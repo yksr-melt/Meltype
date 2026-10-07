@@ -160,7 +160,7 @@ public sealed class CompositionOptions
 ///   Shift+Space → 英単語と判定した語も、ローマ字として読んで変換 (go → 語)
 ///   ←→      → 文節を選ぶ (変換前に押しても文節の選択に入る) / Space・↓↑ でその文節の候補 / Shift+←→ で区切りを変える
 ///   Enter   → 確定してテキストボックスへ入力
-///   BackSpace / Esc → 1 音削除 / 変換取り消し・入力取り消し
+///   BackSpace (Ctrl+H) / Esc → 1 音削除 / 変換取り消し・入力取り消し
 ///   F6 / F7 / F9 / F10, 半角/全角 → ひらがな / カタカナ / 全角英数 / 半角英数 / 日本語⇔英字
 ///   その他のキー・クリック → 確定してからそのキーやクリックを通す
 /// 英数状態でも、打ち始めの数文字でローマ字 (日本語) かを判定し (打鍵は待たせずに送る)、日本語なら送った分を消して日本語入力に戻し、変換ボックスに入れる。
@@ -189,6 +189,7 @@ public sealed class CompositionController
     private readonly Dictionary<string, string> _conversionCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _liveCache = new(StringComparer.Ordinal);
     private readonly HashSet<int> _swallowedShift = [];
+    private readonly HashSet<int> _swallowedControl = [];
     private readonly HashSet<int> _replayedDown = [];
     private readonly HashSet<int> _capturedDown = [];
     private List<Clause> _clauses = [];
@@ -269,6 +270,7 @@ public sealed class CompositionController
             if (IsComposing) return;
             // 読みをすべて削除した場合も、元の選択範囲は置換せず再変換を終了する。
             if (_reconversion is not null) ClearComposition();
+            ReplaySwallowedControl(0);
             if (_gate.TryRelease())
             {
                 // 以降のキーアップはフックを素通りしてアプリに直接届くので、追跡をやめる。
@@ -330,6 +332,7 @@ public sealed class CompositionController
         ClearComposition();
         ClearHeld();
         _swallowedShift.Clear();
+        _swallowedControl.Clear();
         _replayedDown.Clear();
         _capturedDown.Clear();
     }
@@ -373,6 +376,7 @@ public sealed class CompositionController
         // クリックで別の場所に移る前に、今の位置へ確定しておく。
         CommitPending();
         _correctable.Clear();
+        ReplaySwallowedControl(0);
         _host.Replay(e);
     }
 
@@ -382,6 +386,7 @@ public sealed class CompositionController
         if (e.IsUp)
         {
             _swallowedShift.Remove(vk);
+            _swallowedControl.Remove(vk);
             // 押下をアプリに送ったキー、または押下が関所を閉じる前に通っていたキーは、離したこともアプリに伝える。
             var replayed = _replayedDown.Remove(vk);
             var capturedHere = _capturedDown.Remove(vk);
@@ -427,18 +432,33 @@ public sealed class CompositionController
             _swallowedShift.Add(vk);
             return;
         }
+        if (VirtualKeys.IsControl(vk))
+        {
+            // Ctrl も Shift と同じく預かる (押しただけでは確定しない。Ctrl+H を BackSpace として使うため)。
+            _swallowedControl.Add(vk);
+            return;
+        }
         if (VirtualKeys.IsModifier(vk))
         {
-            // Ctrl / Alt / Win: ショートカットの前に確定する。
+            // Alt / Win: ショートカットの前に確定する。
             CommitIfAny();
             ReplayDown(e);
             return;
         }
-        if (_replayedDown.Any(IsCommandModifier))
+        if (_swallowedControl.Count > 0 || _replayedDown.Any(IsCommandModifier))
         {
-            CommitIfAny();
-            ReplayDown(e);
-            return;
+            if (IsCtrlH(vk))
+            {
+                // Ctrl+H は MS-IME と同じく BackSpace。
+                vk = VirtualKeys.Back;
+                e = e with { Vk = VirtualKeys.Back };
+            }
+            else
+            {
+                CommitIfAny();
+                ReplayDown(e);
+                return;
+            }
         }
 
         if (_reconversion is not null && vk == VirtualKeys.Escape)
@@ -1603,7 +1623,8 @@ public sealed class CompositionController
     {
         // Meltype を通らないキーを送る = キャレットが動くかもしれないので、直前の語はもう確定し直さない。
         _correctable.Clear();
-        // 握りつぶしていた Shift を先に送る (Shift+矢印 の範囲選択、Ctrl+Shift+Z など)。
+        // 握りつぶしていた Ctrl・Shift を先に送る (Ctrl+V、Shift+矢印 の範囲選択、Ctrl+Shift+Z など)。
+        ReplaySwallowedControl(e.TimeMs);
         foreach (var shift in _swallowedShift)
         {
             _host.Replay(new KeyEvent(shift, 0, false, false, false, e.TimeMs));
@@ -1612,6 +1633,20 @@ public sealed class CompositionController
         _swallowedShift.Clear();
         _host.Replay(e);
         _replayedDown.Add(e.Vk);
+    }
+
+    /// <summary>
+    /// 預かっていた Ctrl をアプリに送る。Ctrl を押したまま変換ボックスが閉じるとき (Ctrl+H で全部消したときなど) にも送る。
+    /// 送らないと、アプリと OS には Ctrl が押されていないように見える。
+    /// </summary>
+    private void ReplaySwallowedControl(long timeMs)
+    {
+        foreach (var control in _swallowedControl)
+        {
+            _host.Replay(new KeyEvent(control, 0, false, false, false, timeMs));
+            _replayedDown.Add(control);
+        }
+        _swallowedControl.Clear();
     }
 
     private void UpdateView()
@@ -1650,4 +1685,9 @@ public sealed class CompositionController
     private static bool IsShift(int vk) => vk is VirtualKeys.Shift or VirtualKeys.LShift or VirtualKeys.RShift;
 
     private static bool IsCommandModifier(int vk) => VirtualKeys.IsModifier(vk) && !IsShift(vk);
+
+    /// <summary>変換ボックスが開いているときの Ctrl+H か。Shift・Alt・Win も押しているとき (Ctrl+Shift+H など) はアプリのショートカット。</summary>
+    private bool IsCtrlH(int vk) =>
+        VirtualKeys.IsLetter(vk) && VirtualKeys.ToLetter(vk) == 'h' && IsComposing &&
+        _swallowedControl.Count > 0 && _swallowedShift.Count == 0 && !_host.IsShiftDown() && !_replayedDown.Any(IsCommandModifier);
 }

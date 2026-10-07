@@ -33,6 +33,8 @@ internal static class VirtualKeys
 
     public static bool IsModifier(int vk) => vk is Shift or Control or Menu or LShift or RShift or LControl or RControl or LMenu or RMenu or LWin or RWin;
 
+    public static bool IsControl(int vk) => vk is Control or LControl or RControl;
+
     /// <summary>入力セッションの区切り (設計書 §5)。</summary>
     public static bool IsSessionBoundary(int vk) => vk is Return or Space or Escape or Tab;
 
