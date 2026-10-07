@@ -37,12 +37,23 @@ private let candidatesCallback: CandidatesCallback = { reading in
     return strdup(candidates.joined(separator: "\n"))
 }
 
+/// スペルチェッカーの結果。本体は打鍵のたびに入力全体を判定し直すので、同じ語を何度も聞く
+/// (36 文字の入力で 6000 回ほど、語の種類は 340 ほど)。スペルチェッカーはプロセス間通信で遅いので、覚えておく。
+private let spellLock = NSLock()
+nonisolated(unsafe) private var spellCache: [String: Bool] = [:]
+
 /// 英単語として正しい綴りか (macOS のスペルチェッカー、英語で調べる)。
 private let isWordCallback: IsWordCallback = { word in
     guard let word else { return 0 }
     let text = String(cString: word)
+    if let cached = spellLock.withLock({ spellCache[text] }) { return cached ? 1 : 0 }
     let misspelled = NSSpellChecker.shared.checkSpelling(of: text, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
-    return misspelled.location == NSNotFound ? 1 : 0
+    let isWord = misspelled.location == NSNotFound
+    spellLock.withLock {
+        if spellCache.count >= 4096 { spellCache.removeAll() }
+        spellCache[text] = isWord
+    }
+    return isWord ? 1 : 0
 }
 
 /// Swift 側で扱う結果 (本体の SessionResult.ToJson と同じ形)。
