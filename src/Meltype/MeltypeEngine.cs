@@ -54,6 +54,9 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
 
     private readonly HashSet<int> _toggleKeyDown = [];
 
+    /// <summary>変換ボックスが Ctrl を預かっている (次のキーまでアプリに送らない) 間は OS のキー状態に Ctrl が出ないので、ここで覚えておく。</summary>
+    private volatile bool _controlInGate;
+
     public MeltypeEngine(Settings settings, string? configPath, string? modelPath, string? userDictionaryDirectory)
     {
         _settings = settings.Clone().Normalize();
@@ -165,6 +168,8 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     private bool OnKey(KeyEvent e)
     {
         var settings = _settings;
+        // Ctrl を離したら、どの経路で処理しても預かりは終わり。
+        if (e.IsUp && VirtualKeys.IsControl(e.Vk)) _controlInGate = false;
         // 飲み込んだ切替キーの解放は、入力言語が変わっても対にして処理する。
         if (e.IsUp && !e.Injected)
         {
@@ -180,7 +185,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             return _session.State == SessionState.Flushing && _session.OnKey(e);
         }
         // Ctrl + 半角/全角: Meltype 全体の有効/無効 (どちらのモードでも)。変換ボックスの後始末が要るので切り替え自体は UI スレッドで行う。
-        if (VirtualKeys.IsHankakuZenkaku(e.Vk) && !e.Injected && e.IsDown && IsDown(VirtualKeys.Control))
+        if (VirtualKeys.IsHankakuZenkaku(e.Vk) && !e.Injected && e.IsDown && IsControlDown())
         {
             if (e.IsDown)
             {
@@ -235,6 +240,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         if (_keyboardDirect && e.IsDown && !VirtualKeys.IsLetter(e.Vk) && !VirtualKeys.IsModifier(e.Vk))
             _directEnglishWord = !e.Injected && KeyText.CharFromKey(e.Vk, e.Scan, false) is '@' or '_';
         var swallowed = composition.Gate.OnKey(e, StartsComposition);
+        if (VirtualKeys.IsControl(e.Vk) && e.IsDown && swallowed) _controlInGate = true;
         // Meltype を通らずにアプリへ届いたキーはキャレットを動かすかもしれない。直前の語を確定し直さないようにする。
         if (!swallowed && e.IsDown && !VirtualKeys.IsModifier(e.Vk)) composition.ForgetLastCommit();
         if (!swallowed && !e.Injected) TrackLine(e);
@@ -313,7 +319,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         }
         if (e.Vk == VirtualKeys.Escape) return;
         // Ctrl・Alt・Win の操作 (貼り付け・元に戻す …)、Tab (補完)、キャレットを動かすキーの後は分からない。
-        if (IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ||
+        if (IsControlDown() || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ||
             e.Vk is VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E)
         {
             InvalidateLine(resetJapanese: !terminal);
@@ -375,7 +381,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         {
             return false;
         }
-        if (IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin)) return false;
+        if (IsControlDown() || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin)) return false;
         if (!_foreground.Check(settings).Allowed) return false;
         // 文字入力欄 (パスワード以外) にフォーカスがあるときだけ。ショートカットキーやゲームの操作を横取りしない。
         if (_composition?.Focus.CanCapture != true && _composition?.Focus.CanCaptureWaiting() != true) return false;
@@ -715,6 +721,9 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     }
 
     private static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
+
+    /// <summary>Ctrl が押されているか。変換ボックスが預かっていてアプリにまだ送っていない Ctrl も含める。</summary>
+    private bool IsControlDown() => IsDown(VirtualKeys.Control) || _controlInGate;
 
     private static void SafeRun(Action action)
     {

@@ -1475,8 +1475,87 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LControl);
         k.Press('C');
         k.Key(VirtualKeys.LControl, up: true);
-        Assert.Equal("text:かな|down:A2|passed:43|passed-up:43|passed-up:A2", string.Join("|", k.Host.Events), "確定 → Ctrl を送る → 以降は直接アプリへ");
+        Assert.Equal("text:かな|down:A2|down:43|passed-up:43|passed-up:A2", string.Join("|", k.Host.Events), "確定 → 預かっていた Ctrl と C を送る → 以降は直接アプリへ");
         Assert.True(!k.Gate.IsCaptured, "ショートカットの後は横取りをやめる");
+    }
+
+    [Test]
+    public static void CtrlTap_KeepsComposition()
+    {
+        var k = new Keyboard();
+        k.Type("kana");
+        k.Key(VirtualKeys.LControl);
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("かな", k.Showing, "Ctrl を押して離しただけでは確定しない (Ctrl+H のため)");
+        Assert.Equal("", string.Join("|", k.Host.Events), "Ctrl だけの押下はアプリに送らない");
+    }
+
+    [Test]
+    public static void CtrlH_DeletesLikeBackspace()
+    {
+        var k = new Keyboard();
+        k.Type("kana");
+        k.Key(VirtualKeys.LControl);
+        k.Press('H');
+        Assert.Equal("か", k.Showing, "Ctrl+H は BackSpace と同じく 1 音消す");
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("か", k.Showing, "Ctrl を離しても変換ボックスは残る");
+        Assert.Equal("", string.Join("|", k.Host.Events), "Ctrl も H もアプリには送らない");
+        k.Type("na\n");
+        Assert.Equal("text:かな|passed-up:0D", string.Join("|", k.Host.Events), "続けて打って確定できる");
+    }
+
+    [Test]
+    public static void CtrlH_DuringConversion_CancelsConversion()
+    {
+        var k = new Keyboard();
+        k.Type("kyou ");
+        Assert.Equal("今日", k.Showing);
+        k.Key(VirtualKeys.LControl);
+        k.Press('H');
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("きょう", k.Showing, "変換中の Ctrl+H は BackSpace と同じく変換をやめてかなに戻す");
+        Assert.Equal("", string.Join("|", k.Host.Events));
+    }
+
+    [Test]
+    public static void CtrlH_UntilEmpty_SendsHeldCtrlToApp()
+    {
+        var k = new Keyboard();
+        k.Type("ka");
+        k.Key(VirtualKeys.LControl);
+        k.Press('H');
+        Assert.True(!k.Gate.IsCaptured, "全部消したら横取りをやめる");
+        k.Press('H'); // Ctrl を押したままの 2 回目は、変換ボックスが無いのでアプリの Ctrl+H
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("down:A2|passed-up:48|passed:48|passed-up:48|passed-up:A2", string.Join("|", k.Host.Events),
+            "変換ボックスが閉じるときに預かっていた Ctrl を送る (アプリと OS に Ctrl が押されていると分かるように)。以降は直接アプリへ");
+    }
+
+    [Test]
+    public static void CtrlShiftH_IsShortcut()
+    {
+        var k = new Keyboard();
+        k.Type("kana");
+        k.Key(VirtualKeys.LControl);
+        k.Key(VirtualKeys.LShift);
+        k.Press('H');
+        k.Key(VirtualKeys.LShift, up: true);
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("text:かな|down:A2|down:A0|down:48|passed-up:48|passed-up:A0|passed-up:A2", string.Join("|", k.Host.Events),
+            "Ctrl+Shift+H はアプリのショートカットなので、確定してから Ctrl・Shift・H を送る");
+    }
+
+    [Test]
+    public static void CtrlClick_SendsCtrlBeforeClick()
+    {
+        var k = new Keyboard();
+        k.Type("kana");
+        k.Key(VirtualKeys.LControl);
+        Assert.True(k.Gate.OnMouseButton(new MouseButtonEvent(0x201, 10, 20, 0)), "変換中のクリックは一旦止める");
+        k.Controller.Pump();
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("text:かな|down:A2|mouse:201|passed-up:A2", string.Join("|", k.Host.Events), "確定 → 預かっていた Ctrl → クリック (Ctrl+クリック)");
     }
 
     [Test]
