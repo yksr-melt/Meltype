@@ -135,7 +135,10 @@ public sealed class CompositionText
                    // 英単語の最後の l / x (hotel の l) は、次の文字と合わせて小書き文字 (lya = ゃ) にしない。
                    !(last.Raw is "l" or "x" or "L" or "X" && EndsWithEnglishWordFromUnit(_units.Count)) &&
                    // 英単語の最後の t (commit の t) も、続けて打った s と合わせて ts (つ) にしない。
-                   !(last.Raw is "t" or "T" && _pending.Length > 0 && _pending[0] is 's' or 'S' && EndsWithEnglishWordFromUnit(_units.Count)))
+                   !(last.Raw is "t" or "T" && _pending.Length > 0 && _pending[0] is 's' or 'S' && EndsWithEnglishWordFromUnit(_units.Count)) &&
+                   // 英単語全体の最後の子音 (github の b) は、助詞 ya の拗音 (bya = びゃ) に飲み込まれないようにする (githubya → githubや)。
+                   // 接尾辞だけが英単語のとき (kaibuns の buns) は日本語の拗音 (しょ) を優先する。
+                   !(EndsWithWholeEnglishWord(_units.Count) && (c is 'y' or 'Y' || _pending.Length > 0 && _pending[0] is 'y' or 'Y')))
             {
                 pulled.Insert(0, last.Raw);
                 _units.RemoveAt(_units.Count - 1);
@@ -152,6 +155,14 @@ public sealed class CompositionText
             // 読めない子音がいくつか残っていても同じ (reflect + sareta の ct + s → reflectされた。refェcつァれた になっていた: issue #77)。
             if (_pending.Length >= 1 && _pending[^1] is 't' or 'T' && c is 's' or 'S' && _pending.ToString().All(char.IsAsciiLetter) &&
                 EndsWithEnglishWordFromUnit(_units.Count, _pending.ToString()))
+            {
+                foreach (var letter in _pending.ToString()) _units.Add(new CompositionUnit(letter.ToString(), letter.ToString()));
+                _pending.Clear();
+            }
+            // 英単語全体の打ちかけ末尾の子音 (github の b) の次に y が来たら、拗音 (bya = びゃ) にせず子音を英字のまま確定する
+            // (githubya → githubや)。接尾辞だけ英単語の kaibuns + yo (かいぶんしょ) は分けない。
+            if (c is 'y' or 'Y' && _pending.Length > 0 && _pending.ToString().All(char.IsAsciiLetter) &&
+                EndsWithWholeEnglishWord(_units.Count, _pending.ToString()))
             {
                 foreach (var letter in _pending.ToString()) _units.Add(new CompositionUnit(letter.ToString(), letter.ToString()));
                 _pending.Clear();
@@ -265,6 +276,18 @@ public sealed class CompositionText
             if (letters.Length >= 4 && _detector.IsKnownEnglishWord(letters)) return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// 末尾の英字の並び全体が、同梱辞書の英単語か (接尾辞だけの一致・スペルチェッカーは含めない)。
+    /// github + ya は分けるが、kaibuns + yo (かいぶんしょ。buns だけ英単語 / Windows のスペルが kaibuns と言う) は分けない。
+    /// </summary>
+    private bool EndsWithWholeEnglishWord(int count, string extra = "")
+    {
+        var letters = extra;
+        for (var i = count - 1; i >= 0 && _units[i].Raw.Length > 0 && _units[i].Raw.All(char.IsAsciiLetter); i--)
+            letters = _units[i].Raw + letters;
+        return letters.Length >= 4 && _detector.IsListedEnglishWord(letters.ToLowerInvariant());
     }
 
     /// <summary>

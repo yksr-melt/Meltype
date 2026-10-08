@@ -163,12 +163,35 @@ internal static class Quality
         new("混在", "pythonnobug", "pythonのbug"),
         new("混在", "GitHub no repo", "GitHub のれぽ"),
         new("混在", "Google to Apple", "Google とApple"),
+        // 助詞「や」+ 英単語 / 英単語 + 助詞「や」(Particles / TrailingParticles に ya)
+        new("混在", "yagithub", "やgithub"),
+        new("混在", "kyouhayagithub", "きょうはやgithub"),
+        new("混在", "hagithub", "はgithub"),
+        new("混在", "githubya", "githubや"),
+        new("混在", "githubni", "githubに"),
+        // 助詞「や」+ 英単語が 1 語にまとまらないこと (IsUnknownEnglishWord / yap|lay の誤分割)
+        new("混在", "yapython", "やpython"),
+        new("混在", "yacursor", "やcursor"),
+        new("混在", "yaslack", "やslack"),
+        new("混在", "yastack", "やstack"),
+        new("混在", "yaplay", "やplay"),
+        new("混在", "yasync", "やsync"),
+        // site (=して) のあと英字が続いても、確定し直しで site に戻さない
+        new("混在", "sitePR", "してPR"),
+        new("混在", "site PR", "して PR"),
+        // -pedia (ローマ字だと ぺぢあ。#207)
+        new("混在", "pedia", "pedia"),
+        new("混在", "protopedia", "protopedia"),
+        new("混在", "conservapedia", "conservapedia"),
+        new("混在", "wikipedia", "wikipedia"),
+        new("英語", "yahoo", "yahoo"),
 
         // --- 英語の後の短い語 (助詞と同じ形) ---
         new("短い語", "no", "の", Before: "GitHub"),
         new("短い語", "de", "で", Before: "Chrome"),
         new("短い語", "ni", "に", Before: "今日は GitHub "),
         new("短い語", "ga", "が", Before: "Python"),
+        new("短い語", "ya", "や", Before: "GitHub"),
         new("短い語", "to", "to", Before: "I want "),
         new("短い語", "is", "is", Before: "this "),
         new("短い語", "at", "at", Before: "look "),

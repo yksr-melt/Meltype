@@ -1654,7 +1654,22 @@ public sealed class CompositionController
             // 助詞と同じ形の短い語 (to, no) 1 語だけを、大文字で始まる語 (固有名詞) で直すことはしない (Google と Apple は日本語でもよく書く)。
             // 小文字の英単語で英文と分かったとき (let me know、do it) は直す。
             if (targets.Count == 1 && targets[0].Raw.Length <= 2 && targets[0].Raw != "i" && char.IsAsciiLetterUpper(raw.FirstOrDefault(char.IsAsciiLetter))) return;
-            replacement = string.Concat(targets.Select(t => (t.Raw == "i" ? "I" : t.Raw) + (t.SpaceIntended ? " " : "")));
+            // する の活用として読める語 (site→して、sita→した) は、後ろが英語でも日本語のまま
+            // (site PR → site PR に確定し直さず、して PR を保つ)。
+            if (targets.Any(t =>
+            {
+                var reading = _detector.Romaji.ConvertLenient(t.Raw.ToLowerInvariant(), final: true);
+                return SuruForms.Any(reading.StartsWith) && reading.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー');
+            }))
+            {
+                // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
+                if (!targets.Any(t => t.SpaceIntended)) return;
+                replacement = string.Concat(targets.Select(t => t.Text + (t.SpaceIntended ? " " : "")));
+            }
+            else
+            {
+                replacement = string.Concat(targets.Select(t => (t.Raw == "i" ? "I" : t.Raw) + (t.SpaceIntended ? " " : "")));
+            }
         }
         else if (previous.English && !english && !_detector.IsAmbiguousWord(raw) && raw.Any(char.IsAsciiLetter))
         {
