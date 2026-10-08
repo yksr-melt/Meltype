@@ -472,6 +472,13 @@ public sealed class CompositionController
                 StartConversion(preferJapanese: true);
                 return;
             case VirtualKeys.Space:
+                // ユーザー辞書に文字列があれば必ず変換処理を入れる
+                if (ContainsUserDictionarySegment())
+                {
+                    StartConversion();
+                    return;
+                }
+
                 _text.FixTypos();
                 // 英語と判定した語で終わっているなら、変換ではなく確定して空白を入れる
                 // (日本語の部分は、ライブ変換が ON なら漢字にして、OFF なら見えているかなのまま確定)。
@@ -863,11 +870,18 @@ public sealed class CompositionController
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
+        var userDictClauses = new List<Clause>();
         var clauses = new List<Clause>();
         var segments = _text.ConversionSegments();
         for (var s = 0; s < segments.Count; s++)
         {
             var segment = segments[s];
+
+            // 一度このSegmentでユーザー辞書を調べる。もし一致したのがあれば一時的にsegment.Rawで追加してあげる
+            // 最後にセグメントで後に追加されたclausesに候補を追加するので、被りは気にしなくてよい
+            var userDictLookup = _options?.UserDictionary?.Lookup(segment.Raw);
+            if (userDictLookup?.Count > 0) userDictClauses.Add(new(segment.Raw, false, [.. userDictLookup]));
+
             if (segment.IsEnglish)
             {
                 var english = EnglishCandidates(segment.Raw);
@@ -893,10 +907,43 @@ public sealed class CompositionController
             }
             clauses.AddRange(japanese);
         }
+
+        // 普通のclausesに含まれてないセグメントの候補を逃さないためのリスト
+        var userDictSegmentClauses = new List<Clause>();
+        foreach (var userDictClause in userDictClauses)
+        {
+            var candidatesAdded = false;
+            foreach (var clause in clauses)
+            {
+                if (clause.Reading == userDictClause.Reading)
+                {
+                    // 既にあるclauseの候補に追加してあげる (ユーザー辞書優先)
+                    clause.Candidates = userDictClause.Candidates
+                        .Concat(clause.Candidates)
+                        .Distinct()
+                        .ToList();
+                    candidatesAdded = true;
+                    break;
+                }
+            }
+
+            if (!candidatesAdded) userDictSegmentClauses.Add(userDictClause);
+        }
+
         if (clauses.Count == 0) return;
-        _clauses = clauses;
+        _clauses = [ .. userDictSegmentClauses, .. clauses]; // ユーザー辞書優先
         _selectedClause = 0;
         _converting = true;
+    }
+
+    private bool ContainsUserDictionarySegment()
+    {
+        var segments = _text.ConversionSegments();
+        foreach (var segment in segments)
+        {
+            if (_options?.UserDictionary?.Lookup(segment.Raw).Count > 0) return true;
+        }
+        return false;
     }
 
     /// <summary>
