@@ -83,11 +83,18 @@ public sealed class CompositionDetector
         // 辞書にない英単語 (stackoverflow など) を最初から打っているなら全体を英語にする。
         // 途中の区間 (… flow) だけを英語にすると「sたcこvえrflow」のようになってしまう。
         // ただし先頭が辞書の英単語として区切れている (github に push) ならその区切りを使う。
+        // 助詞 + 既知の英単語 (ya|python) も FindSpans の区切りを優先する (やpython が yapython になるのを防ぐ)。
         var whole = Raw(units, 0, units.Count) + pending;
         if (UnknownWordThenJapanese(units, pending, segments, level, whole) is { } split) return split;
         if (level != DetectionLevel.Manual && !segments[0].IsEnglish && Memory?.Get(whole.ToLowerInvariant()) != false && IsUnknownEnglishWord(whole))
         {
-            return [new CompositionSegment(true, "", whole)];
+            var lowerWhole = whole.ToLowerInvariant();
+            if (Detection.DictionaryDetector.StartsWithParticle(lowerWhole) is not { } leading ||
+                lowerWhole.Length - leading.Length < 3 ||
+                !IsKnownEnglishWord(lowerWhole[leading.Length..]))
+            {
+                return [new CompositionSegment(true, "", whole)];
+            }
         }
         return segments;
     }
@@ -187,6 +194,23 @@ public sealed class CompositionDetector
                             found = -1;
                             break;
                         }
+                    }
+                }
+            }
+            // 短い英単語 (yap) が助詞 (ya) + 後ろの英単語 (play) の頭を食っているなら、助詞側を優先する
+            // (yap|lay → ya|play。スペルチェッカーが yap / lay を知っているとやplay が yaplay になる)。
+            if (found > i && !kanaInput && !IsAsciiSymbol(units[i]))
+            {
+                var head = Raw(units, i, found).ToLowerInvariant();
+                if (Detection.DictionaryDetector.StartsWithParticle(head) is { } leading && head.Length > leading.Length)
+                {
+                    var covered = 0;
+                    var afterParticle = i;
+                    while (afterParticle < found && covered < leading.Length) covered += units[afterParticle++].Raw.Length;
+                    if (covered == leading.Length)
+                    {
+                        var rest = Raw(units, afterParticle, n) + pending;
+                        if (rest.Length >= 3 && IsKnownEnglishWord(rest)) found = -1;
                     }
                 }
             }

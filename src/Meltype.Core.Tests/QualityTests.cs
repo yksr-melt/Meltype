@@ -169,6 +169,13 @@ internal static class Quality
         new("混在", "hagithub", "はgithub"),
         new("混在", "githubya", "githubや"),
         new("混在", "githubni", "githubに"),
+        // 助詞「や」+ 英単語が 1 語にまとまらないこと (IsUnknownEnglishWord / yap|lay の誤分割)
+        new("混在", "yapython", "やpython"),
+        new("混在", "yacursor", "やcursor"),
+        new("混在", "yaslack", "やslack"),
+        new("混在", "yastack", "やstack"),
+        new("混在", "yaplay", "やplay"),
+        new("混在", "yasync", "やsync"),
         // -pedia (ローマ字だと ぺぢあ。#207)
         new("混在", "pedia", "pedia"),
         new("混在", "protopedia", "protopedia"),

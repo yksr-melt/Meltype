@@ -22,7 +22,7 @@ docker podman kubernetes kubectl helm terraform ansible aws azure gcp linux ubun
 windows macos ios android bash zsh fish powershell pwsh cmd terminal console server client localhost
 http https www html css scss sass json yaml yml toml xml csv sql mysql postgres postgresql sqlite mongodb
 redis nginx apache kafka rabbitmq elasticsearch commit commits push pull merge rebase branch checkout
-clone fetch stash status diff log init install uninstall update upgrade build run test tests debug deploy
+clone fetch stash sync synced syncing status diff log init install uninstall update upgrade build run test tests debug deploy
 release config configure setup start stop restart reset revert cherry pick tag tags dev prod staging api
 apis rest graphql grpc sdk cli gui ide vscode vim neovim emacs nano code visual studio dotnet csharp cpp
 rust golang kotlin swift ruby rails php laravel django flask fastapi spring boot maven gradle cargo pip
