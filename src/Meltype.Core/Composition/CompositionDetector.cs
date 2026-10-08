@@ -271,7 +271,10 @@ public sealed class CompositionDetector
     /// <summary>よくある英語の打ち間違いなら正しい綴り (teh → the)。大文字で始まる語は大文字で始める。</summary>
     public string? EnglishAutoCorrection(string word)
     {
-        if (word.Length < 2 || !word.All(char.IsAsciiLetter) || SpellChecker?.AutoCorrection(word.ToLowerInvariant()) is not { } right) return null;
+        if (word.Length < 2 || !word.All(char.IsAsciiLetter)) return null;
+        // -pedia 複合 (conservapedia など) はスペルチェッカーが別綴りに「訂正」してしまうことがあるので触らない。
+        if (word.EndsWith("pedia", StringComparison.OrdinalIgnoreCase) && word.Length >= 5) return null;
+        if (SpellChecker?.AutoCorrection(word.ToLowerInvariant()) is not { } right) return null;
         if (word.All(char.IsAsciiLetterUpper) && word.Length > 1) return right.ToUpperInvariant();
         return char.IsAsciiLetterUpper(word[0]) ? char.ToUpperInvariant(right[0]) + right[1..] : right;
     }
@@ -289,7 +292,11 @@ public sealed class CompositionDetector
         var lower = word.ToLowerInvariant();
         if (lower.Length < 3 || !lower.All(char.IsAsciiLetterLower)) return false;
         if (Memory?.Get(lower) is { } learned) return learned;
-        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || (lower.Length >= 4 && IsSpellWord(lower));
+        if (_english.Words.ContainsWord(lower) || _proper.Contains(lower) || (lower.Length >= 4 && IsSpellWord(lower))) return true;
+        // english-readable.txt / -pedia (IsEnglishSpan と同じ根拠)。打ち間違い直しが英字の語を崩さないようにする。
+        if (lower.Length >= 4 && ReadableEnglish.Value.ContainsWord(lower)) return true;
+        return lower.EndsWith("pedia", StringComparison.Ordinal) && lower.Length >= 5 &&
+               (lower.Length == 5 || lower.Length - 5 >= 3);
     }
 
     /// <summary>よく使う語の読み (readings.txt、3 文字以上)。かな入力で、英単語のキーが日本語の語を打っていないかを見る。</summary>
@@ -395,6 +402,13 @@ public sealed class CompositionDetector
         // ローマ字として最後まで読めても、日本語の語にならない英単語 (feature = ふぇあつれ、remote = れもて。dictionaries/english-readable.txt、#12)。
         // 日本語の語の始まりにもならない語だけを入れているので、後ろに日本語が続いても (feature|wo) 英語。
         if (lower.Length >= 4 && ReadableEnglish.Value.ContainsWord(lower)) return true;
+        // -pedia (pedia / protopedia …)。ローマ字だと ぺぢあ になり、途中の to が助詞「と」に割れる (pro|to|pedia)。
+        // wikipedia はスペルチェッカーで足りるが、pedia 単体や未登録の複合はここですくう。
+        if (lower.EndsWith("pedia", StringComparison.Ordinal) && lower.Length >= 5 &&
+            (lower.Length == 5 || lower.Length - 5 >= 3) && IsCommonJapanese?.Invoke(lower) != true)
+        {
+            return true;
+        }
         // c 行の綴りで読める語 (care = かれ、can = かん) が日本語の途中にあるなら、日本語を打っている (fucarete → ふかれて、shoucanshi → しょうかんし)。
         // 入力全体がその語だけのときは英語。
         if (!(startOfInput && atEnd))
@@ -697,7 +711,7 @@ public sealed class CompositionDetector
         return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsSpellWord(lower);
     }
 
-    private static readonly string[] TrailingParticles = ["kara", "made", "yori", "ga", "wo", "ni", "de", "no", "to", "mo", "ha", "wa"];
+    private static readonly string[] TrailingParticles = ["kara", "made", "yori", "ga", "wo", "ni", "de", "no", "to", "mo", "ha", "wa", "ya"];
 
     /// <summary>
     /// 知らない英字の語 + 助詞 (grokga = grok + が) か。語の部分は 3 文字以上でローマ字として読めないもの、全体は辞書に無いもの。

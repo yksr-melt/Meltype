@@ -135,7 +135,9 @@ public sealed class CompositionText
                    // 英単語の最後の l / x (hotel の l) は、次の文字と合わせて小書き文字 (lya = ゃ) にしない。
                    !(last.Raw is "l" or "x" or "L" or "X" && EndsWithEnglishWordFromUnit(_units.Count)) &&
                    // 英単語の最後の t (commit の t) も、続けて打った s と合わせて ts (つ) にしない。
-                   !(last.Raw is "t" or "T" && _pending.Length > 0 && _pending[0] is 's' or 'S' && EndsWithEnglishWordFromUnit(_units.Count)))
+                   !(last.Raw is "t" or "T" && _pending.Length > 0 && _pending[0] is 's' or 'S' && EndsWithEnglishWordFromUnit(_units.Count)) &&
+                   // 英単語の最後の子音 (github の b) は、助詞 ya や拗音 (bya = びゃ) に飲み込まれないようにする (githubya → githubや)。
+                   !(EndsWithEnglishWordFromUnit(_units.Count) && (c is 'y' or 'Y' || _pending.Length > 0 && _pending[0] is 'y' or 'Y')))
             {
                 pulled.Insert(0, last.Raw);
                 _units.RemoveAt(_units.Count - 1);
@@ -151,6 +153,14 @@ public sealed class CompositionText
             // (commit + suru・site → こっみつる・こっみつぃて ではなく commitする・commitして)。
             // 読めない子音がいくつか残っていても同じ (reflect + sareta の ct + s → reflectされた。refェcつァれた になっていた: issue #77)。
             if (_pending.Length >= 1 && _pending[^1] is 't' or 'T' && c is 's' or 'S' && _pending.ToString().All(char.IsAsciiLetter) &&
+                EndsWithEnglishWordFromUnit(_units.Count, _pending.ToString()))
+            {
+                foreach (var letter in _pending.ToString()) _units.Add(new CompositionUnit(letter.ToString(), letter.ToString()));
+                _pending.Clear();
+            }
+            // 英単語の打ちかけ末尾の子音 (github の b) の次に y が来たら、拗音 (bya = びゃ) にせず子音を英字のまま確定する
+            // (githubya → githubや。hotel + ya は上の l/x と同じ趣旨)。
+            if (c is 'y' or 'Y' && _pending.Length > 0 && _pending.ToString().All(char.IsAsciiLetter) &&
                 EndsWithEnglishWordFromUnit(_units.Count, _pending.ToString()))
             {
                 foreach (var letter in _pending.ToString()) _units.Add(new CompositionUnit(letter.ToString(), letter.ToString()));
