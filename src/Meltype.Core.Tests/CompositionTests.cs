@@ -1363,6 +1363,28 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AutoCorrect_KeepsSuruFormBeforeEnglish()
+    {
+        // site → して のあと英字 (PR) が続いても、する活用を英単語 site に確定し直さない。
+        foreach (var (typed, expected) in new[]
+        {
+            ("sitePR\n", "してPR"),
+            ("site PR\n", "して PR"), // Space で変換開始していた空白は残す
+            ("sitaOK\n", "したOK"),
+            ("pushsitePR\n", "pushしてPR"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed.Trim());
+        }
+        // sushi など、する活用でない曖昧語は、後ろが英語なら今までどおり英語に直す。
+        var sushi = new Keyboard();
+        sushi.Type("sushi PR\n");
+        Assert.Equal("sushi PR", sushi.Host.Document);
+    }
+
+    [Test]
     public static void AutoCorrect_EnglishToJapaneseAfterCommit()
     {
         var k = new Keyboard();

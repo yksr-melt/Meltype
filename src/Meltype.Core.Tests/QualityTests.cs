@@ -176,6 +176,9 @@ internal static class Quality
         new("混在", "yastack", "やstack"),
         new("混在", "yaplay", "やplay"),
         new("混在", "yasync", "やsync"),
+        // site (=して) のあと英字が続いても、確定し直しで site に戻さない
+        new("混在", "sitePR", "してPR"),
+        new("混在", "site PR", "して PR"),
         // -pedia (ローマ字だと ぺぢあ。#207)
         new("混在", "pedia", "pedia"),
         new("混在", "protopedia", "protopedia"),

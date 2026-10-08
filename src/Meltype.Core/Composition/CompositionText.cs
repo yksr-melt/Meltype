@@ -279,15 +279,15 @@ public sealed class CompositionText
     }
 
     /// <summary>
-    /// 末尾の英字の並び全体が英単語か (接尾辞だけの一致は含めない)。
-    /// github + ya は分けるが、kaibuns + yo (かいぶんしょ。buns だけ英単語) は分けない。
+    /// 末尾の英字の並び全体が、同梱辞書の英単語か (接尾辞だけの一致・スペルチェッカーは含めない)。
+    /// github + ya は分けるが、kaibuns + yo (かいぶんしょ。buns だけ英単語 / Windows のスペルが kaibuns と言う) は分けない。
     /// </summary>
     private bool EndsWithWholeEnglishWord(int count, string extra = "")
     {
         var letters = extra;
         for (var i = count - 1; i >= 0 && _units[i].Raw.Length > 0 && _units[i].Raw.All(char.IsAsciiLetter); i--)
             letters = _units[i].Raw + letters;
-        return letters.Length >= 4 && _detector.IsKnownEnglishWord(letters);
+        return letters.Length >= 4 && _detector.IsListedEnglishWord(letters.ToLowerInvariant());
     }
 
     /// <summary>
