@@ -2034,6 +2034,31 @@ internal static class CompositionTests
         Assert.Equal("hello |world", string.Join("|", k.Host.Output));
     }
 
+    // #127: 英語の後ろで英字に見えていた語 (mata) は、Enter でもそのまま英字
+    [Test]
+    public static void EnglishPrefixAfterEnglish_CommitsAsShown()
+    {
+        var k = new Keyboard();
+        k.Type("hello mata\n");
+        Assert.Equal("hello |mata", string.Join("|", k.Host.Output));
+
+        k = new Keyboard();
+        k.Type("hello kore\n");
+        Assert.Equal("hello |kore", string.Join("|", k.Host.Output));
+
+        k = new Keyboard();
+        k.Type("hello tama\n");
+        Assert.Equal("hello |tama", string.Join("|", k.Host.Output));
+
+        k = new Keyboard();
+        k.Type("mata\n");
+        Assert.Equal("また", k.Host.Output.Single(), "前が英語でなければ今までどおりかなになる");
+
+        k = new Keyboard();
+        k.Type("hello matane\n");
+        Assert.Equal("hello |またね", string.Join("|", k.Host.Output));
+    }
+
     [Test]
     public static void Backspace_EditsAndEscapeCancels()
     {

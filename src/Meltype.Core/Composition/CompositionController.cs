@@ -1642,9 +1642,14 @@ public sealed class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
-        var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
+        // 英文の続きで英字に見えていた打ちかけ (hello の後の mata) は final で判定し直さない (かなになり、見えていたものと違う文字が入る)。
+        // 前が英語でないとき (mine → みね) は今までどおり final で判定する。
+        var keepEnglish = !converting && _text.Mode == DisplayMode.Auto && _text.PrecedingEnglish == true && _text.IsAlphanumericAt(final: false);
+        var text = converting ? string.Concat(_clauses.Select(c => c.Text))
+            : CurrentDisplay(final: !keepEnglish);
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
-        var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
+        var english = converting ? _clauses.All(c => c.IsEnglish)
+            : keepEnglish || _text.IsAlphanumericAt(final: true);
         // F6 / F7 / F9 / F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
         var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is { } selection)

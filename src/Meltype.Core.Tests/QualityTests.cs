@@ -174,6 +174,8 @@ internal static class Quality
         new("短い語", "at", "at", Before: "look "),
         new("短い語", "a", "a", Before: "this is "),
 
+        new("曖昧な語", "mata", "mata", Before: "hello "),
+
         // --- 記号・数字 ---
         new("記号・数字", "!", "！"),
         new("記号・数字", "?", "？"),
