@@ -6,8 +6,8 @@ using Meltype.Config;
 
 namespace Meltype.Composition;
 
-/// <summary>変換ボックスの表示形式。Auto 以外は F6/F7/F9/F10 などでユーザーが明示的に選んだもの。</summary>
-public enum DisplayMode { Auto, Hiragana, Katakana, FullWidthAlphanumeric, HalfWidthAlphanumeric }
+/// <summary>変換ボックスの表示形式。Auto 以外は F6〜F10 などでユーザーが明示的に選んだもの。</summary>
+public enum DisplayMode { Auto, Hiragana, Katakana, FullWidthAlphanumeric, HalfWidthAlphanumeric, HalfWidthKatakana }
 
 /// <summary>英字 (F9 / F10) で見せるときの大文字・小文字。F9 / F10 を続けて押すと 打ったまま → すべて大文字 → 先頭だけ大文字 と切り替わる。</summary>
 public enum LetterCase { AsTyped, Upper, Capitalized }
@@ -800,6 +800,7 @@ public sealed class CompositionText
         DisplayMode.FullWidthAlphanumeric => ToFullWidth(ApplyCase(Raw, Case)),
         DisplayMode.Hiragana => AllKana(final),
         DisplayMode.Katakana => ToKatakana(AllKana(final)),
+        DisplayMode.HalfWidthKatakana => ToHalfWidthKatakana(ToKatakana(AllKana(final))),
         _ => IsNumeric ? Raw : RenderSegments(final, convert),
     };
 

@@ -2132,6 +2132,32 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void F8_HalfWidthKatakana()
+    {
+        // Issue #74: F8 で半角カタカナ (Microsoft IME と同じ)。濁点・半濁点は ﾞ ﾟ に分ける
+        var k = new Keyboard();
+        k.Type("aiueo");
+        k.Press(VirtualKeys.F8);
+        Assert.Equal("ｱｲｳｴｵ", k.Showing);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("ｱｲｳｴｵ", k.Host.Document);
+
+        k = new Keyboard();
+        k.Type("gakkoupa-ri-");
+        k.Press(VirtualKeys.F8);
+        Assert.Equal("ｶﾞｯｺｳﾊﾟｰﾘｰ", k.Showing);
+        k.Press(VirtualKeys.F6);
+        Assert.Equal("がっこうぱーりー", k.Showing);
+
+        // 変換中に押しても半角カタカナにする
+        k = new Keyboard();
+        k.Type("tesuto ");
+        k.Press(VirtualKeys.F8);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("ﾃｽﾄ", k.Host.Document);
+    }
+
+    [Test]
     public static void OtherKeys_CommitFirstThenPassThroughInOrder()
     {
         var k = new Keyboard();
