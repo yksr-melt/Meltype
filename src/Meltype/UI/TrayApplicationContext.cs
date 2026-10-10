@@ -207,6 +207,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ApplyUpdate()
     {
+        // 更新の前に、あなたの打ち方で変わる語があれば見せる (issue #285)
+        if (Updater.Staged() is { } staged && !UpdateChangesDialog.Confirm(_composition.Languages, staged.Version, _engine.Settings)) return;
         // install.ps1 が Meltype を終了させてから入れ替え、新しい版を起動する。
         if (!Updater.Apply()) MessageBox.Show("更新を始められませんでした。ログを確認してください。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
