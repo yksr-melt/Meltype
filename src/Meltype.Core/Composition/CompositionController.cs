@@ -1294,7 +1294,7 @@ public sealed class CompositionController
         {
             parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
         }
-        parts = JoinSmallKana(parts);
+        parts = JoinDateTime(JoinSmallKana(parts));
         var clauses = parts.Select(p => new Clause(p.Reading, false, JapaneseCandidates(p.Reading, NormalizeHalfWidth(p.Text, p.Reading)))).ToList();
         for (var i = 0; i < clauses.Count; i++)
         {
@@ -1449,6 +1449,7 @@ public sealed class CompositionController
     /// </summary>
     private IEnumerable<string> TimeCandidates(string reading)
     {
+        if (TypedDateCandidates(reading) is { } typed) return typed;
         var isNow = NowReadings.Contains(reading);
         if (!isNow && reading != "きょう") return [];
         var now = _options.Now();
@@ -1465,11 +1466,68 @@ public sealed class CompositionController
             $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
     }
 
+    /// <summary>打った日付 (10がつ9にち) と時刻 (3じ15ふん) の読み。数字は全角でもよい。</summary>
+    private static readonly System.Text.RegularExpressions.Regex DateReading = new("^(?<m>[0-9０-９]{1,2})がつ(?<d>[0-9０-９]{1,2})にち$");
+    private static readonly System.Text.RegularExpressions.Regex ClockReading = new("^(?<h>[0-9０-９]{1,2})じ(?<m>[0-9０-９]{1,2})(?:ふん|ぷん)$");
+
+    private static bool IsTypedDateOrTime(string reading) => DateReading.IsMatch(reading) || ClockReading.IsMatch(reading);
+
     /// <summary>
-    /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日) を選んだ文節か。学習しない (覚えると、次に打ったときに古い日時が最初に出る)。
+    /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
+    /// 10がつ9にち → 10/9 / 10/09 / 10/9(金) / 2026/10/09 (年と曜日は今年として求める)、3じ15ふん → 3:15 / 03:15。
+    /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
+    /// </summary>
+    private IEnumerable<string>? TypedDateCandidates(string reading)
+    {
+        static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()));
+        if (DateReading.Match(reading) is { Success: true } date)
+        {
+            var (month, day) = (Number(date.Groups["m"].Value), Number(date.Groups["d"].Value));
+            var year = _options.Now().Year;
+            if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return [];
+            var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
+            return [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}/{day}({week})", $"{year:D4}/{month:D2}/{day:D2}"];
+        }
+        if (ClockReading.Match(reading) is { Success: true } clock)
+        {
+            var (hour, minute) = (Number(clock.Groups["h"].Value), Number(clock.Groups["m"].Value));
+            if (hour > 23 || minute > 59) return [];
+            return [$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"];
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 変換エンジンが打った日付・時刻を 2 つ以上の文節に分けたら (10がつ|9にち)、1 つの文節にまとめる (/ の形の候補を出せるように)。
+    /// </summary>
+    private static IReadOnlyList<ConversionClause> JoinDateTime(IReadOnlyList<ConversionClause> parts)
+    {
+        if (parts.Count < 2 || !parts.Any(p => p.Reading.Contains("がつ") || p.Reading.Contains('じ'))) return parts;
+        var joined = new List<ConversionClause>();
+        for (var i = 0; i < parts.Count; i++)
+        {
+            var end = -1;
+            for (var j = Math.Min(parts.Count, i + 4); j > i + 1 && end < 0; j--)
+                if (IsTypedDateOrTime(string.Concat(parts.Skip(i).Take(j - i).Select(p => p.Reading)))) end = j;
+            if (end < 0)
+            {
+                joined.Add(parts[i]);
+                continue;
+            }
+            var run = parts.Skip(i).Take(end - i).ToList();
+            joined.Add(new ConversionClause(string.Concat(run.Select(p => p.Reading)), string.Concat(run.Select(p => p.Text))));
+            i = end - 1;
+        }
+        return joined;
+    }
+
+    /// <summary>
+    /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
+    /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
     /// </summary>
     private static bool IsDateTimeChoice(Clause clause) =>
-        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
+        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal)) ||
+        IsTypedDateOrTime(clause.Reading) && clause.Text.IndexOfAny(['/', ':']) >= 0;
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
     private IEnumerable<string> EmojiBlock(string reading) =>
