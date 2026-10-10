@@ -123,6 +123,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
     public UserDictionary UserDictionary { get; }
 
+    /// <summary>登録した定型文 (トレイの「定型文...」で編集する。;名前 + Space で入れる: issue #290)。</summary>
+    public SnippetStore Snippets { get; } = new(Config.AppPaths.SnippetsFile);
+
     private readonly CompositionDetector _detector;
 
     /// <summary>
@@ -173,6 +176,13 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             Volatile.Write(ref _pumpScheduled, 0);
             Safely(Controller.Pump);
         });
+    }
+
+    /// <summary>フックのスレッドから、UI スレッドで行う処理を頼む (定型文を入れる: issue #290)。</summary>
+    public void Post(Action action)
+    {
+        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
+        _invoker.BeginInvoke(() => Safely(action));
     }
 
     /// <summary>
@@ -415,6 +425,29 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             events.Add(new KeyEvent(VirtualKeys.Back, 0, false, true, false, 0));
         }
         _injector.Inject(events);
+    }
+
+    /// <summary>
+    /// 定型文を入れる: 打った ;名前 (count 文字) を消してから text を入れる (issue #290)。複数行の文は、改行を Enter として送ると
+    /// チャットでは途中で送信されてしまうので、貼り付けで入れる。1 行の文は、確定し直しと同じく 1 回の SendInput で送る。
+    /// </summary>
+    public void InsertSnippet(int count, string text)
+    {
+        if (!InputAllowed()) return;
+        if (text.Contains('\n'))
+        {
+            DeleteBackward(count);
+            EnsureSystemImeClosed();
+            if (TryPaste(text.ReplaceLineEndings("\r\n"))) return;
+            Diagnostics.Log.Warn("定型文を貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
+            foreach (var line in text.Split('\n').Select((line, i) => (line, i)))
+            {
+                if (line.i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
+                CommitText(line.line);
+            }
+            return;
+        }
+        ReplaceBackward(count, text);
     }
 
     /// <summary>

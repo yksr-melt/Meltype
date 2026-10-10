@@ -124,6 +124,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         {
             _line.Append(text);
             _sigil.Append(text);
+            _snippet.Append(text);
         };
         composition.Controller.ReconversionCommitted += () => InvalidateLine();
         composition.KeyReplayed += e => TrackLine(e);
@@ -270,6 +271,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         // @ と _ の後ろはユーザー名 (@kuraido、upah_setu) なので判定しない (ローマ字として読めても日本語にしない)。
         if (_keyboardDirect && e.IsDown && !VirtualKeys.IsLetter(e.Vk) && !VirtualKeys.IsModifier(e.Vk))
             _directEnglishWord = !e.Injected && KeyText.CharFromKey(e.Vk, e.Scan, false) is '@' or '_';
+        if (HandleSnippetKey(composition, settings, e)) return true;
         var swallowed = composition.Gate.OnKey(e, StartsComposition);
         // Meltype を通らずにアプリへ届いたキーはキャレットを動かすかもしれない。直前の語を確定し直さないようにする。
         if (!swallowed && e.IsDown && !VirtualKeys.IsModifier(e.Vk)) composition.ForgetLastCommit();
@@ -324,6 +326,42 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     private readonly LineTracker _line = new();
     // 先頭か空白の直後の /command・$skill・@ファイル名 (#193)。
     private readonly Composition.SigilWord _sigil = new();
+    // 先頭か空白の直後の ;名前 (定型文: #290)。
+    private readonly Composition.SnippetTrigger _snippet = new();
+    // 直前に入れた定型文 (すぐに Esc を押したら、打った ;名前 に戻す)。
+    private (string Text, string Typed)? _lastSnippet;
+
+    /// <summary>定型文を使うか: 記号が 1 文字で、定型文を 1 つ以上登録している (登録していなければ ; は今までどおり変換ボックスに入れる)。</summary>
+    private bool SnippetsEnabled(Settings settings) =>
+        settings.SnippetMark is [_] && _composition?.Snippets.Count > 0 && settings.InputStyle != InputStyle.Kana;
+
+    /// <summary>
+    /// ;名前 の後の Space / Tab で定型文を入れる。入れた直後の Esc で、打った ;名前 に戻す (issue #290)。
+    /// 変換ボックスが空のときだけ (名前は打つたびにアプリへ渡しているので、変換ボックスには入っていない)。処理したら true。
+    /// </summary>
+    private bool HandleSnippetKey(Composition.CompositionService composition, Settings settings, KeyEvent e)
+    {
+        if (!e.IsDown || e.Injected || VirtualKeys.IsModifier(e.Vk)) return false;
+        var undo = _lastSnippet;
+        _lastSnippet = null;
+        if (composition.Gate.IsCaptured || IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin)) return false;
+        if (e.Vk == VirtualKeys.Escape && undo is { } last)
+        {
+            lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
+            composition.Post(() => composition.InsertSnippet(last.Text.ReplaceLineEndings("\n").Length, last.Typed));
+            Log.Info("定型文を取り消して、打った名前に戻しました。");
+            return true;
+        }
+        if (e.Vk is not (VirtualKeys.Space or VirtualKeys.Tab) || IsDown(VirtualKeys.Shift) || !SnippetsEnabled(settings)) return false;
+        _snippet.Mark = settings.SnippetMark;
+        if (_snippet.Expand(composition.Snippets) is not { } expansion) return false;
+        lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
+        _lastSnippet = (expansion.Text, expansion.Typed);
+        composition.Post(() => composition.InsertSnippet(expansion.Delete, expansion.Text));
+        _line.Invalidate();
+        Log.Info($"定型文を入れました ({expansion.Text.Length} 文字)。");
+        return true;
+    }
     private long _lineVersion;
     private System.Threading.Timer? _lineTimer;
     private volatile bool _codeJapanese;
@@ -372,10 +410,12 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                 // AI の入力で 半角/全角 を押して日本語にしていたら、続けて日本語のまま。
                 InvalidateLine(resetJapanese: false, delayMs: 300);
                 _sigil.Start();
+                _snippet.Start();
                 return;
             }
             _line.NewLine();
             _sigil.Start();
+            _snippet.Start();
             _codeJapanese = false;
             return;
         }
@@ -383,6 +423,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         {
             _line.Backspace();
             _sigil.Backspace();
+            _snippet.Backspace();
             return;
         }
         if (e.Vk == VirtualKeys.Escape) return;
@@ -397,6 +438,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         {
             _line.Append(c.ToString());
             _sigil.Append(c);
+            _snippet.Append(c.ToString());
         }
     }
 
@@ -405,7 +447,11 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     private void InvalidateLine(bool resetJapanese = true, int delayMs = 80, bool keepSigil = false)
     {
         _line.Invalidate();
-        if (!keepSigil) _sigil.Lose();
+        if (!keepSigil)
+        {
+            _sigil.Lose();
+            _snippet.Lose();
+        }
         if (resetJapanese) _codeJapanese = false;
         Interlocked.Increment(ref _lineVersion);
         // キャレットの移動がアプリに届くのを少し待ってから読む。
@@ -458,6 +504,12 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             return false;
         }
         if (IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin)) return false;
+        // 先頭か空白の直後の ;名前 (定型文) は、Space / Tab まで変換せずにそのままアプリへ渡す (#290)。
+        if (!reconvert && SnippetsEnabled(settings) && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } snippetChar)
+        {
+            _snippet.Mark = settings.SnippetMark;
+            if (_snippet.PassesThrough(snippetChar, _line.Text)) return false;
+        }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、名前の終わり (空白) まで変換せずにそのままアプリへ渡す (#193)。
         // かな入力では / などのキーはかな (め) なので対象にしない。
         if (!reconvert && settings.SigilWordsDirect && (_keyboardDirect || settings.InputStyle != InputStyle.Kana) &&
@@ -696,6 +748,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         _codeJapanese = false;
         _line.Invalidate();
         _sigil.Lose();
+        _snippet.Lose();
         Interlocked.Increment(ref _lineVersion);
         _lastLineKind = null;
     }
@@ -705,6 +758,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         InvalidateLine(keepSigil: true);
         // 別の入力欄に移った。次に打つ文字は先頭とみなす (/ $ @ の名前の途中なら続ける)。
         _sigil.FocusMoved();
+        _snippet.FocusMoved();
         _composition?.Focus.Invalidate();
         _directEnglishWord = false;
         _composition?.ResetContext();
@@ -718,6 +772,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         _foreground.Refresh(window);
         InvalidateLine();
         _sigil.Start();
+        _snippet.Start();
         _lastLineKind = null;
         var app = _foreground.Current;
         if (_settings.ProfileFor(app.ProcessName) == AppProfile.Code)

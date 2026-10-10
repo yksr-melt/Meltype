@@ -35,3 +35,8 @@ internal sealed partial class ConversionJsonContext : JsonSerializerContext;
 [JsonSourceGenerationOptions(WriteIndented = true)]
 [JsonSerializable(typeof(UserModel.ModelFile))]
 internal sealed partial class IndentedLearningJsonContext : JsonSerializerContext;
+
+/// <summary>定型文 (snippets.json) の JSON の読み書き (issue #290)。手で読み書きしやすいように字下げする。</summary>
+[JsonSourceGenerationOptions(WriteIndented = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true)]
+[JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "Snippets")]
+internal sealed partial class SnippetJsonContext : JsonSerializerContext;

@@ -17,7 +17,7 @@ public static class Backup
     private const int FormatVersion = 1;
 
     /// <summary>バックアップに入れるファイル (データフォルダーからの相対パス)。dictionaries/ はユーザーが足した辞書。</summary>
-    private static readonly string[] RootFiles = ["config.json", "model.json", "conversions.json", "translations.json", "languages.json", "userdict.txt"];
+    private static readonly string[] RootFiles = ["config.json", "model.json", "conversions.json", "translations.json", "languages.json", "userdict.txt", "snippets.json"];
 
     /// <summary>
     /// 戻してよい名前か (バックアップに入れるファイルと同じ名前だけ: 決まった名前か、dictionaries/ の直下の .txt)。
