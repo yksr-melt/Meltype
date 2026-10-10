@@ -682,7 +682,9 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, wchar_t& ch, bool test)
     if (KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return pass(L"Ctrl・Alt・Windows キーを押している");
     if (ContextDisabled(context)) return pass(L"この入力欄では使わない");
     ch = CharOf(vk, 0);
-    bool starts = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'!' && ch <= L'~');
+    // Shift+Space は全角スペース (Microsoft IME と同じ。Meltype.exe が入れる: issue #246)
+    bool starts = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'!' && ch <= L'~') ||
+                  (vk == VK_SPACE && KeyDown(VK_SHIFT));
     if (!starts) return false;
     if (!ServerReady()) return pass(L"Meltype.exe が使えない");
     // パスワード欄か。OnTestKeyDown で読んだ結果は、続く同じキー・同じ入力欄の OnKeyDown で 1 回だけ使う (ほかのキー・入力欄には使わない)
