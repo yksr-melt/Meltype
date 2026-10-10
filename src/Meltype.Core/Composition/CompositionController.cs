@@ -710,6 +710,7 @@ public sealed class CompositionController
         {
             if (_host.GetReconversionSelection() is not { } selection || string.IsNullOrWhiteSpace(selection.Reading)) return;
             _correctable.Clear();
+            if (IsRomajiText(selection.Text) && StartRomajiReconversion(selection)) return;
             BeginComposition();
             _reconversion = selection;
             foreach (var kana in selection.Reading) _text.AppendKana(kana, kana);
@@ -758,6 +759,68 @@ public sealed class CompositionController
     /// 新しい入力を始める。入力欄のキャレットの前後の確定済みの文字を読みに行き、
     /// 英語とも日本語とも読める語の判定と、変換の文脈に使う。読めるまでは自分が最後に確定した文字列で代用する。
     /// </summary>
+    /// <summary>ローマ字のまま入った文か (英字を含み、半角の英数字・記号・空白だけ)。</summary>
+    internal static bool IsRomajiText(string text) =>
+        text.Any(char.IsAsciiLetter) && text.All(c => c is >= ' ' and <= '~') && text.Trim().Length > 0;
+
+    /// <summary>
+    /// ローマ字のまま入った文を選んで変換キーを押したとき (Meltype が止まっていた・ターミナルで打った: issue #288)。
+    /// Meltype の判定で日本語の所だけを日本語にした文を候補として見せ、Enter で選んだ文字と置き換える。
+    /// 候補は 日本語にした文 → 選んだままの文。日本語にする所が無ければ false (今までの再変換に任せる)。
+    /// </summary>
+    private bool StartRomajiReconversion(ReconversionSelection selection)
+    {
+        var converted = ConvertRomajiText(selection.Text);
+        if (converted == selection.Text)
+        {
+            Diagnostics.Log.Info("再変換: 選んだ文字に、日本語にする所がありませんでした。");
+            return false;
+        }
+        BeginComposition();
+        _reconversion = selection;
+        foreach (var c in converted) _text.AppendKana(c, c);
+        _text.Mode = DisplayMode.Hiragana;
+        _clauses = [new Clause(converted, false, [converted, selection.Text])];
+        _selectedClause = 0;
+        _converting = true;
+        return true;
+    }
+
+    /// <summary>
+    /// ローマ字の文を、打ったときと同じ判定で日本語にする。空白で区切った語ごとに英語 / 日本語を判定し (前の語が英語かも手がかりにする)、
+    /// 続く日本語の語はつなげて 1 つの文として変換する (asita no → 明日の)。英語の語は前後に空白を残す
+    /// (asita no meeting de review shimasu → 明日の meeting で review します)。
+    /// </summary>
+    internal string ConvertRomajiText(string text)
+    {
+        var output = new StringBuilder();
+        var kana = new StringBuilder();
+        bool? previousEnglish = null;
+        foreach (var word in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            // 前の語が日本語でも「日本語の続き」とはしない (空白で区切って打った語なので、語の途中ではない)
+            var typed = new CompositionText(_detector) { PrecedingEnglish = previousEnglish == true ? true : null, Punctuation = _options.Punctuation() };
+            foreach (var c in word) typed.Append(c);
+            var segments = typed.Segments(final: true);
+            foreach (var segment in segments)
+            {
+                if (!segment.IsEnglish)
+                {
+                    kana.Append(segment.Kana);
+                    continue;
+                }
+                // 英語の語: 前の日本語をまとめて変換してから、空白で区切って足す
+                if (kana.Length > 0) output.Append(Convert(kana.ToString()));
+                kana.Clear();
+                if (output.Length > 0 && output[^1] != ' ') output.Append(' ');
+                output.Append(segment.Raw).Append(' ');
+            }
+            previousEnglish = segments.Count > 0 && segments[^1].IsEnglish;
+        }
+        if (kana.Length > 0) output.Append(Convert(kana.ToString()));
+        return output.ToString().TrimEnd();
+    }
+
     private void BeginComposition()
     {
         _text.KanaInput = _options.KanaInput();

@@ -317,6 +317,43 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Reconversion_RomajiTextBecomesJapanese()
+    {
+        // #288: ローマ字のまま入った文を選んで変換キー → Meltype の判定で日本語の所だけを日本語にして候補に出す。Enter で置き換える
+        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (selected, expected) in new[]
+            {
+                ("kyouha iitenki desu ne", "きょうはいいてんきですね"),
+                ("asita no meeting de review shimasu", "あしたの meeting で review します"),
+                ("PR no review onegai shimasu", "PR の review おねがいします"),
+            })
+            {
+                var k = new Keyboard(direct: true);
+                var selection = new ReconversionSelection(selected, selected);
+                k.Host.Selection = selection;
+                k.Press(VirtualKeys.Convert);
+                Assert.True(k.Host.View?.Converting == true, selected + ": 候補を出す");
+                Assert.Equal(expected, k.Showing, selected);
+                Assert.True(k.Host.View!.Candidates.Contains(selected), "選んだままの文も候補に");
+                Assert.Equal(0, k.Host.Output.Count, "Enter まで置き換えない");
+                k.Press(VirtualKeys.Return);
+                Assert.True(k.Host.Events.Any(e => e == $"replace:{selected}:{expected}"), string.Join(" ", k.Host.Events));
+            }
+            // 日本語にする所が無い英文は、今までの再変換と同じく扱う (英文を勝手に日本語にしない)
+            var english = new Keyboard(direct: true);
+            english.Host.Selection = new ReconversionSelection("this is a pen", "this is a pen");
+            english.Press(VirtualKeys.Convert);
+            Assert.True(english.Showing is null || !english.Showing.Any(c => c is >= 'ぁ' and <= 'ゖ'), "英文を日本語にしない: " + english.Showing);
+        }
+        finally
+        {
+            Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void Reconversion_ReplacesSelectedTextOnlyOnCommit()
     {
         var k = new Keyboard(direct: true);
