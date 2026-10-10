@@ -303,6 +303,13 @@ public sealed class FocusInspector : IDisposable
                 // Windows Terminal などは Edit ではなく TextPattern を持つ独自コントロール。
                 editable = true;
             }
+            else if (type == ControlTypeGroup && element.IsKeyboardFocusable && LooksLikeInputClass(element.ClassName))
+            {
+                // Web アプリの独自の入力欄 (Chatwork の検索欄: Group "チャット名、メッセージ内容を検索" (… inputLong))。
+                // UI Automation では Group で、ValuePattern も TextPattern も IAccessible2 の EDITABLE も持たないが、クラス名が入力欄 (issue #70)
+                editable = true;
+                description += " (クラス名が入力欄)";
+            }
             else if (element.IsKeyboardFocusable && element.IsIa2Editable())
             {
                 // Chromium / Electron の contenteditable は、空欄の間は UI Automation では
@@ -341,6 +348,32 @@ public sealed class FocusInspector : IDisposable
             return new FocusInfo(false, false, null, $"確認できない: {ex.GetType().Name}");
         }
     }
+
+    private const int ControlTypeGroup = 50026;
+
+    /// <summary>
+    /// Web の要素のクラス名 (空白区切り) に、入力欄を表す名前があるか: input・inputLong・searchInput・search-input・chat_input。
+    /// 入力欄を囲む枠・ボタン (input-group、inputWrapper、inputButton) は除く。
+    /// </summary>
+    internal static bool LooksLikeInputClass(string? className)
+    {
+        if (string.IsNullOrEmpty(className)) return false;
+        foreach (var token in className.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var lower = token.ToLowerInvariant();
+            var at = lower.IndexOf("input", StringComparison.Ordinal);
+            if (at < 0) continue;
+            if (NotInputParts.Any(lower.Contains)) continue;
+            // input の前は語の頭 (先頭・区切り・大文字の語の切れ目: searchInput)、後ろは終わりか大文字・区切り (inputLong、input-field)
+            var start = at == 0 || lower[at - 1] is '-' or '_' || char.IsAsciiLetterUpper(token[at]);
+            var end = at + 5;
+            var finish = end == token.Length || token[end] is '-' or '_' || char.IsAsciiLetterUpper(token[end]);
+            if (start && finish) return true;
+        }
+        return false;
+    }
+
+    private static readonly string[] NotInputParts = ["group", "wrap", "container", "label", "button", "btn", "icon"];
 
     /// <summary>入力欄が UI Automation に出てこない、画面をすべて自分で描くエディターのウィンドウのクラス名。</summary>
     // Zed::Window: Zed (issue #75)
