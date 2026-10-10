@@ -69,6 +69,7 @@ color colors pixel pixels screen screens display monitor keyboard mouse touch cl
 copy paste cut undo redo save open close exit quit new edit view help about home back next previous
 submit cancel confirm delete remove add create update upload download share send receive reply forward
 select deselect enable disable enabled disabled toggle check uncheck on off yes no ok okay
+ping pong
 
 # --- ローマ字としても読めてしまう一般的な英単語 ---
 a an and are as at be been but by can do does done did go goes going gone get got give given
