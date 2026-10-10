@@ -191,7 +191,78 @@ public sealed class MeltypeSession
         {
             _codeInput = value;
             _codeLine.SetFromText("");
+            _codeJapanese = false;
         }
+    }
+
+    /// <summary>コードの入力欄がターミナルか。</summary>
+    public bool CodeTerminal
+    {
+        get => _codeTerminal;
+        set
+        {
+            // エディターとターミナルを行き来した (VS Code など、同じ入力の本体のまま): 日本語にしていたら英数に戻す
+            if (_codeTerminal != value) _codeJapanese = false;
+            _codeTerminal = value;
+        }
+    }
+    private bool _codeTerminal;
+
+    // 半角/全角 で、コードの行でも日本語にしている (改行しても続ける。Meltype キーボードと同じ)
+    private bool _codeJapanese;
+
+    /// <summary>
+    /// コードの入力欄で、コードの行を日本語にする (japanese) / 英数に戻す。半角/全角 を押したとき。
+    /// コードの行 (コメント・文字列の外) を日本語にしたとき、日本語にしていたのを英数に戻したときに true。
+    /// コメント・文字列の中、コードの入力欄でないときは何もせずに false (IME の ON/OFF を切り替える)。
+    /// </summary>
+    public bool SetCodeLine(bool japanese, string? before)
+    {
+        if (!CodeInput || Direct || _controller.IsComposing) return false;
+        before = SyncCodeLine(before);
+        if (!japanese)
+        {
+            if (!_codeJapanese) return false;
+            _codeJapanese = false;
+            Diagnostics.Log.Info("コードの行: 英数に戻す");
+            return true;
+        }
+        if (_codeJapanese || before is not null && LineContext.ClassifyText(before) != LineKind.Code) return false;
+        _codeJapanese = true;
+        Diagnostics.Log.Info("コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)");
+        return true;
+    }
+
+    /// <summary>
+    /// 次に打つキーが、コードの行なので英数のままアプリに通るか (入力モードの表示に使う)。
+    /// before はキャレットの前 (null なら、打ったキーから追いかけた今の行)。
+    /// </summary>
+    public bool CodeEnglishAt(string? before)
+    {
+        if (!CodeInput || Direct || _controller.IsComposing) return false;
+        before = SyncCodeLine(before);
+        return !_codeJapanese && LineContext.ClassifyText(before ?? "") == LineKind.Code;
+    }
+
+    /// <summary>
+    /// キャレットが動いた (passedVk はアプリに通したキー。0 ならクリックなど、control は Ctrl を押していたか)。
+    /// 半角/全角 で日本語にしていたら、矢印・Tab・Ctrl の操作・クリックで英数に戻す (Meltype キーボードと同じ。改行では戻さない)。
+    /// ターミナルは、出力でもキャレットが動くので、キーなしの移動では戻さない。
+    /// </summary>
+    public void CaretMoved(int passedVk, bool control)
+    {
+        if (!_codeJapanese) return;
+        var moved = control || passedVk is VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
+        if (!moved) return;
+        _codeJapanese = false;
+        Diagnostics.Log.Info("コードの行: キャレットが別の場所に移ったので英数に戻す");
+    }
+
+    /// <summary>今の行をキャレットの前で読み直す。今の行 (分からなければ null) を返す。</summary>
+    private string? SyncCodeLine(string? before)
+    {
+        if (before is not null) _codeLine.SetFromText(before);
+        return before ?? _codeLine.Text;
     }
 
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
@@ -209,17 +280,14 @@ public sealed class MeltypeSession
     /// </summary>
     public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null)
     {
-        if (CodeInput && !_controller.IsComposing)
-        {
-            if (before is not null) _codeLine.SetFromText(before);
-            before ??= _codeLine.Text;
-        }
-        if (CodeInput && !Direct && _controller.IsComposing && !control && !alt && !command &&
+        if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
+        // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
+        if (CodeInput && !Direct && !control && !alt && !command &&
             ch is '"' or '\'' or '`' && _codeLine.Text is { } line &&
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
         {
-            var committed = CommitPending();
+            var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
             foreach (var edit in committed.Commits) _codeLine.Append(edit.Text);
             TrackCodeKey(vk, ch, false);
             return committed with { Consumed = false };
@@ -238,7 +306,7 @@ public sealed class MeltypeSession
             if (CodeInput) TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
-        if (CodeInput && !_controller.IsComposing &&
+        if (CodeInput && !_codeJapanese && !_controller.IsComposing &&
             (before is null || LineContext.ClassifyText(before) == LineKind.Code))
         {
             TrackCodeKey(vk, ch, modifier);

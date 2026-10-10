@@ -133,7 +133,7 @@ STDMETHODIMP LangBarButton::GetTooltipString(BSTR* tooltip) {
 }
 
 STDMETHODIMP LangBarButton::OnClick(TfLBIClick, POINT, const RECT*) {
-    if (service_ != nullptr) service_->SetOpen(!service_->IsOpen());
+    if (service_ != nullptr) service_->ToggleInputMode(nullptr);
     return S_OK;
 }
 
