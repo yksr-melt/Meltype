@@ -22,9 +22,20 @@ public sealed class MsImeKanjiConverter : IKanjiConverter, IDisposable
 
     public bool IsAvailable => !_unavailable;
 
+    /// <summary>
+    /// 1 回に渡せる読みの長さ (文脈の文字を含む)。これより長いと GetJMorphResult が E_LARGEINPUT を返して変換できない (issue #221)。
+    /// 上限は資料に無いが、100 文字を超えると失敗するのを確かめている。
+    /// </summary>
+    internal const int MaxInputLength = 100;
+
     public string? Convert(string hiragana)
     {
         if (string.IsNullOrEmpty(hiragana)) return null;
+        if (hiragana.Length > MaxInputLength)
+        {
+            // 長い読みは区切って変換し、つなげる (変換できなかった部分は読みのまま)
+            return string.Concat(SplitForEngine(hiragana, MaxInputLength).Select(part => Convert(part) ?? part));
+        }
         var language = Open();
         if (language is null) return null;
         try
@@ -43,9 +54,51 @@ public sealed class MsImeKanjiConverter : IKanjiConverter, IDisposable
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
         if (string.IsNullOrEmpty(hiragana)) return null;
+        if ((context?.Length ?? 0) + hiragana.Length > MaxInputLength)
+        {
+            // 長い読み (未確定のまま 100 文字以上: issue #221) は、句読点・助詞の後ろで区切って変換し、文節をつなげる。
+            // 2 つ目からは、前の部分の変換結果の終わりを文脈にする
+            var clauses = new List<ConversionClause>();
+            foreach (var part in SplitForEngine(hiragana, MaxInputLength - MaxContextLength))
+            {
+                var previous = clauses.Count > 0 ? string.Concat(clauses.Select(c => c.Text)) : context ?? "";
+                var partContext = previous.Length > MaxContextLength ? previous[^MaxContextLength..] : previous;
+                clauses.AddRange(ConvertClauses(part, partContext) ?? [new ConversionClause(part, Convert(part) ?? part)]);
+            }
+            return clauses;
+        }
         // 文脈付きで区切れなければ (エンジンが文脈の文字を読み直したなど)、文脈なしでやり直す。
         if (!string.IsNullOrEmpty(context) && Morph(hiragana, context) is { } withContext) return withContext;
         return Morph(hiragana, null);
+    }
+
+    /// <summary>長い読みを区切るときに、前の部分から文脈として渡す文字数。</summary>
+    private const int MaxContextLength = 10;
+
+    /// <summary>
+    /// 読みを max 文字以下の部分に区切る。なるべく文の切れ目 (。！？ の後ろ)、次に読点 (、) の後ろ、次に助詞らしいかな
+    /// (は が を に で と も へ や の) の後ろで区切り、見つからなければ max 文字で切る。
+    /// </summary>
+    internal static List<string> SplitForEngine(string text, int max)
+    {
+        var parts = new List<string>();
+        var start = 0;
+        while (text.Length - start > max)
+        {
+            var cut = Find("。．！？!?") ?? Find("、，,") ?? Find("はがをにでともへやの") ?? start + max;
+            parts.Add(text[start..cut]);
+            start = cut;
+        }
+        parts.Add(text[start..]);
+        return parts;
+
+        // start から max 文字の中で、いちばん後ろの区切りの文字の直後 (前半が短くなりすぎないよう、半分より後ろだけ)
+        int? Find(string marks)
+        {
+            for (var i = start + max; i > start + max / 2; i--)
+                if (marks.Contains(text[i - 1])) return i;
+            return null;
+        }
     }
 
     /// <summary>
