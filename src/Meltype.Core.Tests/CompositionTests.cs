@@ -666,6 +666,29 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void CtrlH_IsBackSpaceWhileComposing()
+    {
+        // #150: 入力中の Ctrl+H は BackSpace (確定しない)。変換中なら変換をやめてかなに戻す
+        var k = new Keyboard();
+        k.Type("aiueo");
+        CtrlPress(k, 'H');
+        Assert.Equal("あいうえ", k.Showing);
+        Assert.Equal(0, k.Host.Output.Count);
+        Assert.True(!k.Host.Events.Any(e => e.EndsWith(":A2")), "Ctrl を送らない: " + string.Join(" ", k.Host.Events));
+
+        k.Press(VirtualKeys.Space);
+        CtrlPress(k, 'H');
+        Assert.Equal("あいうえ", k.Showing);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("あいうえ", k.Host.Document);
+
+        // 変換ボックスが空なら、Ctrl+H はアプリの操作 (置換など) としてそのまま送る
+        k = new Keyboard();
+        CtrlPress(k, 'H');
+        Assert.True(k.Host.Events.Contains("passed:48"), "Ctrl+H をアプリに通す: " + string.Join(" ", k.Host.Events));
+    }
+
+    [Test]
     public static void CtrlHeld_RepeatsShortcutAndMatchesUps()
     {
         // Ctrl を押したまま O を 2 回 (半角英数 → 大文字)。右 Ctrl でも同じ。Ctrl はアプリに送らず、上げ下げもそろったまま

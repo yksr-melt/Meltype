@@ -175,6 +175,17 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CtrlHWhileComposing_IsBackSpace()
+    {
+        // #150: Meltype IME・Mac・Linux も、入力中の Ctrl+H は確定せずに 1 音消す
+        var session = Create();
+        Type(session, "aiueo");
+        var result = session.HandleKey('H', '\b', false, true, false, false);
+        Assert.True(result.Consumed && result.Commits.Count == 0, "確定しない");
+        Assert.Equal("あいうえ", result.View?.Text);
+    }
+
+    [Test]
     public static void ArrowWhileComposing_SelectsClauses()
     {
         var session = Create();
