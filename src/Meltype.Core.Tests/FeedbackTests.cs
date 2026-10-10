@@ -45,6 +45,26 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue303_ArtistNames_StayEnglish()
+    {
+        // Issue #303: 大文字の語 + 日本語 (K|はぃふぁ、She|えらん、Gran|で) に区切られていた名前と、記号を混ぜて書く名前
+        foreach (var (typed, expected) in new[]
+        {
+            ("Wiz Khalifa", "Wiz Khalifa"), ("Ariana Grande", "Ariana Grande"), ("Ed Sheeran", "Ed Sheeran"),
+            ("Marshmello", "Marshmello"), ("beabadoobee", "beabadoobee"), ("The Chainsmokers", "The Chainsmokers"),
+            ("iann dior", "iann dior"), ("999dobby", "999dobby"),
+            ("B.o.B", "B.o.B"), ("U.S.A.", "U.S.A."), ("Chri$tian Gate$", "Chri$tian Gate$"), ("Ke$ha", "Ke$ha"),
+            // 大文字の語 + 助詞は今までどおり区切る
+            ("Anisiyouka", "Aにしようか"), ("Tokyonisumu", "Tokyoにすむ"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void ShiftedSingleConsonant_StaysUppercase()
     {
         foreach (var c in "WRTYPSDGHKLZXVBNM")

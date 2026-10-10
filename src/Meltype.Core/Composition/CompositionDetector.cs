@@ -104,7 +104,7 @@ public sealed partial class CompositionDetector
         // Structured Latin tokens are opaque; their components are not Japanese readings.
         if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
             (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) ||
-             System.Text.RegularExpressions.Regex.Matches(token, "[a-z][A-Z][a-z]").Count >= 2))
+             System.Text.RegularExpressions.Regex.Matches(token, "[a-z][A-Z][a-z]").Count >= 2 || IsStylizedName(token)))
             return [new CompositionSegment(true, "", token)];
         // A romaji token can cross an English boundary (reflect + sa becomes tsa).
         // Recognize an unambiguous English verb before parsing its Japanese conjugation.
@@ -156,6 +156,17 @@ public sealed partial class CompositionDetector
         }
         return segments;
     }
+
+    /// <summary>
+    /// 記号を混ぜて書く名前・略語か (#303)。英字 1 文字ずつを . で区切った大文字を含む略語 (B.o.B、U.S.A.) と、
+    /// 大文字で始まり、英字のすぐ後ろに $ が入った名前 (Chri$tian、Ke$ha、A$AP)。日本語の打ちかけではない。
+    /// </summary>
+    private static bool IsStylizedName(string token) =>
+        token.Any(char.IsAsciiLetterUpper) && DottedLetters.IsMatch(token) ||
+        token.Length > 0 && char.IsAsciiLetterUpper(token[0]) && DollarName.IsMatch(token);
+
+    private static readonly System.Text.RegularExpressions.Regex DottedLetters = new(@"^(?:[A-Za-z]\.)+[A-Za-z]\.?$");
+    private static readonly System.Text.RegularExpressions.Regex DollarName = new(@"^[A-Za-z]+(?:\$[A-Za-z]*)+$");
 
     private List<CompositionSegment>? UnknownWordThenJapanese(IReadOnlyList<CompositionUnit> units, string pending, List<CompositionSegment> segments, DetectionLevel level, string whole)
     {
