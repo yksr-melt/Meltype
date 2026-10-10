@@ -241,6 +241,10 @@ public sealed class Settings
      Description("打っている途中に Tab を押すと、Space と同じく変換を始めます (Microsoft IME と同じ)。Tab で始めた変換の中では Tab で次の候補、Shift+Tab で前の候補、Enter で確定します。もしかして・手動の提案・予測変換の候補が出ているときは、今までどおりそちらに使います。英語で終わっているとき・Space で始めた変換の中では、今までどおり確定してから Tab をアプリに渡します。")]
     public bool TabConversion { get; set; } = true;
 
+    [Category("1. 全般"), DisplayName("変換したあとに続けて打っても確定しない"),
+     Description("Space で変換したあとに続けて文字を打っても、変換した部分を確定せず、続けて打った文字と一緒に変換ボックスに残します (選んだ候補は、もう一度変換したときにも使います)。OFF なら Microsoft IME と同じく、変換した部分を確定してから続きを打ちます。")]
+    public bool ContinueAfterConversion { get; set; }
+
     [Category("1. 全般"), DisplayName("候補の意味を表示"),
      Description("変換中に同じ候補で少し (約 1.5 秒) 止まると、その候補の意味をウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge)。同音異義語を選ぶときの手がかりに。")]
     public bool ShowCandidateMeanings { get; set; } = true;

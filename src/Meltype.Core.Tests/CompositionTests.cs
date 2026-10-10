@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool ContinueAfterConversion { get; set; }
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
         public Meltype.Config.PunctuationStyle Punctuation { get; set; }
@@ -239,6 +240,7 @@ internal static class CompositionTests
                 Now = now ?? (() => DateTime.Now),
                 ShowTypedKeys = () => showTypedKeys,
                 TabConversion = () => tabConversion,
+                ContinueAfterConversion = () => ContinueAfterConversion,
             });
             Controller.Committed += Sigil.Append;
             Host.Replayed += e =>
@@ -2148,6 +2150,51 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Tab);
         k.Key(VirtualKeys.LShift, up: true);
         k.Host.PhysicalShift = false;
+    }
+
+    /// <summary>今日は を 今日|は に区切る変換エンジン (変換したあとに続けて打つテスト用)。</summary>
+    private sealed class KyouhaConverter : IKanjiConverter
+    {
+        private readonly FakeConverter _inner = new();
+        public string? Convert(string hiragana) => _inner.Convert(hiragana);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => hiragana switch
+        {
+            "きょう" => [new("きょう", "今日")],
+            "きょうは" => [new("きょう", "今日"), new("は", "は")],
+            _ => _inner.ConvertClauses(hiragana, context),
+        };
+    }
+
+    [Test]
+    public static void ContinueAfterConversion_KeepsTheConvertedPartComposing()
+    {
+        // #123: 設定を ON にすると、Space で変換したあとに続けて打っても確定せず、続けて打った文字と一緒に変換ボックスに残る
+        var k = new Keyboard(converter: new KyouhaConverter()) { ContinueAfterConversion = true };
+        k.Type("kyou ");
+        Assert.Equal("今日", k.Showing);
+        k.Type("ha");
+        Assert.Equal(0, k.Host.Output.Count, "確定しない");
+        Assert.Equal("きょうは", k.Showing);
+        k.Type(" \n");
+        Assert.Equal("今日は", k.Host.Document);
+
+        // 選んでいた候補 (キョウ) は、続けて打ったあとにもう一度変換しても使う
+        k = new Keyboard(converter: new KyouhaConverter()) { ContinueAfterConversion = true };
+        k.Type("kyou ");
+        var index = k.Host.View!.Candidates.ToList().IndexOf("キョウ");
+        Assert.True(index > 0, string.Join(" ", k.Host.View!.Candidates));
+        for (var i = 0; i < index; i++) k.Press(VirtualKeys.Space);
+        Assert.Equal("キョウ", k.Showing);
+        k.Type("ha ");
+        Assert.Equal("キョウは", k.Showing);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("キョウは", k.Host.Document);
+
+        // 既定 (OFF) は今までどおり、変換した部分を確定してから続きを打つ
+        var normal = new Keyboard(converter: new KyouhaConverter());
+        Assert.True(!new Meltype.Config.Settings().ContinueAfterConversion, "既定で OFF");
+        normal.Type("kyou ha");
+        Assert.Equal("今日", string.Concat(normal.Host.Output));
     }
 
     [Test]
