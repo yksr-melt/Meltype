@@ -45,6 +45,17 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue65_JapaneseWord_NotSplitByProperNounPrefix()
+    {
+        // Issue #65: anata を打っている途中で あnata (nata が固有名詞 Natalie の始まり) になっていた。
+        // 日本語のすぐ後ろの区間は、固有名詞の始まりというだけでは英字にしない
+        Assert.Equal("あなた", Showing("anata"));
+        Assert.Equal("きょうはなた", Showing("kyouhanata"));
+        // 入力の先頭の固有名詞の打ちかけ・大文字の名前は今までどおり英字
+        Assert.Equal("Nata", Showing("Nata"));
+    }
+
+    [Test]
     public static void ShiftedSingleConsonant_StaysUppercase()
     {
         foreach (var c in "WRTYPSDGHKLZXVBNM")
