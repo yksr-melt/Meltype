@@ -217,6 +217,68 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_SetCodeLineMakesCodeJapaneseUntilCaretMoves()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        const string line = "int x = 1;\nfoo(";
+        Assert.True(session.CodeEnglishAt(line), "コードの行は英数");
+        Assert.True(session.SetCodeLine(true, line), "コードの行を日本語にする");
+        Assert.True(!session.CodeEnglishAt(line), "日本語にした");
+        Assert.Equal("きょうは", Type(session, "kyouha", line)[^1].View?.Text);
+        Type(session, "\n");
+        session.CaretMoved(VirtualKeys.Return, false);
+        Assert.True(!session.CodeEnglishAt(line + "今日は\n"), "改行しても日本語のまま");
+        Assert.Equal("きょうは", Type(session, "kyouha", line + "今日は\n")[^1].View?.Text);
+        Type(session, "\n");
+        session.CaretMoved('A', false);
+        Assert.True(!session.CodeEnglishAt("foo(a"), "英字を打っただけなら日本語のまま");
+        session.CaretMoved(0x26, false);
+        Assert.True(session.CodeEnglishAt(line), "矢印で別の場所に移ったら英数に戻す");
+        Assert.True(Type(session, "hello", line).All(r => !r.Consumed), "英数に戻した");
+
+        Assert.True(session.SetCodeLine(true, line), "もう一度日本語にする");
+        session.CaretMoved(0, false);
+        Assert.True(session.CodeEnglishAt(line), "クリックで英数に戻す");
+        Assert.True(session.SetCodeLine(true, line), "もう一度日本語にする");
+        session.CaretMoved('V', true);
+        Assert.True(session.CodeEnglishAt(line), "Ctrl の操作で英数に戻す");
+        Assert.True(session.SetCodeLine(true, line), "もう一度日本語にする");
+        Assert.True(session.SetCodeLine(false, line), "半角/全角 で英数に戻す");
+        Assert.True(!session.SetCodeLine(false, line), "日本語にしていなければ、英数に戻すことはない (IME を閉じる)");
+
+        session.CodeTerminal = true;
+        Assert.True(session.SetCodeLine(true, "$ "), "ターミナル");
+        session.CaretMoved(0, false);
+        Assert.True(!session.CodeEnglishAt("$ "), "ターミナルは出力でキャレットが動いても日本語のまま");
+        session.CaretMoved(0x26, false);
+        Assert.True(session.CodeEnglishAt("$ "), "矢印で英数に戻す");
+        Assert.True(session.SetCodeLine(true, "$ "), "ターミナル");
+        session.CodeTerminal = false;
+        Assert.True(session.CodeEnglishAt(line), "エディターとターミナルを行き来したら英数に戻す");
+
+        Assert.True(!session.CodeEnglishAt("// "), "コメントの中は日本語");
+        Assert.True(!session.SetCodeLine(true, "// "), "コメントの中はもう日本語");
+        session.CodeInput = false;
+        Assert.True(!session.CodeEnglishAt(line), "コードの入力欄でなければ日本語");
+        Assert.True(!session.SetCodeLine(true, line), "コードの入力欄でなければ IME の ON/OFF");
+    }
+
+    [Test]
+    public static void CodeInput_ClosingQuoteStaysAscii()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        var empty = Type(session, "\"", "x = \"")[0];
+        Assert.True(!empty.Consumed && empty.Commits.Count == 0, "空の文字列を閉じる引用符は英数のまま通す");
+        Assert.Equal("きょうは", Type(session, "kyouha", "x = \"")[^1].View?.Text);
+        var close = Type(session, "\"")[0];
+        Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じる引用符は英数のまま通し、日本語は確定");
+        Assert.True(session.CodeEnglishAt(null), "閉じたあとは英数");
+        Assert.True(Type(session, "abc", "x = \"今日は\"").All(r => !r.Consumed), "閉じたあとのキーは英数のまま通す");
+    }
+
+    [Test]
     public static void MixedInput_ConvertsJapaneseAndKeepsEnglish()
     {
         var session = Create();

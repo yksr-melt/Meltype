@@ -72,8 +72,11 @@ public:
     STDMETHODIMP OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEditRecord* record) override;
 
     // 入力モード (日本語 = 開いている / 英数 = 閉じている)。タスクバーのボタンから使う。
-    bool IsOpen() const { return open_; }
+    // コードエディターのコードの行では、IME は開いたまま、次に打つキーが英数のままアプリに通るので「A」と出す
+    bool IsOpen() const { return open_ && !codeEnglish_; }
     void SetOpen(bool open);
+    // 半角/全角・タスクバーのボタン: 表示している 日本語 ⇔ 英数 を切り替える (context が null ならフォーカスのある入力欄)
+    void ToggleInputMode(ITfContext* context);
 
 private:
     ~TextService();
@@ -85,8 +88,18 @@ private:
     bool ServerReady();
     void Hello();
     void HandleKey(ITfContext* context, UINT vk, wchar_t ch);
+    // コードの行を日本語にする / 英数に戻すよう Meltype.exe に頼む。そうしたなら true
+    bool SetCodeLine(ITfContext* context, bool japanese);
+    // キャレットが動いたときに、次に打つキーが英数か Meltype.exe に聞く (コードエディターのとき。編集の通知の中で呼ぶ)
+    void QueryMode(TfEditCookie ec, ITfContext* context, bool selectionChanged);
+    // アプリに通したキーを覚える (QueryMode で伝える)
+    void RememberPassed(UINT vk);
+    // まだ伝えていない、アプリに通したキー (要求に足す JSON。無ければ空)
+    std::string PendingPassed();
+    // 応答の code / english を入力モードの表示に反映する
+    void ApplyMode(const JsonValue& reply);
     // 要求を送って応答を読む。失敗したら false
-    bool Request(const std::string& json, JsonValue& reply);
+    bool Request(const std::string& json, JsonValue& reply, DWORD timeoutMs = 800);
     // 応答を入力欄に反映する (編集セッションの中で呼ぶ)
     void Apply(TfEditCookie ec, ITfContext* context, const JsonValue& reply);
     // range の前の count 文字が expect (前に確定した文字) なら、range をそこまで広げる。違えば false
@@ -138,6 +151,12 @@ private:
     bool serverActive_ = false;
     ULONGLONG lastHello_ = 0;
     bool open_ = true;
+    bool codeApp_ = false;         // コードエディター・ターミナル (Meltype.exe の応答の code)
+    bool codeEnglish_ = false;     // 次に打つキーがコードの行なので英数のまま通る (Meltype.exe の応答の english)
+    UINT passedVk_ = 0;            // 最後にアプリに通したキー (キャレットが動いたときに Meltype.exe に伝える)
+    bool passedControl_ = false;   // そのとき Ctrl を押していたか
+    ULONGLONG passedTime_ = 0;
+    bool passedPending_ = false;   // そのキーをまだ Meltype.exe に伝えていない
     bool disabled_ = false;
     bool ownProcess_ = false;      // Meltype.exe 自身の中で動いている (要求にスレッドを付ける)  // Meltype.exe 自身の中では動かない (自分のサーバーを待って固まるため)
     bool eatenDown_[256] = {};

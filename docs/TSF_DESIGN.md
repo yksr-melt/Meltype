@@ -55,7 +55,7 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 |---|---|
 | ITfTextInputProcessorEx | IME として起動・終了 |
 | ITfKeyEventSink | キーを受け取り、サーバーに渡して「使ったか」を返す |
-| ITfThreadMgrEventSink / ITfTextEditSink | フォーカスが変わった・キャレットが変換中の文字の外に出た → 確定する。変換していないときにキャレットが動いた → 次のキーで伝える |
+| ITfThreadMgrEventSink / ITfTextEditSink | フォーカスが変わった・キャレットが変換中の文字の外に出た → 確定する。変換していないときにキャレットが動いた → 次のキーで伝える。種類が「コード」のアプリでは、移った先がコードの行かをサーバーに聞いて、タスクバーの「あ / A」を合わせる |
 | ITfCompositionSink | アプリの側が変換中の文字を確定したとき (打っている途中で、キャレットがその後ろのままなら、次のキーで変換中に戻して続ける。空のノートに最初の文字を入れたときに、アプリが入力欄を作り直して確定することがあるため) |
 | ITfDisplayAttributeProvider | 下線の種類 (打っている途中は点線、変換した文節は細線、選んでいる文節は太線) |
 | ITfCompartmentEventSink | 日本語 ⇔ 英数 (IME の ON/OFF)。半角/全角 と、タスクバーの「あ / A」のボタン (ITfLangBarItemButton) で切り替える |
@@ -165,8 +165,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 <img src="images/headings/tsf-design/07.svg" alt="未対応・確かめていないこと" height="53"><br>
 
 
-- Meltype キーボードから移せていない機能: コードエディター・ターミナルの「コメントと文字列の中だけ日本語」、アプリの種類ごとの「最初は英数」、
-  カーソルの近くの「あ」「A」の表示、選んだ文字の再変換
+- Meltype キーボードから移せていない機能: アプリの種類ごとの「最初は英数」、カーソルの近くの「あ」「A」の表示、選んだ文字の再変換
 - UILess (候補を自分で描くアプリ)、ARM64 (ARM64 の Windows ではインストールのときに Meltype IME を入れない)
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。
   実際のアプリ (メモ帳・Chrome・VS Code など)、表示スケール 150%、コード署名をしない DLL を読み込まないアプリがあるかは、まだ広くは確かめていない
