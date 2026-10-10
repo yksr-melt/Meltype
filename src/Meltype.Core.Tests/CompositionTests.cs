@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool Learning { get; set; } = true;
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
         public Meltype.Config.PunctuationStyle Punctuation { get; set; }
@@ -239,6 +240,7 @@ internal static class CompositionTests
                 Now = now ?? (() => DateTime.Now),
                 ShowTypedKeys = () => showTypedKeys,
                 TabConversion = () => tabConversion,
+                Learning = () => Learning,
             });
             Controller.Committed += Sigil.Append;
             Host.Replayed += e =>
@@ -1422,6 +1424,25 @@ internal static class CompositionTests
         k = new Keyboard(history: history);
         k.Type("hashiwo ");
         Assert.Equal("箸を", k.Host.View!.Clauses![0], "前に選び直した変換が最初の候補になる");
+    }
+
+    [Test]
+    public static void LearningOff_RemembersNothing()
+    {
+        // #277: 設定「ユーザー学習を使う」が OFF なら、選び直した変換も、F10 で英字に直した語も覚えない
+        var history = new ConversionHistory(null);
+        var languages = new LanguageMemory(null);
+        var k = new Keyboard(history: history, languages: languages) { Learning = false };
+        k.Type("hashiwo ");
+        var index = k.Host.View!.Candidates.ToList().IndexOf("箸を");
+        for (var i = 0; i < index; i++) k.Type(" ");
+        k.Type("\n");
+        Assert.Equal("箸を", k.Host.Output.Single());
+        k.Type("api");
+        k.Press(VirtualKeys.F10);
+        k.Type("\n");
+        Assert.Equal(0, history.Count, "変換を覚えない");
+        Assert.Equal(0, languages.Entries().Count, "英字に直した語を覚えない");
     }
 
     [Test]

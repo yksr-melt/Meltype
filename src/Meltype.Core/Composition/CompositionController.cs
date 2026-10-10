@@ -144,6 +144,9 @@ public sealed record CompositionOptions
     /// <summary>変換前の Tab で変換を始めるか (設定、issue #219)。</summary>
     public Func<bool> TabConversion { get; init; } = () => false;
 
+    /// <summary>選び直した変換・英字 / かなに直した語・予測変換の語句・英訳を新しく覚えるか (設定「ユーザー学習を使う」。issue #277)。</summary>
+    public Func<bool> Learning { get; init; } = () => true;
+
     /// <summary>選んだ英訳の記録 (普通の変換の学習より弱く効かせる)。</summary>
     public TranslationHistory? TranslationHistory { get; init; }
 
@@ -1733,7 +1736,7 @@ public sealed class CompositionController
     /// <summary>漢字を含む日本語の語句を確定したら、予測変換のために読みと一緒に覚える (英字だけ・かなのままは覚えない)。</summary>
     private void RememberPhrase(string reading, string text, bool english)
     {
-        if (english || _options.Predictor?.Phrases is not { } phrases || !_options.Predictions()) return;
+        if (english || !_options.Learning() || _options.Predictor?.Phrases is not { } phrases || !_options.Predictions()) return;
         if (!text.Any(c => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿') || reading.Length < 3 || reading.Any(char.IsAsciiLetter)) return;
         phrases.Remember(reading, text);
     }
@@ -1744,7 +1747,7 @@ public sealed class CompositionController
         var english = prediction.All(c => c < 0x80);
         var reading = _text.AllKana(final: true);
         _predictionIndex = -1;
-        if (!english) _options.Predictor?.Phrases?.Remember(PredictionReading(prediction, reading), prediction);
+        if (!english && _options.Learning()) _options.Predictor?.Phrases?.Remember(PredictionReading(prediction, reading), prediction);
         CommitText(prediction, english, english ? prediction : _text.Raw, chosen: true);
     }
 
@@ -1771,7 +1774,7 @@ public sealed class CompositionController
     /// </summary>
     private void LearnLanguage()
     {
-        if (_options.Languages is not { } memory) return;
+        if (!_options.Learning() || _options.Languages is not { } memory) return;
         var raw = _text.Raw;
         if (raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return;
         var automatic = _text.Segments(final: true);
@@ -1863,6 +1866,8 @@ public sealed class CompositionController
     /// <summary>選び直した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。</summary>
     private void Learn()
     {
+        // 設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)
+        if (!_options.Learning()) return;
         // 変換の候補から打ったままの英字 (api) を選んで確定したら、その語は次から英字にする (F10 と同じ)。
         foreach (var clause in _clauses.Where(c => !c.IsEnglish && c.Changed && c.Raw is { } raw && c.Text == raw))
         {

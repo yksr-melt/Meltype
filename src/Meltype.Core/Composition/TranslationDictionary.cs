@@ -134,6 +134,13 @@ public sealed class TranslationHistory
         Save();
     }
 
+    /// <summary>選んだ英訳の記録をすべて消す (トレイの「学習データをリセット」)。</summary>
+    public void Clear()
+    {
+        _counts.Clear();
+        Save();
+    }
+
     private void Save()
     {
         if (_path is null) return;

@@ -508,7 +508,8 @@ public sealed class Settings
     [Category("4. セッション"), DisplayName("英語の後の Space では判定しない"), Description("英語と判定した直後に Space で区切られた次の単語は、保留せずそのまま通します (英文入力中の遅延を減らします)。")]
     public bool ContinueEnglishAfterSpace { get; set; }
 
-    [Category("5. 学習"), DisplayName("ユーザー学習を使う")]
+    [Category("5. 学習"), DisplayName("ユーザー学習を使う"),
+     Description("OFF にすると、自動切替の学習 (model.json) を使わず、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳も新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
     public bool LearningEnabled { get; set; } = true;
 
     [Category("5. 学習"), DisplayName("誤判定フィードバックの受付時間 (ms)"), Description("自動判定の後、この時間内に 半角/全角 などの IME 切替キーが押されたら誤判定として学習します。")]
