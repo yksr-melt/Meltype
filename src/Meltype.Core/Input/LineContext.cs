@@ -189,7 +189,7 @@ public static class LineContext
     public static readonly HashSet<string> TerminalProcesses = new(StringComparer.OrdinalIgnoreCase)
     {
         "WindowsTerminal.exe", "OpenConsole.exe", "conhost.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
-        "wezterm-gui.exe", "alacritty.exe", "mintty.exe",
+        "wezterm-gui.exe", "alacritty.exe", "mintty.exe", "rio.exe",
     };
 
     /// <summary>エディター以外の入力欄 (チャット・拡張機能の画面) も多い、Electron 製のエディター。</summary>
