@@ -87,7 +87,12 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _opacity = options.Opacity;
         _directMode = options.DirectMode;
         var onFocus = options.ModeIndicatorOnFocus;
-        Focus.TextInputEntered += () => { if (onFocus()) ShowMode(!_directMode()); };
+        Focus.TextInputEntered += () =>
+        {
+            if (!onFocus()) return;
+            if (ShowModeOnFocus is { } show) show();
+            else ShowMode(!_directMode());
+        };
         Focus.CaptureLost += Abandon;
         Controller.Committed += text => Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(text.Length > 20 ? text[..20] + "…" : text)}");
         _tick.Tick += (_, _) => Safely(() => Controller.Tick(Environment.TickCount64));
@@ -279,6 +284,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         CommitText(text);
         return true;
     }
+
+    /// <summary>入力欄にフォーカスが移ったときに、次に打つキーのモード (あ / A) を出す (フォーカスを調べるスレッドから呼ばれる)。null なら英数 / 日本語 をそのまま出す。</summary>
+    public Action? ShowModeOnFocus { get; set; }
 
     /// <summary>前面のアプリで、確定した文字を貼り付けで入れるか (設定の「貼り付けで入力するアプリ」)。</summary>
     public Func<bool> PasteCommit { get; set; } = () => false;

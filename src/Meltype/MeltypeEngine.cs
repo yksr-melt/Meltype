@@ -119,6 +119,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         composition.PasteCommit = () => PastePolicy.ShouldPaste(_settings, _foreground.Current.ProcessName, IsQt(_foreground.Current.Window));
         composition.InputAllowed = () => KeyboardLayoutPolicy.AllowsInput(_settings);
         composition.Focus.TreatsAsTextInput = () => _settings.TreatsAsTextInput(_foreground.Current.ProcessName);
+        composition.ShowModeOnFocus = ShowModeOnFocus;
         // 変換ボックスで確定した文字と、Meltype が送り直したキーも、今の行の追いかけに入れる (自分で送ったキーはフックに届かない)。
         composition.Controller.Committed += text =>
         {
@@ -163,7 +164,9 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             _directEnglishWord = false;
             Log.Info(value ? "Meltype キーボード: 直接入力 (英数)" : "Meltype キーボード: 日本語入力");
             if (!value) CloseSystemImeAsync();
-            _composition?.ShowMode(!value);
+            // 「コード」のアプリのコードの行では、日本語入力にしても次のキーは英数で入る。
+            if (value || !IsCodeApp(_settings)) _composition?.ShowMode(!value);
+            else ShowCodeMode();
             StatusChanged?.Invoke();
         }
     }
@@ -245,7 +248,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                 {
                     _codeJapanese = !_codeJapanese;
                     Log.Info(_codeJapanese ? "コードの行: 日本語で入力 (エディターは改行まで、ターミナルは別の場所に移るまで)" : "コードの行: 英数に戻す");
-                    composition.ShowMode(_codeJapanese);
+                    ShowCodeMode();
                     return true;
                 }
                 KeyboardDirect = !_keyboardDirect;
@@ -292,22 +295,23 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                     _codeJapanese = false;
                     Log.Info("コードの行: 英数に戻す");
                 }
-                composition.ShowMode(false);
+                ShowCodeMode();
                 return;
             }
             if (_keyboardDirect) composition.ShowMode(false);
             else KeyboardDirect = true;
             return;
         }
-        // 英数状態からなら KeyboardDirect の切り替えで「あ」を出す。
+        // コードの行を日本語にしてから、英数状態なら KeyboardDirect の切り替えで「あ」を出す。
         var wasDirect = _keyboardDirect;
-        if (wasDirect) KeyboardDirect = false;
         if (InCode(settings))
         {
             _codeJapanese = true;
             Log.Info("コードの行: 日本語で入力 (エディターは改行まで、ターミナルは別の場所に移るまで)");
         }
-        if (!wasDirect) composition.ShowMode(true);
+        if (wasDirect) KeyboardDirect = false;
+        else if (IsCodeApp(settings)) ShowCodeMode();
+        else composition.ShowMode(true);
     }
 
     /// <summary>
@@ -359,6 +363,49 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         return LineContext.ClassifyText(line) == LineKind.Code;
     }
 
+    /// <summary>
+    /// 入力欄にフォーカスが移ったとき (フォーカスを調べるスレッドから呼ばれる)。次に打つキーが 日本語 / 英数 のどちらで入るかを出す。
+    /// 「コード」のアプリのコードの行では、日本語入力のままでも英数で入るので「A」を出す。
+    /// </summary>
+    private void ShowModeOnFocus()
+    {
+        if (_composition is not { } composition) return;
+        if (_keyboardDirect || !IsCodeApp(_settings))
+        {
+            composition.ShowMode(!_keyboardDirect);
+            return;
+        }
+        if (_line.IsKnown)
+        {
+            ShowCodeMode();
+            return;
+        }
+        // 今の行が分からないので、読んでから出す (読めなければコードとみなして「A」)。
+        var version = Interlocked.Read(ref _lineVersion);
+        composition.Focus.RequestTextBeforeCaret(before =>
+        {
+            // 読んでいる間にキャレットが動いたなら出さない。
+            if (version != Interlocked.Read(ref _lineVersion)) return;
+            if (before is not null && !_line.IsKnown) _line.SetFromText(before);
+            ShowCodeMode();
+        });
+    }
+
+    /// <summary>
+    /// 「コード」のアプリで、次に打つキーが 日本語 / 英数 のどちらで入るかを出す。
+    /// changedOnly なら、最後に出したものから変わったときだけ出す (改行・キャレットの移動の後)。
+    /// </summary>
+    private void ShowCodeMode(bool changedOnly = false)
+    {
+        if (_composition is not { } composition) return;
+        if (changedOnly && (_lastLineKind is null || !_line.IsKnown && !_codeJapanese || !IsCodeApp(_settings))) return;
+        var kind = InCode(_settings) ? LineKind.Code : LineKind.Comment;
+        if (changedOnly && kind == _lastLineKind) return;
+        // 打ち始めの英字で同じ表示を出し直さないように、出した種類を覚えておく。
+        _lastLineKind = kind;
+        composition.ShowMode(kind != LineKind.Code);
+    }
+
     /// <summary>アプリへ届いたキーで、今の行を追いかける。</summary>
     private void TrackLine(KeyEvent e)
     {
@@ -377,6 +424,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             _line.NewLine();
             _sigil.Start();
             _codeJapanese = false;
+            ShowCodeMode(changedOnly: true);
             return;
         }
         if (e.Vk == VirtualKeys.Back)
@@ -422,6 +470,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             // 読んでいる間にキャレットが動いた・打鍵で分かったなら使わない。
             if (before is null || version != Interlocked.Read(ref _lineVersion) || _line.IsKnown) return;
             _line.SetFromText(before);
+            ShowCodeMode(changedOnly: true);
         });
         if (delayMs <= 0)
         {
@@ -703,6 +752,8 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     private void OnFocusChanged()
     {
         InvalidateLine(keepSigil: true);
+        // 移った先の表示は、入力欄と分かったときに出す (ShowModeOnFocus)。
+        _lastLineKind = null;
         // 別の入力欄に移った。次に打つ文字は先頭とみなす (/ $ @ の名前の途中なら続ける)。
         _sigil.FocusMoved();
         _composition?.Focus.Invalidate();
