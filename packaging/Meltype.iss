@@ -81,6 +81,8 @@ Filename: "{app}\Meltype.exe"; Description: "Meltype を起動する"; Flags: no
 
 [UninstallRun]
 Filename: "{app}\Meltype.exe"; Parameters: "--exit"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "ExitMeltype"
+; サインインしたらすぐ起動するタスク (Meltype が作る: #283)
+Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Meltype /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteStartupTask"
 
 [UninstallDelete]
 ; 設定と学習データ ({localappdata}\Meltype) は、アンインストールの最後に聞いてから消す (CurUninstallStepChanged)
