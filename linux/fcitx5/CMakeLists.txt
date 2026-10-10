@@ -14,6 +14,10 @@ set(MELTYPE_DIR "/opt/meltype" CACHE PATH "libMeltypeNative.so を入れた場�
 
 add_library(meltype MODULE meltype.cpp)
 set_target_properties(meltype PROPERTIES PREFIX "" CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+# fcitx5 5.1.16 以降の fcitx-utils/log.h は std::source_location を使うため、C++20 が要る
+if(Fcitx5Core_VERSION VERSION_GREATER_EQUAL 5.1.16)
+    set_target_properties(meltype PROPERTIES CXX_STANDARD 20)
+endif()
 target_compile_definitions(meltype PRIVATE MELTYPE_DIR="${MELTYPE_DIR}")
 target_link_libraries(meltype PRIVATE Fcitx5::Core Fcitx5::Utils ${CMAKE_DL_LIBS})
 
@@ -36,6 +40,10 @@ if(BUILD_TESTING)
     get_filename_component(FCITX5_LIB_DIR ${FCITX5_CORE_LOCATION} DIRECTORY)
     add_executable(testmeltype test/testmeltype.cpp)
     set_target_properties(testmeltype PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    # fcitx5 5.1.16 以降の fcitx-utils/log.h は std::source_location を使うため、C++20 が要る
+    if(Fcitx5Core_VERSION VERSION_GREATER_EQUAL 5.1.16)
+        set_target_properties(testmeltype PROPERTIES CXX_STANDARD 20)
+    endif()
     target_compile_definitions(testmeltype PRIVATE
         FCITX5_MELTYPE_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
         FCITX5_SYSTEM_ADDON_DIR="${FCITX5_LIB_DIR}/fcitx5")
