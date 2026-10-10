@@ -376,6 +376,9 @@ public:
             apply(ic, native_.take(native_.commit(state->session())));
             state->direct = toDirect;
             native_.setDirect(state->session(), toDirect ? 1 : 0);
+            // 切り替えたモードをカーソル位置に出す (Mozc と同じ入力パネルの枠)
+            ic->inputPanel().setAuxUp(fcitx::Text(toDirect ? "A" : "あ"));
+            ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
             event.filterAndAccept();
             return;
         }
