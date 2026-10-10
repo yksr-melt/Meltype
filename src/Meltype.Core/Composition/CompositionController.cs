@@ -1212,6 +1212,21 @@ public sealed class CompositionController
     /// <summary>する の活用 (した・して・しない・しよう・したい …) で始まる読み。</summary>
     private static readonly string[] SuruForms = ["する", "すれ", "した", "して", "しま", "しな", "しよ", "しと", "しちゃ", "しろ", "され", "させ", "せず"];
 
+    /// <summary>
+    /// 確定し直しで英語に戻さない、する活用のローマ字。
+    /// sure は make sure で英文に直す必要があるので入れない (すれ と読めても除外)。
+    /// </summary>
+    private static readonly HashSet<string> SuruRomajiKeepJapanese =
+        ["site", "sita", "suru", "shite", "shita", "shimasu", "shinai", "shiyou", "shiro", "sezu"];
+
+    private bool IsSuruRomajiKeepJapanese(string raw)
+    {
+        var lower = raw.ToLowerInvariant();
+        if (!SuruRomajiKeepJapanese.Contains(lower)) return false;
+        var reading = _detector.Romaji.ConvertLenient(lower, final: true);
+        return SuruForms.Any(reading.StartsWith) && reading.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー');
+    }
+
     /// <summary>英単語の後ろの、する の活用の文節を、変換エンジンが漢字で始めた (した → 下、したい → 死体、しよう → 使用)。</summary>
     private static bool IsSuruAfterEnglish(Clause clause) =>
         SuruForms.Any(clause.Reading.StartsWith) && clause.Text.Length > 0 && !IsKana(clause.Text[0]) && clause.Text != clause.Reading;
@@ -1654,13 +1669,10 @@ public sealed class CompositionController
             // 助詞と同じ形の短い語 (to, no) 1 語だけを、大文字で始まる語 (固有名詞) で直すことはしない (Google と Apple は日本語でもよく書く)。
             // 小文字の英単語で英文と分かったとき (let me know、do it) は直す。
             if (targets.Count == 1 && targets[0].Raw.Length <= 2 && targets[0].Raw != "i" && char.IsAsciiLetterUpper(raw.FirstOrDefault(char.IsAsciiLetter))) return;
-            // する の活用として読める語 (site→して、sita→した) は、後ろが英語でも日本語のまま
+            // する の活用のローマ字 (site→して、sita→した) は、後ろが英語でも日本語のまま
             // (site PR → site PR に確定し直さず、して PR を保つ)。
-            if (targets.Any(t =>
-            {
-                var reading = _detector.Romaji.ConvertLenient(t.Raw.ToLowerInvariant(), final: true);
-                return SuruForms.Any(reading.StartsWith) && reading.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー');
-            }))
+            // sure→すれ は英文 (make sure) でも使うので含めない。
+            if (targets.Any(t => IsSuruRomajiKeepJapanese(t.Raw)))
             {
                 // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
                 if (!targets.Any(t => t.SpaceIntended)) return;
