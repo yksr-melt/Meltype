@@ -216,6 +216,27 @@ internal static class KanaInputTests
     }
 
     [Test]
+    public static void KanaInput_ShiftOverlappingAKey_StaysKana()
+    {
+        // #135: にゅうりょく の ゅ (Shift+8) を打つ Shift が、前後のキー (に = I) に重なると、Shift+I が英字の I として残っていた (Iゅ雨力)。
+        // かな入力で、Shift を押した英字 1 文字の後ろにかなが続くなら、かなの打ち間違い (Shift の押しすぎ)
+        foreach (var keys in new[]
+        {
+            new[] { (0x49, true), (0x38, true), (0x34, false), (0x4C, false), (0x39, true), (0x48, false) },  // Shift+I ゅ う り ょ く
+            new[] { (0x49, false), (0x38, true), (0x34, false), (0x4C, true), (0x39, true), (0x48, false) }, // に ゅ う Shift+L ょ く
+        })
+        {
+            var k = Kana();
+            k.TypeKeys(keys);
+            Assert.Equal("にゅうりょく", k.Showing, string.Join(" ", keys.Select(x => (x.Item2 ? "Shift+" : "") + (char)x.Item1)));
+        }
+        // 大文字で始まる英単語 (Google) は今までどおり英字
+        var word = Kana();
+        word.TypeKeys((0x47, true), (0x4F, false), (0x4F, false), (0x47, false), (0x4C, false), (0x45, false));
+        Assert.Equal("Google", word.Showing);
+    }
+
+    [Test]
     public static void KanaInput_Punctuation_FollowsSetting()
     {
         // かな入力の 、 (Shift+ね) と 。 (Shift+る) も句読点の設定に合わせる
