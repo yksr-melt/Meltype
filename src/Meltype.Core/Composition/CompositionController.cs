@@ -1757,7 +1757,8 @@ public sealed class CompositionController
     /// 直前に確定した語。英語とも日本語とも読める語 (i, sushi) を文脈が分からないまま確定したとき、
     /// 次の語で文脈がはっきりしたら確定し直す (I want: 「胃」→「I」)。キャレットが動いたら (ほかのキー・クリック) 無効。
     /// </summary>
-    private sealed record CommitRecord(string Text, string Raw, bool English, bool SpaceIntended);
+    /// <param name="AfterEnglish">確定したとき、前が英語だった (Are + you)。英文の中の語なので、後ろが日本語でも日本語に直さない (#265)。</param>
+    private sealed record CommitRecord(string Text, string Raw, bool English, bool SpaceIntended, bool AfterEnglish = false);
 
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     private readonly List<CommitRecord> _correctable = [];
@@ -1789,7 +1790,9 @@ public sealed class CompositionController
             if (targets.Count == 1 && targets[0].Raw.Length <= 2 && targets[0].Raw != "i" && char.IsAsciiLetterUpper(raw.FirstOrDefault(char.IsAsciiLetter))) return null;
             replacement = string.Concat(targets.Select(t => (t.Raw == "i" ? "I" : t.Raw) + (t.SpaceIntended ? " " : "")));
         }
-        else if (previous.English && !english && !_detector.IsAmbiguousWord(raw) && raw.Any(char.IsAsciiLetter))
+        // 前に英語が続いていた普通の英単語 (Are you の you) は、英文の続きとして打ったもの。後ろが日本語 (すし？) でも日本語に直さない (#265)。
+        // 日本語由来の語 (I love sushi + がすき) は、日本語のつもりのことがあるので今までどおり直す。
+        else if (previous.English && !(previous.AfterEnglish && !CompositionDetector.IsJapaneseOriginWord(previous.Raw.ToLowerInvariant())) && !english && !_detector.IsAmbiguousWord(raw) && raw.Any(char.IsAsciiLetter))
         {
             // 英語で確定した語を日本語に (Space で空白を入れていたら取る)。
             targets = [previous];
@@ -1885,6 +1888,7 @@ public sealed class CompositionController
     {
         var formatEnglish = _options.AutomaticEnglishSpacing() && _text.Mode == DisplayMode.Auto;
         var spaceIntended = _spaceStartedConversion;
+        var afterEnglish = _text.PrecedingEnglish == true;
         _spaceStartedConversion = false;
         // 誤変換の報告を調べられるように、打った英字・読み・文節の区切りもログに残す (ログはファイルに書く設定のときだけ保存される)。
         if (!_text.IsEmpty)
@@ -1904,7 +1908,7 @@ public sealed class CompositionController
         {
             // 前の語の後に Space で区切って続けたときだけつなげる (それ以外は新しい並び)。
             if (_correctable.Count > 0 && !_correctable[^1].SpaceIntended) _correctable.Clear();
-            _correctable.Add(new CommitRecord(text, raw, english, spaceIntended));
+            _correctable.Add(new CommitRecord(text, raw, english, spaceIntended, afterEnglish));
             if (_correctable.Count > MaxCorrectable) _correctable.RemoveAt(0);
         }
         else _correctable.Clear();

@@ -1456,6 +1456,24 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AutoCorrect_KeepsEnglishWordInsideEnglishSentence()
+    {
+        // #265: 英文の中の普通の英単語 (Are you の you) は、後ろに日本語 (すし？) が続いても よう に確定し直さない。
+        // (#258 の Are yoよう人間？ も、この確定し直しで起きていた)
+        foreach (var (typed, expected) in new[] { ("Are you susi?\n", "Are you すし？"), ("Are you ningen?\n", "Are you にんげん？"), ("Are you susi\n", "Are you すし") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed);
+            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:") || e.StartsWith("replace")), "消さない: " + string.Join(" ", k.Host.Events));
+        }
+        // 先頭の you は今までどおり、後ろの日本語に合わせて直す
+        var start = new Keyboard();
+        start.Type("you ninaru\n");
+        Assert.Equal("ようになる", start.Host.Document);
+    }
+
+    [Test]
     public static void AutoCorrect_NotWhenHostCannotDelete()
     {
         // #124: 確定済みの文字を消せない入力欄 (Linux で周りの文字に対応していないアプリ) では確定し直さない (sushi が残って すし が足されないように)
