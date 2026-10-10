@@ -104,7 +104,7 @@ public sealed partial class CompositionDetector
         // Structured Latin tokens are opaque; their components are not Japanese readings.
         if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
             (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) ||
-             System.Text.RegularExpressions.Regex.Matches(token, "[a-z][A-Z][a-z]").Count >= 2))
+             System.Text.RegularExpressions.Regex.Matches(token, "[a-z][A-Z][a-z]").Count >= 2 && !StartsWithJapaneseReading(token)))
             return [new CompositionSegment(true, "", token)];
         // A romaji token can cross an English boundary (reflect + sa becomes tsa).
         // Recognize an unambiguous English verb before parsing its Japanese conjugation.
@@ -336,6 +336,19 @@ public sealed partial class CompositionDetector
     /// <summary>同梱の英単語の辞書・固有名詞にある語か、ユーザーが英字に直して覚えた語か (ok、github)。スペルチェッカーは使わない。</summary>
     public bool IsListedEnglishWord(string lower) =>
         lower.Length >= 2 && (Memory?.Get(lower) ?? (_english.Words.ContainsWord(lower) || _proper.Contains(lower)));
+
+    /// <summary>
+    /// 最初の大文字の前の小文字が、助詞で終わる日本語として読み切れるか (kyouhaGitHubni の kyouha)。
+    /// camelCaseName・getElementById・sakuraTreeNode のような識別子 (camel・get・sakura) は当たらない。
+    /// </summary>
+    private bool StartsWithJapaneseReading(string token)
+    {
+        var upper = token.AsSpan().IndexOfAnyInRange('A', 'Z');
+        if (upper < 3) return false;
+        var head = token[..upper];
+        return head.All(char.IsAsciiLetterLower) && TrailingParticles.Any(p => head.Length > p.Length && head.EndsWith(p, StringComparison.Ordinal)) &&
+            _romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } && !IsKnownEnglishWord(head);
+    }
 
     /// <summary>
     /// 知っている英単語か (同梱の辞書・固有名詞・ユーザーが英字に直して覚えた語・4 文字以上ならスペルチェッカー)。
