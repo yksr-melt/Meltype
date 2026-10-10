@@ -996,4 +996,29 @@ internal static class RomajiTypoTests
         k.Type("onegaishimsu\n");
         Assert.Equal("おねがいしmす", k.Host.Document);
     }
+
+    [Test]
+    public static void Issue243_BacktickBeforeEnglish_IsHalfWidth()
+    {
+        // Issue #243: 後ろが英語のバッククォート (Markdown のインラインコード) も ( " と同じく半角にする
+        CompositionTests.Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("kore`git status`dekakunin", "これ`git status`でかくにん"),
+                ("`npm install`wojikkou", "`npm install`をじっこう"),
+                ("`kakko`", "｀かっこ｀"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
 }
