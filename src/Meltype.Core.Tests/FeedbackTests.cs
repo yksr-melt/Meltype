@@ -393,6 +393,29 @@ internal static class CodeProfileTests
     }
 
     [Test]
+    public static void AppRules_LaterRuleForTheSameApp_Wins()
+    {
+        // #233: 既定の一覧の Code.exe (コード) の後ろに、config.json で Enabled: false の Code.exe を足しても OFF にならなかった
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-test-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var config = Path.Combine(directory, "config.json");
+            var settings = new Settings();
+            settings.AppRules.Add(new AppRule { Process = "code.exe", Enabled = false });
+            settings.Save(config);
+            var loaded = Settings.Load(config);
+            Assert.True(!loaded.IsAppEnabled("Code.exe"), "後から足した OFF を使う");
+            Assert.Equal(1, loaded.AppRules.Count(r => string.Equals(r.Process, "Code.exe", StringComparison.OrdinalIgnoreCase)), "1 つにまとめる");
+            Assert.True(loaded.IsAppEnabled("pwsh.exe"), "ほかのアプリはそのまま");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
     public static void Settings_CustomAppKinds()
     {
         // 報告: アプリ別設定の種類を、一般とコードだけでなく自分で作れるように。

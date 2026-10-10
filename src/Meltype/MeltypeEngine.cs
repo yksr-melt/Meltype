@@ -541,6 +541,8 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             {
                 if (!IsKeyboardActive || ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow()) || ImeTarget.FromForeground() is not { } target ||
                     !KeyboardLayoutPolicy.AllowsInput(_settings, target)) return;
+                // アプリ別設定で OFF にしたアプリ (・ゲーム) では、Microsoft IME をそのまま使ってもらう (OFF に戻さない: issue #233)
+                if (!_foreground.Check(_settings).Allowed) return;
                 var state = _imm32.GetState(target);
                 if (!KeyboardLayoutPolicy.AllowsInput(_settings, state.KeyboardLayout)) return;
                 if (state.Mode == IME.ImeMode.Open && _imm32.TrySetOpen(target, false, null, _settings.ImeTimeoutMs))
