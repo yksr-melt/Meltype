@@ -175,6 +175,20 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CtrlUiopWhileComposing_SwitchesKanaAndLetters()
+    {
+        // #60: Meltype IME・Mac・Linux も、入力中の Ctrl+U/I/O/P は確定せずに F6/F7/F10/F9 と同じ切り替えをする
+        var session = Create();
+        Type(session, "aiueo");
+        foreach (var (key, expected) in new[] { ('P', "ａｉｕｅｏ"), ('O', "aiueo"), ('I', "アイウエオ"), ('U', "あいうえお") })
+        {
+            var result = session.HandleKey(key, null, false, true, false, false);
+            Assert.True(result.Consumed && result.Commits.Count == 0, $"Ctrl+{key} で確定しない");
+            Assert.Equal(expected, result.View?.Text, $"Ctrl+{key}");
+        }
+    }
+
+    [Test]
     public static void ArrowWhileComposing_SelectsClauses()
     {
         var session = Create();
