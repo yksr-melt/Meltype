@@ -2260,6 +2260,34 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void SpaceAroundEnglish_WhenTypingInTheCompositionBox()
+    {
+        // #248: 英数を使わず、変換ボックスの中で英語と日本語を判定して打っても、設定「英単語の前後に半角スペース」が効く
+        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("kyouhaGooglenipushshita\n", "きょうは Google に push した"),
+                ("pingwoutsu\n", "ping をうつ"),
+                ("meetingga\n", "meeting が"),
+                ("kyouhashoppingniiku\n", "きょうは shopping にいく"),
+                // 別々に確定しても、前に確定した英単語との間に入れる
+                ("GitHub\nni\n", "GitHub に"),
+            })
+            {
+                var k = new Keyboard { SpaceAroundEnglish = true };
+                k.Type(typed);
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void SigilWord_AtStartPassesNameToTheApp()
     {
         // #193: AI エージェントの /command・$skill・@ファイル名 は、変換ボックスに溜めずに打つたびにアプリへ渡す (補完を選べるように)。
