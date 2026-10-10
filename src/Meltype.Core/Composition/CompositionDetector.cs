@@ -62,6 +62,33 @@ public sealed partial class CompositionDetector
         return list;
     });
 
+    /// <summary>english.txt の「日本語由来で英語としても使われる語」(sushi, anime, tofu …)。</summary>
+    private static readonly Lazy<HashSet<string>> JapaneseOriginWords = new(() =>
+    {
+        var words = new HashSet<string>(StringComparer.Ordinal);
+        var inSection = false;
+        foreach (var line in DictionarySource.ReadEmbedded("english.txt").Split('\n'))
+        {
+            if (line.StartsWith("# ---", StringComparison.Ordinal))
+            {
+                inSection = line.Contains("日本語由来");
+                continue;
+            }
+            if (!inSection || line.StartsWith('#')) continue;
+            // 日本語由来の語の後ろに、同じ段落で続けて技術用語などを並べてあるので、空行までを読む
+            if (line.Trim().Length == 0)
+            {
+                inSection = false;
+                continue;
+            }
+            foreach (var word in line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) words.Add(word);
+        }
+        return words;
+    });
+
+    /// <summary>日本語由来で英語としても使われる語か (sushi, ramen)。英文の中に出てきても、日本語のつもりのことがある。</summary>
+    public static bool IsJapaneseOriginWord(string lower) => JapaneseOriginWords.Value.Contains(lower);
+
     public RomajiDetector Romaji => _romaji;
 
     /// <summary>普通の英単語の判定に使う Windows のスペルチェッカー。null なら同梱の辞書だけ。</summary>
