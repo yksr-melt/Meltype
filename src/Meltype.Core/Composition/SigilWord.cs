@@ -36,6 +36,9 @@ public sealed class SigilWord
     {
         lock (_gate)
         {
+            // 名前の途中のはずなのに、キャレットの前が空白・名前に使わない文字: 名前の後の空白・Enter が
+            // こちらを通らずにアプリへ届いた (Meltype IME は変換中でないときの Space・Enter を送ってこない: #242)。普通の入力に戻る
+            if (_length > 0 && !string.IsNullOrEmpty(before) && !IsNameChar(before[^1])) _length = 0;
             if (_length > 0) return IsNameChar(c);
             if (!IsSigil(c)) return false;
             // ホストが前の文字を教えてくれれば、そちらを使う。空 (入力欄の先頭) は、前の文字を打ったのを見ていないときだけ信じる
