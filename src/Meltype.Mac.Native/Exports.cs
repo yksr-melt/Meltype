@@ -117,6 +117,25 @@ public static unsafe class Exports
         });
     }
 
+    /// <summary>
+    /// 変換・無変換・ひらがな/カタカナ キー (vk 0x1C / 0x1D / 0x15)。設定「入力中のキーの役割を分ける」が ON で入力中なら、
+    /// 変換ボックスで処理して結果を返す (issue #199)。そうでなければ NULL (今までどおり、英数 / 日本語の切り替えに使う)。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_role_key")]
+    public static byte* RoleKey(IntPtr handle, int vk)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
+            return session.HandleRoleKey(vk) is { } result ? ToUtf8(result.ToJson()) : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
+            return null;
+        }
+    }
+
     /// <summary>不正な文字の引数か。0 は「文字を伴わないキー」なので不正ではない。</summary>
     private static bool IsInvalidScalar(int ch) =>
         ch < 0 || ch > 0x10FFFF || (ch >= 0xD800 && ch <= 0xDFFF);

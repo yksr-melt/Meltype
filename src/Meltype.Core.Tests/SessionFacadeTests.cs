@@ -175,6 +175,25 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void RoleKeys_OnlyWhenSettingIsOnAndComposing()
+    {
+        // #199: Linux の IBus・fcitx5 は、入力中の 変換・無変換・ひらがな/カタカナ を先に本体に渡す (meltype_role_key)。
+        // 設定が OFF か、何も打っていなければ null (今までどおり英数 / 日本語の切り替えに使う)
+        var settings = new Settings();
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SeparateKeyRoles = () => settings.SeparateKeyRoles }, () => settings);
+        Type(session, "kana");
+        Assert.True(session.HandleRoleKey(VirtualKeys.NonConvert) is null, "設定が OFF");
+        settings.SeparateKeyRoles = true;
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SeparateKeyRoles = () => settings.SeparateKeyRoles }, () => settings);
+        Assert.True(session.HandleRoleKey(VirtualKeys.NonConvert) is null, "何も打っていない");
+        Type(session, "kana");
+        var result = session.HandleRoleKey(VirtualKeys.NonConvert);
+        Assert.True(result is { Consumed: true } && result.Commits.Count == 0, "変換ボックスで処理する");
+        Assert.Equal("kana", result!.View?.Text);
+        Assert.Equal("カナ", session.HandleRoleKey(VirtualKeys.Kana) is { } kana && session.HandleRoleKey(VirtualKeys.Kana) is { } katakana ? katakana.View?.Text : null);
+    }
+
+    [Test]
     public static void ArrowWhileComposing_SelectsClauses()
     {
         var session = Create();

@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool SeparateKeyRoles { get; set; }
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
         public Meltype.Config.PunctuationStyle Punctuation { get; set; }
@@ -239,6 +240,7 @@ internal static class CompositionTests
                 Now = now ?? (() => DateTime.Now),
                 ShowTypedKeys = () => showTypedKeys,
                 TabConversion = () => tabConversion,
+                SeparateKeyRoles = () => SeparateKeyRoles,
             });
             Controller.Committed += Sigil.Append;
             Host.Replayed += e =>
@@ -314,6 +316,57 @@ internal static class CompositionTests
         }
 
         public string? Showing => Host.View?.Text;
+    }
+
+    [Test]
+    public static void SeparateKeyRoles_SpaceAlwaysOpensCandidates()
+    {
+        // #199: 設定「入力中のキーの役割を分ける」。英字で見えている語でも、Space で確定して空白を入れずに候補を開く
+        // (英字を最初の候補に残し、ローマ字として読めれば日本語の候補も選べる)
+        var k = new Keyboard { SeparateKeyRoles = true };
+        k.Host.PrecedingText = "I ";
+        k.Type("made");
+        Assert.Equal("made", k.Showing, "前が英語なので英字");
+        k.Press(VirtualKeys.Space);
+        Assert.Equal(0, k.Host.Output.Count, "確定しない");
+        Assert.True(k.Host.View?.Converting == true, "候補を開く");
+        Assert.Equal("made", k.Host.View!.Candidates[0]);
+        Assert.True(k.Host.View!.Candidates.Contains("まで"), string.Join(" ", k.Host.View!.Candidates));
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("made", k.Host.Document, "確定は Enter");
+
+        // 設定が OFF なら今までどおり、英字で確定して空白を入れる
+        var normal = new Keyboard();
+        normal.Host.PrecedingText = "I ";
+        normal.Type("made ");
+        Assert.Equal("made ", normal.Host.Document);
+    }
+
+    [Test]
+    public static void SeparateKeyRoles_ConvertNonConvertAndKanaKeys()
+    {
+        // 変換: 日本語を優先して変換する
+        var k = new Keyboard { SeparateKeyRoles = true };
+        k.Host.PrecedingText = "I ";
+        k.Type("made");
+        k.Press(VirtualKeys.Convert);
+        Assert.Equal("まで", k.Host.View!.Candidates[0], string.Join(" ", k.Host.View!.Candidates));
+
+        // 無変換: 英字にする
+        k = new Keyboard { SeparateKeyRoles = true };
+        k.Type("kana");
+        Assert.Equal("かな", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("kana", k.Showing);
+
+        // ひらがな/カタカナ: 押すたびに ひらがな ⇔ カタカナ。英字からはまずひらがな
+        k.Press(VirtualKeys.Kana);
+        Assert.Equal("かな", k.Showing);
+        k.Press(VirtualKeys.Kana);
+        Assert.Equal("カナ", k.Showing);
+        k.Press(VirtualKeys.Kana);
+        Assert.Equal("かな", k.Showing);
+        Assert.Equal(0, k.Host.Output.Count, "確定しない");
     }
 
     [Test]

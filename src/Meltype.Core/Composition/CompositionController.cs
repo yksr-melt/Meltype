@@ -144,6 +144,12 @@ public sealed record CompositionOptions
     /// <summary>変換前の Tab で変換を始めるか (設定、issue #219)。</summary>
     public Func<bool> TabConversion { get; init; } = () => false;
 
+    /// <summary>
+    /// 入力中の Space・変換・無変換・ひらがな/カタカナ キーの役割を分けるか (設定。issue #199)。Space は常に候補を開く、変換は日本語を優先して変換、
+    /// 無変換は英字にする、ひらがな/カタカナ はひらがな ⇔ カタカナ。確定は Enter。
+    /// </summary>
+    public Func<bool> SeparateKeyRoles { get; init; } = () => false;
+
     /// <summary>選んだ英訳の記録 (普通の変換の学習より弱く効かせる)。</summary>
     public TranslationHistory? TranslationHistory { get; init; }
 
@@ -602,6 +608,21 @@ public sealed class CompositionController
                 _text.FixTypos();
                 _spaceStartedConversion = true;
                 StartConversion(preferJapanese: true);
+                return;
+            case VirtualKeys.Space when _options.SeparateKeyRoles() && !IsProtectedInput:
+                // 設定「入力中のキーの役割を分ける」: Space は英語・日本語の判定にかかわらず候補を開く (英字のまま確定して空白を入れない)。
+                // 英字で見えている語も、英字を最初の候補に残し、ローマ字として読めれば日本語の候補も選べる (issue #199)
+                _text.FixTypos();
+                _spaceStartedConversion = true;
+                StartConversion();
+                return;
+            case VirtualKeys.NonConvert when _options.SeparateKeyRoles():
+                // 無変換: 今までの入力を英字にする (F10 と同じ。続けて押すと大文字・小文字も切り替わる)
+                SetAlphanumericMode(DisplayMode.HalfWidthAlphanumeric);
+                return;
+            case VirtualKeys.Kana when _options.SeparateKeyRoles():
+                // ひらがな / カタカナ キー: 押すたびに ひらがな ⇔ カタカナ (漢字・英字の状態からは、まずひらがな)
+                SetMode(_text.Mode == DisplayMode.Hiragana && !_converting ? DisplayMode.Katakana : DisplayMode.Hiragana);
                 return;
             case VirtualKeys.Space:
                 // 保護区間 (メンション・URL・パス) の末尾は、自動変換せず原文のまま + 半角空白で確定する。
