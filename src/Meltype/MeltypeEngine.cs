@@ -119,6 +119,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         composition.PasteCommit = () => PastePolicy.ShouldPaste(_settings, _foreground.Current.ProcessName, IsQt(_foreground.Current.Window));
         composition.InputAllowed = () => KeyboardLayoutPolicy.AllowsInput(_settings);
         composition.Focus.TreatsAsTextInput = () => _settings.TreatsAsTextInput(_foreground.Current.ProcessName);
+        composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
         // 変換ボックスで確定した文字と、Meltype が送り直したキーも、今の行の追いかけに入れる (自分で送ったキーはフックに届かない)。
         composition.Controller.Committed += text =>
         {
@@ -146,6 +147,9 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     /// <summary>
     /// #95の対応として、Qtアプリでは確定した文字を貼り付けで入れる。
     /// </summary>
+    /// <summary>フォーカスがウィンドウそのものでも入力欄とみなすアプリ (#373)。</summary>
+    private static readonly HashSet<string> WindowInputApps = new(StringComparer.OrdinalIgnoreCase) { "LINE.exe" };
+
     private static bool IsQt(IntPtr window)
     {
         if (window == IntPtr.Zero) return false;
