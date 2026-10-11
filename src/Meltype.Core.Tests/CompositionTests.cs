@@ -526,6 +526,55 @@ internal static class CompositionTests
         Assert.True(!other.Host.View!.Candidates.Contains("17:22"), "いま だけの文節のとき");
     }
 
+    [Test]
+    public static void TypedDate_OffersSlashForms()
+    {
+        // #294: 打った日付 (10がつ9にち) にも 10/9 の形を候補に出す。いつもの候補 (変換エンジンの結果) は最初のまま。
+        // 変換エンジンが 10がつ|9にち に分けても 1 つの文節にまとめる
+        var converter = new SplitConverter(new()
+        {
+            ["10がつ9にち"] = [new("10がつ", "10月"), new("9にち", "9日")],
+            ["12がつ25にち"] = [new("12がつ25にち", "12月25日")],
+            ["3じ15ふん"] = [new("3じ", "3時"), new("15ふん", "15分")],
+        });
+        foreach (var (keys, first, expected) in new[]
+        {
+            ("10gatsu9nichi ", "10月9日", new[] { "10/9", "10/09", "10/9(金)", "2026/10/09" }),
+            ("12gatsu25nichi ", "12月25日", new[] { "12/25", "12/25(金)" }),
+            ("3ji15hun ", "3時15分", new[] { "3:15", "03:15" }),
+        })
+        {
+            var k = new Keyboard(converter: converter, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
+            k.Type(keys);
+            var candidates = k.Host.View!.Candidates;
+            Assert.Equal(first, candidates[0], keys);
+            foreach (var form in expected) Assert.True(candidates.Contains(form), keys + ": " + string.Join(" ", candidates));
+        }
+        // ありえない日付には出さない
+        var bad = new Keyboard(converter: new SplitConverter(new() { ["2がつ30にち"] = [new("2がつ30にち", "2月30日")] }), now: () => new DateTime(2026, 10, 8));
+        bad.Type("2gatsu30nichi ");
+        Assert.True(!bad.Host.View!.Candidates.Any(c => c.Contains('/')), string.Join(" ", bad.Host.View!.Candidates));
+
+        // 選んでも学習しない (次に違う日付を打ったときに邪魔になる)
+        var history = new ConversionHistory(null);
+        var chosen = new Keyboard(converter: converter, history: history, now: () => new DateTime(2026, 10, 8));
+        chosen.Type("10gatsu9nichi ");
+        var index = chosen.Host.View!.Candidates.ToList().IndexOf("10/9");
+        for (var i = 0; i < index; i++) chosen.Press(VirtualKeys.Space);
+        chosen.Press(VirtualKeys.Return);
+        Assert.Equal("10/9", chosen.Host.Document);
+        Assert.True(history.Get("10がつ9にち") is null, "学習しない");
+    }
+
+    /// <summary>決めた文節に区切る変換エンジン。</summary>
+    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
+    {
+        private readonly FakeConverter _inner = new();
+        public string? Convert(string hiragana) => _inner.Convert(hiragana);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+    }
+
       [Test]
       public static void ShiftSpace_DuringConversion_GoesBack()
       {
