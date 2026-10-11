@@ -175,6 +175,20 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void ShiftSpace_WhenEmpty_InsertsFullWidthSpace()
+    {
+        // #246: Meltype IME も、何も打っていないときの Shift+Space は全角スペース (英数のときは半角のままアプリへ)
+        var session = Create();
+        var result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(result.Consumed, "Shift+Space を受け取る");
+        Assert.Equal("　", string.Concat(result.Commits.Select(c => c.Text)));
+
+        session.Direct = true;
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(!result.Consumed && result.Commits.Count == 0, "英数ではアプリに通す");
+    }
+
+    [Test]
     public static void ArrowWhileComposing_SelectsClauses()
     {
         var session = Create();
