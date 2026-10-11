@@ -174,6 +174,12 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         // 遠隔操作 (AnyDesk・VNC) のキーは、ほかのソフトが送ったキー (LLKHF_INJECTED) として届く。設定で許可していれば手で打ったキーとして扱う。
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
         if (e.Injected && settings.AllowInjectedInput) e = e with { Injected = false };
+        else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
+        {
+            // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)
+            _injectedHintLogged = true;
+            Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。ULE4JIS などキー配列を変えるソフトや遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
+        }
         // 飲み込んだ切替キーの解放は、入力言語が変わっても対にして処理する。
         if (e.IsUp && !e.Injected)
         {
@@ -327,6 +333,8 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     private long _lineVersion;
     private System.Threading.Timer? _lineTimer;
     private volatile bool _codeJapanese;
+    // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
+    private bool _injectedHintLogged;
     private LineKind? _lastLineKind;
 
     /// <summary>
