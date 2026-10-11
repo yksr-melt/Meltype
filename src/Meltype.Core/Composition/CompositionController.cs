@@ -1315,10 +1315,53 @@ public sealed class CompositionController
             // がち (ガチで) を、変換エンジンは 勝ち にしてしまう (勝ちでやばい)。勝ち の読みは かち なので、がち は ガチ にする
             preferred ??= clauses[i].Reading.StartsWith("がち", StringComparison.Ordinal) && clauses[i].Text.StartsWith("勝ち", StringComparison.Ordinal)
                 ? "ガチ" + clauses[i].Text["勝ち".Length..] : null;
+            // 数字のすぐ後ろの かける・わる は × ÷ (3かける4 → 3×4)。たす・ひく などは記号を候補の上の方に足す (#293)
+            var math = AddMathSymbol(clauses, i);
+            preferred ??= math;
             if (preferred is not null) Prefer(clauses[i], preferred);
         }
         return clauses;
     }
+
+    /// <summary>計算の言葉 (かける・わる …) の文節の読み。前後に数字が付いていてもよい (変換エンジンが 3かける を 1 つの文節にする)。</summary>
+    private static readonly System.Text.RegularExpressions.Regex MathOperator =
+        new("^(?<a>[0-9０-９]*)(?<op>かける|わる|たす|ひく|ぷらす|まいなす|いこーる)(?<b>[0-9０-９]*)$");
+
+    /// <summary>
+    /// 数字のすぐ後ろの計算の言葉の文節に、記号の候補を足す (3かける4 → 3×4、1たす1 → 1+1: #293)。
+    /// かける・わる は数字の後ろならまず記号なので、最初の候補にする記号を返す。たす・ひく などは動詞 (足す・引く) のことも多いので、
+    /// 2 番目の候補に足すだけ (null を返す)。+ - = の全角・半角は、前の数字に合わせる。
+    /// </summary>
+    private string? AddMathSymbol(List<Clause> clauses, int i)
+    {
+        var clause = clauses[i];
+        if (MathOperator.Match(clause.Reading) is not { Success: true } match) return null;
+        var digits = match.Groups["a"].Value;
+        var before = digits.Length > 0 ? digits : i > 0 ? clauses[i - 1].Text : _precedingText ?? "";
+        if (before.Length == 0 || !(char.IsAsciiDigit(before[^1]) || before[^1] is >= '０' and <= '９')) return null;
+        var full = before[^1] is >= '０' and <= '９';
+        var op = match.Groups["op"].Value;
+        var symbol = op switch
+        {
+            "かける" => "×",
+            "わる" => "÷",
+            "たす" or "ぷらす" => full ? "＋" : "+",
+            "ひく" or "まいなす" => full ? "－" : "-",
+            _ => full ? "＝" : "=",
+        };
+        var text = digits + symbol + match.Groups["b"].Value;
+        if (op is "かける" or "わる") return text;
+        clause.Candidates.Remove(text);
+        clause.Candidates.Insert(Math.Min(1, clause.Candidates.Count), text);
+        return null;
+    }
+
+    /// <summary>計算の言葉の文節で、記号の候補 (×、+) を選んだか。学習しない (覚えると 電話をかける まで × になる)。</summary>
+    private static bool IsMathSymbolChoice(Clause clause) =>
+        IsMathSymbol(clause.Reading, clause.Text);
+
+    private static bool IsMathSymbol(string reading, string text) =>
+        MathOperator.IsMatch(reading) && text.IndexOfAny(['×', '÷', '+', '＋', '-', '－', '=', '＝']) >= 0;
 
     /// <summary>する の活用 (した・して・しない・しよう・したい …) で始まる読み。</summary>
     private static readonly string[] SuruForms = ["する", "すれ", "した", "して", "しま", "しな", "しよ", "しと", "しちゃ", "しろ", "され", "させ", "せず"];
@@ -1483,7 +1526,8 @@ public sealed class CompositionController
     /// </summary>
     private void MoveEmojiLast(Clause clause)
     {
-        var block = EmojiBlock(clause.Reading).Where(e => clause.Candidates.IndexOf(e) > 0).ToList();
+        // 数字の後ろの計算の言葉に足した記号 (たす → +) は、絵文字の辞書にあっても動かさない
+        var block = EmojiBlock(clause.Reading).Where(e => clause.Candidates.IndexOf(e) > 0 && !IsMathSymbol(clause.Reading, e)).ToList();
         if (block.Count == 0) return;
         var current = clause.Text;
         clause.Candidates.RemoveAll(block.Contains);
@@ -1890,7 +1934,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (IsDateTimeChoice(clause)) continue;
+            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -1913,7 +1957,7 @@ public sealed class CompositionController
         }
         foreach (var clause in _clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause))
             {
                 Flush();
                 continue;

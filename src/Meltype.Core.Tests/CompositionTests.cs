@@ -1716,6 +1716,50 @@ internal static class CompositionTests
         Assert.Equal("ＡＢＣ", CompositionController.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
     }
 
+    /// <summary>決めた文節に区切る変換エンジン (計算の言葉のテスト用)。</summary>
+    private sealed class ClauseConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
+    {
+        private readonly FakeConverter _inner = new();
+        public string? Convert(string hiragana) => hiragana switch { "かける" => "掛ける", "わる" => "割る", "たす" => "足す", _ => _inner.Convert(hiragana) };
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+    }
+
+    [Test]
+    public static void MathWordsAfterDigits_OfferSymbols()
+    {
+        // #293: 数字のすぐ後ろの かける・わる は × ÷ を最初の候補に。変換エンジンが数字と同じ文節にしても (3かける) 別の文節にしても
+        var converter = new ClauseConverter(new()
+        {
+            ["3かける4"] = [new("3", "3"), new("かける", "掛ける"), new("4", "4")],
+            ["10わる2"] = [new("10わる", "10割る"), new("2", "2")],
+            ["1たす1は2"] = [new("1", "1"), new("たす", "足す"), new("1は2", "1は2")],
+            ["5ふんかける"] = [new("5ふん", "5分"), new("かける", "かける")],
+            ["でんわをかける"] = [new("でんわを", "電話を"), new("かける", "かける")],
+        });
+        foreach (var (typed, expected) in new[]
+        {
+            ("3kakeru4 \n", "3×4"), ("10waru2 \n", "10÷2"), ("1tasu1ha2 \n", "1足す1は2"),
+            ("5hunkakeru \n", "5分かける"), ("denwawokakeru \n", "電話をかける"),
+        })
+        {
+            var k = new Keyboard(converter: converter);
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+
+        // たす は記号を 2 番目の候補に足す (動詞のことも多いので最初にはしない)。選んでも覚えない
+        var history = new ConversionHistory(null);
+        var tasu = new Keyboard(converter: converter, history: history);
+        tasu.Type("1tasu1ha2 ");
+        tasu.Press(VirtualKeys.Right);
+        Assert.Equal("+", tasu.Host.View!.Candidates[1], string.Join(",", tasu.Host.View!.Candidates));
+        tasu.Press(VirtualKeys.Space);
+        tasu.Press(VirtualKeys.Return);
+        Assert.Equal("1+1は2", tasu.Host.Document);
+        Assert.True(history.Get("たす") is null, "記号を選んでも学習しない");
+    }
+
     /// <summary>覚えさせた文節を記録する変換エンジン (Mozc の代わり)。</summary>
     private sealed class LearningConverter : IKanjiConverter, ILearningConverter
     {
