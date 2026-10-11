@@ -1803,6 +1803,8 @@ public sealed class CompositionController
     private readonly List<CommitRecord> _correctable = [];
     private const int MaxCorrectable = 4;
     private bool _spaceStartedConversion;
+    // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
+    private (int Count, string Text)? _pendingReplace;
 
     /// <summary>今の変換を Tab で始めたか (変換中の Tab で候補を送るため。issue #219)。</summary>
     private bool _tabStartedConversion;
@@ -1856,7 +1858,9 @@ public sealed class CompositionController
         }
 
         Diagnostics.Log.Decision($"前後の文脈に合わせて確定し直しました: {Diagnostics.Log.Text(original)}→{Diagnostics.Log.Text(replacement)}");
-        _host.ReplaceBackward(original.Length, replacement);
+        // 消して入れ直すのは、続けて確定する文字と一緒に送る (CommitText)。別々に送ると、その間に入れ直した文字と
+        // 続けて確定した文字の順番が入れ替わるアプリがある (Are yoよ人間う？: issue #258)
+        _pendingReplace = (original.Length, replacement);
         _lastCommitText = replacement;
         _correctable.Clear();
         return replacement;
@@ -1956,7 +1960,12 @@ public sealed class CompositionController
         var joined = (_lastCommitText ?? "") + text;
         _lastCommitText = joined.Length > 20 ? joined[^20..] : joined;
         _lastCommitTime = Environment.TickCount64;
-        _host.CommitText(text);
+        if (_pendingReplace is var (count, replacement))
+        {
+            _pendingReplace = null;
+            _host.ReplaceBackward(count, replacement + text);
+        }
+        else _host.CommitText(text);
         Committed?.Invoke(text);
     }
 

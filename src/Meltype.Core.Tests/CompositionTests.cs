@@ -1457,6 +1457,22 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AutoCorrect_SendsReplacementTogetherWithNextText()
+    {
+        // #258: 確定し直し (消して すし を入れ直す) と、続けて確定する がすき を 1 回で送る
+        // (別々に送ると、その間で文字の順番が入れ替わるアプリがある: Are yoよ人間う？)
+        var k = new Keyboard();
+        k.Host.PrecedingText = "I love ";
+        k.Type("sushi ");
+        k.Host.PrecedingText = null;
+        k.Host.Events.Clear();
+        k.Type("gasuki\n");
+        Assert.Equal("すしがすき", k.Host.Document);
+        var edits = k.Host.Events.Where(e => e.StartsWith("bs:") || e.StartsWith("text:")).ToList();
+        Assert.Equal("bs:6 text:すしがすき", string.Join(" ", edits));
+    }
+
+    [Test]
     public static void AutoCorrect_NotWhenHostCannotDelete()
     {
         // #124: 確定済みの文字を消せない入力欄 (Linux で周りの文字に対応していないアプリ) では確定し直さない (sushi が残って すし が足されないように)
