@@ -32,6 +32,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private SettingsForm? _settingsForm;
     private LogForm? _logForm;
     private UserDictionaryForm? _dictionaryForm;
+    private SnippetsForm? _snippetsForm;
     private ReportDialog? _reportDialog;
     private LearnedWordsForm? _learnedForm;
     private WelcomeForm? _welcomeForm;
@@ -119,6 +120,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("使い方...", null, (_, _) => ShowWelcome());
         menu.Items.Add("設定...", null, (_, _) => ShowSettings());
         menu.Items.Add("ユーザー辞書...", null, (_, _) => ShowUserDictionary());
+        menu.Items.Add("定型文...", null, (_, _) => ShowSnippets());
         menu.Items.Add("ログ / 判定理由...", null, (_, _) => ShowLog());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("データフォルダを開く", null, (_, _) => OpenDataFolder());
@@ -414,6 +416,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         _dictionaryForm = new UserDictionaryForm(_composition);
         _dictionaryForm.Show();
+    }
+
+    private void ShowSnippets()
+    {
+        if (_snippetsForm is { IsDisposed: false })
+        {
+            _snippetsForm.Activate();
+            return;
+        }
+        _snippetsForm = new SnippetsForm(_composition.Snippets, () => _engine.Settings.SnippetMark);
+        _snippetsForm.Show();
     }
 
     /// <summary>
