@@ -144,6 +144,9 @@ public sealed record CompositionOptions
     /// <summary>変換前の Tab で変換を始めるか (設定、issue #219)。</summary>
     public Func<bool> TabConversion { get; init; } = () => false;
 
+    /// <summary>変換したあとに続けて打っても確定せず、変換ボックスに残すか (設定。issue #123)。</summary>
+    public Func<bool> ContinueAfterConversion { get; init; } = () => false;
+
     /// <summary>選んだ英訳の記録 (普通の変換の学習より弱く効かせる)。</summary>
     public TranslationHistory? TranslationHistory { get; init; }
 
@@ -674,23 +677,15 @@ public sealed class CompositionController
 
         if (_text.KanaInput && KanaOf(e) is { } key)
         {
-            if (_converting)
-            {
-                Commit();
-                BeginComposition();
-            }
+            if (_converting) CommitOrKeepConversion();
             _text.AppendKana(key.Raw, key.Kana);
             return;
         }
 
         if (_host.CharFromKey(e, _swallowedShift.Count > 0) is { } ch && !char.IsControl(ch) && ch != ' ')
         {
-            // 変換中に次の文字を打ったら、今の候補で確定して新しい入力を始める (IME と同じ)。
-            if (_converting)
-            {
-                Commit();
-                BeginComposition();
-            }
+            // 変換中に次の文字を打ったら、今の候補で確定して新しい入力を始める (IME と同じ。設定で、確定せずに続けることもできる)。
+            if (_converting) CommitOrKeepConversion();
             _text.Append(ch);
             return;
         }
@@ -758,8 +753,29 @@ public sealed class CompositionController
     /// 新しい入力を始める。入力欄のキャレットの前後の確定済みの文字を読みに行き、
     /// 英語とも日本語とも読める語の判定と、変換の文脈に使う。読めるまでは自分が最後に確定した文字列で代用する。
     /// </summary>
+    /// <summary>
+    /// 変換中に次の文字を打ったとき。普通は今の候補で確定して新しい入力を始める (Microsoft IME と同じ)。
+    /// 設定「変換したあとに続けて打っても確定しない」が ON なら、変換をやめて打った文字を続けて入れる。選んでいた候補は覚えておき、
+    /// もう一度変換したときに同じ読みの文節で使う (issue #123)。
+    /// </summary>
+    private void CommitOrKeepConversion()
+    {
+        if (!_options.ContinueAfterConversion() || _reconversion is not null)
+        {
+            Commit();
+            BeginComposition();
+            return;
+        }
+        foreach (var clause in _clauses.Where(c => !c.IsEnglish)) _keptChoices[clause.Reading] = clause.Text;
+        _converting = false;
+    }
+
+    // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
+    private readonly Dictionary<string, string> _keptChoices = [];
+
     private void BeginComposition()
     {
+        _keptChoices.Clear();
         _text.KanaInput = _options.KanaInput();
         _text.Punctuation = _options.Punctuation();
         var id = ++_compositionId;
@@ -1154,6 +1170,9 @@ public sealed class CompositionController
             clauses.AddRange(japanese);
         }
         if (clauses.Count == 0) return;
+        // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
+        foreach (var clause in clauses)
+            if (_keptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
         _clauses = clauses;
         _selectedClause = 0;
         _converting = true;
