@@ -217,7 +217,7 @@ public sealed record CompositionOptions
 ///   ←→      → 文節を選ぶ (変換前に押しても文節の選択に入る) / Space・↓↑ でその文節の候補 / Shift+←→ で区切りを変える
 ///   Enter   → 確定してテキストボックスへ入力
 ///   BackSpace / Esc → 1 音削除 / 変換取り消し・入力取り消し
-///   F6 / F7 / F9 / F10, 半角/全角 → ひらがな / カタカナ / 全角英数 / 半角英数 (続けて押すと 大文字 → 先頭だけ大文字) / 日本語⇔英字
+///   F6 / F7 / F8 / F9 / F10, 半角/全角 → ひらがな / カタカナ / 半角カタカナ / 全角英数 / 半角英数 (続けて押すと 大文字 → 先頭だけ大文字) / 日本語⇔英字
 ///   その他のキー・クリック → 確定してからそのキーやクリックを通す
 /// 英数状態でも、打ち始めの数文字でローマ字 (日本語) かを判定し (打鍵は待たせずに送る)、日本語なら送った分を消して日本語入力に戻し、変換ボックスに入れる。
 /// UI スレッドだけで動く。フックからは CaptureGate 経由で入力が順番どおり届く。
@@ -658,6 +658,7 @@ public sealed class CompositionController
                 return;
             case VirtualKeys.F6: SetMode(DisplayMode.Hiragana); return;
             case VirtualKeys.F7: SetMode(DisplayMode.Katakana); return;
+            case VirtualKeys.F8: SetMode(DisplayMode.HalfWidthKatakana); return;
             case VirtualKeys.F9: SetAlphanumericMode(DisplayMode.FullWidthAlphanumeric); return;
             case VirtualKeys.F10: SetAlphanumericMode(DisplayMode.HalfWidthAlphanumeric); return;
             case VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Up or VirtualKeys.Down when !_text.IsAlphanumeric:
@@ -1698,7 +1699,7 @@ public sealed class CompositionController
         var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
-        // F6 / F7 / F9 / F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
+        // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
         var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is { } selection)
         {
@@ -1782,7 +1783,7 @@ public sealed class CompositionController
             case DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric when !automatic.All(s => s.IsEnglish):
                 memory.Remember(raw, english: true, explicitChoice: true);
                 break;
-            case DisplayMode.Hiragana or DisplayMode.Katakana when automatic.Any(s => s.IsEnglish):
+            case DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana when automatic.Any(s => s.IsEnglish):
                 memory.Remember(raw, english: false, explicitChoice: true);
                 break;
             case DisplayMode.Auto when _text.LevelOverride is not null && automatic.All(s => s.IsEnglish):
