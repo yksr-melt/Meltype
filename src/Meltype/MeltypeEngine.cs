@@ -146,6 +146,10 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     /// <summary>
     /// #95の対応として、Qtアプリでは確定した文字を貼り付けで入れる。
     /// </summary>
+    /// <summary>入力欄にフォーカスが移っても UI Automation の通知が来ないことがあるブラウザー (#364)。打ったときに調べ直す。</summary>
+    private static readonly HashSet<string> Browsers = new(StringComparer.OrdinalIgnoreCase)
+        { "firefox.exe", "chrome.exe", "msedge.exe", "vivaldi.exe", "brave.exe", "opera.exe", "floorp.exe", "zen.exe", "waterfox.exe", "librewolf.exe" };
+
     private static bool IsQt(IntPtr window)
     {
         if (window == IntPtr.Zero) return false;
@@ -468,7 +472,8 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         }
         if (!_foreground.Check(settings).Allowed) return false;
         // 文字入力欄 (パスワード以外) にフォーカスがあるときだけ。ショートカットキーやゲームの操作を横取りしない。
-        if (_composition?.Focus.CanCapture != true && _composition?.Focus.CanCaptureWaiting() != true) return false;
+        if (_composition?.Focus.CanCapture != true && _composition?.Focus.CanCaptureWaiting() != true &&
+            !(Browsers.Contains(_foreground.Current.ProcessName) && _composition?.Focus.RecheckStale() == true)) return false;
         // コードエディター・ターミナル: コードの中は英数のまま通す (補完もそのまま効く)。コメント・文字列の中は日本語を判定する。
         if (!reconvert && !_keyboardDirect && IsCodeApp(settings))
         {
