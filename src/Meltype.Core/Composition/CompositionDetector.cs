@@ -172,7 +172,7 @@ public sealed partial class CompositionDetector
                 var readable = _romaji.Analyze(stem).Tokens.Sum(t => t.Romaji.Length);
                 if (readable >= 2 || _romaji.Analyze(stem[(readable + 1)..]) is { IsValid: true, Partial: "" }) continue;
                 var rest = (Raw(units, k, units.Count) + pending).ToLowerInvariant();
-                if (!TrailingParticles.Any(p => rest.StartsWith(p, StringComparison.Ordinal)) || stem[^1] == rest[0] ||
+                if (!TrailingParticles.Any(p => rest.StartsWith(p, StringComparison.Ordinal)) ||
                     _romaji.Analyze(rest) is not { IsValid: true, Partial: "" or "n" }) continue;
                 return [new CompositionSegment(true, "", Raw(units, 0, k)), Japanese(units, k, units.Count, pending)];
             }
