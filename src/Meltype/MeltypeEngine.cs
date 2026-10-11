@@ -244,7 +244,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                 if (!_keyboardDirect && IsCodeApp(settings) && (_codeJapanese || InCode(settings)))
                 {
                     _codeJapanese = !_codeJapanese;
-                    Log.Info(_codeJapanese ? "コードの行: 日本語で入力 (エディターは改行まで、ターミナルは別の場所に移るまで)" : "コードの行: 英数に戻す");
+                    Log.Info(_codeJapanese ? "コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)" : "コードの行: 英数に戻す");
                     composition.ShowMode(_codeJapanese);
                     return true;
                 }
@@ -305,7 +305,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         if (InCode(settings))
         {
             _codeJapanese = true;
-            Log.Info("コードの行: 日本語で入力 (エディターは改行まで、ターミナルは別の場所に移るまで)");
+            Log.Info("コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)");
         }
         if (!wasDirect) composition.ShowMode(true);
     }
@@ -374,9 +374,10 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                 _sigil.Start();
                 return;
             }
+            // 半角/全角 で日本語にしていたら、改行しても日本語のまま (コメント・文書を続けて書く。改行のたびに戻っていた: issue #214)。
+            // クリック・矢印でキャレットを別の場所に動かすか、もう一度 半角/全角 を押すと戻る
             _line.NewLine();
             _sigil.Start();
-            _codeJapanese = false;
             return;
         }
         if (e.Vk == VirtualKeys.Back)
