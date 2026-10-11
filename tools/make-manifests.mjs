@@ -2,17 +2,20 @@
 // Copyright (C) 2026 Yukishiro
 //
 // 公開版のリリースから、パッケージマネージャーに出すマニフェストを作る (winget・Scoop・Homebrew)。
-//   node tools/make-manifests.mjs <版> <Windows の zip> [Mac の zip]
-//   例: node tools/make-manifests.mjs 1.0.0 dist/Meltype-1.0.0-windows.zip dist/Meltype-1.0.0-mac.zip
-// zip は GitHub のリリース (v<版>) に同じ名前で上げたもの。SHA-256 をここで計算する。
+//   node tools/make-manifests.mjs <版> <Windows の zip> [Mac の zip] [Windows のインストーラー (setup.exe)]
+//   例: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
+// zip・setup.exe は GitHub のリリース (v<版>) に同じ名前で上げたもの。SHA-256 をここで計算する。
+// winget はインストーラー (setup.exe) があればそれを使う (Meltype IME・起動時の起動・Meltype の自動更新と同じ場所に入る: issue #367)。
 // できたものは dist/manifests/ に置く。出し方は docs/RELEASE.md。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const [version, windowsZip, macZip] = process.argv.slice(2);
+const [version, windowsZip, ...rest] = process.argv.slice(2);
+const windowsSetup = rest.find(file => file.endsWith('-setup.exe'));
+const macZip = rest.find(file => file.endsWith('.zip'));
 if (!version || !windowsZip) {
-  console.error('使い方: node tools/make-manifests.mjs <版> <Windows の zip> [Mac の zip]');
+  console.error('使い方: node tools/make-manifests.mjs <版> <Windows の zip> [Mac の zip] [Windows の setup.exe]');
   process.exit(1);
 }
 const repo = 'https://github.com/yksr-melt/Meltype';
@@ -53,7 +56,25 @@ DefaultLocale: ja-JP
 ManifestType: version
 ManifestVersion: 1.6.0
 `);
-write(`${wingetDir}/${id}.installer.yaml`, `PackageIdentifier: ${id}
+// インストーラー (Inno Setup、このユーザーだけに入れる・管理者権限なし) があればそれを使う。
+// 無ければ zip (portable)。portable は Meltype IME・起動時の起動が無く、Meltype の自動更新とも別の場所になる
+write(`${wingetDir}/${id}.installer.yaml`, windowsSetup ? `PackageIdentifier: ${id}
+PackageVersion: ${version}
+InstallerType: inno
+Scope: user
+InstallModes:
+  - interactive
+  - silent
+  - silentWithProgress
+UpgradeBehavior: install
+ProductCode: Meltype_is1
+Installers:
+  - Architecture: x64
+    InstallerUrl: ${release}/${path.basename(windowsSetup)}
+    InstallerSha256: ${sha256(windowsSetup).toUpperCase()}
+ManifestType: installer
+ManifestVersion: 1.6.0
+` : `PackageIdentifier: ${id}
 PackageVersion: ${version}
 InstallerType: zip
 NestedInstallerType: portable
