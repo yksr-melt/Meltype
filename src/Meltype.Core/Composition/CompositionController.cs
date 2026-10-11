@@ -1251,6 +1251,8 @@ public sealed class CompositionController
             return result;
         }
         if (_options.UserDictionary?.Split(kana) is not { } pieces) return ConvertWithEngine(kana);
+        pieces = AlignUserWords(kana, pieces);
+        if (pieces.All(p => p.Word is null)) return ConvertWithEngine(kana);
         var clauses = new List<Clause>();
         var registered = new List<Clause>();
         foreach (var (reading, word) in pieces)
@@ -1273,6 +1275,37 @@ public sealed class CompositionController
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
+    }
+
+    /// <summary>
+    /// ユーザーが登録した語の読みが、変換エンジンの文節の途中から始まるなら、その語では区切らない (issue #374)。
+    /// しの → 紫乃 を登録すると、わたしのことがすき の途中の しの で区切って ワタ紫乃ことが好き になっていた
+    /// (変換エンジンは わたしの|ことが|すき と区切るので、しの は文節の途中から始まる)。文節の頭から始まる語 (しのがきた の しの) は今までどおり。
+    /// 同梱の語句 (phrases.txt) は、変換エンジンが区切りを間違える語句を補うものなので、そのまま使う。
+    /// </summary>
+    private List<(string Reading, string? Word)> AlignUserWords(string kana, List<(string Reading, string? Word)> pieces)
+    {
+        if (_options.UserDictionary is not { } dictionary || !pieces.Any(p => p.Word is not null && dictionary.IsUserReading(p.Reading))) return pieces;
+        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : _converter.ConvertClauses(kana);
+        if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return pieces;
+        var starts = new HashSet<int>();
+        for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
+        var aligned = new List<(string Reading, string? Word)>();
+        var position = 0;
+        foreach (var (reading, word) in pieces)
+        {
+            var keep = word is null || !dictionary.IsUserReading(reading) || starts.Contains(position);
+            if (!keep) Diagnostics.Log.Info($"ユーザー辞書の語は、変換エンジンの文節の途中から始まるので使いません: {Diagnostics.Log.Text(reading)}");
+            // 使わない語の読みは、前後の変換エンジンに渡す部分とつなげる
+            if (!keep || word is null)
+            {
+                if (aligned.Count > 0 && aligned[^1].Word is null) aligned[^1] = (aligned[^1].Reading + reading, null);
+                else aligned.Add((reading, null));
+            }
+            else aligned.Add((reading, word));
+            position += reading.Length;
+        }
+        return aligned;
     }
 
     /// <summary>

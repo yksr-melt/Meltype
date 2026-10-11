@@ -196,7 +196,14 @@ public sealed class UserDictionary
         }
         _byReading = byReading;
         _maxReadingLength = byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length);
+        _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
     }
+
+    // 同梱の語句だけにある読み (ユーザーが登録した語ではない)。
+    private HashSet<string> _builtInOnly = new(StringComparer.Ordinal);
+
+    /// <summary>ユーザーが登録した (取り込んだ) 語の読みか。同梱の語句だけの読みなら false。</summary>
+    public bool IsUserReading(string reading) => _byReading.ContainsKey(reading) && !_builtInOnly.Contains(reading);
 
     private void Save()
     {
