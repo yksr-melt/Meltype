@@ -69,6 +69,9 @@ internal static class Program
             return 1;
         }
 
+        // スタートアップのフォルダー・Run の登録 (サインインの後、遅れて起動する) を、すぐ起動するタスクに移す (#283)
+        ThreadPool.QueueUserWorkItem(_ => Startup.MigrateToTask());
+
         using (engine)
         {
             using var exitSignal = new ExitSignal();

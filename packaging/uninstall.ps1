@@ -48,6 +48,9 @@ if (Test-Path -LiteralPath $imeScript) {
     if (-not (Uninstall-MeltypeIme)) { Say "Meltype IME の登録を外せませんでした。管理者として、次を実行してください:`nregsvr32 /u `"$MeltypeProgramFiles\Meltype\tip\x64\MeltypeTip.dll`"`n%SystemRoot%\SysWOW64\regsvr32 /u `"$MeltypeProgramFiles\Meltype\tip\x86\MeltypeTip.dll`"" }
 }
 
+# サインインしたらすぐ起動するタスク (Meltype が作る: #283)
+& cmd.exe /c 'schtasks.exe /Delete /TN Meltype /F >nul 2>&1'
+
 foreach ($name in 'Meltype.lnk', 'AutoIME.lnk') {
     $shortcut = Join-Path ([Environment]::GetFolderPath('Startup')) $name
     if (Test-Path -LiteralPath $shortcut) { Remove-Item -LiteralPath $shortcut -Force }
