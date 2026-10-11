@@ -977,7 +977,9 @@ public sealed class CompositionController
     /// </summary>
     private bool TabStartsConversion()
     {
-        if (IsProtectedInput) return false;
+        // 保護区間が語の途中にあり、その後にかなが続く入力も Tab 変換しない。
+        // IsProtectedInput は末尾が保護区間かだけを見るため、ここでは全区間を調べる。
+        if (_text.Mode == DisplayMode.Auto && _text.ProtectedSpans().Count > 0) return false;
         if (_text.PrecedingEnglish != true && PreviewCandidates() is not null) return false;
         _text.FixTypos();
         return !SpaceCommitsAsEnglish();
