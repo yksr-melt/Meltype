@@ -575,7 +575,8 @@ public sealed partial class CompositionDetector
         var prefix = atEnd && !final && level == DetectionLevel.Aggressive && lower.Length >= 4 && _english.IsPrefix(lower);
 
         // Shift を押して打った大文字で始まる語は英語 (手動でも)。
-        if (char.IsAsciiLetterUpper(span[0]) && (word || prefix || atEnd)) return true;
+        // ただし Shift を押した 1 文字の後ろにかなが続くなら、ゅ・ょ などを打つ Shift が前後のキーに重なった打ち間違い (Iゅうりょく: issue #135)
+        if (char.IsAsciiLetterUpper(span[0]) && ((word || prefix) && span.Length >= 2 || atEnd)) return true;
         if (level == DetectionLevel.Manual) return false;
         if (Memory?.Get(lower) is { } learned) return learned;
         if (!(word || prefix) || lower.Length < 2) return false;
