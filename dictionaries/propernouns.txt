@@ -49,7 +49,7 @@ Elon Jobs Gates Bezos Zuckerberg Musk Trump Obama Biden Lincoln Einstein Newton 
 
 # --- 追加 (2026-09) ---
 # AI・開発ツール
-OpenAI ChatGPT Anthropic Claude Gemini Copilot Perplexity Midjourney HuggingFace Ollama LangChain LlamaIndex
+OpenAI ChatGPT Anthropic Claude Gemini Copilot Perplexity Midjourney HuggingFace Ollama LangChain LlamaIndex Huihui
 Cursor Windsurf Replit CodeSandbox StackBlitz Postman Insomnia Sentry Datadog Grafana Prometheus Kibana Splunk
 Jenkins CircleCI TravisCI Terraform Ansible Pulumi Vagrant Nginx Apache Tomcat Redis MongoDB PostgreSQL MySQL MariaDB SQLite Oracle Snowflake Databricks BigQuery Elasticsearch Kafka RabbitMQ
 React Vue Angular Svelte Nextjs Nuxt Remix Astro Gatsby Vite Webpack Rollup Parcel Babel TypeScript JavaScript CoffeeScript Deno Bun Nodejs
