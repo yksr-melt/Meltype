@@ -182,7 +182,7 @@ public sealed class Settings
     public bool JapaneseKeyboardOnly { get; set; }
 
     [Category("1. 全般"), DisplayName("遠隔操作などの入力も処理する"),
-     Description("AnyDesk・VNC などの遠隔操作ソフトから届いたキーも、手で打ったキーと同じように処理します (OFF だと、ほかのソフトが送ったキーはそのままアプリに渡し、変換ボックスを開きません)。遠隔操作ソフトとキーボードのマクロ・自動入力のソフトは見分けられないので、ON にするとどちらも処理の対象になります。Meltype 自身が送ったキーは、ON でも処理しません。全プロファイル共通です。")]
+     Description("AnyDesk・VNC などの遠隔操作ソフトから届いたキーも、手で打ったキーと同じように処理します (OFF だと、ほかのソフトが送ったキーはそのままアプリに渡し、変換ボックスを開きません)。遠隔操作ソフトとキーボードのマクロ・自動入力のソフトは見分けられないので、ON にするとどちらも処理の対象になります。Meltype 自身が送ったキーは、ON でも処理しません。Chrome リモート デスクトップ・Parsec で操作されている間は、OFF でも処理します。全プロファイル共通です。")]
     public bool AllowInjectedInput { get; set; }
 
     [Category("1. 全般"), DisplayName("動作モード"),
