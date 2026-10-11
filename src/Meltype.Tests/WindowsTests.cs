@@ -27,4 +27,26 @@ internal static class WindowsTests
         settings.AppRules.Add(new AppRule { Process = "minecraft.exe", Enabled = true, Profile = AppProfile.Game });
         Assert.True(settings.IsGame("minecraft.exe", looksLikeGame: false), "アプリ別設定で「ゲーム」にしたら止める");
     }
+
+    [Test]
+    public static void MsIme_LongReading_IsSplitBeforeTheEngineLimit()
+    {
+        // #221: Microsoft IME の変換エンジンは 100 文字を超える読みを受け付けない (E_LARGEINPUT)。区切って渡す
+        var sentence = "きょうはいいてんきですね、あしたもはれるといいですね。";
+        var text = string.Concat(Enumerable.Repeat(sentence, 6)); // 162 文字
+        var parts = Composition.MsImeKanjiConverter.SplitForEngine(text, 90);
+        Assert.Equal(text, string.Concat(parts));
+        Assert.True(parts.All(p => p.Length <= 90), string.Join(" / ", parts.Select(p => p.Length)));
+        Assert.True(parts[0].EndsWith('。'), "文の切れ目で区切る: " + parts[0]);
+        // 区切りの文字が無ければ上限で切る
+        Assert.Equal("100,50", string.Join(",", Composition.MsImeKanjiConverter.SplitForEngine(new string('ー', 150), 100).Select(p => p.Length)));
+
+        using var ime = new Composition.MsImeKanjiConverter();
+        if (ime.Convert("てすと") is null) return; // Microsoft IME が無い環境
+        var clauses = ime.ConvertClauses(text, "わたしは");
+        Assert.True(clauses is { Count: > 0 }, "長い読みも文節に区切って変換できる");
+        Assert.Equal(text, string.Concat(clauses!.Select(c => c.Reading)));
+        Assert.True(string.Concat(clauses.Select(c => c.Text)).Contains("天気"), string.Concat(clauses.Select(c => c.Text)));
+        Assert.True(ime.Convert(text)?.Contains("天気") == true, "全体の変換も");
+    }
 }
