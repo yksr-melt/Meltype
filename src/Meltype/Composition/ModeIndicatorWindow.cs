@@ -11,8 +11,10 @@ namespace Meltype.Composition;
 internal sealed class ModeIndicatorWindow : Form
 {
     private const int WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x00000080, WS_EX_TOPMOST = 0x00000008, WS_EX_TRANSPARENT = 0x00000020;
-    private static readonly Color JapaneseColor = Color.FromArgb(76, 160, 255);
-    private static readonly Color DirectColor = Color.FromArgb(110, 110, 120);
+    private static readonly Color DefaultJapaneseColor = Color.FromArgb(76, 160, 255);
+    private static readonly Color DefaultDirectColor = Color.FromArgb(110, 110, 120);
+    // 設定で変えた色 (issue #359)。
+    private Color _japaneseColor = DefaultJapaneseColor, _directColor = DefaultDirectColor, _textColor = Color.White;
     private readonly Font _font = new("Yu Gothic UI", 14F, FontStyle.Bold);
     private readonly System.Windows.Forms.Timer _hideTimer = new() { Interval = 1200 };
     private string _text = "あ";
@@ -45,11 +47,20 @@ internal sealed class ModeIndicatorWindow : Form
         }
     }
 
+    /// <summary>色を変える (設定「入力モードの表示の色」。null なら既定の色)。</summary>
+    public void SetColors((int R, int G, int B)? japanese, (int R, int G, int B)? direct, (int R, int G, int B)? text)
+    {
+        static Color Of((int R, int G, int B)? rgb, Color fallback) => rgb is var (r, g, b) ? Color.FromArgb(r, g, b) : fallback;
+        _japaneseColor = Of(japanese, DefaultJapaneseColor);
+        _directColor = Of(direct, DefaultDirectColor);
+        _textColor = Of(text, Color.White);
+    }
+
     /// <summary>japanese なら「あ」、そうでなければ「A」を location に出し、しばらくしたら消す。</summary>
     public void Flash(bool japanese, Point location)
     {
         _text = japanese ? "あ" : "A";
-        BackColor = japanese ? JapaneseColor : DirectColor;
+        BackColor = japanese ? _japaneseColor : _directColor;
         var screen = Screen.FromPoint(location).WorkingArea;
         location.X = Math.Clamp(location.X, screen.Left, screen.Right - Width);
         location.Y = Math.Clamp(location.Y, screen.Top, screen.Bottom - Height);
@@ -62,7 +73,7 @@ internal sealed class ModeIndicatorWindow : Form
 
     protected override void OnPaint(PaintEventArgs e)
     {
-        TextRenderer.DrawText(e.Graphics, _text, _font, ClientRectangle, Color.White,
+        TextRenderer.DrawText(e.Graphics, _text, _font, ClientRectangle, _textColor,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
     }
 

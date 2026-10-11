@@ -48,4 +48,15 @@ internal static class SettingsJsonTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    [Test]
+    public static void ModeIndicatorColors_AreParsed()
+    {
+        // #359: 入力モードの表示の色は #RRGGBB (# は無くても・#RGB でも)。空・読めない値は既定の色
+        Assert.True(Settings.ParseColor("#D32F2F") == (0xD3, 0x2F, 0x2F), "#RRGGBB");
+        Assert.True(Settings.ParseColor("007acc") == (0x00, 0x7A, 0xCC), "# なし・小文字");
+        Assert.True(Settings.ParseColor("#fff") == (255, 255, 255), "#RGB");
+        Assert.True(Settings.ParseColor("") is null && Settings.ParseColor("red") is null && Settings.ParseColor("#12345") is null, "読めない値");
+        Assert.Equal("", new Settings().ModeIndicatorDirectColor, "既定は空 (今までの色)");
+    }
 }

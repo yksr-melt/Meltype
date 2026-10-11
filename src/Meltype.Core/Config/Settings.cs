@@ -265,6 +265,18 @@ public sealed class Settings
      Description("「入力モードをカーソルの近くに表示」が ON のとき、入力欄をクリックしたとき (フォーカスが入ったとき) にも「あ」「A」を出します。OFF にすると、半角/全角 を押したときだけ出します。")]
     public bool ShowModeIndicatorOnFocus { get; set; } = true;
 
+    [Category("1. 全般"), DisplayName("入力モードの表示の色: 日本語 (あ)"),
+     Description("「あ」の背景色を #RRGGBB で書きます (例: #007ACC)。空なら青。壁紙・アプリのテーマで見えにくいときに変えます。")]
+    public string ModeIndicatorJapaneseColor { get; set; } = "";
+
+    [Category("1. 全般"), DisplayName("入力モードの表示の色: 英数 (A)"),
+     Description("「A」の背景色を #RRGGBB で書きます (例: #D32F2F で赤)。空なら灰色。英数になっているのに気づかずに打ち始めてしまうときは、目立つ色にします。")]
+    public string ModeIndicatorDirectColor { get; set; } = "";
+
+    [Category("1. 全般"), DisplayName("入力モードの表示の色: 文字"),
+     Description("「あ」「A」の文字の色を #RRGGBB で書きます (例: #000000)。空なら白。")]
+    public string ModeIndicatorTextColor { get; set; } = "";
+
     [Category("1. 全般"), DisplayName("変換ボックスの位置"),
      Description("入力位置に重ねる: 打っている文字が入力欄の中の入力位置にそのまま出ているように見えます。カーソルの下: 入力位置の下に別の枠で出します (今までの出し方)。カーソルの上: 入力位置の上に別の枠で出します (候補の一覧が入力欄や下の行を隠さない)。入力位置が分からないアプリでは、どれも入力欄の下に出します。")]
     public CompositionPlacement CompositionPlacement { get; set; } = CompositionPlacement.Overlay;
@@ -540,6 +552,17 @@ public sealed class Settings
 
     /// <summary>このアプリでは、入力欄と判定できなくてもフォーカスのある所を入力欄として扱うか (<see cref="TextInputApps"/>)。</summary>
     public bool TreatsAsTextInput(string? processName) => ContainsApp(TextInputApps, processName);
+
+    /// <summary>
+    /// #RRGGBB (# は無くてもよい・#RGB も可) の色を (赤, 緑, 青) にする。空・読めない値なら null (既定の色を使う: issue #359)。
+    /// </summary>
+    public static (int R, int G, int B)? ParseColor(string? text)
+    {
+        var hex = (text ?? "").Trim().TrimStart('#');
+        if (hex.Length == 3) hex = string.Concat(hex.Select(c => $"{c}{c}"));
+        if (hex.Length != 6 || !int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out var value)) return null;
+        return ((value >> 16) & 0xFF, (value >> 8) & 0xFF, value & 0xFF);
+    }
 
     /// <summary>
     /// カンマ・セミコロン区切りのプロセス名の一覧に processName があるか (大文字小文字は無視)。
