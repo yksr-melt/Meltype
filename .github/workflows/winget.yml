@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Yukishiro
+#
+# 公開版のリリースを winget (microsoft/winget-pkgs) に出す (issue #367)。
+# リリースが公開されたら、インストーラー (Meltype-<版>-setup.exe) から新しい版のマニフェストを作り、winget-pkgs に Pull Request を出す。
+# 使う前に (docs/RELEASE.md の「パッケージマネージャー」):
+#   1. 最初の版だけは、tools/make-manifests.mjs で作ったマニフェストを手で winget-pkgs に出し、取り込まれるのを待つ
+#   2. microsoft/winget-pkgs をフォークし、public_repo の権限のトークンを秘密 WINGET_TOKEN に登録する
+# WINGET_TOKEN が無ければ何もしない。
+name: winget
+
+on:
+  release:
+    types: [released]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: winget に出すリリースのタグ (v1.2.0 など)
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  winget:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check token
+        id: token
+        shell: pwsh
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        run: |
+          if ([string]::IsNullOrEmpty($env:WINGET_TOKEN)) {
+            Write-Output '::notice::WINGET_TOKEN が無いので、winget には出しません (docs/RELEASE.md)。'
+            'ready=false' >> $env:GITHUB_OUTPUT
+          } else {
+            'ready=true' >> $env:GITHUB_OUTPUT
+          }
+      - if: steps.token.outputs.ready == 'true'
+        uses: vedantmgoyal9/winget-releaser@f29ed1ffd34f91223a2aebaa71beaab0901ff9fd # v2
+        with:
+          identifier: Yukishiro.Meltype
+          installers-regex: '-setup\.exe$'
+          release-tag: ${{ inputs.tag || github.event.release.tag_name }}
+          token: ${{ secrets.WINGET_TOKEN }}
