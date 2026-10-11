@@ -667,6 +667,9 @@ public sealed class Settings
         ActiveProfile = ActiveProfile.Trim();
         if (Profiles.All(p => p.Name != ActiveProfile)) Profiles.Insert(0, new SettingsProfile { Name = ActiveProfile });
         foreach (var rule in AppRules) rule.Process = rule.Process.Trim();
+        // 同じアプリの設定が 2 つ以上あれば、後ろ (あとから足した方) を使う。既定の一覧にある Code.exe (コード) の後ろに
+        // Enabled: false の Code.exe を足しても、前の方が使われて OFF にならなかった (issue #233)
+        AppRules = AppRules.Where((rule, i) => !AppRules.Skip(i + 1).Any(later => string.Equals(later.Process, rule.Process, StringComparison.OrdinalIgnoreCase))).ToList();
         return this;
     }
 
