@@ -56,7 +56,7 @@ internal sealed class Updater : IDisposable
     /// 起動時: ダウンロード済みの新しい版があればインストールを始める (true なら Meltype はそのまま終了する。install.ps1 が新しい版を起動する)。
     /// 前回インストールに失敗していた (同じ版のまま起動した) ときは、繰り返さない。
     /// </summary>
-    public static bool ApplyStagedAtStartup(Func<bool> enabled)
+    public static bool ApplyStagedAtStartup(Func<bool> enabled, Func<string, bool>? confirm = null)
     {
         try
         {
@@ -76,7 +76,8 @@ internal sealed class Updater : IDisposable
         {
             Log.Warn($"更新の状態を読めませんでした: {ex.Message}");
         }
-        return enabled() && Apply();
+        // 更新の前に、あなたの打ち方で変わる語があれば見せる (issue #285。「あとで」なら今回は更新しない)
+        return enabled() && Staged() is { } staged && (confirm?.Invoke(staged.Version) ?? true) && Apply();
     }
 
     /// <summary>ダウンロード済みの新しい版のインストールを始める。install.ps1 が動いている Meltype を終了させてから入れ替え、起動する。</summary>
@@ -101,6 +102,51 @@ internal sealed class Updater : IDisposable
         {
             Log.Warn($"更新を始められませんでした: {ex.Message}");
             return false;
+        }
+    }
+
+    /// <summary>
+    /// 更新の前に「あなたの打ち方で変わる語」を調べる (issue #285)。自分で英字 / かなに直した語 (languages.json) を、
+    /// 今の版とダウンロードした新しい版 (Meltype.exe --judge-words) の両方で判定し、見え方が変わる語を返す。
+    /// 調べられなければ (新しい版がこの仕組みを持たない・時間切れ) null。この PC の中だけで動かし、何も送らない。
+    /// </summary>
+    public static IReadOnlyList<Composition.WordChange>? PreviewChanges(IEnumerable<string> words)
+    {
+        if (Staged() is not { } staged) return null;
+        var list = words.Where(Composition.WordJudge.IsWord).Distinct(StringComparer.Ordinal).ToList();
+        if (list.Count == 0) return [];
+        var exe = Path.Combine(staged.Folder, "app", "Meltype.exe");
+        if (!File.Exists(exe)) return null;
+        var input = Path.Combine(Directory, "judge-words.txt");
+        var output = Path.Combine(Directory, "judge-result.txt");
+        try
+        {
+            File.WriteAllLines(input, list);
+            File.Delete(output);
+            var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe)! };
+            foreach (var arg in new[] { "--judge-words", input, output }) start.ArgumentList.Add(arg);
+            using var process = Process.Start(start)!;
+            if (!process.WaitForExit(60_000))
+            {
+                process.Kill();
+                Log.Warn("新しい版の判定が時間内に終わりませんでした。変わる語は調べずに更新します。");
+                return null;
+            }
+            if (process.ExitCode != 0 || !File.Exists(output)) return null;
+            var next = Composition.WordJudge.Parse(File.ReadAllText(output));
+            var now = Composition.WordJudge.Parse(Program.JudgeWords(list));
+            var changes = Composition.WordJudge.Changes(now, next);
+            Log.Info($"Meltype {staged.Version} で見え方が変わる語: {changes.Count} 語 (調べた語 {list.Count})。");
+            return changes;
+        }
+        catch (Exception ex)
+        {
+            Log.Warn($"新しい版で変わる語を調べられませんでした: {ex.Message}");
+            return null;
+        }
+        finally
+        {
+            try { File.Delete(input); File.Delete(output); } catch { }
         }
     }
 

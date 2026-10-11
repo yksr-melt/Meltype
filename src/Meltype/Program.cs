@@ -10,12 +10,39 @@ namespace Meltype;
 internal static class Program
 {
     [STAThread]
+    /// <summary>
+    /// 語ごとの自動の判定 (学習は使わない)。今の版の判定にも同じものを使う (<see cref="Updater.PreviewChanges"/>)。
+    /// </summary>
+    internal static string JudgeWords(IEnumerable<string> words)
+    {
+        var detector = Composition.CompositionDetector.CreateDefault();
+        if (Detection.WindowsSpellChecker.Shared.IsAvailable) detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
+        return Composition.WordJudge.JudgeAll(detector, words);
+    }
+
+    private static int JudgeWords(string input, string output)
+    {
+        try
+        {
+            File.WriteAllText(output, JudgeWords(File.ReadAllLines(input)));
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+    }
+
     private static int Main(string[] args)
     {
         // Meltype.exe --selftest [結果ファイル]: キーボードフックを掛けずに、主な機能が動くかだけを確かめる。
         if (args.FirstOrDefault() == "--selftest") return SelfTest.Run(args.ElementAtOrDefault(1));
         // Meltype.exe --exit: 動いている Meltype を終了させる (インストール・アンインストール用。管理者として動いていても止められる)。
         if (args.FirstOrDefault() == "--exit") return ExitSignal.Send() ? 0 : 1;
+        // Meltype.exe --judge-words <語の一覧> <結果>: 語ごとの自動の判定を書き出す。前の版の Meltype が、更新の前に
+        // 「あなたの打ち方で変わる語」を調べるために、ダウンロードした新しい版をこれで動かす (issue #285)。
+        if (args.FirstOrDefault() == "--judge-words" && args.Length >= 3) return JudgeWords(args[1], args[2]);
 
         // フックを二重に掛けると同じ打鍵を二重に保留・再入力してしまうので、多重起動させない。
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Meltype.SingleInstance", out var createdNew);
@@ -54,7 +81,8 @@ internal static class Program
         }
 
         // ダウンロード済みの新しい版があれば、起動せずに更新する (install.ps1 が新しい版を起動する)。
-        if (Updater.ApplyStagedAtStartup(() => settings.AutoUpdate)) return 0;
+        if (Updater.ApplyStagedAtStartup(() => settings.AutoUpdate,
+                version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings))) return 0;
 
         MeltypeEngine engine;
         try
