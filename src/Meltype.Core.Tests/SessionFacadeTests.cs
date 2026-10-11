@@ -342,6 +342,27 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void SigilWord_EndsWhenSpaceReachedTheAppDirectly()
+    {
+        // #242: Meltype IME は変換中でないときの Space・Enter を Meltype.exe に送らず、アプリに通す。
+        // /xyz の後の空白・改行はキャレットの前の文字で分かるので、そこで普通の入力に戻る (ずっと素通しにならない)
+        foreach (var before in new[] { "/xyz ", "/xyz\r\n", "/xyz\n" })
+        {
+            var session = Create();
+            Assert.True(Type(session, "/xyz", before: "").All(r => !r.Consumed), "/xyz はアプリへ");
+            Assert.Equal("きょう", Type(session, "kyou", before)[^1].View?.Text, before);
+        }
+        // 名前の途中 (前が名前の文字) なら今までどおりアプリへ
+        var typing = Create();
+        Type(typing, "/xy", before: "");
+        Assert.True(!Type(typing, "z", before: "/xy")[0].Consumed, "名前の続きはアプリへ");
+        // 空白の後の 2 つ目の /command も、そのままアプリへ
+        typing = Create();
+        Type(typing, "/xyz", before: "");
+        Assert.True(!Type(typing, "/", before: "/xyz ")[0].Consumed, "空白の後の / はアプリへ");
+    }
+
+    [Test]
     public static void SigilWord_UsesTextBeforeCaret()
     {
         // キャレットの前の文字を教えてもらえば、それで決める (taro@ は対象外、"> " の後は対象)。
