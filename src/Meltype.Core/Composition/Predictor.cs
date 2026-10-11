@@ -71,6 +71,16 @@ public sealed class PhraseHistory
         Save();
     }
 
+    /// <summary>sinceUtc より後に覚えた (確定した) 語句を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
+    public int ForgetSince(DateTime sinceUtc)
+    {
+        var recent = _entries.Where(e => e.Value.Used >= sinceUtc.Ticks).Select(e => e.Key).ToList();
+        if (recent.Count == 0) return 0;
+        foreach (var key in recent) _entries.Remove(key);
+        Save();
+        return recent.Count;
+    }
+
     private void Save()
     {
         if (_path is null) return;

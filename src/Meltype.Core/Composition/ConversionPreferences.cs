@@ -145,6 +145,17 @@ public sealed class ConversionHistory
         Save();
     }
 
+    /// <summary>sinceUtc より後に覚えた (使った) 変換を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
+    public int ForgetSince(DateTime sinceUtc)
+    {
+        var recent = _entries.Where(e => e.Value.Used >= sinceUtc).Select(e => e.Key).ToList();
+        if (recent.Count == 0) return 0;
+        foreach (var reading in recent) _entries.Remove(reading);
+        Version++;
+        Save();
+        return recent.Count;
+    }
+
     private void Save()
     {
         if (_path is null) return;

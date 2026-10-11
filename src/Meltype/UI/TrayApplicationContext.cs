@@ -59,6 +59,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             CandidateMeanings = () => _engine.Settings.ShowCandidateMeanings,
             ShowTypedKeys = () => _engine.Settings.ShowTypedKeys,
             TabConversion = () => _engine.Settings.TabConversion,
+            Learning = () => _engine.Settings.LearningEnabled,
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
@@ -129,7 +130,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("不具合の報告・提案...", null, (_, _) => OpenReport());
         menu.Items.Add("Meltype について...", null, (_, _) => MessageBox.Show(AppInfo.AboutText, "Meltype について", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add("学習した語...", null, (_, _) => ShowLearnedWords());
-        menu.Items.Add("学習データをリセット", null, (_, _) => ResetLearning());
+        var forget = new ToolStripMenuItem("学習データを消す");
+        forget.DropDownItems.Add("この 1 時間に覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.UtcNow.AddHours(-1), "この 1 時間"));
+        forget.DropDownItems.Add("今日覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.Today.ToUniversalTime(), "今日"));
+        forget.DropDownItems.Add("すべて (リセット)...", null, (_, _) => ResetLearning());
+        menu.Items.Add(forget);
         menu.Items.Add("アンインストール...", null, (_, _) => Uninstall());
         // 更新: 自動更新の ON/OFF、今すぐ確認、ダウンロード済みなら更新して再起動
         var updates = new ToolStripMenuItem("更新");
@@ -518,14 +523,28 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ResetLearning()
     {
-        var answer = MessageBox.Show("学習データ (model.json と、選び直した変換の記録 conversions.json、予測変換の語句 phrases.txt) をすべて削除します。よろしいですか？", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        var answer = MessageBox.Show("学習データ (自動切替の学習 model.json、選び直した変換 conversions.json、英字 / かなに直した語 languages.json、予測変換の語句 phrases.txt、選んだ英訳 translations.json) をすべて削除します。よろしいですか？\n\nユーザー辞書 (userdict.txt) と設定は消えません。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
         if (answer == DialogResult.OK)
         {
             _engine.ResetLearning();
             _composition.History.Clear();
             _composition.Languages.Clear();
             _composition.Phrases?.Clear();
+            _composition.TranslationHistory?.Clear();
         }
+    }
+
+    /// <summary>
+    /// 最近覚えたものだけを忘れる (一時的な入力・間違えて覚えたものを、全体をリセットせずに消す: issue #277)。
+    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。自動切替の学習と英訳の記録は覚えた時刻を持たないので、「すべて」で消す。
+    /// </summary>
+    private void ForgetRecentLearning(DateTime sinceUtc, string label)
+    {
+        var answer = MessageBox.Show($"{label}に覚えた学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        if (answer != DialogResult.OK) return;
+        var count = _composition.History.ForgetSince(sinceUtc) + _composition.Languages.ForgetSince(sinceUtc) + (_composition.Phrases?.ForgetSince(sinceUtc) ?? 0);
+        Diagnostics.Log.Info($"{label}に覚えた学習データを削除しました ({count} 件)。");
+        MessageBox.Show(count > 0 ? $"{count} 件削除しました。" : "削除するものはありませんでした。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
     /// <summary>
