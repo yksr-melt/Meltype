@@ -529,7 +529,7 @@ public sealed class CompositionController
         }
         if (IsControl(vk) && !_text.IsEmpty)
         {
-            // 変換ボックスに入力中の Ctrl は、次のキーを見るまで送らない (Ctrl+U/I/O/P はかな・英字の切り替え。それ以外は確定してから送る)。
+            // 変換ボックスに入力中の Ctrl は、次のキーを見るまで送らない (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから送る)。
             _swallowedControl.Add(vk);
             return;
         }
@@ -537,7 +537,7 @@ public sealed class CompositionController
         {
             if (!_text.IsEmpty && ControlShortcut(vk) is { } function)
             {
-                // Ctrl+U/I/O/P: F6/F7/F10/F9 と同じ (ATOK と同じ割り当て。続けて押すと大文字・小文字も切り替わる)。
+                // Ctrl+U/I/O/P: F6/F7/F10/F9 と同じ (ATOK と同じ割り当て。続けて押すと大文字・小文字も切り替わる)。Ctrl+H は BackSpace。
                 vk = function;
             }
             else
@@ -2116,13 +2116,15 @@ public sealed class CompositionController
 
     private static bool IsControl(int vk) => vk is VirtualKeys.Control or VirtualKeys.LControl or VirtualKeys.RControl;
 
-    /// <summary>入力中の Ctrl+英字で、かな・英字を切り替えるもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数)。</summary>
+    /// <summary>入力中の Ctrl+英字で、ほかのキーと同じ働きをするもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数 / H BackSpace)。</summary>
     private static int? ControlShortcut(int vk) => vk switch
     {
         'U' => VirtualKeys.F6,
         'I' => VirtualKeys.F7,
         'O' => VirtualKeys.F10,
         'P' => VirtualKeys.F9,
+        // Ctrl+H は BackSpace (Microsoft IME と同じ。ホームポジションのまま消せる: issue #150)
+        'H' => VirtualKeys.Back,
         _ => null,
     };
 
