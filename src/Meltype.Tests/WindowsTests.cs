@@ -27,4 +27,14 @@ internal static class WindowsTests
         settings.AppRules.Add(new AppRule { Process = "minecraft.exe", Enabled = true, Profile = AppProfile.Game });
         Assert.True(settings.IsGame("minecraft.exe", looksLikeGame: false), "アプリ別設定で「ゲーム」にしたら止める");
     }
+
+    [Test]
+    public static void WebInputClassNames_AreTextInputs()
+    {
+        // #70: Chatwork の検索欄は Group で、クラス名 (sc-kzAZJu ijnNh inputLong) でしか入力欄と分からない
+        foreach (var name in new[] { "sc-kzAZJu ijnNh inputLong", "input", "searchInput", "search-input", "chat_input", "input-field" })
+            Assert.True(Composition.FocusInspector.LooksLikeInputClass(name), name);
+        foreach (var name in new[] { "", "inputs", "input-group", "inputWrapper", "searchInputButton", "sc-kzAZJu ijnNh", "inputtable" })
+            Assert.True(!Composition.FocusInspector.LooksLikeInputClass(name), name);
+    }
 }
