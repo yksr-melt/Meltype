@@ -83,6 +83,26 @@ public sealed class FocusInspector : IDisposable
 
     public FocusInfo Current => _info;
 
+    private long _lastRecheck;
+
+    /// <summary>
+    /// 前に調べた結果が「入力欄ではない」でも、ブラウザーではもう一度調べ直す (最大 waitMs 待つ。1 秒に 1 回まで)。
+    /// Firefox でタブを切り替えた後、入力欄にフォーカスが移っても UI Automation の通知が来ず、「入力欄ではない」(ページそのもの) のまま
+    /// 変換ボックスを出さなくなることがあった (issue #364)。打った時点で調べ直せば、そのときのフォーカスで決められる。
+    /// </summary>
+    public bool RecheckStale(int waitMs = 60)
+    {
+        var now = Environment.TickCount64;
+        if (now - Interlocked.Read(ref _lastRecheck) < 1000) return false;
+        if (Interlocked.Read(ref _resolvedSequence) != Interlocked.Read(ref _focusSequence) || Native.GetForegroundWindow() != _inspectedForeground) return false;
+        if (_info is { IsTextInput: true } or { IsPassword: true }) return false;
+        Interlocked.Exchange(ref _lastRecheck, now);
+        Invalidate();
+        var deadline = now + waitMs;
+        while (Interlocked.Read(ref _resolvedSequence) != Interlocked.Read(ref _focusSequence) && Environment.TickCount64 < deadline) Thread.Sleep(5);
+        return CanCapture;
+    }
+
     /// <summary>
     /// 前面のアプリが設定「入力欄とみなすアプリ」にあるか (このクラスのスレッドから呼ばれる)。
     /// そのアプリでは、入力欄と判定できなくてもフォーカスのある所を入力欄として扱う (issue #52)。
