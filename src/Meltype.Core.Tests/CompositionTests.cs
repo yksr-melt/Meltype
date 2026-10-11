@@ -1731,6 +1731,15 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Ki_OffersOldKanji()
+    {
+        // #371: き の候補に 気 の旧字体 氣 も出す
+        var k = new Keyboard();
+        k.Type("ki ");
+        Assert.True(k.Host.View!.Candidates.Contains("氣"), string.Join(" ", k.Host.View!.Candidates));
+    }
+
+    [Test]
     public static void WiWe_OfferOldKana()
     {
         var k = new Keyboard();
