@@ -79,6 +79,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading));
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
+        Controller.Corrected += Corrections.Add;
         if (options.Engine() != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
         _showIndicator = options.ModeIndicator;
         _placement = options.Placement;
@@ -122,6 +123,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
     public UserDictionary UserDictionary { get; }
+
+    /// <summary>最近自分で直した誤判定 (メモリの中だけ。トレイの「直した誤判定を報告...」: issue #284)。</summary>
+    public CorrectionLog Corrections { get; } = new();
 
     private readonly CompositionDetector _detector;
 

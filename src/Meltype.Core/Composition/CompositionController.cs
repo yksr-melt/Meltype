@@ -1711,10 +1711,42 @@ public sealed class CompositionController
             ClearComposition();
             return;
         }
+        RecordCorrection(converting, text, suffix);
         if (converting) Learn();
         else LearnLanguage();
         RememberPhrase(converting ? string.Concat(_clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : _text.AllKana(final: true), text, english);
         CommitText(text + suffix, english, _text.Raw, chosen, preserveText);
+    }
+
+    /// <summary>
+    /// ユーザーが自動の判定を自分で直して確定したとき (F6〜F10 で英字 / かなにした、変換の候補から打ったままの英字・日本語を選んだ)。
+    /// 誤判定の報告 (トレイの「直した誤判定を報告...」) に使う。記録を作るだけで、どこにも送らない (issue #284)。
+    /// </summary>
+    public event Action<Correction>? Corrected;
+
+    private void RecordCorrection(bool converting, string text, string suffix)
+    {
+        if (Corrected is null || _text.Raw.Length == 0 || !_text.Raw.Any(char.IsAsciiLetter)) return;
+        string shown;
+        if (converting)
+        {
+            // 英語 / 日本語を選び直した文節があるときだけ (漢字の選び直しは判定の間違いではない)
+            var switched = _clauses.Any(c => c.Changed && (c.IsEnglish ? IsJapaneseText(c.Text) : c.Raw is { } raw && c.Text == raw));
+            if (!switched) return;
+            shown = string.Concat(_clauses.Select(c => c.Candidates[0]));
+        }
+        else
+        {
+            if (_text.Mode == DisplayMode.Auto) return;
+            var (mode, letterCase) = (_text.Mode, _text.Case);
+            _text.Mode = DisplayMode.Auto;
+            shown = _text.Display(final: true);
+            (_text.Mode, _text.Case) = (mode, letterCase);
+        }
+        if (shown == text) return;
+        var before = _precedingText ?? "";
+        Corrected.Invoke(new Correction(_text.Raw, shown, text, suffix.Contains(' ') ? "Space (変換)" : "Enter (確定)",
+            before.Length > 20 ? before[^20..] : before, DateTime.Now));
     }
 
     /// <summary>
