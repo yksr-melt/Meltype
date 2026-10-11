@@ -21,6 +21,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     private readonly Func<string> _font;
     private readonly Func<bool> _lightTheme;
     private readonly Func<double> _opacity;
+    private readonly Func<(string Japanese, string Direct, string Text)> _indicatorColors;
     private readonly Func<bool> _directMode;
     private readonly MsImeKanjiConverter _converter = new();
     private readonly KeyInjector _injector = new();
@@ -86,6 +87,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _font = options.Font;
         _lightTheme = options.LightTheme;
         _opacity = options.Opacity;
+        _indicatorColors = options.ModeIndicatorColors;
         _directMode = options.DirectMode;
         var onFocus = options.ModeIndicatorOnFocus;
         Focus.TextInputEntered += () => { if (onFocus()) ShowMode(!_directMode()); };
@@ -506,6 +508,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         {
             if (!_showIndicator() || _window.Visible) return;
             var anchor = FindAnchor();
+            var (jp, direct, text) = _indicatorColors();
+            _indicator.SetColors(Config.Settings.ParseColor(jp), Config.Settings.ParseColor(direct), Config.Settings.ParseColor(text));
             _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2));
         }));
     }
