@@ -50,6 +50,7 @@ struct Native {
     char *(*selectCandidate)(void *, int) = nullptr;
     void (*setDirect)(void *, int) = nullptr;
     void (*setCanDelete)(void *, int) = nullptr; // 古い本体には無い
+    char *(*roleKey)(void *, int) = nullptr;     // 古い本体には無い (入力中のキーの役割: #199)
     void (*free)(void *) = nullptr;
 
     bool load() {
@@ -69,6 +70,7 @@ struct Native {
         selectCandidate = reinterpret_cast<decltype(selectCandidate)>(sym("meltype_select_candidate"));
         setDirect = reinterpret_cast<decltype(setDirect)>(sym("meltype_set_direct"));
         setCanDelete = reinterpret_cast<decltype(setCanDelete)>(sym("meltype_set_can_delete"));
+        roleKey = reinterpret_cast<decltype(roleKey)>(sym("meltype_role_key"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         if (!create || !destroy || !handleKey || !commit || !selectCandidate || !setDirect || !free) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
@@ -368,6 +370,18 @@ public:
         syncCanDelete(ic, state->session());
         const auto key = event.key();
         const auto sym = key.sym();
+        // 入力中の 変換・無変換・ひらがな/カタカナ: 設定で役割を分けていれば、本体が変換ボックスで処理する (#199)
+        if (native_.roleKey && !state->direct &&
+            (sym == FcitxKey_Henkan || sym == FcitxKey_Muhenkan || sym == FcitxKey_Hiragana_Katakana)) {
+            int vk = sym == FcitxKey_Henkan ? 0x1C : sym == FcitxKey_Muhenkan ? 0x1D : 0x15;
+            auto handled = native_.take(native_.roleKey(state->session(), vk));
+            Json result;
+            if (!handled.empty() && JsonReader(handled).read(result)) {
+                apply(ic, result);
+                event.filterAndAccept();
+                return;
+            }
+        }
         // 半角/全角: 英数 (直接入力) ⇔ 日本語。英数・ひらがなのキーでも切り替える (JIS キーボード)。
         if (sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku || sym == FcitxKey_Eisu_toggle ||
             sym == FcitxKey_Hiragana_Katakana || sym == FcitxKey_Muhenkan || sym == FcitxKey_Henkan) {

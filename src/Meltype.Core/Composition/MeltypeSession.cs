@@ -165,6 +165,7 @@ public sealed class MeltypeSession
             Translations = TranslationDictionary.Load(),
             TranslationCandidates = () => settings.TranslationCandidates,
             TabConversion = () => settings.TabConversion,
+            SeparateKeyRoles = () => settings.SeparateKeyRoles,
             Meanings = MeaningDictionary.Load(),
             CandidateMeanings = () => settings.ShowCandidateMeanings,
             RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji),
@@ -268,6 +269,17 @@ public sealed class MeltypeSession
             if (!consumed) TrackCodeKey(vk, ch, modifier);
         }
         return Track(result, vk, ch, modifier);
+    }
+
+    /// <summary>
+    /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON で入力中なら、変換ボックスで処理する (issue #199)。
+    /// そうでなければ null (Linux の IBus・fcitx5 は、今までどおり英数 / 日本語の切り替えに使う)。
+    /// </summary>
+    public SessionResult? HandleRoleKey(int vk)
+    {
+        if (vk is not (VirtualKeys.Convert or VirtualKeys.NonConvert or VirtualKeys.Kana)) return null;
+        if (!_settings().SeparateKeyRoles || !_controller.IsComposing || Direct) return null;
+        return HandleKey(vk, null, false, false, false, false);
     }
 
     private void TrackCodeKey(int vk, char? ch, bool modifier)
