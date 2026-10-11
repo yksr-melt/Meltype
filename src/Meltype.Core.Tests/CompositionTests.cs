@@ -1730,6 +1730,24 @@ internal static class CompositionTests
         }
     }
 
+    /// <summary>しゃーなし を 西なし にする変換エンジン (Mozc の苦手な語の代わり)。</summary>
+    private sealed class NishinashiConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana.Replace("しゃーなし", "西なし");
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => [new(hiragana, Convert(hiragana)!)];
+    }
+
+    [Test]
+    public static void Shanashi_IsNotConvertedToPlaceName()
+    {
+        // #368: sha-nashi (しゃーなし) を、変換エンジンが 西なし にしていた。同梱の語句でかなのまま最初の候補にする
+        var k = new Keyboard(converter: new NishinashiConverter(), userDictionary: new UserDictionary(null));
+        k.Type("sha-nashi ");
+        Assert.Equal("しゃーなし", k.Host.View!.Candidates[0], string.Join(" ", k.Host.View!.Candidates));
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("しゃーなし", k.Host.Document);
+    }
+
     [Test]
     public static void WiWe_OfferOldKana()
     {
