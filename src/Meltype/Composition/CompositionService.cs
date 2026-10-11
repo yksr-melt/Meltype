@@ -257,7 +257,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         // 再変換のときは、IME の逆変換で出てくる読みを使う。
         _reconversionSelection = null;
         if (Focus.SelectedText() is not { } text) return null;
-        var reading = GuessReading(text);
+        // ローマ字のまま入った文 (kyouhaiitenki) は、逆変換せずにそのまま渡す (Meltype の判定で日本語にする: issue #288)
+        var reading = CompositionController.IsRomajiText(text) ? text : GuessReading(text);
         if (string.IsNullOrWhiteSpace(reading))
         {
             Diagnostics.Log.Info("再変換: 選択文字の読みを取得できませんでした。");
