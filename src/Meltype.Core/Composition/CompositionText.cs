@@ -214,6 +214,12 @@ public sealed class CompositionText
                 return;
             }
         }
+        // 文章の入力欄で打ち始めに打った / は ・ (Microsoft IME と同じ)。Space で / にできる。
+        if (c == '/' && _units.Count == 0 && SlashAtStart())
+        {
+            _units.Add(new CompositionUnit("・", "/"));
+            return;
+        }
         // / キーで中黒 (設定): かなのすぐ後ろの / は ・ (いろん/ますく → いろん・ますく)。英字・数字の後ろ (and/or、3/4、URL)
         // と入力の始め (/help) は / のまま (issue #122)。英語の区間に入ったときは、打ったままの / を見せる。
         if (c == '/' && SlashAsMiddleDot() && _units.Count > 0 && _units[^1].Kana is [.., var kana] && kana is >= 'ぁ' and <= 'ヺ' or 'ー')
@@ -226,6 +232,12 @@ public sealed class CompositionText
 
     /// <summary>かなのすぐ後ろの / を中黒 (・) にするか (設定)。</summary>
     public Func<bool> SlashAsMiddleDot { get; set; } = () => false;
+
+    /// <summary>空の変換ボックスに打った / を、打ち始めの / として中黒 (・) にするか。読むと次からは false。</summary>
+    public Func<bool> SlashAtStart { get; set; } = () => false;
+
+    /// <summary>打ち始めの / だけを ・ にして入れているか。</summary>
+    public bool IsSlashAtStart => _pending.Length == 0 && _units is [{ Kana: "・", Raw: "/" }];
 
     /// <summary>
     /// 英単語の最後の n と、続けて打った n + 母音 (の・な …) が「nn → ん」とまとまってしまうのを防ぐ
@@ -874,9 +886,12 @@ public sealed class CompositionText
         // かな入力では "@" は濁点などのキーで、ローマ字の原文とは意味が違う。保護判定はローマ字入力だけにする。
         if (KanaInput) return [];
         var raw = Raw;
-        if (_protectedCache is not null && _protectedCacheRaw == raw) return _protectedCache;
-        _protectedCache = ProtectedSpanScanner.Scan(raw);
-        _protectedCacheRaw = raw;
+        // 打ち始めの / を ・ にしたときは、続けて打った文字と合わせて / から始まるパス (/kyou) にしない。
+        var slash = _units is [{ Kana: "・", Raw: "/" }, ..];
+        var key = slash ? "・" + raw : raw;
+        if (_protectedCache is not null && _protectedCacheRaw == key) return _protectedCache;
+        _protectedCache = slash ? ProtectedSpanScanner.Scan(raw[1..]).Select(s => s with { Start = s.Start + 1 }).ToList() : ProtectedSpanScanner.Scan(raw);
+        _protectedCacheRaw = key;
         return _protectedCache;
     }
 

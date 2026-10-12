@@ -664,9 +664,10 @@ internal static class SessionFacadeTests
     [Test]
     public static void SigilWord_PassesToTheAppUntilSpace()
     {
-        // #193: 先頭の /review は打つたびにアプリへ渡し (補完を選べるように)、空白の後は日本語に戻る。
+        // #193: 先頭の @review は打つたびにアプリへ渡し (補完を選べるように)、空白の後は日本語に戻る。
+        // 文章の入力欄の先頭の / は ・ として変換ボックスに入れる ので、@ で確かめる。
         var session = Create();
-        Assert.True(Type(session, "/review").All(r => !r.Consumed && r.View is null), "/review はそのままアプリへ");
+        Assert.True(Type(session, "@review").All(r => !r.Consumed && r.View is null), "@review はそのままアプリへ");
         Assert.True(!Type(session, " ")[0].Consumed, "空白もアプリへ");
         Assert.Equal("きょう", Type(session, "kyou")[^1].View?.Text);
         // google を確定した後の空白に続く @ も。
@@ -676,24 +677,46 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void SlashAtStart_IsMiddleDotInText()
+    {
+        // 文章の入力欄の先頭の / は ・。Space で / にして名前を打つと、/ を確定して名前はアプリへ。
+        var session = Create();
+        Assert.Equal("・", Type(session, "/", before: "")[0].View?.Text);
+        Assert.Equal("/", Type(session, " ")[0].View?.Text);
+        var help = Type(session, "help");
+        Assert.True(help[0].Commits.Single().Text == "/" && help.All(r => !r.Consumed && r.View is null), "/ を確定して help はアプリへ");
+        // Discord は空の入力欄でも、キャレットの前に U+FEFF を返す。
+        session = Create();
+        Assert.Equal("・", Type(session, "/", before: "\uFEFF")[0].View?.Text);
+        // /help を送信した後 (Enter は Meltype IME を通らない) の空の欄では、日本語に戻る。
+        Type(session, " ");
+        Type(session, "help");
+        Assert.Equal("きょう", Type(session, "kyou", before: "\uFEFF")[^1].View?.Text);
+        // コードの入力欄では、今までどおりアプリへ。
+        session = Create();
+        session.CodeInput = true;
+        Assert.True(Type(session, "/help", before: "").All(r => !r.Consumed), "コードの /help はアプリへ");
+    }
+
+    [Test]
     public static void SigilWord_EndsWhenSpaceReachedTheAppDirectly()
     {
         // #242: Meltype IME は変換中でないときの Space・Enter を Meltype.exe に送らず、アプリに通す。
-        // /xyz の後の空白・改行はキャレットの前の文字で分かるので、そこで普通の入力に戻る (ずっと素通しにならない)
-        foreach (var before in new[] { "/xyz ", "/xyz\r\n", "/xyz\n" })
+        // @xyz の後の空白・改行はキャレットの前の文字で分かるので、そこで普通の入力に戻る (ずっと素通しにならない)
+        foreach (var before in new[] { "@xyz ", "@xyz\r\n", "@xyz\n" })
         {
             var session = Create();
-            Assert.True(Type(session, "/xyz", before: "").All(r => !r.Consumed), "/xyz はアプリへ");
+            Assert.True(Type(session, "@xyz", before: "").All(r => !r.Consumed), "@xyz はアプリへ");
             Assert.Equal("きょう", Type(session, "kyou", before)[^1].View?.Text, before);
         }
         // 名前の途中 (前が名前の文字) なら今までどおりアプリへ
         var typing = Create();
-        Type(typing, "/xy", before: "");
-        Assert.True(!Type(typing, "z", before: "/xy")[0].Consumed, "名前の続きはアプリへ");
-        // 空白の後の 2 つ目の /command も、そのままアプリへ
+        Type(typing, "@xy", before: "");
+        Assert.True(!Type(typing, "z", before: "@xy")[0].Consumed, "名前の続きはアプリへ");
+        // 空白の後の 2 つ目の @file も、そのままアプリへ
         typing = Create();
-        Type(typing, "/xyz", before: "");
-        Assert.True(!Type(typing, "/", before: "/xyz ")[0].Consumed, "空白の後の / はアプリへ");
+        Type(typing, "@xyz", before: "");
+        Assert.True(!Type(typing, "@", before: "@xyz ")[0].Consumed, "空白の後の @ はアプリへ");
     }
 
     [Test]
@@ -704,7 +727,7 @@ internal static class SessionFacadeTests
         Assert.True(Type(session, "@", before: "taro")[0].Consumed, "前が英字なら @ は変換ボックスへ");
         session = Create();
         session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
-        Assert.True(!Type(session, "/", before: "> ")[0].Consumed, "前が空白なら / はアプリへ");
+        Assert.True(!Type(session, "@", before: "> ")[0].Consumed, "前が空白なら @ はアプリへ");
         // 前の文字を打ったのを見ていれば、空 (前の文字を読めないアプリ) より自分の記録を信じる。
         session = Create();
         session.Direct = true;

@@ -591,11 +591,17 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、名前の終わり (空白) まで変換せずにそのままアプリへ渡す (#193)。
         // かな入力では / などのキーはかな (め) なので対象にしない。
+        // 文章の入力欄 (コードエディターのコード以外) の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
+        var slashAtStart = false;
         if (!reconvert && settings.SigilWordsDirect && (_keyboardDirect || settings.InputStyle != InputStyle.Kana) &&
             KeyText.CharFromKey(e.Vk, e.Scan, false) is { } typed && _sigil.PassesThrough(typed, _line.Text))
         {
-            if (!_sigil.IsActive) Log.Info($"{typed} で始まる語: 空白までそのまま入力します");
-            return false;
+            slashAtStart = typed == '/' && !_keyboardDirect && !_sigil.IsActive && !IsCodeApp(settings);
+            if (!slashAtStart)
+            {
+                if (!_sigil.IsActive) Log.Info($"{typed} で始まる語: 空白までそのまま入力します");
+                return false;
+            }
         }
         if (!_foreground.Check(settings).Allowed) return false;
         // 文字入力欄 (パスワード以外) にフォーカスがあるときだけ。ショートカットキーやゲームの操作を横取りしない。
@@ -610,6 +616,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             if (letter) _lastLineKind = kind;
             if (code) return false;
         }
+        if (slashAtStart) _composition?.Controller.MarkSlashAtStart();
         return true;
     }
 

@@ -210,7 +210,7 @@ public sealed class Settings
     public bool DirectModeAutoDetect { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("/ $ @ で始まる語はそのまま入力"),
-     Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。")]
+     Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。文章の入力欄 (コードエディターのコード以外) の / は「・」として入り、Space で / にしてから名前を打つと、名前はそのまま渡します。")]
     public bool SigilWordsDirect { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("定型文を出す記号"),
@@ -270,7 +270,7 @@ public sealed class Settings
     public bool CorrectTypos { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("/ キーで中黒「・」"),
-     Description("かなのすぐ後ろで打った / を中黒「・」にします (いーろん/ますく → イーロン・マスク)。英字・数字の後ろ (and/or、3/4、URL) と、打ち始めの / (/help) は / のままです。OFF のときも、z/ または / を打って Space で「・」にできます。")]
+     Description("かなのすぐ後ろで打った / を中黒「・」にします (いーろん/ますく → イーロン・マスク)。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。OFF のときも、z/ または / を打って Space で「・」にできます。")]
     public bool SlashAsMiddleDot { get; set; }
 
     [Category("1. 全般"), DisplayName("入力モードをカーソルの近くに表示"),
