@@ -61,18 +61,13 @@ Mac 版には登録の画面がないので、データフォルダ (`~/Library/
 
 ## 困ったとき
 
-- 入力ソースに出てこない: まず入力メニューを見る。無ければ、ターミナルで次を実行する (ログアウトは要りません。`install.sh` も同じことをします、#134)
+- 入力ソースに出てこない、または Meltype がいくつも並ぶ: ターミナルで次を実行する
   ```bash
-  ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
+  "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
   ```
-  これで戻らなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。「+」の一覧に出ないときは、ターミナルで次を実行してから入力メニューを見る (`install.sh` も同じことをします、#21)
-  ```bash
-  defaults write com.apple.HIToolbox AppleEnabledInputSources -array-add \
-    '<dict><key>Bundle ID</key><string>io.github.yksr-melt.inputmethod.Meltype</string><key>InputSourceKind</key><string>Keyboard Input Method</string></dict>' \
-    '<dict><key>Bundle ID</key><string>io.github.yksr-melt.inputmethod.Meltype</string><key>Input Mode</key><string>io.github.yksr-melt.inputmethod.Meltype.Japanese</string><key>InputSourceKind</key><string>Input Mode</string></dict>'
-  killall TextInputMenuAgent
-  ```
-- 入力メニューに「絵文字と記号を表示」「キーボードビューアを表示」「キーボード設定を開く…」の 3 つしか出ない: 入力ソースの登録は残っていて Meltype も使えるが、メニューの一覧が古いまま固まっている (#134)。上の `MeltypeRegisterInputSource` を実行すると直る。応急処置は、入力メニューで「キーボードビューアを表示」を押すか、ターミナルで `killall TextInputMenuAgent` (macOS がすぐ起動し直します)。入力メニューの一覧は、選択できるキーボード系の入力ソースが 2 つ以上あるときだけ出るので、1 つしか無いときも同じ見え方になります
+  ほかの入力ソースを残し、Meltype の親と日本語モードを一組に整理する。macOS 26 以降、または新しい設定の一覧が存在するときは、`com.apple.inputsources` の `AppleEnabledThirdPartyInputSources` を使い、`com.apple.HIToolbox` の `AppleEnabledInputSources` から Meltype の重複を取り除く。旧 macOS で新しい一覧がなければ、旧設定だけを整理する。変更前の一覧は、それぞれの設定領域の `MeltypeInputSourcesBeforeRepair` に保存する。
+  選択できる有効な日本語モードが一つになったことを確認してから、入力メニューの表示を更新する。エラーが出る場合は、`~/Library/Input Methods/Meltype.app` があるか確かめ、ログアウトしてログインし直す。
+- 入力メニューに「絵文字と記号を表示」「キーボードビューアを表示」「キーボード設定を開く…」の 3 つしか出ない: 入力ソースの登録は残っていて Meltype も使えるが、メニューの一覧が古いまま固まっている (#134)。上の `--register-input-source` を実行して表示を更新する。応急処置は、入力メニューで「キーボードビューアを表示」を押すか、ターミナルで `killall TextInputMenuAgent` (macOS がすぐ起動し直します)。入力メニューの一覧は、選択できるキーボード系の入力ソースが 2 つ以上あるときだけ出るので、1 つしか無いときも同じ見え方になります
 - 動きがおかしい: ログを見る
 
   ```bash

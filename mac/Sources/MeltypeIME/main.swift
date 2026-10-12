@@ -11,7 +11,20 @@ if CommandLine.arguments.contains("--version") {
 }
 
 if CommandLine.arguments.contains("--register-input-source") {
-    exit(InputSourceRegistration.register() == 0 ? 0 : 1)
+    guard InputSourceRegistration.register() == 0 else { exit(1) }
+    // 登録が変わらなくても、入力メニューの一覧が古い場合がある。
+    let refresh = Process()
+    refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+    refresh.arguments = ["TextInputMenuAgent"]
+    refresh.standardOutput = FileHandle.nullDevice
+    refresh.standardError = FileHandle.nullDevice
+    do {
+        try refresh.run()
+        refresh.waitUntilExit()
+    } catch {
+        FileHandle.standardError.write(Data("入力メニューの表示を更新できませんでした: \(error.localizedDescription)\n".utf8))
+    }
+    exit(0)
 }
 
 // Input Method Kit のサーバーを起動する。入力欄 (クライアント) ごとに MeltypeInputController が作られる。
@@ -103,9 +116,48 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
     check("issue 114: repeated spelling uses cache", repeatedChecks == 0 && firstOutput == secondOutput)
     let other: [String: Any] = ["InputSourceKind": "Keyboard Layout", "KeyboardLayout Name": "ABC"]
     let duplicate: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier, "InputSourceKind": "Keyboard Input Method"]
-    let repaired = InputSourceRegistration.normalized([other] + Array(repeating: duplicate, count: 15))
-    check("issue 101: deduplicate input sources", repaired.count == 3 && (repaired[0]["KeyboardLayout Name"] as? String) == "ABC")
-    check("issue 101: registration is idempotent", NSArray(array: repaired).isEqual(to: InputSourceRegistration.normalized(repaired)))
+    let duplicateMode: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier,
+                                      "Input Mode": InputSourceRegistration.japaneseIdentifier, "InputSourceKind": "Input Mode"]
+    let google: [String: Any] = ["Bundle ID": "com.google.inputmethod.Japanese", "InputSourceKind": "Keyboard Input Method",
+                               "metadata": ["enabled": true, "modes": ["Hiragana", "Roman"]]]
+    let azooKey: [String: Any] = ["Bundle ID": "dev.ensan.inputmethod.azooKey", "InputSourceKind": "Keyboard Input Method",
+                                "metadata": ["order": 7]]
+    let similar: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier + "Extra",
+                                "Input Mode": InputSourceRegistration.japaneseIdentifier + ".Other", "metadata": ["keep": true]]
+    let unrelated = [google, azooKey, similar]
+    let duplicatePairs = (0..<15).flatMap { _ in [duplicate, duplicateMode] }
+    let repaired = InputSourceRegistration.repaired(legacy: [other] + duplicatePairs,
+        thirdParty: [google] + duplicatePairs + [azooKey, similar], preferThirdParty: true)
+    let thirdParty = repaired.thirdParty ?? []
+    check("issue 101: remove Meltype overlap from legacy store", NSArray(array: repaired.legacy).isEqual(to: [other]))
+    check("issue 101: deduplicate 15 third-party pairs", thirdParty.count == 5 &&
+          NSArray(array: Array(thirdParty.suffix(2))).isEqual(to: [duplicateMode, duplicate]))
+    check("issue 101: preserve Google, azooKey, similar identifiers and metadata", NSArray(array: Array(thirdParty.prefix(3))).isEqual(to: unrelated))
+    let repeatedRepair = InputSourceRegistration.repaired(legacy: repaired.legacy, thirdParty: repaired.thirdParty, preferThirdParty: true)
+    check("issue 101: dual-store repair is idempotent", NSArray(array: repeatedRepair.legacy).isEqual(to: repaired.legacy) &&
+          NSArray(array: repeatedRepair.thirdParty ?? []).isEqual(to: thirdParty))
+    let existingThirdParty = InputSourceRegistration.repaired(legacy: [other] + duplicatePairs, thirdParty: [], preferThirdParty: false)
+    check("issue 101: existing third-party key takes priority on older OS", NSArray(array: existingThirdParty.legacy).isEqual(to: [other]) &&
+          NSArray(array: existingThirdParty.thirdParty ?? []).isEqual(to: [duplicateMode, duplicate]))
+    let modern = InputSourceRegistration.repaired(legacy: [other] + duplicatePairs, thirdParty: nil, preferThirdParty: true)
+    check("issue 101: create third-party store on modern OS", NSArray(array: modern.legacy).isEqual(to: [other]) &&
+          NSArray(array: modern.thirdParty ?? []).isEqual(to: [duplicateMode, duplicate]))
+    let fallback = InputSourceRegistration.repaired(legacy: [other] + duplicatePairs + unrelated, thirdParty: nil, preferThirdParty: false)
+    let expectedFallback = [other] + unrelated + [duplicateMode, duplicate]
+    check("issue 101: older OS fallback preserves absent third-party store", fallback.thirdParty == nil &&
+          NSArray(array: fallback.legacy).isEqual(to: expectedFallback))
+    let repeatedFallback = InputSourceRegistration.repaired(legacy: fallback.legacy, thirdParty: nil, preferThirdParty: false)
+    check("issue 101: fallback repair is idempotent", repeatedFallback.thirdParty == nil &&
+          NSArray(array: repeatedFallback.legacy).isEqual(to: expectedFallback))
+    let guiSources = [google, azooKey, duplicateMode, duplicate]
+    check("issue 101: preserve the order saved by macOS", NSArray(array: InputSourceRegistration.normalized(guiSources)).isEqual(to: guiSources))
+    let malformedPreferences: [Any] = ["not an array", [other, "not a dictionary"] as [Any]]
+    for invalid in malformedPreferences {
+        do {
+            _ = try InputSourceRegistration.validatedSources(invalid, name: "self-test")
+            check("issue 101: reject malformed preferences", false)
+        } catch { check("issue 101: reject malformed preferences", true) }
+    }
     do {
         for format in [PropertyListSerialization.PropertyListFormat.xml, .binary] {
             let data = try PropertyListSerialization.data(fromPropertyList: [["shortcut": "カイシャ", "phrase": "株式会社テスト"]], format: format, options: 0)
