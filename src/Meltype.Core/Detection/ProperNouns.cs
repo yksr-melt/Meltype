@@ -46,7 +46,11 @@ public sealed class ProperNouns
                 _words.Add(lower);
             }
         }
+        Version++;
     }
+
+    /// <summary>語を足すたびに増える (区間の判定の控えを捨てる)。</summary>
+    internal int Version { get; private set; }
 
     /// <summary>小文字の綴り (英語辞書に足す用)。</summary>
     public IEnumerable<string> LowercaseWords => _canonical.Keys;

@@ -120,6 +120,22 @@ public sealed class MisspellingDictionary
     internal static string Shape(string katakana)
     {
         var builder = new StringBuilder(katakana.Length);
+        foreach (var c in katakana)
+        {
+            var shape = c < 0x80 ? AsciiShapes[c] : c is >= '゠' and <= 'ヿ' ? KatakanaShapes[c - 0x30A0] : null;
+            if (shape is null) return NormalizedShape(katakana);
+            builder.Append(shape);
+        }
+        return builder.ToString();
+    }
+
+    // 1 文字ずつの形をつなげても、文字列全体を正規化したときと同じになる範囲 (濁点などの結合文字は捨てるので並べ替えが効かない)
+    private static readonly string[] AsciiShapes = Enumerable.Range(0, 0x80).Select(c => NormalizedShape(((char)c).ToString())).ToArray();
+    private static readonly string[] KatakanaShapes = Enumerable.Range(0x30A0, 0x60).Select(c => NormalizedShape(((char)c).ToString())).ToArray();
+
+    private static string NormalizedShape(string katakana)
+    {
+        var builder = new StringBuilder(katakana.Length);
         foreach (var c in katakana.Normalize(NormalizationForm.FormD))
         {
             if (c is 'ッ' or 'ー' || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;

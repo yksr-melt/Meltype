@@ -492,7 +492,25 @@ public sealed partial class CompositionDetector
     internal bool IsJapaneseWordOrPrefix(string kana) => _kana?.IsJapaneseWordOrPrefix(kana) == true;
 
     /// <summary>スペルチェッカーが正しいと言う英単語か、よくある打ち間違い (teh、recieve) か。</summary>
-    internal bool IsSpellWord(string lower) => SpellChecker is { } checker && (checker.IsWord(lower) || checker.AutoCorrection(lower) is not null);
+    internal bool IsSpellWord(string lower)
+    {
+        if (SpellChecker is not { } checker) return false;
+        if (checker is BuiltInWordChecker) return checker.IsWord(lower) || checker.AutoCorrection(lower) is not null;
+        int generation;
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (_spellMemo.TryGetValue(lower, out var known)) return known;
+            generation = _memoGeneration;
+        }
+        var result = checker.IsWord(lower) || checker.AutoCorrection(lower) is not null;
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (generation == _memoGeneration) _spellMemo[lower] = result;
+        }
+        return result;
+    }
 
     /// <summary>よくある英語の打ち間違いなら正しい綴り (teh → the)。大文字で始まる語は大文字で始める。</summary>
     public string? EnglishAutoCorrection(string word)
@@ -597,7 +615,7 @@ public sealed partial class CompositionDetector
     private static readonly string[] SuruForms = ["する", "すれ", "した", "して", "しま", "しな", "しよ", "しと", "しちゃ", "しろ", "され", "させ", "せず"];
 
     /// <summary>する の活用 (して・した・します …) だけでできたかなか。</summary>
-    private static bool IsSuruForm(string kana) => SuruForms.Any(kana.StartsWith) && kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー');
+    private static bool IsSuruForm(string kana) => kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー') && SuruForms.Any(form => kana.StartsWith(form, StringComparison.Ordinal));
 
     private static int Score(bool? english) => english switch { true => 1, false => -1, null => 0 };
 
@@ -620,10 +638,58 @@ public sealed partial class CompositionDetector
         return true;
     }
 
+    private readonly record struct EnglishSpanKey(string Span, bool AtEnd, int Before, bool? After, bool StartOfInput, DetectionLevel Level, bool Final, bool Unreadable, string? Next, bool EndsWord);
+
+    private const int MemoLimit = 50_000;
+    private static readonly long MemoLifetime = System.Diagnostics.Stopwatch.Frequency * 60;
+    private readonly object _memoGate = new();
+    private readonly Dictionary<EnglishSpanKey, bool> _englishSpanMemo = [];
+    private readonly Dictionary<string, bool> _spellMemo = new(StringComparer.Ordinal);
+    // 判定が読む、後から変わりうるもの (辞書は足すだけなので語の数で見る)
+    private readonly record struct MemoState(IWordChecker? Checker, LanguageMemory? Memory, int MemoryVersion, Func<string, bool>? MemoryCommon, Func<string, bool>? MemoryReadable,
+        Func<string, bool>? Common, int Proper, int English, int Japanese);
+
+    private MemoState _memoState;
+    private long _memoStarted;
+    private int _memoGeneration;
+
+    // _memoGate の中で呼ぶ
+    private void ValidateMemo()
+    {
+        var state = new MemoState(SpellChecker, Memory, Memory?.Version ?? -1, Memory?.IsCommonJapanese, Memory?.IsReadableRomaji,
+            IsCommonJapanese, _proper.Version, _english.Words.Count, _japanese.Words.Count);
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (state == _memoState && now - _memoStarted <= MemoLifetime && _englishSpanMemo.Count + _spellMemo.Count <= MemoLimit) return;
+        _englishSpanMemo.Clear();
+        _spellMemo.Clear();
+        _memoState = state;
+        _memoStarted = now;
+        _memoGeneration++;
+    }
+
     /// <param name="final">打ち終わった (Space・Enter)。末尾の区間でも、英単語の打ちかけ (amaz) は英語の根拠にしない。</param>
     /// <param name="unreadable">区間にローマ字として読めなかった英字がある (zoom + de の m、bug + wo の g)。</param>
     /// <param name="endsWord">区間の後ろが記号だけ (let's go! の go)。語はそこで打ち終わっているので、短い語も末尾の語と同じく見る。</param>
     private bool IsEnglishSpan(string span, bool atEnd, int before, bool? after, bool startOfInput, DetectionLevel level, bool final = false, bool unreadable = false, string? next = null, bool endsWord = false)
+    {
+        var key = new EnglishSpanKey(span, atEnd, before, after, startOfInput, level, final, unreadable, next, endsWord);
+        int generation;
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (_englishSpanMemo.TryGetValue(key, out var known)) return known;
+            generation = _memoGeneration;
+        }
+        var result = IsEnglishSpanCore(span, atEnd, before, after, startOfInput, level, final, unreadable, next, endsWord);
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (generation == _memoGeneration) _englishSpanMemo[key] = result;
+        }
+        return result;
+    }
+
+    private bool IsEnglishSpanCore(string span, bool atEnd, int before, bool? after, bool startOfInput, DetectionLevel level, bool final, bool unreadable, string? next, bool endsWord)
     {
         // まだ続きを打つかもしれない末尾の区間 (打ちかけの英単語を英語と見てよい)。
         var growing = atEnd && !final;
@@ -1293,7 +1359,6 @@ public sealed partial class CompositionDetector
     }
 
     // 英語の根拠がない小文字区間は、連結文字列・解析を作らずに除外する。
-    // 追加のスペルチェッカーは独自の訂正を持つため、従来の判定へ渡す。
     private bool CanBeEnglishSpan(int start, int end, string pending, bool growing, string? next)
     {
         if (pending.Length > 0) return true;
@@ -1308,7 +1373,7 @@ public sealed partial class CompositionDetector
             IsPediaEnglishWord(lower) ||
             growing && (_english.Words.HasPrefix(lower) || _proper.HasPrefix(lower))) return true;
         if (Memory?.Get(lower) is not null) return true;
-        return SpellChecker switch { null => false, BuiltInWordChecker builtIn => builtIn.IsWord(lower), _ => true };
+        return SpellChecker switch { null => false, BuiltInWordChecker builtIn => builtIn.IsWord(lower), _ => IsSpellWord(lower.ToString()) };
     }
 
     private IReadOnlyList<CompositionUnit>? _preparedUnits;

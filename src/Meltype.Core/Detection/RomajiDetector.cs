@@ -209,15 +209,22 @@ public sealed class RomajiDetector
 
     private RomajiAnalysis Analyze(string letters, bool strictStart, bool composition)
     {
+        var slot = composition ? 2 : strictStart ? 0 : 1;
         var cache = composition ? _compositionCache : strictStart ? _strictCache : _looseCache;
         if (cache.TryGetValue(letters, out var cached)) return cached;
         var result = AnalyzeCore(letters, strictStart, composition);
-        if (cache.Count >= CacheLimit) cache.Clear();
+        // ConcurrentDictionary.Count はすべてのロックを取るので、足した数を別に数える
+        if (Interlocked.Increment(ref _cacheAdded[slot]) > CacheLimit)
+        {
+            cache.Clear();
+            Interlocked.Exchange(ref _cacheAdded[slot], 0);
+        }
         cache[letters] = result;
         return result;
     }
 
     private const int CacheLimit = 50000;
+    private readonly int[] _cacheAdded = new int[3];
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _strictCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _looseCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _compositionCache = new(StringComparer.Ordinal);
