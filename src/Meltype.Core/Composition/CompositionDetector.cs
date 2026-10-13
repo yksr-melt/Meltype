@@ -144,6 +144,15 @@ public sealed partial class CompositionDetector
         // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の Segment 呼び出しの間だけ、
         // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
         Prepare(units);
+        if (!kanaInput && level != DetectionLevel.Manual)
+        {
+            var splitUnits = SplitEnglishFinalConsonant(units, pending, precedingEnglish, level, final);
+            if (!ReferenceEquals(splitUnits, units))
+            {
+                units = splitUnits;
+                Prepare(units);
+            }
+        }
         var token = Raw(units, 0, units.Count) + pending;
         // Structured Latin tokens are opaque; their components are not Japanese readings.
         if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
@@ -241,6 +250,70 @@ public sealed partial class CompositionDetector
             !IsKnownEnglishWord(whole.ToLowerInvariant()) && HasListedEnglishPrefixSplit(whole, segments))
             return [new CompositionSegment(true, "", whole)];
         return segments;
+    }
+
+    /// <summary>
+    /// 英単語の末尾子音が次の母音と1音になっている場合、区間判定用の単位だけを分ける
+    /// (error|aru の ra)。入力単位は保持し、かな表示・削除では元の読みを使う。
+    /// </summary>
+    private IReadOnlyList<CompositionUnit> SplitEnglishFinalConsonant(IReadOnlyList<CompositionUnit> units, string pending,
+        bool? precedingEnglish, DetectionLevel level, bool final)
+    {
+        List<CompositionUnit>? split = null;
+        for (var end = 1; end < units.Count; end++)
+        {
+            var raw = units[end].Raw;
+            if (raw.Length != 2 || !char.IsAsciiLetterLower(raw[0]) || "aiueon".Contains(raw[0]) || !"aiueo".Contains(raw[1]))
+            {
+                split?.Add(units[end]);
+                continue;
+            }
+            var divided = false;
+            var hasEnglishReading = false;
+            for (var start = end - 1; start >= 0; start--)
+            {
+                if (_preparedNonLetters[end] != _preparedNonLetters[start]) break;
+                // 母音の前の子音以外がすべて通常のかななら、日本語の打ちかけ。解析・辞書照合は不要。
+                hasEnglishReading |= units[start].Kana.Contains('っ') || units[start] is { Raw.Length: 1 } unit && unit.Kana == unit.Raw;
+                if (!hasEnglishReading) continue;
+                var from = _preparedRawOffsets[start];
+                var length = _preparedRawOffsets[end] - from + 1;
+                if (length < 4) continue;
+                var candidate = _preparedRaw.AsSpan(from, length);
+                // ほとんどの区間は辞書にない。小文字なら文字列を作らずに照合する。
+                if (_preparedUpper[end + 1] == _preparedUpper[start] && !_english.Words.ContainsWord(candidate)) continue;
+                var word = candidate.ToString();
+                var lower = word.ToLowerInvariant();
+                if (!_english.Words.ContainsWord(lower) || _japanese.IsPrefix(lower)) continue;
+                var analysis = _romaji.AnalyzeFragment(lower);
+                // 読み切れる日本語や、その打ちかけ (shit|ai = したい) は分けない。
+                if (analysis.IsValid && analysis.Sokuon == 0) continue;
+                if (CoveredByJapaneseWord(units, end)) break;
+                // 後続がローマ字として読み切れない間は、既存の区切りを保つ (erroring の ring)。
+                var tailEnd = end + 1;
+                while (tailEnd < units.Count && _preparedNonLetters[tailEnd + 1] == _preparedNonLetters[tailEnd]) tailEnd++;
+                var rest = Raw(units, end, tailEnd) + (tailEnd == units.Count ? pending : "");
+                // commit|suru を commits|uru にしない。既存の「する」の境界を優先する。
+                if (IsSuruTail(rest.ToLowerInvariant()) && IsKnownEnglishWord(word[..^1])) continue;
+                // 同じ位置から始まる長い英単語を短い語に割らない (musk|et ではなく musket)。
+                var whole = word + rest[1..];
+                var longerWord = false;
+                for (var wordEnd = word.Length + 1; wordEnd <= whole.Length; wordEnd++)
+                    if (IsKnownEnglishWord(whole[..wordEnd])) { longerWord = true; break; }
+                if (longerWord) continue;
+                var tail = rest[1..];
+                if (_romaji.AnalyzeFragment(tail.ToLowerInvariant()) is not { IsValid: true, Partial: "" or "n" }) continue;
+                if (!IsEnglishSpan(word, atEnd: false, start == 0 ? Score(precedingEnglish) : -1, false,
+                        startOfInput: start == 0, level, final, unreadable: true, next: raw[1..])) continue;
+                split ??= [.. units.Take(end)];
+                split.Add(new CompositionUnit(raw[..1], raw[..1]));
+                split.Add(new CompositionUnit(_romaji.ConvertLenient(raw[1..], final: true), raw[1..]));
+                divided = true;
+                break;
+            }
+            if (!divided) split?.Add(units[end]);
+        }
+        return split ?? units;
     }
 
     /// <summary>

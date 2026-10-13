@@ -2186,6 +2186,65 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishFinalConsonant_BeforeVowel()
+    {
+        foreach (var scored in new[] { false, true })
+        {
+            var detector = CompositionDetector.CreateDefault();
+            detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+            detector.UseScoredSegmentation = () => scored;
+            foreach (var (typed, expected) in new[] {
+                ("erroraru", "errorある"), ("errordeta", "errorでた"), ("error", "error"),
+                ("erroriru", "errorいる"), ("errorugoku", "errorうごく"), ("erroreranai", "errorえらない"), ("errorokita", "errorおきた"),
+                ("kyouhaerroraru", "きょうはerrorある"), ("errors", "errors"), ("erroring", "えっろring"),
+                ("erroraru,", "errorある、"), ("erroraru.", "errorある。"),
+                ("erroraru,erroraru", "errorある、errorある"),
+                ("commitsuru", "commitする"), ("errorsuru", "errorする"),
+                ("shitai", "したい"), ("komatta", "こまった"), ("gomennyo", "ごめんよ") })
+            {
+                var text = new CompositionText(detector);
+                foreach (var c in typed) text.Append(c);
+                Assert.Equal(expected, text.Display(final: false), $"{typed}, scored={scored}, 入力中");
+                Assert.Equal(expected, text.Display(final: true), $"{typed}, scored={scored}, 確定");
+                Assert.Equal(typed, string.Concat(text.Segments(final: true).Select(s => s.Raw)), "区間の原文を失わない");
+            }
+        }
+    }
+
+    [Test]
+    public static void EnglishFinalConsonant_PreservesKanaAndEditing()
+    {
+        var k = new Keyboard();
+        k.Type("erroraru");
+        Assert.Equal("errorある", k.Showing);
+        k.Press(VirtualKeys.F6);
+        Assert.Equal("えっろらる", k.Showing, "明示的なかな表示は元の入力単位を使う");
+        k.Press(VirtualKeys.F10);
+        Assert.Equal("erroraru", k.Showing);
+
+        k = new Keyboard();
+        k.Type("erroraru\bi");
+        Assert.Equal("errorあい", k.Showing, "るを削除して母音を打ち直す");
+        k.Type("\n");
+        Assert.Equal("errorあい", k.Host.Document);
+
+        k = new Keyboard { Level = Meltype.Config.DetectionLevel.Manual };
+        k.Type("erroraru");
+        Assert.Equal("えっろらる", k.Showing, "手動では境界を補わない");
+
+        k = new Keyboard();
+        k.Type("erroraru\n");
+        Assert.Equal("errorある", k.Host.Document);
+
+        var detector = CompositionDetector.CreateDefault();
+        detector.Memory = new LanguageMemory(null);
+        detector.Memory.Remember("error", english: false, explicitChoice: true);
+        var text = new CompositionText(detector);
+        foreach (var c in "erroraru") text.Append(c);
+        Assert.Equal("えっろらる", text.Display(final: true), "明示的に覚えたかな判定を優先する");
+    }
+
+    [Test]
     public static void Backspace_ThenRetype_RereadsRomaji()
     {
         // 報告: test の最後の t を消して u → 「てsう」になる。
