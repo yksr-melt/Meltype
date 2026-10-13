@@ -60,6 +60,7 @@ internal static class CompositionTests
         public CompositionView? View { get; private set; }
         public bool PhysicalShift { get; set; }
         public bool CanDeleteBackward { get; set; } = true;
+        public bool TextBeforeCaretMatchesResult { get; set; } = true;
         public ReconversionSelection? Selection { get; set; }
 
         public ReconversionSelection? GetReconversionSelection() => Selection;
@@ -80,9 +81,11 @@ internal static class CompositionTests
         public string? FollowingText { get; set; }
 
         public void RequestSurroundingText(Action<string?, string?> callback) => callback(PrecedingText ?? (Document.Length > 0 ? Document : null), FollowingText);
+        public bool TextBeforeCaretMatches(string expected) => TextBeforeCaretMatchesResult;
 
         /// <summary>入力欄の中身 (確定した文字列と、確定し直すときの削除を反映したもの)。</summary>
         public string Document { get; private set; } = "";
+        public void SimulateExternalTextChange(string text) => Document = text;
 
         public void DeleteBackward(int count)
         {
@@ -1906,6 +1909,21 @@ internal static class CompositionTests
         Assert.Equal("すしがすき", k.Host.Document);
         var edits = k.Host.Events.Where(e => e.StartsWith("bs:") || e.StartsWith("text:")).ToList();
         Assert.Equal("bs:6 text:すしがすき", string.Join(" ", edits));
+    }
+
+    [Test]
+    public static void AutoCorrect_DoesNotReplaceChangedText()
+    {
+        var k = new Keyboard();
+        k.Type("i\n");
+        k.Host.TextBeforeCaretMatchesResult = false;
+        k.Host.SimulateExternalTextChange("pasted sentence");
+        k.Host.Events.Clear();
+
+        k.Type("want ");
+
+        Assert.True(k.Host.Document.Contains("pasted sentence", StringComparison.Ordinal), k.Host.Document);
+        Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:")), "貼り付けた文面に古い削除を適用しない");
     }
 
     [Test]

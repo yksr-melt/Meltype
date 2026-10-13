@@ -220,9 +220,15 @@ final class MeltypeInputController: IMKInputController {
                 // 確定し直し: キャレット (変換中の文字があればその先頭) の前の文字を置き換える。
                 let marked = client.markedRange()
                 let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
-                if caret != NSNotFound {
-                    let length = min(edit.deleteBefore, caret)
-                    range = NSRange(location: caret - length, length: length)
+                guard caret != NSNotFound, caret >= edit.deleteBefore else {
+                    NSLog("Meltype: 確定し直す文字を確認できないため、置き換えを中止しました")
+                    continue
+                }
+                range = NSRange(location: caret - edit.deleteBefore, length: edit.deleteBefore)
+                let previous = client.attributedSubstring(from: range)?.string
+                guard matchesExpectedText(previous, expected: edit.expect, deleteBefore: edit.deleteBefore) else {
+                    NSLog("Meltype: 前の文字が確定時と違うため、確定し直しを中止しました")
+                    continue
                 }
             }
             client.insertText(NSAttributedString(string: edit.text), replacementRange: range)

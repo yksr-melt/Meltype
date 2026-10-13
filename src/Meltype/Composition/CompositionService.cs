@@ -539,6 +539,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         });
     }
 
+    public bool TextBeforeCaretMatches(string expected) => Focus.TextBeforeCaretMatches(expected);
+
     public void Replay(MouseButtonEvent e)
     {
         var (button, data) = e.Message switch

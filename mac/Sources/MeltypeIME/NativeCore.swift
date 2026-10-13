@@ -73,6 +73,16 @@ struct SessionResult: Decodable {
 struct TextEdit: Decodable {
     let deleteBefore: Int
     let text: String
+    let expect: String?
+}
+
+// DeleteBefore uses UTF-16 units, matching .NET string lengths and AppKit ranges.
+func matchesExpectedText(_ actual: String?, expected: String?, deleteBefore: Int) -> Bool {
+    guard deleteBefore > 0,
+          let expected,
+          (expected as NSString).length == deleteBefore,
+          actual == expected else { return false }
+    return true
 }
 
 struct CompositionView: Decodable {

@@ -271,6 +271,32 @@ public sealed class FocusInspector : IDisposable
         callback(before, after);
     });
 
+    /// <summary>キャレット直前の文字を新たに読み取り、再確定の対象と一致するか調べる。</summary>
+    public bool TextBeforeCaretMatches(string expected, int waitMs = 250)
+    {
+        if (expected.Length == 0 || !CanCapture || Input.ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow())) return false;
+        var sequence = Interlocked.Read(ref _focusSequence);
+        var foreground = Native.GetForegroundWindow();
+        if (foreground == IntPtr.Zero) return false;
+
+        var matches = false;
+        using var done = new ManualResetEventSlim();
+        Enqueue(() =>
+        {
+            try
+            {
+                if (!CanCapture || sequence != Interlocked.Read(ref _focusSequence) ||
+                    foreground != Native.GetForegroundWindow() || Input.ForegroundTracker.IsOwnWindow(foreground)) return;
+                if (Automation()?.Focused() is not { IsPassword: false, IsReadOnly: false } element) return;
+                var before = element.Surrounding(expected.Length)?.Before;
+                matches = before?.EndsWith(expected, StringComparison.Ordinal) == true;
+            }
+            finally { done.Set(); }
+        });
+        return done.Wait(waitMs) && matches &&
+            sequence == Interlocked.Read(ref _focusSequence) && foreground == Native.GetForegroundWindow();
+    }
+
     private void Enqueue(Action action)
     {
         if (!_work.IsAddingCompleted)

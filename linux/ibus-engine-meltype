@@ -255,10 +255,17 @@ class MeltypeEngine(IBus.Engine):
         if not result:
             return
         for edit in result.get("commits", []):
-            self._hide_preedit()
-            if edit.get("deleteBefore", 0) > 0:
+            delete_before = edit.get("deleteBefore", 0)
+            if delete_before > 0:
+                expected = edit.get("expect")
+                if not self._matches_expected_before(delete_before, expected):
+                    print("Meltype: 前の文字が確定時と違うため、確定し直しを中止しました", file=sys.stderr)
+                    continue
+                self._hide_preedit()
                 # 確定し直し: キャレットの前の文字を消してから入れる (入力欄が対応していれば)。
-                self.delete_surrounding_text(-edit["deleteBefore"], edit["deleteBefore"])
+                self.delete_surrounding_text(-delete_before, delete_before)
+            else:
+                self._hide_preedit()
             if edit.get("text"):
                 self.commit_text(IBus.Text.new_from_string(edit["text"]))
         view = result.get("view")
@@ -268,6 +275,18 @@ class MeltypeEngine(IBus.Engine):
         else:
             self._hide_preedit()
             self._hide_candidates()
+
+    def _matches_expected_before(self, delete_before, expected):
+        if not isinstance(expected, str) or delete_before <= 0 or len(expected) != delete_before:
+            return False
+        try:
+            text, cursor, _anchor = self.get_surrounding_text()
+            value = text.get_text() if text else ""
+        except Exception as error:
+            print(f"Meltype: 確定し直す文字を確認できませんでした: {error}", file=sys.stderr)
+            return False
+        return (0 <= cursor <= len(value) and cursor >= delete_before and
+                value[cursor - delete_before:cursor] == expected)
 
     def _show_preedit(self, view):
         text = view.get("text", "")

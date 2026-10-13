@@ -203,6 +203,16 @@ class IntegrationTests(unittest.TestCase):
         self.engine.do_focus_out()
         self.assertEqual(["@kuraido"], self.engine.commits)
 
+    def test_reconversion_does_not_delete_changed_pasted_text(self):
+        self.engine.document = "pasted sentence"
+        self.engine._apply({"commits": [{"deleteBefore": 4, "expect": "word", "text": "って"}], "view": None})
+        self.assertEqual("pasted sentence", self.engine.document)
+
+    def test_reconversion_replaces_matching_previous_text(self):
+        self.engine.document = "previous"
+        self.engine._apply({"commits": [{"deleteBefore": 8, "expect": "previous", "text": "replacement"}], "view": None})
+        self.assertEqual("replacement", self.engine.document)
+
     def test_manual_width_and_kana(self):
         self.type_text("@kuraido")
         self.special(IBus.KEY_F9)

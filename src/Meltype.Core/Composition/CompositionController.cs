@@ -61,6 +61,9 @@ public interface ICompositionHost
     /// </summary>
     bool CanDeleteBackward => true;
 
+    /// <summary>再確定で消す文字が、キャレット直前に今もあるかを確認する。</summary>
+    bool TextBeforeCaretMatches(string expected) => true;
+
     void Replay(MouseButtonEvent e);
 
     /// <summary>その打鍵で入力される文字 (記号・数字を含む)。文字を生まないキーなら null。</summary>
@@ -2265,6 +2268,12 @@ public sealed class CompositionController
         if (targets.Any(t => _options.Languages?.Get(t.Raw.ToLowerInvariant()) == t.English)) return null;
         var original = string.Concat(targets.Select(t => t.Text));
         if (replacement is null || replacement == original) return null;
+        if (!_host.TextBeforeCaretMatches(original))
+        {
+            Diagnostics.Log.Decision($"前に確定した文字を確認できないため、確定し直しません: {Diagnostics.Log.Text(original)}");
+            _correctable.Clear();
+            return null;
+        }
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。

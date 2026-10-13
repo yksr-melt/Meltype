@@ -28,6 +28,14 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
         print("\(condition ? "PASS" : "FAIL") \(name)")
         if !condition { failures += 1 }
     }
+    check("reconversion: replaces matching previous text",
+          matchesExpectedText("って", expected: "って", deleteBefore: 2))
+    check("reconversion: preserves changed pasted text",
+          !matchesExpectedText("paste", expected: "って", deleteBefore: 2))
+    check("reconversion: counts UTF-16 units",
+          matchesExpectedText("😊", expected: "😊", deleteBefore: 2))
+    check("reconversion: rejects missing expected text",
+          !matchesExpectedText("って", expected: nil, deleteBefore: 2))
     func type(_ text: String, session: UnsafeMutableRawPointer?, before: String? = nil) -> (String, SessionResult?) {
         var output = ""
         var last: SessionResult?
@@ -45,7 +53,10 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
             for edit in last?.commits ?? [] {
                 if edit.deleteBefore > 0 {
                     let current = output as NSString
-                    output = current.substring(to: max(0, current.length - edit.deleteBefore))
+                    guard edit.deleteBefore <= current.length else { continue }
+                    let previous = current.substring(from: current.length - edit.deleteBefore)
+                    guard matchesExpectedText(previous, expected: edit.expect, deleteBefore: edit.deleteBefore) else { continue }
+                    output = current.substring(to: current.length - edit.deleteBefore)
                 }
                 output += edit.text
             }

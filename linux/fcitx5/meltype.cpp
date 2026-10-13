@@ -469,9 +469,30 @@ private:
     void apply(fcitx::InputContext *ic, const Json &result) {
         if (auto *commits = result.get("commits"); commits && commits->kind == Json::Kind::Array) {
             for (const auto &edit : commits->items) {
-                hidePreedit(ic);
                 int remove = edit.integer("deleteBefore");
-                if (remove > 0) ic->deleteSurroundingText(-remove, static_cast<unsigned int>(remove));
+                if (remove > 0) {
+                    const std::string expected = edit.str("expect");
+                    if (expected.empty() || charLength(expected) != static_cast<size_t>(remove) ||
+                        !ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) || !ic->surroundingText().isValid()) {
+                        FCITX_WARN() << "Meltype: 確定し直す文字を確認できないため、置き換えを中止しました";
+                        continue;
+                    }
+                    const auto &surrounding = ic->surroundingText();
+                    const auto &text = surrounding.text();
+                    const size_t cursor = surrounding.cursor();
+                    if (cursor < static_cast<size_t>(remove) ||
+                        text.compare(byteOffset(text, cursor - static_cast<size_t>(remove)),
+                                     byteOffset(text, cursor) - byteOffset(text, cursor - static_cast<size_t>(remove)),
+                                     expected) != 0) {
+                        FCITX_WARN() << "Meltype: 前の文字が確定時と違うため、確定し直しを中止しました";
+                        continue;
+                    }
+                    hidePreedit(ic);
+                    ic->deleteSurroundingText(-remove, static_cast<unsigned int>(remove));
+                } else {
+                    ic->inputPanel().reset();
+                    ic->propertyFor(&factory_)->preeditVisible = false;
+                }
                 auto committed = edit.str("text");
                 if (!committed.empty()) ic->commitString(committed);
             }
