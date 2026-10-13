@@ -157,9 +157,10 @@ public sealed partial class CompositionDetector
             var raw = Raw(units, 0, units.Count) + pending;
             // Require two recognized words around a particle: never split arbitrary names
             // or identifiers merely because they contain a romaji particle.
+            var longestWord = LongestWord(raw);
             if (raw.All(char.IsAsciiLetter) && !IsKnownEnglishWord(raw))
             {
-                for (var end = raw.Length - 3; end >= 3; end--)
+                for (var end = Math.Min(raw.Length - 3, longestWord); end >= 3; end--)
                 {
                     var word = raw[..end];
                     if (!IsKnownEnglishWord(word) || _romaji.AnalyzeFragment(word.ToLowerInvariant()).IsValid) continue;
@@ -199,7 +200,7 @@ public sealed partial class CompositionDetector
                 var tail = rest.Length > 0 ? Segment([.. typed.Units], typed.Pending, true, followingEnglish, level, englishSentence, kanaInput, final) : [];
                 return [new CompositionSegment(true, "", raw[..compound]), .. tail];
             }
-            for (var end = raw.Length - 2; end >= 4; end--)
+            for (var end = Math.Min(raw.Length - 2, longestWord); end >= 4; end--)
             {
                 var word = raw[..end];
                 var rest = raw[end..].ToLowerInvariant();
@@ -303,8 +304,18 @@ public sealed partial class CompositionDetector
         // 語は、ローマ字の打ちかけとしても読めない (gr) もの。後ろは最後までローマ字として読めるもの。
         if (level != DetectionLevel.Manual && !segments[0].IsEnglish && whole.All(char.IsAsciiLetter) && !IsKnownEnglishWord(whole))
         {
+            // stem が window 文字以上なら readable >= 2 かどうかは変わらないので、読めるならそこで終える
+            var window = _romaji.DecisionWindow + 1;
+            bool? longStemsReadable = null;
+            var stemLength = 0;
             for (var k = 1; k < units.Count; k++)
             {
+                stemLength += units[k - 1].Raw.Length;
+                if (stemLength >= window)
+                {
+                    longStemsReadable ??= _romaji.Analyze(Raw(units, 0, k).ToLowerInvariant()).Tokens.Sum(t => t.Romaji.Length) >= 2;
+                    if (longStemsReadable == true) break;
+                }
                 var stem = Raw(units, 0, k).ToLowerInvariant();
                 if (stem.Length < 3 || _romaji.AnalyzeFragment(stem).IsValid || IsKnownEnglishWord(stem) && stem.Length >= 5) continue;
                 // 語の頭から読めない (gr): 日本語の後ろの英単語 (kyouha|google) ではない。
@@ -325,6 +336,7 @@ public sealed partial class CompositionDetector
         var n = units.Count;
         var segments = new List<CompositionSegment>();
         var japaneseStart = 0;
+        var longestWord = kanaInput ? 0 : LongestWord(Raw(units, 0, n) + pending);
         // 区間の前が英語か: 先頭なら入力欄の確定済みの文字、途中なら直前の区間 (英語区間の直後なら英語、それ以外は日本語)。
         bool? PrecededByEnglish(int start) => start == 0 ? precedingEnglish : segments.Count > 0 && segments[^1].IsEnglish && japaneseStart == start;
         // 前の文脈の点数: 英文の続きなら +2、英語なら +1、日本語なら -1、分からなければ 0。
@@ -350,9 +362,19 @@ public sealed partial class CompositionDetector
             // 助詞で始まるなら日本語 (PS5|wokaitai)。
             if (!kanaInput && found < 0 && level != DetectionLevel.Manual && AlphanumericSuffixEnd(units, i, pending, segments, japaneseStart) is var suffix and > 0) found = suffix;
             if (!kanaInput && found < 0 && level != DetectionLevel.Manual)
-                found = EnglishBeforeParticleAndEnglishTail(units, i, pending);
+                found = EnglishBeforeParticleAndEnglishTail(units, i, pending, longestWord);
+            var (marked, reach) = kanaInput || found >= 0 ? (n, n) : LowercaseSpanReach(i, n, longestWord);
+            // 末尾まで小文字だけで、どの語より長い区間 (+ 入力途中の子音) は、IsEnglishSpanCore がすぐ false を返す
+            var skipToEnd = !kanaInput && marked == n && _preparedNextNonLetter[i] == n && pending.All(char.IsAsciiLetterLower) &&
+                _preparedRawOffsets[n] - _preparedRawOffsets[i] + pending.Length > longestWord;
             for (var j = n; j > i && found < 0; j--)
             {
+                if (j == n && skipToEnd) continue;
+                if (j < n && j <= marked && j > reach)
+                {
+                    j = reach + 1;
+                    continue;
+                }
                 // 区間の後ろ: 末尾まで打っているならキャレットの後ろの文字、途中なら続きの日本語。
                 // 後ろが記号だけ (let's go! の !) なら、語はそこで打ち終わっている: Enter で確定するときと同じく末尾の語として見る
                 // (記号を日本語の続きとみなして、英文の中の go・no を ご・の にしていた)。
@@ -381,7 +403,7 @@ public sealed partial class CompositionDetector
                 var foundLength = Raw(units, i, found).Length;
                 for (var k = i + 1; k < found && found >= 0; k++)
                 {
-                    for (var e = n; e > found; e--)
+                    for (var e = LongWordEnd(k, found, n, pending, longestWord); e > found; e--)
                     {
                         var word = Raw(units, k, e) + (e == n ? pending : "");
                         if (word.Length >= foundLength && IsLongEnglishWord(word))
@@ -492,7 +514,25 @@ public sealed partial class CompositionDetector
     internal bool IsJapaneseWordOrPrefix(string kana) => _kana?.IsJapaneseWordOrPrefix(kana) == true;
 
     /// <summary>スペルチェッカーが正しいと言う英単語か、よくある打ち間違い (teh、recieve) か。</summary>
-    internal bool IsSpellWord(string lower) => SpellChecker is { } checker && (checker.IsWord(lower) || checker.AutoCorrection(lower) is not null);
+    internal bool IsSpellWord(string lower)
+    {
+        if (SpellChecker is not { } checker) return false;
+        if (checker is BuiltInWordChecker) return checker.IsWord(lower) || checker.AutoCorrection(lower) is not null;
+        int generation;
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (_spellMemo.TryGetValue(lower, out var known)) return known;
+            generation = _memoGeneration;
+        }
+        var result = checker.IsWord(lower) || checker.AutoCorrection(lower) is not null;
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (generation == _memoGeneration) _spellMemo[lower] = result;
+        }
+        return result;
+    }
 
     /// <summary>よくある英語の打ち間違いなら正しい綴り (teh → the)。大文字で始まる語は大文字で始める。</summary>
     public string? EnglishAutoCorrection(string word)
@@ -597,7 +637,7 @@ public sealed partial class CompositionDetector
     private static readonly string[] SuruForms = ["する", "すれ", "した", "して", "しま", "しな", "しよ", "しと", "しちゃ", "しろ", "され", "させ", "せず"];
 
     /// <summary>する の活用 (して・した・します …) だけでできたかなか。</summary>
-    private static bool IsSuruForm(string kana) => SuruForms.Any(kana.StartsWith) && kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー');
+    private static bool IsSuruForm(string kana) => kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー') && SuruForms.Any(form => kana.StartsWith(form, StringComparison.Ordinal));
 
     private static int Score(bool? english) => english switch { true => 1, false => -1, null => 0 };
 
@@ -620,10 +660,58 @@ public sealed partial class CompositionDetector
         return true;
     }
 
+    private readonly record struct EnglishSpanKey(string Span, bool AtEnd, int Before, bool? After, bool StartOfInput, DetectionLevel Level, bool Final, bool Unreadable, string? Next, bool EndsWord);
+
+    private const int MemoLimit = 50_000;
+    private static readonly long MemoLifetime = System.Diagnostics.Stopwatch.Frequency * 60;
+    private readonly object _memoGate = new();
+    private readonly Dictionary<EnglishSpanKey, bool> _englishSpanMemo = [];
+    private readonly Dictionary<string, bool> _spellMemo = new(StringComparer.Ordinal);
+    // 判定が読む、後から変わりうるもの (辞書は足すだけなので語の数で見る)
+    private readonly record struct MemoState(IWordChecker? Checker, LanguageMemory? Memory, int MemoryVersion, Func<string, bool>? MemoryCommon, Func<string, bool>? MemoryReadable,
+        Func<string, bool>? Common, int Proper, int English, int Japanese);
+
+    private MemoState _memoState;
+    private long _memoStarted;
+    private int _memoGeneration;
+
+    // _memoGate の中で呼ぶ
+    private void ValidateMemo()
+    {
+        var state = new MemoState(SpellChecker, Memory, Memory?.Version ?? -1, Memory?.IsCommonJapanese, Memory?.IsReadableRomaji,
+            IsCommonJapanese, _proper.Version, _english.Words.Count, _japanese.Words.Count);
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (state == _memoState && now - _memoStarted <= MemoLifetime && _englishSpanMemo.Count + _spellMemo.Count <= MemoLimit) return;
+        _englishSpanMemo.Clear();
+        _spellMemo.Clear();
+        _memoState = state;
+        _memoStarted = now;
+        _memoGeneration++;
+    }
+
     /// <param name="final">打ち終わった (Space・Enter)。末尾の区間でも、英単語の打ちかけ (amaz) は英語の根拠にしない。</param>
     /// <param name="unreadable">区間にローマ字として読めなかった英字がある (zoom + de の m、bug + wo の g)。</param>
     /// <param name="endsWord">区間の後ろが記号だけ (let's go! の go)。語はそこで打ち終わっているので、短い語も末尾の語と同じく見る。</param>
     private bool IsEnglishSpan(string span, bool atEnd, int before, bool? after, bool startOfInput, DetectionLevel level, bool final = false, bool unreadable = false, string? next = null, bool endsWord = false)
+    {
+        var key = new EnglishSpanKey(span, atEnd, before, after, startOfInput, level, final, unreadable, next, endsWord);
+        int generation;
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (_englishSpanMemo.TryGetValue(key, out var known)) return known;
+            generation = _memoGeneration;
+        }
+        var result = IsEnglishSpanCore(span, atEnd, before, after, startOfInput, level, final, unreadable, next, endsWord);
+        lock (_memoGate)
+        {
+            ValidateMemo();
+            if (generation == _memoGeneration) _englishSpanMemo[key] = result;
+        }
+        return result;
+    }
+
+    private bool IsEnglishSpanCore(string span, bool atEnd, int before, bool? after, bool startOfInput, DetectionLevel level, bool final, bool unreadable, string? next, bool endsWord)
     {
         // まだ続きを打つかもしれない末尾の区間 (打ちかけの英単語を英語と見てよい)。
         var growing = atEnd && !final;
@@ -857,9 +945,9 @@ public sealed partial class CompositionDetector
     private int CapitalizedWordEnd(IReadOnlyList<CompositionUnit> units, int start, string pending, bool final)
     {
         // 見るのは、次の記号・数字・空白まで (長い文の OCR|woshi, … では、後ろの , までの woshi を見る)
-        var n = start;
-        while (n < units.Count && units[n].Raw.All(char.IsAsciiLetter) && units[n].Raw.Length > 0) n++;
+        var n = LetterRunEnd(units, start);
         if (n < units.Count) pending = "";
+        if (!StartsCapitalized(units, start, n, pending)) return -1;
         var whole = Raw(units, start, n) + pending;
         // 2 文字目が大文字の語 (iPad、iPhone、eSports) も、知っている語なら同じように区切る (iPad|deii → iPad でいい)
         var lowerStart = whole.Length >= 2 && char.IsAsciiLetterLower(whole[0]) && char.IsAsciiLetterUpper(whole[1]);
@@ -1120,8 +1208,7 @@ public sealed partial class CompositionDetector
         var afterJapaneseRomaji = start > 0 && units[start - 1].Raw.Length > 0 && units[start - 1].Raw.All(char.IsAsciiLetter) &&
                                   units[start - 1].Kana != units[start - 1].Raw;
         if (start > 0 && units[start - 1].Raw.Length > 0 && units[start - 1].Raw.All(char.IsAsciiLetter) && !afterJapaneseRomaji) return -1;
-        var dash = start;
-        while (dash < n && units[dash].Raw.Length > 0 && units[dash].Raw.All(char.IsAsciiLetter)) dash++;
+        var dash = LetterRunEnd(units, start);
         if (dash == start || dash >= n || units[dash].Raw != "-") return -1;
         for (var end = n; end > dash + 1; end--)
         {
@@ -1162,7 +1249,7 @@ public sealed partial class CompositionDetector
     /// </summary>
     private bool IsSuruTail(string tail) =>
         _romaji.AnalyzeFragment(tail.ToLowerInvariant()) is { IsValid: true, Partial: "" } reading && IsSuruForm(reading.Kana);
-    private int EnglishBeforeParticleAndEnglishTail(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int EnglishBeforeParticleAndEnglishTail(IReadOnlyList<CompositionUnit> units, int start, string pending, int longestWord)
     {
         // api + no + error のように、辞書の英語見出しを助詞と確実な英単語が挟むとき。
         // 単独の api や、日本語の語 (sushi + no + error) を無条件に英字へ変えない。
@@ -1174,7 +1261,7 @@ public sealed partial class CompositionDetector
             var rest = (Raw(units, end, units.Count) + pending).ToLowerInvariant();
             // 見出しから始まる、もっと長い英単語 (car → carnival、won → wonderful、pro → promoted) なら、途中で助詞に分けない
             var whole = head + rest;
-            if (Enumerable.Range(head.Length + 1, whole.Length - head.Length).Any(length => IsKnownEnglishWord(whole[..length]))) continue;
+            if (Enumerable.Range(head.Length + 1, Math.Max(0, Math.Min(whole.Length, longestWord) - head.Length)).Any(length => IsKnownEnglishWord(whole[..length]))) continue;
             foreach (var particle in TrailingParticles)
             {
                 if (!rest.StartsWith(particle, StringComparison.Ordinal) || !IsDefinitelyEnglish(rest[particle.Length..]) || IsSuruTail(rest[particle.Length..])) continue;
@@ -1293,7 +1380,6 @@ public sealed partial class CompositionDetector
     }
 
     // 英語の根拠がない小文字区間は、連結文字列・解析を作らずに除外する。
-    // 追加のスペルチェッカーは独自の訂正を持つため、従来の判定へ渡す。
     private bool CanBeEnglishSpan(int start, int end, string pending, bool growing, string? next)
     {
         if (pending.Length > 0) return true;
@@ -1308,10 +1394,79 @@ public sealed partial class CompositionDetector
             IsPediaEnglishWord(lower) ||
             growing && (_english.Words.HasPrefix(lower) || _proper.HasPrefix(lower))) return true;
         if (Memory?.Get(lower) is not null) return true;
-        return SpellChecker switch { null => false, BuiltInWordChecker builtIn => builtIn.IsWord(lower), _ => true };
+        return SpellChecker switch { null => false, BuiltInWordChecker builtIn => builtIn.IsWord(lower), _ => IsSpellWord(lower.ToString()) };
+    }
+
+    // [start, j) (j < n) で CanBeEnglishSpan が true になりうるのは、j > Marked (大文字か ' を含む) か j <= Reach のときだけ
+    private (int Marked, int Reach) LowercaseSpanReach(int start, int n, int longestWord)
+    {
+        var marked = _preparedNextMarked[start];
+        var plain = Math.Min(marked, _preparedNextNonLetter[start]);
+        var reach = start;
+        while (reach + 1 < n)
+        {
+            var length = _preparedRawOffsets[reach + 1] - _preparedRawOffsets[start];
+            if (length >= 2 && (reach + 1 > plain || length > longestWord)) break;
+            reach++;
+        }
+        return (marked, reach);
+    }
+
+    private int LetterRunEnd(IReadOnlyList<CompositionUnit> units, int start)
+    {
+        if (ReferenceEquals(units, _preparedUnits)) return _preparedLetterRunEnd[start];
+        var end = start;
+        while (end < units.Count && units[end].Raw.Length > 0 && units[end].Raw.All(char.IsAsciiLetter)) end++;
+        return end;
+    }
+
+    private static bool StartsCapitalized(IReadOnlyList<CompositionUnit> units, int start, int end, string pending)
+    {
+        char? first = null, second = null;
+        for (var k = start; k < end && second is null; k++)
+        {
+            foreach (var c in units[k].Raw)
+            {
+                if (first is null) first = c;
+                else if (second is null) second = c;
+                else break;
+            }
+        }
+        foreach (var c in pending)
+        {
+            if (first is null) first = c;
+            else if (second is null) second = c;
+            else break;
+        }
+        return first is { } a && (char.IsAsciiLetterUpper(a) || second is { } b && char.IsAsciiLetterLower(a) && char.IsAsciiLetterUpper(b));
+    }
+
+    // [start, e) (末尾なら + pending) が IsLongEnglishWord になりうる最も後ろの e
+    private int LongWordEnd(int start, int from, int n, string pending, int longestWord)
+    {
+        var end = from;
+        while (end < n)
+        {
+            var next = end + 1;
+            var length = _preparedRawOffsets[next] - _preparedRawOffsets[start] + (next == n ? pending.Length : 0);
+            if (length > longestWord || _preparedNextNonLetter[start] < next || next == n && !pending.All(char.IsAsciiLetter)) break;
+            end = next;
+        }
+        return end;
+    }
+
+    // -pedia の複合語 (IsPediaEnglishWord) は長さに上限が無いので、入力に pedia があれば区間を長さで絞らない
+    private int LongestWord(string text)
+    {
+        if (text.Contains("pedia", StringComparison.OrdinalIgnoreCase)) return int.MaxValue / 4;
+        var spell = SpellChecker switch { null => 0, BuiltInWordChecker builtIn => builtIn.MaxWordLength, var checker => checker.MaxWordLength };
+        return Math.Max(Math.Max(Math.Max(_english.Words.MaxLength, _proper.MaxLength), Math.Max(ReadableEnglish.Value.MaxLength, Memory?.MaxWordLength ?? 0)), Math.Max(spell, 6));
     }
 
     private IReadOnlyList<CompositionUnit>? _preparedUnits;
+    private int[] _preparedNextMarked = [];
+    private int[] _preparedLetterRunEnd = [];
+    private int[] _preparedNextNonLetter = [];
     private int[] _preparedUpper = [];
     private int[] _preparedNonLetters = [];
     private int[] _preparedApostrophes = [];
@@ -1337,6 +1492,20 @@ public sealed partial class CompositionDetector
         _preparedUpper = upper;
         _preparedNonLetters = nonLetters;
         _preparedApostrophes = apostrophes;
+        var nextMarked = new int[units.Count + 1];
+        var nextNonLetter = new int[units.Count + 1];
+        nextMarked[units.Count] = nextNonLetter[units.Count] = units.Count;
+        for (var i = units.Count - 1; i >= 0; i--)
+        {
+            nextMarked[i] = upper[i + 1] > upper[i] || apostrophes[i + 1] > apostrophes[i] ? i : nextMarked[i + 1];
+            nextNonLetter[i] = nonLetters[i + 1] > nonLetters[i] ? i : nextNonLetter[i + 1];
+        }
+        _preparedNextMarked = nextMarked;
+        _preparedNextNonLetter = nextNonLetter;
+        var letterRunEnd = new int[units.Count + 1];
+        letterRunEnd[units.Count] = units.Count;
+        for (var i = units.Count - 1; i >= 0; i--) letterRunEnd[i] = units[i].Raw.Length > 0 && units[i].Raw.All(char.IsAsciiLetter) ? letterRunEnd[i + 1] : i;
+        _preparedLetterRunEnd = letterRunEnd;
         var unreadable = new int[units.Count + 1];
         var symbols = new bool[units.Count + 1];
         symbols[units.Count] = true;

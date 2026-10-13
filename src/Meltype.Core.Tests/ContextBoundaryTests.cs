@@ -59,6 +59,29 @@ internal static class ContextBoundaryTests
     }
 
     [Test]
+    public static void WordsAddedLater_AreUsedByTheSameDetector()
+    {
+        var romaji = new RomajiDetector();
+        var japanese = new DictionaryDetector([], romaji);
+        var proper = new ProperNouns();
+        var detector = new CompositionDetector(romaji, japanese, new EnglishDetector([]), new TypoDetector(japanese.Words), proper);
+        Assert.Equal("いHanana", Type("iHanana"));
+        proper.AddText("iHanana");
+        Assert.Equal("iHanana", Type("iHanana"), "判定の控えに足す前の答えを使わない");
+        proper.AddText("Hanana");
+        Assert.Equal("hanana", Type("hanana"));
+        japanese.Words.Add("hanana");
+        Assert.Equal("はなな", Type("hanana"), "日本語の辞書に足した語");
+
+        string Type(string typed)
+        {
+            var text = new CompositionText(detector);
+            foreach (var c in typed) text.Append(c);
+            return text.Display(final: false);
+        }
+    }
+
+    [Test]
     public static void LanguageMemory_SpanLookupMatchesStringIncludingLegacyEntries()
     {
         var path = Path.Combine(Path.GetTempPath(), "meltype-span-" + Guid.NewGuid() + ".json");
