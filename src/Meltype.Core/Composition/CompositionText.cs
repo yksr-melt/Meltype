@@ -121,6 +121,14 @@ public sealed class CompositionText
         }
         if (char.IsAsciiLetter(c))
         {
+            // ひらがな・カタカナにしているときの Shift+英字は、全角の英字 (カタ + A → カタＡ: issue #500)。
+            // 自動判定の大文字 (TS) と、半角カタカナ・半角英数の大文字は今までどおり。
+            if (Mode is DisplayMode.Hiragana or DisplayMode.Katakana && char.IsAsciiLetterUpper(c))
+            {
+                Normalize(final: true);
+                _units.Add(new CompositionUnit(ToFullWidth(c.ToString()), c.ToString()));
+                return;
+            }
             // 大文字に続けて打った大文字 (TS, IME の S, M) は略語の 1 文字。後ろのローマ字 (yu) とつなげて かな (しゅ) にしない。
             var lastTyped = _pending.Length > 0 ? _pending[^1] : _units.Count > 0 && _units[^1].Raw.Length > 0 ? _units[^1].Raw[^1] : '\0';
             if (char.IsAsciiLetterUpper(c) && char.IsAsciiLetterUpper(lastTyped))

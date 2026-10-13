@@ -2838,6 +2838,36 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue500_ShiftAfterKatakanaIsFullWidth()
+    {
+        // F7 でカタカナにしたあと、Shift を押しながら打った英字は全角 (カタＡ)。Shift なしはカタカナの続き。
+        var k = new Keyboard();
+        k.Type("kata");
+        k.Press(VirtualKeys.F7);
+        Assert.Equal("カタ", k.Showing);
+        k.Type("A");
+        Assert.Equal("カタＡ", k.Showing);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("カタＡ", k.Host.Document);
+
+        k = new Keyboard();
+        k.Type("kata");
+        k.Press(VirtualKeys.F7);
+        k.Type("a");
+        Assert.Equal("カタア", k.Showing);
+
+        k = new Keyboard();
+        k.Type("kata");
+        k.Press(VirtualKeys.F6);
+        k.Type("A");
+        Assert.Equal("かたＡ", k.Showing);
+
+        k = new Keyboard();
+        k.Type("TS");
+        Assert.Equal("TS", k.Showing);
+    }
+
+    [Test]
     public static void FunctionKeys_ChangeDisplay()
     {
         var k = new Keyboard();
