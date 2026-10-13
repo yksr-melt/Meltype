@@ -26,6 +26,8 @@ public sealed class WindowsSpellChecker : IWordChecker
     /// <summary>スペルチェッカーを使えるか (初回の呼び出しで作る)。</summary>
     public bool IsAvailable => Checker() is not null;
 
+    public int MaxWordLength => 30;
+
     /// <summary>小文字の英単語 (a-z だけ) が、英語として正しい綴りか。</summary>
     public bool IsWord(string lower)
     {

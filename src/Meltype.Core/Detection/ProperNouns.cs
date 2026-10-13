@@ -59,6 +59,7 @@ public sealed class ProperNouns
     internal bool Contains(ReadOnlySpan<char> lower) => _canonical.GetAlternateLookup<ReadOnlySpan<char>>().ContainsKey(lower);
 
     public bool HasPrefix(string lower) => _words.HasPrefix(lower);
+    internal int MaxLength => _words.MaxLength;
     internal bool HasPrefix(ReadOnlySpan<char> lower) => _words.HasPrefix(lower);
 
     /// <summary>正しい大文字小文字の形。固有名詞でなければ null。</summary>

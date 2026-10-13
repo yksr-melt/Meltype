@@ -17,4 +17,7 @@ public interface IWordChecker
 
     /// <summary>よくある打ち間違い (teh → the) なら、OS の自動修正の綴り。無ければ null。</summary>
     string? AutoCorrection(string lower) => null;
+
+    /// <summary>IsWord・AutoCorrection が語と言いうる最も長い語の長さ。</summary>
+    int MaxWordLength => int.MaxValue;
 }

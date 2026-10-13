@@ -11,11 +11,13 @@ public sealed class WordList
     private readonly Dictionary<char, List<string>> _byFirstLetter = [];
 
     public int Count => _words.Count;
+    public int MaxLength { get; private set; }
     public IEnumerable<string> Words => _words;
 
     public void Add(string word)
     {
         if (word.Length == 0 || !_words.Add(word)) return;
+        MaxLength = Math.Max(MaxLength, word.Length);
         for (var i = 1; i <= word.Length; i++) _prefixes.Add(word[..i]);
         if (!_byFirstLetter.TryGetValue(word[0], out var bucket)) _byFirstLetter[word[0]] = bucket = [];
         bucket.Add(word);

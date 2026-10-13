@@ -23,7 +23,10 @@ public sealed class BuiltInWordChecker : IWordChecker
             var word = line.Trim();
             if (word.Length > 0 && word[0] != '#') _words.Add(word);
         }
+        MaxWordLength = _words.Count == 0 ? 0 : _words.Max(w => w.Length);
     }
+
+    public int MaxWordLength { get; }
 
     public bool IsAvailable => _words.Count > 0;
 

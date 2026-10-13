@@ -229,6 +229,11 @@ public sealed class RomajiDetector
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _looseCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _compositionCache = new(StringComparer.Ordinal);
 
+    /// <summary>位置 i の読み方 (語・っ・ん・読めない) は、i から後ろにこの文字数以上あれば、それより後ろの文字によらない。</summary>
+    internal int DecisionWindow => Math.Max(Math.Max(5, MaxSpellingLength + 1), _customMaxLength + 1);
+
+    private static readonly int MaxSpellingLength = CompositionSpellingToKana.Keys.Max(k => k.Length);
+
     private RomajiAnalysis AnalyzeCore(string letters, bool strictStart, bool composition)
     {
         var tokens = new List<RomajiToken>();
