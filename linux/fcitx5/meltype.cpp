@@ -469,9 +469,18 @@ private:
     void apply(fcitx::InputContext *ic, const Json &result) {
         if (auto *commits = result.get("commits"); commits && commits->kind == Json::Kind::Array) {
             for (const auto &edit : commits->items) {
-                hidePreedit(ic);
                 int remove = edit.integer("deleteBefore");
-                if (remove > 0) ic->deleteSurroundingText(-remove, static_cast<unsigned int>(remove));
+                if (remove > 0) {
+                    hidePreedit(ic);
+                    ic->deleteSurroundingText(-remove, static_cast<unsigned int>(remove));
+                } else {
+                    // 確定の前に preedit だけ消す更新を送らない (issue #486)。
+                    // Wayland の text-input-v3 では preedit の消去と commit が別の done になると、
+                    // Chromium 系が 1 つ目の done を確定と受け取って二重に入る。
+                    // ここでは画面の状態だけ倒し、表示の更新は commit 後の view の処理に任せる。
+                    ic->inputPanel().reset();
+                    ic->propertyFor(&factory_)->preeditVisible = false;
+                }
                 auto committed = edit.str("text");
                 if (!committed.empty()) ic->commitString(committed);
             }
