@@ -732,6 +732,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.ImeSuggested -= OnImeSuggested;
         _tipServer.Dispose();
         _engine.DetachComposition();
+        Composition.LearningSaves.FlushAll();
         _composition.Dispose();
         _settingsForm?.Close();
         _logForm?.Close();

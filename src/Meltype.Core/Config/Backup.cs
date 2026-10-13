@@ -49,6 +49,7 @@ public static class Backup
     /// <summary>バックアップを作る。戻り値はファイルの中身と、入れたファイルの数。</summary>
     public static (byte[] Content, int Files) Create(string dataDirectory, string appVersion)
     {
+        Composition.LearningSaves.FlushAll();
         using var stream = new MemoryStream();
         var count = 0;
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))

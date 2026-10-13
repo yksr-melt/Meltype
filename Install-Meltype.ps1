@@ -15,6 +15,9 @@ $output = Join-Path $PSScriptRoot 'app-build'
 Get-Process AutoIME -ErrorAction SilentlyContinue | Stop-Process -Force
 $oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
 if (Test-Path -LiteralPath $oldShortcut) { Remove-Item -LiteralPath $oldShortcut -Force }
+# 強制終了の前に終了の合図を送り、まだ書いていない学習データを書かせる
+$running = Join-Path $PSScriptRoot 'app-build\Meltype.exe'
+if (Test-Path -LiteralPath $running) { Start-Process -FilePath $running -ArgumentList '--exit' -Wait -ErrorAction SilentlyContinue }
 Get-Process Meltype, meltype_mozc_helper -ErrorAction SilentlyContinue | Stop-Process -Force
 
 dotnet build $project -c Release -o $output

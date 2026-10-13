@@ -27,17 +27,22 @@ internal sealed class ExitSignal : NativeWindow, IDisposable
         if (ExitMessage != 0 && m.Msg == (int)ExitMessage)
         {
             Diagnostics.Log.Info("終了の合図を受け取りました (インストール・アンインストール)。");
+            // 合図の後すぐに強制終了されることがあるので、まだ書いていない学習データを先に書く
+            Composition.LearningSaves.FlushAll();
             Application.Exit();
             return;
         }
         base.WndProc(ref m);
     }
 
-    /// <summary>動いている Meltype に終了の合図を送る。送れたら true。</summary>
+    /// <summary>動いている Meltype に終了の合図を送り、学習データを書いて窓を閉じるまで (最長 5 秒) 待つ。送れたら true。</summary>
     public static bool Send()
     {
         var window = FindWindow(null, Caption);
-        return window != IntPtr.Zero && PostMessage(window, ExitMessage, IntPtr.Zero, IntPtr.Zero);
+        if (window == IntPtr.Zero || !PostMessage(window, ExitMessage, IntPtr.Zero, IntPtr.Zero)) return false;
+        // インストーラーはこの後すぐに強制終了する
+        for (var i = 0; i < 50 && IsWindow(window); i++) Thread.Sleep(100);
+        return true;
     }
 
     public void Dispose() => DestroyHandle();
@@ -50,6 +55,9 @@ internal sealed class ExitSignal : NativeWindow, IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern IntPtr FindWindow(string? className, string windowName);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hwnd);
 
     [DllImport("user32.dll")]
     private static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);

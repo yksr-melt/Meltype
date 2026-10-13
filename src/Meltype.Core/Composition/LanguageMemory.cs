@@ -15,6 +15,9 @@ public sealed class LanguageMemory
     private const int MaxEntries = 3000;
     private readonly string? _path;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private readonly object _gate = new();
+    private readonly object _fileGate = new();
+    private readonly DeferredSaver _saver;
 
     internal sealed class Entry
     {
@@ -50,6 +53,7 @@ public sealed class LanguageMemory
 
     public LanguageMemory(string? path)
     {
+        _saver = new DeferredSaver(Write);
         _path = path;
         if (path is null || !File.Exists(path)) return;
         try
@@ -92,6 +96,12 @@ public sealed class LanguageMemory
     {
         word = word.ToLowerInvariant();
         if (word.Length < 2 || !word.All(char.IsAsciiLetterLower)) return;
+        lock (_gate) RememberLocked(word, english, explicitChoice);
+        _saver.Request();
+    }
+
+    private void RememberLocked(string word, bool english, bool explicitChoice)
+    {
         Version++;
         if (_entries.TryGetValue(word, out var old) && old.English == english)
         {
@@ -116,7 +126,6 @@ public sealed class LanguageMemory
                 _entries.Remove(key);
             }
         }
-        Save();
     }
 
     /// <summary>学習した語の一覧 (新しく使ったものから)。</summary>
@@ -129,40 +138,54 @@ public sealed class LanguageMemory
     public void Remove(IEnumerable<string> words)
     {
         var removed = false;
-        foreach (var word in words) removed |= _entries.Remove(word);
-        if (!removed) return;
-        Version++;
-        Save();
+        lock (_gate)
+        {
+            foreach (var word in words) removed |= _entries.Remove(word);
+            if (!removed) return;
+            Version++;
+        }
+        _saver.WriteNow();
     }
 
     public void Clear()
     {
-        _entries.Clear();
-        Version++;
-        Save();
+        lock (_gate)
+        {
+            _entries.Clear();
+            Version++;
+        }
+        _saver.WriteNow();
     }
 
     /// <summary>sinceUtc より後に覚えた (直した) 語を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
     public int ForgetSince(DateTime sinceUtc)
     {
-        var recent = _entries.Where(e => e.Value.Used >= sinceUtc).Select(e => e.Key).ToList();
+        List<string> recent;
+        lock (_gate) recent = _entries.Where(e => e.Value.Used >= sinceUtc).Select(e => e.Key).ToList();
         Remove(recent);
         return recent.Count;
     }
 
-    private void Save()
+    private bool Write()
     {
-        if (_path is null) return;
+        if (_path is null) return true;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(_entries, Config.LearningJsonContext.Default.Languages));
-            File.Move(temp, _path, overwrite: true);
+            lock (_fileGate)
+            {
+                string json;
+                lock (_gate) json = JsonSerializer.Serialize(_entries, Config.LearningJsonContext.Default.Languages);
+                Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+                var temp = _path + ".tmp";
+                File.WriteAllText(temp, json);
+                File.Move(temp, _path, overwrite: true);
+            }
+            return true;
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"英語 / 日本語の学習データを保存できませんでした: {ex.Message}");
+            return false;
         }
     }
 }
