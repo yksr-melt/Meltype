@@ -152,7 +152,7 @@ public sealed partial class CompositionDetector
             var raw = Raw(units, 0, units.Count) + pending;
             // Require two recognized words around a particle: never split arbitrary names
             // or identifiers merely because they contain a romaji particle.
-            var longestWord = LongestWord();
+            var longestWord = LongestWord(raw);
             if (raw.All(char.IsAsciiLetter) && !IsKnownEnglishWord(raw))
             {
                 for (var end = Math.Min(raw.Length - 3, longestWord); end >= 3; end--)
@@ -364,7 +364,7 @@ public sealed partial class CompositionDetector
         var n = units.Count;
         var segments = new List<CompositionSegment>();
         var japaneseStart = 0;
-        var longestWord = kanaInput ? 0 : LongestWord();
+        var longestWord = kanaInput ? 0 : LongestWord(Raw(units, 0, n) + pending);
         // 区間の前が英語か: 先頭なら入力欄の確定済みの文字、途中なら直前の区間 (英語区間の直後なら英語、それ以外は日本語)。
         bool? PrecededByEnglish(int start) => start == 0 ? precedingEnglish : segments.Count > 0 && segments[^1].IsEnglish && japaneseStart == start;
         // 前の文脈の点数: 英文の続きなら +2、英語なら +1、日本語なら -1、分からなければ 0。
@@ -1278,7 +1278,7 @@ public sealed partial class CompositionDetector
     /// </summary>
     private bool IsSuruTail(string tail) =>
         _romaji.AnalyzeFragment(tail.ToLowerInvariant()) is { IsValid: true, Partial: "" } reading && IsSuruForm(reading.Kana);
-        private int EnglishBeforeParticleAndEnglishTail(IReadOnlyList<CompositionUnit> units, int start, string pending, int longestWord)
+    private int EnglishBeforeParticleAndEnglishTail(IReadOnlyList<CompositionUnit> units, int start, string pending, int longestWord)
     {
         // api + no + error のように、辞書の英語見出しを助詞と確実な英単語が挟むとき。
         // 単独の api や、日本語の語 (sushi + no + error) を無条件に英字へ変えない。
@@ -1484,8 +1484,10 @@ public sealed partial class CompositionDetector
         return end;
     }
 
-    private int LongestWord()
+    // -pedia の複合語 (IsPediaEnglishWord) は長さに上限が無いので、入力に pedia があれば区間を長さで絞らない
+    private int LongestWord(string text)
     {
+        if (text.Contains("pedia", StringComparison.OrdinalIgnoreCase)) return int.MaxValue / 4;
         var spell = SpellChecker switch { null => 0, BuiltInWordChecker builtIn => builtIn.MaxWordLength, var checker => checker.MaxWordLength };
         return Math.Max(Math.Max(Math.Max(_english.Words.MaxLength, _proper.MaxLength), Math.Max(ReadableEnglish.Value.MaxLength, Memory?.MaxWordLength ?? 0)), Math.Max(spell, 6));
     }
