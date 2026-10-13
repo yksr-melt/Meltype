@@ -75,6 +75,8 @@ ping pong
 a an and are as at be been but by can do does done did go goes going gone get got give given
 he her him his i if in is it its me my no not of on or our out so some such than that the them then
 there these they this to too up us was we were what when where which who why will with you your
+# whois は WHOIS。who で割れて うぉis になっていた (issue #616)
+whois
 about above after again against age ago ahead air all almost alone along already also although always
 among amount ancient anger angle animal annual another answer anti anybody anyone anything anyway
 anywhere apart appear area areas arise arid arm army around arrive art article ask asked asleep aside
