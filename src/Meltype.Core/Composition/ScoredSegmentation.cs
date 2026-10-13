@@ -102,7 +102,7 @@ public sealed partial class CompositionDetector
                 if (forced < 0 && level != DetectionLevel.Manual) forced = HyphenatedWordEnd(units, i, pending);
                 if (forced < 0 && level != DetectionLevel.Manual) forced = NumeronymEnd(units, i, pending);
                 if (forced < 0 && level != DetectionLevel.Manual && (i > 0 && units[i - 1].Raw is [var digit] && char.IsAsciiDigit(digit) ? AlphanumericSuffixEnd(units, i, pending, Segments(), path.JapaneseStart) : -1) is var suffix and > 0) forced = suffix;
-                if (forced < 0 && level != DetectionLevel.Manual) forced = EnglishBeforeParticleAndEnglishTail(units, i, pending);
+                if (forced < 0 && level != DetectionLevel.Manual) forced = EnglishBeforeParticleAndEnglishTail(units, i, pending, LongestWord());
                 if (forced > i)
                 {
                     Offer(forced, true, Extend(path, i, forced, units, pending));

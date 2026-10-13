@@ -26,6 +26,7 @@ public sealed class WordList
     }
 
     public int Count => _words.Count;
+    public int MaxLength { get; private set; }
     public IEnumerable<string> Words => _words;
 
     public void Add(string word)
@@ -37,6 +38,7 @@ public sealed class WordList
     {
         if (word.Length == 0 || !_words.Add(word)) return false;
         _wordsByIndex.Add(word);
+        MaxLength = Math.Max(MaxLength, word.Length);
         if (!_byFirstLetter.TryGetValue(word[0], out var bucket)) _byFirstLetter[word[0]] = bucket = [];
         bucket.Add(word);
         return true;
