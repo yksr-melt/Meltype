@@ -50,4 +50,18 @@ if(BUILD_TESTING)
     target_link_libraries(testmeltype PRIVATE Fcitx5::Core Fcitx5::Utils Fcitx5::Module::TestFrontend)
     add_dependencies(testmeltype meltype)
     add_test(NAME testmeltype COMMAND testmeltype)
+
+    # 確定 (Enter) のときに、変換中の文字を消すだけの更新が確定より先に送られないことを確かめる (issue #486)。
+    # 入力欄の代わりに、アドオンからの呼び出しを記録する入力欄を使う (testfrontend は要らない)。
+    add_executable(testcommitorder test/testcommitorder.cpp)
+    set_target_properties(testcommitorder PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+    if(Fcitx5Core_VERSION VERSION_GREATER_EQUAL 5.1.16)
+        set_target_properties(testcommitorder PROPERTIES CXX_STANDARD 20)
+    endif()
+    target_compile_definitions(testcommitorder PRIVATE
+        FCITX5_MELTYPE_BINARY_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+        FCITX5_SYSTEM_ADDON_DIR="${FCITX5_LIB_DIR}/fcitx5")
+    target_link_libraries(testcommitorder PRIVATE Fcitx5::Core Fcitx5::Utils)
+    add_dependencies(testcommitorder meltype)
+    add_test(NAME testcommitorder COMMAND testcommitorder)
 endif()
