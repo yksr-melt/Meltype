@@ -2728,6 +2728,20 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue505_LiveConversion_KeepsKanaWithExpressionSuffix()
+    {
+        var k = new Keyboard(live: true);
+        k.Type("na~~~");
+        Assert.Equal("な～～～", k.Showing, "伸ばし記号だけではライブ変換しない");
+        k = new Keyboard(live: true);
+        k.Type("sou~~");
+        Assert.Equal("そう～～", k.Showing);
+        k = new Keyboard(live: true);
+        k.Type("sa!!!");
+        Assert.Equal("さ！！！", k.Showing);
+    }
+
+    [Test]
     public static void LiveConversion_ConvertsWhileTyping()
     {
         var k = new Keyboard(live: true);

@@ -2030,13 +2030,22 @@ public sealed class CompositionController
         return converted;
     }
 
+    private static int KanaLengthForLiveConversion(string text)
+    {
+        var n = 0;
+        foreach (var c in text)
+            if (c is >= 'ぁ' and <= 'ゖ' or >= 'ァ' and <= 'ヶ' or 'ー') n++;
+        return n;
+    }
+
     /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
     private string LiveConvert(string kana)
     {
-        if (kana.Length < LiveConversionMinLength) return kana;
+        // な～～～ など、伸ばし記号だけで文字数が 4 に達しても漢字にしない (issue #505)。
+        if (KanaLengthForLiveConversion(kana) < LiveConversionMinLength) return kana;
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var converted = string.Concat(ConvertJapanese(kana).Select(c => c.Text));
