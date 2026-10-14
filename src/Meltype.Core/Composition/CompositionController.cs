@@ -2036,7 +2036,8 @@ public sealed class CompositionController
     /// </summary>
     private string LiveConvert(string kana)
     {
-        if (kana.Length < LiveConversionMinLength) return kana;
+        // 記号や長音を足すだけで短い相づちを漢字にしない (#505)。
+        if (kana.Count(c => IsKana(c) && c != 'ー') < LiveConversionMinLength) return kana;
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var converted = string.Concat(ConvertJapanese(kana).Select(c => c.Text));

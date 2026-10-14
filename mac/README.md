@@ -167,11 +167,9 @@ Mac 版には登録の画面がないので、データフォルダ (`~/Library/
   ```bash
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
-  これで戻らなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。「+」の一覧に出ないときは、ターミナルで次を実行してから入力メニューを見る (`install.sh` も同じことをします、#21)
+  これで戻らなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。「+」の一覧に出ない、または Meltype が重複しているときは、ターミナルで次を実行してから入力メニューを見る (`install.sh` も同じことをします、#21・#101)。Meltype の登録を整理し、ほかの入力ソースは保持します。
   ```bash
-  defaults write com.apple.HIToolbox AppleEnabledInputSources -array-add \
-    '<dict><key>Bundle ID</key><string>io.github.yksr-melt.inputmethod.Meltype</string><key>InputSourceKind</key><string>Keyboard Input Method</string></dict>' \
-    '<dict><key>Bundle ID</key><string>io.github.yksr-melt.inputmethod.Meltype</string><key>Input Mode</key><string>io.github.yksr-melt.inputmethod.Meltype.Japanese</string><key>InputSourceKind</key><string>Input Mode</string></dict>'
+  ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/Meltype --register-input-source
   killall TextInputMenuAgent
   ```
 - **入力メニューに「絵文字と記号を表示」「キーボードビューアを表示」「キーボード設定を開く…」の 3 つしか出ない**: 入力ソースの登録は残っていて Meltype も使えるが、メニューの一覧が古いまま固まっている (#134)。上の `MeltypeRegisterInputSource` を実行すると直る。応急処置は、入力メニューで「キーボードビューアを表示」を押すか、ターミナルで `killall TextInputMenuAgent` (macOS がすぐ起動し直します)。入力メニューの一覧は、選択できるキーボード系の入力ソースが 2 つ以上あるときだけ出るので、1 つしか無いときも同じ見え方になります
