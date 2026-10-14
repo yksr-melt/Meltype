@@ -83,7 +83,6 @@ const LabelInfo = {
   'win10': ['5E9ED6', 'Windows 10'],
   '企業PC': ['5319E7', 'Windows の Enterprise / Education (管理が厳しいことがある)'],
   '管理者で実行': ['D93F0B', 'Meltype を管理者として実行していた'],
-  'IME自動切替': ['C2E0C6', 'IME 自動切替 (Microsoft IME を使う)'],
   'Mozcなし': ['E99695', 'Mozc の変換ヘルパーが無い (Microsoft IME だけで変換)'],
   'かな入力': ['FEF2C0', 'かな入力 (JIS)'],
   'USキーボード': ['FEF2C0', '日本語 (JIS) 以外のキーボード'],
@@ -123,7 +122,6 @@ function environmentLabels(text) {
   if (/Enterprise|Education/i.test(os)) result.push({ label: '企業PC', reason: 'Windows のエディションが Enterprise / Education (会社・学校の PC は制限があることが多い)' });
   if (/^Meltype \S/.test(`Meltype ${env['Meltype'] ?? ''}`) && /^\d+\.\d+\.\d+/.test(env['Meltype'] ?? '')) result.push({ label: `v${env['Meltype'].match(/^\d+\.\d+\.\d+/)[0]}`, reason: '実行環境の版' });
   if (/はい/.test(env['管理者として実行'] ?? '')) result.push({ label: '管理者で実行', reason: 'Meltype を管理者として実行していた' });
-  if (/^AutoSwitch/.test(env['モード'] ?? '')) result.push({ label: 'IME自動切替', reason: 'モードが IME 自動切替' });
   if (/Mozc:\s*なし/.test(env['変換エンジン'] ?? '')) result.push({ label: 'Mozcなし', reason: 'Mozc の変換ヘルパーが無い' });
   if (/Kana/.test(env['入力方式'] ?? '')) result.push({ label: 'かな入力', reason: '入力方式がかな入力' });
   if (/日本語以外/.test(env['キーボード'] ?? '')) result.push({ label: 'USキーボード', reason: `キーボードが ${env['キーボード']}` });
@@ -169,7 +167,7 @@ const Help = [
   '| コマンド | すること | 使える人 |',
   '|---|---|---|',
   '| `/repro <打ったキー> [space\\|enter\\|none]` | 最新のコードで打つ (Mozc があれば漢字も) | だれでも |',
-  '| `/explain <打ったキー>` | IME 自動切替での 1 文字ずつの判定理由 | だれでも |',
+  '| `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |',
   '| `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す | だれでも |',
   '| `/jht <出てほしい文> [/ 読み]` | 考えられるローマ字打ちで変換テスト (読みはオプション) | だれでも |',
   '| `/test` | Pull Request のコードでテストを流す | メンテナー |',
@@ -411,7 +409,7 @@ async function report() {
     const text = readText(path.join(dir, 'explain.txt'));
     const head = action === 'test-explain' ? ` (PR ${process.env.BOT_SHA?.slice(0, 7)})` : '';
     await upsertComment(issue, `explain-${process.env.BOT_COMMENT_ID}`,
-      text ? `${code(keys)} の判定理由 (IME 自動切替)${head}:\n\n\`\`\`\n${text.trim()}\n\`\`\`` : `判定理由を出せませんでした ([実行結果](${runUrl}))。`);
+      text ? `${code(keys)} の判定理由 (英数状態の検知)${head}:\n\n\`\`\`\n${text.trim()}\n\`\`\`` : `判定理由を出せませんでした ([実行結果](${runUrl}))。`);
     return;
   }
 

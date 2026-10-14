@@ -103,9 +103,9 @@ internal static class ProfileTests
         Assert.True(b.ImportProfile("{\"format\":\"meltype-profile\",\"values\":{\"LiveConversion\":\"yes\"}}") is null, "型の違う値");
 
         // 知らない項目・共通の項目は無視し、範囲外の値は収める
-        var odd = b.ImportProfile("{\"format\":\"meltype-profile\",\"name\":\"x\",\"values\":{\"Enabled\":false,\"Unknown\":1,\"IdleFlushMs\":999999}}")!;
+        var odd = b.ImportProfile("{\"format\":\"meltype-profile\",\"name\":\"x\",\"values\":{\"Enabled\":false,\"Unknown\":1,\"MaxPendingKeys\":999999}}")!;
         Assert.True(odd.Enabled, "ON/OFF は読み込まない");
-        Assert.Equal(3000, odd.IdleFlushMs, "範囲に収める");
+        Assert.Equal(12, odd.MaxPendingKeys, "範囲に収める");
     }
 
     [Test]

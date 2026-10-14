@@ -19,12 +19,12 @@
 | `mac/` | Mac 版の IME (Swift、Input Method Kit。漢字変換は azooKey) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
 | `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー |
-| `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・入力セッション・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
+| `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
 | `src/Meltype.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
 | `dictionaries/` | 組み込みの辞書 |
 | `packaging/` | 配布用のファイル (インストーラー・Install.cmd など) |
 
-`src/Meltype.Core/` の中は、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・IME 自動切替の入力・コードの行の判定)、`Learning/`・`Config/`・`Diagnostics/` (学習・設定・ログ) に分かれています。
+`src/Meltype.Core/` の中は、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
 
 <br>
 
@@ -72,7 +72,7 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # �
 dotnet build Meltype.sln
 dotnet run --project src/Meltype.Tests                                   # すべてのテスト (Windows)
 dotnet run --project src/Meltype.Tests -- CompositionTests               # 名前に一致するテストだけ
-dotnet run --project src/Meltype.Tests -- --explain konnichiwa hello      # 1 文字ずつの判定理由 (IME 自動切替)
+dotnet run --project src/Meltype.Tests -- --explain konnichiwa hello      # 1 文字ずつの判定理由 (英数状態の検知)
 dotnet run --project src/Meltype.Tests -- --convert きょうはいいてんき     # 変換エンジンの結果と文節の区切り
 dotnet run --project src/Meltype.Tests -- --context この本は:あつい        # 文脈を渡したときの変換結果
 dotnet run --project src/Meltype.Tests -- --eval                          # 品質テスト
@@ -171,22 +171,3 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-wi
 ```
 
 Meltype IME は、この変換ボックスの代わりに、TSF で入力欄に直接入力します ([TSF_DESIGN.md](TSF_DESIGN.md))。
-
-<a name="ime-自動切替"></a>
-<img src="images/headings/development/s05.svg" alt="IME 自動切替" height="40">
-
-
-```
-物理キー ─▶ KeyboardMonitor ─▶ InputSession (Idle → Collecting → Flushing → Committed)
-                                   │  Collecting 中は打鍵をすべて保留 (キーアップ・記号も届いた順に)
-                                   ▼
-                             ScoreEngine ◀─ RomajiDetector / KanaDetector / DictionaryDetector
-                                   │         EnglishDetector / TypoDetector / UserModel
-                                   ▼
-              日本語 ─▶ ImeController で IME を ON ─▶ 保留分を送り直す ─▶ Microsoft IME が処理
-              英語 / 不明 ─────────────────────────▶ 保留分をそのまま送り直す
-```
-
-- 日本語と判定する条件: `JapaneseScore >= 閾値` かつ `JapaneseScore - EnglishScore >= 閾値` (既定の閾値 4)
-- 保留は最大 6 文字、無入力 0.7 秒、最初の打鍵から 2.5 秒で打ち切り、そのまま出す
-- IME の切り替えは IMM32 → TSF → `VK_IME_ON` の順に試し、すべて失敗したら切り替えずにそのまま出す

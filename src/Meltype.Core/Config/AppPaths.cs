@@ -40,7 +40,6 @@ internal static class AppPaths
     }
 
     public static string ConfigFile => Path.Combine(DataDirectory, "config.json");
-    public static string ModelFile => Path.Combine(DataDirectory, "model.json");
     public static string ConversionHistoryFile => Path.Combine(DataDirectory, "conversions.json");
     public static string TranslationHistoryFile => Path.Combine(DataDirectory, "translations.json");
     public static string LanguageMemoryFile => Path.Combine(DataDirectory, "languages.json");

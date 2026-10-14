@@ -138,7 +138,7 @@ internal static class TestRunner
         {
             // 調査用: 設定画面とユーザー辞書の画面を表示せずに画像にする。
             Application.EnableVisualStyles();
-            var engine = new MeltypeEngine(new Config.Settings(), null, null, null);
+            var engine = new MeltypeEngine(new Config.Settings(), null, null);
             using var invoker = new Control();
             invoker.CreateControl();
             using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions { UserDictionary = new Composition.UserDictionary(null) });

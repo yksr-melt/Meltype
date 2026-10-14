@@ -13,7 +13,7 @@ namespace Meltype.UI;
 /// 設定画面。Settings の各項目を種類に合わせた部品で並べる:
 ///   ON/OFF → スイッチ (ToggleSwitch)、選択肢 (列挙型) → 日本語名のプルダウン、数値 → 数値入力、アプリ別設定 → 表 (ON/OFF はスイッチ)。
 /// 項目名・分類・説明は Settings の属性 (DisplayName / Category / Description) から取る。
-/// 下の「判定テスト」欄では、打った英字が IME 自動切替でどう判定されるかと理由を確認できる。
+/// 下の「判定テスト」欄では、打った英字をローマ字 (日本語) と英語のどちらと判定するかと理由を確認できる。
 /// </summary>
 internal sealed class SettingsForm : Form, IMessageFilter
 {
@@ -77,7 +77,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         _helpPanel.Controls.Add(_help);
         _helpPanel.Height = TextRenderer.MeasureText("あ", Font).Height * HelpLines + _help.Padding.Vertical + 6;
 
-        var testLabel = new Label { Text = "判定テスト (IME 自動切替の判定。英字で入力):", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 2) };
+        var testLabel = new Label { Text = "判定テスト (ローマ字か英語かの判定。英字で入力):", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 2) };
         _testInput.TextChanged += (_, _) => RunTest();
         var testPanel = new Panel { Dock = DockStyle.Bottom, Height = 110, Padding = new Padding(8, 0, 8, 0) };
         testPanel.Controls.Add(_testResult);
@@ -667,7 +667,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
             AllowUserToDeleteRows = true,
         };
         grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "プロセス名 (例: code.exe)", FillWeight = 55 });
-        grid.Columns.Add(new ToggleSwitchColumn("自動切替", 22));
+        grid.Columns.Add(new ToggleSwitchColumn("有効", 22));
         // 種類: 一般 / コード (コメント・文字列の中だけ日本語)
         var profile = new DataGridViewComboBoxColumn { HeaderText = "種類", FillWeight = 23, FlatStyle = FlatStyle.Flat };
         profile.Items.AddRange(Enum.GetValues<AppProfile>().Select(p => (object)EnumName(typeof(AppProfile), p)).ToArray());

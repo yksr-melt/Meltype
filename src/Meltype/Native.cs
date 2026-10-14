@@ -12,7 +12,7 @@ internal static class Native
     public const int WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_SYSKEYDOWN = 0x0104, WM_SYSKEYUP = 0x0105;
     public const int WM_LBUTTONDOWN = 0x0201, WM_RBUTTONDOWN = 0x0204, WM_MBUTTONDOWN = 0x0207, WM_XBUTTONDOWN = 0x020B;
     public const int WM_MOUSEWHEEL = 0x020A;
-    public const int WM_QUIT = 0x0012, WM_INPUTLANGCHANGEREQUEST = 0x0050, WM_IME_CONTROL = 0x0283;
+    public const int WM_QUIT = 0x0012, WM_IME_CONTROL = 0x0283;
     public const uint LLKHF_EXTENDED = 0x01, LLKHF_INJECTED = 0x10, LLKHF_UP = 0x80;
     public const uint KEYEVENTF_EXTENDEDKEY = 0x0001, KEYEVENTF_KEYUP = 0x0002;
     public const uint INPUT_KEYBOARD = 1;
@@ -141,7 +141,6 @@ internal static class Native
 
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint threadId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int InternalGetWindowText(IntPtr hwnd, [Out] char[] text, int max);
-    [DllImport("user32.dll")] public static extern int GetKeyboardLayoutList(int count, [Out] IntPtr[]? list);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
     [DllImport("imm32.dll")] public static extern IntPtr ImmGetDefaultIMEWnd(IntPtr hwnd);

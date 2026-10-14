@@ -344,7 +344,7 @@ internal sealed class ToggleSwitch : Control
 }
 
 /// <summary>
-/// 表の中の ON/OFF の列 (アプリ別設定の「自動切替」・独自の種類の「最初は英数」)。
+/// 表の中の ON/OFF の列 (アプリ別設定の「有効」・独自の種類の「最初は英数」)。
 /// チェックボックスの列の動き (クリック・Space で切り替え、値は bool) のまま、見た目を <see cref="ToggleSwitch"/> にする。
 /// </summary>
 internal sealed class ToggleSwitchColumn : DataGridViewCheckBoxColumn

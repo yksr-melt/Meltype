@@ -14,8 +14,6 @@ public enum InputStyle
     [Description("ローマ字入力")] Romaji,
     /// <summary>JIS かな入力。</summary>
     [Description("かな入力 (JIS、α版)")] Kana,
-    /// <summary>両方を判定する。</summary>
-    [Description("両方を判定")] Both,
 }
 
 /// <summary>英語か日本語かの自動判定の強さ。</summary>
@@ -94,14 +92,13 @@ public enum PunctuationStyle
     [Description("、．")] ToutenFullWidthPeriod,
 }
 
+// config.json に数値で書いても読めるので、番号は前の版のまま (1 は消した IME 自動切替)。
 public enum InputMode
 {
     /// <summary>Meltype 自身の変換ボックスで入力する (半角/全角 不要)。</summary>
-    [Description("Meltype キーボード (変換ボックスで入力)")] Keyboard,
-    /// <summary>入力開始時に判定して Microsoft IME の ON/OFF を切り替える (v1 の動作)。</summary>
-    [Description("IME 自動切替 (Microsoft IME を使う)")] AutoSwitch,
+    [Description("Meltype キーボード (変換ボックスで入力)")] Keyboard = 0,
     /// <summary>Windows の IME (TSF) として、入力欄に直接入力する。キーボードフックは使わない。</summary>
-    [Description("Meltype IME (入力欄に直接入力)")] Tsf,
+    [Description("Meltype IME (入力欄に直接入力)")] Tsf = 2,
 }
 
 [TypeConverter(typeof(ExpandableObjectConverter))]
@@ -110,7 +107,7 @@ public sealed class AppRule
     [DisplayName("プロセス名"), Description("例: code.exe / chrome.exe / WindowsTerminal.exe")]
     public string Process { get; set; } = "";
 
-    [DisplayName("自動切替"), Description("false にするとこのアプリでは一切キーを保留しません。")]
+    [DisplayName("有効"), Description("OFF にすると、このアプリでは変換ボックスを出しません。Meltype IME でも英字がそのまま入ります。")]
     public bool Enabled { get; set; } = true;
 
     [DisplayName("種類"), Description("コード = コードエディターやターミナル。基本は英数で、コメントや \"…\" の中だけ日本語を判定します。")]
@@ -186,7 +183,8 @@ public sealed class Settings
     public bool AllowInjectedInput { get; set; }
 
     [Category("1. 全般"), DisplayName("動作モード"),
-     Description("Tsf = Windows の IME として入力欄に直接入力 (Win + Space で Meltype を選ぶ) / Keyboard = Meltype の変換ボックスで入力 (英単語は自動で英字、Space で変換、Enter で確定) / AutoSwitch = 入力開始時に判定して Microsoft IME を自動で ON にする")]
+     Description("Tsf = Windows の IME として入力欄に直接入力 (Win + Space で Meltype を選ぶ) / Keyboard = Meltype の変換ボックスで入力 (英単語は自動で英字、Space で変換、Enter で確定)")]
+    [JsonConverter(typeof(InputModeJsonConverter))]
     public InputMode Mode { get; set; } = InputMode.Tsf;
 
     [Category("1. 全般"), DisplayName("半角/全角 で Meltype を ON/OFF"),
@@ -339,18 +337,19 @@ public sealed class Settings
      Description("新しい版が公開されたら自動でダウンロードし、次に Meltype を起動したとき (Windows にサインインしたとき) に更新します。トレイの「更新して再起動」で今すぐ更新もできます。設定・学習データはそのまま残ります。")]
     public bool AutoUpdate { get; set; } = true;
 
-    [Category("1. 全般"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中) / 両方を判定。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。「両方を判定」は IME 自動切替のみ (Meltype キーボードではローマ字入力)。")]
+    [Category("1. 全般"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]
+    [JsonConverter(typeof(InputStyleJsonConverter))]
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
 
     [Category("2. 判定"), DisplayName("自動判定の強さ"),
-     Description("積極的 = 英語らしければすぐ英字 / 標準 = 短い語 (no, to, ga) は前後が英語のときだけ英字 / 慎重 = 確信度が高いときだけ英字 / 手動 = 自動では切り替えず提案だけ (変換ボックスで Tab を押すと提案どおり英字に)。Meltype キーボード・IME 自動切替・英数状態の検知・かな入力のすべてに効きます。")]
+     Description("積極的 = 英語らしければすぐ英字 / 標準 = 短い語 (no, to, ga) は前後が英語のときだけ英字 / 慎重 = 確信度が高いときだけ英字 / 手動 = 自動では切り替えず提案だけ (変換ボックスで Tab を押すと提案どおり英字に)。Meltype キーボード・英数状態の検知・かな入力のすべてに効きます。")]
     public DetectionLevel DetectionLevel { get; set; } = DetectionLevel.Balanced;
 
     [Category("2. 判定"), DisplayName("区切りを点数で選ぶ (α版)"),
      Description("変換ボックスの中で英語と日本語をどこで区切るかを、あり得る区切り方を全部比べて一番自然なもので決めます (α版: 試験中)。英単語の後ろの「は」(medalsha → medalsは、presidentha → presidentは) などが正しく分かれやすくなります。OFF なら今までどおり、先頭から順に決めます。")]
     public bool ScoredSegmentation { get; set; }
 
-    /// <summary>判定の強さを反映した日本語判定の閾値 (IME 自動切替・英数状態の検知)。</summary>
+    /// <summary>判定の強さを反映した日本語判定の閾値 (英数状態の検知)。</summary>
     [Browsable(false), JsonIgnore]
     public int EffectiveJapaneseThreshold => JapaneseThreshold + DetectionLevel switch
     {
@@ -367,12 +366,6 @@ public sealed class Settings
 
     [Category("3. 保留"), DisplayName("最大保留キー数"), Description("判定のために保留する文字数の上限。超えたら判定不能としてそのまま出力します。")]
     public int MaxPendingKeys { get; set; } = 6;
-
-    [Category("3. 保留"), DisplayName("無入力で出力するまでの時間 (ms)")]
-    public int IdleFlushMs { get; set; } = 700;
-
-    [Category("3. 保留"), DisplayName("最大保留時間 (ms)"), Description("最初のキーからこの時間が経ったら、判定途中でも保留分を出力します。")]
-    public int MaxHoldMs { get; set; } = 2500;
 
     /// <summary>config.json の形式のバージョン。古い既定値を持つ設定ファイルを移行するのに使う。</summary>
     [Browsable(false)]
@@ -600,21 +593,9 @@ public sealed class Settings
 
     public const int CurrentVersion = 5;
 
-    [Category("4. セッション"), DisplayName("新しいセッションとみなす無入力時間 (ms)")]
-    public int SessionIdleMs { get; set; } = 1500;
-
-    [Category("4. セッション"), DisplayName("英語の後の Space では判定しない"), Description("英語と判定した直後に Space で区切られた次の単語は、保留せずそのまま通します (英文入力中の遅延を減らします)。")]
-    public bool ContinueEnglishAfterSpace { get; set; }
-
     [Category("5. 学習"), DisplayName("ユーザー学習を使う"),
-     Description("OFF にすると、自動切替の学習 (model.json) を使わず、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳も新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
+     Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
     public bool LearningEnabled { get; set; } = true;
-
-    [Category("5. 学習"), DisplayName("誤判定フィードバックの受付時間 (ms)"), Description("自動判定の後、この時間内に 半角/全角 などの IME 切替キーが押されたら誤判定として学習します。")]
-    public int FeedbackWindowMs { get; set; } = 4000;
-
-    [Category("6. IME"), DisplayName("TSF を使う"), Description("IMM32 で入力言語を切り替えられなかったとき、TSF のプロファイル切替を試します。")]
-    public bool UseTsf { get; set; } = true;
 
     [Category("6. IME"), DisplayName("IME 操作のタイムアウト (ms)")]
     public int ImeTimeoutMs { get; set; } = 300;
@@ -676,7 +657,7 @@ public sealed class Settings
      Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype は何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
-    [Category("7. アプリ"), DisplayName("アプリ別設定"), Description("プロセス名ごとに、自動切替の ON/OFF と種類を指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
+    [Category("7. アプリ"), DisplayName("アプリ別設定"), Description("プロセス名ごとに、ON/OFF と種類を指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
     public List<AppRule> AppRules { get; set; } = DefaultAppRules();
 
     [Category("7. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、判定の強さ・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
@@ -761,11 +742,10 @@ public sealed class Settings
     {
         JapaneseThreshold = Math.Clamp(JapaneseThreshold, 2, 20);
         MaxPendingKeys = Math.Clamp(MaxPendingKeys, 2, 12);
-        IdleFlushMs = Math.Clamp(IdleFlushMs, 100, 3000);
-        MaxHoldMs = Math.Clamp(MaxHoldMs, 200, 5000);
-        SessionIdleMs = Math.Clamp(SessionIdleMs, 300, 60000);
-        FeedbackWindowMs = Math.Clamp(FeedbackWindowMs, 500, 30000);
         ImeTimeoutMs = Math.Clamp(ImeTimeoutMs, 50, 2000);
+        // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
+        if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
+        if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));
@@ -787,12 +767,7 @@ public sealed class Settings
     internal bool Migrate()
     {
         if (SettingsVersion >= CurrentVersion) return false;
-        if (SettingsVersion < 2)
-        {
-            // v1 の 400ms / 1200ms では、ゆっくり打つと判定前に保留が切れて日本語を見逃していた。
-            if (IdleFlushMs == 400) IdleFlushMs = 700;
-            if (MaxHoldMs == 1200) MaxHoldMs = 2500;
-        }
+        // v2: IME 自動切替の保留の時間を延ばした (IME 自動切替は消した)。
         // v3: Meltype キーボード (変換ボックス) を追加。v2 以前の config.json には Mode が無いので、
         // 読み込み時に初期値になる。
         if (SettingsVersion < 4)
@@ -822,7 +797,12 @@ public sealed class Settings
             var json = File.ReadAllText(path);
             var settings = JsonSerializer.Deserialize(json, JsonType) ?? new Settings();
             if (!json.Contains(nameof(SettingsVersion))) settings.SettingsVersion = 1;
-            if (settings.Migrate())
+            // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。
+            // 初めて起動したときと同じく、Meltype IME を使えなければ Meltype キーボードに戻し、使えれば入力方式も Meltype IME にする
+            var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
+            if (autoSwitch) settings.TsfIntroduced = false;
+            var migrated = settings.Migrate();
+            if (migrated || autoSwitch)
             {
                 // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
                 try { settings.Save(path); }
@@ -838,6 +818,18 @@ public sealed class Settings
             Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
             return new Settings();
         }
+    }
+
+    /// <summary>config.json の一番上の項目 property が、文字列の value か (プロファイルの中の値は見ない)。</summary>
+    private static bool TopLevelStringIs(string json, string property, string value)
+    {
+        var reader = new Utf8JsonReader(System.Text.Encoding.UTF8.GetBytes(json), new JsonReaderOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true });
+        while (reader.Read())
+        {
+            if (reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 1 && reader.ValueTextEquals(property))
+                return reader.Read() && reader.TokenType == JsonTokenType.String && string.Equals(reader.GetString(), value, StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     /// <summary>config.json と同じ形式の文字列 (変更があったかを比べるのに使う)。</summary>

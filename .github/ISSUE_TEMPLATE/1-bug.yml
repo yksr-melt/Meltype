@@ -42,8 +42,8 @@ body:
     attributes:
       label: 使っていたモード (Windows)
       options:
+        - Meltype IME (入力欄に直接入力)
         - Meltype キーボード (変換ボックスで入力)
-        - IME 自動切替 (Microsoft IME を使う)
         - 分からない / Mac・Linux
 
   - type: input

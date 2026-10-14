@@ -336,7 +336,7 @@ internal static class Quality
         ("Windows PowerShell", false),
     ];
 
-    /// <summary>よく使う英単語 (IME 自動切替で日本語と誤判定しないか)。</summary>
+    /// <summary>よく使う英単語 (英数状態の検知で日本語と誤判定しないか)。</summary>
     private static readonly string[] CommonEnglish =
     [
         "the", "this", "that", "with", "from", "have", "what", "when", "where", "which", "there", "their", "would", "could", "should",
@@ -421,18 +421,18 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
             Score("文章ファイル", actual == expected, $"「{title}」→ {actual} (期待: {expected})");
         }
 
-        // IME 自動切替 (打ち始めの数文字で Microsoft IME を ON にするか): 日本語の辞書の語は英語と決めつけない、よく使う英単語は日本語にしない。
+        // 英数状態の検知 (打ち始めの数文字がローマ字なら日本語入力に戻すか): 日本語の辞書の語は英語と決めつけない、よく使う英単語は日本語にしない。
         var scoreEngine = TestSupport.CreateEngine();
         var japaneseWords = DictionarySource.Load("japanese.txt", null).Where(w => w.Length >= 4).Distinct().ToList();
         foreach (var word in japaneseWords)
         {
             var result = TestSupport.Classify(scoreEngine, word);
-            Score("自動切替: 日本語", result.Verdict != Verdict.English, $"{word} → {result.Verdict} ({result.Summary})");
+            Score("英数状態の検知: 日本語", result.Verdict != Verdict.English, $"{word} → {result.Verdict} ({result.Summary})");
         }
         foreach (var word in CommonEnglish)
         {
             var result = TestSupport.Classify(scoreEngine, word);
-            Score("自動切替: 英語", result.Verdict != Verdict.Japanese, $"{word} → {result.Verdict} ({result.Summary})");
+            Score("英数状態の検知: 英語", result.Verdict != Verdict.Japanese, $"{word} → {result.Verdict} ({result.Summary})");
         }
 
         // 絵文字・顔文字の候補

@@ -1,5 +1,4 @@
 using Meltype.Config;
-using Meltype.Learning;
 
 namespace Meltype.Detection;
 
@@ -17,7 +16,6 @@ public sealed class ScoreEngine
     private readonly EnglishDetector _english;
     private readonly DictionaryDetector _dictionary;
     private readonly TypoDetector _typo;
-    private readonly UserModel? _user;
     private readonly Func<Settings> _settings;
 
     public ScoreEngine(
@@ -26,7 +24,6 @@ public sealed class ScoreEngine
         EnglishDetector english,
         DictionaryDetector dictionary,
         TypoDetector typo,
-        UserModel? user,
         Func<Settings> settings)
     {
         _romaji = romaji;
@@ -34,19 +31,18 @@ public sealed class ScoreEngine
         _english = english;
         _dictionary = dictionary;
         _typo = typo;
-        _user = user;
         _settings = settings;
     }
 
     /// <summary>組み込み辞書 (+ ユーザー辞書) から一式を組み立てる。</summary>
-    public static ScoreEngine CreateDefault(UserModel? user, Func<Settings> settings, string? userDictionaryDirectory = null)
+    public static ScoreEngine CreateDefault(Func<Settings> settings, string? userDictionaryDirectory = null)
     {
         var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory);
         var japaneseWords = DictionarySource.Load("japanese.txt", userDictionaryDirectory).ToList();
         var dictionary = new DictionaryDetector(japaneseWords, romaji);
         var english = new EnglishDetector(DictionarySource.Load("english.txt", userDictionaryDirectory).Concat(ProperNouns.Load(userDictionaryDirectory).LowercaseWords));
         var kana = new KanaDetector(japaneseWords, romaji);
-        return new ScoreEngine(romaji, kana, english, dictionary, new TypoDetector(dictionary.Words), user, settings);
+        return new ScoreEngine(romaji, kana, english, dictionary, new TypoDetector(dictionary.Words), settings);
     }
 
     public RomajiDetector Romaji => _romaji;
@@ -114,7 +110,6 @@ public sealed class ScoreEngine
         }
 
         _english.Evaluate(original, contributions);
-        if (settings.LearningEnabled) _user?.Evaluate(original, contributions);
 
         var japanese = contributions.Sum(c => c.Japanese);
         var english = contributions.Sum(c => c.English);

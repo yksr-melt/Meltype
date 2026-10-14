@@ -32,14 +32,4 @@ internal static class VirtualKeys
     public static char ToLetter(int vk) => (char)('a' + (vk - 0x41));
 
     public static bool IsModifier(int vk) => vk is Shift or Control or Menu or LShift or RShift or LControl or RControl or LMenu or RMenu or LWin or RWin;
-
-    /// <summary>入力セッションの区切り (設計書 §5)。</summary>
-    public static bool IsSessionBoundary(int vk) => vk is Return or Space or Escape or Tab;
-
-    /// <summary>
-    /// ユーザーが IME の ON/OFF を手で切り替えたとみなすキー。
-    /// 半角/全角 (0xF3/0xF4 と 0x19)、英数 (0xF0)、カタカナひらがな (0xF2)、変換/無変換、IME ON/OFF、かな。
-    /// </summary>
-    public static bool IsImeToggle(int vk) =>
-        vk is Kanji or Kana or ImeOn or ImeOff or Convert or NonConvert or OemAttn or OemCopy or OemAuto or OemEnlw;
 }

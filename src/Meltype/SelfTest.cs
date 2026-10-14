@@ -47,7 +47,7 @@ internal static class SelfTest
                 File.Delete(path);
             }
         });
-        Check("判定 (IME 自動切替)", () => ScoreEngine.CreateDefault(null, () => new Config.Settings())
+        Check("判定 (英数状態の検知)", () => ScoreEngine.CreateDefault(() => new Config.Settings())
             .Evaluate(new DetectionInput("konn", [], false)).Verdict.ToString());
         var detector = CompositionDetector.CreateDefault();
         Check("変換ボックスの英語判定", () =>
@@ -74,7 +74,7 @@ internal static class SelfTest
         Check("UI Automation", () => { var result = ""; var thread = new Thread(() => result = FocusInspector.Probe()); thread.SetApartmentState(ApartmentState.MTA); thread.Start(); thread.Join(); return result; });
         Check("画面", () =>
         {
-            using var engine = new MeltypeEngine(new Config.Settings(), null, null, null);
+            using var engine = new MeltypeEngine(new Config.Settings(), null, null);
             using var invoker = new Control();
             invoker.CreateControl();
             using var service = new CompositionService(invoker, detector, new CompositionOptions { UserDictionary = new UserDictionary(null), History = new ConversionHistory(null) });
@@ -96,7 +96,7 @@ internal static class SelfTest
         {
             // トレイのアイコン・メニュー・ホットキーを作ってすぐ閉じる (キーボードフックは掛けない)。
             // TsfIntroduced にしておく (作る人の PC に Meltype IME があると、入力方式が Meltype IME に切り替わってしまう)。
-            using var engine = new MeltypeEngine(new Config.Settings { TsfIntroduced = true }, null, null, null);
+            using var engine = new MeltypeEngine(new Config.Settings { TsfIntroduced = true }, null, null);
             var tray = new UI.TrayApplicationContext(engine);
             tray.ExitThread();
             return "OK";
@@ -106,9 +106,6 @@ internal static class SelfTest
             var directory = Path.Combine(Path.GetTempPath(), $"meltype-selftest-{Guid.NewGuid():N}");
             try
             {
-                var model = new Learning.UserModel(Path.Combine(directory, "model.json"));
-                model.Learn("konn", Learning.SessionOutcome.JapaneseAccepted, false);
-                model.Save();
                 new ConversionHistory(Path.Combine(directory, "conversions.json")).Remember("はしを", "箸を");
                 Diagnostics.Log.SetFileOutput(Path.Combine(directory, "meltype.log"));
                 Diagnostics.Log.Info("自己診断");

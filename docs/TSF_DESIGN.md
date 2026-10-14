@@ -133,7 +133,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 <img src="images/headings/tsf-design/05.svg" alt="Meltype.exe 側" height="53"><br>
 
 
-- 動作モードに `Tsf` (Meltype IME) を足した。Tsf のときは、キーボードフックは何もしない。今までの方式 (変換ボックス・IME 自動切替) も残している
+- 動作モードに `Tsf` (Meltype IME) を足した。Tsf のときは、キーボードフックは何もしない。今までの方式 (変換ボックス) も残している
 - Meltype IME が登録されていて、このユーザーのキーボードの一覧にも入っていれば、一度だけ自動で Tsf にする。
   そのとき (とトレイで Meltype IME を選んだとき) は、いま使う入力方式も Meltype IME にする (ITfInputProcessorProfileMgr::ActivateProfile の TF_IPPMF_FORSESSION)
 - Meltype.exe 自身の画面 (はじめに・設定など) でも使える。そこでは UI スレッドが DLL の中で応答を待って止まるので、

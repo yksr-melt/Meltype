@@ -100,7 +100,7 @@ internal static class DetectionTests
     }
 
     [Test]
-    public static void ObviousEnglishKeysRemainKanaInKanaCapableStyles()
+    public static void ObviousEnglishKeysRemainKanaInKanaInput()
     {
         var expectedKana = new Dictionary<int, string>
         {
@@ -110,20 +110,28 @@ internal static class DetectionTests
             [0x4C] = "り", // L
         };
 
-        foreach (var style in new[] { InputStyle.Kana, InputStyle.Both })
-        {
-            var settings = DefaultSettings();
-            settings.InputStyle = style;
-            var engine = CreateEngine(settings);
+        var settings = DefaultSettings();
+        settings.InputStyle = InputStyle.Kana;
+        var engine = CreateEngine(settings);
 
-            foreach (var (key, kana) in expectedKana)
-            {
-                var letter = char.ToLowerInvariant((char)key).ToString();
-                var result = engine.Evaluate(new DetectionInput(letter, [key], true));
-                Assert.True(result.Verdict != Verdict.English, $"{style}: {letter.ToUpperInvariant()} は JIS かな入力の {kana} として扱う: {result.Describe()}");
-                Assert.Equal(kana, KanaDetector.ToKana([key]));
-            }
+        foreach (var (key, kana) in expectedKana)
+        {
+            var letter = char.ToLowerInvariant((char)key).ToString();
+            var result = engine.Evaluate(new DetectionInput(letter, [key], true));
+            Assert.True(result.Verdict != Verdict.English, $"{letter.ToUpperInvariant()} は JIS かな入力の {kana} として扱う: {result.Describe()}");
+            Assert.Equal(kana, KanaDetector.ToKana([key]));
         }
+    }
+
+    [Test]
+    public static void MaxPendingKeys_EndsWithoutWaitingForMore()
+    {
+        // 上限の文字数まで判定できなければ、打ち終わる前でも結論 (判断できない) を出す (英数状態の検知が終わらないままにならない)
+        var input = new DetectionInput("tab", "TAB".Select(c => (int)c).ToArray(), false);
+        Assert.Equal(Verdict.Undecided, Engine.Evaluate(input).Verdict, "上限より短いうちは待つ");
+        var settings = DefaultSettings();
+        settings.MaxPendingKeys = 3;
+        Assert.Equal(Verdict.Unknown, CreateEngine(settings).Evaluate(input).Verdict, "上限の文字数で結論を出す");
     }
 
     [Test]
