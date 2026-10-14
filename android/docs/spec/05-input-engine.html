@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>05 入力エンジン | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html" aria-current="page">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>05 入力エンジン</h1>
+      <p class="status"><span class="badge fixed">確定</span>（段階1の範囲）</p>
+<p><code>engine</code> モジュールの仕様。ここに書くのは、未確定文字を作る配列（かな、ローマ字、英字フリック）での入力の動作。英字配列と数字・記号の配列は未確定文字を作らないので、エンジンを通らない。</p>
+<h2 id="入力セッション">入力セッション</h2>
+<p>入力欄1つにつき、入力セッションを1つ持つ。入力欄が切り替わったら、新しいセッションを始める。未確定文字として出ていた文字は、ふつうの文字として元の入力欄に残る（Android が、出ていた内容のまま未確定を終わらせる）。新しい入力欄には何も持ち込まない。このとき学習はさせない。</p>
+<p>セッションが持つ状態:</p>
+<table>
+<thead>
+<tr>
+<th>状態</th>
+<th>中身</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>読み</td>
+<td>利用者が打ったかなの並び。最大 100 文字</td>
+</tr>
+<tr>
+<td>打ちかけの英字</td>
+<td>ローマ字配列で打った英字のうち、まだかなになっていないもの（<a href="#ローマ字入力">ローマ字入力</a>）。ほかの配列ではいつも空</td>
+</tr>
+<tr>
+<td>変換結果</td>
+<td>読みを文節に区切り、各文節に候補を付けたもの。変換を頼んでいないとき、または結果がまだ返っていないときは空</td>
+</tr>
+<tr>
+<td>選択中の候補</td>
+<td>空白キーで選んでいる候補の番号。選んでいなければなし</td>
+</tr>
+</tbody></table>
+<p>読みも打ちかけの英字も空のとき、未確定文字はない。</p>
+<h2 id="操作と結果">操作と結果</h2>
+<p><code>app</code> から受け取る操作と、その結果。</p>
+<h3 id="文字を入れる">文字を入れる</h3>
+<p>読みの末尾に文字を足す。読みが 100 文字に達していたら、先に未確定文字を確定してから足す。</p>
+<p>選択中の候補があるときは、その候補を確定してから、新しい読みとして足す。</p>
+<h3 id="文字キーをタップ（トグル入力）">文字キーをタップ（トグル入力）</h3>
+<p>トグル入力（<a href="04-keyboard-ui.html">04</a>）がオンのとき、文字キーのタップは「どのキーか」と「押した時刻」を付けて受け取る。</p>
+<ul>
+<li>直前の操作が同じキーのタップで、その時刻から待ち時間以内なら、読みの最後の1文字を、そのキーの次の文字に置き換える。</li>
+<li>そうでなければ、「文字を入れる」と同じように、そのキーの最初の文字を足す。</li>
+</ul>
+<p>タップと「戻す」以外の操作（フリックでの入力、濁点・半濁点・小文字、削除、空白、確定、候補のタップ、▶ キー）を受け取ると、切り替えは終わる。▶ キーは、切り替え中でなければ何もしない。</p>
+<p>時刻は <code>app</code> が渡す。<code>engine</code> は自分で時計を見ない（テストで時刻を自由に決められるようにするため）。</p>
+<p>待ち時間とオン・オフは、設定の値を <code>app</code> が <code>engine</code> に渡す。設定が変わったら、次のタップから新しい値で動く。</p>
+<p>トグル入力がオフのとき、タップは「文字を入れる」と同じに扱う。</p>
+<h3 id="戻す">戻す</h3>
+<p>戻すキー（<a href="04-keyboard-ui.html">04</a>）の操作。「押した時刻」を付けて受け取る。次の順に見て、最初に当てはまったものだけを行う。</p>
+<ol>
+<li>選択中の候補がある（または、変換結果を待ったまま空白が押されている）: 選択を解いて、ライブ変換の表示に戻す。文字は消さない。</li>
+<li>切り替えの途中（直前の操作が文字キーのタップか「戻す」で、その時刻から待ち時間以内）: 読みの最後の1文字を、そのキーの1つ前の文字に置き換える。最初の文字からは最後の文字に回る。切り替えは続き、待ち時間はこの操作の時刻から数え直す。</li>
+<li>どちらでもない: 何もしない。</li>
+</ol>
+<p>トグル入力がオフのとき、何も持たない欄（パスワード）のときは、2 に当てはまらない。変換しない欄で最後の1文字を持っているときは、2 が効く。</p>
+<h3 id="濁点・半濁点・小文字">濁点・半濁点・小文字</h3>
+<p>読みの最後の1文字を、<a href="04-keyboard-ui.html">04</a> の表の順に切り替える。</p>
+<h3 id="大文字・小文字">大文字・小文字</h3>
+<p>英字フリック配列の <code>a⇔A</code> キー（<a href="04-keyboard-ui.html#大文字・小文字キー（a⇔A）">04</a>）の操作。持っている最後の1文字が英字なら、小文字と大文字を入れ替える。英字でなければ何もしない。</p>
+<p>英字フリック配列では、セッションを「変換しない欄」と同じ動作にして使う（最後の1文字だけを持つ。<a href="09-privacy-security.html">09</a>）。文字キーのタップ、フリック、トグル入力、戻す、削除は、かなのときと同じ操作で受け取る。キーに文字のない向きがあるとき、トグル入力は文字のある向きだけを回る。</p>
+<h3 id="削除">削除</h3>
+<p>読みの最後の1文字を消す。選択中の候補があるときは、選択を解いてライブ変換の表示に戻すだけで、文字は消さない。</p>
+<p>読みが空になったら、未確定文字をなくす。</p>
+<h3 id="空白（明示変換）">空白（明示変換）</h3>
+<p>候補バーの次の変換候補を選ぶ。まだ何も選んでいないときは、いま表示している内容と違う最初の変換候補を選ぶ（ライブ変換で第一候補が出ているならその次、かなのまま出ているなら1番目）。最後の変換候補の次は最初に戻る。選んだ候補を未確定文字として表示する。</p>
+<p>空白で選ぶのは変換候補だけ。変換候補は、読み全体を変換した結果、先頭の文節のほかの候補、読みそのまま（ひらがな）、読みをカタカナにしたもの。予測候補は候補バーには出すが、空白では選ばない（飛ばして次の変換候補へ進む）。予測候補を選ぶ方法はタップだけ。</p>
+<p>理由: 予測候補には、前に確定した長い文が、打った分より長いまま出てくる。空白は「打った読みを変換する」ためのキーなので、打っていない文がそれで確定されてはいけない。</p>
+<p>変換結果がまだ返っていないときは、返るのを待ってから最初の候補を選ぶ。</p>
+<h3 id="確定">確定</h3>
+<p>いま未確定文字として表示している内容を確定し、読みを空にする。確定した内容を学習させる（<a href="06-conversion-mozc.html">06</a>）。</p>
+<h3 id="候補をタップ">候補をタップ</h3>
+<p>その候補を確定する。候補が読みの先頭の一部だけに対応するものなら、残りの読みは未確定のまま残し、ライブ変換を続ける。</p>
+<h2 id="ローマ字入力">ローマ字入力</h2>
+<p>ローマ字配列（<a href="04-keyboard-ui.html#ローマ字配列">04</a>）で打った英字を、かなに組み立てる。できたかなは読みの末尾に入り、そこから先（ライブ変換、候補、確定、学習）は、かな配列で打ったかなと同じに扱う。</p>
+<h3 id="打ちかけの英字">打ちかけの英字</h3>
+<ul>
+<li>まだかなになっていない英字を、打ちかけの英字と呼ぶ。入力セッションが、読みと並べて持つ。長くても 3 文字。</li>
+<li>打ちかけが <code>n</code> ひとつのときは、それを仮の ん として扱う（下の「仮の ん」）。それ以外の打ちかけの英字は、次のとおり。</li>
+<li>未確定文字として出すのは、読みの表示（<a href="#ライブ変換">ライブ変換</a>の表のとおり）のあとに、打ちかけの英字を打ったまま半角で続けたもの。</li>
+<li>変換するのは読みだけ。打ちかけの英字は Converter に渡さない。変換を頼むのは、読みが変わったときだけ（英字を打っても、読みが変わらなければ頼まない）。</li>
+<li>ライブ変換の 4 文字の境目は、読みの長さで数える。打ちかけの英字は数えない。</li>
+<li>読みの上限（100 文字）も、読みの長さで数える。できたかなを足すと 100 文字を超えるときは、先に読みを確定してから、できたかなを新しい読みにする。打ちかけの英字はそのまま続く。</li>
+<li>読みも打ちかけの英字もないとき、未確定文字はない。</li>
+</ul>
+<h3 id="仮のん">仮の ん</h3>
+<p>打ちかけが <code>n</code> ひとつのあいだ、読みの末尾に ん があるものとして扱う。<code>nihonjin</code> と打って確定すれば、にほんじん の変換結果（日本人）が確定される。</p>
+<ul>
+<li>変換を頼む読み、ライブ変換の表示、候補の一覧、空白・確定・候補のタップ、学習は、どれも「読み + ん」に対して働く。表示にも ん が出る（<code>n</code> とは出さない）。4 文字の境目と 100 文字の上限も、この ん を数える。</li>
+<li>セッションは、この ん が仮のものだと覚えておく。次に打つ字で決まる。
+<ul>
+<li>母音か <code>y</code>: ん をやめて、な行に組み立て直す（<code>kan</code> + <code>a</code> → かな、<code>n</code> + <code>ya</code> → にゃ）。読みが変わるので、変換を頼み直す。</li>
+<li><code>n</code> か <code>'</code>: ん に決まる（<code>kann</code> → かん）。読みは変わらないので、頼み直さない。</li>
+<li>ほかの子音や記号: ん に決まり、その字が次の打ちかけになる（<code>kanj</code> → かん + <code>j</code>）。</li>
+</ul>
+</li>
+<li>削除は、仮の ん を消す（<code>kan</code> で削除 → か）。</li>
+<li>確定、候補のタップで読みの末尾まで確定したとき、ん に決まる。候補が読みの先頭の一部だけに対応するときは、残りの読みの末尾で、仮の ん のまま続く。</li>
+<li>変換結果がまだ返っていないあいだの表示は、ライブ変換の表のとおり（直前の表示 + 新しく打ったかな。ここでは ん）。</li>
+</ul>
+<h3 id="組み立ての規則">組み立ての規則</h3>
+<p>英字を1つ受け取るたびに、打ちかけの英字の末尾に足して、次の順に見る。当てはまったら、残りについて最初から見直す。</p>
+<ol>
+<li>下の表の打ち方にちょうど一致する: そのかなを読みに足し、打ちかけを空にする。</li>
+<li>下の表のどれかの打ち方の、途中までに当たる（<code>k</code>、<code>ky</code>、<code>n</code> など）: 打ちかけのまま待つ。</li>
+<li>先頭が <code>n</code> で、1 にも 2 にも当たらない（<code>nk</code>、<code>ns</code> など。次が母音、<code>y</code>、<code>n</code>、<code>'</code> 以外）: ん を読みに足し、<code>n</code> を除いた残りを打ちかけにする（<code>shinb</code> → しん + <code>b</code>）。</li>
+<li>同じ子音が2つ続く（<code>kk</code>、<code>tt</code>、<code>ss</code>、<code>pp</code> など。<code>n</code> は除く）: っ を読みに足し、1つを打ちかけに残す（<code>kapp</code> → かっ + <code>p</code>）。<code>tc</code> も同じに扱う（<code>matc</code> → まっ + <code>c</code>、続けて <code>ha</code> で ちゃ）。</li>
+<li>どれでもない（<code>kq</code> の <code>k</code>、<code>sht</code> の <code>s</code> と <code>h</code> など）: 先頭の1文字を、英字のまま読みに入れる。残りを打ちかけにする。読みに入った英字は、かなと同じに1文字として数え、変換にもそのまま渡す。</li>
+</ol>
+<ul>
+<li>ん の打ち方は <code>nn</code>、<code>n'</code>、<code>xn</code>、または <code>n</code> のあとに母音・<code>y</code>・<code>n</code> 以外の字。<code>nn</code> は、打ったところで ん に決まる。そのあとの母音は あ行のかなになる（<code>konnichiha</code> は こんいちは。こんにちは は、<code>n</code> を3つ続けて <code>konnnichiha</code> と打つ）。Mozc など、ほかの日本語入力と同じ規則。<code>n</code> が足りない打ち方を補うのは段階3（<a href="08-auto-detection.html">08</a>）。</li>
+<li>末尾に残った <code>n</code> ひとつは、仮の ん（上の「仮の ん」）。</li>
+<li>4 の子音は、表の打ち方の先頭に出てくる子音（<code>n</code> を除く、英字の子音すべて）。</li>
+<li>受け取るのは、英字の小文字と <code>-</code> <code>,</code> <code>.</code> <code>'</code>。大文字は受け取らない（app が確定してから直接入力する。<a href="04-keyboard-ui.html#ローマ字配列">04</a>）。</li>
+</ul>
+<h3 id="ローマ字の表">ローマ字の表</h3>
+<p>一般に使われているローマ字の打ち方を、自分たちで並べたもの。テストはこの表を写して確かめる（<a href="11-testing.html">11</a>）。打ち方を足すときは、どの打ち方も、ほかの打ち方の途中までと一致しないようにする（一致すると、規則の 1 と 2 のどちらか決まらない）。<code>'</code> を使う打ち方は、いまの配列には <code>'</code> のキーがないので打てない。</p>
+<table>
+<thead>
+<tr>
+<th>まとまり</th>
+<th>打ち方 = かな</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>あ行</td>
+<td><code>a</code>=あ <code>i</code>=い <code>u</code>=う <code>e</code>=え <code>o</code>=お</td>
+</tr>
+<tr>
+<td>か行</td>
+<td><code>ka</code>=か <code>ki</code>=き <code>ku</code>=く <code>ke</code>=け <code>ko</code>=こ <code>ca</code>=か <code>cu</code>=く <code>co</code>=こ</td>
+</tr>
+<tr>
+<td>さ行</td>
+<td><code>sa</code>=さ <code>si</code>=し <code>su</code>=す <code>se</code>=せ <code>so</code>=そ <code>shi</code>=し <code>ci</code>=し <code>ce</code>=せ</td>
+</tr>
+<tr>
+<td>た行</td>
+<td><code>ta</code>=た <code>ti</code>=ち <code>tu</code>=つ <code>te</code>=て <code>to</code>=と <code>chi</code>=ち <code>tsu</code>=つ</td>
+</tr>
+<tr>
+<td>な行</td>
+<td><code>na</code>=な <code>ni</code>=に <code>nu</code>=ぬ <code>ne</code>=ね <code>no</code>=の</td>
+</tr>
+<tr>
+<td>は行</td>
+<td><code>ha</code>=は <code>hi</code>=ひ <code>hu</code>=ふ <code>he</code>=へ <code>ho</code>=ほ <code>fu</code>=ふ</td>
+</tr>
+<tr>
+<td>ま行</td>
+<td><code>ma</code>=ま <code>mi</code>=み <code>mu</code>=む <code>me</code>=め <code>mo</code>=も</td>
+</tr>
+<tr>
+<td>や行</td>
+<td><code>ya</code>=や <code>yu</code>=ゆ <code>yo</code>=よ <code>ye</code>=いぇ</td>
+</tr>
+<tr>
+<td>ら行</td>
+<td><code>ra</code>=ら <code>ri</code>=り <code>ru</code>=る <code>re</code>=れ <code>ro</code>=ろ</td>
+</tr>
+<tr>
+<td>わ行</td>
+<td><code>wa</code>=わ <code>wo</code>=を <code>wu</code>=う <code>wi</code>=うぃ <code>we</code>=うぇ <code>wyi</code>=ゐ <code>wye</code>=ゑ</td>
+</tr>
+<tr>
+<td>ん</td>
+<td><code>nn</code>=ん <code>n&#x27;</code>=ん <code>xn</code>=ん</td>
+</tr>
+<tr>
+<td>が行</td>
+<td><code>ga</code>=が <code>gi</code>=ぎ <code>gu</code>=ぐ <code>ge</code>=げ <code>go</code>=ご</td>
+</tr>
+<tr>
+<td>ざ行</td>
+<td><code>za</code>=ざ <code>zi</code>=じ <code>zu</code>=ず <code>ze</code>=ぜ <code>zo</code>=ぞ <code>ji</code>=じ</td>
+</tr>
+<tr>
+<td>だ行</td>
+<td><code>da</code>=だ <code>di</code>=ぢ <code>du</code>=づ <code>de</code>=で <code>do</code>=ど</td>
+</tr>
+<tr>
+<td>ば行</td>
+<td><code>ba</code>=ば <code>bi</code>=び <code>bu</code>=ぶ <code>be</code>=べ <code>bo</code>=ぼ</td>
+</tr>
+<tr>
+<td>ぱ行</td>
+<td><code>pa</code>=ぱ <code>pi</code>=ぴ <code>pu</code>=ぷ <code>pe</code>=ぺ <code>po</code>=ぽ</td>
+</tr>
+<tr>
+<td>きゃ</td>
+<td><code>kya</code>=きゃ <code>kyi</code>=きぃ <code>kyu</code>=きゅ <code>kye</code>=きぇ <code>kyo</code>=きょ</td>
+</tr>
+<tr>
+<td>ぎゃ</td>
+<td><code>gya</code>=ぎゃ <code>gyi</code>=ぎぃ <code>gyu</code>=ぎゅ <code>gye</code>=ぎぇ <code>gyo</code>=ぎょ</td>
+</tr>
+<tr>
+<td>しゃ</td>
+<td><code>sya</code>=しゃ <code>syi</code>=しぃ <code>syu</code>=しゅ <code>sye</code>=しぇ <code>syo</code>=しょ <code>sha</code>=しゃ <code>shu</code>=しゅ <code>she</code>=しぇ <code>sho</code>=しょ</td>
+</tr>
+<tr>
+<td>じゃ</td>
+<td><code>zya</code>=じゃ <code>zyi</code>=じぃ <code>zyu</code>=じゅ <code>zye</code>=じぇ <code>zyo</code>=じょ <code>ja</code>=じゃ <code>ju</code>=じゅ <code>je</code>=じぇ <code>jo</code>=じょ <code>jya</code>=じゃ <code>jyi</code>=じぃ <code>jyu</code>=じゅ <code>jye</code>=じぇ <code>jyo</code>=じょ</td>
+</tr>
+<tr>
+<td>ちゃ</td>
+<td><code>tya</code>=ちゃ <code>tyi</code>=ちぃ <code>tyu</code>=ちゅ <code>tye</code>=ちぇ <code>tyo</code>=ちょ <code>cha</code>=ちゃ <code>chu</code>=ちゅ <code>che</code>=ちぇ <code>cho</code>=ちょ <code>cya</code>=ちゃ <code>cyi</code>=ちぃ <code>cyu</code>=ちゅ <code>cye</code>=ちぇ <code>cyo</code>=ちょ</td>
+</tr>
+<tr>
+<td>ぢゃ</td>
+<td><code>dya</code>=ぢゃ <code>dyi</code>=ぢぃ <code>dyu</code>=ぢゅ <code>dye</code>=ぢぇ <code>dyo</code>=ぢょ</td>
+</tr>
+<tr>
+<td>にゃ</td>
+<td><code>nya</code>=にゃ <code>nyi</code>=にぃ <code>nyu</code>=にゅ <code>nye</code>=にぇ <code>nyo</code>=にょ</td>
+</tr>
+<tr>
+<td>ひゃ</td>
+<td><code>hya</code>=ひゃ <code>hyi</code>=ひぃ <code>hyu</code>=ひゅ <code>hye</code>=ひぇ <code>hyo</code>=ひょ</td>
+</tr>
+<tr>
+<td>びゃ</td>
+<td><code>bya</code>=びゃ <code>byi</code>=びぃ <code>byu</code>=びゅ <code>bye</code>=びぇ <code>byo</code>=びょ</td>
+</tr>
+<tr>
+<td>ぴゃ</td>
+<td><code>pya</code>=ぴゃ <code>pyi</code>=ぴぃ <code>pyu</code>=ぴゅ <code>pye</code>=ぴぇ <code>pyo</code>=ぴょ</td>
+</tr>
+<tr>
+<td>みゃ</td>
+<td><code>mya</code>=みゃ <code>myi</code>=みぃ <code>myu</code>=みゅ <code>mye</code>=みぇ <code>myo</code>=みょ</td>
+</tr>
+<tr>
+<td>りゃ</td>
+<td><code>rya</code>=りゃ <code>ryi</code>=りぃ <code>ryu</code>=りゅ <code>rye</code>=りぇ <code>ryo</code>=りょ</td>
+</tr>
+<tr>
+<td>ふぁ</td>
+<td><code>fa</code>=ふぁ <code>fi</code>=ふぃ <code>fe</code>=ふぇ <code>fo</code>=ふぉ <code>fya</code>=ふゃ <code>fyi</code>=ふぃ <code>fyu</code>=ふゅ <code>fye</code>=ふぇ <code>fyo</code>=ふょ <code>fwa</code>=ふぁ <code>fwi</code>=ふぃ <code>fwu</code>=ふぅ <code>fwe</code>=ふぇ <code>fwo</code>=ふぉ <code>hwa</code>=ふぁ <code>hwi</code>=ふぃ <code>hwe</code>=ふぇ <code>hwo</code>=ふぉ <code>hwyu</code>=ふゅ</td>
+</tr>
+<tr>
+<td>ゔ</td>
+<td><code>va</code>=ゔぁ <code>vi</code>=ゔぃ <code>vu</code>=ゔ <code>ve</code>=ゔぇ <code>vo</code>=ゔぉ <code>vya</code>=ゔゃ <code>vyi</code>=ゔぃ <code>vyu</code>=ゔゅ <code>vye</code>=ゔぇ <code>vyo</code>=ゔょ</td>
+</tr>
+<tr>
+<td>てぃ・でぃ</td>
+<td><code>tha</code>=てゃ <code>thi</code>=てぃ <code>thu</code>=てゅ <code>the</code>=てぇ <code>tho</code>=てょ <code>dha</code>=でゃ <code>dhi</code>=でぃ <code>dhu</code>=でゅ <code>dhe</code>=でぇ <code>dho</code>=でょ <code>t&#x27;i</code>=てぃ <code>t&#x27;yu</code>=てゅ <code>d&#x27;i</code>=でぃ <code>d&#x27;yu</code>=でゅ</td>
+</tr>
+<tr>
+<td>とぅ・どぅ</td>
+<td><code>twa</code>=とぁ <code>twi</code>=とぃ <code>twu</code>=とぅ <code>twe</code>=とぇ <code>two</code>=とぉ <code>dwa</code>=どぁ <code>dwi</code>=どぃ <code>dwu</code>=どぅ <code>dwe</code>=どぇ <code>dwo</code>=どぉ <code>t&#x27;u</code>=とぅ <code>d&#x27;u</code>=どぅ</td>
+</tr>
+<tr>
+<td>つぁ</td>
+<td><code>tsa</code>=つぁ <code>tsi</code>=つぃ <code>tse</code>=つぇ <code>tso</code>=つぉ</td>
+</tr>
+<tr>
+<td>くぁ・ぐぁ</td>
+<td><code>kwa</code>=くぁ <code>kwi</code>=くぃ <code>kwu</code>=くぅ <code>kwe</code>=くぇ <code>kwo</code>=くぉ <code>gwa</code>=ぐぁ <code>gwi</code>=ぐぃ <code>gwu</code>=ぐぅ <code>gwe</code>=ぐぇ <code>gwo</code>=ぐぉ <code>qa</code>=くぁ <code>qi</code>=くぃ <code>qu</code>=く <code>qe</code>=くぇ <code>qo</code>=くぉ <code>qya</code>=くゃ <code>qyu</code>=くゅ <code>qyo</code>=くょ</td>
+</tr>
+<tr>
+<td>すぁ・ずぁ</td>
+<td><code>swa</code>=すぁ <code>swi</code>=すぃ <code>swu</code>=すぅ <code>swe</code>=すぇ <code>swo</code>=すぉ <code>zwa</code>=ずぁ <code>zwi</code>=ずぃ <code>zwu</code>=ずぅ <code>zwe</code>=ずぇ <code>zwo</code>=ずぉ</td>
+</tr>
+<tr>
+<td>うぁ</td>
+<td><code>wha</code>=うぁ <code>whi</code>=うぃ <code>whu</code>=う <code>whe</code>=うぇ <code>who</code>=うぉ</td>
+</tr>
+<tr>
+<td>小さい字</td>
+<td><code>xa</code>=ぁ <code>xi</code>=ぃ <code>xu</code>=ぅ <code>xe</code>=ぇ <code>xo</code>=ぉ <code>la</code>=ぁ <code>li</code>=ぃ <code>lu</code>=ぅ <code>le</code>=ぇ <code>lo</code>=ぉ <code>xya</code>=ゃ <code>xyi</code>=ぃ <code>xyu</code>=ゅ <code>xye</code>=ぇ <code>xyo</code>=ょ <code>lya</code>=ゃ <code>lyi</code>=ぃ <code>lyu</code>=ゅ <code>lye</code>=ぇ <code>lyo</code>=ょ <code>xka</code>=ヵ <code>xke</code>=ヶ <code>lka</code>=ヵ <code>lke</code>=ヶ <code>xtu</code>=っ <code>xtsu</code>=っ <code>ltu</code>=っ <code>ltsu</code>=っ <code>xwa</code>=ゎ <code>lwa</code>=ゎ</td>
+</tr>
+<tr>
+<td>記号</td>
+<td><code>-</code>=ー <code>,</code>=、 <code>.</code>=。</td>
+</tr>
+</tbody></table>
+<h3 id="ローマ字入力の操作">操作ごとの扱い</h3>
+<p>打ちかけが <code>n</code> ひとつのときは、仮の ん として読みに入っているので、ここでの「打ちかけの英字」には当たらない。</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>打ちかけの英字があるときの動作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>英字を入れる</td>
+<td>上の規則で組み立てる。選択中の候補があるときは、いま出している内容（打ちかけの英字を含む）を確定してから、新しく組み立て始める</td>
+</tr>
+<tr>
+<td>削除</td>
+<td>打ちかけの英字の最後の1文字を消す。打ちかけがなければ、読みの最後の1文字を消す。選択中の候補があるときは、選択を解くだけ（かな配列と同じ）</td>
+</tr>
+<tr>
+<td>空白</td>
+<td>打ちかけの英字は、打ちかけのまま残し、読みの候補を選ぶ（表示は、選んだ候補 + 打ちかけの英字）。読みが空で打ちかけの英字だけのときは、その英字を打ったまま確定する（空白は入れない）</td>
+</tr>
+<tr>
+<td>確定</td>
+<td>いま出している内容を確定する。打ちかけの英字は打ったまま、末尾に付けて確定する。学習させるのは読みの分だけ</td>
+</tr>
+<tr>
+<td>候補をタップ</td>
+<td>その候補を確定する。残りの読みと打ちかけの英字は、未確定のまま残る</td>
+</tr>
+</tbody></table>
+<p>変換しない欄では、読みを作らず、できたかなを1回分ずつ持つ（<a href="09-privacy-security.html">09</a>）。</p>
+<h2 id="ライブ変換">ライブ変換</h2>
+<p>読みが変わるたびに、読み全体の変換を <code>Converter</code> に頼む。</p>
+<p>未確定文字として表示する内容:</p>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>表示</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>読みが 4 文字未満</td>
+<td>読みのまま（かな）</td>
+</tr>
+<tr>
+<td>読みが 4 文字以上で、変換結果が返っている</td>
+<td>各文節の第一候補をつなげたもの</td>
+</tr>
+<tr>
+<td>読みが 4 文字以上で、変換結果がまだ返っていない</td>
+<td>直前の表示のうち読みと対応が取れる部分 + 新しく打ったかな。対応が取れなければ読みのまま</td>
+</tr>
+<tr>
+<td>選択中の候補がある</td>
+<td>その候補</td>
+</tr>
+</tbody></table>
+<p>4 文字という境目は、短い読みで勝手に漢字になって打ちにくくなるのを避けるため。Meltype と同じ値にしてある。短い語は空白キーか候補のタップで変換する。この値は定数1つで変えられるようにする。</p>
+<p>変換結果が返ったとき、頼んだ時点の読みと今の読みが違っていたら、その結果は捨てる。</p>
+<p>変換に失敗した、または 2 秒たっても返らないときは、読みのまま表示する。入力は止めない。</p>
+<h2 id="候補バーに並べる内容">候補バーに並べる内容</h2>
+<p>読みがあるとき、次の順に並べる。同じ表記は2度出さない。予測候補がほかの種類の候補と同じ表記なら、予測候補のほうを出さない（空白で選べる候補が減らないようにする）。</p>
+<ol>
+<li>読み全体を変換した結果（各文節の第一候補をつなげたもの）</li>
+<li>読み全体に対する予測候補（Mozc が返すもの）</li>
+<li>先頭の文節の、ほかの候補</li>
+<li>読みそのまま（ひらがな）</li>
+<li>読みをカタカナにしたもの</li>
+</ol>
+<p>読みが空のときは何も並べない。</p>
+<p>2 が予測候補、それ以外が変換候補。空白キーが選ぶのは変換候補だけ（上の「空白（明示変換）」）。</p>
+<p>3 の候補は、読みの先頭の一部だけに対応する。タップしたときの動作は上の「候補をタップ」のとおり。</p>
+<h2><code>app</code> に返す内容</h2>
+<p>操作のたびに、次の3つをまとめて返す。</p>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>中身</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>確定する文字列</td>
+<td>入力欄に書き込んで確定させる文字。なければ空</td>
+</tr>
+<tr>
+<td>未確定文字</td>
+<td>入力欄に下線付きで出す文字。なければ空</td>
+</tr>
+<tr>
+<td>候補の一覧</td>
+<td>候補バーに並べるもの。選択中の番号を含む</td>
+</tr>
+</tbody></table>
+<p><code>app</code> はこの順に入力欄へ反映する（先に確定、次に未確定）。</p>
+      <nav class="pager" aria-label="前後の章">
+        <a href="04-keyboard-ui.html">← 04 キーボード画面</a>
+        <a href="06-conversion-mozc.html">06 変換（Mozc） →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

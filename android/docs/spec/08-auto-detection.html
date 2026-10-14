@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>08 日英自動判別 | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html" aria-current="page">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>08 日英自動判別</h1>
+      <p class="status"><span class="badge draft">概要</span>（段階3。着手するときに詳細を詰めて「確定」に上げる）</p>
+<h2 id="目的">目的</h2>
+<p>QWERTY の配列でローマ字を打つと、日本語か英語かを自動で見分ける。</p>
+<pre>kyouhagoogledekensaku    →  今日はgoogleで検索
+ashitanomeetingwotsuika  →  明日のmeetingを追加
+I want to go to the park →  I want to go to the park
+</pre>
+<h2 id="決まっていること">決まっていること</h2>
+<ul>
+<li>判別の仕組みは、<a href="https://github.com/yksr-melt/Meltype">Meltype</a> の C# のコードを Kotlin に移植して作る。簡易版を自作しない。</li>
+<li>移植したものは <code>engine</code> に入れる。かな漢字変換は、フリックと同じ <code>Converter</code>（<a href="06-conversion-mozc.html">06</a>）を使う。</li>
+<li>土台は、段階1で作ったローマ字配列とローマ字入力（<a href="04-keyboard-ui.html#ローマ字配列">04</a>、<a href="05-input-engine.html#ローマ字入力">05</a>）。段階1では、そこで打った英字をすべてローマ字として扱う。段階3で、そこに判別を足す。英字だけを打ちたいときは、これまでどおり <code>あa</code> で英語の配列に替える。</li>
+<li>移植の元にする本家の版は、コミットを1つに固定して記録する。設計時点の最新は <code>53fafd036b4d06fab7dae9ca0b9ea4eeafbfe976</code>（v1.2.1 の後）。着手するときの最新に更新する。</li>
+<li>移植は、本家のテストを先に Kotlin に写し、それが通るように進める。</li>
+</ul>
+<h2 id="規模の見積もり">規模の見積もり</h2>
+<p>本家の <code>Meltype.Core</code> は約 700KB、テストは約 446KB ある（設計時点）。全部は移植しない。</p>
+<p>移植する見込みのもの:</p>
+<table>
+<thead>
+<tr>
+<th>本家の場所</th>
+<th>中身</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Detection/</code></td>
+<td>ローマ字・かな・英単語の判定、点数付け</td>
+</tr>
+<tr>
+<td><code>Composition/CompositionDetector.cs</code></td>
+<td>打った文字列を日本語と英語の部分に分ける中心</td>
+</tr>
+<tr>
+<td><code>Composition/CompositionText.cs</code></td>
+<td>ローマ字からかなへの変換と、未確定文字の組み立て</td>
+</tr>
+<tr>
+<td><code>Composition/ScoredSegmentation.cs</code>、<code>WordJudge.cs</code>、<code>RomajiTypoCorrector.cs</code></td>
+<td>区切りの点数付け、語の判定、打ち間違いの補正</td>
+</tr>
+<tr>
+<td><code>Composition/LanguageMemory.cs</code>、<code>Learning/UserModel.cs</code></td>
+<td>語ごとの日英の学習</td>
+</tr>
+<tr>
+<td><code>dictionaries/</code> のうち判別に使うもの</td>
+<td>英単語、日本語、固有名詞、外来語 など</td>
+</tr>
+</tbody></table>
+<p>移植しないもの:</p>
+<table>
+<thead>
+<tr>
+<th>本家の場所</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Config/Settings.cs</code> ほか設定まわり</td>
+<td>Windows の設定画面とアプリごとの設定のためのもの</td>
+</tr>
+<tr>
+<td><code>Input/LineContext.cs</code>、<code>SigilWord.cs</code>、<code>ProtectedSpan.cs</code></td>
+<td>エディターやターミナルでのコード入力のためのもの</td>
+</tr>
+<tr>
+<td><code>Snippets.cs</code>、<code>Backup.cs</code>、<code>Corrections.cs</code>、<code>MisspellingDictionary.cs</code>、<code>MeaningDictionary.cs</code>、<code>TranslationDictionary.cs</code></td>
+<td>定型文、バックアップ、書き間違いの指摘、意味や英訳の表示。判別そのものではない</td>
+</tr>
+<tr>
+<td><code>src/Meltype/</code>、<code>native/</code>、<code>mac/</code>、<code>linux/</code></td>
+<td>各 OS に固有の部分</td>
+</tr>
+</tbody></table>
+<p><code>CompositionController.cs</code>（約 141KB）と <code>MeltypeSession.cs</code> は、キー操作と未確定文字の管理を担う。こちらのアプリは <a href="05-input-engine.html">05</a> の入力セッションを持っているので、そのまま移植せず、必要な判断だけを取り込む。どこまで取り込むかは着手するときに決める。</p>
+<h2 id="着手するときに決めること">着手するときに決めること</h2>
+<ul>
+<li>上の「移植する見込み」を実際のコードで確かめ、範囲を確定する。</li>
+<li>本家の更新を、どの頻度で、どうやって取り込むか。</li>
+<li>05 の入力セッションは、読みと打ちかけの英字を持つところまでできている。英語と判別した部分をどう持つか、⇧ で打つ大文字（段階1では、確定してから直接入力する）をどう扱うか。</li>
+<li>判別の強さの設定（本家は4段階）を持つか。</li>
+</ul>
+      <nav class="pager" aria-label="前後の章">
+        <a href="07-kana-to-english.html">← 07 読みから英字</a>
+        <a href="09-privacy-security.html">09 プライバシーと安全 →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>
