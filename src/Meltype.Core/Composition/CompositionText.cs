@@ -253,8 +253,13 @@ public sealed class CompositionText
         {
             if (!_detector.IsKnownEnglishWord(run[start..])) continue;
             // ローマ字として最後まで読める語 (gomen の omen = おめ + n) は、日本語を打っている (ごめんよ)。
-            // 分けるのは、ローマ字として読めない英単語 (python、kotlin、json) だけ。
-            if (_detector.Romaji.AnalyzeFragment(run[start..].ToLowerInvariant()) is { IsValid: true }) continue;
+            // 分けるのは、ローマ字として読めない英単語 (python、kotlin、json) か、
+            // 前がよく使う日本語のとき (ima + open + no → open の n を ん にしない: issue #485)。
+            if (_detector.Romaji.AnalyzeFragment(run[start..].ToLowerInvariant()) is { IsValid: true })
+            {
+                var prefix = run[..start].ToLowerInvariant();
+                if (prefix.Length < 2 || _detector.IsCommonJapanese?.Invoke(prefix) != true) continue;
+            }
             _units[^1] = new CompositionUnit("ん", last.Raw[..1]);
             _pending.Append(last.Raw[1]);
             return;
@@ -379,7 +384,11 @@ public sealed class CompositionText
             if (IsLongVowelU(i)) continue;
             // 続けて打った s と合わせた つ まで読むと日本語の語 (shitsumon の shit) なら、英単語として見ない
             if (tsuFollows && ReadsAsJapaneseWithTsu(i, count, extra)) continue;
-            if (letters.Length >= 4 && _detector.IsKnownEnglishWord(letters)) return true;
+            if (letters.Length >= 4 && _detector.IsKnownEnglishWord(letters))
+            {
+                if (_detector.IsSpellKnownRomajiEndingInLorX(letters.ToLowerInvariant())) continue;
+                return true;
+            }
         }
         return false;
     }
@@ -512,15 +521,42 @@ public sealed class CompositionText
         }
     }
 
+    /// <summary>確定時、単位に分かれた zenin / tenin を語全体として読む (ze|ni|n → ぜんいん)。</summary>
+    private bool TryMergeWholeWordKanaOnFinal()
+    {
+        if (_pending.Length > 0 && !_pending.ToString().All(char.IsAsciiLetter)) return false;
+        var letters = LettersBefore(_units.Count) + _pending.ToString();
+        if (letters.Length == 0) return false;
+        var lower = letters.ToLowerInvariant();
+        if (_detector.Romaji.GetWholeWordKanaWhenFinal(lower, final: true) is not { } kana) return false;
+        var letterUnits = 0;
+        while (letterUnits < _units.Count && _units[^(letterUnits + 1)].Raw.All(char.IsAsciiLetter)) letterUnits++;
+        if (letterUnits > 0) _units.RemoveRange(_units.Count - letterUnits, letterUnits);
+        _units.Add(new CompositionUnit(kana, letters));
+        _pending.Clear();
+        return true;
+    }
+
+    /// <summary>Enter 確定の直前に、zenin / tenin のように ん が 1 つ足りない綴りを語全体として読む。</summary>
+    public void MergeOmittedNWholeWordsOnCommit() => TryMergeWholeWordKanaOnFinal();
+
     /// <summary>Pending のうち、音として確定した部分を単位に移す。</summary>
     private void Normalize(bool final)
     {
         if (final) SplitUnitAfterNumber(final: true);
+        if (final && TryMergeWholeWordKanaOnFinal()) return;
         var romaji = _detector.Romaji;
         while (_pending.Length > 0)
         {
             var original = _pending.ToString();
-            var analysis = romaji.AnalyzeFragment(original.ToLowerInvariant());
+            var lower = original.ToLowerInvariant();
+            if (final && lower.All(char.IsAsciiLetter) && romaji.GetWholeWordKanaWhenFinal(lower, final) is { } fixedKana)
+            {
+                _units.Add(new CompositionUnit(fixedKana, original));
+                _pending.Clear();
+                return;
+            }
+            var analysis = romaji.AnalyzeFragment(lower);
             var position = 0;
             var tokens = analysis.Tokens;
             for (var i = 0; i < tokens.Count; i++)

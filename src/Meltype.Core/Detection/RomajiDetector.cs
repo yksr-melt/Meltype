@@ -308,8 +308,22 @@ public sealed class RomajiDetector
     private static bool EndsWithVowel(string romaji, char a, char b) =>
         romaji.Length > 0 && (romaji[^1] == a || romaji[^1] == b);
 
+    /// <summary>ん 1 つ省略の綴り (zenin = 全員, tenin = 店員)。確定時だけ ぜんいん / てんいん に直す。</summary>
+    private static string? WholeWordKanaWhenFinal(string lower, bool final) =>
+        final && lower.Length is >= 4 and <= 7 ? lower switch
+        {
+            "zenin" => "ぜんいん",
+            "tenin" => "てんいん",
+            _ => null,
+        } : null;
+
+    /// <summary>確定時に語全体として読む綴り (zenin / tenin)。Composition の Normalize からも使う。</summary>
+    public string? GetWholeWordKanaWhenFinal(string lower, bool final) => WholeWordKanaWhenFinal(lower, final);
+
     public string ConvertLenient(string letters, bool final)
     {
+        var lower = letters.ToLowerInvariant();
+        if (WholeWordKanaWhenFinal(lower, final) is { } fixedKana) return fixedKana;
         var builder = new StringBuilder();
         var rest = letters;
         while (rest.Length > 0)

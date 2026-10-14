@@ -1410,6 +1410,92 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue485_ImaOpenNoKeepsOpen()
+    {
+        var k = new Keyboard();
+        k.Type("imaopenno\n");
+        Assert.Equal("いまopenの", k.Host.Document);
+    }
+
+    [Test]
+    public static void Issue485_SpellOnlyWordStaysInsideJapanese()
+    {
+        var saved = Detector.SpellChecker;
+        Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("imaopenno", "いまopenの"),
+                ("dochiramouserga", "どちらもuserが"),
+                ("mainichiasagohanwotabemasu", "まいにちあさごはんをたべます"),
+            })
+            {
+                var k = new Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            Detector.SpellChecker = saved;
+        }
+    }
+
+    [Test]
+    public static void Issue499_SbiStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("sbisinnseiginnkou\n");
+        Assert.Equal("sbiしんせいぎんこう", k.Host.Document);
+    }
+
+    [Test]
+    public static void SegmentationRegression_NinNotSplitAsEnglish()
+    {
+        Detector.UseScoredSegmentation = () => false;
+        foreach (var (typed, expected) in new[] { ("ichimannenn", "いちまんねん"), ("zenin", "ぜんいん") })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void SegmentationRegression_SpellCheckedEnglishWithParticle()
+    {
+        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("commentsuru", "commentする"),
+                ("channelya", "channelや"),
+                ("episodeListView", "episodeListView"),
+            })
+            {
+                var k = new Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
+    public static void SegmentationRegression_CamelCaseIdentifierStaysEnglish()
+    {
+        Detector.UseScoredSegmentation = () => false;
+        var k = new Keyboard();
+        k.Type("getElementById\n");
+        Assert.Equal("getElementById", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue469_HoloXStaysEnglish()
     {
         var k = new Keyboard();

@@ -178,6 +178,8 @@ internal static class DetectionTests
         Assert.Equal("こんにちわ", romaji.Analyze("konnichiwa").Kana);
         Assert.Equal("こんにちは", romaji.Analyze("konnnichiha").Kana);
         Assert.Equal("しんぶん", romaji.AnalyzeWord("shinbun").Kana);
+        Assert.Equal("ぜんいん", romaji.ConvertLenient("zenin", final: true));
+        Assert.Equal("てんいん", romaji.ConvertLenient("tenin", final: true));
         Assert.Equal("きって", romaji.Analyze("kitte").Kana);
         Assert.Equal("まっちゃ", romaji.Analyze("matcha").Kana);
         Assert.Equal("しゅ", romaji.Analyze("syu").Kana);

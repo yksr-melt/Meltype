@@ -2067,6 +2067,7 @@ public sealed class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
+        if (!converting) _text.MergeOmittedNWholeWordsOnCommit();
         var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
