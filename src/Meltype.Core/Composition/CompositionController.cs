@@ -194,6 +194,9 @@ public sealed record CompositionOptions
     /// <summary>句読点の組み合わせ (設定)。</summary>
     public Func<Config.PunctuationStyle> Punctuation { get; init; } = () => Config.PunctuationStyle.Japanese;
 
+    /// <summary>入力する記号・数字の幅設定。</summary>
+    public Func<Config.Settings> WidthSettings { get; init; } = () => new Config.Settings();
+
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }
 
@@ -780,6 +783,11 @@ public sealed class CompositionController
         if (e.Vk == VirtualKeys.Space && !_options.DirectMode() && (_swallowedShift.Count > 0 || _host.IsShiftDown()))
         {
             CommitText("　", english: false);
+            return;
+        }
+        if (e.Vk == VirtualKeys.Space && !_options.DirectMode() && _options.WidthSettings().FullWidthSpace)
+        {
+            CommitText(" ", english: false);
             return;
         }
         // かな入力: かなのキーならすべて入力を始める (英数状態でなければ)。
@@ -2046,7 +2054,7 @@ public sealed class CompositionController
 
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private string CurrentDisplay(bool final) =>
-        _text.Display(final, _options.LiveConversion() ? LiveConvert : null);
+        _options.WidthSettings().ApplySymbolWidths(_text.Display(final, _options.LiveConversion() ? LiveConvert : null));
 
     // ---- 確定 ----
 
@@ -2121,8 +2129,8 @@ public sealed class CompositionController
     }
 
     /// <summary>
-    /// 保護区間 (メンション・URL・メール・パス) を、自動変換・かな化・幅変換・誤字補正・学習・確定後補正に
-    /// 渡さず、打った原文のまま確定する。Space は IME が半角空白を 1 つ足し、Enter は足さない。
+    /// 保護区間 (メンション・URL・メール・パス) は自動変換・かな化・誤字補正・学習・確定後補正をせず、
+    /// 明示された記号幅の設定だけ反映する。Space は IME が半角空白を 1 つ足し、Enter は足さない。
     /// </summary>
     private void CommitProtected(string suffix)
     {
@@ -2368,6 +2376,7 @@ public sealed class CompositionController
         if (formatEnglish && !preserveText) text = EnglishPhraseSpacing.Format(text);
         var corrected = CorrectPreviousCommit(raw, english);
         if (!preserveText && _options.SpaceAroundEnglish()) text = AddSpacesAroundEnglish(text, corrected ?? _precedingText, _followingText);
+        text = _options.WidthSettings().ApplySymbolWidths(text);
         // 英語とも日本語とも読める語を、文脈を決めずに (選び直さずに) 確定したときだけ、後で確定し直せるようにしておく。
         if (!chosen && _detector.IsAmbiguousWord(raw))
         {

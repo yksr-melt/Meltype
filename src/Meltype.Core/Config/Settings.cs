@@ -94,6 +94,14 @@ public enum PunctuationStyle
     [Description("、．")] ToutenFullWidthPeriod,
 }
 
+/// <summary>空白・記号・数字の幅。</summary>
+public enum SymbolWidth
+{
+    [Description("自動 (入力内容に合わせる)")] Automatic,
+    [Description("半角")] HalfWidth,
+    [Description("全角")] FullWidth,
+}
+
 public enum InputMode
 {
     /// <summary>Meltype 自身の変換ボックスで入力する (半角/全角 不要)。</summary>
@@ -224,6 +232,72 @@ public sealed class Settings
     [Category("1. 全般"), DisplayName("句読点"),
      Description("日本語の中で , と . を打ったときに出す句読点です (Microsoft IME と同じ 4 通り)。論文などで「，．」「，。」「、．」を使うときに変えます。かな入力の 、 。 のキーにも効きます。数字の間の . , (1.5、1,000) や英単語の中の . (tetr.io) は半角のままです。")]
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
+
+    [Category("1. 全般"), DisplayName("空白を全角にする"), Description("OFF は通常の Space が半角、Shift+Space が全角 (従来どおり)。ON にすると通常の Space が全角、Shift+Space が半角になります。")]
+    public bool FullWidthSpace { get; set; }
+
+    [Category("1. 全般"), DisplayName("！の幅")] public SymbolWidth ExclamationWidth { get; set; }
+    [Category("1. 全般"), DisplayName("？の幅")] public SymbolWidth QuestionWidth { get; set; }
+    [Category("1. 全般"), DisplayName("数字を全角にする"), Description("OFF は半角 (従来どおり)、ON は全角です。")]
+    public bool FullWidthDigits { get; set; }
+    [Category("1. 全般"), DisplayName("￥の幅")] public SymbolWidth YenWidth { get; set; }
+    [Category("1. 全般"), DisplayName("＄の幅")] public SymbolWidth DollarWidth { get; set; }
+    [Category("1. 全般"), DisplayName("％の幅")] public SymbolWidth PercentWidth { get; set; }
+    [Category("1. 全般"), DisplayName("＾の幅")] public SymbolWidth CaretWidth { get; set; }
+    [Category("1. 全般"), DisplayName("＆の幅")] public SymbolWidth AmpersandWidth { get; set; }
+    [Category("1. 全般"), DisplayName("＝の幅")] public SymbolWidth EqualsWidth { get; set; }
+    [Category("1. 全般"), DisplayName("＋の幅")] public SymbolWidth PlusWidth { get; set; }
+    [Category("1. 全般"), DisplayName("＊の幅")] public SymbolWidth AsteriskWidth { get; set; }
+
+    /// <summary>指定された項目だけ、入力結果の幅を変える。</summary>
+    [Browsable(false)]
+    public string ApplySymbolWidths(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var chars = text.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            var c = chars[i];
+            var mode = c switch
+            {
+                '!' or '！' => ExclamationWidth,
+                '?' or '？' => QuestionWidth,
+                '\\' or '¥' or '￥' => YenWidth,
+                '$' or '＄' => DollarWidth,
+                '%' or '％' => PercentWidth,
+                '^' or '＾' => CaretWidth,
+                '&' or '＆' => AmpersandWidth,
+                '=' or '＝' => EqualsWidth,
+                '+' or '＋' => PlusWidth,
+                '*' or '＊' => AsteriskWidth,
+                _ => SymbolWidth.Automatic,
+            };
+            if (c is ' ' or '　')
+            {
+                chars[i] = FullWidthSpace ? (c == ' ' ? '　' : ' ') : (c == ' ' ? ' ' : '　');
+                continue;
+            }
+            if (c is >= '0' and <= '9' && FullWidthDigits) { chars[i] = (char)(c + 0xFEE0); continue; }
+            if (c is >= '０' and <= '９' && !FullWidthDigits) { chars[i] = (char)(c - 0xFEE0); continue; }
+            if (mode == SymbolWidth.Automatic) continue;
+            var full = mode == SymbolWidth.FullWidth;
+            chars[i] = c switch
+            {
+                '!' or '！' => full ? '！' : '!',
+                '?' or '？' => full ? '？' : '?',
+                '\\' or '¥' or '￥' => full ? '￥' : '¥',
+                '$' or '＄' => full ? '＄' : '$',
+                '%' or '％' => full ? '％' : '%',
+                '^' or '＾' => full ? '＾' : '^',
+                '&' or '＆' => full ? '＆' : '&',
+                '=' or '＝' => full ? '＝' : '=',
+                '+' or '＋' => full ? '＋' : '+',
+                '*' or '＊' => full ? '＊' : '*',
+                _ => c,
+            };
+        }
+        return new string(chars);
+    }
 
     [Category("1. 全般"), DisplayName("英字の後ろの , . も句読点にする"),
      Description("英字のすぐ後ろで打った , . も、日本語の句読点 (設定「句読点」の形) にします (IME, → IME、)。OFF だと、変換ボックスの中が英字だけなら半角の , . のままです (英文を打つとき)。ON でも、キャレットの前が英語 (Hello + world.) のときと、英単語の中の . (tetr.io) は半角のままです。")]

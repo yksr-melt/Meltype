@@ -75,6 +75,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             SlashAsMiddleDot = options.SlashAsMiddleDot,
             SpaceAroundEnglish = options.SpaceAroundEnglish,
             Punctuation = options.Punctuation,
+            WidthSettings = options.WidthSettings,
             TranslationHistory = options.TranslationHistory ?? new TranslationHistory(Config.AppPaths.TranslationHistoryFile),
             Predictor = options.Predictor ?? new Predictor(new PhraseHistory(Config.AppPaths.PhraseHistoryFile), UserDictionary, History),
             Predictions = options.Predictions,

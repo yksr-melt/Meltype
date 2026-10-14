@@ -573,6 +573,8 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         if (settings.InputStyle == InputStyle.Kana && !_keyboardDirect && KanaDetector.IsKanaKey(e.Vk)) punctuation = true;
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。
         if (e.Vk == VirtualKeys.Space && !_keyboardDirect && IsDown(VirtualKeys.Shift)) punctuation = true;
+        // 空白幅を明示したときは、何も入力していない Space も変換ボックスで処理する。
+        if (e.Vk == VirtualKeys.Space && !_keyboardDirect && settings.FullWidthSpace) punctuation = true;
         if (_keyboardDirect && !reconvert)
         {
             // 英数状態: ローマ字かどうかを判定するために、単語の打ち始めの英字だけを受け取る。
