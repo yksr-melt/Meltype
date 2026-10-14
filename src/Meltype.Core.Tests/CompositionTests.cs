@@ -2289,6 +2289,24 @@ internal static class CompositionTests
         Assert.Equal("しゃーなし", k.Host.Document);
     }
 
+    /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
+    private sealed class YahoConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana == "やほやほ" ? "谷保谷保" : null;
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            hiragana == "やほやほ" ? [new("やほ", "谷保"), new("やほ", "谷保")] : null;
+    }
+
+    [Test]
+    public static void Issue424_YahoyahoStaysHiragana()
+    {
+        // #424: yahoyaho を Enter すると 谷保谷保 になっていた。繰り返しはかなのまま。
+        var k = new Keyboard(live: true, converter: new YahoConverter(), userDictionary: new UserDictionary(null));
+        k.Type("yahoyaho\n");
+        Assert.Equal("やほやほ", k.Host.Document);
+    }
+
     [Test]
     public static void Ki_OffersOldKanji()
     {
