@@ -1,0 +1,15 @@
+{
+  "name": "meltype-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler d1 migrations apply DB --local && wrangler dev",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "check": "node --check src/worker.js && node --check src/reports.js && node --check src/github.js && node --check src/http.js && node --check public/assets/js/common.js && node --check public/assets/js/report-schema.js && node --check public/assets/js/site.js && node --check public/assets/js/report.js && node --check public/assets/js/dashboard.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.150.0"
+  }
+}

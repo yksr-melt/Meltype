@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "meltype-web",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/", "/report/*"],
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "meltype-reports",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FILES",
+      "bucket_name": "meltype-report-files"
+    }
+  ],
+  "vars": {
+    "GITHUB_REPO": "yksr-melt/Meltype"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

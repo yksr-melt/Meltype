@@ -1,0 +1,163 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Konayukiw -->
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>問題を報告する | Meltype</title>
+  <meta name="description" content="Meltype の不具合・変換や判定の間違い・辞書に足してほしい語・改善の提案を、メールアドレスなしで送れるフォームです。">
+  <meta name="theme-color" content="#3aaee8">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Meltype">
+  <meta property="og:url" content="/report/">
+  <meta property="og:title" content="問題を報告する | Meltype">
+  <meta property="og:description" content="Meltype の不具合・変換や判定の間違い・辞書に足してほしい語・改善の提案を、メールアドレスなしで送れます。">
+  <meta property="og:image" content="/og.png">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LINE+Seed+JP:wght@400;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script type="module" src="/assets/js/report.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">本文へ移動</a>
+
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
+        <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/#features">できること</a>
+        <a href="/#install">インストール</a>
+        <a href="/#start">使い方</a>
+        <a href="/#faq">よくある質問</a>
+        <a href="/#thanks">協力者</a>
+        <a class="nav-report is-current" href="/report/" aria-current="page">問題を報告する</a>
+        <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-hero" aria-labelledby="report-title">
+      <div class="wrap">
+        <h1 id="report-title">問題を報告する</h1>
+        <p>バグ・変換や判定の間違い・辞書に足してほしい語・改善の提案を送れます。届いた報告は開発者が読んで、直すときの手がかりにします。</p>
+        <ul class="points">
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-check"/></svg>メールアドレス・GitHub などのアカウントは必要ありません</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-check"/></svg>スクリーンショット・録画・ログを添付できます</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="report wrap" data-report>
+      <div class="side-notes">
+        <p class="callout is-danger"><svg class="ic"><use href="/assets/img/icons.svg#i-eye-off"/></svg><span>パスワードや個人的な文章は記載しないでください。ログには直前に打った文字の一部が入ることがあります。見られたくない部分は自分で削除してください。</span></p>
+        <p class="callout is-warn"><svg class="ic"><use href="/assets/img/icons.svg#i-shield"/></svg><span>悪用される可能性のあるセキュリティの問題は、ここではなく <a href="https://github.com/yksr-melt/Meltype/security/advisories/new">GitHub の非公開の報告</a> に送信してください。</span></p>
+      </div>
+
+      <form class="report-form" novalidate data-form>
+        <h2 class="step-title"><span class="step-no">1</span>何を報告しますか？</h2>
+        <fieldset class="form-picker" data-picker>
+          <legend class="sr-only">報告の種類</legend>
+        </fieldset>
+
+        <div data-form-body hidden>
+          <h2 class="step-title"><span class="step-no">2</span>内容を書く</h2>
+          <p class="callout is-info form-note" data-form-note></p>
+          <div class="panes">
+            <section class="pane is-required" aria-labelledby="pane-required-title">
+              <div class="pane-head">
+                <span class="pane-tag">必須</span>
+                <h3 id="pane-required-title">必ず書いてください</h3>
+              </div>
+              <div class="fields" data-required></div>
+            </section>
+            <section class="pane is-optional" aria-labelledby="pane-optional-title">
+              <div class="pane-head">
+                <span class="pane-tag">任意</span>
+                <h3 id="pane-optional-title">あれば書いて・添付してください</h3>
+                <p>分かるところだけで大丈夫ですが、添付していただけると助かります。</p>
+              </div>
+              <div class="fields" data-optional></div>
+              <div class="fields attachments">
+                <div class="field is-wide">
+                  <span class="label-like" id="files-label"><b>添付</b></span>
+                  <span class="hint">スクリーンショット・画面の録画・ログ・設定ファイル (config.json) など</span>
+                </div>
+                <label class="dropzone" data-dropzone>
+                  <svg class="ic"><use href="/assets/img/icons.svg#i-upload"/></svg>
+                  <b>ここにドロップするか、クリックして選ぶ</b>
+                  <small data-file-rules></small>
+                  <small>スクリーンショットは <kbd>Ctrl</kbd>+<kbd>V</kbd> で貼り付けることもできます</small>
+                  <input class="sr-only" type="file" multiple aria-labelledby="files-label" data-file-input>
+                </label>
+                <ul class="file-list" data-file-list></ul>
+                <p class="files-total" data-files-total></p>
+                <p class="field-error" data-files-error role="alert"></p>
+              </div>
+            </section>
+          </div>
+
+          <div class="trap" aria-hidden="true">
+            <label for="website">ウェブサイト</label>
+            <input id="website" name="website" type="text" tabindex="-1" autocomplete="off" data-trap>
+          </div>
+
+          <div class="submit-bar">
+            <p>送信された内容は、Meltype の開発のためだけに使います。スパム対策でレートリミットがあります。返信を希望する場合は「連絡先」を書いてください。</p>
+            <button class="btn btn-pink btn-large" type="submit" data-submit>
+              <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>送信する
+            </button>
+          </div>
+          <div class="form-status" role="status" aria-live="polite" data-status></div>
+        </div>
+      </form>
+
+      <section class="card done" hidden tabindex="-1" data-done aria-labelledby="done-title">
+        <svg class="ic done-icon" aria-hidden="true"><use href="/assets/img/icons.svg#i-check"/></svg>
+        <h2 id="done-title">受け付けました！</h2>
+        <p class="receipt">受付番号 <b data-receipt></b></p>
+        <p>報告ありがとうございます。Discord や GitHub で続きの相談が必要なときは、この番号と紐づけてください。</p>
+        <p data-done-files></p>
+        <div class="actions">
+          <button class="btn" type="button" data-again>続けて報告する</button>
+          <a class="btn btn-ghost" href="/">トップへ戻る</a>
+        </div>
+      </section>
+
+      <p class="callout is-info report-foot"><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>GitHub のアカウントがあれば、<a href="https://github.com/yksr-melt/Meltype/issues/new/choose">GitHub の Issues</a> からも送れます (返事や修正の通知が届きます)。</span></p>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/img/logo-small.png" alt="Meltype" width="120" height="60">
+        <p>雪解けのように、半角/全角の壁を溶かす日本語入力。</p>
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com/yksr-melt/Meltype">GitHub</a></li>
+        <li><a href="https://github.com/yksr-melt/Meltype/releases">Releases</a></li>
+        <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
+        <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
+        <li><a href="/report/">問題を報告する</a></li>
+      </ul>
+      <p class="footer-copy">Copyright (C) 2026 雪代 / Yukishiro・GPL-3.0・Logo by <a href="https://github.com/Crysta1221">@Crysta1221</a></p>
+    </div>
+  </footer>
+</body>
+</html>

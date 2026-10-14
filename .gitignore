@@ -31,5 +31,6 @@ tools/data/
 native/tip/bin/
 native/tip/obj/
 
-# Python のキャッシュ (tools/*.py を動かすと作られる)
+# ウェブサイトの作業ファイル
+tests/web/
 __pycache__/

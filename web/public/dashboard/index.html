@@ -1,0 +1,98 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Konayukiw -->
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>報告ダッシュボード | Meltype</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#3aaee8">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=LINE+Seed+JP:wght@400;700;800&family=Noto+Sans+JP:wght@400;500;700&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script type="module" src="/assets/js/dashboard.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">本文へ移動</a>
+
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
+        <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/">トップ</a>
+        <a href="/report/">報告のフォーム</a>
+        <a class="is-current" href="/dashboard/" aria-current="page">ダッシュボード</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-hero" aria-labelledby="dash-title">
+      <div class="wrap">
+        <h1 id="dash-title">報告ダッシュボード</h1>
+        <p>フォームから届いた報告の一覧です。GitHub の Issue にするときは、詳細の「Issue の形でコピー」か「GitHub で Issue を作る」を使ってください。</p>
+      </div>
+    </section>
+
+    <div class="dash wrap">
+      <p class="callout is-warn dash-warn"><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>このページはまだ誰でも開けます。管理者だけが見られるようにする前に、URL を公開の場所に貼らないでください。</span></p>
+
+      <div class="stat-grid" data-stats>
+        <div class="card stat"><span>すべて</span><b data-stat="total">-</b></div>
+        <div class="card stat"><span>今日</span><b data-stat="today">-</b></div>
+        <div class="card stat"><span>この 7 日間</span><b data-stat="week">-</b></div>
+        <div class="card stat"><span>添付つき</span><b data-stat="withFiles">-</b></div>
+      </div>
+
+      <div class="dash-row">
+        <div class="panel">
+          <h3>30 日間の報告の数</h3>
+          <svg class="chart" role="img" aria-label="30 日間の報告の数" data-chart></svg>
+        </div>
+        <div class="panel">
+          <h3>種類ごと</h3>
+          <div class="kind-bars" data-kinds></div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <label class="search">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-search"/></svg>
+          <span class="sr-only">報告を探す</span>
+          <input class="input" type="search" placeholder="打ったもの・アプリ・文の一部で探す" data-filter="q">
+        </label>
+        <label><span class="sr-only">種類</span><select class="select" data-filter="form"></select></label>
+        <label><span class="sr-only">状態</span>
+          <select class="select" data-filter="status">
+            <option value="">すべての状態</option>
+            <option value="new">届いた</option>
+            <option value="uploading">添付を送っている途中</option>
+          </select>
+        </label>
+        <button class="btn btn-ghost btn-small" type="button" data-refresh><svg class="ic"><use href="/assets/img/icons.svg#i-refresh"/></svg>読み直す</button>
+        <button class="btn btn-pink btn-small" type="button" hidden data-new-reports></button>
+      </div>
+
+      <div class="dash-main">
+        <div>
+          <ul class="report-list" data-list aria-label="報告の一覧"></ul>
+          <button class="btn btn-ghost list-more" type="button" hidden data-more>もっと見る</button>
+        </div>
+        <section class="detail" aria-live="polite" data-detail>
+          <p class="detail-empty">左の一覧から報告を選んでください</p>
+        </section>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
