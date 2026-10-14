@@ -96,7 +96,7 @@ internal static class Program
             WriteCrashLog(e.ExceptionObject);
         };
 
-        AppPaths.MigrateFromOldName();
+        if (!AppPaths.IsPortable) AppPaths.MigrateFromOldName();
         Directory.CreateDirectory(AppPaths.DataDirectory);
         if (restore is not null) RestoreBackup(restore);
         var settings = Settings.Load(AppPaths.ConfigFile);
@@ -108,15 +108,15 @@ internal static class Program
         // 動作モードが Meltype IME なのに使えない: どこでも何も起きなくなるので、Meltype キーボードに戻して保存する
         // (Meltype IME を入れ直したら、トレイで選び直す)。
         // 保存しておくと、あとで前の版 (動作モード「Meltype IME」を読めない) を入れても、設定が初期化されない
-        if (ShouldFallBackToKeyboard(settings, Tip.TipServer.IsKnownUnregistered, Tip.TipServer.IsInUserLanguageList, System.Runtime.InteropServices.RuntimeInformation.OSArchitecture))
+        if ((AppPaths.IsPortable && settings.Mode == InputMode.Tsf) || ShouldFallBackToKeyboard(settings, Tip.TipServer.IsKnownUnregistered, Tip.TipServer.IsInUserLanguageList, System.Runtime.InteropServices.RuntimeInformation.OSArchitecture))
         {
             settings.Mode = InputMode.Keyboard;
             try { settings.Save(AppPaths.ConfigFile); } catch { }
-            Diagnostics.Log.Warn("Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードを Meltype キーボードに戻しました。");
+            Diagnostics.Log.Warn(AppPaths.IsPortable ? "ポータブル版では Meltype IME を使わないため、Meltype キーボードに戻しました。" : "Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードを Meltype キーボードに戻しました。");
         }
 
         // ダウンロード済みの新しい版があれば、起動せずに更新する (install.ps1 が新しい版を起動する)。
-        if (Updater.ApplyStagedAtStartup(() => settings.AutoUpdate,
+        if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate,
                 version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings))) return 0;
 
         MeltypeEngine engine;
@@ -133,7 +133,7 @@ internal static class Program
         }
 
         // スタートアップのフォルダー・Run の登録 (サインインの後、遅れて起動する) を、すぐ起動するタスクに移す (#283)
-        ThreadPool.QueueUserWorkItem(_ => Startup.MigrateToTask());
+        if (!AppPaths.IsPortable) ThreadPool.QueueUserWorkItem(_ => Startup.MigrateToTask());
 
         using (engine)
         {

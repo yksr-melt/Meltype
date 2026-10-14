@@ -2,7 +2,8 @@
 # Copyright (C) 2026 Yukishiro
 
 # -Version を付けると、公開するリリースの名前 (dist\Meltype-<版>-windows.zip) にする (GitHub Actions がタグから付ける)。
-param([string]$Version = '')
+# -Portable を付けると、アプリ内にデータを保存するポータブル版 zip を作る。
+param([string]$Version = '', [switch]$Portable)
 
 $ErrorActionPreference = 'Stop'
 
@@ -15,10 +16,16 @@ $ErrorActionPreference = 'Stop'
 
 $root = $PSScriptRoot
 $dist = Join-Path $root 'dist'
-$stage = Join-Path $dist 'Meltype'
+$packageName = if ($Portable) { 'Meltype-portable' } else { 'Meltype' }
+$stage = Join-Path $dist $packageName
 $app = Join-Path $stage 'app'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
-$zip = if ($Version) { Join-Path $dist "Meltype-$Version-windows.zip" } else { Join-Path $dist "Meltype-test-$stamp.zip" }
+$zip = if ($Version) {
+    if ($Portable) { Join-Path $dist "Meltype-portable-$Version-windows.zip" }
+    else { Join-Path $dist "Meltype-$Version-windows.zip" }
+}
+elseif ($Portable) { Join-Path $dist "Meltype-portable-$stamp-windows.zip" }
+else { Join-Path $dist "Meltype-test-$stamp.zip" }
 
 if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
@@ -152,22 +159,24 @@ foreach ($file in Get-ChildItem (Join-Path $runtime 'shared') -Recurse -Filter '
 Update-DepsJson
 Invoke-SelfTest '読み込まれない部品も削った後' | Out-Null
 
-# Meltype IME (入力欄に直接入力する TSF の DLL)。x64 と x86 (32bit のアプリ用) をビルドして同梱する。
-# C++ のビルドツールが無ければ、Meltype IME を入れずに作る (変換ボックスの方式だけの zip になる)
+# Meltype IME (入力欄に直接入力する TSF の DLL)。ポータブル版は登録を行わないので含めない。
 $tip = Join-Path $app 'tip'
-$imeBuilt = $true
-try { & (Join-Path $root 'native\tip\build.ps1') -Configuration Release }
-catch {
-    $imeBuilt = $false
-    Write-Warning "Meltype IME をビルドできないので、入れずに作ります: $($_.Exception.Message)"
-}
-if ($imeBuilt) {
-    foreach ($arch in 'x64', 'x86') {
-        New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
-        Copy-Item -LiteralPath (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll"), (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll.sha256") -Destination (Join-Path $tip $arch)
+$imeBuilt = $false
+if (-not $Portable) {
+    $imeBuilt = $true
+    try { & (Join-Path $root 'native\tip\build.ps1') -Configuration Release }
+    catch {
+        $imeBuilt = $false
+        Write-Warning "Meltype IME をビルドできないので、入れずに作ります: $($_.Exception.Message)"
     }
-    Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
-    Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
+    if ($imeBuilt) {
+        foreach ($arch in 'x64', 'x86') {
+            New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
+            Copy-Item -LiteralPath (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll"), (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll.sha256") -Destination (Join-Path $tip $arch)
+        }
+        Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
+        Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
+    }
 }
 
 # コード署名 (証明書があるときだけ): 環境変数 MELTYPE_SIGN_PFX (証明書の .pfx) と MELTYPE_SIGN_PASSWORD を設定すると、
@@ -196,15 +205,60 @@ foreach ($arch in @(if ($imeBuilt) { 'x64', 'x86' })) {
     [IO.File]::WriteAllText("$dll.package.sha256", $hash)
 }
 
-# 自動更新の確認に使う (Meltype が app フォルダーから呼ぶ)
-Copy-Item -LiteralPath (Join-Path $root 'packaging\update.ps1') -Destination $app
-foreach ($file in 'Install.cmd', 'Uninstall.cmd', 'install.ps1', 'uninstall.ps1', 'README.txt') {
-    Copy-Item -LiteralPath (Join-Path $root "packaging\$file") -Destination $stage
+if ($Portable) {
+    # The native launcher bundles the existing app folder and unpacks it to a temporary directory at runtime.
+    [IO.File]::WriteAllText((Join-Path $app 'Meltype.portable'), 'portable', [Text.Encoding]::ASCII)
+    Copy-Item -LiteralPath (Join-Path $root 'packaging\README-portable.txt') -Destination (Join-Path $stage 'README.txt')
+    if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
+        Copy-Item -LiteralPath (Join-Path $mozcBin 'MOZC-LICENSE.txt') -Destination $stage
+        Copy-Item -LiteralPath (Join-Path $mozcBin 'MOZC-CREDITS.html') -Destination $stage
+        Copy-Item -LiteralPath (Join-Path $mozcBin 'VC-RUNTIME.txt') -Destination $stage
+    }
+    Copy-Item -LiteralPath (Join-Path $dotnetRoot 'LICENSE.txt') -Destination (Join-Path $stage 'DOTNET-LICENSE.txt')
+    Copy-Item -LiteralPath (Join-Path $dotnetRoot 'ThirdPartyNotices.txt') -Destination (Join-Path $stage 'DOTNET-THIRD-PARTY-NOTICES.txt')
+}
+else {
+    # Automatic updates and install scripts are only included in the regular package.
+    Copy-Item -LiteralPath (Join-Path $root 'packaging\update.ps1') -Destination $app
+    foreach ($file in 'Install.cmd', 'Uninstall.cmd', 'install.ps1', 'uninstall.ps1', 'README.txt') {
+        Copy-Item -LiteralPath (Join-Path $root "packaging\$file") -Destination $stage
+    }
 }
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md') -Destination (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
 
 Remove-Item -LiteralPath (Join-Path $dist 'selftest.txt') -ErrorAction SilentlyContinue
+if ($Portable) {
+    $launcherWork = Join-Path $dist 'portable-launcher'
+    if (Test-Path -LiteralPath $launcherWork) { Remove-Item -LiteralPath $launcherWork -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $launcherWork | Out-Null
+    $payload = Join-Path $launcherWork 'payload.zip'
+    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $payload -Force
+
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+    if (-not $vs) { throw 'ポータブル版ランチャーのビルドには Visual Studio C++ ツールが必要です。' }
+    $devCmd = Join-Path $vs 'Common7\Tools\VsDevCmd.bat'
+    $rcFile = Join-Path $launcherWork 'portable.rc'
+    $payloadForRc = $payload.Replace('\', '\\')
+    $runnerForRc = (Join-Path $root 'packaging\portable\run.ps1').Replace('\', '\\')
+    Set-Content -LiteralPath $rcFile -Encoding ASCII -Value "101 RCDATA `"$payloadForRc`"`r`n102 RCDATA `"$runnerForRc`""
+
+    $launcherExe = Join-Path $stage 'Meltype.exe'
+    $launcherCpp = Join-Path $root 'packaging\portable\launcher.cpp'
+    $objFile = Join-Path $launcherWork 'launcher.obj'
+    $resFile = Join-Path $launcherWork 'portable.res'
+    $compileCommand = 'call "' + $devCmd + '" -arch=amd64 -host_arch=amd64 >nul && rc.exe /nologo /fo "' + $resFile + '" "' + $rcFile + '" && cl.exe /nologo /c /O2 /MT /EHsc /std:c++17 /utf-8 /DUNICODE /D_UNICODE /Fo"' + $objFile + '" "' + $launcherCpp + '" && link.exe /nologo /SUBSYSTEM:WINDOWS /OUT:"' + $launcherExe + '" "' + $objFile + '" "' + $resFile + '" kernel32.lib user32.lib'
+    & cmd.exe /d /s /c $compileCommand
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $launcherExe)) { throw 'ポータブル版の自己展開ランチャーをビルドできませんでした。' }
+
+    if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
+        & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $launcherExe
+        if ($LASTEXITCODE -ne 0) { throw 'ポータブル版ランチャーの署名に失敗しました。' }
+    }
+    Remove-Item -LiteralPath (Join-Path $stage 'app') -Recurse -Force
+    Remove-Item -LiteralPath $launcherWork -Recurse -Force
+}
 Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
 $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-Write-Host "テスト版を作成しました: $zip ($size MB, .NET $version 同梱)"
+Write-Host "パッケージを作成しました: $zip ($size MB, .NET $version 同梱)"

@@ -13,7 +13,7 @@
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
 3. GitHub Actions が Windows (build.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作り、リリースに付ける
-   - Windows: `Meltype-<版>-setup.exe` (インストーラー) と `Meltype-<版>-windows.zip`
+   - Windows: `Meltype-<版>-setup.exe` (インストーラー)、`Meltype-<版>-windows.zip`、`Meltype-portable-<版>-windows.zip`
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` (どちらもプレビュー版)
 4. リリースのページにリリースノートを書く
 5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます

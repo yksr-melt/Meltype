@@ -132,6 +132,14 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
 - 自己診断は、設定・判定・辞書・変換エンジン・Windows の候補 API・UI Automation・各画面・タスクトレイ・データの保存を、キーボードフックを掛けずに一通り動かします
 - インストール先は `%LOCALAPPDATA%\Programs\Meltype` で、管理者権限は要りません。配布用のファイルの元は [packaging/](../packaging/) にあります
 
+ポータブル版は次で作れます。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1 -Portable
+```
+
+通常版と分けて `dist\Meltype-portable-<日時>-windows.zip` を作ります。リリースビルドでは版番号を含む `Meltype-portable-<版>-windows.zip` になります。ポータブル版はアプリと.NETランタイムを内包した単一 `Meltype.exe` とライセンス文書で構成し、.NET未導入のPCでも起動できます。起動時にアプリ一式を一時フォルダーへ展開し、終了時に削除します。ユーザーデータは実行ファイルの隣の `data` に保存します。IME登録、自動起動、アプリ内更新は含めません。ランチャーのビルドにはVisual StudioのC++ツールが必要です。
+
 <a name="ウイルス対策ソフトの検査"></a>
 <img src="images/headings/development/s03.svg" alt="ウイルス対策ソフトの検査" height="40">
 

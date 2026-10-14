@@ -25,7 +25,7 @@ try {
     $latest = $release.tag_name -replace '^v', ''
     if ([version]$latest -le [version]$CurrentVersion) { Write-Output 'none'; exit 0 }
 
-    $asset = @($release.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' }) + @($release.assets | Where-Object { $_.name -like 'Meltype-test-*.zip' }) | Select-Object -First 1
+    $asset = @($release.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' -and $_.name -notlike 'Meltype-portable-*' }) + @($release.assets | Where-Object { $_.name -like 'Meltype-test-*.zip' }) | Select-Object -First 1
     if (-not $asset) { Write-Output "error リリース $latest に zip がありません"; exit 0 }
 
     $target = Join-Path $Directory $latest

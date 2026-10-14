@@ -198,10 +198,11 @@ jobs:
         shell: powershell
         env:
           MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
-        # タグ (v1.0.0) なら Meltype-1.0.0-windows.zip、手動実行ならテスト版の名前 (Meltype-test-<日時>.zip)
+        # タグ (v1.0.0) なら版番号付き、手動実行なら日時付きの通常版・ポータブル版 zip を作る。
         run: |
           $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '' }
           .\Build-Package.ps1 -Version $version
+          .\Build-Package.ps1 -Version $version -Portable
       # インストーラー (dist\Meltype-<版>-setup.exe)。zip と同じ app フォルダーから作る (issue #161)。
       - name: Installer
         shell: pwsh
@@ -225,10 +226,10 @@ jobs:
         timeout-minutes: 15
         run: |
           $packages = @(Get-ChildItem -LiteralPath dist -Filter 'Meltype-*.zip' -File)
-          if ($packages.Count -ne 1) { throw 'Expected one Meltype-*.zip file but found ' + $packages.Count }
+          if ($packages.Count -ne 2) { throw 'Expected regular and portable Meltype zip files but found ' + $packages.Count }
           $setups = @(Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File)
           if ($setups.Count -ne 1) { throw 'Expected one Meltype-*-setup.exe file but found ' + $setups.Count }
-          .\tools\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', $packages[0].FullName, $setups[0].FullName)
+          .\tools\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', '.\dist\Meltype-portable', $packages[0].FullName, $packages[1].FullName, $setups[0].FullName)
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: meltype-package

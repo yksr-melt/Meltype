@@ -288,6 +288,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
     {
         var properties = typeof(Settings).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanWrite && p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
+            // ポータブル版では IME 切替の詳細設定を使わないため、設定画面には表示しない。
+            .Where(p => !AppPaths.IsPortable || p.GetCustomAttribute<CategoryAttribute>()?.Category != "6. IME")
             .GroupBy(p => p.GetCustomAttribute<CategoryAttribute>()?.Category ?? "その他")
             .OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var category in properties)

@@ -112,7 +112,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
           $api = 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest'
           $rel = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'meltype-bot' }
-          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' } | Select-Object -First 1
+          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' -and $_.name -notlike 'Meltype-portable-*' } | Select-Object -First 1
           if (-not $asset) { Write-Host 'Windows リリースが見つかりません (Mozc なしで続行)'; exit 0 }
           $zip = Join-Path $env:RUNNER_TEMP 'meltype-win.zip'
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
@@ -180,7 +180,7 @@ jobs:
           $bin = 'native/mozc/bin'
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
           $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest' -Headers @{ 'User-Agent' = 'meltype-bot' }
-          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' } | Select-Object -First 1
+          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' -and $_.name -notlike 'Meltype-portable-*' } | Select-Object -First 1
           if (-not $asset) { Write-Host 'Windows リリースが見つかりません'; exit 0 }
           $zip = Join-Path $env:RUNNER_TEMP 'meltype-win.zip'
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
