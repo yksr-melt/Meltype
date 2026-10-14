@@ -15,6 +15,7 @@
 #include "Globals.h"
 #include "Json.h"
 #include "Pipe.h"
+#include "Shortcut.h"
 
 namespace meltype {
 
@@ -53,10 +54,7 @@ public:
     STDMETHODIMP OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) override;
     STDMETHODIMP OnTestKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) override;
     STDMETHODIMP OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) override;
-    STDMETHODIMP OnPreservedKey(ITfContext*, REFGUID, BOOL* eaten) override {
-        *eaten = FALSE;
-        return S_OK;
-    }
+    STDMETHODIMP OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eaten) override;
 
     // ITfCompositionSink
     STDMETHODIMP OnCompositionTerminated(TfEditCookie ec, ITfComposition* composition) override;
@@ -75,7 +73,8 @@ public:
     // コードエディターのコードの行では、IME は開いたまま、次に打つキーが英数のままアプリに通るので「A」と出す
     bool IsOpen() const { return open_ && !codeEnglish_; }
     void SetOpen(bool open);
-    // 半角/全角・タスクバーのボタン: 表示している 日本語 ⇔ 英数 を切り替える (context が null ならフォーカスのある入力欄)
+    // 登録された切り替えキーやタスクバーのボタンから日本語 ⇔ 英数を切り替える。
+    // context が null の場合はフォーカス中の入力欄を使用する。
     void ToggleInputMode(ITfContext* context);
 
 private:
@@ -87,7 +86,13 @@ private:
     bool IsReinjected(UINT vk);
     bool ServerReady();
     void Hello();
-    void HandleKey(ITfContext* context, UINT vk, wchar_t ch);
+    // Meltype.exe から受け取った入力モード切り替えショートカットを TSF (PreserveKey) に再登録する
+    void RefreshPreservedShortcuts();
+    // TSF に登録した入力モード切り替えショートカットを解除する
+    void UnpreserveShortcuts();
+    // 押されたキーと修飾キーの状態が、登録された切り替えショートカットのいずれかに一致するか判定する
+    bool MatchesToggle(UINT vk, LPARAM lParam);
+    void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool toggleText = false);
     // コードの行を日本語にする / 英数に戻すよう Meltype.exe に頼む。そうしたなら true
     bool SetCodeLine(ITfContext* context, bool japanese);
     // キャレットが動いたときに、次に打つキーが英数か Meltype.exe に聞く (コードエディターのとき。編集の通知の中で呼ぶ)
@@ -162,6 +167,11 @@ private:
     bool disabled_ = false;
     bool ownProcess_ = false;      // Meltype.exe 自身の中で動いている (要求にスレッドを付ける)  // Meltype.exe 自身の中では動かない (自分のサーバーを待って固まるため)
     bool eatenDown_[256] = {};
+    bool toggleDown_[256] = {};
+    bool shortcutsEnabled_ = true; // 初回接続前は従来の初期登録。接続後は最後に受け取った設定。
+    std::vector<ToggleShortcut> toggleShortcuts_ = {{0x19, 0}, {0xC0, 4}};
+    struct PreservedToggle { TF_PRESERVEDKEY key; GUID guid; };
+    std::vector<PreservedToggle> preservedToggles_;
     struct Reinjected {
         UINT vk = 0;
         ULONGLONG time = 0;

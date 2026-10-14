@@ -467,7 +467,7 @@ internal sealed class TipServer : IDisposable
     /// <summary>ログに書くアプリの名前の数の上限。</summary>
     private const int MaxGreeted = 256;
 
-    private string Handle(string request, Dictionary<string, MeltypeSession> sessions)
+    internal string Handle(string request, Dictionary<string, MeltypeSession> sessions)
     {
         // 終わる途中 (変換エンジンなどを片付けた後) には何もしない
         if (_stop.IsCancellationRequested) return Inactive;
@@ -485,10 +485,11 @@ internal sealed class TipServer : IDisposable
                 // 名前はアプリの側が送ってくるので、ログを崩さないように短くして、改行などは消す
                 var shown = new string(process.Where(c => !char.IsControl(c) && !char.IsSurrogate(c) && char.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.Format).Take(64).ToArray());
                 if (greeting && _greeted.Count < MaxGreeted && _greeted.Add(shown)) Log.Info($"Meltype IME: {shown} からつながりました。");
-                if (!greeting) return Inactive;
+                var shortcutJson = "[" + string.Join(",", _settings().EffectiveToggleShortcuts
+                    .Select(b => $"{{\"key\":{b.Key},\"mods\":{(int)b.Modifiers}}}")) + "]";
                 // コードエディター・ターミナルのアプリか (DLL は、キャレットが動くたびに入力モードの表示を問い合わせる)
                 var codeApp = _settings().ProfileFor(process + ".exe") == AppProfile.Code;
-                return $"{{\"active\":true,\"code\":{(codeApp ? "true" : "false")},\"directDetection\":{(DirectDetectionFor(process) ? "true" : "false")},\"consumed\":false,\"commits\":[],\"view\":null}}";
+                return $"{{\"active\":{(greeting ? "true" : "false")},\"toggleShortcuts\":{shortcutJson},\"code\":{(codeApp ? "true" : "false")},\"directDetection\":{(DirectDetectionFor(process) ? "true" : "false")},\"consumed\":false,\"commits\":[],\"view\":null}}";
             }
             case "close":
                 if (sessions.Remove(sid, out var closing) && closing.IsComposing) closing.CommitPending();

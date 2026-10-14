@@ -61,31 +61,33 @@ constexpr ULONG_PTR kReinjectMarker = 0x4D4C5450;
 
 // 修飾キーだけのキー (それ自体では入力にならない)
 bool IsModifier(UINT vk) {
-    switch (vk) {
-        case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT:
-        case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL:
-        case VK_MENU: case VK_LMENU: case VK_RMENU:
-        case VK_LWIN: case VK_RWIN: case VK_CAPITAL:
-            return true;
-        default:
-            return false;
-    }
+    return ToggleShortcut::IsModifier(vk) || vk == VK_CAPITAL;
 }
-
-// 半角/全角 キー (日本語キーボード)
-bool IsHankakuZenkaku(UINT vk) { return vk == VK_KANJI || vk == 0xF3 || vk == 0xF4; }
 
 bool KeyDown(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
 
-// US 配列の Alt + ` (半角/全角キー相当)。Alt はキーイベントの lParam も確認する。
-bool IsAltGraveToggle(UINT vk, LPARAM lParam) {
-    const ULONG_PTR message = static_cast<ULONG_PTR>(lParam);
-    const UINT scan = static_cast<UINT>((message >> 16) & 0xFF);
-    const bool graveKey = vk == VK_OEM_3 || (scan == 0x29 && (message & (static_cast<ULONG_PTR>(1) << 24)) == 0);
-    const bool altDown = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 29)) != 0 ||
-                         KeyDown(VK_MENU);
-    return graveKey && altDown && !KeyDown(VK_CONTROL) && !KeyDown(VK_SHIFT) &&
-           !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN);
+UINT ShortcutKey(UINT vk, LPARAM lParam) {
+    const auto bits = static_cast<ULONG_PTR>(lParam);
+    const UINT scan = static_cast<UINT>((bits >> 16) & 0xFF);
+    return ToggleShortcut::NormalizeShortcutKey(vk, scan, (bits & (static_cast<ULONG_PTR>(1) << 24)) != 0,
+        scan == 0x29 ? MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0)) : 0);
+}
+
+UINT ShortcutSlot(UINT vk, LPARAM lParam = 0) {
+    // JIS 半角/全角の仮想キー変化だけを同じスロットで照合する。
+    return ShortcutKey(vk, lParam);
+}
+
+// Alt/Win を押したまま主キーだけを飲み込むと、アプリ側で修飾キー単独押しと判定される。
+// 割り当てのない 0xE8 を送り、Alt の単独押しによるメニュー移動を防ぐ。
+void MaskSystemModifier() {
+    if (!KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN)) return;
+    INPUT mask[2] = {};
+    mask[0].type = mask[1].type = INPUT_KEYBOARD;
+    mask[0].ki.wVk = mask[1].ki.wVk = 0xE8;
+    mask[0].ki.dwExtraInfo = mask[1].ki.dwExtraInfo = kReinjectMarker;
+    mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    SendInput(2, mask, sizeof(INPUT));
 }
 
 // 変換中に Meltype.exe が受け持つ Ctrl+英字 (CompositionController.ControlShortcut と合わせる)。Alt・Windows キーと一緒なら違う
@@ -233,6 +235,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     keyFailed_ = false;
     consumed_ = true;
     for (bool& eaten : eatenDown_) eaten = false;
+    for (bool& toggle : toggleDown_) toggle = false;
     // サインインや UAC の画面では何もしない。
     // Meltype.exe より高い権限で動いているアプリ (管理者として動くアプリなど) は、つなぐときに断る (Pipe.cpp の IsTrustedServer)
     // (Meltype.exe 自身の画面でも使う。そのときは Meltype.exe が画面のスレッドを通さずに処理する: TipServer の Serve)
@@ -305,6 +308,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
 }
 
 STDMETHODIMP TextService::Deactivate() {
+    UnpreserveShortcuts();
     TipLog(L"Deactivate");
     if (composition_ != nullptr && compositionContext_ != nullptr) {
         // 確定してから終わる
@@ -405,11 +409,13 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
 }
 
 STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
+    if (foreground && !disabled_) Hello();
     if (!foreground && candidates_) candidates_->Hide();
     // キーを受け取らなくなった (スレッドが前面でなくなった・ほかの IME に移った): 受け取ったキーを離したことは届かないかもしれないので忘れる
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
         for (bool& eaten : eatenDown_) eaten = false;
+        for (bool& toggle : toggleDown_) toggle = false;
     }
     return S_OK;
 }
@@ -628,19 +634,93 @@ bool TextService::ContextDisabled(ITfContext* context) {
 
 bool TextService::ServerReady() {
     if (disabled_) return false;
-    if (!serverActive_ && GetTickCount64() - lastHello_ > 2000) Hello();
+    if (GetTickCount64() - lastHello_ > 2000) Hello();
     return serverActive_;
 }
 
 void TextService::Hello() {
     lastHello_ = GetTickCount64();
     JsonValue reply;
-    serverActive_ = Request("{\"op\":\"hello\",\"process\":" + JsonString(ProcessName()) + "}", reply) && reply[L"active"].Bool();
+    const bool wasActive = serverActive_;
+    const bool wereShortcutsEnabled = shortcutsEnabled_;
+    bool bindingsChanged = false;
+    bool received = Request("{\"op\":\"hello\",\"process\":" + JsonString(ProcessName()) + "}", reply, 100);
+    serverActive_ = received && reply[L"active"].Bool();
+    if (received) shortcutsEnabled_ = serverActive_;
+    if (received && reply[L"toggleShortcuts"].type == JsonValue::Type::Array) {
+        std::vector<ToggleShortcut> shortcuts;
+        for (const auto& b : reply[L"toggleShortcuts"].array) {
+            const int key = b[L"key"].Int(), mods = b[L"mods"].Int();
+            if (key > 0 && key < 256 && !ToggleShortcut::IsModifier(key) && mods >= 0 && mods <= 15) shortcuts.push_back({static_cast<UINT>(key), mods});
+        }
+        bindingsChanged = shortcuts != toggleShortcuts_;
+        if (bindingsChanged) toggleShortcuts_.swap(shortcuts);
+    }
+    if (bindingsChanged || wereShortcutsEnabled != shortcutsEnabled_ || preservedToggles_.empty()) RefreshPreservedShortcuts();
     directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
-    directEnglishWord_ = false;
+    if (wasActive != serverActive_) directEnglishWord_ = false;
     // コードエディター・ターミナルのアプリなら、キャレットが動くたびに入力モードの表示を合わせる (QueryMode)
     codeApp_ = serverActive_ && reply[L"code"].Bool();
-    TipLog(L"Meltype.exe: %s", serverActive_ ? L"つながりました" : L"使えません (動いていない・モードが Meltype IME でない)");
+    if (wasActive != serverActive_) TipLog(L"Meltype.exe: %s", serverActive_ ? L"つながりました" : L"使えません (動いていない・モードが Meltype IME でない)");
+}
+
+void TextService::UnpreserveShortcuts() {
+    Microsoft::WRL::ComPtr<ITfKeystrokeMgr> manager;
+    if (threadMgr_ && SUCCEEDED(threadMgr_->QueryInterface(IID_PPV_ARGS(&manager))))
+        for (const auto& binding : preservedToggles_) manager->UnpreserveKey(binding.guid, &binding.key);
+    preservedToggles_.clear();
+}
+
+void TextService::RefreshPreservedShortcuts() {
+    if (!threadMgr_) return;
+    Microsoft::WRL::ComPtr<ITfKeystrokeMgr> manager;
+    if (FAILED(threadMgr_->QueryInterface(IID_PPV_ARGS(&manager)))) return;
+    UnpreserveShortcuts();
+    if (disabled_ || !shortcutsEnabled_) return;
+    for (const auto& b : PreservedShortcutKeys(toggleShortcuts_, MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0)) == ToggleShortcut::Grave)) {
+        PreservedToggle entry{{b.key, b.flags}, {0x7118DA00u | b.key, static_cast<USHORT>(b.flags), 0x4AC2, {0xAA, 0x4D, 0xC5, 0x51, 0x17, 0x39, 0x61, 0xC3}}};
+        const HRESULT hr = manager->PreserveKey(clientId_, entry.guid, &entry.key, nullptr, 0);
+        if (SUCCEEDED(hr)) preservedToggles_.push_back(entry);
+        else TipLog(L"ショートカットを登録できません: 0x%02X (0x%08X)", b.key, hr);
+    }
+}
+
+STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eaten) {
+    *eaten = FALSE;
+    ServerReady(); // 設定を削除した後の古い登録も発動させない。
+    for (const auto& binding : preservedToggles_) {
+        if (!IsEqualGUID(binding.guid, guid)) continue;
+        const UINT scan = ToggleShortcut::NormalizeHankakuKey(binding.key.uVKey) == ToggleShortcut::Hankaku || binding.key.uVKey == ToggleShortcut::Grave
+            ? 0x29 : MapVirtualKeyExW(binding.key.uVKey, MAPVK_VK_TO_VSC, GetKeyboardLayout(0));
+        const LPARAM keyParam = static_cast<LPARAM>(scan) << 16;
+        const UINT slot = ShortcutSlot(binding.key.uVKey, keyParam);
+        if (binding.key.uModifiers & TF_MOD_ON_KEYUP) {
+            *eaten = eatenDown_[slot] ? TRUE : FALSE;
+            eatenDown_[slot] = toggleDown_[slot] = false;
+            return S_OK;
+        }
+        if (disabled_ || !shortcutsEnabled_ || ContextDisabled(context) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return S_OK;
+        if (!MatchesToggle(binding.key.uVKey, keyParam)) return S_OK;
+        *eaten = TRUE;
+        if (toggleDown_[slot]) return S_OK;
+        eatenDown_[slot] = toggleDown_[slot] = true;
+        if (composition_ == nullptr) ToggleInputMode(context);
+        else HandleKey(context, VK_KANJI, 0, true);
+        MaskSystemModifier();
+        return S_OK;
+    }
+    return S_OK;
+}
+
+bool TextService::MatchesToggle(UINT vk, LPARAM lParam) {
+    if (!shortcutsEnabled_) return false;
+    const auto bits = static_cast<ULONG_PTR>(lParam);
+    int mods = (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) |
+        ((KeyDown(VK_MENU) || (bits & (static_cast<ULONG_PTR>(1) << 29))) ? 4 : 0) |
+        (KeyDown(VK_LWIN) || KeyDown(VK_RWIN) ? 8 : 0);
+    for (const auto& b : toggleShortcuts_)
+        if (b.Matches(ShortcutKey(vk, lParam), mods)) return true;
+    return false;
 }
 
 void TextService::ForgetSecretField() {
@@ -653,7 +733,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     secretChecked_ = false;
     secretWhileComposing_ = false;
     if (disabled_ || vk >= 256) return false;
-    if (IsModifier(vk)) return false;
+    ServerReady(); // 英数・修飾キーでも設定の変更を検知する。
+    if (IsModifier(vk) && !MatchesToggle(vk, lParam)) return false;
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
     ResumeOrCommit(context);
     // VK_PACKET: ほかのソフト (パスワード管理・AutoHotkey など) が送り込んだ文字。送り直せないので受け取らずに通す。
@@ -683,6 +764,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
             AbandonComposition();
         }
     }
+    // 登録キーは通常の Ctrl/Alt 処理より先。確定は OnKeyDown で行う。
+    if (toggleDown_[ShortcutSlot(vk, lParam)] || MatchesToggle(vk, lParam)) return true;
     if (composition_ != nullptr) {
         // 変換中にアプリが入力欄の IME を無効にした (ブラウザーはパスワード欄に変えるとそうする): 変換中の文字を確定して、
         // このキーからは受け取らない。ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す
@@ -703,10 +786,6 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
         if ((KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) && !IsCompositionShortcut(vk) && CommitNow()) return false;
         return true;  // 変換中はほかのキーを全部受け取る (つながらなければ確定して通す)
     }
-    // 半角/全角: 日本語 ⇔ 英数 (IME の ON/OFF は IME 自身が切り替える)。Meltype.exe が使えないときも受け取る
-    // (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる。管理者として動くアプリでは Meltype.exe につながらない)
-    if (IsAltGraveToggle(vk, lParam)) return true;
-    if (IsHankakuZenkaku(vk)) return !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU);
     // 調べるとき用: 文字を生むキーを通した理由 (どのキーかは書かない)
     auto pass = [&](const wchar_t* reason) {
         if (passReason_ != reason) TipLog(L"キーを通します: %s", reason);
@@ -816,10 +895,15 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     }
     *eaten = TRUE;
     // 押しっぱなしによる自動リピートで、入力モードを何度も切り替えない。
-    if (IsAltGraveToggle(vk, lParam) && eatenDown_[vk]) return S_OK;
-    eatenDown_[vk] = true;
-    if ((IsHankakuZenkaku(vk) || IsAltGraveToggle(vk, lParam)) && composition_ == nullptr) {
-        ToggleInputMode(context);
+    const UINT slot = ShortcutSlot(vk, lParam);
+    const bool toggle = toggleDown_[slot] || MatchesToggle(vk, lParam);
+    if (toggle && eatenDown_[slot]) return S_OK;
+    eatenDown_[slot] = true;
+    if (toggle) {
+        toggleDown_[slot] = true;
+        if (composition_ == nullptr) ToggleInputMode(context);
+        else HandleKey(context, VK_KANJI, 0, true);
+        MaskSystemModifier();
         return S_OK;
     }
     ch = CharOf(vk, lParam);
@@ -827,20 +911,31 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     return S_OK;
 }
 
-STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM, BOOL* eaten) {
-    *eaten = wParam < 256 && eatenDown_[wParam] ? TRUE : FALSE;
+STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
+    // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
+    if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
+        eatenDown_[ToggleShortcut::Hankaku] = toggleDown_[ToggleShortcut::Hankaku] = false;
+    }
+    *eaten = wParam < 256 && eatenDown_[ShortcutSlot(static_cast<UINT>(wParam), lParam)] ? TRUE : FALSE;
     return S_OK;
 }
 
-STDMETHODIMP TextService::OnKeyUp(ITfContext*, WPARAM wParam, LPARAM, BOOL* eaten) {
-    *eaten = wParam < 256 && eatenDown_[wParam] ? TRUE : FALSE;
-    if (wParam < 256) eatenDown_[wParam] = false;
+STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
+    // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
+    if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
+        eatenDown_[ToggleShortcut::Hankaku] = toggleDown_[ToggleShortcut::Hankaku] = false;
+    }
+    const UINT slot = ShortcutSlot(static_cast<UINT>(wParam), lParam);
+    *eaten = wParam < 256 && eatenDown_[slot] ? TRUE : FALSE;
+    if (wParam < 256) { eatenDown_[slot] = false; toggleDown_[slot] = false; }
     return S_OK;
 }
 
-void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch) {
+void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool toggleText) {
     // 8 = Windows キー (Meltype.exe は Mac の Command と同じく、確定してアプリに渡す)
     int mods = (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) | (KeyDown(VK_MENU) ? 4 : 0) | (KeyDown(VK_LWIN) || KeyDown(VK_RWIN) ? 8 : 0);
+    // 登録キーの修飾キーは文字変換の指定には引き継がない。
+    if (toggleText) mods = 0;
     keyFailed_ = false;
     consumed_ = true;
     bool insertedOnFailure = false;
@@ -924,7 +1019,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch) {
     } else if (keyFailed_) {
         TipLog(L"Meltype.exe から応答が来ないので、打った文字をそのまま入れました");
     }
-    if ((keyFailed_ && !insertedOnFailure) || (!consumed_ && !insertedDirect)) Reinject(vk);
+    if (!toggleText && ((keyFailed_ && !insertedOnFailure) || (!consumed_ && !insertedDirect))) Reinject(vk);
 }
 
 void TextService::ToggleInputMode(ITfContext* context) {

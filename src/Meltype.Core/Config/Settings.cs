@@ -5,6 +5,7 @@ using System.ComponentModel;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using Meltype.Input;
 
 namespace Meltype.Config;
 
@@ -189,9 +190,12 @@ public sealed class Settings
      Description("Tsf = Windows の IME として入力欄に直接入力 (Win + Space で Meltype を選ぶ) / Keyboard = Meltype の変換ボックスで入力 (英単語は自動で英字、Space で変換、Enter で確定) / AutoSwitch = 入力開始時に判定して Microsoft IME を自動で ON にする")]
     public InputMode Mode { get; set; } = InputMode.Tsf;
 
-    [Category("1. 全般"), DisplayName("半角/全角 で Meltype を ON/OFF"),
-     Description("Keyboard モードで、変換ボックスが出ていないときの 半角/全角 キーを Meltype キーボードの ON/OFF (直接入力) に使います。")]
-    public bool HankakuTogglesKeyboard { get; set; } = true;
+    [Category("1. 全般"), DisplayName("入力モード切り替えキー"),
+     Description("日本語／英数の入力モードを切り替えるキーを複数登録できます。Windows や他のアプリで使うキー操作を登録すると、元の操作が使えなくなったり、入力モードの切り替えと同時に動いたりする場合があります。")]
+    public List<ToggleShortcut>? ToggleShortcuts { get; set; }
+
+    [JsonIgnore, Browsable(false)]
+    public IReadOnlyList<ToggleShortcut> EffectiveToggleShortcuts => ToggleShortcuts ?? ToggleShortcut.Defaults();
 
     [Category("1. 全般"), DisplayName("無変換で英数 / 変換で日本語"),
      Description("Keyboard モードで、変換ボックスが出ていないときの 無変換 キーで英数 (直接入力) に、変換 キーで日本語入力にします (Mac の 英数 / かな キーと同じく、押す前のモードによらず決まったモードになります)。もう日本語入力のときの 変換 キーは今までどおり選択した文字の再変換です。変換ボックスが出ている間の 無変換・変換 は今までどおりで、切り替えません。「コード」のアプリのコードの行では、変換 キーでその行を日本語にします (半角/全角 と同じ)。")]
@@ -448,6 +452,7 @@ public sealed class Settings
         current.Profiles.First(p => p.Name == current.ActiveProfile).Values = current.ProfileValues();
         // 共通の項目は今の値のまま、プロファイルの項目だけを切り替え先の値にする
         var merged = JsonSerializer.SerializeToNode(current, JsonType)!.AsObject();
+        InitializeToggleShortcuts(target.Values ??= new JsonObject());
         // 前の版で保存したプロファイルには、今は共通にした項目 (動作モードなど) が入っていることがあるので飛ばす
         foreach (var (key, value) in target.Values ?? [])
         {
@@ -522,6 +527,7 @@ public sealed class Settings
         {
             if (JsonNode.Parse(json, documentOptions: new JsonDocumentOptions { CommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true }) is not JsonObject file ||
                 file["format"]?.GetValue<string>() != ProfileFileFormat || file["values"] is not JsonObject raw) return null;
+            InitializeToggleShortcuts(raw);
             name = (file["name"]?.GetValue<string>() ?? "").Trim();
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -598,7 +604,16 @@ public sealed class Settings
     private JsonObject? ValuesOf(string name) =>
         name == ActiveProfile ? ProfileValues() : Profiles.FirstOrDefault(p => p.Name == name) is { } profile ? profile.Values ?? [] : null;
 
-    public const int CurrentVersion = 5;
+    /// <summary>旧プロファイルでも、未設定と明示的な空の一覧を区別する。</summary>
+    private static void InitializeToggleShortcuts(JsonObject? values)
+    {
+        if (values is null) return;
+        if (values[nameof(ToggleShortcuts)] is null)
+            values[nameof(ToggleShortcuts)] = JsonSerializer.SerializeToNode(ToggleShortcut.Defaults(), SettingsJsonContext.Default.ListToggleShortcut);
+        values.Remove("HankakuTogglesKeyboard");
+    }
+
+    public const int CurrentVersion = 6;
 
     [Category("4. セッション"), DisplayName("新しいセッションとみなす無入力時間 (ms)")]
     public int SessionIdleMs { get; set; } = 1500;
@@ -753,12 +768,22 @@ public sealed class Settings
         copy.AppRules = AppRules.Select(r => new AppRule { Process = r.Process, Enabled = r.Enabled, Profile = r.Profile, Kind = r.Kind }).ToList();
         copy.AppKinds = AppKinds.Select(k => k.Clone()).ToList();
         copy.Profiles = (Profiles ?? []).Select(p => p.Clone()).ToList();
+        copy.ToggleShortcuts = ToggleShortcuts?.Select(b => b with { }).ToList();
         return copy;
     }
 
     /// <summary>手で編集された config.json の極端な値を安全な範囲に収める。</summary>
     public Settings Normalize()
     {
+        ToggleShortcuts ??= ToggleShortcut.Defaults();
+        if (ToggleShortcuts is { } shortcuts)
+        {
+            var valid = new List<ToggleShortcut>();
+            foreach (var shortcut in shortcuts)
+                if (shortcut is not null && ToggleShortcutValidator.Validate(shortcut, this, valid) == ShortcutValidationError.None)
+                    valid.Add(shortcut with { Key = ToggleShortcut.NormalizeHankakuKey(shortcut.Key) });
+            ToggleShortcuts = valid;
+        }
         JapaneseThreshold = Math.Clamp(JapaneseThreshold, 2, 20);
         MaxPendingKeys = Math.Clamp(MaxPendingKeys, 2, 12);
         IdleFlushMs = Math.Clamp(IdleFlushMs, 100, 3000);
@@ -809,6 +834,13 @@ public sealed class Settings
         {
             // v5: 既定の「コード」のアプリに Maya (Script Editor) を追加。ユーザーが自分で入れていれば、そのまま。
             if (FindRule("maya.exe") is null) AppRules.Add(new AppRule { Process = "maya.exe", Enabled = true, Profile = AppProfile.Code });
+        }
+        if (SettingsVersion < 6)
+        {
+            // v6: 旧 ON/OFF の値によらず、未設定の切り替えキーには 2 つの初期登録を使う。
+            ToggleShortcuts ??= ToggleShortcut.Defaults();
+            foreach (var profile in Profiles ?? [])
+                if (profile is not null) InitializeToggleShortcuts(profile.Values ??= new JsonObject());
         }
         SettingsVersion = CurrentVersion;
         return true;

@@ -103,6 +103,11 @@ internal sealed class KeyboardMonitor : IDisposable
                             IsUp: (data.flags & Native.LLKHF_UP) != 0,
                             Injected: (data.flags & Native.LLKHF_INJECTED) != 0,
                             TimeMs: Environment.TickCount64);
+                        if (e.Scan == 0x29 && !e.Extended)
+                        {
+                            var thread = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out _);
+                            e = e with { UnmodifiedKey = (int)Native.MapVirtualKeyEx(0x29, 3, Native.GetKeyboardLayout(thread)) };
+                        }
                         if (_onKey(e)) return new IntPtr(1);
                     }
                 }
