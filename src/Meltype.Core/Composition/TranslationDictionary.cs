@@ -107,9 +107,13 @@ public sealed class TranslationHistory
 {
     private readonly string? _path;
     private readonly Dictionary<string, Dictionary<string, int>> _counts = new(StringComparer.Ordinal);
+    private readonly object _gate = new();
+    private readonly object _fileGate = new();
+    private readonly DeferredSaver _saver;
 
     public TranslationHistory(string? path)
     {
+        _saver = new DeferredSaver(Write);
         _path = path;
         if (path is null || !File.Exists(path)) return;
         try
@@ -131,31 +135,41 @@ public sealed class TranslationHistory
 
     public void Remember(string reading, string word)
     {
-        if (!_counts.TryGetValue(reading, out var words)) _counts[reading] = words = new(StringComparer.Ordinal);
-        words[word] = words.GetValueOrDefault(word) + 1;
-        Save();
+        lock (_gate)
+        {
+            if (!_counts.TryGetValue(reading, out var words)) _counts[reading] = words = new(StringComparer.Ordinal);
+            words[word] = words.GetValueOrDefault(word) + 1;
+        }
+        _saver.Request();
     }
 
     /// <summary>選んだ英訳の記録をすべて消す (トレイの「学習データをリセット」)。</summary>
     public void Clear()
     {
-        _counts.Clear();
-        Save();
+        lock (_gate) _counts.Clear();
+        _saver.WriteNow();
     }
 
-    private void Save()
+    private bool Write()
     {
-        if (_path is null) return;
+        if (_path is null) return true;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations));
-            File.Move(temp, _path, overwrite: true);
+            lock (_fileGate)
+            {
+                string json;
+                lock (_gate) json = JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations);
+                Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
+                var temp = _path + ".tmp";
+                File.WriteAllText(temp, json);
+                File.Move(temp, _path, overwrite: true);
+            }
+            return true;
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"英訳の学習データを保存できませんでした: {ex.Message}");
+            return false;
         }
     }
 }

@@ -13,6 +13,9 @@ foreach ($folderName in 'Startup', 'Programs') {
 }
 # サインインしたらすぐ起動するタスク (Meltype が作る: #283)
 & cmd.exe /c 'schtasks.exe /Delete /TN Meltype /F >nul 2>&1'
+# 強制終了の前に終了の合図を送り、まだ書いていない学習データを書かせる
+$running = Join-Path $PSScriptRoot 'app-build\Meltype.exe'
+if (Test-Path -LiteralPath $running) { Start-Process -FilePath $running -ArgumentList '--exit' -Wait -ErrorAction SilentlyContinue }
 Get-Process Meltype, meltype_mozc_helper -ErrorAction SilentlyContinue | Stop-Process -Force
 . (Join-Path $PSScriptRoot 'packaging\meltype-ime.ps1')
 if (-not (Uninstall-MeltypeIme)) {
