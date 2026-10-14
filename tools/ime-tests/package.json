@@ -1,0 +1,22 @@
+{
+  "name": "meltype-ime-tests",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "test:unit": "playwright test --project unit",
+    "test:dom": "playwright test --project chromium",
+    "test:ci": "npm run typecheck && playwright test",
+    "report": "playwright show-report artifacts/report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0",
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3",
+    "vite": "6.4.4"
+  }
+}

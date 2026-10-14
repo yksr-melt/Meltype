@@ -1,0 +1,29 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 HarukiKubota -->
+<html lang="ja">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Meltype 入力テスト</title></head>
+<body>
+  <!-- 要素IDはmain.tsとDOMテストの接続点。変更時はschemas/fields.tsと各locatorも確認する。 -->
+  <main>
+    <h1>Meltype 入力テスト</h1>
+    <p>CIでは画面の操作を確認します。実IMEの入力結果はこのCIの対象に含みません。</p>
+    <p>現在の入力欄: <output id="focus">なし</output></p>
+    <section><h2>検索</h2><label>text <input id="text" type="text" autocomplete="off"></label><label>search <input id="search" type="search" autocomplete="off"></label></section>
+    <section><h2>チャット</h2>
+      <form id="chat"><label>textarea <textarea id="textarea"></textarea></label>
+      <label id="editable-label">contenteditable</label><div id="contenteditable" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="editable-label"></div>
+      <button type="submit">送信</button></form>
+      <p>送信回数: <output id="send-count">0</output></p><ol id="messages"></ol>
+    </section>
+    <section><h2>アカウント</h2><label>password <input id="password" type="password" autocomplete="off"></label><p>ダミー文字列だけで試してください。</p></section>
+    <section><h2>イベント記録</h2>
+      <!-- 初期チェック状態はRecorderの既定値と揃える。文字保存は明示的にONにした場合だけ。 -->
+      <label><input id="record" type="checkbox" checked>記録する</label>
+      <label><input id="save-text" type="checkbox">通常欄の文字内容を保存する</label>
+      <button id="clear" type="button">記録を消す</button><button id="export" type="button">JSONを保存</button>
+      <p>イベント数: <output id="event-count">0</output></p><details><summary>イベント詳細</summary><pre id="events"></pre></details>
+    </section>
+  </main>
+  <script type="module" src="/src/main.ts"></script>
+</body></html>
