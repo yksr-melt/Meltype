@@ -6,6 +6,7 @@
  * 成功が必要な呼び出し元は保存対象を確保してからrequireSuccessで判定する。
  */
 
+import type { BotEnvironment } from './schemas/bot-report';
 import { execFile } from 'node:child_process';
 
 export interface ProcessEvidence {
@@ -19,12 +20,12 @@ export interface ProcessEvidence {
   readonly timedOut: boolean;
   readonly error: string | null;
 }
-export async function executeProcess(command: string, args: readonly string[], timeoutMs = 20_000): Promise<ProcessEvidence> {
+export async function executeProcess(command: string, args: readonly string[], timeoutMs = 20_000, environment?: BotEnvironment): Promise<ProcessEvidence> {
   return new Promise(resolve => {
     let timedOut = false;
     // shellを介さず引数を渡す。出力は最大1 MiBとし、超過もerrorとして呼び出し元へ返す。
     const child = execFile(command, [...args], { maxBuffer: 1024 * 1024, encoding: 'utf8',
-      env: process.env }, (error, stdout, stderr) => {
+      env: { ...process.env, ...environment } }, (error, stdout, stderr) => {
       clearTimeout(timer);
       resolve({ command, args, stdout, stderr, exitCode: error ? (typeof error.code === 'number' ? error.code : null) : 0,
         signal: error?.signal ?? null, timedOut, error: error?.message ?? null });

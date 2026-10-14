@@ -1,4 +1,4 @@
-# 入力テスト基盤・合成DOM操作を検査する。Coreの実行は既存CIが担当する。
+# 入力テスト基盤・botの報告処理・合成DOM操作を検査する。Coreの実行は既存CIが担当する。
 name: ime-tests
 
 on:
@@ -7,7 +7,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# テストはローカルで完結するため、Issueへの書込み権限は不要。
+# bot試験はlocalhostの偽APIを使うため、Issueへの書込み権限は不要。
 permissions:
   contents: read
 
@@ -35,7 +35,7 @@ jobs:
           cache-dependency-path: tools/ime-tests/package-lock.json
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - name: Typecheck and Chromium DOM tests
+      - name: Typecheck, bot regression and Chromium DOM tests
         run: |
           mkdir -p artifacts
           # teeでログを残しても、テストの非0終了をジョブの失敗として伝える。

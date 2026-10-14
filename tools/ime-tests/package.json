@@ -9,6 +9,7 @@
     "dev": "vite --host 127.0.0.1 --port 4173 --strictPort",
     "typecheck": "tsc --noEmit",
     "test:unit": "playwright test --project unit",
+    "test:regression": "playwright test tests/regression --project=bot --project=chromium",
     "test:dom": "playwright test --project chromium",
     "test:ci": "npm run typecheck && playwright test",
     "report": "playwright show-report artifacts/report"

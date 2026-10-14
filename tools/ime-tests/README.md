@@ -1,6 +1,6 @@
 # 入力・回帰テスト
 
-Playwright Testで、入力テスト画面のDOM操作とテスト基盤を検査するフォルダです。
+Playwright Testで、入力テスト画面のDOM操作、botの報告処理、テスト基盤を検査するフォルダです。
 
 ## テストランナーと実行方法
 
@@ -23,7 +23,8 @@ npm run test:ci
 | `npm run test:ci` | 型検査と全テスト |
 | `npm run typecheck` | TypeScriptの型検査のみ |
 | `npm run test:unit` | 記録・プロセス実行・レポートなど基盤の単体テスト |
-| `npm run test:dom` | 入力画面の基本操作 |
+| `npm run test:regression` | botとDOMの回帰テスト |
+| `npm run test:dom` | 入力画面の基本操作とDOM回帰テスト |
 | `npm run dev` | 入力テスト画面を起動（`http://127.0.0.1:4173`） |
 | `npm run report` | 保存済みのHTML結果を開く |
 
@@ -33,7 +34,7 @@ npm run test:ci
 
 | 指定 | 用途 |
 | --- | --- |
-| `--project=unit` / `chromium` | 実行プロジェクトを選択 |
+| `--project=unit` / `bot` / `chromium` | 実行プロジェクトを選択 |
 | ファイルパス | 対象specを絞り込み |
 | `--grep '正規表現'` | タイトルやケースIDを絞り込み |
 | `--headed` | ブラウザーを表示してDOM試験を実行 |
@@ -42,7 +43,9 @@ npm run test:ci
 | `--help` | 使用可能なオプションを表示 |
 
 ```bash
-npx playwright test --project=chromium --grep '\[D03/' --headed
+npx playwright test tests/regression/dom-input.spec.ts --project=chromium
+npx playwright test --project=chromium --grep '\[D08/' --headed
+npx playwright test --project=bot --grep '\[B01\]'
 npm run test:dom -- --grep '\[D03/' --debug
 ```
 
@@ -67,6 +70,7 @@ tools/ime-tests/
 │   └── reporting/             失敗要約・証拠保存・ログ出力
 ├── tests/
 │   ├── e2e/                   入力テスト画面の基本操作
+│   ├── regression/            事象ごとのbot・DOM回帰テスト
 │   └── unit/                  テスト基盤の単体テスト・型検査
 └── artifacts/                 実行結果・添付（Git管理対象外）
 ```
@@ -83,14 +87,14 @@ tools/ime-tests/
 | プロジェクト | 収集対象（`tests/` からの相対パス） |
 | --- | --- |
 | `unit` | `unit/**/*.spec.ts` |
-| `chromium` | `e2e/**/*.spec.ts` |
+| `bot` | `regression/bot-report.spec.ts` |
+| `chromium` | `e2e/**/*.spec.ts`、`regression/dom-input.spec.ts` |
 
-収集対象外の場所へspecを追加する場合は、`playwright.config.ts` の対応する `testMatch` にも追加します。
+回帰テストのファイルを増やす場合は、`playwright.config.ts` の対応する `testMatch` にも追加します。
 
 ### 例: DOMの本文への追記
 
-`tests/e2e/` のspecへ追加する例です。使用するimportは既存の宣言へまとめます。
-
+`tests/regression/dom-input.spec.ts` に追加するケースの例です。使用するimportは既存の宣言へまとめます。
 
 ```ts
 import { test } from '@playwright/test';
@@ -129,6 +133,32 @@ npx playwright test --project=chromium --grep '\[D.append-example\]'
 npm run test:ci
 ```
 
+### 例: botの判定
+
+`tests/regression/bot-report.spec.ts` では、`BotReportCase`を `verifyBotReport(item, info)` へ渡します。
+
+```ts
+const item = {
+  id: 'B.compare-example',
+  operation: {
+    committed: 'abcあ',
+    composing: '',
+    converted: null,
+    expected: 'abcい',
+    reported: '別の結果',
+  },
+  expected: { verdict: 'different' },
+} as const satisfies BotReportCase;
+```
+
+| 項目 | 内容 |
+| --- | --- |
+| `committed` / `composing` / `converted` | botへ渡す確定文字列・未確定文字列・変換結果 |
+| `operation.expected` | 利用者が期待する結果 |
+| `operation.reported` | 不具合として報告された結果 |
+| `expected.verdict` | botに期待する判定。`match`（期待値と一致）、`reproduced`（期待値には一致せず報告と一致）、`different`（どちらとも異なる） |
+| `info` | botへの入力・偽APIの観測・プロセス出力の添付先 |
+
 ### ケースの記述ルール
 
 - タイトル: `[ケースID] 検証する事象`。
@@ -142,8 +172,8 @@ npm run test:ci
 ## 失敗表示と詳細
 
 ```text
-FAIL E2E/dom-input [D03/textarea] 確定と送信・改行
-送信回数: 期待 "1" / 実際 "0"
+FAIL regression/bot-report [B01] 英字が同じでもかなが異なる
+判定: 期待 "different" / 実際 "match"
 ```
 
 1. ログのケースIDと、2行目の差分・エラーを確認する。
@@ -171,6 +201,7 @@ FAIL E2E/dom-input [D03/textarea] 確定と送信・改行
 ## 検証範囲と機密情報
 
 - DOM: ローカル入力テスト画面への合成イベントと画面の状態。
+- bot: localhostの偽APIへの要求。実GitHubへのコメント・ラベル送信なし。
 - 対象外: 実IME、OS入力ソース、実候補確定、OSクリップボード経由の入力。
 - イベント記録の既定値: ON。
 - 通常欄の文字保存の既定値: OFF。

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 HarukiKubota
 
 /**
- * 基盤単体・ChromiumのDOM試験を同じ実行にまとめる。
+ * 基盤単体・bot回帰・ChromiumのDOM試験を同じ実行にまとめる。
  * ブラウザーの版はpackage-lock.jsonに固定したPlaywrightに対応するものを使う。
  */
 
@@ -25,8 +25,9 @@ export default defineConfig({
   ],
   projects: [
     { name: 'unit', testMatch: 'unit/**/*.spec.ts' },
+    { name: 'bot', testMatch: 'regression/bot-report.spec.ts' },
     {
-      name: 'chromium', testMatch: 'e2e/**/*.spec.ts',
+      name: 'chromium', testMatch: ['e2e/**/*.spec.ts', 'regression/dom-input.spec.ts'],
       use: { browserName: 'chromium', baseURL: 'http://127.0.0.1:4173', trace: 'retain-on-failure', screenshot: 'only-on-failure' },
     },
   ],
