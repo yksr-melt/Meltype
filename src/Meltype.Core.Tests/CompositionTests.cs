@@ -21,6 +21,7 @@ internal static class CompositionTests
             "きょうは" => "今日は",
             "でけんさく" => "で検索",
             "たんい" => "単位",
+            "な～～～" => "名～～～",
             _ => null,
         };
 
@@ -1457,6 +1458,14 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue505_LiveConvertIgnoresSymbolsInLength()
+    {
+        var k = new Keyboard(live: true);
+        k.Type("na~~~\n");
+        Assert.Equal("な～～～", k.Host.Document);
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
