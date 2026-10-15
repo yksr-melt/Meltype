@@ -54,6 +54,8 @@ seikou shippai genin kaiketsu kinyuu toiawase kakunin
 
 # 助詞・助動詞・接続詞など
 dakara demo shikashi soshite sorede sorekara keredo kedo node nado dake shika desu deshita
+# 助詞のつながり。Deno と同じ綴りでも、日本語では「での」。
+deno
 dewa janai masu mashita masen mashou darou deshou kamoshirenai hazu rashii soudesu soudesune
 naruhodo iie uun sayou tsumari tatoeba toriaezu ichiou
 
