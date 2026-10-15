@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue727_AdBlockerStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("ad-blocker\n");
+        Assert.Equal("ad-blocker", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
