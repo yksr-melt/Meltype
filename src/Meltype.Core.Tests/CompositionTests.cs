@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue724_BingeWatchStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("binge-watch\n");
+        Assert.Equal("binge-watch", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
