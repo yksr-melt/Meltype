@@ -12,6 +12,37 @@ internal static class SessionFacadeTests
 {
     private static MeltypeSession Create() => new(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
 
+    private sealed class SkippingLongWordsChecker : Meltype.Detection.IWordChecker
+    {
+        public bool IsAvailable => true;
+        // macOS の NSSpellChecker は長すぎる未知語も「誤りなし」と返す。
+        public bool IsWord(string lower) => lower.Length > 72;
+    }
+
+    [Test]
+    public static void LongRomaji_SkippedSpellCheckDoesNotTurnSentenceIntoEnglish()
+    {
+        foreach (var input in new[] {
+            "nnmonnkannsatuwosuruzikanngaarunodagazikanngaamarunodesonotokinisannkagatawodekiruyounisitai",
+            string.Concat(Enumerable.Repeat("nihongowonyuuryokusimasu", 5)),
+            string.Concat(Enumerable.Repeat("nihongowonyuuryokusimasu", 4)) + "googlewotukau",
+        })
+        {
+            var detector = CompositionDetector.CreateDefault();
+            detector.SpellChecker = new SkippingLongWordsChecker();
+            var actual = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
+            var baseline = new MeltypeSession(CompositionDetector.CreateDefault(), new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
+            for (var i = 0; i < input.Length; i++)
+            {
+                var expected = Type(baseline, input[i].ToString(), before: "こんど小学生が学校にきてて")[0];
+                var result = Type(actual, input[i].ToString(), before: "こんど小学生が学校にきてて")[0];
+                Assert.Equal(expected.View?.Text, result.View?.Text, $"{i + 1}文字目: {input}");
+                Assert.Equal(expected.Consumed, result.Consumed);
+            }
+            Assert.Equal(Type(baseline, "\n")[0].Commits.Single().Text, Type(actual, "\n")[0].Commits.Single().Text);
+        }
+    }
+
     /// <summary>文字を 1 つずつ打つ (英字は大文字なら Shift 付き)。</summary>
     private static List<SessionResult> Type(MeltypeSession session, string text, string? before = null)
     {
