@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue725_OpenStreetMapStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("openstreetmap\n");
+        Assert.Equal("openstreetmap", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
