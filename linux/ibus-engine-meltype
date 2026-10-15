@@ -84,6 +84,24 @@ if _role_key is not None:
 
 ROLE_KEYS = {IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D, IBus.KEY_Hiragana_Katakana: 0x15}
 
+# 半角/全角: 英数 (直接入力) ⇔ 日本語。英数・ひらがなのキーでも切り替える (JIS キーボード)。
+ZENKAKU_HANKAKU_KEYS = (IBus.KEY_Zenkaku_Hankaku, IBus.KEY_Hankaku, IBus.KEY_Zenkaku)
+ALWAYS_DIRECT_KEYS = (IBus.KEY_Eisu_toggle, IBus.KEY_Muhenkan)
+MODE_SWITCH_KEYS = ZENKAKU_HANKAKU_KEYS + ALWAYS_DIRECT_KEYS + (IBus.KEY_Hiragana_Katakana, IBus.KEY_Henkan)
+
+# IBus の修飾キー → 本体が使うビット (Shift=1, Ctrl=2, Alt=4, Win=8)
+MODIFIER_BITS = (
+    (IBus.ModifierType.SHIFT_MASK, 1),
+    (IBus.ModifierType.CONTROL_MASK, 2),
+    (IBus.ModifierType.MOD1_MASK, 4),
+    (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK, 8),
+)
+
+
+def modifier_flags(state):
+    """IBus の state から、本体へ渡す修飾キーのビットを作る。"""
+    return sum(bit for mask, bit in MODIFIER_BITS if state & mask)
+
 
 def _report_url():
     """不具合報告を開く URL (OS・版・実行環境を入れたもの)。"""
@@ -181,25 +199,13 @@ class MeltypeEngine(IBus.Engine):
             if pointer:
                 self._apply(_result(pointer))
                 return True
-        # 半角/全角: 英数 (直接入力) ⇔ 日本語。英数・ひらがなのキーでも切り替える (JIS キーボード)。
-        if keyval in (IBus.KEY_Zenkaku_Hankaku, IBus.KEY_Hankaku, IBus.KEY_Zenkaku, IBus.KEY_Eisu_toggle, IBus.KEY_Hiragana_Katakana, IBus.KEY_Muhenkan, IBus.KEY_Henkan):
-            to_direct = keyval in (IBus.KEY_Eisu_toggle, IBus.KEY_Muhenkan) or (keyval in (IBus.KEY_Zenkaku_Hankaku, IBus.KEY_Hankaku, IBus.KEY_Zenkaku) and not self._direct)
-            self._apply(_result(_lib.meltype_commit(self._session)))
-            self._direct = to_direct
-            _lib.meltype_set_direct(self._session, 1 if to_direct else 0)
+        if keyval in MODE_SWITCH_KEYS:
+            self._switch_mode(keyval)
             return True
         vk, character = virtual_key(keyval)
         if vk is None:
             return False
-        modifiers = 0
-        if state & IBus.ModifierType.SHIFT_MASK:
-            modifiers |= 1
-        if state & IBus.ModifierType.CONTROL_MASK:
-            modifiers |= 2
-        if state & IBus.ModifierType.MOD1_MASK:
-            modifiers |= 4
-        if state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK):
-            modifiers |= 8
+        modifiers = modifier_flags(state)
         before, after = (None, None) if self._preedit_visible else self._surrounding_text()
         result = _result(_lib.meltype_handle_key(
             self._session, vk, character, modifiers,
@@ -209,6 +215,13 @@ class MeltypeEngine(IBus.Engine):
             return False
         self._apply(result)
         return bool(result.get("consumed"))
+
+    def _switch_mode(self, keyval):
+        """未確定の内容を確定してから、英数 (直接入力) と日本語を切り替える。"""
+        to_direct = keyval in ALWAYS_DIRECT_KEYS or (keyval in ZENKAKU_HANKAKU_KEYS and not self._direct)
+        self._apply(_result(_lib.meltype_commit(self._session)))
+        self._direct = to_direct
+        _lib.meltype_set_direct(self._session, 1 if to_direct else 0)
 
     def do_focus_out(self):
         # 別の入力欄・アプリに移るときは、未確定の内容をそのまま確定する。
