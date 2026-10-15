@@ -218,3 +218,5 @@ riverside seaside teenage teenager woah mod mods hardcore tacz nsfw sfw fbc mine
 online
 # --- 英単語 + する (pushして) の site と同じ綴りで終わる語 (web + site で分けない) ---
 website websites campsite worksite onsite offsite
+# Issue #726
+malvertising
