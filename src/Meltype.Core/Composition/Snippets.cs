@@ -21,17 +21,10 @@ public sealed class SnippetStore
     public SnippetStore(string? path)
     {
         _path = path;
-        if (path is null || !File.Exists(path)) return;
-        try
+        Config.DataFile.Load(path, "定型文", content =>
         {
-            foreach (var (name, text) in Parse(File.ReadAllText(path))) _snippets[name] = text;
-        }
-        catch (Exception ex)
-        {
-            try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"定型文を読めませんでした: {ex.Message}");
-        }
+            foreach (var (name, text) in Parse(content)) _snippets[name] = text;
+        });
     }
 
     public int Count { get { lock (_gate) return _snippets.Count; } }
@@ -94,10 +87,7 @@ public sealed class SnippetStore
         if (_path is null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, Export(), Encoding.UTF8);
-            File.Move(temp, _path, overwrite: true);
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, Export(), Encoding.UTF8));
         }
         catch (Exception ex)
         {

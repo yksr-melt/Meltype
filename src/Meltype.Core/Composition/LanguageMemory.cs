@@ -51,18 +51,11 @@ public sealed class LanguageMemory
     public LanguageMemory(string? path)
     {
         _path = path;
-        if (path is null || !File.Exists(path)) return;
-        try
+        Config.DataFile.Load(path, "英語 / 日本語の学習データ", content =>
         {
-            var loaded = JsonSerializer.Deserialize(File.ReadAllText(path), Config.LearningJsonContext.Default.Languages);
+            var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Languages);
             if (loaded is not null) foreach (var (word, entry) in loaded) _entries[word] = entry;
-        }
-        catch (Exception ex)
-        {
-            try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"英語 / 日本語の学習データを読めませんでした: {ex.Message}");
-        }
+        });
     }
 
     public int Count => _entries.Count;
@@ -156,10 +149,7 @@ public sealed class LanguageMemory
         if (_path is null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(_entries, Config.LearningJsonContext.Default.Languages));
-            File.Move(temp, _path, overwrite: true);
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(_entries, Config.LearningJsonContext.Default.Languages)));
         }
         catch (Exception ex)
         {

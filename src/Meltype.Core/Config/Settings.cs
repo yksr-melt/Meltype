@@ -845,9 +845,6 @@ public sealed class Settings
 
     public void Save(string path)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonType));
-        File.Move(temp, path, overwrite: true);
+        DataFile.Write(path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonType)));
     }
 }

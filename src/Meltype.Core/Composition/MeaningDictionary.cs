@@ -24,10 +24,8 @@ public sealed class MeaningDictionary
     public static MeaningDictionary Parse(string text)
     {
         var dictionary = new MeaningDictionary();
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in Detection.DictionarySource.DataLines(text))
         {
-            var line = rawLine.TrimEnd('\r');
-            if (line.Length == 0 || line[0] == '#') continue;
             var fields = line.Split('\t');
             if (fields.Length < 3) continue;
             var word = fields[0];
@@ -35,7 +33,7 @@ public sealed class MeaningDictionary
             list.Add((fields[1], fields[2]));
             dictionary._maxLength = Math.Max(dictionary._maxLength, word.Length);
             // 動詞 (う段で終わる)・い形容詞 (い で終わる) は語幹でも引けるようにする。語幹に漢字が入るものだけ。
-            if (word.Length >= 2 && "うくぐすつぬぶむるい".Contains(word[^1]) && word[..^1].Any(IsKanji)) dictionary._stems.TryAdd(word[..^1], word);
+            if (word.Length >= 2 && "うくぐすつぬぶむるい".Contains(word[^1]) && word[..^1].Any(KanaChars.IsKanji)) dictionary._stems.TryAdd(word[..^1], word);
         }
         return dictionary;
     }
@@ -46,7 +44,7 @@ public sealed class MeaningDictionary
     /// </summary>
     public string? Lookup(string text, string? reading)
     {
-        if (!text.Any(c => IsKanji(c) || IsKatakana(c))) return null;
+        if (!text.Any(KanaChars.IsKanjiOrKatakana)) return null;
         for (var length = Math.Min(_maxLength, text.Length); length >= 1; length--)
         {
             var head = text[..length];
@@ -54,7 +52,7 @@ public sealed class MeaningDictionary
             {
                 if (!_stems.TryGetValue(head, out var word) || !_entries.TryGetValue(word, out senses)) continue;
             }
-            if (text[length..].Any(c => IsKanji(c) || IsKatakana(c))) return null;
+            if (text[length..].Any(KanaChars.IsKanjiOrKatakana)) return null;
             return Format(Choose(senses, reading));
         }
         return null;
@@ -75,7 +73,4 @@ public sealed class MeaningDictionary
         if (shown.Count == 1) return shown[0];
         return string.Join("\n", shown.Select((g, i) => $"{(char)('①' + i)} {g}"));
     }
-
-    private static bool IsKanji(char c) => c is >= '㐀' and <= '䶿' or >= '一' and <= '鿿' or '々';
-    private static bool IsKatakana(char c) => c is >= 'ァ' and <= 'ヶ';
 }

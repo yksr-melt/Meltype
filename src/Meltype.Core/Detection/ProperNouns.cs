@@ -33,11 +33,8 @@ public sealed class ProperNouns
 
     public void AddText(string text)
     {
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in DictionarySource.LinesWithoutComments(text))
         {
-            var line = rawLine;
-            var hash = line.IndexOf('#');
-            if (hash >= 0) line = line[..hash];
             foreach (var word in line.Split([' ', '\t', '\r', ','], StringSplitOptions.RemoveEmptyEntries))
             {
                 if (!word.All(char.IsAsciiLetterOrDigit)) continue;

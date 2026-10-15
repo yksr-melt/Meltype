@@ -13,10 +13,9 @@ internal static class EnglishPhraseSpacing
     private static Dictionary<string, int[]> Load()
     {
         var result = new Dictionary<string, int[]>(StringComparer.OrdinalIgnoreCase);
-        foreach (var line in DictionarySource.ReadEmbedded("english-phrases.txt").Split('\n'))
+        foreach (var line in DictionarySource.DataLines(DictionarySource.ReadEmbedded("english-phrases.txt")))
         {
-            if (line.StartsWith('#')) continue;
-            var fields = line.TrimEnd('\r').Split('\t');
+            var fields = line.Split('\t');
             if (fields.Length != 2) continue;
             var words = fields[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (string.Concat(words) == fields[0]) result[fields[0]] = words.Select(word => word.Length).ToArray();

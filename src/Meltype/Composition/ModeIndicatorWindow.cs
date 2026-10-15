@@ -8,9 +8,8 @@ namespace Meltype.Composition;
 /// Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になる。
 /// 今どちらで入力されるかは、入力欄に入ったときと 半角/全角 を押したときにこれで知らせる。
 /// </summary>
-internal sealed class ModeIndicatorWindow : Form
+internal sealed class ModeIndicatorWindow : PopupForm
 {
-    private const int WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x00000080, WS_EX_TOPMOST = 0x00000008, WS_EX_TRANSPARENT = 0x00000020;
     internal static readonly Color DefaultJapaneseColor = Color.FromArgb(76, 160, 255);
     internal static readonly Color DefaultDirectColor = Color.FromArgb(110, 110, 120);
     // 設定で変えた色 (issue #359)。
@@ -21,11 +20,6 @@ internal sealed class ModeIndicatorWindow : Form
 
     public ModeIndicatorWindow()
     {
-        FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
-        TopMost = true;
-        StartPosition = FormStartPosition.Manual;
-        DoubleBuffered = true;
         Size = new Size(34, 34);
         _hideTimer.Tick += (_, _) =>
         {
@@ -34,18 +28,8 @@ internal sealed class ModeIndicatorWindow : Form
         };
     }
 
-    protected override bool ShowWithoutActivation => true;
-
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var cp = base.CreateParams;
-            // クリックは下のウィンドウへ通す。
-            cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_TRANSPARENT;
-            return cp;
-        }
-    }
+    // クリックは下のウィンドウへ通す。
+    protected override bool ClickThrough => true;
 
     /// <summary>色を変える (設定「入力モードの表示の色」。null なら既定の色)。</summary>
     public void SetColors((int R, int G, int B)? japanese, (int R, int G, int B)? direct, (int R, int G, int B)? text)

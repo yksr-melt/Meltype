@@ -158,10 +158,7 @@ public sealed class UserModel
         }
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(new ModelFile { Version = 1, Prefixes = snapshot }, Config.IndentedLearningJsonContext.Default.ModelFile));
-            File.Move(temp, _path, overwrite: true);
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(new ModelFile { Version = 1, Prefixes = snapshot }, Config.IndentedLearningJsonContext.Default.ModelFile)));
         }
         catch (Exception ex)
         {

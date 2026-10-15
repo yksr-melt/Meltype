@@ -55,11 +55,8 @@ public sealed class CandidateDictionary
 
     public void AddText(string text)
     {
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in Detection.DictionarySource.LinesWithoutComments(text))
         {
-            var line = rawLine;
-            var hash = line.IndexOf('#');
-            if (hash >= 0) line = line[..hash];
             var parts = line.Split([' ', '\t', '\r', '　'], StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2) continue;
             Add(parts[0], parts.Skip(1));

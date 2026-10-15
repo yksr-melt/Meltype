@@ -594,10 +594,11 @@ public sealed partial class CompositionDetector
         return false;
     }
 
-    private static readonly string[] SuruForms = ["する", "すれ", "した", "して", "しま", "しな", "しよ", "しと", "しちゃ", "しろ", "され", "させ", "せず"];
+    /// <summary>する の活用 (した・して・しない・しよう・したい …) で始まる読み。</summary>
+    internal static readonly string[] SuruForms = ["する", "すれ", "した", "して", "しま", "しな", "しよ", "しと", "しちゃ", "しろ", "され", "させ", "せず"];
 
     /// <summary>する の活用 (して・した・します …) だけでできたかなか。</summary>
-    private static bool IsSuruForm(string kana) => SuruForms.Any(kana.StartsWith) && kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー');
+    internal static bool IsSuruForm(string kana) => SuruForms.Any(kana.StartsWith) && kana.All(KanaChars.IsHiraganaOrLongMark);
 
     private static int Score(bool? english) => english switch { true => 1, false => -1, null => 0 };
 

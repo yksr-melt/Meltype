@@ -15,18 +15,8 @@ internal sealed class SnippetsForm : Form
     private readonly Func<string> _mark;
     private readonly TextBox _name = new() { Width = 220 };
     private readonly TextBox _text = new() { Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, Height = 110 };
-    private readonly DataGridView _grid = new()
-    {
-        Dock = DockStyle.Fill,
-        ReadOnly = true,
-        AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false,
-        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        RowHeadersVisible = false,
-        BackgroundColor = SystemColors.Window,
-    };
-    private readonly Label _message = new() { AutoSize = true, ForeColor = Color.Firebrick, Padding = new Padding(0, 6, 0, 0) };
+    private readonly DataGridView _grid = FormControls.ReadOnlyGrid();
+    private readonly Label _message = FormControls.ErrorLabel();
 
     public SnippetsForm(SnippetStore store, Func<string> mark)
     {

@@ -24,10 +24,8 @@ public sealed class RomajiTypoCorrector
     {
         _romaji = romaji;
         foreach (var word in FunctionWords) Add(word);
-        foreach (var rawLine in readings.Split('\n'))
+        foreach (var line in Detection.DictionarySource.DataLines(readings))
         {
-            var line = rawLine.TrimEnd('\r');
-            if (line.Length == 0 || line[0] == '#') continue;
             var parts = line.Split('\t');
             Add(parts[0]);
             if (parts.Length > 1) AddConjugations(parts[0], parts[1]);

@@ -22,10 +22,8 @@ public sealed class TranslationDictionary
     public static TranslationDictionary Parse(string text)
     {
         var dictionary = new TranslationDictionary();
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in Detection.DictionarySource.DataLines(text))
         {
-            var line = rawLine.TrimEnd('\r');
-            if (line.Length == 0 || line[0] == '#') continue;
             var fields = line.Split('\t');
             if (fields.Length < 3) continue;
             if (!dictionary._entries.TryGetValue(fields[0], out var list)) dictionary._entries[fields[0]] = list = [];
@@ -81,11 +79,11 @@ public sealed class TranslationDictionary
     /// </summary>
     public string? Meaning(string text)
     {
-        if (!text.Any(c => IsKanji(c) || c is >= 'ァ' and <= 'ヶ')) return null;
+        if (!text.Any(KanaChars.IsKanjiOrKatakana)) return null;
         for (var length = Math.Min(_maxLength, text.Length); length >= 1; length--)
         {
             if (!_entries.TryGetValue(text[..length], out var list)) continue;
-            if (text[length..].Any(c => IsKanji(c) || c is >= 'ァ' and <= 'ヶ')) return null;
+            if (text[length..].Any(KanaChars.IsKanjiOrKatakana)) return null;
             var words = new List<string>();
             foreach (var (_, entryWords) in list)
             {
@@ -95,8 +93,6 @@ public sealed class TranslationDictionary
         }
         return null;
     }
-
-    private static bool IsKanji(char c) => c is >= '㐀' and <= '䶿' or >= '一' and <= '鿿' or '々';
 }
 
 /// <summary>
@@ -111,18 +107,11 @@ public sealed class TranslationHistory
     public TranslationHistory(string? path)
     {
         _path = path;
-        if (path is null || !File.Exists(path)) return;
-        try
+        Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
-            var loaded = JsonSerializer.Deserialize(File.ReadAllText(path), Config.LearningJsonContext.Default.Translations);
+            var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Translations);
             if (loaded is not null) foreach (var (key, value) in loaded) _counts[key] = value;
-        }
-        catch (Exception ex)
-        {
-            try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"英訳の学習データを読めませんでした: {ex.Message}");
-        }
+        });
     }
 
     /// <summary>読みに対して選んだ回数 (多い順)。</summary>
@@ -148,10 +137,7 @@ public sealed class TranslationHistory
         if (_path is null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations));
-            File.Move(temp, _path, overwrite: true);
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations)));
         }
         catch (Exception ex)
         {

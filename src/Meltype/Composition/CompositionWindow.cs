@@ -9,9 +9,8 @@ namespace Meltype.Composition;
 /// 変換ボックス。フォーカスを奪わない最前面のウィンドウで、カーソル (キャレット) の下に出す。
 /// 未確定の文字列に下線を引き、変換中は候補の一覧を出す。
 /// </summary>
-internal sealed class CompositionWindow : Form
+internal sealed class CompositionWindow : PopupForm
 {
-    private const int WS_EX_NOACTIVATE = 0x08000000, WS_EX_TOOLWINDOW = 0x00000080, WS_EX_TOPMOST = 0x00000008;
     private Palette _palette = Palette.Dark;
     private Color Background => _palette.Background;
     private Color Accent => _palette.Accent;
@@ -121,26 +120,9 @@ internal sealed class CompositionWindow : Form
 
     public CompositionWindow()
     {
-        FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
-        TopMost = true;
-        StartPosition = FormStartPosition.Manual;
         BackColor = Background;
-        DoubleBuffered = true;
         Size = new Size(200, 40);
         _meaningTimer.Tick += (_, _) => ShowMeaning();
-    }
-
-    protected override bool ShowWithoutActivation => true;
-
-    protected override CreateParams CreateParams
-    {
-        get
-        {
-            var cp = base.CreateParams;
-            cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-            return cp;
-        }
     }
 
     /// <summary>表示内容を更新する。anchor は表示位置 (キャレットの左下)。null なら今の位置のまま。</summary>
@@ -238,7 +220,7 @@ internal sealed class CompositionWindow : Form
     }
 
     /// <summary>候補の意味を出す小さな枠 (フォーカスを奪わない)。</summary>
-    private sealed class MeaningPopup : Form
+    private sealed class MeaningPopup : PopupForm
     {
         private string _text = "";
         private Font? _font;
@@ -248,12 +230,7 @@ internal sealed class CompositionWindow : Form
         {
             _palette = palette;
             Opacity = opacity;
-            FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            TopMost = true;
-            StartPosition = FormStartPosition.Manual;
             BackColor = palette.MeaningBackground;
-            DoubleBuffered = true;
         }
 
         public void SetPalette(Palette palette)
@@ -261,18 +238,6 @@ internal sealed class CompositionWindow : Form
             _palette = palette;
             BackColor = palette.MeaningBackground;
             Invalidate();
-        }
-
-        protected override bool ShowWithoutActivation => true;
-
-        protected override CreateParams CreateParams
-        {
-            get
-            {
-                var cp = base.CreateParams;
-                cp.ExStyle |= WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-                return cp;
-            }
         }
 
         public void SetText(string text, Font font)

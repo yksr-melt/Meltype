@@ -163,7 +163,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// <summary>ユーザー辞書の登録画面用: 語の読みを推測する (かなならそのまま、漢字は Microsoft IME の逆変換)。分からなければ空。</summary>
     public string GuessReading(string word)
     {
-        if (word.All(c => c is >= 'ぁ' and <= 'ゖ' or >= 'ァ' and <= 'ヶ' or 'ー')) return new string(word.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
+        if (word.All(c => KanaChars.IsHiraganaOrLongMark(c) || KanaChars.IsKatakana(c))) return KanaChars.ToHiragana(word);
         try
         {
             return _converter.Reading(word) ?? "";
@@ -332,13 +332,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             return;
         }
         var inputs = new List<Native.INPUT>(text.Length * 2);
-        foreach (var c in text)
-        {
-            inputs.Add(UnicodeInput(c, up: false));
-            inputs.Add(UnicodeInput(c, up: true));
-        }
-        var array = inputs.ToArray();
-        Native.SendAll(array, "確定文字列の入力");
+        AddUnicodeText(inputs, text);
+        Native.SendAll(inputs.ToArray(), "確定文字列の入力");
     }
 
     private DataObject? _savedClipboard;
@@ -523,11 +518,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             inputs.Add(KeyInput(VirtualKeys.Back, up: false));
             inputs.Add(KeyInput(VirtualKeys.Back, up: true));
         }
-        foreach (var c in text)
-        {
-            inputs.Add(UnicodeInput(c, up: false));
-            inputs.Add(UnicodeInput(c, up: true));
-        }
+        AddUnicodeText(inputs, text);
         Native.SendAll(inputs.ToArray(), "確定し直し");
     }
 
@@ -814,6 +805,16 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             },
         },
     };
+
+    /// <summary>文字列を 1 文字ずつ (押す・離す) の打鍵にして足す。</summary>
+    private static void AddUnicodeText(List<Native.INPUT> inputs, string text)
+    {
+        foreach (var c in text)
+        {
+            inputs.Add(UnicodeInput(c, up: false));
+            inputs.Add(UnicodeInput(c, up: true));
+        }
+    }
 
     private static Native.INPUT UnicodeInput(char c, bool up) => new()
     {

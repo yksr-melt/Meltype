@@ -210,12 +210,9 @@ public sealed class UserDictionary
         if (_path is null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」" };
             lines.AddRange(_words.Select(w => $"{w.Reading}\t{w.Word}"));
-            var temp = _path + ".tmp";
-            File.WriteAllLines(temp, lines, new UTF8Encoding(true));
-            File.Move(temp, _path, overwrite: true);
+            Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
         }
         catch (Exception ex)
         {

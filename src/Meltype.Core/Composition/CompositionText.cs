@@ -360,7 +360,7 @@ public sealed class CompositionText
         var kana = "";
         for (var i = last - 1; i >= 0; i--)
         {
-            if (!_units[i].Kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー') || _units[i].Raw.Length == 0 || !_units[i].Raw.All(char.IsAsciiLetter)) return false;
+            if (!_units[i].Kana.All(KanaChars.IsHiraganaOrLongMark) || _units[i].Raw.Length == 0 || !_units[i].Raw.All(char.IsAsciiLetter)) return false;
             kana = _units[i].Kana + kana;
             if (i <= start && kana.Length + 1 >= (i == start ? 2 : 3) && _detector.IsJapaneseWordOrPrefix(kana + "つ")) return true;
         }
@@ -1174,7 +1174,7 @@ public sealed class CompositionText
     /// <summary>単位 [start, end) の読みを、正しい読み (カタカナ) に置き換える。end が単位の数を超えるときは語末の n も含む。</summary>
     public void ReplaceReading(int start, int end, string rightKatakana)
     {
-        var hiragana = new string(rightKatakana.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
+        var hiragana = KanaChars.ToHiragana(rightKatakana);
         if (end > _units.Count)
         {
             _pending.Clear();
@@ -1275,15 +1275,7 @@ public sealed class CompositionText
         _ => null,
     };
 
-    public static string ToKatakana(string hiragana)
-    {
-        var chars = hiragana.ToCharArray();
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (chars[i] is >= 'ぁ' and <= 'ゖ') chars[i] = (char)(chars[i] + 0x60);
-        }
-        return new string(chars);
-    }
+    public static string ToKatakana(string hiragana) => KanaChars.ToKatakana(hiragana);
 
     /// <summary>全角カタカナを半角カタカナにする。濁点・半濁点は半角の ﾞ / ﾟ に分ける。</summary>
     public static string ToHalfWidthKatakana(string katakana)

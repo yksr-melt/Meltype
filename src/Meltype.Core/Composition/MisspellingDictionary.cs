@@ -45,14 +45,11 @@ public sealed class MisspellingDictionary
 
     public void AddText(string text)
     {
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in Detection.DictionarySource.LinesWithoutComments(text))
         {
-            var line = rawLine;
-            var hash = line.IndexOf('#');
-            if (hash >= 0) line = line[..hash];
             var parts = line.Split('\t', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            if (parts.Length == 1) AddRight(ToKatakana(parts[0]));
-            else if (parts.Length >= 2) Add(ToKatakana(parts[0]), ToKatakana(parts[1]));
+            if (parts.Length == 1) AddRight(KanaChars.ToKatakana(parts[0]));
+            else if (parts.Length >= 2) Add(KanaChars.ToKatakana(parts[0]), KanaChars.ToKatakana(parts[1]));
         }
     }
 
@@ -74,7 +71,7 @@ public sealed class MisspellingDictionary
     /// <summary>読み (ひらがな・カタカナ) の中から書き間違いを 1 つ探す。無ければ null。</summary>
     public Misspelling? Find(string reading)
     {
-        var text = ToKatakana(reading);
+        var text = KanaChars.ToKatakana(reading);
         // 1. 辞書に書いてある誤り (長いものを優先)
         Misspelling? best = null;
         foreach (var (wrong, right) in _wrong)
@@ -132,6 +129,4 @@ public sealed class MisspellingDictionary
         }
         return builder.ToString();
     }
-
-    internal static string ToKatakana(string text) => CompositionText.ToKatakana(text);
 }

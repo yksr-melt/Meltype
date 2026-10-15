@@ -17,18 +17,8 @@ internal sealed class UserDictionaryForm : Form
     private readonly TextBox _reading = new() { Width = 220 };
     private readonly Label _readingPreview = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Padding = new Padding(0, 6, 0, 0) };
     private readonly ComboBox _word = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDown };
-    private readonly DataGridView _grid = new()
-    {
-        Dock = DockStyle.Fill,
-        ReadOnly = true,
-        AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false,
-        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        RowHeadersVisible = false,
-        BackgroundColor = SystemColors.Window,
-    };
-    private readonly Label _message = new() { AutoSize = true, ForeColor = Color.Firebrick, Padding = new Padding(0, 6, 0, 0) };
+    private readonly DataGridView _grid = FormControls.ReadOnlyGrid();
+    private readonly Label _message = FormControls.ErrorLabel();
     private readonly System.Windows.Forms.Timer _suggestTimer = new() { Interval = 300 };
 
     public UserDictionaryForm(CompositionService service)

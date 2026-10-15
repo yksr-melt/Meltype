@@ -37,11 +37,8 @@ public sealed class ContextRules
 
     public void AddText(string text)
     {
-        foreach (var rawLine in text.Split('\n'))
+        foreach (var line in Detection.DictionarySource.LinesWithoutComments(text))
         {
-            var line = rawLine;
-            var hash = line.IndexOf('#');
-            if (hash >= 0) line = line[..hash];
             var colon = line.IndexOf(':');
             if (colon < 0) continue;
             var head = line[..colon].Split([' ', '\t', '　'], StringSplitOptions.RemoveEmptyEntries);
@@ -92,19 +89,12 @@ public sealed class ConversionHistory
     public ConversionHistory(string? path)
     {
         _path = path;
-        if (path is null || !File.Exists(path)) return;
-        try
+        Config.DataFile.Load(path, "変換の学習データ", content =>
         {
-            var loaded = JsonSerializer.Deserialize(File.ReadAllText(path), Config.ConversionJsonContext.Default.Conversions);
+            var loaded = JsonSerializer.Deserialize(content, Config.ConversionJsonContext.Default.Conversions);
             // 1 文字の読み (き → 記) は、以前の版で覚えてしまったものも使わない (関係ない変換を巻き込むため)。
             if (loaded is not null) foreach (var (reading, entry) in loaded) if (reading.Length >= 2) _entries[reading] = entry;
-        }
-        catch (Exception ex)
-        {
-            try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"変換の学習データを読めませんでした: {ex.Message}");
-        }
+        });
     }
 
     /// <summary>学習した内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
@@ -163,10 +153,7 @@ public sealed class ConversionHistory
         if (_path is null) return;
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
-            var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(_entries, Config.ConversionJsonContext.Default.Conversions));
-            File.Move(temp, _path, overwrite: true);
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(_entries, Config.ConversionJsonContext.Default.Conversions)));
         }
         catch (Exception ex)
         {

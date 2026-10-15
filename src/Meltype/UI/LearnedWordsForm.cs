@@ -15,8 +15,8 @@ internal sealed class LearnedWordsForm : Form
 {
     private readonly LanguageMemory _languages;
     private readonly ConversionHistory _conversions;
-    private readonly DataGridView _languageGrid = CreateGrid();
-    private readonly DataGridView _conversionGrid = CreateGrid();
+    private readonly DataGridView _languageGrid = FormControls.ReadOnlyGrid();
+    private readonly DataGridView _conversionGrid = FormControls.ReadOnlyGrid();
     private readonly TextBox _filter = new() { Width = 220, PlaceholderText = "絞り込み (語・読み)" };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
 
@@ -83,18 +83,6 @@ internal sealed class LearnedWordsForm : Form
         CancelButton = close;
         Reload();
     }
-
-    private static DataGridView CreateGrid() => new()
-    {
-        Dock = DockStyle.Fill,
-        ReadOnly = true,
-        AllowUserToAddRows = false,
-        AllowUserToDeleteRows = false,
-        SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-        RowHeadersVisible = false,
-        BackgroundColor = SystemColors.Window,
-    };
 
     private void Reload()
     {
