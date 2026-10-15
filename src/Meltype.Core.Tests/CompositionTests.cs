@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue689_FinfluencerStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("Finfluencer\n");
+        Assert.Equal("Finfluencer", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
