@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue686_EnshittificationStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("enshittification\n");
+        Assert.Equal("enshittification", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
