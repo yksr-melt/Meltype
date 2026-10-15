@@ -980,6 +980,15 @@ public sealed class CompositionController
         return words.Length >= 2 && words.All(w => w.Any(char.IsAsciiLetter) && w.All(c => char.IsAsciiLetterOrDigit(c) || c is ',' or '.' or '\'' or '-' or '!' or '?' or ':' or ';'));
     }
 
+    /// <summary>最後の語 (空白で区切った) が英小文字で始まるか ("hello " は true、"GitHub " は false)。</summary>
+    internal static bool EndsWithLowercaseWord(string? text)
+    {
+        var trimmed = text?.TrimEnd();
+        if (string.IsNullOrEmpty(trimmed)) return false;
+        var start = trimmed.LastIndexOfAny([' ', '\t', '\n', '\r', '　']) + 1;
+        return char.IsAsciiLetterLower(trimmed[start]);
+    }
+
     internal static bool IsEnglishNameContext(string? text)
     {
         if (!IsEnglishSentence(text)) return false;
@@ -2067,9 +2076,17 @@ public sealed class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
-        var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
+        // 英文の続きで英字に見えていた打ちかけ (hello の後の mata) は final で判定し直さない (かなになり、見えていたものと違う文字が入る)。
+        // 前が英語でないとき (mine → みね) は今までどおり final で判定する。
+        // 前の英語が大文字で始まる 1 語 (GitHub また見てみる) は日本語の文の中の製品名が多いので、英文の続きとはみなさない。
+        var keepEnglish = !converting && _text.Mode == DisplayMode.Auto && _text.PrecedingEnglish == true
+            && (_text.PrecedingEnglishSentence || EndsWithLowercaseWord(_precedingText))
+            && _text.IsAlphanumericAt(final: false);
+        var text = converting ? string.Concat(_clauses.Select(c => c.Text))
+            : CurrentDisplay(final: !keepEnglish);
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
-        var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
+        var english = converting ? _clauses.All(c => c.IsEnglish)
+            : keepEnglish || _text.IsAlphanumericAt(final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
         var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is { } selection)
