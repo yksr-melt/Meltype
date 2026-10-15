@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue674_FyuIsFuxyu()
+    {
+        var k = new Keyboard();
+        k.Type("fyu\n");
+        Assert.Equal("ふゅ", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
