@@ -22,3 +22,5 @@ overchoice
 enumerate
 # fatigue は ふぁちぐえ と読めるが、日本語の語ではない (issue #536)
 fatigue
+# Issue #690
+datamation
