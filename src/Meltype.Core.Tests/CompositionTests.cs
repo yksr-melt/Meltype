@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue683_GuesstimationStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("guesstimation\n");
+        Assert.Equal("guesstimation", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
