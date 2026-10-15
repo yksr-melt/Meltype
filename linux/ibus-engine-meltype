@@ -73,6 +73,10 @@ _lib.meltype_select_candidate.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _lib.meltype_select_candidate.restype = ctypes.c_void_p
 _lib.meltype_set_direct.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _lib.meltype_set_can_delete.argtypes = [ctypes.c_void_p, ctypes.c_int]
+# コード入力 (コメント・文字列は日本語、それ以外は英字のまま)。ターミナルの入力欄で既定にする (issue #715)
+_set_code_input = getattr(_lib, "meltype_set_code_input", None)
+if _set_code_input is not None:
+    _set_code_input.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _lib.meltype_free.argtypes = [ctypes.c_void_p]
 _lib.meltype_report_url.argtypes = [ctypes.c_char_p]
 _lib.meltype_report_url.restype = ctypes.c_void_p
@@ -220,6 +224,12 @@ class MeltypeEngine(IBus.Engine):
         # 消せないのに確定し直すと、元の文字が残ったまま書き足される (api → apiあぴ) ので、本体に確定し直しをやめさせる。
         if self._session:
             _lib.meltype_set_can_delete(self._session, 1 if caps & IBus.Capabilite.SURROUNDING_TEXT else 0)
+
+    def do_set_content_type(self, purpose, hints):
+        # 入力欄がターミナル (Ghostty などは input-purpose: terminal を設定する) なら、コード入力を既定にする。
+        # j k やコマンド名が変換中の文字に入って、アプリに届かなくなるのを防ぐ (Windows 版でターミナルが既定で「コード」なのと同じ)。
+        if self._session and _set_code_input is not None:
+            _set_code_input(self._session, 1 if purpose == IBus.InputPurpose.TERMINAL else 0)
 
     def do_focus_in(self):
         self.register_properties(self._properties)
