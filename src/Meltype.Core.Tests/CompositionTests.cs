@@ -1458,6 +1458,13 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue654_LatticeOffersKatakana()
+    {
+        var dictionary = CandidateDictionary.Load(null);
+        Assert.True(dictionary.Lookup("らてぃす").Contains("ラティス"), "らてぃす → ラティス");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
