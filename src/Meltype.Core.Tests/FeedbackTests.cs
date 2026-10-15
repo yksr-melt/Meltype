@@ -243,6 +243,71 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue594_Shatsu_KeepsJapaneseReadingWithEnglishPrefix()
+    {
+        // shat を知っているスペルチェッカーでも、しゃつ の tsu を t + su に分けない。
+        var saved = CompositionTests.Detector.SpellChecker;
+        CompositionTests.Detector.SpellChecker = new FewWordsChecker("shat", "shut", "shit", "reflect");
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("shatsu", "しゃつ"), ("shatu", "しゃつ"), ("syatsu", "しゃつ"), ("syatu", "しゃつ"),
+                ("shatsuwokau", "しゃつをかう"), ("Tshatsu", "Tしゃつ"),
+                ("shat", "shat"), ("I shat", "I shat"),
+                ("commitsuru", "commitする"), ("commitsite", "commitして"), ("reflectsareta", "reflectされた"),
+                ("shutsita", "shutした"), ("shitsumon", "しつもん"), ("teishutsushita", "ていしゅつした"),
+                ("sounitsuite", "そうについて"), ("AInitsuite", "AIについて"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = saved;
+        }
+    }
+
+    [Test]
+    public static void Issue594_Shatsu_ConversionResizeAndEditingKeepTsu()
+    {
+        var saved = CompositionTests.Detector.SpellChecker;
+        CompositionTests.Detector.SpellChecker = new FewWordsChecker("shat");
+        try
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type("shatsu ");
+            Assert.Equal("しゃつ", k.Showing, "Space で変換しても、しゃつ の読みを保つ");
+            Assert.True(k.Host.View!.Candidates.Contains("シャツ"), "カタカナの候補も出る");
+            k.Key(VirtualKeys.LShift);
+            k.Press(VirtualKeys.Left);
+            Assert.Equal("しゃ|つ", string.Join("|", k.Host.View.Clauses!));
+            k.Press(VirtualKeys.Right);
+            Assert.Equal("しゃつ", string.Join("|", k.Host.View.Clauses!));
+            k.Key(VirtualKeys.LShift, up: true);
+            k.Press(VirtualKeys.Return);
+            Assert.Equal("しゃつ", k.Host.Document);
+
+            k = new CompositionTests.Keyboard();
+            k.Type("shatsu");
+            k.Press(VirtualKeys.Back);
+            Assert.Equal("しゃ", k.Showing, "BackSpace は、つ を1音で消す");
+            k.Type("tsu");
+            k.Press(VirtualKeys.F6);
+            Assert.Equal("しゃつ", k.Showing, "打ち直してF6でひらがなにできる");
+            k.Press(VirtualKeys.Return);
+            Assert.Equal("しゃつ", k.Host.Document);
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = saved;
+        }
+    }
+
+    [Test]
     public static void Laughter_IsNotTakenAsWordFoundMidRomaji()
     {
         // Windows のスペルチェッカーは taw (ビー玉) を知っている。kiyagat|taw の taw で、笑いの w を英字にしていた (きやがっtaw)
