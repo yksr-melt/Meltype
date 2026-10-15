@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue656_SiriHyphenIsLongVowel()
+    {
+        var k = new Keyboard();
+        k.Type("siri-zu\n");
+        Assert.Equal("しりーず", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
