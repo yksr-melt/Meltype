@@ -1458,6 +1458,13 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue706_AonishikiOffersName()
+    {
+        var dictionary = CandidateDictionary.Load(null);
+        Assert.True(dictionary.Lookup("あおにしき").Contains("安青錦"), "あおにしき → 安青錦");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
