@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue735_TverStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("tver\n");
+        Assert.Equal("tver", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
