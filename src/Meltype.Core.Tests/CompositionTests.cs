@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool CalculatorCandidates { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                CalculatorCandidates = () => CalculatorCandidates,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,21 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue295_CalculatorOffersResult()
+    {
+        Assert.Equal("7", Calculator.Evaluate("1+2*3"), "掛け算が先");
+        Assert.Equal("9", Calculator.Evaluate("(1+2)*3="), "括弧と末尾の =");
+        Assert.Equal("0.5", Calculator.Evaluate("1/2"), "小数");
+        Assert.True(Calculator.Evaluate("1/0") is null && Calculator.Evaluate("123") is null && Calculator.Evaluate("1+") is null, "割れない・式でない・途中は null");
+        var k = new Keyboard { CalculatorCandidates = true };
+        k.Type("1+2*3 ");
+        Assert.True(k.Host.View!.Candidates.Contains("7") && k.Host.View.Candidates.Contains("1+2*3=7"), string.Join(",", k.Host.View.Candidates));
+        var off = new Keyboard();
+        off.Type("1+2*3 ");
+        Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("7"), "OFF は候補に出さない");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
