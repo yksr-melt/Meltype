@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> MacControlKeys { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -585,7 +586,17 @@ public sealed class CompositionController
         }
         if (_swallowedControl.Count > 0)
         {
-            if (!_text.IsEmpty && ControlShortcut(vk) is { } function)
+            // 設定「Control キーを macOS 標準の日本語入力と同じにする」: ATOK 風の割り当てより先に見る (issue #643)
+            if (!_text.IsEmpty && _options.MacControlKeys() && MacControlShortcut(vk) is { } mac)
+            {
+                if (mac is ResizeExtend or ResizeShrink)
+                {
+                    if (_converting) Resize(mac == ResizeExtend ? +1 : -1);
+                    return;
+                }
+                vk = mac;
+            }
+            else if (!_text.IsEmpty && ControlShortcut(vk) is { } function)
             {
                 // Ctrl+U/I/O/P: F6/F7/F10/F9 と同じ (ATOK と同じ割り当て。続けて押すと大文字・小文字も切り替わる)。Ctrl+H は BackSpace。
                 vk = function;
@@ -2546,6 +2557,30 @@ public sealed class CompositionController
     private static bool IsShift(int vk) => vk is VirtualKeys.Shift or VirtualKeys.LShift or VirtualKeys.RShift;
 
     private static bool IsControl(int vk) => vk is VirtualKeys.Control or VirtualKeys.LControl or VirtualKeys.RControl;
+
+    private const int ResizeExtend = 0x7FFF0001, ResizeShrink = 0x7FFF0002;
+
+    /// <summary>
+    /// 設定「Control キーを macOS 標準の日本語入力と同じにする」の割り当て。J K L = ひらがな / カタカナ / 全角英字、H D = 1 文字消す、
+    /// N P = 次 / 前の候補、B F A E = カーソル移動、O I = 文節を伸ばす / 縮める。
+    /// </summary>
+    private static int? MacControlShortcut(int vk) => vk switch
+    {
+        'J' => VirtualKeys.F6,
+        'K' => VirtualKeys.F7,
+        'L' => VirtualKeys.F9,
+        'H' => VirtualKeys.Back,
+        'D' => 0x2E,
+        'N' => VirtualKeys.Down,
+        'P' => VirtualKeys.Up,
+        'B' => VirtualKeys.Left,
+        'F' => VirtualKeys.Right,
+        'A' => 0x24,
+        'E' => 0x23,
+        'O' => ResizeExtend,
+        'I' => ResizeShrink,
+        _ => null,
+    };
 
     /// <summary>入力中の Ctrl+英字で、ほかのキーと同じ働きをするもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数 / H BackSpace)。</summary>
     private static int? ControlShortcut(int vk) => vk switch

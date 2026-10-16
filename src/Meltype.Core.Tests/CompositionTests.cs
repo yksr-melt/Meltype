@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool MacControlKeys { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                MacControlKeys = () => MacControlKeys,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,30 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue643_MacControlKeysConvertLikeKotoeri()
+    {
+        var k = new Keyboard { MacControlKeys = true };
+        k.Type("toukyou");
+        k.Key(VirtualKeys.LControl);
+        k.Key('K');
+        k.Key('K', up: true);
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("トウキョウ", k.Showing, "Control+K でカタカナ");
+        k.Key(VirtualKeys.LControl);
+        k.Key('J');
+        k.Key('J', up: true);
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("とうきょう", k.Showing, "Control+J でひらがな");
+        var normal = new Keyboard();
+        normal.Type("toukyou");
+        normal.Key(VirtualKeys.LControl);
+        normal.Key('K');
+        normal.Key('K', up: true);
+        normal.Key(VirtualKeys.LControl, up: true);
+        Assert.True(normal.Showing != "トウキョウ", "OFF は今までどおり");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
