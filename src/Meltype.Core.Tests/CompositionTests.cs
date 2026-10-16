@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue249_MozcThenJapanese()
+    {
+        var k = new Keyboard();
+        k.Type("mozcgamiteirutohaie\n");
+        Assert.Equal("mozcがみているとはいえ", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
