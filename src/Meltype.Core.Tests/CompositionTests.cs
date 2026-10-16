@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue268_DeVitoThenParticle()
+    {
+        var k = new Keyboard();
+        k.Type("DeVitode\n");
+        Assert.Equal("DeVitoで", k.Host.Document);
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
