@@ -105,6 +105,14 @@ public sealed class CompositionText
             if (acronym || knownUnambiguous || properNoun || _units[^1].Raw == "-" && loneConsonant)
                 _units[^1] = _units[^1] with { Kana = _units[^1].Raw };
         }
+        // … になった / の続きの / は、同じ … に足す (4〜6 個で ……、7〜9 個で ………: 3 個ごとに … を 1 つ増やす。issue #495)
+        if (c == '/' && _pending.Length == 0 && _units.Count >= 1 && _units[^1] is { Kana: [.., '…'] } ellipsis && ellipsis.Raw.Length >= 3 && ellipsis.Raw.All(x => x == '/') &&
+            ellipsis.Kana.All(x => x == '…'))
+        {
+            var raw = ellipsis.Raw + "/";
+            _units[^1] = new CompositionUnit(new string('…', (raw.Length + 2) / 3), raw);
+            return;
+        }
         // / を 3 つ続けて打ったら … (三点リーダー)。URL (file:///) の : の後ろは除く。
         if (c == '/' && _pending.Length == 0 && _units.Count >= 2 && _units[^1].Raw == "/" && _units[^2].Raw == "/" &&
             !(_units.Count >= 3 && _units[^3].Raw == ":"))

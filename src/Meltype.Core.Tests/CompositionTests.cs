@@ -1458,6 +1458,18 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue495_MoreThanThreeSlashesExtendTheEllipsis()
+    {
+        var expected = new[] { (3, "…"), (4, "……"), (6, "……"), (7, "………") };
+        foreach (var (count, ellipsis) in expected)
+        {
+            var k = new Keyboard();
+            k.Type("naruhodo" + new string('/', count) + "\n");
+            Assert.Equal("なるほど" + ellipsis, k.Host.Document, $"/ を {count} 個");
+        }
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
