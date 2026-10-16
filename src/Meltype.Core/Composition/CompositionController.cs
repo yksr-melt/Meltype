@@ -1748,6 +1748,7 @@ public sealed class CompositionController
     private IEnumerable<string> TimeCandidates(string reading)
     {
         if (TypedDateCandidates(reading) is { } typed) return typed;
+        if (reading is "じこう" or "じこうのあいさつ") return SeasonalGreetings(_options.Now().Month);
         var isNow = NowReadings.Contains(reading);
         if (!isNow && reading != "きょう") return [];
         var now = _options.Now();
@@ -1762,6 +1763,34 @@ public sealed class CompositionController
         var time = $"{now.Hour}時{now.Minute}分";
         return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
             $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
+    }
+
+    /// <summary>月ごとの時候の挨拶 (「〜の候」の〜)。手紙・メールの書き出しに使う。</summary>
+    private static readonly string[][] SeasonalTerms =
+    [
+        ["新春", "初春", "厳寒", "大寒"],
+        ["余寒", "立春", "春寒", "梅花"],
+        ["早春", "春分", "春暖", "浅春"],
+        ["桜花", "陽春", "春暖", "晩春"],
+        ["新緑", "薫風", "若葉", "立夏"],
+        ["入梅", "梅雨", "向暑", "初夏"],
+        ["盛夏", "猛暑", "大暑", "酷暑"],
+        ["晩夏", "残暑", "立秋", "暮夏"],
+        ["初秋", "新秋", "秋晴", "野分"],
+        ["秋冷", "紅葉", "秋涼", "寒露"],
+        ["晩秋", "霜降", "向寒", "初霜"],
+        ["初冬", "師走", "寒冷", "歳晩"],
+    ];
+
+    /// <summary>
+    /// じこう / じこうのあいさつ の文節に、今の月に合う時候の挨拶 (秋冷の候 / 拝啓　秋冷の候、…) を候補として出す (issue #339)。
+    /// 今の月を先に、続けて前後の月のものも出す。
+    /// </summary>
+    internal static IEnumerable<string> SeasonalGreetings(int month)
+    {
+        var months = new[] { month, (month + 10) % 12 + 1, month % 12 + 1 };
+        var terms = months.SelectMany(m => SeasonalTerms[m - 1]).Distinct().ToList();
+        return terms.Select(t => $"{t}の候").Concat([$"拝啓　{terms[0]}の候、"]);
     }
 
     /// <summary>打った日付 (10がつ9にち) と時刻 (3じ15ふん) の読み。数字は全角でもよい。</summary>

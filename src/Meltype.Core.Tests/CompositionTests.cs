@@ -1458,6 +1458,18 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue339_JikouOffersSeasonalGreetings()
+    {
+        var k = new Keyboard(now: () => new DateTime(2026, 10, 9));
+        k.Type("jikou ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.True(candidates.Contains("秋冷の候") && candidates.Contains("拝啓　秋冷の候、"), "10 月の時候の挨拶: " + string.Join(",", candidates));
+        var spring = new Keyboard(now: () => new DateTime(2026, 4, 3));
+        spring.Type("jikou ");
+        Assert.True(spring.Host.View!.Candidates.Contains("陽春の候"), "4 月");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
