@@ -13,6 +13,8 @@ on:
     types: [opened, edited]
   issue_comment:
     types: [created]
+  pull_request:
+    types: [opened, synchronize, reopened]
   pull_request_target:
     types: [opened, reopened]
 
@@ -23,6 +25,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  candidate-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - name: Test related-issue candidate logic
+        run: node --test .github/bot/tests/issue-relation-candidates.test.mjs
+
   # PR 作成時: pr ラベルを付ける (pull_request_target なので fork からも動く。コードは触らない)
   pr-label:
     if: github.event_name == 'pull_request_target'
@@ -55,7 +70,7 @@ jobs:
             });
 
   parse:
-    if: github.event_name != 'pull_request_target'
+    if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
