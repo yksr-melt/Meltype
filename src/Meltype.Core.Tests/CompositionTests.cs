@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool LogKeyIntervals { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                LogKeyIntervals = () => LogKeyIntervals,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,18 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue286_KeyIntervalsAreLoggedWithoutText()
+    {
+        var k = new Keyboard { LogKeyIntervals = true };
+        var before = Diagnostics.Log.Snapshot().Length;
+        var version = Diagnostics.Log.Version;
+        k.Type("hello");
+        var added = Diagnostics.Log.Snapshot().Select(x => x.Message).Where(x => x.Contains("打鍵の間隔")).ToList();
+        Assert.True(added.Count >= 3, "間隔を残す: " + added.Count);
+        Assert.True(added.All(x => !x.Contains("hello")), "打った文字は残さない");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
