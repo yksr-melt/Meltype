@@ -77,6 +77,35 @@ async function react(content) {
   if (event.comment) await gh('POST', `/issues/comments/${event.comment.id}/reactions`, { content }).catch(() => {});
 }
 
+// 関連しそうな Issue を、根拠つきで挙げる (issue #456)。ラベルや状態は変えず、自動で閉じもしない。
+//   根拠 1: 本文に書かれた Issue の参照 (#123)
+//   根拠 2: 誤判定の報告の「打ったもの」(打ったキー) が、ほかの Issue の本文と同じ (4 文字以上)
+// 失敗しても Issue の処理は続ける (関連の候補が出ないだけ)。
+async function relatedIssues(number, body, keys) {
+  const found = new Map();
+  try {
+    const refs = [...(body ?? '').matchAll(/(?<![\w/&])#(\d{1,5})\b/g)].map(m => Number(m[1])).filter(n => n !== number);
+    for (const ref of [...new Set(refs)].slice(0, 5)) {
+      const issue = await gh('GET', `/issues/${ref}`).catch(() => null);
+      if (issue && !issue.pull_request) found.set(ref, { title: issue.title, state: issue.state, reason: '本文で参照されている' });
+    }
+    if (keys && keys.length >= 4 && /^[\x20-\x7e]+$/.test(keys) && !/["\\]/.test(keys)) {
+      const query = encodeURIComponent(`repo:${repo} is:issue "${keys}" in:body`);
+      const response = await fetch(`${api}/search/issues?q=${query}&per_page=6`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'meltype-bot' } });
+      if (response.ok) {
+        for (const item of (await response.json()).items ?? []) {
+          if (item.number !== number && !item.pull_request && !found.has(item.number)) {
+            found.set(item.number, { title: item.title, state: item.state, reason: `同じ「打ったもの」(\`${keys}\`) の報告` });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('関連の Issue を調べられませんでした:', error.message);
+  }
+  return [...found].slice(0, 5).map(([n, v]) => `- #${n} ${v.title} (${v.state === 'open' ? '未解決' : '解決済み'}) — ${v.reason}`);
+}
+
 const LabelInfo = {
   '要トリアージ': ['FBCA04', '作者がまだ確認していない報告'],
   'win11': ['0078D4', 'Windows 11'],
@@ -210,6 +239,8 @@ async function parse() {
 
     const text = [];
     if (problems.length > 0) text.push('報告ありがとうございます。確認のために、もう少し教えてください。', '', ...problems.map(p => `- ${p}`), '', '本文を編集して直してもらえれば、自動でもう一度確認します。', '');
+    const related = await relatedIssues(issue, event.issue.body, misdetection ? field(form, '打ったもの') : '');
+    if (related.length > 0) text.push('<details><summary>🔗 関連しそうな Issue (自動・根拠つき)</summary>', '', ...related, '', '本文の参照と「打ったもの」の一致だけを根拠にした候補です。同じ問題とは限りません (ラベルや状態は変えていません)。', '</details>', '');
     if (reasons.length > 0) text.push('<details><summary>🤖 自動の仕分け</summary>', '', ...reasons.map(r => `- ${r}`), '', '優先度・分類は本文からの見当です。作者が確認したら `要トリアージ` を外します。', '</details>');
     if (text.length > 0) await upsertComment(issue, 'triage', text.join('\n'));
 
