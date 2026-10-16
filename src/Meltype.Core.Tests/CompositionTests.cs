@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool FunctionKeysAffectSelectedClause { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                FunctionKeysAffectSelectedClause = () => FunctionKeysAffectSelectedClause,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,19 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue678_FunctionKeysCanAffectOnlyTheSelectedClause()
+    {
+        var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
+        k.Type("tanniwotoru ");
+        Assert.Equal("単位を取る", string.Concat(k.Host.View!.Clauses!));
+        k.Press(VirtualKeys.F7);
+        Assert.True(k.Host.View!.Converting, "変換は続く");
+        Assert.Equal("タンイヲ取る", string.Concat(k.Host.View!.Clauses!), "選んでいる文節だけカタカナ");
+        k.Press(VirtualKeys.F6);
+        Assert.Equal("たんいを取る", string.Concat(k.Host.View!.Clauses!), "F6 でひらがな");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
