@@ -1007,14 +1007,14 @@ public sealed class CompositionText
     /// 直し方も続きで変わる (futtemshi の時点では ふってんし、futtemshita まで打てば ふってました) ので直さない。
     /// 大文字を含む部分・英単語は直さない。
     /// </summary>
-    public bool FixTypos()
+    public bool FixTypos(bool correct = true)
     {
         // 確定・変換の前に、数字の後ろの単位を英字のままにする (5min を 5みん にしない)。打ち間違いを直す設定に関係なく
         SplitUnitAfterNumber(final: true);
         Normalize(final: false);
         // 英字の並びの最後の w の連続 (笑い) はそのまま残し、打ち間違いの直しの対象にもしない
         KeepLaughter();
-        if (TypoCorrector is not { } corrector || !CorrectTypos() || Mode != DisplayMode.Auto || KanaInput) return false;
+        if (!correct || TypoCorrector is not { } corrector || !CorrectTypos() || Mode != DisplayMode.Auto || KanaInput) return false;
         var changed = false;
         // 今の表示で英字に見えている文字 (きょうは|meeting|です の meeting)。ここは直さない
         // (表示では英単語なのに、確定したら g が が に直されて めえちんがです になっていた)。
