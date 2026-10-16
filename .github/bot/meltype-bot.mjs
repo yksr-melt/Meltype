@@ -177,8 +177,57 @@ const Help = [
   '| `/test-repro <キー>` | PR のコードで `/repro` | メンテナー |',
   '| `/test-jht <文> [/ 読み]` | PR のコードで `/jht` | メンテナー |',
   '| `/test-explain <キー>` | PR のコードで `/explain` | メンテナー |',
+  '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でなければ止める | 管理者 |',
+  '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1` の形) | 管理者 |',
   '| `/help` | この一覧 | だれでも |',
 ].join('\n');
+
+// /release <版>・/pre-release <版> (issue #665)。管理者 (admin / maintain) だけ。
+//   1. 版の形を確かめる (release: 1.2.3 / pre-release: 1.2.3-pre.1)
+//   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
+//   3. タグ v<版> を main の先頭に作る (もうあれば止める)
+//   4. リリースの下書きを作る (リリースノートは自動生成。pre-release は prerelease)
+//   5. 配布物のビルド (build / mac / linux) を、そのタグで始める。ビルドが終わると、下書きに配布物が付く
+// タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
+async function releaseCommand(issue, command, version) {
+  const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
+  const pre = command === 'pre-release';
+  const permission = await gh('GET', `/collaborators/${event.comment.user.login}/permission`).then(r => r.permission).catch(() => 'none');
+  if (!['admin', 'maintain'].includes(permission)) return reply(`\`/${command}\` は管理者 (admin / maintain) だけが使えます。`);
+  const shape = pre ? /^\d+\.\d+\.\d+-pre\.\d+$/ : /^\d+\.\d+\.\d+$/;
+  if (!shape.test(version)) return reply(`版を ${pre ? '`1.2.3-pre.1`' : '`1.2.3`'} の形で書いてください (例: \`/${command} ${pre ? '1.2.3-pre.1' : '1.2.3'}\`)。`);
+  await react('eyes');
+  const read = async file => Buffer.from((await gh('GET', `/contents/${file}?ref=main`)).content, 'base64').toString('utf8');
+  const mismatches = [];
+  for (const file of ['src/Meltype/Meltype.csproj', 'src/Meltype.Core/Meltype.Core.csproj']) {
+    const found = (await read(file)).match(/<Version>([^<]+)<\/Version>/)?.[1];
+    if (found !== version) mismatches.push(`${file}: ${found ?? '(版なし)'}`);
+  }
+  const plain = version.replace(/-.*$/, '');
+  const plist = await read('mac/Resources/Info.plist');
+  const plistVersion = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+  if (plistVersion !== plain) mismatches.push(`mac/Resources/Info.plist: ${plistVersion ?? '(版なし)'} (期待 ${plain})`);
+  if (mismatches.length > 0) return reply(`❌ main の版が ${version} になっていないので、リリースしません (docs/RELEASE.md の「版を上げる」を先に main に入れてください):\n\n${mismatches.map(m => `- ${m}`).join('\n')}`);
+  const tag = `v${version}`;
+  if (await gh('GET', `/git/ref/tags/${tag}`).then(() => true).catch(() => false)) return reply(`❌ タグ \`${tag}\` はもうあります。`);
+  const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
+  await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha });
+  await gh('POST', '/releases', { tag_name: tag, name: `Meltype ${version}`, draft: true, prerelease: pre, generate_notes: true });
+  const started = [], failed = [];
+  for (const workflow of ['build.yml', 'mac.yml', 'linux.yml']) {
+    try {
+      await gh('POST', `/actions/workflows/${workflow}/dispatches`, { ref: tag });
+      started.push(workflow);
+    } catch (error) {
+      failed.push(`${workflow}: ${error.message.slice(0, 120)}`);
+    }
+  }
+  await reply([
+    `✅ タグ \`${tag}\` (${sha.slice(0, 7)}) とリリースの下書き (${pre ? 'プレリリース' : '通常'}、リリースノートは自動生成) を作りました。`,
+    started.length > 0 ? `\nビルドを始めました: ${started.join('・')}。終わると下書きに配布物が付くので、中身を確かめてから公開してください。` : '',
+    failed.length > 0 ? `\n⚠ 始められなかったビルド (Actions の画面から ${tag} で手で実行してください):\n${failed.map(f => `- ${f}`).join('\n')}` : '',
+  ].join('\n'));
+}
 
 async function parse() {
   const issue = event.issue.number;
@@ -223,12 +272,16 @@ async function parse() {
   }
 
   const line = (event.comment.body ?? '').split('\n')[0].trim();
-  const match = line.match(/^\/(repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|help)\b\s*(.*)$/);
+  const match = line.match(/^\/(repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|pre-release|release|help)\b\s*(.*)$/);
   if (!match || event.comment.user?.type === 'Bot') return output({ action: 'none' });
   const [, command, rest] = match;
   const maintainer = Maintainers.includes(event.comment.author_association);
   const prOnly = ['test', 'pack', 'test-repro', 'test-jht', 'test-explain'];
 
+  if (command === 'release' || command === 'pre-release') {
+    await releaseCommand(issue, command, rest.trim().replace(/^`|`$/g, '').replace(/^v/, ''));
+    return output({ action: 'none' });
+  }
   if (command === 'help') {
     await upsertComment(issue, `help-${event.comment.id}`, Help);
     return output({ action: 'none' });

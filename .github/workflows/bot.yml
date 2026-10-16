@@ -3,6 +3,7 @@
 #   コメントの 1 行目のコマンド:
 #     だれでも: /repro /explain /ca /jht /help
 #     メンテナー (PR のみ): /test /pack /test-repro /test-jht /test-explain
+#     管理者: /release <版> /pre-release <版> (タグとリリースの下書きを作り、配布物のビルドを始める)
 # Issue・コメントの文は誰でも書けるので、run: の中に ${{ }} で埋め込まず、環境変数で値として渡す。
 # Pull Request のコードは、書き込みの権限を持たない job (pr) でだけ動かす。結果のコメントは別の job (report) が書く。
 # 漢字変換には最新リリースの meltype_mozc_helper を使う (毎回 Bazel ビルドしない)。
@@ -59,7 +60,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      contents: read
+      # /release・/pre-release (管理者だけ) がタグとリリースの下書きを作り、配布物のビルドを始める
+      contents: write
+      actions: write
       issues: write
       pull-requests: write
     outputs:
