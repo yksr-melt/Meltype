@@ -545,6 +545,9 @@ public sealed partial class CompositionDetector
             _romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } && !IsKnownEnglishWord(head);
     }
 
+    /// <summary>english-readable.txt の語か (ローマ字として最後まで読めても、日本語の語にならない英単語: open、feature)。</summary>
+    public static bool IsReadableEnglishWord(string lower) => ReadableEnglish.Value.ContainsWord(lower);
+
     /// <summary>
     /// 知っている英単語か (同梱の辞書・固有名詞・ユーザーが英字に直して覚えた語・4 文字以上ならスペルチェッカー)。
     /// python + no の n のように、英単語の最後の n と次の音がくっつくのを防ぐのに使う。
