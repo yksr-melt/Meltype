@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool EscRevertsSelectedClause { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                EscRevertsSelectedClause = () => EscRevertsSelectedClause,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,19 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue670_EscRevertsOnlyTheSelectedClause()
+    {
+        var k = new Keyboard { EscRevertsSelectedClause = true };
+        k.Type("tanniwotoru ");
+        Assert.Equal("単位を取る", string.Concat(k.Host.View!.Clauses!), "文節に分かれて変換");
+        k.Press(VirtualKeys.Escape);
+        Assert.True(k.Host.View!.Converting, "変換は続く");
+        Assert.Equal("たんいを取る", string.Concat(k.Host.View!.Clauses!), "選んでいる文節だけひらがなに");
+        k.Press(VirtualKeys.Escape);
+        Assert.True(!k.Host.View!.Converting, "もうひらがなの文節なら、今までどおり変換をやめる");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {

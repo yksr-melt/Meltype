@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> EscRevertsSelectedClause { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -1188,6 +1189,20 @@ public sealed class CompositionController
             case VirtualKeys.Tab when _tabStartedConversion:
                 // Tab で始めた変換の中では、Tab が次の候補、Shift+Tab が前の候補 (issue #219)。
                 NextCandidate(shift || _host.IsShiftDown() ? -1 : +1);
+                return true;
+            case VirtualKeys.Escape when _options.EscRevertsSelectedClause() && _clauses.Count > 1 &&
+                                         !_clauses[_selectedClause].IsEnglish && _clauses[_selectedClause].Text != _clauses[_selectedClause].Reading:
+                // 設定「変換中の Esc は選んだ文節だけをかなに戻す」: 選んでいる文節だけをひらがなにして、変換は続ける (issue #670)
+                {
+                    var clause = _clauses[_selectedClause];
+                    var index = clause.Candidates.IndexOf(clause.Reading);
+                    if (index < 0)
+                    {
+                        clause.Candidates.Add(clause.Reading);
+                        index = clause.Candidates.Count - 1;
+                    }
+                    clause.Index = index;
+                }
                 return true;
             case VirtualKeys.Back:
             case VirtualKeys.Escape:
