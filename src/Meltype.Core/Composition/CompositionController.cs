@@ -1748,6 +1748,7 @@ public sealed class CompositionController
     private IEnumerable<string> TimeCandidates(string reading)
     {
         if (TypedDateCandidates(reading) is { } typed) return typed;
+        if (TypedUnitCandidates(reading) is { } units) return units;
         var isNow = NowReadings.Contains(reading);
         if (!isNow && reading != "きょう") return [];
         var now = _options.Now();
@@ -1762,6 +1763,34 @@ public sealed class CompositionController
         var time = $"{now.Hour}時{now.Minute}分";
         return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
             $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
+    }
+
+    /// <summary>尺貫法の単位 (読み → 単位の字、メートル法での大きさ、メートル法の単位)。</summary>
+    private static readonly (string Reading, string Unit, double Size, string Metric, string Name)[] TraditionalUnits =
+    [
+        ("しゃく", "尺", 100.0 / 3.3, "cm", "尺"), ("すん", "寸", 10.0 / 3.3, "cm", "寸"), ("けん", "間", 200.0 / 110.0, "m", "間"),
+        ("じょう", "丈", 100.0 / 33.0, "m", "丈"), ("つぼ", "坪", 400.0 / 121.0, "㎡", "坪"),
+        ("ごう", "合", 180.39, "mL", "合"), ("しょう", "升", 1.8039, "L", "升"), ("と", "斗", 18.039, "L", "斗"),
+        ("かん", "貫", 3.75, "kg", "貫"), ("もんめ", "匁", 3.75, "g", "匁"), ("きん", "斤", 600, "g", "斤"), ("りょう", "両", 37.5, "g", "両"),
+    ];
+
+    private static readonly System.Text.RegularExpressions.Regex UnitReading =
+        new("^(?<n>[0-9０-９]{1,6}(?:[.．][0-9０-９]{1,3})?)(?<u>しゃく|すん|けん|じょう|つぼ|ごう|しょう|と|かん|もんめ|きん|りょう)$");
+
+    /// <summary>
+    /// 数字 + 尺貫法の単位の読み (3しゃく) の文節に、単位の字 (3尺) と、メートル法に直した大きさ (約90.9cm) を出す (issue #340)。
+    /// 尺貫法でなければ null。
+    /// </summary>
+    internal static IEnumerable<string>? TypedUnitCandidates(string reading)
+    {
+        if (UnitReading.Match(reading) is not { Success: true } match) return null;
+        var digits = new string(match.Groups["n"].Value.Select(c => c switch { >= '０' and <= '９' => (char)(c - '０' + '0'), '．' => '.', _ => c }).ToArray());
+        if (!double.TryParse(digits, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value)) return null;
+        var unit = TraditionalUnits.First(u => u.Reading == match.Groups["u"].Value);
+        var size = value * unit.Size;
+        var text = size >= 100 ? Math.Round(size).ToString("0", System.Globalization.CultureInfo.InvariantCulture)
+            : Math.Round(size, 2).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        return [$"{digits}{unit.Unit}", $"約{text}{unit.Metric}"];
     }
 
     /// <summary>打った日付 (10がつ9にち) と時刻 (3じ15ふん) の読み。数字は全角でもよい。</summary>
