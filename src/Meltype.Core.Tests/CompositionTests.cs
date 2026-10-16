@@ -1458,6 +1458,14 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue812_CwdThenNihaIsJapanese()
+    {
+        var k = new Keyboard();
+        k.Type("cwdniha\n");
+        Assert.Equal("cwdには", k.Host.Document, "cwd + には");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
