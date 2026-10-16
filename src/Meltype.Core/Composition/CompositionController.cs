@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> CompatibleShortcuts { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -585,6 +586,12 @@ public sealed class CompositionController
         }
         if (_swallowedControl.Count > 0)
         {
+            // 設定「Ctrl + K / L で文節の長さを変える」: 変換中だけ (Shift + ← → と同じ。issue #599)
+            if (_converting && _options.CompatibleShortcuts() && vk is 'K' or 'L')
+            {
+                Resize(vk == 'L' ? +1 : -1);
+                return;
+            }
             if (!_text.IsEmpty && ControlShortcut(vk) is { } function)
             {
                 // Ctrl+U/I/O/P: F6/F7/F10/F9 と同じ (ATOK と同じ割り当て。続けて押すと大文字・小文字も切り替わる)。Ctrl+H は BackSpace。

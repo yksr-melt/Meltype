@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool CompatibleShortcuts { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                CompatibleShortcuts = () => CompatibleShortcuts,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,20 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue599_CtrlKLResizeTheClause()
+    {
+        var k = new Keyboard { CompatibleShortcuts = true };
+        k.Type("tanniwotoru ");
+        Assert.Equal("単位を取る", string.Concat(k.Host.View!.Clauses!));
+        k.Key(VirtualKeys.LControl);
+        k.Key('K');
+        k.Key('K', up: true);
+        k.Key(VirtualKeys.LControl, up: true);
+        var shrunk = string.Concat(k.Host.View!.Clauses!);
+        Assert.True(k.Host.View!.Converting && shrunk != "単位を取る", "Ctrl+K で文節が縮む: " + shrunk);
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
