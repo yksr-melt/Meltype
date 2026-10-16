@@ -621,8 +621,31 @@ public sealed class CompositionText
             return cached.Segments;
         }
         var result = ComputeSegments(final);
+        if (LaughterAfterKana) result = SplitLaughter(result);
         _segmentsCache[slot] = (key, _detector.Memory, _detector.SpellChecker, result);
         return result;
+    }
+
+    /// <summary>
+    /// 設定「かな + w を笑いにする」: 英語の区間が、1 つのかなの音 + w (new・saw) だけなら、かな (ね・さ) と笑いの w に分ける (issue #713・#492)。
+    /// 前が日本語 (またはなにも無い) ときだけ。前が英語の文 (I saw) のときは、英単語のまま。
+    /// </summary>
+    private IReadOnlyList<CompositionSegment> SplitLaughter(IReadOnlyList<CompositionSegment> segments)
+    {
+        List<CompositionSegment>? changed = null;
+        for (var i = 0; i < segments.Count; i++)
+        {
+            var segment = segments[i];
+            if (segment.IsEnglish && segment.Raw.Length == 3 && segment.Raw[2] is 'w' && !(i > 0 ? segments[i - 1].IsEnglish : PrecedingEnglishSentence) &&
+                char.IsAsciiLetterLower(segment.Raw[0]) && char.IsAsciiLetterLower(segment.Raw[1]) &&
+                _detector.Romaji.Analyze(segment.Raw[..2]) is { IsValid: true, Partial: "" } reading && reading.Kana.Length == 1)
+            {
+                changed ??= [.. segments];
+                changed[i] = new CompositionSegment(false, reading.Kana, segment.Raw[..2]);
+                changed.Insert(i + 1 + (changed.Count - segments.Count), new CompositionSegment(true, "w", "w"));
+            }
+        }
+        return changed ?? segments;
     }
 
     private readonly (string Key, LanguageMemory? Memory, Detection.IWordChecker? SpellChecker, IReadOnlyList<CompositionSegment> Segments)?[] _segmentsCache = new (string, LanguageMemory?, Detection.IWordChecker?, IReadOnlyList<CompositionSegment>)?[2];
@@ -636,7 +659,7 @@ public sealed class CompositionText
             .Append(PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-').Append(final ? 'F' : '-')
-            .Append(PrecedingEnglishName ? 'N' : '-')
+            .Append(PrecedingEnglishName ? 'N' : '-').Append(LaughterAfterKana ? 'L' : '-')
             .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1);
         return key.ToString();
     }
@@ -1108,9 +1131,13 @@ public sealed class CompositionText
         // (スペルチェッカーの短い語が音の途中から見つかる kiyagat|taw の taw で、笑いの w を英字にしていた)
         var letters = string.Concat(_units.Skip(start).Take(end - start).Select(u => u.Raw)) + pending;
         var laugh = letters;
+        // 設定「かな + w を笑いにする」: 1 つのかなの音 (ね・さ) だけの後ろの w は、その 2 つで英単語 (new・saw) にしない (issue #713・#492)。
+        // もっと長い英単語 (snow・window) の終わりは、今までどおり英単語
+        var soleSyllable = LaughterAfterKana && start > 0 && _units[start - 1].Kana is [>= 'ぁ' and <= 'ん'] && _units[start - 1].Raw.All(char.IsAsciiLetter);
         for (var i = start - 1; i >= 0 && _units[i].Raw.Length > 0 && _units[i].Raw.All(char.IsAsciiLetter); i--)
         {
             letters = _units[i].Raw + letters;
+            if (soleSyllable && i == start - 1) continue;
             var runStart = i == 0 || !IsLetters(_units[i - 1].Raw);
             if (letters.Length >= 3 && (runStart ? _detector.IsKnownEnglishWord(letters) : _detector.IsListedEnglishWord(letters.ToLowerInvariant()))) return end;
         }
@@ -1211,6 +1238,9 @@ public sealed class CompositionText
     }
 
     /// <summary>日本語の中で打った記号 (Microsoft IME と同じく全角)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
+    /// <summary>1 つのかなの音の後ろの w を笑いにするか (設定)。</summary>
+    public bool LaughterAfterKana { get; set; }
+
     private char Symbol(char c) => c switch
     {
         '-' => 'ー',
