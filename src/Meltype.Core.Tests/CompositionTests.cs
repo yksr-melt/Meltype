@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool ShowCandidatesWhileTyping { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                ShowCandidatesWhileTyping = () => ShowCandidatesWhileTyping,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,18 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue666_CandidatesCanBeShownWhileTyping()
+    {
+        var k = new Keyboard { ShowCandidatesWhileTyping = true };
+        k.Type("kyouha");
+        Assert.True(!k.Host.View!.Converting, "変換はまだ始めていない");
+        Assert.True(k.Host.View.Candidates.Count >= 2, "入力中も候補を出す: " + string.Join(",", k.Host.View.Candidates));
+        var off = new Keyboard();
+        off.Type("kyouha");
+        Assert.Equal(0, off.Host.View!.Candidates.Count, "OFF は出さない");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
