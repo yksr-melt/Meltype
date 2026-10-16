@@ -1458,6 +1458,20 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue672_DigitChoiceIsLearned()
+    {
+        var k = new Keyboard(history: new ConversionHistory(null));
+        k.Type("1 ");
+        var candidates = k.Host.View!.Candidates.ToList();
+        Assert.True(candidates.Count >= 2, "候補が 2 つ以上: " + string.Join(",", candidates));
+        k.Press(VirtualKeys.Space);
+        var chosen = k.Host.View!.Candidates[k.Host.View.SelectedIndex];
+        k.Press(VirtualKeys.Return);
+        k.Type("1 ");
+        Assert.Equal(chosen, k.Host.View!.Candidates[k.Host.View.SelectedIndex], "次に同じ数字を変換したら、選んだ候補が先に出る");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
