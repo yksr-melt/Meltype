@@ -1458,6 +1458,17 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue127_EnterKeepsWhatIsShownAsEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("hello ");
+        k.Type("mata");
+        Assert.Equal("mata", k.Showing, "Enter の前は英字");
+        k.Type("\n");
+        Assert.Equal("hello mata", k.Host.Document, "確定しても英字のまま");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
