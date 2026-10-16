@@ -263,6 +263,24 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                 return true;
             }
         }
+        // 設定「日本語 / 英数を切り替えるキーを追加」: 半角/全角 と同じく Meltype キーボードの ON/OFF (issue #530)
+        if (settings.Enabled && settings.Mode == InputMode.Keyboard && settings.ToggleKeyboardShortcuts.Length > 0 && !e.Injected && !composition.Gate.IsCaptured)
+        {
+            var ctrl = IsDown(VirtualKeys.Control);
+            var alt = IsDown(VirtualKeys.Menu);
+            var shift = IsDown(VirtualKeys.Shift);
+            var win = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+            if (Meltype.Input.KeyShortcut.ParseList(settings.ToggleKeyboardShortcuts).Any(shortcut => shortcut.Matches(e.Vk, ctrl, alt, shift, win)))
+            {
+                if (e.IsDown)
+                {
+                    lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
+                    MaskAltRelease();
+                    KeyboardDirect = !_keyboardDirect;
+                }
+                return true;
+            }
+        }
         // 半角/全角 キーは Microsoft IME ではなく Meltype キーボードの ON/OFF に使う。
         if (settings.Enabled && settings.HankakuTogglesKeyboard && VirtualKeys.IsHankakuZenkaku(e.Vk) && !e.Injected && !composition.Gate.IsCaptured)
         {
