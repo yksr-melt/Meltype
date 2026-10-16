@@ -1298,7 +1298,7 @@ public sealed class CompositionController
                 var romaji = RomajiCandidates(segment.Raw);
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
-                    : Distinct([.. english, .. romaji])) { Kana = _text.KanaForSegment(s) });
+                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)])) { Kana = _text.KanaForSegment(s) });
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
@@ -1359,6 +1359,11 @@ public sealed class CompositionController
         }
         if (clause.Raw is not { } raw || !raw.Any(c => c is >= '!' and <= '~')) return;
         foreach (var candidate in new[] { raw, CompositionText.ToFullWidth(raw) })
+        {
+            if (!clause.Candidates.Contains(candidate)) clause.Candidates.Add(candidate);
+        }
+        // 数字だけなら、漢数字 (二〇二六・二千二十六) と元号 (令和8年) も出す (issue #344・#341)
+        foreach (var candidate in NumberCandidates.For(raw))
         {
             if (!clause.Candidates.Contains(candidate)) clause.Candidates.Add(candidate);
         }

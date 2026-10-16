@@ -1458,6 +1458,29 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue344_Issue341_NumbersOfferKanjiAndEra()
+    {
+        Assert.Equal("二〇二六|二千二十六|弐千弐拾六|令和8年", string.Join("|", NumberCandidates.For("2026")), "2026");
+        Assert.Equal("一二三四五|一万二千三百四十五|壱万弐千参百四拾五", string.Join("|", NumberCandidates.For("12345")), "12345");
+        Assert.Equal("一〇〇|百|壱百", string.Join("|", NumberCandidates.For("100")), "100");
+        Assert.Equal("一〇〇〇〇|一万|壱万", string.Join("|", NumberCandidates.For("10000")), "10000");
+        Assert.Equal("〇〇一", string.Join("|", NumberCandidates.For("001")), "先頭が 0 の数字は位取りしない");
+        Assert.Equal("一九八九|千九百八十九|壱千九百八拾九|平成元年", string.Join("|", NumberCandidates.For("1989")), "1989 = 平成元年");
+        Assert.Equal(0, NumberCandidates.For("abc").Count, "数字でなければ候補なし");
+    }
+
+    [Test]
+    public static void Issue344_DigitsOfferKanjiWhenConverting()
+    {
+        var k = new Keyboard();
+        k.Type("2026");
+        k.Host.PhysicalShift = true;
+        k.Press(VirtualKeys.Space);
+        var candidates = k.Host.View!.Candidates;
+        Assert.True(candidates.Contains("二〇二六") && candidates.Contains("令和8年"), "数字の候補に漢数字・元号: " + string.Join(",", candidates));
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
