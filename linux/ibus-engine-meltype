@@ -255,7 +255,11 @@ class MeltypeEngine(IBus.Engine):
         if not result:
             return
         for edit in result.get("commits", []):
-            self._hide_preedit()
+            # 消すだけの preedit 更新を確定の前に送らない。Chromium 系 (Wayland text-input-v3) は
+            # それを変換中の文字の確定と解釈して挿入し (issue #486 と同じ問題)、確定し直しでは
+            # さらに続く削除の位置がずれて壊れる (い + want → いwanI want になる)。
+            # 変換中の表示を消すのは確定のあと (下の else か _show_preedit)。surrounding の削除は
+            # 変換中の文字には触れないので、表示を消す前に消してよい。
             if edit.get("deleteBefore", 0) > 0:
                 # 確定し直し: キャレットの前の文字を消してから入れる (入力欄が対応していれば)。
                 self.delete_surrounding_text(-edit["deleteBefore"], edit["deleteBefore"])

@@ -40,6 +40,8 @@ class SyntheticClient:
         value = text.get_text()
         self.document += value
         self.commits.append(value)
+        # 実際のクライアント (GTK / Qt / Chromium) は commit-text で変換中の表示を消す
+        self.preedit = ""
 
     def preedit_updated(self, context, text, cursor, visible, *mode):
         self.preedit = text.get_text() if visible else ""

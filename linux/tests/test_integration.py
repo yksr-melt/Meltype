@@ -49,6 +49,8 @@ class IntegrationTests(unittest.TestCase):
                 self.document = ""
                 self.marked = ""
                 self.commits = []
+                # (メソッド, 値) の発行順。送信順序 (確定と preedit 更新の前後) の検証に使う。
+                self.events = []
                 self.visible_candidates = []
                 super().__init__()
 
@@ -56,16 +58,21 @@ class IntegrationTests(unittest.TestCase):
                 value = text.get_text()
                 self.document += value
                 self.commits.append(value)
+                # 実際のクライアント (GTK / Qt / Chromium) は commit-text で変換中の表示を消す
+                self.marked = ""
+                self.events.append(("commit", value))
 
             def delete_surrounding_text(self, offset, count):
                 start = len(self.document) + offset
                 self.document = self.document[:start] + self.document[start + count:]
+                self.events.append(("delete_surrounding", count))
 
             def get_surrounding_text(self):
                 return IBus.Text.new_from_string(self.document), len(self.document), len(self.document)
 
             def update_preedit_text_with_mode(self, text, cursor, visible, mode):
                 self.marked = text.get_text() if visible else ""
+                self.events.append(("preedit", self.marked))
 
             def update_lookup_table(self, table, visible):
                 self.visible_candidates = [table.get_candidate(i).get_text()
@@ -231,6 +238,54 @@ class IntegrationTests(unittest.TestCase):
         self.assertFalse(self.scalar("a", IBus.ModifierType.CONTROL_MASK))
         self.assertEqual("@kuraido", self.engine.document)
         self.assertEqual(["@kuraido"], self.engine.commits)
+
+    def test_no_empty_preedit_before_commit(self):
+        # 確定 (commit-text) の直前に「変換中の文字を消すだけ」の preedit 更新を送らない。
+        # 送ると Chromium 系 (Wayland text-input-v3) が変換中の文字を確定と解釈し、
+        # 続く commit-text で同じ文字が二重に入る (fcitx5 側の issue #486 と同じ問題)。
+        self.type_text("kyouha")
+        self.assertTrue(self.special(IBus.KEY_Return))
+        self.assertEqual(1, len(self.engine.commits))
+        for index, (kind, value) in enumerate(self.engine.events):
+            if kind == "commit":
+                if index > 0 and self.engine.events[index - 1][0] == "preedit":
+                    self.assertNotEqual("", self.engine.events[index - 1][1],
+                                        "確定の直前に空の preedit 更新が送られている")
+
+    def test_preedit_cleared_after_commit(self):
+        # 確定のあとに preedit を消す更新を送る。送らないと、確定と送信が同時に起きたあと
+        # 入力欄を再度フォーカスしたとき、コンポジターが残った変換中の文字を再表示する
+        # (Electron (Discord) で確定前のかなが再入力される問題)。
+        self.type_text("kyouha")
+        self.assertTrue(self.special(IBus.KEY_Return))
+        self.assertEqual("", self.engine.marked)
+        commit = max(i for i, (kind, _) in enumerate(self.engine.events) if kind == "commit")
+        tail = self.engine.events[commit:]
+        self.assertTrue(any(kind == "preedit" and value == "" for kind, value in tail),
+                        "確定のあとに preedit を消す更新が送られていない")
+
+    def test_recommit_deletes_without_hiding_preedit(self):
+        # 確定し直し (deleteBefore あり) でも、確定の前に preedit を消す更新を送らない。
+        # 送ると Chromium 系 (Wayland text-input-v3) が変換中の文字を確定と解釈して挿入し (issue #486)、
+        # 続く削除がずれた位置を消して壊れる (い + want → いwanI want)。
+        # 変換中の文字は surrounding の削除対象にならないので、消してから入れてよい。
+        # 確定のあとの preedit クリアは下の else 側が送る (test_preedit_cleared_after_commit)。
+        self.type_text("i")
+        self.special(IBus.KEY_space)
+        self.special(IBus.KEY_Return)
+        self.type_text("want")
+        self.special(IBus.KEY_Return)
+        self.assertIn("I want", self.engine.commits)
+        events = self.engine.events
+        last_commit = max(i for i, (kind, _) in enumerate(events) if kind == "commit")
+        delete = next(i for i, (kind, _) in enumerate(events) if kind == "delete_surrounding")
+        self.assertLess(delete, last_commit, "確定し直しの削除がコミットの前にある")
+        # 「want」の preedit 表示の後、「I want」のコミットまでの間に空の preedit 更新が無い。
+        shown = max(i for i in range(last_commit)
+                    if events[i][0] == "preedit" and events[i][1] != "")
+        middle = events[shown + 1:last_commit]
+        self.assertFalse(any(kind == "preedit" and value == "" for kind, value in middle),
+                         "確定し直しで、preedit を消す更新が確定の前に送られている")
 
 
 if __name__ == "__main__":
