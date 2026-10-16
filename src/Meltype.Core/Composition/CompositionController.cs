@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> PartialCommit { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -1176,6 +1177,9 @@ public sealed class CompositionController
             case VirtualKeys.Left:
                 _selectedClause = Math.Max(_selectedClause - 1, 0);
                 return true;
+            case VirtualKeys.Return when shift && _options.PartialCommit() && _selectedClause < _clauses.Count - 1:
+                CommitUpToSelectedClause();
+                return true;
             case VirtualKeys.Return:
                 Commit();
                 return true;
@@ -1243,6 +1247,33 @@ public sealed class CompositionController
         _selectedClause = vk == VirtualKeys.Left ? _clauses.Count - 1 : 0;
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
         else if (vk == VirtualKeys.Up) NextCandidate(-1);
+    }
+
+    /// <summary>
+    /// 設定「Shift + Enter で選んだ文節までを確定」: 選んでいる文節までを確定し、残りの文節は読み (英語の文節は打った英字) を
+    /// 未確定の入力として残す (残りは選び直した候補を忘れ、変換前に戻る)。issue #493
+    /// </summary>
+    private void CommitUpToSelectedClause()
+    {
+        var all = _clauses;
+        var done = all.Take(_selectedClause + 1).ToList();
+        var rest = all.Skip(_selectedClause + 1).ToList();
+        _clauses = done;
+        Learn();
+        var text = string.Concat(done.Select(c => c.Text));
+        CommitText(text, done.All(c => c.IsEnglish), "", chosen: true);
+        BeginComposition();
+        foreach (var clause in rest)
+        {
+            if (clause.IsEnglish)
+            {
+                foreach (var letter in clause.Raw ?? clause.Reading) _text.Append(letter);
+            }
+            else
+            {
+                foreach (var kana in clause.Reading) _text.AppendKana(kana, kana);
+            }
+        }
     }
 
     private void SetMode(DisplayMode mode)
