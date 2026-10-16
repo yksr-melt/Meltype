@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public string ControlKeyBindings { get; set; } = "";
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                ControlKeyBindings = () => ControlKeyBindings,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,23 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue63_ControlKeysCanBeBound()
+    {
+        var k = new Keyboard { ControlKeyBindings = "T=F7; Y=F6" };
+        k.Type("toukyou");
+        k.Key(VirtualKeys.LControl);
+        k.Key('T');
+        k.Key('T', up: true);
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("トウキョウ", k.Showing, "Control+T = F7 (カタカナ)");
+        k.Key(VirtualKeys.LControl);
+        k.Key('Y');
+        k.Key('Y', up: true);
+        k.Key(VirtualKeys.LControl, up: true);
+        Assert.Equal("とうきょう", k.Showing, "Control+Y = F6 (ひらがな)");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {

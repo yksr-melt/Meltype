@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<string> ControlKeyBindings { get; init; } = () => "";
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -585,7 +586,12 @@ public sealed class CompositionController
         }
         if (_swallowedControl.Count > 0)
         {
-            if (!_text.IsEmpty && ControlShortcut(vk) is { } function)
+            // 設定「Control キーの割り当て」: 組み込みの割り当てより先に見る (issue #63・#209)
+            if (!_text.IsEmpty && BoundControlKey(vk) is { } bound)
+            {
+                vk = bound;
+            }
+            else if (!_text.IsEmpty && ControlShortcut(vk) is { } function)
             {
                 // Ctrl+U/I/O/P: F6/F7/F10/F9 と同じ (ATOK と同じ割り当て。続けて押すと大文字・小文字も切り替わる)。Ctrl+H は BackSpace。
                 vk = function;
@@ -2546,6 +2552,36 @@ public sealed class CompositionController
     private static bool IsShift(int vk) => vk is VirtualKeys.Shift or VirtualKeys.LShift or VirtualKeys.RShift;
 
     private static bool IsControl(int vk) => vk is VirtualKeys.Control or VirtualKeys.LControl or VirtualKeys.RControl;
+
+    private static readonly Dictionary<string, int> BindableKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["F6"] = VirtualKeys.F6, ["F7"] = VirtualKeys.F7, ["F8"] = VirtualKeys.F8, ["F9"] = VirtualKeys.F9, ["F10"] = VirtualKeys.F10,
+        ["Left"] = VirtualKeys.Left, ["Right"] = VirtualKeys.Right, ["Up"] = VirtualKeys.Up, ["Down"] = VirtualKeys.Down,
+        ["Home"] = 0x24, ["End"] = 0x23, ["Delete"] = 0x2E, ["Back"] = VirtualKeys.Back, ["Enter"] = VirtualKeys.Return,
+        ["Esc"] = VirtualKeys.Escape, ["Tab"] = VirtualKeys.Tab,
+    };
+
+    private string? _boundKeysText;
+    private Dictionary<int, int> _boundKeys = [];
+
+    /// <summary>設定「Control キーの割り当て」(T=F6;Y=F7 …) で、Control + vk に割り当てたキー。無ければ null。</summary>
+    private int? BoundControlKey(int vk)
+    {
+        var text = _options.ControlKeyBindings();
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        if (!ReferenceEquals(text, _boundKeysText) && text != _boundKeysText)
+        {
+            _boundKeysText = text;
+            _boundKeys = [];
+            foreach (var part in text.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var pair = part.Split('=', 2, StringSplitOptions.TrimEntries);
+                if (pair.Length == 2 && pair[0].Length == 1 && char.IsAsciiLetter(pair[0][0]) && BindableKeys.TryGetValue(pair[1], out var target))
+                    _boundKeys[char.ToUpperInvariant(pair[0][0])] = target;
+            }
+        }
+        return _boundKeys.TryGetValue(vk, out var key) ? key : null;
+    }
 
     /// <summary>入力中の Ctrl+英字で、ほかのキーと同じ働きをするもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数 / H BackSpace)。</summary>
     private static int? ControlShortcut(int vk) => vk switch
