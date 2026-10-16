@@ -221,6 +221,10 @@ public sealed class Settings
      Description("確定するときに、日本語と英単語の間に半角スペースを入れます (今日はGitHubにpushした → 今日は GitHub に push した)。数字だけの語 (3時) には入れません。")]
     public bool SpaceAroundEnglish { get; set; }
 
+    [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"),
+     Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。Windows のみ。変換・無変換キーが無い US 配列のキーボード向けです。")]
+    public string PauseHotkey { get; set; } = "";
+
     [Category("1. 全般"), DisplayName("句読点"),
      Description("日本語の中で , と . を打ったときに出す句読点です (Microsoft IME と同じ 4 通り)。論文などで「，．」「，。」「、．」を使うときに変えます。かな入力の 、 。 のキーにも効きます。数字の間の . , (1.5、1,000) や英単語の中の . (tetr.io) は半角のままです。")]
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;

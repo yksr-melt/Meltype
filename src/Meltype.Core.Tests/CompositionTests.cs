@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public string PauseHotkey { get; set; } = "";
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                PauseHotkey = () => PauseHotkey,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,16 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue810_PauseHotkeySettingIsParsed()
+    {
+        // 一時停止 / 再開のホットキーの設定 (Ctrl+Alt+F10) は、切り替えキーの設定と同じ書き方で読む
+        var list = KeyShortcut.ParseList("Ctrl+Alt+F10");
+        Assert.Equal(1, list.Count);
+        Assert.True(list[0].Matches(0x79, true, true, false, false), "Ctrl+Alt+F10");
+        Assert.Equal("", new Keyboard().PauseHotkey, "既定は空 (組み込みの Ctrl+Alt+F12)");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {

@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<string> PauseHotkey { get; init; } = () => "";
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
