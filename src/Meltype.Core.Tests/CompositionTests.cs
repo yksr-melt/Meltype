@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool EscStepsBack { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                EscStepsBack = () => EscStepsBack,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,25 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue676_EscStepsBackOneLevelAtATime()
+    {
+        var k = new Keyboard { EscStepsBack = true };
+        k.Type("kyou");
+        k.Press(VirtualKeys.F7);
+        Assert.Equal("キョウ", k.Showing);
+        k.Press(VirtualKeys.Escape);
+        Assert.Equal("きょう", k.Showing, "1 回目: ひらがな");
+        k.Press(VirtualKeys.Escape);
+        Assert.Equal("kyou", k.Showing, "2 回目: 打ったローマ字");
+        k.Press(VirtualKeys.Escape);
+        Assert.True(string.IsNullOrEmpty(k.Showing), "3 回目: 消える: " + k.Showing);
+        var normal = new Keyboard();
+        normal.Type("kyou");
+        normal.Press(VirtualKeys.Escape);
+        Assert.True(string.IsNullOrEmpty(normal.Showing), "OFF は今までどおり全部消す");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {

@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> EscStepsBack { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -702,6 +703,8 @@ public sealed class CompositionController
                 // 予測の候補を選んでいたら、選ぶのをやめるだけ (打った内容は残す)。
                 _predictionIndex = -1;
                 return;
+            case VirtualKeys.Escape when _options.EscStepsBack() && StepBack():
+                return;
             case VirtualKeys.Escape:
                 _text.Clear();
                 return;
@@ -826,6 +829,7 @@ public sealed class CompositionController
     private void CommitOrKeepConversion()
     {
         _modeByKey = false;
+        _escReverted = false;
         if (!_options.ContinueAfterConversion() || _reconversion is not null)
         {
             Commit();
@@ -922,6 +926,7 @@ public sealed class CompositionController
     {
         _keptChoices.Clear();
         _modeByKey = false;
+        _escReverted = false;
         _text.KanaInput = _options.KanaInput();
         _text.Punctuation = _options.Punctuation();
         var id = ++_compositionId;
@@ -1244,6 +1249,33 @@ public sealed class CompositionController
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
         else if (vk == VirtualKeys.Up) NextCandidate(-1);
     }
+
+    /// <summary>
+    /// 設定「Esc で一段ずつ戻す」: 見えている内容を 漢字 → ひらがな → 打ったローマ字 の順に一段戻す。見た目が変わらない段は飛ばす。
+    /// 戻せる段が無ければ false (そのまま全部消す)。戻した語は日本語 / 英語の判定として覚えない (issue #676)。
+    /// </summary>
+    private bool StepBack()
+    {
+        var before = CurrentDisplay(final: false);
+        // 今のモードより先の段だけ (ひらがなの次はローマ字。カタカナなどはひらがなへ)
+        DisplayMode[] steps = _text.Mode switch
+        {
+            DisplayMode.Hiragana => [DisplayMode.HalfWidthAlphanumeric],
+            DisplayMode.HalfWidthAlphanumeric => [],
+            _ => [DisplayMode.Hiragana, DisplayMode.HalfWidthAlphanumeric],
+        };
+        foreach (var mode in steps)
+        {
+            SetMode(mode);
+            _escReverted = true;
+            _modeByKey = true;
+            if (CurrentDisplay(final: false) != before) return true;
+        }
+        return false;
+    }
+
+    // Esc で戻した語は、判定として覚えない
+    private bool _escReverted;
 
     private void SetMode(DisplayMode mode)
     {
@@ -2177,7 +2209,7 @@ public sealed class CompositionController
     /// </summary>
     private void LearnLanguage()
     {
-        if (!_options.Learning() || _options.Languages is not { } memory) return;
+        if (!_options.Learning() || _options.Languages is not { } memory || _escReverted) return;
         var raw = _text.Raw;
         if (raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return;
         var automatic = _text.Segments(final: true);
