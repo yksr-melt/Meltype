@@ -1282,6 +1282,15 @@ public sealed class CompositionController
     private void StartConversion(bool preferJapanese = false)
     {
         _tabStartedConversion = false;
+        // 子音の略入力 (ast → 明日): 打った英字全体が candidates.txt の英字の読みにあれば、それを 1 つの文節の候補にする (issue #62)
+        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto && _text.Raw is { Length: >= 2 } typedRaw && typedRaw.All(char.IsAsciiLetter) &&
+            _options.Candidates?.Lookup(typedRaw.ToLowerInvariant()) is { Count: > 0 } abbreviation)
+        {
+            _clauses = [new Clause(typedRaw, true, Distinct([.. abbreviation, typedRaw, .. EnglishCandidates(typedRaw)])) { Raw = typedRaw }];
+            _selectedClause = 0;
+            _converting = true;
+            return;
+        }
         var clauses = new List<Clause>();
         var segments = _text.ConversionSegments();
         for (var s = 0; s < segments.Count; s++)
@@ -1295,6 +1304,14 @@ public sealed class CompositionController
                     continue;
                 }
                 var english = EnglishCandidates(segment.Raw);
+                // 子音の略入力 (ast → 明日): 英字のまま見える語にも、candidates.txt の英字の読みの候補を足す (issue #62)
+                if (segment.Raw.Length >= 2 && segment.Raw.All(char.IsAsciiLetter) && _options.Candidates is { } abbreviations)
+                {
+                    foreach (var word in abbreviations.Lookup(segment.Raw.ToLowerInvariant()))
+                    {
+                        if (!english.Contains(word)) english.Add(word);
+                    }
+                }
                 var romaji = RomajiCandidates(segment.Raw);
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
@@ -1349,8 +1366,16 @@ public sealed class CompositionController
         clause.Candidates.AddRange(words);
     }
 
-    private static void AddRawCandidates(Clause clause)
+    private void AddRawCandidates(Clause clause)
     {
+        // 子音の略入力 (ast → 明日): 打った英字を読みとする候補 (candidates.txt の英字の読み) を足す (issue #62)
+        if (clause.Raw is { Length: >= 2 } abbreviation && abbreviation.All(char.IsAsciiLetter) && _options.Candidates is { } abbreviations)
+        {
+            foreach (var word in abbreviations.Lookup(abbreviation.ToLowerInvariant()))
+            {
+                if (!clause.Candidates.Contains(word)) clause.Candidates.Add(word);
+            }
+        }
         // 全角にした記号 (＃ （ ％) は、半角に戻した候補も出す (Space を続けて押すと半角の # ( %)。
         if (clause.Candidates.Count > 0 && CompositionText.SymbolsToHalfWidth(clause.Candidates[0]) is var half && half != clause.Candidates[0] &&
             !clause.Candidates.Contains(half))

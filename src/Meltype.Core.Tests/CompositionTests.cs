@@ -1458,6 +1458,15 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue62_ConsonantAbbreviationOffersWord()
+    {
+        var k = new Keyboard();
+        k.Type("ast ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.True(candidates.Contains("明日"), "ast → 明日: " + string.Join(",", candidates));
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();

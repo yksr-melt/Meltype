@@ -360,3 +360,6 @@
 きく お聞きになる 伺う 拝聴する
 おもう 思う お思いになる 存じる
 くれる 呉れる くださる
+
+# --- 子音の略入力 (Issue #62: 英字の読みで候補を出せる。自分の略語は %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt に同じ形式で書く) ---
+ast 明日
