@@ -77,6 +77,12 @@ public interface ICompositionHost
     bool SurroundingTextIsCurrent => false;
 
     /// <summary>
+    /// クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に 1 回読む)。
+    /// 読めない・文字ではない・履歴に残さない印がある (パスワード管理ソフトなど) ときは null。
+    /// </summary>
+    string? ClipboardText => null;
+
+    /// <summary>
     /// 入力欄のキャレットの前後の文字列 (確定済みの文字) を取りに行く。結果は後から UI スレッドで callback(前, 後ろ) に渡す。
     /// 取れなければ null を渡す。
     /// </summary>
@@ -189,6 +195,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> ClipboardCandidates { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -1748,6 +1755,7 @@ public sealed class CompositionController
     private IEnumerable<string> TimeCandidates(string reading)
     {
         if (TypedDateCandidates(reading) is { } typed) return typed;
+        if (ClipboardReadings.Contains(reading) && _options.ClipboardCandidates() && ClipboardLine(_host.ClipboardText) is { } clip) return [clip];
         var isNow = NowReadings.Contains(reading);
         if (!isNow && reading != "きょう") return [];
         var now = _options.Now();
@@ -1762,6 +1770,16 @@ public sealed class CompositionController
         var time = $"{now.Hour}時{now.Minute}分";
         return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
             $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
+    }
+
+    /// <summary>クリップボードの文字を候補に出す読み。</summary>
+    private static readonly HashSet<string> ClipboardReadings = ["くりっぷぼーど", "ぺーすと"];
+
+    /// <summary>クリップボードの文字が、候補に出してよい 1 行 (200 文字まで・制御文字なし) なら、その文字。前後の空白は除く。</summary>
+    internal static string? ClipboardLine(string? text)
+    {
+        var line = text?.Trim();
+        return line is { Length: > 0 and <= 200 } && !line.Any(char.IsControl) ? line : null;
     }
 
     /// <summary>打った日付 (10がつ9にち) と時刻 (3じ15ふん) の読み。数字は全角でもよい。</summary>
