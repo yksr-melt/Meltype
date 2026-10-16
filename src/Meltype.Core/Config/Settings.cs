@@ -221,6 +221,14 @@ public sealed class Settings
      Description("確定するときに、日本語と英単語の間に半角スペースを入れます (今日はGitHubにpushした → 今日は GitHub に push した)。数字だけの語 (3時) には入れません。")]
     public bool SpaceAroundEnglish { get; set; }
 
+    [Category("1. 全般"), DisplayName("/ を全角のスラッシュ／にする"),
+     Description("かなのすぐ後ろで打った / を、中黒「・」ではなく全角のスラッシュ／にします。「/ キーで中黒「・」」が ON のときは、そちらが優先です。")]
+    public bool FullWidthSlash { get; set; }
+
+    [Category("1. 全般"), DisplayName("[ ] を角括弧［ ］にする"),
+     Description("日本語入力中の [ ] を「」ではなく全角の角括弧［ ］にします (Google 日本語入力の「記号」の設定と同じ)。")]
+    public bool SquareBrackets { get; set; }
+
     [Category("1. 全般"), DisplayName("句読点"),
      Description("日本語の中で , と . を打ったときに出す句読点です (Microsoft IME と同じ 4 通り)。論文などで「，．」「，。」「、．」を使うときに変えます。かな入力の 、 。 のキーにも効きます。数字の間の . , (1.5、1,000) や英単語の中の . (tetr.io) は半角のままです。")]
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;

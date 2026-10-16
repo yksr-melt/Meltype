@@ -67,6 +67,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
+            FullWidthSlash = () => _engine.Settings.FullWidthSlash,
+            SquareBrackets = () => _engine.Settings.SquareBrackets,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
             ModeIndicator = () => _engine.Settings is { Enabled: true, Mode: InputMode.Keyboard, ShowModeIndicator: true },

@@ -166,6 +166,8 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool FullWidthSlash { get; set; }
+        public bool SquareBrackets { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +237,8 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                FullWidthSlash = () => FullWidthSlash,
+                SquareBrackets = () => SquareBrackets,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1461,17 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue502_SymbolStyleCanBeChosen()
+    {
+        var k = new Keyboard { SquareBrackets = true, FullWidthSlash = true };
+        k.Type("[nihongo]aiueo/kakikukeko\n");
+        Assert.Equal("［にほんご］あいうえお／かきくけこ", k.Host.Document);
+        var normal = new Keyboard();
+        normal.Type("[nihongo]\n");
+        Assert.Equal("「にほんご」", normal.Host.Document, "OFF は今までどおり");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {

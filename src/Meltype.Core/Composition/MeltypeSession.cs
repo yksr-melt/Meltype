@@ -228,6 +228,8 @@ public sealed class MeltypeSession
             CorrectTypos = () => settings.CorrectTypos,
             SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
+            FullWidthSlash = () => settings.FullWidthSlash,
+            SquareBrackets = () => settings.SquareBrackets,
             AutomaticEnglishSpacing = () => autoSpacing,
             Punctuation = () => settings.Punctuation,
         };

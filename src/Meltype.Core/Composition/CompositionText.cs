@@ -229,6 +229,12 @@ public sealed class CompositionText
             _units.Add(new CompositionUnit("・", "/"));
             return;
         }
+        // 設定「/ を全角のスラッシュ／にする」: 中黒と同じく、かなのすぐ後ろだけ (issue #502)
+        if (c == '/' && FullWidthSlash && _units.Count > 0 && _units[^1].Kana is [.., var kanaBefore] && kanaBefore is >= 'ぁ' and <= 'ヺ' or 'ー')
+        {
+            _units.Add(new CompositionUnit("／", "/"));
+            return;
+        }
         _units.Add(new CompositionUnit(Symbol(c).ToString(), c.ToString()));
     }
 
@@ -1211,14 +1217,20 @@ public sealed class CompositionText
     }
 
     /// <summary>日本語の中で打った記号 (Microsoft IME と同じく全角)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
+    /// <summary>[ ] を「」ではなく［］にするか (設定)。</summary>
+    public bool SquareBrackets { get; set; }
+
+    /// <summary>かなの後ろの / を全角の／にするか (設定)。</summary>
+    public bool FullWidthSlash { get; set; }
+
     private char Symbol(char c) => c switch
     {
         '-' => 'ー',
         // 句読点は設定の組み合わせ (、。 / ，． / ，。 / 、．)。
         ',' => Comma,
         '.' => Period,
-        '[' => '「',
-        ']' => '」',
+        '[' => SquareBrackets ? '［' : '「',
+        ']' => SquareBrackets ? '］' : '」',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。
         '(' => '(',
         ')' => ')',
