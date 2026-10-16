@@ -189,6 +189,9 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> GitHubIssueCandidates { get; init; } = () => false;
+    public Func<string> GitHubRepository { get; init; } = () => "";
+    public Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -1282,6 +1285,17 @@ public sealed class CompositionController
     private void StartConversion(bool preferJapanese = false)
     {
         _tabStartedConversion = false;
+        // 設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」: #123 の形 (issue #291)
+        if (_options.GitHubIssueCandidates() && _options.GitHubTitles() is { } titles && !_text.KanaInput && _text.Mode == DisplayMode.Auto &&
+            _text.Raw is ['#', .. { Length: > 0 } digits] && digits.All(char.IsAsciiDigit) && digits.Length <= 7 &&
+            titles.Lookup(_options.GitHubRepository(), int.Parse(digits)) is { Length: > 0 } title)
+        {
+            var repository = _options.GitHubRepository();
+            _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, $"{_text.Raw} {title}", $"{title} ({_text.Raw})", $"{repository}{_text.Raw}"])) { Raw = _text.Raw }];
+            _selectedClause = 0;
+            _converting = true;
+            return;
+        }
         var clauses = new List<Clause>();
         var segments = _text.ConversionSegments();
         for (var s = 0; s < segments.Count; s++)

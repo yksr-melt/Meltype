@@ -175,6 +175,9 @@ public sealed class MeltypeSession
     // Input Method Kit・fcitx5・IBus はどれも 1 つのスレッド (メインループ) から呼ぶので、排他はしない。
     private static (string Directory, CompositionDetector Detector, CompositionOptions Options)? s_shared;
 
+    // #123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。セッションの間だけ覚える
+    private static readonly GitHubIssueTitles s_githubTitles = new();
+
     /// <summary>dataDirectory に置いた設定・辞書・学習データで作る (テストでは一時フォルダーを渡す)。</summary>
     internal static MeltypeSession CreateDefault(string dataDirectory, IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false)
     {
@@ -228,6 +231,9 @@ public sealed class MeltypeSession
             CorrectTypos = () => settings.CorrectTypos,
             SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
+            GitHubIssueCandidates = () => settings.GitHubIssueCandidates,
+            GitHubRepository = () => settings.GitHubRepository,
+            GitHubTitles = () => s_githubTitles,
             AutomaticEnglishSpacing = () => autoSpacing,
             Punctuation = () => settings.Punctuation,
         };

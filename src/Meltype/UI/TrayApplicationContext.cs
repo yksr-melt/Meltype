@@ -13,6 +13,7 @@ namespace Meltype.UI;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly MeltypeEngine _engine;
+    private static readonly Meltype.Composition.GitHubIssueTitles GitHubTitlesShared = new();
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _enabledItem;
@@ -67,6 +68,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
+            GitHubIssueCandidates = () => _engine.Settings.GitHubIssueCandidates,
+            GitHubRepository = () => _engine.Settings.GitHubRepository,
+            GitHubTitles = () => GitHubTitlesShared,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
             ModeIndicator = () => _engine.Settings is { Enabled: true, Mode: InputMode.Keyboard, ShowModeIndicator: true },
