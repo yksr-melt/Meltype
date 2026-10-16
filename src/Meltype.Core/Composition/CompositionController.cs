@@ -1748,6 +1748,7 @@ public sealed class CompositionController
     private IEnumerable<string> TimeCandidates(string reading)
     {
         if (TypedDateCandidates(reading) is { } typed) return typed;
+        if (EraToYear(reading) is { } year) return year;
         var isNow = NowReadings.Contains(reading);
         if (!isNow && reading != "きょう") return [];
         var now = _options.Now();
@@ -1762,6 +1763,30 @@ public sealed class CompositionController
         var time = $"{now.Hour}時{now.Minute}分";
         return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
             $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex EraReading =
+        new("^(?<e>れいわ|へいせい|しょうわ|たいしょう|めいじ)(?<n>[0-9０-９]{1,2}|がん)ねん$");
+
+    /// <summary>
+    /// 元号の年 (れいわ8ねん・へいせいがんねん) を西暦にした候補 (2026年 / 2026)。元号の範囲 (明治 〜 令和) の外なら null (issue #341)。
+    /// </summary>
+    internal static IEnumerable<string>? EraToYear(string reading)
+    {
+        if (EraReading.Match(reading) is not { Success: true } match) return null;
+        var number = match.Groups["n"].Value;
+        var n = number == "がん" ? 1 : int.Parse(new string(number.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()));
+        (int Start, int Last) range = match.Groups["e"].Value switch
+        {
+            "れいわ" => (2019, 2100),
+            "へいせい" => (1989, 2019),
+            "しょうわ" => (1926, 1989),
+            "たいしょう" => (1912, 1926),
+            _ => (1868, 1912),
+        };
+        var year = range.Start + n - 1;
+        if (n < 1 || year > range.Last) return null;
+        return [$"{year}年", year.ToString()];
     }
 
     /// <summary>打った日付 (10がつ9にち) と時刻 (3じ15ふん) の読み。数字は全角でもよい。</summary>

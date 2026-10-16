@@ -1458,6 +1458,18 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue341_EraYearOffersGregorianYear()
+    {
+        var k = new Keyboard();
+        k.Type("reiwagannnenn ");
+        Assert.True(k.Host.View!.Candidates.Contains("2019年"), "令和元年: " + string.Join(",", k.Host.View.Candidates));
+        Assert.Equal("2026年", CompositionController.EraToYear("れいわ8ねん")!.First(), "令和8年");
+        Assert.Equal("1989年", CompositionController.EraToYear("へいせいがんねん")!.First(), "平成元年");
+        Assert.Equal("1926年", CompositionController.EraToYear("しょうわ1ねん")!.First(), "昭和1年");
+        Assert.True(CompositionController.EraToYear("へいせい40ねん") is null, "平成は 31 年まで");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
