@@ -189,6 +189,7 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+    public Func<bool> FullWidthParentheses { get; init; } = () => false;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -924,6 +925,7 @@ public sealed class CompositionController
         _modeByKey = false;
         _text.KanaInput = _options.KanaInput();
         _text.Punctuation = _options.Punctuation();
+        _text.FullWidthParentheses = _options.FullWidthParentheses();
         var id = ++_compositionId;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = Environment.TickCount64 - _lastCommitTime < OwnCommitTrustMs;

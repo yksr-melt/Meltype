@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool FullWidthParentheses { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                FullWidthParentheses = () => FullWidthParentheses,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,20 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue443_ParenthesesCanBeFullWidth()
+    {
+        var k = new Keyboard { FullWidthParentheses = true };
+        k.Type("kyouha(nihongo)\n");
+        Assert.Equal("きょうは（にほんご）", k.Host.Document, "日本語の中");
+        var after = new Keyboard { FullWidthParentheses = true };
+        after.Type("Google(kensaku)\n");
+        Assert.Equal("Google（けんさく）", after.Host.Document, "英字の直後でも全角");
+        var normal = new Keyboard();
+        normal.Type("kyouha(nihongo)\n");
+        Assert.Equal("きょうは(にほんご)", normal.Host.Document, "OFF は今までどおり");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {

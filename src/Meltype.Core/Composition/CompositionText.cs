@@ -621,6 +621,7 @@ public sealed class CompositionText
             return cached.Segments;
         }
         var result = ComputeSegments(final);
+        if (FullWidthParentheses) result = [.. result.Select(s => s.IsEnglish && s.Raw is "(" or ")" ? new CompositionSegment(false, s.Raw == "(" ? "（" : "）", s.Raw) : s)];
         _segmentsCache[slot] = (key, _detector.Memory, _detector.SpellChecker, result);
         return result;
     }
@@ -636,7 +637,7 @@ public sealed class CompositionText
             .Append(PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-').Append(final ? 'F' : '-')
-            .Append(PrecedingEnglishName ? 'N' : '-')
+            .Append(PrecedingEnglishName ? 'N' : '-').Append(FullWidthParentheses ? 'W' : '-')
             .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1);
         return key.ToString();
     }
@@ -740,6 +741,7 @@ public sealed class CompositionText
         for (var i = 0; i < _units.Count; i++)
         {
             if (!Openers.TryGetValue(_units[i].Raw, out var closer) || _units[i].Kana == _units[i].Raw) continue;
+            if (FullWidthParentheses && _units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
             var nextIsEnglish = i + 1 < _units.Count ? offsets[i + 1] < english.Count && english[offsets[i + 1]] && char.IsAsciiLetter(_units[i + 1].Raw[0])
                 : Pending.Length > 0 && segments.Count > 0 && segments[^1].IsEnglish;
             var closing = Enumerable.Range(i + 1, _units.Count - i - 1).FirstOrDefault(k => _units[k].Raw == closer, -1);
@@ -1211,6 +1213,9 @@ public sealed class CompositionText
     }
 
     /// <summary>日本語の中で打った記号 (Microsoft IME と同じく全角)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
+    /// <summary>( ) を全角にするか (設定「カッコを全角で入力」)。</summary>
+    public bool FullWidthParentheses { get; set; }
+
     private char Symbol(char c) => c switch
     {
         '-' => 'ー',
@@ -1220,8 +1225,8 @@ public sealed class CompositionText
         '[' => '「',
         ']' => '」',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。
-        '(' => '(',
-        ')' => ')',
+        '(' => FullWidthParentheses ? '（' : '(',
+        ')' => FullWidthParentheses ? '）' : ')',
         // ! ? は Microsoft IME と同じく全角 (テスターのチャットでも、日本語の後ろの ？ ！ は 96% が全角だった)。
         // : ; | はチャット本文でも半角で使うので、入力した幅を保つ。
         ':' => ':',
