@@ -1458,6 +1458,15 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue710_UserDictionaryAcceptsOneCharacterReading()
+    {
+        var dictionary = new UserDictionary(null);
+        Assert.True(dictionary.Add("お", "お父さん") is null, "1 文字の読みも登録できる");
+        Assert.Equal("お父さん", dictionary.Split("お")?.Single().Word, "その 1 文字だけを変換するときは登録した単語");
+        Assert.True(dictionary.Split("おかね") is null, "ほかの語の途中の 1 文字は巻き込まない");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();
@@ -2496,7 +2505,7 @@ internal static class CompositionTests
     {
         var dictionary = new UserDictionary(null);
         Assert.True(dictionary.Add("きごうとう", "記号等") is null, "登録できる");
-        Assert.True(dictionary.Add("き", "記") is not null, "1 文字の読みは登録できない");
+        Assert.True(dictionary.Add("", "記") is not null, "空の読みは登録できない");
 
         var k = new Keyboard(userDictionary: dictionary);
         k.Host.PrecedingText = "文章を「記号等」含め、"; // 変換エンジンが き|ごうとう と区切ってしまう文脈

@@ -18,8 +18,17 @@ public sealed record UserWord(string Reading, string Word);
 /// </summary>
 public sealed class UserDictionary
 {
-    /// <summary>1 文字の読みは、ほかの語の中にも現れやすく巻き込みが大きいので登録させない。</summary>
+    /// <summary>他の辞書 (Microsoft IME・Google 日本語入力・macOS の plist) から取り込む読みの最小の長さ。</summary>
     public const int MinReadingLength = 2;
+
+    /// <summary>自分で登録する (画面・userdict.txt) 読みの最小の長さ。</summary>
+    public const int MinRegisteredReadingLength = 1;
+
+    /// <summary>
+    /// 読みの途中に見つけて使える読みの最小の長さ。1 文字の読み (お → お父さん) は、ほかの語の中にも現れやすく巻き込みが大きいので、
+    /// 変換する読みが 1 文字だけのとき (その文字だけを変換するとき) にだけ使う (issue #710)。
+    /// </summary>
+    private const int MinSplitReadingLength = 2;
 
     private readonly string? _path;
     private readonly List<UserWord> _words = [];
@@ -85,7 +94,7 @@ public sealed class UserDictionary
         {
             if (line.StartsWith('#')) continue;
             var parts = line.TrimEnd('\r').Split('\t');
-            if (parts.Length >= 2 && parts[0].Trim().Length >= MinReadingLength && parts[1].Trim().Length > 0)
+            if (parts.Length >= 2 && parts[0].Trim().Length >= MinRegisteredReadingLength && parts[1].Trim().Length > 0)
             {
                 words.Add(new UserWord(parts[0].Trim(), parts[1].Trim()));
             }
@@ -104,7 +113,7 @@ public sealed class UserDictionary
     {
         reading = reading.Trim();
         word = word.Trim();
-        if (reading.Length < MinReadingLength) return $"読みは {MinReadingLength} 文字以上にしてください。";
+        if (reading.Length < MinRegisteredReadingLength) return "読みを入力してください。";
         if (word.Length == 0) return "単語を入力してください。";
         if (reading.Contains('\t') || word.Contains('\t')) return "タブ文字は使えません。";
         if (_words.Any(w => w.Reading == reading && w.Word == word)) return null;
@@ -119,7 +128,7 @@ public sealed class UserDictionary
         var added = 0;
         foreach (var word in words)
         {
-            if (word.Reading.Length < MinReadingLength || word.Word.Length == 0 || word.Reading.Contains('\t') || word.Word.Contains('\t')) continue;
+            if (word.Reading.Length < MinRegisteredReadingLength || word.Word.Length == 0 || word.Reading.Contains('\t') || word.Word.Contains('\t')) continue;
             if (_words.Any(w => w.Reading == word.Reading && w.Word == word.Word)) continue;
             _words.Add(word);
             added++;
@@ -143,7 +152,7 @@ public sealed class UserDictionary
     /// </summary>
     public List<(string Reading, string? Word)>? Split(string kana)
     {
-        if (_byReading.Count == 0 || kana.Length < MinReadingLength) return null;
+        if (_byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
         var pieces = new List<(string Reading, string? Word)>();
         var plain = new StringBuilder();
         var found = false;
@@ -151,7 +160,7 @@ public sealed class UserDictionary
         while (i < kana.Length)
         {
             string? matched = null;
-            for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= MinReadingLength; length--)
+            for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
             {
                 if (_byReading.ContainsKey(kana.Substring(i, length)))
                 {
