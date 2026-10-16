@@ -67,12 +67,23 @@ public sealed class LanguageMemory
 
     public int Count => _entries.Count;
 
+    /// <summary>学習を前の文脈 (英語の後か日本語の後か) ごとに分けるか (設定「英語 / 日本語の学習を前の文脈ごとに分ける」: issue #491)。</summary>
+    public bool ContextSensitive { get; set; }
+
+    /// <summary>今の入力の前が英語か (true)、日本語か (false)、分からないか (null)。</summary>
+    public bool? Context { get; set; }
+
+    /// <summary>文脈ごとに分けるときの、語の後ろにつける印 (分けないときは空)。</summary>
+    private string ContextSuffix => ContextSensitive && Context is { } english ? (english ? "@e" : "@j") : "";
+
     /// <summary>覚えている内容が変わるたびに増える (判定の結果を使い回してよいかを見るのに使う)。</summary>
     public int Version { get; private set; }
 
     /// <summary>覚えている語なら英語か (true) 日本語か (false)。覚えていなければ null。word は小文字の英字。</summary>
     public bool? Get(string word)
     {
+        if (ContextSuffix is { Length: > 0 } suffix && _entries.TryGetValue(word + suffix, out var contextual))
+            return NeedsTwice(word, contextual) ? null : contextual.English;
         if (!_entries.TryGetValue(word, out var entry)) return null;
         if (NeedsTwice(word, entry)) return null;
         return entry.English;
@@ -80,6 +91,7 @@ public sealed class LanguageMemory
 
     internal bool? Get(ReadOnlySpan<char> word)
     {
+        if (ContextSuffix is { Length: > 0 }) return Get(word.ToString());
         if (!_entries.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(word, out var entry)) return null;
         if (NeedsTwice(word.ToString(), entry)) return null;
         return entry.English;
@@ -94,7 +106,8 @@ public sealed class LanguageMemory
         word = word.ToLowerInvariant();
         if (word.Length < 2 || !word.All(char.IsAsciiLetterLower)) return;
         Version++;
-        if (_entries.TryGetValue(word, out var old) && old.English == english)
+        var entryKey = word + ContextSuffix;
+        if (_entries.TryGetValue(entryKey, out var old) && old.English == english)
         {
             old.Used = DateTime.UtcNow;
             var waiting = NeedsTwice(word, old);
@@ -105,7 +118,7 @@ public sealed class LanguageMemory
         else
         {
             var entry = new Entry { English = english, Used = DateTime.UtcNow, Count = 1, Explicit = explicitChoice };
-            _entries[word] = entry;
+            _entries[entryKey] = entry;
             Diagnostics.Log.Decision(NeedsTwice(word, entry)
                 ? $"{Diagnostics.Log.Text(word)}はローマ字としても読めるので、もう一度英字にして確定したら英語にします (学習)。"
                 : $"{Diagnostics.Log.Text(word)}は次から{(english ? "英語" : "日本語")}にします (学習)。");

@@ -166,6 +166,7 @@ internal static class CompositionTests
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
+        public bool ContextualLearning { get; set; }
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -235,6 +236,7 @@ internal static class CompositionTests
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
+                ContextualLearning = () => ContextualLearning,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 Punctuation = () => Punctuation,
@@ -1457,6 +1459,26 @@ internal static class CompositionTests
         Assert.Equal("infobesity", k.Host.Document);
     }
   
+    [Test]
+    public static void Issue491_LearningCanBeSeparatedByContext()
+    {
+        var memory = new LanguageMemory(null) { ContextSensitive = true };
+        memory.Context = false;
+        memory.Remember("nw", english: false, explicitChoice: true);
+        memory.Context = true;
+        memory.Remember("nw", english: true, explicitChoice: true);
+        memory.Context = false;
+        Assert.Equal(false, memory.Get("nw"), "日本語の後では日本語");
+        memory.Context = true;
+        Assert.Equal(true, memory.Get("nw"), "英語の後では英語");
+        memory.Context = null;
+        Assert.True(memory.Get("nw") is null, "文脈が分からなければ、文脈ごとの学習は使わない");
+        var plain = new LanguageMemory(null);
+        plain.Remember("nw", english: true, explicitChoice: true);
+        plain.Context = false;
+        Assert.Equal(true, plain.Get("nw"), "OFF は今までどおり 1 つだけ");
+    }
+
     [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
