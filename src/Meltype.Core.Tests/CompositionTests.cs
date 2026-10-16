@@ -1458,6 +1458,21 @@ internal static class CompositionTests
     }
   
     [Test]
+    public static void Issue349_DeleteForgetsTheSelectedPrediction()
+    {
+        var phrases = new PhraseHistory(null);
+        var k = new Keyboard(predictor: new Predictor(phrases, null, null));
+        k.Type("kyou ");
+        k.Press(VirtualKeys.Return);
+        k.Type("kyo");
+        Assert.True(k.Host.View!.Predictions?.Contains("今日") == true, "予測の候補に出る");
+        k.Press(VirtualKeys.Tab);
+        k.Press(0x2E); // Delete
+        Assert.True(!phrases.StartingWith("kyo").Contains("今日") && !phrases.StartingWith("きょ").Contains("今日"), "学習から消える");
+        Assert.True(k.Host.View!.Predictions?.Contains("今日") != true, "予測の候補から消える");
+    }
+
+    [Test]
     public static void Issue535_OverchoiceStaysEnglish()
     {
         var k = new Keyboard();

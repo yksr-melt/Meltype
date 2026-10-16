@@ -698,6 +698,12 @@ public sealed class CompositionController
             case VirtualKeys.Back:
                 _text.RemoveLast();
                 return;
+            case 0x2E /* Delete */ when _predictionIndex >= 0 && _predictionIndex < _predictions.Count && _options.Predictor?.Phrases is { } phrases:
+                // 予測の候補を選んでいる間の Delete: その語句を学習から消す (issue #349)
+                phrases.Forget(_predictions[_predictionIndex]);
+                _predictionKey = "\u0000"; // 候補を作り直す
+                _predictionIndex = -1;
+                return;
             case VirtualKeys.Escape when _predictionIndex >= 0:
                 // 予測の候補を選んでいたら、選ぶのをやめるだけ (打った内容は残す)。
                 _predictionIndex = -1;
