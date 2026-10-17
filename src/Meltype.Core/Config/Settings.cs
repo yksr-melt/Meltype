@@ -163,6 +163,50 @@ public enum AppProfile
     [Description("ゲーム")] Game,
 }
 
+/// <summary>既定の判定条件で扱う行コメント。有効・無効だけを変更できる。</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class BuiltInCodeSingleComments
+{
+    [JsonPropertyName("//")]
+    public bool SlashSlash { get; set; } = true;
+
+    [JsonPropertyName("#")]
+    public bool Hash { get; set; } = true;
+
+    [JsonPropertyName("--")]
+    public bool DoubleHyphen { get; set; } = true;
+
+    /// <summary>行頭（字下げ可）で大文字・小文字を区別せず照合し、直後に半角スペースを必要とする。</summary>
+    [JsonPropertyName("REM")]
+    public bool Rem { get; set; } = true;
+}
+
+/// <summary>CODE モードの既定コメントと、単純な前方一致で扱う独自トークン。</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class CodeSingleCommentSettings
+{
+    /// <summary>既存の4種類は既定で有効。有効・無効だけを切り替え、判定条件は維持する。</summary>
+    public BuiltInCodeSingleComments BuiltIn { get; set; } = new();
+
+    /// <summary>
+    /// 初期値は空。ユーザーが必要なトークンを登録し、削除または Enabled で制御する。
+    /// 空白を含まない印字可能 ASCII を、大文字・小文字を区別して照合する。
+    /// 文字列・ブロック判定を優先し、コード内で一致した位置から行末をコメントとする。言語や演算子は判別しない。
+    /// </summary>
+    public List<CodeSingleComment> Custom { get; set; } = [];
+}
+
+/// <summary>CODE モードで使う独自の行コメント開始トークン。</summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed class CodeSingleComment
+{
+    public string Token { get; set; } = "";
+    public bool Enabled { get; set; } = true;
+}
+
+/// <summary>行コメント設定に使用できないトークンや重複がある。</summary>
+public sealed class CodeSingleCommentValidationException(string message, Exception? innerException = null) : ArgumentException(message, innerException);
+
 /// <summary>
 /// config.json の内容。値はすべて保守的な初期値にしてある (設計書 §18)。
 /// インスタンスは不変として扱い、変更時は Clone して差し替える。
@@ -682,6 +726,27 @@ public sealed class Settings
     [Category("7. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、判定の強さ・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
+    [Category("7. アプリ"), DisplayName("コードの行コメント"),
+     Description("既定の //・#・--・REM は有効・無効だけを指定します。独自の開始記号には空白を含まない印字可能 ASCII を使い、既定の記号と同じものや重複は登録できません。")]
+    public CodeSingleCommentSettings CodeSingleComments { get; set; } = new();
+
+    /// <summary>空白を含まない印字可能 ASCII と、大文字小文字を区別した一意性を検証する。</summary>
+    public static void ValidateCodeSingleComments(CodeSingleCommentSettings comments)
+    {
+        if (comments is null || comments.BuiltIn is null || comments.Custom is null)
+            throw new CodeSingleCommentValidationException("行コメントには BuiltIn と Custom の設定が必要です。");
+        var tokens = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var comment in comments.Custom)
+        {
+            if (comment is null || string.IsNullOrEmpty(comment.Token) || comment.Token.Any(c => c is < '!' or > '~'))
+                throw new CodeSingleCommentValidationException("行コメントには空白を含まない印字可能 ASCII (0x21〜0x7E) を指定してください。");
+            if (comment.Token is "//" or "#" or "--" || comment.Token.Equals("REM", StringComparison.OrdinalIgnoreCase))
+                throw new CodeSingleCommentValidationException($"既定の行コメント「{comment.Token}」は Custom に登録できません。BuiltIn で有効・無効を指定してください。");
+            if (!tokens.Add(comment.Token))
+                throw new CodeSingleCommentValidationException($"行コメントの開始記号「{comment.Token}」が重複しています。");
+        }
+    }
+
     [Category("8. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。判定した語の先頭の数文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
     public bool FileLog { get; set; }
 
@@ -752,6 +817,17 @@ public sealed class Settings
         var copy = (Settings)MemberwiseClone();
         copy.AppRules = AppRules.Select(r => new AppRule { Process = r.Process, Enabled = r.Enabled, Profile = r.Profile, Kind = r.Kind }).ToList();
         copy.AppKinds = AppKinds.Select(k => k.Clone()).ToList();
+        copy.CodeSingleComments = new CodeSingleCommentSettings
+        {
+            BuiltIn = new BuiltInCodeSingleComments
+            {
+                SlashSlash = CodeSingleComments.BuiltIn.SlashSlash,
+                Hash = CodeSingleComments.BuiltIn.Hash,
+                DoubleHyphen = CodeSingleComments.BuiltIn.DoubleHyphen,
+                Rem = CodeSingleComments.BuiltIn.Rem,
+            },
+            Custom = CodeSingleComments.Custom.Select(c => new CodeSingleComment { Token = c.Token, Enabled = c.Enabled }).ToList(),
+        };
         copy.Profiles = (Profiles ?? []).Select(p => p.Clone()).ToList();
         return copy;
     }
@@ -759,6 +835,7 @@ public sealed class Settings
     /// <summary>手で編集された config.json の極端な値を安全な範囲に収める。</summary>
     public Settings Normalize()
     {
+        ValidateCodeSingleComments(CodeSingleComments);
         JapaneseThreshold = Math.Clamp(JapaneseThreshold, 2, 20);
         MaxPendingKeys = Math.Clamp(MaxPendingKeys, 2, 12);
         IdleFlushMs = Math.Clamp(IdleFlushMs, 100, 3000);
@@ -820,7 +897,15 @@ public sealed class Settings
         {
             if (!File.Exists(path)) return new Settings();
             var json = File.ReadAllText(path);
-            var settings = JsonSerializer.Deserialize(json, JsonType) ?? new Settings();
+            Settings settings;
+            try { settings = JsonSerializer.Deserialize(json, JsonType) ?? new Settings(); }
+            catch (JsonException ex) when (ex.Path is { } jsonPath &&
+                (jsonPath == "$.CodeSingleComments" || jsonPath.StartsWith("$.CodeSingleComments[", StringComparison.Ordinal) ||
+                 jsonPath.StartsWith("$.CodeSingleComments.", StringComparison.Ordinal)))
+            {
+                throw new CodeSingleCommentValidationException($"行コメントの設定を読み込めません: {ex.Message}", ex);
+            }
+            ValidateCodeSingleComments(settings.CodeSingleComments);
             if (!json.Contains(nameof(SettingsVersion))) settings.SettingsVersion = 1;
             if (settings.Migrate())
             {
@@ -830,7 +915,7 @@ public sealed class Settings
             }
             return settings.Normalize();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not CodeSingleCommentValidationException)
         {
             // 壊れた設定で起動不能にしない。元ファイルは退避して既定値で動く。
             try { File.Copy(path, path + ".broken", overwrite: true); }
@@ -845,6 +930,7 @@ public sealed class Settings
 
     public void Save(string path)
     {
+        ValidateCodeSingleComments(CodeSingleComments);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(this, JsonType));

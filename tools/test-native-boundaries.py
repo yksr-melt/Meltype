@@ -50,6 +50,7 @@ class NativeBoundaryTests(unittest.TestCase):
         cls.lib.meltype_handle_key.restype = ctypes.c_void_p
         cls.lib.meltype_free.argtypes = [ctypes.c_void_p]
         cls.lib.meltype_set_direct.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        cls.lib.meltype_set_code_input.argtypes = [ctypes.c_void_p, ctypes.c_int]
         assert cls.lib.meltype_init(None, None, None) == 1
 
     def setUp(self):
@@ -144,6 +145,26 @@ class NativeBoundaryTests(unittest.TestCase):
         self.lib.meltype_set_direct(self.session, 1)
         self.assert_pass(self.key(ord("e")))
         self.assert_pass(self.key(0x0301))
+
+    def test_code_hash_directives_pass_every_key(self):
+        self.lib.meltype_set_code_input(self.session, 1)
+        for surrounding in (True, False):
+            for text in ("#include", "#region", "r#type", "r#match"):
+                with self.subTest(surrounding=surrounding, text=text):
+                    self.lib.meltype_set_code_input(self.session, 1)
+                    before = ""
+                    for char in text:
+                        self.assert_pass(self.key(ord(char), before=before if surrounding else None))
+                        before += char
+                    self.assert_pass(self.key(0, vk=0x0D, before=before if surrounding else None))
+
+    def test_code_hash_comment_still_composes_japanese(self):
+        self.lib.meltype_set_code_input(self.session, 1)
+        self.assert_pass(self.key(ord("#")))
+        self.key(ord(" "), vk=0x20)
+        self.type_text("kyouha")
+        committed = self.key(0, vk=0x0D)["commits"]
+        self.assertEqual([{"deleteBefore": 0, "text": "きょうは"}], committed)
 
     def test_kana_combining_mark_before_english(self):
         self.type_text("ka", after="world")

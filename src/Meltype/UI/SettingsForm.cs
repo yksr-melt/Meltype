@@ -37,6 +37,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private bool _loadingProfiles;
     private readonly ToggleSwitch _showHelp = new() { Text = "下部に説明を表示" };
     private readonly ToggleSwitch _wheelChangesValue = new() { Text = "マウスホイールで値を変更" };
+    private CodeSingleCommentsEditor _comments = null!;
+    private bool _loadingSettings;
 
     /// <summary>画面の部品に出していない値 (プロファイルの一覧・使っているプロファイル など) を持つ設定。</summary>
     private Settings _draft;
@@ -95,11 +97,20 @@ internal sealed class SettingsForm : Form, IMessageFilter
             discard = true;
             Close();
         };
-        FormClosing += (_, _) =>
+        FormClosing += (_, e) =>
         {
             if (discard) return;
-            var next = Settings.MergeEdits(_opened, Collect(), _engine.Settings);
-            if (next.ToJson() != _engine.Settings.Clone().Normalize().ToJson()) _engine.ApplySettings(next);
+            if (!TryCollect(out var edited)) { e.Cancel = true; return; }
+            try
+            {
+                var next = Settings.MergeEdits(_opened, edited, _engine.Settings);
+                if (next.ToJson() != _engine.Settings.Clone().Normalize().ToJson()) _engine.ApplySettings(next);
+            }
+            catch (CodeSingleCommentValidationException ex)
+            {
+                ShowCommentError(ex.Message);
+                e.Cancel = true;
+            }
         };
         defaults.Click += (_, _) =>
         {
@@ -180,14 +191,22 @@ internal sealed class SettingsForm : Form, IMessageFilter
         {
             if (_loadingProfiles || _profiles.SelectedItem is not string name || name == _draft.ActiveProfile) return;
             // 今の画面の値を今のプロファイルに入れてから、選んだプロファイルの値を読み込む
-            _draft = Collect().SwitchProfile(name);
+            if (!TryCollect(out var edited)) { RefreshProfiles(); return; }
+            try { _draft = edited.SwitchProfile(name); }
+            catch (CodeSingleCommentValidationException ex)
+            {
+                ShowCommentError(ex.Message);
+                RefreshProfiles();
+                return;
+            }
             LoadFrom(_draft);
             RunTest();
         };
         add.Click += (_, _) =>
         {
+            if (!TryCollect(out var edited)) return;
             if (TextPrompt.Ask(this, "新しいプロファイル", "名前 (例: 仕事用、趣味用、SNS 用)。今の設定を写して作ります。", "") is not { } name) return;
-            if (Collect().AddProfile(name) is not { } next)
+            if (edited.AddProfile(name) is not { } next)
             {
                 MessageBox.Show(this, "名前が空か、同じ名前のプロファイルがあります。", "プロファイル", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
@@ -197,9 +216,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
         };
         rename.Click += (_, _) =>
         {
+            if (!TryCollect(out var edited)) return;
             var old = _draft.ActiveProfile;
             if (TextPrompt.Ask(this, "プロファイルの名前を変更", "新しい名前:", old) is not { } name || name == old) return;
-            if (Collect().RenameProfile(old, name) is not { } next)
+            if (edited.RenameProfile(old, name) is not { } next)
             {
                 MessageBox.Show(this, "名前が空か、同じ名前のプロファイルがあります。", "プロファイル", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
@@ -209,6 +229,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         };
         remove.Click += (_, _) =>
         {
+            if (!TryCollect(out var edited)) return;
             var name = _draft.ActiveProfile;
             if (_draft.Profiles.Count <= 1)
             {
@@ -216,7 +237,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 return;
             }
             if (MessageBox.Show(this, $"プロファイル「{name}」を削除しますか?", "プロファイル", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
-            _draft = Collect().RemoveProfile(name) ?? _draft;
+            try { _draft = edited.RemoveProfile(name) ?? _draft; }
+            catch (CodeSingleCommentValidationException ex) { ShowCommentError(ex.Message); return; }
             LoadFrom(_draft);
             RefreshProfiles();
             RunTest();
@@ -224,7 +246,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         // プロファイルを人に渡す: 書き出したファイルを、相手が「読み込む...」で新しいプロファイルとして足す
         export.Click += (_, _) =>
         {
-            var draft = Collect();
+            if (!TryCollect(out var draft)) return;
             using var dialog = new SaveFileDialog
             {
                 Title = "プロファイルを書き出す",
@@ -244,6 +266,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         };
         import.Click += (_, _) =>
         {
+            if (!TryCollect(out var edited)) return;
             using var dialog = new OpenFileDialog
             {
                 Title = "プロファイルを読み込む",
@@ -254,7 +277,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
             try
             {
                 // プロファイルは数 KB。大きすぎるファイルは読まない
-                if (new FileInfo(dialog.FileName).Length <= 1024 * 1024) next = Collect().ImportProfile(File.ReadAllText(dialog.FileName));
+                if (new FileInfo(dialog.FileName).Length <= 1024 * 1024) next = edited.ImportProfile(File.ReadAllText(dialog.FileName));
+            }
+            catch (CodeSingleCommentValidationException ex)
+            {
+                ShowCommentError($"プロファイルを読み込めませんでした: {ex.Message}");
+                return;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -331,6 +359,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private Binding? CreateBinding(PropertyInfo property)
     {
         var type = property.PropertyType;
+        if (type == typeof(CodeSingleCommentSettings))
+        {
+            var editor = _comments = new CodeSingleCommentsEditor();
+            return new Binding(property, editor,
+                s => editor.LoadValue(s.CodeSingleComments),
+                s => s.CodeSingleComments = editor.ReadValue());
+        }
         if (type == typeof(bool))
         {
             var toggle = Toggle();
@@ -785,7 +820,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
     private void LoadFrom(Settings settings)
     {
-        foreach (var binding in _bindings) binding.Load(settings);
+        // 読み込み中のスイッチ変更で、まだ旧値の残る表を Collect しない。
+        _loadingSettings = true;
+        try { foreach (var binding in _bindings) binding.Load(settings); }
+        finally { _loadingSettings = false; }
     }
 
     /// <summary>画面の内容を設定にする。画面に出していない項目 (SettingsVersion・プロファイルの一覧など) は今の値を引き継ぐ。</summary>
@@ -798,16 +836,39 @@ internal sealed class SettingsForm : Form, IMessageFilter
         return settings.Normalize();
     }
 
+    private void ShowCommentError(string message)
+    {
+        _comments.ShowError(message);
+        _body.ScrollControlIntoView(_comments);
+    }
+
+    /// <summary>編集に失敗したときは値を補正せず、画面に残して保存・切替を止める。</summary>
+    private bool TryCollect(out Settings settings, bool revealError = true)
+    {
+        try { settings = Collect(); return true; }
+        catch (CodeSingleCommentValidationException ex)
+        {
+            settings = null!;
+            _comments.ShowError(ex.Message);
+            if (revealError) ShowCommentError(ex.Message);
+            return false;
+        }
+    }
+
     private void RunTest()
     {
-        if (_bindings.Count == 0) return;
+        if (_loadingSettings || _bindings.Count == 0) return;
         var words = _testInput.Text.ToLowerInvariant().Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0)
         {
             _testResult.Text = "";
             return;
         }
-        var settings = Collect();
+        if (!TryCollect(out var settings, revealError: false))
+        {
+            _testResult.Text = "行コメントの設定に誤りがあります。開始記号を修正するか、その行を削除してください。";
+            return;
+        }
         var lines = new List<string>();
         foreach (var word in words)
         {

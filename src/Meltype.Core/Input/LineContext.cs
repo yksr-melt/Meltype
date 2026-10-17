@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
+using Meltype.Config;
 
 namespace Meltype.Input;
 
@@ -36,25 +37,43 @@ public enum CodeFocus
 /// </summary>
 public static class LineContext
 {
+    private static readonly CodeSingleCommentSettings DefaultComments = new();
+
     /// <summary>
     /// キャレットより前の文字列 (前の行も含んでよい) から、キャレットの位置の種類を調べる。
     /// 前の行から続く複数行の文字列・コメント (Python の """ … """、/* … */、&lt;!-- … --&gt;) の中なら、その種類。
     /// それ以外は、今の行 (最後の改行より後ろ) だけで調べる。
     /// </summary>
-    public static LineKind ClassifyText(string text)
+    public static LineKind ClassifyText(string text, CodeSingleCommentSettings? comments = null)
     {
+        comments ??= DefaultComments;
+        var customStarts = new CustomCommentStarts(comments.Custom);
         var lastNewline = text.LastIndexOfAny(['\r', '\n']);
         var line = lastNewline >= 0 ? text[(lastNewline + 1)..] : text;
-        if (lastNewline >= 0 && OpenBlock(text) is { } block) return block;
-        return Classify(line);
+        var codeStart = 0;
+        if (lastNewline >= 0 && OpenBlock(text, comments, customStarts, out codeStart) is { } block) return block;
+        return ClassifyLine(line, comments, customStarts, codeStart);
+    }
+
+    /// <summary>
+    /// 次の文字を入力するときの種類。末尾の # がコメントではなく #include や r#type の一部になるならコードとして扱う。
+    /// </summary>
+    internal static LineKind ClassifyForInput(string text, char? nextCharacter, CodeSingleCommentSettings? comments = null)
+    {
+        var kind = ClassifyText(text, comments);
+        if (kind == LineKind.Comment && text.EndsWith('#') && nextCharacter is { } character &&
+            character >= ' ' && !char.IsControl(character) && ClassifyText(text + character, comments) == LineKind.Code)
+            return LineKind.Code;
+        return kind;
     }
 
     /// <summary>
     /// 前の行から始まって、まだ閉じていない複数行の文字列・コメントがあれば、その種類 (無ければ null)。
     /// 1 行のコメント (# //) と 1 行の文字列 ("…" '…') の中の """ /* は数えない。
     /// </summary>
-    private static LineKind? OpenBlock(string text)
+    private static LineKind? OpenBlock(string text, CodeSingleCommentSettings comments, CustomCommentStarts customStarts, out int codeStart)
     {
+        codeStart = 0;
         string? close = null; // 閉じる記号 (""" ''' */ -->)
         var kind = LineKind.Code;
         var lineStart = true;
@@ -72,6 +91,8 @@ public static class LineContext
             {
                 if (StartsWith(text, i, close))
                 {
+                    // 最終行で閉じたブロックの終端を、独自の行コメントとして再解釈しない。
+                    if (startedBeforeLastLine && i > lastNewline) codeStart = i + close.Length - lastNewline - 1;
                     i += close.Length - 1;
                     close = null;
                 }
@@ -91,33 +112,38 @@ public static class LineContext
                 i += (open == "*/" ? 2 : open == "-->" ? 4 : 3) - 1;
                 continue;
             }
-            // 1 行のコメント: 行の終わりまで飛ばす
-            if (StartsWith(text, i, "//") || (c == '#' && (i + 1 == text.Length || char.IsWhiteSpace(text[i + 1]) || text[i + 1] == '#')) ||
-                (atStart && StartsWithIgnoreCase(text, i, "rem ")))
-            {
-                while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
-                continue;
-            }
-            // 1 行の文字列: 同じ引用符か行の終わりまで飛ばす
-            if (c is '"' or '\'' && !(c == '\'' && i > 0 && char.IsLetterOrDigit(text[i - 1])))
+            // 1 行の文字列: 同じ引用符か行の終わりまで飛ばす。設定トークンより引用符を優先する。
+            if (c is '"' or '`' || c == '\'' && !(i > 0 && char.IsLetterOrDigit(text[i - 1])))
             {
                 for (i++; i < text.Length && text[i] != c && text[i] is not ('\r' or '\n'); i++)
                 {
-                    if (text[i] == '\\') i++;
+                    if (text[i] == '\\' && i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
                 }
                 if (i < text.Length && text[i] is '\r' or '\n') i--;
+                continue;
+            }
+            // 1 行のコメント: 行の終わりまで飛ばす。
+            if (MatchSingleComment(text, i, atStart, comments, customStarts) is not null)
+            {
+                while (i + 1 < text.Length && text[i + 1] is not ('\r' or '\n')) i++;
             }
         }
         // 今の行より前で開いて、まだ閉じていない。今の行で開いたものは、今の行だけで調べる (Classify)。
         return close is not null && startedBeforeLastLine ? kind : null;
     }
 
-    public static LineKind Classify(string line)
+    public static LineKind Classify(string line, CodeSingleCommentSettings? comments = null)
     {
-        if (IsChatPrompt(line)) return LineKind.Prompt;
+        comments ??= DefaultComments;
+        return ClassifyLine(line, comments, new CustomCommentStarts(comments.Custom), 0);
+    }
+
+    private static LineKind ClassifyLine(string line, CodeSingleCommentSettings comments, CustomCommentStarts customStarts, int codeStart)
+    {
+        if (codeStart == 0 && IsChatPrompt(line)) return LineKind.Prompt;
         char? quote = null;
-        var firstText = true; // まだ空白以外の文字が出ていない
-        for (var i = 0; i < line.Length; i++)
+        var firstText = codeStart == 0; // まだ空白以外の文字が出ていない
+        for (var i = codeStart; i < line.Length; i++)
         {
             var c = line[i];
             if (quote is { } q)
@@ -136,7 +162,6 @@ public static class LineContext
                 quote = c;
                 continue;
             }
-            if (StartsWith(line, i, "//")) return LineKind.Comment;
             if (StartsWith(line, i, "/*"))
             {
                 var close = line.IndexOf("*/", i + 2, StringComparison.Ordinal);
@@ -151,16 +176,78 @@ public static class LineContext
                 i = close + 2;
                 continue;
             }
-            // # コメント (Python・シェル・PowerShell・YAML)。#include や #region のように # の直後が文字なら指令なので除く。
-            if (c == '#' && (i + 1 == line.Length || char.IsWhiteSpace(line[i + 1]) || line[i + 1] == '#')) return LineKind.Comment;
-            // -- コメント (SQL・Lua・Haskell)。x-- のような減算は直後が空白でないことが多い。
-            if (StartsWith(line, i, "--") && (i + 2 == line.Length || line[i + 2] == ' ') && (atStart || i > 0 && line[i - 1] == ' ')) return LineKind.Comment;
+            if (MatchSingleComment(line, i, atStart, comments, customStarts) is not null) return LineKind.Comment;
             // 複数行コメントの途中の行 ( * …)
             if (atStart && c == '*' && (i + 1 == line.Length || line[i + 1] == ' ')) return LineKind.Comment;
-            // REM コメント (バッチファイル)
-            if (atStart && StartsWithIgnoreCase(line, i, "rem ")) return LineKind.Comment;
         }
         return quote is null ? LineKind.Code : LineKind.String;
+    }
+
+    /// <summary>既定のコメント条件と独自トークンを照合し、同じ位置では最長のものを選ぶ。</summary>
+    internal static string? MatchSingleComment(string text, int index, bool atStart, CodeSingleCommentSettings comments) =>
+        MatchSingleComment(text, index, atStart, comments, new CustomCommentStarts(comments.Custom));
+
+    private static string? MatchSingleComment(string text, int index, bool atStart, CodeSingleCommentSettings comments, CustomCommentStarts customStarts)
+    {
+        string? match = null;
+        var builtIn = comments.BuiltIn;
+        var c = text[index];
+        switch (c)
+        {
+            case '/' when builtIn.SlashSlash && index + 1 < text.Length && text[index + 1] == '/':
+                match = "//";
+                break;
+            // #include や #region のように、直後が文字なら指令なので除く。
+            case '#' when builtIn.Hash &&
+                (index + 1 == text.Length || char.IsWhiteSpace(text[index + 1]) || text[index + 1] == '#'):
+                match = "#";
+                break;
+            // -- は行頭または空白の直後で、後ろが空白か行末の場合だけコメントにする。
+            case '-' when builtIn.DoubleHyphen && index + 1 < text.Length && text[index + 1] == '-' &&
+                (index + 2 == text.Length || text[index + 2] is ' ' or '\r' or '\n') &&
+                (atStart || index > 0 && text[index - 1] == ' '):
+                match = "--";
+                break;
+            // REM は行頭だけで、大文字小文字を区別せず、後続の半角空白を必要とする。
+            case 'r' or 'R' when builtIn.Rem && atStart && StartsWithIgnoreCase(text, index, "rem "):
+                match = "REM";
+                break;
+        }
+        if (!customStarts.Contains(c)) return match;
+        var longest = match?.Length ?? 0;
+        foreach (var comment in comments.Custom)
+        {
+            if (!comment.Enabled) continue;
+            var token = comment.Token;
+            if (token.Length > longest && token.Length <= text.Length - index && token[0] == c && StartsWith(text, index, token))
+            {
+                match = token;
+                longest = token.Length;
+            }
+        }
+        return match;
+    }
+
+    // 設定は直接編集できるため、先頭文字集合は分類の呼び出し内だけで共有する。
+    // トークンは設定の検証で印字可能 ASCII に限定済み。配列や永続キャッシュは作らない。
+    private readonly struct CustomCommentStarts
+    {
+        private readonly ulong _low;
+        private readonly ulong _high;
+
+        public CustomCommentStarts(List<CodeSingleComment> comments)
+        {
+            foreach (var comment in comments)
+            {
+                if (!comment.Enabled) continue;
+                var c = comment.Token[0];
+                if (c < 64) _low |= 1UL << c;
+                else _high |= 1UL << (c - 64);
+            }
+        }
+
+        public bool Contains(char c) => c < 64 ? (_low & (1UL << c)) != 0 :
+            c < 128 && (_high & (1UL << (c - 64))) != 0;
     }
 
     /// <summary>

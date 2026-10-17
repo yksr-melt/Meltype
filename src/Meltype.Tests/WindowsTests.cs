@@ -351,12 +351,12 @@ internal static class WindowsTests
         var settings = typeof(Settings).GetProperties().Count(p => p.PropertyType == typeof(bool) && p.CanWrite &&
             p.GetCustomAttributes(typeof(System.ComponentModel.BrowsableAttribute), false).OfType<System.ComponentModel.BrowsableAttribute>().FirstOrDefault()?.Browsable != false);
         Assert.True(settings >= 30, $"ON/OFF の設定を読めている: {settings}");
-        Assert.Equal(settings + 2, controls.OfType<UI.ToggleSwitch>().Count(), "ON/OFF の設定 + 上の表示オプション 2 つ");
+        Assert.Equal(settings + 6, controls.OfType<UI.ToggleSwitch>().Count(), "ON/OFF の設定 + 上の表示オプション 2 つ + 既定の行コメント 4 つ");
         Assert.True(!controls.OfType<ComboBox>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "ON/OFF だけのプルダウンが残っていない");
         Assert.True(!controls.OfType<CheckBox>().Any(), "チェックボックスが残っていない");
         // 表の ON/OFF の列 (アプリ別設定の「自動切替」・独自の種類の「最初は英数」) もスイッチで、値は bool
         var columns = controls.OfType<DataGridView>().SelectMany(g => g.Columns.Cast<DataGridViewColumn>()).ToList();
-        Assert.Equal(2, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
+        Assert.Equal(3, columns.OfType<UI.ToggleSwitchColumn>().Count(), "アプリ別設定・独自の種類・独自の行コメントのスイッチの列");
         Assert.True(!columns.OfType<DataGridViewComboBoxColumn>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "表に ON/OFF だけのプルダウンの列が残っていない");
         var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名"));
         Assert.Equal(false, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "mstsc.exe")).Cells[1].Value, "mstsc.exe は OFF");

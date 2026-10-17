@@ -418,7 +418,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
     /// 前面のアプリが「コード」で、キャレットがコード (コメント・文字列・AI の入力行の外) にあるか。フックのスレッドで呼ばれる。
     /// 今の行が分からないときはコードとみなし、UI Automation で読みに行く。
     /// </summary>
-    private bool InCode(Settings settings)
+    private bool InCode(Settings settings, char? nextCharacter = null)
     {
         if (_codeJapanese || !IsCodeApp(settings)) return false;
         var line = _line.Text;
@@ -427,7 +427,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
             RequestLine(0);
             return true;
         }
-        return LineContext.ClassifyText(line) == LineKind.Code;
+        return (nextCharacter is null ? LineContext.ClassifyText(line, settings.CodeSingleComments) : LineContext.ClassifyForInput(line, nextCharacter, settings.CodeSingleComments)) == LineKind.Code;
     }
 
     /// <summary>
@@ -605,7 +605,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         // コードエディター・ターミナル: コードの中は英数のまま通す (補完もそのまま効く)。コメント・文字列の中は日本語を判定する。
         if (!reconvert && !_keyboardDirect && IsCodeApp(settings))
         {
-            var code = InCode(settings);
+            var code = InCode(settings, KeyText.CharFromKey(e.Vk, e.Scan, false));
             var kind = code ? LineKind.Code : LineKind.Comment;
             if (letter && _lastLineKind is { } last && last != kind) _composition?.ShowMode(!code);
             if (letter) _lastLineKind = kind;
