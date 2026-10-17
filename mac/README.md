@@ -95,7 +95,7 @@ cd mac
 | <kbd>英数</kbd> / <kbd>かな</kbd> | JIS キーボードで、英数 (直接入力) / 日本語に戻る |
 
 - 先頭か空白の直後に打った `/review`・`$skill`・`@ファイル名` は、空白まで変換せずにそのまま入ります (`SigilWordsDirect` で OFF)
-- 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` です (自動判定の強さ `DetectionLevel` など)
+- 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` (入力メニューの「Meltype のデータフォルダを開く」「Meltype の設定ファイル (config.json) を開く…」)。設定は Windows 版と同じ `config.json` です (自動判定の強さ `DetectionLevel` など)
 
 ## 入力モードのショートカット (Mac 専用)
 
