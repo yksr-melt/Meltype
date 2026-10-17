@@ -13,6 +13,7 @@ namespace Meltype.UI;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly MeltypeEngine _engine;
+    private static readonly Meltype.Composition.GitHubIssueTitles GitHubTitlesShared = new();
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem;
     private readonly ToolStripMenuItem _enabledItem;
@@ -64,9 +65,36 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ContinueAfterConversion = () => _engine.Settings.ContinueAfterConversion,
             Learning = () => _engine.Settings.LearningEnabled,
             SeparateKeyRoles = () => _engine.Settings.SeparateKeyRoles,
+            EnglishFirstInput = () => _engine.Settings.EnglishFirstInput,
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
+            ShiftSpaceHalfWidth = () => _engine.Settings.ShiftSpaceHalfWidth,
+            EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,
+            AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,
+            FullWidthParentheses = () => _engine.Settings.FullWidthParentheses,
+            FullWidthSlash = () => _engine.Settings.FullWidthSlash,
+            SquareBrackets = () => _engine.Settings.SquareBrackets,
+            EscStepsBack = () => _engine.Settings.EscStepsBack,
+            EscRevertsSelectedClause = () => _engine.Settings.EscRevertsSelectedClause,
+            FunctionKeysAffectSelectedClause = () => _engine.Settings.FunctionKeysAffectSelectedClause,
+            CompatibleShortcuts = () => _engine.Settings.CompatibleShortcuts,
+            PartialCommit = () => _engine.Settings.PartialCommit,
+            MacControlKeys = () => _engine.Settings.MacControlKeys,
+            CursorIntoBrackets = () => _engine.Settings.CursorIntoBrackets,
+            ControlKeyBindings = () => _engine.Settings.ControlKeyBindings,
+            CalculatorCandidates = () => _engine.Settings.CalculatorCandidates,
+            LogKeyIntervals = () => _engine.Settings.LogKeyIntervals,
+            LaughterAfterKana = () => _engine.Settings.LaughterAfterKana,
+            ContextualLearning = () => _engine.Settings.ContextualLearning,
+            FullWidthSpaceByDefault = () => _engine.Settings.FullWidthSpaceByDefault,
+            ShowCandidatesWhileTyping = () => _engine.Settings.ShowCandidatesWhileTyping,
+            ToggleKeyboardShortcuts = () => _engine.Settings.ToggleKeyboardShortcuts,
+            GitHubIssueCandidates = () => _engine.Settings.GitHubIssueCandidates,
+            GitHubRepository = () => _engine.Settings.GitHubRepository,
+            GitHubTitles = () => GitHubTitlesShared,
+            ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
+            PauseHotkey = () => _engine.Settings.PauseHotkey,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
             ModeIndicator = () => _engine.Settings is { Enabled: true, Mode: InputMode.Keyboard, ShowModeIndicator: true },
@@ -148,7 +176,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
         _tray = new NotifyIcon { ContextMenuStrip = menu, Visible = true };
         _tray.DoubleClick += (_, _) => ToggleEnabled();
-        _hotkey = new HotkeyWindow(ToggleEnabled);
+        _hotkey = new HotkeyWindow(ToggleEnabled, HotkeyWindow.WithCustom(_engine.Settings.PauseHotkey, HotkeyWindow.ToggleKeys));
         _registerHotkey = new HotkeyWindow(RegisterSelectedWord, HotkeyWindow.RegisterWordKeys, "単語の登録");
         _engine.ToggleRequested += OnToggleRequested;
         _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
@@ -795,6 +823,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
             (MOD_CONTROL, 0x76, "Ctrl+F7"),
             (MOD_CONTROL | MOD_ALT, 0x76, "Ctrl+Alt+F7"),
         ];
+
+        /// <summary>設定「一時停止 / 再開のホットキー」(Ctrl+Alt+F10 など) を先頭の候補にする。読めなければ組み込みの候補だけ。</summary>
+        public static (uint Modifiers, uint Key, string Name)[] WithCustom(string? setting, (uint Modifiers, uint Key, string Name)[] defaults)
+        {
+            var custom = Meltype.Input.KeyShortcut.ParseList(setting).Take(1)
+                .Select(shortcut => (
+                    (shortcut.Ctrl ? MOD_CONTROL : 0u) | (shortcut.Alt ? MOD_ALT : 0u) | (shortcut.Shift ? MOD_SHIFT : 0u) | (shortcut.Win ? 0x0008u : 0u),
+                    (uint)shortcut.Vk,
+                    setting!.Trim()))
+                .ToArray();
+            return [.. custom, .. defaults];
+        }
 
         public string? Name { get; }
 

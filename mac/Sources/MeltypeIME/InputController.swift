@@ -180,6 +180,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         indicator.state = ModeIndicatorSettings.shared.isEnabled ? .on : .off
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
+        let configItem = menu.addItem(withTitle: "Meltype の設定ファイル (config.json) を開く…", action: #selector(openConfigFile(_:)), keyEquivalent: "")
+        configItem.target = self
         menu.addItem(withTitle: "Meltype のデータフォルダを開く (設定・ユーザー辞書)", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "不具合の報告・提案… (Mac 版はプレビュー版です)", action: #selector(openReport(_:)), keyEquivalent: "")
         return menu
@@ -233,11 +235,16 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     @objc private func importUserDictionary(_ sender: Any?) {
         commitComposition(client())
+        // 入力メソッドは背景のアプリなので、前面に出さないと、開いた画面がほかのウィンドウに触れた瞬間に消える (issue #716)
+        NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
+        panel.level = .floating
+        panel.makeKeyAndOrderFront(nil)
         guard panel.runModal() == .OK, let source = panel.url,
               let directory = NativeCore.shared.dataDirectory else { return }
+        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         do {
             let count = try MacUserDictionary.importFile(source, directory: directory)
@@ -253,6 +260,16 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     @objc private func openReport(_ sender: Any?) {
         guard let url = NativeCore.shared.reportUrl else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
+    @objc private func openConfigFile(_ sender: Any?) {
+        guard let directory = NativeCore.shared.dataDirectory else { return }
+        let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? "{\n}\n".write(to: url, atomically: true, encoding: .utf8)
+        }
         NSWorkspace.shared.open(url)
     }
 

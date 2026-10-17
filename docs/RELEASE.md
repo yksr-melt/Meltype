@@ -15,8 +15,17 @@
 3. GitHub Actions が Windows (build.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作り、リリースに付ける
    - Windows: `Meltype-<版>-setup.exe` (インストーラー) と `Meltype-<版>-windows.zip`
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` (どちらもプレビュー版)
-4. リリースのページにリリースノートを書く
+4. リリースのページにリリースノートを書く (bot を使うと、リリースノートの下書きまで自動で作ります。下の「bot でリリースする」)
 5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
+
+### bot でリリースする
+
+版を上げて main に入れたあと、Issue か Pull Request のコメントの 1 行目に、管理者 (admin / maintain) が次のように書きます。
+
+- `/release 1.2.3` … 通常の版
+- `/pre-release 1.2.3-pre.1` … プレリリース
+
+bot は、main の `Meltype.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、タグ `v1.2.3` とリリースの下書き (リリースノートは自動生成) を作って、Windows・Mac・Linux のビルドを始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
 
 <br>
 

@@ -77,6 +77,35 @@ async function react(content) {
   if (event.comment) await gh('POST', `/issues/comments/${event.comment.id}/reactions`, { content }).catch(() => {});
 }
 
+// 関連しそうな Issue を、根拠つきで挙げる (issue #456)。ラベルや状態は変えず、自動で閉じもしない。
+//   根拠 1: 本文に書かれた Issue の参照 (#123)
+//   根拠 2: 誤判定の報告の「打ったもの」(打ったキー) が、ほかの Issue の本文と同じ (4 文字以上)
+// 失敗しても Issue の処理は続ける (関連の候補が出ないだけ)。
+async function relatedIssues(number, body, keys) {
+  const found = new Map();
+  try {
+    const refs = [...(body ?? '').matchAll(/(?<![\w/&])#(\d{1,5})\b/g)].map(m => Number(m[1])).filter(n => n !== number);
+    for (const ref of [...new Set(refs)].slice(0, 5)) {
+      const issue = await gh('GET', `/issues/${ref}`).catch(() => null);
+      if (issue && !issue.pull_request) found.set(ref, { title: issue.title, state: issue.state, reason: '本文で参照されている' });
+    }
+    if (keys && keys.length >= 4 && /^[\x20-\x7e]+$/.test(keys) && !/["\\]/.test(keys)) {
+      const query = encodeURIComponent(`repo:${repo} is:issue "${keys}" in:body`);
+      const response = await fetch(`${api}/search/issues?q=${query}&per_page=6`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'meltype-bot' } });
+      if (response.ok) {
+        for (const item of (await response.json()).items ?? []) {
+          if (item.number !== number && !item.pull_request && !found.has(item.number)) {
+            found.set(item.number, { title: item.title, state: item.state, reason: `同じ「打ったもの」(\`${keys}\`) の報告` });
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('関連の Issue を調べられませんでした:', error.message);
+  }
+  return [...found].slice(0, 5).map(([n, v]) => `- #${n} ${v.title} (${v.state === 'open' ? '未解決' : '解決済み'}) — ${v.reason}`);
+}
+
 const LabelInfo = {
   '要トリアージ': ['FBCA04', '作者がまだ確認していない報告'],
   'win11': ['0078D4', 'Windows 11'],
@@ -177,8 +206,57 @@ const Help = [
   '| `/test-repro <キー>` | PR のコードで `/repro` | メンテナー |',
   '| `/test-jht <文> [/ 読み]` | PR のコードで `/jht` | メンテナー |',
   '| `/test-explain <キー>` | PR のコードで `/explain` | メンテナー |',
+  '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でなければ止める | 管理者 |',
+  '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1` の形) | 管理者 |',
   '| `/help` | この一覧 | だれでも |',
 ].join('\n');
+
+// /release <版>・/pre-release <版> (issue #665)。管理者 (admin / maintain) だけ。
+//   1. 版の形を確かめる (release: 1.2.3 / pre-release: 1.2.3-pre.1)
+//   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
+//   3. タグ v<版> を main の先頭に作る (もうあれば止める)
+//   4. リリースの下書きを作る (リリースノートは自動生成。pre-release は prerelease)
+//   5. 配布物のビルド (build / mac / linux) を、そのタグで始める。ビルドが終わると、下書きに配布物が付く
+// タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
+async function releaseCommand(issue, command, version) {
+  const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
+  const pre = command === 'pre-release';
+  const permission = await gh('GET', `/collaborators/${event.comment.user.login}/permission`).then(r => r.permission).catch(() => 'none');
+  if (!['admin', 'maintain'].includes(permission)) return reply(`\`/${command}\` は管理者 (admin / maintain) だけが使えます。`);
+  const shape = pre ? /^\d+\.\d+\.\d+-pre\.\d+$/ : /^\d+\.\d+\.\d+$/;
+  if (!shape.test(version)) return reply(`版を ${pre ? '`1.2.3-pre.1`' : '`1.2.3`'} の形で書いてください (例: \`/${command} ${pre ? '1.2.3-pre.1' : '1.2.3'}\`)。`);
+  await react('eyes');
+  const read = async file => Buffer.from((await gh('GET', `/contents/${file}?ref=main`)).content, 'base64').toString('utf8');
+  const mismatches = [];
+  for (const file of ['src/Meltype/Meltype.csproj', 'src/Meltype.Core/Meltype.Core.csproj']) {
+    const found = (await read(file)).match(/<Version>([^<]+)<\/Version>/)?.[1];
+    if (found !== version) mismatches.push(`${file}: ${found ?? '(版なし)'}`);
+  }
+  const plain = version.replace(/-.*$/, '');
+  const plist = await read('mac/Resources/Info.plist');
+  const plistVersion = plist.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/)?.[1];
+  if (plistVersion !== plain) mismatches.push(`mac/Resources/Info.plist: ${plistVersion ?? '(版なし)'} (期待 ${plain})`);
+  if (mismatches.length > 0) return reply(`❌ main の版が ${version} になっていないので、リリースしません (docs/RELEASE.md の「版を上げる」を先に main に入れてください):\n\n${mismatches.map(m => `- ${m}`).join('\n')}`);
+  const tag = `v${version}`;
+  if (await gh('GET', `/git/ref/tags/${tag}`).then(() => true).catch(() => false)) return reply(`❌ タグ \`${tag}\` はもうあります。`);
+  const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
+  await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha });
+  await gh('POST', '/releases', { tag_name: tag, name: `Meltype ${version}`, draft: true, prerelease: pre, generate_notes: true });
+  const started = [], failed = [];
+  for (const workflow of ['build.yml', 'mac.yml', 'linux.yml']) {
+    try {
+      await gh('POST', `/actions/workflows/${workflow}/dispatches`, { ref: tag });
+      started.push(workflow);
+    } catch (error) {
+      failed.push(`${workflow}: ${error.message.slice(0, 120)}`);
+    }
+  }
+  await reply([
+    `✅ タグ \`${tag}\` (${sha.slice(0, 7)}) とリリースの下書き (${pre ? 'プレリリース' : '通常'}、リリースノートは自動生成) を作りました。`,
+    started.length > 0 ? `\nビルドを始めました: ${started.join('・')}。終わると下書きに配布物が付くので、中身を確かめてから公開してください。` : '',
+    failed.length > 0 ? `\n⚠ 始められなかったビルド (Actions の画面から ${tag} で手で実行してください):\n${failed.map(f => `- ${f}`).join('\n')}` : '',
+  ].join('\n'));
+}
 
 async function parse() {
   const issue = event.issue.number;
@@ -210,6 +288,8 @@ async function parse() {
 
     const text = [];
     if (problems.length > 0) text.push('報告ありがとうございます。確認のために、もう少し教えてください。', '', ...problems.map(p => `- ${p}`), '', '本文を編集して直してもらえれば、自動でもう一度確認します。', '');
+    const related = await relatedIssues(issue, event.issue.body, misdetection ? field(form, '打ったもの') : '');
+    if (related.length > 0) text.push('<details><summary>🔗 関連しそうな Issue (自動・根拠つき)</summary>', '', ...related, '', '本文の参照と「打ったもの」の一致だけを根拠にした候補です。同じ問題とは限りません (ラベルや状態は変えていません)。', '</details>', '');
     if (reasons.length > 0) text.push('<details><summary>🤖 自動の仕分け</summary>', '', ...reasons.map(r => `- ${r}`), '', '優先度・分類は本文からの見当です。作者が確認したら `要トリアージ` を外します。', '</details>');
     if (text.length > 0) await upsertComment(issue, 'triage', text.join('\n'));
 
@@ -223,12 +303,16 @@ async function parse() {
   }
 
   const line = (event.comment.body ?? '').split('\n')[0].trim();
-  const match = line.match(/^\/(repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|help)\b\s*(.*)$/);
+  const match = line.match(/^\/(repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|pre-release|release|help)\b\s*(.*)$/);
   if (!match || event.comment.user?.type === 'Bot') return output({ action: 'none' });
   const [, command, rest] = match;
   const maintainer = Maintainers.includes(event.comment.author_association);
   const prOnly = ['test', 'pack', 'test-repro', 'test-jht', 'test-explain'];
 
+  if (command === 'release' || command === 'pre-release') {
+    await releaseCommand(issue, command, rest.trim().replace(/^`|`$/g, '').replace(/^v/, ''));
+    return output({ action: 'none' });
+  }
   if (command === 'help') {
     await upsertComment(issue, `help-${event.comment.id}`, Help);
     return output({ action: 'none' });

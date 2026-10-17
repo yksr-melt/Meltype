@@ -221,6 +221,106 @@ public sealed class Settings
      Description("確定するときに、日本語と英単語の間に半角スペースを入れます (今日はGitHubにpushした → 今日は GitHub に push した)。数字だけの語 (3時) には入れません。")]
     public bool SpaceAroundEnglish { get; set; }
 
+    [Category("1. 全般"), DisplayName("Shift + Space で半角スペース"),
+     Description("日本語入力のときの Shift + Space を、全角スペースではなく半角スペースにします (プログラミングの癖で Shift + Space を半角スペースに使う人向け)。")]
+    public bool ShiftSpaceHalfWidth { get; set; }
+
+    [Category("1. 全般"), DisplayName("Enter は見えているとおりに確定"),
+     Description("Enter で確定するとき、打ち間違いの自動修正をせず、変換ボックスに見えているとおりに確定します (Space で変換するときの修正は今までどおりです)。")]
+    public bool EnterCommitsAsShown { get; set; }
+
+    [Category("1. 全般"), DisplayName("F9 / F10 の 1 回目は打ったまま"),
+     Description("入力中の表示が英字でも、F10 (Ctrl+O) の 1 回目は常に打ったまま (小文字) の英字にして、2 回目以降で すべて大文字 → 先頭だけ大文字 と切り替えます (Microsoft IME・Google 日本語入力と同じ)。OFF のときは、英字で見えている語の 1 回目の F10 で すべて大文字になります。")]
+    public bool AlphanumericKeyStartsAsTyped { get; set; }
+
+    [Category("1. 全般"), DisplayName("カッコを全角で入力"),
+     Description("日本語入力中の ( ) を全角の（ ）にします。英字の直後でも全角のままです (OFF のときは、打った幅の半角のままで、英語の中では半角です)。")]
+    public bool FullWidthParentheses { get; set; }
+
+    [Category("1. 全般"), DisplayName("/ を全角のスラッシュ／にする"),
+     Description("かなのすぐ後ろで打った / を、中黒「・」ではなく全角のスラッシュ／にします。「/ キーで中黒「・」」が ON のときは、そちらが優先です。")]
+    public bool FullWidthSlash { get; set; }
+
+    [Category("1. 全般"), DisplayName("[ ] を角括弧［ ］にする"),
+     Description("日本語入力中の [ ] を「」ではなく全角の角括弧［ ］にします (Google 日本語入力の「記号」の設定と同じ)。")]
+    public bool SquareBrackets { get; set; }
+
+    [Category("1. 全般"), DisplayName("Esc で一段ずつ戻す"),
+     Description("入力中の Esc を、打った内容を全部消すのではなく一段ずつ戻します (漢字 → ひらがな → 打ったローマ字 → 消す。見た目が変わらない段は飛ばします)。戻した語は、日本語 / 英語の判定として覚えません。")]
+    public bool EscStepsBack { get; set; }
+
+    [Category("1. 全般"), DisplayName("変換中の Esc は選んだ文節だけをかなに戻す"),
+     Description("文節に分けて変換しているとき、Esc で変換全体をやめるのではなく、選んでいる文節だけをひらがなに戻します (ほかの文節はそのまま)。もうひらがなの文節か、文節が 1 つだけのときの Esc は、今までどおり変換をやめます。")]
+    public bool EscRevertsSelectedClause { get; set; }
+
+    [Category("1. 全般"), DisplayName("変換中の F6〜F10 は選んだ文節だけに効かせる"),
+     Description("文節に分けて変換しているとき、F6〜F10 (ひらがな・カタカナ・半角カタカナ・全角英数・半角英数) を全体ではなく、選んでいる文節だけに効かせます (今日は|Google の「今日は」だけをカタカナにするなど)。")]
+    public bool FunctionKeysAffectSelectedClause { get; set; }
+
+    [Category("1. 全般"), DisplayName("Ctrl + K / L で文節の長さを変える"),
+     Description("変換中の Ctrl + K で選んでいる文節を縮め、Ctrl + L で伸ばします (Shift + ← → と同じ。以前の IME の手グセのショートカット)。")]
+    public bool CompatibleShortcuts { get; set; }
+
+    [Category("1. 全般"), DisplayName("Shift + Enter で選んだ文節までを確定"),
+     Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
+    public bool PartialCommit { get; set; }
+
+    [Category("1. 全般"), DisplayName("Control キーを macOS 標準の日本語入力と同じにする"),
+     Description("入力中の Control + J / K / L をひらがな / カタカナ / 全角英字 (F6 / F7 / F9) に、Control + H / D を前 / 後ろの 1 文字を消す、N / P を次 / 前の候補、B / F / A / E をカーソル移動、O / I を変換中の文節を伸ばす / 縮める、にします (macOS 標準の日本語入力と同じ)。ON のときは、ATOK 風の Control + U / I / O / P より優先します。")]
+    public bool MacControlKeys { get; set; }
+
+    [Category("1. 全般"), DisplayName("カッコを打ったら中にカーソルを移動"),
+     Description("カッコだけ（「」・（）・() など）を確定したときに、カーソルをカッコの中へ移動します (← キーを自動で送ります)。")]
+    public bool CursorIntoBrackets { get; set; }
+
+    [Category("1. 全般"), DisplayName("Control キーの割り当て"),
+     Description("入力中の Control + 英字に、別のキーの働きを割り当てます。「T=F6;Y=F7;U=F8;I=F9;O=F10」のように、英字=キー名を ; で区切って書きます (F キーが無い HHKB やノートパソコン向け)。キー名: F6〜F10・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab。ここに書いた英字は、組み込みの Control + U/I/O/P/H より優先します。")]
+    public string ControlKeyBindings { get; set; } = "";
+
+    [Category("1. 全般"), DisplayName("計算式を変換すると結果を候補に出す"),
+     Description("数字と + - * / ( ) だけの式を打って Space で変換すると、計算した結果 (1+2*3 → 7) と「式=結果」を候補に出します。")]
+    public bool CalculatorCandidates { get; set; }
+
+    [Category("1. 全般"), DisplayName("打鍵の間隔を判定の記録に残す (実験)"),
+     Description("判定の記録 (ログ) に、キーとキーの間の時間 (ミリ秒) だけを残します (打った文字は残しません)。英語と日本語の見分けに打鍵のリズムが使えるかを調べるための実験用です。")]
+    public bool LogKeyIntervals { get; set; }
+
+    [Category("1. 全般"), DisplayName("かな + w を笑い (ねw・さw) にする"),
+     Description("ね・さ などの 1 文字のかなの後ろの w を、英単語 (new・saw) にせず笑いの w にします (なるほどnew → なるほどねw)。英単語の new や saw を打つ人は OFF のままにしてください。")]
+    public bool LaughterAfterKana { get; set; }
+
+    [Category("1. 全般"), DisplayName("英語 / 日本語の学習を前の文脈ごとに分ける"),
+     Description("英字 / かなに直した語 (new → ねw など) の学習を、直前が英語だったか日本語だったかごとに別々に覚えます。同じローマ字でも、英語の文の中と日本語の文の中で使い分けられます。ON にする前に覚えた学習は、どちらの文脈でも使います。")]
+    public bool ContextualLearning { get; set; }
+
+    [Category("1. 全般"), DisplayName("スペースを全角で入力 (Shift + Space で半角)"),
+     Description("日本語入力のときの Space (何も打っていないとき) を全角スペースにし、Shift + Space を半角スペースにします (全角スペースを多く使う人向け。Meltype キーボードで使えます)。")]
+    public bool FullWidthSpaceByDefault { get; set; }
+
+    [Category("1. 全般"), DisplayName("入力中も変換候補をいくつか表示"),
+     Description("ひらがなを打っている間も、Space を押す前から変換候補を (5 件まで) 変換ボックスに出します。候補をクリックすると、その候補で変換を始めます。")]
+    public bool ShowCandidatesWhileTyping { get; set; }
+
+    [Category("1. 全般"), DisplayName("日本語 / 英数を切り替えるキーを追加"),
+     Description("Meltype キーボードの 日本語 / 英数 (直接入力) の切り替えに使うキーの組み合わせを、半角/全角 のほかに追加します。「Ctrl+Space; Alt+Backquote」のように ; で区切って書きます。修飾キーは Ctrl・Alt・Shift・Win、キー名は A〜Z・0〜9・F1〜F12・Space・Tab・Enter・Esc・Backquote・Muhenkan・Henkan・Kanji。")]
+    public string ToggleKeyboardShortcuts { get; set; } = "";
+
+    [Category("1. 全般"), DisplayName("#番号で GitHub の Issue・PR のタイトルを候補に出す"),
+     Description("#123 のように打って Space で変換すると、下の「GitHub のリポジトリ」の Issue・Pull Request のタイトルを候補に出します (開発者向け)。打った番号を GitHub (api.github.com) に問い合わせるので、既定は OFF です。非公開のリポジトリは、環境変数 MELTYPE_GITHUB_TOKEN にトークンを入れると読めます。調べた結果はこのセッションの間だけ覚えます。")]
+    public bool GitHubIssueCandidates { get; set; }
+
+    [Category("1. 全般"), DisplayName("GitHub のリポジトリ"),
+     Description("「#番号で GitHub の Issue・PR のタイトルを候補に出す」で問い合わせるリポジトリ。「所有者/名前」の形で書きます (例: yksr-melt/Meltype)。")]
+    public string GitHubRepository { get; set; } = "";
+
+    [Category("1. 全般"), DisplayName("クリップボードの文字を変換候補に出す"),
+     Description("「くりっぷぼーど」「ぺーすと」を変換したとき、クリップボードにある 1 行の文字 (200 文字まで) を候補に出します。変換した瞬間に 1 回だけ読み、監視・保存・送信はしません。パスワード管理ソフトなど、履歴に残さない印のついた内容は読みません。Windows のみ。既定は OFF です。")]
+    public bool ClipboardCandidates { get; set; }
+
+    [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"),
+     Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。Windows のみ。変換・無変換キーが無い US 配列のキーボード向けです。")]
+    public string PauseHotkey { get; set; } = "";
+
     [Category("1. 全般"), DisplayName("句読点"),
      Description("日本語の中で , と . を打ったときに出す句読点です (Microsoft IME と同じ 4 通り)。論文などで「，．」「，。」「、．」を使うときに変えます。かな入力の 、 。 のキーにも効きます。数字の間の . , (1.5、1,000) や英単語の中の . (tetr.io) は半角のままです。")]
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
@@ -256,6 +356,10 @@ public sealed class Settings
     [Category("1. 全般"), DisplayName("入力中のキーの役割を分ける"),
      Description("入力中 (変換ボックスに文字があるとき) の Space・変換・無変換・ひらがな/カタカナ キーの役割を分けます。Space: 英語・日本語の判定にかかわらず候補を開く (英字で見えている語も、確定して空白を入れずに候補を出す)。変換: 日本語を優先して変換。無変換: 英字にする。ひらがな/カタカナ: ひらがな ⇔ カタカナ。確定は Enter です。何も打っていないときの各キーは今までどおりです。")]
     public bool SeparateKeyRoles { get; set; }
+
+    [Category("1. 全般"), DisplayName("英字を主に入力 (変換キー / ↓ で日本語に)"),
+     Description("自動判定をせず、打った英字をそのまま入力中にします (Space は空白、Enter は英字のまま確定)。日本語にしたい語は、変換キーか ↓ を押すと、ローマ字として読んで変換します。コマンドを多く打つ使い方向けで、Microsoft IME の「主に英語を入力する」と同じ動きです。")]
+    public bool EnglishFirstInput { get; set; }
 
     [Category("1. 全般"), DisplayName("候補の意味を表示"),
      Description("変換中に同じ候補で少し (約 1.5 秒) 止まると、その候補の意味をウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge)。同音異義語を選ぶときの手がかりに。")]

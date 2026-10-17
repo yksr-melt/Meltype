@@ -263,6 +263,24 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
                 return true;
             }
         }
+        // 設定「日本語 / 英数を切り替えるキーを追加」: 半角/全角 と同じく Meltype キーボードの ON/OFF (issue #530)
+        if (settings.Enabled && settings.Mode == InputMode.Keyboard && settings.ToggleKeyboardShortcuts.Length > 0 && !e.Injected && !composition.Gate.IsCaptured)
+        {
+            var ctrl = IsDown(VirtualKeys.Control);
+            var alt = IsDown(VirtualKeys.Menu);
+            var shift = IsDown(VirtualKeys.Shift);
+            var win = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+            if (Meltype.Input.KeyShortcut.ParseList(settings.ToggleKeyboardShortcuts).Any(shortcut => shortcut.Matches(e.Vk, ctrl, alt, shift, win)))
+            {
+                if (e.IsDown)
+                {
+                    lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
+                    MaskAltRelease();
+                    KeyboardDirect = !_keyboardDirect;
+                }
+                return true;
+            }
+        }
         // 半角/全角 キーは Microsoft IME ではなく Meltype キーボードの ON/OFF に使う。
         if (settings.Enabled && settings.HankakuTogglesKeyboard && VirtualKeys.IsHankakuZenkaku(e.Vk) && !e.Injected && !composition.Gate.IsCaptured)
         {
@@ -572,7 +590,7 @@ internal sealed class MeltypeEngine : ISessionEnvironment, IDisposable
         // かな入力 (JIS): かなのキー (数字・記号のキーも含む) はすべて入力を始める。
         if (settings.InputStyle == InputStyle.Kana && !_keyboardDirect && KanaDetector.IsKanaKey(e.Vk)) punctuation = true;
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。
-        if (e.Vk == VirtualKeys.Space && !_keyboardDirect && IsDown(VirtualKeys.Shift)) punctuation = true;
+        if (e.Vk == VirtualKeys.Space && !_keyboardDirect && (IsDown(VirtualKeys.Shift) || settings.FullWidthSpaceByDefault)) punctuation = true;
         if (_keyboardDirect && !reconvert)
         {
             // 英数状態: ローマ字かどうかを判定するために、単語の打ち始めの英字だけを受け取る。

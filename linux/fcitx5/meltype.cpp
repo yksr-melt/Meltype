@@ -50,6 +50,7 @@ struct Native {
     char *(*selectCandidate)(void *, int) = nullptr;
     void (*setDirect)(void *, int) = nullptr;
     void (*setCanDelete)(void *, int) = nullptr; // 古い本体には無い
+    void (*setCodeInput)(void *, int) = nullptr; // 古い本体には無い (コード入力: ターミナルの入力欄で既定にする、#715)
     char *(*roleKey)(void *, int) = nullptr;     // 古い本体には無い (入力中のキーの役割: #199)
     void (*free)(void *) = nullptr;
 
@@ -70,6 +71,7 @@ struct Native {
         selectCandidate = reinterpret_cast<decltype(selectCandidate)>(sym("meltype_select_candidate"));
         setDirect = reinterpret_cast<decltype(setDirect)>(sym("meltype_set_direct"));
         setCanDelete = reinterpret_cast<decltype(setCanDelete)>(sym("meltype_set_can_delete"));
+        setCodeInput = reinterpret_cast<decltype(setCodeInput)>(sym("meltype_set_code_input"));
         roleKey = reinterpret_cast<decltype(roleKey)>(sym("meltype_role_key"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         if (!create || !destroy || !handleKey || !commit || !selectCandidate || !setDirect || !free) {
@@ -458,6 +460,8 @@ private:
         if (!native_.setCanDelete || !session) return;
         bool canDelete = ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) && ic->surroundingText().isValid();
         native_.setCanDelete(session, canDelete ? 1 : 0);
+        // 入力欄がターミナル (capability flag の Terminal) なら、コード入力を既定にする (j k やコマンド名がアプリに届くように)
+        if (native_.setCodeInput) native_.setCodeInput(session, ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal) ? 1 : 0);
     }
 
     void apply(fcitx::InputContext *ic, const std::string &text) {

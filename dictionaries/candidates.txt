@@ -360,3 +360,12 @@
 きく お聞きになる 伺う 拝聴する
 おもう 思う お思いになる 存じる
 くれる 呉れる くださる
+# Issue #653
+しょた ショタ
+# Issue #654
+らてぃす ラティス
+# Issue #706
+あおにしき 安青錦
+
+# --- 子音の略入力 (Issue #62: 英字の読みで候補を出せる。自分の略語は %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt に同じ形式で書く) ---
+ast 明日
