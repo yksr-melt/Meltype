@@ -323,6 +323,14 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue835_DocsSlashStaysEnglish()
+    {
+        var k = new Keyboard();
+        k.Type("docs/");
+        Assert.Equal("docs/", k.Showing, "docs/ は英字のまま");
+    }
+
+    [Test]
     public static void Reconversion_RomajiTextBecomesJapanese()
     {
         // #288: ローマ字のまま入った文を選んで変換キー → Meltype の判定で日本語の所だけを日本語にして候補に出す。Enter で置き換える
