@@ -160,6 +160,9 @@ public sealed record CompositionOptions
     /// </summary>
     public Func<bool> SeparateKeyRoles { get; init; } = () => false;
 
+    /// <summary>設定「英字を主に入力」: 自動判定をせず英字のまま入力中にし、変換キー / ↓ で日本語にする (issue #839)。</summary>
+    public Func<bool> EnglishFirstInput { get; init; } = () => false;
+
     /// <summary>選んだ英訳の記録 (普通の変換の学習より弱く効かせる)。</summary>
     public TranslationHistory? TranslationHistory { get; init; }
 
@@ -634,6 +637,17 @@ public sealed class CompositionController
 
         switch (vk)
         {
+            case VirtualKeys.Convert or VirtualKeys.Down when _options.EnglishFirstInput() && _text.Mode == DisplayMode.HalfWidthAlphanumeric && !_modeByKey && !IsProtectedInput:
+                // 設定「英字を主に入力」: 変換キー / ↓ で、打った英字をローマ字として読んで変換する (issue #839)
+                _text.Mode = DisplayMode.Hiragana;
+                _text.FixTypos();
+                StartConversion(preferJapanese: true);
+                return;
+            case VirtualKeys.Space when _options.EnglishFirstInput() && _text.Mode == DisplayMode.HalfWidthAlphanumeric && !_modeByKey && !IsProtectedInput &&
+                                        _swallowedShift.Count == 0 && !_host.IsShiftDown():
+                // 設定「英字を主に入力」: Space は変換ではなく、ふつうの空白として入力中の文字に足す (ls -la)
+                _text.Append(' ');
+                return;
             case VirtualKeys.Convert:
                 _text.FixTypos();
                 StartConversion(preferJapanese: true);
@@ -922,6 +936,8 @@ public sealed class CompositionController
     {
         _keptChoices.Clear();
         _modeByKey = false;
+        // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
+        if (_options.EnglishFirstInput() && !_options.KanaInput() && _text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.HalfWidthAlphanumeric;
         _text.KanaInput = _options.KanaInput();
         _text.Punctuation = _options.Punctuation();
         var id = ++_compositionId;

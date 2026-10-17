@@ -169,6 +169,7 @@ internal static class CompositionTests
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
+        public bool EnglishFirstInput { get; set; }
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
         public Meltype.Config.PunctuationStyle Punctuation { get; set; }
@@ -245,6 +246,7 @@ internal static class CompositionTests
                 ContinueAfterConversion = () => ContinueAfterConversion,
                 Learning = () => Learning,
                 SeparateKeyRoles = () => SeparateKeyRoles,
+                EnglishFirstInput = () => EnglishFirstInput,
             });
             Controller.Committed += Sigil.Append;
             Host.Replayed += e =>
@@ -320,6 +322,33 @@ internal static class CompositionTests
         }
 
         public string? Showing => Host.View?.Text;
+    }
+
+    [Test]
+    public static void Issue839_EnglishFirstInput()
+    {
+        // Enter は打った英字のまま、Space は空白 (ls -la)
+        var k = new Keyboard { EnglishFirstInput = true };
+        k.Type("ls -la");
+        Assert.Equal("ls -la", k.Showing, "英字のまま入力中 (空白も)");
+        k.Type("\n");
+        Assert.Equal("ls -la", k.Host.Document, "Enter は英字のまま確定");
+
+        // sakura を打って変換キー / ↓ で日本語にする
+        foreach (var key in new[] { VirtualKeys.Convert, VirtualKeys.Down })
+        {
+            var j = new Keyboard { EnglishFirstInput = true };
+            j.Type("sakura");
+            Assert.Equal("sakura", j.Showing, "変換するまで英字");
+            j.Press(key);
+            Assert.True(j.Host.View?.Converting == true && j.Host.View.Candidates.Contains("さくら"), "さくら が候補に: " + string.Join(",", j.Host.View?.Candidates ?? []));
+            Assert.Equal("さくら", j.Showing, "日本語が最初");
+        }
+
+        // 設定が OFF なら今までどおり (kyou は日本語)
+        var off = new Keyboard();
+        off.Type("kyou");
+        Assert.Equal("きょう", off.Showing, "OFF は自動判定");
     }
 
     [Test]
