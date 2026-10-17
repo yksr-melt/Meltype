@@ -323,6 +323,14 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue821_LongJapaneseWithTwoCamelCaseNames()
+    {
+        var k = new Keyboard();
+        k.Type("korewoiPhonedesatueisi,YouTubeniappuro-dosiyou");
+        Assert.Equal("これをiPhoneでさつえいし、YouTubeにあっぷろーどしよう", k.Showing, "iPhone と YouTube を含む長い文も日本語");
+    }
+
+    [Test]
     public static void Reconversion_RomajiTextBecomesJapanese()
     {
         // #288: ローマ字のまま入った文を選んで変換キー → Meltype の判定で日本語の所だけを日本語にして候補に出す。Enter で置き換える

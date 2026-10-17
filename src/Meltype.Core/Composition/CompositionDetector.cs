@@ -541,7 +541,8 @@ public sealed partial class CompositionDetector
         var upper = token.AsSpan().IndexOfAnyInRange('A', 'Z');
         if (upper < 3) return false;
         var head = token[..upper];
-        return head.All(char.IsAsciiLetterLower) && TrailingParticles.Any(p => head.Length > p.Length && head.EndsWith(p, StringComparison.Ordinal)) &&
+        // 長い日本語の読み (korewoiPhone: これをiPhone) は、助詞で終わらなくても (iPhone・YouTube を 2 つ含む文: issue #821)
+        return head.All(char.IsAsciiLetterLower) && (head.Length >= 7 || TrailingParticles.Any(p => head.Length > p.Length && head.EndsWith(p, StringComparison.Ordinal))) &&
             _romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } && !IsKnownEnglishWord(head);
     }
 
