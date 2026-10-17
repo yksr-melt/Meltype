@@ -1883,8 +1883,11 @@ public sealed class CompositionController
     /// <summary>英語と判定した語を、ローマ字として読んだときの候補 (go → 語 ご ゴ)。読み切れなければ空。</summary>
     private List<string> RomajiCandidates(string raw)
     {
-        if (_detector.Romaji.AnalyzeFragment(raw.ToLowerInvariant()) is not { IsValid: true, Partial: "" } analysis || analysis.Kana.Length == 0) return [];
-        return JapaneseCandidates(analysis.Kana, null);
+        // 大文字だけで打った語 (TEN) は、最後の n を ん と読む (TEN → てん: issue #833)。小文字の英文の中の語 (pen) は日本語にしない
+        var finalN = raw.All(char.IsAsciiLetterUpper);
+        if (_detector.Romaji.AnalyzeFragment(raw.ToLowerInvariant()) is not { IsValid: true } analysis || analysis.Partial != "" && !(finalN && analysis.Partial == "n") ||
+            analysis.Kana.Length == 0 && analysis.Partial.Length == 0) return [];
+        return JapaneseCandidates(analysis.Kana + (analysis.Partial == "n" ? "ん" : ""), null);
     }
 
     /// <summary>日本語の候補 (かな・漢字) か。英語の文節で選ばれたら、その語を日本語として覚える。</summary>

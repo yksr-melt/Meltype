@@ -323,6 +323,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue833_ConvertKeyOnEnglishTenOffersKana()
+    {
+        // 英字で見えている TEN も、変換キーで てん の候補が出る (HOGE → ほげ と同じ)
+        var k = new Keyboard();
+        k.Type("TEN");
+        k.Press(VirtualKeys.Convert);
+        Assert.True(k.Host.View?.Candidates.Contains("てん") == true, "てん が候補に: " + string.Join(",", k.Host.View?.Candidates ?? []));
+        Assert.Equal("てん", k.Showing, "日本語を最初に");
+    }
+
+    [Test]
     public static void Reconversion_RomajiTextBecomesJapanese()
     {
         // #288: ローマ字のまま入った文を選んで変換キー → Meltype の判定で日本語の所だけを日本語にして候補に出す。Enter で置き換える
