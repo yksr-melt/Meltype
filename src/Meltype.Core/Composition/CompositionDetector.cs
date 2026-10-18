@@ -689,7 +689,8 @@ public sealed partial class CompositionDetector
         return true;
     }
 
-    private readonly record struct EnglishSpanKey(string Span, bool AtEnd, int Before, bool? After, bool StartOfInput, DetectionLevel Level, bool Final, bool Unreadable, string? Next, bool EndsWord);
+    // LearnedContext は、学習を文脈ごとに分けるときの前の文脈 (Memory.Get の答えが変わる)。入力ごとに変わるので、控えを捨てずにキーに入れる
+    private readonly record struct EnglishSpanKey(string Span, bool AtEnd, int Before, bool? After, bool StartOfInput, DetectionLevel Level, bool Final, bool Unreadable, string? Next, bool EndsWord, bool? LearnedContext);
 
     private const int MemoLimit = 50_000;
     private static readonly long MemoLifetime = System.Diagnostics.Stopwatch.Frequency * 60;
@@ -723,7 +724,7 @@ public sealed partial class CompositionDetector
     /// <param name="endsWord">区間の後ろが記号だけ (let's go! の go)。語はそこで打ち終わっているので、短い語も末尾の語と同じく見る。</param>
     private bool IsEnglishSpan(string span, bool atEnd, int before, bool? after, bool startOfInput, DetectionLevel level, bool final = false, bool unreadable = false, string? next = null, bool endsWord = false)
     {
-        var key = new EnglishSpanKey(span, atEnd, before, after, startOfInput, level, final, unreadable, next, endsWord);
+        var key = new EnglishSpanKey(span, atEnd, before, after, startOfInput, level, final, unreadable, next, endsWord, Memory is { ContextSensitive: true } memory ? memory.Context : null);
         int generation;
         lock (_memoGate)
         {

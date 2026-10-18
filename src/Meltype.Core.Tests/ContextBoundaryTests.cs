@@ -82,6 +82,36 @@ internal static class ContextBoundaryTests
     }
 
     [Test]
+    public static void LearnedWords_AreUsedByTheSameDetector()
+    {
+        var memory = new LanguageMemory(null);
+        var detector = CompositionDetector.CreateDefault();
+        detector.SpellChecker = BuiltInWordChecker.Shared;
+        detector.Memory = memory;
+        Assert.Equal("google", Type("google"));
+        memory.Remember("google", english: false, explicitChoice: true);
+        Assert.Equal("ごogle", Type("google"), "学習の版が変わったら、控えた答えを使わない");
+        Assert.Equal("かなた", Type("kanata"));
+        memory.Remember("kanata", english: true, explicitChoice: true);
+        Assert.Equal("kanata", Type("kanata"));
+        memory.ContextSensitive = true;
+        memory.Context = false;
+        memory.Remember("kanata", english: false, explicitChoice: true);
+        Assert.Equal("かなた", Type("kanata"));
+        memory.Context = true;
+        Assert.Equal("kanata", Type("kanata"), "前の文脈が変わったら、別の文脈で控えた答えを使わない");
+        memory.Context = false;
+        Assert.Equal("かなた", Type("kanata"));
+
+        string Type(string typed)
+        {
+            var text = new CompositionText(detector);
+            foreach (var c in typed) text.Append(c);
+            return text.Display(final: true);
+        }
+    }
+
+    [Test]
     public static void LanguageMemory_SpanLookupMatchesStringIncludingLegacyEntries()
     {
         var path = Path.Combine(Path.GetTempPath(), "meltype-span-" + Guid.NewGuid() + ".json");

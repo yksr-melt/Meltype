@@ -475,6 +475,80 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         }
     }
 
+    /// <summary>区間を語の最長の長さで絞っても、絞らないとき (語の長さに上限の無いスペルチェッカー) と打鍵ごとの表示が同じか。</summary>
+    [Test]
+    public static void LengthLimit_KeepsEveryKeystroke()
+    {
+        var joined = string.Concat(Typing.Select(c => c.Typed.Replace(" ", "")));
+        // 一覧で最も長い語 (18 文字) の前後の長さの語と、長い入力
+        var longWords = from before in new[] { "", "kyouha", "somete", "motte", "more", "kyouhamore", "watashino" }
+                        from word in new[] { "oversimplification", "telecommunications", "misrepresentations", "enshittification", "Oversimplification" }
+                        from after in new[] { "", "nokoto", "desu", "x" }
+                        select (Typed: before + word + after, Before: (string?)null);
+        // 入力に pedia があるときは絞らない (-pedia の合成語は長さに上限が無い)
+        string[] pedia = ["oversimplificationspedia", "abcdefghijklmnopqrstuvwxyzpediawo", "kyouhaoversimplificationspediadesu"];
+        var cases = Typing.Select(c => (c.Typed, c.Before)).Concat(longWords).Concat(pedia.Select(typed => (Typed: typed, Before: (string?)null)))
+            .Append((joined[..Math.Min(400, joined.Length)], null)).ToList();
+        // 上限ちょうど (20 文字) の語を足したスペルチェッカーで、英単語 + 助詞 + 英単語 (読める sake も)・長い英単語の途中の助詞の場面。
+        // 学習した語 (21 文字) は、スペルチェッカーのどの語よりも長い
+        var made = new WithWords(BuiltInWordChecker.Shared, "telecommunicationsxq", "overnopresentationzz", "presentationzz");
+        var learned = new LanguageMemory(null);
+        learned.Remember("supercalifragilisticx", english: true, explicitChoice: true);
+        var madeCases = new[] { "telecommunicationsxqnoproblem", "telecommunicationsxqnosake", "telecommunicationsxqganame", "telecommunicationsxqshita",
+            "kyouhatelecommunicationsxqdesu", "overnopresentationzz", "overnopresentationzzdesu", "kyouhasupercalifragilisticxdesu", "supercalifragilisticx" }
+            .Select(typed => (Typed: typed, Before: (string?)null)).ToList();
+        var detector = CompositionTests.Detector;
+        try
+        {
+            foreach (var scored in new[] { false, true })
+            {
+                detector.UseScoredSegmentation = () => scored;
+                foreach (var (checker, memory, inputs) in new[] { ((IWordChecker)BuiltInWordChecker.Shared, (LanguageMemory?)null, cases), (made, learned, madeCases) })
+                {
+                    detector.Memory = memory;
+                    detector.SpellChecker = checker;
+                    var limited = inputs.Select(Keystrokes).ToList();
+                    detector.SpellChecker = new Unlimited(checker);
+                    for (var i = 0; i < inputs.Count; i++) Assert.Equal(limited[i], Keystrokes(inputs[i]), $"{inputs[i].Typed} (点数で選ぶ: {scored})");
+                }
+            }
+        }
+        finally
+        {
+            detector.SpellChecker = null;
+            detector.Memory = null;
+            detector.UseScoredSegmentation = null;
+        }
+
+        static string Keystrokes((string Typed, string? Before) input)
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Host.PrecedingText = input.Before;
+            var shown = new List<string>();
+            foreach (var c in input.Typed + "\n")
+            {
+                k.Type(c.ToString());
+                shown.Add(k.Host.View?.Text + "|" + k.Host.Document);
+            }
+            return string.Join("\n", shown);
+        }
+    }
+
+    private sealed class Unlimited(IWordChecker inner) : IWordChecker
+    {
+        public bool IsAvailable => inner.IsAvailable;
+        public bool IsWord(string lower) => inner.IsWord(lower);
+        public string? AutoCorrection(string lower) => inner.AutoCorrection(lower);
+    }
+
+    private sealed class WithWords(IWordChecker inner, params string[] words) : IWordChecker
+    {
+        public bool IsAvailable => true;
+        public bool IsWord(string lower) => words.Contains(lower) || inner.IsWord(lower);
+        public string? AutoCorrection(string lower) => inner.AutoCorrection(lower);
+        public int MaxWordLength => Math.Max(inner.MaxWordLength, words.Max(w => w.Length));
+    }
+
     [Test]
     public static void Quality_Corpus()
     {
