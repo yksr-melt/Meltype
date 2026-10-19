@@ -2626,6 +2626,8 @@ public sealed class CompositionController
         string? replacement = null;
         if (!previous.English && english && _detector.IsDefinitelyEnglish(raw))
         {
+            // 前の語の後ろを Space で区切らずに続けたとき (Enter で確定したときなど) は直さない。英語にすると前の語とつながる (あれ + ON → areON)
+            if (!previous.SpaceIntended) return null;
             // 日本語で確定した語を英語に: 代名詞の i は I にし、Space で変換していたなら空白も入れる。
             // その前にも Space で区切って日本語にした語が続いていれば、まとめて英文に直す (make sure you have)。
             var start = _correctable.Count - 1;
@@ -2640,7 +2642,6 @@ public sealed class CompositionController
             if (targets.Any(t => IsSuruRomajiKeepJapanese(t.Raw)))
             {
                 // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
-                if (!targets.Any(t => t.SpaceIntended)) return null;
                 replacement = string.Concat(targets.Select(t => t.Text + (t.SpaceIntended ? " " : "")));
             }
             else

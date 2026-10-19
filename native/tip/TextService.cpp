@@ -1171,8 +1171,6 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
     for (const JsonValue& edit : reply[L"commits"].array) {
         const std::wstring& text = edit[L"text"].Str();
         int deleteBefore = edit[L"deleteBefore"].Int();
-        // 変換中は範囲外の確定語を置換せず、今の変換を保持する。
-        if (deleteBefore > 0 && composition_ != nullptr) continue;
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (composition_ != nullptr) {
             composition_->GetRange(&range);
@@ -1185,8 +1183,19 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
         }
         if (!range) continue;
         // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
-        // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
-        if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
+        // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない
+        if (deleteBefore > 0) {
+            bool composing = composition_ != nullptr;
+            if (ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) {
+                // 変換中は、変換中の文字の外 (前に確定した文字) を書き換えられないアプリがある (TF_E_RANGE_NOT_COVERED)。
+                // 変換を終えてから、前に確定した文字と変換中だった文字をまとめて書き換える
+                if (composing) EndComposition(ec);
+            } else if (!composing) {
+                continue;
+            }
+            // 変換中で、前の文字が確定したときのままか確かめられない: 前の文字は消さずに、変換中の文字をこの確定の文字にする
+            // (確定し直しは今の語の確定と 1 つにまとめて届くので、飛ばすと今の語まで消える)
+        }
         if (!WriteCommit(ec, context, range.Get(), text)) continue;
         next.Reset();
         if (SUCCEEDED(range->Clone(&next))) next->Collapse(ec, TF_ANCHOR_END);

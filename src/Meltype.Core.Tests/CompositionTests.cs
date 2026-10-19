@@ -2852,6 +2852,23 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void AutoCorrect_NotToEnglishWithoutSpaceBetween()
+    {
+        // Enter で確定した日本語の語の後ろに英語の語を続けても、英語に確定し直さない (英語にすると、空白なしで前の語とつながる)
+        foreach (var (typed, expected) in new[] { ("are\nON ", "あれON "), ("i\nwant ", "いwant "), ("sushi\nPR\n", "すしPR") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed.Replace("\n", "⏎"));
+            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:")), "消さない: " + string.Join(" ", k.Host.Events));
+        }
+        // Space で区切ったときは今までどおり直す
+        var spaced = new Keyboard();
+        spaced.Type("are ON ");
+        Assert.Equal("are ON ", spaced.Host.Document);
+    }
+
+    [Test]
     public static void AutoCorrect_KeepsSuruFormBeforeEnglish()
     {
         // site → して のあと英字 (PR) が続いても、する活用を英単語 site に確定し直さない。
