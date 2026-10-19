@@ -504,6 +504,19 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// 定型文を入れる: 打った ;名前 (count 文字) を消してから text を入れる (issue #290)。複数行の文は、改行を Enter として送ると
     /// チャットでは途中で送信されてしまうので、貼り付けで入れる。1 行の文は、確定し直しと同じく 1 回の SendInput で送る。
     /// </summary>
+    /// <summary>変換ボックスが開いていれば捨ててから <see cref="InsertSnippet"/> する (issue #463)。</summary>
+    public void InsertSnippetAfterCancelComposition(int count, string text)
+    {
+        if (!InputAllowed()) return;
+        if (Gate.IsCaptured)
+        {
+            Controller.Abandon("定型文");
+            ReplayAll(Gate.Abort());
+            Hide();
+        }
+        InsertSnippet(count, text);
+    }
+
     public void InsertSnippet(int count, string text)
     {
         if (!InputAllowed()) return;

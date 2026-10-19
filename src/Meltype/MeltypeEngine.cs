@@ -366,7 +366,22 @@ internal sealed class MeltypeEngine : IDisposable
         if (!e.IsDown || e.Injected || VirtualKeys.IsModifier(e.Vk)) return false;
         var undo = _lastSnippet;
         _lastSnippet = null;
-        if (composition.Gate.IsCaptured || IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin)) return false;
+        var mods = IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+        // Space / Tab は変換ボックスが開いていても先に試す (issue #463: ;名前 が変換に取られて展開できない)。
+        if (e.Vk is (VirtualKeys.Space or VirtualKeys.Tab) && !IsDown(VirtualKeys.Shift) && !mods && SnippetsEnabled(settings) && composition.Focus.CanCapture)
+        {
+            _snippet.Mark = settings.SnippetMark;
+            if (_snippet.Expand(composition.Snippets) is { } expansion)
+            {
+                lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
+                _lastSnippet = (expansion.Text, expansion.Typed);
+                composition.Post(() => composition.InsertSnippetAfterCancelComposition(expansion.Delete, expansion.Text));
+                _line.Invalidate();
+                Log.Info($"定型文を入れました ({expansion.Text.Length} 文字)。");
+                return true;
+            }
+        }
+        if (composition.Gate.IsCaptured || mods) return false;
         if (e.Vk == VirtualKeys.Escape && undo is { } last)
         {
             lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
@@ -374,16 +389,7 @@ internal sealed class MeltypeEngine : IDisposable
             Log.Info("定型文を取り消して、打った名前に戻しました。");
             return true;
         }
-        // 入力欄にフォーカスがないとき (エクスプローラーのファイル一覧など) は展開しない。名前を消す Backspace が「前のフォルダーに戻る」になってしまう。
-        if (e.Vk is not (VirtualKeys.Space or VirtualKeys.Tab) || IsDown(VirtualKeys.Shift) || !SnippetsEnabled(settings) || !composition.Focus.CanCapture) return false;
-        _snippet.Mark = settings.SnippetMark;
-        if (_snippet.Expand(composition.Snippets) is not { } expansion) return false;
-        lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
-        _lastSnippet = (expansion.Text, expansion.Typed);
-        composition.Post(() => composition.InsertSnippet(expansion.Delete, expansion.Text));
-        _line.Invalidate();
-        Log.Info($"定型文を入れました ({expansion.Text.Length} 文字)。");
-        return true;
+        return false;
     }
     private long _lineVersion;
     private System.Threading.Timer? _lineTimer;
@@ -576,6 +582,8 @@ internal sealed class MeltypeEngine : IDisposable
             return false;
         }
         if (IsDown(VirtualKeys.Control) || IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin)) return false;
+        // ;名前 を打っている途中は変換ボックスを開かない (issue #463)。
+        if (!reconvert && SnippetsEnabled(settings) && _snippet.IsActive) return false;
         // 先頭か空白の直後の ;名前 (定型文) は、Space / Tab まで変換せずにそのままアプリへ渡す (#290)。
         if (!reconvert && SnippetsEnabled(settings) && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } snippetChar)
         {
