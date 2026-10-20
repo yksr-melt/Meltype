@@ -84,12 +84,14 @@ public sealed class LanguageMemory
     {
         get
         {
-            if (_maxWordLengthVersion != Version)
+            if (_maxWordLengthVersion == Version) return _maxWordLength;
+            // 判定のスレッドから呼ばれる。画面のスレッドが学習を書き換えている途中には数えない
+            lock (_gate)
             {
                 _maxWordLength = _entries.Count == 0 ? 0 : _entries.Keys.Max(k => k.Length);
                 _maxWordLengthVersion = Version;
+                return _maxWordLength;
             }
-            return _maxWordLength;
         }
     }
 
@@ -128,7 +130,6 @@ public sealed class LanguageMemory
 
     private void RememberLocked(string word, bool english, bool explicitChoice)
     {
-        Version++;
         var entryKey = word + ContextSuffix;
         if (_entries.TryGetValue(entryKey, out var old) && old.English == english)
         {
@@ -153,6 +154,8 @@ public sealed class LanguageMemory
                 _entries.Remove(key);
             }
         }
+        // 書き換え終えてから上げる。先に上げると、別のスレッドの判定が古い内容の答えを新しい版のものとして控える
+        Version++;
     }
 
     /// <summary>学習した語の一覧 (新しく使ったものから)。</summary>
