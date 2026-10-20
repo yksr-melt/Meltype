@@ -335,9 +335,15 @@ public sealed class CompositionController
     private ReconversionSelection? _reconversion;
 
     // 予測変換: 打ちかけの読み・英字の続きの候補と、Tab で選んでいるもの (-1 なら選んでいない)。
-    private IReadOnlyList<string> _predictions = [];
+    private IReadOnlyList<Prediction> _predictions = [];
     private string _predictionKey = "";
     private int _predictionIndex = -1;
+
+    /// <summary>
+    /// 予測変換の候補。Text は一覧に出す語、Before は選んだときに語の前に残す文字 (最後の文節の続きの候補なら前の文節の見えている文字、
+    /// 読み全体の続きの候補なら空)、Reading は語に置き換わる打ちかけの読み。
+    /// </summary>
+    private sealed record Prediction(string Text, string Before, string Reading);
 
     // 英数状態で判定中の語。打鍵はすぐアプリに送り (待たせない)、ローマ字と分かったら消して変換ボックスに入れ直す。
     private readonly StringBuilder _heldLetters = new();
@@ -742,9 +748,9 @@ public sealed class CompositionController
                 _text.FixTypos();
                 StartConversion(preferJapanese: true);
                 return;
-            case VirtualKeys.Return when _predictionIndex >= 0 && _predictionIndex < _predictions.Count && _predictionKey == PredictionKey():
+            case VirtualKeys.Return when SelectedPrediction() is { } prediction:
                 // 予測変換の候補を選んでいれば、それを確定する。
-                CommitPrediction(_predictions[_predictionIndex]);
+                CommitPrediction(prediction);
                 return;
             case VirtualKeys.Return:
                 if (IsProtectedInput) { CommitProtected(""); return; }
@@ -805,7 +811,7 @@ public sealed class CompositionController
                 return;
             case 0x2E /* Delete */ when _predictionIndex >= 0 && _predictionIndex < _predictions.Count && _options.Predictor?.Phrases is { } phrases:
                 // 予測の候補を選んでいる間の Delete: その語句を学習から消す (issue #349)
-                phrases.Forget(_predictions[_predictionIndex]);
+                phrases.Forget(_predictions[_predictionIndex].Text);
                 _predictionKey = "\u0000"; // 候補を作り直す
                 _predictionIndex = -1;
                 return;
@@ -971,6 +977,12 @@ public sealed class CompositionController
         else if (_modeByKey)
         {
             Commit();
+            BeginComposition();
+        }
+        else if (SelectedPrediction() is { } prediction)
+        {
+            // Tab で予測の候補を選んだあとに続けて打ったら、その候補で確定して新しい入力を始める (選ぶ前の打ちかけに戻さない)
+            CommitPrediction(prediction);
             BeginComposition();
         }
     }
@@ -2590,13 +2602,15 @@ public sealed class CompositionController
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
-    private void CommitPrediction(string prediction)
+    private void CommitPrediction(Prediction prediction)
     {
-        var english = prediction.All(c => c < 0x80);
-        var reading = _text.AllKana(final: true);
         _predictionIndex = -1;
-        if (!english && _options.Learning()) _options.Predictor?.Phrases?.Remember(PredictionReading(prediction, reading), prediction);
-        CommitText(prediction, english, english ? prediction : _text.Raw, chosen: true);
+        if (!prediction.Text.All(c => c < 0x80) && _options.Learning())
+            _options.Predictor?.Phrases?.Remember(PredictionReading(prediction.Text, prediction.Reading), prediction.Text);
+        // 最後の文節の続きの候補なら、前の文節 (見えているとおり) とつなげて確定する
+        var text = prediction.Before + prediction.Text;
+        var english = text.All(c => c < 0x80);
+        CommitText(text, english, english ? text : _text.Raw, chosen: true);
     }
 
     /// <summary>予測の候補の読み (前に確定したときの読み)。分からなければ打ちかけの読み。</summary>
@@ -2938,12 +2952,12 @@ public sealed class CompositionController
             var misspelling = MisspellingSuggestion();
             UpdatePredictions(blocked: misspelling is not null || _text.Suggestion() is not null);
             if (_predictions.Count > 0) hint = "Tab 予測の候補を選ぶ　" + hint;
-            var selected = _predictionIndex >= 0 ? _predictions[_predictionIndex] : null;
+            var selected = _predictionIndex >= 0 ? _predictions[_predictionIndex].Before + _predictions[_predictionIndex].Text : null;
             var display = selected ?? CurrentDisplay(final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             if (preview is null && selected is null && misspelling is null) preview = TypingCandidates();
             _host.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
-                Predictions: _predictions.Count > 0 ? _predictions : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
+                Predictions: _predictions.Count > 0 ? _predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
                 Committed: selected ?? CurrentDisplay(final: true)));
         }
     }
@@ -2977,42 +2991,63 @@ public sealed class CompositionController
         if (_text.IsAlphanumeric)
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
-            if (_text.Raw.All(char.IsAsciiLetter)) _predictions = predictor.PredictEnglish(_text.Raw);
+            if (_text.Raw.All(char.IsAsciiLetter)) _predictions = predictor.PredictEnglish(_text.Raw).Select(w => new Prediction(w, "", _text.Raw)).ToList();
             return;
         }
         var kana = _text.AllKana(final: false);
-        var predictions = new List<string>();
+        var predictions = new List<Prediction>();
+        void Add(IEnumerable<string> words, string before, string reading)
+        {
+            foreach (var word in words)
+            {
+                if (predictions.Count < Predictor.MaxPredictions && !predictions.Any(p => p.Text == word)) predictions.Add(new Prediction(word, before, reading));
+            }
+        }
         if (kana.All(KanaChars.IsHiraganaOrLongMark))
         {
-            predictions.AddRange(predictor.PredictJapanese(kana));
-            // 英字で書く社名・サービス名 (しゃお → Xiaomi)。日本語の予測の後ろに足す
-            if (_options.EnglishNamePredictions())
+            foreach (var (before, reading) in PredictionStarts(kana))
             {
-                foreach (var word in predictor.PredictEnglishNames(kana))
-                {
-                    if (predictions.Count < Predictor.MaxPredictions && !predictions.Contains(word)) predictions.Add(word);
-                }
+                Add(predictor.PredictJapanese(reading), before, reading);
+                // 英字で書く社名・サービス名 (しゃお → Xiaomi)。日本語の予測の後ろに足す
+                if (_options.EnglishNamePredictions()) Add(predictor.PredictEnglishNames(reading), before, reading);
             }
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
-        if (_text.Raw.Length >= 4 && _text.Raw.All(char.IsAsciiLetter))
-        {
-            foreach (var word in predictor.PredictEnglish(_text.Raw))
-            {
-                if (predictions.Count < Predictor.MaxPredictions && !predictions.Contains(word)) predictions.Add(word);
-            }
-        }
+        if (_text.Raw.Length >= 4 && _text.Raw.All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(_text.Raw), "", _text.Raw);
         _predictions = predictions;
+    }
+
+    /// <summary>
+    /// 予測変換で続きを探す読み: 読み全体と、最後の文節 (変換エンジンの区切り)。
+    /// 読み全体の続きだけだと、前に確定したのと同じ語句を頭から打たないと候補が出ない。
+    /// 最後の文節の続きの候補を選んだときは、前の文節は見えているとおりに残す (たんいをとる → 単位を + トルコ料理)。
+    /// </summary>
+    private List<(string Before, string Reading)> PredictionStarts(string kana)
+    {
+        var starts = new List<(string Before, string Reading)> { ("", kana) };
+        var clauses = ConvertJapanese(kana);
+        if (clauses.Count < 2) return starts;
+        var last = clauses[^1];
+        // 見えている文字の終わりが最後の文節 (ライブ変換なら漢字、短いうちや OFF ならかな) のときだけ。
+        // 英語として見せている所があるときなどは、前に残す文字が分からないので読み全体の続きだけにする
+        var display = CurrentDisplay(final: false);
+        var shown = display.EndsWith(last.Text, StringComparison.Ordinal) ? last.Text : display.EndsWith(last.Reading, StringComparison.Ordinal) ? last.Reading : null;
+        if (shown is not null) starts.Add((display[..^shown.Length], last.Reading));
+        return starts;
     }
 
     private string PredictionKey() => _text.Raw + "\u0001" + _text.Mode;
 
     /// <summary>今の打ちかけの予測の候補 (キーをまとめて処理しているときにも、打った内容に合わせて作り直す)。</summary>
-    private IReadOnlyList<string> CurrentPredictions()
+    private IReadOnlyList<Prediction> CurrentPredictions()
     {
         UpdatePredictions(blocked: false);
         return _predictions;
     }
+
+    /// <summary>Tab で選んでいる予測の候補 (打った内容が選んだときのままのときだけ)。</summary>
+    private Prediction? SelectedPrediction() =>
+        _predictionIndex >= 0 && _predictionIndex < _predictions.Count && _predictionKey == PredictionKey() ? _predictions[_predictionIndex] : null;
 
     private List<string>? PreviewCandidates() =>
         _text.Mode == DisplayMode.Auto && _text.Raw.Equals("go", StringComparison.OrdinalIgnoreCase)
