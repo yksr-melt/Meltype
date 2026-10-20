@@ -498,6 +498,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
             "kyouhatelecommunicationsxqdesu", "overnopresentationzz", "overnopresentationzzdesu", "kyouhasupercalifragilisticxdesu", "supercalifragilisticx" }
             .Select(typed => (Typed: typed, Before: (string?)null)).ToList();
         var detector = CompositionTests.Detector;
+        var (savedChecker, savedMemory, savedScored) = (detector.SpellChecker, detector.Memory, detector.UseScoredSegmentation);
         try
         {
             foreach (var scored in new[] { false, true })
@@ -515,9 +516,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         }
         finally
         {
-            detector.SpellChecker = null;
-            detector.Memory = null;
-            detector.UseScoredSegmentation = null;
+            (detector.SpellChecker, detector.Memory, detector.UseScoredSegmentation) = (savedChecker, savedMemory, savedScored);
         }
 
         static string Keystrokes((string Typed, string? Before) input)
