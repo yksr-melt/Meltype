@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 kikutadev
+# Authored expectations; diagnostic corpus, not an independent human holdout.
+# category<TAB>typed ASCII keys<TAB>expected committed text (kana/Latin; no kanji conversion)
+japanese	ashitahahayakukaerimasu	あしたははやくかえります
+japanese	kinounoyorunikimemashita	きのうのよるにきめました
+japanese	kyouhasukoshimattayo	きょうはすこしまったよ
+japanese	madowoaketeheyanokazewoireta	まどをあけてへやのかぜをいれた
+japanese	asaokiteko-hi-woireta	あさおきてこーひーをいれた
+japanese	shiryounonaiyouwokakuninshita	しりょうのないようをかくにんした
+japanese	kaiginoshinkouwoonegaishimasu	かいぎのしんこうをおねがいします
+japanese	atarashiisu-tsuwoeranda	あたらしいすーつをえらんだ
+japanese	atsuihonwomotteiru	あついほんをもっている
+japanese	hashiwowatatteikou	はしをわたっていこう
+english	please check the log	please check the log
+english	open the file	open the file
+english	hello world	hello world
+english	git push origin main	git push origin main
+english	npm install	npm install
+english	run the tests	run the tests
+english	I want to go to the park	I want to go to the park
+english	thank you so much	thank you so much
+english	where is the file	where is the file
+english	my name is taro	my name is taro
+mixed_front	Excelnoshitadehenshuushita	Excelのしたでへんしゅうした
+mixed_front	Slacknokakuninwoshiteiru	Slackのかくにんをしている
+mixed_front	Pythonnoshoriwominaoshita	Pythonのしょりをみなおした
+mixed_front	Dockerwokidoushita	Dockerをきどうした
+mixed_front	CSVwoyomikondaraera-gaokita	CSVをよみこんだらえらーがおきた
+mixed_front	APIhakyouhazennbuochiteiru	APIはきょうはぜんぶおちている
+mixed_front	READMEnojunbanwosoroeru	READMEのじゅんばんをそろえる
+mixed_front	TypeScriptdekaiteimasu	TypeScriptでかいています
+mixed_front	Notionniisshonimatometai	Notionにいっしょにまとめたい
+mixed_front	Chromedehenshuushita	Chromeでへんしゅうした
+mixed_middle	ashitahaZoomdehanashiaiwohiraku	あしたはZoomではなしあいをひらく
+mixed_middle	kinouhaGitLabkaracodewototta	きのうはGitLabからcodeをとった
+mixed_middle	shukudaiwoGoogleDocsdematometa	しゅくだいをGoogleDocsでまとめた
+mixed_middle	konoPDFwoatodeokutte	このPDFをあとでおくって
+mixed_middle	shigotohaGitHubIssuesdekanrisuru	しごとはGitHubIssuesでかんりする
+mixed_middle	kekkahaJSONnihozonshita	けっかはJSONにほぞんした
+mixed_middle	byouinnkaraLINEderenrakugakita	びょういんからLINEでれんらくがきた
+mixed_middle	seikyuushowoExceldetsukutta	せいきゅうしょをExcelでつくった
+mixed_middle	kinouhaSlackdehanashita	きのうはSlackではなした
+mixed_middle	korehaPythonnokouza	これはPythonのこうざ
+mixed_tail	kekkanokirokuhaCSV	けっかのきろくはCSV
+mixed_tail	korewotsukuttanohaPython	これをつくったのはPython
+mixed_tail	shigotonokirokuhaNotion	しごとのきろくはNotion
+mixed_tail	konope-jinokoushinnhaGitHub	このぺーじのこうしんはGitHub
+mixed_tail	jissounosyousaihaREADME	じっそうのしょうさいはREADME
+mixed_tail	enshutsunokanrihaSlack	えんしゅつのかんりはSlack
+mixed_tail	furerunohaHTML	ふれるのはHTML
+mixed_tail	saishuunoketteihaTeams	さいしゅうのけっていはTeams
+mixed_tail	ashitanooshirasehaPDF	あしたのおしらせはPDF
+mixed_tail	shutsuryokukeishikihaCSV	しゅつりょくけいしきはCSV
+mixed_alternating	ChromewohiraitePythonwookoshita	ChromeをひらいてPythonをおこした
+mixed_alternating	GitHubdeshirabeteSlacknikaita	GitHubでしらべてSlackにかいた
+mixed_alternating	ZoomgakiretakaraLINEdehanashita	ZoomがきれたからLINEではなした
+mixed_alternating	APIwokaeteJSONwokakuninshita	APIをかえてJSONをかくにんした
+mixed_alternating	NotionnikaitekaraPDFnishita	NotionにかいてからPDFにした
+mixed_alternating	DockerwotometeChromewohiraita	DockerをとめてChromeをひらいた
+mixed_alternating	CSVwotsukutteExceldehiraita	CSVをつくってExcelでひらいた
+mixed_alternating	HTMLwonaoshiteCSSwokaeta	HTMLをなおしてCSSをかえた
+mixed_alternating	YouTubewomiteDiscorddewaratta	YouTubeをみてDiscordでわらった
+mixed_alternating	SafariwotojiteFirefoxwohiraita	SafariをとじてFirefoxをひらいた
+mixed_case	korehaOpenAInokotaedesu	これはOpenAIのこたえです
+mixed_case	Applenoseihinwokaimashita	Appleのせいひんをかいました
+mixed_case	iPhonenoshashinwoutsushita	iPhoneのしゃしんをうつした
+mixed_case	macOSnosetteiwominaosu	macOSのせっていをみなおす
+mixed_case	USB-Cnoke-burugatarinai	USB-Cのけーぶるがたりない
+mixed_case	Wi-Finitsunagaranai	Wi-Fiにつながらない
+mixed_case	README.mdnokoumokuwokaeta	README.mdのこうもくをかえた
+mixed_case	JSONnonakaniuserIDwoireta	JSONのなかにuserIDをいれた
+mixed_case	URLwokopi-shiteSlacknihatta	URLをこぴーしてSlackにはった
+mixed_case	GPT-6nosetsumeiwoyonda	GPT-6のせつめいをよんだ
+# Known issue examples. This group is NOT independent of upstream bug reports.
+reported_issues	printenv	printenv
+reported_issues	mainnipushsuru	mainにpushする
+reported_issues	doomscroll	doomscroll
+reported_issues	pure	pure
+reported_issues	image	image
+reported_issues	passwordnisite	passwordにして
+reported_issues	backwo	backを

@@ -173,6 +173,49 @@ internal static class Checks
         Console.WriteLine($"{pass}/{results.Count}");
     }
 
+    /// <summary>
+    /// 人手で期待を書いた日英混在入力を、Enter まで実際のキー経路で打って採点する。
+    /// 漢字変換・IMK上のカーソル操作は評価対象外。既定スコアを CI の合否に使わない。
+    /// </summary>
+    public static void MixedCorpus(string input, string output)
+    {
+        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
+        var rows = new List<(string Category, string Typed, string Expected)>();
+        foreach (var (line, index) in File.ReadLines(input).Select((line, index) => (line, index + 1)))
+        {
+            if (string.IsNullOrWhiteSpace(line) || line.StartsWith('#')) continue;
+            var columns = line.Split('\t');
+            if (columns.Length != 3 || columns[0].Length == 0 || columns[1].Length == 0 ||
+                columns[2].Length == 0 || columns[1].Length > 300 ||
+                columns[1].Any(c => c is < ' ' or > '~'))
+                throw new FormatException($"{input}:{index}: category, ASCII keys, expected をタブで3列指定してください");
+            rows.Add((columns[0], columns[1], columns[2]));
+        }
+        if (rows.Count == 0) throw new FormatException("比較する入力がありません");
+
+        var cases = rows.Select(row =>
+        {
+            var keyboard = new CompositionTests.Keyboard();
+            keyboard.Type(row.Typed + "\n");
+            var actual = Hiragana(keyboard.Host.Document);
+            return new { category = row.Category, typed = row.Typed, expected = row.Expected,
+                         actual, ok = actual == row.Expected };
+        }).ToList();
+        var groups = cases.GroupBy(c => c.category).OrderBy(g => g.Key)
+            .Select(g => new { category = g.Key, pass = g.Count(c => c.ok), total = g.Count() }).ToList();
+        var pass = cases.Count(c => c.ok);
+        File.WriteAllText(output, JsonSerializer.Serialize(new
+        {
+            mode = "Core key-to-Enter, no kanji conversion, not GUI",
+            corpus = Path.GetFileName(input),
+            pass, total = cases.Count, groups, cases,
+        }, Json));
+        Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+        foreach (var group in groups)
+            Console.WriteLine($"{group.category}: {group.pass}/{group.total}");
+        Console.WriteLine($"Total: {pass}/{cases.Count} (diagnostic only)");
+    }
+
     /// <summary>カタカナをひらがなに直す (テストの変換エンジンはカタカナにしないため)。</summary>
     private static string Hiragana(string text) =>
         new(text.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
