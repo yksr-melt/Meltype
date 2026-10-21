@@ -12,14 +12,17 @@ enum MacUserDictionary {
     static func entries(from data: Data) throws -> [(String, String)] {
         let plist = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
         let rows = (plist as? [[String: Any]]) ?? (plist as? [String: Any])?["UserDictionary"] as? [[String: Any]] ?? []
+        let controls = CharacterSet.controlCharacters
         let entries = rows.compactMap { row -> (String, String)? in
             guard let raw = (row["reading"] ?? row["shortcut"]) as? String,
                   let phrase = (row["phrase"] ?? row["word"]) as? String else { return nil }
             let reading = (raw.applyingTransform(.hiraganaToKatakana, reverse: true) ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
             let word = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Core の UserDictionary.Parse は制御文字を含む行を読まない。
+            // 取り込み件数に「使えない語」を含めないよう、保存前にも同じ条件で除外する。
             guard reading.utf16.count >= 2, !word.isEmpty,
-                  !reading.contains(where: { $0 == "\t" || $0 == "\n" || $0 == "\r" }),
-                  !word.contains(where: { $0 == "\t" || $0 == "\n" || $0 == "\r" }) else { return nil }
+                  !reading.unicodeScalars.contains(where: { controls.contains($0) }),
+                  !word.unicodeScalars.contains(where: { controls.contains($0) }) else { return nil }
             return (reading, word)
         }
         guard !entries.isEmpty else { throw ImportError.unsupported }
