@@ -738,6 +738,9 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
             secretWhileComposing_ = true;
             return true;
         }
+        // Alt + 半角/全角 (US 配列の Alt + `) は、Alt なしの 半角/全角 と同じく受け取る (#1080)。
+        // 下の Ctrl・Alt・Windows キーとの組み合わせに入ると、確定してアプリに通してしまう
+        if (IsAltGraveToggle(vk, lParam)) return true;
         // Ctrl・Alt・Windows キーとの組み合わせ (Ctrl + S など): Meltype.exe も確定してアプリに渡すだけなので、ここで確定して
         // 受け取らずに通す (受け取ってから送り直すと、送り直しが届かないアプリでキーが消える)。
         // ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す (キーが先に届いて、確定が後になるのを防ぐ)
@@ -868,6 +871,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
         ToggleInputMode(context);
         return S_OK;
     }
+    if (IsAltGraveToggle(vk, lParam)) {
+        HandleKey(context, vk, 0, true);
+        return S_OK;
+    }
     ch = CharOf(vk, lParam);
     HandleKey(context, vk, ch);
     return S_OK;
@@ -884,9 +891,11 @@ STDMETHODIMP TextService::OnKeyUp(ITfContext*, WPARAM wParam, LPARAM, BOOL* eate
     return S_OK;
 }
 
-void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch) {
+void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool hankaku) {
     // 8 = Windows キー (Meltype.exe は Mac の Command と同じく、確定してアプリに渡す)
-    int mods = (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) | (KeyDown(VK_MENU) ? 4 : 0) | (KeyDown(VK_LWIN) || KeyDown(VK_RWIN) ? 8 : 0);
+    // hankaku なら Alt を付けない (付けると、Meltype.exe は入力中の文字を確定して、キーをアプリに通してしまう: #1080)
+    int mods = hankaku ? 0 : (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) | (KeyDown(VK_MENU) ? 4 : 0) | (KeyDown(VK_LWIN) || KeyDown(VK_RWIN) ? 8 : 0);
+    UINT sentVk = hankaku ? VK_KANJI : vk;
     keyFailed_ = false;
     consumed_ = true;
     bool insertedOnFailure = false;
@@ -902,7 +911,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch) {
             return S_OK;
         }
         ownEdit_ = true;
-        std::string request = "{\"op\":\"key\",\"sid\":\"" + sid_ + "\",\"vk\":" + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
+        std::string request = "{\"op\":\"key\",\"sid\":\"" + sid_ + "\",\"vk\":" + std::to_string(sentVk) + ",\"ch\":" + std::to_string(ch) +
                               ",\"mods\":" + std::to_string(mods) + ",\"process\":" + JsonString(ProcessName()) + ",\"code\":true" +
                               std::string(",\"direct\":") + (!open_ ? "true" : "false");
         // 前に確定してからキャレットが動いた: Meltype.exe に、前の語を確定し直さないように伝える
