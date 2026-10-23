@@ -7,13 +7,29 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-if [[ ! -d Meltype.app ]]; then
+if [[ ! -d Meltype.app && ! -f Meltype.app.zip ]]; then
     echo "Meltype.app が見つかりません。zip を展開したフォルダーで実行してください。" >&2
     exit 1
 fi
 for helper in install-app.sh start-input-method.sh select-input-source.swift; do
     [[ -f "$helper" ]] || { echo "必要なファイルがありません: ${helper}。zip 全体を展開してください。" >&2; exit 1; }
 done
+
+SOURCE_APP="$PWD/Meltype.app"
+PAYLOAD_STAGE=""
+cleanup_payload() {
+    if [[ -n "$PAYLOAD_STAGE" ]]; then
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$PAYLOAD_STAGE/Meltype.app" 2>/dev/null || true
+        rm -rf "$PAYLOAD_STAGE"
+    fi
+}
+trap cleanup_payload EXIT
+if [[ -f Meltype.app.zip ]]; then
+    PAYLOAD_STAGE="$(mktemp -d "${TMPDIR:-/tmp}/.meltype-payload.XXXXXX")"
+    ditto -x -k Meltype.app.zip "$PAYLOAD_STAGE"
+    SOURCE_APP="$PAYLOAD_STAGE/Meltype.app"
+    [[ -d "$SOURCE_APP" ]] || { echo "Meltype.app.zip の内容が不正です" >&2; exit 1; }
+fi
 
 # 入力ソースの「+」の一覧に Meltype が出ない Mac がある (macOS 26、#21)。
 # アプリ内の登録処理で、有効な入力ソースを追加し、Meltype の重複だけを整理する。
@@ -30,19 +46,17 @@ enable_input_source() {
 # これまではログアウトするしかなかった。TISRegisterInputSource なら実行中でも戻せる。
 register_input_source() {
     local tool="$TARGET/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource"
-    # この道具が入っていない Meltype.app (これまでの版) のときは何もしない。
-    [[ -x "$tool" ]] || return 0
-    "$tool" "$TARGET/Meltype.app" ||
-        echo "入力ソースに登録できませんでした。ログアウトしてログインし直すと直ります。" >&2
+    # 古いアプリに補助ツールがなければ、本体の登録処理へフォールバックする。
+    [[ -x "$tool" ]] || { enable_input_source; return; }
+    "$tool" "$TARGET/Meltype.app"
 }
 
 TARGET="$HOME/Library/Input Methods"
-bash ./install-app.sh Meltype.app "$TARGET/Meltype.app"
+bash ./install-app.sh "$SOURCE_APP" "$TARGET/Meltype.app"
 # インターネットから取ってきた印 (隔離属性) を外す。署名が自分用なので、外さないと macOS が起動させない。
 xattr -dr com.apple.quarantine "$TARGET/Meltype.app" 2>/dev/null || true
 
 echo "インストールしました: $TARGET/Meltype.app"
-enable_input_source
 register_input_source
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
 bash ./start-input-method.sh "$TARGET/Meltype.app"

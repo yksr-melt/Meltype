@@ -15,7 +15,7 @@ if CommandLine.arguments.contains("--register-input-source") {
     guard outcome == .ready else { exit(outcome.exitCode) }
     let refresh = Process()
     refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-    refresh.arguments = ["TextInputMenuAgent"]
+    refresh.arguments = ["TextInputMenuAgent", "TextInputSwitcher"]
     refresh.standardOutput = FileHandle.nullDevice
     refresh.standardError = FileHandle.nullDevice
     do {
