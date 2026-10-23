@@ -142,6 +142,7 @@ heya ie uchi eki michi mise ginkou byouin gakkou kouen kuukou hoteru denwa keita
 tenki ame yuki kaze kumori hare kion natsu fuyu haru aki
 
 # カタカナ語 (助詞の後に続けて打つことが多いもの)
+karendaa
 tasuku sukejuuru purojekuto miitingu kaigi shiryou fairu foruda pasuwaado akaunto rogu settei
 gamen botan messeeji menyuu risuto deeta saabaa apuri sofuto baagu tesuto koodo
 

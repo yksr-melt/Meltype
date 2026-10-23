@@ -239,6 +239,33 @@ internal static class Quality
         new("綴り", "xa", "ぁ"),
         new("綴り", "la", "ぁ"),
         new("綴り", "mala", "まぁ"),
+        // 報告のあった入力 (issue #960・#920)
+        new("綴り", "kwo", "くぉ"),
+        new("綴り", "kwo-to", "くぉーと"),
+        // kwo の前が日本語の綴りのときは分けない (akwo → あkを になっていた)
+        new("綴り", "akwo", "あくぉ"),
+        new("綴り", "ikwo", "いくぉ"),
+        new("綴り", "ukwo", "うくぉ"),
+        new("綴り", "ekwo", "えくぉ"),
+        // 英単語の最後の k + を は分ける (back|wo・ink|wo)
+        new("混在", "backwo", "backを"),
+        new("混在", "taskwo", "taskを"),
+        new("混在", "inkwo", "inkを"),
+        new("混在", "okwo", "okを"),
+        // 2〜3 文字の英単語は、入力の先頭から始まるときだけ (かなの「お」を英字と数えない)
+        new("日本語", "watashihaokwo", "わたしはおくぉ"),
+        new("日本語", "haokwo", "はおくぉ"),
+        new("混在", "bankwo", "bankを"),
+        // 英語の語を english-readable に入れると、日本語の先頭と重なる綴りが壊れる
+        // (pure → purezento が pureぜんと、image → imageru が imageる になっていた)
+        new("日本語", "purezento", "ぷれぜんと"),
+        new("日本語", "watashihapurezento", "わたしはぷれぜんと"),
+        new("日本語", "pureha", "ぷれは"),
+        new("日本語", "imageru", "いまげる"),
+        new("日本語", "imagenai", "いまげない"),
+        new("日本語", "imagewo", "いまげを"),
+        new("カタカナ語", "karenda-", "かれんだー"),
+
         new("綴り", "ltu", "っ"),
         new("綴り", "moraltute", "もらって"),
         new("綴り", "moraltsute", "もらって"),
