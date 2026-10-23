@@ -397,6 +397,9 @@ public sealed class CompositionController
     /// <summary>選択範囲を置換した。入力先の行を読み直すための通知。</summary>
     public event Action? ReconversionCommitted;
 
+    /// <summary>登録キーの処理を入力順に行うため、UI スレッドへ対象のウィンドウを通知する。</summary>
+    public event Action<nint>? ToggleModeRequested;
+
     /// <summary>キューにたまった入力をすべて処理する。UI スレッドで呼ぶ。</summary>
     public void Pump()
     {
@@ -406,6 +409,7 @@ public sealed class CompositionController
             {
                 if (input.Key is { } key) HandleKey(key);
                 else if (input.Mouse is { } mouse) HandleMouse(mouse);
+                else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
             }
             UpdateView();
             if (IsComposing) return;
@@ -473,6 +477,20 @@ public sealed class CompositionController
         if (index < 0 || index >= predictions.Count) return;
         CommitPrediction(predictions[index]);
         UpdateView();
+    }
+
+    /// <summary>未確定文字を確定せず日本語／英字へ切り替える。未確定入力がなければ false。</summary>
+    public bool TogglePendingInput()
+    {
+        // 英数状態の自動判定中の文字はすでにアプリへ渡しているので、未確定文字には含めない。
+        if (_text.IsEmpty)
+        {
+            AbandonDirectHold();
+            return false;
+        }
+        SetMode(_text.IsAlphanumeric ? DisplayMode.Hiragana : DisplayMode.HalfWidthAlphanumeric);
+        UpdateView();
+        return true;
     }
 
     /// <summary>無効化・フォーカス喪失などで、未確定の内容をそのまま確定する。</summary>
@@ -849,7 +867,7 @@ public sealed class CompositionController
 
         if (VirtualKeys.IsHankakuZenkaku(vk))
         {
-            SetMode(_text.IsAlphanumeric ? DisplayMode.Hiragana : DisplayMode.HalfWidthAlphanumeric);
+            TogglePendingInput();
             return;
         }
 
@@ -3046,14 +3064,6 @@ public sealed class CompositionController
         _ => null,
     };
 
-    private static readonly Dictionary<string, int> BindableKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["F6"] = VirtualKeys.F6, ["F7"] = VirtualKeys.F7, ["F8"] = VirtualKeys.F8, ["F9"] = VirtualKeys.F9, ["F10"] = VirtualKeys.F10,
-        ["Left"] = VirtualKeys.Left, ["Right"] = VirtualKeys.Right, ["Up"] = VirtualKeys.Up, ["Down"] = VirtualKeys.Down,
-        ["Home"] = 0x24, ["End"] = 0x23, ["Delete"] = 0x2E, ["Back"] = VirtualKeys.Back, ["Enter"] = VirtualKeys.Return,
-        ["Esc"] = VirtualKeys.Escape, ["Tab"] = VirtualKeys.Tab,
-    };
-
     private string? _boundKeysText;
     private Dictionary<int, int> _boundKeys = [];
 
@@ -3065,13 +3075,7 @@ public sealed class CompositionController
         if (!ReferenceEquals(text, _boundKeysText) && text != _boundKeysText)
         {
             _boundKeysText = text;
-            _boundKeys = [];
-            foreach (var part in text.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                var pair = part.Split('=', 2, StringSplitOptions.TrimEntries);
-                if (pair.Length == 2 && pair[0].Length == 1 && char.IsAsciiLetter(pair[0][0]) && BindableKeys.TryGetValue(pair[1], out var target))
-                    _boundKeys[char.ToUpperInvariant(pair[0][0])] = target;
-            }
+            _boundKeys = ControlKeyBindingParser.Parse(text);
         }
         return _boundKeys.TryGetValue(vk, out var key) ? key : null;
     }

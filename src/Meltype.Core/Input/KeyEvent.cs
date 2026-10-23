@@ -9,7 +9,12 @@ namespace Meltype.Input;
 /// </summary>
 public readonly record struct KeyEvent(int Vk, int Scan, bool Extended, bool IsUp, bool Injected, long TimeMs)
 {
+    /// <summary>修飾キーによる変化を含まない、使用中の配列でのキーコード (取得できなければ 0)。</summary>
+    public int UnmodifiedKey { get; init; }
+    public int ShortcutKey => ToggleShortcut.NormalizeShortcutKey(Vk, Scan, Extended, UnmodifiedKey);
     public bool IsDown => !IsUp;
+    /// <summary>同じ物理キーの押下・解放は、Windows が仮想キーを変更しても対にする。</summary>
+    public int PhysicalId => Scan != 0 ? 0x10000 | Scan | (Extended ? 0x100 : 0) : ToggleShortcut.NormalizeHankakuKey(Vk);
     public override string ToString() => $"{(IsUp ? "↑" : "↓")}{Vk:X2}";
 }
 
