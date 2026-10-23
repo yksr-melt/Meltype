@@ -3144,7 +3144,9 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("ばらまいてたあい")?.First().Word == "ばらまいてた", "ばらまいてた|あい");
         // 報告 (#196): しょたこん → ショタこん
         Assert.True(dictionary.Split("しょたこん")?.Any(p => p.Word == "ショタコン") == true, "しょたこん → ショタコン");
-        Assert.True(dictionary.Split("きょうひさしぶり")?.Any(p => p.Word == "今日久しぶり") == true, "きょうひさしぶり → 今日久しぶり (#872)");
+        // 報告 (#872): きょうひさしぶり → 共久しぶり。今日|久しぶり の 2 つの文節にする
+        var hisashiburi = dictionary.Split("きょうひさしぶり");
+        Assert.True(hisashiburi is [("きょう", null), ("ひさしぶり", "久しぶり")], "きょう|ひさしぶり → きょう|久しぶり (#872)");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
     }
 
