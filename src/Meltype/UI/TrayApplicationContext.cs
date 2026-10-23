@@ -35,6 +35,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private SnippetsForm? _snippetsForm;
     private ReportDialog? _reportDialog;
     private LearnedWordsForm? _learnedForm;
+    private KeyCountForm? _keyCountForm;
     private WelcomeForm? _welcomeForm;
     private readonly Updater _updater;
     private readonly ToolStripMenuItem _updateItem;
@@ -158,6 +159,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("直した誤判定を報告...", null, (_, _) => new CorrectionReportDialog(_composition.Corrections, _engine.Settings).Show());
         menu.Items.Add("Meltype について...", null, (_, _) => MessageBox.Show(AppInfo.AboutText, "Meltype について", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add("学習した語...", null, (_, _) => ShowLearnedWords());
+        menu.Items.Add("打鍵数...", null, (_, _) => ShowKeyCount());
         var forget = new ToolStripMenuItem("学習データを消す");
         forget.DropDownItems.Add("この 1 時間に覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.UtcNow.AddHours(-1), "この 1 時間"));
         forget.DropDownItems.Add("今日覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.Today.ToUniversalTime(), "今日"));
@@ -530,6 +532,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _settingsForm = new SettingsForm(_engine);
         _settingsForm.FormClosed += (_, _) => UpdateStatus();
         _settingsForm.Show();
+    }
+
+    private void ShowKeyCount()
+    {
+        if (_keyCountForm is { IsDisposed: false })
+        {
+            _keyCountForm.Activate();
+            return;
+        }
+        _keyCountForm = new KeyCountForm(_engine.KeyCounter);
+        _keyCountForm.Show();
     }
 
     private void ShowLearnedWords()

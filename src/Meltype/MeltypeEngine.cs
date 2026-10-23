@@ -39,6 +39,10 @@ internal sealed class MeltypeEngine : IDisposable
 
     private readonly HashSet<int> _toggleKeyDown = [];
 
+    /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
+    public KeyCounter KeyCounter { get; }
+    private readonly System.Threading.Timer _keyCountTimer;
+
     public MeltypeEngine(Settings settings, string? configPath, string? userDictionaryDirectory)
     {
         _settings = settings.Clone().Normalize();
@@ -49,6 +53,8 @@ internal sealed class MeltypeEngine : IDisposable
         _scoreEngine = ScoreEngine.CreateDefault(() => _settings, userDictionaryDirectory);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
         _pollTimer = new System.Threading.Timer(_ => PollImeState(), null, Timeout.Infinite, Timeout.Infinite);
+        KeyCounter = new KeyCounter(configPath is null ? null : AppPaths.KeyCountFile);
+        _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
     }
 
     public Settings Settings => _settings;
@@ -221,6 +227,7 @@ internal sealed class MeltypeEngine : IDisposable
             _injectedHintLogged = true;
             Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。ULE4JIS などキー配列を変えるソフトや遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
         }
+        if (!e.Injected) KeyCounter.Count(e, DateTime.Now);
         // 飲み込んだ切替キーの解放は、入力言語が変わっても対にして処理する。
         if (e.IsUp && !e.Injected)
         {
@@ -1010,6 +1017,8 @@ internal sealed class MeltypeEngine : IDisposable
         _pollTimer.Dispose();
         _remote.Dispose();
         _lineTimer?.Dispose();
+        _keyCountTimer.Dispose();
+        KeyCounter.Save();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();
     }
