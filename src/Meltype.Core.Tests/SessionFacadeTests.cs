@@ -326,6 +326,10 @@ internal static class SessionFacadeTests
         Assert.Equal(first, correction.Expect);
         Assert.Equal(first.Length, correction.DeleteBefore);
         Assert.True(new SessionResult(true, [correction], null).ToJson().Contains("\"expect\":"), "JSON にも入れる");
+        // 前の文字を消せないときに今の語だけを入れられるように、今の語も分けて渡す (Text をそのまま入れると I が二重に入る)
+        Assert.Equal("I want ", correction.Text);
+        Assert.Equal("want ", correction.Current);
+        Assert.True(new SessionResult(true, [correction], null).ToJson().Contains("\"current\":\"want \""), "JSON にも入れる");
     }
 
     [Test]
@@ -364,24 +368,24 @@ internal static class SessionFacadeTests
     {
         var session = Create();
         var commit = Type(session, "kyouha\n")[^1].Commits.Single();
-        Assert.True(commit.Expect is null, "消さない確定には付けない");
-        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("expect"), "JSON にも入れない");
+        Assert.True(commit.Expect is null && commit.Current is null, "消さない確定には付けない");
+        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("expect") && !new SessionResult(true, [commit], null).ToJson().Contains("current"), "JSON にも入れない");
     }
 
     [Test]
     public static void AutoCorrect_NotAfterKeyPassedToApp()
     {
         // 確定したあと、アプリに渡したキー (矢印など) でキャレットが動いたかもしれない: 消す位置がずれるので確定し直さない
-        // Enter で確定したあとも、次の語で確定し直す (動かさなければ)
+        // Enter で確定したあとも、次の語で確定し直す (動かさなければ)。英語で確定した sushi を、続けて打った がすき で日本語に直す
         var control = Create();
-        Type(control, "i\n");
-        Assert.True(Type(control, "want ").SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "動かさなければ確定し直す");
+        Type(control, "sushi\n", "I love ");
+        Assert.True(Type(control, "gasuki\n").SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "動かさなければ確定し直す");
 
         var session = Create();
-        Type(session, "i\n");
+        Type(session, "sushi\n", "I love ");
         var left = session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
         Assert.True(!left.Consumed, "変換していないときの矢印はアプリに渡す");
-        var results = Type(session, "want ");
+        var results = Type(session, "gasuki\n");
         Assert.True(!results.SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "関係ない文字を消さない");
     }
 

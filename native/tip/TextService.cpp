@@ -1371,8 +1371,9 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
     for (const JsonValue& edit : reply[L"commits"].array) {
         const std::wstring& text = edit[L"text"].Str();
         int deleteBefore = edit[L"deleteBefore"].Int();
-        // 変換中は範囲外の確定語を置換せず、今の変換を保持する。
-        if (deleteBefore > 0 && composition_ != nullptr) continue;
+        const JsonValue& current = edit[L"current"];
+        // 変換中は範囲外の確定語を置換せず、今の変換を保持する (今確定した語がある確定し直しは、下で今の語を確定してから書き換える)。
+        if (deleteBefore > 0 && composition_ != nullptr && current.type != JsonValue::Type::String) continue;
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (composition_ != nullptr) {
             composition_->GetRange(&range);
@@ -1384,10 +1385,19 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0) range.Attach(selection.range);
         }
         if (!range) continue;
-        // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
-        // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
-        if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
-        if (!WriteCommit(ec, context, range.Get(), text)) continue;
+        if (deleteBefore > 0 && current.type == JsonValue::Type::String) {
+            // 確定し直し (今確定した語つき): 今の語をふつうに確定してから、次の編集セッションで、前に確定した文字ごと書き換える。
+            // 同じ編集セッションで変換中の文字の外も書き換えると、Chrome はページに変換の終わり (compositionend) を伝えない。
+            // 変換中の範囲を前に広げて書き換えると、Chrome では TF_E_RANGE_NOT_COVERED で失敗する (#262)
+            if (!WriteCommit(ec, context, range.Get(), current.Str())) continue;
+            const JsonValue& expect = edit[L"expect"];
+            if (expect.type == JsonValue::Type::String) RewriteBeforeCaret(context, deleteBefore + static_cast<LONG>(current.Str().size()), expect.Str() + current.Str(), text);
+        } else {
+            // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
+            // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
+            if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
+            if (!WriteCommit(ec, context, range.Get(), text)) continue;
+        }
         next.Reset();
         if (SUCCEEDED(range->Clone(&next))) next->Collapse(ec, TF_ANCHOR_END);
     }
@@ -1432,6 +1442,29 @@ bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG coun
         return false;
     }
     return SUCCEEDED(range->ShiftStart(ec, -count, &moved, nullptr));
+}
+
+void TextService::RewriteBeforeCaret(ITfContext* context, LONG count, const std::wstring& before, const std::wstring& text) {
+    Microsoft::WRL::ComPtr<TextService> self = this;
+    Microsoft::WRL::ComPtr<ITfContext> target = context;
+    JsonValue expect;
+    expect.type = JsonValue::Type::String;
+    expect.string = before;
+    RunEditSession(context, clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, target, count, expect, text](TfEditCookie ec) {
+        // 動くまでに次の語を打ち始めていたら書き換えない
+        if (self->composition_ != nullptr) return S_OK;
+        TF_SELECTION selection = {};
+        ULONG fetched = 0;
+        if (FAILED(target->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return S_OK;
+        Microsoft::WRL::ComPtr<ITfRange> range;
+        range.Attach(selection.range);
+        // キャレットの前が before のままのときだけ書き換える (キャレットが動いた・前の文字を読めないときは、今の語を確定したままにする)
+        range->Collapse(ec, TF_ANCHOR_END);
+        if (!self->ExtendOverPrevious(ec, range.Get(), count, expect)) return S_OK;
+        if (target.Get() == self->editSinkContext_) self->ownEdit_ = true;
+        if (!self->WriteCommit(ec, target.Get(), range.Get(), text)) self->ownEdit_ = false;
+        return S_OK;
+    });
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text) {

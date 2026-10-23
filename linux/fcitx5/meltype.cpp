@@ -491,17 +491,20 @@ private:
                 int remove = edit.integer("deleteBefore");
                 // 確定し直し: 消す文字が今もキャレットの前にあると確認できたときだけ消し、今打った文字を入れる。
                 // 確認できない (入力欄が周りの文字に対応していない・確定したときと変わった) ときは、前の文字は
-                // 消さずに今打った文字だけを入れる (本体は text が入った前提で状態を進めるので、text を捨てない)。
+                // 消さずに今打った文字 (current) だけを入れる (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
                 const size_t length = remove > 0 ? expectedBeforeCaret(ic, edit.str("expect")) : 0;
+                auto committed = edit.str("text");
                 if (length > 0) {
                     hidePreedit(ic);
                     ic->deleteSurroundingText(-static_cast<int>(length), static_cast<unsigned int>(length));
                 } else {
-                    if (remove > 0) FCITX_WARN() << "Meltype: 確定し直す文字を確認できないため、前の文字を消しません";
+                    if (remove > 0) {
+                        FCITX_WARN() << "Meltype: 確定し直す文字を確認できないため、前の文字を消しません";
+                        if (edit.get("current")) committed = edit.str("current");
+                    }
                     ic->inputPanel().reset();
                     ic->propertyFor(&factory_)->preeditVisible = false;
                 }
-                auto committed = edit.str("text");
                 if (!committed.empty()) ic->commitString(committed);
             }
         }

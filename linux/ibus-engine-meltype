@@ -315,10 +315,12 @@ class MeltypeEngine(IBus.Engine):
             delete_before = edit.get("deleteBefore", 0)
             # 確定し直し: 消す文字が今もキャレットの前にあると確認できたときだけ消し、今打った文字を入れる。
             # 確認できない (入力欄が周りの文字に対応していない・確定したときと変わった) ときは、前の文字は
-            # 消さずに今打った文字だけを入れる (本体は text が入った前提で状態を進めるので、text を捨てない)。
+            # 消さずに今打った文字 (current) だけを入れる (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
             length = self._expected_before_caret(edit.get("expect")) if delete_before > 0 else 0
+            text = edit.get("text")
             if delete_before > 0 and not length:
                 print("Meltype: 確定し直す文字を確認できないため、前の文字を消しません", file=sys.stderr)
+                text = edit.get("current", text)
             # 消すだけの preedit 更新を確定の前に送らない。Chromium 系 (Wayland text-input-v3) は
             # それを変換中の文字の確定と解釈して挿入し (issue #486 と同じ問題)、確定し直しでは
             # さらに続く削除の位置がずれて壊れる。変換中の表示を消すのは確定のあと (下の else)。
@@ -327,10 +329,10 @@ class MeltypeEngine(IBus.Engine):
                 # キャレットの前の文字を消してから入れる (入力欄が対応していれば)。
                 # 消えたかどうかは送ったあとでしか分からないので、次の入力のときに確かめる
                 # (Wayland + Chromium は削除要求を無視するため、前の文字が残って二重になる)。
-                self._note_replace(length, edit.get("text") or "")
+                self._note_replace(length, text or "")
                 self.delete_surrounding_text(-length, length)
-            if edit.get("text"):
-                self.commit_text(IBus.Text.new_from_string(edit["text"]))
+            if text:
+                self.commit_text(IBus.Text.new_from_string(text))
         view = result.get("view")
         if view:
             self._show_preedit(view)
