@@ -864,8 +864,10 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
         return S_OK;
     }
     *eaten = TRUE;
-    // 押しっぱなしによる自動リピートで、入力モードを何度も切り替えない。
-    if (IsAltGraveToggle(vk, lParam) && eatenDown_[vk]) return S_OK;
+    // 押しっぱなしによる自動リピートで、入力モードを何度も切り替えない (US 配列の Alt + ` だけ)。
+    // 半角/全角 キー (VK_KANJI・0xF3・0xF4) は Alt の有無にかかわらず Alt なしと同じに扱い、ここでは止めない (#1080)。
+    // Alt を先に離すと VK_KANJI の離しが届かず eatenDown_ が残るので、それで止めると以後切り替わらなくなる
+    if (!IsHankakuZenkaku(vk) && IsAltGraveToggle(vk, lParam) && eatenDown_[vk]) return S_OK;
     eatenDown_[vk] = true;
     if ((IsHankakuZenkaku(vk) || IsAltGraveToggle(vk, lParam)) && composition_ == nullptr) {
         ToggleInputMode(context);
