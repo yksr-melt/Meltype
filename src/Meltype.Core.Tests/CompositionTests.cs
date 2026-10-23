@@ -3147,6 +3147,9 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("いちがっき")?.Any(p => p.Word == "一学期") == true, "いちがっき → 一学期 (#1037)");
         Assert.True(dictionary.Split("にがっき")?.Any(p => p.Word == "二学期") == true, "にがっき → 二学期 (#1037)");
         Assert.True(dictionary.Split("さんがっき")?.Any(p => p.Word == "三学期") == true, "さんがっき → 三学期 (#1037)");
+        // 数字と 学期 は別の文節にする (いち|がっき → 一|学期)
+        Assert.Equal("いち:一|がっき:学期", string.Join("|", dictionary.Clauses("いちがっき", "一学期").Select(c => $"{c.Reading}:{c.Word}")), "一|学期");
+        Assert.Equal("しょせん:所詮", string.Join("|", dictionary.Clauses("しょせん", "所詮").Select(c => $"{c.Reading}:{c.Word}")), "区切りの無い語句は 1 つの文節");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
     }
 
@@ -3336,6 +3339,24 @@ internal static class CompositionTests
         Assert.Equal("しゃーなし", k.Host.View!.Candidates[0], string.Join(" ", k.Host.View!.Candidates));
         k.Press(VirtualKeys.Return);
         Assert.Equal("しゃーなし", k.Host.Document);
+    }
+
+    /// <summary>いちがっき を 一楽器 にする変換エンジン (issue #1037)。</summary>
+    private sealed class IchigakkiConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana.Replace("いちがっき", "一楽器").Replace("いち", "一").Replace("がっき", "楽器");
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => [new(hiragana, Convert(hiragana)!)];
+    }
+
+    [Test]
+    public static void Issue1037_GakkiIsSplitFromNumber()
+    {
+        // #1037: いちがっき が 一楽器 になっていた。同梱の語句で 一|学期 の 2 つの文節にする (数字と 学期 を別に選び直せる)
+        var k = new Keyboard(converter: new IchigakkiConverter(), userDictionary: new UserDictionary(null));
+        k.Type("itigakki ");
+        Assert.Equal("一|学期", string.Join("|", k.Host.View!.Clauses!));
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("一学期", k.Host.Document);
     }
 
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
