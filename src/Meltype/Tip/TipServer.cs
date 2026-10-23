@@ -645,7 +645,9 @@ internal sealed class TipServer : IDisposable
         if (string.IsNullOrEmpty(process)) return CodeFocus.None;
         var name = process + ".exe";
         if (_settings().ProfileFor(name) != AppProfile.Code || LineContext.IsDocumentTitle(KeyText.WindowTitle(Native.GetForegroundWindow()))) return CodeFocus.None;
-        var info = _composition.Focus.Current;
+        // While UIA is inspecting, retain the session's last known code context
+        // rather than misclassifying the empty UnresolvedInfo as a chat field.
+        if (!_composition.Focus.TryGetCurrent(out var info)) return null;
         // 打つと開く補完の一覧 (VS Code など) では、UI Automation のフォーカスは一覧の行に移るが、打った文字はエディターに入る
         if (info.ClassName.Contains("monaco-list-row", StringComparison.Ordinal)) return null;
         return LineContext.ClassifyFocus(name, info.Name, info.ClassName);

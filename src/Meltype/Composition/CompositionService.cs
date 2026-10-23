@@ -148,9 +148,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _indicatorColors = options.ModeIndicatorColors;
         _directMode = options.DirectMode;
         var onFocus = options.ModeIndicatorOnFocus;
-        Focus.TextInputEntered += () =>
+        Focus.TextInputEntered += token =>
         {
-            if (!onFocus()) return;
+            if (!Focus.IsCurrent(token) || !onFocus()) return;
             if (ShowModeOnFocus is { } show) show();
             else ShowMode(!_directMode());
         };
@@ -301,6 +301,22 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
         _invoker.BeginInvoke(() => Safely(() =>
         {
+            if (!Controller.Abandon(reason)) return;
+            ReplayAll(Gate.Abort());
+            Hide();
+        }));
+    }
+
+    /// <summary>
+    /// フォーカス調査の通知はUIスレッドへのキュー内で古くなることがある。
+    /// 現在の欄が既に別の入力欄に移っていれば、前の結果では変換を破棄しない。
+    /// </summary>
+    private void Abandon(string reason, FocusInspector.NotificationToken token)
+    {
+        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
+        _invoker.BeginInvoke(() => Safely(() =>
+        {
+            if (!Focus.IsCurrent(token)) return;
             if (!Controller.Abandon(reason)) return;
             ReplayAll(Gate.Abort());
             Hide();
@@ -702,6 +718,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         var caret = FindCaret();
         // 入力欄が空のとき、アプリによっては入力位置ではなく入力欄の枠 (40px の欄など) や、複数行の欄全体の四角形が返る。
         // 枠と同じ高さなら、文字の高さは枠のおよそ半分 (1 行の欄の文字は上下の真ん中にある)。高すぎる四角形は、文字の高さが分からない。
+        // Current excludes invalidated UIA bounds. Do not position the box using LastInspected:
+        // it may belong to another field or application.
         var element = Focus.Current.Bounds;
         var wholeField = caret is { Height: > 22 } c0 && element is { } e && Math.Abs(e.Height - c0.Height) <= 6;
         int? textHeight = caret switch
@@ -862,13 +880,14 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         if ((caretSearched ? caret : caret ?? FindCaret()) is { } found) return new Point(found.Left, found.Bottom + 4);
         // 入力欄の四角形が潰れている・画面の外にある (Google ドキュメントの、文字を受け取るための見えない欄など) ときは、
         // その左下に出すと画面の端や関係ない所に出てしまう (issue #128)。マウスカーソルの近くに出す。
-        if (Focus.Current.Bounds is { } bounds && bounds.Height is > 2 and < 120 && bounds.Width > 2 && IsOnScreen(bounds))
+        var currentBounds = Focus.Current.Bounds; // one validated read per positioning decision
+        if (currentBounds is { } bounds && bounds.Height is > 2 and < 120 && bounds.Width > 2 && IsOnScreen(bounds))
         {
             return new Point(bounds.Left, bounds.Bottom + 2);
         }
         // 複数行の欄 (Chrome の textarea など) は、空のときに入力位置が取れない。空の欄で打ち始めるのは左上なので、そこに出す
         // (マウスカーソルの近くに出すと、欄の右下や別のモニターなど、打っている所から離れた所に出ていた)。
-        if (Focus.Current.Bounds is { } field && field.Height >= 120 && field.Width > 2 && IsOnScreen(field))
+        if (currentBounds is { } field && field.Height >= 120 && field.Width > 2 && IsOnScreen(field))
         {
             return new Point(field.Left, Math.Max(field.Top, Screen.FromRectangle(field).WorkingArea.Top) + 2);
         }

@@ -165,6 +165,193 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void FocusInspector_StaleGenerationDoesNotPublish()
+    {
+        // 古い UIA の戻りを後から適用する。インスペクタのワーカースレッドを起こさずに順序を再現する。
+        using var focus = new FocusInspector();
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var apply = typeof(FocusInspector).GetMethod("ApplyFocus", flags)!;
+        var sequence = typeof(FocusInspector).GetField("_focusSequence", flags)!;
+        var original = new FocusInfo(false, false, null, "current button");
+        var stale = new FocusInfo(true, false, null, "stale editor");
+        var entered = 0;
+        focus.TextInputEntered += _ => entered++;
+        apply.Invoke(focus, [0L, original, IntPtr.Zero]);
+        Assert.Equal(original, focus.LastInspected, "最新の元状態");
+        sequence.SetValue(focus, 1L); // Invalidate が処理され、旧 UIA の結果だけが残った順序
+        apply.Invoke(focus, [0L, stale, IntPtr.Zero]);
+        Assert.Equal(original, focus.LastInspected, "旧世代の状態を公開しない");
+        Assert.True(!focus.CanCapture, "旧世代の入力欄判定を横取りに使わない");
+        Assert.Equal(0, entered, "旧世代の通知も発火しない");
+        apply.Invoke(focus, [2L, stale, IntPtr.Zero]);
+        Assert.Equal(original, focus.LastInspected, "未来の世代も受け入れない");
+        Assert.Equal(0, entered, "未来の世代でもイベントはない");
+    }
+
+    [Test]
+    public static void FocusInspector_RejectsInspectionFinishedAfterClick()
+    {
+        // UIAを開始→調査中にクリック→古い入力欄の結果が返る順序を反射で再現する。
+        // 通常はクリック時に Invalidate も発生するが、その前後の狭い競合区間も検査する。
+        using var focus = new FocusInspector();
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var apply = typeof(FocusInspector).GetMethod("ApplyFocus", flags)!;
+        var clickedAtInspection = typeof(FocusInspector).GetField("_inspectedClickVersion", flags)!;
+        var staleInput = new FocusInfo(true, false, null, "old editor");
+        var nothing = focus.LastInspected;
+        focus.NoteClick();
+        apply.Invoke(focus, [0L, staleInput, IntPtr.Zero]);
+        Assert.Equal(nothing, focus.LastInspected, "調査開始後にクリックがあった結果は採用しない");
+
+        // クリックを取り込んだ調査なら公開可能だが、次のクリックで直ちに失効する。
+        clickedAtInspection.SetValue(focus, 1L);
+        apply.Invoke(focus, [0L, staleInput, IntPtr.Zero]);
+        Assert.Equal(staleInput, focus.LastInspected, "クリック世代と一致した結果は公開できる");
+        focus.NoteClick();
+        Assert.Equal(staleInput, focus.LastInspected, "失効しても直前の結果そのものは診断用に保持する");
+        Assert.True(!focus.CanCapture, "新しいクリック以降は旧結果で入力を横取りしない");
+    }
+
+    [Test]
+    public static void FocusInspector_TokenExpiresAfterClickOrNewFocus()
+    {
+        // UIスレッドに届いた通知が、別のクリックや調査によって失効したことを検出する。
+        using var focus = new FocusInspector();
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var apply = typeof(FocusInspector).GetMethod("ApplyFocus", flags)!;
+        var inspectedForeground = typeof(FocusInspector).GetField("_inspectedForeground", flags)!;
+        var focusSequence = typeof(FocusInspector).GetField("_focusSequence", flags)!;
+        inspectedForeground.SetValue(focus, Native.GetForegroundWindow());
+        var field = new FocusInfo(true, false, null, "original editor");
+        FocusInspector.NotificationToken token = default;
+        focus.TextInputEntered += t => token = t;
+        apply.Invoke(focus, [0L, field, IntPtr.Zero]);
+        Assert.Equal(field, focus.LastInspected, "診断用は最後に調査した結果を保持");
+        Assert.True(focus.IsCurrent(token), "調査直後の通知は有効");
+        Assert.Equal(field, focus.Current, "有効な結果は操作に使える");
+        Assert.True(focus.TryGetCurrent(out var current), "有効な結果を明示的に取得できる");
+        Assert.Equal(field, current);
+        var originalToken = token; // 後続の通知で token が上書きされても、古い通知の失効を検証する。
+
+        focus.NoteClick();
+        Assert.True(!focus.IsCurrent(token), "クリック後は過去の通知が無効");
+        Assert.True(!focus.Current.IsTextInput, "クリック直後に古い入力欄を公開しない");
+        Assert.True(!focus.TryGetCurrent(out var unresolved), "失効した結果は有効として取得できない");
+        Assert.Equal(focus.Current, unresolved, "調査中の結果は未確認を返す");
+        Assert.Equal(field, focus.LastInspected, "診断用の結果まで消さない");
+
+        // UIA再調査が完了しても、同じトークンを再利用してはならない。
+        focusSequence.SetValue(focus, 1L);
+        var clickSnapshot = typeof(FocusInspector).GetField("_inspectedClickVersion", flags)!;
+        clickSnapshot.SetValue(focus, 1L);
+        apply.Invoke(focus, [1L, field with { Description = "new editor" }, IntPtr.Zero]);
+        Assert.True(!focus.IsCurrent(originalToken), "別の公開状態では旧通知を再利用しない");
+        Assert.True(token != originalToken, "新しい公開結果には別の通知トークンが付与される");
+    }
+
+    [Test]
+    public static void CodeFocus_UnresolvedInspectionDoesNotBecomeChat()
+    {
+        // Code.exe's empty UIA name would otherwise classify as non-code.
+        Assert.Equal(CodeFocus.None, LineContext.ClassifyFocus("Code.exe", "", ""));
+        Assert.Equal(CodeFocus.Editor, MeltypeEngine.CodeFocusWhileUnresolved("Code.exe"),
+            "調査中はコード入力を保守的に扱う");
+        Assert.Equal(CodeFocus.Editor, MeltypeEngine.CodeFocusWhileUnresolved("Cursor.exe"));
+        Assert.Equal(CodeFocus.Terminal, MeltypeEngine.CodeFocusWhileUnresolved("WindowsTerminal.exe"),
+            "ターミナルの種別は保持する");
+    }
+
+    [Test]
+    public static void FocusInspector_LostEventCarriesVersion()
+    {
+        using var focus = new FocusInspector();
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var apply = typeof(FocusInspector).GetMethod("ApplyFocus", flags)!;
+        typeof(FocusInspector).GetField("_inspectedForeground", flags)!
+            .SetValue(focus, Native.GetForegroundWindow());
+        FocusInspector.NotificationToken token = default;
+        focus.CaptureLost += (_, t) => token = t;
+        apply.Invoke(focus, [0L, new FocusInfo(false, false, null, "button"), IntPtr.Zero]);
+        Assert.True(focus.IsCurrent(token), "イベントの瞬間は有効");
+        focus.NoteClick();
+        Assert.True(!focus.IsCurrent(token), "UIスレッドへの通知中に失効した結果を検出");
+    }
+
+    [Test]
+    public static void FocusInspector_UnresolvedReuseRejectsCounterexamples()
+    {
+        // #675: Discord の補完候補など、クリックせず同じ入力欄にとどまる場合だけ直前の判定を再利用する。
+        Assert.True(FocusInspector.CanReuseUnresolvedFocus(true, true, false, false, true), "同じ欄・クリックなし");
+        Assert.True(!FocusInspector.CanReuseUnresolvedFocus(true, true, false, true, true), "入力欄→ボタンへのクリック直後");
+        Assert.True(!FocusInspector.CanReuseUnresolvedFocus(false, true, false, false, true), "別の前面ウィンドウ");
+        Assert.True(!FocusInspector.CanReuseUnresolvedFocus(true, true, false, false, false), "同ウィンドウだが別 HWND の欄");
+        Assert.True(!FocusInspector.CanReuseUnresolvedFocus(true, true, true, false, true), "パスワード欄");
+        Assert.True(!FocusInspector.CanReuseUnresolvedFocus(true, false, false, false, true), "直前が非入力欄");
+    }
+
+    [Test]
+    public static void AsyncIme_RejectsDifferentWindowProcessAndFocus()
+    {
+        var origin = new Meltype.Input.AppInfo(new IntPtr(0x100), 10, "notepad.exe", false, false, false);
+        var initial = new ImeTarget(origin.Window, new IntPtr(0x101), 1, origin.ProcessId);
+        bool Accepted(ImeTarget current, IntPtr? foreground = null) =>
+            MeltypeEngine.ImeTargetMatchesOrigin(origin, initial, current, foreground ?? origin.Window);
+        Assert.True(Accepted(initial), "元のウィンドウ・フォーカス");
+        Assert.True(!Accepted(initial, new IntPtr(0x200)), "別の前面ウィンドウへ移動");
+        Assert.True(!Accepted(initial with { ProcessId = 20 }), "プロセスが変わった");
+        Assert.True(!Accepted(initial with { TopLevel = new IntPtr(0x200) }), "対象ウィンドウが変わった");
+        Assert.True(!Accepted(initial with { Focus = new IntPtr(0x102) }), "同じウィンドウ内で別の入力欄へ移った");
+        Assert.True(!Accepted(initial with { ThreadId = 2 }), "別スレッドのIME");
+        Assert.True(!MeltypeEngine.ImeTargetMatchesOrigin(origin with { IsOwnProcess = true }, initial, initial, origin.Window),
+            "自アプリは触らない");
+        Assert.True(!MeltypeEngine.ImeTargetMatchesOrigin(origin, null, initial, origin.Window),
+            "元の入力先を確かめられないときは動作しない");
+    }
+
+    [Test]
+    public static void FocusInspector_PendingReuseBooleanMatrix()
+    {
+        // 5 条件 2^5 = 32 通り。クリック・別ウィンドウ・非入力・パスワード・別 HWND の反例が
+        // ほかの条件と重なっていても、古い入力欄の判定を再利用しない。
+        for (var mask = 0; mask < 32; mask++)
+        {
+            bool sameWindow = (mask & 1) != 0;
+            bool input = (mask & 2) != 0;
+            bool password = (mask & 4) != 0;
+            bool clicked = (mask & 8) != 0;
+            bool sameFocus = (mask & 16) != 0;
+            var expected = sameWindow && input && !password && !clicked && sameFocus;
+            Assert.Equal(expected,
+                FocusInspector.CanReuseUnresolvedFocus(sameWindow, input, password, clicked, sameFocus),
+                $"Focus fallback mask={mask}");
+        }
+    }
+
+    [Test]
+    public static void AsyncIme_TargetMatchingBooleanMatrix()
+    {
+        // HWND・PID・focus・thread・前面・自アプリ・元対象未取得の 2^7=128 通り。
+        var saved = new Meltype.Input.AppInfo(new IntPtr(0x100), 10, "notepad.exe", false, false, false);
+        var initial = new ImeTarget(saved.Window, new IntPtr(0x101), 1, saved.ProcessId);
+        for (var mask = 0; mask < 128; mask++)
+        {
+            var current = initial with
+            {
+                TopLevel = (mask & 1) == 0 ? initial.TopLevel : new IntPtr(0x200),
+                ProcessId = (mask & 2) == 0 ? initial.ProcessId : 20u,
+                Focus = (mask & 4) == 0 ? initial.Focus : new IntPtr(0x102),
+                ThreadId = (mask & 8) == 0 ? initial.ThreadId : 2u
+            };
+            var foreground = (mask & 16) == 0 ? saved.Window : new IntPtr(0x300);
+            var app = (mask & 32) == 0 ? saved : saved with { IsOwnProcess = true };
+            var origin = (mask & 64) == 0 ? initial : null;
+            var expected = mask == 0;
+            Assert.Equal(expected, MeltypeEngine.ImeTargetMatchesOrigin(app, origin, current, foreground),
+                $"IME targeting mask={mask}");
+        }
+    }
+
+    [Test]
     public static void FirstLetter_AfterClickAndAutofill()
     {
         // クリックの直後 (1 秒以内) の打ち始めだけ、フォーカスを調べ直す

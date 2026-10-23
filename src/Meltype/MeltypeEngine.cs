@@ -255,7 +255,7 @@ internal sealed class MeltypeEngine : IDisposable
                 settings.IsAppEnabled(app.ProcessName) && !settings.IsGame(app.ProcessName, looksLikeGame: false))
             {
                 var masked = MaskAltTap(altTap, e);
-                if (altTap == AltTap.Tapped) SetImeOpenAsync(japanese: e.Vk == VirtualKeys.RMenu);
+                if (altTap == AltTap.Tapped) SetImeOpenAsync(japanese: e.Vk == VirtualKeys.RMenu, app);
                 return masked;
             }
             return false;
@@ -432,29 +432,92 @@ internal sealed class MeltypeEngine : IDisposable
     internal static KeyEvent[] MaskedAltRelease(KeyEvent release) =>
         [new KeyEvent(0xE8, 0, false, false, false, 0), new KeyEvent(0xE8, 0, false, true, false, 0), release];
 
+    /// <summary>キュー投入後のフォーカス移動によって、別アプリの IME を操作しないための照合。</summary>
+    internal static bool ImeTargetMatchesOrigin(Input.AppInfo origin, ImeTarget? initial, ImeTarget? current, IntPtr foreground) =>
+        origin.Window != IntPtr.Zero && origin.ProcessId != 0 && !origin.IsOwnProcess &&
+        origin.Window == foreground && initial is not null && current is not null &&
+        initial.TopLevel == origin.Window && initial.ProcessId == origin.ProcessId &&
+        current.TopLevel == initial.TopLevel && current.ProcessId == initial.ProcessId &&
+        current.ThreadId == initial.ThreadId && current.Focus == initial.Focus;
+
     /// <summary>
     /// Meltype IME のモードで、前面のアプリの IME を日本語入力 / 英数にする (左右の Alt の単独押し)。
     /// Meltype IME は開閉の変化を受けて表示を切り替え、英数にするときは変換中の文字を確定する。
-    /// 「コード」のアプリのコードの行だけを日本語にする働き (半角/全角 と同じ) はない。フックのスレッドでは待たない。
+    /// 「コード」のアプリのコードの行だけを日本語にする働き (半角/全角 と同じ) はない。
+    /// 入力時点では対象を Win32 から取得するが、IME の変更はワーカーに委譲する。
     /// </summary>
-    private void SetImeOpenAsync(bool japanese)
+    // ThreadPool のワーカーは投入順に完了しない。左右Altの切替要求を一本のキューで順序付ける。
+    // フック側ではロック内に要求を積むだけで、IMM32 / UIA / IPC の待機を行わない。
+    private readonly object _altImeGate = new();
+    private readonly Queue<AltImeRequest> _altImeQueue = new();
+    private bool _altImeWorkerRunning;
+    private sealed record AltImeRequest(bool Japanese, Input.AppInfo Origin, ImeTarget Initial, Settings Settings);
+
+    private void SetImeOpenAsync(bool japanese, Input.AppInfo origin)
     {
-        ThreadPool.QueueUserWorkItem(_ =>
+        var initial = ImeTarget.FromForeground();
+        if (!ImeTargetMatchesOrigin(origin, initial, initial, Native.GetForegroundWindow())) return;
+        var settings = _settings;
+        lock (_altImeGate)
         {
+            _altImeQueue.Enqueue(new AltImeRequest(japanese, origin, initial!, settings));
+            if (_altImeWorkerRunning) return;
+            _altImeWorkerRunning = true;
+        }
+        ThreadPool.QueueUserWorkItem(_ => DrainAltImeQueue());
+    }
+
+    private void DrainAltImeQueue()
+    {
+        while (true)
+        {
+            AltImeRequest request;
+            lock (_altImeGate)
+            {
+                if (_altImeQueue.Count == 0)
+                {
+                    _altImeWorkerRunning = false;
+                    return;
+                }
+                request = _altImeQueue.Dequeue();
+            }
             try
             {
-                // 日本語のキーボードでなければ IME は無い
-                if (ImeTarget.FromForeground() is not { } target || (Native.GetKeyboardLayout(target.ThreadId).ToInt64() & 0xFFFF) != 0x0411) return;
-                if (_imm32.TrySetOpen(target, japanese, null, _settings.ImeTimeoutMs))
-                    Log.Info(japanese ? "左右の Alt: 日本語入力にしました (右 Alt)" : "左右の Alt: 英数にしました (左 Alt)");
-                else
-                    Log.Warn($"左右の Alt: {(japanese ? "日本語入力" : "英数")}にできませんでした。");
+                ApplyAltImeRequest(request);
             }
             catch (Exception ex)
             {
                 Log.Warn($"左右の Alt: IME を切り替えられませんでした: {ex.Message}");
             }
-        });
+        }
+    }
+
+    private void ApplyAltImeRequest(AltImeRequest request)
+    {
+        var settings = request.Settings;
+        var origin = request.Origin;
+        if (!ReferenceEquals(settings, _settings))
+        {
+            Log.Info("左右の Alt: 設定が更新されたため、待機中の IME 切替要求を破棄しました。");
+            return;
+        }
+        if (!settings.Enabled || settings.Mode != InputMode.Tsf ||
+            !settings.AltKeysSwitchKeyboard || !settings.IsAppEnabled(origin.ProcessName) ||
+            settings.IsGame(origin.ProcessName, looksLikeGame: false)) return;
+        var target = ImeTarget.FromForeground();
+        if (target is null || !ImeTargetMatchesOrigin(origin, request.Initial, target, Native.GetForegroundWindow())) return;
+        if ((Native.GetKeyboardLayout(target.ThreadId).ToInt64() & 0xFFFF) != 0x0411) return;
+        // 待機中に他の入力先・設定へ変わった場合は操作しない。同じ入力先への要求はこのワーカーで直列実行する。
+        if (!ReferenceEquals(settings, _settings))
+        {
+            Log.Info("左右の Alt: IME 切替の実行直前に設定が更新されたため、要求を破棄しました。");
+            return;
+        }
+        if (!ImeTargetMatchesOrigin(origin, request.Initial, ImeTarget.FromForeground(), Native.GetForegroundWindow())) return;
+        if (_imm32.TrySetOpen(target, request.Japanese, null, settings.ImeTimeoutMs))
+            Log.Info(request.Japanese ? "左右の Alt: 日本語入力にしました (右 Alt)" : "左右の Alt: 英数にしました (左 Alt)");
+        else
+            Log.Warn($"左右の Alt: {(request.Japanese ? "日本語入力" : "英数")}にできませんでした。");
     }
 
     // ---- アプリの種類「コード」: コメント・文字列の中だけ日本語 ----
@@ -516,8 +579,18 @@ internal sealed class MeltypeEngine : IDisposable
     {
         var app = _foreground.Current;
         if (settings.ProfileFor(app.ProcessName) != AppProfile.Code || LineContext.IsDocumentTitle(KeyText.WindowTitle(app.Window))) return CodeFocus.None;
-        var focus = _composition?.Focus.Current;
-        return LineContext.ClassifyFocus(app.ProcessName, focus?.Name ?? "", focus?.ClassName ?? "");
+        if (_composition is not { } composition) return CodeFocus.None;
+        if (!composition.Focus.TryGetCurrent(out var focus))
+            return CodeFocusWhileUnresolved(app.ProcessName);
+        return LineContext.ClassifyFocus(app.ProcessName, focus.Name, focus.ClassName);
+    }
+
+    // Until UIA resolves, do not treat an editor as a chat box simply because
+    // UnresolvedInfo has an empty name/class. Use a conservative code-mode fallback.
+    internal static CodeFocus CodeFocusWhileUnresolved(string process)
+    {
+        var kind = LineContext.ClassifyFocus(process, "", "");
+        return kind == CodeFocus.None ? CodeFocus.Editor : kind;
     }
 
     private bool IsCodeApp(Settings settings) => CurrentCodeFocus(settings) != CodeFocus.None;
@@ -797,17 +870,38 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>Meltype キーボード使用中は Microsoft IME を閉じておく (二重に変換されないように)。</summary>
     private void CloseSystemImeAsync()
     {
+        // 実行時に FromForeground を初めて取得すると、キュー投入後に移った別アプリの IME を閉じてしまう。
+        var origin = _foreground.Current;
+        var initial = ImeTarget.FromForeground();
+        if (!ImeTargetMatchesOrigin(origin, initial, initial, Native.GetForegroundWindow())) return;
+        var settings = _settings;
         ThreadPool.QueueUserWorkItem(_ =>
         {
             try
             {
-                if (!IsKeyboardActive || ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow()) || ImeTarget.FromForeground() is not { } target ||
-                    !KeyboardLayoutPolicy.AllowsInput(_settings, target)) return;
-                // アプリ別設定で OFF にしたアプリ (・ゲーム) では、Microsoft IME をそのまま使ってもらう (OFF に戻さない: issue #233)
-                if (!_foreground.Check(_settings).Allowed) return;
+                if (!ReferenceEquals(settings, _settings))
+                {
+                    Log.Info("Microsoft IME 自動 OFF: 設定が更新されたため、待機中の要求を破棄しました。");
+                    return;
+                }
+                if (!IsKeyboardActive || TakeoverPending) return;
+                var target = ImeTarget.FromForeground();
+                if (target is null || !ImeTargetMatchesOrigin(origin, initial, target, Native.GetForegroundWindow()) ||
+                    !KeyboardLayoutPolicy.AllowsInput(settings, target)) return;
+                // アプリ別設定で OFF にしたアプリ (・ゲーム) では、Microsoft IME をそのまま使ってもらう (issue #233)
+                if (!_foreground.Check(settings).Allowed) return;
                 var state = _imm32.GetState(target);
-                if (!KeyboardLayoutPolicy.AllowsInput(_settings, state.KeyboardLayout)) return;
-                if (state.Mode == IME.ImeMode.Open && _imm32.TrySetOpen(target, false, null, _settings.ImeTimeoutMs))
+                if (!KeyboardLayoutPolicy.AllowsInput(settings, state.KeyboardLayout)) return;
+                // GetState 中にも前面ウィンドウや設定が変わり得る。元の対象以外には送らない。
+                if (!ReferenceEquals(settings, _settings))
+                {
+                    Log.Info("Microsoft IME 自動 OFF: IME 状態の取得中に設定が更新されたため、要求を破棄しました。");
+                    return;
+                }
+                if (!IsKeyboardActive || TakeoverPending ||
+                    !ImeTargetMatchesOrigin(origin, initial, ImeTarget.FromForeground(), Native.GetForegroundWindow()) ||
+                    !_foreground.Check(settings).Allowed) return;
+                if (state.Mode == IME.ImeMode.Open && _imm32.TrySetOpen(target, false, null, settings.ImeTimeoutMs))
                 {
                     Log.Info("Meltype キーボードを使うため Microsoft IME を OFF にしました。");
                 }
