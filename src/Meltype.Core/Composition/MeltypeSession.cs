@@ -197,6 +197,7 @@ public sealed class MeltypeSession
         var userDirectory = Path.Combine(dataDirectory, "dictionaries");
         if (s_shared is not { } shared || shared.Directory != dataDirectory)
         {
+            SettingsSchema.Write(dataDirectory);
             var created = CompositionDetector.CreateDefault(userDirectory);
             var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
             created.Memory = languages;

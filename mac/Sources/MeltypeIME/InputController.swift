@@ -264,11 +264,12 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
+    /// 空の設定にも、本体が隣に書く config.schema.json を指定しておく (エディターで項目の補完・説明が出る)。
     @objc private func openConfigFile(_ sender: Any?) {
         guard let directory = NativeCore.shared.dataDirectory else { return }
         let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
         if !FileManager.default.fileExists(atPath: url.path) {
-            try? "{\n}\n".write(to: url, atomically: true, encoding: .utf8)
+            try? "{\n  \"$schema\": \"./config.schema.json\"\n}\n".write(to: url, atomically: true, encoding: .utf8)
         }
         NSWorkspace.shared.open(url)
     }

@@ -85,6 +85,7 @@ internal static class Program
         }
         if (restore is not null) RestoreBackup(restore);
         var settings = Settings.Load(AppPaths.ConfigFile);
+        SettingsSchema.Write(AppPaths.DataDirectory);
         if (!File.Exists(AppPaths.ConfigFile))
         {
             try { settings.Save(AppPaths.ConfigFile); } catch { }
