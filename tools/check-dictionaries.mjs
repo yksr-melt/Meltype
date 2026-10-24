@@ -37,7 +37,7 @@ const formats = {
   },
   // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
   'phrases.txt': tabbed(2, 2, ([reading, word]) => [
-    reading.split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
+    reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
     reading.split('|').length === word.split('|').length && !word.split('|').includes('') ? null : `読み「${reading}」と語句「${word}」の | の数が違う`,
   ]),
   'misspellings.txt': tabbed(1, 2, fields => fields.map(f => kana.test(f) ? null : `「${f}」がかなでない`)),

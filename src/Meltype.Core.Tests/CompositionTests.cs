@@ -3440,6 +3440,25 @@ internal static class CompositionTests
         Assert.Equal("一学期", k.Host.Document);
     }
 
+    [Test]
+    public static void Issue1037_Gakki_IsNotUsedInsideALongerClause()
+    {
+        // #1072 のレビュー: に|がっき (二|学期) は、変換エンジンの文節の途中 (ほんとうに|がっきを の に) では使わない
+        var converter = new ClauseConverter(new()
+        {
+            ["ほんとうにがっきをひく"] = [new("ほんとうに", "本当に"), new("がっきを", "楽器を"), new("ひく", "弾く")],
+        });
+        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("honntounigakkiwohiku ");
+        Assert.Equal("本当に|楽器を|弾く", string.Join("|", k.Host.View!.Clauses!));
+        // 区切りで分けた文節は学習で選び直さない (いち で 市 を選んだことがあっても 一|学期 のまま)
+        var history = new ConversionHistory(null);
+        history.Remember("いち", "市");
+        k = new Keyboard(converter: new IchigakkiConverter(), userDictionary: new UserDictionary(null), history: history);
+        k.Type("itigakki ");
+        Assert.Equal("一|学期", string.Join("|", k.Host.View!.Clauses!));
+    }
+
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
     private sealed class YahoConverter : IKanjiConverter
     {
