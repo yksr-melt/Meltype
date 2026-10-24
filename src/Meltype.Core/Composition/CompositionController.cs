@@ -2503,8 +2503,8 @@ public sealed class CompositionController
     /// </summary>
     private string LiveConvert(string kana)
     {
-        // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') < LiveConversionMinLength) return kana;
+        // 記号や長音を足すだけで短い相づちを漢字にしない (#505)。
+        if (kana.Count(c => IsKana(c) && c != 'ー') < LiveConversionMinLength) return kana;
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var converted = string.Concat(ConvertJapanese(kana).Select(c => c.Text));
