@@ -3417,6 +3417,23 @@ internal static class CompositionTests
         Assert.Equal("しゃーなし", k.Host.Document);
     }
 
+    [Test]
+    public static void Issue825_Nasasou_IsNotUsedInsideALongerWord()
+    {
+        // #1072 のレビュー: 同梱の語句 ^なさそう は、変換エンジンの文節の途中 (あぶなさそう = 危なさそう) では使わない
+        var converter = new ClauseConverter(new()
+        {
+            ["あぶなさそう"] = [new("あぶなさそう", "危なさそう")],
+            ["なさそう"] = [new("なさそう", "無點そう")],
+        });
+        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("abunasasou ");
+        Assert.Equal("危なさそう", string.Join("|", k.Host.View!.Clauses!));
+        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("nasasou ");
+        Assert.Equal("なさそう", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#825)");
+    }
+
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
     private sealed class YahoConverter : IKanjiConverter
     {
