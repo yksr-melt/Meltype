@@ -228,6 +228,10 @@ public sealed class Settings
      Description("確定するときに、日本語と英単語の間に半角スペースを入れます (今日はGitHubにpushした → 今日は GitHub に push した)。数字だけの語 (3時) には入れません。")]
     public bool SpaceAroundEnglish { get; set; }
 
+    [Category("1. 全般"), DisplayName("変換中の数字キーで候補を選ぶ"),
+     Description("Space・Tab で変換している間に、キーボードの上の段の 1〜9 を押すと、候補の一覧の番号で選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。テンキーの 1〜9 は、この設定に関係なく候補を選びます。")]
+    public bool NumberKeysSelectCandidates { get; set; } = true;
+
     [Category("1. 全般"), DisplayName("Shift + Space で半角スペース"),
      Description("日本語入力のときの Shift + Space を、全角スペースではなく半角スペースにします (プログラミングの癖で Shift + Space を半角スペースに使う人向け)。")]
     public bool ShiftSpaceHalfWidth { get; set; }
