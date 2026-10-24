@@ -523,7 +523,10 @@ public sealed partial class CompositionDetector
     internal static bool IsJapaneseReadingOrPrefix(string kana) => kana.Length >= 3 && CommonReadings.Words.HasPrefix(kana);
 
     /// <summary>スペルチェッカーが正しいと言う英単語か、よくある打ち間違い (teh、recieve) か。</summary>
-    internal bool IsSpellWord(string lower) => SpellChecker is { } checker && (checker.IsWord(lower) || checker.AutoCorrection(lower) is not null);
+    internal bool IsSpellWord(string lower) =>
+        // NSSpellChecker は73文字以上の未知語を検査せず「誤りなし」と返す。
+        // 長いローマ字文を英単語の根拠にしない。同梱辞書の語は別途判定する。
+        lower.Length <= 72 && SpellChecker is { } checker && (checker.IsWord(lower) || checker.AutoCorrection(lower) is not null);
 
     /// <summary>よくある英語の打ち間違いなら正しい綴り (teh → the)。大文字で始まる語は大文字で始める。</summary>
     public string? EnglishAutoCorrection(string word)
