@@ -39,6 +39,14 @@ internal static class Program
                     Console.WriteLine("segments: " + string.Join(" | ", text.Segments(final: true).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
                 return 0;
+            case "--typo-eval":
+                // 打ち間違いの直しの詳しい評価 (種類・言語・長さ・実際の綴り間違い・辞書に無い語・速さ)
+                TypoCorrectorTests.Report();
+                return 0;
+            case "--typo-tune":
+                // α と θ の組ごとに、打ち間違いの直しの評価 (langAcc・fixAcc・直し間違い) を出す
+                TypoCorrectorTests.Tune();
+                return 0;
             case "--eval-json":
                 Checks.EvalJson(args[1]);
                 return 0;
