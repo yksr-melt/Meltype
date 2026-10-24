@@ -213,6 +213,12 @@ public sealed partial class CompositionDetector
         var segments = ScoredSegmentation && !kanaInput
             ? FindSpansScored(units, pending, precedingEnglish, followingEnglish, level, englishSentence && precedingEnglish == true, final)
             : FindSpans(units, pending, precedingEnglish, followingEnglish, level, englishSentence && precedingEnglish == true, kanaInput, final);
+        // 英字だけの入力は、全体を「日本語として読んだ場合」と「英語として読んだ場合」の点で比べても区切る (issue #838)。
+        // 今までの決まりの結果 (segments) をそのまま使い回し、良くなる見込みがあるときだけ走らせる。
+        if (!kanaInput && ReadingComparison && token.All(char.IsAsciiLetter) && ShouldTryReadingComparison(segments) &&
+            FindSpansReading(units, pending, level, final, precedingEnglish, followingEnglish, englishSentence) is { } reading &&
+            ReadingComparisonIsBetter(reading, segments, units, pending, level))
+            return reading;
         if (kanaInput) return segments;
         // 辞書にない英単語 (stackoverflow など) を最初から打っているなら全体を英語にする。
         // 途中の区間 (… flow) だけを英語にすると「sたcこvえrflow」のようになってしまう。

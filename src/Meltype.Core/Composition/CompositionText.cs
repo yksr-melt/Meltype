@@ -714,7 +714,8 @@ public sealed class CompositionText
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-').Append(final ? 'F' : '-')
             .Append(PrecedingEnglishName ? 'N' : '-').Append(FullWidthParentheses ? 'W' : '-').Append(LaughterAfterKana ? 'L' : '-')
-            .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1);
+            .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1)
+            .Append(_detector.ReadingComparisonEnabled ? 'R' : '-');
         return key.ToString();
     }
 

@@ -483,6 +483,10 @@ public sealed class Settings
      Description("変換ボックスの中で英語と日本語をどこで区切るかを、あり得る区切り方を全部比べて一番自然なもので決めます (α版: 試験中)。英単語の後ろの「は」(medalsha → medalsは、presidentha → presidentは) などが正しく分かれやすくなります。OFF なら今までどおり、先頭から順に決めます。")]
     public bool ScoredSegmentation { get; set; }
 
+    [Category("2. 判定"), DisplayName("日英の区切りを読んだ点数で決める (β版)"),
+     Description("英字だけの入力を「日本語として読んだ場合」と「英語として読んだ場合」の点で比べ、自然なほうに区切ります (β版: 試験中。issue #838)。")]
+    public bool ReadingComparison { get; set; }
+
     /// <summary>判定の強さを反映した日本語判定の閾値 (英数状態の検知)。</summary>
     [Browsable(false), JsonIgnore]
     public int EffectiveJapaneseThreshold => JapaneseThreshold + DetectionLevel switch
