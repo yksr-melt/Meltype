@@ -39,6 +39,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Updater _updater;
     private readonly ToolStripMenuItem _updateItem;
     private readonly ToolStripMenuItem _autoUpdateItem;
+    private int _exclusionNotificationScheduled;
+    private volatile bool _exiting;
 
     public TrayApplicationContext(MeltypeEngine engine)
     {
@@ -207,6 +209,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _engine.ApplySettings(next);
             if (!firstRun && CanOfferTsf()) _invoker.BeginInvoke(OfferTsf);
         }
+        // 起動時の設定反映が終わってから、読み込み中に蓄積した除外をまとめて通知する。
+        Diagnostics.ShortcutExclusions.Added += OnShortcutExcluded;
+        OnShortcutExcluded();
     }
 
     /// <summary>
@@ -335,6 +340,44 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray.ShowBalloonTip(timeout, title, text, ToolTipIcon.Info);
     }
 
+    /// <summary>除外情報の表示を UI スレッドに予約し、その処理までに追加された複数の登録を一つのトレイ通知にまとめる。</summary>
+    private void OnShortcutExcluded()
+    {
+        if (_exiting || !_invoker.IsHandleCreated || _invoker.IsDisposed ||
+            Interlocked.Exchange(ref _exclusionNotificationScheduled, 1) != 0) return;
+        try
+        {
+            _invoker.BeginInvoke(() =>
+            {
+                Interlocked.Exchange(ref _exclusionNotificationScheduled, 0);
+                if (_exiting) return;
+                var message = TakeShortcutExclusionMessage(_engine.Settings.ShowNotifications);
+                if (message is null) return;
+                _tray.BalloonTipClicked -= OnUpdateBalloonClicked;
+                _tray.ShowBalloonTip(5000, "入力モード切り替えキーを除外しました", message, ToolTipIcon.Warning);
+            });
+        }
+        catch (InvalidOperationException) when (_exiting)
+        {
+            // 終了と別スレッドからの除外通知が重なった場合は、破棄済みの UI を呼ばない。
+        }
+    }
+
+    /// <summary>未通知の除外情報を消費し、通知が有効で対象があるときだけ本文を返す (OFF 中の情報も消費する)。</summary>
+    internal static string? TakeShortcutExclusionMessage(bool showNotifications)
+    {
+        var excluded = Diagnostics.ShortcutExclusions.Drain();
+        return showNotifications && excluded.Length > 0 ? ShortcutExclusionMessage(excluded) : null;
+    }
+
+    /// <summary>除外した登録の先頭 3 件をキー名で示し、残り件数とログ画面への案内を付けた通知本文を作る。</summary>
+    internal static string ShortcutExclusionMessage(IReadOnlyList<Diagnostics.ShortcutExclusion> excluded)
+    {
+        var names = excluded.Take(3).Select(e => e.Shortcut is { } shortcut ? ShortcutEditor.Describe(shortcut) : "不正な登録 (null)");
+        var remaining = excluded.Count > 3 ? $"、ほか {excluded.Count - 3} 件" : "";
+        return $"{string.Join("、", names)}{remaining}\n詳細は「ログ / 判定理由」で確認できます。";
+    }
+
     private void ShowUpdateItem()
     {
         if (Updater.Staged() is not { } staged) return;
@@ -459,8 +502,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (name == _engine.Settings.ActiveProfile) return;
         _engine.ApplySettings(_engine.Settings.SwitchProfile(name));
         UpdateStatus();
-        if (_engine.Settings.ShowNotifications) ShowBalloonTip(1500, "Meltype", $"プロファイルを「{name}」にしました");
+        if (ProfileSwitchMessage(_engine.Settings) is { } message) ShowBalloonTip(1500, "Meltype", message);
     }
+
+    /// <summary>除外警告が待機中なら通常の切替通知を省略し、同じ操作でバルーンを連続して表示しない。</summary>
+    internal static string? ProfileSwitchMessage(Settings settings) =>
+        settings.ShowNotifications && !Diagnostics.ShortcutExclusions.HasPending
+            ? $"プロファイルを「{settings.ActiveProfile}」にしました" : null;
 
     private void SetLevel(DetectionLevel level)
     {
@@ -736,6 +784,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        _exiting = true;
+        Diagnostics.ShortcutExclusions.Added -= OnShortcutExcluded;
         _engine.StatusChanged -= OnEngineStatusChanged;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();

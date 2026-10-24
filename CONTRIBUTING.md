@@ -138,11 +138,14 @@ Issue・Pull Request のコメントの 1 行目に書くと、bot が GitHub Ac
 | `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す (最新のコードと最新のリリース) | だれでも |
 | `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |
 | `/pack <SHA>` | Pull Request のコードで Windows のテスト版の zip を作る | メンテナー |
+| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる) | だれでも |
 | `/help` | コマンドの一覧 | だれでも |
 
 `/test`・`/pack` の `<SHA>` は、中身を確かめた commit の SHA (40 桁) です。PR の今の head と違えば動かしません。
 
 「変換・判定の間違い」の Issue を作ると、`/repro` と同じことを自動で行います。漢字の変換は再現しません (日本語 / 英語の判定だけを見ます)。
+
+開いている Issue に `/self-assign` とコメントすると、bot がコメントした人を Assignees に入れ、👍 を付けます。「着手します」「対応します」とだけコメントしたときは、`/self-assign` の案内を返します (言葉だけでは割り当てません)。
 
 <a name="自動の仕分け"></a>
 <img src="docs/images/headings/contributing/s06.svg" alt="自動の仕分け" height="40">
@@ -171,5 +174,11 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます |
 | 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」と、`Fixes #12` で閉じる誤判定の報告を、Pull Request のコードで確かめます |
 | CLA | 初めての方 | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」) |
+| フォーマット | `.cs` が変わったとき | 変えた行の空白・改行・字下げを `dotnet format whitespace` で調べる。前からある違反では失敗しません |
+| 静的解析 | いつも | Roslyn の解析の警告のうち、Pull Request で新しく出たものを注釈で出す (マージは止めません) |
+| CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
+| 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
+
+フォーマット・静的解析・CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder --include <ファイル>` を流し、変えた行の分だけ残してください。解析のルールの重要度は `.editorconfig` で決め、運用を見ながら段階的に厳しくします。使っている依存の脆弱性は、Dependabot のアラートで知らせます (依存関係のチェックは、Pull Request で足した・上げた依存だけを見ます)。

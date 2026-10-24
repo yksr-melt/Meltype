@@ -708,6 +708,9 @@ internal static class CompositionTests
         Assert.True(predictor.PredictEnglishNames("ぎっと") is { } git && git.Contains("GitHub") && git.Contains("GitLab"), string.Join(",", predictor.PredictEnglishNames("ぎっと")));
         Assert.True(predictor.PredictEnglishNames("しゃおみ").Contains("Xiaomi"), "読みを打ち終わっても出す");
         Assert.Equal(1, predictor.PredictEnglishNames("しゃおみ").Count(w => w == "Xiaomi"), "同じ語は 1 つだけ (しゃおみ・しゃおみー)");
+        // #1040・#959: めるたいぷ → Meltype (候補と予測の両方)
+        Assert.True(predictor.PredictEnglishNames("めるた").Contains("Meltype"), string.Join(",", predictor.PredictEnglishNames("めるた")));
+        Assert.True(CandidateDictionary.Load(null).Lookup("めるたいぷ").Contains("Meltype"), "めるたいぷ の候補に Meltype");
         Assert.Equal(0, predictor.PredictEnglishNames("しゃ").Count, "2 文字では出さない");
         Assert.True(predictor.PredictEnglishNames("あいあ").Count <= Predictor.MaxPredictions, "多すぎない");
         Assert.Equal(0, predictor.PredictEnglishNames("ゐゐゐ").Count, "無い読みは出さない");
@@ -2036,6 +2039,81 @@ internal static class CompositionTests
         Assert.Equal("たんいを取る", string.Concat(k.Host.View!.Clauses!), "F6 でひらがな");
     }
 
+    private static void ShiftArrow(Keyboard k, int vk)
+    {
+        k.Host.PhysicalShift = true;
+        k.Key(VirtualKeys.LShift);
+        k.Press(vk);
+        k.Key(VirtualKeys.LShift, up: true);
+        k.Host.PhysicalShift = false;
+    }
+
+    [Test]
+    public static void Issue678_FunctionKeysStillAffectOnlyTheSelectedClauseAfterExtending()
+    {
+        // 文節の長さを変えると、その文節の打った英字が分からなくなり、F9 / F10 が文全体に効いていた
+        foreach (var (vk, expected) in new[] { (VirtualKeys.F10, "m3e4"), (VirtualKeys.F9, "ｍ３ｅ４") })
+        {
+            var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
+            k.Type("m3e4wotukau ");
+            ShiftArrow(k, VirtualKeys.Right);
+            ShiftArrow(k, VirtualKeys.Right);
+            var before = k.Host.View!.Clauses!;
+            Assert.Equal("m3え4", before[0], "先頭の文節が伸びる");
+            k.Press(vk);
+            Assert.True(k.Host.View!.Converting, "変換は続く");
+            var clauses = k.Host.View!.Clauses!;
+            Assert.Equal(expected, clauses[0], "選んだ文節だけが英字になる");
+            Assert.Equal(string.Concat(before.Skip(1)), string.Concat(clauses.Skip(1)), "ほかの文節はそのまま");
+        }
+    }
+
+    [Test]
+    public static void Issue678_FunctionKeysStillAffectOnlyTheSelectedClauseAfterShrinking()
+    {
+        foreach (var (vk, expected) in new[] { (VirtualKeys.F10, "e4wotuka"), (VirtualKeys.F9, "ｅ４ｗｏｔｕｋａ") })
+        {
+            var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
+            k.Type("m3e4wotukau ");
+            k.Press(VirtualKeys.Right);
+            ShiftArrow(k, VirtualKeys.Left);
+            var before = k.Host.View!.Clauses!;
+            Assert.Equal("m3|え4をつか|う", string.Join("|", before), "後ろの文節が縮む");
+            k.Press(vk);
+            Assert.True(k.Host.View!.Converting, "変換は続く");
+            Assert.Equal($"m3|{expected}|う", string.Join("|", k.Host.View!.Clauses!), "選んだ文節だけが英字になる");
+        }
+    }
+
+    [Test]
+    public static void Issue678_FunctionKeysDoNothingWhenTheTypedLettersOfTheClauseAreUnknown()
+    {
+        // きゃ を き|ゃ に分けると、打った英字 (kya) を文節に割り当てられない。文全体には効かせない
+        var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
+        k.Type("kyakuwotoru ");
+        for (var i = 0; i < 6 && k.Host.View!.Clauses![0] != "き"; i++) ShiftArrow(k, VirtualKeys.Left);
+        var before = k.Host.View!.Clauses!.ToArray();
+        Assert.Equal("き", before[0], "先頭の文節が き だけになる");
+        k.Press(VirtualKeys.F10);
+        Assert.True(k.Host.View!.Converting, "変換は続く");
+        Assert.Equal(string.Concat(before), string.Concat(k.Host.View!.Clauses!), "どの文節も変わらない");
+    }
+
+    [Test]
+    public static void Issue678_FunctionKeysAffectOnlyTheSelectedEnglishClause()
+    {
+        foreach (var (vk, expected) in new[] { (VirtualKeys.F9, "ｇｏｏｇｌｅ"), (VirtualKeys.F7, "ゴオgェ") })
+        {
+            var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
+            k.Type("tanniwogoogleto ");
+            k.Press(VirtualKeys.Right);
+            Assert.Equal("たんいを|google|と", string.Join("|", k.Host.View!.Clauses!), "2 番目の英語の文節を選ぶ");
+            k.Press(vk);
+            Assert.True(k.Host.View!.Converting, "変換は続く");
+            Assert.Equal($"たんいを|{expected}|と", string.Join("|", k.Host.View!.Clauses!), "選んだ英語の文節だけが変わる");
+        }
+    }
+
     [Test]
     public static void Issue599_CtrlKLResizeTheClause()
     {
@@ -3144,6 +3222,7 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("ばらまいてたあい")?.First().Word == "ばらまいてた", "ばらまいてた|あい");
         // 報告 (#196): しょたこん → ショタこん
         Assert.True(dictionary.Split("しょたこん")?.Any(p => p.Word == "ショタコン") == true, "しょたこん → ショタコン");
+        Assert.True(dictionary.Split("しりーず")?.Any(p => p.Word == "シリーズ") == true, "しりーず → シリーズ (#853)");
         Assert.True(dictionary.Split("いちがっき")?.Any(p => p.Word == "一学期") == true, "いちがっき → 一学期 (#1037)");
         Assert.True(dictionary.Split("にがっき")?.Any(p => p.Word == "二学期") == true, "にがっき → 二学期 (#1037)");
         Assert.True(dictionary.Split("さんがっき")?.Any(p => p.Word == "三学期") == true, "さんがっき → 三学期 (#1037)");
@@ -3151,6 +3230,8 @@ internal static class CompositionTests
         Assert.Equal("いち:一|がっき:学期", string.Join("|", dictionary.Clauses("いちがっき", "一学期").Select(c => $"{c.Reading}:{c.Word}")), "一|学期");
         Assert.Equal("しょせん:所詮", string.Join("|", dictionary.Clauses("しょせん", "所詮").Select(c => $"{c.Reading}:{c.Word}")), "区切りの無い語句は 1 つの文節");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
+        // 報告 (#968): かんそうりつ の候補に 乾燥率
+        Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
     }
 
     [Test]
