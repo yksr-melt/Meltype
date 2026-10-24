@@ -8,6 +8,8 @@
 <img src="images/headings/release/01.svg" alt="版を出す" height="53"><br>
 
 
+いつ出すか・版をどう上げるかは、[CONTRIBUTING.md の「リリースの決まり」](../CONTRIBUTING.md#リリースの決まり) にあります。
+
 1. 版を上げる
    - `src/Meltype/Meltype.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
