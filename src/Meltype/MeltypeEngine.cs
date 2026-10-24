@@ -81,6 +81,12 @@ internal sealed class MeltypeEngine : IDisposable
     private volatile bool _directEnglishWord;
     private readonly HashSet<int> _swallowedToggleUps = [];
     private readonly AltTapDetector _altTap = new();
+    private readonly ToggleShortcutDetector _shortcutDetector = new();
+    private Action<KeyEvent>? _shortcutCapture;
+    private bool _captureHankakuTail;
+    private readonly HashSet<int> _captureDown = [];
+
+    public void CaptureShortcut(Action<KeyEvent>? capture) => Volatile.Write(ref _shortcutCapture, capture);
 
     /// <summary>UI スレッドで作った変換ボックスをつなぐ。</summary>
     public void AttachComposition(Composition.CompositionService composition)
@@ -88,6 +94,21 @@ internal sealed class MeltypeEngine : IDisposable
         // 起動の途中から Windows の IME で語を打っている (Enter で確定する前か、確定した直後) なら、閉じずにそのまま打たせる (PollImeState で引き継ぐ)。
         // 語の途中で Meltype に替わると、前半と後半が別の IME に分かれる。OnKey が _composition を見る前に決めておく
         Volatile.Write(ref _takeoverPending, IsKeyboardActive && StillTypingInSystemIme() ? 1 : 0);
+        composition.Controller.ToggleModeRequested += target =>
+        {
+            if (_settings.Mode != InputMode.Keyboard || !_settings.Enabled ||
+                Native.GetForegroundWindow() != target || !KeyboardLayoutPolicy.AllowsInput(_settings)) return;
+            // 前の打鍵を処理した後の未確定状態で判断する。未確定文字があれば文字だけを切り替える。
+            if (composition.Controller.TogglePendingInput()) return;
+            // コードの行 (コメント・文字列の外) では、この行だけ日本語にする / 戻す。
+            if (!_keyboardDirect && IsCodeApp(_settings) && (_codeJapanese || InCode(_settings)))
+            {
+                _codeJapanese = !_codeJapanese;
+                Log.Info(_codeJapanese ? "コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)" : "コードの行: 英数に戻す");
+                ShowCodeMode();
+            }
+            else KeyboardDirect = !_keyboardDirect;
+        };
         composition.PasteCommit = () => PastePolicy.ShouldPaste(_settings, _foreground.Current.ProcessName, IsQt(_foreground.Current.Window));
         composition.InputAllowed = () => KeyboardLayoutPolicy.AllowsInput(_settings);
         composition.Focus.TreatsAsTextInput = () => _settings.TreatsAsTextInput(_foreground.Current.ProcessName)
@@ -210,6 +231,27 @@ internal sealed class MeltypeEngine : IDisposable
 
     private bool OnKey(KeyEvent e)
     {
+        // 登録画面の取り込みは両モードの入力処理より先。終了後も飲み込んだキー解放は対にする。
+        // 取り込みを終えた F3 解放に続く F4 押下を、通常の切り替えとして実行しない。
+        if (_captureHankakuTail)
+        {
+            _captureHankakuTail = false;
+            if (!e.Injected && e.IsDown && e.Vk == VirtualKeys.OemEnlw && e.Scan == 0x29 && !e.Extended) return true;
+        }
+        var capture = Volatile.Read(ref _shortcutCapture);
+        if (!e.Injected && capture is not null)
+        {
+            if (e.IsDown) _captureDown.Add(e.PhysicalId); else _captureDown.Remove(e.PhysicalId);
+            _captureHankakuTail = e.IsUp && e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
+            if (e.IsUp) _shortcutDetector.ReleaseConsumed(e);
+            capture(e);
+            return true;
+        }
+        if (e.IsUp && _captureDown.Remove(e.PhysicalId))
+        {
+            _captureHankakuTail = e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
+            return true;
+        }
         var settings = _settings;
         // 遠隔操作 (AnyDesk・VNC) のキーは、ほかのソフトが送ったキー (LLKHF_INJECTED) として届く。設定で許可していれば手で打ったキーとして扱う。
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
@@ -221,6 +263,7 @@ internal sealed class MeltypeEngine : IDisposable
             _injectedHintLogged = true;
             Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。ULE4JIS などキー配列を変えるソフトや遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
         }
+        if (_shortcutDetector.ReleaseConsumed(e)) return true;
         // 飲み込んだ切替キーの解放は、入力言語が変わっても対にして処理する。
         if (e.IsUp && !e.Injected)
         {
@@ -276,6 +319,20 @@ internal sealed class MeltypeEngine : IDisposable
             return false;
         }
 
+        var mods = (IsDown(VirtualKeys.Shift) ? ShortcutModifiers.Shift : 0) |
+            (IsDown(VirtualKeys.Control) ? ShortcutModifiers.Control : 0) |
+            (IsDown(VirtualKeys.Menu) ? ShortcutModifiers.Alt : 0) |
+            (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? ShortcutModifiers.Win : 0);
+        var shortcut = _shortcutDetector.OnKey(e, mods,
+            settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) &&
+                !settings.IsGame(_foreground.Current.ProcessName, _foreground.Current.LooksLikeGame) ? settings.EffectiveToggleShortcuts : []);
+        if (shortcut.Toggle)
+        {
+            MaskAltRelease();
+            composition.Gate.OnToggleMode(Native.GetForegroundWindow());
+        }
+        if (shortcut.Consume) return true;
+
         // 左 Alt の単独押しで英数、右 Alt の単独押しで日本語。Alt の押下はそのままアプリに通し、解放はメニューバーに移らないよう送り直す (MaskAltTap)。
         if (altTap != AltTap.None && settings.Enabled && settings.AltKeysSwitchKeyboard && !composition.Gate.IsCaptured)
         {
@@ -295,43 +352,6 @@ internal sealed class MeltypeEngine : IDisposable
                 lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
                 MaskAltRelease();
                 SetKeyboardMode(composition, settings, japanese);
-                return true;
-            }
-        }
-        // 設定「日本語 / 英数を切り替えるキーを追加」: 半角/全角 と同じく Meltype キーボードの ON/OFF (issue #530)
-        if (settings.Enabled && settings.Mode == InputMode.Keyboard && settings.ToggleKeyboardShortcuts.Length > 0 && !e.Injected && !composition.Gate.IsCaptured)
-        {
-            var ctrl = IsDown(VirtualKeys.Control);
-            var alt = IsDown(VirtualKeys.Menu);
-            var shift = IsDown(VirtualKeys.Shift);
-            var win = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
-            if (ToggleShortcuts(settings.ToggleKeyboardShortcuts).Any(shortcut => shortcut.Matches(e.Vk, ctrl, alt, shift, win)))
-            {
-                if (e.IsDown)
-                {
-                    lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
-                    MaskAltRelease();
-                    KeyboardDirect = !_keyboardDirect;
-                }
-                return true;
-            }
-        }
-        // 半角/全角 キーは Microsoft IME ではなく Meltype キーボードの ON/OFF に使う。
-        if (settings.Enabled && settings.HankakuTogglesKeyboard && VirtualKeys.IsHankakuZenkaku(e.Vk) && !e.Injected && !composition.Gate.IsCaptured)
-        {
-            if (e.IsDown)
-            {
-                lock (_swallowedToggleUps) _swallowedToggleUps.Add(e.Vk);
-                MaskAltRelease();
-                // コードの行 (コメント・文字列の外) では、この行だけ日本語にする / 戻す。
-                if (!_keyboardDirect && IsCodeApp(settings) && (_codeJapanese || InCode(settings)))
-                {
-                    _codeJapanese = !_codeJapanese;
-                    Log.Info(_codeJapanese ? "コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)" : "コードの行: 英数に戻す");
-                    ShowCodeMode();
-                    return true;
-                }
-                KeyboardDirect = !_keyboardDirect;
                 return true;
             }
         }
@@ -395,27 +415,14 @@ internal sealed class MeltypeEngine : IDisposable
         else composition.ShowMode(true);
     }
 
-    // 設定の文字列を、打鍵のたびに読み直さない (変わったときだけ読み直す)
-    private string _toggleShortcutsText = "";
-    private IReadOnlyList<Meltype.Input.KeyShortcut> _toggleShortcuts = [];
-
-    private IReadOnlyList<Meltype.Input.KeyShortcut> ToggleShortcuts(string text)
-    {
-        if (text != _toggleShortcutsText)
-        {
-            _toggleShortcuts = Meltype.Input.KeyShortcut.ParseList(text).ToList();
-            _toggleShortcutsText = text;
-        }
-        return _toggleShortcuts;
-    }
-
     /// <summary>
-    /// Alt を押したまま打ったキー (US 配列の Alt + ` = 半角/全角) を飲み込むと、アプリには Alt だけを押して離したように見え、
-    /// メニューバーに移ってしまう。何もしないキー (0xE8、割り当てなし) を送って、Alt の単独押しにしない。
+    /// Alt/Win を押したまま打ったキー (US 配列では Alt + ` が半角/全角) を飲み込むと、アプリには修飾キーだけを押したように見える。
+    /// 割り当てのないキー (0xE8) を送り、Alt の単独押しによるメニュー移動を防ぐ。
     /// </summary>
     private static void MaskAltRelease()
     {
-        if (IsDown(VirtualKeys.Menu)) ThreadPool.QueueUserWorkItem(_ => KeyInjector.SendKey(0xE8));
+        if (IsDown(VirtualKeys.Menu) || IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin))
+            ThreadPool.QueueUserWorkItem(_ => KeyInjector.SendKey(0xE8));
     }
 
     /// <summary>

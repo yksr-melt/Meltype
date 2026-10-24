@@ -95,10 +95,18 @@ internal sealed class SettingsForm : Form, IMessageFilter
             discard = true;
             Close();
         };
-        FormClosing += (_, _) =>
+        FormClosing += (_, e) =>
         {
             if (discard) return;
-            var next = Settings.MergeEdits(_opened, Collect(), _engine.Settings);
+            var next = CollectValues();
+            foreach (var binding in next.EffectiveToggleShortcuts)
+            {
+                if (ShortcutEditor.ValidationError(binding, next, []) is not { } error) continue;
+                MessageBox.Show(this, error, "入力モード切り替えキー", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                e.Cancel = true;
+                return;
+            }
+            next = Settings.MergeEdits(_opened, next, _engine.Settings);
             if (next.ToJson() != _engine.Settings.Clone().Normalize().ToJson()) _engine.ApplySettings(next);
         };
         defaults.Click += (_, _) =>
@@ -333,6 +341,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private Binding? CreateBinding(PropertyInfo property)
     {
         var type = property.PropertyType;
+        if (property.Name == nameof(Settings.ToggleShortcuts))
+        {
+            var editor = new ShortcutEditor(_engine, () => Collect());
+            return new Binding(property, editor,
+                s => editor.LoadBindings(s.EffectiveToggleShortcuts),
+                s => s.ToggleShortcuts = editor.CollectBindings());
+        }
         if (type == typeof(bool))
         {
             var toggle = Toggle();
@@ -791,14 +806,16 @@ internal sealed class SettingsForm : Form, IMessageFilter
         foreach (var binding in _bindings) binding.Load(settings);
     }
 
-    /// <summary>画面の内容を設定にする。画面に出していない項目 (SettingsVersion・プロファイルの一覧など) は今の値を引き継ぐ。</summary>
-    private Settings Collect()
+    /// <summary>画面の内容を設定にする。画面に出していない項目は引き継ぎ、編集中の正規化では除外ログ・通知を出さない。</summary>
+    private Settings Collect() => CollectValues().Normalize(reportShortcutExclusions: false);
+
+    private Settings CollectValues()
     {
         var settings = _draft.Clone();
         foreach (var binding in _bindings) binding.Store(settings);
         settings.SettingsShowHelp = _showHelp.Checked;
         settings.SettingsWheelChangesValue = _wheelChangesValue.Checked;
-        return settings.Normalize();
+        return settings;
     }
 
     private void RunTest()
