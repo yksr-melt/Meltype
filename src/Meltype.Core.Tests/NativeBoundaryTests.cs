@@ -41,6 +41,40 @@ internal static unsafe class NativeBoundaryTests
             }
         }
 
+        public void SetCodeInput(int enabled)
+        {
+            delegate* unmanaged<IntPtr, int, void> setCodeInput = &Exports.SetCodeInput;
+            setCodeInput(GCHandle.ToIntPtr(_handle), enabled);
+        }
+
+        public void SetCodeTerminal(int terminal)
+        {
+            delegate* unmanaged<IntPtr, int, void> setCodeTerminal = &Exports.SetCodeTerminal;
+            setCodeTerminal(GCHandle.ToIntPtr(_handle), terminal);
+        }
+
+        public int SetCodeLine(int japanese, string? before = null)
+        {
+            delegate* unmanaged<IntPtr, int, byte*, int> setCodeLine = &Exports.SetCodeLine;
+            var beforePointer = before is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(before);
+            try { return setCodeLine(GCHandle.ToIntPtr(_handle), japanese, (byte*)beforePointer); }
+            finally { Marshal.FreeCoTaskMem(beforePointer); }
+        }
+
+        public void CaretMoved(int passedVk, int control = 0)
+        {
+            delegate* unmanaged<IntPtr, int, int, void> caretMoved = &Exports.CaretMoved;
+            caretMoved(GCHandle.ToIntPtr(_handle), passedVk, control);
+        }
+
+        public int CodeEnglishAt(string? before = null)
+        {
+            delegate* unmanaged<IntPtr, byte*, int> codeEnglishAt = &Exports.CodeEnglishAt;
+            var beforePointer = before is null ? IntPtr.Zero : Marshal.StringToCoTaskMemUTF8(before);
+            try { return codeEnglishAt(GCHandle.ToIntPtr(_handle), (byte*)beforePointer); }
+            finally { Marshal.FreeCoTaskMem(beforePointer); }
+        }
+
         public void Type(string text, string? after = null)
         {
             foreach (var c in text)
@@ -64,6 +98,129 @@ internal static unsafe class NativeBoundaryTests
             Assert.Equal(0, commits[0].GetProperty("deleteBefore").GetInt32());
         }
         Assert.Equal(JsonValueKind.Null, root.GetProperty("view").ValueKind, "未確定表示を閉じる");
+    }
+
+    [Test]
+    public static void Native_CodeLineToggleControlsCompositionWithoutSurroundingText()
+    {
+        using var native = new NativeSession();
+        native.SetCodeInput(1);
+        using var direct = native.Key('k');
+        AssertPassThrough(direct, null);
+        using var newline = native.Key(0, VirtualKeys.Return);
+        AssertPassThrough(newline, null);
+
+        Assert.Equal(1, native.SetCodeLine(7), "明示的に日本語にすると、周辺文字列がなくても扱う");
+        native.Type("kyouha");
+        using var commit = native.Key(0, VirtualKeys.Return);
+        Assert.True(commit.RootElement.GetProperty("consumed").GetBoolean(), "日本語の確定を扱う");
+        Assert.Equal("きょうは", commit.RootElement.GetProperty("commits")[0].GetProperty("text").GetString());
+
+        Assert.Equal(1, native.SetCodeLine(0), "英数へ戻す操作を扱う");
+        using var english = native.Key('k');
+        AssertPassThrough(english, null);
+        Assert.Equal(0, native.SetCodeLine(0), "日本語でなければモード切り替えを扱わない");
+    }
+
+    [Test]
+    public static void Native_CodeEnglishAtUsesUtf8AndTrackedContext()
+    {
+        using var native = new NativeSession();
+        Assert.Equal(0, native.CodeEnglishAt("$ "), "コード入力でなければ英数の表示にしない");
+        Assert.Equal(0, native.SetCodeLine(1), "コード入力以外のモード切り替えを扱わない");
+        native.SetCodeInput(1);
+        Assert.Equal(1, native.CodeEnglishAt("$ "), "シェルの行は英数");
+        Assert.Equal(1, native.CodeEnglishAt(), "NULL は追跡している行を使う");
+
+        Assert.Equal(0, native.SetCodeLine(1, "│ › 日本語😊 "), "UTF-8 の AI プロンプトでは切り替えを扱わない");
+        Assert.Equal(0, native.CodeEnglishAt("│ › 日本語😊 "), "UTF-8 の AI プロンプトでは日本語");
+        Assert.Equal(0, native.CodeEnglishAt(), "UTF-8 の行も次の問い合わせに引き継ぐ");
+        Assert.Equal(0, native.SetCodeLine(1), "既に日本語の場所では切り替えを扱わない");
+        Assert.Equal(0, native.CodeEnglishAt("printf \"日本語😊"), "文字列の中は日本語");
+        Assert.Equal(1, native.CodeEnglishAt("printf \"日本語😊\""), "文字列の外は英数");
+
+        Assert.Equal(1, native.SetCodeLine(1), "コードの行だけ明示的に日本語にする");
+        Assert.Equal(0, native.CodeEnglishAt(), "明示的な日本語を表示に反映する");
+        Assert.Equal(1, native.SetCodeLine(0), "明示的に英数へ戻す");
+        Assert.Equal(1, native.CodeEnglishAt(), "英数への切り替えを表示に反映する");
+    }
+
+    [Test]
+    public static void Native_PassedNavigationClearsExplicitJapanese()
+    {
+        using var native = new NativeSession();
+        native.SetCodeInput(1);
+        foreach (var (passedVk, control) in new[]
+                 {
+                     (VirtualKeys.Tab, 0), (0x21, 0), (0x22, 0), (0x23, 0), (0x24, 0),
+                     (0x25, 0), (0x26, 0), (0x27, 0), (0x28, 0), (0x2E, 0), ('V', 7),
+                 })
+        {
+            Assert.Equal(1, native.SetCodeLine(1, "$ "));
+            native.CaretMoved('A');
+            native.CaretMoved(VirtualKeys.Return);
+            Assert.Equal(0, native.CodeEnglishAt(), "普通の入力と改行では日本語を続ける");
+            native.CaretMoved(passedVk, control);
+            Assert.Equal(1, native.CodeEnglishAt(), "アプリに通した移動操作で英数に戻す");
+        }
+    }
+
+    [Test]
+    public static void Native_TerminalJapaneseSurvivesNewlineAndOutputMovement()
+    {
+        using var native = new NativeSession();
+        native.SetCodeInput(1);
+        native.SetCodeTerminal(7);
+        Assert.Equal(1, native.SetCodeLine(1));
+        native.Type("kyouha");
+        using var commit = native.Key(0, VirtualKeys.Return);
+        Assert.Equal("きょうは", commit.RootElement.GetProperty("commits")[0].GetProperty("text").GetString());
+        using var newline = native.Key(0, VirtualKeys.Return);
+        AssertPassThrough(newline, null);
+        native.CaretMoved(VirtualKeys.Return);
+        Assert.Equal(0, native.CodeEnglishAt(), "改行しても明示的な日本語を続ける");
+        native.CaretMoved(0);
+        Assert.Equal(0, native.CodeEnglishAt(), "ターミナルの出力では明示的な日本語を解除しない");
+        native.SetCodeTerminal(1);
+        Assert.Equal(0, native.CodeEnglishAt(), "同じ入力欄の種類を再設定しても日本語を続ける");
+
+        native.CaretMoved(0x26);
+        Assert.Equal(1, native.CodeEnglishAt(), "ターミナルでも通した矢印キーで英数に戻す");
+        Assert.Equal(1, native.SetCodeLine(1));
+        native.SetCodeTerminal(0);
+        Assert.Equal(1, native.CodeEnglishAt(), "エディターへ移ったら英数に戻す");
+        Assert.Equal(1, native.SetCodeLine(1));
+        native.CaretMoved(0);
+        Assert.Equal(1, native.CodeEnglishAt(), "エディターのクリックでは英数に戻す");
+    }
+
+    [Test]
+    public static void Native_OptionalCodeExportsIgnoreMissingSessions()
+    {
+        delegate* unmanaged<IntPtr, int, byte*, int> setCodeLine = &Exports.SetCodeLine;
+        delegate* unmanaged<IntPtr, int, void> setCodeTerminal = &Exports.SetCodeTerminal;
+        delegate* unmanaged<IntPtr, int, int, void> caretMoved = &Exports.CaretMoved;
+        delegate* unmanaged<IntPtr, byte*, int> codeEnglishAt = &Exports.CodeEnglishAt;
+        var nullSession = GCHandle.Alloc(null);
+        var otherTarget = GCHandle.Alloc(new object());
+        try
+        {
+            foreach (var handle in new[] { IntPtr.Zero, GCHandle.ToIntPtr(nullSession), GCHandle.ToIntPtr(otherTarget) })
+            {
+                Assert.Equal(0, setCodeLine(handle, 1, null), "セッションがなければモード切り替えを扱わない");
+                Assert.Equal(0, setCodeLine(handle, 0, null));
+                Assert.Equal(0, codeEnglishAt(handle, null), "セッションがなければ英数の表示にしない");
+                setCodeTerminal(handle, 1);
+                setCodeTerminal(handle, 0);
+                caretMoved(handle, 0, 0);
+                caretMoved(handle, 0x26, 1);
+            }
+        }
+        finally
+        {
+            nullSession.Free();
+            otherTarget.Free();
+        }
     }
 
     [Test]
