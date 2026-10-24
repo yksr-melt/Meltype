@@ -208,6 +208,7 @@ const Help = [
   '| `/test-explain <SHA> <キー>` | PR のコードで `/explain` | メンテナー |',
   '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でなければ止める | 管理者 |',
   '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1` の形) | 管理者 |',
+  '| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる) | だれでも |',
   '| `/help` | この一覧 | だれでも |',
   '',
   'PR のコードを動かすコマンドの `<SHA>` は、中身を確かめた commit の SHA (40 桁)。PR の今の head と違えば動かしません。',
@@ -260,6 +261,19 @@ async function releaseCommand(issue, command, version) {
   ].join('\n'));
 }
 
+// /self-assign で、コメントした人を Assignees に入れる (issue #1098)。
+// 「着手します」「対応します」などだけのコメントには、/self-assign の案内を返す (言葉では割り当てない)。
+// 案内は 1 行目がその言葉だけのときに限る (「対応しますか?」「だれか対応しますか」などの質問や、文の途中の言葉には返さない)
+const isClaim = line => /^(これ[はをも]?|この\s*issue\s*[はをも]?|私が|わたしが|僕が|ぼくが|自分が)?\s*(着手|対応|担当|作業)(します|しています|してみます|させてください|させていただきます)[。.!！]*$/i.test(line.replace(/\s+$/, ''));
+
+async function selfAssign(issue, login) {
+  if (event.issue.assignees?.some(a => a.login === login)) return react('+1');
+  // 割り当てられない人 (Issue に関われない人) は、GitHub が黙って外す。入ったかどうかは返事で確かめる
+  const updated = await gh('POST', `/issues/${issue}/assignees`, { assignees: [login] });
+  if (updated.assignees?.some(a => a.login === login)) return react('+1');
+  await upsertComment(issue, `error-${event.comment.id}`, 'Assignees に入れられませんでした (GitHub の制限で、この Issue に割り当てられない人がいます)。メンテナーに頼んでください。');
+}
+
 async function parse() {
   const issue = event.issue.number;
   const isPr = Boolean(event.issue.pull_request);
@@ -305,7 +319,12 @@ async function parse() {
   }
 
   const line = (event.comment.body ?? '').split('\n')[0].trim();
-  const match = line.match(/^\/(repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|pre-release|release|help)\b\s*(.*)$/);
+  if (!isPr && event.issue.state === 'open' && event.comment.user?.type !== 'Bot' && isClaim(line)
+      && !event.issue.assignees?.some(a => a.login === event.comment.user.login)) {
+    await upsertComment(issue, 'self-assign-hint', 'この Issue の担当になるときは、`/self-assign` とだけコメントしてください。bot が Assignees に入れます。');
+    return output({ action: 'none' });
+  }
+  const match = line.match(/^\/(self-assign|repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|pre-release|release|help)\b\s*(.*)$/);
   if (!match || event.comment.user?.type === 'Bot') return output({ action: 'none' });
   const [, command, rest] = match;
   const maintainer = Maintainers.includes(event.comment.author_association);
@@ -315,6 +334,14 @@ async function parse() {
     // 権限の広い処理は parse では行わない (parse はだれのコメントでも動くので、権限は contents: read のまま)。
     // 別の job (release) に頼む。管理者かどうかの確認は release の中で、書き込みの前に行う
     return output({ action: 'none', release_command: command, release_version: rest.trim().replace(/^`|`$/g, '').replace(/^v/, '').slice(0, 40) });
+  }
+  if (command === 'self-assign') {
+    if (isPr || event.issue.state !== 'open') {
+      await upsertComment(issue, `error-${event.comment.id}`, '`/self-assign` は開いている Issue でだけ使えます。');
+      return output({ action: 'none' });
+    }
+    await selfAssign(issue, event.comment.user.login);
+    return output({ action: 'none' });
   }
   if (command === 'help') {
     await upsertComment(issue, `help-${event.comment.id}`, Help);

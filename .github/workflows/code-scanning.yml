@@ -1,0 +1,35 @@
+# CodeQL の指摘を日本語でまとめる bot (.github/bot/code-scanning.mjs)。
+#   CodeQL (codeql.yml) が Pull Request で終わったら、その Pull Request で新しく出た指摘を日本語の表にしてコメントする。
+# workflow_run は main のワークフローで動き、書き込みの権限を持つので、Pull Request のコードはチェックアウトしない
+# (main の bot のスクリプトだけを使い、Code scanning の結果は GitHub の API で読む)。
+name: code-scanning
+
+on:
+  workflow_run:
+    workflows: [codeql]
+    types: [completed]
+
+permissions: {}
+
+concurrency:
+  group: code-scanning-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
+
+jobs:
+  summary:
+    if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      security-events: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: .github/bot
+          persist-credentials: false
+      - run: node .github/bot/code-scanning.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

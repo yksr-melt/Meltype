@@ -367,5 +367,8 @@
 # Issue #706
 あおにしき 安青錦
 
+# Issue #968
+かんそうりつ 乾燥率
+
 # --- 子音の略入力 (Issue #62: 英字の読みで候補を出せる。自分の略語は %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt に同じ形式で書く) ---
 ast 明日
