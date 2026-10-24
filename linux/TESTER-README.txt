@@ -20,6 +20,7 @@ Meltype は「入力ソース」(日本語入力、IBus のエンジン・fcitx5
   5. 画面右上の入力ソースのメニュー (または Super + Space) で Meltype を選ぶ
   fcitx5 のとき (fcitx5 が入っていれば、install.sh が fcitx5 にも入れます。fcitx5 だけに入れるなら bash install.sh --fcitx5):
   3. fcitx5 の設定 (fcitx5-configtool) →「入力メソッド」で Meltype を追加する
+     (「新しい Meltype を読み込ませられませんでした」と出たら、ログアウトしてログインし直してから追加する)
   4. Ctrl + Space などで Meltype に切り替える
 
 ■ 使い方

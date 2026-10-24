@@ -127,6 +127,10 @@ fcitx5 が入っていれば、`install.sh` が fcitx5 にも入れます (fcitx
 1. fcitx5 の設定 (`fcitx5-configtool`) →「入力メソッド」で Meltype を追加する
 2. <kbd>Ctrl</kbd> + <kbd>Space</kbd> などで Meltype に切り替える
 
+動いている fcitx5 があれば、`install.sh` は Meltype を読み込ませます (入れ直したときは、新しい版に切り替えます)。
+「新しい Meltype を読み込ませられませんでした」と出たときは、案内のとおり fcitx5 を起動し直してください。
+KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ログアウトしてログインし直すのが確実です。
+
 <br>
 
 <a name="使い方"></a>
