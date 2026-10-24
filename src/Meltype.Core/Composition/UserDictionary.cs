@@ -36,13 +36,19 @@ public sealed class UserDictionary
     private readonly List<UserWord> _imported = [];
     // 同梱の語句 (dictionaries/phrases.txt)。変換エンジンが苦手な語句を補う。ユーザーの登録より後回しで、保存も表示もしない。
     private readonly List<UserWord> _builtIn = [];
+    // 同梱の語句のうち、読みの頭に ^ を付けたもの (^けんりつ)。変換エンジンの文節の頭から始まるときだけ使う。
+    private readonly HashSet<string> _headOnly = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
 
     public UserDictionary(string? path, bool builtIn = true, string? importDirectory = null)
     {
         _path = path;
-        if (builtIn) Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
+        if (builtIn)
+        {
+            Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
+            MarkHeadOnly();
+        }
         try
         {
             if (path is not null && File.Exists(path)) Parse(File.ReadAllLines(path, Encoding.UTF8), _words);
@@ -101,6 +107,23 @@ public sealed class UserDictionary
             }
         }
     }
+
+    /// <summary>
+    /// 同梱の語句の読みの頭の ^ を読む。^けんりつ は、変換エンジンの文節の頭から始まるときだけ使い、
+    /// 長い語の途中 (はっけんりつ = 発見率 の けんりつ) では使わない (AlignUserWords)。
+    /// </summary>
+    private void MarkHeadOnly()
+    {
+        for (var i = 0; i < _builtIn.Count; i++)
+        {
+            if (!_builtIn[i].Reading.StartsWith('^')) continue;
+            _builtIn[i] = _builtIn[i] with { Reading = _builtIn[i].Reading[1..] };
+            _headOnly.Add(_builtIn[i].Reading.Replace("|", ""));
+        }
+    }
+
+    /// <summary>変換エンジンの文節の頭から始まるときだけ使う同梱の語句の読みか (^けんりつ)。</summary>
+    public bool IsHeadOnly(string reading) => _headOnly.Contains(reading);
 
     /// <summary>登録内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
     public int Version { get; private set; }

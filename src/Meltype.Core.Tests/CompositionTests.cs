@@ -3417,6 +3417,23 @@ internal static class CompositionTests
         Assert.Equal("しゃーなし", k.Host.Document);
     }
 
+    [Test]
+    public static void Issue1014_Doshitano_IsNotUsedInsideALongerWord()
+    {
+        // #1072 のレビュー: 同梱の語句 ^どしたの は、変換エンジンの文節の途中 (なんどしたの = 何度したの) では使わない
+        var converter = new ClauseConverter(new()
+        {
+            ["なんどしたの"] = [new("なんどしたの", "何度したの")],
+            ["どしたの"] = [new("どしたの", "土下の")],
+        });
+        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("nanndositano ");
+        Assert.Equal("何度したの", string.Join("|", k.Host.View!.Clauses!));
+        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("dositano ");
+        Assert.Equal("どしたの", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#1014)");
+    }
+
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
     private sealed class YahoConverter : IKanjiConverter
     {
