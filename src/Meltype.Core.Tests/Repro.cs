@@ -121,6 +121,15 @@ internal static class Checks
                 results.Add(new { typed, expected, kind = "候補", actual = string.Join(" ", list.Take(12)), ok = list.Contains(expected) });
                 continue;
             }
+            if (typed.Any(c => c is >= 'ａ' and <= 'ｚ' or >= 'Ａ' and <= 'Ｚ'))
+            {
+                var text = new Composition.CompositionText(CompositionTests.Detector);
+                foreach (var ch in typed.Take(300))
+                    if (ch is not '\n' and not '\r') text.Append(ch);
+                var fwActual = text.Display(final: true);
+                results.Add(new { typed, expected, kind = "入力 (全角英字)", actual = fwActual, ok = fwActual == expected });
+                continue;
+            }
             var k = new CompositionTests.Keyboard();
             k.Type(new string(typed.Where(c => c is >= ' ' and <= '~').Take(300).ToArray()) + "\n");
             var actual = k.Host.Document;

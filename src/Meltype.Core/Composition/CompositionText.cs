@@ -89,6 +89,8 @@ public sealed class CompositionText
 
     public void Append(char c)
     {
+        // 全角英字 (ｚｈ など) は半角として扱う (Issue #197 / #338)。
+        if (c is >= 'ａ' and <= 'ｚ' or >= 'Ａ' and <= 'Ｚ') c = (char)(c - 0xFEE0);
         // 英数字の間に打った . / - はドメイン名や略語の区切り。入力直後は後続文字が分からないため、
         // 次の英数字が来た時点で句点・長音として読んだ記号を半角に戻す (tetr.io、J-core)。
         if (char.IsAsciiLetterOrDigit(c) && _units.Count >= 2 && (_units[^1].Raw is "." or "-") &&

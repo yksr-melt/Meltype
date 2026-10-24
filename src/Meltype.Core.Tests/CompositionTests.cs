@@ -4658,6 +4658,13 @@ internal static class CompositionTests
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, typed);
         }
+        foreach (var (a, b, expected) in new[] { ('ｚ', 'ｈ', "←"), ('ｚ', 'ｊ', "↓"), ('ｚ', 'ｋ', "↑"), ('ｚ', 'ｌ', "→") })
+        {
+            var text = new CompositionText(Detector);
+            text.Append(a);
+            text.Append(b);
+            Assert.Equal(expected, text.Display(final: true), $"{a}{b}");
+        }
     }
 
     [Test]
