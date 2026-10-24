@@ -176,6 +176,8 @@ public sealed partial class CompositionDetector
                     var right = raw[(end + 2)..];
                     if (_romaji.Analyze(left.ToLowerInvariant()) is { IsValid: true, Partial: "" or "n" }) continue;
                     if (_romaji.Analyze(right.ToLowerInvariant()) is { IsValid: true, Partial: "" or "n" }) continue;
+                    // 右が同じ子音 2 つで始まる (not|to|tte の tte = って) なら、っ の綴りで続く日本語 (則って) なので、英単語ではない (issue #1030)
+                    if (right.Length >= 2 && char.ToLowerInvariant(right[0]) == char.ToLowerInvariant(right[1]) && right[0] is not ('a' or 'i' or 'u' or 'e' or 'o' or 'n')) continue;
                     if (IsKnownEnglishWord(left + "to")) continue;
                     // 左が英単語でなく、to までで日本語の語 (chotto の っと) になるか、to が英単語の途中 (stories・symptom) なら助詞ではない
                     if (!IsKnownEnglishWord(left) && (EndsWithJapaneseWord(raw.ToLowerInvariant()[..(end + 2)]) || ToInsideEnglishWord(raw.ToLowerInvariant(), end))) continue;

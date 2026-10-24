@@ -107,6 +107,10 @@ internal static class Quality
         new("混在", "kyouhagoogledekensaku", "きょうはgoogleでけんさく"),
         new("混在", "tanaka@example.com", "tanaka@example.com"),
         new("混在", "yamada.taro@example.co.jp", "yamada.taro@example.co.jp"),
+        // 英単語 + と + っ で始まる続き (not|to|tte) は、っ の綴りで続く日本語 (則って: issue #1030)
+        new("日本語", "nottotte", "のっとって"),
+        new("日本語", "kanreininottotte", "かんれいにのっとって"),
+        new("混在", "cattodog", "catとdog"),
         new("混在", "foo_bar@example.com", "foo_bar@example.com"),
         new("混在", "taro+news@example.com", "taro+news@example.com"),
         new("混在", "yamada-taro@example.com", "yamada-taro@example.com"),
