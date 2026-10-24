@@ -1,0 +1,82 @@
+# コードの品質のチェック (issue #1083)。ビルドとテストは build.yml、辞書・精度・報告の再現は pr-checks.yml。
+#   フォーマット   … Pull Request で変わった .cs を dotnet format whitespace で調べる。変えた行の違反だけを失敗にする (tools/check-format.mjs)
+#   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の結果を SARIF にして、Code scanning に送る。
+#                    Code scanning は Pull Request で新しく出た警告だけを、その Pull Request の注釈に出す (前からある警告は Security タブに残る)。
+#                    警告ではマージを止めない。重要度は .editorconfig で上げる
+#   依存関係       … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
+# セキュリティの解析 (CodeQL) は codeql.yml。
+name: quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Check format of changed lines
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node tools/check-format.mjs "origin/$BASE_REF"
+
+  analyzers:
+    # Windows 版のプロジェクトは Windows でしかビルドできないので、プロジェクトごとに分ける (SARIF の category もプロジェクトごと)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { project: Meltype, os: windows-latest }
+          - { project: Meltype.Tests, os: windows-latest }
+          - { project: Meltype.Core, os: ubuntu-latest }
+          - { project: Meltype.Core.Tests, os: ubuntu-latest }
+          - { project: Meltype.Mac.Native, os: ubuntu-latest }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build with analyzers
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/sarif"
+          dotnet build "src/${{ matrix.project }}/${{ matrix.project }}.csproj" -c Release \
+            -p:AnalysisLevel=latest-recommended "-p:MeltypeSarifDir=$RUNNER_TEMP/sarif"
+      - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          sarif_file: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
+          category: roslyn-${{ matrix.project }}
+
+  dependencies:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+        with:
+          fail-on-severity: high

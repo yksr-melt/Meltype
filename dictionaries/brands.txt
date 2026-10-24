@@ -10,6 +10,7 @@
 まっくおーえす macOS
 あいおーえす iOS
 いめ IME
+めるたいぷ Meltype
 あんどろいど Android
 うぶんつ Ubuntu
 でびあん Debian

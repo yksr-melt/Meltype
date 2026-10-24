@@ -1,6 +1,6 @@
 cask "meltype" do
   version "1.3.1-pre.1"
-  sha256 "395183e79f6f979efbcf25ac0080abebc95af862cabeb29b7e111797729b7125"
+  sha256 "d04b4b96ccfd992da05245e3d6bc16c1bd84875211483e6089bb2352b2ba5732"
 
   url "https://github.com/yksr-melt/Meltype/releases/download/v1.3.1-pre.1/Meltype-#{version}-mac.zip"
   name "Meltype"
