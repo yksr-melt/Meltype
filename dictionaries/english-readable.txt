@@ -9,7 +9,7 @@ define
 defuse
 # ツール名・合成語。ローマ字としても読めるが日本語の語ではない (おぺんこで / tむx に割れないようにする)
 # discode は固有名詞でないので入れない (discoで が自然。issue #145)
-opencode tmux
+opencode claudecode tmux
 see seeyou seeyouagain seeyoulater seeyoutomorrow
 thankyou thankyouverymuch goodafternoon goodevening
 nicetomeetyou howareyou imfine iloveyou takecare
