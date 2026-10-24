@@ -39,6 +39,8 @@ jobs:
           if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
       # 表記の bot (notices.yml) の判定を確かめる (GitHub には何も書かない)
       - run: node .github/bot/notices.mjs --self-test
+      # CodeQL の指摘をまとめる bot (code-scanning.yml) のまとめ方を確かめる (GitHub には何も書かない)
+      - run: node .github/bot/code-scanning.mjs --self-test
 
   dictionaries:
     name: 辞書の形式

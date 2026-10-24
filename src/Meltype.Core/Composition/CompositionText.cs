@@ -888,6 +888,11 @@ public sealed class CompositionText
         foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
         if (pending.Length > 0) pieces.Add((_detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
 
+        return RawInPieces(pieces, start, length);
+    }
+
+    private static string? RawInPieces(List<(string Kana, string Raw)> pieces, int start, int length)
+    {
         var builder = new StringBuilder();
         var position = 0;
         foreach (var (kana, raw) in pieces)
@@ -902,6 +907,31 @@ public sealed class CompositionText
             position = end;
         }
         return builder.Length > 0 ? builder.ToString() : null;
+    }
+
+    /// <summary>
+    /// 文全体のかなを kanas の順に区切ったときの、各区切りに対応する打った英字。区切りは <see cref="RawForReading"/> と同じく 1 音の途中に入ると null。
+    /// かな入力のときと、kanas をつないだものが文全体のかな (<see cref="KanaForSegment"/> を全区間つないだもの) と一致しないときは、すべて null を返す。
+    /// 変換中に文節の区切りを動かしたあとで、文節ごとの打った英字を取り直すのに使う。
+    /// </summary>
+    public IReadOnlyList<string?> RawForKanas(IReadOnlyList<string> kanas)
+    {
+        var none = new string?[kanas.Count];
+        if (KanaInput) return none;
+        var units = UnitsInRawRange(_units, 0, Raw.Length, out var pending);
+        var pieces = new List<(string Kana, string Raw)>();
+        foreach (var unit in units) pieces.Add((unit.Kana, unit.Raw));
+        if (pending.Length > 0) pieces.Add((_detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final: true), pending));
+        if (string.Concat(pieces.Select(piece => piece.Kana)) != string.Concat(kanas)) return none;
+
+        var raws = new string?[kanas.Count];
+        var start = 0;
+        for (var i = 0; i < kanas.Count; i++)
+        {
+            raws[i] = RawInPieces(pieces, start, kanas[i].Length);
+            start += kanas[i].Length;
+        }
+        return raws;
     }
 
     /// <summary>

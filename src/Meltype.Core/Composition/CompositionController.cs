@@ -397,6 +397,9 @@ public sealed class CompositionController
     /// <summary>選択範囲を置換した。入力先の行を読み直すための通知。</summary>
     public event Action? ReconversionCommitted;
 
+    /// <summary>登録キーの処理を入力順に行うため、UI スレッドへ対象のウィンドウを通知する。</summary>
+    public event Action<nint>? ToggleModeRequested;
+
     /// <summary>キューにたまった入力をすべて処理する。UI スレッドで呼ぶ。</summary>
     public void Pump()
     {
@@ -406,6 +409,7 @@ public sealed class CompositionController
             {
                 if (input.Key is { } key) HandleKey(key);
                 else if (input.Mouse is { } mouse) HandleMouse(mouse);
+                else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
             }
             UpdateView();
             if (IsComposing) return;
@@ -473,6 +477,20 @@ public sealed class CompositionController
         if (index < 0 || index >= predictions.Count) return;
         CommitPrediction(predictions[index]);
         UpdateView();
+    }
+
+    /// <summary>未確定文字を確定せず日本語／英字へ切り替える。未確定入力がなければ false。</summary>
+    public bool TogglePendingInput()
+    {
+        // 英数状態の自動判定中の文字はすでにアプリへ渡しているので、未確定文字には含めない。
+        if (_text.IsEmpty)
+        {
+            AbandonDirectHold();
+            return false;
+        }
+        SetMode(_text.IsAlphanumeric ? DisplayMode.Hiragana : DisplayMode.HalfWidthAlphanumeric);
+        UpdateView();
+        return true;
     }
 
     /// <summary>無効化・フォーカス喪失などで、未確定の内容をそのまま確定する。</summary>
@@ -849,7 +867,7 @@ public sealed class CompositionController
 
         if (VirtualKeys.IsHankakuZenkaku(vk))
         {
-            SetMode(_text.IsAlphanumeric ? DisplayMode.Hiragana : DisplayMode.HalfWidthAlphanumeric);
+            TogglePendingInput();
             return;
         }
 
@@ -1330,7 +1348,8 @@ public sealed class CompositionController
                 Commit();
                 return true;
             case VirtualKeys.F6 or VirtualKeys.F7 or VirtualKeys.F8 or VirtualKeys.F9 or VirtualKeys.F10
-                when _options.FunctionKeysAffectSelectedClause() && _clauses.Count > 1 && ApplyFunctionKeyToClause(vk):
+                when _options.FunctionKeysAffectSelectedClause() && _clauses.Count > 1:
+                ApplyFunctionKeyToClause(vk);
                 return true;
             case VirtualKeys.Tab when FindMisspelling() is { } typo:
                 // もしかして: 書き間違いを直して変換し直す。
@@ -1443,21 +1462,23 @@ public sealed class CompositionController
 
     /// <summary>
     /// 設定「変換中の F6〜F10 は選んだ文節だけに効かせる」: 選んでいる文節だけを、ひらがな / カタカナ / 半角カタカナ / 全角英数 / 半角英数にする。
-    /// 英語の文節や、打った英字が分からない文節の F9 / F10 は何もしない (false を返し、今までどおり全体に効かせる)。issue #678
+    /// 英語の文節は、打った英字 (Reading) を英数に、ローマ字として読んだかな (Kana) をかなにする。
+    /// 打った英字や読みが分からない文節 (かな入力、1 音の途中で区切れた文節) では、文全体に効かせずに何もしない。issue #678
     /// </summary>
-    private bool ApplyFunctionKeyToClause(int vk)
+    private void ApplyFunctionKeyToClause(int vk)
     {
         var clause = _clauses[_selectedClause];
-        if (clause.IsEnglish) return false;
+        var reading = clause.IsEnglish ? clause.Kana : clause.Reading;
+        var raw = clause.IsEnglish ? clause.Reading : clause.Raw;
         var text = vk switch
         {
-            VirtualKeys.F6 => clause.Reading,
-            VirtualKeys.F7 => CompositionText.ToKatakana(clause.Reading),
-            VirtualKeys.F8 => CompositionText.ToHalfWidthKatakana(CompositionText.ToKatakana(clause.Reading)),
-            VirtualKeys.F9 => clause.Raw is { } full ? CompositionText.ToFullWidth(full) : null,
-            _ => clause.Raw,
+            VirtualKeys.F6 => reading,
+            VirtualKeys.F7 => reading is null ? null : CompositionText.ToKatakana(reading),
+            VirtualKeys.F8 => reading is null ? null : CompositionText.ToHalfWidthKatakana(CompositionText.ToKatakana(reading)),
+            VirtualKeys.F9 => raw is null ? null : CompositionText.ToFullWidth(raw),
+            _ => raw,
         };
-        if (text is null) return false;
+        if (text is null) return;
         var index = clause.Candidates.IndexOf(text);
         if (index < 0)
         {
@@ -1465,7 +1486,6 @@ public sealed class CompositionController
             index = clause.Candidates.Count - 1;
         }
         clause.Index = index;
-        return true;
     }
 
     /// <summary>
@@ -2411,6 +2431,22 @@ public sealed class CompositionController
             Reconvert(next);
         }
         Reconvert(current);
+        RestoreRaw();
+    }
+
+    /// <summary>
+    /// 文節の区切りを動かすと Reconvert が Raw を消すので、文節ごとの打った英字を取り直す (F9 / F10 が選んだ文節だけに効くのに要る)。
+    /// 英語の文節は Kana (打った英字をローマ字として読んだかな) の長さ分、日本語の文節は Reading の長さ分を、文全体のかなの上で数える。
+    /// 英語の文節に Kana が無い (保護区間など) ときは位置が決まらないので、取り直さない。
+    /// </summary>
+    private void RestoreRaw()
+    {
+        if (_clauses.Any(c => c.IsEnglish && c.Kana is null)) return;
+        var raws = _text.RawForKanas([.. _clauses.Select(c => c.IsEnglish ? c.Kana! : c.Reading)]);
+        for (var i = 0; i < _clauses.Count; i++)
+        {
+            if (!_clauses[i].IsEnglish) _clauses[i].Raw = raws[i];
+        }
     }
 
     /// <summary>英語の文節を、打ったローマ字のかなを読みにした日本語の文節に置き換える。かなに読めない英字だけ (xyz) なら置き換えずに false。</summary>
@@ -3046,14 +3082,6 @@ public sealed class CompositionController
         _ => null,
     };
 
-    private static readonly Dictionary<string, int> BindableKeys = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ["F6"] = VirtualKeys.F6, ["F7"] = VirtualKeys.F7, ["F8"] = VirtualKeys.F8, ["F9"] = VirtualKeys.F9, ["F10"] = VirtualKeys.F10,
-        ["Left"] = VirtualKeys.Left, ["Right"] = VirtualKeys.Right, ["Up"] = VirtualKeys.Up, ["Down"] = VirtualKeys.Down,
-        ["Home"] = 0x24, ["End"] = 0x23, ["Delete"] = 0x2E, ["Back"] = VirtualKeys.Back, ["Enter"] = VirtualKeys.Return,
-        ["Esc"] = VirtualKeys.Escape, ["Tab"] = VirtualKeys.Tab,
-    };
-
     private string? _boundKeysText;
     private Dictionary<int, int> _boundKeys = [];
 
@@ -3065,13 +3093,7 @@ public sealed class CompositionController
         if (!ReferenceEquals(text, _boundKeysText) && text != _boundKeysText)
         {
             _boundKeysText = text;
-            _boundKeys = [];
-            foreach (var part in text.Split([';', ',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-            {
-                var pair = part.Split('=', 2, StringSplitOptions.TrimEntries);
-                if (pair.Length == 2 && pair[0].Length == 1 && char.IsAsciiLetter(pair[0][0]) && BindableKeys.TryGetValue(pair[1], out var target))
-                    _boundKeys[char.ToUpperInvariant(pair[0][0])] = target;
-            }
+            _boundKeys = ControlKeyBindingParser.Parse(text);
         }
         return _boundKeys.TryGetValue(vk, out var key) ? key : null;
     }
