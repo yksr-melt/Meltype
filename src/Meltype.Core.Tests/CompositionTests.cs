@@ -3417,6 +3417,25 @@ internal static class CompositionTests
         Assert.Equal("しゃーなし", k.Host.Document);
     }
 
+    [Test]
+    public static void Issue1004_Kenritsu_IsNotUsedInsideALongerWord()
+    {
+        // #1072 のレビュー: 同梱の語句 ^けんりつ は、変換エンジンの文節の途中 (はっけんりつ = 発見率) では使わない
+        var converter = new ClauseConverter(new()
+        {
+            ["はっけんりつ"] = [new("はっけんりつ", "発見率")],
+            ["けんりつ"] = [new("けんりつ", "県率")],
+            ["あいちけんりつ"] = [new("あいち", "愛知"), new("けんりつ", "県率")],
+            ["あいち"] = [new("あいち", "愛知")],
+        });
+        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("hakkenritu ");
+        Assert.Equal("発見率", string.Join("|", k.Host.View!.Clauses!));
+        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("aitikenritu ");
+        Assert.Equal("愛知|県立", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#1004)");
+    }
+
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
     private sealed class YahoConverter : IKanjiConverter
     {
