@@ -79,6 +79,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <summary>使えるか。何度も失敗したら諦める (毎回起動し直して入力が遅くなるのを避ける)。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3;
 
+    /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
+    public bool GaveUp => _failures >= 3;
+
+    /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
+    public bool HasAnswered { get; private set; }
+
     /// <summary>サーバーの起動をバックグラウンドで始める (入力を始める前に呼ぶ)。</summary>
     public void WarmUp()
     {
@@ -111,7 +117,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         {
             if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
             if (answer is null && !slow) _failures++;
-            else if (answer is not null) _failures = 0;
+            else if (answer is not null) { _failures = 0; HasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;
