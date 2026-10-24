@@ -33,6 +33,13 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
 
+IME の ON/OFF が変わると、DLL の `OnChange` が `indicator` 要求を送り、常駐側の `ModeIndicatorWindow` で入力位置の近くに「あ / A」を 1.2 秒表示します。
+Terminal・コードの行では IME を開いたまま英数と日本語を切り替えるため、`ToggleInputMode` の最終的なモードでも通知します。切り替え途中の開閉通知は表示せず、1 回の操作で最終モードを 1 回表示します。
+キーボード方式と表示設定・色を共用します。通知には入力スレッドの ID を付け、表示時に別の入力先へ移っていたら表示しません。
+表示要求は入力セッションを作らず、応答待ちは最大 100ms (補助要求) です。表示位置は TSF の選択範囲の `GetTextExt` を優先し、取得できなければ常駐側でキャレットを探します。それも取得できない場合はマウス位置へ戻し、Terminal の入力欄の左上を入力位置と推測しません。
+
+DLL を更新した後の確認では、入力先アプリのプロセスを終了して起動し直します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い DLL が残ることがあります。
+
 `--tip-e2e` の制約: Windows は、人のキーボード操作がしばらく無い状態だと、プログラムが送り込んだキー (SendInput) も、TSF のキー処理を直接呼んだキー (ITfKeystrokeMgr) も、IME に渡さない。
 このときは TSF の状態がすべて正常なのに、IME のキー処理が呼ばれず、英字のまま入る。人が操作している間に流すと通る。
 IME を変えたときは、このテストに加えて、メモ帳などで実際に打って確かめる。

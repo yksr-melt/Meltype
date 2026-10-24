@@ -558,6 +558,8 @@ internal sealed class MeltypeEngine : IDisposable
     /// </summary>
     private void ShowModeOnFocus()
     {
+        // IME 版は TSF の開閉通知で表示する。キーボード方式の論理モードを表示しない。
+        if (_settings.Mode != InputMode.Keyboard) return;
         if (_composition is not { } composition) return;
         if (_keyboardDirect || !IsCodeApp(_settings))
         {

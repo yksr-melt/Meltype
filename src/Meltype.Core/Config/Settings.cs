@@ -406,11 +406,11 @@ public sealed class Settings
     public bool SlashAsMiddleDot { get; set; }
 
     [Category("1. 全般"), DisplayName("入力モードをカーソルの近くに表示"),
-     Description("入力欄をクリックしたときと 半角/全角 を押したときに、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
+     Description("Meltype IME の ON/OFF を切り替えたときに、カーソルの近くに「あ」(日本語) か「A」(英数) を1.2秒表示します。Meltype キーボードでは 半角/全角 を押したときと、設定に応じて入力欄をクリックしたときにも表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
     public bool ShowModeIndicator { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("入力欄に入ったときも入力モードを表示"),
-     Description("「入力モードをカーソルの近くに表示」が ON のとき、入力欄をクリックしたとき (フォーカスが入ったとき) にも「あ」「A」を出します。OFF にすると、半角/全角 を押したときだけ出します。")]
+     Description("Meltype キーボードで「入力モードをカーソルの近くに表示」が ON のとき、入力欄をクリックしたとき (フォーカスが入ったとき) にも「あ」「A」を出します。OFF にすると、モードを切り替えたときだけ出します。")]
     public bool ShowModeIndicatorOnFocus { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("入力モードの表示の色: 日本語 (あ)"),

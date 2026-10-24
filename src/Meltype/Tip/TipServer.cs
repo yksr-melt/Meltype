@@ -23,6 +23,7 @@ namespace Meltype.Tip;
 ///   {"op":"commit","sid":"…","moved":true} / {"op":"select","sid":"…","index":2,"prediction":true} / {"op":"close","sid":"…"} / {"op":"hello","process":"…"}
 ///   {"op":"toggle","sid":"…","process":"…","before":"…","japanese":true} (半角/全角。consumed が true なら、コードの行を日本語にした / 英数に戻した)
 ///   {"op":"mode","sid":"…","process":"…","before":"…","passed":37,"ctrl":true} (キャレットが動いた・文字が変わった。入力モードの表示を合わせる)
+///   {"op":"indicator","process":"…","thread":123,"japanese":true,"x":100,"y":200} (入力モードが変わった。「あ / A」を一瞬表示する。x/y は省略可)
 /// select の prediction は、予測変換の候補を選んだこと (付けなければ変換の候補)。
 /// key の code は、DLL が toggle・mode を送ること (付けない古い DLL では、コードの入力欄として扱わない)。
 /// key の private は、入力を覚えないように求める入力欄 (InputScope が IS_PRIVATE) であること。次の key まで学習しない。
@@ -401,7 +402,7 @@ internal sealed class TipServer : IDisposable
         }
         catch (JsonException) { }
         // op はアプリの側が送ってくるので、知っているものだけを書く (ログを崩さないように)
-        var shown = op is "hello" or "key" or "commit" or "select" or "close" or "toggle" or "mode" ? op : "?";
+        var shown = op is "hello" or "key" or "commit" or "select" or "close" or "toggle" or "mode" or "indicator" ? op : "?";
         Log.Warn($"Meltype IME: 要求 ({shown}) の応答に {elapsedMs}ms かかりました。");
     }
 
@@ -507,6 +508,13 @@ internal sealed class TipServer : IDisposable
         var sid = root.TryGetProperty("sid", out var s) ? s.GetString() ?? "" : "";
         switch (op)
         {
+            case "indicator":
+                // 入力セッションを作らずに表示だけを依頼する。表示時に入力先を再確認する。
+                if (ActiveFor(String(root, "process")) &&
+                    root.TryGetProperty("thread", out var thread) && thread.ValueKind == JsonValueKind.Number && thread.TryGetUInt32(out var inputThread) && inputThread != 0 &&
+                    root.TryGetProperty("japanese", out var japanese) && japanese.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                    _composition.ShowMode(japanese.ValueKind == JsonValueKind.True, inputThread, IndicatorAnchor(root));
+                return Inactive;
             case "hello":
             {
                 var process = String(root, "process") ?? "?";
@@ -608,6 +616,11 @@ internal sealed class TipServer : IDisposable
             : process + ".exe";
         return settings.DirectModeAutoDetect && settings.ForApp(processName).DetectionLevel != DetectionLevel.Manual;
     }
+
+    internal static Point? IndicatorAnchor(JsonElement root) =>
+        root.TryGetProperty("x", out var x) && x.ValueKind == JsonValueKind.Number && x.TryGetInt32(out var left) &&
+        root.TryGetProperty("y", out var y) && y.ValueKind == JsonValueKind.Number && y.TryGetInt32(out var bottom)
+            ? new Point(left, bottom) : null;
 
     /// <summary>
     /// 設定「スペースを全角で入力」(issue #259)。DLL は、これが ON で日本語入力のときに、何も打っていなくても Space を受け取って

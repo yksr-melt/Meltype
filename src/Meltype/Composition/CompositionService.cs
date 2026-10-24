@@ -628,17 +628,27 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// 入力モード (日本語なら「あ」、英数なら「A」) をカーソルの近くに一瞬出す。どのスレッドから呼んでもよい。
     /// 変換ボックスが出ているときは出さない。
     /// </summary>
-    public void ShowMode(bool japanese)
+    public void ShowMode(bool japanese, uint inputThread = 0, Point? inputAnchor = null)
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
         _invoker.BeginInvoke(() => Safely(() =>
         {
             if (!_showIndicator() || _window.Visible) return;
-            var anchor = FindAnchor();
+            // TSF の通知が届くまでに別の入力先へ移っていたら表示しない。
+            if (inputThread != 0 && IME.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
+            var anchor = inputAnchor ?? (inputThread == 0 ? FindAnchor() : FindImeIndicatorAnchor());
             var (jp, direct, text) = _indicatorColors();
             _indicator.SetColors(Config.Settings.ParseColor(jp), Config.Settings.ParseColor(direct), Config.Settings.ParseColor(text));
             _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2));
         }));
+    }
+
+    private Point FindImeIndicatorAnchor()
+    {
+        if (FindCaret() is { } caret) return new Point(caret.Left, caret.Bottom + 4);
+        // 空の入力欄とは限らないため、入力欄の左上をキャレット位置と推測しない。
+        Native.GetCursorPos(out var cursor);
+        return new Point(cursor.X + 12, cursor.Y + 20);
     }
 
     public bool IsShiftDown() => (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;

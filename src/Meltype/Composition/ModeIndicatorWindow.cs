@@ -7,6 +7,7 @@ namespace Meltype.Composition;
 /// 入力モード (あ / A) をカーソルの近くに一瞬だけ出す小さなウィンドウ。フォーカスを奪わない。
 /// Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になる。
 /// 今どちらで入力されるかは、入力欄に入ったときと 半角/全角 を押したときにこれで知らせる。
+/// Meltype IME では TSF の ON/OFF が変わったときに同じ表示を使う。
 /// </summary>
 internal sealed class ModeIndicatorWindow : PopupForm
 {
