@@ -1122,6 +1122,7 @@ public sealed partial class CompositionDetector
         while (i < units.Count && IsDigit(units[i])) i++;
         var digitLen = Raw(units, digitStart, i).Length;
         if (digitLen is < 1 or > 2) return -1;
+        var digitEnd = i;
         var pendingLetters = i == units.Count && pending.Length > 0 && pending.All(char.IsAsciiLetter) ? pending : "";
         if (i < units.Count && IsLetter(units[i]))
         {
@@ -1135,7 +1136,14 @@ public sealed partial class CompositionDetector
         }
         else if (pendingLetters.Length is < 1 or > 3) return -1;
         var word = Raw(units, start, i) + pendingLetters;
-        return word.Length is >= 3 and <= 6 ? i : -1;
+        if (word.Length is < 3 or > 6) return -1;
+        // 数字の前と後ろが、どちらもかなとして最後まで読める (huuso|ku|6|me|-toru の ku と me) なら、
+        // 略語 (i18n の n、k8s の s、h2o の h) ではなく、数字を挟んだ日本語 (風速6メートル: issue #1017)。
+        var head = Raw(units, start, digitStart).ToLowerInvariant();
+        var tail = (Raw(units, digitEnd, i) + pendingLetters).ToLowerInvariant();
+        if (tail.Length > 0 && _romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } &&
+            _romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" }) return -1;
+        return i;
     }
 
     /// <summary>

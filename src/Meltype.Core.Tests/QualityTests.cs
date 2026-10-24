@@ -107,6 +107,11 @@ internal static class Quality
         new("混在", "kyouhagoogledekensaku", "きょうはgoogleでけんさく"),
         new("混在", "tanaka@example.com", "tanaka@example.com"),
         new("混在", "yamada.taro@example.co.jp", "yamada.taro@example.co.jp"),
+        // 数字の前後がかなとして読める (huuso|ku|6|me) のは、略語 (i18n) ではなく数字を挟んだ日本語 (issue #1017)
+        new("日本語", "huusoku6me-toru", "ふうそく6めーとる"),
+        new("混在", "i18n", "i18n"),
+        new("混在", "k8s", "k8s"),
+        new("混在", "h2o", "h2o"),
         new("混在", "foo_bar@example.com", "foo_bar@example.com"),
         new("混在", "taro+news@example.com", "taro+news@example.com"),
         new("混在", "yamada-taro@example.com", "yamada-taro@example.com"),
