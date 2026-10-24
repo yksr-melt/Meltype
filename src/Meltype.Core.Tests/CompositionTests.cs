@@ -2360,6 +2360,9 @@ internal static class CompositionTests
         Assert.True(list[2].Matches(0x79, false, false, true, false), "Shift+F10");
         Assert.True(list[3].Matches(0x1D, false, false, false, false), "Muhenkan");
         Assert.Equal(0, KeyShortcut.ParseList("").Count, "空");
+        // #955: CapsLock・JIS の 英数 キーも書ける
+        Assert.True(KeyShortcut.TryParse("Shift+CapsLock", out var caps) && caps.Matches(0x14, false, false, true, false), "Shift+CapsLock");
+        Assert.True(KeyShortcut.TryParse("Eisu", out var eisu) && eisu.Matches(0xF0, false, false, false, false), "Eisu");
         Assert.True(!KeyShortcut.TryParse("Ctrl+", out _) && !KeyShortcut.TryParse("A+B", out _), "キーが無い・2 つ");
     }
 
