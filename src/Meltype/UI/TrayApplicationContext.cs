@@ -74,6 +74,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
+            SpaceAroundNumbers = () => _engine.Settings.SpaceAroundNumbers,
             ShiftSpaceHalfWidth = () => _engine.Settings.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,

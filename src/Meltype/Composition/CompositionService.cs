@@ -81,6 +81,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             CorrectTypos = options.CorrectTypos,
             SlashAsMiddleDot = options.SlashAsMiddleDot,
             SpaceAroundEnglish = options.SpaceAroundEnglish,
+            SpaceAroundNumbers = options.SpaceAroundNumbers,
             ShiftSpaceHalfWidth = options.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = options.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = options.AlphanumericKeyStartsAsTyped,

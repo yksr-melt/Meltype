@@ -228,6 +228,10 @@ public sealed class Settings
      Description("確定するときに、日本語と英単語の間に半角スペースを入れます (今日はGitHubにpushした → 今日は GitHub に push した)。数字だけの語 (3時) には入れません。")]
     public bool SpaceAroundEnglish { get; set; }
 
+    [Category("1. 全般"), DisplayName("半角数字の前後に半角スペース"),
+     Description("確定するときに、日本語と半角数字の間に半角スペースを入れます (この処理を3回実行します → この処理を 3 回実行します)。技術文書などの表記に合わせるとき用です。全角数字 (３回) には入れません。")]
+    public bool SpaceAroundNumbers { get; set; }
+
     [Category("1. 全般"), DisplayName("Shift + Space で半角スペース"),
      Description("日本語入力のときの Shift + Space を、全角スペースではなく半角スペースにします (プログラミングの癖で Shift + Space を半角スペースに使う人向け)。")]
     public bool ShiftSpaceHalfWidth { get; set; }

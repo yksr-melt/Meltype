@@ -240,6 +240,7 @@ public sealed class MeltypeSession
             CorrectTypos = () => settings.CorrectTypos,
             SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
+            SpaceAroundNumbers = () => settings.SpaceAroundNumbers,
             ShiftSpaceHalfWidth = () => settings.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = () => settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => settings.AlphanumericKeyStartsAsTyped,

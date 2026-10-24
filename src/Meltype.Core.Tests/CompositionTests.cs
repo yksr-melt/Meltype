@@ -4407,6 +4407,26 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue958_SpaceAroundNumbers()
+    {
+        // #958: 設定「半角数字の前後に半角スペース」。英単語の設定とは別に切り替える
+        foreach (var (text, before, after, english, expected) in new (string, string?, string?, bool, string)[]
+        {
+            ("この処理を3回実行します", null, null, false, "この処理を 3 回実行します"),
+            ("ファイルを5個選択します", null, null, false, "ファイルを 5 個選択します"),
+            ("3,000円です", null, null, false, "3,000 円です"),
+            ("３回", null, null, false, "３回"),                         // 全角数字には入れない
+            ("GitHubに3回push", null, null, false, "GitHubに 3 回push"), // 英単語の設定が OFF なら英単語には入れない
+            ("GitHubに3回push", null, null, true, "GitHub に 3 回 push"),
+            ("回", "3", null, false, " 回"),                             // 前に確定した数字に続ける
+            ("3", "今日は", "回", false, " 3 "),
+        })
+        {
+            Assert.Equal(expected, CompositionController.AddSpacesAroundEnglish(text, before, after, english, numbers: true), text);
+        }
+    }
+
+    [Test]
     public static void SpaceAroundEnglish_WhenTypingInTheCompositionBox()
     {
         // #248: 英数を使わず、変換ボックスの中で英語と日本語を判定して打っても、設定「英単語の前後に半角スペース」が効く

@@ -212,6 +212,9 @@ public sealed record CompositionOptions
 
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
+
+    /// <summary>確定するときに、日本語と半角数字の間に半角スペースを入れるか (設定。issue #958)。</summary>
+    public Func<bool> SpaceAroundNumbers { get; init; } = () => false;
     public Func<bool> ShiftSpaceHalfWidth { get; init; } = () => false;
     public Func<bool> EnterCommitsAsShown { get; init; } = () => false;
     public Func<bool> AlphanumericKeyStartsAsTyped { get; init; } = () => false;
@@ -2853,7 +2856,8 @@ public sealed class CompositionController
         if (text.Length == 0) return;
         if (formatEnglish && !preserveText) text = EnglishPhraseSpacing.Format(text);
         var corrected = CorrectPreviousCommit(raw, english);
-        if (!preserveText && _options.SpaceAroundEnglish()) text = AddSpacesAroundEnglish(text, corrected ?? _precedingText, _followingText);
+        if (!preserveText && (_options.SpaceAroundEnglish() || _options.SpaceAroundNumbers()))
+            text = AddSpacesAroundEnglish(text, corrected ?? _precedingText, _followingText, _options.SpaceAroundEnglish(), _options.SpaceAroundNumbers());
         // 英語とも日本語とも読める語を、文脈を決めずに (選び直さずに) 確定したときだけ、後で確定し直せるようにしておく。
         if (!chosen && _detector.IsAmbiguousWord(raw))
         {
@@ -2886,16 +2890,18 @@ public sealed class CompositionController
     /// 日本語 (かな・漢字) と英単語の間に半角スペースを入れる (今日はGitHubにpush → 今日は GitHub に push)。
     /// 英字を 1 つ以上含む英数字の並び (iPhone15、C++) を英単語とみなす。数字だけ (3時) と記号 (、。「」) の隣には入れない。
     /// 確定する文字列の端は、入力欄のキャレットの前後の文字 (before・after) との間も見る。
+    /// english が false なら英単語には入れない。numbers が true なら、半角数字だけの並び (3回・3,000円 の 3 と 000) の前後にも入れる (issue #958)。
     /// </summary>
-    internal static string AddSpacesAroundEnglish(string text, string? before, string? after)
+    internal static string AddSpacesAroundEnglish(string text, string? before, string? after, bool english = true, bool numbers = false)
     {
         static bool IsJapanese(char c) => c is (>= '\u3040' and <= '\u30FF') or (>= '\u3400' and <= '\u4DBF') or (>= '\u4E00' and <= '\u9FFF') or (>= '\uF900' and <= '\uFAFF');
         static bool IsWordChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '-' or '+' or '#' or '.' or '\'' or '@';
         var previous = string.IsNullOrEmpty(before) ? '\0' : before[^1];
         var next = string.IsNullOrEmpty(after) ? '\0' : after[0];
         var builder = new StringBuilder(text.Length + 8);
-        // 前に確定した英単語のすぐ後ろに日本語を続けるとき (GitHub|に)
-        if (IsJapanese(text[0]) && char.IsAsciiLetter(previous)) builder.Append(' ');
+        bool Spaced(char c) => english && char.IsAsciiLetter(c) || numbers && char.IsAsciiDigit(c);
+        // 前に確定した英単語 (数字) のすぐ後ろに日本語を続けるとき (GitHub|に、3|回)
+        if (IsJapanese(text[0]) && Spaced(previous)) builder.Append(' ');
         var i = 0;
         while (i < text.Length)
         {
@@ -2913,15 +2919,15 @@ public sealed class CompositionController
             var word = text[start..stop];
             var left = start > 0 ? text[start - 1] : previous;
             var right = stop < text.Length ? text[stop] : next;
-            var isWord = word.Any(char.IsAsciiLetter);
+            var isWord = word.Any(char.IsAsciiLetter) ? english : numbers && word.Any(char.IsAsciiDigit);
             if (isWord && IsJapanese(left) && (builder.Length == 0 || builder[^1] != ' ')) builder.Append(' ');
             builder.Append(word);
             if (isWord && IsJapanese(right)) builder.Append(' ');
             builder.Append(text, stop, end - stop);
             i = end;
         }
-        // 確定した日本語のすぐ後ろが英単語のとき (キャレットの後ろの文字)
-        if (IsJapanese(text[^1]) && char.IsAsciiLetter(next)) builder.Append(' ');
+        // 確定した日本語のすぐ後ろが英単語 (数字) のとき (キャレットの後ろの文字)
+        if (IsJapanese(text[^1]) && Spaced(next)) builder.Append(' ');
         return builder.ToString();
     }
 
