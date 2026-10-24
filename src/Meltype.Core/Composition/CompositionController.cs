@@ -30,7 +30,12 @@ public sealed record CompositionView(
     /// 「表示中の preedit」をそのまま確定するので、表示と確定が違うと文書と本体の認識がずれる
     /// (「かn」を表示したまま確定すると、本体は「かん」で確定していて食い違う)。
     /// </summary>
-    string? Committed = null);
+    string? Committed = null,
+    /// <summary>
+    /// 入力内容に応じた操作の案内 (手動の英字提案・予測候補の選択)。固定の操作一覧は含めない。
+    /// 書き間違いの修正は Suggestion に入れる。案内が無ければ null。
+    /// </summary>
+    string? ContextHint = null);
 
 /// <summary>CompositionController が外界とやり取りする口。テストでは偽物に差し替える。</summary>
 public interface ICompositionHost
@@ -2951,18 +2956,25 @@ public sealed class CompositionController
         else
         {
             var hint = _text.IsAlphanumeric ? "Enter 確定　Space 確定+空白　Shift+Space 日本語で変換　半角/全角 日本語に" : (_options.TabConversion() ? "Space/Tab 変換" : "Space 変換") + "　←→ 文節　Enter 確定　F7 カタカナ　F10 英字";
-            if (_text.Suggestion() is { } suggestion) hint = $"Tab → {suggestion} (英字に)　" + hint;
+            var suggestion = _text.Suggestion();
+            var contextHint = suggestion is null ? null : $"Tab → {suggestion} (英字に)";
+            if (contextHint is not null) hint = contextHint + "　" + hint;
             var preview = PreviewCandidates();
             var misspelling = MisspellingSuggestion();
-            UpdatePredictions(blocked: misspelling is not null || _text.Suggestion() is not null);
-            if (_predictions.Count > 0) hint = "Tab 予測の候補を選ぶ　" + hint;
+            // 手動の英字提案・訂正提案がある間は予測を出さないため、contextHint の両方の案内は同時に出ない。
+            UpdatePredictions(blocked: misspelling is not null || suggestion is not null);
+            if (_predictions.Count > 0)
+            {
+                contextHint = "Tab 予測の候補を選ぶ";
+                hint = contextHint + "　" + hint;
+            }
             var selected = _predictionIndex >= 0 ? _predictions[_predictionIndex] : null;
             var display = selected ?? CurrentDisplay(final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             if (preview is null && selected is null && misspelling is null) preview = TypingCandidates();
             _host.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
                 Predictions: _predictions.Count > 0 ? _predictions : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
-                Committed: selected ?? CurrentDisplay(final: true)));
+                Committed: selected ?? CurrentDisplay(final: true), ContextHint: contextHint));
         }
     }
 

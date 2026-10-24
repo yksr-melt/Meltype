@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Input;
@@ -336,14 +337,24 @@ internal static class SessionFacadeTests
             new CompositionOptions { Predictor = new Predictor(null, null, null), Predictions = () => true }, () => new Settings());
         var typing = Type(session, "decis", "I made ")[^1];
         Assert.True(typing.View?.Predictions?.Contains("decision") == true, string.Join(",", typing.View?.Predictions ?? []));
+        Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "予測の選択案内は固定の操作一覧と分けて返す");
+        Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "従来の予測の案内は変えない");
+        Assert.True(typing.View.Suggestion is null, "予測の案内は書き間違いの修正ではない");
         Assert.True(typing.ToJson().Contains("\"predictions\":[\"") && typing.ToJson().Contains("\"selectedPrediction\":-1"), typing.ToJson());
         var tab = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false, "I made ");
         Assert.True(tab.Consumed, "Tab は予測の候補を選ぶのに使う");
         Assert.Equal(0, tab.View?.SelectedPrediction);
-        Assert.Equal(typing.View!.Predictions![0], tab.View?.Text);
+        Assert.Equal(typing.View.Predictions![0], tab.View?.Text);
+        Assert.Equal("Tab 予測の候補を選ぶ", tab.View?.ContextHint, "候補を選んでいる間も選択案内を残す");
         Assert.True(tab.ToJson().Contains("\"selectedPrediction\":0"), tab.ToJson());
         var back = session.HandleKey(VirtualKeys.Tab, null, true, false, false, false, "I made ");
         Assert.Equal(-1, back.View?.SelectedPrediction, "Shift+Tab で前に戻る (最初の前は選ばない状態)");
+        var kana = session.HandleKey(VirtualKeys.F6, null, false, false, false, false).View!;
+        Assert.True(kana.ContextHint is null, "予測を出さない表示では固定の操作一覧だけに戻る");
+        Assert.Equal("Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", kana.Hint);
+        var converting = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View!;
+        Assert.True(converting.Converting && converting.ContextHint is null, "変換中の固定の操作一覧は文脈の案内に含めない");
+        Assert.Equal("←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る", converting.Hint);
     }
 
     [Test]
@@ -513,8 +524,23 @@ internal static class SessionFacadeTests
     public static void Json_IsEscaped()
     {
         var result = new SessionResult(true, [new TextEdit(2, "a\"b\\c\n")], new CompositionView("x", ["y"], 0, true, "h", ["x"], 0));
-        const string expected = """{"consumed":true,"commits":[{"deleteBefore":2,"text":"a\"b\\c\n"}],"view":{"text":"x","committed":null,"converting":true,"selectedIndex":0,"selectedClause":0,"hint":"h","candidates":["y"],"clauses":["x"],"suggestion":null,"meaning":null,"notes":[null],"predictions":[],"selectedPrediction":-1,"typed":null}}""";
+        const string expected = """{"consumed":true,"commits":[{"deleteBefore":2,"text":"a\"b\\c\n"}],"view":{"text":"x","committed":null,"converting":true,"selectedIndex":0,"selectedClause":0,"hint":"h","contextHint":null,"candidates":["y"],"clauses":["x"],"suggestion":null,"meaning":null,"notes":[null],"predictions":[],"selectedPrediction":-1,"typed":null}}""";
         Assert.Equal(expected, result.ToJson());
+    }
+
+    [Test]
+    public static void Json_ContextHint_IsEscaped()
+    {
+        const string contextHint = "Tab → \"google\"\\候補\n\r\t\u0001";
+        const string suggestion = "もしかして: ブレスレット　<Tab>で修正";
+        var view = new CompositionView("x", [], -1, false, "legacy hint", Suggestion: suggestion, ContextHint: contextHint);
+        using var json = JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
+        var result = json.RootElement.GetProperty("view");
+        Assert.True(result.TryGetProperty("contextHint", out var actual), "文脈の案内を JSON に含める");
+        Assert.Equal(JsonValueKind.String, actual.ValueKind);
+        Assert.Equal(contextHint, actual.GetString(), "引用符・バックスラッシュ・制御文字をエスケープする");
+        Assert.Equal("legacy hint", result.GetProperty("hint").GetString(), "従来の案内は独立して残す");
+        Assert.Equal(suggestion, result.GetProperty("suggestion").GetString(), "書き間違いの修正も独立して残す");
     }
 
     [Test]

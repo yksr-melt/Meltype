@@ -532,13 +532,16 @@ private:
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
-        // 案内 (Space で変換 など) と もしかして は補助テキストに出す
-        auto hint = view.str("hint");
-        if (auto suggestion = view.str("suggestion"); !suggestion.empty()) hint = suggestion + "　" + hint;
+        // 固定の操作一覧を隠しても、手動判定・予測・書き間違いの提案は残す。
+        // 旧版の本体は案内を分けていないので、提案まで消さないよう従来の hint を使う。
+        auto hint = view.get("contextHint") ? view.str("contextHint") : view.str("hint");
+        if (auto suggestion = view.str("suggestion"); !suggestion.empty())
+            hint = suggestion + (hint.empty() ? "" : "　" + hint);
         if (!hint.empty()) panel.setAuxDown(fcitx::Text(hint));
         const auto candidates = view.strings("candidates");
         if (converting && candidates.size() > 1) {
             auto list = std::make_unique<fcitx::CommonCandidateList>();
+            list->setLayoutHint(fcitx::CandidateLayoutHint::Vertical);
             list->setPageSize(9);
             list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);

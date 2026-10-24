@@ -384,9 +384,12 @@ internal static class FeedbackTests
         var k = new CompositionTests.Keyboard { Level = DetectionLevel.Manual };
         k.Type("google");
         Assert.Equal("ごおgぇ", k.Showing, "手動: 自動では英字にしない");
-        Assert.True(k.Host.View!.Hint.Contains("Tab → google"), $"提案を表示: {k.Host.View.Hint}");
+        Assert.Equal("Tab → google (英字に)", k.Host.View!.ContextHint, "手動の提案は固定の操作一覧と分けて返す");
+        Assert.Equal("Tab → google (英字に)　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", k.Host.View.Hint, "従来の案内は変えない");
+        Assert.True(k.Host.View.Suggestion is null, "英字の提案は書き間違いの修正ではない");
         k.Press(VirtualKeys.Tab);
         Assert.Equal("google", k.Showing, "Tab で提案どおり英字");
+        Assert.True(k.Host.View!.ContextHint is null, "提案を受け入れたら案内を消す");
         k.Type("\n");
         Assert.Equal("google", k.Host.Document);
 

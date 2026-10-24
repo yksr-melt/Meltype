@@ -57,6 +57,10 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
+        // null も必ず出し、この項目に対応していない古い本体 (項目なし) と区別する。
+        builder.Append(",\"contextHint\":");
+        if (view.ContextHint is { } contextHint) AppendString(builder, contextHint);
+        else builder.Append("null");
         builder.Append(",\"candidates\":");
         AppendArray(builder, view.Candidates);
         builder.Append(",\"clauses\":");
