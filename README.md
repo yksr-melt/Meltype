@@ -283,6 +283,9 @@ General Public License for more details.
   <a href="https://github.com/STD17g"><img src="https://github.com/STD17g.png?size=120" width="60" alt="@STD17g" title="@STD17g"></a>
   <a href="https://github.com/Fugu0141"><img src="https://github.com/Fugu0141.png?size=120" width="60" alt="@Fugu0141" title="@Fugu0141"></a>
   <a href="https://github.com/ryesryuuichi"><img src="https://github.com/ryesryuuichi.png?size=120" width="60" alt="@ryesryuuichi" title="@ryesryuuichi"></a>
+  <a href="https://github.com/moozaru-ch"><img src="https://github.com/moozaru-ch.png?size=120" width="60" alt="@moozaru-ch" title="@moozaru-ch"></a>
+  <a href="https://github.com/harapeko"><img src="https://github.com/harapeko.png?size=120" width="60" alt="@harapeko" title="@harapeko"></a>
+  <a href="https://github.com/milkeclair"><img src="https://github.com/milkeclair.png?size=120" width="60" alt="@milkeclair" title="@milkeclair"></a>
 </p>
 <!-- sponsors:end -->
 <sub>名前を公開にして応援してくださった方を載せています。</sub>
