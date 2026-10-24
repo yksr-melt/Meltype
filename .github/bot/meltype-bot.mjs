@@ -7,6 +7,7 @@
 // Issue の本文・コメントは誰でも書けるので、コマンドとして実行しない (値として次の job に渡すだけ)。
 import fs from 'node:fs';
 import path from 'node:path';
+import { findRelatedIssues, formatRelatedIssueComment } from './issue-relation-candidates.mjs';
 
 const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
 const repo = process.env.GITHUB_REPOSITORY;
@@ -14,7 +15,7 @@ const token = process.env.GITHUB_TOKEN;
 // workflow_dispatch は bot の App に Actions の権限が無いので、job の GITHUB_TOKEN (actions: write) で叩く
 const dispatchToken = process.env.BOT_DISPATCH_TOKEN || token;
 const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-const Marker = '<!-- meltype-bot -->';
+const COMMENT_MARKER = '<!-- meltype-bot -->';
 const Maintainers = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 const MaxKeys = 300;
 
@@ -66,13 +67,53 @@ function lastKey(text) {
 
 const isKeys = text => text.length > 0 && /^[\x20-\x7e]+$/.test(text);
 
+function commentMarker(kind) {
+  return `${COMMENT_MARKER}<!-- ${kind} -->`;
+}
+
+async function findBotComment(issue, kind) {
+  const marker = commentMarker(kind);
+  for (let page = 1; ; page++) {
+    const comments = await gh('GET', `/issues/${issue}/comments?per_page=100&page=${page}`);
+    const mine = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+    if (mine || comments.length < 100) return mine ?? null;
+  }
+}
+
 async function upsertComment(issue, kind, text) {
-  const marker = `${Marker}<!-- ${kind} -->`;
-  const comments = await gh('GET', `/issues/${issue}/comments?per_page=100`);
-  const mine = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(marker));
+  const mine = await findBotComment(issue, kind);
+  const marker = commentMarker(kind);
   const body = `${marker}\n${text}`;
   if (mine) await gh('PATCH', `/issues/comments/${mine.id}`, { body });
   else await gh('POST', `/issues/${issue}/comments`, { body });
+}
+
+
+async function searchIssues(query) {
+  const response = await fetch(api + '/search/issues?q=' + encodeURIComponent(query) + '&per_page=100&page=1', {
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'User-Agent': 'meltype-bot' },
+  });
+  if (!response.ok) throw new Error('Issue search failed: ' + response.status);
+  return response.json();
+}
+async function updateRelatedIssues(issue) {
+  try {
+    const candidates = await findRelatedIssues(issue, {
+      repo,
+      search: searchIssues,
+      getIssue: async number => gh('GET', '/issues/' + number),
+    });
+    if (candidates.length > 0) {
+      await upsertComment(issue.number, 'related-issues', formatRelatedIssueComment(issue, candidates, repo));
+    } else {
+      // Only a successful zero-result search removes stale candidates; failures preserve them.
+      const existing = await findBotComment(issue.number, 'related-issues');
+      if (existing) await gh('DELETE', `/issues/comments/${existing.id}`);
+    }
+  } catch (error) {
+    // Keep the last successful comment when GitHub search is rate-limited or unavailable.
+    console.warn('Related-issue search failed; existing comment was left unchanged (' + (error?.message ?? 'unknown error') + ').');
+  }
 }
 
 async function react(content) {
@@ -276,10 +317,10 @@ async function selfAssign(issue, login) {
 
 async function parse() {
   const issue = event.issue.number;
-  const isPr = Boolean(event.issue.pull_request);
-
   if (!event.comment) {
     if (event.action !== 'opened' && event.action !== 'edited') return output({ action: 'none' });
+    const rerunOnEdit = process.env.SEARCH_RELATED_ISSUES_ON_EDIT === 'true';
+    if (event.action === 'opened' || rerunOnEdit) await updateRelatedIssues(event.issue);
     const form = parseForm(event.issue.body);
     const labels = new Set(event.issue.labels.map(l => l.name));
     const add = new Set(osLabels(field(form, 'OS')));
