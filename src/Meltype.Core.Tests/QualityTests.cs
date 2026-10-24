@@ -107,6 +107,11 @@ internal static class Quality
         new("混在", "kyouhagoogledekensaku", "きょうはgoogleでけんさく"),
         new("混在", "tanaka@example.com", "tanaka@example.com"),
         new("混在", "yamada.taro@example.co.jp", "yamada.taro@example.co.jp"),
+        // 日本語 + 大文字 1 文字 + 数字 (kamiwo|A4) は、名前の最後の大文字 (holoX) ではない (issue #1005)
+        new("混在", "sonodokyumentowoA4saizudeinsatushitekudasai", "そのどきゅめんとをA4さいずでいんさつしてください"),
+        new("混在", "kamiwoA4", "かみをA4"),
+        new("混在", "kyouhaA", "きょうはA"),
+        new("混在", "holoX", "holoX"),
         new("混在", "foo_bar@example.com", "foo_bar@example.com"),
         new("混在", "taro+news@example.com", "taro+news@example.com"),
         new("混在", "yamada-taro@example.com", "yamada-taro@example.com"),

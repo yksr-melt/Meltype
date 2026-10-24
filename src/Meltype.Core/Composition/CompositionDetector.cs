@@ -646,6 +646,11 @@ public sealed partial class CompositionDetector
         var stem = span[..^1];
         if (stem.Length < 3 || !stem.All(char.IsAsciiLetterLower)) return false;
         if (IsCommonJapanese?.Invoke(stem) == true || _japanese.Words.ContainsWord(stem)) return false;
+        // 数字が続く (A4・B5 の紙の大きさ、X1) なら、名前の最後の大文字ではなく、大文字 + 数字の略記 (kamiwo|A4 = 紙をA4: issue #1005)
+        if (next is [var digit, ..] && char.IsAsciiDigit(digit)) return false;
+        // 小文字側が助詞で終わる日本語 (kyouha|A = 今日はA、kamiwo|A = 紙をA) なら、日本語 + 大文字 1 文字
+        if (_romaji.Analyze(stem) is { IsValid: true, Partial: "" } &&
+            TrailingParticles.Any(particle => stem.Length > particle.Length && stem.EndsWith(particle, StringComparison.Ordinal))) return false;
         return true;
     }
 
