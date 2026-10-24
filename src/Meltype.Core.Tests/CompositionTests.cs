@@ -4680,4 +4680,30 @@ internal static class CompositionTests
         foreach (var c in "suityoku") text.Append(c);
         Assert.Equal("JA:suityoku", string.Join(" | ", text.Segments(final: true).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
     }
+
+    [Test]
+    public static void CustomRomajiTable_PendingDisplayShowsTypedLetters()
+    {
+        // issue #979 レビュー: 打ちかけの表示が んg から ng に変わり、続けて打つと登録した読みになることを、
+        // Core の変換ボックス (CompositionText) で確かめる (Core の変更なので、どの OS でも同じ動き)。
+        var dir = Path.Combine(Path.GetTempPath(), $"meltype-romaji-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "romaji.txt"), "ngh\tにゅう\n");
+            var detector = CompositionDetector.CreateDefault(dir);
+            var text = new CompositionText(detector);
+            text.Append('n');
+            Assert.Equal("n", text.Display(final: false), "n だけなら打ちかけのまま");
+            text.Append('g');
+            Assert.Equal("ng", text.Display(final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
+            text.Append('h');
+            Assert.Equal("にゅう", text.Display(final: false), "続けて打つと登録した読みになる");
+            // 表を登録していなければ、これまでどおり んg と読む
+            var plain = new CompositionText(Detector);
+            foreach (var c in "ng") plain.Append(c);
+            Assert.Equal("んg", plain.Display(final: false), "表が無ければ今までどおり んg");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
+    }
 }
