@@ -121,12 +121,23 @@ Remove-Item Env:\MELTYPE_UT_DICTIONARY
 .\native\mozc\Build-MozcHelper.ps1 -Python python -Bazelisk C:\tools\bazelisk.exe
 ```
 
-The previous merge is undone before the build (`dictionary00.txt` is restored from Mozc's git), so no UT words remain.
-To undo it by hand:
+A build without the variable empties the file that holds the UT words (`dictionary_ut.txt`) before building, so no UT words remain (if you built with v1.3.1-pre.1, see "Updating from v1.3.1-pre.1" below).
+
+## Updating from v1.3.1-pre.1
+
+If you built with `MELTYPE_UT_DICTIONARY` on v1.3.1-pre.1, Mozc's `dictionary00.txt` still contains the Mozc-UT words.
+The current build scripts never modify `dictionary00.txt`, so those words also end up in builds without the variable, and a newer UT dictionary keeps the old dictionary's words and costs.
+After updating, run the following once to restore the file. Building with the variable afterwards adds the Mozc-UT words again.
 
 ```bash
-python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src --restore
+git -C ~/mozc checkout HEAD -- src/data/dictionary_oss/dictionary00.txt
 ```
+
+```powershell
+git -C $env:USERPROFILE\mozc checkout HEAD -- src/data/dictionary_oss/dictionary00.txt
+```
+
+If you keep Mozc somewhere else, replace `~/mozc` (`$env:USERPROFILE\mozc` on Windows) with that location.
 
 ## Performance and size (measured)
 
@@ -139,7 +150,7 @@ These numbers are specific to that machine.
 | Startup (to `READY`, median of 9) | 9.96 ms | 11.5 ms |
 | One conversion (median of 200) | 0.209 ms | 0.213 ms |
 | Memory (RSS right after startup) | 21.5 MB | 27.8 MB |
-| `dictionary00.txt` | 7.2 MB | 76.7 MB |
+| Dictionary text (`dictionary00.txt` + `dictionary_ut.txt`) | 7.2 MB | 76.7 MB |
 
 - Conversion speed is essentially unchanged (+2% at the median). Memory and binary size grow.
 - Each additional dictionary increases build time, size and memory.
@@ -147,11 +158,11 @@ These numbers are specific to that machine.
 
 ## How it works
 
-1. Before building, `native/mozc/merge-ut-dictionary.py` restores Mozc's `src/data/dictionary_oss/dictionary00.txt` **from Mozc's git**. A previous merge therefore never accumulates duplicates.
-2. It reads the given `mozcdic-ut.txt` and validates it: UTF-8 (BOM and NUL bytes rejected), exactly 5 columns, no empty columns, POS IDs (lid/rid) present in `id.def`, cost within 0–65535, and readings in hiragana (a warning by default; an error with `--strict-readings`).
+1. The build script adds `dictionary_ut.txt` to the dictionary list in Mozc's `src/data/dictionary_oss/BUILD.bazel` and empties `dictionary_ut.txt`. Mozc's own dictionaries (`dictionary00.txt` to `dictionary09.txt`) are never modified.
+2. When the variable is set, `native/mozc/merge-ut-dictionary.py` reads the given `mozcdic-ut.txt` and validates it: UTF-8 (BOM and NUL bytes rejected), exactly 5 columns, no empty columns, POS IDs (lid/rid) present in `id.def`, cost within 0–65535, and readings in hiragana (a warning by default; an error with `--strict-readings`).
 3. It aligns POS IDs with the `id.def` of **the Mozc being built**. UT output is written with the POS IDs of the Mozc it was generated from, so IDs can mean something else on a different version. `merge-ut-dictionaries` emits a single POS (general noun by default); if that ID is not the current general-noun ID, it is remapped and recorded in `MOZC-UT.json`. Custom dictionaries with several POS IDs keep the IDs that exist.
-4. It drops entries that duplicate Mozc's existing dictionary (same reading and surface) and duplicates within the UT file.
-5. It appends the entries in a deterministic order to the end of `dictionary00.txt`. Mozc does not depend on dictionary line order.
+4. It drops entries that duplicate Mozc's existing dictionary (same reading and surface) and duplicates within the UT file. If you edited Mozc's dictionary locally, it compares against the edited contents.
+5. It writes the entries in a deterministic order to `dictionary_ut.txt`, replacing any previous contents. Mozc does not depend on dictionary line order.
 6. Bazel rebuilds the embedded Mozc dictionary and links the helper.
 
 No code from `merge-ut-dictionaries` is used; the merge is implemented for Meltype.
@@ -165,10 +176,9 @@ No code from `merge-ut-dictionaries` is used; the merge is implemented for Melty
 | `列が N 個あります (5 列ではありません)` | Not a `mozcdic-ut.txt` (reading<Tab>lid<Tab>rid<Tab>cost<Tab>surface, 5 columns) |
 | `品詞 ID が、ビルドする Mozc の id.def にありません` | The ID does not exist in this Mozc version. Drop `--keep-pos-ids` or regenerate the dictionary |
 | `Mozc の id.def が見つかりません` | The Mozc checkout is incomplete. Delete the Mozc folder and retry |
-| `Mozc の git リポジトリが見つかりません` | Point at a Mozc checkout created by the build script (`~/mozc` etc.) |
-| `git リポジトリが見つかりません` / `git の管理下にありません` | Cannot restore the target safely, so it stops. Use the Mozc checkout made by the build script |
+| `BUILD.bazel に dictionary_ut.txt がありません` | `merge-ut-dictionary.py` was run directly. Run it through the build script |
 
-You can also validate a dictionary without touching Mozc (this still reads the whole UT dictionary and
+You can also validate a dictionary without writing `dictionary_ut.txt` (this still reads the whole UT dictionary and
 Mozc's dictionary, so expect roughly 1 GB of memory for a dictionary with over a million entries):
 
 ```bash
@@ -180,6 +190,6 @@ python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src \
 
 - **Only the Mozc engine** is affected (the Windows/Linux `meltype_mozc_helper`). The macOS build uses azooKey.
 - The UT dictionary is added to Mozc at build time, so switching dictionaries requires rebuilding the helper (re-embedding the dictionary). Bazel's cache makes later builds take a few minutes.
-- `dictionary00.txt` is tracked by Mozc's git, and it is always restored before merging. If you edited it locally, that edit is lost (treat the Mozc checkout as a build input).
+- The build script leaves `dictionary_ut.txt` listed in Mozc's `src/data/dictionary_oss/BUILD.bazel`. If you delete `dictionary_ut.txt`, running `bazel build` directly in that Mozc checkout fails. Build through the build script.
 - Candidate quality and ordering come from the UT dictionary; Meltype neither reorders nor filters it.
 - Licenses differ per dictionary. In particular, **do not use a dictionary that includes alt-cannadic (GPL-2.0-only)**.

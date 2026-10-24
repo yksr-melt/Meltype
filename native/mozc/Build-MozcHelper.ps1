@@ -96,6 +96,13 @@ $head = & git -C $MozcSource rev-parse -q --verify HEAD
 if ($head) {
     # 前に足したヘルパーの定義を消し、取ってきたときの BUILD.bazel に戻す (BUILD.fragment の変更を反映し、checkout が止まらないように)
     Invoke-Native git @('-C', $MozcSource, 'checkout', '-q', 'HEAD', '--', 'src/converter/BUILD.bazel') 'BUILD.bazel を戻せませんでした。'
+    # 辞書の BUILD.bazel は利用者が書き換えていることがあるので、checkout せずに、足した dictionary_ut.txt の行だけを消す
+    # (build-mozc-helper.sh は Mozc の版を変えないので、この処理が無い。版を合わせる処理を足すときは同じ手当てが要る)
+    $dictionaryBuild = Join-Path $MozcSource 'src\data\dictionary_oss\BUILD.bazel'
+    $buildText = [IO.File]::ReadAllText($dictionaryBuild)
+    if ($buildText -match '"dictionary_ut\.txt"') {
+        [IO.File]::WriteAllText($dictionaryBuild, ($buildText -replace '(?m)^ *"dictionary_ut\.txt",\r?\n', ''))
+    }
 }
 if ($head -ne $commit) {
     Invoke-Native git @('-C', $MozcSource, 'fetch', '-q', '--depth', '1', 'origin', $commit) "Mozc ($commit) を取得できませんでした。"
@@ -118,21 +125,21 @@ $utReport = Join-Path $bin 'MOZC-UT.json'
 $utPending = Join-Path $bin 'MOZC-UT.json.tmp'
 if (Test-Path -LiteralPath $utPending) { Remove-Item -LiteralPath $utPending -Force }
 
-# 前に Mozc-UT を統合してビルドしていれば、Mozc の辞書に Mozc-UT の語が残っている。
-# 指定なしのビルドに混ざらないよう、先に元に戻す (辞書は Mozc の git から戻すので壊れない)。
-# git status が失敗したときに黙って続けると、Mozc-UT 入りのまま標準のヘルパーを作ってしまうので止める。
-$target = 'src/data/dictionary_oss/dictionary00.txt'
-$previous = $ErrorActionPreference
-$ErrorActionPreference = 'Continue'
-try { $dirty = & git -C $MozcSource status --porcelain -- $target 2>$null }
-finally { $ErrorActionPreference = $previous }
-if ($LASTEXITCODE -ne 0) {
-    throw "Mozc の辞書の状態を調べられませんでした (git status: exit code $LASTEXITCODE)。Mozc のフォルダーを取り直してください。"
+# Mozc-UT の語は Mozc の辞書とは別の dictionary_ut.txt に置き、ビルドのたびに作り直す
+# (Mozc の辞書は書き換えないので、手元で書き換えた辞書も残る)。
+# dictionary_ut.txt はいつもビルドに含め、-UtDictionary が無いときは空にする。
+# BUILD.bazel は "dictionary09.txt", の行を目印に、その次の行に足す。同じ書き換えを build-mozc-helper.sh も行い、
+# merge-ut-dictionary.py (ensure_registered) が足した行を確かめるので、Mozc の BUILD.bazel の形が変わったら 3 か所を直す。
+$dictionaryBuild = Join-Path $src 'data\dictionary_oss\BUILD.bazel'
+$buildText = [IO.File]::ReadAllText($dictionaryBuild)
+if ($buildText -notmatch '"dictionary_ut\.txt"') {
+    $buildText = $buildText -replace '(?m)^( *)"dictionary09\.txt",(\r?)$', "`$0`n`$1`"dictionary_ut.txt`",`$2"
+    if ($buildText -notmatch '"dictionary_ut\.txt"') {
+        throw "$dictionaryBuild に dictionary_ut.txt を足せませんでした (Mozc の BUILD.bazel の形が変わった可能性があります)。"
+    }
+    [IO.File]::WriteAllText($dictionaryBuild, $buildText)
 }
-if ($UtDictionary -or $dirty -or (Test-Path -LiteralPath $utReport)) {
-    Invoke-PythonUtf8 @($merge, '--mozc-src', $src, '--restore') 'Mozc-UT の辞書を元に戻せませんでした。'
-}
-if ($dirty) { Write-Host '前回統合した Mozc-UT の辞書を取り消しました。' }
+[IO.File]::WriteAllText((Join-Path $src 'data\dictionary_oss\dictionary_ut.txt'), '')
 
 if ($UtDictionary) {
     Invoke-PythonUtf8 @($merge, '--mozc-src', $src, '--dictionary', $UtDictionary, '--report', $utPending) 'Mozc-UT の辞書を統合できませんでした。'

@@ -7,13 +7,13 @@ Mozc-UT の辞書は、そのままでは Mozc の辞書と同じ形 (読み<Tab
 作られたときの Mozc の品詞 ID で書かれている。ビルドする Mozc の版が違うと ID の意味が変わるので、
 ここで品詞 ID を確かめ、必要なら今の Mozc の ID に置き換える。
 
-統合先は Mozc の data/dictionary_oss/dictionary00.txt (Mozc-UT の README が案内している場所)。
-統合の前に、そのファイルを git の記録から元に戻すので、同じ辞書を何度統合しても増えないし、
-Mozc-UT を指定せずにビルドし直しても、前の Mozc-UT の語が残らない。
+出力は Mozc の data/dictionary_oss/dictionary_ut.txt で、実行するたびに丸ごと書き直す。
+Mozc の辞書 (dictionary00.txt〜dictionary09.txt) は読むだけで書き換えないので、手元で書き換えた辞書も残る。
+dictionary_ut.txt を Mozc のビルドに含める BUILD.bazel の変更と、UT を使わないときに空にするのは
+ビルドスクリプト (build-mozc-helper.sh / Build-MozcHelper.ps1) が行う (UT を使わないときは Python が要らないため)。
 
 使い方:
   python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src --dictionary mozcdic-ut.txt
-  python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src --restore
   python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src --dictionary mozcdic-ut.txt --check
 
 終了コード: 0 = 成功、1 = 使い方・環境の誤り、2 = 辞書の中身が不正。
@@ -30,8 +30,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-# 統合先 (Mozc-UT の README が案内している場所)。
-TARGET_RELATIVE = Path("data/dictionary_oss/dictionary00.txt")
+# 出力先。ビルドスクリプトが BUILD.bazel の base_dictionary_data に足す名前と揃える。
+OUTPUT_RELATIVE = Path("data/dictionary_oss/dictionary_ut.txt")
+BUILD_RELATIVE = Path("data/dictionary_oss/BUILD.bazel")
 # Mozc の辞書のファイル (重複を調べるのに読む)。
 DICTIONARY_FILES = [f"dictionary{i:02d}.txt" for i in range(10)]
 ID_DEF_RELATIVE = Path("data/dictionary_oss/id.def")
@@ -342,47 +343,18 @@ def _remap_pos_ids(result: ParseResult, id_def: IdDefinition, pos: str,
         )
 
 
-def pristine_text(mozc_src: Path, target: Path) -> str | None:
-    """Mozc を取得したときの辞書の中身。統合する前の状態で比べるために使う。
-
-    --check は書き換えないので、統合したあとに --check したときも元の状態で比べられるよう、
-    統合先が変わっていれば git の記録から取る。取れなければ None。
-    """
-    root = mozc_src.parent
-    if not (root / ".git").exists():
-        return None
-    relative = target.relative_to(root).as_posix()
-    status = run_git(root, "status", "--porcelain", "--", relative)
-    if status.returncode != 0:
-        return None
-    if not status.stdout.strip():
-        return target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
-    show = run_git(root, "show", f"HEAD:{relative}")
-    if show.returncode != 0:
-        return target.read_text(encoding="utf-8", errors="replace") if target.is_file() else None
-    return show.stdout
-
-
-def read_mozc_entries(mozc_src: Path, target: Path) -> tuple[set[tuple[str, str]], int]:
-    """ビルドする Mozc の辞書にある語 (読み, 表記) と、統合先の元の行数を返す。"""
+def read_mozc_entries(mozc_src: Path) -> set[tuple[str, str]]:
+    """ビルドする Mozc の辞書にある語 (読み, 表記)。手元で書き換えた辞書なら、その中身で比べる。"""
     entries: set[tuple[str, str]] = set()
-    before_lines = 0
     for name in DICTIONARY_FILES:
-        path = target.parent / name
-        if path.name == target.name:
-            text = pristine_text(mozc_src, target)
-            if text is None:
-                text = path.read_text(encoding="utf-8", errors="replace") if path.is_file() else ""
-            before_lines = text.count("\n")
-        else:
-            if not path.is_file():
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-        for line in text.splitlines():
+        path = mozc_src / OUTPUT_RELATIVE.parent / name
+        if not path.is_file():
+            continue
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
             columns = line.split("\t")
             if len(columns) >= 5:
                 entries.add((columns[0], columns[4]))
-    return entries, before_lines
+    return entries
 
 
 def remove_duplicates(entries: list[Entry],
@@ -402,54 +374,24 @@ def remove_duplicates(entries: list[Entry],
     return kept, in_ut, in_mozc
 
 
-def restore_dictionary(mozc_src: Path, target: Path) -> bool:
-    """統合した辞書を、Mozc を取得したときの状態に戻す。戻したら True。"""
-    root = mozc_src.parent
-    relative = target.relative_to(root).as_posix()
-    if not (root / ".git").exists():
+def ensure_registered(mozc_src: Path) -> None:
+    """出力先が Mozc のビルドに含まれるか確かめる。含まれないと、書いた語が黙って捨てられる。
+
+    出力先の行は、ビルドスクリプト (build-mozc-helper.sh の sed と Build-MozcHelper.ps1 の正規表現) が
+    BUILD.bazel の "dictionary09.txt", の行を目印に足す。Mozc の BUILD.bazel の形が変わったら 3 か所を直す。
+    """
+    build = mozc_src / BUILD_RELATIVE
+    text = build.read_text(encoding="utf-8") if build.is_file() else ""
+    if f'"{OUTPUT_RELATIVE.name}"' not in text:
         raise MergeError(
-            f"Mozc の git リポジトリが見つかりません: {root}\n"
-            "build-mozc-helper.sh / Build-MozcHelper.ps1 で取得した Mozc を指定してください。"
+            f"{build} に {OUTPUT_RELATIVE.name} がありません (このままでは UT の語がビルドに入りません)。\n"
+            "build-mozc-helper.sh / Build-MozcHelper.ps1 から実行してください。"
         )
-    tracked = run_git(root, "ls-files", "--error-unmatch", "--", relative)
-    if tracked.returncode != 0:
-        raise MergeError(
-            f"{relative} が Mozc の git の管理下にありません: {root}\n"
-            "統合した辞書を元に戻せないので中止します。"
-        )
-    status = run_git(root, "status", "--porcelain", "--", relative)
-    if status.returncode != 0:
-        raise MergeError(f"Mozc の状態を調べられませんでした: {status.stderr.strip()}")
-    if not status.stdout.strip():
-        return False
-    if target.stat().st_size == 0:
-        raise MergeError(f"{target} が空です。Mozc を取得し直してください。")
-    # `git checkout -- <path>` は index から戻すので、統合したあとに add されていると
-    # 統合済みの中身が戻ってしまう。必ず HEAD (最後のコミット) から戻す。
-    checkout = run_git(root, "checkout", "HEAD", "--", relative)
-    if checkout.returncode != 0:
-        raise MergeError(
-            f"{relative} を元に戻せませんでした: {checkout.stderr.strip()}"
-        )
-    verify = run_git(root, "diff", "--quiet", "HEAD", "--", relative)
-    if verify.returncode != 0:
-        raise MergeError(
-            f"{relative} を Mozc の git の記録 (HEAD) と同じにできませんでした。\n"
-            "Mozc のフォルダーを消して、ビルドスクリプトで取得し直してください。"
-        )
-    return True
 
 
-def append_entries(target: Path, entries: list[Entry]) -> None:
-    """統合先の末尾に足す。Mozc の辞書は行の順番を気にしない (どの行も独立に読まれる)。"""
-    if target.stat().st_size > 0:
-        with open(target, "rb") as stream:
-            stream.seek(-1, os.SEEK_END)
-            if stream.read(1) != b"\n":
-                raise MergeError(
-                    f"{target} の末尾に改行がありません。Mozc を取得し直してください。"
-                )
-    with open(target, "a", encoding="utf-8", newline="\n") as stream:
+def write_entries(output: Path, entries: list[Entry]) -> None:
+    """出力先を丸ごと書き直す。Mozc の辞書は行の順番を気にしない (どの行も独立に読まれる)。"""
+    with open(output, "w", encoding="utf-8", newline="\n") as stream:
         for entry in entries:
             stream.write(entry.line())
 
@@ -474,17 +416,14 @@ def iso_now() -> str:
     return moment.replace(microsecond=0).isoformat()
 
 
-def summary(result: ParseResult, dictionary: Path, target: Path,
-            in_ut: int, in_mozc: int, before_lines: int, after_lines: int,
-            id_def: IdDefinition, pos: str, restored: bool) -> str:
+def summary(result: ParseResult, dictionary: Path, output: Path,
+            in_ut: int, in_mozc: int, id_def: IdDefinition, pos: str) -> str:
     lines = [
         f"Mozc-UT の辞書を統合しました: {dictionary}",
         f"  辞書の SHA-256: {sha256_of(dictionary)}",
         f"  読み込み: {len(result.entries) + in_ut + in_mozc} 件 / 統合: {len(result.entries)} 件",
         f"  除外: Mozc の辞書と重複 {in_mozc} 件 / UT の中の重複 {in_ut} 件",
     ]
-    if restored:
-        lines.append("  前の統合を取り消してから統合しました (重複しません)")
     target_id = id_def.by_pos.get(pos, -1)
     if result.pos_drift or result.pos_remap:
         changes = ", ".join(
@@ -496,7 +435,7 @@ def summary(result: ParseResult, dictionary: Path, target: Path,
         lines.append(f"  品詞 ID: {target_id} ({pos}) — そのまま使えます")
     if result.warnings:
         lines.append(f"  注意: {len(result.warnings)} 件 (--check で一覧を出せます)")
-    lines.append(f"  統合先: {target} ({before_lines} → {after_lines} 行)")
+    lines.append(f"  出力先: {output} ({len(result.entries)} 行)")
     lines.append(f"  注意: {LICENSE_NOTICE}")
     return "\n".join(lines)
 
@@ -518,16 +457,11 @@ def main(argv: list[str]) -> int:
     )
     parser.add_argument(
         "--dictionary", type=Path,
-        help="統合する Mozc-UT の辞書 (mozcdic-ut.txt)。--restore のときは要りません",
+        help="統合する Mozc-UT の辞書 (mozcdic-ut.txt)",
     )
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--restore", action="store_true",
-        help="統合をとりやめて、Mozc の辞書を取得したときの状態に戻す",
-    )
-    mode.add_argument(
+    parser.add_argument(
         "--check", action="store_true",
-        help="辞書を確かめるだけで、Mozc の辞書は書き換えない",
+        help=f"辞書を確かめるだけで、{OUTPUT_RELATIVE.name} は書かない",
     )
     parser.add_argument(
         "--report", type=Path,
@@ -549,45 +483,34 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     mozc_src = args.mozc_src.expanduser().resolve()
-    target = (mozc_src / TARGET_RELATIVE)
-    if not (mozc_src / "data" / "dictionary_oss").is_dir():
+    output = mozc_src / OUTPUT_RELATIVE
+    if not output.parent.is_dir():
         raise MergeError(
             f"Mozc の data/dictionary_oss が見つかりません: {mozc_src}\n"
             "--mozc-src には Mozc の src ディレクトリを指定してください。"
         )
 
-    if args.restore:
-        if args.dictionary:
-            raise MergeError("--restore と --dictionary は同時に指定できません。")
-        restored = restore_dictionary(mozc_src, target)
-        print(
-            "統合した Mozc-UT の辞書を取り消しました。"
-            if restored else "Mozc の辞書は統合する前の状態のままです。"
-        )
-        return EXIT_OK
-
+    # argparse の required は終了コード 2 (辞書の中身が不正) になるので、ここで確かめる。
     if not args.dictionary:
-        raise MergeError("--dictionary か --restore を指定してください。")
-
+        raise MergeError("--dictionary を指定してください。")
     dictionary = args.dictionary.expanduser().resolve()
-    if dictionary == target:
-        raise MergeError("--dictionary に Mozc の辞書そのものを指定できません。")
+    if dictionary == output:
+        raise MergeError(f"--dictionary に出力先 ({OUTPUT_RELATIVE.name}) を指定できません。")
+    if not args.check:
+        ensure_registered(mozc_src)
 
     id_def = load_id_def(mozc_src)
     result = parse_dictionary(
         dictionary, id_def, args.pos, args.keep_pos_ids, args.strict_readings
     )
 
-    # 統合した辞書が残っていれば、まず元に戻す (繰り返しても増えないように)。
-    undone = False if args.check else restore_dictionary(mozc_src, target)
-
-    existing, before_lines = read_mozc_entries(mozc_src, target)
+    existing = read_mozc_entries(mozc_src)
     kept, in_ut, in_mozc = remove_duplicates(result.entries, existing)
     kept.sort(key=lambda entry: (entry.reading, entry.word, entry.cost))
     result.entries = kept
 
     report = {
-        "schema": 1,
+        "schema": 2,
         "tool": "native/mozc/merge-ut-dictionary.py",
         "generated_at": iso_now(),
         "mode": "check" if args.check else "merge",
@@ -598,7 +521,7 @@ def main(argv: list[str]) -> int:
             "id_def_pos_count": len(id_def.by_id),
             "pos": args.pos,
             "pos_id": id_def.by_pos.get(args.pos, -1),
-            "target": TARGET_RELATIVE.as_posix(),
+            "output": OUTPUT_RELATIVE.as_posix(),
         },
         "dictionary": {
             "path": str(dictionary),
@@ -615,10 +538,7 @@ def main(argv: list[str]) -> int:
             "already_in_mozc": in_mozc,
         },
         "result": {
-            "previous_merge_undone": undone,
-            "lines_before": before_lines,
             "lines_added": len(result.entries),
-            "lines_after": before_lines + len(result.entries),
         },
         "warnings": result.warnings[:100],
         "license": {
@@ -630,34 +550,22 @@ def main(argv: list[str]) -> int:
 
     if args.check:
         if not args.quiet:
-            print(summary(result, dictionary, target, in_ut, in_mozc,
-                          before_lines, before_lines + len(result.entries),
-                          id_def, args.pos, restored=False))
+            print(summary(result, dictionary, output, in_ut, in_mozc, id_def, args.pos))
             for warning in result.warnings[:20]:
                 print(f"  注意: {warning}", file=sys.stderr)
             if len(result.warnings) > 20:
                 print(f"  注意: ほか {len(result.warnings) - 20} 件", file=sys.stderr)
         if args.report:
             write_report(args.report, report)
-        print("辞書を確かめました (Mozc の辞書は書き換えていません)。")
+        print(f"辞書を確かめました ({OUTPUT_RELATIVE.name} は書いていません)。")
         return EXIT_OK
 
-    # 足す前に、足したあとの行数と中身を確かめられるようにしておく。
-    append_entries(target, result.entries)
-    after_lines = count_lines(target)
-    expected = before_lines + len(result.entries)
-    if after_lines != expected:
-        raise MergeError(
-            f"統合後の行数が合いません ({after_lines} 行、期待は {expected} 行)。"
-            f"{target} を Mozc の git から戻してやり直してください。"
-        )
-    report["result"]["lines_after"] = after_lines
-    report["result"]["target_sha256"] = sha256_of(target)
+    write_entries(output, result.entries)
+    report["result"]["output_sha256"] = sha256_of(output)
 
     if args.report:
         write_report(args.report, report)
-    print(summary(result, dictionary, target, in_ut, in_mozc,
-                  before_lines, after_lines, id_def, args.pos, restored=undone))
+    print(summary(result, dictionary, output, in_ut, in_mozc, id_def, args.pos))
     return EXIT_OK
 
 

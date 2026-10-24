@@ -121,12 +121,23 @@ Remove-Item Env:\MELTYPE_UT_DICTIONARY
 .\native\mozc\Build-MozcHelper.ps1 -Python python -Bazelisk C:\tools\bazelisk.exe
 ```
 
-前回統合した辞書は、ビルドの前に自動で取り消します (`dictionary00.txt` を Mozc の git から戻します)。
-手動で取り消すときは次を実行します。
+環境変数を指定しないビルドでは、Mozc-UT の語を入れるファイル (`dictionary_ut.txt`) を空にしてからビルドするので、前回の語は残りません (v1.3.1-pre.1 でビルドしたときは、次の「v1.3.1-pre.1 から更新したとき」)。
+
+## v1.3.1-pre.1 から更新したとき
+
+v1.3.1-pre.1 で `MELTYPE_UT_DICTIONARY` を指定してビルドした場合は、Mozc の `dictionary00.txt` に Mozc-UT の語が残っています。
+今のビルドスクリプトは `dictionary00.txt` を書き換えないので、残った語は、環境変数を指定しないビルドにも入ります。UT 辞書を新しくしても、古い辞書の語とコストが残ります。
+更新したら一度、次を実行して戻してください。戻したあと環境変数を指定してビルドすれば、Mozc-UT の語はまた入ります。
 
 ```bash
-python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src --restore
+git -C ~/mozc checkout HEAD -- src/data/dictionary_oss/dictionary00.txt
 ```
+
+```powershell
+git -C $env:USERPROFILE\mozc checkout HEAD -- src/data/dictionary_oss/dictionary00.txt
+```
+
+Mozc を別の場所に置いている場合は、`~/mozc` (Windows は `$env:USERPROFILE\mozc`) をその場所に読み替えてください。
 
 ## 性能とサイズ (実測)
 
@@ -139,7 +150,7 @@ Linux x86_64 (6 コア、clang 21.1.8、Bazel 9.0.2、Mozc `a069a88d`) で、`pe
 | 起動 (READY まで、9 回の中央値) | 9.96 ms | 11.5 ms |
 | 変換 1 回 (200 回の中央値) | 0.209 ms | 0.213 ms |
 | メモリ (RSS、起動直後) | 21.5 MB | 27.8 MB |
-| `dictionary00.txt` | 7.2 MB | 76.7 MB |
+| 辞書のテキスト (`dictionary00.txt` + `dictionary_ut.txt`) | 7.2 MB | 76.7 MB |
 
 - 変換の速さはほとんど変わりません (中央値で +2%)。メモリとバイナリのサイズは増えます。
 - 統合する辞書を増やすほど、ビルド時間・サイズ・メモリは増えます。
@@ -147,14 +158,14 @@ Linux x86_64 (6 コア、clang 21.1.8、Bazel 9.0.2、Mozc `a069a88d`) で、`pe
 
 ## 仕組み
 
-1. ビルドの前に、`native/mozc/merge-ut-dictionary.py` が Mozc の `src/data/dictionary_oss/dictionary00.txt` を **Mozc の git から元に戻します**。前回の統合が残っていても、語は重複しません。
-2. 指定された `mozcdic-ut.txt` を読み、Mozc の辞書に足せるか確かめます。
+1. ビルドスクリプトが、Mozc の `src/data/dictionary_oss/BUILD.bazel` の辞書の一覧に `dictionary_ut.txt` を足し、`dictionary_ut.txt` を空にします。Mozc の辞書 (`dictionary00.txt`〜`dictionary09.txt`) は書き換えません。
+2. 環境変数を指定したときは、`native/mozc/merge-ut-dictionary.py` が指定された `mozcdic-ut.txt` を読み、Mozc の辞書に足せるか確かめます。
    - UTF-8 か (BOM・NUL バイトは拒否)、5 列か、空の列が無いか
    - 品詞 ID (lid/rid) が `id.def` にあるか、コストが 0〜65535 か
    - 読みがひらがなか (警告。`--strict-readings` でエラー)
 3. 品詞 ID を、**ビルドする Mozc の `id.def`** に合わせます。UT 辞書は作ったときの Mozc の ID で書かれているので、版が違えば ID の意味が変わります。`merge-ut-dictionaries` の出力はすべて 1 つの品詞 (既定は「名詞,一般」) なので、その ID が今の Mozc の「名詞,一般」と違えば置き換え、`MOZC-UT.json` に記録します (複数の品詞を使う自前の辞書は、使える ID をそのまま使います)。
-4. Mozc の辞書と重複する語 (読みと表記が同じ) と、辞書の中の重複を取り除きます。
-5. 決まった順に並べて `dictionary00.txt` の末尾に足します。Mozc は辞書の行の順番を気にしません。
+4. Mozc の辞書と重複する語 (読みと表記が同じ) と、辞書の中の重複を取り除きます。Mozc の辞書を手元で書き換えていれば、書き換えた中身と比べます。
+5. 決まった順に並べて `dictionary_ut.txt` に書きます (前回の中身は残しません)。Mozc は辞書の行の順番を気にしません。
 6. Bazel が Mozc の辞書を組み込み直し、ヘルパーが作られます。
 
 Mozc-UT のツール (`merge-ut-dictionaries`) のコードは使っていません。統合の処理は Meltype のために書き下ろしたものです。
@@ -168,10 +179,9 @@ Mozc-UT のツール (`merge-ut-dictionaries`) のコードは使っていませ
 | `列が N 個あります (5 列ではありません)` | `mozcdic-ut.txt` ではありません (読み<Tab>lid<Tab>rid<Tab>コスト<Tab>表記 の 5 列) |
 | `品詞 ID が、ビルドする Mozc の id.def にありません` | この Mozc の版に無い ID です。`--keep-pos-ids` を外すか、辞書を作り直してください |
 | `Mozc の id.def が見つかりません` | Mozc の取得が途中で終わっています。Mozc のフォルダーを消してやり直してください |
-| `Mozc の git リポジトリが見つかりません` | ビルドスクリプトで取得した Mozc (`~/mozc` など) を指定してください |
-| `git リポジトリが見つかりません` / `git の管理下にありません` | 統合先を元に戻せないため中止します。ビルドスクリプトで取得した Mozc を使ってください |
+| `BUILD.bazel に dictionary_ut.txt がありません` | `merge-ut-dictionary.py` を直接実行しています。ビルドスクリプトから実行してください |
 
-辞書を変えずに、統合できるかだけ確かめることもできます (Mozc の辞書は書き換えません)。
+統合できるかだけ確かめることもできます (`dictionary_ut.txt` を書きません)。
 このときも UT 辞書 (100 万行を超えることがあります) と Mozc の辞書を読み込むので、1 GB 前後のメモリを使います。
 
 ```bash
@@ -183,6 +193,6 @@ python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src \
 
 - **Mozc の変換エンジンだけ**が対象です (Windows・Linux の `meltype_mozc_helper`)。Mac 版は azooKey なので対象外です。
 - UT 辞書はビルド時に Mozc の辞書へ足す方式です。辞書を切り替えるたびにヘルパーのビルド (辞書の組み込み直し) が要ります。ビルドのキャッシュが効くので、2 回目以降は数分です。
-- `dictionary00.txt` は Mozc の git の管理下のファイルなので、統合する前に**必ず元に戻します**。手元で `dictionary00.txt` を書き換えて使っている場合は、その変更は消えます (Mozc はビルド用の取得物として扱ってください)。
+- ビルドスクリプトは Mozc の `src/data/dictionary_oss/BUILD.bazel` に `dictionary_ut.txt` を足したままにします。`dictionary_ut.txt` を消すと、その Mozc のフォルダーで `bazel build` を直接実行したときに失敗します。ビルドはビルドスクリプトから実行してください。
 - UT 辞書の品質 (候補の順位・表記) は UT 側のものです。Meltype は並べ替えも選別もしません。
 - 辞書のライセンスは辞書ごとに違います。とくに **alt-cannadic (GPL-2.0 のみ) を含む辞書は使わないでください**。
