@@ -35,7 +35,11 @@ const formats = {
     const [reading, word, extra] = left.trim().split(/\s+/);
     return [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, word ? null : '候補が無い', extra ? '候補は 1 つだけ' : null, right.trim() ? null : '手がかりが無い'];
   },
-  'phrases.txt': tabbed(2, 2, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
+  'phrases.txt': tabbed(2, 2, ([reading, word]) => [
+    reading.split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
+    reading.split('|').length === word.split('|').length && !word.split('|').includes('') ? null : `読み「${reading}」と語句「${word}」の | の数が違う`,
+  ]),
   'misspellings.txt': tabbed(1, 2, fields => fields.map(f => kana.test(f) ? null : `「${f}」がかなでない`)),
   'translations.txt': tabbed(3, 3, ([, kind]) => [['n', 'na', 'i', 'v', 'adv'].includes(kind) ? null : `品詞「${kind}」が n / na / i / v / adv でない`]),
   'meanings.txt': tabbed(3, 3, ([, reading]) => [reading === '' || hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),

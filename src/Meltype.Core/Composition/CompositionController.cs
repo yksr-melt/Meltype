@@ -1766,9 +1766,13 @@ public sealed class CompositionController
                 clauses.AddRange(ConvertWithEngine(reading, engine));
                 continue;
             }
-            var clause = new Clause(reading, false, JapaneseCandidates(reading, word));
-            clauses.Add(clause);
-            registered.Add(clause);
+            // 同梱の語句に文節の区切りがあれば、その区切りで分ける (いちがっき → 一|学期)
+            foreach (var (part, text) in _options.UserDictionary!.Clauses(reading, word))
+            {
+                var clause = new Clause(part, false, JapaneseCandidates(part, text));
+                clauses.Add(clause);
+                registered.Add(clause);
+            }
         }
         // 同梱の語句 (しょせん → 所詮) も、文脈の手がかり (試合 → 初戦) と学習で選び直せるようにする。
         // 変換エンジンの文節も、語句の文節を含めた前後で文脈の手がかりを見直す (甲斐性ない + こうかい → 後悔)。
