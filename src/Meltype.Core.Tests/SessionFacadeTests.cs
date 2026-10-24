@@ -626,6 +626,30 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_ActivationSyncClearsTrackedContext()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        Assert.True(Type(session, "echo \"").All(r => !r.Consumed), "引用符の開始まではアプリへ渡す");
+        session.CommitPending();
+
+        // 同じ入力欄の再有効化 (Mac など): 周辺文字列がなくても、前の引用符を引き継がない。
+        session.Direct = false;
+        session.CodeInput = true;
+        var afterQuote = Type(session, "j").Single();
+        Assert.True(!afterQuote.Consumed && afterQuote.View is null && afterQuote.Commits.Count == 0,
+            "同じコード入力の設定も、既存の呼び出し元では文脈の初期化として使う");
+
+        Assert.True(session.SetCodeLine(true, null), "明示的な日本語指定を有効にする");
+        session.CommitPending();
+        session.Direct = false;
+        session.CodeInput = true;
+        var afterJapanese = Type(session, "k").Single();
+        Assert.True(!afterJapanese.Consumed && afterJapanese.View is null && afterJapanese.Commits.Count == 0,
+            "再有効化で明示的な日本語指定も初期化する");
+    }
+
+    [Test]
     public static void CodeInput_TracksCommentSlashesWithSigilWordsEnabled()
     {
         var session = Create();
