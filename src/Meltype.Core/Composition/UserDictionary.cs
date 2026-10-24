@@ -36,13 +36,19 @@ public sealed class UserDictionary
     private readonly List<UserWord> _imported = [];
     // 同梱の語句 (dictionaries/phrases.txt)。変換エンジンが苦手な語句を補う。ユーザーの登録より後回しで、保存も表示もしない。
     private readonly List<UserWord> _builtIn = [];
+    // 同梱の語句のうち、| で文節の区切りを書いたもの (いち|がっき → 一|学期)。読みと語句は | を除いた形で _builtIn に入れる。
+    private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
 
     public UserDictionary(string? path, bool builtIn = true, string? importDirectory = null)
     {
         _path = path;
-        if (builtIn) Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
+        if (builtIn)
+        {
+            Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
+            SplitBuiltInClauses();
+        }
         try
         {
             if (path is not null && File.Exists(path)) Parse(File.ReadAllLines(path, Encoding.UTF8), _words);
@@ -101,6 +107,31 @@ public sealed class UserDictionary
             }
         }
     }
+
+    /// <summary>
+    /// 同梱の語句の | (文節の区切り) を読む。いち|がっき → 一|学期 は、読み いちがっき を 一学期 として見つけ、変換では 一|学期 の 2 つの文節にする
+    /// (数字と 学期 を別に選び直せるように)。読みと語句の | の数が違う行は、| を除いた 1 つの文節にする。
+    /// </summary>
+    private void SplitBuiltInClauses()
+    {
+        for (var i = 0; i < _builtIn.Count; i++)
+        {
+            var (reading, word) = (_builtIn[i].Reading, _builtIn[i].Word);
+            if (!reading.Contains('|') && !word.Contains('|')) continue;
+            var readings = reading.Split('|');
+            var words = word.Split('|');
+            _builtIn[i] = new UserWord(reading.Replace("|", ""), word.Replace("|", ""));
+            if (readings.Length == words.Length && readings.All(r => r.Length > 0) && words.All(w => w.Length > 0))
+                _clauses[_builtIn[i].Reading + "\t" + _builtIn[i].Word] = [.. readings.Zip(words)];
+        }
+    }
+
+    /// <summary>
+    /// 見つけた語を文節に分ける。同梱の語句に | で区切りを書いたもの (いちがっき → 一学期 は いち|がっき → 一|学期) は分けた文節、
+    /// それ以外はそのまま 1 つの文節。
+    /// </summary>
+    public IReadOnlyList<(string Reading, string Word)> Clauses(string reading, string word) =>
+        _clauses.TryGetValue(reading + "\t" + word, out var parts) ? parts : [(reading, word)];
 
     /// <summary>登録内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
     public int Version { get; private set; }

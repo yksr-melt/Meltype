@@ -107,6 +107,28 @@ internal static class Quality
         new("混在", "kyouhagoogledekensaku", "きょうはgoogleでけんさく"),
         new("混在", "tanaka@example.com", "tanaka@example.com"),
         new("混在", "yamada.taro@example.co.jp", "yamada.taro@example.co.jp"),
+        // 英単語の最後の d / t と は (android|ha の dha = でゃ にしない: issue #1044)
+        new("混在", "Androidha", "Androidは"),
+        new("混在", "kyouhaAndroidhaii", "きょうはAndroidはいい"),
+        new("混在", "Discordha", "Discordは"),
+        new("日本語", "dhisuku", "でぃすく"),
+        // 英単語 + と + っ で始まる続き (not|to|tte) は、っ の綴りで続く日本語 (則って: issue #1030)
+        new("日本語", "nottotte", "のっとって"),
+        new("日本語", "kanreininottotte", "かんれいにのっとって"),
+        new("混在", "cattodog", "catとdog"),
+        // 数字の前後がかなとして読める (huuso|ku|6|me) のは、略語 (i18n) ではなく数字を挟んだ日本語 (issue #1017)
+        new("日本語", "huusoku6me-toru", "ふうそく6めーとる"),
+        new("混在", "i18n", "i18n"),
+        new("混在", "k8s", "k8s"),
+        new("混在", "h2o", "h2o"),
+        // 日本語 + 大文字 1 文字 + 数字 (kamiwo|A4) は、名前の最後の大文字 (holoX) ではない (issue #1005)
+        new("混在", "sonodokyumentowoA4saizudeinsatushitekudasai", "そのどきゅめんとをA4さいずでいんさつしてください"),
+        new("混在", "kamiwoA4", "かみをA4"),
+        new("混在", "kyouhaA", "きょうはA"),
+        new("混在", "holoX", "holoX"),
+        // ツール名 (Claude Code): code の de を助詞にしない (issue #1001)
+        new("英語", "claudecode", "claudecode"),
+        new("混在", "claudecodewotukau", "claudecodeをつかう"),
         new("混在", "foo_bar@example.com", "foo_bar@example.com"),
         new("混在", "taro+news@example.com", "taro+news@example.com"),
         new("混在", "yamada-taro@example.com", "yamada-taro@example.com"),

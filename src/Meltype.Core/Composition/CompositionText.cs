@@ -188,7 +188,7 @@ public sealed class CompositionText
                 _pending.Remove(0, _pending.Length - 1);
             }
             // zh / zj / zk / zl → ← ↓ ↑ →。z が 1 文字のときだけ (puzzle の zz の次の l は英単語)。
-            if (_pending.Length == 1 && char.ToLowerInvariant(_pending[0]) == 'z' && ZSymbol(c) is { } arrow)
+            if (_pending.Length == 1 && char.ToLowerInvariant(_pending[0]) == 'z' && ZSymbols() && ZSymbol(c) is { } arrow)
             {
                 var raw = _pending[0].ToString() + c;
                 _pending.Clear();
@@ -202,7 +202,7 @@ public sealed class CompositionText
             RereadSmallTsuAfterEnglishL();
             return;
         }
-        if (_pending.Length > 0 && char.ToLowerInvariant(_pending[^1]) == 'z' && ZSymbol(c) is { } z)
+        if (_pending.Length > 0 && char.ToLowerInvariant(_pending[^1]) == 'z' && ZSymbols() && ZSymbol(c) is { } z)
         {
             var raw = _pending[^1].ToString() + c;
             _pending.Length--;
@@ -256,6 +256,9 @@ public sealed class CompositionText
 
     /// <summary>かなのすぐ後ろの / を中黒 (・) にするか (設定)。</summary>
     public Func<bool> SlashAsMiddleDot { get; set; } = () => false;
+
+    /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。OFF なら z はほかの英字と同じ: issue #1008)。</summary>
+    public Func<bool> ZSymbols { get; set; } = () => true;
 
     /// <summary>空の変換ボックスに打った / を、打ち始めの / として中黒 (・) にするか。読むと次からは false。</summary>
     public Func<bool> SlashAtStart { get; set; } = () => false;
@@ -595,6 +598,22 @@ public sealed class CompositionText
                     _units.Add(new CompositionUnit("ん", raw[..1]));
                     var offset = 1;
                     foreach (var token in rest.Tokens)
+                    {
+                        _units.Add(new CompositionUnit(token.Kana, raw.Substring(offset, token.Romaji.Length)));
+                        offset += token.Romaji.Length;
+                    }
+                }
+                // 英単語の最後の d / t + は行・わ行 (android|ha の dha = でゃ、reddit|ha の tha = てゃ) は、d / t を英単語に残して は と分ける
+                // (d が でゃ とつながって、英単語の区切りが無くなっていた。Androidha が Andろいでゃ になっていた: issue #1044)。
+                // 英単語は単位の区切りから始まり、ローマ字として読めないものだけ (日本語の でゃ・てぃ を割らない)。
+                else if (raw.Length >= 3 && char.ToLowerInvariant(raw[0]) is 'd' or 't' && char.ToLowerInvariant(raw[1]) == 'h' &&
+                         EndsWithEnglishWordFromUnit(_units.Count, raw[..1]) &&
+                         !romaji.Analyze((LettersBefore(_units.Count) + raw[..1]).ToLowerInvariant()).IsValid &&
+                         romaji.AnalyzeFragment(raw[1..].ToLowerInvariant()) is { IsValid: true, Partial: "" } particle)
+                {
+                    _units.Add(new CompositionUnit(raw[..1], raw[..1]));
+                    var offset = 1;
+                    foreach (var token in particle.Tokens)
                     {
                         _units.Add(new CompositionUnit(token.Kana, raw.Substring(offset, token.Romaji.Length)));
                         offset += token.Romaji.Length;

@@ -228,6 +228,13 @@ public sealed class Settings
      Description("確定するときに、日本語と英単語の間に半角スペースを入れます (今日はGitHubにpushした → 今日は GitHub に push した)。数字だけの語 (3時) には入れません。")]
     public bool SpaceAroundEnglish { get; set; }
 
+    [Category("1. 全般"), DisplayName("半角数字の前後に半角スペース"),
+     Description("確定するときに、日本語と半角数字の間に半角スペースを入れます (この処理を3回実行します → この処理を 3 回実行します)。技術文書などの表記に合わせるとき用です。全角数字 (３回) には入れません。")]
+    public bool SpaceAroundNumbers { get; set; }
+    [Category("1. 全般"), DisplayName("変換中の数字キーで候補を選ぶ"),
+     Description("Space・Tab で変換している間に、キーボードの上の段の 1〜9 を押すと、候補の一覧の番号で選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。テンキーの 1〜9 は、この設定に関係なく候補を選びます。")]
+    public bool NumberKeysSelectCandidates { get; set; } = true;
+
     [Category("1. 全般"), DisplayName("Shift + Space で半角スペース"),
      Description("日本語入力のときの Shift + Space を、全角スペースではなく半角スペースにします (プログラミングの癖で Shift + Space を半角スペースに使う人向け)。")]
     public bool ShiftSpaceHalfWidth { get; set; }
@@ -404,6 +411,10 @@ public sealed class Settings
     [Category("1. 全般"), DisplayName("/ キーで中黒「・」"),
      Description("かなのすぐ後ろで打った / を中黒「・」にします (いーろん/ますく → イーロン・マスク)。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。OFF のときも、z/ または / を打って Space で「・」にできます。")]
     public bool SlashAsMiddleDot { get; set; }
+
+    [Category("1. 全般"), DisplayName("z + 記号・hjkl で記号・矢印を入れる"),
+     Description("日本語入力のとき、z の後ろに記号や h j k l を打つと記号・矢印にします (Microsoft IME・Google 日本語入力と同じ。z/ → ・、z. → …、z, → ‥、z- → ～、z[ → 『、z] → 』、zh zj zk zl → ← ↓ ↑ →)。OFF にすると、z はほかの英字と同じに扱います (1000Hz. や quiz. の z. を … にしません)。")]
+    public bool ZSymbols { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("入力モードをカーソルの近くに表示"),
      Description("入力欄をクリックしたときと 半角/全角 を押したときに、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
