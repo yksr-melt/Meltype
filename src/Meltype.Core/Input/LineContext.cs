@@ -50,6 +50,18 @@ public static class LineContext
     }
 
     /// <summary>
+    /// 次の文字を入力するときの種類。末尾の # がコメントではなく #include や r#type の一部になるならコードとして扱う。
+    /// </summary>
+    internal static LineKind ClassifyForInput(string text, char? nextCharacter)
+    {
+        var kind = ClassifyText(text);
+        if (kind == LineKind.Comment && text.EndsWith('#') && nextCharacter is { } character &&
+            character >= ' ' && !char.IsControl(character) && ClassifyText(text + character) == LineKind.Code)
+            return LineKind.Code;
+        return kind;
+    }
+
+    /// <summary>
     /// 前の行から始まって、まだ閉じていない複数行の文字列・コメントがあれば、その種類 (無ければ null)。
     /// 1 行のコメント (# //) と 1 行の文字列 ("…" '…') の中の """ /* は数えない。
     /// </summary>
