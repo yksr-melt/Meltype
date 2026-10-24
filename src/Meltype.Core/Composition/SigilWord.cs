@@ -18,6 +18,7 @@ public sealed class SigilWord
     private bool? _boundary = true;
     // 記号から打っている名前の文字数 (記号を含む)。0 なら名前の途中ではない。
     private int _length;
+    private bool _sawBefore;
 
     /// <summary>名前の前に付ける記号。</summary>
     public static bool IsSigil(char c) => c is '/' or '$' or '@';
@@ -27,6 +28,13 @@ public sealed class SigilWord
 
     /// <summary>記号から始めた名前を打っている途中か。</summary>
     public bool IsActive { get { lock (_gate) return _length > 0; } }
+
+    /// <summary>
+    /// ホスト (TSF やエディタ) が直前の文脈 (before) を渡す際、一定文字数 (例: 16〜32 文字) で切り詰めることがある。
+    /// 長い名前を入力中に先頭の記号 (/・$・@) が切り詰め境界より手前に押し出された場合でも、
+    /// 切り詰められたバッファ全体が名前文字で満たされていれば名前の途中とみなすための閾値。
+    /// </summary>
+    private const int TruncatedBeforeThreshold = 20;
 
     /// <summary>
     /// 変換ボックスが空のときに打った文字を、変換せずにそのままアプリへ渡すか。
@@ -40,9 +48,40 @@ public sealed class SigilWord
         if (invisibleOnly) before = "";
         lock (_gate)
         {
-            // 名前の途中のはずなのに、キャレットの前が空白・名前に使わない文字: 名前の後の空白・Enter が
-            // こちらを通らずにアプリへ届いた (Meltype IME は変換中でないときの Space・Enter を送ってこない: #242)。普通の入力に戻る
-            if (_length > 0 && (invisibleOnly || !string.IsNullOrEmpty(before) && !IsNameChar(before[^1]))) _length = 0;
+            if (_length > 0)
+            {
+                // Discord などで見えない文字だけになった場合や、
+                // 名前の途中のはずなのにキャレットの前が空白・名前に使わない文字・記号で始まらない語・消されて空になった場合:
+                // 名前の後の空白・Enter・BackSpace などがこちらを通らずにアプリへ届いた (#242)。普通の入力に戻る。
+                if (invisibleOnly)
+                {
+                    _length = 0;
+                    _sawBefore = false;
+                    _boundary = true;
+                }
+                else if (!string.IsNullOrEmpty(before))
+                {
+                    _sawBefore = true;
+                    var i = before.Length;
+                    while (i > 0 && IsNameChar(before[i - 1])) i--;
+                    // 記号で始まっているか、あるいは before が切り詰められて記号が枠外に押し出された (バッファ全体が名前文字) かを判定する
+                    if (!IsNameChar(before[^1]) || !(IsSigil(before[i]) || (i == 0 && before.Length >= TruncatedBeforeThreshold)))
+                    {
+                        _length = 0;
+                        _sawBefore = false;
+                    }
+                    else
+                    {
+                        _length = before.Length - i;
+                    }
+                }
+                else if (before is not null && _sawBefore)
+                {
+                    _length = 0;
+                    _sawBefore = false;
+                    _boundary = true;
+                }
+            }
             if (_length > 0) return IsNameChar(c);
             if (!IsSigil(c)) return false;
             // ホストが前の文字を教えてくれれば、そちらを使う。空 (入力欄の先頭) は、前の文字を打ったのを見ていないときだけ信じる
@@ -79,10 +118,12 @@ public sealed class SigilWord
             }
             // 名前の後の空白 (など) で普通の入力に戻る。
             _length = 0;
+            _sawBefore = false;
         }
         else if (IsSigil(c) && _boundary == true)
         {
             _length = 1;
+            _sawBefore = false;
             _boundary = false;
             return;
         }
@@ -113,7 +154,11 @@ public sealed class SigilWord
         {
             if (_length > 0)
             {
-                if (--_length == 0) _boundary = true;
+                if (--_length == 0)
+                {
+                    _sawBefore = false;
+                    _boundary = true;
+                }
                 return;
             }
             _boundary = null;
@@ -127,6 +172,7 @@ public sealed class SigilWord
         {
             _boundary = true;
             _length = 0;
+            _sawBefore = false;
         }
     }
 
@@ -149,6 +195,7 @@ public sealed class SigilWord
         {
             _boundary = null;
             _length = 0;
+            _sawBefore = false;
         }
     }
 }

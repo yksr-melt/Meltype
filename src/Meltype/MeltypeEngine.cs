@@ -712,14 +712,15 @@ internal sealed class MeltypeEngine : IDisposable
             _snippet.Mark = settings.SnippetMark;
             if (_snippet.PassesThrough(snippetChar, _line.Text)) return false;
         }
-        // 先頭か空白の直後の /command・$skill・@ファイル名 は、名前の終わり (空白) まで変換せずにそのままアプリへ渡す (#193)。
         // かな入力では / などのキーはかな (め) なので対象にしない。
-        // 文章の入力欄 (コードエディターのコード以外) の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
+        // 文章の入力欄 (コードエディターのコード以外) の / や「/ キーで中黒」設定時は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
         var slashAtStart = false;
         if (!reconvert && settings.SigilWordsDirect && (_keyboardDirect || settings.InputStyle != InputStyle.Kana) &&
-            KeyText.CharFromKey(e.Vk, e.Scan, false) is { } typed && _sigil.PassesThrough(typed, _line.Text))
+            KeyText.CharFromKey(e.Vk, e.Scan, false) is { } typed &&
+            _sigil.PassesThrough(typed, _line.Text))
         {
-            slashAtStart = typed == '/' && !_keyboardDirect && !_sigil.IsActive && !PassesSlash(settings);
+            slashAtStart = typed == '/' && !_keyboardDirect && !_sigil.IsActive &&
+                           (settings.SlashAsMiddleDot || !PassesSlash(settings));
             if (!slashAtStart)
             {
                 if (!_sigil.IsActive) Log.Info($"{typed} で始まる語: 空白までそのまま入力します");

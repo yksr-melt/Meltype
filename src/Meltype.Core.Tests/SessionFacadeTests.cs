@@ -292,6 +292,31 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void TsfDirectMode_DigitsResetDirectEnglishWord()
+    {
+        var settings = new Settings { DirectModeAutoDetect = true };
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions
+            {
+                ClassifyDirect = (letters, _) => letters == "to" ? Detection.Verdict.Japanese
+                    : letters.Length >= 3 ? Detection.Verdict.English
+                    : Detection.Verdict.Undecided,
+            },
+            () => settings, directModeDetection: true)
+        {
+            Direct = true,
+        };
+
+        Type(session, "mod");
+        session.HandleKey('5', '5', false, false, false, false);
+        Assert.True(!session.DirectEnglishWord, "数字を打ったら英単語の継続をリセットする");
+
+        var result = Type(session, "to", before: "mod5")[^1];
+        Assert.True(result.Consumed, "数字の後のローマ字も日本語判定される");
+        Assert.Equal("と", result.View?.Text, "日本語の変換中に切り替わる");
+    }
+
+    [Test]
     public static void KeysOutsideComposition_GoToTheApp()
     {
         var session = Create();
@@ -796,6 +821,36 @@ internal static class SessionFacadeTests
         Type(session, "taro");
         session.Direct = false;
         Assert.True(Type(session, "@", before: "")[0].Consumed, "taro と打った後の @ は変換ボックスへ");
+    }
+
+    [Test]
+    public static void SigilWord_ResetsWhenDeletedOrCaretMoved()
+    {
+        // 記号 (@ やコード欄の /) を打ったあとに BackSpace や矢印・クリックが passed 通知で届いたとき、または before から記号が消えたときは日本語入力に戻る。
+        var session = Create();
+        Assert.True(!Type(session, "@", before: "")[0].Consumed, "先頭の @ は素通し");
+        Assert.True(!Type(session, "h", before: "@")[0].Consumed, "名前の続きは素通し");
+        // 複数回 BackSpace を押して入力欄が空になった場合 (最後の BackSpace 1 回分しか届かなくても before が空に戻れば解除)
+        session.CaretMoved(VirtualKeys.Back, false);
+        Assert.Equal("か", Type(session, "ka", before: "")[^1].View?.Text);
+
+        // キャレット移動 (passedVk == 0: クリックやフォーカス移動) でも解除される
+        session = Create();
+        Assert.True(!Type(session, "@", before: "")[0].Consumed, "先頭の @ は素通し");
+        session.CaretMoved(0, false);
+        Assert.Equal("か", Type(session, "ka", before: "something")[^1].View?.Text);
+    }
+
+    [Test]
+    public static void SlashAsMiddleDot_WorksAtStartEvenWhenSigilWordsDirectEnabled()
+    {
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { Candidates = CandidateDictionary.Load(null), SlashAsMiddleDot = () => true },
+            () => new Settings { SlashAsMiddleDot = true, SigilWordsDirect = true });
+        var slash = Type(session, "/", before: "")[0];
+        Assert.True(slash.Consumed, "/ キーで中黒が ON なら先頭の / も変換ボックスへ入る");
+        Assert.Equal("・", slash.View?.Text);
+        Assert.Equal("・", Type(session, "\n")[0].Commits.Single().Text);
     }
 
     [Test]

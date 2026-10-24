@@ -361,6 +361,8 @@ public sealed class MeltypeSession
     /// </summary>
     public void CaretMoved(int passedVk, bool control)
     {
+        if (control || passedVk == 0) _sigil.Lose();
+        else _sigil.OnKey(passedVk, null);
         if (!_codeJapanese) return;
         var moved = control || passedVk is VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
         if (!moved) return;
@@ -409,21 +411,24 @@ public sealed class MeltypeSession
         var modifier = control || alt || command;
         var settings = _settings();
         if (Direct && _directModeDetection && _directEnglishWord &&
-            (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
-             before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
+            (ch is { } directChar && !char.IsAsciiLetter(directChar) && directChar is not ('@' or '_') ||
+             before is { Length: > 0 } && !char.IsAsciiLetter(before[^1]) && before[^1] is not ('@' or '_')))
             _directEnglishWord = false;
         if ((Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
-        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !_sigil.IsActive && _settings().SigilWordsDirect &&
+        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !_sigil.IsActive && settings.SigilWordsDirect &&
             _sigil.PassesThrough('/', before))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && _sigil.PassesThrough(c, before))
+        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
+        // ただし「/ キーで中黒」が ON の日本語入力時は、先頭の / も中黒 (・) として変換ボックスに入れる。
+        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect &&
+            !(c == '/' && !Direct && settings.SlashAsMiddleDot && settings.InputStyle != InputStyle.Kana && !_sigil.IsActive) &&
+            _sigil.PassesThrough(c, before))
         {
             if (CodeInput) TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
