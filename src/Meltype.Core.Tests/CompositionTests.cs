@@ -845,7 +845,7 @@ internal static class CompositionTests
         // きょう → 今日の日付
         var today = new Keyboard(now: () => new DateTime(2026, 10, 8, 17, 22, 0));
         today.Type("kyou ");
-        foreach (var expected in new[] { "2026年10月8日", "2026年10月8日(木)", "10月8日(木)", "2026/10/08", "2026-10-08", "木曜日" })
+        foreach (var expected in new[] { "2026年10月8日", "2026年10月8日(木)", "10月8日(木)", "2026/10/08", "2026/10/08(木)", "10/8(木)", "2026-10-08", "木曜日" })
             Assert.True(today.Host.View!.Candidates.Contains(expected), string.Join(" ", today.Host.View!.Candidates));
         var other = new Keyboard(now: () => new DateTime(2026, 10, 8, 17, 22, 0));
         other.Type("imada ");
@@ -865,7 +865,7 @@ internal static class CompositionTests
         });
         foreach (var (keys, first, expected) in new[]
         {
-            ("10gatsu9nichi ", "10月9日", new[] { "10/9", "10/09", "10/9(金)", "2026/10/09" }),
+            ("10gatsu9nichi ", "10月9日", new[] { "10/9", "10/09", "10/9(金)", "10月9日(金)", "2026/10/09", "2026/10/09(金)" }),
             ("12gatsu25nichi ", "12月25日", new[] { "12/25", "12/25(金)" }),
             ("3ji15hun ", "3時15分", new[] { "3:15", "03:15" }),
         })
@@ -890,6 +890,14 @@ internal static class CompositionTests
         chosen.Press(VirtualKeys.Return);
         Assert.Equal("10/9", chosen.Host.Document);
         Assert.True(history.Get("10がつ9にち") is null, "学習しない");
+        // #935: 曜日付きの 10月9日(金) を選んでも学習しない
+        var weekday = new Keyboard(converter: converter, history: history, now: () => new DateTime(2026, 10, 8));
+        weekday.Type("10gatsu9nichi ");
+        var weekdayIndex = weekday.Host.View!.Candidates.ToList().IndexOf("10月9日(金)");
+        for (var i = 0; i < weekdayIndex; i++) weekday.Press(VirtualKeys.Space);
+        weekday.Press(VirtualKeys.Return);
+        Assert.Equal("10月9日(金)", weekday.Host.Document);
+        Assert.True(history.Get("10がつ9にち") is null, "曜日付きも学習しない");
     }
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
