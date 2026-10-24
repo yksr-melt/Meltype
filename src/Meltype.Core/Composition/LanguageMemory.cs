@@ -80,6 +80,22 @@ public sealed class LanguageMemory
     /// <summary>覚えている内容が変わるたびに増える (判定の結果を使い回してよいかを見るのに使う)。</summary>
     public int Version { get; private set; }
 
+    internal int MaxWordLength
+    {
+        get
+        {
+            if (_maxWordLengthVersion != Version)
+            {
+                _maxWordLength = _entries.Count == 0 ? 0 : _entries.Keys.Max(k => k.Length);
+                _maxWordLengthVersion = Version;
+            }
+            return _maxWordLength;
+        }
+    }
+
+    private int _maxWordLength;
+    private int _maxWordLengthVersion = -1;
+
     /// <summary>覚えている語なら英語か (true) 日本語か (false)。覚えていなければ null。word は小文字の英字。</summary>
     public bool? Get(string word)
     {

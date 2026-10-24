@@ -43,7 +43,11 @@ public sealed class ProperNouns
                 _words.Add(lower);
             }
         }
+        Version++;
     }
+
+    /// <summary>語を足すたびに増える (区間の判定の控えを捨てる)。</summary>
+    internal int Version { get; private set; }
 
     /// <summary>小文字の綴り (英語辞書に足す用)。</summary>
     public IEnumerable<string> LowercaseWords => _canonical.Keys;
@@ -52,6 +56,7 @@ public sealed class ProperNouns
     internal bool Contains(ReadOnlySpan<char> lower) => _canonical.GetAlternateLookup<ReadOnlySpan<char>>().ContainsKey(lower);
 
     public bool HasPrefix(string lower) => _words.HasPrefix(lower);
+    internal int MaxLength => _words.MaxLength;
     internal bool HasPrefix(ReadOnlySpan<char> lower) => _words.HasPrefix(lower);
 
     /// <summary>正しい大文字小文字の形。固有名詞でなければ null。</summary>

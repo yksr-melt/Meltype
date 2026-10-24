@@ -67,6 +67,7 @@ public sealed partial class CompositionDetector
         DetectionLevel level, bool englishSentence, bool final)
     {
         var n = units.Count;
+        var longestWord = LongestWord(Raw(units, 0, n) + pending);
         // best[i, e]: 位置 i まで区切ったときの一番良い区切り方。e は「直前の区間が i で終わる英語の区間か」。
         var best = new ScoredPath?[n + 1, 2];
         best[0, 0] = new ScoredPath(0, [], 0);
@@ -102,7 +103,7 @@ public sealed partial class CompositionDetector
                 if (forced < 0 && level != DetectionLevel.Manual) forced = HyphenatedWordEnd(units, i, pending);
                 if (forced < 0 && level != DetectionLevel.Manual) forced = NumeronymEnd(units, i, pending);
                 if (forced < 0 && level != DetectionLevel.Manual && (i > 0 && units[i - 1].Raw is [var digit] && char.IsAsciiDigit(digit) ? AlphanumericSuffixEnd(units, i, pending, Segments(), path.JapaneseStart) : -1) is var suffix and > 0) forced = suffix;
-                if (forced < 0 && level != DetectionLevel.Manual) forced = EnglishBeforeParticleAndEnglishTail(units, i, pending);
+                if (forced < 0 && level != DetectionLevel.Manual) forced = EnglishBeforeParticleAndEnglishTail(units, i, pending, longestWord);
                 if (forced > i)
                 {
                     Offer(forced, true, Extend(path, i, forced, units, pending));

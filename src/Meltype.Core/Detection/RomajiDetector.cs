@@ -215,18 +215,30 @@ public sealed class RomajiDetector
 
     private RomajiAnalysis Analyze(string letters, bool strictStart, bool composition)
     {
+        var slot = composition ? 2 : strictStart ? 0 : 1;
         var cache = composition ? _compositionCache : strictStart ? _strictCache : _looseCache;
         if (cache.TryGetValue(letters, out var cached)) return cached;
         var result = AnalyzeCore(letters, strictStart, composition);
-        if (cache.Count >= CacheLimit) cache.Clear();
+        // ConcurrentDictionary.Count はすべてのロックを取るので、足した数を別に数える
+        if (Interlocked.Increment(ref _cacheAdded[slot]) > CacheLimit)
+        {
+            cache.Clear();
+            Interlocked.Exchange(ref _cacheAdded[slot], 0);
+        }
         cache[letters] = result;
         return result;
     }
 
     private const int CacheLimit = 50000;
+    private readonly int[] _cacheAdded = new int[3];
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _strictCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _looseCache = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, RomajiAnalysis> _compositionCache = new(StringComparer.Ordinal);
+
+    /// <summary>位置 i の読み方 (語・っ・ん・読めない) は、i から後ろにこの文字数以上あれば、それより後ろの文字によらない。</summary>
+    internal int DecisionWindow => Math.Max(Math.Max(5, MaxSpellingLength + 1), _customMaxLength + 1);
+
+    private static readonly int MaxSpellingLength = CompositionSpellingToKana.Keys.Max(k => k.Length);
 
     private RomajiAnalysis AnalyzeCore(string letters, bool strictStart, bool composition)
     {

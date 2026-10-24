@@ -29,6 +29,9 @@ public static class Log
     private static string? _filePath;
     private static System.Threading.Timer? _fileTimer;
 
+    // 最初の DateTime.Now はタイムゾーンを読み込むので重い (Linux で約 160ms)。入力中に初めてログを書くときに待たせない
+    private static readonly bool TimeZoneRequested = ThreadPool.QueueUserWorkItem(_ => _ = DateTime.Now);
+
     public static long Version => Interlocked.Read(ref _version);
 
     /// <summary>

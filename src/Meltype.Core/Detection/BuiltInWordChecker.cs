@@ -16,7 +16,13 @@ public sealed class BuiltInWordChecker : IWordChecker
 
     private readonly PackedWordSet _words;
 
-    public BuiltInWordChecker(string text) => _words = PackedWordSet.FromLines(text);
+    public BuiltInWordChecker(string text)
+    {
+        _words = PackedWordSet.FromLines(text);
+        MaxWordLength = _words.MaxLength;
+    }
+
+    public int MaxWordLength { get; }
 
     public bool IsAvailable => _words.Count > 0;
 
