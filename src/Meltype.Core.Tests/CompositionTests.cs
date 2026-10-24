@@ -3313,6 +3313,24 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1016_PageKeysTurnCandidatePages()
+    {
+        // #1016: 変換中の PageDown / PageUp で候補の一覧のページを送る (アプリに通して確定しない)
+        var many = Enumerable.Range(1, 20).Select(i => "候補" + i).ToArray();
+        var k = new Keyboard(moreCandidates: reading => reading == "かわ" ? many : []);
+        k.Type("kawa ");
+        k.Press(0x22); // PageDown
+        Assert.True(k.Host.View is { Converting: true }, "確定しない");
+        var page2 = k.Host.View!.Clauses![0];
+        Assert.Equal(k.Host.View.Candidates[9], page2, "次のページの最初の候補");
+        k.Press(0x21); // PageUp
+        Assert.Equal(k.Host.View!.Candidates[0], k.Host.View.Clauses![0], "前のページに戻る");
+        k.Press(0x21); // PageUp (最初のページの前は最後のページ)
+        Assert.Equal(k.Host.View!.Candidates[(k.Host.View.Candidates.Count - 1) / 9 * 9], k.Host.View.Clauses![0], "最後のページ");
+        Assert.Equal("", k.Host.Document, "まだ確定しない");
+    }
+
+    [Test]
     public static void Backspace_ThenRetype_RereadsRomaji()
     {
         // 報告: test の最後の t を消して u → 「てsう」になる。
