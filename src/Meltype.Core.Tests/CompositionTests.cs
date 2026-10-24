@@ -35,6 +35,8 @@ internal static class CompositionTests
             return hiragana switch
             {
                 "たんいをとる" => [new("たんいを", "単位を"), new("とる", "取る")],
+                // 英語として見せている語 (Make) も、読み (まけ) にして区切る
+                "きょうはまけ" => [new("きょうは", "今日は"), new("まけ", "負け")],
                 "ひるか" => [new("ひる", "昼"), new("か", "化")],
                 // 本物の変換エンジンは、前に同じ語があると区切りを変える (「記号等」含め、 + きごうとう → 気強盗)。
                 "きごうとう" when context?.Contains("記号等") == true => [new("き", "気"), new("ごうとう", "強盗")],
@@ -676,6 +678,76 @@ internal static class CompositionTests
         Assert.Equal(0, k.Host.View!.SelectedPrediction);
         k.Press(VirtualKeys.Return);
         Assert.Equal("今日今日", k.Host.Document);
+    }
+
+    [Test]
+    public static void Prediction_FromLastClause()
+    {
+        // 読み全体 (たんいをとる) の続きが無くても、最後の文節 (とる) の続きを出す。選ぶと前の文節は見えているとおりに残す
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("とるこりょうり", "トルコ料理");
+        var k = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
+        k.Type("tanniwotoru");
+        Assert.Equal("単位を取る", k.Showing);
+        Assert.True(k.Host.View!.Predictions?.Contains("トルコ料理") == true, "最後の文節の続き: " + string.Join(",", k.Host.View.Predictions ?? []));
+        k.Press(VirtualKeys.Tab);
+        Assert.Equal("単位をトルコ料理", k.Showing);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("単位をトルコ料理", k.Host.Document);
+
+        // ライブ変換が OFF なら、最後の文節では引かない (打鍵ごとに変換を増やさない)
+        var off = new Keyboard(predictor: new Predictor(phrases, null, null));
+        off.Type("tanniwotoru");
+        Assert.True(off.Host.View!.Predictions is null, "OFF: " + string.Join(",", off.Host.View.Predictions ?? []));
+    }
+
+    [Test]
+    public static void Prediction_EnglishAtEndUsesWholeReading()
+    {
+        // 英語として見せている語で終わるとき (きょうはMake) は、前に残す文字が分からないので、最後の文節 (まけ) の続きは出さずに読み全体の続きだけにする
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("まけおしみ", "負け惜しみ");
+        phrases.Remember("きょうはまけた", "今日は負けた");
+        var k = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
+        k.Type("kyouhaMake");
+        Assert.True(k.Showing.EndsWith("Make", StringComparison.Ordinal), k.Showing);
+        Assert.Equal("今日は負けた", string.Join(",", k.Host.View!.Predictions ?? []));
+
+        // 同じ読みでも、日本語で見えていれば最後の文節の続きを出す
+        var japanese = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
+        japanese.Type("kyouhamake");
+        Assert.Equal("今日は負け", japanese.Showing);
+        Assert.True(japanese.Host.View!.Predictions?.Contains("負け惜しみ") == true, "最後の文節の続き: " + string.Join(",", japanese.Host.View.Predictions ?? []));
+    }
+
+    [Test]
+    public static void Prediction_TypingAfterTabCommitsIt()
+    {
+        // Tab で予測の候補を選んだあと、Enter を押さずに続けて打ったら、その候補で確定して続きを入力する (選ぶ前の打ちかけに戻さない)
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("きょうのよてい", "今日の予定");
+        var k = new Keyboard(predictor: new Predictor(phrases, null, null));
+        k.Type("kyou");
+        k.Press(VirtualKeys.Tab);
+        Assert.Equal("今日の予定", k.Showing);
+        k.Type("ha");
+        Assert.Equal("今日の予定", k.Host.Document);
+        Assert.Equal("は", k.Showing);
+    }
+
+    [Test]
+    public static void Prediction_BackSpaceAfterTabDoesNotCommit()
+    {
+        // Tab で予測の候補を選んだあとの BackSpace は、確定せずに、選ぶ前の打ちかけから 1 文字消す
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("きょうのよてい", "今日の予定");
+        var k = new Keyboard(predictor: new Predictor(phrases, null, null));
+        k.Type("kyou");
+        k.Press(VirtualKeys.Tab);
+        Assert.Equal("今日の予定", k.Showing);
+        k.Press(VirtualKeys.Back);
+        Assert.Equal("", k.Host.Document);
+        Assert.Equal("きょ", k.Showing);
     }
 
     [Test]
