@@ -80,6 +80,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             RomajiTypos = options.RomajiTypos ?? RomajiTypoCorrector.Load(detector.Romaji),
             CorrectTypos = options.CorrectTypos,
             SlashAsMiddleDot = options.SlashAsMiddleDot,
+            ZSymbols = options.ZSymbols,
             SpaceAroundEnglish = options.SpaceAroundEnglish,
             ShiftSpaceHalfWidth = options.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = options.EnterCommitsAsShown,

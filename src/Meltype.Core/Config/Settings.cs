@@ -405,6 +405,10 @@ public sealed class Settings
      Description("かなのすぐ後ろで打った / を中黒「・」にします (いーろん/ますく → イーロン・マスク)。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。OFF のときも、z/ または / を打って Space で「・」にできます。")]
     public bool SlashAsMiddleDot { get; set; }
 
+    [Category("1. 全般"), DisplayName("z + 記号・hjkl で記号・矢印を入れる"),
+     Description("日本語入力のとき、z の後ろに記号や h j k l を打つと記号・矢印にします (Microsoft IME・Google 日本語入力と同じ。z/ → ・、z. → …、z, → ‥、z- → ～、z[ → 『、z] → 』、zh zj zk zl → ← ↓ ↑ →)。OFF にすると、z はほかの英字と同じに扱います (1000Hz. や quiz. の z. を … にしません)。")]
+    public bool ZSymbols { get; set; } = true;
+
     [Category("1. 全般"), DisplayName("入力モードをカーソルの近くに表示"),
      Description("入力欄をクリックしたときと 半角/全角 を押したときに、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
     public bool ShowModeIndicator { get; set; } = true;

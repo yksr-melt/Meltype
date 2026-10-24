@@ -210,6 +210,9 @@ public sealed record CompositionOptions
     /// <summary>かなのすぐ後ろの / を中黒 (・) にするか (設定)。</summary>
     public Func<bool> SlashAsMiddleDot { get; init; } = () => false;
 
+    /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。issue #1008)。</summary>
+    public Func<bool> ZSymbols { get; init; } = () => true;
+
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
     public Func<bool> ShiftSpaceHalfWidth { get; init; } = () => false;
@@ -385,6 +388,7 @@ public sealed class CompositionController
         if (_options.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
         _text.CorrectTypos = () => _options.CorrectTypos();
         _text.SlashAsMiddleDot = () => _options.SlashAsMiddleDot();
+        _text.ZSymbols = () => _options.ZSymbols();
         _text.SlashAtStart = () => Interlocked.Exchange(ref _slashAtStart, 0) == 1;
     }
 

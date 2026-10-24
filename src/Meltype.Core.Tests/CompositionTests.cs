@@ -168,6 +168,7 @@ internal static class CompositionTests
         /// <summary>かな入力 (JIS) か。</summary>
         public bool Kana { get; set; }
         public bool CorrectTypos { get; set; } = true;
+        public bool ZSymbols { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
         public bool ShiftSpaceHalfWidth { get; set; }
         public bool EnterCommitsAsShown { get; set; }
@@ -266,6 +267,7 @@ internal static class CompositionTests
                 TranslationHistory = translationHistory,
                 RomajiTypos = Typos,
                 CorrectTypos = () => CorrectTypos,
+                ZSymbols = () => ZSymbols,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
                 ShiftSpaceHalfWidth = () => ShiftSpaceHalfWidth,
                 EnterCommitsAsShown = () => EnterCommitsAsShown,
@@ -4656,6 +4658,21 @@ internal static class CompositionTests
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, typed);
         }
+    }
+
+    [Test]
+    public static void Issue1008_ZSymbolsCanBeTurnedOff()
+    {
+        // Issue #1008: 設定「z + 記号・hjkl で記号・矢印を入れる」を OFF にすると、z はほかの英字と同じ (1000Hz. の z. を … にしない)
+        foreach (var (typed, expected) in new[] { ("z.", "z。"), ("zh", "zh"), ("zkai", "zかい"), ("zu", "ず") })
+        {
+            var k = new Keyboard { ZSymbols = false };
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+        var on = new Keyboard();
+        on.Type("z.\n");
+        Assert.Equal("…", on.Host.Document, "既定 (ON) は今までどおり");
     }
 
     [Test]

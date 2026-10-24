@@ -73,6 +73,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ConsonantAbbreviations = () => _engine.Settings.ConsonantAbbreviations,
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
+            ZSymbols = () => _engine.Settings.ZSymbols,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
             ShiftSpaceHalfWidth = () => _engine.Settings.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,

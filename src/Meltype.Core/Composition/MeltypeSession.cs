@@ -239,6 +239,7 @@ public sealed class MeltypeSession
             CandidateMeanings = () => settings.ShowCandidateMeanings,
             CorrectTypos = () => settings.CorrectTypos,
             SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
+            ZSymbols = () => settings.ZSymbols,
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
             ShiftSpaceHalfWidth = () => settings.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = () => settings.EnterCommitsAsShown,
