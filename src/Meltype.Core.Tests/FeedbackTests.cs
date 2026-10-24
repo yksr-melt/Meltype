@@ -778,6 +778,34 @@ internal static class LanguageLearningTests
         }
     }
 
+    [Test]
+    public static void LearnedEnglishWord_ConvertShowsEngineCandidates()
+    {
+        // #1137: go を英字で確定したあと、go + 変換キーの候補が ご ゴ ｺﾞ go Go GO だけで、語 碁 後 が出ない。
+        var memory = new LanguageMemory(null);
+        CompositionTests.Detector.Memory = memory;
+        try
+        {
+            var k = new CompositionTests.Keyboard(languages: memory);
+            k.Type("go");
+            k.Press(VirtualKeys.F10);
+            k.Type("\n");
+            Assert.Equal("go", k.Host.Document);
+
+            k = new CompositionTests.Keyboard(languages: memory, moreCandidates: reading => reading == "ご" ? ["語", "碁", "後"] : []);
+            k.Type("go");
+            Assert.Equal("go", k.Showing, "覚えたとおり英字");
+            k.Press(VirtualKeys.Convert);
+            var candidates = k.Host.View!.Candidates.ToList();
+            Assert.True(candidates.Contains("碁") && candidates.Contains("後"), string.Join(",", candidates));
+            Assert.True(candidates.IndexOf("碁") < candidates.IndexOf("ゴ"), "変換エンジンの候補はかなより前: " + string.Join(",", candidates));
+            Assert.True(candidates.IndexOf("ゴ") < candidates.IndexOf("go"), "英字の候補は日本語の候補の後ろのまま: " + string.Join(",", candidates));
+        }
+        finally
+        {
+            CompositionTests.Detector.Memory = null;
+        }
+    }
 
 
     [Test]
