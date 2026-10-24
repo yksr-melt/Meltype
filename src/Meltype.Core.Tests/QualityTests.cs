@@ -107,6 +107,11 @@ internal static class Quality
         new("混在", "kyouhagoogledekensaku", "きょうはgoogleでけんさく"),
         new("混在", "tanaka@example.com", "tanaka@example.com"),
         new("混在", "yamada.taro@example.co.jp", "yamada.taro@example.co.jp"),
+        // 英単語の最後の d / t と は (android|ha の dha = でゃ にしない: issue #1044)
+        new("混在", "Androidha", "Androidは"),
+        new("混在", "kyouhaAndroidhaii", "きょうはAndroidはいい"),
+        new("混在", "Discordha", "Discordは"),
+        new("日本語", "dhisuku", "でぃすく"),
         new("混在", "foo_bar@example.com", "foo_bar@example.com"),
         new("混在", "taro+news@example.com", "taro+news@example.com"),
         new("混在", "yamada-taro@example.com", "yamada-taro@example.com"),

@@ -600,6 +600,22 @@ public sealed class CompositionText
                         offset += token.Romaji.Length;
                     }
                 }
+                // 英単語の最後の d / t + は行・わ行 (android|ha の dha = でゃ、reddit|ha の tha = てゃ) は、d / t を英単語に残して は と分ける
+                // (d が でゃ とつながって、英単語の区切りが無くなっていた。Androidha が Andろいでゃ になっていた: issue #1044)。
+                // 英単語は単位の区切りから始まり、ローマ字として読めないものだけ (日本語の でゃ・てぃ を割らない)。
+                else if (raw.Length >= 3 && char.ToLowerInvariant(raw[0]) is 'd' or 't' && char.ToLowerInvariant(raw[1]) == 'h' &&
+                         EndsWithEnglishWordFromUnit(_units.Count, raw[..1]) &&
+                         !romaji.Analyze((LettersBefore(_units.Count) + raw[..1]).ToLowerInvariant()).IsValid &&
+                         romaji.AnalyzeFragment(raw[1..].ToLowerInvariant()) is { IsValid: true, Partial: "" } particle)
+                {
+                    _units.Add(new CompositionUnit(raw[..1], raw[..1]));
+                    var offset = 1;
+                    foreach (var token in particle.Tokens)
+                    {
+                        _units.Add(new CompositionUnit(token.Kana, raw.Substring(offset, token.Romaji.Length)));
+                        offset += token.Romaji.Length;
+                    }
+                }
                 // ローマ字として読めない略語の最後の c + h / y (vrc|ya、vc|ha、jc|ha の cya・cha = ちゃ) は、c を略語に残して や・は と分ける
                 // (c が ちゃ とつながって、略語の区切りが無くなっていた。vrcyaranai が vrちゃらない になっていた)。
                 // 読める語 (mac|hi = まち) は日本語のことが多いので分けない。
