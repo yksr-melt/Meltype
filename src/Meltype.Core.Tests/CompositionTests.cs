@@ -3417,6 +3417,23 @@ internal static class CompositionTests
         Assert.Equal("しゃーなし", k.Host.Document);
     }
 
+    [Test]
+    public static void Issue917_Ninatta_IsNotUsedInsideALongerWord()
+    {
+        // #1072 のレビュー: 同梱の語句 ^になった は、変換エンジンの文節の途中 (きになった = 気に|なった の に) では使わない
+        var converter = new ClauseConverter(new()
+        {
+            ["きになった"] = [new("きに", "気に"), new("なった", "なった")],
+            ["になった"] = [new("になった", "担った")],
+        });
+        var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("kininatta ");
+        Assert.Equal("気に|なった", string.Join("|", k.Host.View!.Clauses!));
+        k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
+        k.Type("ninatta ");
+        Assert.Equal("になった", string.Join("|", k.Host.View!.Clauses!), "文節の頭から始まるなら使う (#917)");
+    }
+
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
     private sealed class YahoConverter : IKanjiConverter
     {
