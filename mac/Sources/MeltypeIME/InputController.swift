@@ -239,6 +239,13 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         // 入力メソッドは背景のアプリなので、前面に出さないと、開いた画面がほかのウィンドウに触れた瞬間に消える (issue #716)
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()
+        let fileManager = FileManager.default
+        let keyboardServices = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/KeyboardServices", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        panel.directoryURL = fileManager.fileExists(atPath: keyboardServices.path, isDirectory: &isDirectory) && isDirectory.boolValue
+            ? keyboardServices
+            : fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.level = .floating
