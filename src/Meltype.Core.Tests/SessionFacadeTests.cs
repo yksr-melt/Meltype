@@ -83,6 +83,24 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void Deno_ParticleSequenceFollowsJapaneseContext()
+    {
+        foreach (var (input, before, expected) in new (string, string?, string)[] {
+            ("deno", null, "での"),
+            ("deno", "学校", "での"),
+            ("gakkoudeno", null, "がっこうでの"),
+            ("Deno", null, "Deno"),
+            ("deno", "I use ", "deno"),
+        })
+        {
+            var session = Create();
+            var results = Type(session, input, before);
+            Assert.Equal(expected, results[^1].View?.Text, input + " / " + before);
+            Assert.Equal(expected, Type(session, "\n", before)[0].Commits.Single().Text);
+        }
+    }
+
+    [Test]
     public static void CtrlEnterDuringCompositionCommitsWithoutSending()
     {
         // 変換中の Ctrl+Enter (送信のショートカット) は確定だけ行い、キーはアプリへ渡さない。
