@@ -49,6 +49,8 @@ struct Native {
     char *(*commit)(void *) = nullptr;
     char *(*selectCandidate)(void *, int) = nullptr;
     void (*setDirect)(void *, int) = nullptr;
+    int (*takeModeToggled)(void *) = nullptr; // 古い本体には無い (#1033: 本体が切替キーで切り替えたか)
+    int (*isDirect)(void *) = nullptr;        // 古い本体には無い (#1033: 本体のモード。1 = 英数)
     void (*setCanDelete)(void *, int) = nullptr; // 古い本体には無い
     void (*setCodeInput)(void *, int) = nullptr; // 古い本体には無い (コード入力: ターミナルの入力欄で既定にする、#715)
     char *(*roleKey)(void *, int) = nullptr;     // 古い本体には無い (入力中のキーの役割: #199)
@@ -70,6 +72,8 @@ struct Native {
         commit = reinterpret_cast<decltype(commit)>(sym("meltype_commit"));
         selectCandidate = reinterpret_cast<decltype(selectCandidate)>(sym("meltype_select_candidate"));
         setDirect = reinterpret_cast<decltype(setDirect)>(sym("meltype_set_direct"));
+        takeModeToggled = reinterpret_cast<decltype(takeModeToggled)>(sym("meltype_take_mode_toggled"));
+        isDirect = reinterpret_cast<decltype(isDirect)>(sym("meltype_is_direct"));
         setCanDelete = reinterpret_cast<decltype(setCanDelete)>(sym("meltype_set_can_delete"));
         setCodeInput = reinterpret_cast<decltype(setCodeInput)>(sym("meltype_set_code_input"));
         roleKey = reinterpret_cast<decltype(roleKey)>(sym("meltype_role_key"));
@@ -337,6 +341,9 @@ public:
     }
     void *session() const { return session_; }
     bool direct = false;
+    // Shift を押しているか。fcitx5 は Space のキーに Shift を付けて渡さないことがある (どの環境で起きるかは
+    // 未確認。手元は KDE Plasma 6 / Wayland、X11 と GNOME は試していない) ので、キーから覚えておく: #1033
+    bool shiftHeld = false;
     // 変換ボックス (preedit) を出しているか。出している間は、周りの文字 (preedit を含む) を本体に渡さない
     bool preeditVisible = false;
 
@@ -365,9 +372,16 @@ public:
     }
 
     void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) override {
-        if (!loaded_ || event.isRelease()) return;
+        if (!loaded_) return;
         auto *ic = event.inputContext();
         auto *state = ic->propertyFor(&factory_);
+        // Shift そのものの押し下げと離しを覚えておく (Space には Shift が付いてこないことがある: #1033)
+        const auto shiftSym = event.key().sym();
+        if (shiftSym == FcitxKey_Shift_L || shiftSym == FcitxKey_Shift_R) {
+            state->shiftHeld = !event.isRelease();
+            return;
+        }
+        if (event.isRelease()) return;
         if (!state->session()) return;
         syncCanDelete(ic, state->session());
         const auto key = event.key();
@@ -385,6 +399,8 @@ public:
             }
         }
         // 半角/全角: 英数 (直接入力) ⇔ 日本語。英数・ひらがなのキーでも切り替える (JIS キーボード)。
+        // 設定「日本語 / 英数を切り替えるキーを追加」の Space (Shift+Space など) で本体が切り替えたときは、
+        // 本体のモードをそのまま使う (fcitx5 の切替キーとしても受け取ると二重に切り替わる: #1033)。
         if (sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku || sym == FcitxKey_Eisu_toggle ||
             sym == FcitxKey_Hiragana_Katakana || sym == FcitxKey_Muhenkan || sym == FcitxKey_Henkan) {
             bool toDirect = sym == FcitxKey_Eisu_toggle || sym == FcitxKey_Muhenkan ||
@@ -392,17 +408,18 @@ public:
             apply(ic, native_.take(native_.commit(state->session())));
             state->direct = toDirect;
             native_.setDirect(state->session(), toDirect ? 1 : 0);
-            // 切り替えたモードをカーソル位置に出す (Mozc と同じ入力パネルの枠)
-            ic->inputPanel().setAuxUp(fcitx::Text(toDirect ? "A" : "あ"));
-            ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+            showMode(ic, toDirect);
             event.filterAndAccept();
             return;
         }
         auto [vk, character] = virtualKey(sym);
         if (vk == 0) return;
         const auto states = key.states();
+        // Shift+Space は、fcitx5 の設定 (Hotkey/TriggerKeys) で日本語 / 英数の切替キーになっていることがある。
+        // Meltype の本体が切替として使った場合は、fcitx5 の切替キーとして受け取らない (#1033)。
+        bool shiftSpace = vk == 0x20 && (states.test(fcitx::KeyState::Shift) || state->shiftHeld);
         int modifiers = 0;
-        if (states.test(fcitx::KeyState::Shift)) modifiers |= 1;
+        if (states.test(fcitx::KeyState::Shift) || state->shiftHeld) modifiers |= 1;
         if (states.test(fcitx::KeyState::Ctrl)) modifiers |= 2;
         if (states.test(fcitx::KeyState::Alt)) modifiers |= 4;
         if (states.test(fcitx::KeyState::Super)) modifiers |= 8;
@@ -414,12 +431,28 @@ public:
         Json result;
         if (!JsonReader(text).read(result)) return;
         apply(ic, result);
+        // 本体が設定「日本語 / 英数を切り替えるキーを追加」の切替をしたときは、fcitx5 のモード (A / あ) も
+        // 本体に合わせる (#1033)。合わせないと、次に 半角/全角 を押したときの切り替え先がずれる。
+        if (native_.takeModeToggled && native_.takeModeToggled(state->session())) {
+            state->direct = native_.isDirect ? native_.isDirect(state->session()) != 0 : !state->direct;
+            showMode(ic, state->direct);
+        }
         if (result.flag("consumed")) event.filterAndAccept();
+        // 本体が切替に使わなかった Shift+Space は、アプリにも fcitx5 の切替キーにもせず、今までどおり fcitx5 に任せる
+        // (日本語入力なら全角スペース、英数なら空白)。ここで受け取ると、空白が入らなくなる。
+        else if (shiftSpace) event.filter();
     }
 
     // 別の入力欄・アプリに移るとき、入力欄が変わったときは、未確定の内容をそのまま確定する。
-    void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override { commitPending(event.inputContext()); }
-    void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override { commitPending(event.inputContext()); }
+    // フォーカスが外れると Shift の離しが届かないことがあるので、押し下げの記憶も戻す (#1033)。
+    void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
+        event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        commitPending(event.inputContext());
+    }
+    void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
+        event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        commitPending(event.inputContext());
+    }
 
     void selectCandidate(fcitx::InputContext *ic, int index) {
         auto *state = ic->propertyFor(&factory_);
@@ -439,6 +472,12 @@ private:
         if (!state->session()) return;
         syncCanDelete(ic, state->session());
         apply(ic, native_.take(native_.commit(state->session())));
+    }
+
+    // 切り替えたモード (A / あ) をカーソル位置に出す (Mozc と同じ入力パネルの枠)。
+    static void showMode(fcitx::InputContext *ic, bool direct) {
+        ic->inputPanel().setAuxUp(fcitx::Text(direct ? "A" : "あ"));
+        ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
     }
 
     // 入力欄のキャレットの前後の文字列 (それぞれ 20 文字まで)。入力欄が対応していなければ false。

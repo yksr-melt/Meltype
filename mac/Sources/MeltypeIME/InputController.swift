@@ -111,6 +111,13 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             return false
         }
         apply(result, to: client)
+        // 本体が設定「日本語 / 英数を切り替えるキーを追加」の切替をしたときは、モード表示と入力メニューも合わせる (#1033)。
+        // 合わせないと、別のアプリに移ったときの activateServer で、本体のモードが元に戻ってしまう。
+        if NativeCore.shared.takeModeToggled(session) {
+            directInput = NativeCore.shared.isDirect(session)
+            codeInput = false
+            rememberMode(caret: modeIndicatorCaret(client))
+        }
         return result.consumed
     }
 

@@ -155,6 +155,23 @@ public static unsafe class Exports
         if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.Direct = direct != 0;
     }
 
+    /// <summary>
+    /// 直前のキーが、設定「入力モード切り替えキー」の切替として使われたか (1 / 0)。読むと印が消える (#1033)。
+    /// Mac・Linux のフロントエンドは、これと <c>meltype_is_direct</c> で、自分のモード (A / あ、入力メニュー) を本体に合わせる。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_take_mode_toggled")]
+    public static int TakeToggled(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.TakeToggled() ? 1 : 0;
+    }
+
+    /// <summary>本体のモード (1 = 英数 / 直接入力、0 = 日本語)。切り替えたあとにフロントエンドが読む (#1033)。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_is_direct")]
+    public static int IsDirect(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.Direct ? 1 : 0;
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_input")]
     public static void SetCodeInput(IntPtr handle, int enabled)
     {
