@@ -1,0 +1,45 @@
+# セキュリティの解析 (GitHub CodeQL。issue #1083)。結果は Security タブの Code scanning に出る。
+# Pull Request では、新しく見つかった問題だけをその Pull Request に注釈で出し、重大なもの (error / high 以上) があればチェックを失敗にする。
+# どの言語もビルドせずに解析する (build-mode: none)。Swift (mac/) はビルドが要り macOS のランナーで時間がかかるので、まだ対象にしない。
+name: codeql
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    # 新しいクエリで既存のコードも見直すため、毎週
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    strategy:
+      fail-fast: false
+      matrix:
+        # csharp: src/ / c-cpp: native/ (TSF の TIP・Mozc のヘルパー)・linux/ の fcitx5 / javascript-typescript: web/・.github/bot・tools/
+        # python: linux/ の IBus のエンジンなど / actions: .github/workflows
+        language: [csharp, c-cpp, javascript-typescript, python, actions]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}
