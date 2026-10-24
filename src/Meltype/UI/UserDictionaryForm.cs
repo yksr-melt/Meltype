@@ -26,7 +26,8 @@ internal sealed class UserDictionaryForm : Form
         _service = service;
         Text = "Meltype ユーザー辞書";
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(560, 520);
+        // 文字は画面の拡大率に合わせて大きくなるので、窓の大きさも拡大率に合わせる。
+        Size = LogicalToDeviceUnits(new Size(560, 520));
         MinimumSize = new Size(460, 360);
         Font = new Font("Yu Gothic UI", 9.5F);
 
