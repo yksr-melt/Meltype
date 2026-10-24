@@ -1,0 +1,25 @@
+pkgbase = meltype-bin
+	pkgdesc = 雪解けのように、半角/全角の壁を溶かす日本語入力 (IBus / fcitx5)
+	pkgver = 1.3.0
+	pkgrel = 1
+	url = https://github.com/yksr-melt/Meltype
+	install = meltype-bin.install
+	arch = x86_64
+	arch = aarch64
+	license = GPL-3.0-or-later
+	depends = glibc
+	depends = gcc-libs
+	depends = zlib
+	depends = python
+	optdepends = ibus: IBus で使う
+	optdepends = python-gobject: IBus で使う
+	optdepends = fcitx5: fcitx5 で使う
+	provides = meltype
+	conflicts = meltype
+	conflicts = meltype-ut
+	source_x86_64 = Meltype-1.3.0-linux.zip::https://github.com/yksr-melt/Meltype/releases/download/v1.3.0/Meltype-1.3.0-linux.zip
+	sha256sums_x86_64 = 284ee5729975df2de9ed4fd7d5f5b22b0982db7c5a4f2186bb01d5bac835e736
+	source_aarch64 = Meltype-1.3.0-linux-arm64.zip::https://github.com/yksr-melt/Meltype/releases/download/v1.3.0/Meltype-1.3.0-linux-arm64.zip
+	sha256sums_aarch64 = 7fc9a0c72dc02009b9f74dff03bd6655d103e1ebe58f1355080cacbf2dd2a7e1
+
+pkgname = meltype-bin
