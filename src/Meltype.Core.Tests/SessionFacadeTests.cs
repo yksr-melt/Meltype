@@ -540,6 +540,111 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_HashDirectivesStayDirectDuringSequentialInput()
+    {
+        foreach (var surrounding in new[] { true, false })
+        foreach (var input in new[] { "#include", "#region", "r#type", "let value = r#type;" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var before = "";
+            foreach (var c in input)
+            {
+                var context = $"{input}, surrounding={surrounding}, before={before}, key={c}";
+                var result = Type(session, c.ToString(), surrounding ? before : null)[0];
+                Assert.True(!result.Consumed, context + ": キーはアプリへ直接渡す");
+                Assert.Equal(0, result.Commits.Count, context + ": 確定文字を生成しない");
+                Assert.True(!session.IsComposing, context + ": 未確定入力を始めない");
+                before += c;
+            }
+            var enter = Type(session, "\n", surrounding ? before : null)[0];
+            Assert.True(!enter.Consumed, input + ": Enter はアプリへ直接渡す");
+            Assert.Equal(0, enter.Commits.Count, input + ": Enter で遅れて確定しない");
+            Assert.True(!session.IsComposing, input + ": Enter 後も未確定入力なし");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_HashCommentsStillComposeDuringSequentialInput()
+    {
+        foreach (var surrounding in new[] { true, false })
+        foreach (var prefix in new[] { "# ", "## " })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var before = "";
+            foreach (var c in prefix)
+            {
+                var result = Type(session, c.ToString(), surrounding ? before : null)[0];
+                Assert.Equal(0, result.Commits.Count, prefix + ": コメント開始で確定文字を生成しない");
+                if (!result.Consumed) before += c;
+            }
+            Assert.Equal("きょうは", Type(session, "kyouha", surrounding ? before : null)[^1].View?.Text);
+            var enter = Type(session, "\n")[0];
+            Assert.Equal("きょうは", enter.Commits.Single().Text);
+            Assert.True(!session.IsComposing, prefix + ": コメントの日本語を確定できる");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_HashInsideStringKeepsJapaneseAndClosesNormally()
+    {
+        foreach (var surrounding in new[] { true, false })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var before = "";
+            foreach (var c in "x = \"")
+            {
+                Assert.True(!Type(session, c.ToString(), surrounding ? before : null)[0].Consumed, "文字列の開始は直接入力");
+                before += c;
+            }
+            Assert.Equal("#きょうは", Type(session, "#kyouha", surrounding ? before : null)[^1].View?.Text);
+            var close = Type(session, "\"")[0];
+            Assert.True(!close.Consumed, "閉じる引用符は直接入力");
+            Assert.Equal("#きょうは", close.Commits.Single().Text);
+            Assert.True(!session.IsComposing, "引用符で日本語を確定");
+            Assert.True(Type(session, "include").All(r => !r.Consumed && r.Commits.Count == 0), "文字列の外は直接入力");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_HashThenModifiedKeyDoesNotStartComposition()
+    {
+        foreach (var surrounding in new[] { true, false })
+        foreach (var modifier in new[] { "control", "alt", "command" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Type(session, "#", surrounding ? "" : null);
+            var result = session.HandleKey('I', 'i', false, modifier == "control", modifier == "alt", modifier == "command",
+                surrounding ? "#" : null);
+            Assert.True(!result.Consumed, modifier + ": ショートカットはアプリへ渡す");
+            Assert.Equal(0, result.Commits.Count, modifier + ": ショートカットで文字を確定しない");
+            Assert.True(!session.IsComposing, modifier + ": ショートカットで未確定入力を始めない");
+        }
+    }
+
+    [Test]
+    public static void CodeInput_HashLookaheadKeepsOtherContextBoundaries()
+    {
+        foreach (var (before, next, expected) in new (string, char?, LineKind)[]
+        {
+            ("--", 'v', LineKind.Comment),
+            ("/* comment *", '/', LineKind.Comment),
+            ("<!-- comment --", '>', LineKind.Comment),
+            ("x = \"", '"', LineKind.String),
+            ("x = '", '\'', LineKind.String),
+            ("#", null, LineKind.Comment),
+            ("##", 'i', LineKind.Comment),
+            ("// #", 'i', LineKind.Comment),
+            ("/* #", 'i', LineKind.Comment),
+            ("x = \"#", 'i', LineKind.String),
+        })
+            Assert.Equal(expected, LineContext.ClassifyForInput(before, next), $"before={before}, key={next}");
+    }
+
+    [Test]
     public static void CodeInput_SetCodeLineMakesCodeJapaneseUntilCaretMoves()
     {
         var session = Create();

@@ -432,7 +432,7 @@ public sealed class MeltypeSession
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
         if (CodeInput && !_codeJapanese && !_controller.IsComposing &&
-            (before is null || LineContext.ClassifyText(before) == LineKind.Code))
+            (before is null || LineContext.ClassifyForInput(before, modifier ? null : ch) == LineKind.Code))
         {
             TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
