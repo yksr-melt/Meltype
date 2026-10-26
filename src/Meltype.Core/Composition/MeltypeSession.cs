@@ -165,6 +165,7 @@ public sealed class MeltypeSession
         controllerOptions = controllerOptions with { Learning = () => !Private && options.Learning() };
         _host.DeferCurrentReplayOnDelete = directModeDetection;
         _controller = new CompositionController(_gate, detector, converter, _host, controllerOptions);
+        _host.IsComposing = () => _controller.IsComposing;
     }
 
     /// <summary>
@@ -294,6 +295,16 @@ public sealed class MeltypeSession
     /// <summary>入力を覚えないように求める入力欄か (Windows のブラウザーのシークレット / InPrivate ウィンドウ)。true の間は学習しない。</summary>
     public bool Private { get; set; }
 
+    /// <summary>
+    /// 選んだ文字の読みを調べる (Windows の Meltype IME は Microsoft IME の逆変換)。無ければ、選んだ文字を変換キーで再変換しない。
+    /// 選んだ文字は <see cref="HandleKey"/> の selected で渡す。
+    /// </summary>
+    public Func<string, string?>? ReadingOf
+    {
+        get => _host.ReadingOf;
+        set => _host.ReadingOf = value;
+    }
+
     /// <summary>コードの入力欄ではコメント・文字列以外を直接入力する。</summary>
     private bool _codeInput;
     private readonly LineTracker _codeLine = new();
@@ -390,8 +401,11 @@ public sealed class MeltypeSession
 
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
+    /// selected は入力欄で選んでいる文字 (変換キーのとき。<see cref="ReadingOf"/> があれば、選んだ文字を再変換する)。
+    /// 再変換の変換中の文字は、選んでいた文字の所に置く (Meltype IME は選んでいた文字を変換中の文字にする)。
     /// </summary>
-    public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null)
+    public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
+        string? selected = null)
     {
         if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
@@ -406,6 +420,8 @@ public sealed class MeltypeSession
             return committed with { Consumed = false };
         }
         _host.Begin(ch, shift, before, after);
+        var reconvert = vk == VirtualKeys.Convert && !_controller.IsComposing && !string.IsNullOrEmpty(selected) && ReadingOf is not null;
+        _host.Selected = reconvert ? selected : null;
         var down = new KeyEvent(vk, ch ?? 0, false, false, false, _timeMs());
         if (_directModeDetection) _controller.Tick(down.TimeMs);
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
@@ -441,7 +457,7 @@ public sealed class MeltypeSession
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, false, false, down.TimeMs));
         if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, false, false, down.TimeMs));
 
-        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().FullWidthSpaceByDefault)));
+        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || reconvert || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().FullWidthSpaceByDefault)));
         // このキーをアプリに送り直した (= 使わなかった) なら、アプリに渡す。
         var consumed = swallowed && !_host.ReplayedCurrent;
         Feed(down with { IsUp = true });
@@ -612,8 +628,43 @@ public sealed class MeltypeSession
         private bool _hidden;
         public bool DeferCurrentReplayOnDelete { get; set; }
         private string? _pendingExpectOverride;
+        // 再変換している選んだ文字 (Meltype IME では、変換中の文字が選んでいた文字の所にある)
+        private ReconversionSelection? _reconversion;
 
         public bool ReplayedCurrent { get; private set; }
+
+        public Func<string, string?>? ReadingOf { get; set; }
+
+        public Func<bool> IsComposing { get; set; } = () => false;
+
+        /// <summary>今のキー (変換キー) のときに選んでいた文字。</summary>
+        public string? Selected { get; set; }
+
+        /// <summary>長文の誤選択は再変換しない (Meltype キーボードと同じ上限)。</summary>
+        private const int MaxSelected = 128;
+
+        public ReconversionSelection? GetReconversionSelection()
+        {
+            _reconversion = null;
+            if (Selected is not { Length: > 0 and <= MaxSelected } text || ReadingOf is null) return null;
+            // ローマ字のまま入った文 (kyouhaiitenki) は、逆変換せずにそのまま渡す (Meltype の判定で日本語にする: issue #288)
+            var reading = CompositionController.IsRomajiText(text) ? text : ReadingOf(text);
+            if (string.IsNullOrWhiteSpace(reading))
+            {
+                Diagnostics.Log.Info("再変換: 選択文字の読みを取得できませんでした。");
+                return null;
+            }
+            return _reconversion = new ReconversionSelection(text, reading);
+        }
+
+        public bool TryReplaceSelection(ReconversionSelection selection, string text)
+        {
+            if (!ReferenceEquals(selection, _reconversion)) return false;
+            // 変換中の文字が選んでいた文字の所にあるので、そのまま確定すれば置き換わる
+            _reconversion = null;
+            Add(text);
+            return true;
+        }
 
         public bool CanDeleteBackward { get; set; } = true;
 
@@ -632,6 +683,14 @@ public sealed class MeltypeSession
         public SessionResult Result(bool consumed)
         {
             if (_pendingDelete > 0) Add("");
+            if (_reconversion is { } selection && !IsComposing())
+            {
+                // 再変換を取り消した (Esc・読みを全部消した): 変換中の文字にした、選んでいた文字を元に戻す
+                _reconversion = null;
+                _commits.Add(new TextEdit(0, selection.Text, null));
+                // 戻した文字は確定し直しで消さない
+                ForgetCommitted();
+            }
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
             return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view);

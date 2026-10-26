@@ -359,6 +359,69 @@ internal static class SessionFacadeTests
         Assert.True(session.SelectPrediction(0).Commits.Count == 0, "打っていないときは何もしない");
     }
 
+    // Meltype IME (TSF) で、確定した文字を選んで変換キーを押したとき (issue #313: こうなんの → 江南の と確定したのを選び直す)
+    private static SessionResult Reconvert(MeltypeSession session, string selected) =>
+        session.HandleKey(VirtualKeys.Convert, null, false, false, false, false, "", "", selected);
+
+    [Test]
+    public static void TsfReconversion_SelectedTextBecomesCompositionAndEnterReplacesIt()
+    {
+        var session = Create();
+        session.ReadingOf = text => text == "江南の" ? "こうなんの" : null;
+        var convert = Reconvert(session, "江南の");
+        Assert.True(convert.Consumed, "変換キーは再変換に使う");
+        Assert.True(convert.View?.Converting == true, "選んだ文字の読みを変換して候補を出す");
+        Assert.True(convert.View!.Candidates.Contains("こうなんの"), "ひらがなも候補に出る");
+        Assert.Equal(0, convert.Commits.Count, "確定するまで選んだ文字は変えない");
+        var shown = convert.View.Text;
+        var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+        Assert.True(enter.Consumed, "Enter は確定に使う");
+        Assert.Equal(shown, enter.Commits.Single().Text, "変換中の文字 (選んでいた文字の所) を確定する");
+        Assert.Equal(0, enter.Commits.Single().DeleteBefore, "前の文字は消さない");
+        Assert.True(!session.IsComposing, "確定したら変換を終える");
+    }
+
+    [Test]
+    public static void TsfReconversion_EscapeRestoresSelectedText()
+    {
+        var session = Create();
+        session.ReadingOf = _ => "こうなんの";
+        Reconvert(session, "江南の");
+        var escape = session.HandleKey(VirtualKeys.Escape, null, false, false, false, false);
+        Assert.True(escape.Consumed, "Esc は取り消しに使う");
+        Assert.Equal("江南の", escape.Commits.Single().Text, "選んでいた文字に戻す");
+        Assert.True(escape.View is null, "変換中の文字を消す");
+        // 戻した文字を、次の確定で確定し直して消さない
+        var next = Type(session, "kyouha\n")[^1];
+        Assert.True(next.Commits.All(c => c.DeleteBefore == 0), "戻した文字を消さない");
+    }
+
+    [Test]
+    public static void TsfReconversion_BackspaceAllRestoresSelectedText()
+    {
+        var session = Create();
+        session.ReadingOf = _ => "かな";
+        Reconvert(session, "仮名");
+        var commits = new List<TextEdit>();
+        for (var i = 0; i < 10 && session.IsComposing; i++) commits.AddRange(session.HandleKey(VirtualKeys.Back, null, false, false, false, false).Commits);
+        Assert.True(!session.IsComposing, "読みを全部消したら変換を終える");
+        Assert.Equal("仮名", commits.Single().Text, "選んでいた文字に戻す");
+    }
+
+    [Test]
+    public static void TsfReconversion_NotWithoutSelectionOrReading()
+    {
+        var noReading = Create();
+        Assert.True(!Reconvert(noReading, "江南の").Consumed, "読みを調べられないアプリ (Mac・Linux) では今までどおり通す");
+        var session = Create();
+        session.ReadingOf = _ => null;
+        Assert.True(Reconvert(session, "江南の").View is null, "読みが分からなければ再変換しない");
+        Assert.True(!session.IsComposing, "変換を始めない");
+        session.ReadingOf = _ => "こうなんの";
+        Assert.True(!session.HandleKey(VirtualKeys.Convert, null, false, false, false, false, "", "").Consumed, "選んでいなければ通す");
+        Assert.True(Reconvert(session, new string('あ', 129)).View is null, "長すぎる選択は再変換しない");
+    }
+
     [Test]
     public static void Commits_WithoutDeleteHaveNoExpect()
     {
