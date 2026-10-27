@@ -37,6 +37,9 @@ internal static class TipContractTests
         /// <summary>入力欄ごとの、変換中の表示 (無ければ null)。</summary>
         public Dictionary<string, string?> Composition { get; } = [];
 
+        /// <summary>DLL が見送った確定し直し (deleteBefore が 1 以上で、DLL の条件に合わなかったもの)。</summary>
+        public List<string> Skipped { get; } = [];
+
         public Dll()
         {
             _service = TipHarness.CreateService(_invoker);
@@ -93,16 +96,29 @@ internal static class TipContractTests
             return reply;
         }
 
-        /// <summary>DLL と同じく、確定し直し (deleteBefore) は入力欄の文字が expect と同じときだけ消し、確定した文字を入れる。表示を置き換える。</summary>
-        private void Apply(JsonElement reply, string sid)
+        /// <summary>
+        /// DLL (native/tip の TextService::Apply・ExtendOverPrevious) と同じ条件で確定を入れ、表示を置き換える。
+        /// 確定し直し (deleteBefore が 1 以上) は、変換中でなく、expect があり、前の deleteBefore 文字がちょうど expect のときだけ、
+        /// 消してから入れる。合わなければ、その確定は丸ごと見送る (消しも入れもしない)。
+        /// </summary>
+        public void Apply(JsonElement reply, string sid)
         {
+            var composing = Composition.GetValueOrDefault(sid) is not null;
             foreach (var commit in reply.GetProperty("commits").EnumerateArray())
             {
                 var delete = commit.GetProperty("deleteBefore").GetInt32();
-                var expect = commit.TryGetProperty("expect", out var e) ? e.GetString() : null;
-                if (delete > 0 && delete <= Document.Length && (expect is null || Document.EndsWith(expect, StringComparison.Ordinal)))
+                var text = commit.GetProperty("text").GetString();
+                if (delete > 0)
+                {
+                    var expect = commit.TryGetProperty("expect", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                    if (composing || expect is null || delete > Document.Length || Document[^delete..] != expect)
+                    {
+                        Skipped.Add(commit.GetRawText());
+                        continue;
+                    }
                     Document = Document[..^delete];
-                Document += commit.GetProperty("text").GetString();
+                }
+                Document += text;
             }
             Composition[sid] = reply.GetProperty("view") is { ValueKind: JsonValueKind.Object } view ? view.GetProperty("text").GetString() : null;
         }
@@ -182,6 +198,49 @@ internal static class TipContractTests
         Assert.True(replies.SelectMany(r => r.GetProperty("commits").EnumerateArray()).All(c => c.GetProperty("deleteBefore").GetInt32() == 0),
             "前の確定を消さない\n" + dll.Trace);
         Assert.True(dll.Document.StartsWith('い'), dll.Trace);
+    }
+
+    [Test]
+    public static void CommitRewrite_IsAppliedOnlyWhenTheDllWould()
+    {
+        // 確定し直し (deleteBefore) は DLL と同じ条件でだけ入れる: expect が前の文字と同じなら消して入れ、
+        // expect が無い・違う・消す文字が足りない・変換中なら、丸ごと見送る (native/tip の TextService::Apply)
+        static JsonElement Reply(string commit, string? view = null)
+        {
+            using var document = JsonDocument.Parse($"{{\"active\":true,\"consumed\":true,\"commits\":[{commit}],\"view\":{view ?? "null"}}}");
+            return document.RootElement.Clone();
+        }
+        using var dll = new Dll();
+        dll.Apply(Reply("{\"deleteBefore\":0,\"text\":\"teh\"}"), "t1");
+        dll.Apply(Reply("{\"deleteBefore\":3,\"text\":\"the\",\"expect\":\"teh\"}"), "t1");
+        Assert.Equal("the", dll.Document, "expect が同じなら確定し直す");
+        Assert.Equal(0, dll.Skipped.Count);
+        foreach (var (commit, reason) in new[]
+                 {
+                     ("{\"deleteBefore\":3,\"text\":\"xyz\"}", "expect が無い"),
+                     ("{\"deleteBefore\":3,\"text\":\"xyz\",\"expect\":\"abc\"}", "expect が違う"),
+                     ("{\"deleteBefore\":9,\"text\":\"xyz\",\"expect\":\"thethethe\"}", "消す文字が足りない"),
+                 })
+        {
+            dll.Apply(Reply(commit), "t1");
+            Assert.Equal("the", dll.Document, reason + ": 消しも入れもしない");
+        }
+        dll.Apply(Reply("{\"deleteBefore\":0,\"text\":\"\"}", "{\"text\":\"か\"}"), "t1");
+        dll.Apply(Reply("{\"deleteBefore\":3,\"text\":\"xyz\",\"expect\":\"the\"}", "{\"text\":\"か\"}"), "t1");
+        Assert.Equal("the", dll.Document, "変換中は確定し直さない");
+        Assert.Equal(4, dll.Skipped.Count);
+    }
+
+    [Test]
+    public static void ServerRewrites_AlwaysMatchWhatTheDllCanApply()
+    {
+        // Meltype.exe が送る確定し直しは、DLL が入れられる形 (expect が前の文字と同じ) になっている。
+        // 確定のあとキャレットを動かさずに続けて打つ (前の語を確定し直すことがある) 流れで、DLL が見送るものが無いこと
+        using var dll = new Dll();
+        dll.Type("i\n");
+        dll.Type("want ");
+        dll.Type("kyouha\n");
+        Assert.Equal(0, dll.Skipped.Count, "見送った確定し直し: " + string.Join(", ", dll.Skipped) + "\n" + dll.Trace);
     }
 
     [Test]
