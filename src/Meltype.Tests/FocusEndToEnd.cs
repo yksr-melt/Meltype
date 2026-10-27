@@ -15,7 +15,11 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class FocusEndToEnd
 {
-    private sealed record Result(bool Captured, bool CapturedBeforeFix, bool ByRecheck, long Waited, long TotalMs, int DelayMs = 0, string Focus = "");
+    // Enable only during targeted diagnosis; keep the default timing test unchanged.
+    private static readonly bool DiagnosticsEnabled = Environment.GetEnvironmentVariable("MELTYPE_FOCUS_DIAGNOSTICS") == "1";
+    private sealed record Result(bool Captured, bool CapturedBeforeFix, bool ByRecheck, long Waited, long TotalMs, int DelayMs = 0, string Focus = "",
+        IntPtr TargetHwnd = default, IntPtr NativeFocusAtKey = default, IntPtr NativeFocusAfterCheck = default,
+        IntPtr ForegroundAtKey = default, IntPtr ForegroundAfterCheck = default);
 
     public static int Run()
     {
@@ -95,7 +99,11 @@ internal static class FocusEndToEnd
                 results.Add(KeyAfterClick(focus, button, delay));
             }
         }
-        Report(results);
+        Report(results, "input-to-button");
+        if (DiagnosticsEnabled)
+            Expect(results.All(r => !r.Captured || r.NativeFocusAtKey == IntPtr.Zero || r.TargetHwnd == IntPtr.Zero ||
+                r.NativeFocusAtKey != r.TargetHwnd),
+                "ボタンにネイティブフォーカスが移った時点では、入力を横取りしない");
         Expect(results.All(r => !r.ByRecheck), "クリック直後の調べ直しで、ボタンを入力欄にしたことは無い");
         // 直す前からの動き: 調べ終わる前に打つと、クリックする前の判定 (入力欄) のまま変換ボックスに入れることがある (この変更では変わらない)
         Expect(Settled(focus, button) == false, "落ち着いた後、ボタンは入力欄ではない");
@@ -110,7 +118,11 @@ internal static class FocusEndToEnd
                 results.Add(KeyAfterClick(focus, password, delay));
             }
         }
-        Report(results);
+        Report(results, "input-to-password");
+        if (DiagnosticsEnabled)
+            Expect(results.All(r => !r.Captured || r.NativeFocusAtKey == IntPtr.Zero || r.TargetHwnd == IntPtr.Zero ||
+                r.NativeFocusAtKey != r.TargetHwnd),
+                "パスワード欄にネイティブフォーカスが移った時点では、入力を横取りしない");
         Expect(results.All(r => !r.ByRecheck), "クリック直後の調べ直しで、パスワード欄を入力欄にしたことは無い");
         Expect(Settled(focus, password) == false, "落ち着いた後、パスワード欄は入力欄ではない");
 
@@ -151,20 +163,27 @@ internal static class FocusEndToEnd
     private static Result KeyAfterClick(FocusInspector focus, Control target, int keyDelayMs)
     {
         var point = (Point)target.Invoke(() => target.PointToScreen(new Point(target.Width / 2, target.Height / 2)));
+        // HWND の読み取りはクリック前に行う。診断による UI スレッド待ちを判定経路へ追加しない。
+        var targetHwnd = DiagnosticsEnabled ? (IntPtr)target.Invoke(() => target.Handle) : IntPtr.Zero;
         Cursor.Position = point;
         focus.NoteClick();
         focus.Invalidate();
         Click();
         if (keyDelayMs > 0) Thread.Sleep(keyDelayMs);
+        // UIA を直接呼ばずに Win32 のフォーカスだけを記録する。取得不能な場合は 0 として扱う。
+        var atKey = DiagnosticsEnabled ? SnapshotNativeFocus() : default;
         var sw = Stopwatch.StartNew();
         var before = focus.CanCaptureWaiting();
         var waited = -1L;
         var byRecheck = !before && focus.RecheckAfterClick(out waited);
         if (before) focus.RecheckAfterClick(out _); // 使わなかったクリックを消しておく (次の回に残さない)
-        return new Result(before || byRecheck, before, byRecheck, waited, sw.ElapsedMilliseconds, keyDelayMs, focus.Current.Description);
+        var elapsed = sw.ElapsedMilliseconds;
+        var afterCheck = DiagnosticsEnabled ? SnapshotNativeFocus() : default;
+        return new Result(before || byRecheck, before, byRecheck, waited, elapsed, keyDelayMs, focus.LastInspected.Description,
+            targetHwnd, atKey.Focus, afterCheck.Focus, atKey.Foreground, afterCheck.Foreground);
     }
 
-    private static void Report(List<Result> results)
+    private static void Report(List<Result> results, string scenario = "")
     {
         Console.WriteLine($"     変換ボックスに入れた {results.Count(r => r.Captured)}/{results.Count} 回" +
             $" (直す前の判定だけなら {results.Count(r => r.CapturedBeforeFix)} 回、クリック直後の調べ直しで {results.Count(r => r.ByRecheck)} 回)、" +
@@ -172,6 +191,41 @@ internal static class FocusEndToEnd
             $"フックで止まった時間 平均 {results.Average(r => r.TotalMs):0.0} ms・最大 {results.Max(r => r.TotalMs)} ms");
         foreach (var r in results.Where(r => !r.Captured && r.Waited >= 0).Take(10))
             Console.WriteLine($"       入れなかった: {r.DelayMs} ms 後のキー、待った {r.Waited} ms、判定 {r.Focus}");
+        if (DiagnosticsEnabled && !string.IsNullOrEmpty(scenario))
+        {
+            // 入力を横取りすると判定した瞬間に、Win32 では既に目的のコントロールへ
+            // フォーカスが移っていたかを区別する。HWND不明は一致とみなさない。
+            foreach (var group in results.GroupBy(r => r.DelayMs).OrderBy(g => g.Key))
+            {
+                var captured = group.Where(r => r.Captured).ToArray();
+                var confirmedAtKey = captured.Count(r => r.TargetHwnd != IntPtr.Zero && r.NativeFocusAtKey == r.TargetHwnd);
+                var confirmedAfter = captured.Count(r => r.TargetHwnd != IntPtr.Zero && r.NativeFocusAfterCheck == r.TargetHwnd);
+                var unknownAtKey = captured.Count(r => r.NativeFocusAtKey == IntPtr.Zero);
+                Console.WriteLine($"     FOCUS_DIAG scenario={scenario} delay={group.Key}ms " +
+                    $"captured={captured.Length}/{group.Count()} captured_with_target_focus_at_key={confirmedAtKey} " +
+                    $"captured_with_target_focus_after_check={confirmedAfter} captured_with_unknown_focus_at_key={unknownAtKey}");
+            }
+            foreach (var r in results.Where(r => r.Captured))
+                Console.WriteLine($"       FOCUS_TRACE scenario={scenario} delay={r.DelayMs}ms " +
+                    $"target=0x{r.TargetHwnd.ToInt64():X} at_key=0x{r.NativeFocusAtKey.ToInt64():X} " +
+                    $"after_check=0x{r.NativeFocusAfterCheck.ToInt64():X} " +
+                    $"foreground_at_key=0x{r.ForegroundAtKey.ToInt64():X} " +
+                    $"foreground_after_check=0x{r.ForegroundAfterCheck.ToInt64():X} " +
+                    $"captured_before_recheck={r.CapturedBeforeFix} captured_by_recheck={r.ByRecheck} " +
+                    $"last_published={r.Focus}");
+        }
+    }
+
+    /// <summary>Win32 native focus only: no UIA calls, no input contents and no password values.</summary>
+    private static (IntPtr Foreground, IntPtr Focus) SnapshotNativeFocus()
+    {
+        var foreground = Native.GetForegroundWindow();
+        if (foreground == IntPtr.Zero) return (foreground, IntPtr.Zero);
+        var thread = Native.GetWindowThreadProcessId(foreground, out _);
+        var info = new Native.GUITHREADINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<Native.GUITHREADINFO>() };
+        return thread != 0 && Native.GetGUIThreadInfo(thread, ref info)
+            ? (foreground, info.hwndFocus)
+            : (foreground, IntPtr.Zero);
     }
 
     /// <summary>target をクリックして、フォーカスを調べ終わるまで待つ。</summary>
