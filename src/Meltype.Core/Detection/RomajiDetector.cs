@@ -255,7 +255,7 @@ public sealed class RomajiDetector
             {
                 if (i == 0 && strictStart) return Invalid("語頭の「ん」");
                 var consumed = 1;
-                if (s[i + 1] == 'n' && (composition || i + 2 >= s.Length || !(IsVowel(s[i + 2]) || s[i + 2] == 'y'))) consumed = 2;
+                if (s[i + 1] == 'n' && (i + 2 >= s.Length || !(IsVowel(s[i + 2]) || s[i + 2] == 'y'))) consumed = 2;
                 tokens.Add(new RomajiToken(s.Substring(i, consumed), "ん"));
                 i += consumed;
                 continue;

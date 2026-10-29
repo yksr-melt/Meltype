@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>08 日英自動判別 | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html" aria-current="page">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>08 日英自動判別</h1>
+      <p class="status"><span class="badge fixed">実装済み</span> 日本語QWERTYで利用可能（2026-10-25検証）</p>
+      <h2 id="適用範囲">適用範囲</h2>
+      <p>日本語QWERTY（ローマ字入力）では、英語・日本語・日英混在を手動切り替えなしで入力できる。従来の「判別は未実装、C#をKotlinに移植する」という設計は採用しない。<strong>Windows等と同じC# <code>Meltype.Core</code>を共有</strong>する。</p>
+      <p>12キーのかなフリック／英字フリックと独立した英字入力配列は、引き続き既存のKotlinエンジンを使用する。全配列での日英自動判別を保証するものではない。</p>
+      <h2 id="実装">実装</h2>
+      <ol>
+        <li>Androidの<code>KeyboardService</code>が日本語QWERTYの入力を受ける。</li>
+        <li><code>MeltypeCoreSession</code>がJNIの<code>libMeltypeNative.so</code>を呼ぶ。C# <code>Meltype.Core</code>はAndroid向けにNativeAOTでビルドする（arm64-v8a/x86_64）。</li>
+        <li>Coreが日英の判別、未確定文字、変換・予測候補を管理する。かな漢字変換には端末内のMozcを使用する。</li>
+        <li><code>CoreInputAdapter</code>がAndroidの<code>InputConnection</code>へ結果を反映する。<code>CoreCandidateChoices</code>が通常候補、予測候補、英字・かな・カタカナの訂正候補を重複なく組み立て、候補の元インデックスを維持する。</li>
+      </ol>
+      <p>Coreが利用できない場合は例外でIME全体を落とさず、既存のKotlin入力処理に戻る。入力欄の性質により変換や学習を抑止する（<a href="09-privacy-security.html">09</a>）。</p>
+      <h2 id="操作">操作</h2>
+      <ul>
+        <li>QWERTY入力では通常、言語切り替えキーを押す必要はない。</li>
+        <li>判別を訂正したいときは、表示された原文・かな・カタカナなどの候補を選択できる。</li>
+        <li>言語配列を明示的に選ぶ場合はスペースを長押しする。記号と数字には専用の2ページ配列を使用する。</li>
+        <li>入力候補のタップ、句読点・確定操作は未確定文字と変換状態に応じて処理する。</li>
+      </ul>
+      <h2 id="検証">検証</h2>
+      <p>2026-10-25のソースに対し、Android 15（API 35）エミュレーターでInstrumentationの18件すべてが成功。日英の入力、候補選択、訂正候補、設定、Back、システムバーの回帰を含む。Pixel 10 Pro Fold（Android 17）で実機確認済み。<a href="https://github.com/KoheiTakada/Meltypetest/actions/runs/40163689812">CI実行結果</a>。</p>
+      <h2 id="制限">制限・保留事項</h2>
+      <ul>
+        <li>Coreによる日英自動判別は日本語QWERTYが対象。12キーの各フリック配列には未提供。</li>
+        <li>読みから英字を推薦する独立機能（例: <code>ぐーぐる</code> → <code>Google</code>）は未対応（<a href="07-kana-to-english.html">07</a>）。</li>
+        <li>Android版Mozcは検証済みコミットを維持。デスクトップ版との統合は別途検証が必要。</li>
+        <li>公式AndroidアプリID、リリース署名、各機種の互換性、TalkBackについては本家と調整・追加検証が必要。</li>
+      </ul>
+      <nav class="pager" aria-label="前後の章">
+        <a href="07-kana-to-english.html">← 07 読みから英字</a>
+        <a href="09-privacy-security.html">09 プライバシーと安全 →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

@@ -149,6 +149,17 @@ public static unsafe class Exports
     public static byte* SelectCandidate(IntPtr handle, int index) => Run(handle, session => session.SelectCandidate(index));
 
     /// <summary>英数 (直接入力) にするか (1) 日本語にするか (0)。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_select_prediction")]
+    public static byte* SelectPrediction(IntPtr handle, int index) =>
+        Run(handle, session => session.SelectPrediction(index));
+
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_live_conversion")]
+    public static void SetLiveConversion(IntPtr handle, int enabled)
+    {
+        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+            session.SetLiveConversion(enabled != 0);
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_direct")]
     public static void SetDirect(IntPtr handle, int direct)
     {

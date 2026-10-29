@@ -12,6 +12,11 @@ namespace Meltype.Composition;
 /// <summary>
 /// 変換ボックスに表示する内容。変換中は文節ごとの文字列 (Clauses) と選択中の文節、その文節の候補を持つ。
 /// </summary>
+/// <param name="Committed">
+/// この表示を確定したときに文書へ入る文字列。IBus はフォーカスが外れたとき
+/// 「表示中の preedit」をそのまま確定するので、表示と確定が違うと文書と本体の認識がずれる
+/// (「かn」を表示したまま確定すると、本体は「かん」で確定していて食い違う)。
+/// </param>
 public sealed record CompositionView(
     string Text,
     IReadOnlyList<string> Candidates,
@@ -26,11 +31,8 @@ public sealed record CompositionView(
     IReadOnlyList<string>? Predictions = null,
     int SelectedPrediction = -1,
     string? Typed = null,
-    /// <summary>
-    /// この表示を確定したときに文書へ入る文字列。IBus はフォーカスが外れたとき
-    /// 「表示中の preedit」をそのまま確定するので、表示と確定が違うと文書と本体の認識がずれる
-    /// (「かn」を表示したまま確定すると、本体は「かん」で確定していて食い違う)。
-    /// </summary>
+    string? Raw = null,
+    string? Kana = null,
     string? Committed = null);
 
 /// <summary>CompositionController が外界とやり取りする口。テストでは偽物に差し替える。</summary>
@@ -3020,7 +3022,8 @@ public sealed class CompositionController
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates() : null;
             _host.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
-                Predictions: _predictions.Count > 0 ? _predictions : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
+                Predictions: _predictions.Count > 0 ? _predictions : null, SelectedPrediction: _predictionIndex,
+                Typed: TypedKeys(), Raw: _text.Raw, Kana: _text.AllKana(final: true),
                 Committed: selected ?? CurrentDisplay(final: true)));
         }
     }

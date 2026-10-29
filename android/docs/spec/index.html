@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>仕様書 | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html" aria-current="page">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>仕様書</h1>
+      
+<p>このディレクトリが、このキーボードアプリの仕様の唯一の正（SSOT）です。</p>
+<h2 id="運用ルール">運用ルール</h2>
+<ul>
+<li>このディレクトリのHTMLを正本とし、章ごとに管理する。<code>../markdown/spec/</code> にはレビューしやすいMarkdown版を併置し、機能変更時に両方更新する。</li>
+<li>章を足す・名前を変えるときは、全ファイルの左の目次と、下の「章の一覧」を揃えて直す。</li>
+<li>仕様を変えるときは、先にここを直してからコードを直す。コードと食い違ったら、仕様書が正しいものとして扱い、どちらかを直して揃える。</li>
+<li>1つの事柄は1か所にだけ書く。他の章から触れるときは、内容を写さずリンクする。</li>
+<li>実装計画、作業メモ、議事録はここに置かない。ここに書くのは「何を作るか」と「なぜそうするか」だけ。</li>
+<li>各章の先頭に状態を書く。<ul>
+<li><strong>確定</strong>: この内容で実装してよい。</li>
+<li><strong>概要</strong>: 方向だけ決まっている。その段階に着手するとき、詳細を詰めて「確定」に上げる。</li>
+</ul>
+</li>
+</ul>
+<h2 id="章の一覧">章の一覧</h2>
+<table>
+<thead>
+<tr>
+<th>章</th>
+<th>内容</th>
+<th>状態</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="01-overview.html">01 概要</a></td>
+<td>目的、利用者、成功の基準、用語</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="02-roadmap.html">02 段階と範囲</a></td>
+<td>3段階の区切りと、各段階で作るもの・作らないもの</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="03-architecture.html">03 構成</a></td>
+<td>モジュール、依存の向き、処理の流れ、対応環境</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="04-keyboard-ui.html">04 キーボード画面</a></td>
+<td>配列、フリック、各キーの動作、候補バー、導入画面</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="05-input-engine.html">05 入力エンジン</a></td>
+<td>未確定文字の管理、かなの組み立て、ライブ変換、確定の規則</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="06-conversion-mozc.html">06 変換（Mozc）</a></td>
+<td>変換の窓口、Mozc の組み込みとビルド</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="07-kana-to-english.html">07 読みから英字</a></td>
+<td>段階2: かなで打った外来語を英字で出す</td>
+<td><span class="badge draft">概要</span></td>
+</tr>
+<tr>
+<td><a href="08-auto-detection.html">08 日英自動判別</a></td>
+<td>実装済み: C# Coreを共有した日本語QWERTYの日英自動判別</td>
+<td><span class="badge fixed">実装済み</span></td>
+</tr>
+<tr>
+<td><a href="09-privacy-security.html">09 プライバシーと安全</a></td>
+<td>権限、パスワード欄、学習データ、ログ</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="10-licensing.html">10 ライセンス</a></td>
+<td>アプリのライセンスと、同梱物の表記</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+<tr>
+<td><a href="11-testing.html">11 テスト</a></td>
+<td>何をどの水準で確かめるか</td>
+<td><span class="badge fixed">確定</span></td>
+</tr>
+</tbody></table>
+    </main>
+  </div>
+</body>
+</html>

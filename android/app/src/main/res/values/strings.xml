@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <string name="app_name">Meltype</string>
+    <string name="settings_title">設定</string>
+    <string name="toggle_input">トグル入力</string>
+    <string name="toggle_wait">トグル入力の待ち時間</string>
+    <string name="japanese_input">日本語の入力</string>
+    <string name="japanese_input_flick">12キー（フリック）</string>
+    <string name="japanese_input_romaji">QWERTY（ローマ字）</string>
+    <string name="english_input">英字の入力</string>
+    <string name="english_input_qwerty">QWERTY</string>
+    <string name="english_input_flick">12キー（フリック）</string>
+    <string name="japanese_space_setting">日本語入力中のスペース</string>
+    <string name="japanese_space_fullwidth">全角スペース</string>
+    <string name="japanese_space_halfwidth">半角スペース</string>
+    <string name="emoji_enabled_setting">絵文字を使う</string>
+    <string name="licenses_link">ライセンス</string>
+    <string name="licenses_loading">読み込み中…</string>
+</resources>

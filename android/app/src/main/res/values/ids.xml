@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<resources>
+    <!-- 画面が作り直されても（回転、ライト/ダークの切り替え）中身が残るよう、ID を持たせるもの。 -->
+    <item name="try_field" type="id" />
+    <item name="setup_scroll" type="id" />
+</resources>

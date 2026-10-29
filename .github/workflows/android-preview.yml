@@ -1,0 +1,111 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Debug preview for the Android-only Space swipe change. NOT a release build.
+name: Android debug APK preview
+on:
+  push:
+    branches: [feat/android-bilingual-adaptive-ime]
+    paths:
+      - '.github/workflows/android-preview.yml'
+      - 'android/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  debug-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - name: Install NDK for the JNI bridge
+        run: sdkmanager 'ndk;28.2.13676358'
+      - uses: gradle/actions/wrapper-validation@v4
+      - name: Guard unchanged native dependencies
+        run: |
+          # The last passing native build used the same C# logic and Mozc pin.
+          # The only Core diff since that build is XML documentation.
+          # Subsequent native changes require rebuilding in the full QA workflow.
+          git diff --exit-code 264e90379b8413cea1bb7962ddc08af522055d84 HEAD -- src/Meltype.Core src/Meltype.Mac.Native android/mozc
+      - uses: actions/download-artifact@v4
+        with:
+          name: android-qa-report-and-debug-apk
+          repository: KoheiTakada/Meltype
+          run-id: 40186993501
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: .qa-native
+      - name: Restore identical pinned native binaries and Mozc data
+        shell: bash
+        run: |
+          set -euo pipefail
+          OLD_APK="$(find .qa-native -type f -name app-debug.apk -print -quit)"
+          test -n "$OLD_APK" && test -s "$OLD_APK"
+          python3 - "$OLD_APK" <<'PY'
+          import pathlib, sys, zipfile
+          root = pathlib.Path.cwd()
+          apk = pathlib.Path(sys.argv[1])
+          entries = {}
+          for abi in ("arm64-v8a", "x86_64"):
+              entries[f"lib/{abi}/libMeltypeNative.so"] = root / f"android/app/prebuilt/{abi}/libMeltypeNative.so"
+              entries[f"lib/{abi}/libmozc.so"] = root / f"android/mozc/src/main/jniLibs/{abi}/libmozc.so"
+          entries["assets/mozc.data"] = root / "android/mozc/src/main/assets/mozc.data"
+          entries["assets/MOZC_NOTICES.txt"] = root / "android/mozc/src/main/assets/MOZC_NOTICES.txt"
+          with zipfile.ZipFile(apk) as z:
+              for member, destination in entries.items():
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(z.read(member))
+                  print(member, "=>", destination, destination.stat().st_size)
+          PY
+      - name: Compile current Android source and run JVM tests
+        working-directory: android
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/28.2.13676358
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :engine:test :app:testDebugUnitTest :app:assembleDebug
+      - name: Preserve original debug APK and make side-by-side test build
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android/build/preview
+          cp android/app/build/outputs/apk/debug/app-debug.apk android/build/preview/Meltype-original-package.apk
+          # Different app ID bypasses signature-mismatch upgrades without uninstalling the user's installed IME.
+          # This is CI-local only and does not mutate the checked-in Gradle configuration.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle.kts')
+          src = p.read_text()
+          before = 'applicationIdSuffix = ".bilingualtest"'
+          assert src.count(before) == 1
+          p.write_text(src.replace(before, 'applicationIdSuffix = ".swipepreview"'))
+          PY
+          cd android
+          ./gradlew --no-daemon :app:assembleDebug
+          cp app/build/outputs/apk/debug/app-debug.apk build/preview/Meltype-side-by-side.apk
+      - name: Record source and binary SHA
+        if: success()
+        run: |
+          git rev-parse HEAD > android/build/preview/source-commit.txt
+          printf '%s\n' 'Native dependencies reused from successful Android QA run 40186993501 (db65e27).' > android/build/preview/native-provenance.txt
+          sha256sum android/build/preview/Meltype-original-package.apk android/build/preview/Meltype-side-by-side.apk > android/build/preview/apk-sha256.txt
+      - name: Upload freshly compiled debug APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: meltype-android-current-preview-apk
+          path: |
+            android/build/preview/
+            android/app/build/test-results/testDebugUnitTest/
+          retention-days: 30
+          if-no-files-found: warn

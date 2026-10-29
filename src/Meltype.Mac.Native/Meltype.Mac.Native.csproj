@@ -24,4 +24,10 @@
   <ItemGroup>
     <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
   </ItemGroup>
+  <!-- Linux-bionic .so needs a stable SONAME. macOS clang does not support
+       ELF-specific SONAME and hash-style linker flags. Do not affect osx-arm64. -->
+  <ItemGroup Condition="'$(RuntimeIdentifier)' == 'linux-bionic-arm64' Or '$(RuntimeIdentifier)' == 'linux-bionic-x64'">
+    <LinkerArg Include="-Wl,-soname,libMeltypeNative.so" />
+    <LinkerArg Include="-Wl,--hash-style=both" />
+  </ItemGroup>
 </Project>

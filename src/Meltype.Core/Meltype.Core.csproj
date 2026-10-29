@@ -14,6 +14,11 @@
     <Authors>Yukishiro</Authors>
     <Copyright>Copyright (C) 2026 雪代 / Yukishiro. GPL-3.0-or-later</Copyright>
   </PropertyGroup>
+  <!-- The Android NativeAOT build uses a separate compile-time feature switch.
+       Keep desktop Core JSON/romaji behavior unchanged. -->
+  <PropertyGroup Condition="'$(MeltypeAndroidNative)' == 'true'">
+    <DefineConstants>$(DefineConstants);MELTYPE_ANDROID_NATIVE</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Meltype" />
     <InternalsVisibleTo Include="Meltype.Tests" />

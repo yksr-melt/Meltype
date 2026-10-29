@@ -1,0 +1,10 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.mozc-build/
+mozc/src/main/jniLibs/
+mozc/src/main/assets/mozc.data
+mozc/src/main/assets/MOZC_NOTICES.txt
+app/prebuilt/

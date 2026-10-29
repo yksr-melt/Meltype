@@ -274,8 +274,18 @@ public sealed class CompositionText
     /// </summary>
     private void SplitEnglishFinalN(char c)
     {
-        if (_pending.Length > 0 || _units.Count < 2 || char.ToLowerInvariant(c) is not ('a' or 'i' or 'u' or 'e' or 'o' or 'y')) return;
+        if (_pending.Length > 0 || _units.Count == 0 || char.ToLowerInvariant(c) is not ('a' or 'i' or 'u' or 'e' or 'o' or 'y')) return;
         if (_units[^1] is not { Kana: "ん" } last || !last.Raw.Equals("nn", StringComparison.OrdinalIgnoreCase)) return;
+        // Android QWERTY: after 'nn', the next vowel starts a new syllable,
+        // including konnichi -> こんにちは. Retain the upstream English-final-n
+        // heuristics verbatim for desktop platforms.
+        if (AndroidNativeRuntime.Enabled)
+        {
+            _units[^1] = new CompositionUnit("ん", last.Raw[..1]);
+            _pending.Append(last.Raw[1]);
+            return;
+        }
+        if (_units.Count < 2) return;
         // 直前の英字の並び (英字だけの単位) の後ろの部分 + n が英単語か (きょうは + python の python)。
         var letters = new StringBuilder();
         for (var i = _units.Count - 2; i >= 0 && _units[i].Raw.All(char.IsAsciiLetter); i--) letters.Insert(0, _units[i].Raw);
