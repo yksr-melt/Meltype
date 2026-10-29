@@ -188,6 +188,8 @@ Meltype キーボードのときは、<kbd>Ctrl</kbd> + <kbd>半角/全角</kbd>
 
 <img src="docs/images/headings/privacy.svg" alt="プライバシー" width="480"><br>
 
+[Code signing policy](docs/CODE-SIGNING.md) (Windows のテスト署名を導入中。本番の署名付き配布は準備中)
+
 <p align="center">
   <img src="docs/images/cards/privacy-send.svg" alt="打った文字は送らない: 判定も変換も PC の中で完結" width="32%">
   <img src="docs/images/cards/privacy-network.svg" alt="通信は 2 つだけ: 自動更新の確認と、自分で開いた報告のフォーム" width="32%">
