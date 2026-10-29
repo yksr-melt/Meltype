@@ -86,17 +86,18 @@ jobs:
     permissions:
       contents: read
       actions: read
-    env:
-      SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-      SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
-      SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG }}
-      SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Check confirmed configuration
         shell: pwsh
+        # Environment の変数は runner が Environment を読み込んだ後、step で参照する。
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG }}
+          SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
         run: |
           $id = [guid]::Empty
           if (-not [guid]::TryParse($env:SIGNPATH_ORGANIZATION_ID, [ref]$id) -or $id -eq [guid]::Empty) {
@@ -121,10 +122,10 @@ jobs:
         uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
           signing-policy-slug: test-signing
-          artifact-configuration-slug: ${{ env.SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG }}
           github-artifact-id: ${{ needs.build.outputs.artifact-id }}
           wait-for-completion: true
           wait-for-completion-timeout-in-seconds: 1800
@@ -133,6 +134,8 @@ jobs:
             version: ${{ toJSON(needs.build.outputs.version) }}
       - name: Verify signed application and record trust separately
         shell: pwsh
+        env:
+          SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
         run: |
           . ./tools/Verify-SignPathArtifact.ps1
           Test-MeltypeSignPathArtifact -UnsignedDirectory "$env:RUNNER_TEMP/signpath-unsigned" -SignedDirectory "$env:RUNNER_TEMP/signpath-signed" -ExpectedCertificateSha256 $env:SIGNPATH_TEST_CERTIFICATE_SHA256 -ReportPath "$env:RUNNER_TEMP/signpath-verification/report.json"
