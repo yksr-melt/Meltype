@@ -163,6 +163,14 @@ public static class ProtectedSpanScanner
 
     private static bool IsMentionChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '-';
 
+    // POSIX / macOS の代表的なルートディレクトリ名。1 階層の /home や /tmp などは保護対象にする。
+    private static readonly HashSet<string> CommonRootDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin", "boot", "dev", "etc", "home", "lib", "lib64", "media", "mnt", "opt",
+        "proc", "root", "run", "sbin", "srv", "sys", "tmp", "usr", "var",
+        "Users", "Applications", "Library", "System", "Volumes", "private", "Network", "cores", "data"
+    };
+
     // ---- POSIX パス ----
     private static ProtectedSpan? TryPosixPath(string raw, int start)
     {
@@ -182,12 +190,23 @@ public static class ProtectedSpanScanner
             }
             return null;
         }
-        // 先頭の / (/// や単独の / は対象外)
+        // 先頭の / (/// や単独の /、区切りの / の後ろの普通のローマ字語 /nihongo は対象外。2 つ目の / や記号・数字を含むパス、代表的なルートディレクトリを対象にする)
         if (raw[start] == '/' && start + 1 < raw.Length && IsPathElementStart(raw[start + 1]))
         {
             var end = start + 1;
             while (end < raw.Length && IsPathChar(raw[end])) end++;
-            return new ProtectedSpan(start, end - start, ProtectedKind.PosixPath);
+            var segment = raw[(start + 1)..end];
+            // 2 つ目以降の / や記号 (@, ., _ 等)・数字を含むパスは保護する (/home/user, /app.sh, /a@b, /.config など)
+            if (segment.Any(c => !char.IsAsciiLetter(c) && c != '-'))
+            {
+                return new ProtectedSpan(start, end - start, ProtectedKind.PosixPath);
+            }
+            // 1 階層かつ英字・ハイフンのみの場合:
+            // 実在する代表的なルートディレクトリ (/home, /tmp, /etc, /usr など) は保護する。
+            if (CommonRootDirectories.Contains(segment))
+            {
+                return new ProtectedSpan(start, end - start, ProtectedKind.PosixPath);
+            }
         }
         return null;
     }
