@@ -23,6 +23,8 @@ internal static class Program
                 Console.WriteLine($"Meltype {Meltype.Config.ProjectInfo.CoreVersion}");
                 return 0;
             case "--eval":
+                // アプリと同じく、同梱の英単語 (english-words.txt) をスペルチェッカーとして使う
+                CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
                 Quality.Print(Quality.Run());
                 return 0;
             case "--repro":

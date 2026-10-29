@@ -359,6 +359,33 @@ public sealed class CompositionText
         return letters.ToString();
     }
 
+    /// <summary>
+    /// kwo を k + を に割るか。英単語の最後の k のあとに を を打ったとき (back|wo・ink|wo・ok|wo) だけ割る。
+    /// 日本語の綴りの途中 (akwo・ikwo) は、そこまでの英字が英単語にならないので割らない。
+    /// 4 文字以上の語は同梱の辞書とスペルチェッカーで見る。2〜3 文字の語 (ok・ink) は、
+    /// かなの単位のローマ字 (お の o) を英字として数えてしまうため、入力の先頭から始まるときだけ認める
+    /// (watashiha|ok|wo を わたしはokを にしない)。
+    /// </summary>
+    private bool EndsWithEnglishWordBeforeKwo()
+    {
+        var letters = "k";
+        for (var i = _units.Count - 1; i >= 0 && _units[i].Raw.Length > 0 && _units[i].Raw.All(char.IsAsciiLetter); i--)
+        {
+            letters = _units[i].Raw + letters;
+            if (letters.Length < 2) continue;
+            var lower = letters.ToLowerInvariant();
+            if (letters.Length >= 4)
+            {
+                if (_detector.IsKnownEnglishWord(lower)) return true;
+            }
+            else if (i == 0 && (_detector.IsListedEnglishWord(lower) || _detector.IsKnownEnglishWord(lower) || _detector.IsSpellWord(lower)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /// <summary>英字の並びの最後が、4 文字以上の知っている英単語で終わっているか (… hotel)。</summary>
     private bool EndsWithEnglishWord(string letters)
     {
@@ -621,6 +648,16 @@ public sealed class CompositionText
                          EndsWithListedAbbreviation(raw[..1]) &&
                          romaji.AnalyzeFragment(raw[1..].ToLowerInvariant()) is { IsValid: true, Partial: "" } after)
                     AddSplit(raw[..1], raw, after);
+                // 英単語の最後の k + を (back|wo の kwo = くぉ) は、k を英単語に残して を と分ける
+                // (kwo を くぉ として足したため、英単語の直後の を が くぉ とつながっていた)。
+                // 前が英字 1 文字かどうかではなく、そこまでの英字が英単語になるかで決める
+                // (akwo → あくぉ、ikwo → いくぉ のように、日本語の綴りの途中の kwo は分けない)。
+                else if (raw.Length == 3 && raw.Equals("kwo", StringComparison.OrdinalIgnoreCase) &&
+                         EndsWithEnglishWordBeforeKwo())
+                {
+                    _units.Add(new CompositionUnit(raw[..1], raw[..1]));
+                    _units.Add(new CompositionUnit("を", raw[1..]));
+                }
                 else _units.Add(new CompositionUnit(tokens[i].Kana, raw));
                 position += length;
             }
