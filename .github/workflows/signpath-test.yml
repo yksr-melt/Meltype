@@ -41,13 +41,11 @@ jobs:
       - name: Test signature verification (without SignPath credentials)
         shell: pwsh
         run: ./tools/Test-SignPathArtifact.ps1
-      - name: Build and test
+      - name: Build
         shell: pwsh
         run: |
           dotnet build Meltype.sln -c Release
           if ($LASTEXITCODE -ne 0) { throw 'ビルドに失敗しました。' }
-          dotnet run --project src/Meltype.Tests -c Release --no-build
-          if ($LASTEXITCODE -ne 0) { throw 'テストに失敗しました。' }
       - name: Publish unsigned application
         id: publish
         shell: pwsh
@@ -66,6 +64,12 @@ jobs:
             }
           }
           "version=$version" >> $env:GITHUB_OUTPUT
+      # publish の構成も確かめた後、テスト成功を Artifact 保存と署名の必須条件にする。
+      - name: Test application before uploading
+        shell: pwsh
+        run: |
+          dotnet run --project src/Meltype.Tests -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'テストに失敗しました。' }
       - name: Upload unsigned input for origin verification
         id: unsigned
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
