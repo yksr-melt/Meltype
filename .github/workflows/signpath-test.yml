@@ -10,12 +10,6 @@ on:
       - '.github/workflows/signpath-test.yml'
       - 'tools/*SignPath*'
       - 'packaging/signpath/**'
-  push:
-    branches: [codex/signpath-test-signing]
-    paths:
-      - '.github/workflows/signpath-test.yml'
-      - 'tools/*SignPath*'
-      - 'packaging/signpath/**'
 
 permissions:
   contents: read
@@ -80,7 +74,7 @@ jobs:
           retention-days: 7
 
   sign:
-    # PR と push では絶対に秘密へアクセスしない。手動実行も main だけ。
+    # PR では絶対に秘密へアクセスしない。手動実行も main だけ。
     if: >-
       github.event_name == 'workflow_dispatch' &&
       github.repository == 'yksr-melt/Meltype' &&
