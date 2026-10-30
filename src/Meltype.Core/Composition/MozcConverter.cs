@@ -36,6 +36,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private long _candidateCacheHits;
     private long _helperCalls;
     private long _helperTicks;
+    // 入力側がヘルパーを待った時間。裏の学習・保存の時間は含めない (issue #1209)。
+    private long _waitCalls;
+    private long _waitTicks;
+    private long _busySkips;
     // 起動はバックグラウンドで行い、そのあいだの変換は待たずに null を返す (変換は UI スレッドで動くので、READY を待つと入力が止まる)
     private Task? _starting;
     private bool _started;
@@ -93,7 +97,13 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
     public IReadOnlyList<string> Candidates(string reading)
     {
-        lock (_gate)
+        // 学習・保存や別の変換がヘルパーを使っていても、入力側では終わるのを待たない。
+        if (!Monitor.TryEnter(_gate))
+        {
+            Interlocked.Increment(ref _busySkips);
+            return [];
+        }
+        try
         {
             _candidateRequests++;
             if (_candidates.TryGetValue(reading, out var cached))
@@ -102,6 +112,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                 return cached;
             }
         }
+        finally { Monitor.Exit(_gate); }
         var segments = Request("", reading);
         if (segments is null) return [];
         // 1 文節ならその候補。複数の文節に分かれたなら、最初の候補をつなげたものだけ。
@@ -119,7 +130,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         var records = string.Join(RecordSeparator, clauses.Select(c => Clean(c.Reading).Replace(UnitSeparator, ' ') + UnitSeparator + Clean(c.Text).Replace(UnitSeparator, ' ')));
         lock (_gate)
         {
-            if (_disposed) return;
+            if (_disposed || !IsAvailable) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
             _candidates.Clear();
             _conversions.Clear();
@@ -133,34 +144,44 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     }
 
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
-private string? Send(string request)
-{
-    try
+    private string? Send(string request, bool recordWait = false)
     {
         var started = Stopwatch.GetTimestamp();
-        if (Start() is not { } process) return null;
-
-        process.StandardInput.Write(request + "\n");
-        process.StandardInput.Flush();
-        var line = ReadLine(process, TimeoutMs);
-        _helperCalls++;
-        _helperTicks += Stopwatch.GetTimestamp() - started;
-
-        if (line is null)
+        var queried = false;
+        try
         {
-            Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
-            Fail();
-            return null;
-        }
+            if (Start() is not { } process) return null;
+            queried = true;
 
-        _failures = 0;
-        return line;
-    }
+            process.StandardInput.Write(request + "\n");
+            process.StandardInput.Flush();
+            var line = ReadLine(process, TimeoutMs);
+            _helperCalls++;
+            _helperTicks += Stopwatch.GetTimestamp() - started;
+
+            if (line is null)
+            {
+                Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
+                Fail();
+                return null;
+            }
+
+            _failures = 0;
+            return line;
+        }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
             Fail();
             return null;
+        }
+        finally
+        {
+            if (recordWait && queried)
+            {
+                Interlocked.Increment(ref _waitCalls);
+                Interlocked.Add(ref _waitTicks, Stopwatch.GetTimestamp() - started);
+            }
         }
     }
 
@@ -169,9 +190,14 @@ private string? Send(string request)
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
         context = Clean(context);
         reading = Clean(reading);
-        lock (_gate)
+        if (!Monitor.TryEnter(_gate))
         {
-            if (_disposed) return null;
+            Interlocked.Increment(ref _busySkips);
+            return null;
+        }
+        try
+        {
+            if (_disposed || !IsAvailable) return null;
             // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す (覚えさせたら捨てる)。
             var key = context + "\t" + reading;
             _requests++;
@@ -184,7 +210,7 @@ private string? Send(string request)
             }
             try
             {
-                var line = Send($"C\t{context}\t{reading}");
+                var line = Send($"C\t{context}\t{reading}", recordWait: true);
                 if (line is null) return null;
                 if (line.Length == 0) return Remember(key, null);
                 var segments = new List<(string, IReadOnlyList<string>)>();
@@ -206,6 +232,7 @@ private string? Send(string request)
                 return null;
             }
         }
+        finally { Monitor.Exit(_gate); }
     }
 
     /// <summary>候補の控えと変換の結果の控えを捨てる (前の入力の控えを次の入力に持ち越さない。テストで文ごとに使う)。</summary>
@@ -239,6 +266,11 @@ private string? Send(string request)
                 Stopwatch.GetElapsedTime(0, _helperTicks), workingSet);
         }
     }
+
+    /// <summary>前に取ってから入力側がヘルパーを待った回数・時間と、使用中のため見送った回数。学習・保存の待ち時間は除く。</summary>
+    public (long Calls, long Ms, long BusySkips) TakeWaitStats() =>
+        (Interlocked.Exchange(ref _waitCalls, 0), (long)Stopwatch.GetElapsedTime(0, Interlocked.Exchange(ref _waitTicks, 0)).TotalMilliseconds,
+            Interlocked.Exchange(ref _busySkips, 0));
 
     /// <summary>変換の結果を覚えておく (_gate の中で呼ぶ)。</summary>
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Remember(string key, List<(string Reading, IReadOnlyList<string> Candidates)>? segments)
