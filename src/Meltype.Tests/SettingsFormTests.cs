@@ -22,7 +22,7 @@ internal static class SettingsFormTests
         Native.SendMessage(combo.Handle, Native.WM_KEYUP, (nint)(int)Keys.Down, 0);
         Assert.Equal(1, combo.SelectedIndex, "閉じたまま ↓ で次のフォントを選べる");
         var collect = form.GetType().GetMethod("Collect", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        Assert.Equal(combo.Items[1].ToString(), ((Settings)collect.Invoke(form, null)!).CompositionFont, "選んだフォントを設定に戻せる");
+        Assert.Equal(combo.GetItemText(combo.Items[1]), ((Settings)collect.Invoke(form, null)!).CompositionFont, "選んだフォントを設定に戻せる");
     }
 
     [Test]
