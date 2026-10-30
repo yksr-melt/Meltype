@@ -30,6 +30,10 @@ internal static class ProtectionTests
                      ("C:/Users/taro/project", ProtectedKind.WindowsPath),
                      ("\\\\server\\share\\nihongo.txt", ProtectedKind.WindowsPath),
                      ("@User_123", ProtectedKind.Mention),
+                     ("/home", ProtectedKind.PosixPath),
+                     ("/tmp", ProtectedKind.PosixPath),
+                     ("/etc", ProtectedKind.PosixPath),
+                     ("/usr", ProtectedKind.PosixPath),
                  })
         {
             var spans = ProtectedSpanScanner.Scan(raw);
@@ -49,6 +53,7 @@ internal static class ProtectionTests
                  {
                      "a/b", "1/2", "///", "@", "/", ":", "kyouhagithubnipushshita",
                      "konnichiwa.", "OPENAI_API_KEY", "camelCase", "2026-10-05", "hello", "upah_setu",
+                     "/nihongo", "/ashita",
                  })
         {
             var spans = ProtectedSpanScanner.Scan(raw);
@@ -103,7 +108,7 @@ internal static class ProtectionTests
 
     // ---- 確定契約 (MeltypeSession は Linux/Mac アダプターと同じ経路) ----
 
-    private static MeltypeSession Create(LanguageMemory? languages = null, bool spaceAroundEnglish = false)
+    private static MeltypeSession Create(LanguageMemory? languages = null, bool spaceAroundEnglish = false, bool slashAsMiddleDot = false)
     {
         CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
         // 製品の CreateDefault と同じく、候補辞書・誤字補正・文脈辞書を入れる (実経路と同じ条件で検査する)。
@@ -116,9 +121,10 @@ internal static class ProtectionTests
             RomajiTypos = RomajiTypoCorrector.Load(CompositionTests.Detector.Romaji),
             Languages = languages,
             SpaceAroundEnglish = () => spaceAroundEnglish,
+            SlashAsMiddleDot = () => slashAsMiddleDot,
         };
         // 行頭の @・/ (#193 の「そのままアプリへ渡す」) を切り、変換ボックスの中の保護区間の扱いを確かめる。
-        return new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), options, () => new Settings { SigilWordsDirect = false });
+        return new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), options, () => new Settings { SigilWordsDirect = false, SlashAsMiddleDot = slashAsMiddleDot });
     }
 
     private static SessionResult TypeOne(MeltypeSession session, char c)
@@ -354,5 +360,57 @@ internal static class ProtectionTests
         TypeOne(session, '\n');
         // 保護した原文は学習記憶に残さない。
         Assert.True(languages.Get("https://example.com/?token=synthetic_test_only") is null, "保護原文を学習しない");
+    }
+
+    [Test]
+    public static void SingleSlashBeforeRomaji_DoesNotLockIntoProtectedPosixPath()
+    {
+        // SigilWordsDirect = false のときに /nihongo や 、/ashita と打っても PosixPath 保護区間に固定されず日本語になる。
+        var session = Create();
+        TypeText(session, "/nihongo");
+        Assert.Equal("/にほんご", TypeOne(session, '\n').Commits.Single().Text);
+
+        var session2 = Create();
+        TypeText(session2, "kyouha,/ashita");
+        Assert.Equal("きょうは、/あした", TypeOne(session2, '\n').Commits.Single().Text);
+
+        // /Linux などルートディレクトリ以外の英単語も、1 階層パスとして誤保護されない。
+        Assert.Equal(0, ProtectedSpanScanner.Scan("/Linux").Count, "/Linux はルートディレクトリではないので保護されない");
+    }
+
+    [Test]
+    public static void SingleSlashBeforeRootPath_ProtectsPosixPath()
+    {
+        // /home, /tmp, /data などの代表的なルートディレクトリは保護区間として保護され、ローマ字かな化 (/ほめ 等) されない。
+        var session = Create();
+        TypeText(session, "/home");
+        Assert.Equal("/home", TypeOne(session, '\n').Commits.Single().Text);
+
+        var session2 = Create();
+        TypeText(session2, "/tmp");
+        Assert.Equal("/tmp", TypeOne(session2, '\n').Commits.Single().Text);
+
+        var session3 = Create();
+        TypeText(session3, "/data");
+        Assert.Equal("/data", TypeOne(session3, '\n').Commits.Single().Text);
+    }
+
+    [Test]
+    public static void SingleSlashBeforeRootPath_WithSlashAsMiddleDot_ProtectsPosixPath()
+    {
+        // SlashAsMiddleDot = true のときでも、/home や /tmp などは ・ほめ にならず /home として保護される。
+        var session = Create(slashAsMiddleDot: true);
+        TypeText(session, "/home");
+        Assert.Equal("/home", TypeOne(session, '\n').Commits.Single().Text);
+
+        var session2 = Create(slashAsMiddleDot: true);
+        TypeText(session2, "/tmp");
+        Assert.Equal("/tmp", TypeOne(session2, '\n').Commits.Single().Text);
+
+        var session3 = Create(slashAsMiddleDot: true);
+        TypeText(session3, "/nihongo");
+        // /nihongo はルートディレクトリではないため保護から外れて日本語になる。
+        // (先頭の / を中黒にする機能は別 PR #1329 のため、この PR 単体では /にほんご となる)
+        Assert.Equal("/にほんご", TypeOne(session3, '\n').Commits.Single().Text);
     }
 }
