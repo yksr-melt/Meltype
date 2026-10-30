@@ -126,28 +126,29 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Issue1209_AnswersJustUnderTheLimit_PauseZenzaiWhenTheyAddUp()
+    public static void Issue1209_KeysPending_DoesNotWaitForZenzai()
     {
-        // #1209: 1 回ずつは上限 (ここでは 300ms) に間に合っても、続けて打つと待つ時間がたまって入力が数秒止まった。
-        // 直近 1 秒に待った合計が上限を超えたら、しばらく使わない (今までの変換エンジンに任せる)
-        using var server = new FakeServer { Answer = p => { Thread.Sleep(120); return "漢字"; } };
-        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 300);
-        Assert.True(zenzai.ConvertClauses("あ") is not null, "1 回目は間に合う");
-        Assert.True(zenzai.ConvertClauses("あい") is not null, "2 回目も間に合う (合計はまだ上限より短い)");
-        zenzai.ConvertClauses("あいう");
-        int before;
-        lock (server.Prompts) before = server.Prompts.Count;
-        Assert.True(zenzai.ConvertClauses("あいうえ") is null, "合計が上限を超えたら、しばらく頼まない");
-        lock (server.Prompts) Assert.Equal(before, server.Prompts.Count, "休んでいるあいだはサーバーに頼まない");
-        Assert.True(zenzai.IsAvailable, "諦めはしない (また使える)");
+        // #1209: 速く打って打鍵が溜まっているあいだは、途中の読みで Zenzai の答えを待たない (今までの変換エンジンで変換する)。
+        // 溜まった打鍵を処理し終えた読みは、Zenzai に頼む
+        using var server = new FakeServer { Answer = _ => "単位を取る" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var pending = true;
+        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => zenzai) { KeysPending = () => pending };
+        Assert.True(hybrid.ConvertClauses("たんいをとる") is [{ Text: "単位を" }, { Text: "取る" }], "打鍵が溜まっているあいだは、ほかの変換エンジンで");
+        lock (server.Prompts) Assert.Equal(0, server.Prompts.Count, "Zenzai には頼まない");
+        pending = false;
+        hybrid.ConvertClauses("たんいをとる");
+        lock (server.Prompts) Assert.Equal(1, server.Prompts.Count, "溜まった打鍵を処理し終えたら Zenzai に頼む");
 
-        // 間をあけて打つなら、合計はたまらない
-        using var calm = new ZenzaiConverter(server.Endpoint, timeoutMs: 300);
-        for (var i = 1; i <= 4; i++)
-        {
-            Assert.True(calm.ConvertClauses(new string('あ', i)) is not null, $"{i} 回目");
-            Thread.Sleep(1000);
-        }
+        // 関所は、溜まった打鍵があるかを答える
+        var gate = new CaptureGate(() => { });
+        Assert.True(!gate.HasPending, "空");
+        gate.OnKey(new Meltype.Input.KeyEvent(0x41, 0, false, false, false, 0), _ => true);
+        gate.OnKey(new Meltype.Input.KeyEvent(0x42, 0, false, false, false, 0), _ => true);
+        gate.TryDequeue(out _);
+        Assert.True(gate.HasPending, "まだ 1 つ溜まっている");
+        gate.TryDequeue(out _);
+        Assert.True(!gate.HasPending, "処理し終えた");
     }
 
     [Test]

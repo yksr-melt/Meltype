@@ -19,6 +19,13 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     public string? WideContext { get; set; }
 
     /// <summary>
+    /// まだ処理していない打鍵が溜まっているか。溜まっているあいだは、途中の読みの変換で Zenzai の答えを待たない (issue #1209)。
+    /// ライブ変換は 1 打鍵ごとに Zenzai の答えを待つので、速く打つと Zenzai が追いつかず、溜まった打鍵の数だけ待って入力が数秒止まった。
+    /// 途中の読みはすぐ次の打鍵で変わるので、今までの変換エンジンで変換し、溜まった打鍵を処理し終えた読みだけ Zenzai に頼む。
+    /// </summary>
+    public Func<bool>? KeysPending { get; set; }
+
+    /// <summary>
     /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null。
     /// Zenzai を作れない・変換で例外になったときも null (Mozc などで変換する)。Zenzai の失敗で入力全体を止めないように
     /// (#973: 同梱の .NET に System.Net.Http が無く、Zenzai を作るたびに例外になって、日本語を打てなくなった)。
@@ -30,6 +37,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
         ZenzaiConverter? z = null;
         try
         {
+            if (KeysPending?.Invoke() == true) return null;
             z = zenzai?.Invoke();
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
             return z.ConvertClauses(hiragana, WideContext ?? context);

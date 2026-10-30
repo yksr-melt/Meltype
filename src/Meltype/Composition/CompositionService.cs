@@ -115,7 +115,11 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         };
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
-        _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed);
+        _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed)
+        {
+            // 速く打って打鍵が溜まっているあいだは、途中の読みで Zenzai の答えを待たない (issue #1209)
+            KeysPending = () => Gate.HasPending,
+        };
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)

@@ -56,11 +56,6 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
-    // 1 回ずつは間に合っても (0.4 秒の少し手前で答える)、続けて打つと待つ時間がたまって、入力が数秒止まってから一気に入る (issue #1209)。
-    // 直近 BusyWindowMs のあいだに答えを待った合計が 1 回の上限 (_timeoutMs) を超えたら、遅いときと同じく、しばらく使わない
-    private const int BusyWindowMs = 1000;
-    private readonly Queue<(long End, long Took)> _recent = new();
-
     /// <param name="serverPath">llama-server の実行ファイル。</param>
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
     /// <param name="timeoutMs">1 回の変換を待つ時間。</param>
@@ -118,11 +113,10 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var text = answer;
         var unchanged = answer is not null && answer == hiragana;
         if (unchanged) text = null;
-        var finished = Environment.TickCount64;
-        var slow = finished - started >= _timeoutMs;
+        var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
-            if (slow || Busy(finished, finished - started)) Interlocked.Exchange(ref _pausedUntil, finished + BackoffMs);
+            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
             if (answer is null && !slow) _failures++;
             else if (answer is not null) { _failures = 0; HasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
@@ -130,16 +124,6 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (answer is not null && !slow) _cache[key] = text;
         }
         return text is null ? null : [new ConversionClause(hiragana, text)];
-    }
-
-    /// <summary>直近 BusyWindowMs のあいだに答えを待った合計が、1 回の上限を超えたか (_gate の中で呼ぶ)。超えたら記録を消す (休んだあとは数え直す)。</summary>
-    private bool Busy(long now, long took)
-    {
-        _recent.Enqueue((now, took));
-        while (_recent.Count > 0 && _recent.Peek().End < now - BusyWindowMs) _recent.Dequeue();
-        if (_recent.Sum(r => r.Took) < _timeoutMs) return false;
-        _recent.Clear();
-        return true;
     }
 
     /// <summary>zenz に渡す文: U+EE00 + カタカナの読み + (文脈があれば U+EE02 + 文脈) + U+EE01。</summary>

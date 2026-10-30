@@ -31,6 +31,9 @@ public sealed class CaptureGate
 
     public bool IsCaptured { get { lock (_gate) return _captured; } }
 
+    /// <summary>まだ処理していない入力が溜まっているか (速く打って、処理が追いついていない)。</summary>
+    public bool HasPending { get { lock (_gate) return _queue.Count > 0; } }
+
     /// <summary>true ならフックでその打鍵を握りつぶす。</summary>
     public bool OnKey(KeyEvent e, Func<KeyEvent, bool> startsComposition)
     {
