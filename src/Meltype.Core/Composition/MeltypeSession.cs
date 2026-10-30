@@ -250,6 +250,7 @@ public sealed class MeltypeSession
             CorrectTypos = () => settings.CorrectTypos,
             SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
             ZSymbols = () => settings.ZSymbols,
+            ContextualSlash = OperatingSystem.IsMacOS(),
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
             SpaceAroundNumbers = () => settings.SpaceAroundNumbers,
             NumberKeysSelectCandidates = () => settings.NumberKeysSelectCandidates,

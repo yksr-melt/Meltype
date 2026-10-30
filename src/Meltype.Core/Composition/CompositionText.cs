@@ -200,7 +200,7 @@ public sealed class CompositionText
         }
         // / キーで中黒 (設定): かなのすぐ後ろの / は ・ (いろん/ますく → いろん・ますく)。英字・数字の後ろ (and/or、3/4、URL)
         // と入力の始め (/help) は / のまま (issue #122)。英語の区間に入ったときは、打ったままの / を見せる。
-        if (c == '/' && SlashAsMiddleDot() && _units.Count > 0 && _units[^1].Kana is [.., var kana] && kana is >= 'ぁ' and <= 'ヺ' or 'ー')
+        if (c == '/' && (SlashAsMiddleDot() || ContextualSlash) && _units.Count > 0 && _units[^1].Kana is [.., var kana] && kana is >= 'ぁ' and <= 'ヺ' or 'ー')
         {
             _units.Add(new CompositionUnit("・", "/"));
             return;
@@ -219,6 +219,9 @@ public sealed class CompositionText
 
     /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。OFF なら z はほかの英字と同じ: issue #1008)。</summary>
     public Func<bool> ZSymbols { get; set; } = () => true;
+
+    /// <summary>/ の直後が英語なら /、日本語なら ・ にする。</summary>
+    public bool ContextualSlash { get; set; }
 
     /// <summary>空の変換ボックスに打った / を、打ち始めの / として中黒 (・) にするか。読むと次からは false。</summary>
     public Func<bool> SlashAtStart { get; set; } = () => false;
@@ -445,6 +448,7 @@ public sealed class CompositionText
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-')
             .Append(PrecedingEnglishName ? 'N' : '-').Append(FullWidthParentheses ? 'W' : '-').Append(LaughterAfterKana ? 'L' : '-')
+            .Append(ContextualSlash ? 'C' : '-')
             .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1);
         return key.ToString();
     }
@@ -458,7 +462,7 @@ public sealed class CompositionText
             raw.Length > 0 && raw.All(char.IsAsciiLetter) && _detector.Memory?.Get(raw.ToLowerInvariant()) != false)
             return [new CompositionSegment(true, "", raw)];
         var segments = SegmentWithProtection(_units);
-        return HalfWidthOpeners(segments) is { } adjusted
+        return HalfWidthSymbols(segments) is { } adjusted
             ? SegmentWithProtection(adjusted)
             : segments;
     }
@@ -534,9 +538,10 @@ public sealed class CompositionText
     /// すぐ後ろが英語 ((Ooh) か、対になる閉じの記号が半角 ("…Go Through!") なら、開きの記号も半角にした単位の並びを返す。変えなければ null。
     /// ("打ち上げ話はGo Through!" の最初の " だけ全角 ” になっていた、(Ooh … wow…) の ( だけ全角 （ になっていた)
     /// </summary>
-    private List<CompositionUnit>? HalfWidthOpeners(IReadOnlyList<CompositionSegment> segments)
+    // ContextualSlash の / も、直後の語が英語なら半角の記号に戻す。
+    private List<CompositionUnit>? HalfWidthSymbols(IReadOnlyList<CompositionSegment> segments)
     {
-        if (KanaInput || !_units.Any(u => Openers.ContainsKey(u.Raw) && u.Kana != u.Raw)) return null;
+        if (KanaInput || !_units.Any(u => Openers.ContainsKey(u.Raw) && u.Kana != u.Raw || ContextualSlash && u is { Raw: "/", Kana: "・" })) return null;
         // 打った英字の 1 文字ずつが英語の区間か
         var english = new List<bool>();
         foreach (var segment in segments) foreach (var _ in segment.Raw) english.Add(segment.IsEnglish);
@@ -547,6 +552,17 @@ public sealed class CompositionText
         List<CompositionUnit>? adjusted = null;
         for (var i = 0; i < _units.Count; i++)
         {
+            // / は打った時点では後ろが分からない。直後の語を英語と判定したら、中黒からスラッシュに戻す。
+            if (ContextualSlash && _units[i] is { Raw: "/", Kana: "・" })
+            {
+                var nextOffset = offsets[i] + 1;
+                if (nextOffset < english.Count && english[nextOffset])
+                {
+                    adjusted ??= [.. _units];
+                    adjusted[i] = _units[i] with { Kana = "/" };
+                }
+                continue;
+            }
             if (!Openers.TryGetValue(_units[i].Raw, out var closer) || _units[i].Kana == _units[i].Raw) continue;
             if (FullWidthParentheses && _units[i].Raw == "(") continue; // 設定「カッコを全角で入力」: 英語のそばでも全角のまま
             var nextIsEnglish = i + 1 < _units.Count ? offsets[i + 1] < english.Count && english[offsets[i + 1]] && char.IsAsciiLetter(_units[i + 1].Raw[0])
