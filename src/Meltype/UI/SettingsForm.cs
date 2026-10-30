@@ -49,6 +49,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
     public SettingsForm(MeltypeEngine engine)
     {
+        // 開くまでにかかった時間をログに書く (遅いときに、部品を作るのと表示するののどちらに時間がかかったかを測る。issue #1199)
+        var opening = System.Diagnostics.Stopwatch.StartNew();
         _engine = engine;
         _draft = engine.Settings.Clone().Normalize();
         Text = "Meltype 設定";
@@ -134,6 +136,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
         _opened = Collect();
         _body.ResumeLayout();
         ResumeLayout();
+        var built = opening.ElapsedMilliseconds;
+        Shown += (_, _) => Diagnostics.Log.Info($"設定画面を開くまで {opening.ElapsedMilliseconds} ms (部品を作るまで {built} ms)");
     }
 
     /// <summary>プロファイルの欄の下: 説明の欄を出すか、ホイールで値を変えるか。</summary>
@@ -375,22 +379,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
         }
         if (type == typeof(string) && property.Name == nameof(Settings.CompositionFont))
         {
-            // この PC のフォントから選ぶ。先頭は既定 (空)。
-            // フォントの一覧は、プルダウンを開いたときに読む (フォントが多い PC で、設定を開くのが遅かった。issue #1199)
-            var combo = DropDown([DefaultFontChoice]);
-            var fontsLoaded = false;
-            combo.DropDown += (_, _) =>
-            {
-                if (fontsLoaded) return;
-                fontsLoaded = true;
-                var selected = combo.SelectedItem;
-                using var installed = new System.Drawing.Text.InstalledFontCollection();
-                var families = installed.Families.Select(f => f.Name).Where(n => n.Length > 0 && !n.StartsWith('@')).Distinct().OrderBy(n => n, StringComparer.CurrentCulture).ToList();
-                combo.BeginUpdate();
-                foreach (var name in families) if (!combo.Items.Contains(name)) combo.Items.Add(name);
-                combo.EndUpdate();
-                combo.SelectedItem = selected;
-            };
+            // この PC のフォントから選ぶ。先頭は既定 (空)
+            using var installed = new System.Drawing.Text.InstalledFontCollection();
+            var families = installed.Families.Select(f => f.Name).Where(n => n.Length > 0 && !n.StartsWith('@')).Distinct().OrderBy(n => n, StringComparer.CurrentCulture).ToList();
+            var combo = DropDown([DefaultFontChoice, .. families]);
             return new Binding(property, combo,
                 s =>
                 {
