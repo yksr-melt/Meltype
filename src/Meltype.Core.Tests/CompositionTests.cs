@@ -4234,6 +4234,46 @@ internal static class CompositionTests
         Assert.Equal("きょう", k.Host.Output.Single());
     }
 
+    private sealed class ExpressionConverter : IKanjiConverter
+    {
+        public int Calls { get; private set; }
+        public string? Convert(string hiragana)
+        {
+            Calls++;
+            return "誤変換" + hiragana;
+        }
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Calls++;
+            return [new(hiragana, "誤変換" + hiragana)];
+        }
+    }
+
+    [Test]
+    public static void LiveConversion_SymbolsDoNotTriggerShortReadingConversion()
+    {
+        foreach (var input in new[] { "na~~~", "ne~~~", "ma~~~", "u~~~", "ka~~~", "i~~~",
+            "sou~~", "sa!!!", "sa???", "sa...", "sou……", "na~!~", "na～～a", "yada~~",
+            "na〜〜〜", "naーーー", "naa～～～", "nee～～～", "un～～～" })
+        {
+            var plain = new Keyboard();
+            plain.Type(input);
+            var converter = new ExpressionConverter();
+            var live = new Keyboard(live: true, converter: converter);
+            live.Type(input);
+            Assert.Equal(plain.Showing, live.Showing, input + " の表示");
+            plain.Type("\n");
+            live.Type("\n");
+            Assert.Equal(plain.Host.Document, live.Host.Document, input + " の確定");
+            Assert.Equal(0, converter.Calls, input + " は自動変換しない");
+        }
+
+        var explicitConverter = new ExpressionConverter();
+        var explicitConversion = new Keyboard(live: true, converter: explicitConverter);
+        explicitConversion.Type("na~~~ ");
+        Assert.True(explicitConverter.Calls > 0, "Space による明示的な変換は可能");
+    }
+
     [Test]
     public static void Backspace_DeletesOneKanaAtATime()
     {
