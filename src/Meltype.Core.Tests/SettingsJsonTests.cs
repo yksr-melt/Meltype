@@ -8,6 +8,27 @@ namespace Meltype.Tests;
 internal static class SettingsJsonTests
 {
     [Test]
+    public static void SettingsJson_TsfIndicatorIsOptInAndRoundTrips()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-indicator-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            File.WriteAllText(path, $"{{\"SettingsVersion\":{Settings.CurrentVersion},\"Mode\":\"Tsf\",\"ShowModeIndicator\":true,\"ShowModeIndicatorOnFocus\":true}}");
+            var settings = Settings.Load(path);
+            Assert.True(!new Settings().ShowTsfModeIndicator && !settings.ShowTsfModeIndicator, "新規・既存の設定とも IME 表示は既定 OFF");
+            Assert.True(settings.ShowModeIndicator && settings.ShowModeIndicatorOnFocus, "既存のキーボード方式の設定を維持する");
+            settings.ShowTsfModeIndicator = true;
+            settings.ShowModeIndicator = false;
+            settings.Save(path);
+            var loaded = Settings.Load(path);
+            Assert.True(loaded.ShowTsfModeIndicator && !loaded.ShowModeIndicator, "方式ごとの設定を独立して保存・復元する");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void SettingsJson_PreservesEnumsAndSpacingAcrossSaveLoad()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-json-" + Guid.NewGuid().ToString("N"));
@@ -17,8 +38,10 @@ internal static class SettingsJsonTests
             var path = Path.Combine(directory, "config.json");
             var original = new Settings
             {
-                SpaceAroundEnglish = true, InputStyle = InputStyle.Kana,
-                DetectionLevel = DetectionLevel.Manual, Mode = InputMode.Keyboard,
+                SpaceAroundEnglish = true,
+                InputStyle = InputStyle.Kana,
+                DetectionLevel = DetectionLevel.Manual,
+                Mode = InputMode.Keyboard,
             }.Normalize();
             original.Save(path);
             Assert.True(original.ToJson().Contains("\"Keyboard\"") && original.ToJson().Contains("\"Kana\""), "enum の文字列表現を維持する");

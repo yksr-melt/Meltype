@@ -362,11 +362,14 @@ public sealed class CompositionController
         public int Index { get; set; }
         public string Text => Candidates[Index];
 
-        /// <summary>ユーザーが候補を選び直したか (確定時に学習する)。</summary>
+        /// <summary>ユーザーが候補を選び直したか (通常の文節は確定時に学習する。括弧専用文節は除外)。</summary>
         public bool Changed { get; set; }
 
-        /// <summary>Windows の変換候補 API の候補を足したか。</summary>
+        /// <summary>外部変換エンジンの候補追加が完了したか。括弧専用文節では追加せずに完了扱いにする。</summary>
         public bool Expanded { get; set; }
+
+        /// <summary>括弧だけの専用候補。外部候補の追加・文節の分割・学習を行わない。</summary>
+        public BracketCandidates? Brackets { get; init; }
 
         /// <summary>この文節の読みを打ったときの英字 (あぴ → api)。分からなければ null。</summary>
         public string? Raw { get; set; }
@@ -1581,6 +1584,19 @@ public sealed class CompositionController
     private void StartConversion(bool preferJapanese = false)
     {
         _tabStartedConversion = false;
+        // 括弧単独は生成した候補だけで完結させる仕様 (issue #870)。辞書・履歴・エンジンの候補で補わない。
+        // Expanded=true は追加漏れではなく、表示時の Expand も呼ばないための指定。ペアの終端までを1文節にする。
+        if (BracketInput() is { } input && BracketCandidates.For(input) is { } brackets)
+        {
+            var clause = new Clause(input, false, brackets.Candidates) { Raw = _text.Raw, Expanded = true, Brackets = brackets };
+            // 続けて入力する前の選択だけを復元し、設定・入力形で決まる候補順と幅の注記は変えない。
+            if (_keptChoices.TryGetValue(input, out var kept) && brackets.Candidates.IndexOf(kept) is var index && index >= 0)
+                clause.Index = index;
+            _clauses = [clause];
+            _selectedClause = 0;
+            _converting = true;
+            return;
+        }
         // 打った英字全体がユーザー辞書の読み (helloworld → 登録した語) か子音の略入力の読み (ast → 明日。issue #62) なら、
         // 区間に分けずに 1 つの文節にして、その語を候補の先頭にする。ローマ字として読めれば、その読みの漢字も出す (go → 後・語・碁)
         if (HasRegisteredReading())
@@ -1675,6 +1691,18 @@ public sealed class CompositionController
         _clauses = clauses;
         _selectedClause = 0;
         _converting = true;
+    }
+
+    /// <summary>
+    /// 第一候補は入力方式と記号設定を反映した形を優先する。通常の [ ] は設定に従い「」または［］になる。
+    /// 波括弧・不等号形には専用の幅設定がないため、自動全角化だけを戻し、入力した幅を第一候補にする。
+    /// かな入力の Raw は物理キーの表記なので、同じ幅の戻し方は適用しない。
+    /// </summary>
+    private string? BracketInput()
+    {
+        if (_options.DirectMode() || _text.Mode is DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric ||
+            _text.Pending.Length > 0 || _text.Units.Count is not (1 or 2) || _text.ProtectedSpans().Count > 0) return null;
+        return string.Concat(_text.Units.Select(u => !_text.KanaInput && u.Raw is "{" or "}" or "<" or ">" ? u.Raw : u.Kana));
     }
 
     /// <summary>
@@ -2358,6 +2386,8 @@ public sealed class CompositionController
     /// </summary>
     private static List<string?>? CandidateNotes(Clause clause)
     {
+        // 括弧の幅は定義した注記を使う。ASCII の幅変換では「」と｢｣の対応を判定できない。
+        if (clause.Brackets is { } brackets) return brackets.Notes.Select(note => note.ToDisplayText()).ToList();
         var notes = clause.Candidates.Select(c =>
         {
             if (clause.Translations.Contains(c)) return "英訳";
@@ -2467,6 +2497,8 @@ public sealed class CompositionController
     private void Resize(int delta)
     {
         var current = _clauses[_selectedClause];
+        // 空のペアは左右を一度に選択・確定する単位。区切り操作で片側の文節へ戻さない。
+        if (current.Brackets is not null) return;
         var next = _selectedClause + 1 < _clauses.Count ? _clauses[_selectedClause + 1] : null;
         // 区切りを動かせないときは、英語の文節を読み直さずにそのままにする
         if (current.IsEnglish && !CanReadAsJapanese(current)) return;
@@ -2846,6 +2878,9 @@ public sealed class CompositionController
     /// <summary>選び直した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。</summary>
     private void Learn()
     {
+        // 括弧専用候補は選び直しても学習しない仕様。変換履歴だけでなく、言語判定・翻訳・外部学習も除外する。
+        // 通常の文章の学習には影響させず、次回も設定と入力形に従う候補順を維持する。
+        if (_clauses.Any(c => c.Brackets is not null)) return;
         // 設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)
         if (!_options.Learning()) return;
         // 変換の候補から打ったままの英字 (api) を選んで確定したら、その語は次から英字にする (F10 と同じ)。

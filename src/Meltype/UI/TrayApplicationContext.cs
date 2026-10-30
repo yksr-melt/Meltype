@@ -43,6 +43,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private int _exclusionNotificationScheduled;
     private volatile bool _exiting;
 
+    internal static bool ShouldShowModeIndicator(Settings settings) => settings.Enabled && (settings.Mode switch
+    {
+        InputMode.Keyboard => settings.ShowModeIndicator,
+        InputMode.Tsf => settings.ShowTsfModeIndicator,
+        _ => false,
+    });
+
     public TrayApplicationContext(MeltypeEngine engine)
     {
         _engine = engine;
@@ -103,8 +110,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
-            ModeIndicator = () => _engine.Settings is { Enabled: true, Mode: InputMode.Keyboard, ShowModeIndicator: true },
-            ModeIndicatorOnFocus = () => _engine.Settings.ShowModeIndicatorOnFocus,
+            ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
+            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ShowModeIndicatorOnFocus,
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
             Placement = () => _engine.Settings.CompositionPlacement,
             Size = () => _engine.Settings.CompositionSize,
