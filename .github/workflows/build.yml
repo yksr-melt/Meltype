@@ -1,4 +1,5 @@
 name: build
+run-name: 'Windows PR #1335 (51ca8c8)'
 
 on:
   push:
@@ -173,12 +174,12 @@ jobs:
   package:
     # タグ (v0.1.0 など) を push したら、テスト版の zip を作ってリリースに添付する。
     # Actions の画面から手動で実行 (Run workflow) したら、zip を実行結果 (Artifacts) に置く。
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/windows-build-pr-1335-20261030'
     needs: [test, mozc]
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -203,8 +204,8 @@ jobs:
       - name: Sign
         shell: powershell
         env:
-          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
+          SIGN_PFX_BASE64: ''
+          MELTYPE_SIGN_PASSWORD: ''
         run: |
           $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '' }
           $pfx = Join-Path $env:RUNNER_TEMP 'meltype-sign.pfx'
@@ -228,8 +229,8 @@ jobs:
       - name: Sign installer
         shell: pwsh
         env:
-          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
+          SIGN_PFX_BASE64: ''
+          MELTYPE_SIGN_PASSWORD: ''
         run: |
           if (-not $env:SIGN_PFX_BASE64) { exit 0 }
           $setup = Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File | Select-Object -First 1
@@ -261,14 +262,8 @@ jobs:
           .\tools\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', '.\dist\Meltype-portable', $packages[0].FullName, $packages[1].FullName, $setups[0].FullName)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: meltype-package
+          name: meltype-pr-1335-windows
           path: |
             dist/Meltype-*.zip
             dist/Meltype-*-setup.exe
           retention-days: 14
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: |
-            dist/Meltype-*.zip
-            dist/Meltype-*-setup.exe
