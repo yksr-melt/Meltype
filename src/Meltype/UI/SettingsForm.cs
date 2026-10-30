@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Config;
+using Microsoft.Win32;
 
 namespace Meltype.UI;
 
@@ -19,6 +20,14 @@ internal sealed class SettingsForm : Form, IMessageFilter
 {
     private const string On = "ON";
     private const string Off = "OFF";
+
+    private static readonly object FontNamesGate = new();
+    private static string[]? s_fontNames;
+
+    static SettingsForm()
+    {
+        SystemEvents.InstalledFontsChanged += (_, _) => { lock (FontNamesGate) s_fontNames = null; };
+    }
 
     private readonly MeltypeEngine _engine;
     private readonly List<Binding> _bindings = [];
@@ -35,6 +44,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
     // プロファイル (仕事用・趣味用・SNS 用など) を選ぶ欄
     private readonly ComboBox _profiles = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Anchor = AnchorStyles.Left };
     private bool _loadingProfiles;
+    private bool _loadingSettings;
+    private long _fontNamesMs;
     private readonly ToggleSwitch _showHelp = new() { Text = "下部に説明を表示" };
     private readonly ToggleSwitch _wheelChangesValue = new() { Text = "マウスホイールで値を変更" };
 
@@ -131,13 +142,27 @@ internal sealed class SettingsForm : Form, IMessageFilter
         AcceptButton = ok;
         CancelButton = cancel;
 
+        var controlsBuilt = opening.ElapsedMilliseconds;
         LoadFrom(_draft);
         RefreshProfiles();
         _opened = Collect();
+        var valuesLoaded = opening.ElapsedMilliseconds;
+        // 親からフォントを引き継ぎ、値を読み終えてから、内側の表 → 分類の枠 → 一覧の順に配置する。
+        // 一覧だけを止めても、内側の表は部品の追加やフォントの変更のたびに並べ直してしまう。
+        foreach (var group in _body.Controls.OfType<GroupBox>())
+        {
+            foreach (Control child in group.Controls) child.ResumeLayout();
+            group.ResumeLayout();
+        }
         _body.ResumeLayout();
         ResumeLayout();
         var built = opening.ElapsedMilliseconds;
-        Shown += (_, _) => Diagnostics.Log.Info($"設定画面を開くまで {opening.ElapsedMilliseconds} ms (部品を作るまで {built} ms)");
+        Shown += (_, _) =>
+        {
+            var shown = opening.ElapsedMilliseconds;
+            Diagnostics.Log.Info($"設定画面を開くまで {shown} ms (部品を作るまで {built} ms)");
+            Diagnostics.Log.Info($"設定画面の内訳: 部品作成 {controlsBuilt} ms (フォント一覧 {_fontNamesMs} ms)、値の読込 {valuesLoaded - controlsBuilt} ms、配置 {built - valuesLoaded} ms、表示 {shown - built} ms");
+        };
     }
 
     /// <summary>プロファイルの欄の下: 説明の欄を出すか、ホイールで値を変えるか。</summary>
@@ -311,7 +336,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
             .OrderBy(g => g.Key, StringComparer.Ordinal);
         foreach (var category in properties)
         {
+            var group = new GroupBox { Text = StripNumber(category.Key), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(6) };
+            group.SuspendLayout();
             var table = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, Padding = new Padding(4) };
+            table.SuspendLayout();
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
             foreach (var property in category)
@@ -340,8 +368,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 ShowHelpFor(binding.Control, name, description);
                 _bindings.Add(binding);
             }
-            var group = new GroupBox { Text = StripNumber(category.Key), AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Padding = new Padding(6) };
             group.Controls.Add(table);
+            // ここでは再開しない。親に付けてフォントを引き継ぎ、設定の値を入れてからコンストラクターでまとめて再開する。
             yield return group;
         }
     }
@@ -379,10 +407,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
         }
         if (type == typeof(string) && property.Name == nameof(Settings.CompositionFont))
         {
-            // この PC のフォントから選ぶ。先頭は既定 (空)
-            using var installed = new System.Drawing.Text.InstalledFontCollection();
-            var families = installed.Families.Select(f => f.Name).Where(n => n.Length > 0 && !n.StartsWith('@')).Distinct().OrderBy(n => n, StringComparer.CurrentCulture).ToList();
-            var combo = DropDown([DefaultFontChoice, .. families]);
+            // 一覧は使い回す。最初から全選択肢を入れ、閉じたまま ↑↓ でも選べるようにする。
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var combo = DropDown([DefaultFontChoice, .. FontNames()]);
+            _fontNamesMs += (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
             return new Binding(property, combo,
                 s =>
                 {
@@ -548,7 +576,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
         };
         CommitSwitchesImmediately(grid);
         // 種類を足したり名前を変えたりしたら、アプリ別設定の「種類」の選択肢にすぐ出す。
-        void Changed() => RefreshKindChoices(ReadKinds(grid).Select(k => k.Name));
+        void Changed()
+        {
+            if (!_loadingSettings) RefreshKindChoices(ReadKinds(grid).Select(k => k.Name));
+        }
         grid.CellValueChanged += (_, _) => Changed();
         grid.RowsRemoved += (_, _) => Changed();
         grid.DataError += (_, e) => e.ThrowException = false;
@@ -563,6 +594,17 @@ internal sealed class SettingsForm : Form, IMessageFilter
     }
 
     private const string DefaultFontChoice = "既定 (Yu Gothic UI)";
+
+    private static string[] FontNames()
+    {
+        lock (FontNamesGate)
+        {
+            if (s_fontNames is not null) return s_fontNames;
+            using var installed = new System.Drawing.Text.InstalledFontCollection();
+            return s_fontNames = installed.Families.Select(f => f.Name).Where(n => n.Length > 0 && !n.StartsWith('@'))
+                .Distinct().OrderBy(n => n, StringComparer.CurrentCulture).ToArray();
+        }
+    }
 
     private ComboBox DropDown(string[] items)
     {
@@ -813,7 +855,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
     private void LoadFrom(Settings settings)
     {
-        foreach (var binding in _bindings) binding.Load(settings);
+        _loadingSettings = true;
+        try
+        {
+            foreach (var binding in _bindings) binding.Load(settings);
+            RefreshKindChoices(settings.AppKinds.Select(k => k.Name));
+        }
+        finally { _loadingSettings = false; }
     }
 
     /// <summary>
@@ -844,7 +892,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
     private void RunTest()
     {
-        if (_bindings.Count == 0) return;
+        if (_loadingSettings || _bindings.Count == 0) return;
         var words = _testInput.Text.ToLowerInvariant().Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0)
         {
