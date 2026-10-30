@@ -18,7 +18,7 @@
 | `src/Meltype.Mac.Native/` | Mac 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib にする) |
 | `mac/` | Mac 版の IME (Swift、Input Method Kit。漢字変換は azooKey) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
-| `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー |
+| `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
 | `src/Meltype.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
 | `dictionaries/` | 組み込みの辞書 |
@@ -90,6 +90,7 @@ dotnet run --project src/Meltype.Core.Tests -- --eval       # 品質テスト (�
 dotnet run --project src/Meltype.Core.Tests -- --version    # 版 (Meltype.Core)
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter   # 打ったときの見え方と確定の結果
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json       # 日本語の文の中の英単語が正しく分かれるか (約 550 例)
+dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json  # 報告された誤変換
 dotnet run -c Release --project src/Meltype.Core.Tests -- --perf perf.json  # 変換エンジンの遅延 (p95 / p99)・候補の数・控え・メモリ・正解率 (MELTYPE_MOZC が要る)
 ```
 
@@ -97,8 +98,9 @@ Windows のアプリ本体・Mac / Linux の IME も同じ形で版を出せま�
 Windows のアプリ本体は GUI アプリ (WinExe) なので、cmd では版がプロンプトの後に出ます。
 コンソールアプリ (Exe) にすると、エクスプローラーやタスク スケジューラから起動したときにコンソールの窓が一瞬フォーカスを取り、その間に打ったキーが消えるので、WinExe のままにしています。
 
-環境変数 `MELTYPE_SCORED=1` を付けると、区切りを点数で選ぶ α版 (設定「区切りを点数で選ぶ (α版)」、`ScoredSegmentation.cs`) で動かせます。
-今までの区切りと比べるときは、同じコマンドを `MELTYPE_SCORED=0` と `1` で 2 回動かします。`--mixed-bench` は `MELTYPE_BENCH_OFFSET=31` などで調べる語を変えられます。
+`src/Meltype.Core.Tests/data/issue-cases.tsv` は、GitHub の issue (open / closed) から「打ったもの」と「期待した結果」を取り出したコーパスです。判定の作り方に関係なく同じ物差しで比べられるので、判定を変えるときは `--eval` と合わせて `--expect` で流します。
+
+`--mixed-bench` は `MELTYPE_BENCH_OFFSET=31` などで調べる語を変えられます。
 
 機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [tools/performance](../tools/performance/README.md) にあります。
 
@@ -113,6 +115,20 @@ Windows のアプリ本体は GUI アプリ (WinExe) なので、cmd では版�
 - Windows の英語のスペルチェッカーが使える環境では、それも使います (`MELTYPE_NO_SPELLCHECK=1` で使わずに測れます)
 - Pull Request では「精度の比較」のチェックが main と比べ、新しく外れた例があれば失敗にします
 - 新しい不具合の報告を受けたら、まずここに例を足してから直すのがおすすめです
+- 直した語だけでなく、**逆向き・似た入力の例** も足してください。たとえば `midi` を英語にする直し (#1122) は、`midika` (身近) を `midiか` にしてしまいました (#1179)。英語にする直しなら、その語で始まる日本語の語を、日本語にする直しなら、その語を含む英単語を足します
+
+<a name="よく使う語の判定の変化"></a>
+**よく使う語の判定の変化 (影響範囲の確認)**: 品質テストの例は数百個なので、そこに無い語が変わっても気づけません。
+「精度の比較」のチェックは、よく使う語の読み (`dictionaries/readings.txt` をローマ字にしたもの) と英単語 (`dictionaries/english-words.txt`) を 1 語ずつ打って確定し、main と見え方が変わった語を Summary に一覧にします。
+変わった語が間違いとは限らない (直したかった語は変わって当然) ので失敗にはせず、意図しない語が変わっていないかを人が確かめるための参考にします。
+辞書から消した語・足した語も比べられるように、変えたあとは変える前の一覧も渡して、その語も判定します (チェックでは main の側にも Pull Request の一覧を渡します)。
+Summary には 200 語まで出し、全件はログと、成果物 `judged-words` の `changes.tsv` に出します。手元では次のように比べられます。
+
+```
+dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus before.tsv              # 変える前
+dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus after.tsv before.tsv    # 変えたあと (変える前の語も判定する)
+node .github/bot/pr-checks.mjs impact before.tsv after.tsv changes.tsv
+```
 
 <br>
 

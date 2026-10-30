@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 
 namespace Meltype.Detection;
@@ -12,138 +14,283 @@ namespace Meltype.Detection;
 /// 普通の英単語 (meeting, name, tomorrow …) はこちらで補う。結果は語ごとに覚えておく。
 /// 使えない環境 (英語のスペルチェッカーが無い) では常に false を返す。
 /// </summary>
-public sealed class WindowsSpellChecker : IWordChecker
+public sealed class WindowsSpellChecker : IWordChecker, IDisposable
 {
     private static readonly Guid ClsidSpellCheckerFactory = new("7AB36653-1796-484B-BDFA-E74F1DB7C1DC");
 
-    private readonly ConcurrentDictionary<string, bool> _cache = new(StringComparer.Ordinal);
+    private const int CacheLimit = 50000;
+    private ConcurrentDictionary<string, Answer> _cache = new(StringComparer.Ordinal);
+    private ConcurrentDictionary<string, Answer> _older = new(StringComparer.Ordinal);
+    private int _cached;
     private readonly object _gate = new();
-    private ISpellChecker? _checker;
-    private bool _unavailable;
+    private volatile ISpellChecker? _checker;
+    private volatile bool _unavailable;
+    private readonly AutoResetEvent _wake = new(false);
+    private Thread? _comThread;
+    private Action? _job;
+    private volatile bool _done;
+    private volatile bool _disposed;
+
+    // 1 回の問い合わせで両方の答えが分かる (Known)。IsWord・AutoCorrection で聞いた側は Asked にする。
+    // 聞けなかったときは聞いた側の答え (false・null) だけを覚え、スペルチェッカーが止まった後は Asked の答えだけを使う
+    private enum Side : byte { Unknown, Known, Asked }
+
+    private readonly record struct Answer(bool IsWord, string? Correction, Side Word, Side Fix)
+    {
+        public Side Of(bool forWord) => forWord ? Word : Fix;
+        public static Answer Found(bool isWord, string? correction, bool forWord) => new(isWord, correction, forWord ? Side.Asked : Side.Known, forWord ? Side.Known : Side.Asked);
+        public static Answer Failed(bool forWord) => new(false, null, forWord ? Side.Asked : Side.Unknown, forWord ? Side.Unknown : Side.Asked);
+
+        // 聞いた答えは後から聞いたものを優先し (main は聞くたびに上書きする)、聞いた答えを「分かっただけ」の答えで変えない
+        public Answer Merge(Answer later)
+        {
+            var word = later.Word == Side.Asked || (Word != Side.Asked && later.Word == Side.Known);
+            var fix = later.Fix == Side.Asked || (Fix != Side.Asked && later.Fix == Side.Known);
+            return new(word ? later.IsWord : IsWord, fix ? later.Correction : Correction, word ? later.Word : Word, fix ? later.Fix : Fix);
+        }
+    }
 
     public static WindowsSpellChecker Shared { get; } = new();
 
     /// <summary>スペルチェッカーを使えるか (初回の呼び出しで作る)。</summary>
-    public bool IsAvailable => Checker() is not null;
-
-    /// <summary>小文字の英単語 (a-z だけ) が、英語として正しい綴りか。</summary>
-    public bool IsWord(string lower)
+    public bool IsAvailable
     {
-        if (lower.Length < 2 || lower.Length > 30 || !lower.All(char.IsAsciiLetterLower)) return false;
-        if (_cache.TryGetValue(lower, out var known)) return known;
-        var result = Check(lower);
-        if (_cache.Count > 20000) _cache.Clear();
-        _cache[lower] = result;
-        return result;
+        get
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_checker is not null || _unavailable) return _checker is not null;
+            lock (_gate) return OnComThread(Checker) is not null;
+        }
     }
 
-    private readonly ConcurrentDictionary<string, string?> _corrections = new(StringComparer.Ordinal);
+    /// <summary>小文字の英単語 (a-z だけ) が、英語として正しい綴りか。</summary>
+    public bool IsWord(string lower) => Lookup(lower, forWord: true) is { IsWord: true };
 
     /// <summary>
     /// Windows の自動修正の一覧にある打ち間違いなら、正しい綴り (teh → the、recieve → receive)。
     /// スペルチェッカーが「置き換える」と言うものだけで、候補が複数あるもの (提案だけのもの) は null。
     /// </summary>
-    public string? AutoCorrection(string lower)
+    public string? AutoCorrection(string lower) => Lookup(lower, forWord: false)?.Correction;
+
+    // 1 回の問い合わせで両方の答えが分かるので、まとめて覚える (問い合わせは重い)
+    private Answer? Lookup(string lower, bool forWord)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (lower.Length < 2 || lower.Length > 30 || !lower.All(char.IsAsciiLetterLower)) return null;
-        if (_corrections.TryGetValue(lower, out var known)) return known;
-        string? result = null;
+        if (Usable(_cache, lower, forWord, out var known) || Usable(_older, lower, forWord, out known))
+        {
+            // 反対側は Unknown で渡し、その間に聞かれた新しい答えを読んだ時の答えで戻さない
+            return known.Of(forWord) == Side.Asked && _cache.ContainsKey(lower) ? known : Remember(lower, known with
+            {
+                Word = forWord ? Side.Asked : Side.Unknown,
+                Fix = forWord ? Side.Unknown : Side.Asked,
+            });
+        }
         lock (_gate)
         {
-            var checker = Checker();
-            if (checker is null) return null;
+            var (answer, keep) = OnComThread(() => Ask(lower, forWord));
+            return keep ? Remember(lower, answer!.Value) : answer;
+        }
+    }
+
+    private bool Usable(ConcurrentDictionary<string, Answer> cache, string lower, bool forWord, out Answer answer) =>
+        cache.TryGetValue(lower, out answer) && answer.Of(forWord) switch { Side.Asked => true, Side.Known => !_unavailable, _ => false };
+
+    private (Answer? Answer, bool Keep) Ask(string lower, bool forWord)
+    {
+        var checker = Checker();
+        if (checker is null) return (null, false);
+        try
+        {
+            if (checker.Check(lower, out var errors) < 0 || errors is null) return (Answer.Failed(forWord), true);
             try
             {
-                if (checker.Check(lower, out var errors) >= 0 && errors is not null)
+                // 誤りが 1 つも無ければ S_FALSE (1) が返る。
+                var hr = errors.Next(out var item);
+                if (hr < 0)
                 {
+                    if (item is not null) Marshal.ReleaseComObject(item);
+                    return (Answer.Failed(forWord), true);
+                }
+                string? correction = null;
+                var fixRead = true;
+                if (hr == 0 && item is ISpellingError error)
+                {
+                    // 直し方の読み取りの失敗では止めない (main の IsWord はここを通らない)
                     try
                     {
-                        if (errors.Next(out var item) == 0 && item is ISpellingError error)
+                        // CORRECTIVE_ACTION_REPLACE = 2
+                        if (error.GetCorrectiveAction(out var action) < 0) fixRead = false;
+                        else if (action == 2)
                         {
-                            // CORRECTIVE_ACTION_REPLACE = 2
-                            if (error.GetCorrectiveAction(out var action) >= 0 && action == 2 && error.GetReplacement(out var text) >= 0 && text != IntPtr.Zero)
+                            if (error.GetReplacement(out var text) < 0) fixRead = false;
+                            else if (text != IntPtr.Zero)
                             {
-                                result = Marshal.PtrToStringUni(text);
+                                correction = Marshal.PtrToStringUni(text);
                                 Marshal.FreeCoTaskMem(text);
                             }
-                            Marshal.ReleaseComObject(error);
                         }
                     }
-                    finally
+                    catch (Exception ex)
                     {
-                        Marshal.ReleaseComObject(errors);
+                        Diagnostics.Log.Warn($"スペルチェッカーの自動修正でエラー ({ex.Message})");
+                        (fixRead, correction) = (false, null);
                     }
+                    Marshal.ReleaseComObject(error);
                 }
+                else if (item is not null) Marshal.ReleaseComObject(item);
+                var answer = Answer.Found(hr == 1, correction, forWord);
+                // 直し方を読めなかったときは、IsWord で聞いたなら自動修正の答えは分からないままにする
+                return (fixRead || !forWord ? answer : answer with { Fix = Side.Unknown }, true);
             }
-            catch (Exception ex)
+            finally
             {
-                Diagnostics.Log.Warn($"スペルチェッカーの自動修正でエラー ({ex.Message})");
+                Marshal.ReleaseComObject(errors);
             }
         }
-        if (_corrections.Count > 20000) _corrections.Clear();
-        _corrections[lower] = result;
+        catch (Exception ex)
+        {
+            if (!forWord)
+            {
+                Diagnostics.Log.Warn($"スペルチェッカーの自動修正でエラー ({ex.Message})");
+                return (Answer.Failed(forWord), true);
+            }
+            Diagnostics.Log.Warn($"スペルチェッカーでエラー ({ex.Message})。以後は使いません。");
+            _checker = null;
+            _unavailable = true;
+            return (null, false);
+        }
+    }
+
+    // STA のスレッドから聞くと 1 回が数倍重い (Windows で 240µs と 36µs) ので、MTA の専用のスレッドで聞く。
+    // 呼ぶ側は _gate を持ったまま待つ。STA で止まって待つとメッセージを処理してしまうので、回って待つ。
+    private T OnComThread<T>(Func<T> work)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) return work();
+        _comThread ??= StartComThread();
+        T result = default!;
+        ExceptionDispatchInfo? failure = null;
+        _job = () =>
+        {
+            try { result = work(); }
+            catch (Exception ex) { failure = ExceptionDispatchInfo.Capture(ex); }
+        };
+        _done = false;
+        _wake.Set();
+        var spin = new SpinWait();
+        var start = Stopwatch.GetTimestamp();
+        while (!_done)
+        {
+            // 長引いたとき (最初の生成など) は 1 コアを回し続けない。Thread.Sleep はメッセージを処理しない
+            if (Stopwatch.GetElapsedTime(start) > TimeSpan.FromMilliseconds(1)) Thread.Sleep(1);
+            else spin.SpinOnce(sleep1Threshold: -1);
+        }
+        failure?.Throw();
         return result;
     }
 
-    private bool Check(string word)
+    private Thread StartComThread()
+    {
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                while (true)
+                {
+                    _wake.WaitOne();
+                    if (_disposed) break;
+                    _job!();
+                    _job = null;
+                    _done = true;
+                }
+            }
+            finally { ReleaseChecker(); }
+        }) { IsBackground = true, Name = "Meltype spell checker" };
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        return thread;
+    }
+
+    /// <summary>問い合わせが終わるのを待ち、COM のスレッドと待機ハンドルを閉じる。</summary>
+    public void Dispose()
     {
         lock (_gate)
         {
-            var checker = Checker();
-            if (checker is null) return false;
-            try
+            if (_disposed) return;
+            _disposed = true;
+            _unavailable = true;
+            if (_comThread is { } thread)
             {
-                if (checker.Check(word, out var errors) < 0 || errors is null) return false;
-                try
-                {
-                    // 誤りが 1 つも無ければ S_FALSE (1) が返る。
-                    var hr = errors.Next(out var error);
-                    if (error is not null) Marshal.ReleaseComObject(error);
-                    return hr == 1;
-                }
-                finally
-                {
-                    Marshal.ReleaseComObject(errors);
-                }
+                _wake.Set();
+                thread.Join();
             }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"スペルチェッカーでエラー ({ex.Message})。以後は使いません。");
-                _checker = null;
-                _unavailable = true;
-                return false;
-            }
+            else ReleaseChecker();
+            _wake.Dispose();
         }
     }
 
+    private void ReleaseChecker()
+    {
+        if (_checker is { } checker)
+        {
+            _checker = null;
+            Marshal.ReleaseComObject(checker);
+        }
+    }
+
+    private Answer Remember(string lower, Answer answer)
+    {
+        var added = false;
+        var merged = _cache.AddOrUpdate(lower, _ =>
+        {
+            added = true;
+            return _older.TryGetValue(lower, out var older) ? older.Merge(answer) : answer;
+        }, (_, earlier) =>
+        {
+            added = false;
+            return earlier.Merge(answer);
+        });
+        if (added && Interlocked.Increment(ref _cached) > CacheLimit)
+        {
+            lock (_gate)
+            {
+                if (_cached > CacheLimit)
+                {
+                    _older = _cache;
+                    _cache = new ConcurrentDictionary<string, Answer>(StringComparer.Ordinal);
+                    _cached = 0;
+                }
+            }
+        }
+        return merged;
+    }
+
+    // _gate を持って、OnComThread の中で呼ぶ
     private ISpellChecker? Checker()
     {
         if (_checker is not null || _unavailable) return _checker;
-        lock (_gate)
+        try
         {
-            if (_checker is not null || _unavailable) return _checker;
-            try
+            var type = Type.GetTypeFromCLSID(ClsidSpellCheckerFactory, throwOnError: true)!;
+            var factory = (ISpellCheckerFactory)Activator.CreateInstance(type)!;
+            foreach (var tag in new[] { "en-US", "en-GB" })
             {
-                var type = Type.GetTypeFromCLSID(ClsidSpellCheckerFactory, throwOnError: true)!;
-                var factory = (ISpellCheckerFactory)Activator.CreateInstance(type)!;
-                foreach (var tag in new[] { "en-US", "en-GB" })
+                if (factory.IsSupported(tag, out var supported) >= 0 && supported != 0 &&
+                    factory.CreateSpellChecker(tag, out var checker) >= 0 && checker is not null)
                 {
-                    if (factory.IsSupported(tag, out var supported) >= 0 && supported != 0 &&
-                        factory.CreateSpellChecker(tag, out var checker) >= 0 && checker is not null)
-                    {
-                        _checker = checker;
-                        return checker;
-                    }
+                    _checker = checker;
+                    return checker;
                 }
-                Diagnostics.Log.Info("英語のスペルチェッカーが無いため、英単語の判定は同梱の辞書だけで行います。");
             }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Info($"スペルチェッカーを使えません ({ex.Message})。英単語の判定は同梱の辞書だけで行います。");
-            }
-            _unavailable = true;
-            return null;
+            Diagnostics.Log.Info("英語のスペルチェッカーが無いため、英単語の判定は同梱の辞書だけで行います。");
         }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Info($"スペルチェッカーを使えません ({ex.Message})。英単語の判定は同梱の辞書だけで行います。");
+        }
+        _unavailable = true;
+        return null;
     }
 
     // ---- COM (spellcheck.h) ----

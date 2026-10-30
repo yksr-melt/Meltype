@@ -1,0 +1,13 @@
+/* SPDX-License-Identifier: GPL-3.0-or-later */
+/* Copyright (C) 2026 HarukiKubota */
+
+body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 960px; padding: 0 1rem; color: #222; background: #fafafa; }
+section { background: white; border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+h2 { margin-top: 0; }
+label { display: block; margin: .6rem 0; }
+input:not([type=checkbox]), textarea, [contenteditable] { box-sizing: border-box; width: 100%; font: inherit; padding: .5rem; border: 1px solid #777; }
+/* 両方の複数行欄で改行・連続空白を表示し、追記後の本文を目視でも確認できるようにする。 */
+textarea, [contenteditable] { min-height: 5rem; white-space: pre-wrap; }
+button, select { font: inherit; margin: .3rem; padding: .4rem; }
+/* 長いイベントJSONが横へはみ出して、入力欄の確認を妨げないよう折り返す。 */
+pre { white-space: pre-wrap; overflow-wrap: anywhere; }

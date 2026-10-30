@@ -33,3 +33,4 @@ native/tip/obj/
 
 # Python のキャッシュ (tools/*.py を動かすと作られる)
 __pycache__/
+llama.log

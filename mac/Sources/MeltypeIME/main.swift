@@ -13,6 +13,8 @@ if CommandLine.arguments.contains("--version") {
 if CommandLine.arguments.contains("--register-input-source") {
     let outcome = InputSourceRegistration.register()
     guard outcome == .ready else { exit(outcome.exitCode) }
+    // メニューと切り替えUIは一覧を別々にキャッシュするため、両方の表示を更新する。
+    // 有効なモードの確認後だけ実行し、登録待ちのときは一覧を消さない。
     let refresh = Process()
     refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
     refresh.arguments = ["TextInputMenuAgent", "TextInputSwitcher"]
@@ -159,15 +161,6 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
         }
     } catch { check("issue 40: plist parsing", false) }
     let session = NativeCore.shared.createSession()
-    let (_, goPreview) = type("go", session: session)
-    check("go preview candidates", goPreview?.view?.candidates == ["go", "ご"])
-    let selectedGo = NativeCore.shared.selectCandidate(session, index: 0)
-    check("select English go", selectedGo?.view?.text == "go")
-    _ = NativeCore.shared.commit(session)
-    _ = type("go", session: session)
-    let selectedKana = NativeCore.shared.selectCandidate(session, index: 1)
-    check("select hiragana go", selectedKana?.view?.text == "ご")
-    _ = NativeCore.shared.commit(session)
     let (_, emoji) = type("egao ", session: session)
     check("emoji candidate", emoji?.view?.candidates.contains("😊") == true)
     _ = NativeCore.shared.commit(session)

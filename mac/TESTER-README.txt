@@ -5,6 +5,8 @@ Meltype for Mac テスト版
 
 Meltype は「入力ソース」(日本語入力) です。アプリ本体の Meltype.app.zip は手動で展開せず、そのまま保管してください。
 展開済みのアプリを Downloads などに残すと、macOS が別の入力ソースとして検出することがあります。
+インストール済みの ~/Library/Input Methods/Meltype.app を残し、Downloads などにある古い展開済みの Meltype.app は削除して構いません。
+保管したい旧版は ZIP に圧縮し、展開済みコピーを残さないでください。
 下の手順でインストールして、入力ソースに追加して使います。
 
 ■ 動く環境

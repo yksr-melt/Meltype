@@ -151,9 +151,9 @@ if (macZip) {
     # 入力ソースに登録する (#21、#134)
     register = "#{app}/Contents/MacOS/MeltypeRegisterInputSource"
     if File.executable?(register)
-      system_command register, args: [app], must_succeed: true
+      system_command register, args: [app], must_succeed: false
     else
-      system_command "#{app}/Contents/MacOS/Meltype", args: ["--register-input-source"], must_succeed: true
+      system_command "#{app}/Contents/MacOS/Meltype", args: ["--register-input-source"], must_succeed: false
     end
     system_command "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
                    args: ["-f", app], must_succeed: false

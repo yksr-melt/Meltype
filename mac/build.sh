@@ -22,7 +22,8 @@ enable_input_source() {
 # これまではログアウトするしかなかった。TISRegisterInputSource なら実行中でも戻せる。
 register_input_source() {
     local tool="$TARGET/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource"
-    "$tool" "$TARGET/Meltype.app"
+    "$tool" "$TARGET/Meltype.app" ||
+        echo "入力ソースを登録できませんでした。システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。" >&2
 }
 [[ "${1:-}" == "--no-install" ]] && INSTALL=0
 

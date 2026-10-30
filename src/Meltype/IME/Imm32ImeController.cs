@@ -9,7 +9,7 @@ namespace Meltype.IME;
 /// IMM32 経由の IME 操作。ImmGetContext は別プロセスのウィンドウには使えないので、
 /// 対象スレッドの既定 IME ウィンドウに WM_IME_CONTROL を送る方式を取る (TSF ベースの MS-IME でも有効)。
 /// </summary>
-public sealed class Imm32ImeController
+public static class Imm32ImeController
 {
     private const int IMC_GETCONVERSIONMODE = 0x0001, IMC_SETCONVERSIONMODE = 0x0002;
     private const int IMC_GETOPENSTATUS = 0x0005, IMC_SETOPENSTATUS = 0x0006;
@@ -17,7 +17,7 @@ public sealed class Imm32ImeController
     private const ushort LangJapanese = 0x0411;
     private const uint QueryTimeoutMs = 100;
 
-    public ImeState GetState(ImeTarget target)
+    public static ImeState GetState(ImeTarget target)
     {
         var hkl = Native.GetKeyboardLayout(target.ThreadId);
         var language = (hkl.ToInt64() & 0xFFFF) == LangJapanese ? InputLanguage.Japanese : InputLanguage.Other;
@@ -57,7 +57,7 @@ public sealed class Imm32ImeController
         return false;
     }
 
-    public bool TrySetOpen(ImeTarget target, bool open, int? conversionMode, int timeoutMs)
+    public static bool TrySetOpen(ImeTarget target, bool open, int? conversionMode, int timeoutMs)
     {
         var imeWindow = Native.ImmGetDefaultIMEWnd(target.EffectiveWindow);
         if (imeWindow == IntPtr.Zero) return false;

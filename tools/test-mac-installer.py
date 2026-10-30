@@ -127,12 +127,15 @@ class InstallerTests(unittest.TestCase):
         self.assertIn('Meltype-mac/Meltype.app.zip', names)
         self.assertFalse(any('/Meltype.app/' in name for name in names))
 
-    def test_registration_failure_does_not_start_or_select(self):
+    def test_registration_failure_warns_and_continues(self):
         self.compress()
         self.environment['MELTYPE_TEST_FAIL_REGISTER'] = '23'
-        self.assertEqual(self.run_install().returncode, 23)
-        self.assertNotIn('started', self.calls())
-        self.assertNotIn('selected', self.calls())
+        result = self.run_install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('システム設定', result.stderr)
+        self.assertEqual(self.calls().count('register'), 1)
+        self.assertIn('started', self.calls())
+        self.assertIn('selected', self.calls())
 
 
 if __name__ == '__main__':

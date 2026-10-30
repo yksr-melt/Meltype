@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+using System.Globalization;
 using System.Text;
 
 namespace Meltype.Composition;
@@ -24,7 +25,7 @@ public static class NumberCandidates
         if (half.Length is 0 or > 16 || !half.All(char.IsAsciiDigit)) return [];
         var result = new List<string> { string.Concat(half.Select(c => Digits[c - '0'])) };
         if (half.Length > 1 && half[0] == '0') return result;
-        var value = ulong.Parse(half);
+        var value = ulong.Parse(half, CultureInfo.InvariantCulture);
         if (value > 0)
         {
             result.Add(ToKanji(value, Digits, SmallUnits, omitOne: true));
@@ -43,7 +44,7 @@ public static class NumberCandidates
         {
             if (year < start) continue;
             var n = year - start + 1;
-            return $"{name}{(n == 1 ? "元" : n.ToString())}年";
+            return $"{name}{(n == 1 ? "元" : n.ToString(CultureInfo.InvariantCulture))}年";
         }
         return null;
     }

@@ -58,6 +58,18 @@ body:
         - 句読点・記号
         - そのほか
 
+  - type: dropdown
+    id: zenzai
+    attributes:
+      label: Zenzai (zenz) を使っているか
+      description: 設定の「Zenzai を使う」です。ON だと変換の結果が変わるので、直すときに同じ条件で確かめるために使います
+      options:
+        - 使っていない
+        - 使っている
+        - 分からない
+    validations:
+      required: true
+
   - type: textarea
     id: context
     attributes:

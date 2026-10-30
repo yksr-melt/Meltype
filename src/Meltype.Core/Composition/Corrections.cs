@@ -9,6 +9,9 @@ namespace Meltype.Composition;
 /// </summary>
 public sealed record Correction(string Typed, string Shown, string Corrected, string LastKey, string Before, DateTime Time)
 {
+    /// <summary>直したときに「Zenzai を使う」が ON だったか (分からなければ null。報告の「Zenzai (zenz) を使っているか」に入れる。issue #1197)。</summary>
+    public bool? Zenzai { get; init; }
+
     /// <summary>報告の種類 (ひな形の選択肢)。</summary>
     public string Kind =>
         Corrected.Any(char.IsAsciiLetter) && !Shown.Any(char.IsAsciiLetter) ? "英語のつもりがかなになった (みいてぃんg)" :

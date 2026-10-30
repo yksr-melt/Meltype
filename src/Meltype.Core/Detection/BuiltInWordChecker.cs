@@ -14,19 +14,12 @@ public sealed class BuiltInWordChecker : IWordChecker
     /// <summary>同梱の一覧を読んだもの (最初に使うときに読む)。</summary>
     public static BuiltInWordChecker Shared => SharedInstance.Value;
 
-    private readonly HashSet<string> _words = new(StringComparer.Ordinal);
+    private readonly PackedWordSet _words;
 
-    public BuiltInWordChecker(string text)
-    {
-        foreach (var line in text.Split('\n'))
-        {
-            var word = line.Trim();
-            if (word.Length > 0 && word[0] != '#') _words.Add(word);
-        }
-    }
+    public BuiltInWordChecker(string text) => _words = PackedWordSet.FromLines(text);
 
     public bool IsAvailable => _words.Count > 0;
 
     public bool IsWord(string lower) => _words.Contains(lower);
-    internal bool IsWord(ReadOnlySpan<char> lower) => _words.GetAlternateLookup<ReadOnlySpan<char>>().Contains(lower);
+    internal bool IsWord(ReadOnlySpan<char> lower) => _words.Contains(lower);
 }

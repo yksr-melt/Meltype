@@ -16,6 +16,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private static readonly Meltype.Composition.GitHubIssueTitles GitHubTitlesShared = new();
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem;
+    // Zenzai の状態 (「Zenzai を使う」が ON のときだけ出す。issue #1152)
+    private readonly ToolStripMenuItem _zenzaiItem = new() { Enabled = false, Visible = false };
     private readonly ToolStripMenuItem _enabledItem;
     private readonly HotkeyWindow _hotkey;
     private readonly HotkeyWindow _registerHotkey;
@@ -35,10 +37,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private SnippetsForm? _snippetsForm;
     private ReportDialog? _reportDialog;
     private LearnedWordsForm? _learnedForm;
+    private KeyCountForm? _keyCountForm;
     private WelcomeForm? _welcomeForm;
     private readonly Updater _updater;
     private readonly ToolStripMenuItem _updateItem;
     private readonly ToolStripMenuItem _autoUpdateItem;
+    private int _exclusionNotificationScheduled;
+    private volatile bool _exiting;
+
+    internal static bool ShouldShowModeIndicator(Settings settings) => settings.Enabled && (settings.Mode switch
+    {
+        InputMode.Keyboard => settings.ShowModeIndicator,
+        InputMode.Tsf => settings.ShowTsfModeIndicator,
+        _ => false,
+    });
 
     public TrayApplicationContext(MeltypeEngine engine)
     {
@@ -46,7 +58,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _invoker.CreateControl();
         var detector = Composition.CompositionDetector.CreateDefault(AppPaths.UserDictionaryDirectory);
         detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
-        detector.UseScoredSegmentation = () => _engine.AppSettings.ScoredSegmentation;
         detector.UseJapanesePunctuationAfterEnglish = () => _engine.Settings.JapanesePunctuationAfterEnglish;
         _composition = new Composition.CompositionService(_invoker, detector, new Composition.CompositionOptions
         {
@@ -57,6 +68,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.DetectionLevel != DetectionLevel.Manual,
             Level = () => _engine.AppSettings.DetectionLevel,
             Engine = () => _engine.Settings.ConversionEngine,
+            UseZenzai = () => _engine.Settings.UseZenzai,
+            ZenzaiServerPath = () => _engine.Settings.ZenzaiServerPath,
+            ZenzaiModelPath = () => _engine.Settings.ZenzaiModelPath,
+            ZenzaiDevice = () => _engine.Settings.ZenzaiDevice,
             TranslationCandidates = () => _engine.Settings.TranslationCandidates,
             CandidateMeanings = () => _engine.Settings.ShowCandidateMeanings,
             ShowTypedKeys = () => _engine.Settings.ShowTypedKeys,
@@ -68,7 +83,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ConsonantAbbreviations = () => _engine.Settings.ConsonantAbbreviations,
             CorrectTypos = () => _engine.Settings.CorrectTypos,
             SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
+            ZSymbols = () => _engine.Settings.ZSymbols,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
+            SpaceAroundNumbers = () => _engine.Settings.SpaceAroundNumbers,
+            NumberKeysSelectCandidates = () => _engine.Settings.NumberKeysSelectCandidates,
             ShiftSpaceHalfWidth = () => _engine.Settings.ShiftSpaceHalfWidth,
             EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,
@@ -95,8 +113,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
-            ModeIndicator = () => _engine.Settings is { Enabled: true, Mode: InputMode.Keyboard, ShowModeIndicator: true },
-            ModeIndicatorOnFocus = () => _engine.Settings.ShowModeIndicatorOnFocus,
+            ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
+            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ShowModeIndicatorOnFocus,
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
             Placement = () => _engine.Settings.CompositionPlacement,
             Size = () => _engine.Settings.CompositionSize,
@@ -117,6 +135,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _keyboardModeItem = new ToolStripMenuItem("Meltype キーボード (変換ボックスで入力)", null, (_, _) => SetMode(InputMode.Keyboard));
         _tsfModeItem = new ToolStripMenuItem("Meltype IME (入力欄に直接入力)", null, (_, _) => SetMode(InputMode.Tsf));
         menu.Items.Add(_statusItem);
+        menu.Items.Add(_zenzaiItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(_enabledItem);
         if (!AppPaths.IsPortable) menu.Items.Add(_tsfModeItem);
@@ -155,6 +174,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("直した誤判定を報告...", null, (_, _) => new CorrectionReportDialog(_composition.Corrections, _engine.Settings).Show());
         menu.Items.Add("Meltype について...", null, (_, _) => MessageBox.Show(AppInfo.AboutText, "Meltype について", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add("学習した語...", null, (_, _) => ShowLearnedWords());
+        menu.Items.Add("打鍵数...", null, (_, _) => ShowKeyCount());
         var forget = new ToolStripMenuItem("学習データを消す");
         forget.DropDownItems.Add("この 1 時間に覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.UtcNow.AddHours(-1), "この 1 時間"));
         forget.DropDownItems.Add("今日覚えたもの...", null, (_, _) => ForgetRecentLearning(DateTime.Today.ToUniversalTime(), "今日"));
@@ -166,9 +186,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _autoUpdateItem = new ToolStripMenuItem("自動で更新する", null, (_, _) => ToggleAutoUpdate());
         updates.DropDownItems.Add(_autoUpdateItem);
         updates.DropDownItems.Add("今すぐ更新を確認", null, (_, _) => CheckForUpdate());
+        updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false));
         _updateItem = new ToolStripMenuItem("", null, (_, _) => ApplyUpdate()) { Visible = false };
         updates.DropDownItems.Add(_updateItem);
-        updates.DropDownOpening += (_, _) => _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
+        updates.DropDownOpening += (_, _) =>
+        {
+            _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
+            // プレリリース版の更新を OFF にしたら、ダウンロード済みのプレリリース版の「更新して再起動」は出さない
+            ShowUpdateItem();
+        };
         if (!AppPaths.IsPortable) menu.Items.Add(updates);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("終了", null, (_, _) => ExitThread());
@@ -182,7 +208,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.ToggleRequested += OnToggleRequested;
         _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
         _engine.StatusChanged += OnEngineStatusChanged;
-        _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate);
+        _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate, () => Prerelease);
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
         UpdateStatus();
@@ -195,6 +221,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _engine.ApplySettings(next);
             _invoker.BeginInvoke(ShowWelcome);
         }
+        // 更新したあとの初めての起動なら、その版のリリースノートを一度だけ見せる (issue #1207)。
+        // 初めて起動した人には見せず、今の版を見せたことにしておく
+        if (_engine.Settings.ReleaseNotesShown != AppInfo.Version)
+        {
+            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_engine.Settings.ReleaseNotesShown, AppInfo.Version, firstRun);
+            var next = _engine.Settings.Clone();
+            next.ReleaseNotesShown = AppInfo.Version;
+            _engine.ApplySettings(next);
+            if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true));
+        }
         // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
         // (初めて起動した人には、インストーラーが聞いている)
         if (!AppPaths.IsPortable && !_engine.Settings.TsfOffered)
@@ -204,6 +240,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _engine.ApplySettings(next);
             if (!firstRun && CanOfferTsf()) _invoker.BeginInvoke(OfferTsf);
         }
+        // 起動時の設定反映が終わってから、読み込み中に蓄積した除外をまとめて通知する。
+        Diagnostics.ShortcutExclusions.Added += OnShortcutExcluded;
+        OnShortcutExcluded();
     }
 
     /// <summary>
@@ -332,11 +371,56 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tray.ShowBalloonTip(timeout, title, text, ToolTipIcon.Info);
     }
 
+    /// <summary>除外情報の表示を UI スレッドに予約し、その処理までに追加された複数の登録を一つのトレイ通知にまとめる。</summary>
+    private void OnShortcutExcluded()
+    {
+        if (_exiting || !_invoker.IsHandleCreated || _invoker.IsDisposed ||
+            Interlocked.Exchange(ref _exclusionNotificationScheduled, 1) != 0) return;
+        try
+        {
+            _invoker.BeginInvoke(() =>
+            {
+                Interlocked.Exchange(ref _exclusionNotificationScheduled, 0);
+                if (_exiting) return;
+                var message = TakeShortcutExclusionMessage(_engine.Settings.ShowNotifications);
+                if (message is null) return;
+                _tray.BalloonTipClicked -= OnUpdateBalloonClicked;
+                _tray.ShowBalloonTip(5000, "入力モード切り替えキーを除外しました", message, ToolTipIcon.Warning);
+            });
+        }
+        catch (InvalidOperationException) when (_exiting)
+        {
+            // 終了と別スレッドからの除外通知が重なった場合は、破棄済みの UI を呼ばない。
+        }
+    }
+
+    /// <summary>未通知の除外情報を消費し、通知が有効で対象があるときだけ本文を返す (OFF 中の情報も消費する)。</summary>
+    internal static string? TakeShortcutExclusionMessage(bool showNotifications)
+    {
+        var excluded = Diagnostics.ShortcutExclusions.Drain();
+        return showNotifications && excluded.Length > 0 ? ShortcutExclusionMessage(excluded) : null;
+    }
+
+    /// <summary>除外した登録の先頭 3 件をキー名で示し、残り件数とログ画面への案内を付けた通知本文を作る。</summary>
+    internal static string ShortcutExclusionMessage(IReadOnlyList<Diagnostics.ShortcutExclusion> excluded)
+    {
+        var names = excluded.Take(3).Select(e => e.Shortcut is { } shortcut ? ShortcutEditor.Describe(shortcut) : "不正な登録 (null)");
+        var remaining = excluded.Count > 3 ? $"、ほか {excluded.Count - 3} 件" : "";
+        return $"{string.Join("、", names)}{remaining}\n詳細は「ログ / 判定理由」で確認できます。";
+    }
+
+    /// <summary>
+    /// プレリリース版も更新の対象にするか (設定の「プレリリース版も自動で更新する」)。
+    /// ダウンロード (Updater) と更新 (Staged・Apply) のどちらも、そのときのこの値で決める。
+    /// </summary>
+    private bool Prerelease => _engine.Settings.UpdatePrerelease;
+
+    /// <summary>ダウンロード済みの新しい版があれば「更新して再起動」を出し、無ければ隠す。</summary>
     private void ShowUpdateItem()
     {
-        if (Updater.Staged() is not { } staged) return;
-        _updateItem.Text = $"Meltype {staged.Version} に更新して再起動";
-        _updateItem.Visible = true;
+        var staged = Updater.Staged(Prerelease);
+        _updateItem.Visible = staged is not null;
+        if (staged is { } shown) _updateItem.Text = $"Meltype {shown.Version} に更新して再起動";
     }
 
     private bool _applyingUpdate;
@@ -350,14 +434,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             // 更新の前に、あなたの打ち方で変わる語があれば見せる (issue #285)。
             // 判定は新しい版の Meltype.exe を起動して待つので、UI スレッドの外で行う (待つ間も Meltype IME に応答するため)
-            if (Updater.Staged() is { } staged)
+            if (Updater.Staged(Prerelease) is { } staged)
             {
                 var words = _composition.Languages.Entries().Select(e => e.Word).Distinct().ToList();
-                var preview = await Task.Run(() => Updater.PreviewChanges(words));
+                var preview = await Task.Run(() => Updater.PreviewChanges(words, Prerelease));
                 if (!UpdateChangesDialog.Confirm(_composition.Languages, staged.Version, _engine.Settings, preview)) return;
             }
             // install.ps1 が Meltype を終了させてから入れ替え、新しい版を起動する。
-            if (!Updater.Apply()) MessageBox.Show("更新を始められませんでした。ログを確認してください。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            if (!Updater.Apply(Prerelease)) MessageBox.Show("更新を始められませんでした。ログを確認してください。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         finally
         {
@@ -369,7 +453,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var result = await _updater.CheckNowAsync();
         ShowUpdateItem();
-        if (Updater.Staged() is { } staged)
+        if (Updater.Staged(Prerelease) is { } staged)
         {
             if (MessageBox.Show($"Meltype {staged.Version} に更新できます。今すぐ更新しますか？ (Meltype が再起動します)", "Meltype の更新", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) ApplyUpdate();
             return;
@@ -456,8 +540,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (name == _engine.Settings.ActiveProfile) return;
         _engine.ApplySettings(_engine.Settings.SwitchProfile(name));
         UpdateStatus();
-        if (_engine.Settings.ShowNotifications) ShowBalloonTip(1500, "Meltype", $"プロファイルを「{name}」にしました");
+        if (ProfileSwitchMessage(_engine.Settings) is { } message) ShowBalloonTip(1500, "Meltype", message);
     }
+
+    /// <summary>除外警告が待機中なら通常の切替通知を省略し、同じ操作でバルーンを連続して表示しない。</summary>
+    internal static string? ProfileSwitchMessage(Settings settings) =>
+        settings.ShowNotifications && !Diagnostics.ShortcutExclusions.HasPending
+            ? $"プロファイルを「{settings.ActiveProfile}」にしました" : null;
 
     private void SetLevel(DetectionLevel level)
     {
@@ -513,6 +602,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             status = _engine.KeyboardDirect ? "キーボード: 直接入力 (半角/全角 で日本語)" : "キーボード: 日本語";
         }
         _statusItem.Text = status;
+        var zenzai = _composition.ZenzaiStatus(settings.UseZenzai, settings.ZenzaiServerPath, settings.ZenzaiModelPath);
+        _zenzaiItem.Visible = zenzai is not null;
+        if (zenzai is not null) _zenzaiItem.Text = $"Zenzai: {zenzai}";
         var tip = $"Meltype — {status}";
         _tray.Text = tip.Length > 63 ? tip[..63] : tip;
     }
@@ -527,6 +619,17 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _settingsForm = new SettingsForm(_engine);
         _settingsForm.FormClosed += (_, _) => UpdateStatus();
         _settingsForm.Show();
+    }
+
+    private void ShowKeyCount()
+    {
+        if (_keyCountForm is { IsDisposed: false })
+        {
+            _keyCountForm.Activate();
+            return;
+        }
+        _keyCountForm = new KeyCountForm(_engine.KeyCounter);
+        _keyCountForm.Show();
     }
 
     private void ShowLearnedWords()
@@ -603,7 +706,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>設定・学習データ・ユーザー辞書を 1 つのファイルに書き出す (PC の買い替え・別の PC への移行)。</summary>
-    private void CreateBackup()
+    private static void CreateBackup()
     {
         using var dialog = new SaveFileDialog
         {
@@ -733,10 +836,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     protected override void ExitThreadCore()
     {
+        _exiting = true;
+        Diagnostics.ShortcutExclusions.Added -= OnShortcutExcluded;
         _engine.StatusChanged -= OnEngineStatusChanged;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();
         _engine.DetachComposition();
+        Composition.LearningSaves.FlushAll();
         _composition.Dispose();
         _settingsForm?.Close();
         _logForm?.Close();

@@ -11,12 +11,13 @@
 1. 版を上げる
    - `src/Meltype/Meltype.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
+   - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
 3. GitHub Actions が Windows (build.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作り、リリースに付ける
    - Windows: `Meltype-<版>-setup.exe` (インストーラー)、`Meltype-<版>-windows.zip`、`Meltype-<版>-windows-portable.zip`
-   - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb` (どれもプレビュー版。.deb の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
+   - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb`、Fedora 向けの `meltype-<版>-1.x86_64.rpm` と `meltype-<版>-1.aarch64.rpm` (どれもプレビュー版。.deb と .rpm の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
    - Mac はタグのとき、Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
-4. リリースのページにリリースノートを書く (bot を使うと、リリースノートの下書きまで自動で作ります。下の「bot でリリースする」)
+4. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
 5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
 
 ### bot でリリースする
@@ -26,7 +27,7 @@
 - `/release 1.2.3` … 通常の版
 - `/pre-release 1.2.3-pre.1` … プレリリース
 
-bot は、main の `Meltype.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、タグ `v1.2.3` とリリースの下書き (リリースノートは自動生成) を作って、Windows・Mac・Linux のビルドを始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
+bot は、main の `Meltype.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、Windows・Mac・Linux のビルドを始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
 
 <br>
 
@@ -59,7 +60,7 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 <img src="images/headings/release/04.svg" alt="パッケージマネージャー" height="53"><br>
 
 
-リリースの zip から、winget・Scoop・Homebrew のマニフェストを作れます。Linux の .deb は linux.yml が作ります。
+リリースの zip から、winget・Scoop・Homebrew のマニフェストを作れます。Linux の .deb と .rpm は linux.yml が作ります。
 
 ```
 node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
@@ -105,6 +106,8 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-
     sudo apt update
     sudo apt install meltype
     ```
+- **dnf (.rpm)**: linux.yml が x86_64 / aarch64 の `.rpm` を Fedora 44 で作り、リリースに付けます。apt と同じ署名鍵 (`APT_SIGNING_KEY_B64`) で署名した dnf リポジトリを、apt リポジトリと一緒に GitHub Pages の `/rpm` に公開します (Pages の設定は apt と共通です)。
+  - 使う人は `sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo` を一度行うと、`sudo dnf upgrade` で更新できます
 
 
 winget・Scoop で入れた場合は Install.cmd を使わないので、Windows の起動時に起動するには、トレイの「Windows の起動時に起動」を ON にしてもらいます。

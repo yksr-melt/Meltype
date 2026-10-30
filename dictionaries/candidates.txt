@@ -367,5 +367,16 @@
 # Issue #706
 あおにしき 安青錦
 
+# Issue #968
+かんそうりつ 乾燥率
+# Issue #1106
+ぶるあか ブルーアーカイブ
+# Issue #1135
+ー＞ →
+# Issue #1155 (ボカロP の Orangestar の別名)
+みかんせい 蜜柑星
+# Issue #1286 (VTuber グループ。最初の候補は phrases.txt の ぶいすぽ)
+ぶいすぽ ぶいすぽっ！
+
 # --- 子音の略入力 (Issue #62: 英字の読みで候補を出せる。自分の略語は %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt に同じ形式で書く) ---
 ast 明日

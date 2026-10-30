@@ -23,7 +23,7 @@ enum BundleCleanup {
         }
     }
 
-    static func unregisterCopies(of installed: URL) throws {
+    static func unregisterCopies(of installed: URL) {
         let roots = [FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Input Methods"),
                      URL(fileURLWithPath: "/Library/Input Methods"), URL(fileURLWithPath: "/System/Library/Input Methods")]
         let registered = NSWorkspace.shared.urlsForApplications(withBundleIdentifier: identifier)
@@ -32,13 +32,19 @@ enum BundleCleanup {
             process.executableURL = URL(fileURLWithPath:
                 "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister")
             process.arguments = ["-u", url.path]
-            try process.run()
-            process.waitUntilExit()
-            guard process.terminationStatus == 0 else {
-                throw NSError(domain: "MeltypeBundleCleanup", code: Int(process.terminationStatus),
-                              userInfo: [NSLocalizedDescriptionKey: "Could not unregister duplicate app: \(url.path)"])
+            // 他ユーザーのコピーなど、整理できないパスがあっても残りと本体の登録を続ける。
+            do {
+                try process.run()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0 else {
+                    throw NSError(domain: "MeltypeBundleCleanup", code: Int(process.terminationStatus),
+                                  userInfo: [NSLocalizedDescriptionKey: "登録解除に失敗しました (終了コード \(process.terminationStatus))"])
+                }
+                print("入力ソースの候補からコピーの登録を外しました（ファイルは保持）: \(url.path)")
+            } catch {
+                FileHandle.standardError.write(Data(
+                    "古いコピーの登録を解除できませんでした（本体の登録は続けます）: \(url.path): \(error.localizedDescription)\n".utf8))
             }
-            print("入力ソースの候補からコピーの登録を外しました（ファイルは保持）: \(url.path)")
         }
     }
 }

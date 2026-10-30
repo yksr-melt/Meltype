@@ -93,9 +93,10 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 要素へ切り詰めたり 0 に置き換えたりしない。
         // 1 スカラーならそのコードポイントのまま本体へ渡し、複数スカラーは未確定内容だけ確定して
         // 元のイベントを 1 回アプリへ通す (本体側の pass-through 契約と対にする)。
-        let scalars = Array((event.characters ?? "").unicodeScalars)
+        let text = KeyMapping.text(for: event, virtualKey: vk)
+        let scalars = Array(text.unicodeScalars)
         if scalars.count > 1 {
-            apply(NativeCore.shared.commitBeforeExternalText(session, text: event.characters ?? ""), to: client)
+            apply(NativeCore.shared.commitBeforeExternalText(session, text: text), to: client)
             return false
         }
         let character: Int32 = scalars.count == 1 ? Int32(scalars[0].value) : 0
@@ -236,16 +237,24 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     @objc private func importUserDictionary(_ sender: Any?) {
         commitComposition(client())
-        // 入力メソッドは背景のアプリなので、前面に出さないと、開いた画面がほかのウィンドウに触れた瞬間に消える (issue #716)
-        NSApp.activate(ignoringOtherApps: true)
+        // 入力メニューの処理を抜けてから、操作できる画面として表示する。
+        DispatchQueue.main.async {
+            do {
+                try ImportDialogPresentation.run {
+                    Self.importUserDictionaryFile()
+                }
+            } catch {
+                NSLog("Meltype: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    private static func importUserDictionaryFile() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.level = .floating
-        panel.makeKeyAndOrderFront(nil)
         guard panel.runModal() == .OK, let source = panel.url,
               let directory = NativeCore.shared.dataDirectory else { return }
-        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         do {
             let count = try MacUserDictionary.importFile(source, directory: directory)
@@ -264,11 +273,12 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
+    /// 空の設定にも、本体が隣に書く config.schema.json を指定しておく (エディターで項目の補完・説明が出る)。
     @objc private func openConfigFile(_ sender: Any?) {
         guard let directory = NativeCore.shared.dataDirectory else { return }
         let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
         if !FileManager.default.fileExists(atPath: url.path) {
-            try? "{\n}\n".write(to: url, atomically: true, encoding: .utf8)
+            try? "{\n  \"$schema\": \"./config.schema.json\"\n}\n".write(to: url, atomically: true, encoding: .utf8)
         }
         NSWorkspace.shared.open(url)
     }
@@ -425,7 +435,12 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             // 一覧を作り直すと選択が先頭に戻るので、中身が変わったとき (別の文節に移ったときなど) だけ作り直す。
             if candidateList != view.candidates || !window.isVisible() {
                 candidateList = view.candidates
+                // IMK が入力位置を取り直すよう、更新前にいったん非表示にする。
+                window.hide()
                 window.update()
+                window.show(kIMKLocateCandidatesBelowHint)
+                // macOS 26 の IMK は入力位置の更新前に画面を選ぶため、画面移動直後は以前の画面に収まる。
+                // 更新された入力位置で画面を選び直し、その後で選択位置を本体とそろえる。
                 window.show(kIMKLocateCandidatesBelowHint)
                 windowIndex = 0
             }

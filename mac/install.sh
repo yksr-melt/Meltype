@@ -48,7 +48,8 @@ register_input_source() {
     local tool="$TARGET/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource"
     # 古いアプリに補助ツールがなければ、本体の登録処理へフォールバックする。
     [[ -x "$tool" ]] || { enable_input_source; return; }
-    "$tool" "$TARGET/Meltype.app"
+    "$tool" "$TARGET/Meltype.app" ||
+        echo "入力ソースを登録できませんでした。システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。" >&2
 }
 
 TARGET="$HOME/Library/Input Methods"
@@ -61,10 +62,14 @@ register_input_source
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
 bash ./start-input-method.sh "$TARGET/Meltype.app"
 # swift はコマンドライン・デベロッパ・ツールが無い Mac では使えない。選べなくてもインストールは終わっている。
+# macOS 27 では、入力ソースの有効化がアプリから通らず、ここで選べないことがある。その場合も、
+# システム設定の入力ソースに追加すれば、ログアウトしなくても入力メニューから選べるようになる。
 if swift ./select-input-source.swift; then
     echo
     echo "Meltype を起動し、入力ソースとして選択しました。"
 else
     echo
-    echo "Meltype を起動しました。入力メニューから Meltype を選んでください。"
+    echo "Meltype を起動しました。入力メニューに Meltype が無いときは、"
+    echo "システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype"
+    echo "から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。"
 fi

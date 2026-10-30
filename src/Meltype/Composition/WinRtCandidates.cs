@@ -49,7 +49,7 @@ public sealed unsafe class WinRtCandidates : IDisposable
             }
             finally
             {
-                WindowsDeleteString(input);
+                _ = WindowsDeleteString(input); // 解放の戻り値は常に S_OK。
             }
 
             try
@@ -68,7 +68,7 @@ public sealed unsafe class WinRtCandidates : IDisposable
                         IntPtr item;
                         if (((delegate* unmanaged[Stdcall]<IntPtr, uint, IntPtr*, int>)VTable(vector, 6))(vector, i, &item) < 0) continue; // GetAt
                         var text = ReadString(item);
-                        WindowsDeleteString(item);
+                        _ = WindowsDeleteString(item); // 解放の戻り値は常に S_OK。
                         if (!string.IsNullOrEmpty(text) && !result.Contains(text)) result.Add(text);
                     }
                     return result;
@@ -124,7 +124,7 @@ public sealed unsafe class WinRtCandidates : IDisposable
                 }
                 finally
                 {
-                    WindowsDeleteString(language);
+                    _ = WindowsDeleteString(language); // 解放の戻り値は常に S_OK。
                 }
             }
             finally
@@ -134,7 +134,7 @@ public sealed unsafe class WinRtCandidates : IDisposable
         }
         finally
         {
-            WindowsDeleteString(className);
+            _ = WindowsDeleteString(className); // 解放の戻り値は常に S_OK。
         }
     }
 
@@ -170,7 +170,7 @@ public sealed unsafe class WinRtCandidates : IDisposable
 
     private static IntPtr CreateString(string text)
     {
-        if (WindowsCreateString(text, (uint)text.Length, out var handle) < 0) throw new COMException("WindowsCreateString が失敗しました。");
+        Marshal.ThrowExceptionForHR(WindowsCreateString(text, (uint)text.Length, out var handle));
         return handle;
     }
 

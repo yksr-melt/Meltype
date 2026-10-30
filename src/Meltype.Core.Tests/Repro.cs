@@ -11,6 +11,7 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class Repro
 {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     /// <summary>打つ文字の上限 (bot に長い文を渡されても時間がかからないように)。</summary>
     private const int MaxKeys = 300;
 
@@ -74,7 +75,7 @@ internal static class Repro
             candidates,
             // 英語のスペルチェッカーを使ったか (Windows では使う。使わないと英単語の判定が実際のアプリと違うことがある)
             spellChecker = CompositionTests.Detector.SpellChecker is not null,
-        }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        }, Json));
 
         if (hasMozc) Henkan.Shutdown();
     }
@@ -111,7 +112,7 @@ internal static class Checks
         foreach (var line in File.ReadAllLines(input))
         {
             var parts = line.Split('\t');
-            if (parts.Length != 2) continue;
+            if (parts.Length != 2) throw new FormatException($"Expected exactly two tab-separated columns in {input}: {line}");
             var (typed, expected) = (parts[0].Trim(), parts[1].Trim());
             if (typed.Length == 0 || expected.Length == 0) continue;
             if (typed.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー' or >= 'ァ' and <= 'ヺ'))
@@ -121,7 +122,7 @@ internal static class Checks
                 results.Add(new { typed, expected, kind = "候補", actual = string.Join(" ", list.Take(12)), ok = list.Contains(expected) });
                 continue;
             }
-            var k = new CompositionTests.Keyboard();
+            var k = new CompositionTests.Keyboard(userDictionary: new Meltype.Composition.UserDictionary(null));
             k.Type(new string(typed.Where(c => c is >= ' ' and <= '~').Take(300).ToArray()) + "\n");
             var actual = k.Host.Document;
             var kanji = expected.Any(c => c is >= '㐀' and <= '鿿');
@@ -193,6 +194,7 @@ internal static class Checks
 /// </summary>
 internal static class Henkan
 {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private const int MaxKeys = 300;
 
     /// <summary>Mozc の学習データの場所。bot が同時にいくつも動かすので、プロセスごとに分ける (終わったら消す)。</summary>
@@ -235,7 +237,7 @@ internal static class Henkan
         // 確かめたいのは、まだ何も覚えていない人の最初の変換)
         var converter = Mozc.Value is { } engine ? new WithoutLearning(engine) : FallbackConverter;
         return new(live: true, converter: converter, moreCandidates: Mozc.Value is { } mozc ? mozc.Candidates : null,
-            userDictionary: new Composition.UserDictionary(null), translations: Translations.Value);
+            userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
     }
 
     /// <summary>変換だけを頼み、覚えさせない変換エンジン (ILearningConverter を持たない)。</summary>
@@ -275,7 +277,7 @@ internal static class Henkan
             converted,
             clauses,
             candidates,
-        }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        }, Json));
     }
 }
 
@@ -287,6 +289,7 @@ internal static class Henkan
 /// </summary>
 internal static class MozcCompare
 {
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private const string Placeholder = "えっくす";
     private const string PlaceholderText = "エックス";
 
@@ -320,7 +323,7 @@ internal static class MozcCompare
             var reading = System.Text.RegularExpressions.Regex.Replace(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*", Placeholder);
             var clauses = mozc.ConvertClauses(reading) ?? [];
             var text = string.Concat(clauses.Select(c => c.Text));
-            var placeholders = System.Text.RegularExpressions.Regex.Matches(text, PlaceholderText).Count;
+            var placeholders = System.Text.RegularExpressions.Regex.Count(text, PlaceholderText);
             string whole;
             if (placeholders == english.Count)
             {
@@ -337,7 +340,7 @@ internal static class MozcCompare
             results.Add(new { typed, expected, shown, current, whole, wholeClauses = clauses.Select(c => c.Reading + ":" + c.Text), currentOk = ok1, wholeOk = ok2 });
         }
         File.WriteAllText(output, JsonSerializer.Serialize(new { currentOk, wholeOk, total = results.Count, cases = results },
-            new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            Json));
         Console.WriteLine($"今の変換 {currentOk}/{results.Count}、丸ごと {wholeOk}/{results.Count}");
     }
 

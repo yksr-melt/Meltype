@@ -79,6 +79,10 @@ public sealed class ConversionHistory
     private const int MaxEntries = 5000;
     private readonly string? _path;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private readonly object _gate = new();
+    private readonly object _fileGate = new();
+    private readonly DeferredSaver _saver;
+    private (int Version, (string Reading, string Text, DateTime Used, int Order)[] Items)? _index;
 
     internal sealed class Entry
     {
@@ -88,6 +92,7 @@ public sealed class ConversionHistory
 
     public ConversionHistory(string? path)
     {
+        _saver = new DeferredSaver(Write);
         _path = path;
         Config.DataFile.Load(path, "変換の学習データ", content =>
         {
@@ -107,23 +112,59 @@ public sealed class ConversionHistory
     public void Remember(string reading, string text)
     {
         if (reading.Length == 0 || text.Length == 0) return;
-        _entries[reading] = new Entry { Text = text, Used = DateTime.UtcNow };
-        if (_entries.Count > MaxEntries)
+        lock (_gate)
         {
-            foreach (var old in _entries.OrderBy(e => e.Value.Used).Take(_entries.Count - MaxEntries * 9 / 10).Select(e => e.Key).ToList())
+            _entries[reading] = new Entry { Text = text, Used = DateTime.UtcNow };
+            if (_entries.Count > MaxEntries)
             {
-                _entries.Remove(old);
+                foreach (var old in _entries.OrderBy(e => e.Value.Used).Take(_entries.Count - MaxEntries * 9 / 10).Select(e => e.Key).ToList())
+                {
+                    _entries.Remove(old);
+                }
             }
+            Version++;
         }
-        Version++;
-        Save();
+        _saver.Request();
     }
 
     public void Forget(string reading)
     {
-        if (!_entries.Remove(reading)) return;
-        Version++;
-        Save();
+        lock (_gate)
+        {
+            if (!_entries.Remove(reading)) return;
+            Version++;
+        }
+        _saver.WriteNow();
+    }
+
+    /// <summary>読みが prefix で始まり prefix より長い、学習した変換の語 (新しく使ったものから。Entries() から探すのと同じ順)。</summary>
+    public IEnumerable<string> TextsStartingWith(string prefix)
+    {
+        if (_index is not { } index || index.Version != Version)
+        {
+            var order = 0;
+            var items = _entries.Select(e => (e.Key, e.Value.Text, e.Value.Used, order++)).ToArray();
+            Array.Sort(items, (a, b) => string.CompareOrdinal(a.Key, b.Key));
+            _index = index = (Version, items);
+        }
+        var matches = new List<(string Text, DateTime Used, int Order)>();
+        for (var i = LowerBound(index.Items, prefix); i < index.Items.Length && index.Items[i].Reading.StartsWith(prefix, StringComparison.Ordinal); i++)
+        {
+            if (index.Items[i].Reading.Length > prefix.Length) matches.Add((index.Items[i].Text, index.Items[i].Used, index.Items[i].Order));
+        }
+        return matches.OrderByDescending(m => m.Used).ThenBy(m => m.Order).Select(m => m.Text);
+    }
+
+    private static int LowerBound((string Reading, string Text, DateTime Used, int Order)[] items, string prefix)
+    {
+        int low = 0, high = items.Length;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (string.CompareOrdinal(items[middle].Reading, prefix) < 0) low = middle + 1;
+            else high = middle;
+        }
+        return low;
     }
 
     /// <summary>学習した変換 (読み → 選んだ語) の一覧 (新しく使ったものから)。設定の「学習した語」に出す。</summary>
@@ -132,32 +173,46 @@ public sealed class ConversionHistory
 
     public void Clear()
     {
-        _entries.Clear();
-        Version++;
-        Save();
+        lock (_gate)
+        {
+            _entries.Clear();
+            Version++;
+        }
+        _saver.WriteNow();
     }
 
     /// <summary>sinceUtc より後に覚えた (使った) 変換を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
     public int ForgetSince(DateTime sinceUtc)
     {
-        var recent = _entries.Where(e => e.Value.Used >= sinceUtc).Select(e => e.Key).ToList();
-        if (recent.Count == 0) return 0;
-        foreach (var reading in recent) _entries.Remove(reading);
-        Version++;
-        Save();
+        List<string> recent;
+        lock (_gate)
+        {
+            recent = _entries.Where(e => e.Value.Used >= sinceUtc).Select(e => e.Key).ToList();
+            if (recent.Count == 0) return 0;
+            foreach (var reading in recent) _entries.Remove(reading);
+            Version++;
+        }
+        _saver.WriteNow();
         return recent.Count;
     }
 
-    private void Save()
+    private bool Write()
     {
-        if (_path is null) return;
+        if (_path is null) return true;
         try
         {
-            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(_entries, Config.ConversionJsonContext.Default.Conversions)));
+            lock (_fileGate)
+            {
+                string json;
+                lock (_gate) json = JsonSerializer.Serialize(_entries, Config.ConversionJsonContext.Default.Conversions);
+                Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+            }
+            return true;
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"変換の学習データを保存できませんでした: {ex.Message}");
+            return false;
         }
     }
 }
