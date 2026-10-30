@@ -8,6 +8,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Schema;
+using System.Text.Json.Serialization;
 
 namespace Meltype.Config;
 
@@ -78,6 +79,12 @@ public static class SettingsSchema
         }
         // 知らない項目は読み込みで無視されるので、書き間違いに気づけるように警告させる
         if (schema.ContainsKey("properties")) schema["additionalProperties"] = false;
+        // 非公開の JsonInclude は古い設定を読むためだけの項目 (Settings.LegacyHankaku など)。保存しないので、補完にも出さない
+        if (context.PropertyInfo is null && schema["properties"] is JsonObject properties)
+        {
+            foreach (var legacy in context.TypeInfo.Properties.Where(p => p.AttributeProvider?.IsDefined(typeof(JsonIncludeAttribute), false) == true))
+                properties.Remove(legacy.Name);
+        }
         if (context.PropertyInfo is { } property)
         {
             if (property.AttributeProvider?.GetCustomAttributes(typeof(DisplayNameAttribute), false).FirstOrDefault() is DisplayNameAttribute { DisplayName.Length: > 0 } title)

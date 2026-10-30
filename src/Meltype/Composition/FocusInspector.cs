@@ -130,6 +130,9 @@ public sealed class FocusInspector : IDisposable
 
     public FocusInfo Current => _info;
 
+    /// <summary>最新のフォーカスを調べ終わっているか (移った直後で、まだ調べている最中なら false)。</summary>
+    public bool Resolved => Interlocked.Read(ref _resolvedSequence) == Interlocked.Read(ref _focusSequence);
+
     private long _lastRecheck;
     private long _lastRecheckForeground;
 

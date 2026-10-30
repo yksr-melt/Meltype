@@ -152,6 +152,8 @@ KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ロ�
 
 設定は `config.json` を直接編集します。Meltype は同じフォルダーに設定の一覧と説明 (`config.schema.json`) を書くので、`config.json` の先頭で指定すると、VS Code などのエディターで項目の補完・説明・書き間違いの警告が出ます。`"SettingsVersion"` の無い `config.json` は、Meltype が最初に読んだときに、書いていない項目を既定値で書き足します。
 
+fcitx5 の固定の操作ガイドを隠すには、`config.json` に `"ShowGuide": false` を追加します (既定は `true`)。英字・予測・訂正の提案は OFF でも表示します。設定は新しい入力欄を作るときに読み込むので、既存の入力欄へ確実に反映するには fcitx5 を再起動してください。
+
 ```json
 {
   "$schema": "./config.schema.json",

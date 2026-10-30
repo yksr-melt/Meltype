@@ -59,6 +59,7 @@ internal static class AppPaths
     public static string PhraseHistoryFile => Path.Combine(DataDirectory, "phrases.txt");
     public static string UserDictionaryFile => Path.Combine(DataDirectory, "userdict.txt");
     public static string SnippetsFile => Path.Combine(DataDirectory, "snippets.json");
+    public static string KeyCountFile => Path.Combine(DataDirectory, "keycount.json");
     public static string LogFile => Path.Combine(DataDirectory, "meltype.log");
     /// <summary>落ちたときの例外 (ファイルへのログが OFF でも書く)。</summary>
     public static string CrashLogFile => Path.Combine(DataDirectory, "crash.log");

@@ -31,13 +31,16 @@ internal static class Program
                 Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
                 return 0;
             case "--segments":
-                // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前)
+                // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前) と、区間分けのラティスの道と重み
                 {
                     var text = new Meltype.Composition.CompositionText(CompositionTests.Detector);
                     foreach (var c in args.ElementAtOrDefault(1) ?? "") text.Append(c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
                     Console.WriteLine("units: " + string.Join(" ", text.Units.Select(u => $"{u.Raw}={u.Kana}")) + (text.Pending.Length > 0 ? $" +{text.Pending}" : ""));
-                    Console.WriteLine("segments: " + string.Join(" | ", text.Segments(final: true).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
+                    CompositionTests.Detector.LatticeTrace = Console.WriteLine;
+                    var segments = text.Segments();
+                    CompositionTests.Detector.LatticeTrace = null;
+                    Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
                 return 0;
             case "--eval-json":

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 yksr-melt
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decision, excessPulls, githubApi, Labels, LimitWaitMs, runPolicy, WaitMs } from './policy.mjs';
+import { decision, excessPulls, githubApi, Labels, runPolicy, WaitMs } from './policy.mjs';
 
 const start = Date.parse('2026-10-25T00:00:00Z');
 const user = login => ({ login, type: 'User' });
@@ -87,12 +87,15 @@ function fixture(items) {
   };
 }
 
-test('Draft は上限に含めず、作者ごとの古い 2 件を残す', () => {
-  assert.deepEqual([...excessPulls([pull(4), pull(1, true), pull(3), pull(2), pull(5, false, 'bob')])], [4]);
+const Day = 24 * 60 * 60 * 1000;
+const limited = (f, n) => f.records.get(n).labels.some(l => l.name === Labels.limit);
+
+test('Draft も上限に含め、作者ごとの古い 2 件を残す', () => {
+  assert.deepEqual([...excessPulls([pull(4), pull(1, true), pull(3), pull(2), pull(5, false, 'bob')])], [3, 4]);
 });
 
 for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
-  test(`${association}: メンテナーには上限の通知・自動 Draft 化を行わず、一般投稿者の 3 件目だけを Draft にする`, async () => {
+  test(`${association}: メンテナーには上限の通知をせず、一般投稿者の 3 件目だけを順番待ちにする`, async () => {
     const f = fixture([
       ...[1, 2, 3].map(n => pull(n, false, 'alice', association)),
       ...[4, 5, 6].map(n => pull(n, false, 'bob')),
@@ -103,10 +106,8 @@ for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
       assert.deepEqual(f.comments.get(n), []);
     }
     assert.equal(f.comments.get(6).length, 1);
-    await f.run(start + LimitWaitMs);
-    for (const n of [1, 2, 3, 4, 5]) assert.equal(f.records.get(n).draft, false);
-    assert.equal(f.records.get(6).draft, true);
-    for (const n of [1, 2, 3, 4, 5, 6]) assert.equal(f.records.get(n).state, 'open');
+    assert.ok(limited(f, 6));
+    assert.ok(!limited(f, 5));
   });
 }
 
@@ -120,10 +121,8 @@ test('メンテナーになった投稿者の上限超過ラベルと通知を�
   const f = fixture([pull(1), pull(2), pull(3)]);
   await f.run();
   for (const pr of f.records.values()) pr.author_association = 'COLLABORATOR';
-  await f.run(start + LimitWaitMs);
+  await f.run(start + Day);
   assert.deepEqual(f.records.get(3).labels, []);
-  assert.equal(f.records.get(3).draft, false);
-  assert.equal(f.records.get(3).state, 'open');
   assert.equal(f.comments.get(3).length, 1);
   assert.match(f.comments.get(3)[0].body, /対象ではなく/);
 });
@@ -136,52 +135,63 @@ test('メンテナーの PR も PR要対応ラベルによる期限管理の対�
   assert.equal(f.records.get(1).state, 'closed');
 });
 
-test('Draft にする直前に投稿者がメンテナーになった場合も、上限超過で Draft にしない', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]); await f.run();
-  const original = f.api.list; let reads = 0;
-  f.api.list = async path => {
-    if (path === '/pulls?state=open' && ++reads === 2) {
-      for (const pr of f.records.values()) pr.author_association = 'COLLABORATOR';
-    }
-    return original(path);
-  };
-  await f.run(start + LimitWaitMs);
-  assert.equal(f.records.get(3).draft, false);
-  assert.equal(f.records.get(3).state, 'open');
-});
-
-test('3 件目だけに通知し、通知後 24 時間でその PR だけを Draft にする (閉じない)', async () => {
+test('3 件目は順番待ちにするだけで、時間がたっても Draft にも閉じもしない', async () => {
   const f = fixture([pull(1), pull(2), pull(3)]);
   await f.run();
   assert.equal(f.comments.get(1).length, 0);
   assert.equal(f.comments.get(3).length, 1);
-  assert.match(f.comments.get(3)[0].body, /24 時間/);
-  await f.run(start + LimitWaitMs - 1);
-  assert.equal(f.records.get(3).draft, false);
-  await f.run(start + LimitWaitMs);
-  assert.equal(f.records.get(3).draft, true);
-  assert.equal(f.records.get(3).state, 'open');
-  assert.match(f.comments.get(3).at(-1).body, /Draft にしました/);
-  assert.equal(f.records.get(1).draft, false);
-  assert.equal(f.records.get(2).draft, false);
-  // 14 日たっても、超過を理由には閉じない
+  assert.match(f.comments.get(3)[0].body, /順番待ち/);
   await f.run(start + WaitMs * 2);
+  assert.equal(f.writes.some(w => w.method === 'GRAPHQL'), false);
+  assert.equal(f.records.get(3).draft, false);
   assert.equal(f.records.get(3).state, 'open');
-  assert.equal(f.records.get(3).labels.length, 0);
+  assert.ok(limited(f, 3));
+  assert.equal(f.comments.get(3).length, 1);
 });
 
-for (const change of ['reply', 'push', 'body']) {
-  test(`${change}: コメント・push・本文の変更では、件数の超過の猶予を延ばさない`, async () => {
-    const f = fixture([pull(1), pull(2), pull(3)]);
-    await f.run();
-    if (change === 'reply') f.reply(3);
-    if (change === 'push') f.records.get(3).head.sha = 'new';
-    if (change === 'body') f.records.get(3).body += '追記';
-    await f.run(start + LimitWaitMs);
-    assert.equal(f.records.get(3).draft, true);
-    assert.equal(f.records.get(3).state, 'open');
-  });
-}
+test('Draft にしても枠は空かない (上限を避けるために Draft にしなくてよい)', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  f.records.get(3).draft = true; f.addEvent(3, 'converted_to_draft');
+  await f.run(start + Day);
+  assert.ok(limited(f, 3));
+  assert.match(f.comments.get(3)[0].body, /"status":"waiting"/);
+});
+
+test('枠が空いたらラベルを外して通知を解除する', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  f.records.get(1).state = 'closed';
+  await f.run(start + Day);
+  assert.equal(f.records.get(3).labels.length, 0);
+  assert.match(f.comments.get(3)[0].body, /対象ではなく/);
+});
+
+test('次にレビューの付いた PR は、古い PR より先に枠へ入れる', () => {
+  const next = pull(3); next.labels.push({ name: Labels.next });
+  assert.deepEqual([...excessPulls([pull(1), pull(2), next])], [2]);
+});
+
+test('次にレビューを付けた順番待ちの PR を枠に入れ、代わりに古い PR を順番待ちにする', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  f.records.get(3).labels.push({ name: Labels.next }); f.addEvent(3, 'labeled', Labels.next);
+  await f.run(start + Day);
+  assert.ok(limited(f, 2));
+  assert.ok(!limited(f, 3));
+  assert.equal(f.records.get(2).draft, false);
+});
+
+test('前の版の「Draft にする」超過の通知は、順番待ちの通知に書き直す', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  const notice = f.comments.get(3)[0];
+  notice.body = notice.body.replace('"version":3', '"version":2');
+  await f.run(start + Day);
+  assert.equal(f.records.get(3).draft, false);
+  assert.equal(f.comments.get(3).length, 1);
+  assert.match(f.comments.get(3)[0].body, /"version":3/);
+});
 
 test('他の人・bot のコメントやレビュー通知では投稿者の返信とみなさない', async () => {
   const f = fixture([issue(1, [Labels.info])]);
@@ -190,44 +200,6 @@ test('他の人・bot のコメントやレビュー通知では投稿者の返�
   f.comments.get(1).push({ user: bot, body: 'CI 成功', created_at: new Date(start + 1000).toISOString() });
   await f.run(start + WaitMs);
   assert.equal(f.records.get(1).state, 'closed');
-});
-
-for (const change of ['draft', 'slot']) {
-  test(`${change}: 24 時間以内に 2 件以下になれば、Draft にせず通知を解除する`, async () => {
-    const f = fixture([pull(1), pull(2), pull(3)]);
-    await f.run();
-    if (change === 'draft') f.records.get(3).draft = true;
-    if (change === 'slot') f.records.get(1).state = 'closed';
-    await f.run(start + LimitWaitMs);
-    assert.equal(f.writes.some(w => w.method === 'GRAPHQL'), false);
-    assert.equal(f.records.get(3).labels.length, 0);
-    assert.match(f.comments.get(3)[0].body, /対象ではなく/);
-  });
-}
-
-test('自動で Draft にした PR を Ready for review に戻したら、数え直して新しく 24 時間待つ', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]);
-  await f.run(); await f.run(start + LimitWaitMs);
-  const back = start + LimitWaitMs + 1000;
-  f.records.get(3).draft = false; f.addEvent(3, 'ready_for_review');
-  await f.run(back);
-  assert.match(f.comments.get(3)[0].body, /"status":"waiting"/);
-  await f.run(back + LimitWaitMs - 1);
-  assert.equal(f.records.get(3).draft, false);
-  await f.run(back + LimitWaitMs);
-  assert.equal(f.records.get(3).draft, true);
-});
-
-test('前の版の「14 日で閉じる」超過の通知は期限に使わず、24 時間の通知をし直す', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]);
-  await f.run();
-  const notice = f.comments.get(3)[0];
-  notice.body = notice.body.replace('"version":2', '"version":1');
-  await f.run(start + WaitMs);
-  assert.equal(f.records.get(3).draft, false);
-  assert.equal(f.comments.get(3).length, 1);
-  await f.run(start + WaitMs + LimitWaitMs);
-  assert.equal(f.records.get(3).draft, true);
 });
 
 test('手動の PR要対応ラベルも通知から 14 日待ち、通知を重複投稿しない', async () => {
@@ -359,24 +331,15 @@ test('フォームなど bot 名義の報告は、人からの補足でも待機
   assert.equal(f.records.get(1).state, 'open');
 });
 
-test('Draft にする直前に数え直し、空き枠ができていれば Draft にしない', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]); await f.run();
-  const original = f.api.list; let reads = 0;
-  f.api.list = async path => {
-    if (path === '/pulls?state=open' && ++reads === 2) f.records.get(1).state = 'closed';
-    return original(path);
-  };
-  await f.run(start + LimitWaitMs);
-  assert.equal(f.records.get(3).draft, false);
-  assert.equal(f.records.get(3).state, 'open');
-});
-
-test('No Close の PR は、超過していても Draft にしない', async () => {
+test('No Close の PR も、超過していれば順番待ちの通知のままにする (Draft にも閉じもしない)', async () => {
   const f = fixture([pull(1), pull(2), pull(3)]); await f.run();
   f.records.get(3).labels.push({ name: Labels.exempt }); f.addEvent(3, 'labeled', Labels.exempt);
-  await f.run(start + LimitWaitMs * 3);
+  await f.run(start + WaitMs * 2);
   assert.equal(f.records.get(3).draft, false);
-  assert.match(f.comments.get(3)[0].body, /No Close/);
+  assert.equal(f.records.get(3).state, 'open');
+  assert.ok(f.records.get(3).labels.some(l => l.name === Labels.limit));
+  assert.match(f.comments.get(3)[0].body, /順番待ち/);
+  assert.doesNotMatch(f.comments.get(3)[0].body, /クローズを止めています/);
 });
 
 test('No Close の間は閉じず、外したあとは新しく 14 日待つ', async () => {

@@ -12,19 +12,19 @@ internal static class CorrectionTests
     [Test]
     public static void FunctionKeyCorrection_IsRecorded()
     {
-        // api と打つと あぴ → F10 で api にして確定: 打ったもの api / 出たもの あぴ / 期待 api
+        // sushi と打つと すし → F10 で sushi にして確定: 打ったもの sushi / 出たもの すし / 期待 sushi
         var k = new CompositionTests.Keyboard();
         var log = new CorrectionLog();
         k.Controller.Corrected += log.Add;
         k.Host.PrecedingText = "これは";
-        k.Type("api");
-        Assert.Equal("あぴ", k.Showing);
+        k.Type("sushi");
+        Assert.Equal("すし", k.Showing);
         k.Press(VirtualKeys.F10);
         k.Press(VirtualKeys.Return);
         var correction = log.Recent().Single();
-        Assert.Equal("api", correction.Typed);
-        Assert.Equal("あぴ", correction.Shown);
-        Assert.Equal("api", correction.Corrected);
+        Assert.Equal("sushi", correction.Typed);
+        Assert.Equal("すし", correction.Shown);
+        Assert.Equal("sushi", correction.Corrected);
         Assert.Equal("Enter (確定)", correction.LastKey);
         Assert.Equal("これは", correction.Before);
         Assert.Equal("英語のつもりがかなになった (みいてぃんg)", correction.Kind);

@@ -124,9 +124,9 @@ struct Json {
         auto *v = get(name);
         return v && v->kind == Kind::Number ? static_cast<int>(v->number) : fallback;
     }
-    bool flag(const std::string &name) const {
+    bool flag(const std::string &name, bool fallback = false) const {
         auto *v = get(name);
-        return v && v->kind == Kind::Bool && v->boolean;
+        return v && v->kind == Kind::Bool ? v->boolean : fallback;
     }
     std::vector<std::string> strings(const std::string &name) const {
         std::vector<std::string> result;
@@ -579,11 +579,11 @@ private:
             }
         }
         auto *view = result.get("view");
-        if (view && view->kind == Json::Kind::Object) show(ic, *view);
+        if (view && view->kind == Json::Kind::Object) show(ic, *view, result.flag("showGuide", true));
         else hidePreedit(ic);
     }
 
-    void show(fcitx::InputContext *ic, const Json &view) {
+    void show(fcitx::InputContext *ic, const Json &view, bool showGuide) {
         auto &panel = ic->inputPanel();
         panel.reset();
         const auto text = view.str("text");
@@ -605,13 +605,16 @@ private:
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
-        // 案内 (Space で変換 など) と もしかして は補助テキストに出す
-        auto hint = view.str("hint");
-        if (auto suggestion = view.str("suggestion"); !suggestion.empty()) hint = suggestion + "　" + hint;
+        // 固定の操作一覧は既定で表示する。OFF でも手動判定・予測・書き間違いの提案は残す。
+        // 旧版の本体は案内を分けていないので、提案まで消さないよう従来の hint を使う。
+        auto hint = !showGuide && view.get("contextHint") ? view.str("contextHint") : view.str("hint");
+        if (auto suggestion = view.str("suggestion"); !suggestion.empty())
+            hint = suggestion + (hint.empty() ? "" : "　" + hint);
         if (!hint.empty()) panel.setAuxDown(fcitx::Text(hint));
         const auto candidates = view.strings("candidates");
         if (converting && candidates.size() > 1) {
             auto list = std::make_unique<fcitx::CommonCandidateList>();
+            list->setLayoutHint(fcitx::CandidateLayoutHint::Vertical);
             list->setPageSize(9);
             list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);

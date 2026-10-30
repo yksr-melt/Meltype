@@ -38,6 +38,10 @@ internal sealed class MeltypeEngine : IDisposable
 
     private readonly HashSet<int> _toggleKeyDown = [];
 
+    /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
+    public KeyCounter KeyCounter { get; }
+    private readonly System.Threading.Timer _keyCountTimer;
+
     public MeltypeEngine(Settings settings, string? configPath, string? userDictionaryDirectory)
     {
         _settings = settings.Clone().Normalize();
@@ -48,6 +52,8 @@ internal sealed class MeltypeEngine : IDisposable
         _scoreEngine = ScoreEngine.CreateDefault(() => _settings, userDictionaryDirectory);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
         _pollTimer = new System.Threading.Timer(_ => PollImeState(), null, Timeout.Infinite, Timeout.Infinite);
+        KeyCounter = new KeyCounter(configPath is null ? null : AppPaths.KeyCountFile);
+        _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
     }
 
     public Settings Settings => _settings;
@@ -262,6 +268,7 @@ internal sealed class MeltypeEngine : IDisposable
             _injectedHintLogged = true;
             Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。ULE4JIS などキー配列を変えるソフトや遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
         }
+        if (!e.Injected) KeyCounter.Count(e, DateTime.Now, KeyCountAllowed(settings));
         if (_shortcutDetector.ReleaseConsumed(e)) return true;
         // 飲み込んだ切替キーの解放は、入力言語が変わっても対にして処理する。
         if (e.IsUp && !e.Injected)
@@ -294,7 +301,7 @@ internal sealed class MeltypeEngine : IDisposable
         {
             var app = _foreground.Current;
             if (altTap != AltTap.None && settings.Enabled && settings.AltKeysSwitchKeyboard &&
-                settings.IsAppEnabled(app.ProcessName) && !settings.IsGame(app.ProcessName, looksLikeGame: false))
+                settings.IsAppEnabled(app.ProcessName) && !settings.IsGame(app.ProcessName, app.LooksLikeGame))
             {
                 var masked = MaskAltTap(altTap, e);
                 if (altTap == AltTap.Tapped) SetImeOpenAsync(japanese: e.Vk == VirtualKeys.RMenu);
@@ -451,8 +458,13 @@ internal sealed class MeltypeEngine : IDisposable
             {
                 // 日本語のキーボードでなければ IME は無い
                 if (ImeTarget.FromForeground() is not { } target || (Native.GetKeyboardLayout(target.ThreadId).ToInt64() & 0xFFFF) != 0x0411) return;
+                var previous = IME.Imm32ImeController.GetState(target).Mode;
                 if (IME.Imm32ImeController.TrySetOpen(target, japanese, null, _settings.ImeTimeoutMs))
+                {
                     Log.Info(japanese ? "左右の Alt: 日本語入力にしました (右 Alt)" : "左右の Alt: 英数にしました (左 Alt)");
+                    if (previous == (japanese ? IME.ImeMode.Closed : IME.ImeMode.Open))
+                        _composition?.ShowMode(japanese, target.ThreadId);
+                }
                 else
                     Log.Warn($"左右の Alt: {(japanese ? "日本語入力" : "英数")}にできませんでした。");
             }
@@ -529,6 +541,14 @@ internal sealed class MeltypeEngine : IDisposable
     private bool IsCodeApp(Settings settings) => CurrentCodeFocus(settings) != CodeFocus.None;
 
     /// <summary>
+    /// 打鍵数に数えてよいか。Meltype を一時停止しているとき・アプリ別に OFF のとき・パスワード欄では数えない。
+    /// フォーカスが移った先をまだ調べている間も数えない (前の入力欄の判定のままパスワード欄の打鍵を数えないように)。
+    /// </summary>
+    private bool KeyCountAllowed(Settings settings) =>
+        settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) &&
+        (_composition is null || _composition.Focus.Resolved && !_composition.Focus.Current.IsPassword);
+
+    /// <summary>
     /// 前面のアプリが「コード」で、キャレットがコード (コメント・文字列・AI の入力行の外) にあるか。フックのスレッドで呼ばれる。
     /// 今の行が分からないときはコードとみなし、UI Automation で読みに行く。
     /// </summary>
@@ -557,6 +577,8 @@ internal sealed class MeltypeEngine : IDisposable
     /// </summary>
     private void ShowModeOnFocus()
     {
+        // IME 版は TSF の開閉通知で表示する。キーボード方式の論理モードを表示しない。
+        if (_settings.Mode != InputMode.Keyboard) return;
         if (_composition is not { } composition) return;
         if (_keyboardDirect || !IsCodeApp(_settings))
         {
@@ -1016,6 +1038,8 @@ internal sealed class MeltypeEngine : IDisposable
         _pollTimer.Dispose();
         _remote.Dispose();
         _lineTimer?.Dispose();
+        _keyCountTimer.Dispose();
+        KeyCounter.Save();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();
     }

@@ -10,6 +10,12 @@ enum KeyMapping {
     /// 文字を入力するキーで、特別な扱いのないもの (記号など)。本体では文字だけを見る。
     private static let otherCharacterKey: Int32 = 0x07
 
+    /// ナビゲーションキーの characters は操作を表す特殊コードであり、入力文字ではない。
+    static func text(for event: NSEvent, virtualKey: Int32) -> String {
+        if (0x21...0x28).contains(virtualKey) { return "" }
+        return event.characters ?? ""
+    }
+
     static func virtualKey(for event: NSEvent) -> Int32? {
         switch Int(event.keyCode) {
         case kVK_Return, kVK_ANSI_KeypadEnter: return 0x0D

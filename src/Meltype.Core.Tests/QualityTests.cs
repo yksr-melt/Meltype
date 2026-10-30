@@ -73,7 +73,7 @@ internal static class Quality
         new("曖昧な語", "sushi", "すし"),
         new("曖昧な語", "sushi", "sushi", Before: "I like "),
         new("曖昧な語", "sushi", "すし", Before: "今日は"),
-        new("曖昧な語", "repo", "れぽ"),
+        new("曖昧な語", "repo", "repo"),
         new("曖昧な語", "make", "make", Before: "Please "),
 
         // --- 英語 ---
@@ -153,6 +153,10 @@ internal static class Quality
         new("日本語", "gare-ji", "がれーじ"),
         new("日本語", "midika", "みぢか"),           // issue #1179
         new("日本語", "midikani", "みぢかに"),
+        // 英単語の midi は英字のまま (issue #1122)
+        new("英語", "midi", "midi"),
+        new("混在", "midiwo", "midiを"),
+        new("混在", "midinofairu", "midiのふぁいる"),
         // 語のすぐ後ろが ん なら、語の最後の音の続き (いまげんざい = 今現在。issue #1175)
         new("日本語", "imagenzai", "いまげんざい"),
         new("日本語", "wakatte", "わかって"),         // issue #1231 (Wakatte.TV は固有名詞のまま: Symbols_StartComposition)
@@ -210,7 +214,7 @@ internal static class Quality
         new("混在", "microsoftnokaisha", "microsoftのかいしゃ"),
         new("混在", "kyouhaclaudetohanashita", "きょうはclaudeとはなした"),
         new("混在", "pythonnobug", "pythonのbug"),
-        new("混在", "GitHub no repo", "GitHub のれぽ"),
+        new("混在", "GitHub no repo", "GitHub のrepo"),
         new("混在", "Google to Apple", "Google とApple"),
         // 助詞「や」+ 英単語 / 英単語 + 助詞「や」(Particles / TrailingParticles に ya)
         new("混在", "yagithub", "やgithub"),

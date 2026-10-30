@@ -83,6 +83,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
     public bool GaveUp => _failures >= 3;
 
+    /// <summary>llama-server が起動して、変換を頼めるか (起動中は false)。</summary>
+    public bool IsReady { get { lock (_gate) return _ready; } }
+
+    /// <summary>応答が遅かったので、しばらく使わずに休んでいるか。</summary>
+    public bool IsResting => Environment.TickCount64 < Interlocked.Read(ref _pausedUntil);
+
     /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
     public bool HasAnswered { get; private set; }
 
@@ -205,6 +211,20 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 // zenz の前処理 (gpt2-small-japanese-char) は本家の llama.cpp に無く、読み込めない。gpt-2 に差し替えると本家でも動く (#849 で Serugu さんが確かめた)
                 "--override-kv", "tokenizer.ggml.pre=str:gpt-2" })
                 info.ArgumentList.Add(argument);
+            // Windows 版の llama.cpp は既定で全物理コアを使い、計算後も 200ms ほど CPU を使用し続ける。ライブ変換では打鍵のたびに変換するため、入力中はこの状態が続く。
+            // そこでスレッド数を 4 までに制限し (zenz は小さいモデルなので、4 より増やしてもほとんど速くならない)、計算後に CPU を使い続ける時間を短くする。どの設定を読むかはビルドにより異なる:
+            // LLVM / Intel の OpenMP でビルドしたもの (本家の Windows の CPU 版) は KMP_BLOCKTIME を読むので、5ms にする。
+            // OpenMP なしのビルドは --poll を読むので、0 にする (--poll は、次の計算が来たかを CPU を使ってループで確かめ続ける長さ。0 にするとループせず、すぐに条件変数で待つ)。
+            // MSVC の OpenMP でビルドしたものはどちらも読まず、スレッド数の制限だけになる (OMP_WAIT_POLICY=PASSIVE なら CPU 時間は減るが、変換が 20ms ほど遅くなる)
+            // LLAMA_ARG_THREADS・KMP_BLOCKTIME が設定されている場合は、その値を優先する (-t は LLAMA_ARG_THREADS より優先されるため付けない)
+            if (!info.Environment.ContainsKey("LLAMA_ARG_THREADS"))
+            {
+                info.ArgumentList.Add("-t");
+                info.ArgumentList.Add(Math.Min(Environment.ProcessorCount, 4).ToString(CultureInfo.InvariantCulture));
+            }
+            info.ArgumentList.Add("--poll");
+            info.ArgumentList.Add("0");
+            info.Environment.TryAdd("KMP_BLOCKTIME", "5");
             KillStaleServer();
             var process = Process.Start(info);
             if (process is null) { Fail(); return; }

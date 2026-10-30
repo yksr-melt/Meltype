@@ -145,6 +145,8 @@ private:
     std::string CommitRequest(bool moved) const;
     void UnadviseTextEditSink();
     void UpdateLangBar();
+    // 明示的に入力モードを切り替えたとき、常駐側の「あ / A」を一瞬表示する。
+    void FlashModeIndicator(ITfContext* context = nullptr);
 
     LONG refs_ = 1;
     ITfThreadMgr* threadMgr_ = nullptr;
@@ -169,6 +171,7 @@ private:
     unsigned long long helloStateRevision_ = 0; // 設定取得を開始した時点の世代
     bool directDetection_ = false; // 英数状態でもローマ字検知が有効 (Meltype.exe の応答)
     bool directEnglishWord_ = false;
+    bool modeIndicator_ = false;   // 設定「Meltype IME でも入力モードを表示」(応答の modeIndicator。ON のときだけ FlashModeIndicator が動く)
     bool fullWidthSpace_ = false;  // 設定「スペースを全角で入力」(Meltype.exe の応答の fullWidthSpace。日本語入力のときは Space も受け取る)
     ULONGLONG lastHello_ = 0;
     HWND helloWindow_ = nullptr; // IME のスレッドでタイマーを受ける、表示しないウィンドウ

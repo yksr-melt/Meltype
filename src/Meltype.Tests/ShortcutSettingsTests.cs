@@ -154,6 +154,10 @@ internal static class ShortcutSettingsTests
         settings.FullWidthSpaceByDefault = true;
         using var same = Hello();
         Assert.True(same.RootElement.GetProperty("fullWidthSpace").GetBoolean(), "キー一覧と全角スペースの設定を同時に反映");
+        Assert.True(!same.RootElement.GetProperty("modeIndicator").GetBoolean(), "IME の表示は既定 OFF なので DLL は問い合わせない");
+        settings.ShowTsfModeIndicator = true;
+        using var indicator = Hello();
+        Assert.True(indicator.RootElement.GetProperty("modeIndicator").GetBoolean(), "IME の表示を ON にしたら DLL に伝える");
         Assert.Equal(bindings.GetRawText(), same.RootElement.GetProperty("toggleShortcuts").GetRawText(), "同じ設定の配列を送る");
         settings = new Settings { Mode = InputMode.Tsf, ToggleShortcuts = [] }.Normalize();
         using var cleared = Hello();

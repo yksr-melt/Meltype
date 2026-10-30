@@ -17,7 +17,7 @@ internal sealed class UpdateChangesDialog : Form
     /// 調べられない (新しい版がこの仕組みを持たない) ・変わる語が無いときは、何も見せずに true。
     /// </summary>
     public static bool Confirm(LanguageMemory languages, string version, Config.Settings settings) =>
-        Confirm(languages, version, settings, Updater.PreviewChanges(languages.Entries().Select(e => e.Word).Distinct()));
+        Confirm(languages, version, settings, Updater.PreviewChanges(languages.Entries().Select(e => e.Word).Distinct(), settings.UpdatePrerelease));
 
     /// <summary>調べ終えた結果 (<see cref="Updater.PreviewChanges"/> の戻り値) で確認する。</summary>
     public static bool Confirm(LanguageMemory languages, string version, Config.Settings settings, IReadOnlyList<WordChange>? preview)

@@ -60,7 +60,10 @@ jobs:
           persist-credentials: false
       # IBus のエンジン (Python) の書き間違いを、時間のかかるビルドの前に見つける
       - name: Check Python
-        run: python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
+        run: |
+          python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
+          python3 linux/tests/test_virtual_key.py
+          python3 linux/tests/test_code_mode.py
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x

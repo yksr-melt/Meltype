@@ -55,3 +55,7 @@ ost
 dive
 # Issue #1139
 dice die dies died
+# いっすえ と読めるが、日本語の語ではない
+issue issues
+# へれ・へろ は 減る の活用 (readings.txt) だが、日本語で打つことはまず無い
+here hero

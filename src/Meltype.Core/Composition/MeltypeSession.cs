@@ -24,11 +24,15 @@ public readonly record struct TextEdit(int DeleteBefore, string Text, string? Ex
 /// </summary>
 public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commits, CompositionView? View)
 {
+    /// <summary>固定の操作ガイドを表示するか。対応するフロントだけが使い、Hint と ContextHint の内容は変えない。</summary>
+    public bool ShowGuide { get; init; } = true;
+
     /// <summary>Swift などから読みやすいように JSON にする (NativeAOT でも使えるよう手書き)。</summary>
     public string ToJson()
     {
         var builder = new StringBuilder();
-        builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false").Append(",\"commits\":[");
+        builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false");
+        builder.Append(",\"showGuide\":").Append(ShowGuide ? "true" : "false").Append(",\"commits\":[");
         for (var i = 0; i < Commits.Count; i++)
         {
             if (i > 0) builder.Append(',');
@@ -58,6 +62,10 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
+        // null も必ず出し、この項目に対応していない古い本体 (項目なし) と区別する。
+        builder.Append(",\"contextHint\":");
+        if (view.ContextHint is { } contextHint) AppendString(builder, contextHint);
+        else builder.Append("null");
         builder.Append(",\"candidates\":");
         AppendArray(builder, view.Candidates);
         builder.Append(",\"clauses\":");
@@ -135,7 +143,7 @@ public sealed class MeltypeSession
 {
     private readonly CaptureGate _gate;
     private readonly CompositionController _controller;
-    private readonly Host _host = new();
+    private readonly Host _host;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly SigilWord _sigil = new();
@@ -147,6 +155,7 @@ public sealed class MeltypeSession
         bool directModeDetection = false, Func<long>? timeMs = null)
     {
         _settings = settings;
+        _host = new Host(settings);
         _timeMs = timeMs ?? (() => Environment.TickCount64);
         _directModeDetection = directModeDetection;
         _gate = new CaptureGate(() => { });
@@ -220,7 +229,6 @@ public sealed class MeltypeSession
         // 検出器は入力欄で共有するので、検出器が見る設定は最後に作った入力欄で読んだもの。
         // OS のスペルチェッカーが無ければ (Linux)、同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。
         detector.SpellChecker = wordChecker is { IsAvailable: true } ? wordChecker : Detection.BuiltInWordChecker.Shared;
-        detector.UseScoredSegmentation = () => settings.ScoredSegmentation;
         detector.UseJapanesePunctuationAfterEnglish = () => settings.JapanesePunctuationAfterEnglish;
         var options = shared.Options with
         {
@@ -599,7 +607,7 @@ public sealed class MeltypeSession
     }
 
     /// <summary>変換ボックスからの指示を集めて、1 回のキー入力の結果にまとめる。</summary>
-    private sealed class Host : ICompositionHost
+    private sealed class Host(Func<Settings> settings) : ICompositionHost
     {
         private readonly List<TextEdit> _commits = [];
         private int _pendingDelete;
@@ -636,7 +644,7 @@ public sealed class MeltypeSession
             if (_pendingDelete > 0) Add("");
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
-            return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view);
+            return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view) { ShowGuide = settings().ShowGuide };
         }
 
         public void CommitText(string text) => Add(text);

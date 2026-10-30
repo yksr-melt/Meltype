@@ -3,8 +3,11 @@
 
 namespace Meltype.Composition;
 
-/// <summary>文節 1 つ分の変換結果。Reading はその文節の読み (ひらがな)。</summary>
-public sealed record ConversionClause(string Reading, string Text);
+/// <summary>
+/// 文節 1 つ分の変換結果。Reading はその文節の読み (ひらがな)。
+/// Zenzai は、この文字列が Zenzai の答えか (変換ボックスに「Zenzai」と出す。issue #1152)。
+/// </summary>
+public sealed record ConversionClause(string Reading, string Text, bool Zenzai = false);
 
 /// <summary>
 /// 助詞だけの文節の読み。変換エンジンは助詞だけの文節を漢字にしてしまう (github + に + push → 二) ので、かなのまま使う。

@@ -15,7 +15,7 @@ internal static class ZenzaiConverterTests
     /// <summary>受け取った prompt を記録して、answer(prompt) を content にして返す。status が 200 以外ならそのエラーを返す。</summary>
     private sealed class FakeServer : IDisposable
     {
-        private readonly HttpListener _listener = new();
+        private readonly HttpListener _listener;
         public List<string> Prompts { get; } = [];
         public int Status { get; set; } = 200;
         public Func<string, string> Answer { get; set; } = _ => "";
@@ -29,15 +29,25 @@ internal static class ZenzaiConverterTests
 
         public FakeServer()
         {
-            var port = 0;
             for (var tries = 0; tries < 20; tries++)
             {
-                port = Random.Shared.Next(20000, 60000);
-                try { _listener.Prefixes.Add($"http://127.0.0.1:{port}/"); _listener.Start(); break; }
-                catch (HttpListenerException) { _listener.Prefixes.Clear(); }
+                // ephemeral port (Linux は 32768〜、Windows・macOS は 49152〜) と重ならない範囲から選ぶ (外向きの接続が使っているポートを引かないように)
+                var port = Random.Shared.Next(20000, 32768);
+                // Start に失敗した (ポートが使われていた) HttpListener は、Linux などでは閉じられて使えなくなる。
+                // 同じものに次のポートを足すと ObjectDisposedException になってテストごと落ちていた (#1178) ので、試すたびに作り直す
+                _listener = new HttpListener();
+                try
+                {
+                    _listener.Prefixes.Add($"http://127.0.0.1:{port}/");
+                    _listener.Start();
+                    Endpoint = new Uri($"http://127.0.0.1:{port}/");
+                    Task.Run(Loop);
+                    return;
+                }
+                catch (HttpListenerException) { _listener.Close(); }
             }
-            Endpoint = new Uri($"http://127.0.0.1:{port}/");
-            Task.Run(Loop);
+            // どのポートでも始められなければ、ここで分かるように落とす (始めていないサーバーに頼んで、別の理由で落ちたように見えないように)
+            throw new InvalidOperationException("テスト用の llama-server をどのポートでも始められませんでした");
         }
 
         private void Loop()
@@ -223,6 +233,48 @@ internal static class ZenzaiConverterTests
         var cargo = new CompositionTests.Keyboard(converter: hybrid);
         cargo.Type("nimotsuwonikainihakobu ");
         Assert.Equal("荷物を2階に運ぶ", cargo.Showing ?? "", "助詞の文節を数字にしない (1 つの文節のまま)");
+    }
+
+    [Test]
+    public static void Issue1152_ShowsWhetherZenzaiAnswered()
+    {
+        // #1152: Zenzai が答えたかを、変換ボックスとトレイに出す
+        using var server = new FakeServer { Answer = _ => "単位を取る" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var useZenzai = true;
+        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => useZenzai ? zenzai : null);
+        Assert.True(hybrid.ConvertClauses("たんいをとる") is { } z && z.All(c => c.Zenzai), "Zenzai の答えの文節に印を付ける");
+        // 変換ボックスの説明の行に出す。Zenzai の答えを出しているときだけ
+        var k = new CompositionTests.Keyboard(converter: hybrid);
+        k.Type("tanniwotoru ");
+        Assert.True(k.Host.View!.Hint.StartsWith("Zenzai", StringComparison.Ordinal), k.Host.View.Hint);
+        Assert.Equal("Zenzai", k.Host.View.ContextHint, "固定ガイドを隠す表示にも、変換エンジンの案内だけを残す");
+        useZenzai = false;
+        Assert.True(hybrid.ConvertClauses("たんいをとる") is { } m && !m.Any(c => c.Zenzai), "Zenzai を使わなければ印を付けない");
+        var mozc = new CompositionTests.Keyboard(converter: hybrid);
+        mozc.Type("tanniwotoru ");
+        Assert.True(!mozc.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "Zenzai の答えでなければ出さない: " + mozc.Host.View.Hint);
+        Assert.True(mozc.Host.View.ContextHint is null, "Zenzai の答えでなければ文脈の案内にも出さない");
+        // 学習した変換で Zenzai の答えと違う文字列にした文節は数えない
+        useZenzai = true;
+        var history = new ConversionHistory(null);
+        history.Remember("とる", "採る");
+        history.Remember("たんいを", "単位お");
+        var learned = new CompositionTests.Keyboard(converter: hybrid, history: history);
+        learned.Type("tanniwotoru ");
+        Assert.Equal("単位お採る", learned.Showing ?? "", "学習した変換を出す");
+        Assert.True(!learned.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "学習で変わった文節には出さない: " + learned.Host.View.Hint);
+        Assert.True(learned.Host.View.ContextHint is null, "学習で置き換わった文節の Zenzai 表示は残さない");
+
+        using var holder = new ZenzaiHolder((s, m) => new ZenzaiConverter(server.Endpoint, timeoutMs: 5000));
+        Assert.True(holder.Status is null, "OFF・まだ使っていなければ出さない");
+        holder.Get("server", "model");
+        Assert.Equal("使えます", holder.Status ?? "");
+        using var missing = new ZenzaiHolder();
+        missing.Get("/no/such/llama-server", "/no/such.gguf");
+        Assert.Equal("llama-server かモデルが見つかりません", missing.Status ?? "");
+        holder.Get("", "");
+        Assert.True(holder.Status is null, "OFF にしたら出さない");
     }
 
     [Test]

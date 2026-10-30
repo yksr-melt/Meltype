@@ -21,8 +21,36 @@ public static class ProjectInfo
     public static string CoreVersion =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "?";
 
-    /// <summary>公開した版 (1.0.0 以降) か。それまではリポジトリが非公開なので、GitHub で報告する道は出さない。</summary>
-    public static bool IsPublicRelease(string version) => Version.TryParse(version, out var parsed) && parsed.Major >= 1;
+    /// <summary>公開した版 (1.0.0 以降。1.3.1-pre.3 などのプレリリースも) か。それまではリポジトリが非公開なので、GitHub で報告する道は出さない。</summary>
+    public static bool IsPublicRelease(string version) => Version.TryParse(version.Split('-', 2)[0], out var parsed) && parsed.Major >= 1;
+
+    /// <summary>
+    /// 版 (1.3.1・1.3.1-pre.3) を比べる (Semantic Versioning の順。プレリリースは同じ数字の正式版より前)。
+    /// left が新しければ正、同じなら 0、古ければ負。読めない版があれば null。packaging/update.ps1 の Compare-MeltypeVersion と同じ順。
+    /// </summary>
+    public static int? CompareVersions(string left, string right)
+    {
+        var a = left.Split('+')[0].Split('-', 2);
+        var b = right.Split('+')[0].Split('-', 2);
+        if (!Version.TryParse(a[0], out var x) || !Version.TryParse(b[0], out var y)) return null;
+        var core = x.CompareTo(y);
+        if (core != 0 || (a.Length == 1 && b.Length == 1)) return Math.Sign(core);
+        if (a.Length == 1) return 1;
+        if (b.Length == 1) return -1;
+        var p = a[1].Split('.');
+        var q = b[1].Split('.');
+        for (var i = 0; i < Math.Min(p.Length, q.Length); i++)
+        {
+            var pn = long.TryParse(p[i], out var pv) && p[i].All(char.IsAsciiDigit);
+            var qn = long.TryParse(q[i], out var qv) && q[i].All(char.IsAsciiDigit);
+            var c = pn && qn ? pv.CompareTo(qv) : pn ? -1 : qn ? 1 : string.CompareOrdinal(p[i], q[i]);
+            if (c != 0) return Math.Sign(c);
+        }
+        return Math.Sign(p.Length - q.Length);
+    }
+
+    /// <summary>プレリリースの版 (1.3.1-pre.3) か。</summary>
+    public static bool IsPrerelease(string version) => version.Split('+')[0].Contains('-');
 
     /// <summary>その版のリリースのページ (リリースノート)。</summary>
     public static string ReleaseUrl(string version) => $"{SourceUrl}/releases/tag/v{Uri.EscapeDataString(version)}";

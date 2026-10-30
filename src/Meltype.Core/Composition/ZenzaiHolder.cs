@@ -81,6 +81,17 @@ public sealed class ZenzaiHolder(Func<string, string, ZenzaiConverter>? create =
 
     public void Dispose() => Stop();
 
+    /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・まだ一度も変換していなければ null。</summary>
+    public string? Status => _key.Length == 0 ? null : _zenzai switch
+    {
+        null => "使えません (しばらくしてもう一度試します。ログに理由があります)",
+        { IsInstalled: false } => "llama-server かモデルが見つかりません",
+        { IsAvailable: false } => "使えません (llama-server が答えません。しばらくしてもう一度試します)",
+        { IsReady: false } => "起動中",
+        { IsResting: true } => "応答が遅いので、少し休んでいます",
+        _ => "使えます",
+    };
+
     private void StopAndWait(string reason)
     {
         // 一度でも答えたものの失敗は、一時的なものとして最初の待ち時間から

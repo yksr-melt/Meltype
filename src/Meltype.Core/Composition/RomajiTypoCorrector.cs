@@ -22,26 +22,40 @@ public sealed class RomajiTypoCorrector
     private readonly PackedWordSet _forms;
     private readonly int _maxLength;
 
-    public RomajiTypoCorrector(RomajiDetector romaji, string readings) : this(romaji, readings, PackedWordSet.FromLines(readings, firstField: true))
+    public RomajiTypoCorrector(RomajiDetector romaji, string readings) : this(romaji, PackedWordSet.FromLines(readings, firstField: true), readings)
     {
     }
 
-    private RomajiTypoCorrector(RomajiDetector romaji, string readingsText, PackedWordSet readings)
+    private RomajiTypoCorrector(RomajiDetector romaji, PackedWordSet readings, string readingsText) : this(romaji, readings, BuildForms(readingsText, readings))
+    {
+    }
+
+    private RomajiTypoCorrector(RomajiDetector romaji, PackedWordSet readings, PackedWordSet forms)
     {
         _romaji = romaji;
         _readings = readings;
-        var forms = new List<string>(FunctionWords);
-        foreach (var line in Detection.DictionarySource.DataLines(readingsText))
-        {
-            var parts = line.Split('\t');
-            if (parts.Length > 1) AddConjugations(parts[0], parts[1], forms);
-        }
-        _forms = PackedWordSet.FromWords(forms.Where(form => !_readings.Contains(form)));
+        _forms = forms;
         _maxLength = Math.Max(_readings.MaxLength, _forms.MaxLength);
         Count = _readings.Count + _forms.Count;
     }
 
-    public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, CommonReadings.ReadText(), CommonReadings.Words);
+    private static PackedWordSet BuildForms(string readingsText, PackedWordSet readings)
+    {
+        var forms = new List<string>(FunctionWords);
+        foreach (var line in Detection.DictionarySource.DataLines(readingsText))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length < 2) continue;
+            // 同じ読みで活用の違う語 (くる = 繰る v5r・来る vk) は , でつないである
+            foreach (var kind in parts[1].Split(',')) AddConjugations(parts[0], kind, forms);
+        }
+        return PackedWordSet.FromWords(forms.Where(form => !readings.Contains(form)));
+    }
+
+    // 同梱の読み (CommonReadings) から作った付属語・活用した形。Load で作る打ち間違い直しと、日英の区切り (CompositionDetector) で共有する
+    private static readonly Lazy<PackedWordSet> CommonForms = new(() => BuildForms(CommonReadings.ReadText(), CommonReadings.Words));
+
+    public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
 
     public int Count { get; }
 
@@ -49,6 +63,23 @@ public sealed class RomajiTypoCorrector
     public bool IsWord(string hiragana) => IsWord(hiragana.AsSpan());
 
     private bool IsWord(ReadOnlySpan<char> hiragana) => _readings.Contains(hiragana) || _forms.Contains(hiragana);
+
+    /// <summary>同梱の読みで、kana を 1 語として読むときの重み (WordCost)。語でなければ null。</summary>
+    internal static double? CommonWordCost(ReadOnlySpan<char> kana) =>
+        CommonReadings.Words.Contains(kana) || CommonForms.Value.Contains(kana) ? WordCost(kana) : null;
+
+    /// <summary>kana が、同梱の読み・付属語・活用した形のどれかの頭か。</summary>
+    internal static bool CommonHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Words.HasPrefix(kana) || CommonForms.Value.HasPrefix(kana);
+
+    // 語の生起コスト。日英の区切り (ReadingLattice.cs) と共有する
+    // 付属語 (が・を・て)
+    private const double FunctionWordCost = 0.8;
+    // 2 文字以上の語
+    private const double WordCostPerWord = 1;
+    // 1 文字の語 (め・き)
+    private const double SingleKanaWordCost = 1.5;
+
+    private static double WordCost(ReadOnlySpan<char> word) => Function.Contains(word) ? FunctionWordCost : word.Length >= 2 ? WordCostPerWord : SingleKanaWordCost;
 
     // 助詞・助動詞・よく付く語。1 文字でも語として数える。
     private static readonly string[] FunctionWords =
@@ -75,7 +106,9 @@ public sealed class RomajiTypoCorrector
         switch (kind)
         {
             case "v1":
-                if (word[^1] == 'る') forms.Add(stem);
+                if (word[^1] != 'る') break;
+                // て・た 形も 1 語にする: 語幹が 1 文字 (み・ね) だと 1 文字の語の重みになり、み|て が英単語 mite に負ける
+                foreach (var ending in (string[])["", "て", "た"]) forms.Add(stem + ending);
                 break;
             case "i":
                 if (word[^1] != 'い') break;
@@ -83,7 +116,7 @@ public sealed class RomajiTypoCorrector
                 if (word == "いい") foreach (var ending in (string[])["よく", "よかっ", "よけれ"]) forms.Add(ending);
                 break;
             case "vk":
-                if (word.EndsWith("くる", StringComparison.Ordinal)) foreach (var form in (string[])["き", "こ", "く", "くれ"]) forms.Add(word[..^2] + form);
+                if (word.EndsWith("くる", StringComparison.Ordinal)) foreach (var form in (string[])["き", "きて", "きた", "こ", "く", "くれ"]) forms.Add(word[..^2] + form);
                 break;
             case "vs":
                 if (word.EndsWith("する", StringComparison.Ordinal)) foreach (var form in (string[])["し", "さ", "せ", "すれ", "しろ"]) forms.Add(word[..^2] + form);
@@ -257,7 +290,7 @@ public sealed class RomajiTypoCorrector
             {
                 var piece = kana.AsSpan(i - length, length);
                 double step;
-                if (IsWord(piece)) step = Function.Contains(piece) ? 0.8 : length >= 2 ? 1 : 1.5;
+                if (IsWord(piece)) step = WordCost(piece);
                 else if (length == 1) step = piece is "ー" or "っ" ? 0.5 : 3;
                 else continue;
                 if (cost[i - length] + step < cost[i])
