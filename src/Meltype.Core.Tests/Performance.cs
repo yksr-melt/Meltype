@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -261,7 +262,7 @@ internal static class Performance
         return number;
     }
 
-    private static string Format(double? value) => value is { } v ? v.ToString(v != 0 && Math.Abs(v) < 1 ? "F4" : "F2") : "-";
+    private static string Format(double? value) => value is { } v ? v.ToString(v != 0 && Math.Abs(v) < 1 ? "F4" : "F2", CultureInfo.InvariantCulture) : "-";
 
     public sealed record Distribution(int Count, double Mean, double P50, double P95, double P99, double Max);
 

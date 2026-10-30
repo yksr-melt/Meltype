@@ -110,13 +110,16 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, NSApplicationDelegate, NSM
                 process.waitUntilExit()
                 guard process.terminationStatus == 0 else { return }
                 DispatchQueue.main.async {
-                    UserDefaults.standard.removeObject(forKey: self.repairKey)
-                    UserDefaults.standard.removeObject(forKey: self.selectKey)
                     if select {
                         let filter = [kTISPropertyInputSourceID as String: InputSourceRegistration.japaneseIdentifier] as CFDictionary
                         let sources = TISCreateInputSourceList(filter, false)?.takeRetainedValue() as? [TISInputSource] ?? []
-                        if let source = sources.first { _ = TISSelectInputSource(source) }
+                        guard let source = sources.first, TISSelectInputSource(source) == noErr else {
+                            // 登録が反映待ち、または選択失敗なら次の起動時に再試行できるよう記録を残す。
+                            return
+                        }
                     }
+                    UserDefaults.standard.removeObject(forKey: self.repairKey)
+                    UserDefaults.standard.removeObject(forKey: self.selectKey)
                 }
             } catch { NSLog("Meltype: could not finish input-source registration after update: %@", error.localizedDescription) }
         }

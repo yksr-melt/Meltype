@@ -90,6 +90,28 @@ sudo apt install meltype
 
 apt リポジトリがまだ公開されていない場合は、上の Releases から `.deb` を入れる方法を使ってください.
 
+Fedora では、`.rpm` から入れられます (dnf で外せます。中身は `.deb` と同じです。Fedora 44 でビルドしています)。
+[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` をダウンロードして、次のコマンドでインストールします。
+
+x86_64:
+
+```bash
+sudo dnf install ./meltype-<version>-1.x86_64.rpm
+```
+
+ARM64:
+
+```bash
+sudo dnf install ./meltype-<version>-1.aarch64.rpm
+```
+
+dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
+
+```bash
+sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo
+sudo dnf install meltype
+```
+
 <a name="ibus-のとき"></a>
 <img src="../docs/images/headings/linux/s01.svg" alt="IBus のとき" height="40">
 
@@ -104,6 +126,10 @@ fcitx5 が入っていれば、`install.sh` が fcitx5 にも入れます (fcitx
 
 1. fcitx5 の設定 (`fcitx5-configtool`) →「入力メソッド」で Meltype を追加する
 2. <kbd>Ctrl</kbd> + <kbd>Space</kbd> などで Meltype に切り替える
+
+動いている fcitx5 があれば、`install.sh` は Meltype を読み込ませます (入れ直したときは、新しい版に切り替えます)。
+「新しい Meltype を読み込ませられませんでした」と出たときは、案内のとおり fcitx5 を起動し直してください。
+KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ログアウトしてログインし直すのが確実です。
 
 <br>
 
@@ -123,6 +149,17 @@ fcitx5 が入っていれば、`install.sh` が fcitx5 にも入れます (fcitx
 | <kbd>半角/全角</kbd> | 英数と日本語の切り替え |
 
 設定と学習データは `~/.local/share/Meltype` にあります (`config.json` は Windows 版と同じ形式)。
+
+設定は `config.json` を直接編集します。Meltype は同じフォルダーに設定の一覧と説明 (`config.schema.json`) を書くので、`config.json` の先頭で指定すると、VS Code などのエディターで項目の補完・説明・書き間違いの警告が出ます。`"SettingsVersion"` の無い `config.json` は、Meltype が最初に読んだときに、書いていない項目を既定値で書き足します。
+
+fcitx5 の固定の操作ガイドを隠すには、`config.json` に `"ShowGuide": false` を追加します (既定は `true`)。英字・予測・訂正の提案は OFF でも表示します。設定は新しい入力欄を作るときに読み込むので、既存の入力欄へ確実に反映するには fcitx5 を再起動してください。
+
+```json
+{
+  "$schema": "./config.schema.json",
+  "Punctuation": "FullWidthCommaPeriod"
+}
+```
 
 <br>
 
@@ -152,7 +189,7 @@ bash uninstall.sh
 bash uninstall.sh --data
 ```
 
-`.deb` で入れたときは `sudo apt remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
+`.deb` で入れたときは `sudo apt remove meltype`、`.rpm` で入れたときは `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
 
 <br>
 

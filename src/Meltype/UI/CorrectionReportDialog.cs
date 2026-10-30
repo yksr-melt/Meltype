@@ -99,9 +99,12 @@ internal sealed class CorrectionReportDialog : Form
         _status.Text = "";
     }
 
-    /// <summary>画面で書き換えた中身。</summary>
+    /// <summary>画面で書き換えた中身。Zenzai を使っていたかは、選んだ誤判定を直したときのもの (画面を開いたときの設定ではない)。</summary>
     private Correction Current() =>
-        new(_typed.Text.Trim(), _shown.Text, _expected.Text, _key.SelectedItem as string ?? "そのほか", _before.Text, DateTime.Now);
+        new(_typed.Text.Trim(), _shown.Text, _expected.Text, _key.SelectedItem as string ?? "そのほか", _before.Text, DateTime.Now)
+        {
+            Zenzai = (_list.SelectedItem as Correction)?.Zenzai,
+        };
 
     private void Open()
     {

@@ -14,6 +14,7 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class Jht
 {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private const int MaxPatterns = 24;
 
     private static readonly Dictionary<string, string[]> Romaji = Build();
@@ -139,7 +140,7 @@ internal static class Jht
         catch (InvalidDataException ex)
         {
             Console.OutputEncoding = new UTF8Encoding(false);
-            Console.WriteLine(JsonSerializer.Serialize(new { error = ex.Message }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            Console.WriteLine(JsonSerializer.Serialize(new { error = ex.Message }, Json));
         }
     }
 
@@ -256,7 +257,7 @@ internal static class Jht
             results.Add(new { keys, entered, first, liveOk = entered == expected, firstOk = first == expected, splitOk = split, notes });
         }
         Console.WriteLine(JsonSerializer.Serialize(new { expected, reading = string.Join(" / ", readings), engine, results },
-            new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            Json));
     }
 
     private static string HalfWidth(string text) => new(text.Select(c => c is >= '！' and <= '～' ? (char)(c - 0xFEE0) : c == '　' ? ' ' : c).ToArray());

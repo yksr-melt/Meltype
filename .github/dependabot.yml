@@ -1,0 +1,19 @@
+# .github/dependabot.yml
+version: 2
+
+updates:
+  # C# / .NET のNuGetパッケージ
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action/*"

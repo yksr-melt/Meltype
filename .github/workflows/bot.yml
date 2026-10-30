@@ -1,9 +1,9 @@
 # Meltype の GitHub bot。
 #   Issue を作った・直したとき: OS のラベルと「要トリアージ」を付け、足りない情報を聞き、誤判定の報告なら最新のコードで打ってみて結果を返す。
-#   コメントの 1 行目のコマンド:
+#   コメントの行の先頭のコマンド (1 つのコメントに 1 つ。/repro だけは複数行):
 #     だれでも: /repro /explain /ca /jht /help
 #     メンテナー (PR のみ): /test /pack /test-repro /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
-#     管理者: /release <版> /pre-release <版> (タグとリリースの下書きを作り、配布物のビルドを始める)
+#     管理者: /release <版> /pre-release <版> (コメントの 1 行目だけ。タグとリリースの下書きを作り、配布物のビルドを始める)
 # Issue・コメントの文は誰でも書けるので、run: の中に ${{ }} で埋め込まず、環境変数で値として渡す。
 # Pull Request のコードは、書き込みの権限を持たない job (pr) でだけ動かす。結果のコメントは別の job (report) が書く。
 # 漢字変換には最新リリースの meltype_mozc_helper を使う (毎回 Bazel ビルドしない)。
@@ -14,16 +14,37 @@ on:
     types: [opened, edited]
   issue_comment:
     types: [created]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/bot/**'
+      - '.github/workflows/bot.yml'
+      - '.github/workflows/historical-issue-evaluation.yml'
   pull_request_target:
     types: [opened, reopened]
 
 permissions: {}
 
 concurrency:
-  group: bot-${{ github.event.issue.number || github.event.pull_request.number }}-${{ github.event.comment.id || github.event.action || 'event' }}
+  group: bot-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}-${{ github.event.comment.id || github.event.action || 'event' }}
   cancel-in-progress: true
 
 jobs:
+  candidate-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test related-issue candidate logic
+        run: node --test .github/bot/tests/*.test.mjs
+      - name: Evaluate historical related-issue fixtures offline
+        run: node .github/bot/evaluate-historical-issues.mjs
+
   # PR 作成時: pr ラベルを付ける (pull_request_target なので fork からも動く。コードは触らない)
   pr-label:
     if: github.event_name == 'pull_request_target'
@@ -33,7 +54,7 @@ jobs:
       issues: write
     steps:
       # コードは checkout しない (pull_request_target で PR のコードを動かさない)
-      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const name = 'pr';
@@ -56,7 +77,7 @@ jobs:
             });
 
   parse:
-    if: github.event_name != 'pull_request_target'
+    if: github.event_name != 'pull_request_target' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -69,20 +90,20 @@ jobs:
       action: ${{ steps.parse.outputs.action }}
       issue: ${{ steps.parse.outputs.issue }}
       keys: ${{ steps.parse.outputs.keys }}
-      last: ${{ steps.parse.outputs.last }}
+      repros: ${{ steps.parse.outputs.repros }}
       reported: ${{ steps.parse.outputs.reported }}
       expected: ${{ steps.parse.outputs.expected }}
       kind: ${{ steps.parse.outputs.kind }}
       sha: ${{ steps.parse.outputs.sha }}
       comment: ${{ steps.parse.outputs.comment }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/bot
           persist-credentials: false
       - id: app
         if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
@@ -103,19 +124,20 @@ jobs:
       actions: write
       issues: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/bot
           persist-credentials: false
       - id: app
         if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
       - run: node .github/bot/meltype-bot.mjs release
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          BOT_DISPATCH_TOKEN: ${{ github.token }}
           BOT_RELEASE_COMMAND: ${{ needs.parse.outputs.release_command }}
           BOT_RELEASE_VERSION: ${{ needs.parse.outputs.release_version }}
 
@@ -128,11 +150,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
@@ -160,7 +182,7 @@ jobs:
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
-          LAST: ${{ needs.parse.outputs.last }}
+          REPROS: ${{ needs.parse.outputs.repros }}
           MELTYPE_UTF8: '1'
         run: |
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -174,15 +196,21 @@ jobs:
             dotnet run --project src/Meltype.Core.Tests -c Release -- --jht "$env:KEYS" | Out-File results/jht.json -Encoding utf8NoBOM
             exit 0
           }
-          # repro と ca (Mozc があれば漢字も。ca も repro と同じく打つ。LAST は space)
-          dotnet run --project src/Meltype.Tests -c Release -- --repro "$env:KEYS" "$env:LAST" | Out-File results/repro-main.json -Encoding utf8
+          # repro と ca (Mozc があれば漢字も。ca も repro と同じく打つ。last は space)。REPROS の i 番目の結果は results/<i>/
           $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
-          if ($tag -and (git ls-tree --name-only $tag src/Meltype.Core.Tests/Repro.cs)) {
-            git worktree add ../release $tag
-            $env:MELTYPE_MOZC = $env:MELTYPE_MOZC  # 同じヘルパーを共有
-            dotnet run --project ../release/src/Meltype.Tests -c Release -- --repro "$env:KEYS" "$env:LAST" | Out-File "results/repro-$tag.json" -Encoding utf8
+          $release = $tag -and (git ls-tree --name-only $tag src/Meltype.Core.Tests/Repro.cs)
+          if ($release) { git worktree add ../release $tag }
+          $i = 0
+          foreach ($r in ($env:REPROS | ConvertFrom-Json)) {
+            $build = if ($i -gt 0) { '--no-build' }
+            New-Item -ItemType Directory -Force "results/$i" | Out-Null
+            dotnet run --project src/Meltype.Tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-main.json" -Encoding utf8
+            if ($release) {
+              dotnet run --project ../release/src/Meltype.Tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-$tag.json" -Encoding utf8
+            }
+            $i++
           }
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bot-results
           path: results/
@@ -197,11 +225,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.parse.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
@@ -240,7 +268,7 @@ jobs:
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
-          LAST: ${{ needs.parse.outputs.last }}
+          REPROS: ${{ needs.parse.outputs.repros }}
           MELTYPE_UTF8: '1'
         run: |
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -250,16 +278,18 @@ jobs:
           } elseif ($env:ACTION -eq 'test-jht') {
             dotnet run --project src/Meltype.Core.Tests -c Release -- --jht "$env:KEYS" | Out-File results/jht.json -Encoding utf8NoBOM
           } else {
-            dotnet run --project src/Meltype.Tests -c Release -- --repro "$env:KEYS" "$env:LAST" | Out-File results/repro-pr.json -Encoding utf8
+            $r = $env:REPROS | ConvertFrom-Json
+            New-Item -ItemType Directory -Force results/0 | Out-Null
+            dotnet run --project src/Meltype.Tests -c Release -- --repro "$($r.keys)" "$($r.last)" | Out-File results/0/repro-pr.json -Encoding utf8
           }
       - if: needs.parse.outputs.action != 'pack'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bot-results
           path: results/
           retention-days: 7
       - if: needs.parse.outputs.action == 'pack'
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-pr-${{ needs.parse.outputs.issue }}
           path: dist/Meltype-test-*.zip
@@ -275,18 +305,18 @@ jobs:
       issues: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github/bot
           persist-credentials: false
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           name: bot-results
           path: results/
       - id: app
         if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
@@ -296,7 +326,7 @@ jobs:
           BOT_ACTION: ${{ needs.parse.outputs.action }}
           BOT_ISSUE: ${{ needs.parse.outputs.issue }}
           BOT_KEYS: ${{ needs.parse.outputs.keys }}
-          BOT_LAST: ${{ needs.parse.outputs.last }}
+          BOT_REPROS: ${{ needs.parse.outputs.repros }}
           BOT_REPORTED: ${{ needs.parse.outputs.reported }}
           BOT_EXPECTED: ${{ needs.parse.outputs.expected }}
           BOT_KIND: ${{ needs.parse.outputs.kind }}

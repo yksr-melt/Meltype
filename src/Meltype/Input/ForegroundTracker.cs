@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Diagnostics;
-using System.Text;
 using Meltype.Config;
 
 namespace Meltype.Input;
@@ -14,6 +13,7 @@ public sealed record AppInfo(IntPtr Window, uint ProcessId, string ProcessName, 
 }
 
 /// <summary>打鍵を保留してよいかの判断。</summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "打鍵を保留してよいかの結果を表す既存の公開名。セキュリティ権限の型ではない。")]
 public readonly record struct CollectPermission(bool Allowed, string Reason)
 {
     public static CollectPermission Allow { get; } = new(true, "");
@@ -64,7 +64,7 @@ internal sealed class ForegroundTracker
     public static bool IsOwnWindow(IntPtr window)
     {
         if (window == IntPtr.Zero) return false;
-        Native.GetWindowThreadProcessId(window, out var processId);
+        if (Native.GetWindowThreadProcessId(window, out var processId) == 0) return false;
         return processId == OwnProcessId && !TypingAllowedWindows.ContainsKey(window);
     }
 
@@ -128,7 +128,7 @@ internal sealed class ForegroundTracker
     private static AppInfo Describe(IntPtr window)
     {
         if (window == IntPtr.Zero) return AppInfo.None;
-        Native.GetWindowThreadProcessId(window, out var processId);
+        if (Native.GetWindowThreadProcessId(window, out var processId) == 0) return AppInfo.None;
         if (processId == OwnProcessId) return new AppInfo(window, processId, "Meltype.exe", false, false, !TypingAllowedWindows.ContainsKey(window));
 
         var name = "";
@@ -139,12 +139,13 @@ internal sealed class ForegroundTracker
         {
             try
             {
-                var builder = new StringBuilder(1024);
-                var size = builder.Capacity;
-                if (Native.QueryFullProcessImageName(process, 0, builder, ref size))
+                var buffer = new char[1024];
+                var size = buffer.Length;
+                if (Native.QueryFullProcessImageName(process, 0, buffer, ref size))
                 {
-                    name = Path.GetFileName(builder.ToString());
-                    looksLikeGame = LooksLikeGame(builder.ToString());
+                    var path = new string(buffer, 0, size);
+                    name = Path.GetFileName(path);
+                    looksLikeGame = LooksLikeGame(path);
                 }
                 elevated = QueryElevation(process);
             }
@@ -163,7 +164,26 @@ internal sealed class ForegroundTracker
         @"\Ubisoft Game Launcher\games\", @"\Battle.net\", @"\XboxGames\", @"\GOG Galaxy\Games\", @"\Origin Games\",
         // 専用のランチャーから入れるゲーム (PSO2 NGS: …\PHANTASYSTARONLINE2_JP\pso2_bin\pso2.exe)
         @"\pso2_bin\",
+        // Minecraft (Java 版): 公式ランチャーが入れた Java (…\.minecraft\runtime\…\javaw.exe) で動く (#1009)
+        @"\.minecraft\runtime\", @"\Minecraft Launcher\runtime\", @"\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\",
     ];
+
+    /// <summary>そのプロセスの実行ファイルがゲームのフォルダーにあるか。調べられなければ false。</summary>
+    public static bool LooksLikeGame(uint processId)
+    {
+        var process = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        if (process == IntPtr.Zero) return false;
+        try
+        {
+            var buffer = new char[1024];
+            var size = buffer.Length;
+            return Native.QueryFullProcessImageName(process, 0, buffer, ref size) && LooksLikeGame(new string(buffer, 0, size));
+        }
+        finally
+        {
+            Native.CloseHandle(process);
+        }
+    }
 
     public static bool LooksLikeGame(string path) =>
         GameFolders.Any(folder => path.Contains(folder, StringComparison.OrdinalIgnoreCase)) &&
@@ -187,9 +207,9 @@ internal sealed class ForegroundTracker
     private static bool IsFullscreen(IntPtr window)
     {
         if (window == Native.GetShellWindow() || window == Native.GetDesktopWindow()) return false;
-        var className = new StringBuilder(64);
-        Native.GetClassName(window, className, className.Capacity);
-        if (className.ToString() is "Progman" or "WorkerW") return false;
+        var className = new char[64];
+        var length = Native.GetClassName(window, className, className.Length);
+        if (length == 0 || new string(className, 0, length) is "Progman" or "WorkerW") return false;
         // タイトルバーのあるウィンドウは最大化されているだけ (タスクバー自動非表示だと画面全体を覆う)。
         const long WS_CAPTION = 0x00C00000;
         if ((Native.GetWindowLongPtr(window, Native.GWL_STYLE).ToInt64() & WS_CAPTION) == WS_CAPTION) return false;

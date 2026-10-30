@@ -5,6 +5,7 @@
 // ローマ字の打ち間違い (shimsu → shimasu) を直すとき、直した読みが日本語らしいかを調べるのに使う。
 //   node tools/make-readings.mjs JMdict_e.xml > dictionaries/readings.txt
 // 1 行に「読み」か「読み[TAB]活用の種類」(v1 = 一段、v5k など = 五段、vk = 来る、vs = する、i = い形容詞)。
+// 同じ読みで活用の違う語 (繰る v5r・来る vk) は、活用の種類を , でつなぐ (JMdict で先に出る語が先)。
 // 活用した形 (たべ、かきま、はやく) は Meltype が読み込むときに作る。
 import fs from 'node:fs';
 
@@ -34,7 +35,8 @@ for (const [, entry] of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
   const pos = [...entry.matchAll(/<pos>(.*?)<\/pos>/g)].map(m => m[1]);
   const kind = conjugation(pos);
   for (const reading of readings) {
-    if (!lines.has(reading) || (kind && !lines.get(reading))) lines.set(reading, kind);
+    if (!lines.has(reading)) lines.set(reading, new Set());
+    if (kind) lines.get(reading).add(kind);
   }
 }
 
@@ -43,6 +45,6 @@ const out = [
   '# ローマ字の打ち間違いを直すとき、直した読みが日本語らしいかを調べるのに使う。',
   '# JMdict (Electronic Dictionary Research and Development Group) のよく使う語から tools/make-readings.mjs で作成。',
   '# JMdict は Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) で公開されている: https://www.edrdg.org/edrdg/licence.html',
-  ...[...lines].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([r, k]) => k ? `${r}\t${k}` : r),
+  ...[...lines].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([r, k]) => k.size > 0 ? `${r}\t${[...k].join(',')}` : r),
 ];
 process.stdout.write(out.join('\n') + '\n');

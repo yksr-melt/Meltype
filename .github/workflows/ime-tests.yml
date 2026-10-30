@@ -1,0 +1,162 @@
+# 基盤自身の契約と、属性・操作ごとの実IME入力を検査する。
+name: ime-tests
+
+on:
+  pull_request:
+    paths:
+      - 'src/Meltype.Core/**'
+      - 'src/Meltype.Mac.Native/**'
+      - 'dictionaries/*.txt'
+      - 'nuget.config'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'src/Directory.Build.props'
+      - 'src/Directory.Build.targets'
+      - 'src/Directory.Packages.props'
+      - 'native/mozc/MOZC_COMMIT'
+      - 'native/mozc/BUILD.fragment'
+      - 'native/mozc/meltype_mozc_helper.cc'
+      - 'native/mozc/build-mozc-helper.sh'
+      - 'linux/build.sh'
+      - 'linux/ibus-engine-meltype'
+      - 'linux/meltype.xml'
+      - 'linux/icon.png'
+      - 'linux/install.sh'
+      - 'linux/uninstall.sh'
+      - 'linux/fcitx5/**'
+      - 'tools/ime-tests/**'
+      - '.github/workflows/ime-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Meltype.Core/**'
+      - 'src/Meltype.Mac.Native/**'
+      - 'dictionaries/*.txt'
+      - 'nuget.config'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'src/Directory.Build.props'
+      - 'src/Directory.Build.targets'
+      - 'src/Directory.Packages.props'
+      - 'native/mozc/MOZC_COMMIT'
+      - 'native/mozc/BUILD.fragment'
+      - 'native/mozc/meltype_mozc_helper.cc'
+      - 'native/mozc/build-mozc-helper.sh'
+      - 'linux/build.sh'
+      - 'linux/ibus-engine-meltype'
+      - 'linux/meltype.xml'
+      - 'linux/icon.png'
+      - 'linux/install.sh'
+      - 'linux/uninstall.sh'
+      - 'linux/fcitx5/**'
+      - 'tools/ime-tests/**'
+      - '.github/workflows/ime-tests.yml'
+  workflow_dispatch:
+
+# ソースの読取りだけを許可する。
+permissions:
+  contents: read
+
+concurrency:
+  group: ime-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    name: IME CI tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/ime-tests
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/ime-tests/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Linux session control tests
+        run: python3 scripts/test_linux_ime.py
+      - name: Typecheck and test-page contracts
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/checkout-sha.txt
+          # teeでログを残しても、テストの非0終了をジョブの失敗として伝える。
+          set -o pipefail
+          npm run test:ci 2>&1 | tee artifacts/ci.log
+      - name: Results and failure traces
+        # テスト失敗時にも観測・traceを取得できるよう、成果物保存は成功条件にしない。
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ime-tests
+          path: tools/ime-tests/artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+  real-ime:
+    name: IME real input (Linux)
+    needs: ci
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/ime-tests/package-lock.json
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install Linux IME and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld pkg-config zlib1g-dev python3-gi gir1.2-ibus-1.0 \
+            ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils \
+            libdbus-1-dev libglib2.0-dev libgtk-3-dev libibus-1.0-dev libxcb-xfixes0-dev qt6-base-dev
+          npm --prefix tools/ime-tests ci
+          cd tools/ime-tests
+          npx playwright install --with-deps chromium
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/bazel-cache
+            ~/mozc/src/third_party_cache
+          key: mozc-linux-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          restore-keys: |
+            mozc-linux-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+      - name: Build product from this checkout
+        run: |
+          mkdir -p "$RUNNER_TEMP/meltype-tools"
+          curl -fsSL -o "$RUNNER_TEMP/meltype-tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-amd64
+          echo "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992  $RUNNER_TEMP/meltype-tools/bazelisk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/meltype-tools/bazelisk"
+          BAZEL="$RUNNER_TEMP/meltype-tools/bazelisk" native/mozc/build-mozc-helper.sh "$HOME/mozc" "$HOME/bazel-cache"
+          linux/build.sh
+      - name: OS keys through IBus, product Core and Chromium
+        working-directory: tools/ime-tests
+        env:
+          MELTYPE_PACKAGE_DIR: ${{ github.workspace }}/linux/build/Meltype-linux
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npm run test:ime:linux:ci
+      - name: Real IME observations and process logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ime-real-input-linux
+          path: tools/ime-tests/artifacts/
+          if-no-files-found: warn
+          retention-days: 14

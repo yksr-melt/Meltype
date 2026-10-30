@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Input;
@@ -303,6 +304,21 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void NavigationKeysWithoutCharacters_CommitAndPassThrough()
+    {
+        foreach (var vk in new[] { 0x21, 0x22, 0x23, 0x24 }) // Page Up, Page Down, End, Home
+        {
+            var session = Create();
+            Assert.True(!session.HandleKey(vk, null, false, false, false, false).Consumed, "未確定がなければアプリへ渡す");
+            Type(session, "a");
+            var result = session.HandleKey(vk, null, false, false, false, false);
+            Assert.True(!result.Consumed, "未確定文字を確定してキーをアプリへ渡す");
+            Assert.Equal("あ", result.Commits.Single().Text, "操作キーの特殊文字を含めない");
+            Assert.True(result.View is null, "未確定表示を閉じる");
+        }
+    }
+
+    [Test]
     public static void AutoCorrect_ReplacesPreviousWord()
     {
         // i を確定したあと、want で英文と分かったら i を確定し直す (前の文字を消して入れ直す)
@@ -336,14 +352,24 @@ internal static class SessionFacadeTests
             new CompositionOptions { Predictor = new Predictor(null, null, null), Predictions = () => true }, () => new Settings());
         var typing = Type(session, "decis", "I made ")[^1];
         Assert.True(typing.View?.Predictions?.Contains("decision") == true, string.Join(",", typing.View?.Predictions ?? []));
+        Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "予測の選択案内は固定の操作一覧と分けて返す");
+        Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "従来の予測の案内は変えない");
+        Assert.True(typing.View.Suggestion is null, "予測の案内は書き間違いの修正ではない");
         Assert.True(typing.ToJson().Contains("\"predictions\":[\"") && typing.ToJson().Contains("\"selectedPrediction\":-1"), typing.ToJson());
         var tab = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false, "I made ");
         Assert.True(tab.Consumed, "Tab は予測の候補を選ぶのに使う");
         Assert.Equal(0, tab.View?.SelectedPrediction);
-        Assert.Equal(typing.View!.Predictions![0], tab.View?.Text);
+        Assert.Equal(typing.View.Predictions![0], tab.View?.Text);
+        Assert.Equal("Tab 予測の候補を選ぶ", tab.View?.ContextHint, "候補を選んでいる間も選択案内を残す");
         Assert.True(tab.ToJson().Contains("\"selectedPrediction\":0"), tab.ToJson());
         var back = session.HandleKey(VirtualKeys.Tab, null, true, false, false, false, "I made ");
         Assert.Equal(-1, back.View?.SelectedPrediction, "Shift+Tab で前に戻る (最初の前は選ばない状態)");
+        var kana = session.HandleKey(VirtualKeys.F6, null, false, false, false, false).View!;
+        Assert.True(kana.ContextHint is null, "予測を出さない表示では固定の操作一覧だけに戻る");
+        Assert.Equal("Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", kana.Hint);
+        var converting = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View!;
+        Assert.True(converting.Converting && converting.ContextHint is null, "変換中の固定の操作一覧は文脈の案内に含めない");
+        Assert.Equal("←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る", converting.Hint);
     }
 
     [Test]
@@ -502,7 +528,7 @@ internal static class SessionFacadeTests
     public static void Candidates_CanBeSelectedByIndex()
     {
         var session = Create();
-        Type(session, "api ");
+        Type(session, "sushi ");
         var view = session.SelectCandidate(2).View!;
         Assert.Equal(2, view.SelectedIndex);
         var commit = Type(session, "\n")[0];
@@ -513,8 +539,45 @@ internal static class SessionFacadeTests
     public static void Json_IsEscaped()
     {
         var result = new SessionResult(true, [new TextEdit(2, "a\"b\\c\n")], new CompositionView("x", ["y"], 0, true, "h", ["x"], 0));
-        const string expected = """{"consumed":true,"commits":[{"deleteBefore":2,"text":"a\"b\\c\n"}],"view":{"text":"x","committed":null,"converting":true,"selectedIndex":0,"selectedClause":0,"hint":"h","candidates":["y"],"clauses":["x"],"suggestion":null,"meaning":null,"notes":[null],"predictions":[],"selectedPrediction":-1,"typed":null}}""";
+        const string expected = """{"consumed":true,"showGuide":true,"commits":[{"deleteBefore":2,"text":"a\"b\\c\n"}],"view":{"text":"x","committed":null,"converting":true,"selectedIndex":0,"selectedClause":0,"hint":"h","contextHint":null,"candidates":["y"],"clauses":["x"],"suggestion":null,"meaning":null,"notes":[null],"predictions":[],"selectedPrediction":-1,"typed":null}}""";
         Assert.Equal(expected, result.ToJson());
+    }
+
+    [Test]
+    public static void ShowGuide_IsSentToNativeWithoutChangingHints()
+    {
+        foreach (var showGuide in new[] { true, false })
+        {
+            var settings = new Settings { ShowGuide = showGuide };
+            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionOptions { Predictor = new Predictor(null, null, null), Predictions = () => true }, () => settings);
+            var typing = Type(session, "decis", "I made ")[^1];
+            using var json = JsonDocument.Parse(typing.ToJson());
+            Assert.Equal(showGuide, json.RootElement.GetProperty("showGuide").GetBoolean(), "表示設定を Native の結果へ渡す");
+            Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "固定ガイドを隠しても文脈の案内は変えない");
+            Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "他のフロントが使う従来の案内は変えない");
+            Assert.True(typing.View.Predictions!.Contains("decision"), "表示設定によらず予測候補を残す");
+            session.HandleKey(VirtualKeys.F6, null, false, false, false, false);
+            var converting = session.HandleKey(VirtualKeys.Space, null, false, false, false, false);
+            using var convertedJson = JsonDocument.Parse(converting.ToJson());
+            Assert.Equal(showGuide, convertedJson.RootElement.GetProperty("showGuide").GetBoolean(), "変換中も表示設定を保つ");
+            Assert.True(converting.View is { Converting: true, ContextHint: null }, "文脈の案内がない表示は null のまま返す");
+        }
+    }
+
+    [Test]
+    public static void Json_ContextHint_IsEscaped()
+    {
+        const string contextHint = "Tab → \"google\"\\候補\n\r\t\u0001";
+        const string suggestion = "もしかして: ブレスレット　<Tab>で修正";
+        var view = new CompositionView("x", [], -1, false, "legacy hint", Suggestion: suggestion, ContextHint: contextHint);
+        using var json = JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
+        var result = json.RootElement.GetProperty("view");
+        Assert.True(result.TryGetProperty("contextHint", out var actual), "文脈の案内を JSON に含める");
+        Assert.Equal(JsonValueKind.String, actual.ValueKind);
+        Assert.Equal(contextHint, actual.GetString(), "引用符・バックスラッシュ・制御文字をエスケープする");
+        Assert.Equal("legacy hint", result.GetProperty("hint").GetString(), "従来の案内は独立して残す");
+        Assert.Equal(suggestion, result.GetProperty("suggestion").GetString(), "書き間違いの修正も独立して残す");
     }
 
     [Test]
@@ -626,6 +689,30 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_ActivationSyncClearsTrackedContext()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        Assert.True(Type(session, "echo \"").All(r => !r.Consumed), "引用符の開始まではアプリへ渡す");
+        session.CommitPending();
+
+        // 同じ入力欄の再有効化 (Mac など): 周辺文字列がなくても、前の引用符を引き継がない。
+        session.Direct = false;
+        session.CodeInput = true;
+        var afterQuote = Type(session, "j").Single();
+        Assert.True(!afterQuote.Consumed && afterQuote.View is null && afterQuote.Commits.Count == 0,
+            "同じコード入力の設定も、既存の呼び出し元では文脈の初期化として使う");
+
+        Assert.True(session.SetCodeLine(true, null), "明示的な日本語指定を有効にする");
+        session.CommitPending();
+        session.Direct = false;
+        session.CodeInput = true;
+        var afterJapanese = Type(session, "k").Single();
+        Assert.True(!afterJapanese.Consumed && afterJapanese.View is null && afterJapanese.Commits.Count == 0,
+            "再有効化で明示的な日本語指定も初期化する");
+    }
+
+    [Test]
     public static void CodeInput_TracksCommentSlashesWithSigilWordsEnabled()
     {
         var session = Create();
@@ -648,43 +735,6 @@ internal static class SessionFacadeTests
         var session = Create();
         var results = Type(session, "seeyouagain\n");
         Assert.Equal("seeyouagain", string.Concat(results.SelectMany(r => r.Commits).Select(e => e.Text)));
-    }
-
-    [Test]
-    public static void Go_OffersEnglishAndHiraganaWhileTyping()
-    {
-        foreach (var (index, expected) in new[] { (0, "go"), (1, "ご") })
-        {
-            var session = Create();
-            var view = Type(session, "go")[^1].View!;
-            Assert.True(view.Candidates.SequenceEqual(new[] { "go", "ご" }), "入力中に両方の候補を返す");
-            Assert.Equal(expected, session.SelectCandidate(index).View?.Text);
-            Assert.Equal(expected, Type(session, "\n")[0].Commits.Single().Text);
-        }
-        var cycling = Create();
-        Type(cycling, "go");
-        Assert.Equal("go", Type(cycling, " ")[0].View?.Text);
-        Assert.Equal("ご", Type(cycling, " ")[0].View?.Text);
-    }
-
-    [Test]
-    public static void GoPreview_IsLimitedToExactAutomaticToken()
-    {
-        foreach (var input in new[] { "g", "goo", "google", "gohan", "kyouhago" })
-        {
-            var session = Create();
-            var view = Type(session, input)[^1].View!;
-            Assert.True(view.Candidates.Count == 0, input + ": go preview must not replace other candidates");
-            Assert.True(!session.SelectCandidate(0).View!.Converting, input + ": no preview selection");
-        }
-        var forced = Create();
-        Type(forced, "go");
-        var kana = forced.HandleKey(VirtualKeys.F6, null, false, false, false, false).View!;
-        Assert.Equal("ご", kana.Text);
-        Assert.Equal(0, kana.Candidates.Count);
-        var invalid = Create();
-        Type(invalid, "go");
-        Assert.True(!invalid.SelectCandidate(2).View!.Converting, "invalid preview index leaves composition unchanged");
     }
 
     [Test]
@@ -715,9 +765,10 @@ internal static class SessionFacadeTests
     [Test]
     public static void SigilWord_PassesToTheAppUntilSpace()
     {
-        // #193: 先頭の /review は打つたびにアプリへ渡し (補完を選べるように)、空白の後は日本語に戻る。
+        // #193: 先頭の @review は打つたびにアプリへ渡し (補完を選べるように)、空白の後は日本語に戻る。
+        // 文章の入力欄の先頭の / は ・ として変換ボックスに入れる ので、@ で確かめる。
         var session = Create();
-        Assert.True(Type(session, "/review").All(r => !r.Consumed && r.View is null), "/review はそのままアプリへ");
+        Assert.True(Type(session, "@review").All(r => !r.Consumed && r.View is null), "@review はそのままアプリへ");
         Assert.True(!Type(session, " ")[0].Consumed, "空白もアプリへ");
         Assert.Equal("きょう", Type(session, "kyou")[^1].View?.Text);
         // google を確定した後の空白に続く @ も。
@@ -727,24 +778,57 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void SlashAtStart_IsMiddleDotInText()
+    {
+        // 文章の入力欄の先頭の / は ・。Space で / にして名前を打つと、/ を確定して名前はアプリへ。
+        var session = Create();
+        Assert.Equal("・", Type(session, "/", before: "")[0].View?.Text);
+        Assert.Equal("/", Type(session, " ")[0].View?.Text);
+        var help = Type(session, "help");
+        Assert.True(help[0].Commits.Single().Text == "/" && help.All(r => !r.Consumed && r.View is null), "/ を確定して help はアプリへ");
+        // Discord は空の入力欄でも、キャレットの前に U+FEFF を返す。
+        session = Create();
+        Assert.Equal("・", Type(session, "/", before: "\uFEFF")[0].View?.Text);
+        // /help を送信した後 (Enter は Meltype IME を通らない) の空の欄では、日本語に戻る。
+        Type(session, " ");
+        Type(session, "help");
+        Assert.Equal("きょう", Type(session, "kyou", before: "\uFEFF")[^1].View?.Text);
+        // コードの入力欄では、今までどおりアプリへ。
+        session = Create();
+        session.CodeInput = true;
+        Assert.True(Type(session, "/help", before: "").All(r => !r.Consumed), "コードの /help はアプリへ");
+        // コードの入力欄でも、コメント・文字列の中は ・。
+        session = Create();
+        session.CodeInput = true;
+        Assert.Equal("・", Type(session, "/", before: "// メモ ")[0].View?.Text);
+        session = Create();
+        session.CodeInput = true;
+        Assert.Equal("・", Type(session, "/", before: "var text = \"メモ ")[0].View?.Text);
+        // ターミナルの AI の入力行 (Claude Code の「> 」の後) は /command を打つ所なので、今までどおりアプリへ。
+        session = Create();
+        session.CodeInput = true;
+        Assert.True(!Type(session, "/", before: "> ")[0].Consumed && Type(session, "help").All(r => !r.Consumed), "AI の入力行の /help はアプリへ");
+    }
+
+    [Test]
     public static void SigilWord_EndsWhenSpaceReachedTheAppDirectly()
     {
         // #242: Meltype IME は変換中でないときの Space・Enter を Meltype.exe に送らず、アプリに通す。
-        // /xyz の後の空白・改行はキャレットの前の文字で分かるので、そこで普通の入力に戻る (ずっと素通しにならない)
-        foreach (var before in new[] { "/xyz ", "/xyz\r\n", "/xyz\n" })
+        // @xyz の後の空白・改行はキャレットの前の文字で分かるので、そこで普通の入力に戻る (ずっと素通しにならない)
+        foreach (var before in new[] { "@xyz ", "@xyz\r\n", "@xyz\n" })
         {
             var session = Create();
-            Assert.True(Type(session, "/xyz", before: "").All(r => !r.Consumed), "/xyz はアプリへ");
+            Assert.True(Type(session, "@xyz", before: "").All(r => !r.Consumed), "@xyz はアプリへ");
             Assert.Equal("きょう", Type(session, "kyou", before)[^1].View?.Text, before);
         }
         // 名前の途中 (前が名前の文字) なら今までどおりアプリへ
         var typing = Create();
-        Type(typing, "/xy", before: "");
-        Assert.True(!Type(typing, "z", before: "/xy")[0].Consumed, "名前の続きはアプリへ");
-        // 空白の後の 2 つ目の /command も、そのままアプリへ
+        Type(typing, "@xy", before: "");
+        Assert.True(!Type(typing, "z", before: "@xy")[0].Consumed, "名前の続きはアプリへ");
+        // 空白の後の 2 つ目の @file も、そのままアプリへ
         typing = Create();
-        Type(typing, "/xyz", before: "");
-        Assert.True(!Type(typing, "/", before: "/xyz ")[0].Consumed, "空白の後の / はアプリへ");
+        Type(typing, "@xyz", before: "");
+        Assert.True(!Type(typing, "@", before: "@xyz ")[0].Consumed, "空白の後の @ はアプリへ");
     }
 
     [Test]
@@ -755,7 +839,7 @@ internal static class SessionFacadeTests
         Assert.True(Type(session, "@", before: "taro")[0].Consumed, "前が英字なら @ は変換ボックスへ");
         session = Create();
         session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
-        Assert.True(!Type(session, "/", before: "> ")[0].Consumed, "前が空白なら / はアプリへ");
+        Assert.True(!Type(session, "@", before: "> ")[0].Consumed, "前が空白なら @ はアプリへ");
         // 前の文字を打ったのを見ていれば、空 (前の文字を読めないアプリ) より自分の記録を信じる。
         session = Create();
         session.Direct = true;

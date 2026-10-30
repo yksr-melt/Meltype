@@ -278,7 +278,7 @@ public sealed class MsImeKanjiConverter : IKanjiConverter, IDisposable
             var type = Type.GetTypeFromProgID("MSIME.Japan", throwOnError: true)!;
             var language = (IFELanguage)Activator.CreateInstance(type)!;
             var hr = language.Open();
-            if (hr < 0) throw new COMException("IFELanguage.Open が失敗しました。", hr);
+            Marshal.ThrowExceptionForHR(hr);
             _language = language;
             return language;
         }

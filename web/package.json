@@ -11,6 +11,6 @@
     "check": "node --check src/worker.js && node --check src/access.js && node --check src/cleanup.js && node --check src/reports.js && node --check src/github.js && node --check src/http.js && node --check public/assets/js/common.js && node --check public/assets/js/report-schema.js && node --check public/assets/js/site.js && node --check public/assets/js/report.js && node --check public/assets/js/dashboard.js"
   },
   "devDependencies": {
-    "wrangler": "^4.150.0"
+    "wrangler": "^4.154.0"
   }
 }

@@ -8,8 +8,8 @@ namespace Meltype.Composition;
 /// <summary>マウスボタンの押下/解放 (変換中にクリックされたとき、確定してからクリックを再生するため)。</summary>
 public readonly record struct MouseButtonEvent(int Message, int X, int Y, uint MouseData);
 
-/// <summary>フックから変換ボックスへ渡す入力。キーかマウスボタンのどちらか。</summary>
-public readonly record struct CapturedInput(KeyEvent? Key, MouseButtonEvent? Mouse);
+/// <summary>フックから変換ボックスへ渡す入力。キー、マウスボタン、または入力モード切り替え要求。</summary>
+public readonly record struct CapturedInput(KeyEvent? Key, MouseButtonEvent? Mouse, nint? ToggleTarget = null);
 
 /// <summary>
 /// フック側の関所。変換ボックスが開いている間 (captured) は、届いたキーとマウスボタンを
@@ -67,6 +67,17 @@ public sealed class CaptureGate
         return true;
     }
 
+    /// <summary>登録キーの切り替え要求を、前後の入力と同じ順序で処理する。</summary>
+    public void OnToggleMode(nint target)
+    {
+        lock (_gate)
+        {
+            _captured = true;
+            _queue.Enqueue(new CapturedInput(null, null, target));
+        }
+        _signal();
+    }
+
     public bool TryDequeue(out CapturedInput input)
     {
         lock (_gate) return _queue.TryDequeue(out input);
@@ -83,12 +94,12 @@ public sealed class CaptureGate
         }
     }
 
-    /// <summary>無効化・終了時。残っている入力を返す (呼び出し側で再生する)。</summary>
+    /// <summary>無効化・終了時。切り替え要求を破棄し、残っているキー・マウス入力を返す (呼び出し側で再生する)。</summary>
     public List<CapturedInput> Abort()
     {
         lock (_gate)
         {
-            var rest = _queue.ToList();
+            var rest = _queue.Where(input => input.ToggleTarget is null).ToList();
             _queue.Clear();
             _captured = false;
             return rest;

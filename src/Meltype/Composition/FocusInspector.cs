@@ -130,6 +130,9 @@ public sealed class FocusInspector : IDisposable
 
     public FocusInfo Current => _info;
 
+    /// <summary>最新のフォーカスを調べ終わっているか (移った直後で、まだ調べている最中なら false)。</summary>
+    public bool Resolved => Interlocked.Read(ref _resolvedSequence) == Interlocked.Read(ref _focusSequence);
+
     private long _lastRecheck;
     private long _lastRecheckForeground;
 
@@ -355,7 +358,7 @@ public sealed class FocusInspector : IDisposable
 
         // 変換中に入力先がパスワード欄・入力欄でない所に変わったら、変換中の内容を捨てさせる (移った先に入らないように)。
         // UI Automation で調べられなかっただけ (確認できない・フォーカスなし) のときは捨てない。
-        if (sequence == Interlocked.Read(ref _focusSequence) && (info.IsPassword || !info.IsTextInput && !info.Description.StartsWith("確認できない") && info.Description != "フォーカスなし"))
+        if (sequence == Interlocked.Read(ref _focusSequence) && (info.IsPassword || !info.IsTextInput && !info.Description.StartsWith("確認できない", StringComparison.Ordinal) && info.Description != "フォーカスなし"))
         {
             CaptureLost?.Invoke(info.IsPassword ? "パスワード欄にフォーカスが移った" : "入力欄でない所にフォーカスが移った");
         }
@@ -500,7 +503,9 @@ public sealed class FocusInspector : IDisposable
 
             // UI Automation では入力欄と分からなくても、Windows のキャレット (点滅する縦線) を出しているなら文字を打つ所
             // (サクラエディタなど、独自の編集画面を持つ Win32 のアプリ)。
-            if (!editable && HasCaret())
+            // ただし一覧・ツリーの行 (Outlook のメール一覧の LeafRow など) は、キャレットがあっても入力欄ではない。
+            // 入力欄とみなすと、フォルダを開いたときに Outlook が固まって落ちていた (#1226)。
+            if (!editable && !IsListRow(type, element.ClassName) && HasCaret())
             {
                 editable = true;
                 description += " (キャレットあり)";
@@ -570,6 +575,13 @@ public sealed class FocusInspector : IDisposable
         }
         return false;
     }
+
+    /// <summary>
+    /// 一覧・ツリーの行と、Outlook のメール一覧の行。キャレットがあっても文字を打つ所ではない。
+    /// DataItem は Excel のセルでもある (選んでそのまま打てる) ので、Outlook の行 (LeafRow) だけにする。
+    /// </summary>
+    private static bool IsListRow(int controlType, string? className) =>
+        controlType is 50007 /* ListItem */ or 50024 /* TreeItem */ || (controlType == 50029 /* DataItem */ && className == "LeafRow");
 
     private static readonly string[] NotInputParts = ["group", "wrap", "container", "label", "button", "btn", "icon"];
     private const int ControlTypeWindow = 50032, ControlTypePane = 50033;

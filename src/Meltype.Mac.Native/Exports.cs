@@ -161,6 +161,68 @@ public static unsafe class Exports
         if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.CodeInput = enabled != 0;
     }
 
+    /// <summary>コードの入力欄がターミナル (非 0) / エディター (0) かを設定する。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_terminal")]
+    public static void SetCodeTerminal(IntPtr handle, int terminal)
+    {
+        try
+        {
+            if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+                session.CodeTerminal = terminal != 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+        }
+    }
+
+    /// <summary>コードの行を日本語 (非 0) / 英数 (0) にする。before は借用する UTF-8 (NULL 可)。扱ったら 1、それ以外・失敗時は 0。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_line")]
+    public static int SetCodeLine(IntPtr handle, int japanese, byte* before)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return 0;
+            return session.SetCodeLine(japanese != 0, FromUtf8(before)) ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+            return 0;
+        }
+    }
+
+    /// <summary>アプリに通したキーによるキャレット移動を通知する (消費したキーには呼ばない)。passedVk = 0 はキーなし、control は非 0 なら Ctrl。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_caret_moved")]
+    public static void CaretMoved(IntPtr handle, int passedVk, int control)
+    {
+        try
+        {
+            if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+                session.CaretMoved(passedVk, control != 0);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+        }
+    }
+
+    /// <summary>次のキーをコードの英数として通すなら 1。それ以外・失敗時は 0。before は借用する UTF-8 (NULL 可)。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_code_english_at")]
+    public static int CodeEnglishAt(IntPtr handle, byte* before)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return 0;
+            return session.CodeEnglishAt(FromUtf8(before)) ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+            return 0;
+        }
+    }
+
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (1) いないか (0)。対応していなければ、確定し直しをしない。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_can_delete")]
     public static void SetCanDelete(IntPtr handle, int canDelete)

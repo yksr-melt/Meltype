@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -49,6 +50,7 @@ public static class Backup
     /// <summary>バックアップを作る。戻り値はファイルの中身と、入れたファイルの数。</summary>
     public static (byte[] Content, int Files) Create(string dataDirectory, string appVersion)
     {
+        Composition.LearningSaves.FlushAll();
         using var stream = new MemoryStream();
         var count = 0;
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
@@ -57,7 +59,7 @@ public static class Backup
             writer.WriteString("format", Format);
             writer.WriteNumber("version", FormatVersion);
             writer.WriteString("app", appVersion);
-            writer.WriteString("created", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"));
+            writer.WriteString("created", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
             writer.WriteStartObject("files");
             foreach (var name in TargetFiles(dataDirectory))
             {

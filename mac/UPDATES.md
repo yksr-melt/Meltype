@@ -1,27 +1,38 @@
-# macOS: notify, then update on click
+# macOSの更新通知・クリック後の更新（試作）
 
-The IME uses Sparkle 2.10.0. The input menu offers 「更新を確認…」 and 「新しいバージョンを通知」. Scheduled checks default to once per day and may be disabled. Sparkle asks the user before downloading/installing; automatic installation and automatic background download are disabled. No profile data is sent.
+Issue #944で相談しているSparkle 2.10.0の試作です。入力メニューに「更新を確認…」「新しいバージョンを通知」を追加します。定期確認は1日間隔で、通知は無効にできます。自動ダウンロード・自動インストールは無効です。
 
-Before relaunch, the active composition is committed. If no input client is available to accept it, installation remains pending. After relaunch the existing registration helper repairs input-source registration once, and restores Meltype only if it was selected before updating. This does not guarantee recovery from a runtime crash in a new release.
+更新前には入力クライアントに未確定文字を確定させます。非アクティブな入力欄も確認し、確定先がなければ更新を待機します。更新後は既存の補助ツールで入力ソース登録を修復し、更新前にMeltypeを選択していた場合だけ再選択します。登録・選択が完了しなければ、次の起動時に再試行できるよう記録を保持します。これらの実機動作は未検証です。
 
-## Maintainer setup (required before public distribution)
+## 公開前に作者が設定するもの
 
-1. Generate and securely back up a Sparkle Ed25519 signing seed using the official Sparkle tools. Keep the same key for subsequent releases. Do not share the private key with contributors. See https://sparkle-project.org/documentation/ . The workflow expects the base64 32-byte private seed, not a Keychain identifier or a 64-byte combined secret.
-2. Add repository variable `MELTYPE_SPARKLE_PUBLIC_KEY` (base64 32-byte public key), and repository secret `MELTYPE_SPARKLE_PRIVATE_KEY` (base64 private seed). `tools/sparkle-public-key.swift <seed-file>` derives the matching public key without using the Keychain.
-3. Configure the existing Developer ID signing and notarization secrets in `.github/workflows/mac.yml`. Test on a separate macOS account, with the IME installed in `~/Library/Input Methods` or `/Library/Input Methods`.
-4. On stable `vX.Y.Z` tags, CI embeds the public key, signs a separate `Meltype-X.Y.Z-mac-update.zip`, verifies the signature, and publishes it with `appcast.xml`. The manual installer ZIP remains separate; Sparkle must receive a direct app archive, not the installer package. The feed points at the official repository's latest release asset. Do not mark a stable release as latest until all macOS assets are available.
-5. The first updater-capable version must be installed manually. Later versions use the same bundle ID, installation location and signing key. Versions must increase numerically. Prerelease tags do not publish the stable feed.
+1. Sparkle公式ツールでEd25519署名鍵を作成し、安全にバックアップします。同じ鍵を継続使用し、秘密鍵を貢献者と共有しないでください。公式資料: https://sparkle-project.org/documentation/
+2. Repository variable `MELTYPE_SPARKLE_PUBLIC_KEY` にBase64の32バイト公開鍵、Secret `MELTYPE_SPARKLE_PRIVATE_KEY` にBase64の32バイト秘密seedを設定します。Keychainの識別子や64バイトの結合鍵ではありません。`tools/sparkle-public-key.swift <seed-file>` で対応する公開鍵を取得できます。
+3. 既存のDeveloper ID署名・公証設定も必要です。公開鍵だけでは配布可能な状態になりません。
+4. 安定版の `vX.Y.Z` タグでは、アプリを直接格納した `Meltype-X.Y.Z-mac-update.zip` と署名付き `appcast.xml` を生成する案です。手動インストーラーZIPとは別にします。全Mac用アセットが揃う前にリリースをlatestにしないでください。
+5. 最初の更新対応版は手動導入します。以後は同じBundle ID・インストール先・署名鍵を使い、版番号を増やします。プレリリースでは安定版用フィードを公開しません。
 
-Without a valid embedded public key, local builds show an explanation under 「更新を確認…」 and do not start network update checks. Do not put a test private key into release artifacts. The included local confirmation build deliberately has no production public key.
+有効な公開鍵が組み込まれていないビルドでは、自動確認を開始しません。「更新を確認…」には未設定の説明を表示します。本番鍵やSecretの設定はこのPRでは行いません。
 
-## Build compatibility
+## ビルドと検証
 
-The default macos-15 CI image uses Swift 6.1. Pin swift-collections to 1.1.4 (tools version 5.7), which satisfies both the converter and Jinja constraints, rather than resolving 1.7.2 (requires tools version 6.4). Keep Package.resolved in sync. This dependency change does not enable production update delivery.
+既存試作ではCIのSwift 6.1向けにswift-collectionsを1.1.4へ固定しています。現在の実際のCIで、変換エンジンとJinjaを含めた依存解決・ビルドの確認が必要です。
 
-## Validation
+```sh
+swiftc mac/Sources/MeltypeIME/MacUpdatePolicy.swift tools/test-mac-updater.swift -o /tmp/test-updater
+/tmp/test-updater
+# Swift依存の解決後、実際のSparkle署名ツールを使用（一時鍵のみ）
+python3 tools/test-mac-appcast.py
+```
 
-- `swiftc mac/Sources/MeltypeIME/MacUpdatePolicy.swift tools/test-mac-updater.swift -o /tmp/test-updater && /tmp/test-updater`
-- After resolving Swift packages: `python3 tools/test-mac-appcast.py` (ephemeral keys, real Sparkle sign/verify, no Keychain changes or publication).
-- Existing native-boundary, Swift-boundary, event and installer tests still apply.
+以前の試作では更新ポリシー・待機/再開/取消と、実署名を使った6テストが成功しています。今回のmain追従・修正後は、Swift/macOSビルドと実署名テストを再実行できていません。CIのUpdate testsで再確認します。
 
-A real update between two signed/notarized releases, including composition preservation, source reselection, permission prompts and rollback on installer failure, still requires a separate-account end-to-end test before shipping. No automatic rollback after application startup is implemented.
+公開前には、別のmacOSアカウントで次を実機確認してください。
+
+- 本番相当の署名・公証と配信鍵を使う2版間の更新。
+- 入力・変換中と、確定先のない場合の文字保持・待機・取消。非アクティブな入力欄も含む。
+- IMEの終了・再起動と登録・再選択。更新前に別の入力ソースを使っていた場合の維持。
+- `~/Library/Input Methods` と `/Library/Input Methods`、権限不足、OSの許可表示。
+- ダウンロード・署名・インストール失敗時に入力可能な状態へ戻れること。
+
+新しいアプリの起動後の不具合に対する自動ロールバックは実装していません。復旧が必要な場合は、別の入力ソースへ切り替え、以前の公式配布版のinstall.shで再導入し、必要なら設定画面からMeltypeを追加します。この復旧手順も各権限条件で実機確認が必要です。
