@@ -1775,10 +1775,12 @@ public sealed class CompositionController
     private List<Clause> ConvertJapanese(string kana)
     {
         // ローマ字として読めずに残った英字 (こほぃc の c) と半角の記号 (... @) は、変換エンジンに渡すと別の記号 (© ．．． ＠) にされるので、
-        // そのままの文節にする。数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
+        // そのままの文節にする。設定の「，．」も渡さない。渡すと半角の , . に戻る (4 文字以上のライブ変換、issue #498)。
+        // 数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
         // それ以外は変換エンジンに渡す (2026ねん → 2026年)。
         var keep = new bool[kana.Length];
-        for (var i = 0; i < kana.Length; i++) keep[i] = kana[i] is >= '!' and <= '~' && !char.IsAsciiDigit(kana[i]);
+        for (var i = 0; i < kana.Length; i++)
+            keep[i] = kana[i] is >= '!' and <= '~' && !char.IsAsciiDigit(kana[i]) || kana[i] is '，' or '．';
         for (var i = 0; i < kana.Length; i++)
         {
             if (!char.IsAsciiDigit(kana[i])) continue;

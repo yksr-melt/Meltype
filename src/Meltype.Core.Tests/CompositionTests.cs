@@ -4222,6 +4222,47 @@ internal static class CompositionTests
         Assert.Equal("今日はgoogleで検索", k.Host.Output.Single());
     }
 
+    /// <summary>変換エンジンは渡された「，．」を半角に戻す (issue #498 の再現)。</summary>
+    private sealed class HalfWidthPunctuationConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            Map(hiragana) is { } text ? [new(hiragana.Replace('，', ',').Replace('．', '.'), text)] : null;
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "わたしは" => "私は",
+            "わたしは，" or "わたしは," => "私は,",
+            "わたしは．" or "わたしは." => "私は.",
+            "わたしは，そうです" or "わたしは,そうです" => "私は,そうです",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Issue498_FullWidthPunctuationSurvivesLiveConversion()
+    {
+        // #498: 句読点を「，．」にして 4 文字以上をライブ変換すると、，． が半角の , . になっていた。
+        Keyboard Type(string keys)
+        {
+            var k = new Keyboard(live: true, converter: new HalfWidthPunctuationConverter())
+            {
+                Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod,
+            };
+            k.Type(keys);
+            return k;
+        }
+
+        var comma = Type("watasiha,");
+        Assert.Equal("私は，", comma.Showing);
+        comma.Type("\n");
+        Assert.Equal("私は，", comma.Host.Output.Single());
+        Assert.Equal("私は．", Type("watasiha.").Showing);
+        Assert.Equal("私は，そうです", Type("watasiha,soudesu").Showing);
+        Assert.Equal("は，", Type("ha,").Showing, "4 文字未満はかなのまま、句読点も設定どおり");
+    }
+
     [Test]
     public static void LiveConversion_SpaceShowsAlternatives()
     {
