@@ -563,6 +563,32 @@ int TextService::ReadSecretField(ITfContext* context) {
     return FAILED(hr) ? -1 : secret ? 1 : 0;
 }
 
+bool TextService::SelectedText(TfEditCookie ec, ITfContext* context, std::wstring& text) {
+    text.clear();
+    TF_SELECTION selection = {};
+    ULONG fetched = 0;
+    if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return false;
+    // 長文の誤選択は再変換しない (Meltype キーボードと同じ 128 文字まで)。超えたかが分かるように 1 文字多く読む
+    constexpr ULONG kLimit = 128;
+    wchar_t buffer[kLimit + 1];
+    ULONG length = 0;
+    bool read = SUCCEEDED(selection.range->GetText(ec, 0, buffer, kLimit + 1, &length));
+    selection.range->Release();
+    if (!read || length == 0 || length > kLimit) return false;
+    text.assign(buffer, length);
+    return true;
+}
+
+bool TextService::HasSelectedText(ITfContext* context) {
+    bool selected = false;
+    HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
+        std::wstring text;
+        selected = SelectedText(ec, context, text);
+        return S_OK;
+    });
+    return SUCCEEDED(hr) && selected;
+}
+
 std::string TextService::CommitRequest(bool moved) const {
     // moved: キャレットが動いた (クリック・別の入力欄・アプリが確定した) ので、前に確定した語を確定し直さない
     return "{\"op\":\"commit\",\"sid\":\"" + sid_ + "\"" + (moved ? ",\"moved\":true" : "") + "}";
@@ -944,7 +970,9 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     // 設定「スペースを全角で入力」が ON なら、日本語入力のときの Space も受け取る (Space が全角・Shift+Space が半角。Meltype.exe が入れる: issue #881)
     bool starts = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'!' && ch <= L'~') ||
                   (vk == VK_SPACE && (KeyDown(VK_SHIFT) || (open_ && fullWidthSpace_)));
-    if (!starts) return false;
+    // 変換キー: 文字を選んでいれば受け取り、Meltype.exe で選んだ文字を再変換する (issue #313)
+    bool reconvert = !starts && vk == VK_CONVERT && open_ && HasSelectedText(context);
+    if (!starts && !reconvert) return false;
     if (!ServerReady()) return pass(L"Meltype.exe が使えない");
     // パスワード欄か。OnTestKeyDown で読んだ結果は、続く同じキー・同じ入力欄の OnKeyDown で 1 回だけ使う (ほかのキー・入力欄には使わない)
     ULONGLONG now = GetTickCount64();
@@ -1111,6 +1139,9 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool toggl
             std::wstring before, after;
             SurroundingText(ec, context, before, after);
             request += ",\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after);
+            // 変換キー: 選んでいる文字を送る (Meltype.exe が再変換する。変換中の文字は、選んでいた文字の所に置く)
+            std::wstring selected;
+            if (vk == VK_CONVERT && SelectedText(ec, context, selected)) request += ",\"selected\":" + JsonString(selected);
         } else {
             // 変換中: Meltype.exe に入力の続きが無ければ (つなぎ直した)、新しく始めずに知らせてもらう
             request += ",\"composing\":true";

@@ -175,7 +175,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 <img src="images/headings/tsf-design/07.svg" alt="未対応・確かめていないこと" height="53"><br>
 
 
-- Meltype キーボードから移せていない機能: アプリの種類ごとの「最初は英数」、カーソルの近くの「あ」「A」の表示、選んだ文字の再変換
+- Meltype キーボードから移せていない機能: アプリの種類ごとの「最初は英数」、カーソルの近くの「あ」「A」の表示
 - UILess (候補を自分で描くアプリ)、ARM64 (ARM64 の Windows ではインストールのときに Meltype IME を入れない)
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。
   実際のアプリ (メモ帳・Chrome・VS Code など)、表示スケール 150%、コード署名をしない DLL を読み込まないアプリがあるかは、まだ広くは確かめていない

@@ -25,6 +25,8 @@ namespace Meltype.Tip;
 ///   {"op":"mode","sid":"…","process":"…","before":"…","passed":37,"ctrl":true} (キャレットが動いた・文字が変わった。入力モードの表示を合わせる)
 /// select の prediction は、予測変換の候補を選んだこと (付けなければ変換の候補)。
 /// key の code は、DLL が toggle・mode を送ること (付けない古い DLL では、コードの入力欄として扱わない)。
+/// key の selected は、変換キーを押したときに入力欄で選んでいた文字 (選んだ文字を再変換する。変換中の文字は選んでいた文字の所に置き、
+/// 取り消したら選んでいた文字を確定して元に戻す)。
 /// key の private は、入力を覚えないように求める入力欄 (InputScope が IS_PRIVATE) であること。次の key まで学習しない。
 /// passed は、DLL がアプリに通したキー (0 はキーなしでキャレットが動いた、-1 は文字が変わっただけ)。key・toggle にも、まだ伝えていなければ付ける。
 /// 応答: {"active":true, "consumed":…, "commits":[…], "view":{…}, "code":…, "english":…} (active が false なら DLL は何もせずにキーを通す)
@@ -533,6 +535,8 @@ internal sealed class TipServer : IDisposable
             // 受け持たない (DLL は変換中の文字をそのまま確定し、キーはアプリに通す)
             if (!active || op is not ("key" or "toggle" or "mode") || IsTrue(root, "composing") || sessions.Count >= MaxSessionsPerConnection) return Inactive;
             session = _composition.CreateSession(_settings, directModeDetection: true);
+            // 選んだ文字の再変換 (変換キー) で、読みを Microsoft IME の逆変換で調べる (issue #313)
+            session.ReadingOf = _composition.GuessReading;
             sessions[sid] = session;
         }
         SessionResult result;
@@ -565,7 +569,7 @@ internal sealed class TipServer : IDisposable
                 var process = IsTrue(root, "code") ? String(root, "process") : null;
                 var before = UpdateCodeInput(session, process, String(root, "before"));
                 result = session.HandleKey(vk, ch is > 0 and < 0x10000 ? (char)ch : null,
-                    (mods & 1) != 0, (mods & 2) != 0, (mods & 4) != 0, (mods & 8) != 0, before, String(root, "after"));
+                    (mods & 1) != 0, (mods & 2) != 0, (mods & 4) != 0, (mods & 8) != 0, before, String(root, "after"), String(root, "selected"));
                 switchedToJapanese = wasDirect && !session.Direct;
                 break;
             }
