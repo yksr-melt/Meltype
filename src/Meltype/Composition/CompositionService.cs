@@ -115,11 +115,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         };
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
-        _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed)
-        {
-            // 速く打って打鍵が溜まっているあいだは、途中の読みで Zenzai の答えを待たない (issue #1209)
-            KeysPending = () => Gate.HasPending,
-        };
+        _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed);
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
@@ -229,6 +225,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public bool ConverterAvailable => _converter.IsAvailable;
 
+    /// <summary>入力の処理にこれ以上かかったらログに書く (ミリ秒)。</summary>
+    private const int SlowPumpMs = 300;
+
     private void SchedulePump()
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
@@ -236,7 +235,15 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _invoker.BeginInvoke(() =>
         {
             Volatile.Write(ref _pumpScheduled, 0);
+            // 入力の処理に時間がかかったら、何個の入力を処理したか・そのうち Zenzai を何回・何 ms 待ったかをログに書く (issue #1209: Zenzai を使うと入力が数秒止まる)
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var dequeued = Gate.Dequeued;
+            ZenzaiConverter.TakeWaitStats();
             Safely(Controller.Pump);
+            var elapsed = (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var (calls, waited) = ZenzaiConverter.TakeWaitStats();
+            if (elapsed >= SlowPumpMs)
+                Diagnostics.Log.Info($"入力の処理に {elapsed} ms かかりました (処理した入力 {Gate.Dequeued - dequeued} 個、Zenzai を {calls} 回・計 {waited} ms 待ちました)");
         });
     }
 

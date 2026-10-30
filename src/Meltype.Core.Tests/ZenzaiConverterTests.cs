@@ -126,29 +126,25 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Issue1209_KeysPending_DoesNotWaitForZenzai()
+    public static void Issue1209_CountsTimeWaitedForZenzai()
     {
-        // #1209: 速く打って打鍵が溜まっているあいだは、途中の読みで Zenzai の答えを待たない (今までの変換エンジンで変換する)。
-        // 溜まった打鍵を処理し終えた読みは、Zenzai に頼む
-        using var server = new FakeServer { Answer = _ => "単位を取る" };
+        // #1209: 入力が止まったときに Zenzai をどれだけ待っていたかをログに書くため、待った回数と時間を数える
+        using var server = new FakeServer { Answer = _ => { Thread.Sleep(50); return "漢字"; } };
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
-        var pending = true;
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => zenzai) { KeysPending = () => pending };
-        Assert.True(hybrid.ConvertClauses("たんいをとる") is [{ Text: "単位を" }, { Text: "取る" }], "打鍵が溜まっているあいだは、ほかの変換エンジンで");
-        lock (server.Prompts) Assert.Equal(0, server.Prompts.Count, "Zenzai には頼まない");
-        pending = false;
-        hybrid.ConvertClauses("たんいをとる");
-        lock (server.Prompts) Assert.Equal(1, server.Prompts.Count, "溜まった打鍵を処理し終えたら Zenzai に頼む");
+        ZenzaiConverter.TakeWaitStats();
+        zenzai.ConvertClauses("かんじ");
+        zenzai.ConvertClauses("かんじを");
+        var (calls, ms) = ZenzaiConverter.TakeWaitStats();
+        Assert.Equal(2L, calls);
+        Assert.True(ms >= 90, $"待った時間: {ms} ms");
+        Assert.Equal((0L, 0L), ZenzaiConverter.TakeWaitStats(), "取ったら 0 に戻す");
 
-        // 関所は、溜まった打鍵があるかを答える
+        // 関所は、取り出した入力の数を数える
         var gate = new CaptureGate(() => { });
-        Assert.True(!gate.HasPending, "空");
         gate.OnKey(new Meltype.Input.KeyEvent(0x41, 0, false, false, false, 0), _ => true);
         gate.OnKey(new Meltype.Input.KeyEvent(0x42, 0, false, false, false, 0), _ => true);
-        gate.TryDequeue(out _);
-        Assert.True(gate.HasPending, "まだ 1 つ溜まっている");
-        gate.TryDequeue(out _);
-        Assert.True(!gate.HasPending, "処理し終えた");
+        while (gate.TryDequeue(out _)) { }
+        Assert.Equal(2L, gate.Dequeued);
     }
 
     [Test]

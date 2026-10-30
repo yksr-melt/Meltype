@@ -31,9 +31,6 @@ public sealed class CaptureGate
 
     public bool IsCaptured { get { lock (_gate) return _captured; } }
 
-    /// <summary>まだ処理していない入力が溜まっているか (速く打って、処理が追いついていない)。</summary>
-    public bool HasPending { get { lock (_gate) return _queue.Count > 0; } }
-
     /// <summary>true ならフックでその打鍵を握りつぶす。</summary>
     public bool OnKey(KeyEvent e, Func<KeyEvent, bool> startsComposition)
     {
@@ -83,8 +80,16 @@ public sealed class CaptureGate
 
     public bool TryDequeue(out CapturedInput input)
     {
-        lock (_gate) return _queue.TryDequeue(out input);
+        lock (_gate)
+        {
+            if (!_queue.TryDequeue(out input)) return false;
+            Dequeued++;
+            return true;
+        }
     }
+
+    /// <summary>これまでに取り出した入力の数 (入力の処理が遅いときに、何個処理したかをログに書く。issue #1209)。</summary>
+    public long Dequeued { get; private set; }
 
     /// <summary>変換ボックスが空になったら呼ぶ。キューも空なら関所を開けて true を返す。</summary>
     public bool TryRelease()
