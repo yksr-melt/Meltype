@@ -1,4 +1,5 @@
 name: build
+run-name: 'Windows PR #1340 Mozc待ち改善 (7541500)'
 
 on:
   push:
@@ -108,77 +109,16 @@ jobs:
       - name: Test Mozc-UT dictionary merge
         run: python3 native/mozc/tests/test_merge_ut_dictionary.py
 
-  # Mozc の変換ヘルパー (native/mozc) をビルドする。初回は 30〜40 分かかるので、配布用の zip を作るとき
-  # (タグ・手動実行) と、ヘルパーのソースを変えたときだけ。Bazel の結果はキャッシュして次から速くする。
-  mozc:
-    if: github.event_name != 'pull_request'
-    runs-on: windows-2022
-    timeout-minutes: 90
-    outputs:
-      built: ${{ steps.check.outputs.build }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      # タグ・手動実行ならビルドする。push なら、native/mozc かこのファイルが変わったときだけ (変わっていなければ数秒で終わる)。
-      - name: Check
-        id: check
-        shell: bash
-        run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || git diff --name-only "$BEFORE" "$GITHUB_SHA" -- native/mozc .github/workflows/build.yml | grep -q .; then
-            echo "build=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "native/mozc は変わっていないので、Mozc のビルドは飛ばします。"
-            echo "build=false" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          BEFORE: ${{ github.event.before }}
-      - if: steps.check.outputs.build == 'true'
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - name: Bazelisk
-        if: steps.check.outputs.build == 'true'
-        shell: pwsh
-        run: |
-          # 版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
-          $version = 'v1.29.0'
-          $expected = '092a8738d5b41aae7a85c42cc961b1034e3389aba43ffc20c0fabda7b43e095b'
-          New-Item -ItemType Directory -Force -Path C:\tools | Out-Null
-          Invoke-WebRequest -Uri "https://github.com/bazelbuild/bazelisk/releases/download/$version/bazelisk-windows-amd64.exe" -OutFile C:\tools\bazelisk.exe
-          $actual = (Get-FileHash C:\tools\bazelisk.exe -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($actual -ne $expected) { throw "Bazelisk のハッシュが違います: $actual" }
-      - if: steps.check.outputs.build == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            C:\bazel-cache
-            C:\mozc\src\third_party_cache
-          key: mozc-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
-          restore-keys: |
-            mozc-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
-      - name: Build Mozc helper
-        if: steps.check.outputs.build == 'true'
-        shell: powershell
-        run: .\native\mozc\Build-MozcHelper.ps1 -MozcSource C:\mozc -Python python -Bazelisk C:\tools\bazelisk.exe -DiskCache C:\bazel-cache
-      - if: steps.check.outputs.build == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: mozc-helper
-          path: native/mozc/bin/
-          retention-days: 7
-
   package:
     # タグ (v0.1.0 など) を push したら、テスト版の zip を作ってリリースに添付する。
     # Actions の画面から手動で実行 (Run workflow) したら、zip を実行結果 (Artifacts) に置く。
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    needs: [test, mozc]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/codex/windows-build-pr-1340-mozc-20261030'
+    needs: [test]
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
-      contents: write
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -186,11 +126,13 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      - if: needs.mozc.outputs.built == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      # 同じ PR の前回ビルドから、ソースを変えていない Mozc ヘルパーを再利用する。
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: mozc-helper
           path: native/mozc/bin/
+          run-id: 41031519924
+          github-token: ${{ github.token }}
       # 署名の秘密は、署名する step (Sign / Sign installer) にだけ渡す。ビルドしたもの (Meltype.exe --selftest と、
       # それが起動する Mozc のヘルパー) は、秘密の無い step (Package / Installer / Portable) でだけ実行する。
       - name: Package
@@ -203,8 +145,8 @@ jobs:
       - name: Sign
         shell: powershell
         env:
-          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
+          SIGN_PFX_BASE64: ''
+          MELTYPE_SIGN_PASSWORD: ''
         run: |
           $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '' }
           $pfx = Join-Path $env:RUNNER_TEMP 'meltype-sign.pfx'
@@ -228,8 +170,8 @@ jobs:
       - name: Sign installer
         shell: pwsh
         env:
-          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
+          SIGN_PFX_BASE64: ''
+          MELTYPE_SIGN_PASSWORD: ''
         run: |
           if (-not $env:SIGN_PFX_BASE64) { exit 0 }
           $setup = Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File | Select-Object -First 1
@@ -261,14 +203,8 @@ jobs:
           .\tools\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', '.\dist\Meltype-portable', $packages[0].FullName, $packages[1].FullName, $setups[0].FullName)
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: meltype-package
+          name: meltype-pr-1340-mozc-improved-windows
           path: |
             dist/Meltype-*.zip
             dist/Meltype-*-setup.exe
           retention-days: 14
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: |
-            dist/Meltype-*.zip
-            dist/Meltype-*-setup.exe
