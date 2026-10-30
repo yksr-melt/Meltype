@@ -8,6 +8,28 @@ namespace Meltype.Tests;
 internal static class SettingsFormTests
 {
     [Test]
+    public static void SettingsForm_WaitsForChildHandlesBeforeLayingOut()
+    {
+        using var engine = new MeltypeEngine(new Settings(), null, null);
+        using var form = new UI.SettingsForm(engine);
+        var tables = Descendants(form).OfType<TableLayoutPanel>().ToList();
+        var controls = tables.SelectMany(Descendants).Distinct().ToList();
+        var prematureLayouts = 0;
+        var layouts = 0;
+        foreach (var table in tables)
+        {
+            table.Layout += (_, _) =>
+            {
+                layouts++;
+                if (controls.Any(c => c.Visible && !c.IsHandleCreated)) prematureLayouts++;
+            };
+        }
+        form.Show();
+        Assert.True(layouts > 0, "表示前に配置を再開する");
+        Assert.Equal(0, prematureLayouts, "子のハンドル作成中に表を何度も並べ直さない");
+    }
+
+    [Test]
     public static void SettingsForm_FontCanBeChangedWithoutOpeningDropDown()
     {
         using var engine = new MeltypeEngine(new Settings(), null, null);

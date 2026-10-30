@@ -147,21 +147,27 @@ internal sealed class SettingsForm : Form, IMessageFilter
         RefreshProfiles();
         _opened = Collect();
         var valuesLoaded = opening.ElapsedMilliseconds;
-        // 親からフォントを引き継ぎ、値を読み終えてから、内側の表 → 分類の枠 → 一覧の順に配置する。
-        // 一覧だけを止めても、内側の表は部品の追加やフォントの変更のたびに並べ直してしまう。
-        foreach (var group in _body.Controls.OfType<GroupBox>())
+        var handlesCreated = valuesLoaded;
+        var laidOut = valuesLoaded;
+        // Show() で子のウィンドウハンドルを作ると、プルダウンなどの高さが変わり、表の再配置が起きる。
+        // そこまで止めておき、すべてのハンドルがそろった Load で内側 → 外側の順に一度だけ配置する。
+        Load += (_, _) =>
         {
-            foreach (Control child in group.Controls) child.ResumeLayout();
-            group.ResumeLayout();
-        }
-        _body.ResumeLayout();
-        ResumeLayout();
-        var built = opening.ElapsedMilliseconds;
+            handlesCreated = opening.ElapsedMilliseconds;
+            foreach (var group in _body.Controls.OfType<GroupBox>())
+            {
+                foreach (Control child in group.Controls) child.ResumeLayout();
+                group.ResumeLayout();
+            }
+            _body.ResumeLayout();
+            ResumeLayout();
+            laidOut = opening.ElapsedMilliseconds;
+        };
         Shown += (_, _) =>
         {
             var shown = opening.ElapsedMilliseconds;
-            Diagnostics.Log.Info($"設定画面を開くまで {shown} ms (部品を作るまで {built} ms)");
-            Diagnostics.Log.Info($"設定画面の内訳: 部品作成 {controlsBuilt} ms (フォント一覧 {_fontNamesMs} ms)、値の読込 {valuesLoaded - controlsBuilt} ms、配置 {built - valuesLoaded} ms、表示 {shown - built} ms");
+            Diagnostics.Log.Info($"設定画面を開くまで {shown} ms (部品を作るまで {valuesLoaded} ms)");
+            Diagnostics.Log.Info($"設定画面の内訳: 部品作成 {controlsBuilt} ms (フォント一覧 {_fontNamesMs} ms)、値の読込 {valuesLoaded - controlsBuilt} ms、ハンドル作成 {handlesCreated - valuesLoaded} ms、配置 {laidOut - handlesCreated} ms、表示 {shown - laidOut} ms");
         };
     }
 
