@@ -1,0 +1,17 @@
+# .deb の postinst / prerm / postrm と同じことをする (→ native/mozc ではなく linux/build-deb.sh を参照)
+post_install() {
+    if command -v ibus >/dev/null 2>&1; then ibus write-cache --system >/dev/null 2>&1 || true; fi
+    echo 'Meltype を入れました。ログアウトしてログインし直してから、入力ソース (IBus) か fcitx5 の設定で Meltype を追加してください。'
+}
+
+post_upgrade() {
+    post_install
+}
+
+pre_remove() {
+    pkill -f /opt/meltype/ibus-engine-meltype >/dev/null 2>&1 || true
+}
+
+post_remove() {
+    if command -v ibus >/dev/null 2>&1; then ibus write-cache --system >/dev/null 2>&1 || true; fi
+}
