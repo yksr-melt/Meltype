@@ -62,6 +62,9 @@ internal sealed class SettingsForm : Form, IMessageFilter
         MinimumSize = new Size(480, 400);
         Font = new Font("Yu Gothic UI", 9.5F);
 
+        // 部品を並べ終わるまで配置の計算を止める (項目を 1 つ足すたびに全体を並べ直して、開くのが遅かった。issue #1199)
+        SuspendLayout();
+        _body.SuspendLayout();
         // 1 列の表に分類ごとの枠を縦に並べる (どの枠も画面の幅いっぱいにそろう)。
         _body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         foreach (var group in BuildGroups())
@@ -129,6 +132,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
         LoadFrom(_draft);
         RefreshProfiles();
         _opened = Collect();
+        _body.ResumeLayout();
+        ResumeLayout();
     }
 
     /// <summary>プロファイルの欄の下: 説明の欄を出すか、ホイールで値を変えるか。</summary>
@@ -370,10 +375,22 @@ internal sealed class SettingsForm : Form, IMessageFilter
         }
         if (type == typeof(string) && property.Name == nameof(Settings.CompositionFont))
         {
-            // この PC のフォントから選ぶ。先頭は既定 (空)
-            using var installed = new System.Drawing.Text.InstalledFontCollection();
-            var families = installed.Families.Select(f => f.Name).Where(n => n.Length > 0 && !n.StartsWith('@')).Distinct().OrderBy(n => n, StringComparer.CurrentCulture).ToList();
-            var combo = DropDown([DefaultFontChoice, .. families]);
+            // この PC のフォントから選ぶ。先頭は既定 (空)。
+            // フォントの一覧は、プルダウンを開いたときに読む (フォントが多い PC で、設定を開くのが遅かった。issue #1199)
+            var combo = DropDown([DefaultFontChoice]);
+            var fontsLoaded = false;
+            combo.DropDown += (_, _) =>
+            {
+                if (fontsLoaded) return;
+                fontsLoaded = true;
+                var selected = combo.SelectedItem;
+                using var installed = new System.Drawing.Text.InstalledFontCollection();
+                var families = installed.Families.Select(f => f.Name).Where(n => n.Length > 0 && !n.StartsWith('@')).Distinct().OrderBy(n => n, StringComparer.CurrentCulture).ToList();
+                combo.BeginUpdate();
+                foreach (var name in families) if (!combo.Items.Contains(name)) combo.Items.Add(name);
+                combo.EndUpdate();
+                combo.SelectedItem = selected;
+            };
             return new Binding(property, combo,
                 s =>
                 {
