@@ -14,6 +14,13 @@ public sealed class ContextRules
 {
     private readonly Dictionary<string, List<(string Candidate, string[] Cues)>> _rules = new(StringComparer.Ordinal);
 
+    // 語の後ろにかなのまま付けられる助詞・活用語尾。先頭だけ合う別の語 (かく|にん、はし|る) は補正しない。
+    // 先頭が助詞らしくても、残り全体が一致しなければ使わない (かく|にんを を 書くにんを にしない)。
+    private static readonly HashSet<string> Endings =
+        ["", "を", "が", "は", "に", "で", "と", "も", "へ", "の", "や", "か", "な", "だ", "です", "から", "まで", "より", "って", "とか", "しか", "さ", "ね", "よ",
+         "ます", "ました", "ません", "ませんでした", "ましょう", "たい", "たくない", "たかった",
+         "する", "した", "して", "します", "しました", "しない", "しません", "しよう"];
+
     public int Count => _rules.Sum(r => r.Value.Count);
 
     public static ContextRules Load(string? userDirectory)
@@ -51,7 +58,7 @@ public sealed class ContextRules
 
     /// <summary>
     /// 文節の読み (はしを) に対して、前後の文字列 (surrounding) の手がかりに合う候補 (箸を) を返す。無ければ null。
-    /// 辞書にある最長の先頭部分で探し、残り (を) はそのまま付ける。手がかりが多く当たった規則を優先する。
+    /// 辞書にある最長の先頭部分で探し、残りが助詞・活用語尾 (を) のときだけ付ける。手がかりが多く当たった規則を優先する。
     /// </summary>
     public string? Choose(string reading, string surrounding)
     {
@@ -59,12 +66,14 @@ public sealed class ContextRules
         for (var length = reading.Length; length >= 1; length--)
         {
             if (!_rules.TryGetValue(reading[..length], out var list)) continue;
+            var ending = reading[length..];
+            if (!Endings.Contains(ending)) return null;
             var best = list
                 .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => surrounding.Contains(cue, StringComparison.Ordinal))))
                 .Where(r => r.Hits > 0)
                 .OrderByDescending(r => r.Hits)
                 .FirstOrDefault();
-            return best.Hits > 0 ? best.Candidate + reading[length..] : null;
+            return best.Hits > 0 ? best.Candidate + ending : null;
         }
         return null;
     }

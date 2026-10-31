@@ -46,6 +46,10 @@ internal static class CompositionTests
                 "かわ" => [new("かわ", "川")],
                 "すぱいだーまっ" => [new("すぱいだーま", "スパイダーマ"), new("っ", "っ")],
                 "はしを" => [new("はしを", "橋を")],
+                "かくにん" => [new("かくにん", "確認")],
+                "かくてい" => [new("かくてい", "確定")],
+                "かくにんしたら" => [new("かくにんしたら", "確認したら")],
+                "かくていして" => [new("かくていして", "確定して")],
                 // 本物の変換エンジン (Mozc) の苦手なもの: え、 → 得、、がちで → 勝ちで
                 "え、しらん" => [new("え", "得"), new("、", "、"), new("しらん", "知らん")],
                 "えかく" => [new("え", "絵"), new("かく", "描く")],
@@ -3260,6 +3264,60 @@ internal static class CompositionTests
         Assert.Equal("池", rules.Choose("いけ", "公園の"), "公園なら 池");
         Assert.Equal(null, rules.Choose("いけん", "学校の"), "意見 を 行けん にしない");
         Assert.Equal(null, rules.Choose("いけない", "学校で"), "いけない を 行けない にしない");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesDoNotReplacePartOfAnotherWord()
+    {
+        var rules = ContextRules.Load(null);
+        foreach (var surrounding in new[] { "メール", "コード", "メール。" })
+        {
+            foreach (var reading in new[] { "かくにん", "かくてい", "かくにんを", "かくにんしたら", "かくていして", "かくとう", "かくりつ" })
+                Assert.Equal(null, rules.Choose(reading, surrounding), $"{surrounding}: {reading} の途中を 書く にしない");
+        }
+        foreach (var (reading, surrounding) in new[] { ("はしる", "ご飯"), ("かわいい", "財布"), ("かみなり", "神社"), ("いしき", "病院") })
+            Assert.Equal(null, rules.Choose(reading, surrounding), $"{surrounding}: {reading} も語の途中で補正しない");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesKeepParticlesAndInflections()
+    {
+        var rules = ContextRules.Load(null);
+        foreach (var (reading, surrounding, expected) in new[]
+        {
+            ("かく", "メール", "書く"), ("かく", "イラスト", "描く"), ("かくよ", "メール", "書くよ"),
+            ("はしを", "ご飯", "箸を"), ("かわから", "泳ぐ", "川から"), ("おんげーしか", "ACの曲", "音ゲーしか"),
+            ("いきました", "学校に", "行きました"), ("いきませんでした", "学校に", "行きませんでした"),
+            ("かいとうして", "質問", "回答して"), ("しようです", "API", "仕様です"),
+        })
+            Assert.Equal(expected, rules.Choose(reading, surrounding), $"{surrounding}: {reading} の補正は残す");
+        Assert.Equal(null, rules.Choose("いけないよ", "学校で"), "長い規則に手がかりがなくても、短い いけ に戻らない");
+        rules.AddText("かくにん 確認 : メール");
+        Assert.Equal("確認を", rules.Choose("かくにんを", "メール"), "ユーザーの長い規則を優先する");
+        Assert.Equal(null, rules.Choose("かくにんを", "コード"), "長い規則に手がかりがなければ変換エンジンに任せる");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesPreserveKakuninAndKakutei()
+    {
+        // #348 のコメント: メール・コードの文脈でも「確認」「確定」を変換エンジンの結果から壊さない。
+        foreach (var live in new[] { false, true })
+        {
+            foreach (var context in new[] { "メールを", "コードで" })
+            {
+                foreach (var (typed, expected) in new[]
+                {
+                    ("kakuninn", "確認"), ("kakutei", "確定"),
+                    ("kakuninshitara", "確認したら"), ("kakuteishite", "確定して"),
+                })
+                {
+                    var k = new Keyboard(live: live);
+                    k.Host.PrecedingText = context;
+                    k.Type(typed + " \n");
+                    Assert.Equal(expected, k.Host.Document, $"live={live}, {context}: {typed}");
+                }
+            }
+        }
     }
 
     [Test]
