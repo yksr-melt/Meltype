@@ -429,14 +429,17 @@ public sealed class MeltypeSession
         {
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
-        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
-        // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !_sigil.IsActive && _settings().SigilWordsDirect &&
-            _sigil.PassesThrough('/', before))
+        // 文章の入力欄の / や「/ キーで中黒」設定時は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
+        if (!modifier && !_controller.IsComposing && ch is '/' && (settings.SlashAsMiddleDot || !PassesSlash(before)) && !_sigil.IsActive && settings.SigilWordsDirect &&
+            (_sigil.PassesThrough('/', before) || (!Direct && settings.SlashAsMiddleDot && settings.InputStyle != InputStyle.Kana)))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && _sigil.PassesThrough(c, before))
+        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
+        // ただし「/ キーで中黒」が ON の日本語入力時は、先頭の / も中黒 (・) として変換ボックスに入れる。
+        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect &&
+            !(c == '/' && !Direct && settings.SlashAsMiddleDot && settings.InputStyle != InputStyle.Kana && !_sigil.IsActive) &&
+            _sigil.PassesThrough(c, before))
         {
             if (CodeInput) TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);

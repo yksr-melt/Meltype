@@ -908,4 +908,56 @@ internal static class SessionFacadeTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    [Test]
+    public static void SlashAsMiddleDot_WorksAtStartEvenWhenSigilWordsDirectEnabled()
+    {
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { Candidates = CandidateDictionary.Load(null), SlashAsMiddleDot = () => true },
+            () => new Settings { SlashAsMiddleDot = true, SigilWordsDirect = true });
+        var slash = Type(session, "/", before: "")[0];
+        Assert.True(slash.Consumed, "/ キーで中黒が ON なら先頭の / も変換ボックスへ入る");
+        Assert.Equal("・", slash.View?.Text);
+        Assert.Equal("・", Type(session, "\n")[0].Commits.Single().Text);
+
+        // コード欄 (CodeInput = true) かつ直前に記号がある場合 (before = "> ")
+        // MarkSlashAtStart() が働かない環境でも、中黒優先条件によって / が素通しされずに変換ボックスへ入ること
+        var codeSession = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { Candidates = CandidateDictionary.Load(null), SlashAsMiddleDot = () => true },
+            () => new Settings { SlashAsMiddleDot = true, SigilWordsDirect = true })
+        {
+            CodeInput = true,
+        };
+        var codeSlash = Type(codeSession, "/", before: "> ")[0];
+        Assert.True(codeSlash.Consumed, "コード入力欄でも / キーで中黒が ON なら中黒として入る");
+        Assert.Equal("・", codeSlash.View?.Text);
+
+        // 数字を直接入力した後に Backspace で消して空に戻った場合も、状態を引きずらず中黒になること
+        var digitSession = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { Candidates = CandidateDictionary.Load(null), SlashAsMiddleDot = () => true },
+            () => new Settings { SlashAsMiddleDot = true, SigilWordsDirect = true });
+        Type(digitSession, "1", before: "");
+        digitSession.HandleKey(VirtualKeys.Back, '\b', false, false, false, false);
+        var slashAfterDigit = Type(digitSession, "/", before: "")[0];
+        Assert.True(slashAfterDigit.Consumed, "数字を消して空になった後の / も中黒になる");
+        Assert.Equal("・", slashAfterDigit.View?.Text);
+
+        // 前の文字を読めないアプリ (before == null) で数字を消して / を打った場合も中黒になること
+        var nullDigitSession = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { Candidates = CandidateDictionary.Load(null), SlashAsMiddleDot = () => true },
+            () => new Settings { SlashAsMiddleDot = true, SigilWordsDirect = true });
+        Type(nullDigitSession, "1", before: null);
+        nullDigitSession.HandleKey(VirtualKeys.Back, '\b', false, false, false, false);
+        var slashAfterNullDigit = Type(nullDigitSession, "/", before: null)[0];
+        Assert.True(slashAfterNullDigit.Consumed, "before が null でも数字を消した後の / は中黒になる");
+        Assert.Equal("・", slashAfterNullDigit.View?.Text);
+
+        // 直前が数字 (before: "1") であっても、SlashAsMiddleDot が ON なら中黒として表示されること (英語記号扱いされて / に戻らないこと)
+        var preDigitSession = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { Candidates = CandidateDictionary.Load(null), SlashAsMiddleDot = () => true },
+            () => new Settings { SlashAsMiddleDot = true, SigilWordsDirect = true });
+        var slashAfterPreDigit = Type(preDigitSession, "/", before: "1")[0];
+        Assert.True(slashAfterPreDigit.Consumed, "直前が数字でも中黒になる");
+        Assert.Equal("・", slashAfterPreDigit.View?.Text);
+    }
 }

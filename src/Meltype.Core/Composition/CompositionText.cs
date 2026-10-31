@@ -404,6 +404,7 @@ public sealed class CompositionText
         }
         var result = ComputeSegments();
         if (FullWidthParentheses) result = [.. result.Select(s => s.IsEnglish && s.Raw is "(" or ")" ? new CompositionSegment(false, s.Raw == "(" ? "（" : "）", s.Raw) : s)];
+        if (_units is [{ Kana: "・", Raw: "/" }]) result = [.. result.Select(s => s.IsEnglish && s.Raw == "/" ? new CompositionSegment(false, "・", s.Raw) : s)];
         if (LaughterAfterKana) result = SplitLaughter(result);
         _segmentsCache = (key, _detector.Memory, _detector.SpellChecker, result);
         return result;
