@@ -2,9 +2,23 @@
 # Copyright (C) 2026 Yukishiro
 
 # -Ask: Install.cmd から自分で実行したとき。前に Meltype IME の登録を断っていても、もう一度聞く (自動更新では聞かない)
-param([switch]$Ask)
+param([switch]$Ask, [string]$UpdateLog)
 
 $ErrorActionPreference = 'Stop'
+
+# 自動更新では PowerShell のウィンドウを表示しないため、標準出力と失敗理由をファイルに残す。
+# ログの書き込みに失敗しても、インストールそのものは妨げない。
+if ($UpdateLog) {
+    try {
+        $logDirectory = Split-Path -Parent $UpdateLog
+        New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+        Start-Transcript -LiteralPath $UpdateLog -Force -ErrorAction Stop | Out-Null
+    }
+    catch {
+        $UpdateLog = $null
+    }
+}
+
 
 # Meltype のインストール。ビルド済みの app フォルダーを %LOCALAPPDATA%\Programs\Meltype にコピーし、
 # スタートアップとスタートメニューに登録して起動する。管理者権限は不要 (Meltype IME を登録するときだけ UAC で求める)。.NET は app の dotnet フォルダーに同梱しているので、インストール不要。
@@ -41,7 +55,15 @@ function Stop-Meltype {
     Start-Sleep -Milliseconds 300
 }
 
-Stop-Meltype
+# インストールの失敗で Meltype が起動しないままになるのを防ぐ。
+# 更新前の実行ファイルと同じフォルダーを退避しておき、コピーや後処理が失敗したら復元する。
+$backup = Join-Path $env:TEMP ('Meltype-update-backup-' + [guid]::NewGuid().ToString('N'))
+$hadTarget = Test-Path -LiteralPath $target
+if ($hadTarget) {
+    Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force
+}
+try {
+    Stop-Meltype
 
 # 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。
 $oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
@@ -130,3 +152,29 @@ $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 if ($admin) { Start-Process -FilePath explorer.exe -ArgumentList "`"$exe`"" }
 else { Start-Process -FilePath $exe -WorkingDirectory $target }
 Write-Host 'Meltype をインストールして起動しました。画面右下のタスクトレイに「あ」のアイコンが出ます。'
+}
+catch {
+    $errorMessage = $_.Exception.Message
+    Write-Host "インストールに失敗しました: $errorMessage"
+    try {
+        if ($hadTarget -and (Test-Path -LiteralPath $backup)) {
+            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+            Copy-Item -LiteralPath $backup -Destination $target -Recurse -Force
+            Start-Process -FilePath $exe -WorkingDirectory $target
+            Write-Host '更新前の Meltype を復元して起動しました。'
+        }
+    }
+    catch {
+        Write-Host "更新前の Meltype を復元できませんでした: $($_.Exception.Message)"
+        Write-Host "バックアップ: $backup"
+        exit 1
+    }
+    exit 1
+}
+finally {
+    if (Test-Path -LiteralPath $backup) {
+        Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    if ($UpdateLog) { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null }
+}
+
