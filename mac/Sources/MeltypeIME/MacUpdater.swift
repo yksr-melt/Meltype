@@ -100,6 +100,14 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, NSApplicationDelegate, NSM
         retry = nil
     }
 
+    func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
+        // 期限切れによる中止はエラーなしで終了するため、この通知でも状態を戻す。
+        // 次回の更新確認が前回の中止状態で拒否されないようにする。
+        gate.cancel()
+        retry?.invalidate()
+        retry = nil
+    }
+
     private static func currentSourceIsMeltype() -> Bool {
         guard let source = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
               let value = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return false }
