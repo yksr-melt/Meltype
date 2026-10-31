@@ -57,6 +57,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
+    // Zenzai の答えを待った回数と時間の合計 (入力の処理が遅いときに、そのうち Zenzai を待っていた分をログに書く。issue #1209)
+    private static long s_waitCalls;
+    private static long s_waitedMs;
+
+    /// <summary>前に呼んでから、Zenzai の答えを待った回数と時間の合計 (ミリ秒)。呼ぶと 0 に戻す。</summary>
+    public static (long Calls, long Ms) TakeWaitStats() => (Interlocked.Exchange(ref s_waitCalls, 0), Interlocked.Exchange(ref s_waitedMs, 0));
+
     /// <param name="serverPath">llama-server の実行ファイル。</param>
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
     /// <param name="timeoutMs">1 回の変換を待つ時間。</param>
@@ -137,7 +144,10 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var text = answer;
         var unchanged = answer is not null && answer == hiragana;
         if (unchanged) text = null;
-        var slow = Environment.TickCount64 - started >= _timeoutMs;
+        var took = Environment.TickCount64 - started;
+        Interlocked.Increment(ref s_waitCalls);
+        Interlocked.Add(ref s_waitedMs, took);
+        var slow = took >= _timeoutMs;
         lock (_gate)
         {
             if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);

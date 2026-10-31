@@ -136,6 +136,28 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Issue1209_CountsTimeWaitedForZenzai()
+    {
+        // #1209: 入力が止まったときに Zenzai をどれだけ待っていたかをログに書くため、待った回数と時間を数える
+        using var server = new FakeServer { Answer = _ => { Thread.Sleep(50); return "漢字"; } };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        ZenzaiConverter.TakeWaitStats();
+        zenzai.ConvertClauses("かんじ");
+        zenzai.ConvertClauses("かんじを");
+        var (calls, ms) = ZenzaiConverter.TakeWaitStats();
+        Assert.Equal(2L, calls);
+        Assert.True(ms >= 90, $"待った時間: {ms} ms");
+        Assert.Equal((0L, 0L), ZenzaiConverter.TakeWaitStats(), "取ったら 0 に戻す");
+
+        // 関所は、取り出した入力の数を数える
+        var gate = new CaptureGate(() => { });
+        gate.OnKey(new Meltype.Input.KeyEvent(0x41, 0, false, false, false, 0), _ => true);
+        gate.OnKey(new Meltype.Input.KeyEvent(0x42, 0, false, false, false, 0), _ => true);
+        while (gate.TryDequeue(out _)) { }
+        Assert.Equal(2L, gate.Dequeued);
+    }
+
+    [Test]
     public static void SlowServer_PausesZenzaiForAWhile()
     {
         using var server = new FakeServer { Answer = p => { Thread.Sleep(300); return "遅い"; } };

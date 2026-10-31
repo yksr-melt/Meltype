@@ -80,8 +80,16 @@ public sealed class CaptureGate
 
     public bool TryDequeue(out CapturedInput input)
     {
-        lock (_gate) return _queue.TryDequeue(out input);
+        lock (_gate)
+        {
+            if (!_queue.TryDequeue(out input)) return false;
+            Dequeued++;
+            return true;
+        }
     }
+
+    /// <summary>これまでに取り出した入力の数 (入力の処理が遅いときに、何個処理したかをログに書く。issue #1209)。</summary>
+    public long Dequeued { get; private set; }
 
     /// <summary>変換ボックスが空になったら呼ぶ。キューも空なら関所を開けて true を返す。</summary>
     public bool TryRelease()

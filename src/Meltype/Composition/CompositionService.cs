@@ -225,6 +225,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public bool ConverterAvailable => _converter.IsAvailable;
 
+    /// <summary>入力の処理にこれ以上かかったらログに書く (ミリ秒)。</summary>
+    private const int SlowPumpMs = 300;
+
     private void SchedulePump()
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
@@ -232,7 +235,17 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _invoker.BeginInvoke(() =>
         {
             Volatile.Write(ref _pumpScheduled, 0);
+            // 入力の処理に時間がかかったら、処理した入力の数と、Zenzai / Mozc を待った回数・時間をログに書く (issue #1209)。
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            var dequeued = Gate.Dequeued;
+            ZenzaiConverter.TakeWaitStats();
+            _mozc.TakeWaitStats();
             Safely(Controller.Pump);
+            var elapsed = (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            var (calls, waited) = ZenzaiConverter.TakeWaitStats();
+            var (mozcCalls, mozcWaited, busy) = _mozc.TakeWaitStats();
+            if (elapsed >= SlowPumpMs)
+                Diagnostics.Log.Info($"入力の処理に {elapsed} ms かかりました (処理した入力 {Gate.Dequeued - dequeued} 個、Zenzai を {calls} 回・計 {waited} ms、Mozc を {mozcCalls} 回・計 {mozcWaited} ms 待ちました、Mozc 使用中の見送り {busy} 回)");
         });
     }
 
