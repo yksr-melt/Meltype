@@ -10,6 +10,19 @@ import InputMethodKit
 /// Info.plist の InputMethodServerControllerClass に書いた名前で、Input Method Kit が作る。
 @objc(MeltypeInputController)
 final class MeltypeInputController: IMKInputController, ModeServiceTarget {
+    private static let controllersForUpdate = NSHashTable<MeltypeInputController>.weakObjects()
+
+    static func prepareForUpdate() -> Bool {
+        // 非アクティブな入力欄にも未確定文字が残る場合を含め、全クライアントを確認する。
+        var ready = true
+        for controller in controllersForUpdate.allObjects where controller.hasMarkedText {
+            guard let client = controller.client() else { ready = false; continue }
+            controller.commitComposition(client)
+            if controller.hasMarkedText { ready = false }
+        }
+        return ready
+    }
+
     private var session: UnsafeMutableRawPointer?
     private var candidateList: [String] = []
     private var hasMarkedText = false
@@ -35,6 +48,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
         super.init(server: server, delegate: delegate, client: inputClient)
+        Self.controllersForUpdate.add(self)
         session = NativeCore.shared.createSession()
         NativeCore.shared.setDirect(session, directInput)
         NativeCore.shared.setCodeInput(session, codeInput)
@@ -186,6 +200,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         configItem.target = self
         menu.addItem(withTitle: "Meltype のデータフォルダを開く (設定・ユーザー辞書)", action: #selector(openDataFolder(_:)), keyEquivalent: "")
         menu.addItem(withTitle: "不具合の報告・提案… (Mac 版はプレビュー版です)", action: #selector(openReport(_:)), keyEquivalent: "")
+        ModeServices.shared.updateMenu?(menu)
         return menu
     }
 

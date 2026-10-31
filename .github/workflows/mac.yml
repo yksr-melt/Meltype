@@ -15,6 +15,9 @@ on:
       - 'tools/test-native-boundaries.py'
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
+      - 'tools/*appcast*'
+      - 'tools/*mac-updater*'
+      - 'tools/sparkle-public-key.swift'
       - '.github/workflows/mac.yml'
 
 permissions:
@@ -71,6 +74,8 @@ jobs:
           rm "$RUNNER_TEMP/cert.p12"
           echo "MELTYPE_MAC_IDENTITY=$MAC_IDENTITY" >> "$GITHUB_ENV"
       - name: Build
+        env:
+          MELTYPE_SPARKLE_PUBLIC_KEY: ${{ vars.MELTYPE_SPARKLE_PUBLIC_KEY }}
         working-directory: mac
         run: ./build.sh --no-install
       - name: NativeAOT and Swift boundary tests
@@ -78,6 +83,11 @@ jobs:
           python3 tools/test-native-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
           python3 tools/test-mac-boundaries.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
           python3 tools/test-mac-events.py mac/build/Meltype.app/Contents/Frameworks/libMeltypeNative.dylib
+      - name: Update tests
+        run: |
+          swiftc mac/Sources/MeltypeIME/MacUpdatePolicy.swift tools/test-mac-updater.swift -o "$RUNNER_TEMP/test-updater"
+          "$RUNNER_TEMP/test-updater"
+          python3 tools/test-mac-appcast.py
       # 公証 (notarization): 署名したときだけ。秘密 NOTARY_APPLE_ID・NOTARY_TEAM_ID・NOTARY_PASSWORD (App 用パスワード)
       - name: Notarize
         if: env.MELTYPE_MAC_IDENTITY != ''
@@ -95,10 +105,31 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-mac.zip"; else name="Meltype-mac-test-$(date +%Y%m%d-%H%M).zip"; fi
           bash mac/package.sh "$name"
           ls -la dist
+      - name: Signed macOS update feed
+        if: startsWith(github.ref, 'refs/tags/v') && vars.MELTYPE_SPARKLE_PUBLIC_KEY != ''
+        env:
+          MELTYPE_SPARKLE_PRIVATE_KEY: ${{ secrets.MELTYPE_SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 0
+          [[ -n "$MELTYPE_SPARKLE_PRIVATE_KEY" ]] || { echo "Missing update signing key" >&2; exit 1; }
+          key_file="$RUNNER_TEMP/meltype-update-key"
+          trap 'rm -f "$key_file"' EXIT
+          umask 077
+          printf '%s' "$MELTYPE_SPARKLE_PRIVATE_KEY" > "$key_file"
+          version="${GITHUB_REF_NAME#v}"
+          archive="dist/Meltype-${version}-mac-update.zip"
+          ditto -c -k --keepParent mac/build/Meltype.app "$archive"
+          python3 tools/make-mac-appcast.py "$archive" \
+            --key-file "$key_file" --sign-tool mac/.build/artifacts/sparkle/Sparkle/bin/sign_update \
+            --download-url "https://github.com/yksr-melt/Meltype/releases/download/v${version}/Meltype-${version}-mac-update.zip" \
+            --output dist/appcast.xml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-mac
-          path: dist/Meltype-*.zip
+          path: |
+            dist/Meltype-*.zip
+            dist/appcast.xml
           retention-days: 14
       # Homebrew の cask をこのリリースの zip の SHA-256 で作る (#863)。同じリポジトリを tap として使い、Casks/ に更新する。
       - name: Homebrew cask
@@ -160,4 +191,6 @@ jobs:
       - if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
-          files: dist/Meltype-*.zip
+          files: |
+            dist/Meltype-*.zip
+            dist/appcast.xml

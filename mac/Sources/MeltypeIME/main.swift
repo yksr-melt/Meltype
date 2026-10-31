@@ -200,4 +200,6 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
 }
 candidatesWindow = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
+NSApplication.shared.delegate = MacUpdater.shared
+DispatchQueue.main.async { MacUpdater.shared.start() }
 NSApplication.shared.run()
