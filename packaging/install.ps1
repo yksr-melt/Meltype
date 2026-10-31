@@ -167,6 +167,7 @@ catch {
     catch {
         Write-Host "更新前の Meltype を復元できませんでした: $($_.Exception.Message)"
         Write-Host "バックアップ: $backup"
+        $backup = $null
         exit 1
     }
     exit 1
