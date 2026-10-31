@@ -218,6 +218,8 @@ public sealed class UserDictionary
             string? matched = null;
             for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
             {
+                // 拗音・小さい母音 (じょ・ふぁ) の途中では切らない (いしょくじょうたい が しょくじ|ょうたい で い食事ょうたい になっていた)
+                if (i + length < kana.Length && IsSmallKana(kana[i + length])) continue;
                 if (_byReading.ContainsKey(kana.Substring(i, length)))
                 {
                     matched = kana.Substring(i, length);
@@ -242,6 +244,9 @@ public sealed class UserDictionary
         if (plain.Length > 0) pieces.Add((plain.ToString(), null));
         return found ? pieces : null;
     }
+
+    /// <summary>前の文字と 1 つの音になる小さいかな (ゃ ゅ ょ ぁ ぃ ぅ ぇ ぉ ゎ)。</summary>
+    private static bool IsSmallKana(char c) => c is 'ゃ' or 'ゅ' or 'ょ' or 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'ゎ';
 
     private void Changed()
     {
