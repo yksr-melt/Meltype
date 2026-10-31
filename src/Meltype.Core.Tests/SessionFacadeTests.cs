@@ -778,6 +778,29 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void MacSlash_FollowsTheLanguageAfterIt()
+    {
+        foreach (var (input, expected) in new[] {
+            ("/exit", "/exit"), ("/review", "/review"),
+            ("/kyou", "・きょう"), ("kyou/ashita", "きょう・あした"),
+            ("kyou/exit", "きょう/exit"), ("exit/kyou", "exit/きょう"),
+            ("https://example.com", "https://example.com"), ("3/4", "3/4") })
+        {
+            var session = new MeltypeSession(CompositionDetector.CreateDefault(), new CompositionTests.FakeConverter(),
+                new CompositionOptions { ContextualSlash = true }, () => new Settings());
+            var results = Type(session, input + "\n");
+            var output = "";
+            for (var i = 0; i < results.Count; i++)
+            {
+                foreach (var edit in results[i].Commits)
+                    output = output[..Math.Max(0, output.Length - edit.DeleteBefore)] + edit.Text;
+                if (!results[i].Consumed) output += (input + "\n")[i];
+            }
+            Assert.Equal(expected, output, input);
+        }
+    }
+
+    [Test]
     public static void SlashAtStart_IsMiddleDotInText()
     {
         // 文章の入力欄の先頭の / は ・。Space で / にして名前を打つと、/ を確定して名前はアプリへ。

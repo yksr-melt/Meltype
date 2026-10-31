@@ -222,6 +222,9 @@ public sealed record CompositionOptions
     /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。issue #1008)。</summary>
     public Func<bool> ZSymbols { get; init; } = () => true;
 
+    /// <summary>/ の直後が英語なら /、日本語なら ・ にする (Mac の通常入力)。</summary>
+    public bool ContextualSlash { get; init; }
+
     /// <summary>確定するときに、日本語と英単語の間に半角スペースを入れるか (設定)。</summary>
     public Func<bool> SpaceAroundEnglish { get; init; } = () => false;
 
@@ -415,6 +418,7 @@ public sealed class CompositionController
         _text.CorrectTypos = () => _options.CorrectTypos();
         _text.SlashAsMiddleDot = () => _options.SlashAsMiddleDot();
         _text.ZSymbols = () => _options.ZSymbols();
+        _text.ContextualSlash = _options.ContextualSlash;
         _text.SlashAtStart = () => Interlocked.Exchange(ref _slashAtStart, 0) == 1;
     }
 

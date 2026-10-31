@@ -1,4 +1,9 @@
 hello	hello
+/exit	/exit
+/review	/review
+/hai	・はい
+hai/hai	はい・はい
+hai/exit	はい/exit
 google	google
 github	github
 meeting	meeting
