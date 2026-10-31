@@ -16,6 +16,8 @@ $data = Join-Path $env:LOCALAPPDATA 'Meltype'
 $updateDirectory = Join-Path $data 'update'
 $log = Join-Path $updateDirectory 'install.log'
 $config = Join-Path $data 'config.json'
+# GitHub Actions の利用者名は 8 文字を超えるので、8.3 形式の名前がある
+$shortName = $env:USERNAME.Substring(0, 6) + '~1'
 $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype'
 $innoKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype_is1'
 $shortcuts = 'Startup', 'Programs' | ForEach-Object { Join-Path ([Environment]::GetFolderPath($_)) 'Meltype.lnk' }
@@ -94,7 +96,7 @@ function Get-KeyValue([string]$Key, [string]$Name) { (Get-ItemProperty -LiteralP
 function Get-Log { [IO.File]::ReadAllText($log) }
 function Assert-LogProtected {
     $text = Get-Log
-    foreach ($value in $env:USERNAME, $env:COMPUTERNAME, $env:LOCALAPPDATA) {
+    foreach ($value in $env:USERNAME, $shortName, $env:COMPUTERNAME, $env:LOCALAPPDATA) {
         Assert-True ($text -notmatch [regex]::Escape($value)) "ログに個人情報が残った: $value"
     }
 }
@@ -134,13 +136,21 @@ try {
     $code = Invoke-Script (Join-Path $package 'install.ps1')
     Assert-True ($code -eq 1) "Meltype.exe が無い更新の終了コード: $code"
     Assert-True ((Get-Log) -match 'result=failed reason=missing-exe') 'ログに失敗の理由が無い'
+    Assert-True (@(Get-Process Meltype).Count -eq 1) '動いている Meltype を二重に起動した'
+    Assert-True ((Get-Log) -notmatch 'fallback=') '動いているのに起動を試みた'
     Assert-LogProtected
+    # 起動時の更新では、前の版はもう終わっている
+    Get-Process Meltype | Stop-Process -Force
+    $code = Invoke-Script (Join-Path $package 'install.ps1')
+    Assert-True ($code -eq 1) "Meltype.exe が無い起動時の更新の終了コード: $code"
+    $null = Wait-Meltype
+    Assert-True ((Get-Log) -match 'fallback=started') 'ログに起動の結果が無い'
     Remove-Item -LiteralPath $log
     Write-Host 'PASS: 配布物に Meltype.exe が無い'
 
     # 前の版の Meltype: -UpdateLog を渡さない。ダウンロード先のフォルダーから実行する。
     # 前回の記録と、新しい版の Updater が書いた行は残し、前回が途中で止まって残った見出しは伏せる
-    [IO.File]::AppendAllText($log, "requested version=3.0.0`r`nMachine: $env:COMPUTERNAME`r`n")
+    [IO.File]::AppendAllText($log, "requested version=3.0.0`r`nMachine: $env:COMPUTERNAME`r`n${env:USERNAME}の設定と $shortName のフォルダー`r`n")
     $code = Invoke-Hidden (Join-Path (New-Package '3.0.0' (Join-Path $updateDirectory '3.0.0')) 'install.ps1')
     Assert-True ($code -eq 0) "前の版からの更新の終了コード: $code"
     Assert-True ((Get-InstalledVersion) -eq '3.0.0') '前の版から更新できていない'
@@ -197,6 +207,8 @@ try {
     Assert-True (Test-Path -LiteralPath (Join-Path $backups[0].FullName 'Meltype.exe')) 'バックアップに Meltype.exe が無い'
     Assert-True ((Get-Log) -match [regex]::Escape($backups[0].Name)) 'ログにバックアップの場所が無い'
     Assert-True ((Get-Log) -match 'result=rollback-failed') 'ログに復元の失敗が無い'
+    $null = Wait-Meltype
+    Assert-True ((Get-Log) -match 'fallback=started') 'ログに起動の結果が無い'
     Assert-LogProtected
     Remove-Item -LiteralPath $backups[0].FullName -Recurse -Force
     Remove-Item -LiteralPath $kept, $log

@@ -25,8 +25,12 @@ function Hide-Personal([string]$Text) {
     foreach ($path in $paths) { $Text = $Text -ireplace [regex]::Escape($path.Value), "%$($path.Name)%" }
     foreach ($name in 'USERDOMAIN', 'USERNAME', 'COMPUTERNAME') {
         $value = [Environment]::GetEnvironmentVariable($name)
-        if ($value) { $Text = $Text -ireplace "(?<![\p{L}\p{N}_])$([regex]::Escape($value))(?![\p{L}\p{N}_])", "%$name%" }
+        # 日本語が直接続くことがあるので、英数字の語の一部だけを避ける
+        if ($value) { $Text = $Text -ireplace "(?<![A-Za-z0-9_])$([regex]::Escape($value))(?![A-Za-z0-9_])", "%$name%" }
     }
+    # 8 文字を超える名前の 8.3 形式 (ABCDEF~1) は、上の値と一致しない
+    $user = ([string]$env:USERNAME) -replace '[ .]', ''
+    if ($user.Length -gt 8) { $Text = $Text -ireplace "$([regex]::Escape($user.Substring(0, 6)))~\d+", '%USERNAME%' }
     $Text
 }
 
@@ -91,11 +95,32 @@ function Write-Environment {
 }
 Write-Environment
 
+function Start-InstalledMeltype {
+    # 管理者として実行していても、Meltype はふつうの権限で起動する (エクスプローラーから起動すると、ふつうの権限になる)。
+    # 管理者として動かすと、次のインストール・アンインストールでも管理者権限が必要になってしまう。
+    if ($admin) { Start-Process -FilePath explorer.exe -ArgumentList "`"$exe`"" }
+    else { Start-Process -FilePath $exe -WorkingDirectory $target }
+}
+
+# 更新の失敗で Meltype が止まったままだと、次のサインインまで入力できない。動いていなければ、残っている版を起動する。
+function Start-RemainingMeltype {
+    if ((Get-Process Meltype -ErrorAction SilentlyContinue) -or -not (Test-Path -LiteralPath $exe)) { return }
+    try {
+        Start-InstalledMeltype
+        Write-Mark 'fallback=started'
+    }
+    catch {
+        Write-Mark "fallback=failed type=$($_.Exception.GetType().FullName)"
+    }
+}
+
 # zip の中身がそろっているか (展開の途中で止まった・app フォルダーを差し替えた などで Meltype.exe が無いと、起動のところで分かりにくいエラーになる)
 if (-not (Test-Path -LiteralPath (Join-Path $source 'Meltype.exe'))) {
     Write-Host "インストールするファイルが見つかりません: $(Join-Path $source 'Meltype.exe')"
     Write-Host 'zip をすべて展開し直してから、展開したフォルダーの Install.cmd を実行してください。'
     Write-Mark 'result=failed reason=missing-exe'
+    # 起動時の更新では、前の版はもう終わっている
+    if ($UpdateLog) { Start-RemainingMeltype }
     Close-UpdateLog
     exit 1
 }
@@ -221,11 +246,8 @@ foreach ($folderName in 'Startup', 'Programs') {
     $shortcut.Save()
 }
 
-# 管理者として実行していても、Meltype はふつうの権限で起動する (エクスプローラーから起動すると、ふつうの権限になる)。
-# 管理者として動かすと、次のインストール・アンインストールでも管理者権限が必要になってしまう。
 Write-Mark 'phase=launch'
-if ($admin) { Start-Process -FilePath explorer.exe -ArgumentList "`"$exe`"" }
-else { Start-Process -FilePath $exe -WorkingDirectory $target }
+Start-InstalledMeltype
 Write-Host 'Meltype をインストールして起動しました。画面右下のタスクトレイに「あ」のアイコンが出ます。'
 Write-Mark 'result=ok'
 }
@@ -238,17 +260,21 @@ catch {
             # 復元先を削除してからコピーすると、復元失敗時に旧版まで失う。
             New-Item -ItemType Directory -Path $target -Force | Out-Null
             Copy-Item -Path (Join-Path $backup '*') -Destination $target -Recurse -Force -ErrorAction Stop
-            Start-Process -FilePath $exe -WorkingDirectory $target
+            Start-InstalledMeltype
             Write-Host '更新前の Meltype を復元して起動しました。'
             Write-Mark 'result=rolled-back'
         }
-        else { Write-Mark 'result=failed' }
+        else {
+            Write-Mark 'result=failed'
+            if ($hadTarget) { Start-RemainingMeltype }
+        }
     }
     catch {
         Write-Host "更新前の Meltype を復元できませんでした: $($_.Exception.Message)"
         Write-Host "バックアップ: $backup"
         Write-Mark 'result=rollback-failed'
         $preserveBackup = $true
+        Start-RemainingMeltype
         exit 1
     }
     exit 1
