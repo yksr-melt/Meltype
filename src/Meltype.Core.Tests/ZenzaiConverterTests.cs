@@ -266,7 +266,7 @@ internal static class ZenzaiConverterTests
         Assert.True(!learned.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "学習で変わった文節には出さない: " + learned.Host.View.Hint);
         Assert.True(learned.Host.View.ContextHint is null, "学習で置き換わった文節の Zenzai 表示は残さない");
 
-        using var holder = new ZenzaiHolder((s, m) => new ZenzaiConverter(server.Endpoint, timeoutMs: 5000));
+        using var holder = new ZenzaiHolder((s, m, _) => new ZenzaiConverter(server.Endpoint, timeoutMs: 5000));
         Assert.True(holder.Status is null, "OFF・まだ使っていなければ出さない");
         holder.Get("server", "model");
         Assert.Equal("使えます", holder.Status ?? "");

@@ -9,7 +9,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Meltype.Core</AssemblyName>
     <RootNamespace>Meltype</RootNamespace>
-    <Version>1.4.1-pre.1</Version>
+    <Version>1.4.1-pre.2</Version>
     <Product>Meltype</Product>
     <Authors>Yukishiro</Authors>
     <Copyright>Copyright (C) 2026 雪代 / Yukishiro. GPL-3.0-or-later</Copyright>

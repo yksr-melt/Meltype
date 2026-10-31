@@ -302,8 +302,8 @@ internal sealed class CompositionWindow : PopupForm
         {
             for (var i = 0; i < view.Candidates.Count; i++)
             {
-                // 英訳の候補は、右に「英訳」と出す分だけ広くする
-                var note = view.Notes?.ElementAtOrDefault(i) is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
+                // 候補の右に注記を出す分だけ広くする
+                var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
                 width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {view.Candidates[i]}", _candidateFont).Width + 28 + note);
             }
             height += Math.Min(view.Candidates.Count, PageSize) * (_candidateFont.Height + 4) + 6;
@@ -399,9 +399,9 @@ internal sealed class CompositionWindow : PopupForm
                 DrawText(g, $"{i - first + 1}  {view.Candidates[i]}", _candidateFont, new Point(12, y),
                     i == view.SelectedIndex ? _palette.Text : _palette.Candidate,
                     i == view.SelectedIndex ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
-                if (view.Notes?.ElementAtOrDefault(i) is { } note)
+                if (view.Notes?[i].ToDisplayText() is { } note)
                 {
-                    // 英訳の候補: 右端に小さく「英訳」
+                    // 候補の注記を右端に小さく出す
                     var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
                     TextRenderer.DrawText(g, note, _hintFont, new Point(Width - noteWidth - 10, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
                 }

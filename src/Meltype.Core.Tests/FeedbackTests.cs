@@ -917,8 +917,8 @@ internal static class LanguageLearningTests
         var view = k.Host.View!;
         Assert.True(view.Converting, "変換中");
         var notes = view.Notes ?? [];
-        Assert.Equal("半角", notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("@")), string.Join(" ", view.Candidates));
-        Assert.Equal("全角", notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("＠")), string.Join(" ", view.Candidates));
+        Assert.Equal(CandidateNote.HalfWidth, notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("@")), string.Join(" ", view.Candidates));
+        Assert.Equal(CandidateNote.FullWidth, notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("＠")), string.Join(" ", view.Candidates));
     }
 
   [Test]
