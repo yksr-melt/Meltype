@@ -43,6 +43,10 @@ internal static class Program
                     Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
                 return 0;
+            case "--related-signature":
+                // --related-signature 入力.tsv 出力.jsonl: 関連 Issue 検知の試作用に、打ったものの判定理由を出す (issue #1382。tools/related-issues)
+                RelatedIssueSignature.Run(args[1], args[2]);
+                return 0;
             case "--eval-json":
                 Checks.EvalJson(args[1]);
                 return 0;
