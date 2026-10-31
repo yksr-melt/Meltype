@@ -908,4 +908,23 @@ internal static class SessionFacadeTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    [Test]
+    public static void SigilWord_ResetsWhenDeletedOrCaretMoved()
+    {
+        // 記号 (@ やコード欄の /) を打ったあとに BackSpace や矢印・クリックが passed 通知で届いたとき、または before から記号が消えたときは日本語入力に戻る。
+        var session = Create();
+        Assert.True(!Type(session, "@", before: "")[0].Consumed, "先頭の @ は素通し");
+        Assert.True(!Type(session, "h", before: "@")[0].Consumed, "名前の続きは素通し");
+        // 複数回 BackSpace を押して入力欄が空になった場合 (最後の BackSpace 1 回分しか届かなくても before が空に戻れば解除)
+        session.CaretMoved(VirtualKeys.Back, false);
+        Assert.Equal("か", Type(session, "ka", before: "")[^1].View?.Text);
+
+        // キャレット移動 (passedVk == 0: クリックやフォーカス移動) でも解除される
+        session = Create();
+        Assert.True(!Type(session, "@", before: "")[0].Consumed, "先頭の @ は素通し");
+        session.CaretMoved(0, false);
+        // before が null (直前テキストが取得できない環境) でも _sigil が解除されて日本語入力に戻ること
+        Assert.Equal("か", Type(session, "ka", before: null)[^1].View?.Text);
+    }
 }

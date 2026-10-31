@@ -438,6 +438,7 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
     ResumeOrCommit(nullptr);
     directEnglishWord_ = false;
     caretMoved_ = true;
+    RememberPassed(0);
     ForgetSecretField();
     if (candidates_) candidates_->Hide();
     AdviseTextEditSink(focus);
@@ -595,7 +596,10 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEdi
     if (!changed) return S_OK;
     if (composition_ == nullptr || context != compositionContext_) {
         // 変換していないとき (変換中の文字が別の入力欄に残っているときも) に、クリックなどでキャレットが動いた: 前に確定した語を確定し直さない
-        if (((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0) directEnglishWord_ = false;
+        if (((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0) {
+            directEnglishWord_ = false;
+            RememberPassed(0);
+        }
         caretMoved_ = true;
         return S_OK;
     }

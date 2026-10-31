@@ -374,6 +374,8 @@ public sealed class MeltypeSession
     /// </summary>
     public void CaretMoved(int passedVk, bool control)
     {
+        if (control || passedVk == 0) _sigil.Lose();
+        else _sigil.OnKey(passedVk, null);
         if (!_codeJapanese) return;
         var moved = control || passedVk is VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
         if (!moved) return;
