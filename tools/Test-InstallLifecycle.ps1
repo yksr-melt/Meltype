@@ -63,6 +63,21 @@ function Invoke-Script([string]$Script, [string[]]$Arguments = @()) {
     return $process.ExitCode
 }
 
+# Updater.Apply と同じ起動のしかた (ウィンドウが無く、標準出力もつながっていない)
+function Invoke-Hidden([string]$Script) {
+    $info = New-Object Diagnostics.ProcessStartInfo $powershell
+    $info.Arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$Script`""
+    $info.UseShellExecute = $false
+    $info.CreateNoWindow = $true
+    $info.WorkingDirectory = Split-Path -Parent $Script
+    $process = [Diagnostics.Process]::Start($info)
+    if (-not $process.WaitForExit(120000)) {
+        Stop-Process -Id $process.Id -Force
+        throw "$Script が 2 分で終わりませんでした。"
+    }
+    return $process.ExitCode
+}
+
 function Wait-Meltype {
     for ($i = 0; $i -lt 300; $i++) {
         $process = Get-Process Meltype -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | Select-Object -First 1
@@ -77,6 +92,12 @@ function Get-Backups { @(Get-ChildItem -LiteralPath $env:TEMP -Directory -Filter
 function Get-KeyValue([string]$Key, [string]$Name) { (Get-ItemProperty -LiteralPath $Key).$Name }
 # Transcript の文字コードは BOM で判定させる
 function Get-Log { [IO.File]::ReadAllText($log) }
+function Assert-LogProtected {
+    $text = Get-Log
+    foreach ($value in $env:USERNAME, $env:COMPUTERNAME, $env:LOCALAPPDATA) {
+        Assert-True ($text -notmatch [regex]::Escape($value)) "ログに個人情報が残った: $value"
+    }
+}
 
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 try {
@@ -101,16 +122,36 @@ try {
     Assert-True (Test-Path -LiteralPath $config) '更新で設定が消えた'
     Assert-True ((Get-KeyValue $uninstallKey 'DisplayVersion') -eq '2.0.0') '「設定 → アプリ」の版が更新されていない'
     Assert-True ((Get-Log) -match 'インストールして起動しました') '更新のログに完了が記録されていない'
+    Assert-True ((Get-Log) -match 'via=arg') 'ログに起動のされ方が無い'
+    Assert-LogProtected
     Assert-True ((Get-Backups).Count -eq 0) '更新のあとにバックアップが残った'
     Remove-Item -LiteralPath $log
     Write-Host 'PASS: 更新 (-UpdateLog あり)'
 
-    # 前の版の Meltype: -UpdateLog を渡さない。ダウンロード先のフォルダーから実行する
-    $code = Invoke-Script (Join-Path (New-Package '3.0.0' (Join-Path $updateDirectory '3.0.0')) 'install.ps1')
+    # 展開が途中で止まった: 開始の前に終わるので、ここでも伏せて閉じる
+    $package = New-Package '2.5.0' (Join-Path $updateDirectory '2.5.0')
+    Remove-Item -LiteralPath (Join-Path $package 'app\Meltype.exe')
+    $code = Invoke-Script (Join-Path $package 'install.ps1')
+    Assert-True ($code -eq 1) "Meltype.exe が無い更新の終了コード: $code"
+    Assert-True ((Get-Log) -match 'result=failed reason=missing-exe') 'ログに失敗の理由が無い'
+    Assert-LogProtected
+    Remove-Item -LiteralPath $log
+    Write-Host 'PASS: 配布物に Meltype.exe が無い'
+
+    # 前の版の Meltype: -UpdateLog を渡さない。ダウンロード先のフォルダーから実行する。
+    # 前回の記録と、新しい版の Updater が書いた行は残し、前回が途中で止まって残った見出しは伏せる
+    [IO.File]::AppendAllText($log, "requested version=3.0.0`r`nMachine: $env:COMPUTERNAME`r`n")
+    $code = Invoke-Hidden (Join-Path (New-Package '3.0.0' (Join-Path $updateDirectory '3.0.0')) 'install.ps1')
     Assert-True ($code -eq 0) "前の版からの更新の終了コード: $code"
     Assert-True ((Get-InstalledVersion) -eq '3.0.0') '前の版から更新できていない'
     $null = Wait-Meltype
     Assert-True (Test-Path -LiteralPath $log) '-UpdateLog なしの更新でログができなかった'
+    $text = Get-Log
+    Assert-True ($text -match 'requested version=3\.0\.0') '前の記録が消えた'
+    foreach ($mark in 'start run=', 'via=folder', 'new=3.0.0', 'old=2.0.0', 'env os=', 'phase=copy', 'phase=launch', 'result=ok', 'インストールして起動しました') {
+        Assert-True ($text.Contains($mark)) "ログに無い: $mark"
+    }
+    Assert-LogProtected
     Remove-Item -LiteralPath $log
     Write-Host 'PASS: 更新 (-UpdateLog なし)'
 
@@ -120,6 +161,7 @@ try {
     $locked = Join-Path $package 'app\zz-locked.bin'
     Set-Content -LiteralPath $locked -Value 'locked'
     $before = Wait-Meltype
+    [IO.File]::WriteAllBytes($log, (New-Object byte[] (1MB + 1)))
     $lock = [IO.File]::Open($locked, 'Open', 'Read', 'None')
     try { $code = Invoke-Script (Join-Path $package 'install.ps1') }
     finally { $lock.Dispose() }
@@ -131,7 +173,14 @@ try {
     $text = Get-Log
     Assert-True ($text -match 'インストールに失敗しました') 'ログに失敗の理由が無い'
     Assert-True ($text -match '復元して起動しました') 'ログに復元の結果が無い'
-    Remove-Item -LiteralPath $log
+    foreach ($mark in 'phase=copy', 'error type=', 'hresult=0x', 'line=', 'result=rolled-back') {
+        Assert-True ($text.Contains($mark)) "ログに無い: $mark"
+    }
+    Assert-LogProtected
+    $oldLog = Join-Path $updateDirectory 'install.old.log'
+    Assert-True (Test-Path -LiteralPath $oldLog) '大きくなったログが .old に移っていない'
+    Assert-True ((Get-Item -LiteralPath $log).Length -lt 1MB) 'ログが小さくなっていない'
+    Remove-Item -LiteralPath $log, $oldLog
     Write-Host 'PASS: 更新の失敗で旧版を復元する'
 
     # 読み取りだけ許すと、退避はできて、上書きは更新でも復元でも失敗する
@@ -147,6 +196,8 @@ try {
     Assert-True ($backups.Count -eq 1) "バックアップが残っていない: $($backups.Count)"
     Assert-True (Test-Path -LiteralPath (Join-Path $backups[0].FullName 'Meltype.exe')) 'バックアップに Meltype.exe が無い'
     Assert-True ((Get-Log) -match [regex]::Escape($backups[0].Name)) 'ログにバックアップの場所が無い'
+    Assert-True ((Get-Log) -match 'result=rollback-failed') 'ログに復元の失敗が無い'
+    Assert-LogProtected
     Remove-Item -LiteralPath $backups[0].FullName -Recurse -Force
     Remove-Item -LiteralPath $kept, $log
     Write-Host 'PASS: 復元の失敗でバックアップを残す'
