@@ -49,7 +49,7 @@ function Stop-Meltype {
         catch {
             Write-Host 'Meltype を終了できませんでした (管理者として動いているのかもしれません)。'
             Write-Host 'タスクトレイの Meltype のアイコンを右クリックして「終了」を選んでから、もう一度実行してください。'
-            exit 1
+            throw "Meltype の終了に失敗しました: $($_.Exception.Message)"
         }
     }
     Start-Sleep -Milliseconds 300
@@ -59,11 +59,12 @@ function Stop-Meltype {
 # 更新前の実行ファイルと同じフォルダーを退避しておき、コピーや後処理が失敗したら復元する。
 $backup = Join-Path $env:TEMP ('Meltype-update-backup-' + [guid]::NewGuid().ToString('N'))
 $hadTarget = Test-Path -LiteralPath $target
-if ($hadTarget) {
-    Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force
-}
 try {
     Stop-Meltype
+    # 実行中の DLL / EXE を退避しない。終了後にバックアップする。
+    if ($hadTarget) {
+        Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force -ErrorAction Stop
+    }
 
 # 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。
 $oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
@@ -80,7 +81,7 @@ if (-not (Test-Path -LiteralPath $exe)) {
     Write-Host 'Windows セキュリティ →「ウイルスと脅威の防止」→「保護の更新」で定義を更新し、公式の ZIP を再ダウンロードして再検査してください。'
     Write-Host 'Windows セキュリティ →「ウイルスと脅威の防止」→「保護の履歴」で検出名を確認してください。誤検知かどうかは、この状態だけでは判断できません。'
     Write-Host '保護を無効にしたり「許可」に変更したりせず、版と検出名を https://github.com/yksr-melt/Meltype/issues に報告してください (個人名やパスは隠してください)。'
-    exit 1
+    throw "コピーした Meltype.exe が見つかりません: $exe"
 }
 
 # インターネットから落とした印 (Zone.Identifier) はコピーにも付いてくるので外す (起動時の SmartScreen の確認を減らす)
@@ -158,8 +159,9 @@ catch {
     Write-Host "インストールに失敗しました: $errorMessage"
     try {
         if ($hadTarget -and (Test-Path -LiteralPath $backup)) {
-            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
-            Copy-Item -LiteralPath $backup -Destination $target -Recurse -Force
+            # 復元先を削除してからコピーすると、復元失敗時に旧版まで失う。
+            New-Item -ItemType Directory -Path $target -Force | Out-Null
+            Copy-Item -Path (Join-Path $backup '*') -Destination $target -Recurse -Force -ErrorAction Stop
             Start-Process -FilePath $exe -WorkingDirectory $target
             Write-Host '更新前の Meltype を復元して起動しました。'
         }
@@ -167,13 +169,13 @@ catch {
     catch {
         Write-Host "更新前の Meltype を復元できませんでした: $($_.Exception.Message)"
         Write-Host "バックアップ: $backup"
-        $backup = $null
+        $preserveBackup = $true
         exit 1
     }
     exit 1
 }
 finally {
-    if (Test-Path -LiteralPath $backup) {
+    if (-not $preserveBackup -and (Test-Path -LiteralPath $backup)) {
         Remove-Item -LiteralPath $backup -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($UpdateLog) { Stop-Transcript -ErrorAction SilentlyContinue | Out-Null }
