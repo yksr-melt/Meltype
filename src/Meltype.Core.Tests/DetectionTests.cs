@@ -298,6 +298,73 @@ internal static class DetectionTests
     }
 
     [Test]
+    public static void CustomRomajiTable_PrefixWaitsForLongerSpelling()
+    {
+        // issue #979: 短い定義とそれを先頭に含む長い定義があるとき、打ちかけは ん・っ・組み込みの綴りで読まずに続きを待つ
+        var table = RomajiDetector.ParseCustomTable("ry\tらい\nryp\tりょう\nngh\tにゅう\n");
+        var romaji = new RomajiDetector(table);
+        // 完成した入力はファイルの行順ではなく最長一致
+        Assert.Equal("らい", romaji.ConvertLenient("ry", final: true));
+        Assert.Equal("りょう", romaji.ConvertLenient("ryp", final: true));
+        Assert.Equal("らいt", romaji.ConvertLenient("ryt", final: true));
+        Assert.Equal("にゅう", romaji.ConvertLenient("ngh", final: true));
+        // 打ちかけは続きを待つ (以前は ng → んg、kk → っk と読んでいた)
+        var mid = romaji.AnalyzeFragment("ng");
+        Assert.True(mid.IsValid && mid.Tokens.Count == 0 && mid.Partial == "ng", "ng は にゅう の打ちかけとして続きを待つ");
+        Assert.Equal("ng", romaji.ConvertLenient("ng", final: false));
+        var kkq = new RomajiDetector(RomajiDetector.ParseCustomTable("kkq\tきゅん\n"));
+        Assert.Equal("kk", kkq.ConvertLenient("kk", final: false));
+        Assert.Equal("きゅん", kkq.ConvertLenient("kkq", final: true));
+        // 前置詞から外れたら今までどおり組み込みの読みに戻る
+        Assert.Equal("んが", romaji.AnalyzeFragment("nga").Kana);
+        // 確定のときは打ちかけを待たずに組み込みの読みに戻す (ng → んg、kk → っk)
+        Assert.Equal("んg", romaji.ConvertLenient("ng", final: true));
+        Assert.Equal("っk", kkq.ConvertLenient("kk", final: true));
+    }
+
+    [Test]
+    public static void CustomRomajiTable_StrictStartDoesNotWait()
+    {
+        // issue #979 レビュー: 語頭の ん・っ をはじく確認 (strictStart) は、表の打ちかけを待つ処理より先。
+        // 表に ngh・kkq を登録していても、語頭の ng・kk はローマ字として正しいと判定されない
+        // (英字かローマ字かの判定に使うので、nginx のような英語の語頭で今までと結果が変わらない)。
+        var romaji = new RomajiDetector(RomajiDetector.ParseCustomTable("ngh\tにゅう\nkkq\tきゅん\n"));
+        Assert.True(!romaji.Analyze("ng").IsValid, "語頭の ng は待たずに語頭の「ん」としてはじく");
+        Assert.True(!romaji.Analyze("kk").IsValid, "語頭の kk は待たずに語頭の「っ」としてはじく");
+        // 語中や打ちかけの表示 (strictStart ではない判定) では、これまでどおり続きを待つ
+        Assert.True(romaji.AnalyzeFragment("ng").IsValid, "打ちかけの ng は にゅう の打ちかけとして待つ");
+        var mid = romaji.AnalyzeFragment("ang");
+        Assert.True(mid.IsValid && mid.Partial == "ng", "語中の ng も続きを待つ");
+    }
+
+    [Test]
+    public static void CustomRomajiTable_CommitKeepsUnreadLetters()
+    {
+        // issue #979 レビュー: 確定の再解析で読めなかった文字を捨てない。
+        // 表の打ちかけのまま確定すると、組み込みの読み (ん・っ) の後ろに未処理の文字が残る
+        var romaji = new RomajiDetector(RomajiDetector.ParseCustomTable("ngha\tにゅう\nkkqa\tきゅん\n"));
+        Assert.Equal("んgh", romaji.ConvertLenient("ngh", final: true));
+        Assert.Equal("っkq", romaji.ConvertLenient("kkq", final: true));
+        // 打ちかけの表示では、これまでどおり表の続きを待つ
+        Assert.Equal("ngh", romaji.ConvertLenient("ngh", final: false));
+        Assert.Equal("kkq", romaji.ConvertLenient("kkq", final: false));
+    }
+
+    [Test]
+    public static void CustomRomajiTable_CompleteBuiltinSpellingDoesNotWait()
+    {
+        // issue #979 レビュー: 組み込みの綴りとして完成している語 (ka など) は、それを先頭に含む
+        // ユーザーの綴り (kaa) があっても待たない。待つのは組み込みの読みが ん・っ になる場合だけ。
+        var romaji = new RomajiDetector(RomajiDetector.ParseCustomTable("kaa\tかあ\n"));
+        Assert.Equal("か", romaji.ConvertLenient("ka", final: false));
+        Assert.Equal("か", romaji.ConvertLenient("ka", final: true));
+        // 完成したユーザーの綴りはこれまでどおり読める
+        Assert.Equal("かあ", romaji.ConvertLenient("kaa", final: true));
+        var mid = romaji.AnalyzeFragment("ka");
+        Assert.True(mid.IsValid && mid.Kana == "か" && mid.Partial.Length == 0, "ka は か と読む (かあ の打ちかけとして待たない)");
+    }
+
+    [Test]
     public static void CustomRomajiTable_AzikSampleKeepsCommonSpellings()
     {
         // 同梱の AZIK の例 (docs/romaji-azik-sample.txt) を読んでも、ふつうのローマ字の語は今までどおり読める (AZIK では sh は すう なので し は si)
