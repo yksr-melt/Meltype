@@ -5,7 +5,7 @@ using Meltype.Config;
 
 namespace Meltype.Input;
 
-public enum ShortcutValidationError { None, Invalid, Duplicate, Conversion, FunctionKey, ConvertKeys, UnmodifiedKey, ControlKeyBinding }
+public enum ShortcutValidationError { None, Invalid, Duplicate, Conversion, FunctionKey, ConvertKeys, UnmodifiedKey, ControlKeyBinding, ShiftSpaceHalfWidth }
 
 /// <summary>設定画面と設定の読み込みで共通に使う割り当て判定。</summary>
 public static class ToggleShortcutValidator
@@ -34,9 +34,17 @@ public static class ToggleShortcutValidator
 
         // 通常入力を奪わないよう、Ctrl・Alt・Win を伴わないキーは IME 用キーだけに絞る。
         // Shift だけの英字・記号も文字入力に使うので、単独押しと同じ規則にする。
-        if ((b.Modifiers & ~ShortcutModifiers.Shift) == ShortcutModifiers.None &&
+        // Shift+Space だけは例外にする (#1033)。日本語入力中の Shift+Space は、全角スペースではなく
+        // 日本語 / 英数の切り替えに使いたいという要望があり、Space は文字入力に使わないため。
+        var shiftSpace = b.Modifiers == ShortcutModifiers.Shift && b.Key == VirtualKeys.Space;
+        if (!shiftSpace && (b.Modifiers & ~ShortcutModifiers.Shift) == ShortcutModifiers.None &&
             ToggleShortcut.NormalizeHankakuKey(b.Key) is not (ToggleShortcut.Hankaku or 0x1C or 0x1D))
             return ShortcutValidationError.UnmodifiedKey;
+
+        // 設定「Shift + Space で半角スペース」が ON のときは、Shift+Space を切り替えに使うと競合する。
+        // 無変換 / 変換 のときと同じく、先に設定を OFF してもらう。
+        if (shiftSpace && settings.ShiftSpaceHalfWidth)
+            return ShortcutValidationError.ShiftSpaceHalfWidth;
 
         // 無変換 (0x1D) / 変換 (0x1C) キー単独
         // 設定「無変換で英数 / 変換で日本語」が有効な場合は競合するため登録不可

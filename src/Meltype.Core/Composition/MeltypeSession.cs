@@ -301,6 +301,42 @@ public sealed class MeltypeSession
 
     public bool DirectEnglishWord => _directEnglishWord;
 
+    /// <summary>
+    /// 直前のキーが、設定「入力モード切り替えキー」の切替として使われたか (#1033)。
+    /// Mac・Linux のフロントエンドは、これを見て自分のモード (A / あ、入力メニュー) を本体に合わせる。
+    /// 読むだけでは変わらず、<see cref="TakeToggled"/> で読むと false に戻る。
+    /// </summary>
+    public bool Toggled => _toggled;
+
+    /// <summary><see cref="Toggled"/> を読み、印を消す。</summary>
+    public bool TakeToggled()
+    {
+        var toggled = _toggled;
+        _toggled = false;
+        return toggled;
+    }
+
+    private bool _toggled;
+
+    /// <summary>
+    /// 押されたキーが、設定「入力モード切り替えキー」の割り当てのどれかか (#1033)。
+    /// 修飾キーは、どのフロントエンドも Ctrl と Shift を別々のビットで渡す (macOS・fcitx5・IBus とも)。
+    /// 修飾キーなし・Shift だけのキーをどう扱うか (半角/全角・変換・無変換・Shift+Space 以外は外す) は
+    /// <see cref="Meltype.Input.ToggleShortcutValidator"/> が設定の読み込みで決めるので、ここでは見ない。
+    /// </summary>
+    private static bool IsToggleShortcut(IReadOnlyList<Meltype.Input.ToggleShortcut> shortcuts, int vk, bool ctrl, bool alt, bool shift, bool command)
+    {
+        var modifiers = (shift ? Meltype.Input.ShortcutModifiers.Shift : Meltype.Input.ShortcutModifiers.None)
+            | (ctrl ? Meltype.Input.ShortcutModifiers.Control : Meltype.Input.ShortcutModifiers.None)
+            | (alt ? Meltype.Input.ShortcutModifiers.Alt : Meltype.Input.ShortcutModifiers.None)
+            | (command ? Meltype.Input.ShortcutModifiers.Win : Meltype.Input.ShortcutModifiers.None);
+        foreach (var shortcut in shortcuts)
+        {
+            if (shortcut.Matches(vk, modifiers)) return true;
+        }
+        return false;
+    }
+
     /// <summary>入力を覚えないように求める入力欄か (Windows のブラウザーのシークレット / InPrivate ウィンドウ)。true の間は学習しない。</summary>
     public bool Private { get; set; }
 
@@ -400,8 +436,11 @@ public sealed class MeltypeSession
 
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
+    /// toggleShortcuts は、設定「入力モード切り替えキー」をこの経路で読むか。
+    /// Meltype IME (Windows の TSF) は DLL が打鍵ごとに direct を送ってくるので、そちらからは false にして読ませない (#1033)。
     /// </summary>
-    public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null)
+    public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
+        bool toggleShortcuts = true)
     {
         if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
@@ -421,6 +460,20 @@ public sealed class MeltypeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = _settings();
+        // 設定「入力モード切り替えキー」(#1033)。Windows 版のフックは MeltypeEngine が読む。
+        // Mac・Linux の本体はここで読むので、Shift+Space を切替に指定でき、全角スペースを確定してしまわない。
+        // Meltype IME (Windows の TSF) は DLL が打鍵ごとに direct を送ってくるので、toggleShortcuts を false にして読ませない。
+        // 半角/全角 キーは、本体 (変換ボックス) がすでに英字表示との切り替えに使っている (#662 の既定の
+        // 切り替えキーにも入っている)。フロントエンドもこのキーは自分で扱うので、ここでは横取りしない。
+        var hankaku = Meltype.Input.ToggleShortcut.NormalizeHankakuKey(vk) == Meltype.Input.ToggleShortcut.Hankaku;
+        if (toggleShortcuts && !hankaku && IsToggleShortcut(settings.EffectiveToggleShortcuts, vk, control, alt, shift, command))
+        {
+            // 半角/全角 と同じく、変換中なら確定してから切り替える (空のときは今出ている変換ボックスを閉じる)。
+            var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
+            Direct = !Direct;
+            _toggled = true;
+            return Track(committed with { Consumed = true }, vk, ch, modifier: false);
+        }
         if (Direct && _directModeDetection && _directEnglishWord &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))

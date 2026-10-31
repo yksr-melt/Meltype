@@ -574,8 +574,12 @@ internal sealed class TipServer : IDisposable
                     // キャレットの前も 20 文字しか送らない。コードの入力欄として扱うと、コードの行を日本語にできないので、一般として扱う
                     var process = IsTrue(root, "code") ? String(root, "process") : null;
                     var before = UpdateCodeInput(session, process, String(root, "before"));
+                    // 設定「入力モード切り替えキー」は、この経路では読まない (#1033)。
+                    // Meltype IME は DLL が打鍵ごとに direct を送ってくるので、本体が切り替えても次の打鍵で元に戻る。
+                    // 設定は Meltype キーボード (MeltypeEngine) と、Mac 版・Linux 版が使う。
                     result = session.HandleKey(vk, ch is > 0 and < 0x10000 ? (char)ch : null,
-                        (mods & 1) != 0, (mods & 2) != 0, (mods & 4) != 0, (mods & 8) != 0, before, String(root, "after"));
+                        (mods & 1) != 0, (mods & 2) != 0, (mods & 4) != 0, (mods & 8) != 0, before, String(root, "after"),
+                        toggleShortcuts: false);
                     switchedToJapanese = wasDirect && !session.Direct;
                     break;
                 }
