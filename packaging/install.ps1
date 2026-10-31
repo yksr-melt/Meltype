@@ -8,6 +8,11 @@ $ErrorActionPreference = 'Stop'
 
 # 自動更新では PowerShell のウィンドウを表示しないため、標準出力と失敗理由をファイルに残す。
 # ログの書き込みに失敗しても、インストールそのものは妨げない。
+# 前の版の Meltype は -UpdateLog を渡さないので、更新用のフォルダーで動いているときは引数が無くても記録する。
+$updateDirectory = Join-Path $env:LOCALAPPDATA 'Meltype\update'
+if (-not $UpdateLog -and (Split-Path -Parent $PSScriptRoot) -eq $updateDirectory) {
+    $UpdateLog = Join-Path $updateDirectory 'install.log'
+}
 if ($UpdateLog) {
     try {
         $logDirectory = Split-Path -Parent $UpdateLog
