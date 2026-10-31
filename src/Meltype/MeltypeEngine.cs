@@ -41,6 +41,8 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
     public KeyCounter KeyCounter { get; }
     private readonly System.Threading.Timer _keyCountTimer;
+    /// <summary>Discord のステータスに打鍵数を出す (打鍵数の「Discord に表示する」が ON の間だけ。入力とは別のスレッドで送る)。</summary>
+    private readonly DiscordPresence _discordPresence;
 
     public MeltypeEngine(Settings settings, string? configPath, string? userDictionaryDirectory)
     {
@@ -54,6 +56,9 @@ internal sealed class MeltypeEngine : IDisposable
         _pollTimer = new System.Threading.Timer(_ => PollImeState(), null, Timeout.Infinite, Timeout.Infinite);
         KeyCounter = new KeyCounter(configPath is null ? null : AppPaths.KeyCountFile);
         _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
+        _discordPresence = new DiscordPresence(
+            () => KeyCounter.DiscordPresence && KeyCounter.Enabled,
+            () => new DiscordPresence.Stats(KeyCounter.OnDay(DateTime.Today), KeyCounter.Total));
     }
 
     public Settings Settings => _settings;
@@ -1039,6 +1044,7 @@ internal sealed class MeltypeEngine : IDisposable
         _remote.Dispose();
         _lineTimer?.Dispose();
         _keyCountTimer.Dispose();
+        _discordPresence.Dispose();
         KeyCounter.Save();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();

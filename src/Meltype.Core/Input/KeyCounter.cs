@@ -30,6 +30,8 @@ internal sealed partial class KeyCounter
         public bool Enabled { get; set; }
         /// <summary>取り込んだテキストの SHA-256 (取り込んだ順)。同じものを 2 回取り込んで 2 倍にしないため。</summary>
         public List<string> ImportedHashes { get; set; } = [];
+        /// <summary>Discord のステータス (Rich Presence) に打鍵数を出すか。既定は OFF。</summary>
+        public bool DiscordPresence { get; set; }
     }
 
     private readonly string? _path;
@@ -63,6 +65,20 @@ internal sealed partial class KeyCounter
             lock (_lock)
             {
                 _data.Enabled = value;
+                _dirty = true;
+            }
+        }
+    }
+
+    /// <summary>Discord のステータス (Rich Presence) に今日と合計の打鍵数を出すか。</summary>
+    public bool DiscordPresence
+    {
+        get { lock (_lock) return _data.DiscordPresence; }
+        set
+        {
+            lock (_lock)
+            {
+                _data.DiscordPresence = value;
                 _dirty = true;
             }
         }
@@ -149,12 +165,12 @@ internal sealed partial class KeyCounter
         }
     }
 
-    /// <summary>数えた分をすべて 0 に戻す。数えるかどうかの設定は残す。</summary>
+    /// <summary>数えた分をすべて 0 に戻す。数えるかどうか・Discord に出すかの設定は残す。</summary>
     public void Reset()
     {
         lock (_lock)
         {
-            _data = new Data { Enabled = _data.Enabled };
+            _data = new Data { Enabled = _data.Enabled, DiscordPresence = _data.DiscordPresence };
             _dirty = true;
         }
     }

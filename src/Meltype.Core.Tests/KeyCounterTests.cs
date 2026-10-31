@@ -145,4 +145,16 @@ internal static class KeyCounterTests
         Assert.Equal(0.75, a.LeftHandShare);
         Assert.Equal(0.2, a.CorrectionShare);
     }
+
+    [Test]
+    public static void Reset_KeepsDiscordPresenceSetting()
+    {
+        var counter = OnCounter();
+        counter.DiscordPresence = true;
+        counter.Count(Down(0x41), DateTime.Today, true);
+        counter.Reset();
+        Assert.Equal(0L, counter.Total);
+        Assert.True(counter.DiscordPresence, "Discord に出す設定は残す");
+        Assert.True(!new KeyCounter(null).DiscordPresence, "既定は OFF");
+    }
 }
