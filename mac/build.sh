@@ -23,7 +23,7 @@ enable_input_source() {
 register_input_source() {
     local tool="$TARGET/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource"
     "$tool" "$TARGET/Meltype.app" ||
-        echo "入力ソースに登録できませんでした。ログアウトしてログインし直すと直ります。" >&2
+        echo "入力ソースを登録できませんでした。システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。" >&2
 }
 [[ "${1:-}" == "--no-install" ]] && INSTALL=0
 
@@ -113,7 +113,6 @@ if [[ $INSTALL -eq 1 ]]; then
     TARGET="$HOME/Library/Input Methods"
     bash "$PWD/install-app.sh" "$APP" "$TARGET/Meltype.app"
     echo "インストールしました: $TARGET/Meltype.app"
-    enable_input_source
     register_input_source
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
     # Keep the build copy out of the input-source add dialog after installing.

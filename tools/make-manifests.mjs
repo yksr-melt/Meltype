@@ -135,6 +135,13 @@ if (macZip) {
   depends_on macos: ">= :ventura"
   depends_on arch: :arm64
 
+  preflight do
+    payload = "#{staged_path}/Meltype-mac/Meltype.app.zip"
+    if File.exist?(payload)
+      system_command "/usr/bin/ditto", args: ["-x", "-k", payload, "#{staged_path}/Meltype-mac"], must_succeed: true
+    end
+  end
+
   input_method "Meltype-mac/Meltype.app"
 
   postflight do
@@ -142,9 +149,12 @@ if (macZip) {
     # 署名が自分用 (ad hoc) の版もあるので、隔離属性を外さないと macOS が起動させない (install.sh と同じ)
     system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", app], must_succeed: false
     # 入力ソースに登録する (#21、#134)
-    system_command "#{app}/Contents/MacOS/Meltype", args: ["--register-input-source"], must_succeed: false
     register = "#{app}/Contents/MacOS/MeltypeRegisterInputSource"
-    system_command register, args: [app], must_succeed: false if File.executable?(register)
+    if File.executable?(register)
+      system_command register, args: [app], must_succeed: false
+    else
+      system_command "#{app}/Contents/MacOS/Meltype", args: ["--register-input-source"], must_succeed: false
+    end
     system_command "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
                    args: ["-f", app], must_succeed: false
     system_command "/bin/bash", args: ["#{staged_path}/Meltype-mac/start-input-method.sh", app], must_succeed: false
