@@ -5,8 +5,8 @@ import AppKit
 import Carbon
 import Sparkle
 
-/// Sparkle owns checking, archive signature validation, installation and relaunch.
-/// Automatic downloads and installations are disabled: the user chooses to update.
+/// 更新確認・署名検証・インストール・再起動はSparkleに任せる。
+/// 自動ダウンロード・自動インストールは使わず、利用者が更新を選ぶ。
 final class MacUpdater: NSObject, SPUUpdaterDelegate, NSApplicationDelegate, NSMenuItemValidation {
     static let shared = MacUpdater()
     private var controller: SPUStandardUpdaterController?
@@ -76,8 +76,17 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, NSApplicationDelegate, NSM
         return postponed
     }
 
+    func updaterShouldRelaunchApplication(_ updater: SPUUpdater) -> Bool {
+        // 待機期限が切れた場合は、Sparkleの公開APIで今回のインストールを中止する。
+        // Sparkle 2.10は待機用の継続を呼んだあとも、この可否を確認する。
+        !gate.didExpire
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        MeltypeInputController.prepareForUpdate() ? .terminateNow : .terminateCancel
+        // 更新の待機は上の専用経路だけで行う。ログアウト・再起動などは妨げない。
+        // 確定先のある入力欄だけ処理し、確定できない欄があっても終了を許可する。
+        _ = MeltypeInputController.prepareForUpdate()
+        return .terminateNow
     }
 
     func updaterWillRelaunchApplication(_ updater: SPUUpdater) {
@@ -121,7 +130,7 @@ final class MacUpdater: NSObject, SPUUpdaterDelegate, NSApplicationDelegate, NSM
                     UserDefaults.standard.removeObject(forKey: self.repairKey)
                     UserDefaults.standard.removeObject(forKey: self.selectKey)
                 }
-            } catch { NSLog("Meltype: could not finish input-source registration after update: %@", error.localizedDescription) }
+            } catch { NSLog("Meltype: 更新後の入力ソース登録を完了できませんでした: %@", error.localizedDescription) }
         }
     }
 }

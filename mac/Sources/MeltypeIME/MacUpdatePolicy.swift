@@ -20,22 +20,37 @@ struct MacUpdatePolicy {
     }
 }
 
-/// Keep the install continuation pending until the active input client has committed its text.
+/// 未確定文字の確定を待つ。30秒で打ち切り、Sparkleに今回の更新を中止させる。
 final class UpdateRelaunchGate {
+    static let timeout: TimeInterval = 30
     private var continuation: (() -> Void)?
+    private var deadline: TimeInterval?
+    private(set) var didExpire = false
     var isPending: Bool { continuation != nil }
 
-    func postpone(ready: Bool, continuation: @escaping () -> Void) -> Bool {
+    func postpone(ready: Bool, now: TimeInterval = ProcessInfo.processInfo.systemUptime,
+                  continuation: @escaping () -> Void) -> Bool {
+        cancel()
         guard !ready else { return false }
+        deadline = now + Self.timeout
         self.continuation = continuation
         return true
     }
 
-    func resumeIfReady(_ ready: Bool) {
-        guard ready, let resume = continuation else { return }
+    func resumeIfReady(_ ready: Bool, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+        guard let resume = continuation, let deadline else { return }
+        didExpire = now >= deadline
+        guard ready || didExpire else { return }
         continuation = nil
+        self.deadline = nil
+        // 期限切れでも継続を一度返す。Sparkleは再開時に再起動の可否を再確認するため、
+        // updaterShouldRelaunchApplicationで拒否すればインストール自体が中止される。
         resume()
     }
 
-    func cancel() { continuation = nil }
+    func cancel() {
+        continuation = nil
+        deadline = nil
+        didExpire = false
+    }
 }

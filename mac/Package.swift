@@ -12,7 +12,7 @@ let package = Package(
     name: "MeltypeIME",
     platforms: [.macOS(.v13)],
     dependencies: [
-        // Keep transitive Collections compatible with the Swift 6.1 CI toolchain.
+        // 間接依存のCollectionsもCIのSwift 6.1でビルドできる版に固定する。
         .package(url: "https://github.com/apple/swift-collections", exact: "1.1.4"),
         .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
         // main は API がよく変わるので、確かめたコミットに固定する (更新するときは Converter.swift も合わせて直す)。

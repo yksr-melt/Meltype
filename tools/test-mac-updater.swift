@@ -29,6 +29,20 @@ import Foundation
         gate.cancel()
         gate.resumeIfReady(true)
         assert(count == 1 && !gate.isPending)
-        print("Update policy and deferred installation checks passed")
+        // 確定できない場合でも期限で継続を一度返し、更新拒否状態を保持する。
+        assert(gate.postpone(ready: false, now: 100) { count += 1 })
+        gate.resumeIfReady(false, now: 129.9)
+        assert(count == 1 && gate.isPending && !gate.didExpire)
+        gate.resumeIfReady(false, now: 130)
+        assert(count == 2 && !gate.isPending && gate.didExpire)
+        gate.resumeIfReady(true, now: 131)
+        assert(count == 2 && gate.didExpire)
+        gate.cancel()
+        assert(!gate.didExpire && !gate.isPending)
+        // 次の更新は前回の期限切れを引きずらず、確定後に再開できる。
+        assert(gate.postpone(ready: false, now: 200) { count += 1 })
+        gate.resumeIfReady(true, now: 201)
+        assert(count == 3 && !gate.didExpire && !gate.isPending)
+        print("更新ポリシー・待機・期限切れ・再試行のテストに成功しました")
     }
 }

@@ -14,12 +14,13 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     static func prepareForUpdate() -> Bool {
         // 非アクティブな入力欄にも未確定文字が残る場合を含め、全クライアントを確認する。
+        var ready = true
         for controller in controllersForUpdate.allObjects where controller.hasMarkedText {
-            guard let client = controller.client() else { return false }
+            guard let client = controller.client() else { ready = false; continue }
             controller.commitComposition(client)
-            guard !controller.hasMarkedText else { return false }
+            if controller.hasMarkedText { ready = false }
         }
-        return true
+        return ready
     }
 
     private var session: UnsafeMutableRawPointer?
