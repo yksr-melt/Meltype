@@ -12,11 +12,14 @@ namespace Meltype.Composition;
 /// <summary>
 /// 入力欄への書き込み 1 回分。DeleteBefore 文字をキャレットの前から消してから Text を入れる (確定し直すとき以外は 0)。
 /// Expect は消す文字 (このセッションで確定した文字。分からなければ null)。
-/// フロントは、キャレットの前が Expect と一致すると確認できたときだけ消す。確認できないときは消さずに Text だけを入れる
-/// (本体は Text が入った前提で状態を進めるので、Edit ごと捨てると、打った文字が消えて入力欄と本体がずれる)。
+/// Current は、確定し直すときに Text の後ろに続けて入る、今確定した語 (確定し直しは今の語の確定とまとめて届く)。
+/// フロントは、キャレットの前が Expect と一致すると確認できたときだけ消す。確認できないときは前の文字を消さずに Current を入れる
+/// (Current が無ければ Text)。Text を入れると、直した前の語が二重に入る。Edit ごと捨てると、打った文字が消えて入力欄と本体がずれる。
+/// Current だけを入れたときも、本体は Text が入った前提で確定した文字を覚える。直せなかった前の語まで消す確定し直しは、
+/// 次の Expect が入力欄と合わないので、フロントは前の文字を消さない (それ以上その語は直さない)。
 /// DeleteBefore は本体の単位 (UTF-16) の長さなので、消す文字数は Expect から入力欄の単位で数える。
 /// </summary>
-public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null);
+public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null);
 
 /// <summary>
 /// 1 回のキー入力の結果。Consumed が false ならそのキーはアプリにそのまま渡す (Commits を入れた後で)。
@@ -42,6 +45,11 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             {
                 builder.Append(",\"expect\":");
                 AppendString(builder, expect);
+            }
+            if (Commits[i].Current is { } current)
+            {
+                builder.Append(",\"current\":");
+                AppendString(builder, current);
             }
             builder.Append('}');
         }
@@ -649,9 +657,15 @@ public sealed class MeltypeSession
 
         public void CommitText(string text) => Add(text);
 
+        public void ReplaceBackward(int count, string replacement, string current)
+        {
+            DeleteBackward(count);
+            Add(replacement + current, current);
+        }
+
         public void ForgetCommitted() => _committed.Clear();
 
-        private void Add(string text)
+        private void Add(string text, string? current = null)
         {
             string? expect = null;
             if (_pendingDelete > 0)
@@ -669,7 +683,7 @@ public sealed class MeltypeSession
                 }
                 else _committed.Clear();
             }
-            _commits.Add(new TextEdit(_pendingDelete, text, expect));
+            _commits.Add(new TextEdit(_pendingDelete, text, expect, _pendingDelete > 0 ? current : null));
             _pendingDelete = 0;
             _committed.Append(text);
             if (_committed.Length > MaxCommitted) _committed.Remove(0, _committed.Length - MaxCommitted);

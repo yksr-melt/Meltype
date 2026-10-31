@@ -430,6 +430,12 @@ class IntegrationTests(unittest.TestCase):
         self.engine._apply({"commits": [{"deleteBefore": 4, "expect": "word", "text": "って"}], "view": None})
         self.assertEqual("pasted sentenceって", self.engine.document)
 
+    def test_reconversion_inserts_only_current_word_when_previous_text_changed(self):
+        # 前の文字を消せないときに text を入れると、直した前の語 (make) が二重に入る。今確定した語 (current) だけを入れる。
+        self.engine.document = "負け!"
+        self.engine._apply({"commits": [{"deleteBefore": 2, "expect": "負け", "text": "make want ", "current": "want "}], "view": None})
+        self.assertEqual("負け!want ", self.engine.document)
+
     def test_reconversion_without_expected_text_does_not_delete(self):
         # 消す文字が分からない (expect が無い) ときも、消さずに今打った文字だけを入れる。
         self.engine.document = "pasted"

@@ -294,17 +294,19 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         guard let result else { return }
         for edit in result.commits {
             var range = NSRange(location: NSNotFound, length: 0)
+            var text = edit.text
             if edit.deleteBefore > 0 {
                 if let verified = verifiedRange(for: edit, client: client) {
                     // 確定し直し: キャレットの前の文字を置き換える。
                     range = verified
                 } else {
                     // 消す文字を確認できないときは、前の文字は消さずに今打った文字だけを入れる
-                    // (本体は text が入った前提で状態を進めるので、edit ごと捨てない)。
+                    // (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
                     NSLog("Meltype: 確定し直す文字を確認できないため、前の文字を消しません")
+                    text = edit.current ?? edit.text
                 }
             }
-            client.insertText(NSAttributedString(string: edit.text), replacementRange: range)
+            client.insertText(NSAttributedString(string: text), replacementRange: range)
             hasMarkedText = false
         }
         if let view = result.view {

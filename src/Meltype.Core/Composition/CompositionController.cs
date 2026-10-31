@@ -66,6 +66,12 @@ public interface ICompositionHost
         CommitText(text);
     }
 
+    /// <summary>
+    /// 確定し直し: キャレットの前の count 文字を replacement に置き換えて、続けて今確定した語 (current) を入れる。
+    /// 前の文字を消せなかったときに current だけを入れられるように、分けて渡す (Meltype IME など。<see cref="TextEdit"/>)。
+    /// </summary>
+    void ReplaceBackward(int count, string replacement, string current) => ReplaceBackward(count, replacement + current);
+
     void RecordDirectReplay(char c) { }
 
     /// <summary>
@@ -2853,6 +2859,8 @@ public sealed class CompositionController
         string? replacement = null;
         if (!previous.English && english && _detector.IsDefinitelyEnglish(raw))
         {
+            // 前の語の後ろを Space で区切らずに続けたとき (Enter で確定したときなど) は直さない。英語にすると前の語とつながる (あれ + ON → areON)
+            if (!previous.SpaceIntended) return null;
             // 日本語で確定した語を英語に: 代名詞の i は I にし、Space で変換していたなら空白も入れる。
             // その前にも Space で区切って日本語にした語が続いていれば、まとめて英文に直す (make sure you have)。
             var start = _correctable.Count - 1;
@@ -2867,7 +2875,6 @@ public sealed class CompositionController
             if (targets.Any(t => IsSuruRomajiKeepJapanese(t.Raw)))
             {
                 // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
-                if (!targets.Any(t => t.SpaceIntended)) return null;
                 replacement = string.Concat(targets.Select(t => t.Text + (t.SpaceIntended ? " " : "")));
             }
             else
@@ -3017,7 +3024,7 @@ public sealed class CompositionController
         if (_pendingReplace is var (count, replacement))
         {
             _pendingReplace = null;
-            _host.ReplaceBackward(count, replacement + text);
+            _host.ReplaceBackward(count, replacement, text);
         }
         else _host.CommitText(text);
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、← を送って中に入る (issue #72)

@@ -64,16 +64,19 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
             last = NativeCore.shared.handleKey(session, vk: vk, character: code,
                 modifiers: character.isUppercase ? 1 : 0, before: before, after: nil)
             for edit in last?.commits ?? [] {
+                var text = edit.text
                 if edit.deleteBefore > 0 {
                     let current = output as NSString
-                    // 消す文字を確認できないときは、前の文字は消さずに edit.text だけを入れる (本体の状態とそろえる)。
+                    // 消す文字を確認できないときは、前の文字は消さずに今打った文字 (edit.current) だけを入れる (入力欄と同じ扱い)。
                     if edit.deleteBefore <= current.length,
                        matchesExpectedText(current.substring(from: current.length - edit.deleteBefore),
                                            expected: edit.expect, deleteBefore: edit.deleteBefore) {
                         output = current.substring(to: current.length - edit.deleteBefore)
+                    } else {
+                        text = edit.current ?? edit.text
                     }
                 }
-                output += edit.text
+                output += text
             }
             if last?.consumed != true { output += String(character) }
         }
