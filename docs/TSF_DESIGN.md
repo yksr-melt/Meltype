@@ -30,6 +30,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 をビルド、`Register-Tip.ps1` で登録 |
 | `src/Meltype/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー |
 | `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
+| `src/Meltype.Tests/TipContractTests.cs` | DLL と Meltype.exe の境目の契約テスト。DLL と同じ要求 (key・commit・close・hello) を `TipServer.Handle` に送り、確定・表示・キーを使ったかを確かめる。`dotnet run --project src/Meltype.Tests -- TipContract` で流せ、GitHub Actions (build.yml の test) でも毎回流れる |
 | `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
 
@@ -194,6 +195,20 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - UILess (候補を自分で描くアプリ)、ARM64 (ARM64 の Windows ではインストールのときに Meltype IME を入れない)
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。
   実際のアプリ (メモ帳・Chrome・VS Code など)、表示スケール 150%、コード署名をしない DLL を読み込まないアプリがあるかは、まだ広くは確かめていない
+
+**自動テストで確かめている範囲** (issue #1215):
+
+| 層 | テスト | CI | 確かめること |
+|---|---|---|---|
+| 入力の本体 (MeltypeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
+| DLL と Meltype.exe の境目 (TipServer の JSON) | `src/Meltype.Tests/TipContractTests.cs` | Windows (build.yml の test) | 入力 → 変換 → 確定 → 続けて入力、BackSpace・Esc、アプリの確定 (フォーカスの移動) で変換を終える、キャレットを動かしたら前の確定を直さない、入力欄 (sid) ごとに分ける・閉じる、つなぎ直した DLL の続きを受け持たない、変換中の一時停止・モードの切り替え、アプリ別設定 |
+| パイプ | `--tip-client` | 手で流す | 実際のパイプでのやり取り |
+| DLL を含めた全体 | `--tip-e2e` | 手で流す (人が操作しているデスクトップが要る) | 登録した DLL で、RichEdit の入力欄に実際に打つ |
+
+- **契約テストが通っても、実際の Windows のデスクトップでキーが届き、正しく打てることは保証しない。** DLL (native/tip、C++) の TSF の処理 (キーの受け取り・未確定の文字の表示・フォーカスの通知・候補の一覧の描画) と、OS がキーを IME に配る部分は、自動テストでは通らない
+- 自動テストに無いもの: Tab で選んだ予測の候補のあとに続けて打つとき (#1214・#974 で動きを相談中)、選んだ文字の再変換 (#313、#1182 で作っている)、設定の読み直し (config.json の書き換え) をはさむ流れ、コードのアプリの toggle・mode
+- DLL まで含めた実際の打鍵のテスト (`--tip-e2e`) を定期的に流すなら、隔離した対話型の Windows で、任意または定期の実行にする。外部の Pull Request のコードを、個人の PC や権限の強いセルフホストランナーで無条件に動かさない
+- 不具合の報告を直したら、Core で確かめられることは Core のテストに、DLL との境目の受け渡しで起きることは `TipContractTests` に、操作の順番どおりに足す
 
 <br>
 
