@@ -101,6 +101,10 @@ internal sealed class Updater : IDisposable
                 WorkingDirectory = staged.Folder,
             };
             foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(staged.Folder, "install.ps1") }) start.ArgumentList.Add(arg);
+            // インストーラーの失敗内容を、Meltype を再起動したあとでも確認できるように記録する。
+            // install.ps1 自身のプロセスが Meltype を止めるため、ここでは終了を待たない。
+            start.ArgumentList.Add("-UpdateLog");
+            start.ArgumentList.Add(Path.Combine(Directory, "install.log"));
             Process.Start(start);
             Log.Info($"Meltype {staged.Version} に更新します。");
             return true;
