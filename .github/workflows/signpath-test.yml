@@ -1,0 +1,156 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 yksr-melt
+name: signpath-test
+
+on:
+  workflow_dispatch:
+  # PR では秘密を使わず、検証処理と実際のビルドだけを確かめる。
+  pull_request:
+    paths:
+      - '.github/workflows/signpath-test.yml'
+      - 'tools/*SignPath*'
+      - 'packaging/signpath/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signpath-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+      version: ${{ steps.publish.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Test signature verification (without SignPath credentials)
+        shell: pwsh
+        run: ./tools/Test-SignPathArtifact.ps1
+      - name: Build
+        shell: pwsh
+        run: |
+          dotnet build Meltype.sln -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'ビルドに失敗しました。' }
+      - name: Publish unsigned application
+        id: publish
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'signpath-unsigned'
+          dotnet publish src/Meltype/Meltype.csproj -c Release -o $out -p:DebugType=none -p:IncludeSourceRevisionInInformationalVersion=false
+          if ($LASTEXITCODE -ne 0) { throw 'publish に失敗しました。' }
+          Copy-Item LICENSE (Join-Path $out 'LICENSE.txt')
+          Copy-Item THIRD-PARTY-NOTICES.md (Join-Path $out 'THIRD-PARTY-NOTICES.txt')
+          $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $out 'Meltype.exe')).ProductVersion
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') { throw '製品の版番号が不正です。' }
+          foreach ($name in 'Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll') {
+            $info = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $out $name))
+            if ($info.ProductName -cne 'Meltype' -or $info.ProductVersion -cne $version) {
+              throw "製品名・製品の版番号が揃っていません: $name"
+            }
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+      # publish の構成も確かめた後、テスト成功を Artifact 保存と署名の必須条件にする。
+      - name: Test application before uploading
+        shell: pwsh
+        run: |
+          dotnet run --project src/Meltype.Tests -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw 'テストに失敗しました。' }
+      - name: Upload unsigned input for origin verification
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signpath-test-unsigned-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/signpath-unsigned/
+          if-no-files-found: error
+          retention-days: 7
+
+  sign:
+    # PR では絶対に秘密へアクセスしない。手動実行も main だけ。
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'yksr-melt/Meltype' &&
+      github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 40
+    environment: signpath-test
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check confirmed configuration
+        shell: pwsh
+        # Environment の変数は runner が Environment を読み込んだ後、step で参照する。
+        env:
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG }}
+          SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
+        run: |
+          $id = [guid]::Empty
+          if (-not [guid]::TryParse($env:SIGNPATH_ORGANIZATION_ID, [ref]$id) -or $id -eq [guid]::Empty) {
+            throw 'SIGNPATH_ORGANIZATION_ID に SignPath で確認した Organization ID を設定してください。'
+          }
+          foreach ($name in 'SIGNPATH_PROJECT_SLUG', 'SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG') {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "$name に SignPath で確認した slug を設定してください。"
+            }
+          }
+          if ($env:SIGNPATH_TEST_CERTIFICATE_SHA256 -notmatch '^[0-9A-Fa-f]{64}$') {
+            throw 'SIGNPATH_TEST_CERTIFICATE_SHA256 に公開テスト証明書の SHA-256 (64 桁) を設定してください。'
+          }
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          path: ${{ runner.temp }}/signpath-unsigned
+          merge-multiple: true
+      # API Token はこの公式 Action にだけ渡す。ダウンロードしたアプリは実行しない。
+      - name: Submit test signing request
+        id: signpath
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: test-signing
+          artifact-configuration-slug: ${{ vars.SIGNPATH_TEST_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ needs.build.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: ${{ runner.temp }}/signpath-signed
+          parameters: |
+            version: ${{ toJSON(needs.build.outputs.version) }}
+      - name: Verify signed application and record trust separately
+        shell: pwsh
+        env:
+          SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
+        run: |
+          . ./tools/Verify-SignPathArtifact.ps1
+          Test-MeltypeSignPathArtifact -UnsignedDirectory "$env:RUNNER_TEMP/signpath-unsigned" -SignedDirectory "$env:RUNNER_TEMP/signpath-signed" -ExpectedCertificateSha256 $env:SIGNPATH_TEST_CERTIFICATE_SHA256 -ReportPath "$env:RUNNER_TEMP/signpath-verification/report.json"
+      - name: Upload verified test output (never a Release)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signpath-test-signed-NOT-FOR-RELEASE-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/signpath-signed/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload verification report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signpath-test-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/signpath-verification/
+          if-no-files-found: ignore
+          retention-days: 14
