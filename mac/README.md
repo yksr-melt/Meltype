@@ -174,7 +174,7 @@ Mac 版には登録の画面がないので、データフォルダ (`~/Library/
   ```bash
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
-  これで戻らなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。
+  これで戻らなければ、システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype で追加する。macOS 27 では、アプリからの有効化が通らず、この手順が必要になることがある (追加すると、同じログインセッションのまま入力メニューから選べる)。それでも出てこなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。
 - **Meltype がいくつも並ぶ**: ターミナルで次を実行する
   ```bash
   "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
