@@ -31,6 +31,8 @@ internal sealed class ExitSignal : NativeWindow, IDisposable
             Diagnostics.Log.Info("終了の合図を受け取りました (インストール・アンインストール)。");
             // 合図の後すぐに強制終了されることがあるので、まだ書いていない学習データを先に書く
             Composition.LearningSaves.FlushAll();
+            // Application.Run の前 (起動時の更新のダイアログを出している間) は、Application.Exit ではダイアログが閉じず終わらない
+            if (!Application.MessageLoop) Environment.Exit(0);
             Application.Exit();
             return;
         }

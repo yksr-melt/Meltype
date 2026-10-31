@@ -102,6 +102,9 @@ internal static class Program
             Diagnostics.Log.Warn(AppPaths.IsPortable ? "ポータブル版では Meltype IME を使わないため、Meltype キーボードに戻しました。" : "Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードを Meltype キーボードに戻しました。");
         }
 
+        // 更新の確認や「更新失敗」のダイアログを出している間も、インストーラーの終了の合図を受け取れるように、先に窓を作る
+        using var exitSignal = new ExitSignal();
+
         // ダウンロード済みの新しい版があれば、起動せずに更新する (install.ps1 が新しい版を起動する)。
         if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease,
                 version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings),
@@ -130,7 +133,6 @@ internal static class Program
 
         using (engine)
         {
-            using var exitSignal = new ExitSignal();
             Application.Run(new TrayApplicationContext(engine));
         }
         Composition.LearningSaves.FlushAll();
