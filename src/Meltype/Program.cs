@@ -104,7 +104,8 @@ internal static class Program
 
         // ダウンロード済みの新しい版があれば、起動せずに更新する (install.ps1 が新しい版を起動する)。
         if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease,
-                version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings))) return 0;
+                version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings),
+                version => MessageBox.Show($"Meltype {version} への更新に失敗しました。\n\n現在のバージョンで起動します。自動での再試行は行いません。\n\n記録: {Updater.InstallLog}", "Meltype - 更新失敗", MessageBoxButtons.OK, MessageBoxIcon.Warning))) return 0;
 
         // 学習データは確定のたびに書かず、少し後にまとめて書く。終了・ログオフのときに残りを書く
         // (更新の確認は学習データを別に読み込んで書くので、それより後で切り替える)

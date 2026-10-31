@@ -93,6 +93,7 @@ body:
       label: ログ (あれば)
       description: |
         Windows: トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」
+        Windows の更新の不具合: %LOCALAPPDATA%\Meltype\update\install.log の中身
         Mac: ターミナルで log stream --predicate 'process == "Meltype"' --level debug を実行してから操作
         見られて困る部分は消してください。
       render: text
