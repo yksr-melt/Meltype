@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>02 段階と範囲 | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html" aria-current="page">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>02 段階と範囲</h1>
+      <p class="status"><span class="badge fixed">確定</span></p>
+<p>3段階に分けて作る。各段階の終わりで、実際に使えるキーボードになっていること。</p>
+<p>段階ごとに、仕様の詳細を詰める → 実装計画を書く → 実装する、を繰り返す。</p>
+<h2 id="段階1: フリックとライブ変換">段階1: フリックとライブ変換</h2>
+<p>キーボードとしての土台。これだけで普段使いできる状態にする。</p>
+<p>作るもの:</p>
+<ul>
+<li>12キーのかなフリック配列（<a href="04-keyboard-ui.html">04</a>）。押しているキーに重ねて出す、フリックの案内</li>
+<li>濁点・半濁点・小文字の切り替え、削除、空白/変換、確定</li>
+<li>トグル入力（設定でオン・オフを切り替える）</li>
+<li>ライブ変換と候補バー（<a href="05-input-engine.html">05</a>）</li>
+<li>Mozc の組み込み（<a href="06-conversion-mozc.html">06</a>）</li>
+<li>英字の QWERTY 配列（直接入力のみ。判別はしない）</li>
+<li>QWERTY でローマ字を打つ配列（打った英字はすべてローマ字として扱う。判別はしない）と、12キーのフリックで英字を打つ配列。日本語と英字のそれぞれで、どちらの配列を使うかを設定で選ぶ</li>
+<li>数字・記号の配列</li>
+<li>絵で出す操作キー、戻すキー、空白キーの長押しでのカーソル移動</li>
+<li>絵文字の画面</li>
+<li>キーボードを有効にする手順を案内する導入画面と、設定</li>
+</ul>
+<h2 id="段階2: 読みから英字">段階2: 読みから英字</h2>
+<p>フリックで打った外来語を、英字でも出せるようにする（<a href="07-kana-to-english.html">07</a>）。</p>
+<h2 id="段階3: 日英自動判別">段階3: 日英自動判別</h2>
+<p>段階1のローマ字配列に、Meltype 式の日英自動判別を載せる（<a href="08-auto-detection.html">08</a>）。</p>
+<h2 id="どの段階でも作らないもの">どの段階でも作らないもの</h2>
+<p>必要になったら、この表から外して該当の章に仕様を書く。</p>
+<table>
+<thead>
+<tr>
+<th>もの</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ユーザー辞書の編集画面</td>
+<td>Mozc の学習で当面足りる</td>
+</tr>
+<tr>
+<td>顔文字の専用画面</td>
+<td>変換候補に出るもので当面足りる</td>
+</tr>
+<tr>
+<td>テーマや配色の変更</td>
+<td>端末のライト/ダークに従うだけにする</td>
+</tr>
+<tr>
+<td>音声入力、手書き入力</td>
+<td>目的の外</td>
+</tr>
+<tr>
+<td>クラウド変換、利用状況の送信</td>
+<td>入力を端末の外に出さない方針に反する</td>
+</tr>
+<tr>
+<td>他のキーボードからの学習データの取り込み</td>
+<td>目的の外</td>
+</tr>
+<tr>
+<td>タブレットや横画面に合わせた専用配列</td>
+<td>縦画面のスマートフォンを対象にする。横画面は同じ配列を伸ばして表示する</td>
+</tr>
+</tbody></table>
+      <nav class="pager" aria-label="前後の章">
+        <a href="01-overview.html">← 01 概要</a>
+        <a href="03-architecture.html">03 構成 →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>
