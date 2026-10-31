@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Yukishiro
+
+namespace Meltype.Tests;
+
+/// <summary>impact.py が古い版にも入れて使う。--repro を 1 回の起動でまとめて流す (issue #1382)。</summary>
+internal static class ImpactBatch
+{
+    public static void Run(string input, string output)
+    {
+        var console = Console.Out;
+        using var writer = new StreamWriter(output, false, new System.Text.UTF8Encoding(false));
+        foreach (var line in File.ReadLines(input))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length < 3) continue;
+            var buffer = new StringWriter();
+            Console.SetOut(buffer);
+            try
+            {
+                Repro.Type(parts[1], parts[2]);
+            }
+            catch (Exception e)
+            {
+                buffer.WriteLine("{\"error\":" + System.Text.Json.JsonSerializer.Serialize(e.GetType().Name) + "}");
+            }
+            Console.SetOut(console);
+            var result = buffer.ToString().Trim().Split('\n').LastOrDefault() ?? "";
+            writer.WriteLine(parts[0] + "\t" + result.Trim());
+        }
+    }
+}

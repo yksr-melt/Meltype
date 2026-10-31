@@ -18,15 +18,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 MAX_GROUP = 5
 
 
-def gh(path, jq):
-    return subprocess.run(["gh", "api", "-X", "GET", path, "--jq", jq], capture_output=True, text=True, check=True).stdout
+def gh(path, jq, **params):
+    fields = [a for k, v in params.items() for a in ("-f", f"{k}={v}")]
+    return subprocess.run(["gh", "api", "-X", "GET", path, *fields, "--jq", jq], capture_output=True, text=True, check=True).stdout
 
 
 def fetch(work):
     with open(f"{work}/issues.jsonl", "w") as out:
         for page in range(1, 50):
-            text = gh(f"repos/{REPO}/issues?labels=誤判定&state=all&per_page=100&page={page}",
-                      ".[] | select(.pull_request == null) | {number,title,body,state,labels:[.labels[].name]}")
+            text = gh(f"repos/{REPO}/issues", ".[] | select(.pull_request == null) | {number,title,body,state,labels:[.labels[].name]}",
+                      labels="誤判定", state="all", per_page=100, page=page)
             if not text.strip():
                 break
             out.write(text)
