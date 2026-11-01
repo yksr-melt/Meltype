@@ -176,7 +176,7 @@ try {
     try { $code = Invoke-Script (Join-Path $package 'install.ps1') }
     finally { $lock.Dispose() }
     Assert-True ($code -eq 1) "更新の失敗の終了コード: $code"
-    Assert-True (Test-Path -LiteralPath (Join-Path $target 'zy-copied.txt')) 'コピーの途中まで進んでいない (復元を確かめられない)'
+    Assert-True (-not (Test-Path -LiteralPath (Join-Path $target 'zy-copied.txt'))) '復元後に新版だけのファイルが残った'
     Assert-True ((Get-InstalledVersion) -eq '3.0.0') '旧版が復元されていない'
     Assert-True ((Wait-Meltype).Id -ne $before.Id) '復元した旧版が起動していない'
     Assert-True ((Get-Backups).Count -eq 0) '復元のあとにバックアップが残った'
@@ -225,6 +225,17 @@ try {
     Assert-True ($code -eq 0) "Inno Setup の環境の更新の終了コード: $code"
     Assert-True ((Get-InstalledVersion) -eq '6.0.0') 'Inno Setup の環境で新しい版に置き換わっていない'
     Assert-True ((Get-KeyValue $innoKey 'DisplayVersion') -eq '6.0.0') 'Inno Setup の項目の版が更新されていない'
+    # Fail after registry mutation and verify metadata rollback.
+    $failed = New-Package '6.1.0' (Join-Path $updateDirectory '6.1.0')
+    $startupShortcut = $shortcuts[0]
+    $originalShortcut = [IO.File]::ReadAllBytes($startupShortcut)
+    $lock = [IO.File]::Open($startupShortcut, 'Open', 'Read', 'None')
+    try { $code = Invoke-Script (Join-Path $failed 'install.ps1') }
+    finally { $lock.Dispose() }
+    Assert-True ($code -eq 1) 'ショートカット失敗の終了コードが違う'
+    Assert-True ((Get-InstalledVersion) -eq '6.0.0') '失敗後に旧版が戻らなかった'
+    Assert-True ((Get-KeyValue $innoKey 'DisplayVersion') -eq '6.0.0') '失敗後にレジストリの版が戻らなかった'
+    Assert-True ([Convert]::ToBase64String([IO.File]::ReadAllBytes($startupShortcut)) -eq [Convert]::ToBase64String($originalShortcut)) '失敗後にショートカットが戻らなかった'
     Assert-True (-not (Test-Path -LiteralPath $uninstallKey)) '「設定 → アプリ」の項目が二重になった'
     Write-Host 'PASS: Inno Setup で入れた環境の更新'
 
