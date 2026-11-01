@@ -31,14 +31,17 @@ class InstallerTests(unittest.TestCase):
         self.environment['MELTYPE_TEST_FAIL_REGISTER'] = '0'
         for name in ['pkill', 'codesign', 'xattr']:
             self.executable(self.bin / name, 'exit 0')
-        self.executable(self.bin / 'lsregister', 'echo "ls:$*" >> "$MELTYPE_TEST_LOG"')
+        self.executable(self.bin / 'lsregister',
+                        'echo "ls:$*" >> "$MELTYPE_TEST_LOG"; '
+                        'if [[ "$1" == -f ]]; then exit "${MELTYPE_TEST_FAIL_LSREGISTER:-0}"; fi')
         self.executable(self.bin / 'swift', 'echo selected >> "$MELTYPE_TEST_LOG"')
         for name in ['install.sh', 'install-app.sh']:
             text = (REPO / 'mac' / name).read_text().replace(LSREGISTER, 'lsregister')
             text = text.replace('$HOME/Library/Input Methods', str(self.target))
             text = text.replace('${TMPDIR:-/tmp}', str(self.root))
             (self.package / name).write_text(text)
-        self.executable(self.package / 'start-input-method.sh', 'echo started >> "$MELTYPE_TEST_LOG"')
+        self.executable(self.package / 'start-input-method.sh',
+                        'echo started >> "$MELTYPE_TEST_LOG"; exit "${MELTYPE_TEST_FAIL_START:-0}"')
         (self.package / 'select-input-source.swift').write_text('// fixture')
         self.app = self.package / 'Meltype.app'
         self.executable(self.app / 'Contents/MacOS/Meltype', 'echo "app:$*" >> "$MELTYPE_TEST_LOG"')
@@ -60,8 +63,8 @@ class InstallerTests(unittest.TestCase):
                         str(self.package / 'Meltype.app.zip')], check=True)
         shutil.rmtree(self.app)
 
-    def run_install(self):
-        result = subprocess.run(['bash', str(self.package / 'install.sh')], env=self.environment,
+    def run_install(self, *args):
+        result = subprocess.run(['bash', str(self.package / 'install.sh'), *args], env=self.environment,
                                 capture_output=True, text=True)
         self.assertFalse(list(self.root.glob('.meltype-payload.*')), 'temporary payload leaked')
         return result
@@ -136,6 +139,55 @@ class InstallerTests(unittest.TestCase):
         self.assertEqual(self.calls().count('register'), 1)
         self.assertIn('started', self.calls())
         self.assertIn('selected', self.calls())
+
+    def test_homebrew_compressed_payload_does_not_select(self):
+        self.compress()
+        result = self.run_install('--homebrew')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls().count('register'), 1)
+        self.assertIn('started', self.calls())
+        self.assertNotIn('selected', self.calls())
+        self.assertFalse(self.app.exists())
+        self.assertEqual((self.target / 'Meltype.app/version').read_text(), 'new')
+
+    def test_homebrew_post_install_failures_warn_and_continue(self):
+        for failure in ['MELTYPE_TEST_FAIL_REGISTER', 'MELTYPE_TEST_FAIL_LSREGISTER',
+                        'MELTYPE_TEST_FAIL_START']:
+            with self.subTest(failure=failure):
+                self.log.unlink(missing_ok=True)
+                self.environment[failure] = '23'
+                result = self.run_install('--homebrew')
+                self.environment[failure] = '0'
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(result.stderr)
+                self.assertEqual(self.calls().count('register'), 1)
+                self.assertIn('started', self.calls())
+                self.assertNotIn('selected', self.calls())
+                self.assertEqual((self.target / 'Meltype.app/version').read_text(), 'new')
+
+    def test_manual_post_install_failures_still_stop(self):
+        for failure in ['MELTYPE_TEST_FAIL_LSREGISTER', 'MELTYPE_TEST_FAIL_START']:
+            with self.subTest(failure=failure):
+                self.log.unlink(missing_ok=True)
+                self.environment[failure] = '23'
+                result = self.run_install()
+                self.environment[failure] = '0'
+                self.assertEqual(result.returncode, 23, result.stderr)
+                self.assertNotIn('selected', self.calls())
+                if failure == 'MELTYPE_TEST_FAIL_LSREGISTER':
+                    self.assertNotIn('started', self.calls())
+
+    def test_unknown_argument_keeps_previous_app(self):
+        self.assertNotEqual(self.run_install('--unknown').returncode, 0)
+        self.assertEqual((self.target / 'Meltype.app/version').read_text(), 'previous')
+        self.assertEqual(self.calls(), [])
+
+    def test_homebrew_corrupt_archive_keeps_previous_app(self):
+        shutil.rmtree(self.app)
+        (self.package / 'Meltype.app.zip').write_text('invalid zip')
+        self.assertNotEqual(self.run_install('--homebrew').returncode, 0)
+        self.assertEqual((self.target / 'Meltype.app/version').read_text(), 'previous')
+        self.assertNotIn('register', self.calls())
 
 
 if __name__ == '__main__':
