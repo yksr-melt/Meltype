@@ -117,6 +117,84 @@ struct EventTests {
   check("Command shortcut commits once") { controller,client in
    type(controller,client,"@kuraido");precondition(!key(controller,client,"a",flags:.command));equal(client.document,"@kuraido");equal(client.marked,"")
   }
+  // #1375: 特殊コード付きのイベントを実際の Swift → Native Core 経路へ送る。
+  // 操作キーはアプリで文字挿入されないので、上の key ヘルパーによる挿入模擬は使わない。
+  let operationKeys: [(Int, Int)] = [
+   (kVK_ForwardDelete, NSDeleteFunctionKey), (kVK_ANSI_KeypadClear, NSClearLineFunctionKey),
+   (kVK_F1, NSF1FunctionKey), (kVK_F2, NSF2FunctionKey), (kVK_F3, NSF3FunctionKey),
+   (kVK_F4, NSF4FunctionKey), (kVK_F5, NSF5FunctionKey),
+   (kVK_F11, NSF11FunctionKey), (kVK_F12, NSF12FunctionKey), (kVK_F13, NSF13FunctionKey),
+   (kVK_F14, NSF14FunctionKey), (kVK_F15, NSF15FunctionKey), (kVK_F16, NSF16FunctionKey),
+   (kVK_F17, NSF17FunctionKey), (kVK_F18, NSF18FunctionKey), (kVK_F19, NSF19FunctionKey),
+   (kVK_F20, NSF20FunctionKey),
+  ]
+  func operation(_ controller:MeltypeInputController,_ client:EventClient,_ code:Int,_ scalar:Int,
+                 flags:NSEvent.ModifierFlags=[])->Bool {
+   let text=String(UnicodeScalar(scalar)!)
+   let event=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:flags,timestamp:0,
+                            windowNumber:0,context:nil,characters:text,charactersIgnoringModifiers:text,
+                            isARepeat:false,keyCode:UInt16(code))!
+   return controller.handle(event,client:client)
+  }
+  for (code,scalar) in operationKeys {
+   for state in ["idle", "composing", "converting"] {
+    for flags:NSEvent.ModifierFlags in [[], .shift, .control, .option, .command] {
+     check("operation key \(code), \(state), modifiers=\(flags.rawValue)") { controller,client in
+      if state != "idle" { type(controller,client,"a") }
+      if state == "converting" {
+       precondition(key(controller,client," ",code:UInt16(kVK_Space)))
+       // 候補ウィンドウを作らない合成クライアントでは、変換中だけ消費する PageUp で状態を確かめる。
+       precondition(operation(controller,client,kVK_PageUp,NSPageUpFunctionKey),"must be converting")
+      }
+      let expected=client.marked
+      precondition(!operation(controller,client,code,scalar,flags:flags),"operation must pass to app")
+      equal(client.document,expected); equal(client.marked,"")
+      // 同じ操作や Enter で再び確定文字が出ないことも確認する。
+      precondition(!operation(controller,client,code,scalar,flags:flags))
+      precondition(!key(controller,client,"\r",code:UInt16(kVK_Return)))
+      equal(client.document,expected); equal(client.marked,"")
+     }
+    }
+   }
+  }
+  for (code,scalar,expected) in [(kVK_F6,NSF6FunctionKey,"か"), (kVK_F7,NSF7FunctionKey,"カ"),
+                                (kVK_F8,NSF8FunctionKey,"ｶ"), (kVK_F9,NSF9FunctionKey,"ｋａ"),
+                                (kVK_F10,NSF10FunctionKey,"ka")] {
+   for converting in [false,true] {
+    check("conversion mode key \(code), converting=\(converting)") { controller,client in
+     type(controller,client,"ka")
+     // 前の F9/F10 による英語学習にかかわらず、ひらがな表示から各操作を試す。
+     precondition(operation(controller,client,kVK_F6,NSF6FunctionKey))
+     if converting {
+      precondition(key(controller,client," ",code:UInt16(kVK_Space)))
+      precondition(operation(controller,client,kVK_PageUp,NSPageUpFunctionKey),"must be converting")
+     }
+     precondition(operation(controller,client,code,scalar),"F6-F10 must stay in IME: keyCode=\(code), converting=\(converting)")
+     equal(client.marked,expected); equal(client.document,"")
+     precondition(key(controller,client,"\r",code:UInt16(kVK_Return)))
+     equal(client.document,expected); equal(client.marked,"")
+    }
+   }
+  }
+  for (code,scalar) in [(kVK_LeftArrow,NSLeftArrowFunctionKey), (kVK_RightArrow,NSRightArrowFunctionKey),
+                         (kVK_UpArrow,NSUpArrowFunctionKey), (kVK_DownArrow,NSDownArrowFunctionKey),
+                         (kVK_PageUp,NSPageUpFunctionKey), (kVK_PageDown,NSPageDownFunctionKey)] {
+   check("navigation while converting \(code)") { controller,client in
+    type(controller,client,"a"); _=key(controller,client," ",code:UInt16(kVK_Space))
+    precondition(operation(controller,client,code,scalar),"conversion navigation must stay in IME")
+    precondition(!client.marked.isEmpty); equal(client.document,"")
+    let expected=client.marked
+    _=key(controller,client,"\r",code:UInt16(kVK_Return))
+    equal(client.document,expected); equal(client.marked,"")
+   }
+  }
+  for text in ["", "\u{E000}", "\u{F700}", "𠮷", "e\u{301}", "👩‍💻"] {
+   check("ordinary text \(text.debugDescription)") { controller,client in
+    type(controller,client,"a"); _=key(controller,client,text,code:UInt16(kVK_ANSI_A))
+    controller.commitComposition(client)
+    equal(client.document,"あ"+text); equal(client.marked,"")
+   }
+  }
   #if REAL_CONVERTER
   let converter=MeltypeConverter.shared
   let candidates=converter.candidates(for:"きょう")
