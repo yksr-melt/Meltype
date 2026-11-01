@@ -381,6 +381,13 @@ public:
         auto *ic = event.inputContext();
         auto *state = ic->propertyFor(&factory_);
         if (!state->session()) return;
+        // 機密の入力欄 (KDE Plasma のロック画面のパスワード欄など) では変換しない。
+        // fcitx5 本体は Password のときだけ入力メソッドを外すので、Sensitive だけの欄は
+        // ここでそのままアプリへ渡す (変換した文字をパスワード欄に入れない)。
+        if (isSensitiveInput(ic)) {
+            discardPending(ic, state);
+            return;
+        }
         syncCanDelete(ic, state);
         const auto key = event.key();
         const auto sym = key.sym();
@@ -503,8 +510,28 @@ private:
     void commitPending(fcitx::InputContext *ic) {
         auto *state = ic->propertyFor(&factory_);
         if (!state->session()) return;
+        if (isSensitiveInput(ic)) {
+            // 機密の入力欄には、未確定の内容を確定しない
+            discardPending(ic, state);
+            return;
+        }
         syncCanDelete(ic, state);
         apply(ic, native_.take(native_.commit(state->session())));
+    }
+
+    // 機密の入力欄か。KDE Plasma のロック画面のパスワード欄は、Qt が
+    // 「パスワード」ではなく「機密 (Sensitive)」として fcitx5 に伝えるため、
+    // fcitx5 本体のパスワード欄の扱い (Password) では外れない。
+    static bool isSensitiveInput(const fcitx::InputContext *ic) {
+        return ic->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive);
+    }
+
+    // 未確定の内容を入力欄へ確定せずに捨てる (機密の入力欄に移ったとき)。
+    // 本体の状態は commit で進め、返ってきた確定は使わない。
+    void discardPending(fcitx::InputContext *ic, MeltypeState *state) {
+        if (!state->preeditVisible) return;
+        native_.take(native_.commit(state->session()));
+        hidePreedit(ic);
     }
 
     // 入力欄のキャレットの前後の文字列 (それぞれ 20 文字まで)。入力欄が対応していなければ false。

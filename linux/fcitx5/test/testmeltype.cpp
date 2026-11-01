@@ -68,6 +68,19 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         typeKeys(frontend, uuid, "\n");
         FCITX_ASSERT(!ic->inputPanel().candidateList()) << "確定したら候補の一覧を閉じる";
 
+        // 機密の入力欄 (KDE Plasma のロック画面のパスワード欄など) では変換せず、そのままアプリへ渡す。
+        // fcitx5 本体は Password のときだけ入力メソッドを外すので、Sensitive だけの欄は Meltype 側で守る。
+        auto passwordUuid = frontend->call<ITestFrontend::createInputContext>("testpassword");
+        auto *passwordIc = instance->inputContextManager().findByUUID(passwordUuid);
+        FCITX_ASSERT(passwordIc);
+        passwordIc->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
+        instance->setCurrentInputMethod(passwordIc, "meltype", true);
+        FCITX_ASSERT(instance->inputMethod(passwordIc) == "meltype");
+        FCITX_ASSERT(!frontend->call<ITestFrontend::sendKeyEvent>(passwordUuid, Key("n"), false))
+            << "機密の入力欄なのに、Meltype がキーを取った";
+        FCITX_ASSERT(passwordIc->inputPanel().preedit().toString().empty())
+            << "機密の入力欄に未確定の文字が出た";
+
         dispatcher->schedule([dispatcher, instance]() {
             dispatcher->detach();
             instance->exit();
