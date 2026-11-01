@@ -5456,13 +5456,14 @@ internal static class CompositionTests
             Assert.Equal("ng", text.Display(final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
             text.Append('h');
             Assert.Equal("にゅう", text.Display(final: false), "続けて打つと登録した読みになる");
-            // 表を登録していなければ、これまでどおり んg と読む
+            // 表を登録していない場合 (main 側の判定に従う)
             var plain = new CompositionText(Detector);
             foreach (var c in "ng") plain.Append(c);
-            // main の判定 (入力全体の重み比較) では、表が無いときの ng の表示が んg ではなく英字の ng になることがある。
-            // ここで確かめたいのは「表が無ければ、登録した読み (にゅう) にならない」ことだけ。
-            var plainDisplay = plain.Display(final: false);
-            Assert.True(plainDisplay is "んg" or "ng", $"表が無ければ今までどおり (んg か ng) 実際: {plainDisplay}");
+            // main の判定では、語頭の ng は表の有無に関係なく英字の ng として表示される (main だけの状態でも同じ結果を確認済み)。
+            // 表の登録で変わるのは、続けて h を打ったときに にゅう になるかどうか。
+            Assert.Equal("ng", plain.Display(final: false), "表が無いときの ng は main と同じ表示");
+            plain.Append('h');
+            Assert.True(plain.Display(final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
