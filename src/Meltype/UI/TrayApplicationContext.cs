@@ -13,6 +13,7 @@ namespace Meltype.UI;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly MeltypeEngine _engine;
+    private readonly AppState _state;
     private static readonly Meltype.Composition.GitHubIssueTitles GitHubTitlesShared = new();
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem;
@@ -47,14 +48,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     internal static bool ShouldShowModeIndicator(Settings settings) => settings.Enabled && (settings.Mode switch
     {
-        InputMode.Keyboard => settings.ShowModeIndicator,
+        InputMode.Keyboard => settings.ModeIndicator != ModeIndicatorTiming.Never,
         InputMode.Tsf => settings.ShowTsfModeIndicator,
         _ => false,
     });
 
-    public TrayApplicationContext(MeltypeEngine engine)
+    public TrayApplicationContext(MeltypeEngine engine, AppState state)
     {
         _engine = engine;
+        _state = state;
         _invoker.CreateControl();
         var detector = Composition.CompositionDetector.CreateDefault(AppPaths.UserDictionaryDirectory);
         detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
@@ -82,30 +84,26 @@ internal sealed class TrayApplicationContext : ApplicationContext
             EnglishFirstInput = () => _engine.Settings.EnglishFirstInput,
             ConsonantAbbreviations = () => _engine.Settings.ConsonantAbbreviations,
             CorrectTypos = () => _engine.Settings.CorrectTypos,
-            SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
+            Slash = () => _engine.Settings.Slash,
             ZSymbols = () => _engine.Settings.ZSymbols,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
             SpaceAroundNumbers = () => _engine.Settings.SpaceAroundNumbers,
             NumberKeysSelectCandidates = () => _engine.Settings.NumberKeysSelectCandidates,
-            ShiftSpaceHalfWidth = () => _engine.Settings.ShiftSpaceHalfWidth,
+            SpaceWidth = () => _engine.Settings.SpaceWidth,
             EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = () => _engine.Settings.FullWidthParentheses,
-            FullWidthSlash = () => _engine.Settings.FullWidthSlash,
             SquareBrackets = () => _engine.Settings.SquareBrackets,
             EscStepsBack = () => _engine.Settings.EscStepsBack,
             EscRevertsSelectedClause = () => _engine.Settings.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = () => _engine.Settings.FunctionKeysAffectSelectedClause,
-            CompatibleShortcuts = () => _engine.Settings.CompatibleShortcuts,
+            ControlKeys = () => _engine.Settings.ControlKeys,
             PartialCommit = () => _engine.Settings.PartialCommit,
-            MacControlKeys = () => _engine.Settings.MacControlKeys,
             CursorIntoBrackets = () => _engine.Settings.CursorIntoBrackets,
             ControlKeyBindings = () => _engine.Settings.ControlKeyBindings,
             CalculatorCandidates = () => _engine.Settings.CalculatorCandidates,
-            LogKeyIntervals = () => _engine.Settings.LogKeyIntervals,
             LaughterAfterKana = () => _engine.Settings.LaughterAfterKana,
             ContextualLearning = () => _engine.Settings.ContextualLearning,
-            FullWidthSpaceByDefault = () => _engine.Settings.FullWidthSpaceByDefault,
             ShowCandidatesWhileTyping = () => _engine.Settings.ShowCandidatesWhileTyping,
             GitHubIssueCandidates = () => _engine.Settings.GitHubIssueCandidates,
             GitHubRepository = () => _engine.Settings.GitHubRepository,
@@ -114,7 +112,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
             ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
-            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ShowModeIndicatorOnFocus,
+            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
             Placement = () => _engine.Settings.CompositionPlacement,
             Size = () => _engine.Settings.CompositionSize,
@@ -212,32 +210,29 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
         UpdateStatus();
-        // 初めて起動したら使い方を見せる (見せたことは設定に残す)
-        var firstRun = !_engine.Settings.WelcomeShown;
+        // 初めて起動したら使い方を見せる (見せたことは state.json に残す)
+        var firstRun = !_state.WelcomeShown;
         if (firstRun)
         {
-            var next = _engine.Settings.Clone();
-            next.WelcomeShown = true;
-            _engine.ApplySettings(next);
+            _state.WelcomeShown = true;
+            _state.Save();
             _invoker.BeginInvoke(ShowWelcome);
         }
         // 更新したあとの初めての起動なら、その版のリリースノートを一度だけ見せる (issue #1207)。
         // 初めて起動した人には見せず、今の版を見せたことにしておく
-        if (_engine.Settings.ReleaseNotesShown != AppInfo.Version)
+        if (_state.ReleaseNotesShown != AppInfo.Version)
         {
-            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_engine.Settings.ReleaseNotesShown, AppInfo.Version, firstRun);
-            var next = _engine.Settings.Clone();
-            next.ReleaseNotesShown = AppInfo.Version;
-            _engine.ApplySettings(next);
+            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_state.ReleaseNotesShown, AppInfo.Version, firstRun);
+            _state.ReleaseNotesShown = AppInfo.Version;
+            _state.Save();
             if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true));
         }
         // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
         // (初めて起動した人には、インストーラーが聞いている)
-        if (!AppPaths.IsPortable && !_engine.Settings.TsfOffered)
+        if (!AppPaths.IsPortable && !_state.TsfOffered)
         {
-            var next = _engine.Settings.Clone();
-            next.TsfOffered = true;
-            _engine.ApplySettings(next);
+            _state.TsfOffered = true;
+            _state.Save();
             if (!firstRun && CanOfferTsf()) _invoker.BeginInvoke(OfferTsf);
         }
         // 起動時の設定反映が終わってから、読み込み中に蓄積した除外をまとめて通知する。
@@ -252,11 +247,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void IntroduceTsf()
     {
-        if (AppPaths.IsPortable || _engine.Settings.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
+        if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
             RuntimeInformation.OSArchitecture == Architecture.Arm64) return;
         var wasTsf = _engine.Settings.Mode == InputMode.Tsf;
+        _state.TsfIntroduced = true;
+        _state.Save();
         var next = _engine.Settings.Clone();
-        next.TsfIntroduced = true;
         next.Mode = InputMode.Tsf;
         _engine.ApplySettings(next);
         // ほかのモードからなら ApplySettings が切り替える。もう Meltype IME のモードだったときも、入力方式を Meltype IME にする
@@ -270,7 +266,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private bool CanOfferTsf()
     {
-        if (_engine.Settings.TsfIntroduced || !Tip.TipServer.IsKnownUnregistered || RuntimeInformation.OSArchitecture == Architecture.Arm64) return false;
+        if (_state.TsfIntroduced || !Tip.TipServer.IsKnownUnregistered || RuntimeInformation.OSArchitecture == Architecture.Arm64) return false;
         if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "meltype-ime.ps1")) || !Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"))) return false;
         try
         {
@@ -318,9 +314,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
         // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
-        var next = _engine.Settings.Clone();
-        next.TsfIntroduced = true;
-        _engine.ApplySettings(next);
+        _state.TsfIntroduced = true;
+        _state.Save();
         SetMode(InputMode.Tsf);
         UpdateStatus();
     }
@@ -616,7 +611,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _settingsForm.Activate();
             return;
         }
-        _settingsForm = new SettingsForm(_engine);
+        _settingsForm = new SettingsForm(_engine, _state);
         _settingsForm.FormClosed += (_, _) => UpdateStatus();
         _settingsForm.Show();
     }

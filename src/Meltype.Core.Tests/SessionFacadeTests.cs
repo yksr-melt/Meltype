@@ -493,9 +493,9 @@ internal static class SessionFacadeTests
     [Test]
     public static void FullWidthSpaceSetting_SpaceIsFullWidthAndShiftSpaceIsHalfWidth()
     {
-        // #881: 設定「スペースを全角で入力」では、Meltype IME も何も打っていないときの Space が全角・Shift+Space が半角 (Meltype キーボードと同じ: #259)
-        var settings = new Settings { FullWidthSpaceByDefault = true };
-        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault }, () => settings);
+        // #881: 設定「スペースの幅」が全角では、Meltype IME も何も打っていないときの Space が全角・Shift+Space が半角 (Meltype キーボードと同じ: #259)
+        var settings = new Settings { SpaceWidth = SpaceWidth.FullWidth };
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SpaceWidth = () => settings.SpaceWidth }, () => settings);
         var result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
         Assert.True(result.Consumed, "Space を受け取る");
         Assert.Equal("　", string.Concat(result.Commits.Select(c => c.Text)));
@@ -508,11 +508,11 @@ internal static class SessionFacadeTests
         result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
         Assert.True(!result.Consumed && result.Commits.Count == 0, "英数ではアプリに通す");
 
-        // 設定が OFF なら、Space はアプリに通す (DLL も受け取らない)
-        settings.FullWidthSpaceByDefault = false;
-        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault }, () => settings);
+        // 全角でなければ、Space はアプリに通す (DLL も受け取らない)
+        settings.SpaceWidth = SpaceWidth.Standard;
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SpaceWidth = () => settings.SpaceWidth }, () => settings);
         result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
-        Assert.True(!result.Consumed && result.Commits.Count == 0, "設定が OFF なら通す");
+        Assert.True(!result.Consumed && result.Commits.Count == 0, "全角でなければ通す");
     }
 
     [Test]

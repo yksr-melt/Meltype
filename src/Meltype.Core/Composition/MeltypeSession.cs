@@ -248,30 +248,26 @@ public sealed class MeltypeSession
             ConsonantAbbreviations = () => settings.ConsonantAbbreviations,
             CandidateMeanings = () => settings.ShowCandidateMeanings,
             CorrectTypos = () => settings.CorrectTypos,
-            SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
+            Slash = () => settings.Slash,
             ZSymbols = () => settings.ZSymbols,
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
             SpaceAroundNumbers = () => settings.SpaceAroundNumbers,
             NumberKeysSelectCandidates = () => settings.NumberKeysSelectCandidates,
-            ShiftSpaceHalfWidth = () => settings.ShiftSpaceHalfWidth,
+            SpaceWidth = () => settings.SpaceWidth,
             EnterCommitsAsShown = () => settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => settings.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = () => settings.FullWidthParentheses,
-            FullWidthSlash = () => settings.FullWidthSlash,
             SquareBrackets = () => settings.SquareBrackets,
             EscStepsBack = () => settings.EscStepsBack,
             EscRevertsSelectedClause = () => settings.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = () => settings.FunctionKeysAffectSelectedClause,
-            CompatibleShortcuts = () => settings.CompatibleShortcuts,
+            ControlKeys = () => settings.ControlKeys,
             PartialCommit = () => settings.PartialCommit,
-            MacControlKeys = () => settings.MacControlKeys,
             CursorIntoBrackets = () => settings.CursorIntoBrackets,
             ControlKeyBindings = () => settings.ControlKeyBindings,
             CalculatorCandidates = () => settings.CalculatorCandidates,
-            LogKeyIntervals = () => settings.LogKeyIntervals,
             LaughterAfterKana = () => settings.LaughterAfterKana,
             ContextualLearning = () => settings.ContextualLearning,
-            FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault,
             ShowCandidatesWhileTyping = () => settings.ShowCandidatesWhileTyping,
             GitHubIssueCandidates = () => settings.GitHubIssueCandidates,
             GitHubRepository = () => settings.GitHubRepository,
@@ -451,7 +447,7 @@ public sealed class MeltypeSession
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, false, false, down.TimeMs));
         if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, false, false, down.TimeMs));
 
-        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().FullWidthSpaceByDefault)));
+        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().SpaceWidth == SpaceWidth.FullWidth)));
         // このキーをアプリに送り直した (= 使わなかった) なら、アプリに渡す。
         var consumed = swallowed && !_host.ReplayedCurrent;
         Feed(down with { IsUp = true });

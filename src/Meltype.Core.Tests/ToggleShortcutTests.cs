@@ -251,9 +251,8 @@ internal static class ToggleShortcutTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            var settings = new Settings { ConvertKeysSwitchKeyboard = true, JapaneseThreshold = 100, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
+            var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
             var edited = settings.Clone().Normalize(reportShortcutExclusions: false);
-            Assert.Equal(20, edited.JapaneseThreshold, "数値は正規化する");
             Assert.Equal(1, edited.EffectiveToggleShortcuts.Count, "キーの正規化は既存どおり");
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "編集時は通知しない");
             settings.Normalize();

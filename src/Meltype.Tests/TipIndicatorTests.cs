@@ -18,7 +18,7 @@ internal static class TipIndicatorTests
         {
             foreach (var tsf in new[] { false, true })
             {
-                settings.ShowModeIndicator = keyboard;
+                settings.ModeIndicator = keyboard ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never;
                 settings.ShowTsfModeIndicator = tsf;
                 settings.Mode = InputMode.Keyboard;
                 Assert.Equal(keyboard, UI.TrayApplicationContext.ShouldShowModeIndicator(settings), "キーボード方式は既存設定だけを見る");

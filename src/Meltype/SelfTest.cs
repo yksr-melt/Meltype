@@ -86,7 +86,7 @@ internal static class SelfTest
             invoker.CreateControl();
             using var service = new CompositionService(invoker, detector, new CompositionOptions { UserDictionary = new UserDictionary(null), History = new ConversionHistory(null) });
             var names = new List<string>();
-            foreach (var form in new Form[] { new UI.SettingsForm(engine), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
+            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
             {
                 using (form)
                 {
@@ -103,8 +103,8 @@ internal static class SelfTest
         {
             // トレイのアイコン・メニュー・ホットキーを作ってすぐ閉じる (キーボードフックは掛けない)。
             // TsfIntroduced にしておく (作る人の PC に Meltype IME があると、入力方式が Meltype IME に切り替わってしまう)。
-            using var engine = new MeltypeEngine(new Config.Settings { TsfIntroduced = true }, null, null);
-            var tray = new UI.TrayApplicationContext(engine);
+            using var engine = new MeltypeEngine(new Config.Settings(), null, null);
+            var tray = new UI.TrayApplicationContext(engine, new Config.AppState { TsfIntroduced = true });
             tray.ExitThread();
             return "OK";
         });

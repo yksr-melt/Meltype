@@ -256,15 +256,14 @@ internal static class WindowsTests
         var arm64 = System.Runtime.InteropServices.Architecture.Arm64;
         var fresh = new Settings();
         Assert.Equal(InputMode.Tsf, fresh.Mode, "初期値は Meltype IME");
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: false, inUserLanguageList: true, x64), "登録済みで一覧にもある");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: false, inUserLanguageList: true, arm64), "ARM64 は登録済みで一覧にあっても戻す");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: true, inUserLanguageList: false, x64), "登録されていない");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: false, inUserLanguageList: false, x64), "まだ切り替えたことがなく、一覧に無い");
+        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: true, x64), "登録済みで一覧にもある");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: true, arm64), "ARM64 は登録済みで一覧にあっても戻す");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: true, inUserLanguageList: false, x64), "登録されていない");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: false, x64), "まだ切り替えたことがなく、一覧に無い");
 
-        var introduced = new Settings { TsfIntroduced = true };
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(introduced, knownUnregistered: false, inUserLanguageList: false, x64), "使っていた人は、一覧に無くても戻さない");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(introduced, knownUnregistered: false, inUserLanguageList: true, arm64), "使っていた人も、ARM64 なら戻す");
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(new Settings { Mode = InputMode.Keyboard }, knownUnregistered: true, inUserLanguageList: false, arm64), "Meltype キーボードはそのまま");
+        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: true, knownUnregistered: false, inUserLanguageList: false, x64), "使っていた人は、一覧に無くても戻さない");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: true, knownUnregistered: false, inUserLanguageList: true, arm64), "使っていた人も、ARM64 なら戻す");
+        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, knownUnregistered: true, inUserLanguageList: false, arm64), "Meltype キーボードはそのまま");
     }
 
     [Test]
@@ -278,8 +277,8 @@ internal static class WindowsTests
     public static void Portable_StartupResetsModeToKeyboard()
     {
         var x64 = System.Runtime.InteropServices.Architecture.X64;
-        Assert.True(global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Tsf }, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
-        Assert.True(!global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Keyboard }, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
+        Assert.True(global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Tsf }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
+        Assert.True(!global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
     }
 
     [Test]
@@ -449,7 +448,7 @@ internal static class WindowsTests
     public static void SettingsForm_UsesToggleSwitchesForEveryOnOffSetting()
     {
         using var engine = new MeltypeEngine(new Settings(), null, null);
-        using var form = new UI.SettingsForm(engine);
+        using var form = new UI.SettingsForm(engine, new AppState());
         var controls = Descendants(form).ToList();
         // 設定画面に出す bool の項目は、すべてスイッチ (ON/OFF だけのプルダウン・チェックボックスを残さない)
         var settings = typeof(Settings).GetProperties().Count(p => p.PropertyType == typeof(bool) && p.CanWrite &&

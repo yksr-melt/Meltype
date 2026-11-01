@@ -18,10 +18,11 @@ public static class PastePolicy
         className is { Length: >= 3 } &&
         className[0] == 'Q' && className[1] == 't' && className[2] is >= '0' and <= '9';
         
-    public static bool ShouldPaste(Settings settings, string? processName, bool isQtApp)
+    public static bool ShouldPaste(Settings settings, string? processName, bool isQtApp) => settings.CommitMethodFor(processName) switch
     {
-        if (settings.UsesNoPaste(processName)) return false;
-        if (settings.UsesPaste(processName)) return true;
-        return isQtApp;
-    }
+        CommitMethod.Paste => true,
+        CommitMethod.Keys => false,
+        CommitMethod.Auto => isQtApp,
+        var method => throw new InvalidOperationException($"不明な CommitMethod: {method}"),
+    };
 }

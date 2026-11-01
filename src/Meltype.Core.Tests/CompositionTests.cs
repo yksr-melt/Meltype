@@ -174,25 +174,22 @@ internal static class CompositionTests
         public bool ZSymbols { get; set; } = true;
         public bool NumberKeysSelectCandidates { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
-        public bool ShiftSpaceHalfWidth { get; set; }
+        public Meltype.Config.SpaceWidth SpaceWidth { get; set; }
         public bool EnterCommitsAsShown { get; set; }
         public bool AlphanumericKeyStartsAsTyped { get; set; }
         public bool FullWidthParentheses { get; set; }
-        public bool FullWidthSlash { get; set; }
+        public Meltype.Config.SlashStyle Slash { get; set; }
         public bool SquareBrackets { get; set; }
         public bool EscStepsBack { get; set; }
         public bool EscRevertsSelectedClause { get; set; }
         public bool FunctionKeysAffectSelectedClause { get; set; }
-        public bool CompatibleShortcuts { get; set; }
+        public Meltype.Config.ControlKeyLayout ControlKeys { get; set; }
         public bool PartialCommit { get; set; }
-        public bool MacControlKeys { get; set; }
         public bool CursorIntoBrackets { get; set; }
         public string ControlKeyBindings { get; set; } = "";
         public bool CalculatorCandidates { get; set; }
-        public bool LogKeyIntervals { get; set; }
         public bool LaughterAfterKana { get; set; }
         public bool ContextualLearning { get; set; }
-        public bool FullWidthSpaceByDefault { get; set; }
         public bool ShowCandidatesWhileTyping { get; set; }
         public bool GitHubIssueCandidates { get; set; }
         public string GitHubRepository { get; set; } = "";
@@ -248,7 +245,7 @@ internal static class CompositionTests
 
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
-            TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, bool slashAsMiddleDot = false, Predictor? predictor = null,
+            TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
             Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
         {
             Direct = direct;
@@ -274,25 +271,21 @@ internal static class CompositionTests
                 ZSymbols = () => ZSymbols,
                 NumberKeysSelectCandidates = () => NumberKeysSelectCandidates,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
-                ShiftSpaceHalfWidth = () => ShiftSpaceHalfWidth,
+                SpaceWidth = () => SpaceWidth,
                 EnterCommitsAsShown = () => EnterCommitsAsShown,
                 AlphanumericKeyStartsAsTyped = () => AlphanumericKeyStartsAsTyped,
                 FullWidthParentheses = () => FullWidthParentheses,
-                FullWidthSlash = () => FullWidthSlash,
                 SquareBrackets = () => SquareBrackets,
                 EscStepsBack = () => EscStepsBack,
                 EscRevertsSelectedClause = () => EscRevertsSelectedClause,
                 FunctionKeysAffectSelectedClause = () => FunctionKeysAffectSelectedClause,
-                CompatibleShortcuts = () => CompatibleShortcuts,
+                ControlKeys = () => ControlKeys,
                 PartialCommit = () => PartialCommit,
-                MacControlKeys = () => MacControlKeys,
                 CursorIntoBrackets = () => CursorIntoBrackets,
                 ControlKeyBindings = () => ControlKeyBindings,
                 CalculatorCandidates = () => CalculatorCandidates,
-                LogKeyIntervals = () => LogKeyIntervals,
                 LaughterAfterKana = () => LaughterAfterKana,
                 ContextualLearning = () => ContextualLearning,
-                FullWidthSpaceByDefault = () => FullWidthSpaceByDefault,
                 ShowCandidatesWhileTyping = () => ShowCandidatesWhileTyping,
                 GitHubIssueCandidates = () => GitHubIssueCandidates,
                 GitHubRepository = () => GitHubRepository,
@@ -302,7 +295,7 @@ internal static class CompositionTests
                 Predictions = () => predictor is not null,
                 EnglishNamePredictions = () => englishNamePredictions,
                 Punctuation = () => Punctuation,
-                SlashAsMiddleDot = () => slashAsMiddleDot,
+                Slash = () => Slash,
                 Now = now ?? (() => DateTime.Now),
                 ShowTypedKeys = () => showTypedKeys,
                 TabConversion = () => tabConversion,
@@ -333,7 +326,7 @@ internal static class CompositionTests
             var letter = VirtualKeys.IsLetter(k.Vk);
             if (Direct) return letter && !_directEnglishWord && Level != Meltype.Config.DetectionLevel.Manual;
             if (Kana && Detection.KanaDetector.IsKanaKey(k.Vk)) return true;
-            if (k.Vk == VirtualKeys.Space && (_shiftHeld || FullWidthSpaceByDefault && !Direct)) return true;
+            if (k.Vk == VirtualKeys.Space && (_shiftHeld || SpaceWidth == Meltype.Config.SpaceWidth.FullWidth && !Direct)) return true;
             return letter || k.Vk is >= 0x30 and <= 0x39 or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
         }
 
@@ -1406,7 +1399,7 @@ internal static class CompositionTests
             ("3/4", true, "3/4"), ("/help", true, "/help"), ("and/or", true, "and/or"),
         })
         {
-            var k = new Keyboard(slashAsMiddleDot: on) { SigilWords = false }; // 先頭の /help は #193 でそのまま入力になるので切って比べる
+            var k = new Keyboard { SigilWords = false, Slash = on ? Meltype.Config.SlashStyle.MiddleDot : Meltype.Config.SlashStyle.Slash }; // 先頭の /help は #193 でそのまま入力になるので切って比べる
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, $"{typed} ({(on ? "ON" : "OFF")})");
         }
@@ -2267,7 +2260,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue708_ShiftSpaceCanBeHalfWidth()
     {
-        var k = new Keyboard { ShiftSpaceHalfWidth = true };
+        var k = new Keyboard { SpaceWidth = Meltype.Config.SpaceWidth.HalfWidth };
         k.Type("tanaka\n");
         k.Host.PhysicalShift = true;
         k.Key(VirtualKeys.LShift);
@@ -2327,7 +2320,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue502_SymbolStyleCanBeChosen()
     {
-        var k = new Keyboard { SquareBrackets = true, FullWidthSlash = true };
+        var k = new Keyboard { SquareBrackets = true, Slash = Meltype.Config.SlashStyle.FullWidth };
         k.Type("[nihongo]aiueo/kakikukeko\n");
         Assert.Equal("［にほんご］あいうえお／かきくけこ", k.Host.Document);
         var normal = new Keyboard();
@@ -2527,7 +2520,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue599_CtrlKLResizeTheClause()
     {
-        var k = new Keyboard { CompatibleShortcuts = true };
+        var k = new Keyboard { ControlKeys = Meltype.Config.ControlKeyLayout.Atok };
         k.Type("tanniwotoru ");
         Assert.Equal("単位を取る", string.Concat(k.Host.View!.Clauses!));
         k.Key(VirtualKeys.LControl);
@@ -2609,7 +2602,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue643_MacControlKeysConvertLikeKotoeri()
     {
-        var k = new Keyboard { MacControlKeys = true };
+        var k = new Keyboard { ControlKeys = Meltype.Config.ControlKeyLayout.Mac };
         k.Type("toukyou");
         k.Key(VirtualKeys.LControl);
         k.Key('K');
@@ -2737,18 +2730,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue286_KeyIntervalsAreLoggedWithoutText()
-    {
-        var k = new Keyboard { LogKeyIntervals = true };
-        var before = Diagnostics.Log.Snapshot().Length;
-        var version = Diagnostics.Log.Version;
-        k.Type("hello");
-        var added = Diagnostics.Log.Snapshot().Select(x => x.Message).Where(x => x.Contains("打鍵の間隔")).ToList();
-        Assert.True(added.Count >= 3, "間隔を残す: " + added.Count);
-        Assert.True(added.All(x => !x.Contains("hello")), "打った文字は残さない");
-    }
-
-    [Test]
     public static void Issue713_SingleKanaThenWIsLaughter()
     {
         var k = new Keyboard { LaughterAfterKana = true };
@@ -2828,7 +2809,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue259_SpaceCanBeFullWidthByDefault()
     {
-        var k = new Keyboard { FullWidthSpaceByDefault = true };
+        var k = new Keyboard { SpaceWidth = Meltype.Config.SpaceWidth.FullWidth };
         k.Type("tanaka\n");
         k.Press(VirtualKeys.Space);
         k.Type("tarou\n");

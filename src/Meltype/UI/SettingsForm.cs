@@ -11,7 +11,7 @@ namespace Meltype.UI;
 
 /// <summary>
 /// 設定画面。Settings の各項目を種類に合わせた部品で並べる:
-///   ON/OFF → スイッチ (ToggleSwitch)、選択肢 (列挙型) → 日本語名のプルダウン、数値 → 数値入力、アプリ別設定 → 表 (ON/OFF はスイッチ)。
+///   ON/OFF → スイッチ (ToggleSwitch)、選択肢 (列挙型) → 日本語名のプルダウン、アプリ別設定 → 表 (ON/OFF はスイッチ)。
 /// 項目名・分類・説明は Settings の属性 (DisplayName / Category / Description) から取る。
 /// 下の「判定テスト」欄では、打った英字をローマ字 (日本語) と英語のどちらと判定するかと理由を確認できる。
 /// </summary>
@@ -21,6 +21,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private const string Off = "OFF";
 
     private readonly MeltypeEngine _engine;
+    private readonly AppState _state;
     private readonly List<Binding> _bindings = [];
     private readonly TableLayoutPanel _body = new() { Dock = DockStyle.Fill, ColumnCount = 1, AutoScroll = true, Padding = new Padding(8, 8, SystemInformation.VerticalScrollBarWidth + 4, 8) };
     // 左の分類の一覧。選ぶと、その分類の枠まで設定の一覧をスクロールする (issue #1200)
@@ -51,9 +52,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
     /// <summary>1 項目分の部品と、設定値との受け渡し。</summary>
     private sealed record Binding(PropertyInfo Property, Control Control, Action<Settings> Load, Action<Settings> Store);
 
-    public SettingsForm(MeltypeEngine engine)
+    public SettingsForm(MeltypeEngine engine, AppState state)
     {
         _engine = engine;
+        _state = state;
         _draft = engine.Settings.Clone().Normalize();
         Text = "Meltype 設定";
         StartPosition = FormStartPosition.CenterScreen;
@@ -114,6 +116,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
             }
             next = Settings.MergeEdits(_opened, next, _engine.Settings);
             if (next.ToJson() != _engine.Settings.Clone().Normalize().ToJson()) _engine.ApplySettings(next);
+            if (_state.SettingsShowHelp != _showHelp.Checked || _state.SettingsWheelChangesValue != _wheelChangesValue.Checked)
+            {
+                _state.SettingsShowHelp = _showHelp.Checked;
+                _state.SettingsWheelChangesValue = _wheelChangesValue.Checked;
+                _state.Save();
+            }
         };
         defaults.Click += (_, _) =>
         {
@@ -198,11 +206,11 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private FlowLayoutPanel BuildViewOptions()
     {
         var bar = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(8, 4, 8, 0) };
-        _showHelp.Checked = _draft.SettingsShowHelp;
+        _showHelp.Checked = _state.SettingsShowHelp;
         _helpPanel.Visible = _showHelp.Checked;
         _showHelp.CheckedChanged += (_, _) => _helpPanel.Visible = _showHelp.Checked;
-        _wheelChangesValue.Checked = _draft.SettingsWheelChangesValue;
-        _toolTip.SetToolTip(_wheelChangesValue, WrapToolTip("OFF にすると、プルダウンや数値の上でホイールを回しても値を変えず、設定の一覧をスクロールします。"));
+        _wheelChangesValue.Checked = _state.SettingsWheelChangesValue;
+        _toolTip.SetToolTip(_wheelChangesValue, WrapToolTip("OFF にすると、プルダウンの上でホイールを回しても値を変えず、設定の一覧をスクロールします。"));
         bar.Controls.AddRange([_showHelp, _wheelChangesValue]);
         return bar;
     }
@@ -219,15 +227,15 @@ internal sealed class SettingsForm : Form, IMessageFilter
         base.OnFormClosed(e);
     }
 
-    /// <summary>「マウスホイールで値を変更」が OFF のとき、プルダウン・数値の上で回したホイールを設定の一覧のスクロールに回す。</summary>
+    /// <summary>「マウスホイールで値を変更」が OFF のとき、プルダウンの上で回したホイールを設定の一覧のスクロールに回す。</summary>
     public bool PreFilterMessage(ref Message m)
     {
         if (m.Msg != Native.WM_MOUSEWHEEL || _wheelChangesValue.Checked || !_body.IsHandleCreated) return false;
-        // 数値の入力欄は NumericUpDown の中の部品なので、親をたどって見る
+        // ホイールを受け取るのはプルダウンの中の部品のこともあるので、親をたどって見る
         for (var control = FromChildHandle(m.HWnd); control is not null; control = control.Parent)
         {
             if (control is ComboBox { DroppedDown: true }) return false; // 開いた一覧はホイールで選べるままにする
-            if (control is ComboBox or NumericUpDown && _body.Contains(control))
+            if (control is ComboBox && _body.Contains(control))
             {
                 Native.SendMessage(_body.Handle, m.Msg, m.WParam, m.LParam);
                 return true;
@@ -359,10 +367,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
     {
         var properties = typeof(Settings).GetProperties(BindingFlags.Public | BindingFlags.Instance)
             .Where(p => p.CanWrite && p.GetCustomAttribute<BrowsableAttribute>()?.Browsable != false)
-            // ポータブル版では動作モードと IME 切替の詳細設定を使わないため、設定画面には表示しない。
-            .Where(p => !AppPaths.IsPortable || (p.GetCustomAttribute<CategoryAttribute>()?.Category != "6. IME" && p.Name != nameof(Settings.Mode)))
+            // ポータブル版では動作モードを使わないため、設定画面には表示しない。
+            .Where(p => !AppPaths.IsPortable || p.Name != nameof(Settings.Mode))
             .GroupBy(p => p.GetCustomAttribute<CategoryAttribute>()?.Category ?? "その他")
-            .OrderBy(g => g.Key, StringComparer.Ordinal);
+            .OrderBy(g => CategoryNumber(g.Key));
         foreach (var category in properties)
         {
             var table = new TableLayoutPanel { Dock = DockStyle.Fill, AutoSize = true, ColumnCount = 2, Padding = new Padding(4) };
@@ -446,13 +454,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 },
                 s => property.SetValue(s, combo.SelectedItem is string name && name != DefaultFontChoice ? name : ""));
         }
-        if (type == typeof(string) && property.Name is nameof(Settings.TextInputApps) or nameof(Settings.PasteApps) or nameof(Settings.NoPasteApps))
-        {
-            var panel = AppListEditor(out var text);
-            return new Binding(property, panel,
-                s => text.Text = (string?)property.GetValue(s) ?? "",
-                s => property.SetValue(s, text.Text.Trim()));
-        }
         if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor))
         {
             var fallback = property.Name switch
@@ -473,13 +474,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
             return new Binding(property, box,
                 s => box.Text = (string?)property.GetValue(s) ?? "",
                 s => property.SetValue(s, box.Text));
-        }
-        if (type == typeof(int))
-        {
-            var number = new NumericUpDown { Minimum = 0, Maximum = 60000, Width = 120, Anchor = AnchorStyles.Left };
-            return new Binding(property, number,
-                s => number.Value = Math.Clamp((int)property.GetValue(s)!, (int)number.Minimum, (int)number.Maximum),
-                s => property.SetValue(s, (int)number.Value));
         }
         if (type == typeof(List<AppRule>))
         {
@@ -506,12 +500,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
                     foreach (var rule in (List<AppRule>)property.GetValue(s)!)
                     {
                         var kind = rule.Kind is { Length: > 0 } name && s.AppKinds.Any(k => k.Name == name) ? name : EnumName(typeof(AppProfile), rule.Profile);
-                        grid.Rows.Add(rule.Process, rule.Enabled, kind);
+                        grid.Rows.Add(rule.Process, rule.Enabled, kind, EnumName(typeof(CommitMethod), rule.Commit), rule.TextInput);
                     }
                 },
                 s => property.SetValue(s, grid.Rows.Cast<DataGridViewRow>()
                     .Where(r => !r.IsNewRow)
-                    .Select(r => (Process: (r.Cells[0].Value as string ?? "").Trim(), r.Cells[1].Value, Kind: r.Cells[2].Value as string ?? ""))
+                    .Select(r => (Process: (r.Cells[0].Value as string ?? "").Trim(), r.Cells[1].Value, Kind: r.Cells[2].Value as string ?? "", Commit: r.Cells[3].Value, TextInput: r.Cells[4].Value))
                     .Where(r => r.Process.Length > 0)
                     .Select(r =>
                     {
@@ -522,6 +516,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
                             Enabled = r.Value is not false, // 新しい行の空の値は ON
                             Profile = builtIn ?? AppProfile.General,
                             Kind = builtIn is null && r.Kind.Length > 0 ? r.Kind : null,
+                            Commit = Enum.GetValues<CommitMethod>().FirstOrDefault(m => Equals(r.Commit, EnumName(typeof(CommitMethod), m))),
+                            TextInput = r.TextInput is true,
                         };
                     })
                     .ToList()));
@@ -658,7 +654,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private static void ShowRunningApps(DataGridView grid, Control anchor) => ShowRunningApps(anchor, name =>
     {
         var existing = grid.Rows.Cast<DataGridViewRow>().FirstOrDefault(r => !r.IsNewRow && string.Equals(r.Cells[0].Value as string, name, StringComparison.OrdinalIgnoreCase));
-        var row = existing ?? grid.Rows[grid.Rows.Add(name, true, EnumName(typeof(AppProfile), AppProfile.General))];
+        var row = existing ?? grid.Rows[grid.Rows.Add(name, true, EnumName(typeof(AppProfile), AppProfile.General), EnumName(typeof(CommitMethod), CommitMethod.Auto), false)];
         grid.ClearSelection();
         row.Selected = true;
         grid.FirstDisplayedScrollingRowIndex = row.Index;
@@ -688,27 +684,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
         foreach (var name in names) menu.Items.Add(name, null, (_, _) => picked(name));
         if (menu.Items.Count == 0) menu.Items.Add("(窓を開いているアプリがありません)").Enabled = false;
         menu.Show(anchor, new Point(0, anchor.Height));
-    }
-
-    /// <summary>
-    /// アプリの一覧 (プロセス名、カンマ区切り) の設定 (入力欄とみなすアプリ・貼り付けで入力するアプリなど) の部品。
-    /// 手で書くほか、実行中のアプリから選んで足せる (issue #223)。
-    /// </summary>
-    private static Panel AppListEditor(out TextBox text)
-    {
-        var box = text = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "例: Adobe Premiere Pro.exe, foo.exe" };
-        var add = new Button { Text = "実行中のアプリから選ぶ…", AutoSize = true, Dock = DockStyle.Right };
-        add.Click += (_, _) => ShowRunningApps(add, name =>
-        {
-            var apps = box.Text.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
-            if (apps.Contains(name, StringComparer.OrdinalIgnoreCase)) return;
-            apps.Add(name);
-            box.Text = string.Join(", ", apps);
-        });
-        var panel = new Panel { Height = Math.Max(box.PreferredHeight, add.PreferredSize.Height) + 4, Dock = DockStyle.Fill };
-        panel.Controls.Add(box);
-        panel.Controls.Add(add);
-        return panel;
     }
 
     /// <summary>
@@ -748,20 +723,29 @@ internal sealed class SettingsForm : Form, IMessageFilter
             AllowUserToAddRows = true,
             AllowUserToDeleteRows = true,
         };
-        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "プロセス名 (例: code.exe)", FillWeight = 55 });
-        grid.Columns.Add(new ToggleSwitchColumn("有効", 22));
+        grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "プロセス名 (例: code.exe)", FillWeight = 40 });
+        grid.Columns.Add(new ToggleSwitchColumn("有効", 14));
         // 種類: 一般 / コード (コメント・文字列の中だけ日本語)
-        var profile = new DataGridViewComboBoxColumn { HeaderText = "種類", FillWeight = 23, FlatStyle = FlatStyle.Flat };
+        var profile = new DataGridViewComboBoxColumn { HeaderText = "種類", FillWeight = 16, FlatStyle = FlatStyle.Flat };
         profile.Items.AddRange(Enum.GetValues<AppProfile>().Select(p => (object)EnumName(typeof(AppProfile), p)).ToArray());
         grid.Columns.Add(profile);
+        var commit = new DataGridViewComboBoxColumn { HeaderText = ColumnName(nameof(AppRule.Commit)), FillWeight = 16, FlatStyle = FlatStyle.Flat, ToolTipText = ColumnHelp(nameof(AppRule.Commit)) };
+        commit.Items.AddRange(Enum.GetValues<CommitMethod>().Select(m => (object)EnumName(typeof(CommitMethod), m)).ToArray());
+        grid.Columns.Add(commit);
+        grid.Columns.Add(new ToggleSwitchColumn(ColumnName(nameof(AppRule.TextInput)), 14) { ToolTipText = ColumnHelp(nameof(AppRule.TextInput)) });
         grid.DefaultValuesNeeded += (_, e) =>
         {
             e.Row.Cells[1].Value = true;
             e.Row.Cells[2].Value = EnumName(typeof(AppProfile), AppProfile.General);
+            e.Row.Cells[3].Value = EnumName(typeof(CommitMethod), CommitMethod.Auto);
+            e.Row.Cells[4].Value = false;
         };
         grid.DataError += (_, e) => e.ThrowException = false;
         CommitSwitchesImmediately(grid);
         return grid;
+
+        static string ColumnName(string property) => typeof(AppRule).GetProperty(property)!.GetCustomAttribute<DisplayNameAttribute>()!.DisplayName;
+        static string ColumnHelp(string property) => WrapToolTip(typeof(AppRule).GetProperty(property)!.GetCustomAttribute<DescriptionAttribute>()!.Description);
     }
 
     /// <summary>
@@ -778,6 +762,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
     private static string EnumName(Type type, object value) =>
         type.GetField(value.ToString()!)?.GetCustomAttribute<DescriptionAttribute>()?.Description ?? value.ToString()!;
+
+    /// <summary>"10. アプリ" → 10。番号の無い分類は最後。</summary>
+    private static int CategoryNumber(string category)
+    {
+        var dot = category.IndexOf(". ", StringComparison.Ordinal);
+        return dot > 0 && int.TryParse(category[..dot], out var number) ? number : int.MaxValue;
+    }
 
     /// <summary>"1. 全般" → "全般"</summary>
     private static string StripNumber(string category)
@@ -891,8 +882,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
     {
         var settings = _draft.Clone();
         foreach (var binding in _bindings) binding.Store(settings);
-        settings.SettingsShowHelp = _showHelp.Checked;
-        settings.SettingsWheelChangesValue = _wheelChangesValue.Checked;
         return settings;
     }
 

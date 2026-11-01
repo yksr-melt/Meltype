@@ -11,6 +11,9 @@ namespace Meltype.Detection;
 /// </summary>
 public sealed class ScoreEngine
 {
+    /// <summary>判定のために保留する文字数の上限。超えたら判定不能 (Unknown) にする。</summary>
+    internal const int MaxPendingKeys = 6;
+
     private readonly RomajiDetector _romaji;
     private readonly KanaDetector _kana;
     private readonly EnglishDetector _english;
@@ -92,7 +95,7 @@ public sealed class ScoreEngine
                 _dictionary.Evaluate(letters, contributions);
                 japaneseDictionaryPrefix = _dictionary.IsPrefix(letters);
 
-                if (settings.TypoEnabled) _typo.Evaluate(letters, contributions);
+                _typo.Evaluate(letters, contributions);
 
                 // 5 文字以上が最後までローマ字として読めて、英単語 (の先頭) にも当たらない (fukare) なら日本語寄り。
                 // 辞書にない英単語 (debate) は、英数状態の判定でスペルチェッカーが止める (MeltypeEngine.ClassifyDirect)。
@@ -136,7 +139,7 @@ public sealed class ScoreEngine
             return Result(Verdict.English, letters, contributions, "英語の語と一致");
         }
 
-        if (input.IsFinal || letters.Length >= settings.MaxPendingKeys)
+        if (input.IsFinal || letters.Length >= MaxPendingKeys)
         {
             return Result(Verdict.Unknown, letters, contributions, "判断できない");
         }

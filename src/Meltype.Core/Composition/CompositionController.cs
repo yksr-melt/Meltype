@@ -216,8 +216,8 @@ public sealed record CompositionOptions
     /// <summary>ローマ字の打ち間違いを直すか (設定)。</summary>
     public Func<bool> CorrectTypos { get; init; } = () => true;
 
-    /// <summary>かなのすぐ後ろの / を中黒 (・) にするか (設定)。</summary>
-    public Func<bool> SlashAsMiddleDot { get; init; } = () => false;
+    /// <summary>かなのすぐ後ろの / を何にするか (設定)。</summary>
+    public Func<Config.SlashStyle> Slash { get; init; } = () => Config.SlashStyle.Slash;
 
     /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。issue #1008)。</summary>
     public Func<bool> ZSymbols { get; init; } = () => true;
@@ -229,25 +229,21 @@ public sealed record CompositionOptions
     public Func<bool> SpaceAroundNumbers { get; init; } = () => false;
     /// <summary>変換中の上の段の数字キー (1〜9) で候補を選ぶか (設定)。false なら確定して数字を入力する (issue #989)。</summary>
     public Func<bool> NumberKeysSelectCandidates { get; init; } = () => true;
-    public Func<bool> ShiftSpaceHalfWidth { get; init; } = () => false;
+    public Func<Config.SpaceWidth> SpaceWidth { get; init; } = () => Config.SpaceWidth.Standard;
     public Func<bool> EnterCommitsAsShown { get; init; } = () => false;
     public Func<bool> AlphanumericKeyStartsAsTyped { get; init; } = () => false;
     public Func<bool> FullWidthParentheses { get; init; } = () => false;
-    public Func<bool> FullWidthSlash { get; init; } = () => false;
     public Func<bool> SquareBrackets { get; init; } = () => false;
     public Func<bool> EscStepsBack { get; init; } = () => false;
     public Func<bool> EscRevertsSelectedClause { get; init; } = () => false;
     public Func<bool> FunctionKeysAffectSelectedClause { get; init; } = () => false;
-    public Func<bool> CompatibleShortcuts { get; init; } = () => false;
+    public Func<Config.ControlKeyLayout> ControlKeys { get; init; } = () => Config.ControlKeyLayout.Standard;
     public Func<bool> PartialCommit { get; init; } = () => false;
-    public Func<bool> MacControlKeys { get; init; } = () => false;
     public Func<bool> CursorIntoBrackets { get; init; } = () => false;
     public Func<string> ControlKeyBindings { get; init; } = () => "";
     public Func<bool> CalculatorCandidates { get; init; } = () => false;
-    public Func<bool> LogKeyIntervals { get; init; } = () => false;
     public Func<bool> LaughterAfterKana { get; init; } = () => false;
     public Func<bool> ContextualLearning { get; init; } = () => false;
-    public Func<bool> FullWidthSpaceByDefault { get; init; } = () => false;
     public Func<bool> ShowCandidatesWhileTyping { get; init; } = () => false;
     public Func<bool> GitHubIssueCandidates { get; init; } = () => false;
     public Func<string> GitHubRepository { get; init; } = () => "";
@@ -413,7 +409,7 @@ public sealed class CompositionController
         if (_options.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
         if (_options.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
         _text.CorrectTypos = () => _options.CorrectTypos();
-        _text.SlashAsMiddleDot = () => _options.SlashAsMiddleDot();
+        _text.Slash = () => _options.Slash();
         _text.ZSymbols = () => _options.ZSymbols();
         _text.SlashAtStart = () => Interlocked.Exchange(ref _slashAtStart, 0) == 1;
     }
@@ -629,12 +625,6 @@ public sealed class CompositionController
 
     private void HandleKey(KeyEvent e)
     {
-        // 設定「打鍵の間隔を判定の記録に残す」: 間隔 (ミリ秒) と、入力中か (語の途中か) だけ。打った文字は残さない (issue #286)
-        if (_options.LogKeyIntervals() && !e.IsUp && !VirtualKeys.IsModifier(e.Vk))
-        {
-            if (_lastKeyDownTime > 0) Diagnostics.Log.Decision($"打鍵の間隔: {e.TimeMs - _lastKeyDownTime}ms ({(IsComposing ? "入力中" : "入力の始め")})");
-            _lastKeyDownTime = e.TimeMs;
-        }
         var vk = e.Vk;
         if (e.IsUp)
         {
@@ -694,8 +684,8 @@ public sealed class CompositionController
         }
         if (_swallowedControl.Count > 0)
         {
-            // 設定「Ctrl + K / L で文節の長さを変える」: 変換中だけ (Shift + ← → と同じ。issue #599)
-            if (_converting && _options.CompatibleShortcuts() && vk is 'K' or 'L')
+            // 設定「Control キーの割り当て」が ATOK 風: Ctrl + K / L で文節の長さを変える。変換中だけ (Shift + ← → と同じ。issue #599)
+            if (_converting && _options.ControlKeys() == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
             {
                 Resize(vk == 'L' ? +1 : -1);
                 return;
@@ -705,8 +695,8 @@ public sealed class CompositionController
             {
                 vk = bound;
             }
-            // 設定「Control キーを macOS 標準の日本語入力と同じにする」: ATOK 風の割り当てより先に見る (issue #643)
-            else if (!_text.IsEmpty && _options.MacControlKeys() && MacControlShortcut(vk) is { } mac)
+            // 設定「Control キーの割り当て」が macOS 風: 組み込みの Ctrl+U/I/O/P/H より先に見る (issue #643)
+            else if (!_text.IsEmpty && _options.ControlKeys() == Config.ControlKeyLayout.Mac && MacControlShortcut(vk) is { } mac)
             {
                 if (mac is ResizeExtend or ResizeShrink)
                 {
@@ -946,12 +936,19 @@ public sealed class CompositionController
             return;
         }
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。英数状態では普通の空白のまま。
-        // 設定「スペースを全角で入力」では、Space が全角で Shift+Space が半角 (issue #259)
-        if (e.Vk == VirtualKeys.Space && !_options.DirectMode() && (_options.FullWidthSpaceByDefault() || _swallowedShift.Count > 0 || _host.IsShiftDown()))
+        // 設定「スペースの幅」が全角では、Space が全角で Shift+Space が半角 (issue #259)
+        var spaceWidth = _options.SpaceWidth();
+        if (e.Vk == VirtualKeys.Space && !_options.DirectMode() && (spaceWidth == Config.SpaceWidth.FullWidth || _swallowedShift.Count > 0 || _host.IsShiftDown()))
         {
-            // 設定「Shift + Space で半角スペース」(issue #708)、「スペースを全角で入力」では Space が全角・Shift+Space が半角 (issue #259)
+            // 「スペースの幅」が半角なら Shift+Space も半角 (issue #708)
             var shifted = _swallowedShift.Count > 0 || _host.IsShiftDown();
-            var halfWidth = _options.FullWidthSpaceByDefault() ? shifted : _options.ShiftSpaceHalfWidth();
+            var halfWidth = spaceWidth switch
+            {
+                Config.SpaceWidth.FullWidth => shifted,
+                Config.SpaceWidth.HalfWidth => true,
+                Config.SpaceWidth.Standard => false,
+                _ => throw new InvalidOperationException($"不明な SpaceWidth: {spaceWidth}"),
+            };
             CommitText(halfWidth ? " " : "　", english: false);
             return;
         }
@@ -1031,9 +1028,6 @@ public sealed class CompositionController
 
     // F6〜F10 (Ctrl+U/I/O/P・無変換・ひらがなキーも) でかな・英字にしたか。次に文字を打ったら確定する。
     private bool _modeByKey;
-
-    // 設定「打鍵の間隔を判定の記録に残す」: 前のキーを押した時刻
-    private long _lastKeyDownTime;
 
     // 続けて打つ前に選んでいた候補 (読み → 文字)。確定するか、変換ボックスを空にするまで。
     private readonly Dictionary<string, string> _keptChoices = [];
@@ -1124,7 +1118,6 @@ public sealed class CompositionController
         _text.Punctuation = _options.Punctuation();
         _text.FullWidthParentheses = _options.FullWidthParentheses();
         _text.SquareBrackets = _options.SquareBrackets();
-        _text.FullWidthSlash = _options.FullWidthSlash();
         _text.LaughterAfterKana = _options.LaughterAfterKana();
         var id = ++_compositionId;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
@@ -1688,7 +1681,8 @@ public sealed class CompositionController
                 List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
-                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)])) { Kana = _text.KanaForSegment(s) });
+                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)]))
+                { Kana = _text.KanaForSegment(s) });
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
@@ -3248,7 +3242,7 @@ public sealed class CompositionController
     private const int ResizeExtend = 0x7FFF0001, ResizeShrink = 0x7FFF0002;
 
     /// <summary>
-    /// 設定「Control キーを macOS 標準の日本語入力と同じにする」の割り当て。J K L = ひらがな / カタカナ / 全角英字、H D = 1 文字消す、
+    /// 設定「Control キーの割り当て」が macOS 風のときの割り当て。J K L = ひらがな / カタカナ / 全角英字、H D = 1 文字消す、
     /// N P = 次 / 前の候補、B F A E = カーソル移動、O I = 文節を伸ばす / 縮める。
     /// </summary>
     private static int? MacControlShortcut(int vk) => vk switch

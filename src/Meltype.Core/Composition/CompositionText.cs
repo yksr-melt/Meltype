@@ -198,24 +198,28 @@ public sealed class CompositionText
             _units.Add(new CompositionUnit("・", "/"));
             return;
         }
-        // / キーで中黒 (設定): かなのすぐ後ろの / は ・ (いろん/ますく → いろん・ますく)。英字・数字の後ろ (and/or、3/4、URL)
+        // 設定「かなの後ろの /」: かなのすぐ後ろの / を ・ (いろん/ますく → いろん・ますく) か ／ にする (issue #502)。英字・数字の後ろ (and/or、3/4、URL)
         // と入力の始め (/help) は / のまま (issue #122)。英語の区間に入ったときは、打ったままの / を見せる。
-        if (c == '/' && SlashAsMiddleDot() && _units.Count > 0 && _units[^1].Kana is [.., var kana] && kana is >= 'ぁ' and <= 'ヺ' or 'ー')
+        if (c == '/' && _units.Count > 0 && _units[^1].Kana is [.., var kana] && kana is >= 'ぁ' and <= 'ヺ' or 'ー')
         {
-            _units.Add(new CompositionUnit("・", "/"));
-            return;
-        }
-        // 設定「/ を全角のスラッシュ／にする」: 中黒と同じく、かなのすぐ後ろだけ (issue #502)
-        if (c == '/' && FullWidthSlash && _units.Count > 0 && _units[^1].Kana is [.., var kanaBefore] && kanaBefore is >= 'ぁ' and <= 'ヺ' or 'ー')
-        {
-            _units.Add(new CompositionUnit("／", "/"));
-            return;
+            var slash = Slash() switch
+            {
+                Config.SlashStyle.MiddleDot => "・",
+                Config.SlashStyle.FullWidth => "／",
+                Config.SlashStyle.Slash => null,
+                var style => throw new InvalidOperationException($"不明な SlashStyle: {style}"),
+            };
+            if (slash is not null)
+            {
+                _units.Add(new CompositionUnit(slash, "/"));
+                return;
+            }
         }
         _units.Add(new CompositionUnit(Symbol(c).ToString(), c.ToString()));
     }
 
-    /// <summary>かなのすぐ後ろの / を中黒 (・) にするか (設定)。</summary>
-    public Func<bool> SlashAsMiddleDot { get; set; } = () => false;
+    /// <summary>かなのすぐ後ろの / を何にするか (設定)。</summary>
+    public Func<Config.SlashStyle> Slash { get; set; } = () => Config.SlashStyle.Slash;
 
     /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。OFF なら z はほかの英字と同じ: issue #1008)。</summary>
     public Func<bool> ZSymbols { get; set; } = () => true;
@@ -1088,9 +1092,6 @@ public sealed class CompositionText
 
     /// <summary>[ ] を「」ではなく［］にするか (設定)。</summary>
     public bool SquareBrackets { get; set; }
-
-    /// <summary>かなの後ろの / を全角の／にするか (設定)。</summary>
-    public bool FullWidthSlash { get; set; }
 
     /// <summary>1 つのかなの音の後ろの w を笑いにするか (設定)。</summary>
     public bool LaughterAfterKana { get; set; }
