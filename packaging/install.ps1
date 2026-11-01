@@ -160,16 +160,37 @@ function Save-RegistryState([string]$Path) {
     if ($exists) {
         $item = Get-ItemProperty -LiteralPath $Path
         foreach ($property in $item.PSObject.Properties) {
-            if ($property.Name -notmatch '^PS(Path|ParentPath|ChildName|Drive|Provider)
+            if ($property.Name -notmatch '^PS(Path|ParentPath|ChildName|Drive|Provider)$') {
+                $values[$property.Name] = $property.Value
+            }
+        }
+    }
+    return @{ Path = $Path; Exists = $exists; Values = $values }
+}
+function Restore-RegistryState($Snapshot) {
+    if (-not $Snapshot.Exists) {
+        Remove-Item -LiteralPath $Snapshot.Path -Recurse -Force -ErrorAction SilentlyContinue
+        return
+    }
+    New-Item -Path $Snapshot.Path -Force | Out-Null
+    $current = Get-ItemProperty -LiteralPath $Snapshot.Path
+    foreach ($property in $current.PSObject.Properties) {
+        if ($property.Name -notmatch '^PS(Path|ParentPath|ChildName|Drive|Provider)$' -and -not $Snapshot.Values.ContainsKey($property.Name)) {
+            Remove-ItemProperty -LiteralPath $Snapshot.Path -Name $property.Name -ErrorAction Stop
+        }
+    }
+    foreach ($name in $Snapshot.Values.Keys) {
+        Set-ItemProperty -LiteralPath $Snapshot.Path -Name $name -Value $Snapshot.Values[$name] -ErrorAction Stop
+    }
+}
+try {
     Write-Mark 'phase=stop'
     Stop-Meltype
-    # 実行中の DLL / EXE を退避しない。終了後にバックアップする。
     if ($hadTarget) {
         Write-Mark 'phase=backup'
         Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force -ErrorAction Stop
         $backupCompleted = $true
     }
-    # Save metadata before the first installation mutation.
     foreach ($keyPath in @($innoKey, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype')) {
         $registrySnapshots += ,(Save-RegistryState $keyPath)
     }
@@ -180,7 +201,6 @@ function Save-RegistryState([string]$Path) {
         if ($existed) { Copy-Item -LiteralPath $shortcutPath -Destination $savedPath -ErrorAction Stop }
         $shortcutSnapshots += ,@{ Path = $shortcutPath; Saved = $savedPath; Exists = $existed }
     }
-    $installModified = $true
 
 # 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。
 $oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
