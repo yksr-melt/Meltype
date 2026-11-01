@@ -101,8 +101,9 @@ public sealed class CompositionText
             var acronym = word.Any(char.IsAsciiLetterUpper) && word.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c));
             var knownUnambiguous = word.Length >= 3 && _detector.IsKnownEnglishWord(word) && !_detector.Romaji.AnalyzeFragment(lower).IsValid;
             var properNoun = _detector.ProperNouns.Contains(lower) && (_units[^1].Raw != "-" || word.Any(char.IsAsciiLetterUpper) || !_detector.Romaji.AnalyzeFragment(lower).IsValid);
-            var loneConsonant = word.Length == 1 && char.IsAsciiLetterLower(word[0]) && word[0] is not ('a' or 'i' or 'u' or 'e' or 'o');
-            if (acronym || knownUnambiguous || properNoun || _units[^1].Raw == "-" && loneConsonant)
+            // かなにならずに残った英字 (p-hub の p、kyouhapt-query-digest の t) の後の - は長音ではない。かなになった ん (n-to) の後は長音
+            var unconverted = _units[^2].Kana == _units[^2].Raw && _units[^2].Raw.All(char.IsAsciiLetterLower);
+            if (acronym || knownUnambiguous || properNoun || _units[^1].Raw == "-" && unconverted)
                 _units[^1] = _units[^1] with { Kana = _units[^1].Raw };
         }
         // … になった / の続きの / は、同じ … に足す (4〜6 個で ……、7〜9 個で ………: 3 個ごとに … を 1 つ増やす。issue #495)

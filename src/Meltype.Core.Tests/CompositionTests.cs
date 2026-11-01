@@ -3603,6 +3603,12 @@ internal static class CompositionTests
             ["J-core"] = "J-core",
             ["p-hub"] = "p-hub",
             ["talk-admin"] = "talk-admin",
+            // 報告 (#1349): かなの後ろの子音だけの語の後の - が長音になる (きょうはptーquery-digest)。ん (n-to・nn-to) の後は長音
+            ["pt-query-digest"] = "pt-query-digest",
+            ["kyouhapt-query-digest"] = "きょうはpt-query-digest",
+            ["kyouhals-files"] = "きょうはls-files",
+            ["n-to"] = "んーと",
+            ["nn-to"] = "んーと",
             // 報告: ca / cu / co で か く こ
             ["cacuco"] = "かくこ",
             ["iijane"] = "いいじゃね",
