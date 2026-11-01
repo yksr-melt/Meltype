@@ -39,8 +39,11 @@ def load_items(schema):
     for key, prop in schema.get("properties", {}).items():
         if "title" in prop:
             groups.setdefault(prop.get("x-category", OTHER_CATEGORY), []).append((key, prop))
-    # 分類は "1. 全般" のように番号から始まる (Windows 版の設定画面と同じ並び)。番号の無い「その他」は最後
-    return sorted(groups.items(), key=lambda group: (group[0] == OTHER_CATEGORY, group[0]))
+    # 分類は "1. 全般" のように番号から始まり、番号の順に並べる (Windows 版の SettingsForm.CategoryNumber と同じ)。番号の無い分類は最後
+    def number(category):
+        match = re.match(r"(\d+)\. ", category)
+        return int(match[1]) if match else sys.maxsize
+    return sorted(groups.items(), key=lambda group: number(group[0]))
 
 
 def category_label(category):
