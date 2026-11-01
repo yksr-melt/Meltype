@@ -68,18 +68,32 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         typeKeys(frontend, uuid, "\n");
         FCITX_ASSERT(!ic->inputPanel().candidateList()) << "確定したら候補の一覧を閉じる";
 
-        // 機密の入力欄 (KDE Plasma のロック画面のパスワード欄など) では変換せず、そのままアプリへ渡す。
+        // ロック画面のパスワード欄 (KDE Plasma) では変換せず、そのままアプリへ渡す。
         // fcitx5 本体は Password のときだけ入力メソッドを外すので、Sensitive だけの欄は Meltype 側で守る。
-        auto passwordUuid = frontend->call<ITestFrontend::createInputContext>("testpassword");
+        // ただし Sensitive は「学習しないでほしい」欄にも付くので、アプリ名でロック画面に限る。
+        auto passwordUuid = frontend->call<ITestFrontend::createInputContext>("kscreenlocker_greet");
         auto *passwordIc = instance->inputContextManager().findByUUID(passwordUuid);
         FCITX_ASSERT(passwordIc);
         passwordIc->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
         instance->setCurrentInputMethod(passwordIc, "meltype", true);
         FCITX_ASSERT(instance->inputMethod(passwordIc) == "meltype");
         FCITX_ASSERT(!frontend->call<ITestFrontend::sendKeyEvent>(passwordUuid, Key("n"), false))
-            << "機密の入力欄なのに、Meltype がキーを取った";
+            << "ロック画面の入力欄なのに、Meltype がキーを取った";
         FCITX_ASSERT(passwordIc->inputPanel().preedit().toString().empty())
-            << "機密の入力欄に未確定の文字が出た";
+            << "ロック画面の入力欄に未確定の文字が出た";
+
+        // 同じ Sensitive でも、Chromium のシークレットや Falkon のプライベートモードのように
+        // 「学習しないでほしい」だけの欄では、今までどおり日本語を打てる。
+        auto privateUuid = frontend->call<ITestFrontend::createInputContext>("chromium");
+        auto *privateIc = instance->inputContextManager().findByUUID(privateUuid);
+        FCITX_ASSERT(privateIc);
+        privateIc->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
+        instance->setCurrentInputMethod(privateIc, "meltype", true);
+        FCITX_ASSERT(instance->inputMethod(privateIc) == "meltype");
+        FCITX_ASSERT(frontend->call<ITestFrontend::sendKeyEvent>(privateUuid, Key("n"), false))
+            << "Sensitive だけの欄で日本語を打てなくなった";
+        FCITX_ASSERT(!privateIc->inputPanel().preedit().toString().empty())
+            << "Sensitive だけの欄で変換が始まらない";
 
         dispatcher->schedule([dispatcher, instance]() {
             dispatcher->detach();

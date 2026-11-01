@@ -519,11 +519,23 @@ private:
         apply(ic, native_.take(native_.commit(state->session())));
     }
 
-    // 機密の入力欄か。KDE Plasma のロック画面のパスワード欄は、Qt が
+    // ロック画面の入力欄か。KDE Plasma のロック画面のパスワード欄は、Qt が
     // 「パスワード」ではなく「機密 (Sensitive)」として fcitx5 に伝えるため、
     // fcitx5 本体のパスワード欄の扱い (Password) では外れない。
+    // ただし Sensitive は「学習しないでほしい」欄にも広く付く (Chromium のシークレット、
+    // Falkon のプライベートモード) ので、それらで日本語が打てなくならないよう、
+    // アプリ名でロック画面に限る。
+    static bool isLockScreen(const fcitx::InputContext *ic) {
+        static const char *const programs[] = {"kscreenlocker_greet", "kscreenlocker"};
+        for (const char *name : programs) {
+            if (ic->program() == name) return true;
+        }
+        return false;
+    }
+
+    // 変換してはいけない入力欄か (ロック画面のパスワード欄)。
     static bool isSensitiveInput(const fcitx::InputContext *ic) {
-        return ic->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive);
+        return ic->capabilityFlags().test(fcitx::CapabilityFlag::Sensitive) && isLockScreen(ic);
     }
 
     // 未確定の内容を入力欄へ確定せずに捨てる (機密の入力欄に移ったとき)。
