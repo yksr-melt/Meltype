@@ -288,6 +288,7 @@ General Public License for more details.
   <a href="https://github.com/milkeclair"><img src="https://github.com/milkeclair.png?size=120" width="60" alt="@milkeclair" title="@milkeclair"></a>
   <a href="https://github.com/r67018"><img src="https://github.com/r67018.png?size=120" width="60" alt="@r67018" title="@r67018"></a>
   <a href="https://github.com/itouuuuuuuuu"><img src="https://github.com/itouuuuuuuuu.png?size=120" width="60" alt="@itouuuuuuuuu" title="@itouuuuuuuuu"></a>
+  <a href="https://github.com/organic817"><img src="https://github.com/organic817.png?size=120" width="60" alt="@organic817" title="@organic817"></a>
 </p>
 <!-- sponsors:end -->
 <sub>名前を公開にして応援してくださった方を載せています。</sub>

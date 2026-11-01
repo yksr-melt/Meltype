@@ -4069,14 +4069,18 @@ internal static class CompositionTests
         {
             var k = new Keyboard(translations: dictionary, translationHistory: history);
             k.Type("kawa ");
-            return k.Host.View!.Candidates;
+            var view = k.Host.View!;
+            var index = view.Candidates.ToList().IndexOf("river");
+            Assert.True(index >= 0, "英訳の候補がある");
+            Assert.Equal(CandidateNote.Translation, view.Notes![index], "並べ替え後も英訳の注記が追従する");
+            return view.Candidates;
         }
         var k = new Keyboard(translations: dictionary, translationHistory: history);
         k.Type("kawa ");
         var view = k.Host.View!;
         var index = view.Candidates.ToList().IndexOf("river");
         Assert.True(index > 0 && view.Candidates[0] == "川", "英訳は日本語の候補の後ろ: " + string.Join(",", view.Candidates));
-        Assert.Equal("英訳", view.Notes?[index] ?? "(なし)");
+        Assert.Equal(CandidateNote.Translation, view.Notes![index]);
         for (var i = 0; i < index; i++) k.Press(VirtualKeys.Space);
         k.Press(VirtualKeys.Return);
         Assert.Equal("river", k.Host.Output.Single());
@@ -4085,6 +4089,40 @@ internal static class CompositionTests
         Assert.Equal("川", Convert()[0], "1 回では 1 番目にしない");
         history.Remember("かわ", "river");
         Assert.Equal("川,river", string.Join(",", Convert().Take(2)), "2 回選んだら 2 番目");
+    }
+
+    [Test]
+    public static void CandidateNotes_SessionJsonKeepsDisplayText()
+    {
+        // Core 内は Enum で保持し、Native 向け JSON だけで表示文字列にする。
+        var view = new CompositionView("@", ["@", "＠", "river", "川"], 0, true, "",
+            Notes: [CandidateNote.HalfWidth, CandidateNote.FullWidth, CandidateNote.Translation, CandidateNote.None]);
+        using var json = System.Text.Json.JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
+        var notes = json.RootElement.GetProperty("view").GetProperty("notes");
+        Assert.Equal(4, notes.GetArrayLength());
+        Assert.Equal("半角", notes[0].GetString());
+        Assert.Equal("全角", notes[1].GetString());
+        Assert.Equal("英訳", notes[2].GetString());
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, notes[3].ValueKind);
+
+        using var unlabelled = System.Text.Json.JsonDocument.Parse(new SessionResult(true, [], view with { Notes = null }).ToJson());
+        var emptyNotes = unlabelled.RootElement.GetProperty("view").GetProperty("notes");
+        Assert.Equal(4, emptyNotes.GetArrayLength());
+        Assert.True(emptyNotes.EnumerateArray().All(n => n.ValueKind == System.Text.Json.JsonValueKind.Null), "注記リストが無ければ各候補の注記は null");
+    }
+
+    [Test]
+    public static void CandidateNotes_InvalidValueIsRejected()
+    {
+        try
+        {
+            ((CandidateNote)(-1)).ToDisplayText();
+        }
+        catch (ArgumentOutOfRangeException)
+        {
+            return;
+        }
+        Assert.True(false, "未定義の注記を表示時に受け入れない");
     }
 
     [Test]

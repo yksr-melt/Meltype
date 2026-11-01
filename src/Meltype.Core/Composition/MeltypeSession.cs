@@ -77,12 +77,12 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"meaning\":");
         if (view.Meaning is { } meaning) AppendString(builder, meaning);
         else builder.Append("null");
-        // 候補ごとの注釈 (英訳の候補なら「英訳」、無ければ null)
+        // 候補ごとの注記を表示用の文字列にする (注記が無ければ null)
         builder.Append(",\"notes\":[");
         for (var i = 0; i < view.Candidates.Count; i++)
         {
             if (i > 0) builder.Append(',');
-            if (view.Notes?.ElementAtOrDefault(i) is { } note) AppendString(builder, note);
+            if (view.Notes?[i].ToDisplayText() is { } note) AppendString(builder, note);
             else builder.Append("null");
         }
         builder.Append(']');

@@ -20,6 +20,7 @@ namespace Meltype.Composition;
 /// ContextHint は入力内容や変換エンジンに応じた案内 (手動の英字提案・予測候補の選択など)。固定の操作一覧は含めない。
 /// 書き間違いの修正は Suggestion に入れる。案内が無ければ null。
 /// </para>
+/// Notes は Candidates と同じ順序・件数の注記。注記がない候補は None、リスト全体を省略するときは null。
 /// </summary>
 public sealed record CompositionView(
     string Text,
@@ -29,7 +30,7 @@ public sealed record CompositionView(
     string Hint,
     IReadOnlyList<string>? Clauses = null,
     int SelectedClause = -1,
-    IReadOnlyList<string?>? Notes = null,
+    IReadOnlyList<CandidateNote>? Notes = null,
     string? Meaning = null,
     string? Suggestion = null,
     IReadOnlyList<string>? Predictions = null,
@@ -2409,20 +2410,20 @@ public sealed class CompositionController
     /// 候補の右に小さく出す注記: 英訳 (complex)、半角 / 全角 (同じ記号・英数字の半角と全角が両方候補にあるとき。# と ＃ は見分けにくい)。
     /// 注記が 1 つも無ければ null。
     /// </summary>
-    private static List<string?>? CandidateNotes(Clause clause)
+    private static List<CandidateNote>? CandidateNotes(Clause clause)
     {
         // 括弧の幅は定義した注記を使う。ASCII の幅変換では「」と｢｣の対応を判定できない。
-        if (clause.Brackets is { } brackets) return brackets.Notes.Select(note => note.ToDisplayText()).ToList();
+        if (clause.Brackets is { } brackets) return brackets.Notes;
         var notes = clause.Candidates.Select(c =>
         {
-            if (clause.Translations.Contains(c)) return "英訳";
+            if (clause.Translations.Contains(c)) return CandidateNote.Translation;
             var half = ToHalfWidth(c);
-            if (half != c && clause.Candidates.Contains(half)) return "全角";
+            if (half != c && clause.Candidates.Contains(half)) return CandidateNote.FullWidth;
             var full = CompositionText.ToFullWidth(c);
-            if (full != c && clause.Candidates.Contains(full)) return "半角";
-            return null;
+            if (full != c && clause.Candidates.Contains(full)) return CandidateNote.HalfWidth;
+            return CandidateNote.None;
         }).ToList();
-        return notes.Any(n => n is not null) ? notes : null;
+        return notes.Any(n => n != CandidateNote.None) ? notes : null;
     }
 
     /// <summary>全角の英数字・記号 (！〜～) と全角の空白を半角にする。</summary>
