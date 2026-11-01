@@ -53,7 +53,7 @@ Meltype はアプリではなく「入力ソース」(日本語入力) です。
    - それでも開けないときは、「ターミナル」で `bash ~/Downloads/Meltype-mac/install.sh` を実行する
 3. インストーラーが Meltype を登録・起動し、入力ソースを選びます
 
-起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。初回に入力ソースが見つからないときだけ、ログアウト・ログインしてから入力メニューを確かめてください。
+起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
 
 Homebrew から入れる場合は、最初に tap を追加してからインストールします。以後は `brew upgrade --cask meltype` で更新できます。
 
@@ -122,7 +122,7 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
   ```bash
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
-  これで戻らなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。
+  これで戻らなければ、システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype で追加する (macOS 27 では、この手順が必要になることがあります)。それでも出てこなければ、ログアウトしてログインし直し、`~/Library/Input Methods/Meltype.app` があるか確かめる。
 - **Meltype がいくつも並ぶ**: ターミナルで次を実行する
   ```bash
   "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
