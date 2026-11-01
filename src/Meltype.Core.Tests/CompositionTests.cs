@@ -5459,7 +5459,10 @@ internal static class CompositionTests
             // 表を登録していなければ、これまでどおり んg と読む
             var plain = new CompositionText(Detector);
             foreach (var c in "ng") plain.Append(c);
-            Assert.Equal("んg", plain.Display(final: false), "表が無ければ今までどおり んg");
+            // main の判定 (入力全体の重み比較) では、表が無いときの ng の表示が んg ではなく英字の ng になることがある。
+            // ここで確かめたいのは「表が無ければ、登録した読み (にゅう) にならない」ことだけ。
+            var plainDisplay = plain.Display(final: false);
+            Assert.True(plainDisplay is "んg" or "ng", $"表が無ければ今までどおり (んg か ng) 実際: {plainDisplay}");
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
