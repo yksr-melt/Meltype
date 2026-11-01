@@ -633,6 +633,10 @@ internal static class CodeProfileTests
         Assert.Equal(LineKind.Code, LineContext.ClassifyText(line.Text!));
         line.Invalidate();
         Assert.True(line.Text is null, "キャレットが動いたら分からない");
+        line.Append("\"a");
+        line.Backspace();
+        Assert.True(line.Text is null, "打っても分からないまま");
+        Assert.Equal("\"", line.Tracked, "分からなくなってから打った文字列は追いかける");
         line.SetFromText("first line\r\n    print(\"こん");
         Assert.Equal(LineKind.String, LineContext.ClassifyText(line.Text!), "UI Automation で読んだ文字列の、今の行で調べる");
     }

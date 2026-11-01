@@ -350,7 +350,7 @@ public sealed class MeltypeSession
             Diagnostics.Log.Info("コードの行: 英数に戻す");
             return true;
         }
-        if (_codeJapanese || before is not null && LineContext.ClassifyText(before) != LineKind.Code) return false;
+        if (_codeJapanese || CodeLineKind(before) != LineKind.Code) return false;
         _codeJapanese = true;
         Diagnostics.Log.Info("コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)");
         return true;
@@ -364,7 +364,7 @@ public sealed class MeltypeSession
     {
         if (!CodeInput || Direct || _controller.IsComposing) return false;
         before = SyncCodeLine(before);
-        return !_codeJapanese && LineContext.ClassifyText(before ?? "") == LineKind.Code;
+        return !_codeJapanese && CodeLineKind(before) == LineKind.Code;
     }
 
     /// <summary>
@@ -388,6 +388,9 @@ public sealed class MeltypeSession
         return before ?? _codeLine.Text;
     }
 
+    /// <summary>キャレットの位置の種類。今の行が分からなければ、分からなくなってから打った文字列で調べる (その前はコードとみなす)。</summary>
+    private LineKind CodeLineKind(string? before) => LineContext.ClassifyText(before ?? _codeLine.Tracked);
+
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public bool CanDeleteSurrounding
     {
@@ -406,7 +409,7 @@ public sealed class MeltypeSession
         if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
         if (CodeInput && !Direct && !control && !alt && !command &&
-            ch is '"' or '\'' or '`' && _codeLine.Text is { } line &&
+            ch is '"' or '\'' or '`' && _codeLine.Tracked is var line &&
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
         {
@@ -441,8 +444,7 @@ public sealed class MeltypeSession
             if (CodeInput) TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
-        if (CodeInput && !_codeJapanese && !_controller.IsComposing &&
-            (before is null || LineContext.ClassifyText(before) == LineKind.Code))
+        if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
             TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
@@ -486,11 +488,11 @@ public sealed class MeltypeSession
 
     /// <summary>
     /// 打ち始めの / を、・ にせずそのままアプリへ渡すか。コードの入力欄で、キャレットがコードの中か、
-    /// ターミナルの AI の入力行 (Claude Code・Codex の /command を打つ所) にあるとき (行が分からなければコードとみなす)。
+    /// ターミナルの AI の入力行 (Claude Code・Codex の /command を打つ所) にあるとき。
     /// コメント・文字列の中は ・ にする (Meltype キーボードと同じ)。
     /// </summary>
     private bool PassesSlash(string? before) =>
-        CodeInput && !_codeJapanese && (before is null || LineContext.ClassifyText(before) is LineKind.Code or LineKind.Prompt);
+        CodeInput && !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
 
     private void TrackCodeKey(int vk, char? ch, bool modifier)
     {
