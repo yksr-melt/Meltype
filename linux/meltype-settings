@@ -34,10 +34,10 @@ class SettingsError(Exception):
 
 
 def load_items(schema):
-    """設定画面に出す項目 (title のある項目) を、分類ごとに schema の順で返す: [(分類, [(キー, schema)])]。"""
+    """設定画面に出す項目 (title があり、Windows のみではない項目) を、分類ごとに schema の順で返す: [(分類, [(キー, schema)])]。"""
     groups = {}
     for key, prop in schema.get("properties", {}).items():
-        if "title" in prop:
+        if "title" in prop and not prop.get("x-windows-only"):
             groups.setdefault(prop.get("x-category", OTHER_CATEGORY), []).append((key, prop))
     # 分類は "1. 全般" のように番号から始まり、番号の順に並べる (Windows 版の SettingsForm.CategoryNumber と同じ)。番号の無い分類は最後
     def number(category):
@@ -146,8 +146,6 @@ def main():
             self.sidebar.select_row(self.sidebar.get_row_at_index(0))
 
             # どのエディターで開くかは環境で違うので、開くボタンは置かずにパスとコピーのボタンを出す
-            # 項目の対応 OS を schema に出していないので、Windows 版だけで効く項目も並ぶ
-            warning = Gtk.Label(label="Windows 版でだけ効く項目も表示しています。", xalign=0, wrap=True)
             message = Gtk.Label(label="変更は 1 秒ほどで入力に反映します。画面に無い項目は、次のファイルを直接編集します。",
                                 xalign=0, wrap=True)
             message.add_css_class("dim-label")
@@ -164,7 +162,6 @@ def main():
             path_row.append(path)
             path_row.append(copy)
             note = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_start=12, margin_end=12, margin_top=8, margin_bottom=8)
-            note.append(warning)
             note.append(message)
             note.append(path_row)
             self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
