@@ -8,7 +8,7 @@
 // ファイルは名前で見分ける (-mac.zip は Mac、ほかの .zip は Windows、-setup.exe はインストーラー)。
 // zip・setup.exe は GitHub のリリース (v<版>) に同じ名前で上げたもの。SHA-256 をここで計算する。
 // winget はインストーラー (setup.exe) があればそれを使う (Meltype IME・起動時の起動・Meltype の自動更新と同じ場所に入る: issue #367)。
-// できたものは dist/manifests/ に置く。出し方は docs/RELEASE.md。
+// できたものは dist/manifests/ に置く。出し方は docs/dev/RELEASE.md。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';

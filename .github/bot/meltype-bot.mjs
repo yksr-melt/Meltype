@@ -224,7 +224,7 @@ async function releaseCommand(issue, command, version) {
   const notesFile = `docs/release-notes/${version}.md`;
   const notes = await read(notesFile).catch(() => null);
   if (!notes?.trim()) mismatches.push(`${notesFile}: (無い。リリースノートを書いて main に入れてください)`);
-  if (mismatches.length > 0) return reply(`❌ main で ${version} のリリースの準備 (版・リリースノート) ができていないので、リリースしません (docs/RELEASE.md の「版を上げる」を先に main に入れてください):\n\n${mismatches.map(m => `- ${m}`).join('\n')}`);
+  if (mismatches.length > 0) return reply(`❌ main で ${version} のリリースの準備 (版・リリースノート) ができていないので、リリースしません (docs/dev/RELEASE.md の「版を上げる」を先に main に入れてください):\n\n${mismatches.map(m => `- ${m}`).join('\n')}`);
   const tag = `v${version}`;
   if (await gh('GET', `/git/ref/tags/${tag}`).then(() => true).catch(() => false)) return reply(`❌ タグ \`${tag}\` はもうあります。`);
   const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
