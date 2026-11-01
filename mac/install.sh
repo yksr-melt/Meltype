@@ -4,8 +4,17 @@
 #
 # テスト版の Meltype.app を ~/Library/Input Methods に入れる。zip を展開したフォルダーで実行する:
 #   bash install.sh
+# --no-select を付けると、最後に入力ソースを Meltype に切り替えない (Homebrew の cask から使う)。
 set -euo pipefail
 cd "$(dirname "$0")"
+
+select_after_install=1
+for arg in "$@"; do
+    case "$arg" in
+        --no-select) select_after_install=0 ;;
+        *) echo "知らない引数です: $arg" >&2; exit 1 ;;
+    esac
+done
 
 if [[ ! -d Meltype.app ]]; then
     echo "Meltype.app が見つかりません。zip を展開したフォルダーで実行してください。" >&2
@@ -46,6 +55,10 @@ enable_input_source
 register_input_source
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
 bash ./start-input-method.sh "$TARGET/Meltype.app"
+if [[ $select_after_install -eq 0 ]]; then
+    echo "Meltype を起動しました。入力メニューから Meltype を選んでください。"
+    exit 0
+fi
 # swift はコマンドライン・デベロッパ・ツールが無い Mac では使えない。選べなくてもインストールは終わっている。
 if swift ./select-input-source.swift; then
     echo
