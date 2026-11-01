@@ -1,6 +1,7 @@
 # Pull Request のチェック (ビルドとテストは build.yml)。変わったものに合わせて流す。
 #   辞書の形式   … dictionaries/ が変わったとき: 読めない行・ひらがなでない読み・重複など
 #   精度の比較   … 判定・変換の本体か辞書が変わったとき: main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗
+#                  あわせて、よく使う語の判定が main から変わった語を一覧にする (参考。失敗にはしない)
 #   報告の再現   … 本文の「## 確かめること」の「入力 → 期待」と、「Fixes #12」で閉じる誤判定の報告を、Pull Request のコードで確かめる
 # pull_request なので、フォークからの Pull Request でも書き込みの権限は持たない (結果は Summary とチェックの成否で返す)。
 name: pr-checks
@@ -24,7 +25,7 @@ jobs:
       dictionaries: ${{ steps.diff.outputs.dictionaries }}
       core: ${{ steps.diff.outputs.core }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -39,6 +40,8 @@ jobs:
           if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
       # 表記の bot (notices.yml) の判定を確かめる (GitHub には何も書かない)
       - run: node .github/bot/notices.mjs --self-test
+      # CodeQL の指摘をまとめる bot (code-scanning.yml) のまとめ方を確かめる (GitHub には何も書かない)
+      - run: node .github/bot/code-scanning.mjs --self-test
 
   dictionaries:
     name: 辞書の形式
@@ -47,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - run: node tools/check-dictionaries.mjs
@@ -59,15 +62,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: 品質テスト (Pull Request)
-        run: dotnet run --project src/Meltype.Core.Tests -c Release -- --eval-json "$RUNNER_TEMP/pr.json"
+        run: |
+          dotnet run --project src/Meltype.Core.Tests -c Release -- --eval-json "$RUNNER_TEMP/pr.json"
+          dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus "$RUNNER_TEMP/pr-words.tsv"
       - name: 品質テスト (main)
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -77,6 +82,25 @@ jobs:
           if grep -q -- '--eval-json' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
             dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --eval-json "$RUNNER_TEMP/base.json"
           fi
+          # main にまだ --judge-corpus が無ければ比べない
+          if grep -q -- '--judge-corpus' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
+            # Pull Request の一覧の語も判定する (Pull Request で辞書に足した語も比べる)
+            dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --judge-corpus "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv"
+          fi
+      - name: よく使う語の判定の変化 (参考)
+        run: |
+          # main の一覧の語も Pull Request で判定し直す (Pull Request で辞書から消した語も比べる)
+          if [ -f "$RUNNER_TEMP/base-words.tsv" ]; then
+            dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus "$RUNNER_TEMP/pr-words.tsv" "$RUNNER_TEMP/base-words.tsv"
+          fi
+          mkdir -p "$RUNNER_TEMP/judged-words"
+          cp "$RUNNER_TEMP"/*-words.tsv "$RUNNER_TEMP/judged-words/" 2>/dev/null || true
+          node .github/bot/pr-checks.mjs impact "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv" "$RUNNER_TEMP/judged-words/changes.tsv"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: judged-words
+          path: ${{ runner.temp }}/judged-words
+          if-no-files-found: ignore
       - name: 比べる
         run: node .github/bot/pr-checks.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json"
 
@@ -89,7 +113,7 @@ jobs:
       issues: read
       pull-requests: read
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - id: cases
@@ -97,7 +121,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - if: steps.cases.outputs.count != '0'
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - if: steps.cases.outputs.count != '0'

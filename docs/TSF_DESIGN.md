@@ -33,6 +33,21 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
 
+設定「Meltype IME でも入力モードをカーソルの近くに表示」(`ShowTsfModeIndicator`、既定 OFF) を ON にすると、明示的に入力モードを切り替えたとき、入力位置の近くに「あ / A」を 1.2 秒表示します。
+半角/全角・US 配列の Alt + `・タスクバーのボタンは、DLL の `ToggleInputMode` の最後で `indicator` 要求を送ります。Terminal・コードの行では IME を開いたまま切り替わる場合も含め、最終モードを 1 回表示します。設定が OFF のときは、DLL は問い合わせをしません (常駐側の `hello` と入力の応答の `modeIndicator` で設定を知ります。変更の反映は最大 2 秒遅れます)。変換中の 半角/全角 は `HandleKey` に回るため表示せず、変換ボックスに任せます。左右 Alt の単独押しは、常駐側で開閉の変更に成功したときに表示します。
+`OnChange` は状態更新だけを担当し、表示を依頼しません。アプリ・Windows による自動的な開閉やパスワード欄への移動だけでは表示されません。
+既存の「入力モードをカーソルの近くに表示」「入力欄に入ったときも入力モードを表示」はキーボード方式だけに適用し、色の設定は共用します。通知には入力スレッドの ID を付け、表示時に別の入力先へ移っていたら表示しません。
+表示要求は入力セッションを作らず、応答待ちは最大 100ms (補助要求) です。表示位置は TSF の選択範囲の `GetTextExt` を優先し、取得できなければ常駐側でキャレットを探します。それも取得できない場合はマウス位置へ戻し、Terminal の入力欄の左上を入力位置と推測しません。
+
+DLL を更新した後の確認では、入力先アプリのプロセスを終了して起動し直します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い DLL が残ることがあります。
+
+自動開閉の検証は次で行えます。短時間テスト画面が前面に出ます。Windows の実際の TSF コンパートメントと通常欄・パスワード欄を使い、プログラムからの開閉では表示要求が出ず、明示的な切り替えでは 1 回ずつ出ることを確認します。パイプ通信だけを記録用に置き換えており、通常の Meltype 本体・設定・学習データには接続しません。前面に出せない場合は終了コード 77 でスキップします。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File native/tip/tests/build-mode-indicator-test.ps1
+native/tip/bin/tests/ModeIndicatorEvents.exe
+```
+
 `--tip-e2e` の制約: Windows は、人のキーボード操作がしばらく無い状態だと、プログラムが送り込んだキー (SendInput) も、TSF のキー処理を直接呼んだキー (ITfKeystrokeMgr) も、IME に渡さない。
 このときは TSF の状態がすべて正常なのに、IME のキー処理が呼ばれず、英字のまま入る。人が操作している間に流すと通る。
 IME を変えたときは、このテストに加えて、メモ帳などで実際に打って確かめる。

@@ -133,9 +133,12 @@ public static class DictionarySource
         }
     }
 
-    public static IEnumerable<string> Load(string name, string? userDirectory)
+    public static IEnumerable<string> Load(string name, string? userDirectory) =>
+        WordList.ParseWords(ReadEmbedded(name)).Concat(LoadUser(name, userDirectory));
+
+    /// <summary>ユーザーの辞書フォルダーに置いた name の語だけ。</summary>
+    public static IEnumerable<string> LoadUser(string name, string? userDirectory)
     {
-        foreach (var word in WordList.ParseWords(ReadEmbedded(name))) yield return word;
         if (userDirectory is null) yield break;
         var userFile = Path.Combine(userDirectory, name);
         string text;

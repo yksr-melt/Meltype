@@ -1,0 +1,87 @@
+# PR の件数制限と、投稿者の返事を待っている Issue・PR の期限管理。
+# 閉じる Issue の担当でない人の PR を Draft にする (assignee.mjs)。
+# 書き込み job は必ず main のスクリプトを使い、PR のコードを実行しない。
+name: policy
+
+on:
+  pull_request:
+    paths:
+      - '.github/bot/policy*'
+      - '.github/bot/assignee*'
+      - '.github/workflows/policy.yml'
+  pull_request_target:
+    types: [opened, reopened, closed, ready_for_review, converted_to_draft, synchronize, edited, labeled, unlabeled]
+  issues:
+    types: [opened, edited, labeled, unlabeled, reopened]
+  issue_comment:
+    types: [created, edited]
+  schedule:
+    # 件数の超過のラベルの付け外しと、14 日の期限の確認は 1 時間ごとにする
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  test:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node --test .github/bot/policy.test.mjs .github/bot/assignee.test.mjs
+
+  # policy-enforce の並び待ちで取り消された run は PR の Checks に cancelled で残るので、PR のイベントでは動かさない。
+  # PR の変化は、次の Issue・コメントのイベントか定期実行で拾う。
+  enforce:
+    if: >-
+      !contains(fromJSON('["pull_request","pull_request_target"]'), github.event_name) &&
+      (github.event_name != 'issue_comment' || github.event.comment.user.type != 'Bot')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: policy-enforce
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: .github/bot
+          persist-credentials: false
+      - run: node .github/bot/policy.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  # 閉じる Issue の担当でない人の PR を Draft にする。件数の job (policy-enforce) と同じ並び待ちに入れると、
+  # 待っている間に別のイベントが来たとき取り消されて検査が抜けるので、PR ごとに分ける。
+  # 定期実行では開いているすべての PR を確かめ、取り消されたイベントの分も拾う。
+  assignee:
+    if: >-
+      contains(fromJSON('["pull_request_target","schedule","workflow_dispatch"]'), github.event_name) &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: policy-assignee-${{ github.event.pull_request.number || 'all' }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          sparse-checkout: .github/bot
+          persist-credentials: false
+      - run: node .github/bot/assignee.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

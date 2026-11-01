@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -58,7 +59,7 @@ public static class Backup
             writer.WriteString("format", Format);
             writer.WriteNumber("version", FormatVersion);
             writer.WriteString("app", appVersion);
-            writer.WriteString("created", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"));
+            writer.WriteString("created", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
             writer.WriteStartObject("files");
             foreach (var name in TargetFiles(dataDirectory))
             {

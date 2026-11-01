@@ -22,6 +22,9 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class DictionaryMemory
 {
+    private static readonly string[] CandidateFiles = ["candidates.txt", "loanwords.txt", "brands.txt"];
+    private static readonly string[] EmojiFiles = ["emoji.txt", "emoji-cldr.txt"];
+    private static readonly string[] LookupSuffixes = ["", "を", "字"];
     /// <summary>ヒープを詰めてから、使っている大きさ (断片化した分を除く) を返す。</summary>
     private static long Heap()
     {
@@ -109,10 +112,10 @@ internal static class DictionaryMemory
         // 変換の候補: 読みそのもの・助詞が付いたもの・絵文字だけ
         var candidates = CandidateDictionary.Load(null);
         Line($"候補 {candidates.Count}");
-        var readings = new[] { "candidates.txt", "loanwords.txt", "brands.txt" }
+        var readings = CandidateFiles
             .SelectMany(name => DictionarySource.LinesWithoutComments(DictionarySource.ReadEmbedded(name)))
             .Select(line => line.Split([' ', '\t', '\r', '　'], StringSplitOptions.RemoveEmptyEntries)).Where(parts => parts.Length > 0).Select(parts => parts[0])
-            .Concat(new[] { "emoji.txt", "emoji-cldr.txt" }.SelectMany(Fields).Select(f => f[0].Trim())).Distinct();
+            .Concat(EmojiFiles.SelectMany(Fields).Select(f => f[0].Trim())).Distinct();
         foreach (var reading in readings)
         {
             Line($"候補 {reading} {Join(candidates.Lookup(reading))} / {Join(candidates.Lookup(reading + "を"))} / {Join(candidates.LookupWords(reading + "から"))} / " +
@@ -286,7 +289,7 @@ internal static class DictionaryMemory
         .Select(line => line.TrimEnd('\r')).Where(line => line.Length > 0 && line[0] != '#')
         .Select(line => line.Split('\t')).Where(fields => fields.Length >= 3)
         .Where((_, index) => index % 23 == 0).Take(512)
-        .SelectMany(fields => new[] { "", "を", "字" }.Select(suffix =>
+        .SelectMany(fields => LookupSuffixes.Select(suffix =>
             new LookupInput(fields[0] + suffix, withReading && fields[1].Length > 0 ? fields[1] : null))).ToArray();
 
     // 時間を測る道具は、最適化していない Debug の時間を出さないよう Release でしか動かさない

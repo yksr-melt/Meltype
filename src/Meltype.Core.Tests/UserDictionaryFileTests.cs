@@ -10,6 +10,22 @@ namespace Meltype.Tests;
 internal static class UserDictionaryFileTests
 {
     [Test]
+    public static void Export_TimestampUsesTheSameFormatInEveryLocale()
+    {
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("th-TH");
+            var exported = Encoding.Unicode.GetString(UserDictionaryFile.Export([new UserWord("てすと", "テスト")]));
+            var stamp = exported.Split("!DateTime:", StringSplitOptions.None)[1].Split('\r')[0];
+            var date = DateTime.ParseExact(stamp, "yyyy/MM/dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Equal(DateTime.Now.Year, date.Year, "書き出す日時は Microsoft IME が読める西暦");
+            Assert.Equal(new UserWord("てすと", "テスト"), UserDictionaryFile.Parse(Encoding.Unicode.GetBytes(exported)).Words[0]);
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
+    }
+
+    [Test]
     public static void Import_MicrosoftImeAndGoogleFormats()
     {
         // Microsoft IME の「一覧の出力」(UTF-16 LE、BOM 付き)

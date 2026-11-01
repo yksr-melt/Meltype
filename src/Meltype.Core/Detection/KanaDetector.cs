@@ -63,8 +63,9 @@ public sealed class KanaDetector
         return index >= 0 && index % 2 == 0 ? table[index + 1] : null;
     }
 
-    /// <summary>辞書の日本語の語か、その先頭と一致するかな (2 文字以上)。</summary>
-    public bool IsJapaneseWordOrPrefix(string kana) => kana.Length >= 2 && (_words.Contains(kana) || _prefixes.Contains(kana));
+    /// <summary>辞書 (japanese.txt) の日本語の語のかなか。</summary>
+    public bool IsJapaneseWord(string kana) => _words.Contains(kana);
+
 
     /// <summary>仮想キー列をかな文字列にする。濁点・半濁点キーは直前の文字に合成する。</summary>
     public static string? ToKana(IReadOnlyList<int> keys)

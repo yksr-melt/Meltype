@@ -13,6 +13,7 @@ public enum LineKind
     /// <summary>コメントの中 (// # -- /* <!-- など)。日本語を書くことが多い。</summary>
     Comment,
     /// <summary>文字列の中 ("…" '…' `…`)。日本語を書くことが多い。</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1720:Identifier contains type name", Justification = "文字列リテラルの中という位置を表す値。データ型の名前ではない。")]
     String,
     /// <summary>ターミナルで動く AI・チャットの入力 (Claude Code・Codex などの「&gt; 」の後)。日本語を書くことが多い。</summary>
     Prompt,

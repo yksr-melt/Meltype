@@ -84,8 +84,12 @@ def run_script(mozc_src, *args):
     )
 
 
+# ビルドスクリプトが dictionary_ut.txt を足したあとの BUILD.bazel (base_dictionary_data の部分)
+BUILD_REGISTERED = '    srcs = [\n        "dictionary09.txt",\n        "dictionary_ut.txt",\n    ],\n'
+
+
 class FakeMozc:
-    """テスト用の Mozc。src/data/dictionary_oss に id.def と辞書だけを置く。"""
+    """テスト用の Mozc。src/data/dictionary_oss に id.def・辞書・BUILD.bazel だけを置く。"""
 
     def __init__(self, root: Path, lines=(BASE_LINE,), general_id=ID_GENERAL):
         self.root = root
@@ -94,26 +98,25 @@ class FakeMozc:
         self.directory.mkdir(parents=True)
         (self.directory / "id.def").write_text(
             make_id_def(general_id=general_id), encoding="utf-8")
-        self.target = self.directory / "dictionary00.txt"
-        self.write_target("".join(lines))
+        (self.directory / "BUILD.bazel").write_text(BUILD_REGISTERED, encoding="utf-8")
+        self.base = self.directory / "dictionary00.txt"
+        self.output = self.directory / "dictionary_ut.txt"
+        self.write_base("".join(lines))
         for index in range(1, 10):
             (self.directory / f"dictionary{index:02d}.txt").write_text(
                 "", encoding="utf-8")
-        self.commit()
-
-    def write_target(self, text: str) -> None:
-        self.target.write_text(text, encoding="utf-8")
-
-    def commit(self) -> None:
         git(self.root, "init", "-q", check=True)
         git(self.root, "add", "-A", check=True)
         git(self.root, "commit", "-q", "-m", "mozc", check=True)
 
-    def target_lines(self) -> list[str]:
-        return self.target.read_text(encoding="utf-8").splitlines()
+    def write_base(self, text: str) -> None:
+        self.base.write_text(text, encoding="utf-8")
 
-    def target_sha(self) -> str:
-        return hashlib.sha256(self.target.read_bytes()).hexdigest()
+    def base_sha(self) -> str:
+        return hashlib.sha256(self.base.read_bytes()).hexdigest()
+
+    def output_lines(self) -> list[str]:
+        return self.output.read_text(encoding="utf-8").splitlines()
 
 
 class MergeTestBase(unittest.TestCase):
@@ -139,23 +142,30 @@ class MergeTest(MergeTestBase):
     def test_adds_entries_that_are_not_in_mozc(self):
         result = self.merge(SAMPLE)
         self.assertEqual(result.returncode, 0, result.stderr)
-        lines = self.mozc.target_lines()
-        self.assertEqual(len(lines), 1 + 4)  # 元の 1 行 + 重複を除いた 4 件
+        lines = self.mozc.output_lines()
+        self.assertEqual(len(lines), 4)  # 重複を除いた 4 件
         self.assertIn("がんまかんすう\t1851\t1851\t7400\tガンマ関数", lines)
 
     def test_same_word_in_mozc_is_not_added_twice(self):
         # 「あるふぁべっと / アルファベット研究」を Mozc の辞書に置いておく
-        self.mozc.write_target(BASE_LINE + "あるふぁべっと\t1851\t1851\t7000\tアルファベット研究\n")
-        self.mozc.commit()
+        self.mozc.write_base(BASE_LINE + "あるふぁべっと\t1851\t1851\t7000\tアルファベット研究\n")
         result = self.merge(SAMPLE)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(len(self.mozc.target_lines()), 2 + 3)
+        self.assertEqual(len(self.mozc.output_lines()), 3)
+
+    def test_mozc_dictionary_is_not_modified(self):
+        # issue #961: 手元で書き換えた dictionary00.txt を、統合で消さない。
+        custom = BASE_LINE + "じかせい\t1851\t1851\t5000\tジカセイ\n"
+        self.mozc.write_base(custom)
+        before = self.mozc.base_sha()
+        self.assertEqual(self.merge(SAMPLE).returncode, 0)
+        self.assertEqual(self.mozc.base_sha(), before)
 
     def test_duplicate_in_ut_keeps_lowest_cost(self):
         result = self.merge(SAMPLE)
         self.assertEqual(result.returncode, 0, result.stderr)
         costs = [
-            line.split("\t")[3] for line in self.mozc.target_lines()
+            line.split("\t")[3] for line in self.mozc.output_lines()
             if line.endswith("\tアルファベット研究")
         ]
         self.assertEqual(costs, ["7300"])
@@ -163,73 +173,51 @@ class MergeTest(MergeTestBase):
     def test_output_is_sorted(self):
         result = self.merge(SAMPLE)
         self.assertEqual(result.returncode, 0, result.stderr)
-        added = [line for line in self.mozc.target_lines()
-                 if line != BASE_LINE.rstrip("\n")]
-        self.assertEqual(len(added), 4)
-        keys = [line.split("\t") for line in added]
+        keys = [line.split("\t") for line in self.mozc.output_lines()]
         self.assertEqual(keys, sorted(keys))
 
-    def test_merging_twice_does_not_duplicate(self):
-        first = self.merge(SAMPLE)
-        self.assertEqual(first.returncode, 0, first.stderr)
-        after_first = self.mozc.target_sha()
-        count_after_first = len(self.mozc.target_lines())
-
-        second = self.merge(SAMPLE)
-        self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertEqual(self.mozc.target_sha(), after_first)
-        self.assertEqual(len(self.mozc.target_lines()), count_after_first)
-        # 2 回目は、前の統合を取り消してから統合したと出す
-        self.assertIn("前の統合を取り消してから統合しました", second.stdout)
-
-    def test_restore_undoes_merge(self):
-        original = self.mozc.target_sha()
+    def test_merging_twice_gives_the_same_output(self):
         self.assertEqual(self.merge(SAMPLE).returncode, 0)
-        self.assertNotEqual(self.mozc.target_sha(), original)
+        first = self.mozc.output.read_bytes()
+        self.assertEqual(self.merge(SAMPLE).returncode, 0)
+        self.assertEqual(self.mozc.output.read_bytes(), first)
 
-        restored = self.run_script("--restore")
-        self.assertEqual(restored.returncode, 0, restored.stderr)
-        self.assertEqual(self.mozc.target_sha(), original)
-        self.assertIn("取り消しました", restored.stdout)
-
-    def test_restore_when_clean_does_nothing(self):
-        result = self.run_script("--restore")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("統合する前の状態のままです", result.stdout)
+    def test_output_is_rewritten(self):
+        # 前の出力の中身は、次の出力に残らない。
+        self.mozc.output.write_text("ふるい\t1851\t1851\t5000\t古い\n", encoding="utf-8")
+        self.assertEqual(self.merge(SAMPLE).returncode, 0)
+        self.assertNotIn("ふるい\t1851\t1851\t5000\t古い", self.mozc.output_lines())
 
     def test_check_does_not_write(self):
-        original = self.mozc.target_sha()
         result = self.merge(SAMPLE, "--check")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.mozc.target_sha(), original)
-        self.assertIn("書き換えていません", result.stdout)
+        self.assertFalse(self.mozc.output.exists())
+        self.assertIn("書いていません", result.stdout)
 
-    def test_check_after_merge_compares_with_pristine_mozc(self):
-        self.assertEqual(self.merge(SAMPLE).returncode, 0)
-        result = self.merge(SAMPLE, "--check")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        # 統合済みでも、元の Mozc と比べるので「4 件」のままになる
-        self.assertIn("統合: 4 件", result.stdout)
+    def test_output_must_be_in_the_build(self):
+        # BUILD.bazel に無いと、書いた語がビルドに入らない。黙って書かずに止める。
+        (self.mozc.directory / "BUILD.bazel").write_text(
+            '    srcs = [\n        "dictionary09.txt",\n    ],\n', encoding="utf-8")
+        result = self.merge(SAMPLE)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("dictionary_ut.txt がありません", result.stderr)
+        self.assertFalse(self.mozc.output.exists())
 
     def test_report_is_written(self):
         report_path = self.temp / "report.json"
         result = self.merge(SAMPLE, "--report", str(report_path))
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        self.assertEqual(report["schema"], 1)
+        self.assertEqual(report["schema"], 2)
         self.assertEqual(report["mode"], "merge")
         self.assertEqual(report["dictionary"]["sha256"],
                          hashlib.sha256(SAMPLE.read_bytes()).hexdigest())
         self.assertEqual(report["mozc"]["pos_id"], ID_GENERAL)
         self.assertTrue(report["mozc"]["commit"])  # git の commit を記録する
         self.assertEqual(report["result"]["lines_added"], 4)
+        self.assertEqual(report["result"]["output_sha256"],
+                         hashlib.sha256(self.mozc.output.read_bytes()).hexdigest())
         self.assertEqual(report["removed"]["duplicate_in_ut"], 1)
-        # 1 回目は取り消す前の統合が無い
-        self.assertFalse(report["result"]["previous_merge_undone"])
-        second = self.merge(SAMPLE, "--report", str(report_path))
-        self.assertEqual(second.returncode, 0, second.stderr)
-        report = json.loads(report_path.read_text(encoding="utf-8"))
-        self.assertTrue(report["result"]["previous_merge_undone"])
 
 
     def test_license_notice_is_recorded(self):
@@ -246,21 +234,9 @@ class MergeTest(MergeTestBase):
                           "neologd", "edict2", "skk_jisyo", "alt_cannadic"})
 
 
-    def test_staged_merge_is_restored_from_head(self):
-        # 統合した辞書を git の index に載せてから、もう一度統合する。
-        # index から戻すと統合済みの中身が戻って重複するので、HEAD から戻すことを確かめる。
-        self.assertEqual(self.merge(SAMPLE).returncode, 0)
-        git(self.mozc.root, "add", "src/data/dictionary_oss/dictionary00.txt", check=True)
-        result = self.merge(SAMPLE)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        lines = self.mozc.target_lines()
-        self.assertEqual(len(lines), 1 + 4)
-        self.assertEqual(len(set(lines)), len(lines))
-
     def test_non_utf8_console_does_not_crash(self):
         # Windows のコンソール (cp1252 など) でも、日本語を出そうとして止まらないこと。
         environment = dict(os.environ, PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
-        original = self.mozc.target_sha()
         result = subprocess.run(
             [sys.executable, str(SCRIPT), "--mozc-src", str(self.mozc.src),
              "--dictionary", str(SAMPLE), "--check"],
@@ -270,7 +246,6 @@ class MergeTest(MergeTestBase):
         self.assertEqual(result.returncode, 0, result.stderr)
         # cp1252 で表せない文字は \uXXXX の形になる
         self.assertIn("\\u", result.stdout)
-        self.assertEqual(self.mozc.target_sha(), original)
 
 
 class PosIdTest(MergeTestBase):
@@ -285,7 +260,7 @@ class PosIdTest(MergeTestBase):
         self.assertIn(f"1849 (名詞,固有名詞,一般,*,*,*,*) → {ID_GENERAL}", result.stdout)
         self.assertIn(
             f"あるふぁべっと\t{ID_GENERAL}\t{ID_GENERAL}\t7600\tアルファベット研究",
-            self.mozc.target_lines(),
+            self.mozc.output_lines(),
         )
         report = json.loads((self.temp / "report.json").read_text(encoding="utf-8"))
         self.assertTrue(report["dictionary"]["pos_drift"])
@@ -301,7 +276,7 @@ class PosIdTest(MergeTestBase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
             f"あるふぁべっと\t{ID_GENERAL}\t{ID_GENERAL}\t7600\tアルファベット研究",
-            self.mozc.target_lines(),
+            self.mozc.output_lines(),
         )
 
     def test_multiple_known_pos_ids_are_kept(self):
@@ -312,9 +287,9 @@ class PosIdTest(MergeTestBase):
         )
         result = self.merge(dictionary)
         self.assertEqual(result.returncode, 0, result.stderr)
-        target = self.mozc.target.read_text(encoding="utf-8")
-        self.assertIn(f"あるふぁべっと\t{ID_PROPER}\t{ID_PROPER}\t7600\tアルファベット研究", target)
-        self.assertIn(f"べーたせいり\t{ID_GENERAL}\t{ID_GENERAL}\t7800\tベータ整理", target)
+        lines = self.mozc.output_lines()
+        self.assertIn(f"あるふぁべっと\t{ID_PROPER}\t{ID_PROPER}\t7600\tアルファベット研究", lines)
+        self.assertIn(f"べーたせいり\t{ID_GENERAL}\t{ID_GENERAL}\t7800\tベータ整理", lines)
 
     def test_keep_pos_ids_rejects_unknown_id(self):
         dictionary = self.write(
@@ -334,18 +309,17 @@ class PosIdTest(MergeTestBase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(
             f"あるふぁべっと\t{ID_PROPER}\t{ID_PROPER}\t7600\tアルファベット研究",
-            self.mozc.target_lines(),
+            self.mozc.output_lines(),
         )
 
 
 class InvalidDictionaryTest(MergeTestBase):
     def assert_invalid(self, content: str, message: str) -> None:
         dictionary = self.write("invalid.txt", content)
-        original = self.mozc.target_sha()
         result = self.merge(dictionary)
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn(message, result.stderr)
-        self.assertEqual(self.mozc.target_sha(), original)  # 壊さない
+        self.assertFalse(self.mozc.output.exists())  # 途中まで書かない
 
     def test_wrong_column_count(self):
         self.assert_invalid("あるふぁべっと\t1851\t1851\t7600\n", "5 列ではありません")
@@ -371,11 +345,10 @@ class InvalidDictionaryTest(MergeTestBase):
     def test_not_utf8(self):
         dictionary = self.temp / "sjis.txt"
         dictionary.write_bytes("あるふぁべっと\t1851\t1851\t7600\tアルファベット研究\n".encode("cp932"))
-        original = self.mozc.target_sha()
         result = self.merge(dictionary)
         self.assertEqual(result.returncode, 2)
         self.assertIn("UTF-8", result.stderr)
-        self.assertEqual(self.mozc.target_sha(), original)
+        self.assertFalse(self.mozc.output.exists())
 
     def test_bom_is_rejected(self):
         dictionary = self.temp / "bom.txt"
@@ -419,40 +392,25 @@ class ReadingTest(MergeTestBase):
             "katakana.txt",
             "アルファベット\t1851\t1851\t7600\tアルファベット研究\n",
         )
-        original = self.mozc.target_sha()
         result = self.merge(dictionary, "--strict-readings")
         self.assertEqual(result.returncode, 2)
         self.assertIn("ひらがなではありません", result.stderr)
-        self.assertEqual(self.mozc.target_sha(), original)
+        self.assertFalse(self.mozc.output.exists())
 
 
 class EnvironmentTest(MergeTestBase):
-    def test_not_a_git_repository_is_reported(self):
-        plain = self.temp / "plain"
-        directory = plain / "src" / "data" / "dictionary_oss"
-        directory.mkdir(parents=True)
-        (directory / "id.def").write_text(make_id_def(), encoding="utf-8")
-        (directory / "dictionary00.txt").write_text(BASE_LINE, encoding="utf-8")
-        result = run_script(plain / "src", "--dictionary", str(SAMPLE))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("git リポジトリ", result.stderr)
-
     def test_mozc_src_must_point_at_src(self):
         result = run_script(self.temp, "--dictionary", str(SAMPLE))
         self.assertEqual(result.returncode, 1)
         self.assertIn("dictionary_oss", result.stderr)
 
-    def test_dictionary_cannot_be_the_target(self):
-        result = self.merge(self.mozc.target)
+    def test_dictionary_cannot_be_the_output(self):
+        self.mozc.output.write_text(BASE_LINE, encoding="utf-8")
+        result = self.merge(self.mozc.output)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("Mozc の辞書そのもの", result.stderr)
+        self.assertIn("出力先", result.stderr)
 
-    def test_restore_and_dictionary_are_exclusive(self):
-        result = self.run_script("--restore", "--dictionary", str(SAMPLE))
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("同時に指定できません", result.stderr)
-
-    def test_neither_dictionary_nor_restore(self):
+    def test_dictionary_is_required(self):
         result = self.run_script()
         self.assertEqual(result.returncode, 1)
         self.assertIn("--dictionary", result.stderr)

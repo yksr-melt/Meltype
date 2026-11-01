@@ -56,3 +56,8 @@ internal sealed partial class ConversionJsonContext : JsonSerializerContext;
 [JsonSourceGenerationOptions(WriteIndented = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true)]
 [JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "Snippets")]
 internal sealed partial class SnippetJsonContext : JsonSerializerContext;
+
+/// <summary>打鍵数 (keycount.json) の JSON の読み書き。</summary>
+[JsonSourceGenerationOptions(WriteIndented = true, AllowTrailingCommas = true)]
+[JsonSerializable(typeof(Meltype.Input.KeyCounter.Data))]
+internal sealed partial class KeyCountJsonContext : JsonSerializerContext;

@@ -11,7 +11,7 @@
 # Mozc-UT の辞書 (https://github.com/utuhiro78/merge-ut-dictionaries などで作る mozcdic-ut.txt) を
 # 変換の候補に足す場合は、環境変数 MELTYPE_UT_DICTIONARY にそのファイルを指定する。
 #   MELTYPE_UT_DICTIONARY=~/mozcdic-ut.txt native/mozc/build-mozc-helper.sh
-# 指定しなければ、これまでどおり Mozc だけのヘルパーを作る (前回の統合は自動で取り消す)。
+# 指定しなければ、これまでどおり Mozc だけのヘルパーを作る。
 # 辞書は Mozc の辞書に足すだけで、同梱も再配布もしない (ライセンスは README.md)。
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -20,8 +20,6 @@ cache="${2:-}"
 commit="$(tr -d '[:space:]' < "$here/MOZC_COMMIT")"
 out="$here/bin/linux"
 ut_dictionary="${MELTYPE_UT_DICTIONARY:-}"
-# 統合する辞書のファイル (Mozc の git の管理下。統合の前に元に戻すのに使う)
-target_relative="src/data/dictionary_oss/dictionary00.txt"
 
 # src の有無ではなく .git で見る (GitHub Actions のキャッシュが src/third_party_cache だけを先に戻すため)。
 if [[ ! -d "$mozc/.git" ]]; then
@@ -36,33 +34,33 @@ src="$mozc/src"
 
 mkdir -p "$out"
 
-# 前に MELTYPE_UT_DICTIONARY を指定してビルドしていれば、Mozc の辞書に Mozc-UT の語が残っている。
-# 指定なしのビルドに混ざらないよう、先に元に戻す (辞書のファイルは Mozc の git から戻すので壊れない)。
-# git status が失敗したときに黙って続けると、Mozc-UT 入りのまま標準のヘルパーを作ってしまうので止める。
-dirty=""
-if ! dirty="$(git -C "$mozc" status --porcelain -- "$target_relative")"; then
-    echo "エラー: Mozc の辞書の状態を調べられませんでした ($mozc)。" >&2
-    echo "Mozc のフォルダーを消して、取り直してからやり直してください。" >&2
-    exit 1
-fi
-if [[ -n "$ut_dictionary" || -n "$dirty" || -e "$out/MOZC-UT.json" ]]; then
-    python="${PYTHON:-python3}"
-    if ! command -v "$python" >/dev/null 2>&1; then
-        echo "エラー: Python 3.10 以降が見つかりません ($python)。Mozc-UT の辞書の統合に使います。" >&2
+# Mozc-UT の語は Mozc の辞書とは別の dictionary_ut.txt に置き、ビルドのたびに作り直す
+# (Mozc の辞書は書き換えないので、手元で書き換えた辞書も残る)。
+# dictionary_ut.txt はいつもビルドに含め、MELTYPE_UT_DICTIONARY が無いときは空にする。
+# BUILD.bazel は "dictionary09.txt", の行を目印に、その次の行に足す。同じ書き換えを Build-MozcHelper.ps1 も行い、
+# merge-ut-dictionary.py (ensure_registered) が足した行を確かめるので、Mozc の BUILD.bazel の形が変わったら 3 か所を直す。
+# Build-MozcHelper.ps1 は Mozc の版を変える前に、足した dictionary_ut.txt の行を消している。このスクリプトは Mozc が無いときに
+# 取るだけで版を変えないので要らないが、版を合わせる処理を足すときは同じ手当てが要る。
+dictionary_build="$src/data/dictionary_oss/BUILD.bazel"
+if ! grep -q '"dictionary_ut.txt"' "$dictionary_build"; then
+    sed -i 's/^\( *\)"dictionary09\.txt",$/&\n\1"dictionary_ut.txt",/' "$dictionary_build"
+    if ! grep -q '"dictionary_ut.txt"' "$dictionary_build"; then
+        echo "エラー: $dictionary_build に dictionary_ut.txt を足せませんでした (Mozc の BUILD.bazel の形が変わった可能性があります)。" >&2
         exit 1
     fi
-    "$python" "$here/merge-ut-dictionary.py" --mozc-src "$src" --restore
-    if [[ -n "$dirty" ]]; then
-        echo "前回統合した Mozc-UT の辞書を取り消しました。"
-    fi
 fi
-
+: > "$src/data/dictionary_oss/dictionary_ut.txt"
 
 # 統合した内容 (辞書と Mozc のハッシュ) は、ビルドが通ってから印 (MOZC-UT.json) にする。
 # 途中で失敗したときに印だけ消すと、前のビルドのヘルパー (Mozc-UT 入りのことがある) が
 # 標準のヘルパーに見えてしまうため、ビルドが終わるまでは書かない。
 report=""
 if [[ -n "$ut_dictionary" ]]; then
+    python="${PYTHON:-python3}"
+    if ! command -v "$python" >/dev/null 2>&1; then
+        echo "エラー: Python 3.10 以降が見つかりません ($python)。Mozc-UT の辞書の統合に使います。" >&2
+        exit 1
+    fi
     report="$(mktemp)"
     if ! "$python" "$here/merge-ut-dictionary.py" --mozc-src "$src" \
         --dictionary "$ut_dictionary" --report "$report"; then

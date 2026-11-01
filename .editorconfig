@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Yukishiro
+#
+# エディターと dotnet format・Roslyn の解析の設定 (issue #1083)。
+# 解析のルールは、CI (.github/workflows/quality.yml) では AnalysisLevel=latest-recommended で流し、警告として出す。
+# 重要度を変えるときは、下の [*.cs] に dotnet_diagnostic.<ID>.severity = error / warning / suggestion / none を足す。
+# error にするのは、既存のコードに 1 件も無いことを確かめてから (Windows 版のビルドも止まるため)。
+root = true
+
+[*.cs]
+indent_style = space
+indent_size = 4

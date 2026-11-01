@@ -79,7 +79,8 @@ if let bundleID = Bundle(path: appPath)?.bundleIdentifier {
         restartTextInputMenuAgent()
         print("入力メニューの表示を更新しました")
     } else {
-        print("まだ入力ソースとして有効になっていません。ログアウトしてログインし直すと直ります。")
+        print("まだ入力ソースとして有効になっていません。システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype から追加してください。")
+        print("それでも出てこなければ、ログアウトしてログインし直してください。")
     }
 } else {
     print("Meltype.app の Bundle ID が読めませんでした。ログアウトしてログインし直すと直ります。")
