@@ -4,14 +4,17 @@
 #
 # テスト版の Meltype.app を ~/Library/Input Methods に入れる。zip を展開したフォルダーで実行する:
 #   bash install.sh
-# --no-select を付けると、最後に入力ソースを Meltype に切り替えない (Homebrew の cask から使う)。
+# Homebrew の cask からは --homebrew を付けて動かす。付けたときは:
+#   - 最後に入力ソースを Meltype に切り替えない (brew install の途中で入力ソースを変えない)
+#   - 配置したあとの登録・起動に失敗しても、警告して続ける。Homebrew は失敗した installer script が
+#     置いたものを戻さないので、ここで止めると Homebrew の管理外の Meltype.app が残る
 set -euo pipefail
 cd "$(dirname "$0")"
 
-select_after_install=1
+from_homebrew=0
 for arg in "$@"; do
     case "$arg" in
-        --no-select) select_after_install=0 ;;
+        --homebrew) from_homebrew=1 ;;
         *) echo "知らない引数です: $arg" >&2; exit 1 ;;
     esac
 done
@@ -45,6 +48,16 @@ register_input_source() {
         echo "入力ソースに登録できませんでした。ログアウトしてログインし直すと直ります。" >&2
 }
 
+# 配置したあとの手順を動かす。失敗したら、--homebrew のときは印を付けて続け、そうでなければ止める。
+after_install_failed=0
+after_install() {
+    local status=0
+    "$@" || status=$?
+    [[ $status -ne 0 ]] || return 0
+    [[ $from_homebrew -eq 1 ]] || exit "$status"
+    after_install_failed=1
+}
+
 TARGET="$HOME/Library/Input Methods"
 bash ./install-app.sh Meltype.app "$TARGET/Meltype.app"
 # インターネットから取ってきた印 (隔離属性) を外す。署名が自分用なので、外さないと macOS が起動させない。
@@ -53,10 +66,14 @@ xattr -dr com.apple.quarantine "$TARGET/Meltype.app" 2>/dev/null || true
 echo "インストールしました: $TARGET/Meltype.app"
 enable_input_source
 register_input_source
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
-bash ./start-input-method.sh "$TARGET/Meltype.app"
-if [[ $select_after_install -eq 0 ]]; then
-    echo "Meltype を起動しました。入力メニューから Meltype を選んでください。"
+after_install /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
+after_install bash ./start-input-method.sh "$TARGET/Meltype.app"
+if [[ $from_homebrew -eq 1 ]]; then
+    if [[ $after_install_failed -eq 1 ]]; then
+        echo "Meltype を入れましたが、登録か起動が終わりませんでした。ログアウトしてログインし直してから、入力メニューで Meltype を選んでください。" >&2
+    else
+        echo "Meltype を起動しました。入力メニューから Meltype を選んでください。"
+    fi
     exit 0
 fi
 # swift はコマンドライン・デベロッパ・ツールが無い Mac では使えない。選べなくてもインストールは終わっている。
