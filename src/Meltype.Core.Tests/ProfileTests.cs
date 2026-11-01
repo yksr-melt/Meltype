@@ -24,17 +24,12 @@ internal static class ProfileTests
 
         // 標準に戻すと、標準の値に戻る。共通の項目 (ログ・更新) は切り替えても変わらない
         work.FileLog = true;
-        work.TsfOffered = true;
-        work.SettingsShowHelp = false;
-        work.SettingsWheelChangesValue = false;
         var standard = work.SwitchProfile("標準");
         Assert.Equal("標準", standard.ActiveProfile);
         Assert.Equal(DetectionLevel.Balanced, standard.DetectionLevel);
         Assert.True(standard.LiveConversion, "標準はライブ変換 ON のまま");
         Assert.Equal(0, standard.AppKinds.Count, "表 (独自の種類) もプロファイルごと");
         Assert.True(standard.FileLog, "ログはどのプロファイルでも共通");
-        Assert.True(standard.TsfOffered, "Meltype IME を入れるかを聞いたかは、どのプロファイルでも共通 (切り替えるたびに聞かない)");
-        Assert.True(!standard.SettingsShowHelp && !standard.SettingsWheelChangesValue, "設定画面の説明の欄・ホイールの設定は、どのプロファイルでも共通");
 
         // もう一度 仕事用 にすると、仕事用で変えた値が戻ってくる
         var back = standard.SwitchProfile("仕事用");
@@ -102,10 +97,17 @@ internal static class ProfileTests
         Assert.True(b.ImportProfile("{\"Enabled\": false}") is null, "config.json など別のファイル");
         Assert.True(b.ImportProfile("{\"format\":\"meltype-profile\",\"values\":{\"LiveConversion\":\"yes\"}}") is null, "型の違う値");
 
-        // 知らない項目・共通の項目は無視し、範囲外の値は収める
+        // 知らない項目・消した項目・共通の項目は無視する
         var odd = b.ImportProfile("{\"format\":\"meltype-profile\",\"name\":\"x\",\"values\":{\"Enabled\":false,\"Unknown\":1,\"MaxPendingKeys\":999999}}")!;
         Assert.True(odd.Enabled, "ON/OFF は読み込まない");
-        Assert.Equal(12, odd.MaxPendingKeys, "範囲に収める");
+
+        // v8 より前に書き出したプロファイルは、まとめた項目を新しい項目に移して読む
+        var old = b.ImportProfile("{\"format\":\"meltype-profile\",\"version\":7,\"name\":\"old\",\"values\":{\"SlashAsMiddleDot\":true,\"FullWidthSpaceByDefault\":true,\"PasteApps\":\"foo.exe\"}}")!;
+        Assert.Equal(SlashStyle.MiddleDot, old.Slash, "/ キーで中黒 → 中黒");
+        Assert.Equal(SpaceWidth.FullWidth, old.SpaceWidth, "スペースを全角で入力 → 全角");
+        Assert.Equal(CommitMethod.Paste, old.CommitMethodFor("foo.exe"), "貼り付けで入力するアプリ → アプリ別設定");
+        var current = b.ImportProfile("{\"format\":\"meltype-profile\",\"version\":8,\"name\":\"new\",\"values\":{\"SlashAsMiddleDot\":true}}")!;
+        Assert.Equal(SlashStyle.Slash, current.Slash, "v8 の書き出しは移さない (前の項目名は無視する)");
     }
 
     [Test]
@@ -153,10 +155,10 @@ internal static class ProfileTests
 
         // 画面で「仕事用」に切り替えた (トレイでは切り替えていない): 画面のプロファイルにする
         var formSwitched = opened.SwitchProfile("仕事用");
-        formSwitched.TypoEnabled = false;
+        formSwitched.CorrectTypos = false;
         var toWork = Settings.MergeEdits(opened, formSwitched, current);
         Assert.Equal("仕事用", toWork.ActiveProfile);
-        Assert.True(!toWork.TypoEnabled && !toWork.Enabled, "画面で変えた値を重ね、一時停止のまま");
+        Assert.True(!toWork.CorrectTypos && !toWork.Enabled, "画面で変えた値を重ね、一時停止のまま");
         Assert.Equal(DetectionLevel.Balanced, toWork.DetectionLevel, "標準でトレイで変えた判定の強さは、仕事用に入れない");
         Assert.Equal(DetectionLevel.Aggressive, toWork.SwitchProfile("標準").DetectionLevel, "標準のトレイで変えた値は標準に残る");
     }
@@ -165,33 +167,27 @@ internal static class ProfileTests
     {
         // #5: DaVinci Resolve は 1 文字ずつ送ると取り違えるので、最初から貼り付けで入れる
         var settings = new Settings().Normalize();
-        Assert.True(settings.UsesPaste("Resolve.exe") && settings.UsesPaste("resolve.EXE"), "Resolve は最初から (大文字小文字は問わない)");
-        Assert.True(!settings.UsesPaste("notepad.exe") && !settings.UsesPaste(null), "ほかのアプリは今までどおり");
-        settings.PasteApps = "Resolve.exe, LINE.exe ;foo.exe";
-        Assert.True(settings.UsesPaste("LINE.exe") && settings.UsesPaste("foo.exe"), "カンマ・セミコロン区切り");
+        Assert.True(settings.CommitMethodFor("Resolve.exe") == CommitMethod.Paste && settings.CommitMethodFor("resolve.EXE") == CommitMethod.Paste, "Resolve は最初から (大文字小文字は問わない)");
+        Assert.True(settings.CommitMethodFor("notepad.exe") == CommitMethod.Auto && settings.CommitMethodFor(null) == CommitMethod.Auto, "ほかのアプリは自動");
     }
     [Test]
     public static void TextInputApps_MatchProcessNames()
     {
-        // #52: Premiere Pro は入力欄と判定されないので、設定に書いたアプリではフォーカスのある所を入力欄として扱う
+        // #52: Premiere Pro は入力欄と判定されないので、アプリ別設定で「入力欄とみなす」にしたアプリではフォーカスのある所を入力欄として扱う
         var settings = new Settings().Normalize();
-        Assert.True(!settings.TreatsAsTextInput("Adobe Premiere Pro.exe") && !settings.TreatsAsTextInput(null), "既定は空 (何もしない)");
-        settings.TextInputApps = " Adobe Premiere Pro.exe , foo.exe;bar.exe ";
+        Assert.True(!settings.TreatsAsTextInput("Adobe Premiere Pro.exe") && !settings.TreatsAsTextInput(null), "既定は何もしない");
+        settings.AppRules.Add(new AppRule { Process = "Adobe Premiere Pro.exe", TextInput = true });
         Assert.True(settings.TreatsAsTextInput("Adobe Premiere Pro.exe") && settings.TreatsAsTextInput("adobe premiere pro.EXE"), "空白を含む名前 (大文字小文字は問わない)");
-        Assert.True(settings.TreatsAsTextInput("foo.exe") && settings.TreatsAsTextInput("bar.exe"), "カンマ・セミコロン区切り");
         Assert.True(!settings.TreatsAsTextInput("Adobe") && !settings.TreatsAsTextInput("Pro.exe") && !settings.TreatsAsTextInput("Premiere"), "名前の一部では一致しない");
         Assert.True(!settings.TreatsAsTextInput("AfterFX.exe"), "書いていないアプリはそのまま");
-        settings.TextInputApps = "a.exe b.exe";
-        Assert.True(settings.TreatsAsTextInput("a.exe") && settings.TreatsAsTextInput("b.exe"), "空白区切りの .exe の並びも通す");
 
         var path = Path.Combine(Path.GetTempPath(), $"meltype-textinput-{Guid.NewGuid():N}.json");
         try
         {
-            new Settings { TextInputApps = "Adobe Premiere Pro.exe" }.Save(path);
+            settings.Save(path);
             var loaded = Settings.Load(path);
-            Assert.Equal("Adobe Premiere Pro.exe", loaded.TextInputApps, "保存して読み込んでも保つ");
+            Assert.True(loaded.TreatsAsTextInput("Adobe Premiere Pro.exe"), "保存して読み込んでも保つ");
             Assert.True(loaded.Clone().TreatsAsTextInput("Adobe Premiere Pro.exe"), "複製しても保つ");
-            Assert.Equal("", Settings.Load(Path.Combine(Path.GetTempPath(), $"meltype-none-{Guid.NewGuid():N}.json")).TextInputApps, "設定ファイルが無ければ空");
         }
         finally
         {

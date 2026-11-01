@@ -90,8 +90,9 @@ public static class SettingsSchema
         {
             if (property.AttributeProvider?.GetCustomAttributes(typeof(DisplayNameAttribute), false).FirstOrDefault() is DisplayNameAttribute { DisplayName.Length: > 0 } title)
                 schema["title"] = title.DisplayName;
-            if (property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute { Description.Length: > 0 } description)
-                schema["description"] = description.Description;
+            var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
+            if (property.AttributeProvider?.IsDefined(typeof(WindowsOnlyAttribute), false) == true) description = $"Windows のみ。{description}";
+            if (description.Length > 0) schema["description"] = description;
             // JSON Schema の標準には無いキーワード (エディターは無視する)。設定画面が項目を分類ごとに並べるのに使う
             if (property.AttributeProvider?.GetCustomAttributes(typeof(CategoryAttribute), false).FirstOrDefault() is CategoryAttribute { Category.Length: > 0 } category)
                 schema["x-category"] = category.Category;

@@ -69,14 +69,14 @@ internal static class InputRegressionTests
             restored = new UserDictionary(path, builtIn: false);
             Assert.Equal(controlWord, restored.Lookup(controlReading).Single());
             foreach (var live in new[] { false, true })
-            foreach (var (reading, word) in pairs.Append((controlReading, controlWord)))
-            {
-                var k = new CompositionTests.Keyboard(live: live, userDictionary: restored);
-                k.Type(reading + " ");
-                Assert.Equal(word, k.Host.View!.Clauses![0], reading + "の候補");
-                k.Press(VirtualKeys.Return);
-                Assert.Equal(word, k.Host.Document, reading + "の確定");
-            }
+                foreach (var (reading, word) in pairs.Append((controlReading, controlWord)))
+                {
+                    var k = new CompositionTests.Keyboard(live: live, userDictionary: restored);
+                    k.Type(reading + " ");
+                    Assert.Equal(word, k.Host.View!.Clauses![0], reading + "の候補");
+                    k.Press(VirtualKeys.Return);
+                    Assert.Equal(word, k.Host.Document, reading + "の確定");
+                }
         }
         finally { File.Delete(path); }
     }

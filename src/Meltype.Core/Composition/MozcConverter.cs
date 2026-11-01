@@ -133,29 +133,29 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     }
 
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
-private string? Send(string request)
-{
-    try
+    private string? Send(string request)
     {
-        var started = Stopwatch.GetTimestamp();
-        if (Start() is not { } process) return null;
-
-        process.StandardInput.Write(request + "\n");
-        process.StandardInput.Flush();
-        var line = ReadLine(process, TimeoutMs);
-        _helperCalls++;
-        _helperTicks += Stopwatch.GetTimestamp() - started;
-
-        if (line is null)
+        try
         {
-            Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
-            Fail();
-            return null;
-        }
+            var started = Stopwatch.GetTimestamp();
+            if (Start() is not { } process) return null;
 
-        _failures = 0;
-        return line;
-    }
+            process.StandardInput.Write(request + "\n");
+            process.StandardInput.Flush();
+            var line = ReadLine(process, TimeoutMs);
+            _helperCalls++;
+            _helperTicks += Stopwatch.GetTimestamp() - started;
+
+            if (line is null)
+            {
+                Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
+                Fail();
+                return null;
+            }
+
+            _failures = 0;
+            return line;
+        }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");

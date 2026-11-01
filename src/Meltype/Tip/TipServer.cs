@@ -625,10 +625,10 @@ internal sealed class TipServer : IDisposable
             ? new Point(left, bottom) : null;
 
     /// <summary>
-    /// 設定「スペースを全角で入力」(issue #259)。DLL は、これが ON で日本語入力のときに、何も打っていなくても Space を受け取って
-    /// Meltype.exe に送る (OFF なら Space はそのままアプリに通す。Shift+Space はいつも送る: issue #246, #881)
+    /// 設定「スペースの幅」が全角か (issue #259)。DLL は、これが true で日本語入力のときに、何も打っていなくても Space を受け取って
+    /// Meltype.exe に送る (false なら Space はそのままアプリに通す。Shift+Space はいつも送る: issue #246, #881)
     /// </summary>
-    private string FullWidthSpaceJson() => $"\"fullWidthSpace\":{(_settings().FullWidthSpaceByDefault ? "true" : "false")},";
+    private string FullWidthSpaceJson() => $"\"fullWidthSpace\":{(_settings().SpaceWidth == SpaceWidth.FullWidth ? "true" : "false")},";
 
     /// <summary>設定「Meltype IME でも入力モードをカーソルの近くに表示」。DLL は、これが ON のときだけ indicator を依頼する (OFF なら切り替えのたびの問い合わせをしない)。</summary>
     private string ModeIndicatorJson() => $"\"modeIndicator\":{(_settings().ShowTsfModeIndicator ? "true" : "false")},";

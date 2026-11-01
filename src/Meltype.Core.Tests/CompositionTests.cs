@@ -126,14 +126,47 @@ internal static class CompositionTests
         /// <summary>JIS 配列の数字・記号のキー (文字 → 仮想キー, Shift)。</summary>
         public static readonly Dictionary<char, (int Vk, bool Shift)> JisKeys = new()
         {
-            ['0'] = (0x30, false), ['1'] = (0x31, false), ['2'] = (0x32, false), ['3'] = (0x33, false), ['4'] = (0x34, false),
-            ['5'] = (0x35, false), ['6'] = (0x36, false), ['7'] = (0x37, false), ['8'] = (0x38, false), ['9'] = (0x39, false),
-            ['!'] = (0x31, true), ['"'] = (0x32, true), ['#'] = (0x33, true), ['$'] = (0x34, true), ['%'] = (0x35, true),
-            ['&'] = (0x36, true), ['\''] = (0x37, true), ['('] = (0x38, true), [')'] = (0x39, true),
-            ['-'] = (0xBD, false), ['='] = (0xBD, true), ['^'] = (0xDE, false), ['~'] = (0xDE, true), ['\\'] = (0xDC, false), ['|'] = (0xDC, true),
-            ['@'] = (0xC0, false), ['`'] = (0xC0, true), ['['] = (0xDB, false), ['{'] = (0xDB, true),
-            [';'] = (0xBB, false), ['+'] = (0xBB, true), [':'] = (0xBA, false), ['*'] = (0xBA, true), [']'] = (0xDD, false), ['}'] = (0xDD, true),
-            [','] = (0xBC, false), ['<'] = (0xBC, true), ['.'] = (0xBE, false), ['>'] = (0xBE, true), ['/'] = (0xBF, false), ['?'] = (0xBF, true),
+            ['0'] = (0x30, false),
+            ['1'] = (0x31, false),
+            ['2'] = (0x32, false),
+            ['3'] = (0x33, false),
+            ['4'] = (0x34, false),
+            ['5'] = (0x35, false),
+            ['6'] = (0x36, false),
+            ['7'] = (0x37, false),
+            ['8'] = (0x38, false),
+            ['9'] = (0x39, false),
+            ['!'] = (0x31, true),
+            ['"'] = (0x32, true),
+            ['#'] = (0x33, true),
+            ['$'] = (0x34, true),
+            ['%'] = (0x35, true),
+            ['&'] = (0x36, true),
+            ['\''] = (0x37, true),
+            ['('] = (0x38, true),
+            [')'] = (0x39, true),
+            ['-'] = (0xBD, false),
+            ['='] = (0xBD, true),
+            ['^'] = (0xDE, false),
+            ['~'] = (0xDE, true),
+            ['\\'] = (0xDC, false),
+            ['|'] = (0xDC, true),
+            ['@'] = (0xC0, false),
+            ['`'] = (0xC0, true),
+            ['['] = (0xDB, false),
+            ['{'] = (0xDB, true),
+            [';'] = (0xBB, false),
+            ['+'] = (0xBB, true),
+            [':'] = (0xBA, false),
+            ['*'] = (0xBA, true),
+            [']'] = (0xDD, false),
+            ['}'] = (0xDD, true),
+            [','] = (0xBC, false),
+            ['<'] = (0xBC, true),
+            ['.'] = (0xBE, false),
+            ['>'] = (0xBE, true),
+            ['/'] = (0xBF, false),
+            ['?'] = (0xBF, true),
             ['_'] = (0xE2, true),
         };
 
@@ -174,25 +207,22 @@ internal static class CompositionTests
         public bool ZSymbols { get; set; } = true;
         public bool NumberKeysSelectCandidates { get; set; } = true;
         public bool SpaceAroundEnglish { get; set; }
-        public bool ShiftSpaceHalfWidth { get; set; }
+        public Meltype.Config.SpaceWidth SpaceWidth { get; set; }
         public bool EnterCommitsAsShown { get; set; }
         public bool AlphanumericKeyStartsAsTyped { get; set; }
         public bool FullWidthParentheses { get; set; }
-        public bool FullWidthSlash { get; set; }
+        public Meltype.Config.SlashStyle Slash { get; set; }
         public bool SquareBrackets { get; set; }
         public bool EscStepsBack { get; set; }
         public bool EscRevertsSelectedClause { get; set; }
         public bool FunctionKeysAffectSelectedClause { get; set; }
-        public bool CompatibleShortcuts { get; set; }
+        public Meltype.Config.ControlKeyLayout ControlKeys { get; set; }
         public bool PartialCommit { get; set; }
-        public bool MacControlKeys { get; set; }
         public bool CursorIntoBrackets { get; set; }
         public string ControlKeyBindings { get; set; } = "";
         public bool CalculatorCandidates { get; set; }
-        public bool LogKeyIntervals { get; set; }
         public bool LaughterAfterKana { get; set; }
         public bool ContextualLearning { get; set; }
-        public bool FullWidthSpaceByDefault { get; set; }
         public bool ShowCandidatesWhileTyping { get; set; }
         public bool GitHubIssueCandidates { get; set; }
         public string GitHubRepository { get; set; } = "";
@@ -248,7 +278,7 @@ internal static class CompositionTests
 
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
-            TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, bool slashAsMiddleDot = false, Predictor? predictor = null,
+            TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
             Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
         {
             Direct = direct;
@@ -274,25 +304,21 @@ internal static class CompositionTests
                 ZSymbols = () => ZSymbols,
                 NumberKeysSelectCandidates = () => NumberKeysSelectCandidates,
                 SpaceAroundEnglish = () => SpaceAroundEnglish,
-                ShiftSpaceHalfWidth = () => ShiftSpaceHalfWidth,
+                SpaceWidth = () => SpaceWidth,
                 EnterCommitsAsShown = () => EnterCommitsAsShown,
                 AlphanumericKeyStartsAsTyped = () => AlphanumericKeyStartsAsTyped,
                 FullWidthParentheses = () => FullWidthParentheses,
-                FullWidthSlash = () => FullWidthSlash,
                 SquareBrackets = () => SquareBrackets,
                 EscStepsBack = () => EscStepsBack,
                 EscRevertsSelectedClause = () => EscRevertsSelectedClause,
                 FunctionKeysAffectSelectedClause = () => FunctionKeysAffectSelectedClause,
-                CompatibleShortcuts = () => CompatibleShortcuts,
+                ControlKeys = () => ControlKeys,
                 PartialCommit = () => PartialCommit,
-                MacControlKeys = () => MacControlKeys,
                 CursorIntoBrackets = () => CursorIntoBrackets,
                 ControlKeyBindings = () => ControlKeyBindings,
                 CalculatorCandidates = () => CalculatorCandidates,
-                LogKeyIntervals = () => LogKeyIntervals,
                 LaughterAfterKana = () => LaughterAfterKana,
                 ContextualLearning = () => ContextualLearning,
-                FullWidthSpaceByDefault = () => FullWidthSpaceByDefault,
                 ShowCandidatesWhileTyping = () => ShowCandidatesWhileTyping,
                 GitHubIssueCandidates = () => GitHubIssueCandidates,
                 GitHubRepository = () => GitHubRepository,
@@ -302,7 +328,7 @@ internal static class CompositionTests
                 Predictions = () => predictor is not null,
                 EnglishNamePredictions = () => englishNamePredictions,
                 Punctuation = () => Punctuation,
-                SlashAsMiddleDot = () => slashAsMiddleDot,
+                Slash = () => Slash,
                 Now = now ?? (() => DateTime.Now),
                 ShowTypedKeys = () => showTypedKeys,
                 TabConversion = () => tabConversion,
@@ -333,7 +359,7 @@ internal static class CompositionTests
             var letter = VirtualKeys.IsLetter(k.Vk);
             if (Direct) return letter && !_directEnglishWord && Level != Meltype.Config.DetectionLevel.Manual;
             if (Kana && Detection.KanaDetector.IsKanaKey(k.Vk)) return true;
-            if (k.Vk == VirtualKeys.Space && (_shiftHeld || FullWidthSpaceByDefault && !Direct)) return true;
+            if (k.Vk == VirtualKeys.Space && (_shiftHeld || SpaceWidth == Meltype.Config.SpaceWidth.FullWidth && !Direct)) return true;
             return letter || k.Vk is >= 0x30 and <= 0x39 or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
         }
 
@@ -497,14 +523,14 @@ internal static class CompositionTests
             var k = new Keyboard();
             k.Type(typed);
             Assert.Equal(expected, k.Showing, typed);
-                // 英単語の中の綴りは、かなにしない (trying・swan・highway・hyena・babying)
-        foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
-        {
-            var e = new Keyboard();
-            e.Type(word);
-            Assert.Equal(word, e.Showing, word);
+            // 英単語の中の綴りは、かなにしない (trying・swan・highway・hyena・babying)
+            foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
+            {
+                var e = new Keyboard();
+                e.Type(word);
+                Assert.Equal(word, e.Showing, word);
+            }
         }
-}
     }
 
     [Test]
@@ -911,7 +937,7 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Up);
         Assert.Equal("😄", k.Showing);
     }
-  
+
     [Test]
     public static void Now_ChosenTimeIsNotLearned()
     {
@@ -1057,9 +1083,9 @@ internal static class CompositionTests
             clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
     }
 
-      [Test]
-      public static void ShiftSpace_DuringConversion_GoesBack()
-      {
+    [Test]
+    public static void ShiftSpace_DuringConversion_GoesBack()
+    {
         // #140: 変換中の Shift+Space は前の候補へ (Space と同じに進んでいた)
         var k = new Keyboard();
         k.Type("kawa ");
@@ -1075,7 +1101,7 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Space);
         k.Key(VirtualKeys.LShift, up: true);
         Assert.Equal(k.Host.View!.Candidates.Count - 1, k.Host.View!.SelectedIndex, "先頭から戻ると最後の候補へ");
-      }
+    }
 
     [Test]
     public static void F10_CyclesLetterCase()
@@ -1406,7 +1432,7 @@ internal static class CompositionTests
             ("3/4", true, "3/4"), ("/help", true, "/help"), ("and/or", true, "and/or"),
         })
         {
-            var k = new Keyboard(slashAsMiddleDot: on) { SigilWords = false }; // 先頭の /help は #193 でそのまま入力になるので切って比べる
+            var k = new Keyboard { SigilWords = false, Slash = on ? Meltype.Config.SlashStyle.MiddleDot : Meltype.Config.SlashStyle.Slash }; // 先頭の /help は #193 でそのまま入力になるので切って比べる
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, $"{typed} ({(on ? "ON" : "OFF")})");
         }
@@ -1643,11 +1669,16 @@ internal static class CompositionTests
     {
         var cases = new Dictionary<string, string>
         {
-            ["kaxnji"] = "かんじ", ["kannji"] = "かんじ", ["kanji"] = "かんじ", // ん: n / xn / nn
+            ["kaxnji"] = "かんじ",
+            ["kannji"] = "かんじ",
+            ["kanji"] = "かんじ", // ん: n / xn / nn
             ["whotto"] = "うぉっと",
             ["ulo"] = "うぉ",
             ["uxo"] = "うぉ",
-            ["xtu"] = "っ", ["ltsu"] = "っ", ["vu"] = "ゔ", ["thi"] = "てぃ",
+            ["xtu"] = "っ",
+            ["ltsu"] = "っ",
+            ["vu"] = "ゔ",
+            ["thi"] = "てぃ",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -2013,7 +2044,7 @@ internal static class CompositionTests
         k.Type("infobesity\n");
         Assert.Equal("infobesity", k.Host.Document);
     }
-  
+
     [Test]
     public static void Issue505_LiveConvertIgnoresSymbolsInLength()
     {
@@ -2267,7 +2298,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue708_ShiftSpaceCanBeHalfWidth()
     {
-        var k = new Keyboard { ShiftSpaceHalfWidth = true };
+        var k = new Keyboard { SpaceWidth = Meltype.Config.SpaceWidth.HalfWidth };
         k.Type("tanaka\n");
         k.Host.PhysicalShift = true;
         k.Key(VirtualKeys.LShift);
@@ -2327,12 +2358,63 @@ internal static class CompositionTests
     [Test]
     public static void Issue502_SymbolStyleCanBeChosen()
     {
-        var k = new Keyboard { SquareBrackets = true, FullWidthSlash = true };
+        var k = new Keyboard { SquareBrackets = true, Slash = Meltype.Config.SlashStyle.FullWidth };
         k.Type("[nihongo]aiueo/kakikukeko\n");
         Assert.Equal("［にほんご］あいうえお／かきくけこ", k.Host.Document);
         var normal = new Keyboard();
         normal.Type("[nihongo]\n");
         Assert.Equal("「にほんご」", normal.Host.Document, "OFF は今までどおり");
+    }
+
+    [Test]
+    public static void EllipsisIsOfferedForTententenReading()
+    {
+        Assert.True(CandidateDictionary.Load(null).Lookup("てんてんてん").Contains("…"), "てんてんてん → …");
+        var k = new Keyboard();
+        k.Type("tenntenntenn");
+        k.Press(VirtualKeys.Space);
+        Assert.True(k.Host.View!.Candidates.Contains("…"), string.Join(",", k.Host.View.Candidates));
+    }
+
+    [Test]
+    public static void NamedSymbolsAreAvailableAsConversionCandidates()
+    {
+        foreach (var (raw, reading, symbol) in new[] {
+            ("sanntenn", "さんてん", "…"),
+            ("sanntennri-da-", "さんてんりーだー", "…"),
+            ("sanntennri-da", "さんてんりーだ", "…"),
+            ("nitennri-da-", "にてんりーだー", "‥"),
+            ("nitennri-da", "にてんりーだ", "‥"),
+            ("namidassyu", "なみだっしゅ", "〜"),
+            ("natyuraru", "なちゅらる", "♮"),
+            ("sessi", "せっし", "℃"),
+            ("mugenndai", "むげんだい", "∞"),
+            ("batu", "ばつ", "×"),
+            ("koronn", "ころん", "："),
+            ("semikoronn", "せみころん", "；"),
+            ("surassyu", "すらっしゅ", "／"),
+            ("bakkusurassyu", "ばっくすらっしゅ", "＼"),
+        })
+        {
+            Assert.True(CandidateDictionary.Load(null).LookupWords(reading).Contains(symbol), reading + " → " + symbol);
+            var k = new Keyboard();
+            k.Type(raw);
+            k.Press(VirtualKeys.Space);
+            Assert.True(k.Host.View!.Candidates.Contains(symbol), raw + ": " + string.Join(",", k.Host.View.Candidates));
+        }
+    }
+
+    [Test]
+    public static void SymbolConversionOffersEllipsisWithoutChangingLiteralPunctuation()
+    {
+        var k = new Keyboard();
+        k.Type("...");
+        k.Press(VirtualKeys.Space);
+        Assert.True(k.Host.View!.Candidates.Contains("…"), string.Join(",", k.Host.View.Candidates));
+        Assert.True(k.Host.View.Candidates.Contains("..."), "打ったままのピリオドも残す");
+        var literal = new Keyboard();
+        literal.Type("...\n");
+        Assert.Equal("...", literal.Host.Document);
     }
 
     [Test]
@@ -2476,7 +2558,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue599_CtrlKLResizeTheClause()
     {
-        var k = new Keyboard { CompatibleShortcuts = true };
+        var k = new Keyboard { ControlKeys = Meltype.Config.ControlKeyLayout.Atok };
         k.Type("tanniwotoru ");
         Assert.Equal("単位を取る", string.Concat(k.Host.View!.Clauses!));
         k.Key(VirtualKeys.LControl);
@@ -2558,7 +2640,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue643_MacControlKeysConvertLikeKotoeri()
     {
-        var k = new Keyboard { MacControlKeys = true };
+        var k = new Keyboard { ControlKeys = Meltype.Config.ControlKeyLayout.Mac };
         k.Type("toukyou");
         k.Key(VirtualKeys.LControl);
         k.Key('K');
@@ -2686,18 +2768,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue286_KeyIntervalsAreLoggedWithoutText()
-    {
-        var k = new Keyboard { LogKeyIntervals = true };
-        var before = Diagnostics.Log.Snapshot().Length;
-        var version = Diagnostics.Log.Version;
-        k.Type("hello");
-        var added = Diagnostics.Log.Snapshot().Select(x => x.Message).Where(x => x.Contains("打鍵の間隔")).ToList();
-        Assert.True(added.Count >= 3, "間隔を残す: " + added.Count);
-        Assert.True(added.All(x => !x.Contains("hello")), "打った文字は残さない");
-    }
-
-    [Test]
     public static void Issue713_SingleKanaThenWIsLaughter()
     {
         var k = new Keyboard { LaughterAfterKana = true };
@@ -2777,7 +2847,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue259_SpaceCanBeFullWidthByDefault()
     {
-        var k = new Keyboard { FullWidthSpaceByDefault = true };
+        var k = new Keyboard { SpaceWidth = Meltype.Config.SpaceWidth.FullWidth };
         k.Type("tanaka\n");
         k.Press(VirtualKeys.Space);
         k.Type("tarou\n");
@@ -3196,7 +3266,10 @@ internal static class CompositionTests
     {
         var cases = new Dictionary<string, string>
         {
-            ["amazon"] = "amazon", ["adobe"] = "adobe", ["netflix"] = "netflix", ["spotify"] = "spotify",
+            ["amazon"] = "amazon",
+            ["adobe"] = "adobe",
+            ["netflix"] = "netflix",
+            ["spotify"] = "spotify",
             ["kyouhaamazondekaimono"] = "きょうはamazonでかいもの",
             ["nihongonobenkyou"] = "にほんごのべんきょう", // 短い名前 (Ben) は文の途中で英語にしない
             ["suzuki"] = "すずき", // 日本語で書くことが多い名前は固有名詞辞書に入れていない
@@ -3507,12 +3580,44 @@ internal static class CompositionTests
     public static void Symbols_StartComposition()
     {
         // 報告: かぎかっこが入力できない。
-        var cases = new Dictionary<string, string> { ["[kagi]"] = "「かぎ」", ["-"] = "ー", ["/"] = "/", ["z/"] = "・", ["#"] = "#", ["("] = "(", [")"] = ")", ["]"] = "」", ["@"] = "@", [",,,"] = "...", ["\\"] = "￥", [","] = "、",
+        var cases = new Dictionary<string, string>
+        {
+            ["[kagi]"] = "「かぎ」",
+            ["-"] = "ー",
+            ["/"] = "/",
+            ["z/"] = "・",
+            ["#"] = "#",
+            ["("] = "(",
+            [")"] = ")",
+            ["]"] = "」",
+            ["@"] = "@",
+            [",,,"] = "...",
+            ["\\"] = "￥",
+            [","] = "、",
             // 報告: Shift で打つ記号が全角で打てない、/ が打てない。英語の中では半角のまま。
-            ["$%&"] = "＄％＆", ["kyouha(tenki)"] = "きょうは(てんき)", ["hello@example"] = "hello@example",
-            ["tetr.io"] = "tetr.io", ["Wakatte.TV"] = "Wakatte.TV", ["J-core"] = "J-core", ["p-hub"] = "p-hub", ["talk-admin"] = "talk-admin",
+            ["$%&"] = "＄％＆",
+            ["kyouha(tenki)"] = "きょうは(てんき)",
+            ["hello@example"] = "hello@example",
+            ["tetr.io"] = "tetr.io",
+            ["Wakatte.TV"] = "Wakatte.TV",
+            ["J-core"] = "J-core",
+            ["p-hub"] = "p-hub",
+            ["talk-admin"] = "talk-admin",
+            // 報告 (#1349): かなの後ろの子音だけの語の後の - が長音になる (きょうはptーquery-digest)。ん (n-to・nn-to) の後は長音
+            ["pt-query-digest"] = "pt-query-digest",
+            ["kyouhapt-query-digest"] = "きょうはpt-query-digest",
+            ["kyouhals-files"] = "きょうはls-files",
+            ["n-to"] = "んーと",
+            ["nn-to"] = "んーと",
             // 報告: ca / cu / co で か く こ
-            ["cacuco"] = "かくこ", ["iijane"] = "いいじゃね", ["shoucanshi"] = "しょうかんし", ["vanpaia"] = "ゔぁんぱいあ", ["wyiwye"] = "ゐゑ", ["GPL3.0"] = "GPL3.0", ["3.14desu"] = "3.14です", ["oknotasuku"] = "okのたすく",
+            ["cacuco"] = "かくこ",
+            ["iijane"] = "いいじゃね",
+            ["shoucanshi"] = "しょうかんし",
+            ["vanpaia"] = "ゔぁんぱいあ",
+            ["wyiwye"] = "ゐゑ",
+            ["GPL3.0"] = "GPL3.0",
+            ["3.14desu"] = "3.14です",
+            ["oknotasuku"] = "okのたすく",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -3532,20 +3637,39 @@ internal static class CompositionTests
         // 報告 (#260・#254): 英語の語.拡張子 の拡張子がひらがなになる (MeltypeTip.dっl、Meltype.coんふぃg、Meltype.ご。mod)
         var cases = new Dictionary<string, string>
         {
-            ["MeltypeTip.dll"] = "MeltypeTip.dll", ["Meltype.aab"] = "Meltype.aab", ["Meltype.config"] = "Meltype.config", ["Meltype.index"] = "Meltype.index",
-            ["Meltype.ini"] = "Meltype.ini", ["Meltype.go.mod"] = "Meltype.go.mod", ["Meltype.abi.json"] = "Meltype.abi.json", ["Meltype.so.1"] = "Meltype.so.1",
-            ["Meltype.e57"] = "Meltype.e57", ["Meltype.cargo/config.toml"] = "Meltype.cargo/config.toml", ["Meltype.db-journal"] = "Meltype.db-journal",
+            ["MeltypeTip.dll"] = "MeltypeTip.dll",
+            ["Meltype.aab"] = "Meltype.aab",
+            ["Meltype.config"] = "Meltype.config",
+            ["Meltype.index"] = "Meltype.index",
+            ["Meltype.ini"] = "Meltype.ini",
+            ["Meltype.go.mod"] = "Meltype.go.mod",
+            ["Meltype.abi.json"] = "Meltype.abi.json",
+            ["Meltype.so.1"] = "Meltype.so.1",
+            ["Meltype.e57"] = "Meltype.e57",
+            ["Meltype.cargo/config.toml"] = "Meltype.cargo/config.toml",
+            ["Meltype.db-journal"] = "Meltype.db-journal",
             // 表示で英字にした拡張子を、確定でローマ字の打ち間違いとして直さない (amr → あめ、bas → ば)
-            ["Meltype.amr"] = "Meltype.amr", ["Meltype.bas"] = "Meltype.bas", ["Meltype.ann"] = "Meltype.ann",
+            ["Meltype.amr"] = "Meltype.amr",
+            ["Meltype.bas"] = "Meltype.bas",
+            ["Meltype.ann"] = "Meltype.ann",
             // issue #462: ローマ字読める語尾 (llama → っぁま) + 読めない拡張子は英字スパンとしてまとめる
             ["llama.cpp"] = "llama.cpp",
             // 長い名前の途中の助詞・ドメインの頭では分けない
-            ["Meltype.gitignore"] = "Meltype.gitignore", ["Meltype.gcno"] = "Meltype.gcno", ["Meltype.automount"] = "Meltype.automount",
+            ["Meltype.gitignore"] = "Meltype.gitignore",
+            ["Meltype.gcno"] = "Meltype.gcno",
+            ["Meltype.automount"] = "Meltype.automount",
             // 先頭のドットファイルも英字のまま (issue #431: 。ぎちgのれ にしない)
-            [".gitignore"] = ".gitignore", [".env"] = ".env", [".dll"] = ".dll", [".json"] = ".json", [".go"] = ".go",
+            [".gitignore"] = ".gitignore",
+            [".env"] = ".env",
+            [".dll"] = ".dll",
+            [".json"] = ".json",
+            [".go"] = ".go",
             // 拡張子・ドメインの後ろの助詞からは日本語
-            ["MeltypeTip.dllwokesu"] = "MeltypeTip.dllをけす", ["setup.exewojikkou"] = "setup.exeをじっこう", ["github.comnipush"] = "github.comにpush",
-            ["tetr.iode"] = "tetr.ioで", ["google.comdekensaku"] = "google.comでけんさく",
+            ["MeltypeTip.dllwokesu"] = "MeltypeTip.dllをけす",
+            ["setup.exewojikkou"] = "setup.exeをじっこう",
+            ["github.comnipush"] = "github.comにpush",
+            ["tetr.iode"] = "tetr.ioで",
+            ["google.comdekensaku"] = "google.comでけんさく",
             // 日本語の語と同じ綴りの固有名詞 (Wakatte) のドメインは、小文字で打っても英字
             ["wakatte.tv"] = "wakatte.tv",
             ["wakatte.tvdemiru"] = "wakatte.tvでみる",
@@ -3675,12 +3799,17 @@ internal static class CompositionTests
         // 報告: 今日はAutoIMEnotesutowosimasu が全部英字になる。大文字で始まる語の後ろの日本語は日本語にする。
         var cases = new Dictionary<string, string>
         {
-            ["AutoIMEnotesuto"] = "AutoIMEのてすと", ["Githubdekaku"] = "Githubでかく", ["OKdesu"] = "OKです",
-            ["Tokyo"] = "Tokyo", ["Hello"] = "Hello",
+            ["AutoIMEnotesuto"] = "AutoIMEのてすと",
+            ["Githubdekaku"] = "Githubでかく",
+            ["OKdesu"] = "OKです",
+            ["Tokyo"] = "Tokyo",
+            ["Hello"] = "Hello",
             // 報告: I don't → どん't。短縮形は英語。
-            ["don't"] = "don't", ["I'm"] = "I'm",
+            ["don't"] = "don't",
+            ["I'm"] = "I'm",
             // 報告: TSユーザー → Tシューざー、issue → いっすえ
-            ["TSyu-za-"] = "TSゆーざー", ["issue"] = "issue",
+            ["TSyu-za-"] = "TSゆーざー",
+            ["issue"] = "issue",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -4554,8 +4683,16 @@ internal static class CompositionTests
     {
         var expected = new Dictionary<string, string>
         {
-            ["watashi"] = "わたし", ["arigatou"] = "ありがとう", ["kana"] = "かな", ["sushi"] = "すし", ["tesuto"] = "てすと",
-            ["make"] = "まけ", ["ra-men"] = "らーめn", ["nihon"] = "にほn", ["konnichiwq"] = "こんいちwq", ["tanni"] = "たんい",
+            ["watashi"] = "わたし",
+            ["arigatou"] = "ありがとう",
+            ["kana"] = "かな",
+            ["sushi"] = "すし",
+            ["tesuto"] = "てすと",
+            ["make"] = "まけ",
+            ["ra-men"] = "らーめn",
+            ["nihon"] = "にほn",
+            ["konnichiwq"] = "こんいちwq",
+            ["tanni"] = "たんい",
         };
         foreach (var (typed, kana) in expected)
         {

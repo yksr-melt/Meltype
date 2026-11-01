@@ -206,7 +206,8 @@ public sealed class WindowsSpellChecker : IWordChecker, IDisposable
                 }
             }
             finally { ReleaseChecker(); }
-        }) { IsBackground = true, Name = "Meltype spell checker" };
+        })
+        { IsBackground = true, Name = "Meltype spell checker" };
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
         return thread;

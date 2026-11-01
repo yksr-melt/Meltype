@@ -146,6 +146,9 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>最後にキーを押してから、この時間たつまで閉じない (Enter で確定した直後に閉じると、アプリがまだ受け取っていない Enter が改行になる)。</summary>
     private const int TakeoverQuietMs = 200;
 
+    /// <summary>Windows の IME の ON/OFF を切り替えるときに、応答を待つ時間。</summary>
+    private const int ImeTimeoutMs = 300;
+
     /// <summary>Windows の IME で語を打っている途中か、打ってすぐか (閉じると、前半と後半が別の IME に分かれる)。</summary>
     private bool StillTypingInSystemIme() =>
         _imeMaybeComposing || Environment.TickCount64 - Volatile.Read(ref _lastKeyDownMs) < TakeoverQuietMs;
@@ -459,7 +462,7 @@ internal sealed class MeltypeEngine : IDisposable
                 // 日本語のキーボードでなければ IME は無い
                 if (ImeTarget.FromForeground() is not { } target || (Native.GetKeyboardLayout(target.ThreadId).ToInt64() & 0xFFFF) != 0x0411) return;
                 var previous = IME.Imm32ImeController.GetState(target).Mode;
-                if (IME.Imm32ImeController.TrySetOpen(target, japanese, null, _settings.ImeTimeoutMs))
+                if (IME.Imm32ImeController.TrySetOpen(target, japanese, null, ImeTimeoutMs))
                 {
                     Log.Info(japanese ? "左右の Alt: 日本語入力にしました (右 Alt)" : "左右の Alt: 英数にしました (左 Alt)");
                     if (previous == (japanese ? IME.ImeMode.Closed : IME.ImeMode.Open))
@@ -715,7 +718,7 @@ internal sealed class MeltypeEngine : IDisposable
         // かな入力 (JIS): かなのキー (数字・記号のキーも含む) はすべて入力を始める。
         if (settings.InputStyle == InputStyle.Kana && !_keyboardDirect && KanaDetector.IsKanaKey(e.Vk)) punctuation = true;
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。
-        if (e.Vk == VirtualKeys.Space && !_keyboardDirect && (IsDown(VirtualKeys.Shift) || settings.FullWidthSpaceByDefault)) punctuation = true;
+        if (e.Vk == VirtualKeys.Space && !_keyboardDirect && (IsDown(VirtualKeys.Shift) || settings.SpaceWidth == SpaceWidth.FullWidth)) punctuation = true;
         if (_keyboardDirect && !reconvert)
         {
             // 英数状態: ローマ字かどうかを判定するために、単語の打ち始めの英字だけを受け取る。
@@ -835,7 +838,7 @@ internal sealed class MeltypeEngine : IDisposable
                 if (!_foreground.Check(_settings).Allowed) return;
                 var state = IME.Imm32ImeController.GetState(target);
                 if (!KeyboardLayoutPolicy.AllowsInput(_settings, state.KeyboardLayout)) return;
-                if (state.Mode == IME.ImeMode.Open && IME.Imm32ImeController.TrySetOpen(target, false, null, _settings.ImeTimeoutMs))
+                if (state.Mode == IME.ImeMode.Open && IME.Imm32ImeController.TrySetOpen(target, false, null, ImeTimeoutMs))
                 {
                     Log.Info("Meltype キーボードを使うため Microsoft IME を OFF にしました。");
                 }
@@ -867,8 +870,8 @@ internal sealed class MeltypeEngine : IDisposable
         }
         // Meltype IME のモードにしたら (トレイでも設定画面でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
         if (SwitchesToTsf(previous.Mode, next.Mode)) Tip.TipServer.ActivateForSession();
-        // 「入力欄とみなすアプリ」を変えたら、今のフォーカスを調べ直す (前面のアプリに戻ったときを待たずに効かせる)。
-        if (previous.TextInputApps != next.TextInputApps) _composition?.Focus.Invalidate();
+        // アプリ別設定の「入力欄とみなす」を変えたら、今のフォーカスを調べ直す (前面のアプリに戻ったときを待たずに効かせる)。
+        if (!TextInputApps(previous).SequenceEqual(TextInputApps(next), StringComparer.OrdinalIgnoreCase)) _composition?.Focus.Invalidate();
         Log.SetFileOutput(next.FileLog ? AppPaths.LogFile : null);
         Log.RecordText = next.LogTypedText;
         if (_configPath is not null)
@@ -882,6 +885,9 @@ internal sealed class MeltypeEngine : IDisposable
 
     /// <summary>動作モードを Meltype IME に変えたか (使えずに元のモードに戻したときは、戻した後のモードで見る)。</summary>
     internal static bool SwitchesToTsf(InputMode previous, InputMode next) => previous != InputMode.Tsf && next == InputMode.Tsf;
+
+    /// <summary>アプリ別設定で「入力欄とみなす」にしたアプリ。</summary>
+    private static IEnumerable<string> TextInputApps(Settings settings) => settings.AppRules.Where(r => r.TextInput).Select(r => r.Process);
 
     public DetectionResult Evaluate(string letters, Settings? settings = null) =>
         _scoreEngine.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), IsFinal: false), settings ?? _settings);
@@ -1021,7 +1027,7 @@ internal sealed class MeltypeEngine : IDisposable
         if (_forcedCloses >= 3) return;
         _forcedCloses++;
         _lastForcedClose = now;
-        var closed = IME.Imm32ImeController.TrySetOpen(target, false, null, _settings.ImeTimeoutMs);
+        var closed = IME.Imm32ImeController.TrySetOpen(target, false, null, ImeTimeoutMs);
         Log.Warn($"Meltype キーボードの使用中に Windows の IME が ON になっていました ({state}) → {(closed ? "OFF にしました" : "OFF にできませんでした")}。" +
                  (_forcedCloses == 3 ? " (続けて ON になるため、しばらく自動で OFF にしません。IME を使うときは Ctrl+半角/全角 で Meltype を一時停止してください)" : ""));
     }

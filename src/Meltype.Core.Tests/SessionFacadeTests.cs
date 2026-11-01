@@ -84,6 +84,25 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void MacOperationKeysCommitAndPassThroughWithoutInsertingFunctionCharacters()
+    {
+        foreach (var vk in new[] { 0x2E, 0x0C, 0x70, 0x71, 0x72, 0x73, 0x74, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F, 0x80, 0x81, 0x82, 0x83 })
+        {
+            foreach (var converting in new[] { false, true })
+            {
+                var session = Create();
+                Type(session, "a");
+                if (converting) Type(session, " ");
+                var result = session.HandleKey(vk, null, false, false, false, false);
+                Assert.True(!result.Consumed, $"操作キー {vk:X} はアプリへ渡す");
+                Assert.Equal("あ", result.Commits.Single().Text);
+                Assert.True(result.View is null, "確定後に変換表示を閉じる");
+                Assert.True(!session.HandleKey(vk, null, false, false, false, false).Consumed, "未確定なしでもアプリへ渡す");
+            }
+        }
+    }
+
+    [Test]
     public static void CtrlEnterDuringCompositionCommitsWithoutSending()
     {
         // 変換中の Ctrl+Enter (送信のショートカット) は確定だけ行い、キーはアプリへ渡さない。
@@ -474,9 +493,9 @@ internal static class SessionFacadeTests
     [Test]
     public static void FullWidthSpaceSetting_SpaceIsFullWidthAndShiftSpaceIsHalfWidth()
     {
-        // #881: 設定「スペースを全角で入力」では、Meltype IME も何も打っていないときの Space が全角・Shift+Space が半角 (Meltype キーボードと同じ: #259)
-        var settings = new Settings { FullWidthSpaceByDefault = true };
-        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault }, () => settings);
+        // #881: 設定「スペースの幅」が全角では、Meltype IME も何も打っていないときの Space が全角・Shift+Space が半角 (Meltype キーボードと同じ: #259)
+        var settings = new Settings { SpaceWidth = SpaceWidth.FullWidth };
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SpaceWidth = () => settings.SpaceWidth }, () => settings);
         var result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
         Assert.True(result.Consumed, "Space を受け取る");
         Assert.Equal("　", string.Concat(result.Commits.Select(c => c.Text)));
@@ -489,11 +508,11 @@ internal static class SessionFacadeTests
         result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
         Assert.True(!result.Consumed && result.Commits.Count == 0, "英数ではアプリに通す");
 
-        // 設定が OFF なら、Space はアプリに通す (DLL も受け取らない)
-        settings.FullWidthSpaceByDefault = false;
-        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault }, () => settings);
+        // 全角でなければ、Space はアプリに通す (DLL も受け取らない)
+        settings.SpaceWidth = SpaceWidth.Standard;
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SpaceWidth = () => settings.SpaceWidth }, () => settings);
         result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
-        Assert.True(!result.Consumed && result.Commits.Count == 0, "設定が OFF なら通す");
+        Assert.True(!result.Consumed && result.Commits.Count == 0, "全角でなければ通す");
     }
 
     [Test]

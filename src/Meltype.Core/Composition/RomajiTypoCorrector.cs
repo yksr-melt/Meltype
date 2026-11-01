@@ -143,16 +143,46 @@ public sealed class RomajiTypoCorrector
     // 五段の語尾 → あ段・い段・え段・お段
     private static readonly Dictionary<char, string> Rows = new()
     {
-        ['う'] = "わいえお", ['く'] = "かきけこ", ['ぐ'] = "がぎげご", ['す'] = "さしせそ", ['つ'] = "たちてと",
-        ['ぬ'] = "なにねの", ['ぶ'] = "ばびべぼ", ['む'] = "まみめも", ['る'] = "らりれろ",
+        ['う'] = "わいえお",
+        ['く'] = "かきけこ",
+        ['ぐ'] = "がぎげご",
+        ['す'] = "さしせそ",
+        ['つ'] = "たちてと",
+        ['ぬ'] = "なにねの",
+        ['ぶ'] = "ばびべぼ",
+        ['む'] = "まみめも",
+        ['る'] = "らりれろ",
     };
 
     // QWERTY の隣のキー
     private static readonly Dictionary<char, string> Neighbors = new()
     {
-        ['q'] = "wa", ['w'] = "qeas", ['e'] = "wrsd", ['r'] = "etdf", ['t'] = "ryfg", ['y'] = "tugh", ['u'] = "yihj", ['i'] = "uojk", ['o'] = "ipkl", ['p'] = "ol",
-        ['a'] = "qwsz", ['s'] = "weadzx", ['d'] = "erfsxc", ['f'] = "rtdgcv", ['g'] = "tyfhvb", ['h'] = "yugjbn", ['j'] = "uihknm", ['k'] = "iojlm", ['l'] = "opk",
-        ['z'] = "asx", ['x'] = "zsdc", ['c'] = "xdfv", ['v'] = "cfgb", ['b'] = "vghn", ['n'] = "bhjm", ['m'] = "njk",
+        ['q'] = "wa",
+        ['w'] = "qeas",
+        ['e'] = "wrsd",
+        ['r'] = "etdf",
+        ['t'] = "ryfg",
+        ['y'] = "tugh",
+        ['u'] = "yihj",
+        ['i'] = "uojk",
+        ['o'] = "ipkl",
+        ['p'] = "ol",
+        ['a'] = "qwsz",
+        ['s'] = "weadzx",
+        ['d'] = "erfsxc",
+        ['f'] = "rtdgcv",
+        ['g'] = "tyfhvb",
+        ['h'] = "yugjbn",
+        ['j'] = "uihknm",
+        ['k'] = "iojlm",
+        ['l'] = "opk",
+        ['z'] = "asx",
+        ['x'] = "zsdc",
+        ['c'] = "xdfv",
+        ['v'] = "cfgb",
+        ['b'] = "vghn",
+        ['n'] = "bhjm",
+        ['m'] = "njk",
     };
 
     private static bool IsVowel(char c) => c is 'a' or 'i' or 'u' or 'e' or 'o';
