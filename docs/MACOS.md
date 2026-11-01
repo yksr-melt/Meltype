@@ -27,9 +27,7 @@
   <a href="LINUX.md"><img src="images/cards/os-linux.svg" alt="Linux" width="30%"></a>
 </p>
 
-Mac の正式な IME の仕組み (Input Method Kit) で動く Meltype です。Windows 版と同じく、日本語を打っている途中の英単語は英字のまま、
-英語とも日本語とも読める語は前後の文脈で判定します。Mac では OS が IME としてキーを渡してくれるので、
-メニューバーの入力メニューにもふつうの IME として表示されます。
+Mac 版のインストール・設定・困ったときの説明です。キー操作と、どの OS でも共通の機能は [USAGE.md](USAGE.md) にあります。
 
 > **プレビュー版です。** 動かないところやビルドエラーがあれば、エラーの全文とあわせて [Issues](https://github.com/yksr-melt/Meltype/issues) で教えてください！
 
@@ -48,12 +46,12 @@ Mac の正式な IME の仕組み (Input Method Kit) で動く Meltype です。
 
 Meltype はアプリではなく「入力ソース」(日本語入力) です。`Meltype.app` をダブルクリックしても何も起きません。
 
-1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-mac.zip` をダウンロードして、**zip 全体を**展開する (インストーラーが `install-app.sh`・`start-input-method.sh`・`select-input-source.swift` も使います)
+1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-mac.zip` をダウンロードして、**zip 全体を**展開する
 2. 「Install Meltype.command」をダブルクリック
    - 「開発元が未確認のため開けません」と出たら、右クリック (control + クリック) →「開く」→「開く」
    - macOS 15 以降は、一度ダブルクリックしてから、システム設定 → プライバシーとセキュリティ → 下のほうの「このまま開く」を押す
    - それでも開けないときは、「ターミナル」で `bash ~/Downloads/Meltype-mac/install.sh` を実行する
-3. インストーラーが Meltype を登録・起動し、入力ソースを選びます。通常の更新では、システム設定を開く必要はありません
+3. インストーラーが Meltype を登録・起動し、入力ソースを選びます
 
 起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。初回に入力ソースが見つからないときだけ、ログアウト・ログインしてから入力メニューを確かめてください。
 
@@ -69,20 +67,9 @@ brew install --cask yksr-melt/Meltype/meltype
 <a name="使い方"></a>
 <img src="images/headings/mac/03.svg" alt="使い方" height="53"><br>
 
-ふつうにローマ字で打つと、下線付きの変換中の文字になります。英単語 (google, github …) は英字のまま！
+入力メニューの「日本語・英語の自動判定」で使います。JIS キーボードの <kbd>英数</kbd> / <kbd>かな</kbd> で、英数 (直接入力) / 日本語に切り替えます。
 
-| キー | |
-|---|---|
-| <kbd>Space</kbd> | 変換 (候補の一覧が出ます) |
-| <kbd>Enter</kbd> | 確定 |
-| <kbd>←</kbd> <kbd>→</kbd> | 文節を選ぶ |
-| <kbd>Esc</kbd> | 取り消し |
-| <kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd> | ひらがな / カタカナ / 半角カタカナ |
-| <kbd>F9</kbd> / <kbd>F10</kbd> | 全角英数 / 半角英数 |
-| <kbd>英数</kbd> / <kbd>かな</kbd> | JIS キーボードで、英数 (直接入力) / 日本語に戻る |
-
-- 先頭か空白の直後に打った `/review`・`$skill`・`@ファイル名` は、空白まで変換せずにそのまま入ります (`SigilWordsDirect` で OFF)
-- 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` (入力メニューの「Meltype のデータフォルダを開く」「Meltype の設定ファイル (config.json) を開く…」)。設定は Windows 版と同じ `config.json` です (自動判定の強さ `DetectionLevel` など)。同じフォルダーの `config.schema.json` を `config.json` の `"$schema"` に指定すると (入力メニューから作った `config.json` には最初から入っています)、VS Code などのエディターで項目の補完・説明・書き間違いの警告が出ます
+設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
 
 <a name="入力モードのショートカット"></a>
 <img src="images/headings/mac/s06.svg" alt="入力モードのショートカット" height="40">
@@ -131,7 +118,7 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 <a name="困ったとき"></a>
 <img src="images/headings/mac/04.svg" alt="困ったとき" height="53"><br>
 
-- **入力ソースに出てこない**: まず入力メニューを見る。無ければ、ターミナルで次を実行する (ログアウトは要りません。`install.sh` も同じことをします、#134)
+- **入力ソースに出てこない**: まず入力メニューを見る。無ければ、ターミナルで次を実行する
   ```bash
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
@@ -141,7 +128,7 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
   "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source
   ```
   それでも並んだままなら、システム設定 → キーボード → 入力ソース で Meltype を追加し直すか、ログアウトしてログインし直す。
-- **入力メニューに「絵文字と記号を表示」「キーボードビューアを表示」「キーボード設定を開く…」の 3 つしか出ない**: 入力ソースの登録は残っていて Meltype も使えるが、メニューの一覧が古いまま固まっている (#134)。上の `MeltypeRegisterInputSource` を実行すると直る。応急処置は、入力メニューで「キーボードビューアを表示」を押すか、ターミナルで `killall TextInputMenuAgent` (macOS がすぐ起動し直します)。入力メニューの一覧は、選択できるキーボード系の入力ソースが 2 つ以上あるときだけ出るので、1 つしか無いときも同じ見え方になります
+- **入力メニューに「絵文字と記号を表示」「キーボードビューアを表示」「キーボード設定を開く…」の 3 つしか出ない**: 上の `MeltypeRegisterInputSource` を実行するか、ターミナルで `killall TextInputMenuAgent` を実行する。入力ソースが 1 つしか無いときも、この見え方になります
 - **動きがおかしい**: ログを見る
   ```bash
   log stream --predicate 'process == "Meltype"' --level debug

@@ -27,8 +27,7 @@
   <a href="LINUX.md"><img src="images/cards/os-linux.svg" alt="Linux" width="30%"></a>
 </p>
 
-Meltype は Linux では「入力ソース」(日本語入力) として動きます。IBus のエンジンと fcitx5 のアドオンの両方があります。
-Windows 版と同じく、日本語を打っている途中の英単語は英字のまま出ます！
+Linux 版のインストール・設定・困ったときの説明です。IBus と fcitx5 で動きます。キー操作と、どの OS でも共通の機能は [USAGE.md](USAGE.md) にあります。
 
 > **プレビュー版です。** 動かないところがあります。気づいたことはなんでも [Issues](https://github.com/yksr-melt/Meltype/issues) で教えてください！
 
@@ -88,8 +87,6 @@ sudo apt update
 sudo apt install meltype
 ```
 
-apt リポジトリがまだ公開されていない場合は、上の Releases から `.deb` を入れる方法を使ってください.
-
 Fedora では、`.rpm` から入れられます (dnf で外せます。中身は `.deb` と同じです。Fedora 44 でビルドしています)。
 [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` をダウンロードして、次のコマンドでインストールします。
 
@@ -136,23 +133,9 @@ KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ロ�
 <a name="使い方"></a>
 <img src="images/headings/linux/03.svg" alt="使い方" height="53"><br>
 
-ふつうにローマ字で打つと日本語、英単語 (google、github …) は英字のまま！
+<kbd>半角/全角</kbd> で英数と日本語を切り替えます。
 
-| キー | |
-|---|---|
-| <kbd>Space</kbd> | 変換 |
-| <kbd>Enter</kbd> | 確定 |
-| <kbd>←</kbd> <kbd>→</kbd> | 文節を選ぶ |
-| <kbd>Esc</kbd> | 取り消し |
-| <kbd>F6</kbd> / <kbd>F7</kbd> / <kbd>F8</kbd> | ひらがな / カタカナ / 半角カタカナ |
-| <kbd>F9</kbd> / <kbd>F10</kbd> | 全角英数 / 半角英数 |
-| <kbd>半角/全角</kbd> | 英数と日本語の切り替え |
-
-設定と学習データは `~/.local/share/Meltype` にあります (`config.json` は Windows 版と同じ形式)。
-
-設定は `config.json` を直接編集します。Meltype は同じフォルダーに設定の一覧と説明 (`config.schema.json`) を書くので、`config.json` の先頭で指定すると、VS Code などのエディターで項目の補完・説明・書き間違いの警告が出ます。`"SettingsVersion"` の無い `config.json` は、Meltype が最初に読んだときに、書いていない項目を既定値で書き足します。
-
-fcitx5 の固定の操作ガイドを隠すには、`config.json` に `"ShowGuide": false` を追加します (既定は `true`)。英字・予測・訂正の提案は OFF でも表示します。設定は新しい入力欄を作るときに読み込むので、既存の入力欄へ確実に反映するには fcitx5 を再起動してください。
+設定と学習データは `~/.local/share/Meltype` にあります。設定は Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
 
 ```json
 {
@@ -160,6 +143,8 @@ fcitx5 の固定の操作ガイドを隠すには、`config.json` に `"ShowGuid
   "Punctuation": "FullWidthCommaPeriod"
 }
 ```
+
+fcitx5 の操作ガイドを隠すには、`config.json` に `"ShowGuide": false` を書いて、fcitx5 を再起動します。
 
 <br>
 
