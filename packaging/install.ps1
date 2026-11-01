@@ -104,7 +104,11 @@ function Start-InstalledMeltype {
 
 # 更新の失敗で Meltype が止まったままだと、次のサインインまで入力できない。動いていなければ、残っている版を起動する。
 function Start-RemainingMeltype {
-    if ((Get-Process Meltype -ErrorAction SilentlyContinue) -or -not (Test-Path -LiteralPath $exe)) { return }
+    if (-not (Test-Path -LiteralPath $exe)) { return }
+    $runningInstalled = @(Get-Process Meltype -ErrorAction SilentlyContinue | Where-Object {
+        try { $_.Path -eq $exe } catch { $false }
+    })
+    if ($runningInstalled.Count -gt 0) { return }
     try {
         Start-InstalledMeltype
         Write-Mark 'fallback=started'
@@ -328,6 +332,7 @@ catch {
         Write-Host "バックアップ: $backup"
         Write-Mark 'result=rollback-failed'
         $preserveBackup = $true
+        # A locked non-executable file must not prevent restarting the intact previous EXE.
         Start-RemainingMeltype
         exit 1
     }
