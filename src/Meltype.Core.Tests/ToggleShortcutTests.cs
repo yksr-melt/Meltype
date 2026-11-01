@@ -402,7 +402,8 @@ internal static class ToggleShortcutTests
     public static void Shortcut_ImeTextToggleKeepsCompositionUncommitted()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions(), () => new Settings()) { Direct = false };
+            new CompositionOptions(), () => new Settings())
+        { Direct = false };
         SessionResult? last = null;
         foreach (var c in "nihongo") last = session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
         var japanese = last!.View!.Text;
@@ -620,12 +621,16 @@ internal static class ToggleShortcutTests
     public static void Shortcut_CoreRejectsConflictsAcrossSettingsAndProfiles()
     {
         var valid = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
-        var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts =
-        [
-            new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
-            new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
-            new() { Key = 0x1C }, valid, valid,
-        ] }.Normalize();
+        var settings = new Settings
+        {
+            ConvertKeysSwitchKeyboard = true,
+            ToggleShortcuts =
+            [
+                new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
+                new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
+                new() { Key = 0x1C }, valid, valid,
+            ],
+        }.Normalize();
         Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "Core で衝突と重複を除外");
         Assert.Equal(valid, settings.EffectiveToggleShortcuts[0]);
         var values = settings.ProfileValues();
@@ -641,12 +646,12 @@ internal static class ToggleShortcutTests
     public static void Shortcut_RejectsUnmodifiedTextAndEditingKeys()
     {
         foreach (var mods in new[] { ShortcutModifiers.None, ShortcutModifiers.Shift })
-        foreach (var key in new[] { 0x20, 0x0D, 0x1B, 0x41, 0x30, 0x09, 0x08, 0x25, 0x2E, 0xC0, 0x70 })
-        {
-            var binding = new ToggleShortcut { Key = key, Modifiers = mods };
-            Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
-            Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
-        }
+            foreach (var key in new[] { 0x20, 0x0D, 0x1B, 0x41, 0x30, 0x09, 0x08, 0x25, 0x2E, 0xC0, 0x70 })
+            {
+                var binding = new ToggleShortcut { Key = key, Modifiers = mods };
+                Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
+                Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
+            }
         foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x1C, 0x1D })
             Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
         Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(

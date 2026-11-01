@@ -14,10 +14,10 @@ namespace Meltype.Config;
 
 public static class PastePolicy
 {
-        public static bool IsQtWindowClass(string? className) =>
-        className is { Length: >= 3 } &&
-        className[0] == 'Q' && className[1] == 't' && className[2] is >= '0' and <= '9';
-        
+    public static bool IsQtWindowClass(string? className) =>
+    className is { Length: >= 3 } &&
+    className[0] == 'Q' && className[1] == 't' && className[2] is >= '0' and <= '9';
+
     public static bool ShouldPaste(Settings settings, string? processName, bool isQtApp) => settings.CommitMethodFor(processName) switch
     {
         CommitMethod.Paste => true,

@@ -892,7 +892,7 @@ internal static class SessionFacadeTests
         session.Private = false;
         ChooseHashi(session);
         Assert.Equal("箸を", history.Get("はしを"));
-      }
+    }
     [Test]
     public static void CreateDefault_SessionsShareLearning()
     {

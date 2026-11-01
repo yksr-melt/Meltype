@@ -921,25 +921,25 @@ internal static class LanguageLearningTests
         Assert.Equal(CandidateNote.FullWidth, notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("＠")), string.Join(" ", view.Candidates));
     }
 
-  [Test]
-  public static void Brand_TeamsFromChiimusu()
-  {
-    // ちーむす でも Teams を出す (issue #47。ちーむず だけだった)
-    var candidates = CandidateDictionary.Load(null);
-    Assert.True(candidates.Lookup("ちーむす").Contains("Teams"), string.Join(" ", candidates.Lookup("ちーむす")));
-    Assert.True(candidates.Lookup("ちーむず").Contains("Teams"), "ちーむず も今までどおり");
-  }
+    [Test]
+    public static void Brand_TeamsFromChiimusu()
+    {
+        // ちーむす でも Teams を出す (issue #47。ちーむず だけだった)
+        var candidates = CandidateDictionary.Load(null);
+        Assert.True(candidates.Lookup("ちーむす").Contains("Teams"), string.Join(" ", candidates.Lookup("ちーむす")));
+        Assert.True(candidates.Lookup("ちーむず").Contains("Teams"), "ちーむず も今までどおり");
+    }
 
-  [Test]
-  public static void Phrase_AgeashiWoToru()
-  {
-    // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
-    var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
-    k.Type("ageashitoruna ");
-    var view = k.Host.View!;
-    Assert.True(view.Converting, "変換中");
-    Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
-  }
+    [Test]
+    public static void Phrase_AgeashiWoToru()
+    {
+        // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
+        var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
+        k.Type("ageashitoruna ");
+        var view = k.Host.View!;
+        Assert.True(view.Converting, "変換中");
+        Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
+    }
 
     [Test]
     public static void TesterNames_AreCandidates()
