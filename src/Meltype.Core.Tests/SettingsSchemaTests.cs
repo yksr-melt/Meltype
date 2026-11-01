@@ -24,7 +24,7 @@ internal static class SettingsSchemaTests
         Assert.Equal("Keyboard,Tsf", string.Join(",", properties["Mode"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("Romaji,Kana", string.Join(",", properties["InputStyle"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("、。", properties["Punctuation"]!["enumDescriptions"]![0]?.GetValue<string>(), "選択肢の説明を出す");
-        Assert.True(properties["CompositionFont"]!["description"]!.GetValue<string>().StartsWith("Windows のみ。"), "Windows 版でしか効かない項目は、説明の先頭に書く");
+        Assert.True(properties["CompositionFont"]!["description"]!.GetValue<string>().StartsWith("Windows のみ。", StringComparison.Ordinal),"Windows 版でしか効かない項目は、説明の先頭に書く");
         Assert.True(!properties["Punctuation"]!["description"]!.GetValue<string>().Contains("Windows のみ"), "どの OS でも効く項目には書かない");
     }
 
