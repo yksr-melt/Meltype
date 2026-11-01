@@ -123,8 +123,15 @@ public sealed class MisspellingDictionary
             if (c is 'ッ' or 'ー' || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
             builder.Append(c switch
             {
-                'ァ' => 'ア', 'ィ' => 'イ', 'ゥ' => 'ウ', 'ェ' => 'エ', 'ォ' => 'オ',
-                'ャ' => 'ヤ', 'ュ' => 'ユ', 'ョ' => 'ヨ', 'ヮ' => 'ワ',
+                'ァ' => 'ア',
+                'ィ' => 'イ',
+                'ゥ' => 'ウ',
+                'ェ' => 'エ',
+                'ォ' => 'オ',
+                'ャ' => 'ヤ',
+                'ュ' => 'ユ',
+                'ョ' => 'ヨ',
+                'ヮ' => 'ワ',
                 _ => c,
             });
         }
