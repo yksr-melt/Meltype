@@ -1,4 +1,4 @@
-詳しい開発手順は [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
+詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
 
 ## 構成（どこを触るか）
 
@@ -15,7 +15,8 @@
 | `web/`                     | Web（Cloudflare Workers・報告フォーム）                                                             |
 | `dictionaries/`            | 辞書                                                                                         |
 | `tools/`                   | 辞書生成・検査・ベンチ・テスト用スクリプト                                                                      |
-| `docs/`                    | 使い方・開発・設計の文書                                                                               |
+| `docs/`                    | 利用者向けの文書（使い方・OS ごとの説明・リリースノート）                                                              |
+| `docs/dev/`                | 開発者向けの文書（開発・設計・リリースの手順）                                                                     |
 
 ## ビルドとテスト
 
@@ -102,6 +103,7 @@ node tools/check-format.mjs origin/main
 - **AI を使ったことを PR に書く。** テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
 - **説明は日本語で書く。** PR の本文・コメント・文書は日本語で書く。
 - **PR と関係ない場所を変更しない。**
+- **挙動を変えたら、利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/` 直下）も同じ PR で直す。** 開発者向けの文書（`docs/dev/`・各ディレクトリの `README.md`）は、使うときに古ければ直す。
 - **機能実装や枠組みを変える変更は、先に Issue で相談する。**
 - **報告された入力は症状の 1 例。原因を突き止め、同じ原因で起きる入力をまとめて直す。**
 

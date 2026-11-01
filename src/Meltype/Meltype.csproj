@@ -29,6 +29,6 @@
   </ItemGroup>
   <!-- タグのビルド (GitHub Actions の GITHUB_REF_TYPE=tag。手で push したタグも) では、リリースノートが無ければ止める。開発中のビルドは無くてもよい (GitHub のリリースのページへ案内する) -->
   <Target Name="RequireReleaseNotes" BeforeTargets="Build" Condition="'$(GITHUB_REF_TYPE)' == 'tag' And !Exists('..\..\docs\release-notes\$(Version).md')">
-    <Error Text="docs/release-notes/$(Version).md がありません。リリースノートを書いて main に入れてから、タグを付けてください (docs/RELEASE.md)。" />
+    <Error Text="docs/release-notes/$(Version).md がありません。リリースノートを書いて main に入れてから、タグを付けてください (docs/dev/RELEASE.md)。" />
   </Target>
 </Project>

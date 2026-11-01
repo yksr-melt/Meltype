@@ -22,7 +22,7 @@ UT を有効にしたバイナリをビルドして配布する場合、各ラ�
 UT 辞書は CC BY-SA のバージョン (3.0 か 4.0 か) を明記しておらず、CC BY-SA 3.0 のデータは GPLv3 と組み合わせられません。**alt-cannadic は GPL-2.0 のみで、Meltype とは組み合わせられません。**
 
 UT 辞書を入れたバイナリはあなた自身のビルドであり、Meltype の公式成果物でも、サポートや動作保証の対象でもありません。
-辞書ごとの詳しい条件は [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) の「Mozc-UT 辞書」にあります。
+辞書ごとの詳しい条件は [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md) の「Mozc-UT 辞書」にあります。
 
 ## UT 辞書を用意する
 

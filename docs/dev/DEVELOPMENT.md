@@ -1,15 +1,9 @@
-<a name="meltype-の開発"></a>
-<img src="images/headings/development/title.svg" alt="Meltype の開発" height="80">
-
+# Meltype の開発
 
 ソースからのビルド、テスト、配布用のパッケージ、動作の仕組みです。
-使い方は [USAGE.md](USAGE.md)、貢献の方法は [CONTRIBUTING.md](../CONTRIBUTING.md)、リリースの手順は [RELEASE.md](RELEASE.md) にあります。
+使い方は [USAGE.md](../USAGE.md)、貢献の方法は [CONTRIBUTING.md](../../CONTRIBUTING.md)、リリースの手順は [RELEASE.md](RELEASE.md) にあります。
 
-<br>
-
-<a name="フォルダーの構成"></a>
-<img src="images/headings/development/01.svg" alt="フォルダーの構成" height="53"><br>
-
+## フォルダーの構成
 
 | フォルダー | 中身 |
 |---|---|
@@ -18,7 +12,7 @@
 | `src/Meltype.Mac.Native/` | Mac 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib にする) |
 | `mac/` | Mac 版の IME (Swift、Input Method Kit。漢字変換は azooKey) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
-| `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
+| `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
 | `src/Meltype.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
 | `dictionaries/` | 組み込みの辞書 |
@@ -26,11 +20,7 @@
 
 `src/Meltype.Core/` の中は、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
 
-<br>
-
-<a name="windows-でビルドして試す"></a>
-<img src="images/headings/development/02.svg" alt="Windows でビルドして試す" height="53"><br>
-
+## Windows でビルドして試す
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
@@ -53,20 +43,12 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # �
 - Microsoft IME (漢字変換に使います)
 - Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
 
-<br>
+## Mac・Linux でビルドする
 
-<a name="maclinux-でビルドする"></a>
-<img src="images/headings/development/03.svg" alt="Mac・Linux でビルドする" height="53"><br>
+- Mac 版: [mac/README.md](../../mac/README.md)
+- Linux 版 (WSL を含む): [linux/README.md](../../linux/README.md)
 
-
-- Mac 版: [MAC-CLI.md](MAC-CLI.md)
-- Linux 版 (WSL を含む): [WSL.md](WSL.md)
-
-<br>
-
-<a name="テスト"></a>
-<img src="images/headings/development/04.svg" alt="テスト" height="53"><br>
-
+## テスト
 
 ```powershell
 dotnet build Meltype.sln
@@ -78,9 +60,7 @@ dotnet run --project src/Meltype.Tests -- --context この本は:あつい      
 dotnet run --project src/Meltype.Tests -- --eval                          # 品質テスト
 ```
 
-<a name="maclinux-でのテスト"></a>
-<img src="images/headings/development/s01.svg" alt="Mac・Linux でのテスト" height="40">
-
+### Mac・Linux でのテスト
 
 OS に依存しない部分 (`src/Meltype.Core`) とそのテストは、Mac・Linux でも動きます。.NET 10 SDK を入れて次を実行します。GitHub Actions でも、Ubuntu と macOS で毎回流しています。
 
@@ -102,11 +82,9 @@ Windows のアプリ本体は GUI アプリ (WinExe) なので、cmd では版�
 
 `--mixed-bench` は `MELTYPE_BENCH_OFFSET=31` などで調べる語を変えられます。
 
-機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [tools/performance](../tools/performance/README.md) にあります。
+機能を足す前と後で変換エンジンの速さ・精度を比べるときは、両方の版で `--perf` を動かして `--perf-compare 前.json 後.json` で比べます。測る項目と比べ方は [tools/performance](../../tools/performance/README.md) にあります。
 
-<a name="品質テスト"></a>
-<img src="images/headings/development/s02.svg" alt="品質テスト" height="40">
-
+### 品質テスト
 
 `src/Meltype.Core.Tests/QualityTests.cs` に、日本語の文・英文・混在・英語とも日本語とも読める語・英語の後の短い語・記号と数字・小書き文字・大文字・かな入力・コードの行・文章ファイル・絵文字・もしかして の例をまとめてあります。
 期待値は「理想の結果」で書いてあり、`--eval` でカテゴリーごとの正解率と外れた例を表示します。
@@ -130,11 +108,7 @@ dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus after.t
 node .github/bot/pr-checks.mjs impact before.tsv after.tsv changes.tsv
 ```
 
-<br>
-
-<a name="配布用のパッケージを作る"></a>
-<img src="images/headings/development/05.svg" alt="配布用のパッケージを作る" height="53"><br>
-
+## 配布用のパッケージを作る
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
@@ -148,7 +122,7 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
   2. 自己診断 (`Meltype.exe --selftest`) を走らせ、実際に読み込まれなかった大きなアセンブリを削る
   3. もう一度自己診断を走らせ、削りすぎていないことを確かめる (失敗したら zip を作らない)
 - 自己診断は、設定・判定・辞書・変換エンジン・Windows の候補 API・UI Automation・各画面・タスクトレイ・データの保存を、キーボードフックを掛けずに一通り動かします
-- インストール先は `%LOCALAPPDATA%\Programs\Meltype` で、管理者権限は要りません。配布用のファイルの元は [packaging/](../packaging/) にあります
+- インストール先は `%LOCALAPPDATA%\Programs\Meltype` で、管理者権限は要りません。配布用のファイルの元は [packaging/](../../packaging/) にあります
 
 ポータブル版は次で作れます。
 
@@ -158,9 +132,7 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1 -Portable
 
 通常版と分けて `dist\Meltype-test-<日時>-windows-portable.zip` を作ります。リリースビルドでは版番号を含む `Meltype-<版>-windows-portable.zip` になります。ZIPをフォルダーごと展開し、その中の `Meltype.exe` を実行してください。アプリと.NETランタイムを同梱するため、.NET未導入のPCでも起動できます。ユーザーデータは `Meltype.exe` の隣の `data` に保存します。IME登録、自動起動、アプリ内更新は含めません。
 
-<a name="ウイルス対策ソフトの検査"></a>
-<img src="images/headings/development/s03.svg" alt="ウイルス対策ソフトの検査" height="40">
-
+### ウイルス対策ソフトの検査
 
 GitHub Actions の配布ジョブは、公開する前に Microsoft Defender の定義を更新し、できたフォルダーと zip を検査します。検出・検査のエラー・Defender が無効のときは、公開を止めます。
 手元で配布するときも、管理者の PowerShell で次を実行してください。
@@ -172,17 +144,11 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-wi
 検査は駆除せずに行い、検出した内容をコマンドの出力に残します。検出されたら、対象のファイル・版・ハッシュ・Defender の定義の版を確かめ、誤検知が疑われるときは [Microsoft の審査窓口](https://www.microsoft.com/en-us/wdsi/filesubmission) に出してください。
 検査に通ったことは、その時点の判定で、安全や将来の判定を保証するものではありません。検査に失敗したときの動きは `powershell -NoProfile -File tools/Test-WindowsPackageScan.ps1` で確かめられます。
 
-<br>
-
-<a name="動作の仕組み"></a>
-<img src="images/headings/development/06.svg" alt="動作の仕組み" height="53"><br>
-
+## 動作の仕組み
 
 どの動作モードも、キーボードフック (`WH_KEYBOARD_LL`) を専用のスレッドで受けます。Meltype が送り直したキーには印 (`dwExtraInfo = "MELT"`) を付け、自分では判定しません。
 
-<a name="meltype-キーボード"></a>
-<img src="images/headings/development/s04.svg" alt="Meltype キーボード" height="40">
-
+### Meltype キーボード
 
 ```
 物理キー ─▶ KeyboardMonitor ─▶ CaptureGate (変換ボックスが開いている間は、キーとクリックをすべて順番どおりに保留)

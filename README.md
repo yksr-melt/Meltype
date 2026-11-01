@@ -79,11 +79,11 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 
 <p align="center">
   <a href="docs/WINDOWS.md"><img src="docs/images/cards/os-windows.svg" alt="Windows" width="30%"></a>
-  <a href="mac/README.md"><img src="docs/images/cards/os-mac.svg" alt="Mac" width="30%"></a>
-  <a href="linux/README.md"><img src="docs/images/cards/os-linux.svg" alt="Linux" width="30%"></a>
+  <a href="docs/MACOS.md"><img src="docs/images/cards/os-mac.svg" alt="Mac" width="30%"></a>
+  <a href="docs/LINUX.md"><img src="docs/images/cards/os-linux.svg" alt="Linux" width="30%"></a>
 </p>
 
-<p align="center"><sub>カードを押すと、それぞれの OS の README (インストール・使い方・困ったとき) が開きます</sub></p>
+<p align="center"><sub>カードを押すと、それぞれの OS の説明 (インストール・使い方・困ったとき) が開きます</sub></p>
 
 1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロード
 2. 開いて、案内どおりに進める
@@ -99,8 +99,8 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 | | ファイル |
 |---|---|
 | Windows (zip) | `Meltype-<version>-windows.zip` を展開して `Install.cmd` をダブルクリック |
-| Mac (プレビュー版) | `Meltype-<version>-mac.zip` ([mac/README.md](mac/README.md)) |
-| Linux (プレビュー版) | `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`。IBus / fcitx5、[linux/README.md](linux/README.md)) |
+| Mac (プレビュー版) | `Meltype-<version>-mac.zip` ([docs/MACOS.md](docs/MACOS.md)) |
+| Linux (プレビュー版) | `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`。IBus / fcitx5、[docs/LINUX.md](docs/LINUX.md)) |
 
 インストーラーでも zip でも、入る場所は同じ `%LOCALAPPDATA%\Programs\Meltype` です。
 Windows 版に必要なのは Windows 10 / 11 (64bit) と Microsoft IME だけで、.NET は同梱しています。
@@ -328,8 +328,8 @@ General Public License for more details.
 </p>
 
 - 送り方 → [CONTRIBUTING.md](CONTRIBUTING.md)
-- ビルド・仕組み → [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-- Mac の CLI ビルド → [docs/MAC-CLI.md](docs/MAC-CLI.md)、WSL / Linux の CLI ビルド → [docs/WSL.md](docs/WSL.md)
+- ビルド・仕組み → [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)
+- Mac 版のビルド → [mac/README.md](mac/README.md)、Linux 版 (WSL を含む) のビルド → [linux/README.md](linux/README.md)
 
 <br><br>
 

@@ -1,12 +1,6 @@
-<a name="リリースの手順"></a>
-<img src="images/headings/release/title.svg" alt="リリースの手順" height="80">
+# リリースの手順
 
-
-<br>
-
-<a name="版を出す"></a>
-<img src="images/headings/release/01.svg" alt="版を出す" height="53"><br>
-
+## 版を出す
 
 1. 版を上げる
    - `src/Meltype/Meltype.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
@@ -29,11 +23,7 @@
 
 bot は、main の `Meltype.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、Windows・Mac・Linux のビルドを始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
 
-<br>
-
-<a name="同梱の-net-の更新"></a>
-<img src="images/headings/release/02.svg" alt="同梱の .NET の更新" height="53"><br>
-
+## 同梱の .NET の更新
 
 配布物の .NET の版は、どこにも固定していません。ビルドのたびに setup-dotnet (`10.0.x`) がその時の最新の SDK とランタイムを入れます。
 Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタイムを `app\dotnet` に同梱し、Mac・Linux は NativeAOT で組み込みます。
@@ -43,22 +33,14 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 新しい版が出ていれば「同梱の .NET を <版> に更新する (リリースし直す)」の Issue を立てます (Actions の画面から手で実行することもできます)。
 .NET のメジャー版を上げる (net10.0 → net11.0) ときは、`*.csproj` の `TargetFramework` と、ワークフローの `dotnet-version` を手で変えます。
 
-<br>
+## GitHub の設定
 
-<a name="github-の設定"></a>
-<img src="images/headings/release/03.svg" alt="GitHub の設定" height="53"><br>
-
-
-- Settings → Security → **Private vulnerability reporting** を ON にする ([SECURITY.md](../SECURITY.md) の報告先)
+- Settings → Security → **Private vulnerability reporting** を ON にする ([SECURITY.md](../../SECURITY.md) の報告先)
 - Settings → Branches → main のブランチ保護で、必須のチェックに **CLA**・**build**・**精度の比較**・**辞書の形式** を入れる
 - (任意) bot の名前を変える: GitHub App を作り、変数 `BOT_APP_ID` と秘密 `BOT_APP_PRIVATE_KEY` を登録する
-- 不具合報告のフォーム: [tools/report-form/README.md](../tools/report-form/README.md) の手順で作り、`src/Meltype.Core/Config/ProjectInfo.cs` の `ReportForm` に URL を書く
+- 不具合報告のフォーム: [tools/report-form/README.md](../../tools/report-form/README.md) の手順で作り、`src/Meltype.Core/Config/ProjectInfo.cs` の `ReportForm` に URL を書く
 
-<br>
-
-<a name="パッケージマネージャー"></a>
-<img src="images/headings/release/04.svg" alt="パッケージマネージャー" height="53"><br>
-
+## パッケージマネージャー
 
 リリースの zip から、winget・Scoop・Homebrew のマニフェストを作れます。Linux の .deb と .rpm は linux.yml が作ります。
 
@@ -108,6 +90,5 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-
     ```
 - **dnf (.rpm)**: linux.yml が x86_64 / aarch64 の `.rpm` を Fedora 44 で作り、リリースに付けます。apt と同じ署名鍵 (`APT_SIGNING_KEY_B64`) で署名した dnf リポジトリを、apt リポジトリと一緒に GitHub Pages の `/rpm` に公開します (Pages の設定は apt と共通です)。
   - 使う人は `sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo` を一度行うと、`sudo dnf upgrade` で更新できます
-
 
 winget・Scoop で入れた場合は Install.cmd を使わないので、Windows の起動時に起動するには、トレイの「Windows の起動時に起動」を ON にしてもらいます。

@@ -22,7 +22,7 @@ If you build a UT-enabled binary and distribute it, **you** — not Meltype — 
 The UT project does not state which CC BY-SA version applies, and CC BY-SA 3.0 material cannot be combined with GPLv3. **alt-cannadic is GPL-2.0-only and must not be combined with Meltype.**
 
 A UT-merged binary is your own build, not an official Meltype artifact, and is not covered by Meltype's support or warranties.
-Per-dictionary details are in [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) (Japanese) under "Mozc-UT 辞書".
+Per-dictionary details are in [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md) (Japanese) under "Mozc-UT 辞書".
 
 ## Getting a UT dictionary
 

@@ -25,8 +25,8 @@
 
 <p align="center">
   <a href="WINDOWS.md"><img src="images/cards/os-windows.svg" alt="Windows" width="30%"></a>
-  <a href="../mac/README.md"><img src="images/cards/os-mac.svg" alt="Mac" width="30%"></a>
-  <a href="../linux/README.md"><img src="images/cards/os-linux.svg" alt="Linux" width="30%"></a>
+  <a href="MACOS.md"><img src="images/cards/os-mac.svg" alt="Mac" width="30%"></a>
+  <a href="LINUX.md"><img src="images/cards/os-linux.svg" alt="Linux" width="30%"></a>
 </p>
 
 半角/全角 キーを押さなくても、日本語と英語を打ち分けられるようにする Windows 用の日本語入力です。
@@ -107,7 +107,9 @@ SmartScreen の警告とは別のものです。誤検知のこともありま�
 <a name="今のモードの見分け方"></a>
 <img src="images/headings/windows/s03.svg" alt="今のモード (日本語 / 英数) の見分け方" height="40">
 
-タスクバーの Windows の IME の表示は、Meltype が動いている間は常に「A」になります (故障ではありません)。Meltype が Windows の IME を OFF にして、代わりに入力を受け持っているためです。
+Meltype IME では、タスクバーの「あ」「A」が今のモードです。クリックしても切り替わります。
+
+Meltype キーボードのときは、タスクバーの Windows の IME の表示は常に「A」になります (故障ではありません)。Meltype が Windows の IME を OFF にして、代わりに入力を受け持っているためです。
 今のモードは、次のどちらかで確かめてください。
 
 - 入力欄をクリックしたときと <kbd>半角/全角</kbd> を押したとき、カーソルの近くに「あ」(日本語) か「A」(英数) が一瞬出ます
@@ -137,7 +139,9 @@ SmartScreen の警告とは別のものです。誤検知のこともありま�
 <a name="ほかの-ime-と併用するとき"></a>
 <img src="images/headings/windows/s06.svg" alt="ほかの IME と併用するとき" height="40">
 
-Meltype が有効な間は、Windows の IME (Microsoft IME・Google 日本語入力) を自動で OFF にします。
+Meltype IME では、<kbd>Win</kbd> + <kbd>Space</kbd> でほかの IME に切り替えます。
+
+Meltype キーボードのときは、Windows の IME (Microsoft IME・Google 日本語入力) を自動で OFF にします。
 ほかの IME を使いたいときは <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で Meltype を一時停止してください。
 
 <br>
@@ -159,7 +163,7 @@ Meltype が有効な間は、Windows の IME (Microsoft IME・Google 日本語�
 <img src="images/headings/windows/05.svg" alt="保存されるデータ" height="53"><br>
 
 設定と学習データは `%LOCALAPPDATA%\Meltype` に保存されます。打った内容をネットワークに送ることはありません。
-通信するのは、新しい版があるかを GitHub に確かめるときだけです (アイコンを右クリック →「更新」→「自動で更新する」で止められます)。
+通信するのは、新しい版があるかを GitHub に確かめるとき (アイコンを右クリック →「更新」→「自動で更新する」で止められます) と、「不具合の報告・提案...」から自分でフォームを開いたときだけです。
 
 <br>
 
@@ -171,13 +175,3 @@ Windows の「設定」→「アプリ」→「インストールされている
 
 - インストーラーで入れた場合は、最後に設定と学習データも消すかを聞かれます
 - zip 版は、展開したフォルダーの `Uninstall.cmd` でも消せます。こちらは停止・自動起動の解除・設定と学習データの削除までまとめて行います
-
-<br>
-
-<a name="開発者向け"></a>
-<img src="images/headings/windows/07.svg" alt="開発者向け" height="53"><br>
-
-- Windows 版の本体は `src/Meltype` (WinForms のアプリ)、Meltype IME は `native/` にあります
-- ビルド・テスト・仕組み → [DEVELOPMENT.md](DEVELOPMENT.md)、Meltype IME の仕組み → [TSF_DESIGN.md](TSF_DESIGN.md)、リリースの手順 → [RELEASE.md](RELEASE.md)
-
-Meltype は GNU GPL v3 ([LICENSE](../LICENSE)) で配布しています。同梱の .NET ランタイムは MIT ライセンスです ([THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md))。
