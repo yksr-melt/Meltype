@@ -276,3 +276,18 @@ Code Helper のディスク書き込み `.diag` と stickersd の JetsamEvent �
 これはChrome/VS Codeのクライアント切替やパネル位置のGUI検証を代替しません。
 
 ほかのビルドの方法は [docs/MAC-CLI.md](../docs/MAC-CLI.md)、全体の仕組みは [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md) にあります。
+
+
+### 配布用コピーによる入力ソース重複を防ぐ
+
+配布フォルダではアプリ本体を `Meltype.app.zip` として保持する。`install.sh` が隠し一時ディレクトリへ展開し、インストール後に片付ける。インストール先の登録補助ツールは `NSWorkspace` で同じBundle IDのアプリを列挙し、正規のInput Methodsディレクトリ以外の旧配布コピーを `lsregister -u` で登録解除してから、本体の登録・設定修復処理を一度だけ呼ぶ。他のアプリや別の正規インストール先、アプリのファイル自体は変更しない。
+
+古い展開済みアプリをFinderで再び検出させると、そのコピーが再登録される可能性がある。今後の配布・保管用コピーはZIPのままにする。
+
+登録解除は次のテストでは実行しない。
+
+```sh
+swiftc mac/Sources/RegisterInputSource/BundleCleanup.swift tools/test-mac-bundle-cleanup.swift -o /tmp/test-mac-bundle-cleanup
+/tmp/test-mac-bundle-cleanup
+python3 tools/test-mac-installer.py
+```

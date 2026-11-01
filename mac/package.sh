@@ -18,7 +18,7 @@ cleanup() {
 trap cleanup EXIT
 package="$stage/Meltype-mac"
 mkdir -p "$package"
-cp -R "$here/build/Meltype.app" "$package/"
+ditto -c -k --keepParent "$here/build/Meltype.app" "$package/Meltype.app.zip"
 cp "$here/install.sh" "$here/Install Meltype.command" "$here/install-app.sh" "$here/start-input-method.sh" "$here/select-input-source.swift" "$package/"
 cp "$here/TESTER-README.txt" "$package/はじめにお読みください.txt"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$package/"

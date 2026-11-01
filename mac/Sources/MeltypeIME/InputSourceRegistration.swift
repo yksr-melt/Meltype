@@ -167,7 +167,7 @@ enum InputSourceRegistration {
                     wait()
                 } else {
                     FileHandle.standardError.write(Data(
-                        "Input-source registration is pending (enabled selectable Japanese modes: \(count)). Choose Meltype in Keyboard settings or log out and back in.\n".utf8))
+                        "まだ入力ソースとして有効になっていません（有効で選択可能な日本語モード: \(count) 件）。システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype から追加してください。それでも出てこなければ、ログアウトしてログインし直してください。\n".utf8))
                 }
             }
             return .pending

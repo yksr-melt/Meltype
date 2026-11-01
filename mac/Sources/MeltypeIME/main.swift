@@ -13,9 +13,11 @@ if CommandLine.arguments.contains("--version") {
 if CommandLine.arguments.contains("--register-input-source") {
     let outcome = InputSourceRegistration.register()
     guard outcome == .ready else { exit(outcome.exitCode) }
+    // メニューと切り替えUIは一覧を別々にキャッシュするため、両方の表示を更新する。
+    // 有効なモードの確認後だけ実行し、登録待ちのときは一覧を消さない。
     let refresh = Process()
     refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-    refresh.arguments = ["TextInputMenuAgent"]
+    refresh.arguments = ["TextInputMenuAgent", "TextInputSwitcher"]
     refresh.standardOutput = FileHandle.nullDevice
     refresh.standardError = FileHandle.nullDevice
     do {
