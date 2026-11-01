@@ -95,7 +95,7 @@ Windows は、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) �
 
 <p align="center">
   <img src="docs/images/cards/privacy-send.svg" alt="打った文字は送らない: 判定も変換も PC の中で完結" width="32%">
-  <img src="docs/images/cards/privacy-network.svg" alt="通信は 2 つだけ: 自動更新の確認と、自分で開いた報告のフォーム" width="32%">
+  <img src="docs/images/cards/privacy-network.svg" alt="既定の通信は 2 つだけ: 自動更新の確認と、自分で開いた報告のフォーム" width="32%">
   <img src="docs/images/cards/privacy-storage.svg" alt="保存も PC の中: 設定・学習データ・辞書は %LOCALAPPDATA% の中に" width="32%">
 </p>
 

@@ -3,6 +3,8 @@
 
 Windows・Mac・Linux で共通の機能とキー操作です。OS ごとの設定と困ったときは [WINDOWS.md](WINDOWS.md)・[MACOS.md](MACOS.md)・[LINUX.md](LINUX.md) にあります。
 
+ここに書いていない設定は、Windows では設定画面で項目にマウスを乗せると説明が出ます。Mac・Linux では、`config.json` と同じフォルダーの `config.schema.json` に設定の一覧と説明があります。
+
 <a name="キー操作"></a>
 <img src="images/headings/usage/01.svg" alt="キー操作" height="53"><br>
 

@@ -241,7 +241,7 @@ def card(icon, title, lines, color, out):
 # README の下の方のカード (ファイル名, アイコン (drawn_icon の絵の名前), 題, 説明 2 行, 色)
 MORE_CARDS = [
     ("privacy-send", "lock", "打った文字は送らない", ["判定も変換も PC の中で完結。", "ネットには出しません"], BLUE),
-    ("privacy-network", "cloud", "通信は 2 つだけ", ["自動更新の確認と、", "自分で開いた報告のフォーム"], PINK),
+    ("privacy-network", "cloud", "既定の通信は 2 つだけ", ["自動更新の確認と、", "自分で開いた報告のフォーム"], PINK),
     ("privacy-storage", "pc", "保存も PC の中", ["設定・学習データ・辞書は", "%LOCALAPPDATA% の中に"], OUTLINE),
     ("contribute-issue", "exclaim", "不具合の報告", ["どのアプリで・何と打って・", "どうなったかを教えてください"], PINK),
     ("contribute-dictionary", "book", "辞書の追加", ["足りない語・社名は", "Pull Request か Issue で"], BLUE),
