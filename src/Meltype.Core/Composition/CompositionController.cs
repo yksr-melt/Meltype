@@ -66,6 +66,12 @@ public interface ICompositionHost
         CommitText(text);
     }
 
+    /// <summary>
+    /// 確定し直し: キャレットの前の count 文字を replacement に置き換えて、続けて今確定した語 (current) を入れる。
+    /// 前の文字を消せなかったときに current だけを入れられるように、分けて渡す (Meltype IME など。<see cref="TextEdit"/>)。
+    /// </summary>
+    void ReplaceBackward(int count, string replacement, string current) => ReplaceBackward(count, replacement + current);
+
     void RecordDirectReplay(char c) { }
 
     /// <summary>
@@ -97,6 +103,9 @@ public interface ICompositionHost
     /// 読めない・文字ではない・履歴に残さない印がある (パスワード管理ソフトなど) ときは null。
     /// </summary>
     string? ClipboardText => null;
+
+    /// <summary>今再生している曲 (曲名・アーティスト。「なう」の候補に出す。issue #1400)。読めない・再生していなければ null。</summary>
+    (string Title, string Artist)? NowPlaying => null;
 
     /// <summary>
     /// 入力欄のキャレットの前後の文字列 (確定済みの文字) を取りに行く。結果は後から UI スレッドで callback(前, 後ろ) に渡す。
@@ -258,6 +267,15 @@ public sealed record CompositionOptions
     public Func<string> GitHubRepository { get; init; } = () => "";
     public Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
     public Func<bool> ClipboardCandidates { get; init; } = () => false;
+
+    /// <summary>「なう」の候補に、今再生している曲を出すか (issue #1400)。</summary>
+    public Func<bool> NowPlayingCandidates { get; init; } = () => false;
+
+    /// <summary>「とけい」「じこく」の候補の時刻のタイムゾーン (IANA か Windows の ID。空ならこの PC のもの。issue #1401)。</summary>
+    public Func<string> ClockTimeZone { get; init; } = () => "";
+
+    /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
+    public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -1682,14 +1700,26 @@ public sealed class CompositionController
             _converting = true;
             return;
         }
-        // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
-        if (_options.CalculatorCandidates() && !_text.KanaInput && _text.Mode == DisplayMode.Auto && Calculator.Evaluate(_text.Raw) is { } result)
+        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto)
         {
-            var expression = _text.Raw.TrimEnd('=');
-            _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, result, $"{expression}={result}"])) { Raw = _text.Raw }];
-            _selectedClause = 0;
-            _converting = true;
-            return;
+            // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
+            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } result
+                ? [result, $"{_text.Raw.TrimEnd('=')}={result}"]
+                : [];
+            // 月/日 (10/20) は、日付の書き方の候補も出す (issue #935)。分数・割り算 (1/2) かもしれないので、打ったままと計算の結果より後ろに。
+            // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
+            var dates = SlashDate.Match(_text.Raw) is { Success: true } date
+                ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture)) ?? []
+                : [];
+            if (calculated.Length > 0 || dates.Length > 0)
+            {
+                // 月/日 の全角 (１０／２０) は、日付のときだけ今までどおり最後に出す
+                string[] fullWidth = dates.Length > 0 ? [CompositionText.ToFullWidth(_text.Raw)] : [];
+                _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates, .. fullWidth])) { Raw = _text.Raw }];
+                _selectedClause = 0;
+                _converting = true;
+                return;
+            }
         }
         // #123 の形は、# と数字を別々の文節にしない (issue #865)。
         // 設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」なら、タイトルも候補に出す (issue #291)
@@ -2253,8 +2283,12 @@ public sealed class CompositionController
         if (EraToYear(reading) is { } year) return year;
         if (TypedUnitCandidates(reading) is { } units) return units;
         if (ClipboardReadings.Contains(reading) && _options.ClipboardCandidates() && ClipboardLine(_host.ClipboardText) is { } clip) return [clip];
+        if (ClockReadings.Contains(reading)) return ClockCandidates();
         var isNow = NowReadings.Contains(reading);
         if (!isNow && reading != "きょう") return [];
+        // なう: 今再生している曲を、時刻より先に (issue #1400)
+        if (reading == "なう" && _options.NowPlayingCandidates() && NowPlayingCandidates() is { Count: > 0 } songs)
+            return [.. songs, .. NowTimes(ClockNow())];
         var now = _options.Now();
         var day = WeekDays[(int)now.DayOfWeek];
         var date = $"{now.Year}年{now.Month}月{now.Day}日";
@@ -2265,9 +2299,66 @@ public sealed class CompositionController
         if (!isNow)
             return [date, $"{date}({day})", monthDay, $"{monthDay}({day})", slashDate, $"{slashDate}({day})", $"{now.Month}/{now.Day}({day})",
                 $"{now.Year:D4}-{now.Month:D2}-{now.Day:D2}", $"{day}曜日", $"{now.Year:D4}{now.Month:D2}{now.Day:D2}"];
+        return NowTimes(ClockNow());
+    }
+
+    private static string[] NowTimes(DateTime now)
+    {
+        var day = WeekDays[(int)now.DayOfWeek];
+        var date = $"{now.Year}年{now.Month}月{now.Day}日";
+        var monthDay = $"{now.Month}月{now.Day}日";
+        var slashDate = $"{now.Year:D4}/{now.Month:D2}/{now.Day:D2}";
+        var clock = $"{now.Hour:D2}:{now.Minute:D2}";
         var time = $"{now.Hour}時{now.Minute}分";
         return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
             $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
+    }
+
+    /// <summary>設定のタイムゾーンの時刻を出す読み (issue #1401)。</summary>
+    private static readonly HashSet<string> ClockReadings = ["とけい", "じこく"];
+
+    /// <summary>今再生している曲の候補 (曲名 / アーティスト、曲名)。読めなければ空。</summary>
+    private List<string> NowPlayingCandidates()
+    {
+        if (_host.NowPlaying is not { } song || string.IsNullOrWhiteSpace(song.Title)) return [];
+        var title = song.Title.Trim();
+        var artist = song.Artist?.Trim() ?? "";
+        return artist.Length > 0 ? [$"{title} / {artist}", title, $"#NowPlaying {title} / {artist}"] : [title, $"#NowPlaying {title}"];
+    }
+
+    /// <summary>
+    /// とけい・じこく の文節に、設定のタイムゾーンの今の時刻 (19:21 / 19時21分 / 午後7時21分) を出す (issue #1401)。
+    /// 夏時間は TimeZoneInfo が決める。この PC と違うタイムゾーンなら、日付とタイムゾーンの名前を付けたものも出す (日付をまたぐことがあるので)。
+    /// </summary>
+    private List<string> ClockCandidates()
+    {
+        var zone = ClockZone(_options.ClockTimeZone());
+        var now = ClockNow();
+        var clock = $"{now.Hour:D2}:{now.Minute:D2}";
+        List<string> result = [clock, $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"];
+        if (zone is not null && !zone.HasSameRules(TimeZoneInfo.Local)) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
+        return result;
+    }
+
+    /// <summary>設定「時計の候補のタイムゾーン」の今の時刻 (とけい・じこく・いま・なう)。設定が空ならこの PC の時刻。</summary>
+    private DateTime ClockNow() => ClockZone(_options.ClockTimeZone()) is { } zone
+        ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_options.UtcNow(), DateTimeKind.Utc), zone)
+        : _options.Now();
+
+    /// <summary>設定のタイムゾーン。空・見つからなければ null (この PC のもの)。
+    /// IANA (Asia/Tokyo) と Windows (Tokyo Standard Time) のどちらの ID も読む (見つからない ID は .NET が IANA ⇔ Windows に変換して探し直す)。</summary>
+    internal static TimeZoneInfo? ClockZone(string id)
+    {
+        id = id?.Trim() ?? "";
+        if (id.Length == 0) return null;
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(id);
+        }
+        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
+        {
+            return null;
+        }
     }
 
     /// <summary>月ごとの時候の挨拶 (「〜の候」の〜)。手紙・メールの書き出しに使う。</summary>
@@ -2366,9 +2457,37 @@ public sealed class CompositionController
 
     private static bool IsTypedDateOrTime(string reading) => DateReading.IsMatch(reading) || ClockReading.IsMatch(reading);
 
+    private static readonly System.Text.RegularExpressions.Regex SlashDate = new("^(?<m>[0-9]{1,2})/(?<d>[0-9]{1,2})$");
+
+    /// <summary>
+    /// 月と日の書き方の候補。10がつ20にち (TypedDateCandidates) と 10/20 (変換) で同じものを出す。
+    /// 10/20 / 10/20 / 10月20日 / 10/20(火) / 10月20日(火) / 2026/10/20 / 2026/10/20(火) / 2026年10月20日。ありえない日付なら null。
+    /// 年は先の日付を優先する (予定を打つことが多いので)。今年のその日が今日以降なら今年、過ぎていれば来年。
+    /// ただし過ぎてから 30 日以内ならその日 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年、1 月 5 日に打つ 12/28 は去年)。
+    /// 選んでも学習しない (IsDateTimeChoice。年や曜日が変わるので)。
+    /// </summary>
+    private string[]? DateCandidates(int month, int day)
+    {
+        if (month is < 1 or > 12 || day is < 1 or > 31) return null;
+        var today = _options.Now().Date;
+        DateTime? best = null;
+        for (var year = today.Year - 1; year <= today.Year + 4; year++) // 去年から (1 月に打つ 12/28)。2/29 は次のうるう年まで
+        {
+            if (day > DateTime.DaysInMonth(year, month)) continue;
+            var date = new DateTime(year, month, day);
+            if (date >= today.AddDays(-30)) { best = date; break; }
+        }
+        if (best is not { } chosen) return null;
+        var week = WeekDays[(int)chosen.DayOfWeek];
+        var y = chosen.Year;
+        string[] dates = [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})",
+            $"{y:D4}/{month:D2}/{day:D2}", $"{y:D4}/{month:D2}/{day:D2}({week})", $"{y}年{month}月{day}日"];
+        return dates;
+    }
+
     /// <summary>
     /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
-    /// 10がつ9にち → 10/9 / 10/09 / 10/9(金) / 10月9日(金) / 2026/10/09 / 2026/10/09(金) (年と曜日は今年として求める: #935)、3じ15ふん → 3:15 / 03:15。
+    /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
     private IEnumerable<string>? TypedDateCandidates(string reading)
@@ -2376,12 +2495,7 @@ public sealed class CompositionController
         static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
         if (DateReading.Match(reading) is { Success: true } date)
         {
-            var (month, day) = (Number(date.Groups["m"].Value), Number(date.Groups["d"].Value));
-            var year = _options.Now().Year;
-            if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return [];
-            var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
-            return [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}/{day}({week})", $"{month}月{day}日({week})", $"{year:D4}/{month:D2}/{day:D2}",
-                $"{year:D4}/{month:D2}/{day:D2}({week})"];
+            return DateCandidates(Number(date.Groups["m"].Value), Number(date.Groups["d"].Value)) ?? [];
         }
         if (ClockReading.Match(reading) is { Success: true } clock)
         {
@@ -2417,12 +2531,25 @@ public sealed class CompositionController
     }
 
     /// <summary>
+    /// 「なう」の文節か。何を選んでも学習しない (再生中の曲・時刻は打つたびに変わるので。issue #1400)。
+    /// 曲名は何でもありうるので、出した曲を覚えておかずに、読みだけで決める。
+    /// </summary>
+    private static bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう";
+
+    /// <summary>
     /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
     /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
     /// </summary>
-    private static bool IsDateTimeChoice(Clause clause) =>
-        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal)) ||
-        IsTypedDateOrTime(clause.Reading) && (clause.Text.IndexOfAny(['/', ':']) >= 0 || clause.Text.EndsWith(')'));
+    private bool IsDateTimeChoice(Clause clause) =>
+        // 打った日付・時刻 (10がつ20にち・3じ15ふん・10/20) の文節は、その読みから作る日付・時刻の候補を選んだか (書き方の形は見ない)
+        DateTimeCandidatesOf(clause.Reading)?.Contains(clause.Text) == true ||
+        (NowReadings.Contains(clause.Reading) || ClockReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
+
+    /// <summary>打った日付・時刻の読みから作る候補 (変換したときと同じもの)。日付・時刻でなければ null。</summary>
+    private IEnumerable<string>? DateTimeCandidatesOf(string reading) =>
+        SlashDate.Match(reading) is { Success: true } date
+            ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture))
+            : TypedDateCandidates(reading);
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
     private IEnumerable<string> EmojiBlock(string reading) =>
@@ -2902,6 +3029,8 @@ public sealed class CompositionController
         string? replacement = null;
         if (!previous.English && english && _detector.IsDefinitelyEnglish(raw))
         {
+            // 前の語の後ろを Space で区切らずに続けたとき (Enter で確定したときなど) は直さない。英語にすると前の語とつながる (あれ + ON → areON)
+            if (!previous.SpaceIntended) return null;
             // 日本語で確定した語を英語に: 代名詞の i は I にし、Space で変換していたなら空白も入れる。
             // その前にも Space で区切って日本語にした語が続いていれば、まとめて英文に直す (make sure you have)。
             var start = _correctable.Count - 1;
@@ -2916,7 +3045,6 @@ public sealed class CompositionController
             if (targets.Any(t => IsSuruRomajiKeepJapanese(t.Raw)))
             {
                 // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
-                if (!targets.Any(t => t.SpaceIntended)) return null;
                 replacement = string.Concat(targets.Select(t => t.Text + (t.SpaceIntended ? " " : "")));
             }
             else
@@ -2992,7 +3120,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause)) continue;
+            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -3015,7 +3143,7 @@ public sealed class CompositionController
         }
         foreach (var clause in _clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause))
             {
                 Flush();
                 continue;
@@ -3066,7 +3194,7 @@ public sealed class CompositionController
         if (_pendingReplace is var (count, replacement))
         {
             _pendingReplace = null;
-            _host.ReplaceBackward(count, replacement + text);
+            _host.ReplaceBackward(count, replacement, text);
         }
         else _host.CommitText(text);
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、← を送って中に入る (issue #72)

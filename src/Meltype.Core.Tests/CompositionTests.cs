@@ -146,6 +146,7 @@ internal static class CompositionTests
         /// <summary>入力欄の文字を、キーを処理しているその場で読めているか (Mac と同じ環境にするとき true)。</summary>
         public bool SurroundingTextIsCurrent { get; set; }
         public string? ClipboardText { get; set; }
+        public (string Title, string Artist)? NowPlaying { get; set; }
 
         public void Show(CompositionView view) => View = view;
         public void Hide() => View = null;
@@ -201,6 +202,9 @@ internal static class CompositionTests
         public string GitHubRepository { get; set; } = "";
         public GitHubIssueTitles? GitHubTitles { get; set; }
         public bool ClipboardCandidates { get; set; }
+        public bool NowPlayingCandidates { get; set; }
+        public string ClockTimeZone { get; set; } = "";
+        public DateTime UtcNow { get; set; } = DateTime.UtcNow;
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -299,6 +303,9 @@ internal static class CompositionTests
                 GitHubRepository = () => GitHubRepository,
                 GitHubTitles = () => GitHubTitles,
                 ClipboardCandidates = () => ClipboardCandidates,
+                NowPlayingCandidates = () => NowPlayingCandidates,
+                ClockTimeZone = () => ClockTimeZone,
+                UtcNow = () => UtcNow,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 EnglishNamePredictions = () => englishNamePredictions,
@@ -3480,6 +3487,23 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("i want ");
         Assert.Equal("I want ", k.Host.Document, string.Join("|", k.Host.Events));
+    }
+
+    [Test]
+    public static void AutoCorrect_NotToEnglishWithoutSpaceBetween()
+    {
+        // Enter で確定した日本語の語の後ろに英語の語を続けても、英語に確定し直さない (英語にすると、空白なしで前の語とつながる)
+        foreach (var (typed, expected) in new[] { ("are\nON ", "あれON "), ("i\nwant ", "いwant "), ("sushi\nPR\n", "すしPR") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed.Replace("\n", "⏎"));
+            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:")), "消さない: " + string.Join(" ", k.Host.Events));
+        }
+        // Space で区切ったときは今までどおり直す
+        var spaced = new Keyboard();
+        spaced.Type("are ON ");
+        Assert.Equal("are ON ", spaced.Host.Document);
     }
 
     [Test]

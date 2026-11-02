@@ -19,6 +19,13 @@ internal sealed class Updater : IDisposable
     private static string Directory => Path.Combine(Config.AppPaths.DataDirectory, "update");
     private static string ReadyFile => Path.Combine(Directory, "ready.txt");
     private static string ApplyingFile => Path.Combine(Directory, "applying.txt");
+    internal static string InstallLog => Path.Combine(Directory, "install.log");
+
+    /// <summary>
+    /// 起動時に見つけた、前回インストールに失敗した版 (無ければ null)。トレイを出してから通知で知らせる
+    /// (起動の前にダイアログを出すと、サインイン直後に OK を押すまで入力できないため)。
+    /// </summary>
+    internal static string? FailedVersion { get; private set; }
     private static string Script => Path.Combine(AppContext.BaseDirectory, "update.ps1");
     internal static string PowerShell => Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
 
@@ -75,6 +82,7 @@ internal sealed class Updater : IDisposable
                 {
                     Log.Warn($"Meltype {tried} への更新に失敗したようです。もう一度ダウンロードするまで、自動では更新しません。");
                     File.Delete(ReadyFile);
+                    FailedVersion = tried;
                     return false;
                 }
             }
@@ -101,6 +109,12 @@ internal sealed class Updater : IDisposable
                 WorkingDirectory = staged.Folder,
             };
             foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(staged.Folder, "install.ps1") }) start.ArgumentList.Add(arg);
+            // インストーラーの失敗内容を、Meltype を再起動したあとでも確認できるように記録する。
+            // install.ps1 自身のプロセスが Meltype を止めるため、ここでは終了を待たない。
+            start.ArgumentList.Add("-UpdateLog");
+            start.ArgumentList.Add(InstallLog);
+            // 起動したのに install.ps1 が始まらなかったことを、ログから見分けられるようにする。
+            try { File.AppendAllText(InstallLog, $"{DateTimeOffset.Now:o} requested version={staged.Version}\r\n"); } catch { }
             Process.Start(start);
             Log.Info($"Meltype {staged.Version} に更新します。");
             return true;

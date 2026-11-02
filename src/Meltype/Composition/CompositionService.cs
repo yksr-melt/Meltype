@@ -26,14 +26,16 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     private readonly MsImeKanjiConverter _converter = new();
     private readonly KeyInjector _injector = new();
     private readonly WinRtCandidates _windowsCandidates = new();
+    // 「なう」の候補に出す再生中の曲 (issue #1400)
+    private readonly NowPlaying _nowPlaying;
     // Mozc (同梱の mozc/meltype_mozc_helper.exe) と Microsoft IME を組み合わせた変換エンジン。
     private readonly MozcConverter _mozc = new(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe"), Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
     private HybridConverter _hybrid = null!;
 
-    // Zenzai (llama-server + zenz の GGUF)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
+    // Zenzai (llama-server + zenz の GGUF。場所が空なら同梱のもの)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
     private readonly ZenzaiHolder _zenzai = new();
     private ZenzaiConverter? CurrentZenzai(CompositionOptions options) =>
-        options.UseZenzai() ? _zenzai.Get(options.ZenzaiServerPath(), options.ZenzaiModelPath(), options.ZenzaiDevice()) : _zenzai.Get("", "");
+        options.UseZenzai() ? _zenzai.Get(ZenzaiBundle.ServerPath(options.ZenzaiServerPath()), ZenzaiBundle.ModelPath(options.ZenzaiModelPath()), options.ZenzaiDevice()) : _zenzai.Get("", "");
     private readonly System.Windows.Forms.Timer _tick = new() { Interval = 100 };
     private int _pumpScheduled;
 
@@ -41,6 +43,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     public CompositionService(Control invoker, CompositionDetector detector, CompositionOptions options)
     {
         _invoker = invoker;
+        _nowPlaying = new NowPlaying(options.NowPlayingCandidates);
         Gate = new CaptureGate(SchedulePump);
         // 補助辞書・文脈の手がかり・学習データは、指定がなければ既定の場所から読む。
         var userDirectory = Config.AppPaths.UserDictionaryDirectory;
@@ -105,6 +108,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             GitHubRepository = options.GitHubRepository,
             GitHubTitles = options.GitHubTitles,
             ClipboardCandidates = options.ClipboardCandidates,
+            NowPlayingCandidates = options.NowPlayingCandidates,
+            ClockTimeZone = options.ClockTimeZone,
             Punctuation = options.Punctuation,
             TranslationHistory = options.TranslationHistory ?? new TranslationHistory(Config.AppPaths.TranslationHistoryFile),
             Predictor = options.Predictor ?? new Predictor(new PhraseHistory(Config.AppPaths.PhraseHistoryFile), UserDictionary, History),
@@ -635,6 +640,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public bool IsKeyDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 
+    /// <summary>今再生している曲 (裏で 3 秒ごとに読んだもの。保存しない・送らない)。</summary>
+    public (string Title, string Artist)? NowPlaying => _nowPlaying.Read();
+
     /// <summary>クリップボードの文字 (変換した瞬間に 1 回だけ読む)。履歴に残さない印のある内容 (パスワード管理ソフトなど) は読まない。</summary>
     public string? ClipboardText
     {
@@ -662,7 +670,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す)。OFF なら null。</summary>
     public string? ZenzaiStatus(bool useZenzai, string serverPath, string modelPath) =>
         !useZenzai ? null
-        : serverPath.Trim().Length == 0 || modelPath.Trim().Length == 0 ? "llama-server かモデルの場所が指定されていません"
         : _zenzai.Status ?? "まだ起動していません (日本語を変換すると起動します)";
 
     public void Show(CompositionView view)
@@ -929,6 +936,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         Focus.Dispose();
         _converter.Dispose();
         _windowsCandidates.Dispose();
+        _nowPlaying.Dispose();
         _mozc.Dispose();
         _zenzai.Dispose();
         _window.Dispose();

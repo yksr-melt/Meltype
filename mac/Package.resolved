@@ -1,5 +1,5 @@
 {
-  "originHash" : "aeebfdde0de53f0aa058ea5649253a44bc01b9c05590f323088e04c49e58028a",
+  "originHash" : "9c7e16d961883a8a61250eb9198d0a9dd7c186de9e0863e8a813310309483ea2",
   "pins" : [
     {
       "identity" : "azookeykanakanjiconverter",
@@ -51,6 +51,15 @@
       "location" : "https://github.com/ensan-hcl/swift-tokenizers",
       "state" : {
         "revision" : "4a606f66e0cc4d7d9f0197649e812f7fc86a4c34",
+        "version" : "0.0.1"
+      }
+    },
+    {
+      "identity" : "swiftymarisa",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/ensan-hcl/SwiftyMarisa",
+      "state" : {
+        "revision" : "91acc3cb0e747e0bd4b0e0813d42fb273d10e62f",
         "version" : "0.0.1"
       }
     }

@@ -109,6 +109,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             GitHubRepository = () => _engine.Settings.GitHubRepository,
             GitHubTitles = () => GitHubTitlesShared,
             ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
+            NowPlayingCandidates = () => _engine.Settings.NowPlayingCandidates,
+            ClockTimeZone = () => _engine.Settings.ClockTimeZone,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
             KanaLayout = () => _engine.Settings.KanaLayout,
@@ -208,6 +210,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
         UpdateStatus();
+        // 前回の更新に失敗していたら知らせる (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
+        if (Updater.FailedVersion is { } failed)
+            _invoker.BeginInvoke(() => _tray.ShowBalloonTip(10000, "Meltype - 更新失敗", UpdateFailedMessage(failed), ToolTipIcon.Warning));
         // 初めて起動したら使い方を見せる (見せたことは state.json に残す)
         var firstRun = !_state.WelcomeShown;
         if (firstRun)
@@ -347,6 +352,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     internal static string UpdateReadyMessage(string version, bool autoUpdate) => autoUpdate
         ? $"Meltype {version} を準備しました。次に Windows にサインインしたときに更新します。ここをクリックすると今すぐ更新します。"
         : $"Meltype {version} を準備しました。トレイの「更新」→「Meltype {version} に更新して再起動」で更新できます。ここをクリックすると今すぐ更新します。";
+
+    internal static string UpdateFailedMessage(string version) =>
+        $"Meltype {version} への更新に失敗しました。今のバージョンで動いています。自動ではもう一度試しません。記録: {Updater.InstallLog}";
 
     private void OnUpdateBalloonClicked(object? sender, EventArgs e)
     {
