@@ -985,10 +985,8 @@ public sealed class Settings
     }
 
     /// <summary>
-    /// v8: 同時に ON にすると片方が負ける真偽値の組を 1 つの選択肢にまとめ、自動判定の強さ (DetectionLevel) を AutoDetection のオン・オフにし、
-    /// アプリの一覧の文字列 (PasteApps・NoPasteApps・TextInputApps) をアプリ別設定の項目に移した。
+    /// v9: Zenzai を同梱して既定 ON にした。前の既定 (OFF・場所が空) のままなら ON にする。
     /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
-    /// 消した項目 (JapaneseThreshold・TypoEnabled・MaxPendingKeys・ImeTimeoutMs・LogKeyIntervals) と、state.json に移した項目 (AppState) は、読み込みで無視されて次の保存で消える。
     /// </summary>
     internal static void MigrateToV9(JsonObject values)
     {
@@ -1000,6 +998,12 @@ public sealed class Settings
             values[nameof(UseZenzai)] = true;
     }
 
+    /// <summary>
+    /// v8: 同時に ON にすると片方が負ける真偽値の組を 1 つの選択肢にまとめ、自動判定の強さ (DetectionLevel) を AutoDetection のオン・オフにし、
+    /// アプリの一覧の文字列 (PasteApps・NoPasteApps・TextInputApps) をアプリ別設定の項目に移した。
+    /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
+    /// 消した項目 (JapaneseThreshold・TypoEnabled・MaxPendingKeys・ImeTimeoutMs・LogKeyIntervals) と、state.json に移した項目 (AppState) は、読み込みで無視されて次の保存で消える。
+    /// </summary>
     internal static void MigrateToV8(JsonObject values)
     {
         bool Flag(string key, bool fallback) => values[key] is JsonValue value && value.TryGetValue<bool>(out var on) ? on : fallback;
