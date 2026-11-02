@@ -30,10 +30,10 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     private readonly MozcConverter _mozc = new(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe"), Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
     private HybridConverter _hybrid = null!;
 
-    // Zenzai (llama-server + zenz の GGUF)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
+    // Zenzai (llama-server + zenz の GGUF。場所が空なら同梱のもの)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
     private readonly ZenzaiHolder _zenzai = new();
     private ZenzaiConverter? CurrentZenzai(CompositionOptions options) =>
-        options.UseZenzai() ? _zenzai.Get(options.ZenzaiServerPath(), options.ZenzaiModelPath(), options.ZenzaiDevice()) : _zenzai.Get("", "");
+        options.UseZenzai() ? _zenzai.Get(ZenzaiBundle.ServerPath(options.ZenzaiServerPath()), ZenzaiBundle.ModelPath(options.ZenzaiModelPath()), options.ZenzaiDevice()) : _zenzai.Get("", "");
     private readonly System.Windows.Forms.Timer _tick = new() { Interval = 100 };
     private int _pumpScheduled;
 
@@ -662,7 +662,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す)。OFF なら null。</summary>
     public string? ZenzaiStatus(bool useZenzai, string serverPath, string modelPath) =>
         !useZenzai ? null
-        : serverPath.Trim().Length == 0 || modelPath.Trim().Length == 0 ? "llama-server かモデルの場所が指定されていません"
         : _zenzai.Status ?? "まだ起動していません (日本語を変換すると起動します)";
 
     public void Show(CompositionView view)

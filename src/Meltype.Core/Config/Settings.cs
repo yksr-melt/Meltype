@@ -358,16 +358,16 @@ public sealed class Settings
      Description("かな漢字変換に使うエンジン。「両方」は Mozc (Google 日本語入力のオープンソース版) で変換し、Mozc が使えないときは Microsoft IME で変換します。候補には両方の候補が出ます。")]
     public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
 
-    [Category("1. 全般"), DisplayName("Zenzai を使う (Windows・実験)"),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で変換します。llama.cpp の llama-server と zenz の GGUF ファイルを自分で用意し、下の 2 つの場所を指定してください (どちらも Meltype には同梱しません)。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は OFF です。")]
-    public bool UseZenzai { get; set; }
+    [Category("1. 全般"), DisplayName("Zenzai を使う"),
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+    public bool UseZenzai { get; set; } = true;
 
     [Category("1. 全般"), DisplayName("Zenzai: llama-server の場所"),
-     Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。「Zenzai を使う」が ON のときに使います。")]
+     Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。Windows のみ。")]
     public string ZenzaiServerPath { get; set; } = "";
 
     [Category("1. 全般"), DisplayName("Zenzai: モデル (GGUF) の場所"),
-     Description("zenz のモデルファイル (例: zenz-v3.1-small の ggml-model-Q5_K_M.gguf) の場所。「Zenzai を使う」が ON のときに使います。")]
+     Description("zenz のモデルファイル (例: zenz-v3.2-small の ggml-model-Q5_K_M.gguf) の場所。空なら同梱の zenz-v3.2-small を使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiModelPath { get; set; } = "";
 
     [Category("1. 全般"), DisplayName("Zenzai: 使う GPU"),
@@ -814,7 +814,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 7;
+    public const int CurrentVersion = 8;
 
     [Category("5. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -1034,6 +1034,12 @@ public sealed class Settings
         }
         // v7: 追加キーの文字列を共通の一覧へ移し、旧項目を保存しない。
         MigrateLegacyToggleShortcuts(report: true);
+        if (SettingsVersion < 8)
+        {
+            // v8: Zenzai を同梱して既定 ON にした (issue #1120)。前の既定 (OFF・場所が空) のままなら ON にする。
+            // 自分で llama-server やモデルの場所を書いた人は、OFF にしていればそのまま
+            if (!UseZenzai && string.IsNullOrWhiteSpace(ZenzaiServerPath) && string.IsNullOrWhiteSpace(ZenzaiModelPath)) UseZenzai = true;
+        }
         SettingsVersion = CurrentVersion;
         return true;
     }
