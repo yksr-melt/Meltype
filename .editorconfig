@@ -10,3 +10,5 @@ root = true
 [*.cs]
 indent_style = space
 indent_size = 4
+# 対応表 (キーの表など) は 1 行に複数の項目を並べる
+csharp_new_line_before_members_in_object_initializers = false

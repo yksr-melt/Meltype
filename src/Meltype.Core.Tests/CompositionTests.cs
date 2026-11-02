@@ -126,47 +126,14 @@ internal static class CompositionTests
         /// <summary>JIS 配列の数字・記号のキー (文字 → 仮想キー, Shift)。</summary>
         public static readonly Dictionary<char, (int Vk, bool Shift)> JisKeys = new()
         {
-            ['0'] = (0x30, false),
-            ['1'] = (0x31, false),
-            ['2'] = (0x32, false),
-            ['3'] = (0x33, false),
-            ['4'] = (0x34, false),
-            ['5'] = (0x35, false),
-            ['6'] = (0x36, false),
-            ['7'] = (0x37, false),
-            ['8'] = (0x38, false),
-            ['9'] = (0x39, false),
-            ['!'] = (0x31, true),
-            ['"'] = (0x32, true),
-            ['#'] = (0x33, true),
-            ['$'] = (0x34, true),
-            ['%'] = (0x35, true),
-            ['&'] = (0x36, true),
-            ['\''] = (0x37, true),
-            ['('] = (0x38, true),
-            [')'] = (0x39, true),
-            ['-'] = (0xBD, false),
-            ['='] = (0xBD, true),
-            ['^'] = (0xDE, false),
-            ['~'] = (0xDE, true),
-            ['\\'] = (0xDC, false),
-            ['|'] = (0xDC, true),
-            ['@'] = (0xC0, false),
-            ['`'] = (0xC0, true),
-            ['['] = (0xDB, false),
-            ['{'] = (0xDB, true),
-            [';'] = (0xBB, false),
-            ['+'] = (0xBB, true),
-            [':'] = (0xBA, false),
-            ['*'] = (0xBA, true),
-            [']'] = (0xDD, false),
-            ['}'] = (0xDD, true),
-            [','] = (0xBC, false),
-            ['<'] = (0xBC, true),
-            ['.'] = (0xBE, false),
-            ['>'] = (0xBE, true),
-            ['/'] = (0xBF, false),
-            ['?'] = (0xBF, true),
+            ['0'] = (0x30, false), ['1'] = (0x31, false), ['2'] = (0x32, false), ['3'] = (0x33, false), ['4'] = (0x34, false),
+            ['5'] = (0x35, false), ['6'] = (0x36, false), ['7'] = (0x37, false), ['8'] = (0x38, false), ['9'] = (0x39, false),
+            ['!'] = (0x31, true), ['"'] = (0x32, true), ['#'] = (0x33, true), ['$'] = (0x34, true), ['%'] = (0x35, true),
+            ['&'] = (0x36, true), ['\''] = (0x37, true), ['('] = (0x38, true), [')'] = (0x39, true),
+            ['-'] = (0xBD, false), ['='] = (0xBD, true), ['^'] = (0xDE, false), ['~'] = (0xDE, true), ['\\'] = (0xDC, false), ['|'] = (0xDC, true),
+            ['@'] = (0xC0, false), ['`'] = (0xC0, true), ['['] = (0xDB, false), ['{'] = (0xDB, true),
+            [';'] = (0xBB, false), ['+'] = (0xBB, true), [':'] = (0xBA, false), ['*'] = (0xBA, true), [']'] = (0xDD, false), ['}'] = (0xDD, true),
+            [','] = (0xBC, false), ['<'] = (0xBC, true), ['.'] = (0xBE, false), ['>'] = (0xBE, true), ['/'] = (0xBF, false), ['?'] = (0xBF, true),
             ['_'] = (0xE2, true),
         };
 
@@ -1676,16 +1643,11 @@ internal static class CompositionTests
     {
         var cases = new Dictionary<string, string>
         {
-            ["kaxnji"] = "かんじ",
-            ["kannji"] = "かんじ",
-            ["kanji"] = "かんじ", // ん: n / xn / nn
+            ["kaxnji"] = "かんじ", ["kannji"] = "かんじ", ["kanji"] = "かんじ", // ん: n / xn / nn
             ["whotto"] = "うぉっと",
             ["ulo"] = "うぉ",
             ["uxo"] = "うぉ",
-            ["xtu"] = "っ",
-            ["ltsu"] = "っ",
-            ["vu"] = "ゔ",
-            ["thi"] = "てぃ",
+            ["xtu"] = "っ", ["ltsu"] = "っ", ["vu"] = "ゔ", ["thi"] = "てぃ",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -3285,10 +3247,7 @@ internal static class CompositionTests
     {
         var cases = new Dictionary<string, string>
         {
-            ["amazon"] = "amazon",
-            ["adobe"] = "adobe",
-            ["netflix"] = "netflix",
-            ["spotify"] = "spotify",
+            ["amazon"] = "amazon", ["adobe"] = "adobe", ["netflix"] = "netflix", ["spotify"] = "spotify",
             ["kyouhaamazondekaimono"] = "きょうはamazonでかいもの",
             ["nihongonobenkyou"] = "にほんごのべんきょう", // 短い名前 (Ben) は文の途中で英語にしない
             ["suzuki"] = "すずき", // 日本語で書くことが多い名前は固有名詞辞書に入れていない
@@ -3601,27 +3560,10 @@ internal static class CompositionTests
         // 報告: かぎかっこが入力できない。
         var cases = new Dictionary<string, string>
         {
-            ["[kagi]"] = "「かぎ」",
-            ["-"] = "ー",
-            ["/"] = "/",
-            ["z/"] = "・",
-            ["#"] = "#",
-            ["("] = "(",
-            [")"] = ")",
-            ["]"] = "」",
-            ["@"] = "@",
-            [",,,"] = "...",
-            ["\\"] = "￥",
-            [","] = "、",
+            ["[kagi]"] = "「かぎ」", ["-"] = "ー", ["/"] = "/", ["z/"] = "・", ["#"] = "#", ["("] = "(", [")"] = ")", ["]"] = "」", ["@"] = "@", [",,,"] = "...", ["\\"] = "￥", [","] = "、",
             // 報告: Shift で打つ記号が全角で打てない、/ が打てない。英語の中では半角のまま。
-            ["$%&"] = "＄％＆",
-            ["kyouha(tenki)"] = "きょうは(てんき)",
-            ["hello@example"] = "hello@example",
-            ["tetr.io"] = "tetr.io",
-            ["Wakatte.TV"] = "Wakatte.TV",
-            ["J-core"] = "J-core",
-            ["p-hub"] = "p-hub",
-            ["talk-admin"] = "talk-admin",
+            ["$%&"] = "＄％＆", ["kyouha(tenki)"] = "きょうは(てんき)", ["hello@example"] = "hello@example",
+            ["tetr.io"] = "tetr.io", ["Wakatte.TV"] = "Wakatte.TV", ["J-core"] = "J-core", ["p-hub"] = "p-hub", ["talk-admin"] = "talk-admin",
             // 報告 (#1349): かなの後ろの子音だけの語の後の - が長音になる (きょうはptーquery-digest)。ん (n-to・nn-to) の後は長音
             ["pt-query-digest"] = "pt-query-digest",
             ["kyouhapt-query-digest"] = "きょうはpt-query-digest",
@@ -3629,14 +3571,7 @@ internal static class CompositionTests
             ["n-to"] = "んーと",
             ["nn-to"] = "んーと",
             // 報告: ca / cu / co で か く こ
-            ["cacuco"] = "かくこ",
-            ["iijane"] = "いいじゃね",
-            ["shoucanshi"] = "しょうかんし",
-            ["vanpaia"] = "ゔぁんぱいあ",
-            ["wyiwye"] = "ゐゑ",
-            ["GPL3.0"] = "GPL3.0",
-            ["3.14desu"] = "3.14です",
-            ["oknotasuku"] = "okのたすく",
+            ["cacuco"] = "かくこ", ["iijane"] = "いいじゃね", ["shoucanshi"] = "しょうかんし", ["vanpaia"] = "ゔぁんぱいあ", ["wyiwye"] = "ゐゑ", ["GPL3.0"] = "GPL3.0", ["3.14desu"] = "3.14です", ["oknotasuku"] = "okのたすく",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -3656,39 +3591,20 @@ internal static class CompositionTests
         // 報告 (#260・#254): 英語の語.拡張子 の拡張子がひらがなになる (MeltypeTip.dっl、Meltype.coんふぃg、Meltype.ご。mod)
         var cases = new Dictionary<string, string>
         {
-            ["MeltypeTip.dll"] = "MeltypeTip.dll",
-            ["Meltype.aab"] = "Meltype.aab",
-            ["Meltype.config"] = "Meltype.config",
-            ["Meltype.index"] = "Meltype.index",
-            ["Meltype.ini"] = "Meltype.ini",
-            ["Meltype.go.mod"] = "Meltype.go.mod",
-            ["Meltype.abi.json"] = "Meltype.abi.json",
-            ["Meltype.so.1"] = "Meltype.so.1",
-            ["Meltype.e57"] = "Meltype.e57",
-            ["Meltype.cargo/config.toml"] = "Meltype.cargo/config.toml",
-            ["Meltype.db-journal"] = "Meltype.db-journal",
+            ["MeltypeTip.dll"] = "MeltypeTip.dll", ["Meltype.aab"] = "Meltype.aab", ["Meltype.config"] = "Meltype.config", ["Meltype.index"] = "Meltype.index",
+            ["Meltype.ini"] = "Meltype.ini", ["Meltype.go.mod"] = "Meltype.go.mod", ["Meltype.abi.json"] = "Meltype.abi.json", ["Meltype.so.1"] = "Meltype.so.1",
+            ["Meltype.e57"] = "Meltype.e57", ["Meltype.cargo/config.toml"] = "Meltype.cargo/config.toml", ["Meltype.db-journal"] = "Meltype.db-journal",
             // 表示で英字にした拡張子を、確定でローマ字の打ち間違いとして直さない (amr → あめ、bas → ば)
-            ["Meltype.amr"] = "Meltype.amr",
-            ["Meltype.bas"] = "Meltype.bas",
-            ["Meltype.ann"] = "Meltype.ann",
+            ["Meltype.amr"] = "Meltype.amr", ["Meltype.bas"] = "Meltype.bas", ["Meltype.ann"] = "Meltype.ann",
             // issue #462: ローマ字読める語尾 (llama → っぁま) + 読めない拡張子は英字スパンとしてまとめる
             ["llama.cpp"] = "llama.cpp",
             // 長い名前の途中の助詞・ドメインの頭では分けない
-            ["Meltype.gitignore"] = "Meltype.gitignore",
-            ["Meltype.gcno"] = "Meltype.gcno",
-            ["Meltype.automount"] = "Meltype.automount",
+            ["Meltype.gitignore"] = "Meltype.gitignore", ["Meltype.gcno"] = "Meltype.gcno", ["Meltype.automount"] = "Meltype.automount",
             // 先頭のドットファイルも英字のまま (issue #431: 。ぎちgのれ にしない)
-            [".gitignore"] = ".gitignore",
-            [".env"] = ".env",
-            [".dll"] = ".dll",
-            [".json"] = ".json",
-            [".go"] = ".go",
+            [".gitignore"] = ".gitignore", [".env"] = ".env", [".dll"] = ".dll", [".json"] = ".json", [".go"] = ".go",
             // 拡張子・ドメインの後ろの助詞からは日本語
-            ["MeltypeTip.dllwokesu"] = "MeltypeTip.dllをけす",
-            ["setup.exewojikkou"] = "setup.exeをじっこう",
-            ["github.comnipush"] = "github.comにpush",
-            ["tetr.iode"] = "tetr.ioで",
-            ["google.comdekensaku"] = "google.comでけんさく",
+            ["MeltypeTip.dllwokesu"] = "MeltypeTip.dllをけす", ["setup.exewojikkou"] = "setup.exeをじっこう", ["github.comnipush"] = "github.comにpush",
+            ["tetr.iode"] = "tetr.ioで", ["google.comdekensaku"] = "google.comでけんさく",
             // 日本語の語と同じ綴りの固有名詞 (Wakatte) のドメインは、小文字で打っても英字
             ["wakatte.tv"] = "wakatte.tv",
             ["wakatte.tvdemiru"] = "wakatte.tvでみる",
@@ -3818,17 +3734,12 @@ internal static class CompositionTests
         // 報告: 今日はAutoIMEnotesutowosimasu が全部英字になる。大文字で始まる語の後ろの日本語は日本語にする。
         var cases = new Dictionary<string, string>
         {
-            ["AutoIMEnotesuto"] = "AutoIMEのてすと",
-            ["Githubdekaku"] = "Githubでかく",
-            ["OKdesu"] = "OKです",
-            ["Tokyo"] = "Tokyo",
-            ["Hello"] = "Hello",
+            ["AutoIMEnotesuto"] = "AutoIMEのてすと", ["Githubdekaku"] = "Githubでかく", ["OKdesu"] = "OKです",
+            ["Tokyo"] = "Tokyo", ["Hello"] = "Hello",
             // 報告: I don't → どん't。短縮形は英語。
-            ["don't"] = "don't",
-            ["I'm"] = "I'm",
+            ["don't"] = "don't", ["I'm"] = "I'm",
             // 報告: TSユーザー → Tシューざー、issue → いっすえ
-            ["TSyu-za-"] = "TSゆーざー",
-            ["issue"] = "issue",
+            ["TSyu-za-"] = "TSゆーざー", ["issue"] = "issue",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -4702,16 +4613,8 @@ internal static class CompositionTests
     {
         var expected = new Dictionary<string, string>
         {
-            ["watashi"] = "わたし",
-            ["arigatou"] = "ありがとう",
-            ["kana"] = "かな",
-            ["sushi"] = "すし",
-            ["tesuto"] = "てすと",
-            ["make"] = "まけ",
-            ["ra-men"] = "らーめn",
-            ["nihon"] = "にほn",
-            ["konnichiwq"] = "こんいちwq",
-            ["tanni"] = "たんい",
+            ["watashi"] = "わたし", ["arigatou"] = "ありがとう", ["kana"] = "かな", ["sushi"] = "すし", ["tesuto"] = "てすと",
+            ["make"] = "まけ", ["ra-men"] = "らーめn", ["nihon"] = "にほn", ["konnichiwq"] = "こんいちwq", ["tanni"] = "たんい",
         };
         foreach (var (typed, kana) in expected)
         {

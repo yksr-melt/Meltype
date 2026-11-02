@@ -11,16 +11,8 @@ public readonly record struct KeyShortcut(int Vk, bool Ctrl, bool Alt, bool Shif
 {
     private static readonly Dictionary<string, int> Names = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Space"] = 0x20,
-        ["Tab"] = 0x09,
-        ["Enter"] = 0x0D,
-        ["Esc"] = 0x1B,
-        ["Backquote"] = 0xC0,
-        ["Grave"] = 0xC0,
-        ["Muhenkan"] = 0x1D,
-        ["Henkan"] = 0x1C,
-        ["Kanji"] = 0x19,
-        ["CapsLock"] = 0x14,
+        ["Space"] = 0x20, ["Tab"] = 0x09, ["Enter"] = 0x0D, ["Esc"] = 0x1B, ["Backquote"] = 0xC0, ["Grave"] = 0xC0,
+        ["Muhenkan"] = 0x1D, ["Henkan"] = 0x1C, ["Kanji"] = 0x19, ["CapsLock"] = 0x14,
         // JIS キーボードの 英数 キー (CapsLock の刻印のキー)。Shift なしは VK_OEM_ATTN、Shift+英数 は CapsLock (issue #955)
         ["Eisu"] = VirtualKeys.OemAttn,
     };
