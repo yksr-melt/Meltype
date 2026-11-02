@@ -338,6 +338,14 @@ public sealed class Settings
      Description("「くりっぷぼーど」「ぺーすと」を変換したとき、クリップボードにある 1 行の文字 (200 文字まで) を候補に出します。変換した瞬間に 1 回だけ読み、監視・保存・送信はしません。パスワード管理ソフトなど、履歴に残さない印のついた内容は読みません。Windows のみ。既定は OFF です。")]
     public bool ClipboardCandidates { get; set; }
 
+    [Category("1. 全般"), DisplayName("「なう」で再生中の曲を候補に出す"),
+     Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。変換した瞬間に 1 回だけ読み、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。Windows のみ。")]
+    public bool NowPlayingCandidates { get; set; } = true;
+
+    [Category("1. 全般"), DisplayName("時計の候補のタイムゾーン"),
+     Description("「とけい」「じこく」を変換したときに候補に出す、今の時刻 (19:21 / 19時21分 / 午後7時21分) のタイムゾーン。IANA の ID (例: America/New_York・Europe/London) か Windows の ID (例: Eastern Standard Time) を書きます。空ならこの PC のタイムゾーン (既定)。夏時間も反映します。この PC と違うタイムゾーンなら、日付とタイムゾーンの名前を付けた候補も出します。")]
+    public string ClockTimeZone { get; set; } = "";
+
     [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"),
      Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。Windows のみ。変換・無変換キーが無い US 配列のキーボード向けです。")]
     public string PauseHotkey { get; set; } = "";
@@ -982,6 +990,7 @@ public sealed class Settings
         MaxPendingKeys = Math.Clamp(MaxPendingKeys, 2, 12);
         ImeTimeoutMs = Math.Clamp(ImeTimeoutMs, 50, 2000);
         ZenzaiDevice = ZenzaiDevice?.Trim() ?? "";
+        ClockTimeZone = ClockTimeZone?.Trim() ?? "";
         // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
         if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;

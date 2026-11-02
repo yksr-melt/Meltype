@@ -111,6 +111,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             GitHubRepository = () => _engine.Settings.GitHubRepository,
             GitHubTitles = () => GitHubTitlesShared,
             ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
+            NowPlayingCandidates = () => _engine.Settings.NowPlayingCandidates,
+            ClockTimeZone = () => _engine.Settings.ClockTimeZone,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
             ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),

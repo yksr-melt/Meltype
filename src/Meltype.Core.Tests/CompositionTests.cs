@@ -142,6 +142,7 @@ internal static class CompositionTests
         /// <summary>入力欄の文字を、キーを処理しているその場で読めているか (Mac と同じ環境にするとき true)。</summary>
         public bool SurroundingTextIsCurrent { get; set; }
         public string? ClipboardText { get; set; }
+        public (string Title, string Artist)? NowPlaying { get; set; }
 
         public void Show(CompositionView view) => View = view;
         public void Hide() => View = null;
@@ -198,6 +199,9 @@ internal static class CompositionTests
         public string GitHubRepository { get; set; } = "";
         public GitHubIssueTitles? GitHubTitles { get; set; }
         public bool ClipboardCandidates { get; set; }
+        public bool NowPlayingCandidates { get; set; }
+        public string ClockTimeZone { get; set; } = "";
+        public DateTime UtcNow { get; set; } = DateTime.UtcNow;
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -298,6 +302,9 @@ internal static class CompositionTests
                 GitHubRepository = () => GitHubRepository,
                 GitHubTitles = () => GitHubTitles,
                 ClipboardCandidates = () => ClipboardCandidates,
+                NowPlayingCandidates = () => NowPlayingCandidates,
+                ClockTimeZone = () => ClockTimeZone,
+                UtcNow = () => UtcNow,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 EnglishNamePredictions = () => englishNamePredictions,
