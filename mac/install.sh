@@ -6,6 +6,7 @@
 #   bash install.sh
 # Homebrew の cask からは --homebrew を付けて動かす。付けたときは:
 #   - 最後に入力ソースを Meltype に切り替えない (brew install の途中で入力ソースを変えない)
+#   - 手動で入れた Meltype.app があれば、何も置かずに止める (Homebrew で入れると brew uninstall で消えるため)
 #   - 配置したあとの登録・起動に失敗しても、警告して続ける。Homebrew は失敗した installer script が
 #     置いたものを戻さないので、ここで止めると Homebrew の管理外の Meltype.app が残る
 set -euo pipefail
@@ -59,6 +60,13 @@ after_install() {
 }
 
 TARGET="$HOME/Library/Input Methods"
+# brew upgrade・reinstall では、先に cask の uninstall が古い Meltype.app を消している。
+# ここにあるのは手動で入れたもので、上書きすると brew uninstall で消えてしまう (前の cask の input_method と同じく止める)。
+if [[ $from_homebrew -eq 1 && -e "$TARGET/Meltype.app" ]]; then
+    echo "手動で入れた Meltype があります: $TARGET/Meltype.app" >&2
+    echo "Homebrew で入れるときは、先にこれを消してから、もう一度実行してください。" >&2
+    exit 1
+fi
 bash ./install-app.sh Meltype.app "$TARGET/Meltype.app"
 # インターネットから取ってきた印 (隔離属性) を外す。署名が自分用なので、外さないと macOS が起動させない。
 xattr -dr com.apple.quarantine "$TARGET/Meltype.app" 2>/dev/null || true

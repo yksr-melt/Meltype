@@ -119,8 +119,8 @@ ManifestVersion: 1.6.0
 // 入力ソースへの登録や GUI のセッションでの起動ができない。installer script はサンドボックスの外で動く (#1397)。
 // installer は input_method より先に動くので、input_method は使わない。
 // uninstall delete: は常に sudo で消すので、ホームの下のアプリは uninstall script で利用者の権限のまま消す。
-// --homebrew で、入力ソースを切り替えず、配置したあとの登録・起動の失敗は警告にする (Homebrew は失敗した
-// installer script が置いたアプリを戻さないため。くわしくは install.sh)。
+// --homebrew で、入力ソースを切り替えず、手動で入れたアプリがあれば止め、配置したあとの登録・起動の失敗は
+// 警告にする (Homebrew は失敗した installer script が置いたアプリを戻さないため。くわしくは install.sh)。
 if (macZip) {
   const macName = path.basename(macZip);
   write('homebrew/Casks/meltype.rb', `cask "meltype" do
