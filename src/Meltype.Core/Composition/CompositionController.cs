@@ -1638,6 +1638,17 @@ public sealed class CompositionController
             return;
         }
         // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
+        // 月/日 (10/20) を変換したら、日付の書き方の候補 (10月20日・10/20(火)・10月20日(火)) も出す (issue #935)。
+        // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)。分数・割り算 (1/2) かもしれないので、打ったままを最初に、
+        // 設定「計算式の結果を候補に出す」なら計算の結果も日付より先に出す
+        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto && SlashDateCandidates(_text.Raw) is { } dates)
+        {
+            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } value ? [value, $"{_text.Raw}={value}"] : [];
+            _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates, CompositionText.ToFullWidth(_text.Raw)])) { Raw = _text.Raw }];
+            _selectedClause = 0;
+            _converting = true;
+            return;
+        }
         if (_options.CalculatorCandidates() && !_text.KanaInput && _text.Mode == DisplayMode.Auto && Calculator.Evaluate(_text.Raw) is { } result)
         {
             var expression = _text.Raw.TrimEnd('=');
@@ -2320,6 +2331,19 @@ public sealed class CompositionController
     private static readonly System.Text.RegularExpressions.Regex ClockReading = new("^(?<h>[0-9０-９]{1,2})じ(?<m>[0-9０-９]{1,2})(?:ふん|ぷん)$");
 
     private static bool IsTypedDateOrTime(string reading) => DateReading.IsMatch(reading) || ClockReading.IsMatch(reading);
+
+    private static readonly System.Text.RegularExpressions.Regex SlashDate = new("^(?<m>[0-9]{1,2})/(?<d>[0-9]{1,2})$");
+
+    /// <summary>打った 月/日 (10/20) の日付の候補 (打ったままは含まない)。今年の日付として正しくなければ null。</summary>
+    private string[]? SlashDateCandidates(string raw)
+    {
+        if (SlashDate.Match(raw) is not { Success: true } match) return null;
+        var (month, day) = (int.Parse(match.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(match.Groups["d"].Value, CultureInfo.InvariantCulture));
+        var year = _options.Now().Year;
+        if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return null;
+        var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
+        return [$"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})", $"{year:D4}/{month:D2}/{day:D2}", $"{year:D4}/{month:D2}/{day:D2}({week})", $"{year}年{month}月{day}日"];
+    }
 
     /// <summary>
     /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
