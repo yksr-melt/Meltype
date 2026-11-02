@@ -156,6 +156,7 @@ Windows 版は、同梱の Mozc と Microsoft IME で変換します。設定の
 - `i` を確定 → 続けて `want` と打つ → 「I want」
 - `make sure you` → まけすれよう → 続けて `have` と打つ → 「make sure you have」
 - 英文の続きで `sushi ` と確定 → 続けて `gasuki` と打つ → 「すしがすき」
+- 日本語で確定した語を英語に直すのは、その語の後ろを Space で区切ったときだけ。Enter で確定した語は、後ろに英語を続けても直しません (`are ON ` → 「are ON」、`are` Enter `ON ` → 「あれON」)
 - 候補を自分で選び直したときと、確定の後にカーソルを動かしたときは直しません
 
 <br>
