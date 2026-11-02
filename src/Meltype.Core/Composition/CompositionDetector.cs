@@ -541,7 +541,10 @@ public sealed partial class CompositionDetector
             if (!(afterJapaneseRomaji ? NumericHyphenatedWords.Contains(word) : IsHyphenatedEnglishWord(word))) continue;
             // - の後ろがローマ字として読める語 (re-tori) で、すぐ後ろに英字が続く (re-tori|mitto) なら、語の途中で切っている。
             // 長音の - を挟んだ日本語 (れーとりみっと) なので英語にしない (issue #705: Windows のスペルチェッカーは tori を知っている)
+            // 後ろが付属語 (lo-fi|wo) なら、英単語 + 付属語なので英語のまま
+            var after = (Raw(units, end, n) + pending).ToLowerInvariant();
             if (end < n && units[end].Raw is { Length: > 0 } next && next.All(char.IsAsciiLetter) &&
+                !TrailingParticles.Any(p => after.StartsWith(p, StringComparison.Ordinal)) &&
                 _romaji.Analyze(word[(word.IndexOf('-') + 1)..]) is { IsValid: true, Partial: "" }) continue;
             return end;
         }
