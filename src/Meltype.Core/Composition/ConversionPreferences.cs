@@ -49,16 +49,25 @@ public sealed class ContextRules
         }
     }
 
+    // 助詞のほかに、語の後ろに付く終助詞・付属語 (行け|よ、音ゲー|しか)
+    private static readonly HashSet<string> TrailingWords = ["よ", "ね", "な", "わ", "ぞ", "ぜ", "さ", "しか", "だけ", "って", "など", "なら", "ので", "のに", "けど", "でも", "だ", "です", "じゃ", "も", "よね"];
+
     /// <summary>
     /// 文節の読み (はしを) に対して、前後の文字列 (surrounding) の手がかりに合う候補 (箸を) を返す。無ければ null。
     /// 辞書にある最長の先頭部分で探し、残り (を) はそのまま付ける。手がかりが多く当たった規則を優先する。
+    /// 残りが付属語・終助詞でなく、変換エンジンもかなのまま付けていない (はし|もと = 橋本) なら使わない。
     /// </summary>
-    public string? Choose(string reading, string surrounding)
+    /// <param name="engineText">変換エンジンがその文節にした文字 (分かれば)。残りがかなのまま後ろに付いている (暑い|です) なら使う。</param>
+    public string? Choose(string reading, string surrounding, string? engineText = null)
     {
         if (surrounding.Length == 0) return null;
         for (var length = reading.Length; length >= 1; length--)
         {
             if (!_rules.TryGetValue(reading[..length], out var list)) continue;
+            // 語の続き (はし|もと) に、先頭の はし の手がかり (左内 の 左) を当てはめない (端もと にしていた: issue #1360)
+            var rest = reading[length..];
+            if (rest.Length > 0 && !JapaneseParticles.IsParticle(rest) && !TrailingWords.Contains(rest) &&
+                !(engineText is { } text && text.Length > rest.Length && text.EndsWith(rest, StringComparison.Ordinal))) return null;
             var best = list
                 .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => surrounding.Contains(cue, StringComparison.Ordinal))))
                 .Where(r => r.Hits > 0)
