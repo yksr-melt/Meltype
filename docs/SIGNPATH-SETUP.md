@@ -44,14 +44,14 @@ Deployment branches and tags は **Selected branches and tags → Branch: `main`
 
 ## 3. 実行して確かめる
 
-1. PR の `signpath-test / build` が成功することを確認します。ここでは自己署名の一時テスト証明書を使った検証テストと、通常の Windows ビルド・テストだけを行います。SignPath の秘密は使いません。
+1. PR の `signpath-test / build` が成功することを確認します。ここでは通常の Windows ビルド・テストだけを行います。SignPath の秘密は使いません。
 2. レビュー後にこのワークフローを main に取り込みます。新しい `workflow_dispatch` のワークフローはデフォルトブランチに置く必要があります。PR ブランチから署名させるために制限を緩めません。
 3. Actions → **signpath-test** → Run workflow → Branch: **main** を選びます。
 4. Environment / SignPath で承認待ちがあれば、対象 commit・Artifact Configuration・ポリシー `test-signing` を確認して承認します。
 5. 成功した run から次を取得します。
    - `signpath-test-signed-NOT-FOR-RELEASE-...`: 検証を通ったテスト署名済みファイル。
-   - `signpath-test-verification-.../report.json`: 各ファイルの署名前後の SHA-256、証明書 SHA-256・Subject、CMS の暗号検証、Authenticode のハッシュ検証、Windows の検証状態、チェーンの信頼結果。
-6. `verified: true` と 3 ファイルの `cmsSignatureValid`・`authenticodeHashValid`・`originalContentPreserved` が true であることを確認します。`chainTrusted: false` / `UntrustedRoot` はテスト証明書では起こり得ます。信頼チェーンの成功として扱いません。失効検証はテスト専用に `NoCheck` と記録しています。
+   - `signpath-test-verification-.../report.json`: 各ファイルの署名前後の SHA-256、証明書の SHA-256・Subject、Windows の検証状態。
+6. `verified: true` で、3 ファイルの `windowsStatus` が `Valid` か `UnknownError` (テスト証明書は信頼されないため)、`certificateSha256` が登録した値であることを確認します。署名後に中身が変わっていれば `HashMismatch` になり、検証は失敗します。
 
 この成果物はランタイムを同梱しない署名検証用の publish 出力です。通常版・ポータブル版のリリースパッケージではありません。
 このテストではインストーラー・TSF DLL・PowerShell スクリプトへの署名までは確認しません。
