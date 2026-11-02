@@ -116,6 +116,7 @@ final class NativeCore {
     private let setCodeInputFunction: SetDirectFunction?
     private let dataDirectoryFunction: DataDirectoryFunction?
     private let reportUrlFunction: ReportUrlFunction?
+    private let zenzaiModelFunction: DataDirectoryFunction?
     private let freeFunction: FreeFunction?
 
     private init() {
@@ -140,6 +141,7 @@ final class NativeCore {
         setCodeInputFunction = symbol("meltype_set_code_input", as: SetDirectFunction.self)
         dataDirectoryFunction = symbol("meltype_data_directory", as: DataDirectoryFunction.self)
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
+        zenzaiModelFunction = symbol("meltype_zenzai_model", as: DataDirectoryFunction.self)
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
     }
 
@@ -190,6 +192,13 @@ final class NativeCore {
 
     func setCodeInput(_ session: UnsafeMutableRawPointer?, _ enabled: Bool) {
         setCodeInputFunction?(session, enabled ? 1 : 0)
+    }
+
+    /// Zenzai の設定 (issue #1130)。「Zenzai を使う」が OFF なら nil、ON なら設定のモデルの場所 (空なら同梱のモデル)。
+    var zenzaiModelSetting: String? {
+        guard let pointer = zenzaiModelFunction?() else { return nil }
+        defer { freeFunction?(pointer) }
+        return String(cString: pointer)
     }
 
     /// 設定・学習データ・ユーザー辞書の保存場所。

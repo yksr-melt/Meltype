@@ -14,7 +14,7 @@ enum MacUserDictionary {
     }
 
     private static func parsedEntries(from data: Data) throws -> (entries: [(String, String)], skipped: Int) {
-        let plist = try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+        let plist = try PropertyListSerialization.propertyList(from: data, options: PropertyListSerialization.ReadOptions(), format: nil)
         let rows = (plist as? [[String: Any]]) ?? (plist as? [String: Any])?["UserDictionary"] as? [[String: Any]] ?? []
         let entries = rows.compactMap { row -> (String, String)? in
             guard let raw = (row["reading"] ?? row["shortcut"]) as? String,
