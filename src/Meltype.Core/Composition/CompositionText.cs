@@ -317,6 +317,19 @@ public sealed class CompositionText
         if (digit < 0 || _units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(_units.Skip(digit + 1).Select(u => u.Raw)) + _pending;
         var lower = run.ToLowerInvariant();
+        // 確定のとき、数字の後ろに母音 1 文字だけ (GPT-4o の 4o) は型番。4お にしない (issue #1417)。
+        // 単位 (5min) と同じく、確定するときに決める (打っている間は 4お。続けて打つ 4oku は 4億)。
+        // i は順位 (1i → 1位) を打つことがあるので除く。英字のすぐ後ろの数字 (m3e) は略語の一部なので対象外
+        var digitsStart = digit;
+        while (digitsStart > 0 && _units[digitsStart - 1].Raw is [var earlier] && char.IsAsciiDigit(earlier)) digitsStart--;
+        var afterLetter = digitsStart > 0 && _units[digitsStart - 1].Raw is { Length: > 0 } before && char.IsAsciiLetter(before[^1]);
+        if (final && lower is "a" or "u" or "e" or "o" && !afterLetter)
+        {
+            _units.RemoveRange(digit + 1, _units.Count - digit - 1);
+            _units.Add(new CompositionUnit(run, run));
+            _pending.Clear();
+            return;
+        }
         foreach (var unit in UnitWords)
         {
             if (!lower.StartsWith(unit, StringComparison.Ordinal)) continue;
