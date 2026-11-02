@@ -317,6 +317,18 @@ public sealed class CompositionText
         if (digit < 0 || _units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(_units.Skip(digit + 1).Select(u => u.Raw)) + _pending;
         var lower = run.ToLowerInvariant();
+        // 確定のとき、数字の後ろに母音 1 文字だけ (GPT-4o の 4o) は型番。4お にしない (issue #1417)。
+        // i は順位 (1i → 1位) を打つことがあるので除く
+        var digitsStart = digit;
+        while (digitsStart > 0 && _units[digitsStart - 1].Raw is [var earlier] && char.IsAsciiDigit(earlier)) digitsStart--;
+        var afterLetter = digitsStart > 0 && _units[digitsStart - 1].Raw is { Length: > 0 } before && char.IsAsciiLetter(before[^1]);
+        if (final && lower is "a" or "u" or "e" or "o" && !afterLetter)
+        {
+            _units.RemoveRange(digit + 1, _units.Count - digit - 1);
+            _units.Add(new CompositionUnit(run, run));
+            _pending.Clear();
+            return;
+        }
         foreach (var unit in UnitWords)
         {
             if (!lower.StartsWith(unit, StringComparison.Ordinal)) continue;
@@ -888,7 +900,7 @@ public sealed class CompositionText
         var changed = false;
         // 今の表示で英字に見えている文字 (きょうは|meeting|です の meeting)。ここは直さない
         // (表示では英単語なのに、確定したら g が が に直されて めえちんがです になっていた)。
-        var shownEnglish = EnglishMask();
+        var shownEnglish = EnglishMask(out var protectedMask);
         var offset = 0;
         var start = 0;
         while (start < _units.Count)
@@ -910,11 +922,14 @@ public sealed class CompositionText
                 UnitWords.Any(u => letters.StartsWith(u, StringComparison.OrdinalIgnoreCase));
             if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !_detector.IsKnownEnglishWord(letters) &&
                 corrector.FirstUnreadable(letters, final: true) is var first and > 0 &&
-                !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first]) &&
                 // 数字のすぐ前の短い英字 (kaibunsyo|rta|2026 の rta) は略語。打ち間違いとして直さない
                 !(end < _units.Count && _units[end].Raw is [var after] && char.IsAsciiDigit(after) && first >= letters.Length - 6) &&
                 !ContainsEnglishWord(letters, first) &&
-                corrector.Fix(letters, final: true) is { } fix)
+                corrector.Fix(letters, final: true) is { } fix &&
+                // 表示で英字にしている所は直さない。ただし直すと並び全体が 1 つのよく使う語 (すみません・へんかん) になるなら、
+                // 語の途中に偶然できた短い英単語 (sumi|mas|ne の mas、hen|kas|nn の kas) なので直す (issue #971)
+                (!(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first]) ||
+                 !(runOffset + first < protectedMask.Count && protectedMask[runOffset + first]) && IsWholeCommonWord(fix.Kana)))
             {
                 Diagnostics.Log.Decision($"ローマ字の打ち間違いを直しました: {Diagnostics.Log.Text(fix.Wrong)}→{Diagnostics.Log.Text(fix.Right)}");
                 var analysis = _detector.Romaji.AnalyzeFragment(fix.Right);
@@ -998,9 +1013,10 @@ public sealed class CompositionText
     /// 打った英字 (Raw) の 1 文字ずつが、今の表示で英単語 (5 文字以上の知っている語: meeting) の区間に入っているか。
     /// 短い語 (onegai|shim|su の shim) は、ローマ字の途中に偶然現れることが多いので含めない (打ち間違いとして直す)。
     /// </summary>
-    private List<bool> EnglishMask()
+    private List<bool> EnglishMask(out List<bool> protectedMask)
     {
         var mask = new List<bool>();
+        protectedMask = [];
         var segments = Segments();
         for (var s = 0; s < segments.Count; s++)
         {
@@ -1008,7 +1024,7 @@ public sealed class CompositionText
             // 英語の語.の後ろの英字 (ドメイン・拡張子: Meltype.amr、MeltypeTip.dll) も、表示のまま英字にする (amr を あめ に直していた: issue #260)
             if (segment.IsEnglish && s >= 2 && segments[s - 1] is { IsEnglish: true, Raw: "." } && segments[s - 2].IsEnglish && segments[s - 2].Raw.Any(char.IsAsciiLetter))
             {
-                for (var i = 0; i < segment.Raw.Length; i++) mask.Add(true);
+                for (var i = 0; i < segment.Raw.Length; i++) { mask.Add(true); protectedMask.Add(false); }
                 continue;
             }
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
@@ -1018,10 +1034,30 @@ public sealed class CompositionText
                 segment.Raw.Length == 4 && _detector.IsKnownEnglishWord(lower) && !_detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のスペルチェッカーの語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
                 segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && _detector.IsSpellWord(lower) && _detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
-            for (var i = 0; i < segment.Raw.Length; i++) mask.Add(word);
+            // 入力の始め (か空白の後ろ) の 2〜4 文字の知らない英字で、すぐ後ろが名詞に付く付属語 (eq|が・mtg|の) なら略語。
+            // 打ち間違いとして直さない (eq を ea に直して エアが にしていた: issue #1158)
+            if (!word && segment.IsEnglish && segment.Raw.Length is >= 2 and <= 4 && segment.Raw.All(char.IsAsciiLetterLower) &&
+                (s == 0 || segments[s - 1].Raw.EndsWith(' ')) && s + 1 < segments.Count && !segments[s + 1].IsEnglish &&
+                StartsWithNounParticle(segments[s + 1].Raw))
+                word = true;
+            for (var i = 0; i < segment.Raw.Length; i++) { mask.Add(word); protectedMask.Add(segment.IsProtected); }
         }
         return mask;
     }
+
+    /// <summary>かな全体が、よく使う 1 つの語 (活用した形・する の付いた形を含む) か。</summary>
+    private static bool IsWholeCommonWord(string kana)
+    {
+        if (kana.Length < 3) return false;
+        if (RomajiTypoCorrector.CommonWordCost(kana.AsSpan()) is not null) return true;
+        return kana.EndsWith("する", StringComparison.Ordinal) && kana.Length >= 5 && RomajiTypoCorrector.CommonWordCost(kana.AsSpan(0, kana.Length - 2)) is not null;
+    }
+
+    private static readonly string[] NounParticleRomaji = ["ga", "wo", "ni", "de", "to", "no", "ha", "wa", "mo", "kara", "made", "yori", "tte"];
+
+    /// <summary>ローマ字の区間が名詞に付く付属語 (が・を・に…) で始まるか。続きがあれば語の切れ目 (gatyotto の ga) でなくてもよい。</summary>
+    private static bool StartsWithNounParticle(string raw) =>
+        NounParticleRomaji.Any(p => raw.StartsWith(p, StringComparison.Ordinal));
 
     /// <summary>
     /// 読めない文字 (位置 first) が英単語の一部か。
@@ -1121,6 +1157,8 @@ public sealed class CompositionText
         // # はハッシュタグ・チャンネル名 (Discord の #雑談) で使うので半角のまま (Space で ＃)。
         '#' => '#',
         '/' => '/',
+        // _ は語をつなぐ区切り (りんご_みかん_もも) やファイル名に使うので半角のまま (issue #1287)
+        '_' => '_',
         // JIS キーボードの ￥ キー
         '\\' => '￥',
         _ when c is >= '!' and <= '~' && !char.IsAsciiLetterOrDigit(c) => (char)(c + 0xFEE0),
