@@ -708,6 +708,28 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_TracksTerminalQuotesAfterCaretMoves()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        Type(session, "echo ");
+        Assert.True(!session.HandleKey(VirtualKeys.Left, null, false, false, false, false).Consumed, "矢印はアプリへ");
+        Assert.True(Type(session, "ls").All(r => !r.Consumed), "矢印のあともコードは英数");
+        Assert.True(Type(session, "\"").All(r => !r.Consumed), "引用符はアプリへ");
+        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "矢印のあとに開いた引用符の中は日本語");
+        var close = Type(session, "\"")[0];
+        Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じ引用符は英数のまま通し、日本語は確定");
+        Assert.True(Type(session, "hello").All(r => !r.Consumed), "閉じたあとは英数");
+
+        Assert.True(!session.HandleKey(VirtualKeys.Right, null, false, false, false, false).Consumed, "矢印はアプリへ");
+        Assert.True(Type(session, "\"\bkyouha").All(r => !r.Consumed), "打った引用符を消したらコード");
+
+        session.CodeInput = true;
+        Assert.True(Type(session, "\b\b\"").All(r => !r.Consumed), "行頭を超えて消しても、コードは英数");
+        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "行頭を超えて消したあとに開いた引用符の中は日本語");
+    }
+
+    [Test]
     public static void CodeInput_ActivationSyncClearsTrackedContext()
     {
         var session = Create();
