@@ -319,7 +319,9 @@ public sealed class CompositionText
         var lower = run.ToLowerInvariant();
         // 確定のとき、数字の後ろに母音 1 文字だけ (GPT-4o の 4o) は型番。4お にしない (issue #1417)。
         // 単位 (5min) と同じく、確定するときに決める (打っている間は 4お。続けて打つ 4oku は 4億)。
-        // i は順位 (1i → 1位) を打つことがあるので除く。英字のすぐ後ろの数字 (m3e) は略語の一部なので対象外
+        // i だけ除くのは、数字の直後の い 1 文字が 位 (1位・2位) として日本語でよく打たれるから。
+        // a・u・e・o は、数字の直後で 1 文字だけで終わる日本語の語にならない (を は wo、へ は he と打つ。円 en・億 oku などは
+        // 2 文字以上続くので、この決まりに当たらない)。英字のすぐ後ろの数字 (m3e) は略語の一部なので対象外
         var digitsStart = digit;
         while (digitsStart > 0 && _units[digitsStart - 1].Raw is [var earlier] && char.IsAsciiDigit(earlier)) digitsStart--;
         var afterLetter = digitsStart > 0 && _units[digitsStart - 1].Raw is { Length: > 0 } before && char.IsAsciiLetter(before[^1]);
