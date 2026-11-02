@@ -91,7 +91,7 @@ class ConfigFile:
 
     def set(self, key, value):
         if self._read() != self.text:
-            raise SettingsError(f"{self.path} がほかで書き換えられました。設定画面を開き直してください")
+            raise SettingsError(f"{self.path} がほかで書き換えられました")
         self.values[key] = value
         text = json.dumps(self.values, ensure_ascii=False, indent=2) + "\n"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -169,10 +169,23 @@ def main():
             self.content.append(self.list)
             self.scroller = Gtk.ScrolledWindow(child=self.content, hexpand=True, vexpand=True)
             self.scroller.get_vadjustment().connect("value-changed", self._follow_scroll)
+
+            # 保存できなかったことは、スクロールしても見えるように一覧の上に出し続ける
+            self.banner_text = Gtk.Label(xalign=0, wrap=True, wrap_mode=Pango.WrapMode.WORD_CHAR, hexpand=True)
+            self.banner_text.add_css_class("error")
+            reload = Gtk.Button(label="読み直す", valign=Gtk.Align.CENTER)
+            reload.connect("clicked", lambda _: self._reload())
+            banner = Gtk.Box(spacing=12, margin_start=12, margin_end=12, margin_top=8, margin_bottom=8)
+            banner.append(self.banner_text)
+            banner.append(reload)
+            self.banner = Gtk.Revealer(child=banner)
+            main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            main.append(self.banner)
+            main.append(self.scroller)
             layout = Gtk.Box()
             layout.append(Gtk.ScrolledWindow(child=self.sidebar, hscrollbar_policy=Gtk.PolicyType.NEVER))
             layout.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
-            layout.append(self.scroller)
+            layout.append(main)
             self.set_child(layout)
 
         def _row(self, key, prop):
@@ -225,9 +238,23 @@ def main():
             try:
                 self.config.set(key, value)
             except (SettingsError, OSError) as error:
-                # 古い中身のまま書き続けないように、編集を止める
+                # 古い中身のまま書き続けないように、読み直すまで編集を止める (失敗した項目の表示も、読み直すと元に戻る)
                 self.list.set_sensitive(False)
-                Gtk.AlertDialog(message="設定を保存できませんでした", detail=str(error)).show(self)
+                self.banner_text.set_label(f"保存していません: {error}")
+                self.banner.set_reveal_child(True)
+
+        def _reload(self):
+            """いまの config.json と schema で、ウィンドウを作り直す。"""
+            directory = self.config.path.parent
+            try:
+                schema = read_schema(directory)
+                window = SettingsWindow(self.get_application(), schema, ConfigFile(directory, schema))
+            except SettingsError as error:
+                self.banner_text.set_label(f"読み直せませんでした: {error}")
+                return
+            window.set_default_size(self.get_width(), self.get_height())
+            window.present()
+            self.destroy()
 
         def _matches(self, row):
             query = self.search.get_text().strip().casefold()
