@@ -30,17 +30,20 @@ public sealed unsafe class NowPlaying : IDisposable
     private const int TimeoutMs = 2000;
     // 前に読んだ結果を使う長さ (この間に曲が変わっても、次の「なう」で読み直す)
     private const int FreshMs = 3000;
+    // これより古い結果は出さない (止めた曲・前の曲を出さないように)。読み直している間は何も出さない
+    private const int StaleMs = 10000;
 
     private readonly object _lock = new();
     private IntPtr _manager;
     private volatile bool _unavailable;
     private (string Title, string Artist)? _last;
-    private long _readAt = long.MinValue;
+    private long _readAt = -1_000_000; // まだ読んでいない (long.MinValue だと引き算があふれる)
     private bool _reading;
 
     /// <summary>
     /// 前に読んだ今再生している曲 (再生中のものがなければ null) をすぐ返す。待たない。
     /// 前に読んでから時間がたっていれば、裏のスレッドで読み直す (次の「なう」・候補の描き直しで出る)。
+    /// 10 秒より前に読んだ結果は返さない (30 分前の曲が出ないように)。
     /// </summary>
     public (string Title, string Artist)? Read()
     {
@@ -61,7 +64,7 @@ public sealed unsafe class NowPlaying : IDisposable
                     }
                 });
             }
-            return _last;
+            return Environment.TickCount64 - _readAt <= StaleMs ? _last : null;
         }
     }
 

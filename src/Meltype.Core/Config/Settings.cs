@@ -373,7 +373,7 @@ public sealed class Settings
     public bool NowPlayingCandidates { get; set; } = true;
 
     [Category("5. 候補"), DisplayName("時計の候補のタイムゾーン"),
-     Description("「とけい」「じこく」を変換したときに候補に出す、今の時刻 (19:21 / 19時21分 / 午後7時21分) のタイムゾーン。IANA の ID (例: America/New_York・Europe/London) か Windows の ID (例: Eastern Standard Time) を書きます。空ならこの PC のタイムゾーン (既定)。夏時間も反映します。この PC と違うタイムゾーンなら、日付とタイムゾーンの名前を付けた候補も出します。")]
+     Description("「とけい」「じこく」「いま」「なう」を変換したときに候補に出す、今の時刻 (19:21 / 19時21分 / 午後7時21分) のタイムゾーン。IANA の ID (例: America/New_York・Europe/London) か Windows の ID (例: Eastern Standard Time) を書きます。空ならこの PC のタイムゾーン (既定)。夏時間も反映します。この PC と違うタイムゾーンなら、「とけい」「じこく」では日付とタイムゾーンの名前を付けた候補も出します。")]
     public string ClockTimeZone { get; set; } = "";
 
     [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"), WindowsOnly,

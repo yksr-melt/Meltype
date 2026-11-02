@@ -2218,7 +2218,7 @@ public sealed class CompositionController
         if (!isNow && reading != "きょう") return [];
         // なう: 今再生している曲を、時刻より先に (issue #1400)
         if (reading == "なう" && _options.NowPlayingCandidates() && NowPlayingCandidates() is { Count: > 0 } songs)
-            return [.. songs, .. NowTimes(_options.Now())];
+            return [.. songs, .. NowTimes(ClockNow())];
         var now = _options.Now();
         var day = WeekDays[(int)now.DayOfWeek];
         var date = $"{now.Year}年{now.Month}月{now.Day}日";
@@ -2229,7 +2229,7 @@ public sealed class CompositionController
         if (!isNow)
             return [date, $"{date}({day})", monthDay, $"{monthDay}({day})", slashDate, $"{slashDate}({day})", $"{now.Month}/{now.Day}({day})",
                 $"{now.Year:D4}-{now.Month:D2}-{now.Day:D2}", $"{day}曜日", $"{now.Year:D4}{now.Month:D2}{now.Day:D2}"];
-        return NowTimes(now);
+        return NowTimes(ClockNow());
     }
 
     private static string[] NowTimes(DateTime now)
@@ -2263,12 +2263,17 @@ public sealed class CompositionController
     private List<string> ClockCandidates()
     {
         var zone = ClockZone(_options.ClockTimeZone());
-        var now = zone is null ? _options.Now() : TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_options.UtcNow(), DateTimeKind.Utc), zone);
+        var now = ClockNow();
         var clock = $"{now.Hour:D2}:{now.Minute:D2}";
         List<string> result = [clock, $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"];
         if (zone is not null && !zone.HasSameRules(TimeZoneInfo.Local)) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
         return result;
     }
+
+    /// <summary>設定「時計の候補のタイムゾーン」の今の時刻 (とけい・じこく・いま・なう)。設定が空ならこの PC の時刻。</summary>
+    private DateTime ClockNow() => ClockZone(_options.ClockTimeZone()) is { } zone
+        ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_options.UtcNow(), DateTimeKind.Utc), zone)
+        : _options.Now();
 
     /// <summary>設定のタイムゾーン。空・見つからなければ null (この PC のもの)。
     /// IANA (Asia/Tokyo) と Windows (Tokyo Standard Time) のどちらの ID も読む (見つからない ID は .NET が IANA ⇔ Windows に変換して探し直す)。</summary>

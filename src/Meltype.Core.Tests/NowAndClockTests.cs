@@ -75,6 +75,15 @@ internal static class NowAndClockTests
     }
 
     [Test]
+    public static void Issue1401_ImaUsesConfiguredZone()
+    {
+        // いま も、とけい・じこく と同じく設定のタイムゾーンの時刻 (2026-07-01 23:30 UTC はニューヨークで 19:30)
+        var k = new Keyboard { ClockTimeZone = "America/New_York", UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
+        k.Type("ima ");
+        Assert.True(k.Host.View!.Candidates.Contains("19:30"), string.Join(",", k.Host.View.Candidates));
+    }
+
+    [Test]
     public static void Issue1401_SameZoneAsThisPcHasNoZoneName()
     {
         // この PC と同じタイムゾーンを書いても、タイムゾーンの名前を付けた候補は出さない (設定の説明どおり)
