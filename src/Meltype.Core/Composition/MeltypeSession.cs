@@ -466,9 +466,12 @@ public sealed class MeltypeSession
         // 半角/全角 キーは、本体 (変換ボックス) がすでに英字表示との切り替えに使っている (#662 の既定の
         // 切り替えキーにも入っている)。フロントエンドもこのキーは自分で扱うので、ここでは横取りしない。
         var hankaku = Meltype.Input.ToggleShortcut.NormalizeHankakuKey(vk) == Meltype.Input.ToggleShortcut.Hankaku;
-        if (toggleShortcuts && !hankaku && IsToggleShortcut(settings.EffectiveToggleShortcuts, vk, control, alt, shift, command))
+        // 変換中は切り替えない: Shift+Space は変換中の「前の候補へ」として docs/USAGE.md に書いてあり、
+        // 切り替えキーに登録した人でも、変換の操作を奪わない (変換を終えてから押せば切り替わる)。
+        if (toggleShortcuts && !hankaku && !_controller.IsComposing &&
+            IsToggleShortcut(settings.EffectiveToggleShortcuts, vk, control, alt, shift, command))
         {
-            // 半角/全角 と同じく、変換中なら確定してから切り替える (空のときは今出ている変換ボックスを閉じる)。
+            // 半角/全角 と同じく、変換ボックスが出ていれば閉じてから切り替える。
             var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
             Direct = !Direct;
             _toggled = true;

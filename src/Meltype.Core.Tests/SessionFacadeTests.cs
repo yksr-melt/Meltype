@@ -548,15 +548,26 @@ internal static class SessionFacadeTests
         // Space だけの組み合わせは、設定の読み込みで ToggleShortcutValidator が外す
         // (ToggleShortcutTests.Shortcut_ShiftSpaceIsAllowedAndConflictsWithTheHalfWidthSetting)。
 
-        // 打っている途中に切替を押したら、打った内容 (かな) を確定してから切り替える
+        // 変換中は切替にしない: Shift+Space は変換中の「前の候補へ」で、docs/USAGE.md にそう書いてある。
+        // 切り替えたいときは、変換を終えてから押す。
         session.TakeToggled();
         settings.ToggleShortcuts = [new ToggleShortcut { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift }];
         session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
         Type(session, "kyou");
+        session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");   // まず Space で変換して候補を出す
+        var composing = session.IsComposing;
         result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
-        Assert.True(result.Consumed, "切替として使う");
-        Assert.Equal("きょう", string.Concat(result.Commits.Select(c => c.Text)), "打っていた内容を確定する (変換は Space なので、かなのまま)");
-        Assert.True(session.Direct, "確定してから英数になる");
+        Assert.True(composing, "変換中の状態を作る");
+        Assert.True(!session.Direct, "変換中の Shift+Space では英数にしない");
+        Assert.True(!session.Toggled, "変換中の Shift+Space は切替として扱わない");
+        Assert.Equal(0, result.Commits.Count, "変換中は確定しない");
+
+        // 変換を終えてから押せば、今までどおり切り替わる。
+        result = session.HandleKey(VirtualKeys.Return, null, false, false, false, false, "");
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(result.Consumed, "空のときは切替として使う");
+        Assert.True(session.Direct, "英数になる");
+        Assert.True(session.Toggled, "切替を伝える");
 
         // 修飾キーは、どのフロントエンドも Ctrl と Shift を別々のビットで渡す (macOS・fcitx5・IBus)。
         // そのため Ctrl+Shift+Space は、Shift+Space の設定では切替にしない。
