@@ -21,9 +21,9 @@ internal static class ZenzaiDefaultTests
     {
         foreach (var (json, expected, why) in new[]
         {
-            ("{ \"SettingsVersion\": 7, \"UseZenzai\": false }", true, "前の既定 (OFF・場所が空) は ON にする"),
-            ("{ \"SettingsVersion\": 7, \"UseZenzai\": false, \"ZenzaiModelPath\": \"C:\\\\m.gguf\" }", false, "自分で場所を書いて OFF にした人はそのまま"),
-            ("{ \"SettingsVersion\": 7, \"UseZenzai\": true, \"ZenzaiServerPath\": \"C:\\\\s.exe\" }", true, "ON はそのまま"),
+            ("{ \"SettingsVersion\": 8, \"UseZenzai\": false }", true, "前の既定 (OFF・場所が空) は ON にする"),
+            ("{ \"SettingsVersion\": 8, \"UseZenzai\": false, \"ZenzaiModelPath\": \"C:\\\\m.gguf\" }", false, "自分で場所を書いて OFF にした人はそのまま"),
+            ("{ \"SettingsVersion\": 8, \"UseZenzai\": true, \"ZenzaiServerPath\": \"C:\\\\s.exe\" }", true, "ON はそのまま"),
             ($"{{ \"SettingsVersion\": {Settings.CurrentVersion}, \"UseZenzai\": false }}", false, "移行の後に OFF にしたものは戻さない"),
         })
         {
