@@ -508,6 +508,14 @@ public sealed class Settings
     [JsonConverter(typeof(InputStyleJsonConverter))]
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
 
+    [Category("1. 全般"), DisplayName("かな配列"),
+     Description("入力方式が「かな入力」のときの配列。JIS かな (刻印どおり)・月配列 (U9。D・K を押してから次のキーで 2 段目・3 段目)・花配列 (D・K を押してから次のキーで 2 段目)・NICOLA (親指シフト。無変換が左、変換が右の親指キー)・中指NICOLA (NICOLA に加え、K を押したままの左手のキーで左シフト、D を押したままの右手のキーで右シフト)・TRON 配列 (親指シフト)。親指シフトは、親指キーを押したまま文字キーを押すか、文字キーの直後 (0.1 秒以内) に親指キーを押します。親指キーだけを押して離すと、ふつうの変換・無変換です。Shift を押したキーはふつうの英字・記号です。JIS かな以外では、打ったキーの英字を英単語として見せません。Meltype キーボードで使えます。")]
+    public KanaLayout KanaLayout { get; set; } = KanaLayout.Jis;
+
+    [Category("1. 全般"), DisplayName("ローマ字の配列"),
+     Description("入力方式が「ローマ字入力」のときのキーの配列。QWERTY (ふつう) か SKY 配列 (左手が子音 , W R M H / N T S K Y / P D Z G B、右手が母音 UU AI OU 。 EI / U A O I E / UN AN ON IN EN)。SKY 配列では、英字のキーを SKY 配列のローマ字にしてから読みます (拗音は子音 + Y + 母音、促音は子音を 2 回)。英語の自動判定は使わず、日本語として読みます。Meltype キーボードで使えます。")]
+    public RomajiLayout RomajiLayout { get; set; } = RomajiLayout.Qwerty;
+
     [Category("2. 判定"), DisplayName("自動判定の強さ"),
      Description("積極的 = 英語らしければすぐ英字 / 標準 = 短い語 (no, to, ga) は前後が英語のときだけ英字 / 慎重 = 確信度が高いときだけ英字 / 手動 = 自動では切り替えず提案だけ (変換ボックスで Tab を押すと提案どおり英字に)。Meltype キーボード・英数状態の検知・かな入力のすべてに効きます。")]
     public DetectionLevel DetectionLevel { get; set; } = DetectionLevel.Balanced;
@@ -985,6 +993,8 @@ public sealed class Settings
         // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
         if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
+        if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
+        if (!Enum.IsDefined(RomajiLayout)) RomajiLayout = RomajiLayout.Qwerty;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));
