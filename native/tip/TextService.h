@@ -142,6 +142,10 @@ private:
     bool IsSecretField(TfEditCookie ec, ITfContext* context);
     // 入力欄の種類を読む読み取りの編集セッション。1 = パスワード欄、0 = 違う、-1 = 読めない (キーの編集セッションの中で読む)
     int ReadSecretField(ITfContext* context);
+    // 選んでいる文字 (再変換に使う)。選んでいない・長すぎる (誤って広く選んだ) なら false
+    bool SelectedText(TfEditCookie ec, ITfContext* context, std::wstring& text);
+    // 選んでいる文字があるかを読む読み取りの編集セッション (変換キーを受け取るか決める)
+    bool HasSelectedText(ITfContext* context);
     std::string CommitRequest(bool moved) const;
     void UnadviseTextEditSink();
     void UpdateLangBar();
