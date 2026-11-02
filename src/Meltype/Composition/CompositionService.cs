@@ -63,6 +63,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             AutoCorrect = options.AutoCorrect,
             Level = options.Level,
             KanaInput = options.KanaInput,
+            KanaLayout = options.KanaLayout,
+            RomajiLayout = options.RomajiLayout,
             Misspellings = options.Misspellings ?? MisspellingDictionary.Load(userDirectory),
             Languages = Languages,
             Translations = options.Translations ?? TranslationDictionary.Load(),
@@ -634,6 +636,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     }
 
     public bool IsShiftDown() => (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;
+
+    public bool IsKeyDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 
     /// <summary>クリップボードの文字 (変換した瞬間に 1 回だけ読む)。履歴に残さない印のある内容 (パスワード管理ソフトなど) は読まない。</summary>
     public string? ClipboardText
