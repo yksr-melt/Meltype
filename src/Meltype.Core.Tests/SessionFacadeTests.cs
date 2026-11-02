@@ -84,6 +84,25 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void MacOperationKeysCommitAndPassThroughWithoutInsertingFunctionCharacters()
+    {
+        foreach (var vk in new[] { 0x2E, 0x0C, 0x70, 0x71, 0x72, 0x73, 0x74, 0x7A, 0x7B, 0x7C, 0x7D, 0x7E, 0x7F, 0x80, 0x81, 0x82, 0x83 })
+        {
+            foreach (var converting in new[] { false, true })
+            {
+                var session = Create();
+                Type(session, "a");
+                if (converting) Type(session, " ");
+                var result = session.HandleKey(vk, null, false, false, false, false);
+                Assert.True(!result.Consumed, $"操作キー {vk:X} はアプリへ渡す");
+                Assert.Equal("あ", result.Commits.Single().Text);
+                Assert.True(result.View is null, "確定後に変換表示を閉じる");
+                Assert.True(!session.HandleKey(vk, null, false, false, false, false).Consumed, "未確定なしでもアプリへ渡す");
+            }
+        }
+    }
+
+    [Test]
     public static void CtrlEnterDuringCompositionCommitsWithoutSending()
     {
         // 変換中の Ctrl+Enter (送信のショートカット) は確定だけ行い、キーはアプリへ渡さない。
@@ -689,6 +708,28 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_TracksTerminalQuotesAfterCaretMoves()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        Type(session, "echo ");
+        Assert.True(!session.HandleKey(VirtualKeys.Left, null, false, false, false, false).Consumed, "矢印はアプリへ");
+        Assert.True(Type(session, "ls").All(r => !r.Consumed), "矢印のあともコードは英数");
+        Assert.True(Type(session, "\"").All(r => !r.Consumed), "引用符はアプリへ");
+        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "矢印のあとに開いた引用符の中は日本語");
+        var close = Type(session, "\"")[0];
+        Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じ引用符は英数のまま通し、日本語は確定");
+        Assert.True(Type(session, "hello").All(r => !r.Consumed), "閉じたあとは英数");
+
+        Assert.True(!session.HandleKey(VirtualKeys.Right, null, false, false, false, false).Consumed, "矢印はアプリへ");
+        Assert.True(Type(session, "\"\bkyouha").All(r => !r.Consumed), "打った引用符を消したらコード");
+
+        session.CodeInput = true;
+        Assert.True(Type(session, "\b\b\"").All(r => !r.Consumed), "行頭を超えて消しても、コードは英数");
+        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "行頭を超えて消したあとに開いた引用符の中は日本語");
+    }
+
+    [Test]
     public static void CodeInput_ActivationSyncClearsTrackedContext()
     {
         var session = Create();
@@ -873,7 +914,7 @@ internal static class SessionFacadeTests
         session.Private = false;
         ChooseHashi(session);
         Assert.Equal("箸を", history.Get("はしを"));
-      }
+    }
     [Test]
     public static void CreateDefault_SessionsShareLearning()
     {

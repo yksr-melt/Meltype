@@ -633,6 +633,10 @@ internal static class CodeProfileTests
         Assert.Equal(LineKind.Code, LineContext.ClassifyText(line.Text!));
         line.Invalidate();
         Assert.True(line.Text is null, "キャレットが動いたら分からない");
+        line.Append("\"a");
+        line.Backspace();
+        Assert.True(line.Text is null, "打っても分からないまま");
+        Assert.Equal("\"", line.Tracked, "分からなくなってから打った文字列は追いかける");
         line.SetFromText("first line\r\n    print(\"こん");
         Assert.Equal(LineKind.String, LineContext.ClassifyText(line.Text!), "UI Automation で読んだ文字列の、今の行で調べる");
     }
@@ -917,29 +921,29 @@ internal static class LanguageLearningTests
         var view = k.Host.View!;
         Assert.True(view.Converting, "変換中");
         var notes = view.Notes ?? [];
-        Assert.Equal("半角", notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("@")), string.Join(" ", view.Candidates));
-        Assert.Equal("全角", notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("＠")), string.Join(" ", view.Candidates));
+        Assert.Equal(CandidateNote.HalfWidth, notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("@")), string.Join(" ", view.Candidates));
+        Assert.Equal(CandidateNote.FullWidth, notes.ElementAtOrDefault(view.Candidates.ToList().IndexOf("＠")), string.Join(" ", view.Candidates));
     }
 
-  [Test]
-  public static void Brand_TeamsFromChiimusu()
-  {
-    // ちーむす でも Teams を出す (issue #47。ちーむず だけだった)
-    var candidates = CandidateDictionary.Load(null);
-    Assert.True(candidates.Lookup("ちーむす").Contains("Teams"), string.Join(" ", candidates.Lookup("ちーむす")));
-    Assert.True(candidates.Lookup("ちーむず").Contains("Teams"), "ちーむず も今までどおり");
-  }
+    [Test]
+    public static void Brand_TeamsFromChiimusu()
+    {
+        // ちーむす でも Teams を出す (issue #47。ちーむず だけだった)
+        var candidates = CandidateDictionary.Load(null);
+        Assert.True(candidates.Lookup("ちーむす").Contains("Teams"), string.Join(" ", candidates.Lookup("ちーむす")));
+        Assert.True(candidates.Lookup("ちーむず").Contains("Teams"), "ちーむず も今までどおり");
+    }
 
-  [Test]
-  public static void Phrase_AgeashiWoToru()
-  {
-    // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
-    var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
-    k.Type("ageashitoruna ");
-    var view = k.Host.View!;
-    Assert.True(view.Converting, "変換中");
-    Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
-  }
+    [Test]
+    public static void Phrase_AgeashiWoToru()
+    {
+        // 揚げ足取るな が 揚げ足とルナ になっていた (issue #147)。同梱の語句で 揚げ足取る を 1 つの文節にする
+        var k = new CompositionTests.Keyboard(userDictionary: new UserDictionary(null));
+        k.Type("ageashitoruna ");
+        var view = k.Host.View!;
+        Assert.True(view.Converting, "変換中");
+        Assert.Equal("揚げ足取る", view.Clauses![0], string.Join("|", view.Clauses));
+    }
 
     [Test]
     public static void TesterNames_AreCandidates()
