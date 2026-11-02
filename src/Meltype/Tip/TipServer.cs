@@ -416,6 +416,8 @@ internal sealed class TipServer : IDisposable
         var ownClient = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var clientProcess) && clientProcess == (uint)Environment.ProcessId;
         // DLL が送るのはプロセスの名前だけなので、ゲームのフォルダーにあるか (Minecraft の javaw.exe など: #1009) はここで調べる
         var looksLikeGame = !ownClient && clientProcess != 0 && ForegroundTracker.LooksLikeGame(clientProcess);
+        // Java のアプリは、ゲームのウィンドウ (Minecraft など) かを前面のウィンドウで見る。つながったときにはまだウィンドウが無いことがあるので、要求のたびに見る
+        var javaClient = !ownClient && !looksLikeGame && clientProcess != 0 && ForegroundTracker.IsJava(clientProcess);
         var buffer = new byte[64 * 1024];
         using var message = new MemoryStream();
         try
@@ -437,6 +439,7 @@ internal sealed class TipServer : IDisposable
                 {
                     var request = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
                     var started = Environment.TickCount64;
+                    if (javaClient && !looksLikeGame) looksLikeGame = ForegroundTracker.IsForegroundJavaGame(clientProcess);
                     reply = FromOwnUiThread(ownClient, request) ? Handle(request, sessions, looksLikeGame) : Invoke(() => Handle(request, sessions, looksLikeGame));
                     LogSlow(request, Environment.TickCount64 - started);
                 }
@@ -480,7 +483,7 @@ internal sealed class TipServer : IDisposable
 
     /// <summary>
     /// このアプリで入力を受け持つか。アプリ別設定で OFF にしたアプリと「ゲーム」のアプリでは、変換ボックスのときと同じく何もしない。
-    /// process は DLL が送る、.exe を除いたプロセスの名前。looksLikeGame は、つながってきたアプリがゲームのフォルダーにあるか。
+    /// process は DLL が送る、.exe を除いたプロセスの名前。looksLikeGame は、つながってきたアプリがゲームのフォルダーにあるか、Java で動くゲームか。
     /// </summary>
     private bool ActiveFor(string? process, bool looksLikeGame)
     {

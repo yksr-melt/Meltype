@@ -39,6 +39,17 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void JavaGames_AreDetectedFromWindowClass()
+    {
+        Assert.True(ForegroundTracker.IsJava("javaw.exe") && ForegroundTracker.IsJava("java.exe"), "Java");
+        Assert.True(!ForegroundTracker.IsJava("javaws.exe"), "ほかのアプリ");
+        Assert.True(ForegroundTracker.IsJavaGameWindowClass("GLFW30"), "LWJGL 3 (Minecraft 1.13 から)");
+        Assert.True(ForegroundTracker.IsJavaGameWindowClass("LWJGL"), "LWJGL 2 (Minecraft 1.12.2 まで)");
+        Assert.True(!ForegroundTracker.IsJavaGameWindowClass("SunAwtFrame"), "ふつうの Java のアプリ (Swing)");
+        Assert.True(!ForegroundTracker.IsJavaGameWindowClass("GLFW3 Helper"), "GLFW の見えないウィンドウ");
+    }
+
+    [Test]
     public static void Games_AreDetectedFromInstallFolder()
     {
         Assert.True(ForegroundTracker.LooksLikeGame(@"D:\SteamLibrary\steamapps\common\Apex Legends\r5apex.exe"), "Steam のゲーム");
