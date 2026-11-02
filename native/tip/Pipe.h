@@ -25,7 +25,7 @@ public:
 
 private:
     bool Connect();
-    bool Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred);
+    bool Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred, DWORD& error);
     void TimedOut(bool optional);
 
     static constexpr size_t kMaxResponse = 1024 * 1024;

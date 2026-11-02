@@ -172,14 +172,26 @@ void PipeClient::Close() {
     }
 }
 
-bool PipeClient::Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred) {
+// 終わらなかったときの error は、時間切れなら WAIT_TIMEOUT、それより前に失敗で終わったらそのエラー (切れていたなど)。
+bool PipeClient::Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred, DWORD& error) {
+    error = ERROR_SUCCESS;
     if (WaitForSingleObject(event_, timeoutMs) != WAIT_OBJECT_0) {
         CancelIoEx(pipe_, &overlapped);
         GetOverlappedResult(pipe_, &overlapped, &transferred, TRUE);
+        error = WAIT_TIMEOUT;
         return false;
     }
-    return GetOverlappedResult(pipe_, &overlapped, &transferred, FALSE) != FALSE || GetLastError() == ERROR_MORE_DATA;
+    if (GetOverlappedResult(pipe_, &overlapped, &transferred, FALSE)) return true;
+    error = GetLastError();
+    return error == ERROR_MORE_DATA;
 }
+
+namespace {
+// 前の Meltype.exe とのつながりが切れていたときのエラー (起動し直した)
+bool IsDisconnected(DWORD error) {
+    return error == ERROR_NO_DATA || error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED;
+}
+}  // namespace
 
 // 書き込み・読み取りが時間内に終わらなかった。閉じる (閉じないと、遅れて来た応答を次の要求の応答として読んでしまう)。
 // 応答しない Meltype.exe を毎回待つと、どのアプリでも打鍵のたびに止まるので、少し前にも時間切れになっていたら、しばらくつながない。
@@ -215,14 +227,22 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
         Close();
         // 前の Meltype.exe とのつながりが切れていた (起動し直した): まだ何も送っていないので、つなぎ直して 1 回だけ送り直す。
         // 送り直さないと、起動し直した後の最初のキーが、応答が無いときと同じく打った文字のまま入る
-        if (reused && (error == ERROR_NO_DATA || error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED)) {
+        if (reused && IsDisconnected(error)) {
             TipLog(L"つなぎ直して送り直します");
             return Transact(request, response, remaining(), optional);
         }
         return false;
     }
-    if (!Wait(overlapped, remaining(), transferred)) {
-        TipLog(L"パイプへの書き込みが終わりません");
+    DWORD waitError = ERROR_SUCCESS;
+    if (!Wait(overlapped, remaining(), transferred, waitError)) {
+        // WriteFile は ERROR_IO_PENDING を返し、切れていたことは終わるのを待って分かることが多い (#1112)。
+        // その場で失敗したときと同じく、つなぎ直して 1 回だけ送り直す (時間切れとは分けて、TimedOut にしない)
+        if (reused && IsDisconnected(waitError)) {
+            TipLog(L"パイプへの書き込みが切れていました (エラー %lu)。つなぎ直して送り直します", waitError);
+            Close();
+            return Transact(request, response, remaining(), optional);
+        }
+        TipLog(L"パイプへの書き込みが終わりません (エラー %lu)", waitError);
         TimedOut(optional);
         return false;
     }
@@ -241,8 +261,8 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
             retryAfter_ = GetTickCount64() + 2000;
             return false;
         }
-        if (!Wait(overlapped, remaining(), transferred)) {
-            TipLog(L"Meltype.exe の応答が時間内に来ません");
+        if (!Wait(overlapped, remaining(), transferred, waitError)) {
+            TipLog(L"Meltype.exe の応答が時間内に来ません (エラー %lu)", waitError);
             TimedOut(optional);
             return false;
         }
