@@ -151,4 +151,31 @@ internal static class ReportedMisdetectionTests
         other.Type("13/40 ");
         Assert.Equal("13/40 ", other.Host.Document, "日付でなければ候補を出さない");
     }
+
+    /// <summary>Windows のスペルチェッカーのように、同梱の一覧に無い語 (tori) も知っている。</summary>
+    private sealed class WiderChecker(params string[] extra) : Detection.IWordChecker
+    {
+        public bool IsAvailable => true;
+        public bool IsWord(string lower) => extra.Contains(lower) || Detection.BuiltInWordChecker.Shared.IsWord(lower);
+    }
+
+    [Test]
+    public static void Issue705_HyphenPrefixDoesNotCutInsideRomaji()
+    {
+        // re- + 英単語 (tori) でも、すぐ後ろに英字が続く (re-tori|mitto) なら長音を挟んだ日本語
+        Detector.SpellChecker = new WiderChecker("tori");
+        try
+        {
+            foreach (var (typed, expected) in new[] { ("re-torimitto", "れーとりみっと"), ("re-install", "re-install"), ("re-tori", "re-tori") })
+            {
+                var k = new Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            Detector.SpellChecker = null;
+        }
+    }
 }
