@@ -248,8 +248,9 @@ public static unsafe class Exports
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Error($"Zenzai の設定を読めませんでした: {ex}");
-            return ToUtf8("");
+            // 読めないときは使わない (打鍵のたびに推論が走るので、分からないまま ON にしない)
+            Diagnostics.Log.Error($"Zenzai の設定を読めませんでした。Zenzai を使わずに変換します: {ex}");
+            return null;
         }
     }
 

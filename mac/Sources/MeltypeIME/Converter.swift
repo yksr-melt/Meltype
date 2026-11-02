@@ -36,8 +36,8 @@ final class MeltypeConverter {
     }
 
     /// zenz のモデル (gguf)。設定「Zenzai を使う」が OFF なら nil (issue #1130)。
-    /// 設定「Zenzai: モデル (GGUF) の場所」があればそれを、空なら Meltype.app に同梱の Resources/zenz/ のモデルを使う。
-    static let zenzModelNames = ["zenz-v3.2-small-Q5_K_M.gguf", "zenz-v3.1-small-Q5_K_M.gguf", "ggml-model-Q5_K_M.gguf"]
+    /// 設定「Zenzai: モデル (GGUF) の場所」があればそれを、空なら Meltype.app に同梱の Resources/zenz/ の .gguf を使う
+    /// (名前は見ない: 版とファイル名は native/zenzai/zenzai.env だけに書く)。
     private static func findZenzModel() -> URL? {
         guard let configured = NativeCore.shared.zenzaiModelSetting else { return nil }
         let path = configured.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -47,13 +47,9 @@ final class MeltypeConverter {
             NSLog("Meltype: Zenzai のモデルが見つかりません: %@", url.path)
             return nil
         }
-        guard let resources = Bundle.main.resourceURL else { return nil }
-        let directory = resources.appendingPathComponent("zenz", isDirectory: true)
-        for name in zenzModelNames {
-            let url = directory.appendingPathComponent(name, isDirectory: false)
-            if FileManager.default.fileExists(atPath: url.path) { return url }
-        }
-        return nil
+        guard let directory = Bundle.main.resourceURL?.appendingPathComponent("zenz", isDirectory: true),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return nil }
+        return names.filter { $0.hasSuffix(".gguf") }.sorted().first.map { directory.appendingPathComponent($0, isDirectory: false) }
     }
 
     var usesZenzai: Bool { zenzModel != nil }

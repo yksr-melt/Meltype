@@ -665,7 +665,9 @@ public sealed class Settings
             if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject file ||
                 file["format"]?.GetValue<string>() != ProfileFileFormat || file["values"] is not JsonObject raw) return null;
             name = (file["name"]?.GetValue<string>() ?? "").Trim();
-            if ((file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1) < 8) MigrateToV8(raw);
+            var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
+            if (fileVersion < 8) MigrateToV8(raw);
+            if (fileVersion < 9) MigrateToV9(raw);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -977,12 +979,7 @@ public sealed class Settings
         // v7: 追加キーの文字列を共通の一覧へ移し、旧項目を保存しない。
         MigrateLegacyToggleShortcuts(report: true);
         // v8: 型を変えた項目は、読み込む前の JSON で移す (MigrateToV8)。
-        if (SettingsVersion < 9)
-        {
-            // v9: Zenzai を同梱して既定 ON にした (issue #1120)。前の既定 (OFF・場所が空) のままなら ON にする。
-            // 自分で llama-server やモデルの場所を書いた人は、OFF にしていればそのまま
-            if (!UseZenzai && string.IsNullOrWhiteSpace(ZenzaiServerPath) && string.IsNullOrWhiteSpace(ZenzaiModelPath)) UseZenzai = true;
-        }
+        // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
         SettingsVersion = CurrentVersion;
         return true;
     }
@@ -993,6 +990,16 @@ public sealed class Settings
     /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
     /// 消した項目 (JapaneseThreshold・TypoEnabled・MaxPendingKeys・ImeTimeoutMs・LogKeyIntervals) と、state.json に移した項目 (AppState) は、読み込みで無視されて次の保存で消える。
     /// </summary>
+    internal static void MigrateToV9(JsonObject values)
+    {
+        // v9: Zenzai を同梱して既定 ON にした (issue #1120)。前の既定 (OFF・場所が空) のままなら ON にする。
+        // 自分で llama-server やモデルの場所を書いた人は、OFF にしていればそのまま。書いていない項目は新しい既定 (ON) になる
+        static string Text(JsonObject o, string key) => o[key] is JsonValue v && v.TryGetValue<string>(out var t) ? t : "";
+        if (values[nameof(UseZenzai)] is JsonValue use && use.TryGetValue<bool>(out var on) && !on &&
+            string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiServerPath))) && string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiModelPath))))
+            values[nameof(UseZenzai)] = true;
+    }
+
     internal static void MigrateToV8(JsonObject values)
     {
         bool Flag(string key, bool fallback) => values[key] is JsonValue value && value.TryGetValue<bool>(out var on) ? on : fallback;
@@ -1078,6 +1085,12 @@ public sealed class Settings
                 MigrateToV8(values);
                 foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                     if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
+            }
+            if (version < 9)
+            {
+                MigrateToV9(values);
+                foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                    if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
             }
             var settings = values.Deserialize(JsonType) ?? new Settings();
             settings.SettingsVersion = version;

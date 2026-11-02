@@ -120,6 +120,10 @@ if (Test-Path -LiteralPath (Join-Path $zenzaiBin 'llama-server.exe')) {
     Copy-Item -Path (Join-Path $zenzaiBin '*') -Destination (Join-Path $app 'zenzai') -Force
     Write-Host 'Zenzai (llama-server とモデル) を同梱しました。'
 }
+elseif ($Version -or $env:GITHUB_REF -like 'refs/tags/v*') {
+    # 版番号付き (リリース) のビルドでは、Zenzai の無い配布物を作らない (「Zenzai を使う」は既定 ON なので)
+    throw 'Zenzai がありません (native\zenzai\Get-Zenzai.ps1)。リリースのビルドなので止めます。'
+}
 else {
     Write-Warning 'Zenzai がありません (native\zenzai\Get-Zenzai.ps1)。Zenzai なしで変換します。'
 }

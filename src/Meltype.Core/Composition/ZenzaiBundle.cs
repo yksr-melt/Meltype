@@ -16,16 +16,29 @@ public static class ZenzaiBundle
     /// <summary>同梱の llama-server のファイル名。</summary>
     public static string ServerFileName => OperatingSystem.IsWindows() ? "llama-server.exe" : "llama-server";
 
-    /// <summary>同梱のモデルのファイル名 (native/zenzai/Get-Zenzai.ps1 が置く名前)。</summary>
-    public const string ModelFileName = "zenz-v3.2-small-Q5_K_M.gguf";
 
     /// <summary>設定の llama-server の場所。空なら同梱のもの。</summary>
     public static string ServerPath(string configured, string? baseDirectory = null) =>
         Resolve(configured, ServerFileName, baseDirectory);
 
-    /// <summary>設定のモデルの場所。空なら同梱のもの。</summary>
-    public static string ModelPath(string configured, string? baseDirectory = null) =>
-        Resolve(configured, ModelFileName, baseDirectory);
+    /// <summary>
+    /// 設定のモデルの場所。空なら同梱の zenzai\ にある .gguf (名前は見ない: 版とファイル名は native/zenzai/zenzai.env だけに書く)。
+    /// 同梱のモデルが無ければ、zenzai\ の中の存在しないファイルの場所 (ZenzaiConverter が「見つからない」と答える)。
+    /// </summary>
+    public static string ModelPath(string configured, string? baseDirectory = null)
+    {
+        var path = configured?.Trim() ?? "";
+        if (path.Length > 0) return path;
+        var folder = Path.Combine(baseDirectory ?? AppContext.BaseDirectory, FolderName);
+        try
+        {
+            if (Directory.Exists(folder) && Directory.EnumerateFiles(folder, "*.gguf").Order(StringComparer.Ordinal).FirstOrDefault() is { } bundled) return bundled;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+        }
+        return Path.Combine(folder, "model.gguf");
+    }
 
     private static string Resolve(string configured, string fileName, string? baseDirectory)
     {

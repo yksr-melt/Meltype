@@ -191,8 +191,8 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 
 <br>
 
-<a name="zenzai-ニューラルかな漢字変換実験"></a>
-<img src="images/headings/windows/08.svg" alt="Zenzai (ニューラルかな漢字変換、実験)" height="53"><br>
+<a name="zenzai-ニューラルかな漢字変換"></a>
+<img src="images/headings/windows/08.svg" alt="Zenzai (ニューラルかな漢字変換)" height="53"><br>
 
 [Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 

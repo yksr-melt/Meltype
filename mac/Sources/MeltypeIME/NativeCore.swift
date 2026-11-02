@@ -193,10 +193,8 @@ final class NativeCore {
     }
 
     /// Zenzai の設定 (issue #1130)。「Zenzai を使う」が OFF なら nil、ON なら設定のモデルの場所 (空なら同梱のモデル)。
-    /// 古い libMeltypeNative.dylib (関数が無い) なら既定 (ON・同梱のモデル)。
     var zenzaiModelSetting: String? {
-        guard let function = zenzaiModelFunction else { return "" }
-        guard let pointer = function() else { return nil }
+        guard let pointer = zenzaiModelFunction?() else { return nil }
         defer { freeFunction?(pointer) }
         return String(cString: pointer)
     }

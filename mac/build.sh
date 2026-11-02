@@ -96,11 +96,11 @@ cp -R Resources/ja.lproj Resources/en.lproj "$APP/Contents/Resources/"
 for bundle in "$BIN"/*.bundle; do
     [[ -e "$bundle" ]] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
-# Zenzai のモデル zenz-v3.2-small (Apache-2.0) を同梱する (issue #1130)。版はコミット、中身は SHA-256 で固定する。
-# 取れないときは同梱せずに続ける (Zenzai なしで、azooKey の辞書だけで変換する)
-ZENZ_COMMIT=c67e03e07d215c869f591b274c1631170d3e11fe
-ZENZ_SHA256=29c223d4c23327b80fd13ebb5ab2555057a46317997d5da391584ffbef0db673
-ZENZ_NAME=zenz-v3.2-small-Q5_K_M.gguf
+# Zenzai のモデル zenz-v3.2-small (Apache-2.0) を同梱する (issue #1130)。版とハッシュは native/zenzai/zenzai.env (Windows と共通)。
+# 取れないとき: リリースのビルド (タグ v*) なら止める (Zenzai は既定 ON なので、無いまま配らない)。
+# 自分の Mac で使うビルドなら、同梱せずに続ける (Zenzai なしで、azooKey の辞書だけで変換する)
+# shellcheck source=../native/zenzai/zenzai.env
+source ../native/zenzai/zenzai.env
 ZENZ_CACHE="$BUILD/cache/$ZENZ_NAME"
 mkdir -p "$BUILD/cache"
 if [[ ! -f "$ZENZ_CACHE" ]] || [[ "$(shasum -a 256 "$ZENZ_CACHE" | cut -d' ' -f1)" != "$ZENZ_SHA256" ]]; then
@@ -112,6 +112,10 @@ if [[ -f "$ZENZ_CACHE" ]] && [[ "$(shasum -a 256 "$ZENZ_CACHE" | cut -d' ' -f1)"
     echo "Zenzai のモデルを同梱しました: $ZENZ_NAME"
 else
     rm -f "$ZENZ_CACHE"
+    if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+        echo "Zenzai のモデルを取れませんでした。リリースのビルドなので止めます" >&2
+        exit 1
+    fi
     echo "警告: Zenzai のモデルを取れなかったので、同梱しません (Zenzai なしで変換します)" >&2
 fi
 # 署名: 環境変数 MELTYPE_MAC_IDENTITY (Developer ID Application の証明書の名前) があれば配布用に署名する

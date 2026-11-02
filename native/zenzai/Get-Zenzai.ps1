@@ -9,15 +9,19 @@ param([string]$OutDir = (Join-Path $PSScriptRoot 'bin'))
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
-# llama.cpp (MIT License)。docs/WINDOWS.md で確かめた版
-$llamaBuild = 'b11719'
+# 版とハッシュは zenzai.env に 1 か所だけ書く (mac/build.sh と共通)
+$versions = @{}
+Get-Content -LiteralPath (Join-Path $PSScriptRoot 'zenzai.env') | Where-Object { $_ -match '^\s*([A-Z0-9_]+)=(.*)$' } | ForEach-Object { $versions[$Matches[1]] = $Matches[2].Trim() }
+# llama.cpp (MIT License)
+$llamaBuild = $versions['LLAMA_BUILD']
 $llamaUrl = "https://github.com/ggml-org/llama.cpp/releases/download/$llamaBuild/llama-$llamaBuild-bin-win-cpu-x64.zip"
-$llamaSha256 = '1b1234d208a8b851cc27cd3d96b850d1547a4e5cfc5cd75f0a9fdd1d4c5bea20'
+$llamaSha256 = $versions['LLAMA_SHA256']
 # zenz-v3.2-small (Apache License 2.0)。版はコミットで固定する
-$modelCommit = 'c67e03e07d215c869f591b274c1631170d3e11fe'
+$modelCommit = $versions['ZENZ_COMMIT']
 $modelUrl = "https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf/resolve/$modelCommit/ggml-model-Q5_K_M.gguf"
-$modelSha256 = '29c223d4c23327b80fd13ebb5ab2555057a46317997d5da391584ffbef0db673'
-$modelName = 'zenz-v3.2-small-Q5_K_M.gguf'
+$modelSha256 = $versions['ZENZ_SHA256']
+$modelName = $versions['ZENZ_NAME']
+if (-not ($llamaBuild -and $llamaSha256 -and $modelCommit -and $modelSha256 -and $modelName)) { throw 'zenzai.env の値が足りません。' }
 
 function Get-Verified([string]$url, [string]$path, [string]$sha256) {
     if ((Test-Path -LiteralPath $path) -and (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -eq $sha256) { return }
