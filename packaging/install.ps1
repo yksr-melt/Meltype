@@ -95,16 +95,21 @@ function Write-Environment {
 }
 Write-Environment
 
+$launched = $false
+
 function Start-InstalledMeltype {
     # 管理者として実行していても、Meltype はふつうの権限で起動する (エクスプローラーから起動すると、ふつうの権限になる)。
     # 管理者として動かすと、次のインストール・アンインストールでも管理者権限が必要になってしまう。
     if ($admin) { Start-Process -FilePath explorer.exe -ArgumentList "`"$exe`"" }
     else { Start-Process -FilePath $exe -WorkingDirectory $target }
+    # エクスプローラー経由の起動は、Meltype のプロセスが出るまでに時間がかかる。直後に Start-RemainingMeltype で
+    # 「動いていない」と判断して二重に起動しないように、起動したことを覚えておく。
+    $script:launched = $true
 }
 
 # 更新の失敗で Meltype が止まったままだと、次のサインインまで入力できない。動いていなければ、残っている版を起動する。
 function Start-RemainingMeltype {
-    if (-not (Test-Path -LiteralPath $exe)) { return }
+    if ($script:launched -or -not (Test-Path -LiteralPath $exe)) { return }
     $runningInstalled = @(Get-Process Meltype -ErrorAction SilentlyContinue | Where-Object {
         try { $_.Path -eq $exe } catch { $false }
     })
@@ -188,115 +193,115 @@ function Restore-RegistryState($Snapshot) {
     }
 }
 try {
-    Write-Mark 'phase=stop'
-    Stop-Meltype
-    if ($hadTarget) {
-        Write-Mark 'phase=backup'
-        Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force -ErrorAction Stop
-        $backupCompleted = $true
+        Write-Mark 'phase=stop'
+        Stop-Meltype
+        if ($hadTarget) {
+            Write-Mark 'phase=backup'
+            Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force -ErrorAction Stop
+            $backupCompleted = $true
+        }
+        foreach ($keyPath in @($innoKey, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype')) {
+            $registrySnapshots += ,(Save-RegistryState $keyPath)
+        }
+        foreach ($folderName in 'Startup', 'Programs') {
+            $shortcutPath = Join-Path ([Environment]::GetFolderPath($folderName)) 'Meltype.lnk'
+            $savedPath = Join-Path $env:TEMP ('Meltype-shortcut-' + [guid]::NewGuid().ToString('N') + '.lnk')
+            $existed = Test-Path -LiteralPath $shortcutPath
+            if ($existed) { Copy-Item -LiteralPath $shortcutPath -Destination $savedPath -ErrorAction Stop }
+            $shortcutSnapshots += ,@{ Path = $shortcutPath; Saved = $savedPath; Exists = $existed }
+        }
+
+    # 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。
+    $oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
+    if (Test-Path -LiteralPath $oldShortcut) { Remove-Item -LiteralPath $oldShortcut -Force }
+    $oldProgram = Join-Path $env:LOCALAPPDATA 'Programs\AutoIME'
+    if (Test-Path -LiteralPath $oldProgram) { Remove-Item -LiteralPath $oldProgram -Recurse -Force }
+    New-Item -ItemType Directory -Force -Path $target | Out-Null
+    Write-Mark 'phase=copy'
+    Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force
+
+    Write-Mark 'phase=verify'
+    # コピーした直後にウイルス対策ソフトが Meltype.exe を隔離することがある。誤検知かどうかはここでは判断できない。
+    if (-not (Test-Path -LiteralPath $exe)) {
+        Write-Host "コピーした Meltype.exe が見つかりません: $exe"
+        Write-Host 'ウイルス対策ソフトが Meltype を止めた可能性があります。'
+        Write-Host 'Windows セキュリティ →「ウイルスと脅威の防止」→「保護の更新」で定義を更新し、公式の ZIP を再ダウンロードして再検査してください。'
+        Write-Host 'Windows セキュリティ →「ウイルスと脅威の防止」→「保護の履歴」で検出名を確認してください。誤検知かどうかは、この状態だけでは判断できません。'
+        Write-Host '保護を無効にしたり「許可」に変更したりせず、版と検出名を https://github.com/yksr-melt/Meltype/issues に報告してください (個人名やパスは隠してください)。'
+        throw "コピーした Meltype.exe が見つかりません: $exe"
     }
-    foreach ($keyPath in @($innoKey, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype')) {
-        $registrySnapshots += ,(Save-RegistryState $keyPath)
+
+    # インターネットから落とした印 (Zone.Identifier) はコピーにも付いてくるので外す (起動時の SmartScreen の確認を減らす)
+    Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
+
+    # Windows の「設定 → アプリ → インストールされているアプリ」からアンインストールできるようにする。
+    # 前は zip を展開したフォルダーの Uninstall.cmd しか無く、zip を消していると探し直す手間がかかった。
+    Write-Mark 'phase=register'
+    $uninstaller = Join-Path $target 'uninstall.ps1'
+    $uninstallSource = Join-Path $PSScriptRoot 'uninstall.ps1'
+    # インストーラー (Meltype-<版>-setup.exe) で入れていたら、その「設定 → アプリ」の項目の版だけ新しくする
+    # (自動更新もこのスクリプトを使うので、項目が二重にならないように)。
+    if ((Test-Path -LiteralPath $innoKey) -and (Test-Path -LiteralPath (Join-Path $target 'unins000.exe'))) {
+        $version = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
+        Set-ItemProperty -Path $innoKey -Name DisplayVersion -Value $version
+        Set-ItemProperty -Path $innoKey -Name DisplayName -Value 'Meltype'
     }
+    elseif (Test-Path -LiteralPath $uninstallSource) {
+        Copy-Item -LiteralPath $uninstallSource -Destination $uninstaller -Force
+        Unblock-File -LiteralPath $uninstaller -ErrorAction SilentlyContinue
+        $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype'
+        New-Item -Path $key -Force | Out-Null
+        $size = [int]((Get-ChildItem -LiteralPath $target -Recurse -File | Measure-Object Length -Sum).Sum / 1KB)
+        $values = @{
+            DisplayName     = 'Meltype'
+            DisplayVersion  = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
+            Publisher       = 'Yukishiro'
+            DisplayIcon     = $exe
+            InstallLocation = $target
+            # PATH に PowerShell のフォルダーが無い PC もあるので、フルパスで書く
+            UninstallString = "`"$(Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\powershell.exe')`" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$uninstaller`" -FromSettings"
+            URLInfoAbout    = 'https://github.com/yksr-melt/Meltype'
+        }
+        foreach ($name in $values.Keys) { Set-ItemProperty -Path $key -Name $name -Value $values[$name] }
+        foreach ($name in 'NoModify', 'NoRepair') { Set-ItemProperty -Path $key -Name $name -Value 1 -Type DWord }
+        Set-ItemProperty -Path $key -Name EstimatedSize -Value $size -Type DWord
+    }
+
+    # Meltype IME (入力欄に直接入力)。登録には管理者権限が要る。断られたら、今までどおり変換ボックスで入力する方式で使う
+    $imeScript = Join-Path $target 'meltype-ime.ps1'
+    if ((Test-Path -LiteralPath $imeScript) -and (Test-Path -LiteralPath (Join-Path $target 'tip'))) {
+        # 失敗しても、ショートカットを作って Meltype を起動するところまでは続ける (自動更新で Meltype が止まったままにならないように)
+        Write-Mark 'phase=ime'
+        try {
+            . $imeScript
+            $imeRegistered = Test-MeltypeImeRegistered
+            Write-Mark "ime registered=$imeRegistered"
+            # 自分で実行したとき (-Ask) か、もう登録してある (DLL を入れ替える) ときだけ。頼まれていないのに管理者権限の確認を出さない
+            if ($Ask -or $imeRegistered) { Install-MeltypeIme -Source (Join-Path $target 'tip') -Ask:$Ask | Out-Null }
+        }
+        catch {
+            Write-Host "Meltype IME を登録できませんでした (変換ボックスで入力する方式で使えます): $($_.Exception.Message)"
+        }
+    }
+
+    Write-Mark 'phase=shortcut'
+    # 自動起動と、スタートメニュー・Windows 検索からの起動用 (現在のユーザー)
+    $shell = New-Object -ComObject WScript.Shell
     foreach ($folderName in 'Startup', 'Programs') {
-        $shortcutPath = Join-Path ([Environment]::GetFolderPath($folderName)) 'Meltype.lnk'
-        $savedPath = Join-Path $env:TEMP ('Meltype-shortcut-' + [guid]::NewGuid().ToString('N') + '.lnk')
-        $existed = Test-Path -LiteralPath $shortcutPath
-        if ($existed) { Copy-Item -LiteralPath $shortcutPath -Destination $savedPath -ErrorAction Stop }
-        $shortcutSnapshots += ,@{ Path = $shortcutPath; Saved = $savedPath; Exists = $existed }
+        $folder = [Environment]::GetFolderPath($folderName)
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        $shortcut = $shell.CreateShortcut((Join-Path $folder 'Meltype.lnk'))
+        $shortcut.TargetPath = $exe
+        $shortcut.WorkingDirectory = $target
+        $shortcut.IconLocation = "$exe,0"
+        $shortcut.Description = 'Meltype: 日本語と英語を自動で打ち分ける'
+        $shortcut.Save()
     }
 
-# 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。
-$oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
-if (Test-Path -LiteralPath $oldShortcut) { Remove-Item -LiteralPath $oldShortcut -Force }
-$oldProgram = Join-Path $env:LOCALAPPDATA 'Programs\AutoIME'
-if (Test-Path -LiteralPath $oldProgram) { Remove-Item -LiteralPath $oldProgram -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $target | Out-Null
-Write-Mark 'phase=copy'
-Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force
-
-Write-Mark 'phase=verify'
-# コピーした直後にウイルス対策ソフトが Meltype.exe を隔離することがある。誤検知かどうかはここでは判断できない。
-if (-not (Test-Path -LiteralPath $exe)) {
-    Write-Host "コピーした Meltype.exe が見つかりません: $exe"
-    Write-Host 'ウイルス対策ソフトが Meltype を止めた可能性があります。'
-    Write-Host 'Windows セキュリティ →「ウイルスと脅威の防止」→「保護の更新」で定義を更新し、公式の ZIP を再ダウンロードして再検査してください。'
-    Write-Host 'Windows セキュリティ →「ウイルスと脅威の防止」→「保護の履歴」で検出名を確認してください。誤検知かどうかは、この状態だけでは判断できません。'
-    Write-Host '保護を無効にしたり「許可」に変更したりせず、版と検出名を https://github.com/yksr-melt/Meltype/issues に報告してください (個人名やパスは隠してください)。'
-    throw "コピーした Meltype.exe が見つかりません: $exe"
-}
-
-# インターネットから落とした印 (Zone.Identifier) はコピーにも付いてくるので外す (起動時の SmartScreen の確認を減らす)
-Get-ChildItem -LiteralPath $target -Recurse -File | Unblock-File -ErrorAction SilentlyContinue
-
-# Windows の「設定 → アプリ → インストールされているアプリ」からアンインストールできるようにする。
-# 前は zip を展開したフォルダーの Uninstall.cmd しか無く、zip を消していると探し直す手間がかかった。
-Write-Mark 'phase=register'
-$uninstaller = Join-Path $target 'uninstall.ps1'
-$uninstallSource = Join-Path $PSScriptRoot 'uninstall.ps1'
-# インストーラー (Meltype-<版>-setup.exe) で入れていたら、その「設定 → アプリ」の項目の版だけ新しくする
-# (自動更新もこのスクリプトを使うので、項目が二重にならないように)。
-if ((Test-Path -LiteralPath $innoKey) -and (Test-Path -LiteralPath (Join-Path $target 'unins000.exe'))) {
-    $version = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
-    Set-ItemProperty -Path $innoKey -Name DisplayVersion -Value $version
-    Set-ItemProperty -Path $innoKey -Name DisplayName -Value 'Meltype'
-}
-elseif (Test-Path -LiteralPath $uninstallSource) {
-    Copy-Item -LiteralPath $uninstallSource -Destination $uninstaller -Force
-    Unblock-File -LiteralPath $uninstaller -ErrorAction SilentlyContinue
-    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype'
-    New-Item -Path $key -Force | Out-Null
-    $size = [int]((Get-ChildItem -LiteralPath $target -Recurse -File | Measure-Object Length -Sum).Sum / 1KB)
-    $values = @{
-        DisplayName     = 'Meltype'
-        DisplayVersion  = (Get-Item -LiteralPath $exe).VersionInfo.ProductVersion
-        Publisher       = 'Yukishiro'
-        DisplayIcon     = $exe
-        InstallLocation = $target
-        # PATH に PowerShell のフォルダーが無い PC もあるので、フルパスで書く
-        UninstallString = "`"$(Join-Path ([Environment]::GetFolderPath('Windows')) 'System32\WindowsPowerShell\v1.0\powershell.exe')`" -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$uninstaller`" -FromSettings"
-        URLInfoAbout    = 'https://github.com/yksr-melt/Meltype'
-    }
-    foreach ($name in $values.Keys) { Set-ItemProperty -Path $key -Name $name -Value $values[$name] }
-    foreach ($name in 'NoModify', 'NoRepair') { Set-ItemProperty -Path $key -Name $name -Value 1 -Type DWord }
-    Set-ItemProperty -Path $key -Name EstimatedSize -Value $size -Type DWord
-}
-
-# Meltype IME (入力欄に直接入力)。登録には管理者権限が要る。断られたら、今までどおり変換ボックスで入力する方式で使う
-$imeScript = Join-Path $target 'meltype-ime.ps1'
-if ((Test-Path -LiteralPath $imeScript) -and (Test-Path -LiteralPath (Join-Path $target 'tip'))) {
-    # 失敗しても、ショートカットを作って Meltype を起動するところまでは続ける (自動更新で Meltype が止まったままにならないように)
-    Write-Mark 'phase=ime'
-    try {
-        . $imeScript
-        $imeRegistered = Test-MeltypeImeRegistered
-        Write-Mark "ime registered=$imeRegistered"
-        # 自分で実行したとき (-Ask) か、もう登録してある (DLL を入れ替える) ときだけ。頼まれていないのに管理者権限の確認を出さない
-        if ($Ask -or $imeRegistered) { Install-MeltypeIme -Source (Join-Path $target 'tip') -Ask:$Ask | Out-Null }
-    }
-    catch {
-        Write-Host "Meltype IME を登録できませんでした (変換ボックスで入力する方式で使えます): $($_.Exception.Message)"
-    }
-}
-
-Write-Mark 'phase=shortcut'
-# 自動起動と、スタートメニュー・Windows 検索からの起動用 (現在のユーザー)
-$shell = New-Object -ComObject WScript.Shell
-foreach ($folderName in 'Startup', 'Programs') {
-    $folder = [Environment]::GetFolderPath($folderName)
-    New-Item -ItemType Directory -Force -Path $folder | Out-Null
-    $shortcut = $shell.CreateShortcut((Join-Path $folder 'Meltype.lnk'))
-    $shortcut.TargetPath = $exe
-    $shortcut.WorkingDirectory = $target
-    $shortcut.IconLocation = "$exe,0"
-    $shortcut.Description = 'Meltype: 日本語と英語を自動で打ち分ける'
-    $shortcut.Save()
-}
-
-Write-Mark 'phase=launch'
-Start-InstalledMeltype
-Write-Host 'Meltype をインストールして起動しました。画面右下のタスクトレイに「あ」のアイコンが出ます。'
-Write-Mark 'result=ok'
+    Write-Mark 'phase=launch'
+    Start-InstalledMeltype
+    Write-Host 'Meltype をインストールして起動しました。画面右下のタスクトレイに「あ」のアイコンが出ます。'
+    Write-Mark 'result=ok'
 }
 catch {
     $errorMessage = $_.Exception.Message
