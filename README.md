@@ -91,7 +91,7 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 
 途中で Meltype IME を Windows に登録するための管理者権限の確認が出るので、「はい」を選んでください。断った場合は、変換ボックスで入力する Meltype キーボードで動きます。新しい版は自動で入ります。
 
-「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」。コード署名をしていないため表示されます。
+「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」。コード署名をしていないため表示されます。署名の方針は [Code signing policy](docs/CODE-SIGNING.md) にあります。
 
 <details>
 <summary>zip 版・Mac 版・Linux 版</summary>
@@ -187,8 +187,6 @@ Meltype キーボードのときは、<kbd>Ctrl</kbd> + <kbd>半角/全角</kbd>
 <br><br>
 
 <img src="docs/images/headings/privacy.svg" alt="プライバシー" width="480"><br>
-
-[Code signing policy](docs/CODE-SIGNING.md) (Windows のテスト署名を導入中。本番の署名付き配布は準備中)
 
 <p align="center">
   <img src="docs/images/cards/privacy-send.svg" alt="打った文字は送らない: 判定も変換も PC の中で完結" width="32%">
