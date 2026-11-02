@@ -245,6 +245,7 @@ public sealed partial class CompositionDetector
                 if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = NumeronymEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = CamelNameEnd(units, unit, pending);
+                if (forced < 0) forced = ProperNounWithDigitsEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
             }
 

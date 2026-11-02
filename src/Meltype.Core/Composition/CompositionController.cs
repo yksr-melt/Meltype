@@ -1339,7 +1339,8 @@ public sealed class CompositionController
          _options.ConsonantAbbreviations() && _options.Candidates?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 });
 
     private bool SpaceCommitsAlphanumeric() =>
-        _text.IsAlphanumericAt(final: true) && !(_text.Mode == DisplayMode.Auto && _text.IsNumeric && _text.Raw.All(char.IsAsciiDigit) && _text.PrecedingEnglish != true);
+        _text.IsAlphanumericAt(final: true) && !(_text.Mode == DisplayMode.Auto && _text.IsNumeric && _text.Raw.All(char.IsAsciiDigit) && _text.PrecedingEnglish != true) &&
+        !(_text.Mode == DisplayMode.Auto && _text.PrecedingEnglish != true && SlashDateCandidates(_text.Raw) is not null);
 
     private bool SpaceCommitsAutoEnglish() => _text.Mode == DisplayMode.Auto && _detector.IsEnglishAtWordEnd(_text.Raw, _options.Level());
 
@@ -1638,6 +1639,14 @@ public sealed class CompositionController
             return;
         }
         // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
+        // 月/日 (10/20) は、日付の書き方の候補 (10月20日・10/20(火)・10月20日(火)) を出す (issue #935)
+        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto && SlashDateCandidates(_text.Raw) is { } dates)
+        {
+            _clauses = [new Clause(_text.Raw, true, Distinct([.. dates])) { Raw = _text.Raw }];
+            _selectedClause = 0;
+            _converting = true;
+            return;
+        }
         if (_options.CalculatorCandidates() && !_text.KanaInput && _text.Mode == DisplayMode.Auto && Calculator.Evaluate(_text.Raw) is { } result)
         {
             var expression = _text.Raw.TrimEnd('=');
@@ -2326,6 +2335,19 @@ public sealed class CompositionController
     /// 10がつ9にち → 10/9 / 10/09 / 10/9(金) / 10月9日(金) / 2026/10/09 / 2026/10/09(金) (年と曜日は今年として求める: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex SlashDate = new("^(?<m>[0-9]{1,2})/(?<d>[0-9]{1,2})$");
+
+    /// <summary>打った 月/日 (10/20) の日付の候補。今年の日付として正しくなければ null。</summary>
+    private string[]? SlashDateCandidates(string raw)
+    {
+        if (SlashDate.Match(raw) is not { Success: true } match) return null;
+        var (month, day) = (int.Parse(match.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(match.Groups["d"].Value, CultureInfo.InvariantCulture));
+        var year = _options.Now().Year;
+        if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return null;
+        var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
+        return [raw, $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})", $"{year:D4}/{month:D2}/{day:D2}", $"{year:D4}/{month:D2}/{day:D2}({week})", $"{year}年{month}月{day}日"];
+    }
+
     private IEnumerable<string>? TypedDateCandidates(string reading)
     {
         static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);

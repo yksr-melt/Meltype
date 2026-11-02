@@ -440,6 +440,25 @@ public sealed partial class CompositionDetector
     /// 末尾の子音が打ちかけ (pending の n: i18|n) のときも、数字の後ろの英字として数える。
     /// </summary>
     /// <summary>
+    /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。語の始めからの英字・数字が一覧にあるとき (後ろに日本語が続いてもよい)。
+    /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
+    /// </summary>
+    private int ProperNounWithDigitsEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    {
+        static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
+        if (start >= units.Count || !IsPart(units[start])) return -1;
+        if (start > 0 && units[start - 1].Raw is { Length: > 0 } previous && char.IsAsciiLetterOrDigit(previous[^1])) return -1;
+        // 一覧にある一番長い頭 (yachi8000|desu の yachi8000)
+        var end = -1;
+        for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
+        {
+            var word = Raw(units, start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
+            if (word.Any(char.IsAsciiDigit) && word.Any(char.IsAsciiLetter) && _proper.Contains(word.ToLowerInvariant())) end = i;
+        }
+        return end;
+    }
+
+    /// <summary>
     /// 小文字 1〜2 文字のすぐ後ろに、大文字で始まる語が続く名前 (iZotope・iPhone・eBay) の終わり。
     /// 大文字の前の小文字 (i・e) は、ローマ字として読めてもかなにしない (いZotope にしない: issue #1319)。
     /// 語の始め (前が英字でない) から、英字の続く所まで。大文字の後ろは小文字を含む 2 文字以上。

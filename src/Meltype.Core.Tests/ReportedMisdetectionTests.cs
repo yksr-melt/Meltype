@@ -129,4 +129,26 @@ internal static class ReportedMisdetectionTests
         Assert.Equal("禸部", RareKanji.Demote(["禸部", "十部"])[^1], "消さずに残す");
         Assert.Equal("橋本", RareKanji.Demote(["橋本", "觜本"])[0], "一番目がふつうの漢字なら変えない");
     }
+
+    [Test]
+    public static void Issue1013_1402_ProperNouns()
+    {
+        // 数字を含む固有名詞 (yachi8000) と、ローマ字として読める固有名詞 (neovide) は英字のまま。一覧に無い語 + 数字は今までどおり
+        Check(("yachi8000", "yachi8000"), ("yachi8000desu", "yachi8000です"), ("neovide", "neovide"), ("heisei31nenn", "へいせい31ねん"));
+    }
+
+    [Test]
+    public static void Issue935_SlashDateCandidates()
+    {
+        var k = new Keyboard(now: () => new DateTime(2026, 10, 1));
+        k.Type("10/20 ");
+        Assert.True(k.Host.View is { Converting: true }, "月/日 は Space で候補を出す");
+        var candidates = k.Host.View!.Candidates;
+        foreach (var expected in new[] { "10/20", "10月20日", "10/20(火)", "10月20日(火)" })
+            Assert.True(candidates.Contains(expected), expected + ": " + string.Join(",", candidates));
+        // 日付にならない数字 (13/40) は今までどおり確定して空白
+        var other = new Keyboard();
+        other.Type("13/40 ");
+        Assert.Equal("13/40 ", other.Host.Document, "日付でなければ候補を出さない");
+    }
 }
