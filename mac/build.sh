@@ -89,6 +89,14 @@ done < <(otool -L "$APP/Contents/MacOS/Meltype" | awk '/@rpath\//{print $1}')
 cp "$BUILD/native/MeltypeNative.dylib" "$APP/Contents/Frameworks/libMeltypeNative.dylib"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+CORE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*$/\1/')"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $CORE_VERSION" "$APP/Contents/Info.plist"
+if [[ -n "${MELTYPE_SPARKLE_PUBLIC_KEY:-}" ]]; then
+    # Validate before passing a value to PlistBuddy (and never embed the signing secret).
+    python3 -c 'import base64,os; assert len(base64.b64decode(os.environ["MELTYPE_SPARKLE_PUBLIC_KEY"], validate=True)) == 32'
+    /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $MELTYPE_SPARKLE_PUBLIC_KEY" "$APP/Contents/Info.plist"
+fi
+cp .build/artifacts/sparkle/Sparkle/LICENSE "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 cp Resources/icon.tiff "$APP/Contents/Resources/icon.tiff"
 # システム設定の入力ソースの一覧に出す名前
 cp -R Resources/ja.lproj Resources/en.lproj "$APP/Contents/Resources/"
@@ -100,6 +108,12 @@ done
 # (Hardened Runtime・タイムスタンプ付き。公証 (notarization) は mac.yml で行う)。無ければ自分の Mac で使うための署名。
 if [[ -n "${MELTYPE_MAC_IDENTITY:-}" ]]; then
     for item in "$APP/Contents/Frameworks/"*; do
+        # Sign Sparkle's embedded tools inside-out before the framework and host.
+        if [[ "$item" == */Sparkle.framework ]]; then
+            for nested in "$item"/Versions/B/XPCServices/*.xpc "$item"/Versions/B/Updater.app "$item"/Versions/B/Autoupdate; do
+                [[ -e "$nested" ]] && codesign --force --sign "$MELTYPE_MAC_IDENTITY" --options runtime --timestamp "$nested"
+            done
+        fi
         codesign --force --sign "$MELTYPE_MAC_IDENTITY" --options runtime --timestamp "$item"
     done
     codesign --force --deep --sign "$MELTYPE_MAC_IDENTITY" --options runtime --timestamp "$APP"

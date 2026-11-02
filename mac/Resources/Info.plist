@@ -29,6 +29,16 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright (C) 2026 雪代 / Yukishiro. GPL-3.0-or-later</string>
 
+    <!-- 更新を通知し、利用者が選んでからインストールする。公開鍵はbuild.shで設定する。 -->
+    <key>SUFeedURL</key>
+    <string>https://github.com/yksr-melt/Meltype/releases/latest/download/appcast.xml</string>
+    <key>SUEnableAutomaticChecks</key><true/>
+    <key>SUAutomaticallyUpdate</key><false/>
+    <key>SUAllowsAutomaticUpdates</key><false/>
+    <key>SUSendProfileInfo</key><false/>
+    <key>SUVerifyUpdateBeforeExtraction</key><true/>
+    <key>SUScheduledCheckInterval</key><integer>86400</integer>
+
 	<key>NSServices</key>
 	<array>
 		<dict>

@@ -1,5 +1,5 @@
 {
-  "originHash" : "aeebfdde0de53f0aa058ea5649253a44bc01b9c05590f323088e04c49e58028a",
+  "originHash" : "c80b8b342a25fb80bff9e6f2f7f88a4505bfb0762e888dfdf8d4b46368fe1628",
   "pins" : [
     {
       "identity" : "azookeykanakanjiconverter",
@@ -19,6 +19,15 @@
       }
     },
     {
+      "identity" : "sparkle",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/sparkle-project/Sparkle",
+      "state" : {
+        "revision" : "eef1a539a373c1f1a320624b1130fc5de7b2e100",
+        "version" : "2.10.0"
+      }
+    },
+    {
       "identity" : "swift-algorithms",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-algorithms",
@@ -32,8 +41,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-collections",
       "state" : {
-        "revision" : "3b69cedbaa49957e97c092ae400bb57602ef941f",
-        "version" : "1.7.2"
+        "revision" : "671108c96644956dddcd89dd59c203dcdb36cec7",
+        "version" : "1.1.4"
       }
     },
     {

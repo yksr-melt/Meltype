@@ -14,6 +14,7 @@ protocol ModeServiceTarget: AnyObject {
 final class ModeServices: NSObject {
     static let shared = ModeServices()
     static let portName = "MeltypeModeServices"
+    var updateMenu: ((NSMenu) -> Void)?
     private weak var activeTarget: ModeServiceTarget?
     private let isMeltypeSelected: () -> Bool
     private let selectWithoutInput: (ModeShortcutAction) -> Void
