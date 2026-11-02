@@ -31,7 +31,9 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             if (_settings is null) _settings = Settings.Load(path);
             else
             {
-                // 読み直しで読めないのは、エディターが書いている途中のことがある。既定値に戻さず (.broken も作らず)、前の設定を使い続ける
+                // 読み直しで無い・読めないのは、エディターが書いている途中のことがある (元のファイルを別名に移してから書くエディターもある)。
+                // 既定値に戻さず (.broken も作らず)、前の設定を使い続ける
+                if (!File.Exists(path)) return _settings;
                 try { _settings = Settings.LoadOrThrow(path); }
                 catch (Exception ex)
                 {

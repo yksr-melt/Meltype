@@ -45,6 +45,14 @@ internal static class SettingsFileTests
             Write("Japanese", 3);
             now += SettingsFile.CheckIntervalMs;
             Assert.Equal(PunctuationStyle.Japanese, file.Current.Punctuation, "書き終わったら読み直す");
+
+            // 元のファイルを別名に移してから書くエディターの、書く前
+            File.Delete(path);
+            now += SettingsFile.CheckIntervalMs;
+            Assert.Equal(PunctuationStyle.Japanese, file.Current.Punctuation, "読み直しで無ければ、既定値に戻さず前の設定を使う");
+            Write("FullWidthCommaPeriod", 4);
+            now += SettingsFile.CheckIntervalMs;
+            Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, file.Current.Punctuation, "書かれたら読み直す");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

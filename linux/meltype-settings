@@ -249,7 +249,7 @@ def main():
             try:
                 schema = read_schema(directory)
                 window = SettingsWindow(self.get_application(), schema, ConfigFile(directory, schema))
-            except SettingsError as error:
+            except (SettingsError, OSError) as error:
                 self.banner_text.set_label(f"読み直せませんでした: {error}")
                 return
             window.set_default_size(self.get_width(), self.get_height())
@@ -301,7 +301,7 @@ def main():
         try:
             schema = read_schema(directory)
             config = ConfigFile(directory, schema)
-        except SettingsError as error:
+        except (SettingsError, OSError) as error:
             # ウィンドウが無いと AlertDialog を閉じたときに終わらないので、閉じたら終わる
             app.hold()
             Gtk.AlertDialog(message="Meltype の設定を開けません", detail=str(error)).choose(None, None, lambda *_: app.release())
