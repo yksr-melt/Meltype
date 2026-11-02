@@ -17,6 +17,14 @@ final class MeltypeConverter {
     private var options: ConvertRequestOptions
     /// Zenzai (ニューラルかな漢字変換) のモデル。無ければ Zenzai を使わない。
     private let zenzModel: URL?
+    /// Zenzai が遅かったときは、この時刻まで使わない (今までの変換エンジンだけで変換する)。
+    private var zenzaiPausedUntil = Date.distantPast
+    /// 最初の Zenzai の変換 (モデルの読み込みを含む) を済ませたか。
+    private var zenzaiWarmedUp = false
+    /// Zenzai の変換がこれより長くかかったら、しばらく使わない (Windows の Zenzai と同じ考え方: 変換を待たせない)。
+    private static let zenzaiSlowLimit: TimeInterval = 0.5
+    /// 遅かったときに Zenzai を使わない長さ。
+    private static let zenzaiPause: TimeInterval = 10 * 60
     private var resultCache: [String: [Candidate]] = [:]
     private var cacheOrder: [String] = []
 
@@ -84,16 +92,30 @@ final class MeltypeConverter {
     /// ひらがな全体に対する変換結果 (入力をすべて使ったものだけ、よい順)。
     /// Zenzai を使うときは、キャレットの前の文 (context) も文脈としてモデルに渡す (同じ読みでも前の文で変換が変わる)。
     private func results(for hiragana: String, context: String? = nil) -> [Candidate] {
-        let tail = zenzModel == nil ? nil : Self.contextTail(context)
-        let key = tail.map { $0 + "\u{1}" + hiragana } ?? hiragana
+        // 遅かった後のしばらくは Zenzai を使わない (キャッシュの鍵も Zenzai なしのものにする)
+        let zenz = Date() < zenzaiPausedUntil ? nil : zenzModel
+        let tail = zenz == nil ? nil : Self.contextTail(context)
+        let key = zenz == nil ? hiragana : (tail ?? "") + "\u{1}" + hiragana
         if let cached = resultCache[key] { return cached }
         var composing = ComposingText()
         composing.insertAtCursorPosition(hiragana, inputStyle: .direct)
-        if let zenzModel {
-            options.zenzaiMode = .on(weight: zenzModel, inferenceLimit: 10, personalizationMode: nil,
+        if let zenz {
+            options.zenzaiMode = .on(weight: zenz, inferenceLimit: 10, personalizationMode: nil,
                                      versionDependentMode: .v3(.init(leftSideContext: tail, maxLeftSideContextLength: 20)))
+        } else {
+            options.zenzaiMode = .off
         }
+        let started = Date()
         let results = converter.requestCandidates(composing, options: options)
+        if zenz != nil {
+            let elapsed = Date().timeIntervalSince(started)
+            // 最初の 1 回はモデルの読み込みを含むので数えない。2 回目からは、遅ければしばらく Zenzai を使わない
+            if zenzaiWarmedUp && elapsed > Self.zenzaiSlowLimit {
+                zenzaiPausedUntil = Date().addingTimeInterval(Self.zenzaiPause)
+                NSLog("Meltype: Zenzai の変換に %.0f ms かかったので、10 分間 Zenzai を使いません", elapsed * 1000)
+            }
+            zenzaiWarmedUp = true
+        }
         let count = hiragana.count
         // 入力 (ひらがな) をすべて使った候補だけ (.direct で入れたので、入力の文字数 = ひらがなの文字数)
         let candidates = results.mainResults.filter { $0.composingCount == .inputCount(count) || $0.composingCount == .surfaceCount(count) }
