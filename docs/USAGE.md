@@ -225,6 +225,8 @@ Windows 版は、同梱の Mozc と Microsoft IME で変換します。設定の
 | `userdict.txt` | ユーザー辞書 (1 行に「読み[Tab]単語」) | |
 | `snippets.json` | 定型文 | |
 | `meltype.log` | 設定で「ファイルにログを書く」を ON にしたときのログ | |
+| `crash.log` | Meltype が異常終了したときの記録。設定にかかわらず書く | |
+| `update\install.log` | Windows の自動更新のインストールの記録 (版・OS・工程・失敗の理由)。設定にかかわらず書く。利用者名・コンピューター名・パスは環境変数の名前に置き換える。途中で強制終了されると次の更新まで置き換わらないので、貼る前に確かめる | 1 MB で `install.old.log` へ移す |
 
 学習データ (`userdict.txt`・`snippets.json` と設定以外) は、Windows ではトレイの「学習データを消す」で消せます。
 
