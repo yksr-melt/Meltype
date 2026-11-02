@@ -91,7 +91,7 @@ class ConfigFile:
 
     def set(self, key, value):
         if self._read() != self.text:
-            raise SettingsError(f"{self.path} がほかで書き換えられました")
+            raise SettingsError(f"{CONFIG} がほかで書き換えられたので、保存していません")
         self.values[key] = value
         text = json.dumps(self.values, ensure_ascii=False, indent=2) + "\n"
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -240,7 +240,7 @@ def main():
             except (SettingsError, OSError) as error:
                 # 古い中身のまま書き続けないように、読み直すまで編集を止める (失敗した項目の表示も、読み直すと元に戻る)
                 self.list.set_sensitive(False)
-                self.banner_text.set_label(f"保存していません: {error}")
+                self.banner_text.set_label(str(error) if isinstance(error, SettingsError) else f"保存していません: {error}")
                 self.banner.set_reveal_child(True)
 
         def _reload(self):
