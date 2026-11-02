@@ -13,8 +13,8 @@ internal static class ModelNumberTests
     {
         foreach (var (typed, expected) in new[]
         {
-            ("4o", "4o"), ("10o", "10o"), ("2e", "2e"),
-            // 境界: 順位の 位 (1i)・続けて打つ語 (4oku = 4億)・英字のすぐ後ろの数字 (m3e)
+            ("4o", "4o"), ("10o", "10o"), ("2e", "2e"), ("gpt4o", "gpt4o"), ("gpt-4o", "gpt-4o"),
+            // 境界: 順位の 位 (1i)・続けて打つ語 (4oku = 4億)・英字 1 文字 + 数字 + 英字 1 文字の略語 (m3e)
             ("1i", "1い"), ("4oku", "4おく"), ("m3e", "m3e"),
         })
         {
