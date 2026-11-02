@@ -1636,14 +1636,26 @@ public sealed class CompositionController
             _converting = true;
             return;
         }
-        // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
-        if (_options.CalculatorCandidates() && !_text.KanaInput && _text.Mode == DisplayMode.Auto && Calculator.Evaluate(_text.Raw) is { } result)
+        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto)
         {
-            var expression = _text.Raw.TrimEnd('=');
-            _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, result, $"{expression}={result}"])) { Raw = _text.Raw }];
-            _selectedClause = 0;
-            _converting = true;
-            return;
+            // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
+            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } result
+                ? [result, $"{_text.Raw.TrimEnd('=')}={result}"]
+                : [];
+            // 月/日 (10/20) は、日付の書き方の候補も出す (issue #935)。分数・割り算 (1/2) かもしれないので、打ったままと計算の結果より後ろに。
+            // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
+            var dates = SlashDate.Match(_text.Raw) is { Success: true } date
+                ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture)) ?? []
+                : [];
+            if (calculated.Length > 0 || dates.Length > 0)
+            {
+                // 月/日 の全角 (１０／２０) は、日付のときだけ今までどおり最後に出す
+                string[] fullWidth = dates.Length > 0 ? [CompositionText.ToFullWidth(_text.Raw)] : [];
+                _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates, .. fullWidth])) { Raw = _text.Raw }];
+                _selectedClause = 0;
+                _converting = true;
+                return;
+            }
         }
         // #123 の形は、# と数字を別々の文節にしない (issue #865)。
         // 設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」なら、タイトルも候補に出す (issue #291)
@@ -2320,9 +2332,37 @@ public sealed class CompositionController
 
     private static bool IsTypedDateOrTime(string reading) => DateReading.IsMatch(reading) || ClockReading.IsMatch(reading);
 
+    private static readonly System.Text.RegularExpressions.Regex SlashDate = new("^(?<m>[0-9]{1,2})/(?<d>[0-9]{1,2})$");
+
+    /// <summary>
+    /// 月と日の書き方の候補。10がつ20にち (TypedDateCandidates) と 10/20 (変換) で同じものを出す。
+    /// 10/20 / 10/20 / 10月20日 / 10/20(火) / 10月20日(火) / 2026/10/20 / 2026/10/20(火) / 2026年10月20日。ありえない日付なら null。
+    /// 年は先の日付を優先する (予定を打つことが多いので)。今年のその日が今日以降なら今年、過ぎていれば来年。
+    /// ただし過ぎてから 30 日以内ならその日 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年、1 月 5 日に打つ 12/28 は去年)。
+    /// 選んでも学習しない (IsDateTimeChoice。年や曜日が変わるので)。
+    /// </summary>
+    private string[]? DateCandidates(int month, int day)
+    {
+        if (month is < 1 or > 12 || day is < 1 or > 31) return null;
+        var today = _options.Now().Date;
+        DateTime? best = null;
+        for (var year = today.Year - 1; year <= today.Year + 4; year++) // 去年から (1 月に打つ 12/28)。2/29 は次のうるう年まで
+        {
+            if (day > DateTime.DaysInMonth(year, month)) continue;
+            var date = new DateTime(year, month, day);
+            if (date >= today.AddDays(-30)) { best = date; break; }
+        }
+        if (best is not { } chosen) return null;
+        var week = WeekDays[(int)chosen.DayOfWeek];
+        var y = chosen.Year;
+        string[] dates = [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})",
+            $"{y:D4}/{month:D2}/{day:D2}", $"{y:D4}/{month:D2}/{day:D2}({week})", $"{y}年{month}月{day}日"];
+        return dates;
+    }
+
     /// <summary>
     /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
-    /// 10がつ9にち → 10/9 / 10/09 / 10/9(金) / 10月9日(金) / 2026/10/09 / 2026/10/09(金) (年と曜日は今年として求める: #935)、3じ15ふん → 3:15 / 03:15。
+    /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
     private IEnumerable<string>? TypedDateCandidates(string reading)
@@ -2330,12 +2370,7 @@ public sealed class CompositionController
         static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
         if (DateReading.Match(reading) is { Success: true } date)
         {
-            var (month, day) = (Number(date.Groups["m"].Value), Number(date.Groups["d"].Value));
-            var year = _options.Now().Year;
-            if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return [];
-            var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
-            return [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}/{day}({week})", $"{month}月{day}日({week})", $"{year:D4}/{month:D2}/{day:D2}",
-                $"{year:D4}/{month:D2}/{day:D2}({week})"];
+            return DateCandidates(Number(date.Groups["m"].Value), Number(date.Groups["d"].Value)) ?? [];
         }
         if (ClockReading.Match(reading) is { Success: true } clock)
         {
@@ -2374,9 +2409,16 @@ public sealed class CompositionController
     /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
     /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
     /// </summary>
-    private static bool IsDateTimeChoice(Clause clause) =>
-        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal)) ||
-        IsTypedDateOrTime(clause.Reading) && (clause.Text.IndexOfAny(['/', ':']) >= 0 || clause.Text.EndsWith(')'));
+    private bool IsDateTimeChoice(Clause clause) =>
+        // 打った日付・時刻 (10がつ20にち・3じ15ふん・10/20) の文節は、その読みから作る日付・時刻の候補を選んだか (書き方の形は見ない)
+        DateTimeCandidatesOf(clause.Reading)?.Contains(clause.Text) == true ||
+        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
+
+    /// <summary>打った日付・時刻の読みから作る候補 (変換したときと同じもの)。日付・時刻でなければ null。</summary>
+    private IEnumerable<string>? DateTimeCandidatesOf(string reading) =>
+        SlashDate.Match(reading) is { Success: true } date
+            ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture))
+            : TypedDateCandidates(reading);
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
     private IEnumerable<string> EmojiBlock(string reading) =>
