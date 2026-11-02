@@ -35,6 +35,16 @@ internal static class SettingsFileTests
             now += SettingsFile.CheckIntervalMs;
             _ = file.Current;
             Assert.Equal(2, loads, "更新時刻が変わっていなければ読み直さない");
+
+            // エディターが書いている途中の、壊れた JSON
+            File.WriteAllText(path, "{ \"Punctuation\": ");
+            File.SetLastWriteTimeUtc(path, new DateTime(2026, 1, 1, 0, 0, 2, DateTimeKind.Utc));
+            now += SettingsFile.CheckIntervalMs;
+            Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, file.Current.Punctuation, "読み直せなければ、既定値に戻さず前の設定を使う");
+            Assert.True(!File.Exists(path + ".broken"), "読み直しの失敗では .broken を作らない");
+            Write("Japanese", 3);
+            now += SettingsFile.CheckIntervalMs;
+            Assert.Equal(PunctuationStyle.Japanese, file.Current.Punctuation, "書き終わったら読み直す");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

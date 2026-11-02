@@ -26,12 +26,20 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             _checkedMs = now;
             // 読む前の時刻を覚える。読んでいる間に書かれても、次に読み直す (Load の移行で保存したときも 1 回読み直す)
             var writeTime = File.GetLastWriteTimeUtc(path);
-            if (_settings is null || writeTime != _writeTime)
+            if (_settings is not null && writeTime == _writeTime) return _settings;
+            _writeTime = writeTime;
+            if (_settings is null) _settings = Settings.Load(path);
+            else
             {
-                _writeTime = writeTime;
-                _settings = Settings.Load(path);
-                loaded?.Invoke(_settings);
+                // 読み直しで読めないのは、エディターが書いている途中のことがある。既定値に戻さず (.broken も作らず)、前の設定を使い続ける
+                try { _settings = Settings.LoadOrThrow(path); }
+                catch (Exception ex)
+                {
+                    Diagnostics.Log.Warn($"config.json を読み直せなかったので、前の設定を使い続けます: {ex.Message}");
+                    return _settings;
+                }
             }
+            loaded?.Invoke(_settings);
             return _settings;
         }
     }
