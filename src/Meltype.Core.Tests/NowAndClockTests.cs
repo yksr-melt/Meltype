@@ -32,7 +32,7 @@ internal static class NowAndClockTests
         var off = new Keyboard();
         off.Host.NowPlaying = ("曲", "人");
         off.Type("nau ");
-        Assert.True(!off.Host.View!.Candidates.Any(c => c.Contains("曲")), "OFF なら曲を読まない");
+        Assert.True(!off.Host.View!.Candidates.Any(c => c.Contains('曲')), "OFF なら曲を読まない");
         var ima = new Keyboard { NowPlayingCandidates = true };
         ima.Host.NowPlaying = ("曲", "人");
         ima.Type("ima ");

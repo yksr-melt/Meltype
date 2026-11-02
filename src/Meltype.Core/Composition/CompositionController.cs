@@ -2272,7 +2272,7 @@ public sealed class CompositionController
     /// とけい・じこく の文節に、設定のタイムゾーンの今の時刻 (19:21 / 19時21分 / 午後7時21分) を出す (issue #1401)。
     /// 夏時間は TimeZoneInfo が決める。この PC と違うタイムゾーンなら、日付とタイムゾーンの名前を付けたものも出す (日付をまたぐことがあるので)。
     /// </summary>
-    private IEnumerable<string> ClockCandidates()
+    private List<string> ClockCandidates()
     {
         var zone = ClockZone(_options.ClockTimeZone());
         var now = zone is null ? _options.Now() : TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_options.UtcNow(), DateTimeKind.Utc), zone);
