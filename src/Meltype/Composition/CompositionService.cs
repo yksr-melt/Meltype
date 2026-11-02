@@ -61,7 +61,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             UserDictionary = UserDictionary,
             MoreCandidates = options.MoreCandidates ?? (reading => _hybrid.Candidates(reading)),
             AutoCorrect = options.AutoCorrect,
-            Level = options.Level,
+            Manual = options.Manual,
             KanaInput = options.KanaInput,
             Misspellings = options.Misspellings ?? MisspellingDictionary.Load(userDirectory),
             Languages = Languages,

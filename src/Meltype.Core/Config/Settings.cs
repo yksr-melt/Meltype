@@ -21,19 +21,6 @@ public enum InputStyle
     [Description("かな入力 (JIS、α版)")] Kana,
 }
 
-/// <summary>英語か日本語かの自動判定の強さ。</summary>
-public enum DetectionLevel
-{
-    /// <summary>少しでも英語らしければ英字にする。</summary>
-    [Description("積極的 (Aggressive)")] Aggressive,
-    /// <summary>既定。短い語 (no, to) は前後が英語のときだけ英字。</summary>
-    [Description("標準 (Balanced)")] Balanced,
-    /// <summary>確信度が高いときだけ英字にする。</summary>
-    [Description("慎重 (Conservative)")] Conservative,
-    /// <summary>自動では切り替えず、提案だけ出す。</summary>
-    [Description("手動 (提案のみ)")] Manual,
-}
-
 /// <summary>変換ボックスの文字の大きさ。</summary>
 public enum CompositionSize
 {
@@ -179,14 +166,14 @@ public sealed class AppRule
 }
 
 /// <summary>
-/// ユーザーが作るアプリの種類 (例: 「チャット」「ゲーム」)。一般 / コード を元に、判定の強さ・ライブ変換・最初の入力モードを変えられる。
+/// ユーザーが作るアプリの種類 (例: 「チャット」「ゲーム」)。一般 / コード を元に、自動判定・ライブ変換・最初の入力モードを変えられる。
 /// null の項目は全体の設定のまま。
 /// </summary>
 public sealed class AppKind
 {
     public string Name { get; set; } = "";
     public AppProfile Base { get; set; } = AppProfile.General;
-    public DetectionLevel? DetectionLevel { get; set; }
+    public bool? AutoDetection { get; set; }
     public bool? LiveConversion { get; set; }
     /// <summary>このアプリに切り替えたら英数 (直接入力) から始める。</summary>
     public bool StartInEnglish { get; set; }
@@ -547,18 +534,9 @@ public sealed class Settings
     [JsonConverter(typeof(InputStyleJsonConverter))]
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
 
-    [Category("3. 判定"), DisplayName("自動判定の強さ"),
-     Description("積極的 = 英語らしければすぐ英字 / 標準 = 短い語 (no, to, ga) は前後が英語のときだけ英字 / 慎重 = 確信度が高いときだけ英字 / 手動 = 自動では切り替えず提案だけ (変換ボックスで Tab を押すと提案どおり英字に)。Meltype キーボード・英数状態の検知・かな入力のすべてに効きます。")]
-    public DetectionLevel DetectionLevel { get; set; } = DetectionLevel.Balanced;
-
-    /// <summary>判定の強さを反映した日本語判定の閾値 (英数状態の検知)。JapaneseScore がこの値以上、かつ EnglishScore をこの値以上上回ったときだけ切り替える。</summary>
-    [Browsable(false), JsonIgnore]
-    public int EffectiveJapaneseThreshold => 4 + DetectionLevel switch
-    {
-        DetectionLevel.Aggressive => -1,
-        DetectionLevel.Conservative => 3,
-        _ => 0,
-    };
+    [Category("3. 判定"), DisplayName("英語 / 日本語を自動で判定する"),
+     Description("打った英字が英語か日本語 (ローマ字) かを自動で判定し、英語なら英字にします。OFF にすると、Shift で打った大文字で始まる語だけを英字にし、ほかの語は提案だけ出します (変換ボックスで Tab を押すと提案どおり英字に)。英数状態の検知と、確定後の直しもしません。Meltype キーボード・Meltype IME・かな入力のすべてに効きます。")]
+    public bool AutoDetection { get; set; } = true;
 
     /// <summary>config.json の形式のバージョン。古い既定値を持つ設定ファイルを移行するのに使う。</summary>
     [Browsable(false)]
@@ -715,7 +693,7 @@ public sealed class Settings
 
     /// <summary>
     /// 設定画面で変えた項目だけを今の設定 (current) に重ねた設定を返す。opened は画面を開いた時点の画面の値、edited は閉じる時点の画面の値。
-    /// 画面を開いている間にトレイなどで変えた項目 (一時停止・動作モード・判定の強さ・プロファイルなど) は、画面で変えていなければ current のまま。
+    /// 画面を開いている間にトレイなどで変えた項目 (一時停止・動作モード・自動判定・プロファイルなど) は、画面で変えていなければ current のまま。
     /// プロファイルごとの値はプロファイルの名前ごとに比べる。トレイでプロファイルを切り替えても、画面で変えた値は画面で選んでいたプロファイルに入る。
     /// 使っているプロファイルは、画面で切り替えたときだけ画面のものにする。プロファイルの一覧 (足す・名前を変える・消す) は画面のもの (トレイでは切り替えるだけ)。
     /// </summary>
@@ -848,7 +826,7 @@ public sealed class Settings
     [Category("10. アプリ"), DisplayName("アプリ別設定"), WindowsOnly, Description("プロセス名ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
     public List<AppRule> AppRules { get; set; } = DefaultAppRules();
 
-    [Category("10. アプリ"), DisplayName("独自の種類"), WindowsOnly, Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、判定の強さ・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
+    [Category("10. アプリ"), DisplayName("独自の種類"), WindowsOnly, Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
     [Category("11. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。判定した語の先頭の数文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
@@ -898,12 +876,12 @@ public sealed class Settings
     public AppKind? KindFor(string? processName) =>
         FindRule(processName)?.Kind is { Length: > 0 } name ? AppKinds.FirstOrDefault(k => k.Name == name) : null;
 
-    /// <summary>アプリの独自の種類で変えた項目 (判定の強さ・ライブ変換) を反映した設定。変えていなければ自分自身。</summary>
+    /// <summary>アプリの独自の種類で変えた項目 (自動判定・ライブ変換) を反映した設定。変えていなければ自分自身。</summary>
     public Settings ForApp(string? processName)
     {
-        if (KindFor(processName) is not { } kind || (kind.DetectionLevel is null && kind.LiveConversion is null)) return this;
+        if (KindFor(processName) is not { } kind || (kind.AutoDetection is null && kind.LiveConversion is null)) return this;
         var copy = Clone();
-        if (kind.DetectionLevel is { } level) copy.DetectionLevel = level;
+        if (kind.AutoDetection is { } auto) copy.AutoDetection = auto;
         if (kind.LiveConversion is { } live) copy.LiveConversion = live;
         return copy;
     }
@@ -1004,7 +982,8 @@ public sealed class Settings
     }
 
     /// <summary>
-    /// v8: 同時に ON にすると片方が負ける真偽値の組を 1 つの選択肢にまとめ、アプリの一覧の文字列 (PasteApps・NoPasteApps・TextInputApps) をアプリ別設定の項目に移した。
+    /// v8: 同時に ON にすると片方が負ける真偽値の組を 1 つの選択肢にまとめ、自動判定の強さ (DetectionLevel) を AutoDetection のオン・オフにし、
+    /// アプリの一覧の文字列 (PasteApps・NoPasteApps・TextInputApps) をアプリ別設定の項目に移した。
     /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
     /// 消した項目 (JapaneseThreshold・TypoEnabled・MaxPendingKeys・ImeTimeoutMs・LogKeyIntervals) と、state.json に移した項目 (AppState) は、読み込みで無視されて次の保存で消える。
     /// </summary>
@@ -1026,6 +1005,16 @@ public sealed class Settings
             () => Flag("MacControlKeys", false) ? ControlKeyLayout.Mac : Flag("CompatibleShortcuts", false) ? ControlKeyLayout.Atok : ControlKeyLayout.Standard);
         Replace(nameof(ModeIndicator), ["ShowModeIndicator", "ShowModeIndicatorOnFocus"],
             () => !Flag("ShowModeIndicator", true) ? ModeIndicatorTiming.Never : Flag("ShowModeIndicatorOnFocus", true) ? ModeIndicatorTiming.OnSwitchAndFocus : ModeIndicatorTiming.OnSwitch);
+
+        // 自動判定の強さ (積極的・標準・慎重・手動) は、手動だけを AutoDetection の OFF にする (積極的・慎重は標準として読む: #1232)。数値で書いたものは 3 が手動
+        static bool? Manual(JsonNode? level) => level is not JsonValue value ? null
+            : value.TryGetValue<string>(out var name) ? string.Equals(name, "Manual", StringComparison.OrdinalIgnoreCase)
+            : value.TryGetValue<int>(out var number) ? number == 3 : null;
+        if (values.Remove("DetectionLevel", out var level) && Manual(level) == true) values[nameof(AutoDetection)] = false;
+        foreach (var kind in (values[nameof(AppKinds)] as JsonArray ?? []).OfType<JsonObject>())
+        {
+            if (kind.Remove("DetectionLevel", out var kindLevel) && Manual(kindLevel) is { } manual) kind[nameof(AppKind.AutoDetection)] = !manual;
+        }
 
         string[] lists = ["PasteApps", "NoPasteApps", "TextInputApps"];
         if (!lists.Any(values.ContainsKey)) return;

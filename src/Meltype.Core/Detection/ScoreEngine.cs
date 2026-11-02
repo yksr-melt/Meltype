@@ -14,6 +14,9 @@ public sealed class ScoreEngine
     /// <summary>判定のために保留する文字数の上限。超えたら判定不能 (Unknown) にする。</summary>
     internal const int MaxPendingKeys = 6;
 
+    /// <summary>日本語判定の閾値。JapaneseScore がこの値以上、かつ EnglishScore をこの値以上上回ったときだけ日本語にする。</summary>
+    internal const int JapaneseThreshold = 4;
+
     private readonly RomajiDetector _romaji;
     private readonly KanaDetector _kana;
     private readonly EnglishDetector _english;
@@ -55,7 +58,7 @@ public sealed class ScoreEngine
     /// <summary>設定画面の判定テスト用に、保存前の設定で判定できるようにしてある。</summary>
     public DetectionResult Evaluate(DetectionInput input, Settings settings)
     {
-        var threshold = Math.Max(2, settings.EffectiveJapaneseThreshold);
+        const int threshold = JapaneseThreshold;
         // c 行 (ca / cu / co = か く こ) は k に読み替えてローマ字・日本語の辞書で調べる (fucarete = fukarete)。英語の判定は打ったまま。
         var letters = RomajiDetector.ReadCRow(input.Letters);
         var original = input.Letters;

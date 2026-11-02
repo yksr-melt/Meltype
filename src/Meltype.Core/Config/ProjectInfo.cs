@@ -112,7 +112,7 @@ public static class ProjectInfo
         $"Meltype: {CoreVersion} ({platform}、プレビュー版)",
         $"OS: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})",
         $".NET: {System.Environment.Version}",
-        $"自動判定の強さ: {settings.DetectionLevel}",
+        $"自動判定: {(settings.AutoDetection ? "ON" : "OFF")}",
         $"入力方式: {settings.InputStyle}",
         $"ライブ変換: {(settings.LiveConversion ? "ON" : "OFF")}",
         $"言語: {System.Globalization.CultureInfo.CurrentUICulture.Name}",

@@ -233,8 +233,8 @@ public sealed class MeltypeSession
         var options = shared.Options with
         {
             LiveConversion = () => settings.LiveConversion,
-            AutoCorrect = () => settings.AutoCorrectAfterCommit && settings.DetectionLevel != DetectionLevel.Manual,
-            Level = () => settings.DetectionLevel,
+            AutoCorrect = () => settings.AutoCorrectAfterCommit && settings.AutoDetection,
+            Manual = () => !settings.AutoDetection,
             // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
             // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
             UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory),

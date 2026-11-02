@@ -163,8 +163,8 @@ internal static class CompositionTests
         private static RomajiTypoCorrector Typos => SharedTypos.Value;
         private bool _directEnglishWord;
 
-        /// <summary>自動判定の強さ。</summary>
-        public Meltype.Config.DetectionLevel Level { get; set; } = Meltype.Config.DetectionLevel.Balanced;
+        /// <summary>自動判定を使わない (設定 AutoDetection が OFF)。</summary>
+        public bool Manual { get; set; }
 
         private bool _shiftHeld;
 
@@ -260,7 +260,7 @@ internal static class CompositionTests
                 History = history ?? new ConversionHistory(null),
                 MoreCandidates = moreCandidates,
                 UserDictionary = userDictionary,
-                Level = () => Level,
+                Manual = () => Manual,
                 KanaInput = () => Kana,
                 Misspellings = Misspellings,
                 Languages = languages,
@@ -324,7 +324,7 @@ internal static class CompositionTests
                 return true;
             }
             var letter = VirtualKeys.IsLetter(k.Vk);
-            if (Direct) return letter && !_directEnglishWord && Level != Meltype.Config.DetectionLevel.Manual;
+            if (Direct) return letter && !_directEnglishWord && !Manual;
             if (Kana && Detection.KanaDetector.IsKanaKey(k.Vk)) return true;
             if (k.Vk == VirtualKeys.Space && (_shiftHeld || SpaceWidth == Meltype.Config.SpaceWidth.FullWidth && !Direct)) return true;
             return letter || k.Vk is >= 0x30 and <= 0x39 or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;

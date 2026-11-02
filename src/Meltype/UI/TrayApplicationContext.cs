@@ -27,7 +27,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Icon _directIcon = CreateIcon("A", Color.FromArgb(0, 120, 212));
     private readonly Icon _offIcon = CreateIcon("A", Color.FromArgb(120, 120, 120));
     private readonly ToolStripMenuItem _keyboardModeItem;
-    private readonly ToolStripMenuItem _levelItem;
+    private readonly ToolStripMenuItem _autoDetectionItem;
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
@@ -67,8 +67,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             DirectMode = () => _engine.KeyboardDirect,
             ClassifyDirect = _engine.ClassifyDirect,
             DirectDecided = _engine.OnDirectDecided,
-            AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.DetectionLevel != DetectionLevel.Manual,
-            Level = () => _engine.AppSettings.DetectionLevel,
+            AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.AutoDetection,
+            Manual = () => !_engine.AppSettings.AutoDetection,
             Engine = () => _engine.Settings.ConversionEngine,
             UseZenzai = () => _engine.Settings.UseZenzai,
             ZenzaiServerPath = () => _engine.Settings.ZenzaiServerPath,
@@ -138,13 +138,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_enabledItem);
         if (!AppPaths.IsPortable) menu.Items.Add(_tsfModeItem);
         menu.Items.Add(_keyboardModeItem);
-        // 自動判定の強さ (積極的 / 標準 / 慎重 / 手動)
-        _levelItem = new ToolStripMenuItem("自動判定の強さ");
-        foreach (var level in Enum.GetValues<DetectionLevel>())
-        {
-            _levelItem.DropDownItems.Add(new ToolStripMenuItem(LevelName(level), null, (_, _) => SetLevel(level)) { Tag = level });
-        }
-        menu.Items.Add(_levelItem);
+        // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
+        _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
+        menu.Items.Add(_autoDetectionItem);
         // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
         _profileItem = new ToolStripMenuItem("プロファイル");
         _profileItem.DropDownItems.Add("(読み込み中)");
@@ -473,14 +469,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_engine.Settings.ShowNotifications) ShowBalloonTip(1500, "Meltype", _engine.Enabled ? "Meltype を有効にしました" : "Meltype を一時停止しました");
     }
 
-    private static string LevelName(DetectionLevel level) => level switch
-    {
-        DetectionLevel.Aggressive => "積極的 (英語らしければすぐ英字)",
-        DetectionLevel.Balanced => "標準",
-        DetectionLevel.Conservative => "慎重 (確信度が高いときだけ英字)",
-        _ => "手動 (提案のみ・Tab で英字)",
-    };
-
     /// <summary>
     /// 不具合の報告の画面 (GitHub のアカウントが無くても報告できる)。実行環境とログを見せ、ログはコピーボタンで、フォームはボタンで開く。
     /// ログは URL に入れない (履歴に残る・長さの上限がある)。
@@ -543,10 +531,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         settings.ShowNotifications && !Diagnostics.ShortcutExclusions.HasPending
             ? $"プロファイルを「{settings.ActiveProfile}」にしました" : null;
 
-    private void SetLevel(DetectionLevel level)
+    private void ToggleAutoDetection()
     {
         var next = _engine.Settings.Clone();
-        next.DetectionLevel = level;
+        next.AutoDetection = !next.AutoDetection;
         _engine.ApplySettings(next);
         UpdateStatus();
     }
@@ -576,8 +564,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // (選ぶとキーボードフックが止まり、どこでも何も起きなくなる)
         var registered = Tip.TipServer.IsRegistered;
         _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable;
-        foreach (ToolStripMenuItem item in _levelItem.DropDownItems) item.Checked = item.Tag is DetectionLevel level && level == settings.DetectionLevel;
-        _levelItem.Text = $"自動判定の強さ: {LevelName(settings.DetectionLevel).Split(' ')[0]}";
+        _autoDetectionItem.Checked = settings.AutoDetection;
         _profileItem.Text = $"プロファイル: {settings.ActiveProfile}";
 
         string status;

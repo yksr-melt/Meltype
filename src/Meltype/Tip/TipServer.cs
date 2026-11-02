@@ -616,7 +616,7 @@ internal sealed class TipServer : IDisposable
         var processName = string.IsNullOrWhiteSpace(process) || process.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? process
             : process + ".exe";
-        return settings.DirectModeAutoDetect && settings.ForApp(processName).DetectionLevel != DetectionLevel.Manual;
+        return settings.DirectModeAutoDetect && settings.ForApp(processName).AutoDetection;
     }
 
     internal static Point? IndicatorAnchor(JsonElement root) =>

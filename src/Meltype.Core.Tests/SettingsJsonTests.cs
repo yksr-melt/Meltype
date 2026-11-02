@@ -63,7 +63,7 @@ internal static class SettingsJsonTests
             {
                 SpaceAroundEnglish = true,
                 InputStyle = InputStyle.Kana,
-                DetectionLevel = DetectionLevel.Manual,
+                AutoDetection = false,
                 Mode = InputMode.Keyboard,
             }.Normalize();
             original.Save(path);
@@ -71,7 +71,7 @@ internal static class SettingsJsonTests
             var loaded = Settings.Load(path);
             Assert.True(loaded.SpaceAroundEnglish, "空白設定を読み込む");
             Assert.Equal(InputStyle.Kana, loaded.InputStyle);
-            Assert.Equal(DetectionLevel.Manual, loaded.DetectionLevel);
+            Assert.True(!loaded.AutoDetection, "自動判定 OFF を読み込む");
             Assert.Equal(InputMode.Keyboard, loaded.Mode);
             Assert.True(!File.Exists(path + ".broken"), "有効な設定を壊れたファイルとして扱わない");
         }
@@ -196,8 +196,10 @@ internal static class SettingsJsonTests
                   "PasteApps": "Resolve.exe, foo.exe", "NoPasteApps": "LINE.exe", "TextInputApps": "Adobe Premiere Pro.exe;a.exe b.exe",
                   "AppRules": [ { "Process": "line.exe", "Enabled": false, "Profile": "General" } ],
                   "JapaneseThreshold": 12, "TypoEnabled": false, "MaxPendingKeys": 3, "ImeTimeoutMs": 500, "LogKeyIntervals": true,
+                  "DetectionLevel": "Conservative",
+                  "AppKinds": [ { "Name": "チャット", "DetectionLevel": "Manual" }, { "Name": "仕事", "DetectionLevel": "Aggressive" }, { "Name": "ゲーム" } ],
                   "ActiveProfile": "標準",
-                  "Profiles": [ { "Name": "標準" }, { "Name": "趣味", "Values": { "FullWidthSlash": true, "MacControlKeys": true, "CompatibleShortcuts": true, "ShowModeIndicator": false, "FullWidthSpaceByDefault": true, "ShiftSpaceHalfWidth": true } } ]
+                  "Profiles": [ { "Name": "標準" }, { "Name": "趣味", "Values": { "FullWidthSlash": true, "MacControlKeys": true, "CompatibleShortcuts": true, "ShowModeIndicator": false, "FullWidthSpaceByDefault": true, "ShiftSpaceHalfWidth": true, "DetectionLevel": 3 } } ]
                 }
                 """);
             var loaded = Settings.Load(path);
@@ -211,16 +213,19 @@ internal static class SettingsJsonTests
             Assert.True(!loaded.IsAppEnabled("LINE.exe"), "前からあったアプリ別設定 (大文字小文字の違う名前) に足し、OFF のまま");
             Assert.True(loaded.TreatsAsTextInput("Adobe Premiere Pro.exe") && loaded.TreatsAsTextInput("a.exe") && loaded.TreatsAsTextInput("b.exe"), "入力欄とみなすアプリ (空白区切りの .exe の並びも分ける)");
             Assert.True(!loaded.TreatsAsTextInput("foo.exe"), "書いていないアプリは入力欄とみなさない");
+            Assert.True(loaded.AutoDetection, "慎重 → 自動判定 ON (#1232)");
+            Assert.Equal("False,True,", string.Join(",", loaded.AppKinds.Select(k => k.AutoDetection)), "独自の種類の 手動 → OFF・積極的 → ON・指定なし → 全体と同じ");
 
             var hobby = loaded.SwitchProfile("趣味");
             Assert.Equal(SlashStyle.FullWidth, hobby.Slash, "プロファイルの中も移す");
             Assert.Equal(ControlKeyLayout.Mac, hobby.ControlKeys, "macOS 風と ATOK 風の両方なら macOS 風");
             Assert.Equal(ModeIndicatorTiming.Never, hobby.ModeIndicator);
             Assert.Equal(SpaceWidth.FullWidth, hobby.SpaceWidth, "スペースを全角で入力が優先 (前も Shift + Space で半角だった)");
+            Assert.True(!hobby.AutoDetection, "数値で書いた 手動 (3) → 自動判定 OFF");
 
             var saved = File.ReadAllText(path);
             foreach (var key in new[] { "SlashAsMiddleDot", "FullWidthSlash", "ShiftSpaceHalfWidth", "FullWidthSpaceByDefault", "CompatibleShortcuts", "MacControlKeys",
-                         "ShowModeIndicator\"", "ShowModeIndicatorOnFocus", "PasteApps", "NoPasteApps", "TextInputApps", "JapaneseThreshold", "TypoEnabled", "MaxPendingKeys", "ImeTimeoutMs", "LogKeyIntervals" })
+                         "ShowModeIndicator\"", "ShowModeIndicatorOnFocus", "PasteApps", "NoPasteApps", "TextInputApps", "JapaneseThreshold", "TypoEnabled", "MaxPendingKeys", "ImeTimeoutMs", "LogKeyIntervals", "DetectionLevel" })
                 Assert.True(!saved.Contains(key), $"移した・消した項目は保存しない: {key}");
             Assert.True(saved.Contains($"\"SettingsVersion\": {Settings.CurrentVersion}"), "版を上げて保存する");
             Assert.Equal(loaded.ToJson(), Settings.Load(path).ToJson(), "保存したものを読み直しても同じ");

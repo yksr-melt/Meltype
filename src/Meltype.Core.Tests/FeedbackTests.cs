@@ -8,25 +8,25 @@ using Meltype.Input;
 
 namespace Meltype.Tests;
 
-/// <summary>協力者のテストで報告された問題 (2026-09) と、判定の強さ (Aggressive / Balanced / Conservative / Manual)。</summary>
+/// <summary>協力者のテストで報告された問題 (2026-09) と、自動判定を使わないとき (Manual)。</summary>
 internal static class FeedbackTests
 {
-    private static string Showing(string typed, string? before = null, DetectionLevel level = DetectionLevel.Balanced)
+    private static string Showing(string typed, string? before = null, bool manual = false)
     {
-        var k = new CompositionTests.Keyboard { Level = level };
+        var k = new CompositionTests.Keyboard { Manual = manual };
         k.Host.PrecedingText = before;
         k.Type(typed);
         return k.Showing ?? "";
     }
 
     /// <summary>Windows のスペルチェッカーを使って打つ (使えない環境では null)。</summary>
-    private static string? TypeWithSpellChecker(string typed, DetectionLevel level = DetectionLevel.Balanced)
+    private static string? TypeWithSpellChecker(string typed)
     {
         if (TestSupport.WordChecker is not { IsAvailable: true } checker) return null;
         CompositionTests.Detector.SpellChecker = checker;
         try
         {
-            var k = new CompositionTests.Keyboard { Level = level };
+            var k = new CompositionTests.Keyboard();
             k.Type(typed);
             return k.Host.Document;
         }
@@ -367,7 +367,6 @@ internal static class FeedbackTests
             Assert.Equal(expected, Showing(typed, before: "GitHub"), $"GitHub + {typed}");
             Assert.Equal(expected, Showing(typed, before: "今日は GitHub "), $"今日は GitHub + {typed}");
         }
-        Assert.Equal("no", Showing("no", before: "GitHub", level: DetectionLevel.Aggressive), "積極的なら英語");
     }
 
     [Test]
@@ -379,18 +378,15 @@ internal static class FeedbackTests
     }
 
     [Test]
-    public static void Levels_ChangeHowEagerlyEnglishIsShown()
+    public static void Sushi_AfterEnglishSentence_IsEnglish()
     {
         Assert.Equal("sushi", Showing("sushi", before: "I like "), "英文の後");
-        Assert.Equal("すし", Showing("sushi", before: "I ", level: DetectionLevel.Conservative), "慎重: 1 語だけの文脈では英語にしない");
-        Assert.Equal("google", Showing("google", level: DetectionLevel.Conservative), "慎重でもローマ字として読めない英単語は英語");
-        Assert.Equal("あまぞn", Showing("amazon", level: DetectionLevel.Conservative), "慎重: ローマ字として読める固有名詞は日本語のまま");
     }
 
     [Test]
     public static void Manual_OnlySuggests_TabAccepts()
     {
-        var k = new CompositionTests.Keyboard { Level = DetectionLevel.Manual };
+        var k = new CompositionTests.Keyboard { Manual = true };
         k.Type("google");
         Assert.Equal("ごおgぇ", k.Showing, "手動: 自動では英字にしない");
         Assert.Equal("Tab → google (英字に)", k.Host.View!.ContextHint, "手動の提案は固定の操作一覧と分けて返す");
@@ -402,7 +398,7 @@ internal static class FeedbackTests
         k.Type("\n");
         Assert.Equal("google", k.Host.Document);
 
-        Assert.Equal("Google", Showing("Google", level: DetectionLevel.Manual), "Shift で打った大文字始まりは手動でも英語");
+        Assert.Equal("Google", Showing("Google", manual: true), "Shift で打った大文字始まりは手動でも英語");
     }
 
     [Test]
@@ -435,7 +431,7 @@ internal static class FeedbackTests
 
 internal static class KanaInputTests
 {
-    private static CompositionTests.Keyboard Kana(DetectionLevel level = DetectionLevel.Balanced) => new() { Kana = true, Level = level };
+    private static CompositionTests.Keyboard Kana(bool manual = false) => new() { Kana = true, Manual = manual };
 
     [Test]
     public static void KanaKeys_ProduceKana()
@@ -547,14 +543,14 @@ internal static class KanaInputTests
     }
 
     [Test]
-    public static void KanaInput_FollowsLevels()
+    public static void KanaInput_FollowsManual()
     {
-        var manual = Kana(DetectionLevel.Manual);
+        var manual = Kana(manual: true);
         manual.TypeKanaKeys("google");
         Assert.Equal("きららきりい", manual.Showing, "手動: 自動では英字にしない");
         Assert.True(manual.Host.View!.Hint.Contains("Tab → google"), manual.Host.View.Hint);
 
-        var shift = Kana(DetectionLevel.Manual);
+        var shift = Kana(manual: true);
         shift.TypeKanaKeys("Google");
         Assert.Equal("Google", shift.Showing, "Shift で打った大文字始まりは英語");
     }
@@ -700,13 +696,13 @@ internal static class CodeProfileTests
         // 報告: アプリ別設定の種類を、一般とコードだけでなく自分で作れるように。
         var settings = new Settings
         {
-            DetectionLevel = DetectionLevel.Balanced,
-            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, DetectionLevel = DetectionLevel.Aggressive, LiveConversion = false, StartInEnglish = true }],
+            AutoDetection = true,
+            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false, StartInEnglish = true }],
             AppRules = [new AppRule { Process = "Discord.exe", Kind = "チャット" }, new AppRule { Process = "Code.exe", Profile = AppProfile.Code }],
         };
-        Assert.Equal(DetectionLevel.Aggressive, settings.ForApp("discord.exe").DetectionLevel, "独自の種類の判定の強さ");
+        Assert.True(!settings.ForApp("discord.exe").AutoDetection, "独自の種類の自動判定");
         Assert.True(!settings.ForApp("Discord.exe").LiveConversion, "独自の種類のライブ変換");
-        Assert.Equal(DetectionLevel.Balanced, settings.ForApp("chrome.exe").DetectionLevel, "ほかのアプリは全体の設定");
+        Assert.True(settings.ForApp("chrome.exe").AutoDetection, "ほかのアプリは全体の設定");
         Assert.True(settings.KindFor("Discord.exe")?.StartInEnglish == true, "最初は英数");
         Assert.Equal(AppProfile.Code, settings.ProfileFor("Code.exe"));
 
@@ -716,7 +712,7 @@ internal static class CodeProfileTests
             settings.Save(path);
             var loaded = Settings.Load(path);
             Assert.Equal("チャット", loaded.KindFor("Discord.exe")?.Name, "保存して読み込んでも種類を保つ");
-            Assert.Equal(DetectionLevel.Aggressive, loaded.Clone().ForApp("Discord.exe").DetectionLevel, "複製しても保つ");
+            Assert.True(!loaded.Clone().ForApp("Discord.exe").AutoDetection, "複製しても保つ");
         }
         finally
         {
@@ -1180,14 +1176,14 @@ internal static class LanguageLearningTests
         try
         {
             var config = Path.Combine(dir, "config.json");
-            File.WriteAllText(config, "{\n  // コメント\n  \"FileLog\": true,\n  \"Mode\": \"Keyboard\",\n  \"DetectionLevel\": \"Conservative\",\n  \"AppRules\": [{ \"Process\": \"code.exe\", \"Profile\": \"Code\" }],\n}");
+            File.WriteAllText(config, "{\n  // コメント\n  \"FileLog\": true,\n  \"Mode\": \"Keyboard\",\n  \"Punctuation\": \"FullWidthCommaPeriod\",\n  \"AppRules\": [{ \"Process\": \"code.exe\", \"Profile\": \"Code\" }],\n}");
             var settings = Settings.Load(config);
             Assert.True(settings.FileLog, "FileLog");
-            Assert.Equal(DetectionLevel.Conservative, settings.DetectionLevel);
+            Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, settings.Punctuation);
             Assert.Equal(AppProfile.Code, settings.ProfileFor("code.exe"));
             Assert.True(!File.Exists(config + ".broken"), "壊れたとみなさない");
             settings.Save(config);
-            Assert.True(File.ReadAllText(config).Contains("\"DetectionLevel\": \"Conservative\""), "列挙型は名前で保存する");
+            Assert.True(File.ReadAllText(config).Contains("\"Punctuation\": \"FullWidthCommaPeriod\""), "列挙型は名前で保存する");
 
             var languages = Path.Combine(dir, "languages.json");
             File.WriteAllText(languages, "{\"emoji\":{\"English\":true,\"Used\":\"2026-10-01T00:00:00Z\",\"Count\":3,\"Explicit\":true}}");

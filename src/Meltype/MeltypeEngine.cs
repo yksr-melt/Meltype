@@ -58,7 +58,7 @@ internal sealed class MeltypeEngine : IDisposable
 
     public Settings Settings => _settings;
 
-    /// <summary>前面のアプリの独自の種類 (判定の強さ・ライブ変換) を反映した設定。</summary>
+    /// <summary>前面のアプリの独自の種類 (自動判定・ライブ変換) を反映した設定。</summary>
     public Settings AppSettings => _settings.ForApp(_foreground.Current.ProcessName);
 
     public void Start()
@@ -723,7 +723,7 @@ internal sealed class MeltypeEngine : IDisposable
         {
             // 英数状態: ローマ字かどうかを判定するために、単語の打ち始めの英字だけを受け取る。
             // 英語と分かった単語の続きは、区切り (Space など) まで素通しする。
-            if (!letter || !settings.DirectModeAutoDetect || settings.ForApp(_foreground.Current.ProcessName).DetectionLevel == DetectionLevel.Manual || _directEnglishWord) return false;
+            if (!letter || !settings.DirectModeAutoDetect || !settings.ForApp(_foreground.Current.ProcessName).AutoDetection || _directEnglishWord) return false;
         }
         else if (!reconvert && !letter && !punctuation)
         {
@@ -879,7 +879,7 @@ internal sealed class MeltypeEngine : IDisposable
             try { next.Save(_configPath); }
             catch (Exception ex) { Log.Warn($"config.json を保存できませんでした: {ex.Message}"); }
         }
-        Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 判定の強さ: {next.DetectionLevel}, 閾値: {next.EffectiveJapaneseThreshold}, 入力方式: {next.InputStyle})。");
+        Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 自動判定: {(next.AutoDetection ? "ON" : "OFF")}, 入力方式: {next.InputStyle})。");
         StatusChanged?.Invoke();
     }
 

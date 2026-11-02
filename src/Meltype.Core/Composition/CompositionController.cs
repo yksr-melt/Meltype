@@ -201,8 +201,8 @@ public sealed record CompositionOptions
     /// <summary>ユーザー辞書 (変換で最優先に使う)。</summary>
     public UserDictionary? UserDictionary { get; init; }
 
-    /// <summary>英語か日本語かの自動判定の強さ。</summary>
-    public Func<DetectionLevel> Level { get; init; } = () => DetectionLevel.Balanced;
+    /// <summary>英語か日本語かの自動判定を使わないか (設定 AutoDetection が OFF)。</summary>
+    public Func<bool> Manual { get; init; } = () => false;
 
     /// <summary>かな入力 (JIS) か。</summary>
     public Func<bool> KanaInput { get; init; } = () => false;
@@ -402,7 +402,7 @@ public sealed class CompositionController
         _converter = converter;
         _host = host;
         _options = options ?? new CompositionOptions();
-        _text.Level = () => _options.Level();
+        _text.Manual = () => _options.Manual();
         _text.TypoCorrector = _options.RomajiTypos;
         // よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは英語として覚えない。
         if (_options.Languages is { } languages && _options.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
@@ -856,8 +856,8 @@ public sealed class CompositionController
                 FixMisspelling(typo);
                 return;
             case VirtualKeys.Tab when _text.Suggestion() is not null:
-                // 判定の強さが手動: 提案どおり英字にする。
-                _text.LevelOverride = DetectionLevel.Balanced;
+                // 自動判定を使わないとき: 提案どおり英字にする。
+                _text.SuggestionAccepted = true;
                 return;
             case VirtualKeys.Tab when CurrentPredictions().Count > 0:
                 // 予測変換の候補を選ぶ (Tab で次、Shift+Tab で前。最後の次は選ばない状態に戻る)。
@@ -1334,7 +1334,7 @@ public sealed class CompositionController
     private bool SpaceCommitsAlphanumeric() =>
         _text.IsAlphanumericAt(final: true) && !(_text.Mode == DisplayMode.Auto && _text.IsNumeric && _text.Raw.All(char.IsAsciiDigit) && _text.PrecedingEnglish != true);
 
-    private bool SpaceCommitsAutoEnglish() => _text.Mode == DisplayMode.Auto && _detector.IsEnglishAtWordEnd(_text.Raw, _options.Level());
+    private bool SpaceCommitsAutoEnglish() => _text.Mode == DisplayMode.Auto && _detector.IsEnglishAtWordEnd(_text.Raw, _options.Manual());
 
     /// <summary>
     /// Space の分岐で変換を始める (StartConversion に行く) 場面か。Tab で始めるときも同じ場面に限る (issue #219)。
@@ -2810,8 +2810,8 @@ public sealed class CompositionController
             case DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana when automatic.Any(s => s.IsEnglish):
                 memory.Remember(raw, english: false, explicitChoice: true);
                 break;
-            case DisplayMode.Auto when _text.LevelOverride is not null && automatic.All(s => s.IsEnglish):
-                // 判定の強さが手動で、Tab で提案どおり英字にした。
+            case DisplayMode.Auto when _text.SuggestionAccepted && automatic.All(s => s.IsEnglish):
+                // 自動判定を使わないときに、Tab で提案どおり英字にした。
                 memory.Remember(raw, english: true, explicitChoice: true);
                 break;
         }
