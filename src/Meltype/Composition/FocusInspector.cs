@@ -210,7 +210,7 @@ public sealed class FocusInspector : IDisposable
     }
 
     /// <summary>
-    /// 前面のアプリが設定「入力欄とみなすアプリ」にあるか (このクラスのスレッドから呼ばれる)。
+    /// 前面のアプリがアプリ別設定で「入力欄とみなす」か (このクラスのスレッドから呼ばれる)。
     /// そのアプリでは、入力欄と判定できなくてもフォーカスのある所を入力欄として扱う (issue #52)。
     /// </summary>
     public Func<bool>? TreatsAsTextInput { get; set; }
@@ -536,8 +536,8 @@ public sealed class FocusInspector : IDisposable
                     description += " (Affinity のキャンバス)";
                 }
             }
-            // それでも分からないアプリ (Premiere Pro など、画面を自分で描くアプリ) は、設定「入力欄とみなすアプリ」に
-            // 書いてあれば入力欄として扱う。1 文字のショートカットが多いアプリもあるので、既定では何もしない。
+            // それでも分からないアプリ (Premiere Pro など、画面を自分で描くアプリ) は、アプリ別設定で「入力欄とみなす」が
+            // ON なら入力欄として扱う。1 文字のショートカットが多いアプリもあるので、既定では何もしない。
             if (!editable && forced && affinityWindow == IntPtr.Zero)
             {
                 editable = true;

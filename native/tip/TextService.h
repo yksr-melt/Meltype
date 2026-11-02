@@ -172,7 +172,7 @@ private:
     bool directDetection_ = false; // 英数状態でもローマ字検知が有効 (Meltype.exe の応答)
     bool directEnglishWord_ = false;
     bool modeIndicator_ = false;   // 設定「Meltype IME でも入力モードを表示」(応答の modeIndicator。ON のときだけ FlashModeIndicator が動く)
-    bool fullWidthSpace_ = false;  // 設定「スペースを全角で入力」(Meltype.exe の応答の fullWidthSpace。日本語入力のときは Space も受け取る)
+    bool fullWidthSpace_ = false;  // 設定「スペースの幅」が全角か (Meltype.exe の応答の fullWidthSpace。日本語入力のときは Space も受け取る)
     ULONGLONG lastHello_ = 0;
     HWND helloWindow_ = nullptr; // IME のスレッドでタイマーを受ける、表示しないウィンドウ
     std::shared_ptr<PipeClient> helloPipe_; // 設定取得専用。入力用の pipe_ と同時に使える

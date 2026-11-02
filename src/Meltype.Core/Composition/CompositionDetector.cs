@@ -126,11 +126,11 @@ public sealed partial class CompositionDetector
     /// </summary>
     /// <param name="precedingEnglish">入力欄のキャレットの前の確定済みの文字が英語なら true、日本語なら false、分からなければ null。</param>
     /// <param name="followingEnglish">キャレットの後ろの文字が英語なら true、日本語なら false、分からなければ null。</param>
-    /// <param name="level">判定の強さ。手動 (Manual) では Shift で打った大文字始まりの語だけを英語にする。</param>
+    /// <param name="manual">自動判定を使わない (設定 AutoDetection が OFF)。Shift で打った大文字始まりの語だけを英語にする。</param>
     /// <param name="englishSentence">キャレットの前が英文 (空白で区切った英単語が 2 語以上続いて空白で終わる: "I want ")。
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        DetectionLevel level = DetectionLevel.Balanced, bool englishSentence = false, bool kanaInput = false)
+        bool manual = false, bool englishSentence = false, bool kanaInput = false)
     {
         // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の Segment 呼び出しの間だけ、
         // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
@@ -140,7 +140,7 @@ public sealed partial class CompositionDetector
         if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
             (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
             return [new CompositionSegment(true, "", token)];
-        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, level, englishSentence && precedingEnglish == true, kanaInput);
+        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
     }
 
     /// <summary>
@@ -149,7 +149,7 @@ public sealed partial class CompositionDetector
     public IReadOnlyList<CompositionSegment> SegmentLeaningEnglish(IReadOnlyList<CompositionUnit> units)
     {
         Prepare(units);
-        return FindSpansByReading(units, "", null, null, DetectionLevel.Balanced, false, false, LeaningEnglishBias);
+        return FindSpansByReading(units, "", null, null, false, false, false, LeaningEnglishBias);
     }
 
     /// <summary>
@@ -197,9 +197,9 @@ public sealed partial class CompositionDetector
     /// Space を押した時点で、かなにならない子音が残る英単語か (my, by, meeting)。日本語として変換しても子音が残るだけなので、
     /// 英語として確定して空白を入れる。
     /// </summary>
-    public bool IsEnglishAtWordEnd(string raw, DetectionLevel level)
+    public bool IsEnglishAtWordEnd(string raw, bool manual)
     {
-        if (level == DetectionLevel.Manual || raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return false;
+        if (manual || raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return false;
         var lower = raw.ToLowerInvariant();
         var analysis = _romaji.Analyze(lower);
         if (!analysis.IsValid || analysis.Partial.Length == 0 || analysis.Partial is "n" or "nn") return false;
@@ -353,9 +353,9 @@ public sealed partial class CompositionDetector
     /// 入力先頭のドットファイル (.gitignore / .env / .dll) の終わり。無ければ -1 (issue #431)。
     /// 途中の 3.14desu や「です。」の . には使わない (start == 0 のときだけ)。
     /// </summary>
-    private int LeadingDotfileEnd(IReadOnlyList<CompositionUnit> units, int start, string pending, DetectionLevel level)
+    private int LeadingDotfileEnd(IReadOnlyList<CompositionUnit> units, int start, string pending, bool manual)
     {
-        if (level == DetectionLevel.Manual || start != 0 || units.Count == 0 || units[0].Raw != ".") return -1;
+        if (manual || start != 0 || units.Count == 0 || units[0].Raw != ".") return -1;
         var end = DotSuffixEnd(units, 1, pending);
         return end > 1 ? end : -1;
     }
