@@ -526,7 +526,10 @@ private:
     // Falkon のプライベートモード) ので、それらで日本語が打てなくならないよう、
     // アプリ名でロック画面に限る。
     static bool isLockScreen(const fcitx::InputContext *ic) {
-        static const char *const programs[] = {"kscreenlocker_greet", "kscreenlocker"};
+        // 名前は /usr/lib/kscreenlocker_greet のバイナリに埋まっている 2 つ (実行ファイル名と
+        // app id)。Wayland では入力コンテキストの program が空になることもあるので、
+        // 実機で確かめた値をここに残すこと。
+        static const char *const programs[] = {"kscreenlocker_greet", "org.kde.kscreenlocker"};
         for (const char *name : programs) {
             if (ic->program() == name) return true;
         }
