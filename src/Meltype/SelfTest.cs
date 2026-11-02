@@ -67,7 +67,7 @@ internal static class SelfTest
         detector.SpellChecker = WindowsSpellChecker.Shared;
         Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
-        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温") ?? "(なし)");
+        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温", "厚い", _ => null) ?? "(なし)");
         Check("ユーザー辞書", () => new UserDictionary(null).Add("きごうとう", "記号等") ?? "登録できる");
         using (var converter = new MsImeKanjiConverter())
         {
@@ -86,7 +86,7 @@ internal static class SelfTest
             invoker.CreateControl();
             using var service = new CompositionService(invoker, detector, new CompositionOptions { UserDictionary = new UserDictionary(null), History = new ConversionHistory(null) });
             var names = new List<string>();
-            foreach (var form in new Form[] { new UI.SettingsForm(engine), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
+            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
             {
                 using (form)
                 {
@@ -103,8 +103,8 @@ internal static class SelfTest
         {
             // トレイのアイコン・メニュー・ホットキーを作ってすぐ閉じる (キーボードフックは掛けない)。
             // TsfIntroduced にしておく (作る人の PC に Meltype IME があると、入力方式が Meltype IME に切り替わってしまう)。
-            using var engine = new MeltypeEngine(new Config.Settings { TsfIntroduced = true }, null, null);
-            var tray = new UI.TrayApplicationContext(engine);
+            using var engine = new MeltypeEngine(new Config.Settings(), null, null);
+            var tray = new UI.TrayApplicationContext(engine, new Config.AppState { TsfIntroduced = true });
             tray.ExitThread();
             return "OK";
         });
