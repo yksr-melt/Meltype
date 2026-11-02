@@ -61,7 +61,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             UserDictionary = UserDictionary,
             MoreCandidates = options.MoreCandidates ?? (reading => _hybrid.Candidates(reading)),
             AutoCorrect = options.AutoCorrect,
-            Level = options.Level,
+            Manual = options.Manual,
             KanaInput = options.KanaInput,
             KanaLayout = options.KanaLayout,
             RomajiLayout = options.RomajiLayout,
@@ -80,30 +80,26 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             Meanings = options.Meanings ?? MeaningDictionary.Load(),
             RomajiTypos = options.RomajiTypos ?? RomajiTypoCorrector.Load(detector.Romaji),
             CorrectTypos = options.CorrectTypos,
-            SlashAsMiddleDot = options.SlashAsMiddleDot,
+            Slash = options.Slash,
             ZSymbols = options.ZSymbols,
             SpaceAroundEnglish = options.SpaceAroundEnglish,
             SpaceAroundNumbers = options.SpaceAroundNumbers,
             NumberKeysSelectCandidates = options.NumberKeysSelectCandidates,
-            ShiftSpaceHalfWidth = options.ShiftSpaceHalfWidth,
+            SpaceWidth = options.SpaceWidth,
             EnterCommitsAsShown = options.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = options.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = options.FullWidthParentheses,
-            FullWidthSlash = options.FullWidthSlash,
             SquareBrackets = options.SquareBrackets,
             EscStepsBack = options.EscStepsBack,
             EscRevertsSelectedClause = options.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = options.FunctionKeysAffectSelectedClause,
-            CompatibleShortcuts = options.CompatibleShortcuts,
+            ControlKeys = options.ControlKeys,
             PartialCommit = options.PartialCommit,
-            MacControlKeys = options.MacControlKeys,
             CursorIntoBrackets = options.CursorIntoBrackets,
             ControlKeyBindings = options.ControlKeyBindings,
             CalculatorCandidates = options.CalculatorCandidates,
-            LogKeyIntervals = options.LogKeyIntervals,
             LaughterAfterKana = options.LaughterAfterKana,
             ContextualLearning = options.ContextualLearning,
-            FullWidthSpaceByDefault = options.FullWidthSpaceByDefault,
             ShowCandidatesWhileTyping = options.ShowCandidatesWhileTyping,
             GitHubIssueCandidates = options.GitHubIssueCandidates,
             GitHubRepository = options.GitHubRepository,
@@ -355,7 +351,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// <summary>入力欄にフォーカスが移ったときに、次に打つキーのモード (あ / A) を出す (フォーカスを調べるスレッドから呼ばれる)。null なら英数 / 日本語 をそのまま出す。</summary>
     public Action? ShowModeOnFocus { get; set; }
 
-    /// <summary>前面のアプリで、確定した文字を貼り付けで入れるか (設定の「貼り付けで入力するアプリ」)。</summary>
+    /// <summary>前面のアプリで、確定した文字を貼り付けで入れるか (アプリ別設定の「確定した文字の入れ方」)。</summary>
     public Func<bool> PasteCommit { get; set; } = () => false;
 
     public void CommitText(string text)

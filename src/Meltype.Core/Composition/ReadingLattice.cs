@@ -14,7 +14,7 @@ namespace Meltype.Composition;
 /// - 綴りを名指しする条件は持たない。
 /// - 知っている英単語は、英単語の書き方の大文字・小文字 (its・Its・ITS・GitHub) のときだけノードにする (iTs は its にしない)。
 /// - 1 文字の英単語 (a・i・u・r) は、前後を英字以外で区切ったときだけノードにする。
-/// - 判定の強さが手動なら、Shift を押して打った大文字で始まる語だけを英語のノードにする。
+/// - 自動判定を使わないなら、Shift を押して打った大文字で始まる語だけを英語のノードにする。
 /// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
 /// </summary>
@@ -55,9 +55,6 @@ public sealed partial class CompositionDetector
     // かな入力の 4 文字以上の知っている英単語に足す: 英字のキーで打ったかな (さっき + かく|ちか = that) が日本語の語に読める分を打ち消す。
     // 3 文字以下 (eh・at・id) は日本語の文の一部が英単語になりやすいので付けない
     private const double KanaInputEnglishBias = -1;
-    // 判定の強さ 積極的・慎重 で、英語のノードごとに足す
-    private const double AggressiveEnglishBias = -0.5;
-    private const double ConservativeEnglishBias = 1;
     // 変換の候補に出す英語寄りの区切りを作るとき英語のノードごとに足す: 英単語 + 切り替え + 付属語 (midi + か = 2.8) が日本語の語 1 つ (みぢか = 1) より軽くなる
     private const double LeaningEnglishBias = -2;
 
@@ -106,7 +103,7 @@ public sealed partial class CompositionDetector
     internal Action<string>? LatticeTrace { get; set; }
 
     private List<CompositionSegment> FindSpansByReading(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        DetectionLevel level, bool englishSentence, bool kanaInput, double extraEnglishBias = 0)
+        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0)
     {
         var text = _preparedRaw + pending;
         var length = text.Length;
@@ -135,8 +132,6 @@ public sealed partial class CompositionDetector
             unknown[p + 1] = unknown[p] + (char.IsAsciiLetter(c) && unreadable ? 1 : 0);
         }
 
-        // 判定の強さ: 英語の候補の重みに足す
-        var englishBias = extraEnglishBias + level switch { DetectionLevel.Aggressive => AggressiveEnglishBias, DetectionLevel.Conservative => ConservativeEnglishBias, _ => 0 };
         var best = new LatticeNode?[length + 1, LatticeState.Count];
         var start = new LatticeState(precedingEnglish switch { true => englishSentence ? Side.Sentence : Side.English, false => Side.Japanese, null => Side.None },
             false, true, precedingEnglish == true, ContextSwitch: precedingEnglish == true);
@@ -216,12 +211,12 @@ public sealed partial class CompositionDetector
             Offer(edge.End, next, new LatticeNode(from.Cost + step + sokuon, from, edge));
         }
 
-        var englishLevel = level != DetectionLevel.Manual;
+        var englishLevel = !manual;
         for (var p = 0; p < length; p++)
         {
             if (!IsBoundary(p)) continue;
             var japanese = JapaneseEdges(units, text, p, unitOf, unitsEnd, pending, kanaInput);
-            var english = EnglishEdges(text, p, unknown, kanaInput, level, IsBoundary, precedingEnglish == true);
+            var english = EnglishEdges(text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
             var unit = p < unitsEnd ? unitAt[p] : -1;
             // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
@@ -234,7 +229,7 @@ public sealed partial class CompositionDetector
             var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(units, unit, pending) : -1;
             if (unit >= 0 && !kanaInput)
             {
-                forced = LeadingDotfileEnd(units, unit, pending, level);
+                forced = LeadingDotfileEnd(units, unit, pending, manual);
                 if (forced < 0) forced = UserNameEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = NumeronymEnd(units, unit, pending);
@@ -290,7 +285,7 @@ public sealed partial class CompositionDetector
         }
         if (LatticeTrace is { } trace)
         {
-            trace($"lattice {text} (level {level}, preceding {precedingEnglish?.ToString() ?? "-"}, following {followingEnglish?.ToString() ?? "-"}, bias {englishBias})");
+            trace($"lattice {text} (manual {manual}, preceding {precedingEnglish?.ToString() ?? "-"}, following {followingEnglish?.ToString() ?? "-"}, bias {englishBias})");
             foreach (var (cost, state, node) in finals.OrderBy(f => f.Cost))
             {
                 var path = new List<string>();
@@ -469,12 +464,12 @@ public sealed partial class CompositionDetector
     /// start から始まる、綴りで決まる候補: 英語 (知っている英単語・知らない英字・短縮形) と、
     /// ユーザーがかなに直して覚えた語 (日本語の語として重み 1)。
     /// </summary>
-    private List<(LatticeEdge, double)> EnglishEdges(string text, int start, int[] unknown, bool kanaInput, DetectionLevel level, Func<int, bool> isBoundary, bool afterEnglish)
+    private List<(LatticeEdge, double)> EnglishEdges(string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
     {
         var edges = new List<(LatticeEdge, double)>();
         if (!char.IsAsciiLetter(text[start])) return edges;
-        // 手動では Shift を押して打った大文字で始まる語だけ
-        if (level == DetectionLevel.Manual && !char.IsAsciiLetterUpper(text[start])) return edges;
+        // 自動判定を使わないときは、Shift を押して打った大文字で始まる語だけ
+        if (manual && !char.IsAsciiLetterUpper(text[start])) return edges;
         var length = text.Length;
         for (var end = start + 1; end <= length && end - start <= MaxSpan; end++)
         {
