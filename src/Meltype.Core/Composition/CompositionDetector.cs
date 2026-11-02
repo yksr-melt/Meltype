@@ -418,14 +418,14 @@ public sealed partial class CompositionDetector
     }
 
     /// <summary>
-    /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。語の始めからの英字・数字が一覧にあるとき (後ろに日本語が続いてもよい)。
+    /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。start からの英字・数字が一覧にあるとき (前後に日本語が続いてもよい)。
     /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
     /// </summary>
     private int ProperNounWithDigitsEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
         if (start >= units.Count || !IsPart(units[start])) return -1;
-        if (start > 0 && units[start - 1].Raw is { Length: > 0 } previous && char.IsAsciiLetterOrDigit(previous[^1])) return -1;
+        // 数字の無い固有名詞 (korehaneovidedesu の neovide) と同じく、文の途中 (koreha|yachi8000|desu) からも引く。
         // 一覧にある一番長い頭 (yachi8000|desu の yachi8000)
         var end = -1;
         for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
