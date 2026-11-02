@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 haru0416-dev
 
+using System.Globalization;
 using System.Reflection;
 using System.Text;
 using Meltype.Composition;
@@ -128,7 +129,7 @@ internal static class LearningSaveTests
             for (var i = 0; i < 600; i++)
             {
                 var reading = heads[random.Next(heads.Length)] + new string((char)random.Next('ぁ', 'ゖ'), random.Next(0, 3));
-                lines.Append($"{reading}\t語{i}\t{random.Next(1, 4)}\t{random.Next(1, 5)}\n");
+                lines.Append(CultureInfo.InvariantCulture, $"{reading}\t語{i}\t{random.Next(1, 4)}\t{random.Next(1, 5)}\n");
             }
             var path = Path.Combine(directory, "phrases.txt");
             File.WriteAllText(path, lines.ToString());
@@ -162,7 +163,7 @@ internal static class LearningSaveTests
             for (var i = 0; i < 400; i++)
             {
                 var reading = heads[random.Next(heads.Length)] + new string((char)random.Next('ぁ', 'ゖ'), random.Next(0, 3)) + i;
-                json.Append($"{(i > 0 ? "," : "")}\"{reading}\":{{\"Text\":\"語{i}\",\"Used\":\"2026-10-0{random.Next(1, 4)}T00:00:00Z\"}}");
+                json.Append(CultureInfo.InvariantCulture, $"{(i > 0 ? "," : "")}\"{reading}\":{{\"Text\":\"語{i}\",\"Used\":\"2026-10-0{random.Next(1, 4)}T00:00:00Z\"}}");
             }
             var path = Path.Combine(directory, "conversions.json");
             File.WriteAllText(path, json.Append('}').ToString());
@@ -175,7 +176,7 @@ internal static class LearningSaveTests
                     Assert.Equal(string.Join("|", expected), string.Join("|", history.TextsStartingWith(prefix)), $"「{prefix}」");
                 }
                 history.Remember("かいぎしつ" + round, "会議室");
-                history.Forget(history.Entries().Last().Reading);
+                history.Forget(history.Entries()[^1].Reading);
             }
         }
         finally

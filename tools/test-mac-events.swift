@@ -100,6 +100,28 @@ struct EventTests {
     equal(client.marked,"")
    }
   }
+  let operationKeys: [(Int, Int)] = [
+   (kVK_ForwardDelete, NSDeleteFunctionKey), (kVK_ANSI_KeypadClear, NSClearLineFunctionKey),
+   (kVK_F1, NSF1FunctionKey), (kVK_F2, NSF2FunctionKey), (kVK_F3, NSF3FunctionKey),
+   (kVK_F4, NSF4FunctionKey), (kVK_F5, NSF5FunctionKey), (kVK_F11, NSF11FunctionKey),
+   (kVK_F12, NSF12FunctionKey), (kVK_F13, NSF13FunctionKey), (kVK_F14, NSF14FunctionKey),
+   (kVK_F15, NSF15FunctionKey), (kVK_F16, NSF16FunctionKey), (kVK_F17, NSF17FunctionKey),
+   (kVK_F18, NSF18FunctionKey), (kVK_F19, NSF19FunctionKey), (kVK_F20, NSF20FunctionKey),
+  ]
+  for (code, scalar) in operationKeys {
+   for converting in [false, true] {
+    check("operation key \(code), converting \(converting)") { controller,client in
+     type(controller,client,"a")
+     if converting { _=key(controller,client," ",code:UInt16(kVK_Space)) }
+     let text=String(UnicodeScalar(scalar)!)
+     let event=NSEvent.keyEvent(with:.keyDown,location:.zero,modifierFlags:[],timestamp:0,windowNumber:0,context:nil,characters:text,charactersIgnoringModifiers:text,isARepeat:false,keyCode:UInt16(code))!
+     precondition(!controller.handle(event,client:client),"operation key must pass through")
+     equal(client.document,"あ");equal(client.marked,"")
+     precondition(!controller.handle(event,client:client),"empty composition must pass through")
+     equal(client.document,"あ")
+    }
+   }
+  }
   check("Backspace at protected boundary") { controller,client in
    type(controller,client,"./z]");_=key(controller,client,"",code:UInt16(kVK_Delete));equal(client.marked,"./z")
    _=key(controller,client,"\r",code:UInt16(kVK_Return));equal(client.document,"./z")

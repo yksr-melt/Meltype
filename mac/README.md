@@ -102,7 +102,7 @@ cd mac
 | <kbd>英数</kbd> / <kbd>かな</kbd> | JIS キーボードで、英数 (直接入力) / 日本語に戻る |
 
 - 先頭か空白の直後に打った `/review`・`$skill`・`@ファイル名` は、空白まで変換せずにそのまま入ります (`SigilWordsDirect` で OFF)
-- 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` (入力メニューの「Meltype のデータフォルダを開く」「Meltype の設定ファイル (config.json) を開く…」)。設定は Windows 版と同じ `config.json` です (自動判定の強さ `DetectionLevel` など)
+- 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` (入力メニューの「Meltype のデータフォルダを開く」「Meltype の設定ファイル (config.json) を開く…」)。設定は Windows 版と同じ `config.json` です (自動判定の強さ `DetectionLevel` など)。同じフォルダーの `config.schema.json` を `config.json` の `"$schema"` に指定すると (入力メニューから作った `config.json` には最初から入っています)、VS Code などのエディターで項目の補完・説明・書き間違いの警告が出ます
 
 ## 入力モードのショートカット (Mac 専用)
 
@@ -174,7 +174,7 @@ Mac 版には登録の画面がないので、データフォルダ (`~/Library/
   ```bash
   ~/Library/Input\ Methods/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource
   ```
-  これで戻らなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。
+  これで戻らなければ、システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype で追加する。macOS 27 では、アプリからの有効化が通らず、この手順が必要になることがある (追加すると、同じログインセッションのまま入力メニューから選べる)。それでも出てこなければ、ログアウトしてログインし直す。`~/Library/Input Methods/Meltype.app` があるか確かめる。
 - **Meltype がいくつも並ぶ**: ターミナルで次を実行する
   ```bash
   "$HOME/Library/Input Methods/Meltype.app/Contents/MacOS/Meltype" --register-input-source

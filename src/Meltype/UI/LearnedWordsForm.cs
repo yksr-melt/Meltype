@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using Meltype.Composition;
 
 namespace Meltype.UI;
@@ -91,13 +92,13 @@ internal sealed class LearnedWordsForm : Form
         foreach (var entry in _languages.Entries().Where(e => filter.Length == 0 || e.Word.Contains(filter, StringComparison.OrdinalIgnoreCase)))
         {
             var row = _languageGrid.Rows.Add(entry.Word, (entry.English ? "英語 (英字のまま)" : "日本語 (かな)") + (entry.Context is { } context ? $"・{context}" : ""), entry.Count,
-                entry.Active ? "有効" : "もう一度で覚える", entry.Used.ToLocalTime().ToString("yyyy/MM/dd"));
+                entry.Active ? "有効" : "もう一度で覚える", entry.Used.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
             _languageGrid.Rows[row].Tag = entry.EntryKey;
         }
         _conversionGrid.Rows.Clear();
         foreach (var (reading, text, used) in _conversions.Entries().Where(e => filter.Length == 0 || e.Reading.Contains(filter) || e.Text.Contains(filter)))
         {
-            var row = _conversionGrid.Rows.Add(reading, text, used.ToLocalTime().ToString("yyyy/MM/dd"));
+            var row = _conversionGrid.Rows.Add(reading, text, used.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
             _conversionGrid.Rows[row].Tag = reading;
         }
         _tabs.TabPages[0].Text = $"英語 / 日本語 ({_languageGrid.Rows.Count})";

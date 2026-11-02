@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Meltype の IBus のコンポーネント。install.sh が @DIR@ をインストール先に置き換えて /usr/share/ibus/component に入れる。 -->
+<!-- build.sh が @VERSION@ を本体の版に、install.sh が @DIR@ をインストール先に置き換える。 -->
 <component>
     <name>org.freedesktop.IBus.Meltype</name>
     <description>Meltype: 半角/全角 を押さずに日本語と英語を打ち分ける日本語入力</description>
     <exec>@DIR@/ibus-engine-meltype --ibus</exec>
-    <version>1.3.0</version>
+    <version>@VERSION@</version>
     <author>Yukishiro</author>
     <license>GPL-3.0-or-later</license>
     <homepage>https://github.com/yksr-melt/Meltype</homepage>

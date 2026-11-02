@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Detection;
@@ -22,12 +23,12 @@ internal static class SelfTest
             try
             {
                 var result = action();
-                report.AppendLine($"OK   {name}: {result}");
+                report.AppendLine(CultureInfo.InvariantCulture, $"OK   {name}: {result}");
             }
             catch (Exception ex)
             {
                 failed++;
-                report.AppendLine($"FAIL {name}: {ex.GetType().Name}: {ex.Message}");
+                report.AppendLine(CultureInfo.InvariantCulture, $"FAIL {name}: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -179,7 +180,7 @@ internal static class SelfTest
         while ((headerEnd = Encoding.ASCII.GetString([.. received]).IndexOf("\r\n\r\n", StringComparison.Ordinal)) < 0 && (read = stream.Read(buffer)) > 0) received.AddRange(buffer[..read]);
         if (headerEnd < 0) return;
         var header = Encoding.ASCII.GetString([.. received], 0, headerEnd);
-        var length = header.Split("\r\n").Select(l => l.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) is { } p ? int.Parse(p[1].Trim()) : 0;
+        var length = header.Split("\r\n").Select(l => l.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) is { } p ? int.Parse(p[1].Trim(), CultureInfo.InvariantCulture) : 0;
         while (received.Count < headerEnd + 4 + length && (read = stream.Read(buffer)) > 0) received.AddRange(buffer[..read]);
         var body = Encoding.UTF8.GetBytes(json);
         stream.Write(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n"));

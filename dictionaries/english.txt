@@ -18,19 +18,19 @@ sumitomo mizuho nomura daikin shimano asics mazinger gundam naruto dragonball do
 # --- 技術用語 ---
 github gitlab bitbucket git svn typescript javascript java python node nodejs npm npx yarn pnpm deno bun
 react vue angular svelte next nuxt vite webpack rollup esbuild babel eslint prettier jest mocha vitest
-docker podman kubernetes kubectl helm terraform ansible aws azure gcp linux ubuntu debian fedora centos
+docker podman kubernetes kubectl helm terraform ansible aws redshift azure gcp linux ubuntu debian fedora centos
 wsl windows macos ios android bash zsh fish powershell pwsh cmd terminal console server client localhost
 http https www html css scss sass json yaml yml toml xml csv sql mysql postgres postgresql sqlite mongodb
 redis nginx apache kafka rabbitmq elasticsearch commit commits push pull merge rebase branch checkout
 clone fetch stash sync synced syncing status diff log init install uninstall update upgrade build run test tests debug deploy
 release config configure setup start stop restart reset revert cherry pick tag tags dev prod staging api
 apis rest graphql grpc sdk cli gui ide vscode vim neovim emacs nano code coding vibe visual studio dotnet csharp cpp
-rust golang kotlin swift ruby rails php laravel django flask fastapi spring boot maven gradle cargo pip
+rust golang kotlin swift swiftui uikit ruby rails php laravel django flask fastapi spring boot maven gradle cargo pip
 pipenv poetry conda venv jupyter notebook pandas numpy scipy matplotlib tensorflow pytorch keras openai
 anthropic claude chatgpt gpt llm discord slack teams zoom notion figma jira confluence trello asana
 google youtube twitter facebook instagram amazon microsoft apple iphone ipad chrome firefox edge safari
 email gmail outlook excel word powerpoint onedrive dropbox admin root sudo chmod chown mkdir rmdir grep
-sed awk curl wget ssh scp sftp ftp tcp udp dns vpn url uri uuid token tokens auth oauth login logout
+sed awk env curl wget ssh scp sftp ftp tcp udp dns vpn url uri uuid token tokens auth oauth login logout
 logon password passwd username user users readme license todo fixme hotfix feature features bugfix bug
 bugs main master origin upstream remote remotes version versions package packages module modules import
 export function functions const let var return async await promise class classes interface type types
@@ -196,7 +196,7 @@ lane logo meta mute nude nuke pane pine poke polo pope rage rake ripe rode rune 
 wade wipe woke wore anime demo dojo emoji kimono karate tsunami typhoon tycoon
 # 技術用語 (日本語の文の中でもそのまま英字で書くことが多い)
 api apis url urls uri json yaml csv pdf png jpg jpeg gif svg html css xml sql ssh ssl tls dns ip tcp udp http https oem
-cpu gpu ram rom ssd hdd usb hdmi wifi bluetooth nfc os ui ux io ai ml llm gpt rag mcp sdk ide cli gui repo repos
+cpu gpu ram rom ssd hdd usb hdmi midi wifi bluetooth nfc os ui ux io ai ml llm gpt rag mcp sdk ide cli gui repo repos
 bug bugs issue issues pull push merge commit commits branch branches deploy build release tag tags diff patch
 token tokens prompt prompts model models agent agents tool tools server servers client clients browser
 

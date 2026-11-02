@@ -13,6 +13,24 @@ namespace Meltype.Tests;
 internal static class WindowsTests
 {
     [Test]
+    public static void SpellChecker_DisposeStopsTheWorkerAndClosesItsWaitHandle()
+    {
+        using var checker = new Detection.WindowsSpellChecker();
+        _ = checker.IsAvailable;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var worker = (Thread?)typeof(Detection.WindowsSpellChecker).GetField("_comThread", flags)!.GetValue(checker);
+        var wake = (AutoResetEvent)typeof(Detection.WindowsSpellChecker).GetField("_wake", flags)!.GetValue(checker)!;
+        checker.Dispose();
+        checker.Dispose();
+        Assert.True(worker is null || !worker.IsAlive, "問い合わせのスレッドが終了している");
+        Assert.True(wake.SafeWaitHandle.IsClosed, "待機ハンドルを閉じる");
+        var disposed = false;
+        try { checker.IsWord("test"); }
+        catch (ObjectDisposedException) { disposed = true; }
+        Assert.True(disposed, "破棄した後に問い合わせを再開しない");
+    }
+
+    [Test]
     public static void Main_RunsOnStaThread()
     {
         // クリップボード・UI は STA でないと動かない。Main の前にメソッドを足して、[STAThread] がそちらに付いていた (v1.2.0 の自己診断で失敗)
@@ -27,6 +45,10 @@ internal static class WindowsTests
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe"), "Epic のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\Rainbow Six Siege\RainbowSix.exe"), "Ubisoft のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\SEGA\PHANTASYSTARONLINE2_JP\pso2_bin\pso2.exe"), "PSO2 NGS (専用のランチャー)");
+        Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Users\a\AppData\Roaming\.minecraft\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe"), "Minecraft (Java 版) #1009");
+        Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Users\a\AppData\Local\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe"), "Minecraft (ストアのランチャー)");
+        Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Minecraft Launcher\runtime\jre-x64\bin\javaw.exe"), "Minecraft (旧ランチャー: \\Launcher\\ ではないので除かない)");
+        Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Java\jdk-21\bin\javaw.exe"), "ふつうの Java のアプリ");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Steam\steam.exe"), "Steam のクライアントは除く");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe"), "ランチャーは除く");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Microsoft VS Code\Code.exe"), "ふつうのアプリ");
@@ -101,7 +123,7 @@ internal static class WindowsTests
         var clauses = ime.ConvertClauses(text, "わたしは");
         Assert.True(clauses is { Count: > 0 }, "長い読みも文節に区切って変換できる");
         Assert.Equal(text, string.Concat(clauses!.Select(c => c.Reading)));
-        Assert.True(string.Concat(clauses.Select(c => c.Text)).Contains("天気"), string.Concat(clauses.Select(c => c.Text)));
+        Assert.True(string.Concat(clauses!.Select(c => c.Text)).Contains("天気"), string.Concat(clauses!.Select(c => c.Text)));
         Assert.True(ime.Convert(text)?.Contains("天気") == true, "全体の変換も");
     }
 
@@ -440,7 +462,7 @@ internal static class WindowsTests
         var columns = controls.OfType<DataGridView>().SelectMany(g => g.Columns.Cast<DataGridViewColumn>()).ToList();
         Assert.Equal(2, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
         Assert.True(!columns.OfType<DataGridViewComboBoxColumn>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "表に ON/OFF だけのプルダウンの列が残っていない");
-        var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名"));
+        var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名", StringComparison.Ordinal));
         Assert.Equal(false, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "mstsc.exe")).Cells[1].Value, "mstsc.exe は OFF");
         Assert.Equal(true, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "Code.exe")).Cells[1].Value, "Code.exe は ON");
         // 画面の値を設定に戻す (Collect) ときも、スイッチと表の bool がそのまま設定になる

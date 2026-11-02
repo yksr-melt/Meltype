@@ -1,12 +1,56 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 0924haruto12
 
+using System.Text.Json;
 using Meltype.Config;
 
 namespace Meltype.Tests;
 
 internal static class SettingsJsonTests
 {
+    [Test]
+    public static void SettingsJson_ShowGuideDefaultsOnAndRoundTrips()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-guide-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            foreach (var (json, expected) in new[] { ("{}", true), ("{\"ShowGuide\":true}", true), ("{\"ShowGuide\":false}", false) })
+            {
+                File.WriteAllText(path, json);
+                var settings = Settings.Load(path);
+                using var saved = JsonDocument.Parse(settings.ToJson());
+                Assert.Equal(expected, saved.RootElement.GetProperty("ShowGuide").GetBoolean(), "省略時はガイドを表示し、明示した値を読む");
+                settings.Clone().Save(path);
+                using var loaded = JsonDocument.Parse(Settings.Load(path).ToJson());
+                Assert.Equal(expected, loaded.RootElement.GetProperty("ShowGuide").GetBoolean(), "複製・保存・再読込で表示設定を保つ");
+            }
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
+    public static void SettingsJson_TsfIndicatorIsOptInAndRoundTrips()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-indicator-settings-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            File.WriteAllText(path, $"{{\"SettingsVersion\":{Settings.CurrentVersion},\"Mode\":\"Tsf\",\"ShowModeIndicator\":true,\"ShowModeIndicatorOnFocus\":true}}");
+            var settings = Settings.Load(path);
+            Assert.True(!new Settings().ShowTsfModeIndicator && !settings.ShowTsfModeIndicator, "新規・既存の設定とも IME 表示は既定 OFF");
+            Assert.True(settings.ShowModeIndicator && settings.ShowModeIndicatorOnFocus, "既存のキーボード方式の設定を維持する");
+            settings.ShowTsfModeIndicator = true;
+            settings.ShowModeIndicator = false;
+            settings.Save(path);
+            var loaded = Settings.Load(path);
+            Assert.True(loaded.ShowTsfModeIndicator && !loaded.ShowModeIndicator, "方式ごとの設定を独立して保存・復元する");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     [Test]
     public static void SettingsJson_PreservesEnumsAndSpacingAcrossSaveLoad()
     {
@@ -17,8 +61,10 @@ internal static class SettingsJsonTests
             var path = Path.Combine(directory, "config.json");
             var original = new Settings
             {
-                SpaceAroundEnglish = true, InputStyle = InputStyle.Kana,
-                DetectionLevel = DetectionLevel.Manual, Mode = InputMode.Keyboard,
+                SpaceAroundEnglish = true,
+                InputStyle = InputStyle.Kana,
+                DetectionLevel = DetectionLevel.Manual,
+                Mode = InputMode.Keyboard,
             }.Normalize();
             original.Save(path);
             Assert.True(original.ToJson().Contains("\"Keyboard\"") && original.ToJson().Contains("\"Kana\""), "enum の文字列表現を維持する");

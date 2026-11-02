@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eisenferik
 
+using System.Globalization;
 using Meltype.Composition;
 using Meltype.Detection;
 
@@ -78,7 +79,7 @@ internal static class PackedDictionaryTests
     [Test]
     public static void WordList_KeepsEveryPrefix()
     {
-        var words = Enumerable.Range(0, 2000).Select(i => "w" + i.ToString("x")).ToList();
+        var words = Enumerable.Range(0, 2000).Select(i => "w" + i.ToString("x", CultureInfo.InvariantCulture)).ToList();
         // 1 語ずつ足して prefix の表が何度も大きくなっても、まとめて渡して (同じ語が 2 度あっても) 頭の数から表を作っても、どの語のどの先頭も引ける
         var added = new WordList();
         foreach (var word in words) added.Add(word);

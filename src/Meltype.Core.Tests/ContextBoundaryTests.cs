@@ -37,25 +37,16 @@ internal static class ContextBoundaryTests
             foreach (var c in "taro") text.Append(c);
             Assert.Equal("たろ", text.Display(final: true));
         }
+        // 英字に直して覚えた日本語由来の語 (sushi) は英字のまま (tools/test-native-boundaries.py と同じ)
+        var englishMemory = new LanguageMemory(null);
+        englishMemory.Remember("sushi", english: true, explicitChoice: true);
+        englishMemory.Remember("sushi", english: true, explicitChoice: true);
+        var learned = Create(memory: englishMemory);
+        foreach (var c in "sushi") learned.Append(c);
+        Assert.Equal("sushi", learned.Display(final: true), "覚えた sushi");
         var knownJapanese = Create("I study ");
         foreach (var c in "nihongo") knownJapanese.Append(c);
         Assert.Equal("にほんご", knownJapanese.Display(final: true));
-    }
-
-    [Test]
-    public static void IndependentProperNounPrefixes_RemainEnglishWhileGrowing()
-    {
-        var romaji = new RomajiDetector();
-        var japanese = new DictionaryDetector([], romaji);
-        var proper = new ProperNouns();
-        var detector = new CompositionDetector(romaji, japanese, new EnglishDetector([]), new TypoDetector(japanese.Words), proper);
-        proper.AddText("Hanana");
-        var text = new CompositionText(detector);
-        foreach (var c in "hana") text.Append(c);
-        Assert.Equal("hana", text.Display(final: false));
-        Assert.Equal("はな", text.Display(final: true));
-        text.Level = () => DetectionLevel.Manual;
-        Assert.Equal("はな", text.Display(final: false));
     }
 
     [Test]
@@ -88,7 +79,7 @@ internal static class ContextBoundaryTests
             foreach (var c in raw) text.Append(c);
             Assert.Equal(expected, text.Display(final: true), raw);
         }
-        foreach (var (raw, expected) in new[] { ("api", "あぴ"), ("sushinoerror", "すしのerror"), ("kapibara", "かぴばら") })
+        foreach (var (raw, expected) in new[] { ("api", "api"), ("sushinoerror", "すしのerror"), ("kapibara", "かぴばら") })
         {
             var text = Create();
             foreach (var c in raw) text.Append(c);

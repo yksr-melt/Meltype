@@ -21,8 +21,49 @@ public static class ProjectInfo
     public static string CoreVersion =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "?";
 
-    /// <summary>公開した版 (1.0.0 以降) か。それまではリポジトリが非公開なので、GitHub で報告する道は出さない。</summary>
-    public static bool IsPublicRelease(string version) => Version.TryParse(version, out var parsed) && parsed.Major >= 1;
+    /// <summary>公開した版 (1.0.0 以降。1.3.1-pre.3 などのプレリリースも) か。それまではリポジトリが非公開なので、GitHub で報告する道は出さない。</summary>
+    public static bool IsPublicRelease(string version) => Version.TryParse(version.Split('-', 2)[0], out var parsed) && parsed.Major >= 1;
+
+    /// <summary>
+    /// 版 (1.3.1・1.3.1-pre.3) を比べる (Semantic Versioning の順。プレリリースは同じ数字の正式版より前)。
+    /// left が新しければ正、同じなら 0、古ければ負。読めない版があれば null。packaging/update.ps1 の Compare-MeltypeVersion と同じ順。
+    /// </summary>
+    public static int? CompareVersions(string left, string right)
+    {
+        var a = left.Split('+')[0].Split('-', 2);
+        var b = right.Split('+')[0].Split('-', 2);
+        if (!Version.TryParse(a[0], out var x) || !Version.TryParse(b[0], out var y)) return null;
+        var core = x.CompareTo(y);
+        if (core != 0 || (a.Length == 1 && b.Length == 1)) return Math.Sign(core);
+        if (a.Length == 1) return 1;
+        if (b.Length == 1) return -1;
+        var p = a[1].Split('.');
+        var q = b[1].Split('.');
+        for (var i = 0; i < Math.Min(p.Length, q.Length); i++)
+        {
+            var pn = long.TryParse(p[i], out var pv) && p[i].All(char.IsAsciiDigit);
+            var qn = long.TryParse(q[i], out var qv) && q[i].All(char.IsAsciiDigit);
+            var c = pn && qn ? pv.CompareTo(qv) : pn ? -1 : qn ? 1 : string.CompareOrdinal(p[i], q[i]);
+            if (c != 0) return Math.Sign(c);
+        }
+        return Math.Sign(p.Length - q.Length);
+    }
+
+    /// <summary>プレリリースの版 (1.3.1-pre.3) か。</summary>
+    public static bool IsPrerelease(string version) => version.Split('+')[0].Contains('-');
+
+    /// <summary>その版のリリースのページ (リリースノート)。</summary>
+    public static string ReleaseUrl(string version) => $"{SourceUrl}/releases/tag/v{Uri.EscapeDataString(version)}";
+
+    /// <summary>すべてのリリースの一覧 (過去のリリースノート)。</summary>
+    public const string ReleasesUrl = SourceUrl + "/releases";
+
+    /// <summary>
+    /// 更新したあとの初めての起動で、リリースノートを見せるか (issue #1207)。最後に見せた版と今の版が違えば見せる。
+    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。
+    /// </summary>
+    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun) =>
+        !firstRun && currentVersion != "?" && shownVersion != currentVersion;
 
     /// <summary>不具合報告のフォーム (ReportForm) があるか。無ければ GitHub の Issue の画面で報告してもらう。</summary>
     public static bool HasReportForm => ReportForm.Length > 0;
@@ -51,7 +92,8 @@ public static class ProjectInfo
 
     /// <summary>
     /// 自分で直した誤判定を、「変換・判定の間違い」のひな形 (2-misdetection.yml) に入れた状態で開く URL (issue #284)。
-    /// 欄の id (kind・typed・actual・expected・key・context) は、ひな形と合わせる。
+    /// 欄の id (kind・typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
+    /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
     public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
@@ -61,6 +103,7 @@ public static class ProjectInfo
         $"&actual={Uri.EscapeDataString(correction.Shown)}" +
         $"&expected={Uri.EscapeDataString(correction.Corrected)}" +
         $"&key={Uri.EscapeDataString(correction.LastKey)}" +
+        (correction.Zenzai is { } on ? $"&zenzai={Uri.EscapeDataString(on ? "使っている" : "使っていない")}" : "") +
         $"&context={Uri.EscapeDataString(correction.Before)}";
 
     /// <summary>Mac 版・Linux 版の実行環境 (不具合報告に入れる。入力した文字は入れない)。</summary>

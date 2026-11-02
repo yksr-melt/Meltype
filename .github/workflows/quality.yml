@@ -3,6 +3,7 @@
 #   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の結果を SARIF にして、Code scanning に送る。
 #                    Code scanning は Pull Request で新しく出た警告だけを、その Pull Request の注釈に出す (前からある警告は Security タブに残る)。
 #                    警告ではマージを止めない。重要度は .editorconfig で上げる
+#                    大きな移行の note は IDE に残す。命名は理由付きのソース内抑制を反映する (tools/filter-sarif.mjs)。
 #   依存関係       … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
 # セキュリティの解析 (CodeQL) は codeql.yml。
 name: quality
@@ -26,11 +27,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: Check format of changed lines
@@ -55,10 +56,10 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
       - name: Build with analyzers
@@ -67,7 +68,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sarif"
           dotnet build "src/${{ matrix.project }}/${{ matrix.project }}.csproj" -c Release \
             -p:AnalysisLevel=latest-recommended "-p:MeltypeSarifDir=$RUNNER_TEMP/sarif"
-      - uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+      - name: Keep migration suggestions in the IDE
+        shell: bash
+        env:
+          SARIF_FILE: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
+        run: |
+          node --test tools/filter-sarif.test.mjs .github/bot/markdown.test.mjs
+          node tools/filter-sarif.mjs "$SARIF_FILE"
+      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
           category: roslyn-${{ matrix.project }}
@@ -77,6 +85,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high

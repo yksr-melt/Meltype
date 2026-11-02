@@ -14,7 +14,7 @@ namespace Meltype.Detection;
 /// 普通の英単語 (meeting, name, tomorrow …) はこちらで補う。結果は語ごとに覚えておく。
 /// 使えない環境 (英語のスペルチェッカーが無い) では常に false を返す。
 /// </summary>
-public sealed class WindowsSpellChecker : IWordChecker
+public sealed class WindowsSpellChecker : IWordChecker, IDisposable
 {
     private static readonly Guid ClsidSpellCheckerFactory = new("7AB36653-1796-484B-BDFA-E74F1DB7C1DC");
 
@@ -29,6 +29,7 @@ public sealed class WindowsSpellChecker : IWordChecker
     private Thread? _comThread;
     private Action? _job;
     private volatile bool _done;
+    private volatile bool _disposed;
 
     // 1 回の問い合わせで両方の答えが分かる (Known)。IsWord・AutoCorrection で聞いた側は Asked にする。
     // 聞けなかったときは聞いた側の答え (false・null) だけを覚え、スペルチェッカーが止まった後は Asked の答えだけを使う
@@ -56,6 +57,7 @@ public sealed class WindowsSpellChecker : IWordChecker
     {
         get
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             if (_checker is not null || _unavailable) return _checker is not null;
             lock (_gate) return OnComThread(Checker) is not null;
         }
@@ -73,6 +75,7 @@ public sealed class WindowsSpellChecker : IWordChecker
     // 1 回の問い合わせで両方の答えが分かるので、まとめて覚える (問い合わせは重い)
     private Answer? Lookup(string lower, bool forWord)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (lower.Length < 2 || lower.Length > 30 || !lower.All(char.IsAsciiLetterLower)) return null;
         if (Usable(_cache, lower, forWord, out var known) || Usable(_older, lower, forWord, out known))
         {
@@ -163,6 +166,7 @@ public sealed class WindowsSpellChecker : IWordChecker
     // 呼ぶ側は _gate を持ったまま待つ。STA で止まって待つとメッセージを処理してしまうので、回って待つ。
     private T OnComThread<T>(Func<T> work)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (Thread.CurrentThread.GetApartmentState() != ApartmentState.STA) return work();
         _comThread ??= StartComThread();
         T result = default!;
@@ -190,16 +194,49 @@ public sealed class WindowsSpellChecker : IWordChecker
     {
         var thread = new Thread(() =>
         {
-            while (true)
+            try
             {
-                _wake.WaitOne();
-                _job!();
-                _done = true;
+                while (true)
+                {
+                    _wake.WaitOne();
+                    if (_disposed) break;
+                    _job!();
+                    _job = null;
+                    _done = true;
+                }
             }
+            finally { ReleaseChecker(); }
         }) { IsBackground = true, Name = "Meltype spell checker" };
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
         return thread;
+    }
+
+    /// <summary>問い合わせが終わるのを待ち、COM のスレッドと待機ハンドルを閉じる。</summary>
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _unavailable = true;
+            if (_comThread is { } thread)
+            {
+                _wake.Set();
+                thread.Join();
+            }
+            else ReleaseChecker();
+            _wake.Dispose();
+        }
+    }
+
+    private void ReleaseChecker()
+    {
+        if (_checker is { } checker)
+        {
+            _checker = null;
+            Marshal.ReleaseComObject(checker);
+        }
     }
 
     private Answer Remember(string lower, Answer answer)

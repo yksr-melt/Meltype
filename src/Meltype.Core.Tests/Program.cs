@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 namespace Meltype.Tests;
 
 /// <summary>
@@ -30,17 +31,24 @@ internal static class Program
                 Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
                 return 0;
             case "--segments":
-                // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前)
+                // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前) と、区間分けのラティスの道と重み
                 {
                     var text = new Meltype.Composition.CompositionText(CompositionTests.Detector);
                     foreach (var c in args.ElementAtOrDefault(1) ?? "") text.Append(c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
                     Console.WriteLine("units: " + string.Join(" ", text.Units.Select(u => $"{u.Raw}={u.Kana}")) + (text.Pending.Length > 0 ? $" +{text.Pending}" : ""));
-                    Console.WriteLine("segments: " + string.Join(" | ", text.Segments(final: true).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
+                    CompositionTests.Detector.LatticeTrace = Console.WriteLine;
+                    var segments = text.Segments();
+                    CompositionTests.Detector.LatticeTrace = null;
+                    Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }
                 return 0;
             case "--eval-json":
                 Checks.EvalJson(args[1]);
+                return 0;
+            case "--judge-corpus":
+                // --judge-corpus 出力ファイル [ほかの一覧 …]: よく使う語の判定の一覧 (Pull Request のチェックで main と比べる。issue #1196)
+                Impact.JudgeCorpus(args[1], args.Skip(2));
                 return 0;
             case "--mixed-bench":
                 // --mixed-bench 出力ファイル: 日本語の文の中に英単語を入れて打ち、英単語と日本語に正しく分かれるかを数える (区切りの点数化の試作の比較用)
@@ -53,7 +61,7 @@ internal static class Program
                 return 0;
             case "--perf":
                 // --perf 出力ファイル [例文のファイル] [回数]: 変換エンジンの遅延・段階ごとの時間・候補の数・控えの使い回し・メモリ・正解率 (docs/PERFORMANCE.md)
-                Performance.Measure(args[1], args.ElementAtOrDefault(2), args.Length > 3 ? int.Parse(args[3]) : Performance.DefaultSamples);
+                Performance.Measure(args[1], args.ElementAtOrDefault(2), args.Length > 3 ? int.Parse(args[3], CultureInfo.InvariantCulture) : Performance.DefaultSamples);
                 Henkan.Shutdown();
                 return 0;
             case "--perf-compare":
@@ -92,11 +100,11 @@ internal static class Program
                 return 0;
             case "--dictionary-bench":
                 // --dictionary-bench [回数]: 1 打鍵あたりの時間と割り当て
-                DictionaryMemory.Bench(args.Length > 1 ? int.Parse(args[1]) : 15);
+                DictionaryMemory.Bench(args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCulture) : 15);
                 return 0;
             case "--dictionary-lookup-bench":
                 // --dictionary-lookup-bench [回数]: 意味・英訳を直接引いたときの 1 検索あたりの時間と割り当て
-                DictionaryMemory.LookupBench(args.Length > 1 ? int.Parse(args[1]) : 7);
+                DictionaryMemory.LookupBench(args.Length > 1 ? int.Parse(args[1], CultureInfo.InvariantCulture) : 7);
                 return 0;
             case "--explain":
                 if (Environment.GetEnvironmentVariable("MELTYPE_UTF8") == "1") Console.OutputEncoding = new System.Text.UTF8Encoding(false);

@@ -51,6 +51,10 @@ struct Native {
     void (*setDirect)(void *, int) = nullptr;
     void (*setCanDelete)(void *, int) = nullptr; // 古い本体には無い
     void (*setCodeInput)(void *, int) = nullptr; // 古い本体には無い (コード入力: ターミナルの入力欄で既定にする、#715)
+    int (*setCodeLine)(void *, int, const char *) = nullptr;
+    void (*setCodeTerminal)(void *, int) = nullptr;
+    int (*codeEnglishAt)(void *, const char *) = nullptr;
+    void (*caretMoved)(void *, int, int) = nullptr;
     char *(*roleKey)(void *, int) = nullptr;     // 古い本体には無い (入力中のキーの役割: #199)
     void (*free)(void *) = nullptr;
 
@@ -72,6 +76,10 @@ struct Native {
         setDirect = reinterpret_cast<decltype(setDirect)>(sym("meltype_set_direct"));
         setCanDelete = reinterpret_cast<decltype(setCanDelete)>(sym("meltype_set_can_delete"));
         setCodeInput = reinterpret_cast<decltype(setCodeInput)>(sym("meltype_set_code_input"));
+        setCodeLine = reinterpret_cast<decltype(setCodeLine)>(sym("meltype_set_code_line"));
+        setCodeTerminal = reinterpret_cast<decltype(setCodeTerminal)>(sym("meltype_set_code_terminal"));
+        codeEnglishAt = reinterpret_cast<decltype(codeEnglishAt)>(sym("meltype_code_english_at"));
+        caretMoved = reinterpret_cast<decltype(caretMoved)>(sym("meltype_caret_moved"));
         roleKey = reinterpret_cast<decltype(roleKey)>(sym("meltype_role_key"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         if (!create || !destroy || !handleKey || !commit || !selectCandidate || !setDirect || !free) {
@@ -116,9 +124,9 @@ struct Json {
         auto *v = get(name);
         return v && v->kind == Kind::Number ? static_cast<int>(v->number) : fallback;
     }
-    bool flag(const std::string &name) const {
+    bool flag(const std::string &name, bool fallback = false) const {
         auto *v = get(name);
-        return v && v->kind == Kind::Bool && v->boolean;
+        return v && v->kind == Kind::Bool ? v->boolean : fallback;
     }
     std::vector<std::string> strings(const std::string &name) const {
         std::vector<std::string> result;
@@ -337,6 +345,10 @@ public:
     }
     void *session() const { return session_; }
     bool direct = false;
+    // 古い本体でも、同じモードの再設定で行の追跡状態を消さない。
+    bool codeInput = false;
+    // 明示的な日本語切り替えの入口が無い旧版の本体にだけ使う。
+    bool legacyJapanese = false;
     // 変換ボックス (preedit) を出しているか。出している間は、周りの文字 (preedit を含む) を本体に渡さない
     bool preeditVisible = false;
 
@@ -369,7 +381,7 @@ public:
         auto *ic = event.inputContext();
         auto *state = ic->propertyFor(&factory_);
         if (!state->session()) return;
-        syncCanDelete(ic, state->session());
+        syncCanDelete(ic, state);
         const auto key = event.key();
         const auto sym = key.sym();
         // 入力中の 変換・無変換・ひらがな/カタカナ: 設定で役割を分けていれば、本体が変換ボックスで処理する (#199)
@@ -384,17 +396,22 @@ public:
                 return;
             }
         }
-        // 半角/全角: 英数 (直接入力) ⇔ 日本語。英数・ひらがなのキーでも切り替える (JIS キーボード)。
+        // 半角/全角: 英数 ⇔ 日本語。コードの日本語指定を解除するときは、直接入力ではなくコード保護へ戻す。
+        // 英数・ひらがなのキーでも切り替える (JIS キーボード)。
         if (sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku || sym == FcitxKey_Eisu_toggle ||
             sym == FcitxKey_Hiragana_Katakana || sym == FcitxKey_Muhenkan || sym == FcitxKey_Henkan) {
+            bool codeEnglish = false;
+            if (!state->direct && !state->preeditVisible && ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal)) {
+                std::string before, after;
+                bool surrounding = readSurrounding(ic, before, after);
+                codeEnglish = native_.codeEnglishAt
+                    ? native_.codeEnglishAt(state->session(), surrounding ? before.c_str() : nullptr) != 0
+                    : state->codeInput && !state->legacyJapanese;
+            }
+            bool toggle = sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku;
             bool toDirect = sym == FcitxKey_Eisu_toggle || sym == FcitxKey_Muhenkan ||
-                            ((sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku) && !state->direct);
-            apply(ic, native_.take(native_.commit(state->session())));
-            state->direct = toDirect;
-            native_.setDirect(state->session(), toDirect ? 1 : 0);
-            // 切り替えたモードをカーソル位置に出す (Mozc と同じ入力パネルの枠)
-            ic->inputPanel().setAuxUp(fcitx::Text(toDirect ? "A" : "あ"));
-            ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+                            (toggle && !state->direct && !codeEnglish);
+            switchMode(ic, state, toDirect, toggle);
             event.filterAndAccept();
             return;
         }
@@ -414,17 +431,42 @@ public:
         Json result;
         if (!JsonReader(text).read(result)) return;
         apply(ic, result);
-        if (result.flag("consumed")) event.filterAndAccept();
+        if (result.flag("consumed")) {
+            event.filterAndAccept();
+        } else if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal)) {
+            // 変換ボックスが使った矢印・Tab・Esc ではなく、アプリへ通した操作だけを通知する。
+            bool shortcut = (modifiers & (2 | 4 | 8)) != 0;
+            if (native_.caretMoved) native_.caretMoved(state->session(), vk, shortcut ? 1 : 0);
+            bool navigation = shortcut || vk == 0x09 || vk == 0x1B || (vk >= 0x21 && vk <= 0x28) || vk == 0x2E;
+            if (navigation) {
+                // アプリへ通した Esc は vim 等の操作への境界。開いた引用符の追跡も捨てる (旧版の本体も同じ)。
+                if (vk == 0x1B && state->codeInput && native_.setCodeInput) {
+                    native_.setCodeInput(state->session(), 0);
+                    state->codeInput = false;
+                }
+                state->legacyJapanese = false;
+                syncCanDelete(ic, state);
+            }
+        }
     }
 
-    // 別の入力欄・アプリに移るとき、入力欄が変わったときは、未確定の内容をそのまま確定する。
+    // Reset では未確定の内容を確定するが、日本語指定とコード行の追跡は消さない。
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override { commitPending(event.inputContext()); }
-    void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override { commitPending(event.inputContext()); }
+    void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
+        auto *ic = event.inputContext();
+        auto *state = ic->propertyFor(&factory_);
+        if (!state->session()) return;
+        commitPending(ic);
+        // フォーカス移動・入力メソッドの無効化ではコード保護へ戻す。
+        if (state->codeInput && native_.setCodeInput) native_.setCodeInput(state->session(), 0);
+        state->codeInput = false;
+        state->legacyJapanese = false;
+    }
 
     void selectCandidate(fcitx::InputContext *ic, int index) {
         auto *state = ic->propertyFor(&factory_);
         if (!state->session()) return;
-        syncCanDelete(ic, state->session());
+        syncCanDelete(ic, state);
         apply(ic, native_.take(native_.selectCandidate(state->session(), index)));
     }
 
@@ -434,10 +476,34 @@ private:
     bool loaded_ = false;
     fcitx::FactoryFor<MeltypeState> factory_;
 
+    void switchMode(fcitx::InputContext *ic, MeltypeState *state, bool toDirect, bool toggle) {
+        apply(ic, native_.take(native_.commit(state->session())));
+        // CodeLine は Direct 中には切り替えられないので、先に直接入力を解除する。
+        native_.setDirect(state->session(), 0);
+        bool codeLineHandled = false;
+        if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal)) {
+            std::string before, after;
+            bool surrounding = readSurrounding(ic, before, after);
+            if (native_.setCodeLine) {
+                codeLineHandled = native_.setCodeLine(state->session(), toDirect ? 0 : 1, surrounding ? before.c_str() : nullptr) != 0;
+            } else {
+                // 旧版では CodeInput の切替で日本語指定と解除を代用する。
+                codeLineHandled = state->legacyJapanese;
+                state->legacyJapanese = !toDirect;
+                syncCanDelete(ic, state);
+            }
+        }
+        // 半角/全角で日本語指定を解除したら IME は開いたまま。英数・無変換は従来どおり直接入力にする。
+        state->direct = toDirect && !(toggle && codeLineHandled);
+        native_.setDirect(state->session(), state->direct ? 1 : 0);
+        ic->inputPanel().setAuxUp(fcitx::Text(toDirect ? "A" : "あ"));
+        ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+    }
+
     void commitPending(fcitx::InputContext *ic) {
         auto *state = ic->propertyFor(&factory_);
         if (!state->session()) return;
-        syncCanDelete(ic, state->session());
+        syncCanDelete(ic, state);
         apply(ic, native_.take(native_.commit(state->session())));
     }
 
@@ -471,12 +537,19 @@ private:
 
     // 確定し直し (DeleteBefore) は、入力欄が周りの文字の削除に対応しているときだけ本体が行う。
     // 本体を呼ぶ前に毎回伝える (入力欄を移った最初のキーで、前の入力欄の値のまま確定し直さないように)。
-    void syncCanDelete(fcitx::InputContext *ic, void *session) {
-        if (!native_.setCanDelete || !session) return;
+    void syncCanDelete(fcitx::InputContext *ic, MeltypeState *state) {
+        auto *session = state->session();
+        if (!session) return;
         bool canDelete = ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) && ic->surroundingText().isValid();
-        native_.setCanDelete(session, canDelete ? 1 : 0);
-        // 入力欄がターミナル (capability flag の Terminal) なら、コード入力を既定にする (j k やコマンド名がアプリに届くように)
-        if (native_.setCodeInput) native_.setCodeInput(session, ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal) ? 1 : 0);
+        if (native_.setCanDelete) native_.setCanDelete(session, canDelete ? 1 : 0);
+        // ターミナルはコード入力を既定にする。同じ値では行の追跡状態を初期化しない。
+        bool terminal = ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal);
+        if (native_.setCodeTerminal) native_.setCodeTerminal(session, terminal ? 1 : 0);
+        bool codeInput = terminal && !state->legacyJapanese;
+        if (native_.setCodeInput && state->codeInput != codeInput) {
+            native_.setCodeInput(session, codeInput ? 1 : 0);
+            state->codeInput = codeInput;
+        }
     }
 
     void apply(fcitx::InputContext *ic, const std::string &text) {
@@ -506,11 +579,11 @@ private:
             }
         }
         auto *view = result.get("view");
-        if (view && view->kind == Json::Kind::Object) show(ic, *view);
+        if (view && view->kind == Json::Kind::Object) show(ic, *view, result.flag("showGuide", true));
         else hidePreedit(ic);
     }
 
-    void show(fcitx::InputContext *ic, const Json &view) {
+    void show(fcitx::InputContext *ic, const Json &view, bool showGuide) {
         auto &panel = ic->inputPanel();
         panel.reset();
         const auto text = view.str("text");
@@ -532,13 +605,16 @@ private:
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
-        // 案内 (Space で変換 など) と もしかして は補助テキストに出す
-        auto hint = view.str("hint");
-        if (auto suggestion = view.str("suggestion"); !suggestion.empty()) hint = suggestion + "　" + hint;
+        // 固定の操作一覧は既定で表示する。OFF でも手動判定・予測・書き間違いの提案は残す。
+        // 旧版の本体は案内を分けていないので、提案まで消さないよう従来の hint を使う。
+        auto hint = !showGuide && view.get("contextHint") ? view.str("contextHint") : view.str("hint");
+        if (auto suggestion = view.str("suggestion"); !suggestion.empty())
+            hint = suggestion + (hint.empty() ? "" : "　" + hint);
         if (!hint.empty()) panel.setAuxDown(fcitx::Text(hint));
         const auto candidates = view.strings("candidates");
         if (converting && candidates.size() > 1) {
             auto list = std::make_unique<fcitx::CommonCandidateList>();
+            list->setLayoutHint(fcitx::CandidateLayoutHint::Vertical);
             list->setPageSize(9);
             list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);

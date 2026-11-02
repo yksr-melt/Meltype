@@ -228,7 +228,8 @@ def control(operation):
         command(["xdotool", "type", "--clearmodifiers", "--delay", "30", "--", operation["text"]])
     elif operation["action"] == "key":
         command(["xdotool", "key", "--clearmodifiers", "--", operation["key"]])
-    print(json.dumps({"windowId": window, "context": context_path, "password": password}))
+    # 入力した文字は返さない。password は欄の種類を表す真偽値だけ。
+    print(json.dumps({"windowId": window, "context": context_path, "password": True if password else False}))
 
 
 def isolate_environment(root):

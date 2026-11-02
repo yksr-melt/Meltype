@@ -87,7 +87,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null)
     {
         if (Request(context ?? "", hiragana) is not { Count: > 0 } segments) return null;
-        return segments.Select(s => (new ConversionClause(s.Reading, s.Candidates.FirstOrDefault() ?? s.Reading), s.Candidates)).ToList();
+        return segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList();
     }
 
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
@@ -105,7 +105,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         var segments = Request("", reading);
         if (segments is null) return [];
         // 1 文節ならその候補。複数の文節に分かれたなら、最初の候補をつなげたものだけ。
-        return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => s.Candidates.FirstOrDefault() ?? s.Reading))];
+        return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading))];
     }
 
     // 学習データを保存する間隔 (覚えさせた回数)。Meltype を終了するときにも保存する。
@@ -323,7 +323,8 @@ private string? Send(string request)
         if (OperatingSystem.IsWindows())
         {
             previousMode = GetErrorMode();
-            SetErrorMode(previousMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+            // 戻り値は以前のモード (エラーコードではない)。復元には直前に読んだモードを使う。
+            _ = SetErrorMode(previousMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
         }
         try
         {
@@ -331,7 +332,7 @@ private string? Send(string request)
         }
         finally
         {
-            if (OperatingSystem.IsWindows()) SetErrorMode(previousMode);
+            if (OperatingSystem.IsWindows()) _ = SetErrorMode(previousMode);
         }
         // Mozc のログ (標準エラー) は読み捨てる (溜まるとヘルパーが止まる)。
         process.ErrorDataReceived += (_, _) => { };

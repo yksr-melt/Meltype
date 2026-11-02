@@ -32,7 +32,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
         {
             z = zenzai?.Invoke();
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
-            return z.ConvertClauses(hiragana, WideContext ?? context);
+            return z.ConvertClauses(hiragana, WideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
         }
         catch (Exception ex)
         {
@@ -71,10 +71,11 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
         var fromMozc = UseMozc ? mozc!.ConvertWithCandidates(hiragana, context) : null;
         var other = fromMozc?.Select(s => s.Clause).ToList() ?? (UseSystem ? system.ConvertClauses(hiragana, context) : null);
         if (Zenzai(hiragana, context) is not { Count: > 0 } z) return other;
-        if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other;
+        // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
+        if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();
         // 候補は、この変換で文節と一緒に受け取ったものを使う (ヘルパーには聞き直さない)。
         // 文節の読みは Mozc が返したまま (全角の（ を ( にするなど、読み全体と少し違うことがある。Mozc だけで変換するときと同じ)
-        return (fromMozc is not null ? Align(fromMozc, z[0].Text) : null) ?? z;
+        return (fromMozc is not null ? Align(fromMozc, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() : null) ?? z;
     }
 
     /// <summary>

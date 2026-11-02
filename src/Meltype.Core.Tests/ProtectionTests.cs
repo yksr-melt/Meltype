@@ -90,15 +90,15 @@ internal static class ProtectionTests
     }
 
     [Test]
-    public static void Protected_ReconversionReplacesSelection()
+    public static void Protected_ReconversionDoesNothing()
     {
         var keyboard = new CompositionTests.Keyboard();
         keyboard.Host.Selection = new ReconversionSelection("@user", "@user");
         keyboard.Press(VirtualKeys.Convert);
+        Assert.True(keyboard.Showing is null, "日本語にする所が無いので再変換を始めない");
         keyboard.Press(VirtualKeys.Return);
-        Assert.Equal("@user", keyboard.Host.Document);
-        Assert.Equal(0, keyboard.Host.Output.Count, "選択を置換し、別の確定入力を足さない");
-        Assert.True(keyboard.Showing is null, "再変換の未確定状態を消す");
+        Assert.True(!keyboard.Host.Events.Any(e => e.StartsWith("replace:", StringComparison.Ordinal)), "選択を置き換えない");
+        Assert.Equal(0, keyboard.Host.Output.Count, "確定入力を足さない");
     }
 
     // ---- 確定契約 (MeltypeSession は Linux/Mac アダプターと同じ経路) ----
