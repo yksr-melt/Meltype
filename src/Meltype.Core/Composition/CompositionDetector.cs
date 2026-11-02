@@ -280,7 +280,9 @@ public sealed partial class CompositionDetector
         var dash = lower.IndexOf('-');
         if (dash <= 0 || lower.IndexOf('-', dash + 1) >= 0) return false;
         var rest = lower[(dash + 1)..];
-        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsKnownEnglishWord(rest);
+        // - の後ろの語は、区間分けと同じ基準 (OS のスペルチェッカーだけが知っている語は数えない) で英単語か見る。
+        // Windows のスペルチェッカーは tori も語にするので、re-torimitto を re-tori|みっと にしていた (issue #705)
+        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsLatticeEnglishWord(rest);
     }
 
     /// <summary>
@@ -477,15 +479,7 @@ public sealed partial class CompositionDetector
         for (var end = n; end > dash + 1; end--)
         {
             var word = (Raw(units, start, end) + (end == n ? pending : "")).ToLowerInvariant();
-            if (!(afterJapaneseRomaji ? NumericHyphenatedWords.Contains(word) : IsHyphenatedEnglishWord(word))) continue;
-            // - の後ろがローマ字として読める語 (re-tori) で、すぐ後ろに英字が続く (re-tori|mitto) なら、語の途中で切っている。
-            // 長音の - を挟んだ日本語 (れーとりみっと) なので英語にしない (issue #705: Windows のスペルチェッカーは tori を知っている)。
-            // 後ろが付属語 (lo-fi|wo) なら、英単語 + 付属語なので英語のまま
-            var after = (Raw(units, end, n) + pending).ToLowerInvariant();
-            if (end < n && units[end].Raw is { Length: > 0 } next && next.All(char.IsAsciiLetter) &&
-                !TrailingParticles.Any(p => after.StartsWith(p, StringComparison.Ordinal)) &&
-                _romaji.Analyze(word[(word.IndexOf('-') + 1)..]) is { IsValid: true, Partial: "" }) continue;
-            return end;
+            if (afterJapaneseRomaji ? NumericHyphenatedWords.Contains(word) : IsHyphenatedEnglishWord(word)) return end;
         }
         return -1;
     }
