@@ -888,7 +888,7 @@ public sealed class CompositionText
         var changed = false;
         // 今の表示で英字に見えている文字 (きょうは|meeting|です の meeting)。ここは直さない
         // (表示では英単語なのに、確定したら g が が に直されて めえちんがです になっていた)。
-        var shownEnglish = EnglishMask();
+        var shownEnglish = EnglishMask(out var protectedMask);
         var offset = 0;
         var start = 0;
         while (start < _units.Count)
@@ -910,11 +910,14 @@ public sealed class CompositionText
                 UnitWords.Any(u => letters.StartsWith(u, StringComparison.OrdinalIgnoreCase));
             if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !_detector.IsKnownEnglishWord(letters) &&
                 corrector.FirstUnreadable(letters, final: true) is var first and > 0 &&
-                !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first]) &&
                 // 数字のすぐ前の短い英字 (kaibunsyo|rta|2026 の rta) は略語。打ち間違いとして直さない
                 !(end < _units.Count && _units[end].Raw is [var after] && char.IsAsciiDigit(after) && first >= letters.Length - 6) &&
                 !ContainsEnglishWord(letters, first) &&
-                corrector.Fix(letters, final: true) is { } fix)
+                corrector.Fix(letters, final: true) is { } fix &&
+                // 表示で英字にしている所は直さない。ただし直すと並び全体が 1 つのよく使う語 (すみません・へんかん) になるなら、
+                // 語の途中に偶然できた短い英単語 (sumi|mas|ne の mas、hen|kas|nn の kas) なので直す (issue #971)。保護範囲 (@…) の中は直さない
+                (!(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first]) ||
+                 !(runOffset + first < protectedMask.Count && protectedMask[runOffset + first]) && IsWholeCommonWord(fix.Kana)))
             {
                 Diagnostics.Log.Decision($"ローマ字の打ち間違いを直しました: {Diagnostics.Log.Text(fix.Wrong)}→{Diagnostics.Log.Text(fix.Right)}");
                 var analysis = _detector.Romaji.AnalyzeFragment(fix.Right);
@@ -998,9 +1001,10 @@ public sealed class CompositionText
     /// 打った英字 (Raw) の 1 文字ずつが、今の表示で英単語 (5 文字以上の知っている語: meeting) の区間に入っているか。
     /// 短い語 (onegai|shim|su の shim) は、ローマ字の途中に偶然現れることが多いので含めない (打ち間違いとして直す)。
     /// </summary>
-    private List<bool> EnglishMask()
+    private List<bool> EnglishMask(out List<bool> protectedMask)
     {
         var mask = new List<bool>();
+        protectedMask = [];
         var segments = Segments();
         for (var s = 0; s < segments.Count; s++)
         {
@@ -1008,7 +1012,7 @@ public sealed class CompositionText
             // 英語の語.の後ろの英字 (ドメイン・拡張子: Meltype.amr、MeltypeTip.dll) も、表示のまま英字にする (amr を あめ に直していた: issue #260)
             if (segment.IsEnglish && s >= 2 && segments[s - 1] is { IsEnglish: true, Raw: "." } && segments[s - 2].IsEnglish && segments[s - 2].Raw.Any(char.IsAsciiLetter))
             {
-                for (var i = 0; i < segment.Raw.Length; i++) mask.Add(true);
+                for (var i = 0; i < segment.Raw.Length; i++) { mask.Add(true); protectedMask.Add(false); }
                 continue;
             }
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
@@ -1018,9 +1022,17 @@ public sealed class CompositionText
                 segment.Raw.Length == 4 && _detector.IsKnownEnglishWord(lower) && !_detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のスペルチェッカーの語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
                 segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && _detector.IsSpellWord(lower) && _detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
-            for (var i = 0; i < segment.Raw.Length; i++) mask.Add(word);
+            for (var i = 0; i < segment.Raw.Length; i++) { mask.Add(word); protectedMask.Add(segment.IsProtected); }
         }
         return mask;
+    }
+
+    /// <summary>かな全体が、よく使う 1 つの語 (する の付いた形を含む) か。</summary>
+    private static bool IsWholeCommonWord(string kana)
+    {
+        if (kana.Length < 3) return false;
+        if (RomajiTypoCorrector.CommonWordCost(kana.AsSpan()) is not null) return true;
+        return kana.EndsWith("する", StringComparison.Ordinal) && kana.Length >= 5 && RomajiTypoCorrector.CommonWordCost(kana.AsSpan(0, kana.Length - 2)) is not null;
     }
 
     /// <summary>
