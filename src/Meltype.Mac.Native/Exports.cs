@@ -234,6 +234,26 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "meltype_data_directory")]
     public static byte* DataDirectory() => ToUtf8(Config.AppPaths.DataDirectory);
 
+    /// <summary>
+    /// Zenzai の設定 (Mac 版。issue #1130)。「Zenzai を使う」が OFF なら NULL、ON なら設定のモデルの場所
+    /// (空文字列なら Meltype.app に同梱のモデルを使う)。meltype_free で解放する。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_zenzai_model")]
+    public static byte* ZenzaiModel()
+    {
+        try
+        {
+            var settings = Config.Settings.Load(Config.AppPaths.ConfigFile);
+            return settings.UseZenzai ? ToUtf8(settings.ZenzaiModelPath.Trim()) : null;
+        }
+        catch (Exception ex)
+        {
+            // 読めないときは使わない (打鍵のたびに推論が走るので、分からないまま ON にしない)
+            Diagnostics.Log.Error($"Zenzai の設定を読めませんでした。Zenzai を使わずに変換します: {ex}");
+            return null;
+        }
+    }
+
     /// <summary>Meltype.Core の版 (csproj の Version)。meltype_free で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_version")]
     public static byte* Version() => ToUtf8(Config.ProjectInfo.CoreVersion);
