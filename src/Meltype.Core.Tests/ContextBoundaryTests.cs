@@ -15,10 +15,13 @@ internal static class ContextBoundaryTests
         detector.SpellChecker = BuiltInWordChecker.Shared;
         detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
-        return new CompositionText(detector) { PrecedingEnglish = before.Length == 0 ? null : true,
+        return new CompositionText(detector)
+        {
+            PrecedingEnglish = before.Length == 0 ? null : true,
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
             PrecedingEnglishName = CompositionController.IsEnglishNameContext(before),
-            Level = () => level };
+            Level = () => level
+        };
     }
 
     [Test]

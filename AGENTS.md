@@ -60,11 +60,8 @@ node tools/check-dictionaries.mjs
 
 ```bash
 
-# 変えたファイルだけ直す
-dotnet format whitespace --folder --include path/to/File.cs
-
-# 手元で CI と同じ検査（main と比較）
-node tools/check-format.mjs origin/main
+# フォーマットを直す（CI は --verify-no-changes で同じ検査をする）
+dotnet format whitespace --folder
 
 ```
 

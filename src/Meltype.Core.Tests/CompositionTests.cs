@@ -497,14 +497,14 @@ internal static class CompositionTests
             var k = new Keyboard();
             k.Type(typed);
             Assert.Equal(expected, k.Showing, typed);
-                // 英単語の中の綴りは、かなにしない (trying・swan・highway・hyena・babying)
-        foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
-        {
-            var e = new Keyboard();
-            e.Type(word);
-            Assert.Equal(word, e.Showing, word);
+            // 英単語の中の綴りは、かなにしない (trying・swan・highway・hyena・babying)
+            foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
+            {
+                var e = new Keyboard();
+                e.Type(word);
+                Assert.Equal(word, e.Showing, word);
+            }
         }
-}
     }
 
     [Test]
@@ -911,7 +911,7 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Up);
         Assert.Equal("😄", k.Showing);
     }
-  
+
     [Test]
     public static void Now_ChosenTimeIsNotLearned()
     {
@@ -1057,9 +1057,9 @@ internal static class CompositionTests
             clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
     }
 
-      [Test]
-      public static void ShiftSpace_DuringConversion_GoesBack()
-      {
+    [Test]
+    public static void ShiftSpace_DuringConversion_GoesBack()
+    {
         // #140: 変換中の Shift+Space は前の候補へ (Space と同じに進んでいた)
         var k = new Keyboard();
         k.Type("kawa ");
@@ -1075,7 +1075,7 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Space);
         k.Key(VirtualKeys.LShift, up: true);
         Assert.Equal(k.Host.View!.Candidates.Count - 1, k.Host.View!.SelectedIndex, "先頭から戻ると最後の候補へ");
-      }
+    }
 
     [Test]
     public static void F10_CyclesLetterCase()
@@ -2013,7 +2013,7 @@ internal static class CompositionTests
         k.Type("infobesity\n");
         Assert.Equal("infobesity", k.Host.Document);
     }
-  
+
     [Test]
     public static void Issue505_LiveConvertIgnoresSymbolsInLength()
     {
@@ -3558,10 +3558,18 @@ internal static class CompositionTests
     public static void Symbols_StartComposition()
     {
         // 報告: かぎかっこが入力できない。
-        var cases = new Dictionary<string, string> { ["[kagi]"] = "「かぎ」", ["-"] = "ー", ["/"] = "/", ["z/"] = "・", ["#"] = "#", ["("] = "(", [")"] = ")", ["]"] = "」", ["@"] = "@", [",,,"] = "...", ["\\"] = "￥", [","] = "、",
+        var cases = new Dictionary<string, string>
+        {
+            ["[kagi]"] = "「かぎ」", ["-"] = "ー", ["/"] = "/", ["z/"] = "・", ["#"] = "#", ["("] = "(", [")"] = ")", ["]"] = "」", ["@"] = "@", [",,,"] = "...", ["\\"] = "￥", [","] = "、",
             // 報告: Shift で打つ記号が全角で打てない、/ が打てない。英語の中では半角のまま。
             ["$%&"] = "＄％＆", ["kyouha(tenki)"] = "きょうは(てんき)", ["hello@example"] = "hello@example",
             ["tetr.io"] = "tetr.io", ["Wakatte.TV"] = "Wakatte.TV", ["J-core"] = "J-core", ["p-hub"] = "p-hub", ["talk-admin"] = "talk-admin",
+            // 報告 (#1349): かなの後ろの子音だけの語の後の - が長音になる (きょうはptーquery-digest)。ん (n-to・nn-to) の後は長音
+            ["pt-query-digest"] = "pt-query-digest",
+            ["kyouhapt-query-digest"] = "きょうはpt-query-digest",
+            ["kyouhals-files"] = "きょうはls-files",
+            ["n-to"] = "んーと",
+            ["nn-to"] = "んーと",
             // 報告: ca / cu / co で か く こ
             ["cacuco"] = "かくこ", ["iijane"] = "いいじゃね", ["shoucanshi"] = "しょうかんし", ["vanpaia"] = "ゔぁんぱいあ", ["wyiwye"] = "ゐゑ", ["GPL3.0"] = "GPL3.0", ["3.14desu"] = "3.14です", ["oknotasuku"] = "okのたすく",
         };
