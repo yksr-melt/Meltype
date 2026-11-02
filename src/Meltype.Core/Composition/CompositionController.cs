@@ -2339,7 +2339,7 @@ public sealed class CompositionController
     /// 月と日の書き方の候補。10がつ20にち (TypedDateCandidates) と 10/20 (変換) で同じものを出す。
     /// 10/20 / 10/20 / 10月20日 / 10/20(火) / 10月20日(火) / 2026/10/20 / 2026/10/20(火) / 2026年10月20日。ありえない日付なら null。
     /// 年は先の日付を優先する (予定を打つことが多いので)。今年のその日が今日以降なら今年、過ぎていれば来年。
-    /// ただし過ぎてから 30 日以内なら今年 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年)。
+    /// ただし過ぎてから 30 日以内ならその日 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年、1 月 5 日に打つ 12/28 は去年)。
     /// 選んでも学習しない (IsDateTimeChoice。年や曜日が変わるので)。
     /// </summary>
     private string[]? DateCandidates(int month, int day)
@@ -2347,7 +2347,7 @@ public sealed class CompositionController
         if (month is < 1 or > 12 || day is < 1 or > 31) return null;
         var today = _options.Now().Date;
         DateTime? best = null;
-        for (var year = today.Year; year <= today.Year + 4; year++) // 2/29 は次のうるう年まで
+        for (var year = today.Year - 1; year <= today.Year + 4; year++) // 去年から (1 月に打つ 12/28)。2/29 は次のうるう年まで
         {
             if (day > DateTime.DaysInMonth(year, month)) continue;
             var date = new DateTime(year, month, day);

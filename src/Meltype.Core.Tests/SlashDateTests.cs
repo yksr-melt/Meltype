@@ -69,6 +69,8 @@ internal static class SlashDateTests
             (new DateTime(2026, 6, 15), "12/20", "2026/12/20"),
             (new DateTime(2026, 6, 15), "5/1", "2027/05/01"),
             (new DateTime(2026, 3, 1), "2/29", "2028/02/29"),
+            (new DateTime(2026, 1, 5), "12/28", "2025/12/28"),
+            (new DateTime(2026, 1, 5), "12/1", "2026/12/01"),
             (new DateTime(2026, 6, 15), "6/1", "2026/06/01"),
             (new DateTime(2026, 12, 20), "1/5", "2027/01/05"),
         })
