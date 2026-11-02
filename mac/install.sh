@@ -4,8 +4,21 @@
 #
 # テスト版の Meltype.app を ~/Library/Input Methods に入れる。zip を展開したフォルダーで実行する:
 #   bash install.sh
+# Homebrew の cask からは --homebrew を付けて動かす。付けたときは:
+#   - 最後に入力ソースを Meltype に切り替えない (brew install の途中で入力ソースを変えない)
+#   - 手動で入れた Meltype.app があれば、何も置かずに止める (Homebrew で入れると brew uninstall で消えるため)
+#   - 配置したあとの登録・起動に失敗しても、警告して続ける。Homebrew は失敗した installer script が
+#     置いたものを戻さないので、ここで止めると Homebrew の管理外の Meltype.app が残る
 set -euo pipefail
 cd "$(dirname "$0")"
+
+from_homebrew=0
+for arg in "$@"; do
+    case "$arg" in
+        --homebrew) from_homebrew=1 ;;
+        *) echo "知らない引数です: $arg" >&2; exit 1 ;;
+    esac
+done
 
 if [[ ! -d Meltype.app ]]; then
     echo "Meltype.app が見つかりません。zip を展開したフォルダーで実行してください。" >&2
@@ -36,7 +49,24 @@ register_input_source() {
         echo "入力ソースに登録できませんでした。ログアウトしてログインし直すと直ります。" >&2
 }
 
+# 配置したあとの手順を動かす。失敗したら、--homebrew のときは印を付けて続け、そうでなければ止める。
+after_install_failed=0
+after_install() {
+    local status=0
+    "$@" || status=$?
+    [[ $status -ne 0 ]] || return 0
+    [[ $from_homebrew -eq 1 ]] || exit "$status"
+    after_install_failed=1
+}
+
 TARGET="$HOME/Library/Input Methods"
+# brew upgrade・reinstall では、先に cask の uninstall が古い Meltype.app を消している。
+# ここにあるのは手動で入れたもので、上書きすると brew uninstall で消えてしまう (前の cask の input_method と同じく止める)。
+if [[ $from_homebrew -eq 1 && -e "$TARGET/Meltype.app" ]]; then
+    echo "手動で入れた Meltype があります: $TARGET/Meltype.app" >&2
+    echo "Homebrew で入れるときは、先にこれを消してから、もう一度実行してください。" >&2
+    exit 1
+fi
 bash ./install-app.sh Meltype.app "$TARGET/Meltype.app"
 # インターネットから取ってきた印 (隔離属性) を外す。署名が自分用なので、外さないと macOS が起動させない。
 xattr -dr com.apple.quarantine "$TARGET/Meltype.app" 2>/dev/null || true
@@ -44,8 +74,16 @@ xattr -dr com.apple.quarantine "$TARGET/Meltype.app" 2>/dev/null || true
 echo "インストールしました: $TARGET/Meltype.app"
 enable_input_source
 register_input_source
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
-bash ./start-input-method.sh "$TARGET/Meltype.app"
+after_install /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
+after_install bash ./start-input-method.sh "$TARGET/Meltype.app"
+if [[ $from_homebrew -eq 1 ]]; then
+    if [[ $after_install_failed -eq 1 ]]; then
+        echo "Meltype を入れましたが、登録か起動が終わりませんでした。ログアウトしてログインし直してから、入力メニューで Meltype を選んでください。" >&2
+    else
+        echo "Meltype を起動しました。入力メニューから Meltype を選んでください。"
+    fi
+    exit 0
+fi
 # swift はコマンドライン・デベロッパ・ツールが無い Mac では使えない。選べなくてもインストールは終わっている。
 # macOS 27 では、入力ソースの有効化がアプリから通らず、ここで選べないことがある。その場合も、
 # システム設定の入力ソースに追加すれば、ログアウトしなくても入力メニューから選べるようになる。

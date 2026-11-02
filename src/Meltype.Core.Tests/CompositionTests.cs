@@ -46,6 +46,10 @@ internal static class CompositionTests
                 "かわ" => [new("かわ", "川")],
                 "すぱいだーまっ" => [new("すぱいだーま", "スパイダーマ"), new("っ", "っ")],
                 "はしを" => [new("はしを", "橋を")],
+                "かくにん" => [new("かくにん", "確認")],
+                "かくてい" => [new("かくてい", "確定")],
+                "かくにんしたら" => [new("かくにんしたら", "確認したら")],
+                "かくていして" => [new("かくていして", "確定して")],
                 // 本物の変換エンジン (Mozc) の苦手なもの: え、 → 得、、がちで → 勝ちで
                 "え、しらん" => [new("え", "得"), new("、", "、"), new("しらん", "知らん")],
                 "えかく" => [new("え", "絵"), new("かく", "描く")],
@@ -163,8 +167,8 @@ internal static class CompositionTests
         private static RomajiTypoCorrector Typos => SharedTypos.Value;
         private bool _directEnglishWord;
 
-        /// <summary>自動判定の強さ。</summary>
-        public Meltype.Config.DetectionLevel Level { get; set; } = Meltype.Config.DetectionLevel.Balanced;
+        /// <summary>自動判定を使わない (設定 AutoDetection が OFF)。</summary>
+        public bool Manual { get; set; }
 
         private bool _shiftHeld;
 
@@ -260,7 +264,7 @@ internal static class CompositionTests
                 History = history ?? new ConversionHistory(null),
                 MoreCandidates = moreCandidates,
                 UserDictionary = userDictionary,
-                Level = () => Level,
+                Manual = () => Manual,
                 KanaInput = () => Kana,
                 Misspellings = Misspellings,
                 Languages = languages,
@@ -324,7 +328,7 @@ internal static class CompositionTests
                 return true;
             }
             var letter = VirtualKeys.IsLetter(k.Vk);
-            if (Direct) return letter && !_directEnglishWord && Level != Meltype.Config.DetectionLevel.Manual;
+            if (Direct) return letter && !_directEnglishWord && !Manual;
             if (Kana && Detection.KanaDetector.IsKanaKey(k.Vk)) return true;
             if (k.Vk == VirtualKeys.Space && (_shiftHeld || SpaceWidth == Meltype.Config.SpaceWidth.FullWidth && !Direct)) return true;
             return letter || k.Vk is >= 0x30 and <= 0x39 or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
@@ -1603,24 +1607,24 @@ internal static class CompositionTests
     public static void CorpusContextRules_PreferChatFormsWhenCued()
     {
         var rules = ContextRules.Load(null);
-        Assert.Equal("ガチで", rules.Choose("かちで", "終わってる")!);
-        Assert.Equal("垢", rules.Choose("あか", "Twitterのアカウント")!);
-        Assert.Equal("鯖", rules.Choose("さば", "Discordコミュ")!);
-        Assert.Equal("めるちゃん", rules.Choose("めるちゃん", "先輩")!);
-        Assert.Equal("ガチで", rules.Choose("かちで", "オンゲーしかしてないから知らん")!);
-        Assert.Equal("音ゲーしか", rules.Choose("おんげーしか", "ACの曲を漁ろう")!);
-        Assert.Equal("淫夢", rules.Choose("いんゆめ", "R18画像")!);
-        Assert.Equal("すこん部", rules.Choose("すこんぶ", "鯖のオーナー")!);
-        Assert.Equal("音ゲーしか", rules.Choose("おんげーしか", "してないから")!);
-        Assert.Equal("淫", rules.Choose("いん", "夢のr－18画像")!);
-        Assert.Equal("鯖", rules.Choose("さば", "すこん部のオーナ人")!);
-        Assert.Equal("え", rules.Choose("え", "ほんと")!);
-        Assert.Equal("うちの", rules.Choose("うちの", "家族は")!);
-        Assert.Equal("ねむ", rules.Choose("ねむ", "先輩に聞いて")!);
-        Assert.Equal("いま", rules.Choose("いま", "やるなら")!);
-        Assert.Equal("垢", rules.Choose("あか", "ログインできなくなって")!);
-        Assert.Equal("なに", rules.Choose("なに", "って")!);
-        Assert.Equal("めるちゃん", rules.Choose("めるちゃん", "後輩")!);
+        Assert.Equal("ガチで", ChooseKana(rules, "かちで", "終わってる")!);
+        Assert.Equal("垢", ChooseKana(rules, "あか", "Twitterのアカウント")!);
+        Assert.Equal("鯖", ChooseKana(rules, "さば", "Discordコミュ")!);
+        Assert.Equal("めるちゃん", ChooseKana(rules, "めるちゃん", "先輩")!);
+        Assert.Equal("ガチで", ChooseKana(rules, "かちで", "オンゲーしかしてないから知らん")!);
+        Assert.Equal("音ゲーしか", ChooseKana(rules, "おんげーしか", "ACの曲を漁ろう")!);
+        Assert.Equal("淫夢", ChooseKana(rules, "いんゆめ", "R18画像")!);
+        Assert.Equal("すこん部", ChooseKana(rules, "すこんぶ", "鯖のオーナー")!);
+        Assert.Equal("音ゲーしか", ChooseKana(rules, "おんげーしか", "してないから")!);
+        Assert.Equal("淫", ChooseKana(rules, "いん", "夢のr－18画像")!);
+        Assert.Equal("鯖", ChooseKana(rules, "さば", "すこん部のオーナ人")!);
+        Assert.Equal("え", ChooseKana(rules, "え", "ほんと")!);
+        Assert.Equal("うちの", ChooseKana(rules, "うちの", "家族は")!);
+        Assert.Equal("ねむ", ChooseKana(rules, "ねむ", "先輩に聞いて")!);
+        Assert.Equal("いま", ChooseKana(rules, "いま", "やるなら")!);
+        Assert.Equal("垢", ChooseKana(rules, "あか", "ログインできなくなって")!);
+        Assert.Equal("なに", ChooseKana(rules, "なに", "って")!);
+        Assert.Equal("めるちゃん", ChooseKana(rules, "めるちゃん", "後輩")!);
     }
 
     [Test]
@@ -3287,11 +3291,113 @@ internal static class CompositionTests
     public static void Conversion_ContextRulesIke()
     {
         var rules = ContextRules.Load(null);
-        Assert.Equal("行け", rules.Choose("いけ", "ねむ学校"), "学校いけ → 行け (池にしない)");
-        Assert.Equal("行けよ", rules.Choose("いけよ", "早く"), "助詞付きでも 行け");
-        Assert.Equal("池", rules.Choose("いけ", "公園の"), "公園なら 池");
-        Assert.Equal(null, rules.Choose("いけん", "学校の"), "意見 を 行けん にしない");
-        Assert.Equal(null, rules.Choose("いけない", "学校で"), "いけない を 行けない にしない");
+        Assert.Equal("行け", ChooseKana(rules, "いけ", "ねむ学校"), "学校いけ → 行け (池にしない)");
+        Assert.Equal("行けよ", ChooseKana(rules, "いけよ", "早く"), "助詞付きでも 行け");
+        Assert.Equal("池", ChooseKana(rules, "いけ", "公園の"), "公園なら 池");
+        Assert.Equal(null, ChooseKana(rules, "いけん", "学校の"), "意見 を 行けん にしない");
+        Assert.Equal(null, ChooseKana(rules, "いけない", "学校で"), "いけない を 行けない にしない");
+    }
+
+    /// <summary>文脈の手がかり辞書を、変換エンジンがかなのまま返した文節に使う (残りの前の部分は先頭部分の読みのまま)。</summary>
+    private static string? ChooseKana(ContextRules rules, string reading, string surrounding) =>
+        rules.Choose(reading, surrounding, reading, head => head);
+
+    /// <summary>先頭部分だけを変換した結果 (変換エンジンの代わり)。</summary>
+    private static string? ConvertStem(string head) => head switch
+    {
+        "かく" => "書く",
+        "かわ" => "川",
+        "かち" => "勝ち",
+        "はし" => "橋",
+        _ => null,
+    };
+
+    [Test]
+    public static void Conversion_ContextRulesDoNotReplacePartOfAnotherWord()
+    {
+        var rules = ContextRules.Load(null);
+        foreach (var surrounding in new[] { "メール", "コード", "メール。" })
+        {
+            foreach (var (reading, engine) in new[]
+            {
+                ("かくにん", "確認"), ("かくてい", "確定"), ("かくにんを", "確認を"), ("かくにんしたら", "確認したら"),
+                ("かくていして", "確定して"), ("かくとう", "格闘"), ("かくりつ", "確率"),
+            })
+                Assert.Equal(null, rules.Choose(reading, surrounding, engine, ConvertStem), $"{surrounding}: {reading} ({engine}) の途中を 書く にしない");
+        }
+        foreach (var (reading, surrounding, engine) in new[] { ("はしる", "ご飯", "走る"), ("かわいい", "財布", "可愛い"), ("かみなり", "神社", "雷"), ("いしき", "病院", "意識") })
+            Assert.Equal(null, rules.Choose(reading, surrounding, engine, ConvertStem), $"{surrounding}: {reading} も語の途中で補正しない");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesDoNotReplaceVerbStems()
+    {
+        // 送り仮名が助詞の頭の文字 (し・さ・っ・す・せ) で始まる動詞も、語の途中で置き換えない (#1352 のレビュー)。
+        // 変換エンジンの 隠 / 変わ / 交わ は、かく / かわ の変換ではない。
+        var rules = ContextRules.Load(null);
+        foreach (var (reading, surrounding, engine) in new[]
+        {
+            ("かくして", "メール", "隠して"), ("かくした", "メール", "隠した"), ("かくさない", "メール", "隠さない"),
+            ("かわった", "泳ぐ", "変わった"), ("かわす", "泳ぐ", "交わす"), ("かわせる", "泳ぐ", "交わせる"),
+        })
+            Assert.Equal(null, rules.Choose(reading, surrounding, engine, ConvertStem), $"{surrounding}: {reading} ({engine}) の途中を置き換えない");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesKeepOpenEndedParticles()
+    {
+        // 語尾は列挙しない。変換エンジンが 先頭部分の語 + 残りのかな と区切っていれば補正する (#1352 のレビュー)。
+        var rules = ContextRules.Load(null);
+        foreach (var (reading, surrounding, engine, expected) in new[]
+        {
+            ("はしには", "ご飯", "橋には", "箸には"), ("かわでは", "泳ぐ", "皮では", "川では"),
+            ("あついので", "気温", "厚いので", "暑いので"), ("あついけど", "気温", "厚いけど", "暑いけど"), ("あついよね", "気温", "厚いよね", "暑いよね"),
+            ("かくけど", "メール", "描くけど", "書くけど"), ("しようでした", "API", "使用でした", "仕様でした"),
+            ("せんたくしてる", "服", "選択してる", "洗濯してる"), ("しょうめいされる", "部屋", "証明される", "照明される"),
+            // 規則に無い語でも、先頭部分だけを変換した結果なら同じ区切り (勝ち|で)
+            ("かちで", "終わってる", "勝ちで", "ガチで"),
+        })
+            Assert.Equal(expected, rules.Choose(reading, surrounding, engine, ConvertStem), $"{surrounding}: {reading} ({engine}) を補正する");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesKeepParticlesAndInflections()
+    {
+        var rules = ContextRules.Load(null);
+        foreach (var (reading, surrounding, engine, expected) in new[]
+        {
+            ("かく", "メール", "核", "書く"), ("かく", "イラスト", "書く", "描く"), ("かくよ", "メール", "描くよ", "書くよ"),
+            ("はしを", "ご飯", "橋を", "箸を"), ("かわから", "泳ぐ", "皮から", "川から"), ("おんげーしか", "ACの曲", "おんげーしか", "音ゲーしか"),
+            ("かいとうして", "質問", "解答して", "回答して"), ("しようです", "API", "使用です", "仕様です"),
+        })
+            Assert.Equal(expected, rules.Choose(reading, surrounding, engine, ConvertStem), $"{surrounding}: {reading} ({engine}) の補正は残す");
+        Assert.Equal(null, ChooseKana(rules, "いけないよ", "学校で"), "長い規則に手がかりがなくても、短い いけ に戻らない");
+        rules.AddText("かくにん 確認 : メール");
+        Assert.Equal("確認を", rules.Choose("かくにんを", "メール", "確認を", ConvertStem), "ユーザーの長い規則を優先する");
+        Assert.Equal(null, rules.Choose("かくにんを", "コード", "確認を", ConvertStem), "長い規則に手がかりがなければ変換エンジンに任せる");
+    }
+
+    [Test]
+    public static void Conversion_ContextRulesPreserveKakuninAndKakutei()
+    {
+        // #348 のコメント: メール・コードの文脈でも「確認」「確定」を変換エンジンの結果から壊さない。
+        foreach (var live in new[] { false, true })
+        {
+            foreach (var context in new[] { "メールを", "コードで" })
+            {
+                foreach (var (typed, expected) in new[]
+                {
+                    ("kakuninn", "確認"), ("kakutei", "確定"),
+                    ("kakuninshitara", "確認したら"), ("kakuteishite", "確定して"),
+                })
+                {
+                    var k = new Keyboard(live: live);
+                    k.Host.PrecedingText = context;
+                    k.Type(typed + " \n");
+                    Assert.Equal(expected, k.Host.Document, $"live={live}, {context}: {typed}");
+                }
+            }
+        }
     }
 
     [Test]
@@ -3367,6 +3473,23 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("i want ");
         Assert.Equal("I want ", k.Host.Document, string.Join("|", k.Host.Events));
+    }
+
+    [Test]
+    public static void AutoCorrect_NotToEnglishWithoutSpaceBetween()
+    {
+        // Enter で確定した日本語の語の後ろに英語の語を続けても、英語に確定し直さない (英語にすると、空白なしで前の語とつながる)
+        foreach (var (typed, expected) in new[] { ("are\nON ", "あれON "), ("i\nwant ", "いwant "), ("sushi\nPR\n", "すしPR") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed.Replace("\n", "⏎"));
+            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:")), "消さない: " + string.Join(" ", k.Host.Events));
+        }
+        // Space で区切ったときは今までどおり直す
+        var spaced = new Keyboard();
+        spaced.Type("are ON ");
+        Assert.Equal("are ON ", spaced.Host.Document);
     }
 
     [Test]

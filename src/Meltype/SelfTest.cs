@@ -67,7 +67,7 @@ internal static class SelfTest
         detector.SpellChecker = WindowsSpellChecker.Shared;
         Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
-        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温") ?? "(なし)");
+        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温", "厚い", _ => null) ?? "(なし)");
         Check("ユーザー辞書", () => new UserDictionary(null).Add("きごうとう", "記号等") ?? "登録できる");
         using (var converter = new MsImeKanjiConverter())
         {

@@ -45,13 +45,13 @@ public sealed class CompositionText
     /// <summary>英字 (F9 / F10) で見せるときの大文字・小文字。確定・取り消しで戻る。</summary>
     public LetterCase Case { get; set; } = LetterCase.AsTyped;
 
-    /// <summary>自動判定の強さ (設定)。</summary>
-    public Func<DetectionLevel> Level { get; set; } = () => DetectionLevel.Balanced;
+    /// <summary>自動判定を使わないか (設定 AutoDetection が OFF)。</summary>
+    public Func<bool> Manual { get; set; } = () => false;
 
-    /// <summary>この入力だけ判定の強さを変える (手動のときに Tab で提案を受け入れる)。確定・取り消しで戻る。</summary>
-    public DetectionLevel? LevelOverride { get; set; }
+    /// <summary>この入力だけ自動判定を使う (自動判定を使わないときに Tab で提案を受け入れた)。確定・取り消しで戻る。</summary>
+    public bool SuggestionAccepted { get; set; }
 
-    private DetectionLevel EffectiveLevel => LevelOverride ?? Level();
+    private bool EffectiveManual => !SuggestionAccepted && Manual();
 
     /// <summary>かな入力 (JIS) か。かな入力では <see cref="AppendKana"/> で 1 キー 1 文字ずつ入れる。</summary>
     public bool KanaInput { get; set; }
@@ -248,7 +248,7 @@ public sealed class CompositionText
                 if (IsEmpty)
                 {
                     Mode = DisplayMode.Auto;
-                    LevelOverride = null;
+                    SuggestionAccepted = false;
                 }
                 return;
             }
@@ -271,7 +271,7 @@ public sealed class CompositionText
         {
             Mode = DisplayMode.Auto;
             Case = LetterCase.AsTyped;
-            LevelOverride = null;
+            SuggestionAccepted = false;
         }
     }
 
@@ -294,7 +294,7 @@ public sealed class CompositionText
         _protectedCacheRaw = null;
         Mode = DisplayMode.Auto;
         Case = LetterCase.AsTyped;
-        LevelOverride = null;
+        SuggestionAccepted = false;
     }
 
     /// <summary>
@@ -321,6 +321,30 @@ public sealed class CompositionText
         if (digit < 0 || _units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(_units.Skip(digit + 1).Select(u => u.Raw)) + _pending;
         var lower = run.ToLowerInvariant();
+        // 確定のとき、数字の後ろに母音 1 文字だけ (GPT-4o の 4o) は型番。4お にしない (issue #1417)。
+        // 単位 (5min) と同じく、確定するときに決める (打っている間は 4お。続けて打つ 4oku は 4億)。
+        // i だけ除くのは、数字の直後の い 1 文字が 位 (1位・2位) として日本語でよく打たれるから。
+        // a・u・e・o は、数字の直後で 1 文字だけで終わる日本語の語にならない (を は wo、へ は he と打つ。円 en・億 oku などは
+        // 2 文字以上続くので、この決まりに当たらない)
+        var digitsStart = digit;
+        while (digitsStart > 0 && _units[digitsStart - 1].Raw is [var earlier] && char.IsAsciiDigit(earlier)) digitsStart--;
+        // 数字のすぐ前がかなとして読んだ英字 (kono|4o の no) なら、日本語の後ろの数字なので、ここでは決めない (前のかなを英字に戻さない)。
+        // 数字の前の英字が 1 文字だけ (m3e) なら、英字 1 文字 + 数字 + 英字 1 文字の略語の形 (i18n・m3e) なので、ここでも決めない。
+        // かなにならなかった 2 文字以上の英字 (gpt4o) は型番の名前なので対象にする
+        var letters = 0;
+        var afterKana = false;
+        for (var k = digitsStart - 1; k >= 0 && _units[k].Raw is { Length: > 0 } raw && raw.All(char.IsAsciiLetter); k--)
+        {
+            if (_units[k].Kana != raw) { afterKana = true; break; }
+            letters += raw.Length;
+        }
+        if (final && lower is "a" or "u" or "e" or "o" && letters != 1 && !afterKana)
+        {
+            _units.RemoveRange(digit + 1, _units.Count - digit - 1);
+            _units.Add(new CompositionUnit(run, run));
+            _pending.Clear();
+            return;
+        }
         foreach (var unit in UnitWords)
         {
             if (!lower.StartsWith(unit, StringComparison.Ordinal)) continue;
@@ -440,7 +464,7 @@ public sealed class CompositionText
 
     private (string Key, LanguageMemory? Memory, Detection.IWordChecker? SpellChecker, IReadOnlyList<CompositionSegment> Segments)? _segmentsCache;
 
-    /// <summary>区間分けの結果を決めるもの (打った単位・入力途中の子音・前後・判定の強さ・学習した語の版) をつないだもの。</summary>
+    /// <summary>区間分けの結果を決めるもの (打った単位・入力途中の子音・前後・自動判定を使うか・学習した語の版) をつないだもの。</summary>
     private string SegmentsKey()
     {
         var key = new StringBuilder();
@@ -450,7 +474,7 @@ public sealed class CompositionText
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-')
             .Append(PrecedingEnglishName ? 'N' : '-').Append(FullWidthParentheses ? 'W' : '-').Append(LaughterAfterKana ? 'L' : '-')
-            .Append((int)EffectiveLevel).Append(':').Append(_detector.Memory?.Version ?? -1);
+            .Append(EffectiveManual ? 'M' : '-').Append(':').Append(_detector.Memory?.Version ?? -1);
         return key.ToString();
     }
 
@@ -459,7 +483,7 @@ public sealed class CompositionText
         // 名前を紹介する英文では、辞書にないローマ字の名前も英字で残す。
         // 手動・かな入力・明示的な日本語学習・後ろの日本語は優先する。
         var raw = Raw;
-        if (!KanaInput && PrecedingEnglishName && FollowingEnglish != false && EffectiveLevel != DetectionLevel.Manual &&
+        if (!KanaInput && PrecedingEnglishName && FollowingEnglish != false && !EffectiveManual &&
             raw.Length > 0 && raw.All(char.IsAsciiLetter) && _detector.Memory?.Get(raw.ToLowerInvariant()) != false)
             return [new CompositionSegment(true, "", raw)];
         var segments = SegmentWithProtection(_units);
@@ -472,7 +496,7 @@ public sealed class CompositionText
     {
         var spans = ProtectedSpans();
         if (spans.Count == 0)
-            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveLevel, PrecedingEnglishSentence, KanaInput);
+            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput);
         var raw = Raw;
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -490,7 +514,7 @@ public sealed class CompositionText
             if (from == to) return;
             var gapUnits = UnitsInRawRange(units, from, to, out var pending);
             var segments = _detector.Segment(gapUnits, pending, from == 0 ? PrecedingEnglish : false,
-                to == raw.Length ? FollowingEnglish : false, EffectiveLevel,
+                to == raw.Length ? FollowingEnglish : false, EffectiveManual,
                 from == 0 && PrecedingEnglishSentence, KanaInput);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
             if (to < raw.Length && pending.Length > 0 && !segments[^1].IsEnglish)
@@ -576,11 +600,11 @@ public sealed class CompositionText
         return adjusted;
     }
 
-    /// <summary>判定の強さが「手動」のとき、標準の判定なら英字にする部分 (提案)。無ければ null。</summary>
+    /// <summary>自動判定を使わないとき、自動判定なら英字にする部分 (提案)。無ければ null。</summary>
     public string? Suggestion()
     {
-        if (Mode != DisplayMode.Auto || EffectiveLevel != DetectionLevel.Manual || IsNumeric) return null;
-        var suggested = _detector.Segment(_units, Pending, PrecedingEnglish, FollowingEnglish, DetectionLevel.Balanced, PrecedingEnglishSentence, KanaInput);
+        if (Mode != DisplayMode.Auto || !EffectiveManual || IsNumeric) return null;
+        var suggested = _detector.Segment(_units, Pending, PrecedingEnglish, FollowingEnglish, false, PrecedingEnglishSentence, KanaInput);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(Segments())) return null;
         return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
     }

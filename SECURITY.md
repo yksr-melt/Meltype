@@ -21,7 +21,7 @@ Meltype はキーボードの入力を扱うソフトです。安心して使っ
 - **Meltype IME (入力欄に直接入力) を入れるときだけ、管理者権限を求めます。** Windows に IME として登録するためです。IME の DLL は、ユーザーが書き換えられない `C:\Program Files\Meltype\tip` に置き、登録の前に配布したときのハッシュと合うかを確かめます。
   Meltype より高い権限で動いているアプリ (ふつうは管理者として動いているアプリ)・サインインや UAC の画面では、Meltype IME は何もしません。
   UAC の確認に見覚えが無いときは「いいえ」を選んでください (Meltype は変換ボックスで入力する方式で動きます)。設計と制限の詳細は [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) にあります。
-- 保存するのは、設定・学習データ・ユーザー辞書 (`%LOCALAPPDATA%\Meltype`) と、ON にしたときのログだけです。
+- 保存するのは、設定・学習データ・ユーザー辞書 (`%LOCALAPPDATA%\Meltype`) と、ON にしたときのログ、異常終了と自動更新の記録だけです。
 
 <br>
 

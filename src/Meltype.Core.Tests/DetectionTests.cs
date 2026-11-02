@@ -150,16 +150,6 @@ internal static class DetectionTests
     }
 
     [Test]
-    public static void HigherThresholdIsMoreConservative()
-    {
-        // 辞書に無いローマ字 (hokuta) の日本語スコアは、標準の閾値には届くが慎重の閾値には届かない
-        Assert.Equal(Verdict.Japanese, Classify(Engine, "hokuta").Verdict, "標準は切り替える");
-        var strict = DefaultSettings();
-        strict.DetectionLevel = DetectionLevel.Conservative;
-        Assert.True(Classify(CreateEngine(strict), "hokuta").Verdict != Verdict.Japanese, "慎重は閾値を上げて切り替えない");
-    }
-
-    [Test]
     public static void KanaInputStyle()
     {
         var settings = DefaultSettings();
@@ -252,7 +242,7 @@ internal static class DetectionTests
         var engine = CreateEngine(settings);
         var result = engine.Evaluate(new DetectionInput("konic", [], false));
         var typo = result.Contributions.Where(c => c.Source == "Typo").Sum(c => c.Japanese);
-        Assert.True(typo > 0 && typo < settings.EffectiveJapaneseThreshold, $"Typo の加点は閾値未満であるべき: {result.Describe()}");
+        Assert.True(typo > 0 && typo < ScoreEngine.JapaneseThreshold, $"Typo の加点は閾値未満であるべき: {result.Describe()}");
     }
 
     [Test]

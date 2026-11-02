@@ -569,7 +569,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
                     foreach (var kind in (List<AppKind>)property.GetValue(s)!)
                     {
                         grid.Rows.Add(kind.Name, EnumName(typeof(AppProfile), kind.Base),
-                            kind.DetectionLevel is { } level ? EnumName(typeof(DetectionLevel), level) : SameAsGlobal,
+                            kind.AutoDetection is { } auto ? (auto ? On : Off) : SameAsGlobal,
                             kind.LiveConversion is { } live ? (live ? On : Off) : SameAsGlobal,
                             kind.StartInEnglish);
                     }
@@ -588,7 +588,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         {
             Name = (r.Cells[0].Value as string ?? "").Trim(),
             Base = Equals(r.Cells[1].Value, EnumName(typeof(AppProfile), AppProfile.Code)) ? AppProfile.Code : AppProfile.General,
-            DetectionLevel = Enum.GetValues<DetectionLevel>().Where(l => Equals(r.Cells[2].Value, EnumName(typeof(DetectionLevel), l))).Cast<DetectionLevel?>().FirstOrDefault(),
+            AutoDetection = Equals(r.Cells[2].Value, On) ? true : Equals(r.Cells[2].Value, Off) ? false : null,
             LiveConversion = Equals(r.Cells[3].Value, On) ? true : Equals(r.Cells[3].Value, Off) ? false : null,
             StartInEnglish = r.Cells[4].Value is true,
         })
@@ -623,7 +623,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         };
         grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "名前 (例: チャット)", FillWeight = 26 });
         grid.Columns.Add(Choices("元にする種類", 18, Enum.GetValues<AppProfile>().Select(p => EnumName(typeof(AppProfile), p))));
-        grid.Columns.Add(Choices("判定の強さ", 20, [SameAsGlobal, .. Enum.GetValues<DetectionLevel>().Select(l => EnumName(typeof(DetectionLevel), l))]));
+        grid.Columns.Add(Choices("自動判定", 20, [SameAsGlobal, On, Off]));
         grid.Columns.Add(Choices("ライブ変換", 18, [SameAsGlobal, On, Off]));
         grid.Columns.Add(new ToggleSwitchColumn("最初は英数", 18));
         grid.DefaultValuesNeeded += (_, e) =>
