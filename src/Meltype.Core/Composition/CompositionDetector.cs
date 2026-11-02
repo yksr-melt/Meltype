@@ -34,7 +34,8 @@ public sealed partial class CompositionDetector
         "so", "suo", "tese", "ufo", "vue",
     ];
 
-    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "net", "org", "uk", "us", "xyz"];
+    // moe は meltype.moe のように使う (issue #1356)。ローマ字として読める前の語 (sugoku.moe) は、句点の後ろの日本語と重みで比べる
+    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "moe", "net", "org", "uk", "us", "xyz"];
 
     public CompositionDetector(RomajiDetector romaji, EnglishDetector english, ProperNouns? proper = null, KanaDetector? kana = null,
         IEnumerable<string>? userJapaneseWords = null)
