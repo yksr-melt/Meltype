@@ -14,7 +14,7 @@ namespace Meltype.Composition;
 /// やり取り (UTF-8、1 行ずつ): 「C[TAB]前の文字列[TAB]読み」を送ると、文節ごとに「読み[US]候補1[US]候補2…」を [RS] でつないだ 1 行が返る。
 /// ヘルパーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
+public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBusySkippingConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
@@ -40,6 +40,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private long _waitCalls;
     private long _waitTicks;
     private long _busySkips;
+    private long _busySkipsTotal;
+
+    /// <summary>使用中のため見送った問い合わせの数 (増えるだけ。TakeWaitStats では戻さない)。</summary>
+    public long BusySkips => Interlocked.Read(ref _busySkipsTotal);
     // 起動はバックグラウンドで行い、そのあいだの変換は待たずに null を返す (変換は UI スレッドで動くので、READY を待つと入力が止まる)
     private Task? _starting;
     private bool _started;
@@ -101,6 +105,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         if (!Monitor.TryEnter(_gate))
         {
             Interlocked.Increment(ref _busySkips);
+            Interlocked.Increment(ref _busySkipsTotal);
             return [];
         }
         try
@@ -161,7 +166,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
 
             if (line is null)
             {
-                Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
+                Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms、{Kind(request)})。");
                 Fail();
                 return null;
             }
@@ -171,7 +176,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         }
         catch (Exception ex)
         {
-            Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
+            Diagnostics.Log.Warn($"Mozc を使えませんでした ({Kind(request)}): {ex.Message}");
             Fail();
             return null;
         }
@@ -185,6 +190,15 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         }
     }
 
+    /// <summary>ログ用の頼みの種類。入力側の変換と裏の学習・保存のどちらで止まったかを見分ける (issue #1209)。</summary>
+    private static string Kind(string request) => request.Length > 0 ? request[0] switch
+    {
+        'C' => "変換",
+        'L' => "学習",
+        'S' => "保存",
+        _ => "その他",
+    } : "その他";
+
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Request(string context, string reading)
     {
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
@@ -193,6 +207,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         if (!Monitor.TryEnter(_gate))
         {
             Interlocked.Increment(ref _busySkips);
+            Interlocked.Increment(ref _busySkipsTotal);
             return null;
         }
         try

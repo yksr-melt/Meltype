@@ -42,6 +42,9 @@ internal static class MozcConverterTests
                     Pause();
                     output.WriteLine(fields[2] + UnitSeparator + fields[2]);
                     break;
+                case "C" when fields[2] == "かんじへんかん":
+                    output.WriteLine(fields[2] + UnitSeparator + "漢字変換");
+                    break;
                 case "C" when fields[2] == "ゆっくり":
                     Thread.Sleep(75);
                     output.WriteLine(fields[2] + UnitSeparator + fields[2]);
@@ -138,6 +141,39 @@ internal static class MozcConverterTests
                 Assert.True(busy.Wait(5000), "裏の処理を終えた");
             }
             Assert.True(WaitConverted(mozc, "にほんご"), "処理が終わったら Mozc を再び使える");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
+    public static void Issue1209_LiveConversionUsesMozcAgainAfterBusy()
+    {
+        // 使用中で見送ったライブ変換の結果をキャッシュすると、Mozc が空いても同じ読みのあいだ戻らない (#1340 のレビュー)。
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-mozc-busy-" + Guid.NewGuid().ToString("N"));
+        var profile = Path.Combine(directory, FakeHelperProfile);
+        try
+        {
+            using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+            mozc.WarmUp();
+            Assert.True(WaitConverted(mozc, "あ"), "起動した");
+            var hybrid = new HybridConverter(() => Config.ConversionEngine.Mozc, mozc, new CompositionTests.FakeConverter(), null);
+            var keyboard = new CompositionTests.Keyboard(live: true, converter: hybrid, moreCandidates: hybrid.Candidates);
+            var busy = Task.Run(() => mozc.Learn(null, [new ConversionClause("まつ", "待つ")]));
+            try
+            {
+                Assert.True(SpinWait.SpinUntil(() => File.Exists(Path.Combine(profile, "busy")), 5000), "ヘルパーが処理中になった");
+                keyboard.Type("kanjihennkann");
+                Assert.Equal("かんじへんかん", keyboard.Showing, "使用中は Mozc の変換を見送る");
+            }
+            finally
+            {
+                File.WriteAllText(Path.Combine(profile, "release"), "");
+                Assert.True(busy.Wait(5000), "裏の処理を終えた");
+            }
+            keyboard.Type("a\b");
+            Assert.Equal("漢字変換", keyboard.Showing, "Mozc が空いたら、同じ読みでも Mozc の結果に戻る");
+            keyboard.Type("\n");
+            Assert.Equal("漢字変換", keyboard.Host.Document);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

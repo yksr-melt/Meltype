@@ -52,6 +52,16 @@ public interface IStandaloneConverter
     string? ConvertStandalone(string hiragana);
 }
 
+/// <summary>
+/// 使用中のため問い合わせを見送ることがある変換エンジン (Mozc。issue #1209)。見送った変換結果は不完全なので、
+/// 呼び出し側はキャッシュしない (キャッシュすると、Mozc が空いても同じ読みのあいだ不完全な結果が残る)。
+/// </summary>
+public interface IBusySkippingConverter
+{
+    /// <summary>これまでに見送った問い合わせの数 (増えるだけ)。変換の前後で変わったら、その結果はキャッシュしない。</summary>
+    long BusySkips { get; }
+}
+
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
 public interface ILearningConverter
 {

@@ -1662,7 +1662,8 @@ public sealed class CompositionController
                 List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
-                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)])) { Kana = _text.KanaForSegment(s) });
+                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)]))
+                { Kana = _text.KanaForSegment(s) });
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
@@ -2582,11 +2583,16 @@ public sealed class CompositionController
         if (_options.History?.Get(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
+    /// <summary>変換エンジンが使用中のため見送った問い合わせの数。変換の前後で変わったら、その結果はキャッシュしない。</summary>
+    private long BusySkips => (_converter as IBusySkippingConverter)?.BusySkips ?? 0;
+
     /// <summary>同じかなを何度も変換しないようにキャッシュする。</summary>
     private string Convert(string kana)
     {
         if (_conversionCache.TryGetValue(kana, out var cached)) return cached;
+        var skips = BusySkips;
         var converted = NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
+        if (BusySkips != skips) return converted;
         if (_conversionCache.Count > 256) _conversionCache.Clear();
         _conversionCache[kana] = converted;
         return converted;
@@ -2600,7 +2606,9 @@ public sealed class CompositionController
     {
         if (_converter is not IStandaloneConverter standalone) return Convert(kana);
         if (_standaloneCache.TryGetValue(kana, out var cached)) return cached;
+        var skips = BusySkips;
         var converted = NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
+        if (BusySkips != skips) return converted;
         if (_standaloneCache.Count > 256) _standaloneCache.Clear();
         _standaloneCache[kana] = converted;
         return converted;
@@ -2616,7 +2624,10 @@ public sealed class CompositionController
         if (kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') < LiveConversionMinLength) return kana;
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
+        var skips = BusySkips;
         var converted = string.Concat(ConvertJapanese(kana).Select(c => c.Text));
+        // Mozc が使用中で見送った結果はキャッシュしない。Mozc が空いたら、次の打鍵で変換し直す (issue #1209)。
+        if (BusySkips != skips) return converted;
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = converted;
         return converted;
