@@ -644,7 +644,49 @@ STDMETHODIMP TextService::OnChange(REFGUID guid) {
     TipLog(L"入力モード: %s", open_ ? L"日本語" : L"英数");
     if (!open_ && composition_ != nullptr) CommitAsync(false);
     UpdateLangBar();
+    // アプリ・Windows による自動的な開閉 (パスワード欄への移動など) では表示しない。
+    // 明示的な切り替えの表示は ToggleInputMode の最後で 1 回だけ依頼する。
     return S_OK;
+}
+
+void TextService::FlashModeIndicator(ITfContext* context) {
+    // 設定が OFF なら、カーソル位置の取得も Meltype.exe への問い合わせもしない。
+    if (disabled_ || deactivated_ || !modeIndicator_) return;
+    // バックグラウンドの入力スレッドがモードを変えても、前面の入力欄に表示しない。
+    DWORD process = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &process);
+    if (process != GetCurrentProcessId()) return;
+    // Terminal の UI Automation の選択範囲は実際のカーソル位置とは限らない。
+    // 候補ウィンドウと同じ TSF の入力コンテキストから、未変換時の位置も取得する。
+    Microsoft::WRL::ComPtr<ITfContext> focused;
+    if (context == nullptr && threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
+        context = focused.Get();
+    }
+    RECT anchor = {};
+    RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
+        TF_SELECTION selection = {};
+        ULONG fetched = 0;
+        if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0 && selection.range != nullptr) {
+            Microsoft::WRL::ComPtr<ITfRange> range;
+            range.Attach(selection.range);
+            range->Collapse(ec, selection.style.ase == TF_AE_START ? TF_ANCHOR_START : TF_ANCHOR_END);
+            Microsoft::WRL::ComPtr<ITfContextView> view;
+            BOOL clipped = FALSE;
+            if (SUCCEEDED(context->GetActiveView(&view)) &&
+                (FAILED(view->GetTextExt(ec, range.Get(), &anchor, &clipped)) || clipped)) anchor = {};
+        }
+        return S_OK;
+    });
+    std::string position;
+    if (anchor.bottom > anchor.top && anchor.bottom - anchor.top < 200)
+        position = ",\"x\":" + std::to_string(anchor.left) + ",\"y\":" + std::to_string(anchor.bottom + 4);
+    JsonValue reply;
+    // 表示は補助機能なので、常駐側が応答しなければ短い時間で諦める。
+    Request("{\"op\":\"indicator\",\"process\":" + JsonString(ProcessName()) +
+            ",\"thread\":" + std::to_string(GetCurrentThreadId()) +
+            ",\"japanese\":" + (IsOpen() ? "true" : "false") + position + "}", reply, 100, true);
 }
 
 void TextService::SetOpen(bool open) {
@@ -781,6 +823,7 @@ void TextService::ApplyHello(const JsonValue& reply, bool currentState) {
         directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
         codeApp_ = serverActive_ && reply[L"code"].Bool();
         fullWidthSpace_ = serverActive_ && reply[L"fullWidthSpace"].Bool();
+        modeIndicator_ = serverActive_ && reply[L"modeIndicator"].Bool();
     }
     if (serverStateKnown_) shortcutsEnabled_ = serverActive_;
     // 入力応答にはキー一覧が含まれないので、状態が更新済みでも一覧はこの応答から取得する。
@@ -1145,6 +1188,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool toggl
         directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
         directEnglishWord_ = directDetection_ && reply[L"directEnglishWord"].Bool();
         fullWidthSpace_ = serverActive_ && reply[L"fullWidthSpace"].Bool();
+        modeIndicator_ = serverActive_ && reply[L"modeIndicator"].Bool();
         switchToJapanese = reply[L"switchToJapanese"].Bool();
         consumed_ = reply[L"consumed"].Bool();
         ApplyMode(reply);
@@ -1185,15 +1229,18 @@ void TextService::ToggleInputMode(ITfContext* context) {
         if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
         context = focused.Get();
     }
-    if (IsOpen()) {
+    const bool wasJapanese = IsOpen();
+    if (wasJapanese) {
         // 日本語 → 英数。コードの行を日本語にしていたなら、その行を英数に戻す (IME は開いたまま。コメント・文字列はまた日本語になる)。
         // それ以外は IME を閉じる
         if (!codeApp_ || !SetCodeLine(context, false)) SetOpen(false);
-        return;
+    } else {
+        // 英数 → 日本語。コードの行なら、その行だけ日本語にする (改行・別の行に移ると英数に戻る)
+        if (!open_) SetOpen(true);
+        if (codeApp_ && codeEnglish_) SetCodeLine(context, true);
     }
-    // 英数 → 日本語。コードの行なら、その行だけ日本語にする (改行・別の行に移ると英数に戻る)
-    if (!open_) SetOpen(true);
-    if (codeApp_ && codeEnglish_) SetCodeLine(context, true);
+    // Terminal・コードの行では IME 自体を開いたまま切り替わり、OnChange は来ない。
+    if (wasJapanese != IsOpen()) FlashModeIndicator(context);
 }
 
 bool TextService::SetCodeLine(ITfContext* context, bool japanese) {

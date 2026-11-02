@@ -158,7 +158,7 @@ public sealed class PhraseHistory
 
 /// <summary>
 /// 予測変換の候補 (issue #38)。打っている途中の読み・英字から、続きの候補を出す。
-///   日本語: 前に確定した語句 (PhraseHistory) → ユーザー辞書 → 選び直した変換の学習 の、読みが前方一致する語
+///   日本語: 前に確定した語句 (PhraseHistory) → ユーザー辞書 → 選び直した変換の学習 → 同梱の定型句 (greetings.txt、issue #1213) の、読みが前方一致する語
 ///   英語: よく使う英単語 (english.txt) → 同梱の英単語の一覧 (english-words.txt) の、前方一致する語 (短い順)
 ///   英字の名前 (設定が ON のとき、issue #890): 社名・サービス名 (brands.txt) → 英字で書く語 (loanwords.txt) の、読みが前方一致する語 (しゃお → Xiaomi)
 /// </summary>
@@ -178,6 +178,7 @@ public sealed class Predictor
     private readonly ConversionHistory? _history;
     private readonly Lazy<(string[] Common, string[] All)> _english;
     private readonly Lazy<EnglishName[]> _englishNames = new(LoadEnglishNames);
+    private readonly Lazy<(string Reading, string Phrase, string Start)[]> _greetings = new(LoadGreetings);
 
     /// <summary>英字の名前の読みと語。Brand は社名・サービス名の辞書 (brands.txt) のもの、Order は辞書に書いた順。</summary>
     private readonly record struct EnglishName(string Reading, string Word, bool Brand, int Order);
@@ -217,6 +218,10 @@ public sealed class Predictor
             Add(_userDictionary.Words.Where(w => w.Reading.Length > kana.Length && w.Reading.StartsWith(kana, StringComparison.Ordinal)).Select(w => w.Word));
         if (_history is not null)
             Add(_history.TextsStartingWith(kana));
+        // 学習がなくても出す定型句 (おはよ → おはようございます)。出し始める読みまで打ったら出す (ほかの語の打ち始めでは出さない)。
+        // 打ち終えた読みと同じ語句 (こんにちは) は、続きではないので出さない
+        Add(_greetings.Value.Where(g => g.Reading.Length > kana.Length && g.Reading.StartsWith(kana, StringComparison.Ordinal)
+            && kana.StartsWith(g.Start, StringComparison.Ordinal)).Select(g => g.Phrase));
         return result;
     }
 
@@ -284,6 +289,13 @@ public sealed class Predictor
         Add("loanwords.txt", brand: false);
         return names.OrderBy(n => n.Reading, StringComparer.Ordinal).ThenBy(n => n.Order).ToArray();
     }
+
+    /// <summary>greetings.txt (読み<Tab>語句<Tab>出し始める読み)。</summary>
+    private static (string Reading, string Phrase, string Start)[] LoadGreetings() =>
+        Detection.DictionarySource.LinesWithoutComments(Detection.DictionarySource.ReadEmbedded("greetings.txt"))
+            .Select(line => line.TrimEnd('\r').Split('\t'))
+            .Where(parts => parts.Length == 3 && parts.All(p => p.Length > 0))
+            .Select(parts => (parts[0], parts[1], parts[2])).ToArray();
 
     private static IEnumerable<string> StartingWith(string[] sorted, string prefix)
     {

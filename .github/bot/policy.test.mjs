@@ -11,8 +11,8 @@ const issue = (number, labels = [], author = 'alice') => ({
   number, state: 'open', user: user(author), body: '報告', labels: labels.map(name => ({ name })),
   created_at: new Date(start - WaitMs * 2 + number * 1000).toISOString(),
 });
-const pull = (number, draft = false, author = 'alice') => ({
-  ...issue(number, [], author), draft, head: { sha: 'original' }, pull_request: {},
+const pull = (number, draft = false, author = 'alice', association = 'NONE') => ({
+  ...issue(number, [], author), author_association: association, draft, head: { sha: 'original' }, pull_request: {}, node_id: `PR_${number}`,
 });
 
 /** インメモリの GitHub API。API の書き込みまで通して、閉じる対象とタイミングを確かめる。 */
@@ -25,6 +25,13 @@ function fixture(items) {
   const writes = [];
   let serial = 1, now = start;
   const api = {
+    async graphql(query, variables) {
+      writes.push({ method: 'GRAPHQL', query, variables });
+      const item = [...records.values()].find(i => i.node_id === variables.id);
+      if (!item || !query.includes('convertPullRequestToDraft')) throw new Error('未対応の GraphQL');
+      item.draft = true; addEvent(item.number, 'converted_to_draft');
+      return { convertPullRequestToDraft: { pullRequest: { isDraft: true } } };
+    },
     async list(path) {
       if (path.startsWith('/pulls?')) return structuredClone([...records.values()].filter(i => i.pull_request && i.state === 'open'));
       if (path === '/labels') return Object.values(Labels).map(name => ({ name }));
@@ -80,55 +87,120 @@ function fixture(items) {
   };
 }
 
-test('Draft は上限に含めず、作者ごとの古い 2 件を残す', () => {
-  assert.deepEqual([...excessPulls([pull(4), pull(1, true), pull(3), pull(2), pull(5, false, 'bob')])], [4]);
+const Day = 24 * 60 * 60 * 1000;
+const limited = (f, n) => f.records.get(n).labels.some(l => l.name === Labels.limit);
+
+test('Draft も上限に含め、作者ごとの古い 2 件を残す', () => {
+  assert.deepEqual([...excessPulls([pull(4), pull(1, true), pull(3), pull(2), pull(5, false, 'bob')])], [3, 4]);
 });
 
-test('3 件目だけに通知し、通知後 14 日でその PR だけを閉じる', async () => {
+for (const association of ['OWNER', 'MEMBER', 'COLLABORATOR']) {
+  test(`${association}: メンテナーには上限の通知をせず、一般投稿者の 3 件目だけを順番待ちにする`, async () => {
+    const f = fixture([
+      ...[1, 2, 3].map(n => pull(n, false, 'alice', association)),
+      ...[4, 5, 6].map(n => pull(n, false, 'bob')),
+    ]);
+    await f.run();
+    for (const n of [1, 2, 3]) {
+      assert.deepEqual(f.records.get(n).labels, []);
+      assert.deepEqual(f.comments.get(n), []);
+    }
+    assert.equal(f.comments.get(6).length, 1);
+    assert.ok(limited(f, 6));
+    assert.ok(!limited(f, 5));
+  });
+}
+
+for (const association of ['CONTRIBUTOR', 'FIRST_TIME_CONTRIBUTOR', 'FIRST_TIMER', 'MANNEQUIN', 'NONE']) {
+  test(`${association}: 一般投稿者は上限の対象にする`, () => {
+    assert.deepEqual([...excessPulls([1, 2, 3].map(n => pull(n, false, 'alice', association)))], [3]);
+  });
+}
+
+test('メンテナーになった投稿者の上限超過ラベルと通知を解除する', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  for (const pr of f.records.values()) pr.author_association = 'COLLABORATOR';
+  await f.run(start + Day);
+  assert.deepEqual(f.records.get(3).labels, []);
+  assert.equal(f.comments.get(3).length, 1);
+  assert.match(f.comments.get(3)[0].body, /対象ではなく/);
+});
+
+test('メンテナーの PR も PR要対応ラベルによる期限管理の対象にする', async () => {
+  const pr = pull(1, false, 'alice', 'OWNER'); pr.labels = [{ name: Labels.rule }];
+  const f = fixture([pr]);
+  await f.run();
+  await f.run(start + WaitMs);
+  assert.equal(f.records.get(1).state, 'closed');
+});
+
+test('3 件目は順番待ちにするだけで、時間がたっても Draft にも閉じもしない', async () => {
   const f = fixture([pull(1), pull(2), pull(3)]);
   await f.run();
   assert.equal(f.comments.get(1).length, 0);
   assert.equal(f.comments.get(3).length, 1);
-  await f.run(start + WaitMs - 1);
+  assert.match(f.comments.get(3)[0].body, /順番待ち/);
+  await f.run(start + WaitMs * 2);
+  assert.equal(f.writes.some(w => w.method === 'GRAPHQL'), false);
+  assert.equal(f.records.get(3).draft, false);
   assert.equal(f.records.get(3).state, 'open');
-  await f.run(start + WaitMs);
-  assert.equal(f.records.get(3).state, 'closed');
-  assert.equal(f.records.get(1).state, 'open');
-  assert.equal(f.records.get(2).state, 'open');
+  assert.ok(limited(f, 3));
+  assert.equal(f.comments.get(3).length, 1);
 });
 
-test('投稿者の返信後は、長期間たっても自動クローズしない', async () => {
+test('Draft にしても枠は空かない (上限を避けるために Draft にしなくてよい)', async () => {
   const f = fixture([pull(1), pull(2), pull(3)]);
   await f.run();
-  f.reply(3);
-  await f.run(start + WaitMs);
-  await f.run(start + WaitMs * 3);
-  assert.equal(f.records.get(3).state, 'open');
-  assert.match(f.comments.get(3)[0].body, /自動クローズを止め/);
+  f.records.get(3).draft = true; f.addEvent(3, 'converted_to_draft');
+  await f.run(start + Day);
+  assert.ok(limited(f, 3));
+  assert.match(f.comments.get(3)[0].body, /"status":"waiting"/);
+});
+
+test('枠が空いたらラベルを外して通知を解除する', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  f.records.get(1).state = 'closed';
+  await f.run(start + Day);
+  assert.equal(f.records.get(3).labels.length, 0);
+  assert.match(f.comments.get(3)[0].body, /対象ではなく/);
+});
+
+test('次にレビューの付いた PR は、古い PR より先に枠へ入れる', () => {
+  const next = pull(3); next.labels.push({ name: Labels.next });
+  assert.deepEqual([...excessPulls([pull(1), pull(2), next])], [2]);
+});
+
+test('次にレビューを付けた順番待ちの PR を枠に入れ、代わりに古い PR を順番待ちにする', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  f.records.get(3).labels.push({ name: Labels.next }); f.addEvent(3, 'labeled', Labels.next);
+  await f.run(start + Day);
+  assert.ok(limited(f, 2));
+  assert.ok(!limited(f, 3));
+  assert.equal(f.records.get(2).draft, false);
+});
+
+test('前の版の「Draft にする」超過の通知は、順番待ちの通知に書き直す', async () => {
+  const f = fixture([pull(1), pull(2), pull(3)]);
+  await f.run();
+  const notice = f.comments.get(3)[0];
+  notice.body = notice.body.replace('"version":3', '"version":2');
+  await f.run(start + Day);
+  assert.equal(f.records.get(3).draft, false);
+  assert.equal(f.comments.get(3).length, 1);
+  assert.match(f.comments.get(3)[0].body, /"version":3/);
 });
 
 test('他の人・bot のコメントやレビュー通知では投稿者の返信とみなさない', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]);
+  const f = fixture([issue(1, [Labels.info])]);
   await f.run();
-  f.reply(3, 'reviewer');
-  f.comments.get(3).push({ user: bot, body: 'CI 成功', created_at: new Date(start + 1000).toISOString() });
+  f.reply(1, 'reviewer');
+  f.comments.get(1).push({ user: bot, body: 'CI 成功', created_at: new Date(start + 1000).toISOString() });
   await f.run(start + WaitMs);
-  assert.equal(f.records.get(3).state, 'closed');
+  assert.equal(f.records.get(1).state, 'closed');
 });
-
-for (const change of ['push', 'body', 'draft', 'slot']) {
-  test(`${change}: 対応・Draft 化・空き枠で超過 PR を閉じない`, async () => {
-    const f = fixture([pull(1), pull(2), pull(3)]);
-    await f.run();
-    if (change === 'push') f.records.get(3).head.sha = 'new';
-    if (change === 'body') f.records.get(3).body += '追記';
-    if (change === 'draft') f.records.get(3).draft = true;
-    if (change === 'slot') f.records.get(1).state = 'closed';
-    await f.run(start + WaitMs);
-    assert.equal(f.records.get(3).state, 'open');
-    if (['draft', 'slot'].includes(change)) assert.equal(f.records.get(3).labels.length, 0);
-  });
-}
 
 test('手動の PR要対応ラベルも通知から 14 日待ち、通知を重複投稿しない', async () => {
   const pr = pull(1); pr.labels = [{ name: Labels.rule }];
@@ -259,15 +331,50 @@ test('フォームなど bot 名義の報告は、人からの補足でも待機
   assert.equal(f.records.get(1).state, 'open');
 });
 
-test('閉じる直前に空き枠ができた場合も PR を閉じない', async () => {
+test('No Close の PR も、超過していれば順番待ちの通知のままにする (Draft にも閉じもしない)', async () => {
   const f = fixture([pull(1), pull(2), pull(3)]); await f.run();
-  const original = f.api.list; let reads = 0;
-  f.api.list = async path => {
-    if (path === '/pulls?state=open' && ++reads === 2) f.records.get(1).state = 'closed';
-    return original(path);
-  };
-  await f.run(start + WaitMs);
+  f.records.get(3).labels.push({ name: Labels.exempt }); f.addEvent(3, 'labeled', Labels.exempt);
+  await f.run(start + WaitMs * 2);
+  assert.equal(f.records.get(3).draft, false);
   assert.equal(f.records.get(3).state, 'open');
+  assert.ok(f.records.get(3).labels.some(l => l.name === Labels.limit));
+  assert.match(f.comments.get(3)[0].body, /順番待ち/);
+  assert.doesNotMatch(f.comments.get(3)[0].body, /クローズを止めています/);
+});
+
+test('No Close の間は閉じず、外したあとは新しく 14 日待つ', async () => {
+  const f = fixture([issue(1, [Labels.info, Labels.exempt])]);
+  const pr = pull(3); pr.labels = [{ name: Labels.rule }, { name: Labels.exempt }]; f.records.set(3, pr);
+  for (const map of [f.comments, f.events, f.reviewComments, f.reviews]) map.set(3, []);
+  await f.run();
+  await f.run(start + WaitMs * 2);
+  assert.equal(f.records.get(1).state, 'open');
+  assert.equal(f.records.get(3).state, 'open');
+  assert.equal(f.comments.get(1).length, 0);
+  const removed = start + WaitMs * 2;
+  f.records.get(1).labels = [{ name: Labels.info }]; f.addEvent(1, 'unlabeled', Labels.exempt);
+  await f.run(removed);
+  assert.equal(f.records.get(1).state, 'open');
+  await f.run(removed + WaitMs - 1);
+  assert.equal(f.records.get(1).state, 'open');
+  await f.run(removed + WaitMs);
+  assert.equal(f.records.get(1).state, 'closed');
+});
+
+test('待っている途中で No Close を付けたら、通知を止めて閉じない', async () => {
+  const f = fixture([issue(1, [Labels.info])]); await f.run();
+  f.records.get(1).labels.push({ name: Labels.exempt }); f.addEvent(1, 'labeled', Labels.exempt);
+  await f.run(start + WaitMs);
+  assert.equal(f.records.get(1).state, 'open');
+  assert.match(f.comments.get(1)[0].body, /"status":"exempt"/);
+});
+
+test('情報待ちで閉じるときは、情報不足で閉じることと再オープンの頼み方を書く', async () => {
+  const f = fixture([issue(1, [Labels.info])]); await f.run();
+  await f.run(start + WaitMs);
+  assert.equal(f.records.get(1).state, 'closed');
+  assert.equal(f.writes.find(w => w.path === '/issues/1' && w.method === 'PATCH').body.state_reason, 'not_planned');
+  assert.match(f.comments.get(1).at(-1).body, /情報が届かなかった[\s\S]*再オープン/);
 });
 
 test('情報待ちラベルを解除していれば期限切れでも閉じない', async () => {

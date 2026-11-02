@@ -65,7 +65,14 @@ internal sealed class ToggleSwitch : Control
         set { _offText = value; FitToContent(); }
     }
 
-    public void Toggle() => Checked = !Checked;
+    /// <summary>利用者が切り替えたとき (クリック・Space キー・アクセシビリティの操作。プログラムから Checked を変えたときは起きない)。</summary>
+    public event EventHandler? Toggled;
+
+    public void Toggle()
+    {
+        Checked = !Checked;
+        Toggled?.Invoke(this, EventArgs.Empty);
+    }
 
     protected override Size DefaultSize => new(TrackWidth + Gap + 30 + Pad * 2, TrackHeight + Pad * 2);
 

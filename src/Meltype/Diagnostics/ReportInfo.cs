@@ -33,6 +33,7 @@ internal static class ReportInfo
             $"管理者として実行: {(IsAdministrator() ? "はい" : "いいえ")}",
             $"モード: {settings.Mode}",
             $"変換エンジン: {settings.ConversionEngine} (Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")})",
+            $"Zenzai: {(settings.UseZenzai ? "ON" : "OFF")}",
             $"自動判定の強さ: {settings.DetectionLevel}",
             $"入力方式: {settings.InputStyle}",
             $"ライブ変換: {(settings.LiveConversion ? "ON" : "OFF")}",

@@ -102,7 +102,7 @@ public sealed class RomajiDetector
         // c 行 (Microsoft IME と同じ。cake や code まで日本語として読めてしまうので判定には使わない)
         ("か", ["ca"]), ("し", ["ci"]), ("く", ["cu"]), ("こ", ["co"]),
         ("ちぃ", ["cyi", "tyi"]),
-        ("くぁ", ["kwa"]), ("ぐぁ", ["gwa"]), ("つぁ", ["tsa"]), ("つぃ", ["tsi"]), ("つぇ", ["tse"]), ("つぉ", ["tso"]),
+        ("くぁ", ["kwa"]), ("くぉ", ["kwo"]), ("ぐぁ", ["gwa"]), ("つぁ", ["tsa"]), ("つぃ", ["tsi"]), ("つぇ", ["tse"]), ("つぉ", ["tso"]),
     ];
 
     private static readonly Dictionary<string, string> SpellingToKana = BuildSpellingMap(Table);

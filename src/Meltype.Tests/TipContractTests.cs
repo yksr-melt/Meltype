@@ -13,7 +13,7 @@ namespace Meltype.Tests;
 /// DLL がするのと同じ要求 (key・commit・close・hello) を順に送り、応答の確定 (commits)・未確定の表示 (view)・キーを使ったか (consumed) を確かめる。
 /// パイプも DLL も使わないので、GitHub Actions の Windows でも安定して流せる。
 /// 確かめられないこと: DLL (native/tip) の TSF の処理 (キーの受け取り・未確定の文字の表示・フォーカスの通知) と、OS の実際のキーの配送。
-/// <b>このテストが通っても、実際の Windows のデスクトップで打てることは保証しない</b> (docs/TSF_DESIGN.md の「未対応・確かめていないこと」)。
+/// <b>このテストが通っても、実際の Windows のデスクトップで打てることは保証しない</b> (docs/dev/TSF_DESIGN.md の「未対応・確かめていないこと」)。
 /// </summary>
 internal static class TipContractTests
 {

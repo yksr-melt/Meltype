@@ -7,7 +7,7 @@ using Meltype.Input;
 
 namespace Meltype.Tests;
 
-/// <summary>区切りを点数で選ぶ (α版、設定「区切りを点数で選ぶ (α版)」) のテスト。</summary>
+/// <summary>区切りを重みで選ぶ (ReadingLattice.cs) のテスト。α版「区切りを点数で選ぶ」(#235) のときに足した例。</summary>
 internal static class ScoredSegmentationTests
 {
     private static readonly CompositionDetector Detector = CreateDetector();
@@ -16,7 +16,6 @@ internal static class ScoredSegmentationTests
     {
         var detector = CompositionDetector.CreateDefault();
         detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        detector.UseScoredSegmentation = () => true;
         return detector;
     }
 
@@ -77,11 +76,18 @@ internal static class ScoredSegmentationTests
     }
 
     [Test]
-    public static void CapitalFollowedByLowercase_StillScored()
+    public static void KnownWord_NeedsWordCasing()
     {
-        // 小文字が続く大文字 (文の頭を Shift で打った Ga・Koreha) は、今までどおり点数で区切る (助詞 + 英単語を全部英語にしない)
-        foreach (var (typed, expected) in new[] {
-            ("Gagoogle", "がgoogle"), ("Hagithub", "はgithub"), ("Desupport", "でsupport"), ("Korehagithubni", "これはgithubに") })
+        // iTs は its の書き方ではないので、知っている英単語にしない (#351: やばiTsはつやさん になっていた)
+        foreach (var (typed, expected) in new[] { ("yabaiTshatuyasann", "やばいTしゃつやさん"), ("Its", "Its"), ("ITS", "ITS"), ("GitHubni", "GitHubに") })
+            Assert.Equal(expected, Type(typed), typed);
+    }
+
+    [Test]
+    public static void DoubledConsonantSokuon_IsBetweenKana()
+    {
+        // 子音を重ねて打った っ は、前後をかなに挟まれているときだけ (excelとっpt・pythonとっfmpeg にしない)
+        foreach (var (typed, expected) in new[] { ("exceltoppt", "excelとppt"), ("pythontoffmpeg", "pythonとffmpeg"), ("mottekita", "もってきた") })
             Assert.Equal(expected, Type(typed), typed);
     }
 }

@@ -101,6 +101,25 @@ internal static unsafe class NativeBoundaryTests
     }
 
     [Test]
+    public static void Native_EmptyBracketsKeepThePairThroughCandidateSelection()
+    {
+        foreach (var (input, count, expected) in new[] { ("[]", 7, "｢｣"), ("()", 2, "（）"), ("{}", 2, "｛｝"), ("<>", 4, "＜＞") })
+        {
+            using var native = new NativeSession();
+            native.Type(input);
+            using var conversion = native.Key(' ', VirtualKeys.Space);
+            var view = conversion.RootElement.GetProperty("view");
+            Assert.True(view.GetProperty("converting").GetBoolean(), input);
+            Assert.Equal(1, view.GetProperty("clauses").GetArrayLength(), input);
+            Assert.Equal(count, view.GetProperty("candidates").GetArrayLength(), input);
+            Assert.Equal(expected, view.GetProperty("candidates")[1].GetString(), input);
+            using var selected = native.Key('2', 0x32);
+            Assert.Equal(expected, selected.RootElement.GetProperty("commits")[0].GetProperty("text").GetString(), input);
+            Assert.Equal(JsonValueKind.Null, selected.RootElement.GetProperty("view").ValueKind, input);
+        }
+    }
+
+    [Test]
     public static void Native_CodeLineToggleControlsCompositionWithoutSurroundingText()
     {
         using var native = new NativeSession();
