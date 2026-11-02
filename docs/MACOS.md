@@ -71,7 +71,7 @@ brew install --cask yksr-melt/Meltype/meltype
 
 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
 
-かな漢字変換では、azooKey に組み込まれた Zenzai (zenz-v3.2-small、同梱) で、キャレットの前の文 (20 文字まで) を文脈にして変換します (既定は OFF。推論が遅いときに打ち切る仕組みができるまで。CPU で計算します)。使うときは `config.json` の `"UseZenzai": true`、自分のモデルを使うときは `"ZenzaiModelPath"` に GGUF の場所を書きます。変えたら Meltype を起動し直します。
+かな漢字変換では、azooKey に組み込まれた Zenzai (zenz-v3.2-small、同梱) で、キャレットの前の文 (20 文字まで) を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分のモデルを使うときは `"ZenzaiModelPath"` に GGUF の場所を書きます。変えたら Meltype を起動し直します。
 
 <a name="入力モードのショートカット"></a>
 <img src="images/headings/mac/s06.svg" alt="入力モードのショートカット" height="40">

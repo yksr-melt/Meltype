@@ -389,11 +389,8 @@ public sealed class Settings
     public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
 
     [Category("4. 変換"), DisplayName("Zenzai を使う"),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は Windows では ON、Mac では OFF です (Mac は推論の時間の上限ができるまで)。")]
-    public bool UseZenzai { get; set; } = DefaultUseZenzai;
-
-    /// <summary>Zenzai の既定。Mac は推論が遅いときに打ち切る仕組みができるまで OFF (既定 ON は別の PR で)。</summary>
-    internal static bool DefaultUseZenzai => !OperatingSystem.IsMacOS();
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+    public bool UseZenzai { get; set; } = true;
 
     [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), WindowsOnly,
      Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
@@ -995,8 +992,6 @@ public sealed class Settings
     {
         // v9: Zenzai を同梱して既定 ON にした (issue #1120)。前の既定 (OFF・場所が空) のままなら ON にする。
         // 自分で llama-server やモデルの場所を書いた人は、OFF にしていればそのまま。書いていない項目は新しい既定 (ON) になる
-        // Mac は既定 OFF のままなので移さない
-        if (!DefaultUseZenzai) return;
         static string Text(JsonObject o, string key) => o[key] is JsonValue v && v.TryGetValue<string>(out var t) ? t : "";
         if (values[nameof(UseZenzai)] is JsonValue use && use.TryGetValue<bool>(out var on) && !on &&
             string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiServerPath))) && string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiModelPath))))
