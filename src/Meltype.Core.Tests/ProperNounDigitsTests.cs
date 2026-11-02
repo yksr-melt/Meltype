@@ -29,7 +29,7 @@ internal static class ProperNounDigitsTests
     [Test]
     public static void Issue1013_ManualLevelKeepsKana()
     {
-        // 自動判定の強さが手動なら、ほかの固有名詞 (neovide) と同じく英字にしない
+        // 自動判定が OFF なら、ほかの固有名詞 (neovide) と同じく英字にしない
         var k = new Keyboard { Manual = true };
         k.Type("yachi8000\n");
         Assert.Equal("やち8000", k.Host.Document, "手動では英字にしない");
