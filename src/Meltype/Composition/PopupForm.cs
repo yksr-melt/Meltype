@@ -32,4 +32,27 @@ internal abstract class PopupForm : Form
             return cp;
         }
     }
+
+    private const int WM_MOUSEACTIVATE = 0x0021, WM_ACTIVATE = 0x0006, MA_NOACTIVATE = 3, WA_INACTIVE = 0;
+
+    protected override void WndProc(ref Message m)
+    {
+        switch (m.Msg)
+        {
+            case WM_MOUSEACTIVATE:
+                // クリック・マウスを乗せたこと (Windows の「マウスポインターを合わせたウィンドウをアクティブにする」) でアクティブにならない (issue #997)
+                m.Result = MA_NOACTIVATE;
+                return;
+            case WM_ACTIVATE when (m.WParam.ToInt64() & 0xFFFF) != WA_INACTIVE && m.LParam != IntPtr.Zero:
+                // それでもアクティブにされた (マウスを乗せたウィンドウをアクティブにする設定は WS_EX_NOACTIVATE を見ないことがある)。
+                // 入力欄のウィンドウにすぐ返す。返さないと、確定した文字が入力欄に届かずに消える (issue #997)
+                base.WndProc(ref m);
+                SetForegroundWindow(m.LParam);
+                return;
+        }
+        base.WndProc(ref m);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 }
