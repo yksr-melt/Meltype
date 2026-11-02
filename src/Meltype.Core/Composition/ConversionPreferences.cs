@@ -15,7 +15,6 @@ public sealed class ContextRules
     private readonly Dictionary<string, List<(string Candidate, string[] Cues)>> _rules = new(StringComparer.Ordinal);
 
     // 語の後ろに続く助詞・助動詞・活用語尾の頭の文字 (はし|を、あつい|ので、かく|けど、せんたく|してる)。
-    // 語尾を列挙しきることはできないので、頭の文字だけを見て、語の境界は変換エンジンの結果で確かめる。
     // る・い・き・り などで始まる残りは語の続き (はし|る → 走る、かわ|いい、いし|き) なので補正しない。
     private const string EndingHeads = "をがはにでともへのやかなだけよねさしすせまたてぞぜわっじば";
 
@@ -55,19 +54,27 @@ public sealed class ContextRules
     }
 
     /// <summary>
-    /// 文節の読み (はしを) に対して、前後の文字列 (surrounding) の手がかりに合う候補 (箸を) を返す。無ければ null。
-    /// 辞書にある最長の先頭部分で探し、残りが助詞・活用語尾 (を) のときだけ付ける。手がかりが多く当たった規則を優先する。
-    /// 変換エンジンの文節 (engineText) があれば、それが残りのかなで終わるときだけ補正する。
-    /// 確認 は にん で終わらないので、かく|にん は別の語で、書くにん にしない (issue #348)。
+    /// 文節の読み (はしを) と変換エンジンの結果 (engineText: 橋を) に対して、前後の文字列 (surrounding) の手がかりに合う候補 (箸を) を返す。無ければ null。
+    /// 辞書にある最長の先頭部分で探し、残り (を) はそのまま付ける。手がかりが多く当たった規則を優先する。
+    /// 残りがあるときは、語の境界と活用を Meltype では判定せず、変換エンジンに確かめる (issue #348)。
+    /// 変換エンジンの結果が「先頭部分の語 + 残りのかな」になっていて、その語が先頭部分の読みの変換 (同じ規則の候補か、
+    /// convertStem で先頭部分だけを変換した結果) であるときだけ置き換える。
+    /// 隠して は かく の変換ではないので 書くして に、変わった は かわ の変換ではないので 川った に、確認 は にん で終わらないので 書くにん にしない。
     /// </summary>
-    public string? Choose(string reading, string surrounding, string? engineText = null)
+    public string? Choose(string reading, string surrounding, string engineText, Func<string, string?> convertStem)
     {
         if (surrounding.Length == 0) return null;
         for (var length = reading.Length; length >= 1; length--)
         {
-            if (!_rules.TryGetValue(reading[..length], out var list)) continue;
+            var head = reading[..length];
+            if (!_rules.TryGetValue(head, out var list)) continue;
             var ending = reading[length..];
-            if (ending.Length > 0 && (!EndingHeads.Contains(ending[0]) || engineText is not null && !engineText.EndsWith(ending, StringComparison.Ordinal))) return null;
+            if (ending.Length > 0)
+            {
+                if (!EndingHeads.Contains(ending[0]) || !engineText.EndsWith(ending, StringComparison.Ordinal)) return null;
+                var stem = engineText[..^ending.Length];
+                if (stem != head && !list.Any(rule => rule.Candidate == stem) && convertStem(head) != stem) return null;
+            }
             var best = list
                 .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => surrounding.Contains(cue, StringComparison.Ordinal))))
                 .Where(r => r.Hits > 0)
