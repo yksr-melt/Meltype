@@ -393,10 +393,15 @@ internal static class SessionFacadeTests
     public static void AutoCorrect_NotAfterCaretMovedOutside()
     {
         // OS の IME がアプリに通したキー・クリックで動いたと知らせてきた (Meltype IME の "moved")
+        // 英語で確定した sushi を、続けて打った がすき で日本語に直す入力で比べる (知らせが無ければ確定し直す)
+        var control = Create();
+        Type(control, "sushi\n", "I love ");
+        Assert.True(Type(control, "gasuki\n").SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "知らせが無ければ確定し直す");
+
         var session = Create();
-        Type(session, "i\n");
+        Type(session, "sushi\n", "I love ");
         session.ForgetLastCommit();
-        var results = Type(session, "want ");
+        var results = Type(session, "gasuki\n");
         Assert.True(!results.SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "関係ない文字を消さない");
     }
 
