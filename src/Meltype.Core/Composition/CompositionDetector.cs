@@ -417,6 +417,25 @@ public sealed partial class CompositionDetector
     }
 
     /// <summary>
+    /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。語の始めからの英字・数字が一覧にあるとき (後ろに日本語が続いてもよい)。
+    /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
+    /// </summary>
+    private int ProperNounWithDigitsEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    {
+        static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
+        if (start >= units.Count || !IsPart(units[start])) return -1;
+        if (start > 0 && units[start - 1].Raw is { Length: > 0 } previous && char.IsAsciiLetterOrDigit(previous[^1])) return -1;
+        // 一覧にある一番長い頭 (yachi8000|desu の yachi8000)
+        var end = -1;
+        for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
+        {
+            var word = Raw(units, start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
+            if (word.Any(char.IsAsciiDigit) && word.Any(char.IsAsciiLetter) && _proper.Contains(word.ToLowerInvariant())) end = i;
+        }
+        return end;
+    }
+
+    /// <summary>
     /// 数字を英字が挟む短い略語 (i18n、l10n、h2o、a11y、k8s) の終わり。無ければ -1。
     /// 末尾が数字だけの語 (win11、ps5) は区切りの重みに任せる。
     /// 日本語の途中の数字 (かいぎは3じ) を略語にしないよう、前後の英字は短く、全体も短いときだけ。

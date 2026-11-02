@@ -77,3 +77,5 @@ Suica DCafe ProBot Carlbot Disboard TaCZ NSFW
 Khalifa Ariana Grande Sheeran Marshmello Beabadoobee Chainsmokers Iann Dior Dobby
 # Issue #268
 DeVito
+# Issue #1013 (英字・数字の名前。数字の前で区切らない)
+yachi8000
