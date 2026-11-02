@@ -317,6 +317,30 @@ public sealed class CompositionText
         if (digit < 0 || _units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(_units.Skip(digit + 1).Select(u => u.Raw)) + _pending;
         var lower = run.ToLowerInvariant();
+        // 確定のとき、数字の後ろに母音 1 文字だけ (GPT-4o の 4o) は型番。4お にしない (issue #1417)。
+        // 単位 (5min) と同じく、確定するときに決める (打っている間は 4お。続けて打つ 4oku は 4億)。
+        // i だけ除くのは、数字の直後の い 1 文字が 位 (1位・2位) として日本語でよく打たれるから。
+        // a・u・e・o は、数字の直後で 1 文字だけで終わる日本語の語にならない (を は wo、へ は he と打つ。円 en・億 oku などは
+        // 2 文字以上続くので、この決まりに当たらない)
+        var digitsStart = digit;
+        while (digitsStart > 0 && _units[digitsStart - 1].Raw is [var earlier] && char.IsAsciiDigit(earlier)) digitsStart--;
+        // 数字のすぐ前がかなとして読んだ英字 (kono|4o の no) なら、日本語の後ろの数字なので、ここでは決めない (前のかなを英字に戻さない)。
+        // 数字の前の英字が 1 文字だけ (m3e) なら、英字 1 文字 + 数字 + 英字 1 文字の略語の形 (i18n・m3e) なので、ここでも決めない。
+        // かなにならなかった 2 文字以上の英字 (gpt4o) は型番の名前なので対象にする
+        var letters = 0;
+        var afterKana = false;
+        for (var k = digitsStart - 1; k >= 0 && _units[k].Raw is { Length: > 0 } raw && raw.All(char.IsAsciiLetter); k--)
+        {
+            if (_units[k].Kana != raw) { afterKana = true; break; }
+            letters += raw.Length;
+        }
+        if (final && lower is "a" or "u" or "e" or "o" && letters != 1 && !afterKana)
+        {
+            _units.RemoveRange(digit + 1, _units.Count - digit - 1);
+            _units.Add(new CompositionUnit(run, run));
+            _pending.Clear();
+            return;
+        }
         foreach (var unit in UnitWords)
         {
             if (!lower.StartsWith(unit, StringComparison.Ordinal)) continue;
