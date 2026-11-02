@@ -109,12 +109,12 @@ function Start-InstalledMeltype {
 
 # 更新の失敗で Meltype が止まったままだと、次のサインインまで入力できない。動いていなければ、残っている版を起動する。
 function Start-RemainingMeltype {
-    if ($script:launched) { Write-Mark 'fallback=skipped reason=launched'; return }
-    if (-not (Test-Path -LiteralPath $exe)) { Write-Mark 'fallback=skipped reason=missing-exe'; return }
+    if ($script:launched) { Write-Mark 'remaining=skipped reason=launched'; return }
+    if (-not (Test-Path -LiteralPath $exe)) { Write-Mark 'remaining=skipped reason=missing-exe'; return }
     $runningInstalled = @(Get-Process Meltype -ErrorAction SilentlyContinue | Where-Object {
         try { $_.Path -eq $exe } catch { $false }
     })
-    if ($runningInstalled.Count -gt 0) { Write-Mark "fallback=skipped reason=running pid=$($runningInstalled[0].Id)"; return }
+    if ($runningInstalled.Count -gt 0) { Write-Mark "remaining=skipped reason=running pid=$($runningInstalled[0].Id)"; return }
     try {
         Start-InstalledMeltype
         Write-Mark 'fallback=started'
