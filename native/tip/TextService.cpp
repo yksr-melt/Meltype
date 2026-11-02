@@ -1191,7 +1191,11 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             // 変換中の範囲を前に広げて書き換えると、Chrome では TF_E_RANGE_NOT_COVERED で失敗する (#262)
             if (!WriteCommit(ec, context, range.Get(), current.Str())) continue;
             const JsonValue& expect = edit[L"expect"];
-            if (expect.type == JsonValue::Type::String) RewriteBeforeCaret(context, deleteBefore + static_cast<LONG>(current.Str().size()), expect.Str() + current.Str(), text);
+            // 今の語の後ろの位置を覚えておき、書き換えるときにキャレットがそこにあるかを確かめる (後ろに文字が入っても動かないように、両端とも前に寄せる)
+            Microsoft::WRL::ComPtr<ITfRange> end;
+            if (expect.type == JsonValue::Type::String && SUCCEEDED(range->Clone(&end)) && SUCCEEDED(end->Collapse(ec, TF_ANCHOR_END)) &&
+                SUCCEEDED(end->SetGravity(ec, TF_GRAVITY_BACKWARD, TF_GRAVITY_BACKWARD)))
+                RewriteBeforeCaret(context, end.Get(), deleteBefore + static_cast<LONG>(current.Str().size()), expect.Str() + current.Str(), text);
         } else {
             // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
             // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
@@ -1244,13 +1248,14 @@ bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG coun
     return SUCCEEDED(range->ShiftStart(ec, -count, &moved, nullptr));
 }
 
-void TextService::RewriteBeforeCaret(ITfContext* context, LONG count, const std::wstring& before, const std::wstring& text) {
+void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG count, const std::wstring& before, const std::wstring& text) {
     Microsoft::WRL::ComPtr<TextService> self = this;
     Microsoft::WRL::ComPtr<ITfContext> target = context;
+    Microsoft::WRL::ComPtr<ITfRange> committedEnd = end;
     JsonValue expect;
     expect.type = JsonValue::Type::String;
     expect.string = before;
-    RunEditSession(context, clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, target, count, expect, text](TfEditCookie ec) {
+    RunEditSession(context, clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, target, committedEnd, count, expect, text](TfEditCookie ec) {
         // 動くまでに次の語を打ち始めていたら書き換えない
         if (self->composition_ != nullptr) return S_OK;
         TF_SELECTION selection = {};
@@ -1258,8 +1263,10 @@ void TextService::RewriteBeforeCaret(ITfContext* context, LONG count, const std:
         if (FAILED(target->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return S_OK;
         Microsoft::WRL::ComPtr<ITfRange> range;
         range.Attach(selection.range);
-        // キャレットの前が before のままのときだけ書き換える (キャレットが動いた・前の文字を読めないときは、今の語を確定したままにする)
-        range->Collapse(ec, TF_ANCHOR_END);
+        // キャレットが今の語の後ろのまま (選んでいない) で、その前が before のままのときだけ書き換える。
+        // キャレットが動いた (同じ文字が並んだ別の所へ動いたときも)・前の文字を読めないときは、今の語を確定したままにする
+        BOOL empty = FALSE, same = FALSE;
+        if (FAILED(range->IsEmpty(ec, &empty)) || !empty || FAILED(range->IsEqualEnd(ec, committedEnd.Get(), TF_ANCHOR_END, &same)) || !same) return S_OK;
         if (!self->ExtendOverPrevious(ec, range.Get(), count, expect)) return S_OK;
         if (target.Get() == self->editSinkContext_) self->ownEdit_ = true;
         if (!self->WriteCommit(ec, target.Get(), range.Get(), text)) self->ownEdit_ = false;
