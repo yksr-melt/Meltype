@@ -74,8 +74,6 @@ public sealed partial class CompositionDetector
     private const double NameSplitCost = 3;
     // ltu・xtu で打った っ の後ろに入力が続く (mai|ltu|kau)。かなの前の っ は子音を重ねて打つ
     private const double SpelledSokuonCost = 2;
-    // っ で終わる活用形 (いっ・かっ) の後ろに、て・た 行でない語が続く
-    private const double SokuonFormCost = 2;
     // 小文字で終わる英語のすぐ後ろの日本語が あ行のかな (thing|う・rate|ぃす) で始まる: 英単語の最後の子音と次の母音の切り間違い。USBいれた と、母音字で終わる英語の後ろの大きい あ行 (issue|ある) は除く
     private const double VowelAfterEnglishCost = 1;
     // 日本語の中の c 行の綴り (ca・ci・cu・ce・co。ch は除く) 1 つ: 日本語を打つときは k を使う
@@ -178,11 +176,7 @@ public sealed partial class CompositionDetector
             var nameSplit = japanese && !edge.Particle && from.Edge.Name && from.Edge.End == edge.Start && edge.Start < length && char.IsAsciiLetterLower(text[edge.Start]) ? NameSplitCost : 0;
             // ltu・xtu で打った っ の後ろに入力が続く (まいっ|かう・れあ|っ|かう)。っ の後ろにかなが続くときは子音を重ねて打つ (maikka・moratte)
             var spelledSokuon = japanese ? SpelledSokuonCost * SpelledSokuons(edge.Start, edge.End) : 0;
-            // っ で終わる活用形 (いっ = 行っ・かっ) の後ろは て・た・ちゃ など。ほかの語が続く (いっ|すえ) のは語の切り間違い (issue #1367: issue が いっすえ になった)
-            // 話し言葉の っす (いいっす・いっすよ・いっすね) の す・すよ・すね・すか は続いてよい
-            var sokuonForm = japanese && edge.Kana is [var first, ..] && "たちつてとだぢづでど".IndexOf(first) < 0 && edge.Kana is not ("す" or "すよ" or "すね" or "すか") &&
-                from.Edge is { English: false, Neutral: false, Kana: [_, .., 'っ'] } sokuonEdge && sokuonEdge.End == edge.Start ? SokuonFormCost : 0;
-            var sokuon = vowel + nameSplit + spelledSokuon + sokuonForm + (state.Sokuon && !japanese ? DanglingSokuonCost : 0) +
+            var sokuon = vowel + nameSplit + spelledSokuon + (state.Sokuon && !japanese ? DanglingSokuonCost : 0) +
                 (japanese && edge.Kana == "っ" && DoubledAt(edge.Start) && state.Side != Side.Japanese ? DanglingSokuonCost : 0);
             if (edge.English)
             {
@@ -244,8 +238,6 @@ public sealed partial class CompositionDetector
                 if (forced < 0) forced = UserNameEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = NumeronymEnd(units, unit, pending);
-                if (forced < 0 && englishLevel) forced = CamelNameEnd(units, unit, pending);
-                if (forced < 0) forced = ProperNounWithDigitsEnd(units, unit, pending);
                 if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
             }
 

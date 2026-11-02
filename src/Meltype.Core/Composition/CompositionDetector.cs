@@ -34,12 +34,7 @@ public sealed partial class CompositionDetector
         "so", "suo", "tese", "ufo", "vue",
     ];
 
-    // moe・site・blog などのよく使う新しいトップレベルドメインと、jp の第 2 レベル (ne.jp・or.jp・ac.jp) も (meltype.moe: issue #1356)
-    private static readonly HashSet<string> DomainSuffixes =
-    [
-        "ac", "ai", "app", "au", "biz", "blog", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fm", "fr", "gg", "gov", "info", "in", "io", "jp", "kr",
-        "live", "me", "moe", "ne", "net", "or", "org", "page", "site", "tech", "tv", "uk", "us", "xyz",
-    ];
+    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "net", "org", "uk", "us", "xyz"];
 
     public CompositionDetector(RomajiDetector romaji, EnglishDetector english, ProperNouns? proper = null, KanaDetector? kana = null,
         IEnumerable<string>? userJapaneseWords = null)
@@ -142,7 +137,7 @@ public sealed partial class CompositionDetector
         var token = _preparedRaw + pending;
         // Structured Latin tokens are opaque; their components are not Japanese readings.
         if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
-            (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') && !IsJapaneseWordsJoined(token) || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
+            (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
             return [new CompositionSegment(true, "", token)];
         return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, level, englishSentence && precedingEnglish == true, kanaInput);
     }
@@ -289,18 +284,6 @@ public sealed partial class CompositionDetector
     }
 
     /// <summary>
-    /// _ でつないだ、どれもよく使う日本語の語のローマ字 (rinngo_mikann_momo) か。ユーザー名・識別子 (cafely_latte・upah_setu) ではなく、
-    /// 区切りに _ を使った日本語なので、ほかの記号と同じく区切りの両側をかなにする (issue #1287)。
-    /// </summary>
-    private bool IsJapaneseWordsJoined(string token)
-    {
-        var parts = token.Split('_');
-        return parts.Length >= 2 && parts.All(part => part.Length >= 2 && part.All(char.IsAsciiLetterLower) &&
-            _romaji.AnalyzeWord(part) is { IsValid: true, Partial: "" } reading && reading.Kana.Length >= 2 &&
-            RomajiTypoCorrector.CommonWordCost(reading.Kana.AsSpan()) is not null);
-    }
-
-    /// <summary>
     /// start から始まるユーザー名の終わり。無ければ -1。
     /// @ の後ろ (Discord・X のメンション @kuraido) と、_ の入った語 (upah_setu、cafely_latte) は、ローマ字として読めても英字のまま。
     /// 英字・数字・_ が続く所までがユーザー名 (@ の後ろは、メールアドレスのドメインの . - も含める)。
@@ -321,7 +304,7 @@ public sealed partial class CompositionDetector
         }
         var name = Raw(units, start, end) + (end == n ? pending : "");
         if (!name.Any(char.IsAsciiLetter)) return -1;
-        if (mention || name.Contains('_') && !IsJapaneseWordsJoined(name)) return end;
+        if (mention || name.Contains('_')) return end;
         // メールアドレスの @ より前 (tanaka@、yamada.taro@): @ を打ったら、その前も英字のまま。
         // @ の後ろのドメインは、上の @ の後ろの決まりで英字になる (たなか@gmail.com になっていた: issue #59)。
         if (start == 0 || units[start - 1].Raw is " " or "<" or "(" or "\"" or "'" or ":" or ",")
@@ -439,50 +422,6 @@ public sealed partial class CompositionDetector
     /// 日本語の途中の数字 (かいぎは3じ) を略語にしないよう、前後の英字は短く、全体も短いときだけ。
     /// 末尾の子音が打ちかけ (pending の n: i18|n) のときも、数字の後ろの英字として数える。
     /// </summary>
-    /// <summary>
-    /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。語の始めからの英字・数字が一覧にあるとき (後ろに日本語が続いてもよい)。
-    /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
-    /// </summary>
-    private int ProperNounWithDigitsEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
-    {
-        static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
-        if (start >= units.Count || !IsPart(units[start])) return -1;
-        if (start > 0 && units[start - 1].Raw is { Length: > 0 } previous && char.IsAsciiLetterOrDigit(previous[^1])) return -1;
-        // 一覧にある一番長い頭 (yachi8000|desu の yachi8000)
-        var end = -1;
-        for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
-        {
-            var word = Raw(units, start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
-            if (word.Any(char.IsAsciiDigit) && word.Any(char.IsAsciiLetter) && _proper.Contains(word.ToLowerInvariant())) end = i;
-        }
-        return end;
-    }
-
-    /// <summary>
-    /// 小文字 1〜2 文字のすぐ後ろに、大文字で始まる語が続く名前 (iZotope・iPhone・eBay) の終わり。
-    /// 大文字の前の小文字 (i・e) は、ローマ字として読めてもかなにしない (いZotope にしない: issue #1319)。
-    /// 語の始め (前が英字でない) から、英字の続く所まで。大文字の後ろは小文字を含む 2 文字以上。
-    /// </summary>
-    private int CamelNameEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
-    {
-        static bool IsLetter(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter);
-        if (start >= units.Count || !IsLetter(units[start])) return -1;
-        if (start > 0 && units[start - 1].Raw is { Length: > 0 } previous && char.IsAsciiLetter(previous[^1])) return -1;
-        var i = start;
-        while (i < units.Count && IsLetter(units[i])) i++;
-        var word = Raw(units, start, i) + (i == units.Count && pending.All(char.IsAsciiLetter) ? pending : "");
-        var head = 0;
-        while (head < word.Length && char.IsAsciiLetterLower(word[head])) head++;
-        if (head is < 1 or > 2 || head >= word.Length || !char.IsAsciiLetterUpper(word[head])) return -1;
-        var rest = word[(head + 1)..];
-        // 大文字のすぐ後ろが小文字 (iZotope の Zo)。大文字が続く略語 (oRPC|で) は対象外
-        if (rest.Length < 2 || !char.IsAsciiLetterLower(rest[0])) return -1;
-        // 知っている語 (iPhone・eBay) で始まるなら、ほかの英単語と同じく重みで比べる (iPhone|が を iPhonega にしない)
-        for (var length = head + 2; length <= word.Length; length++)
-            if (IsKnownEnglishWord(word[..length])) return -1;
-        return i;
-    }
-
     private int NumeronymEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsLetter(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter);
@@ -538,15 +477,7 @@ public sealed partial class CompositionDetector
         for (var end = n; end > dash + 1; end--)
         {
             var word = (Raw(units, start, end) + (end == n ? pending : "")).ToLowerInvariant();
-            if (!(afterJapaneseRomaji ? NumericHyphenatedWords.Contains(word) : IsHyphenatedEnglishWord(word))) continue;
-            // - の後ろがローマ字として読める語 (re-tori) で、すぐ後ろに英字が続く (re-tori|mitto) なら、語の途中で切っている。
-            // 長音の - を挟んだ日本語 (れーとりみっと) なので英語にしない (issue #705: Windows のスペルチェッカーは tori を知っている)
-            // 後ろが付属語 (lo-fi|wo) なら、英単語 + 付属語なので英語のまま
-            var after = (Raw(units, end, n) + pending).ToLowerInvariant();
-            if (end < n && units[end].Raw is { Length: > 0 } next && next.All(char.IsAsciiLetter) &&
-                !TrailingParticles.Any(p => after.StartsWith(p, StringComparison.Ordinal)) &&
-                _romaji.Analyze(word[(word.IndexOf('-') + 1)..]) is { IsValid: true, Partial: "" }) continue;
-            return end;
+            if (afterJapaneseRomaji ? NumericHyphenatedWords.Contains(word) : IsHyphenatedEnglishWord(word)) return end;
         }
         return -1;
     }

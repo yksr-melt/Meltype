@@ -192,7 +192,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                 {
                     var fields = record.Split(UnitSeparator);
                     if (fields[0].Length == 0) continue;
-                    var candidates = RareKanji.Demote(fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList());
+                    var candidates = fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList();
                     segments.Add((fields[0], candidates));
                     if (_candidates.Count > 512) _candidates.Clear();
                     _candidates[fields[0]] = candidates;
