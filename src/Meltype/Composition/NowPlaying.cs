@@ -8,8 +8,8 @@ namespace Meltype.Composition;
 /// <summary>
 /// 今再生している曲 (曲名・アーティスト) を、Windows のメディアの操作
 /// (Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager) から読む (issue #1400)。
-/// キーを処理する UI スレッドでは待たない: Read は前に読んだ結果をすぐ返し、古ければ裏のスレッドで読み直す。
-/// 「なう」を打ったときだけ読む (常に見張らない)。覚えない (前に読んだ 1 曲だけ持つ)・送らない。
+/// キーを処理する UI スレッドでは待たない: 設定が ON の間は裏のスレッドで 3 秒ごとに読み、Read はその結果をすぐ返す
+/// (「なう」を時間をあけて 1 回だけ変換しても、その場で曲が出るように)。覚えない (前に読んだ 1 曲だけ持つ)・送らない。
 ///
 /// WinRT の C# 投影が使えないので、WinRtCandidates と同じく COM の関数表 (vtable) を直接呼ぶ。
 /// 番号は Windows.Foundation.UniversalApiContract.winmd の定義に合わせてある:
@@ -28,43 +28,52 @@ public sealed unsafe class NowPlaying : IDisposable
     private const int Playing = 4;
     // 裏のスレッドで読むので、UI は待たない。読めないまま待ち続けないための上限
     private const int TimeoutMs = 2000;
-    // 前に読んだ結果を使う長さ (この間に曲が変わっても、次の「なう」で読み直す)
-    private const int FreshMs = 3000;
-    // これより古い結果は出さない (止めた曲・前の曲を出さないように)。読み直している間は何も出さない
+    // 裏で読み直す間隔
+    private const int IntervalMs = 3000;
+    // これより古い結果は出さない (止めた曲・前の曲を出さないように。読めなくなったとき)
     private const int StaleMs = 10000;
 
     private readonly object _lock = new();
+    private readonly Func<bool> _enabled;
+    private readonly System.Threading.Timer _timer;
     private IntPtr _manager;
     private volatile bool _unavailable;
     private (string Title, string Artist)? _last;
     private long _readAt = -1_000_000; // まだ読んでいない (long.MinValue だと引き算があふれる)
     private bool _reading;
 
-    /// <summary>
-    /// 前に読んだ今再生している曲 (再生中のものがなければ null) をすぐ返す。待たない。
-    /// 前に読んでから時間がたっていれば、裏のスレッドで読み直す (次の「なう」・候補の描き直しで出る)。
-    /// 10 秒より前に読んだ結果は返さない (30 分前の曲が出ないように)。
-    /// </summary>
+    /// <param name="enabled">設定「なうで再生中の曲を候補に出す」。OFF の間は読まない。</param>
+    public NowPlaying(Func<bool> enabled)
+    {
+        _enabled = enabled;
+        _timer = new System.Threading.Timer(_ => Refresh(), null, 0, IntervalMs);
+    }
+
+    /// <summary>今再生している曲 (再生中のものがなければ null) を、裏で読んだ結果からすぐ返す。待たない。</summary>
     public (string Title, string Artist)? Read()
     {
         if (_unavailable) return null;
+        lock (_lock) return Environment.TickCount64 - _readAt <= StaleMs ? _last : null;
+    }
+
+    private void Refresh()
+    {
+        if (_unavailable || !_enabled())
+        {
+            lock (_lock) _last = null; // OFF にしたら持たない
+            return;
+        }
         lock (_lock)
         {
-            if (!_reading && Environment.TickCount64 - _readAt > FreshMs)
-            {
-                _reading = true;
-                _ = Task.Run(() =>
-                {
-                    var song = ReadNow();
-                    lock (_lock)
-                    {
-                        _last = song;
-                        _readAt = Environment.TickCount64;
-                        _reading = false;
-                    }
-                });
-            }
-            return Environment.TickCount64 - _readAt <= StaleMs ? _last : null;
+            if (_reading) return;
+            _reading = true;
+        }
+        var song = ReadNow();
+        lock (_lock)
+        {
+            _last = song;
+            _readAt = Environment.TickCount64;
+            _reading = false;
         }
     }
 
@@ -248,6 +257,7 @@ public sealed unsafe class NowPlaying : IDisposable
     public void Dispose()
     {
         _unavailable = true;
+        _timer.Dispose();
         lock (_lock) if (_reading) return; // 読んでいる途中なら、終了時の解放は OS に任せる
         if (_manager == IntPtr.Zero) return;
         Marshal.Release(_manager);

@@ -369,7 +369,7 @@ public sealed class Settings
     public bool ClipboardCandidates { get; set; }
 
     [Category("5. 候補"), DisplayName("「なう」で再生中の曲を候補に出す"), WindowsOnly,
-     Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。変換した瞬間に 1 回だけ読み、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。")]
+     Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。ON の間は 3 秒ごとに今の曲を読みます (変換を待たせないため)。メモリに今の 1 曲を持つだけで、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。")]
     public bool NowPlayingCandidates { get; set; } = true;
 
     [Category("5. 候補"), DisplayName("時計の候補のタイムゾーン"),
