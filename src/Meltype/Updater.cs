@@ -20,6 +20,12 @@ internal sealed class Updater : IDisposable
     private static string ReadyFile => Path.Combine(Directory, "ready.txt");
     private static string ApplyingFile => Path.Combine(Directory, "applying.txt");
     internal static string InstallLog => Path.Combine(Directory, "install.log");
+
+    /// <summary>
+    /// 起動時に見つけた、前回インストールに失敗した版 (無ければ null)。トレイを出してから通知で知らせる
+    /// (起動の前にダイアログを出すと、サインイン直後に OK を押すまで入力できないため)。
+    /// </summary>
+    internal static string? FailedVersion { get; private set; }
     private static string Script => Path.Combine(AppContext.BaseDirectory, "update.ps1");
     internal static string PowerShell => Path.Combine(Environment.SystemDirectory, @"WindowsPowerShell\v1.0\powershell.exe");
 
@@ -64,7 +70,7 @@ internal sealed class Updater : IDisposable
     /// 起動時: ダウンロード済みの新しい版があればインストールを始める (true なら Meltype はそのまま終了する。install.ps1 が新しい版を起動する)。
     /// 前回インストールに失敗していた (同じ版のまま起動した) ときは、繰り返さない。
     /// </summary>
-    public static bool ApplyStagedAtStartup(Func<bool> enabled, bool allowPrerelease, Func<string, bool>? confirm = null, Action<string>? onFailure = null)
+    public static bool ApplyStagedAtStartup(Func<bool> enabled, bool allowPrerelease, Func<string, bool>? confirm = null)
     {
         try
         {
@@ -76,7 +82,7 @@ internal sealed class Updater : IDisposable
                 {
                     Log.Warn($"Meltype {tried} への更新に失敗したようです。もう一度ダウンロードするまで、自動では更新しません。");
                     File.Delete(ReadyFile);
-                    onFailure?.Invoke(tried);
+                    FailedVersion = tried;
                     return false;
                 }
             }

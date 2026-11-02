@@ -104,6 +104,7 @@ function Start-InstalledMeltype {
     else { Start-Process -FilePath $exe -WorkingDirectory $target }
     # エクスプローラー経由の起動は、Meltype のプロセスが出るまでに時間がかかる。直後に Start-RemainingMeltype で
     # 「動いていない」と判断して二重に起動しないように、起動したことを覚えておく。
+    # 起動を頼んだことしか分からないので、起動した版がすぐ落ちたときも、残っている版は起動しない (次のサインインで起動する)。
     $script:launched = $true
 }
 
@@ -194,23 +195,23 @@ function Restore-RegistryState($Snapshot) {
     }
 }
 try {
-        Write-Mark 'phase=stop'
-        Stop-Meltype
-        if ($hadTarget) {
-            Write-Mark 'phase=backup'
-            Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force -ErrorAction Stop
-            $backupCompleted = $true
-        }
-        foreach ($keyPath in @($innoKey, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype')) {
-            $registrySnapshots += ,(Save-RegistryState $keyPath)
-        }
-        foreach ($folderName in 'Startup', 'Programs') {
-            $shortcutPath = Join-Path ([Environment]::GetFolderPath($folderName)) 'Meltype.lnk'
-            $savedPath = Join-Path $env:TEMP ('Meltype-shortcut-' + [guid]::NewGuid().ToString('N') + '.lnk')
-            $existed = Test-Path -LiteralPath $shortcutPath
-            if ($existed) { Copy-Item -LiteralPath $shortcutPath -Destination $savedPath -ErrorAction Stop }
-            $shortcutSnapshots += ,@{ Path = $shortcutPath; Saved = $savedPath; Exists = $existed }
-        }
+    Write-Mark 'phase=stop'
+    Stop-Meltype
+    if ($hadTarget) {
+        Write-Mark 'phase=backup'
+        Copy-Item -LiteralPath $target -Destination $backup -Recurse -Force -ErrorAction Stop
+        $backupCompleted = $true
+    }
+    foreach ($keyPath in @($innoKey, 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype')) {
+        $registrySnapshots += ,(Save-RegistryState $keyPath)
+    }
+    foreach ($folderName in 'Startup', 'Programs') {
+        $shortcutPath = Join-Path ([Environment]::GetFolderPath($folderName)) 'Meltype.lnk'
+        $savedPath = Join-Path $env:TEMP ('Meltype-shortcut-' + [guid]::NewGuid().ToString('N') + '.lnk')
+        $existed = Test-Path -LiteralPath $shortcutPath
+        if ($existed) { Copy-Item -LiteralPath $shortcutPath -Destination $savedPath -ErrorAction Stop }
+        $shortcutSnapshots += ,@{ Path = $shortcutPath; Saved = $savedPath; Exists = $existed }
+    }
 
     # 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。
     $oldShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\AutoIME.lnk'
