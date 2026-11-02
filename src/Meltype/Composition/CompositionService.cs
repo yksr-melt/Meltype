@@ -26,6 +26,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     private readonly MsImeKanjiConverter _converter = new();
     private readonly KeyInjector _injector = new();
     private readonly WinRtCandidates _windowsCandidates = new();
+    // 「なう」の候補に出す再生中の曲 (issue #1400)
+    private readonly NowPlaying _nowPlaying;
     // Mozc (同梱の mozc/meltype_mozc_helper.exe) と Microsoft IME を組み合わせた変換エンジン。
     private readonly MozcConverter _mozc = new(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe"), Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
     private HybridConverter _hybrid = null!;
@@ -41,6 +43,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     public CompositionService(Control invoker, CompositionDetector detector, CompositionOptions options)
     {
         _invoker = invoker;
+        _nowPlaying = new NowPlaying(options.NowPlayingCandidates);
         Gate = new CaptureGate(SchedulePump);
         // 補助辞書・文脈の手がかり・学習データは、指定がなければ既定の場所から読む。
         var userDirectory = Config.AppPaths.UserDictionaryDirectory;
@@ -103,6 +106,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             GitHubRepository = options.GitHubRepository,
             GitHubTitles = options.GitHubTitles,
             ClipboardCandidates = options.ClipboardCandidates,
+            NowPlayingCandidates = options.NowPlayingCandidates,
+            ClockTimeZone = options.ClockTimeZone,
             Punctuation = options.Punctuation,
             TranslationHistory = options.TranslationHistory ?? new TranslationHistory(Config.AppPaths.TranslationHistoryFile),
             Predictor = options.Predictor ?? new Predictor(new PhraseHistory(Config.AppPaths.PhraseHistoryFile), UserDictionary, History),
@@ -631,6 +636,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public bool IsShiftDown() => (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;
 
+    /// <summary>今再生している曲 (裏で 3 秒ごとに読んだもの。保存しない・送らない)。</summary>
+    public (string Title, string Artist)? NowPlaying => _nowPlaying.Read();
+
     /// <summary>クリップボードの文字 (変換した瞬間に 1 回だけ読む)。履歴に残さない印のある内容 (パスワード管理ソフトなど) は読まない。</summary>
     public string? ClipboardText
     {
@@ -924,6 +932,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         Focus.Dispose();
         _converter.Dispose();
         _windowsCandidates.Dispose();
+        _nowPlaying.Dispose();
         _mozc.Dispose();
         _zenzai.Dispose();
         _window.Dispose();
