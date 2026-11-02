@@ -2338,35 +2338,32 @@ public sealed class CompositionController
     /// <summary>
     /// 月と日の書き方の候補。10がつ20にち (TypedDateCandidates) と 10/20 (変換) で同じものを出す。
     /// 10/20 / 10/20 / 10月20日 / 10/20(火) / 10月20日(火) / 2026/10/20 / 2026/10/20(火) / 2026年10月20日。ありえない日付なら null。
-    /// 年は今日にいちばん近い年 (今日から半年より先なら去年、半年より前なら来年: 12 月に打つ 1/5 は来年の 1 月 5 日)。
-    /// 出した候補は覚えておき、選んでも学習しない (IsDateTimeChoice。年や曜日が変わるので)。
+    /// 年は先の日付を優先する (予定を打つことが多いので)。今年のその日が今日以降なら今年、過ぎていれば来年。
+    /// ただし過ぎてから 30 日以内なら今年 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年)。
+    /// 選んでも学習しない (IsDateTimeChoice。年や曜日が変わるので)。
     /// </summary>
     private string[]? DateCandidates(int month, int day)
     {
         if (month is < 1 or > 12 || day is < 1 or > 31) return null;
         var today = _options.Now().Date;
         DateTime? best = null;
-        foreach (var year in new[] { today.Year - 1, today.Year, today.Year + 1 })
+        for (var year = today.Year; year <= today.Year + 4; year++) // 2/29 は次のうるう年まで
         {
             if (day > DateTime.DaysInMonth(year, month)) continue;
             var date = new DateTime(year, month, day);
-            if (best is null || Math.Abs((date - today).TotalDays) < Math.Abs((best.Value - today).TotalDays)) best = date;
+            if (date >= today.AddDays(-30)) { best = date; break; }
         }
         if (best is not { } chosen) return null;
         var week = WeekDays[(int)chosen.DayOfWeek];
         var y = chosen.Year;
         string[] dates = [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})",
             $"{y:D4}/{month:D2}/{day:D2}", $"{y:D4}/{month:D2}/{day:D2}({week})", $"{y}年{month}月{day}日"];
-        foreach (var text in dates) _dateTimeShown.Add(text);
         return dates;
     }
 
-    // 日付・時刻の候補として出した文字 (選んでも学習しない: IsDateTimeChoice)
-    private readonly HashSet<string> _dateTimeShown = new(StringComparer.Ordinal);
-
     /// <summary>
     /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
-    /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …。年と曜日は今年として求める: #935)、3じ15ふん → 3:15 / 03:15。
+    /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
     private IEnumerable<string>? TypedDateCandidates(string reading)
@@ -2380,9 +2377,7 @@ public sealed class CompositionController
         {
             var (hour, minute) = (Number(clock.Groups["h"].Value), Number(clock.Groups["m"].Value));
             if (hour > 23 || minute > 59) return [];
-            string[] clocks = [$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"];
-            foreach (var text in clocks) _dateTimeShown.Add(text);
-            return clocks;
+            return [$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"];
         }
         return null;
     }
@@ -2416,10 +2411,15 @@ public sealed class CompositionController
     /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
     /// </summary>
     private bool IsDateTimeChoice(Clause clause) =>
-        // 打った日付・時刻の文節で、日付・時刻の候補として出したもの (書き方の形を見ずに決める: 2026年1月2日 も)
-        IsTypedDateOrTime(clause.Reading) && _dateTimeShown.Contains(clause.Text) ||
-        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal)) ||
-        IsTypedDateOrTime(clause.Reading) && (clause.Text.IndexOfAny(['/', ':']) >= 0 || clause.Text.EndsWith(')'));
+        // 打った日付・時刻 (10がつ20にち・3じ15ふん・10/20) の文節は、その読みから作る日付・時刻の候補を選んだか (書き方の形は見ない)
+        DateTimeCandidatesOf(clause.Reading)?.Contains(clause.Text) == true ||
+        (NowReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
+
+    /// <summary>打った日付・時刻の読みから作る候補 (変換したときと同じもの)。日付・時刻でなければ null。</summary>
+    private IEnumerable<string>? DateTimeCandidatesOf(string reading) =>
+        SlashDate.Match(reading) is { Success: true } date
+            ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture))
+            : TypedDateCandidates(reading);
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
     private IEnumerable<string> EmojiBlock(string reading) =>

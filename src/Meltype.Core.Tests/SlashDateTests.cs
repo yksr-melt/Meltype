@@ -60,12 +60,15 @@ internal static class SlashDateTests
     }
 
     [Test]
-    public static void Issue935_YearIsNearestToToday()
+    public static void Issue935_YearPrefersFuture()
     {
-        // 今日から半年より先なら去年、半年より前なら来年 (2 月に打つ 12/25 は去年、6 月に打つ 6/1 は今年)
+        // 先の日付を優先する。過ぎてから 30 日以内だけ今年 (6 月 15 日に打つ 12/20 は今年、6/1 は今年、1/5 は来年)
         foreach (var (now, typed, expected) in new[]
         {
-            (new DateTime(2026, 2, 10), "12/25", "2025/12/25"),
+            (new DateTime(2026, 2, 10), "12/25", "2026/12/25"),
+            (new DateTime(2026, 6, 15), "12/20", "2026/12/20"),
+            (new DateTime(2026, 6, 15), "5/1", "2027/05/01"),
+            (new DateTime(2026, 3, 1), "2/29", "2028/02/29"),
             (new DateTime(2026, 6, 15), "6/1", "2026/06/01"),
             (new DateTime(2026, 12, 20), "1/5", "2027/01/05"),
         })
