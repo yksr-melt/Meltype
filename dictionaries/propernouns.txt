@@ -77,3 +77,5 @@ Suica DCafe ProBot Carlbot Disboard TaCZ NSFW
 Khalifa Ariana Grande Sheeran Marshmello Beabadoobee Chainsmokers Iann Dior Dobby
 # Issue #268
 DeVito
+# Issue #1391 (BIOS の American Megatrends)・#1319・#1402・#1276
+America American Megatrends iZotope Neovide pH
