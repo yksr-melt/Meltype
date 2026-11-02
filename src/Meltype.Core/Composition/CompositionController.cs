@@ -1682,7 +1682,8 @@ public sealed class CompositionController
                 List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
-                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)])) { Kana = _text.KanaForSegment(s) });
+                    : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)]))
+                { Kana = _text.KanaForSegment(s) });
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
@@ -1880,7 +1881,7 @@ public sealed class CompositionController
         {
             if (parts.Contains(clause)) continue;
             var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding) ?? (registered.Contains(clause) ? _options.History?.Get(clause.Reading) : null);
+            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text) ?? (registered.Contains(clause) ? _options.History?.Get(clause.Reading) : null);
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
@@ -1984,7 +1985,7 @@ public sealed class CompositionController
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (_precedingText ?? "") + others + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding) ?? _options.History?.Get(clauses[i].Reading);
+            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text) ?? _options.History?.Get(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。

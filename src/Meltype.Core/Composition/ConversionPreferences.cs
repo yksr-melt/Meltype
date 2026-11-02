@@ -14,12 +14,10 @@ public sealed class ContextRules
 {
     private readonly Dictionary<string, List<(string Candidate, string[] Cues)>> _rules = new(StringComparer.Ordinal);
 
-    // 語の後ろにかなのまま付けられる助詞・活用語尾。先頭だけ合う別の語 (かく|にん、はし|る) は補正しない。
-    // 先頭が助詞らしくても、残り全体が一致しなければ使わない (かく|にんを を 書くにんを にしない)。
-    private static readonly HashSet<string> Endings =
-        ["", "を", "が", "は", "に", "で", "と", "も", "へ", "の", "や", "か", "な", "だ", "です", "から", "まで", "より", "って", "とか", "しか", "さ", "ね", "よ",
-         "ます", "ました", "ません", "ませんでした", "ましょう", "たい", "たくない", "たかった",
-         "する", "した", "して", "します", "しました", "しない", "しません", "しよう"];
+    // 語の後ろに続く助詞・助動詞・活用語尾の頭の文字 (はし|を、あつい|ので、かく|けど、せんたく|してる)。
+    // 語尾を列挙しきることはできないので、頭の文字だけを見て、語の境界は変換エンジンの結果で確かめる。
+    // る・い・き・り などで始まる残りは語の続き (はし|る → 走る、かわ|いい、いし|き) なので補正しない。
+    private const string EndingHeads = "をがはにでともへのやかなだけよねさしすせまたてぞぜわっじば";
 
     public int Count => _rules.Sum(r => r.Value.Count);
 
@@ -59,15 +57,17 @@ public sealed class ContextRules
     /// <summary>
     /// 文節の読み (はしを) に対して、前後の文字列 (surrounding) の手がかりに合う候補 (箸を) を返す。無ければ null。
     /// 辞書にある最長の先頭部分で探し、残りが助詞・活用語尾 (を) のときだけ付ける。手がかりが多く当たった規則を優先する。
+    /// 変換エンジンの文節 (engineText) があれば、それが残りのかなで終わるときだけ補正する。
+    /// 確認 は にん で終わらないので、かく|にん は別の語で、書くにん にしない (issue #348)。
     /// </summary>
-    public string? Choose(string reading, string surrounding)
+    public string? Choose(string reading, string surrounding, string? engineText = null)
     {
         if (surrounding.Length == 0) return null;
         for (var length = reading.Length; length >= 1; length--)
         {
             if (!_rules.TryGetValue(reading[..length], out var list)) continue;
             var ending = reading[length..];
-            if (!Endings.Contains(ending)) return null;
+            if (ending.Length > 0 && (!EndingHeads.Contains(ending[0]) || engineText is not null && !engineText.EndsWith(ending, StringComparison.Ordinal))) return null;
             var best = list
                 .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => surrounding.Contains(cue, StringComparison.Ordinal))))
                 .Where(r => r.Hits > 0)
