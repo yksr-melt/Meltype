@@ -37,6 +37,7 @@ if ($Step -ne 'Sign') {
 }
 
 $mozcBin = Join-Path $root 'native\mozc\bin'
+$zenzaiBin = Join-Path $root 'native\zenzai\bin'
 $dotnetRoot = Split-Path -Parent (Get-Command dotnet).Source
 $runtime = Join-Path $app 'dotnet'
 $version = $null
@@ -110,6 +111,17 @@ if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
 }
 else {
     Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。Microsoft IME だけで変換します。'
+}
+
+# Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。
+# 「Zenzai を使う」は既定 ON で、場所が空なら app\zenzai のものを使う。無ければ今までの変換エンジンだけで変換する。
+if (Test-Path -LiteralPath (Join-Path $zenzaiBin 'llama-server.exe')) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $app 'zenzai') | Out-Null
+    Copy-Item -Path (Join-Path $zenzaiBin '*') -Destination (Join-Path $app 'zenzai') -Force
+    Write-Host 'Zenzai (llama-server とモデル) を同梱しました。'
+}
+else {
+    Write-Warning 'Zenzai がありません (native\zenzai\Get-Zenzai.ps1)。Zenzai なしで変換します。'
 }
 
 # Meltype が使うランタイムの版 (runtimeconfig.json に書かれている) と同じものを、インストール済みの .NET から探してコピーする。

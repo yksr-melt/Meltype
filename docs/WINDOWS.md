@@ -194,14 +194,12 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 <a name="zenzai-ニューラルかな漢字変換実験"></a>
 <img src="images/headings/windows/08.svg" alt="Zenzai (ニューラルかな漢字変換、実験)" height="53"><br>
 
-[Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。設定の「Zenzai を使う (Windows・実験)」を ON にして、次の 2 つを指定してください (既定は OFF。どちらも Meltype には同梱しません)。
-
-1. **llama-server**: [llama.cpp のリリース](https://github.com/ggml-org/llama.cpp/releases) の `llama-server.exe` (b11719 の CPU 版で確かめました)
-2. **モデル (GGUF)**: [Miwa-Keita/zenz-v3.1-small-gguf](https://huggingface.co/Miwa-Keita/zenz-v3.1-small-gguf) の `ggml-model-Q5_K_M.gguf` など (CC-BY-SA 4.0)
+[Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
 - Meltype が llama-server を 127.0.0.1 で起動します。使えないとき・0.4 秒で返らないときは、ふだんの変換エンジンで変換します
 - Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
-- CPU の負荷が増えるので、改善を感じなければ OFF のままにしてください。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
+- CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
+- 自分で用意した llama-server やモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
 
 <br>
 
