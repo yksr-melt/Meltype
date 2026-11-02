@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using Meltype.Composition;
+using Meltype.Input;
 using static Meltype.Tests.CompositionTests;
 
 namespace Meltype.Tests;
@@ -71,6 +72,31 @@ internal static class NowAndClockTests
         k.Type("tokei ");
         Assert.True(k.Host.View!.Candidates.Contains("07:05"), string.Join(",", k.Host.View.Candidates));
         Assert.True(CompositionController.ClockZone("Not/AZone") is null && CompositionController.ClockZone(" ") is null, "見つからない・空はこの PC の時刻");
+    }
+
+    [Test]
+    public static void Issue1401_SameZoneAsThisPcHasNoZoneName()
+    {
+        // この PC と同じタイムゾーンを書いても、タイムゾーンの名前を付けた候補は出さない (設定の説明どおり)
+        var k = new Keyboard { ClockTimeZone = TimeZoneInfo.Local.Id, UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
+        k.Type("tokei ");
+        Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains(TimeZoneInfo.Local.Id, StringComparison.Ordinal)), string.Join(",", k.Host.View.Candidates));
+    }
+
+    [Test]
+    public static void Issue1400_ChosenSongIsNotLearned()
+    {
+        // 選んだ曲は学習しない (次の「なう」で前の曲が最初に出ないように)
+        var history = new ConversionHistory(null);
+        var k = new Keyboard(history: history) { NowPlayingCandidates = true };
+        k.Host.NowPlaying = ("夜に駆ける", "YOASOBI");
+        k.Type("nau ");
+        var index = k.Host.View!.Candidates.ToList().IndexOf("夜に駆ける");
+        Assert.True(index > 0, string.Join(",", k.Host.View.Candidates));
+        for (var i = 0; i < index; i++) k.Press(VirtualKeys.Space);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("夜に駆ける", k.Host.Document);
+        Assert.Equal(null, history.Get("なう"), "学習しない");
     }
 
     [Test]

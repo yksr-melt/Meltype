@@ -2247,18 +2247,13 @@ public sealed class CompositionController
     /// <summary>設定のタイムゾーンの時刻を出す読み (issue #1401)。</summary>
     private static readonly HashSet<string> ClockReadings = ["とけい", "じこく"];
 
-    // 「なう」で出した再生中の曲 (選んでも学習しない)
-    private readonly HashSet<string> _nowPlayingShown = new(StringComparer.Ordinal);
-
     /// <summary>今再生している曲の候補 (曲名 / アーティスト、曲名)。読めなければ空。</summary>
     private List<string> NowPlayingCandidates()
     {
         if (_host.NowPlaying is not { } song || string.IsNullOrWhiteSpace(song.Title)) return [];
         var title = song.Title.Trim();
         var artist = song.Artist?.Trim() ?? "";
-        List<string> result = artist.Length > 0 ? [$"{title} / {artist}", title, $"#NowPlaying {title} / {artist}"] : [title, $"#NowPlaying {title}"];
-        foreach (var text in result) _nowPlayingShown.Add(text);
-        return result;
+        return artist.Length > 0 ? [$"{title} / {artist}", title, $"#NowPlaying {title} / {artist}"] : [title, $"#NowPlaying {title}"];
     }
 
     /// <summary>
@@ -2271,11 +2266,12 @@ public sealed class CompositionController
         var now = zone is null ? _options.Now() : TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_options.UtcNow(), DateTimeKind.Utc), zone);
         var clock = $"{now.Hour:D2}:{now.Minute:D2}";
         List<string> result = [clock, $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"];
-        if (zone is not null) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
+        if (zone is not null && !zone.HasSameRules(TimeZoneInfo.Local)) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
         return result;
     }
 
-    /// <summary>設定のタイムゾーン。空・見つからなければ null (この PC のもの)。IANA (Asia/Tokyo) と Windows (Tokyo Standard Time) のどちらの ID も読む。</summary>
+    /// <summary>設定のタイムゾーン。空・見つからなければ null (この PC のもの)。
+    /// IANA (Asia/Tokyo) と Windows (Tokyo Standard Time) のどちらの ID も読む (見つからない ID は .NET が IANA ⇔ Windows に変換して探し直す)。</summary>
     internal static TimeZoneInfo? ClockZone(string id)
     {
         id = id?.Trim() ?? "";
@@ -2286,15 +2282,7 @@ public sealed class CompositionController
         }
         catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
         {
-            if (TimeZoneInfo.TryConvertIanaIdToWindowsId(id, out var windows) && TryFind(windows) is { } a) return a;
-            if (TimeZoneInfo.TryConvertWindowsIdToIanaId(id, out var iana) && TryFind(iana) is { } b) return b;
             return null;
-        }
-
-        static TimeZoneInfo? TryFind(string id)
-        {
-            try { return TimeZoneInfo.FindSystemTimeZoneById(id); }
-            catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException) { return null; }
         }
     }
 
@@ -2445,11 +2433,15 @@ public sealed class CompositionController
     }
 
     /// <summary>
+    /// 「なう」の文節か。何を選んでも学習しない (再生中の曲・時刻は打つたびに変わるので。issue #1400)。
+    /// 曲名は何でもありうるので、出した曲を覚えておかずに、読みだけで決める。
+    /// </summary>
+    private static bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう";
+
+    /// <summary>
     /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
     /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
     /// </summary>
-    /// <summary>「なう」で選んだ再生中の曲か (学習しない。曲は変わるので。issue #1400)。</summary>
-    private bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう" && _nowPlayingShown.Contains(clause.Text);
 
     private static bool IsDateTimeChoice(Clause clause) =>
         (NowReadings.Contains(clause.Reading) || ClockReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal)) ||

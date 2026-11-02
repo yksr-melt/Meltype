@@ -8,7 +8,8 @@ namespace Meltype.Composition;
 /// <summary>
 /// 今再生している曲 (曲名・アーティスト) を、Windows のメディアの操作
 /// (Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager) から読む (issue #1400)。
-/// 「なう」の変換の候補に出すときだけ、その場で読む。覚えない・送らない。
+/// キーを処理する UI スレッドでは待たない: Read は前に読んだ結果をすぐ返し、古ければ裏のスレッドで読み直す。
+/// 「なう」を打ったときだけ読む (常に見張らない)。覚えない (前に読んだ 1 曲だけ持つ)・送らない。
 ///
 /// WinRT の C# 投影が使えないので、WinRtCandidates と同じく COM の関数表 (vtable) を直接呼ぶ。
 /// 番号は Windows.Foundation.UniversalApiContract.winmd の定義に合わせてある:
@@ -25,14 +26,47 @@ public sealed unsafe class NowPlaying : IDisposable
     private static readonly Guid IidStatics = new("2050c4ee-11a0-57de-aed7-c97c70338245");
     private static readonly Guid IidAsyncInfo = new("00000036-0000-0000-C000-000000000046");
     private const int Playing = 4;
-    // キーを打っている UI スレッドで読むので、長くても待たない
-    private const int TimeoutMs = 250;
+    // 裏のスレッドで読むので、UI は待たない。読めないまま待ち続けないための上限
+    private const int TimeoutMs = 2000;
+    // 前に読んだ結果を使う長さ (この間に曲が変わっても、次の「なう」で読み直す)
+    private const int FreshMs = 3000;
 
+    private readonly object _lock = new();
     private IntPtr _manager;
-    private bool _unavailable;
+    private volatile bool _unavailable;
+    private (string Title, string Artist)? _last;
+    private long _readAt = long.MinValue;
+    private bool _reading;
 
-    /// <summary>今再生している曲。再生中のものがなければ、一時停止中のものも見ない (null)。</summary>
+    /// <summary>
+    /// 前に読んだ今再生している曲 (再生中のものがなければ null) をすぐ返す。待たない。
+    /// 前に読んでから時間がたっていれば、裏のスレッドで読み直す (次の「なう」・候補の描き直しで出る)。
+    /// </summary>
     public (string Title, string Artist)? Read()
+    {
+        if (_unavailable) return null;
+        lock (_lock)
+        {
+            if (!_reading && Environment.TickCount64 - _readAt > FreshMs)
+            {
+                _reading = true;
+                _ = Task.Run(() =>
+                {
+                    var song = ReadNow();
+                    lock (_lock)
+                    {
+                        _last = song;
+                        _readAt = Environment.TickCount64;
+                        _reading = false;
+                    }
+                });
+            }
+            return _last;
+        }
+    }
+
+    // 裏のスレッド (MTA) で呼ぶ。同時に 1 つだけ (_reading)
+    private (string Title, string Artist)? ReadNow()
     {
         if (_unavailable) return null;
         try
@@ -210,6 +244,8 @@ public sealed unsafe class NowPlaying : IDisposable
 
     public void Dispose()
     {
+        _unavailable = true;
+        lock (_lock) if (_reading) return; // 読んでいる途中なら、終了時の解放は OS に任せる
         if (_manager == IntPtr.Zero) return;
         Marshal.Release(_manager);
         _manager = IntPtr.Zero;

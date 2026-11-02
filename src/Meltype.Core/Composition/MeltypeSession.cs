@@ -233,6 +233,7 @@ public sealed class MeltypeSession
         var options = shared.Options with
         {
             LiveConversion = () => settings.LiveConversion,
+            ClockTimeZone = () => settings.ClockTimeZone,
             AutoCorrect = () => settings.AutoCorrectAfterCommit && settings.AutoDetection,
             Manual = () => !settings.AutoDetection,
             // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
