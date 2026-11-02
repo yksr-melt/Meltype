@@ -318,7 +318,19 @@ catch {
                 $relative = $_.FullName.Substring($target.Length + 1)
                 if ($relative -notin $oldFiles) { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop }
             }
-            Copy-Item -Path (Join-Path $backup '*') -Destination $target -Recurse -Force -ErrorAction Stop
+            # 1 つのファイルの失敗で残りを止めず、Meltype.exe を最初に戻す (使用中のファイルがあっても、旧版を起動できるように)。
+            $notRestored = @()
+            $oldItems = Get-ChildItem -LiteralPath $backup -Recurse -File | Sort-Object { $_.Name -ne 'Meltype.exe' }
+            foreach ($item in $oldItems) {
+                $relative = $item.FullName.Substring($backup.Length + 1)
+                $destination = Join-Path $target $relative
+                try {
+                    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+                    Copy-Item -LiteralPath $item.FullName -Destination $destination -Force -ErrorAction Stop
+                }
+                catch { $notRestored += $relative; $restoreError = $_.Exception.Message }
+            }
+            if ($notRestored.Count -gt 0) { throw "$restoreError (戻せなかったファイル: $($notRestored -join ', '))" }
             foreach ($snapshot in $registrySnapshots) { Restore-RegistryState $snapshot }
             foreach ($snapshot in $shortcutSnapshots) {
                 if ($snapshot.Exists) { Copy-Item -LiteralPath $snapshot.Saved -Destination $snapshot.Path -Force -ErrorAction Stop }
