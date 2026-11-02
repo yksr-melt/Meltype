@@ -74,6 +74,8 @@ struct TextEdit: Decodable {
     let deleteBefore: Int
     let text: String
     let expect: String?
+    /// 確定し直すときに text の後ろに続けて入る、今確定した語。前の文字を消せないときは、これだけを入れる
+    let current: String?
 }
 
 // DeleteBefore uses UTF-16 units, matching .NET string lengths and AppKit ranges.
