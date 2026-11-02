@@ -251,9 +251,8 @@ internal static class ToggleShortcutTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            var settings = new Settings { ConvertKeysSwitchKeyboard = true, JapaneseThreshold = 100, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
+            var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
             var edited = settings.Clone().Normalize(reportShortcutExclusions: false);
-            Assert.Equal(20, edited.JapaneseThreshold, "数値は正規化する");
             Assert.Equal(1, edited.EffectiveToggleShortcuts.Count, "キーの正規化は既存どおり");
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "編集時は通知しない");
             settings.Normalize();
@@ -403,7 +402,8 @@ internal static class ToggleShortcutTests
     public static void Shortcut_ImeTextToggleKeepsCompositionUncommitted()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions(), () => new Settings()) { Direct = false };
+            new CompositionOptions(), () => new Settings())
+        { Direct = false };
         SessionResult? last = null;
         foreach (var c in "nihongo") last = session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
         var japanese = last!.View!.Text;
@@ -621,12 +621,16 @@ internal static class ToggleShortcutTests
     public static void Shortcut_CoreRejectsConflictsAcrossSettingsAndProfiles()
     {
         var valid = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
-        var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts =
-        [
-            new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
-            new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
-            new() { Key = 0x1C }, valid, valid,
-        ] }.Normalize();
+        var settings = new Settings
+        {
+            ConvertKeysSwitchKeyboard = true,
+            ToggleShortcuts =
+            [
+                new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
+                new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
+                new() { Key = 0x1C }, valid, valid,
+            ],
+        }.Normalize();
         Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "Core で衝突と重複を除外");
         Assert.Equal(valid, settings.EffectiveToggleShortcuts[0]);
         var values = settings.ProfileValues();
@@ -746,9 +750,9 @@ internal static class ToggleShortcutTests
             ToggleShortcutValidator.Validate(new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }, settings, []),
             "Ctrl+Space は今までどおり");
 
-        settings.ShiftSpaceHalfWidth = true;
+        settings.SpaceWidth = SpaceWidth.HalfWidth;
         Assert.Equal(ShortcutValidationError.ShiftSpaceHalfWidth, ToggleShortcutValidator.Validate(shiftSpace, settings, []),
-            "「Shift + Space で半角スペース」が ON なら競合として外す");
+            "設定「スペースの幅」が「半角」なら競合として外す");
         Assert.Equal(ShortcutValidationError.None,
             ToggleShortcutValidator.Validate(new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }, settings, []),
             "Shift+Space 以外は半角スペースの設定と競合しない");

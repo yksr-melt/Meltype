@@ -1,5 +1,5 @@
 # コードの品質のチェック (issue #1083)。ビルドとテストは build.yml、辞書・精度・報告の再現は pr-checks.yml。
-#   フォーマット   … Pull Request で変わった .cs を dotnet format whitespace で調べる。変えた行の違反だけを失敗にする (tools/check-format.mjs)
+#   フォーマット   … すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
 #   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の結果を SARIF にして、Code scanning に送る。
 #                    Code scanning は Pull Request で新しく出た警告だけを、その Pull Request の注釈に出す (前からある警告は Security タブに残る)。
 #                    警告ではマージを止めない。重要度は .editorconfig で上げる
@@ -23,21 +23,17 @@ concurrency:
 
 jobs:
   format:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      - name: Check format of changed lines
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: node tools/check-format.mjs "origin/$BASE_REF"
+      - name: Check format
+        run: dotnet format whitespace --folder --verify-no-changes
 
   analyzers:
     # Windows 版のプロジェクトは Windows でしかビルドできないので、プロジェクトごとに分ける (SARIF の category もプロジェクトごと)

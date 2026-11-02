@@ -41,9 +41,9 @@ public static class ToggleShortcutValidator
             ToggleShortcut.NormalizeHankakuKey(b.Key) is not (ToggleShortcut.Hankaku or 0x1C or 0x1D))
             return ShortcutValidationError.UnmodifiedKey;
 
-        // 設定「Shift + Space で半角スペース」が ON のときは、Shift+Space を切り替えに使うと競合する。
-        // 無変換 / 変換 のときと同じく、先に設定を OFF してもらう。
-        if (shiftSpace && settings.ShiftSpaceHalfWidth)
+        // 設定「スペースの幅」が「半角」のときは、Shift+Space を切り替えに使うと競合する。
+        // 無変換 / 変換 のときと同じく、先に設定を変えてもらう。
+        if (shiftSpace && settings.SpaceWidth == SpaceWidth.HalfWidth)
             return ShortcutValidationError.ShiftSpaceHalfWidth;
 
         // 無変換 (0x1D) / 変換 (0x1C) キー単独

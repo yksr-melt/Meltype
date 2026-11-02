@@ -89,8 +89,9 @@ public static class SettingsSchema
         {
             if (property.AttributeProvider?.GetCustomAttributes(typeof(DisplayNameAttribute), false).FirstOrDefault() is DisplayNameAttribute { DisplayName.Length: > 0 } title)
                 schema["title"] = title.DisplayName;
-            if (property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute { Description.Length: > 0 } description)
-                schema["description"] = description.Description;
+            var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
+            if (property.AttributeProvider?.IsDefined(typeof(WindowsOnlyAttribute), false) == true) description = $"Windows のみ。{description}";
+            if (description.Length > 0) schema["description"] = description;
             if (property.DeclaringType == typeof(Settings) && defaults.TryGetPropertyValue(property.Name, out var value))
                 schema["default"] = value?.DeepClone();
         }
