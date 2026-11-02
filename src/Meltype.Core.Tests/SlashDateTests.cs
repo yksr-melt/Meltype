@@ -40,4 +40,20 @@ internal static class SlashDateTests
         other.Press(VirtualKeys.Convert);
         Assert.True(other.Host.View?.Candidates.Any(c => c.Contains('月')) != true, "日付でなければ出さない");
     }
+
+    [Test]
+    public static void Issue935_SameFormatsAsTypedDate()
+    {
+        // 10/20 と 10がつ20にち で、同じ日付の書き方を出す (片方だけに足して食い違わないように)
+        var slash = new Keyboard(now: () => new DateTime(2026, 10, 1));
+        slash.Type("1/2");
+        slash.Press(VirtualKeys.Convert);
+        var typed = new Keyboard(now: () => new DateTime(2026, 10, 1));
+        typed.Type("1gatu2niti ");
+        foreach (var format in new[] { "1/2", "01/02", "1月2日", "1/2(金)", "1月2日(金)", "2026/01/02", "2026/01/02(金)", "2026年1月2日" })
+        {
+            Assert.True(slash.Host.View!.Candidates.Contains(format), "1/2: " + format + ": " + string.Join(",", slash.Host.View.Candidates));
+            Assert.True(typed.Host.View!.Candidates.Contains(format), "1がつ2にち: " + format + ": " + string.Join(",", typed.Host.View.Candidates));
+        }
+    }
 }

@@ -1637,25 +1637,24 @@ public sealed class CompositionController
             _converting = true;
             return;
         }
-        // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
-        // 月/日 (10/20) を変換したら、日付の書き方の候補 (10月20日・10/20(火)・10月20日(火)) も出す (issue #935)。
-        // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)。分数・割り算 (1/2) かもしれないので、打ったままを最初に、
-        // 設定「計算式の結果を候補に出す」なら計算の結果も日付より先に出す
-        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto && SlashDateCandidates(_text.Raw) is { } dates)
+        if (!_text.KanaInput && _text.Mode == DisplayMode.Auto)
         {
-            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } value ? [value, $"{_text.Raw}={value}"] : [];
-            _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates, CompositionText.ToFullWidth(_text.Raw)])) { Raw = _text.Raw }];
-            _selectedClause = 0;
-            _converting = true;
-            return;
-        }
-        if (_options.CalculatorCandidates() && !_text.KanaInput && _text.Mode == DisplayMode.Auto && Calculator.Evaluate(_text.Raw) is { } result)
-        {
-            var expression = _text.Raw.TrimEnd('=');
-            _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, result, $"{expression}={result}"])) { Raw = _text.Raw }];
-            _selectedClause = 0;
-            _converting = true;
-            return;
+            // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
+            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } result
+                ? [result, $"{_text.Raw.TrimEnd('=')}={result}"]
+                : [];
+            // 月/日 (10/20) は、日付の書き方の候補も出す (issue #935)。分数・割り算 (1/2) かもしれないので、打ったままと計算の結果より後ろに。
+            // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
+            var dates = SlashDate.Match(_text.Raw) is { Success: true } date
+                ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture)) ?? []
+                : [];
+            if (calculated.Length > 0 || dates.Length > 0)
+            {
+                _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates])) { Raw = _text.Raw }];
+                _selectedClause = 0;
+                _converting = true;
+                return;
+            }
         }
         // #123 の形は、# と数字を別々の文節にしない (issue #865)。
         // 設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」なら、タイトルも候補に出す (issue #291)
@@ -2334,20 +2333,22 @@ public sealed class CompositionController
 
     private static readonly System.Text.RegularExpressions.Regex SlashDate = new("^(?<m>[0-9]{1,2})/(?<d>[0-9]{1,2})$");
 
-    /// <summary>打った 月/日 (10/20) の日付の候補 (打ったままは含まない)。今年の日付として正しくなければ null。</summary>
-    private string[]? SlashDateCandidates(string raw)
+    /// <summary>
+    /// 月と日の書き方の候補 (年と曜日は今年として求める)。10がつ20にち (TypedDateCandidates) と 10/20 (変換) で同じものを出す。
+    /// 10/20 / 10/20 / 10月20日 / 10/20(火) / 10月20日(火) / 2026/10/20 / 2026/10/20(火) / 2026年10月20日。ありえない日付なら null。
+    /// </summary>
+    private string[]? DateCandidates(int month, int day)
     {
-        if (SlashDate.Match(raw) is not { Success: true } match) return null;
-        var (month, day) = (int.Parse(match.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(match.Groups["d"].Value, CultureInfo.InvariantCulture));
         var year = _options.Now().Year;
         if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return null;
         var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
-        return [$"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})", $"{year:D4}/{month:D2}/{day:D2}", $"{year:D4}/{month:D2}/{day:D2}({week})", $"{year}年{month}月{day}日"];
+        return [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})",
+            $"{year:D4}/{month:D2}/{day:D2}", $"{year:D4}/{month:D2}/{day:D2}({week})", $"{year}年{month}月{day}日"];
     }
 
     /// <summary>
     /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
-    /// 10がつ9にち → 10/9 / 10/09 / 10/9(金) / 10月9日(金) / 2026/10/09 / 2026/10/09(金) (年と曜日は今年として求める: #935)、3じ15ふん → 3:15 / 03:15。
+    /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …。年と曜日は今年として求める: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
     private IEnumerable<string>? TypedDateCandidates(string reading)
@@ -2355,12 +2356,7 @@ public sealed class CompositionController
         static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
         if (DateReading.Match(reading) is { Success: true } date)
         {
-            var (month, day) = (Number(date.Groups["m"].Value), Number(date.Groups["d"].Value));
-            var year = _options.Now().Year;
-            if (month is < 1 or > 12 || day < 1 || day > DateTime.DaysInMonth(year, month)) return [];
-            var week = WeekDays[(int)new DateTime(year, month, day).DayOfWeek];
-            return [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}/{day}({week})", $"{month}月{day}日({week})", $"{year:D4}/{month:D2}/{day:D2}",
-                $"{year:D4}/{month:D2}/{day:D2}({week})"];
+            return DateCandidates(Number(date.Groups["m"].Value), Number(date.Groups["d"].Value)) ?? [];
         }
         if (ClockReading.Match(reading) is { Success: true } clock)
         {
