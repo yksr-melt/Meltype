@@ -50,6 +50,16 @@ class NativeBoundaryTests(unittest.TestCase):
         cls.lib.meltype_handle_key.restype = ctypes.c_void_p
         cls.lib.meltype_free.argtypes = [ctypes.c_void_p]
         cls.lib.meltype_set_direct.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        cls.lib.meltype_set_code_input.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        cls.lib.meltype_set_code_input.restype = None
+        cls.lib.meltype_set_code_terminal.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        cls.lib.meltype_set_code_terminal.restype = None
+        cls.lib.meltype_set_code_line.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p]
+        cls.lib.meltype_set_code_line.restype = ctypes.c_int
+        cls.lib.meltype_caret_moved.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        cls.lib.meltype_caret_moved.restype = None
+        cls.lib.meltype_code_english_at.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        cls.lib.meltype_code_english_at.restype = ctypes.c_int
         assert cls.lib.meltype_init(None, None, None) == 1
 
     def setUp(self):
@@ -79,6 +89,87 @@ class NativeBoundaryTests(unittest.TestCase):
         self.assertFalse(result["consumed"])
         self.assertEqual([] if text is None else [{"deleteBefore": 0, "text": text}], result["commits"])
         self.assertIsNone(result["view"])
+
+    def test_code_line_toggle_controls_composition_without_surrounding_text(self):
+        self.lib.meltype_set_code_input(self.session, 1)
+        self.assert_pass(self.key(ord("k")))
+        self.assert_pass(self.key(0, vk=0x0D))
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 7, None))
+        self.type_text("kyouha")
+        commit = self.key(0, vk=0x0D)
+        self.assertTrue(commit["consumed"])
+        self.assertEqual([{"deleteBefore": 0, "text": "きょうは"}], commit["commits"])
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 0, None))
+        self.assert_pass(self.key(ord("k")))
+        self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 0, None))
+
+    def test_code_mode_reports_utf8_and_tracks_nullable_before(self):
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, b"$ "))
+        self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 1, None))
+        self.lib.meltype_set_code_input(self.session, 1)
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, b"$ "))
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+
+        prompt = "│ › 日本語😊 ".encode("utf-8")
+        before = ctypes.create_string_buffer(prompt)
+        self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 1, before))
+        self.assertEqual(prompt, before.value, "set_code_line borrows the caller's UTF-8 buffer")
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, before))
+        self.assertEqual(prompt, before.value, "code_english_at borrows the caller's UTF-8 buffer")
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 1, None))
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, 'printf "日本語😊'.encode("utf-8")))
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, 'printf "日本語😊"'.encode("utf-8")))
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, None))
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 0, None))
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+
+    def test_passed_navigation_clears_explicit_japanese(self):
+        self.lib.meltype_set_code_input(self.session, 1)
+        actions = [(0x09, 0)] + [(vk, 0) for vk in range(0x21, 0x29)] + [(0x2E, 0), (ord("V"), 7)]
+        for vk, control in actions:
+            with self.subTest(vk=vk, control=control):
+                self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, b"$ "))
+                self.lib.meltype_caret_moved(self.session, ord("A"), 0)
+                self.lib.meltype_caret_moved(self.session, 0x0D, 0)
+                self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+                self.lib.meltype_caret_moved(self.session, vk, control)
+                self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+
+    def test_terminal_japanese_survives_newline_and_output_movement(self):
+        self.lib.meltype_set_code_input(self.session, 1)
+        self.lib.meltype_set_code_terminal(self.session, 7)
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, None))
+        self.type_text("kyouha")
+        self.assertEqual([{"deleteBefore": 0, "text": "きょうは"}], self.key(0, vk=0x0D)["commits"])
+        self.assert_pass(self.key(0, vk=0x0D))
+        self.lib.meltype_caret_moved(self.session, 0x0D, 0)
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+        self.lib.meltype_caret_moved(self.session, 0, 0)
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+        self.lib.meltype_set_code_terminal(self.session, 1)
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+
+        self.lib.meltype_caret_moved(self.session, 0x26, 0)
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, None))
+        self.lib.meltype_set_code_terminal(self.session, 0)
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, None))
+        self.lib.meltype_caret_moved(self.session, 0, 0)
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+
+    def test_optional_code_exports_ignore_null_session(self):
+        for before in (None, "│ › 日本語😊 ".encode("utf-8")):
+            with self.subTest(before=before):
+                self.assertEqual(0, self.lib.meltype_set_code_line(None, 1, before))
+                self.assertEqual(0, self.lib.meltype_set_code_line(None, 0, before))
+                self.assertEqual(0, self.lib.meltype_code_english_at(None, before))
+        self.lib.meltype_set_code_terminal(None, 1)
+        self.lib.meltype_set_code_terminal(None, 0)
+        self.lib.meltype_caret_moved(None, 0, 0)
+        self.lib.meltype_caret_moved(None, 0x26, 1)
 
     def test_bmp_accent_keeps_raw_base(self):
         self.type_text("e")

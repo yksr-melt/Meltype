@@ -7,7 +7,7 @@
 # IT・サービス
 Amazon Google Apple Microsoft Windows macOS iOS iPadOS Android Linux Ubuntu Debian Fedora
 GitHub Meltype GitLab Bitbucket Docker Kubernetes Azure AWS Heroku Vercel Netlify Firebase Supabase Cloudflare
-YouTube Twitter Facebook Instagram TikTok LINE Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
+YouTube Twitter Facebook Instagram TikTok LINE mixi Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
 Netflix Spotify Hulu Disney Prime Twitch Reddit Pinterest LinkedIn Tumblr Medium Substack
 Yahoo Bing DuckDuckGo Baidu Naver Kakao WeChat WhatsApp Telegram Signal Messenger Skype Webex
 ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL
@@ -77,3 +77,5 @@ Suica DCafe ProBot Carlbot Disboard TaCZ NSFW
 Khalifa Ariana Grande Sheeran Marshmello Beabadoobee Chainsmokers Iann Dior Dobby
 # Issue #268
 DeVito
+# Issue #1391 (BIOS の American Megatrends)・#1319・#1402・#1276
+America American Megatrends iZotope Neovide pH

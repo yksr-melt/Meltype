@@ -77,7 +77,7 @@ internal static class TipHarness
         return failed;
     }
 
-    private static Composition.CompositionService CreateService(Control invoker) =>
+    internal static Composition.CompositionService CreateService(Control invoker) =>
         new(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions
         {
             UserDictionary = new Composition.UserDictionary(null),

@@ -99,7 +99,7 @@ internal sealed class ReportDialog : Form
     }
 
     /// <summary>「GitHub で報告: 不具合 / 変換・判定の間違い / 改善の提案」のリンク。</summary>
-    private Control GitHubLinks()
+    private LinkLabel GitHubLinks()
     {
         const string prefix = "GitHub のアカウントがある人は GitHub で報告 (返事や修正の通知が届きます)\n報告リンク: ";
         (string Text, string Template)[] kinds = [("不具合", "1-bug.yml"), ("変換・判定の間違い", "2-misdetection.yml"), ("改善の提案", "4-idea.yml")];

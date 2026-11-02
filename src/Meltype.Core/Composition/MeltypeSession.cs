@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using Meltype.Config;
 using Meltype.Detection;
@@ -26,11 +27,15 @@ public readonly record struct TextEdit(int DeleteBefore, string Text, string? Ex
 /// </summary>
 public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commits, CompositionView? View)
 {
+    /// <summary>固定の操作ガイドを表示するか。対応するフロントだけが使い、Hint と ContextHint の内容は変えない。</summary>
+    public bool ShowGuide { get; init; } = true;
+
     /// <summary>Swift などから読みやすいように JSON にする (NativeAOT でも使えるよう手書き)。</summary>
     public string ToJson()
     {
         var builder = new StringBuilder();
-        builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false").Append(",\"commits\":[");
+        builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false");
+        builder.Append(",\"showGuide\":").Append(ShowGuide ? "true" : "false").Append(",\"commits\":[");
         for (var i = 0; i < Commits.Count; i++)
         {
             if (i > 0) builder.Append(',');
@@ -65,6 +70,10 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
+        // null も必ず出し、この項目に対応していない古い本体 (項目なし) と区別する。
+        builder.Append(",\"contextHint\":");
+        if (view.ContextHint is { } contextHint) AppendString(builder, contextHint);
+        else builder.Append("null");
         builder.Append(",\"candidates\":");
         AppendArray(builder, view.Candidates);
         builder.Append(",\"clauses\":");
@@ -76,12 +85,12 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"meaning\":");
         if (view.Meaning is { } meaning) AppendString(builder, meaning);
         else builder.Append("null");
-        // 候補ごとの注釈 (英訳の候補なら「英訳」、無ければ null)
+        // 候補ごとの注記を表示用の文字列にする (注記が無ければ null)
         builder.Append(",\"notes\":[");
         for (var i = 0; i < view.Candidates.Count; i++)
         {
             if (i > 0) builder.Append(',');
-            if (view.Notes?.ElementAtOrDefault(i) is { } note) AppendString(builder, note);
+            if (view.Notes?[i].ToDisplayText() is { } note) AppendString(builder, note);
             else builder.Append("null");
         }
         builder.Append(']');
@@ -121,7 +130,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
                 case '\r': builder.Append("\\r"); break;
                 case '\t': builder.Append("\\t"); break;
                 default:
-                    if (c < 0x20) builder.Append("\\u").Append(((int)c).ToString("x4"));
+                    if (c < 0x20) builder.Append("\\u").Append(((int)c).ToString("x4", CultureInfo.InvariantCulture));
                     else builder.Append(c);
                     break;
             }
@@ -142,7 +151,7 @@ public sealed class MeltypeSession
 {
     private readonly CaptureGate _gate;
     private readonly CompositionController _controller;
-    private readonly Host _host = new();
+    private readonly Host _host;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly SigilWord _sigil = new();
@@ -154,6 +163,7 @@ public sealed class MeltypeSession
         bool directModeDetection = false, Func<long>? timeMs = null)
     {
         _settings = settings;
+        _host = new Host(settings);
         _timeMs = timeMs ?? (() => Environment.TickCount64);
         _directModeDetection = directModeDetection;
         _gate = new CaptureGate(() => { });
@@ -205,6 +215,7 @@ public sealed class MeltypeSession
         var userDirectory = Path.Combine(dataDirectory, "dictionaries");
         if (s_shared is not { } shared || shared.Directory != dataDirectory)
         {
+            SettingsSchema.Write(dataDirectory);
             var created = CompositionDetector.CreateDefault(userDirectory);
             var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
             created.Memory = languages;
@@ -226,13 +237,12 @@ public sealed class MeltypeSession
         // 検出器は入力欄で共有するので、検出器が見る設定は最後に作った入力欄で読んだもの。
         // OS のスペルチェッカーが無ければ (Linux)、同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。
         detector.SpellChecker = wordChecker is { IsAvailable: true } ? wordChecker : Detection.BuiltInWordChecker.Shared;
-        detector.UseScoredSegmentation = () => settings.ScoredSegmentation;
         detector.UseJapanesePunctuationAfterEnglish = () => settings.JapanesePunctuationAfterEnglish;
         var options = shared.Options with
         {
             LiveConversion = () => settings.LiveConversion,
-            AutoCorrect = () => settings.AutoCorrectAfterCommit && settings.DetectionLevel != DetectionLevel.Manual,
-            Level = () => settings.DetectionLevel,
+            AutoCorrect = () => settings.AutoCorrectAfterCommit && settings.AutoDetection,
+            Manual = () => !settings.AutoDetection,
             // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
             // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
             UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory),
@@ -246,27 +256,26 @@ public sealed class MeltypeSession
             ConsonantAbbreviations = () => settings.ConsonantAbbreviations,
             CandidateMeanings = () => settings.ShowCandidateMeanings,
             CorrectTypos = () => settings.CorrectTypos,
-            SlashAsMiddleDot = () => settings.SlashAsMiddleDot,
+            Slash = () => settings.Slash,
+            ZSymbols = () => settings.ZSymbols,
             SpaceAroundEnglish = () => settings.SpaceAroundEnglish,
-            ShiftSpaceHalfWidth = () => settings.ShiftSpaceHalfWidth,
+            SpaceAroundNumbers = () => settings.SpaceAroundNumbers,
+            NumberKeysSelectCandidates = () => settings.NumberKeysSelectCandidates,
+            SpaceWidth = () => settings.SpaceWidth,
             EnterCommitsAsShown = () => settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => settings.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = () => settings.FullWidthParentheses,
-            FullWidthSlash = () => settings.FullWidthSlash,
             SquareBrackets = () => settings.SquareBrackets,
             EscStepsBack = () => settings.EscStepsBack,
             EscRevertsSelectedClause = () => settings.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = () => settings.FunctionKeysAffectSelectedClause,
-            CompatibleShortcuts = () => settings.CompatibleShortcuts,
+            ControlKeys = () => settings.ControlKeys,
             PartialCommit = () => settings.PartialCommit,
-            MacControlKeys = () => settings.MacControlKeys,
             CursorIntoBrackets = () => settings.CursorIntoBrackets,
             ControlKeyBindings = () => settings.ControlKeyBindings,
             CalculatorCandidates = () => settings.CalculatorCandidates,
-            LogKeyIntervals = () => settings.LogKeyIntervals,
             LaughterAfterKana = () => settings.LaughterAfterKana,
             ContextualLearning = () => settings.ContextualLearning,
-            FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault,
             ShowCandidatesWhileTyping = () => settings.ShowCandidatesWhileTyping,
             GitHubIssueCandidates = () => settings.GitHubIssueCandidates,
             GitHubRepository = () => settings.GitHubRepository,
@@ -345,7 +354,7 @@ public sealed class MeltypeSession
             Diagnostics.Log.Info("コードの行: 英数に戻す");
             return true;
         }
-        if (_codeJapanese || before is not null && LineContext.ClassifyText(before) != LineKind.Code) return false;
+        if (_codeJapanese || CodeLineKind(before) != LineKind.Code) return false;
         _codeJapanese = true;
         Diagnostics.Log.Info("コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)");
         return true;
@@ -359,7 +368,7 @@ public sealed class MeltypeSession
     {
         if (!CodeInput || Direct || _controller.IsComposing) return false;
         before = SyncCodeLine(before);
-        return !_codeJapanese && LineContext.ClassifyText(before ?? "") == LineKind.Code;
+        return !_codeJapanese && CodeLineKind(before) == LineKind.Code;
     }
 
     /// <summary>
@@ -383,6 +392,9 @@ public sealed class MeltypeSession
         return before ?? _codeLine.Text;
     }
 
+    /// <summary>キャレットの位置の種類。今の行が分からなければ、分からなくなってから打った文字列で調べる (その前はコードとみなす)。</summary>
+    private LineKind CodeLineKind(string? before) => LineContext.ClassifyText(before ?? _codeLine.Tracked);
+
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public bool CanDeleteSurrounding
     {
@@ -401,7 +413,7 @@ public sealed class MeltypeSession
         if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
         if (CodeInput && !Direct && !control && !alt && !command &&
-            ch is '"' or '\'' or '`' && _codeLine.Text is { } line &&
+            ch is '"' or '\'' or '`' && _codeLine.Tracked is var line &&
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
         {
@@ -425,13 +437,18 @@ public sealed class MeltypeSession
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
-        if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && _sigil.PassesThrough(c, before))
+        // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
+        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !_sigil.IsActive && _settings().SigilWordsDirect &&
+            _sigil.PassesThrough('/', before))
+        {
+            _controller.MarkSlashAtStart();
+        }
+        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && _sigil.PassesThrough(c, before))
         {
             if (CodeInput) TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
         }
-        if (CodeInput && !_codeJapanese && !_controller.IsComposing &&
-            (before is null || LineContext.ClassifyText(before) == LineKind.Code))
+        if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
             TrackCodeKey(vk, ch, modifier);
             return Track(_host.Result(consumed: false), vk, ch, modifier);
@@ -440,7 +457,7 @@ public sealed class MeltypeSession
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, false, false, down.TimeMs));
         if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, false, false, down.TimeMs));
 
-        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().FullWidthSpaceByDefault)));
+        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().SpaceWidth == SpaceWidth.FullWidth)));
         // このキーをアプリに送り直した (= 使わなかった) なら、アプリに渡す。
         var consumed = swallowed && !_host.ReplayedCurrent;
         Feed(down with { IsUp = true });
@@ -472,6 +489,14 @@ public sealed class MeltypeSession
         if (!_settings().SeparateKeyRoles || !_controller.IsComposing || Direct) return null;
         return HandleKey(vk, null, false, false, false, false);
     }
+
+    /// <summary>
+    /// 打ち始めの / を、・ にせずそのままアプリへ渡すか。コードの入力欄で、キャレットがコードの中か、
+    /// ターミナルの AI の入力行 (Claude Code・Codex の /command を打つ所) にあるとき。
+    /// コメント・文字列の中は ・ にする (Meltype キーボードと同じ)。
+    /// </summary>
+    private bool PassesSlash(string? before) =>
+        CodeInput && !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
 
     private void TrackCodeKey(int vk, char? ch, bool modifier)
     {
@@ -588,7 +613,7 @@ public sealed class MeltypeSession
     }
 
     /// <summary>変換ボックスからの指示を集めて、1 回のキー入力の結果にまとめる。</summary>
-    private sealed class Host : ICompositionHost
+    private sealed class Host(Func<Settings> settings) : ICompositionHost
     {
         private readonly List<TextEdit> _commits = [];
         private int _pendingDelete;
@@ -625,7 +650,7 @@ public sealed class MeltypeSession
             if (_pendingDelete > 0) Add("");
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
-            return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view);
+            return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view) { ShowGuide = settings().ShowGuide };
         }
 
         public void CommitText(string text) => Add(text);

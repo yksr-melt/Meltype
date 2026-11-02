@@ -9,33 +9,24 @@ namespace Meltype.Composition;
 /// 英訳の候補 (dictionaries/translations.txt。JMdict のよく使う語から作った表、CC BY-SA 4.0)。
 /// 変換した文節 (複雑な) の英訳 (complex, complicated …) を、変換の候補の後ろに出すのに使う。
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
 public sealed class TranslationDictionary
 {
-    // 書き方 (複雑) → 品詞ごとの英訳
-    private readonly Dictionary<string, List<(string Kind, string[] Words)>> _entries = new(StringComparer.Ordinal);
-    private int _maxLength;
+    // 書き方 [TAB] 品詞 [TAB] 英訳,英訳…
+    private readonly Detection.PackedLines _lines;
 
-    public int Count => _entries.Count;
+    private TranslationDictionary(Detection.PackedLines lines) => _lines = lines;
+
+    public int Count => _lines.Count;
 
     public static TranslationDictionary Load() => Parse(Detection.DictionarySource.ReadEmbedded("translations.txt"));
 
-    public static TranslationDictionary Parse(string text)
-    {
-        var dictionary = new TranslationDictionary();
-        foreach (var line in Detection.DictionarySource.DataLines(text))
-        {
-            var fields = line.Split('\t');
-            if (fields.Length < 3) continue;
-            if (!dictionary._entries.TryGetValue(fields[0], out var list)) dictionary._entries[fields[0]] = list = [];
-            list.Add((fields[1], fields[2].Split(',', StringSplitOptions.RemoveEmptyEntries)));
-            dictionary._maxLength = Math.Max(dictionary._maxLength, fields[0].Length);
-        }
-        return dictionary;
-    }
+    public static TranslationDictionary Parse(string text) => new(Detection.PackedLines.FromText(text));
 
     // 語の後ろに付いていてよい、助詞・「だ」など (複雑|な、会議|に、食べる|の)。これ以外が続くなら (食べ|ます) 英訳は出さない。
     private static readonly HashSet<string> Endings =
         ["", "な", "に", "だ", "です", "の", "を", "が", "は", "も", "と", "で", "へ", "や", "から", "まで", "より", "って", "とか", "さ"];
+    private static readonly int MaxEndingLength = Endings.Max(ending => ending.Length);
 
     /// <summary>
     /// 文節の英訳。text は変換した文字列 (複雑な)、reading はその読み (かなだけの語 ゆっくり を引くのに使う)。
@@ -45,9 +36,11 @@ public sealed class TranslationDictionary
     {
         foreach (var key in new[] { text, reading })
         {
-            for (var length = Math.Min(_maxLength, key.Length); length >= 1; length--)
+            var minLength = Math.Max(1, key.Length - MaxEndingLength);
+            for (var length = Math.Min(_lines.MaxKeyLength, key.Length); length >= minLength; length--)
             {
-                if (!_entries.TryGetValue(key[..length], out var list)) continue;
+                var (first, count) = _lines.Find(key.AsSpan(0, length));
+                if (count == 0) continue;
                 var ending = key[length..];
                 if (!Endings.Contains(ending)) break;
                 string[] order = ending switch
@@ -57,14 +50,24 @@ public sealed class TranslationDictionary
                     _ => ["n", "na", "i", "v", "adv"],
                 };
                 var words = new List<string>();
+                var left = count; // まだ英訳を取り出していない行の数。全部取り出したら、残りの品詞は見なくてよい
                 foreach (var kind in order)
                 {
-                    foreach (var (entryKind, entryWords) in list)
+                    // 助詞は付けたまま (カメラを → cameraを、川に → riverに)。な形容詞の な・副詞の に は語の一部なので外す (複雑な → complex)。
+                    var suffix = ending == "な" || (ending == "に" && kind is "adv" or "na") ? "" : ending;
+                    for (var k = first; k < first + count; k++)
                     {
-                        if (entryKind != kind) continue;
-                        // 助詞は付けたまま (カメラを → cameraを、川に → riverに)。な形容詞の な・副詞の に は語の一部なので外す (複雑な → complex)。
-                        var suffix = ending == "な" || (ending == "に" && kind is "adv" or "na") ? "" : ending;
-                        foreach (var word in entryWords) if (!words.Contains(word + suffix) && words.Count < 5) words.Add(word + suffix);
+                        if (!_lines.Field(k, 1).SequenceEqual(kind)) continue;
+                        var translations = _lines.Field(k, 2);
+                        foreach (var range in translations.Split(','))
+                        {
+                            var translation = translations[range];
+                            if (translation.IsEmpty) continue;
+                            var word = string.Concat(translation, suffix.AsSpan());
+                            if (!words.Contains(word)) words.Add(word);
+                            if (words.Count == 5) return words;
+                        }
+                        if (--left == 0) return words;
                     }
                 }
                 return words;
@@ -79,15 +82,25 @@ public sealed class TranslationDictionary
     /// </summary>
     public string? Meaning(string text)
     {
-        if (!text.Any(KanaChars.IsKanjiOrKatakana)) return null;
-        for (var length = Math.Min(_maxLength, text.Length); length >= 1; length--)
+        var minLength = text.Length;
+        while (minLength > 0 && !KanaChars.IsKanjiOrKatakana(text[minLength - 1])) minLength--;
+        if (minLength == 0) return null;
+        for (var length = Math.Min(_lines.MaxKeyLength, text.Length); length >= minLength; length--)
         {
-            if (!_entries.TryGetValue(text[..length], out var list)) continue;
-            if (text[length..].Any(KanaChars.IsKanjiOrKatakana)) return null;
+            var (first, count) = _lines.Find(text.AsSpan(0, length));
+            if (count == 0) continue;
             var words = new List<string>();
-            foreach (var (_, entryWords) in list)
+            for (var k = first; k < first + count && words.Count < 4; k++)
             {
-                foreach (var word in entryWords) if (!words.Contains(word) && words.Count < 4) words.Add(word);
+                var translations = _lines.Field(k, 2);
+                foreach (var range in translations.Split(','))
+                {
+                    var translation = translations[range];
+                    if (translation.IsEmpty) continue;
+                    var word = translation.ToString();
+                    if (!words.Contains(word)) words.Add(word);
+                    if (words.Count == 4) break;
+                }
             }
             return words.Count == 0 ? null : string.Join(", ", words);
         }
@@ -103,9 +116,13 @@ public sealed class TranslationHistory
 {
     private readonly string? _path;
     private readonly Dictionary<string, Dictionary<string, int>> _counts = new(StringComparer.Ordinal);
+    private readonly object _gate = new();
+    private readonly object _fileGate = new();
+    private readonly DeferredSaver _saver;
 
     public TranslationHistory(string? path)
     {
+        _saver = new DeferredSaver(Write);
         _path = path;
         Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
@@ -120,28 +137,38 @@ public sealed class TranslationHistory
 
     public void Remember(string reading, string word)
     {
-        if (!_counts.TryGetValue(reading, out var words)) _counts[reading] = words = new(StringComparer.Ordinal);
-        words[word] = words.GetValueOrDefault(word) + 1;
-        Save();
+        lock (_gate)
+        {
+            if (!_counts.TryGetValue(reading, out var words)) _counts[reading] = words = new(StringComparer.Ordinal);
+            words[word] = words.GetValueOrDefault(word) + 1;
+        }
+        _saver.Request();
     }
 
     /// <summary>選んだ英訳の記録をすべて消す (トレイの「学習データをリセット」)。</summary>
     public void Clear()
     {
-        _counts.Clear();
-        Save();
+        lock (_gate) _counts.Clear();
+        _saver.WriteNow();
     }
 
-    private void Save()
+    private bool Write()
     {
-        if (_path is null) return;
+        if (_path is null) return true;
         try
         {
-            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations)));
+            lock (_fileGate)
+            {
+                string json;
+                lock (_gate) json = JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations);
+                Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+            }
+            return true;
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"英訳の学習データを保存できませんでした: {ex.Message}");
+            return false;
         }
     }
 }

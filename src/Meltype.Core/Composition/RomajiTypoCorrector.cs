@@ -17,27 +17,69 @@ public readonly record struct RomajiFix(string Wrong, string Right, string Kana)
 public sealed class RomajiTypoCorrector
 {
     private readonly RomajiDetector _romaji;
-    private readonly HashSet<string> _words = new(StringComparer.Ordinal);
-    private int _maxLength;
+    // よく使う語の読み (Load で作ったときは、かな入力の判定と同じ CommonReadings を共有する) と、付属語・活用した形
+    private readonly PackedWordSet _readings;
+    private readonly PackedWordSet _forms;
+    private readonly int _maxLength;
 
-    public RomajiTypoCorrector(RomajiDetector romaji, string readings)
+    public RomajiTypoCorrector(RomajiDetector romaji, string readings) : this(romaji, PackedWordSet.FromLines(readings, firstField: true), readings)
     {
-        _romaji = romaji;
-        foreach (var word in FunctionWords) Add(word);
-        foreach (var line in Detection.DictionarySource.DataLines(readings))
-        {
-            var parts = line.Split('\t');
-            Add(parts[0]);
-            if (parts.Length > 1) AddConjugations(parts[0], parts[1]);
-        }
     }
 
-    public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, DictionarySource.ReadEmbedded("readings.txt"));
+    private RomajiTypoCorrector(RomajiDetector romaji, PackedWordSet readings, string readingsText) : this(romaji, readings, BuildForms(readingsText, readings))
+    {
+    }
 
-    public int Count => _words.Count;
+    private RomajiTypoCorrector(RomajiDetector romaji, PackedWordSet readings, PackedWordSet forms)
+    {
+        _romaji = romaji;
+        _readings = readings;
+        _forms = forms;
+        _maxLength = Math.Max(_readings.MaxLength, _forms.MaxLength);
+        Count = _readings.Count + _forms.Count;
+    }
+
+    private static PackedWordSet BuildForms(string readingsText, PackedWordSet readings)
+    {
+        var forms = new List<string>(FunctionWords);
+        foreach (var line in Detection.DictionarySource.DataLines(readingsText))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length < 2) continue;
+            // 同じ読みで活用の違う語 (くる = 繰る v5r・来る vk) は , でつないである
+            foreach (var kind in parts[1].Split(',')) AddConjugations(parts[0], kind, forms);
+        }
+        return PackedWordSet.FromWords(forms.Where(form => !readings.Contains(form)));
+    }
+
+    // 同梱の読み (CommonReadings) から作った付属語・活用した形。Load で作る打ち間違い直しと、日英の区切り (CompositionDetector) で共有する
+    private static readonly Lazy<PackedWordSet> CommonForms = new(() => BuildForms(CommonReadings.ReadText(), CommonReadings.Words));
+
+    public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
+
+    public int Count { get; }
 
     /// <summary>読みがよく使う語 (または付属語・活用した形) か。</summary>
-    public bool IsWord(string hiragana) => _words.Contains(hiragana);
+    public bool IsWord(string hiragana) => IsWord(hiragana.AsSpan());
+
+    private bool IsWord(ReadOnlySpan<char> hiragana) => _readings.Contains(hiragana) || _forms.Contains(hiragana);
+
+    /// <summary>同梱の読みで、kana を 1 語として読むときの重み (WordCost)。語でなければ null。</summary>
+    internal static double? CommonWordCost(ReadOnlySpan<char> kana) =>
+        CommonReadings.Words.Contains(kana) || CommonForms.Value.Contains(kana) ? WordCost(kana) : null;
+
+    /// <summary>kana が、同梱の読み・付属語・活用した形のどれかの頭か。</summary>
+    internal static bool CommonHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Words.HasPrefix(kana) || CommonForms.Value.HasPrefix(kana);
+
+    // 語の生起コスト。日英の区切り (ReadingLattice.cs) と共有する
+    // 付属語 (が・を・て)
+    private const double FunctionWordCost = 0.8;
+    // 2 文字以上の語
+    private const double WordCostPerWord = 1;
+    // 1 文字の語 (め・き)
+    private const double SingleKanaWordCost = 1.5;
+
+    private static double WordCost(ReadOnlySpan<char> word) => Function.Contains(word) ? FunctionWordCost : word.Length >= 2 ? WordCostPerWord : SingleKanaWordCost;
 
     // 助詞・助動詞・よく付く語。1 文字でも語として数える。
     private static readonly string[] FunctionWords =
@@ -53,38 +95,35 @@ public sealed class RomajiTypoCorrector
         "ないで", "なくて", "られた", "れた", "ください", "でしょうか", "ですか", "ますか", "ですね", "ますね", "ですよ", "ますよ",
     ];
 
-    private static readonly HashSet<string> Function = new(FunctionWords, StringComparer.Ordinal);
-
-    private void Add(string word)
-    {
-        if (word.Length == 0 || !_words.Add(word)) return;
-        _maxLength = Math.Max(_maxLength, word.Length);
-    }
+    private static readonly HashSet<string>.AlternateLookup<ReadOnlySpan<char>> Function =
+        new HashSet<string>(FunctionWords, StringComparer.Ordinal).GetAlternateLookup<ReadOnlySpan<char>>();
 
     /// <summary>活用する語の、付属語が続く形 (たべ、かき・かか・かい、はやく・はやかっ …)。</summary>
-    private void AddConjugations(string word, string kind)
+    private static void AddConjugations(string word, string kind, List<string> forms)
     {
         if (word.Length < 2) return;
         var stem = word[..^1];
         switch (kind)
         {
             case "v1":
-                if (word[^1] == 'る') Add(stem);
+                if (word[^1] != 'る') break;
+                // て・た 形も 1 語にする: 語幹が 1 文字 (み・ね) だと 1 文字の語の重みになり、み|て が英単語 mite に負ける
+                foreach (var ending in (string[])["", "て", "た"]) forms.Add(stem + ending);
                 break;
             case "i":
                 if (word[^1] != 'い') break;
-                foreach (var ending in (string[])["く", "かっ", "けれ", "さ", "そう"]) Add(stem + ending);
-                if (word == "いい") foreach (var ending in (string[])["よく", "よかっ", "よけれ"]) Add(ending);
+                foreach (var ending in (string[])["く", "かっ", "けれ", "さ", "そう"]) forms.Add(stem + ending);
+                if (word == "いい") foreach (var ending in (string[])["よく", "よかっ", "よけれ"]) forms.Add(ending);
                 break;
             case "vk":
-                if (word.EndsWith("くる")) foreach (var form in (string[])["き", "こ", "く", "くれ"]) Add(word[..^2] + form);
+                if (word.EndsWith("くる", StringComparison.Ordinal)) foreach (var form in (string[])["き", "きて", "きた", "こ", "く", "くれ"]) forms.Add(word[..^2] + form);
                 break;
             case "vs":
-                if (word.EndsWith("する")) foreach (var form in (string[])["し", "さ", "せ", "すれ", "しろ"]) Add(word[..^2] + form);
+                if (word.EndsWith("する", StringComparison.Ordinal)) foreach (var form in (string[])["し", "さ", "せ", "すれ", "しろ"]) forms.Add(word[..^2] + form);
                 break;
             default:
-                if (!kind.StartsWith("v5") || !Rows.TryGetValue(word[^1], out var row)) break;
-                foreach (var kana in row) Add(stem + kana);
+                if (!kind.StartsWith("v5", StringComparison.Ordinal) || !Rows.TryGetValue(word[^1], out var row)) break;
+                foreach (var kana in row) forms.Add(stem + kana);
                 // 音便 (かい-た、およい-だ、かっ-た、よん-だ、いっ-た)
                 var onbin = kind switch
                 {
@@ -94,9 +133,9 @@ public sealed class RomajiTypoCorrector
                     "v5b" or "v5m" or "v5n" => "ん",
                     _ => null,
                 };
-                if (onbin is not null) Add(stem + onbin);
+                if (onbin is not null) forms.Add(stem + onbin);
                 // ござる・いらっしゃる・なさる は ます の前が い (ございます)
-                if (kind == "v5aru") Add(stem + "い");
+                if (kind == "v5aru") forms.Add(stem + "い");
                 break;
         }
     }
@@ -249,9 +288,9 @@ public sealed class RomajiTypoCorrector
             cost[i] = double.MaxValue;
             for (var length = Math.Min(i, _maxLength); length >= 1; length--)
             {
-                var piece = kana.Substring(i - length, length);
+                var piece = kana.AsSpan(i - length, length);
                 double step;
-                if (_words.Contains(piece)) step = Function.Contains(piece) ? 0.8 : length >= 2 ? 1 : 1.5;
+                if (IsWord(piece)) step = WordCost(piece);
                 else if (length == 1) step = piece is "ー" or "っ" ? 0.5 : 3;
                 else continue;
                 if (cost[i - length] + step < cost[i])
@@ -265,8 +304,8 @@ public sealed class RomajiTypoCorrector
         for (var i = n; i > 0 && !known; i = from[i])
         {
             if (from[i] > at || i <= at) continue;
-            var piece = kana[from[i]..i];
-            known = _words.Contains(piece) && (piece.Length >= 2 || Function.Contains(piece));
+            var piece = kana.AsSpan(from[i], i - from[i]);
+            known = IsWord(piece) && (piece.Length >= 2 || Function.Contains(piece));
             break;
         }
         return (cost[n], known);

@@ -17,7 +17,11 @@ param(
     # Visual Studio の VC フォルダー。省略すると vswhere で探す (Mozc の自動検出は一部の構成で失敗するため)。
     [string]$VcPath = '',
     # Bazel の結果を保存しておく場所 (GitHub Actions でビルドを速くするため)。省略すると使わない。
-    [string]$DiskCache = ''
+    [string]$DiskCache = '',
+    # Mozc-UT の辞書 (mozcdic-ut.txt) を足す場合に指定する。省略すると環境変数 MELTYPE_UT_DICTIONARY。
+    # 指定しなければ、これまでどおり Mozc だけのヘルパーを作る (前回の統合は自動で取り消す)。
+    # 辞書は Mozc の辞書に足すだけで、同梱も再配布もしない (ライセンスは README.md)。
+    [string]$UtDictionary = $env:MELTYPE_UT_DICTIONARY
 )
 $ErrorActionPreference = 'Stop'
 
@@ -28,6 +32,26 @@ function Invoke-Native([string]$FilePath, [string[]]$Arguments, [string]$Failure
     $ErrorActionPreference = 'Continue'
     try { & $FilePath @Arguments 2>&1 | ForEach-Object { Write-Host $_ } }
     finally { $ErrorActionPreference = $previous }
+    if ($LASTEXITCODE -ne 0) { throw $Failure }
+}
+
+# Python の出す日本語 (UTF-8) を、コンソールの文字コードに関係なく読めるようにしてから実行する。
+function Invoke-PythonUtf8([string[]]$Arguments, [string]$Failure) {
+    $previousPreference = $ErrorActionPreference
+    $previousIo = $env:PYTHONIOENCODING
+    $previousEncoding = $null
+    try { $previousEncoding = [Console]::OutputEncoding } catch { }
+    $ErrorActionPreference = 'Continue'
+    try {
+        try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+        $env:PYTHONIOENCODING = 'utf-8'
+        & $Python @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+        $env:PYTHONIOENCODING = $previousIo
+        if ($null -ne $previousEncoding) { try { [Console]::OutputEncoding = $previousEncoding } catch { } }
+    }
     if ($LASTEXITCODE -ne 0) { throw $Failure }
 }
 $here = $PSScriptRoot
@@ -72,6 +96,13 @@ $head = & git -C $MozcSource rev-parse -q --verify HEAD
 if ($head) {
     # 前に足したヘルパーの定義を消し、取ってきたときの BUILD.bazel に戻す (BUILD.fragment の変更を反映し、checkout が止まらないように)
     Invoke-Native git @('-C', $MozcSource, 'checkout', '-q', 'HEAD', '--', 'src/converter/BUILD.bazel') 'BUILD.bazel を戻せませんでした。'
+    # 辞書の BUILD.bazel は利用者が書き換えていることがあるので、checkout せずに、足した dictionary_ut.txt の行だけを消す
+    # (build-mozc-helper.sh は Mozc の版を変えないので、この処理が無い。版を合わせる処理を足すときは同じ手当てが要る)
+    $dictionaryBuild = Join-Path $MozcSource 'src\data\dictionary_oss\BUILD.bazel'
+    $buildText = [IO.File]::ReadAllText($dictionaryBuild)
+    if ($buildText -match '"dictionary_ut\.txt"') {
+        [IO.File]::WriteAllText($dictionaryBuild, ($buildText -replace '(?m)^ *"dictionary_ut\.txt",\r?\n', ''))
+    }
 }
 if ($head -ne $commit) {
     Invoke-Native git @('-C', $MozcSource, 'fetch', '-q', '--depth', '1', 'origin', $commit) "Mozc ($commit) を取得できませんでした。"
@@ -79,6 +110,40 @@ if ($head -ne $commit) {
     Invoke-Native git @('-C', $MozcSource, 'submodule', 'update', '-q', '--init', '--recursive', '--depth', '1') 'Mozc のサブモジュールを取得できませんでした。'
 }
 $src = Join-Path $MozcSource 'src'
+$merge = Join-Path $here 'merge-ut-dictionary.py'
+if ($UtDictionary) {
+    if (-not (Test-Path -LiteralPath $UtDictionary -PathType Leaf)) {
+        throw "Mozc-UT の辞書が見つかりません: $UtDictionary"
+    }
+    $UtDictionary = (Resolve-Path -LiteralPath $UtDictionary).Path
+}
+New-Item -ItemType Directory -Force -Path $bin | Out-Null
+$utReport = Join-Path $bin 'MOZC-UT.json'
+# 統合した内容 (辞書と Mozc のハッシュ) は、ビルドが通ってから印 (MOZC-UT.json) にする。
+# 途中で失敗したときに印だけ消すと、前のビルドのヘルパー (Mozc-UT 入りのことがある) が
+# 標準のヘルパーに見えてしまうため、ビルドが終わるまでは書かない。
+$utPending = Join-Path $bin 'MOZC-UT.json.tmp'
+if (Test-Path -LiteralPath $utPending) { Remove-Item -LiteralPath $utPending -Force }
+
+# Mozc-UT の語は Mozc の辞書とは別の dictionary_ut.txt に置き、ビルドのたびに作り直す
+# (Mozc の辞書は書き換えないので、手元で書き換えた辞書も残る)。
+# dictionary_ut.txt はいつもビルドに含め、-UtDictionary が無いときは空にする。
+# BUILD.bazel は "dictionary09.txt", の行を目印に、その次の行に足す。同じ書き換えを build-mozc-helper.sh も行い、
+# merge-ut-dictionary.py (ensure_registered) が足した行を確かめるので、Mozc の BUILD.bazel の形が変わったら 3 か所を直す。
+$dictionaryBuild = Join-Path $src 'data\dictionary_oss\BUILD.bazel'
+$buildText = [IO.File]::ReadAllText($dictionaryBuild)
+if ($buildText -notmatch '"dictionary_ut\.txt"') {
+    $buildText = $buildText -replace '(?m)^( *)"dictionary09\.txt",(\r?)$', "`$0`n`$1`"dictionary_ut.txt`",`$2"
+    if ($buildText -notmatch '"dictionary_ut\.txt"') {
+        throw "$dictionaryBuild に dictionary_ut.txt を足せませんでした (Mozc の BUILD.bazel の形が変わった可能性があります)。"
+    }
+    [IO.File]::WriteAllText($dictionaryBuild, $buildText)
+}
+[IO.File]::WriteAllText((Join-Path $src 'data\dictionary_oss\dictionary_ut.txt'), '')
+
+if ($UtDictionary) {
+    Invoke-PythonUtf8 @($merge, '--mozc-src', $src, '--dictionary', $UtDictionary, '--report', $utPending) 'Mozc-UT の辞書を統合できませんでした。'
+}
 
 # ヘルパーのソースと BUILD の定義を Mozc の converter パッケージに入れる (エンジンを使えるのがこのパッケージのため)。
 Copy-Item -LiteralPath (Join-Path $here 'meltype_mozc_helper.cc') -Destination (Join-Path $src 'converter') -Force
@@ -95,12 +160,19 @@ try {
     # シンボリックリンクは Windows の開発者モードか管理者権限が要るので使わない。
     Invoke-Native $Bazelisk (@('--nowindows_enable_symlinks') + $options) 'ビルドに失敗しました。'
 }
+catch {
+    # ビルドできなかったので、前のヘルパーとその印はそのまま残す。
+    if (Test-Path -LiteralPath $utPending) { Remove-Item -LiteralPath $utPending -Force }
+    throw
+}
 finally {
     Pop-Location
 }
 
-New-Item -ItemType Directory -Force -Path $bin | Out-Null
 Copy-Item -LiteralPath (Join-Path $src 'bazel-bin\converter\meltype_mozc_helper.exe') -Destination $bin -Force
+# ビルドが通ったので、このフォルダーのヘルパーに合わせて印を入れ替える。
+if (Test-Path -LiteralPath $utReport) { Remove-Item -LiteralPath $utReport -Force }
+if (Test-Path -LiteralPath $utPending) { Move-Item -LiteralPath $utPending -Destination $utReport -Force }
 # Bazel の出力は読み取り専用なので、上書きやアンインストールで困らないように外す。
 (Get-Item -LiteralPath (Join-Path $bin 'meltype_mozc_helper.exe')).IsReadOnly = $false
 # Mozc と辞書 (IPAdic など)・ライブラリのライセンス
@@ -137,3 +209,10 @@ if ($placed.Count -eq 0) { throw 'ヘルパーが Visual C++ のランタイム�
 Set-Content -LiteralPath (Join-Path $bin 'VC-RUNTIME.txt') -Value $placed -Encoding ASCII
 Write-Host "Visual C++ のランタイムを置きました ($($crt.FullName)): $($placed -join ', ')"
 Write-Host "作成しました: $bin"
+if ($UtDictionary) {
+    Write-Host "このヘルパーには Mozc-UT の辞書が入っています ($utReport)。"
+    Write-Host '再配布するときは、辞書ごとのライセンスに従ってください (native\mozc\README.md)。'
+}
+else {
+    Write-Host 'Mozc-UT の辞書は入っていません (MELTYPE_UT_DICTIONARY を指定すると入ります)。'
+}

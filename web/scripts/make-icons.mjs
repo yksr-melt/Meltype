@@ -8,7 +8,7 @@
 //   web/public/apple-touch-icon.png  180x180、明るい背景で余白を付ける (角は iOS が丸める)
 //   native/tip/meltype.ico           16〜256 の 9 サイズ (Meltype IME と Meltype.exe)
 //   linux/icon.png                   64x64
-//   mac/Resources/icon.tiff          32x32 の白黒テンプレート (メニューバー用。macOS がダークモードで白く出す)
+//   mac/Resources/icon.tiff          18pt (18px / 36px) の白黒テンプレート (メニューバー用。macOS がダークモードで白く出す)
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -34,7 +34,7 @@ const inner = svg.replace(/^[\s\S]*?<svg[^>]*>/, "").replace(/<\/svg>\s*$/, "");
 // メニューバー用: 結晶は薄い黒、M は濃い黒。M のまわりの白い縁は透明にして結晶と切り離す
 const flake = inner.match(/<path d="(M30 42V22[^"]*)"/)[1];
 const m = "M21.5 50V34l8.5 10 8.5-10v16";
-const template = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="5 17 50 50">
+const template = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="8 20 44 44">
 <defs><mask id="k" maskUnits="userSpaceOnUse" x="0" y="0" width="60" height="80">
 <rect x="0" y="0" width="60" height="80" fill="#fff"/>
 <path d="${m}" fill="none" stroke="#000" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/></mask></defs>
@@ -90,33 +90,46 @@ function ico(entries) {
   return Buffer.concat([header, ...entries.map((e) => e.png)]);
 }
 
-// 圧縮なし RGBA (アルファは乗算なし) の TIFF
-function tiff(width, height, rgba) {
-  const data = Buffer.from(rgba);
-  const tags = [
-    [256, 3, 1, width], [257, 3, 1, height], [258, 3, 4, 0], [259, 3, 1, 1], [262, 3, 1, 2],
-    [273, 4, 1, 0], [277, 3, 1, 4], [278, 3, 1, height], [279, 4, 1, data.length], [284, 3, 1, 1], [338, 3, 1, 2],
-  ];
-  const ifdSize = 2 + tags.length * 12 + 4;
-  const bitsOffset = 8 + ifdSize;
-  const dataOffset = bitsOffset + 8;
-  const head = Buffer.alloc(dataOffset);
-  head.write("II", 0, "latin1");
-  head.writeUInt16LE(42, 2);
-  head.writeUInt32LE(8, 4);
-  head.writeUInt16LE(tags.length, 8);
-  tags.forEach(([tag, type, count, value], i) => {
-    const o = 10 + i * 12;
-    if (tag === 258) value = bitsOffset;
-    if (tag === 273) value = dataOffset;
-    head.writeUInt16LE(tag, o);
-    head.writeUInt16LE(type, o + 2);
-    head.writeUInt32LE(count, o + 4);
-    if (type === 3 && count === 1) head.writeUInt16LE(value, o + 8);
-    else head.writeUInt32LE(value, o + 8);
+// 18pt の白黒テンプレートを 1x / 2x の TIFF 表現として格納する。
+// 各表現の論理サイズを揃え、濃さ・形状を変えず表示寸法を大きくする。
+function tiff(entries) {
+  const header = Buffer.alloc(8);
+  header.write("II", 0, "latin1");
+  header.writeUInt16LE(42, 2);
+  header.writeUInt32LE(8, 4);
+  let offset = 8;
+  const frames = entries.map(({ size, rgba }, index) => {
+    const data = Buffer.from(rgba);
+    const tags = [
+      [256, 3, 1, size], [257, 3, 1, size], [258, 3, 4, 0], [259, 3, 1, 1], [262, 3, 1, 2],
+      [273, 4, 1, 0], [277, 3, 1, 4], [278, 3, 1, size], [279, 4, 1, data.length],
+      [282, 5, 1, 0], [283, 5, 1, 0], [284, 3, 1, 1], [296, 3, 1, 2], [338, 3, 1, 2],
+    ];
+    const ifdSize = 2 + tags.length * 12 + 4;
+    const bitsOffset = offset + ifdSize;
+    const resolutionOffset = bitsOffset + 8;
+    const dataOffset = resolutionOffset + 8;
+    const head = Buffer.alloc(ifdSize + 16);
+    head.writeUInt16LE(tags.length, 0);
+    tags.forEach(([tag, type, count, value], i) => {
+      const o = 2 + i * 12;
+      if (tag === 258) value = bitsOffset;
+      if (tag === 273) value = dataOffset;
+      if (tag === 282 || tag === 283) value = resolutionOffset;
+      head.writeUInt16LE(tag, o);
+      head.writeUInt16LE(type, o + 2);
+      head.writeUInt32LE(count, o + 4);
+      if (type === 3 && count === 1) head.writeUInt16LE(value, o + 8);
+      else head.writeUInt32LE(value, o + 8);
+    });
+    for (let i = 0; i < 4; i++) head.writeUInt16LE(8, ifdSize + i * 2);
+    head.writeUInt32LE(size * 72 / 18, ifdSize + 8);
+    head.writeUInt32LE(1, ifdSize + 12);
+    offset = dataOffset + data.length;
+    head.writeUInt32LE(index + 1 < entries.length ? offset : 0, 2 + tags.length * 12);
+    return Buffer.concat([head, data]);
   });
-  for (let i = 0; i < 4; i++) head.writeUInt16LE(8, bitsOffset + i * 2);
-  return Buffer.concat([head, data]);
+  return Buffer.concat([header, ...frames]);
 }
 
 function save(path, bytes) {
@@ -130,6 +143,10 @@ const sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
 const entries = [];
 for (const size of sizes) entries.push({ size, png: await render(size) });
 save("native/tip/meltype.ico", ico(entries));
-save("mac/Resources/icon.tiff", tiff(32, 32, await pixels(await render(32, { source: template }))));
+const macEntries = [];
+for (const size of [18, 36]) {
+  macEntries.push({ size, rgba: await pixels(await render(size, { source: template })) });
+}
+save("mac/Resources/icon.tiff", tiff(macEntries));
 
 await browser.close();

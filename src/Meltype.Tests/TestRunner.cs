@@ -12,6 +12,7 @@ internal static class TestRunner
     [STAThread]
     public static int Main(string[] args)
     {
+        using var spellChecker = Detection.WindowsSpellChecker.Shared;
         TestSupport.WordChecker = Detection.WindowsSpellChecker.Shared;
         // dotnet run --project src/Meltype.Tests -- --convert きょうはいいてんきです
         // で、Microsoft IME の変換エンジン (MSIME.Japan) が使えるかを確かめる。
@@ -95,7 +96,7 @@ internal static class TestRunner
                     keyboard.Type(c.ToString());
                     var view = keyboard.Host.View;
                     // 変換ボックスを通らずにアプリへ送ったキー (英数状態で英語と判定した打鍵など)
-                    var passed = string.Concat(keyboard.Host.Events.Skip(before).Where(e => e.StartsWith("passed:") || e.StartsWith("down:"))
+                    var passed = string.Concat(keyboard.Host.Events.Skip(before).Where(e => e.StartsWith("passed:", StringComparison.Ordinal) || e.StartsWith("down:", StringComparison.Ordinal))
                         .Select(e => (char)Convert.ToInt32(e[(e.IndexOf(':') + 1)..], 16)).Where(ch => char.IsAsciiLetterOrDigit(ch) || ch == ' ').Select(char.ToLowerInvariant));
                     Console.WriteLine($"  {c} → {(view is null ? "(なし)" : view.Converting ? "[" + string.Join("|", view.Clauses!) + "] 候補: " + string.Join(",", view.Candidates) : view.Text)}{(passed.Length > 0 ? $"  (アプリへ: {passed})" : "")}{(direct ? $"  [{(keyboard.Direct ? "英数" : "日本語")}]" : "")}");
                 }
@@ -149,7 +150,7 @@ internal static class TestRunner
             composition.ShowView(new Composition.CompositionView("ぶれすれっど", ["ブレスレッド", "ぶれすれっど", "buresureddo"], 0, true, "Space/↓ 候補", Suggestion: "もしかして: ブレスレット　<Tab>で修正"), new Point(-5000, -5000));
             var indicator = new Composition.ModeIndicatorWindow();
             indicator.Flash(true, new Point(-5000, -5000));
-            foreach (var form in new Form[] { new UI.SettingsForm(engine), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(), new Composition.ConversionHistory(null)), new UI.WelcomeForm(), indicator, composition })
+            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(), new Composition.ConversionHistory(null)), new UI.WelcomeForm(), indicator, composition })
             {
                 using (form)
                 {

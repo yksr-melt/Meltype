@@ -14,9 +14,10 @@ const ascii = /^[\x21-\x7e]+$/;
 
 /** 辞書ごとの形式。line は # 以降を除いた行。 */
 const formats = {
-  // 読み 候補 候補 … (空白区切り)。記号の行 (/ @ . ,) は読みが記号
+  // 読み 候補 候補 … (空白区切り)。読みは打ったときの読みと完全一致で引くので、キーを打って作れる文字列だけを通す。
+  // 記号の行 (/ @ . ,) は読みが記号。ローマ字入力で全角になる記号 (-> の読みは ー＞) も通す。全角の英数字は打っても出てこない
   'candidates.txt': spaced((reading, rest) => [
-    hiragana.test(reading) || /^[\x21-\x7e]+$/.test(reading) ? null : `読み「${reading}」がひらがなでも記号でもない`,
+    hiragana.test(reading) || /^[\x21-\x7e]+$/.test(reading) || /^[ー！-／：-＠［-｀｛-～]+$/.test(reading) ? null : `読み「${reading}」がひらがなでも記号でもない`,
     rest.length === 0 ? '候補が無い' : null,
   ]),
   'brands.txt': spaced((reading, rest) => [
@@ -35,11 +36,25 @@ const formats = {
     const [reading, word, extra] = left.trim().split(/\s+/);
     return [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, word ? null : '候補が無い', extra ? '候補は 1 つだけ' : null, right.trim() ? null : '手がかりが無い'];
   },
-  'phrases.txt': tabbed(2, 2, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
+  'phrases.txt': tabbed(2, 2, ([reading, word]) => [
+    reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
+    reading.split('|').length === word.split('|').length && !word.split('|').includes('') ? null : `読み「${reading}」と語句「${word}」の | の数が違う`,
+  ]),
+  // 読み<Tab>語句<Tab>出し始める読み (予測変換の定型句)。出し始める読みは、読みの打ちかけ
+  'greetings.txt': tabbed(3, 3, ([reading, , start]) => [
+    hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+    reading.startsWith(start) && start.length < reading.length ? null : `出し始める読み「${start}」が、読み「${reading}」の打ちかけでない`,
+  ]),
   'misspellings.txt': tabbed(1, 2, fields => fields.map(f => kana.test(f) ? null : `「${f}」がかなでない`)),
   'translations.txt': tabbed(3, 3, ([, kind]) => [['n', 'na', 'i', 'v', 'adv'].includes(kind) ? null : `品詞「${kind}」が n / na / i / v / adv でない`]),
   'meanings.txt': tabbed(3, 3, ([, reading]) => [reading === '' || hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   'readings.txt': tabbed(1, 2, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  'readings-extra.txt': tabbed(1, 2, ([reading]) => [
+    hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+    [...reading].length >= 3 ? null : `読み「${reading}」が 3 文字より短い`,
+  ]),
+  'katakana.txt': tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   'emoji.txt': tabbed(2, 99, () => []),
   'emoji-cldr.txt': tabbed(2, 99, () => []),
 };

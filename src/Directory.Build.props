@@ -1,0 +1,12 @@
+<!--
+  SPDX-License-Identifier: GPL-3.0-or-later
+  Copyright (C) 2026 Yukishiro
+
+  静的解析の結果を SARIF に書き出す (.github/workflows/quality.yml。issue #1083)。
+  MeltypeSarifDir を渡したときだけ効く。ふだんのビルドは変わらない。
+-->
+<Project>
+  <PropertyGroup Condition="'$(MeltypeSarifDir)' != ''">
+    <ErrorLog>$(MeltypeSarifDir)/$(MSBuildProjectName).sarif,version=2.1</ErrorLog>
+  </PropertyGroup>
+</Project>

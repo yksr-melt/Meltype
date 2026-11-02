@@ -36,18 +36,16 @@ internal static class PastePolicyTests
         Assert.True(PastePolicy.ShouldPaste(settings, "LINE.exe", isQtApp: true), "Qt アプリは貼り付け");
         Assert.True(PastePolicy.ShouldPaste(settings, "obs64.exe", isQtApp: true), "OBS も貼り付け");
         Assert.True(!PastePolicy.ShouldPaste(settings, "notepad.exe", isQtApp: false), "非 Qt は今までどおり 1 文字ずつ");
-        Assert.True(PastePolicy.ShouldPaste(settings, "Resolve.exe", isQtApp: false), "既定の「貼り付けで入力するアプリ」");
+        Assert.True(PastePolicy.ShouldPaste(settings, "Resolve.exe", isQtApp: false), "既定のアプリ別設定で Resolve は貼り付け");
+        Assert.True(PastePolicy.ShouldPaste(settings, "resolve.EXE", isQtApp: false), "大文字小文字は問わない");
     }
 
     [Test]
-    public static void ShouldPaste_NoPasteListWins()
+    public static void ShouldPaste_KeysWinsOverQt()
     {
-        var settings = new Settings { NoPasteApps = " Custom-Qt.exe , other.exe " };
-        Assert.True(!PastePolicy.ShouldPaste(settings, "custom-qt.exe", isQtApp: true), "除外リストは Qt でも 1 文字ずつ (大文字小文字は無視する)");
-        Assert.True(!PastePolicy.ShouldPaste(settings, "other.exe", isQtApp: true), "2 つ目も効く");
-        Assert.True(PastePolicy.ShouldPaste(settings, "LINE.exe", isQtApp: true), "載っていない Qt アプリは貼り付けのまま");
-
-        var both = new Settings { PasteApps = "both.exe", NoPasteApps = "both.exe" };
-        Assert.True(!PastePolicy.ShouldPaste(both, "both.exe", isQtApp: false), "除外が優先");
+        var settings = new Settings();
+        settings.AppRules.Add(new AppRule { Process = "Custom-Qt.exe", Commit = CommitMethod.Keys });
+        Assert.True(!PastePolicy.ShouldPaste(settings, "custom-qt.exe", isQtApp: true), "「1 文字ずつ送る」は Qt でも 1 文字ずつ (大文字小文字は無視する)");
+        Assert.True(PastePolicy.ShouldPaste(settings, "LINE.exe", isQtApp: true), "アプリ別設定に無い Qt アプリは貼り付けのまま");
     }
 }

@@ -79,118 +79,23 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 
 <p align="center">
   <a href="docs/WINDOWS.md"><img src="docs/images/cards/os-windows.svg" alt="Windows" width="30%"></a>
-  <a href="mac/README.md"><img src="docs/images/cards/os-mac.svg" alt="Mac" width="30%"></a>
-  <a href="linux/README.md"><img src="docs/images/cards/os-linux.svg" alt="Linux" width="30%"></a>
+  <a href="docs/MACOS.md"><img src="docs/images/cards/os-mac.svg" alt="Mac" width="30%"></a>
+  <a href="docs/LINUX.md"><img src="docs/images/cards/os-linux.svg" alt="Linux" width="30%"></a>
 </p>
 
-<p align="center"><sub>カードを押すと、それぞれの OS の README (インストール・使い方・困ったとき) が開きます</sub></p>
+<p align="center"><sub>カードを押すと、それぞれの OS の説明 (インストール・使い方・困ったとき) が開きます</sub></p>
 
-1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロード
-2. 開いて、案内どおりに進める
-3. タスクトレイに「あ」が出たら準備完了！
-
-途中で Meltype IME を Windows に登録するための管理者権限の確認が出るので、「はい」を選んでください。断った場合は、変換ボックスで入力する Meltype キーボードで動きます。新しい版は自動で入ります。
-
-「Windows によって PC が保護されました」と出たら、「詳細情報」→「実行」。コード署名をしていないため表示されます。
-
-<details>
-<summary>zip 版・Mac 版・Linux 版</summary>
-
-| | ファイル |
-|---|---|
-| Windows (zip) | `Meltype-<version>-windows.zip` を展開して `Install.cmd` をダブルクリック |
-| Mac (プレビュー版) | `Meltype-<version>-mac.zip` ([mac/README.md](mac/README.md)) |
-| Linux (プレビュー版) | `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`。IBus / fcitx5、[linux/README.md](linux/README.md)) |
-
-インストーラーでも zip でも、入る場所は同じ `%LOCALAPPDATA%\Programs\Meltype` です。
-Windows 版に必要なのは Windows 10 / 11 (64bit) と Microsoft IME だけで、.NET は同梱しています。
-
-</details>
-
-<details>
-<summary>「ウイルスを検出しました」と出たとき</summary>
-
-SmartScreen の警告とは別のものです。誤検知のこともありますが、検出名だけでは見分けられません。
-
-1. Windows セキュリティ →「ウイルスと脅威の防止」→「保護の更新」で定義を新しくする
-2. 公式のリリースからダウンロードし直して、もう一度検査する
-3. それでも検出されるときは、保護を切ったりフォルダーを除外したりせずに、「保護の履歴」で検出名を確かめて [Issues](https://github.com/yksr-melt/Meltype/issues) で教えてください。個人名やパス、ダウンロード URL の一時トークンは隠してください
-
-ファイルが本物か確かめたいときは、リリースのページにある SHA-256 と比べられます。PowerShell なら `Get-FileHash .\Meltype-<version>-windows.zip` です。
-
-</details>
-
-<details>
-<summary>アンインストール</summary>
-
-トレイのアイコンを右クリックして「アンインストール...」を選ぶか、Windows の「設定」→「アプリ」から消せます。
-インストーラーで入れた場合は、最後に設定と学習データも消すかを聞かれます。zip 版は `Uninstall.cmd` でも消せて、こちらは設定と学習データもまとめて消えます。
-
-</details>
+Windows は、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロードして、案内どおりに進めるだけ！
+あとは、いつもどおりローマ字で打つだけです。キー操作と機能は [docs/USAGE.md](docs/USAGE.md) にあります。
 
 <br><br>
 
-<img src="docs/images/headings/start.svg" alt="使い始める" width="480"><br>
-
-あとは、いつもどおりローマ字で打つだけ！
-
-- **Meltype IME**: 文字は入力欄に直接入り、候補は入力位置の下に出る。ほかの IME との切り替えは <kbd>Win</kbd> + <kbd>Space</kbd>
-- **Meltype IME を入れなかった場合** (Meltype キーボード): カーソルの下に変換ボックスが出る
-
-| キー | |
-|---|---|
-| <kbd>Enter</kbd> | 確定 |
-| <kbd>Space</kbd> | 候補を出して選ぶ (4 文字以上は打つそばから漢字になる。短い語は Space で変換) |
-| <kbd>F7</kbd> / <kbd>F10</kbd> | カタカナ / 英字 |
-| <kbd>半角/全角</kbd> | 英数と日本語の切り替え |
-| <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> | Meltype を一時停止 |
-
-<kbd>F10</kbd> で英字に直した語は、次から英字で出ます。使うほど自分に合っていきます！
-よく使う言葉は、トレイのメニューの「ユーザー辞書...」から登録。くわしくは [docs/USAGE.md](docs/USAGE.md)。
-
-<br><br>
-
-<img src="docs/images/headings/faq.svg" alt="よくある質問" width="480"><br>
-
-<details>
-<summary>タスクバーの IME の表示がずっと「A」のまま</summary>
-
-Meltype キーボードで使っているときの表示で、故障ではありません。Meltype が Windows の IME に代わって入力を受け持っているためです。
-今のモードは、カーソルの近くに出る「あ」「A」か、トレイのアイコンで確認できます。
-
-</details>
-
-<details>
-<summary>Google 日本語入力など、ほかの IME も使いたい</summary>
-
-Meltype IME なら、<kbd>Win</kbd> + <kbd>Space</kbd> でほかの IME に切り替えられます。
-Meltype キーボードのときは、<kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で Meltype を一時停止すれば使えます。
-
-</details>
-
-<details>
-<summary>英語のつもりがかなに、かなのつもりが英字になった</summary>
-
-<kbd>F10</kbd> (英字) か <kbd>F6</kbd> (ひらがな) で直して確定すれば、次からはその語を覚えています。
-トレイのメニューの「自動判定の強さ」でも調整できます。
-
-</details>
-
-<details>
-<summary>おかしな動きを見つけた</summary>
-
-トレイのメニューの「不具合の報告・提案...」から送れます。
-「どのアプリで」「何と打って」「どうなったか」があると、すぐに調べられます。
-
-</details>
-
-<br><br>
-
+<a name="プライバシー"></a>
 <img src="docs/images/headings/privacy.svg" alt="プライバシー" width="480"><br>
 
 <p align="center">
   <img src="docs/images/cards/privacy-send.svg" alt="打った文字は送らない: 判定も変換も PC の中で完結" width="32%">
-  <img src="docs/images/cards/privacy-network.svg" alt="通信は 2 つだけ: 自動更新の確認と、自分で開いた報告のフォーム" width="32%">
+  <img src="docs/images/cards/privacy-network.svg" alt="既定の通信は 2 つだけ: 自動更新の確認と、自分で開いた報告のフォーム" width="32%">
   <img src="docs/images/cards/privacy-storage.svg" alt="保存も PC の中: 設定・学習データ・辞書は %LOCALAPPDATA% の中に" width="32%">
 </p>
 
@@ -278,6 +183,17 @@ General Public License for more details.
   <a href="https://github.com/Kuraido1018"><img src="https://github.com/Kuraido1018.png?size=120" width="60" alt="@Kuraido1018" title="@Kuraido1018"></a>
   <a href="https://github.com/overdozer1124"><img src="https://github.com/overdozer1124.png?size=120" width="60" alt="@overdozer1124" title="@overdozer1124"></a>
   <a href="https://github.com/01mercurylampe"><img src="https://github.com/01mercurylampe.png?size=120" width="60" alt="@01mercurylampe" title="@01mercurylampe"></a>
+  <a href="https://github.com/aster-void"><img src="https://github.com/aster-void.png?size=120" width="60" alt="@aster-void" title="@aster-void"></a>
+  <a href="https://github.com/Kawayan"><img src="https://github.com/Kawayan.png?size=120" width="60" alt="@Kawayan" title="@Kawayan"></a>
+  <a href="https://github.com/STD17g"><img src="https://github.com/STD17g.png?size=120" width="60" alt="@STD17g" title="@STD17g"></a>
+  <a href="https://github.com/Fugu0141"><img src="https://github.com/Fugu0141.png?size=120" width="60" alt="@Fugu0141" title="@Fugu0141"></a>
+  <a href="https://github.com/ryesryuuichi"><img src="https://github.com/ryesryuuichi.png?size=120" width="60" alt="@ryesryuuichi" title="@ryesryuuichi"></a>
+  <a href="https://github.com/moozaru-ch"><img src="https://github.com/moozaru-ch.png?size=120" width="60" alt="@moozaru-ch" title="@moozaru-ch"></a>
+  <a href="https://github.com/harapeko"><img src="https://github.com/harapeko.png?size=120" width="60" alt="@harapeko" title="@harapeko"></a>
+  <a href="https://github.com/milkeclair"><img src="https://github.com/milkeclair.png?size=120" width="60" alt="@milkeclair" title="@milkeclair"></a>
+  <a href="https://github.com/r67018"><img src="https://github.com/r67018.png?size=120" width="60" alt="@r67018" title="@r67018"></a>
+  <a href="https://github.com/itouuuuuuuuu"><img src="https://github.com/itouuuuuuuuu.png?size=120" width="60" alt="@itouuuuuuuuu" title="@itouuuuuuuuu"></a>
+  <a href="https://github.com/organic817"><img src="https://github.com/organic817.png?size=120" width="60" alt="@organic817" title="@organic817"></a>
 </p>
 <!-- sponsors:end -->
 <sub>名前を公開にして応援してくださった方を載せています。</sub>
@@ -317,8 +233,8 @@ General Public License for more details.
 </p>
 
 - 送り方 → [CONTRIBUTING.md](CONTRIBUTING.md)
-- ビルド・仕組み → [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
-- Mac の CLI ビルド → [docs/MAC-CLI.md](docs/MAC-CLI.md)、WSL / Linux の CLI ビルド → [docs/WSL.md](docs/WSL.md)
+- ビルド・仕組み → [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)
+- Mac 版のビルド → [mac/README.md](mac/README.md)、Linux 版 (WSL を含む) のビルド → [linux/README.md](linux/README.md)
 
 <br><br>
 

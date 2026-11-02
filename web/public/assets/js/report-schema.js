@@ -90,6 +90,7 @@ export const FORMS = [
       { id: "typed", label: "打ったもの (キーをそのまま)", type: "text", placeholder: "nihongowohanasu" },
       { id: "actual", label: "出たもの", type: "text", placeholder: "にほんgoを話す" },
       { id: "expected", label: "期待した結果", type: "text", placeholder: "日本語を話す" },
+      { id: "zenzai", label: "Zenzai (zenz) を使っているか", type: "select", options: ["使っていない", "使っている", "分からない"], hint: "設定の「Zenzai を使う」です。ON だと変換の結果が変わります" },
     ],
     optional: [
       { id: "key", label: "最後に押したキー", type: "select", options: ["Space (変換)", "Enter (確定)", "打っている途中 (まだ確定していない)", "句読点・記号", "そのほか"] },
