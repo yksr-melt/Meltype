@@ -313,16 +313,19 @@ catch {
             # 復元先を削除してからコピーすると、復元失敗時に旧版まで失う。
             New-Item -ItemType Directory -Path $target -Force | Out-Null
             # Remove files introduced by the failed update, but keep the old installation intact if deletion fails.
-            $oldFiles = @(Get-ChildItem -LiteralPath $backup -Recurse -File | ForEach-Object { $_.FullName.Substring($backup.Length + 1) })
+            # TEMP は短い名前 (RUNNER~1) のことがあり、Get-ChildItem の FullName は長い名前になる。実際のパスにそろえてから相対パスを取る。
+            $backupRoot = (Get-Item -LiteralPath $backup).FullName
+            $targetRoot = (Get-Item -LiteralPath $target).FullName
+            $oldFiles = @(Get-ChildItem -LiteralPath $backup -Recurse -File | ForEach-Object { $_.FullName.Substring($backupRoot.Length + 1) })
             Get-ChildItem -LiteralPath $target -Recurse -File | ForEach-Object {
-                $relative = $_.FullName.Substring($target.Length + 1)
+                $relative = $_.FullName.Substring($targetRoot.Length + 1)
                 if ($relative -notin $oldFiles) { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop }
             }
             # 1 つのファイルの失敗で残りを止めず、Meltype.exe を最初に戻す (使用中のファイルがあっても、旧版を起動できるように)。
             $notRestored = @()
             $oldItems = Get-ChildItem -LiteralPath $backup -Recurse -File | Sort-Object { $_.Name -ne 'Meltype.exe' }
             foreach ($item in $oldItems) {
-                $relative = $item.FullName.Substring($backup.Length + 1)
+                $relative = $item.FullName.Substring($backupRoot.Length + 1)
                 $destination = Join-Path $target $relative
                 try {
                     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
