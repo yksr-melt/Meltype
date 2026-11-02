@@ -6,13 +6,13 @@ using Meltype.Config;
 
 namespace Meltype.Tests;
 
-/// <summary>Zenzai を同梱して既定 ON にしたこと (issue #1120・#1130)。</summary>
+/// <summary>Zenzai を同梱して既定 ON にしたこと (issue #1120・#1130)。Mac は既定 OFF のまま (移行もしない)。</summary>
 internal static class ZenzaiDefaultTests
 {
     [Test]
     public static void ZenzaiDefault_NewSettingsUseZenzai()
     {
-        Assert.True(new Settings().UseZenzai, "新しい設定では Zenzai を使う");
+        Assert.Equal(!OperatingSystem.IsMacOS(), new Settings().UseZenzai, "新しい設定では Zenzai を使う (Mac は OFF)");
         Assert.Equal("", new Settings().ZenzaiServerPath, "場所は空 (同梱のものを使う)");
     }
 
@@ -21,7 +21,7 @@ internal static class ZenzaiDefaultTests
     {
         foreach (var (json, expected, why) in new[]
         {
-            ("{ \"SettingsVersion\": 8, \"UseZenzai\": false }", true, "前の既定 (OFF・場所が空) は ON にする"),
+            ("{ \"SettingsVersion\": 8, \"UseZenzai\": false }", !OperatingSystem.IsMacOS(), "前の既定 (OFF・場所が空) は ON にする (Mac はそのまま)"),
             ("{ \"SettingsVersion\": 8, \"UseZenzai\": false, \"ZenzaiModelPath\": \"C:\\\\m.gguf\" }", false, "自分で場所を書いて OFF にした人はそのまま"),
             ("{ \"SettingsVersion\": 8, \"UseZenzai\": true, \"ZenzaiServerPath\": \"C:\\\\s.exe\" }", true, "ON はそのまま"),
             ($"{{ \"SettingsVersion\": {Settings.CurrentVersion}, \"UseZenzai\": false }}", false, "移行の後に OFF にしたものは戻さない"),
@@ -57,8 +57,9 @@ internal static class ZenzaiDefaultTests
                     { "Name": "自前", "Values": { "UseZenzai": false, "ZenzaiModelPath": "C:\\m.gguf" } } ] }
                 """);
             var loaded = Settings.Load(path);
-            Assert.True(loaded.UseZenzai, "今のプロファイル");
-            Assert.True(loaded.SwitchProfile("趣味").UseZenzai, "切り替えた先のプロファイルも ON");
+            var on = !OperatingSystem.IsMacOS(); // Mac は移行しない
+            Assert.Equal(on, loaded.UseZenzai, "今のプロファイル");
+            Assert.Equal(on, loaded.SwitchProfile("趣味").UseZenzai, "切り替えた先のプロファイルも ON");
             Assert.True(!loaded.SwitchProfile("自前").UseZenzai, "自分で場所を書いて OFF にしたプロファイルはそのまま");
         }
         finally { Directory.Delete(directory, recursive: true); }

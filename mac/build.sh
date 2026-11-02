@@ -97,7 +97,7 @@ for bundle in "$BIN"/*.bundle; do
     [[ -e "$bundle" ]] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
 # Zenzai のモデル zenz-v3.2-small (Apache-2.0) を同梱する (issue #1130)。版とハッシュは native/zenzai/zenzai.env (Windows と共通)。
-# 取れないとき: リリースのビルド (タグ v*) なら止める (Zenzai は既定 ON なので、無いまま配らない)。
+# 取れないとき: リリースのビルド (タグ v*) なら止める (「Zenzai を使う」を ON にしたときに同梱のモデルを使うので、無いまま配らない)。
 # 自分の Mac で使うビルドなら、同梱せずに続ける (Zenzai なしで、azooKey の辞書だけで変換する)
 # shellcheck source=../native/zenzai/zenzai.env
 source ../native/zenzai/zenzai.env
