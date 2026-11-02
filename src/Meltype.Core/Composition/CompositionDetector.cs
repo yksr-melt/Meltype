@@ -281,7 +281,9 @@ public sealed partial class CompositionDetector
         var dash = lower.IndexOf('-');
         if (dash <= 0 || lower.IndexOf('-', dash + 1) >= 0) return false;
         var rest = lower[(dash + 1)..];
-        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsKnownEnglishWord(rest);
+        // - の後ろの語は、区間分けと同じ基準 (OS のスペルチェッカーだけが知っている語は数えない) で英単語か見る。
+        // Windows のスペルチェッカーは tori も語にするので、re-torimitto を re-tori|みっと にしていた (issue #705)
+        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsLatticeEnglishWord(rest);
     }
 
     /// <summary>
