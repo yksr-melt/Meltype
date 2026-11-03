@@ -637,7 +637,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public bool IsShiftDown() => (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;
 
-    /// <summary>今再生している曲 (裏で 3 秒ごとに読んだもの。保存しない・送らない)。</summary>
+    /// <summary>今再生している曲 (曲が変わったときに裏で読んだもの。保存しない・送らない)。</summary>
     public (string Title, string Artist)? NowPlaying => _nowPlaying.Read();
 
     /// <summary>クリップボードの文字 (変換した瞬間に 1 回だけ読む)。履歴に残さない印のある内容 (パスワード管理ソフトなど) は読まない。</summary>
