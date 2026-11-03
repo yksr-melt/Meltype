@@ -914,6 +914,8 @@ internal sealed class MeltypeEngine : IDisposable
 
     private void OnForegroundChanged(IntPtr window)
     {
+        // 変換ボックスなどがアクティブにされて、入力欄に返しただけ (同じ入力欄のまま。issue #997)。変換中の内容は捨てない
+        if (Composition.PopupForm.IsReturnedFocus(window)) return;
         // 変換中に別のウィンドウに切り替わったら、変換中の内容は捨てる (切り替わった先のアプリに入らないように)。
         _composition?.Abandon("別のウィンドウに切り替わった");
         // 起動の途中から Windows の IME で打っていた語も、ここで終わる (Meltype キーボードを使うなら下で閉じる)
