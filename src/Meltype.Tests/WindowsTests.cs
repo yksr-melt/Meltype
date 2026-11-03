@@ -13,6 +13,25 @@ namespace Meltype.Tests;
 internal static class WindowsTests
 {
     [Test]
+    public static void PopupWindows_RejectMouseActivationWithoutDiscardingMouseInput()
+    {
+        // Windows のマウス追跡は WS_EX_NOACTIVATE を無視して WM_MOUSEACTIVATE を送る。
+        // 移動とクリックのどちらでも、変換ボックスやモード表示はフォーカスを奪わず、マウス入力は残す。
+        const int mouseActivate = 0x0021, mouseMove = 0x0200, leftButtonDown = 0x0201, hitClient = 1;
+        const int noActivate = 3; // MA_NOACTIVATE (MA_NOACTIVATEANDEAT ではない)
+        using Form composition = new CompositionWindow();
+        using Form indicator = new ModeIndicatorWindow();
+        foreach (var popup in new[] { composition, indicator })
+        {
+            foreach (var mouseMessage in new[] { mouseMove, leftButtonDown })
+            {
+                var result = Native.SendMessage(popup.Handle, mouseActivate, IntPtr.Zero, (IntPtr)((mouseMessage << 16) | hitClient));
+                Assert.Equal((IntPtr)noActivate, result, $"{popup.GetType().Name}: マウス入力を捨てずアクティブ化を断る");
+            }
+        }
+    }
+
+    [Test]
     public static void SpellChecker_DisposeStopsTheWorkerAndClosesItsWaitHandle()
     {
         using var checker = new Detection.WindowsSpellChecker();
