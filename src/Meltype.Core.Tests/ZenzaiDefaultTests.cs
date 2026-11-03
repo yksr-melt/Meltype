@@ -25,8 +25,6 @@ internal static class ZenzaiDefaultTests
             ("{ \"SettingsVersion\": 8, \"UseZenzai\": false, \"ZenzaiModelPath\": \"C:\\\\m.gguf\" }", false, "自分で場所を書いて OFF にした人はそのまま"),
             ("{ \"SettingsVersion\": 8, \"UseZenzai\": true, \"ZenzaiServerPath\": \"C:\\\\s.exe\" }", true, "ON はそのまま"),
             ($"{{ \"SettingsVersion\": {Settings.CurrentVersion}, \"UseZenzai\": false }}", false, "移行の後に OFF にしたものは戻さない"),
-            // v9 (Mac は既定 OFF のまま移さなかった版) からは、Mac だけ ON にする
-            ("{ \"SettingsVersion\": 9, \"UseZenzai\": false }", OperatingSystem.IsMacOS(), "v9 の OFF は Mac だけ ON にする (Windows は v9 で移した後に OFF にしたもの)"),
         })
         {
             var directory = Path.Combine(Path.GetTempPath(), "meltype-zenzai-default-" + Guid.NewGuid().ToString("N"));

@@ -667,7 +667,7 @@ public sealed class Settings
             name = (file["name"]?.GetValue<string>() ?? "").Trim();
             var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
             if (fileVersion < 8) MigrateToV8(raw);
-            if (NeedsZenzaiMigration(fileVersion)) MigrateToV9(raw);
+            if (fileVersion < 9) MigrateToV9(raw);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -795,7 +795,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 10;
+    public const int CurrentVersion = 9;
 
     [Category("9. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -980,16 +980,9 @@ public sealed class Settings
         MigrateLegacyToggleShortcuts(report: true);
         // v8: 型を変えた項目は、読み込む前の JSON で移す (MigrateToV8)。
         // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
-        // v10: Mac でも Zenzai を既定 ON にした (v9 では Mac は既定 OFF のまま移さなかった)。Mac だけ v9 と同じく移す。
         SettingsVersion = CurrentVersion;
         return true;
     }
-
-    /// <summary>
-    /// Zenzai を既定 ON にする移行 (MigrateToV9) がいるか。v9 より前はどの OS も、v10 より前は Mac も
-    /// (v9 では Mac は既定 OFF のまま移さなかった。Mac の既定 ON は v10 から)。
-    /// </summary>
-    internal static bool NeedsZenzaiMigration(int version) => version < 9 || (version < 10 && OperatingSystem.IsMacOS());
 
     /// <summary>
     /// v9: Zenzai を同梱して既定 ON にした。前の既定 (OFF・場所が空) のままなら ON にする。
@@ -1097,7 +1090,7 @@ public sealed class Settings
                 foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                     if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
             }
-            if (NeedsZenzaiMigration(version))
+            if (version < 9)
             {
                 MigrateToV9(values);
                 foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
