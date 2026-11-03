@@ -716,12 +716,17 @@ internal sealed class MeltypeEngine : IDisposable
         var settings = _settings;
         if (!settings.Enabled || settings.Mode != InputMode.Keyboard || !KeyboardLayoutPolicy.AllowsInput(settings)) return false;
         var letter = VirtualKeys.IsLetter(e.Vk);
-        var reconvert = e.Vk == VirtualKeys.Convert;
+        // 親指シフトのかな配列 (NICOLA・中指NICOLA・TRON): 無変換・変換は親指キー。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする
+        // (文頭の 変換 + W を再変換にしない: issue #1415)
+        var thumbKey = settings.InputStyle == InputStyle.Kana && !_keyboardDirect && e.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
+            settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
+        var reconvert = e.Vk == VirtualKeys.Convert && !thumbKey;
         // 句読点・かぎかっこ・長音・数字・記号のキー (Shift を押して打つ ＃＄％（）＠ なども) でも変換ボックスを開く。
         // 日本語の中では全角、英語の中では半角になる。
         var punctuation = IsDigitOrPunctuationKey(e.Vk);
         // かな入力 (JIS): かなのキー (数字・記号のキーも含む) はすべて入力を始める。
         if (settings.InputStyle == InputStyle.Kana && !_keyboardDirect && KanaDetector.IsKanaKey(e.Vk)) punctuation = true;
+        if (thumbKey) punctuation = true;
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。
         if (e.Vk == VirtualKeys.Space && !_keyboardDirect && (IsDown(VirtualKeys.Shift) || settings.SpaceWidth == SpaceWidth.FullWidth)) punctuation = true;
         if (_keyboardDirect && !reconvert)
