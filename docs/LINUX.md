@@ -39,7 +39,7 @@ Linux 版のインストール・設定・困ったときの説明です。IBus 
 - Ubuntu 24.04・Debian・Fedora 44・AlmaLinux 9 などの RHEL 9 系 (x86_64 / ARM64)
 - 入力の仕組みが IBus (GNOME、Ubuntu の標準) か fcitx5 (KDE など) のもの
 
-fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
+fcitx5 のアドオンは、`.deb` は Ubuntu 24.04 の fcitx5 5.1、`.rpm` は Fedora 44 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
 
 <br>
 
@@ -82,7 +82,7 @@ IBus の部品は「おすすめ」なので、ふつうは一緒に入ります
 <a name="fedora"></a>
 <img src="images/headings/linux/s02.svg" alt="Fedora" height="40">
 
-Fedora 44 でビルドしています。dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
+dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
 
 ```bash
 sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo
@@ -165,4 +165,4 @@ ibus restart; sleep 2; pkill -f ibus-engine-meltype; /opt/meltype/ibus-engine-me
 <a name="アンインストール"></a>
 <img src="images/headings/linux/05.svg" alt="アンインストール" height="53"><br>
 
-Ubuntu / Debian は `sudo apt remove meltype`、Fedora は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
+Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
