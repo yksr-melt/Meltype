@@ -1,24 +1,53 @@
-# Pull Request のチェック (ビルドとテストは build.yml)。変わったものに合わせて流す。
+# 判定・変換のコア (Meltype.Core) と辞書のチェック。Windows 版のビルドとテストは windows.yml。
+#   core         … いつも: Meltype.Core のテストを Linux と Mac で流す (Mac 版・Linux 版の土台)。main の必須チェック
 #   辞書の形式   … dictionaries/ が変わったとき: 読めない行・ひらがなでない読み・重複など
-#   精度の比較   … 判定・変換の本体か辞書が変わったとき: main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗
+#   精度の比較   … 判定・変換の本体か辞書が変わったとき: main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。main の必須チェック
 #                  あわせて、よく使う語の判定が main から変わった語を一覧にする (参考。失敗にはしない)
-#   報告の再現   … 本文の「## 確かめること」の「入力 → 期待」と、「Fixes #12」で閉じる誤判定の報告を、Pull Request のコードで確かめる
+#                  Core・辞書を変えない Pull Request では skipped になり、skipped は必須チェックを満たす (比べずにマージできる)
+# 本文を読む「報告の再現」は pr-expectations.yml。ここは本文の編集 (edited) では流さない
+# (承認待ちのフォークの Pull Request で、編集のたびに run が積まれて取り消し合い、必須チェックが報告されないまま残るため)。
 # pull_request なので、フォークからの Pull Request でも書き込みの権限は持たない (結果は Summary とチェックの成否で返す)。
-name: pr-checks
+name: core
 
 on:
+  # paths で絞ると、当たらない Pull Request で必須チェックが報告されずマージできなくなる
   pull_request:
-    types: [opened, reopened, synchronize, edited]
+  push:
+    branches: [main]
 
 permissions:
   contents: read
 
 concurrency:
-  group: pr-checks-${{ github.event.pull_request.number }}
+  group: core-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Test
+        run: dotnet run --project src/Meltype.Core.Tests/Meltype.Core.Tests.csproj -c Release
+      - name: Linux Unicode key mapping (without IBus)
+        run: python3 linux/tests/test_virtual_key.py
+      # Mozc-UT の辞書の統合 (native/mozc/merge-ut-dictionary.py)。本物の Mozc も辞書も要らない。
+      - name: Test Mozc-UT dictionary merge
+        run: python3 native/mozc/tests/test_merge_ut_dictionary.py
+
+  # Pull Request で変わったファイルから、辞書の形式・精度の比較を流すか決める
   changes:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -38,10 +67,6 @@ jobs:
           echo "$files"
           if grep -q '^dictionaries/' <<< "$files"; then echo "dictionaries=true" >> "$GITHUB_OUTPUT"; fi
           if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
-      # 表記の bot (notices.yml) の判定を確かめる (GitHub には何も書かない)
-      - run: node .github/bot/notices.mjs --self-test
-      # CodeQL の指摘をまとめる bot (code-scanning.yml) のまとめ方を確かめる (GitHub には何も書かない)
-      - run: node .github/bot/code-scanning.mjs --self-test
 
   dictionaries:
     name: 辞書の形式
@@ -78,6 +103,12 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           git worktree add "$RUNNER_TEMP/base" "$BASE"
+          # main をビルドできなければ比べない (pr-checks.mjs が「比べられません」と出す)。
+          # 失敗にすると、main を直す Pull Request もこのチェックでマージできなくなる (#1453)
+          if ! dotnet build "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release; then
+            echo "::warning::main ($BASE) をビルドできないため、精度を比べません"
+            exit 0
+          fi
           # main にまだ --eval-json が無ければ比べない (pr-checks.mjs が「比べられません」と出す)
           if grep -q -- '--eval-json' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
             dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --eval-json "$RUNNER_TEMP/base.json"
@@ -103,28 +134,3 @@ jobs:
           if-no-files-found: ignore
       - name: 比べる
         run: node .github/bot/pr-checks.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json"
-
-  expectations:
-    name: 報告の再現
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      issues: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - id: cases
-        run: node .github/bot/pr-checks.mjs cases "$RUNNER_TEMP/cases.txt"
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - if: steps.cases.outputs.count != '0'
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: 10.0.x
-      - if: steps.cases.outputs.count != '0'
-        run: |
-          dotnet run --project src/Meltype.Core.Tests -c Release -- --expect "$RUNNER_TEMP/cases.txt" "$RUNNER_TEMP/cases.json"
-          node .github/bot/pr-checks.mjs expect "$RUNNER_TEMP/cases.json"

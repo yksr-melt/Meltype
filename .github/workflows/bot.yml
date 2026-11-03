@@ -139,7 +139,7 @@ jobs:
       - name: Mozc helper from latest release
         if: needs.parse.outputs.action == 'repro' || needs.parse.outputs.action == 'ca' || needs.parse.outputs.action == 'jht'
         shell: pwsh
-        run: |
+        run: &mozc-helper |
           $bin = 'native/mozc/bin'
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
           $api = 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest'
@@ -214,21 +214,7 @@ jobs:
       - name: Mozc helper from latest release
         if: needs.parse.outputs.action == 'test-repro' || needs.parse.outputs.action == 'test-jht'
         shell: pwsh
-        run: |
-          $bin = 'native/mozc/bin'
-          New-Item -ItemType Directory -Force -Path $bin | Out-Null
-          $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest' -Headers @{ 'User-Agent' = 'meltype-bot' }
-          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' } | Select-Object -First 1
-          if (-not $asset) { Write-Host 'Windows リリースが見つかりません'; exit 0 }
-          $zip = Join-Path $env:RUNNER_TEMP 'meltype-win.zip'
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
-          $extract = Join-Path $env:RUNNER_TEMP 'meltype-win'
-          Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
-          $helper = Get-ChildItem -Path $extract -Recurse -Filter 'meltype_mozc_helper.exe' | Select-Object -First 1
-          if (-not $helper) { exit 0 }
-          Copy-Item $helper.FullName (Join-Path $bin 'meltype_mozc_helper.exe') -Force
-          $full = (Resolve-Path (Join-Path $bin 'meltype_mozc_helper.exe')).Path
-          "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        run: *mozc-helper
       - name: Test
         if: needs.parse.outputs.action == 'test'
         shell: pwsh

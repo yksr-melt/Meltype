@@ -87,7 +87,7 @@ $env:MELTYPE_UT_DICTIONARY = 'C:\path\to\mozcdic-ut.txt'
 `-UtDictionary` でも指定できます (`-UtDictionary 'C:\path\to\mozcdic-ut.txt'`)。環境変数と引数の両方を指定した場合は引数が優先です。
 `native\mozc\bin\` のヘルパーが、Mozc-UT の辞書入りになります。`Build-Package.ps1` / `Install-Meltype.ps1` はこれまでどおり `bin\` を同梱します。
 
-GitHub Actions で作る場合は、`.github/workflows/build.yml` の `mozc` ジョブに環境変数を足します。
+GitHub Actions で作る場合は、`.github/workflows/windows.yml` の `mozc` ジョブに環境変数を足します。
 
 ```yaml
       - name: Build Mozc helper
