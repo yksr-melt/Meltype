@@ -34,7 +34,7 @@ internal static class ReportInfo
             $"モード: {settings.Mode}",
             $"変換エンジン: {settings.ConversionEngine} (Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")})",
             $"Zenzai: {(settings.UseZenzai ? "ON" : "OFF")}",
-            $"自動判定の強さ: {settings.DetectionLevel}",
+            $"自動判定: {(settings.AutoDetection ? "ON" : "OFF")}",
             $"入力方式: {settings.InputStyle}",
             $"ライブ変換: {(settings.LiveConversion ? "ON" : "OFF")}",
             $"変換ボックス: {settings.CompositionPlacement} / {settings.CompositionSize} / {settings.CompositionTheme} / {settings.CompositionOpacity}",

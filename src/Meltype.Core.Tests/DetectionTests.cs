@@ -127,11 +127,9 @@ internal static class DetectionTests
     public static void MaxPendingKeys_EndsWithoutWaitingForMore()
     {
         // 上限の文字数まで判定できなければ、打ち終わる前でも結論 (判断できない) を出す (英数状態の検知が終わらないままにならない)
-        var input = new DetectionInput("tab", "TAB".Select(c => (int)c).ToArray(), false);
-        Assert.Equal(Verdict.Undecided, Engine.Evaluate(input).Verdict, "上限より短いうちは待つ");
-        var settings = DefaultSettings();
-        settings.MaxPendingKeys = 3;
-        Assert.Equal(Verdict.Unknown, CreateEngine(settings).Evaluate(input).Verdict, "上限の文字数で結論を出す");
+        static DetectionInput Input(string text) => new(text, text.ToUpperInvariant().Select(c => (int)c).ToArray(), false);
+        Assert.Equal(Verdict.Undecided, Engine.Evaluate(Input("hanab")).Verdict, "上限より短いうちは待つ");
+        Assert.Equal(Verdict.Unknown, Engine.Evaluate(Input("hanabb")).Verdict, "上限の文字数で結論を出す");
     }
 
     [Test]
@@ -149,15 +147,6 @@ internal static class DetectionTests
         Assert.Equal("konn", Classify(Engine, "konnichiwa").Text);
         Assert.Equal("wata", Classify(Engine, "watashi").Text);
         Assert.Equal("kyou", Classify(Engine, "kyouha").Text);
-    }
-
-    [Test]
-    public static void HigherThresholdIsMoreConservative()
-    {
-        var strict = DefaultSettings();
-        strict.JapaneseThreshold = 12;
-        var engine = CreateEngine(strict);
-        Assert.True(Classify(engine, "konnichiwa").Verdict != Verdict.Japanese, "閾値を上げたら切り替えない");
     }
 
     [Test]
@@ -249,12 +238,11 @@ internal static class DetectionTests
     [Test]
     public static void Typo_AloneDoesNotSwitch()
     {
-        var withoutTypo = DefaultSettings();
-        withoutTypo.TypoEnabled = true;
-        var engine = CreateEngine(withoutTypo);
+        var settings = DefaultSettings();
+        var engine = CreateEngine(settings);
         var result = engine.Evaluate(new DetectionInput("konic", [], false));
         var typo = result.Contributions.Where(c => c.Source == "Typo").Sum(c => c.Japanese);
-        Assert.True(typo > 0 && typo < withoutTypo.JapaneseThreshold, $"Typo の加点は閾値未満であるべき: {result.Describe()}");
+        Assert.True(typo > 0 && typo < ScoreEngine.JapaneseThreshold, $"Typo の加点は閾値未満であるべき: {result.Describe()}");
     }
 
     [Test]

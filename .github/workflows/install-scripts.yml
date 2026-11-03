@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 penta2himajin
+#
+# install.ps1 と uninstall.ps1 を、ダミーの Meltype.exe で通す (tools/Test-InstallLifecycle.ps1)。
+#   まだ必須チェックにしない。必須にするときは、paths だと飛ばされて報告されないので、pr-checks.yml の changes ジョブと同じ判定に変える。
+#   本物の配布物でのインストール → 更新 → アンインストールを確かめる統合テストが必要になったら、手動実行のワークフローを別に足す。
+#   update.ps1 のダウンロードは、ここでは確かめていない (API の URL が固定で、偽のサーバーに向けられない)。別途、CI での検証が要る。
+name: install-scripts
+
+on:
+  pull_request:
+    paths:
+      - 'packaging/install.ps1'
+      - 'packaging/uninstall.ps1'
+      - 'tools/Test-InstallLifecycle.ps1'
+      - '.github/workflows/install-scripts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: install-scripts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lifecycle:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test install, update and uninstall
+        shell: powershell
+        run: .\tools\Test-InstallLifecycle.ps1

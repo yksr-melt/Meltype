@@ -73,7 +73,7 @@ export const FORMS = [
       { id: "os-detail", label: "OS の詳細", type: "text", placeholder: "Ubuntu 24.04 / GNOME / Wayland", hint: "Mac: macOS 15.2 / M2 など。Linux: Ubuntu 24.04 / GNOME / Wayland など" },
       { id: "expected", label: "どうなってほしかったか", type: "textarea" },
       { id: "frequency", label: "起きる頻度", type: "select", options: ["毎回", "ときどき", "一度だけ"] },
-      { id: "log", label: "ログ", type: "code", hint: "トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」。見られて困る部分は消してから貼ってください" },
+      { id: "log", label: "ログ", type: "code", hint: "トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」。Windows の更新の不具合は %LOCALAPPDATA%\\Meltype\\update\\install.log の中身。見られて困る部分は消してから貼ってください" },
       ENVIRONMENT,
       CONTACT,
     ],
