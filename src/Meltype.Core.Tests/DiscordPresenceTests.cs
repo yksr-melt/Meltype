@@ -41,12 +41,10 @@ internal static class DiscordPresenceTests
     [Test]
     public static void VerifyResponse_RejectsDiscordErrorAndClose()
     {
-        var error = Assert.Throws<IOException>(() => DiscordPresence.VerifyResponse(
-            1, "{\"cmd\":\"SET_ACTIVITY\",\"evt\":\"ERROR\",\"data\":{\"code\":4000,\"message\":\"Invalid activity\"}}"));
-        Assert.True(error.Message.Contains("4000", StringComparison.Ordinal));
-        Assert.True(error.Message.Contains("Invalid activity", StringComparison.Ordinal));
-        Assert.Throws<IOException>(() => DiscordPresence.VerifyResponse(2, "{}"));
-        Assert.Throws<IOException>(() => DiscordPresence.VerifyResponse(7, "{}"));
+        AssertIOException(() => DiscordPresence.VerifyResponse(
+            1, "{\"cmd\":\"SET_ACTIVITY\",\"evt\":\"ERROR\",\"data\":{\"code\":4000,\"message\":\"Invalid activity\"}}"), "4000");
+        AssertIOException(() => DiscordPresence.VerifyResponse(2, "{}"), "接続を閉じました");
+        AssertIOException(() => DiscordPresence.VerifyResponse(7, "{}"), "opcode");
     }
 
     [Test]
@@ -70,6 +68,17 @@ internal static class DiscordPresenceTests
         Assert.Equal(120L, DiscordPresence.KeysPerMinute(40, TimeSpan.FromSeconds(20)));
         Assert.Equal(0L, DiscordPresence.KeysPerMinute(-5, TimeSpan.FromSeconds(20))); // リセットした直後
         Assert.Equal(0L, DiscordPresence.KeysPerMinute(10, TimeSpan.Zero));
+    }
+
+    private static void AssertIOException(Action action, string message)
+    {
+        try { action(); }
+        catch (IOException ex)
+        {
+            Assert.True(ex.Message.Contains(message, StringComparison.Ordinal), ex.Message);
+            return;
+        }
+        throw new AssertionException("IOException が発生しませんでした。");
     }
 
     [Test]
