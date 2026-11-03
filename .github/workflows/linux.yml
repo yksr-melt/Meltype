@@ -9,7 +9,7 @@ name: linux
 on:
   workflow_dispatch:
   pull_request:
-    paths:
+    paths: &paths
       - 'linux/**'
       - 'native/mozc/**'
       - 'src/Meltype.Core/**'
@@ -19,13 +19,7 @@ on:
   push:
     branches: ['**']
     tags: ['v*']
-    paths:
-      - 'linux/**'
-      - 'native/mozc/**'
-      - 'src/Meltype.Core/**'
-      - 'dictionaries/**'
-      - 'tools/test-native-boundaries.py'
-      - '.github/workflows/linux.yml'
+    paths: *paths
 
 permissions:
   contents: read

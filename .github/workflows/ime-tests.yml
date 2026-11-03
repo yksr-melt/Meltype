@@ -3,7 +3,7 @@ name: ime-tests
 
 on:
   pull_request:
-    paths:
+    paths: &paths
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Mac.Native/**'
       - 'dictionaries/*.txt'
@@ -30,31 +30,7 @@ on:
       - '.github/workflows/ime-tests.yml'
   push:
     branches: [main]
-    paths:
-      - 'src/Meltype.Core/**'
-      - 'src/Meltype.Mac.Native/**'
-      - 'dictionaries/*.txt'
-      - 'nuget.config'
-      - 'global.json'
-      - 'Directory.Build.props'
-      - 'Directory.Build.targets'
-      - 'Directory.Packages.props'
-      - 'src/Directory.Build.props'
-      - 'src/Directory.Build.targets'
-      - 'src/Directory.Packages.props'
-      - 'native/mozc/MOZC_COMMIT'
-      - 'native/mozc/BUILD.fragment'
-      - 'native/mozc/meltype_mozc_helper.cc'
-      - 'native/mozc/build-mozc-helper.sh'
-      - 'linux/build.sh'
-      - 'linux/ibus-engine-meltype'
-      - 'linux/meltype.xml'
-      - 'linux/icon.png'
-      - 'linux/install.sh'
-      - 'linux/uninstall.sh'
-      - 'linux/fcitx5/**'
-      - 'tools/ime-tests/**'
-      - '.github/workflows/ime-tests.yml'
+    paths: *paths
   workflow_dispatch:
 
 # ソースの読取りだけを許可する。

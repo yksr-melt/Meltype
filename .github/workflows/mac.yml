@@ -106,7 +106,7 @@ jobs:
         run: |
           node tools/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
           cat dist/manifests/homebrew/Casks/meltype.rb
-            # GitHub App のトークンなら、作成した PR の CI も起動する (bot.yml / sponsors.yml と同じ)。
+      # GitHub App のトークンなら、作成した PR の CI も起動する (bot.yml / sponsors.yml と同じ)。
       - id: app-token
         if: startsWith(github.ref, 'refs/tags/v') && vars.BOT_APP_ID != ''
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
