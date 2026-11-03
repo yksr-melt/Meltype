@@ -542,6 +542,10 @@ public sealed class Settings
     [JsonConverter(typeof(InputStyleJsonConverter))]
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
 
+    [Category("1. 全般"), DisplayName("かな配列"), WindowsOnly,
+     Description("入力方式が「かな入力」のときの配列。JIS かな (刻印どおり)・月配列 (U9。D・K を押してから次のキーで 2 段目・3 段目)・花配列 (D・K を押してから次のキーで 2 段目)。Shift を押したキーはふつうの英字・記号です。JIS かな以外では、打ったキーの英字を英単語として見せません。Meltype キーボードで使えます。")]
+    public KanaLayout KanaLayout { get; set; } = KanaLayout.Jis;
+
     [Category("3. 判定"), DisplayName("英語 / 日本語を自動で判定する"),
      Description("打った英字が英語か日本語 (ローマ字) かを自動で判定し、英語なら英字にします。OFF にすると、Shift で打った大文字で始まる語だけを英字にし、ほかの語は提案だけ出します (変換ボックスで Tab を押すと提案どおり英字に)。英数状態の検知と、確定後の直しもしません。Meltype キーボード・Meltype IME・かな入力のすべてに効きます。")]
     public bool AutoDetection { get; set; } = true;
@@ -938,6 +942,7 @@ public sealed class Settings
         // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
         if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
+        if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));

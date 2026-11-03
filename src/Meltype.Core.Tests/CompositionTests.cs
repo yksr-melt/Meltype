@@ -175,6 +175,7 @@ internal static class CompositionTests
 
         /// <summary>かな入力 (JIS) か。</summary>
         public bool Kana { get; set; }
+        public KanaLayout KanaLayout { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool ZSymbols { get; set; } = true;
         public bool NumberKeysSelectCandidates { get; set; } = true;
@@ -270,6 +271,7 @@ internal static class CompositionTests
                 UserDictionary = userDictionary,
                 Manual = () => Manual,
                 KanaInput = () => Kana,
+                KanaLayout = () => KanaLayout,
                 Misspellings = Misspellings,
                 Languages = languages,
                 Translations = translations,
