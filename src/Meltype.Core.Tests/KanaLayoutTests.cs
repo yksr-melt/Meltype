@@ -292,7 +292,7 @@ internal static class KanaLayoutTests
         k.Key(Convert);
         k.TypeKanaKeys("w");
         k.Key(Convert, up: true);
-        Assert.True(k.Showing.EndsWith("が", StringComparison.Ordinal), k.Showing);
+        Assert.True(k.Showing?.EndsWith('が') == true, k.Showing ?? "");
     }
 
     [Test]
@@ -316,6 +316,6 @@ internal static class KanaLayoutTests
         k.Press(Convert);
         Assert.True(k.Host.View is { Converting: true }, "単独タップでは変換を確定しない");
         k.TypeKanaKeys("w");
-        Assert.True(k.Showing.EndsWith("か", StringComparison.Ordinal), k.Showing);
+        Assert.True(k.Showing?.EndsWith('か') == true, k.Showing ?? "");
     }
 }
