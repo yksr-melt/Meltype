@@ -16,6 +16,7 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
     private Settings? _settings;
     private DateTime _writeTime;
     private long _checkedMs;
+    private bool _failed;
 
     public Settings Current
     {
@@ -26,7 +27,9 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             _checkedMs = now;
             // 読む前の時刻を覚える。読んでいる間に書かれても、次に読み直す (Load の移行で保存したときも 1 回読み直す)
             var writeTime = File.GetLastWriteTimeUtc(path);
-            if (_settings is not null && writeTime == _writeTime) return _settings;
+            var changed = writeTime != _writeTime;
+            // 読み直せなかったときは、更新時刻が変わらなくても (権限を直したなど) 次の間隔でまた読む
+            if (_settings is not null && !changed && !_failed) return _settings;
             _writeTime = writeTime;
             if (_settings is null) _settings = Settings.Load(path);
             else
@@ -34,10 +37,16 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
                 // 読み直しで無い・読めないのは、エディターが書いている途中のことがある (元のファイルを別名に移してから書くエディターもある)。
                 // 既定値に戻さず (.broken も作らず)、前の設定を使い続ける
                 if (!File.Exists(path)) return _settings;
-                try { _settings = Settings.LoadOrThrow(path); }
+                try
+                {
+                    _settings = Settings.LoadOrThrow(path);
+                    _failed = false;
+                }
                 catch (Exception ex)
                 {
-                    Diagnostics.Log.Warn($"config.json を読み直せなかったので、前の設定を使い続けます: {ex.Message}");
+                    // 読み直すたびにログを書かないように、書くのは更新時刻が変わったときだけ
+                    if (changed) Diagnostics.Log.Warn($"config.json を読み直せなかったので、前の設定を使い続けます: {ex.Message}");
+                    _failed = true;
                     return _settings;
                 }
             }

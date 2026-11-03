@@ -42,9 +42,14 @@ internal static class SettingsFileTests
             now += SettingsFile.CheckIntervalMs;
             Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, file.Current.Punctuation, "読み直せなければ、既定値に戻さず前の設定を使う");
             Assert.True(!File.Exists(path + ".broken"), "読み直しの失敗では .broken を作らない");
-            Write("Japanese", 3);
+            // 更新時刻が変わらないまま読めるようになった (権限を直したときなど)
+            Write("Japanese", 2);
             now += SettingsFile.CheckIntervalMs;
-            Assert.Equal(PunctuationStyle.Japanese, file.Current.Punctuation, "書き終わったら読み直す");
+            Assert.Equal(PunctuationStyle.Japanese, file.Current.Punctuation, "読み直せなかった後は、更新時刻が同じでもまた読む");
+            loads = 0;
+            now += SettingsFile.CheckIntervalMs;
+            _ = file.Current;
+            Assert.Equal(0, loads, "読めた後は、更新時刻が変わるまで読み直さない");
 
             // 元のファイルを別名に移してから書くエディターの、書く前
             File.Delete(path);
