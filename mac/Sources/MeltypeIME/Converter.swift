@@ -82,8 +82,15 @@ final class MeltypeConverter {
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             metadata: .init(versionString: "Meltype \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")")
         )
-        zenzModel = Self.findZenzModel()
-        zenzaiWorker = zenzModel.map { ZenzaiWorker(dictionaryURL: MeltypeConverter.resource("Dictionary"), model: $0, options: options) }
+        // init の中では self を閉包に入れられないので、ローカルの値で作る
+        let model = Self.findZenzModel()
+        let requestOptions = options
+        zenzModel = model
+        if let model {
+            zenzaiWorker = ZenzaiWorker(dictionaryURL: MeltypeConverter.resource("Dictionary"), model: model, options: requestOptions)
+        } else {
+            zenzaiWorker = nil
+        }
     }
 
     /// キャレットの前の文 (Zenzai の文脈に使う) は最後の 20 文字まで。
