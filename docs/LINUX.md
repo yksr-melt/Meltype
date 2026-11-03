@@ -36,7 +36,7 @@ Linux 版のインストール・設定・困ったときの説明です。IBus 
 <a name="動く環境"></a>
 <img src="images/headings/linux/01.svg" alt="動く環境" height="53"><br>
 
-- Ubuntu 24.04・Debian・Fedora 44 など (x86_64 / ARM64)
+- Ubuntu 24.04・Debian・Fedora 44・AlmaLinux 9 などの RHEL 9 系 (x86_64 / ARM64)
 - 入力の仕組みが IBus (GNOME、Ubuntu の標準) か fcitx5 (KDE など) のもの
 
 fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
@@ -46,7 +46,7 @@ fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。
 <a name="インストール"></a>
 <img src="images/headings/linux/02.svg" alt="インストール" height="53"><br>
 
-Ubuntu・Debian は apt で、Fedora は dnf で入れます。どちらも IBus と fcitx5 の両方に入れます。
+Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
 
 以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
@@ -89,10 +89,21 @@ sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Melt
 sudo dnf install meltype
 ```
 
-リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` (x86_64 は `meltype-<version>-1.x86_64.rpm`、ARM64 は `meltype-<version>-1.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。
+AlmaLinux 9・Rocky Linux 9 などの RHEL 9 系では、リポジトリを次のコマンドで登録します。
+
+```bash
+sudo dnf install dnf-plugins-core
+sudo dnf config-manager --add-repo https://yksr-melt.github.io/Meltype/rpm/meltype.repo
+sudo dnf install meltype
+```
+
+fcitx5 のアドオンは別のパッケージ `meltype-fcitx5` です。fcitx5 が入っていれば、dnf が `meltype` と一緒に入れます。
+
+リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` (x86_64 は `meltype-<version>-1.x86_64.rpm`、ARM64 は `meltype-<version>-1.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。fcitx5 で使うときは、`meltype-fcitx5-<version>-1.x86_64.rpm` も一緒に入れます。
 
 ```bash
 sudo dnf install ./meltype-<version>-1.x86_64.rpm
+sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x86_64.rpm  # fcitx5 で使うとき
 ```
 
 <a name="ほかのディストリビューション"></a>
