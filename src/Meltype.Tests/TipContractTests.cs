@@ -214,6 +214,8 @@ internal static class TipContractTests
         {
             var dll = new Dll();
             dll.Type("i ");
+            // クリックで動かしたときは、DLL が先に変換中の文字を確定し (commit + moved)、次のキーにも moved を付ける
+            if (moved) dll.Commit(moved: true);
             var replies = new List<JsonElement> { dll.Key('w', moved: moved) };
             replies.AddRange(dll.Type("ant "));
             return (dll, replies);
