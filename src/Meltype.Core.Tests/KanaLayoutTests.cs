@@ -294,4 +294,28 @@ internal static class KanaLayoutTests
         k.Key(Convert, up: true);
         Assert.True(k.Showing.EndsWith("が", StringComparison.Ordinal), k.Showing);
     }
+
+    [Test]
+    public static void KanaLayout_Nicola_RightThumbTapAtStartDoesNotStick()
+    {
+        // 文頭で変換キーだけを押して離した後は、次の W が通常面の「か」になる。
+        var k = Layout(KanaLayout.Nicola);
+        k.Press(Convert);
+        k.TypeKanaKeys("w");
+        Assert.Equal("か", k.Showing);
+    }
+
+    [Test]
+    public static void KanaLayout_Nicola_ThumbTapDuringConversionKeepsOriginalAction()
+    {
+        // 変換中の変換キー単独タップは候補送り。次の文字はシフトされない。
+        var k = Layout(KanaLayout.Nicola);
+        k.TypeKanaKeys("kw");
+        k.Press(VirtualKeys.Space);
+        Assert.True(k.Host.View is { Converting: true });
+        k.Press(Convert);
+        Assert.True(k.Host.View is { Converting: true }, "単独タップでは変換を確定しない");
+        k.TypeKanaKeys("w");
+        Assert.True(k.Showing.EndsWith("か", StringComparison.Ordinal), k.Showing);
+    }
 }
