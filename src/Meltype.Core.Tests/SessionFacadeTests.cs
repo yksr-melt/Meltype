@@ -925,6 +925,28 @@ internal static class SessionFacadeTests
         Assert.Equal("箸を", history.Get("はしを"));
     }
     [Test]
+    public static void CreateDefault_ReloadsChangedConfigInOpenSession()
+    {
+        // Mac・Linux 版は、設定画面が別のプロセスで config.json を書く。開いたままの入力欄 (IBus はエンジンを入力欄で使い回す) でも、次のキーから効く
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-session-reload-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var session = MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
+            Assert.Equal("ね、", Type(session, "ne,\n")[^1].Commits.Single().Text, "既定の句読点");
+            var config = Path.Combine(directory, "config.json");
+            File.WriteAllText(config, $"{{ \"SettingsVersion\": {Settings.CurrentVersion}, \"Punctuation\": \"FullWidthCommaPeriod\" }}");
+            // 同じ時刻に書かれても読み直すことは保証しないので、時刻を進める
+            File.SetLastWriteTimeUtc(config, DateTime.UtcNow.AddSeconds(1));
+            // 更新時刻を見るのは SettingsFile.CheckIntervalMs に 1 回 (間隔は SettingsFileTests で確かめる)
+            Thread.Sleep(TimeSpan.FromMilliseconds(SettingsFile.CheckIntervalMs + 100));
+            Assert.Equal("ね，", Type(session, "ne,\n")[^1].Commits.Single().Text, "書き換えた config.json の句読点");
+            var other = MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
+            Assert.Equal("ね，", Type(other, "ne,\n")[^1].Commits.Single().Text, "後から開いた入力欄も同じ設定");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void CreateDefault_SessionsShareLearning()
     {
         // 入力欄 (セッション) が 2 つあっても、学習データは 1 つ。B で選び直して保存しても、A で選び直したものが消えない

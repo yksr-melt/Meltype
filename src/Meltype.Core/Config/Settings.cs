@@ -397,11 +397,8 @@ public sealed class Settings
     public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
 
     [Category("4. 変換"), DisplayName("Zenzai を使う"),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は Windows では ON、Mac では OFF です (Mac は推論の時間の上限ができるまで)。")]
-    public bool UseZenzai { get; set; } = DefaultUseZenzai;
-
-    /// <summary>Zenzai の既定。Mac は推論が遅いときに打ち切る仕組みができるまで OFF (既定 ON は別の PR で)。</summary>
-    internal static bool DefaultUseZenzai => !OperatingSystem.IsMacOS();
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+    public bool UseZenzai { get; set; } = true;
 
     [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), WindowsOnly,
      Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
@@ -1014,8 +1011,6 @@ public sealed class Settings
     {
         // v9: Zenzai を同梱して既定 ON にした (issue #1120)。前の既定 (OFF・場所が空) のままなら ON にする。
         // 自分で llama-server やモデルの場所を書いた人は、OFF にしていればそのまま。書いていない項目は新しい既定 (ON) になる
-        // Mac は既定 OFF のままなので移さない
-        if (!DefaultUseZenzai) return;
         static string Text(JsonObject o, string key) => o[key] is JsonValue v && v.TryGetValue<string>(out var t) ? t : "";
         if (values[nameof(UseZenzai)] is JsonValue use && use.TryGetValue<bool>(out var on) && !on &&
             string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiServerPath))) && string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiModelPath))))
@@ -1104,36 +1099,7 @@ public sealed class Settings
     {
         try
         {
-            if (!File.Exists(path)) return new Settings();
-            var json = File.ReadAllText(path);
-            if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
-            var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
-            if (version < 8)
-            {
-                MigrateToV8(values);
-                foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
-                    if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
-            }
-            if (version < 9)
-            {
-                MigrateToV9(values);
-                foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
-                    if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
-            }
-            var settings = values.Deserialize(JsonType) ?? new Settings();
-            settings.SettingsVersion = version;
-            // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
-            var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
-            var migrated = settings.Migrate();
-            // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
-            settings.Normalize();
-            if (migrated || autoSwitch)
-            {
-                // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
-                try { settings.Save(path); }
-                catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
-            }
-            return settings;
+            return LoadOrThrow(path);
         }
         catch (Exception ex)
         {
@@ -1143,6 +1109,41 @@ public sealed class Settings
             Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
             return new Settings();
         }
+    }
+
+    /// <summary><see cref="Load"/> と同じだが、読めなければ例外を投げる (既定値に戻さず、.broken も作らない)。</summary>
+    internal static Settings LoadOrThrow(string path)
+    {
+        if (!File.Exists(path)) return new Settings();
+        var json = File.ReadAllText(path);
+        if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
+        var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
+        if (version < 8)
+        {
+            MigrateToV8(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
+        }
+        if (version < 9)
+        {
+            MigrateToV9(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
+        }
+        var settings = values.Deserialize(JsonType) ?? new Settings();
+        settings.SettingsVersion = version;
+        // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
+        var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
+        var migrated = settings.Migrate();
+        // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
+        settings.Normalize();
+        if (migrated || autoSwitch)
+        {
+            // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
+            try { settings.Save(path); }
+            catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
+        }
+        return settings;
     }
 
     /// <summary>config.json の一番上の項目 property が、文字列の value か (プロファイルの中の値は見ない)。</summary>

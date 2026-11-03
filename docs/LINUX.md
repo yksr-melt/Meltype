@@ -135,7 +135,9 @@ KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ロ�
 
 <kbd>半角/全角</kbd> で英数と日本語を切り替えます。
 
-設定と学習データは `~/.local/share/Meltype` にあります。設定は Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
+設定は、アプリの一覧の「Meltype の設定」で変えられます。
+
+設定と学習データは `~/.local/share/Meltype` にあります。画面に無い項目 (アプリ別設定など) は、Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
 
 ```json
 {
@@ -143,8 +145,6 @@ KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ロ�
   "Punctuation": "FullWidthCommaPeriod"
 }
 ```
-
-fcitx5 の操作ガイドを隠すには、`config.json` に `"ShowGuide": false` を書いて、fcitx5 を再起動します。
 
 <br>
 
