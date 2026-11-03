@@ -55,7 +55,7 @@ public static class SettingsSchema
     // 選択肢の説明 (列挙型のフィールドの Description) は reflection で読む。Mac・Linux 版 (NativeAOT) では Meltype.Core の型を削らない
     // (Meltype.Mac.Native.csproj の TrimmerRootAssembly) ので読める。削られても説明が空になるだけで、選択肢の名前は Enum.GetNames から入る。
     [UnconditionalSuppressMessage("Trimming", "IL2075", Justification = "Meltype.Core は TrimmerRootAssembly。読めなくても説明が空になるだけ")]
-    private static JsonNode Transform(JsonSchemaExporterContext context, JsonNode node, JsonObject defaults)
+    private static JsonObject Transform(JsonSchemaExporterContext context, JsonNode node, JsonObject defaults)
     {
         // 何でもよい値の schema は true で来るので、説明を足せるように {} にする
         var schema = node as JsonObject ?? new JsonObject();

@@ -754,7 +754,7 @@ internal static class CompositionTests
         phrases.Remember("きょうはまけた", "今日は負けた");
         var k = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
         k.Type("kyouhaMake");
-        Assert.True(k.Showing.EndsWith("Make", StringComparison.Ordinal), k.Showing);
+        Assert.True(k.Showing!.EndsWith("Make", StringComparison.Ordinal), k.Showing);
         Assert.Equal("今日は負けた", string.Join(",", k.Host.View!.Predictions ?? []));
 
         // 同じ読みでも、日本語で見えていれば最後の文節の続きを出す
@@ -3502,7 +3502,7 @@ internal static class CompositionTests
             var k = new Keyboard();
             k.Type(typed);
             Assert.Equal(expected, k.Host.Document, typed.Replace("\n", "⏎"));
-            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:")), "消さない: " + string.Join(" ", k.Host.Events));
+            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:", StringComparison.Ordinal)), "消さない: " + string.Join(" ", k.Host.Events));
         }
         // Space で区切ったときは今までどおり直す
         var spaced = new Keyboard();
