@@ -79,3 +79,5 @@ Khalifa Ariana Grande Sheeran Marshmello Beabadoobee Chainsmokers Iann Dior Dobb
 DeVito
 # Issue #1391 (BIOS の American Megatrends)・#1319・#1402・#1276
 America American Megatrends iZotope Neovide pH
+# Issue #1013 (英字・数字の名前。数字の前で区切らない)
+yachi8000
