@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# Meltype (Linux 版テスト版) を入れる。zip を展開したフォルダーで実行する:
-#   bash install.sh
+# Meltype (Linux 版) を、パッケージ管理を使わずに入れる旧来のスクリプト。Debian / Ubuntu 向け (足りない部品は apt-get で入れる)。
+# apt・dnf で入れられる環境では .deb・.rpm を使う (docs/LINUX.md)。zip を展開したフォルダーで実行する:
+#   bash install-legacy.sh
 # プログラムは /opt/meltype に、IBus のコンポーネントは /usr/share/ibus/component に入れる (管理者のパスワードを聞かれる)。
 # fcitx5 を使っていれば、fcitx5 のアドオンも入れる (IBus が無ければ IBus の部品は入れない)。fcitx5 だけに入れるなら --fcitx5 を付ける。
 set -euo pipefail
@@ -85,7 +86,7 @@ fcitx5_has_meltype() {
 
 # 動いている fcitx5 に、新しいアドオンと入力メソッドを読ませる (DBus の Refresh)
 # dbus-send は、Meltype を読めたかを確かめる fcitx5-remote と同じセッションバスにつながる。
-# dbus-send が無ければ install.sh が dbus を入れる (fcitx5 を使うときだけ)
+# dbus-send が無ければ install-legacy.sh が dbus を入れる (fcitx5 を使うときだけ)
 fcitx5_refresh() {
     dbus-send --session --print-reply --dest=org.fcitx.Fcitx5 /controller \
         org.fcitx.Fcitx.Controller1.Refresh > /dev/null 2>&1
@@ -106,7 +107,7 @@ fcitx5_restart() {
     (fcitx5 -r -d > /dev/null 2>&1 &)
     # 前の fcitx5 が終わるのを待つ。終わらなければ起動し直せていない
     # (起動しかけてすぐ終わる fcitx5 を、起動し直せたと数えないようにする)
-    # 待ち方 (0.2 秒 × 25 回) は uninstall.sh の同じ待ちと対になっている。片方だけ変えない。
+    # 待ち方 (0.2 秒 × 25 回) は uninstall-legacy.sh の同じ待ちと対になっている。片方だけ変えない。
     for _ in {1..25}; do
         sleep 0.2
         if ! kill -0 "$before" 2> /dev/null; then break; fi

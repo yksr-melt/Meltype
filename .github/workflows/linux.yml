@@ -1,4 +1,4 @@
-# Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、テスター向けの zip と .deb・.rpm を Artifacts に置く。
+# Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
 #   app・rpm … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
 #   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
@@ -41,7 +41,7 @@ concurrency:
 jobs:
   app:
     # x64 と arm64 を、それぞれの CPU のランナーでビルドする (Mozc の Bazel のビルドは、ビルドしているマシンの CPU 向けになる)。
-    # zip の名前の最後 (asset) は、x64 は以前からの linux のまま (web のダウンロードのリンクが linux.zip で探すため)
+    # zip の名前の最後 (asset) は、x64 は以前からの linux のまま (nix-meltype などがこの名前でリリースから取るため)
     strategy:
       matrix:
         include:
@@ -115,7 +115,7 @@ jobs:
           # タグ (v1.0.0) なら Meltype-1.0.0-linux.zip (arm64 は Meltype-1.0.0-linux-arm64.zip)、それ以外はテスト版の名前
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-${{ matrix.asset }}.zip"; else name="Meltype-${{ matrix.asset }}-test-$(date +%Y%m%d-%H%M).zip"; fi
           (cd linux/build && zip -qr "$name" Meltype-linux)
-      # apt で入れられる .deb (#863)。中身は install.sh が入れるものと同じ。タグなら版、それ以外は meltype.xml の版 + テスト版の印
+      # apt で入れられる .deb (#863)。タグなら版、それ以外は meltype.xml の版 + テスト版の印
       - name: Package (.deb)
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
