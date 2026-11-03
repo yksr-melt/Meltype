@@ -1089,36 +1089,7 @@ public sealed class Settings
     {
         try
         {
-            if (!File.Exists(path)) return new Settings();
-            var json = File.ReadAllText(path);
-            if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
-            var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
-            if (version < 8)
-            {
-                MigrateToV8(values);
-                foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
-                    if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
-            }
-            if (version < 9)
-            {
-                MigrateToV9(values);
-                foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
-                    if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
-            }
-            var settings = values.Deserialize(JsonType) ?? new Settings();
-            settings.SettingsVersion = version;
-            // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
-            var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
-            var migrated = settings.Migrate();
-            // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
-            settings.Normalize();
-            if (migrated || autoSwitch)
-            {
-                // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
-                try { settings.Save(path); }
-                catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
-            }
-            return settings;
+            return LoadOrThrow(path);
         }
         catch (Exception ex)
         {
@@ -1128,6 +1099,41 @@ public sealed class Settings
             Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
             return new Settings();
         }
+    }
+
+    /// <summary><see cref="Load"/> と同じだが、読めなければ例外を投げる (既定値に戻さず、.broken も作らない)。</summary>
+    internal static Settings LoadOrThrow(string path)
+    {
+        if (!File.Exists(path)) return new Settings();
+        var json = File.ReadAllText(path);
+        if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject values) throw new JsonException("config.json の一番上が { } ではありません");
+        var version = values[nameof(SettingsVersion)] is JsonValue number && number.TryGetValue<int>(out var v) ? v : 1;
+        if (version < 8)
+        {
+            MigrateToV8(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
+        }
+        if (version < 9)
+        {
+            MigrateToV9(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
+        }
+        var settings = values.Deserialize(JsonType) ?? new Settings();
+        settings.SettingsVersion = version;
+        // 動作モードが IME 自動切替 (消した) だった: Meltype IME として読んでいる (InputModeJsonConverter)。保存して名前を書き直す
+        var autoSwitch = TopLevelStringIs(json, nameof(Mode), "AutoSwitch");
+        var migrated = settings.Migrate();
+        // 移行したキーの競合も保存前に除外し、次回起動時の再通知を防ぐ。
+        settings.Normalize();
+        if (migrated || autoSwitch)
+        {
+            // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
+            try { settings.Save(path); }
+            catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
+        }
+        return settings;
     }
 
     /// <summary>config.json の一番上の項目 property が、文字列の value か (プロファイルの中の値は見ない)。</summary>

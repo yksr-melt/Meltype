@@ -28,7 +28,7 @@ if [[ ! "$rpmversion" =~ ^[0-9][A-Za-z0-9.+~]*$ ]]; then
     exit 1
 fi
 
-for f in libMeltypeNative.so ibus-engine-meltype meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper; do
+for f in libMeltypeNative.so ibus-engine-meltype meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper; do
     [[ -e "$src/$f" ]] || { echo "必要なファイルがありません: $src/$f (先に linux/build.sh を実行してください)" >&2; exit 1; }
 done
 command -v rpmbuild > /dev/null || { echo "rpmbuild がありません (Fedora なら sudo dnf install rpm-build)" >&2; exit 1; }
@@ -71,7 +71,7 @@ Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
 Requires: libicu, python3
-Recommends: ibus, python3-gobject
+Recommends: ibus, python3-gobject, gtk4
 %if %{with_fcitx5}
 Suggests: fcitx5
 %endif
@@ -82,11 +82,13 @@ English words typed while writing Japanese stay as English,
 and romaji becomes Japanese, without switching the input mode.
 
 %install
-mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component
-cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
+mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component %{buildroot}%{_bindir} %{buildroot}%{_datadir}/applications
+cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
 chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
-chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/mozc/meltype_mozc_helper
+chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper
 sed "s|@DIR@|%{target}|g" %{meltype_src}/meltype.xml > %{buildroot}%{_datadir}/ibus/component/meltype.xml
+ln -s %{target}/meltype-settings %{buildroot}%{_bindir}/meltype-settings
+sed "s|@DIR@|%{target}|g" %{meltype_src}/ibus-setup-meltype.desktop > %{buildroot}%{_datadir}/applications/ibus-setup-meltype.desktop
 %if %{with_fcitx5}
 install -D -m 644 %{meltype_src}/fcitx5/meltype.so %{buildroot}%{_libdir}/fcitx5/meltype.so
 install -D -m 644 %{meltype_src}/fcitx5/meltype-addon.conf %{buildroot}%{_datadir}/fcitx5/addon/meltype.conf
@@ -106,11 +108,14 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 %dir %{target}
 %{target}/libMeltypeNative.so
 %{target}/ibus-engine-meltype
+%{target}/meltype-settings
 %{target}/icon.png
 %{target}/mozc
 %{target}/THIRD-PARTY-NOTICES.md
 %license %{target}/LICENSE
 %{_datadir}/ibus/component/meltype.xml
+%{_bindir}/meltype-settings
+%{_datadir}/applications/ibus-setup-meltype.desktop
 %if %{with_fcitx5}
 %{_libdir}/fcitx5/meltype.so
 %{_datadir}/fcitx5/addon/meltype.conf
