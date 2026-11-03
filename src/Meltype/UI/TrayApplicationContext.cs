@@ -13,6 +13,7 @@ namespace Meltype.UI;
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly MeltypeEngine _engine;
+    private readonly AppState _state;
     private static readonly Meltype.Composition.GitHubIssueTitles GitHubTitlesShared = new();
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem;
@@ -26,7 +27,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly Icon _directIcon = CreateIcon("A", Color.FromArgb(0, 120, 212));
     private readonly Icon _offIcon = CreateIcon("A", Color.FromArgb(120, 120, 120));
     private readonly ToolStripMenuItem _keyboardModeItem;
-    private readonly ToolStripMenuItem _levelItem;
+    private readonly ToolStripMenuItem _autoDetectionItem;
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
@@ -47,14 +48,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     internal static bool ShouldShowModeIndicator(Settings settings) => settings.Enabled && (settings.Mode switch
     {
-        InputMode.Keyboard => settings.ShowModeIndicator,
+        InputMode.Keyboard => settings.ModeIndicator != ModeIndicatorTiming.Never,
         InputMode.Tsf => settings.ShowTsfModeIndicator,
         _ => false,
     });
 
-    public TrayApplicationContext(MeltypeEngine engine)
+    public TrayApplicationContext(MeltypeEngine engine, AppState state)
     {
         _engine = engine;
+        _state = state;
         _invoker.CreateControl();
         var detector = Composition.CompositionDetector.CreateDefault(AppPaths.UserDictionaryDirectory);
         detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
@@ -65,8 +67,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             DirectMode = () => _engine.KeyboardDirect,
             ClassifyDirect = _engine.ClassifyDirect,
             DirectDecided = _engine.OnDirectDecided,
-            AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.DetectionLevel != DetectionLevel.Manual,
-            Level = () => _engine.AppSettings.DetectionLevel,
+            AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.AutoDetection,
+            Manual = () => !_engine.AppSettings.AutoDetection,
             Engine = () => _engine.Settings.ConversionEngine,
             UseZenzai = () => _engine.Settings.UseZenzai,
             ZenzaiServerPath = () => _engine.Settings.ZenzaiServerPath,
@@ -82,39 +84,39 @@ internal sealed class TrayApplicationContext : ApplicationContext
             EnglishFirstInput = () => _engine.Settings.EnglishFirstInput,
             ConsonantAbbreviations = () => _engine.Settings.ConsonantAbbreviations,
             CorrectTypos = () => _engine.Settings.CorrectTypos,
-            SlashAsMiddleDot = () => _engine.Settings.SlashAsMiddleDot,
+            Slash = () => _engine.Settings.Slash,
             ZSymbols = () => _engine.Settings.ZSymbols,
             SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
             SpaceAroundNumbers = () => _engine.Settings.SpaceAroundNumbers,
             NumberKeysSelectCandidates = () => _engine.Settings.NumberKeysSelectCandidates,
-            ShiftSpaceHalfWidth = () => _engine.Settings.ShiftSpaceHalfWidth,
+            SpaceWidth = () => _engine.Settings.SpaceWidth,
             EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,
             AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = () => _engine.Settings.FullWidthParentheses,
-            FullWidthSlash = () => _engine.Settings.FullWidthSlash,
             SquareBrackets = () => _engine.Settings.SquareBrackets,
             EscStepsBack = () => _engine.Settings.EscStepsBack,
             EscRevertsSelectedClause = () => _engine.Settings.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = () => _engine.Settings.FunctionKeysAffectSelectedClause,
-            CompatibleShortcuts = () => _engine.Settings.CompatibleShortcuts,
+            ControlKeys = () => _engine.Settings.ControlKeys,
             PartialCommit = () => _engine.Settings.PartialCommit,
-            MacControlKeys = () => _engine.Settings.MacControlKeys,
             CursorIntoBrackets = () => _engine.Settings.CursorIntoBrackets,
             ControlKeyBindings = () => _engine.Settings.ControlKeyBindings,
             CalculatorCandidates = () => _engine.Settings.CalculatorCandidates,
-            LogKeyIntervals = () => _engine.Settings.LogKeyIntervals,
             LaughterAfterKana = () => _engine.Settings.LaughterAfterKana,
             ContextualLearning = () => _engine.Settings.ContextualLearning,
-            FullWidthSpaceByDefault = () => _engine.Settings.FullWidthSpaceByDefault,
             ShowCandidatesWhileTyping = () => _engine.Settings.ShowCandidatesWhileTyping,
             GitHubIssueCandidates = () => _engine.Settings.GitHubIssueCandidates,
             GitHubRepository = () => _engine.Settings.GitHubRepository,
             GitHubTitles = () => GitHubTitlesShared,
             ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
+            NowPlayingCandidates = () => _engine.Settings.NowPlayingCandidates,
+            ClockTimeZone = () => _engine.Settings.ClockTimeZone,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
+            KanaLayout = () => _engine.Settings.KanaLayout,
+            RomajiLayout = () => _engine.Settings.RomajiLayout,
             ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
-            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ShowModeIndicatorOnFocus,
+            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
             Placement = () => _engine.Settings.CompositionPlacement,
             Size = () => _engine.Settings.CompositionSize,
@@ -140,13 +142,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add(_enabledItem);
         if (!AppPaths.IsPortable) menu.Items.Add(_tsfModeItem);
         menu.Items.Add(_keyboardModeItem);
-        // 自動判定の強さ (積極的 / 標準 / 慎重 / 手動)
-        _levelItem = new ToolStripMenuItem("自動判定の強さ");
-        foreach (var level in Enum.GetValues<DetectionLevel>())
-        {
-            _levelItem.DropDownItems.Add(new ToolStripMenuItem(LevelName(level), null, (_, _) => SetLevel(level)) { Tag = level });
-        }
-        menu.Items.Add(_levelItem);
+        // 英語 / 日本語の自動判定 (OFF なら提案だけ出し、Tab で英字にする)
+        _autoDetectionItem = new ToolStripMenuItem("英語 / 日本語を自動で判定する", null, (_, _) => ToggleAutoDetection());
+        menu.Items.Add(_autoDetectionItem);
         // プロファイル (仕事用・趣味用・SNS 用など)。一覧は開くたびに作る (設定画面で足したもの・名前を変えたものを出す)
         _profileItem = new ToolStripMenuItem("プロファイル");
         _profileItem.DropDownItems.Add("(読み込み中)");
@@ -212,32 +210,32 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
         UpdateStatus();
-        // 初めて起動したら使い方を見せる (見せたことは設定に残す)
-        var firstRun = !_engine.Settings.WelcomeShown;
+        // 前回の更新に失敗していたら知らせる (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
+        if (Updater.FailedVersion is { } failed)
+            _invoker.BeginInvoke(() => _tray.ShowBalloonTip(10000, "Meltype - 更新失敗", UpdateFailedMessage(failed), ToolTipIcon.Warning));
+        // 初めて起動したら使い方を見せる (見せたことは state.json に残す)
+        var firstRun = !_state.WelcomeShown;
         if (firstRun)
         {
-            var next = _engine.Settings.Clone();
-            next.WelcomeShown = true;
-            _engine.ApplySettings(next);
+            _state.WelcomeShown = true;
+            _state.Save();
             _invoker.BeginInvoke(ShowWelcome);
         }
         // 更新したあとの初めての起動なら、その版のリリースノートを一度だけ見せる (issue #1207)。
         // 初めて起動した人には見せず、今の版を見せたことにしておく
-        if (_engine.Settings.ReleaseNotesShown != AppInfo.Version)
+        if (_state.ReleaseNotesShown != AppInfo.Version)
         {
-            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_engine.Settings.ReleaseNotesShown, AppInfo.Version, firstRun);
-            var next = _engine.Settings.Clone();
-            next.ReleaseNotesShown = AppInfo.Version;
-            _engine.ApplySettings(next);
+            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_state.ReleaseNotesShown, AppInfo.Version, firstRun);
+            _state.ReleaseNotesShown = AppInfo.Version;
+            _state.Save();
             if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true));
         }
         // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
         // (初めて起動した人には、インストーラーが聞いている)
-        if (!AppPaths.IsPortable && !_engine.Settings.TsfOffered)
+        if (!AppPaths.IsPortable && !_state.TsfOffered)
         {
-            var next = _engine.Settings.Clone();
-            next.TsfOffered = true;
-            _engine.ApplySettings(next);
+            _state.TsfOffered = true;
+            _state.Save();
             if (!firstRun && CanOfferTsf()) _invoker.BeginInvoke(OfferTsf);
         }
         // 起動時の設定反映が終わってから、読み込み中に蓄積した除外をまとめて通知する。
@@ -252,11 +250,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void IntroduceTsf()
     {
-        if (AppPaths.IsPortable || _engine.Settings.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
+        if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
             RuntimeInformation.OSArchitecture == Architecture.Arm64) return;
         var wasTsf = _engine.Settings.Mode == InputMode.Tsf;
+        _state.TsfIntroduced = true;
+        _state.Save();
         var next = _engine.Settings.Clone();
-        next.TsfIntroduced = true;
         next.Mode = InputMode.Tsf;
         _engine.ApplySettings(next);
         // ほかのモードからなら ApplySettings が切り替える。もう Meltype IME のモードだったときも、入力方式を Meltype IME にする
@@ -270,7 +269,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private bool CanOfferTsf()
     {
-        if (_engine.Settings.TsfIntroduced || !Tip.TipServer.IsKnownUnregistered || RuntimeInformation.OSArchitecture == Architecture.Arm64) return false;
+        if (_state.TsfIntroduced || !Tip.TipServer.IsKnownUnregistered || RuntimeInformation.OSArchitecture == Architecture.Arm64) return false;
         if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "meltype-ime.ps1")) || !Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"))) return false;
         try
         {
@@ -318,9 +317,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             return;
         }
         // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
-        var next = _engine.Settings.Clone();
-        next.TsfIntroduced = true;
-        _engine.ApplySettings(next);
+        _state.TsfIntroduced = true;
+        _state.Save();
         SetMode(InputMode.Tsf);
         UpdateStatus();
     }
@@ -354,6 +352,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
     internal static string UpdateReadyMessage(string version, bool autoUpdate) => autoUpdate
         ? $"Meltype {version} を準備しました。次に Windows にサインインしたときに更新します。ここをクリックすると今すぐ更新します。"
         : $"Meltype {version} を準備しました。トレイの「更新」→「Meltype {version} に更新して再起動」で更新できます。ここをクリックすると今すぐ更新します。";
+
+    internal static string UpdateFailedMessage(string version) =>
+        $"Meltype {version} への更新に失敗しました。今のバージョンで動いています。自動ではもう一度試しません。記録: {Updater.InstallLog}";
 
     private void OnUpdateBalloonClicked(object? sender, EventArgs e)
     {
@@ -478,14 +479,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_engine.Settings.ShowNotifications) ShowBalloonTip(1500, "Meltype", _engine.Enabled ? "Meltype を有効にしました" : "Meltype を一時停止しました");
     }
 
-    private static string LevelName(DetectionLevel level) => level switch
-    {
-        DetectionLevel.Aggressive => "積極的 (英語らしければすぐ英字)",
-        DetectionLevel.Balanced => "標準",
-        DetectionLevel.Conservative => "慎重 (確信度が高いときだけ英字)",
-        _ => "手動 (提案のみ・Tab で英字)",
-    };
-
     /// <summary>
     /// 不具合の報告の画面 (GitHub のアカウントが無くても報告できる)。実行環境とログを見せ、ログはコピーボタンで、フォームはボタンで開く。
     /// ログは URL に入れない (履歴に残る・長さの上限がある)。
@@ -548,10 +541,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         settings.ShowNotifications && !Diagnostics.ShortcutExclusions.HasPending
             ? $"プロファイルを「{settings.ActiveProfile}」にしました" : null;
 
-    private void SetLevel(DetectionLevel level)
+    private void ToggleAutoDetection()
     {
         var next = _engine.Settings.Clone();
-        next.DetectionLevel = level;
+        next.AutoDetection = !next.AutoDetection;
         _engine.ApplySettings(next);
         UpdateStatus();
     }
@@ -581,8 +574,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         // (選ぶとキーボードフックが止まり、どこでも何も起きなくなる)
         var registered = Tip.TipServer.IsRegistered;
         _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable;
-        foreach (ToolStripMenuItem item in _levelItem.DropDownItems) item.Checked = item.Tag is DetectionLevel level && level == settings.DetectionLevel;
-        _levelItem.Text = $"自動判定の強さ: {LevelName(settings.DetectionLevel).Split(' ')[0]}";
+        _autoDetectionItem.Checked = settings.AutoDetection;
         _profileItem.Text = $"プロファイル: {settings.ActiveProfile}";
 
         string status;
@@ -616,7 +608,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _settingsForm.Activate();
             return;
         }
-        _settingsForm = new SettingsForm(_engine);
+        _settingsForm = new SettingsForm(_engine, _state);
         _settingsForm.FormClosed += (_, _) => UpdateStatus();
         _settingsForm.Show();
     }

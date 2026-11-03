@@ -20,6 +20,11 @@ namespace Meltype.Config;
 [JsonSerializable(typeof(Settings))]
 internal sealed partial class SettingsJsonContext : JsonSerializerContext;
 
+/// <summary>Meltype が覚えておく状態 (state.json) の JSON の読み書き。</summary>
+[JsonSourceGenerationOptions(WriteIndented = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true)]
+[JsonSerializable(typeof(AppState))]
+internal sealed partial class AppStateJsonContext : JsonSerializerContext;
+
 /// <summary>
 /// 列挙型を名前で読み書きし、前の版で選べた今は無い選択肢 (removed) は replacement として読む。
 /// 知らない名前があると config.json 全体を読めず、設定がすべて既定値に戻る。

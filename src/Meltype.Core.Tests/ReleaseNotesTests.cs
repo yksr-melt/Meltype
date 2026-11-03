@@ -23,6 +23,6 @@ internal static class ReleaseNotesTests
     {
         Assert.Equal("https://github.com/yksr-melt/Meltype/releases/tag/v1.3.1-pre.3", ProjectInfo.ReleaseUrl("1.3.1-pre.3"));
         Assert.Equal("https://github.com/yksr-melt/Meltype/releases", ProjectInfo.ReleasesUrl);
-        Assert.True(!new Settings().ProfileValues().ContainsKey(nameof(Settings.ReleaseNotesShown)), "プロファイルでは変えない");
+        Assert.True(!new Settings().ToJson().Contains(nameof(AppState.ReleaseNotesShown)), "config.json (プロファイル) には入れない");
     }
 }

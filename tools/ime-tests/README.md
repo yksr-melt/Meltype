@@ -33,7 +33,7 @@ npm run test:ci
 
 ### 必要なもの
 
-Linux上に、[CIの実IMEジョブ](../../.github/workflows/ime-tests.yml)と同じ依存関係を用意します。
+Linux上に、次の依存関係を用意します。CIでは、[linux workflow](../../.github/workflows/linux.yml)の`app`ジョブがビルドした製品を、`ime-real`ジョブが同じ手順で検査します。
 
 - 実行環境: Python 3、IBus、GTK3のIBusモジュール、Xvfb、D-Bus、xdotool、setxkbmap
 - 製品のビルド: .NET 10 SDK、NativeAOT、Mozcのビルド依存
@@ -150,7 +150,7 @@ type Target = {
 
 ### 追加先の判断
 
-- Coreだけで検査できる条件は、C#側に追加してください。`InputRegressionTests`も含め、既存の`build.yml`のCoreジョブ(Linux/macOS)で実行されます。既存のCoreテストをTypeScriptから再実行する構成にはしません。
+- Coreだけで検査できる条件は、C#側に追加してください。`InputRegressionTests`も含め、既存の`core.yml`のCoreジョブ(Linux/macOS)で実行されます。既存のCoreテストをTypeScriptから再実行する構成にはしません。
 - テストページは`tests/page/`、記録処理は`tests/unit/`のspecで確認します。各ディレクトリの`*.spec.ts`は、サブディレクトリも含めて自動で収集されます。
 
 ### 追加後の確認
@@ -212,4 +212,4 @@ PRのheadと、実際に検査したmerge checkoutは区別して記録されま
 
 ### CIで失敗した場合
 
-[ime-tests workflow](../../.github/workflows/ime-tests.yml)の実行画面からArtifactsを取得してください。ローカルと同じレポートとログを確認できます。
+[linux workflow](../../.github/workflows/linux.yml)の実行画面からArtifactsを取得してください。ローカルと同じレポートとログを確認できます。

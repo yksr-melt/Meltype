@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- build.sh が @VERSION@ を本体の版に、install.sh が @DIR@ をインストール先に置き換える。 -->
+<!-- build.sh が @VERSION@ を本体の版に、build-deb.sh・build-rpm.sh が @DIR@ をインストール先に置き換える。 -->
 <component>
     <name>org.freedesktop.IBus.Meltype</name>
     <description>Meltype: 半角/全角 を押さずに日本語と英語を打ち分ける日本語入力</description>
@@ -21,6 +21,7 @@
             <description>半角/全角 を押さずに日本語と英語を打ち分ける日本語入力</description>
             <rank>0</rank>
             <symbol>あ</symbol>
+            <setup>@DIR@/meltype-settings</setup>
         </engine>
     </engines>
 </component>

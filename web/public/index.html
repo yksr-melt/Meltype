@@ -385,18 +385,16 @@
             <p class="callout is-warn"><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>「開発元が未確認のため開けません」と出たら、右クリック (control + クリック) →「開く」。macOS 15 以降は、システム設定 → プライバシーとセキュリティ の「このまま開く」を押してください。</span></p>
             <p class="callout is-info"><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>配布している zip は Apple シリコンの Mac 用です。Intel の Mac ではソースからビルドしてください。</span></p>
           </div>
-          <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/mac/README.md">Mac 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
+          <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/MACOS.md">Mac 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
         </div>
 
         <div class="os-panel" role="tabpanel" id="panel-linux" aria-labelledby="tab-linux" hidden>
-          <p class="panel-lead">Ubuntu 24.04 などの x86_64 で、IBus (GNOME など) と fcitx5 (KDE など) の入力ソースとして動きます。</p>
+          <p class="panel-lead">IBus (GNOME など) と fcitx5 (KDE など) の入力ソースとして動きます。ディストリビューションのパッケージマネージャーで入れます。</p>
           <ol class="steps">
-            <li><b>ダウンロード</b><span><a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="linux.zip"><code>Meltype-&lt;version&gt;-linux.zip</code></a> をダウンロードして展開します</span></li>
-            <li><b>インストール</b><span>展開したフォルダーで端末を開き、下のコマンドを実行します。足りない部品は自動で入ります</span></li>
-            <li><b>入力ソースを追加</b><span>IBus はログインし直してから「設定」→「キーボード」→「入力ソース」で Meltype を追加し、fcitx5 は <code>fcitx5-configtool</code> で追加します</span></li>
+            <li><b>インストール</b><span><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md#インストール">Linux 版の説明の「インストール」</a>から、使っているディストリビューションの手順を端末で実行します</span></li>
+            <li><b>入力ソースを追加</b><span>ログインし直してから、IBus は「設定」→「キーボード」→「入力ソース」で Meltype を追加し、fcitx5 は <code>fcitx5-configtool</code> で追加します</span></li>
           </ol>
-          <div class="codebox"><code>bash install.sh</code><button class="copy" type="button" data-copy="bash install.sh"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
-          <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/linux/README.md">Linux 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
+          <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md">Linux 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
         </div>
       </div>
     </section>
@@ -461,7 +459,7 @@
             <summary>英語のつもりがかなに、かなのつもりが英字になった</summary>
             <div class="fold-body">
               <p><kbd>F10</kbd> (英字) か <kbd>F6</kbd> (ひらがな) で直して確定すれば、次からはその形で出ます。</p>
-              <p>トレイのメニューの「自動判定の強さ」でも調整できます。</p>
+              <p>自動で英字にしてほしくないときは、トレイのメニューの「英語 / 日本語を自動で判定する」を OFF にすると、Shift で打った大文字始まりの語だけ英字になります。</p>
             </div>
           </details>
           <details class="fold">
@@ -561,9 +559,9 @@
           </a>
         </div>
         <ul class="link-list">
-          <li><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/DEVELOPMENT.md">ビルド・仕組み (DEVELOPMENT.md)<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></li>
-          <li><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/MAC-CLI.md">Mac の CLI ビルド<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></li>
-          <li><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/WSL.md">WSL / Linux の CLI ビルド<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></li>
+          <li><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/dev/DEVELOPMENT.md">ビルド・仕組み (DEVELOPMENT.md)<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></li>
+          <li><a href="https://github.com/yksr-melt/Meltype/blob/main/mac/README.md">Mac の CLI ビルド<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></li>
+          <li><a href="https://github.com/yksr-melt/Meltype/blob/main/linux/README.md">WSL / Linux の CLI ビルド<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></li>
         </ul>
         <figure class="star-history">
           <a href="https://www.star-history.com/?repos=yksr-melt%2FMeltype&amp;type=date&amp;legend=top-left">

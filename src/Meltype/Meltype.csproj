@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <AssemblyName>Meltype</AssemblyName>
     <RootNamespace>Meltype</RootNamespace>
-    <Version>1.4.1-pre.2</Version>
+    <Version>1.4.1-pre.4</Version>
     <Product>Meltype</Product>
     <Authors>Yukishiro</Authors>
     <Copyright>Copyright (C) 2026 雪代 / Yukishiro. GPL-3.0-or-later</Copyright>
@@ -29,6 +29,6 @@
   </ItemGroup>
   <!-- タグのビルド (GitHub Actions の GITHUB_REF_TYPE=tag。手で push したタグも) では、リリースノートが無ければ止める。開発中のビルドは無くてもよい (GitHub のリリースのページへ案内する) -->
   <Target Name="RequireReleaseNotes" BeforeTargets="Build" Condition="'$(GITHUB_REF_TYPE)' == 'tag' And !Exists('..\..\docs\release-notes\$(Version).md')">
-    <Error Text="docs/release-notes/$(Version).md がありません。リリースノートを書いて main に入れてから、タグを付けてください (docs/RELEASE.md)。" />
+    <Error Text="docs/release-notes/$(Version).md がありません。リリースノートを書いて main に入れてから、タグを付けてください (docs/dev/RELEASE.md)。" />
   </Target>
 </Project>

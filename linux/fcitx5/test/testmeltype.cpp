@@ -8,6 +8,7 @@
 #include <testfrontend_public.h>
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/log.h>
+#include <fcitx-utils/stringutils.h>
 #include <fcitx-utils/testing.h>
 #include <fcitx/addonmanager.h>
 #include <fcitx/inputcontextmanager.h>
@@ -15,6 +16,8 @@
 #include <fcitx/inputmethodmanager.h>
 #include <fcitx/inputpanel.h>
 #include <fcitx/candidatelist.h>
+#include <fcitx/inputmethodengine.h>
+#include <fcitx/inputmethodentry.h>
 #include <fcitx/instance.h>
 
 using namespace fcitx;
@@ -33,6 +36,15 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
     dispatcher->schedule([dispatcher, instance]() {
         auto *frontend = instance->addonManager().addon("testfrontend");
         FCITX_ASSERT(instance->addonManager().addon("meltype", true)) << "Meltype のアドオンを読めません";
+        // fcitx5 の設定ツールで Meltype の設定を開くと、設定画面 (meltype-settings) を起動する
+        const auto *entry = instance->inputMethodManager().entry("meltype");
+        FCITX_ASSERT(entry && entry->isConfigurable());
+        RawConfig description;
+        instance->inputMethodEngine("meltype")->getConfigForInputMethod(*entry)->dumpDescription(description);
+        FCITX_ASSERT(description.valueByPath("MeltypeConfig/Settings/Type") &&
+                     *description.valueByPath("MeltypeConfig/Settings/Type") == "External");
+        const auto *command = description.valueByPath("MeltypeConfig/Settings/External");
+        FCITX_ASSERT(command && stringutils::endsWith(*command, "/meltype-settings")) << (command ? *command : "");
         auto group = instance->inputMethodManager().currentGroup();
         group.inputMethodList().clear();
         group.inputMethodList().push_back(InputMethodGroupItem("keyboard-us"));

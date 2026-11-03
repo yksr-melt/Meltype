@@ -4,11 +4,11 @@
 // 公開版のリリースから、パッケージマネージャーに出すマニフェストを作る (winget・Scoop・Homebrew)。
 //   node tools/make-manifests.mjs <版> [Windows の zip] [Mac の zip] [Windows のインストーラー (setup.exe)]
 //   例: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
-//   Homebrew だけ: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip (mac.yml がタグのときに作る)
+//   Homebrew だけ: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip (release.yml がタグのときに作る)
 // ファイルは名前で見分ける (-mac.zip は Mac、ほかの .zip は Windows、-setup.exe はインストーラー)。
 // zip・setup.exe は GitHub のリリース (v<版>) に同じ名前で上げたもの。SHA-256 をここで計算する。
 // winget はインストーラー (setup.exe) があればそれを使う (Meltype IME・起動時の起動・Meltype の自動更新と同じ場所に入る: issue #367)。
-// できたものは dist/manifests/ に置く。出し方は docs/RELEASE.md。
+// できたものは dist/manifests/ に置く。出し方は docs/dev/RELEASE.md。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -113,9 +113,14 @@ ManifestVersion: 1.6.0
 }
 
 // --- Homebrew Cask (このリポジトリを URL 指定の tap として使う) ---
-// input_method で ~/Library/Input Methods/Meltype.app に入れ、postflight で mac/install.sh と同じこと
-// (隔離属性を外す・入力ソースに登録・LaunchServices に登録・GUI のセッションで起動) をする。
-// start-input-method.sh は zip の中 (Meltype-mac/) のものを使う (Homebrew は Meltype.app だけを動かし、ほかは staged_path に残す)。
+// installer script で zip の中 (Meltype-mac/) の install.sh を動かし、手動インストールと同じこと
+// (~/Library/Input Methods に入れる・隔離属性を外す・入力ソースに登録・LaunchServices に登録・GUI のセッションで起動) をする。
+// postflight は Homebrew 7.0.0 で非推奨になり、代わりの postflight_steps はサンドボックスの中で動くため、
+// 入力ソースへの登録や GUI のセッションでの起動ができない。installer script はサンドボックスの外で動く (#1397)。
+// installer は input_method より先に動くので、input_method は使わない。
+// uninstall delete: は常に sudo で消すので、ホームの下のアプリは uninstall script で利用者の権限のまま消す。
+// --homebrew で、入力ソースを切り替えず、手動で入れたアプリがあれば止め、配置したあとの登録・起動の失敗は
+// 警告にする (Homebrew は失敗した installer script が置いたアプリを戻さないため。くわしくは install.sh)。
 if (macZip) {
   const macName = path.basename(macZip);
   write('homebrew/Casks/meltype.rb', `cask "meltype" do
@@ -132,26 +137,20 @@ if (macZip) {
     strategy :github_latest
   end
 
-  depends_on macos: ">= :ventura"
   depends_on arch: :arm64
+  depends_on macos: :ventura
 
-  input_method "Meltype-mac/Meltype.app"
-
-  postflight do
-    app = "#{Dir.home}/Library/Input Methods/Meltype.app"
-    # 署名が自分用 (ad hoc) の版もあるので、隔離属性を外さないと macOS が起動させない (install.sh と同じ)
-    system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", app], must_succeed: false
-    # 入力ソースに登録する (#21、#134)
-    system_command "#{app}/Contents/MacOS/Meltype", args: ["--register-input-source"], must_succeed: false
-    register = "#{app}/Contents/MacOS/MeltypeRegisterInputSource"
-    system_command register, args: [app], must_succeed: false if File.executable?(register)
-    system_command "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-                   args: ["-f", app], must_succeed: false
-    system_command "/bin/bash", args: ["#{staged_path}/Meltype-mac/start-input-method.sh", app], must_succeed: false
-  end
+  installer script: {
+    executable: "Meltype-mac/install.sh",
+    args:       ["--homebrew"],
+  }
 
   uninstall launchctl: "io.github.yksr-melt.Meltype.manual",
-            quit:      "io.github.yksr-melt.inputmethod.Meltype"
+            quit:      "io.github.yksr-melt.inputmethod.Meltype",
+            script:    {
+              executable: "/bin/rm",
+              args:       ["-rf", "#{Dir.home}/Library/Input Methods/Meltype.app"],
+            }
 
   zap trash: [
     "~/Library/Application Support/Meltype",

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 //
-// Pull Request のチェック (.github/workflows/pr-checks.yml) の補助。結果は GitHub の「Summary」に表で出す。
+// Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) の補助。結果は GitHub の「Summary」に表で出す。
 //   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「確かめること」と「Fixes #12」の誤判定の報告から、確かめる例を集める
 //   node pr-checks.mjs expect <結果の JSON>        … 例の結果を表にし、外れがあれば失敗
 //   node pr-checks.mjs compare <main の JSON> <Pull Request の JSON>  … 品質テストを比べ、新しく外れた例があれば失敗
@@ -80,7 +80,7 @@ function expect(resultFile) {
 function compare(baseFile, prFile) {
   const pr = JSON.parse(fs.readFileSync(prFile, 'utf8'));
   let base = null;
-  try { base = JSON.parse(fs.readFileSync(baseFile, 'utf8')); } catch { /* main に --eval-json がまだ無い */ }
+  try { base = JSON.parse(fs.readFileSync(baseFile, 'utf8')); } catch { /* main に --eval-json がまだ無いか、main をビルドできない */ }
   const baseCases = new Map((base?.cases ?? []).map(c => [c.key, c]));
   const broken = pr.cases.filter(c => !c.ok && baseCases.get(c.key)?.ok === true);
   const fixed = pr.cases.filter(c => c.ok && baseCases.get(c.key)?.ok === false);
@@ -133,7 +133,7 @@ function impact(baseFile, prFile, allFile) {
   const pr = readJudged(prFile), base = readJudged(baseFile);
   summary('## よく使う語の判定の変化 (参考)\n');
   if (!pr || !base) {
-    summary('main にまだこの仕組みが無いため、比べられません。');
+    summary('main にまだこの仕組みが無いか、main をビルドできないため、比べられません。');
     return;
   }
   const changes = judgedChanges(base, pr);

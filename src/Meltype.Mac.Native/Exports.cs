@@ -155,6 +155,23 @@ public static unsafe class Exports
         if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.Direct = direct != 0;
     }
 
+    /// <summary>
+    /// 直前のキーが、設定「入力モード切り替えキー」の切替として使われたか (1 / 0)。読むと印が消える (#1033)。
+    /// Mac・Linux のフロントエンドは、これと <c>meltype_is_direct</c> で、自分のモード (A / あ、入力メニュー) を本体に合わせる。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_take_mode_toggled")]
+    public static int TakeToggled(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.TakeToggled() ? 1 : 0;
+    }
+
+    /// <summary>本体のモード (1 = 英数 / 直接入力、0 = 日本語)。切り替えたあとにフロントエンドが読む (#1033)。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_is_direct")]
+    public static int IsDirect(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.Direct ? 1 : 0;
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_input")]
     public static void SetCodeInput(IntPtr handle, int enabled)
     {
@@ -233,6 +250,26 @@ public static unsafe class Exports
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_data_directory")]
     public static byte* DataDirectory() => ToUtf8(Config.AppPaths.DataDirectory);
+
+    /// <summary>
+    /// Zenzai の設定 (Mac 版。issue #1130)。「Zenzai を使う」が OFF なら NULL、ON なら設定のモデルの場所
+    /// (空文字列なら Meltype.app に同梱のモデルを使う)。meltype_free で解放する。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_zenzai_model")]
+    public static byte* ZenzaiModel()
+    {
+        try
+        {
+            var settings = Config.Settings.Load(Config.AppPaths.ConfigFile);
+            return settings.UseZenzai ? ToUtf8(settings.ZenzaiModelPath.Trim()) : null;
+        }
+        catch (Exception ex)
+        {
+            // 読めないときは使わない (打鍵のたびに推論が走るので、分からないまま ON にしない)
+            Diagnostics.Log.Error($"Zenzai の設定を読めませんでした。Zenzai を使わずに変換します: {ex}");
+            return null;
+        }
+    }
 
     /// <summary>Meltype.Core の版 (csproj の Version)。meltype_free で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_version")]

@@ -3,7 +3,7 @@
 #
 # Mozc の変換ヘルパー (meltype_mozc_helper.exe) をビルドして native\mozc\bin に置く。
 # Build-Package.ps1 / Install-Meltype.ps1 は、bin にヘルパーがあれば Meltype に同梱する (無ければ Microsoft IME だけで動く)。
-# GitHub Actions (.github/workflows/build.yml の mozc) でも同じスクリプトでビルドする。
+# GitHub Actions (.github/workflows/windows.yml の mozc) でも同じスクリプトでビルドする。
 #
 # 必要なもの (Mozc の docs/build_mozc_in_windows.md と同じ):
 #   Visual Studio 2022 (「C++ によるデスクトップ開発」、Windows 11 SDK、C++ ATL)、Python 3.12 以降、Bazelisk、Git

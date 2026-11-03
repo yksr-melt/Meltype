@@ -414,8 +414,10 @@ internal sealed class TipServer : IDisposable
         // このつながりの入力の本体 (UI スレッドからだけ触る。Meltype.exe 自身の UI スレッドのつながりは、UI スレッドが止まっている間に触る)
         var sessions = new Dictionary<string, MeltypeSession>();
         var ownClient = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var clientProcess) && clientProcess == (uint)Environment.ProcessId;
-        // DLL が送るのはプロセスの名前だけなので、ゲームのフォルダーにあるか (Minecraft の javaw.exe など: #1009) はここで調べる
+        // DLL が送るのはプロセスの名前だけなので、ゲームのフォルダーにあるかはここで調べる
         var looksLikeGame = !ownClient && clientProcess != 0 && ForegroundTracker.LooksLikeGame(clientProcess);
+        // Java のアプリは、ゲームのウィンドウ (Minecraft など) かを前面のウィンドウで見る。つながったときにはまだウィンドウが無いことがあるので、要求のたびに見る
+        var javaClient = !ownClient && !looksLikeGame && clientProcess != 0 && ForegroundTracker.IsJava(clientProcess);
         var buffer = new byte[64 * 1024];
         using var message = new MemoryStream();
         try
@@ -437,6 +439,7 @@ internal sealed class TipServer : IDisposable
                 {
                     var request = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
                     var started = Environment.TickCount64;
+                    if (javaClient && !looksLikeGame) looksLikeGame = ForegroundTracker.IsForegroundJavaGame(clientProcess);
                     reply = FromOwnUiThread(ownClient, request) ? Handle(request, sessions, looksLikeGame) : Invoke(() => Handle(request, sessions, looksLikeGame));
                     LogSlow(request, Environment.TickCount64 - started);
                 }
@@ -480,7 +483,7 @@ internal sealed class TipServer : IDisposable
 
     /// <summary>
     /// このアプリで入力を受け持つか。アプリ別設定で OFF にしたアプリと「ゲーム」のアプリでは、変換ボックスのときと同じく何もしない。
-    /// process は DLL が送る、.exe を除いたプロセスの名前。looksLikeGame は、つながってきたアプリがゲームのフォルダーにあるか。
+    /// process は DLL が送る、.exe を除いたプロセスの名前。looksLikeGame は、つながってきたアプリがゲームのフォルダーにあるか、Java で動くゲームか。
     /// </summary>
     private bool ActiveFor(string? process, bool looksLikeGame)
     {
@@ -574,8 +577,12 @@ internal sealed class TipServer : IDisposable
                     // キャレットの前も 20 文字しか送らない。コードの入力欄として扱うと、コードの行を日本語にできないので、一般として扱う
                     var process = IsTrue(root, "code") ? String(root, "process") : null;
                     var before = UpdateCodeInput(session, process, String(root, "before"));
+                    // 設定「入力モード切り替えキー」は、この経路では読まない (#1033)。
+                    // Meltype IME は DLL が打鍵ごとに direct を送ってくるので、本体が切り替えても次の打鍵で元に戻る。
+                    // 設定は Meltype キーボード (MeltypeEngine) と、Mac 版・Linux 版が使う。
                     result = session.HandleKey(vk, ch is > 0 and < 0x10000 ? (char)ch : null,
-                        (mods & 1) != 0, (mods & 2) != 0, (mods & 4) != 0, (mods & 8) != 0, before, String(root, "after"));
+                        (mods & 1) != 0, (mods & 2) != 0, (mods & 4) != 0, (mods & 8) != 0, before, String(root, "after"),
+                        toggleShortcuts: false);
                     switchedToJapanese = wasDirect && !session.Direct;
                     break;
                 }
@@ -616,7 +623,7 @@ internal sealed class TipServer : IDisposable
         var processName = string.IsNullOrWhiteSpace(process) || process.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
             ? process
             : process + ".exe";
-        return settings.DirectModeAutoDetect && settings.ForApp(processName).DetectionLevel != DetectionLevel.Manual;
+        return settings.DirectModeAutoDetect && settings.ForApp(processName).AutoDetection;
     }
 
     internal static Point? IndicatorAnchor(JsonElement root) =>
@@ -625,10 +632,10 @@ internal sealed class TipServer : IDisposable
             ? new Point(left, bottom) : null;
 
     /// <summary>
-    /// 設定「スペースを全角で入力」(issue #259)。DLL は、これが ON で日本語入力のときに、何も打っていなくても Space を受け取って
-    /// Meltype.exe に送る (OFF なら Space はそのままアプリに通す。Shift+Space はいつも送る: issue #246, #881)
+    /// 設定「スペースの幅」が全角か (issue #259)。DLL は、これが true で日本語入力のときに、何も打っていなくても Space を受け取って
+    /// Meltype.exe に送る (false なら Space はそのままアプリに通す。Shift+Space はいつも送る: issue #246, #881)
     /// </summary>
-    private string FullWidthSpaceJson() => $"\"fullWidthSpace\":{(_settings().FullWidthSpaceByDefault ? "true" : "false")},";
+    private string FullWidthSpaceJson() => $"\"fullWidthSpace\":{(_settings().SpaceWidth == SpaceWidth.FullWidth ? "true" : "false")},";
 
     /// <summary>設定「Meltype IME でも入力モードをカーソルの近くに表示」。DLL は、これが ON のときだけ indicator を依頼する (OFF なら切り替えのたびの問い合わせをしない)。</summary>
     private string ModeIndicatorJson() => $"\"modeIndicator\":{(_settings().ShowTsfModeIndicator ? "true" : "false")},";

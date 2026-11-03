@@ -7,6 +7,12 @@
 # error にするのは、既存のコードに 1 件も無いことを確かめてから (Windows 版のビルドも止まるため)。
 root = true
 
+# Windows PowerShell 5.1 (shell: powershell) は BOM の無いスクリプトを UTF-8 として読まない
+[*.{ps1,psm1}]
+charset = utf-8-bom
+
 [*.cs]
 indent_style = space
 indent_size = 4
+# 対応表 (キーの表など) は 1 行に複数の項目を並べる
+csharp_new_line_before_members_in_object_initializers = false

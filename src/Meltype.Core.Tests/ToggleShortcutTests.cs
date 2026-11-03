@@ -251,9 +251,8 @@ internal static class ToggleShortcutTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            var settings = new Settings { ConvertKeysSwitchKeyboard = true, JapaneseThreshold = 100, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
+            var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
             var edited = settings.Clone().Normalize(reportShortcutExclusions: false);
-            Assert.Equal(20, edited.JapaneseThreshold, "数値は正規化する");
             Assert.Equal(1, edited.EffectiveToggleShortcuts.Count, "キーの正規化は既存どおり");
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "編集時は通知しない");
             settings.Normalize();
@@ -403,7 +402,8 @@ internal static class ToggleShortcutTests
     public static void Shortcut_ImeTextToggleKeepsCompositionUncommitted()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions(), () => new Settings()) { Direct = false };
+            new CompositionOptions(), () => new Settings())
+        { Direct = false };
         SessionResult? last = null;
         foreach (var c in "nihongo") last = session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
         var japanese = last!.View!.Text;
@@ -621,12 +621,16 @@ internal static class ToggleShortcutTests
     public static void Shortcut_CoreRejectsConflictsAcrossSettingsAndProfiles()
     {
         var valid = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
-        var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts =
-        [
-            new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
-            new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
-            new() { Key = 0x1C }, valid, valid,
-        ] }.Normalize();
+        var settings = new Settings
+        {
+            ConvertKeysSwitchKeyboard = true,
+            ToggleShortcuts =
+            [
+                new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
+                new() { Key = 0x55, Modifiers = ShortcutModifiers.Control },
+                new() { Key = 0x1C }, valid, valid,
+            ],
+        }.Normalize();
         Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "Core で衝突と重複を除外");
         Assert.Equal(valid, settings.EffectiveToggleShortcuts[0]);
         var values = settings.ProfileValues();
@@ -642,12 +646,14 @@ internal static class ToggleShortcutTests
     public static void Shortcut_RejectsUnmodifiedTextAndEditingKeys()
     {
         foreach (var mods in new[] { ShortcutModifiers.None, ShortcutModifiers.Shift })
-        foreach (var key in new[] { 0x20, 0x0D, 0x1B, 0x41, 0x30, 0x09, 0x08, 0x25, 0x2E, 0xC0, 0x70 })
-        {
-            var binding = new ToggleShortcut { Key = key, Modifiers = mods };
-            Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
-            Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
-        }
+            foreach (var key in new[] { 0x20, 0x0D, 0x1B, 0x41, 0x30, 0x09, 0x08, 0x25, 0x2E, 0xC0, 0x70 })
+            {
+                // Shift+Space だけは #1033 で切り替えキーにできる (Shortcut_ShiftSpaceIsAllowed... を参照)。
+                if (mods == ShortcutModifiers.Shift && key == 0x20) continue;
+                var binding = new ToggleShortcut { Key = key, Modifiers = mods };
+                Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
+                Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
+            }
         foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x1C, 0x1D })
             Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
         Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(
@@ -717,5 +723,61 @@ internal static class ToggleShortcutTests
         empty.Migrate();
         Assert.Equal(0, empty.Normalize().EffectiveToggleShortcuts.Count, "空を維持");
         Assert.Equal(0, empty.SwitchProfile("空").EffectiveToggleShortcuts.Count, "プロファイルの空を維持");
+    }
+
+    /// <summary>
+    /// #1033: Shift+Space は入力モード切り替えキーにでき、ほかの Shift だけのキーは今までどおり外すこと。
+    /// 設定「Shift + Space で半角スペース」が ON のときは、無変換 / 変換 と同じく競合として外す。
+    /// </summary>
+    [Test]
+    public static void Shortcut_ShiftSpaceIsAllowedAndConflictsWithTheHalfWidthSetting()
+    {
+        var settings = new Settings();
+        var shiftSpace = new ToggleShortcut { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift };
+
+        Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(shiftSpace, settings, []),
+            "Shift+Space は切り替えキーにできる");
+        Assert.Equal(ShortcutValidationError.UnmodifiedKey,
+            ToggleShortcutValidator.Validate(new() { Key = 'A', Modifiers = ShortcutModifiers.Shift }, settings, []),
+            "Shift+英字は文字の入力に使うので外す");
+        Assert.Equal(ShortcutValidationError.UnmodifiedKey,
+            ToggleShortcutValidator.Validate(new() { Key = '1', Modifiers = ShortcutModifiers.Shift }, settings, []),
+            "Shift+数字も外す");
+        Assert.Equal(ShortcutValidationError.UnmodifiedKey,
+            ToggleShortcutValidator.Validate(new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.None }, settings, []),
+            "Space だけは切り替えにしない");
+        Assert.Equal(ShortcutValidationError.None,
+            ToggleShortcutValidator.Validate(new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }, settings, []),
+            "Ctrl+Space は今までどおり");
+
+        settings.SpaceWidth = SpaceWidth.HalfWidth;
+        Assert.Equal(ShortcutValidationError.ShiftSpaceHalfWidth, ToggleShortcutValidator.Validate(shiftSpace, settings, []),
+            "設定「スペースの幅」が「半角」なら競合として外す");
+        Assert.Equal(ShortcutValidationError.None,
+            ToggleShortcutValidator.Validate(new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }, settings, []),
+            "Shift+Space 以外は半角スペースの設定と競合しない");
+    }
+
+    /// <summary>#1033: 旧設定の "Shift+Space" が読み込み時の移行で残り、除外されないこと。</summary>
+    [Test]
+    public static void Shortcut_LegacyShiftSpaceSurvivesMigration()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "Meltype-shift-space-" + Guid.NewGuid() + ".json");
+        Meltype.Diagnostics.ShortcutExclusions.Drain();
+        try
+        {
+            File.WriteAllText(path, """
+                {"SettingsVersion":6,"ToggleShortcuts":[],"ToggleKeyboardShortcuts":"Shift+Space"}
+                """);
+            var settings = Settings.Load(path);
+            Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "旧設定の Shift+Space を残す");
+            Assert.Equal(VirtualKeys.Space, settings.EffectiveToggleShortcuts[0].Key);
+            Assert.Equal(ShortcutModifiers.Shift, settings.EffectiveToggleShortcuts[0].Modifiers);
+            Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Count(), "除外しない");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 }

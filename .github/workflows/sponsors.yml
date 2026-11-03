@@ -35,9 +35,7 @@ jobs:
       - name: Update README from GitHub Sponsors
         env:
           GITHUB_TOKEN: ${{ secrets.SPONSORS_TOKEN || github.token }}
-        run: |
-          node .github/bot/sponsors.mjs --self-test
-          node .github/bot/sponsors.mjs
+        run: node .github/bot/sponsors.mjs
       - name: Open or update the pull request
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}

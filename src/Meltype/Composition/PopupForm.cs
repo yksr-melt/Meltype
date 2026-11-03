@@ -12,7 +12,8 @@ internal abstract class PopupForm : Form
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
-        TopMost = true;
+        // 最前面には CreateParams の WS_EX_TOPMOST を使う。
+        // Form.TopMost を使うと、WinForms が表示時に SetFocus を呼んで入力欄のフォーカスを奪う。
         StartPosition = FormStartPosition.Manual;
         DoubleBuffered = true;
     }
@@ -32,4 +33,30 @@ internal abstract class PopupForm : Form
             return cp;
         }
     }
+
+    private const int WM_ACTIVATE = 0x0006, WA_INACTIVE = 0;
+    private const int WM_MOUSEACTIVATE = 0x0021, MA_NOACTIVATE = 3;
+
+    protected override void WndProc(ref Message m)
+    {
+        // Windows の「マウスを合わせたウィンドウをアクティブにする」は WS_EX_NOACTIVATE を見ない。
+        // アクティブになる前に断り、クリック自体は消さない (候補の操作を妨げない)。
+        if (m.Msg == WM_MOUSEACTIVATE)
+        {
+            m.Result = (IntPtr)MA_NOACTIVATE;
+            return;
+        }
+        // 別の経路でアクティブにされた場合は、前にアクティブだったウィンドウ (入力欄) に返す。
+        // 返さないと、確定した文字が入力欄に届かずに消える (issue #997)
+        if (m.Msg == WM_ACTIVATE && (m.WParam.ToInt64() & 0xFFFF) != WA_INACTIVE && m.LParam != IntPtr.Zero)
+        {
+            base.WndProc(ref m);
+            SetForegroundWindow(m.LParam);
+            return;
+        }
+        base.WndProc(ref m);
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 }
