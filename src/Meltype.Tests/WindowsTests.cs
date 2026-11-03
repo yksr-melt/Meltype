@@ -39,15 +39,24 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void JavaGames_AreDetectedFromWindowClass()
+    {
+        Assert.True(ForegroundTracker.IsJava("javaw.exe") && ForegroundTracker.IsJava("java.exe"), "Java");
+        Assert.True(!ForegroundTracker.IsJava("javaws.exe"), "ほかのアプリ");
+        Assert.True(ForegroundTracker.IsJavaGameWindowClass("GLFW30"), "LWJGL 3 (Minecraft 1.13 から)");
+        Assert.True(ForegroundTracker.IsJavaGameWindowClass("LWJGL"), "LWJGL 2 (Minecraft 1.12.2 まで)");
+        Assert.True(!ForegroundTracker.IsJavaGameWindowClass("SunAwtFrame"), "ふつうの Java のアプリ (Swing)");
+        Assert.True(!ForegroundTracker.IsJavaGameWindowClass("GLFW3 Helper"), "GLFW の見えないウィンドウ");
+    }
+
+    [Test]
     public static void Games_AreDetectedFromInstallFolder()
     {
         Assert.True(ForegroundTracker.LooksLikeGame(@"D:\SteamLibrary\steamapps\common\Apex Legends\r5apex.exe"), "Steam のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe"), "Epic のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\Rainbow Six Siege\RainbowSix.exe"), "Ubisoft のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\SEGA\PHANTASYSTARONLINE2_JP\pso2_bin\pso2.exe"), "PSO2 NGS (専用のランチャー)");
-        Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Users\a\AppData\Roaming\.minecraft\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe"), "Minecraft (Java 版) #1009");
-        Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Users\a\AppData\Local\Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe"), "Minecraft (ストアのランチャー)");
-        Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Minecraft Launcher\runtime\jre-x64\bin\javaw.exe"), "Minecraft (旧ランチャー: \\Launcher\\ ではないので除かない)");
+        Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Users\a\AppData\Roaming\.minecraft\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe"), "Minecraft (Java 版) はフォルダーではなくウィンドウのクラスで見分ける");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Java\jdk-21\bin\javaw.exe"), "ふつうの Java のアプリ");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Steam\steam.exe"), "Steam のクライアントは除く");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe"), "ランチャーは除く");
