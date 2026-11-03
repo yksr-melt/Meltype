@@ -51,13 +51,13 @@ Deployment branches and tags は **Selected branches and tags → Branch: `main`
 5. 成功した run から次を取得します。
    - `signpath-test-signed-NOT-FOR-RELEASE-...`: 検証を通ったテスト署名済みファイル。
    - `signpath-test-verification-.../report.json`: 各ファイルの署名前後の SHA-256、証明書の SHA-256・Subject、Windows の検証状態。
-6. `verified: true` で、3 ファイルの `windowsStatus` が `Valid` か `UnknownError` (テスト証明書は信頼されないため)、`certificateSha256` が登録した値であることを確認します。署名後に中身が変わっていれば `HashMismatch` になり、検証は失敗します。
+6. `verified: true` で、3 ファイルの `windowsStatus` が `Valid`、`certificateSha256` が登録した値であることを確認します。署名の検証が `Valid` 以外なら、理由を問わず失敗します。
 
 この成果物はランタイムを同梱しない署名検証用の publish 出力です。通常版・ポータブル版のリリースパッケージではありません。
 このテストではインストーラー・TSF DLL・PowerShell スクリプトへの署名までは確認しません。
 
 秘密は署名 Action の入力にだけ渡します。ビルド・テストとは別の GitHub-hosted runner で署名し、署名ジョブでは成果物のコードを実行しません。
-信頼ストアへテスト証明書を入れません。ファイルの増減、対象外ファイルの変更、署名対象のコードの変更、未署名、証明書違い、暗号署名の不一致で停止します。
+テスト署名の検証中に限り、SHA-256 で固定した自己署名テスト証明書を使い捨て Windows runner の CurrentUser Root に一時登録し、検証終了時に削除します。本番署名では信頼ストアを変更しません。`UnknownError` は許可しません。ファイルの増減、対象外ファイルの変更、署名対象のコードの変更、未署名、証明書違い、暗号署名の不一致で停止します。
 検証失敗時は、署名済み成果物を公開する step は動かず、失敗を含む検証レポートだけを保存します。
 
 ## 公式資料
