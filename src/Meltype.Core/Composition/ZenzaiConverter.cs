@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Buffers;
 using System.Globalization;
 using System.Diagnostics;
 using System.Net;
@@ -24,6 +25,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const char InputMark = '';
     private const char OutputMark = '';
     private const char ContextMark = '';
+    private static readonly SearchValues<char> OutputBoundaries = SearchValues.Create("\uEE00\uEE01\uEE02\uEE03\uEE04\uEE05\uEE06\uEE07\uEE08\n");
     private const int StartTimeoutMs = 30000;
     private const int MaxReading = 80;
     private const int MaxContext = 100;
@@ -198,7 +200,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     internal static string? Clean(string? content)
     {
         if (content is null) return null;
-        var end = content.AsSpan().IndexOfAny("\uEE00\uEE01\uEE02\uEE03\uEE04\uEE05\uEE06\uEE07\uEE08\n");
+        var end = content.AsSpan().IndexOfAny(OutputBoundaries);
         if (end >= 0) content = content[..end];
         content = content.Replace("</s>", "").Replace("<s>", "").Trim();
         return content.Length == 0 ? null : content;
