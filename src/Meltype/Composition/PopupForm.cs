@@ -12,7 +12,8 @@ internal abstract class PopupForm : Form
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
-        TopMost = true;
+        // 最前面には CreateParams の WS_EX_TOPMOST を使う。
+        // Form.TopMost を使うと、WinForms が表示時に SetFocus を呼んで入力欄のフォーカスを奪う。
         StartPosition = FormStartPosition.Manual;
         DoubleBuffered = true;
     }
