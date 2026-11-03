@@ -87,7 +87,7 @@ $env:MELTYPE_UT_DICTIONARY = 'C:\path\to\mozcdic-ut.txt'
 You can also pass `-UtDictionary 'C:\path\to\mozcdic-ut.txt'`; the parameter wins over the environment variable.
 `native\mozc\bin\` then holds the UT-enabled helper. `Build-Package.ps1` / `Install-Meltype.ps1` package `bin\` as before.
 
-To do it in GitHub Actions, add the environment variable to the `mozc` job of `.github/workflows/build.yml`:
+To do it in GitHub Actions, add the environment variable to the `mozc` job of `.github/workflows/windows.yml`:
 
 ```yaml
       - name: Build Mozc helper

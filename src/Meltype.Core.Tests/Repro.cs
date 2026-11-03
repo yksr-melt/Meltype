@@ -81,7 +81,7 @@ internal static class Repro
     }
 }
 
-/// <summary>Pull Request のチェック (.github/workflows/pr-checks.yml) で使う結果の出力。</summary>
+/// <summary>Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) で使う結果の出力。</summary>
 internal static class Checks
 {
     private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true };
