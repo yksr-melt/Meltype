@@ -176,7 +176,6 @@ internal static class CompositionTests
         /// <summary>かな入力 (JIS) か。</summary>
         public bool Kana { get; set; }
         public KanaLayout KanaLayout { get; set; }
-        public RomajiLayout RomajiLayout { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool ZSymbols { get; set; } = true;
         public bool NumberKeysSelectCandidates { get; set; } = true;
@@ -273,7 +272,6 @@ internal static class CompositionTests
                 Manual = () => Manual,
                 KanaInput = () => Kana,
                 KanaLayout = () => KanaLayout,
-                RomajiLayout = () => RomajiLayout,
                 Misspellings = Misspellings,
                 Languages = languages,
                 Translations = translations,
@@ -363,9 +361,6 @@ internal static class CompositionTests
             Controller.Pump();
             return swallowed;
         }
-
-        /// <summary>次の打鍵まで時間を空ける (ミリ秒)。</summary>
-        public void Wait(int ms) => _now += ms;
 
         public void Press(int vk)
         {

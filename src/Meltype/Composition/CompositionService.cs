@@ -67,7 +67,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             Manual = options.Manual,
             KanaInput = options.KanaInput,
             KanaLayout = options.KanaLayout,
-            RomajiLayout = options.RomajiLayout,
             Misspellings = options.Misspellings ?? MisspellingDictionary.Load(userDirectory),
             Languages = Languages,
             Translations = options.Translations ?? TranslationDictionary.Load(),
@@ -637,8 +636,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     }
 
     public bool IsShiftDown() => (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;
-
-    public bool IsKeyDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 
     /// <summary>今再生している曲 (裏で 3 秒ごとに読んだもの。保存しない・送らない)。</summary>
     public (string Title, string Artist)? NowPlaying => _nowPlaying.Read();
