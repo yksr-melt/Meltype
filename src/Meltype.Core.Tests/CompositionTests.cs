@@ -1403,7 +1403,7 @@ internal static class CompositionTests
     [Test]
     public static void Slash_AsMiddleDot_WhenEnabled()
     {
-        // #122: 設定が ON なら、かなの後ろの / は ・。英字・数字の後ろ・打ち始めは / のまま。OFF なら今までどおり /
+        // #122: 設定「/ の入力方法」が中黒なら、かなの後ろの / は ・。英字・数字の後ろ・打ち始めは / のまま。「/ のまま」なら今までどおり /
         foreach (var (typed, on, expected) in new[]
         {
             ("iron/masuku", true, "いろん・ますく"), ("iron/masuku", false, "いろん/ますく"),

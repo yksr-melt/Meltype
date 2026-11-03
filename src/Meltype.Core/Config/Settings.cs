@@ -84,12 +84,13 @@ public enum PunctuationStyle
     [Description("、．")] ToutenFullWidthPeriod,
 }
 
-/// <summary>かなのすぐ後ろで打った / に出す文字。</summary>
+/// <summary>/ の入力方法。従来のかなの後ろの変換と、後ろの語に合わせる自動判定。</summary>
 public enum SlashStyle
 {
     [Description("/ のまま")] Slash,
     [Description("中黒「・」")] MiddleDot,
     [Description("全角のスラッシュ「／」")] FullWidth,
+    [Description("後ろの語に合わせる")] Contextual,
 }
 
 /// <summary>日本語入力のときの Space (何も打っていないとき) と Shift + Space で入れるスペース。</summary>
@@ -463,8 +464,8 @@ public sealed class Settings
      Description("Space・Enter で変換・確定するときに打ち間違いを直します。ローマ字: 読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。英語: Windows の自動修正の一覧にある打ち間違いを直します (teh → the、recieve → receive)。")]
     public bool CorrectTypos { get; set; } = true;
 
-    [Category("6. 記号・スペース"), DisplayName("かなの後ろの /"),
-     Description("かなのすぐ後ろで打った / を、中黒「・」(いーろん/ますく → イーロン・マスク) か全角のスラッシュ「／」にします。英字・数字の後ろ (and/or、3/4、URL) は / のままです。文章の入力欄の打ち始めの / は、この設定に関係なく「・」になり、Space で / にできます。「/ のまま」のときも、z/ (設定「z + 記号・hjkl で記号・矢印を入れる」が ON のとき) または / を打って Space で「・」にできます。")]
+    [Category("6. 記号・スペース"), DisplayName("/ の入力方法"),
+     Description("かなのすぐ後ろで打った / を、中黒「・」(いーろん/ますく → イーロン・マスク) か全角のスラッシュ「／」にします。英字・数字の後ろ (and/or、3/4、URL) は / のままです。「後ろの語に合わせる」では、打ち始めやかなの後ろの / を一旦「・」と表示し、続く語が英語なら /、日本語なら ・ にします。ほかの選択肢では、文章の入力欄の打ち始めの / は従来どおり「・」になり、Space で / にできます。「/ のまま」のときも、z/ (設定「z + 記号・hjkl で記号・矢印を入れる」が ON のとき) または / を打って Space で「・」にできます。")]
     public SlashStyle Slash { get; set; } = SlashStyle.Slash;
 
     [Category("6. 記号・スペース"), DisplayName("z + 記号・hjkl で記号・矢印を入れる"),
