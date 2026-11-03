@@ -74,6 +74,12 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           git worktree add "$RUNNER_TEMP/base" "$BASE"
+          # main をビルドできなければ比べない (pr-checks.mjs が「比べられません」と出す)。
+          # 失敗にすると、main を直す Pull Request もこのチェックでマージできなくなる (#1453)
+          if ! dotnet build "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release; then
+            echo "::warning::main ($BASE) をビルドできないため、精度を比べません"
+            exit 0
+          fi
           # main にまだ --eval-json が無ければ比べない (pr-checks.mjs が「比べられません」と出す)
           if grep -q -- '--eval-json' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
             dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --eval-json "$RUNNER_TEMP/base.json"
