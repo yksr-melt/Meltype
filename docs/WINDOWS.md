@@ -197,9 +197,10 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 [Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
 - Meltype が llama-server を 127.0.0.1 で起動します。使えないとき・0.4 秒で返らないときは、ふだんの変換エンジンで変換します
+- 前の文脈をそのまま返すなど、変換に使えない答えは、ふだんの変換エンジンに任せます
 - Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
 - CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
-- 自分で用意した llama-server やモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
+- 自分で用意した llama-server や zenz v3 系のモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
 
 <br>
 
