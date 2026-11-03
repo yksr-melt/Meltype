@@ -7,11 +7,11 @@
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
-3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けない
+3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けず、下の Homebrew・apt・dnf にも出さない
    - Windows: `Meltype-<版>-setup.exe` (インストーラー)、`Meltype-<版>-windows.zip`、`Meltype-<版>-windows-portable.zip`
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb`、Fedora 向けの `meltype-<版>-1.x86_64.rpm` と `meltype-<版>-1.aarch64.rpm` (どれもプレビュー版。.deb と .rpm の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
-   - Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
-   - apt・dnf のリポジトリを GitHub Pages に公開します (下の「パッケージマネージャー」の署名鍵があるときだけ)
+   - リリースに付けたあと、Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
+   - リリースに付けたあと、apt・dnf のリポジトリを GitHub Pages に公開します (下の「パッケージマネージャー」の署名鍵があるときだけ)
 4. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
 5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
 

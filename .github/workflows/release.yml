@@ -3,6 +3,7 @@
 #   publish             … 配布物をタグのリリースに添付する (bot が作った下書きがあれば、それに付ける)
 #   homebrew            … Casks/meltype.rb の更新 PR を作る (main は PR 必須のため)
 #   *-repositories      … apt と dnf のリポジトリを GitHub Pages に公開する
+# homebrew・*-repositories は publish のあと (どれかの OS が失敗したら、どこにも公開しない)。
 # タグでなく手動実行したときは、3 つの OS のテスト版の配布物を Artifacts に置くだけ。
 # 呼ぶワークフローには書き込みの権限を渡さない。書き込みはこのファイルのジョブだけがする。
 name: release
@@ -56,7 +57,7 @@ jobs:
   # Homebrew の cask をこのリリースの zip の SHA-256 で作る (#863)。同じリポジトリを tap として使い、Casks/ に更新する。
   homebrew:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: mac
+    needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -128,7 +129,7 @@ jobs:
   # (Pages は deploy のたびにサイト全体を置き換えるので、別々のジョブで deploy すると片方が消える)
   build-repositories:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: linux
+    needs: publish
     runs-on: ubuntu-24.04
     outputs:
       ready: ${{ steps.signing.outputs.ready }}
