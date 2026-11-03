@@ -5,45 +5,46 @@
 # Build a signed, single-version dnf repository for GitHub Pages.
 # Signs the packages and repodata/repomd.xml with the same key as the apt repository.
 # Usage: APT_SIGNING_KEY_B64=... APT_SIGNING_KEY_PASSPHRASE=... \
-#        bash linux/build-rpm-repository.sh <x86_64.rpm> <aarch64.rpm> <site-root>
+#        bash linux/build-rpm-repository.sh <site-root> <.rpm>...
+# Takes meltype and meltype-fcitx5 for both x86_64 and aarch64.
 # Needs: rpm (rpmsign), createrepo_c, gpg
 set -euo pipefail
 
-if [[ $# -ne 3 ]]; then
-  echo "Usage: $0 <x86_64 .rpm> <aarch64 .rpm> <GitHub Pages site root>" >&2
+if [[ $# -lt 2 ]]; then
+  echo "Usage: $0 <GitHub Pages site root> <.rpm>..." >&2
   exit 2
 fi
 
-rpms=("$1" "$2")
-site_root="$3"
-declare -A architectures=()
+site_root="$1"
+shift
+expected=(meltype.x86_64 meltype.aarch64 meltype-fcitx5.x86_64 meltype-fcitx5.aarch64)
+declare -A packages_found=()
 rpm_root="$site_root/rpm"
 packages="$rpm_root/packages"
 mkdir -p "$packages"
 find "$packages" -maxdepth 1 -type f -name 'meltype-*.rpm' -delete
 
-for rpm in "${rpms[@]}"; do
+for rpm in "$@"; do
   if [[ ! -f "$rpm" ]]; then
     echo "Error: .rpm not found: $rpm" >&2
     exit 1
   fi
-  name="$(rpm -qp --queryformat '%{NAME}' "$rpm")"
-  architecture="$(rpm -qp --queryformat '%{ARCH}' "$rpm")"
-  if [[ "$name" != meltype || ( "$architecture" != x86_64 && "$architecture" != aarch64 ) ]]; then
-    echo "Error: expected a Meltype x86_64 or aarch64 package; got $name ($architecture)." >&2
+  package="$(rpm -qp --queryformat '%{NAME}.%{ARCH}' "$rpm")"
+  if [[ " ${expected[*]} " != *" $package "* ]]; then
+    echo "Error: unexpected .rpm: $package ($rpm)." >&2
     exit 1
   fi
-  if [[ -n "${architectures[$architecture]:-}" ]]; then
-    echo "Error: duplicate .rpm for architecture $architecture." >&2
+  if [[ -n "${packages_found[$package]:-}" ]]; then
+    echo "Error: duplicate .rpm for $package." >&2
     exit 1
   fi
-  architectures["$architecture"]=1
+  packages_found["$package"]=1
   cp "$rpm" "$packages/"
 done
 
-for architecture in x86_64 aarch64; do
-  if [[ -z "${architectures[$architecture]:-}" ]]; then
-    echo "Error: missing Meltype .rpm for architecture $architecture." >&2
+for package in "${expected[@]}"; do
+  if [[ -z "${packages_found[$package]:-}" ]]; then
+    echo "Error: missing .rpm for $package." >&2
     exit 1
   fi
 done
