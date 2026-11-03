@@ -34,7 +34,7 @@ public sealed class CompositionText
     private readonly List<CompositionUnit> _units = [];
     private readonly StringBuilder _pending = new();
     private readonly CompositionDetector _detector;
-    private bool _slashAtStart;
+    private bool _slashBeganAtStart;
 
     public CompositionText(CompositionDetector detector) => _detector = detector;
 
@@ -197,8 +197,8 @@ public sealed class CompositionText
         // 文章の入力欄で打ち始めに打った / は ・ (Microsoft IME と同じ)。Space で / にできる。
         if (c == '/' && _units.Count == 0)
         {
-            _slashAtStart = SlashAtStart();
-            if (_slashAtStart || Slash() == Config.SlashStyle.Contextual)
+            _slashBeganAtStart = SlashAtStart();
+            if (_slashBeganAtStart || Slash() == Config.SlashStyle.Contextual)
             {
                 _units.Add(new CompositionUnit("・", "/"));
                 return;
@@ -237,7 +237,7 @@ public sealed class CompositionText
     internal bool IsSingleSlash => _pending.Length == 0 && _units is [{ Kana: "・", Raw: "/" }];
 
     /// <summary>打ち始めの / だけを ・ にして入れているか。</summary>
-    public bool IsSlashAtStart => _slashAtStart && IsSingleSlash;
+    public bool IsSlashAtStart => _slashBeganAtStart && IsSingleSlash;
 
     /// <summary>1 音 (または 1 文字) 消す。入力途中の子音があればそれを 1 文字消す。</summary>
     public void RemoveLast()
@@ -250,11 +250,11 @@ public sealed class CompositionText
             if (raw.Length > 0)
             {
                 var truncated = raw[..^1];
-                var slashAtStart = _slashAtStart;
+                var slashBeganAtStart = _slashBeganAtStart;
                 _units.Clear();
                 _pending.Clear();
                 foreach (var c in truncated) Append(c);
-                _slashAtStart = slashAtStart && !IsEmpty;
+                _slashBeganAtStart = slashBeganAtStart && !IsEmpty;
                 if (IsEmpty)
                 {
                     Mode = DisplayMode.Auto;
@@ -279,7 +279,7 @@ public sealed class CompositionText
         }
         if (IsEmpty)
         {
-            _slashAtStart = false;
+            _slashBeganAtStart = false;
             Mode = DisplayMode.Auto;
             Case = LetterCase.AsTyped;
             SuggestionAccepted = false;
@@ -301,7 +301,7 @@ public sealed class CompositionText
     {
         _units.Clear();
         _pending.Clear();
-        _slashAtStart = false;
+        _slashBeganAtStart = false;
         _protectedCache = null;
         _protectedCacheRaw = null;
         Mode = DisplayMode.Auto;
