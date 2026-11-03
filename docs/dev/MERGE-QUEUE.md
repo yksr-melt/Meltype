@@ -4,6 +4,14 @@
 Mergify は必要なら元の PR ブランチに最新の main をマージし、元の PR のチェックを待つ (in-place checks)。PR の履歴に main のマージコミットが入ることがある。
 外部のマージで main が進んだときはキューをリセットする。これは webhook による再評価であり、外部マージとの競合を防ぐ原子的なロックではない。
 
+## Fast / Normal の優先処理
+
+- 通常の PR は Normal（Mergify 既定の `medium`）。メンテナーが `merge:fast` ラベルを付けた PR は Fast（`high`）として優先する。Fast は docs・寄付者更新・Homebrew cask 更新・緊急修正などを想定するが、ラベルは変更内容を確認して手動で付ける。
+- Fast と Normal は同じ `main` 向けの直列 Merge Queue を共有する。別々の並列処理ではない。実行中のチェックは中断せず、Fast は原則として検査中の PR の後に優先配置される。
+- `merge:fast` は CI・CLA・レビューを省略しない。`CLA確認済み` は bot 専用の別ラベルであり、手動で付けない。
+- Queue 投入は両方とも従来どおり `@mergifyio queue main`。ラベルを付けるだけで自動投入はしない。Queue 障害などで管理者が直接マージする場合は、理由と検証状況を PR に記録し、外部マージによる Queue リセットを考慮する。
+- 本番運用前に Fast と Normal を各1件以上投入し、優先順位、必須チェック、CLA、外部マージ後の再検査をテスト用リポジトリで確認する。
+
 ## 既存 CI と CLA
 
 2026-11-03 に確認した `Protect` ruleset (ID 24496721) の必須チェックは、GitHub Actions の `test`、`core (ubuntu-latest)`、`core (macos-latest)`、`精度の比較`、`cla`。承認は 1 件必要で、strict policy は無効だった。設定は自動変更しない。
