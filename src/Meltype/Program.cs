@@ -85,6 +85,7 @@ internal static class Program
             return 1;
         }
         if (restore is not null) RestoreBackup(restore);
+        var state = AppState.Load(AppPaths.StateFile, AppPaths.ConfigFile);
         var settings = Settings.Load(AppPaths.ConfigFile);
         SettingsSchema.Write(AppPaths.DataDirectory);
         if (!File.Exists(AppPaths.ConfigFile))
@@ -95,7 +96,7 @@ internal static class Program
         // 動作モードが Meltype IME なのに使えない: どこでも何も起きなくなるので、Meltype キーボードに戻して保存する
         // (Meltype IME を入れ直したら、トレイで選び直す)。
         // 保存しておくと、あとで前の版 (動作モード「Meltype IME」を読めない) を入れても、設定が初期化されない
-        if (ShouldUseKeyboardOnStartup(settings, AppPaths.IsPortable, Tip.TipServer.IsKnownUnregistered, Tip.TipServer.IsInUserLanguageList, System.Runtime.InteropServices.RuntimeInformation.OSArchitecture))
+        if (ShouldUseKeyboardOnStartup(settings, state.TsfIntroduced, AppPaths.IsPortable, Tip.TipServer.IsKnownUnregistered, Tip.TipServer.IsInUserLanguageList, System.Runtime.InteropServices.RuntimeInformation.OSArchitecture))
         {
             settings.Mode = InputMode.Keyboard;
             try { settings.Save(AppPaths.ConfigFile); } catch { }
@@ -130,7 +131,7 @@ internal static class Program
         using (engine)
         {
             using var exitSignal = new ExitSignal();
-            Application.Run(new TrayApplicationContext(engine));
+            Application.Run(new TrayApplicationContext(engine, state));
         }
         Composition.LearningSaves.FlushAll();
         return 0;
@@ -142,12 +143,12 @@ internal static class Program
     /// まだ Meltype IME に切り替えたことがない (初期値の Meltype IME のまま) ときは、このユーザーのキーボードの一覧に無いときも戻す
     /// (ほかのユーザーが登録した PC で Meltype IME を断ると、Win + Space で選べない)。
     /// </summary>
-    internal static bool ShouldFallBackToKeyboard(Settings settings, bool knownUnregistered, bool inUserLanguageList, System.Runtime.InteropServices.Architecture architecture) =>
+    internal static bool ShouldFallBackToKeyboard(Settings settings, bool tsfIntroduced, bool knownUnregistered, bool inUserLanguageList, System.Runtime.InteropServices.Architecture architecture) =>
         settings.Mode == InputMode.Tsf &&
-        (architecture == System.Runtime.InteropServices.Architecture.Arm64 || knownUnregistered || (!settings.TsfIntroduced && !inUserLanguageList));
+        (architecture == System.Runtime.InteropServices.Architecture.Arm64 || knownUnregistered || (!tsfIntroduced && !inUserLanguageList));
 
-    internal static bool ShouldUseKeyboardOnStartup(Settings settings, bool isPortable, bool knownUnregistered, bool inUserLanguageList, System.Runtime.InteropServices.Architecture architecture) =>
-        (isPortable && settings.Mode != InputMode.Keyboard) || ShouldFallBackToKeyboard(settings, knownUnregistered, inUserLanguageList, architecture);
+    internal static bool ShouldUseKeyboardOnStartup(Settings settings, bool tsfIntroduced, bool isPortable, bool knownUnregistered, bool inUserLanguageList, System.Runtime.InteropServices.Architecture architecture) =>
+        (isPortable && settings.Mode != InputMode.Keyboard) || ShouldFallBackToKeyboard(settings, tsfIntroduced, knownUnregistered, inUserLanguageList, architecture);
 
     /// <summary>
     /// 落ちたとき (起動できなかったとき) の例外を crash.log に書き足す。ファイルへのログ (設定) が OFF でも書く:

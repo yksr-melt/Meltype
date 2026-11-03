@@ -393,5 +393,9 @@
 # Issue #1286 (VTuber グループ。最初の候補は phrases.txt の ぶいすぽ)
 ぶいすぽ ぶいすぽっ！
 
+# Issue #1364
+めたでーた メタデータ Metadata metadata
+# Issue #1387 (配信の同時接続数)
+どうせつ 同接
 # --- 子音の略入力 (Issue #62: 英字の読みで候補を出せる。自分の略語は %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt に同じ形式で書く) ---
 ast 明日

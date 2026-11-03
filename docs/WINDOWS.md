@@ -105,7 +105,7 @@ Meltype IME では、タスクバーの「あ」「A」が今のモードです�
 
 Meltype キーボードのときは、タスクバーの IME の表示は常に「A」になります (故障ではありません)。Meltype が Windows の IME を OFF にして、代わりに入力を受け持っているためです。今のモードは、次のどちらかで確かめてください。
 
-- 入力欄に入ったときと <kbd>半角/全角</kbd> を押したとき、カーソルの近くに「あ」(日本語) か「A」(英数) が 1.2 秒出ます。設定の「入力モードをカーソルの近くに表示」で OFF に、「入力モードの表示の色」で色を変えられます (英数のときだけ目立つ色にすると、英数のまま打ち始めるのを防げます)
+- 入力欄に入ったときと <kbd>半角/全角</kbd> を押したとき、カーソルの近くに「あ」(日本語) か「A」(英数) が 1.2 秒出ます。設定の「入力モードをカーソルの近くに表示」で出さないか <kbd>半角/全角</kbd> を押したときだけに、「入力モードの表示の色」で色を変えられます (英数のときだけ目立つ色にすると、英数のまま打ち始めるのを防げます)
 - タスクトレイの Meltype のアイコン (青い「あ」= 日本語、青い「A」= 英数、灰色の「A」= 一時停止)。Windows 10 では最初「^」の中に隠れていることがあるので、タスクバーにドラッグしておくと便利です
 
 タスクバーの「A」が紛らわしいときは、Windows の設定で入力インジケーターを非表示にできます (Windows 10: 設定 → 個人用設定 → タスクバー → システム アイコンのオン/オフ →「入力インジケーター」)。
@@ -167,7 +167,7 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 
 画面をすべて自分で描くアプリ (Premiere Pro など) では、文字を打つ所でも変換ボックスが出ないことがあります。ログに「フォーカス → 入力欄ではない: …」と出ていたら、次のどちらかで打てます。
 
-- 設定の「アプリ」→「入力欄とみなすアプリ」にプロセス名 (例: `Adobe Premiere Pro.exe`) を書くか、「実行中のアプリから選ぶ…」で足す。そのアプリでは `V` `C` のような 1 文字のショートカットも変換ボックスに入るので、ショートカットを使うときは <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で一時停止してください
+- 設定の「アプリ」→「アプリ別設定」にプロセス名 (例: `Adobe Premiere Pro.exe`) の行を足し (「実行中のアプリから追加…」でも足せます)、「入力欄とみなす」を ON にする。そのアプリでは `V` `C` のような 1 文字のショートカットも変換ボックスに入るので、ショートカットを使うときは <kbd>Ctrl</kbd> + <kbd>半角/全角</kbd> で一時停止してください
 - アプリ別設定でそのアプリを OFF にして、Windows の IME で打つ
 
 <br>
@@ -186,22 +186,20 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 確定した文字を 1 文字ずつ送ると取り違えるアプリ (DaVinci Resolve で「あいうえお」→「あああああ」) では、クリップボードを使って貼り付けで入れます。元のクリップボードの中身は 0.5 秒後に戻します。
 
 - Qt のアプリ (LINE・OBS Studio・Telegram Desktop・DaVinci Resolve など) は自動で貼り付けになります
-- ほかのアプリは、設定の「アプリ」→「貼り付けで入力するアプリ」にプロセス名を書きます
-- 貼り付けにしたくないアプリは、設定「貼り付けを使わないアプリ」に書きます
+- ほかのアプリは、設定の「アプリ」→「アプリ別設定」で「確定した文字の入れ方」を「貼り付け」にします
+- 貼り付けにしたくないアプリは、「確定した文字の入れ方」を「1 文字ずつ送る」にします
 
 <br>
 
-<a name="zenzai-ニューラルかな漢字変換実験"></a>
-<img src="images/headings/windows/08.svg" alt="Zenzai (ニューラルかな漢字変換、実験)" height="53"><br>
+<a name="zenzai-ニューラルかな漢字変換"></a>
+<img src="images/headings/windows/08.svg" alt="Zenzai (ニューラルかな漢字変換)" height="53"><br>
 
-[Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。設定の「Zenzai を使う (Windows・実験)」を ON にして、次の 2 つを指定してください (既定は OFF。どちらも Meltype には同梱しません)。
-
-1. **llama-server**: [llama.cpp のリリース](https://github.com/ggml-org/llama.cpp/releases) の `llama-server.exe` (b11719 の CPU 版で確かめました)
-2. **モデル (GGUF)**: [Miwa-Keita/zenz-v3.1-small-gguf](https://huggingface.co/Miwa-Keita/zenz-v3.1-small-gguf) の `ggml-model-Q5_K_M.gguf` など (CC-BY-SA 4.0)
+[Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
 - Meltype が llama-server を 127.0.0.1 で起動します。使えないとき・0.4 秒で返らないときは、ふだんの変換エンジンで変換します
 - Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
-- CPU の負荷が増えるので、改善を感じなければ OFF のままにしてください。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
+- CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
+- 自分で用意した llama-server やモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
 
 <br>
 

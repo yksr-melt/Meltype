@@ -119,6 +119,8 @@ private:
     void Apply(TfEditCookie ec, ITfContext* context, const JsonValue& reply);
     // range の前の count 文字が expect (前に確定した文字) なら、range をそこまで広げる。違えば false
     bool ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect);
+    // 次の編集セッションで、キャレットの前の count 文字が before のままなら text に書き換えて確定する
+    void RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG count, const std::wstring& before, const std::wstring& text);
     // range を text で置き換えて確定する (アプリによっては変換中の文字としてでないと入らないので、いったん変換中にする)
     bool WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text);
     void ApplyComposition(TfEditCookie ec, ITfContext* context, const JsonValue& view);
@@ -172,7 +174,7 @@ private:
     bool directDetection_ = false; // 英数状態でもローマ字検知が有効 (Meltype.exe の応答)
     bool directEnglishWord_ = false;
     bool modeIndicator_ = false;   // 設定「Meltype IME でも入力モードを表示」(応答の modeIndicator。ON のときだけ FlashModeIndicator が動く)
-    bool fullWidthSpace_ = false;  // 設定「スペースを全角で入力」(Meltype.exe の応答の fullWidthSpace。日本語入力のときは Space も受け取る)
+    bool fullWidthSpace_ = false;  // 設定「スペースの幅」が全角か (Meltype.exe の応答の fullWidthSpace。日本語入力のときは Space も受け取る)
     ULONGLONG lastHello_ = 0;
     HWND helloWindow_ = nullptr; // IME のスレッドでタイマーを受ける、表示しないウィンドウ
     std::shared_ptr<PipeClient> helloPipe_; // 設定取得専用。入力用の pipe_ と同時に使える

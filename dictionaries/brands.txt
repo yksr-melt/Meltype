@@ -230,3 +230,7 @@
 ひょんだい Hyundai
 ひゅんだい Hyundai
 れくさす Lexus
+# Issue #1318
+あいぞとーぷ iZotope
+にゅーとろん Neutron
+おぞん Ozone

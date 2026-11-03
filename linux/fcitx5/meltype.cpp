@@ -13,6 +13,8 @@
 #include <string>
 #include <vector>
 
+#include <fcitx-config/configuration.h>
+#include <fcitx-config/option.h>
 #include <fcitx-utils/capabilityflags.h>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
@@ -38,6 +40,16 @@
 
 namespace {
 
+// libMeltypeNative.so と設定画面 (meltype-settings) を入れた場所
+std::string meltypeDir() {
+    const char *dir = std::getenv("MELTYPE_DIR");
+    return dir && *dir ? dir : MELTYPE_DIR;
+}
+
+// fcitx5 の設定ツールは、External の項目が 1 つだけの設定を開くと、その項目のプログラムを直接起動する
+FCITX_CONFIGURATION(MeltypeConfig,
+                    fcitx::ExternalOption settings{this, "Settings", "設定", meltypeDir() + "/meltype-settings"};);
+
 // ---- 本体 (libMeltypeNative.so) ----
 
 struct Native {
@@ -59,9 +71,7 @@ struct Native {
     void (*free)(void *) = nullptr;
 
     bool load() {
-        const char *dir = std::getenv("MELTYPE_DIR");
-        std::string base = dir && *dir ? dir : MELTYPE_DIR;
-        handle = dlopen((base + "/libMeltypeNative.so").c_str(), RTLD_NOW | RTLD_LOCAL);
+        handle = dlopen((meltypeDir() + "/libMeltypeNative.so").c_str(), RTLD_NOW | RTLD_LOCAL);
         if (!handle) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so を読めません: " << dlerror();
             return false;
@@ -86,7 +96,7 @@ struct Native {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
-        if (initMozc && !initMozc((base + "/mozc/meltype_mozc_helper").c_str(), nullptr)) {
+        if (initMozc && !initMozc((meltypeDir() + "/mozc/meltype_mozc_helper").c_str(), nullptr)) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
         return true;
@@ -463,6 +473,8 @@ public:
         state->legacyJapanese = false;
     }
 
+    const fcitx::Configuration *getConfig() const override { return &config_; }
+
     void selectCandidate(fcitx::InputContext *ic, int index) {
         auto *state = ic->propertyFor(&factory_);
         if (!state->session()) return;
@@ -475,6 +487,7 @@ private:
     Native native_;
     bool loaded_ = false;
     fcitx::FactoryFor<MeltypeState> factory_;
+    MeltypeConfig config_;
 
     void switchMode(fcitx::InputContext *ic, MeltypeState *state, bool toDirect, bool toggle) {
         apply(ic, native_.take(native_.commit(state->session())));
@@ -564,17 +577,20 @@ private:
                 int remove = edit.integer("deleteBefore");
                 // 確定し直し: 消す文字が今もキャレットの前にあると確認できたときだけ消し、今打った文字を入れる。
                 // 確認できない (入力欄が周りの文字に対応していない・確定したときと変わった) ときは、前の文字は
-                // 消さずに今打った文字だけを入れる (本体は text が入った前提で状態を進めるので、text を捨てない)。
+                // 消さずに今打った文字 (current) だけを入れる (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
                 const size_t length = remove > 0 ? expectedBeforeCaret(ic, edit.str("expect")) : 0;
+                auto committed = edit.str("text");
                 if (length > 0) {
                     hidePreedit(ic);
                     ic->deleteSurroundingText(-static_cast<int>(length), static_cast<unsigned int>(length));
                 } else {
-                    if (remove > 0) FCITX_WARN() << "Meltype: 確定し直す文字を確認できないため、前の文字を消しません";
+                    if (remove > 0) {
+                        FCITX_WARN() << "Meltype: 確定し直す文字を確認できないため、前の文字を消しません";
+                        if (edit.get("current")) committed = edit.str("current");
+                    }
                     ic->inputPanel().reset();
                     ic->propertyFor(&factory_)->preeditVisible = false;
                 }
-                auto committed = edit.str("text");
                 if (!committed.empty()) ic->commitString(committed);
             }
         }

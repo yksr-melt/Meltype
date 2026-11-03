@@ -39,6 +39,14 @@ if $use_ibus; then
     fi
 fi
 
+# 設定画面 (meltype-settings) が使う GTK 4 と、Python から GTK を使う部品
+missing=()
+python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk' 2> /dev/null || missing+=(python3-gi gir1.2-gtk-4.0)
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "必要な部品を入れます: ${missing[*]}"
+    sudo apt-get install -y "${missing[@]}"
+fi
+
 # fcitx5 に読み直させる dbus-send (Ubuntu の標準の画面なら、ふつうは入っている)
 if $use_fcitx5; then
     missing=()
@@ -52,8 +60,11 @@ fi
 echo "$target に入れます (管理者のパスワードを聞かれます)"
 sudo rm -rf "$target"
 sudo mkdir -p "$target"
-sudo cp -R libMeltypeNative.so ibus-engine-meltype icon.png mozc LICENSE THIRD-PARTY-NOTICES.md "$target/"
-sudo chmod 755 "$target/ibus-engine-meltype" "$target/mozc/meltype_mozc_helper"
+sudo cp -R libMeltypeNative.so ibus-engine-meltype meltype-settings icon.png mozc LICENSE THIRD-PARTY-NOTICES.md "$target/"
+sudo chmod 755 "$target/ibus-engine-meltype" "$target/meltype-settings" "$target/mozc/meltype_mozc_helper"
+# 設定画面: 端末からは meltype-settings、GNOME からはアプリの一覧と入力ソースの「設定」で開く
+sudo ln -sf "$target/meltype-settings" /usr/bin/meltype-settings
+sed "s|@DIR@|$target|g" ibus-setup-meltype.desktop | sudo tee /usr/share/applications/ibus-setup-meltype.desktop > /dev/null
 if $use_ibus; then
     sed "s|@DIR@|$target|g" meltype.xml | sudo tee /usr/share/ibus/component/meltype.xml > /dev/null
     # IBus に読み込み直させる (動いている Meltype も止まり、次に使うときに新しいものが起動する)

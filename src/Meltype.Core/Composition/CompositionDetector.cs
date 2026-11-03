@@ -34,7 +34,8 @@ public sealed partial class CompositionDetector
         "so", "suo", "tese", "ufo", "vue",
     ];
 
-    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "net", "org", "uk", "us", "xyz"];
+    // moe は meltype.moe のように使う (issue #1356)。ローマ字として読める前の語 (sugoku.moe) は、句点の後ろの日本語と重みで比べる
+    private static readonly HashSet<string> DomainSuffixes = ["ai", "app", "au", "biz", "ca", "cn", "co", "com", "de", "dev", "edu", "eu", "fr", "gg", "gov", "info", "in", "io", "jp", "kr", "me", "moe", "net", "org", "uk", "us", "xyz"];
 
     public CompositionDetector(RomajiDetector romaji, EnglishDetector english, ProperNouns? proper = null, KanaDetector? kana = null,
         IEnumerable<string>? userJapaneseWords = null)
@@ -125,11 +126,11 @@ public sealed partial class CompositionDetector
     /// </summary>
     /// <param name="precedingEnglish">入力欄のキャレットの前の確定済みの文字が英語なら true、日本語なら false、分からなければ null。</param>
     /// <param name="followingEnglish">キャレットの後ろの文字が英語なら true、日本語なら false、分からなければ null。</param>
-    /// <param name="level">判定の強さ。手動 (Manual) では Shift で打った大文字始まりの語だけを英語にする。</param>
+    /// <param name="manual">自動判定を使わない (設定 AutoDetection が OFF)。Shift で打った大文字始まりの語だけを英語にする。</param>
     /// <param name="englishSentence">キャレットの前が英文 (空白で区切った英単語が 2 語以上続いて空白で終わる: "I want ")。
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        DetectionLevel level = DetectionLevel.Balanced, bool englishSentence = false, bool kanaInput = false)
+        bool manual = false, bool englishSentence = false, bool kanaInput = false)
     {
         // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の Segment 呼び出しの間だけ、
         // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
@@ -139,7 +140,7 @@ public sealed partial class CompositionDetector
         if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
             (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
             return [new CompositionSegment(true, "", token)];
-        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, level, englishSentence && precedingEnglish == true, kanaInput);
+        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
     }
 
     /// <summary>
@@ -148,7 +149,7 @@ public sealed partial class CompositionDetector
     public IReadOnlyList<CompositionSegment> SegmentLeaningEnglish(IReadOnlyList<CompositionUnit> units)
     {
         Prepare(units);
-        return FindSpansByReading(units, "", null, null, DetectionLevel.Balanced, false, false, LeaningEnglishBias);
+        return FindSpansByReading(units, "", null, null, false, false, false, LeaningEnglishBias);
     }
 
     /// <summary>
@@ -196,9 +197,9 @@ public sealed partial class CompositionDetector
     /// Space を押した時点で、かなにならない子音が残る英単語か (my, by, meeting)。日本語として変換しても子音が残るだけなので、
     /// 英語として確定して空白を入れる。
     /// </summary>
-    public bool IsEnglishAtWordEnd(string raw, DetectionLevel level)
+    public bool IsEnglishAtWordEnd(string raw, bool manual)
     {
-        if (level == DetectionLevel.Manual || raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return false;
+        if (manual || raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return false;
         var lower = raw.ToLowerInvariant();
         var analysis = _romaji.Analyze(lower);
         if (!analysis.IsValid || analysis.Partial.Length == 0 || analysis.Partial is "n" or "nn") return false;
@@ -280,7 +281,9 @@ public sealed partial class CompositionDetector
         var dash = lower.IndexOf('-');
         if (dash <= 0 || lower.IndexOf('-', dash + 1) >= 0) return false;
         var rest = lower[(dash + 1)..];
-        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsKnownEnglishWord(rest);
+        // - の後ろの語は、区間分けと同じ基準 (OS のスペルチェッカーだけが知っている語は数えない) で英単語か見る。
+        // Windows のスペルチェッカーは tori も語にするので、re-torimitto を re-tori|みっと にしていた (issue #705)
+        return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsLatticeEnglishWord(rest);
     }
 
     /// <summary>
@@ -350,9 +353,9 @@ public sealed partial class CompositionDetector
     /// 入力先頭のドットファイル (.gitignore / .env / .dll) の終わり。無ければ -1 (issue #431)。
     /// 途中の 3.14desu や「です。」の . には使わない (start == 0 のときだけ)。
     /// </summary>
-    private int LeadingDotfileEnd(IReadOnlyList<CompositionUnit> units, int start, string pending, DetectionLevel level)
+    private int LeadingDotfileEnd(IReadOnlyList<CompositionUnit> units, int start, string pending, bool manual)
     {
-        if (level == DetectionLevel.Manual || start != 0 || units.Count == 0 || units[0].Raw != ".") return -1;
+        if (manual || start != 0 || units.Count == 0 || units[0].Raw != ".") return -1;
         var end = DotSuffixEnd(units, 1, pending);
         return end > 1 ? end : -1;
     }
@@ -414,6 +417,25 @@ public sealed partial class CompositionDetector
         }
         // 最後までローマ字として読める語 (Meltype.desu) は、ふつうに判定する
         return readable ? -1 : end;
+    }
+
+    /// <summary>
+    /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。start からの英字・数字が一覧にあるとき (前後に日本語が続いてもよい)。
+    /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
+    /// </summary>
+    private int ProperNounWithDigitsEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    {
+        static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
+        if (start >= units.Count || !IsPart(units[start])) return -1;
+        // 数字の無い固有名詞 (korehaneovidedesu の neovide) と同じく、文の途中 (koreha|yachi8000|desu) からも引く。
+        // 一覧にある一番長い頭 (yachi8000|desu の yachi8000)
+        var end = -1;
+        for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
+        {
+            var word = Raw(units, start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
+            if (word.Any(char.IsAsciiDigit) && word.Any(char.IsAsciiLetter) && _proper.Contains(word.ToLowerInvariant())) end = i;
+        }
+        return end;
     }
 
     /// <summary>

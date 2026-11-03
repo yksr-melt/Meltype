@@ -361,6 +361,10 @@ internal static class SessionFacadeTests
         Assert.Equal(first, correction.Expect);
         Assert.Equal(first.Length, correction.DeleteBefore);
         Assert.True(new SessionResult(true, [correction], null).ToJson().Contains("\"expect\":"), "JSON にも入れる");
+        // 前の文字を消せないときに今の語だけを入れられるように、今の語も分けて渡す (Text をそのまま入れると I が二重に入る)
+        Assert.Equal("I want ", correction.Text);
+        Assert.Equal("want ", correction.Current);
+        Assert.True(new SessionResult(true, [correction], null).ToJson().Contains("\"current\":\"want \""), "JSON にも入れる");
     }
 
     [Test]
@@ -409,24 +413,24 @@ internal static class SessionFacadeTests
     {
         var session = Create();
         var commit = Type(session, "kyouha\n")[^1].Commits.Single();
-        Assert.True(commit.Expect is null, "消さない確定には付けない");
-        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("expect"), "JSON にも入れない");
+        Assert.True(commit.Expect is null && commit.Current is null, "消さない確定には付けない");
+        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("expect") && !new SessionResult(true, [commit], null).ToJson().Contains("current"), "JSON にも入れない");
     }
 
     [Test]
     public static void AutoCorrect_NotAfterKeyPassedToApp()
     {
         // 確定したあと、アプリに渡したキー (矢印など) でキャレットが動いたかもしれない: 消す位置がずれるので確定し直さない
-        // Enter で確定したあとも、次の語で確定し直す (動かさなければ)
+        // Enter で確定したあとも、次の語で確定し直す (動かさなければ)。英語で確定した sushi を、続けて打った がすき で日本語に直す
         var control = Create();
-        Type(control, "i\n");
-        Assert.True(Type(control, "want ").SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "動かさなければ確定し直す");
+        Type(control, "sushi\n", "I love ");
+        Assert.True(Type(control, "gasuki\n").SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "動かさなければ確定し直す");
 
         var session = Create();
-        Type(session, "i\n");
+        Type(session, "sushi\n", "I love ");
         var left = session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
         Assert.True(!left.Consumed, "変換していないときの矢印はアプリに渡す");
-        var results = Type(session, "want ");
+        var results = Type(session, "gasuki\n");
         Assert.True(!results.SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "関係ない文字を消さない");
     }
 
@@ -434,10 +438,15 @@ internal static class SessionFacadeTests
     public static void AutoCorrect_NotAfterCaretMovedOutside()
     {
         // OS の IME がアプリに通したキー・クリックで動いたと知らせてきた (Meltype IME の "moved")
+        // 英語で確定した sushi を、続けて打った がすき で日本語に直す入力で比べる (知らせが無ければ確定し直す)
+        var control = Create();
+        Type(control, "sushi\n", "I love ");
+        Assert.True(Type(control, "gasuki\n").SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "知らせが無ければ確定し直す");
+
         var session = Create();
-        Type(session, "i\n");
+        Type(session, "sushi\n", "I love ");
         session.ForgetLastCommit();
-        var results = Type(session, "want ");
+        var results = Type(session, "gasuki\n");
         Assert.True(!results.SelectMany(r => r.Commits).Any(c => c.DeleteBefore > 0), "関係ない文字を消さない");
     }
 
@@ -493,9 +502,9 @@ internal static class SessionFacadeTests
     [Test]
     public static void FullWidthSpaceSetting_SpaceIsFullWidthAndShiftSpaceIsHalfWidth()
     {
-        // #881: 設定「スペースを全角で入力」では、Meltype IME も何も打っていないときの Space が全角・Shift+Space が半角 (Meltype キーボードと同じ: #259)
-        var settings = new Settings { FullWidthSpaceByDefault = true };
-        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault }, () => settings);
+        // #881: 設定「スペースの幅」が全角では、Meltype IME も何も打っていないときの Space が全角・Shift+Space が半角 (Meltype キーボードと同じ: #259)
+        var settings = new Settings { SpaceWidth = SpaceWidth.FullWidth };
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SpaceWidth = () => settings.SpaceWidth }, () => settings);
         var result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
         Assert.True(result.Consumed, "Space を受け取る");
         Assert.Equal("　", string.Concat(result.Commits.Select(c => c.Text)));
@@ -508,11 +517,11 @@ internal static class SessionFacadeTests
         result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
         Assert.True(!result.Consumed && result.Commits.Count == 0, "英数ではアプリに通す");
 
-        // 設定が OFF なら、Space はアプリに通す (DLL も受け取らない)
-        settings.FullWidthSpaceByDefault = false;
-        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { FullWidthSpaceByDefault = () => settings.FullWidthSpaceByDefault }, () => settings);
+        // 全角でなければ、Space はアプリに通す (DLL も受け取らない)
+        settings.SpaceWidth = SpaceWidth.Standard;
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { SpaceWidth = () => settings.SpaceWidth }, () => settings);
         result = session.HandleKey(VirtualKeys.Space, ' ', false, false, false, false, "");
-        Assert.True(!result.Consumed && result.Commits.Count == 0, "設定が OFF なら通す");
+        Assert.True(!result.Consumed && result.Commits.Count == 0, "全角でなければ通す");
     }
 
     [Test]
@@ -708,6 +717,28 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_TracksTerminalQuotesAfterCaretMoves()
+    {
+        var session = Create();
+        session.CodeInput = true;
+        Type(session, "echo ");
+        Assert.True(!session.HandleKey(VirtualKeys.Left, null, false, false, false, false).Consumed, "矢印はアプリへ");
+        Assert.True(Type(session, "ls").All(r => !r.Consumed), "矢印のあともコードは英数");
+        Assert.True(Type(session, "\"").All(r => !r.Consumed), "引用符はアプリへ");
+        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "矢印のあとに開いた引用符の中は日本語");
+        var close = Type(session, "\"")[0];
+        Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じ引用符は英数のまま通し、日本語は確定");
+        Assert.True(Type(session, "hello").All(r => !r.Consumed), "閉じたあとは英数");
+
+        Assert.True(!session.HandleKey(VirtualKeys.Right, null, false, false, false, false).Consumed, "矢印はアプリへ");
+        Assert.True(Type(session, "\"\bkyouha").All(r => !r.Consumed), "打った引用符を消したらコード");
+
+        session.CodeInput = true;
+        Assert.True(Type(session, "\b\b\"").All(r => !r.Consumed), "行頭を超えて消しても、コードは英数");
+        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "行頭を超えて消したあとに開いた引用符の中は日本語");
+    }
+
+    [Test]
     public static void CodeInput_ActivationSyncClearsTrackedContext()
     {
         var session = Create();
@@ -893,6 +924,28 @@ internal static class SessionFacadeTests
         ChooseHashi(session);
         Assert.Equal("箸を", history.Get("はしを"));
     }
+    [Test]
+    public static void CreateDefault_ReloadsChangedConfigInOpenSession()
+    {
+        // Mac・Linux 版は、設定画面が別のプロセスで config.json を書く。開いたままの入力欄 (IBus はエンジンを入力欄で使い回す) でも、次のキーから効く
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-session-reload-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var session = MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
+            Assert.Equal("ね、", Type(session, "ne,\n")[^1].Commits.Single().Text, "既定の句読点");
+            var config = Path.Combine(directory, "config.json");
+            File.WriteAllText(config, $"{{ \"SettingsVersion\": {Settings.CurrentVersion}, \"Punctuation\": \"FullWidthCommaPeriod\" }}");
+            // 同じ時刻に書かれても読み直すことは保証しないので、時刻を進める
+            File.SetLastWriteTimeUtc(config, DateTime.UtcNow.AddSeconds(1));
+            // 更新時刻を見るのは SettingsFile.CheckIntervalMs に 1 回 (間隔は SettingsFileTests で確かめる)
+            Thread.Sleep(TimeSpan.FromMilliseconds(SettingsFile.CheckIntervalMs + 100));
+            Assert.Equal("ね，", Type(session, "ne,\n")[^1].Commits.Single().Text, "書き換えた config.json の句読点");
+            var other = MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
+            Assert.Equal("ね，", Type(other, "ne,\n")[^1].Commits.Single().Text, "後から開いた入力欄も同じ設定");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     [Test]
     public static void CreateDefault_SessionsShareLearning()
     {
