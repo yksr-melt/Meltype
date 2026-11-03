@@ -13,6 +13,40 @@ namespace Meltype.Tests;
 internal static class WindowsTests
 {
     [Test]
+    public static void PopupWindows_ShowingPreservesInputFocusAndTopmost()
+    {
+        // 入力先にフォーカスした状態で、打ち始めやモードの表示を繰り返す。
+        // 窓の表示直後に一瞬だけフォーカスを奪い、すぐ戻す場合も検出する。
+        using var target = new Form();
+        using var input = new TextBox();
+        target.Controls.Add(input);
+        target.Show();
+        target.Activate();
+        Assert.True(input.Focus(), "入力欄にフォーカスできる");
+        Assert.True(input.Focused, "表示前の入力先");
+
+        using var composition = new CompositionWindow();
+        using var indicator = new ModeIndicatorWindow();
+        var popupFocused = false;
+        composition.GotFocus += (_, _) => popupFocused = true;
+        indicator.GotFocus += (_, _) => popupFocused = true;
+        var view = new CompositionView("あ", [], -1, false, "");
+        for (var i = 0; i < 2; i++)
+        {
+            composition.ShowView(view, new Point(20, 20));
+            Assert.True(composition.Visible && input.Focused, "変換ボックスを表示しても入力欄を維持する");
+            composition.Hide();
+            indicator.Flash(true, new Point(40, 40));
+            Assert.True(indicator.Visible && input.Focused, "入力モード表示でも入力欄を維持する");
+            indicator.Hide();
+        }
+        Assert.True(!popupFocused, "表示中にポップアップへフォーカスを移さない");
+        const int exStyle = -20, topmost = 0x00000008;
+        foreach (var popup in new Form[] { composition, indicator })
+            Assert.True((Native.GetWindowLongPtr(popup.Handle, exStyle).ToInt64() & topmost) != 0, "フォーカスを奪わず最前面に出す");
+    }
+
+    [Test]
     public static void PopupWindows_RejectMouseActivationWithoutDiscardingMouseInput()
     {
         // Windows のマウス追跡は WS_EX_NOACTIVATE を無視して WM_MOUSEACTIVATE を送る。
