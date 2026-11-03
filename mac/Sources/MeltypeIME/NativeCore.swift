@@ -205,6 +205,7 @@ final class NativeCore {
         guard let pointer = zenzaiModelFunction?() else { return nil }
         defer { freeFunction?(pointer) }
         return String(cString: pointer)
+    }
 
     /// 直前のキーで、設定「日本語 / 英数を切り替えるキーを追加」の切替をしたか (#1033)。読むと印が消える。
     func takeModeToggled(_ session: UnsafeMutableRawPointer?) -> Bool {
