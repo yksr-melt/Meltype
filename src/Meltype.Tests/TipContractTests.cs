@@ -97,9 +97,12 @@ internal static class TipContractTests
         }
 
         /// <summary>
-        /// DLL (native/tip の TextService::Apply・ExtendOverPrevious) と同じ条件で確定を入れ、表示を置き換える。
-        /// 確定し直し (deleteBefore が 1 以上) は、変換中でなく、expect があり、前の deleteBefore 文字がちょうど expect のときだけ、
-        /// 消してから入れる。合わなければ、その確定は丸ごと見送る (消しも入れもしない)。
+        /// DLL (native/tip の TextService::Apply・ExtendOverPrevious・RewriteBeforeCaret) と同じ条件で確定を入れ、表示を置き換える。
+        /// 確定し直し (deleteBefore が 1 以上) は:
+        ///   current (今確定した語) があれば、まず current を入れ、次に入力欄の前が expect + current のままなら、まとめて text に書き換える。
+        ///   書き換えられなければ current を確定したまま残す (変換中でも行う)。
+        ///   current が無ければ、変換中でなく、前の deleteBefore 文字がちょうど expect のときだけ、消してから text を入れる。
+        /// 見送った確定し直し (書き換えなかったもの) は Skipped に残す。
         /// </summary>
         public void Apply(JsonElement reply, string sid)
         {
@@ -107,18 +110,32 @@ internal static class TipContractTests
             foreach (var commit in reply.GetProperty("commits").EnumerateArray())
             {
                 var delete = commit.GetProperty("deleteBefore").GetInt32();
-                var text = commit.GetProperty("text").GetString();
-                if (delete > 0)
+                var text = commit.GetProperty("text").GetString()!;
+                if (delete == 0)
                 {
-                    var expect = commit.TryGetProperty("expect", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-                    if (composing || expect is null || delete > Document.Length || Document[^delete..] != expect)
+                    Document += text;
+                    continue;
+                }
+                var expect = commit.TryGetProperty("expect", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+                if (commit.TryGetProperty("current", out var c) && c.ValueKind == JsonValueKind.String)
+                {
+                    var current = c.GetString()!;
+                    Document += current;
+                    var rewritten = expect + current;
+                    if (expect is null || !Document.EndsWith(rewritten, StringComparison.Ordinal))
                     {
                         Skipped.Add(commit.GetRawText());
                         continue;
                     }
-                    Document = Document[..^delete];
+                    Document = Document[..^rewritten.Length] + text;
+                    continue;
                 }
-                Document += text;
+                if (composing || expect is null || delete > Document.Length || Document[^delete..] != expect)
+                {
+                    Skipped.Add(commit.GetRawText());
+                    continue;
+                }
+                Document = Document[..^delete] + text;
             }
             Composition[sid] = reply.GetProperty("view") is { ValueKind: JsonValueKind.Object } view ? view.GetProperty("text").GetString() : null;
         }
@@ -189,15 +206,32 @@ internal static class TipContractTests
     [Test]
     public static void CaretMoved_DoesNotRewriteThePreviousCommit()
     {
-        // 確定したあとキャレットを動かして (moved) 打ったら、前に確定した文字を消して確定し直さない (--tip-e2e の「動かしたあとは直さない」)
-        using var dll = new Dll();
-        dll.Type("i\n");
-        Assert.Equal("い", dll.Document, dll.Trace);
-        var replies = new List<JsonElement> { dll.Key('w', moved: true) };
-        replies.AddRange(dll.Type("ant "));
-        Assert.True(replies.SelectMany(r => r.GetProperty("commits").EnumerateArray()).All(c => c.GetProperty("deleteBefore").GetInt32() == 0),
-            "前の確定を消さない\n" + dll.Trace);
-        Assert.True(dll.Document.StartsWith('い'), dll.Trace);
+        // make Space want Space と続けて打つと、前の「make」を英語に確定し直す (#975)。
+        // 前の語を確定したあとキャレットを動かして (moved) から打ったときは、前の確定を消して確定し直さない (--tip-e2e の「動かしたあとは直さない」)
+        static (Dll Dll, List<JsonElement> Replies) TypeWantAfterMake(bool moved)
+        {
+            var dll = new Dll();
+            dll.Type("make ");
+            var replies = new List<JsonElement> { dll.Key('w', moved: moved) };
+            replies.AddRange(dll.Type("ant "));
+            return (dll, replies);
+        }
+        static bool Rewrites(List<JsonElement> replies) =>
+            replies.SelectMany(r => r.GetProperty("commits").EnumerateArray()).Any(c => c.GetProperty("deleteBefore").GetInt32() > 0);
+
+        var (still, stillReplies) = TypeWantAfterMake(moved: false);
+        using (still)
+        {
+            Assert.True(Rewrites(stillReplies), "動かさなければ、前の語を確定し直す\n" + still.Trace);
+            Assert.Equal("make want ", still.Document, "前の語ごと書き換え、今の語も消えない\n" + still.Trace);
+            Assert.Equal(0, still.Skipped.Count, "見送った確定し直し: " + string.Join(", ", still.Skipped) + "\n" + still.Trace);
+        }
+        var (moved, movedReplies) = TypeWantAfterMake(moved: true);
+        using (moved)
+        {
+            Assert.True(!Rewrites(movedReplies), "動かしたら、前の確定を消さない\n" + moved.Trace);
+            Assert.True(moved.Document.EndsWith("want ", StringComparison.Ordinal) && !moved.Document.StartsWith("make", StringComparison.Ordinal), moved.Trace);
+        }
     }
 
     [Test]
@@ -229,17 +263,30 @@ internal static class TipContractTests
         dll.Apply(Reply("{\"deleteBefore\":3,\"text\":\"xyz\",\"expect\":\"the\"}", "{\"text\":\"か\"}"), "t1");
         Assert.Equal("the", dll.Document, "変換中は確定し直さない");
         Assert.Equal(4, dll.Skipped.Count);
+
+        // 今確定した語 (current) つきの確定し直しは、変換中でも今の語を入れ、前が expect + current のままなら前の語ごと書き換える (#975)
+        using var rewrite = new Dll();
+        rewrite.Apply(Reply("{\"deleteBefore\":0,\"text\":\"負け\"}"), "t1");
+        rewrite.Apply(Reply("{\"deleteBefore\":0,\"text\":\"\"}", "{\"text\":\"want\"}"), "t1");
+        rewrite.Apply(Reply("{\"deleteBefore\":2,\"text\":\"make want \",\"expect\":\"負け\",\"current\":\"want \"}"), "t1");
+        Assert.Equal("make want ", rewrite.Document, "前の語ごと書き換える");
+        // 前の文字が expect と違えば、今の語だけを確定したまま残す (今の語は消さない・前の語を二重に入れない)
+        rewrite.Apply(Reply("{\"deleteBefore\":2,\"text\":\"xx yy \",\"expect\":\"負け\",\"current\":\"yy \"}"), "t1");
+        Assert.Equal("make want yy ", rewrite.Document, "書き換えられなければ今の語だけ");
+        Assert.Equal(1, rewrite.Skipped.Count);
     }
 
     [Test]
     public static void ServerRewrites_AlwaysMatchWhatTheDllCanApply()
     {
         // Meltype.exe が送る確定し直しは、DLL が入れられる形 (expect が前の文字と同じ) になっている。
-        // 確定のあとキャレットを動かさずに続けて打つ (前の語を確定し直すことがある) 流れで、DLL が見送るものが無いこと
+        // 確定のあとキャレットを動かさずに続けて打つ流れで、DLL が見送るものが無いこと。
+        // i Enter のあとの want Space は、#975 で確定し直さなくなった (Enter で確定した日本語の語は英語に直さない)
         using var dll = new Dll();
         dll.Type("i\n");
         dll.Type("want ");
         dll.Type("kyouha\n");
+        Assert.Equal("いwant きょうは", dll.Document, "前の語も今の語も消えない\n" + dll.Trace);
         Assert.Equal(0, dll.Skipped.Count, "見送った確定し直し: " + string.Join(", ", dll.Skipped) + "\n" + dll.Trace);
     }
 
