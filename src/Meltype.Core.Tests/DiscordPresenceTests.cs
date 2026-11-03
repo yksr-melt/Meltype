@@ -22,22 +22,38 @@ internal static class DiscordPresenceTests
     [Test]
     public static void Activity_ShowsOnlyCountsWithDigitGrouping()
     {
-        var started = new DateTimeOffset(2026, 10, 30, 9, 0, 0, TimeSpan.Zero);
-        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(12345, 1234567), 250, started));
+        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(12345, 1234567), 250));
         var root = doc.RootElement;
         Assert.Equal("今日 12,345 打", root.GetProperty("details").GetString());
         Assert.Equal("合計 1,234,567 打 · 250 打/分", root.GetProperty("state").GetString());
-        Assert.Equal(started.ToUnixTimeSeconds(), root.GetProperty("timestamps").GetProperty("start").GetInt64());
         // 入力内容・アプリ名などは入れない (表示する欄だけ)
         var names = root.EnumerateObject().Select(p => p.Name).Order(StringComparer.Ordinal).ToArray();
-        Assert.Equal("buttons,details,state,timestamps", string.Join(",", names));
+        Assert.Equal("buttons,details,state", string.Join(",", names));
     }
 
     [Test]
     public static void Activity_OmitsKpmBeforeSecondUpdate()
     {
-        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(0, 0), null, DateTimeOffset.UnixEpoch));
+        using var doc = JsonDocument.Parse(DiscordPresence.ActivityJson(new(0, 0), null));
         Assert.Equal("合計 0 打", doc.RootElement.GetProperty("state").GetString());
+    }
+
+    [Test]
+    public static void VerifyResponse_RejectsDiscordErrorAndClose()
+    {
+        var error = Assert.Throws<IOException>(() => DiscordPresence.VerifyResponse(
+            1, "{\"cmd\":\"SET_ACTIVITY\",\"evt\":\"ERROR\",\"data\":{\"code\":4000,\"message\":\"Invalid activity\"}}"));
+        Assert.True(error.Message.Contains("4000", StringComparison.Ordinal));
+        Assert.True(error.Message.Contains("Invalid activity", StringComparison.Ordinal));
+        Assert.Throws<IOException>(() => DiscordPresence.VerifyResponse(2, "{}"));
+        Assert.Throws<IOException>(() => DiscordPresence.VerifyResponse(7, "{}"));
+    }
+
+    [Test]
+    public static void VerifyResponse_AcceptsNormalReply()
+    {
+        DiscordPresence.VerifyResponse(0, "{\"evt\":\"READY\"}");
+        DiscordPresence.VerifyResponse(1, "{\"cmd\":\"SET_ACTIVITY\",\"data\":{}}");
     }
 
     [Test]
