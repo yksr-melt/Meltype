@@ -6,7 +6,7 @@
 # fcitx5 の設定ツール (meltype.cpp の getConfig) から起動する。
 # 画面は config.schema.json (Meltype.Core の SettingsSchema が Settings から作る) から組み立てるので、
 # Settings に項目を足しても、この画面は直さなくてよい。
-# GTK 4 と PyGObject は Windows・Mac でも動く。OS ごとの違いは data_directory だけに置く (今は Linux だけ)。
+# GTK 4 と PyGObject は Windows・Mac でも動く。OS ごとの違いは PLATFORM と data_directory だけに置く (今は Linux だけ)。
 
 import json
 import os
@@ -18,6 +18,8 @@ from pathlib import Path
 CONFIG = "config.json"
 SCHEMA = "config.schema.json"
 OTHER_CATEGORY = "その他"
+# この OS の名前 (Meltype.Core の Platform。schema の x-platforms に出る名前)
+PLATFORM = "Linux"
 
 
 def data_directory():
@@ -34,10 +36,10 @@ class SettingsError(Exception):
 
 
 def load_items(schema):
-    """設定画面に出す項目 (title があり、Windows のみではない項目) を、分類ごとに schema の順で返す: [(分類, [(キー, schema)])]。"""
+    """設定画面に出す項目 (title があり、この OS で使う項目) を、分類ごとに schema の順で返す: [(分類, [(キー, schema)])]。"""
     groups = {}
     for key, prop in schema.get("properties", {}).items():
-        if "title" in prop and not prop.get("x-windows-only"):
+        if "title" in prop and PLATFORM in prop.get("x-platforms", [PLATFORM]):
             groups.setdefault(prop.get("x-category", OTHER_CATEGORY), []).append((key, prop))
     # 分類は "1. 全般" のように番号から始まり、番号の順に並べる (Windows 版の SettingsForm.CategoryNumber と同じ)。番号の無い分類は最後
     def number(category):
