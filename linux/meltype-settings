@@ -208,31 +208,31 @@ def main():
 
         def _editor(self, key, prop):
             value = self.config.get(key)
-            match kind(prop):
-                case "boolean":
-                    editor = Gtk.Switch(active=bool(value))
-                    editor.connect("notify::active", lambda switch, _: self._save(key, switch.get_active()))
-                case "enum":
-                    choices = prop["enum"]
-                    descriptions = prop.get("enumDescriptions", [])
-                    labels = [(descriptions[i] if i < len(descriptions) and descriptions[i] else None) or choice or "(指定なし)"
-                              for i, choice in enumerate(choices)]
-                    editor = Gtk.DropDown.new_from_strings(labels)
-                    if value in choices:
-                        editor.set_selected(choices.index(value))
-                    editor.connect("notify::selected", lambda dropdown, _: self._save(key, choices[dropdown.get_selected()]))
-                case "integer" | "number" as number:
-                    integer = number == "integer"
-                    editor = Gtk.SpinButton.new_with_range(-1_000_000, 1_000_000, 1 if integer else 0.1)
-                    editor.set_digits(0 if integer else 2)
-                    editor.set_value(value or 0)
-                    editor.connect("value-changed", lambda spin: self._save(key, spin.get_value_as_int() if integer else spin.get_value()))
-                case "string":
-                    editor = Gtk.Entry(text=value or "", width_chars=24)
-                    editor.connect("changed", lambda entry: self._save(key, entry.get_text()))
-                case None:
-                    editor = Gtk.Label(label="config.json で編集します")
-                    editor.add_css_class("dim-label")
+            value_kind = kind(prop)
+            if value_kind == "boolean":
+                editor = Gtk.Switch(active=bool(value))
+                editor.connect("notify::active", lambda switch, _: self._save(key, switch.get_active()))
+            elif value_kind == "enum":
+                choices = prop["enum"]
+                descriptions = prop.get("enumDescriptions", [])
+                labels = [(descriptions[i] if i < len(descriptions) and descriptions[i] else None) or choice or "(指定なし)"
+                          for i, choice in enumerate(choices)]
+                editor = Gtk.DropDown.new_from_strings(labels)
+                if value in choices:
+                    editor.set_selected(choices.index(value))
+                editor.connect("notify::selected", lambda dropdown, _: self._save(key, choices[dropdown.get_selected()]))
+            elif value_kind in ("integer", "number"):
+                integer = value_kind == "integer"
+                editor = Gtk.SpinButton.new_with_range(-1_000_000, 1_000_000, 1 if integer else 0.1)
+                editor.set_digits(0 if integer else 2)
+                editor.set_value(value or 0)
+                editor.connect("value-changed", lambda spin: self._save(key, spin.get_value_as_int() if integer else spin.get_value()))
+            elif value_kind == "string":
+                editor = Gtk.Entry(text=value or "", width_chars=24)
+                editor.connect("changed", lambda entry: self._save(key, entry.get_text()))
+            else:
+                editor = Gtk.Label(label="config.json で編集します")
+                editor.add_css_class("dim-label")
             editor.set_valign(Gtk.Align.CENTER)
             return editor
 
