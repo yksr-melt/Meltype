@@ -13,7 +13,7 @@ namespace Meltype.Input;
 /// <summary>
 /// Discord のステータス (Rich Presence) に打鍵数を出す (打鍵数の「Discord に表示する」。既定は OFF)。
 /// Discord のローカル IPC (Windows は名前付きパイプ discord-ipc-N、macOS・Linux は Unix ソケット) で送り、外のサーバーは使わない。
-/// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数・使い始めた時刻だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
+/// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
 /// 入力とは別のスレッドで UpdateInterval ごとに送り、Discord が起動していない・切れたときは次の回につなぎ直す (入力には影響しない)。
 /// </summary>
 internal sealed class DiscordPresence : IDisposable
@@ -32,7 +32,6 @@ internal sealed class DiscordPresence : IDisposable
     private readonly string _clientId;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _loop;
-    private readonly DateTimeOffset _started = DateTimeOffset.Now;
     private Stream? _stream;
     private string? _sent;
     private (long Total, DateTimeOffset At)? _last;
@@ -79,7 +78,7 @@ internal sealed class DiscordPresence : IDisposable
         var now = DateTimeOffset.Now;
         long? kpm = _last is { } last && now > last.At ? KeysPerMinute(stats.Total - last.Total, now - last.At) : null;
         _last = (stats.Total, now);
-        var activity = ActivityJson(stats, kpm, _started);
+        var activity = ActivityJson(stats, kpm);
         if (_stream is null)
         {
             await ConnectAsync(token);
@@ -182,9 +181,31 @@ internal sealed class DiscordPresence : IDisposable
         await stream.ReadExactlyAsync(header, timeout.Token);
         var length = BinaryPrimitives.ReadInt32LittleEndian(header.AsSpan(4));
         if (length is < 0 or > 1 << 20) throw new IOException("Discord から読めない返事が来ました。");
-        await stream.ReadExactlyAsync(new byte[length], timeout.Token);
-        // opcode 2 は Discord が切ったこと (アプリの ID が違うなど)
-        if (BinaryPrimitives.ReadInt32LittleEndian(header) == 2) throw new IOException("Discord が接続を閉じました。");
+        var response = new byte[length];
+        await stream.ReadExactlyAsync(response, timeout.Token);
+        VerifyResponse(BinaryPrimitives.ReadInt32LittleEndian(header), Encoding.UTF8.GetString(response));
+    }
+
+    /// <summary>IPC 応答を検証する。Discord の ERROR イベントを成功扱いしない。</summary>
+    public static void VerifyResponse(int opcode, string json)
+    {
+        if (opcode == 2) throw new IOException("Discord が接続を閉じました。");
+        if (opcode is not 0 and not 1) throw new IOException($"Discord から不明な opcode が返されました: {opcode}");
+        using var response = JsonDocument.Parse(json);
+        var root = response.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new IOException("Discord の返事が JSON オブジェクトではありません。");
+        if (root.TryGetProperty("evt", out var evt) && evt.ValueKind == JsonValueKind.String &&
+            evt.GetString() == "ERROR")
+        {
+            var detail = "不明なエラー";
+            if (root.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object)
+            {
+                var code = data.TryGetProperty("code", out var codeValue) ? codeValue.ToString() : "";
+                var message = data.TryGetProperty("message", out var messageValue) ? messageValue.ToString() : "";
+                detail = $"code={code}, message={message}";
+            }
+            throw new IOException($"Discord Rich Presence の ERROR 応答: {detail}");
+        }
     }
 
     private void Disconnect()
@@ -217,14 +238,11 @@ internal sealed class DiscordPresence : IDisposable
         });
 
     /// <summary>表示する内容 (activity)。打った文字やアプリ名は入れない。</summary>
-    public static string ActivityJson(Stats stats, long? kpm, DateTimeOffset started) =>
+    public static string ActivityJson(Stats stats, long? kpm) =>
         Write(w =>
         {
             w.WriteString("details", Format($"今日 {stats.Today:N0} 打"));
             w.WriteString("state", kpm is { } k ? Format($"合計 {stats.Total:N0} 打 · {k:N0} 打/分") : Format($"合計 {stats.Total:N0} 打"));
-            w.WriteStartObject("timestamps");
-            w.WriteNumber("start", started.ToUnixTimeSeconds());
-            w.WriteEndObject();
             w.WriteStartArray("buttons");
             w.WriteStartObject();
             w.WriteString("label", "Meltype");
