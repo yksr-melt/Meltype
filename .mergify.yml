@@ -17,3 +17,12 @@ queue_rules:
       - -draft
       # CLA bot が元の PR 作者を確認した場合だけ付ける。手動で付けない。
       - label = CLA確認済み
+
+# Fast / Normal は優先順位の違い。CI・CLA・レビューの免除ではない。
+# メンテナーが merge:fast ラベルを付けた PR を優先する。
+priority_rules:
+  - name: fast
+    conditions:
+      - label = merge:fast
+    priority: high
+    allow_checks_interruption: false
