@@ -43,7 +43,7 @@ linux/build-cli.sh --install
 
 ```bash
 sudo apt install --allow-downgrades meltype=<版>   # apt のリポジトリから。ファイルなら ./meltype_<版>_amd64.deb
-sudo dnf downgrade meltype                          # dnf のリポジトリから。ファイルなら ./meltype-<版>-1.x86_64.rpm
+sudo dnf downgrade meltype                          # dnf のリポジトリから。ファイルなら ./meltype-<版>-1.x86_64.rpm と ./meltype-fcitx5-<版>-1.x86_64.rpm
 ```
 
 入力ソースの一覧に Meltype が出てこないときは、Linux のセッションを入り直してください。
