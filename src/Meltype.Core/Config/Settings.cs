@@ -368,6 +368,14 @@ public sealed class Settings
      Description("「くりっぷぼーど」「ぺーすと」を変換したとき、クリップボードにある 1 行の文字 (200 文字まで) を候補に出します。変換した瞬間に 1 回だけ読み、監視・保存・送信はしません。パスワード管理ソフトなど、履歴に残さない印のついた内容は読みません。既定は OFF です。")]
     public bool ClipboardCandidates { get; set; }
 
+    [Category("5. 候補"), DisplayName("「なう」で再生中の曲を候補に出す"), WindowsOnly,
+     Description("「なう」を変換したとき、今再生している曲 (曲名 / アーティスト) を候補に出します。Windows のメディアの操作 (音量のボタンを押したときに出る再生中の表示) に曲を知らせるアプリ (Spotify・ブラウザーなど) が対象です。ON の間は 3 秒ごとに今の曲を読みます (変換を待たせないため)。メモリに今の 1 曲を持つだけで、保存・送信はしません。選んでも学習しません。再生中の曲が無いときは、今までどおり時刻を出します。")]
+    public bool NowPlayingCandidates { get; set; } = false;
+
+    [Category("5. 候補"), DisplayName("時計の候補のタイムゾーン"),
+     Description("「とけい」「じこく」「いま」「なう」を変換したときに候補に出す、今の時刻 (19:21 / 19時21分 / 午後7時21分) のタイムゾーン。IANA の ID (例: America/New_York・Europe/London) か Windows の ID (例: Eastern Standard Time) を書きます。空ならこの PC のタイムゾーン (既定)。夏時間も反映します。この PC と違うタイムゾーンなら、「とけい」「じこく」では日付とタイムゾーンの名前を付けた候補も出します。")]
+    public string ClockTimeZone { get; set; } = "";
+
     [Category("1. 全般"), DisplayName("Meltype の一時停止 / 再開のホットキー"), WindowsOnly,
      Description("Meltype 全体の一時停止 / 再開に使うキーの組み合わせ (例: Ctrl+Alt+F10)。空のときは Ctrl+Alt+F12 (使えなければ Ctrl+Alt+F11 など)。変更は Meltype を起動し直すと効きます。変換・無変換キーが無い US 配列のキーボード向けです。")]
     public string PauseHotkey { get; set; } = "";
@@ -388,16 +396,19 @@ public sealed class Settings
      Description("かな漢字変換に使うエンジン。「両方」は Mozc (Google 日本語入力のオープンソース版) で変換し、Mozc が使えないときは Microsoft IME で変換します。候補には両方の候補が出ます。")]
     public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
 
-    [Category("4. 変換"), DisplayName("Zenzai を使う (実験)"), WindowsOnly,
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で変換します。llama.cpp の llama-server と zenz の GGUF ファイルを自分で用意し、下の 2 つの場所を指定してください (どちらも Meltype には同梱しません)。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は OFF です。")]
-    public bool UseZenzai { get; set; }
+    [Category("4. 変換"), DisplayName("Zenzai を使う"),
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は Windows では ON、Mac では OFF です (Mac は推論の時間の上限ができるまで)。")]
+    public bool UseZenzai { get; set; } = DefaultUseZenzai;
+
+    /// <summary>Zenzai の既定。Mac は推論が遅いときに打ち切る仕組みができるまで OFF (既定 ON は別の PR で)。</summary>
+    internal static bool DefaultUseZenzai => !OperatingSystem.IsMacOS();
 
     [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), WindowsOnly,
-     Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。「Zenzai を使う」が ON のときに使います。")]
+     Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiServerPath { get; set; } = "";
 
-    [Category("4. 変換"), DisplayName("Zenzai: モデル (GGUF) の場所"), WindowsOnly,
-     Description("zenz のモデルファイル (例: zenz-v3.1-small の ggml-model-Q5_K_M.gguf) の場所。「Zenzai を使う」が ON のときに使います。")]
+    [Category("4. 変換"), DisplayName("Zenzai: モデル (GGUF) の場所"),
+     Description("zenz のモデルファイル (例: zenz-v3.2-small の ggml-model-Q5_K_M.gguf) の場所。空なら同梱の zenz-v3.2-small を使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiModelPath { get; set; } = "";
 
     [Category("4. 変換"), DisplayName("Zenzai: 使う GPU"), WindowsOnly,
@@ -665,7 +676,9 @@ public sealed class Settings
             if (JsonNode.Parse(json, documentOptions: DocumentOptions) is not JsonObject file ||
                 file["format"]?.GetValue<string>() != ProfileFileFormat || file["values"] is not JsonObject raw) return null;
             name = (file["name"]?.GetValue<string>() ?? "").Trim();
-            if ((file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1) < 8) MigrateToV8(raw);
+            var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
+            if (fileVersion < 8) MigrateToV8(raw);
+            if (fileVersion < 9) MigrateToV9(raw);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -793,7 +806,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
 
     [Category("9. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -924,6 +937,7 @@ public sealed class Settings
             ToggleShortcuts = valid;
         }
         ZenzaiDevice = ZenzaiDevice?.Trim() ?? "";
+        ClockTimeZone = ClockTimeZone?.Trim() ?? "";
         // 数値で書いた config.json の、今は無い番号 (消した IME 自動切替・両方を判定) は初期値にする
         if (!Enum.IsDefined(Mode)) Mode = InputMode.Tsf;
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
@@ -977,8 +991,25 @@ public sealed class Settings
         // v7: 追加キーの文字列を共通の一覧へ移し、旧項目を保存しない。
         MigrateLegacyToggleShortcuts(report: true);
         // v8: 型を変えた項目は、読み込む前の JSON で移す (MigrateToV8)。
+        // v9: Zenzai を既定 ON にした。プロファイルの値にも効くよう、読み込む前の JSON で移す (MigrateToV9)。
         SettingsVersion = CurrentVersion;
         return true;
+    }
+
+    /// <summary>
+    /// v9: Zenzai を同梱して既定 ON にした。前の既定 (OFF・場所が空) のままなら ON にする。
+    /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
+    /// </summary>
+    internal static void MigrateToV9(JsonObject values)
+    {
+        // v9: Zenzai を同梱して既定 ON にした (issue #1120)。前の既定 (OFF・場所が空) のままなら ON にする。
+        // 自分で llama-server やモデルの場所を書いた人は、OFF にしていればそのまま。書いていない項目は新しい既定 (ON) になる
+        // Mac は既定 OFF のままなので移さない
+        if (!DefaultUseZenzai) return;
+        static string Text(JsonObject o, string key) => o[key] is JsonValue v && v.TryGetValue<string>(out var t) ? t : "";
+        if (values[nameof(UseZenzai)] is JsonValue use && use.TryGetValue<bool>(out var on) && !on &&
+            string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiServerPath))) && string.IsNullOrWhiteSpace(Text(values, nameof(ZenzaiModelPath))))
+            values[nameof(UseZenzai)] = true;
     }
 
     /// <summary>
@@ -1072,6 +1103,12 @@ public sealed class Settings
                 MigrateToV8(values);
                 foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                     if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV8(profileValues);
+            }
+            if (version < 9)
+            {
+                MigrateToV9(values);
+                foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                    if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
             }
             var settings = values.Deserialize(JsonType) ?? new Settings();
             settings.SettingsVersion = version;
