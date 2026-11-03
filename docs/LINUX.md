@@ -48,7 +48,8 @@ fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。
 
 Ubuntu・Debian は apt で、Fedora は dnf で入れます。どちらも IBus と fcitx5 の両方に入れます。
 
-**Ubuntu / Debian**
+<a name="ubuntu--debian"></a>
+<img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
 
 apt リポジトリから入れると、以後 `sudo apt update && sudo apt upgrade` で更新できます。初回だけ、公開鍵とリポジトリを登録します。
 
@@ -76,9 +77,10 @@ sudo apt install ./meltype_<version>_amd64.deb
 
 IBus の部品は「おすすめ」なので、ふつうは一緒に入ります。
 
-**Fedora** (Fedora 44 でビルドしています)
+<a name="fedora"></a>
+<img src="images/headings/linux/s02.svg" alt="Fedora" height="40">
 
-dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
+Fedora 44 でビルドしています。dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
 
 ```bash
 sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo
@@ -96,14 +98,14 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm
 以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
 <a name="ibus-のとき"></a>
-<img src="images/headings/linux/s01.svg" alt="IBus のとき" height="40">
+<img src="images/headings/linux/s03.svg" alt="IBus のとき" height="40">
 
 1. いったんログアウトしてログインし直す
 2. 設定 → キーボード → 入力ソース →「+ 入力ソースを追加」→ 日本語 → Meltype を追加
 3. 画面右上の入力ソースのメニュー (または <kbd>Super</kbd> + <kbd>Space</kbd>) で Meltype を選ぶ
 
 <a name="fcitx5-のとき"></a>
-<img src="images/headings/linux/s02.svg" alt="fcitx5 のとき" height="40">
+<img src="images/headings/linux/s04.svg" alt="fcitx5 のとき" height="40">
 
 1. いったんログアウトしてログインし直す (動いている fcitx5 は、起動し直すまで新しい Meltype を読み込みません)
 2. fcitx5 の設定 (`fcitx5-configtool`) →「入力メソッド」で Meltype を追加する
