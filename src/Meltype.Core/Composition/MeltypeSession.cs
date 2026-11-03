@@ -479,8 +479,8 @@ public sealed class MeltypeSession
         if (toggleShortcuts && !hankaku && !_controller.IsComposing &&
             IsToggleShortcut(settings.EffectiveToggleShortcuts, vk, control, alt, shift, command))
         {
-            // 半角/全角 と同じく、変換ボックスが出ていれば閉じてから切り替える。
-            var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
+            // 変換中はここへ来ない (条件で除いている) ので、確定するものは無い。
+            var committed = new SessionResult(false, [], null);
             Direct = !Direct;
             _toggled = true;
             return Track(committed with { Consumed = true }, vk, ch, modifier: false);
