@@ -216,8 +216,11 @@ public sealed record CompositionOptions
     /// <summary>かな入力 (JIS) か。</summary>
     public Func<bool> KanaInput { get; init; } = () => false;
 
-    /// <summary>かな入力の配列 (JIS かな・月・花。issue #1415)。</summary>
+    /// <summary>かな入力の配列 (JIS かな・月・花・NICOLA・中指NICOLA・TRON。issue #1415)。</summary>
     public Func<KanaLayout> KanaLayout { get; init; } = () => Input.KanaLayout.Jis;
+
+    /// <summary>ローマ字入力のキーの配列 (QWERTY・SKY 配列。issue #1415)。</summary>
+    public Func<RomajiLayout> RomajiLayout { get; init; } = () => Input.RomajiLayout.Qwerty;
 
     /// <summary>よくある書き間違い (ブレスレッド → ブレスレット) の辞書。「もしかして」に使う。null なら出さない。</summary>
     public MisspellingDictionary? Misspellings { get; init; }
@@ -346,6 +349,7 @@ public sealed class CompositionController
     private readonly CompositionText _text;
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     private KanaLayoutEngine _kanaLayout = new(KanaLayout.Jis);
+    private bool _bypassKanaLayout;
     private readonly CompositionDetector _detector;
     private readonly IKanjiConverter _converter;
     private readonly ICompositionHost _host;
@@ -651,6 +655,16 @@ public sealed class CompositionController
         var vk = e.Vk;
         if (e.IsUp)
         {
+            var kanaUp = _kanaLayout.Up(vk);
+            // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
+            if (kanaUp.Stroke.Handled && IsComposing) ApplyKanaStroke(kanaUp.Stroke);
+            // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
+            if (kanaUp.ThumbTap && _capturedDown.Contains(vk))
+            {
+                _bypassKanaLayout = true;
+                try { HandleKey(e with { IsUp = false }); }
+                finally { _bypassKanaLayout = false; }
+            }
             _swallowedShift.Remove(vk);
             _swallowedControl.Remove(vk);
             // 押下をアプリに送ったキー、または押下が関所を閉じる前に通っていたキーは、離したこともアプリに伝える。
@@ -765,7 +779,7 @@ public sealed class CompositionController
             ReplayDown(e);
             return;
         }
-        if (HandleKanaLayout(e)) return;
+        if (!_bypassKanaLayout && HandleKanaLayout(e)) return;
 
         if (_reconversion is not null && vk == VirtualKeys.Escape)
         {
@@ -1316,32 +1330,51 @@ public sealed class CompositionController
     }
 
     /// <summary>
-    /// JIS かな以外のかな配列 (月・花) の打鍵 (issue #1415)。配列のキーとして扱ったら true。
+    /// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) と SKY 配列の打鍵 (issue #1415)。配列のキーとして扱ったら true。
     /// 打ったキーの英字は英単語の判定に使わない (刻印と違う配列なので)。かなをそのまま原文にする。
     /// </summary>
     private bool HandleKanaLayout(KeyEvent e)
     {
+        if (!_options.KanaInput() && !_options.DirectMode() && _options.RomajiLayout() == RomajiLayout.Sky)
+        {
+            // SKY 配列: キーをローマ字の綴りにして足す。英語の判定はしない (ひらがなで見せる)
+            if (_swallowedShift.Count > 0 || _host.IsShiftDown() || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
+            if (!IsComposing) BeginComposition();
+            else CommitBeforeTyping();
+            if (_text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.Hiragana;
+            foreach (var c in romaji) _text.Append(c);
+            return true;
+        }
         var layout = _options.KanaInput() && !_options.DirectMode() ? _options.KanaLayout() : KanaLayout.Jis;
         if (_kanaLayout.Layout != layout) _kanaLayout = new KanaLayoutEngine(layout);
         if (layout == KanaLayout.Jis) return false;
+        // 変換中の親指キーは、もとの働き (変換・無変換)。入力していないときの親指キーは受け取っておき、文字に使わずに離したらもとの働きをする
+        // (文頭の 変換 + W を再変換にしない。フックは親指シフトの配列では親指キーで変換ボックスを開く)
+        if (_kanaLayout.IsThumbShift && e.Vk is KanaLayoutEngine.LeftThumb or KanaLayoutEngine.RightThumb && _converting) return false;
         // 前置シフトの直後の BackSpace は、シフトのキーを打ち消す (前の文字は消さない)
         if (e.Vk == VirtualKeys.Back && _kanaLayout.HasPrefix)
         {
             _kanaLayout.Reset();
             return true;
         }
-        var stroke = _kanaLayout.Down(e.Vk, _swallowedShift.Count > 0 || _host.IsShiftDown());
+        var stroke = _kanaLayout.Down(e.Vk, _swallowedShift.Count > 0 || _host.IsShiftDown(), e.TimeMs);
         if (!stroke.Handled)
         {
             // 配列のキー以外 (BackSpace・Enter・Esc・Space など): 打ちかけの前置シフトを忘れる
             _kanaLayout.Reset();
             return false;
         }
-        if (stroke.Kana.Length == 0) return true;
-        if (!IsComposing) BeginComposition();
-        else CommitBeforeTyping();
-        foreach (var kana in stroke.Kana) _text.AppendKana(kana, kana);
+        ApplyKanaStroke(stroke);
         return true;
+    }
+
+    private void ApplyKanaStroke(KanaStroke stroke)
+    {
+        if (stroke.Kana.Length == 0 && stroke.RemoveLast == 0) return;
+        if (!IsComposing) BeginComposition();
+        else if (stroke.RemoveLast == 0) CommitBeforeTyping();
+        for (var i = 0; i < stroke.RemoveLast && !_text.IsEmpty; i++) _text.RemoveLast();
+        foreach (var kana in stroke.Kana) _text.AppendKana(kana, kana);
     }
 
     /// <summary>かな入力で、その打鍵が入力するかなと、そのキーの英字 (英語として見せるとき用)。かなのキーでなければ null。</summary>

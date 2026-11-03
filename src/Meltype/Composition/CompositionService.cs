@@ -67,6 +67,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             Manual = options.Manual,
             KanaInput = options.KanaInput,
             KanaLayout = options.KanaLayout,
+            RomajiLayout = options.RomajiLayout,
             Misspellings = options.Misspellings ?? MisspellingDictionary.Load(userDirectory),
             Languages = Languages,
             Translations = options.Translations ?? TranslationDictionary.Load(),
