@@ -93,7 +93,7 @@ installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
     echo "Architecture: $arch"
     echo "Maintainer: Yukishiro <https://github.com/yksr-melt/Meltype>"
     echo "Installed-Size: $installed_size"
-    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3"
+    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9)"
     echo "Recommends: ibus, python3-gi, gir1.2-ibus-1.0, gir1.2-gtk-4.0"
     if $with_fcitx5; then echo "Suggests: fcitx5"; fi
     echo "Section: utils"

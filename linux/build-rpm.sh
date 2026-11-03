@@ -69,7 +69,7 @@ Release: 1
 Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
-Requires: libicu, python3
+Requires: libicu, python3 >= 3.9
 Recommends: ibus, python3-gobject, gtk4
 
 %description
