@@ -34,7 +34,7 @@ Options:
   --mozc                  Build the Linux Mozc helper.
   --build                 Build the Mozc helper and Linux package.
   --package               Build linux/build/Meltype-linux.
-  --install               Install the built IBus engine into Linux.
+  --install               Build a .deb from linux/build/Meltype-linux and install it with apt.
   --all                   Run --test --mozc --package. This is the default.
   --mozc-source DIR       Mozc checkout directory. Default: ~/mozc.
   --bazel-cache DIR       Optional Bazel disk cache directory.
@@ -152,9 +152,11 @@ if [[ $package -eq 1 ]]; then
 fi
 
 if [[ $install -eq 1 ]]; then
-    if [[ ! -f "$root/linux/build/Meltype-linux/install.sh" ]]; then
+    if [[ ! -f "$root/linux/build/Meltype-linux/libMeltypeNative.so" ]]; then
         echo "Build output is missing. Run linux/build-cli.sh --package first." >&2
         exit 1
     fi
-    (cd "$root/linux/build/Meltype-linux" && bash install.sh)
+    rm -f "$root"/linux/build/meltype_*.deb
+    bash "$root/linux/build-deb.sh" "" "$root/linux/build/Meltype-linux" "$root/linux/build"
+    sudo apt-get install -y --reinstall "$root"/linux/build/meltype_*.deb
 fi

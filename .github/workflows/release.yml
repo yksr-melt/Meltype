@@ -47,8 +47,11 @@ jobs:
       - run: ls -la dist
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          # Linux の zip (meltype-linux の Artifacts にある) は rpm と ime-real の中間の成果物なので付けない
           files: |
-            dist/Meltype-*.zip
+            dist/Meltype-*-windows.zip
+            dist/Meltype-*-windows-portable.zip
+            dist/Meltype-*-mac.zip
             dist/Meltype-*-setup.exe
             dist/meltype_*.deb
             dist/meltype-*.rpm

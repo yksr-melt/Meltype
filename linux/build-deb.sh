@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# linux/build.sh で組み立てたもの (または Meltype-<版>-linux.zip を展開したフォルダー) から、
+# linux/build.sh で組み立てたもの (または CI の成果物 meltype-linux の zip を展開したフォルダー) から、
 # Debian / Ubuntu の .deb パッケージを作る。apt で入れる・更新する・外すためのもの (#863)。
 #   linux/build-deb.sh [版] [組み立てたフォルダー] [出力先]
 #   例: linux/build-deb.sh 1.2.2-pre.2 linux/build/Meltype-linux linux/build
 #   使う人: sudo apt install ./meltype_1.2.2~pre.2_amd64.deb / sudo apt remove meltype
-# 中身は install.sh が入れるものと同じ場所に置く:
+# 置く場所:
 #   /opt/meltype (本体)、/usr/share/ibus/component/meltype.xml (IBus)、
 #   /usr/bin/meltype-settings と /usr/share/applications/ibus-setup-meltype.desktop (設定画面)、
 #   fcitx5 のアドオンがあれば <ライブラリのフォルダー>/fcitx5/meltype.so と /usr/share/fcitx5/{addon,inputmethod}/meltype.conf
@@ -38,7 +38,6 @@ done
 command -v dpkg-deb > /dev/null || { echo "dpkg-deb がありません (Debian / Ubuntu で実行してください)" >&2; exit 1; }
 
 # CPU と、fcitx5 のアドオンの置き場所 (Debian / Ubuntu の multiarch のフォルダー)。
-# install.sh は libclassicui.so のあるフォルダーを探すが、Debian / Ubuntu ではここになる
 # libMeltypeNative.so (ELF) の e_machine (18 バイト目から 2 バイト) で見る
 machine="$(od -An -tx1 -j18 -N2 "$src/libMeltypeNative.so" | tr -d ' \n')"
 case "$machine" in
@@ -85,7 +84,7 @@ EOF
 find "$root" -type d -exec chmod 755 {} +
 
 # 依存: 本体 (NativeAOT) と Mozc の変換ヘルパーが使う C / C++ のライブラリと zlib、IBus のエンジン (Python)。
-# IBus は fcitx5 だけで使う人もいるので Recommends にする (install.sh も fcitx5 だけなら IBus を入れない)
+# IBus は fcitx5 だけで使う人もいるので Recommends にする
 # 設定画面 (GTK 4) は無くても入力はできるので Recommends にする
 installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
 {
@@ -117,7 +116,7 @@ if [ "$1" = configure ]; then
 fi
 exit 0
 EOF
-# 外す前・更新の前: 動いている IBus のエンジンを止める (IBus は次に使うときに新しいものを起動する。install.sh の ibus restart と同じ目的)
+# 外す前・更新の前: 動いている IBus のエンジンを止める (IBus は次に使うときに新しいものを起動する)
 cat > "$root/DEBIAN/prerm" << 'EOF'
 #!/bin/sh
 set -e

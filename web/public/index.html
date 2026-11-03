@@ -389,13 +389,15 @@
         </div>
 
         <div class="os-panel" role="tabpanel" id="panel-linux" aria-labelledby="tab-linux" hidden>
-          <p class="panel-lead">Ubuntu 24.04 などの x86_64 で、IBus (GNOME など) と fcitx5 (KDE など) の入力ソースとして動きます。</p>
+          <p class="panel-lead">Ubuntu 24.04・Fedora 44 などで、IBus (GNOME など) と fcitx5 (KDE など) の入力ソースとして動きます。</p>
           <ol class="steps">
-            <li><b>ダウンロード</b><span><a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="linux.zip"><code>Meltype-&lt;version&gt;-linux.zip</code></a> をダウンロードして展開します</span></li>
-            <li><b>インストール</b><span>展開したフォルダーで端末を開き、下のコマンドを実行します。足りない部品は自動で入ります</span></li>
-            <li><b>入力ソースを追加</b><span>IBus はログインし直してから「設定」→「キーボード」→「入力ソース」で Meltype を追加し、fcitx5 は <code>fcitx5-configtool</code> で追加します</span></li>
+            <li><b>ダウンロード</b><span>Ubuntu・Debian は <a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="amd64.deb"><code>meltype_&lt;version&gt;_amd64.deb</code></a>、Fedora は <a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="x86_64.rpm"><code>meltype-&lt;version&gt;-1.x86_64.rpm</code></a> をダウンロードします (ARM64 は Releases の arm64 / aarch64 のもの)</span></li>
+            <li><b>インストール</b><span>ダウンロードしたフォルダーで端末を開き、下のコマンドを実行します</span></li>
+            <li><b>入力ソースを追加</b><span>ログインし直してから、IBus は「設定」→「キーボード」→「入力ソース」で Meltype を追加し、fcitx5 は <code>fcitx5-configtool</code> で追加します</span></li>
           </ol>
-          <div class="codebox"><code>bash install.sh</code><button class="copy" type="button" data-copy="bash install.sh"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+          <div class="codebox"><code>sudo apt install ./meltype_*.deb</code><button class="copy" type="button" data-copy="sudo apt install ./meltype_*.deb"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+          <div class="codebox"><code>sudo dnf install ./meltype-*.rpm</code><button class="copy" type="button" data-copy="sudo dnf install ./meltype-*.rpm"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+          <p class="small">apt / dnf のリポジトリを登録すると、以後の更新も apt / dnf で受け取れます。登録の方法は下の詳しい説明にあります。</p>
           <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md">Linux 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>
         </div>
       </div>
