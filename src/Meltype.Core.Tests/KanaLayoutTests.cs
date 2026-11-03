@@ -312,7 +312,7 @@ internal static class KanaLayoutTests
         var k = Layout(KanaLayout.Nicola);
         k.TypeKanaKeys("kw");
         k.Press(VirtualKeys.Space);
-        Assert.True(k.Host.View is { Converting: true });
+        Assert.True(k.Host.View is { Converting: true }, "Space で変換中になる");
         k.Press(Convert);
         Assert.True(k.Host.View is { Converting: true }, "単独タップでは変換を確定しない");
         k.TypeKanaKeys("w");
