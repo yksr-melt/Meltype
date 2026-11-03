@@ -245,7 +245,7 @@ jobs:
           name: meltype-${{ matrix.asset }}-rpm
           path: rpms
       - name: Install .rpm
-        run: dnf install -y ibus python3-gobject ./rpms/meltype-[0-9]*.rpm
+        run: dnf install -y ./rpms/meltype-[0-9]*.rpm
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py
