@@ -254,7 +254,7 @@ public sealed class Settings
     [JsonConverter(typeof(InputModeJsonConverter))]
     public InputMode Mode { get; set; } = InputMode.Tsf;
 
-    [Category("2. 入力モード"), DisplayName("入力モード切り替えキー"), Platforms(Platform.Windows),
+    [Category("2. 入力モード"), DisplayName("入力モード切り替えキー"),
      Description("日本語／英数の入力モードを切り替えるキーを複数登録できます。Windows や他のアプリで使うキー操作を登録すると、元の操作が使えなくなったり、入力モードの切り替えと同時に動いたりする場合があります。")]
     public List<ToggleShortcut>? ToggleShortcuts { get; set; }
 
