@@ -13,11 +13,93 @@ namespace Meltype.Tests;
 internal static class WindowsTests
 {
     [Test]
+    public static void PopupWindows_ShowingPreservesInputFocusAndTopmost()
+    {
+        // 入力先にフォーカスした状態で、打ち始めやモードの表示を繰り返す。
+        // 窓の表示直後に一瞬だけフォーカスを奪い、すぐ戻す場合も検出する。
+        using var target = new Form();
+        using var input = new TextBox();
+        target.Controls.Add(input);
+        target.Show();
+        target.Activate();
+        Assert.True(input.Focus(), "入力欄にフォーカスできる");
+        Assert.True(input.Focused, "表示前の入力先");
+
+        using var composition = new CompositionWindow();
+        using var indicator = new ModeIndicatorWindow();
+        var popupFocused = false;
+        composition.GotFocus += (_, _) => popupFocused = true;
+        indicator.GotFocus += (_, _) => popupFocused = true;
+        var view = new CompositionView("あ", [], -1, false, "");
+        for (var i = 0; i < 2; i++)
+        {
+            composition.ShowView(view, new Point(20, 20));
+            Assert.True(composition.Visible && input.Focused, "変換ボックスを表示しても入力欄を維持する");
+            composition.Hide();
+            indicator.Flash(true, new Point(40, 40));
+            Assert.True(indicator.Visible && input.Focused, "入力モード表示でも入力欄を維持する");
+            indicator.Hide();
+        }
+        Assert.True(!popupFocused, "表示中にポップアップへフォーカスを移さない");
+        const int exStyle = -20, topmost = 0x00000008;
+        foreach (var popup in new Form[] { composition, indicator })
+            Assert.True((Native.GetWindowLongPtr(popup.Handle, exStyle).ToInt64() & topmost) != 0, "フォーカスを奪わず最前面に出す");
+    }
+
+    [Test]
+    public static void PopupWindows_RejectMouseActivationWithoutDiscardingMouseInput()
+    {
+        // Windows のマウス追跡は WS_EX_NOACTIVATE を無視して WM_MOUSEACTIVATE を送る。
+        // 移動とクリックのどちらでも、変換ボックスやモード表示はフォーカスを奪わず、マウス入力は残す。
+        const int mouseActivate = 0x0021, mouseMove = 0x0200, leftButtonDown = 0x0201, hitClient = 1;
+        const int noActivate = 3; // MA_NOACTIVATE (MA_NOACTIVATEANDEAT ではない)
+        using Form composition = new CompositionWindow();
+        using Form indicator = new ModeIndicatorWindow();
+        foreach (var popup in new[] { composition, indicator })
+        {
+            foreach (var mouseMessage in new[] { mouseMove, leftButtonDown })
+            {
+                var result = Native.SendMessage(popup.Handle, mouseActivate, IntPtr.Zero, (IntPtr)((mouseMessage << 16) | hitClient));
+                Assert.Equal((IntPtr)noActivate, result, $"{popup.GetType().Name}: マウス入力を捨てずアクティブ化を断る");
+            }
+        }
+    }
+
+    [Test]
+    public static void SpellChecker_DisposeStopsTheWorkerAndClosesItsWaitHandle()
+    {
+        using var checker = new Detection.WindowsSpellChecker();
+        _ = checker.IsAvailable;
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var worker = (Thread?)typeof(Detection.WindowsSpellChecker).GetField("_comThread", flags)!.GetValue(checker);
+        var wake = (AutoResetEvent)typeof(Detection.WindowsSpellChecker).GetField("_wake", flags)!.GetValue(checker)!;
+        checker.Dispose();
+        checker.Dispose();
+        Assert.True(worker is null || !worker.IsAlive, "問い合わせのスレッドが終了している");
+        Assert.True(wake.SafeWaitHandle.IsClosed, "待機ハンドルを閉じる");
+        var disposed = false;
+        try { checker.IsWord("test"); }
+        catch (ObjectDisposedException) { disposed = true; }
+        Assert.True(disposed, "破棄した後に問い合わせを再開しない");
+    }
+
+    [Test]
     public static void Main_RunsOnStaThread()
     {
         // クリップボード・UI は STA でないと動かない。Main の前にメソッドを足して、[STAThread] がそちらに付いていた (v1.2.0 の自己診断で失敗)
         var main = typeof(global::Meltype.Program).GetMethod("Main", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
         Assert.True(main.IsDefined(typeof(STAThreadAttribute), false), "Main に [STAThread]");
+    }
+
+    [Test]
+    public static void JavaGames_AreDetectedFromWindowClass()
+    {
+        Assert.True(ForegroundTracker.IsJava("javaw.exe") && ForegroundTracker.IsJava("java.exe"), "Java");
+        Assert.True(!ForegroundTracker.IsJava("javaws.exe"), "ほかのアプリ");
+        Assert.True(ForegroundTracker.IsJavaGameWindowClass("GLFW30"), "LWJGL 3 (Minecraft 1.13 から)");
+        Assert.True(ForegroundTracker.IsJavaGameWindowClass("LWJGL"), "LWJGL 2 (Minecraft 1.12.2 まで)");
+        Assert.True(!ForegroundTracker.IsJavaGameWindowClass("SunAwtFrame"), "ふつうの Java のアプリ (Swing)");
+        Assert.True(!ForegroundTracker.IsJavaGameWindowClass("GLFW3 Helper"), "GLFW の見えないウィンドウ");
     }
 
     [Test]
@@ -27,6 +109,8 @@ internal static class WindowsTests
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe"), "Epic のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Ubisoft\Ubisoft Game Launcher\games\Rainbow Six Siege\RainbowSix.exe"), "Ubisoft のゲーム");
         Assert.True(ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\SEGA\PHANTASYSTARONLINE2_JP\pso2_bin\pso2.exe"), "PSO2 NGS (専用のランチャー)");
+        Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Users\a\AppData\Roaming\.minecraft\runtime\java-runtime-delta\windows-x64\java-runtime-delta\bin\javaw.exe"), "Minecraft (Java 版) はフォルダーではなくウィンドウのクラスで見分ける");
+        Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Java\jdk-21\bin\javaw.exe"), "ふつうの Java のアプリ");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files (x86)\Steam\steam.exe"), "Steam のクライアントは除く");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Epic Games\Launcher\Portal\Binaries\Win64\EpicGamesLauncher.exe"), "ランチャーは除く");
         Assert.True(!ForegroundTracker.LooksLikeGame(@"C:\Program Files\Microsoft VS Code\Code.exe"), "ふつうのアプリ");
@@ -101,7 +185,7 @@ internal static class WindowsTests
         var clauses = ime.ConvertClauses(text, "わたしは");
         Assert.True(clauses is { Count: > 0 }, "長い読みも文節に区切って変換できる");
         Assert.Equal(text, string.Concat(clauses!.Select(c => c.Reading)));
-        Assert.True(string.Concat(clauses.Select(c => c.Text)).Contains("天気"), string.Concat(clauses.Select(c => c.Text)));
+        Assert.True(string.Concat(clauses!.Select(c => c.Text)).Contains("天気"), string.Concat(clauses!.Select(c => c.Text)));
         Assert.True(ime.Convert(text)?.Contains("天気") == true, "全体の変換も");
     }
 
@@ -234,15 +318,14 @@ internal static class WindowsTests
         var arm64 = System.Runtime.InteropServices.Architecture.Arm64;
         var fresh = new Settings();
         Assert.Equal(InputMode.Tsf, fresh.Mode, "初期値は Meltype IME");
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: false, inUserLanguageList: true, x64), "登録済みで一覧にもある");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: false, inUserLanguageList: true, arm64), "ARM64 は登録済みで一覧にあっても戻す");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: true, inUserLanguageList: false, x64), "登録されていない");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, knownUnregistered: false, inUserLanguageList: false, x64), "まだ切り替えたことがなく、一覧に無い");
+        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: true, x64), "登録済みで一覧にもある");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: true, arm64), "ARM64 は登録済みで一覧にあっても戻す");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: true, inUserLanguageList: false, x64), "登録されていない");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: false, x64), "まだ切り替えたことがなく、一覧に無い");
 
-        var introduced = new Settings { TsfIntroduced = true };
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(introduced, knownUnregistered: false, inUserLanguageList: false, x64), "使っていた人は、一覧に無くても戻さない");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(introduced, knownUnregistered: false, inUserLanguageList: true, arm64), "使っていた人も、ARM64 なら戻す");
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(new Settings { Mode = InputMode.Keyboard }, knownUnregistered: true, inUserLanguageList: false, arm64), "Meltype キーボードはそのまま");
+        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: true, knownUnregistered: false, inUserLanguageList: false, x64), "使っていた人は、一覧に無くても戻さない");
+        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: true, knownUnregistered: false, inUserLanguageList: true, arm64), "使っていた人も、ARM64 なら戻す");
+        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, knownUnregistered: true, inUserLanguageList: false, arm64), "Meltype キーボードはそのまま");
     }
 
     [Test]
@@ -256,8 +339,8 @@ internal static class WindowsTests
     public static void Portable_StartupResetsModeToKeyboard()
     {
         var x64 = System.Runtime.InteropServices.Architecture.X64;
-        Assert.True(global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Tsf }, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
-        Assert.True(!global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Keyboard }, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
+        Assert.True(global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Tsf }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
+        Assert.True(!global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
     }
 
     [Test]
@@ -427,7 +510,7 @@ internal static class WindowsTests
     public static void SettingsForm_UsesToggleSwitchesForEveryOnOffSetting()
     {
         using var engine = new MeltypeEngine(new Settings(), null, null);
-        using var form = new UI.SettingsForm(engine);
+        using var form = new UI.SettingsForm(engine, new AppState());
         var controls = Descendants(form).ToList();
         // 設定画面に出す bool の項目は、すべてスイッチ (ON/OFF だけのプルダウン・チェックボックスを残さない)
         var settings = typeof(Settings).GetProperties().Count(p => p.PropertyType == typeof(bool) && p.CanWrite &&
@@ -436,11 +519,11 @@ internal static class WindowsTests
         Assert.Equal(settings + 2, controls.OfType<UI.ToggleSwitch>().Count(), "ON/OFF の設定 + 上の表示オプション 2 つ");
         Assert.True(!controls.OfType<ComboBox>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "ON/OFF だけのプルダウンが残っていない");
         Assert.True(!controls.OfType<CheckBox>().Any(), "チェックボックスが残っていない");
-        // 表の ON/OFF の列 (アプリ別設定の「有効」・独自の種類の「最初は英数」) もスイッチで、値は bool
+        // 表の ON/OFF の列 (アプリ別設定の「有効」「入力欄とみなす」・独自の種類の「最初は英数」) もスイッチで、値は bool
         var columns = controls.OfType<DataGridView>().SelectMany(g => g.Columns.Cast<DataGridViewColumn>()).ToList();
-        Assert.Equal(2, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
+        Assert.Equal(3, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
         Assert.True(!columns.OfType<DataGridViewComboBoxColumn>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "表に ON/OFF だけのプルダウンの列が残っていない");
-        var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名"));
+        var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名", StringComparison.Ordinal));
         Assert.Equal(false, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "mstsc.exe")).Cells[1].Value, "mstsc.exe は OFF");
         Assert.Equal(true, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "Code.exe")).Cells[1].Value, "Code.exe は ON");
         // 画面の値を設定に戻す (Collect) ときも、スイッチと表の bool がそのまま設定になる

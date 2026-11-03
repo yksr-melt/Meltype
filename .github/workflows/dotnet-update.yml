@@ -74,7 +74,7 @@ jobs:
             echo "## やること"
             echo
             echo "コードの変更は要りません。CI (setup-dotnet の \`10.0.x\`) がビルドのたびに最新の .NET を入れるので、"
-            echo "[docs/RELEASE.md]($GITHUB_SERVER_URL/$REPO/blob/main/docs/RELEASE.md) の手順で版を上げてタグを付ければ、Windows (同梱のランタイム)・Mac / Linux (NativeAOT) とも新しい .NET になります。"
+            echo "[docs/dev/RELEASE.md]($GITHUB_SERVER_URL/$REPO/blob/main/docs/dev/RELEASE.md) の手順で版を上げてタグを付ければ、Windows (同梱のランタイム)・Mac / Linux (NativeAOT) とも新しい .NET になります。"
             echo
             echo "この Issue は dotnet-update ワークフローが立てました (毎週水曜日に確認)。"
           } > "$RUNNER_TEMP/body.md"

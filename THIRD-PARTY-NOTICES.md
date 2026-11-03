@@ -1,6 +1,8 @@
 # サードパーティー通知
 
-Meltype のソースコード (このリポジトリ) には、他者の著作物は含まれていません。
+Meltype のソースコード (このリポジトリ) には、次のものを除いて他者の著作物は含まれていません。
+
+- かな配列 (月配列 U9・花配列・NICOLA・中指NICOLA・TRON 配列) の表 (`src/Meltype.Core/Input/KanaLayout.cs`): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
 
 ## 配布用パッケージに同梱しているもの
 
@@ -9,6 +11,8 @@ Meltype のソースコード (このリポジトリ) には、他者の著作�
 | .NET ランタイム (Microsoft.NETCore.App, Microsoft.WindowsDesktop.App) | MIT License | `app\dotnet\` (ライセンス: `app\dotnet\LICENSE.txt`、同梱部品の通知: `app\dotnet\ThirdPartyNotices.txt`) |
 | Microsoft Visual C++ のランタイム (`msvcp140.dll`・`vcruntime140.dll` など、Mozc の変換ヘルパーが使うもの。一覧は `app\mozc\VC-RUNTIME.txt`) | Microsoft Visual Studio ソフトウェア ライセンス条項の「再頒布可能コード」(Visual Studio の VC\Redist にあり、REDIST の一覧に載っているファイル。変えずにアプリと一緒に配ることが認められている) | `app\mozc\` |
 | [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper.exe`。Meltype 用の小さな入出力部分 `native/mozc/meltype_mozc_helper.cc` を足してビルドしたもの) | Mozc: BSD-3-Clause (Copyright Google Inc.)。辞書: IPAdic (NAIST)・ICOT・沖縄辞書 のライセンス。組み込みのライブラリ: Abseil (Apache-2.0)・Protocol Buffers (BSD-3-Clause)・Japanese Usage Dictionary など | `app\mozc\` (ライセンス: `app\mozc\MOZC-LICENSE.txt`、辞書とライブラリの全文: `app\mozc\MOZC-CREDITS.html`。Qt は使っていない) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server.exe` と DLL (CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/Get-Zenzai.ps1` で固定) | MIT License (Copyright The ggml authors)。組み込みの LLVM OpenMP (`libomp.dll`): Apache-2.0 WITH LLVM-exception | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-llama.cpp.txt`・`LICENSE-LLVM-OpenMP`、`app\zenzai\ZENZAI-NOTICE.txt`) |
+| [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のかな漢字変換モデル。`zenz-v3.2-small-Q5_K_M.gguf`) | Apache License 2.0 (Miwa-Keita) | `app\zenzai\` (ライセンス: `app\zenzai\LICENSE-zenz.txt`) |
 
 ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の VC ランタイム DLL は元のバイナリを変更せずに実行し、対象ファイルの一覧を `VC-RUNTIME.txt` に記載します。
 
@@ -18,6 +22,8 @@ Meltype のソースコード (このリポジトリ) には、他者の著作�
 | --- | --- | --- |
 | [AzooKeyKanaKanjiConverter](https://github.com/azooKey/AzooKeyKanaKanjiConverter) (azooKey の変換エンジンと辞書) | MIT License | Swift Package として取り込み、Meltype.app に組み込む (漢字変換)。Meltype.app を配布するときは、azooKey のライセンス表示も同梱する |
 | .NET ランタイム (NativeAOT) | MIT License | libMeltypeNative.dylib に組み込まれる |
+| [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `mac/build.sh` が取ってきて `Meltype.app/Contents/Resources/zenz/` に同梱する |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT License | AzooKeyKanaKanjiConverter の `ZenzaiCPU` トレイトで、llama.framework として Meltype.app に組み込まれる |
 | [swift-collections](https://github.com/apple/swift-collections)・[swift-algorithms](https://github.com/apple/swift-algorithms)・[swift-numerics](https://github.com/apple/swift-numerics) (Apple) | Apache License 2.0 | AzooKeyKanaKanjiConverter が使う部品として、一緒に Meltype.app に組み込まれる (`mac/Package.resolved` で版を固定) |
 | [Jinja](https://github.com/johnmai-dev/Jinja)・[swift-tokenizers](https://github.com/ensan-hcl/swift-tokenizers) | Apache License 2.0 | AzooKeyKanaKanjiConverter が依存する部品 (`mac/Package.resolved` で版を固定)。組み込まれる場合は、ライセンス表示を同梱する |
 
@@ -43,6 +49,10 @@ Meltype のソースコード (このリポジトリ) には、他者の著作�
 ### 読みの一覧 (dictionaries/readings.txt)
 
 ローマ字の打ち間違いを直すときに、直した読みがよく使う語になるかを調べるのに使います。JMdict のよく使う語 (同じ印) の読みと活用の種類を `tools/make-readings.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+
+### カタカナで書く語の読みの一覧 (dictionaries/katakana.txt)
+
+日英の区切りで、よく使う語の読みに無いカタカナ語 (ホスティング) を日本語の語として読むのに使います。JMdict のカタカナだけの読みを `tools/make-katakana.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
 
 ### 英字で書く語の候補 (dictionaries/loanwords.txt)
 

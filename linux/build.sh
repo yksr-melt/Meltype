@@ -12,6 +12,15 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(dirname "$here")"
 out="$here/build/Meltype-linux"
 mozc="$root/native/mozc/bin/linux"
+version="$(dotnet msbuild "$root/src/Meltype.Core/Meltype.Core.csproj" -nologo -getProperty:Version)"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
+    echo "版番号が不正です: $version" >&2
+    exit 1
+fi
+if [[ "${GITHUB_REF:-}" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$version" ]]; then
+    echo "タグの版と本体の版が一致しません: $GITHUB_REF / $version" >&2
+    exit 1
+fi
 
 case "$(uname -m)" in
     x86_64) rid=linux-x64 ;;
@@ -44,9 +53,9 @@ else
 fi
 
 echo "== 3/3 組み立て"
-cp "$here/ibus-engine-meltype" "$here/meltype.xml" "$here/icon.png" "$here/install.sh" "$here/uninstall.sh" "$out/"
-cp "$here/TESTER-README.txt" "$out/はじめにお読みください.txt"
+sed "s|@VERSION@|$version|g" "$here/meltype.xml" > "$out/meltype.xml"
+cp "$here/ibus-engine-meltype" "$here/meltype-settings" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$here/install-legacy.sh" "$here/uninstall-legacy.sh" "$out/"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$out/"
 cp "$mozc/meltype_mozc_helper" "$mozc/MOZC-LICENSE.txt" "$mozc/MOZC-CREDITS.html" "$out/mozc/"
-chmod +x "$out/ibus-engine-meltype" "$out/install.sh" "$out/uninstall.sh" "$out/mozc/meltype_mozc_helper"
+chmod +x "$out/ibus-engine-meltype" "$out/meltype-settings" "$out/install-legacy.sh" "$out/uninstall-legacy.sh" "$out/mozc/meltype_mozc_helper"
 echo "作成しました: $out"

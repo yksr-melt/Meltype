@@ -13,6 +13,7 @@ public enum LineKind
     /// <summary>コメントの中 (// # -- /* <!-- など)。日本語を書くことが多い。</summary>
     Comment,
     /// <summary>文字列の中 ("…" '…' `…`)。日本語を書くことが多い。</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1720:Identifier contains type name", Justification = "文字列リテラルの中という位置を表す値。データ型の名前ではない。")]
     String,
     /// <summary>ターミナルで動く AI・チャットの入力 (Claude Code・Codex などの「&gt; 」の後)。日本語を書くことが多い。</summary>
     Prompt,
@@ -242,6 +243,7 @@ public static class LineContext
 /// キャレットより前の文字列を、打鍵から追いかける (フックのスレッドと UI スレッドから呼ばれる)。
 /// 複数行のコメント・文字列 (""" … """、/* … */) の中かを調べるため、前の行も最大 4000 文字持つ (行の区切りは改行 1 文字)。
 /// キャレットが動いた (矢印キー・クリック・フォーカスの変化・Ctrl の操作) ら分からなくなり、UI Automation で読み直す。
+/// 分からない間も、そこから打った文字列は <see cref="Tracked"/> で追いかける。
 /// </summary>
 public sealed class LineTracker
 {
@@ -256,11 +258,19 @@ public sealed class LineTracker
         get { lock (_gate) return _known ? _text.ToString() : null; }
     }
 
+    /// <summary>
+    /// 追いかけられた分の、キャレットより前の文字列。分からなければ、分からなくなってから打った文字列。
+    /// 周辺文字列を読めない入力欄 (ターミナル) で、キャレットが動いたあとに打った引用符・コメントを調べるのに使う。
+    /// </summary>
+    public string Tracked
+    {
+        get { lock (_gate) return _text.ToString(); }
+    }
+
     public void Append(string text)
     {
         lock (_gate)
         {
-            if (!_known) return;
             foreach (var c in text) _text.Append(c == '\r' ? '\n' : c);
             Trim();
         }
@@ -270,7 +280,6 @@ public sealed class LineTracker
     {
         lock (_gate)
         {
-            if (!_known) return;
             // 改行を消したら前の行とつながる (前の行も持っているので分かる)。
             if (_text.Length > 0) _text.Length--;
             else _known = false;

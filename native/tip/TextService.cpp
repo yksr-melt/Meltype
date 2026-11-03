@@ -644,7 +644,49 @@ STDMETHODIMP TextService::OnChange(REFGUID guid) {
     TipLog(L"入力モード: %s", open_ ? L"日本語" : L"英数");
     if (!open_ && composition_ != nullptr) CommitAsync(false);
     UpdateLangBar();
+    // アプリ・Windows による自動的な開閉 (パスワード欄への移動など) では表示しない。
+    // 明示的な切り替えの表示は ToggleInputMode の最後で 1 回だけ依頼する。
     return S_OK;
+}
+
+void TextService::FlashModeIndicator(ITfContext* context) {
+    // 設定が OFF なら、カーソル位置の取得も Meltype.exe への問い合わせもしない。
+    if (disabled_ || deactivated_ || !modeIndicator_) return;
+    // バックグラウンドの入力スレッドがモードを変えても、前面の入力欄に表示しない。
+    DWORD process = 0;
+    GetWindowThreadProcessId(GetForegroundWindow(), &process);
+    if (process != GetCurrentProcessId()) return;
+    // Terminal の UI Automation の選択範囲は実際のカーソル位置とは限らない。
+    // 候補ウィンドウと同じ TSF の入力コンテキストから、未変換時の位置も取得する。
+    Microsoft::WRL::ComPtr<ITfContext> focused;
+    if (context == nullptr && threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
+        context = focused.Get();
+    }
+    RECT anchor = {};
+    RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
+        TF_SELECTION selection = {};
+        ULONG fetched = 0;
+        if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0 && selection.range != nullptr) {
+            Microsoft::WRL::ComPtr<ITfRange> range;
+            range.Attach(selection.range);
+            range->Collapse(ec, selection.style.ase == TF_AE_START ? TF_ANCHOR_START : TF_ANCHOR_END);
+            Microsoft::WRL::ComPtr<ITfContextView> view;
+            BOOL clipped = FALSE;
+            if (SUCCEEDED(context->GetActiveView(&view)) &&
+                (FAILED(view->GetTextExt(ec, range.Get(), &anchor, &clipped)) || clipped)) anchor = {};
+        }
+        return S_OK;
+    });
+    std::string position;
+    if (anchor.bottom > anchor.top && anchor.bottom - anchor.top < 200)
+        position = ",\"x\":" + std::to_string(anchor.left) + ",\"y\":" + std::to_string(anchor.bottom + 4);
+    JsonValue reply;
+    // 表示は補助機能なので、常駐側が応答しなければ短い時間で諦める。
+    Request("{\"op\":\"indicator\",\"process\":" + JsonString(ProcessName()) +
+            ",\"thread\":" + std::to_string(GetCurrentThreadId()) +
+            ",\"japanese\":" + (IsOpen() ? "true" : "false") + position + "}", reply, 100, true);
 }
 
 void TextService::SetOpen(bool open) {
@@ -781,6 +823,7 @@ void TextService::ApplyHello(const JsonValue& reply, bool currentState) {
         directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
         codeApp_ = serverActive_ && reply[L"code"].Bool();
         fullWidthSpace_ = serverActive_ && reply[L"fullWidthSpace"].Bool();
+        modeIndicator_ = serverActive_ && reply[L"modeIndicator"].Bool();
     }
     if (serverStateKnown_) shortcutsEnabled_ = serverActive_;
     // 入力応答にはキー一覧が含まれないので、状態が更新済みでも一覧はこの応答から取得する。
@@ -941,7 +984,7 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
         directEnglishWord_ = false;
     }
     // Shift+Space は全角スペース (Microsoft IME と同じ。Meltype.exe が入れる: issue #246)
-    // 設定「スペースを全角で入力」が ON なら、日本語入力のときの Space も受け取る (Space が全角・Shift+Space が半角。Meltype.exe が入れる: issue #881)
+    // 設定「スペースの幅」が全角なら、日本語入力のときの Space も受け取る (Space が全角・Shift+Space が半角。Meltype.exe が入れる: issue #881)
     bool starts = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'!' && ch <= L'~') ||
                   (vk == VK_SPACE && (KeyDown(VK_SHIFT) || (open_ && fullWidthSpace_)));
     if (!starts) return false;
@@ -1145,6 +1188,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool toggl
         directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
         directEnglishWord_ = directDetection_ && reply[L"directEnglishWord"].Bool();
         fullWidthSpace_ = serverActive_ && reply[L"fullWidthSpace"].Bool();
+        modeIndicator_ = serverActive_ && reply[L"modeIndicator"].Bool();
         switchToJapanese = reply[L"switchToJapanese"].Bool();
         consumed_ = reply[L"consumed"].Bool();
         ApplyMode(reply);
@@ -1185,15 +1229,18 @@ void TextService::ToggleInputMode(ITfContext* context) {
         if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
         context = focused.Get();
     }
-    if (IsOpen()) {
+    const bool wasJapanese = IsOpen();
+    if (wasJapanese) {
         // 日本語 → 英数。コードの行を日本語にしていたなら、その行を英数に戻す (IME は開いたまま。コメント・文字列はまた日本語になる)。
         // それ以外は IME を閉じる
         if (!codeApp_ || !SetCodeLine(context, false)) SetOpen(false);
-        return;
+    } else {
+        // 英数 → 日本語。コードの行なら、その行だけ日本語にする (改行・別の行に移ると英数に戻る)
+        if (!open_) SetOpen(true);
+        if (codeApp_ && codeEnglish_) SetCodeLine(context, true);
     }
-    // 英数 → 日本語。コードの行なら、その行だけ日本語にする (改行・別の行に移ると英数に戻る)
-    if (!open_) SetOpen(true);
-    if (codeApp_ && codeEnglish_) SetCodeLine(context, true);
+    // Terminal・コードの行では IME 自体を開いたまま切り替わり、OnChange は来ない。
+    if (wasJapanese != IsOpen()) FlashModeIndicator(context);
 }
 
 bool TextService::SetCodeLine(ITfContext* context, bool japanese) {
@@ -1371,8 +1418,9 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
     for (const JsonValue& edit : reply[L"commits"].array) {
         const std::wstring& text = edit[L"text"].Str();
         int deleteBefore = edit[L"deleteBefore"].Int();
-        // 変換中は範囲外の確定語を置換せず、今の変換を保持する。
-        if (deleteBefore > 0 && composition_ != nullptr) continue;
+        const JsonValue& current = edit[L"current"];
+        // 変換中は範囲外の確定語を置換せず、今の変換を保持する (今確定した語がある確定し直しは、下で今の語を確定してから書き換える)。
+        if (deleteBefore > 0 && composition_ != nullptr && current.type != JsonValue::Type::String) continue;
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (composition_ != nullptr) {
             composition_->GetRange(&range);
@@ -1384,10 +1432,23 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0) range.Attach(selection.range);
         }
         if (!range) continue;
-        // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
-        // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
-        if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
-        if (!WriteCommit(ec, context, range.Get(), text)) continue;
+        if (deleteBefore > 0 && current.type == JsonValue::Type::String) {
+            // 確定し直し (今確定した語つき): 今の語をふつうに確定してから、次の編集セッションで、前に確定した文字ごと書き換える。
+            // 同じ編集セッションで変換中の文字の外も書き換えると、Chrome はページに変換の終わり (compositionend) を伝えない。
+            // 変換中の範囲を前に広げて書き換えると、Chrome では TF_E_RANGE_NOT_COVERED で失敗する (#262)
+            if (!WriteCommit(ec, context, range.Get(), current.Str())) continue;
+            const JsonValue& expect = edit[L"expect"];
+            // 今の語の後ろの位置を覚えておき、書き換えるときにキャレットがそこにあるかを確かめる (後ろに文字が入っても動かないように、両端とも前に寄せる)
+            Microsoft::WRL::ComPtr<ITfRange> end;
+            if (expect.type == JsonValue::Type::String && SUCCEEDED(range->Clone(&end)) && SUCCEEDED(end->Collapse(ec, TF_ANCHOR_END)) &&
+                SUCCEEDED(end->SetGravity(ec, TF_GRAVITY_BACKWARD, TF_GRAVITY_BACKWARD)))
+                RewriteBeforeCaret(context, end.Get(), deleteBefore + static_cast<LONG>(current.Str().size()), expect.Str() + current.Str(), text);
+        } else {
+            // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
+            // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
+            if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
+            if (!WriteCommit(ec, context, range.Get(), text)) continue;
+        }
         next.Reset();
         if (SUCCEEDED(range->Clone(&next))) next->Collapse(ec, TF_ANCHOR_END);
     }
@@ -1432,6 +1493,32 @@ bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG coun
         return false;
     }
     return SUCCEEDED(range->ShiftStart(ec, -count, &moved, nullptr));
+}
+
+void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG count, const std::wstring& before, const std::wstring& text) {
+    Microsoft::WRL::ComPtr<TextService> self = this;
+    Microsoft::WRL::ComPtr<ITfContext> target = context;
+    Microsoft::WRL::ComPtr<ITfRange> committedEnd = end;
+    JsonValue expect;
+    expect.type = JsonValue::Type::String;
+    expect.string = before;
+    RunEditSession(context, clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, target, committedEnd, count, expect, text](TfEditCookie ec) {
+        // 動くまでに次の語を打ち始めていたら書き換えない
+        if (self->composition_ != nullptr) return S_OK;
+        TF_SELECTION selection = {};
+        ULONG fetched = 0;
+        if (FAILED(target->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return S_OK;
+        Microsoft::WRL::ComPtr<ITfRange> range;
+        range.Attach(selection.range);
+        // キャレットが今の語の後ろのまま (選んでいない) で、その前が before のままのときだけ書き換える。
+        // キャレットが動いた (同じ文字が並んだ別の所へ動いたときも)・前の文字を読めないときは、今の語を確定したままにする
+        BOOL empty = FALSE, same = FALSE;
+        if (FAILED(range->IsEmpty(ec, &empty)) || !empty || FAILED(range->IsEqualEnd(ec, committedEnd.Get(), TF_ANCHOR_END, &same)) || !same) return S_OK;
+        if (!self->ExtendOverPrevious(ec, range.Get(), count, expect)) return S_OK;
+        if (target.Get() == self->editSinkContext_) self->ownEdit_ = true;
+        if (!self->WriteCommit(ec, target.Get(), range.Get(), text)) self->ownEdit_ = false;
+        return S_OK;
+    });
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text) {

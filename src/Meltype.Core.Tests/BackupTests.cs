@@ -10,6 +10,27 @@ namespace Meltype.Tests;
 internal static class BackupTests
 {
     [Test]
+    public static void Backup_TimestampUsesGregorianCalendarInEveryLocale()
+    {
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        var root = Path.Combine(Path.GetTempPath(), "meltype-backup-culture-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("th-TH");
+            Directory.CreateDirectory(root);
+            var (content, _) = Backup.Create(root, "test");
+            var (created, _, _) = Backup.Inspect(content);
+            var date = DateTime.ParseExact(created, "yyyy-MM-ddTHH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Equal(DateTime.Now.Year, date.Year, "仏暦ではなく西暦で保存する");
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = previous;
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Test]
     public static void Backup_RoundTrips_AndStaysInsideDataFolder()
     {
         var root = Path.Combine(Path.GetTempPath(), "meltype-backup-test-" + Guid.NewGuid().ToString("N"));

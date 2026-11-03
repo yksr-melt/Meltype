@@ -73,7 +73,7 @@ internal static class Quality
         new("曖昧な語", "sushi", "すし"),
         new("曖昧な語", "sushi", "sushi", Before: "I like "),
         new("曖昧な語", "sushi", "すし", Before: "今日は"),
-        new("曖昧な語", "repo", "れぽ"),
+        new("曖昧な語", "repo", "repo"),
         new("曖昧な語", "make", "make", Before: "Please "),
 
         // --- 英語 ---
@@ -137,6 +137,29 @@ internal static class Quality
         // ツール名 (Claude Code): code の de を助詞にしない (issue #1001)
         new("英語", "claudecode", "claudecode"),
         new("混在", "claudecodewotukau", "claudecodeをつかう"),
+        // ローマ字として最後まで読めるが日本語の語ではない英単語 (english-readable.txt)
+        new("英語", "image", "image"),               // issue #852
+        new("英語", "doomscroll", "doomscroll"),     // issue #876
+        new("英語", "printenv", "printenv"),         // issue #915
+        new("混在", "garagewokiku", "garageをきく"), // issue #1114
+        new("英語", "nohup", "nohup"),               // issue #1117
+        new("英語", "vocaloid", "vocaloid"),         // issue #1121
+        new("英語", "ost", "ost"),                   // issue #1123
+        new("英語", "dive", "dive"),                 // issue #1125
+        new("英語", "dice", "dice"),                 // issue #1139
+        new("英語", "die", "die"),
+        // 似た綴りの日本語は今までどおり
+        new("日本語", "imeeji", "いめえじ"),
+        new("日本語", "gare-ji", "がれーじ"),
+        new("日本語", "midika", "みぢか"),           // issue #1179
+        new("日本語", "midikani", "みぢかに"),
+        // 英単語の midi は英字のまま (issue #1122)
+        new("英語", "midi", "midi"),
+        new("混在", "midiwo", "midiを"),
+        new("混在", "midinofairu", "midiのふぁいる"),
+        // 語のすぐ後ろが ん なら、語の最後の音の続き (いまげんざい = 今現在。issue #1175)
+        new("日本語", "imagenzai", "いまげんざい"),
+        new("日本語", "wakatte", "わかって"),         // issue #1231 (Wakatte.TV は固有名詞のまま: Symbols_StartComposition)
         new("混在", "foo_bar@example.com", "foo_bar@example.com"),
         new("混在", "taro+news@example.com", "taro+news@example.com"),
         new("混在", "yamada-taro@example.com", "yamada-taro@example.com"),
@@ -191,7 +214,7 @@ internal static class Quality
         new("混在", "microsoftnokaisha", "microsoftのかいしゃ"),
         new("混在", "kyouhaclaudetohanashita", "きょうはclaudeとはなした"),
         new("混在", "pythonnobug", "pythonのbug"),
-        new("混在", "GitHub no repo", "GitHub のれぽ"),
+        new("混在", "GitHub no repo", "GitHub のrepo"),
         new("混在", "Google to Apple", "Google とApple"),
         // 助詞「や」+ 英単語 / 英単語 + 助詞「や」(Particles / TrailingParticles に ya)
         new("混在", "yagithub", "やgithub"),

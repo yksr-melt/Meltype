@@ -7,6 +7,7 @@ namespace Meltype.Composition;
 /// 候補の日本語の意味 (dictionaries/meanings.txt。ウィクショナリー日本語版から作った表、CC BY-SA 4.0)。
 /// 変換中に候補で止まったとき、その意味を出す (箸 → 食物を…二本一組で用いられる棒)。
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
 public sealed class MeaningDictionary
 {
     // 書き方 [TAB] 読みの印 [TAB] 意味

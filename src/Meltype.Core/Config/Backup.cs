@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 
@@ -17,7 +18,7 @@ public static class Backup
     private const int FormatVersion = 1;
 
     /// <summary>バックアップに入れるファイル (データフォルダーからの相対パス)。dictionaries/ はユーザーが足した辞書。</summary>
-    private static readonly string[] RootFiles = ["config.json", "conversions.json", "translations.json", "languages.json", "userdict.txt", "snippets.json", "phrases.txt"];
+    private static readonly string[] RootFiles = ["config.json", "state.json", "conversions.json", "translations.json", "languages.json", "userdict.txt", "snippets.json", "phrases.txt"];
 
     /// <summary>
     /// 戻してよい名前か (バックアップに入れるファイルと同じ名前だけ: 決まった名前か、dictionaries/ の直下の .txt)。
@@ -58,7 +59,7 @@ public static class Backup
             writer.WriteString("format", Format);
             writer.WriteNumber("version", FormatVersion);
             writer.WriteString("app", appVersion);
-            writer.WriteString("created", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss"));
+            writer.WriteString("created", DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture));
             writer.WriteStartObject("files");
             foreach (var name in TargetFiles(dataDirectory))
             {

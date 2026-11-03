@@ -432,8 +432,9 @@ function initScrollSpy() {
   targets.forEach((_, target) => observer.observe(target));
 }
 
-const OS_ASSET = { windows: "setup.exe", mac: "mac.zip", linux: "linux.zip" };
-const OS_LABEL = { windows: "Windows 版をダウンロード", mac: "Mac 版 (プレビュー) をダウンロード", linux: "Linux 版 (プレビュー) をダウンロード" };
+// Linux はディストリビューションごとに入れ方が違うので、パッケージは直接落とさずに docs/LINUX.md の手順へ案内する。
+const OS_ASSET = { windows: "setup.exe", mac: "mac.zip" };
+const OS_LABEL = { windows: "Windows 版をダウンロード", mac: "Mac 版 (プレビュー) をダウンロード", linux: "Linux 版 (プレビュー) の入れ方" };
 
 function inline(text) {
   const codes = [];
@@ -598,7 +599,7 @@ function applyDownloads(data, os) {
   });
   // OS が分からない PC では、いちばん使われている Windows のインストーラーを直接落とす。
   // スマホでは落としても使えないので、リリースのページのままにする。
-  const target = OS_ASSET[os] ? os : os === "mobile" ? null : "windows";
+  const target = OS_ASSET[os] ? os : os === "mobile" || os === "linux" ? null : "windows";
   const asset = target ? assetFor(latest, OS_ASSET[target]) : null;
   const main = document.querySelector("[data-download-main]");
   if (asset && main) {
@@ -606,7 +607,7 @@ function applyDownloads(data, os) {
     main.querySelector("[data-download-label]").textContent = OS_LABEL[target];
     main.querySelector("[data-download-meta]").textContent = `${latest.tag}・${asset.name.split("-").pop()}・${formatBytes(asset.size)}`;
     document.querySelectorAll("[data-download-link]:not([data-download-main])").forEach((link) => (link.href = asset.url));
-  } else if (main && os !== "mobile") {
+  } else if (main && target) {
     main.querySelector("[data-download-meta]").textContent = `${latest.tag}・Windows 10 / 11`;
   }
   const hashes = document.querySelector("[data-hashes]");
@@ -633,7 +634,10 @@ function initDownloadLabel(os) {
   if (!main) return;
   if (OS_LABEL[os]) main.querySelector("[data-download-label]").textContent = OS_LABEL[os];
   if (os === "mac") main.querySelector("[data-download-meta]").textContent = "macOS 13 以降・Apple シリコン";
-  if (os === "linux") main.querySelector("[data-download-meta]").textContent = "IBus / fcitx5・x86_64";
+  if (os === "linux") {
+    main.href = "https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md#インストール";
+    main.querySelector("[data-download-meta]").textContent = "IBus / fcitx5";
+  }
   if (os === "mobile") main.querySelector("[data-download-meta]").textContent = "PC で開いてください・Windows 10 / 11";
 }
 

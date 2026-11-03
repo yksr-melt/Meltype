@@ -41,6 +41,7 @@ def main():
         filenames = [
             'NativeCore.swift', 'InputController.swift', 'KeyMapping.swift', 'MacUserDictionary.swift',
             'ModeShortcuts.swift', 'ModeIndicator.swift', 'ModeServices.swift', 'InputSourceRegistration.swift',
+            'ImportDialogPresentation.swift',
         ]
         if args.real_converter:
             package = root / 'package'

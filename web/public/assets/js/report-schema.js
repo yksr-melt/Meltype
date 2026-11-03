@@ -73,7 +73,7 @@ export const FORMS = [
       { id: "os-detail", label: "OS の詳細", type: "text", placeholder: "Ubuntu 24.04 / GNOME / Wayland", hint: "Mac: macOS 15.2 / M2 など。Linux: Ubuntu 24.04 / GNOME / Wayland など" },
       { id: "expected", label: "どうなってほしかったか", type: "textarea" },
       { id: "frequency", label: "起きる頻度", type: "select", options: ["毎回", "ときどき", "一度だけ"] },
-      { id: "log", label: "ログ", type: "code", hint: "トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」。見られて困る部分は消してから貼ってください" },
+      { id: "log", label: "ログ", type: "code", hint: "トレイのアイコンを右クリック →「ログ / 判定理由...」→「コピー」。Windows の更新の不具合は %LOCALAPPDATA%\\Meltype\\update\\install.log の中身。見られて困る部分は消してから貼ってください" },
       ENVIRONMENT,
       CONTACT,
     ],
@@ -90,6 +90,7 @@ export const FORMS = [
       { id: "typed", label: "打ったもの (キーをそのまま)", type: "text", placeholder: "nihongowohanasu" },
       { id: "actual", label: "出たもの", type: "text", placeholder: "にほんgoを話す" },
       { id: "expected", label: "期待した結果", type: "text", placeholder: "日本語を話す" },
+      { id: "zenzai", label: "Zenzai (zenz) を使っているか", type: "select", options: ["使っていない", "使っている", "分からない"], hint: "設定の「Zenzai を使う」です。ON だと変換の結果が変わります" },
     ],
     optional: [
       { id: "key", label: "最後に押したキー", type: "select", options: ["Space (変換)", "Enter (確定)", "打っている途中 (まだ確定していない)", "句読点・記号", "そのほか"] },

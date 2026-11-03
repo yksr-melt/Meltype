@@ -37,6 +37,7 @@ if ($Step -ne 'Sign') {
 }
 
 $mozcBin = Join-Path $root 'native\mozc\bin'
+$zenzaiBin = Join-Path $root 'native\zenzai\bin'
 $dotnetRoot = Split-Path -Parent (Get-Command dotnet).Source
 $runtime = Join-Path $app 'dotnet'
 $version = $null
@@ -110,6 +111,21 @@ if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
 }
 else {
     Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。Microsoft IME だけで変換します。'
+}
+
+# Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。
+# 「Zenzai を使う」は既定 ON で、場所が空なら app\zenzai のものを使う。無ければ今までの変換エンジンだけで変換する。
+if (Test-Path -LiteralPath (Join-Path $zenzaiBin 'llama-server.exe')) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $app 'zenzai') | Out-Null
+    Copy-Item -Path (Join-Path $zenzaiBin '*') -Destination (Join-Path $app 'zenzai') -Force
+    Write-Host 'Zenzai (llama-server とモデル) を同梱しました。'
+}
+elseif ($Version -or $env:GITHUB_REF -like 'refs/tags/v*') {
+    # 版番号付き (リリース) のビルドでは、Zenzai の無い配布物を作らない (「Zenzai を使う」は既定 ON なので)
+    throw 'Zenzai がありません (native\zenzai\Get-Zenzai.ps1)。リリースのビルドなので止めます。'
+}
+else {
+    Write-Warning 'Zenzai がありません (native\zenzai\Get-Zenzai.ps1)。Zenzai なしで変換します。'
 }
 
 # Meltype が使うランタイムの版 (runtimeconfig.json に書かれている) と同じものを、インストール済みの .NET から探してコピーする。
@@ -225,7 +241,7 @@ if ($Step -eq 'Build') {
 
 # コード署名 (証明書があるときだけ): 環境変数 MELTYPE_SIGN_PFX (証明書の .pfx) と MELTYPE_SIGN_PASSWORD を設定すると、
 # Meltype.exe・Meltype.dll・Mozc のヘルパーに署名する (SmartScreen の警告とウイルス対策ソフトの誤検知を減らすため)。
-# GitHub Actions では、秘密 SIGN_PFX_BASE64 / SIGN_PASSWORD を登録すると build.yml が設定する。
+# GitHub Actions では、秘密 SIGN_PFX_BASE64 / SIGN_PASSWORD を登録すると windows.yml が設定する。
 if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1

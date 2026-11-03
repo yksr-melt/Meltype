@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
@@ -38,6 +39,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     private readonly string _serverPath;
     private readonly string _modelPath;
+    private readonly string _device;
     private readonly int _timeoutMs;
     private readonly Uri? _fixedEndpoint;
     private readonly object _gate = new();
@@ -58,11 +60,28 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <param name="serverPath">llama-server の実行ファイル。</param>
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
     /// <param name="timeoutMs">1 回の変換を待つ時間。</param>
-    public ZenzaiConverter(string serverPath, string modelPath, int timeoutMs = 400)
+    /// <param name="device">使う GPU (llama-server の --device)。空なら CPU だけで計算する。</param>
+    public ZenzaiConverter(string serverPath, string modelPath, int timeoutMs = 400, string device = "")
     {
         _serverPath = serverPath;
         _modelPath = modelPath;
         _timeoutMs = timeoutMs;
+        _device = device;
+    }
+
+    /// <summary>
+    /// llama-server に渡す引数 (issue #1307: 使う GPU)。
+    /// 使う GPU が空なら、今までどおり -ngl 0 で CPU だけで計算する (--device none を受け付けない古い llama-server でも動くように)。
+    /// 使う GPU を書いたら --device だけを渡し、GPU に載せる層の数は llama-server に任せる (-ngl の既定は auto で、空いている VRAM に合わせる)。
+    /// </summary>
+    internal static List<string> ServerArguments(string modelPath, int port, string device)
+    {
+        var arguments = new List<string> { "-m", modelPath, "--host", "127.0.0.1", "--port", port.ToString(CultureInfo.InvariantCulture), "-c", "1024", "--parallel", "1",
+            // zenz の前処理 (gpt2-small-japanese-char) は本家の llama.cpp に無く、読み込めない。gpt-2 に差し替えると本家でも動く (#849 で Serugu さんが確かめた)
+            "--override-kv", "tokenizer.ggml.pre=str:gpt-2" };
+        if (device.Trim() is { Length: > 0 } name) arguments.AddRange(["--device", name]);
+        else arguments.AddRange(["-ngl", "0"]);
+        return arguments;
     }
 
     /// <summary>すでに動いている llama-server を使う (テスト用)。</summary>
@@ -81,6 +100,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
     public bool GaveUp => _failures >= 3;
+
+    /// <summary>llama-server が起動して、変換を頼めるか (起動中は false)。</summary>
+    public bool IsReady { get { lock (_gate) return _ready; } }
+
+    /// <summary>応答が遅かったので、しばらく使わずに休んでいるか。</summary>
+    public bool IsResting => Environment.TickCount64 < Interlocked.Read(ref _pausedUntil);
 
     /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
     public bool HasAnswered { get; private set; }
@@ -200,10 +225,22 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
             };
-            foreach (var argument in new[] { "-m", _modelPath, "--host", "127.0.0.1", "--port", port.ToString(), "-c", "1024", "-ngl", "0", "--parallel", "1",
-                // zenz の前処理 (gpt2-small-japanese-char) は本家の llama.cpp に無く、読み込めない。gpt-2 に差し替えると本家でも動く (#849 で Serugu さんが確かめた)
-                "--override-kv", "tokenizer.ggml.pre=str:gpt-2" })
+            foreach (var argument in ServerArguments(_modelPath, port, _device))
                 info.ArgumentList.Add(argument);
+            // Windows 版の llama.cpp は既定で全物理コアを使い、計算後も 200ms ほど CPU を使用し続ける。ライブ変換では打鍵のたびに変換するため、入力中はこの状態が続く。
+            // そこでスレッド数を 4 までに制限し (zenz は小さいモデルなので、4 より増やしてもほとんど速くならない)、計算後に CPU を使い続ける時間を短くする。どの設定を読むかはビルドにより異なる:
+            // LLVM / Intel の OpenMP でビルドしたもの (本家の Windows の CPU 版) は KMP_BLOCKTIME を読むので、5ms にする。
+            // OpenMP なしのビルドは --poll を読むので、0 にする (--poll は、次の計算が来たかを CPU を使ってループで確かめ続ける長さ。0 にするとループせず、すぐに条件変数で待つ)。
+            // MSVC の OpenMP でビルドしたものはどちらも読まず、スレッド数の制限だけになる (OMP_WAIT_POLICY=PASSIVE なら CPU 時間は減るが、変換が 20ms ほど遅くなる)
+            // LLAMA_ARG_THREADS・KMP_BLOCKTIME が設定されている場合は、その値を優先する (-t は LLAMA_ARG_THREADS より優先されるため付けない)
+            if (!info.Environment.ContainsKey("LLAMA_ARG_THREADS"))
+            {
+                info.ArgumentList.Add("-t");
+                info.ArgumentList.Add(Math.Min(Environment.ProcessorCount, 4).ToString(CultureInfo.InvariantCulture));
+            }
+            info.ArgumentList.Add("--poll");
+            info.ArgumentList.Add("0");
+            info.Environment.TryAdd("KMP_BLOCKTIME", "5");
             KillStaleServer();
             var process = Process.Start(info);
             if (process is null) { Fail(); return; }
@@ -282,7 +319,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// 前の Meltype が強制終了されて残った llama-server (PID ファイルに書いてあるもの) を終わらせる。
     /// PID は使い回されるので、名前に加えて起動した時刻も同じときだけ (ユーザーが自分で動かしている別の llama-server を止めないように)。
     /// </summary>
-    private void KillStaleServer()
+    private static void KillStaleServer()
     {
         try
         {

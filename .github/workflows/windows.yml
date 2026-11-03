@@ -1,0 +1,254 @@
+# Windows 版のビルドとテスト、配布物 (package) のビルド。
+#   test・installer-script・lifecycle … Pull Request と main で流す。test は main の必須チェック
+#   mozc・package                      … タグ・手動実行 (release.yml から呼ばれたときを含む)。mozc は native/mozc を変えて main に push したときも
+#                                        配布物は Artifacts (meltype-package) に置くだけで、リリースへの添付は release.yml がする
+name: windows
+
+on:
+  # paths で絞ると、当たらない Pull Request で必須チェックの test が報告されずマージできなくなる
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Build
+        run: dotnet build Meltype.sln -c Release
+
+      # Mozc-UT の辞書の統合 (native/mozc/merge-ut-dictionary.py)。本物の Mozc も辞書も要らない。
+      # 環境変数 MELTYPE_UT_DICTIONARY を指定したときだけ使うものなので、ビルドには影響しない。
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Test Mozc-UT dictionary merge
+        run: python native/mozc/tests/test_merge_ut_dictionary.py
+
+      # Meltype IME (入力欄に直接入力する TSF の DLL)。C++ なので dotnet build とは別にビルドする (x64 と x86)。
+      - name: Build Meltype IME
+        shell: pwsh
+        run: ./native/tip/build.ps1 -Configuration Release
+
+      - name: Test package scan failure handling
+        shell: powershell
+        run: .\tools\Test-WindowsPackageScan.ps1
+
+      # Microsoft IME (日本語) や英語のスペルチェッカーが無い環境では、それらを使うテストは飛ばされる。
+      - name: Test
+        run: dotnet run --project src/Meltype.Tests/Meltype.Tests.csproj -c Release --no-build
+
+  # インストーラーの台本 (packaging/Meltype.iss) が Inno Setup で通るか。中身はダミーのファイルで確かめる (本物は package で作る)。
+  installer-script:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test setup IME registration launcher
+        shell: powershell
+        run: .\tools\Test-SetupIme.ps1
+      - name: Compile installer script
+        shell: pwsh
+        run: |
+          $iscc = .\packaging\Find-InnoSetup.ps1
+          $stage = Join-Path $env:RUNNER_TEMP 'Meltype'
+          New-Item -ItemType Directory -Force -Path (Join-Path $stage 'app') | Out-Null
+          Set-Content -LiteralPath (Join-Path $stage 'app\Meltype.exe') -Value 'dummy'
+          Copy-Item -LiteralPath LICENSE -Destination (Join-Path $stage 'LICENSE.txt')
+          Copy-Item -LiteralPath THIRD-PARTY-NOTICES.md -Destination (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
+          & $iscc /Q "/DAppVersion=0.0.0-check" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
+          if ($LASTEXITCODE -ne 0) { throw "インストーラーの台本を Inno Setup で通せませんでした (exit code $LASTEXITCODE)。" }
+          # IME を同梱する場合のチェックボックス・起動処理もコンパイルする。
+          New-Item -ItemType Directory -Force -Path (Join-Path $stage 'app\tip') | Out-Null
+          Set-Content -LiteralPath (Join-Path $stage 'app\meltype-ime.ps1') -Value '# dummy'
+          Set-Content -LiteralPath (Join-Path $stage 'app\tip\Register-Tip.ps1') -Value '# dummy'
+          & $iscc /Q "/DAppVersion=0.0.0-check-ime" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
+          if ($LASTEXITCODE -ne 0) { throw "IME 同梱のインストーラーを Inno Setup で通せませんでした (exit code $LASTEXITCODE)。" }
+
+  # install.ps1 と uninstall.ps1 を、ダミーの Meltype.exe で通す (tools/Test-InstallLifecycle.ps1)。
+  #   本物の配布物でのインストール → 更新 → アンインストールを確かめる統合テストが必要になったら、手動実行のワークフローを別に足す。
+  #   update.ps1 のダウンロードは、ここでは確かめていない (API の URL が固定で、偽のサーバーに向けられない)。別途、CI での検証が要る。
+  lifecycle:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test install, update and uninstall
+        shell: powershell
+        run: .\tools\Test-InstallLifecycle.ps1
+
+  # Mozc の変換ヘルパー (native/mozc) をビルドする。初回は 30〜40 分かかるので、配布用の zip を作るとき
+  # (タグ・手動実行) と、ヘルパーのソースを変えて main に push したときだけ。Bazel の結果はキャッシュして次から速くする。
+  mozc:
+    if: github.event_name != 'pull_request'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    outputs:
+      built: ${{ steps.check.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # タグ・手動実行ならビルドする。push なら、native/mozc かこのファイルが変わったときだけ (変わっていなければ数秒で終わる)。
+      - name: Check
+        id: check
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || git diff --name-only "$BEFORE" "$GITHUB_SHA" -- native/mozc .github/workflows/windows.yml | grep -q .; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "native/mozc は変わっていないので、Mozc のビルドは飛ばします。"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          BEFORE: ${{ github.event.before }}
+      - if: steps.check.outputs.build == 'true'
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Bazelisk
+        if: steps.check.outputs.build == 'true'
+        shell: pwsh
+        run: |
+          # 版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
+          $version = 'v1.29.0'
+          $expected = '092a8738d5b41aae7a85c42cc961b1034e3389aba43ffc20c0fabda7b43e095b'
+          New-Item -ItemType Directory -Force -Path C:\tools | Out-Null
+          Invoke-WebRequest -Uri "https://github.com/bazelbuild/bazelisk/releases/download/$version/bazelisk-windows-amd64.exe" -OutFile C:\tools\bazelisk.exe
+          $actual = (Get-FileHash C:\tools\bazelisk.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Bazelisk のハッシュが違います: $actual" }
+      - if: steps.check.outputs.build == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            C:\bazel-cache
+            C:\mozc\src\third_party_cache
+          key: mozc-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          restore-keys: |
+            mozc-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+      - name: Build Mozc helper
+        if: steps.check.outputs.build == 'true'
+        shell: powershell
+        run: .\native\mozc\Build-MozcHelper.ps1 -MozcSource C:\mozc -Python python -Bazelisk C:\tools\bazelisk.exe -DiskCache C:\bazel-cache
+      - if: steps.check.outputs.build == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mozc-helper
+          path: native/mozc/bin/
+          retention-days: 7
+
+  package:
+    # タグ (v0.1.0 など) なら版番号付き、手動実行ならテスト版の配布物を作り、Artifacts (meltype-package) に置く。
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    needs: [test, mozc]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - if: needs.mozc.outputs.built == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: mozc-helper
+          path: native/mozc/bin/
+      # Zenzai (llama-server と zenz のモデル) を取ってくる。版とハッシュは Get-Zenzai.ps1 で固定している (issue #1120)
+      - name: Fetch Zenzai
+        shell: powershell
+        run: .\native\zenzai\Get-Zenzai.ps1
+      # 署名の秘密は、署名する step (Sign / Sign installer) にだけ渡す。ビルドしたもの (Meltype.exe --selftest と、
+      # それが起動する Mozc のヘルパー) は、秘密の無い step (Package / Installer / Portable) でだけ実行する。
+      - name: Package
+        shell: powershell
+        # 通常版の app を作って自己診断する。zip は次の Sign で作る。
+        run: .\Build-Package.ps1 -Step Build
+      # コード署名の証明書 (秘密 SIGN_PFX_BASE64 = .pfx を Base64 にしたもの、SIGN_PASSWORD) があれば、Build-Package.ps1 が署名する。
+      # 秘密が無いときは署名せずに zip だけ作る。.pfx は署名したらすぐ消す。
+      # タグ (v1.0.0) なら版番号付き、手動実行なら日時付きの zip を作る。
+      - name: Sign
+        shell: powershell
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
+        run: |
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '' }
+          $pfx = Join-Path $env:RUNNER_TEMP 'meltype-sign.pfx'
+          try {
+            if ($env:SIGN_PFX_BASE64) {
+              [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+              $env:MELTYPE_SIGN_PFX = $pfx
+            }
+            .\Build-Package.ps1 -Version $version -Step Sign
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
+      # インストーラー (dist\Meltype-<版>-setup.exe)。zip と同じ app フォルダーから作る (issue #161)。
+      - name: Installer
+        shell: pwsh
+        run: |
+          $iscc = .\packaging\Find-InnoSetup.ps1
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { 'test-' + (Get-Date -Format 'yyyyMMdd-HHmm') }
+          & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$PWD\dist\Meltype" "/DOutputDir=$PWD\dist" packaging\Meltype.iss
+          if ($LASTEXITCODE -ne 0) { throw "インストーラーを作れませんでした (exit code $LASTEXITCODE)。" }
+      - name: Sign installer
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
+        run: |
+          if (-not $env:SIGN_PFX_BASE64) { exit 0 }
+          $setup = Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File | Select-Object -First 1
+          $pfx = Join-Path $env:RUNNER_TEMP 'meltype-sign.pfx'
+          try {
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
+            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+              Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
+            & $signtool.FullName sign /f $pfx /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup.FullName
+            if ($LASTEXITCODE -ne 0) { throw "インストーラーの署名に失敗しました (exit code $LASTEXITCODE)。" }
+          } finally {
+            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
+          }
+      # ポータブル版の zip。署名した通常版の app を再利用し、自己診断を走らせる (署名の後の、秘密の無い step で作る)。
+      - name: Portable
+        shell: powershell
+        run: |
+          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { '' }
+          .\Build-Package.ps1 -Version $version -Portable -ReuseBuild
+      # 検出・検査不能の配布物は、Artifacts にもリリースにも公開しない。
+      - name: Scan Windows package with Defender
+        shell: powershell
+        timeout-minutes: 15
+        run: |
+          $packages = @(Get-ChildItem -LiteralPath dist -Filter 'Meltype-*.zip' -File)
+          if ($packages.Count -ne 2) { throw 'Expected regular and portable Meltype zip files but found ' + $packages.Count }
+          $setups = @(Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File)
+          if ($setups.Count -ne 1) { throw 'Expected one Meltype-*-setup.exe file but found ' + $setups.Count }
+          .\tools\Scan-WindowsPackage.ps1 -Path @('.\dist\Meltype', '.\dist\Meltype-portable', $packages[0].FullName, $packages[1].FullName, $setups[0].FullName)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meltype-package
+          path: |
+            dist/Meltype-*.zip
+            dist/Meltype-*-setup.exe
+          retention-days: 14

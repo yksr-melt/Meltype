@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Detection;
@@ -22,12 +23,12 @@ internal static class SelfTest
             try
             {
                 var result = action();
-                report.AppendLine($"OK   {name}: {result}");
+                report.AppendLine(CultureInfo.InvariantCulture, $"OK   {name}: {result}");
             }
             catch (Exception ex)
             {
                 failed++;
-                report.AppendLine($"FAIL {name}: {ex.GetType().Name}: {ex.Message}");
+                report.AppendLine(CultureInfo.InvariantCulture, $"FAIL {name}: {ex.GetType().Name}: {ex.Message}");
             }
         }
 
@@ -66,7 +67,7 @@ internal static class SelfTest
         detector.SpellChecker = WindowsSpellChecker.Shared;
         Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
-        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温") ?? "(なし)");
+        Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温", "厚い", _ => null) ?? "(なし)");
         Check("ユーザー辞書", () => new UserDictionary(null).Add("きごうとう", "記号等") ?? "登録できる");
         using (var converter = new MsImeKanjiConverter())
         {
@@ -85,7 +86,7 @@ internal static class SelfTest
             invoker.CreateControl();
             using var service = new CompositionService(invoker, detector, new CompositionOptions { UserDictionary = new UserDictionary(null), History = new ConversionHistory(null) });
             var names = new List<string>();
-            foreach (var form in new Form[] { new UI.SettingsForm(engine), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
+            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
             {
                 using (form)
                 {
@@ -102,8 +103,8 @@ internal static class SelfTest
         {
             // トレイのアイコン・メニュー・ホットキーを作ってすぐ閉じる (キーボードフックは掛けない)。
             // TsfIntroduced にしておく (作る人の PC に Meltype IME があると、入力方式が Meltype IME に切り替わってしまう)。
-            using var engine = new MeltypeEngine(new Config.Settings { TsfIntroduced = true }, null, null);
-            var tray = new UI.TrayApplicationContext(engine);
+            using var engine = new MeltypeEngine(new Config.Settings(), null, null);
+            var tray = new UI.TrayApplicationContext(engine, new Config.AppState { TsfIntroduced = true });
             tray.ExitThread();
             return "OK";
         });
@@ -179,7 +180,7 @@ internal static class SelfTest
         while ((headerEnd = Encoding.ASCII.GetString([.. received]).IndexOf("\r\n\r\n", StringComparison.Ordinal)) < 0 && (read = stream.Read(buffer)) > 0) received.AddRange(buffer[..read]);
         if (headerEnd < 0) return;
         var header = Encoding.ASCII.GetString([.. received], 0, headerEnd);
-        var length = header.Split("\r\n").Select(l => l.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) is { } p ? int.Parse(p[1].Trim()) : 0;
+        var length = header.Split("\r\n").Select(l => l.Split(':', 2)).FirstOrDefault(p => p.Length == 2 && p[0].Trim().Equals("Content-Length", StringComparison.OrdinalIgnoreCase)) is { } p ? int.Parse(p[1].Trim(), CultureInfo.InvariantCulture) : 0;
         while (received.Count < headerEnd + 4 + length && (read = stream.Read(buffer)) > 0) received.AddRange(buffer[..read]);
         var body = Encoding.UTF8.GetBytes(json);
         stream.Write(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n"));

@@ -58,7 +58,7 @@ internal static class ShortcutSettingsTests
         try
         {
             using var engine = new MeltypeEngine(new Settings { ConvertKeysSwitchKeyboard = false, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }] }, null, null);
-            using var form = new SettingsForm(engine);
+            using var form = new SettingsForm(engine, new AppState());
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var input = (TextBox)typeof(SettingsForm).GetField("_testInput", flags)!.GetValue(form)!;
             var collect = typeof(SettingsForm).GetMethod("Collect", flags)!;
@@ -151,9 +151,13 @@ internal static class ShortcutSettingsTests
         Assert.Equal(1, bindings.GetArrayLength(), "単独押しを除外して IME に送る");
         Assert.Equal(0x20, bindings[0].GetProperty("key").GetInt32());
         Assert.Equal(2, bindings[0].GetProperty("mods").GetInt32());
-        settings.FullWidthSpaceByDefault = true;
+        settings.SpaceWidth = SpaceWidth.FullWidth;
         using var same = Hello();
         Assert.True(same.RootElement.GetProperty("fullWidthSpace").GetBoolean(), "キー一覧と全角スペースの設定を同時に反映");
+        Assert.True(!same.RootElement.GetProperty("modeIndicator").GetBoolean(), "IME の表示は既定 OFF なので DLL は問い合わせない");
+        settings.ShowTsfModeIndicator = true;
+        using var indicator = Hello();
+        Assert.True(indicator.RootElement.GetProperty("modeIndicator").GetBoolean(), "IME の表示を ON にしたら DLL に伝える");
         Assert.Equal(bindings.GetRawText(), same.RootElement.GetProperty("toggleShortcuts").GetRawText(), "同じ設定の配列を送る");
         settings = new Settings { Mode = InputMode.Tsf, ToggleShortcuts = [] }.Normalize();
         using var cleared = Hello();

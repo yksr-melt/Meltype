@@ -1,8 +1,8 @@
 cask "meltype" do
-  version "1.3.1-pre.2"
-  sha256 "fd29df250372bf96f0128cfebdac84e881114f1838c21e213a75225daee71a7c"
+  version "1.4.1-pre.4"
+  sha256 "12c12c1aeeeb61ae93076dae84dffdd5221612cf64984122ddb6b9a903e09185"
 
-  url "https://github.com/yksr-melt/Meltype/releases/download/v1.3.1-pre.2/Meltype-#{version}-mac.zip"
+  url "https://github.com/yksr-melt/Meltype/releases/download/v1.4.1-pre.4/Meltype-#{version}-mac.zip"
   name "Meltype"
   desc "半角/全角を押さずに、日本語と英語をそのまま打てる日本語入力 (英単語は英字のまま、ローマ字は日本語に)"
   homepage "https://github.com/yksr-melt/Meltype"
@@ -12,26 +12,20 @@ cask "meltype" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :ventura"
   depends_on arch: :arm64
+  depends_on macos: :ventura
 
-  input_method "Meltype-mac/Meltype.app"
-
-  postflight do
-    app = "#{Dir.home}/Library/Input Methods/Meltype.app"
-    # 署名が自分用 (ad hoc) の版もあるので、隔離属性を外さないと macOS が起動させない (install.sh と同じ)
-    system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", app], must_succeed: false
-    # 入力ソースに登録する (#21、#134)
-    system_command "#{app}/Contents/MacOS/Meltype", args: ["--register-input-source"], must_succeed: false
-    register = "#{app}/Contents/MacOS/MeltypeRegisterInputSource"
-    system_command register, args: [app], must_succeed: false if File.executable?(register)
-    system_command "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
-                   args: ["-f", app], must_succeed: false
-    system_command "/bin/bash", args: ["#{staged_path}/Meltype-mac/start-input-method.sh", app], must_succeed: false
-  end
+  installer script: {
+    executable: "Meltype-mac/install.sh",
+    args:       ["--homebrew"],
+  }
 
   uninstall launchctl: "io.github.yksr-melt.Meltype.manual",
-            quit:      "io.github.yksr-melt.inputmethod.Meltype"
+            quit:      "io.github.yksr-melt.inputmethod.Meltype",
+            script:    {
+              executable: "/bin/rm",
+              args:       ["-rf", "#{Dir.home}/Library/Input Methods/Meltype.app"],
+            }
 
   zap trash: [
     "~/Library/Application Support/Meltype",
