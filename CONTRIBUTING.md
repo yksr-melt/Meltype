@@ -106,6 +106,7 @@ Meltype は GNU GPL v3 で公開していますが、GPL v3 の条件で使え�
 これを続けられるように、初めて Pull Request を送る方には次の同意 (CLA) をお願いしています。
 Pull Request を作ると bot がこの文面をコメントするので、同意していただける場合は、その Pull Request に **「CLA に同意します」** と 1 行だけコメントしてください (英語なら `I agree to the CLA`)。
 同意は記録され (`cla-signatures` ブランチ)、次の Pull Request からは不要です。同意するまで、Pull Request の「CLA」のチェックは失敗のままになります。
+CLA bot は同意済みの作者 (または従来の免除対象) の Pull Request に `CLA確認済み` ラベルも付けます。このラベルは Merge Queue が作者を確認するためのもので、手動で付けないでください。
 
 > 私は、この Pull Request で提供する貢献 (コード・辞書・文書など) について、次のことに同意します。
 >
