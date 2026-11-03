@@ -1,0 +1,11 @@
+[Desktop Entry]
+# GNOME の設定の入力ソースは、IBus のエンジン名から ibus-setup-<エンジン名>.desktop を探して「設定」から開く。
+# install.sh・build-deb.sh・build-rpm.sh が @DIR@ をインストール先に置き換える。
+Type=Application
+Name=Meltype の設定
+Comment=日本語入力 Meltype の設定を変える
+Exec=@DIR@/meltype-settings
+Icon=@DIR@/icon.png
+Categories=Settings;
+# meltype-settings の Gtk.Application の application_id
+StartupWMClass=io.github.yksr_melt.Meltype.Settings

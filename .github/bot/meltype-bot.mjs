@@ -8,7 +8,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { codeCell } from './markdown.mjs';
-import { findRelatedIssues, formatRelatedIssueComment } from './issue-relation-candidates.mjs';
 
 const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
 const repo = process.env.GITHUB_REPOSITORY;
@@ -84,28 +83,6 @@ async function upsertComment(issue, kind, text) {
   const body = `${marker}\n${text}`;
   if (mine) await gh('PATCH', `/issues/comments/${mine.id}`, { body });
   else await gh('POST', `/issues/${issue}/comments`, { body });
-}
-
-async function searchIssues(query) {
-  const response = await fetch(api + '/search/issues?q=' + encodeURIComponent(query) + '&per_page=100&page=1', {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'meltype-bot' },
-  });
-  if (!response.ok) throw new Error('Issue search failed: ' + response.status);
-  return response.json();
-}
-
-async function updateRelatedIssues(issue) {
-  try {
-    const candidates = await findRelatedIssues(issue, { repo, search: searchIssues, getIssue: async number => gh('GET', `/issues/${number}`) });
-    if (candidates.length > 0) {
-      await upsertComment(issue.number, 'related-issues', formatRelatedIssueComment(issue, candidates, repo));
-    } else {
-      const existing = await findBotComment(issue.number, 'related-issues');
-      if (existing) await gh('DELETE', `/issues/comments/${existing.id}`);
-    }
-  } catch (error) {
-    console.warn('Related-issue search failed; existing comment was left unchanged (' + (error?.message ?? 'unknown error') + ').');
-  }
 }
 
 async function react(content) {
@@ -247,7 +224,7 @@ async function releaseCommand(issue, command, version) {
   const notesFile = `docs/release-notes/${version}.md`;
   const notes = await read(notesFile).catch(() => null);
   if (!notes?.trim()) mismatches.push(`${notesFile}: (無い。リリースノートを書いて main に入れてください)`);
-  if (mismatches.length > 0) return reply(`❌ main で ${version} のリリースの準備 (版・リリースノート) ができていないので、リリースしません (docs/RELEASE.md の「版を上げる」を先に main に入れてください):\n\n${mismatches.map(m => `- ${m}`).join('\n')}`);
+  if (mismatches.length > 0) return reply(`❌ main で ${version} のリリースの準備 (版・リリースノート) ができていないので、リリースしません (docs/dev/RELEASE.md の「版を上げる」を先に main に入れてください):\n\n${mismatches.map(m => `- ${m}`).join('\n')}`);
   const tag = `v${version}`;
   if (await gh('GET', `/git/ref/tags/${tag}`).then(() => true).catch(() => false)) return reply(`❌ タグ \`${tag}\` はもうあります。`);
   const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
@@ -292,8 +269,6 @@ async function parse() {
 
   if (!event.comment) {
     if (event.action !== 'opened' && event.action !== 'edited') return output({ action: 'none' });
-    const rerunOnEdit = process.env.SEARCH_RELATED_ISSUES_ON_EDIT === 'true';
-    if (event.action === 'opened' || rerunOnEdit) await updateRelatedIssues(event.issue);
     const form = parseForm(event.issue.body);
     const labels = new Set(event.issue.labels.map(l => l.name));
     const add = new Set(osLabels(field(form, 'OS')));

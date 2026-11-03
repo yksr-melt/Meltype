@@ -9,16 +9,19 @@ namespace Meltype.Tests;
 
 internal static class ContextBoundaryTests
 {
-    private static CompositionText Create(string before = "", DetectionLevel level = DetectionLevel.Balanced, LanguageMemory? memory = null)
+    private static CompositionText Create(string before = "", bool manual = false, LanguageMemory? memory = null)
     {
         var detector = CompositionDetector.CreateDefault();
         detector.SpellChecker = BuiltInWordChecker.Shared;
         detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
-        return new CompositionText(detector) { PrecedingEnglish = before.Length == 0 ? null : true,
+        return new CompositionText(detector)
+        {
+            PrecedingEnglish = before.Length == 0 ? null : true,
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
             PrecedingEnglishName = CompositionController.IsEnglishNameContext(before),
-            Level = () => level };
+            Manual = () => manual
+        };
     }
 
     [Test]
@@ -32,7 +35,7 @@ internal static class ContextBoundaryTests
         }
         var japaneseMemory = new LanguageMemory(null);
         japaneseMemory.Remember("taro", english: false, explicitChoice: true);
-        foreach (var text in new[] { Create(), Create("my name is ", DetectionLevel.Manual), Create("my name is ", memory: japaneseMemory) })
+        foreach (var text in new[] { Create(), Create("my name is ", manual: true), Create("my name is ", memory: japaneseMemory) })
         {
             foreach (var c in "taro") text.Append(c);
             Assert.Equal("たろ", text.Display(final: true));

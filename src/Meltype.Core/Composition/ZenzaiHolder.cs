@@ -4,17 +4,17 @@
 namespace Meltype.Composition;
 
 /// <summary>
-/// Zenzai (llama-server + zenz の GGUF) の持ち主。設定で ON のときだけ作り、指定の場所が変わるたびに作り直す。
+/// Zenzai (llama-server + zenz の GGUF) の持ち主。設定で ON のときだけ作り、指定の場所・GPU の設定が変わるたびに作り直す。
 /// 使えなくなった (作れない・変換で例外になった <see cref="Failed"/>・何度も失敗して ZenzaiConverter が諦めた) ときは止めて、
 /// しばらくたってから作り直す (打つたびに例外にしない。一時的な失敗で、ずっと止めたままにもしない。#973)。
 /// 続けて使えないときは、待つ時間を <see cref="RetryAfter"/> から倍にしていく (<see cref="MaxRetryAfter"/> まで)。
 /// 止める (Dispose) のはここだけで、使う側 (HybridConverter) は止めない。
 /// </summary>
-/// <param name="create">llama-server と GGUF の場所から作る (テストでは差し替える)。</param>
+/// <param name="create">llama-server と GGUF の場所と使う GPU から作る (テストでは差し替える)。</param>
 /// <param name="now">今の時刻 (ミリ秒。テストでは差し替える)。</param>
-public sealed class ZenzaiHolder(Func<string, string, ZenzaiConverter>? create = null, Func<long>? now = null) : IDisposable
+public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? create = null, Func<long>? now = null) : IDisposable
 {
-    private readonly Func<string, string, ZenzaiConverter> _create = create ?? CreateAndWarmUp;
+    private readonly Func<string, string, string, ZenzaiConverter> _create = create ?? CreateAndWarmUp;
     private readonly Func<long> _now = now ?? (() => Environment.TickCount64);
     private ZenzaiConverter? _zenzai;
     private string _key = "";
@@ -31,7 +31,7 @@ public sealed class ZenzaiHolder(Func<string, string, ZenzaiConverter>? create =
     public TimeSpan MaxRetryAfter { get; init; } = TimeSpan.FromHours(1);
 
     /// <summary>今の Zenzai。場所が空 (OFF) なら止めて null。作れない・止めて待っている間も null (変換は Mozc などで続ける)。</summary>
-    public ZenzaiConverter? Get(string serverPath, string modelPath)
+    public ZenzaiConverter? Get(string serverPath, string modelPath, string device = "")
     {
         var server = serverPath.Trim();
         var model = modelPath.Trim();
@@ -42,7 +42,8 @@ public sealed class ZenzaiHolder(Func<string, string, ZenzaiConverter>? create =
             _key = "";
             return null;
         }
-        var key = server + "|" + model;
+        device = device.Trim();
+        var key = server + "|" + model + "|" + device;
         if (key != _key)
         {
             Stop();
@@ -58,7 +59,7 @@ public sealed class ZenzaiHolder(Func<string, string, ZenzaiConverter>? create =
         {
             try
             {
-                _zenzai = _create(server, model);
+                _zenzai = _create(server, model, device);
             }
             catch (Exception ex)
             {
@@ -115,9 +116,9 @@ public sealed class ZenzaiHolder(Func<string, string, ZenzaiConverter>? create =
         return wait;
     }
 
-    private static ZenzaiConverter CreateAndWarmUp(string server, string model)
+    private static ZenzaiConverter CreateAndWarmUp(string server, string model, string device)
     {
-        var zenzai = new ZenzaiConverter(server, model);
+        var zenzai = new ZenzaiConverter(server, model, device: device);
         try
         {
             if (zenzai.IsInstalled) zenzai.WarmUp();

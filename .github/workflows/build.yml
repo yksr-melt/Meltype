@@ -191,6 +191,10 @@ jobs:
         with:
           name: mozc-helper
           path: native/mozc/bin/
+      # Zenzai (llama-server と zenz のモデル) を取ってくる。版とハッシュは Get-Zenzai.ps1 で固定している (issue #1120)
+      - name: Fetch Zenzai
+        shell: powershell
+        run: .\native\zenzai\Get-Zenzai.ps1
       # 署名の秘密は、署名する step (Sign / Sign installer) にだけ渡す。ビルドしたもの (Meltype.exe --selftest と、
       # それが起動する Mozc のヘルパー) は、秘密の無い step (Package / Installer / Portable) でだけ実行する。
       - name: Package

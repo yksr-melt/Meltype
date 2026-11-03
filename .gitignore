@@ -26,6 +26,9 @@ mac/build/
 
 # Mozc の変換ヘルパー (native/mozc/Build-MozcHelper.ps1 で作る)
 native/mozc/bin/
+# Zenzai の llama-server とモデル (native/zenzai/Get-Zenzai.ps1 で取ってくる)
+native/zenzai/bin/
+native/zenzai/cache/
 linux/build/
 tools/data/
 native/tip/bin/

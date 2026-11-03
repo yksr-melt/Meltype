@@ -1,4 +1,4 @@
-詳しい開発手順は [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
+詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
 
 ## 構成（どこを触るか）
 
@@ -15,7 +15,8 @@
 | `web/`                     | Web（Cloudflare Workers・報告フォーム）                                                             |
 | `dictionaries/`            | 辞書                                                                                         |
 | `tools/`                   | 辞書生成・検査・ベンチ・テスト用スクリプト                                                                      |
-| `docs/`                    | 使い方・開発・設計の文書                                                                               |
+| `docs/`                    | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート                                              |
+| `docs/dev/`                | 開発者向けの文書（開発・設計・リリースの手順）                                                                     |
 
 ## ビルドとテスト
 
@@ -59,11 +60,8 @@ node tools/check-dictionaries.mjs
 
 ```bash
 
-# 変えたファイルだけ直す
-dotnet format whitespace --folder --include path/to/File.cs
-
-# 手元で CI と同じ検査（main と比較）
-node tools/check-format.mjs origin/main
+# フォーマットを直す（CI は --verify-no-changes で同じ検査をする）
+dotnet format whitespace --folder
 
 ```
 
@@ -102,6 +100,7 @@ node tools/check-format.mjs origin/main
 - **AI を使ったことを PR に書く。** テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
 - **説明は日本語で書く。** PR の本文・コメント・文書は日本語で書く。
 - **PR と関係ない場所を変更しない。**
+- **PR に関係する箇所の文書が古ければ、利用者向けでも開発者向けでも直す。** 利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/*.md`）は常時メンテ対象で、挙動を変える PR では影響する箇所を探して同じ PR で直す。
 - **機能実装や枠組みを変える変更は、先に Issue で相談する。**
 - **報告された入力は症状の 1 例。原因を突き止め、同じ原因で起きる入力をまとめて直す。**
 

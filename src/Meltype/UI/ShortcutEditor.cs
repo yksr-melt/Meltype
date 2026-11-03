@@ -77,8 +77,11 @@ internal sealed class ShortcutEditor : UserControl
             if ((b.Modifiers & flag) != 0) names.Add(label);
         names.Add(b.Key switch
         {
-            ToggleShortcut.Hankaku => "半角/全角", ToggleShortcut.Grave => "` (バッククォート)",
-            0x1C => "変換", 0x1D => "無変換", _ => ((Keys)b.Key).ToString(),
+            ToggleShortcut.Hankaku => "半角/全角",
+            ToggleShortcut.Grave => "` (バッククォート)",
+            0x1C => "変換",
+            0x1D => "無変換",
+            _ => ((Keys)b.Key).ToString(),
         });
         return string.Join(" + ", names);
     }

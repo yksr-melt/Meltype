@@ -14,8 +14,9 @@ namespace Meltype.Config;
 
 /// <summary>
 /// config.json の JSON Schema。config.json と同じフォルダーに config.schema.json として書き、config.json の "$schema" から指す
-/// (設定画面の無い Mac・Linux 版で config.json を手で書くとき、エディターが補完・説明・値の検査を出す)。
-/// Settings の型と、設定画面に出す名前・説明 (DisplayName・Description) から、起動のたびに作る。
+/// (Mac・Linux 版で config.json を手で書くとき、エディターが補完・説明・値の検査を出す)。
+/// Linux 版の設定画面 (linux/meltype-settings) も、この schema から画面を組み立てる。
+/// Settings の型と、設定画面に出す名前・説明・分類 (DisplayName・Description・Category) から、起動のたびに作る。
 /// </summary>
 public static class SettingsSchema
 {
@@ -89,8 +90,14 @@ public static class SettingsSchema
         {
             if (property.AttributeProvider?.GetCustomAttributes(typeof(DisplayNameAttribute), false).FirstOrDefault() is DisplayNameAttribute { DisplayName.Length: > 0 } title)
                 schema["title"] = title.DisplayName;
-            if (property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute { Description.Length: > 0 } description)
-                schema["description"] = description.Description;
+            var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
+            var windowsOnly = property.AttributeProvider?.IsDefined(typeof(WindowsOnlyAttribute), false) == true;
+            if (windowsOnly) description = $"Windows のみ。{description}";
+            if (description.Length > 0) schema["description"] = description;
+            // x- で始まるのは JSON Schema の標準には無いキーワード (エディターは無視する)。Linux 版の設定画面が、分類ごとに並べ、Windows のみの項目を隠すのに使う
+            if (property.AttributeProvider?.GetCustomAttributes(typeof(CategoryAttribute), false).FirstOrDefault() is CategoryAttribute { Category.Length: > 0 } category)
+                schema["x-category"] = category.Category;
+            if (windowsOnly) schema["x-windows-only"] = true;
             if (property.DeclaringType == typeof(Settings) && defaults.TryGetPropertyValue(property.Name, out var value))
                 schema["default"] = value?.DeepClone();
         }

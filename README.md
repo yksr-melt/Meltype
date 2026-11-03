@@ -86,9 +86,8 @@ VS Code やターミナルでは英数が基本で、コメントと文字列の
 <p align="center"><sub>カードを押すと、それぞれの OS の説明 (インストール・使い方・困ったとき) が開きます</sub></p>
 
 Windows は、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-setup.exe` をダウンロードして、案内どおりに進めるだけ！
+Windows のコード署名の方針は [Code signing policy](docs/CODE-SIGNING.md) にあります。
 あとは、いつもどおりローマ字で打つだけです。キー操作と機能は [docs/USAGE.md](docs/USAGE.md) にあります。
-
-Windows のコード署名については [Code signing policy](docs/CODE-SIGNING.md) を参照してください。
 
 <br><br>
 
