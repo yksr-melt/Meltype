@@ -1357,12 +1357,14 @@ public sealed class CompositionController
             _kanaLayout.Reset();
             return true;
         }
-        var stroke = _kanaLayout.Down(e.Vk, _swallowedShift.Count > 0 || _host.IsShiftDown(), e.TimeMs);
+        var shift = _swallowedShift.Count > 0 || _host.IsShiftDown();
+        var stroke = _kanaLayout.Down(e.Vk, shift, e.TimeMs);
         if (!stroke.Handled)
         {
             // 配列のキー以外 (BackSpace・Enter・Esc・Space など): 打ちかけの前置シフトを忘れる
             _kanaLayout.Reset();
-            return false;
+            // 配列の表で空いているかなのキー (月配列の 1 や ]) は何も入れない (JIS かなの文字を入れない)
+            return !shift && Detection.KanaDetector.IsKanaKey(e.Vk);
         }
         ApplyKanaStroke(stroke);
         return true;
