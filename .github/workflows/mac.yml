@@ -1,13 +1,11 @@
+# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
+# Mac 版・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき。
+# リリースへの添付と Homebrew の cask の更新は release.yml。
 name: mac
 
-# Mac 版 (mac/) をビルドして、テスター向けの zip (Meltype.app + install.sh + 説明) を実行結果 (Artifacts) に置く。
-# Actions の画面から手動で実行するか、Mac 版・共通部分を変えて push したとき。タグ (v*) ならリリースにも添付する。
 on:
-  workflow_dispatch:
-  push:
-    branches: ['**']
-    tags: ['v*']
-    paths:
+  pull_request:
+    paths: &paths
       - 'mac/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Mac.Native/**'
@@ -16,6 +14,11 @@ on:
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
       - '.github/workflows/mac.yml'
+  push:
+    branches: [main]
+    paths: *paths
+  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -28,10 +31,6 @@ jobs:
   app:
     runs-on: macos-15
     timeout-minutes: 60
-    # タグ時の softprops/action-gh-release 用。permissions は式が使えないため常に write。
-    permissions:
-      contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,9 +49,10 @@ jobs:
           path: mac/.build
           key: mac-swiftpm-${{ hashFiles('mac/Package.swift', 'mac/Package.resolved') }}
           restore-keys: mac-swiftpm-
-      # 配布用の署名 (Apple Developer Program の Developer ID の証明書があるときだけ)。秘密:
+      # 配布用の署名 (Apple Developer Program の Developer ID の証明書があるときだけ。公証に時間がかかるので Pull Request ではしない)。秘密:
       #   MAC_CERT_P12_BASE64 (証明書の .p12 を Base64 にしたもの)、MAC_CERT_PASSWORD、MAC_IDENTITY ("Developer ID Application: 名前 (チームID)")
       - name: Signing certificate
+        if: github.event_name != 'pull_request'
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
@@ -100,64 +100,3 @@ jobs:
           name: meltype-mac
           path: dist/Meltype-*.zip
           retention-days: 14
-      # Homebrew の cask をこのリリースの zip の SHA-256 で作る (#863)。同じリポジトリを tap として使い、Casks/ に更新する。
-      - name: Homebrew cask
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          node tools/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
-          cat dist/manifests/homebrew/Casks/meltype.rb
-      # GitHub App のトークンなら、作成した PR の CI も起動する (bot.yml / sponsors.yml と同じ)。
-      - id: app-token
-        if: startsWith(github.ref, 'refs/tags/v') && vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ vars.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-      # main は PR 必須のため、リリースごとに更新 PR を作る。
-      - name: Create Homebrew cask update PR
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
-        run: |
-          cask='dist/manifests/homebrew/Casks/meltype.rb'
-          version="${GITHUB_REF_NAME#v}"
-          branch="homebrew-cask-${version}"
-          current_cask_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/Casks/meltype.rb" --jq .sha)"
-          generated_cask_sha="$(git hash-object "$cask")"
-          if [[ "$current_cask_sha" == "$generated_cask_sha" ]]; then
-            echo "Homebrew cask is already up to date for $version."
-            exit 0
-          fi
-
-          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
-            main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/heads/$branch" -f sha="$main_sha"
-          fi
-
-          content="$(base64 < "$cask" | tr -d '\n')"
-          sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/Casks/meltype.rb?ref=$branch" --jq .sha)"
-          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/Casks/meltype.rb" \
-            -f message="Update Homebrew cask to $version" \
-            -f branch="$branch" -f content="$content" -f sha="$sha"
-
-          existing_pr="$(gh pr list --repo "$GITHUB_REPOSITORY" \
-            --head "$GITHUB_REPOSITORY_OWNER:$branch" --base main --state open \
-            --json number --jq '.[0].number // empty')"
-          if [[ -n "$existing_pr" ]]; then
-            echo "Updated Homebrew cask PR #$existing_pr."
-          else
-            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
-              --title "Update Homebrew cask to $version" \
-              --body "Updates the Homebrew cask and SHA-256 for the $version release."
-          fi
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: homebrew-cask
-          path: dist/manifests/homebrew/Casks/meltype.rb
-          retention-days: 90
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: dist/Meltype-*.zip

@@ -1,25 +1,35 @@
+# Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、テスター向けの zip と .deb・.rpm を Artifacts に置く。
+#   app・rpm … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
+#   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
+#   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
+# リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
+# Mozc のビルドは初回 30〜40 分かかるので、Bazel の結果をキャッシュして次から速くする。
 name: linux
 
-# Linux 版 (linux/、IBus) をビルドして、テスター向けの zip と apt で入れられる .deb、dnf で入れられる .rpm を実行結果 (Artifacts) に置く。
-# Actions の画面から手動で実行するか、Linux 版・Mozc のヘルパー・共通部分を変えて push / Pull Request したとき。
-# タグ (v*) ならリリースにも添付する。
-# Mozc のビルドは初回 30〜40 分かかるので、Bazel の結果をキャッシュして次から速くする。
-# pull_request でも流すのは、フォークからの Pull Request では push が起きず、Linux のテストが
-# CI で一度も走らないため (build.yml と同じ扱い)。
 on:
-  workflow_dispatch:
   pull_request:
     paths: &paths
       - 'linux/**'
       - 'native/mozc/**'
       - 'src/Meltype.Core/**'
+      - 'src/Meltype.Mac.Native/**'
       - 'dictionaries/**'
+      - 'nuget.config'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'src/Directory.Build.props'
+      - 'src/Directory.Build.targets'
+      - 'src/Directory.Packages.props'
       - 'tools/test-native-boundaries.py'
+      - 'tools/ime-tests/**'
       - '.github/workflows/linux.yml'
   push:
-    branches: ['**']
-    tags: ['v*']
+    branches: [main]
     paths: *paths
+  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -45,9 +55,6 @@ jobs:
             bazelisk-sha256: e20e8b0f4f240091b7a55bf17b9398bd4f40ee70ae0208dff95dd4c445fb4010
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
-    # タグ時の softprops/action-gh-release 用。permissions は式が使えないため常に write。
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,12 +142,6 @@ jobs:
             linux/build/Meltype-*.zip
             linux/build/meltype_*.deb
           retention-days: 14
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: |
-            linux/build/Meltype-*.zip
-            linux/build/meltype_*.deb
 
   # dnf で入れられる .rpm (Fedora)。本体と Mozc のヘルパーは app のジョブが Ubuntu でビルドした zip のものを使い、
   # fcitx5 のアドオンだけ Fedora の fcitx5 に対してビルドし直す (Ubuntu 24.04 の fcitx5 とは版が違う)
@@ -158,8 +159,6 @@ jobs:
     # https://fedoraproject.org/en/misc/
     container: quay.io/fedora/fedora:44
     timeout-minutes: 30
-    permissions:
-      contents: write
     steps:
       - name: Packages
         run: |
@@ -213,91 +212,88 @@ jobs:
           name: meltype-${{ matrix.asset }}-rpm
           path: linux/build/meltype-*.rpm
           retention-days: 14
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          files: linux/build/meltype-*.rpm
 
-  # apt と dnf のリポジトリを同じ鍵で署名して、1 つの GitHub Pages の成果物にする
-  # (Pages は deploy のたびにサイト全体を置き換えるので、別々のジョブで deploy すると片方が消える)
-  build-repositories:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [app, rpm]
+  # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
+  ime-ci:
+    name: IME CI tests
     runs-on: ubuntu-24.04
-    outputs:
-      ready: ${{ steps.signing.outputs.ready }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/ime-tests
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check apt signing key
-        id: signing
-        env:
-          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
-        run: |
-          if [[ -z "$APT_SIGNING_KEY_B64" ]]; then
-            echo 'ready=false' >> "$GITHUB_OUTPUT"
-            echo '::notice::APT_SIGNING_KEY_B64 is not set; skipping apt and dnf repository publication.'
-          else
-            echo 'ready=true' >> "$GITHUB_OUTPUT"
-          fi
-      - name: Download Linux packages
-        if: steps.signing.outputs.ready == 'true'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          pattern: meltype-linux*
-          path: ${{ runner.temp }}/meltype-artifacts
-          merge-multiple: true
-      - name: Install repository tools
-        if: steps.signing.outputs.ready == 'true'
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/ime-tests/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Linux session control tests
+        run: python3 scripts/test_linux_ime.py
+      - name: Typecheck and test-page contracts
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/checkout-sha.txt
+          # teeでログを残しても、テストの非0終了をジョブの失敗として伝える。
+          set -o pipefail
+          npm run test:ci 2>&1 | tee artifacts/ci.log
+      - name: Results and failure traces
+        # テスト失敗時にも観測・traceを取得できるよう、成果物保存は成功条件にしない。
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ime-tests
+          path: tools/ime-tests/artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # app が作った x64 の zip を、IBus と Chromium で属性・操作ごとに実際に打って確かめる
+  ime-real:
+    name: IME real input (Linux)
+    needs: [app, ime-ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/ime-tests/package-lock.json
+      # linux_ime.py が実行環境の記録 (session.json) に dotnet の版を書く
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install IBus and the test tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y apt-utils gnupg rpm createrepo-c
-      - name: Build signed apt repository
-        if: steps.signing.outputs.ready == 'true'
-        env:
-          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
-          APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
-        run: |
-          mapfile -d '' -t debs < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype_*.deb' -print0 | sort -z)
-          if (("${#debs[@]}" != 2)); then
-            echo "Expected amd64 and arm64 .deb packages; found ${#debs[@]}." >&2
-            exit 1
-          fi
-          bash linux/build-apt-repository.sh "${debs[@]}" "$RUNNER_TEMP/meltype-pages"
-      - name: Build signed dnf repository
-        if: steps.signing.outputs.ready == 'true'
-        env:
-          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
-          APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
-        run: |
-          mapfile -d '' -t rpms < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype-*.rpm' -print0 | sort -z)
-          if (("${#rpms[@]}" != 2)); then
-            echo "Expected x86_64 and aarch64 .rpm packages; found ${#rpms[@]}." >&2
-            exit 1
-          fi
-          bash linux/build-rpm-repository.sh "${rpms[@]}" "$RUNNER_TEMP/meltype-pages"
-      - name: Upload apt and dnf repositories for GitHub Pages
-        if: steps.signing.outputs.ready == 'true'
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+          sudo apt-get install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
+          npm --prefix tools/ime-tests ci
+          cd tools/ime-tests
+          npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: ${{ runner.temp }}/meltype-pages
-
-  publish-repositories:
-    if: startsWith(github.ref, 'refs/tags/v') && needs.build-repositories.outputs.ready == 'true'
-    needs: build-repositories
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: meltype-pages
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy apt and dnf repositories to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+          name: meltype-linux
+          path: linux/build/artifact
+      - run: (cd linux/build && unzip -q artifact/Meltype-*.zip)
+      - name: OS keys through IBus, product Core and Chromium
+        working-directory: tools/ime-tests
+        env:
+          MELTYPE_PACKAGE_DIR: ${{ github.workspace }}/linux/build/Meltype-linux
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npm run test:ime:linux:ci
+      - name: Real IME observations and process logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ime-real-input-linux
+          path: tools/ime-tests/artifacts/
+          if-no-files-found: warn
+          retention-days: 14
