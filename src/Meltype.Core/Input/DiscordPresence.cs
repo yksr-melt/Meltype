@@ -19,7 +19,7 @@ namespace Meltype.Input;
 internal sealed class DiscordPresence : IDisposable
 {
     /// <summary>Discord の開発者ポータルで作ったアプリの ID (Application ID)。空なら何も送らない。</summary>
-    public const string ClientId = "";
+    public const string ClientId = "1567084278423093311";
 
     public static readonly TimeSpan UpdateInterval = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan IoTimeout = TimeSpan.FromSeconds(5);
