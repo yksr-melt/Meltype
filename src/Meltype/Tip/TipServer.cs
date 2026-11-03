@@ -414,7 +414,7 @@ internal sealed class TipServer : IDisposable
         // このつながりの入力の本体 (UI スレッドからだけ触る。Meltype.exe 自身の UI スレッドのつながりは、UI スレッドが止まっている間に触る)
         var sessions = new Dictionary<string, MeltypeSession>();
         var ownClient = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var clientProcess) && clientProcess == (uint)Environment.ProcessId;
-        // DLL が送るのはプロセスの名前だけなので、ゲームのフォルダーにあるか (Minecraft の javaw.exe など: #1009) はここで調べる
+        // DLL が送るのはプロセスの名前だけなので、ゲームのフォルダーにあるかはここで調べる
         var looksLikeGame = !ownClient && clientProcess != 0 && ForegroundTracker.LooksLikeGame(clientProcess);
         // Java のアプリは、ゲームのウィンドウ (Minecraft など) かを前面のウィンドウで見る。つながったときにはまだウィンドウが無いことがあるので、要求のたびに見る
         var javaClient = !ownClient && !looksLikeGame && clientProcess != 0 && ForegroundTracker.IsJava(clientProcess);
