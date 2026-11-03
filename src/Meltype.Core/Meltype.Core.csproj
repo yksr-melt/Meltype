@@ -7,8 +7,6 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <!-- Mac 版・Linux 版は NativeAOT で publish する -->
-    <IsAotCompatible>true</IsAotCompatible>
     <AssemblyName>Meltype.Core</AssemblyName>
     <RootNamespace>Meltype</RootNamespace>
     <Version>1.4.1-pre.2</Version>
