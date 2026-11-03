@@ -15,6 +15,7 @@ internal sealed class KeyCountForm : Form
     private readonly KeyCounter _counter;
     private readonly Label _summary = new() { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8), Font = new Font("Yu Gothic UI", 12F) };
     private readonly CheckBox _enable = new() { Text = "打鍵を数える (OFF の間は数えません。一時停止中・パスワード欄でも数えません)", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 0, 8, 0) };
+    private readonly CheckBox _discord = new() { Text = "Discord のステータスに打鍵数を表示する (今日・合計・1 分あたりの打鍵数だけを送ります。打った文字・変換候補・入力先のアプリ名は送りません)", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(8, 0, 8, 4) };
     private readonly DataGridView _keyGrid = FormControls.ReadOnlyGrid();
     private readonly DataGridView _dayGrid = FormControls.ReadOnlyGrid();
     private readonly TextBox _analysis = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Font = new Font("BIZ UDGothic", 10F), BorderStyle = BorderStyle.None };
@@ -56,6 +57,7 @@ internal sealed class KeyCountForm : Form
         buttons.Controls.AddRange([close, reset, import]);
 
         Controls.Add(tabs);
+        Controls.Add(_discord);
         Controls.Add(_enable);
         Controls.Add(_summary);
         Controls.Add(buttons);
@@ -65,6 +67,15 @@ internal sealed class KeyCountForm : Form
         _enable.CheckedChanged += (_, _) =>
         {
             _counter.Enabled = _enable.Checked;
+            _counter.Save();
+            _discord.Enabled = _enable.Checked;
+        };
+        // Discord のアプリ (PC 版) へ、この PC の中だけでつなぐ (外のサーバーは通さない)。20 秒ごとに送る
+        _discord.Checked = counter.DiscordPresence;
+        _discord.Enabled = counter.Enabled;
+        _discord.CheckedChanged += (_, _) =>
+        {
+            _counter.DiscordPresence = _discord.Checked;
             _counter.Save();
         };
 
