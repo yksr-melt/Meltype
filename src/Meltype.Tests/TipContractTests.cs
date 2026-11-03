@@ -206,12 +206,12 @@ internal static class TipContractTests
     [Test]
     public static void CaretMoved_DoesNotRewriteThePreviousCommit()
     {
-        // make Space want Space と続けて打つと、前の「make」を英語に確定し直す (#975)。
+        // i Space want Space と続けて打つと、前の「い」を英語の I に確定し直す (#975。SessionFacadeTests の AutoCorrect と同じ操作)。
         // 前の語を確定したあとキャレットを動かして (moved) から打ったときは、前の確定を消して確定し直さない (--tip-e2e の「動かしたあとは直さない」)
-        static (Dll Dll, List<JsonElement> Replies) TypeWantAfterMake(bool moved)
+        static (Dll Dll, List<JsonElement> Replies) TypeWantAfterI(bool moved)
         {
             var dll = new Dll();
-            dll.Type("make ");
+            dll.Type("i ");
             var replies = new List<JsonElement> { dll.Key('w', moved: moved) };
             replies.AddRange(dll.Type("ant "));
             return (dll, replies);
@@ -219,18 +219,18 @@ internal static class TipContractTests
         static bool Rewrites(List<JsonElement> replies) =>
             replies.SelectMany(r => r.GetProperty("commits").EnumerateArray()).Any(c => c.GetProperty("deleteBefore").GetInt32() > 0);
 
-        var (still, stillReplies) = TypeWantAfterMake(moved: false);
+        var (still, stillReplies) = TypeWantAfterI(moved: false);
         using (still)
         {
             Assert.True(Rewrites(stillReplies), "動かさなければ、前の語を確定し直す\n" + still.Trace);
-            Assert.Equal("make want ", still.Document, "前の語ごと書き換え、今の語も消えない\n" + still.Trace);
+            Assert.Equal("I want ", still.Document, "前の語ごと書き換え、今の語も消えない\n" + still.Trace);
             Assert.Equal(0, still.Skipped.Count, "見送った確定し直し: " + string.Join(", ", still.Skipped) + "\n" + still.Trace);
         }
-        var (moved, movedReplies) = TypeWantAfterMake(moved: true);
+        var (moved, movedReplies) = TypeWantAfterI(moved: true);
         using (moved)
         {
             Assert.True(!Rewrites(movedReplies), "動かしたら、前の確定を消さない\n" + moved.Trace);
-            Assert.True(moved.Document.EndsWith("want ", StringComparison.Ordinal) && !moved.Document.StartsWith("make", StringComparison.Ordinal), moved.Trace);
+            Assert.True(moved.Document.EndsWith("want ", StringComparison.Ordinal) && !moved.Document.StartsWith("I ", StringComparison.Ordinal), moved.Trace);
         }
     }
 
