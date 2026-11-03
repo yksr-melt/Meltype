@@ -65,6 +65,15 @@ _lib.meltype_select_candidate.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _lib.meltype_select_candidate.restype = ctypes.c_void_p
 _lib.meltype_set_direct.argtypes = [ctypes.c_void_p, ctypes.c_int]
 _lib.meltype_set_can_delete.argtypes = [ctypes.c_void_p, ctypes.c_int]
+# 本体が設定「日本語 / 英数を切り替えるキーを追加」で切り替えたかと、そのあとの本体のモード (#1033)。古い本体には無い
+_take_mode_toggled = getattr(_lib, "meltype_take_mode_toggled", None)
+if _take_mode_toggled is not None:
+    _take_mode_toggled.argtypes = [ctypes.c_void_p]
+    _take_mode_toggled.restype = ctypes.c_int
+_is_direct = getattr(_lib, "meltype_is_direct", None)
+if _is_direct is not None:
+    _is_direct.argtypes = [ctypes.c_void_p]
+    _is_direct.restype = ctypes.c_int
 # コード入力 (コメント・文字列は日本語、それ以外は英字のまま)。ターミナルの入力欄で既定にする (issue #715)
 _set_code_input = getattr(_lib, "meltype_set_code_input", None)
 if _set_code_input is not None:
@@ -240,6 +249,15 @@ class MeltypeEngine(IBus.Engine):
             return False
         self._apply(result)
         consumed = bool(result.get("consumed"))
+        # 本体が設定「入力モード切り替えキー」の切替をしたときは、こちらのモードも合わせる (#1033)。
+        # 合わせないと、次に 半角/全角 を押したときの切り替え先 (not self._direct) と、役割キーの判定がずれる。
+        if _take_mode_toggled is not None and _take_mode_toggled(self._session):
+            self._direct = bool(_is_direct(self._session)) if _is_direct is not None else not self._direct
+            # 利用者が自分で切り替えたときは、コード入力の保護より意思を優先する (Mac の「かな」キーと同じ)。
+            # 変わったときだけ本体へ伝える (同じ値で呼ぶと本体が行の追跡を落とす)。
+            if self._code_input and _set_code_input is not None:
+                _set_code_input(self._session, 0)
+            self._code_input = False
         # アプリに通したキー (矢印・Tab・Ctrl など) はキャレットを動かすかもしれない。
         # コード行を日本語にしていたら、別の場所へ移った時点で英数に戻す。
         if not consumed:
