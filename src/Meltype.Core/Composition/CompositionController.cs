@@ -465,7 +465,8 @@ public sealed class CompositionController
                 else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
             }
             UpdateView();
-            if (IsComposing) return;
+            // 親指キーを押したままなら、離したことを受け取るまで横取りを続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
+            if (IsComposing || _kanaLayout.ThumbHeld) return;
             // 読みをすべて削除した場合も、元の選択範囲は置換せず再変換を終了する。
             if (_reconversion is not null) ClearComposition();
             // 送らずにいた Shift (押したまま) は、横取りをやめる前に送る。送らないと、次に打つキーが Shift なしでアプリに届く
@@ -1348,9 +1349,8 @@ public sealed class CompositionController
         var layout = _options.KanaInput() && !_options.DirectMode() ? _options.KanaLayout() : KanaLayout.Jis;
         if (_kanaLayout.Layout != layout) _kanaLayout = new KanaLayoutEngine(layout);
         if (layout == KanaLayout.Jis) return false;
-        // 変換中の親指キーは、もとの働き (変換・無変換)。入力していないときの親指キーは受け取っておき、文字に使わずに離したらもとの働きをする
-        // (文頭の 変換 + W を再変換にしない。フックは親指シフトの配列では親指キーで変換ボックスを開く)
-        if (_kanaLayout.IsThumbShift && e.Vk is KanaLayoutEngine.LeftThumb or KanaLayoutEngine.RightThumb && _converting) return false;
+        // 親指キーは (入力していないとき・変換中も) 受け取っておき、文字に使わずに離したらもとの働き (再変換・変換・無変換) をする
+        // (文頭の 変換 + W を再変換にしない・変換中の 変換 + W をシフト面にする。フックは親指シフトの配列では親指キーで変換ボックスを開く)
         // 前置シフトの直後の BackSpace は、シフトのキーを打ち消す (前の文字は消さない)
         if (e.Vk == VirtualKeys.Back && _kanaLayout.HasPrefix)
         {

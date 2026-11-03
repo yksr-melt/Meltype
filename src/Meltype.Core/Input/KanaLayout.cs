@@ -226,6 +226,9 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     /// <summary>JIS かな以外で、その配列が文字を割り当てているキーか (変換ボックスを開くキー)。</summary>
     public bool IsLayoutKey(int vk) => _faces.Any(face => face.ContainsKey(vk)) || IsThumbShift && vk is LeftThumb or RightThumb;
 
+    /// <summary>親指キーを押したままか (離すまで、離したことを受け取る必要がある)。</summary>
+    public bool ThumbHeld => _thumb != 0;
+
     /// <summary>前置シフトのキーを押して、次のキーを待っているか。</summary>
     public bool HasPrefix => _prefix > 0;
 

@@ -270,4 +270,28 @@ internal static class KanaLayoutTests
         k.Key(0x4B, up: true);
         Assert.Equal("てき", k.Showing);
     }
+    [Test]
+    public static void KanaLayout_Nicola_ThumbTapAtStartKeepsOriginalAndDoesNotStick()
+    {
+        // 文頭で 無変換 だけを押して離したら、次の S はシフト面にしない (し。「あ」にしない)
+        var k = Layout(KanaLayout.Nicola);
+        k.Key(NonConvert);
+        k.Key(NonConvert, up: true);
+        k.TypeKanaKeys("s");
+        Assert.Equal("し", k.Showing);
+        Assert.True(k.Host.Events.Contains("passed:1D") || k.Host.Events.Any(e => e.Contains("1D")), "無変換はアプリに渡す: " + string.Join(",", k.Host.Events));
+    }
+
+    [Test]
+    public static void KanaLayout_Nicola_ThumbDuringConversionIsShift()
+    {
+        // 変換中に 変換 を押したまま W は、右シフト面の「が」 (次の候補にしない)
+        var k = Layout(KanaLayout.Nicola);
+        k.TypeKanaKeys("kw");
+        k.Press(VirtualKeys.Space);
+        k.Key(Convert);
+        k.TypeKanaKeys("w");
+        k.Key(Convert, up: true);
+        Assert.True(k.Showing.EndsWith("が", StringComparison.Ordinal), k.Showing);
+    }
 }
