@@ -20,6 +20,9 @@ internal static class SettingsSchemaTests
         Assert.Equal("句読点", properties["Punctuation"]!["title"]?.GetValue<string>(), "設定画面の名前を title に出す");
         Assert.True(properties["AutoDetection"]!["description"]?.GetValue<string>().Length > 0, "設定画面の説明を description に出す");
         Assert.Equal("Japanese", properties["Punctuation"]!["default"]?.GetValue<string>(), "既定値を default に出す");
+        Assert.Equal("3. 判定", properties["AutoDetection"]!["x-category"]?.GetValue<string>(), "設定画面の分類を x-category に出す");
+        Assert.Equal(true, properties["CompositionTheme"]!["x-windows-only"]?.GetValue<bool>(), "Windows のみの項目に x-windows-only を出す");
+        Assert.True(properties["AutoDetection"]!["x-windows-only"] is null, "どの OS でも効く項目には出さない");
         // 独自の JsonConverter を付けた列挙型も、選択肢が出る
         Assert.Equal("Keyboard,Tsf", string.Join(",", properties["Mode"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("Romaji,Kana", string.Join(",", properties["InputStyle"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));

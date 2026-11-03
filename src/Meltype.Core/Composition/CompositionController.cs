@@ -216,6 +216,9 @@ public sealed record CompositionOptions
     /// <summary>かな入力 (JIS) か。</summary>
     public Func<bool> KanaInput { get; init; } = () => false;
 
+    /// <summary>かな入力の配列 (JIS かな・月・花。issue #1415)。</summary>
+    public Func<KanaLayout> KanaLayout { get; init; } = () => Input.KanaLayout.Jis;
+
     /// <summary>よくある書き間違い (ブレスレッド → ブレスレット) の辞書。「もしかして」に使う。null なら出さない。</summary>
     public MisspellingDictionary? Misspellings { get; init; }
 
@@ -341,6 +344,8 @@ public sealed class CompositionController
 
     private readonly CaptureGate _gate;
     private readonly CompositionText _text;
+    // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
+    private KanaLayoutEngine _kanaLayout = new(KanaLayout.Jis);
     private readonly CompositionDetector _detector;
     private readonly IKanjiConverter _converter;
     private readonly ICompositionHost _host;
@@ -760,6 +765,7 @@ public sealed class CompositionController
             ReplayDown(e);
             return;
         }
+        if (HandleKanaLayout(e)) return;
 
         if (_reconversion is not null && vk == VirtualKeys.Escape)
         {
@@ -1307,6 +1313,37 @@ public sealed class CompositionController
             if (_text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) _text.AppendKana(c, kana);
             else _text.Append(c);
         }
+    }
+
+    /// <summary>
+    /// JIS かな以外のかな配列 (月・花) の打鍵 (issue #1415)。配列のキーとして扱ったら true。
+    /// 打ったキーの英字は英単語の判定に使わない (刻印と違う配列なので)。かなをそのまま原文にする。
+    /// </summary>
+    private bool HandleKanaLayout(KeyEvent e)
+    {
+        var layout = _options.KanaInput() && !_options.DirectMode() ? _options.KanaLayout() : KanaLayout.Jis;
+        if (_kanaLayout.Layout != layout) _kanaLayout = new KanaLayoutEngine(layout);
+        if (layout == KanaLayout.Jis) return false;
+        // 前置シフトの直後の BackSpace は、シフトのキーを打ち消す (前の文字は消さない)
+        if (e.Vk == VirtualKeys.Back && _kanaLayout.HasPrefix)
+        {
+            _kanaLayout.Reset();
+            return true;
+        }
+        var shift = _swallowedShift.Count > 0 || _host.IsShiftDown();
+        var stroke = _kanaLayout.Down(e.Vk, shift);
+        if (!stroke.Handled)
+        {
+            // 配列のキー以外 (BackSpace・Enter・Esc・Space など): 打ちかけの前置シフトを忘れる
+            _kanaLayout.Reset();
+            // 配列の表で空いているかなのキー (月配列の 1 や ]) は何も入れない (JIS かなの文字を入れない)
+            return !shift && Detection.KanaDetector.IsKanaKey(e.Vk);
+        }
+        if (stroke.Kana.Length == 0) return true;
+        if (!IsComposing) BeginComposition();
+        else CommitBeforeTyping();
+        foreach (var kana in stroke.Kana) _text.AppendKana(kana, kana);
+        return true;
     }
 
     /// <summary>かな入力で、その打鍵が入力するかなと、そのキーの英字 (英語として見せるとき用)。かなのキーでなければ null。</summary>

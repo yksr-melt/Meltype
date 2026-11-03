@@ -21,6 +21,7 @@
             <description>半角/全角 を押さずに日本語と英語を打ち分ける日本語入力</description>
             <rank>0</rank>
             <symbol>あ</symbol>
+            <setup>@DIR@/meltype-settings</setup>
         </engine>
     </engines>
 </component>

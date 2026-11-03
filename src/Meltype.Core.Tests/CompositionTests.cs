@@ -175,6 +175,7 @@ internal static class CompositionTests
 
         /// <summary>かな入力 (JIS) か。</summary>
         public bool Kana { get; set; }
+        public KanaLayout KanaLayout { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool ZSymbols { get; set; } = true;
         public bool NumberKeysSelectCandidates { get; set; } = true;
@@ -270,6 +271,7 @@ internal static class CompositionTests
                 UserDictionary = userDictionary,
                 Manual = () => Manual,
                 KanaInput = () => Kana,
+                KanaLayout = () => KanaLayout,
                 Misspellings = Misspellings,
                 Languages = languages,
                 Translations = translations,
@@ -3813,6 +3815,9 @@ internal static class CompositionTests
         Assert.True(hisashiburi is [("きょう", null), ("ひさしぶり", "久しぶり")], "きょう|ひさしぶり → きょう|久しぶり (#872)");
         Assert.True(dictionary.Split("なさそう")?.Any(p => p.Word == "なさそう") == true, "なさそう → なさそう (#825)");
         Assert.True(dictionary.Split("になった")?.Any(p => p.Word == "になった") == true, "になった → になった (#917)");
+        // 報告 (#823): いしょくじょうたい → い食事ょうたい (しょくじ を じょ の途中で切っていた)
+        Assert.True(dictionary.Split("いしょくじょうたい")?.Any(p => p.Word == "食事") != true, "いしょくじょうたい に 食事 を当てない");
+        Assert.True(dictionary.Split("しょくじをする")?.Any(p => p.Word == "食事") == true, "しょくじ だけなら 食事 のまま");
         Assert.True(dictionary.Split("ふぉろばく")?.Any(p => p.Word == "フォロ爆") == true, "ふぉろばく → フォロ爆 (#1268)");
         Assert.True(dictionary.Split("きゅうくらりん")?.Any(p => p.Word == "きゅうくらりん") == true, "きゅうくらりん → きゅうくらりん (#1278)");
         Assert.True(dictionary.Split("ぶいすぽ")?.Any(p => p.Word == "ぶいすぽ") == true, "ぶいすぽ → ぶいすぽ (#1286)");
