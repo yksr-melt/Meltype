@@ -1,5 +1,4 @@
-# Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、組み立てたフォルダーの zip と .deb・.rpm を Artifacts に置く。
-# zip は rpm と ime-real が使う中間の成果物で、リリースには付けない (release.yml)。
+# Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
 #   app・rpm … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
 #   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
@@ -42,6 +41,7 @@ concurrency:
 jobs:
   app:
     # x64 と arm64 を、それぞれの CPU のランナーでビルドする (Mozc の Bazel のビルドは、ビルドしているマシンの CPU 向けになる)。
+    # zip の名前の最後 (asset) は、x64 は以前からの linux のまま (nix-meltype などがこの名前でリリースから取るため)
     strategy:
       matrix:
         include:

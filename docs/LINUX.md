@@ -48,6 +48,8 @@ fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。
 
 Ubuntu・Debian は apt で、Fedora は dnf で入れます。どちらも IBus と fcitx5 の両方に入れます。
 
+以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+
 <a name="ubuntu--debian"></a>
 <img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
 
@@ -93,19 +95,22 @@ sudo dnf install meltype
 sudo dnf install ./meltype-<version>-1.x86_64.rpm
 ```
 
-ほかのディストリビューション向けのパッケージはまだありません。ソースからビルドする方法は [linux/README.md](../linux/README.md) にあります。
+<a name="ほかのディストリビューション"></a>
+<img src="images/headings/linux/s03.svg" alt="ほかのディストリビューション" height="40">
 
-以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+ほかのディストリビューション向けのパッケージはまだありません。[Releases](https://github.com/yksr-melt/Meltype/releases/latest) の `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`) に、ビルド済みのファイルが入っています。
+置く場所と、`@DIR@` を置いた場所に書き換えるファイルは、[linux/build-deb.sh](../linux/build-deb.sh) と同じです。zip の fcitx5 のアドオン (`fcitx5/meltype.so`) は Ubuntu 24.04 の fcitx5 向けです。
+ソースからビルドする方法は [linux/README.md](../linux/README.md) にあります。
 
 <a name="ibus-のとき"></a>
-<img src="images/headings/linux/s03.svg" alt="IBus のとき" height="40">
+<img src="images/headings/linux/s04.svg" alt="IBus のとき" height="40">
 
 1. いったんログアウトしてログインし直す
 2. 設定 → キーボード → 入力ソース →「+ 入力ソースを追加」→ 日本語 → Meltype を追加
 3. 画面右上の入力ソースのメニュー (または <kbd>Super</kbd> + <kbd>Space</kbd>) で Meltype を選ぶ
 
 <a name="fcitx5-のとき"></a>
-<img src="images/headings/linux/s04.svg" alt="fcitx5 のとき" height="40">
+<img src="images/headings/linux/s05.svg" alt="fcitx5 のとき" height="40">
 
 1. いったんログアウトしてログインし直す (動いている fcitx5 は、起動し直すまで新しい Meltype を読み込みません)
 2. fcitx5 の設定 (`fcitx5-configtool`) →「入力メソッド」で Meltype を追加する

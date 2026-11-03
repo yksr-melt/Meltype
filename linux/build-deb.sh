@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# linux/build.sh で組み立てたもの (または CI の成果物 meltype-linux の zip を展開したフォルダー) から、
+# linux/build.sh で組み立てたもの (または Meltype-<版>-linux.zip を展開したフォルダー) から、
 # Debian / Ubuntu の .deb パッケージを作る。apt で入れる・更新する・外すためのもの (#863)。
 #   linux/build-deb.sh [版] [組み立てたフォルダー] [出力先]
 #   例: linux/build-deb.sh 1.2.2-pre.2 linux/build/Meltype-linux linux/build
