@@ -18,7 +18,6 @@ from pathlib import Path
 CONFIG = "config.json"
 SCHEMA = "config.schema.json"
 OTHER_CATEGORY = "その他"
-SAVE_DELAY_MS = 500
 
 
 def data_directory():
@@ -63,11 +62,7 @@ def kind(prop):
 
 
 class ConfigFile:
-    """config.json。読んだときの中身と違っていたら (Meltype やエディターが書き換えた)、上書きせずに SettingsError にする。
-
-    確かめるのは保存の直前なので、確かめてから置き換えるまでの間に書かれた分は上書きする。
-    Meltype (DataFile.Write) もエディターもロックを取らないので、ロックでは防げない。
-    """
+    """config.json。読んだときの中身と違っていたら (Meltype やエディターが書き換えた)、上書きせずに SettingsError にする。"""
 
     def __init__(self, directory, schema):
         self.path = Path(directory) / CONFIG
@@ -120,16 +115,12 @@ def main():
     gi.require_version("Gdk", "4.0")
     gi.require_version("Graphene", "1.0")
     gi.require_version("Pango", "1.0")
-    from gi.repository import Gdk, Gio, GLib, Graphene, Gtk, Pango
+    from gi.repository import Gdk, Gio, Graphene, Gtk, Pango
 
     class SettingsWindow(Gtk.ApplicationWindow):
         def __init__(self, app, schema, config):
             super().__init__(application=app, title="Meltype の設定", default_width=900, default_height=640)
             self.config = config
-            self._pending = {}
-            self._timer = None
-            # 閉じる前に保存できなければ、閉じずにバナーで知らせる
-            self.connect("close-request", lambda _: not self._flush())
             header = Gtk.HeaderBar()
             self.search = Gtk.SearchEntry(placeholder_text="設定を検索")
             self.search.connect("search-changed", lambda _: self.list.invalidate_filter())
@@ -236,44 +227,21 @@ def main():
                     editor.connect("value-changed", lambda spin: self._save(key, spin.get_value_as_int() if integer else spin.get_value()))
                 case "string":
                     editor = Gtk.Entry(text=value or "", width_chars=24)
-                    # 打っている途中の値を 1 文字ごとに保存しない。打ち終えて少し経つか、Enter で保存する
-                    editor.connect("changed", lambda entry: self._save_later(key, entry.get_text()))
-                    editor.connect("activate", lambda _: self._flush())
+                    editor.connect("changed", lambda entry: self._save(key, entry.get_text()))
                 case None:
                     editor = Gtk.Label(label="config.json で編集します")
                     editor.add_css_class("dim-label")
             editor.set_valign(Gtk.Align.CENTER)
             return editor
 
-        def _save_later(self, key, value):
-            self._pending[key] = value
-            if self._timer:
-                GLib.source_remove(self._timer)
-            self._timer = GLib.timeout_add(SAVE_DELAY_MS, self._on_timer)
-
-        def _on_timer(self):
-            self._timer = None
-            self._flush()
-            return GLib.SOURCE_REMOVE
-
-        def _flush(self):
-            """_save_later で待っている値を、いま保存する。保存できなかった値があれば False。"""
-            if self._timer:
-                GLib.source_remove(self._timer)
-                self._timer = None
-            pending, self._pending = self._pending, {}
-            return all([self._save(key, value) for key, value in pending.items()])
-
         def _save(self, key, value):
             try:
                 self.config.set(key, value)
-                return True
             except (SettingsError, OSError) as error:
                 # 古い中身のまま書き続けないように、読み直すまで編集を止める (失敗した項目の表示も、読み直すと元に戻る)
                 self.list.set_sensitive(False)
                 self.banner_text.set_label(str(error) if isinstance(error, SettingsError) else f"保存していません: {error}")
                 self.banner.set_reveal_child(True)
-                return False
 
         def _reload(self):
             """いまの config.json と schema で、ウィンドウを作り直す。"""
