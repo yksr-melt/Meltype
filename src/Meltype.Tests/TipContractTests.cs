@@ -71,7 +71,9 @@ internal static class TipContractTests
                 _ => throw new ArgumentException($"送れないキー: {key}"),
             };
             var composing = Composition.GetValueOrDefault(sid) is not null;
-            var before = Document.Length > 20 ? Document[^20..] : Document;
+            // DLL はキャレットの前を送る。変換中はキャレットが変換中の文字の後ろにあるので、変換中の文字も入る
+            var field = Document + (Composition.GetValueOrDefault(sid) ?? "");
+            var before = field.Length > 20 ? field[^20..] : field;
             var reply = Send($"{{\"op\":\"key\",\"sid\":{Json(sid)},\"vk\":{vk},\"ch\":{ch},\"mods\":0,\"before\":{Json(before)},\"after\":\"\"," +
                 $"\"process\":{Json(process)}{(moved ? ",\"moved\":true" : "")}{(composing ? ",\"composing\":true" : "")}}}");
             Apply(reply, sid);
