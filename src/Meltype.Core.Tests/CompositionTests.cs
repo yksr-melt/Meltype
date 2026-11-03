@@ -205,6 +205,7 @@ internal static class CompositionTests
         public bool NowPlayingCandidates { get; set; }
         public string ClockTimeZone { get; set; } = "";
         public DateTime UtcNow { get; set; } = DateTime.UtcNow;
+        public TimeZoneInfo LocalTimeZone { get; set; } = TimeZoneInfo.Utc;
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -306,6 +307,7 @@ internal static class CompositionTests
                 NowPlayingCandidates = () => NowPlayingCandidates,
                 ClockTimeZone = () => ClockTimeZone,
                 UtcNow = () => UtcNow,
+                LocalTimeZone = () => LocalTimeZone,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 EnglishNamePredictions = () => englishNamePredictions,

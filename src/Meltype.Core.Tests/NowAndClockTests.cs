@@ -87,9 +87,9 @@ internal static class NowAndClockTests
     public static void Issue1401_SameZoneAsThisPcHasNoZoneName()
     {
         // この PC と同じタイムゾーンを書いても、タイムゾーンの名前を付けた候補は出さない (設定の説明どおり)
-        var k = new Keyboard { ClockTimeZone = TimeZoneInfo.Local.Id, UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
+        var k = new Keyboard { ClockTimeZone = "Asia/Tokyo", LocalTimeZone = CompositionController.ClockZone("Tokyo Standard Time")!, UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
         k.Type("tokei ");
-        Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains(TimeZoneInfo.Local.Id, StringComparison.Ordinal)), string.Join(",", k.Host.View.Candidates));
+        Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains("Asia/Tokyo", StringComparison.Ordinal)), string.Join(",", k.Host.View.Candidates));
     }
 
     [Test]

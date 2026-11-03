@@ -273,6 +273,9 @@ public sealed record CompositionOptions
 
     /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
+
+    /// <summary>この PC のタイムゾーン (時計の候補にタイムゾーンの名前を付けるかの判定に使う。テストでは差し替える)。</summary>
+    public Func<TimeZoneInfo> LocalTimeZone { get; init; } = () => TimeZoneInfo.Local;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -2354,7 +2357,7 @@ public sealed class CompositionController
         var now = ClockNow();
         var clock = $"{now.Hour:D2}:{now.Minute:D2}";
         List<string> result = [clock, $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"];
-        if (zone is not null && !zone.HasSameRules(TimeZoneInfo.Local)) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
+        if (zone is not null && !zone.HasSameRules(_options.LocalTimeZone())) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
         return result;
     }
 
