@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-3.0-or-later
+﻿# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 
 # Zenzai を配布物に同梱するために、llama.cpp の llama-server (CPU 版) と zenz のモデルを取ってきて native\zenzai\bin に置く (issue #1120)。
