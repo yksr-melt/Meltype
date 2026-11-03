@@ -2,14 +2,12 @@ name: web
 
 on:
   pull_request:
-    paths:
+    paths: &paths
       - 'web/**'
       - '.github/workflows/web.yml'
   push:
     branches: [main]
-    paths:
-      - 'web/**'
-      - '.github/workflows/web.yml'
+    paths: *paths
 
 permissions:
   contents: read
