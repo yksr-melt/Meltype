@@ -93,6 +93,8 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm
 
 ほかのディストリビューション向けのパッケージはまだありません。ソースからビルドする方法は [linux/README.md](../linux/README.md) にあります。
 
+以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+
 <a name="ibus-のとき"></a>
 <img src="images/headings/linux/s01.svg" alt="IBus のとき" height="40">
 
@@ -146,5 +148,3 @@ ibus restart; sleep 2; pkill -f ibus-engine-meltype; /opt/meltype/ibus-engine-me
 <img src="images/headings/linux/05.svg" alt="アンインストール" height="53"><br>
 
 Ubuntu / Debian は `sudo apt remove meltype`、Fedora は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
-
-以前の版で zip の `install.sh` を使って入れたときは、その zip を展開したフォルダーの `bash uninstall.sh` で外してから、[インストール](#インストール)の方法で入れ直してください。
