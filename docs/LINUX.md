@@ -48,7 +48,7 @@ fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。
 
 Ubuntu・Debian は apt で、Fedora は dnf で入れます。どちらも IBus と fcitx5 の両方に入れます。
 
-zip の `install-legacy.sh` (以前の版では `install.sh`) で入れていても、先に外す必要はありません。apt / dnf で入れると、スクリプトが入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
 <a name="ubuntu--debian"></a>
 <img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
@@ -100,8 +100,6 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm
 
 ほかのディストリビューション向けのパッケージはまだありません。[Releases](https://github.com/yksr-melt/Meltype/releases/latest) の `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`) に、ビルド済みのファイルが入っています。
 置く場所と、`@DIR@` を置いた場所に書き換えるファイルは、[linux/build-deb.sh](../linux/build-deb.sh) と同じです。zip の fcitx5 のアドオン (`fcitx5/meltype.so`) は Ubuntu 24.04 の fcitx5 向けです。
-
-zip には、パッケージ管理を使わずに入れる旧来のスクリプト `install-legacy.sh` (外すときは `uninstall-legacy.sh`) も入っています。Debian / Ubuntu 向けで、足りない部品は `apt-get` で入れます。ほかのディストリビューションでの動作は保証しません。
 ソースからビルドする方法は [linux/README.md](../linux/README.md) にあります。
 
 <a name="ibus-のとき"></a>
@@ -157,5 +155,3 @@ ibus restart; sleep 2; pkill -f ibus-engine-meltype; /opt/meltype/ibus-engine-me
 <img src="images/headings/linux/05.svg" alt="アンインストール" height="53"><br>
 
 Ubuntu / Debian は `sudo apt remove meltype`、Fedora は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
-
-`install-legacy.sh` で入れたときは、zip を展開したフォルダーで `bash uninstall-legacy.sh` を実行します (`--data` を付けると設定と学習データも消します)。
