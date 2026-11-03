@@ -56,6 +56,16 @@ internal static class KanaLayoutTests
     }
 
     [Test]
+    public static void KanaLayout_EmptyKeysTypeNothing()
+    {
+        // 配列の表で空いているキーは何も入れない (月配列の 1 と ] で、JIS かなの ぬ む を入れない)
+        var k = Layout(KanaLayout.Tsuki);
+        k.TypeKanaKeys("w1");
+        k.Press(0xDD); // ]
+        Assert.Equal("と", k.Showing);
+    }
+
+    [Test]
     public static void KanaLayout_Hana_DakutenKeyCombines()
     {
         // 花配列の L は濁点。直前の かな に付く (S = か + ゛ = が)
