@@ -14,7 +14,7 @@
 
 ## ビルドする
 
-WSL の Ubuntu でも、OS に依存しない部分のテストと、Linux 用のパッケージのビルドができます。
+Ubuntu・Debian (WSL を含む) と Fedora でビルドできます。`--setup` は、apt か dnf でビルドに要るものを入れます。
 
 ```bash
 bash linux/build-cli.sh --setup --all
@@ -36,6 +36,8 @@ linux/build-cli.sh --mozc --package  # Mozc のヘルパーも作り直してパ
 ```bash
 linux/build-cli.sh --install
 ```
+
+`linux/build/Meltype-linux/` から `.deb` (apt のディストリビューション) か `.rpm` (Fedora) を作って入れます。版には `+dev.<日時>` が付くので、同じ版で何度入れ直しても、同じ版のリリース版を入れてあっても、更新として入ります。
 
 入力ソースの一覧に Meltype が出てこないときは、Linux のセッションを入り直してください。
 エンジンの動きを調べるときは、次のように手で起動するとログが見られます。

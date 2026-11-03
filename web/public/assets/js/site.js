@@ -432,7 +432,7 @@ function initScrollSpy() {
   targets.forEach((_, target) => observer.observe(target));
 }
 
-// Linux はディストリビューションでパッケージ (.deb / .rpm) が違うので、直接は落とさずに「インストール」の Linux のタブへ案内する。
+// Linux はディストリビューションごとに入れ方が違うので、パッケージは直接落とさずに docs/LINUX.md の手順へ案内する。
 const OS_ASSET = { windows: "setup.exe", mac: "mac.zip" };
 const OS_LABEL = { windows: "Windows 版をダウンロード", mac: "Mac 版 (プレビュー) をダウンロード", linux: "Linux 版 (プレビュー) の入れ方" };
 
@@ -635,8 +635,8 @@ function initDownloadLabel(os) {
   if (OS_LABEL[os]) main.querySelector("[data-download-label]").textContent = OS_LABEL[os];
   if (os === "mac") main.querySelector("[data-download-meta]").textContent = "macOS 13 以降・Apple シリコン";
   if (os === "linux") {
-    main.href = "#install";
-    main.querySelector("[data-download-meta]").textContent = "Ubuntu・Fedora / IBus・fcitx5";
+    main.href = "https://github.com/yksr-melt/Meltype/blob/main/docs/LINUX.md#インストール";
+    main.querySelector("[data-download-meta]").textContent = "IBus / fcitx5";
   }
   if (os === "mobile") main.querySelector("[data-download-meta]").textContent = "PC で開いてください・Windows 10 / 11";
 }
