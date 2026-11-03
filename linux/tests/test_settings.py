@@ -23,7 +23,9 @@ SCHEMA = {
         "DetectionLevel": {"enum": ["Aggressive", "Balanced"], "title": "強さ", "x-category": "2. 判定", "default": "Balanced"},
         "Punctuation": {"enum": ["Japanese"], "title": "句読点", "x-category": "1. 全般", "default": "Japanese"},
         "AppRules": {"type": "array", "title": "アプリ別設定", "x-category": "10. アプリ"},
-        "CompositionTheme": {"enum": ["Dark"], "title": "変換ボックスの色", "x-category": "8. 表示", "x-windows-only": True},
+        "CompositionTheme": {"enum": ["Dark"], "title": "変換ボックスの色", "x-category": "8. 表示", "x-platforms": ["Windows"]},
+        "UseZenzai": {"type": "boolean", "title": "Zenzai を使う", "x-category": "2. 判定", "x-platforms": ["Windows", "Mac"]},
+        "Learning": {"type": "boolean", "title": "学習", "x-category": "2. 判定", "x-platforms": ["Mac", "Linux"]},
         "SettingsVersion": {"type": "integer", "default": 12},
     }
 }
@@ -80,9 +82,9 @@ class ConfigFileTests(unittest.TestCase):
 class ItemTests(unittest.TestCase):
     def test_groups_titled_items_by_category_with_other_last(self):
         groups = [(category, [key for key, _ in items]) for category, items in settings.load_items(SCHEMA)]
-        self.assertEqual([("1. 全般", ["Enabled", "Punctuation"]), ("2. 判定", ["DetectionLevel"]), ("10. アプリ", ["AppRules"]),
+        self.assertEqual([("1. 全般", ["Enabled", "Punctuation"]), ("2. 判定", ["DetectionLevel", "Learning"]), ("10. アプリ", ["AppRules"]),
                           ("その他", ["ShowGuide"])], groups,
-                         "番号は数の順 (10 は 2 の後)。Windows のみの項目は出さない (項目が無くなった分類も出さない)")
+                         "番号は数の順 (10 は 2 の後)。Linux で使わない項目は出さない (項目が無くなった分類も出さない)")
         self.assertEqual("全般", settings.category_label("1. 全般"))
 
     def test_kind(self):
