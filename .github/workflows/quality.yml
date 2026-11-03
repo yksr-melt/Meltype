@@ -1,4 +1,4 @@
-# コードの品質のチェック (issue #1083)。ビルドとテストは build.yml、辞書・精度・報告の再現は pr-checks.yml。
+# コードの品質のチェック (issue #1083)。ビルドとテストは build.yml、辞書・精度は pr-checks.yml、報告の再現は pr-expectations.yml。
 #   フォーマット   … すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
 #   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の結果を SARIF にして、Code scanning に送る。
 #                    Code scanning は Pull Request で新しく出た警告だけを、その Pull Request の注釈に出す (前からある警告は Security タブに残る)。

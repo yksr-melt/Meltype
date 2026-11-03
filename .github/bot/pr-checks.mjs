@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 //
-// Pull Request のチェック (.github/workflows/pr-checks.yml) の補助。結果は GitHub の「Summary」に表で出す。
+// Pull Request のチェック (.github/workflows/pr-checks.yml・pr-expectations.yml) の補助。結果は GitHub の「Summary」に表で出す。
 //   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「確かめること」と「Fixes #12」の誤判定の報告から、確かめる例を集める
 //   node pr-checks.mjs expect <結果の JSON>        … 例の結果を表にし、外れがあれば失敗
 //   node pr-checks.mjs compare <main の JSON> <Pull Request の JSON>  … 品質テストを比べ、新しく外れた例があれば失敗
