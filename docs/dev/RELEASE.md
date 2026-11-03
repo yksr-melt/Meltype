@@ -14,6 +14,8 @@
 4. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
 5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
 
+Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名の設定手順](SIGNPATH-SETUP.md)。テスト署名は独立した手動ワークフローで、現在の配布手順は変更しません。
+
 ### bot でリリースする
 
 版を上げて main に入れたあと、Issue か Pull Request のコメントの 1 行目に、管理者 (admin / maintain) が次のように書きます。
