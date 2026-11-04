@@ -117,7 +117,7 @@ def main():
     gi.require_version("Gdk", "4.0")
     gi.require_version("Graphene", "1.0")
     gi.require_version("Pango", "1.0")
-    from gi.repository import Gdk, Gio, Graphene, Gtk, Pango
+    from gi.repository import Gdk, Graphene, Gtk, Pango
 
     class SettingsWindow(Gtk.ApplicationWindow):
         def __init__(self, app, schema, config):
@@ -310,7 +310,7 @@ def main():
             return
         SettingsWindow(app, schema, config).present()
 
-    app = Gtk.Application(application_id="io.github.yksr_melt.Meltype.Settings", flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
+    app = Gtk.Application(application_id="io.github.yksr_melt.Meltype.Settings")
     app.connect("activate", activate)
     return app.run(sys.argv)
 
