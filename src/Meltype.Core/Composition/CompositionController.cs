@@ -1983,7 +1983,7 @@ public sealed class CompositionController
         {
             if (parts.Contains(clause)) continue;
             var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _options.History?.Get(clause.Reading) : null);
+            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? LearnedConversion(clause.Reading) : null);
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
@@ -2087,7 +2087,7 @@ public sealed class CompositionController
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (_precedingText ?? "") + others + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? _options.History?.Get(clauses[i].Reading);
+            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
@@ -2261,10 +2261,12 @@ public sealed class CompositionController
     private List<string> JapaneseCandidates(string reading, string? inContext)
     {
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        var candidates = Distinct(inContext);
+        var candidates = IsVersionChoice(reading, inContext)
+            ? Distinct("バージョン" + reading["ばーじょん".Length..], inContext) : Distinct(inContext);
         foreach (var word in _options.UserDictionary?.Lookup(reading) ?? []) if (!candidates.Contains(word)) candidates.Add(word);
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
+        if (candidates.Count == 0 && IsVersionChoice(reading, standalone)) candidates.Add("バージョン" + reading["ばーじょん".Length..]);
         if (!candidates.Contains(standalone)) candidates.Add(standalone);
         foreach (var extra in _options.Candidates?.LookupWords(reading) ?? [])
         {
@@ -2557,6 +2559,17 @@ public sealed class CompositionController
     /// </summary>
     private static bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう";
 
+    // 過去の Meltype の版を覚えていても、通常の「バージョン」の文章では候補の先頭にしない。
+    private static bool IsVersionChoice(string reading, string? text) =>
+        reading.StartsWith("ばーじょん", StringComparison.Ordinal) && text is not null &&
+        text.StartsWith("Meltype-", StringComparison.Ordinal) && text.Length > "Meltype-".Length && char.IsAsciiDigit(text["Meltype-".Length]);
+
+    private string? LearnedConversion(string reading)
+    {
+        var text = _options.History?.Get(reading);
+        return IsVersionChoice(reading, text) ? null : text;
+    }
+
     /// <summary>
     /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
     /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
@@ -2802,7 +2815,7 @@ public sealed class CompositionController
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
-        if (_options.History?.Get(clause.Reading) is { } learned) Prefer(clause, learned);
+        if (LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
     /// <summary>同じかなを何度も変換しないようにキャッシュする。</summary>
@@ -3141,7 +3154,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause)) continue;
+            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause) || IsVersionChoice(clause.Reading, clause.Text)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -3164,7 +3177,7 @@ public sealed class CompositionController
         }
         foreach (var clause in _clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause) || IsVersionChoice(clause.Reading, clause.Text))
             {
                 Flush();
                 continue;

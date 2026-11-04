@@ -1006,6 +1006,65 @@ internal static class LanguageLearningTests
         Assert.Equal("version", english.Host.Document);
     }
 
+    private sealed class OldVersionConverter : IKanjiConverter, ILearningConverter
+    {
+        internal const string OldVersion = "Meltype-1.4.1-pre.2";
+        public readonly ManualResetEventSlim Learned = new();
+        public readonly List<ConversionClause> LearnedClauses = [];
+        public string? Convert(string reading) => reading == "ばーじょん" ? OldVersion : reading;
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => reading switch
+        {
+            "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", OldVersion)],
+            "ばーじょん" => [new(reading, OldVersion)],
+            _ => [new(reading, reading)],
+        };
+        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
+        {
+            lock (LearnedClauses) LearnedClauses.AddRange(clauses);
+            Learned.Set();
+        }
+    }
+
+    [Test]
+    public static void Issue1488_OldVersionLearningDoesNotOverrideNormalConversion()
+    {
+        var history = new ConversionHistory(null);
+        history.Remember("ばーじょん", OldVersionConverter.OldVersion);
+        foreach (var live in new[] { false, true })
+        {
+            var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new OldVersionConverter());
+            keyboard.Type("mukasinoba-jonn ");
+            Assert.Equal("昔のバージョン", keyboard.Host.View!.Text, "古い版を覚えた変換エンジンと履歴でも通常の文にする");
+            keyboard.Press(VirtualKeys.Return);
+            Assert.Equal("昔のバージョン", keyboard.Host.Document);
+        }
+        var standalone = new CompositionTests.Keyboard(history: history, converter: new OldVersionConverter());
+        standalone.Type("ba-jonn ");
+        Assert.Equal("バージョン", standalone.Host.View!.Text, "単独でも普通の変換が先");
+        Assert.True(standalone.Host.View.Candidates.Contains($"Meltype-{ProjectInfo.CoreVersion}"), "現在の版は引き続き選べる");
+    }
+
+    [Test]
+    public static void Issue1488_SelectingVersionDoesNotTeachHistoryOrEngine()
+    {
+        var history = new ConversionHistory(null);
+        var converter = new OldVersionConverter();
+        var keyboard = new CompositionTests.Keyboard(history: history, converter: converter);
+        keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Right);
+        var candidates = keyboard.Host.View!.Candidates.ToList();
+        var version = $"Meltype-{ProjectInfo.CoreVersion}";
+        var index = candidates.IndexOf(version);
+        Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
+        keyboard.Controller.SelectCandidate(index);
+        keyboard.Press(VirtualKeys.Return);
+        Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
+        Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
+        Assert.True(converter.Learned.Wait(5000), "前の普通の文節はエンジンに学習する");
+        lock (converter.LearnedClauses)
+            Assert.True(converter.LearnedClauses.All(c => c.Reading != "ばーじょん"), "版はエンジンにも覚えさせない");
+    }
+
     [Test]
     public static void CompositionSize_LargerChoicesAreSaved()
     {
