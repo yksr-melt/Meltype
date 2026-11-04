@@ -29,6 +29,7 @@ internal object NativeApi {
     external fun selectCandidate(handle: Long, index: Int): ByteArray?
     external fun selectPrediction(handle: Long, index: Int): ByteArray?
     external fun setLiveConversion(handle: Long, enabled: Boolean)
+    external fun setPrivate(handle: Long, isPrivate: Boolean)
     external fun setDirect(handle: Long, direct: Boolean)
     external fun setCanDelete(handle: Long, canDelete: Boolean)
 }
@@ -62,6 +63,7 @@ internal class MeltypeCoreSession private constructor(private var handle: Long) 
     fun selectPrediction(index: Int): String? =
         NativeApi.selectPrediction(currentHandle(), index)?.decodeToString()
     fun setLiveConversion(enabled: Boolean) = NativeApi.setLiveConversion(currentHandle(), enabled)
+    fun setPrivate(isPrivate: Boolean) = NativeApi.setPrivate(currentHandle(), isPrivate)
     fun setDirect(direct: Boolean) = NativeApi.setDirect(currentHandle(), direct)
     fun setCanDelete(canDelete: Boolean) = NativeApi.setCanDelete(currentHandle(), canDelete)
 
