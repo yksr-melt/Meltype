@@ -48,7 +48,7 @@ fcitx5 のアドオンは、`.deb` は Ubuntu 24.04 の fcitx5 5.1、`.rpm` は 
 
 Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
 
-以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、先に外す必要はありません。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
 <a name="ubuntu--debian"></a>
 <img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
