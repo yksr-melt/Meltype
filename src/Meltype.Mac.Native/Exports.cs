@@ -161,6 +161,14 @@ public static unsafe class Exports
             session.SetLiveConversion(enabled != 0);
     }
 
+    /// <summary>Android: disable user learning for editors requesting private input.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_private")]
+    public static void SetPrivate(IntPtr handle, int isPrivate)
+    {
+        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+            session.Private = isPrivate != 0;
+    }
+
     /// <summary>英数 (直接入力) にするか (1) 日本語にするか (0)。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_direct")]
     public static void SetDirect(IntPtr handle, int direct)
