@@ -64,12 +64,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/sarif"
           dotnet build "src/${{ matrix.project }}/${{ matrix.project }}.csproj" -c Release \
             -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true "-p:MeltypeSarifDir=$RUNNER_TEMP/sarif"
+      # 警告でビルドが失敗しても、SARIF ができていれば Code scanning に送る
       - name: Keep migration suggestions in the IDE
+        id: sarif
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           SARIF_FILE: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
-        run: node tools/filter-sarif.mjs "$SARIF_FILE"
-      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        run: |
+          if [ -f "$SARIF_FILE" ]; then
+            node tools/filter-sarif.mjs "$SARIF_FILE"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: ${{ !cancelled() && steps.sarif.outputs.exists == 'true' }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
           category: roslyn-${{ matrix.project }}
