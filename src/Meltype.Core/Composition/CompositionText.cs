@@ -144,12 +144,12 @@ public sealed class CompositionText
             // Keep the upstream desktop composition logic unchanged.
             if (AndroidNativeRuntime.Enabled &&
                 _pending.Length == 0 && _units.Count > 0 &&
-                _units[^1] is { Kana: "ん" } last &&
-                last.Raw.Equals("nn", StringComparison.OrdinalIgnoreCase) &&
+                _units[^1] is { Kana: "ん" } nnUnit &&
+                nnUnit.Raw.Equals("nn", StringComparison.OrdinalIgnoreCase) &&
                 char.ToLowerInvariant(c) is 'a' or 'i' or 'u' or 'e' or 'o' or 'y')
             {
-                _units[^1] = new CompositionUnit("ん", last.Raw[..1]);
-                _pending.Append(last.Raw[1]);
+                _units[^1] = new CompositionUnit("ん", nnUnit.Raw[..1]);
+                _pending.Append(nnUnit.Raw[1]);
             }
             // 直前の「ローマ字として読めなかった英字」は、次の文字と合わせると読めることがある
             // (test の t を消して u を打つ → s + u = す)。入力途中の子音に戻して読み直す。略語の大文字 (TS の S) は戻さない。
