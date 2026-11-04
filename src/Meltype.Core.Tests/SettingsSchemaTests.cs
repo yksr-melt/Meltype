@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Reflection;
 using System.Text.Json.Nodes;
 using Meltype.Composition;
 using Meltype.Config;
@@ -23,12 +24,30 @@ internal static class SettingsSchemaTests
         Assert.Equal("Slash,MiddleDot,FullWidth,Contextual", string.Join(",", properties["Slash"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("Slash", properties["Slash"]!["default"]?.GetValue<string>(), "既定値は変えない");
         Assert.Equal("後ろの語に合わせる", properties["Slash"]!["enumDescriptions"]![3]?.GetValue<string>());
+        Assert.Equal("3. 判定", properties["AutoDetection"]!["x-category"]?.GetValue<string>(), "設定画面の分類を x-category に出す");
+        string Platforms(string key) => string.Join(",", properties[key]!["x-platforms"]!.AsArray().Select(n => n!.GetValue<string>()));
+        Assert.Equal("Windows", Platforms("CompositionTheme"), "一部の OS でしか使わない項目に、使う OS を x-platforms に出す");
+        Assert.Equal("Windows,Mac", Platforms("UseZenzai"));
+        Assert.True(properties["AutoDetection"]!["x-platforms"] is null, "どの OS でも使う項目には出さない");
         // 独自の JsonConverter を付けた列挙型も、選択肢が出る
         Assert.Equal("Keyboard,Tsf", string.Join(",", properties["Mode"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("Romaji,Kana", string.Join(",", properties["InputStyle"]!["enum"]!.AsArray().Select(n => n!.GetValue<string>())));
         Assert.Equal("、。", properties["Punctuation"]!["enumDescriptions"]![0]?.GetValue<string>(), "選択肢の説明を出す");
-        Assert.True(properties["CompositionFont"]!["description"]!.GetValue<string>().StartsWith("Windows のみ。", StringComparison.Ordinal), "Windows 版でしか効かない項目は、説明の先頭に書く");
-        Assert.True(!properties["Punctuation"]!["description"]!.GetValue<string>().Contains("Windows のみ"), "どの OS でも効く項目には書かない");
+        Assert.True(properties["CompositionFont"]!["description"]!.GetValue<string>().StartsWith("Windows のみ。", StringComparison.Ordinal), "一部の OS でしか使わない項目は、使う OS を説明の先頭に書く");
+        Assert.True(properties["UseZenzai"]!["description"]!.GetValue<string>().StartsWith("Windows・Mac のみ。", StringComparison.Ordinal), "OS が複数なら・でつなぐ");
+        Assert.True(!properties["Punctuation"]!["description"]!.GetValue<string>().Contains("のみ。"), "どの OS でも使う項目には書かない");
+    }
+
+    [Test]
+    public static void Platforms_AreSomeButNotAllPlatforms()
+    {
+        var all = Enum.GetValues<Platform>().Aggregate((a, b) => a | b);
+        foreach (var property in typeof(Settings).GetProperties())
+        {
+            if (property.GetCustomAttribute<PlatformsAttribute>() is not { } attribute) continue;
+            Assert.True(attribute.Platforms != 0 && attribute.Platforms != all && (attribute.Platforms & ~all) == 0,
+                $"{property.Name}: 使う OS は 1 つ以上で、すべての OS なら Platforms を付けない");
+        }
     }
 
     [Test]

@@ -3,7 +3,8 @@
 # Copyright (C) 2026 aster-void
 #
 # linux/build.sh で組み立てたもの (または Meltype-<版>-linux.zip を展開したフォルダー) から、
-# Fedora などの .rpm パッケージを作る。dnf で入れる・更新する・外すためのもの。中身は build-deb.sh と同じ。
+# Fedora・RHEL 9 系の .rpm パッケージ (meltype と、fcitx5 のアドオンがあれば meltype-fcitx5) を作る。
+# dnf で入れる・更新する・外すためのもの。中身は build-deb.sh と同じ。
 #   linux/build-rpm.sh [版] [組み立てたフォルダー] [出力先]
 #   例: linux/build-rpm.sh 1.2.2-pre.2 linux/build/Meltype-linux linux/build
 #   使う人: sudo dnf install ./meltype-1.2.2~pre.2-1.x86_64.rpm / sudo dnf remove meltype
@@ -28,7 +29,7 @@ if [[ ! "$rpmversion" =~ ^[0-9][A-Za-z0-9.+~]*$ ]]; then
     exit 1
 fi
 
-for f in libMeltypeNative.so ibus-engine-meltype meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper; do
+for f in libMeltypeNative.so ibus-engine-meltype meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper; do
     [[ -e "$src/$f" ]] || { echo "必要なファイルがありません: $src/$f (先に linux/build.sh を実行してください)" >&2; exit 1; }
 done
 command -v rpmbuild > /dev/null || { echo "rpmbuild がありません (Fedora なら sudo dnf install rpm-build)" >&2; exit 1; }
@@ -53,15 +54,14 @@ trap 'rm -rf "$stage"' EXIT
 # 依存: C / C++ のライブラリは rpmbuild が ELF から自動で足す。
 # 自動では足されないもの: ICU (.NET が実行時に dlopen する。InvariantGlobalization=false) と、
 # python3 (IBus のエンジンの #! は /usr/bin/env python3 なので、自動では /usr/bin/env しか足されない)。
-# fcitx5 のアドオンが使う libFcitx5Core などは、自動で足すと fcitx5 が必須になるので外す
-# (IBus だけで使う人がいる。build-deb.sh と同じく fcitx5 は Suggests)。
+# fcitx5 のアドオンは Fedora の glibc を要求するので、サブパッケージ meltype-fcitx5 に分け、meltype は RHEL 9 系でも入るようにする。
+# meltype-fcitx5 は、fcitx5 が入っていれば dnf が meltype と一緒に入れる (Supplements)。
 # IBus の一覧 (ibus write-cache) は Fedora の ibus パッケージのファイルトリガーが作り直すので、ここでは実行しない
 cat > "$stage/meltype.spec" << 'EOF'
 %global debug_package %{nil}
 %global _build_id_links none
 # 本体とアドオンはビルド済み。rpmbuild の strip や #! の書き換えはしない
 %global __os_install_post %{nil}
-%global __requires_exclude ^libFcitx5
 %global target /opt/meltype
 
 Name: meltype
@@ -70,23 +70,32 @@ Release: 1
 Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
-Requires: libicu, python3
-Recommends: ibus, python3-gobject
-%if %{with_fcitx5}
-Suggests: fcitx5
-%endif
+Requires: libicu, python3 >= 3.9
+Recommends: ibus, python3-gobject, gtk4
 
 %description
 Meltype is a Japanese input method (IBus engine and fcitx5 addon).
 English words typed while writing Japanese stay as English,
 and romaji becomes Japanese, without switching the input mode.
 
+%if %{with_fcitx5}
+%package fcitx5
+Summary: fcitx5 addon for Meltype
+Requires: meltype%{?_isa} = %{version}-%{release}
+Supplements: (meltype and fcitx5)
+
+%description fcitx5
+The fcitx5 addon of Meltype.
+%endif
+
 %install
-mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component
-cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
+mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component %{buildroot}%{_bindir} %{buildroot}%{_datadir}/applications
+cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
 chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
-chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/mozc/meltype_mozc_helper
+chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper
 sed "s|@DIR@|%{target}|g" %{meltype_src}/meltype.xml > %{buildroot}%{_datadir}/ibus/component/meltype.xml
+ln -s %{target}/meltype-settings %{buildroot}%{_bindir}/meltype-settings
+sed "s|@DIR@|%{target}|g" %{meltype_src}/ibus-setup-meltype.desktop > %{buildroot}%{_datadir}/applications/ibus-setup-meltype.desktop
 %if %{with_fcitx5}
 install -D -m 644 %{meltype_src}/fcitx5/meltype.so %{buildroot}%{_libdir}/fcitx5/meltype.so
 install -D -m 644 %{meltype_src}/fcitx5/meltype-addon.conf %{buildroot}%{_datadir}/fcitx5/addon/meltype.conf
@@ -106,12 +115,17 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 %dir %{target}
 %{target}/libMeltypeNative.so
 %{target}/ibus-engine-meltype
+%{target}/meltype-settings
 %{target}/icon.png
 %{target}/mozc
 %{target}/THIRD-PARTY-NOTICES.md
 %license %{target}/LICENSE
 %{_datadir}/ibus/component/meltype.xml
+%{_bindir}/meltype-settings
+%{_datadir}/applications/ibus-setup-meltype.desktop
+
 %if %{with_fcitx5}
+%files fcitx5
 %{_libdir}/fcitx5/meltype.so
 %{_datadir}/fcitx5/addon/meltype.conf
 %{_datadir}/fcitx5/inputmethod/meltype.conf
@@ -126,6 +140,6 @@ rpmbuild -bb --target "$arch" \
     --define "meltype_src $src" \
     --define "with_fcitx5 $with_fcitx5" \
     "$stage/meltype.spec"
-rpm="$(find "$stage/out" -name '*.rpm')"
-cp "$rpm" "$out/"
-echo "作成しました: $out/$(basename "$rpm")"
+find "$stage/out" -name '*.rpm' -exec cp -t "$out/" {} +
+echo "作成しました:"
+find "$stage/out" -name '*.rpm' -printf "  $out/%f\n"

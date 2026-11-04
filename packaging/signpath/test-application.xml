@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 yksr-melt -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <parameters>
+    <parameter name="version" required="true" />
+  </parameters>
+  <!-- upload-artifact が作る ZIP。外側にアプリの ZIP を重ねない。 -->
+  <zip-file>
+    <pe-file path="Meltype.exe" product-name="Meltype" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="Meltype.dll" product-name="Meltype" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+    <pe-file path="Meltype.Core.dll" product-name="Meltype" product-version="${version}">
+      <authenticode-sign />
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

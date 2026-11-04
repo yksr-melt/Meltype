@@ -113,6 +113,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ClockTimeZone = () => _engine.Settings.ClockTimeZone,
             Punctuation = () => _engine.Settings.Punctuation,
             KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
+            KanaLayout = () => _engine.Settings.KanaLayout,
+            RomajiLayout = () => _engine.Settings.RomajiLayout,
             ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
             ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),

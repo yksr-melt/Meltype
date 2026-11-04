@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Buffers;
 using System.Globalization;
 using System.Diagnostics;
 using System.Net;
@@ -12,10 +13,9 @@ using System.Text.Json;
 namespace Meltype.Composition;
 
 /// <summary>
-/// Zenzai (azooKey のニューラルかな漢字変換モデル zenz) で変換する。モデルは llama.cpp の llama-server を別のプロセスで動かして使う
-/// (どちらも同梱しない。ユーザーが用意した llama-server の実行ファイルと zenz の GGUF ファイルの場所を設定する)。
+/// Zenzai (azooKey のニューラルかな漢字変換モデル zenz) で変換する。モデルは llama.cpp の llama-server を別のプロセスで動かして使う。
 ///
-/// 読み (ひらがな) をカタカナにして、zenz の入力の形 (U+EE00 読み U+EE02 文脈 U+EE01) で llama-server の /completion に頼み、
+/// 読み (ひらがな) をカタカナにして、zenz v3 系の入力の形 (U+EE02 文脈 U+EE00 読み U+EE01) で llama-server の /completion に頼み、
 /// 貪欲に生成した文字列を変換結果にする。サーバーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
 /// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す (変換は UI スレッドで動く)。
 /// 結果は文節に区切らず、読み全体 1 つの文節で返す。
@@ -25,6 +25,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const char InputMark = '';
     private const char OutputMark = '';
     private const char ContextMark = '';
+    private static readonly SearchValues<char> OutputBoundaries = SearchValues.Create("\uEE00\uEE01\uEE02\uEE03\uEE04\uEE05\uEE06\uEE07\uEE08\n");
     private const int StartTimeoutMs = 30000;
     private const int MaxReading = 80;
     private const int MaxContext = 100;
@@ -134,9 +135,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
         // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
-        var text = answer;
-        var unchanged = answer is not null && answer == hiragana;
-        if (unchanged) text = null;
+        var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
@@ -150,13 +149,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         return text is null ? null : [new ConversionClause(hiragana, text)];
     }
 
-    /// <summary>zenz に渡す文: U+EE00 + カタカナの読み + (文脈があれば U+EE02 + 文脈) + U+EE01。</summary>
+    /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
     internal static string Prompt(string hiragana, string? context)
     {
         var sb = new StringBuilder();
-        sb.Append(InputMark).Append(ToKatakana(hiragana));
         if (!string.IsNullOrEmpty(context)) sb.Append(ContextMark).Append(context);
-        return sb.Append(OutputMark).ToString();
+        return sb.Append(InputMark).Append(ToKatakana(hiragana)).Append(OutputMark).ToString();
     }
 
     internal static string ToKatakana(string text) =>
@@ -201,7 +199,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     internal static string? Clean(string? content)
     {
         if (content is null) return null;
-        var end = content.IndexOfAny(['', '', '', '', '\n']);
+        var end = content.AsSpan().IndexOfAny(OutputBoundaries);
         if (end >= 0) content = content[..end];
         content = content.Replace("</s>", "").Replace("<s>", "").Trim();
         return content.Length == 0 ? null : content;

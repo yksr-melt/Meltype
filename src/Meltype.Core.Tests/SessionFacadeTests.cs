@@ -525,6 +525,99 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void Issue1033_ShiftSpaceTogglesDirectMode()
+    {
+        // #1033: 設定「入力モード切り替えキー」に Shift+Space があれば、本体 (Mac・Linux) も切替に使う。
+        // 全角スペースを確定せず、もう一度押すと日本語に戻る
+        var settings = new Settings
+        {
+            ToggleShortcuts = [new ToggleShortcut { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift }],
+        };
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
+        Assert.True(!session.Direct, "最初は日本語入力");
+
+        var result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(result.Consumed, "切替の Shift+Space はアプリに渡さない");
+        Assert.Equal(0, result.Commits.Count);
+        Assert.True(session.Direct, "英数になる");
+        Assert.True(session.Toggled, "フロントエンド (fcitx5・IBus・Mac) に、切り替えたことを伝える");
+        Assert.True(session.TakeToggled(), "印を読んで消す");
+        Assert.True(!session.TakeToggled(), "1 回だけ伝える");
+
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(result.Consumed && result.Commits.Count == 0, "切替として使う");
+        Assert.True(!session.Direct, "日本語に戻る");
+        Assert.True(session.TakeToggled(), "2 回目の切替でも伝えられる");
+
+        // 登録が無ければ今までどおり全角スペース (いまは日本語に戻っている)
+        settings.ToggleShortcuts = [];
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.Equal("　", string.Concat(result.Commits.Select(c => c.Text)));
+        Assert.True(!session.TakeToggled(), "切替ではないので印を立てない");
+    }
+
+    [Test]
+    public static void Issue1033_OtherShortcutsAndGuards()
+    {
+        var settings = new Settings
+        {
+            ToggleShortcuts = [new ToggleShortcut { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }],
+        };
+        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
+        var result = session.HandleKey(VirtualKeys.Space, ' ', false, true, false, false, "");
+        Assert.True(result.Consumed && session.Direct, "Ctrl+Space で英数になる");
+        Assert.True(session.TakeToggled(), "Space の切替は印を立てる (フロントエンドに伝える)");
+
+        // Shift+Space は Ctrl+Space の設定では切替にならない (日本語に戻して、今までどおり全角スペースになること)
+        session.Direct = false;
+        var shiftSpace = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.Equal("　", string.Concat(shiftSpace.Commits.Select(c => c.Text)));
+
+        // Space だけの組み合わせは、設定の読み込みで ToggleShortcutValidator が外す
+        // (ToggleShortcutTests.Shortcut_ShiftSpaceIsAllowedAndConflictsWithTheHalfWidthSetting)。
+
+        // 変換中は切替にしない: Shift+Space は変換中の「前の候補へ」で、docs/USAGE.md にそう書いてある。
+        // 切り替えたいときは、変換を終えてから押す。
+        session.TakeToggled();
+        settings.ToggleShortcuts = [new ToggleShortcut { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift }];
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
+        Type(session, "kyou");
+        session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");   // まず Space で変換して候補を出す
+        var composing = session.IsComposing;
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(composing, "変換中の状態を作る");
+        Assert.True(!session.Direct, "変換中の Shift+Space では英数にしない");
+        Assert.True(!session.Toggled, "変換中の Shift+Space は切替として扱わない");
+        Assert.Equal(0, result.Commits.Count, "変換中は確定しない");
+
+        // 変換を終えてから押せば、今までどおり切り替わる。
+        result = session.HandleKey(VirtualKeys.Return, null, false, false, false, false, "");
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, false, false, false, "");
+        Assert.True(result.Consumed, "空のときは切替として使う");
+        Assert.True(session.Direct, "英数になる");
+        Assert.True(session.Toggled, "切替を伝える");
+
+        // 修飾キーは、どのフロントエンドも Ctrl と Shift を別々のビットで渡す (macOS・fcitx5・IBus)。
+        // そのため Ctrl+Shift+Space は、Shift+Space の設定では切替にしない。
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
+        result = session.HandleKey(VirtualKeys.Space, ' ', true, true, false, false, "");
+        Assert.True(!result.Consumed, "Ctrl+Shift+Space はアプリに通す");
+        Assert.True(!session.Direct && !session.Toggled, "Ctrl+Shift+Space では切り替えない");
+
+        // Space 以外の切替キーでも印を立てる (フロントエンドがモードを合わせられるように)
+        settings.ToggleShortcuts = [new ToggleShortcut { Key = 'A', Modifiers = ShortcutModifiers.Control | ShortcutModifiers.Shift }];
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
+        result = session.HandleKey(0x41 /* A */, 'a', true, true, false, false, "");
+        Assert.True(result.Consumed && session.Direct, "設定した組み合わせで切り替える");
+        Assert.True(session.TakeToggled(), "Space 以外の切替でも印を立てる (モードを合わせるため)");
+
+        // Meltype IME (Windows の TSF) は DLL が打鍵ごとに direct を送ってくる。この経路では設定を読まない
+        session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => settings);
+        result = session.HandleKey(0x41 /* A */, 'a', true, true, false, false, "", after: null, toggleShortcuts: false);
+        Assert.True(!result.Consumed && !session.Direct && !session.Toggled, "toggleShortcuts: false では切替にしない");
+    }
+
+    [Test]
     public static void RoleKeys_OnlyWhenSettingIsOnAndComposing()
     {
         // #199: Linux の IBus・fcitx5 は、入力中の 変換・無変換・ひらがな/カタカナ を先に本体に渡す (meltype_role_key)。
@@ -1033,6 +1126,28 @@ internal static class SessionFacadeTests
         ChooseHashi(session);
         Assert.Equal("箸を", history.Get("はしを"));
     }
+    [Test]
+    public static void CreateDefault_ReloadsChangedConfigInOpenSession()
+    {
+        // Mac・Linux 版は、設定画面が別のプロセスで config.json を書く。開いたままの入力欄 (IBus はエンジンを入力欄で使い回す) でも、次のキーから効く
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-session-reload-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var session = MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
+            Assert.Equal("ね、", Type(session, "ne,\n")[^1].Commits.Single().Text, "既定の句読点");
+            var config = Path.Combine(directory, "config.json");
+            File.WriteAllText(config, $"{{ \"SettingsVersion\": {Settings.CurrentVersion}, \"Punctuation\": \"FullWidthCommaPeriod\" }}");
+            // 同じ時刻に書かれても読み直すことは保証しないので、時刻を進める
+            File.SetLastWriteTimeUtc(config, DateTime.UtcNow.AddSeconds(1));
+            // 更新時刻を見るのは SettingsFile.CheckIntervalMs に 1 回 (間隔は SettingsFileTests で確かめる)
+            Thread.Sleep(TimeSpan.FromMilliseconds(SettingsFile.CheckIntervalMs + 100));
+            Assert.Equal("ね，", Type(session, "ne,\n")[^1].Commits.Single().Text, "書き換えた config.json の句読点");
+            var other = MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
+            Assert.Equal("ね，", Type(other, "ne,\n")[^1].Commits.Single().Text, "後から開いた入力欄も同じ設定");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
     [Test]
     public static void CreateDefault_SessionsShareLearning()
     {

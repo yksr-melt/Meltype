@@ -3,10 +3,10 @@
 # Copyright (C) 2026 Yukishiro
 #
 # Meltype (Linux 版テスト版) を外す。設定と学習データ (~/.local/share/Meltype) も消すなら --data を付ける:
-#   bash uninstall.sh [--data]
+#   bash uninstall-legacy.sh [--data]
 set -euo pipefail
 echo "Meltype を外します (管理者のパスワードを聞かれます)"
-sudo rm -f /usr/share/ibus/component/meltype.xml
+sudo rm -f /usr/share/ibus/component/meltype.xml /usr/bin/meltype-settings /usr/share/applications/ibus-setup-meltype.desktop
 # fcitx5 のアドオン
 sudo rm -f /usr/share/fcitx5/addon/meltype.conf /usr/share/fcitx5/inputmethod/meltype.conf
 { find /usr/lib /usr/lib64 -name meltype.so -path '*fcitx5*' 2> /dev/null || true; } | xargs -r sudo rm -f
@@ -18,7 +18,7 @@ before="$(pgrep -u "$(id -u)" -x fcitx5 2> /dev/null | head -n 1)" || true
 if [[ -n "$before" ]]; then
     (fcitx5 -r -d > /dev/null 2>&1 &)
     # 前の fcitx5 が終わるのを待つ。終わらなければ起動し直せていない
-    # 待ち方 (0.2 秒 × 25 回) は install.sh の fcitx5_restart の同じ待ちと対になっている。片方だけ変えない。
+    # 待ち方 (0.2 秒 × 25 回) は install-legacy.sh の fcitx5_restart の同じ待ちと対になっている。片方だけ変えない。
     for _ in {1..25}; do
         sleep 0.2
         if ! kill -0 "$before" 2> /dev/null; then break; fi

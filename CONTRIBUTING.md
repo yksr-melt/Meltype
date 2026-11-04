@@ -33,7 +33,7 @@
 
 
 - 変換エンジンを一から作らない (MS IME・Mozc の上で動かす)
-- クラウドの変換は使わない。AI の変換 (Zenzai) は PC の中で動かし、打った文字を外へ送らない (Zenzai は Windows では既定で ON、Mac では既定で OFF。同梱のモデルを手元で使う)
+- クラウドの変換は使わない。AI の変換 (Zenzai) は PC の中で動かし、打った文字を外へ送らない (Zenzai は既定で ON。同梱のモデルを手元で使う)
 - 有料版は作らない。広告はできるだけ避け、やむを得ないときは前もって知らせる
 
 <br>
@@ -219,7 +219,9 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 
 | チェック | 流れるとき | 内容 |
 |---|---|---|
-| build / test | いつも | ビルドとテスト (Windows・Linux・Mac) |
+| test / core | いつも | Windows 版のビルドとテスト (test)、判定・変換のコアのテスト (core。Linux・Mac) |
+| mac / linux | Mac 版・Linux 版か共通部分が変わったとき | Mac 版・Linux 版のビルドとテスト。Linux 版は IBus で実際に打って確かめます。できた配布物は実行結果の Artifacts から取れます |
+| web | `web/` が変わったとき | Web (Cloudflare Workers・報告フォーム) の構文・テスト |
 | 辞書の形式 | `dictionaries/` が変わったとき | 読めない行・ひらがなでない読み・重複など (`node tools/check-dictionaries.mjs` で手元でも確かめられます) |
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます。あわせて、よく使う語 (約 5.7 万語) の判定が main から変わった語を一覧にします (参考。失敗にはしません) |
 | 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」と、`Fixes #12` で閉じる誤判定の報告を、Pull Request のコードで確かめます |
@@ -227,6 +229,7 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | フォーマット | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、違反があれば失敗 |
 | 静的解析 | いつも | Roslyn の解析の警告のうち、Pull Request で新しく出たものを注釈で出す (マージは止めません) |
 | CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
+| スクリプト | いつも | `.github/bot`・`tools` の Node のスクリプトのテスト |
 | 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。

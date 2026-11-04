@@ -41,6 +41,8 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>打鍵数のカウンター (トレイの「打鍵数...」)。</summary>
     public KeyCounter KeyCounter { get; }
     private readonly System.Threading.Timer _keyCountTimer;
+    /// <summary>Discord のステータスに打鍵数を出す (打鍵数の「Discord に表示する」が ON の間だけ。入力とは別のスレッドで送る)。</summary>
+    private readonly DiscordPresence _discordPresence;
 
     public MeltypeEngine(Settings settings, string? configPath, string? userDictionaryDirectory)
     {
@@ -54,6 +56,9 @@ internal sealed class MeltypeEngine : IDisposable
         _pollTimer = new System.Threading.Timer(_ => PollImeState(), null, Timeout.Infinite, Timeout.Infinite);
         KeyCounter = new KeyCounter(configPath is null ? null : AppPaths.KeyCountFile);
         _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
+        _discordPresence = new DiscordPresence(
+            () => KeyCounter.DiscordPresence && KeyCounter.Enabled,
+            () => new DiscordPresence.Stats(KeyCounter.OnDay(DateTime.Today), KeyCounter.Total));
     }
 
     public Settings Settings => _settings;
@@ -711,12 +716,17 @@ internal sealed class MeltypeEngine : IDisposable
         var settings = _settings;
         if (!settings.Enabled || settings.Mode != InputMode.Keyboard || !KeyboardLayoutPolicy.AllowsInput(settings)) return false;
         var letter = VirtualKeys.IsLetter(e.Vk);
-        var reconvert = e.Vk == VirtualKeys.Convert;
+        // 親指シフトのかな配列 (NICOLA・中指NICOLA・TRON): 無変換・変換は親指キー。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする
+        // (文頭の 変換 + W を再変換にしない: issue #1415)
+        var thumbKey = settings.InputStyle == InputStyle.Kana && !_keyboardDirect && e.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
+            settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
+        var reconvert = e.Vk == VirtualKeys.Convert && !thumbKey;
         // 句読点・かぎかっこ・長音・数字・記号のキー (Shift を押して打つ ＃＄％（）＠ なども) でも変換ボックスを開く。
         // 日本語の中では全角、英語の中では半角になる。
         var punctuation = IsDigitOrPunctuationKey(e.Vk);
         // かな入力 (JIS): かなのキー (数字・記号のキーも含む) はすべて入力を始める。
         if (settings.InputStyle == InputStyle.Kana && !_keyboardDirect && KanaDetector.IsKanaKey(e.Vk)) punctuation = true;
+        if (thumbKey) punctuation = true;
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。
         if (e.Vk == VirtualKeys.Space && !_keyboardDirect && (IsDown(VirtualKeys.Shift) || settings.SpaceWidth == SpaceWidth.FullWidth)) punctuation = true;
         if (_keyboardDirect && !reconvert)
@@ -918,8 +928,16 @@ internal sealed class MeltypeEngine : IDisposable
         _composition?.ResetContext();
     }
 
+    // 最後に届いた前面の切り替え (EVENT_SYSTEM_FOREGROUND) のウィンドウ
+    private IntPtr _lastForegroundEvent;
+
     private void OnForegroundChanged(IntPtr window)
     {
+        // 前の前面の切り替えと同じウィンドウ: 変換ボックスなどがアクティブにされて入力欄に返しただけ (issue #997)。変換中の内容は捨てない。
+        // 変換ボックスがアクティブになったときの切り替えは WINEVENT_SKIPOWNPROCESS で届かないので、前に届いたのは入力欄のまま
+        // (ForegroundTracker.Current は今の前面ウィンドウで覚え直すので、変換ボックスを覚えていることがあり、使わない)
+        if (window != IntPtr.Zero && window == _lastForegroundEvent) return;
+        _lastForegroundEvent = window;
         // 変換中に別のウィンドウに切り替わったら、変換中の内容は捨てる (切り替わった先のアプリに入らないように)。
         _composition?.Abandon("別のウィンドウに切り替わった");
         // 起動の途中から Windows の IME で打っていた語も、ここで終わる (Meltype キーボードを使うなら下で閉じる)
@@ -1045,6 +1063,7 @@ internal sealed class MeltypeEngine : IDisposable
         _remote.Dispose();
         _lineTimer?.Dispose();
         _keyCountTimer.Dispose();
+        _discordPresence.Dispose();
         KeyCounter.Save();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();

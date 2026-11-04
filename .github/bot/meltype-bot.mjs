@@ -200,7 +200,7 @@ const Help = [
 //   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
-//   5. 配布物のビルド (build / mac / linux) を、そのタグで始める。ビルドが終わると、下書きに配布物が付く
+//   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物が付く
 // タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
 async function releaseCommand(issue, command, version) {
   const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
@@ -230,19 +230,13 @@ async function releaseCommand(issue, command, version) {
   const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
   await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha });
   await gh('POST', '/releases', { tag_name: tag, name: `Meltype ${version}`, draft: true, prerelease: pre, body: notes });
-  const started = [], failed = [];
-  for (const workflow of ['build.yml', 'mac.yml', 'linux.yml']) {
-    try {
-      await gh('POST', `/actions/workflows/${workflow}/dispatches`, { ref: tag }, dispatchToken);
-      started.push(workflow);
-    } catch (error) {
-      failed.push(`${workflow}: ${error.message.slice(0, 120)}`);
-    }
-  }
+  const failed = await gh('POST', '/actions/workflows/release.yml/dispatches', { ref: tag }, dispatchToken)
+    .then(() => null, error => error.message.slice(0, 120));
   await reply([
     `✅ タグ \`${tag}\` (${sha.slice(0, 7)}) とリリースの下書き (${pre ? 'プレリリース' : '通常'}、本文は \`${notesFile}\`) を作りました。`,
-    started.length > 0 ? `\nビルドを始めました: ${started.join('・')}。終わると下書きに配布物が付くので、中身を確かめてから公開してください。` : '',
-    failed.length > 0 ? `\n⚠ 始められなかったビルド (Actions の画面から ${tag} で手で実行してください):\n${failed.map(f => `- ${f}`).join('\n')}` : '',
+    failed === null
+      ? '\nビルド (release.yml) を始めました。終わると下書きに配布物が付くので、中身を確かめてから公開してください。'
+      : `\n⚠ ビルド (release.yml) を始められませんでした (Actions の画面から ${tag} で手で実行してください): ${failed}`,
   ].join('\n'));
 }
 

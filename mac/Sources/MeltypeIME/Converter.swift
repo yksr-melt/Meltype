@@ -17,6 +17,16 @@ final class MeltypeConverter {
     private var options: ConvertRequestOptions
     /// Zenzai (ニューラルかな漢字変換) のモデル。無ければ Zenzai を使わない。
     private let zenzModel: URL?
+    /// Zenzai の変換を待つ上限 (Windows の Zenzai と同じ 400 ms)。超えたら Zenzai なしの変換を使う。
+    private static let zenzaiTimeout: TimeInterval = 0.4
+    /// これより長い読みは Zenzai に渡さない (Windows の Zenzai と同じ。長いほど推論が長い)。
+    private static let zenzaiMaxReading = 80
+    /// 打ち切ったときに Zenzai を使わない長さ (遅い Mac で何度も待たないように)。
+    private static let zenzaiPause: TimeInterval = 10 * 60
+    /// Zenzai はこの時刻まで使わない。
+    private var zenzaiPausedUntil = Date.distantPast
+    /// Zenzai の変換は、別の変換エンジンで別のスレッドで動かす (待つ時間に上限を付けるため。azooKey の変換は途中で止められない)。
+    private let zenzaiWorker: ZenzaiWorker?
     private var resultCache: [String: [Candidate]] = [:]
     private var cacheOrder: [String] = []
 
@@ -72,7 +82,15 @@ final class MeltypeConverter {
             specialCandidateProviders: KanaKanjiConverter.defaultSpecialCandidateProviders,
             metadata: .init(versionString: "Meltype \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown")")
         )
-        zenzModel = Self.findZenzModel()
+        // init の中では self を閉包に入れられないので、ローカルの値で作る
+        let model = Self.findZenzModel()
+        let requestOptions = options
+        zenzModel = model
+        if let model {
+            zenzaiWorker = ZenzaiWorker(dictionaryURL: MeltypeConverter.resource("Dictionary"), model: model, options: requestOptions)
+        } else {
+            zenzaiWorker = nil
+        }
     }
 
     /// キャレットの前の文 (Zenzai の文脈に使う) は最後の 20 文字まで。
@@ -84,26 +102,38 @@ final class MeltypeConverter {
     /// ひらがな全体に対する変換結果 (入力をすべて使ったものだけ、よい順)。
     /// Zenzai を使うときは、キャレットの前の文 (context) も文脈としてモデルに渡す (同じ読みでも前の文で変換が変わる)。
     private func results(for hiragana: String, context: String? = nil) -> [Candidate] {
-        let tail = zenzModel == nil ? nil : Self.contextTail(context)
-        let key = tail.map { $0 + "\u{1}" + hiragana } ?? hiragana
+        // Zenzai を使えるとき (止めていない・読みが長すぎない・前の変換が終わっている) だけ、上限付きで Zenzai に頼む
+        let useZenzai = zenzaiWorker != nil && Date() >= zenzaiPausedUntil && hiragana.count <= Self.zenzaiMaxReading
+        let tail = useZenzai ? Self.contextTail(context) : nil
+        let key = useZenzai ? (tail ?? "") + "\u{1}" + hiragana : hiragana
         if let cached = resultCache[key] { return cached }
         var composing = ComposingText()
         composing.insertAtCursorPosition(hiragana, inputStyle: .direct)
-        if let zenzModel {
-            options.zenzaiMode = .on(weight: zenzModel, inferenceLimit: 10, personalizationMode: nil,
-                                     versionDependentMode: .v3(.init(leftSideContext: tail, maxLeftSideContextLength: 20)))
+        var results: ConversionResult?
+        if useZenzai, let zenzaiWorker {
+            switch zenzaiWorker.convert(composing, leftContext: tail, timeout: Self.zenzaiTimeout) {
+            case .done(let zenzai):
+                results = zenzai
+            case .timedOut:
+                zenzaiPausedUntil = Date().addingTimeInterval(Self.zenzaiPause)
+                NSLog("Meltype: Zenzai の変換が %.0f ms で終わらなかったので、10 分間 Zenzai を使いません", Self.zenzaiTimeout * 1000)
+            case .busy, .notReady:
+                break
+            }
         }
-        let results = converter.requestCandidates(composing, options: options)
+        let key2 = results == nil ? hiragana : key
+        if results == nil, let cached = resultCache[key2] { return cached }
+        let converted = results ?? converter.requestCandidates(composing, options: options)
         let count = hiragana.count
         // 入力 (ひらがな) をすべて使った候補だけ (.direct で入れたので、入力の文字数 = ひらがなの文字数)
-        let candidates = results.mainResults.filter { $0.composingCount == .inputCount(count) || $0.composingCount == .surfaceCount(count) }
+        let candidates = converted.mainResults.filter { $0.composingCount == .inputCount(count) || $0.composingCount == .surfaceCount(count) }
         // Keep the engine's previous lattice for incremental conversion; bound retained results.
         if count <= 256 {
             if cacheOrder.count >= 64 {
                 resultCache.removeValue(forKey: cacheOrder.removeFirst())
             }
-            resultCache[key] = candidates
-            cacheOrder.append(key)
+            resultCache[key2] = candidates
+            cacheOrder.append(key2)
         }
         return candidates
     }
@@ -137,5 +167,77 @@ final class MeltypeConverter {
             if list.count >= 30 { break }
         }
         return list
+    }
+}
+
+/// Zenzai の変換を、自分の変換エンジンで別のスレッド (直列のキュー) で動かす。
+/// 呼ぶ側は上限の時間だけ待ち、終わらなければ Zenzai なしの変換を使う。終わらなかった変換は裏で最後まで動き、結果は捨てる。
+/// 最初の変換 (モデルの読み込みを含む) は作ったときに裏で済ませ、済むまでは Zenzai を使わない。
+private final class ZenzaiWorker: @unchecked Sendable {
+    enum Outcome {
+        case done(ConversionResult)
+        case timedOut
+        /// 前の変換がまだ動いている (打ち切った後など)
+        case busy
+        /// モデルを読み込み中
+        case notReady
+    }
+
+    private let converter: KanaKanjiConverter
+    private let model: URL
+    private let options: ConvertRequestOptions
+    private let queue = DispatchQueue(label: "Meltype.Zenzai")
+    private let lock = NSLock()
+    private var running = false
+    private var ready = false
+
+    init(dictionaryURL: URL, model: URL, options: ConvertRequestOptions) {
+        converter = KanaKanjiConverter(dicdataStore: DicdataStore(dictionaryURL: dictionaryURL))
+        self.model = model
+        self.options = options
+        queue.async { [self] in
+            var warmup = ComposingText()
+            warmup.insertAtCursorPosition("にほんご", inputStyle: .direct)
+            _ = converter.requestCandidates(warmup, options: zenzaiOptions(leftContext: nil))
+            locked { ready = true }
+        }
+    }
+
+    // NSLock.withLock は macOS 14 から (Meltype は macOS 13 から動く) なので自分で書く
+    private func locked<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
+    private func zenzaiOptions(leftContext: String?) -> ConvertRequestOptions {
+        var zenzai = options
+        zenzai.zenzaiMode = .on(weight: model, inferenceLimit: 10, personalizationMode: nil,
+                                versionDependentMode: .v3(.init(leftSideContext: leftContext, maxLeftSideContextLength: 20)))
+        return zenzai
+    }
+
+    func convert(_ composing: ComposingText, leftContext: String?, timeout: TimeInterval) -> Outcome {
+        let state: Outcome? = locked {
+            if !ready { return .notReady }
+            if running { return .busy }
+            running = true
+            return nil
+        }
+        if let state { return state }
+        let done = DispatchSemaphore(value: 0)
+        let box = ResultBox()
+        let request = zenzaiOptions(leftContext: leftContext)
+        queue.async { [self] in
+            box.value = converter.requestCandidates(composing, options: request)
+            locked { running = false }
+            done.signal()
+        }
+        guard done.wait(timeout: .now() + timeout) == .success, let result = box.value else { return .timedOut }
+        return .done(result)
+    }
+
+    private final class ResultBox: @unchecked Sendable {
+        var value: ConversionResult?
     }
 }

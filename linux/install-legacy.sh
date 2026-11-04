@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# Meltype (Linux 版テスト版) を入れる。zip を展開したフォルダーで実行する:
-#   bash install.sh
+# Meltype (Linux 版) を、パッケージ管理を使わずに入れる旧来のスクリプト。Debian / Ubuntu 向け (足りない部品は apt-get で入れる)。
+# apt・dnf で入れられる環境では .deb・.rpm を使う (docs/LINUX.md)。zip を展開したフォルダーで実行する:
+#   bash install-legacy.sh
 # プログラムは /opt/meltype に、IBus のコンポーネントは /usr/share/ibus/component に入れる (管理者のパスワードを聞かれる)。
 # fcitx5 を使っていれば、fcitx5 のアドオンも入れる (IBus が無ければ IBus の部品は入れない)。fcitx5 だけに入れるなら --fcitx5 を付ける。
 set -euo pipefail
@@ -39,6 +40,14 @@ if $use_ibus; then
     fi
 fi
 
+# 設定画面 (meltype-settings) が使う GTK 4 と、Python から GTK を使う部品
+missing=()
+python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk' 2> /dev/null || missing+=(python3-gi gir1.2-gtk-4.0)
+if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "必要な部品を入れます: ${missing[*]}"
+    sudo apt-get install -y "${missing[@]}"
+fi
+
 # fcitx5 に読み直させる dbus-send (Ubuntu の標準の画面なら、ふつうは入っている)
 if $use_fcitx5; then
     missing=()
@@ -52,8 +61,11 @@ fi
 echo "$target に入れます (管理者のパスワードを聞かれます)"
 sudo rm -rf "$target"
 sudo mkdir -p "$target"
-sudo cp -R libMeltypeNative.so ibus-engine-meltype icon.png mozc LICENSE THIRD-PARTY-NOTICES.md "$target/"
-sudo chmod 755 "$target/ibus-engine-meltype" "$target/mozc/meltype_mozc_helper"
+sudo cp -R libMeltypeNative.so ibus-engine-meltype meltype-settings icon.png mozc LICENSE THIRD-PARTY-NOTICES.md "$target/"
+sudo chmod 755 "$target/ibus-engine-meltype" "$target/meltype-settings" "$target/mozc/meltype_mozc_helper"
+# 設定画面: 端末からは meltype-settings、GNOME からはアプリの一覧と入力ソースの「設定」で開く
+sudo ln -sf "$target/meltype-settings" /usr/bin/meltype-settings
+sed "s|@DIR@|$target|g" ibus-setup-meltype.desktop | sudo tee /usr/share/applications/ibus-setup-meltype.desktop > /dev/null
 if $use_ibus; then
     sed "s|@DIR@|$target|g" meltype.xml | sudo tee /usr/share/ibus/component/meltype.xml > /dev/null
     # IBus に読み込み直させる (動いている Meltype も止まり、次に使うときに新しいものが起動する)
@@ -74,7 +86,7 @@ fcitx5_has_meltype() {
 
 # 動いている fcitx5 に、新しいアドオンと入力メソッドを読ませる (DBus の Refresh)
 # dbus-send は、Meltype を読めたかを確かめる fcitx5-remote と同じセッションバスにつながる。
-# dbus-send が無ければ install.sh が dbus を入れる (fcitx5 を使うときだけ)
+# dbus-send が無ければ install-legacy.sh が dbus を入れる (fcitx5 を使うときだけ)
 fcitx5_refresh() {
     dbus-send --session --print-reply --dest=org.fcitx.Fcitx5 /controller \
         org.fcitx.Fcitx.Controller1.Refresh > /dev/null 2>&1
@@ -95,7 +107,7 @@ fcitx5_restart() {
     (fcitx5 -r -d > /dev/null 2>&1 &)
     # 前の fcitx5 が終わるのを待つ。終わらなければ起動し直せていない
     # (起動しかけてすぐ終わる fcitx5 を、起動し直せたと数えないようにする)
-    # 待ち方 (0.2 秒 × 25 回) は uninstall.sh の同じ待ちと対になっている。片方だけ変えない。
+    # 待ち方 (0.2 秒 × 25 回) は uninstall-legacy.sh の同じ待ちと対になっている。片方だけ変えない。
     for _ in {1..25}; do
         sleep 0.2
         if ! kill -0 "$before" 2> /dev/null; then break; fi

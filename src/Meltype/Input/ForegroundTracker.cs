@@ -145,7 +145,7 @@ internal sealed class ForegroundTracker
                 {
                     var path = new string(buffer, 0, size);
                     name = Path.GetFileName(path);
-                    looksLikeGame = LooksLikeGame(path);
+                    looksLikeGame = LooksLikeGame(path) || (IsJava(name) && IsJavaGameWindow(window));
                 }
                 elevated = QueryElevation(process);
             }
@@ -164,20 +164,48 @@ internal sealed class ForegroundTracker
         @"\Ubisoft Game Launcher\games\", @"\Battle.net\", @"\XboxGames\", @"\GOG Galaxy\Games\", @"\Origin Games\",
         // 専用のランチャーから入れるゲーム (PSO2 NGS: …\PHANTASYSTARONLINE2_JP\pso2_bin\pso2.exe)
         @"\pso2_bin\",
-        // Minecraft (Java 版): 公式ランチャーが入れた Java (…\.minecraft\runtime\…\javaw.exe) で動く (#1009)
-        @"\.minecraft\runtime\", @"\Minecraft Launcher\runtime\", @"\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime\",
+        // Minecraft (Java 版) はフォルダーではなく、ウィンドウのクラスで見分ける (IsJavaGameWindow)
     ];
 
     /// <summary>そのプロセスの実行ファイルがゲームのフォルダーにあるか。調べられなければ false。</summary>
-    public static bool LooksLikeGame(uint processId)
+    public static bool LooksLikeGame(uint processId) => ImagePath(processId) is { } path && LooksLikeGame(path);
+
+    /// <summary>そのプロセスが Java (java.exe / javaw.exe) か。調べられなければ false。</summary>
+    public static bool IsJava(uint processId) => ImagePath(processId) is { } path && IsJava(Path.GetFileName(path));
+
+    public static bool IsJava(string processName) =>
+        processName.Equals("javaw.exe", StringComparison.OrdinalIgnoreCase) || processName.Equals("java.exe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Java で動くゲームのウィンドウか。Minecraft (Java 版) は、ランチャーや入れた Java の場所によらず、このウィンドウで見分ける。
+    /// LWJGL 3 (GLFW。Minecraft 1.13 から) のウィンドウのクラスは GLFW30、LWJGL 2 (Minecraft 1.12.2 まで) は LWJGL
+    /// </summary>
+    public static bool IsJavaGameWindow(IntPtr window)
+    {
+        var className = new char[16];
+        var length = Native.GetClassName(window, className, className.Length);
+        return length > 0 && IsJavaGameWindowClass(new string(className, 0, length));
+    }
+
+    public static bool IsJavaGameWindowClass(string className) => className is "GLFW30" or "LWJGL";
+
+    /// <summary>前面のウィンドウが、そのプロセスの Java で動くゲームのウィンドウか。</summary>
+    public static bool IsForegroundJavaGame(uint processId)
+    {
+        var window = Native.GetForegroundWindow();
+        return window != IntPtr.Zero && Native.GetWindowThreadProcessId(window, out var foreground) != 0 &&
+               foreground == processId && IsJavaGameWindow(window);
+    }
+
+    private static string? ImagePath(uint processId)
     {
         var process = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
-        if (process == IntPtr.Zero) return false;
+        if (process == IntPtr.Zero) return null;
         try
         {
             var buffer = new char[1024];
             var size = buffer.Length;
-            return Native.QueryFullProcessImageName(process, 0, buffer, ref size) && LooksLikeGame(new string(buffer, 0, size));
+            return Native.QueryFullProcessImageName(process, 0, buffer, ref size) ? new string(buffer, 0, size) : null;
         }
         finally
         {
