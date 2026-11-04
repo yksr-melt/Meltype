@@ -54,8 +54,8 @@ fi
 
 echo "== 3/3 組み立て"
 sed "s|@VERSION@|$version|g" "$here/meltype.xml" > "$out/meltype.xml"
-cp "$here/ibus-engine-meltype" "$here/meltype-settings" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$here/install-legacy.sh" "$here/uninstall-legacy.sh" "$out/"
+cp "$here/ibus-engine-meltype" "$here/meltype-settings" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$out/"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$out/"
 cp "$mozc/meltype_mozc_helper" "$mozc/MOZC-LICENSE.txt" "$mozc/MOZC-CREDITS.html" "$out/mozc/"
-chmod +x "$out/ibus-engine-meltype" "$out/meltype-settings" "$out/install-legacy.sh" "$out/uninstall-legacy.sh" "$out/mozc/meltype_mozc_helper"
+chmod +x "$out/ibus-engine-meltype" "$out/meltype-settings" "$out/mozc/meltype_mozc_helper"
 echo "作成しました: $out"
