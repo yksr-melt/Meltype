@@ -187,6 +187,7 @@ internal static class CompositionTests
         public bool FullWidthParentheses { get; set; }
         public Meltype.Config.SlashStyle Slash { get; set; }
         public bool SquareBrackets { get; set; }
+        public bool MarkdownSymbols { get; set; }
         public bool EscStepsBack { get; set; }
         public bool EscRevertsSelectedClause { get; set; }
         public bool FunctionKeysAffectSelectedClause { get; set; }
@@ -289,6 +290,7 @@ internal static class CompositionTests
                 AlphanumericKeyStartsAsTyped = () => AlphanumericKeyStartsAsTyped,
                 FullWidthParentheses = () => FullWidthParentheses,
                 SquareBrackets = () => SquareBrackets,
+                MarkdownSymbols = () => MarkdownSymbols,
                 EscStepsBack = () => EscStepsBack,
                 EscRevertsSelectedClause = () => EscRevertsSelectedClause,
                 FunctionKeysAffectSelectedClause = () => FunctionKeysAffectSelectedClause,
@@ -3686,6 +3688,9 @@ internal static class CompositionTests
             // 報告: Shift で打つ記号が全角で打てない、/ が打てない。英語の中では半角のまま。
             ["$%&"] = "＄％＆", ["kyouha(tenki)"] = "きょうは(てんき)", ["hello@example"] = "hello@example",
             ["tetr.io"] = "tetr.io", ["Wakatte.TV"] = "Wakatte.TV", ["J-core"] = "J-core", ["p-hub"] = "p-hub", ["talk-admin"] = "talk-admin",
+            // 「Markdown 記法の記号を半角で入力」が OFF (既定) のときは、` * > はこれまでどおり全角 (#1301)
+            ["`"] = "｀", ["*"] = "＊", [">"] = "＞",
+            ["kyouha`made"] = "きょうは｀まで",
             // 報告 (#1349): かなの後ろの子音だけの語の後の - が長音になる (きょうはptーquery-digest)。ん (n-to・nn-to) の後は長音
             ["pt-query-digest"] = "pt-query-digest",
             ["kyouhapt-query-digest"] = "きょうはpt-query-digest",
@@ -3705,6 +3710,25 @@ internal static class CompositionTests
         var ramen = new Keyboard();
         ramen.Type("ra-men\n");
         Assert.Equal("らーめん", ramen.Host.Document, "日本語の長音の打ち方は変えない");
+    }
+
+    [Test]
+    public static void MarkdownSymbols_StayHalfWidth()
+    {
+        foreach (var (typed, expected) in new Dictionary<string, string>
+        {
+            ["```"] = "```", ["**"] = "**", ["---"] = "---",
+            ["-zenbu"] = "-ぜんぶ",       // 先頭の - は半角、続きはかな
+            ["**kyou**"] = "**きょう**",   // 強調: かなを ** で挟む形
+            [">kore"] = ">これ",          // 引用: > の直後にかなが続く形
+            ["ohayo-"] = "おはよー",       // かなの直後の - は長音 (従来どおり)
+            ["o-i"] = "おーい",           // かなの直後の - は長音 (従来どおり)
+        })
+        {
+            var k = new Keyboard { MarkdownSymbols = true };
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, $"「{typed}」");
+        }
     }
 
     [Test]

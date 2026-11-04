@@ -272,6 +272,7 @@ public sealed class MeltypeSession
             AlphanumericKeyStartsAsTyped = () => settings().AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = () => settings().FullWidthParentheses,
             SquareBrackets = () => settings().SquareBrackets,
+            MarkdownSymbols = () => settings().MarkdownSymbols,
             EscStepsBack = () => settings().EscStepsBack,
             EscRevertsSelectedClause = () => settings().EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = () => settings().FunctionKeysAffectSelectedClause,

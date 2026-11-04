@@ -249,6 +249,7 @@ public sealed record CompositionOptions
     public Func<bool> AlphanumericKeyStartsAsTyped { get; init; } = () => false;
     public Func<bool> FullWidthParentheses { get; init; } = () => false;
     public Func<bool> SquareBrackets { get; init; } = () => false;
+    public Func<bool> MarkdownSymbols { get; init; } = () => false;
     public Func<bool> EscStepsBack { get; init; } = () => false;
     public Func<bool> EscRevertsSelectedClause { get; init; } = () => false;
     public Func<bool> FunctionKeysAffectSelectedClause { get; init; } = () => false;
@@ -1160,6 +1161,7 @@ public sealed class CompositionController
         _text.Punctuation = _options.Punctuation();
         _text.FullWidthParentheses = _options.FullWidthParentheses();
         _text.SquareBrackets = _options.SquareBrackets();
+        _text.MarkdownSymbols = _options.MarkdownSymbols();
         _text.LaughterAfterKana = _options.LaughterAfterKana();
         var id = ++_compositionId;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。

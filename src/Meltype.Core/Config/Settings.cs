@@ -322,6 +322,10 @@ public sealed class Settings
      Description("日本語入力中の [ ] を「」ではなく全角の角括弧［ ］にします (Google 日本語入力の「記号」の設定と同じ)。")]
     public bool SquareBrackets { get; set; }
 
+    [Category("6. 記号・スペース"), DisplayName("Markdown 記法の記号を半角で入力"),
+     Description("日本語入力中でも、` (バッククォート)・* (アスタリスク)・- (ハイフン)・> (大なり) を半角のまま入力します。ハイフンは長音にも使うので、何も入力していない状態で打った最初の - と、半角の - の直後の - だけ半角になります。かなの直後は従来どおり長音です (o-i → おーい)。")]
+    public bool MarkdownSymbols { get; set; }
+
     [Category("7. キー操作"), DisplayName("Esc で一段ずつ戻す"),
      Description("入力中の Esc を、打った内容を全部消すのではなく一段ずつ戻します (漢字 → ひらがな → 打ったローマ字 → 消す。見た目が変わらない段は飛ばします)。戻した語は、日本語 / 英語の判定として覚えません。")]
     public bool EscStepsBack { get; set; }

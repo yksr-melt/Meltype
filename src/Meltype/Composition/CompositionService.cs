@@ -93,6 +93,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             AlphanumericKeyStartsAsTyped = options.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = options.FullWidthParentheses,
             SquareBrackets = options.SquareBrackets,
+            MarkdownSymbols = options.MarkdownSymbols,
             EscStepsBack = options.EscStepsBack,
             EscRevertsSelectedClause = options.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = options.FunctionKeysAffectSelectedClause,

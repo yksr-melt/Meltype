@@ -1118,18 +1118,26 @@ public sealed class CompositionText
     /// <summary>[ ] を「」ではなく［］にするか (設定)。</summary>
     public bool SquareBrackets { get; set; }
 
+    /// <summary>Markdown 記法の記号 (` * - >) を半角にするか (設定「Markdown 記法の記号を半角で入力」)。</summary>
+    public bool MarkdownSymbols { get; set; }
+
     /// <summary>1 つのかなの音の後ろの w を笑いにするか (設定)。</summary>
     public bool LaughterAfterKana { get; set; }
 
     /// <summary>日本語の中で打った記号 (Microsoft IME と同じく全角)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
     private char Symbol(char c) => c switch
     {
-        '-' => 'ー',
+        // 設定「Markdown 記法の記号を半角で入力」: - は、打ち始め (変換ボックスが空) と半角の - の直後だけ半角。かなの直後は従来どおり長音 (o-i → おーい)。
+        '-' => MarkdownSymbols && (IsEmpty || _units is [.., { Kana: "-" }]) ? '-' : 'ー',
         // 句読点は設定の組み合わせ (、。 / ，． / ，。 / 、．)。
         ',' => Comma,
         '.' => Period,
         '[' => SquareBrackets ? '［' : '「',
         ']' => SquareBrackets ? '］' : '」',
+        // 設定「Markdown 記法の記号を半角で入力」: ` * > は、日本語の中でも打ったままの半角で出す (コードフェンス・強調・引用)。
+        '`' when MarkdownSymbols => '`',
+        '*' when MarkdownSymbols => '*',
+        '>' when MarkdownSymbols => '>',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。
         '(' => FullWidthParentheses ? '（' : '(',
         ')' => FullWidthParentheses ? '）' : ')',

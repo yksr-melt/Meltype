@@ -94,6 +94,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,
             FullWidthParentheses = () => _engine.Settings.FullWidthParentheses,
             SquareBrackets = () => _engine.Settings.SquareBrackets,
+            MarkdownSymbols = () => _engine.Settings.MarkdownSymbols,
             EscStepsBack = () => _engine.Settings.EscStepsBack,
             EscRevertsSelectedClause = () => _engine.Settings.EscRevertsSelectedClause,
             FunctionKeysAffectSelectedClause = () => _engine.Settings.FunctionKeysAffectSelectedClause,
