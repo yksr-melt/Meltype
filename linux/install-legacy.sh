@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# Meltype (Linux 版) を、パッケージ管理を使わずに入れる旧来のスクリプト。Debian / Ubuntu 向け (足りない部品は apt-get で入れる)。
+# Meltype (Linux 版) を、パッケージ管理を使わずに入れる旧来のスクリプト。Debian / Ubuntu・Fedora / RHEL 系向け (不足する依存は apt-get / dnf で入れる)。
 # apt・dnf で入れられる環境では .deb・.rpm を使う (docs/LINUX.md)。zip を展開したフォルダーで実行する:
 #   bash install-legacy.sh
 # プログラムは /opt/meltype に、IBus のコンポーネントは /usr/share/ibus/component に入れる (管理者のパスワードを聞かれる)。
@@ -29,32 +29,70 @@ if [[ -f fcitx5/meltype.so ]] && { command -v fcitx5 > /dev/null || [[ "${1:-}" 
     if [[ "${1:-}" == "--fcitx5" ]] || ! command -v ibus > /dev/null; then use_ibus=false; fi
 fi
 
+# /etc/os-release の ID / ID_LIKE から依存パッケージの名前を選ぶ。
+# コマンドの存在だけで選ぶと、複数のパッケージマネージャーがある環境で誤判定する。
+detect_package_family() {
+    local id="" id_like="" token
+    if [[ ! -r /etc/os-release ]]; then
+        echo "/etc/os-release が読めません。依存パッケージは手動で導入してください。" >&2
+        return 1
+    fi
+    # os-release は OS が提供する設定ファイル。シェル形式の値を読み込む。
+    . /etc/os-release
+    id="${ID:-}"
+    id_like="${ID_LIKE:-}"
+    for token in "$id" $id_like; do
+        case "$token" in
+            debian|ubuntu) package_family=debian; return 0 ;;
+            fedora|rhel|centos) package_family=rpm; return 0 ;;
+        esac
+    done
+    echo "未対応のディストリビューションです (ID=$id, ID_LIKE=$id_like)。依存パッケージを手動で導入してください。" >&2
+    return 1
+}
+install_dependencies() {
+    (( $# > 0 )) || return 0
+    case "$package_family" in
+        debian)
+            command -v apt-get >/dev/null || { echo "apt-get が見つかりません。" >&2; return 1; }
+            echo "apt-get で依存パッケージを導入します: $*"
+            sudo apt-get install "$@"
+            ;;
+        rpm)
+            command -v dnf >/dev/null || { echo "dnf が見つかりません。" >&2; return 1; }
+            echo "dnf で依存パッケージを導入します: $*"
+            sudo dnf install "$@"
+            ;;
+    esac
+}
+detect_package_family
+
 # IBus と、Python から IBus を使う部品 (Ubuntu の標準の画面なら、ふつうは入っている)
 if $use_ibus; then
     missing=()
     command -v ibus > /dev/null || missing+=(ibus)
-    python3 -c 'import gi; gi.require_version("IBus", "1.0"); from gi.repository import IBus' 2> /dev/null || missing+=(python3-gi gir1.2-ibus-1.0)
+    python3 -c 'import gi; gi.require_version("IBus", "1.0"); from gi.repository import IBus' 2> /dev/null || if [[ "$package_family" == debian ]]; then missing+=(python3-gi gir1.2-ibus-1.0); else missing+=(python3-gobject ibus); fi
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo "必要な部品を入れます: ${missing[*]}"
-        sudo apt-get install -y "${missing[@]}"
+        install_dependencies "${missing[@]}"
     fi
 fi
 
 # 設定画面 (meltype-settings) が使う GTK 4 と、Python から GTK を使う部品
 missing=()
-python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk' 2> /dev/null || missing+=(python3-gi gir1.2-gtk-4.0)
+python3 -c 'import gi; gi.require_version("Gtk", "4.0"); from gi.repository import Gtk' 2> /dev/null || if [[ "$package_family" == debian ]]; then missing+=(python3-gi gir1.2-gtk-4.0); else missing+=(python3-gobject gtk4); fi
 if [[ ${#missing[@]} -gt 0 ]]; then
     echo "必要な部品を入れます: ${missing[*]}"
-    sudo apt-get install -y "${missing[@]}"
+    install_dependencies "${missing[@]}"
 fi
 
 # fcitx5 に読み直させる dbus-send (Ubuntu の標準の画面なら、ふつうは入っている)
 if $use_fcitx5; then
     missing=()
-    command -v dbus-send > /dev/null || missing+=(dbus)
+    command -v dbus-send > /dev/null || if [[ "$package_family" == debian ]]; then missing+=(dbus); else missing+=(dbus-tools); fi
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo "必要な部品を入れます: ${missing[*]}"
-        sudo apt-get install -y "${missing[@]}"
+        install_dependencies "${missing[@]}"
     fi
 fi
 
