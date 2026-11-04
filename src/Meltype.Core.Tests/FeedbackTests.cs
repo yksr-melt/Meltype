@@ -951,6 +951,55 @@ internal static class LanguageLearningTests
     }
 
     [Test]
+    public static void Issue1512_LearnedNoteDoesNotSplitJapaneseWord()
+    {
+        var memory = new LanguageMemory(null);
+        CompositionTests.Detector.Memory = memory;
+        try
+        {
+            // 環境によって未学習の note 自体が英語と判定されるため、学習時は日本語に見える状態から F10 で直す。
+            var teach = new CompositionTests.Keyboard(languages: memory) { Manual = true };
+            teach.Type("note");
+            teach.Press(VirtualKeys.F10);
+            teach.Press(VirtualKeys.Return);
+            Assert.Equal("note", teach.Host.Document, "F10 で英字にして確定する");
+            Assert.True(memory.Get("note") == true, "英語の学習が有効");
+            foreach (var checker in new IWordChecker?[] { null, BuiltInWordChecker.Shared, TestSupport.WordChecker })
+            {
+                CompositionTests.Detector.SpellChecker = checker;
+                foreach (var live in new[] { false, true })
+                {
+                    foreach (var (typed, expected) in new[]
+                    {
+                        ("konotennmo", "このてんも"), ("konotenmo", "このてんも"),
+                        ("sonotennmo", "そのてんも"), ("konotennki", "このてんき"),
+                        ("donotenpo", "どのてんぽ"), ("anotensai", "あのてんさい"),
+                        ("sonotesuto", "そのてすと"), ("konotesuto", "このてすと"),
+                    })
+                    {
+                        var keyboard = new CompositionTests.Keyboard(live: live, languages: memory);
+                        keyboard.Type(typed + "\n");
+                        Assert.Equal(expected, keyboard.Host.Document, typed + " は日本語のまま");
+                    }
+                }
+            }
+            var english = new CompositionTests.Keyboard(languages: memory);
+            english.Type("note\n");
+            Assert.Equal("note", english.Host.Document, "単独の note は学習どおり英語");
+            var mixed = new CompositionTests.Keyboard(languages: memory);
+            mixed.Type("notewomiru\n");
+            Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
+            var settings = new Settings { LiveConversion = true, UseZenzai = false };
+            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionOptions { LiveConversion = () => true, Languages = memory }, () => settings);
+            foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
+            var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+            Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
+        }
+        finally { CompositionTests.Detector.Memory = null; CompositionTests.Detector.SpellChecker = null; }
+    }
+
+    [Test]
     public static void Issue959_VersionCandidate_CanBeSelectedAndCommitted()
     {
         var expected = $"Meltype-{ProjectInfo.CoreVersion}";
