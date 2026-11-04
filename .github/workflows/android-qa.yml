@@ -58,6 +58,8 @@ jobs:
           cd android
           chmod +x ./gradlew
           ./gradlew --no-daemon :engine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Verify Android 16 KiB ELF and APK alignment
+        run: python3 android/tools/check-apk-16k.py android/app/build/outputs/apk/debug/app-debug.apk
       - name: Enable hardware acceleration
         run: |
           test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
