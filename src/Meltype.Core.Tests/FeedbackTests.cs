@@ -1009,7 +1009,7 @@ internal static class LanguageLearningTests
     private sealed class OldVersionConverter : IKanjiConverter, ILearningConverter
     {
         internal const string OldVersion = "Meltype-1.4.1-pre.2";
-        public readonly ManualResetEventSlim Learned = new();
+        public readonly TaskCompletionSource<bool> Learned = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public readonly List<ConversionClause> LearnedClauses = [];
         public string? Convert(string reading) => reading == "ばーじょん" ? OldVersion : reading;
         public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => reading switch
@@ -1021,7 +1021,7 @@ internal static class LanguageLearningTests
         public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
         {
             lock (LearnedClauses) LearnedClauses.AddRange(clauses);
-            Learned.Set();
+            Learned.TrySetResult(true);
         }
     }
 
@@ -1060,7 +1060,7 @@ internal static class LanguageLearningTests
         keyboard.Press(VirtualKeys.Return);
         Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
         Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
-        Assert.True(converter.Learned.Wait(5000), "前の普通の文節はエンジンに学習する");
+        Assert.True(converter.Learned.Task.Wait(5000), "前の普通の文節はエンジンに学習する");
         lock (converter.LearnedClauses)
             Assert.True(converter.LearnedClauses.All(c => c.Reading != "ばーじょん"), "版はエンジンにも覚えさせない");
     }
