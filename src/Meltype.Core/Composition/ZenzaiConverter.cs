@@ -44,6 +44,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private readonly int _timeoutMs;
     private readonly Uri? _fixedEndpoint;
     private readonly object _gate = new();
+    // llama-server は 1 件ずつ処理する。入力途中と Space の変換が重なってもリクエストを積み上げない。
+    private readonly SemaphoreSlim _completionGate = new(1, 1);
     private readonly Dictionary<string, string?> _cache = new(StringComparer.Ordinal);
     private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private Process? _process;
@@ -51,7 +53,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private Task? _starting;
     private bool _ready;
     private volatile bool _disposed;
-    private int _failures;
+    private volatile int _failures;
+    private volatile bool _hasAnswered;
+    private (string Reading, string Context, string Key)? _pendingLive;
+    private string? _activeLiveKey;
+    private bool _liveWorkerRunning;
+    private static long s_backgroundRevision;
+    private long _backgroundRevision;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず今までの変換エンジンに任せる。
     // ライブ変換は 1 打鍵ごとに UI スレッドで変換を頼むので、遅いままだと入力が止まる
@@ -109,7 +117,10 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     public bool IsResting => Environment.TickCount64 < Interlocked.Read(ref _pausedUntil);
 
     /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
-    public bool HasAnswered { get; private set; }
+    public bool HasAnswered => _hasAnswered;
+
+    /// <summary>背景で完了した変換により、入力途中の表示を更新できるようになった回数。</summary>
+    public long BackgroundRevision => Interlocked.Read(ref _backgroundRevision);
 
     /// <summary>サーバーの起動をバックグラウンドで始める (入力を始める前に呼ぶ)。</summary>
     public void WarmUp()
@@ -123,7 +134,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
-        if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
+        if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || _disposed || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
         context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
         var key = context + "\u0000" + hiragana;
         lock (_gate)
@@ -133,20 +144,90 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (!_ready || _endpoint is null) return null;
         }
         var started = Environment.TickCount64;
-        var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
-        var text = answer == hiragana ? null : answer;
-        var slow = Environment.TickCount64 - started >= _timeoutMs;
+        if (!_completionGate.Wait(_timeoutMs)) return null;
+        try
+        {
+            // 待っている間に、入力途中の変換が同じ読みと文脈に答えたかもしれない。
+            lock (_gate)
+            {
+                if (_disposed) return null;
+                if (_cache.TryGetValue(key, out var cached)) return cached is null ? null : [new ConversionClause(hiragana, cached)];
+            }
+            var remainingMs = Math.Max(1, _timeoutMs - (int)(Environment.TickCount64 - started));
+            var requestStarted = Environment.TickCount64;
+            var answer = Complete(Prompt(hiragana, context), remainingMs);
+            // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
+            var text = answer == hiragana ? null : answer;
+            var slow = Environment.TickCount64 - requestStarted >= remainingMs;
+            lock (_gate)
+            {
+                if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
+                if (answer is null && !slow) _failures++;
+                else if (answer is not null) { _failures = 0; _hasAnswered = true; }
+                if (_cache.Count >= MaxCache) _cache.Clear();
+                // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
+                if (answer is not null && !slow && !_disposed) _cache[key] = text;
+            }
+            return text is null ? null : [new ConversionClause(hiragana, text)];
+        }
+        finally { _completionGate.Release(); }
+    }
+
+    /// <summary>入力途中は結果があれば返し、無ければ最新の読みを背景で変換する。</summary>
+    internal IReadOnlyList<ConversionClause>? GetOrQueue(string hiragana, string? context)
+    {
+        if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || _disposed || !IsAvailable || IsResting) return null;
+        context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
+        var key = context + "\u0000" + hiragana;
         lock (_gate)
         {
-            if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
-            if (answer is null && !slow) _failures++;
-            else if (answer is not null) { _failures = 0; HasAnswered = true; }
-            if (_cache.Count >= MaxCache) _cache.Clear();
-            // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
-            if (answer is not null && !slow) _cache[key] = text;
+            if (_cache.TryGetValue(key, out var cached)) return cached is null ? null : [new ConversionClause(hiragana, cached)];
+            EnsureStarting();
+            if (!_ready || _endpoint is null || _disposed) return null;
+            // 変換中のものと同じなら、古い予約は取り消す。違えば最後に頼まれたものだけ残す。
+            _pendingLive = _activeLiveKey == key ? null : (hiragana, context, key);
+            if (!_liveWorkerRunning && _pendingLive is not null)
+            {
+                _liveWorkerRunning = true;
+                _ = Task.Run(ProcessLiveRequests);
+            }
+            return null;
         }
-        return text is null ? null : [new ConversionClause(hiragana, text)];
+    }
+
+    private void ProcessLiveRequests()
+    {
+        while (true)
+        {
+            // 連続打鍵中は最後の読みを優先し、CPU を使い続けない。
+            Thread.Sleep(60);
+            (string Reading, string Context, string Key) request;
+            lock (_gate)
+            {
+                if (_disposed || _pendingLive is not { } pending) { _liveWorkerRunning = false; return; }
+                request = pending;
+                _pendingLive = null;
+                _activeLiveKey = request.Key;
+            }
+            try
+            {
+                ConvertClauses(request.Reading, request.Context);
+                lock (_gate)
+                    if (!_disposed && _cache.TryGetValue(request.Key, out var answer) && answer is not null) NotifyBackgroundUpdate();
+            }
+            catch (Exception ex)
+            {
+                if (!_disposed)
+                {
+                    Diagnostics.Log.Error($"入力途中の Zenzai 変換に失敗しました: {ex}");
+                    Fail();
+                }
+            }
+            finally
+            {
+                lock (_gate) _activeLiveKey = null;
+            }
+        }
     }
 
     /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
@@ -164,7 +245,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 span[i] = source[i] is >= 'ぁ' and <= 'ゖ' ? (char)(source[i] + 0x60) : source[i];
         });
 
-    private string? Complete(string prompt)
+    private string? Complete(string prompt, int timeoutMs)
     {
         try
         {
@@ -177,7 +258,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 ["cache_prompt"] = true,
                 ["parse_special"] = true,
             });
-            using var cts = new CancellationTokenSource(_timeoutMs);
+            using var cts = new CancellationTokenSource(timeoutMs);
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint!, "completion"))
             {
                 Content = new StringContent(body, Encoding.UTF8, "application/json"),
@@ -189,7 +270,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             var content = json.RootElement.TryGetProperty("content", out var c) ? c.GetString() : null;
             return Clean(content);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException or ObjectDisposedException)
         {
             return null;
         }
@@ -261,7 +342,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             {
                 if (Ping(endpoint))
                 {
-                    lock (_gate) { _endpoint = endpoint; _ready = true; }
+                    lock (_gate)
+                    {
+                        if (_disposed) return;
+                        _endpoint = endpoint;
+                        _ready = true;
+                    }
+                    NotifyBackgroundUpdate();
                     return;
                 }
                 Thread.Sleep(200);
@@ -293,6 +380,9 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         lock (_gate) { _failures = 3; }
     }
+
+    private void NotifyBackgroundUpdate() =>
+        Interlocked.Exchange(ref _backgroundRevision, Interlocked.Increment(ref s_backgroundRevision));
 
     private static int FreePort()
     {
@@ -415,6 +505,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         lock (_gate)
         {
             _disposed = true;
+            _pendingLive = null;
             process = _process;
             _process = null;
             _ready = false;

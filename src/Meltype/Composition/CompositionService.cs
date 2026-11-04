@@ -55,6 +55,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         var resolved = new CompositionOptions
         {
             LiveConversion = options.LiveConversion,
+            BackgroundLiveConversion = true,
             DirectMode = options.DirectMode,
             ClassifyDirect = options.ClassifyDirect,
             DirectDecided = options.DirectDecided,
@@ -141,7 +142,11 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         };
         Focus.CaptureLost += Abandon;
         Controller.Committed += text => Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(text.Length > 20 ? text[..20] + "…" : text)}");
-        _tick.Tick += (_, _) => Safely(() => Controller.Tick(Environment.TickCount64));
+        _tick.Tick += (_, _) => Safely(() =>
+        {
+            Controller.Tick(Environment.TickCount64);
+            Controller.RefreshBackgroundConversion();
+        });
         _tick.Start();
     }
 
@@ -157,6 +162,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         new(_detector, _hybrid, _resolved with
         {
             DirectMode = () => false,
+            // TSF は候補の更新をクライアントからの要求に応じて返すため、変換ボックスの定期更新は使えない。
+            BackgroundLiveConversion = false,
             ClassifyDirect = directModeDetection ? _resolved.ClassifyDirect : null,
             DirectDecided = null,
         }, settings, directModeDetection);

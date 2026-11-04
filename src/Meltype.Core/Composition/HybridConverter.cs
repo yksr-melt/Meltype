@@ -13,10 +13,14 @@ namespace Meltype.Composition;
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter system,
     Func<string, IReadOnlyList<string>>? systemCandidates, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter
+    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundLiveConverter
 {
     /// <summary>Zenzai に渡す広い文脈 (Mozc / Microsoft IME には渡さない)。</summary>
     public string? WideContext { get; set; }
+
+    public bool BackgroundLiveConversion { get; set; }
+    private ZenzaiConverter? _liveZenzai;
+    public long BackgroundRevision => _liveZenzai?.BackgroundRevision ?? 0;
 
     /// <summary>
     /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null。
@@ -31,8 +35,12 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
         try
         {
             z = zenzai?.Invoke();
+            if (BackgroundLiveConversion) _liveZenzai = z;
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
-            return z.ConvertClauses(hiragana, WideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
+            var result = BackgroundLiveConversion
+                ? z.GetOrQueue(hiragana, WideContext ?? context)
+                : z.ConvertClauses(hiragana, WideContext ?? context);
+            return result?.Select(c => c with { Zenzai = true }).ToList();
         }
         catch (Exception ex)
         {

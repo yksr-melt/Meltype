@@ -55,6 +55,16 @@ public interface IStandaloneConverter
     string? ConvertStandalone(string hiragana);
 }
 
+/// <summary>
+/// 入力途中の表示では時間のかかる変換を待たず、結果ができたら画面を更新できる変換エンジン。
+/// プロパティの切り替えと画面更新は UI スレッドで行う。
+/// </summary>
+public interface IBackgroundLiveConverter
+{
+    bool BackgroundLiveConversion { get; set; }
+    long BackgroundRevision { get; }
+}
+
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
 public interface ILearningConverter
 {

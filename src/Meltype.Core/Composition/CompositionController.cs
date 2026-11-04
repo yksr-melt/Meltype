@@ -123,6 +123,9 @@ public sealed record CompositionOptions
     /// <summary>打ったそばから漢字に変換して見せるか。</summary>
     public Func<bool> LiveConversion { get; init; } = () => false;
 
+    /// <summary>入力途中の重い変換を背景で行う。ホストは定期的に RefreshBackgroundConversion を呼ぶ。</summary>
+    public bool BackgroundLiveConversion { get; init; }
+
     /// <summary>かな漢字変換のエンジン (Windows の CompositionService が Mozc / Microsoft IME を選ぶのに使う)。</summary>
     public Func<Config.ConversionEngine> Engine { get; init; } = () => Config.ConversionEngine.System;
 
@@ -360,6 +363,7 @@ public sealed class CompositionController
     private readonly Dictionary<string, string> _conversionCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _standaloneCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, string Text)>> _liveCache = new(StringComparer.Ordinal);
+    private long _backgroundRevision;
     private readonly HashSet<int> _swallowedShift = [];
     private readonly HashSet<int> _swallowedControl = [];
     private readonly HashSet<int> _replayedDown = [];
@@ -491,6 +495,19 @@ public sealed class CompositionController
         if (_heldLetters.Length == 0 || nowMs - _heldLastKeyTime < DirectHoldIdleMs) return;
         DecideHeld(final: true);
         Pump();
+    }
+
+    /// <summary>背景の変換が終わったら、入力中の表示を UI スレッドで更新する。</summary>
+    public void RefreshBackgroundConversion()
+    {
+        if (!_options.BackgroundLiveConversion || _converter is not IBackgroundLiveConverter background) return;
+        var revision = background.BackgroundRevision;
+        if (revision == _backgroundRevision) return;
+        _backgroundRevision = revision;
+        _liveCache.Clear();
+        _conversionCache.Clear();
+        // Space で候補を開いた後は、選択中の候補を背景の答えで勝手に置き換えない。
+        if (!_text.IsEmpty && !_converting) UpdateView();
     }
 
     public void AbandonDirectHold()
@@ -2833,11 +2850,16 @@ public sealed class CompositionController
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private string LiveConvert(string kana)
+    private string LiveConvert(string kana) => LiveConvert(kana, waitForConversion: false);
+
+    private string FinalLiveConvert(string kana) => LiveConvert(kana, waitForConversion: true);
+
+    private string LiveConvert(string kana, bool waitForConversion)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
         if (kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') < LiveConversionMinLength) return kana;
-        return string.Concat(LiveClauses(kana).Select(c => c.Text));
+        // 「見えているとおりに確定」が OFF なら、Enter では従来どおり Zenzai の結果を待てる。
+        return waitForConversion ? string.Concat(ConvertJapanese(kana).Select(c => c.Text)) : string.Concat(LiveClauses(kana).Select(c => c.Text));
     }
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
@@ -2845,10 +2867,19 @@ public sealed class CompositionController
     {
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = ForBackgroundLive(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
+    }
+
+    private T ForBackgroundLive<T>(Func<T> convert)
+    {
+        if (!_options.BackgroundLiveConversion || _converter is not IBackgroundLiveConverter background) return convert();
+        var previous = background.BackgroundLiveConversion;
+        background.BackgroundLiveConversion = true;
+        try { return convert(); }
+        finally { background.BackgroundLiveConversion = previous; }
     }
 
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
@@ -2873,7 +2904,10 @@ public sealed class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
-        var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
+        var text = converting ? string.Concat(_clauses.Select(c => c.Text))
+            : _options.BackgroundLiveConversion && !_options.EnterCommitsAsShown()
+                ? _text.Display(final: true, _options.LiveConversion() ? FinalLiveConvert : null)
+                : CurrentDisplay(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
         if (!converting && _text.Mode == DisplayMode.Auto && !_text.KanaInput && _text.PrecedingEnglish == true && CurrentDisplay(final: false) is { Length: > 0 } shown &&
@@ -3349,7 +3383,7 @@ public sealed class CompositionController
         if (!_options.ShowCandidatesWhileTyping() || _text.Mode != DisplayMode.Auto || _text.KanaInput || _text.IsAlphanumeric || _text.IsEmpty) return null;
         var kana = _text.AllKana(final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = JapaneseCandidates(kana, null).Take(5).ToList();
+        var candidates = ForBackgroundLive(() => JapaneseCandidates(kana, null).Take(5).ToList());
         return candidates.Count > 1 ? candidates : null;
     }
 

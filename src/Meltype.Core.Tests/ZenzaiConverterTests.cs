@@ -150,6 +150,179 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Issue1521_LiveConversionDoesNotWaitAndUpdatesWhenReady()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var server = new FakeServer
+        {
+            Answer = p =>
+            {
+                started.Set();
+                release.Wait(5000);
+                return p.Contains("カクテイシテ") ? "確認して" : ReadingIn(p);
+            },
+        };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var keyboard = new CompositionTests.Keyboard(live: true, converter: hybrid, backgroundLive: true) { EnterCommitsAsShown = true };
+        try
+        {
+            var typing = Task.Run(() => keyboard.Type("kakuteisite"));
+            Assert.True(started.Wait(5000), "背景の変換が始まる");
+            Assert.True(typing.Wait(2000), "Zenzai の答えを待たずに入力を処理する");
+            Assert.Equal("確定して", keyboard.Showing ?? "", "待っている間は通常の変換結果を表示する");
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                keyboard.Controller.RefreshBackgroundConversion();
+                return keyboard.Showing == "確認して";
+            }, 5000), "答えが届いたら現在の入力の表示を更新する: " + keyboard.Showing);
+            keyboard.Type("\n");
+            Assert.Equal("確認して", keyboard.Host.Document, "見えている結果を確定する");
+        }
+        finally { release.Set(); }
+    }
+
+    [Test]
+    public static void Issue1521_BackgroundAnswerDoesNotReplaceSelectedCandidate()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var server = new FakeServer { Answer = _ => { started.Set(); release.Wait(5000); return "確認して"; } };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var keyboard = new CompositionTests.Keyboard(live: true, converter: hybrid, backgroundLive: true) { ShowCandidatesWhileTyping = true };
+        try
+        {
+            keyboard.Type("kakuteisite");
+            Assert.True(started.Wait(5000), "背景の変換が始まる");
+            keyboard.Controller.SelectCandidate(1);
+            var selected = keyboard.Host.View;
+            Assert.True(selected is { Converting: true }, "入力中の候補を選べる");
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => zenzai.BackgroundRevision != 0, 5000), "背景の変換が終わる");
+            keyboard.Controller.RefreshBackgroundConversion();
+            Assert.Equal(selected!.Text, keyboard.Host.View?.Text ?? "", "選んだ文字列を変えない");
+            Assert.Equal(selected.SelectedIndex, keyboard.Host.View!.SelectedIndex, "選んだ候補の番号を変えない");
+        }
+        finally { release.Set(); }
+    }
+
+    [Test]
+    public static void Issue1521_LiveRequestsKeepOnlyTheLatestPendingReading()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var server = new FakeServer
+        {
+            Answer = p =>
+            {
+                if (p.Contains("ア")) { started.Set(); release.Wait(5000); return "亜"; }
+                return p.Contains("ウ") ? "宇" : "伊";
+            },
+        };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        try
+        {
+            Assert.True(zenzai.GetOrQueue("あ", null) is null, "答えがなければ背景で頼む");
+            Assert.True(started.Wait(5000), "最初の要求を受けた");
+            zenzai.GetOrQueue("い", null);
+            zenzai.GetOrQueue("う", null);
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => zenzai.GetOrQueue("う", null) is [{ Text: "宇" }], 5000), "最後の読みを変換する");
+            string[] prompts;
+            lock (server.Prompts) prompts = server.Prompts.ToArray();
+            Assert.True(!prompts.Any(p => p.Contains("イ")), "途中の古い要求はサーバーに送らない: " + string.Join("|", prompts));
+            Assert.True(zenzai.GetOrQueue("あ", null) is [{ Text: "亜" }], "完了済みの答えも再利用できる");
+        }
+        finally { release.Set(); }
+    }
+
+    [Test]
+    public static void Issue1521_EnterCanUseAnInFlightAnswerWithoutAnotherRequest()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var server = new FakeServer { Answer = _ => { started.Set(); release.Wait(5000); return "確認して"; } };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var keyboard = new CompositionTests.Keyboard(live: true, converter: hybrid, backgroundLive: true);
+        try
+        {
+            keyboard.Type("kakuteisite");
+            Assert.True(started.Wait(5000), "最後の読みの背景変換が始まる");
+            var enter = Task.Run(() => keyboard.Type("\n"));
+            release.Set();
+            Assert.True(enter.Wait(5000), "確定が終わる");
+            Assert.Equal("確認して", keyboard.Host.Document, "見えているとおりに確定が OFF なら Zenzai の結果を使う");
+            lock (server.Prompts) Assert.Equal(1, server.Prompts.Count, "同じ読みを重ねてサーバーに送らない");
+        }
+        finally { release.Set(); }
+    }
+
+    [Test]
+    public static void Issue1521_EnterAsShownDoesNotWaitOrChangeTheCommittedText()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var server = new FakeServer { Answer = _ => { started.Set(); release.Wait(5000); return "確認して"; } };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var keyboard = new CompositionTests.Keyboard(live: true, converter: hybrid, backgroundLive: true) { EnterCommitsAsShown = true };
+        try
+        {
+            keyboard.Type("kakuteisite");
+            Assert.True(started.Wait(5000), "背景の変換が始まる");
+            var enter = Task.Run(() => keyboard.Type("\n"));
+            Assert.True(enter.Wait(2000), "見えているとおりに確定するときは答えを待たない");
+            Assert.Equal("確定して", keyboard.Host.Document, "その時点で見えていた文字を確定する");
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => zenzai.BackgroundRevision != 0, 5000), "背景の変換が終わる");
+            keyboard.Controller.RefreshBackgroundConversion();
+            Assert.Equal("確定して", keyboard.Host.Document, "後から答えが届いても確定した文字は変わらない");
+            Assert.True(keyboard.Host.View is null, "確定した入力を再び表示しない");
+        }
+        finally { release.Set(); }
+    }
+
+    [Test]
+    public static void Issue1521_OldAnswerCannotReplaceNewerInput()
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var server = new FakeServer
+        {
+            Answer = p =>
+            {
+                if (p.Contains("カクテイシテネ")) return "確認してね";
+                started.Set();
+                release.Wait(5000);
+                return p.Contains("カクテイシテ") ? "確認して" : ReadingIn(p);
+            },
+        };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var keyboard = new CompositionTests.Keyboard(live: true, converter: hybrid, backgroundLive: true);
+        try
+        {
+            keyboard.Type("kakuteisite");
+            Assert.True(started.Wait(5000), "古い読みの変換が始まる");
+            keyboard.Type("ne");
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => zenzai.BackgroundRevision != 0, 5000), "古い読みの変換が終わる");
+            keyboard.Controller.RefreshBackgroundConversion();
+            Assert.True(keyboard.Showing != "確認して", "古い答えで追加した文字を消さない");
+            Assert.True(SpinWait.SpinUntil(() =>
+            {
+                keyboard.Controller.RefreshBackgroundConversion();
+                return keyboard.Showing == "確認してね";
+            }, 5000), "新しい読みの答えを表示する: " + keyboard.Showing);
+        }
+        finally { release.Set(); }
+    }
+
+    [Test]
     public static void Hybrid_PrefersZenzaiAndKeepsOtherClausesWhenSame()
     {
         using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "ひらがな" };

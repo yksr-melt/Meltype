@@ -119,7 +119,7 @@ Windows 版は、同梱の Mozc と Microsoft IME で変換します。設定の
 | Mozc | Mozc だけで変換する |
 | Microsoft IME | Microsoft IME だけで変換する |
 
-- **ライブ変換**: 4 文字以上の日本語は、Space を押さなくても打ったそばから漢字で表示します (設定で OFF にできます)
+- **ライブ変換**: 4 文字以上の日本語は、Space を押さなくても打ったそばから漢字で表示します (設定で OFF にできます)。Windows の Meltype キーボードで Zenzai を使う場合、まず Mozc などの結果を表示し、Zenzai の答えができたら入力中の表示を更新します。すでに候補を選んでいるときは勝手に切り替えません。Space での変換や、設定「Enter は見えているとおりに確定」が OFF のときの確定では、Zenzai の答えを少し待つことがあります
 - **英単語の前後に半角スペース**: 設定の「全般」で ON にすると、日本語と英単語の間に半角スペースを入れます (今日は GitHub に push した。既定は OFF)
 - **句読点**: 設定の「全般」で「、。」「，．」「，。」「、．」から選べます。数字の間の `.` `,` (1.5、1,000) は半角のままです。Mac・Linux 版では `config.json` の `"Punctuation"` に `Japanese` (、。) / `FullWidthCommaPeriod` (，．) / `FullWidthCommaKuten` (，。) / `ToutenFullWidthPeriod` (、．) を書きます
 - **英字の後ろの , . も句読点にする**: 英字だけを打ったとき (`IME.`) の `,` `.` は半角のままです。設定の「全般」で ON にすると、句読点 (`IME。`) にします (既定は OFF)。Mac・Linux 版では `config.json` の `"JapanesePunctuationAfterEnglish": true` で ON にします
