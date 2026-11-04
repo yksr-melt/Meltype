@@ -12,11 +12,17 @@ namespace Meltype.Composition;
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter system,
-    Func<string, IReadOnlyList<string>>? systemCandidates, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter
+    Func<string, IReadOnlyList<string>>? systemCandidates, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null, bool backgroundMozc = false)
+    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IExplicitConversionBudget
 {
     /// <summary>Zenzai に渡す広い文脈 (Mozc / Microsoft IME には渡さない)。</summary>
     public string? WideContext { get; set; }
+
+    // TSF の Space では、速い Mozc の答えを使えるよう全体で最大 100ms だけ待つ。
+    private long _mozDeadline;
+    public void BeginExplicitConversion() { if (backgroundMozc) _mozDeadline = Environment.TickCount64 + 100; }
+    public void EndExplicitConversion() => _mozDeadline = 0;
+    private int MozcWaitMs => backgroundMozc ? (int)Math.Clamp(_mozDeadline - Environment.TickCount64, 0, 100) : 0;
 
     /// <summary>
     /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null。
@@ -57,7 +63,9 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
 
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
     public string? ConvertStandalone(string hiragana) =>
-        (UseMozc ? mozc!.Convert(hiragana) : null) ?? (UseSystem ? system.Convert(hiragana) : null);
+        (UseMozc ? backgroundMozc
+            ? mozc!.ConvertWithoutWaiting(hiragana, waitMs: MozcWaitMs) is { Count: > 0 } parts ? string.Concat(parts.Select(p => p.Clause.Text)) : null
+            : mozc!.Convert(hiragana) : null) ?? (UseSystem ? system.Convert(hiragana) : null);
 
     /// <summary>
     /// Zenzai が使えれば Zenzai の結果。Mozc などの結果と同じ文字列なら、そちらの文節の区切りを使う
@@ -68,7 +76,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     /// </summary>
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
-        var fromMozc = UseMozc ? mozc!.ConvertWithCandidates(hiragana, context) : null;
+        var fromMozc = UseMozc ? backgroundMozc ? mozc!.ConvertWithoutWaiting(hiragana, context, MozcWaitMs) : mozc!.ConvertWithCandidates(hiragana, context) : null;
         var other = fromMozc?.Select(s => s.Clause).ToList() ?? (UseSystem ? system.ConvertClauses(hiragana, context) : null);
         if (Zenzai(hiragana, context) is not { Count: > 0 } z) return other;
         // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
@@ -128,7 +136,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     public IReadOnlyList<string> Candidates(string reading)
     {
         var list = new List<string>();
-        if (UseMozc) list.AddRange(mozc!.Candidates(reading));
+        if (UseMozc) list.AddRange(backgroundMozc ? mozc!.CandidatesWithoutWaiting(reading) : mozc!.Candidates(reading));
         if (engine() != ConversionEngine.Mozc && systemCandidates is not null)
         {
             foreach (var candidate in systemCandidates(reading)) if (!list.Contains(candidate)) list.Add(candidate);

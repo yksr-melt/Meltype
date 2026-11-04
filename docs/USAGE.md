@@ -119,6 +119,8 @@ Windows 版は、同梱の Mozc と Microsoft IME で変換します。設定の
 | Mozc | Mozc だけで変換する |
 | Microsoft IME | Microsoft IME だけで変換する |
 
+Windows の Meltype IME では、Mozc の応答がまだない間は入力を待たせず、「両方」の設定なら Microsoft IME の結果を使います。「Mozc」のみの場合は、答えが間に合うまでかなのままになることがあります。Space での変換では、Mozc の答えを短時間待ちます。
+
 - **ライブ変換**: 4 文字以上の日本語は、Space を押さなくても打ったそばから漢字で表示します (設定で OFF にできます)
 - **英単語の前後に半角スペース**: 設定の「全般」で ON にすると、日本語と英単語の間に半角スペースを入れます (今日は GitHub に push した。既定は OFF)
 - **句読点**: 設定の「全般」で「、。」「，．」「，。」「、．」から選べます。数字の間の `.` `,` (1.5、1,000) は半角のままです。Mac・Linux 版では `config.json` の `"Punctuation"` に `Japanese` (、。) / `FullWidthCommaPeriod` (，．) / `FullWidthCommaKuten` (，。) / `ToutenFullWidthPeriod` (、．) を書きます

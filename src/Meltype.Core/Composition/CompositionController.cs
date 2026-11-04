@@ -1690,6 +1690,14 @@ public sealed class CompositionController
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
+        if (_converter is not IExplicitConversionBudget bounded) { StartConversionCore(preferJapanese); return; }
+        bounded.BeginExplicitConversion();
+        try { StartConversionCore(preferJapanese); }
+        finally { bounded.EndExplicitConversion(); }
+    }
+
+    private void StartConversionCore(bool preferJapanese)
+    {
         _tabStartedConversion = false;
         // 括弧単独は生成した候補だけで完結させる仕様 (issue #870)。辞書・履歴・エンジンの候補で補わない。
         // Expanded=true は追加漏れではなく、表示時の Expand も呼ばないための指定。ペアの終端までを1文節にする。

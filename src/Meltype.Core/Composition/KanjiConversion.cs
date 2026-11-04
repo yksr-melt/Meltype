@@ -55,6 +55,13 @@ public interface IStandaloneConverter
     string? ConvertStandalone(string hiragana);
 }
 
+/// <summary>明示的な変換の間だけ、変換エンジンに短い待ち時間を与える。</summary>
+public interface IExplicitConversionBudget
+{
+    void BeginExplicitConversion();
+    void EndExplicitConversion();
+}
+
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
 public interface ILearningConverter
 {

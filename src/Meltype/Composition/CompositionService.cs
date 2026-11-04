@@ -31,6 +31,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     // Mozc (同梱の mozc/meltype_mozc_helper.exe) と Microsoft IME を組み合わせた変換エンジン。
     private readonly MozcConverter _mozc = new(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe"), Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
     private HybridConverter _hybrid = null!;
+    private HybridConverter _imeHybrid = null!;
+    private readonly Func<string, IReadOnlyList<string>>? _providedCandidates;
 
     // Zenzai (llama-server + zenz の GGUF。場所が空なら同梱のもの)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
     private readonly ZenzaiHolder _zenzai = new();
@@ -44,6 +46,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     {
         _invoker = invoker;
         _nowPlaying = new NowPlaying(options.NowPlayingCandidates);
+        _providedCandidates = options.MoreCandidates;
         Gate = new CaptureGate(SchedulePump);
         // 補助辞書・文脈の手がかり・学習データは、指定がなければ既定の場所から読む。
         var userDirectory = Config.AppPaths.UserDictionaryDirectory;
@@ -119,6 +122,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
         _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed);
+        _imeHybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed, backgroundMozc: true);
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
@@ -154,9 +158,10 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// (UI スレッドからだけ使うので排他は要らない)。英数状態は IME の ON/OFF で決まるので、フック用の英数の判定は外す。
     /// </summary>
     public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false) =>
-        new(_detector, _hybrid, _resolved with
+        new(_detector, _imeHybrid, _resolved with
         {
             DirectMode = () => false,
+            MoreCandidates = _providedCandidates ?? (reading => _imeHybrid.Candidates(reading)),
             ClassifyDirect = directModeDetection ? _resolved.ClassifyDirect : null,
             DirectDecided = null,
         }, settings, directModeDetection);

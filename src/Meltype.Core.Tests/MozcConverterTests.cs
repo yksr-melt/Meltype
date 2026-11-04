@@ -27,6 +27,11 @@ internal static class MozcConverterTests
             {
                 case "C" when fields[2] == "おちる":
                     return 1;
+                case "C" when fields[2] == "おそい":
+                    File.WriteAllText(Path.Combine(Environment.GetCommandLineArgs()[1], "slow-started"), "started");
+                    Thread.Sleep(2000);
+                    output.WriteLine("おそい\x1f遅い");
+                    break;
                 // 2 つの文節に分けて、文節ごとの候補も返す (Zenzai の結果を Mozc の文節に当てはめるテスト: ZenzaiConverterTests)
                 case "C" when fields[2] == "きしゃがきた":
                     output.WriteLine("きしゃが\x1f記者が\x1f汽車が\x1f帰社が" + '\x1e' + "きた\x1f来た\x1f着た\x1f北");
@@ -69,6 +74,73 @@ internal static class MozcConverterTests
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動し直しを待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(WaitConverted(mozc, "え"), "起動し直したら変換する");
         Assert.True(mozc.IsAvailable, "起動し直せたので使える");
+    }
+
+    [Test]
+    public static void Issue1506_SlowMozcDoesNotBlockTsfInput_AndRecovers()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "meltype-1506-" + Guid.NewGuid().ToString("N"));
+        var profile = Path.Combine(root, FakeHelperProfile);
+        try
+        {
+            using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+            mozc.WarmUp();
+            Assert.True(WaitConverted(mozc, "あ"), "偽の Mozc が起動する");
+            var system = new CompositionTests.FakeConverter();
+            var hybrid = new HybridConverter(() => Meltype.Config.ConversionEngine.Hybrid, mozc, system, null, backgroundMozc: true);
+            hybrid.ConvertClauses("おそい");
+            Assert.True(SpinWait.SpinUntil(() => File.Exists(Path.Combine(profile, "slow-started")), 5000), "遅い変換が始まる");
+
+            var watch = Stopwatch.StartNew();
+            Assert.True(hybrid.ConvertClauses("かくにん") is [{ Text: "確認" }], "Mozc が処理中は Microsoft IME 側で変換する");
+            Assert.Equal("簡単", hybrid.Convert("かんたん"), "単独の変換も待たずにフォールバックする");
+            _ = hybrid.Candidates("きょう");
+            Assert.True(watch.ElapsedMilliseconds < 700, $"遅い Mozc のロックを待たない ({watch.ElapsedMilliseconds}ms)");
+
+            watch.Restart();
+            hybrid.BeginExplicitConversion();
+            try { Assert.True(hybrid.ConvertClauses("かくてい") is [{ Text: "確定" }], "明示的な変換も遅いときはフォールバックする"); }
+            finally { hybrid.EndExplicitConversion(); }
+            Assert.True(watch.ElapsedMilliseconds < 700, $"明示的な変換の待ちも上限内 ({watch.ElapsedMilliseconds}ms)");
+
+            var settings = new Meltype.Config.Settings { LiveConversion = true, UseZenzai = false };
+            var session = new MeltypeSession(CompositionDetector.CreateDefault(), hybrid, new CompositionOptions { LiveConversion = () => true }, () => settings);
+            const string typed = "kyounokaiginonaiyouwomatometekudasai";
+            foreach (var c in typed)
+            {
+                watch.Restart();
+                var result = session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
+                Assert.True(result.Consumed, $"{c} をアプリにローマ字のまま通さない");
+                Assert.True(watch.ElapsedMilliseconds < 700, $"{c} の応答が期限より前に返る ({watch.ElapsedMilliseconds}ms)");
+            }
+            var enter = session.HandleKey(Meltype.Input.VirtualKeys.Return, null, false, false, false, false);
+            Assert.True(enter.Consumed && enter.Commits.Count > 0, "入力を確定できる");
+            Assert.True(!enter.Commits[0].Text.Any(char.IsAsciiLetter), "入力がローマ字のまま残らない: " + enter.Commits[0].Text);
+
+            var onlyMozc = new HybridConverter(() => Meltype.Config.ConversionEngine.Mozc, mozc, system, null, backgroundMozc: true);
+            Assert.True(SpinWait.SpinUntil(() => onlyMozc.Convert("い") == "い", 10000), "タイムアウト・再起動後に Mozc の結果を再び使える");
+        }
+        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
+    }
+
+    [Test]
+    public static void Issue1506_ExplicitConversionUsesFastMozc()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "meltype-1506-fast-" + Guid.NewGuid().ToString("N"));
+        var profile = Path.Combine(root, FakeHelperProfile);
+        try
+        {
+            using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+            mozc.WarmUp();
+            Assert.True(WaitConverted(mozc, "あ"), "偽の Mozc が起動する");
+            var hybrid = new HybridConverter(() => Meltype.Config.ConversionEngine.Hybrid, mozc, new CompositionTests.FakeConverter(), null, backgroundMozc: true);
+            var settings = new Meltype.Config.Settings { LiveConversion = false, UseZenzai = false };
+            var session = new MeltypeSession(CompositionDetector.CreateDefault(), hybrid, new CompositionOptions { LiveConversion = () => false }, () => settings);
+            foreach (var c in "kishagakita") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
+            var result = session.HandleKey(Meltype.Input.VirtualKeys.Space, null, false, false, false, false);
+            Assert.Equal("記者が来た", result.View?.Text ?? "", "Space の短い待ち時間内に返った Mozc の文節を使う");
+        }
+        finally { try { Directory.Delete(root, true); } catch (IOException) { } }
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)

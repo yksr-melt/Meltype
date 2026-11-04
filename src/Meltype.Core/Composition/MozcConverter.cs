@@ -24,10 +24,14 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private readonly string _helperPath;
     private readonly string? _profileDirectory;
     private readonly object _gate = new();
+    private readonly object _backgroundGate = new();
+    private (string Context, string Reading)? _pendingBackground;
+    private string? _activeBackground;
+    private bool _backgroundRunning;
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
     private Process? _process;
-    private int _failures;
+    private volatile int _failures;
 
     // 性能の計測用の回数と時間 (--perf)。_gate の中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
@@ -41,10 +45,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private bool _started;
 
     // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
-    private bool _missingDependency;
+    private volatile bool _missingDependency;
 
     // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない (_gate の中で読み書きする)
-    private bool _disposed;
+    private volatile bool _disposed;
 
     // Windows: 子プロセスを起動するあいだ、DLL が見つからないときのエラーの画面を出さない (子プロセスはこの設定を引き継ぐ)。
     // 子プロセスが引き継ぐのはプロセス全体の設定だけなので、SetThreadErrorMode では効かない。起動したらすぐ戻す
@@ -88,6 +92,92 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     {
         if (Request(context ?? "", hiragana) is not { Count: > 0 } segments) return null;
         return segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList();
+    }
+
+    /// <summary>Meltype IME 用。控えがなければ背景で問い合わせ、入力の応答を待たせない。</summary>
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithoutWaiting(string hiragana, string? context = null, int waitMs = 0)
+    {
+        if (CachedOrQueue(context ?? "", hiragana, waitMs) is not { Count: > 0 } segments) return null;
+        return segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList();
+    }
+
+    internal IReadOnlyList<string> CandidatesWithoutWaiting(string reading)
+    {
+        if (Monitor.TryEnter(_gate))
+        {
+            try
+            {
+                _candidateRequests++;
+                if (_candidates.TryGetValue(reading, out var cached)) { _candidateCacheHits++; return cached; }
+            }
+            finally { Monitor.Exit(_gate); }
+        }
+        var segments = CachedOrQueue("", reading);
+        if (segments is null) return [];
+        return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading))];
+    }
+
+    private List<(string Reading, IReadOnlyList<string> Candidates)>? CachedOrQueue(string context, string reading, int waitMs = 0)
+    {
+        if (string.IsNullOrEmpty(reading) || _disposed || !IsAvailable) return null;
+        context = Clean(context);
+        reading = Clean(reading);
+        var key = context + "\t" + reading;
+        // ヘルパーの変換・学習・保存が長引いていても、そのロックを UI スレッドで待たない。
+        if (TryCached(key, out var result)) return result;
+        lock (_backgroundGate)
+        {
+            if (_disposed) return null;
+            _pendingBackground = _activeBackground == key ? null : (context, reading);
+            if (!_backgroundRunning && _pendingBackground is not null)
+            {
+                _backgroundRunning = true;
+                _ = Task.Run(ProcessBackgroundRequests);
+            }
+            var until = Environment.TickCount64 + waitMs;
+            while (!_disposed && waitMs > 0 && (_activeBackground == key || _pendingBackground is { } pending && pending.Context + "\t" + pending.Reading == key))
+            {
+                var left = until - Environment.TickCount64;
+                if (left <= 0) break;
+                Monitor.Wait(_backgroundGate, (int)left);
+            }
+        }
+        if (waitMs > 0 && TryCached(key, out result)) return result;
+        return null;
+    }
+
+    private bool TryCached(string key, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
+    {
+        result = null;
+        if (!Monitor.TryEnter(_gate)) return false;
+        try
+        {
+            if (_disposed) return false;
+            _requests++;
+            if (!_conversions.TryGetValue(key, out result)) return false;
+            _cacheHits++;
+            foreach (var (segmentReading, candidates) in result ?? []) _candidates[segmentReading] = candidates;
+            return true;
+        }
+        finally { Monitor.Exit(_gate); }
+    }
+
+    private void ProcessBackgroundRequests()
+    {
+        while (true)
+        {
+            (string Context, string Reading) request;
+            lock (_backgroundGate)
+            {
+                if (_disposed || _pendingBackground is not { } pending) { _backgroundRunning = false; return; }
+                request = pending;
+                _pendingBackground = null;
+                _activeBackground = request.Context + "\t" + request.Reading;
+            }
+            try { Request(request.Context, request.Reading); }
+            catch (Exception ex) { if (!_disposed) Diagnostics.Log.Warn($"背景の Mozc 変換に失敗しました: {ex.Message}"); }
+            finally { lock (_backgroundGate) { _activeBackground = null; Monitor.PulseAll(_backgroundGate); } }
+        }
     }
 
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
