@@ -103,6 +103,8 @@ class KeyboardService : InputMethodService(), KeyListener {
             MeltypeCoreSession.open(File(noBackupFilesDir, "meltype"), CoreMozcCallbacks(converter))
                 .also {
                     core = it
+                    // The Kotlin/Mozc path already checks policy.learn; the C# core needs the same rule.
+                    it.setPrivate(!policy.learn)
                     it.setCanDelete(true)
                     it.setLiveConversion(Settings(this).liveConversionEnabled)
                 }
