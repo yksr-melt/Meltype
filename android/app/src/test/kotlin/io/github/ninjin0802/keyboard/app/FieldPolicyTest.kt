@@ -21,12 +21,13 @@ class FieldPolicyTest {
         assertEquals(FieldPolicy(LayoutId.QWERTY, convert = false, learn = false, holdLast = false), fieldPolicy(text(v), 0)) }
     @Test fun email_does_not_convert_and_holds_the_last_character() { for (v in listOf(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS))
         assertEquals(FieldPolicy(LayoutId.QWERTY, convert = false, learn = false, holdLast = true), fieldPolicy(text(v), 0)) }
-    @Test fun url_starts_in_qwerty_converts_and_never_learns() {
-        val expected = FieldPolicy(LayoutId.QWERTY, convert = true, learn = false)
+    @Test fun url_starts_in_japanese_converts_and_never_learns() {
+        val expected = FieldPolicy(LayoutId.KANA, convert = true, learn = false)
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), 0))
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), EditorInfo.IME_ACTION_GO))
+        assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), EditorInfo.IME_ACTION_SEARCH))
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))
-        // フラグが付いていても URL は URL（Chrome のアドレスバーは、候補を出さない指定を付けてくる）。
+        // Chrome のアドレスバーが候補を出さない指定を付けても、日本語を初期表示する。
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI) or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, 0))
     }
     @Test fun numbers() { for (c in listOf(InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE, InputType.TYPE_CLASS_DATETIME,
@@ -47,6 +48,17 @@ class FieldPolicyTest {
     }
     @Test fun no_learning_flag() = assertEquals(FieldPolicy(LayoutId.KANA, true, false),
         fieldPolicy(text(0), EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))
+    @Test fun private_browser_fields_do_not_learn() {
+        val privateFlag = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        for (variation in listOf(InputType.TYPE_TEXT_VARIATION_NORMAL,
+            InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT, InputType.TYPE_TEXT_VARIATION_URI)) {
+            val policy = fieldPolicy(text(variation), privateFlag)
+            assertEquals(LayoutId.KANA, policy.layout)
+            assertEquals(true, policy.convert)
+            assertEquals(false, policy.learn)
+            assertEquals(false, policy.recordsEmoji)
+        }
+    }
     @Test fun unknown_type_is_normal() = assertEquals(FieldPolicy(LayoutId.KANA, true, true), fieldPolicy(0, 0))
 
     @Test fun enter_action_follows_the_field() {
