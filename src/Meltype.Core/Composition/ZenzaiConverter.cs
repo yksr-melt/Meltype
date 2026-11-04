@@ -134,9 +134,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのままの答えや、読みより長く前の文脈の末尾をそのまま返した答えは Mozc などに任せる。
-        var repeatsContext = answer is not null && answer.Length > hiragana.Length && context.EndsWith(answer, StringComparison.Ordinal);
-        var text = answer == hiragana || repeatsContext ? null : answer;
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
+        var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {

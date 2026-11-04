@@ -127,26 +127,6 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Hybrid_FallsBackWhenZenzaiCopiesPrecedingText()
-    {
-        using var server = new FakeServer { Answer = _ => "前の文章を調べた" };
-        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
-        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai)
-        {
-            WideContext = "昨日は前の文章を調べた",
-        };
-        Assert.Equal("今日", hybrid.Convert("きょう") ?? "", "前の文章は候補にせず、通常の変換に戻る");
-        Assert.Equal("今日", hybrid.Convert("きょう") ?? "", "同じ文脈で再変換しても通常の変換に戻る");
-        Assert.Equal(1, server.Prompts.Count, "採用しなかった答えも覚える");
-        Assert.True(zenzai.HasAnswered, "通信の失敗とは区別する");
-
-        server.Answer = _ => "日本語";
-        Assert.True(hybrid.ConvertClauses("にほんご") is [{ Text: "日本語", Zenzai: true }], "文脈にない普通の答えは使う");
-        hybrid.WideContext = "日本語";
-        Assert.True(hybrid.ConvertClauses("にほんご") is [{ Text: "日本語", Zenzai: true }], "同じ語を続けて打つ変換は使う");
-    }
-
-    [Test]
     public static void ServerErrors_FallBackAndGiveUp()
     {
         using var server = new FakeServer { Status = 500 };
@@ -493,6 +473,7 @@ internal static class ZenzaiConverterTests
         {
             ("zisyono", "このIMEを調べた。Mozcの", "辞書の"),
             ("unnyousurubaaiha", "今回の更新では、利用者の使い方によって挙動が変わることを想定していますが、同団体の定義で", "運用する場合は"),
+            ("zisyono", "辞書の", "辞書の"),
         })
         {
             var keyboard = new CompositionTests.Keyboard(converter: hybrid);
