@@ -4,6 +4,7 @@
 #                    SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
 #                    結果は SARIF にして Code scanning に送る。大きな移行の note は IDE に残す。命名は理由付きのソース内抑制を反映する (tools/filter-sarif.mjs)。
 #   スクリプト     … .github/bot と tools の Node のスクリプトのテスト
+#   表記           … Pull Request で足したソースファイルの先頭に、ライセンス・著作権の表記があるか
 #   依存関係       … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
 # セキュリティの解析 (CodeQL) は codeql.yml。
 name: quality
@@ -96,6 +97,22 @@ jobs:
           node .github/bot/notices.mjs --self-test
           node .github/bot/code-scanning.mjs --self-test
           node .github/bot/sponsors.mjs --self-test
+
+  # 新しく足したソースファイルの先頭のライセンス・著作権の表記 (.github/bot/notices.mjs)
+  notices:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node .github/bot/notices.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
   dependencies:
     if: github.event_name == 'pull_request'

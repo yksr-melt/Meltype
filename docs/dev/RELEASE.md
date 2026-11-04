@@ -43,7 +43,7 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 ## GitHub の設定
 
 - Settings → Security → **Private vulnerability reporting** を ON にする ([SECURITY.md](../../SECURITY.md) の報告先)
-- Settings → Rules → Rulesets で main の ruleset を作り、必須のチェック (Require status checks to pass) に **test**・**core (ubuntu-latest)**・**core (macos-latest)**・**cla**・**精度の比較** を入れる
+- Settings → Rules → Rulesets で main の ruleset を作り、必須のチェック (Require status checks to pass) に **test**・**core (ubuntu-latest)**・**core (macos-latest)**・**精度の比較** を入れる (「CLA」は入れない。同意の確認はレビューする人がする)
 - (任意) bot の名前を変える: GitHub App を作り、変数 `BOT_APP_ID` と秘密 `BOT_APP_PRIVATE_KEY` を登録する
 - 不具合報告のフォーム: [tools/report-form/README.md](../../tools/report-form/README.md) の手順で作り、`src/Meltype.Core/Config/ProjectInfo.cs` の `ReportForm` に URL を書く
 
