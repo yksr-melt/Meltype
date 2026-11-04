@@ -23,6 +23,7 @@ unsigned char* meltype_commit(void* handle);
 unsigned char* meltype_select_candidate(void* handle, int index);
 unsigned char* meltype_select_prediction(void* handle, int index);
 void meltype_set_live_conversion(void* handle, int enabled);
+void meltype_set_private(void* handle, int is_private);
 void meltype_set_direct(void* handle, int direct);
 void meltype_set_can_delete(void* handle, int can_delete);
 void meltype_free(unsigned char* ptr);
@@ -215,6 +216,12 @@ extern "C" JNIEXPORT void JNICALL
 Java_io_github_ninjin0802_keyboard_app_core_NativeApi_setLiveConversion(
         JNIEnv*, jobject, jlong handle, jboolean enabled) {
     if (handle) meltype_set_live_conversion(as_handle(handle), enabled == JNI_TRUE ? 1 : 0);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_io_github_ninjin0802_keyboard_app_core_NativeApi_setPrivate(
+        JNIEnv*, jobject, jlong handle, jboolean is_private) {
+    if (handle) meltype_set_private(as_handle(handle), is_private == JNI_TRUE ? 1 : 0);
 }
 
 extern "C" JNIEXPORT void JNICALL
