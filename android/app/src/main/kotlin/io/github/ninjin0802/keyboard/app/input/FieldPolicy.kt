@@ -48,9 +48,9 @@ fun fieldPolicy(inputType: Int, imeOptions: Int): FieldPolicy {
             FieldPolicy(LayoutId.QWERTY, convert = false, learn = false, holdLast = false)
         cls == InputType.TYPE_CLASS_TEXT && variation in emailVariations ->
             FieldPolicy(LayoutId.QWERTY, convert = false, learn = false)
-        // ブラウザーのアドレスバーは検索欄でもある。英字で始め、かなに切り替えたら変換できる。学習はしない。
+        // URL 欄は検索にも使うため日本語で始める。URL の直接入力は英字配列に切り替えられる。学習はしない。
         cls == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_URI ->
-            FieldPolicy(LayoutId.QWERTY, convert = true, learn = false)
+            FieldPolicy(LayoutId.KANA, convert = true, learn = false)
         imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0 ->
             FieldPolicy(LayoutId.KANA, convert = true, learn = false)
         else -> FieldPolicy(LayoutId.KANA, convert = true, learn = true)
