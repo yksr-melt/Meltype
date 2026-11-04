@@ -14,4 +14,10 @@ set_target_properties(MeltypeNative PROPERTIES IMPORTED_LOCATION "${MELTYPE_AOT_
 
 add_library(meltype_jni SHARED meltype_jni.cpp)
 target_compile_features(meltype_jni PRIVATE cxx_std_17)
+# Android devices with 16 KiB memory pages require every PT_LOAD segment
+# of the JNI bridge to be 16 KiB aligned. Imported NativeAOT and Mozc libs
+# already use 0x4000 alignment; the NDK-created bridge previously used 0x1000.
+target_link_options(meltype_jni PRIVATE
+    "LINKER:-z,max-page-size=16384"
+    "LINKER:-z,common-page-size=16384")
 target_link_libraries(meltype_jni PRIVATE MeltypeNative)
