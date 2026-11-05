@@ -21,8 +21,8 @@ final class MeltypeConverter {
     private static let zenzaiTimeout: TimeInterval = 1.5
     /// これより長い読みは Zenzai に渡さない (Windows の Zenzai と同じ。長いほど推論が長い)。
     private static let zenzaiMaxReading = 80
-    /// 打ち切ったときに Zenzai を使わない長さ (遅い Mac で何度も待たないように)。
-    private static let zenzaiPause: TimeInterval = 10 * 60
+    /// 打ち切ったときに Zenzai を使わない長さ (Windows の Zenzai と同じ 5 秒)。打ち切った変換が動いている間は .busy で断る。
+    private static let zenzaiPause: TimeInterval = 5
     /// Zenzai はこの時刻まで使わない。
     private var zenzaiPausedUntil = Date.distantPast
     /// Zenzai の変換は、別の変換エンジンで別のスレッドで動かす (待つ時間に上限を付けるため。azooKey の変換は途中で止められない)。
@@ -116,7 +116,7 @@ final class MeltypeConverter {
                 results = zenzai
             case .timedOut:
                 zenzaiPausedUntil = Date().addingTimeInterval(Self.zenzaiPause)
-                NSLog("Meltype: Zenzai の変換が %.0f ms で終わらなかったので、10 分間 Zenzai を使いません", Self.zenzaiTimeout * 1000)
+                NSLog("Meltype: Zenzai の変換が %.0f ms で終わらなかったので、5 秒間 Zenzai を使いません", Self.zenzaiTimeout * 1000)
             case .busy, .notReady:
                 break
             }

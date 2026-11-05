@@ -303,7 +303,7 @@ internal static class BackgroundConversionTests
         mozc.WarmUp();
         Assert.True(ready.Wait(10000), "起動したら知らせる");
 
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, new CompositionTests.FakeConverter(), null);
+        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, null, null);
         var session = Session(hybrid);
         Assert.Equal("きしゃがきた", SessionFacadeTests.Type(session, "kishagakita")[^1].View?.Text);
         Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "届いたら表示が更新される");

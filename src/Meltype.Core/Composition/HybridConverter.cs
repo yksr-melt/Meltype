@@ -9,9 +9,10 @@ namespace Meltype.Composition;
 /// Mozc と OS の変換エンジン (Windows では Microsoft IME) を組み合わせる。
 /// 両方 (既定) なら Mozc で変換し、Mozc が使えない・変換できないときは OS の変換エンジンで変換する。
 /// 候補の一覧は Mozc の候補の後ろに OS の変換エンジンの候補を足す (Microsoft IME に登録した単語も出る)。
+/// 全 OS で使う。Mac 版は OS の変換エンジン (azooKey) だけ、Linux 版は Mozc だけ (system は null)。
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
-public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter system,
+public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter? system,
     Func<string, IReadOnlyList<string>>? systemCandidates, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
     : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
 {
@@ -97,7 +98,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
 
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
     public string? ConvertStandalone(string hiragana) =>
-        (UseMozc ? AskMozc(() => mozc!.Convert(hiragana)) : null) ?? (UseSystem ? system.Convert(hiragana) : null);
+        (UseMozc ? AskMozc(() => mozc!.Convert(hiragana)) : null) ?? (UseSystem ? system?.Convert(hiragana) : null);
 
     /// <summary>
     /// Zenzai が使えれば Zenzai の結果。Mozc などの結果と同じ文字列なら、そちらの文節の区切りを使う
@@ -109,7 +110,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
         var fromMozc = UseMozc ? AskMozc(() => mozc!.ConvertWithCandidates(hiragana, context)) : null;
-        var other = fromMozc?.Select(s => s.Clause).ToList() ?? (UseSystem ? system.ConvertClauses(hiragana, context) : null);
+        var other = fromMozc?.Select(s => s.Clause).ToList() ?? (UseSystem ? system?.ConvertClauses(hiragana, context) : null);
         if (Zenzai(hiragana, context) is not { Count: > 0 } z) return other;
         // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
         if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();

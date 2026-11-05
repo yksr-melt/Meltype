@@ -52,6 +52,7 @@ public static unsafe class Exports
             if (string.IsNullOrEmpty(path)) return 0;
             s_mozc?.Dispose();
             s_mozc = new MozcConverter(path, FromUtf8(profile) ?? Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
+            s_converter = new HybridConverter(() => Config.ConversionEngine.Mozc, s_mozc, null, null);
             if (!s_mozc.IsInstalled) return 0;
             s_mozc.WarmUp();
             return 1;
@@ -72,9 +73,7 @@ public static unsafe class Exports
     {
         try
         {
-            var session = s_mozc is { } mozc
-                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker())
-                : MeltypeSession.CreateDefault(s_callback, s_callback.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true);
+            var session = MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null);
             return GCHandle.ToIntPtr(GCHandle.Alloc(session));
         }
         catch (Exception ex)
@@ -92,19 +91,16 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
     public static void SetConversionReady(delegate* unmanaged<void> notify)
     {
-        if (s_mozc is { } mozc)
-        {
-            mozc.Budget.Enable();
-            mozc.ResultReady += () => notify();
-            return;
-        }
-        s_callback.Budget.Enable();
-        s_callback.ResultReady += () => notify();
-        s_callback.WarmUp();
+        s_converter.Budget.Enable();
+        s_converter.ResultReady += () => notify();
+        if (s_mozc is null) s_callback.WarmUp();
     }
 
     /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
     private static readonly BackgroundCallbackConverter s_callback = new(new CallbackConverter().ConvertClauses, MoreCandidates);
+
+    /// <summary>入力欄が使う変換エンジン。Windows 版と同じ HybridConverter で、Mac 版は登録された関数だけ、Linux 版は Mozc だけを組み合わせる。</summary>
+    private static HybridConverter s_converter = new(() => Config.ConversionEngine.System, null, s_callback, s_callback.Candidates);
 
     /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
