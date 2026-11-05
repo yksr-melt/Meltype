@@ -55,6 +55,47 @@ public interface IStandaloneConverter
     string? ConvertStandalone(string hiragana);
 }
 
+/// <summary>
+/// 入力スレッドが変換エンジンを待ってよい時間。入力スレッドからだけ使う。
+/// Start を一度も呼ばなければ制限なし (変換エンジンは同期で答える。--repro などの測定はこの状態で動かす)。
+/// </summary>
+public sealed class ConversionBudget
+{
+    private long _deadline;
+    private bool _withoutWaiting;
+
+    public bool Limited { get; private set; }
+
+    public int RemainingMs => _withoutWaiting ? 0 : (int)Math.Max(0, _deadline - Environment.TickCount64);
+
+    public void Start(int milliseconds)
+    {
+        Limited = true;
+        _deadline = Environment.TickCount64 + milliseconds;
+    }
+
+    /// <summary>convert の間は待たない (ライブ変換のように、打鍵ごとに走って結果が後から届いてよい変換)。</summary>
+    public T WithoutWaiting<T>(Func<T> convert)
+    {
+        var previous = _withoutWaiting;
+        _withoutWaiting = true;
+        try { return convert(); }
+        finally { _withoutWaiting = previous; }
+    }
+}
+
+/// <summary>結果を背景で作り、できたら知らせる変換エンジン。</summary>
+public interface IBackgroundConverter
+{
+    ConversionBudget Budget { get; }
+
+    /// <summary>
+    /// 変換エンジンのキャッシュに結果が入った (または変換エンジンが使えるようになった)。ワーカーのスレッドで呼ぶ。
+    /// 受け取った側は入力スレッドに移して RefreshConversion を呼ぶ。結果を渡さないので、古い読みの結果は表示に使われない。
+    /// </summary>
+    event Action? ResultReady;
+}
+
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
 public interface ILearningConverter
 {

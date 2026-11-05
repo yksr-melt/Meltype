@@ -59,6 +59,23 @@ internal sealed class TipServer : IDisposable
         _invoker = invoker;
         _composition = composition;
         _settings = settings;
+        composition.ConversionReady += _conversion.Notify;
+    }
+
+    private readonly ConversionSignal _conversion = new();
+
+    /// <summary>
+    /// wait の要求を返さずに持つ時間。DLL が IME のスレッドを止めて終わりを待つことがある (StopHelloUpdates) ので短くする。
+    /// DLL は入力中だけ、返ったらすぐ次の wait を送る。
+    /// </summary>
+    private const int ConversionWaitMs = 250;
+
+    /// <summary>wait の要求 ({"op":"wait","since":世代}) なら、DLL が知っている世代。UI スレッドに移さずに待つ。</summary>
+    internal static long? WaitSince(string request)
+    {
+        if (!request.StartsWith("{\"op\":\"wait\"", StringComparison.Ordinal)) return null;
+        using var document = JsonDocument.Parse(request);
+        return document.RootElement.TryGetProperty("since", out var since) && since.TryGetInt64(out var value) ? value : -1;
     }
 
     /// <summary>Meltype IME が登録されていないと確かに分かるか (レジストリを読めないときは false)。</summary>
@@ -438,10 +455,17 @@ internal sealed class TipServer : IDisposable
                 try
                 {
                     var request = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
-                    var started = Environment.TickCount64;
-                    if (javaClient && !looksLikeGame) looksLikeGame = ForegroundTracker.IsForegroundJavaGame(clientProcess);
-                    reply = FromOwnUiThread(ownClient, request) ? Handle(request, sessions, looksLikeGame) : Invoke(() => Handle(request, sessions, looksLikeGame));
-                    LogSlow(request, Environment.TickCount64 - started);
+                    if (WaitSince(request) is { } since)
+                    {
+                        reply = $"{{\"generation\":{await _conversion.WaitAsync(since, ConversionWaitMs, _stop.Token).ConfigureAwait(false)}}}";
+                    }
+                    else
+                    {
+                        var started = Environment.TickCount64;
+                        if (javaClient && !looksLikeGame) looksLikeGame = ForegroundTracker.IsForegroundJavaGame(clientProcess);
+                        reply = FromOwnUiThread(ownClient, request) ? Handle(request, sessions, looksLikeGame) : Invoke(() => Handle(request, sessions, looksLikeGame));
+                        LogSlow(request, Environment.TickCount64 - started);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -606,6 +630,10 @@ internal sealed class TipServer : IDisposable
                     session.ForgetDirectInput();
                 }
                 result = session.CommitPending();
+                break;
+            case "refresh":
+                if (!active || session.RefreshConversion() is not { } refreshed) return Inactive;
+                result = refreshed;
                 break;
             case "select":
                 result = IsTrue(root, "prediction") ? session.SelectPrediction(Int(root, "index")) : session.SelectCandidate(Int(root, "index"));

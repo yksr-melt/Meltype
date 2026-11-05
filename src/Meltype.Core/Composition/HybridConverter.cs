@@ -13,10 +13,42 @@ namespace Meltype.Composition;
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter system,
     Func<string, IReadOnlyList<string>>? systemCandidates, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter
+    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
 {
     /// <summary>Zenzai に渡す広い文脈 (Mozc / Microsoft IME には渡さない)。</summary>
     public string? WideContext { get; set; }
+
+    private readonly ConversionBudget _ownBudget = new();
+    private ZenzaiConverter? _subscribedZenzai;
+    private Action? _zenzaiReady;
+
+    public ConversionBudget Budget => mozc?.Budget ?? _ownBudget;
+
+    public event Action? ResultReady
+    {
+        add
+        {
+            if (mozc is not null) mozc.ResultReady += value;
+            _zenzaiReady += value;
+        }
+        remove
+        {
+            if (mozc is not null) mozc.ResultReady -= value;
+            _zenzaiReady -= value;
+        }
+    }
+
+    // ZenzaiHolder が Zenzai を作り直すので、今の Zenzai にだけつなぐ
+    private void Subscribe(ZenzaiConverter z)
+    {
+        if (ReferenceEquals(z, _subscribedZenzai)) return;
+        if (_subscribedZenzai is not null) _subscribedZenzai.ResultReady -= OnZenzaiReady;
+        _subscribedZenzai = z;
+        z.Budget = Budget;
+        z.ResultReady += OnZenzaiReady;
+    }
+
+    private void OnZenzaiReady() => _zenzaiReady?.Invoke();
 
     /// <summary>
     /// 設定で Zenzai が使えるとき、その変換結果 (読み全体で 1 つの文節)。使えない・変換できなければ null。
@@ -32,6 +64,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
         {
             z = zenzai?.Invoke();
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
+            Subscribe(z);
             return z.ConvertClauses(hiragana, WideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
         }
         catch (Exception ex)

@@ -7,6 +7,7 @@
 
 #include <dlfcn.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <memory>
@@ -16,6 +17,7 @@
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/option.h>
 #include <fcitx-utils/capabilityflags.h>
+#include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
 #include <fcitx-utils/log.h>
@@ -60,6 +62,8 @@ struct Native {
     char *(*handleKey)(void *, int, int, int, const char *, const char *) = nullptr;
     char *(*commit)(void *) = nullptr;
     char *(*selectCandidate)(void *, int) = nullptr;
+    void (*setConversionReady)(void (*)()) = nullptr; // 古い本体には無い (変換は同期のまま)
+    char *(*refresh)(void *) = nullptr;               // 古い本体には無い
     void (*setDirect)(void *, int) = nullptr;
     int (*takeModeToggled)(void *) = nullptr; // 古い本体には無い (#1033: 本体が切替キーで切り替えたか)
     int (*isDirect)(void *) = nullptr;        // 古い本体には無い (#1033: 本体のモード。1 = 英数)
@@ -96,6 +100,8 @@ struct Native {
         caretMoved = reinterpret_cast<decltype(caretMoved)>(sym("meltype_caret_moved"));
         roleKey = reinterpret_cast<decltype(roleKey)>(sym("meltype_role_key"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
+        setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
+        refresh = reinterpret_cast<decltype(refresh)>(sym("meltype_refresh"));
         if (!create || !destroy || !handleKey || !commit || !selectCandidate || !setDirect || !free) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
@@ -392,8 +398,15 @@ public:
     explicit MeltypeEngine(fcitx::Instance *instance)
         : instance_(instance), factory_([this](fcitx::InputContext &) { return new MeltypeState(native_); }) {
         loaded_ = native_.load();
+        if (loaded_ && native_.setConversionReady && native_.refresh) {
+            dispatcher_.attach(&instance_->eventLoop());
+            s_engine = this;
+            native_.setConversionReady(&MeltypeEngine::onConversionReady);
+        }
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
     }
+
+    ~MeltypeEngine() override { s_engine = nullptr; }
 
     void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) override {
         if (!loaded_) return;
@@ -536,9 +549,23 @@ public:
     }
 
 private:
+    // ワーカーのスレッドで呼ばれるので、メインループに移す。エンジンはプロセスで 1 つで、meltype_set_conversion_ready は解除できない
+    static inline std::atomic<MeltypeEngine *> s_engine = nullptr;
+    static void onConversionReady() {
+        if (auto *engine = s_engine.load()) engine->dispatcher_.schedule([engine]() { engine->refreshConversion(); });
+    }
+
+    void refreshConversion() {
+        auto *ic = instance_->mostRecentInputContext();
+        if (!ic || !ic->hasFocus() || instance_->inputMethodEngine(ic) != this) return;
+        auto *state = ic->propertyFor(&factory_);
+        if (state->session()) apply(ic, native_.take(native_.refresh(state->session())));
+    }
+
     fcitx::Instance *instance_;
     Native native_;
     bool loaded_ = false;
+    fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
     MeltypeConfig config_;
 

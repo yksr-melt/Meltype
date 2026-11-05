@@ -73,7 +73,7 @@ public static unsafe class Exports
         try
         {
             var session = s_mozc is { } mozc
-                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker())
+                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker(), backgroundConversion: true)
                 : MeltypeSession.CreateDefault(new CallbackConverter(), MoreCandidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true);
             return GCHandle.ToIntPtr(GCHandle.Alloc(session));
         }
@@ -81,6 +81,32 @@ public static unsafe class Exports
         {
             Diagnostics.Log.Error($"Mac: 初期化できませんでした: {ex}");
             return IntPtr.Zero;
+        }
+    }
+
+    /// <summary>
+    /// 背景の変換の結果が届いたら notify を呼ぶ (Linux 版)。meltype_init_mozc の後に 1 回呼ぶ。notify はワーカーのスレッドで呼ばれるので、
+    /// フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
+    public static void SetConversionReady(delegate* unmanaged<void> notify)
+    {
+        if (s_mozc is { } mozc) mozc.ResultReady += () => notify();
+    }
+
+    /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
+    public static byte* Refresh(IntPtr handle)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
+            return session.RefreshConversion() is { } result ? ToUtf8(result.ToJson()) : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
+            return null;
         }
     }
 

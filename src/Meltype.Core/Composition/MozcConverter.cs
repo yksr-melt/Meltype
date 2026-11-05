@@ -14,7 +14,7 @@ namespace Meltype.Composition;
 /// やり取り (UTF-8、1 行ずつ): 「C[TAB]前の文字列[TAB]読み」を送ると、文節ごとに「読み[US]候補1[US]候補2…」を [RS] でつないだ 1 行が返る。
 /// ヘルパーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
+public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgroundConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
@@ -26,8 +26,9 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private readonly object _gate = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
+    private readonly LatestRequestWorker<(string, string)> _worker;
     private Process? _process;
-    private int _failures;
+    private volatile int _failures;
 
     // 性能の計測用の回数と時間 (--perf)。_gate の中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
@@ -41,7 +42,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private bool _started;
 
     // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
-    private bool _missingDependency;
+    private volatile bool _missingDependency;
 
     // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない (_gate の中で読み書きする)
     private bool _disposed;
@@ -66,7 +67,12 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     {
         _helperPath = helperPath;
         _profileDirectory = profileDirectory;
+        _worker = new LatestRequestWorker<(string, string)>(ProcessBackground);
     }
+
+    public ConversionBudget Budget { get; } = new();
+
+    public event Action? ResultReady;
 
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => File.Exists(_helperPath);
@@ -86,23 +92,31 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// </summary>
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null)
     {
-        if (Request(context ?? "", hiragana) is not { Count: > 0 } segments) return null;
+        if (Query(context ?? "", hiragana) is not { Count: > 0 } segments) return null;
         return segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList();
     }
 
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
     public IReadOnlyList<string> Candidates(string reading)
     {
-        lock (_gate)
+        // Budget を使っているときは、ヘルパーの応答を待っているワーカーの _gate を入力スレッドで待たない
+        var entered = false;
+        if (Budget.Limited) Monitor.TryEnter(_gate, ref entered);
+        else Monitor.Enter(_gate, ref entered);
+        if (entered)
         {
-            _candidateRequests++;
-            if (_candidates.TryGetValue(reading, out var cached))
+            try
             {
-                _candidateCacheHits++;
-                return cached;
+                _candidateRequests++;
+                if (_candidates.TryGetValue(reading, out var cached))
+                {
+                    _candidateCacheHits++;
+                    return cached;
+                }
             }
+            finally { Monitor.Exit(_gate); }
         }
-        var segments = Request("", reading);
+        var segments = Query("", reading);
         if (segments is null) return [];
         // 1 文節ならその候補。複数の文節に分かれたなら、最初の候補をつなげたものだけ。
         return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading))];
@@ -162,6 +176,42 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             Fail();
             return null;
         }
+    }
+
+    /// <summary>入力スレッドからの問い合わせ。Budget を使っているときは、キャッシュに無ければワーカーに頼み、Budget の間だけ待つ。</summary>
+    private List<(string Reading, IReadOnlyList<string> Candidates)>? Query(string context, string reading)
+    {
+        if (!Budget.Limited) return Request(context, reading);
+        if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
+        var request = (Clean(context), Clean(reading));
+        if (TryCached(request, out var result)) return result;
+        _worker.Submit(request);
+        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, out result) ? result : null;
+    }
+
+    private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
+    {
+        result = null;
+        if (!Monitor.TryEnter(_gate)) return false;
+        try
+        {
+            if (_disposed) return false;
+            _requests++;
+            if (!_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
+            _cacheHits++;
+            foreach (var (segmentReading, candidates) in result ?? []) _candidates[segmentReading] = candidates;
+            return true;
+        }
+        finally { Monitor.Exit(_gate); }
+    }
+
+    private void ProcessBackground((string Context, string Reading) request)
+    {
+        Request(request.Context, request.Reading);
+        // 失敗 (キャッシュに入らない) は知らせない。知らせると再描画がまた同じ要求を出して、失敗のたびに繰り返す
+        bool cached;
+        lock (_gate) cached = _conversions.ContainsKey(request.Context + "\t" + request.Reading);
+        if (cached) ResultReady?.Invoke();
     }
 
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Request(string context, string reading)
@@ -287,6 +337,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                     }
                     _process = process;
                 }
+                ResultReady?.Invoke();
             }
             catch (Exception ex)
             {
@@ -384,6 +435,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
 
     public void Dispose()
     {
+        _worker.Dispose();
         lock (_gate)
         {
             _disposed = true;

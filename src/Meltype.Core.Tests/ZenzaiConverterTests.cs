@@ -105,6 +105,39 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Budget_AnswersFromTheWorker_AndNotifies()
+    {
+        using var server = new FakeServer { Answer = p => p.Contains("キョウ") ? "今日</s>" : "" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        using var ready = new ManualResetEventSlim();
+        zenzai.ResultReady += ready.Set;
+        zenzai.Budget.Start(0);
+
+        Assert.True(zenzai.ConvertClauses("きょう", "朝") is null, "答えが無ければ待たない");
+        Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
+        Assert.True(zenzai.ConvertClauses("きょう", "朝") is [{ Text: "今日" }], "届いた答えを返す");
+        Assert.Equal(1, server.Prompts.Count, "同じ要求を 2 回送らない");
+
+        // 答えが要るときは Budget の間だけ待つ
+        zenzai.Budget.Start(3000);
+        server.Answer = _ => "明日</s>";
+        Assert.True(zenzai.ConvertClauses("あした", "朝") is [{ Text: "明日" }], "Budget の間は待って答える");
+    }
+
+    [Test]
+    public static void Budget_DoesNotNotifyWhenThereIsNoNewText()
+    {
+        using var server = new FakeServer { Answer = p => "かんたん</s>" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        var notified = 0;
+        zenzai.ResultReady += () => Interlocked.Increment(ref notified);
+        zenzai.Budget.Start(3000);
+        // 読みのまま (変換していない) の答えは表示を変えない
+        Assert.True(zenzai.ConvertClauses("かんたん") is null, "変換していない");
+        Assert.Equal(0, Volatile.Read(ref notified));
+    }
+
+    [Test]
     public static void NoContext_UsesNeutralSentenceStart()
     {
         // 前の文脈が無い入力は、モデルが迷う (文脈なしの きょう → 強) ので、文の始まりの合図「。」を文脈として渡す

@@ -55,6 +55,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         var resolved = new CompositionOptions
         {
             LiveConversion = options.LiveConversion,
+            BackgroundConversion = true,
             DirectMode = options.DirectMode,
             ClassifyDirect = options.ClassifyDirect,
             DirectDecided = options.DirectDecided,
@@ -121,6 +122,11 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed);
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
+        _hybrid.ResultReady += () =>
+        {
+            if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(() => Safely(() => Controller.RefreshConversion()));
+            ConversionReady?.Invoke();
+        };
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
         Controller.Corrected += correction => Corrections.Add(correction with { Zenzai = options.UseZenzai() });
         if (options.Engine() != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
@@ -162,6 +168,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         }, settings, directModeDetection);
 
     public CompositionController Controller { get; }
+
+    /// <summary>背景の変換の結果が届いた (Meltype IME の入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
+    public event Action? ConversionReady;
 
     /// <summary>入力言語による制限。フックで保留した後・タイマーで判定する前にも確かめる。</summary>
     public Func<bool> InputAllowed { get; set; } = () => true;

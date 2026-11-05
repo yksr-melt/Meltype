@@ -123,6 +123,11 @@ public sealed record CompositionOptions
     /// <summary>打ったそばから漢字に変換して見せるか。</summary>
     public Func<bool> LiveConversion { get; init; } = () => false;
 
+    /// <summary>
+    /// 変換エンジン (IBackgroundConverter) を入力スレッドで待たない。結果が届いたら、ホストが入力スレッドで RefreshConversion を呼ぶ。
+    /// </summary>
+    public bool BackgroundConversion { get; init; }
+
     /// <summary>かな漢字変換のエンジン (Windows の CompositionService が Mozc / Microsoft IME を選ぶのに使う)。</summary>
     public Func<Config.ConversionEngine> Engine { get; init; } = () => Config.ConversionEngine.System;
 
@@ -339,6 +344,9 @@ public sealed class CompositionController
     /// </summary>
     private const int LiveConversionMinLength = 4;
 
+    /// <summary>Space・確定など、結果が今すぐ要る 1 回の入力で変換エンジンを待つ時間の合計。Meltype IME の DLL の応答期限 (800ms、TextService.h) より短くする。</summary>
+    private const int InputBudgetMs = 400;
+
     /// <summary>候補の一覧の 1 ページの数 (変換ボックス・Linux の候補の一覧と合わせる)。数字キー 1〜9 でこのページの中から選ぶ。</summary>
     internal const int CandidatePageSize = 9;
 
@@ -360,6 +368,7 @@ public sealed class CompositionController
     private readonly Dictionary<string, string> _conversionCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _standaloneCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, string Text)>> _liveCache = new(StringComparer.Ordinal);
+    private readonly ConversionBudget? _budget;
     private readonly HashSet<int> _swallowedShift = [];
     private readonly HashSet<int> _swallowedControl = [];
     private readonly HashSet<int> _replayedDown = [];
@@ -430,6 +439,8 @@ public sealed class CompositionController
         _text = new CompositionText(detector);
         _detector = detector;
         _converter = converter;
+        _budget = options?.BackgroundConversion == true ? (converter as IBackgroundConverter)?.Budget : null;
+        _budget?.Start(0);
         _host = host;
         _options = options ?? new CompositionOptions();
         _text.Manual = () => _options.Manual();
@@ -463,6 +474,7 @@ public sealed class CompositionController
         {
             while (_gate.TryDequeue(out var input))
             {
+                _budget?.Start(InputBudgetMs);
                 if (input.Key is { } key) HandleKey(key);
                 else if (input.Mouse is { } mouse) HandleMouse(mouse);
                 else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
@@ -483,6 +495,20 @@ public sealed class CompositionController
             }
             // 解放しようとした間に新しい入力が届いた。続けて処理する。
         }
+    }
+
+    /// <summary>
+    /// 背景の変換の結果が届いた。入力スレッドで呼ぶ。変換エンジンが使えなかった間の結果を捨てて、入力中の表示を作り直す。
+    /// 変換中 (候補を開いた後) の文節と候補は置き換えない。表示を作り直したなら true。
+    /// </summary>
+    public bool RefreshConversion()
+    {
+        _liveCache.Clear();
+        _conversionCache.Clear();
+        _standaloneCache.Clear();
+        if (_text.IsEmpty || _converting) return false;
+        UpdateView();
+        return true;
     }
 
     /// <summary>定期的に呼ぶ。英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
@@ -549,6 +575,7 @@ public sealed class CompositionController
 
     internal void CommitPending(bool preserveLatinRaw, bool preserveText)
     {
+        _budget?.Start(InputBudgetMs);
         if (_heldLetters.Length > 0) ReleaseHeldAsEnglish();
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
@@ -2836,20 +2863,24 @@ public sealed class CompositionController
     private string LiveConvert(string kana)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') < LiveConversionMinLength) return kana;
+        if (!CountsAsLive(kana)) return kana;
         return string.Concat(LiveClauses(kana).Select(c => c.Text));
     }
+
+    private static bool CountsAsLive(string kana) => kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') >= LiveConversionMinLength;
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     private List<(string Reading, string Text)> LiveClauses(string kana)
     {
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
     }
+
+    private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithoutWaiting(convert);
 
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private string CurrentDisplay(bool final) =>
@@ -2873,7 +2904,11 @@ public sealed class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
-        var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
+        // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
+        var text = converting ? string.Concat(_clauses.Select(c => c.Text))
+            : _budget is not null && !_options.EnterCommitsAsShown()
+                ? _text.Display(final: true, _options.LiveConversion() ? kana => CountsAsLive(kana) ? string.Concat(ConvertJapanese(kana).Select(c => c.Text)) : kana : null)
+                : CurrentDisplay(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
         if (!converting && _text.Mode == DisplayMode.Auto && !_text.KanaInput && _text.PrecedingEnglish == true && CurrentDisplay(final: false) is { Length: > 0 } shown &&
@@ -3349,7 +3384,7 @@ public sealed class CompositionController
         if (!_options.ShowCandidatesWhileTyping() || _text.Mode != DisplayMode.Auto || _text.KanaInput || _text.IsAlphanumeric || _text.IsEmpty) return null;
         var kana = _text.AllKana(final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = JapaneseCandidates(kana, null).Take(5).ToList();
+        var candidates = WithoutWaiting(() => JapaneseCandidates(kana, null).Take(5).ToList());
         return candidates.Count > 1 ? candidates : null;
     }
 

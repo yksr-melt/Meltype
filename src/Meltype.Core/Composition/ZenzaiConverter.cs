@@ -51,10 +51,14 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private Task? _starting;
     private bool _ready;
     private volatile bool _disposed;
-    private int _failures;
+    private volatile int _failures;
+    private volatile bool _hasAnswered;
+    private readonly LatestRequestWorker<LiveRequest> _worker;
+
+    // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
+    private const int SettleMs = 60;
 
     // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず今までの変換エンジンに任せる。
-    // ライブ変換は 1 打鍵ごとに UI スレッドで変換を頼むので、遅いままだと入力が止まる
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
@@ -68,6 +72,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         _modelPath = modelPath;
         _timeoutMs = timeoutMs;
         _device = device;
+        _worker = new LatestRequestWorker<LiveRequest>(ProcessBackground, SettleMs);
     }
 
     /// <summary>
@@ -109,7 +114,11 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     public bool IsResting => Environment.TickCount64 < Interlocked.Read(ref _pausedUntil);
 
     /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
-    public bool HasAnswered { get; private set; }
+    public bool HasAnswered => _hasAnswered;
+
+    public ConversionBudget Budget { get; internal set; } = new();
+
+    public event Action? ResultReady;
 
     /// <summary>サーバーの起動をバックグラウンドで始める (入力を始める前に呼ぶ)。</summary>
     public void WarmUp()
@@ -132,6 +141,23 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             EnsureStarting();
             if (!_ready || _endpoint is null) return null;
         }
+        if (!Budget.Limited) return ConvertNow(hiragana, context, key);
+        var request = new LiveRequest(hiragana, context, key);
+        _worker.Submit(request);
+        if (!_worker.Wait(request, Budget.RemainingMs)) return null;
+        lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
+    }
+
+    private readonly record struct LiveRequest(string Hiragana, string Context, string Key);
+
+    private void ProcessBackground(LiveRequest request)
+    {
+        // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)
+        if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+    }
+
+    private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)
+    {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
         // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
@@ -141,7 +167,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         {
             if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
             if (answer is null && !slow) _failures++;
-            else if (answer is not null) { _failures = 0; HasAnswered = true; }
+            else if (answer is not null) { _failures = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;
@@ -189,7 +215,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             var content = json.RootElement.TryGetProperty("content", out var c) ? c.GetString() : null;
             return Clean(content);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException or ObjectDisposedException)
         {
             return null;
         }
@@ -262,6 +288,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 if (Ping(endpoint))
                 {
                     lock (_gate) { _endpoint = endpoint; _ready = true; }
+                    ResultReady?.Invoke();
                     return;
                 }
                 Thread.Sleep(200);
@@ -411,6 +438,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     public void Dispose()
     {
+        _worker.Dispose();
         Process? process;
         lock (_gate)
         {
