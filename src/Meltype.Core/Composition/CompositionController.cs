@@ -501,6 +501,8 @@ public sealed class CompositionController
         _conversionCache.Clear();
         _standaloneCache.Clear();
         if (_text.IsEmpty || _converting) return false;
+        // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
+        if (_predictionIndex < 0) _predictionKey = "\u0000";
         UpdateView();
         return true;
     }

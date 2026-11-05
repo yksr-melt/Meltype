@@ -773,7 +773,8 @@ void TextService::FinishConversionWait() {
     const int generation = conversionWait_.get();
     // つながらないときは次の Apply までやり直さない (Meltype.exe が無いときに空回りしない)
     if (generation < 0) return;
-    const bool changed = conversionGeneration_ >= 0 && generation != conversionGeneration_;
+    // 最初の wait (世代 -1) も、受け付ける前に届いた結果を反映するので changed にする
+    const bool changed = generation != conversionGeneration_;
     conversionGeneration_ = generation;
     if (composition_ == nullptr) {
         // 入力していない間はつながりを持たない (全アプリの全スレッドの分がつながり続ける)

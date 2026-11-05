@@ -129,6 +129,37 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Refresh_RebuildsPredictionsFromTheArrivedClauses()
+    {
+        // 最後の文節 (とる) の予測は、文節が届くまで出せない (Prediction_FromLastClause の非同期の経路)
+        using var release = new ManualResetEventSlim();
+        using var ready = new ManualResetEventSlim();
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) =>
+            {
+                release.Wait(10000);
+                return reading == "たんいをとる" ? [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")] : [new ConversionClause(reading, reading)];
+            },
+            _ => []);
+        converter.Budget.Enable();
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("とることができる", "取ることができる");
+        var session = new MeltypeSession(CompositionTests.Detector, converter,
+            new CompositionOptions { LiveConversion = () => true, Predictor = new Predictor(phrases, null, null), Predictions = () => true }, () => new Settings());
+        Assert.Equal(0, SessionFacadeTests.Type(session, "tanniwotoru")[^1].View?.Predictions?.Count ?? 0);
+
+        release.Set();
+        CompositionView? view = null;
+        Assert.True(SpinWait.SpinUntil(() => (view = session.RefreshConversion()?.View)?.Predictions?.Count > 0, 5000), "文節が届いたら予測が出る");
+        Assert.Equal("単位を取る", view?.Text);
+        Assert.Equal("取ることができる", string.Join(",", view?.Predictions ?? []));
+
+        // 予測を選んでいる間に結果が届いても、選んでいる候補はそのまま
+        Assert.Equal(0, SessionFacadeTests.Type(session, "\t")[^1].View?.SelectedPrediction);
+        Assert.Equal(0, session.RefreshConversion()?.View?.SelectedPrediction);
+    }
+
+    [Test]
     public static void Refresh_DoesNothingWithoutComposition()
     {
         using var converter = Slow();
