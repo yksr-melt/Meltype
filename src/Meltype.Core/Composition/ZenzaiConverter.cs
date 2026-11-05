@@ -17,7 +17,7 @@ namespace Meltype.Composition;
 ///
 /// 読み (ひらがな) をカタカナにして、zenz v3 系の入力の形 (U+EE02 文脈 U+EE00 読み U+EE01) で llama-server の /completion に頼み、
 /// 貪欲に生成した文字列を変換結果にする。サーバーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
-/// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す (変換は UI スレッドで動く)。
+/// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す。
 /// 結果は文節に区切らず、読み全体 1 つの文節で返す。
 /// </summary>
 public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
@@ -104,7 +104,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <summary>llama-server と GGUF ファイルが指定の場所にあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => _fixedEndpoint is not null || File.Exists(_serverPath) && File.Exists(_modelPath);
 
-    /// <summary>使えるか。何度も失敗したら諦める (毎回起動し直して入力が遅くなるのを避ける)。</summary>
+    /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3;
 
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>

@@ -14,7 +14,7 @@ namespace Meltype.Composition;
 /// やり取り (UTF-8、1 行ずつ): 「C[TAB]前の文字列[TAB]読み」を送ると、文節ごとに「読み[US]候補1[US]候補2…」を [RS] でつないだ 1 行が返る。
 /// ヘルパーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgroundConverter, IDisposable
+public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
@@ -37,9 +37,6 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
     private long _candidateCacheHits;
     private long _helperCalls;
     private long _helperTicks;
-    // 起動はバックグラウンドで行い、そのあいだの変換は待たずに null を返す (変換は UI スレッドで動くので、READY を待つと入力が止まる)
-    private Task? _starting;
-    private bool _started;
 
     // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
     private volatile bool _missingDependency;
@@ -77,7 +74,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => File.Exists(_helperPath);
 
-    /// <summary>使えるか。何度も失敗したら諦める (毎回起動し直して入力が遅くなるのを避ける)。</summary>
+    /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3 && !_missingDependency;
 
     public string? Convert(string hiragana) =>
@@ -88,7 +85,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
 
     /// <summary>
     /// ConvertClauses と同じ文節と、この変換で受け取った文節ごとの候補。
-    /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない (聞き直すと入力が待たされる)。
+    /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
     /// </summary>
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null)
     {
@@ -149,7 +146,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
         try
         {
             var started = Stopwatch.GetTimestamp();
-            if (Start() is not { } process) return null;
+            var process = Start();
 
             process.StandardInput.Write(request + "\n");
             process.StandardInput.Flush();
@@ -202,11 +199,36 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
 
     private void ProcessBackground((string Context, string Reading) request)
     {
+        // 読みが空の要求は WarmUp。起動だけして知らせる
+        if (request.Reading.Length == 0)
+        {
+            if (StartNow()) ResultReady?.Invoke();
+            return;
+        }
         Request(request.Context, request.Reading);
         // 失敗 (キャッシュに入らない) は知らせない。知らせると再描画がまた同じ要求を出して、失敗のたびに繰り返す
         bool cached;
         lock (_gate) cached = _conversions.ContainsKey(request.Context + "\t" + request.Reading);
         if (cached) ResultReady?.Invoke();
+    }
+
+    private bool StartNow()
+    {
+        lock (_gate)
+        {
+            if (_disposed || !IsAvailable) return false;
+            try
+            {
+                Start();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
+                Fail();
+                return false;
+            }
+        }
     }
 
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Request(string context, string reading)
@@ -296,53 +318,12 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
     // タブ・改行は区切りに使うので空白にする。
     private static string Clean(string text) => text.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
 
-    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければバックグラウンドで起動して null を返す。
-    /// WarmUp を呼ばずに初めて変換するとき (テストの道具など) だけは、その場で起動して待つ。</summary>
-    private Process? Start()
+    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければ起動して READY を待つ。入力スレッドは _gate を待たないので、入力は止まらない。</summary>
+    private Process Start()
     {
         if (_process is { HasExited: false } running) return running;
         _process?.Dispose();
-        _process = null;
-        if (_starting is { IsCompleted: false }) return null;
-        if (!_started)
-        {
-            _started = true;
-            return _process = Launch();
-        }
-        StartInBackground();
-        return null;
-    }
-
-    /// <summary>バックグラウンドで起動する (_gate の中で呼ぶ)。READY を待つあいだは _gate を持たない。</summary>
-    private void StartInBackground()
-    {
-        _started = true;
-        _starting = Task.Run(() =>
-        {
-            try
-            {
-                var process = Launch();
-                lock (_gate)
-                {
-                    if (_disposed)
-                    {
-                        try { process.Kill(); } catch { }
-                        process.Dispose();
-                        return;
-                    }
-                    _process = process;
-                }
-                ResultReady?.Invoke();
-            }
-            catch (Exception ex)
-            {
-                lock (_gate)
-                {
-                    Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-                    Fail();
-                }
-            }
-        });
+        return _process = Launch();
     }
 
     private Process Launch()
@@ -420,13 +401,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
     }
 
     /// <summary>起動しておく (最初の変換で待たないように)。</summary>
-    public void WarmUp()
-    {
-        lock (_gate)
-        {
-            if (!_started && IsAvailable) StartInBackground();
-        }
-    }
+    public void WarmUp() => _worker.Submit(("", ""));
 
     public void Dispose()
     {

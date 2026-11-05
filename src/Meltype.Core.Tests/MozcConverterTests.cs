@@ -54,6 +54,7 @@ internal static class MozcConverterTests
     {
         var profile = Path.Combine(Path.GetTempPath(), FakeHelperProfile);
         using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        mozc.Budget.Enable();
 
         // 起動しているあいだ (READY を待っているあいだ) の変換は、待たずに null を返す (呼び出し側が Microsoft IME で変換する)
         mozc.WarmUp();
@@ -63,7 +64,9 @@ internal static class MozcConverterTests
         Assert.True(WaitConverted(mozc, "い"), "起動したら変換する");
 
         // ヘルパーが落ちたら、起動し直しを待たずに null を返し、起動し直したらまた変換する
+        mozc.Budget.Start(5000);
         Assert.True(mozc.ConvertClauses("おちる") is null, "落ちた");
+        mozc.Budget.Start(0);
         watch.Restart();
         Assert.True(mozc.ConvertClauses("う") is null, "起動し直しを待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動し直しを待たない ({watch.ElapsedMilliseconds}ms)");

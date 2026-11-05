@@ -360,8 +360,6 @@ public sealed class CompositionController
     private readonly IKanjiConverter _converter;
     private readonly ICompositionHost _host;
     private readonly CompositionOptions _options;
-    private readonly Dictionary<string, string> _conversionCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _standaloneCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, string Text)>> _liveCache = new(StringComparer.Ordinal);
     private readonly ConversionBudget? _budget;
     private readonly HashSet<int> _swallowedShift = [];
@@ -498,8 +496,6 @@ public sealed class CompositionController
     public bool RefreshConversion()
     {
         _liveCache.Clear();
-        _conversionCache.Clear();
-        _standaloneCache.Clear();
         if (_text.IsEmpty || _converting) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
         if (_predictionIndex < 0) _predictionKey = "\u0000";
@@ -2828,15 +2824,7 @@ public sealed class CompositionController
         if (_options.History?.Get(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
-    /// <summary>同じかなを何度も変換しないようにキャッシュする。</summary>
-    private string Convert(string kana)
-    {
-        if (_conversionCache.TryGetValue(kana, out var cached)) return cached;
-        var converted = NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
-        if (_conversionCache.Count > 256) _conversionCache.Clear();
-        _conversionCache[kana] = converted;
-        return converted;
-    }
+    private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
 
     /// <summary>
     /// 文の中での変換結果がある文節の候補に足す「その読みだけの変換」。Zenzai を使える変換エンジンでも Zenzai には頼まない (IStandaloneConverter)。
@@ -2845,11 +2833,7 @@ public sealed class CompositionController
     private string Standalone(string kana)
     {
         if (_converter is not IStandaloneConverter standalone) return Convert(kana);
-        if (_standaloneCache.TryGetValue(kana, out var cached)) return cached;
-        var converted = NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
-        if (_standaloneCache.Count > 256) _standaloneCache.Clear();
-        _standaloneCache[kana] = converted;
-        return converted;
+        return NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
     }
 
     /// <summary>

@@ -1431,7 +1431,6 @@ bool TextService::Request(const std::string& json, JsonValue& reply, DWORD timeo
     if (ownProcess_ && !request.empty() && request.back() == '}') {
         request.insert(request.size() - 1, ",\"tid\":" + std::to_string(GetCurrentThreadId()));
     }
-    // 初めての変換は Mozc の起動などで時間がかかることがあるので、少し長めに待つ
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
     if (!ParseJson(response, reply)) {
         TipLog(L"応答を読めません");
