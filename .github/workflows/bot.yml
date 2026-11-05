@@ -249,17 +249,17 @@ jobs:
         with:
           sparse-checkout: bots
           persist-credentials: false
-      # PR のコードが作った artifact を展開する前に、main の bot の準備を済ませる
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: bots/package.json
       - run: bun install --frozen-lockfile --production --ignore-scripts
         working-directory: bots
+      # PR のコードが作った artifact は、bun が設定を読むワークスペースの外に展開する
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
           name: bot-results
-          path: results/
+          path: ${{ runner.temp }}/bot-results
       - id: app
         if: vars.BOT_APP_ID != ''
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -278,4 +278,4 @@ jobs:
           BOT_SHA: ${{ needs.parse.outputs.sha }}
           BOT_COMMENT_ID: ${{ needs.parse.outputs.comment }}
           BOT_JOB_RESULT: ${{ needs.run.result == 'success' && 'success' || needs.pr.result == 'success' && 'success' || 'failure' }}
-          BOT_RESULTS: results
+          BOT_RESULTS: ${{ runner.temp }}/bot-results
