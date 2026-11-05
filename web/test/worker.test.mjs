@@ -293,6 +293,23 @@ describe("R2 が無いとき", () => {
   it("掃除の Cron が R2 に触らずに動く", async () => {
     await cleanup(env);
   });
+
+  it("届いた添付があっても、報告の応答で R2 が無いことを知らせる", async () => {
+    env.FILES = new FakeR2();
+    const created = await (await report({ form: "idea", fields: { problem: "p", idea: "i" }, files: [{ name: "shot.png", size: PNG.length }] })).json();
+    const put = await call(`/api/reports/${created.id}/files/0`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${created.uploadToken}`, "content-length": String(PNG.length), "content-type": "application/octet-stream" },
+      body: PNG,
+    });
+    assert.equal(put.status, 200);
+    const headers = { "cf-access-jwt-assertion": await jwt(goodClaims()) };
+    assert.equal((await (await call(`/api/dashboard/reports/${created.id}`, { headers })).json()).filesAvailable, true);
+    delete env.FILES;
+    const body = await (await call(`/api/dashboard/reports/${created.id}`, { headers })).json();
+    assert.equal(body.filesAvailable, false);
+    assert.ok(body.attachments[0].uploaded_at);
+  });
 });
 
 describe("レートリミット (#3)", () => {

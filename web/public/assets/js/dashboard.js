@@ -138,6 +138,7 @@ function fileUrl(report, attachment, download) {
 function attachmentHtml(report, attachment) {
   const head = `<div class="attach-head">${icon(GROUP_ICONS[attachment.grp] || "clip")}<b title="${escapeHtml(attachment.name)}">${escapeHtml(attachment.name)}</b><small>${formatBytes(attachment.size)}</small>`;
   if (!attachment.uploaded_at) return `<div class="attach">${head}<span class="badge is-pink">届いていません</span></div></div>`;
+  if (report.filesAvailable === false) return `<div class="attach">${head}<span class="badge is-pink">添付の置き場が無いため開けません</span></div></div>`;
   const links = `<a href="${fileUrl(report, attachment, false)}" target="_blank" rel="noopener">開く</a><a href="${fileUrl(report, attachment, true)}">保存</a></div>`;
   if (attachment.grp === "image") return `<div class="attach">${head}${links}<a href="${fileUrl(report, attachment, false)}" target="_blank" rel="noopener"><img src="${fileUrl(report, attachment, false)}" alt="${escapeHtml(attachment.name)}" loading="lazy"></a></div>`;
   if (attachment.grp === "video") return `<div class="attach">${head}${links}<video src="${fileUrl(report, attachment, false)}" controls preload="metadata"></video></div>`;

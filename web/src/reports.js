@@ -251,7 +251,8 @@ export async function getReport(env, id) {
   const report = await env.DB.prepare("SELECT id, form, title, fields, status, created_at FROM reports WHERE id = ?").bind(id).first();
   if (!report) return error(404, "その報告は見つかりません");
   const { results } = await env.DB.prepare("SELECT idx, name, mime, grp, size, uploaded_at FROM attachments WHERE report_id = ? ORDER BY idx").bind(id).all();
-  return json({ ...report, fields: JSON.parse(report.fields), attachments: results });
+  // R2 (添付の置き場) が無いと、届いた添付も開けない。ダッシュボードが 404 になるリンクを出さないために知らせる
+  return json({ ...report, fields: JSON.parse(report.fields), attachments: results, filesAvailable: Boolean(env.FILES) });
 }
 
 function parseRange(header, size) {
