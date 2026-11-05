@@ -229,6 +229,70 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Callback_IsCalledFromOneThreadAtATime()
+    {
+        // Mac の変換エンジン (MeltypeConverter) はスレッドセーフでない。文節と候補を重ねて呼ばない
+        var running = 0;
+        var overlapped = false;
+        void Enter()
+        {
+            if (Interlocked.Increment(ref running) != 1) overlapped = true;
+            Thread.Sleep(5);
+            Interlocked.Decrement(ref running);
+        }
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) => { Enter(); return [new ConversionClause(reading, reading + "!")]; },
+            reading => { Enter(); return [reading + "?"]; });
+        converter.Budget.Start(0);
+        var notified = 0;
+        converter.ResultReady += () => Interlocked.Increment(ref notified);
+        for (var i = 0; i < 40; i++)
+        {
+            converter.ConvertClauses("よみ" + i);
+            converter.Candidates("よみ" + i);
+            Thread.Sleep(2);
+        }
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) > 0, 5000), "結果が届く");
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref running) == 0, 5000), "ワーカーが止まる");
+        Assert.True(!overlapped, "同時に呼ばない");
+    }
+
+    [Test]
+    public static void Callback_AnswersLater_AndWaitsOnlyWithinTheBudget()
+    {
+        using var release = new ManualResetEventSlim();
+        using var ready = new ManualResetEventSlim();
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) => { release.Wait(); return [new ConversionClause(reading, "答え")]; },
+            _ => ["候補"]);
+        converter.ResultReady += ready.Set;
+        converter.Budget.Start(0);
+
+        var watch = Stopwatch.StartNew();
+        Assert.True(converter.ConvertClauses("よみ") is null, "答えが無ければ待たない");
+        Assert.True(watch.ElapsedMilliseconds < 1000, $"待たない ({watch.ElapsedMilliseconds}ms)");
+        release.Set();
+        Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
+        Assert.Equal("答え", converter.Convert("よみ"));
+
+        // 候補は Budget の間だけ待てば、その場で受け取れる
+        converter.Budget.Start(3000);
+        Assert.Equal("候補", string.Join(",", converter.Candidates("よみ")));
+    }
+
+    [Test]
+    public static void Callback_IsSynchronousWithoutTheBudget()
+    {
+        // --self-test など、meltype_set_conversion_ready を呼ばないフロントは今までどおり呼んだスレッドで答える
+        var thread = -1;
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) => { thread = Environment.CurrentManagedThreadId; return [new ConversionClause(reading, "答え")]; },
+            _ => []);
+        Assert.Equal("答え", converter.Convert("よみ"));
+        Assert.Equal(Environment.CurrentManagedThreadId, thread);
+    }
+
+    [Test]
     public static void Mozc_AnswersFromTheWorker_AndReportsReadiness()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);

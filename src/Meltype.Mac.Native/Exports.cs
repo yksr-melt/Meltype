@@ -16,7 +16,7 @@ namespace Meltype.Mac;
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Swift 側が登録する関数 (漢字変換・候補・英単語の判定) が返す文字列は malloc したもので、こちらで free する。
-/// Input Method Kit はメインスレッドから呼ぶので、排他はしない。
+/// Input Method Kit はメインスレッドから呼ぶので、排他はしない。漢字変換・候補の関数はワーカーのスレッドから呼ぶ (BackgroundCallbackConverter)。
 /// </summary>
 public static unsafe class Exports
 {
@@ -73,8 +73,8 @@ public static unsafe class Exports
         try
         {
             var session = s_mozc is { } mozc
-                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker(), backgroundConversion: true)
-                : MeltypeSession.CreateDefault(new CallbackConverter(), MoreCandidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true);
+                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker(), backgroundConversion: s_conversionReady)
+                : MeltypeSession.CreateDefault(s_callback, s_callback.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true, backgroundConversion: s_conversionReady);
             return GCHandle.ToIntPtr(GCHandle.Alloc(session));
         }
         catch (Exception ex)
@@ -85,14 +85,28 @@ public static unsafe class Exports
     }
 
     /// <summary>
-    /// 背景の変換の結果が届いたら notify を呼ぶ (Linux 版)。meltype_init_mozc の後に 1 回呼ぶ。notify はワーカーのスレッドで呼ばれるので、
-    /// フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
+    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_create の前に 1 回呼ぶ。
+    /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
+    /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、変換は同期のまま。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
     public static void SetConversionReady(delegate* unmanaged<void> notify)
     {
-        if (s_mozc is { } mozc) mozc.ResultReady += () => notify();
+        s_conversionReady = true;
+        if (s_mozc is { } mozc)
+        {
+            mozc.ResultReady += () => notify();
+            return;
+        }
+        s_callback.ResultReady += () => notify();
+        s_callback.WarmUp();
     }
+
+    /// <summary>meltype_set_conversion_ready を呼んだか。</summary>
+    private static bool s_conversionReady;
+
+    /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
+    private static readonly BackgroundCallbackConverter s_callback = new(CallbackClauses, MoreCandidates);
 
     /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
@@ -346,35 +360,29 @@ public static unsafe class Exports
         return text is null ? [] : text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private sealed class CallbackConverter : IKanjiConverter
+    private static IReadOnlyList<ConversionClause>? CallbackClauses(string hiragana, string? context)
     {
-        public string? Convert(string hiragana) =>
-            ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        if (s_clauses == null) return null;
+        var input = ToUtf8(hiragana, out var inputBuffer);
+        var contextPointer = context is null ? null : ToUtf8(context, out var contextBuffer);
+        try
         {
-            if (s_clauses == null) return null;
-            var input = ToUtf8(hiragana, out var inputBuffer);
-            var contextPointer = context is null ? null : ToUtf8(context, out var contextBuffer);
-            try
+            var text = TakeUtf8(s_clauses(input, contextPointer));
+            if (text is null) return null;
+            var clauses = new List<ConversionClause>();
+            foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
             {
-                var text = TakeUtf8(s_clauses(input, contextPointer));
-                if (text is null) return null;
-                var clauses = new List<ConversionClause>();
-                foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var tab = line.IndexOf('\t');
-                    if (tab <= 0) return null;
-                    clauses.Add(new ConversionClause(line[..tab], line[(tab + 1)..]));
-                }
-                // 読みをつなげると元のひらがなになること (Meltype の文節の扱いの前提)。
-                return clauses.Count > 0 && string.Concat(clauses.Select(c => c.Reading)) == hiragana ? clauses : null;
+                var tab = line.IndexOf('\t');
+                if (tab <= 0) return null;
+                clauses.Add(new ConversionClause(line[..tab], line[(tab + 1)..]));
             }
-            finally
-            {
-                NativeMemory.Free(inputBuffer);
-                if (contextPointer != null) NativeMemory.Free(contextPointer);
-            }
+            // 読みをつなげると元のひらがなになること (Meltype の文節の扱いの前提)。
+            return clauses.Count > 0 && string.Concat(clauses.Select(c => c.Reading)) == hiragana ? clauses : null;
+        }
+        finally
+        {
+            NativeMemory.Free(inputBuffer);
+            if (contextPointer != null) NativeMemory.Free(contextPointer);
         }
     }
 
