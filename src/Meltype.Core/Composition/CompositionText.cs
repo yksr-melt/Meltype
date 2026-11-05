@@ -428,6 +428,9 @@ public sealed class CompositionText
     /// <summary>水平線・front matter の区切り (3 個以上の -) だけの入力か。打った半角のまま表示・確定する。</summary>
     public bool IsHorizontalRule => !KanaInput && Raw.Length >= 3 && Raw.All(c => c == '-');
 
+    /// <summary>変換区間に * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
+    private string HalfWidthStars(string text) => !KanaInput && Raw.Count(c => c == '*') >= 2 ? text.Replace('＊', '*') : text;
+
     /// <summary>自動判定の区間分け (Mode が Auto のときに使う)。</summary>
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
     public IReadOnlyList<CompositionSegment> Segments()
@@ -839,7 +842,7 @@ public sealed class CompositionText
             builder.Append(convert is not null && kana.Length > 0 ? convert(kana) : kana);
             builder.Append(pending);
         }
-        return builder.ToString();
+        return HalfWidthStars(builder.ToString());
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>

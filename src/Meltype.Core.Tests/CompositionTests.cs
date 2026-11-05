@@ -3757,6 +3757,41 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void MarkdownMarker_HalfWidthStars()
+    {
+        // #1301: 変換区間に * が 2 個以上あるときだけ、表示の ＊ を全部半角の * にする (強調 **bold**・*italic*)。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["**"] = "**",
+            ["****"] = "****",
+            ["**kyou**"] = "**きょう**",
+            ["*kyou*"] = "*きょう*",
+            ["*italic*"] = "*italic*",
+            ["*1*"] = "*1*",
+            ["**aiueo**to**kakikukeko**"] = "**あいうえお**と**かきくけこ**",
+            ["*chuui"] = "＊ちゅうい",
+            ["kyou*"] = "きょう＊",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」");
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_StarsSurviveSpaceCommit()
+    {
+        // Space で確定しても、表示と同じ半角のまま (Display を通らない確定の経路)
+        foreach (var typed in new[] { "*italic* ", "**bold** " })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(typed, k.Host.Document, $"「{typed}」");
+        }
+    }
+
+    [Test]
     public static void NotMarkdownMarker_WhenKanaBefore()
     {
         // かなのあとのマーカーは、Space で記号として確定せず、変換を始める。
