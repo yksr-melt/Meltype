@@ -45,10 +45,9 @@ dotnet run --project src/Meltype.Tests -- --context この本は:あつい # 文
 node tools/check-dictionaries.mjs
 ```
 
-- Linux / macOS では `src/Meltype.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
-- `--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。
-- ヘルパーは main の `linux.yml` 成果物 `meltype-linux` の zip 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。
-- `native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+Linux / macOS では `src/Meltype.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
+
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは main の `linux.yml` 成果物 `meltype-linux` の zip 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 
@@ -89,15 +88,13 @@ dotnet format whitespace --folder
 - きょうは → 今日は
 ```
 
-- 英字の入力は打つキーとして扱う。Enter で確定した結果か Space で変換した結果が、期待と完全一致すれば通る。
-- かなの入力は読みとして扱う。変換の候補に期待が含まれれば通る。
-- `→`・`->` を含む行はすべて例として読まれる。補足を同じ行に書くと期待に混ざるので、別の行に書く。
+英字の入力は打つキーとして扱い、Enter で確定した結果か Space で変換した結果が期待と完全一致すれば通る。かなの入力は読みとして扱い、変換の候補に期待が含まれれば通る。
+
+`→`・`->` を含む行はすべて例として読まれる。補足を同じ行に書くと期待に混ざるので、別の行に書く。
 
 ## 設定を足すとき
 
-- ON と OFF のそれぞれに意味がある設定だけを足す。
-- 設定はユーザーの好みであって、判別をサボる理由にはならない。
-- すべての設定項目の追加はユーザーの負担になるので、設定の追加には慎重になる。
+ON と OFF のそれぞれに意味がある設定だけを足す。設定はユーザーの好みであって、判別をサボる理由にはならない。すべての設定項目の追加はユーザーの負担になるので、設定の追加には慎重になる。
 
 ## 守ること
 
