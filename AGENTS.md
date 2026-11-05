@@ -4,7 +4,7 @@
 
 | 場所                         | 中身                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/Meltype.Core`         | OS 非依存の判定・変換コア（Composition / Detection / Input / Config / Diagnostics）。判定・変換を直すときはまずここ |
+| `src/Meltype.Core`         | OS 非依存の判定・変換コア（Composition / Detection / Input / Config / Diagnostics） |
 | `src/Meltype.Core.Tests`   | コアのテスト（どの OS でも動く）                                                                         |
 | `src/Meltype`              | Windows 版（TSF・UI・更新）                                                                       |
 | `src/Meltype.Tests`        | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる）                                                |
