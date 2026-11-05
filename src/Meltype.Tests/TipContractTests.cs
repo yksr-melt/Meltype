@@ -70,12 +70,13 @@ internal static class TipContractTests
                 >= 'a' and <= 'z' => (key - 'a' + 'A', (int)key),
                 _ => throw new ArgumentException($"送れないキー: {key}"),
             };
-            var composing = Composition.GetValueOrDefault(sid) is not null;
-            // DLL はキャレットの前を送る。変換中はキャレットが変換中の文字の後ろにあるので、変換中の文字も入る
-            var field = Document + (Composition.GetValueOrDefault(sid) ?? "");
-            var before = field.Length > 20 ? field[^20..] : field;
-            var reply = Send($"{{\"op\":\"key\",\"sid\":{Json(sid)},\"vk\":{vk},\"ch\":{ch},\"mods\":0,\"before\":{Json(before)},\"after\":\"\"," +
-                $"\"process\":{Json(process)}{(moved ? ",\"moved\":true" : "")}{(composing ? ",\"composing\":true" : "")}}}");
+            // DLL (native/tip の TextService の key) と同じ形で送る: どのキーにも code と direct を付け、
+            // 変換中でなければキャレットの前後 (before・after) を、変換中なら composing だけを送る
+            var surrounding = Composition.GetValueOrDefault(sid) is not null
+                ? ",\"composing\":true"
+                : $",\"before\":{Json(Document.Length > 4000 ? Document[^4000..] : Document)},\"after\":\"\"";
+            var reply = Send($"{{\"op\":\"key\",\"sid\":{Json(sid)},\"vk\":{vk},\"ch\":{ch},\"mods\":0,\"process\":{Json(process)},\"code\":true,\"direct\":false" +
+                $"{(moved ? ",\"moved\":true" : "")}{surrounding}}}");
             Apply(reply, sid);
             // 使わなかった (または受け持たない) キーは、アプリがそのまま入れる
             if (!reply.GetProperty("consumed").GetBoolean() && ch > 0) Document += key;
