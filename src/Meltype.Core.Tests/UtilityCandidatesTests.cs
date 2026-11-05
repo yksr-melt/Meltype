@@ -17,7 +17,7 @@ internal static class UtilityCandidatesTests
 
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => hiragana switch
         {
-            "きょうのひづけ" => [new("きょうの", "今日の"), new("ひづけ", "日付")],
+            "きょうのひづけ" => [new("きょう", "今日"), new("の", "の"), new("ひづけ", "日付")],
             "じこうのあいさつ" => [new("じこうの", "時候の"), new("あいさつ", "挨拶")],
             "10がつ9にち" => [new("10がつ", "10月"), new("9にち", "9日")],
             "10がつ9にちのよてい" => [new("10がつ", "10月"), new("9にちの", "9日の"), new("よてい", "予定")],
@@ -45,7 +45,7 @@ internal static class UtilityCandidatesTests
     {
         var k = new Keyboard(converter: new SplittingConverter());
         k.Type("kyounohiduke ");
-        Assert.True(!Candidates(k).Any(c => c.Contains('年')), "今日の に日付を出さない: " + string.Join(",", Candidates(k)));
+        Assert.True(!Candidates(k).Any(c => c.Contains('年')), "文の途中の 今日 に日付を出さない: " + string.Join(",", Candidates(k)));
 
         var typed = new Keyboard(converter: new SplittingConverter());
         typed.Type("10gatu9nitinoyotei ");

@@ -1815,8 +1815,12 @@ public sealed class CompositionController
     }
 
     /// <summary>読み全体を 1 つの文節にして、いつもの候補とユーティリティ変換の候補を入れたもの。</summary>
-    private Clause UtilityClause(string reading) =>
-        _utilities.Convert(new ConversionRequest(reading, "", JapaneseCandidates), r => [new Clause(r.Kana, false, JapaneseCandidates(r.Kana, null))])[0];
+    private Clause UtilityClause(string reading)
+    {
+        var clause = _utilities.Convert(new ConversionRequest(reading, "", JapaneseCandidates), r => [new Clause(r.Kana, false, JapaneseCandidates(r.Kana, null))])[0];
+        MoveEmojiLast(clause);
+        return clause;
+    }
 
     /// <summary>
     /// 第一候補は入力方式と記号設定を反映した形を優先する。通常の [ ] は設定に従い「」または［］になる。
@@ -2514,6 +2518,7 @@ public sealed class CompositionController
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
+        clause.Generated.Clear();
         if (_options.History?.Get(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
