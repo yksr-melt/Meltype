@@ -3694,6 +3694,8 @@ internal static class CompositionTests
             ["nn-to"] = "んーと",
             // 報告: ca / cu / co で か く こ
             ["cacuco"] = "かくこ", ["iijane"] = "いいじゃね", ["shoucanshi"] = "しょうかんし", ["vanpaia"] = "ゔぁんぱいあ", ["wyiwye"] = "ゐゑ", ["GPL3.0"] = "GPL3.0", ["3.14desu"] = "3.14です", ["oknotasuku"] = "okのたすく",
+            // Markdown 記法の ` を半角にする (#1301)。
+            ["`"] = "`", ["```"] = "```", ["kyouha`made"] = "きょうは`まで",
         };
         foreach (var (typed, expected) in cases)
         {
