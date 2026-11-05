@@ -8,9 +8,17 @@ updates:
     schedule:
       interval: "weekly"
 
+  # bots の依存
+  - package-ecosystem: "bun"
+    directory: "/bots"
+    schedule:
+      interval: "weekly"
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
     groups:

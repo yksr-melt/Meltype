@@ -24,7 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # csharp: src/ / c-cpp: native/ (TSF の TIP・Mozc のヘルパー)・linux/ の fcitx5 / javascript-typescript: web/・.github/bot・tools/
+        # csharp: src/ / c-cpp: native/ (TSF の TIP・Mozc のヘルパー)・linux/ の fcitx5 / javascript-typescript: web/・bots/・tools/
         # python: linux/ の IBus のエンジンなど / actions: .github/workflows
         language: [csharp, c-cpp, javascript-typescript, python, actions]
     runs-on: ubuntu-latest

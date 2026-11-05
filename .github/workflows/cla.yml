@@ -1,4 +1,4 @@
-# 貢献者ライセンス同意 (CLA) の bot。初めて Pull Request を出した人に、コメントで同意してもらう (.github/bot/cla.mjs)。
+# 貢献者ライセンス同意 (CLA) の bot。初めて Pull Request を出した人に、コメントで同意してもらう (bots/cla/main.ts)。
 # pull_request_target は書き込みの権限を持つので、Pull Request のコードはチェックアウトしない (main の bot のスクリプトだけを使う)。
 name: cla
 
@@ -25,8 +25,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.repository.default_branch }}
-          sparse-checkout: .github/bot
+          sparse-checkout: |
+            .github/actions
+            bots
           persist-credentials: false
-      - run: node .github/bot/cla.mjs
+      - uses: ./.github/actions/setup-bots
+      - run: bun bots/cla/main.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}

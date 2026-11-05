@@ -10,7 +10,7 @@ namespace Meltype.Tests;
 /// <summary>
 /// 変更の影響を見るための、よく使う語の判定の一覧 (issue #1196)。
 /// よく使う語の読み (readings.txt) をローマ字にしたものと、よく使う英単語 (english-words.txt) を 1 語ずつ打って確定し、見え方を書き出す。
-/// Pull Request のチェックで main と Pull Request の両方で書き出して比べ、判定が変わった語を一覧にする (.github/bot/pr-checks.mjs impact)。
+/// Pull Request のチェックで main と Pull Request の両方で書き出して比べ、判定が変わった語を一覧にする (bots/pr-checks/main.ts impact)。
 /// 変わった語は必ずしも間違いではない (直したい語が変わるのは当然) ので、失敗にはせず、意図しない変化に気づくための参考にする。
 ///   dotnet run --project src/Meltype.Core.Tests -- --judge-corpus 出力ファイル [ほかの一覧 …]
 /// ほかの一覧 (前に書き出した「語[Tab]見え方」) を渡すと、その語も判定する。main と Pull Request の両方で、

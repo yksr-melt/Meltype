@@ -2,8 +2,8 @@
 // Copyright (C) 2026 yksr-melt
 
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
-import { cell, codeCell } from './markdown.mjs';
+import { test } from 'bun:test';
+import { cell, codeCell } from './markdown.ts';
 
 test('表のセルはバックスラッシュ・改行・リンク・メンションを無害化する', () => {
   assert.equal(cell('a\\|b\r\nc\rd\ne'), 'a\\\\\\|b c d e');

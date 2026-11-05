@@ -2,27 +2,34 @@
 // Copyright (C) 2026 Yukishiro
 //
 // Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) の補助。結果は GitHub の「Summary」に表で出す。
-//   node pr-checks.mjs cases <出力ファイル>        … Pull Request の「確かめること」から、確かめる例を集める
-//   node pr-checks.mjs expect <結果の JSON>        … 例の結果を表にし、外れがあれば失敗
-//   node pr-checks.mjs compare <main の JSON> <Pull Request の JSON>  … 品質テストを比べ、新しく外れた例があれば失敗
-//   node pr-checks.mjs impact <main の一覧> <Pull Request の一覧> [全件の出力]  … よく使う語の判定 (--judge-corpus) を比べ、変わった語を出す (失敗にはしない)
+//   bun bots/pr-checks/main.ts cases <出力ファイル>        … Pull Request の「確かめること」から、確かめる例を集める
+//   bun bots/pr-checks/main.ts expect <結果の JSON>        … 例の結果を表にし、外れがあれば失敗
+//   bun bots/pr-checks/main.ts compare <main の JSON> <Pull Request の JSON>  … 品質テストを比べ、新しく外れた例があれば失敗
+//   bun bots/pr-checks/main.ts impact <main の一覧> <Pull Request の一覧> [全件の出力]  … よく使う語の判定 (--judge-corpus) を比べ、変わった語を出す (失敗にはしない)
 // Pull Request の本文は値として扱うだけ (コマンドとして実行しない)。
 import fs from 'node:fs';
-import { cell, codeCell as code } from './markdown.mjs';
+import * as v from 'valibot';
+import { readEvent } from '../lib/github-api.ts';
+import { cell, codeCell as code } from '../lib/markdown.ts';
 
-const summary = text => fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY ?? '/dev/stdout', text + '\n');
+// Meltype.Core.Tests が書き出す JSON
+type ExpectResult = { ok: boolean; typed: string; expected: string; actual: string; kind: string };
+type EvalCase = { key: string; ok: boolean; detail: string };
+type EvalResult = { pass: number; total: number; cases?: EvalCase[] };
 
-function cases(output) {
-  const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
+const summary = (text: string) => fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY ?? '/dev/stdout', text + '\n');
+
+function cases(output: string) {
+  const event = readEvent(v.looseObject({ pull_request: v.optional(v.looseObject({ body: v.nullish(v.string()) })) }));
   const body = event.pull_request?.body ?? '';
-  const list = [];
+  const list: { typed: string; expected: string }[] = [];
 
   // 「## 確かめること」の下の「入力 → 期待」の行
   const section = body.split(/^##\s*確かめること\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
   for (const line of section.split('\n')) {
     const match = line.replace(/^\s*[-*]\s*/, '').match(/^(.+?)\s*(?:→|->)\s*(.+)$/);
     if (!match || line.trim().startsWith('<!--')) continue;
-    list.push({ typed: match[1].replace(/`/g, '').trim(), expected: match[2].replace(/`/g, '').trim() });
+    list.push({ typed: (match[1] ?? '').replace(/`/g, '').trim(), expected: (match[2] ?? '').replace(/`/g, '').trim() });
   }
 
   fs.writeFileSync(output, list.map(c => `${c.typed}\t${c.expected}`).join('\n') + '\n');
@@ -30,8 +37,8 @@ function cases(output) {
   console.log(`確かめる例: ${list.length} 個`);
 }
 
-function expect(resultFile) {
-  const results = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+function expect(resultFile: string) {
+  const results: ExpectResult[] = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
   const failed = results.filter(r => !r.ok).length;
   summary(`## 確かめることの再現 ${failed === 0 ? '✅' : '❌'}\n`);
   summary('| | 入力 | 期待 | Pull Request の結果 | 比べ方 |\n|---|---|---|---|---|');
@@ -42,20 +49,20 @@ function expect(resultFile) {
   }
 }
 
-function compare(baseFile, prFile) {
-  const pr = JSON.parse(fs.readFileSync(prFile, 'utf8'));
-  let base = null;
+function compare(baseFile: string, prFile: string) {
+  const pr: EvalResult & { cases: EvalCase[] } = JSON.parse(fs.readFileSync(prFile, 'utf8'));
+  let base: EvalResult | null = null;
   try { base = JSON.parse(fs.readFileSync(baseFile, 'utf8')); } catch { /* main に --eval-json がまだ無いか、main をビルドできない */ }
   const baseCases = new Map((base?.cases ?? []).map(c => [c.key, c]));
   const broken = pr.cases.filter(c => !c.ok && baseCases.get(c.key)?.ok === true);
   const fixed = pr.cases.filter(c => c.ok && baseCases.get(c.key)?.ok === false);
   const added = base ? pr.cases.filter(c => !baseCases.has(c.key)) : [];
   const addedFailing = added.filter(c => !c.ok);
-  const rate = r => `${r.pass}/${r.total} (${(r.pass / r.total * 100).toFixed(1)}%)`;
+  const rate = (r: EvalResult) => `${r.pass}/${r.total} (${(r.pass / r.total * 100).toFixed(1)}%)`;
 
   summary(`## 精度の比較 ${broken.length + addedFailing.length === 0 ? '✅' : '❌'}\n`);
   summary(`| | 品質テスト |\n|---|---|\n| main | ${base ? rate(base) : '(比べられません)'} |\n| Pull Request | ${rate(pr)} |\n`);
-  const list = (title, items) => {
+  const list = (title: string, items: EvalCase[]) => {
     if (items.length === 0) return;
     summary(`### ${title} (${items.length})\n`);
     for (const c of items.slice(0, 50)) summary(`- ${cell(c.detail)}`);
@@ -73,10 +80,10 @@ function compare(baseFile, prFile) {
 }
 
 /** 「語[Tab]見え方」の行を読む (無ければ null)。 */
-function readJudged(file) {
+function readJudged(file: string) {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
-  const map = new Map();
+  const map = new Map<string, string>();
   for (const line of text.split('\n')) {
     const tab = line.indexOf('\t');
     if (tab > 0) map.set(line.slice(0, tab), line.slice(tab + 1));
@@ -85,8 +92,8 @@ function readJudged(file) {
 }
 
 /** 変わった語の一覧。両方にある語だけを比べる (辞書に足した・消した語は数えない)。 */
-function judgedChanges(base, pr) {
-  const changes = [];
+function judgedChanges(base: Map<string, string>, pr: Map<string, string>) {
+  const changes: { word: string; before: string; now: string }[] = [];
   for (const [word, now] of pr) {
     const before = base.get(word);
     if (before !== undefined && before !== now) changes.push({ word, before, now });
@@ -94,7 +101,7 @@ function judgedChanges(base, pr) {
   return changes.sort((x, y) => x.word.localeCompare(y.word));
 }
 
-function impact(baseFile, prFile, allFile) {
+function impact(baseFile: string, prFile: string, allFile: string | undefined) {
   const pr = readJudged(prFile), base = readJudged(baseFile);
   summary('## よく使う語の判定の変化 (参考)\n');
   if (!pr || !base) {
@@ -118,8 +125,8 @@ function impact(baseFile, prFile, allFile) {
   console.log(`判定が変わった語: ${changes.length} 語\n${lines.join('\n')}`);
 }
 
-const [mode, a, b] = process.argv.slice(2);
-if (mode === 'cases') cases(a);
-else if (mode === 'expect') expect(a);
-else if (mode === 'compare') compare(a, b);
-else if (mode === 'impact') impact(a, b, process.argv[5]);
+const [mode, a, b, c] = process.argv.slice(2);
+if (mode === 'cases') cases(a!);
+else if (mode === 'expect') expect(a!);
+else if (mode === 'compare') compare(a!, b!);
+else if (mode === 'impact') impact(a!, b!, c);

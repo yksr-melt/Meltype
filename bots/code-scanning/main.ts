@@ -7,17 +7,19 @@
 //   GitHub の bot (github-advanced-security) の英語のコメントはそのまま残る。これは読みやすくするためのまとめ。
 //   指摘が無くなったら、コメントを「新しい指摘はありません」に書き換える (前にコメントしていなければ何もしない)。
 // Pull Request のコードは動かさない。GitHub の API で、Code scanning の結果を読むだけ。
-import fs from 'node:fs';
+import * as v from 'valibot';
+import { createGitHub, readEvent, type Alert, type GitHub } from '../lib/github-api.ts';
 
-const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
-const repo = process.env.GITHUB_REPOSITORY;
-const token = process.env.GITHUB_TOKEN;
+const MARKER = '<!-- meltype-bot --><!-- code-scanning -->';
+const TOOL = 'CodeQL';
 
-const Marker = '<!-- meltype-bot --><!-- code-scanning -->';
-const Tool = 'CodeQL';
+const RunSchema = v.looseObject({
+  head_sha: v.string(),
+  pull_requests: v.nullish(v.array(v.looseObject({ number: v.number() }))),
+});
 
 /** よく出るルールの日本語の説明。無いルールは CodeQL の英語の説明をそのまま出す。 */
-const Rules = {
+const RULES: Record<string, string> = {
   'js/incomplete-sanitization': '文字列のエスケープが足りません (一部の文字しか置き換えていない、またはバックスラッシュを置き換えていない)',
   'js/incomplete-multi-character-sanitization': '複数文字のパターンを 1 回だけ取り除いているため、取り除いた後に同じパターンが残ることがあります',
   'js/regex/missing-regexp-anchor': '正規表現に ^ や $ が無いため、URL などの一部だけに一致して、確かめたつもりの値をすり抜けられます',
@@ -79,7 +81,7 @@ const Rules = {
 };
 
 /** 重要度。security_severity_level (セキュリティのルール) が無ければ、ルールの severity を使う。 */
-const Severities = {
+const SEVERITIES: Record<string, [string, string]> = {
   critical: ['🔴', '重大'],
   high: ['🟠', '高'],
   medium: ['🟡', '中'],
@@ -88,48 +90,26 @@ const Severities = {
   warning: ['🟡', '警告'],
   note: ['⚪', '参考'],
 };
-const Order = Object.keys(Severities);
-
-async function gh(method, url, body) {
-  const response = await fetch(url.startsWith('http') ? url : `${api}/repos/${repo}${url}`, {
-    method,
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'meltype-bot' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`${method} ${url}: ${response.status} ${await response.text()}`);
-  return response.status === 204 ? null : response.json();
-}
-
-/** ref の開いている指摘 (CodeQL のものだけ)。 */
-async function alerts(ref) {
-  const list = [];
-  for (let page = 1; page <= 10; page++) {
-    const batch = await gh('GET', `/code-scanning/alerts?tool_name=${Tool}&state=open&ref=${encodeURIComponent(ref)}&per_page=100&page=${page}`) ?? [];
-    list.push(...batch);
-    if (batch.length < 100) break;
-  }
-  return list;
-}
+const SEVERITY_ORDER = Object.keys(SEVERITIES);
 
 /** base に無い指摘 (Pull Request で新しく出たもの)。番号は ref をまたいで同じ指摘なら同じ。 */
-function newAlerts(prAlerts, baseAlerts) {
+function newAlerts(prAlerts: Alert[], baseAlerts: Alert[]) {
   const base = new Set(baseAlerts.map(a => a.number));
   return prAlerts.filter(a => !base.has(a.number));
 }
 
-const severityOf = alert => alert.rule?.security_severity_level || alert.rule?.severity || 'warning';
+const severityOf = (alert: Alert) => alert.rule?.security_severity_level || alert.rule?.severity || 'warning';
 
 /** 表のセル。パス・メッセージは PR の作者が書けるので、表と Markdown を崩さないようにする。 */
-const cell = text => String(text ?? '').replace(/\r?\n|\r/g, ' ').replace(/[\\|`*_<>[\]]/g, '\\$&').replace(/@/g, '@\u200b');
+const cell = (text: unknown) => String(text ?? '').replace(/\r?\n|\r/g, ' ').replace(/[\\|`*_<>[\]]/g, '\\$&').replace(/@/g, '@\u200b');
 
-function message(list) {
-  const sorted = [...list].sort((a, b) => Order.indexOf(severityOf(a)) - Order.indexOf(severityOf(b)));
+function message(list: Alert[]) {
+  const sorted = [...list].sort((a, b) => SEVERITY_ORDER.indexOf(severityOf(a)) - SEVERITY_ORDER.indexOf(severityOf(b)));
   const rows = sorted.map(a => {
-    const [icon, label] = Severities[severityOf(a)] ?? ['⚪', severityOf(a)];
-    const where = a.most_recent_instance?.location ?? {};
-    const place = `${cell(where.path)}:${where.start_line ?? '?'}`;
-    const ja = Rules[a.rule?.id];
+    const [icon, label] = SEVERITIES[severityOf(a)] ?? ['⚪', severityOf(a)];
+    const where = a.most_recent_instance?.location;
+    const place = `${cell(where?.path)}:${where?.start_line ?? '?'}`;
+    const ja = RULES[a.rule?.id ?? ''];
     const text = ja ? cell(ja) : `${cell(a.rule?.description)} (日本語の説明はまだありません)`;
     return `| ${icon} ${label} | ${place} | ${text} | [#${a.number}](${a.html_url}) |`;
   });
@@ -147,51 +127,44 @@ function message(list) {
   ].join('\n');
 }
 
-async function upsert(number, body) {
-  const comments = await gh('GET', `/issues/${number}/comments?per_page=100`) ?? [];
-  const mine = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(Marker));
+async function upsert(gh: GitHub, number: number, body: string | null) {
+  const mine = await gh.findBotComment(number, MARKER);
   if (!body) {
-    if (mine && !mine.body.includes('✅')) await gh('PATCH', `/issues/comments/${mine.id}`, { body: `${Marker}\n✅ CodeQL の新しい指摘はありません。` });
+    if (mine && !mine.body?.includes('✅')) await gh.updateComment(mine.id, `${MARKER}\n✅ CodeQL の新しい指摘はありません。`);
     return;
   }
-  if (mine) await gh('PATCH', `/issues/comments/${mine.id}`, { body: `${Marker}\n${body}` });
-  else await gh('POST', `/issues/${number}/comments`, { body: `${Marker}\n${body}` });
+  if (mine) await gh.updateComment(mine.id, `${MARKER}\n${body}`);
+  else await gh.postComment(number, `${MARKER}\n${body}`);
 }
 
 /** 終わった CodeQL の実行の Pull Request。フォークからの Pull Request は workflow_run に番号が入らないので、head の SHA で探す。 */
-async function pullRequestOf(run) {
+async function pullRequestOf(gh: GitHub, run: v.InferOutput<typeof RunSchema>) {
   const number = run.pull_requests?.[0]?.number;
-  if (number) return gh('GET', `/pulls/${number}`);
-  for (let page = 1; page <= 5; page++) {
-    const batch = await gh('GET', `/pulls?state=open&per_page=100&page=${page}`) ?? [];
-    const found = batch.find(p => p.head.sha === run.head_sha);
-    if (found) return found;
-    if (batch.length < 100) break;
-  }
-  return null;
+  if (number) return gh.getPull(number);
+  return (await gh.listOpenPulls()).find(p => p.head.sha === run.head_sha) ?? null;
 }
 
 async function main() {
-  const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
-  const run = event.workflow_run;
-  const pr = await pullRequestOf(run);
+  const gh = createGitHub();
+  const run = readEvent(v.looseObject({ workflow_run: RunSchema })).workflow_run;
+  const pr = await pullRequestOf(gh, run);
   if (!pr || pr.state !== 'open') return console.log('開いている Pull Request が見つかりません');
   // 古い commit の結果なら書かない (新しい commit の CodeQL が後で終わり、そのときに書く)
   if (pr.head.sha !== run.head_sha) return console.log(`head が変わっています (${run.head_sha} → ${pr.head.sha})`);
-  const found = newAlerts(await alerts(`refs/pull/${pr.number}/merge`), await alerts(`refs/heads/${pr.base.ref}`));
+  const found = newAlerts(await gh.listOpenAlerts(TOOL, `refs/pull/${pr.number}/merge`), await gh.listOpenAlerts(TOOL, `refs/heads/${pr.base.ref}`));
   for (const a of found) console.log(`#${a.number} ${severityOf(a)} ${a.rule?.id} ${a.most_recent_instance?.location?.path}:${a.most_recent_instance?.location?.start_line}`);
-  await upsert(pr.number, found.length ? message(found) : null);
+  await upsert(gh, pr.number, found.length ? message(found) : null);
 }
 
-/** node .github/bot/code-scanning.mjs --self-test: まとめ方だけを確かめる (GitHub には何も書かない)。 */
+/** bun bots/code-scanning/main.ts --self-test: まとめ方だけを確かめる (GitHub には何も書かない)。 */
 function selfTest() {
-  const alert = (number, id, severity, security, path = 'tools/a.mjs') => ({
+  const alert = (number: number, id: string, severity: string, security: string | null, path = 'tools/a.mjs'): Alert => ({
     number, html_url: `https://example.com/${number}`,
     rule: { id, severity, security_severity_level: security, description: 'English description' },
     most_recent_instance: { location: { path, start_line: 3 } },
   });
   let failed = 0;
-  const check = (name, ok) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); };
+  const check = (name: string, ok: boolean) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); };
   const pr = [alert(1, 'js/incomplete-sanitization', 'warning', 'high'), alert(2, 'cs/unknown-rule', 'note', null), alert(3, 'py/unused-import', 'note', null)];
   const found = newAlerts(pr, [alert(3, 'py/unused-import', 'note', null)]);
   check('base にある指摘は出さない', found.map(a => a.number).join() === '1,2');
@@ -200,7 +173,7 @@ function selfTest() {
   check('日本語の説明が無い指摘は英語の説明を出す', text.includes('English description (日本語の説明はまだありません)'));
   check('重要度の高い順に並べる', text.indexOf('🟠 高') < text.indexOf('⚪ 参考'));
   check('パスの記号で表が崩れない', message([alert(4, 'x', 'note', null, 'a|b`c.mjs')]).includes('a\\|b\\`c.mjs'));
-  check('説明が足りないルールが無い', Object.values(Rules).every(v => v.length > 0));
+  check('説明が足りないルールが無い', Object.values(RULES).every(rule => rule.length > 0));
   if (failed) process.exit(1);
 }
 

@@ -1,5 +1,5 @@
 # PR の件数制限と、投稿者の返事を待っている Issue・PR の期限管理。
-# 閉じる Issue の担当でない人の PR を Draft にする (assignee.mjs)。
+# 閉じる Issue の担当でない人の PR を Draft にする (bots/assignee/main.ts)。
 # 書き込み job は必ず main のスクリプトを使い、PR のコードを実行しない。
 name: policy
 
@@ -37,9 +37,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-          sparse-checkout: .github/bot
+          sparse-checkout: |
+            .github/actions
+            bots
           persist-credentials: false
-      - run: node .github/bot/policy.mjs
+      - uses: ./.github/actions/setup-bots
+      - run: bun bots/policy/main.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
@@ -63,8 +66,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
-          sparse-checkout: .github/bot
+          sparse-checkout: |
+            .github/actions
+            bots
           persist-credentials: false
-      - run: node .github/bot/assignee.mjs
+      - uses: ./.github/actions/setup-bots
+      - run: bun bots/assignee/main.ts
         env:
           GITHUB_TOKEN: ${{ github.token }}
