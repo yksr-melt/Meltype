@@ -20,6 +20,8 @@
 
 `src/Meltype.Core/` の中は、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
 
+`dictionaries/medical.txt` は読み・語句・品詞・空欄の 4 列からなる DMiME の辞書です。`src/Meltype.Core/Composition/CandidateDictionary.cs` が変換候補に、`src/Meltype.Core/Composition/Predictor.cs` が読みの先頭一致による予測候補に使います。入力中の日本語判定には使いません。形式は `tools/check-dictionaries.mjs` で検査します。
+
 ## Windows でビルドして試す
 
 ```powershell

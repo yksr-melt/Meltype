@@ -746,6 +746,19 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void MedicalTerms_AreConversionAndPredictionCandidates()
+    {
+        const string reading = "いちがたとうにょうびょう";
+        const string word = "1型糖尿病";
+        Assert.True(CandidateDictionary.Load(null).LookupMedicalWords(reading).Contains(word), "変換候補に出る");
+        Assert.True(new Predictor(null, null, null).PredictJapanese("いちがた").Contains(word), "予測候補に出る");
+        var keyboard = new Keyboard();
+        keyboard.Type("ichigatatounyoubyou");
+        keyboard.Press(VirtualKeys.Space);
+        Assert.True(keyboard.Host.View!.Candidates.Contains(word), "変換画面の候補にも出る");
+    }
+
+    [Test]
     public static void Prediction_EnglishAtEndUsesWholeReading()
     {
         // 英語として見せている語で終わるとき (きょうはMake) は、前に残す文字が分からないので、最後の文節 (まけ) の続きは出さずに読み全体の続きだけにする
@@ -823,14 +836,14 @@ internal static class CompositionTests
         foreach (var (kana, phrase) in new[] { ("おは", "おはようございます"), ("ありがとう", "ありがとうございます"), ("おつかれ", "お疲れ様です"), ("よろし", "よろしくお願いします"), ("こんにち", "こんにちは") })
             Assert.True(predictor.PredictJapanese(kana).Contains(phrase), kana + ": " + string.Join(",", predictor.PredictJapanese(kana)));
         Assert.Equal(0, predictor.PredictJapanese("お").Count, "1 文字では出さない");
-        // ほかの語の打ち始めにも出る読みでは出さない (どうして・もう少し・今回・おつかい・ありがたい・よろこぶ)
-        foreach (var kana in new[] { "どう", "もう", "こん", "おつか", "ありが", "よろ" })
-            Assert.Equal(0, predictor.PredictJapanese(kana).Count, kana + ": " + string.Join(",", predictor.PredictJapanese(kana)));
+        // ほかの語の打ち始めにも出る読みでは、定型句を早く出しすぎない (医療用語など別の候補は出る)
+        foreach (var (kana, phrase) in new[] { ("どう", "おはようございます"), ("もう", "おはようございます"), ("こん", "こんにちは"), ("おつか", "お疲れ様です"), ("ありが", "ありがとうございます"), ("よろ", "よろしくお願いします") })
+            Assert.True(!predictor.PredictJapanese(kana).Contains(phrase), kana + ": " + string.Join(",", predictor.PredictJapanese(kana)));
         Assert.True(!predictor.PredictJapanese("こんに").Contains("こんばんは"), "こんにちは と こんばんは は見分けがつくまで出さない");
         // よろしく と打ったときも、どうぞよろしくお願いします を出す (読みの途中から)
         Assert.True(predictor.PredictJapanese("よろしく") is { } yoroshiku && yoroshiku.Contains("よろしくお願いします") && yoroshiku.Contains("どうぞよろしくお願いします"),
             string.Join(",", predictor.PredictJapanese("よろしく")));
-        Assert.Equal(0, predictor.PredictJapanese("きょうは").Count, "定型句にない読みでは出さない");
+        Assert.True(!predictor.PredictJapanese("きょうは").Contains("おはようございます"), "定型句にない読みではあいさつを出さない");
         Assert.True(!predictor.PredictJapanese("こんにちは").Contains("こんにちは"), "打ち終えた読みと同じ語句は出さない");
 
         // 前に確定した語句を、定型句より先に出す

@@ -41,6 +41,13 @@ const formats = {
     reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
     reading.split('|').length === word.split('|').length && !word.split('|').includes('') ? null : `読み「${reading}」と語句「${word}」の | の数が違う`,
   ]),
+  // c-colloid/DMiME: 読み<Tab>語句<Tab>品詞<Tab> (末尾の空欄も形式の一部)
+  'medical.txt': tabbed(4, 4, ([reading, word, part, extra]) => [
+    reading ? null : '読みが無い',
+    word ? null : '語句が無い',
+    part ? null : '品詞が無い',
+    extra === '' ? null : '4 欄目が空でない',
+  ]),
   // 読み<Tab>語句<Tab>出し始める読み (予測変換の定型句)。出し始める読みは、読みの打ちかけ
   'greetings.txt': tabbed(3, 3, ([reading, , start]) => [
     hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
@@ -99,8 +106,11 @@ for (const file of files) {
     const hash = file.startsWith('emoji') ? (line.trimStart().startsWith('#') ? 0 : -1) : line.indexOf('#');
     if (hash >= 0) line = line.slice(0, hash);
     if (line.trim() === '') return;
-    if (/[ \t]$/.test(raw.replace(/\r$/, '')) && hash < 0) { report.push(`::warning file=dictionaries/${file},line=${lineNo}::行の終わりに空白がある`); warnings++; }
-    for (const problem of format(line.trim() === line || file.startsWith('emoji') ? line : line.trim()).filter(Boolean)) {
+    if (/[ \t]$/.test(raw.replace(/\r$/, '')) && hash < 0 && !(file === 'medical.txt' && line.endsWith('\t'))) {
+      report.push(`::warning file=dictionaries/${file},line=${lineNo}::行の終わりに空白がある`); warnings++;
+    }
+    const formatLine = line.trim() === line || file.startsWith('emoji') || file === 'medical.txt' ? line : line.trim();
+    for (const problem of format(formatLine).filter(Boolean)) {
       report.push(`::error file=dictionaries/${file},line=${lineNo}::${problem}`);
       errors++;
     }

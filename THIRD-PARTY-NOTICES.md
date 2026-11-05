@@ -1,6 +1,6 @@
 # サードパーティー通知
 
-Meltype のソースコード (このリポジトリ) には、次のものを除いて他者の著作物は含まれていません。
+Meltype のソースコードと組み込みデータには、次の他者の著作物が含まれています。
 
 - かな配列 (月配列 U9・花配列・NICOLA・中指NICOLA・TRON 配列) の表 (`src/Meltype.Core/Input/KanaLayout.cs`): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
 
@@ -37,6 +37,14 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 - UI Automation、IMM32、Text Services Framework
 
 ## 辞書
+
+### 医療用語辞書 (`dictionaries/medical.txt`)
+
+[DMiME v1.1](https://github.com/c-colloid/DMiME) の医療用語を、読み・語句・品詞の辞書として同梱しています。
+
+- 著作権表示: S-N-R (Shinji NAKANO)、Project DMiME、colloid、日本医師会ORCA管理機構
+- ライセンス: GPL-2.0-or-later
+- `medical.txt` の著作権表示とライセンス情報を配布物にも含めます。GPL-2.0-or-later のデータを GPL-3.0-or-later の本体に組み込んで配布します。
 
 ### 英訳の候補 (dictionaries/translations.txt)
 

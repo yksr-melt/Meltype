@@ -2275,6 +2275,10 @@ public sealed class CompositionController
         {
             if (!candidates.Contains(kana)) candidates.Add(kana);
         }
+        foreach (var word in _options.Candidates?.LookupMedicalWords(reading) ?? [])
+        {
+            if (!candidates.Contains(word)) candidates.Add(word);
+        }
         // 日付・時刻 (いま・なう・きょう) は、かなの後ろに出す (いつもの候補の並びは変えない)
         foreach (var time in TimeCandidates(reading))
         {
