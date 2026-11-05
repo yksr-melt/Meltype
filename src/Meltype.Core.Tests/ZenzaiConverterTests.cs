@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Input;
 
 namespace Meltype.Tests;
 
@@ -102,6 +103,84 @@ internal static class ZenzaiConverterTests
         Assert.True(server.Prompts.Count == 1 && server.Prompts[0] == "朝キョウ", "渡した文: " + string.Join("|", server.Prompts));
         zenzai.ConvertClauses("きょう", "朝");
         Assert.Equal(1, server.Prompts.Count, "同じ読みと文脈は覚えている");
+    }
+
+    private static (MeltypeSession Session, MozcConverter Mozc, ZenzaiConverter Zenzai, FakeServer Server, ManualResetEventSlim Release) LateZenzai()
+    {
+        var release = new ManualResetEventSlim();
+        // 止めるのは きしゃがきた だけ (止めたままだと、時間切れで Zenzai が 5 秒休む)
+        var server = new FakeServer
+        {
+            Answer = p =>
+            {
+                if (!p.Contains("キシャガキタ")) return ReadingIn(p);
+                release.Wait(10000);
+                return "汽車が来た</s>";
+            },
+        };
+        var zenzai = new ZenzaiConverter(server.Endpoint);
+        var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
+        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, null, null, () => zenzai);
+        hybrid.Budget.Enable();
+        var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionOptions { LiveConversion = () => true }, () => new Settings());
+        // Mozc の起動を待つ
+        hybrid.Budget.Start(10000);
+        mozc.ConvertClauses("あ");
+        hybrid.Budget.Start(0);
+        return (session, mozc, zenzai, server, release);
+    }
+
+    [Test]
+    public static void LateZenzai_ReplacesTheMozcAnswer_InLiveConversion()
+    {
+        var (session, mozc, zenzai, server, release) = LateZenzai();
+        using (server) using (zenzai) using (mozc) using (release)
+        {
+            var seen = new List<string> { SessionFacadeTests.Type(session, "kishagakita")[^1].View!.Text };
+            void Record() { if (session.RefreshConversion()?.View?.Text is { } text && text != seen[^1]) seen.Add(text); }
+            Assert.True(SpinWait.SpinUntil(() => { Record(); return seen[^1] == "記者が来た"; }, 5000), "先に Mozc の答え: " + string.Join(" -> ", seen));
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => { Record(); return seen[^1] == "汽車が来た"; }, 5000), "あとから Zenzai の答え: " + string.Join(" -> ", seen));
+            Thread.Sleep(200);
+            Record();
+            Assert.Equal("きしゃがきた -> 記者が来た -> 汽車が来た", string.Join(" -> ", seen), "戻らない");
+            // Mozc の文節の区切りのまま (Align) なので、文節ごとに選び直せる
+            Assert.Equal("汽車が,来た", string.Join(",", SessionFacadeTests.Type(session, " ")[^1].View?.Clauses ?? []));
+        }
+    }
+
+    [Test]
+    public static void LateZenzai_ReplacesAnUntouchedOpenConversion()
+    {
+        var (session, mozc, zenzai, server, release) = LateZenzai();
+        using (server) using (zenzai) using (mozc) using (release)
+        {
+            SessionFacadeTests.Type(session, "kishagakita");
+            Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "先に Mozc の答え");
+            var opened = SessionFacadeTests.Type(session, " ")[^1].View;
+            Assert.Equal("記者が来た", opened?.Text, "Zenzai を待ちきれずに Mozc の答えで開く");
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "汽車が来た", 5000), "触っていなければ Zenzai の答えに置き換わる");
+        }
+    }
+
+    [Test]
+    public static void LateZenzai_KeepsTheChosenCandidateOfAnOpenConversion()
+    {
+        var (session, mozc, zenzai, server, release) = LateZenzai();
+        using (server) using (zenzai) using (mozc) using (release)
+        {
+            SessionFacadeTests.Type(session, "kishagakita");
+            Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "先に Mozc の答え");
+            SessionFacadeTests.Type(session, " ");
+            // Zenzai の答え (汽車が) と違う候補まで選び直す
+            session.HandleKey(VirtualKeys.Down, null, false, false, false, false);
+            var chosen = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View?.Text;
+            Assert.True(chosen is not (null or "記者が来た" or "汽車が来た"), $"Mozc の 1 番目とも Zenzai の答えとも違う: {chosen}");
+            release.Set();
+            Assert.True(SpinWait.SpinUntil(() => zenzai.HasAnswered, 5000), "Zenzai が答える");
+            Assert.Equal(chosen, session.RefreshConversion()?.View?.Text ?? chosen, "選び直した候補は Zenzai の答えで上書きしない");
+        }
     }
 
     [Test]
