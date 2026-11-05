@@ -25,13 +25,16 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 
     adb devices
     bash tools/run-instrumentation-tests.sh
+    ./gradlew --no-daemon :mozc:connectedDebugAndroidTest
     ls -la build/qa
 
 出力: instrumentation.log（生ログ）、instrumentation.xml（JUnit XML）、test-cases.md（ケース別成否）、summary.md、device-info.txt。実行スクリプトは実際の @Test fun 一覧と計測結果を照合し、未実行・予期しない・失敗ケースを検出する。
 
-コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt)。テスト内容を変えたらこの表も更新する。
+アプリの計測は、下表の2クラスに加え、文字削除・タッチ操作・Coreブリッジの3クラスも実行する。各ケースの結果は `test-cases.md` と `instrumentation.xml` に記録する。Mozcの計測は別のGradleタスクで実行し、結果を `mozc/build/outputs/androidTest-results/connected/` に記録する。
 
-### 計測テスト18件の入力と期待値
+コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt) / [DeleteLengthDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt) / [KeyboardViewTouchTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt) / [MeltypeCoreBridgeDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt) / [MozcConverterTest.kt](../mozc/src/androidTest/kotlin/io/github/ninjin0802/keyboard/mozc/MozcConverterTest.kt)。
+
+### 日英判定・設定の計測テスト18件の入力と期待値
 | ID | @Test fun | 入力・操作 | 期待値 |
 |---|---|---|---|
 | A01 | englishStaysLatin | hello / meeting | hello / meeting（英字保持） |
@@ -53,7 +56,7 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | B04 | toolbarBackAndSystemBackBothReturnToSettingsHome | 画面内戻る→再入→OS Back | 両方とも設定ホームに復帰 |
 | B05 | unfoldedScreenKeepsCategoriesBesideActiveSettings | 設定を幅700dp以上/未満で表示 | 広画面2ペイン、狭画面スクロール |
 
-A04〜A06などには固定JSONで候補表示ロジックを検証するケースもある。A01〜A03、A08〜A09、A12はNative Coreとの接続を含む。実機での画面開閉は自動計測18件とは別の手動テストである。
+A04〜A06などには固定JSONで候補表示ロジックを検証するケースもある。A01〜A03、A08〜A09、A12はNative Coreとの接続を含む。実機での画面開閉は自動計測とは別の手動テストである。
 
 ## 3. 画面開閉・実機での手動テスト
 実機名、Androidバージョン、ビルドソースSHA、日付、画面サイズ、実際に入力された文字列、スクリーンショットや失敗手順をPRに記録。**試していないケースを合格としない。**
@@ -72,7 +75,7 @@ A04〜A06などには固定JSONで候補表示ロジックを検証するケー�
 
 - **テスト対象APK**: PR #1149 のコミット `965dbf33bb20300a2c906168cfbf980d930f64ad` に対応するQAデバッグAPK（[Actions #40182600362](https://github.com/KoheiTakada/Meltypetest/actions/runs/40182600362)）。
 - **端末**: Pixel 10 Pro Fold、Android 17。
-- **実機テスト状態**: 2026-10-25、ユーザー本人から「実機確認完了」の報告を受領。最新版に対する再確認として記録する。端末上の操作自体はCIの自動実行ではない。
+- **実機テスト状態**: 2026-10-25、ユーザー本人から「実機確認完了」の報告を受領。対象は上記 `965dbf3` であり、後続コミットの実機検証とは区別する。端末上の操作自体はCIの自動実行ではない。
 - **証拠の限界**: M01〜M08各項目の個別成否、実際の文字列、画面寸法、スクリーンショットは受領していない。そのため、個別テストの実測値や8件それぞれのPASSを捏造せず、**総括の完了報告**として記録する。
 - **自動テスト**: API35の計測 **18/18 PASS**、JVM **444/444 PASS**。これはユーザー報告とは独立したCI確認（[実行ログ](https://github.com/KoheiTakada/Meltypetest/actions/runs/40182600362)）。
 - **ソースからの再構築**: [ForkのAndroid QA #40182575249](https://github.com/KoheiTakada/Meltype/actions/runs/40182575249)で成功。公開用署名・他機種互換性の検証とは区別する。

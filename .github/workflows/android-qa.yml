@@ -64,6 +64,7 @@ jobs:
         run: |
           test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
       - name: Run Android 15 instrumentation and publish individual outcomes
+        id: device_tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -75,10 +76,15 @@ jobs:
           disable-linux-hw-accel: false
           emulator-boot-timeout: 900
           disable-animations: true
-          script: bash android/tools/run-instrumentation-tests.sh
+          script: |
+            set -e
+            bash android/tools/run-instrumentation-tests.sh
+            cd android
+            ./gradlew --no-daemon :mozc:connectedDebugAndroidTest
       - name: Display per-case report in Actions
         if: always()
         run: |
+          echo '## App and Mozc device tests: ${{ steps.device_tests.outcome }}' >> "$GITHUB_STEP_SUMMARY"
           if test -s android/build/qa/summary.md; then
             cat android/build/qa/summary.md >> "$GITHUB_STEP_SUMMARY"
           else
@@ -94,6 +100,7 @@ jobs:
             android/build/qa/
             android/engine/build/test-results/test/
             android/app/build/test-results/testDebugUnitTest/
+            android/mozc/build/outputs/androidTest-results/connected/
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           retention-days: 30

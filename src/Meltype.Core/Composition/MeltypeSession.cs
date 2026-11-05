@@ -13,9 +13,9 @@ namespace Meltype.Composition;
 internal static class AndroidNativeRuntime
 {
 #if MELTYPE_ANDROID_NATIVE
-    internal const bool Enabled = true;
+    internal static readonly bool Enabled = true;
 #else
-    internal const bool Enabled = false;
+    internal static readonly bool Enabled = false;
 #endif
 }
 

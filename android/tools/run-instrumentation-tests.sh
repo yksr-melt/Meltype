@@ -46,7 +46,7 @@ adb shell pm path "$PACKAGE" | grep -F 'package:'
 adb shell am start -W -n "$PACKAGE/io.github.ninjin0802.keyboard.app.MainActivity"
 status=0
 adb shell am instrument -w -r -e class \
-  io.github.ninjin0802.keyboard.app.core.LanguageDetectionDeviceTest,io.github.ninjin0802.keyboard.app.SettingsScreenDeviceTest \
+  io.github.ninjin0802.keyboard.app.core.LanguageDetectionDeviceTest,io.github.ninjin0802.keyboard.app.SettingsScreenDeviceTest,io.github.ninjin0802.keyboard.app.DeleteLengthDeviceTest,io.github.ninjin0802.keyboard.app.KeyboardViewTouchTest,io.github.ninjin0802.keyboard.app.core.MeltypeCoreBridgeDeviceTest \
   "$TEST_PACKAGE/androidx.test.runner.AndroidJUnitRunner" \
   | tee "$REPORT/instrumentation.log" || status=1
 python3 "$ROOT/tools/instrumentation-report.py" \
@@ -54,5 +54,8 @@ python3 "$ROOT/tools/instrumentation-report.py" \
   --device "$REPORT/device-info.txt" \
   --sources "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt" \
+            "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt" \
+            "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt" \
+            "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt" \
   --output "$REPORT" || status=1
 exit "$status"

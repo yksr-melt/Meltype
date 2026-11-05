@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 KoheiTakada
 """Verify 16 KiB page compatibility of ARM64 JNI libraries inside an APK.
 
 No third-party dependencies. Check both ELF PT_LOAD alignment and ZIP member
