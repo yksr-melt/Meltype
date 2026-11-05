@@ -2880,7 +2880,7 @@ public sealed class CompositionController
         return clauses;
     }
 
-    private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithoutWaiting(convert);
+    private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithLimit(0, convert);
 
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private string CurrentDisplay(bool final) =>

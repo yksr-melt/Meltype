@@ -122,12 +122,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         };
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
-        _system = new BackgroundCallbackConverter(
-            (reading, context) => _sta.Invoke(() => _converter.ConvertClauses(reading, context)),
-            reading => _sta.Invoke(() => _windowsCandidates.Get(reading)),
-            reading => _sta.Invoke(() => _converter.Convert(reading)),
-            _mozc.Budget,
-            _sta.Post);
+        _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
         _hybrid = new HybridConverter(options.Engine, _mozc, _system, _system.Candidates, () => CurrentZenzai(options), _zenzai.Failed);
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);

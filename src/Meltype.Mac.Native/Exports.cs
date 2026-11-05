@@ -106,7 +106,7 @@ public static unsafe class Exports
     private static bool s_conversionReady;
 
     /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
-    private static readonly BackgroundCallbackConverter s_callback = new(CallbackClauses, MoreCandidates);
+    private static readonly BackgroundCallbackConverter s_callback = new(new CallbackConverter().ConvertClauses, MoreCandidates);
 
     /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
@@ -360,29 +360,35 @@ public static unsafe class Exports
         return text is null ? [] : text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
     }
 
-    private static IReadOnlyList<ConversionClause>? CallbackClauses(string hiragana, string? context)
+    private sealed class CallbackConverter : IKanjiConverter
     {
-        if (s_clauses == null) return null;
-        var input = ToUtf8(hiragana, out var inputBuffer);
-        var contextPointer = context is null ? null : ToUtf8(context, out var contextBuffer);
-        try
+        public string? Convert(string hiragana) =>
+            ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
         {
-            var text = TakeUtf8(s_clauses(input, contextPointer));
-            if (text is null) return null;
-            var clauses = new List<ConversionClause>();
-            foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            if (s_clauses == null) return null;
+            var input = ToUtf8(hiragana, out var inputBuffer);
+            var contextPointer = context is null ? null : ToUtf8(context, out var contextBuffer);
+            try
             {
-                var tab = line.IndexOf('\t');
-                if (tab <= 0) return null;
-                clauses.Add(new ConversionClause(line[..tab], line[(tab + 1)..]));
+                var text = TakeUtf8(s_clauses(input, contextPointer));
+                if (text is null) return null;
+                var clauses = new List<ConversionClause>();
+                foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var tab = line.IndexOf('\t');
+                    if (tab <= 0) return null;
+                    clauses.Add(new ConversionClause(line[..tab], line[(tab + 1)..]));
+                }
+                // 読みをつなげると元のひらがなになること (Meltype の文節の扱いの前提)。
+                return clauses.Count > 0 && string.Concat(clauses.Select(c => c.Reading)) == hiragana ? clauses : null;
             }
-            // 読みをつなげると元のひらがなになること (Meltype の文節の扱いの前提)。
-            return clauses.Count > 0 && string.Concat(clauses.Select(c => c.Reading)) == hiragana ? clauses : null;
-        }
-        finally
-        {
-            NativeMemory.Free(inputBuffer);
-            if (contextPointer != null) NativeMemory.Free(contextPointer);
+            finally
+            {
+                NativeMemory.Free(inputBuffer);
+                if (contextPointer != null) NativeMemory.Free(contextPointer);
+            }
         }
     }
 

@@ -788,7 +788,7 @@ void TextService::FinishConversionWait() {
             if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
             JsonValue reply;
             // consumed でなければ、Meltype.exe に入力の続きが無い。ここでは何もせず、次のキーで扱う
-            if (self->Request("{\"op\":\"refresh\",\"process\":" + JsonString(self->ProcessName()) + ",\"sid\":\"" + self->sid_ + "\"}", reply) && reply[L"consumed"].Bool()) {
+            if (self->Request("{\"op\":\"refresh\",\"process\":" + JsonString(ProcessName()) + ",\"sid\":\"" + self->sid_ + "\"}", reply) && reply[L"consumed"].Bool()) {
                 self->ownEdit_ = true;
                 self->Apply(ec, context.Get(), reply);
             }

@@ -62,11 +62,10 @@ public interface IStandaloneConverter
 public sealed class ConversionBudget
 {
     private long _deadline;
-    private bool _withoutWaiting;
 
     public bool Limited { get; private set; }
 
-    public int RemainingMs => _withoutWaiting ? 0 : (int)Math.Max(0, _deadline - Environment.TickCount64);
+    public int RemainingMs => (int)Math.Max(0, _deadline - Environment.TickCount64);
 
     public void Start(int milliseconds)
     {
@@ -74,22 +73,13 @@ public sealed class ConversionBudget
         _deadline = Environment.TickCount64 + milliseconds;
     }
 
-    /// <summary>convert の間は milliseconds までしか待たない (代わりの変換エンジンに、待つ時間を残すとき)。</summary>
+    /// <summary>convert の間は milliseconds までしか待たない (ライブ変換は 0。代わりの変換エンジンに待つ時間を残すときも使う)。</summary>
     public T WithLimit<T>(int milliseconds, Func<T> convert)
     {
         var previous = _deadline;
         _deadline = Math.Min(previous, Environment.TickCount64 + milliseconds);
         try { return convert(); }
         finally { _deadline = previous; }
-    }
-
-    /// <summary>convert の間は待たない (ライブ変換のように、打鍵ごとに走って結果が後から届いてよい変換)。</summary>
-    public T WithoutWaiting<T>(Func<T> convert)
-    {
-        var previous = _withoutWaiting;
-        _withoutWaiting = true;
-        try { return convert(); }
-        finally { _withoutWaiting = previous; }
     }
 }
 

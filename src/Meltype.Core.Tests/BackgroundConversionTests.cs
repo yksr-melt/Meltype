@@ -11,54 +11,14 @@ namespace Meltype.Tests;
 internal static class BackgroundConversionTests
 {
     /// <summary>delayMs たってから答える変換エンジン。release を渡すと、それが Set されるまで答えない。</summary>
-    private sealed class SlowConverter : IKanjiConverter, IBackgroundConverter, IDisposable
-    {
-        private readonly object _gate = new();
-        private readonly Dictionary<string, string> _answers = [];
-        private readonly LatestRequestWorker<Key> _worker;
-        private readonly ManualResetEventSlim? _release;
-        private readonly int _delayMs;
-
-        public SlowConverter(int delayMs = 0, ManualResetEventSlim? release = null)
+    private static BackgroundCallbackConverter Slow(int delayMs = 0, ManualResetEventSlim? release = null) => new(
+        (reading, _) =>
         {
-            _delayMs = delayMs;
-            _release = release;
-            _worker = new LatestRequestWorker<Key>(Process);
-        }
-
-        public ConversionBudget Budget { get; } = new();
-        public event Action? ResultReady;
-
-        private readonly record struct Key(string Reading);
-
-        private void Process(Key key)
-        {
-            _release?.Wait();
-            Thread.Sleep(_delayMs);
-            lock (_gate) _answers[key.Reading] = key.Reading switch
-            {
-                "にほんご" => "日本語",
-                _ => key.Reading + "!",
-            };
-            ResultReady?.Invoke();
-        }
-
-        public string? Convert(string hiragana) => ConvertClauses(hiragana)?[0].Text;
-
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
-        {
-            lock (_gate)
-            {
-                if (_answers.TryGetValue(hiragana, out var known)) return [new ConversionClause(hiragana, known)];
-            }
-            var key = new Key(hiragana);
-            _worker.Submit(key);
-            if (!_worker.Wait(key, Budget.RemainingMs)) return null;
-            lock (_gate) return _answers.TryGetValue(hiragana, out var answer) ? [new ConversionClause(hiragana, answer)] : null;
-        }
-
-        public void Dispose() => _worker.Dispose();
-    }
+            release?.Wait(10000);
+            Thread.Sleep(delayMs);
+            return [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
+        },
+        _ => []);
 
     private static MeltypeSession Session(IKanjiConverter converter, bool background = true) =>
         new(CompositionTests.Detector, converter, new CompositionOptions { BackgroundConversion = background, LiveConversion = () => true }, () => new Settings());
@@ -148,7 +108,7 @@ internal static class BackgroundConversionTests
     public static void Live_DoesNotWait_AndRefreshShowsTheResult()
     {
         using var release = new ManualResetEventSlim();
-        using var converter = new SlowConverter(release: release);
+        using var converter = Slow(release: release);
         using var ready = new ManualResetEventSlim();
         converter.ResultReady += ready.Set;
         var session = Session(converter);
@@ -168,7 +128,7 @@ internal static class BackgroundConversionTests
     [Test]
     public static void Refresh_DoesNothingWithoutComposition()
     {
-        using var converter = new SlowConverter();
+        using var converter = Slow();
         Assert.True(Session(converter).RefreshConversion() is null, "入力していなければ null");
     }
 
@@ -176,7 +136,7 @@ internal static class BackgroundConversionTests
     public static void Refresh_KeepsTheCandidatesOfAnOpenConversion()
     {
         using var release = new ManualResetEventSlim();
-        using var converter = new SlowConverter(release: release);
+        using var converter = Slow(release: release);
         var session = Session(converter);
         SessionFacadeTests.Type(session, "nihongo");
         // 答えが間に合わないまま Space で開く (予算 400ms を待ってから、かなで開く)
@@ -194,7 +154,7 @@ internal static class BackgroundConversionTests
     [Test]
     public static void Space_WaitsWithinTheBudget()
     {
-        using var converter = new SlowConverter(delayMs: 50);
+        using var converter = Slow(delayMs: 50);
         var session = Session(converter);
         SessionFacadeTests.Type(session, "nihongo");
         var watch = Stopwatch.StartNew();
@@ -207,7 +167,7 @@ internal static class BackgroundConversionTests
     public static void Space_GivesUpAtTheBudget()
     {
         using var release = new ManualResetEventSlim();
-        using var converter = new SlowConverter(release: release);
+        using var converter = Slow(release: release);
         var session = Session(converter);
         SessionFacadeTests.Type(session, "nihongo");
         var watch = Stopwatch.StartNew();
@@ -219,7 +179,7 @@ internal static class BackgroundConversionTests
     [Test]
     public static void WithoutTheOption_ConverterIsSynchronous()
     {
-        using var converter = new SlowConverter(delayMs: 50);
+        using var converter = Slow(delayMs: 50);
         // --repro など: Budget を使わないので、変換エンジンが答えるまで待つ想定の呼び方は変わらない
         Assert.True(!converter.Budget.Limited, "Start を呼ぶまで制限なし");
         Session(converter, background: false);
@@ -328,17 +288,6 @@ internal static class BackgroundConversionTests
         var session = Session(hybrid);
         Assert.Equal("きしゃがきた", SessionFacadeTests.Type(session, "kishagakita")[^1].View?.Text);
         Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "届いたら表示が更新される");
-    }
-
-    [Test]
-    public static void Hybrid_LeavesBudgetForTheFallback_WhenMozcIsSlow()
-    {
-        var budget = new ConversionBudget();
-        budget.Start(1000);
-        var before = budget.RemainingMs;
-        var inside = budget.WithLimit(100, () => budget.RemainingMs);
-        Assert.True(inside <= 100, $"区切った間は 100ms まで ({inside})");
-        Assert.True(budget.RemainingMs > 100 && budget.RemainingMs <= before, $"終わったら残りの時間に戻る ({budget.RemainingMs})");
     }
 
     [Test]

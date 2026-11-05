@@ -152,8 +152,17 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     private void ProcessBackground(LiveRequest request)
     {
-        // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)
-        if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        try
+        {
+            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)
+            if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            // 同期で呼ぶときは HybridConverter が受ける例外。ワーカーでは諦めの印を付けて ZenzaiHolder に止めてもらう (#973)
+            if (!_disposed) Diagnostics.Log.Error($"Zenzai で変換できないので、今までの変換エンジンで変換します: {ex}");
+            Fail();
+        }
     }
 
     private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)

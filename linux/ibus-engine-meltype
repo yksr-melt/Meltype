@@ -139,7 +139,8 @@ def _report_url():
 if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").encode(), None):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
-# フォーカスのあるエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
+# 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
+# (フォーカスが外れた入力欄は確定済みで、meltype_refresh は NULL を返す)
 _focused = None
 
 
@@ -354,9 +355,6 @@ class MeltypeEngine(IBus.Engine):
             _set_code_line(self._session, 0, None)
 
     def do_focus_out(self):
-        global _focused
-        if _focused is self:
-            _focused = None
         # 別の入力欄・アプリに移るときは、未確定の内容を確定する。
         self._finalize_on_focus_loss()
         self._reset_code_japanese()
@@ -424,9 +422,6 @@ class MeltypeEngine(IBus.Engine):
         self._apply(_result(_lib.meltype_select_candidate(self._session, page * self._lookup.get_page_size() + index)))
 
     def do_destroy(self):
-        global _focused
-        if _focused is self:
-            _focused = None
         if self._session:
             _lib.meltype_destroy(self._session)
             self._session = None
