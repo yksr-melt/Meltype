@@ -16,13 +16,14 @@ import os
 import selectors
 import subprocess
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
 import gi
 
 gi.require_version("IBus", "1.0")
-from gi.repository import IBus  # noqa: E402
+from gi.repository import GLib, IBus  # noqa: E402
 
 
 class IntegrationTests(unittest.TestCase):
@@ -167,6 +168,33 @@ class IntegrationTests(unittest.TestCase):
             process.stdin.close()
             process.stdout.close()
             process.stderr.close()
+
+    def test_live_conversion_result_reaches_preedit(self):
+        # 変換エンジンの答えは後から届く。通知をメインループで受けて、入力中の表示を更新する
+        config = Path(self.data.name) / "config.json"
+        original = config.read_text(encoding="utf-8")
+        self.addCleanup(self.restore_config, config, original)
+        self.write_config(config, json.dumps({**json.loads(original), "LiveConversion": True}))
+        self.engine.do_focus_in()
+        self.type_text("kyouhaiitenkidesune")
+        expected = "今日はいい天気ですね"
+        self.assertNotEqual(expected, self.engine.marked, "打鍵の処理の中では答えを待たない")
+        context = GLib.MainContext.default()
+        deadline = time.monotonic() + 10
+        while self.engine.marked != expected and time.monotonic() < deadline:
+            while context.pending():
+                context.iteration(False)
+            time.sleep(0.01)
+        self.assertEqual(expected, self.engine.marked)
+        self.assertEqual([], self.engine.commits, "表示の更新で確定しない")
+
+    def write_config(self, config, text):
+        config.write_text(text, encoding="utf-8")
+        # 本体は config.json を一定の間隔で読み直す (SettingsFile.CheckIntervalMs)
+        time.sleep(1.2)
+
+    def restore_config(self, config, original):
+        self.write_config(config, original)
 
     def test_real_mozc_candidate_selection(self):
         self.type_text("kyou")
