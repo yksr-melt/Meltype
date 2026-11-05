@@ -216,8 +216,11 @@ public sealed record CompositionOptions
     /// <summary>かな入力 (JIS) か。</summary>
     public Func<bool> KanaInput { get; init; } = () => false;
 
-    /// <summary>かな入力の配列 (JIS かな・月・花。issue #1415)。</summary>
+    /// <summary>かな入力の配列 (JIS かな・月・花・NICOLA・中指NICOLA・TRON。issue #1415)。</summary>
     public Func<KanaLayout> KanaLayout { get; init; } = () => Input.KanaLayout.Jis;
+
+    /// <summary>ローマ字入力のキーの配列 (QWERTY・SKY 配列。issue #1415)。</summary>
+    public Func<RomajiLayout> RomajiLayout { get; init; } = () => Input.RomajiLayout.Qwerty;
 
     /// <summary>よくある書き間違い (ブレスレッド → ブレスレット) の辞書。「もしかして」に使う。null なら出さない。</summary>
     public MisspellingDictionary? Misspellings { get; init; }
@@ -270,6 +273,9 @@ public sealed record CompositionOptions
 
     /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
+
+    /// <summary>この PC のタイムゾーン (時計の候補にタイムゾーンの名前を付けるかの判定に使う。テストでは差し替える)。</summary>
+    public Func<TimeZoneInfo> LocalTimeZone { get; init; } = () => TimeZoneInfo.Local;
     public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>句読点の組み合わせ (設定)。</summary>
@@ -346,6 +352,7 @@ public sealed class CompositionController
     private readonly CompositionText _text;
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     private KanaLayoutEngine _kanaLayout = new(KanaLayout.Jis);
+    private bool _bypassKanaLayout;
     private readonly CompositionDetector _detector;
     private readonly IKanjiConverter _converter;
     private readonly ICompositionHost _host;
@@ -461,7 +468,8 @@ public sealed class CompositionController
                 else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
             }
             UpdateView();
-            if (IsComposing) return;
+            // 親指キーを押したままなら、離したことを受け取るまで横取りを続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
+            if (IsComposing || _kanaLayout.ThumbHeld) return;
             // 読みをすべて削除した場合も、元の選択範囲は置換せず再変換を終了する。
             if (_reconversion is not null) ClearComposition();
             // 送らずにいた Shift (押したまま) は、横取りをやめる前に送る。送らないと、次に打つキーが Shift なしでアプリに届く
@@ -651,6 +659,16 @@ public sealed class CompositionController
         var vk = e.Vk;
         if (e.IsUp)
         {
+            var kanaUp = _kanaLayout.Up(vk);
+            // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
+            if (kanaUp.Stroke.Handled && IsComposing) ApplyKanaStroke(kanaUp.Stroke);
+            // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
+            if (kanaUp.ThumbTap && _capturedDown.Contains(vk))
+            {
+                _bypassKanaLayout = true;
+                try { HandleKey(e with { IsUp = false }); }
+                finally { _bypassKanaLayout = false; }
+            }
             _swallowedShift.Remove(vk);
             _swallowedControl.Remove(vk);
             // 押下をアプリに送ったキー、または押下が関所を閉じる前に通っていたキーは、離したこともアプリに伝える。
@@ -765,7 +783,7 @@ public sealed class CompositionController
             ReplayDown(e);
             return;
         }
-        if (HandleKanaLayout(e)) return;
+        if (!_bypassKanaLayout && HandleKanaLayout(e)) return;
 
         if (_reconversion is not null && vk == VirtualKeys.Escape)
         {
@@ -1316,14 +1334,26 @@ public sealed class CompositionController
     }
 
     /// <summary>
-    /// JIS かな以外のかな配列 (月・花) の打鍵 (issue #1415)。配列のキーとして扱ったら true。
+    /// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) と SKY 配列の打鍵 (issue #1415)。配列のキーとして扱ったら true。
     /// 打ったキーの英字は英単語の判定に使わない (刻印と違う配列なので)。かなをそのまま原文にする。
     /// </summary>
     private bool HandleKanaLayout(KeyEvent e)
     {
+        if (!_options.KanaInput() && !_options.DirectMode() && _options.RomajiLayout() == RomajiLayout.Sky)
+        {
+            // SKY 配列: キーをローマ字の綴りにして足す。英語の判定はしない (ひらがなで見せる)
+            if (_swallowedShift.Count > 0 || _host.IsShiftDown() || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
+            if (!IsComposing) BeginComposition();
+            else CommitBeforeTyping();
+            if (_text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.Hiragana;
+            foreach (var c in romaji) _text.Append(c);
+            return true;
+        }
         var layout = _options.KanaInput() && !_options.DirectMode() ? _options.KanaLayout() : KanaLayout.Jis;
         if (_kanaLayout.Layout != layout) _kanaLayout = new KanaLayoutEngine(layout);
         if (layout == KanaLayout.Jis) return false;
+        // 親指キーは (入力していないとき・変換中も) 受け取っておき、文字に使わずに離したらもとの働き (再変換・変換・無変換) をする
+        // (文頭の 変換 + W を再変換にしない・変換中の 変換 + W をシフト面にする。フックは親指シフトの配列では親指キーで変換ボックスを開く)
         // 前置シフトの直後の BackSpace は、シフトのキーを打ち消す (前の文字は消さない)
         if (e.Vk == VirtualKeys.Back && _kanaLayout.HasPrefix)
         {
@@ -1331,7 +1361,7 @@ public sealed class CompositionController
             return true;
         }
         var shift = _swallowedShift.Count > 0 || _host.IsShiftDown();
-        var stroke = _kanaLayout.Down(e.Vk, shift);
+        var stroke = _kanaLayout.Down(e.Vk, shift, e.TimeMs);
         if (!stroke.Handled)
         {
             // 配列のキー以外 (BackSpace・Enter・Esc・Space など): 打ちかけの前置シフトを忘れる
@@ -1339,11 +1369,17 @@ public sealed class CompositionController
             // 配列の表で空いているかなのキー (月配列の 1 や ]) は何も入れない (JIS かなの文字を入れない)
             return !shift && Detection.KanaDetector.IsKanaKey(e.Vk);
         }
-        if (stroke.Kana.Length == 0) return true;
-        if (!IsComposing) BeginComposition();
-        else CommitBeforeTyping();
-        foreach (var kana in stroke.Kana) _text.AppendKana(kana, kana);
+        ApplyKanaStroke(stroke);
         return true;
+    }
+
+    private void ApplyKanaStroke(KanaStroke stroke)
+    {
+        if (stroke.Kana.Length == 0 && stroke.RemoveLast == 0) return;
+        if (!IsComposing) BeginComposition();
+        else if (stroke.RemoveLast == 0) CommitBeforeTyping();
+        for (var i = 0; i < stroke.RemoveLast && !_text.IsEmpty; i++) _text.RemoveLast();
+        foreach (var kana in stroke.Kana) _text.AppendKana(kana, kana);
     }
 
     /// <summary>かな入力で、その打鍵が入力するかなと、そのキーの英字 (英語として見せるとき用)。かなのキーでなければ null。</summary>
@@ -2321,7 +2357,7 @@ public sealed class CompositionController
         var now = ClockNow();
         var clock = $"{now.Hour:D2}:{now.Minute:D2}";
         List<string> result = [clock, $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"];
-        if (zone is not null && !zone.HasSameRules(TimeZoneInfo.Local)) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
+        if (zone is not null && !zone.HasSameRules(_options.LocalTimeZone())) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
         return result;
     }
 

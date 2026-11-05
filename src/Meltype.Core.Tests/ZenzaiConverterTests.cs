@@ -79,7 +79,7 @@ internal static class ZenzaiConverterTests
     public static void Prompt_UsesKatakanaAndContext()
     {
         Assert.Equal("キョウ", ZenzaiConverter.Prompt("きょう", null), "文脈なし");
-        Assert.Equal("アツイこの本は", ZenzaiConverter.Prompt("あつい", "この本は"), "文脈あり");
+        Assert.Equal("この本はアツイ", ZenzaiConverter.Prompt("あつい", "この本は"), "v3 では文脈を前に置く");
         Assert.Equal("ー、。ABC", ZenzaiConverter.ToKatakana("ー、。ABC"), "かな以外はそのまま");
     }
 
@@ -88,6 +88,7 @@ internal static class ZenzaiConverterTests
     {
         Assert.Equal("今日", ZenzaiConverter.Clean("今日</s>")!, "EOS");
         Assert.Equal("今日", ZenzaiConverter.Clean(" 今日ゴミ")!, "区切り記号以降");
+        Assert.Equal("辞書の", ZenzaiConverter.Clean("辞書の\uEE08前の文章")!, "境界記号以降");
         Assert.True(ZenzaiConverter.Clean("</s>") is null, "空は null");
     }
 
@@ -98,7 +99,7 @@ internal static class ZenzaiConverterTests
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         var clauses = zenzai.ConvertClauses("きょう", "朝");
         Assert.True(clauses is [{ Reading: "きょう", Text: "今日" }], "1 つの文節で返る");
-        Assert.True(server.Prompts.Count == 1 && server.Prompts[0] == "キョウ朝", "渡した文: " + string.Join("|", server.Prompts));
+        Assert.True(server.Prompts.Count == 1 && server.Prompts[0] == "朝キョウ", "渡した文: " + string.Join("|", server.Prompts));
         zenzai.ConvertClauses("きょう", "朝");
         Assert.Equal(1, server.Prompts.Count, "同じ読みと文脈は覚えている");
     }
@@ -111,9 +112,9 @@ internal static class ZenzaiConverterTests
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         Assert.True(zenzai.ConvertClauses("きょう") is [{ Text: "今日" }], "文脈なしでも Zenzai で変換する");
         Assert.True(zenzai.ConvertClauses("きょう", "") is [{ Text: "今日" }], "空の文脈も同じ");
-        Assert.Equal("\uEE00キョウ\uEE02。\uEE01", server.Prompts[0], "渡した文: " + server.Prompts[0]);
+        Assert.Equal("\uEE02。\uEE00キョウ\uEE01", server.Prompts[0], "渡した文: " + server.Prompts[0]);
         zenzai.ConvertClauses("あした", "昨日は");
-        Assert.Equal("\uEE00アシタ\uEE02昨日は\uEE01", server.Prompts[^1], "文脈があればそれを渡す");
+        Assert.Equal("\uEE02昨日は\uEE00アシタ\uEE01", server.Prompts[^1], "文脈があればそれを渡す");
     }
 
     [Test]
@@ -423,7 +424,7 @@ internal static class ZenzaiConverterTests
     private static string ReadingIn(string prompt)
     {
         var start = prompt.IndexOf((char)0xEE00) + 1;
-        var end = prompt.IndexOfAny([(char)0xEE01, (char)0xEE02], start);
+        var end = prompt.IndexOf((char)0xEE01, start);
         return string.Concat(prompt[start..(end < 0 ? prompt.Length : end)].Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c));
     }
 
@@ -455,6 +456,33 @@ internal static class ZenzaiConverterTests
         // 文脈の無い きょう は、何も渡すと モデルが迷って 強 になる。「。」を文脈にして 今日 にする
         Assert.Equal("今日", zenzai.ConvertClauses("きょう") is [var bare] ? bare.Text : "", "文脈なしでも きょう は 今日 (「。」を文脈にする: 何も渡さないと 強)");
         Assert.Equal("今日", zenzai.ConvertClauses("きょう", "あしたは") is [var today] ? today.Text : "", "文脈 (あしたは) で 今日");
+    }
+
+    [Test]
+    public static void RealZenz_ConvertsOnlyTheCurrentReading()
+    {
+        if (Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_SERVER") is not { Length: > 0 } server ||
+            Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_MODEL") is not { Length: > 0 } model) return;
+        using var zenzai = new ZenzaiConverter(server, model, timeoutMs: 5000);
+        zenzai.WarmUp();
+        for (var i = 0; i < 100 && !zenzai.IsReady; i++) Thread.Sleep(300);
+        Assert.True(zenzai.IsReady, "llama-server が起動しなかった");
+
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        foreach (var (typed, context, expected) in new[]
+        {
+            ("zisyono", "このIMEを調べた。Mozcの", "辞書の"),
+            ("unnyousurubaaiha", "今回の更新では、利用者の使い方によって挙動が変わることを想定していますが、同団体の定義で", "運用する場合は"),
+            ("zisyono", "辞書の", "辞書の"),
+        })
+        {
+            var keyboard = new CompositionTests.Keyboard(converter: hybrid);
+            keyboard.Host.PrecedingText = context;
+            keyboard.Type(typed + " ");
+            Assert.Equal(expected, keyboard.Host.View?.Candidates[0] ?? "", "最初の候補: " + typed);
+            keyboard.Type("\n");
+            Assert.Equal(expected, keyboard.Host.Document, "確定した文字: " + typed);
+        }
     }
 
     [Test]

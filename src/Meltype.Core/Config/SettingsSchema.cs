@@ -91,13 +91,15 @@ public static class SettingsSchema
             if (property.AttributeProvider?.GetCustomAttributes(typeof(DisplayNameAttribute), false).FirstOrDefault() is DisplayNameAttribute { DisplayName.Length: > 0 } title)
                 schema["title"] = title.DisplayName;
             var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
-            var windowsOnly = property.AttributeProvider?.IsDefined(typeof(WindowsOnlyAttribute), false) == true;
-            if (windowsOnly) description = $"Windows のみ。{description}";
+            var platforms = property.AttributeProvider?.GetCustomAttributes(typeof(PlatformsAttribute), false).FirstOrDefault() is PlatformsAttribute p
+                ? Enum.GetValues<Platform>().Where(platform => p.Platforms.HasFlag(platform)).Select(platform => platform.ToString()).ToArray()
+                : null;
+            if (platforms is not null) description = $"{string.Join("・", platforms)} のみ。{description}";
             if (description.Length > 0) schema["description"] = description;
-            // x- で始まるのは JSON Schema の標準には無いキーワード (エディターは無視する)。Linux 版の設定画面が、分類ごとに並べ、Windows のみの項目を隠すのに使う
+            // x- で始まるのは JSON Schema の標準には無いキーワード (エディターは無視する)。Linux 版の設定画面が、分類ごとに並べ、使わない OS の項目を隠すのに使う
             if (property.AttributeProvider?.GetCustomAttributes(typeof(CategoryAttribute), false).FirstOrDefault() is CategoryAttribute { Category.Length: > 0 } category)
                 schema["x-category"] = category.Category;
-            if (windowsOnly) schema["x-windows-only"] = true;
+            if (platforms is not null) schema["x-platforms"] = new JsonArray(platforms.Select(name => (JsonNode?)name).ToArray());
             if (property.DeclaringType == typeof(Settings) && defaults.TryGetPropertyValue(property.Name, out var value))
                 schema["default"] = value?.DeepClone();
         }

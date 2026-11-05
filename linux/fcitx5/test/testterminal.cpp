@@ -83,6 +83,27 @@ bool explicitJapanese(Instance *instance, AddonInstance *frontend) {
     return true;
 }
 
+bool shiftSpaceInsertsFullWidthSpace(Instance *instance, AddonInstance *frontend) {
+    // 設定「入力モード切り替えキー」に Shift+Space を登録していない既定の状態で、日本語入力の
+    // Shift+Space が本体に消費され、全角スペースが確定することを確かめる (#1034)。
+    // 実機のデスクトップではなく、テスト用のフロントエンド (testfrontend) での確認。
+    ICUUID uuid;
+    auto *ic = terminal(instance, frontend, uuid);
+    if (!expect(ic != nullptr, "shift space input context exists")) return false;
+    if (!expect(press(frontend, uuid, "Henkan"), "Japanese mode key is consumed")) return false;
+    frontend->call<ITestFrontend::pushCommitExpectation>("　");
+    if (!expect(press(frontend, uuid, "Shift+space"), "Shift+space in Japanese mode is consumed by the core")) return false;
+    if (!expect(ic->inputPanel().preedit().empty(), "Shift+space commits without a composition")) return false;
+    // 切替の登録が無いので、モードは日本語のまま (次の a が変換ボックスに入る)。
+    type(frontend, uuid, "a");
+    if (!expect(ic->inputPanel().preedit().toString() == "あ", "Shift+space did not toggle the mode")) return false;
+    frontend->call<ITestFrontend::pushCommitExpectation>("あ");
+    press(frontend, uuid, "Return");
+    frontend->call<ITestFrontend::destroyInputContext>(uuid);
+    std::cout << "PASS: Shift+space in Japanese mode commits a full-width space without a toggle shortcut\n";
+    return true;
+}
+
 bool protectedAfterNavigation(Instance *instance, AddonInstance *frontend) {
     ICUUID uuid;
     auto *ic = terminal(instance, frontend, uuid);
@@ -165,6 +186,20 @@ bool triggerKeepsProtection(Instance *instance, AddonInstance *frontend) {
     press(frontend, uuid, "Return");
     frontend->call<ITestFrontend::destroyInputContext>(uuid);
     std::cout << "PASS: Fcitx activation preserves terminal protection until explicit Japanese selection\n";
+    return true;
+}
+
+bool ctrlShiftSpacePassesNextKey(Instance *instance, AddonInstance *frontend) {
+    ICUUID uuid;
+    auto *ic = terminal(instance, frontend, uuid);
+    if (!expect(ic != nullptr, "ctrl shift space input context exists")) return false;
+    if (!expect(press(frontend, uuid, "Henkan"), "Japanese mode key is consumed")) return false;
+    if (!expect(ic->inputPanel().preedit().empty(), "Japanese mode starts without a composition")) return false;
+    if (!expect(!press(frontend, uuid, "Control+Shift+space"), "Ctrl+Shift+space is not consumed without a composition")) return false;
+    if (!expect(!press(frontend, uuid, "j"), "the key after an unconsumed Ctrl+Shift+space reaches the terminal")) return false;
+    if (!expect(ic->inputPanel().preedit().empty(), "the key after Ctrl+Shift+space does not start composition")) return false;
+    frontend->call<ITestFrontend::destroyInputContext>(uuid);
+    std::cout << "PASS: an unconsumed Ctrl+Shift+space keeps the terminal on code keys\n";
     return true;
 }
 
@@ -264,9 +299,11 @@ int main() {
             instance.inputMethodManager().setGroup(group);
             bool ok = quotedJapanese(&instance, frontend);
             if (ok) ok = explicitJapanese(&instance, frontend);
+            if (ok) ok = shiftSpaceInsertsFullWidthSpace(&instance, frontend);
             if (ok) ok = protectedAfterNavigation(&instance, frontend);
             if (ok) ok = resetKeepsJapanese(&instance, frontend);
             if (ok) ok = triggerKeepsProtection(&instance, frontend);
+            if (ok) ok = ctrlShiftSpacePassesNextKey(&instance, frontend);
             if (ok) ok = toggleJapanese(&instance, frontend, "Hankaku");
             if (ok) ok = toggleJapanese(&instance, frontend, "Henkan");
             if (ok) ok = directEnglish(&instance, frontend, "Eisu_toggle", true);

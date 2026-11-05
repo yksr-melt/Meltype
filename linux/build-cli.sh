@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 hrmcngs
 #
-# WSL / Linux の CLI から Meltype をビルドするための入口。
+# WSL / Linux (Ubuntu・Debian・Fedora) の CLI から Meltype をビルドするための入口。
 #   linux/build-cli.sh --setup --test --package
 #   linux/build-cli.sh --install
 # From any directory in Ubuntu/WSL:
@@ -29,12 +29,12 @@ usage() {
 Usage: linux/build-cli.sh [options]
 
 Options:
-  --setup                 Install Ubuntu/WSL build dependencies with apt.
+  --setup                 Install build dependencies with apt (Ubuntu, Debian, WSL) or dnf (Fedora).
   --test                  Run Meltype.Core.Tests.
   --mozc                  Build the Linux Mozc helper.
   --build                 Build the Mozc helper and Linux package.
   --package               Build linux/build/Meltype-linux.
-  --install               Install the built IBus engine into Linux.
+  --install               Build a .deb (apt) or .rpm (dnf) from linux/build/Meltype-linux and install it.
   --all                   Run --test --mozc --package. This is the default.
   --mozc-source DIR       Mozc checkout directory. Default: ~/mozc.
   --bazel-cache DIR       Optional Bazel disk cache directory.
@@ -91,16 +91,36 @@ if [[ "$(uname -s)" != Linux ]]; then
     exit 1
 fi
 
+# --setup と --install は、パッケージの形式 (Ubuntu・Debian は apt と .deb、Fedora は dnf と .rpm) を合わせる
+if command -v apt-get >/dev/null 2>&1; then
+    distro=apt
+elif command -v dnf >/dev/null 2>&1; then
+    distro=dnf
+else
+    distro=""
+fi
+if [[ ( $setup -eq 1 || $install -eq 1 ) && -z "$distro" ]]; then
+    echo "--setup and --install support apt-based (Ubuntu, Debian) and dnf-based (Fedora) distros." >&2
+    exit 1
+fi
+
 if [[ $setup -eq 1 ]]; then
-    if ! command -v apt-get >/dev/null 2>&1; then
-        echo "--setup supports apt-based distros such as Ubuntu on WSL." >&2
-        exit 1
-    fi
-    sudo apt-get update
-    sudo apt-get install -y \
-        build-essential clang lld curl git ibus libibus-1.0-dev pkg-config python3 python3-gi \
-        gir1.2-ibus-1.0 zlib1g-dev libdbus-1-dev libglib2.0-dev libgtk-3-dev \
-        libxcb-xfixes0-dev qt6-base-dev
+    case "$distro" in
+        apt)
+            sudo apt-get update
+            sudo apt-get install -y \
+                build-essential clang lld curl git ibus libibus-1.0-dev pkg-config python3 python3-gi \
+                gir1.2-ibus-1.0 zlib1g-dev libdbus-1-dev libglib2.0-dev libgtk-3-dev \
+                libxcb-xfixes0-dev qt6-base-dev
+            ;;
+        dnf)
+            # rpm-build は --install、cmake と fcitx5-devel は fcitx5 のアドオンのビルドに使う
+            sudo dnf install -y \
+                gcc gcc-c++ make clang lld curl git ibus ibus-devel pkgconf-pkg-config python3 python3-gobject \
+                zlib-ng-compat-devel dbus-devel glib2-devel gtk3-devel libxcb-devel qt6-qtbase-devel \
+                cmake fcitx5-devel rpm-build
+            ;;
+    esac
     if ! command -v dotnet >/dev/null 2>&1; then
         # /tmp の固定名は別ユーザーに差し替えられるので、自分専用の一時ディレクトリに置く。
         dotnet_tmp="$(mktemp -d)"
@@ -152,9 +172,22 @@ if [[ $package -eq 1 ]]; then
 fi
 
 if [[ $install -eq 1 ]]; then
-    if [[ ! -f "$root/linux/build/Meltype-linux/install.sh" ]]; then
+    if [[ ! -f "$root/linux/build/Meltype-linux/libMeltypeNative.so" ]]; then
         echo "Build output is missing. Run linux/build-cli.sh --package first." >&2
         exit 1
     fi
-    (cd "$root/linux/build/Meltype-linux" && bash install.sh)
+    # 同じ版のまま入れ直しても更新として入るように、+dev.<日時> を付ける (同じ版のリリース版よりも新しい扱いになる)
+    version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' "$root/linux/build/Meltype-linux/meltype.xml" | head -n 1)+dev.$(date +%Y%m%d%H%M%S)"
+    case "$distro" in
+        apt)
+            rm -f "$root"/linux/build/meltype_*.deb
+            bash "$root/linux/build-deb.sh" "$version" "$root/linux/build/Meltype-linux" "$root/linux/build"
+            sudo apt-get install -y "$root"/linux/build/meltype_*.deb
+            ;;
+        dnf)
+            rm -f "$root"/linux/build/meltype-*.rpm
+            bash "$root/linux/build-rpm.sh" "$version" "$root/linux/build/Meltype-linux" "$root/linux/build"
+            sudo dnf install -y "$root"/linux/build/meltype-*.rpm
+            ;;
+    esac
 fi

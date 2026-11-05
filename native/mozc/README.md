@@ -23,7 +23,7 @@ Meltype の変換エンジン「Mozc」(設定の「変換エンジン」が 両
 ```
 
 初回は Mozc の依存関係 (LLVM など約 1 GB) の取得とビルドで 30〜40 分ほどかかります。
-GitHub Actions では `.github/workflows/build.yml` の `mozc` ジョブが同じスクリプトでビルドし、`package` ジョブが同梱します。
+GitHub Actions では `.github/workflows/windows.yml` の `mozc` ジョブが同じスクリプトでビルドし、`package` ジョブが同梱します。
 
 学習データ (Mozc が覚えた変換) は `%LOCALAPPDATA%\Meltype\mozc\` に保存されます。
 
@@ -46,7 +46,7 @@ $env:MELTYPE_UT_DICTIONARY = 'C:\path\to\mozcdic-ut.txt'
 .\native\mozc\Build-MozcHelper.ps1 -Python python -Bazelisk C:\tools\bazelisk.exe
 ```
 
-`build.yml` の `mozc` ジョブも同じスクリプトなので、CI で作るときも `env:` に `MELTYPE_UT_DICTIONARY` を置けば同じように統合できます。
+`windows.yml` の `mozc` ジョブも同じスクリプトなので、CI で作るときも `env:` に `MELTYPE_UT_DICTIONARY` を置けば同じように統合できます。
 
 - **辞書の入手方法・ライセンス・性能への影響・うまくいかないとき**: [../../docs/dev/MOZC-UT.md](../../docs/dev/MOZC-UT.md)
   (English: [../../docs/dev/MOZC-UT.en.md](../../docs/dev/MOZC-UT.en.md))

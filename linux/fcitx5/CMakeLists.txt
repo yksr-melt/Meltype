@@ -9,7 +9,7 @@ project(fcitx5-meltype LANGUAGES CXX)
 find_package(Fcitx5Core 5.0 REQUIRED)
 find_package(Fcitx5Utils 5.0 REQUIRED)
 
-# 本体 (libMeltypeNative.so) と Mozc のヘルパーを入れた場所 (install.sh と同じ)
+# 本体 (libMeltypeNative.so) と Mozc のヘルパーを入れた場所 (build-deb.sh・build-rpm.sh と同じ)
 set(MELTYPE_DIR "/opt/meltype" CACHE PATH "libMeltypeNative.so を入れた場所")
 
 add_library(meltype MODULE meltype.cpp)

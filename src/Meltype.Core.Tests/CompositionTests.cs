@@ -176,6 +176,7 @@ internal static class CompositionTests
         /// <summary>かな入力 (JIS) か。</summary>
         public bool Kana { get; set; }
         public KanaLayout KanaLayout { get; set; }
+        public RomajiLayout RomajiLayout { get; set; }
         public bool CorrectTypos { get; set; } = true;
         public bool ZSymbols { get; set; } = true;
         public bool NumberKeysSelectCandidates { get; set; } = true;
@@ -204,6 +205,7 @@ internal static class CompositionTests
         public bool NowPlayingCandidates { get; set; }
         public string ClockTimeZone { get; set; } = "";
         public DateTime UtcNow { get; set; } = DateTime.UtcNow;
+        public TimeZoneInfo LocalTimeZone { get; set; } = TimeZoneInfo.Utc;
         public bool ContinueAfterConversion { get; set; }
         public bool Learning { get; set; } = true;
         public bool SeparateKeyRoles { get; set; }
@@ -272,6 +274,7 @@ internal static class CompositionTests
                 Manual = () => Manual,
                 KanaInput = () => Kana,
                 KanaLayout = () => KanaLayout,
+                RomajiLayout = () => RomajiLayout,
                 Misspellings = Misspellings,
                 Languages = languages,
                 Translations = translations,
@@ -304,6 +307,7 @@ internal static class CompositionTests
                 NowPlayingCandidates = () => NowPlayingCandidates,
                 ClockTimeZone = () => ClockTimeZone,
                 UtcNow = () => UtcNow,
+                LocalTimeZone = () => LocalTimeZone,
                 Predictor = predictor,
                 Predictions = () => predictor is not null,
                 EnglishNamePredictions = () => englishNamePredictions,
@@ -330,6 +334,8 @@ internal static class CompositionTests
         {
             if (!k.IsDown || _ctrlHeld) return false;
             if (k.Vk == VirtualKeys.Convert) return true;
+            // 親指シフトのかな配列では、無変換も親指キーとして受け取る
+            if (Kana && k.Vk == VirtualKeys.NonConvert && KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
             if (SigilWords && (Direct || !Kana) && Host.CharFromKey(k, _shiftHeld) is { } typed && Sigil.PassesThrough(typed, Host.PrecedingText))
             {
                 if (typed != '/' || Direct || Sigil.IsActive || Code) return false;
@@ -361,6 +367,9 @@ internal static class CompositionTests
             Controller.Pump();
             return swallowed;
         }
+
+        /// <summary>次の打鍵まで時間を空ける (ミリ秒)。</summary>
+        public void Wait(int ms) => _now += ms;
 
         public void Press(int vk)
         {
@@ -5560,5 +5569,35 @@ internal static class CompositionTests
         var text = new CompositionText(Detector);
         foreach (var c in "suityoku") text.Append(c);
         Assert.Equal("JA:suityoku", string.Join(" | ", text.Segments().Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
+    }
+
+    [Test]
+    public static void CustomRomajiTable_PendingDisplayShowsTypedLetters()
+    {
+        // issue #979 レビュー: 打ちかけの表示が んg から ng に変わり、続けて打つと登録した読みになることを、
+        // Core の変換ボックス (CompositionText) で確かめる (Core の変更なので、どの OS でも同じ動き)。
+        var dir = Path.Combine(Path.GetTempPath(), $"meltype-romaji-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, "romaji.txt"), "ngh\tにゅう\n");
+            var detector = CompositionDetector.CreateDefault(dir);
+            var text = new CompositionText(detector);
+            text.Append('n');
+            Assert.Equal("n", text.Display(final: false), "n だけなら打ちかけのまま");
+            text.Append('g');
+            Assert.Equal("ng", text.Display(final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
+            text.Append('h');
+            Assert.Equal("にゅう", text.Display(final: false), "続けて打つと登録した読みになる");
+            // 表を登録していない場合 (main 側の判定に従う)
+            var plain = new CompositionText(Detector);
+            foreach (var c in "ng") plain.Append(c);
+            // main の判定では、語頭の ng は表の有無に関係なく英字の ng として表示される (main だけの状態でも同じ結果を確認済み)。
+            // 表の登録で変わるのは、続けて h を打ったときに にゅう になるかどうか。
+            Assert.Equal("ng", plain.Display(final: false), "表が無いときの ng は main と同じ表示");
+            plain.Append('h');
+            Assert.True(plain.Display(final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
+        }
+        finally { Directory.Delete(dir, recursive: true); }
     }
 }

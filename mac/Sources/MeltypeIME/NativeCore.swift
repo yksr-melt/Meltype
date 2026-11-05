@@ -16,6 +16,8 @@ private typealias HandleKeyFunction = @convention(c) (UnsafeMutableRawPointer?, 
 private typealias CommitFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>?
 private typealias SelectFunction = @convention(c) (UnsafeMutableRawPointer?, Int32) -> UnsafeMutablePointer<CChar>?
 private typealias SetDirectFunction = @convention(c) (UnsafeMutableRawPointer?, Int32) -> Void
+private typealias TakeModeToggledFunction = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias IsDirectFunction = @convention(c) (UnsafeMutableRawPointer?) -> Int32
 private typealias DataDirectoryFunction = @convention(c) () -> UnsafeMutablePointer<CChar>?
 private typealias ReportUrlFunction = @convention(c) (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
 private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
@@ -114,6 +116,8 @@ final class NativeCore {
     private let selectFunction: SelectFunction?
     private let setDirectFunction: SetDirectFunction?
     private let setCodeInputFunction: SetDirectFunction?
+    private let takeModeToggledFunction: TakeModeToggledFunction?
+    private let isDirectFunction: IsDirectFunction?
     private let dataDirectoryFunction: DataDirectoryFunction?
     private let reportUrlFunction: ReportUrlFunction?
     private let zenzaiModelFunction: DataDirectoryFunction?
@@ -139,6 +143,8 @@ final class NativeCore {
         selectFunction = symbol("meltype_select_candidate", as: SelectFunction.self)
         setDirectFunction = symbol("meltype_set_direct", as: SetDirectFunction.self)
         setCodeInputFunction = symbol("meltype_set_code_input", as: SetDirectFunction.self)
+        takeModeToggledFunction = symbol("meltype_take_mode_toggled", as: TakeModeToggledFunction.self)
+        isDirectFunction = symbol("meltype_is_direct", as: IsDirectFunction.self)
         dataDirectoryFunction = symbol("meltype_data_directory", as: DataDirectoryFunction.self)
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
         zenzaiModelFunction = symbol("meltype_zenzai_model", as: DataDirectoryFunction.self)
@@ -199,6 +205,18 @@ final class NativeCore {
         guard let pointer = zenzaiModelFunction?() else { return nil }
         defer { freeFunction?(pointer) }
         return String(cString: pointer)
+    }
+
+    /// 直前のキーで、設定「日本語 / 英数を切り替えるキーを追加」の切替をしたか (#1033)。読むと印が消える。
+    func takeModeToggled(_ session: UnsafeMutableRawPointer?) -> Bool {
+        guard let takeModeToggledFunction, let session else { return false }
+        return takeModeToggledFunction(session) != 0
+    }
+
+    /// 本体のモード (true = 英数 / 直接入力)。切替のあとに読んで、モード表示と入力メニューを合わせる (#1033)。
+    func isDirect(_ session: UnsafeMutableRawPointer?) -> Bool {
+        guard let isDirectFunction, let session else { return false }
+        return isDirectFunction(session) != 0
     }
 
     /// 設定・学習データ・ユーザー辞書の保存場所。
