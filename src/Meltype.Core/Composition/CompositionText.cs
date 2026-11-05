@@ -425,6 +425,9 @@ public sealed class CompositionText
         !KanaInput && _units.Count > 0 &&
         (Raw is "-" or ">" or "*" or "+" || (Raw.Length <= 6 && Raw.All(c => c == '#')));  // 見出しは 6 段まで
 
+    /// <summary>水平線・front matter の区切り (3 個以上の -) だけの入力か。打った半角のまま表示・確定する。</summary>
+    public bool IsHorizontalRule => !KanaInput && Raw.Length >= 3 && Raw.All(c => c == '-');
+
     /// <summary>自動判定の区間分け (Mode が Auto のときに使う)。</summary>
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
     public IReadOnlyList<CompositionSegment> Segments()
@@ -749,7 +752,7 @@ public sealed class CompositionText
         DisplayMode.Hiragana => AllKana(final),
         DisplayMode.Katakana => ToKatakana(AllKana(final)),
         DisplayMode.HalfWidthKatakana => ToHalfWidthKatakana(ToKatakana(AllKana(final))),
-        _ => IsNumeric ? Raw : RenderSegments(final, convert),
+        _ => IsNumeric || IsHorizontalRule ? Raw : RenderSegments(final, convert),
     };
 
     /// <summary>英字の大文字・小文字を変える (ai → AI / Ai)。</summary>

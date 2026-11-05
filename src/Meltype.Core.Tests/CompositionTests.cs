@@ -3779,6 +3779,24 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void MarkdownMarker_HorizontalRule()
+    {
+        // #1301: 3 個以上の - だけの入力は、水平線・front matter の区切りとして打った半角のまま表示・確定する。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["---"] = "---",
+            ["--"] = "ーー",
+            ["----"] = "----",
+            ["aa---"] = "ああーーー",   // かなのあとの - は長音のまま
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Enter");
+        }
+    }
+
+    [Test]
     public static void DotSuffix_FileExtensionsStayEnglish()
     {
         // 報告 (#260・#254): 英語の語.拡張子 の拡張子がひらがなになる (MeltypeTip.dっl、Meltype.coんふぃg、Meltype.ご。mod)
