@@ -83,8 +83,8 @@ public sealed class BackgroundCallbackConverter(
             Kind.Candidates => new Answer(null, null, candidates(request.Reading)),
             _ => throw new InvalidOperationException($"不明な要求: {request.Kind}"),
         };
-        // 候補が無いのは時間切れかもしれない (WinRT) ので、覚えずに次もまた聞く
-        if (answer.Candidates is { Count: 0 }) return;
+        // 答えが無いのは準備前・一時的な失敗・時間切れ (WinRT) かもしれないので、覚えずに次もまた聞く
+        if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {
             if (_answers.Count >= MaxCache) _answers.Clear();

@@ -386,6 +386,22 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Callback_AsksAgainAfterNoAnswer()
+    {
+        // 変換エンジンの準備前・一時的な失敗の null を覚えると、その読みはかなのままになる
+        var clauses = new Queue<IReadOnlyList<ConversionClause>?>([null, [new ConversionClause("よみ", "読み")]]);
+        var texts = new Queue<string?>([null, "全体"]);
+        var notified = 0;
+        using var converter = new BackgroundCallbackConverter((_, _) => clauses.Dequeue(), _ => [], _ => texts.Dequeue());
+        converter.ResultReady += () => Interlocked.Increment(ref notified);
+        Assert.True(converter.ConvertClauses("よみ") is null, "1 回目は答えが無い");
+        Assert.Equal("読み", converter.ConvertClauses("よみ")?[0].Text, "覚えずに聞き直す");
+        Assert.True(converter.Convert("よみ") is null, "1 回目は答えが無い");
+        Assert.Equal("全体", converter.Convert("よみ"), "覚えずに聞き直す");
+        Assert.Equal(2, Volatile.Read(ref notified), "答えが無いときは知らせない (再描画が同じ要求を繰り返さない)");
+    }
+
+    [Test]
     public static void Callback_UsesTheConvertFunctionAndTheStartThread()
     {
         var started = 0;
