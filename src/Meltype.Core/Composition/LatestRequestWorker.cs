@@ -9,7 +9,8 @@ namespace Meltype.Composition;
 /// </summary>
 /// <param name="process">1 件を処理する。ワーカーのスレッドで呼ぶ。</param>
 /// <param name="settleMs">打鍵が続く間の要求をまとめるために、処理を始める前に待つ時間。Wait で待たれている要求は待たない。</param>
-internal sealed class LatestRequestWorker<TRequest>(Action<TRequest> process, int settleMs = 0) : IDisposable
+/// <param name="start">ワーカーの処理を動かす先。null なら thread pool。</param>
+internal sealed class LatestRequestWorker<TRequest>(Action<TRequest> process, int settleMs = 0, Action<Action>? start = null) : IDisposable
     where TRequest : struct, IEquatable<TRequest>
 {
     private readonly object _gate = new();
@@ -28,7 +29,8 @@ internal sealed class LatestRequestWorker<TRequest>(Action<TRequest> process, in
             _pending = Same(_active, request) ? null : request;
             if (_running || _pending is null) return;
             _running = true;
-            _ = Task.Run(Run);
+            if (start is not null) start(Run);
+            else _ = Task.Run(Run);
         }
     }
 

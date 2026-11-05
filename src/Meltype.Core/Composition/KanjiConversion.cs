@@ -74,6 +74,15 @@ public sealed class ConversionBudget
         _deadline = Environment.TickCount64 + milliseconds;
     }
 
+    /// <summary>convert の間は milliseconds までしか待たない (代わりの変換エンジンに、待つ時間を残すとき)。</summary>
+    public T WithLimit<T>(int milliseconds, Func<T> convert)
+    {
+        var previous = _deadline;
+        _deadline = Math.Min(previous, Environment.TickCount64 + milliseconds);
+        try { return convert(); }
+        finally { _deadline = previous; }
+    }
+
     /// <summary>convert の間は待たない (ライブ変換のように、打鍵ごとに走って結果が後から届いてよい変換)。</summary>
     public T WithoutWaiting<T>(Func<T> convert)
     {

@@ -273,7 +273,7 @@ internal static class BackgroundConversionTests
         Assert.True(watch.ElapsedMilliseconds < 1000, $"待たない ({watch.ElapsedMilliseconds}ms)");
         release.Set();
         Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
-        Assert.Equal("答え", converter.Convert("よみ"));
+        Assert.Equal("答え", converter.ConvertClauses("よみ")?[0].Text);
 
         // 候補は Budget の間だけ待てば、その場で受け取れる
         converter.Budget.Start(3000);
@@ -290,6 +290,73 @@ internal static class BackgroundConversionTests
             _ => []);
         Assert.Equal("答え", converter.Convert("よみ"));
         Assert.Equal(Environment.CurrentManagedThreadId, thread);
+    }
+
+    [Test]
+    public static void SystemOnly_ShowsKanaUntilTheAnswer_LikeMozcOnly()
+    {
+        // 変換エンジンが「Microsoft IME」だけ: 答えが届くまではかなで見せ、届いたら表示を更新する
+        using var release = new ManualResetEventSlim();
+        using var ready = new ManualResetEventSlim();
+        var budget = new ConversionBudget();
+        using var system = new BackgroundCallbackConverter(
+            (reading, _) => { release.Wait(10000); return [new ConversionClause(reading, "日本語")]; },
+            _ => [],
+            budget: budget);
+        var hybrid = new HybridConverter(() => ConversionEngine.System, null, system, system.Candidates);
+        hybrid.ResultReady += ready.Set;
+        var session = Session(hybrid);
+
+        Assert.Equal("にほんご", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
+        release.Set();
+        Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
+        // 届いたら表示する。ライブ変換は読みごとに答えるので、同じ読みをもう一度頼むまで繰り返す
+        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "日本語", 5000), "表示が更新される");
+    }
+
+    [Test]
+    public static void MozcOnly_ShowsKanaUntilTheAnswer()
+    {
+        var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
+        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var ready = new ManualResetEventSlim();
+        mozc.ResultReady += ready.Set;
+        mozc.WarmUp();
+        Assert.True(ready.Wait(10000), "起動したら知らせる");
+
+        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, new CompositionTests.FakeConverter(), null);
+        var session = Session(hybrid);
+        Assert.Equal("きしゃがきた", SessionFacadeTests.Type(session, "kishagakita")[^1].View?.Text);
+        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "届いたら表示が更新される");
+    }
+
+    [Test]
+    public static void Hybrid_LeavesBudgetForTheFallback_WhenMozcIsSlow()
+    {
+        var budget = new ConversionBudget();
+        budget.Start(1000);
+        var before = budget.RemainingMs;
+        var inside = budget.WithLimit(100, () => budget.RemainingMs);
+        Assert.True(inside <= 100, $"区切った間は 100ms まで ({inside})");
+        Assert.True(budget.RemainingMs > 100 && budget.RemainingMs <= before, $"終わったら残りの時間に戻る ({budget.RemainingMs})");
+    }
+
+    [Test]
+    public static void Callback_UsesTheConvertFunctionAndTheStartThread()
+    {
+        var started = 0;
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) => [new ConversionClause(reading, "文節")],
+            _ => [],
+            _ => "全体",
+            start: run =>
+            {
+                Interlocked.Increment(ref started);
+                _ = Task.Run(run);
+            });
+        converter.Budget.Start(3000);
+        Assert.Equal("全体", converter.Convert("よみ"));
+        Assert.True(Volatile.Read(ref started) >= 1, "渡した先でワーカーを動かす");
     }
 
     [Test]

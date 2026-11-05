@@ -4,14 +4,20 @@
 namespace Meltype.Composition;
 
 /// <summary>
-/// 同期でしか答えられない外の変換エンジン (Mac の azooKey) を、1 つのワーカーのスレッドから呼ぶ。
-/// Budget を使っている間は clauses と candidates をワーカーだけが呼ぶので、外の変換エンジンはスレッドセーフでなくてよい。
+/// 同期でしか答えられない外の変換エンジン (Mac の azooKey・Windows の Microsoft IME) を、1 つのワーカーから呼ぶ。
+/// Budget を使っている間は関数をワーカーだけが呼ぶので、外の変換エンジンはスレッドセーフでなくてよい。
 /// </summary>
 /// <param name="clauses">(読み, 文脈) → 文節。変換できなければ null。</param>
 /// <param name="candidates">読み → 候補の一覧。</param>
+/// <param name="convert">読み全体の変換。null なら文節をつなげる。</param>
+/// <param name="budget">ほかの変換エンジンと 1 回の入力の待ち時間を共有するときに渡す。</param>
+/// <param name="start">ワーカーを動かすスレッドを選ぶ (COM の STA など)。null なら thread pool。</param>
 public sealed class BackgroundCallbackConverter(
     Func<string, string?, IReadOnlyList<ConversionClause>?> clauses,
-    Func<string, IReadOnlyList<string>> candidates) : IKanjiConverter, IBackgroundConverter, IDisposable
+    Func<string, IReadOnlyList<string>> candidates,
+    Func<string, string?>? convert = null,
+    ConversionBudget? budget = null,
+    Action<Action>? start = null) : IKanjiConverter, IBackgroundConverter, IDisposable
 {
     // 外の変換エンジンの答えは Zenzai の準備などで変わるので、同じ読みの古い答えを長く持たない
     private const int MaxCache = 64;
@@ -20,34 +26,40 @@ public sealed class BackgroundCallbackConverter(
     private readonly Dictionary<Request, Answer> _answers = [];
     private LatestRequestWorker<Request>? _worker;
 
-    private readonly record struct Request(bool IsCandidates, string Reading, string? Context);
+    private enum Kind { Clauses, Convert, Candidates }
 
-    private readonly record struct Answer(IReadOnlyList<ConversionClause>? Clauses, IReadOnlyList<string>? Candidates);
+    private readonly record struct Request(Kind Kind, string Reading, string? Context);
 
-    public ConversionBudget Budget { get; } = new();
+    private readonly record struct Answer(IReadOnlyList<ConversionClause>? Clauses, string? Text, IReadOnlyList<string>? Candidates);
+
+    public ConversionBudget Budget { get; } = budget ?? new();
 
     public event Action? ResultReady;
 
     public string? Convert(string hiragana) =>
-        ConvertClauses(hiragana) is { Count: > 0 } parts ? string.Concat(parts.Select(c => c.Text)) : null;
+        Budget.Limited ? Ask(new Request(Kind.Convert, hiragana, null))?.Text : ConvertNow(hiragana);
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-        Budget.Limited ? Ask(new Request(false, hiragana, context))?.Clauses : clauses(hiragana, context);
+        Budget.Limited ? Ask(new Request(Kind.Clauses, hiragana, context))?.Clauses : clauses(hiragana, context);
 
     public IReadOnlyList<string> Candidates(string reading) =>
-        Budget.Limited ? Ask(new Request(true, reading, null))?.Candidates ?? [] : candidates(reading);
+        Budget.Limited ? Ask(new Request(Kind.Candidates, reading, null))?.Candidates ?? [] : candidates(reading);
 
     /// <summary>最初の変換の準備 (辞書の読み込み) をワーカーで済ませておく。</summary>
-    public void WarmUp() => Worker().Submit(new Request(false, "にほんご", null));
+    public void WarmUp() => Worker().Submit(new Request(Kind.Clauses, "にほんご", null));
 
     public void Dispose()
     {
         lock (_gate) _worker?.Dispose();
     }
 
+    private string? ConvertNow(string hiragana) =>
+        convert is not null ? convert(hiragana)
+            : clauses(hiragana, null) is { Count: > 0 } parts ? string.Concat(parts.Select(c => c.Text)) : null;
+
     private LatestRequestWorker<Request> Worker()
     {
-        lock (_gate) return _worker ??= new LatestRequestWorker<Request>(Process);
+        lock (_gate) return _worker ??= new LatestRequestWorker<Request>(Process, start: start);
     }
 
     private Answer? Ask(Request request)
@@ -64,9 +76,13 @@ public sealed class BackgroundCallbackConverter(
 
     private void Process(Request request)
     {
-        var answer = request.IsCandidates
-            ? new Answer(null, candidates(request.Reading))
-            : new Answer(clauses(request.Reading, request.Context), null);
+        var answer = request.Kind switch
+        {
+            Kind.Clauses => new Answer(clauses(request.Reading, request.Context), null, null),
+            Kind.Convert => new Answer(null, ConvertNow(request.Reading), null),
+            Kind.Candidates => new Answer(null, null, candidates(request.Reading)),
+            _ => throw new InvalidOperationException($"不明な要求: {request.Kind}"),
+        };
         lock (_gate)
         {
             if (_answers.Count >= MaxCache) _answers.Clear();
