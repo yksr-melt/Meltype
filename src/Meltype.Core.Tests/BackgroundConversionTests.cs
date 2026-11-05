@@ -252,30 +252,6 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
-    public static void Live_KeepsThePreviousResultWhileWaiting_InsteadOfFlickeringToKana()
-    {
-        using var hold = new ManualResetEventSlim(true);
-        using var ready = new AutoResetEvent(false);
-        using var converter = new BackgroundCallbackConverter(
-            (reading, _) =>
-            {
-                hold.Wait(10000);
-                return [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
-            },
-            _ => []);
-        converter.ResultReady += () => ready.Set();
-        var session = Session(converter);
-        SessionFacadeTests.Type(session, "nihongo");
-        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "日本語", 5000), "答えが届く");
-
-        // 次の読みの答えが届くまでは、前の答えの続きとして見せる
-        hold.Reset();
-        Assert.Equal("日本語を", SessionFacadeTests.Type(session, "wo")[^1].View?.Text);
-        hold.Set();
-        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "にほんごを!", 5000), "届いたら置き換える");
-    }
-
-    [Test]
     public static void Space_WaitsWithinTheBudget()
     {
         using var converter = Slow(delayMs: 50);

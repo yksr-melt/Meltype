@@ -370,8 +370,6 @@ public sealed class CompositionController
     private bool _conversionPrefersJapanese;
     // 文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える
     private bool _clausesEdited;
-    // 前の打鍵のライブ変換の結果。答えがまだ無い読みは、この続きとして見せる
-    private (string Reading, List<(string Reading, string Text)> Clauses)? _lastLive;
     private int _selectedClause;
     private bool _converting;
     private bool? _lastCommitEnglish;
@@ -677,7 +675,6 @@ public sealed class CompositionController
         _text.Clear();
         _converting = false;
         _clauses = [];
-        _lastLive = null;
         _spaceStartedConversion = false;
         _tabStartedConversion = false;
     }
@@ -2901,13 +2898,6 @@ public sealed class CompositionController
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
-        if (_budget is { Enabled: true })
-        {
-            // 答えがまだ無い (全部かな) ときは、前の打鍵の結果を残す。かなに戻すと、打鍵のたびに表示が漢字とかなで揺れる
-            if (string.Concat(clauses.Select(c => c.Text)) == kana && _lastLive is { } last && kana.StartsWith(last.Reading, StringComparison.Ordinal))
-                return [.. last.Clauses, (kana[last.Reading.Length..], kana[last.Reading.Length..])];
-            _lastLive = (kana, clauses);
-        }
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
