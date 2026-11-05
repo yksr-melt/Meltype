@@ -346,7 +346,7 @@ public static unsafe class Exports
         }
     }
 
-    private static IReadOnlyList<string> MoreCandidates(string reading)
+    private static string[] MoreCandidates(string reading)
     {
         if (s_candidates == null) return [];
         var text = TakeUtf8(s_candidates(ToUtf8(reading, out var buffer)));
