@@ -73,8 +73,8 @@ public static unsafe class Exports
         try
         {
             var session = s_mozc is { } mozc
-                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker(), backgroundConversion: s_conversionReady)
-                : MeltypeSession.CreateDefault(s_callback, s_callback.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true, backgroundConversion: s_conversionReady);
+                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker())
+                : MeltypeSession.CreateDefault(s_callback, s_callback.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true);
             return GCHandle.ToIntPtr(GCHandle.Alloc(session));
         }
         catch (Exception ex)
@@ -87,23 +87,21 @@ public static unsafe class Exports
     /// <summary>
     /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_create の前に 1 回呼ぶ。
     /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
-    /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、変換は同期のまま。
+    /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、答えが出るまで待つ。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
     public static void SetConversionReady(delegate* unmanaged<void> notify)
     {
-        s_conversionReady = true;
         if (s_mozc is { } mozc)
         {
+            mozc.Budget.Enable();
             mozc.ResultReady += () => notify();
             return;
         }
+        s_callback.Budget.Enable();
         s_callback.ResultReady += () => notify();
         s_callback.WarmUp();
     }
-
-    /// <summary>meltype_set_conversion_ready を呼んだか。</summary>
-    private static bool s_conversionReady;
 
     /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
     private static readonly BackgroundCallbackConverter s_callback = new(new CallbackConverter().ConvertClauses, MoreCandidates);

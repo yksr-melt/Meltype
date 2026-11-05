@@ -57,25 +57,31 @@ public interface IStandaloneConverter
 
 /// <summary>
 /// 入力スレッドが変換エンジンを待ってよい時間。入力スレッドからだけ使う。
-/// Start を一度も呼ばなければ制限なし (変換エンジンは同期で答える。--repro などの測定はこの状態で動かす)。
+/// Enable するまでは制限なし。結果を受け取る経路を持つフロントだけが Enable する (--repro・--self-test は答えが出るまで待つ)。
 /// </summary>
 public sealed class ConversionBudget
 {
-    private long _deadline;
+    private long _deadline = long.MaxValue;
 
-    public bool Limited { get; private set; }
+    public bool Enabled { get; private set; }
 
-    public int RemainingMs => (int)Math.Max(0, _deadline - Environment.TickCount64);
+    public int RemainingMs => (int)Math.Clamp(_deadline - Environment.TickCount64, 0, int.MaxValue);
+
+    public void Enable()
+    {
+        Enabled = true;
+        _deadline = Environment.TickCount64;
+    }
 
     public void Start(int milliseconds)
     {
-        Limited = true;
-        _deadline = Environment.TickCount64 + milliseconds;
+        if (Enabled) _deadline = Environment.TickCount64 + milliseconds;
     }
 
     /// <summary>convert の間は milliseconds までしか待たない (ライブ変換は 0。代わりの変換エンジンに待つ時間を残すときも使う)。</summary>
     public T WithLimit<T>(int milliseconds, Func<T> convert)
     {
+        if (!Enabled) return convert();
         var previous = _deadline;
         _deadline = Math.Min(previous, Environment.TickCount64 + milliseconds);
         try { return convert(); }
@@ -83,7 +89,7 @@ public sealed class ConversionBudget
     }
 }
 
-/// <summary>結果を背景で作り、できたら知らせる変換エンジン。</summary>
+/// <summary>結果をワーカーで作り、できたら知らせる変換エンジン。</summary>
 public interface IBackgroundConverter
 {
     ConversionBudget Budget { get; }

@@ -5,7 +5,7 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// 同期でしか答えられない外の変換エンジン (Mac の azooKey・Windows の Microsoft IME) を、1 つのワーカーから呼ぶ。
-/// Budget を使っている間は関数をワーカーだけが呼ぶので、外の変換エンジンはスレッドセーフでなくてよい。
+/// 関数はワーカーだけが呼ぶので、外の変換エンジンはスレッドセーフでなくてよい。
 /// </summary>
 /// <param name="clauses">(読み, 文脈) → 文節。変換できなければ null。</param>
 /// <param name="candidates">読み → 候補の一覧。</param>
@@ -37,13 +37,13 @@ public sealed class BackgroundCallbackConverter(
     public event Action? ResultReady;
 
     public string? Convert(string hiragana) =>
-        Budget.Limited ? Ask(new Request(Kind.Convert, hiragana, null))?.Text : ConvertNow(hiragana);
+        Ask(new Request(Kind.Convert, hiragana, null))?.Text;
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-        Budget.Limited ? Ask(new Request(Kind.Clauses, hiragana, context))?.Clauses : clauses(hiragana, context);
+        Ask(new Request(Kind.Clauses, hiragana, context))?.Clauses;
 
     public IReadOnlyList<string> Candidates(string reading) =>
-        Budget.Limited ? Ask(new Request(Kind.Candidates, reading, null))?.Candidates ?? [] : candidates(reading);
+        Ask(new Request(Kind.Candidates, reading, null))?.Candidates ?? [];
 
     /// <summary>最初の変換の準備 (辞書の読み込み) をワーカーで済ませておく。</summary>
     public void WarmUp() => Worker().Submit(new Request(Kind.Clauses, "にほんご", null));
@@ -83,6 +83,8 @@ public sealed class BackgroundCallbackConverter(
             Kind.Candidates => new Answer(null, null, candidates(request.Reading)),
             _ => throw new InvalidOperationException($"不明な要求: {request.Kind}"),
         };
+        // 候補が無いのは時間切れかもしれない (WinRT) ので、覚えずに次もまた聞く
+        if (answer.Candidates is { Count: 0 }) return;
         lock (_gate)
         {
             if (_answers.Count >= MaxCache) _answers.Clear();

@@ -99,11 +99,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
     public IReadOnlyList<string> Candidates(string reading)
     {
-        // Budget を使っているときは、ヘルパーの応答を待っているワーカーの _gate を入力スレッドで待たない
-        var entered = false;
-        if (Budget.Limited) Monitor.TryEnter(_gate, ref entered);
-        else Monitor.Enter(_gate, ref entered);
-        if (entered)
+        // ヘルパーの応答を待っているワーカーの _gate を入力スレッドで待たない
+        if (Monitor.TryEnter(_gate))
         {
             try
             {
@@ -181,23 +178,21 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IBackgr
     /// <summary>入力スレッドからの問い合わせ。Budget を使っているときは、キャッシュに無ければワーカーに頼み、Budget の間だけ待つ。</summary>
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Query(string context, string reading)
     {
-        if (!Budget.Limited) return Request(context, reading);
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
         var request = (Clean(context), Clean(reading));
-        if (TryCached(request, out var result)) return result;
+        if (TryCached(request, 0, out var result)) return result;
         _worker.Submit(request);
-        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, out result) ? result : null;
+        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, Budget.RemainingMs, out result) ? result : null;
     }
 
-    private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
+    private bool TryCached((string Context, string Reading) request, int waitMs, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
     {
         result = null;
-        if (!Monitor.TryEnter(_gate)) return false;
+        if (!Monitor.TryEnter(_gate, waitMs)) return false;
         try
         {
-            if (_disposed) return false;
+            if (_disposed || !_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
             _requests++;
-            if (!_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
             _cacheHits++;
             foreach (var (segmentReading, candidates) in result ?? []) _candidates[segmentReading] = candidates;
             return true;

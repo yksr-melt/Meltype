@@ -29,6 +29,9 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const int StartTimeoutMs = 30000;
     private const int MaxReading = 80;
     private const int MaxContext = 100;
+
+    // ワーカーで待つ時間。入力は止めないので、CPU だけで計算する PC でも答えが届く長さにする (Space で待つのは ConversionBudget の間だけ)
+    private const int DefaultTimeoutMs = 1500;
     private const int MaxCache = 256;
 
     /// <summary>
@@ -66,7 +69,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
     /// <param name="timeoutMs">1 回の変換を待つ時間。</param>
     /// <param name="device">使う GPU (llama-server の --device)。空なら CPU だけで計算する。</param>
-    public ZenzaiConverter(string serverPath, string modelPath, int timeoutMs = 400, string device = "")
+    public ZenzaiConverter(string serverPath, string modelPath, int timeoutMs = DefaultTimeoutMs, string device = "")
     {
         _serverPath = serverPath;
         _modelPath = modelPath;
@@ -91,7 +94,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>すでに動いている llama-server を使う (テスト用)。</summary>
-    internal ZenzaiConverter(Uri endpoint, int timeoutMs = 400) : this("", "", timeoutMs)
+    internal ZenzaiConverter(Uri endpoint, int timeoutMs = DefaultTimeoutMs) : this("", "", timeoutMs)
     {
         _fixedEndpoint = endpoint;
         _endpoint = endpoint;
@@ -132,6 +135,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
+        ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
         context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
         var key = context + "\u0000" + hiragana;
@@ -141,11 +145,19 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             EnsureStarting();
             if (!_ready || _endpoint is null) return null;
         }
-        if (!Budget.Limited) return ConvertNow(hiragana, context, key);
         var request = new LiveRequest(hiragana, context, key);
         _worker.Submit(request);
         if (!_worker.Wait(request, Budget.RemainingMs)) return null;
+        ThrowWorkerFailure();
         lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
+    }
+
+    // ワーカーの例外は入力スレッドで投げ直す (HybridConverter が受けて持ち主に知らせる: #973)
+    private Exception? _workerFailure;
+
+    private void ThrowWorkerFailure()
+    {
+        if (Interlocked.Exchange(ref _workerFailure, null) is { } failure) throw new InvalidOperationException("Zenzai の変換で例外になりました", failure);
     }
 
     private readonly record struct LiveRequest(string Hiragana, string Context, string Key);
@@ -159,9 +171,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
         catch (Exception ex)
         {
-            // 同期で呼ぶときは HybridConverter が受ける例外。ワーカーでは諦めの印を付けて ZenzaiHolder に止めてもらう (#973)
-            if (!_disposed) Diagnostics.Log.Error($"Zenzai で変換できないので、今までの変換エンジンで変換します: {ex}");
-            Fail();
+            Volatile.Write(ref _workerFailure, ex);
         }
     }
 

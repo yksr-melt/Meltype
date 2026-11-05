@@ -20,8 +20,11 @@ internal static class BackgroundConversionTests
         },
         _ => []);
 
-    private static MeltypeSession Session(IKanjiConverter converter, bool background = true) =>
-        new(CompositionTests.Detector, converter, new CompositionOptions { BackgroundConversion = background, LiveConversion = () => true }, () => new Settings());
+    private static MeltypeSession Session(IKanjiConverter converter)
+    {
+        (converter as IBackgroundConverter)?.Budget.Enable();
+        return new(CompositionTests.Detector, converter, new CompositionOptions { LiveConversion = () => true }, () => new Settings());
+    }
 
     [Test]
     public static void Signal_DoesNotLoseANotificationBeforeWaiting()
@@ -177,15 +180,12 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
-    public static void WithoutTheOption_ConverterIsSynchronous()
+    public static void WithoutEnable_WaitsForTheAnswer()
     {
+        // --repro・--self-test: 結果を受け取る経路が無いので、打鍵ごとに答えを待つ
         using var converter = Slow(delayMs: 50);
-        // --repro など: Budget を使わないので、変換エンジンが答えるまで待つ想定の呼び方は変わらない
-        Assert.True(!converter.Budget.Limited, "Start を呼ぶまで制限なし");
-        Session(converter, background: false);
-        Assert.True(!converter.Budget.Limited, "オプションが無ければ Budget を使わない");
-        Session(converter, background: true);
-        Assert.True(converter.Budget.Limited, "オプションがあれば Budget を使う");
+        var session = new MeltypeSession(CompositionTests.Detector, converter, new CompositionOptions { LiveConversion = () => true }, () => new Settings());
+        Assert.Equal("日本語", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
     }
 
     [Test]
@@ -203,7 +203,7 @@ internal static class BackgroundConversionTests
         using var converter = new BackgroundCallbackConverter(
             (reading, _) => { Enter(); return [new ConversionClause(reading, reading + "!")]; },
             reading => { Enter(); return [reading + "?"]; });
-        converter.Budget.Start(0);
+        converter.Budget.Enable();
         var notified = 0;
         converter.ResultReady += () => Interlocked.Increment(ref notified);
         for (var i = 0; i < 40; i++)
@@ -226,7 +226,7 @@ internal static class BackgroundConversionTests
             (reading, _) => { release.Wait(); return [new ConversionClause(reading, "答え")]; },
             _ => ["候補"]);
         converter.ResultReady += ready.Set;
-        converter.Budget.Start(0);
+        converter.Budget.Enable();
 
         var watch = Stopwatch.StartNew();
         Assert.True(converter.ConvertClauses("よみ") is null, "答えが無ければ待たない");
@@ -238,18 +238,6 @@ internal static class BackgroundConversionTests
         // 候補は Budget の間だけ待てば、その場で受け取れる
         converter.Budget.Start(3000);
         Assert.Equal("候補", string.Join(",", converter.Candidates("よみ")));
-    }
-
-    [Test]
-    public static void Callback_IsSynchronousWithoutTheBudget()
-    {
-        // --self-test など、meltype_set_conversion_ready を呼ばないフロントは今までどおり呼んだスレッドで答える
-        var thread = -1;
-        using var converter = new BackgroundCallbackConverter(
-            (reading, _) => { thread = Environment.CurrentManagedThreadId; return [new ConversionClause(reading, "答え")]; },
-            _ => []);
-        Assert.Equal("答え", converter.Convert("よみ"));
-        Assert.Equal(Environment.CurrentManagedThreadId, thread);
     }
 
     [Test]
@@ -291,6 +279,16 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Callback_AsksAgainAfterEmptyCandidates()
+    {
+        // Windows の候補 (WinRT) は時間切れで空を返す。空を覚えると、同じ読みでしばらく候補が欠ける
+        var answers = new Queue<IReadOnlyList<string>>([[], ["候補"]]);
+        using var converter = new BackgroundCallbackConverter((_, _) => null, _ => answers.Dequeue());
+        Assert.Equal(0, converter.Candidates("よみ").Count);
+        Assert.Equal("候補", string.Join(",", converter.Candidates("よみ")));
+    }
+
+    [Test]
     public static void Callback_UsesTheConvertFunctionAndTheStartThread()
     {
         var started = 0;
@@ -303,6 +301,7 @@ internal static class BackgroundConversionTests
                 Interlocked.Increment(ref started);
                 _ = Task.Run(run);
             });
+        converter.Budget.Enable();
         converter.Budget.Start(3000);
         Assert.Equal("全体", converter.Convert("よみ"));
         Assert.True(Volatile.Read(ref started) >= 1, "渡した先でワーカーを動かす");
@@ -315,7 +314,7 @@ internal static class BackgroundConversionTests
         using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
         var notified = 0;
         mozc.ResultReady += () => Interlocked.Increment(ref notified);
-        mozc.Budget.Start(0);
+        mozc.Budget.Enable();
 
         // 起動の完了を知らせる
         mozc.WarmUp();

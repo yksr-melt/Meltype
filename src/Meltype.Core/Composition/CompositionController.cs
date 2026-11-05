@@ -123,11 +123,6 @@ public sealed record CompositionOptions
     /// <summary>打ったそばから漢字に変換して見せるか。</summary>
     public Func<bool> LiveConversion { get; init; } = () => false;
 
-    /// <summary>
-    /// 変換エンジン (IBackgroundConverter) を入力スレッドで待たない。結果が届いたら、ホストが入力スレッドで RefreshConversion を呼ぶ。
-    /// </summary>
-    public bool BackgroundConversion { get; init; }
-
     /// <summary>かな漢字変換のエンジン (Windows の CompositionService が Mozc / Microsoft IME を選ぶのに使う)。</summary>
     public Func<Config.ConversionEngine> Engine { get; init; } = () => Config.ConversionEngine.System;
 
@@ -439,8 +434,7 @@ public sealed class CompositionController
         _text = new CompositionText(detector);
         _detector = detector;
         _converter = converter;
-        _budget = options?.BackgroundConversion == true ? (converter as IBackgroundConverter)?.Budget : null;
-        _budget?.Start(0);
+        _budget = (converter as IBackgroundConverter)?.Budget;
         _host = host;
         _options = options ?? new CompositionOptions();
         _text.Manual = () => _options.Manual();
@@ -2906,7 +2900,7 @@ public sealed class CompositionController
         var converting = _converting && _clauses.Count > 0;
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? string.Concat(_clauses.Select(c => c.Text))
-            : _budget is not null && !_options.EnterCommitsAsShown()
+            : _budget is { Enabled: true } && !_options.EnterCommitsAsShown()
                 ? _text.Display(final: true, _options.LiveConversion() ? kana => CountsAsLive(kana) ? string.Concat(ConvertJapanese(kana).Select(c => c.Text)) : kana : null)
                 : CurrentDisplay(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。

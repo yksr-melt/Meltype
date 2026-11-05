@@ -58,7 +58,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         var resolved = new CompositionOptions
         {
             LiveConversion = options.LiveConversion,
-            BackgroundConversion = true,
             DirectMode = options.DirectMode,
             ClassifyDirect = options.ClassifyDirect,
             DirectDecided = options.DirectDecided,
@@ -122,6 +121,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         };
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
+        _mozc.Budget.Enable();
         _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
         _hybrid = new HybridConverter(options.Engine, _mozc, _system, _system.Candidates, () => CurrentZenzai(options), _zenzai.Failed);
         _resolved = resolved;

@@ -111,7 +111,7 @@ internal static class ZenzaiConverterTests
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         using var ready = new ManualResetEventSlim();
         zenzai.ResultReady += ready.Set;
-        zenzai.Budget.Start(0);
+        zenzai.Budget.Enable();
 
         Assert.True(zenzai.ConvertClauses("きょう", "朝") is null, "答えが無ければ待たない");
         Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
@@ -131,6 +131,7 @@ internal static class ZenzaiConverterTests
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         var notified = 0;
         zenzai.ResultReady += () => Interlocked.Increment(ref notified);
+        zenzai.Budget.Enable();
         zenzai.Budget.Start(3000);
         // 読みのまま (変換していない) の答えは表示を変えない
         Assert.True(zenzai.ConvertClauses("かんたん") is null, "変換していない");

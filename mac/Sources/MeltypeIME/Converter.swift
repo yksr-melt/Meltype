@@ -17,8 +17,8 @@ final class MeltypeConverter {
     private var options: ConvertRequestOptions
     /// Zenzai (ニューラルかな漢字変換) のモデル。無ければ Zenzai を使わない。
     private let zenzModel: URL?
-    /// Zenzai の変換を待つ上限 (Windows の Zenzai と同じ 400 ms)。超えたら Zenzai なしの変換を使う。
-    private static let zenzaiTimeout: TimeInterval = 0.4
+    /// Zenzai の変換を待つ上限 (Windows の Zenzai と同じ 1500 ms)。超えたら Zenzai なしの変換を使う。ワーカーで待つので入力は止めない。
+    private static let zenzaiTimeout: TimeInterval = 1.5
     /// これより長い読みは Zenzai に渡さない (Windows の Zenzai と同じ。長いほど推論が長い)。
     private static let zenzaiMaxReading = 80
     /// 打ち切ったときに Zenzai を使わない長さ (遅い Mac で何度も待たないように)。
