@@ -200,6 +200,45 @@
   (assert (equal '("app:--register-input-source" "started" "selected")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
 
+(defun test-update-keeps-input-menu (work)
+  (test-distributed-install work)
+  (fake-tool work "Meltype.app/Contents/MacOS/MeltypeRegisterInputSource"
+             "echo helper:${2:-initial} >> \"$MELTYPE_TEST_LOG\"")
+  ;; 同じ入口でも、既存アプリの更新にだけ両コマンドへ指定する。
+  (dolist (update '(t nil))
+    (unless update
+      (uiop:delete-directory-tree (merge-pathnames "installed/Meltype.app/" work) :validate t))
+    (write-file (merge-pathnames "calls" work) "")
+    (run-script work "install.sh" nil)
+    (let ((lines (uiop:read-file-lines (merge-pathnames "calls" work))))
+      (assert (member (if update "app:--register-input-source --keep-input-menu"
+                         "app:--register-input-source") lines :test #'equal))
+      (assert (member (if update "helper:--keep-input-menu" "helper:initial") lines :test #'equal)))))
+
+(defun test-main-registration-keeps-input-menu (work)
+  ;; 本体の登録コマンドをそのままコンパイルし、登録APIとkillallだけをスタブ化する。
+  (let* ((source (uiop:read-file-string (merge-pathnames "mac/Sources/MeltypeIME/main.swift" *root*)))
+         (end (search "// Input Method Kit のサーバーを起動する。" source))
+         (binary (merge-pathnames "main-registrar" work))
+         (called (merge-pathnames "menu-restart-called" work)))
+    (setf source (replace-text (subseq source 0 end) "/usr/bin/killall"
+                              (namestring (merge-pathnames "killall" work))))
+    (write-file (merge-pathnames "main-registrar.swift" work)
+                (concatenate 'string source
+                             "enum InputSourceRegistration { enum Outcome { case ready, pending, failed; var exitCode: Int32 { self == .failed ? 1 : 0 } }; static func register() -> Outcome { if CommandLine.arguments.contains(\"failed\") { return .failed }; return CommandLine.arguments.contains(\"pending\") ? .pending : .ready } }"))
+    (fake-tool work "killall" (format nil "touch ~S; exit 0" (namestring called)))
+    (uiop:run-program (list "xcrun" "swiftc" (namestring (merge-pathnames "main-registrar.swift" work)) "-o" (namestring binary)))
+    (dolist (keep '(nil t))
+      (dolist (outcome '("ready" "pending" "failed"))
+        (when (probe-file called) (delete-file called))
+        (multiple-value-bind (output errors status)
+            (uiop:run-program (append (list (namestring binary) "--register-input-source" outcome)
+                                     (when keep '("--keep-input-menu")))
+                              :output :string :error-output :output :ignore-error-status t)
+          (declare (ignore output errors))
+          (assert (= (if (equal outcome "failed") 1 0) status))
+          (assert (eq (not (null (probe-file called))) (and (not keep) (equal outcome "ready")))))))))
+
 (defun test-incomplete-package (work)
   (test-distributed-install work)
   (write-file (merge-pathnames "calls" work) "")
@@ -745,6 +784,18 @@
         (declare (ignore errors))
         (assert (= 0 status))
         (when (= code 1) (assert (search "プロセスはありません" output)))))
+    ;; 更新指定でも登録失敗・有効化保留は維持し、メニュー再起動は行わない。
+    (let ((called (merge-pathnames "menu-restart-called" work)))
+      (fake-tool work "killall" (format nil "touch ~S; exit 23" (namestring called)))
+      (dolist (scenario '(("0") ("0" "pending") ("-50")))
+        (multiple-value-bind (output errors status)
+            (uiop:run-program (append (list (namestring binary) (namestring app)) scenario
+                                     '("--keep-input-menu"))
+                              :output :string :error-output :output :ignore-error-status t)
+          (declare (ignore output errors))
+          (assert (= (cond ((equal (first scenario) "-50") 1)
+                           ((second scenario) 2) (t 0)) status))
+          (assert (not (probe-file called))))))
     (dolist (scenario '(("0" "pending") ("-50")))
       (multiple-value-bind (output errors status)
           (uiop:run-program (append (list (namestring binary) (namestring app)) scenario)
@@ -841,6 +892,10 @@
     (format t "PASS failed startup keeps input source~%")
     (call-with-work-directory #'test-distributed-install)
     (format t "PASS distributed installer~%")
+    (call-with-work-directory #'test-update-keeps-input-menu)
+    (format t "PASS updates preserve input menu; first install retains refresh~%")
+    (call-with-work-directory #'test-main-registration-keeps-input-menu)
+    (format t "PASS main registration preserves result when keeping input menu~%")
     (call-with-work-directory #'test-incomplete-package)
     (format t "PASS incomplete package preflight~%")
     (call-with-work-directory #'test-update-failure-recovery)
@@ -890,7 +945,7 @@
     (call-with-work-directory #'test-pending-activation-keeps-app)
     (format t "PASS pending activation keeps first install/update/Homebrew/source app~%")
     (call-with-work-directory #'test-selection-failure-keeps-update)
-    (format t "PASS selection-only failure retains the installed update~%29/29 passed~%")))
+    (format t "PASS selection-only failure retains the installed update~%31/31 passed~%")))
 
 (handler-case (call-with-work-directory #'run-tests)
   (error (condition)

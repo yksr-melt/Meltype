@@ -192,9 +192,16 @@ if [[ "$policy" == homebrew ]]; then
 fi
 # Keep the old Contents and the lock until registration and startup both succeed,
 # including updates that began with Meltype stopped and another input source selected.
-require_install_step "入力ソースの登録に失敗しました。" "$target_app/Contents/MacOS/Meltype" --register-input-source
+# Restarting the input menu during an update can detach the frontmost client's IME session.
+app_registration=(--register-input-source)
+helper_registration=("$target_app")
+if [[ $had_previous -eq 1 ]]; then
+    app_registration+=(--keep-input-menu)
+    helper_registration+=(--keep-input-menu)
+fi
+require_install_step "入力ソースの登録に失敗しました。" "$target_app/Contents/MacOS/Meltype" "${app_registration[@]}"
 registration_status=0
-"$target_app/Contents/MacOS/MeltypeRegisterInputSource" "$target_app" || registration_status=$?
+"$target_app/Contents/MacOS/MeltypeRegisterInputSource" "${helper_registration[@]}" || registration_status=$?
 # Exit 2 means registration succeeded but macOS has not enabled the source yet.
 # Keep this distinct from a registration failure so manual activation remains possible.
 case "$registration_status" in

@@ -4,7 +4,7 @@
 // Meltype.app を macOS に登録し直し、入力メニューの再起動を要求する小さな道具 (#134)。
 // install-app.sh が Meltype.app を入れ替えたあとに呼ぶ。
 // 終了コード: 0 = 登録済み、1 = 登録失敗、2 = 登録済みだが有効化は保留。
-//   RegisterInputSource [Meltype.app のパス]   (省略したときは、この道具が入っている Meltype.app)
+//   RegisterInputSource [Meltype.app のパス] [--keep-input-menu]   (省略したときは、この道具が入っている Meltype.app)
 //
 // 更新のたびに入力ソースから消える問題の対策。~/Library/Input Methods/Meltype.app を入れ替えるとき、
 // バンドルが無い一瞬に入力ソースの走査が走ると、macOS は登録を消す。消えたあとは、バンドルを戻して
@@ -76,6 +76,8 @@ guard available else {
     FileHandle.standardError.write(Data("登録処理は実行しましたが、有効な入力ソースとして確認できませんでした。システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype から追加してください。\n".utf8))
     exit(2)
 }
+// 更新時は登録・有効化確認だけを行い、入力メニューを再起動しない。
+if CommandLine.arguments.contains("--keep-input-menu") { exit(0) }
 do {
     let status = try restartTextInputMenuAgent()
     guard status == 0 || status == 1 else {
