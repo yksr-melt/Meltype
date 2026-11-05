@@ -130,11 +130,13 @@ internal static class Checks
             var s = Henkan.Keyboard();
             s.Type(keys + " ");
             var view = s.Host.View;
-            var converted = view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : s.Host.Document.TrimEnd();
+            var converted = view is { Converting: true } ? s.Host.Document + string.Concat(view.Clauses ?? [view.Text]) : s.Host.Document.TrimEnd();
             Henkan.Reset();
             var actual = entered == converted ? entered : $"Enter: {entered} / Space: {converted}";
             results.Add(new { typed, expected, kind = "入力", actual, ok = entered == expected || converted == expected });
         }
+        // MozcConverter は失敗を null や空の候補で返すので、Mozc なしの結果で通っていないことを確かめる
+        if (mozc.Convert("にほんご") is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
         File.WriteAllText(output, JsonSerializer.Serialize(results, Json));
     }
 
