@@ -2263,7 +2263,7 @@ internal static class CompositionTests
         {
             System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("ar-SA");
             Assert.True(NumberCandidates.For("２０２６").Contains("令和8年"), "全角数字をいつも同じ元号にする");
-            Assert.Equal("2026年|2026", string.Join("|", CompositionController.EraToYear("れいわ８ねん")!));
+            Assert.Equal("2026年|2026", string.Join("|", EraYearProvider.EraToYear("れいわ８ねん")!));
         }
         finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
     }
@@ -2604,19 +2604,19 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("reiwagannnenn ");
         Assert.True(k.Host.View!.Candidates.Contains("2019年"), "令和元年: " + string.Join(",", k.Host.View.Candidates));
-        Assert.Equal("2026年", CompositionController.EraToYear("れいわ8ねん")!.First(), "令和8年");
-        Assert.Equal("1989年", CompositionController.EraToYear("へいせいがんねん")!.First(), "平成元年");
-        Assert.Equal("1926年", CompositionController.EraToYear("しょうわ1ねん")!.First(), "昭和1年");
-        Assert.True(CompositionController.EraToYear("へいせい40ねん") is null, "平成は 31 年まで");
+        Assert.Equal("2026年", EraYearProvider.EraToYear("れいわ8ねん")!.First(), "令和8年");
+        Assert.Equal("1989年", EraYearProvider.EraToYear("へいせいがんねん")!.First(), "平成元年");
+        Assert.Equal("1926年", EraYearProvider.EraToYear("しょうわ1ねん")!.First(), "昭和1年");
+        Assert.True(EraYearProvider.EraToYear("へいせい40ねん") is null, "平成は 31 年まで");
     }
 
     [Test]
     public static void Issue340_TraditionalUnitsOfferMetricSize()
     {
-        Assert.Equal("3尺|約90.91cm", string.Join("|", CompositionController.TypedUnitCandidates("3しゃく")!), "3 尺");
-        Assert.Equal("1坪|約3.31㎡", string.Join("|", CompositionController.TypedUnitCandidates("1つぼ")!), "1 坪");
-        Assert.Equal("2貫|約7.5kg", string.Join("|", CompositionController.TypedUnitCandidates("2かん")!), "2 貫");
-        Assert.True(CompositionController.TypedUnitCandidates("かん") is null, "数字が無ければ対象外");
+        Assert.Equal("3尺|約90.91cm", string.Join("|", TraditionalUnitProvider.TypedUnitCandidates("3しゃく")!), "3 尺");
+        Assert.Equal("1坪|約3.31㎡", string.Join("|", TraditionalUnitProvider.TypedUnitCandidates("1つぼ")!), "1 坪");
+        Assert.Equal("2貫|約7.5kg", string.Join("|", TraditionalUnitProvider.TypedUnitCandidates("2かん")!), "2 貫");
+        Assert.True(TraditionalUnitProvider.TypedUnitCandidates("かん") is null, "数字が無ければ対象外");
         var k = new Keyboard();
         k.Type("3syaku ");
         Assert.True(k.Host.View!.Candidates.Contains("3尺") && k.Host.View.Candidates.Contains("約90.91cm"), string.Join(",", k.Host.View.Candidates));
@@ -2958,7 +2958,7 @@ internal static class CompositionTests
         off.Host.ClipboardText = "コピーした語";
         off.Type("kurippubo-do ");
         Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("コピーした語"), "OFF はクリップボードを読まない");
-        Assert.True(CompositionController.ClipboardLine("a\nb") is null && CompositionController.ClipboardLine(new string('あ', 201)) is null && CompositionController.ClipboardLine(" ") is null, "複数行・長い・空は出さない");
+        Assert.True(ClipboardCandidateProvider.ClipboardLine("a\nb") is null && ClipboardCandidateProvider.ClipboardLine(new string('あ', 201)) is null && ClipboardCandidateProvider.ClipboardLine(" ") is null, "複数行・長い・空は出さない");
     }
 
     [Test]
