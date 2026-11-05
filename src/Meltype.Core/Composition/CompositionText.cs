@@ -420,6 +420,11 @@ public sealed class CompositionText
         _ => false,
     };
 
+    /// <summary>Markdown 記法の記号だけ (- > * + # ## …) の入力か。Space で、半角の記号と空白で確定する。</summary>
+    public bool IsMarkdownMarker =>
+        !KanaInput && _units.Count > 0 &&
+        (Raw is "-" or ">" or "*" or "+" || (Raw.Length <= 6 && Raw.All(c => c == '#')));  // 見出しは 6 段まで
+
     /// <summary>自動判定の区間分け (Mode が Auto のときに使う)。</summary>
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
     public IReadOnlyList<CompositionSegment> Segments()
@@ -1143,7 +1148,7 @@ public sealed class CompositionText
         '"' => '”',
         // @ はメールアドレス・メンション、/ は URL・日付・パスで使うので、日本語の中でも半角のまま (Space で ＠ ／ ・)。
         '@' => '@',
-        // # はハッシュタグ・チャンネル名 (Discord の #雑談) で使うので半角のまま (Space で ＃)。
+        // # はハッシュタグ・チャンネル名 (Discord の #雑談) で使うので半角のまま (Space で # と半角空白に確定)。
         '#' => '#',
         '/' => '/',
         // JIS キーボードの ￥ キー

@@ -3708,6 +3708,77 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void MarkdownMarker_SpaceCommitsHalfWidth()
+    {
+        // #1301: 見出し・リスト・引用の記号を、変換区間の先頭で Space を押すと半角のまま確定する。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["-"] = "- ",
+            [">"] = "> ",
+            ["*"] = "* ",
+            ["+"] = "+ ",
+            ["#"] = "# ",
+            ["##"] = "## ",
+            ["######"] = "###### ",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + " ");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Space");
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_ThenContent()
+    {
+        // マーカー確定のあとに本文を続けて打てる
+        var k = new Keyboard();
+        k.Type("# hello ");
+        Assert.Equal("# hello ", k.Host.Document);
+    }
+
+    [Test]
+    public static void MarkdownMarker_EnterCommitsAsBefore()
+    {
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["-"] = "ー",
+            [">"] = "＞",
+            ["*"] = "＊",
+            ["+"] = "＋",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Enter");
+        }
+    }
+
+    [Test]
+    public static void NotMarkdownMarker_WhenKanaBefore()
+    {
+        // かなのあとのマーカーは、Space で記号として確定せず、変換を始める。
+        foreach (var marker in new[] { ">", "#" })
+        {
+            var k = new Keyboard();
+            k.Type("kyou" + marker + " ");
+            Assert.True(k.Host.View?.Converting == true, $"「kyou{marker}」+ Space");
+            Assert.Equal("", k.Host.Document, $"「kyou{marker}」+ Space");
+        }
+    }
+
+    [Test]
+    public static void NotMarkdownMarker_TooManyHashes()
+    {
+        // 見出しは 6 段まで。7 つは確定せず (変換に回る)。
+        var k = new Keyboard();
+        k.Type("#######");
+        k.Type(" ");
+        Assert.True(k.Host.View?.Converting == true, "Space で変換を始める");
+        Assert.Equal("", k.Host.Document, "見出しとして確定しない");
+    }
+
+    [Test]
     public static void DotSuffix_FileExtensionsStayEnglish()
     {
         // 報告 (#260・#254): 英語の語.拡張子 の拡張子がひらがなになる (MeltypeTip.dっl、Meltype.coんふぃg、Meltype.ご。mod)
@@ -3846,11 +3917,6 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("( ");
         Assert.True(k.Host.View!.Candidates.Contains("("), "（ の候補に ( がある: " + string.Join(",", k.Host.View.Candidates));
-        // # は最初から半角 (Discord のチャンネル名・ハッシュタグ)。Space で全角の ＃ にできる。
-        k = new Keyboard();
-        k.Type("# ");
-        Assert.Equal("#", k.Host.View!.Candidates[0]);
-        Assert.True(k.Host.View.Candidates.Contains("＃"), "# の候補に ＃ がある: " + string.Join(",", k.Host.View.Candidates));
     }
 
     [Test]

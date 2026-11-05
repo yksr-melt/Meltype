@@ -862,6 +862,11 @@ public sealed class CompositionController
                     _spaceStartedConversion = true;
                     StartConversion();
                 }
+                else if (SpaceCommitsMarkdownMarker())
+                {
+                    // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
+                    CommitText(_text.Raw + " ", english: false, preserveText: true);
+                }
                 else if (SpaceCommitsAlphanumeric())
                 {
                     Commit(suffix: " ", fixEnglish: true);
@@ -1421,6 +1426,8 @@ public sealed class CompositionController
         !_text.KanaInput && _text.Mode == DisplayMode.Auto && _text.Raw is { Length: >= 2 } raw && raw.All(char.IsAsciiLetter) &&
         (_options.UserDictionary?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 } ||
          _options.ConsonantAbbreviations() && _options.Candidates?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 });
+
+    private bool SpaceCommitsMarkdownMarker() => _text.Mode == DisplayMode.Auto && _text.IsMarkdownMarker;
 
     private bool SpaceCommitsAlphanumeric() =>
         _text.IsAlphanumericAt(final: true) && !(_text.Mode == DisplayMode.Auto && _text.IsNumeric && _text.Raw.All(char.IsAsciiDigit) && _text.PrecedingEnglish != true);
