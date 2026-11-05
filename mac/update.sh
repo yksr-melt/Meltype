@@ -23,19 +23,9 @@ esac
 [[ $# -le 1 ]] || { echo "Too many arguments" >&2; exit 1; }
 [[ "$(uname)" == Darwin ]] || { echo "This updater requires macOS." >&2; exit 1; }
 
-# Native checks exit the input-method process; restore it even if a check fails.
-restore_input() {
-    local result=$?
-    trap - EXIT
-    if ! bash "$here/start-input-method.sh" "$app" ||
-       ! "$app/Contents/MacOS/Meltype" --register-input-source ||
-       ! swift "$here/select-input-source.swift"; then
-        echo "Could not select Meltype. Choose it from the input menu." >&2
-        [[ $result -ne 0 ]] || result=1
-    fi
-    exit "$result"
-}
-trap restore_input EXIT
-MELTYPE_SKIP_START=1 bash "$here/build-cli.sh" --test --install
+# --check-inputs runs in a separate process and exits before creating IMKServer.
+# File replacement restores the old session itself if it fails.
+bash "$here/build-cli.sh" --test --install
 "$app/Contents/MacOS/Meltype" --check-inputs "$here/Resources/InputChecks.tsv"
+swift "$here/select-input-source.swift"
 echo "Meltype update and input checks completed."
