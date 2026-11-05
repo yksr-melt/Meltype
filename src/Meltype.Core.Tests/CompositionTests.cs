@@ -3757,6 +3757,28 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void MarkdownMarker_FullWidthCandidatesViaTabAndShiftSpace()
+    {
+        // Space は半角の記号 + 空白で確定するので、全角の候補は Tab か Shift+Space で出す。
+        foreach (var (marker, full) in new[] { ("#", "＃"), ("+", "＋") })
+        {
+            var k = new Keyboard(tabConversion: true);
+            k.Type(marker);
+            k.Press(VirtualKeys.Tab);
+            Assert.True(k.Host.View?.Converting == true, $"Tab: 「{marker}」で変換が始まる");
+            Assert.True(k.Host.View!.Candidates.Contains(full),
+                $"Tab: 「{marker}」の候補に {full} がある: " + string.Join(",", k.Host.View.Candidates));
+
+            k = new Keyboard();
+            k.Type(marker);
+            k.TypeKeys((VirtualKeys.Space, true));
+            Assert.True(k.Host.View?.Converting == true, $"Shift+Space: 「{marker}」で変換が始まる");
+            Assert.True(k.Host.View!.Candidates.Contains(full),
+                $"Shift+Space: 「{marker}」の候補に {full} がある: " + string.Join(",", k.Host.View.Candidates));
+        }
+    }
+
+    [Test]
     public static void MarkdownMarker_HalfWidthStars()
     {
         // #1301: 変換区間に * が 2 個以上あるときだけ、表示の ＊ を全部半角の * にする (強調 **bold**・*italic*)。
