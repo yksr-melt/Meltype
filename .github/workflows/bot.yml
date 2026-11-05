@@ -247,6 +247,8 @@ jobs:
             .github/actions
             bots
           persist-credentials: false
+      # PR のコードが作った artifact を展開する前に、main の bot の準備を済ませる
+      - uses: ./.github/actions/setup-bots
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         continue-on-error: true
         with:
@@ -258,7 +260,6 @@ jobs:
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-      - uses: ./.github/actions/setup-bots
       - run: bun bots/meltype-bot/main.ts report
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
