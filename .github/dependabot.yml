@@ -16,9 +16,7 @@ updates:
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
-    directories:
-      - "/"
-      - "/.github/actions/*"
+    directory: "/"
     schedule:
       interval: "weekly"
     groups:

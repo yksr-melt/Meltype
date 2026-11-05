@@ -28,7 +28,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup-bots
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: bots/package.json
+      - run: bun install --frozen-lockfile --production --ignore-scripts
+        working-directory: bots
       - id: cases
         run: bun bots/pr-checks/main.ts cases "$RUNNER_TEMP/cases.txt"
       - if: steps.cases.outputs.count != '0'
