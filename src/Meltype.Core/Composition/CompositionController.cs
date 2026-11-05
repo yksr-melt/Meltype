@@ -395,7 +395,7 @@ public sealed class CompositionController
     private long _heldLastKeyTime;
 
     /// <summary>変換中の文節。英語の区間も 1 つの文節として扱う (候補は英字/全角英字)。</summary>
-    private sealed class Clause(string reading, bool isEnglish, List<string> candidates)
+    internal sealed class Clause(string reading, bool isEnglish, List<string> candidates)
     {
         public string Reading { get; set; } = reading;
         public bool IsEnglish { get; } = isEnglish;
@@ -423,6 +423,9 @@ public sealed class CompositionController
 
         /// <summary>候補のうち英訳 (複雑な → complex) のもの。</summary>
         public HashSet<string> Translations { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>候補のうちユーティリティ変換が作ったもの。打つたびに変わるので、選んでも学習しない。</summary>
+        public HashSet<string> Generated { get; } = new(StringComparer.Ordinal);
     }
 
     public CompositionController(CaptureGate gate, CompositionDetector detector, IKanjiConverter converter, ICompositionHost host, CompositionOptions? options = null)
@@ -510,7 +513,10 @@ public sealed class CompositionController
         if (!_converting && TypingCandidates() is { } typing)
         {
             if (index < 0 || index >= typing.Count) return;
-            _clauses = [new Clause(_text.AllKana(final: false), false, typing) { Raw = _text.Raw, Expanded = true }];
+            var kana = _text.AllKana(final: false);
+            var typed = new Clause(kana, false, typing) { Raw = _text.Raw, Expanded = true };
+            typed.Generated.UnionWith(UtilityClause(kana).Generated);
+            _clauses = [typed];
             _selectedClause = 0;
             _converting = true;
         }
@@ -1714,7 +1720,7 @@ public sealed class CompositionController
             var lower = typedRaw.ToLowerInvariant();
             List<string> registered = [.. _options.UserDictionary?.Lookup(lower) ?? [], .. _options.ConsonantAbbreviations() ? _options.Candidates?.Lookup(lower) ?? [] : []];
             var reading = RomajiReading(typedRaw);
-            List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
+            List<string> romaji = reading is null ? [] : UtilityClause(reading).Candidates;
             List<string> english = [typedRaw, .. EnglishCandidates(typedRaw)];
             _clauses = [new Clause(typedRaw, true, preferJapanese
                 ? Distinct([.. registered, .. romaji, .. english])
@@ -1725,18 +1731,10 @@ public sealed class CompositionController
         }
         if (!_text.KanaInput && _text.Mode == DisplayMode.Auto)
         {
-            // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
-            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } result
-                ? [result, $"{_text.Raw.TrimEnd('=')}={result}"]
-                : [];
-            // 月/日 (10/20) は、日付の書き方の候補も出す (issue #935)。分数・割り算 (1/2) かもしれないので、打ったままと計算の結果より後ろに。
-            // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
-            var dates = _utilities.SlashDate(_text.Raw);
-            if (calculated.Length > 0 || dates.Length > 0)
+            // 入力全体が計算式か 月/日 なら、結果を候補にする。Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
+            if (_utilities.Convert(new ConversionRequest("", _text.Raw, JapaneseCandidates), _ => []) is { Count: > 0 } expression)
             {
-                // 月/日 の全角 (１０／２０) は、日付のときだけ今までどおり最後に出す
-                string[] fullWidth = dates.Length > 0 ? [CompositionText.ToFullWidth(_text.Raw)] : [];
-                _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates, .. fullWidth])) { Raw = _text.Raw }];
+                _clauses = expression;
                 _selectedClause = 0;
                 _converting = true;
                 return;
@@ -1781,7 +1779,7 @@ public sealed class CompositionController
                 if (segment.Raw.All(c => !char.IsLetterOrDigit(c)))
                     english = Distinct([.. english, .. _options.Candidates?.Lookup(segment.Raw) ?? []]);
                 var reading = RomajiReading(segment.Raw);
-                List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
+                List<string> romaji = reading is null ? [] : UtilityClause(reading).Candidates;
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
                     : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)]))
@@ -1789,7 +1787,7 @@ public sealed class CompositionController
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapanese(segment.Kana);
+            var japanese = _utilities.Convert(new ConversionRequest(segment.Kana, "", JapaneseCandidates), r => ConvertJapanese(r.Kana));
             // 英単語 + する (push|した、deploy|しよう): 変換エンジンは英語の後ろの「した」だけを見て 下・死体・使用 にしてしまう。かなのまま
             if (s > 0 && segments[s - 1].IsEnglish && japanese.Count > 0 && IsSuruAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
@@ -1815,6 +1813,10 @@ public sealed class CompositionController
         _selectedClause = 0;
         _converting = true;
     }
+
+    /// <summary>読み全体を 1 つの文節にして、いつもの候補とユーティリティ変換の候補を入れたもの。</summary>
+    private Clause UtilityClause(string reading) =>
+        _utilities.Convert(new ConversionRequest(reading, "", JapaneseCandidates), r => [new Clause(r.Kana, false, JapaneseCandidates(r.Kana, null))])[0];
 
     /// <summary>
     /// 第一候補は入力方式と記号設定を反映した形を優先する。通常の [ ] は設定に従い「」または［］になる。
@@ -2078,7 +2080,7 @@ public sealed class CompositionController
         {
             parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
         }
-        parts = TypedDateCandidateProvider.JoinClauses(JoinSmallKana(parts));
+        parts = JoinSmallKana(parts);
         var clauses = parts.Select(p => new Clause(p.Reading, false, JapaneseCandidates(p.Reading, NormalizeHalfWidth(p.Text, p.Reading)))
         {
             ZenzaiText = p.Zenzai ? NormalizeHalfWidth(p.Text, p.Reading) : null,
@@ -2274,11 +2276,6 @@ public sealed class CompositionController
         foreach (var kana in new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) })
         {
             if (!candidates.Contains(kana)) candidates.Add(kana);
-        }
-        // 日付・時刻 (いま・なう・きょう) は、かなの後ろに出す (いつもの候補の並びは変えない)
-        foreach (var time in _utilities.Candidates(reading))
-        {
-            if (!candidates.Contains(time)) candidates.Add(time);
         }
         foreach (var emoji in EmojiBlock(reading))
         {
@@ -2856,7 +2853,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (_utilities.IsVolatile(clause.Reading, clause.Text) || IsMathSymbolChoice(clause)) continue;
+            if (clause.Generated.Contains(clause.Text) || IsMathSymbolChoice(clause)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -2879,7 +2876,7 @@ public sealed class CompositionController
         }
         foreach (var clause in _clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || _utilities.IsVolatile(clause.Reading, clause.Text) || IsMathSymbolChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.Generated.Contains(clause.Text) || IsMathSymbolChoice(clause))
             {
                 Flush();
                 continue;
@@ -3064,7 +3061,7 @@ public sealed class CompositionController
         if (!_options.ShowCandidatesWhileTyping() || _text.Mode != DisplayMode.Auto || _text.KanaInput || _text.IsAlphanumeric || _text.IsEmpty) return null;
         var kana = _text.AllKana(final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = JapaneseCandidates(kana, null).Take(5).ToList();
+        var candidates = UtilityClause(kana).Candidates.Take(5).ToList();
         return candidates.Count > 1 ? candidates : null;
     }
 

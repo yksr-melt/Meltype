@@ -30,22 +30,19 @@ internal static class ClockTime
     public static DateTime Now(CompositionOptions options) => Zone(options.ClockTimeZone()) is { } zone
         ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(options.UtcNow(), DateTimeKind.Utc), zone)
         : options.Now();
-
-    /// <summary>日時の候補を選んだか (数字か曜日を含む。読みのままや漢字の候補は学習してよい)。</summary>
-    public static bool IsTimeText(string text) => text.Any(char.IsAsciiDigit) || text.EndsWith("曜日", StringComparison.Ordinal);
 }
 
 /// <summary>
 /// とけい・じこく の文節に、設定のタイムゾーンの今の時刻 (19:21 / 19時21分 / 午後7時21分) を出す (issue #1401)。
 /// 夏時間は TimeZoneInfo が決める。この PC と違うタイムゾーンなら、日付とタイムゾーンの名前を付けたものも出す (日付をまたぐことがあるので)。
 /// </summary>
-internal sealed class ClockCandidateProvider(CompositionOptions options) : IUtilityCandidateProvider
+internal sealed class ClockCandidateProvider(CompositionOptions options) : ReadingCandidateMiddleware
 {
     private static readonly HashSet<string> Readings = ["とけい", "じこく"];
 
-    public IEnumerable<string>? Candidates(string reading)
+    protected override IEnumerable<string> Candidates(string reading)
     {
-        if (!Readings.Contains(reading)) return null;
+        if (!Readings.Contains(reading)) return [];
         var zone = ClockTime.Zone(options.ClockTimeZone());
         var now = ClockTime.Now(options);
         var clock = $"{now.Hour:D2}:{now.Minute:D2}";
@@ -53,8 +50,6 @@ internal sealed class ClockCandidateProvider(CompositionOptions options) : IUtil
         if (zone is not null && !zone.HasSameRules(options.LocalTimeZone())) result.Add($"{now.Month}/{now.Day}({ClockTime.WeekDays[(int)now.DayOfWeek]}) {clock} ({options.ClockTimeZone().Trim()})");
         return result;
     }
-
-    public bool IsVolatile(string reading, string text) => Readings.Contains(reading) && ClockTime.IsTimeText(text);
 }
 
 /// <summary>
@@ -62,14 +57,14 @@ internal sealed class ClockCandidateProvider(CompositionOptions options) : IUtil
 /// いま → 17:22 / 17時22分 / 午後5時22分 / 2026年10月9日(金) 17時22分 / 10月9日(金) 17:22 …
 /// きょう → 2026年10月9日 / 2026年10月9日(金) / 10月9日(金) / 2026/10/09 / 2026/10/09(金) / 10/9(金) / 2026-10-09 / 金曜日 / 20261009 …
 /// </summary>
-internal sealed class NowCandidateProvider(CompositionOptions options, ICompositionHost host) : IUtilityCandidateProvider
+internal sealed class NowCandidateProvider(CompositionOptions options, ICompositionHost host) : ReadingCandidateMiddleware
 {
     private static readonly HashSet<string> NowReadings = ["いま", "なう"];
 
-    public IEnumerable<string>? Candidates(string reading)
+    protected override IEnumerable<string> Candidates(string reading)
     {
         var isNow = NowReadings.Contains(reading);
-        if (!isNow && reading != "きょう") return null;
+        if (!isNow && reading != "きょう") return [];
         // なう: 今再生している曲を、時刻より先に (issue #1400)
         if (reading == "なう" && options.NowPlayingCandidates() && NowPlaying() is { Count: > 0 } songs)
             return [.. songs, .. NowTimes(ClockTime.Now(options))];
@@ -83,12 +78,6 @@ internal sealed class NowCandidateProvider(CompositionOptions options, IComposit
         return [date, $"{date}({day})", monthDay, $"{monthDay}({day})", slashDate, $"{slashDate}({day})", $"{now.Month}/{now.Day}({day})",
             $"{now.Year:D4}-{now.Month:D2}-{now.Day:D2}", $"{day}曜日", $"{now.Year:D4}{now.Month:D2}{now.Day:D2}"];
     }
-
-    /// <summary>
-    /// 「なう」は何を選んでも学習しない (再生中の曲は打つたびに変わる。曲名は何でもありうるので、出した曲を覚えておかずに読みだけで決める。issue #1400)。
-    /// </summary>
-    public bool IsVolatile(string reading, string text) =>
-        reading == "なう" || (NowReadings.Contains(reading) || reading == "きょう") && ClockTime.IsTimeText(text);
 
     private static string[] NowTimes(DateTime now)
     {
