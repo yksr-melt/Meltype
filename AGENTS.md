@@ -56,6 +56,9 @@ Linux / macOS では `src/Meltype.Tests` は動かない。`src/Meltype.Core.Tes
 ```bash
 # フォーマットを直す（CI は --verify-no-changes で同じ検査をする）
 dotnet format whitespace --folder
+
+# 静的解析（CI は警告が 1 件でもあれば失敗する。EnableWindowsTargeting で Linux / macOS でも Windows 版を調べられる）
+dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true
 ```
 
 ## 判定・変換を直すとき

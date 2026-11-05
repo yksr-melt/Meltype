@@ -1,9 +1,8 @@
 # コードの品質のチェック (issue #1083)。ビルドとテストは windows.yml・core.yml、辞書・精度は core.yml、報告の再現は pr-expectations.yml。
 #   フォーマット   … すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
-#   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の結果を SARIF にして、Code scanning に送る。
-#                    Code scanning は Pull Request で新しく出た警告だけを、その Pull Request の注釈に出す (前からある警告は Security タブに残る)。
-#                    警告ではマージを止めない。重要度は .editorconfig で上げる
-#                    大きな移行の note は IDE に残す。命名は理由付きのソース内抑制を反映する (tools/filter-sarif.mjs)。
+#   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の警告が 1 件でもあれば失敗。重要度は .editorconfig で変える。
+#                    SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
+#                    結果は SARIF にして Code scanning に送る。大きな移行の note は IDE に残す。命名は理由付きのソース内抑制を反映する (tools/filter-sarif.mjs)。
 #   スクリプト     … .github/bot と tools の Node のスクリプトのテスト
 #   依存関係       … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
 # セキュリティの解析 (CodeQL) は codeql.yml。
@@ -64,13 +63,21 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/sarif"
           dotnet build "src/${{ matrix.project }}/${{ matrix.project }}.csproj" -c Release \
-            -p:AnalysisLevel=latest-recommended "-p:MeltypeSarifDir=$RUNNER_TEMP/sarif"
+            -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true "-p:MeltypeSarifDir=$RUNNER_TEMP/sarif"
+      # 警告でビルドが失敗しても、SARIF ができていれば Code scanning に送る
       - name: Keep migration suggestions in the IDE
+        id: sarif
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           SARIF_FILE: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
-        run: node tools/filter-sarif.mjs "$SARIF_FILE"
-      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        run: |
+          if [ -f "$SARIF_FILE" ]; then
+            node tools/filter-sarif.mjs "$SARIF_FILE"
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: ${{ !cancelled() && steps.sarif.outputs.exists == 'true' }}
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           sarif_file: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
           category: roslyn-${{ matrix.project }}
