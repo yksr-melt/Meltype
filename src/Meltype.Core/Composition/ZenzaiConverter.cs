@@ -9,6 +9,7 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Meltype.Composition;
 
@@ -213,7 +214,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         try
         {
-            var body = JsonSerializer.Serialize(new Dictionary<string, object>
+            var body = new JsonObject
             {
                 ["prompt"] = prompt,
                 ["n_predict"] = 96,
@@ -221,7 +222,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 ["top_k"] = 1,
                 ["cache_prompt"] = true,
                 ["parse_special"] = true,
-            });
+            }.ToJsonString();
             using var cts = new CancellationTokenSource(_timeoutMs);
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint!, "completion"))
             {

@@ -383,7 +383,7 @@ public sealed class CompositionController
     private ReconversionSelection? _reconversion;
 
     // 予測変換: 打ちかけの読み・英字の続きの候補と、Tab で選んでいるもの (-1 なら選んでいない)。
-    private IReadOnlyList<Prediction> _predictions = [];
+    private List<Prediction> _predictions = [];
     private string _predictionKey = "";
     private int _predictionIndex = -1;
 
@@ -2572,7 +2572,7 @@ public sealed class CompositionController
     /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
-    private IEnumerable<string>? TypedDateCandidates(string reading)
+    private string[]? TypedDateCandidates(string reading)
     {
         static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
         if (DateReading.Match(reading) is { Success: true } date)
@@ -2628,7 +2628,7 @@ public sealed class CompositionController
         (NowReadings.Contains(clause.Reading) || ClockReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
 
     /// <summary>打った日付・時刻の読みから作る候補 (変換したときと同じもの)。日付・時刻でなければ null。</summary>
-    private IEnumerable<string>? DateTimeCandidatesOf(string reading) =>
+    private string[]? DateTimeCandidatesOf(string reading) =>
         SlashDate.Match(reading) is { Success: true } date
             ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture))
             : TypedDateCandidates(reading);
@@ -3484,7 +3484,7 @@ public sealed class CompositionController
     private string PredictionKey() => _text.Raw + "\u0001" + _text.Mode;
 
     /// <summary>今の打ちかけの予測の候補 (キーをまとめて処理しているときにも、打った内容に合わせて作り直す)。</summary>
-    private IReadOnlyList<Prediction> CurrentPredictions()
+    private List<Prediction> CurrentPredictions()
     {
         UpdatePredictions(blocked: false);
         return _predictions;

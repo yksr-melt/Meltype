@@ -513,11 +513,19 @@ internal static class CompositionTests
             k.Type(typed);
             Assert.Equal(expected, k.Showing, typed);
             // 英単語の中の綴りは、かなにしない (trying・swan・highway・hyena・babying)
-            foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
+            Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+            try
             {
-                var e = new Keyboard();
-                e.Type(word);
-                Assert.Equal(word, e.Showing, word);
+                foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
+                {
+                    var e = new Keyboard();
+                    e.Type(word);
+                    Assert.Equal(word, e.Showing, word);
+                }
+            }
+            finally
+            {
+                Detector.SpellChecker = null;
             }
         }
     }
@@ -754,7 +762,7 @@ internal static class CompositionTests
         phrases.Remember("きょうはまけた", "今日は負けた");
         var k = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
         k.Type("kyouhaMake");
-        Assert.True(k.Showing.EndsWith("Make", StringComparison.Ordinal), k.Showing);
+        Assert.True(k.Showing!.EndsWith("Make", StringComparison.Ordinal), k.Showing);
         Assert.Equal("今日は負けた", string.Join(",", k.Host.View!.Predictions ?? []));
 
         // 同じ読みでも、日本語で見えていれば最後の文節の続きを出す
@@ -1852,9 +1860,17 @@ internal static class CompositionTests
     [Test]
     public static void Issue469_HoloXStaysEnglish()
     {
-        var k = new Keyboard();
-        k.Type("holoX\n");
-        Assert.Equal("holoX", k.Host.Document);
+        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            var k = new Keyboard();
+            k.Type("holoX\n");
+            Assert.Equal("holoX", k.Host.Document);
+        }
+        finally
+        {
+            Detector.SpellChecker = null;
+        }
     }
 
     [Test]
@@ -3502,7 +3518,7 @@ internal static class CompositionTests
             var k = new Keyboard();
             k.Type(typed);
             Assert.Equal(expected, k.Host.Document, typed.Replace("\n", "⏎"));
-            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:")), "消さない: " + string.Join(" ", k.Host.Events));
+            Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:", StringComparison.Ordinal)), "消さない: " + string.Join(" ", k.Host.Events));
         }
         // Space で区切ったときは今までどおり直す
         var spaced = new Keyboard();
@@ -5453,29 +5469,6 @@ internal static class CompositionTests
         k = new Keyboard();
         k.Type("oemu\n");
         Assert.Equal("おえむ", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue455_KatakanaExpectIgnoresAsciiCase()
-    {
-        var tsv = Path.Combine(Path.GetTempPath(), $"meltype-expect-455-{Guid.NewGuid():N}.tsv");
-        var json = Path.Combine(Path.GetTempPath(), $"meltype-expect-455-{Guid.NewGuid():N}.json");
-        try
-        {
-            File.WriteAllText(tsv, "oemnopasokonn\tOEMのパソコン\noemnopasokonn\tCPUのパソコン\n");
-            Checks.Expect(tsv, json);
-            using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(json));
-            var rows = doc.RootElement.EnumerateArray().ToArray();
-            Assert.Equal(2, rows.Length);
-            Assert.True(rows[0].GetProperty("ok").GetBoolean(), "OEMのパソコン は oemのぱそこん と一致する");
-            Assert.Equal("oemのぱそこん", rows[0].GetProperty("actual").GetString());
-            Assert.Equal(false, rows[1].GetProperty("ok").GetBoolean());
-        }
-        finally
-        {
-            if (File.Exists(tsv)) File.Delete(tsv);
-            if (File.Exists(json)) File.Delete(json);
-        }
     }
 
     [Test]

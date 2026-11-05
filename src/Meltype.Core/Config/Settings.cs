@@ -1082,7 +1082,7 @@ public sealed class Settings
                 if (rule is null)
                 {
                     rule = JsonSerializer.SerializeToNode(new AppRule { Process = app }, SettingsJsonContext.Default.AppRule)!.AsObject();
-                    rules.Add(rule);
+                    rules.Add((JsonNode)rule);
                 }
                 apply(rule);
             }
