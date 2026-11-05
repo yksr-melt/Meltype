@@ -101,7 +101,7 @@ internal static class Checks
     /// <summary>
     /// 「入力 → 期待」の一覧 (1 行に「入力&lt;Tab&gt;期待」) を、アプリと同じ Meltype キーボードと Mozc で確かめて JSON で出す (MELTYPE_MOZC が要る)。
     ///   入力がかな (しゃおみ) … 変換の候補に期待した語 (Xiaomi) が出るか
-    ///   入力が英字 (nihongowohanasu) … 打って Enter した結果が期待と同じか
+    ///   入力が英字 (nihongowohanasu) … 打って Enter で確定した結果か Space で変換した結果が期待と同じか
     /// </summary>
     public static void Expect(string input, string output)
     {
@@ -122,11 +122,18 @@ internal static class Checks
                 Henkan.Reset();
                 continue;
             }
+            var keys = new string(typed.Where(c => c is >= ' ' and <= '~').Take(300).ToArray());
             var k = Henkan.Keyboard();
-            k.Type(new string(typed.Where(c => c is >= ' ' and <= '~').Take(300).ToArray()) + "\n");
-            var actual = k.Host.Document;
-            results.Add(new { typed, expected, kind = "入力", actual, ok = actual == expected });
+            k.Type(keys + "\n");
+            var entered = k.Host.Document;
             Henkan.Reset();
+            var s = Henkan.Keyboard();
+            s.Type(keys + " ");
+            var view = s.Host.View;
+            var converted = view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : s.Host.Document.TrimEnd();
+            Henkan.Reset();
+            var actual = entered == converted ? entered : $"Enter: {entered} / Space: {converted}";
+            results.Add(new { typed, expected, kind = "入力", actual, ok = entered == expected || converted == expected });
         }
         File.WriteAllText(output, JsonSerializer.Serialize(results, Json));
     }
