@@ -25,7 +25,7 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     /// 変換で例外になった Zenzai は、それからは使わず (打つたびに例外にしない)、持ち主に知らせる (zenzaiFailed)。
     /// 止める (Dispose) のは持ち主で、ここでは止めない。持ち主が新しく作ったら、それは使う。
     /// </summary>
-    private IReadOnlyList<ConversionClause>? Zenzai(string hiragana, string? context)
+    private List<ConversionClause>? Zenzai(string hiragana, string? context)
     {
         ZenzaiConverter? z = null;
         try
