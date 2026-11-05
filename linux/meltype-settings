@@ -106,8 +106,6 @@ class ConfigFile:
         with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=self.path.parent, prefix=CONFIG + ".", delete=False) as temp:
             temp.write(json.dumps(values, ensure_ascii=False, indent=2) + "\n")
         os.replace(temp.name, self.path)
-        self.opened = values
-        self.edits = {}
 
 
 def read_schema(directory):
@@ -129,6 +127,7 @@ def main():
     class SettingsWindow(Gtk.ApplicationWindow):
         def __init__(self, app, schema, config):
             super().__init__(application=app, title="Meltype の設定", default_width=900, default_height=640)
+            self.schema = schema
             self.config = config
             header = Gtk.HeaderBar()
             self.search = Gtk.SearchEntry(placeholder_text="設定を検索")
@@ -142,15 +141,9 @@ def main():
             self.list.set_header_func(self._header)
             self.sidebar = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE, width_request=160)
             self.sidebar.add_css_class("navigation-sidebar")
-            self.first_rows = []
-            for category, items in load_items(schema):
+            for category, _ in load_items(schema):
                 self.sidebar.append(Gtk.Label(label=category_label(category), xalign=0))
-                for index, (key, prop) in enumerate(items):
-                    row = self._row(key, prop)
-                    row.category = category
-                    if index == 0:
-                        self.first_rows.append(row)
-                    self.list.append(row)
+            self._fill_list()
             self.sidebar.connect("row-activated", lambda _, row: self._scroll_to(self.first_rows[row.get_index()]))
             self.sidebar.select_row(self.sidebar.get_row_at_index(0))
 
@@ -198,6 +191,18 @@ def main():
             root.append(Gtk.Separator())
             root.append(buttons)
             self.set_child(root)
+
+        def _fill_list(self):
+            while row := self.list.get_row_at_index(0):
+                self.list.remove(row)
+            self.first_rows = []
+            for category, items in load_items(self.schema):
+                for index, (key, prop) in enumerate(items):
+                    row = self._row(key, prop)
+                    row.category = category
+                    if index == 0:
+                        self.first_rows.append(row)
+                    self.list.append(row)
 
         def _row(self, key, prop):
             title = Gtk.Label(label=prop["title"], xalign=0, wrap=True)
@@ -252,9 +257,11 @@ def main():
         def _save(self):
             try:
                 self.config.save()
+                self.config = ConfigFile(self.config.path.parent, self.schema)
             except (SettingsError, OSError) as error:
                 Gtk.AlertDialog(message="設定を保存できませんでした", detail=str(error)).show(self)
                 return
+            self._fill_list()
             self.ok.set_sensitive(False)
 
         def _matches(self, row):

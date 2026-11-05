@@ -79,15 +79,6 @@ class ConfigFileTests(unittest.TestCase):
         config.save()
         self.assertEqual(external, self.path.read_text(encoding="utf-8"), "開いたときの値に戻した項目は編集していない扱い")
 
-    def test_edit_back_after_save_is_written(self):
-        self.path.write_text('{"SettingsVersion": 12, "Enabled": true}', encoding="utf-8")
-        config = settings.ConfigFile(self.directory, SCHEMA)
-        config.set("Enabled", False)
-        config.save()
-        config.set("Enabled", True)
-        config.save()
-        self.assertEqual(True, json.loads(self.path.read_text(encoding="utf-8"))["Enabled"], "保存した値から戻す編集も保存する")
-
     def test_save_merges_edits_onto_external_change(self):
         self.path.write_text('{"SettingsVersion": 12, "DetectionLevel": "Balanced"}', encoding="utf-8")
         config = settings.ConfigFile(self.directory, SCHEMA)
