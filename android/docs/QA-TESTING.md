@@ -30,7 +30,7 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 
 出力: instrumentation.log（生ログ）、instrumentation.xml（JUnit XML）、test-cases.md（ケース別成否）、summary.md、device-info.txt。実行スクリプトは実際の @Test fun 一覧と計測結果を照合し、未実行・予期しない・失敗ケースを検出する。
 
-アプリの計測は、下表の2クラスに加え、文字削除・タッチ操作・Coreブリッジの3クラスも実行する。各ケースの結果は `test-cases.md` と `instrumentation.xml` に記録する。Mozcの計測は別のGradleタスクで実行し、結果を `mozc/build/outputs/androidTest-results/connected/` に記録する。
+アプリの計測は、下表の2クラスに加え、文字削除・タッチ操作・Coreブリッジの3クラスも実行する。Coreのデータディレクトリはプロセスごとに固定されるため、別のディレクトリを使うブリッジ試験は別プロセスで実行し、2回分を集計する。各ケースの結果は `test-cases.md` と `instrumentation.xml` に記録する。Mozcの計測は別のGradleタスクで実行し、結果を `mozc/build/outputs/androidTest-results/connected/` に記録する。
 
 コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt) / [DeleteLengthDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt) / [KeyboardViewTouchTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt) / [MeltypeCoreBridgeDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt) / [MozcConverterTest.kt](../mozc/src/androidTest/kotlin/io/github/ninjin0802/keyboard/mozc/MozcConverterTest.kt)。
 

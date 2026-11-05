@@ -64,8 +64,11 @@ def main():
     ap.add_argument("--log", required=True, type=Path)
     ap.add_argument("--device", required=True, type=Path)
     ap.add_argument("--sources", required=True, nargs="+", type=Path)
+    ap.add_argument("--expected-runs", type=int, default=1)
     ap.add_argument("--output", required=True, type=Path)
     a = ap.parse_args()
+    if a.expected_runs < 1:
+        ap.error("--expected-runs must be positive")
     a.output.mkdir(parents=True, exist_ok=True)
     expected = expected_cases(a.sources)
     raw = a.log.read_text(encoding="utf-8", errors="replace")
@@ -74,9 +77,10 @@ def main():
     unexpected = set(cases) - set(expected)
     passes = sum(cases.get(c, (None,))[0] == 0 for c in expected)
     # InstrumentationStatus 0 means pass, but only when runner also confirms OK.
-    match = re.search(r"(?m)^OK \((\d+) tests?\)\s*$", raw)
-    runner_ok = bool(match and int(match.group(1)) == len(expected)
-                     and "FAILURES!!!" not in raw)
+    matches = re.findall(r"(?m)^OK \((\d+) tests?\)\s*$", raw)
+    runner_ok = (len(matches) == a.expected_runs
+                 and sum(int(count) for count in matches) == len(expected)
+                 and "FAILURES!!!" not in raw)
     successful = (passes == len(expected) and runner_ok and
                   not unexpected and not duplicates)
     suite = ET.Element("testsuite", name="MeltypeAndroidInstrumentation",

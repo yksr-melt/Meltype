@@ -37,6 +37,8 @@ jobs:
         with:
           dotnet-version: '10.0.x'
       - uses: gradle/actions/wrapper-validation@v4
+      - name: Test instrumentation result aggregation
+        run: python3 android/tools/test-instrumentation-report.py
       - name: Install Android NDK and source-build prerequisites
         run: |
           sudo apt-get update
