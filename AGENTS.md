@@ -73,6 +73,8 @@ dotnet format whitespace --folder
 - エッジケース
 - 将来の挙動を保証したいもの
 
+報告された例は `src/Meltype.Core.Tests/data/issue-cases.tsv` にも `打ったもの<Tab>期待する結果` の形で足す。
+
 実装の写しのようなテストは書かない。
 
 テストを通すために実装を曲げない。既存のテストのケースが仕様として説明できないなら、実装を合わせずにテストを直し、PR にそう書く。
