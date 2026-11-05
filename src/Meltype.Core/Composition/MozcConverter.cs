@@ -23,14 +23,17 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
 
     private readonly string _helperPath;
     private readonly string? _profileDirectory;
+    // ヘルパーとのやり取りの順番を守る。応答を待つ間も持つので、入力スレッドでは取らない
     private readonly object _gate = new();
+    // 変換の結果の控えと、その回数を守る。ヘルパーの応答を待つ間は持たない (_gate の中で取ってよい。逆は取らない)
+    private readonly object _resultsGate = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
     private readonly LatestRequestWorker<(string, string)> _worker;
     private Process? _process;
     private volatile int _failures;
 
-    // 性能の計測用の回数と時間 (--perf)。_gate の中で数えるだけなので、ふだんの入力は遅くならない
+    // 性能の計測用の回数と時間 (--perf)。ロックの中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
     private long _cacheHits;
     private long _candidateRequests;
@@ -41,8 +44,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
     private volatile bool _missingDependency;
 
-    // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない (_gate の中で読み書きする)
-    private bool _disposed;
+    // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない
+    private volatile bool _disposed;
 
     // Windows: 子プロセスを起動するあいだ、DLL が見つからないときのエラーの画面を出さない (子プロセスはこの設定を引き継ぐ)。
     // 子プロセスが引き継ぐのはプロセス全体の設定だけなので、SetThreadErrorMode では効かない。起動したらすぐ戻す
@@ -96,19 +99,14 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
     public IReadOnlyList<string> Candidates(string reading)
     {
-        // ヘルパーの応答を待っているワーカーの _gate を入力スレッドで待たない
-        if (Monitor.TryEnter(_gate))
+        lock (_resultsGate)
         {
-            try
+            _candidateRequests++;
+            if (_candidates.TryGetValue(reading, out var cached))
             {
-                _candidateRequests++;
-                if (_candidates.TryGetValue(reading, out var cached))
-                {
-                    _candidateCacheHits++;
-                    return cached;
-                }
+                _candidateCacheHits++;
+                return cached;
             }
-            finally { Monitor.Exit(_gate); }
         }
         var segments = Query("", reading);
         if (segments is null) return [];
@@ -129,8 +127,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         {
             if (_disposed) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
-            _candidates.Clear();
-            _conversions.Clear();
+            ClearCache();
             var result = Send($"L\t{Clean(context ?? "")}\t{records}");
             if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
             {
@@ -177,24 +174,23 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     {
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
         var request = (Clean(context), Clean(reading));
-        if (TryCached(request, 0, out var result)) return result;
+        if (TryCached(request, out var result)) return result;
         _worker.Submit(request);
-        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, Budget.RemainingMs, out result) ? result : null;
+        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, out result) ? result : null;
     }
 
-    private bool TryCached((string Context, string Reading) request, int waitMs, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
+    private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
     {
         result = null;
-        if (!Monitor.TryEnter(_gate, waitMs)) return false;
-        try
+        if (_disposed) return false;
+        lock (_resultsGate)
         {
-            if (_disposed || !_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
+            if (!_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
             _requests++;
             _cacheHits++;
             foreach (var (segmentReading, candidates) in result ?? []) _candidates[segmentReading] = candidates;
             return true;
         }
-        finally { Monitor.Exit(_gate); }
     }
 
     private void ProcessBackground((string Context, string Reading) request)
@@ -208,7 +204,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         Request(request.Context, request.Reading);
         // 失敗 (キャッシュに入らない) は知らせない。知らせると再描画がまた同じ要求を出して、失敗のたびに繰り返す
         bool cached;
-        lock (_gate) cached = _conversions.ContainsKey(request.Context + "\t" + request.Reading);
+        lock (_resultsGate) cached = _conversions.ContainsKey(request.Context + "\t" + request.Reading);
         if (cached) ResultReady?.Invoke();
     }
 
@@ -241,13 +237,16 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (_disposed) return null;
             // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す (覚えさせたら捨てる)。
             var key = context + "\t" + reading;
-            _requests++;
-            if (_conversions.TryGetValue(key, out var known))
+            lock (_resultsGate)
             {
-                _cacheHits++;
-                // 候補の控えは「直前の変換」のものを使うので、使い回したときも控えを入れ直す
-                foreach (var (segmentReading, candidates) in known ?? []) _candidates[segmentReading] = candidates;
-                return known;
+                _requests++;
+                if (_conversions.TryGetValue(key, out var known))
+                {
+                    _cacheHits++;
+                    // 候補の控えは「直前の変換」のものを使うので、使い回したときも控えを入れ直す
+                    foreach (var (segmentReading, candidates) in known ?? []) _candidates[segmentReading] = candidates;
+                    return known;
+                }
             }
             try
             {
@@ -261,8 +260,11 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                     if (fields[0].Length == 0) continue;
                     var candidates = fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList();
                     segments.Add((fields[0], candidates));
-                    if (_candidates.Count > 512) _candidates.Clear();
-                    _candidates[fields[0]] = candidates;
+                    lock (_resultsGate)
+                    {
+                        if (_candidates.Count > 512) _candidates.Clear();
+                        _candidates[fields[0]] = candidates;
+                    }
                 }
                 return Remember(key, segments);
             }
@@ -278,7 +280,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>候補の控えと変換の結果の控えを捨てる (前の入力の控えを次の入力に持ち越さない。テストで文ごとに使う)。</summary>
     public void ClearCache()
     {
-        lock (_gate)
+        lock (_resultsGate)
         {
             _candidates.Clear();
             _conversions.Clear();
@@ -302,23 +304,29 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             catch
             {
             }
-            return new MozcStatistics(_requests, _cacheHits, _candidateRequests, _candidateCacheHits, _helperCalls,
-                Stopwatch.GetElapsedTime(0, _helperTicks), workingSet);
+            lock (_resultsGate)
+            {
+                return new MozcStatistics(_requests, _cacheHits, _candidateRequests, _candidateCacheHits, _helperCalls,
+                    Stopwatch.GetElapsedTime(0, _helperTicks), workingSet);
+            }
         }
     }
 
-    /// <summary>変換の結果を覚えておく (_gate の中で呼ぶ)。</summary>
+    /// <summary>変換の結果を覚えておく。</summary>
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Remember(string key, List<(string Reading, IReadOnlyList<string> Candidates)>? segments)
     {
-        if (_conversions.Count > 512) _conversions.Clear();
-        _conversions[key] = segments;
+        lock (_resultsGate)
+        {
+            if (_conversions.Count > 512) _conversions.Clear();
+            _conversions[key] = segments;
+        }
         return segments;
     }
 
     // タブ・改行は区切りに使うので空白にする。
     private static string Clean(string text) => text.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
 
-    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければ起動して READY を待つ。入力スレッドは _gate を待たないので、入力は止まらない。</summary>
+    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければ起動して READY を待つ。入力スレッドは _gate を取らないので、入力は止まらない。</summary>
     private Process Start()
     {
         if (_process is { HasExited: false } running) return running;

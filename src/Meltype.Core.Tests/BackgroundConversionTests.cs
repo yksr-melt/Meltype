@@ -429,6 +429,24 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Mozc_AnswersFromTheCacheWhileTheHelperIsBusy()
+    {
+        // ヘルパーの応答を待っている間に再描画しても、届いている答えが読めないとかなに戻って、表示が 漢字 → かな と揺れる
+        var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
+        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        mozc.Budget.Enable();
+        mozc.Budget.Start(10000);
+        Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text, "起動して答える");
+        Assert.True(mozc.Candidates("あ").Count > 0, "候補も覚えた");
+
+        mozc.Budget.Start(0);
+        Assert.True(mozc.ConvertClauses("おそい") is null, "遅い読みをワーカーに頼む");
+        Thread.Sleep(200);
+        Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text, "ヘルパーの応答を待っている間も、届いている答えを読める");
+        Assert.True(mozc.Candidates("あ").Count > 0, "候補も読める");
+    }
+
+    [Test]
     public static void Mozc_AnswersFromTheWorker_AndReportsReadiness()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
