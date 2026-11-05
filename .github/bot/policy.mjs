@@ -141,7 +141,7 @@ export async function runPolicy(api, event, eventName, now = Date.now()) {
   const canClose = ['schedule', 'workflow_dispatch'].includes(eventName);
   let pulls = await list('/pulls?state=open');
   const excess = excessPulls(pulls);
-  // 手動判断用ラベルも初回に用意する。情報待ちは既存のトリアージ bot が作る。
+  // 手動判断用ラベルも初回に用意する。
   const labels = await list('/labels');
   for (const [name, description] of [
     [Labels.limit, '同時オープン PR (Draft を含む) が 2 件を超えていて、枠が空くのを待っている'],
