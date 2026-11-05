@@ -4,6 +4,7 @@
 using System.Diagnostics;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Input;
 
 namespace Meltype.Tests;
 
@@ -166,23 +167,112 @@ internal static class BackgroundConversionTests
         Assert.True(Session(converter).RefreshConversion() is null, "入力していなければ null");
     }
 
-    [Test]
-    public static void Refresh_KeepsTheCandidatesOfAnOpenConversion()
+    /// <summary>答えが届くまで候補を開いて、その後に答えを届ける。</summary>
+    private static (MeltypeSession Session, ManualResetEventSlim Release, ManualResetEventSlim Ready, BackgroundCallbackConverter Converter) OpenWithoutAnswer(string typed)
     {
-        using var release = new ManualResetEventSlim();
-        using var converter = Slow(release: release);
+        var release = new ManualResetEventSlim();
+        var ready = new ManualResetEventSlim();
+        var converter = new BackgroundCallbackConverter(
+            (reading, _) =>
+            {
+                release.Wait(10000);
+                return reading == "たんいをとる"
+                    ? [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")]
+                    : [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
+            },
+            _ => ["候補1", "候補2"]);
+        converter.ResultReady += ready.Set;
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, typed + " ");
+        return (session, release, ready, converter);
+    }
+
+    private static CompositionView? RefreshUntil(MeltypeSession session, Func<CompositionView, bool> done)
+    {
+        CompositionView? view = null;
+        SpinWait.SpinUntil(() => session.RefreshConversion()?.View is { } v && done(view = v), 5000);
+        return view;
+    }
+
+    [Test]
+    public static void Refresh_ReplacesAnUntouchedOpenConversion()
+    {
+        // 答えが間に合わないまま Space で開く (予算 400ms を待ってから、かなで開く)。3 文字以内の読みも同じ
+        var (session, release, _, converter) = OpenWithoutAnswer("kyou");
+        using (converter)
+        {
+            release.Set();
+            var view = RefreshUntil(session, v => v.Text == "きょう!");
+            Assert.Equal("きょう!", view?.Text);
+            Assert.True(view?.Converting == true, "候補を開いたまま");
+        }
+    }
+
+    [Test]
+    public static void Refresh_SplitsAnUntouchedConversionIntoTheArrivedClauses()
+    {
+        var (session, release, _, converter) = OpenWithoutAnswer("tanniwotoru");
+        using (converter)
+        {
+            release.Set();
+            Assert.Equal("単位を,取る", string.Join(",", RefreshUntil(session, v => v.Clauses is { Count: 2 })?.Clauses ?? []));
+        }
+    }
+
+    [Test]
+    public static void Refresh_KeepsTheChosenCandidate_AndInsertsNewOnesAbove()
+    {
+        var (session, release, _, converter) = OpenWithoutAnswer("nihongo");
+        using (converter)
+        {
+            // 候補を選び直す (↓)。ひらがな → カタカナ
+            var moved = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
+            var chosen = moved?.Text;
+            Assert.True(chosen != "にほんご", $"選び直した: {chosen}");
+            release.Set();
+            var view = RefreshUntil(session, v => v.Candidates.Contains("日本語"));
+            Assert.Equal(chosen, view?.Text, "選んでいる候補は変えない");
+            Assert.Equal("日本語", view?.Candidates[0], "新しい候補は上に入る");
+            Assert.Equal(view!.Candidates.ToList().IndexOf(chosen!), view.SelectedIndex);
+        }
+    }
+
+    [Test]
+    public static void Refresh_DoesNotUndoAResizedClause()
+    {
+        var (session, release, ready, converter) = OpenWithoutAnswer("tanniwotoru");
+        using (converter)
+        {
+            var resized = session.HandleKey(VirtualKeys.Left, null, true, false, false, false).View;
+            release.Set();
+            Assert.True(ready.Wait(5000), "結果が届く");
+            Thread.Sleep(100);
+            Assert.True(session.RefreshConversion() is null, $"区切りを動かしたあとは置き換えない: {resized?.Text}");
+        }
+    }
+
+    [Test]
+    public static void Live_KeepsThePreviousResultWhileWaiting_InsteadOfFlickeringToKana()
+    {
+        using var hold = new ManualResetEventSlim(true);
+        using var ready = new AutoResetEvent(false);
+        using var converter = new BackgroundCallbackConverter(
+            (reading, _) =>
+            {
+                hold.Wait(10000);
+                return [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
+            },
+            _ => []);
+        converter.ResultReady += () => ready.Set();
         var session = Session(converter);
         SessionFacadeTests.Type(session, "nihongo");
-        // 答えが間に合わないまま Space で開く (予算 400ms を待ってから、かなで開く)
-        var opened = SessionFacadeTests.Type(session, " ")[^1].View;
-        Assert.True(opened?.Converting == true, "変換を開いた");
-        Assert.Equal("にほんご", opened!.Text);
+        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "日本語", 5000), "答えが届く");
 
-        using var ready = new ManualResetEventSlim();
-        converter.ResultReady += ready.Set;
-        release.Set();
-        Assert.True(ready.Wait(5000), "結果が届く");
-        Assert.True(session.RefreshConversion() is null, "開いた候補の表示は作り直さない");
+        // 次の読みの答えが届くまでは、前の答えの続きとして見せる
+        hold.Reset();
+        Assert.Equal("日本語を", SessionFacadeTests.Type(session, "wo")[^1].View?.Text);
+        hold.Set();
+        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "にほんごを!", 5000), "届いたら置き換える");
     }
 
     [Test]

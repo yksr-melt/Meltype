@@ -367,6 +367,11 @@ public sealed class CompositionController
     private readonly HashSet<int> _replayedDown = [];
     private readonly HashSet<int> _capturedDown = [];
     private List<Clause> _clauses = [];
+    private bool _conversionPrefersJapanese;
+    // 文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える
+    private bool _clausesEdited;
+    // 前の打鍵のライブ変換の結果。答えがまだ無い読みは、この続きとして見せる
+    private (string Reading, List<(string Reading, string Text)> Clauses)? _lastLive;
     private int _selectedClause;
     private bool _converting;
     private bool? _lastCommitEnglish;
@@ -491,15 +496,52 @@ public sealed class CompositionController
 
     /// <summary>
     /// 背景の変換の結果が届いた。入力スレッドで呼ぶ。変換エンジンが使えなかった間の結果を捨てて、入力中の表示を作り直す。
-    /// 変換中 (候補を開いた後) の文節と候補は置き換えない。表示を作り直したなら true。
+    /// 表示を作り直したなら true。
     /// </summary>
     public bool RefreshConversion()
     {
         _liveCache.Clear();
-        if (_text.IsEmpty || _converting) return false;
+        if (_text.IsEmpty || _converting && !RefreshOpenConversion()) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
         if (_predictionIndex < 0) _predictionKey = "\u0000";
         UpdateView();
+        return true;
+    }
+
+    /// <summary>
+    /// 候補を開いた後に届いた答えを反映する。文節の区切りを動かしたあとは置き換えない。
+    /// 候補を選び直した文節は、選んでいる候補を変えずに、新しい候補を上に入れる。何も変わらなければ false。
+    /// </summary>
+    private bool RefreshOpenConversion()
+    {
+        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0) return false;
+        var (old, selected, tabStarted) = (_clauses, _selectedClause, _tabStartedConversion);
+        WithoutWaiting(() =>
+        {
+            StartConversion(_conversionPrefersJapanese);
+            return true;
+        });
+        _tabStartedConversion = tabStarted;
+        var sameClauses = _clauses.Count == old.Count && _clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
+        var nothingNew = sameClauses && _clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
+        if (nothingNew || !sameClauses && old.Any(c => c.Changed))
+        {
+            _clauses = old;
+            _selectedClause = selected;
+            return false;
+        }
+        if (sameClauses)
+        {
+            foreach (var (fresh, previous) in _clauses.Zip(old))
+            {
+                if (!previous.Changed) continue;
+                fresh.Candidates = Distinct([.. fresh.Candidates, .. previous.Candidates]);
+                fresh.Index = fresh.Candidates.IndexOf(previous.Text);
+                fresh.Changed = true;
+                fresh.Translations.UnionWith(previous.Translations);
+            }
+        }
+        _selectedClause = Math.Min(selected, _clauses.Count - 1);
         return true;
     }
 
@@ -635,6 +677,7 @@ public sealed class CompositionController
         _text.Clear();
         _converting = false;
         _clauses = [];
+        _lastLive = null;
         _spaceStartedConversion = false;
         _tabStartedConversion = false;
     }
@@ -1709,6 +1752,8 @@ public sealed class CompositionController
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
+        _conversionPrefersJapanese = preferJapanese;
+        _clausesEdited = false;
         _tabStartedConversion = false;
         // 括弧単独は生成した候補だけで完結させる仕様 (issue #870)。辞書・履歴・エンジンの候補で補わない。
         // Expanded=true は追加漏れではなく、表示時の Expand も呼ばないための指定。ペアの終端までを1文節にする。
@@ -2738,6 +2783,7 @@ public sealed class CompositionController
     /// </summary>
     private void Resize(int delta)
     {
+        _clausesEdited = true;
         var current = _clauses[_selectedClause];
         // 空のペアは左右を一度に選択・確定する単位。区切り操作で片側の文節へ戻さない。
         if (current.Brackets is not null) return;
@@ -2855,6 +2901,13 @@ public sealed class CompositionController
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
+        if (_budget is { Enabled: true })
+        {
+            // 答えがまだ無い (全部かな) ときは、前の打鍵の結果を残す。かなに戻すと、打鍵のたびに表示が漢字とかなで揺れる
+            if (string.Concat(clauses.Select(c => c.Text)) == kana && _lastLive is { } last && kana.StartsWith(last.Reading, StringComparison.Ordinal))
+                return [.. last.Clauses, (kana[last.Reading.Length..], kana[last.Reading.Length..])];
+            _lastLive = (kana, clauses);
+        }
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
