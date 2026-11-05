@@ -29,7 +29,7 @@ mac/build-cli.sh --setup --all
 ```bash
 mac/build-cli.sh --test      # テストだけ
 mac/build-cli.sh --build     # ビルドだけ
-mac/build-cli.sh --install   # インストールだけ
+mac/build-cli.sh --install   # ビルドしてインストール
 ```
 
 `mac/.build` (Swift のビルド結果) は azooKey の辞書の置き場所として使われることがあるので、消さないでください。
@@ -44,7 +44,7 @@ mac/build-cli.sh --install   # インストールだけ
 bash mac/update.sh
 ```
 
-次のことを順に行います。入力のチェックが失敗しても、入力メソッドは元に戻します。Git の変更を取り込んだり、ユーザー辞書を上書きしたりはしません。
+次のことを順に行います。入力のチェックは別プロセスで実行します。チェックに失敗した場合は入力ソースの選び直しを行わず、更新済みのアプリはそのまま残します。Git の変更を取り込んだり、ユーザー辞書を上書きしたりはしません。
 
 - 本体のテスト (OS に依存しない部分)
 - アプリのビルドとインストール
