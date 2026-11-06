@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Yukishiro
 #
 # AUR の meltype-bin (#1097)。リリースの zip (ビルド済み) を /opt/meltype に置く。置き方は linux/build-deb.sh と同じ。
-# pkgver と sha256sums は packaging/aur/update.sh で書き換える (手で直さない)。
+# pkgver と sha256sums は packaging/aur/update.sh で書き換える (手で直さない)。リリース時は release.yml が書き換えて AUR に push する。
 pkgname=meltype-bin
 pkgver=1.4.0
 pkgrel=1

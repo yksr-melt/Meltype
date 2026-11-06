@@ -125,16 +125,16 @@ jobs:
           path: dist/manifests/homebrew/Casks/meltype.rb
           retention-days: 90
 
-  # AUR の meltype-bin の PKGBUILD と .SRCINFO を、このリリースの zip の SHA-256 で更新する PR を作る (#1097)。
-  # AUR への push はメンテナーが行う (AUR の鍵を CI に置かない)。プレリリースは AUR に出さない。
+  # AUR の meltype-bin を、このリリースの zip の SHA-256 で更新して AUR に push する (#1097)。
+  # push には AUR の共同メンテナー (CI 専用のアカウント) の SSH 鍵を使う (所有者の鍵は置かない)。
+  # 秘密 AUR_SSH_PRIVATE_KEY が無ければ何もしない。プレリリースは AUR に出さない。
   aur:
     if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
     needs: publish
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: write
-      pull-requests: write
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -148,45 +148,29 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           bash packaging/aur/update.sh "$version" "dist/Meltype-$version-linux.zip" "dist/Meltype-$version-linux-arm64.zip"
-          git diff
-      - id: app-token
-        if: vars.BOT_APP_ID != ''
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ vars.BOT_APP_ID }}
-          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
-      - name: Create AUR update PR
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+          cat packaging/aur/meltype-bin/.SRCINFO
+      - name: Push to AUR
+        if: env.AUR_SSH_PRIVATE_KEY != ''
         run: |
           version="${GITHUB_REF_NAME#v}"
-          branch="aur-${version}"
-          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
-            main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/heads/$branch" -f sha="$main_sha"
-          fi
-          changed=false
-          for f in packaging/aur/meltype-bin/PKGBUILD packaging/aur/meltype-bin/.SRCINFO; do
-            sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/$f?ref=$branch" --jq .sha)"
-            [[ "$sha" == "$(git hash-object "$f")" ]] && continue
-            changed=true
-            gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/$f" \
-              -f message="Update AUR meltype-bin to $version" \
-              -f branch="$branch" -f content="$(base64 < "$f" | tr -d '\n')" -f sha="$sha"
-          done
-          if ! $changed; then
-            echo "AUR PKGBUILD is already up to date for $version."
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # aur.archlinux.org のホスト鍵を取り、Arch Wiki (AUR submission guidelines) に載っている指紋と比べる
+          ssh-keyscan -t ed25519 aur.archlinux.org > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -q 'SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4' \
+            || { echo "aur.archlinux.org のホスト鍵の指紋が一致しません" >&2; exit 1; }
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git clone ssh://aur@aur.archlinux.org/meltype-bin.git "$RUNNER_TEMP/aur"
+          cp packaging/aur/meltype-bin/{PKGBUILD,.SRCINFO,meltype.install} "$RUNNER_TEMP/aur/"
+          cd "$RUNNER_TEMP/aur"
+          git add PKGBUILD .SRCINFO meltype.install
+          if git diff --cached --quiet; then
+            echo "AUR meltype-bin is already up to date for $version."
             exit 0
           fi
-          existing_pr="$(gh pr list --repo "$GITHUB_REPOSITORY" \
-            --head "$GITHUB_REPOSITORY_OWNER:$branch" --base main --state open \
-            --json number --jq '.[0].number // empty')"
-          if [[ -z "$existing_pr" ]]; then
-            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
-              --title "packaging: AUR の meltype-bin を $version に更新" \
-              --body "リリース $version の zip の SHA-256 で PKGBUILD と .SRCINFO を更新します。main に入れたら、docs/dev/RELEASE.md の「AUR」の手順で AUR に push してください。"
-          fi
+          git -c user.name="Meltype release" -c user.email="noreply@github.com" commit -m "Update to $version"
+          git push origin HEAD:master
 
   # apt と dnf のリポジトリを同じ鍵で署名して、1 つの GitHub Pages の成果物にする
   # (Pages は deploy のたびにサイト全体を置き換えるので、別々のジョブで deploy すると片方が消える)

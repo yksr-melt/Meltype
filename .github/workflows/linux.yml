@@ -256,7 +256,10 @@ jobs:
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
 
   # AUR の meltype-bin (packaging/aur) を、app が作った x64 の zip で makepkg し、Arch Linux に入れて外せるか確かめる (#1097)
+  # archlinux:latest はローリングリリースで、ミラーの障害や Arch の更新で落ちることがあるので、
+  # release.yml (タグ) から呼ばれたときは流さない (Windows・Mac を含むリリースを止めないため)
   aur:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     needs: app
     runs-on: ubuntu-24.04
     container: archlinux:latest
@@ -297,8 +300,12 @@ jobs:
       - name: Remove
         run: |
           pacman -R --noconfirm meltype-bin
-          test ! -e /opt/meltype
+          # /opt/meltype には、動かしたときに作られたファイル (パッケージに入っていないもの) が残ることがある
+          find /opt/meltype 2>/dev/null || true
+          test ! -e /opt/meltype/ibus-engine-meltype
+          test ! -e /opt/meltype/libMeltypeNative.so
           test ! -e /usr/share/ibus/component/meltype.xml
+          test ! -e /usr/lib/fcitx5/meltype.so
 
   # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
   ime-ci:

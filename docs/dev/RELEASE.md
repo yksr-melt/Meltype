@@ -69,13 +69,9 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-
   次回から `brew upgrade --cask meltype` で更新できます。Mac の zip から cask を作る場合は `node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip` です
   - cask は Meltype.app を `~/Library/Input Methods` に入れ、`mac/install.sh` と同じく、隔離属性を外す・入力ソースに登録する・GUI のセッションで起動するところまでします。`brew upgrade` で更新、`brew uninstall --cask meltype` で外せます (`--zap` で設定と学習データも)
   - 署名と公証 (mac.yml の秘密) が無い版は、自分用の署名 (ad hoc) です。cask は隔離属性を外しますが、Homebrew の本家 (homebrew/cask) には出せません (自分の tap なら使えます)
-- **AUR (`meltype-bin`)**: `packaging/aur/meltype-bin/` に PKGBUILD を置いています。正式版のタグのリリース時に、`pkgver` と `sha256sums`・`.SRCINFO` を更新する PR が自動で作られます (プレリリースは出しません)。AUR の鍵は CI に置かないので、PR を main に入れたあと、AUR のメンテナーが push します:
-  ```bash
-  git clone ssh://aur@aur.archlinux.org/meltype-bin.git aur-meltype-bin
-  cp packaging/aur/meltype-bin/{PKGBUILD,.SRCINFO,meltype.install} aur-meltype-bin/
-  cd aur-meltype-bin && git add -A && git commit -m "Update to <版>" && git push
-  ```
-  手で版を上げるときは `packaging/aur/update.sh <版> <x86_64 の zip> <aarch64 の zip>` です (PKGBUILD の版とハッシュを手で直さない)
+- **AUR (`meltype-bin`)**: `packaging/aur/meltype-bin/` の PKGBUILD を元に、正式版のタグのリリース時に `.github/workflows/release.yml` が `pkgver`・`sha256sums`・`.SRCINFO` を更新して AUR に push します (プレリリースは出しません。リポジトリの PKGBUILD の版は更新しません)。
+  - 初回だけ、AUR の所有者が `meltype-bin` を作り、CI 専用の AUR アカウントを共同メンテナーに加えます。そのアカウントの SSH 秘密鍵を Actions secret `AUR_SSH_PRIVATE_KEY` に登録します (所有者の鍵は置きません)。登録が無ければ push しません
+  - 手で出すときは `packaging/aur/update.sh <版> <x86_64 の zip> <aarch64 の zip>` で PKGBUILD と `.SRCINFO` を作り (版とハッシュを手で直さない)、`ssh://aur@aur.archlinux.org/meltype-bin.git` に `PKGBUILD`・`.SRCINFO`・`meltype.install` を push します
 - **apt (.deb)**: linux.yml が amd64 / arm64 の `.deb` を作り、release.yml がリリースに付けます。署名鍵を登録すると、release.yml が署名付き apt リポジトリを GitHub Pages に自動公開します。
   - 初回だけ GitHub の Settings → Pages → Build and deployment → Source を「GitHub Actions」にします
   - Settings → Environments → `github-pages` → Deployment branches and tags で、タグのルール `v*` を許可します (リリースタグからの公開に必要です)
