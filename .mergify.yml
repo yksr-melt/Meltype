@@ -19,7 +19,8 @@ queue_rules:
       - label = CLA確認済み
 
 # Fast / Normal は優先順位の違い。CI・CLA・レビューの免除ではない。
-# メンテナーが merge:fast ラベルを付けた PR を優先する。
+# merge:fast は緊急時の修正や、文書だけの修正など動作に影響しない小さな修正に使う。
+# メンテナーが merge:fast ラベルを付けた PR は、通常の PR より先にマージする (実行中のチェックは中断しない)。
 priority_rules:
   - name: fast
     conditions:
