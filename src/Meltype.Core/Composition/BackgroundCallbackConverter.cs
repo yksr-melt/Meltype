@@ -19,7 +19,6 @@ public sealed class BackgroundCallbackConverter(
     ConversionBudget? budget = null,
     Action<Action>? start = null) : IKanjiConverter, IBackgroundConverter, IDisposable
 {
-    // 外の変換エンジンの答えは Zenzai の準備などで変わるので、同じ読みの古い答えを長く持たない。
     // 1 回の表示で要る要求より少ないと、答えが届くたびに作り直しても控えが足りず、再描画が終わらない
     private const int MaxCache = 256;
 
@@ -66,11 +65,17 @@ public sealed class BackgroundCallbackConverter(
 
     private Answer? Ask(Request request)
     {
+        var worker = Worker();
         lock (_gate)
         {
-            if (_answers.TryGetValue(request, out var known)) return known;
+            if (_answers.TryGetValue(request, out var known))
+            {
+                // 外の変換エンジンの答えは同じ読みでも変わる (Zenzai の準備中・処理中は azooKey の答え、Microsoft IME は単語の登録)。
+                // 控えを返して裏で聞き直し、変わっていれば Process が知らせる
+                worker.SubmitIfIdle(request);
+                return known;
+            }
         }
-        var worker = Worker();
         worker.Submit(request);
         if (!worker.Wait(request, Budget.RemainingMs)) return null;
         lock (_gate) return _answers.TryGetValue(request, out var answered) ? answered : null;
@@ -89,7 +94,12 @@ public sealed class BackgroundCallbackConverter(
         if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {
-            if (!_answers.ContainsKey(request))
+            if (_answers.TryGetValue(request, out var known))
+            {
+                // 同じ答えを知らせると、再描画が聞き直しを呼び、終わらない
+                if (SameAnswer(known, answer)) return;
+            }
+            else
             {
                 if (_answers.Count >= MaxCache) _answers.Remove(_order.Dequeue());
                 _order.Enqueue(request);
@@ -98,4 +108,9 @@ public sealed class BackgroundCallbackConverter(
         }
         ResultReady?.Invoke();
     }
+
+    private static bool SameAnswer(Answer a, Answer b) =>
+        a.Text == b.Text &&
+        (a.Clauses ?? []).SequenceEqual(b.Clauses ?? []) &&
+        (a.Candidates ?? []).SequenceEqual(b.Candidates ?? []);
 }

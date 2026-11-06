@@ -53,6 +53,7 @@ public static unsafe class Exports
             s_mozc?.Dispose();
             s_mozc = new MozcConverter(path, FromUtf8(profile) ?? Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
             s_converter = new HybridConverter(() => Config.ConversionEngine.Mozc, s_mozc, null, null);
+            if (s_notify != null) ConnectConversionReady();
             if (!s_mozc.IsInstalled) return 0;
             s_mozc.WarmUp();
             return 1;
@@ -84,15 +85,34 @@ public static unsafe class Exports
     }
 
     /// <summary>
-    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_create の前に 1 回呼ぶ。
+    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_create の前に呼ぶ。
     /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
     /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、答えが出るまで待つ。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
     public static void SetConversionReady(delegate* unmanaged<void> notify)
     {
+        try
+        {
+            s_notify = notify;
+            ConnectConversionReady();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"変換の結果の通知を登録できませんでした: {ex}");
+        }
+    }
+
+    private static delegate* unmanaged<void> s_notify;
+
+    private static void NotifyConversionReady() => s_notify();
+
+    // meltype_init_mozc が s_converter を作り直すので、呼ぶ順番によらず今の変換エンジンにつなぐ
+    private static void ConnectConversionReady()
+    {
         s_converter.Budget.Enable();
-        s_converter.ResultReady += () => notify();
+        s_converter.ResultReady -= NotifyConversionReady;
+        s_converter.ResultReady += NotifyConversionReady;
         if (s_mozc is null) s_callback.WarmUp();
     }
 

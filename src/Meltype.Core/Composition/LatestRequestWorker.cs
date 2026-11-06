@@ -34,6 +34,15 @@ internal sealed class LatestRequestWorker<TRequest>(Action<TRequest> process, in
         }
     }
 
+    /// <summary>処理中も予約も無いときだけ、request を頼む。答えを待っている要求の予約を上書きしない。</summary>
+    public void SubmitIfIdle(TRequest request)
+    {
+        lock (_gate)
+        {
+            if (!_running) Submit(request);
+        }
+    }
+
     /// <summary>request の処理が終わるまで最大 timeoutMs 待つ。終わった (または処理の予定が無い) なら true。</summary>
     public bool Wait(TRequest request, int timeoutMs)
     {

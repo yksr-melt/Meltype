@@ -403,17 +403,74 @@ internal static class BackgroundConversionTests
     public static void Callback_DropsOnlyTheOldestAnswerWhenFull()
     {
         var asked = 0;
-        using var converter = new BackgroundCallbackConverter((_, _) => null, reading =>
+        using var converter = new BackgroundCallbackConverter((_, _) => null, reading => [$"{reading}#{Interlocked.Increment(ref asked)}"]);
+        for (var i = 0; i <= 256; i++) converter.Candidates($"よみ{i}");
+        Assert.Equal("よみ1#2", converter.Candidates("よみ1")[0], "新しい答えを入れても、最も古いもの以外は控えに残る");
+        Assert.True(converter.Candidates("よみ0")[0] != "よみ0#1", "最も古い答えは捨てられ、聞き直して待つ");
+    }
+
+    [Test]
+    public static void Callback_AsksAgainAndNotifiesOnlyWhenTheAnswerChanged()
+    {
+        // Mac の Zenzai は準備中・処理中に azooKey の答えを返す。控えたままだと、同じ読みはもう Zenzai の答えにならない
+        var answer = "azooKey";
+        var notified = 0;
+        var asked = 0;
+        using var converter = new BackgroundCallbackConverter((reading, _) =>
         {
             Interlocked.Increment(ref asked);
-            return [reading];
-        });
-        for (var i = 0; i <= 256; i++) converter.Candidates($"よみ{i}");
-        Assert.Equal(257, Volatile.Read(ref asked));
-        converter.Candidates("よみ1");
-        Assert.Equal(257, Volatile.Read(ref asked), "新しい答えを入れても、最も古いもの以外は控えに残る");
-        converter.Candidates("よみ0");
-        Assert.Equal(258, Volatile.Read(ref asked), "最も古い答えは捨てられている");
+            return [new ConversionClause(reading, Volatile.Read(ref answer))];
+        }, _ => []);
+        converter.ResultReady += () => Interlocked.Increment(ref notified);
+        Assert.Equal("azooKey", converter.ConvertClauses("よみ")?[0].Text);
+        Assert.Equal(1, Volatile.Read(ref notified));
+
+        Volatile.Write(ref answer, "Zenzai");
+        Assert.True(SpinWait.SpinUntil(() => converter.ConvertClauses("よみ")?[0].Text == "Zenzai", 5000), "聞き直して新しい答えになる");
+        Assert.Equal(2, Volatile.Read(ref notified), "答えが変わったら知らせる");
+
+        var before = Volatile.Read(ref asked);
+        Assert.True(SpinWait.SpinUntil(() =>
+        {
+            converter.ConvertClauses("よみ");
+            return Volatile.Read(ref asked) >= before + 3;
+        }, 5000), "控えがあっても聞き直す");
+        Assert.Equal(2, Volatile.Read(ref notified), "同じ答えなら知らせない (再描画が聞き直しを呼び、終わらなくなる)");
+    }
+
+    [Test]
+    public static void Callback_RevalidationDoesNotReplaceAWaitingRequest()
+    {
+        using var release = new ManualResetEventSlim();
+        var asked = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        using var converter = new BackgroundCallbackConverter((reading, _) =>
+        {
+            if (reading == "まつ") release.Wait(5000);
+            asked.Enqueue(reading);
+            return [new ConversionClause(reading, reading + "!")];
+        }, _ => []);
+        converter.Budget.Enable();
+        converter.ConvertClauses("ひかえ");
+        converter.Budget.Start(3000);
+        Assert.Equal("ひかえ!", converter.ConvertClauses("ひかえ")?[0].Text);
+        converter.Budget.Start(0);
+        Assert.True(converter.ConvertClauses("まつ") is null, "答えはまだ");
+        Assert.True(converter.ConvertClauses("つぎ") is null, "答えはまだ");
+        converter.ConvertClauses("ひかえ");
+        release.Set();
+        Assert.True(SpinWait.SpinUntil(() => asked.Contains("つぎ"), 5000), "控えの聞き直しで、待っている要求の予約が消えない");
+    }
+
+    [Test]
+    public static void Refresh_ReplacesAnOpenConversionWithTheChangedAnswer()
+    {
+        // 候補を開いたあとも、聞き直した答えが違えば入れ替わる (控えの答えのままにしない)
+        var answer = "azooKey";
+        using var converter = new BackgroundCallbackConverter((reading, _) => [new ConversionClause(reading, Volatile.Read(ref answer))], _ => []);
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "nihongo ");
+        Volatile.Write(ref answer, "Zenzai");
+        Assert.Equal("Zenzai", RefreshUntil(session, v => v.Text == "Zenzai")?.Text);
     }
 
     [Test]
