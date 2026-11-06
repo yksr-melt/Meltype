@@ -14,7 +14,7 @@ internal static class SessionFacadeTests
     private static MeltypeSession Create() => new(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
 
     /// <summary>文字を 1 つずつ打つ (英字は大文字なら Shift 付き)。</summary>
-    private static List<SessionResult> Type(MeltypeSession session, string text, string? before = null)
+    internal static List<SessionResult> Type(MeltypeSession session, string text, string? before = null)
     {
         var results = new List<SessionResult>();
         foreach (var c in text)

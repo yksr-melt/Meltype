@@ -75,11 +75,12 @@ internal static class BracketCandidateTests
     [Test]
     public static void Issue870_SpaceAndTabIncludeTheClosingBracket()
     {
+        // `>` の単独 Space は Markdown の引用の確定 `> ` (#1301) のため対象外。
         foreach (var tab in new[] { false, true })
         {
             foreach (var square in new[] { false, true })
             {
-                foreach (var raw in new[] { "[", "]", "[]", "(", ")", "()", "{", "}", "{}", "<", ">", "<>" })
+                foreach (var raw in new[] { "[", "]", "[]", "(", ")", "()", "{", "}", "{}", "<", "<>" })
                 {
                     var k = new CompositionTests.Keyboard(tabConversion: tab) { SquareBrackets = square };
                     k.Type(raw);
@@ -172,7 +173,8 @@ internal static class BracketCandidateTests
     {
         foreach (var full in new[] { false, true })
         {
-            foreach (var raw in new[] { "[", "]", "[]", "(", ")", "()", "{", "}", "{}", "<", ">", "<>" })
+            // `>` の単独 Space は Markdown の引用の確定 `> ` (#1301) のため対象外。
+            foreach (var raw in new[] { "[", "]", "[]", "(", ")", "()", "{", "}", "{}", "<", "<>" })
             {
                 var k = new CompositionTests.Keyboard
                 { ContinueAfterConversion = true, SquareBrackets = full, FullWidthParentheses = full };

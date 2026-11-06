@@ -739,7 +739,64 @@ LRESULT CALLBACK TextService::HelloWindowProc(HWND window, UINT message, WPARAM 
     }
     auto self = reinterpret_cast<TextService*>(GetWindowLongPtrW(window, GWLP_USERDATA));
     if (message == WM_TIMER && self) { self->Hello(); return 0; }
+    if (message == kConversionWaitDone && self) { self->FinishConversionWait(); return 0; }
     return DefWindowProcW(window, message, wParam, lParam);
+}
+
+void TextService::StartConversionWait() {
+    if (composition_ == nullptr || conversionWait_.valid() || !helloWindow_ || deactivated_) return;
+    if (!conversionPipe_) conversionPipe_ = std::make_shared<PipeClient>();
+    auto pipe = conversionPipe_;
+    HWND window = helloWindow_;
+    auto request = "{\"op\":\"wait\",\"since\":" + std::to_string(conversionGeneration_) + "}";
+    try {
+        conversionWait_ = std::async(std::launch::async, [pipe, window, request]() {
+            std::string response;
+            JsonValue reply;
+            int generation = -1;
+            try {
+                // optional: wait は Meltype.exe が最大 250ms 持つので、時間切れは Meltype.exe が止まっているときだけ
+                if (pipe->Transact(request, response, 1000, true) && ParseJson(response, reply) && reply[L"generation"].type == JsonValue::Type::Number)
+                    generation = reply[L"generation"].Int();
+            } catch (...) {
+            }
+            PostMessageW(window, kConversionWaitDone, 0, 0);
+            return generation;
+        });
+    } catch (...) {
+        TipLog(L"変換結果を待つスレッドを開始できません");
+    }
+}
+
+void TextService::FinishConversionWait() {
+    if (!conversionWait_.valid()) return;
+    const int generation = conversionWait_.get();
+    // つながらないときは次の Apply までやり直さない (Meltype.exe が無いときに空回りしない)
+    if (generation < 0) return;
+    // 最初の wait (世代 -1) も、受け付ける前に届いた結果を反映するので changed にする
+    const bool changed = generation != conversionGeneration_;
+    conversionGeneration_ = generation;
+    if (composition_ == nullptr) {
+        // 入力していない間はつながりを持たない (全アプリの全スレッドの分がつながり続ける)
+        if (conversionPipe_) conversionPipe_->Close();
+        return;
+    }
+    if (changed) {
+        Microsoft::WRL::ComPtr<ITfContext> context = compositionContext_;
+        Microsoft::WRL::ComPtr<ITfComposition> target = composition_;
+        Microsoft::WRL::ComPtr<TextService> self = this;
+        RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target](TfEditCookie ec) {
+            if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
+            JsonValue reply;
+            // consumed でなければ、Meltype.exe に入力の続きが無い。ここでは何もせず、次のキーで扱う
+            if (self->Request("{\"op\":\"refresh\",\"process\":" + JsonString(ProcessName()) + ",\"sid\":\"" + self->sid_ + "\"}", reply) && reply[L"consumed"].Bool()) {
+                self->ownEdit_ = true;
+                self->Apply(ec, context.Get(), reply);
+            }
+            return S_OK;
+        });
+    }
+    StartConversionWait();
 }
 
 void TextService::StartHelloUpdates() {
@@ -761,6 +818,8 @@ void TextService::StopHelloUpdates() {
     // worker は this や TSF に触れない。DLL を解放する前に通信終了を待つ。
     if (helloResult_.valid()) { helloResult_.wait(); helloResult_.get(); }
     helloPipe_.reset();
+    if (conversionWait_.valid()) { conversionWait_.wait(); conversionWait_.get(); }
+    conversionPipe_.reset();
     // クラスはプロセス内で共有する。他スレッドのウィンドウが残る間の解除失敗は許容し、
     // 最後のインスタンスがウィンドウを破棄したときに解除する。
     UnregisterClassW(L"Meltype.Tip.Hello", g_module);
@@ -1372,7 +1431,6 @@ bool TextService::Request(const std::string& json, JsonValue& reply, DWORD timeo
     if (ownProcess_ && !request.empty() && request.back() == '}') {
         request.insert(request.size() - 1, ",\"tid\":" + std::to_string(GetCurrentThreadId()));
     }
-    // 初めての変換は Mozc の起動などで時間がかかることがあるので、少し長めに待つ
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
     if (!ParseJson(response, reply)) {
         TipLog(L"応答を読めません");
@@ -1471,6 +1529,7 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
         }
         if (candidates_) candidates_->Hide();
     }
+    StartConversionWait();
 }
 
 bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect) {

@@ -40,38 +40,62 @@ class ConfigFileTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def test_set_keeps_other_keys_and_reads_defaults(self):
+    def test_save_keeps_other_keys_and_reads_defaults(self):
         self.path.write_text('{"SettingsVersion": 12, "AppRules": [{"Process": "code"}], "Unknown": 1}', encoding="utf-8")
         config = settings.ConfigFile(self.directory, SCHEMA)
         self.assertEqual("Balanced", config.get("DetectionLevel"), "書いていない項目は schema の既定値")
         config.set("DetectionLevel", "Aggressive")
+        config.save()
         written = json.loads(self.path.read_text(encoding="utf-8"))
         self.assertEqual({"SettingsVersion": 12, "AppRules": [{"Process": "code"}], "Unknown": 1, "DetectionLevel": "Aggressive"}, written,
                          "画面で編集しない項目・知らない項目を消さない")
+
+    def test_set_does_not_write_until_save(self):
+        original = '{"SettingsVersion": 12}'
+        self.path.write_text(original, encoding="utf-8")
+        config = settings.ConfigFile(self.directory, SCHEMA)
         config.set("Enabled", False)
-        self.assertEqual(False, json.loads(self.path.read_text(encoding="utf-8"))["Enabled"], "自分で書いた後も続けて保存できる")
+        self.assertEqual(original, self.path.read_text(encoding="utf-8"), "キャンセルで捨てられるように、save まで書かない")
 
     def test_missing_config_is_written_with_current_settings_version(self):
         config = settings.ConfigFile(self.directory, SCHEMA)
         config.set("Enabled", False)
+        config.save()
         written = json.loads(self.path.read_text(encoding="utf-8"))
         self.assertEqual(12, written["SettingsVersion"], "Meltype が古い版の設定として移行しないように、今の版を書く")
         self.assertEqual("./config.schema.json", written["$schema"])
 
-    def test_refuses_to_overwrite_external_change(self):
-        self.path.write_text('{"SettingsVersion": 12}', encoding="utf-8")
-        config = settings.ConfigFile(self.directory, SCHEMA)
-        self.path.write_text('{"SettingsVersion": 12, "Punctuation": "Japanese"}', encoding="utf-8")
-        with self.assertRaises(settings.SettingsError):
-            config.set("Enabled", False)
-        self.assertEqual('{"SettingsVersion": 12, "Punctuation": "Japanese"}', self.path.read_text(encoding="utf-8"),
-                         "ほかで書き換えた中身を上書きしない")
+    def test_save_without_edits_does_not_create_config(self):
+        settings.ConfigFile(self.directory, SCHEMA).save()
+        self.assertFalse(self.path.exists())
 
-    def test_refuses_to_overwrite_config_created_after_opening(self):
+    def test_edit_back_to_opened_value_does_not_overwrite_external_change(self):
+        self.path.write_text('{"SettingsVersion": 12, "Enabled": true}', encoding="utf-8")
         config = settings.ConfigFile(self.directory, SCHEMA)
-        self.path.write_text('{"SettingsVersion": 12}', encoding="utf-8")
+        config.set("Enabled", False)
+        config.set("Enabled", True)
+        external = '{"SettingsVersion": 12, "Enabled": false}'
+        self.path.write_text(external, encoding="utf-8")
+        config.save()
+        self.assertEqual(external, self.path.read_text(encoding="utf-8"), "開いたときの値に戻した項目は編集していない扱い")
+
+    def test_save_merges_edits_onto_external_change(self):
+        self.path.write_text('{"SettingsVersion": 12, "DetectionLevel": "Balanced"}', encoding="utf-8")
+        config = settings.ConfigFile(self.directory, SCHEMA)
+        self.path.write_text('{"SettingsVersion": 12, "DetectionLevel": "Aggressive", "Punctuation": "Japanese"}', encoding="utf-8")
+        config.set("Enabled", False)
+        config.save()
+        self.assertEqual({"SettingsVersion": 12, "DetectionLevel": "Aggressive", "Punctuation": "Japanese", "Enabled": False},
+                         json.loads(self.path.read_text(encoding="utf-8")), "編集していない項目は、ほかで書き換えた中身を残す")
+
+    def test_save_refuses_config_broken_after_opening(self):
+        config = settings.ConfigFile(self.directory, SCHEMA)
+        broken = '{\n  // コメント\n  "SettingsVersion": 12,\n}'
+        self.path.write_text(broken, encoding="utf-8")
+        config.set("Enabled", False)
         with self.assertRaises(settings.SettingsError):
-            config.set("Enabled", False)
+            config.save()
+        self.assertEqual(broken, self.path.read_text(encoding="utf-8"), "読めない中身を上書きしない")
 
     def test_refuses_to_open_config_with_comments(self):
         self.path.write_text('{\n  // コメント\n  "SettingsVersion": 12,\n}', encoding="utf-8")

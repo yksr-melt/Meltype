@@ -3710,6 +3710,8 @@ internal static class CompositionTests
             ["nn-to"] = "んーと",
             // 報告: ca / cu / co で か く こ
             ["cacuco"] = "かくこ", ["iijane"] = "いいじゃね", ["shoucanshi"] = "しょうかんし", ["vanpaia"] = "ゔぁんぱいあ", ["wyiwye"] = "ゐゑ", ["GPL3.0"] = "GPL3.0", ["3.14desu"] = "3.14です", ["oknotasuku"] = "okのたすく",
+            // Markdown 記法の ` を半角にする (#1301)。
+            ["`"] = "`", ["```"] = "```", ["kyouha`made"] = "きょうは`まで",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -3721,6 +3723,191 @@ internal static class CompositionTests
         var ramen = new Keyboard();
         ramen.Type("ra-men\n");
         Assert.Equal("らーめん", ramen.Host.Document, "日本語の長音の打ち方は変えない");
+    }
+
+    [Test]
+    public static void MarkdownMarker_SpaceCommitsHalfWidth()
+    {
+        // #1301: 見出し・リスト・引用の記号を、変換区間の先頭で Space を押すと半角のまま確定する。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["-"] = "- ",
+            [">"] = "> ",
+            ["*"] = "* ",
+            ["+"] = "+ ",
+            ["#"] = "# ",
+            ["##"] = "## ",
+            ["######"] = "###### ",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + " ");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Space");
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_ThenContent()
+    {
+        // マーカー確定のあとに本文を続けて打てる
+        var k = new Keyboard();
+        k.Type("# hello ");
+        Assert.Equal("# hello ", k.Host.Document);
+    }
+
+    [Test]
+    public static void MarkdownMarker_EnterCommitsAsBefore()
+    {
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["-"] = "ー",
+            [">"] = "＞",
+            ["*"] = "＊",
+            ["+"] = "＋",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Enter");
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_FullWidthCandidatesViaTabAndShiftSpace()
+    {
+        // Space は半角の記号 + 空白で確定するので、全角の候補は Tab か Shift+Space で出す。
+        foreach (var (marker, full) in new[] { ("#", "＃"), ("+", "＋") })
+        {
+            var k = new Keyboard(tabConversion: true);
+            k.Type(marker);
+            k.Press(VirtualKeys.Tab);
+            Assert.True(k.Host.View?.Converting == true, $"Tab: 「{marker}」で変換が始まる");
+            Assert.True(k.Host.View!.Candidates.Contains(full),
+                $"Tab: 「{marker}」の候補に {full} がある: " + string.Join(",", k.Host.View.Candidates));
+
+            k = new Keyboard();
+            k.Type(marker);
+            k.TypeKeys((VirtualKeys.Space, true));
+            Assert.True(k.Host.View?.Converting == true, $"Shift+Space: 「{marker}」で変換が始まる");
+            Assert.True(k.Host.View!.Candidates.Contains(full),
+                $"Shift+Space: 「{marker}」の候補に {full} がある: " + string.Join(",", k.Host.View.Candidates));
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_HalfWidthStars()
+    {
+        // #1301: 変換区間に * が 2 個以上あるときだけ、表示の ＊ を全部半角の * にする (強調 **bold**・*italic*)。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["**"] = "**",
+            ["****"] = "****",
+            ["**kyou**"] = "**きょう**",
+            ["*kyou*"] = "*きょう*",
+            ["*italic*"] = "*italic*",
+            ["*1*"] = "*1*",
+            ["**aiueo**to**kakikukeko**"] = "**あいうえお**と**かきくけこ**",
+            ["*chuui"] = "＊ちゅうい",
+            ["kyou*"] = "きょう＊",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」");
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_StarsSurviveSpaceCommit()
+    {
+        // Space で確定しても、表示と同じ半角のまま (Display を通らない確定の経路)
+        foreach (var typed in new[] { "*italic* ", "**bold** " })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(typed, k.Host.Document, $"「{typed}」");
+        }
+    }
+
+    [Test]
+    public static void MarkdownMarker_SpaceConversionStartsWithHalfWidth()
+    {
+        // Space で変換したときも、最初の候補は入力中の表示と同じ半角
+        foreach (var (typed, expected) in new Dictionary<string, string>
+        {
+            ["**kyou** "] = "**きょう**",
+            ["*kyou* "] = "*きょう*",
+            ["--- "] = "---",
+            // 条件に当たらないものは、最初の候補が今までどおり
+            ["*chuui "] = "＊ちゅうい",
+            ["-- "] = "ーー",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.View!.Candidates[0], $"「{typed}」の最初の候補");
+        }
+
+        // 全角の候補も残る
+        var star = new Keyboard();
+        star.Type("**kyou** ");
+        Assert.True(star.Host.View!.Candidates.Contains("＊＊きょう＊＊"), "全角の候補が残る: " + string.Join(",", star.Host.View.Candidates));
+
+        // Space で変換して Enter で確定しても、確定結果が半角のまま
+        foreach (var (typed, expected) in new[]
+        {
+            ("**kyou** ", "**きょう**"),
+            ("*kyou* ", "*きょう*"),
+            ("--- ", "---"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            k.Press(VirtualKeys.Return); // Space の後に Enter
+            Assert.Equal(expected, k.Host.Document, $"「{typed}」+ Space → Enter");
+        }
+    }
+
+    [Test]
+    public static void NotMarkdownMarker_WhenKanaBefore()
+    {
+        // かなのあとのマーカーは、Space で記号として確定せず、変換を始める。
+        foreach (var marker in new[] { ">", "#" })
+        {
+            var k = new Keyboard();
+            k.Type("kyou" + marker + " ");
+            Assert.True(k.Host.View?.Converting == true, $"「kyou{marker}」+ Space");
+            Assert.Equal("", k.Host.Document, $"「kyou{marker}」+ Space");
+        }
+    }
+
+    [Test]
+    public static void NotMarkdownMarker_TooManyHashes()
+    {
+        // 見出しは 6 段まで。7 つは確定せず (変換に回る)。
+        var k = new Keyboard();
+        k.Type("#######");
+        k.Type(" ");
+        Assert.True(k.Host.View?.Converting == true, "Space で変換を始める");
+        Assert.Equal("", k.Host.Document, "見出しとして確定しない");
+    }
+
+    [Test]
+    public static void MarkdownMarker_HorizontalRule()
+    {
+        // #1301: 3 個以上の - だけの入力は、水平線・front matter の区切りとして打った半角のまま表示・確定する。
+        foreach (var (typed, committed) in new Dictionary<string, string>
+        {
+            ["---"] = "---",
+            ["--"] = "ーー",
+            ["----"] = "----",
+            ["aa---"] = "ああーーー",   // かなのあとの - は長音のまま
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Enter");
+        }
     }
 
     [Test]
@@ -3862,11 +4049,6 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("( ");
         Assert.True(k.Host.View!.Candidates.Contains("("), "（ の候補に ( がある: " + string.Join(",", k.Host.View.Candidates));
-        // # は最初から半角 (Discord のチャンネル名・ハッシュタグ)。Space で全角の ＃ にできる。
-        k = new Keyboard();
-        k.Type("# ");
-        Assert.Equal("#", k.Host.View!.Candidates[0]);
-        Assert.True(k.Host.View.Candidates.Contains("＃"), "# の候補に ＃ がある: " + string.Join(",", k.Host.View.Candidates));
     }
 
     [Test]

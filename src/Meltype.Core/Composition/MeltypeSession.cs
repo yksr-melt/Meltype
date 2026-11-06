@@ -642,6 +642,13 @@ public sealed class MeltypeSession
         return _host.Result(consumed: false);
     }
 
+    /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
+    public SessionResult? RefreshConversion()
+    {
+        _host.Begin(null, false, null, null);
+        return _controller.RefreshConversion() ? _host.Result(consumed: true) : null;
+    }
+
     /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>
     public SessionResult SelectCandidate(int index)
     {

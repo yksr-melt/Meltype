@@ -139,6 +139,29 @@ def _report_url():
 if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").encode(), None):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
+# 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
+# (フォーカスが外れた入力欄は確定済みで、meltype_refresh は NULL を返す)
+_focused = None
+
+
+def _refresh_focused():
+    if _focused is not None:
+        _focused.refresh_conversion()
+    return False
+
+
+# ワーカーのスレッドで呼ばれるので、メインループに移す。ctypes の関数オブジェクトはプロセスが終わるまで持つ
+_conversion_ready = ctypes.CFUNCTYPE(None)(lambda: GLib.idle_add(_refresh_focused) and None)
+# 古い本体には無い (変換は同期のままなので、知らせを待たなくてよい)
+_set_conversion_ready = getattr(_lib, "meltype_set_conversion_ready", None)
+_refresh = getattr(_lib, "meltype_refresh", None)
+if _set_conversion_ready is not None and _refresh is not None:
+    _set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
+    _set_conversion_ready.restype = None
+    _set_conversion_ready(_conversion_ready)
+    _refresh.argtypes = [ctypes.c_void_p]
+    _refresh.restype = ctypes.c_void_p
+
 
 def _result(pointer):
     """本体が返した JSON (SessionResult) を読んで解放する。NULL なら None (キーはアプリに渡す)。"""
@@ -336,6 +359,10 @@ class MeltypeEngine(IBus.Engine):
         self._finalize_on_focus_loss()
         self._reset_code_japanese()
 
+    def refresh_conversion(self):
+        if self._session:
+            self._apply(_result(_refresh(self._session)))
+
     def do_set_capabilities(self, caps):
         # 周りの文字 (surrounding text) に対応していない入力欄では、確定済みの文字を消せない。
         # 消せないのに確定し直すと、元の文字が残ったまま書き足される (api → apiあぴ) ので、本体に確定し直しをやめさせる。
@@ -366,6 +393,8 @@ class MeltypeEngine(IBus.Engine):
             _set_code_terminal(self._session, 1 if code_input else 0)
 
     def do_focus_in(self):
+        global _focused
+        _focused = self
         self.register_properties(self._properties)
 
     def do_property_activate(self, prop_name, state):
