@@ -77,6 +77,15 @@ internal static class UtilityCandidatesTests
     }
 
     [Test]
+    public static void GeneratedText_IsNotLearnedEvenIfTheEngineAlsoOffersIt()
+    {
+        // Mozc も きょう に今日の日付を出す。学習すると、次の日からも古い日付が先に出る
+        var clause = new Clause("きょう", false, ["今日", "2026/11/06"]);
+        var result = new Words("きょう", "2026/11/06").Convert(new ConversionRequest("きょう", "", (_, _) => []), _ => [clause]);
+        Assert.True(result[0].Generated.Contains("2026/11/06"), "変換エンジンも出す日付");
+    }
+
+    [Test]
     public static void SeveralMiddlewares_AllAddCandidates()
     {
         // 同じ読みに複数のユーティリティ変換が答えたら、どれも出す
