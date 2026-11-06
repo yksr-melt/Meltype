@@ -2261,12 +2261,10 @@ public sealed class CompositionController
     private List<string> JapaneseCandidates(string reading, string? inContext)
     {
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        var candidates = IsVersionChoice(reading, inContext)
-            ? Distinct("バージョン" + reading["ばーじょん".Length..], inContext) : Distinct(inContext);
+        var candidates = Distinct(inContext);
         foreach (var word in _options.UserDictionary?.Lookup(reading) ?? []) if (!candidates.Contains(word)) candidates.Add(word);
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
-        if (candidates.Count == 0 && IsVersionChoice(reading, standalone)) candidates.Add("バージョン" + reading["ばーじょん".Length..]);
         if (!candidates.Contains(standalone)) candidates.Add(standalone);
         foreach (var extra in _options.Candidates?.LookupWords(reading) ?? [])
         {
@@ -2559,10 +2557,12 @@ public sealed class CompositionController
     /// </summary>
     private static bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう";
 
-    // 過去の Meltype の版を覚えていても、通常の「バージョン」の文章では候補の先頭にしない。
+    /// <summary>
+    /// 「ばーじょん」で選んだ版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) の文節か。
+    /// 覚えない (更新後に古い版が通常の「バージョン」より先に出る。issue #1488)。過去に覚えたものも使わない。
+    /// </summary>
     private static bool IsVersionChoice(string reading, string? text) =>
-        reading.StartsWith("ばーじょん", StringComparison.Ordinal) && text is not null &&
-        text.StartsWith("Meltype-", StringComparison.Ordinal) && text.Length > "Meltype-".Length && char.IsAsciiDigit(text["Meltype-".Length]);
+        text is not null && reading.Contains("ばーじょん", StringComparison.Ordinal) && Predictor.IsVersionText(text);
 
     private string? LearnedConversion(string reading)
     {
@@ -2973,6 +2973,7 @@ public sealed class CompositionController
     {
         if (english || !_options.Learning() || _options.Predictor?.Phrases is not { } phrases || !_options.Predictions()) return;
         if (!text.Any(c => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿') || reading.Length < 3 || reading.Any(char.IsAsciiLetter)) return;
+        if (Predictor.IsVersionText(text)) return;
         phrases.Remember(reading, text);
     }
 
@@ -3177,7 +3178,7 @@ public sealed class CompositionController
         }
         foreach (var clause in _clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause) || IsVersionChoice(clause.Reading, clause.Text))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause))
             {
                 Flush();
                 continue;

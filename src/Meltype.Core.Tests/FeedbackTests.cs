@@ -1006,63 +1006,83 @@ internal static class LanguageLearningTests
         Assert.Equal("version", english.Host.Document);
     }
 
-    private sealed class OldVersionConverter : IKanjiConverter, ILearningConverter
+    /// <summary>Mozc のように「ばーじょん」を「バージョン」にする変換エンジン (版番号は学習しない)。</summary>
+    private sealed class VersionConverter : IKanjiConverter
     {
-        internal const string OldVersion = "Meltype-1.4.1-pre.2";
-        public readonly TaskCompletionSource<bool> Learned = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public readonly List<ConversionClause> LearnedClauses = [];
-        public string? Convert(string reading) => reading == "ばーじょん" ? OldVersion : reading;
+        public string? Convert(string reading) => reading switch
+        {
+            "ばーじょん" => "バージョン",
+            "むかしの" => "昔の",
+            "むかしのばーじょん" => "昔のバージョン",
+            _ => null,
+        };
         public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => reading switch
         {
-            "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", OldVersion)],
-            "ばーじょん" => [new(reading, OldVersion)],
-            _ => [new(reading, reading)],
+            "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", "バージョン")],
+            "ばーじょん" => [new(reading, "バージョン")],
+            _ => null,
         };
-        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
+    }
+
+    [Test]
+    public static void Issue1488_OldVersionInHistoryDoesNotOverrideNormalConversion()
+    {
+        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても、通常の「バージョン」にする
+        foreach (var old in new[] { "Meltype-1.4.1-pre.2", "Mozc-3.34.6239.102+24.11.oss" })
         {
-            lock (LearnedClauses) LearnedClauses.AddRange(clauses);
-            Learned.TrySetResult(true);
+            var history = new ConversionHistory(null);
+            history.Remember("ばーじょん", old);
+            foreach (var live in new[] { false, true })
+            {
+                var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new VersionConverter());
+                keyboard.Type("mukasinoba-jonn ");
+                Assert.Equal("昔のバージョン", keyboard.Host.View!.Text, old);
+                keyboard.Press(VirtualKeys.Return);
+                Assert.Equal("昔のバージョン", keyboard.Host.Document, old);
+            }
+            var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
+            standalone.Type("ba-jonn ");
+            Assert.Equal("バージョン", standalone.Host.View!.Text, old);
+            Assert.True(standalone.Host.View.Candidates.Contains($"Meltype-{ProjectInfo.CoreVersion}"), "現在の版は引き続き選べる");
         }
     }
 
     [Test]
-    public static void Issue1488_OldVersionLearningDoesNotOverrideNormalConversion()
+    public static void Issue1488_SelectingVersionIsNotRemembered()
     {
         var history = new ConversionHistory(null);
-        history.Remember("ばーじょん", OldVersionConverter.OldVersion);
-        foreach (var live in new[] { false, true })
-        {
-            var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new OldVersionConverter());
-            keyboard.Type("mukasinoba-jonn ");
-            Assert.Equal("昔のバージョン", keyboard.Host.View!.Text, "古い版を覚えた変換エンジンと履歴でも通常の文にする");
-            keyboard.Press(VirtualKeys.Return);
-            Assert.Equal("昔のバージョン", keyboard.Host.Document);
-        }
-        var standalone = new CompositionTests.Keyboard(history: history, converter: new OldVersionConverter());
-        standalone.Type("ba-jonn ");
-        Assert.Equal("バージョン", standalone.Host.View!.Text, "単独でも普通の変換が先");
-        Assert.True(standalone.Host.View.Candidates.Contains($"Meltype-{ProjectInfo.CoreVersion}"), "現在の版は引き続き選べる");
-    }
-
-    [Test]
-    public static void Issue1488_SelectingVersionDoesNotTeachHistoryOrEngine()
-    {
-        var history = new ConversionHistory(null);
-        var converter = new OldVersionConverter();
-        var keyboard = new CompositionTests.Keyboard(history: history, converter: converter);
+        var phrases = new PhraseHistory(null);
+        var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
         keyboard.Type("mukasinoba-jonn ");
         keyboard.Press(VirtualKeys.Right);
-        var candidates = keyboard.Host.View!.Candidates.ToList();
         var version = $"Meltype-{ProjectInfo.CoreVersion}";
-        var index = candidates.IndexOf(version);
+        var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.Controller.SelectCandidate(index);
         keyboard.Press(VirtualKeys.Return);
         Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
         Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
-        Assert.True(converter.Learned.Task.Wait(5000), "前の普通の文節はエンジンに学習する");
-        lock (converter.LearnedClauses)
-            Assert.True(converter.LearnedClauses.All(c => c.Reading != "ばーじょん"), "版はエンジンにも覚えさせない");
+        Assert.True(!phrases.StartingWith("むかしの").Any(), "語句の履歴にも覚えない");
+
+        // 普通の「昔のバージョン」は覚える
+        keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Return);
+        Assert.True(phrases.StartingWith("むかしの").Contains("昔のバージョン"), "通常の語句は覚える");
+    }
+
+    [Test]
+    public static void Issue1488_OldVersionIsNotPredicted()
+    {
+        // 前の版で覚えた版番号は、予測の候補に出さない (更新後は古い版になる)
+        var history = new ConversionHistory(null);
+        history.Remember("ばーじょん", "Meltype-1.4.1-pre.2");
+        history.Remember("ばーじょんあっぷ", "バージョンアップ");
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("むかしのばーじょん", "昔のMeltype-1.4.1-pre.5");
+        phrases.Remember("むかしのばーじょんあっぷ", "昔のバージョンアップ");
+        var predictor = new Predictor(phrases, null, history);
+        Assert.Equal("バージョンアップ", string.Join(",", predictor.PredictJapanese("ばーじょ")));
+        Assert.Equal("昔のバージョンアップ", string.Join(",", predictor.PredictJapanese("むかしのばー")));
     }
 
     [Test]
