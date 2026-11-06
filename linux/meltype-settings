@@ -148,7 +148,7 @@ def main():
             self.sidebar.select_row(self.sidebar.get_row_at_index(0))
 
             # どのエディターで開くかは環境で違うので、開くボタンは置かずにパスとコピーのボタンを出す
-            message = Gtk.Label(label="変更は OK を押すと 1 秒ほどで入力に反映します。画面に無い項目は、次のファイルを直接編集します。",
+            message = Gtk.Label(label="変更は「適用」を押すと 1 秒ほどで入力に反映します。画面に無い項目は、次のファイルを直接編集します。",
                                 xalign=0, wrap=True)
             message.add_css_class("dim-label")
             path = Gtk.Label(label=str(config.path), xalign=0, wrap=True, wrap_mode=Pango.WrapMode.CHAR, selectable=True, hexpand=True)
@@ -177,15 +177,15 @@ def main():
             layout.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
             layout.append(self.scroller)
 
-            # OK は保存して開いたまま。キャンセルと × は、未保存の変更を捨てて閉じる
+            # 適用は保存して開いたまま。キャンセルと × は、未保存の変更を捨てて閉じる
             cancel = Gtk.Button(label="キャンセル")
             cancel.connect("clicked", lambda _: self.close())
-            self.ok = Gtk.Button(label="OK", width_request=80, sensitive=False)
-            self.ok.add_css_class("suggested-action")
-            self.ok.connect("clicked", lambda _: self._save())
+            self.apply_button = Gtk.Button(label="適用", width_request=80, sensitive=False)
+            self.apply_button.add_css_class("suggested-action")
+            self.apply_button.connect("clicked", lambda _: self._save())
             buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END, margin_start=12, margin_end=12, margin_top=8, margin_bottom=8)
             buttons.append(cancel)
-            buttons.append(self.ok)
+            buttons.append(self.apply_button)
             root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             root.append(layout)
             root.append(Gtk.Separator())
@@ -252,7 +252,7 @@ def main():
 
         def _edit(self, key, value):
             self.config.set(key, value)
-            self.ok.set_sensitive(bool(self.config.edits))
+            self.apply_button.set_sensitive(bool(self.config.edits))
 
         def _save(self):
             try:
@@ -262,7 +262,7 @@ def main():
                 Gtk.AlertDialog(message="設定を保存できませんでした", detail=str(error)).show(self)
                 return
             self._fill_list()
-            self.ok.set_sensitive(False)
+            self.apply_button.set_sensitive(False)
 
         def _matches(self, row):
             query = self.search.get_text().strip().casefold()
