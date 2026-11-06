@@ -14,49 +14,15 @@ on:
     types: [opened, edited]
   issue_comment:
     types: [created]
-  pull_request_target:
-    types: [opened, reopened]
 
 permissions: {}
 
 concurrency:
-  group: bot-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}-${{ github.event.comment.id || github.event.action || 'event' }}
+  group: bot-${{ github.event_name }}-${{ github.event.issue.number }}-${{ github.event.comment.id || github.event.action }}
   cancel-in-progress: true
 
 jobs:
-  # PR 作成時: pr ラベルを付ける (pull_request_target なので fork からも動く。コードは触らない)
-  pr-label:
-    if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      issues: write
-    steps:
-      # コードは checkout しない (pull_request_target で PR のコードを動かさない)
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const name = 'pr';
-            try {
-              await github.rest.issues.createLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name,
-                color: '0E8A16',
-                description: 'Pull Request',
-              });
-            } catch (e) {
-              if (e.status !== 422) throw e; // 既にある
-            }
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: [name],
-            });
-
   parse:
-    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
