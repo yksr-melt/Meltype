@@ -1,0 +1,56 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Yukishiro
+#
+# AUR の meltype-bin (#1097)。リリースの zip (ビルド済み) を /opt/meltype に置く。置き方は linux/build-deb.sh と同じ。
+# pkgver と sha256sums は packaging/aur/update.sh で書き換える (手で直さない)。
+pkgname=meltype-bin
+pkgver=1.4.0
+pkgrel=1
+pkgdesc='Japanese input method without the Hankaku/Zenkaku key (IBus engine and fcitx5 addon)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/yksr-melt/Meltype'
+license=('GPL-3.0-or-later')
+depends=('glibc' 'gcc-libs' 'zlib' 'python' 'python-gobject' 'gtk4')
+optdepends=('ibus: IBus で使う'
+            'fcitx5: fcitx5 で使う')
+provides=('meltype')
+conflicts=('meltype')
+install=meltype.install
+options=('!strip' '!debug')
+source_x86_64=("Meltype-${pkgver}-linux.zip::${url}/releases/download/v${pkgver}/Meltype-${pkgver}-linux.zip")
+source_aarch64=("Meltype-${pkgver}-linux-arm64.zip::${url}/releases/download/v${pkgver}/Meltype-${pkgver}-linux-arm64.zip")
+sha256sums_x86_64=('0cd78f7f2981accaa52264dadc9c71e6047a4a1c904472a3511be4094190b2da')
+sha256sums_aarch64=('38471bea901fce43426a86fbaf81c6cd44f7c74700dd052ba54f6d0760f56f1d')
+
+package() {
+    local src="$srcdir/Meltype-linux" target=/opt/meltype
+
+    install -d "$pkgdir$target/mozc"
+    install -m 644 "$src/libMeltypeNative.so" "$src/icon.png" "$src/LICENSE" "$src/THIRD-PARTY-NOTICES.md" "$pkgdir$target/"
+    install -m 755 "$src/ibus-engine-meltype" "$pkgdir$target/"
+    install -m 755 "$src/mozc/meltype_mozc_helper" "$pkgdir$target/mozc/"
+    install -m 644 "$src"/mozc/MOZC-* "$pkgdir$target/mozc/"
+
+    install -d "$pkgdir/usr/share/ibus/component"
+    sed "s|@DIR@|$target|g" "$src/meltype.xml" > "$pkgdir/usr/share/ibus/component/meltype.xml"
+
+    # 設定画面 (1.4.0 より後の版から zip に入る)
+    if [[ -f "$src/meltype-settings" ]]; then
+        install -m 755 "$src/meltype-settings" "$pkgdir$target/"
+        install -d "$pkgdir/usr/bin" "$pkgdir/usr/share/applications"
+        ln -s "$target/meltype-settings" "$pkgdir/usr/bin/meltype-settings"
+        sed "s|@DIR@|$target|g" "$src/ibus-setup-meltype.desktop" > "$pkgdir/usr/share/applications/ibus-setup-meltype.desktop"
+    fi
+
+    # fcitx5 のアドオン (Ubuntu の fcitx5 で作ったもの。Arch の fcitx5 と版が大きく違うと読み込めないことがある)
+    if [[ -f "$src/fcitx5/meltype.so" ]]; then
+        install -Dm 644 "$src/fcitx5/meltype.so" "$pkgdir/usr/lib/fcitx5/meltype.so"
+        install -Dm 644 "$src/fcitx5/meltype-addon.conf" "$pkgdir/usr/share/fcitx5/addon/meltype.conf"
+        install -d "$pkgdir/usr/share/fcitx5/inputmethod"
+        sed "s|@DIR@|$target|g" "$src/fcitx5/meltype.conf" > "$pkgdir/usr/share/fcitx5/inputmethod/meltype.conf"
+    fi
+
+    install -d "$pkgdir/usr/share/licenses/$pkgname"
+    ln -s "$target/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    ln -s "$target/THIRD-PARTY-NOTICES.md" "$pkgdir/usr/share/licenses/$pkgname/THIRD-PARTY-NOTICES.md"
+}
