@@ -3814,6 +3814,45 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void MarkdownMarker_SpaceConversionStartsWithHalfWidth()
+    {
+        // Space で変換したときも、最初の候補は入力中の表示と同じ半角
+        foreach (var (typed, expected) in new Dictionary<string, string>
+        {
+            ["**kyou** "] = "**きょう**",
+            ["*kyou* "] = "*きょう*",
+            ["--- "] = "---",
+            // 条件に当たらないものは、最初の候補が今までどおり
+            ["*chuui "] = "＊ちゅうい",
+            ["-- "] = "ーー",
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.View!.Candidates[0], $"「{typed}」の最初の候補");
+        }
+
+        // 全角の候補も残る
+        var star = new Keyboard();
+        star.Type("**kyou** ");
+        Assert.True(star.Host.View!.Candidates.Contains("＊＊きょう＊＊"), "全角の候補が残る: " + string.Join(",", star.Host.View.Candidates));
+
+        // Space で変換して Enter で確定しても、確定結果が半角のまま
+        foreach (var (typed, expected) in new[]
+        {
+            ("**kyou** ", "**きょう**"),
+            ("*kyou* ", "*きょう*"),
+            ("--- ", "---"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            k.Press(VirtualKeys.Return); // Space の後に Enter
+            Assert.Equal(expected, k.Host.Document, $"「{typed}」+ Space → Enter");
+        }
+    }
+
+    [Test]
     public static void NotMarkdownMarker_WhenKanaBefore()
     {
         // かなのあとのマーカーは、Space で記号として確定せず、変換を始める。

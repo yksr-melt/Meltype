@@ -431,6 +431,10 @@ public sealed class CompositionText
     /// <summary>変換区間に * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
     private string HalfWidthStars(string text) => !KanaInput && Raw.Count(c => c == '*') >= 2 ? text.Replace('＊', '*') : text;
 
+    /// <summary>変換の最初の候補を、入力中の表示と同じ半角にする (* が 2 個以上・---)。当てはまらなければそのまま返す。</summary>
+    public string AsDisplayedHalfWidth(string candidate, string? clauseRaw) =>
+        IsHorizontalRule ? clauseRaw ?? candidate : HalfWidthStars(candidate);
+
     /// <summary>自動判定の区間分け (Mode が Auto のときに使う)。</summary>
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
     public IReadOnlyList<CompositionSegment> Segments()
