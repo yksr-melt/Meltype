@@ -103,9 +103,11 @@ final class MeltypeConverter {
     /// Zenzai を使うときは、キャレットの前の文 (context) も文脈としてモデルに渡す (同じ読みでも前の文で変換が変わる)。
     private func results(for hiragana: String, context: String? = nil) -> [Candidate] {
         // Zenzai を使えるとき (止めていない・読みが長すぎない・前の変換が終わっている) だけ、上限付きで Zenzai に頼む
-        let useZenzai = zenzaiWorker != nil && Date() >= zenzaiPausedUntil && hiragana.count <= Self.zenzaiMaxReading
-        let tail = useZenzai ? Self.contextTail(context) : nil
-        let key = useZenzai ? (tail ?? "") + "\u{1}" + hiragana : hiragana
+        let canUseZenzai = zenzaiWorker != nil && hiragana.count <= Self.zenzaiMaxReading
+        let useZenzai = canUseZenzai && Date() >= zenzaiPausedUntil
+        let tail = canUseZenzai ? Self.contextTail(context) : nil
+        let key = canUseZenzai ? (tail ?? "") + "\u{1}" + hiragana : hiragana
+        // 止めている間も、Zenzai の答えを控えていればそれを返す (同じ読みを聞き直して azooKey の答えに戻さない)
         if let cached = resultCache[key] { return cached }
         var composing = ComposingText()
         composing.insertAtCursorPosition(hiragana, inputStyle: .direct)

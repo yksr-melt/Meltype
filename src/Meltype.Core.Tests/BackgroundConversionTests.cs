@@ -400,16 +400,6 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
-    public static void Callback_DropsOnlyTheOldestAnswerWhenFull()
-    {
-        var asked = 0;
-        using var converter = new BackgroundCallbackConverter((_, _) => null, reading => [$"{reading}#{Interlocked.Increment(ref asked)}"]);
-        for (var i = 0; i <= 256; i++) converter.Candidates($"よみ{i}");
-        Assert.Equal("よみ1#2", converter.Candidates("よみ1")[0], "新しい答えを入れても、最も古いもの以外は控えに残る");
-        Assert.True(converter.Candidates("よみ0")[0] != "よみ0#1", "最も古い答えは捨てられ、聞き直して待つ");
-    }
-
-    [Test]
     public static void Callback_AsksAgainAndNotifiesOnlyWhenTheAnswerChanged()
     {
         // Mac の Zenzai は準備中・処理中に azooKey の答えを返す。控えたままだと、同じ読みはもう Zenzai の答えにならない

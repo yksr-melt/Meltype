@@ -24,7 +24,6 @@ public sealed class BackgroundCallbackConverter(
 
     private readonly object _gate = new();
     private readonly Dictionary<Request, Answer> _answers = [];
-    private readonly Queue<Request> _order = [];
     private LatestRequestWorker<Request>? _worker;
 
     private enum Kind { Clauses, Convert, Candidates }
@@ -94,16 +93,9 @@ public sealed class BackgroundCallbackConverter(
         if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {
-            if (_answers.TryGetValue(request, out var known))
-            {
-                // 同じ答えを知らせると、再描画が聞き直しを呼び、終わらない
-                if (SameAnswer(known, answer)) return;
-            }
-            else
-            {
-                if (_answers.Count >= MaxCache) _answers.Remove(_order.Dequeue());
-                _order.Enqueue(request);
-            }
+            // 同じ答えを知らせると、再描画が聞き直しを呼び、終わらない
+            if (_answers.TryGetValue(request, out var known) && SameAnswer(known, answer)) return;
+            if (_answers.Count >= MaxCache) _answers.Clear();
             _answers[request] = answer;
         }
         ResultReady?.Invoke();
