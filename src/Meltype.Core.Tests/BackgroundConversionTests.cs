@@ -251,6 +251,30 @@ internal static class BackgroundConversionTests
         }
     }
 
+    private sealed class ChangingAnswer : IKanjiConverter, IBackgroundConverter
+    {
+        public IReadOnlyList<ConversionClause> Clauses { get; set; } = [];
+
+        public ConversionBudget Budget { get; } = new();
+
+        public event Action? ResultReady { add { } remove { } }
+
+        public string? Convert(string hiragana) => string.Concat(Clauses.Select(c => c.Text));
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => Clauses;
+    }
+
+    [Test]
+    public static void Refresh_DoesNotReplaceTheClausesAfterMovingToAnotherClause()
+    {
+        var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "tanniwotoru ");
+        session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
+        converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+        Assert.True(session.RefreshConversion() is null, "選んでいる文節がずれるので置き換えない");
+    }
+
     [Test]
     public static void Space_WaitsWithinTheBudget()
     {
@@ -373,6 +397,23 @@ internal static class BackgroundConversionTests
         var session = Session(hybrid);
         Assert.Equal("きしゃがきた", SessionFacadeTests.Type(session, "kishagakita")[^1].View?.Text);
         Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "届いたら表示が更新される");
+    }
+
+    [Test]
+    public static void Callback_DropsOnlyTheOldestAnswerWhenFull()
+    {
+        var asked = 0;
+        using var converter = new BackgroundCallbackConverter((_, _) => null, reading =>
+        {
+            Interlocked.Increment(ref asked);
+            return [reading];
+        });
+        for (var i = 0; i <= 256; i++) converter.Candidates($"よみ{i}");
+        Assert.Equal(257, Volatile.Read(ref asked));
+        converter.Candidates("よみ1");
+        Assert.Equal(257, Volatile.Read(ref asked), "新しい答えを入れても、最も古いもの以外は控えに残る");
+        converter.Candidates("よみ0");
+        Assert.Equal(258, Volatile.Read(ref asked), "最も古い答えは捨てられている");
     }
 
     [Test]

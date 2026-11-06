@@ -508,6 +508,7 @@ public sealed class CompositionController
 
     /// <summary>
     /// 候補を開いた後に届いた答えを反映する。文節の区切りを動かしたあとは置き換えない。
+    /// 文節の並びが変わる答えは、候補を選び直したか、別の文節へ移動したあとなら置き換えない (選んでいる文節がずれる)。
     /// 候補を選び直した文節は、選んでいる候補を変えずに、新しい候補を上に入れる。何も変わらなければ false。
     /// </summary>
     private bool RefreshOpenConversion()
@@ -522,7 +523,7 @@ public sealed class CompositionController
         _tabStartedConversion = tabStarted;
         var sameClauses = _clauses.Count == old.Count && _clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && _clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
-        if (nothingNew || !sameClauses && old.Any(c => c.Changed))
+        if (nothingNew || !sameClauses && (selected != 0 || old.Any(c => c.Changed)))
         {
             _clauses = old;
             _selectedClause = selected;
@@ -539,7 +540,7 @@ public sealed class CompositionController
                 fresh.Translations.UnionWith(previous.Translations);
             }
         }
-        _selectedClause = Math.Min(selected, _clauses.Count - 1);
+        _selectedClause = selected;
         return true;
     }
 

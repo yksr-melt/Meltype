@@ -19,11 +19,13 @@ public sealed class BackgroundCallbackConverter(
     ConversionBudget? budget = null,
     Action<Action>? start = null) : IKanjiConverter, IBackgroundConverter, IDisposable
 {
-    // 外の変換エンジンの答えは Zenzai の準備などで変わるので、同じ読みの古い答えを長く持たない
-    private const int MaxCache = 64;
+    // 外の変換エンジンの答えは Zenzai の準備などで変わるので、同じ読みの古い答えを長く持たない。
+    // 1 回の表示で要る要求より少ないと、答えが届くたびに作り直しても控えが足りず、再描画が終わらない
+    private const int MaxCache = 256;
 
     private readonly object _gate = new();
     private readonly Dictionary<Request, Answer> _answers = [];
+    private readonly Queue<Request> _order = [];
     private LatestRequestWorker<Request>? _worker;
 
     private enum Kind { Clauses, Convert, Candidates }
@@ -87,7 +89,11 @@ public sealed class BackgroundCallbackConverter(
         if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {
-            if (_answers.Count >= MaxCache) _answers.Clear();
+            if (!_answers.ContainsKey(request))
+            {
+                if (_answers.Count >= MaxCache) _answers.Remove(_order.Dequeue());
+                _order.Enqueue(request);
+            }
             _answers[request] = answer;
         }
         ResultReady?.Invoke();
