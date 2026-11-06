@@ -126,7 +126,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - Meltype IME が登録されていて、このユーザーのキーボードの一覧にも入っていれば、一度だけ自動で Tsf にする。
   そのとき (とトレイで Meltype IME を選んだとき) は、いま使う入力方式も Meltype IME にする (ITfInputProcessorProfileMgr::ActivateProfile の TF_IPPMF_FORSESSION)
 - Meltype.exe 自身の画面 (はじめに・設定など) でも使える。そこでは UI スレッドが DLL の中で応答を待って止まるので、
-  UI スレッドからの要求 (要求に付けたスレッドの ID で見分ける) は、Invoke せずにパイプのスレッドで処理する (UI スレッドは止まっているので、ほかの処理と同時には動かない)
+  UI スレッドからの要求 (要求に付けたスレッドの ID で見分ける) は、UI スレッドに移さずにパイプのスレッドで処理する (UI スレッドは止まっているので、ほかの処理と同時には動かない)
 - `CompositionService.CreateSession` で、辞書・学習データ・変換エンジンを変換ボックスと共有したセッションを作る。すべて UI スレッドで動かす
 
 ## インストール

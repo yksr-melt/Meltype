@@ -386,7 +386,7 @@ internal sealed class TipServer : IDisposable
 
     /// <summary>
     /// Meltype.exe 自身の UI スレッド (設定・はじめにの画面など) から来た要求か。
-    /// そのとき UI スレッドは、DLL の中でこの応答を待って止まっているので、Invoke で UI スレッドに頼むとお互いに待ち合って固まる。
+    /// そのとき UI スレッドは、DLL の中でこの応答を待って止まっているので、UI スレッドに頼むとお互いに待ち合って固まる。
     /// 代わりにこのスレッドで処理する (UI スレッドは止まっているので、ほかの処理と同時には動かない)。
     /// </summary>
     private bool FromOwnUiThread(bool ownClient, string request)
@@ -463,11 +463,11 @@ internal sealed class TipServer : IDisposable
                     {
                         var started = Environment.TickCount64;
                         if (javaClient && !looksLikeGame) looksLikeGame = ForegroundTracker.IsForegroundJavaGame(clientProcess);
-                        reply = FromOwnUiThread(ownClient, request) ? Handle(request, sessions, looksLikeGame) : Invoke(() => Handle(request, sessions, looksLikeGame));
+                        reply = FromOwnUiThread(ownClient, request) ? Handle(request, sessions, looksLikeGame) : await InvokeAsync(() => Handle(request, sessions, looksLikeGame)).ConfigureAwait(false);
                         LogSlow(request, Environment.TickCount64 - started);
                     }
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     var count = Interlocked.Increment(ref _requestErrors);
                     if (count == 1) Log.Error($"Meltype IME: 要求を処理できませんでした: {ex}");
@@ -489,15 +489,24 @@ internal sealed class TipServer : IDisposable
             Interlocked.Decrement(ref _connections);
             if (sessions.Count > 0 && !_stop.IsCancellationRequested)
             {
-                try { Invoke(() => { sessions.Clear(); return ""; }); } catch { }
+                try { await InvokeAsync(() => { sessions.Clear(); return ""; }).ConfigureAwait(false); } catch { }
             }
         }
     }
 
-    private string Invoke(Func<string> action)
+    // UI スレッドの処理が終わるまでプールのスレッドをふさがない。Mozc や Zenzai の出力の読み取りもプールのスレッドで動くので、
+    // アプリの数だけ同期で待つと空きがなくなり、Mozc の応答を読めなくなる (#1506)
+    private async Task<string> InvokeAsync(Func<string> action)
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return Inactive;
-        return (string)_invoker.Invoke(action);
+        var done = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _invoker.BeginInvoke(() =>
+        {
+            try { done.SetResult(action()); }
+            catch (Exception ex) { done.SetException(ex); }
+        });
+        // 実行される前にウィンドウが破棄されると done は完了しないので、終了の合図でも抜ける
+        return await done.Task.WaitAsync(_stop.Token).ConfigureAwait(false);
     }
 
     private const string Inactive = "{\"active\":false,\"consumed\":false,\"commits\":[],\"view\":null}";
