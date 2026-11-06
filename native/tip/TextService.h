@@ -91,6 +91,11 @@ private:
     void Hello();
     // 取得した設定を反映する。currentState が false なら、入力応答で更新済みの状態は上書きしない。
     void ApplyHello(const JsonValue& reply, bool currentState);
+    // 変換中だけ、背景の変換の結果が届くのを専用の接続で待つ (Meltype.exe は応答でしか知らせられない)。
+    void StartConversionWait();
+    // 待ちが終わった (IME のスレッド)。結果が届いていれば表示を取り直して、続けて待つ。
+    void FinishConversionWait();
+    static constexpr UINT kConversionWaitDone = WM_APP + 1;
     // 設定取得と、その結果を IME のスレッドで反映するためのタイマーを開始する。
     void StartHelloUpdates();
     // タイマーを止め、取得処理の終了を待ってから接続を解放する。
@@ -179,6 +184,9 @@ private:
     HWND helloWindow_ = nullptr; // IME のスレッドでタイマーを受ける、表示しないウィンドウ
     std::shared_ptr<PipeClient> helloPipe_; // 設定取得専用。入力用の pipe_ と同時に使える
     std::future<std::pair<bool, JsonValue>> helloResult_; // 取得中の要求は 1 つだけ。成功したかと応答を保持
+    std::shared_ptr<PipeClient> conversionPipe_; // wait 専用。入力用の pipe_ を塞がない
+    std::future<int> conversionWait_; // 待っている wait は 1 つだけ。世代を返す (失敗は -1)
+    int conversionGeneration_ = -1; // 知っている世代 (Meltype.exe の ConversionSignal)。-1 は未取得
     bool open_ = true;
     bool codeApp_ = false;         // コードエディター・ターミナル (Meltype.exe の応答の code)
     bool codeEnglish_ = false;     // 次に打つキーがコードの行なので英数のまま通る (Meltype.exe の応答の english)
