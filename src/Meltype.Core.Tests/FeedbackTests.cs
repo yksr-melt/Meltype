@@ -1659,7 +1659,7 @@ internal static class RomajiTypoTests
             {
                 ("kore`git status`dekakunin", "これ`git status`でかくにん"),
                 ("`npm install`wojikkou", "`npm install`をじっこう"),
-                ("`kakko`", "｀かっこ｀"),
+                ("`kakko`", "`かっこ`"),   // 後ろが日本語でも半角 (#1301 から。以前は ｀)
             })
             {
                 var k = new CompositionTests.Keyboard();

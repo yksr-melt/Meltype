@@ -862,6 +862,11 @@ public sealed class CompositionController
                     _spaceStartedConversion = true;
                     StartConversion();
                 }
+                else if (SpaceCommitsMarkdownMarker())
+                {
+                    // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
+                    CommitText(_text.Raw + " ", english: false, preserveText: true);
+                }
                 else if (SpaceCommitsAlphanumeric())
                 {
                     Commit(suffix: " ", fixEnglish: true);
@@ -1422,6 +1427,8 @@ public sealed class CompositionController
         (_options.UserDictionary?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 } ||
          _options.ConsonantAbbreviations() && _options.Candidates?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 });
 
+    private bool SpaceCommitsMarkdownMarker() => _text.Mode == DisplayMode.Auto && _text.IsMarkdownMarker;
+
     private bool SpaceCommitsAlphanumeric() =>
         _text.IsAlphanumericAt(final: true) && !(_text.Mode == DisplayMode.Auto && _text.IsNumeric && _text.Raw.All(char.IsAsciiDigit) && _text.PrecedingEnglish != true);
 
@@ -1878,6 +1885,13 @@ public sealed class CompositionController
             {
                 if (!clause.Candidates.Contains(word)) clause.Candidates.Add(word);
             }
+        }
+        // 入力中の表示が半角の記号 (* が 2 個以上・---) のときは、最初の候補も同じ半角にする。
+        if (_text.Mode == DisplayMode.Auto && clause.Candidates.Count > 0 &&
+            _text.AsDisplayedHalfWidth(clause.Candidates[0], clause.Raw) is var shown && shown != clause.Candidates[0])
+        {
+            clause.Candidates.Remove(shown);
+            clause.Candidates.Insert(0, shown);
         }
         // 全角にした記号 (＃ （ ％) は、半角に戻した候補も出す (Space を続けて押すと半角の # ( %)。
         if (clause.Candidates.Count > 0 && CompositionText.SymbolsToHalfWidth(clause.Candidates[0]) is var half && half != clause.Candidates[0] &&
