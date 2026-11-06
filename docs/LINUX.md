@@ -48,7 +48,7 @@ fcitx5 のアドオンは、`.deb` は Ubuntu 24.04 の fcitx5 5.1、`.rpm` は 
 
 Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で、Arch Linux は AUR から入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
 
-以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、先に外す必要はありません。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、apt / dnf なら先に外す必要はありません (Arch Linux は下を見てください)。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
 <a name="ubuntu--debian"></a>
 <img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
@@ -114,6 +114,8 @@ Arch Linux は AUR の `meltype-bin` で入れられます。AUR ヘルパー (`
 ```bash
 yay -S meltype-bin
 ```
+
+以前の zip の `install.sh` で入れていた場合は、同じ場所にファイルがあるため pacman が止まります。先にその zip の `uninstall.sh` (または `uninstall-legacy.sh`) で外してから入れてください。
 
 外すときは `sudo pacman -Rns meltype-bin` です。fcitx5 のアドオンは Ubuntu 24.04 の fcitx5 向けにビルドしたものなので、Arch の fcitx5 では読み込めないことがあります。
 

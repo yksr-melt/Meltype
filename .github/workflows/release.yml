@@ -185,7 +185,7 @@ jobs:
           if [[ -z "$existing_pr" ]]; then
             gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
               --title "packaging: AUR の meltype-bin を $version に更新" \
-              --body "リリース $version の zip の SHA-256 で PKGBUILD と .SRCINFO を更新します。main に入れたら、packaging/aur/README.md の手順で AUR に push してください。"
+              --body "リリース $version の zip の SHA-256 で PKGBUILD と .SRCINFO を更新します。main に入れたら、docs/dev/RELEASE.md の「AUR」の手順で AUR に push してください。"
           fi
 
   # apt と dnf のリポジトリを同じ鍵で署名して、1 つの GitHub Pages の成果物にする
