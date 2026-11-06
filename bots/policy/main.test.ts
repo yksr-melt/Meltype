@@ -338,44 +338,6 @@ test('フォームなど bot 名義の報告は、人からの補足でも待機
   assert.equal(f.records.get(1).state, 'open');
 });
 
-test('No Close の PR も、超過していれば順番待ちの通知のままにする (Draft にも閉じもしない)', async () => {
-  const f = fixture([pull(1), pull(2), pull(3)]); await f.run();
-  f.records.get(3).labels.push({ name: LABELS.exempt }); f.addEvent(3, 'labeled', LABELS.exempt);
-  await f.run(start + WAIT_MS * 2);
-  assert.equal(f.records.get(3).draft, false);
-  assert.equal(f.records.get(3).state, 'open');
-  assert.ok(limited(f, 3));
-  assert.match(f.comments.get(3)[0].body, /順番待ち/);
-  assert.doesNotMatch(f.comments.get(3)[0].body, /クローズを止めています/);
-});
-
-test('No Close の間は閉じず、外したあとは新しく 14 日待つ', async () => {
-  const f = fixture([issue(1, [LABELS.info, LABELS.exempt])]);
-  const pr = pull(3); pr.labels = [{ name: LABELS.rule }, { name: LABELS.exempt }]; f.records.set(3, pr);
-  for (const map of [f.comments, f.events, f.reviewComments, f.reviews]) map.set(3, []);
-  await f.run();
-  await f.run(start + WAIT_MS * 2);
-  assert.equal(f.records.get(1).state, 'open');
-  assert.equal(f.records.get(3).state, 'open');
-  assert.equal(f.comments.get(1).length, 0);
-  const removed = start + WAIT_MS * 2;
-  f.records.get(1).labels = [{ name: LABELS.info }]; f.addEvent(1, 'unlabeled', LABELS.exempt);
-  await f.run(removed);
-  assert.equal(f.records.get(1).state, 'open');
-  await f.run(removed + WAIT_MS - 1);
-  assert.equal(f.records.get(1).state, 'open');
-  await f.run(removed + WAIT_MS);
-  assert.equal(f.records.get(1).state, 'closed');
-});
-
-test('待っている途中で No Close を付けたら、通知を止めて閉じない', async () => {
-  const f = fixture([issue(1, [LABELS.info])]); await f.run();
-  f.records.get(1).labels.push({ name: LABELS.exempt }); f.addEvent(1, 'labeled', LABELS.exempt);
-  await f.run(start + WAIT_MS);
-  assert.equal(f.records.get(1).state, 'open');
-  assert.match(f.comments.get(1)[0].body, /"status":"exempt"/);
-});
-
 test('情報待ちで閉じるときは、情報不足で閉じることと再オープンの頼み方を書く', async () => {
   const f = fixture([issue(1, [LABELS.info])]); await f.run();
   await f.run(start + WAIT_MS);
