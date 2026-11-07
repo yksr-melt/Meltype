@@ -20,6 +20,9 @@ const File = 'signatures.json';
 const Marker = '<!-- meltype-bot --><!-- cla -->';
 const Agree = /^\s*(CLA に同意します|CLAに同意します|I agree to the CLA)[。.!！]?\s*$/i;
 const Maintainers = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+// コミット status は同じ SHA を使う別の PR と共有されるため、PR ごとにも作者の同意を記録する。
+// このラベルは bot 専用で、手動では付けない。Mergify の queue_conditions が参照する。
+const VerifiedLabel = 'CLA確認済み';
 
 async function gh(method, url, body) {
   const response = await fetch(`${api}/repos/${repo}${url}`, {
@@ -66,6 +69,24 @@ async function setStatus(sha, signed, login) {
   });
 }
 
+/** PR ごとの作者確認。存在しなければ作り、作成が競合したときは再取得する。 */
+async function setVerifiedLabel(number, signed) {
+  const label = encodeURIComponent(VerifiedLabel);
+  if (!signed) {
+    await gh('DELETE', `/issues/${number}/labels/${label}`);
+    return;
+  }
+  if (!await gh('GET', `/labels/${label}`)) {
+    try {
+      await gh('POST', '/labels', { name: VerifiedLabel, color: '0e8a16', description: 'CLA bot が PR 作者の同意を確認 (手動で付けない)' });
+    } catch (error) {
+      if (!await gh('GET', `/labels/${label}`)) throw error;
+    }
+  }
+  const labels = await gh('POST', `/issues/${number}/labels`, { labels: [VerifiedLabel] });
+  if (!labels?.some(l => l.name === VerifiedLabel)) throw new Error(`Could not add ${VerifiedLabel} to #${number}`);
+}
+
 /** bot の CLA のコメントを書く。append なら、前の文 (同意をお願いした文面) を残して下に足す。 */
 async function upsertComment(issue, body, append = false) {
   const comments = await gh('GET', `/issues/${issue}/comments?per_page=100`) ?? [];
@@ -83,13 +104,16 @@ async function onPullRequest() {
   const author = pr.user;
   if (exempt(pr.author_association, author.type)) {
     await setStatus(pr.head.sha, true, author.login);
+    await setVerifiedLabel(pr.number, true);
     return;
   }
   const { signatures } = await readSignatures();
   if (hasSigned(signatures, author.id)) {
     await setStatus(pr.head.sha, true, author.login);
+    await setVerifiedLabel(pr.number, true);
     return;
   }
+  await setVerifiedLabel(pr.number, false);
   await setStatus(pr.head.sha, false, author.login);
   await upsertComment(pr.number, [
     `@${author.login} さん、Pull Request ありがとうございます！`,
@@ -134,6 +158,7 @@ async function onComment() {
   }
   await gh('POST', `/issues/comments/${event.comment.id}/reactions`, { content: 'heart' }).catch(() => {});
   await setStatus(pr.head.sha, true, user.login);
+  await setVerifiedLabel(pr.number, true);
   await upsertComment(pr.number, `✅ @${user.login} さん、CLA への同意ありがとうございます。記録しました ([コメント](${event.comment.html_url}))。次の Pull Request からは不要です。`, true);
 }
 
