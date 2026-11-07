@@ -4710,6 +4710,20 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void NounStartingWithNi_GetsNoDummyContext()
+    {
+        // 「庭に花が咲いている」が「に輪に花が咲いている」になる (仮の文脈「これ」で「に」を助詞と読ませたため)。
+        foreach (var kana in new[] { "にわにはながさいている", "にほんごをはなす", "にんげんのからだ", "にもつがとどいた", "にしのほう" })
+        {
+            Assert.True(!CompositionController.StartsWithParticleNi(kana), kana + ": 「に」で始まる語には仮の文脈を付けない");
+        }
+        foreach (var kana in new[] { "になってしまう", "についてかんがえる", "によってちがう", "にとってたいせつ", "にかんするしつもん", "にむけて" })
+        {
+            Assert.True(CompositionController.StartsWithParticleNi(kana), kana + ": 助詞の「に」には仮の文脈を付ける");
+        }
+    }
+
+    [Test]
     public static void ParticleStart_GetsContext()
     {
         // 報告: ○○になってしまう → 「になってしまう」が「担ってしまう」になる。

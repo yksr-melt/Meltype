@@ -2136,6 +2136,31 @@ public sealed class CompositionController
     }
 
     /// <summary>
+    /// 「に」で始まる読みのうち、助詞の「に」に続くことが多い語 (なる・ついて・よって など) で始まるものか。
+    /// 「にわ (庭)」「にほん (日本)」のように「に」で始まる語まで仮の文脈で助詞と読ませると、
+    /// Zenzai が「に|ワニ|は」のように崩すので、助詞らしい続きのときだけにする。
+    /// </summary>
+    internal static bool StartsWithParticleNi(string kana)
+    {
+        if (kana.Length < 3 || kana[0] != 'に') return false;
+        var rest = kana.AsSpan(1);
+        foreach (var next in ParticleNiContinuations)
+        {
+            if (rest.StartsWith(next, StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
+    private static readonly string[] ParticleNiContinuations =
+    [
+        "なる", "なっ", "なり", "なら", "なれ", "なろ", "ついて", "ついての", "つき", "よっ", "よる", "より", "よれ",
+        "とって", "とっての", "たいし", "たいする", "かんし", "かんする", "おいて", "おける", "むけ", "むか", "わたっ", "わたる",
+        "あたっ", "あたり", "して", "した", "する", "すぎ", "さえ", "しか", "ちがい", "そって", "そう", "もとづ", "くらべ",
+        "かけ", "かわっ", "かわり", "ともな", "つれ", "あわせ", "おうじ", "はいっ", "いく", "いっ", "いれ", "いる", "いた",
+        "きた", "くる", "きて", "でき", "みえ", "きこえ", "かんじ", "おもえ",
+    ];
+
+    /// <summary>
     /// 日本語のかなを変換エンジンで文節に区切って変換する。各文節の最初の候補は次の順で決める:
     ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
     ///   2. ユーザーが前に選び直した変換 (学習)
@@ -2150,7 +2175,7 @@ public sealed class CompositionController
         var context = ConversionContext();
         var parts = engine ?? (context is not null
             ? ConvertWithContext(kana, context)
-            : _converter.ConvertClauses(kana, kana.Length >= 3 && kana[0] == 'に' ? "これ" : null));
+            : _converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
         parts ??= [new ConversionClause(kana, _converter.Convert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _options.Candidates?.Contains(kana) == true)
