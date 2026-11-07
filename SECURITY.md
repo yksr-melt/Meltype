@@ -53,6 +53,6 @@ Meltype はキーボードの入力を扱うソフトです。安心して使っ
 <img src="docs/images/headings/security/04.svg" alt="配布物の確かめ方" height="53"><br>
 
 
-- 配布しているのは GitHub のリリースと、各 OS の説明に書いた入れ方 (Homebrew・apt・dnf) だけです。ほかの場所の Meltype は使わないでください。
+- 配布しているのは GitHub のリリースと、各 OS の説明に書いた入れ方 (Homebrew・apt・dnf・AUR の `meltype-bin`) だけです。ほかの場所の Meltype は使わないでください。
 - 自動更新は、GitHub が公開している SHA-256 と一致するかを確かめてからインストールします。
 - 公開版の実行ファイルには、作者のコード署名を付ける予定です。

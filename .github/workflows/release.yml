@@ -125,6 +125,56 @@ jobs:
           path: dist/manifests/homebrew/Casks/meltype.rb
           retention-days: 90
 
+  # AUR の meltype-bin を、このリリースの zip の SHA-256 で更新して AUR に push する (#1097)。
+  # push には AUR の共同メンテナー (CI 専用のアカウント) の SSH 鍵を使う (所有者の鍵は置かない)。
+  # 秘密 AUR_SSH_PRIVATE_KEY が無ければ失敗させる (登録漏れで AUR だけ古いままになるのを防ぐ)。プレリリースは AUR に出さない。
+  aur:
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AUR_SSH_PRIVATE_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: meltype-linux*
+          path: dist
+          merge-multiple: true
+      - name: Update PKGBUILD
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          bash packaging/aur/update.sh "$version" "dist/Meltype-$version-linux.zip" "dist/Meltype-$version-linux-arm64.zip"
+          cat packaging/aur/meltype-bin/.SRCINFO
+      - name: Push to AUR
+        run: |
+          if [[ -z "$AUR_SSH_PRIVATE_KEY" ]]; then
+            echo "::error::秘密 AUR_SSH_PRIVATE_KEY がありません。AUR の meltype-bin を更新できません (docs/dev/RELEASE.md の「AUR」)"
+            exit 1
+          fi
+          version="${GITHUB_REF_NAME#v}"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          # aur.archlinux.org のホスト鍵を取り、Arch Wiki (AUR submission guidelines) に載っている指紋と比べる
+          ssh-keyscan -t ed25519 aur.archlinux.org > ~/.ssh/known_hosts
+          ssh-keygen -lf ~/.ssh/known_hosts | grep -q 'SHA256:RFzBCUItH9LZS0cKB5UE6ceAYhBD5C8GeOBip8Z11+4' \
+            || { echo "aur.archlinux.org のホスト鍵の指紋が一致しません" >&2; exit 1; }
+          export GIT_SSH_COMMAND="ssh -i ~/.ssh/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+          git clone ssh://aur@aur.archlinux.org/meltype-bin.git "$RUNNER_TEMP/aur"
+          cp packaging/aur/meltype-bin/{PKGBUILD,.SRCINFO,meltype.install} "$RUNNER_TEMP/aur/"
+          cd "$RUNNER_TEMP/aur"
+          git add PKGBUILD .SRCINFO meltype.install
+          if git diff --cached --quiet; then
+            echo "AUR meltype-bin is already up to date for $version."
+            exit 0
+          fi
+          git -c user.name="Meltype release" -c user.email="noreply@github.com" commit -m "Update to $version"
+          git push origin HEAD:master
+
   # apt と dnf のリポジトリを同じ鍵で署名して、1 つの GitHub Pages の成果物にする
   # (Pages は deploy のたびにサイト全体を置き換えるので、別々のジョブで deploy すると片方が消える)
   build-repositories:
