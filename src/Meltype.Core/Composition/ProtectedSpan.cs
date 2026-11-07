@@ -163,6 +163,19 @@ public static class ProtectedSpanScanner
 
     private static bool IsMentionChar(char c) => char.IsAsciiLetterOrDigit(c) || c is '_' or '-';
 
+    // #1326 と同じ代表的なルート名。後ろの語に合わせる設定でも、実際のパスは日本語にしない。
+    private static readonly HashSet<string> CommonRootDirectories = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bin", "boot", "dev", "etc", "home", "lib", "lib64", "media", "mnt", "opt",
+        "proc", "root", "run", "sbin", "srv", "sys", "tmp", "usr", "var",
+        "Users", "Applications", "Library", "System", "Volumes", "private", "Network", "cores", "data"
+    };
+
+    internal static bool IsContextualSlashWord(string raw, ProtectedSpan span) =>
+        span.Kind == ProtectedKind.PosixPath && span.Start == 0 && span.Length > 1 &&
+        raw.AsSpan(1, span.Length - 1).IndexOfAnyExcept("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-".AsSpan()) < 0 &&
+        !CommonRootDirectories.Contains(raw.Substring(1, span.Length - 1));
+
     // ---- POSIX パス ----
     private static ProtectedSpan? TryPosixPath(string raw, int start)
     {
