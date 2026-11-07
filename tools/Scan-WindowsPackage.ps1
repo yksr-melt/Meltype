@@ -35,8 +35,14 @@ $scanner = Get-ChildItem -LiteralPath $platform -Directory -ErrorAction Silently
     Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
 if (-not $scanner) { $scanner = Join-Path $env:ProgramFiles 'Windows Defender\MpCmdRun.exe' }
 if (-not (Test-Path -LiteralPath $scanner)) { throw 'MpCmdRun.exe が見つかりません。配布物を検査できません。' }
-& $scanner -SignatureUpdate | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "Defender の定義の更新に失敗しました (exit code $LASTEXITCODE)。" }
+# ランナー側で別の更新が走っていると「別のインストールが実行中」(0x80070652) で失敗するため、待って再試行する。
+for ($attempt = 1; ; $attempt++) {
+    & $scanner -SignatureUpdate | Out-Host
+    if ($LASTEXITCODE -eq 0) { break }
+    if ($attempt -ge 5) { throw "Defender の定義の更新に失敗しました (exit code $LASTEXITCODE)。" }
+    Write-Host "Defender の定義の更新に失敗しました (exit code $LASTEXITCODE)。60 秒後に再試行します ($attempt/5)。"
+    Start-Sleep -Seconds 60
+}
 $status = Get-MpComputerStatus -ErrorAction Stop
 Write-Host "Defender 定義: $($status.AntivirusSignatureVersion) / エンジン: $($status.AMEngineVersion)"
 foreach ($item in $Path) { Invoke-PackageScan $scanner $item }
