@@ -269,6 +269,13 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     private static func importUserDictionaryFile() {
         let panel = NSOpenPanel()
+        let fileManager = FileManager.default
+        let keyboardServices = fileManager.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/KeyboardServices", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        panel.directoryURL = fileManager.fileExists(atPath: keyboardServices.path, isDirectory: &isDirectory) && isDirectory.boolValue
+            ? keyboardServices
+            : fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let source = panel.url,
