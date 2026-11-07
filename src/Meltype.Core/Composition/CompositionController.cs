@@ -2066,7 +2066,7 @@ public sealed class CompositionController
         {
             if (parts.Contains(clause)) continue;
             var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _options.History?.Get(clause.Reading) : null);
+            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? LearnedConversion(clause.Reading) : null);
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
@@ -2170,7 +2170,7 @@ public sealed class CompositionController
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (_precedingText ?? "") + others + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? _options.History?.Get(clauses[i].Reading);
+            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
@@ -2363,6 +2363,19 @@ public sealed class CompositionController
             if (!candidates.Contains(emoji)) candidates.Add(emoji);
         }
         return candidates;
+    }
+
+    /// <summary>
+    /// 「ばーじょん」で選んだ版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) の文節か。
+    /// 覚えない (更新後に古い版が通常の「バージョン」より先に出る。issue #1488)。過去に覚えたものも使わない。
+    /// </summary>
+    private static bool IsVersionChoice(string reading, string? text) =>
+        text is not null && reading.Contains("ばーじょん", StringComparison.Ordinal) && Predictor.IsVersionText(text);
+
+    private string? LearnedConversion(string reading)
+    {
+        var text = _options.History?.Get(reading);
+        return IsVersionChoice(reading, text) ? null : text;
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -2597,7 +2610,7 @@ public sealed class CompositionController
         clause.Raw = null;
         clause.Translations.Clear();
         clause.Generated.Clear();
-        if (_options.History?.Get(clause.Reading) is { } learned) Prefer(clause, learned);
+        if (LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
     private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
@@ -2751,6 +2764,7 @@ public sealed class CompositionController
     {
         if (english || !_options.Learning() || _options.Predictor?.Phrases is not { } phrases || !_options.Predictions()) return;
         if (!text.Any(c => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿') || reading.Length < 3 || reading.Any(char.IsAsciiLetter)) return;
+        if (Predictor.IsVersionText(text)) return;
         phrases.Remember(reading, text);
     }
 
@@ -2932,7 +2946,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (clause.Generated.Contains(clause.Text) || IsMathSymbolChoice(clause)) continue;
+            if (clause.Generated.Contains(clause.Text) || IsMathSymbolChoice(clause) || IsVersionChoice(clause.Reading, clause.Text)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
