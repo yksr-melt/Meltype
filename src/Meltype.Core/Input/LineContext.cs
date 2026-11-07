@@ -184,7 +184,7 @@ public static class LineContext
     private static readonly string[] TerminalWords = ["terminal", "ターミナル", "端末", "console", "コンソール"];
 
     // VS Code の検索・コマンドパレット・ファイル名の入力など (英数で打つもの)
-    private static readonly string[] SearchWords = ["search", "検索", "command", "コマンド", "quick", "file name", "ファイル名", "filter", "フィルター", "go to", "移動", "find", "replace", "置換"];
+    private static readonly string[] SearchWords = ["search", "検索", "command", "コマンド", "quick", "file name", "ファイル名", "filter", "フィルター", "go to", "移動", "find", "replace", "置換", "address", "アドレス", "url"];
 
     /// <summary>ターミナルのアプリ (アプリ全体がターミナル)。</summary>
     public static readonly HashSet<string> TerminalProcesses = new(StringComparer.OrdinalIgnoreCase)
