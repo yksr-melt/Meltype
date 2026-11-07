@@ -127,7 +127,7 @@ jobs:
 
   # AUR の meltype-bin を、このリリースの zip の SHA-256 で更新して AUR に push する (#1097)。
   # push には AUR の共同メンテナー (CI 専用のアカウント) の SSH 鍵を使う (所有者の鍵は置かない)。
-  # 秘密 AUR_SSH_PRIVATE_KEY が無ければ何もしない。プレリリースは AUR に出さない。
+  # 秘密 AUR_SSH_PRIVATE_KEY が無ければ失敗させる (登録漏れで AUR だけ古いままになるのを防ぐ)。プレリリースは AUR に出さない。
   aur:
     if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
     needs: publish
@@ -150,8 +150,11 @@ jobs:
           bash packaging/aur/update.sh "$version" "dist/Meltype-$version-linux.zip" "dist/Meltype-$version-linux-arm64.zip"
           cat packaging/aur/meltype-bin/.SRCINFO
       - name: Push to AUR
-        if: env.AUR_SSH_PRIVATE_KEY != ''
         run: |
+          if [[ -z "$AUR_SSH_PRIVATE_KEY" ]]; then
+            echo "::error::秘密 AUR_SSH_PRIVATE_KEY がありません。AUR の meltype-bin を更新できません (docs/dev/RELEASE.md の「AUR」)"
+            exit 1
+          fi
           version="${GITHUB_REF_NAME#v}"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$AUR_SSH_PRIVATE_KEY" > ~/.ssh/aur

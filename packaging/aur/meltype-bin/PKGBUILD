@@ -2,9 +2,10 @@
 # Copyright (C) 2026 Yukishiro
 #
 # AUR の meltype-bin (#1097)。リリースの zip (ビルド済み) を /opt/meltype に置く。置き方は linux/build-deb.sh と同じ。
-# pkgver と sha256sums は packaging/aur/update.sh で書き換える (手で直さない)。リリース時は release.yml が書き換えて AUR に push する。
+# ここにあるのはひな形で、pkgver と sha256sums は入れていない。リリース時に release.yml が packaging/aur/update.sh で
+# 版とハッシュを入れ、.SRCINFO を作って AUR に push する (手で直さない)。
 pkgname=meltype-bin
-pkgver=1.4.0
+pkgver=0.0.0
 pkgrel=1
 pkgdesc='Japanese input method without the Hankaku/Zenkaku key (IBus engine and fcitx5 addon)'
 arch=('x86_64' 'aarch64')
@@ -19,8 +20,8 @@ install=meltype.install
 options=('!strip' '!debug')
 source_x86_64=("Meltype-${pkgver}-linux.zip::${url}/releases/download/v${pkgver}/Meltype-${pkgver}-linux.zip")
 source_aarch64=("Meltype-${pkgver}-linux-arm64.zip::${url}/releases/download/v${pkgver}/Meltype-${pkgver}-linux-arm64.zip")
-sha256sums_x86_64=('0cd78f7f2981accaa52264dadc9c71e6047a4a1c904472a3511be4094190b2da')
-sha256sums_aarch64=('38471bea901fce43426a86fbaf81c6cd44f7c74700dd052ba54f6d0760f56f1d')
+sha256sums_x86_64=('SKIP')
+sha256sums_aarch64=('SKIP')
 
 package() {
     local src="$srcdir/Meltype-linux" target=/opt/meltype
