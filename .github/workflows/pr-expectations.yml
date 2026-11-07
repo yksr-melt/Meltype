@@ -28,8 +28,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: bots/package.json
+      - run: bun install --frozen-lockfile --production --ignore-scripts
+        working-directory: bots
       - id: cases
-        run: node .github/bot/pr-checks.mjs cases "$RUNNER_TEMP/cases.txt"
+        run: bun bots/pr-checks/main.ts cases "$RUNNER_TEMP/cases.txt"
       - if: steps.cases.outputs.count != '0'
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
@@ -47,4 +52,4 @@ jobs:
       - if: steps.cases.outputs.count != '0'
         run: |
           dotnet run --project src/Meltype.Core.Tests -c Release -- --expect "$RUNNER_TEMP/cases.txt" "$RUNNER_TEMP/cases.json"
-          node .github/bot/pr-checks.mjs expect "$RUNNER_TEMP/cases.json"
+          bun bots/pr-checks/main.ts expect"$RUNNER_TEMP/cases.json"

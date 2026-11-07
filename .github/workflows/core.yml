@@ -94,6 +94,11 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: bots/package.json
+      - run: bun install --frozen-lockfile --production --ignore-scripts
+        working-directory: bots
       - name: 品質テスト (Pull Request)
         run: |
           dotnet run --project src/Meltype.Core.Tests -c Release -- --eval-json "$RUNNER_TEMP/pr.json"
@@ -103,13 +108,13 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           git worktree add "$RUNNER_TEMP/base" "$BASE"
-          # main をビルドできなければ比べない (pr-checks.mjs が「比べられません」と出す)。
+          # main をビルドできなければ比べない (bots/pr-checks が「比べられません」と出す)。
           # 失敗にすると、main を直す Pull Request もこのチェックでマージできなくなる (#1453)
           if ! dotnet build "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release; then
             echo "::warning::main ($BASE) をビルドできないため、精度を比べません"
             exit 0
           fi
-          # main にまだ --eval-json が無ければ比べない (pr-checks.mjs が「比べられません」と出す)
+          # main にまだ --eval-json が無ければ比べない (bots/pr-checks が「比べられません」と出す)
           if grep -q -- '--eval-json' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
             dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --eval-json "$RUNNER_TEMP/base.json"
           fi
@@ -126,11 +131,11 @@ jobs:
           fi
           mkdir -p "$RUNNER_TEMP/judged-words"
           cp "$RUNNER_TEMP"/*-words.tsv "$RUNNER_TEMP/judged-words/" 2>/dev/null || true
-          node .github/bot/pr-checks.mjs impact "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv" "$RUNNER_TEMP/judged-words/changes.tsv"
+          bun bots/pr-checks/main.ts impact"$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv" "$RUNNER_TEMP/judged-words/changes.tsv"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: judged-words
           path: ${{ runner.temp }}/judged-words
           if-no-files-found: ignore
       - name: 比べる
-        run: node .github/bot/pr-checks.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json"
+        run: bun bots/pr-checks/main.ts compare"$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json"

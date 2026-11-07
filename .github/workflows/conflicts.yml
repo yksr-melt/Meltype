@@ -1,4 +1,4 @@
-# コンフリクトのお知らせ (.github/bot/conflicts.mjs)。
+# コンフリクトのお知らせ (bots/conflicts/main.ts)。
 #   いまのコンフリクト: main とコンフリクトしている Pull Request に、ラベルとコメントを付ける (解消したら外す)
 #   マージ後の予告:     「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」をコメントする
 # いつ動くか:
@@ -36,6 +36,11 @@ jobs:
           ref: main
           fetch-depth: 0
           persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: bots/package.json
+      - run: bun install --frozen-lockfile --production --ignore-scripts
+        working-directory: bots
       - id: app
         if: vars.BOT_APP_ID != ''
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
@@ -48,12 +53,12 @@ jobs:
           git config user.email meltype-bot@users.noreply.github.com
       - name: 開いている Pull Request を全部調べる
         if: github.event_name != 'pull_request_target'
-        run: node .github/bot/conflicts.mjs main
+        run: bun bots/conflicts/main.ts main
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
       - name: この Pull Request を調べる
         if: github.event_name == 'pull_request_target'
-        run: node .github/bot/conflicts.mjs pr "$NUMBER"
+        run: bun bots/conflicts/main.ts pr "$NUMBER"
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
           NUMBER: ${{ github.event.pull_request.number }}

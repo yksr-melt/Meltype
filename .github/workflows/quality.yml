@@ -3,7 +3,7 @@
 #   静的解析       … Roslyn の解析 (AnalysisLevel=latest-recommended) の警告が 1 件でもあれば失敗。重要度は .editorconfig で変える。
 #                    SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
 #                    結果は SARIF にして Code scanning に送る。大きな移行の note は IDE に残す。命名は理由付きのソース内抑制を反映する (tools/filter-sarif.mjs)。
-#   スクリプト     … .github/bot と tools の Node のスクリプトのテスト
+#   スクリプト     … bots の型チェックとテスト、tools の Node のスクリプトのテスト
 #   依存関係       … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
 # セキュリティの解析 (CodeQL) は codeql.yml。
 name: quality
@@ -82,7 +82,7 @@ jobs:
           sarif_file: ${{ runner.temp }}/sarif/${{ matrix.project }}.sarif
           category: roslyn-${{ matrix.project }}
 
-  # .github/bot と tools の Node のスクリプトのテスト。--self-test はファイルの中に判定の例を持つ bot (GitHub には何も書かない)
+  # bots の型チェックとテスト、tools の Node のスクリプトのテスト。--self-test はファイルの中に判定の例を持つ bot (GitHub には何も書かない)
   scripts:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -90,12 +90,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: node --test .github/bot/*.test.mjs tools/*.test.mjs
+      - run: node --test tools/*.test.mjs
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: bots/package.json
+      - name: 型チェックとテスト
+        working-directory: bots
+        run: |
+          bun install --frozen-lockfile --ignore-scripts
+          bun run typecheck
+          bun test
       - name: Self-test
         run: |
-          node .github/bot/notices.mjs --self-test
-          node .github/bot/code-scanning.mjs --self-test
-          node .github/bot/sponsors.mjs --self-test
+          bun bots/notices/main.ts --self-test
+          bun bots/code-scanning/main.ts --self-test
+          bun bots/sponsors/main.ts --self-test
 
   dependencies:
     if: github.event_name == 'pull_request'

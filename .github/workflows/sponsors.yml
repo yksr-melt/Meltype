@@ -1,7 +1,7 @@
 name: sponsors
 
 # README の「寄付してくださった方々」を GitHub Sponsors の一覧から作り直し、変わっていれば Pull Request を出す。
-# 名前を公開にしてくださった方だけを載せる (.github/bot/sponsors.mjs)。main には直接 push しない。
+# 名前を公開にしてくださった方だけを載せる (bots/sponsors/main.ts)。main には直接 push しない。
 #
 # 一覧を読むトークン: 秘密 SPONSORS_TOKEN があればそれを使う (yksr-melt のトークン。classic なら read:user、
 # fine-grained なら「Account permissions → GitHub Sponsors: read」)。無ければ github.token で試す
@@ -32,10 +32,15 @@ jobs:
         with:
           app-id: ${{ vars.BOT_APP_ID }}
           private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: bots/package.json
+      - run: bun install --frozen-lockfile --production --ignore-scripts
+        working-directory: bots
       - name: Update README from GitHub Sponsors
         env:
           GITHUB_TOKEN: ${{ secrets.SPONSORS_TOKEN || github.token }}
-        run: node .github/bot/sponsors.mjs
+        run: bun bots/sponsors/main.ts
       - name: Open or update the pull request
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}

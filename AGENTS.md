@@ -15,6 +15,7 @@
 | `web/`                     | Web（Cloudflare Workers・報告フォーム）                                                             |
 | `dictionaries/`            | 辞書                                                                                         |
 | `tools/`                   | 辞書生成・検査・ベンチ・テスト用スクリプト                                                                      |
+| `bots/`                    | GitHub の bot（`<bot 名>/main.ts` が実行の入口、`lib/` が共有のコード。bun と TypeScript）                  |
 | `docs/`                    | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート                                              |
 | `docs/dev/`                | 開発者向けの文書（開発・設計・リリースの手順）                                                                     |
 
@@ -43,7 +44,13 @@ dotnet run --project src/Meltype.Tests -- --context この本は:あつい # 文
 
 # 辞書を変えたとき
 node tools/check-dictionaries.mjs
+
+# bot を変えたとき (bots/ で)
+bun run typecheck
+bun test
 ```
+
+GitHub の API は `bots/lib/github-api.ts` の外から直接呼ばない。URL・応答の形は `gh.postComment()` のようなメソッドに閉じ込める。
 
 Linux / macOS では `src/Meltype.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
 

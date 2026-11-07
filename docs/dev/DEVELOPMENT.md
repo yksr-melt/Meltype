@@ -105,7 +105,7 @@ Summary には 200 語まで出し、全件はログと、成果物 `judged-word
 ```
 dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus before.tsv              # 変える前
 dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus after.tsv before.tsv    # 変えたあと (変える前の語も判定する)
-node .github/bot/pr-checks.mjs impact before.tsv after.tsv changes.tsv
+bun bots/pr-checks/main.ts impact before.tsv after.tsv changes.tsv
 ```
 
 ## 配布用のパッケージを作る
