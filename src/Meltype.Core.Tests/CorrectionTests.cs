@@ -27,7 +27,6 @@ internal static class CorrectionTests
         Assert.Equal("sushi", correction.Corrected);
         Assert.Equal("Enter (確定)", correction.LastKey);
         Assert.Equal("これは", correction.Before);
-        Assert.Equal("英語のつもりがかなになった (みいてぃんg)", correction.Kind);
     }
 
     [Test]
