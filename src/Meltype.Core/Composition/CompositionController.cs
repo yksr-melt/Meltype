@@ -362,6 +362,7 @@ public sealed class CompositionController
     private readonly CompositionDetector _detector;
     private readonly IKanjiConverter _converter;
     private readonly ICompositionHost _host;
+    private readonly UtilityCandidates _utilities;
     private readonly CompositionOptions _options;
     private readonly Dictionary<string, List<(string Reading, string Text)>> _liveCache = new(StringComparer.Ordinal);
     private readonly ConversionBudget? _budget;
@@ -402,7 +403,7 @@ public sealed class CompositionController
     private long _heldLastKeyTime;
 
     /// <summary>変換中の文節。英語の区間も 1 つの文節として扱う (候補は英字/全角英字)。</summary>
-    private sealed class Clause(string reading, bool isEnglish, List<string> candidates)
+    internal sealed class Clause(string reading, bool isEnglish, List<string> candidates)
     {
         public string Reading { get; set; } = reading;
         public bool IsEnglish { get; } = isEnglish;
@@ -430,6 +431,9 @@ public sealed class CompositionController
 
         /// <summary>候補のうち英訳 (複雑な → complex) のもの。</summary>
         public HashSet<string> Translations { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>候補のうちユーティリティ変換が作ったもの。打つたびに変わるので、選んでも学習しない。</summary>
+        public HashSet<string> Generated { get; } = new(StringComparer.Ordinal);
     }
 
     public CompositionController(CaptureGate gate, CompositionDetector detector, IKanjiConverter converter, ICompositionHost host, CompositionOptions? options = null)
@@ -441,6 +445,7 @@ public sealed class CompositionController
         _budget = (converter as IBackgroundConverter)?.Budget;
         _host = host;
         _options = options ?? new CompositionOptions();
+        _utilities = new UtilityCandidates(_options, host);
         _text.Manual = () => _options.Manual();
         _text.TypoCorrector = _options.RomajiTypos;
         // よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは英語として覚えない。
@@ -541,6 +546,7 @@ public sealed class CompositionController
                 fresh.Index = fresh.Candidates.IndexOf(previous.Text);
                 fresh.Changed = true;
                 fresh.Translations.UnionWith(previous.Translations);
+                fresh.Generated.UnionWith(previous.Generated);
             }
         }
         _selectedClause = selected;
@@ -570,7 +576,10 @@ public sealed class CompositionController
         if (!_converting && TypingCandidates() is { } typing)
         {
             if (index < 0 || index >= typing.Count) return;
-            _clauses = [new Clause(_text.AllKana(final: false), false, typing) { Raw = _text.Raw, Expanded = true }];
+            var kana = _text.AllKana(final: false);
+            var typed = new Clause(kana, false, typing) { Raw = _text.Raw, Expanded = true };
+            typed.Generated.UnionWith(WithoutWaiting(() => UtilityClause(kana).Generated));
+            _clauses = [typed];
             _selectedClause = 0;
             _converting = true;
         }
@@ -1784,7 +1793,7 @@ public sealed class CompositionController
             var lower = typedRaw.ToLowerInvariant();
             List<string> registered = [.. _options.UserDictionary?.Lookup(lower) ?? [], .. _options.ConsonantAbbreviations() ? _options.Candidates?.Lookup(lower) ?? [] : []];
             var reading = RomajiReading(typedRaw);
-            List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
+            List<string> romaji = reading is null ? [] : UtilityClause(reading).Candidates;
             List<string> english = [typedRaw, .. EnglishCandidates(typedRaw)];
             _clauses = [new Clause(typedRaw, true, preferJapanese
                 ? Distinct([.. registered, .. romaji, .. english])
@@ -1795,20 +1804,10 @@ public sealed class CompositionController
         }
         if (!_text.KanaInput && _text.Mode == DisplayMode.Auto)
         {
-            // 設定「計算式を変換すると結果を候補に出す」: 数字と + - * / ( ) だけの式 (issue #295)
-            string[] calculated = _options.CalculatorCandidates() && Calculator.Evaluate(_text.Raw) is { } result
-                ? [result, $"{_text.Raw.TrimEnd('=')}={result}"]
-                : [];
-            // 月/日 (10/20) は、日付の書き方の候補も出す (issue #935)。分数・割り算 (1/2) かもしれないので、打ったままと計算の結果より後ろに。
-            // Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
-            var dates = SlashDate.Match(_text.Raw) is { Success: true } date
-                ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture)) ?? []
-                : [];
-            if (calculated.Length > 0 || dates.Length > 0)
+            // 入力全体が計算式か 月/日 なら、結果を候補にする。Space は今までどおり確定して空白 (SpaceCommitsAlphanumeric)
+            if (_utilities.Convert(new ConversionRequest("", _text.Raw, JapaneseCandidates), _ => []) is { Count: > 0 } expression)
             {
-                // 月/日 の全角 (１０／２０) は、日付のときだけ今までどおり最後に出す
-                string[] fullWidth = dates.Length > 0 ? [CompositionText.ToFullWidth(_text.Raw)] : [];
-                _clauses = [new Clause(_text.Raw, true, Distinct([_text.Raw, .. calculated, .. dates, .. fullWidth])) { Raw = _text.Raw }];
+                _clauses = expression;
                 _selectedClause = 0;
                 _converting = true;
                 return;
@@ -1853,7 +1852,7 @@ public sealed class CompositionController
                 if (segment.Raw.All(c => !char.IsLetterOrDigit(c)))
                     english = Distinct([.. english, .. _options.Candidates?.Lookup(segment.Raw) ?? []]);
                 var reading = RomajiReading(segment.Raw);
-                List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null);
+                List<string> romaji = reading is null ? [] : UtilityClause(reading).Candidates;
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
                     : Distinct([.. english, .. romaji, .. NumberCandidates.For(segment.Raw)]))
@@ -1861,7 +1860,7 @@ public sealed class CompositionController
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapanese(segment.Kana);
+            var japanese = _utilities.Convert(new ConversionRequest(segment.Kana, "", JapaneseCandidates), r => ConvertJapanese(r.Kana));
             // 英単語 + する (push|した、deploy|しよう): 変換エンジンは英語の後ろの「した」だけを見て 下・死体・使用 にしてしまう。かなのまま
             if (s > 0 && segments[s - 1].IsEnglish && japanese.Count > 0 && IsSuruAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
@@ -1886,6 +1885,14 @@ public sealed class CompositionController
         _clauses = clauses;
         _selectedClause = 0;
         _converting = true;
+    }
+
+    /// <summary>読み全体を 1 つの文節にして、いつもの候補とユーティリティ変換の候補を入れたもの。</summary>
+    private Clause UtilityClause(string reading)
+    {
+        var clause = _utilities.Convert(new ConversionRequest(reading, "", JapaneseCandidates), r => [new Clause(r.Kana, false, JapaneseCandidates(r.Kana, null))])[0];
+        MoveEmojiLast(clause);
+        return clause;
     }
 
     /// <summary>
@@ -2182,7 +2189,7 @@ public sealed class CompositionController
         {
             parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
         }
-        parts = JoinDateTime(JoinSmallKana(parts));
+        parts = JoinSmallKana(parts);
         var clauses = parts.Select(p => new Clause(p.Reading, false, JapaneseCandidates(p.Reading, NormalizeHalfWidth(p.Text, p.Reading)))
         {
             ZenzaiText = p.Zenzai ? NormalizeHalfWidth(p.Text, p.Reading) : null,
@@ -2379,287 +2386,12 @@ public sealed class CompositionController
         {
             if (!candidates.Contains(kana)) candidates.Add(kana);
         }
-        // 日付・時刻 (いま・なう・きょう) は、かなの後ろに出す (いつもの候補の並びは変えない)
-        foreach (var time in TimeCandidates(reading))
-        {
-            if (!candidates.Contains(time)) candidates.Add(time);
-        }
         foreach (var emoji in EmojiBlock(reading))
         {
             if (!candidates.Contains(emoji)) candidates.Add(emoji);
         }
         return candidates;
     }
-
-    /// <summary>今の時刻を表す読み (issue #208)。</summary>
-    private static readonly HashSet<string> NowReadings = ["いま", "なう"];
-
-    private static readonly string[] WeekDays = ["日", "月", "火", "水", "木", "金", "土"];
-
-    /// <summary>
-    /// いま・なう の文節に今の日時、きょう の文節に今日の日付を候補として出す (issue #208)。
-    /// いま → 17:22 / 17時22分 / 午後5時22分 / 2026年10月9日(金) 17時22分 / 10月9日(金) 17:22 …
-    /// きょう → 2026年10月9日 / 2026年10月9日(金) / 10月9日(金) / 2026/10/09 / 2026/10/09(金) / 10/9(金) / 2026-10-09 / 金曜日 / 20261009 …
-    /// </summary>
-    private IEnumerable<string> TimeCandidates(string reading)
-    {
-        if (TypedDateCandidates(reading) is { } typed) return typed;
-        if (reading is "じこう" or "じこうのあいさつ") return SeasonalGreetings(_options.Now().Month);
-        if (EraToYear(reading) is { } year) return year;
-        if (TypedUnitCandidates(reading) is { } units) return units;
-        if (ClipboardReadings.Contains(reading) && _options.ClipboardCandidates() && ClipboardLine(_host.ClipboardText) is { } clip) return [clip];
-        if (ClockReadings.Contains(reading)) return ClockCandidates();
-        var isNow = NowReadings.Contains(reading);
-        if (!isNow && reading != "きょう") return [];
-        // なう: 今再生している曲を、時刻より先に (issue #1400)
-        if (reading == "なう" && _options.NowPlayingCandidates() && NowPlayingCandidates() is { Count: > 0 } songs)
-            return [.. songs, .. NowTimes(ClockNow())];
-        var now = _options.Now();
-        var day = WeekDays[(int)now.DayOfWeek];
-        var date = $"{now.Year}年{now.Month}月{now.Day}日";
-        var monthDay = $"{now.Month}月{now.Day}日";
-        // 区切りの / と : は、Windows の地域の設定に左右されないように数字から組み立てる (DateTime の書式の / : は地域の区切りになる)
-        var slashDate = $"{now.Year:D4}/{now.Month:D2}/{now.Day:D2}";
-        var clock = $"{now.Hour:D2}:{now.Minute:D2}";
-        if (!isNow)
-            return [date, $"{date}({day})", monthDay, $"{monthDay}({day})", slashDate, $"{slashDate}({day})", $"{now.Month}/{now.Day}({day})",
-                $"{now.Year:D4}-{now.Month:D2}-{now.Day:D2}", $"{day}曜日", $"{now.Year:D4}{now.Month:D2}{now.Day:D2}"];
-        return NowTimes(ClockNow());
-    }
-
-    private static string[] NowTimes(DateTime now)
-    {
-        var day = WeekDays[(int)now.DayOfWeek];
-        var date = $"{now.Year}年{now.Month}月{now.Day}日";
-        var monthDay = $"{now.Month}月{now.Day}日";
-        var slashDate = $"{now.Year:D4}/{now.Month:D2}/{now.Day:D2}";
-        var clock = $"{now.Hour:D2}:{now.Minute:D2}";
-        var time = $"{now.Hour}時{now.Minute}分";
-        return [clock, time, $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分",
-            $"{date}({day}) {time}", $"{monthDay}({day}) {time}", $"{date}({day}) {clock}", $"{slashDate} {clock}"];
-    }
-
-    /// <summary>設定のタイムゾーンの時刻を出す読み (issue #1401)。</summary>
-    private static readonly HashSet<string> ClockReadings = ["とけい", "じこく"];
-
-    /// <summary>今再生している曲の候補 (曲名 / アーティスト、曲名)。読めなければ空。</summary>
-    private List<string> NowPlayingCandidates()
-    {
-        if (_host.NowPlaying is not { } song || string.IsNullOrWhiteSpace(song.Title)) return [];
-        var title = song.Title.Trim();
-        var artist = song.Artist?.Trim() ?? "";
-        return artist.Length > 0 ? [$"{title} / {artist}", title, $"#NowPlaying {title} / {artist}"] : [title, $"#NowPlaying {title}"];
-    }
-
-    /// <summary>
-    /// とけい・じこく の文節に、設定のタイムゾーンの今の時刻 (19:21 / 19時21分 / 午後7時21分) を出す (issue #1401)。
-    /// 夏時間は TimeZoneInfo が決める。この PC と違うタイムゾーンなら、日付とタイムゾーンの名前を付けたものも出す (日付をまたぐことがあるので)。
-    /// </summary>
-    private List<string> ClockCandidates()
-    {
-        var zone = ClockZone(_options.ClockTimeZone());
-        var now = ClockNow();
-        var clock = $"{now.Hour:D2}:{now.Minute:D2}";
-        List<string> result = [clock, $"{now.Hour}時{now.Minute}分", $"{(now.Hour < 12 ? "午前" : "午後")}{now.Hour % 12}時{now.Minute}分"];
-        if (zone is not null && !zone.HasSameRules(_options.LocalTimeZone())) result.Add($"{now.Month}/{now.Day}({WeekDays[(int)now.DayOfWeek]}) {clock} ({_options.ClockTimeZone().Trim()})");
-        return result;
-    }
-
-    /// <summary>設定「時計の候補のタイムゾーン」の今の時刻 (とけい・じこく・いま・なう)。設定が空ならこの PC の時刻。</summary>
-    private DateTime ClockNow() => ClockZone(_options.ClockTimeZone()) is { } zone
-        ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(_options.UtcNow(), DateTimeKind.Utc), zone)
-        : _options.Now();
-
-    /// <summary>設定のタイムゾーン。空・見つからなければ null (この PC のもの)。
-    /// IANA (Asia/Tokyo) と Windows (Tokyo Standard Time) のどちらの ID も読む (見つからない ID は .NET が IANA ⇔ Windows に変換して探し直す)。</summary>
-    internal static TimeZoneInfo? ClockZone(string id)
-    {
-        id = id?.Trim() ?? "";
-        if (id.Length == 0) return null;
-        try
-        {
-            return TimeZoneInfo.FindSystemTimeZoneById(id);
-        }
-        catch (Exception ex) when (ex is TimeZoneNotFoundException or InvalidTimeZoneException)
-        {
-            return null;
-        }
-    }
-
-    /// <summary>月ごとの時候の挨拶 (「〜の候」の〜)。手紙・メールの書き出しに使う。</summary>
-    private static readonly string[][] SeasonalTerms =
-    [
-        ["新春", "初春", "厳寒", "大寒"],
-        ["余寒", "立春", "春寒", "梅花"],
-        ["早春", "春分", "春暖", "浅春"],
-        ["桜花", "陽春", "春暖", "晩春"],
-        ["新緑", "薫風", "若葉", "立夏"],
-        ["入梅", "梅雨", "向暑", "初夏"],
-        ["盛夏", "猛暑", "大暑", "酷暑"],
-        ["晩夏", "残暑", "立秋", "暮夏"],
-        ["初秋", "新秋", "秋晴", "野分"],
-        ["秋冷", "紅葉", "秋涼", "寒露"],
-        ["晩秋", "霜降", "向寒", "初霜"],
-        ["初冬", "師走", "寒冷", "歳晩"],
-    ];
-
-    /// <summary>
-    /// じこう / じこうのあいさつ の文節に、今の月に合う時候の挨拶 (秋冷の候 / 拝啓　秋冷の候、…) を候補として出す (issue #339)。
-    /// 今の月を先に、続けて前後の月のものも出す。
-    /// </summary>
-    internal static IEnumerable<string> SeasonalGreetings(int month)
-    {
-        var months = new[] { month, (month + 10) % 12 + 1, month % 12 + 1 };
-        var terms = months.SelectMany(m => SeasonalTerms[m - 1]).Distinct().ToList();
-        return terms.Select(t => $"{t}の候").Concat([$"拝啓　{terms[0]}の候、"]);
-    }
-
-    private static readonly System.Text.RegularExpressions.Regex EraReading =
-        new("^(?<e>れいわ|へいせい|しょうわ|たいしょう|めいじ)(?<n>[0-9０-９]{1,2}|がん)ねん$");
-
-    /// <summary>
-    /// 元号の年 (れいわ8ねん・へいせいがんねん) を西暦にした候補 (2026年 / 2026)。元号の範囲 (明治 〜 令和) の外なら null (issue #341)。
-    /// </summary>
-    internal static IEnumerable<string>? EraToYear(string reading)
-    {
-        if (EraReading.Match(reading) is not { Success: true } match) return null;
-        var number = match.Groups["n"].Value;
-        var n = number == "がん" ? 1 : int.Parse(new string(number.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
-        (int Start, int Last) range = match.Groups["e"].Value switch
-        {
-            "れいわ" => (2019, 2100),
-            "へいせい" => (1989, 2019),
-            "しょうわ" => (1926, 1989),
-            "たいしょう" => (1912, 1926),
-            _ => (1868, 1912),
-        };
-        var year = range.Start + n - 1;
-        if (n < 1 || year > range.Last) return null;
-        return [$"{year}年", year.ToString(CultureInfo.InvariantCulture)];
-    }
-
-    /// <summary>尺貫法の単位 (読み → 単位の字、メートル法での大きさ、メートル法の単位)。</summary>
-    private static readonly (string Reading, string Unit, double Size, string Metric, string Name)[] TraditionalUnits =
-    [
-        ("しゃく", "尺", 100.0 / 3.3, "cm", "尺"), ("すん", "寸", 10.0 / 3.3, "cm", "寸"), ("けん", "間", 200.0 / 110.0, "m", "間"),
-        ("じょう", "丈", 100.0 / 33.0, "m", "丈"), ("つぼ", "坪", 400.0 / 121.0, "㎡", "坪"),
-        ("ごう", "合", 180.39, "mL", "合"), ("しょう", "升", 1.8039, "L", "升"), ("と", "斗", 18.039, "L", "斗"),
-        ("かん", "貫", 3.75, "kg", "貫"), ("もんめ", "匁", 3.75, "g", "匁"), ("きん", "斤", 600, "g", "斤"), ("りょう", "両", 37.5, "g", "両"),
-    ];
-
-    private static readonly System.Text.RegularExpressions.Regex UnitReading =
-        new("^(?<n>[0-9０-９]{1,6}(?:[.．][0-9０-９]{1,3})?)(?<u>しゃく|すん|けん|じょう|つぼ|ごう|しょう|と|かん|もんめ|きん|りょう)$");
-
-    /// <summary>
-    /// 数字 + 尺貫法の単位の読み (3しゃく) の文節に、単位の字 (3尺) と、メートル法に直した大きさ (約90.9cm) を出す (issue #340)。
-    /// 尺貫法でなければ null。
-    /// </summary>
-    internal static IEnumerable<string>? TypedUnitCandidates(string reading)
-    {
-        if (UnitReading.Match(reading) is not { Success: true } match) return null;
-        var digits = new string(match.Groups["n"].Value.Select(c => c switch { >= '０' and <= '９' => (char)(c - '０' + '0'), '．' => '.', _ => c }).ToArray());
-        if (!double.TryParse(digits, System.Globalization.NumberStyles.Float, CultureInfo.InvariantCulture, out var value)) return null;
-        var unit = TraditionalUnits.First(u => u.Reading == match.Groups["u"].Value);
-        var size = value * unit.Size;
-        var text = size >= 100 ? Math.Round(size).ToString("0", CultureInfo.InvariantCulture)
-            : Math.Round(size, 2).ToString("0.##", CultureInfo.InvariantCulture);
-        return [$"{digits}{unit.Unit}", $"約{text}{unit.Metric}"];
-    }
-
-    /// <summary>クリップボードの文字を候補に出す読み。</summary>
-    private static readonly HashSet<string> ClipboardReadings = ["くりっぷぼーど", "ぺーすと"];
-
-    /// <summary>クリップボードの文字が、候補に出してよい 1 行 (200 文字まで・制御文字なし) なら、その文字。前後の空白は除く。</summary>
-    internal static string? ClipboardLine(string? text)
-    {
-        var line = text?.Trim();
-        return line is { Length: > 0 and <= 200 } && !line.Any(char.IsControl) ? line : null;
-    }
-
-    /// <summary>打った日付 (10がつ9にち) と時刻 (3じ15ふん) の読み。数字は全角でもよい。</summary>
-    private static readonly System.Text.RegularExpressions.Regex DateReading = new("^(?<m>[0-9０-９]{1,2})がつ(?<d>[0-9０-９]{1,2})にち$");
-    private static readonly System.Text.RegularExpressions.Regex ClockReading = new("^(?<h>[0-9０-９]{1,2})じ(?<m>[0-9０-９]{1,2})(?:ふん|ぷん)$");
-
-    private static bool IsTypedDateOrTime(string reading) => DateReading.IsMatch(reading) || ClockReading.IsMatch(reading);
-
-    private static readonly System.Text.RegularExpressions.Regex SlashDate = new("^(?<m>[0-9]{1,2})/(?<d>[0-9]{1,2})$");
-
-    /// <summary>
-    /// 月と日の書き方の候補。10がつ20にち (TypedDateCandidates) と 10/20 (変換) で同じものを出す。
-    /// 10/20 / 10/20 / 10月20日 / 10/20(火) / 10月20日(火) / 2026/10/20 / 2026/10/20(火) / 2026年10月20日。ありえない日付なら null。
-    /// 年は先の日付を優先する (予定を打つことが多いので)。今年のその日が今日以降なら今年、過ぎていれば来年。
-    /// ただし過ぎてから 30 日以内ならその日 (少し前のことを書くとき。6 月 15 日に打つ 6/1 は今年、1/5 は来年、1 月 5 日に打つ 12/28 は去年)。
-    /// 選んでも学習しない (IsDateTimeChoice。年や曜日が変わるので)。
-    /// </summary>
-    private string[]? DateCandidates(int month, int day)
-    {
-        if (month is < 1 or > 12 || day is < 1 or > 31) return null;
-        var today = _options.Now().Date;
-        DateTime? best = null;
-        for (var year = today.Year - 1; year <= today.Year + 4; year++) // 去年から (1 月に打つ 12/28)。2/29 は次のうるう年まで
-        {
-            if (day > DateTime.DaysInMonth(year, month)) continue;
-            var date = new DateTime(year, month, day);
-            if (date >= today.AddDays(-30)) { best = date; break; }
-        }
-        if (best is not { } chosen) return null;
-        var week = WeekDays[(int)chosen.DayOfWeek];
-        var y = chosen.Year;
-        string[] dates = [$"{month}/{day}", $"{month:D2}/{day:D2}", $"{month}月{day}日", $"{month}/{day}({week})", $"{month}月{day}日({week})",
-            $"{y:D4}/{month:D2}/{day:D2}", $"{y:D4}/{month:D2}/{day:D2}({week})", $"{y}年{month}月{day}日"];
-        return dates;
-    }
-
-    /// <summary>
-    /// 打った日付・時刻の文節に、/ と : の形を候補として出す (#294)。いつもの候補 (10月9日) の後ろに足す。
-    /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …: #935)、3じ15ふん → 3:15 / 03:15。
-    /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
-    /// </summary>
-    private string[]? TypedDateCandidates(string reading)
-    {
-        static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
-        if (DateReading.Match(reading) is { Success: true } date)
-        {
-            return DateCandidates(Number(date.Groups["m"].Value), Number(date.Groups["d"].Value)) ?? [];
-        }
-        if (ClockReading.Match(reading) is { Success: true } clock)
-        {
-            var (hour, minute) = (Number(clock.Groups["h"].Value), Number(clock.Groups["m"].Value));
-            if (hour > 23 || minute > 59) return [];
-            return [$"{hour}:{minute:D2}", $"{hour:D2}:{minute:D2}"];
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// 変換エンジンが打った日付・時刻を 2 つ以上の文節に分けたら (10がつ|9にち)、1 つの文節にまとめる (/ の形の候補を出せるように)。
-    /// </summary>
-    private static IReadOnlyList<ConversionClause> JoinDateTime(IReadOnlyList<ConversionClause> parts)
-    {
-        if (parts.Count < 2 || !parts.Any(p => p.Reading.Contains("がつ") || p.Reading.Contains('じ'))) return parts;
-        var joined = new List<ConversionClause>();
-        for (var i = 0; i < parts.Count; i++)
-        {
-            var end = -1;
-            for (var j = Math.Min(parts.Count, i + 4); j > i + 1 && end < 0; j--)
-                if (IsTypedDateOrTime(string.Concat(parts.Skip(i).Take(j - i).Select(p => p.Reading)))) end = j;
-            if (end < 0)
-            {
-                joined.Add(parts[i]);
-                continue;
-            }
-            var run = parts.Skip(i).Take(end - i).ToList();
-            joined.Add(new ConversionClause(string.Concat(run.Select(p => p.Reading)), string.Concat(run.Select(p => p.Text))));
-            i = end - 1;
-        }
-        return joined;
-    }
-
-    /// <summary>
-    /// 「なう」の文節か。何を選んでも学習しない (再生中の曲・時刻は打つたびに変わるので。issue #1400)。
-    /// 曲名は何でもありうるので、出した曲を覚えておかずに、読みだけで決める。
-    /// </summary>
-    private static bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう";
 
     /// <summary>
     /// 「ばーじょん」で選んだ版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) の文節か。
@@ -2673,21 +2405,6 @@ public sealed class CompositionController
         var text = _options.History?.Get(reading);
         return IsVersionChoice(reading, text) ? null : text;
     }
-
-    /// <summary>
-    /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
-    /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
-    /// </summary>
-    private bool IsDateTimeChoice(Clause clause) =>
-        // 打った日付・時刻 (10がつ20にち・3じ15ふん・10/20) の文節は、その読みから作る日付・時刻の候補を選んだか (書き方の形は見ない)
-        DateTimeCandidatesOf(clause.Reading)?.Contains(clause.Text) == true ||
-        (NowReadings.Contains(clause.Reading) || ClockReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
-
-    /// <summary>打った日付・時刻の読みから作る候補 (変換したときと同じもの)。日付・時刻でなければ null。</summary>
-    private string[]? DateTimeCandidatesOf(string reading) =>
-        SlashDate.Match(reading) is { Success: true } date
-            ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture))
-            : TypedDateCandidates(reading);
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
     private IEnumerable<string> EmojiBlock(string reading) =>
@@ -2920,6 +2637,7 @@ public sealed class CompositionController
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
+        clause.Generated.Clear();
         if (LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
@@ -3256,7 +2974,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause) || IsVersionChoice(clause.Reading, clause.Text)) continue;
+            if (clause.Generated.Contains(clause.Text) || IsMathSymbolChoice(clause) || IsVersionChoice(clause.Reading, clause.Text)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -3279,7 +2997,7 @@ public sealed class CompositionController
         }
         foreach (var clause in _clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.Generated.Contains(clause.Text) || IsMathSymbolChoice(clause))
             {
                 Flush();
                 continue;
@@ -3462,7 +3180,7 @@ public sealed class CompositionController
         if (!_options.ShowCandidatesWhileTyping() || _text.Mode != DisplayMode.Auto || _text.KanaInput || _text.IsAlphanumeric || _text.IsEmpty) return null;
         var kana = _text.AllKana(final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = WithoutWaiting(() => JapaneseCandidates(kana, null).Take(5).ToList());
+        var candidates = WithoutWaiting(() => UtilityClause(kana).Candidates.Take(5).ToList());
         return candidates.Count > 1 ? candidates : null;
     }
 
