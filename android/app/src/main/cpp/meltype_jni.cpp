@@ -154,9 +154,18 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
     auto clazz = env->GetObjectClass(callbacks);
     if (!clazz) return JNI_FALSE;
     clauses_method = env->GetMethodID(clazz, "clauses", "([B[B)[B");
+    if (env->ExceptionCheck() || !clauses_method) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(clazz);
+        return JNI_FALSE;
+    }
     candidates_method = env->GetMethodID(clazz, "candidates", "([B)[B");
+    if (env->ExceptionCheck() || !candidates_method) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(clazz);
+        return JNI_FALSE;
+    }
     env->DeleteLocalRef(clazz);
-    if (env->ExceptionCheck() || !clauses_method || !candidates_method) return JNI_FALSE;
     callback_instance = env->NewGlobalRef(callbacks);
     if (!callback_instance) return JNI_FALSE;
     if (meltype_init(convert_clauses, convert_candidates, nullptr) != 1) {

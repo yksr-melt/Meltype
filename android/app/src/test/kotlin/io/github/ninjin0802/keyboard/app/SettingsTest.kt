@@ -18,9 +18,9 @@ class SettingsTest {
         assertEquals(2000, Settings.clampWait(Int.MAX_VALUE))
     }
 
-    /** spec 04「設定」: 日本語の入力の最初の値は 12キー、英字の入力の最初の値は QWERTY。 */
+    /** 日本語・英語ともに、未設定の入力配列はQWERTY。 */
     @Test fun layout_choices_default_when_nothing_or_something_unknown_is_saved() {
-        for (saved in listOf(null, "", "qwerty", "flick", "KANA", "x")) assertEquals(LayoutId.KANA, Settings.japaneseOf(saved), "$saved")
+        for (saved in listOf(null, "", "qwerty", "flick", "KANA", "x")) assertEquals(LayoutId.ROMAJI, Settings.japaneseOf(saved), "$saved")
         for (saved in listOf(null, "", "kana", "romaji", "QWERTY", "x")) assertEquals(LayoutId.QWERTY, Settings.englishOf(saved), "$saved")
     }
     @Test fun layout_choices_read_back_what_was_saved() {
@@ -30,7 +30,7 @@ class SettingsTest {
             listOf(LayoutId.KANA, LayoutId.ROMAJI, LayoutId.QWERTY, LayoutId.LATIN_FLICK).map(Settings::savedName))
     }
     @Test fun a_layout_of_the_wrong_kind_is_saved_as_the_default_of_that_setting() {
-        assertEquals(LayoutId.KANA, Settings.japaneseOf(Settings.savedName(LayoutId.SYMBOLS)))
+        assertEquals(LayoutId.ROMAJI, Settings.japaneseOf(Settings.savedName(LayoutId.SYMBOLS)))
         assertEquals(LayoutId.QWERTY, Settings.englishOf(Settings.savedName(LayoutId.SYMBOLS)))
     }
     @Test fun the_two_choices_are_saved_under_their_own_keys() {

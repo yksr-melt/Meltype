@@ -1,5 +1,6 @@
 package io.github.ninjin0802.keyboard.app.core
 
+import android.content.Context
 import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import androidx.test.platform.app.InstrumentationRegistry
@@ -22,6 +23,41 @@ class LanguageDetectionDeviceTest {
         override fun convert(reading: String, context: String?): List<Segment>? = null
         override fun predict(reading: String): List<String> = emptyList()
         override fun learn(clauses: List<Clause>, context: String?) {}
+    }
+
+    @Test fun freshSettingsDefaultToRomajiHalfWidthAndNoEmoji() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
+        val keys = listOf("japanese_layout", "japanese_space_full_width", "emoji_enabled")
+        val original = prefs.all.toMap()
+        try {
+            val clear = prefs.edit()
+            keys.forEach(clear::remove)
+            check(clear.commit())
+            val settings = io.github.ninjin0802.keyboard.app.Settings(ctx)
+            assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI, settings.japaneseLayout)
+            assertEquals(false, settings.japaneseSpaceFullWidth)
+            assertEquals(false, settings.emojiEnabled)
+
+            settings.japaneseLayout = io.github.ninjin0802.keyboard.app.layout.LayoutId.KANA
+            settings.japaneseSpaceFullWidth = true
+            settings.emojiEnabled = true
+            val saved = io.github.ninjin0802.keyboard.app.Settings(ctx)
+            assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.KANA, saved.japaneseLayout)
+            assertEquals(true, saved.japaneseSpaceFullWidth)
+            assertEquals(true, saved.emojiEnabled)
+        } finally {
+            val restore = prefs.edit()
+            keys.forEach { key ->
+                when (val value = original[key]) {
+                    null -> restore.remove(key)
+                    is String -> restore.putString(key, value)
+                    is Boolean -> restore.putBoolean(key, value)
+                    else -> error("Unexpected setting type for $key")
+                }
+            }
+            check(restore.commit())
+        }
     }
 
     private fun type(text: String): String {

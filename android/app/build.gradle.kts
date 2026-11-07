@@ -60,7 +60,7 @@ android {
         release {
             // 使わないコードを落として小さくする。残すものは mozc/consumer-rules.pro に書いてある。
             isMinifyEnabled = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             // The release variant is deliberately unsigned without the secret key.
             // Only the release workflow may publish Meltype.apk.
             signingConfig = distributionKeystore?.let { signingConfigs.getByName("meltypeDistribution") }

@@ -28,14 +28,14 @@ class Settings(context: Context) {
         get() = englishOf(prefs.getString(KEY_ENGLISH_LAYOUT, null))
         set(value) { prefs.edit().putString(KEY_ENGLISH_LAYOUT, savedName(value)).apply() }
 
-    /** Japanese layout only. Japanese space defaults to full-width, like the original layout. */
+    /** Japanese layout only. The default is a half-width space. */
     var japaneseSpaceFullWidth: Boolean
-        get() = prefs.getBoolean(KEY_JAPANESE_SPACE_FULL_WIDTH, true)
+        get() = prefs.getBoolean(KEY_JAPANESE_SPACE_FULL_WIDTH, false)
         set(value) { prefs.edit().putBoolean(KEY_JAPANESE_SPACE_FULL_WIDTH, value).apply() }
 
     /** Hides emoji keys/panel and suppresses emoji suggestions when disabled. */
     var emojiEnabled: Boolean
-        get() = prefs.getBoolean(KEY_EMOJI_ENABLED, true)
+        get() = prefs.getBoolean(KEY_EMOJI_ENABLED, false)
         set(value) { prefs.edit().putBoolean(KEY_EMOJI_ENABLED, value).apply() }
 
     var hapticEnabled: Boolean
@@ -62,8 +62,8 @@ class Settings(context: Context) {
         const val KEY_LIVE_CONVERSION_ENABLED = "live_conversion_enabled"
         const val KEY_ENGLISH_LAYOUT = "english_layout"
 
-        /** 保存してある値から、日本語の配列を決める。保存がない・知らない値のときは、最初の値（かな配列）。 */
-        fun japaneseOf(saved: String?): LayoutId = if (saved == savedName(LayoutId.ROMAJI)) LayoutId.ROMAJI else LayoutId.KANA
+        /** 保存してある値から日本語の配列を決める。未設定・不明な値はローマ字配列。 */
+        fun japaneseOf(saved: String?): LayoutId = if (saved == savedName(LayoutId.KANA)) LayoutId.KANA else LayoutId.ROMAJI
 
         /** 保存してある値から、英語の配列を決める。保存がない・知らない値のときは、最初の値（英字配列）。 */
         fun englishOf(saved: String?): LayoutId = if (saved == savedName(LayoutId.LATIN_FLICK)) LayoutId.LATIN_FLICK else LayoutId.QWERTY

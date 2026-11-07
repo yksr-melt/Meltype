@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 KoheiTakada -->
+<resources>
+    <color name="meltype_icon_background">#F5F9FF</color>
+</resources>
