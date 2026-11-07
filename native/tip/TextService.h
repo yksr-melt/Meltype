@@ -122,12 +122,15 @@ private:
     bool Request(const std::string& json, JsonValue& reply, DWORD timeoutMs = 800, bool optional = false);
     // 応答を入力欄に反映する (編集セッションの中で呼ぶ)
     void Apply(TfEditCookie ec, ITfContext* context, const JsonValue& reply);
+    // 一時コンテキストの確定後、入力先と確定位置がそのままなら左キーで移動する。
+    void MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int count);
     // range の前の count 文字が expect (前に確定した文字) なら、range をそこまで広げる。違えば false
     bool ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect);
     // 次の編集セッションで、キャレットの前の count 文字が before のままなら text に書き換えて確定する
     void RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG count, const std::wstring& before, const std::wstring& text);
     // range を text で置き換えて確定する (アプリによっては変換中の文字としてでないと入らないので、いったん変換中にする)
-    bool WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text);
+    // 括弧の内側に選択位置を設定できた場合は、続く確定の挿入先を movedCaret に返す。
+    bool WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack = 0, ITfRange** movedCaret = nullptr);
     void ApplyComposition(TfEditCookie ec, ITfContext* context, const JsonValue& view);
     void ShowCandidates(TfEditCookie ec, ITfContext* context, const JsonValue& view);
     void EndComposition(TfEditCookie ec);
@@ -142,7 +145,7 @@ private:
     void ResumeOrCommit(ITfContext* context);
     void CommitInSession(TfEditCookie ec, ITfContext* context, bool keepAppCaret);
     void SelectCandidate(int index, bool prediction);
-    void Reinject(UINT vk);
+    bool Reinject(UINT vk);
     void SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after);
     bool ContextDisabled(ITfContext* context);
     void AdviseTextEditSink(ITfDocumentMgr* documentMgr);

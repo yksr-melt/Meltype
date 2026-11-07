@@ -510,6 +510,15 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         KeyReplayed?.Invoke(e);
     }
 
+    public void MoveCaretBackward(int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            Replay(new KeyEvent(VirtualKeys.Left, 0, false, false, false, Environment.TickCount64));
+            Replay(new KeyEvent(VirtualKeys.Left, 0, false, true, false, Environment.TickCount64));
+        }
+    }
+
     public void DeleteBackward(int count)
     {
         if (count <= 0) return;

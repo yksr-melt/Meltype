@@ -51,6 +51,9 @@ public interface ICompositionHost
     /// <summary>確定した文字列を、フォーカスのあるテキストボックスへ入力する。</summary>
     void CommitText(string text);
 
+    /// <summary>直前に確定した文字の末尾から、キャレットを count 文字だけ左へ戻す。現在の打鍵の通過とは別の操作。</summary>
+    void MoveCaretBackward(int count);
+
     /// <summary>握りつぶしていた打鍵を、そのままアプリへ送り直す。</summary>
     void Replay(KeyEvent e);
 
@@ -3305,12 +3308,10 @@ public sealed class CompositionController
             _host.ReplaceBackward(count, replacement, text);
         }
         else _host.CommitText(text);
-        // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、← を送って中に入る (issue #72)
+        // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
+        // Replay で頼むと、セッション方式では確定に使ったキーまで未消費になる (#991・#1353・#1404・#1581)。
         if (_options.CursorIntoBrackets() && text.Length == 2 && BracketPairs.Contains(text))
-        {
-            _host.Replay(new KeyEvent(VirtualKeys.Left, 0, false, false, false, Environment.TickCount64));
-            _host.Replay(new KeyEvent(VirtualKeys.Left, 0, false, true, false, Environment.TickCount64));
-        }
+            _host.MoveCaretBackward(1);
         Committed?.Invoke(text);
     }
 
