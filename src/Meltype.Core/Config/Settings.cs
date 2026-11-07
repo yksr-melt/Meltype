@@ -347,7 +347,7 @@ public sealed class Settings
     public string ControlKeyBindings { get; set; } = "";
 
     [Category("6. 記号・スペース"), DisplayName("カッコを打ったら中にカーソルを移動"),
-     Description("カッコだけ（「」・（）・() など）を確定したときに、カーソルをカッコの中へ移動します (← キーを自動で送ります)。")]
+     Description("カッコだけ（「」・（）・() など）を確定したときに、カーソルをカッコの中へ移動します。Windows の Meltype IME・Meltype キーボードで対応しています。macOS・Linux は未対応です。")]
     public bool CursorIntoBrackets { get; set; }
 
     [Category("5. 候補"), DisplayName("計算式を変換すると結果を候補に出す"),

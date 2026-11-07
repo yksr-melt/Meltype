@@ -42,7 +42,7 @@ internal static class TipContractTests
 
         public Dll()
         {
-            _service = TipHarness.CreateService(_invoker);
+            _service = TipHarness.CreateService(_invoker, () => Settings.CursorIntoBrackets);
             _server = new TipServer(_invoker, _service, () => Settings);
         }
 
@@ -67,6 +67,8 @@ internal static class TipContractTests
                 '\n' => (0x0D, 0),
                 '\b' => (0x08, 0),
                 '\u001b' => (0x1B, 0),
+                '[' => (0xDB, (int)key),
+                ']' => (0xDD, (int)key),
                 >= 'a' and <= 'z' => (key - 'a' + 'A', (int)key),
                 _ => throw new ArgumentException($"送れないキー: {key}"),
             };
@@ -153,9 +155,47 @@ internal static class TipContractTests
         }
     }
 
+    [Test]
+    public static void BracketCommitKeepsEnterConsumedAndReturnsCaretBack()
+    {
+        foreach (var enabled in new[] { false, true })
+        {
+            foreach (var convert in new[] { false, true })
+            {
+                using var dll = new Dll();
+                dll.Settings.CursorIntoBrackets = enabled;
+                dll.Type(convert ? "[] " : "[]");
+                var result = dll.Key('\n');
+                Assert.True(result.GetProperty("consumed").GetBoolean(), "確定 Enter を送り直さない\n" + dll.Trace);
+                Assert.Equal("「」", dll.Document, dll.Trace);
+                var edit = result.GetProperty("commits")[0];
+                Assert.Equal(enabled, edit.TryGetProperty("caretBack", out var caret), dll.Trace);
+                if (enabled) Assert.Equal(1, caret.GetInt32(), "DLL に独立した移動要求を渡す\n" + dll.Trace);
+            }
+        }
+    }
+
     private static bool Consumed(JsonElement reply) => reply.GetProperty("consumed").GetBoolean();
 
     private static bool Active(JsonElement reply) => reply.GetProperty("active").GetBoolean();
+
+    [Test]
+    public static void BracketCandidateCommitReturnsTheFollowingCompositionTogether()
+    {
+        foreach (var enabled in new[] { false, true })
+        {
+            using var dll = new Dll();
+            dll.Settings.CursorIntoBrackets = enabled;
+            dll.Type("[] ");
+            var result = dll.Key('k');
+            Assert.True(result.GetProperty("consumed").GetBoolean(), dll.Trace);
+            var edit = result.GetProperty("commits")[0];
+            Assert.Equal("「」", edit.GetProperty("text").GetString(), dll.Trace);
+            Assert.Equal(enabled, edit.TryGetProperty("caretBack", out var caret), dll.Trace);
+            if (enabled) Assert.Equal(1, caret.GetInt32(), dll.Trace);
+            Assert.Equal("k", result.GetProperty("view").GetProperty("text").GetString(), dll.Trace);
+        }
+    }
 
     [Test]
     public static void Type_Convert_Commit_ThenTypeAgain()

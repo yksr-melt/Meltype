@@ -114,6 +114,16 @@ internal static class CompositionTests
             Events.Add($"{(e.IsUp ? "up" : "down")}:{e.Vk:X2}");
             Replayed?.Invoke(e);
         }
+
+        public void MoveCaretBackward(int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                Replay(new KeyEvent(VirtualKeys.Left, 0, false, false, false, 0));
+                Replay(new KeyEvent(VirtualKeys.Left, 0, false, true, false, 0));
+            }
+        }
+
         public void Replay(MouseButtonEvent e) => Events.Add($"mouse:{e.Message:X}");
 
         public char? CharFromKey(KeyEvent e, bool shift)
