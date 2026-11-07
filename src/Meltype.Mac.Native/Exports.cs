@@ -189,6 +189,27 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "meltype_select_candidate")]
     public static byte* SelectCandidate(IntPtr handle, int index) => Run(handle, session => session.SelectCandidate(index));
 
+    /// <summary>Android: choose a prediction in the current view.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_select_prediction")]
+    public static byte* SelectPrediction(IntPtr handle, int index) =>
+        Run(handle, session => session.SelectPrediction(index));
+
+    /// <summary>Android: enable or disable live conversion in the active session.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_live_conversion")]
+    public static void SetLiveConversion(IntPtr handle, int enabled)
+    {
+        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+            session.SetLiveConversion(enabled != 0);
+    }
+
+    /// <summary>Android: disable user learning for editors requesting private input.</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_private")]
+    public static void SetPrivate(IntPtr handle, int isPrivate)
+    {
+        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+            session.Private = isPrivate != 0;
+    }
+
     /// <summary>英数 (直接入力) にするか (1) 日本語にするか (0)。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_direct")]
     public static void SetDirect(IntPtr handle, int direct)

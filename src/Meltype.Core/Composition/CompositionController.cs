@@ -36,6 +36,8 @@ public sealed record CompositionView(
     IReadOnlyList<string>? Predictions = null,
     int SelectedPrediction = -1,
     string? Typed = null,
+    string? Raw = null,
+    string? Kana = null,
     string? Committed = null,
     string? ContextHint = null);
 
@@ -3426,6 +3428,7 @@ public sealed class CompositionController
             var preview = selected is null && misspelling is null ? TypingCandidates() : null;
             _host.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
                 Predictions: _predictions.Count > 0 ? _predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
+                Raw: _text.Raw, Kana: _text.AllKana(final: true),
                 Committed: selected ?? CurrentDisplay(final: true), ContextHint: contextHint));
         }
     }

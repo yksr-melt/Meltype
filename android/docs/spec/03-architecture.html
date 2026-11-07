@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>03 構成 | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html" aria-current="page">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>03 構成</h1>
+      <p class="status"><span class="badge fixed">確定</span></p>
+<h2 id="対応環境">対応環境</h2>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>値</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>対応 OS</td>
+<td>Android 8.0（API 26）以降</td>
+</tr>
+<tr>
+<td>CPU</td>
+<td>arm64-v8a（実機）、x86_64（エミュレーター）</td>
+</tr>
+<tr>
+<td>言語</td>
+<td>Kotlin（Android UI・フリック処理）、C#（共有Meltype.Core、NativeAOT）、C++（JNI・Mozc）</td>
+</tr>
+<tr>
+<td>ビルド</td>
+<td>Gradle（Kotlin DSL）、.NET NativeAOT、Android NDK</td>
+</tr>
+<tr>
+<td>リポジトリ</td>
+<td>本家のAndroid開発元 <code>ninjin0802/Meltype:android</code> に対するFork上の機能追加ブランチ</td>
+</tr>
+<tr>
+<td>アプリの表示名</td>
+<td>Meltype</td>
+</tr>
+<tr>
+<td>アプリ ID</td>
+<td><code>io.github.ninjin0802.keyboard</code>（公開前に変えてよい。変えると別アプリ扱いになり学習データは引き継がれない）</td>
+</tr>
+</tbody></table>
+<h2 id="モジュール">モジュール</h2>
+<p>既存のGradle 3モジュールに、共有C# CoreとJNIの経路を追加する。</p>
+<table>
+<thead>
+<tr>
+<th>モジュール</th>
+<th>役割</th>
+<th>Android への依存</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>app</code></td>
+<td>キーボード本体。配列の描画、タッチとフリックの判定、候補バー、入力欄とのやり取り、導入画面</td>
+<td>あり</td>
+</tr>
+<tr>
+<td><code>engine</code></td>
+<td>12キーフリック等の既存の入力セッションとライブ変換を処理。日英判別の本体はここには移植しない</td>
+<td>なし（純粋な Kotlin）</td>
+</tr>
+<tr>
+<td><code>mozc</code></td>
+<td>Mozc を呼び出す層。変換エンジンの本体（<code>libmozc.so</code>）と辞書（<code>mozc.data</code>）を同梱する</td>
+<td>あり</td>
+</tr>
+<tr><td><code>src/Meltype.Core/</code>（共有）</td><td>QWERTYローマ字入力の日英自動判別、未確定文字と候補の管理</td><td>C#（Android向けNativeAOT出力）</td></tr>
+<tr><td><code>app/src/main/cpp/</code></td><td>C# NativeAOTライブラリとのJNI接続、Kotlinからのコールバック</td><td>あり（NDK）</td></tr></tbody></table>
+<h3 id="依存の向き">依存の向き</h3>
+<pre>app ──→ engine ──→ mozc   （フリック等）
+ │
+ └──→ JNI ──→ C# Meltype.Core (NativeAOT) ──→ Mozc （日本語QWERTY）
+</pre>
+<ul>
+<li><code>engine</code> は他のどのモジュールにも依存しない。変換は <code>Converter</code> という窓口（<a href="06-conversion-mozc.html">06</a>）越しに頼む。</li>
+<li><code>mozc</code> はその窓口を実装する。<code>engine</code> は相手が Mozc であることを知らない。</li>
+<li><code>app</code> は日本語QWERTYで共有Coreを呼び、他の入力方式は既存engineへ接続する。変換は端末内で完結させる。</li>
+</ul>
+<p>こう分ける理由は、<code>engine</code> を PC 上の単体テストだけで確かめられるようにするため。テストでは <code>Converter</code> を偽物に差し替える。</p>
+<h2 id="処理の流れ">処理の流れ</h2>
+<ol>
+<li>利用者がキーを押す。<code>app</code> がタッチ位置とフリック方向から、どの操作かを決める（例: 「か」を入力、「削除」）。</li>
+<li><code>app</code> は日本語QWERTYならJNI経由でC# Coreへ、他の配列ならKotlin <code>engine</code> へ操作を渡す。</li>
+<li>入力方式に応じてC# CoreまたはKotlin engineが未確定文字と変換状態を更新し、必要ならMozcに変換を依頼する。</li>
+<li>Coreまたはengineが未確定文字、確定文字、候補を返す。Androidのアダプターが表示・入力指示へ変換する。</li>
+<li><code>app</code> がその指示どおりに、入力欄と候補バーを更新する。</li>
+</ol>
+<p>C# CoreとKotlin engineはいずれもAndroidの入力欄に直接触れない。入力欄への書き込みは<code>app</code>の<code>InputConnection</code>アダプターが行う。詳しくは<a href="08-auto-detection.html">08</a>。</p>
+<h2 id="スレッド">スレッド</h2>
+<ul>
+<li>キーの描画とタッチの処理は、画面のスレッドで行う。</li>
+<li>変換は時間がかかることがあるので、専用のスレッド1本で順番に行う。</li>
+<li>変換の結果が返ったとき、その間に読みが変わっていたら、その結果は捨てる。入力欄が切り替わっていた場合も捨てる。</li>
+</ul>
+<h2 id="キーボード画面の作り方">キーボード画面の作り方</h2>
+<p>Jetpack Compose は使わず、独自の View で描く。キーボードは押してからの反応の速さが最も大事で、独自 View のほうが軽く、IME での実績も多い。導入画面も同じ理由で通常の View で作り、依存を増やさない。</p>
+      <nav class="pager" aria-label="前後の章">
+        <a href="02-roadmap.html">← 02 段階と範囲</a>
+        <a href="04-keyboard-ui.html">04 キーボード画面 →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

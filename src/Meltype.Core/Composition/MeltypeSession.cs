@@ -9,6 +9,16 @@ using Meltype.Input;
 
 namespace Meltype.Composition;
 
+// NativeAOT features are enabled only for the Android publication.
+internal static class AndroidNativeRuntime
+{
+#if MELTYPE_ANDROID_NATIVE
+    internal static readonly bool Enabled = true;
+#else
+    internal static readonly bool Enabled = false;
+#endif
+}
+
 /// <summary>
 /// 入力欄への書き込み 1 回分。DeleteBefore 文字をキャレットの前から消してから Text を入れる (確定し直すとき以外は 0)。
 /// Expect は消す文字 (このセッションで確定した文字。分からなければ null)。
@@ -98,6 +108,14 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"predictions\":");
         AppendArray(builder, view.Predictions ?? []);
         builder.Append(",\"selectedPrediction\":").Append(view.SelectedPrediction);
+        // Preserve raw keystrokes and kana interpretation in Android's JNI response.
+        if (AndroidNativeRuntime.Enabled)
+        {
+            builder.Append(",\"raw\":");
+            AppendString(builder, view.Raw ?? "");
+            builder.Append(",\"kana\":");
+            AppendString(builder, view.Kana ?? "");
+        }
         // 打ったキー (設定「打ったキーを表示」が OFF なら null)
         builder.Append(",\"typed\":");
         if (view.Typed is { } typed) AppendString(builder, typed);
@@ -255,7 +273,12 @@ public sealed class MeltypeSession
             MoreCandidates = moreCandidates,
             TranslationCandidates = () => settings().TranslationCandidates,
             TabConversion = () => settings().TabConversion,
-            ContinueAfterConversion = () => settings().ContinueAfterConversion,
+            ContinueAfterConversion = () => AndroidNativeRuntime.Enabled || settings().ContinueAfterConversion,
+            Predictor = AndroidNativeRuntime.Enabled ? new Predictor(
+                new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt")),
+                new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory),
+                new ConversionHistory(Path.Combine(dataDirectory, "conversions.json"))) : shared.Options.Predictor,
+            Predictions = AndroidNativeRuntime.Enabled ? () => true : shared.Options.Predictions,
             Learning = () => settings().LearningEnabled,
             SeparateKeyRoles = () => settings().SeparateKeyRoles,
             EnglishFirstInput = () => settings().EnglishFirstInput,
@@ -292,6 +315,9 @@ public sealed class MeltypeSession
         };
         return new MeltypeSession(detector, converter, options, settings);
     }
+
+    /// <summary>Android IME: update live conversion on the active session.</summary>
+    public void SetLiveConversion(bool enabled) => _settings().LiveConversion = enabled;
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
     public bool Direct

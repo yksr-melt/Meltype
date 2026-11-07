@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>10 ライセンス | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html" aria-current="page">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>10 ライセンス</h1>
+      <p class="status"><span class="badge fixed">確定</span></p>
+<h2 id="このアプリのライセンス">このアプリのライセンス</h2>
+<p>GPL-3.0-or-later。</p>
+<p>段階3で Meltype（GPL-3.0）のコードを Kotlin に移植して取り込むため、アプリ全体が GPL-3.0 になる。最初からこのライセンスにしておく。</p>
+<p>公開するときは、配布する APK に対応するソースコードを一緒に公開する。</p>
+<h2 id="同梱・利用するもの">同梱・利用するもの</h2>
+<table>
+<thead>
+<tr>
+<th>もの</th>
+<th>ライセンス</th>
+<th>使う段階</th>
+<th>必要なこと</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><a href="https://github.com/google/mozc">Mozc</a>（エンジン本体と辞書）</td>
+<td>BSD-3-Clause。辞書や依存ライブラリはそれぞれの条件</td>
+<td>段階1</td>
+<td>著作権表示とライセンス文を同梱する</td>
+</tr>
+<tr>
+<td>Meltype の辞書 <code>loanwords.txt</code>（JMdict から作られたもの）</td>
+<td>CC BY-SA 4.0</td>
+<td>段階2</td>
+<td>出典（JMdict / Electronic Dictionary Research and Development Group）とライセンスを表示する。手を加えたものも同じ条件で公開する</td>
+</tr>
+<tr>
+<td><a href="https://github.com/yksr-melt/Meltype">Meltype</a> のコードと辞書</td>
+<td>GPL-3.0。辞書はファイルごとの条件</td>
+<td>段階3</td>
+<td>元の著作権表示を残す。移植したファイルには、元のファイルと移植したことを明記する</td>
+</tr>
+<tr>
+<td>Unicode の絵文字の一覧 <a href="https://unicode.org/Public/18.0.0/emoji/emoji-test.txt"><code>emoji-test.txt</code></a>（Unicode Emoji 18.0。形を変えたものを <code>app/src/main/assets/emoji.txt</code> として入れる）</td>
+<td>Unicode License v3</td>
+<td>段階1</td>
+<td>著作権表示と許諾の文を同梱する。版を上げるときは、<code>tools/make-emoji-asset.py</code> で作り直し、この行と <code>THIRD-PARTY-NOTICES.md</code> の版を直す</td>
+</tr>
+<tr>
+<td>Kotlin や Android の標準ライブラリ、Protocol Buffers</td>
+<td>Apache-2.0、BSD-3-Clause など</td>
+<td>段階1</td>
+<td>ライセンス文を同梱する</td>
+</tr>
+</tbody></table>
+<h2 id="表記の置き場所">表記の置き場所</h2>
+<ul>
+<li>リポジトリの直下に <code>LICENSE</code>（GPL-3.0 の全文）と <code>THIRD-PARTY-NOTICES.md</code>（同梱物の一覧と各ライセンス文）を置く。</li>
+<li>アプリの導入画面から、同じ内容を見られるようにする。</li>
+<li>Mozc とその依存ライブラリの表記は、Mozc のビルドのスクリプトが集める（<a href="06-conversion-mozc.html">06</a>）。</li>
+</ul>
+<h2 id="新しく何かを取り込むとき">新しく何かを取り込むとき</h2>
+<p>取り込む前に、GPL-3.0 と一緒に配布できるライセンスかを確かめ、上の表に行を足す。</p>
+      <nav class="pager" aria-label="前後の章">
+        <a href="09-privacy-security.html">← 09 プライバシーと安全</a>
+        <a href="11-testing.html">11 テスト →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>
