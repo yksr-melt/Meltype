@@ -2,14 +2,12 @@
 // Copyright (C) 2026 Yukishiro
 // PR の作者が、本文の「Fixes #123」などで閉じる Issue の担当 (Assignees) に入っていなければ、PR を Draft にする (issue #1208)。
 // 担当のいない Issue・関連 Issue の書かれていない PR はそのまま。メンテナー (OWNER / MEMBER / COLLABORATOR) の PR も対象にしない。
-// PR のイベントではその PR を、定期実行では開いているすべての PR を確かめる (イベントの job が取り消されても、次の定期実行で拾う)。
+// 定期実行・手動の実行で、開いているすべての PR を確かめる。
 // GitHub の本文はデータとして読むだけ。PR のコードは実行しない。
-import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const Marker = '<!-- meltype-bot --><!-- assignee -->';
 const Maintainers = new Set(['OWNER', 'MEMBER', 'COLLABORATOR']);
-const Actions = new Set(['opened', 'reopened', 'ready_for_review', 'edited']);
 const BotLogins = new Set(['github-actions[bot]', 'meltype-helper[bot]']);
 
 /**
@@ -76,7 +74,6 @@ export function githubApi({ token, repository, api = 'https://api.github.com', f
 
 /**
  * 1 つの PR を確かめ、担当でなければ Draft にして理由をコメントする (前のコメントがあれば書き換える)。
- * pr は確かめる直前に取った PR (本文・開いているか・Draft か は、イベントの時点ではなく今のもの)。
  */
 async function checkPull(api, pr, repository) {
   if (!pr || pr.state !== 'open' || pr.draft) return 'skip';
@@ -98,27 +95,14 @@ async function checkPull(api, pr, repository) {
   return 'draft';
 }
 
-/**
- * PR のイベントならその PR を、定期実行・手動の実行なら開いているすべての PR を確かめる。
- * 結果は PR 番号ごとの 'skip' / 'ok' / 'draft'。
- */
-export async function runAssigneeCheck(api, event, eventName, repository = '') {
+/** 開いているすべての PR を確かめる。結果は PR 番号ごとの 'skip' / 'ok' / 'draft'。 */
+export async function runAssigneeCheck(api, repository = '') {
   const results = {};
-  if (eventName === 'schedule' || eventName === 'workflow_dispatch') {
-    const pulls = await api.list('/pulls?state=open');
-    for (const pr of pulls) results[pr.number] = await checkPull(api, pr, repository);
-    return results;
-  }
-  const number = event.pull_request?.number;
-  if (!number || !Actions.has(event.action)) return results;
-  if (event.action === 'edited' && !event.changes?.body) return results;
-  // イベントが届くまでの間に本文の書き換え・Draft 化・クローズがあっても、今の PR で確かめる
-  results[number] = await checkPull(api, await api.request('GET', `/pulls/${number}`), repository);
+  for (const pr of await api.list('/pulls?state=open')) results[pr.number] = await checkPull(api, pr, repository);
   return results;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
   const repository = process.env.GITHUB_REPOSITORY;
-  console.log(await runAssigneeCheck(githubApi({ token: process.env.GITHUB_TOKEN, repository }), event, process.env.GITHUB_EVENT_NAME, repository));
+  console.log(await runAssigneeCheck(githubApi({ token: process.env.GITHUB_TOKEN, repository }), repository));
 }
