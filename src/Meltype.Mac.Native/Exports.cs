@@ -7,6 +7,8 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Detection;
+using Meltype.Ime;
+using Meltype.Input;
 
 namespace Meltype.Mac;
 
@@ -129,6 +131,46 @@ public static unsafe class Exports
     public static void Destroy(IntPtr handle)
     {
         if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+    }
+
+    /// <summary>フロント 1 つ (IBus のエンジン 1 つ) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_ime_create")]
+    public static IntPtr ImeCreate() => GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment())));
+
+    /// <summary>出来事 (<see cref="ImeEvent"/> の JSON) を処理して、<see cref="ImeOutput"/> の JSON を返す。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_ime_handle")]
+    public static byte* ImeHandle(IntPtr handle, byte* json)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not ImeHost host) return null;
+            return ToUtf8(host.Handle(FromUtf8(json) ?? ""));
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
+            return null;
+        }
+    }
+
+    [UnmanagedCallersOnly(EntryPoint = "meltype_ime_destroy")]
+    public static void ImeDestroy(IntPtr handle)
+    {
+        if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
+    }
+
+    /// <summary>Mac・Linux の環境。設定は config.json、コードの入力欄はフロントが知らせるターミナルの印で決める。</summary>
+    private sealed class NativeEnvironment : IImeEnvironment
+    {
+        public Config.Settings Settings => MeltypeSession.DefaultSettings();
+
+        public bool Active => Settings.Enabled;
+
+        public CodeFocus? CodeFocus(bool terminal) => terminal ? Input.CodeFocus.Terminal : Input.CodeFocus.None;
+
+        public MeltypeSession CreateSession() =>
+            MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null,
+                directModeDetection: true);
     }
 
     /// <summary>

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Globalization;
+using System.Text;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Input;
@@ -38,9 +40,10 @@ internal sealed class ImeSession(IImeEnvironment environment)
         var result = e.Type switch
         {
             ImeEventType.Key when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, ref explicitChange) : Leave(),
-            ImeEventType.Toggle when active => Switch(!wasJapanese, before, ref explicitChange),
-            ImeEventType.SetMode when active => Switch(e.Japanese, before, ref explicitChange),
+            ImeEventType.Toggle when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
+            ImeEventType.SetMode when active => Switch(e.Japanese, before, ref explicitChange, toggle: false),
             ImeEventType.Commit => _session.CommitPending(),
+            ImeEventType.Committed => CommittedOutside(e.Field),
             ImeEventType.Select => e.Prediction ? _session.SelectPrediction(e.Index) : _session.SelectCandidate(e.Index),
             ImeEventType.Refresh when active => _session.RefreshConversion() ?? Pass,
             _ => Pass,
@@ -84,9 +87,11 @@ internal sealed class ImeSession(IImeEnvironment environment)
                 _session.ForgetDirectInput();
             }
             if (caret.Passed is { } vk) _session.CaretMoved(vk, caret.Ctrl);
+            if (caret.Left) _session.ForgetCodeLine();
         }
         if (e.Field is not { } field) return;
         _session.Private = field.Private;
+        _session.CanDeleteSurrounding = field.CanDelete;
         if (environment.CodeFocus(field.Terminal) is { } focus)
         {
             var code = focus != CodeFocus.None;
@@ -108,23 +113,47 @@ internal sealed class ImeSession(IImeEnvironment environment)
         {
             return composing
                 ? _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, toggleShortcuts: false)
-                : Switch(!ShowsJapanese(before), before, ref explicitChange);
+                : Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
         }
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
-        if (vk == VirtualKeys.OemAttn && plain) return Switch(false, before, ref explicitChange);
+        if (vk == VirtualKeys.OemAttn && plain) return Switch(false, before, ref explicitChange, toggle: false);
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
         {
             if (_session.HandleRoleKey(vk) is { } role) return role;
-            if (!composing && (vk == VirtualKeys.Kana || settings.ConvertKeysSwitchKeyboard)) return Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange);
+            if (!composing && (vk == VirtualKeys.Kana || settings.ConvertKeysSwitchKeyboard))
+                return Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
         }
+        // 不正な Unicode (負数・単独サロゲート・上限超過) は、状態を変えずにアプリへそのまま渡す
+        if (key.Ch != 0 && !Rune.IsValid(key.Ch)) return _session.PassThrough();
+        // 結合文字は、未確定の表示に取り込まず、直前の内容を確定してからアプリに通す。
+        // U+0300..036F の Latin アクセントのみ ASCII 英字の原文を優先する (濁点・異体字セレクターでは、日本語の表示や選んだ候補をそのまま確定する)
+        if (key.Ch != 0 && Rune.GetUnicodeCategory(new Rune(key.Ch)) is UnicodeCategory.NonSpacingMark or
+            UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark)
+            return _session.CommitCombiningForPassThrough(preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return _session.CommitForPassThrough();
-        return _session.HandleKey(key.Vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command,
+        var result = _session.HandleKey(key.Vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command,
             before, field?.After, toggleShortcuts: false);
+        // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
+        if (!result.Consumed) _session.CaretMoved(key.Vk, key.Ctrl);
+        return result;
     }
 
-    /// <summary>表示するモードを japanese にする。変換中なら確定してから。コードの行では、IME を開いたまま行を日本語 / 英数にする。</summary>
-    private SessionResult Switch(bool japanese, string? before, ref bool explicitChange)
+    /// <summary>OS が変換中の文字を表示のまま確定した: 本体も確定したことにする。文字はもう入っているので、確定し直しも入れない。</summary>
+    private SessionResult CommittedOutside(ImeField? field)
+    {
+        _session.CanDeleteSurrounding = false;
+        _session.CommitPending();
+        _session.CanDeleteSurrounding = field?.CanDelete ?? true;
+        return Consumed;
+    }
+
+    /// <summary>
+    /// 表示するモードを japanese にする。変換中なら確定してから。日本語にするときは、コードの行もその行だけ日本語にする。
+    /// 英数にするとき、toggle (日本語 ⇔ 英数の切り替え) は、日本語にしていたコードの行を英数に戻すだけで IME を開いたままにする。
+    /// そうでなければ (英数キー・無変換) 直接入力にする。
+    /// </summary>
+    private SessionResult Switch(bool japanese, string? before, ref bool explicitChange, bool toggle)
     {
         explicitChange = true;
         var result = _session.IsComposing ? _session.CommitPending() : Consumed;
@@ -133,9 +162,10 @@ internal sealed class ImeSession(IImeEnvironment environment)
             _session.Direct = false;
             if (_session.CodeEnglishAt(before)) _session.SetCodeLine(true, before);
         }
-        else if (!_session.SetCodeLine(false, before))
+        else
         {
-            _session.Direct = true;
+            var codeLineReset = _session.SetCodeLine(false, before);
+            if (!toggle || !codeLineReset) _session.Direct = true;
         }
         return result;
     }

@@ -19,8 +19,10 @@ public enum ImeEventType
     [JsonStringEnumMemberName("toggle")] Toggle,
     /// <summary>モードを指定して切り替える (入力メニューで選んだなど)。</summary>
     [JsonStringEnumMemberName("setMode")] SetMode,
-    /// <summary>未確定の内容を確定する (フォーカスが移った・アプリが確定したなど)。</summary>
+    /// <summary>未確定の内容を確定する (フォーカスが移ったなど)。確定する文字は応答で返す。</summary>
     [JsonStringEnumMemberName("commit")] Commit,
+    /// <summary>OS・アプリが、変換中の文字を表示のまま確定した (IBus のフォーカスの移動・TSF の OnCompositionTerminated)。応答で確定はしない。</summary>
+    [JsonStringEnumMemberName("committed")] Committed,
     [JsonStringEnumMemberName("select")] Select,
     /// <summary>背景の変換の結果が届いた。</summary>
     [JsonStringEnumMemberName("refresh")] Refresh,
@@ -91,6 +93,9 @@ public sealed record ImeField
     public bool Private { get; init; }
     /// <summary>OS がターミナルと知らせてきた入力欄 (IBus の InputPurpose.TERMINAL・fcitx5 の CapabilityFlag::Terminal)。</summary>
     public bool Terminal { get; init; }
+    /// <summary>確定した文字を消せる入力欄か (消せなければ確定し直さない)。</summary>
+    // init にすると、source-gen の JSON は項目が無いときに初期値ではなく false を入れる
+    public bool CanDelete { get; set; } = true;
 }
 
 public sealed record ImeCaret
@@ -101,6 +106,8 @@ public sealed record ImeCaret
     public int? Passed { get; init; }
     /// <summary>Passed のとき Ctrl を押していたか。</summary>
     public bool Ctrl { get; init; }
+    /// <summary>フォーカスが入力欄から外れた (日本語にしていたコードの行を英数に戻す)。</summary>
+    public bool Left { get; init; }
 }
 
 /// <summary>出来事を処理したあとの状態。フロントは毎回まるごと置き換え、自分では状態を持たない。</summary>

@@ -103,12 +103,12 @@ class NativeBoundaryTests(unittest.TestCase):
         self.assert_pass(self.key(ord("k")))
         self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 0, None))
 
-    def test_code_mode_reports_utf8_and_tracks_nullable_before(self):
+    def test_code_mode_reports_utf8_and_treats_null_before_as_code(self):
         self.assertEqual(0, self.lib.meltype_code_english_at(self.session, b"$ "))
         self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 1, None))
         self.lib.meltype_set_code_input(self.session, 1)
         self.assertEqual(1, self.lib.meltype_code_english_at(self.session, b"$ "))
-        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None), "unknown text before the caret is a code line")
 
         prompt = "│ › 日本語😊 ".encode("utf-8")
         before = ctypes.create_string_buffer(prompt)
@@ -116,14 +116,13 @@ class NativeBoundaryTests(unittest.TestCase):
         self.assertEqual(prompt, before.value, "set_code_line borrows the caller's UTF-8 buffer")
         self.assertEqual(0, self.lib.meltype_code_english_at(self.session, before))
         self.assertEqual(prompt, before.value, "code_english_at borrows the caller's UTF-8 buffer")
-        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
-        self.assertEqual(0, self.lib.meltype_set_code_line(self.session, 1, None))
+        line = 'printf "日本語😊"'.encode("utf-8")
         self.assertEqual(0, self.lib.meltype_code_english_at(self.session, 'printf "日本語😊'.encode("utf-8")))
-        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, 'printf "日本語😊"'.encode("utf-8")))
-        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, None))
-        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, line))
+        self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 1, line))
+        self.assertEqual(0, self.lib.meltype_code_english_at(self.session, line))
         self.assertEqual(1, self.lib.meltype_set_code_line(self.session, 0, None))
-        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, None))
+        self.assertEqual(1, self.lib.meltype_code_english_at(self.session, line))
 
     def test_passed_navigation_clears_explicit_japanese(self):
         self.lib.meltype_set_code_input(self.session, 1)

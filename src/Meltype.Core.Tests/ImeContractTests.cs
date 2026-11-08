@@ -427,6 +427,21 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CodeLine_EisuClosesTheImeAndLeavingForgetsJapanese()
+    {
+        var front = new Front { Terminal = true, Document = "ls " };
+        Assert.True(Japanese(front.Key(ToggleShortcut.Hankaku)) && front.Open, "コードの行を日本語にする\n" + front.Trace);
+        front.Key(VirtualKeys.OemAttn);
+        Assert.True(!front.Open, "英数キーは、コードの行でも直接入力にする\n" + front.Trace);
+        front.Key(VirtualKeys.Kana);
+        Assert.True(front.Open && Japanese(front.Event("sync")), "かなで日本語 (コードの行も)\n" + front.Trace);
+        front.Event("caret", extra: ",\"caret\":{\"moved\":true,\"passed\":0}");
+        Assert.True(Japanese(front.Event("sync")), "ターミナルは、キーなしでキャレットが動いても (出力) 日本語のまま\n" + front.Trace);
+        front.Event("caret", extra: ",\"caret\":{\"moved\":true,\"passed\":0,\"left\":true}");
+        Assert.True(!Japanese(front.Event("sync")) && front.Open, "フォーカスが外れたら、コードの行を英数に戻す\n" + front.Trace);
+    }
+
+    [Test]
     public static void CodeLine_IsDecidedOnlyByTheTextBeforeTheCaret()
     {
         // 通したキーから行を追いかけない: アプリが文字を入れたあとの位置は、フロントが caret で送る before で決める

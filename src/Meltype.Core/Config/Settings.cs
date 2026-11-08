@@ -266,8 +266,8 @@ public sealed class Settings
     [JsonIgnore, Browsable(false)]
     public IReadOnlyList<ToggleShortcut> EffectiveToggleShortcuts => ToggleShortcuts ?? ToggleShortcut.Defaults();
 
-    [Category("2. 入力モード"), DisplayName("無変換で英数 / 変換で日本語"), Platforms(Platform.Windows),
-     Description("Keyboard モードで、変換ボックスが出ていないときの 無変換 キーで英数 (直接入力) に、変換 キーで日本語入力にします (Mac の 英数 / かな キーと同じく、押す前のモードによらず決まったモードになります)。もう日本語入力のときの 変換 キーは今までどおり選択した文字の再変換です。変換ボックスが出ている間の 無変換・変換 は今までどおりで、切り替えません。「コード」のアプリのコードの行では、変換 キーでその行を日本語にします (半角/全角 と同じ)。")]
+    [Category("2. 入力モード"), DisplayName("無変換で英数 / 変換で日本語"), Platforms(Platform.Windows | Platform.Linux),
+     Description("変換ボックスが出ていないときの 無変換 キーで英数 (直接入力) に、変換 キーで日本語入力にします (Mac の 英数 / かな キーと同じく、押す前のモードによらず決まったモードになります)。変換ボックスが出ている間の 無変換・変換 は今までどおりで、切り替えません。「コード」のアプリのコードの行では、変換 キーでその行を日本語にします (半角/全角 と同じ)。Keyboard モードでは、もう日本語入力のときの 変換 キーは今までどおり選択した文字の再変換です。Meltype IME (Windows) では使えません。")]
     public bool ConvertKeysSwitchKeyboard { get; set; }
 
     [Category("2. 入力モード"), DisplayName("左 Alt で英数 / 右 Alt で日本語"), Platforms(Platform.Windows),
@@ -279,7 +279,7 @@ public sealed class Settings
     public bool AutoCorrectAfterCommit { get; set; } = true;
 
     [Category("3. 判定"), DisplayName("英数状態でもローマ字を検知"),
-     Description("Keyboard モードまたは Meltype IME の英数状態でも単語の打ち始めを判定し、ローマ字 (日本語) なら自動で日本語入力に戻します。")]
+     Description("英数状態でも単語の打ち始めを判定し、ローマ字 (日本語) なら自動で日本語入力に戻します。Mac 版では使えません。")]
     public bool DirectModeAutoDetect { get; set; } = true;
 
     [Category("3. 判定"), DisplayName("/ $ @ で始まる語はそのまま入力"),
