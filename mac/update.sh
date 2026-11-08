@@ -23,14 +23,9 @@ esac
 [[ $# -le 1 ]] || { echo "Too many arguments" >&2; exit 1; }
 [[ "$(uname)" == Darwin ]] || { echo "This updater requires macOS." >&2; exit 1; }
 
+# --check-inputs runs in a separate process and exits before creating IMKServer.
 # File replacement restores the old session itself if it fails.
 bash "$here/build-cli.sh" --test --install
-
-# Check the fixed expectations with default settings and no learned data.
-(
-    check_data="$(mktemp -d "${TMPDIR:-/tmp}/meltype-input-check.XXXXXX")"
-    trap 'rm -rf "$check_data"' EXIT
-    MELTYPE_DATA_DIR="$check_data" "$app/Contents/MacOS/Meltype" --check-inputs "$here/Resources/InputChecks.tsv"
-)
+"$app/Contents/MacOS/Meltype" --check-inputs "$here/Resources/InputChecks.tsv"
 swift "$here/select-input-source.swift"
 echo "Meltype update and input checks completed."
