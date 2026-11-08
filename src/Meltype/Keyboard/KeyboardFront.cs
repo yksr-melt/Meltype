@@ -309,7 +309,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (apply)
         {
             foreach (var edit in output.Result.Commits) Commit(edit);
-            if (output.Result.View is { } view) _composition.Show(view);
+            if (output.Result.View is { } view) _composition.Show(_settings().ShowGuide ? view : view with { Hint = view.ContextHint ?? "" });
             else _composition.Hide();
             _composing = output.Result.View is not null;
         }

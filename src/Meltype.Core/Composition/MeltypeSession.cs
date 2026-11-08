@@ -240,52 +240,16 @@ public sealed class MeltypeSession
         var detector = shared.Detector;
         // OS のスペルチェッカーが無ければ (Linux)、同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。
         detector.SpellChecker = wordChecker is { IsAvailable: true } ? wordChecker : Detection.BuiltInWordChecker.Shared;
-        var options = shared.Options with
+        // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
+        // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
+        var userDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory);
+        var options = shared.Options.WithSettings(settings) with
         {
-            LiveConversion = () => settings().LiveConversion,
-            ClockTimeZone = () => settings().ClockTimeZone,
-            AutoCorrect = () => settings().AutoCorrectAfterCommit && settings().AutoDetection,
-            Manual = () => !settings().AutoDetection,
-            // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
-            // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
-            UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory),
+            UserDictionary = userDictionary,
+            Predictor = new Predictor(shared.Options.Predictor?.Phrases, userDictionary, shared.Options.History),
             MoreCandidates = moreCandidates,
-            TranslationCandidates = () => settings().TranslationCandidates,
-            TabConversion = () => settings().TabConversion,
-            ContinueAfterConversion = () => settings().ContinueAfterConversion,
-            Learning = () => settings().LearningEnabled,
-            SeparateKeyRoles = () => settings().SeparateKeyRoles,
-            EnglishFirstInput = () => settings().EnglishFirstInput,
-            ConsonantAbbreviations = () => settings().ConsonantAbbreviations,
-            CandidateMeanings = () => settings().ShowCandidateMeanings,
-            CorrectTypos = () => settings().CorrectTypos,
-            Slash = () => settings().Slash,
-            ZSymbols = () => settings().ZSymbols,
-            SpaceAroundEnglish = () => settings().SpaceAroundEnglish,
-            SpaceAroundNumbers = () => settings().SpaceAroundNumbers,
-            NumberKeysSelectCandidates = () => settings().NumberKeysSelectCandidates,
-            SpaceWidth = () => settings().SpaceWidth,
-            EnterCommitsAsShown = () => settings().EnterCommitsAsShown,
-            AlphanumericKeyStartsAsTyped = () => settings().AlphanumericKeyStartsAsTyped,
-            FullWidthParentheses = () => settings().FullWidthParentheses,
-            SquareBrackets = () => settings().SquareBrackets,
-            EscStepsBack = () => settings().EscStepsBack,
-            EscRevertsSelectedClause = () => settings().EscRevertsSelectedClause,
-            FunctionKeysAffectSelectedClause = () => settings().FunctionKeysAffectSelectedClause,
-            ControlKeys = () => settings().ControlKeys,
-            PartialCommit = () => settings().PartialCommit,
-            CursorIntoBrackets = () => settings().CursorIntoBrackets,
-            ControlKeyBindings = () => settings().ControlKeyBindings,
-            CalculatorCandidates = () => settings().CalculatorCandidates,
-            LaughterAfterKana = () => settings().LaughterAfterKana,
-            ContextualLearning = () => settings().ContextualLearning,
-            ShowCandidatesWhileTyping = () => settings().ShowCandidatesWhileTyping,
-            GitHubIssueCandidates = () => settings().GitHubIssueCandidates,
-            GitHubRepository = () => settings().GitHubRepository,
             GitHubTitles = () => s_githubTitles,
-            ClipboardCandidates = () => settings().ClipboardCandidates,
             AutomaticEnglishSpacing = () => autoSpacing,
-            Punctuation = () => settings().Punctuation,
         };
         return new MeltypeSession(detector, converter, options, settings, directModeDetection);
     }
@@ -319,6 +283,8 @@ public sealed class MeltypeSession
                 Meanings = MeaningDictionary.Load(),
                 RomajiTypos = RomajiTypoCorrector.Load(created.Romaji),
                 TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
+                // 予測変換のために覚えた語句 (入力欄で共有する。ユーザー辞書は入力欄ごとの Predictor に渡す)
+                Predictor = new Predictor(new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt")), null, null),
             }, settingsFile);
             s_shared = shared;
         }

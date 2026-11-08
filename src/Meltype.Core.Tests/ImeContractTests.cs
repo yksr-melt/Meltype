@@ -603,6 +603,42 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CodeLine_ToggleShortcutWorksLikeHankaku()
+    {
+        // #1184: 設定「入力モード切り替えキー」(Shift+Space) も、半角/全角 と同じくコードの行を日本語にして、もう一度で英数に戻す
+        var front = new Front { Terminal = true, Document = "ls " };
+        front.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift }];
+        var japanese = front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.True(Consumed(japanese) && Japanese(japanese) && front.Open, "コードの行を日本語にする\n" + front.Trace);
+        front.Type("kyou");
+        Assert.Equal("きょう", front.Composition["t1"], front.Trace);
+        front.Key('\n');
+        var back = front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.True(Consumed(back) && !Japanese(back) && front.Open, "もう一度で英数 (IME は開いたまま)\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('k')), "コードの行は英数のまま\n" + front.Trace);
+    }
+
+    [Test]
+    public static void CodeLine_EscPassedToTheAppForgetsJapanese()
+    {
+        // #1183: 日本語にしたコードの行で、アプリに渡した Esc (vim のノーマルモードに戻る) の後は英数。変換中の文字を取り消す Esc では戻さない
+        var front = new Front { Terminal = true, Document = "ls " };
+        front.Key(ToggleShortcut.Hankaku);
+        front.Type("ka");
+        front.Key('\u001b');
+        Assert.True(front.Composition["t1"] is null && Japanese(front.Event("sync")), "変換中の文字を取り消した Esc の後も日本語\n" + front.Trace);
+        var esc = front.Key('\u001b');
+        Assert.True(!Consumed(esc) && !Japanese(esc), "アプリに渡した Esc で英数に戻す\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('j')), "vim の j はアプリへ\n" + front.Trace);
+        // 引用符の中かも、キャレットの前の文字だけで決める (Esc の前に開いた引用符が、閉じたかどうかを覚えていない)
+        front = new Front { Terminal = true, Document = "echo \"" };
+        Assert.True(Japanese(front.Event("sync")), "開いた引用符の中は日本語\n" + front.Trace);
+        front.Key('\u001b');
+        front.Document = "";
+        Assert.True(!Consumed(front.Key('j')), "TUI が画面を書き換えたあとは、読めたキャレットの前の文字で決める\n" + front.Trace);
+    }
+
+    [Test]
     public static void CodeLine_EisuClosesTheImeAndLeavingForgetsJapanese()
     {
         var front = new Front { Terminal = true, Document = "ls " };
@@ -629,7 +665,7 @@ internal static class ImeContractTests
         var close = front.Key(0xDE, '"');
         Assert.True(!Consumed(close) && front.Document == "echo \"きょうは\"", "閉じる引用符は確定してからアプリへ\n" + front.Trace);
         Assert.True(!Japanese(front.Event("caret", extra: ",\"caret\":{\"passed\":222}")), "閉じたあとは英数\n" + front.Trace);
-        var unknown = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"open\":true,\"field\":{{\"terminal\":true}},\"key\":{{\"vk\":75,\"ch\":107}}}}");
-        Assert.True(!Consumed(unknown), "キャレットの前を読めないコードの入力欄は、コードの行として英数\n" + front.Trace);
+        var unknown = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"open\":true,\"field\":{{\"traits\":[\"terminal\"]}},\"key\":{{\"vk\":75,\"ch\":107}}}}");
+        Assert.True(Active(unknown) && !Consumed(unknown), "キャレットの前を読めないコードの入力欄は、コードの行として英数\n" + front.Trace);
     }
 }

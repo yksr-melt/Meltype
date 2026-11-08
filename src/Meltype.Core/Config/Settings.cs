@@ -282,7 +282,7 @@ public sealed class Settings
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。文章の入力欄 (コードエディターのコード以外) の / は「・」として入り、Space で / にしてから名前を打つと、名前はそのまま渡します。")]
     public bool SigilWordsDirect { get; set; } = true;
 
-    [Category("5. 候補"), DisplayName("定型文を出す記号"), Platforms(Platform.Windows),
+    [Category("5. 候補"), DisplayName("定型文を出す記号"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後にこの記号と名前を打って Space / Tab を押すと、トレイの「定型文...」で登録した文に置き換えます (;sig + Space → 署名)。名前が登録したものでなければ何もしません。置き換えた直後に Esc を押すと、打った ;名前 に戻します。空にすると使いません。定型文を 1 つも登録していなければ、記号は今までどおり入力します。")]
     public string SnippetMark { get; set; } = ";";
 
@@ -427,11 +427,11 @@ public sealed class Settings
      Description("変換の候補の後ろに英訳も出します (複雑な → complex, complicated)。JMdict のよく使う語から。選んだ英訳は少しずつ前に出ます。")]
     public bool TranslationCandidates { get; set; } = true;
 
-    [Category("5. 候補"), DisplayName("予測変換の候補"), Platforms(Platform.Windows),
+    [Category("5. 候補"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
 
-    [Category("5. 候補"), DisplayName("予測変換に英字の社名・サービス名"), Platforms(Platform.Windows),
+    [Category("5. 候補"), DisplayName("予測変換に英字の社名・サービス名"),
      Description("「予測変換の候補」が ON のとき、読みを打ちかけたところで、英字で書く社名・サービス名・語の候補も出します (しゃお → Xiaomi、ぎっとは → GitHub)。読みを 3 文字以上打ったときだけ出します。英単語の続き (decis → decision) は「予測変換の候補」だけで出ます。")]
     public bool EnglishNamePredictions { get; set; }
 
@@ -463,8 +463,8 @@ public sealed class Settings
      Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
     public bool ShowTypedKeys { get; set; } = true;
 
-    [Browsable(false), DisplayName("固定の操作ガイドを表示 (fcitx5)"),
-     Description("fcitx5 の候補窓に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
+    [Browsable(false), DisplayName("固定の操作ガイドを表示"),
+     Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
     public bool ShowGuide { get; set; } = true;
 
     [Category("4. 変換"), DisplayName("打ち間違いを直す"),
@@ -852,10 +852,10 @@ public sealed class Settings
      Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype は何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
-    [Category("10. アプリ"), DisplayName("アプリ別設定"), Platforms(Platform.Windows), Description("プロセス名ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
+    [Category("10. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
     public List<AppRule> AppRules { get; set; } = DefaultAppRules();
 
-    [Category("10. アプリ"), DisplayName("独自の種類"), Platforms(Platform.Windows), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
+    [Category("10. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
     [Category("11. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。判定した語の先頭の数文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]

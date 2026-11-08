@@ -141,7 +141,7 @@ internal sealed class CompositionService : IDisposable
     /// </summary>
     public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false)
     {
-        var session = new MeltypeSession(_detector, _hybrid, _resolved with
+        var session = new MeltypeSession(_detector, _hybrid, _resolved.WithSettings(settings) with
         {
             DirectMode = () => false,
             ClassifyDirect = directModeDetection ? _resolved.ClassifyDirect : null,

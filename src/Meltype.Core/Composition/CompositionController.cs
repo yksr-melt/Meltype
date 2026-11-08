@@ -123,6 +123,59 @@ public sealed record ReconversionSelection(string Text, string Reading);
 /// <summary>CompositionController の設定と、外の判定器へのつなぎ。</summary>
 public sealed record CompositionOptions
 {
+    /// <summary>
+    /// 設定で決まる項目を、settings (入力欄のアプリの設定) から読むようにしたもの。どの OS のフロントの入力欄もこれで作る。
+    /// 辞書・学習データ・変換エンジン・変換ボックスの見た目は、呼ぶ側が決めたまま。
+    /// </summary>
+    public CompositionOptions WithSettings(Func<Config.Settings> settings) => this with
+    {
+        LiveConversion = () => settings().LiveConversion,
+        AutoCorrect = () => settings().AutoCorrectAfterCommit && settings().AutoDetection,
+        Manual = () => !settings().AutoDetection,
+        TranslationCandidates = () => settings().TranslationCandidates,
+        CandidateMeanings = () => settings().ShowCandidateMeanings,
+        ShowTypedKeys = () => settings().ShowTypedKeys,
+        TabConversion = () => settings().TabConversion,
+        ContinueAfterConversion = () => settings().ContinueAfterConversion,
+        Learning = () => settings().LearningEnabled,
+        SeparateKeyRoles = () => settings().SeparateKeyRoles,
+        EnglishFirstInput = () => settings().EnglishFirstInput,
+        ConsonantAbbreviations = () => settings().ConsonantAbbreviations,
+        CorrectTypos = () => settings().CorrectTypos,
+        Slash = () => settings().Slash,
+        ZSymbols = () => settings().ZSymbols,
+        SpaceAroundEnglish = () => settings().SpaceAroundEnglish,
+        SpaceAroundNumbers = () => settings().SpaceAroundNumbers,
+        NumberKeysSelectCandidates = () => settings().NumberKeysSelectCandidates,
+        SpaceWidth = () => settings().SpaceWidth,
+        EnterCommitsAsShown = () => settings().EnterCommitsAsShown,
+        AlphanumericKeyStartsAsTyped = () => settings().AlphanumericKeyStartsAsTyped,
+        FullWidthParentheses = () => settings().FullWidthParentheses,
+        SquareBrackets = () => settings().SquareBrackets,
+        EscStepsBack = () => settings().EscStepsBack,
+        EscRevertsSelectedClause = () => settings().EscRevertsSelectedClause,
+        FunctionKeysAffectSelectedClause = () => settings().FunctionKeysAffectSelectedClause,
+        ControlKeys = () => settings().ControlKeys,
+        PartialCommit = () => settings().PartialCommit,
+        CursorIntoBrackets = () => settings().CursorIntoBrackets,
+        ControlKeyBindings = () => settings().ControlKeyBindings,
+        CalculatorCandidates = () => settings().CalculatorCandidates,
+        LaughterAfterKana = () => settings().LaughterAfterKana,
+        ContextualLearning = () => settings().ContextualLearning,
+        ShowCandidatesWhileTyping = () => settings().ShowCandidatesWhileTyping,
+        GitHubIssueCandidates = () => settings().GitHubIssueCandidates,
+        GitHubRepository = () => settings().GitHubRepository,
+        ClipboardCandidates = () => settings().ClipboardCandidates,
+        NowPlayingCandidates = () => settings().NowPlayingCandidates,
+        ClockTimeZone = () => settings().ClockTimeZone,
+        Punctuation = () => settings().Punctuation,
+        KanaInput = () => settings().InputStyle == Config.InputStyle.Kana,
+        KanaLayout = () => settings().KanaLayout,
+        RomajiLayout = () => settings().RomajiLayout,
+        Predictions = () => settings().PredictiveCandidates,
+        EnglishNamePredictions = () => settings().EnglishNamePredictions,
+    };
+
     /// <summary>打ったそばから漢字に変換して見せるか。</summary>
     public Func<bool> LiveConversion { get; init; } = () => false;
 
