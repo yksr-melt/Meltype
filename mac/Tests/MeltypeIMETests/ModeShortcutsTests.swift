@@ -124,7 +124,11 @@ final class ModeShortcutsTests: XCTestCase {
     func testBundleDeclaresAllServicesWithoutTextSelectionOrDefaultKeys() throws {
         let file = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/Info.plist")
-        let plist = try PropertyListSerialization.propertyList(from: Data(contentsOf: file), format: nil) as! [String: Any]
+        let plist = try PropertyListSerialization.propertyList(
+            from: Data(contentsOf: file),
+            options: PropertyListSerialization.ReadOptions(),
+            format: nil
+        ) as! [String: Any]
         let services = plist["NSServices"] as! [[String: Any]]
         XCTAssertEqual(services.count, ModeShortcutAction.allCases.count)
         for (entry, action) in zip(services, ModeShortcutAction.allCases) {

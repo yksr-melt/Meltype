@@ -50,6 +50,15 @@
   (assert (equal '("--no-install")
                  (uiop:read-file-lines (merge-pathnames "calls" work)))))
 
+(defun fake-input-check (work status)
+  (fake-tool work "Meltype.app/Contents/MacOS/Meltype"
+             (format nil "set -eu
+[[ \"$1\" == --check-inputs && -d \"$MELTYPE_DATA_DIR\" ]]
+[[ -z \"$(ls -A \"$MELTYPE_DATA_DIR\")\" ]]
+echo \"$MELTYPE_DATA_DIR\" > \"$MELTYPE_START_LOG_DIR/check-directory\"
+echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\"
+exit ~D" status)))
+
 (defun test-update (work)
   (let* ((source (uiop:read-file-string (merge-pathnames "mac/update.sh" *root*)))
          (original "$HOME/Library/Input Methods/Meltype.app")
@@ -59,8 +68,7 @@
     (write-file (merge-pathnames "update.sh" work)
                 (concatenate 'string (subseq source 0 position) app
                              (subseq source (+ position (length original))))))
-  (fake-tool work "Meltype.app/Contents/MacOS/Meltype"
-             "echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\"")
+  (fake-input-check work 0)
   (fake-tool work "build-cli.sh"
              "echo \"build:$*\" >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "uname" "echo Darwin")
@@ -69,6 +77,8 @@
   (fake-tool work "swift" "echo select >> \"$MELTYPE_TEST_LOG\"")
   (fake-tool work "open" "echo UNEXPECTED_OPEN >> \"$MELTYPE_TEST_LOG\"; exit 1")
   (run-script work "update.sh" nil)
+  (assert (not (uiop:directory-exists-p
+                (first (uiop:read-file-lines (merge-pathnames "check-directory" work))))))
   (let ((lines (uiop:read-file-lines (merge-pathnames "calls" work))))
     (assert (equal "build:--test --install" (first lines)))
     (assert (uiop:string-prefix-p "app:--check-inputs " (second lines)))
@@ -90,16 +100,19 @@
   (dolist (failure '("build" "check"))
     (write-file (merge-pathnames "calls" work) "")
     (fake-tool work "build-cli.sh" (if (equal failure "build") "exit 23" "exit 0"))
-    (fake-tool work "Meltype.app/Contents/MacOS/Meltype"
-               (if (equal failure "check")
-                   (format nil "if [[ \"$1\" == --check-inputs ]]; then exit 23; fi~%echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\"")
-                   "echo \"app:$*\" >> \"$MELTYPE_TEST_LOG\""))
+    (let ((check-path (merge-pathnames "check-directory" work)))
+      (when (probe-file check-path) (delete-file check-path)))
+    (fake-input-check work (if (equal failure "check") 23 0))
     (let ((status nil))
       (handler-case (run-script work "update.sh" nil)
         (uiop:subprocess-error (condition)
           (setf status (uiop:subprocess-error-code condition))))
       (assert (eql 23 status)))
-    (let ((lines (uiop:read-file-lines (merge-pathnames "calls" work))))
+    (let ((check-path (merge-pathnames "check-directory" work))
+          (lines (uiop:read-file-lines (merge-pathnames "calls" work))))
+      (if (equal failure "check")
+          (assert (not (uiop:directory-exists-p (first (uiop:read-file-lines check-path)))))
+          (assert (not (probe-file check-path))))
       (dolist (unexpected '("app:" "app:--register-input-source" "select" "UNEXPECTED_START"))
         (assert (not (member unexpected lines :test #'equal)))))))
 
