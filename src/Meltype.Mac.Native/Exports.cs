@@ -124,7 +124,7 @@ public static unsafe class Exports
     /// <summary>Mac・Linux の環境。設定は config.json、コードの入力欄はフロントが知らせるターミナルの印で決める。</summary>
     private sealed class NativeEnvironment : IImeEnvironment
     {
-        public Config.InputMode? Mode => null;
+        public Config.InputMode? InputMethod => null;
 
         public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
             MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null,

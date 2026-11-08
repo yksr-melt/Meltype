@@ -11,8 +11,8 @@ namespace Meltype.Ime;
 /// <summary>ImeHost が使う OS 側の機能。1 つのフロント (TSF ではパイプのつながり = 1 つのアプリ) ごとに 1 つ。判断はしない。</summary>
 public interface IImeEnvironment
 {
-    /// <summary>このフロントが受け持つ Windows の動作モード。フロントが 1 つしかない OS では null。</summary>
-    InputMode? Mode { get; }
+    /// <summary>このフロントが Windows のどちらの入力方式 (設定「動作モード」) か。入力方式が 1 つしかない OS では null。</summary>
+    InputMode? InputMethod { get; }
 
     /// <summary>入力欄ごとの入力の本体。settings は、その入力欄のアプリの設定。辞書・学習データはフロントの中で共有する。</summary>
     MeltypeSession CreateSession(Func<Settings> settings);

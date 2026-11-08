@@ -28,8 +28,8 @@ internal static class ImeContractTests
 
         public Settings Settings { get; set; } = new() { LiveConversion = false };
 
-        /// <summary>このフロントが受け持つ Windows の動作モード (null ならフロントが 1 つしかない OS)。</summary>
-        public InputMode? Mode { get; set; }
+        /// <summary>このフロントが Windows のどちらの入力方式か (null なら入力方式が 1 つしかない OS)。</summary>
+        public InputMode? InputMethod { get; set; }
 
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
             new CompositionOptions().WithSettings(settings), settings, directModeDetection: true);
@@ -315,7 +315,7 @@ internal static class ImeContractTests
     [Test]
     public static void Deactivated_WhileComposing_CommitsAndPassesTheKey()
     {
-        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.Mode = InputMode.Keyboard, f =>
+        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.InputMethod = InputMode.Keyboard, f =>
         {
             f.Settings.AppRules.Add(new AppRule { Process = "off.exe", Enabled = false });
             f.App = "off.exe";
@@ -330,7 +330,7 @@ internal static class ImeContractTests
             Assert.True(!Consumed(front.Key('b')), front.Trace);
             Assert.Equal(0, Capture(front.Event("sync")).GetProperty("keys").GetArrayLength(), "受け持たないときはキーを受け取らせない\n" + front.Trace);
             front.Settings.Enabled = true;
-            front.Mode = null;
+            front.InputMethod = null;
             front.App = null;
             front.Type("ka");
             Assert.Equal("か", front.Composition["t1"], "戻したら受け持つ\n" + front.Trace);

@@ -551,7 +551,7 @@ internal sealed class TipServer : IDisposable
             };
         }
 
-        public InputMode? Mode => InputMode.Tsf;
+        public InputMode? InputMethod => InputMode.Tsf;
 
         public MeltypeSession CreateSession(Func<Settings> settings) => _server._composition.CreateSession(settings, directModeDetection: true);
 

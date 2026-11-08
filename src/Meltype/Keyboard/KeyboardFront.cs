@@ -85,7 +85,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     // ---- IImeEnvironment ----
 
-    public InputMode? Mode => InputMode.Keyboard;
+    public InputMode? InputMethod => InputMode.Keyboard;
 
     public MeltypeSession CreateSession(Func<Settings> settings) => _composition.CreateSession(settings, directModeDetection: true);
 
