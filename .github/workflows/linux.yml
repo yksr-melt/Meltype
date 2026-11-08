@@ -87,10 +87,11 @@ jobs:
           restore-keys: |
             mozc-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
       # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
+      # GitHub の一時的な 504 などでは再試行する。接続と 1 回の取得には上限を設ける。
       - name: Bazelisk
         run: |
           mkdir -p "$HOME/tools"
-          curl -fsSL -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}
           echo "${{ matrix.bazelisk-sha256 }}  $HOME/tools/bazelisk" | sha256sum -c -
           chmod +x "$HOME/tools/bazelisk"
       # Mozc のヘルパーは、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux のコンテナでビルドする (#1484)
