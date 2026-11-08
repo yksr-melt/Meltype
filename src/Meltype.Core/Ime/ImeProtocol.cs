@@ -67,7 +67,10 @@ public sealed record ImeEvent
     public bool Japanese { get; init; }
 }
 
-/// <summary>押したキー。Vk は Windows の仮想キーコード (ほかの OS のキーも、対応する仮想キーコードにする)。Ch は入力される文字 (無ければ 0)。</summary>
+/// <summary>
+/// 押したキー。Ch は入力される文字 (無ければ 0)。Vk は Windows の仮想キーコードで、文字を入力するキーなら省いてよい (Ch から決める)。
+/// 文字の無いキー (Enter・矢印・F6〜F10・半角/全角 0x19・英数 0xF0・かな 0x15・変換 0x1C・無変換 0x1D など) は、対応する仮想キーコードにする。
+/// </summary>
 public sealed record ImeKey
 {
     public int Vk { get; init; }
@@ -77,6 +80,8 @@ public sealed record ImeKey
     public bool Alt { get; init; }
     /// <summary>Windows キー・Command・Super。</summary>
     public bool Command { get; init; }
+    /// <summary>押したままの自動の繰り返し (OS が分かるときだけ)。入力モードのキーの繰り返しでは切り替えない。</summary>
+    public bool Repeat { get; init; }
 }
 
 public sealed record ImeField
@@ -130,15 +135,13 @@ public sealed record ImeState
 
 /// <summary>
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
-/// Word は英字・数字・@・_、Symbol はそれ以外の ASCII の記号、Space は Space、ShiftSpace は Shift+Space。
-/// Keys はそれ以外に受け取るキー (修飾キーの組み合わせを含む。TSF は修飾キー付きのものを PreserveKey で登録する)。
+/// Text は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。Except はそのうち受け取らない文字。
+/// Keys は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
 /// </summary>
 public sealed record ImeCapture
 {
-    public bool Word { get; init; }
-    public bool Symbol { get; init; }
-    public bool Space { get; init; }
-    public bool ShiftSpace { get; init; }
+    public bool Text { get; init; }
+    public string Except { get; init; } = "";
     public IReadOnlyList<ImeShortcut> Keys { get; init; } = [];
 }
 

@@ -80,10 +80,7 @@ def _report_url():
     return _take(_lib.meltype_report_url(b"Linux")) or "https://github.com/yksr-melt/Meltype/issues/new/choose"
 
 
-# ---- キー: IBus のキー (keyval) → 本体が使う Windows の仮想キーコード ----
-
-# 文字を入力するキーで、特別な扱いのないもの (記号など)。本体では文字だけを見る。
-OTHER_CHARACTER_KEY = 0x07
+# ---- キー: 文字の無いキー (keyval) → 本体が使う Windows の仮想キーコード。文字を入力するキーは文字だけを渡す ----
 
 SPECIAL_KEYS = {
     IBus.KEY_Return: 0x0D, IBus.KEY_KP_Enter: 0x0D, IBus.KEY_Tab: 0x09, IBus.KEY_ISO_Left_Tab: 0x09,
@@ -97,32 +94,15 @@ SPECIAL_KEYS = {
     IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
 }
 
-SYMBOL_KEYS = {",": 0xBC, ".": 0xBE, "-": 0xBD, "/": 0xBF, "[": 0xDB, "]": 0xDD}
-
-
 def virtual_key(keyval):
-    """(仮想キーコード, 入力する文字) を返す。Meltype が扱わないキーなら (None, 0)。
-
-    英字の仮想キーへ写像するのは ASCII の A-Z / a-z だけにする。以前は character.lower() してから
-    ord() を呼んでいたため、トルコ語の İ (U+0130) のように小文字化で 1 文字でなくなる (i + 結合ドット)
-    文字で例外になっていた。非 ASCII は小文字化せず、元のコードポイントのまま他文字キーとして渡す。
-    """
+    """(仮想キーコード, 入力する文字) を返す。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら (None, 0)。"""
     if keyval in SPECIAL_KEYS:
         return SPECIAL_KEYS[keyval], (0x20 if keyval == IBus.KEY_space else 0)
     character = IBus.keyval_to_unicode(keyval)
-    # 空・複数スカラーは ord() の前に弾く (先頭 1 文字へ黙って切り詰めない)。
-    if not character or len(character) != 1:
+    # 空・複数スカラー・制御文字は渡さない (先頭 1 文字へ黙って切り詰めない)。
+    if not character or len(character) != 1 or ord(character) < 0x20:
         return None, 0
-    codepoint = ord(character)
-    if codepoint < 0x20:
-        return None, 0
-    if "A" <= character <= "Z":
-        return codepoint, codepoint
-    if "a" <= character <= "z":
-        return codepoint - 0x20, codepoint
-    if "0" <= character <= "9":
-        return codepoint, codepoint
-    return SYMBOL_KEYS.get(character, OTHER_CHARACTER_KEY), codepoint
+    return 0, ord(character)
 
 
 # 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
@@ -151,6 +131,8 @@ class MeltypeEngine(IBus.Engine):
         self._lookup = IBus.LookupTable.new(9, 0, True, True)
         self._lookup.set_orientation(IBus.Orientation.VERTICAL)
         self._candidates = []
+        # 出している一覧が予測変換の候補か (クリックしたときに本体へ伝える)
+        self._prediction = False
         # 候補で少し (1.5 秒) 止まったら、その候補の意味を補助テキストに出す (Windows 版と同じ)
         self._meaning_key = None
         self._mode_shown = None
@@ -235,7 +217,7 @@ class MeltypeEngine(IBus.Engine):
 
     def do_candidate_clicked(self, index, button, state):
         page = self._lookup.get_cursor_pos() // self._lookup.get_page_size()
-        self.send("select", index=page * self._lookup.get_page_size() + index)
+        self.send("select", index=page * self._lookup.get_page_size() + index, prediction=self._prediction)
 
     def do_property_activate(self, prop_name, state):
         if prop_name == "report":
@@ -258,22 +240,16 @@ class MeltypeEngine(IBus.Engine):
 
     def _apply(self, result):
         for edit in result["commits"]:
-            delete_before = edit["deleteBefore"]
-            # 確定し直し: 消す文字が今もキャレットの前にあると確認できたときだけ消す。確認できないときは前の文字を消さずに、
-            # 今打った文字 (current) だけを入れる (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)
-            length = self._expected_before_caret(edit.get("expect")) if delete_before > 0 else 0
-            text = edit["text"]
-            if delete_before > 0 and not length:
-                print("Meltype: 確定し直す文字を確認できないため、前の文字を消しません", file=sys.stderr)
-                text = edit.get("current", text)
+            # 確定し直し: 本体がキャレットの前と照合した前の文字 (expect) を消してから入れる
+            if edit["deleteBefore"] > 0:
+                # IBus は文字 (コードポイント) 単位で消す。消えたかどうかは送ったあとでしか分からないので、次の出来事のときに確かめる
+                length = len(edit["expect"])
+                self._note_replace(length, edit["text"])
+                self.delete_surrounding_text(-length, length)
             # 消すだけの preedit 更新を確定の前に送らない。Chromium 系 (Wayland text-input-v3) は
             # それを変換中の文字の確定と解釈して挿入する (issue #486)。変換中の表示を消すのは確定のあと (下の else)
-            if length:
-                # 消えたかどうかは送ったあとでしか分からないので、次の入力のときに確かめる
-                self._note_replace(length, text)
-                self.delete_surrounding_text(-length, length)
-            if text:
-                self.commit_text(IBus.Text.new_from_string(text))
+            if edit["text"]:
+                self.commit_text(IBus.Text.new_from_string(edit["text"]))
         view = result["view"]
         if view:
             self._show_preedit(view)
@@ -282,24 +258,10 @@ class MeltypeEngine(IBus.Engine):
             self._hide_preedit()
             self._hide_candidates()
 
-    def _expected_before_caret(self, expected):
-        """キャレットの前が expected と一致すると確認できたら、消す文字数 (コードポイント) を返す。確認できないときは 0。"""
-        if not isinstance(expected, str) or not expected:
-            return 0
-        surrounding = self._surrounding_value()
-        if surrounding is None:
-            return 0
-        value, cursor = surrounding
-        # IBus は文字 (コードポイント) 単位。本体の deleteBefore (UTF-16) ではなく、確認できた文字列から数える
-        length = len(expected)
-        if not (length <= cursor <= len(value)) or value[cursor - length:cursor] != expected:
-            return 0
-        return length
-
     def _show_preedit(self, view):
         # IBus は「表示中の preedit」をそのまま確定する (COMMIT モード)。表示と確定が違うと、
         # フォーカスが外れたときに「かn」が入って本体の「かん」とずれるので、確定される形を出す。
-        text = view.get("committed") or view["text"]
+        text = view["committed"]
         attributes = IBus.AttrList()
         clauses = view["clauses"]
         if view["converting"] and clauses:
@@ -319,7 +281,7 @@ class MeltypeEngine(IBus.Engine):
         self.update_preedit_text_with_mode(preedit, len(text), bool(text), IBus.PreeditFocusMode.COMMIT)
         self._preedit_visible = bool(text)
         # 案内 (Space で変換 など) は補助テキストに出す。もしかして (書き間違い) は先頭に出す (Tab で直せる)
-        hint = view["hint"] or ""
+        hint = view["hint"]
         if view["suggestion"]:
             hint = view["suggestion"] + "　" + hint
         if hint:
@@ -349,24 +311,26 @@ class MeltypeEngine(IBus.Engine):
         GLib.timeout_add(MODE_SHOWN_MS, hide)
 
     def _show_candidates(self, view):
-        candidates = view["candidates"]
-        if not (view["converting"] and len(candidates) > 1):
+        listed = view["list"]
+        if not listed:
             self._hide_candidates()
             return
+        candidates = listed["items"]
         if candidates != self._candidates:
             self._lookup.clear()
             for candidate in candidates:
                 self._lookup.append_candidate(IBus.Text.new_from_string(candidate))
             self._candidates = candidates
-        selected = view["selectedIndex"]
+        self._prediction = listed["prediction"]
+        selected = listed["selected"]
         if 0 <= selected < len(candidates):
             self._lookup.set_cursor_pos(selected)
         self.update_lookup_table(self._lookup, True)
-        self._schedule_meaning(view)
+        self._schedule_meaning(listed)
 
-    def _schedule_meaning(self, view):
-        meaning = view["meaning"]
-        key = f"{view['selectedIndex']}:{meaning}" if meaning else None
+    def _schedule_meaning(self, listed):
+        meaning = listed["meaning"]
+        key = f"{listed['selected']}:{meaning}" if meaning else None
         if key == self._meaning_key:
             return
         self._meaning_key = key
@@ -382,6 +346,7 @@ class MeltypeEngine(IBus.Engine):
 
     def _hide_candidates(self):
         self._meaning_key = None
+        self._prediction = False
         if self._candidates:
             self._lookup.clear()
             self._candidates = []

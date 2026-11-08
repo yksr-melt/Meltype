@@ -36,8 +36,8 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
     const char* shown = open ? "true" : "false";
     response = std::string("{\"v\":1,\"state\":{\"active\":true,\"open\":") + shown + ",\"japanese\":" + shown +
                ",\"indicator\":" + (toggle ? "true" : "false") +
-               ",\"capture\":{\"word\":true,\"symbol\":true,\"space\":false,\"shiftSpace\":true,\"keys\":[]},\"rev\":" +
-               std::to_string(++revision) + "},\"result\":{\"consumed\":true,\"showGuide\":true,\"commits\":[],\"view\":null}}";
+               ",\"capture\":{\"text\":true,\"except\":\"\",\"keys\":[]},\"rev\":" +
+               std::to_string(++revision) + "},\"result\":{\"consumed\":true,\"commits\":[],\"view\":null}}";
     return true;
 }
 }  // namespace meltype

@@ -37,7 +37,7 @@ internal sealed class ImeSession(IImeEnvironment environment)
         var before = Before(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
-        var result = e.Type switch
+        var result = Verify(e.Type switch
         {
             ImeEventType.Key when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, ref explicitChange) : Leave(),
             ImeEventType.Toggle when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
@@ -47,7 +47,7 @@ internal sealed class ImeSession(IImeEnvironment environment)
             ImeEventType.Select => e.Prediction ? _session.SelectPrediction(e.Index) : _session.SelectCandidate(e.Index),
             ImeEventType.Refresh when active => _session.RefreshConversion() ?? Pass,
             _ => Pass,
-        };
+        }, e.Field);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
         return new(new ImeState
@@ -108,8 +108,12 @@ internal sealed class ImeSession(IImeEnvironment environment)
         var composing = _session.IsComposing;
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
-        var vk = ToggleShortcut.NormalizeHankakuKey(key.Vk);
-        if (settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(key.Vk, modifiers)))
+        var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
+        var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
+        // 押しっぱなしで、入力モードを何度も切り替えない
+        if (key.Repeat && (toggle || plain && (vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana ||
+            vk is VirtualKeys.Convert or VirtualKeys.NonConvert && settings.ConvertKeysSwitchKeyboard))) return Consumed;
+        if (toggle)
         {
             return composing
                 ? _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, toggleShortcuts: false)
@@ -132,11 +136,47 @@ internal sealed class ImeSession(IImeEnvironment environment)
             return _session.CommitCombiningForPassThrough(preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return _session.CommitForPassThrough();
-        var result = _session.HandleKey(key.Vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command,
+        var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command,
             before, field?.After, toggleShortcuts: false);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
-        if (!result.Consumed) _session.CaretMoved(key.Vk, key.Ctrl);
+        if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
         return result;
+    }
+
+    /// <summary>文字を入力するキーの仮想キーコード。特別な扱いのない文字 (記号など) は 0x07 (本体は文字だけを見る)。</summary>
+    private static int VirtualKeyOf(int ch) => ch switch
+    {
+        >= 'a' and <= 'z' => ch - 0x20,
+        >= 'A' and <= 'Z' or >= '0' and <= '9' or ' ' => ch,
+        ',' => VirtualKeys.OemComma,
+        '.' => VirtualKeys.OemPeriod,
+        '-' => VirtualKeys.OemMinus,
+        '/' => VirtualKeys.Oem2,
+        '[' => 0xDB,
+        ']' => 0xDD,
+        _ => 0x07,
+    };
+
+    /// <summary>
+    /// 確定し直し (DeleteBefore) を、フロントが渡したキャレットの前の文字と照合する。消す文字 (Expect) がキャレットの前に無い・
+    /// キャレットの前が分からない・消せない入力欄・変換中の文字の外を書き換える (今の語が無い) ときは、前の文字を消さずに今の語 (Current。無ければ Text) だけを入れる。
+    /// </summary>
+    private SessionResult Verify(SessionResult result, ImeField? field)
+    {
+        if (!result.Commits.Any(edit => edit.DeleteBefore > 0)) return result;
+        var before = field?.Before;
+        var edits = new List<TextEdit>(result.Commits.Count);
+        foreach (var edit in result.Commits)
+        {
+            var verified = edit.DeleteBefore == 0 ||
+                before is not null && edit.Expect is { } expect && expect.Length == edit.DeleteBefore && before.EndsWith(expect, StringComparison.Ordinal) &&
+                _session.CanDeleteSurrounding && !(field?.Composing == true && edit.Current is null);
+            var applied = verified ? edit : edit with { DeleteBefore = 0, Text = edit.Current ?? edit.Text, Expect = null, Current = null };
+            if (!verified) Diagnostics.Log.Decision("確定し直す文字がキャレットの前に無いので、前の文字を消しません");
+            before = before is null ? null : before[..^applied.DeleteBefore] + applied.Text;
+            edits.Add(applied);
+        }
+        return result with { Commits = edits };
     }
 
     /// <summary>OS が変換中の文字を表示のまま確定した: 本体も確定したことにする。文字はもう入っているので、確定し直しも入れない。</summary>
@@ -187,12 +227,21 @@ internal sealed class ImeSession(IImeEnvironment environment)
             .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
             .Concat(settings.ConvertKeysSwitchKeyboard ? [new ImeShortcut(VirtualKeys.Convert, 0), new ImeShortcut(VirtualKeys.NonConvert, 0)] : [])
-            .Distinct().ToList();
-        if (!direct) return new ImeCapture { Word = true, Symbol = true, Space = settings.SpaceWidth == SpaceWidth.FullWidth, ShiftSpace = true, Keys = keys };
-        // 英数でもローマ字を見分ける: 英語の語を打っている途中は、続きの英字をそのまま通す
-        if (settings.DirectModeAutoDetect && settings.AutoDetection) return new ImeCapture { Word = !directEnglishWord, Symbol = true, ShiftSpace = true, Keys = keys };
-        return new ImeCapture { Keys = keys };
+            .ToList();
+        // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
+        var detects = settings.DirectModeAutoDetect && settings.AutoDetection;
+        if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
+        if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        return new ImeCapture
+        {
+            Text = !direct || detects,
+            Except = direct && directEnglishWord ? EnglishWordCharacters : "",
+            Keys = keys.Distinct().ToList(),
+        };
     }
+
+    /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
+    private const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
 
     /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな)。</summary>
     private static readonly int[] ModeKeys = [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana];

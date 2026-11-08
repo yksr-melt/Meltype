@@ -512,13 +512,13 @@ internal static class SessionFacadeTests
         Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "予測の選択案内は固定の操作一覧と分けて返す");
         Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "従来の予測の案内は変えない");
         Assert.True(typing.View.Suggestion is null, "予測の案内は書き間違いの修正ではない");
-        Assert.True(typing.ToJson().Contains("\"predictions\":[\"") && typing.ToJson().Contains("\"selectedPrediction\":-1"), typing.ToJson());
+        Assert.True(typing.ToJson().Contains("\"list\":{\"items\":[\"") && typing.ToJson().Contains("\"selected\":-1,\"prediction\":true"), typing.ToJson());
         var tab = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false, "I made ");
         Assert.True(tab.Consumed, "Tab は予測の候補を選ぶのに使う");
         Assert.Equal(0, tab.View?.SelectedPrediction);
         Assert.Equal(typing.View.Predictions![0], tab.View?.Text);
         Assert.Equal("Tab 予測の候補を選ぶ", tab.View?.ContextHint, "候補を選んでいる間も選択案内を残す");
-        Assert.True(tab.ToJson().Contains("\"selectedPrediction\":0"), tab.ToJson());
+        Assert.True(tab.ToJson().Contains("\"selected\":0,\"prediction\":true"), tab.ToJson());
         var back = session.HandleKey(VirtualKeys.Tab, null, true, false, false, false, "I made ");
         Assert.Equal(-1, back.View?.SelectedPrediction, "Shift+Tab で前に戻る (最初の前は選ばない状態)");
         var kana = session.HandleKey(VirtualKeys.F6, null, false, false, false, false).View!;
@@ -794,7 +794,7 @@ internal static class SessionFacadeTests
     public static void Json_IsEscaped()
     {
         var result = new SessionResult(true, [new TextEdit(2, "a\"b\\c\n")], new CompositionView("x", ["y"], 0, true, "h", ["x"], 0));
-        const string expected = """{"consumed":true,"showGuide":true,"commits":[{"deleteBefore":2,"text":"a\"b\\c\n"}],"view":{"text":"x","committed":null,"converting":true,"selectedIndex":0,"selectedClause":0,"hint":"h","contextHint":null,"candidates":["y"],"clauses":["x"],"suggestion":null,"meaning":null,"notes":[null],"predictions":[],"selectedPrediction":-1,"typed":null}}""";
+        const string expected = """{"consumed":true,"commits":[{"deleteBefore":2,"text":"a\"b\\c\n"}],"view":{"text":"x","committed":"x","converting":true,"clauses":["x"],"selectedClause":0,"hint":"h","suggestion":null,"typed":null,"list":null}}""";
         Assert.Equal(expected, result.ToJson());
     }
 
@@ -808,14 +808,14 @@ internal static class SessionFacadeTests
                 new CompositionOptions { Predictor = new Predictor(null, null, null), Predictions = () => true }, () => settings);
             var typing = Type(session, "decis", "I made ")[^1];
             using var json = JsonDocument.Parse(typing.ToJson());
-            Assert.Equal(showGuide, json.RootElement.GetProperty("showGuide").GetBoolean(), "表示設定を Native の結果へ渡す");
+            Assert.Equal(showGuide ? typing.View!.Hint : typing.View!.ContextHint, json.RootElement.GetProperty("view").GetProperty("hint").GetString(), "表示設定を案内に反映して渡す");
             Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "固定ガイドを隠しても文脈の案内は変えない");
             Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "他のフロントが使う従来の案内は変えない");
             Assert.True(typing.View.Predictions!.Contains("decision"), "表示設定によらず予測候補を残す");
             session.HandleKey(VirtualKeys.F6, null, false, false, false, false);
             var converting = session.HandleKey(VirtualKeys.Space, null, false, false, false, false);
             using var convertedJson = JsonDocument.Parse(converting.ToJson());
-            Assert.Equal(showGuide, convertedJson.RootElement.GetProperty("showGuide").GetBoolean(), "変換中も表示設定を保つ");
+            Assert.Equal(showGuide ? converting.View!.Hint : "", convertedJson.RootElement.GetProperty("view").GetProperty("hint").GetString(), "変換中も表示設定を反映する");
             Assert.True(converting.View is { Converting: true, ContextHint: null }, "文脈の案内がない表示は null のまま返す");
         }
     }
@@ -826,13 +826,12 @@ internal static class SessionFacadeTests
         const string contextHint = "Tab → \"google\"\\候補\n\r\t\u0001";
         const string suggestion = "もしかして: ブレスレット　<Tab>で修正";
         var view = new CompositionView("x", [], -1, false, "legacy hint", Suggestion: suggestion, ContextHint: contextHint);
-        using var json = JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
+        using var json = JsonDocument.Parse(new SessionResult(true, [], view) { ShowGuide = false }.ToJson());
         var result = json.RootElement.GetProperty("view");
-        Assert.True(result.TryGetProperty("contextHint", out var actual), "文脈の案内を JSON に含める");
-        Assert.Equal(JsonValueKind.String, actual.ValueKind);
-        Assert.Equal(contextHint, actual.GetString(), "引用符・バックスラッシュ・制御文字をエスケープする");
-        Assert.Equal("legacy hint", result.GetProperty("hint").GetString(), "従来の案内は独立して残す");
-        Assert.Equal(suggestion, result.GetProperty("suggestion").GetString(), "書き間違いの修正も独立して残す");
+        Assert.Equal(contextHint, result.GetProperty("hint").GetString(), "操作ガイドを出さない設定では文脈の案内。引用符・バックスラッシュ・制御文字をエスケープする");
+        Assert.Equal(suggestion, result.GetProperty("suggestion").GetString(), "書き間違いの修正は独立して残す");
+        using var guide = JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
+        Assert.Equal("legacy hint", guide.RootElement.GetProperty("view").GetProperty("hint").GetString(), "操作ガイドを出す設定では従来の案内");
     }
 
     [Test]

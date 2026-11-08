@@ -111,8 +111,8 @@ internal static unsafe class NativeBoundaryTests
             var view = conversion.RootElement.GetProperty("view");
             Assert.True(view.GetProperty("converting").GetBoolean(), input);
             Assert.Equal(1, view.GetProperty("clauses").GetArrayLength(), input);
-            Assert.Equal(count, view.GetProperty("candidates").GetArrayLength(), input);
-            Assert.Equal(expected, view.GetProperty("candidates")[1].GetString(), input);
+            Assert.Equal(count, view.GetProperty("list").GetProperty("items").GetArrayLength(), input);
+            Assert.Equal(expected, view.GetProperty("list").GetProperty("items")[1].GetString(), input);
             using var selected = native.Key('2', 0x32);
             Assert.Equal(expected, selected.RootElement.GetProperty("commits")[0].GetProperty("text").GetString(), input);
             Assert.Equal(JsonValueKind.Null, selected.RootElement.GetProperty("view").ValueKind, input);

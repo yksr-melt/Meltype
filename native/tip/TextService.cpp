@@ -251,7 +251,6 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     passVk_ = 0;
     passReason_ = nullptr;
     for (bool& eaten : eatenDown_) eaten = false;
-    for (bool& down : modeDown_) down = false;
     // サインインや UAC の画面では何もしない。
     // Meltype.exe より高い権限で動いているアプリ (管理者として動くアプリなど) は、つなぐときに断る (Pipe.cpp の IsTrustedServer)
     disabled_ = (flags & TF_TMAE_SECUREMODE) != 0;
@@ -435,7 +434,6 @@ STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
         for (bool& eaten : eatenDown_) eaten = false;
-        for (bool& down : modeDown_) down = false;
     }
     return S_OK;
 }
@@ -738,10 +736,8 @@ void TextService::ApplyState(const JsonValue& state) {
     next.japanese = state[L"japanese"].Bool();
     next.rev = state[L"rev"].number;
     const JsonValue& capture = state[L"capture"];
-    next.word = capture[L"word"].Bool();
-    next.symbol = capture[L"symbol"].Bool();
-    next.space = capture[L"space"].Bool();
-    next.shiftSpace = capture[L"shiftSpace"].Bool();
+    next.text = capture[L"text"].Bool();
+    next.except = capture[L"except"].Str();
     next.keys.clear();
     for (const JsonValue& key : capture[L"keys"].array) {
         const int vk = key[L"key"].Int(), mods = key[L"mods"].Int();
@@ -916,15 +912,15 @@ STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL
         const UINT slot = ShortcutSlot(binding.key.uVKey, keyParam);
         if (binding.key.uModifiers & TF_MOD_ON_KEYUP) {
             *eaten = eatenDown_[slot] ? TRUE : FALSE;
-            eatenDown_[slot] = modeDown_[slot] = false;
+            eatenDown_[slot] = false;
             return S_OK;
         }
         if (disabled_ || ContextDisabled(context) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return S_OK;
         if (!CapturesKey(binding.key.uVKey, keyParam)) return S_OK;
         *eaten = TRUE;
-        if (modeDown_[slot]) return S_OK;
-        eatenDown_[slot] = modeDown_[slot] = true;
-        HandleKey(context, ShortcutKey(binding.key.uVKey, keyParam), 0, true);
+        const bool repeat = eatenDown_[slot];
+        eatenDown_[slot] = true;
+        HandleKey(context, ShortcutKey(binding.key.uVKey, keyParam), 0, repeat, true);
         MaskSystemModifier();
         return S_OK;
     }
@@ -951,8 +947,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     secretChecked_ = false;
     secretWhileComposing_ = false;
     if (disabled_ || vk >= 256) return false;
-    const bool modeKey = modeDown_[ShortcutSlot(vk, lParam)] || CapturesKey(vk, lParam);
-    if (IsModifier(vk) && !modeKey) return false;
+    const bool listed = CapturesKey(vk, lParam);
+    if (IsModifier(vk) && !listed) return false;
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
     ResumeOrCommit(context);
     // VK_PACKET: ほかのソフト (パスワード管理・AutoHotkey など) が送り込んだ文字。送り直せないので受け取らずに通す。
@@ -982,8 +978,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
             AbandonComposition();
         }
     }
-    // 入力モードのキー (半角/全角・切り替えキーなど) は、変換中でもそうでなくても、意味は Meltype.exe が決める
-    if (modeKey) return true;
+    // 受け取るように言われたキー (Space・半角/全角・切り替えキーなど) は、変換中でもそうでなくても、意味は Meltype.exe が決める
+    if (listed) return true;
     if (composition_ != nullptr) {
         // 変換中にアプリが入力欄の IME を無効にした (ブラウザーはパスワード欄に変えるとそうする): 変換中の文字を確定して、
         // このキーからは受け取らない。ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す
@@ -1015,13 +1011,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     if (KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return pass(L"Ctrl・Alt・Windows キーを押している");
     if (ContextDisabled(context)) return pass(L"この入力欄では使わない");
     ch = CharOf(vk, 0);
-    // 受け取る文字は Meltype.exe が決める (英数では打っている英語の語の続きを通す、全角スペースの設定なら Space も受け取るなど)
-    const bool word = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'0' && ch <= L'9') || ch == L'@' || ch == L'_';
-    const bool captured = vk == VK_SPACE ? (KeyDown(VK_SHIFT) ? state_.shiftSpace : state_.space)
-                          : word ? state_.word
-                          : ch >= L'!' && ch <= L'~' ? state_.symbol
-                          : false;
-    if (!captured) return pass(L"受け取らない文字");
+    // 受け取る文字は Meltype.exe が決める (英数では打っている英語の語の続きを通すなど)
+    if (!state_.text || ch < L'!' || ch > L'~' || state_.except.find(ch) != std::wstring::npos) return pass(L"受け取らない文字");
     // パスワード欄か。OnTestKeyDown で読んだ結果は、続く同じキー・同じ入力欄の OnKeyDown で 1 回だけ使う (ほかのキー・入力欄には使わない)
     ULONGLONG now = GetTickCount64();
     int secret;
@@ -1100,26 +1091,22 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
         return S_OK;
     }
     *eaten = TRUE;
-    // 押しっぱなしによる自動リピートで、入力モードを何度も切り替えない
     const UINT slot = ShortcutSlot(vk, lParam);
-    const bool modeKey = modeDown_[slot] || CapturesKey(vk, lParam);
-    if (modeKey && eatenDown_[slot]) return S_OK;
+    const bool repeat = eatenDown_[slot];
     eatenDown_[slot] = true;
-    if (modeKey) {
-        modeDown_[slot] = true;
-        HandleKey(context, ShortcutKey(vk, lParam), 0, true);
+    if (CapturesKey(vk, lParam)) {
+        HandleKey(context, ShortcutKey(vk, lParam), vk == VK_SPACE ? L' ' : 0, repeat, true);
         MaskSystemModifier();
         return S_OK;
     }
-    ch = CharOf(vk, lParam);
-    HandleKey(context, vk, ch, false);
+    HandleKey(context, vk, CharOf(vk, lParam), repeat, false);
     return S_OK;
 }
 
 STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
-        eatenDown_[ToggleShortcut::Hankaku] = modeDown_[ToggleShortcut::Hankaku] = false;
+        eatenDown_[ToggleShortcut::Hankaku] = false;
     }
     *eaten = wParam < 256 && eatenDown_[ShortcutSlot(static_cast<UINT>(wParam), lParam)] ? TRUE : FALSE;
     return S_OK;
@@ -1128,15 +1115,15 @@ STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam,
 STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
-        eatenDown_[ToggleShortcut::Hankaku] = modeDown_[ToggleShortcut::Hankaku] = false;
+        eatenDown_[ToggleShortcut::Hankaku] = false;
     }
     const UINT slot = ShortcutSlot(static_cast<UINT>(wParam), lParam);
     *eaten = wParam < 256 && eatenDown_[slot] ? TRUE : FALSE;
-    if (wParam < 256) { eatenDown_[slot] = false; modeDown_[slot] = false; }
+    if (wParam < 256) eatenDown_[slot] = false;
     return S_OK;
 }
 
-void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool modeKey) {
+void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed) {
     // 8 = Windows キー (Meltype.exe は Mac の Command と同じく、確定してアプリに渡す)
     const bool shift = KeyDown(VK_SHIFT), control = KeyDown(VK_CONTROL), alt = KeyDown(VK_MENU), command = KeyDown(VK_LWIN) || KeyDown(VK_RWIN);
     bool failed = false;
@@ -1153,14 +1140,15 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool modeK
         }
         std::string field;
         ReadField(ec, context, field);
-        // 入力モードのキーは、表示を出す位置も送る (切り替えたかは Meltype.exe が決める)
-        const RECT anchor = modeKey ? CaretRect(ec, context) : RECT{};
+        // 受け取るように言われたキーは、入力モードを表示する位置も送る (切り替えたかは Meltype.exe が決める)
+        const RECT anchor = listed ? CaretRect(ec, context) : RECT{};
         ownEdit_ = true;
         const std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
                                 ",\"shift\":" + (shift ? "true" : "false") + ",\"ctrl\":" + (control ? "true" : "false") +
-                                ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") + "}";
+                                ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") +
+                                (repeat ? ",\"repeat\":true" : "") + "}";
         JsonValue reply;
-        if (!Send("key", field, key, reply, 800, false, modeKey ? &anchor : nullptr)) {
+        if (!Send("key", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
             // Meltype.exe が応答しない: 変換中の文字はそのまま確定する。打った文字はここで入れる
             // (送り直すと、その間に打った次のキーより後に届いて順番が入れ替わる)
             failed = true;
@@ -1202,16 +1190,13 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool modeK
     } else if (failed) {
         TipLog(L"Meltype.exe から応答が来ないので、打った文字をそのまま入れました");
     }
-    // Meltype.exe につながらない (管理者として動くアプリなど) ときの 半角/全角・英数・かな: 開閉だけを切り替える
+    // Meltype.exe につながらない (管理者として動くアプリなど) ときの 半角/全角・英数・かな: 開閉だけを切り替え、アプリには通さない
     // (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる)
-    if (failed && modeKey) {
-        const UINT key = ToggleShortcut::NormalizeHankakuKey(vk);
-        if (key == ToggleShortcut::Hankaku || key == ToggleShortcut::Grave) pendingOpen_ = open_ ? 0 : 1;
-        else if (key == 0xF0) pendingOpen_ = 0;
-        else if (key == 0x15) pendingOpen_ = 1;
-    }
+    const UINT key = ToggleShortcut::NormalizeHankakuKey(vk);
+    const bool modeKey = key == ToggleShortcut::Hankaku || key == ToggleShortcut::Grave || key == 0xF0 || key == 0x15;
+    if (failed && modeKey && !repeat) pendingOpen_ = key == 0xF0 ? 0 : key == 0x15 ? 1 : open_ ? 0 : 1;
     FlushOpen();
-    // Meltype.exe が使わなかったキーは、アプリに送り直す (入力モードのキーは、つながらなければ上で開閉だけを切り替える)
+    // Meltype.exe が使わなかったキーは、アプリに送り直す
     if (!inserted && (failed ? !modeKey : !consumed)) Reinject(vk);
 }
 
@@ -1361,8 +1346,6 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             }
         }
         const JsonValue& current = edit[L"current"];
-        // 変換中は範囲外の確定語を置換せず、今の変換を保持する (今確定した語がある確定し直しは、下で今の語を確定してから書き換える)。
-        if (deleteBefore > 0 && composition_ != nullptr && current.type != JsonValue::Type::String) continue;
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (composition_ != nullptr) {
             composition_->GetRange(&range);
@@ -1874,33 +1857,20 @@ void TextService::SelectCandidate(int index, bool prediction) {
 
 void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const JsonValue& view) {
     if (!candidates_) return;
+    // 出すもの (候補の一覧・もしかして・打ったキー) は Meltype.exe が決める。どれも無ければ出さない
     CandidateView data;
-    for (const JsonValue& item : view[L"candidates"].array) data.candidates.push_back(item.Str());
-    for (const JsonValue& item : view[L"notes"].array) data.notes.push_back(item.Str());
-    data.selected = view[L"selectedIndex"].Int();
+    const JsonValue& list = view[L"list"];
+    for (const JsonValue& item : list[L"items"].array) data.candidates.push_back(item.Str());
+    for (const JsonValue& item : list[L"notes"].array) data.notes.push_back(item.Str());
+    data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
+    data.prediction = list[L"prediction"].Bool();
+    data.meaning = list[L"meaning"].Str();
     data.suggestion = view[L"suggestion"].Str();
-    data.meaning = view[L"meaning"].Str();
-    // 打ったキー: 見えている文字と同じ (英字のまま) なら出さない
-    if (view[L"typed"].Str() != view[L"text"].Str()) data.typed = view[L"typed"].Str();
-    bool converting = view[L"converting"].Bool();
-    const auto& predictions = view[L"predictions"].array;
-    if (!((converting && data.candidates.size() > 1) || !data.suggestion.empty() || (!converting && !predictions.empty()) || !data.typed.empty())) {
+    data.typed = view[L"typed"].Str();
+    const bool converting = view[L"converting"].Bool();
+    if (data.candidates.empty() && data.suggestion.empty() && data.typed.empty()) {
         candidates_->Hide();
         return;
-    }
-    // 打ったキーだけを出すときは、候補が 1 つでも一覧にしない
-    if (converting && data.candidates.size() <= 1) {
-        data.candidates.clear();
-        data.meaning.clear();
-    }
-    if (!converting) {
-        // 変換していないときは、予測変換の候補を出す (Tab で選ぶ。無ければ「もしかして」だけ)
-        data.candidates.clear();
-        for (const JsonValue& item : predictions) data.candidates.push_back(item.Str());
-        data.notes.clear();
-        data.selected = predictions.empty() ? -1 : view[L"selectedPrediction"].Int();
-        data.meaning.clear();
-        data.prediction = !predictions.empty();
     }
 
     // 選んでいる文節の画面上の位置

@@ -31,12 +31,10 @@ struct ServerState {
     bool active = false;
     bool open = true;
     bool japanese = true;
-    // 変換していないときに受け取るキー (ImeCapture)
-    bool word = true;
-    bool symbol = true;
-    bool space = false;
-    bool shiftSpace = true;
-    std::vector<ToggleShortcut> keys = {{0x19, 0}, {0xC0, 4}, {0xF3, 0}, {0xF4, 0}, {0xF0, 0}, {0x15, 0}};
+    // 変換していないときに受け取るキー (ImeCapture)。text は ! から ~ までの文字 (except を除く)、keys はそれ以外に受け取るキー
+    bool text = true;
+    std::wstring except;
+    std::vector<ToggleShortcut> keys = {{0x19, 0}, {0xC0, 4}, {0xF3, 0}, {0xF4, 0}, {0xF0, 0}, {0x15, 0}, {0x20, 1}};
     double rev = 0;
 };
 
@@ -99,10 +97,10 @@ private:
     // ---- キー ----
     // test: OnTestKeyDown から (入力欄の種類を読んだ結果を、続く OnKeyDown で使うために覚える)
     bool WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t& ch, bool test);
-    // Meltype.exe が受け取るように言ったキー (入力モードのキー・切り替えキー) か
+    // Meltype.exe が、文字に関係なく受け取るように言ったキー (capture.keys) か
     bool CapturesKey(UINT vk, LPARAM lParam) const;
-    // modeKey: 入力モードのキー (自動の繰り返しで何度も切り替えない・文字を入れない・送り直さない)
-    void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool modeKey);
+    // listed: capture.keys のキー (入力モードを表示する位置も送る)。repeat: 押したままの自動の繰り返し
+    void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed);
     bool IsReinjected(UINT vk);
     bool Reinject(UINT vk);
     void RememberPassed(UINT vk);
@@ -201,8 +199,7 @@ private:
     UINT passedVk_ = 0;            // 最後にアプリに通したキー (キャレットが動いたときに Meltype.exe に伝える)
     bool passedControl_ = false;   // そのとき Ctrl を押していたか
     ULONGLONG passedTime_ = 0;
-    bool eatenDown_[256] = {};
-    bool modeDown_[256] = {};      // 押している入力モードのキー (自動の繰り返しで何度も切り替えない)
+    bool eatenDown_[256] = {};     // 受け取って、まだ離していないキー (離したことも受け取る。押したままなら自動の繰り返し)
     struct PreservedKey { TF_PRESERVEDKEY key; GUID guid; };
     std::vector<PreservedKey> preservedKeys_;
     std::vector<ToggleShortcut> preservedFrom_;  // 登録した切り替えキー (変わったときだけ登録し直す)

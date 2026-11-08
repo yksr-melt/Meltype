@@ -50,7 +50,7 @@ internal static class ImeContractTests
 
         public Dictionary<string, string?> Composition { get; } = [];
 
-        /// <summary>入れられなかった確定し直し (deleteBefore が 1 以上で、入力欄の文字が expect と違ったもの)。</summary>
+        /// <summary>本体が出した、入力欄と合わない確定し直し (消す文字 expect が入力欄の末尾に無いもの)。</summary>
         public List<string> Skipped { get; } = [];
 
         public JsonElement State { get; private set; }
@@ -101,45 +101,28 @@ internal static class ImeContractTests
         public List<JsonElement> Type(string keys, string sid = "t1") => keys.Select(key => Key(key, sid)).ToList();
 
         /// <summary>
-        /// 確定を入れ、表示と開閉を置き換える。確定し直し (deleteBefore が 1 以上) は:
-        ///   current (今確定した語) があれば、まず current を入れ、入力欄の前が expect + current のままなら、まとめて text に書き換える。
-        ///   current が無ければ、変換中でなく、前の deleteBefore 文字がちょうど expect のときだけ、消してから text を入れる。
+        /// 確定を入れ、表示と開閉を置き換える。確定し直し (deleteBefore が 1 以上) は照合せずに、expect の分を消してから text を入れる
+        /// (照合は本体の仕事。消す文字が入力欄の末尾に無ければ、本体が約束を破ったので Skipped に残して入れない)。
         /// </summary>
         public void Apply(JsonElement output, string sid)
         {
             Assert.Equal(ImeHost.Version, output.GetProperty("v").GetInt32(), Trace);
             State = output.GetProperty("state");
             var result = output.GetProperty("result");
-            var composing = Composition.GetValueOrDefault(sid) is not null;
             foreach (var commit in result.GetProperty("commits").EnumerateArray())
             {
-                var delete = commit.GetProperty("deleteBefore").GetInt32();
                 var text = commit.GetProperty("text").GetString()!;
-                if (delete == 0)
+                if (commit.GetProperty("deleteBefore").GetInt32() > 0)
                 {
-                    Document += text;
-                    continue;
-                }
-                var expect = commit.TryGetProperty("expect", out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
-                if (commit.TryGetProperty("current", out var c) && c.ValueKind == JsonValueKind.String)
-                {
-                    var current = c.GetString()!;
-                    Document += current;
-                    var rewritten = expect + current;
-                    if (expect is null || !Document.EndsWith(rewritten, StringComparison.Ordinal))
+                    var expect = commit.GetProperty("expect").GetString()!;
+                    if (!Document.EndsWith(expect, StringComparison.Ordinal))
                     {
                         Skipped.Add(commit.GetRawText());
                         continue;
                     }
-                    Document = Document[..^rewritten.Length] + text;
-                    continue;
+                    Document = Document[..^expect.Length];
                 }
-                if (composing || expect is null || delete > Document.Length || Document[^delete..] != expect)
-                {
-                    Skipped.Add(commit.GetRawText());
-                    continue;
-                }
-                Document = Document[..^delete] + text;
+                Document += text;
             }
             Composition[sid] = result.GetProperty("view") is { ValueKind: JsonValueKind.Object } view ? view.GetProperty("text").GetString() : null;
             if (Active(output)) Open = State.GetProperty("open").GetBoolean();
@@ -225,7 +208,7 @@ internal static class ImeContractTests
         var (still, stillOutputs) = TypeWantAfterI(moved: false);
         Assert.True(Rewrites(stillOutputs), "動かさなければ、前の語を確定し直す\n" + still.Trace);
         Assert.Equal("I want ", still.Document, still.Trace);
-        Assert.Equal(0, still.Skipped.Count, "入れられなかった確定し直し: " + string.Join(", ", still.Skipped) + "\n" + still.Trace);
+        Assert.Equal(0, still.Skipped.Count, "入力欄と合わない確定し直し: " + string.Join(", ", still.Skipped) + "\n" + still.Trace);
         var (moved, movedOutputs) = TypeWantAfterI(moved: true);
         Assert.True(!Rewrites(movedOutputs), "動かしたら、前の確定を消さない\n" + moved.Trace);
         Assert.True(moved.Document.EndsWith("want ", StringComparison.Ordinal) && !moved.Document.StartsWith("I ", StringComparison.Ordinal), moved.Trace);
@@ -240,7 +223,7 @@ internal static class ImeContractTests
         front.Type("want ");
         front.Type("kyouha\n");
         Assert.Equal("いwant きょうは", front.Document, front.Trace);
-        Assert.Equal(0, front.Skipped.Count, "入れられなかった確定し直し: " + string.Join(", ", front.Skipped) + "\n" + front.Trace);
+        Assert.Equal(0, front.Skipped.Count, "入力欄と合わない確定し直し: " + string.Join(", ", front.Skipped) + "\n" + front.Trace);
     }
 
     [Test]
@@ -337,6 +320,8 @@ internal static class ImeContractTests
         Assert.True(!Consumed(front.Key('a')), "英数ではアプリに通す\n" + front.Trace);
         var on = front.Key(VirtualKeys.OemEnlw);
         Assert.True(Japanese(on) && front.Open && Indicator(on), "JIS の 半角/全角 のキーコードも同じ\n" + front.Trace);
+        var repeated = front.Event("key", extra: $",\"key\":{{\"vk\":{ToggleShortcut.Hankaku},\"repeat\":true}}");
+        Assert.True(Consumed(repeated) && front.Open && !Indicator(repeated), "押しっぱなしの繰り返しでは切り替えない\n" + front.Trace);
         front.Type("ka");
         var composing = front.Key(ToggleShortcut.Hankaku);
         Assert.True(Consumed(composing) && front.Open && !Indicator(composing), "変換中はモードを変えない (変換ボックスで使う)\n" + front.Trace);
@@ -400,19 +385,60 @@ internal static class ImeContractTests
     [Test]
     public static void Capture_FollowsTheModeAndSettings()
     {
+        static bool HasKey(JsonElement capture, int key, int mods) =>
+            capture.GetProperty("keys").EnumerateArray().Any(k => k.GetProperty("key").GetInt32() == key && k.GetProperty("mods").GetInt32() == mods);
         var front = new Front();
         var japanese = Capture(front.Event("sync"));
-        Assert.True(japanese.GetProperty("word").GetBoolean() && japanese.GetProperty("symbol").GetBoolean() && !japanese.GetProperty("space").GetBoolean(),
-            "日本語では文字を受け取り、半角の Space は通す\n" + front.Trace);
+        Assert.True(japanese.GetProperty("text").GetBoolean() && japanese.GetProperty("except").GetString() == "", "日本語では文字を受け取る\n" + front.Trace);
+        Assert.True(HasKey(japanese, VirtualKeys.Space, 1) && !HasKey(japanese, VirtualKeys.Space, 0), "Shift+Space は受け取り、半角の Space は通す\n" + front.Trace);
         front.Settings.SpaceWidth = SpaceWidth.FullWidth;
-        Assert.True(Capture(front.Event("sync")).GetProperty("space").GetBoolean(), "全角スペースなら Space も受け取る\n" + front.Trace);
+        Assert.True(HasKey(Capture(front.Event("sync")), VirtualKeys.Space, 0), "全角スペースなら Space も受け取る\n" + front.Trace);
         front.Open = false;
         var english = Capture(front.Event("sync"));
-        Assert.True(english.GetProperty("word").GetBoolean(), "英数でもローマ字を見分けるので受け取る\n" + front.Trace);
+        Assert.True(english.GetProperty("text").GetBoolean(), "英数でもローマ字を見分けるので受け取る\n" + front.Trace);
         front.Settings.DirectModeAutoDetect = false;
         english = Capture(front.Event("sync"));
-        Assert.True(!english.GetProperty("word").GetBoolean() && !english.GetProperty("symbol").GetBoolean(), "見分けないなら通す\n" + front.Trace);
-        Assert.True(english.GetProperty("keys").GetArrayLength() > 0, "英数でも切り替えキーは受け取る\n" + front.Trace);
+        Assert.True(!english.GetProperty("text").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "見分けないなら通す\n" + front.Trace);
+        Assert.True(HasKey(english, ToggleShortcut.Hankaku, 0), "英数でも切り替えキーは受け取る\n" + front.Trace);
+    }
+
+    [Test]
+    public static void CharacterKeys_NeedNoVirtualKey()
+    {
+        // 文字を入力するキーは ch だけで送れる (仮想キーコードは本体が決める)
+        var front = new Front();
+        foreach (var c in "kyouha,")
+            front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":{(c == 'k' ? "false" : "true")}}},\"key\":{{\"ch\":{(int)c}}}}}");
+        var view = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"sync\",\"sid\":\"t1\"}}");
+        var enter = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":true}},\"key\":{{\"vk\":13}}}}");
+        Assert.Equal("きょうは、", Commits(enter)[0].GetProperty("text").GetString(), front.Trace + view);
+    }
+
+    [Test]
+    public static void View_HasOnlyWhatTheFrontShows()
+    {
+        var front = new Front();
+        front.Type("kyou");
+        var typing = front.Key(' ');
+        var list = typing.GetProperty("result").GetProperty("view").GetProperty("list");
+        Assert.True(list.ValueKind == JsonValueKind.Object && !list.GetProperty("prediction").GetBoolean() && list.GetProperty("items").GetArrayLength() > 1,
+            "変換中で候補が 2 つ以上なら一覧を出す\n" + front.Trace);
+        Assert.True(!typing.GetProperty("result").TryGetProperty("showGuide", out _) && !typing.GetProperty("result").GetProperty("view").TryGetProperty("contextHint", out _),
+            "案内は操作ガイドの設定を反映済みで渡す\n" + front.Trace);
+        front.Settings.ShowGuide = false;
+        Assert.Equal("", front.Key('\b').GetProperty("result").GetProperty("view").GetProperty("hint").GetString(), "操作ガイドを出さない設定では固定の案内を出さない\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Rewrites_NeedTheTextBeforeTheCaret()
+    {
+        // 確定し直しは、本体がキャレットの前の文字と照合できたときだけ。読めない・合わないなら、今の語だけを確定する
+        var front = new Front();
+        front.Type("i ");
+        front.Document = "pasted";
+        front.Type("want ");
+        Assert.True(front.Document.EndsWith("want ", StringComparison.Ordinal) && front.Document.StartsWith("pasted", StringComparison.Ordinal), front.Trace);
+        Assert.Equal(0, front.Skipped.Count, "合わない確定し直しを出さない\n" + front.Trace);
     }
 
     [Test]

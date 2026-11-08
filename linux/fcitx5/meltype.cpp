@@ -291,9 +291,7 @@ std::string quote(const std::string &text) {
 
 const char *boolean(bool value) { return value ? "true" : "false"; }
 
-// ---- キー: fcitx5 のキー → 本体が使う Windows の仮想キーコード (ibus-engine-meltype と同じ) ----
-
-constexpr int OtherCharacterKey = 0x07;
+// ---- キー: 文字の無いキー → 本体が使う Windows の仮想キーコード (ibus-engine-meltype と同じ)。文字を入力するキーは文字だけを渡す ----
 
 int specialKey(fcitx::KeySym sym) {
     switch (sym) {
@@ -326,23 +324,11 @@ int specialKey(fcitx::KeySym sym) {
     }
 }
 
-// (仮想キーコード, 入力する文字)。Meltype が扱わないキーなら仮想キーコードは 0。
+// (仮想キーコード, 入力する文字)。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら両方 0。
 std::pair<int, uint32_t> virtualKey(fcitx::KeySym sym) {
     if (int vk = specialKey(sym)) return {vk, sym == FcitxKey_space ? 0x20u : 0u};
     uint32_t c = fcitx::Key::keySymToUnicode(sym);
-    if (c < 0x20) return {0, 0};
-    if (c >= 'a' && c <= 'z') return {static_cast<int>(c - 0x20), c};
-    if (c >= 'A' && c <= 'Z') return {static_cast<int>(c), c};
-    if (c >= '0' && c <= '9') return {static_cast<int>(c), c};
-    switch (c) {
-    case ',': return {0xBC, c};
-    case '.': return {0xBE, c};
-    case '-': return {0xBD, c};
-    case '/': return {0xBF, c};
-    case '[': return {0xDB, c};
-    case ']': return {0xDD, c};
-    default: return {OtherCharacterKey, c};
-    }
+    return {0, c < 0x20 ? 0 : c};
 }
 
 // UTF-8 の文字列の、文字単位の位置 → バイトの位置
@@ -391,13 +377,14 @@ private:
 
 class MeltypeCandidate : public fcitx::CandidateWord {
 public:
-    MeltypeCandidate(MeltypeEngine *engine, std::string text, int index)
-        : fcitx::CandidateWord(fcitx::Text(std::move(text))), engine_(engine), index_(index) {}
+    MeltypeCandidate(MeltypeEngine *engine, std::string text, int index, bool prediction)
+        : fcitx::CandidateWord(fcitx::Text(std::move(text))), engine_(engine), index_(index), prediction_(prediction) {}
     void select(fcitx::InputContext *ic) const override;
 
 private:
     MeltypeEngine *engine_;
     int index_;
+    bool prediction_;  // 予測変換の候補か
 };
 
 class MeltypeEngine : public fcitx::InputMethodEngineV2 {
@@ -431,7 +418,7 @@ public:
             state->modeShown = false;
         }
         auto [vk, character] = virtualKey(key.sym());
-        if (vk == 0) return;
+        if (vk == 0 && character == 0) return;
         const auto states = key.states();
         // Shift を離したことが伝わらず shiftHeld が残っていても、Space 以外には付けない (Tab や矢印が Shift 付きにならないように)
         const bool shift = states.test(fcitx::KeyState::Shift) || (vk == 0x20 && state->shiftHeld);
@@ -457,9 +444,9 @@ public:
 
     const fcitx::Configuration *getConfig() const override { return &config_; }
 
-    void selectCandidate(fcitx::InputContext *ic, int index) {
+    void selectCandidate(fcitx::InputContext *ic, int index, bool prediction) {
         Json output;
-        send(ic, "select", ",\"index\":" + std::to_string(index), output);
+        send(ic, "select", ",\"index\":" + std::to_string(index) + (prediction ? ",\"prediction\":true" : ""), output);
     }
 
 private:
@@ -527,50 +514,28 @@ private:
         ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
     }
 
-    // キャレットの前が expected と一致すると確認できたら、消す文字数 (コードポイント) を返す。確認できないときは 0。
-    // 本体の deleteBefore は UTF-16 の単位なので使わず、確認できた文字列から数える (絵文字など、2 単位の文字でもそろえる)。
-    static size_t expectedBeforeCaret(fcitx::InputContext *ic, const std::string &expected) {
-        if (expected.empty() || !ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) ||
-            !ic->surroundingText().isValid())
-            return 0;
-        const auto &text = ic->surroundingText().text();
-        const size_t cursor = ic->surroundingText().cursor();
-        const size_t length = charLength(expected);
-        if (cursor < length) return 0;
-        const size_t from = byteOffset(text, cursor - length);
-        if (text.compare(from, byteOffset(text, cursor) - from, expected) != 0) return 0;
-        return length;
-    }
-
     void apply(fcitx::InputContext *ic, const Json &result) {
         if (auto *commits = result.get("commits"); commits && commits->kind == Json::Kind::Array) {
             for (const auto &edit : commits->items) {
-                int remove = edit.integer("deleteBefore");
-                // 確定し直し: 消す文字が今もキャレットの前にあると確認できたときだけ消し、今打った文字を入れる。
-                // 確認できない (入力欄が周りの文字に対応していない・確定したときと変わった) ときは、前の文字は
-                // 消さずに今打った文字 (current) だけを入れる (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
-                const size_t length = remove > 0 ? expectedBeforeCaret(ic, edit.str("expect")) : 0;
-                auto committed = edit.str("text");
-                if (length > 0) {
+                // 確定し直し: 本体がキャレットの前と照合した前の文字 (expect) を消してから入れる。
+                // 本体の deleteBefore は UTF-16 の単位なので使わず、expect の文字数 (コードポイント) だけ消す
+                if (edit.integer("deleteBefore") > 0) {
+                    const size_t length = charLength(edit.str("expect"));
                     hidePreedit(ic);
                     ic->deleteSurroundingText(-static_cast<int>(length), static_cast<unsigned int>(length));
                 } else {
-                    if (remove > 0) {
-                        FCITX_WARN() << "Meltype: 確定し直す文字を確認できないため、前の文字を消しません";
-                        if (edit.get("current")) committed = edit.str("current");
-                    }
                     ic->inputPanel().reset();
                     ic->propertyFor(&factory_)->preeditVisible = false;
                 }
-                if (!committed.empty()) ic->commitString(committed);
+                if (const auto committed = edit.str("text"); !committed.empty()) ic->commitString(committed);
             }
         }
         auto *view = result.get("view");
-        if (view && view->kind == Json::Kind::Object) show(ic, *view, result.flag("showGuide", true));
+        if (view && view->kind == Json::Kind::Object) show(ic, *view);
         else hidePreedit(ic);
     }
 
-    void show(fcitx::InputContext *ic, const Json &view, bool showGuide) {
+    void show(fcitx::InputContext *ic, const Json &view) {
         auto &panel = ic->inputPanel();
         panel.reset();
         const auto text = view.str("text");
@@ -592,20 +557,20 @@ private:
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
-        // 固定の操作一覧は既定で表示する。OFF でも手動判定・予測・書き間違いの提案は残す。
-        auto hint = showGuide ? view.str("hint") : view.str("contextHint");
+        auto hint = view.str("hint");
         if (auto suggestion = view.str("suggestion"); !suggestion.empty())
             hint = suggestion + (hint.empty() ? "" : "　" + hint);
         if (!hint.empty()) panel.setAuxDown(fcitx::Text(hint));
-        const auto candidates = view.strings("candidates");
-        if (converting && candidates.size() > 1) {
+        if (const auto *listed = view.get("list"); listed && listed->kind == Json::Kind::Object) {
+            const auto candidates = listed->strings("items");
+            const bool prediction = listed->flag("prediction");
             auto list = std::make_unique<fcitx::CommonCandidateList>();
             list->setLayoutHint(fcitx::CandidateLayoutHint::Vertical);
             list->setPageSize(9);
             list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);
-            for (size_t i = 0; i < candidates.size(); i++) list->append<MeltypeCandidate>(this, candidates[i], static_cast<int>(i));
-            int selected = view.integer("selectedIndex", 0);
+            for (size_t i = 0; i < candidates.size(); i++) list->append<MeltypeCandidate>(this, candidates[i], static_cast<int>(i), prediction);
+            int selected = listed->integer("selected", -1);
             if (selected >= 0 && selected < static_cast<int>(candidates.size())) list->setGlobalCursorIndex(selected);
             panel.setCandidateList(std::move(list));
         }
@@ -621,7 +586,7 @@ private:
     }
 };
 
-void MeltypeCandidate::select(fcitx::InputContext *ic) const { engine_->selectCandidate(ic, index_); }
+void MeltypeCandidate::select(fcitx::InputContext *ic) const { engine_->selectCandidate(ic, index_, prediction_); }
 
 class MeltypeEngineFactory : public fcitx::AddonFactory {
     fcitx::AddonInstance *create(fcitx::AddonManager *manager) override { return new MeltypeEngine(manager->instance()); }

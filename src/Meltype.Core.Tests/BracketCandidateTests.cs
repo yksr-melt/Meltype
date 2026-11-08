@@ -306,10 +306,11 @@ internal static class BracketCandidateTests
         using var json = JsonDocument.Parse(result.ToJson());
         var view = json.RootElement.GetProperty("view");
         Assert.Equal(1, view.GetProperty("clauses").GetArrayLength());
-        Assert.Equal(7, view.GetProperty("candidates").GetArrayLength());
-        Assert.Equal("全角", view.GetProperty("notes")[0].GetString());
-        Assert.Equal("半角", view.GetProperty("notes")[1].GetString());
-        Assert.Equal(JsonValueKind.Null, view.GetProperty("notes")[2].ValueKind);
+        var list = view.GetProperty("list");
+        Assert.Equal(7, list.GetProperty("items").GetArrayLength());
+        Assert.Equal("全角", list.GetProperty("notes")[0].GetString());
+        Assert.Equal("半角", list.GetProperty("notes")[1].GetString());
+        Assert.Equal(JsonValueKind.Null, list.GetProperty("notes")[2].ValueKind);
         session.SelectCandidate(1);
         var committed = session.CommitPending();
         Assert.Equal("｢｣", string.Concat(committed.Commits.Select(c => c.Text)));

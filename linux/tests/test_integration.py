@@ -427,25 +427,6 @@ class IntegrationTests(unittest.TestCase):
         self.engine._apply({"commits": [{"deleteBefore": 8, "expect": "previous", "text": "replacement"}], "view": None})
         self.assertEqual("replacement", self.engine.document)
 
-    def test_reconversion_keeps_typed_text_when_previous_text_changed(self):
-        # #516: 貼り付けなどで前の文字が変わっていたときは、前の文字は消さず、今打った文字だけを入れる
-        # (edit ごと捨てると、打った「って」も消えて、本体の状態とずれる)。
-        self.engine.document = "pasted sentence"
-        self.engine._apply({"commits": [{"deleteBefore": 4, "expect": "word", "text": "って"}], "view": None})
-        self.assertEqual("pasted sentenceって", self.engine.document)
-
-    def test_reconversion_inserts_only_current_word_when_previous_text_changed(self):
-        # 前の文字を消せないときに text を入れると、直した前の語 (make) が二重に入る。今確定した語 (current) だけを入れる。
-        self.engine.document = "負け!"
-        self.engine._apply({"commits": [{"deleteBefore": 2, "expect": "負け", "text": "make want ", "current": "want "}], "view": None})
-        self.assertEqual("負け!want ", self.engine.document)
-
-    def test_reconversion_without_expected_text_does_not_delete(self):
-        # 消す文字が分からない (expect が無い) ときも、消さずに今打った文字だけを入れる。
-        self.engine.document = "pasted"
-        self.engine._apply({"commits": [{"deleteBefore": 2, "text": "って"}], "view": None})
-        self.assertEqual("pastedって", self.engine.document)
-
     def test_reconversion_counts_code_points(self):
         # 本体の deleteBefore は UTF-16 単位 (😊 は 2) だが、IBus はコードポイント単位 (😊 は 1)。
         # 消す文字数は、確認できた expect から数える。
