@@ -44,7 +44,8 @@ public sealed record ImeEvent
     public required ImeEventType Type { get; init; }
 
     /// <summary>入力欄 (TSF ではスレッド) ごとにフロントが振る ID。</summary>
-    public string Sid { get; init; } = "";
+    // init にすると、source-gen の JSON は項目が無いときに初期値ではなく null を入れる
+    public string Sid { get; set; } = "";
 
     public ImeKey? Key { get; init; }
 

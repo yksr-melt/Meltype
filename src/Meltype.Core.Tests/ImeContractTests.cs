@@ -304,6 +304,8 @@ internal static class ImeContractTests
             Assert.True(!Active(output) && !Consumed(output), "版の違う・知らない出来事は受け持たない: " + json);
         }
         Assert.Equal(0, front.Sessions, front.Trace);
+        var noSid = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"key\":{{\"vk\":65,\"ch\":97}}}}");
+        Assert.True(Active(noSid) && Consumed(noSid), "sid を省いた出来事も、空の sid の入力欄として受け持つ");
     }
 
     [Test]
