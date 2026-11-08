@@ -340,9 +340,6 @@ public sealed record CompositionOptions
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }
 
-    /// <summary>入力欄に入ったときなどに、入力モード (あ / A) をカーソルの近くに出すか。</summary>
-    public Func<bool> ModeIndicator { get; init; } = () => false;
-
     /// <summary>変換ボックスを出す位置 (入力位置に重ねる / カーソルの下)。</summary>
     public Func<Config.CompositionPlacement> Placement { get; init; } = () => Config.CompositionPlacement.Overlay;
 
@@ -3636,6 +3633,23 @@ public sealed class CompositionController
             _boundKeys = ControlKeyBindingParser.Parse(text);
         }
         return _boundKeys.TryGetValue(vk, out var key) ? key : null;
+    }
+
+    /// <summary>
+    /// 入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー (設定「Control キーの割り当て」による。HandleKey の Ctrl の処理と同じ順に見る)。
+    /// 入力していなければ空。ほかの Ctrl のキーは、確定してアプリへ送る。
+    /// </summary>
+    public IReadOnlyList<int> ComposingControlKeys()
+    {
+        if (_text.IsEmpty) return [];
+        var keys = new HashSet<int>();
+        if (_converting && _options.ControlKeys() == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
+        if (!string.IsNullOrWhiteSpace(_options.ControlKeyBindings())) keys.UnionWith(ControlKeyBindingParser.Parse(_options.ControlKeyBindings()).Keys);
+        for (var vk = 'A'; vk <= 'Z'; vk++)
+        {
+            if ((_options.ControlKeys() == Config.ControlKeyLayout.Mac ? MacControlShortcut(vk) : null) is not null || ControlShortcut(vk) is not null) keys.Add(vk);
+        }
+        return [.. keys.Order()];
     }
 
     /// <summary>入力中の Ctrl+英字で、ほかのキーと同じ働きをするもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数 / H BackSpace)。</summary>

@@ -479,13 +479,10 @@ public sealed class Settings
      Description("日本語入力のとき、z の後ろに記号や h j k l を打つと記号・矢印にします (Microsoft IME・Google 日本語入力と同じ。z/ → ・、z. → …、z, → ‥、z- → ～、z[ → 『、z] → 』、zh zj zk zl → ← ↓ ↑ →)。OFF にすると、z はほかの英字と同じに扱います (1000Hz. や quiz. の z. を … にしません)。")]
     public bool ZSymbols { get; set; } = true;
 
-    [Category("2. 入力モード"), DisplayName("入力モードをカーソルの近くに表示"), Platforms(Platform.Windows),
-     Description("Meltype キーボードで、半角/全角 を押したとき (と入力欄をクリックしたとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
+    [Category("2. 入力モード"), DisplayName("入力モードをカーソルの近くに表示"),
+     Description("入力モードを切り替えたとき (と入力欄に入ったとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
     public ModeIndicatorTiming ModeIndicator { get; set; } = ModeIndicatorTiming.OnSwitchAndFocus;
 
-    [Category("2. 入力モード"), DisplayName("Meltype IME でも入力モードをカーソルの近くに表示"), Platforms(Platform.Windows),
-     Description("Meltype IME の入力モードを切り替えたとき、カーソルの近くに「あ」(日本語) か「A」(英数) を1.2秒表示します。Meltype キーボードの表示設定とは独立して切り替えられます。表示の色は共用です。")]
-    public bool ShowTsfModeIndicator { get; set; }
 
     [Category("2. 入力モード"), DisplayName("入力モードの表示の色: 日本語 (あ)"), Platforms(Platform.Windows),
      Description("「あ」の背景色を #RRGGBB で書きます (例: #007ACC)。空なら青。壁紙・アプリのテーマで見えにくいときに変えます。")]
@@ -695,6 +692,7 @@ public sealed class Settings
             var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
             if (fileVersion < 8) MigrateToV8(raw);
             if (fileVersion < 9) MigrateToV9(raw);
+            if (fileVersion < 10) MigrateToV10(raw);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -822,7 +820,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 10;
 
     [Category("9. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -1023,6 +1021,17 @@ public sealed class Settings
     }
 
     /// <summary>
+    /// v10: 入力モードの表示を、どのフロントも ModeIndicator で決めるようにした (Meltype IME だけの ShowTsfModeIndicator を消した)。
+    /// 動作モードが Meltype IME (既定) なら、今までの Meltype IME の表示 (切り替えたときだけ・既定は出さない) を ModeIndicator にする。
+    /// </summary>
+    internal static void MigrateToV10(JsonObject values)
+    {
+        var tsf = values.Remove("ShowTsfModeIndicator", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on) && on;
+        var keyboard = values[nameof(Mode)] is JsonValue mode && mode.TryGetValue<string>(out var name) && string.Equals(name, nameof(InputMode.Keyboard), StringComparison.OrdinalIgnoreCase);
+        if (!keyboard) values[nameof(ModeIndicator)] = (tsf ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never).ToString();
+    }
+
+    /// <summary>
     /// v9: Zenzai を同梱して既定 ON にした。前の既定 (OFF・場所が空) のままなら ON にする。
     /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
     /// </summary>
@@ -1148,6 +1157,12 @@ public sealed class Settings
             MigrateToV9(values);
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                 if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
+        }
+        if (version < 10)
+        {
+            MigrateToV10(values);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV10(profileValues);
         }
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;

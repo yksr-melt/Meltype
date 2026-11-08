@@ -97,7 +97,7 @@ public static unsafe class Exports
 
     /// <summary>フロント 1 つ (IBus・fcitx5 のエンジン、Input Method Kit のコントローラー) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_ime_create")]
-    public static IntPtr ImeCreate() => GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment())));
+    public static IntPtr ImeCreate() => GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), MeltypeSession.DefaultSettings)));
 
     /// <summary>出来事 (<see cref="ImeEvent"/> の JSON) を処理して、<see cref="ImeOutput"/> の JSON を返す。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_ime_handle")]
@@ -124,9 +124,7 @@ public static unsafe class Exports
     /// <summary>Mac・Linux の環境。設定は config.json、コードの入力欄はフロントが知らせるターミナルの印で決める。</summary>
     private sealed class NativeEnvironment : IImeEnvironment
     {
-        public Config.Settings Settings => MeltypeSession.DefaultSettings();
-
-        public bool Selected => true;
+        public Config.InputMode? Mode => null;
 
         public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
             MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null,

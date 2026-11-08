@@ -93,7 +93,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         super.activateServer(sender)
         Self.active = self
         ModeServices.shared.activate(self)
-        send("sync", client: nil)
+        send("focus", client: client())
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -202,9 +202,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             item.state = (mode == .japanese) == japanese ? .on : .off
         }
         menu.addItem(.separator())
-        let indicator = menu.addItem(withTitle: "入力モードをミニウィンドウで表示", action: #selector(toggleModeIndicator(_:)), keyEquivalent: "")
-        indicator.target = self
-        indicator.state = ModeIndicatorSettings.shared.isEnabled ? .on : .off
         let importItem = menu.addItem(withTitle: "macOSのユーザー辞書を取り込む…", action: #selector(importUserDictionary(_:)), keyEquivalent: "")
         importItem.target = self
         let configItem = menu.addItem(withTitle: "Meltype の設定ファイル (config.json) を開く…", action: #selector(openConfigFile(_:)), keyEquivalent: "")
@@ -234,11 +231,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         var rectangle = NSRect.zero
         _ = client.attributes(forCharacterIndex: index, lineHeightRectangle: &rectangle)
         return ModeIndicator.validCaret(rectangle) ? rectangle : nil
-    }
-
-    @objc private func toggleModeIndicator(_ sender: Any?) {
-        ModeIndicatorSettings.shared.isEnabled.toggle()
-        modeIndicator.hide()
     }
 
     @objc private func importUserDictionary(_ sender: Any?) {

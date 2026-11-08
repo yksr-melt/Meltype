@@ -11,28 +11,6 @@ namespace Meltype.Tests;
 internal static class TipIndicatorTests
 {
     [Test]
-    public static void Indicator_SettingsAreIndependentForKeyboardAndTsf()
-    {
-        var settings = new Settings();
-        foreach (var keyboard in new[] { false, true })
-        {
-            foreach (var tsf in new[] { false, true })
-            {
-                settings.ModeIndicator = keyboard ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never;
-                settings.ShowTsfModeIndicator = tsf;
-                settings.Mode = InputMode.Keyboard;
-                Assert.Equal(keyboard, UI.TrayApplicationContext.ShouldShowModeIndicator(settings), "キーボード方式は既存設定だけを見る");
-                settings.Mode = InputMode.Tsf;
-
-            }
-        }
-        settings.Enabled = false;
-        Assert.True(!UI.TrayApplicationContext.ShouldShowModeIndicator(settings), "一時停止中は表示しない");
-        settings.Mode = InputMode.Keyboard;
-        Assert.True(!UI.TrayApplicationContext.ShouldShowModeIndicator(settings), "キーボード方式も一時停止中は表示しない");
-    }
-
-    [Test]
     public static void Indicator_TsfPositionSupportsNegativeCoordinates()
     {
         static string Request(string position) => $"{{\"thread\":1{position},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"toggle\"}}}}";
@@ -52,7 +30,6 @@ internal static class TipIndicatorTests
         invoker.CreateControl();
         using var composition = new CompositionService(invoker, CompositionDetector.CreateDefault(), new CompositionOptions
         {
-            ModeIndicator = () => true,
             UserDictionary = new UserDictionary(null),
             History = new ConversionHistory(null),
             Languages = new LanguageMemory(null),
@@ -89,44 +66,38 @@ internal static class TipIndicatorTests
     }
 
     [Test]
-    public static void Indicator_IsShownOnlyForExplicitChangesWithTheSetting()
+    public static void Indicator_IsShownWhenTheCoreSaysSo()
     {
-        var settings = new Settings { Mode = InputMode.Tsf };
-        var displayRequests = 0;
+        // 出すかは本体が state.indicator で決める (設定「入力モードをカーソルの近くに表示」)。TipServer は、入力スレッドが分かるときに出すだけ
+        var settings = new Settings { Mode = InputMode.Tsf, ModeIndicator = ModeIndicatorTiming.Never };
         using var invoker = new Control();
         invoker.CreateControl();
         using var composition = new CompositionService(invoker, CompositionDetector.CreateDefault(), new CompositionOptions
         {
-            ModeIndicator = () => { displayRequests++; return false; },
             UserDictionary = new UserDictionary(null),
             History = new ConversionHistory(null),
             Languages = new LanguageMemory(null),
             TranslationHistory = new TranslationHistory(null),
             Engine = () => ConversionEngine.System,
         });
-        using var server = new Tip.TipServer(invoker, composition, () => settings);
+        var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
+        using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));
         var host = server.Connect("harness", 0);
-        void Send(string type, uint thread = 1, string fields = "")
+        bool Shown(string type, uint thread = 1, string fields = "")
         {
+            indicator.Hide();
             var request = Tip.TipRequest.Parse($"{{\"thread\":{thread},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true{fields}}}}}")!;
             server.Handle(host, request);
             Application.DoEvents();
+            return indicator.Visible;
         }
 
-        // 実際の表示は設定で止め、UI への依頼だけ数える
-        Send("toggle");
-        Assert.Equal(0, displayRequests, "設定「Meltype IME でも入力モードを表示」が OFF なら表示しない");
-        settings.ShowTsfModeIndicator = true;
-        Send("toggle");
-        Send("toggle");
-        Assert.Equal(2, displayRequests, "明示的な切り替えのたびに表示する");
-        Send("key", fields: ",\"key\":{\"vk\":65,\"ch\":97}");
-        Send("sync");
-        Assert.Equal(2, displayRequests, "切り替えでない出来事では表示しない");
-        Send("toggle", thread: 0);
-        Assert.Equal(2, displayRequests, "入力スレッドが分からなければ表示しない");
+        Assert.True(!Shown("toggle"), "出さない設定");
+        settings.ModeIndicator = ModeIndicatorTiming.OnSwitch;
+        Assert.True(Shown("toggle") && Shown("toggle"), "明示的な切り替えのたびに出す");
+        Assert.True(!Shown("key", fields: ",\"key\":{\"vk\":65,\"ch\":97}") && !Shown("sync"), "切り替えでない出来事では出さない");
+        Assert.True(!Shown("toggle", thread: 0), "入力スレッドが分からなければ出さない");
         settings.Mode = InputMode.Keyboard;
-        Send("toggle");
-        Assert.Equal(2, displayRequests, "キーボード方式では Meltype IME の切り替えを表示しない");
+        Assert.True(!Shown("toggle"), "動作モードが Meltype キーボードなら、Meltype IME の切り替えでは出さない");
     }
 }

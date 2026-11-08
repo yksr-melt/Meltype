@@ -448,6 +448,12 @@ public:
         if (send(ic, "key", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
     }
 
+    // 入力欄にフォーカスが入った・入力メソッドを Meltype にした
+    void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
+        Json output;
+        send(event.inputContext(), "focus", "", output);
+    }
+
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;

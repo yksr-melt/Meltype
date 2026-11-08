@@ -11,11 +11,8 @@ namespace Meltype.Ime;
 /// <summary>ImeHost が使う OS 側の機能。1 つのフロント (TSF ではパイプのつながり = 1 つのアプリ) ごとに 1 つ。判断はしない。</summary>
 public interface IImeEnvironment
 {
-    /// <summary>設定。アプリ別設定は ImeSession が ImeField.App で反映する。</summary>
-    Settings Settings { get; }
-
-    /// <summary>このフロントが選ばれているか (Windows の動作モード。フロントが 1 つしかない OS では常に true)。</summary>
-    bool Selected { get; }
+    /// <summary>このフロントが受け持つ Windows の動作モード。フロントが 1 つしかない OS では null。</summary>
+    InputMode? Mode { get; }
 
     /// <summary>入力欄ごとの入力の本体。settings は、その入力欄のアプリの設定。辞書・学習データはフロントの中で共有する。</summary>
     MeltypeSession CreateSession(Func<Settings> settings);
@@ -38,7 +35,8 @@ public interface IImeEnvironment
 /// 別の ImeHost の sid には触れない (TSF では、つなぎ直した DLL が古い入力の続きを拾わない・ほかのアプリの入力を読めない)。
 /// 呼ぶスレッドは 1 つに決める (排他しない)。
 /// </summary>
-public sealed class ImeHost(IImeEnvironment environment)
+/// <param name="settings">設定 (config.json)。アプリ別設定は ImeSession が ImeField.App で反映する。フロントは読まない。</param>
+public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings)
 {
     public const int Version = 1;
 
@@ -86,15 +84,16 @@ public sealed class ImeHost(IImeEnvironment environment)
         }
         if (!_sessions.TryGetValue(e.Sid, out var session))
         {
-            var active = ImeSession.IsActive(environment, e.Field);
+            var current = settings();
+            var active = ImeSession.IsActive(environment, current, e.Field);
             // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
             // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
             if (!active || e.Type is not (ImeEventType.Key or ImeEventType.Toggle or ImeEventType.SetMode) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.Open ?? true, environment.Settings.ForApp(e.Field?.App), NextRev()), Pass);
+                return new(ImeSession.InitialState(active, e.Open ?? true, current.ForApp(e.Field?.App), e.Type == ImeEventType.Focus, NextRev()), Pass);
             }
-            session = new ImeSession(environment);
+            session = new ImeSession(environment, settings);
             _sessions[e.Sid] = session;
         }
         return session.Handle(e, NextRev());

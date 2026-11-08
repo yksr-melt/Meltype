@@ -125,16 +125,4 @@ final class ModeShortcutsTests: XCTestCase {
         }
         XCTAssertTrue(ModeServices(isMeltypeSelected: { true }).responds(to: NSSelectorFromString("changeInputMode:userData:error:")))
     }
-
-    func testIndicatorPreferenceDefaultsEnabledAndPersistsIndependently() {
-        let suite = "MeltypeModeIndicatorTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = ModeIndicatorSettings(defaults: defaults)
-        XCTAssertTrue(settings.isEnabled)
-        settings.isEnabled = false
-        XCTAssertFalse(ModeIndicatorSettings(defaults: defaults).isEnabled)
-        settings.isEnabled = true
-        XCTAssertTrue(ModeIndicatorSettings(defaults: defaults).isEnabled)
-    }
 }

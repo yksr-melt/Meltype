@@ -185,12 +185,11 @@ internal sealed class MeltypeEngine : IDisposable
             Log.Warn("Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードは変えません。");
         }
         _settings = next;
-        // Meltype キーボードを使わなくなった: 変換中の内容を確定する
+        // Meltype キーボードを使わなくなった: 変換中の内容を確定する。どちらでも、本体の状態を受け取り直す
         if (previous is { Enabled: true, Mode: InputMode.Keyboard } && next is not { Enabled: true, Mode: InputMode.Keyboard }) Keyboard?.Stop();
+        else Keyboard?.Refresh();
         // Meltype IME のモードにしたら (トレイでも設定画面でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
         if (SwitchesToTsf(previous.Mode, next.Mode)) Tip.TipServer.ActivateForSession();
-        // アプリ別設定の「入力欄とみなす」を変えたら、今のフォーカスを調べ直す (前面のアプリに戻ったときを待たずに効かせる)。
-        if (!TextInputApps(previous).SequenceEqual(TextInputApps(next), StringComparer.OrdinalIgnoreCase)) Focus?.Invalidate();
         Log.SetFileOutput(next.FileLog ? AppPaths.LogFile : null);
         Log.RecordText = next.LogTypedText;
         if (_configPath is not null)
@@ -204,9 +203,6 @@ internal sealed class MeltypeEngine : IDisposable
 
     /// <summary>動作モードを Meltype IME に変えたか (使えずに元のモードに戻したときは、戻した後のモードで見る)。</summary>
     internal static bool SwitchesToTsf(InputMode previous, InputMode next) => previous != InputMode.Tsf && next == InputMode.Tsf;
-
-    /// <summary>アプリ別設定で「入力欄とみなす」にしたアプリ。</summary>
-    private static IEnumerable<string> TextInputApps(Settings settings) => settings.AppRules.Where(r => r.TextInput).Select(r => r.Process);
 
     public DetectionResult Evaluate(string letters, Settings? settings = null) =>
         _scoreEngine.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), IsFinal: false), settings ?? _settings);

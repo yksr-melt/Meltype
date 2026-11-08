@@ -24,16 +24,18 @@ namespace Meltype.Ime;
 internal sealed class ImeSession
 {
     private readonly IImeEnvironment _environment;
+    private readonly Func<Settings> _source;
     private readonly MeltypeSession _session;
     private ImeField? _field;
     private Settings _settings;
     // 直前に入れた定型文 (すぐに Esc を押したら、打った ;名前 に戻す)
     private (string Text, string Typed)? _lastSnippet;
 
-    public ImeSession(IImeEnvironment environment)
+    public ImeSession(IImeEnvironment environment, Func<Settings> settings)
     {
         _environment = environment;
-        _settings = environment.Settings;
+        _source = settings;
+        _settings = settings();
         _session = environment.CreateSession(() => _settings);
         _session.ReadingOf = environment.ReadingOf;
         _session.ClipboardText = () => environment.ClipboardText;
@@ -47,22 +49,29 @@ internal sealed class ImeSession
 
     public void Close() => _session.CommitPending();
 
-    /// <summary>この入力欄で入力を受け持つか (フロントが選ばれていて、一時停止中・アプリ別設定で OFF・ゲーム・パスワード欄でない)。</summary>
-    public static bool IsActive(IImeEnvironment environment, ImeField? field)
+    /// <summary>
+    /// この入力欄で入力を受け持つか。動作モードがこのフロントで、一時停止中・アプリ別設定で OFF・ゲーム・パスワード欄・全画面 (設定)・
+    /// 日本語以外の入力言語 (設定)・フロントが文字を送れない所・入力欄でない所 (アプリ別設定で「入力欄とみなす」アプリとターミナルを除く) でない。
+    /// </summary>
+    public static bool IsActive(IImeEnvironment environment, Settings settings, ImeField? field)
     {
-        var settings = environment.Settings;
         var traits = field?.Traits ?? [];
-        return environment.Selected && settings.Enabled && !traits.Contains(ImeTrait.Password) &&
+        var app = field?.App;
+        return (environment.Mode is not { } mode || settings.Mode == mode) && settings.Enabled &&
+            !traits.Contains(ImeTrait.Password) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
-            settings.IsAppEnabled(field?.App) && !settings.IsGame(field?.App, traits.Contains(ImeTrait.Game));
+            !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
+            !(traits.Contains(ImeTrait.NonText) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
+            settings.IsAppEnabled(app) && !settings.IsGame(app, traits.Contains(ImeTrait.Game));
     }
 
     public ImeOutput Handle(ImeEvent e, long rev)
     {
         var previousApp = _field?.App;
         _field = e.Field ?? _field;
-        var settings = _settings = _environment.Settings.ForApp(_field?.App);
-        var active = IsActive(_environment, _field);
+        var all = _source();
+        var settings = _settings = all.ForApp(_field?.App);
+        var active = IsActive(_environment, all, _field);
         var lastSnippet = _lastSnippet;
         if (e.Type == ImeEventType.Key || e.Caret?.Moved == true) _lastSnippet = null;
         ApplyFacts(e, settings);
@@ -71,7 +80,7 @@ internal sealed class ImeSession
         var before = Before(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
-        var result = Verify(e.Type switch
+        var result = WithPaste(Verify(e.Type switch
         {
             ImeEventType.Key when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
             ImeEventType.Toggle when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
@@ -81,7 +90,7 @@ internal sealed class ImeSession
             ImeEventType.Select => e.Prediction ? _session.SelectPrediction(e.Index) : _session.SelectCandidate(e.Index),
             ImeEventType.Refresh when active => _session.RefreshConversion() ?? Pass,
             _ => Pass,
-        }, e.Field);
+        }, e.Field), settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
         return new(new ImeState
@@ -89,19 +98,22 @@ internal sealed class ImeSession
             Active = active,
             Open = !_session.Direct,
             Japanese = active && japanese,
-            Indicator = active && explicitChange && japanese != wasJapanese,
-            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings),
+            Indicator = active && (explicitChange && japanese != wasJapanese && settings.ModeIndicator != ModeIndicatorTiming.Never ||
+                e.Type == ImeEventType.Focus && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus),
+            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys()),
             Rev = rev,
         }, result);
     }
 
     /// <summary>入力の本体を作る前 (まだ打っていない入力欄) の状態。</summary>
-    public static ImeState InitialState(bool active, bool open, Settings settings, long rev) => new()
+    /// <param name="focus">入力欄にフォーカスが入った (設定によっては入力モードを表示する)。</param>
+    public static ImeState InitialState(bool active, bool open, Settings settings, bool focus, long rev) => new()
     {
         Active = active,
         Open = open,
         Japanese = active && open,
-        Capture = Capture(active, !open, false, settings),
+        Indicator = active && focus && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
+        Capture = Capture(active, !open, false, settings, []),
         Rev = rev,
     };
 
@@ -263,6 +275,17 @@ internal sealed class ImeSession
         return result with { Commits = edits };
     }
 
+    /// <summary>
+    /// キーを送って文字を入れるフロント (Meltype キーボード) が貼り付けで入れる確定: アプリ別設定の「確定した文字の入れ方」(Qt のアプリは既定で貼り付け) と、
+    /// 改行を含む文 (改行を Enter として送ると、チャットでは途中で送信される)。
+    /// </summary>
+    private SessionResult WithPaste(SessionResult result, Settings settings)
+    {
+        if (result.Commits.Count == 0) return result;
+        var paste = PastePolicy.ShouldPaste(settings, _field?.App, PastePolicy.IsQtWindowClass(_field?.WindowClass));
+        return result with { Commits = result.Commits.Select(edit => edit with { Paste = paste || edit.Text.Contains('\n') }).ToList() };
+    }
+
     /// <summary>OS が変換中の文字を表示のまま確定した: 本体も確定したことにする。文字はもう入っているので、確定し直しも入れない。</summary>
     private SessionResult CommittedOutside(ImeField? field)
     {
@@ -303,7 +326,7 @@ internal sealed class ImeSession
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
-    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings)
+    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, IEnumerable<int> composingControlKeys)
     {
         if (!active) return new ImeCapture();
         // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは設定「左 Alt で英数 / 右 Alt で日本語」
@@ -321,6 +344,7 @@ internal sealed class ImeSession
             Text = !direct || detects,
             Except = direct && directEnglishWord ? EnglishWordCharacters : "",
             Keys = keys.Distinct().ToList(),
+            Composing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
         };
     }
 

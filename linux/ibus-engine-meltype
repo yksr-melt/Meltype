@@ -219,6 +219,7 @@ class MeltypeEngine(IBus.Engine):
         global _focused
         _focused = self
         self.register_properties(self._properties)
+        self.send("focus")
 
     def do_focus_out(self):
         self._leave(focus_out=True)

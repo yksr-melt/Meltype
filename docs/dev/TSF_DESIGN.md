@@ -30,11 +30,10 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
 
-設定「Meltype IME でも入力モードをカーソルの近くに表示」(`ShowTsfModeIndicator`、既定 OFF) を ON にすると、明示的に入力モードを切り替えたとき、入力位置の近くに「あ / A」を 1.2 秒表示します。
-明示的に切り替えたか (応答の `state.indicator`) は本体が決め、表示は Meltype.exe (`TipServer`) が出します。DLL は、入力モードのキーとタスクバーのボタンの出来事に、入力スレッドの ID と TSF の選択範囲の位置 (`GetTextExt`) を付けます。
+設定「入力モードをカーソルの近くに表示」(`ModeIndicator`。どのフロントも同じ設定) で、明示的に入力モードを切り替えたとき (と入力欄に入ったとき)、入力位置の近くに「あ / A」を 1.2 秒表示します。
+出すか (応答の `state.indicator`) は本体が決め、表示は Meltype.exe (`TipServer`) が出します。DLL は、入力モードのキーとタスクバーのボタンの出来事に、入力スレッドの ID と TSF の選択範囲の位置 (`GetTextExt`) を付けます。
 位置が分からなければ常駐側でキャレットを探し、それも分からなければマウス位置へ戻します (Terminal の入力欄の左上を入力位置と推測しません)。表示時に別の入力先へ移っていたら表示しません。
 アプリ・Windows による自動的な開閉やパスワード欄への移動だけでは表示されません。
-既存の「入力モードをカーソルの近くに表示」(`ModeIndicator`) はキーボード方式だけに適用し、色の設定は共用します。
 
 DLL を更新した後の確認では、入力先アプリのプロセスを終了して起動し直します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い DLL が残ることがあります。
 

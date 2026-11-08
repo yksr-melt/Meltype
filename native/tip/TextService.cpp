@@ -103,12 +103,6 @@ void MaskSystemModifier() {
     SendInput(2, mask, sizeof(INPUT));
 }
 
-// 変換中に Meltype.exe が受け持つ Ctrl+英字 (CompositionController.ControlShortcut と合わせる)。Alt・Windows キーと一緒なら違う
-bool IsCompositionShortcut(UINT vk) {
-    if (!KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return false;
-    return vk == 'H' || vk == 'U' || vk == 'I' || vk == 'O' || vk == 'P';
-}
-
 // そのキーで入力される文字 (無ければ 0)
 wchar_t CharOf(UINT vk, LPARAM lParam) {
     BYTE state[256] = {};
@@ -424,13 +418,14 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
     ForgetSecretField();
     if (candidates_) candidates_->Hide();
     AdviseTextEditSink(focus);
+    if (focus != nullptr && !disabled_) Sync("focus");
     return S_OK;
 }
 
 STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     if (!foreground && candidates_) candidates_->Hide();
     // 別アプリ (Meltype の設定画面など) から戻ったとき、キー入力の前に状態と設定を受け取り直す
-    if (foreground && !disabled_) Sync();
+    if (foreground && !disabled_) Sync("focus");
     // キーを受け取らなくなった (スレッドが前面でなくなった・ほかの IME に移った): 受け取ったキーを離したことは届かないかもしれないので忘れる
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
@@ -745,6 +740,10 @@ void TextService::ApplyState(const JsonValue& state) {
         const int vk = key[L"key"].Int(), mods = key[L"mods"].Int();
         if (vk > 0 && vk < 256 && mods >= 0 && mods <= 15) next.keys.push_back({static_cast<unsigned>(vk), mods});
     }
+    for (const JsonValue& key : capture[L"composing"].array) {
+        const int vk = key[L"key"].Int();
+        if (vk > 0 && vk < 256) next.composing.push_back(static_cast<UINT>(vk));
+    }
     if (next.active != state_.active || !state_.known) TipLog(L"Meltype.exe: %s", next.active ? L"受け持ちます" : L"受け持ちません");
     state_ = std::move(next);
     if (state_.keys != preservedFrom_) RefreshPreservedKeys();
@@ -755,10 +754,26 @@ std::string TextService::CaretMoved(bool left) {
     return std::string(",\"caret\":{\"moved\":true,\"passed\":0") + (left ? ",\"left\":true" : "") + "}";
 }
 
-void TextService::Sync() {
+void TextService::Sync(const char* type) {
     JsonValue reply;
-    // 状態を受け取るだけ。応答が遅ければ待たない (次のキーで受け取る)
-    if (Send("sync", "", "", reply, 100, true)) ApplyState(reply[L"state"]);
+    // 状態を受け取るだけ。応答が遅ければ待たない (次のキーで受け取る)。
+    // フォーカスが入ったときは入力欄の事実も送る (アプリ別設定・コードの行で、受け持つか・入力モードを表示するかが変わる)
+    std::string field;
+    RECT anchor = {};
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (std::string_view(type) == "focus" && threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&context);
+    }
+    if (context) {
+        RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
+            // パスワード欄の文字は読まずに、パスワード欄であることだけを伝える
+            if (!ReadField(ec, context.Get(), field)) field = "{\"traits\":[\"password\"]}";
+            anchor = CaretRect(ec, context.Get());
+            return S_OK;
+        });
+    }
+    if (Send(type, field, "", reply, 100, true, field.empty() ? nullptr : &anchor)) ApplyState(reply[L"state"]);
     FlushOpen();
 }
 
@@ -998,8 +1013,10 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
         // Ctrl・Alt・Windows キーとの組み合わせ (Ctrl + S など): Meltype.exe も確定してアプリに渡すだけなので、ここで確定して
         // 受け取らずに通す (受け取ってから送り直すと、送り直しが届かないアプリでキーが消える)。
         // ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す (キーが先に届いて、確定が後になるのを防ぐ)
-        // ただし変換ボックスの中で使う Ctrl+英字 (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace) は、確定せずに Meltype.exe に送る
-        if ((KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) && !IsCompositionShortcut(vk) && CommitNow()) return false;
+        // ただし変換ボックスの中で使う Ctrl+英字 (本体が capture.composing で知らせる) は、確定せずに Meltype.exe に送る
+        const bool used = KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
+            std::find(state_.composing.begin(), state_.composing.end(), vk) != state_.composing.end();
+        if ((KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) && !used && CommitNow()) return false;
         return true;  // 変換中はほかのキーを全部受け取る (つながらなければ確定して通す)
     }
     // 調べるとき用: 文字を生むキーを通した理由 (どのキーかは書かない)

@@ -210,12 +210,6 @@ public sealed class FocusInspector : IDisposable
     }
 
     /// <summary>
-    /// 前面のアプリがアプリ別設定で「入力欄とみなす」か (このクラスのスレッドから呼ばれる)。
-    /// そのアプリでは、入力欄と判定できなくてもフォーカスのある所を入力欄として扱う (issue #52)。
-    /// </summary>
-    public Func<bool>? TreatsAsTextInput { get; set; }
-
-    /// <summary>
     /// 前面のアプリが、フォーカスがウィンドウそのもの (Window・Pane) にあるときも入力欄として扱うアプリか (issue #373: LINE)。
     /// LINE (Qt) は、ウィンドウを切り替えた直後、入力欄をクリックするまで変換ボックスが出なかった。そのときの UI Automation のフォーカスはウィンドウにあると見ている。
     /// </summary>
@@ -420,9 +414,8 @@ public sealed class FocusInspector : IDisposable
             // Meltype 自身の画面 (設定のドロップダウンなど) には UI Automation で問い合わせない。
             // 自分の UI スレッドに問い合わせが割り込むと、開いているドロップダウンが閉じてしまう。
             if (Input.ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow())) return new FocusInfo(false, false, null, "Meltype の画面");
-            var forced = TreatsAsTextInput?.Invoke() == true;
             var element = Automation()?.Focused();
-            if (element is null) return forced ? new FocusInfo(true, false, null, "フォーカスなし (入力欄とみなすアプリ)") : new FocusInfo(false, false, null, "フォーカスなし");
+            if (element is null) return new FocusInfo(false, false, null, "フォーカスなし");
             // クリックで調べ始めたときは、フォーカスがまだ前の欄にあることがあるので、UI Automation で取った欄の窓で見る
             if (Input.ForegroundTracker.TypingAllowedWindows.ContainsKey(_inspectedForeground) &&
                 Input.ForegroundTracker.DirectInputControls.ContainsKey(new IntPtr(element.NativeWindowHandle))) return new FocusInfo(false, false, null, "Meltype の画面 (横取りしない欄)");
@@ -509,13 +502,6 @@ public sealed class FocusInspector : IDisposable
                     editable = HasActiveImeContext(_inspectedForeground, affinityWindow);
                     description += " (Affinity のキャンバス)";
                 }
-            }
-            // それでも分からないアプリ (Premiere Pro など、画面を自分で描くアプリ) は、アプリ別設定で「入力欄とみなす」が
-            // ON なら入力欄として扱う。1 文字のショートカットが多いアプリもあるので、既定では何もしない。
-            if (!editable && forced && affinityWindow == IntPtr.Zero)
-            {
-                editable = true;
-                description += " (入力欄とみなすアプリ)";
             }
             return new FocusInfo(editable, false, element.Bounds, description, element.Name, element.ClassName ?? "");
         }

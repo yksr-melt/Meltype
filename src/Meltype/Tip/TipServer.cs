@@ -32,17 +32,18 @@ internal sealed class TipServer : IDisposable
 {
     private readonly Control _invoker;
     private readonly CompositionService _composition;
-    private readonly Func<Settings> _settings;
+    private readonly Func<IImeEnvironment, ImeHost> _createHost;
     private readonly CancellationTokenSource _stop = new();
 
     /// <summary>1 つの要求の大きさの上限 (キー 1 つ分なら 1KB もない)。</summary>
     private const int MaxRequestBytes = 64 * 1024;
 
-    public TipServer(Control invoker, CompositionService composition, Func<Settings> settings)
+    /// <param name="createHost">つながり 1 つの入力の本体を作る (設定は本体に渡す。TipServer は読まない)。</param>
+    public TipServer(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost)
     {
         _invoker = invoker;
         _composition = composition;
-        _settings = settings;
+        _createHost = createHost;
         composition.ConversionReady += _conversion.Notify;
     }
 
@@ -479,7 +480,7 @@ internal sealed class TipServer : IDisposable
         if (e.Field is { } field) e = e with { Field = connection.WithFacts(field) };
         var output = connection.Host.Handle(e);
         if (output.State.Active && connection.Process is { } process) Greet(process);
-        if (output.State.Indicator && _settings().ShowTsfModeIndicator && request.Thread != 0)
+        if (output.State.Indicator && request.Thread != 0)
             _composition.ShowMode(output.State.Japanese, request.Thread, request.Anchor);
         return output.ToJson();
     }
@@ -529,7 +530,7 @@ internal sealed class TipServer : IDisposable
             Process = process;
             _java = processId != 0 && ForegroundTracker.IsJava(processId);
             _looksLikeGame = processId != 0 && ForegroundTracker.LooksLikeGame(processId);
-            Host = new ImeHost(this);
+            Host = server._createHost(this);
         }
 
         public ImeHost Host { get; }
@@ -550,9 +551,7 @@ internal sealed class TipServer : IDisposable
             };
         }
 
-        public Settings Settings => _server._settings();
-
-        public bool Selected => Settings.Mode == InputMode.Tsf;
+        public InputMode? Mode => InputMode.Tsf;
 
         public MeltypeSession CreateSession(Func<Settings> settings) => _server._composition.CreateSession(settings, directModeDetection: true);
 

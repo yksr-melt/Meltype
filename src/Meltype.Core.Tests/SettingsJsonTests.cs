@@ -31,22 +31,26 @@ internal static class SettingsJsonTests
     }
 
     [Test]
-    public static void SettingsJson_TsfIndicatorIsOptInAndRoundTrips()
+    public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
+        // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま
         var directory = Path.Combine(Path.GetTempPath(), "meltype-indicator-settings-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
         {
             var path = Path.Combine(directory, "config.json");
-            File.WriteAllText(path, $"{{\"SettingsVersion\":{Settings.CurrentVersion},\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}}");
-            var settings = Settings.Load(path);
-            Assert.True(!new Settings().ShowTsfModeIndicator && !settings.ShowTsfModeIndicator, "新規・既存の設定とも IME 表示は既定 OFF");
-            Assert.Equal(ModeIndicatorTiming.OnSwitchAndFocus, settings.ModeIndicator, "既存のキーボード方式の設定を維持する");
-            settings.ShowTsfModeIndicator = true;
-            settings.ModeIndicator = ModeIndicatorTiming.Never;
-            settings.Save(path);
-            var loaded = Settings.Load(path);
-            Assert.True(loaded.ShowTsfModeIndicator && loaded.ModeIndicator == ModeIndicatorTiming.Never, "方式ごとの設定を独立して保存・復元する");
+            foreach (var (json, expected) in new[]
+            {
+                ("{\"SettingsVersion\":9,\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", ModeIndicatorTiming.Never),
+                ("{\"SettingsVersion\":9,\"ShowTsfModeIndicator\":true}", ModeIndicatorTiming.OnSwitch),
+                ("{\"SettingsVersion\":9,\"Mode\":\"Keyboard\",\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", ModeIndicatorTiming.OnSwitch),
+                ($"{{\"SettingsVersion\":{Settings.CurrentVersion},\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}}", ModeIndicatorTiming.OnSwitchAndFocus),
+            })
+            {
+                File.WriteAllText(path, json);
+                Assert.Equal(expected, Settings.Load(path).ModeIndicator, json);
+                Assert.True(!File.ReadAllText(path).Contains("ShowTsfModeIndicator"), "移した項目を保存し直して消す: " + json);
+            }
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -188,7 +192,7 @@ internal static class SettingsJsonTests
             var path = Path.Combine(directory, "config.json");
             File.WriteAllText(path, """
                 {
-                  "SettingsVersion": 7,
+                  "SettingsVersion": 7, "Mode": "Keyboard",
                   "SlashAsMiddleDot": true, "FullWidthSlash": true,
                   "ShiftSpaceHalfWidth": true, "FullWidthSpaceByDefault": false,
                   "CompatibleShortcuts": true, "MacControlKeys": false,

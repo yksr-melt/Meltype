@@ -16,7 +16,6 @@ internal sealed class CompositionService : IDisposable
     private readonly Control _invoker;
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
-    private readonly Func<bool> _showIndicator;
     private readonly Func<Config.CompositionPlacement> _placement;
     private readonly Func<Config.CompositionSize> _size;
     private readonly Func<string> _font;
@@ -124,7 +123,6 @@ internal sealed class CompositionService : IDisposable
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         _useZenzai = options.UseZenzai;
         if (options.Engine() != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
-        _showIndicator = options.ModeIndicator;
         _placement = options.Placement;
         _size = options.Size;
         _font = options.Font;
@@ -217,25 +215,44 @@ internal sealed class CompositionService : IDisposable
 
     public bool ConverterAvailable => _converter.IsAvailable;
 
-    /// <summary>入力言語による制限 (日本語のキーボードでないなど)。確定した文字を送る前に確かめる。</summary>
-    public Func<bool> InputAllowed { get; set; } = () => true;
-
-    /// <summary>前面のアプリで、確定した文字を貼り付けで入れるか (アプリ別設定の「確定した文字の入れ方」)。</summary>
-    public Func<bool> PasteCommit { get; set; } = () => false;
-
-    public void CommitText(string text)
+    /// <summary>
+    /// 確定した文字を入れる: 前の count 文字を消してから text を入れる。paste なら貼り付けで入れる (貼り付けられなければキーで送る。改行は Shift+Enter)。
+    /// キーで送るときは、BackSpace と新しい文字を 1 回の SendInput でまとめて送る (間に物理キーやほかの入力が割り込まないように。issue #227)。
+    /// </summary>
+    public void Insert(int count, string text, bool paste)
     {
         // 変換ボックスを出したまま確定して、続けて打っている (kyouha Space iitenki): 次に見せるときに、確定した分だけ右へずらす
         if (_window.Visible) _committedWhileVisible += text;
         EnsureSystemImeClosed();
-        if (PasteCommit() && TryPaste(text))
+        if (!paste)
+        {
+            SendText(count, text);
+            return;
+        }
+        DeleteBackward(count);
+        if (TryPaste(text.ReplaceLineEndings("\r\n")))
         {
             Diagnostics.Log.Info($"確定した文字を貼り付けで入力しました ({text.Length} 文字)。");
             return;
         }
-        var inputs = new List<Native.INPUT>(text.Length * 2);
+        Diagnostics.Log.Warn("貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
+        foreach (var (line, i) in text.Split('\n').Select((line, i) => (line, i)))
+        {
+            if (i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
+            SendText(0, line);
+        }
+    }
+
+    private static void SendText(int count, string text)
+    {
+        var inputs = new List<Native.INPUT>(count * 2 + text.Length * 2);
+        for (var i = 0; i < count; i++)
+        {
+            inputs.Add(KeyInput(VirtualKeys.Back, up: false));
+            inputs.Add(KeyInput(VirtualKeys.Back, up: true));
+        }
         AddUnicodeText(inputs, text);
-        Native.SendAll(inputs.ToArray(), "確定文字列の入力");
+        Native.SendAll(inputs.ToArray(), count > 0 ? "確定し直し" : "確定文字列の入力");
     }
 
     private DataObject? _savedClipboard;
@@ -329,11 +346,10 @@ internal sealed class CompositionService : IDisposable
     /// IME が開いたままだと、送り込んだ文字の一部を IME が抱え込み、後から来た文字と順番が入れ替わることがある
     /// (「やあやあ、私だよ」→「やあやあ、だよ私」)。
     /// </summary>
-    private void EnsureSystemImeClosed()
+    private static void EnsureSystemImeClosed()
     {
         try
         {
-            if (!InputAllowed()) return;
             if (IME.ImeTarget.FromForeground() is not { } target) return;
             var state = IME.Imm32ImeController.GetState(target);
             if (state.Mode != IME.ImeMode.Open) return;
@@ -369,53 +385,6 @@ internal sealed class CompositionService : IDisposable
             events.Add(new KeyEvent(VirtualKeys.Back, 0, false, true, false, 0));
         }
         _injector.Inject(events);
-    }
-
-    /// <summary>
-    /// 定型文を入れる: 打った ;名前 (count 文字) を消してから text を入れる (issue #290)。複数行の文は、改行を Enter として送ると
-    /// チャットでは途中で送信されてしまうので、貼り付けで入れる。1 行の文は、確定し直しと同じく 1 回の SendInput で送る。
-    /// </summary>
-    public void InsertSnippet(int count, string text)
-    {
-        if (!InputAllowed()) return;
-        if (text.Contains('\n'))
-        {
-            DeleteBackward(count);
-            EnsureSystemImeClosed();
-            if (TryPaste(text.ReplaceLineEndings("\r\n"))) return;
-            Diagnostics.Log.Warn("定型文を貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
-            foreach (var line in text.Split('\n').Select((line, i) => (line, i)))
-            {
-                if (line.i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
-                CommitText(line.line);
-            }
-            return;
-        }
-        ReplaceBackward(count, text);
-    }
-
-    /// <summary>
-    /// 確定し直し: BackSpace と新しい文字を 1 回の SendInput でまとめて送る (間に物理キーやほかの入力が割り込まないように。issue #227)。
-    /// 貼り付けで入れるアプリでは、消してから貼り付ける。
-    /// </summary>
-    public void ReplaceBackward(int count, string text)
-    {
-        if (count <= 0 || PasteCommit())
-        {
-            DeleteBackward(count);
-            CommitText(text);
-            return;
-        }
-        if (_window.Visible) _committedWhileVisible += text;
-        EnsureSystemImeClosed();
-        var inputs = new List<Native.INPUT>(count * 2 + text.Length * 2);
-        for (var i = 0; i < count; i++)
-        {
-            inputs.Add(KeyInput(VirtualKeys.Back, up: false));
-            inputs.Add(KeyInput(VirtualKeys.Back, up: true));
-        }
-        AddUnicodeText(inputs, text);
-        Native.SendAll(inputs.ToArray(), "確定し直し");
     }
 
     public static void Replay(MouseButtonEvent e)
@@ -465,7 +434,7 @@ internal sealed class CompositionService : IDisposable
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
         _invoker.BeginInvoke(() =>
         {
-            if (!_showIndicator() || _window.Visible) return;
+            if (_window.Visible) return;
             // TSF の通知が届くまでに別の入力先へ移っていたら表示しない。
             if (inputThread != 0 && IME.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
             var anchor = inputAnchor ?? (inputThread == 0 ? FindAnchor() : FindImeIndicatorAnchor());

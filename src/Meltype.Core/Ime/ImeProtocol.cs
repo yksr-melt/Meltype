@@ -31,8 +31,10 @@ public enum ImeEventType
     /// フロントは見つけたらすぐ送る (Core は打ったキーからキャレットの位置を追いかけない)。
     /// </summary>
     [JsonStringEnumMemberName("caret")] Caret,
-    /// <summary>今の状態だけを受け取る (フォーカスを得たときなど)。入力の本体は作らない。</summary>
+    /// <summary>今の状態だけを受け取る (設定を変えたかもしれないときなど)。入力の本体は作らない。</summary>
     [JsonStringEnumMemberName("sync")] Sync,
+    /// <summary>入力欄にフォーカスが入った。今の状態を受け取る (設定によっては入力モードを表示する)。入力の本体は作らない。</summary>
+    [JsonStringEnumMemberName("focus")] Focus,
     [JsonStringEnumMemberName("close")] Close,
 }
 
@@ -104,6 +106,12 @@ public enum ImeTrait
     [JsonStringEnumMemberName("game")] Game,
     /// <summary>全画面表示のウィンドウ (設定「全画面のアプリでは止める」)。</summary>
     [JsonStringEnumMemberName("fullscreen")] Fullscreen,
+    /// <summary>フォーカスのある所が入力欄ではない (UI Automation。キーボードフックのフロント)。</summary>
+    [JsonStringEnumMemberName("nonText")] NonText,
+    /// <summary>フロントがアプリに文字を送れない (管理者として動くアプリ・Meltype 自身の画面。キーボードフックのフロント)。</summary>
+    [JsonStringEnumMemberName("unreachable")] Unreachable,
+    /// <summary>入力先で日本語以外の入力言語 (キーボード) を選んでいる (キーボードフックのフロント)。</summary>
+    [JsonStringEnumMemberName("otherLanguage")] OtherLanguage,
 }
 
 /// <summary>UI Automation で調べたフォーカスのある要素 (Windows)。</summary>
@@ -129,6 +137,8 @@ public sealed record ImeField
     public string? App { get; init; }
     /// <summary>ウィンドウのタイトル (README.md などの文章のファイルを開いているか)。分からなければ null。</summary>
     public string? Title { get; init; }
+    /// <summary>前面のウィンドウのクラス名 (Windows。Qt のアプリかで確定した文字の入れ方を決める)。分からなければ null。</summary>
+    public string? WindowClass { get; init; }
     public ImeElement? Element { get; init; }
     // init にすると、source-gen の JSON は項目が無いときに初期値ではなく null を入れる
     public IReadOnlyList<ImeTrait> Traits { get; set; } = [];
@@ -158,7 +168,7 @@ public sealed record ImeState
     public bool Open { get; init; }
     /// <summary>表示するモード (「あ」なら true)。コードの行では Open のまま「A」になる。</summary>
     public bool Japanese { get; init; }
-    /// <summary>今の出来事で明示的にモードが変わった。フロントはキャレットの近くに入力モードを一瞬表示する。</summary>
+    /// <summary>入力モードを一瞬表示する (明示的に切り替えた・入力欄に入った。設定「入力モードをカーソルの近くに表示」による)。フロントはキャレットの近くに出す。</summary>
     public bool Indicator { get; init; }
     /// <summary>変換していないときに受け取るキー。キーを受け取るかをその場で決めなければならないフロント (TSF) が使う。</summary>
     public required ImeCapture Capture { get; init; }
@@ -177,6 +187,8 @@ public sealed record ImeCapture
     public bool Text { get; init; }
     public string Except { get; init; } = "";
     public IReadOnlyList<ImeShortcut> Keys { get; init; } = [];
+    /// <summary>変換中に Ctrl と一緒に押しても変換ボックスで使うキー (設定「Control キーの割り当て」)。ほかの Ctrl・Alt・Win と一緒のキーは、確定してアプリに通す。</summary>
+    public IReadOnlyList<ImeShortcut> Composing { get; init; } = [];
 }
 
 /// <summary>Mods は Shift=1, Ctrl=2, Alt=4, Win=8 (<see cref="Input.ShortcutModifiers"/>)。</summary>

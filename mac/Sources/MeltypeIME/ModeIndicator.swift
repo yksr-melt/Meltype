@@ -117,7 +117,6 @@ final class ModeIndicator {
     }
 
     private func present(_ mode: MacInputMode, caret: NSRect?) {
-        guard ModeIndicatorSettings.shared.isEnabled else { hide(); return }
         let screen: NSScreen?
         if let caret {
             screen = NSScreen.screens.first(where: { $0.frame.contains(caret.origin) || $0.frame.intersects(caret) })

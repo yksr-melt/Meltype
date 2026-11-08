@@ -15,7 +15,8 @@ namespace Meltype.Composition;
 /// Current は、確定し直すときに Text の後ろに続けて入る、今確定した語 (先に今の語を入れてから前を書き換えるフロント向け)。
 /// CaretBack は、この確定を入れた後、末尾から左へ戻す UTF-16 の文字数。クリックなどで入力先が移ったときは、フロント側で移動を適用しない。
 /// </summary>
-public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null, int CaretBack = 0);
+/// Paste は、キーを送って文字を入れるフロント (Meltype キーボード) が、貼り付けで入れるか (アプリ別設定の「確定した文字の入れ方」・改行を含む文)。
+public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null, int CaretBack = 0, bool Paste = false);
 
 /// <summary>
 /// 1 回のキー入力の結果。Consumed が false ならそのキーはアプリにそのまま渡す (Commits を入れた後で)。
@@ -23,12 +24,9 @@ public readonly record struct TextEdit(int DeleteBefore, string Text, string? Ex
 /// </summary>
 public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commits, CompositionView? View)
 {
-    /// <summary>固定の操作ガイドを表示するか (設定「操作ガイドを表示」)。JSON の hint に反映する。</summary>
-    public bool ShowGuide { get; init; } = true;
-
     /// <summary>
     /// フロントに渡す JSON にする (NativeAOT でも使えるよう手書き)。表示するかの判断はここで済ませ、フロントは出すものだけを受け取る:
-    /// hint は操作ガイドの設定を反映した案内、typed は見えている文字と違うときだけの打ったキー、
+    /// typed は見えている文字と違うときだけの打ったキー、
     /// list は一覧に出す候補 (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補。出さないなら null)。
     /// </summary>
     public string ToJson()
@@ -51,6 +49,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
                 AppendString(builder, current);
             }
             if (Commits[i].CaretBack > 0) builder.Append(",\"caretBack\":").Append(Commits[i].CaretBack);
+            if (Commits[i].Paste) builder.Append(",\"paste\":true");
             builder.Append('}');
         }
         builder.Append("],\"view\":");
@@ -68,9 +67,8 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"clauses\":");
         AppendArray(builder, view.Clauses ?? []);
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
-        // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ
         builder.Append(",\"hint\":");
-        AppendString(builder, ShowGuide ? view.Hint : view.ContextHint ?? "");
+        AppendString(builder, view.Hint);
         builder.Append(",\"suggestion\":");
         AppendNullable(builder, view.Suggestion);
         // 打ったキー (設定「打ったキーを表示」が OFF か、見えている文字と同じ (英字のまま) なら null)
@@ -410,6 +408,9 @@ public sealed class MeltypeSession
     /// <summary>変換して候補を選んでいるか。</summary>
     public bool IsConverting => _controller.IsConverting;
 
+    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
+    public IReadOnlyList<int> ComposingControlKeys() => _controller.ComposingControlKeys();
+
     /// <summary>ユーザーが判定を直した (英字 / かなに直した語。トレイの「直した誤判定を報告...」)。</summary>
     public event Action<Correction>? Corrected
     {
@@ -685,7 +686,9 @@ public sealed class MeltypeSession
             if (_pendingDelete > 0) Add("");
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
-            return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view) { ShowGuide = settings().ShowGuide };
+            // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
+            var view = _hidden || _view is not { } shown ? null : settings().ShowGuide ? shown : shown with { Hint = shown.ContextHint ?? "" };
+            return new SessionResult(consumed, _commits.ToList(), view);
         }
 
         public void CommitText(string text) => Add(text);

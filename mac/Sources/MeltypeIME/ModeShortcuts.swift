@@ -43,17 +43,3 @@ enum ModeShortcutAction: String, CaseIterable {
         self.init(rawValue: serviceIdentifier)
     }
 }
-
-/// ミニウィンドウの表示設定だけを保持する。キー設定は OS が管理する。
-final class ModeIndicatorSettings {
-    static let shared = ModeIndicatorSettings()
-    private let defaults: UserDefaults
-    private static let storageKey = "MacShowModeIndicator"
-
-    init(defaults: UserDefaults = .standard) { self.defaults = defaults }
-
-    var isEnabled: Bool {
-        get { defaults.object(forKey: Self.storageKey) == nil || defaults.bool(forKey: Self.storageKey) }
-        set { defaults.set(newValue, forKey: Self.storageKey) }
-    }
-}

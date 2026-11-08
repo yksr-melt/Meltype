@@ -47,13 +47,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private int _exclusionNotificationScheduled;
     private volatile bool _exiting;
 
-    internal static bool ShouldShowModeIndicator(Settings settings) => settings.Enabled && (settings.Mode switch
-    {
-        InputMode.Keyboard => settings.ModeIndicator != ModeIndicatorTiming.Never,
-        InputMode.Tsf => settings.ShowTsfModeIndicator,
-        _ => false,
-    });
-
     public TrayApplicationContext(MeltypeEngine engine, AppState state)
     {
         _engine = engine;
@@ -71,7 +64,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ZenzaiModelPath = () => _engine.Settings.ZenzaiModelPath,
             ZenzaiDevice = () => _engine.Settings.ZenzaiDevice,
             GitHubTitles = () => GitHubTitlesShared,
-            ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
             Placement = () => _engine.Settings.CompositionPlacement,
             Size = () => _engine.Settings.CompositionSize,
@@ -79,11 +71,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
             LightTheme = () => _engine.Settings.CompositionIsLight(Meltype.Composition.CompositionWindow.WindowsUsesLightTheme()),
             Opacity = () => _engine.Settings.CompositionOpacityValue,
         });
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, () => _engine.Settings);
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
         _keyboard.ModeChanged += OnEngineStatusChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
-        _tipServer = new Tip.TipServer(_invoker, _composition, () => _engine.Settings);
+        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
         _tipServer.Start();
         IntroduceTsf();
 

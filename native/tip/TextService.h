@@ -35,6 +35,8 @@ struct ServerState {
     bool text = true;
     std::wstring except;
     std::vector<ToggleShortcut> keys = {{0x19, 0}, {0xC0, 4}, {0xF3, 0}, {0xF4, 0}, {0xF0, 0}, {0x15, 0}, {0x20, 1}};
+    // 変換中に Ctrl と一緒に押しても Meltype.exe に送るキー (ほかの Ctrl・Alt・Windows キーとの組み合わせは、確定して通す)
+    std::vector<UINT> composing;
     double rev = 0;
 };
 
@@ -127,7 +129,8 @@ private:
     static std::string CaretMoved(bool left);
     // 前の入力欄の、日本語にしていたコードの行などを忘れさせる (キャレットが動いた)
     void SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged);
-    void Sync();
+    // 状態を受け取る。type は sync か focus (入力欄にフォーカスが入った)
+    void Sync(const char* type = "sync");
     // 変換中だけ、背景の変換の結果が届くのを専用の接続で待つ (Meltype.exe は応答でしか知らせられない)
     void StartConversionWait();
     void FinishConversionWait();

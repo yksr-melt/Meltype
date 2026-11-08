@@ -24,16 +24,15 @@ internal static class ImeContractTests
         private readonly ImeHost _host;
         private readonly List<string> _trace = [];
 
-        public Front() => _host = new ImeHost(this);
+        public Front() => _host = new ImeHost(this, () => Settings);
 
         public Settings Settings { get; set; } = new() { LiveConversion = false };
 
-        /// <summary>このフロントが選ばれているか (Windows の動作モード)。</summary>
-        public bool Selected { get; set; } = true;
+        /// <summary>このフロントが受け持つ Windows の動作モード (null ならフロントが 1 つしかない OS)。</summary>
+        public InputMode? Mode { get; set; }
 
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { CursorIntoBrackets = () => settings().CursorIntoBrackets, LiveConversion = () => settings().LiveConversion },
-            settings, directModeDetection: true);
+            new CompositionOptions().WithSettings(settings), settings, directModeDetection: true);
 
         /// <summary>再変換の読み (OS の機能の代わり)。</summary>
         public Dictionary<string, string> Readings { get; } = [];
@@ -316,7 +315,7 @@ internal static class ImeContractTests
     [Test]
     public static void Deactivated_WhileComposing_CommitsAndPassesTheKey()
     {
-        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.Selected = false, f =>
+        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.Mode = InputMode.Keyboard, f =>
         {
             f.Settings.AppRules.Add(new AppRule { Process = "off.exe", Enabled = false });
             f.App = "off.exe";
@@ -331,7 +330,7 @@ internal static class ImeContractTests
             Assert.True(!Consumed(front.Key('b')), front.Trace);
             Assert.Equal(0, Capture(front.Event("sync")).GetProperty("keys").GetArrayLength(), "受け持たないときはキーを受け取らせない\n" + front.Trace);
             front.Settings.Enabled = true;
-            front.Selected = true;
+            front.Mode = null;
             front.App = null;
             front.Type("ka");
             Assert.Equal("か", front.Composition["t1"], "戻したら受け持つ\n" + front.Trace);
@@ -471,6 +470,69 @@ internal static class ImeContractTests
         front.App = "term.exe";
         front.Event("sync");
         Assert.True(!front.Key('k').GetProperty("state").GetProperty("open").GetBoolean(), "「最初は英数」のアプリに移ったら英数\n" + front.Trace);
+    }
+
+    [Test]
+    public static void ModeIndicator_IsDecidedByTheSetting()
+    {
+        var front = new Front();
+        Assert.True(Indicator(front.Event("focus")), "既定では入力欄に入ったときも表示する\n" + front.Trace);
+        Assert.True(Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたら表示する\n" + front.Trace);
+        front.Settings.ModeIndicator = ModeIndicatorTiming.OnSwitch;
+        Assert.True(!Indicator(front.Event("focus")) && Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたときだけ\n" + front.Trace);
+        front.Settings.ModeIndicator = ModeIndicatorTiming.Never;
+        Assert.True(!Indicator(front.Key(ToggleShortcut.Hankaku)), "出さない設定\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Commits_SayWhenToPaste()
+    {
+        // キーを送って文字を入れるフロント向け: アプリ別設定の「確定した文字の入れ方」・Qt のアプリ・改行を含む文
+        var front = new Front();
+        front.Type("ka");
+        Assert.True(!Commits(front.Key('\n'))[0].TryGetProperty("paste", out _), "ふつうはキーで入れる\n" + front.Trace);
+        front.Settings.AppRules.Add(new AppRule { Process = "paste.exe", Enabled = true, Commit = CommitMethod.Paste });
+        front.App = "paste.exe";
+        front.Type("ka");
+        Assert.True(Commits(front.Key('\n'))[0].GetProperty("paste").GetBoolean(), "アプリ別設定で貼り付け\n" + front.Trace);
+        front = new Front();
+        front.Snippets.Set("sig", "--\nメルト");
+        front.Key(0xBA, ';');
+        front.Type("sig");
+        Assert.True(Commits(front.Key(' '))[0].GetProperty("paste").GetBoolean(), "改行を含む定型文は貼り付け\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Capture_ListsControlKeysUsedWhileComposing()
+    {
+        var front = new Front();
+        Assert.Equal(0, Capture(front.Event("sync")).GetProperty("composing").GetArrayLength(), "入力していなければ空\n" + front.Trace);
+        var typing = front.Key('k');
+        var keys = Capture(typing).GetProperty("composing").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
+        Assert.True(keys.Contains(('U', 2)) && keys.Contains(('H', 2)) && !keys.Contains(('J', 2)), "Ctrl+U・Ctrl+H は変換ボックスで使う\n" + front.Trace);
+        front.Settings.ControlKeys = ControlKeyLayout.Mac;
+        keys = Capture(front.Key('a')).GetProperty("composing").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
+        Assert.True(keys.Contains(('J', 2)) && keys.Contains(('E', 2)), "macOS 風の割り当て\n" + front.Trace);
+    }
+
+    [Test]
+    public static void FrontFacts_DecideWhetherCoreTakesTheField()
+    {
+        foreach (var trait in new[] { "unreachable", "nonText" })
+        {
+            var front = new Front();
+            front.Traits.Add(trait);
+            Assert.True(!Active(front.Key('a')), $"{trait} では受け持たない\n" + front.Trace);
+        }
+        var text = new Front { App = "game.exe" };
+        text.Traits.Add("nonText");
+        text.Settings.AppRules.Add(new AppRule { Process = "game.exe", Enabled = true, TextInput = true });
+        Assert.True(Active(text.Key('a')), "アプリ別設定で「入力欄とみなす」アプリは受け持つ\n" + text.Trace);
+        var language = new Front();
+        language.Traits.Add("otherLanguage");
+        Assert.True(Active(language.Key('a')), "日本語以外のキーボードでも、設定が OFF なら受け持つ\n" + language.Trace);
+        language.Settings.JapaneseKeyboardOnly = true;
+        Assert.True(!Active(language.Key('a')), "設定「日本語のキーボードだけ」\n" + language.Trace);
     }
 
     [Test]

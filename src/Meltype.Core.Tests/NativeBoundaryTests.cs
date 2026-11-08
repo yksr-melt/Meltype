@@ -19,11 +19,11 @@ internal static unsafe class NativeBoundaryTests
     {
         private readonly GCHandle _handle;
 
-        public NativeSession() => _handle = GCHandle.Alloc(new ImeHost(this));
+        public NativeSession() => _handle = GCHandle.Alloc(new ImeHost(this, () => Settings));
 
         public Settings Settings { get; } = new() { SpaceAroundEnglish = true };
 
-        public bool Selected => true;
+        public InputMode? Mode => null;
 
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
             new CompositionOptions { SpaceAroundEnglish = () => true }, settings);
