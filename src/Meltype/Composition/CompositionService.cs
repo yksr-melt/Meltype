@@ -334,6 +334,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     // ---- ICompositionHost ----
 
+    public bool CandidateGridNavigation => true;
+
     private ReconversionSelection? _reconversionSelection;
 
     public ReconversionSelection? GetReconversionSelection()

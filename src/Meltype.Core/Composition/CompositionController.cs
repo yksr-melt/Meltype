@@ -91,6 +91,9 @@ public interface ICompositionHost
     /// <summary>今 Shift キーが押されているか (かな入力の小書き文字・句読点の判定に使う)。</summary>
     bool IsShiftDown() => false;
 
+    /// <summary>候補の一覧を拡張グリッドで表示し、左右キーを候補の列移動に使うか。</summary>
+    bool CandidateGridNavigation => false;
+
     /// <summary>
     /// 入力欄の文字を、キーを処理しているその場で読めているか。読めている環境 (Mac) では、渡された
     /// 「キャレットの前の文字」は今のキャレットの位置のものだと信じられる。読めていない環境 (Windows は別のスレッドで
@@ -347,6 +350,7 @@ public sealed class CompositionController
 
     /// <summary>候補の一覧の 1 ページの数 (変換ボックス・Linux の候補の一覧と合わせる)。数字キー 1〜9 でこのページの中から選ぶ。</summary>
     internal const int CandidatePageSize = 9;
+    private const int CandidateGridColumnCount = 4;
 
     /// <summary>英数状態の判定で、この時間打鍵が無ければ英語とみなして判定をやめる。</summary>
     private const long DirectHoldIdleMs = 700;
@@ -1522,8 +1526,16 @@ public sealed class CompositionController
                 return true;
             case VirtualKeys.Convert:
             case VirtualKeys.Space:
+                NextCandidate(+1);
+                return true;
+            case VirtualKeys.Down when _host.CandidateGridNavigation && IsExpandedCandidateGrid():
+                MoveCandidateRow(+1);
+                return true;
             case VirtualKeys.Down:
                 NextCandidate(+1);
+                return true;
+            case VirtualKeys.Up when _host.CandidateGridNavigation && IsExpandedCandidateGrid():
+                MoveCandidateRow(-1);
                 return true;
             case VirtualKeys.Up:
                 NextCandidate(-1);
@@ -1540,6 +1552,12 @@ public sealed class CompositionController
                 return true;
             case VirtualKeys.Left when shift:
                 Resize(-1);
+                return true;
+            case VirtualKeys.Right when _host.CandidateGridNavigation && IsExpandedCandidateGrid():
+                MoveCandidateColumn(+1);
+                return true;
+            case VirtualKeys.Left when _host.CandidateGridNavigation && IsExpandedCandidateGrid():
+                MoveCandidateColumn(-1);
                 return true;
             case VirtualKeys.Right:
                 _selectedClause = Math.Min(_selectedClause + 1, _clauses.Count - 1);
@@ -2791,6 +2809,36 @@ public sealed class CompositionController
         clause.Changed = true;
     }
 
+    private bool IsExpandedCandidateGrid() =>
+        _clauses[_selectedClause].Candidates.Count > CandidatePageSize &&
+        _clauses[_selectedClause].Index >= CandidatePageSize;
+
+    private void MoveCandidateColumn(int step)
+    {
+        var clause = _clauses[_selectedClause];
+        var index = clause.Index;
+        var target = index + step * CandidatePageSize;
+        var columnGroup = CandidatePageSize * CandidateGridColumnCount;
+        if (step > 0 && target / columnGroup != index / columnGroup)
+            target = (index / columnGroup + 1) * columnGroup + index % CandidatePageSize;
+        else if (step < 0 && target / columnGroup != index / columnGroup)
+            target = (index / columnGroup - 1) * columnGroup + 3 * CandidatePageSize + index % CandidatePageSize;
+        if (target < 0 || target >= clause.Candidates.Count) return;
+        clause.Index = target;
+        clause.Changed = true;
+    }
+
+    private void MoveCandidateRow(int step)
+    {
+        var clause = _clauses[_selectedClause];
+        var row = clause.Index % CandidatePageSize;
+        if ((step < 0 && row == 0) || (step > 0 && row == CandidatePageSize - 1)) return;
+        var target = clause.Index + step;
+        if (target < 0 || target >= clause.Candidates.Count) return;
+        clause.Index = target;
+        clause.Changed = true;
+    }
+
     /// <summary>
     /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を 2 番目以降に足す。
     /// 英語の文節は、ローマ字として読んだかなで一覧を引き、かなの候補 (go → ご) の後ろに足す。
@@ -3422,12 +3470,15 @@ public sealed class CompositionController
             if (!selected.Expanded) Expand(selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = _clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
+            var candidateHint = _host.CandidateGridNavigation && selected.Index >= CandidatePageSize
+                ? "↑↓ 候補　←→ 列　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る"
+                : "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る";
             _host.Show(new CompositionView(
                 string.Concat(_clauses.Select(c => c.Text)),
                 selected.Candidates,
                 selected.Index,
                 true,
-                (zenzai ? "Zenzai · " : "") + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
+                (zenzai ? "Zenzai · " : "") + candidateHint,
                 _clauses.Select(c => c.Text).ToList(),
                 _selectedClause,
                 CandidateNotes(selected),

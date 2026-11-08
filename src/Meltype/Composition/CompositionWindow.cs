@@ -179,6 +179,10 @@ internal sealed class CompositionWindow : PopupForm
 
     /// <summary>候補の一覧に一度に出す数 (Microsoft IME と同じく 9 個)。</summary>
     private const int PageSize = 9;
+    private const int GridColumns = 4;
+    private const int GridPageSize = PageSize * GridColumns;
+    private const int GridColumnGap = 12;
+    private const int MinimumGridColumnWidth = 128;
 
     /// <summary>候補で止まってから意味を出すまでの時間。</summary>
     private const int MeaningDelayMs = 1500;
@@ -277,6 +281,26 @@ internal sealed class CompositionWindow : PopupForm
     private static string? ShowsTyped(CompositionView view) =>
         view.Typed is { Length: > 0 } typed && typed != view.Text ? typed : null;
 
+    private static bool IsExpandedCandidateGrid(CompositionView view) =>
+        view.Candidates.Count > PageSize && view.SelectedIndex >= PageSize;
+
+    private int[] CandidateGridColumnWidths(Graphics g, CompositionView view, int first)
+    {
+        var minimumWidth = (int)(MinimumGridColumnWidth * _scale * _monitorScale);
+        var widths = Enumerable.Repeat(minimumWidth, GridColumns).ToArray();
+        for (var column = 0; column < GridColumns; column++)
+        {
+            var start = first + column * PageSize;
+            for (var i = start; i < Math.Min(view.Candidates.Count, start + PageSize); i++)
+            {
+                var note = view.Notes?[i].ToDisplayText() is { } text ? TextRenderer.MeasureText(g, text, _hintFont).Width + 12 : 0;
+                widths[column] = Math.Max(widths[column],
+                    TextRenderer.MeasureText(g, $"{i - start + 1}  {view.Candidates[i]}", _candidateFont).Width + 28 + note);
+            }
+        }
+        return widths;
+    }
+
     /// <summary>view を出したときの変換ボックスの大きさ (出す場所を決めるのにも使う)。</summary>
     public Size Measure(CompositionView view)
     {
@@ -300,11 +324,20 @@ internal sealed class CompositionWindow : PopupForm
         }
         if (view.Converting)
         {
-            for (var i = 0; i < view.Candidates.Count; i++)
+            if (IsExpandedCandidateGrid(view))
             {
-                // 候補の右に注記を出す分だけ広くする
-                var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
-                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {view.Candidates[i]}", _candidateFont).Width + 28 + note);
+                var first = view.SelectedIndex / GridPageSize * GridPageSize;
+                var columnWidths = CandidateGridColumnWidths(g, view, first);
+                width = Math.Max(width, columnWidths.Sum() + GridColumnGap * (GridColumns - 1) + 20);
+            }
+            else
+            {
+                for (var i = 0; i < view.Candidates.Count; i++)
+                {
+                    // 候補の右に注記を出す分だけ広くする
+                    var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
+                    width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {view.Candidates[i]}", _candidateFont).Width + 28 + note);
+                }
             }
             height += Math.Min(view.Candidates.Count, PageSize) * (_candidateFont.Height + 4) + 6;
             // 2 ページ以上あるときは、下に「3 / 27」を出す分
@@ -385,27 +418,66 @@ internal sealed class CompositionWindow : PopupForm
 
         if (view.Converting)
         {
-            // 9 個ずつのページに分けて、選んでいる候補のページだけを出す (候補が多いと画面に収まらないため)。
-            var first = Math.Max(0, view.SelectedIndex) / PageSize * PageSize;
+            // 最初の 9 件は縦に表示し、10 件目以降を選んだら 9 件 × 4 列の一覧に広げる。
+            var expanded = IsExpandedCandidateGrid(view);
+            var first = expanded
+                ? Math.Max(0, view.SelectedIndex) / GridPageSize * GridPageSize
+                : Math.Max(0, view.SelectedIndex) / PageSize * PageSize;
             var listTop = y;
-            for (var i = first; i < Math.Min(view.Candidates.Count, first + PageSize); i++)
+            if (expanded)
             {
                 var rowHeight = _candidateFont.Height + 4;
-                if (i == view.SelectedIndex)
+                var columnWidths = CandidateGridColumnWidths(g, view, first);
+                var x = 10;
+                for (var column = 0; column < GridColumns; column++)
                 {
-                    using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
-                    g.FillRectangle(highlight, 4, y - 2, Width - 8, rowHeight);
+                    var columnStart = first + column * PageSize;
+                    for (var i = columnStart; i < Math.Min(view.Candidates.Count, columnStart + PageSize); i++)
+                    {
+                        var row = i - columnStart;
+                        var candidateY = listTop + row * rowHeight;
+                        if (i == view.SelectedIndex)
+                        {
+                            using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
+                            g.FillRectangle(highlight, x - 6, candidateY - 2, columnWidths[column] + 2, rowHeight);
+                        }
+                        DrawText(g, $"{row + 1}  {view.Candidates[i]}", _candidateFont, new Point(x + 2, candidateY),
+                            i == view.SelectedIndex ? _palette.Text : _palette.Candidate,
+                            i == view.SelectedIndex ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
+                        if (view.Notes?[i].ToDisplayText() is { } note)
+                        {
+                            var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
+                            TextRenderer.DrawText(g, note, _hintFont,
+                                new Point(x + columnWidths[column] - noteWidth - 8, candidateY + (_candidateFont.Height - _hintFont.Height) / 2),
+                                Accent, TextFormatFlags.NoPrefix);
+                        }
+                    }
+                    x += columnWidths[column] + GridColumnGap;
                 }
-                DrawText(g, $"{i - first + 1}  {view.Candidates[i]}", _candidateFont, new Point(12, y),
-                    i == view.SelectedIndex ? _palette.Text : _palette.Candidate,
-                    i == view.SelectedIndex ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
-                if (view.Notes?[i].ToDisplayText() is { } note)
+                y = listTop + PageSize * rowHeight;
+            }
+            else
+            {
+                // 9 個ずつのページに分けて、選んでいる候補のページだけを出す。
+                for (var i = first; i < Math.Min(view.Candidates.Count, first + PageSize); i++)
                 {
-                    // 候補の注記を右端に小さく出す
-                    var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
-                    TextRenderer.DrawText(g, note, _hintFont, new Point(Width - noteWidth - 10, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
+                    var rowHeight = _candidateFont.Height + 4;
+                    if (i == view.SelectedIndex)
+                    {
+                        using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
+                        g.FillRectangle(highlight, 4, y - 2, Width - 8, rowHeight);
+                    }
+                    DrawText(g, $"{i - first + 1}  {view.Candidates[i]}", _candidateFont, new Point(12, y),
+                        i == view.SelectedIndex ? _palette.Text : _palette.Candidate,
+                        i == view.SelectedIndex ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
+                    if (view.Notes?[i].ToDisplayText() is { } note)
+                    {
+                        // 候補の注記を右端に小さく出す
+                        var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
+                        TextRenderer.DrawText(g, note, _hintFont, new Point(Width - noteWidth - 10, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
+                    }
+                    y += rowHeight;
                 }
-                y += rowHeight;
             }
             if (view.Candidates.Count > PageSize)
             {

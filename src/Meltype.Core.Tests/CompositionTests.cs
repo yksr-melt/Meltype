@@ -69,6 +69,7 @@ internal static class CompositionTests
         public CompositionView? View { get; private set; }
         public bool PhysicalShift { get; set; }
         public bool CanDeleteBackward { get; set; } = true;
+        public bool CandidateGridNavigation { get; set; }
         public ReconversionSelection? Selection { get; set; }
 
         public ReconversionSelection? GetReconversionSelection() => Selection;
@@ -4160,6 +4161,39 @@ internal static class CompositionTests
         k.Press(VirtualKeys.PageUp); // 最初のページの前は最後のページ
         Assert.Equal(k.Host.View!.Candidates[(k.Host.View.Candidates.Count - 1) / 9 * 9], k.Host.View.Clauses![0], "最後のページ");
         Assert.Equal("", k.Host.Document, "まだ確定しない");
+    }
+
+    [Test]
+    public static void CandidateGrid_ArrowKeysMoveBetweenRowsAndColumns()
+    {
+        var many = Enumerable.Range(1, 70).Select(i => "候補" + i).ToArray();
+        var k = new Keyboard(moreCandidates: reading => reading == "かわ" ? many : []);
+        k.Host.CandidateGridNavigation = true;
+        k.Type("kawa ");
+        for (var i = 0; i < 9; i++) k.Press(VirtualKeys.Down);
+        Assert.Equal(9, k.Host.View!.SelectedIndex, "10 件目を選ぶと拡張一覧に入る");
+        Assert.True(k.Host.View.Hint.Contains("←→ 列"), "拡張一覧の左右キー操作を案内する");
+        k.Press(VirtualKeys.Right);
+        Assert.Equal(18, k.Host.View!.SelectedIndex, "右で次の列へ");
+        k.Press(VirtualKeys.Down);
+        Assert.Equal(19, k.Host.View!.SelectedIndex, "下で同じ列の次の行へ");
+        k.Press(VirtualKeys.Left);
+        Assert.Equal(10, k.Host.View!.SelectedIndex, "左で前の列へ");
+        k.Press(VirtualKeys.Up);
+        Assert.Equal(9, k.Host.View!.SelectedIndex, "上で同じ列の前の行へ");
+        for (var i = 0; i < 8; i++) k.Press(VirtualKeys.Up);
+        Assert.Equal(9, k.Host.View!.SelectedIndex, "列の先頭では上へはみ出さない");
+        k.Press(VirtualKeys.Left);
+        Assert.Equal(0, k.Host.View!.SelectedIndex, "最初の列にも戻れる");
+        for (var i = 0; i < 9; i++) k.Press(VirtualKeys.Down);
+        k.Press(VirtualKeys.Right);
+        k.Press(VirtualKeys.Right);
+        for (var i = 0; i < 8; i++) k.Press(VirtualKeys.Down);
+        Assert.Equal(35, k.Host.View!.SelectedIndex, "36 件目まで下へ進める");
+        k.Press(VirtualKeys.Right);
+        Assert.Equal(44, k.Host.View!.SelectedIndex, "右端から次の36件の一覧へ進み、行を保つ");
+        k.Press(VirtualKeys.Left);
+        Assert.Equal(35, k.Host.View!.SelectedIndex, "前の一覧へ戻れる");
     }
 
     [Test]

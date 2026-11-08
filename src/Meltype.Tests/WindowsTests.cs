@@ -62,6 +62,17 @@ internal static class WindowsTests
     }
 
     [Test]
+    public static void CompositionWindow_ExpandsCandidateGridAfterFirstNine()
+    {
+        using var composition = new CompositionWindow();
+        var candidates = Enumerable.Range(1, 40).Select(i => "候補" + i).ToArray();
+        var initial = composition.Measure(new CompositionView("読み", candidates, 0, true, ""));
+        var expanded = composition.Measure(new CompositionView("読み", candidates, 9, true, ""));
+        Assert.True(expanded.Width > initial.Width + 200, $"10 件目以降は横4列に広がる: {initial.Width} → {expanded.Width}");
+        Assert.Equal(initial.Height, expanded.Height, "表示行数は9行のまま");
+    }
+
+    [Test]
     public static void PopupWindows_RejectMouseActivationWithoutDiscardingMouseInput()
     {
         // Windows のマウス追跡は WS_EX_NOACTIVATE を無視して WM_MOUSEACTIVATE を送る。
