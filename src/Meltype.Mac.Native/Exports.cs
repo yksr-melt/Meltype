@@ -126,13 +126,19 @@ public static unsafe class Exports
     {
         public Config.Settings Settings => MeltypeSession.DefaultSettings();
 
-        public bool Active => Settings.Enabled;
+        public bool Selected => true;
 
-        public CodeFocus? CodeFocus(bool terminal) => terminal ? Input.CodeFocus.Terminal : Input.CodeFocus.None;
-
-        public MeltypeSession CreateSession() =>
+        public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
             MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null,
-                directModeDetection: true);
+                directModeDetection: true, settings: settings);
+
+        public string? ReadingOf(string text) => null;
+
+        public SnippetStore Snippets => MeltypeSession.DefaultSnippets();
+
+        public string? ClipboardText => null;
+
+        public (string Title, string Artist)? NowPlaying => null;
     }
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>

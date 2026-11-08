@@ -8,20 +8,29 @@ using Meltype.Input;
 
 namespace Meltype.Ime;
 
-/// <summary>ImeHost が使う OS 側の機能。1 つのフロント (TSF ではパイプのつながり = 1 つのアプリ) ごとに 1 つ。</summary>
+/// <summary>ImeHost が使う OS 側の機能。1 つのフロント (TSF ではパイプのつながり = 1 つのアプリ) ごとに 1 つ。判断はしない。</summary>
 public interface IImeEnvironment
 {
-    /// <summary>このアプリに適用する設定 (アプリ別設定を反映したもの)。</summary>
+    /// <summary>設定。アプリ別設定は ImeSession が ImeField.App で反映する。</summary>
     Settings Settings { get; }
 
-    /// <summary>このアプリで入力を受け持つか (一時停止・動作モード・アプリ別設定・ゲーム)。</summary>
-    bool Active { get; }
+    /// <summary>このフロントが選ばれているか (Windows の動作モード。フロントが 1 つしかない OS では常に true)。</summary>
+    bool Selected { get; }
 
-    /// <summary>フォーカスのある所の種類。terminal は ImeField.Terminal。今までの判定のままにするなら null (補完の一覧に移っただけなど)。</summary>
-    CodeFocus? CodeFocus(bool terminal);
+    /// <summary>入力欄ごとの入力の本体。settings は、その入力欄のアプリの設定。辞書・学習データはフロントの中で共有する。</summary>
+    MeltypeSession CreateSession(Func<Settings> settings);
 
-    /// <summary>入力欄ごとの入力の本体。辞書・学習データはフロントの中で共有する。</summary>
-    MeltypeSession CreateSession();
+    /// <summary>漢字かな交じりの文の読み (再変換)。OS の機能で分からなければ null。</summary>
+    string? ReadingOf(string text);
+
+    /// <summary>ユーザーが登録した定型文。</summary>
+    SnippetStore Snippets { get; }
+
+    /// <summary>クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に読む)。読めなければ null。</summary>
+    string? ClipboardText { get; }
+
+    /// <summary>今再生している曲 (「なう」の候補。issue #1400)。読めない・再生していなければ null。</summary>
+    (string Title, string Artist)? NowPlaying { get; }
 }
 
 /// <summary>
@@ -70,7 +79,6 @@ public sealed class ImeHost(IImeEnvironment environment)
     public ImeOutput Handle(ImeEvent e)
     {
         if (e.V != Version) return Inactive();
-        var active = environment.Active;
         if (e.Type == ImeEventType.Close)
         {
             if (_sessions.Remove(e.Sid, out var closing) && closing.IsComposing) closing.Close();
@@ -78,17 +86,18 @@ public sealed class ImeHost(IImeEnvironment environment)
         }
         if (!_sessions.TryGetValue(e.Sid, out var session))
         {
+            var active = ImeSession.IsActive(environment, e.Field);
             // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
             // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
             if (!active || e.Type is not (ImeEventType.Key or ImeEventType.Toggle or ImeEventType.SetMode) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.Open ?? true, environment.Settings, NextRev()), Pass);
+                return new(ImeSession.InitialState(active, e.Open ?? true, environment.Settings.ForApp(e.Field?.App), NextRev()), Pass);
             }
             session = new ImeSession(environment);
             _sessions[e.Sid] = session;
         }
-        return session.Handle(e, active, NextRev());
+        return session.Handle(e, NextRev());
     }
 
     private static long NextRev() => Interlocked.Increment(ref s_rev);

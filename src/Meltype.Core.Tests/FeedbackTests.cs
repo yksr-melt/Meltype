@@ -611,33 +611,6 @@ internal static class MisspellingTests
 internal static class CodeProfileTests
 {
     [Test]
-    public static void LineTracker_FollowsTypingAndResets()
-    {
-        var line = new LineTracker();
-        Assert.True(line.Text is null, "最初は分からない");
-        line.NewLine();
-        line.Append("x = 1 ");
-        Assert.Equal(LineKind.Code, LineContext.Classify(line.Text!));
-        line.Append("// ");
-        Assert.Equal(LineKind.Comment, LineContext.Classify(line.Text!), "// の後はコメント");
-        line.Backspace();
-        line.Backspace();
-        line.Backspace();
-        Assert.Equal("x = 1 ", line.Text);
-        line.NewLine();
-        Assert.Equal("x = 1 \n", line.Text, "改行で新しい行 (前の行も持っておく)");
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText(line.Text!));
-        line.Invalidate();
-        Assert.True(line.Text is null, "キャレットが動いたら分からない");
-        line.Append("\"a");
-        line.Backspace();
-        Assert.True(line.Text is null, "打っても分からないまま");
-        Assert.Equal("\"", line.Tracked, "分からなくなってから打った文字列は追いかける");
-        line.SetFromText("first line\r\n    print(\"こん");
-        Assert.Equal(LineKind.String, LineContext.ClassifyText(line.Text!), "UI Automation で読んだ文字列の、今の行で調べる");
-    }
-
-    [Test]
     public static void LineContext_MultiLineStringsAndComments()
     {
         // Python の """ の中の行 (本文) で日本語が打てなかった
@@ -1417,7 +1390,8 @@ internal static class LanguageLearningTests
                 // 先頭の @ の語 (#193) はそのままアプリへ渡すので、ここは変換ボックスに入れたときの扱いを確かめる。
                 var k = new CompositionTests.Keyboard { SigilWords = false };
                 k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
+                // 変換ボックスが空のときの Enter は、改行としてアプリに届く
+                Assert.Equal(expected, k.Host.Document.TrimEnd('\n'), typed);
             }
         }
         finally

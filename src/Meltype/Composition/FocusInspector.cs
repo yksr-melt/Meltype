@@ -224,49 +224,30 @@ public sealed class FocusInspector : IDisposable
     /// <summary>アプリ固有の入力欄判定に使う、前面アプリのプロセス名。このクラスのスレッドから呼ぶ。</summary>
     public Func<string>? ForegroundProcessName { get; set; }
 
-    private Func<UiAutomation.Element, bool>? _selectionMatches;
-    private long _selectionSequence;
-    private IntPtr _selectionForeground;
-
-    /// <summary>UIA 専用スレッドで選択文字を取得する。待つのは UI スレッドだけで、フックでは呼ばない。</summary>
-    public string? SelectedText(int waitMs = 250)
+    /// <summary>
+    /// フォーカスのある入力欄の、選んでいる文字の前 (最大 4000 文字)・後ろ (最大 20 文字) と、選んでいる文字を、このクラスのスレッドで読む。
+    /// 待つのは UI スレッドだけで、フックでは呼ばない。読めない (TextPattern が無い・パスワード欄・待ちきれない) ものは null。
+    /// </summary>
+    public (string? Before, string? After, string? Selection) ReadField(int waitMs = 100)
     {
-        string? result = null;
+        (string?, string?, string?) result = (null, null, null);
         var sequence = Interlocked.Read(ref _focusSequence);
-        var foreground = Native.GetForegroundWindow();
         var done = new ManualResetEventSlim();
         Enqueue(() =>
         {
             try
             {
-                _selectionMatches = null;
-                if (!CanCapture || Input.ForegroundTracker.IsOwnWindow(foreground) ||
-                    sequence != Interlocked.Read(ref _focusSequence) || foreground != Native.GetForegroundWindow()) return;
-                if (Automation()?.Focused() is not { IsPassword: false, IsReadOnly: false } element) return;
-                result = element.SelectedText(out _selectionMatches);
-                _selectionSequence = sequence;
-                _selectionForeground = foreground;
+                if (Automation()?.Focused() is not { IsPassword: false } element) return;
+                var surrounding = element.Surrounding(4000);
+                result = (surrounding?.Before, surrounding?.After is { Length: > 20 } after ? after[..20] : surrounding?.After, element.SelectedText(out _));
             }
-            finally { done.Set(); }
-        });
-        return done.Wait(waitMs) && sequence == Interlocked.Read(ref _focusSequence) && foreground == Native.GetForegroundWindow() ? result : null;
-    }
-
-    public bool SelectionUnchanged(int waitMs = 250)
-    {
-        var result = false;
-        var done = new ManualResetEventSlim();
-        Enqueue(() =>
-        {
-            try
+            catch
             {
-                result = CanCapture && _selectionSequence == Interlocked.Read(ref _focusSequence) &&
-                    _selectionForeground == Native.GetForegroundWindow() &&
-                    Automation()?.Focused() is { IsPassword: false, IsReadOnly: false } element && _selectionMatches?.Invoke(element) == true;
+                // 読めなければ分からないまま
             }
             finally { done.Set(); }
         });
-        return done.Wait(waitMs) && result && _selectionSequence == Interlocked.Read(ref _focusSequence) && _selectionForeground == Native.GetForegroundWindow();
+        return done.Wait(waitMs) && sequence == Interlocked.Read(ref _focusSequence) ? result : (null, null, null);
     }
 
     /// <summary>
@@ -316,13 +297,6 @@ public sealed class FocusInspector : IDisposable
             System.Runtime.InteropServices.Marshal.ReleaseComObject(caret);
         }
     }
-
-    /// <summary>キャレットの前後の文字列 (それぞれ最大 20 文字) を調べて callback(前, 後ろ) に渡す (このクラスのスレッドから呼ばれる)。</summary>
-    public void RequestSurroundingText(Action<string?, string?> callback) => Enqueue(() =>
-    {
-        var (before, after) = ReadSurroundingText();
-        callback(before, after);
-    });
 
     private void Enqueue(Action action)
     {
@@ -618,48 +592,6 @@ public sealed class FocusInspector : IDisposable
         UiAutomation.ControlTypeComboBox => "ComboBox",
         _ => $"ControlType {type}",
     };
-
-    /// <summary>
-    /// キャレットの前後の文字列。TextPattern (Chrome, Word, メモ帳など) ならキャレット位置から前後 20 文字ずつ、
-    /// 無ければ ValuePattern の値の末尾 (キャレットが末尾にあるとみなす) を前として返す。取れなければ null。
-    /// </summary>
-    private (string? Before, string? After) ReadSurroundingText()
-    {
-        try
-        {
-            var element = Automation()?.Focused();
-            if (element is null || element.IsPassword) return (null, null);
-            if (element.Surrounding(20) is { } surrounding) return surrounding;
-            if (element.HasValuePattern)
-            {
-                var value = element.Value;
-                return (value.Length > 20 ? value[^20..] : value, null);
-            }
-        }
-        catch
-        {
-            // 取れなければ自分の確定履歴で判断する。
-        }
-        return (null, null);
-    }
-
-    /// <summary>
-    /// キャレットより前の文字列 (最大 300 文字) を読んで callback に渡す (このクラスのスレッドから呼ばれる)。
-    /// コードエディターで、キャレットがコメントや文字列の中にあるかを調べるのに使う。TextPattern が無ければ null。
-    /// </summary>
-    public void RequestTextBeforeCaret(Action<string?> callback) => Enqueue(() =>
-    {
-        string? before = null;
-        try
-        {
-            if (Automation()?.Focused() is { IsPassword: false } element) before = element.Surrounding(3000)?.Before;
-        }
-        catch
-        {
-            // 読めなければ分からないまま (コードとして扱う)。
-        }
-        callback(before);
-    });
 
     /// <summary>自己診断用: UI Automation でデスクトップの要素を取れるか。</summary>
     public static string Probe() => new UiAutomation().Root() is { } root ? ControlTypeName(root.ControlType) : "(取れない)";

@@ -195,12 +195,22 @@ public sealed class MeltypeSession
     /// 既定の辞書・学習データ (保存場所は <see cref="AppPaths"/>) で作る。converter は OS 側の変換エンジン、
     /// moreCandidates は読みに対する候補の一覧 (無ければ null)、wordChecker は OS のスペルチェッカー (無ければ null)。
     /// </summary>
+    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
     public static MeltypeSession CreateDefault(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false,
-        bool directModeDetection = false)
+        bool directModeDetection = false, Func<Settings>? settings = null)
     {
         AppPaths.MigrateFromOldName();
-        return CreateDefault(AppPaths.DataDirectory, converter, moreCandidates, wordChecker, autoSpacing, directModeDetection);
+        return CreateDefault(AppPaths.DataDirectory, converter, moreCandidates, wordChecker, autoSpacing, directModeDetection, settings);
     }
+
+    /// <summary>既定の保存場所の定型文 (snippets.json)。入力欄で共有する。</summary>
+    public static SnippetStore DefaultSnippets()
+    {
+        AppPaths.MigrateFromOldName();
+        return s_snippets ??= new SnippetStore(AppPaths.SnippetsFile);
+    }
+
+    private static SnippetStore? s_snippets;
 
     /// <summary>既定の保存場所の設定 (config.json。変わったら読み直す)。CreateDefault の入力欄と同じものを返す。</summary>
     public static Settings DefaultSettings()
@@ -219,12 +229,12 @@ public sealed class MeltypeSession
 
     /// <summary>dataDirectory に置いた設定・辞書・学習データで作る (テストでは一時フォルダーを渡す)。</summary>
     internal static MeltypeSession CreateDefault(string dataDirectory, IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false,
-        bool directModeDetection = false)
+        bool directModeDetection = false, Func<Settings>? appSettings = null)
     {
         var shared = Shared(dataDirectory);
         var userDirectory = Path.Combine(dataDirectory, "dictionaries");
         var file = shared.Settings;
-        Func<Settings> settings = () => file.Current;
+        var settings = appSettings ?? (() => file.Current);
         // 入力欄を作ったときにも読み直す (ログの設定を、入力の前に入れる)
         _ = settings();
         var detector = shared.Detector;
@@ -434,6 +444,38 @@ public sealed class MeltypeSession
     /// <summary>変換して候補を選んでいるか。</summary>
     public bool IsConverting => _controller.IsConverting;
 
+    /// <summary>ユーザーが判定を直した (英字 / かなに直した語。トレイの「直した誤判定を報告...」)。</summary>
+    public event Action<Correction>? Corrected
+    {
+        add => _controller.Corrected += value;
+        remove => _controller.Corrected -= value;
+    }
+
+    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
+    public string? Selection
+    {
+        get => _host.Selection;
+        set => _host.Selection = value;
+    }
+
+    /// <summary>漢字かな交じりの文の読み (再変換。OS の機能)。分からなければ null。</summary>
+    public Func<string, string?> ReadingOf
+    {
+        set => _host.ReadingOf = value;
+    }
+
+    /// <summary>クリップボードの文字 (OS の機能)。読めなければ null。</summary>
+    public Func<string?> ClipboardText
+    {
+        set => _host.Clipboard = value;
+    }
+
+    /// <summary>今再生している曲 (OS の機能)。読めなければ null。</summary>
+    public Func<(string Title, string Artist)?> NowPlaying
+    {
+        set => _host.Playing = value;
+    }
+
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
@@ -602,9 +644,12 @@ public sealed class MeltypeSession
         return swallowed;
     }
 
-    /// <summary>変換ボックスを開くキーか (Windows 版の MeltypeEngine.StartsComposition と同じ考え方)。</summary>
-    private static bool StartsComposition(KeyEvent e, char? ch, bool shift)
+    /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
+    private bool StartsComposition(KeyEvent e, char? ch, bool shift)
     {
+        if (e.Vk == VirtualKeys.Convert && _host.Selection is { Length: > 0 }) return true;
+        if (e.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !_direct && _settings() is { InputStyle: InputStyle.Kana } settings &&
+            settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
         if (ch is not { } c) return false;
         if (VirtualKeys.IsLetter(e.Vk) && char.IsAsciiLetter(c)) return true;
         // 句読点・かぎかっこ・長音・数字・記号 (Shift で打つものも)
@@ -631,6 +676,31 @@ public sealed class MeltypeSession
         public bool ReplayedCurrent { get; private set; }
 
         public bool CanDeleteBackward { get; set; } = true;
+
+        public string? Selection { get; set; }
+
+        public Func<string, string?> ReadingOf { get; set; } = _ => null;
+
+        public Func<string?> Clipboard { get; set; } = () => null;
+
+        public Func<(string Title, string Artist)?> Playing { get; set; } = () => null;
+
+        public string? ClipboardText => Clipboard();
+
+        public (string Title, string Artist)? NowPlaying => Playing();
+
+        /// <summary>ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
+        public ReconversionSelection? GetReconversionSelection() =>
+            Selection is { Length: > 0 } text && (CompositionController.IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
+                ? new ReconversionSelection(text, reading)
+                : null;
+
+        /// <summary>入れた文字は、アプリが選択していた文字と置き換える。</summary>
+        public bool TryReplaceSelection(ReconversionSelection selection, string text)
+        {
+            CommitText(text);
+            return true;
+        }
 
         public void Begin(char? ch, bool shift, string? before, string? after)
         {

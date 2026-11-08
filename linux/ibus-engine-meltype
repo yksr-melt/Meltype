@@ -94,6 +94,10 @@ SPECIAL_KEYS = {
     IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
 }
 
+# 単独で押して離したことを本体に伝える修飾キー (左右の Alt)
+TAP_KEYS = {IBus.KEY_Alt_L: 0xA4, IBus.KEY_Alt_R: 0xA5}
+
+
 def virtual_key(keyval):
     """(仮想キーコード, 入力する文字) を返す。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら (None, 0)。"""
     if keyval in SPECIAL_KEYS:
@@ -124,7 +128,10 @@ class MeltypeEngine(IBus.Engine):
         self._preedit_visible = False
         # 入力欄の事実 (IBus が知らせてくる)
         self._surrounding = True
-        self._terminal = False
+        self._traits = []
+        self._app = None
+        # 押している修飾キー (左右の Alt)。ほかのキーを押したら None (単独押しではない)
+        self._tap = None
         # 確定し直しで前の文字を消したのに残っていた入力欄 (Wayland + Chromium) は、これからも消せないとみなす
         self._delete_failed = False
         self._replace_expect = None
@@ -159,15 +166,25 @@ class MeltypeEngine(IBus.Engine):
         return output
 
     def _field(self):
-        before, after = self._surrounding_text()
-        return {"before": before, "after": after, "composing": self._preedit_visible, "terminal": self._terminal,
-                "canDelete": self._surrounding and not self._delete_failed}
+        before, after, selection = self._surrounding_text()
+        field = {"before": before, "after": after, "composing": self._preedit_visible, "traits": self._traits,
+                 "canDelete": self._surrounding and not self._delete_failed}
+        if selection:
+            field["selection"] = selection
+        if self._app:
+            field["app"] = self._app
+        return field
 
     # ---- IBus からの呼び出し ----
 
     def do_process_key_event(self, keyval, keycode, state):
         if state & IBus.ModifierType.RELEASE_MASK:
-            return False
+            if keyval != self._tap:
+                return False
+            self._tap = None
+            output = self.send("key", key={"vk": TAP_KEYS[keyval], "tap": True})
+            return bool(output and output["result"]["consumed"])
+        self._tap = keyval if keyval in TAP_KEYS else None
         vk, character = virtual_key(keyval)
         if vk is None:
             return False
@@ -184,12 +201,19 @@ class MeltypeEngine(IBus.Engine):
         表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
+        # Alt + Tab などはウィンドウマネージャーが受け取るので、フォーカスが移ったら単独押しではない
+        self._tap = None
         caret = {"moved": True, "passed": 0, "left": focus_out}
         if self._preedit_visible:
             self._preedit_visible = False
             self.send("committed", caret=caret)
         else:
             self.send("commit", caret=caret)
+
+    def do_focus_in_id(self, object_path, client):
+        # IBus 1.5.27 以降。client は「gtk4-im:gnome-text-editor」のように、IM モジュールとプログラムの名前
+        self._app = client.rpartition(":")[2] if ":" in client else None
+        self.do_focus_in()
 
     def do_focus_in(self):
         global _focused
@@ -213,7 +237,11 @@ class MeltypeEngine(IBus.Engine):
 
     def do_set_content_type(self, purpose, hints):
         # GNOME Terminal の VTE や Ghostty などは input-purpose: terminal を設定する
-        self._terminal = purpose == IBus.InputPurpose.TERMINAL
+        self._traits = [trait for trait, present in (
+            ("terminal", purpose == IBus.InputPurpose.TERMINAL),
+            ("password", purpose in (IBus.InputPurpose.PASSWORD, IBus.InputPurpose.PIN)),
+            ("private", bool(hints & IBus.InputHints.PRIVATE)),
+        ) if present]
 
     def do_candidate_clicked(self, index, button, state):
         page = self._lookup.get_cursor_pos() // self._lookup.get_page_size()
@@ -369,12 +397,18 @@ class MeltypeEngine(IBus.Engine):
         return (value, cursor) if value else None
 
     def _surrounding_text(self):
-        """キャレットの前後の文字列。読めなければ (None, None)。"""
-        surrounding = self._surrounding_value()
-        if surrounding is None:
-            return None, None
-        value, cursor = surrounding
-        return value[max(0, cursor - BEFORE_LENGTH):cursor], value[cursor:cursor + AFTER_LENGTH]
+        """選んでいる文字の前・後ろの文字列と、選んでいる文字。読めなければ (None, None, None)。"""
+        if not self._surrounding:
+            return None, None, None
+        try:
+            text, cursor, anchor = self.get_surrounding_text()
+        except Exception:
+            return None, None, None
+        value = text.get_text() if text else ""
+        if not value:
+            return None, None, None
+        start, end = min(cursor, anchor), max(cursor, anchor)
+        return value[max(0, start - BEFORE_LENGTH):start], value[end:end + AFTER_LENGTH], value[start:end]
 
     def _note_replace(self, count, text):
         """確定し直しのあと、実際に入力欄から消えているかを、次の入力のときに確かめるために期待する文字列を控える。"""

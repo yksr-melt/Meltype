@@ -314,9 +314,6 @@ public sealed record CompositionOptions
     /// <summary>変換ボックスの不透明度 (0.7〜1)。</summary>
     public Func<double> Opacity { get; init; } = () => 1.0;
 
-    /// <summary>入力欄に入った (フォーカスが入った) ときにも入力モードを出すか。false なら 半角/全角 を押したときだけ。</summary>
-    public Func<bool> ModeIndicatorOnFocus { get; init; } = () => true;
-
     /// <summary>入力モードの表示の色 (日本語の背景・英数の背景・文字。#RRGGBB、空なら既定: issue #359)。</summary>
     public Func<(string Japanese, string Direct, string Text)> ModeIndicatorColors { get; init; } = () => ("", "", "");
 }
@@ -462,12 +459,6 @@ public sealed class CompositionController
     /// <summary>直近に確定した文字列 (テスト・ログ用)。</summary>
     public event Action<string>? Committed;
 
-    /// <summary>選択範囲を置換した。入力先の行を読み直すための通知。</summary>
-    public event Action? ReconversionCommitted;
-
-    /// <summary>登録キーの処理を入力順に行うため、UI スレッドへ対象のウィンドウを通知する。</summary>
-    public event Action<nint>? ToggleModeRequested;
-
     /// <summary>キューにたまった入力をすべて処理する。UI スレッドで呼ぶ。</summary>
     public void Pump()
     {
@@ -478,7 +469,6 @@ public sealed class CompositionController
                 _budget?.Start(InputBudgetMs);
                 if (input.Key is { } key) HandleKey(key);
                 else if (input.Mouse is { } mouse) HandleMouse(mouse);
-                else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
             }
             UpdateView();
             // 親指キーを押したままなら、離したことを受け取るまで横取りを続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
@@ -3014,7 +3004,6 @@ public sealed class CompositionController
             {
                 if (converting) Learn();
                 ResetContext();
-                ReconversionCommitted?.Invoke();
             }
             ClearComposition();
             return;

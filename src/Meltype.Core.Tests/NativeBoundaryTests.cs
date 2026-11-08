@@ -23,12 +23,18 @@ internal static unsafe class NativeBoundaryTests
 
         public Settings Settings { get; } = new() { SpaceAroundEnglish = true };
 
-        public bool Active => true;
+        public bool Selected => true;
 
-        public CodeFocus? CodeFocus(bool terminal) => Input.CodeFocus.None;
+        public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { SpaceAroundEnglish = () => true }, settings);
 
-        public MeltypeSession CreateSession() => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { SpaceAroundEnglish = () => true }, () => Settings);
+        public string? ReadingOf(string text) => null;
+
+        public SnippetStore Snippets { get; } = new(null);
+
+        public string? ClipboardText => null;
+
+        public (string Title, string Artist)? NowPlaying => null;
 
         /// <summary>最後の応答で変換中の文字があったか。</summary>
         public bool IsComposing { get; private set; }

@@ -8,6 +8,7 @@
 
 #include <dlfcn.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -367,6 +368,8 @@ public:
     bool shiftHeld = false;
     // 入力モードの表示 (A / あ) を出したか。次のキーで 1 回だけ消す (#1034)。
     bool modeShown = false;
+    // 押している左右の Alt の仮想キーコード。ほかのキーを押したら 0 (単独押しではない)
+    int tap = 0;
     // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
 
@@ -409,9 +412,24 @@ public:
         const auto key = event.key();
         if (key.sym() == FcitxKey_Shift_L || key.sym() == FcitxKey_Shift_R) {
             state->shiftHeld = !event.isRelease();
+            state->tap = 0;
+            return;
+        }
+        if (key.sym() == FcitxKey_Alt_L || key.sym() == FcitxKey_Alt_R) {
+            const int vk = key.sym() == FcitxKey_Alt_L ? 0xA4 : 0xA5;
+            if (!event.isRelease()) {
+                state->tap = vk;
+                return;
+            }
+            if (state->tap != vk) return;
+            state->tap = 0;
+            Json output;
+            if (send(ic, "key", ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tap\":true}", output) && output.get("result")->flag("consumed"))
+                event.filterAndAccept();
             return;
         }
         if (event.isRelease()) return;
+        state->tap = 0;
         // 出した A / あ は、次に実際のキーを押したときに消す (#1034)。離したときに消すと、押している間しか見えない
         if (state->modeShown) {
             showMode(ic, "");
@@ -433,12 +451,15 @@ public:
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        event.inputContext()->propertyFor(&factory_)->tap = 0;
         leave(event.inputContext(), false);
     }
 
     // フォーカスが外れた・入力メソッドを切り替えた。Shift を離したことは届かないことがあるので忘れる (#1033)
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        // Alt + Tab などはウィンドウマネージャーが受け取るので、フォーカスが移ったら単独押しではない
+        event.inputContext()->propertyFor(&factory_)->tap = 0;
         leave(event.inputContext(), true);
     }
 
@@ -495,17 +516,26 @@ private:
     std::string field(fcitx::InputContext *ic) {
         const auto &flags = ic->capabilityFlags();
         const bool surrounding = flags.test(fcitx::CapabilityFlag::SurroundingText) && ic->surroundingText().isValid();
-        std::string before = "null", after = "null";
+        std::string before = "null", after = "null", selection = "null";
         if (surrounding) {
+            // 選んでいる文字の前と後ろ
             const auto &text = ic->surroundingText().text();
-            const size_t cursor = ic->surroundingText().cursor();
-            const size_t from = byteOffset(text, cursor > BeforeLength ? cursor - BeforeLength : 0);
-            const size_t at = byteOffset(text, cursor), to = byteOffset(text, cursor + AfterLength);
+            const size_t start = std::min(ic->surroundingText().cursor(), ic->surroundingText().anchor());
+            const size_t end = std::max(ic->surroundingText().cursor(), ic->surroundingText().anchor());
+            const size_t from = byteOffset(text, start > BeforeLength ? start - BeforeLength : 0);
+            const size_t at = byteOffset(text, start), until = byteOffset(text, end), to = byteOffset(text, end + AfterLength);
             before = quote(text.substr(from, at - from));
-            after = quote(text.substr(at, to - at));
+            after = quote(text.substr(until, to - until));
+            if (until > at) selection = quote(text.substr(at, until - at));
         }
-        return "{\"before\":" + before + ",\"after\":" + after + ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) +
-            ",\"terminal\":" + boolean(flags.test(fcitx::CapabilityFlag::Terminal)) + ",\"canDelete\":" + boolean(surrounding) + "}";
+        std::string traits;
+        for (const auto &[flag, name] : {std::pair{fcitx::CapabilityFlag::Terminal, "terminal"}, std::pair{fcitx::CapabilityFlag::Password, "password"},
+                                          std::pair{fcitx::CapabilityFlag::Sensitive, "private"}}) {
+            if (flags.test(flag)) traits += std::string(traits.empty() ? "" : ",") + "\"" + name + "\"";
+        }
+        return "{\"before\":" + before + ",\"after\":" + after + ",\"selection\":" + selection +
+            ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) + ",\"traits\":[" + traits + "]" +
+            (ic->program().empty() ? "" : ",\"app\":" + quote(ic->program())) + ",\"canDelete\":" + boolean(surrounding) + "}";
     }
 
     // 入力モード (A / あ) をカーソル位置に出す (Mozc と同じ入力パネルの枠)。空なら消す

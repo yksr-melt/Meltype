@@ -266,12 +266,8 @@ public sealed class Settings
     [JsonIgnore, Browsable(false)]
     public IReadOnlyList<ToggleShortcut> EffectiveToggleShortcuts => ToggleShortcuts ?? ToggleShortcut.Defaults();
 
-    [Category("2. 入力モード"), DisplayName("無変換で英数 / 変換で日本語"), Platforms(Platform.Windows | Platform.Linux),
-     Description("変換ボックスが出ていないときの 無変換 キーで英数 (直接入力) に、変換 キーで日本語入力にします (Mac の 英数 / かな キーと同じく、押す前のモードによらず決まったモードになります)。変換ボックスが出ている間の 無変換・変換 は今までどおりで、切り替えません。コードの行では、変換 キーでその行を日本語にします。Keyboard モードでは、もう日本語入力のときの 変換 キーは今までどおり選択した文字の再変換です。")]
-    public bool ConvertKeysSwitchKeyboard { get; set; }
-
-    [Category("2. 入力モード"), DisplayName("左 Alt で英数 / 右 Alt で日本語"), Platforms(Platform.Windows),
-     Description("左 Alt の単独押しで英数 (直接入力) に、右 Alt の単独押しで日本語入力にします (半角/全角 キーの無い US 配列向け。Meltype キーボードと Meltype IME で使えます)。Alt + Tab などの組み合わせや Alt + クリックでは切り替えません。単独押しでアプリのメニューバーに移らなくなります。Meltype キーボードでは、変換ボックスが出ている間は切り替えません (Meltype IME では、変換中の文字を確定して切り替えます)。「コード」のアプリのコードの行では、右 Alt でその行を日本語にします (半角/全角 と同じ。Meltype キーボード)。")]
+    [Category("2. 入力モード"), DisplayName("左 Alt で英数 / 右 Alt で日本語"),
+     Description("左 Alt (Mac は左 Option) の単独押しで英数 (直接入力) に、右 Alt の単独押しで日本語入力にします (半角/全角 キーの無い US 配列向け)。Alt + Tab などの組み合わせや Alt + クリックでは切り替えません。単独押しでアプリのメニューバーに移らなくなります。変換中なら、変換中の文字を確定して切り替えます。コードの行では、右 Alt でその行を日本語にします。")]
     public bool AltKeysSwitchKeyboard { get; set; }
 
     [Category("3. 判定"), DisplayName("確定後も文脈に合わせて直す"),
@@ -891,6 +887,14 @@ public sealed class Settings
         "WindowsTerminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "wezterm-gui.exe", "alacritty.exe", "mintty.exe", "rio.exe",
         // アプリの中にスクリプトエディターがある 3DCG ソフト (Maya の Script Editor)
         "maya.exe",
+        // macOS (bundle ID)
+        "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.vscodium", "com.todesktop.230313mzl4w4u92", "com.exafunction.windsurf", "dev.zed.Zed",
+        "com.apple.dt.Xcode", "com.jetbrains.intellij", "com.jetbrains.intellij.ce", "com.jetbrains.pycharm", "com.jetbrains.pycharm.ce",
+        "com.jetbrains.WebStorm", "com.jetbrains.rider", "com.jetbrains.CLion", "com.jetbrains.goland", "com.google.android.studio", "com.sublimetext.4",
+        "com.apple.Terminal", "com.googlecode.iterm2", "com.github.wez.wezterm", "org.alacritty", "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "dev.warp.Warp-Stable",
+        // Linux (プログラム名)
+        "code", "code-insiders", "codium", "cursor", "windsurf", "zed", "zeditor", "sublime_text",
+        "gnome-terminal-server", "konsole", "kitty", "alacritty", "wezterm-gui", "foot", "ghostty", "xterm", "tilix", "terminator", "xfce4-terminal",
     ];
 
     public bool IsAppEnabled(string? processName) => FindRule(processName)?.Enabled ?? true;

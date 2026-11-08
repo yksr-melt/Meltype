@@ -84,7 +84,30 @@ public sealed record ImeKey
     public bool Repeat { get; init; }
     /// <summary>1 回のキーで入る文字が複数のスカラーのとき (結合文字・ZWJ の絵文字。Mac)、その文字列。Ch は 0。本体は未確定の内容を確定して、キーをアプリに通させる。</summary>
     public string? Text { get; init; }
+    /// <summary>
+    /// 修飾キー (Vk は左右を分けたもの: 左 Alt 0xA4・右 Alt 0xA5 など) を、ほかのキー・マウスのボタンを押さずに離した。離したときに送る。
+    /// consumed なら、フロントは離したことがアプリの操作 (メニューバーに移るなど) にならないようにする。
+    /// </summary>
+    public bool Tap { get; init; }
 }
+
+/// <summary>OS (・Windows のフロントが調べた) 入力欄の性質。</summary>
+public enum ImeTrait
+{
+    /// <summary>ターミナル (IBus の InputPurpose.TERMINAL・fcitx5 の CapabilityFlag::Terminal)。</summary>
+    [JsonStringEnumMemberName("terminal")] Terminal,
+    /// <summary>パスワード・暗証番号 (IBus の InputPurpose.PASSWORD / PIN・fcitx5 の CapabilityFlag::Password・TSF の IS_PASSWORD・UI Automation の IsPassword)。</summary>
+    [JsonStringEnumMemberName("password")] Password,
+    /// <summary>入力を覚えないように求める (TSF の IS_PRIVATE・IBus の InputHints.PRIVATE・fcitx5 の CapabilityFlag::Sensitive)。</summary>
+    [JsonStringEnumMemberName("private")] Private,
+    /// <summary>ゲームらしいウィンドウ (Windows のフロントが調べた全画面などの手がかり)。</summary>
+    [JsonStringEnumMemberName("game")] Game,
+    /// <summary>全画面表示のウィンドウ (設定「全画面のアプリでは止める」)。</summary>
+    [JsonStringEnumMemberName("fullscreen")] Fullscreen,
+}
+
+/// <summary>UI Automation で調べたフォーカスのある要素 (Windows)。</summary>
+public sealed record ImeElement(string Name, string ClassName);
 
 public sealed record ImeField
 {
@@ -95,12 +118,20 @@ public sealed record ImeField
     public string? Before { get; init; }
     /// <summary>キャレット (変換中なら変換中の文字) より後ろ。読めなければ null。</summary>
     public string? After { get; init; }
+    /// <summary>選択している文字 (変換キーで再変換する)。選択していない・読めなければ null。</summary>
+    public string? Selection { get; init; }
     /// <summary>フロントの入力欄に変換中の文字がある。</summary>
     public bool Composing { get; init; }
-    /// <summary>入力を覚えないように求める入力欄 (TSF の IS_PRIVATE)。</summary>
-    public bool Private { get; init; }
-    /// <summary>OS がターミナルと知らせてきた入力欄 (IBus の InputPurpose.TERMINAL・fcitx5 の CapabilityFlag::Terminal)。</summary>
-    public bool Terminal { get; init; }
+    /// <summary>
+    /// アプリ。アプリ別設定の名前と同じ形にする: Windows はプロセスの実行ファイル名 (Code.exe)、macOS は bundle ID (com.microsoft.VSCode)、
+    /// Linux は fcitx5 の program・IBus のクライアント名のプログラムの部分 (code)。分からなければ null。
+    /// </summary>
+    public string? App { get; init; }
+    /// <summary>ウィンドウのタイトル (README.md などの文章のファイルを開いているか)。分からなければ null。</summary>
+    public string? Title { get; init; }
+    public ImeElement? Element { get; init; }
+    // init にすると、source-gen の JSON は項目が無いときに初期値ではなく null を入れる
+    public IReadOnlyList<ImeTrait> Traits { get; set; } = [];
     /// <summary>確定した文字を消せる入力欄か (消せなければ確定し直さない)。</summary>
     // init にすると、source-gen の JSON は項目が無いときに初期値ではなく false を入れる
     public bool CanDelete { get; set; } = true;
@@ -139,6 +170,7 @@ public sealed record ImeState
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
 /// Text は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。Except はそのうち受け取らない文字。
 /// Keys は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
+/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.Tap) を受け取る。
 /// </summary>
 public sealed record ImeCapture
 {

@@ -15,6 +15,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 本体が最後に返した表示のモード (入力メニューのチェックに使う)
     private var japanese = true
     private var hasMarkedText = false
+    /// 押している左右の Option の仮想キーコード (Windows の左右の Alt)。ほかのキーを押したら nil (単独押しではない)
+    private var tap: Int?
     private var candidateList: [String] = []
     /// 出している一覧が予測変換の候補か (選んだら本体に伝える)
     private var prediction = false
@@ -70,9 +72,11 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 入力欄の事実 (ImeField)。キャレットの前後は、変換中なら変換中の文字の前後
     private func field(of client: IMKTextInput) -> [String: Any] {
         var field: [String: Any] = ["composing": hasMarkedText]
+        if let app = client.bundleIdentifier() { field["app"] = app }
         let marked = client.markedRange()
         let anchor = marked.location != NSNotFound && marked.length > 0 ? marked : client.selectedRange()
         guard anchor.location != NSNotFound else { return field }
+        if anchor.length > 0, !hasMarkedText, let selection = client.attributedSubstring(from: anchor)?.string { field["selection"] = selection }
         let start = max(0, anchor.location - Self.beforeLength)
         if let before = client.attributedSubstring(from: NSRange(location: start, length: anchor.location - start))?.string { field["before"] = before }
         if let after = client.attributedSubstring(from: NSRange(location: anchor.location + anchor.length, length: Self.afterLength))?.string { field["after"] = after }
@@ -93,11 +97,14 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue)
+        Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
-        guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
+        guard let event, let client = sender as? IMKTextInput else { return false }
+        if event.type == .flagsChanged { return flagsChanged(event, client: client) }
+        guard event.type == .keyDown else { return false }
+        tap = nil
         let flags = event.modifierFlags
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
@@ -117,8 +124,25 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         return send("key", client: client, ["key": key])?.result.consumed ?? false
     }
 
+    /// 左右の Option を単独で押して離したら、本体に伝える (ほかの修飾キーの変化は単独押しを取り消す)
+    private func flagsChanged(_ event: NSEvent, client: IMKTextInput) -> Bool {
+        let option = [kVK_Option: 0xA4, kVK_RightOption: 0xA5][Int(event.keyCode)]
+        guard let option else {
+            tap = nil
+            return false
+        }
+        if event.modifierFlags.contains(.option) {
+            tap = tap == nil && event.modifierFlags.intersection([.shift, .control, .command]).isEmpty ? option : nil
+            return false
+        }
+        defer { tap = nil }
+        guard tap == option else { return false }
+        return send("key", client: client, ["key": ["vk": option, "tap": true]])?.result.consumed ?? false
+    }
+
     /// フォーカスが外れた・クリックで別の場所に移ったときなど。未確定の内容をそのまま確定する。
     override func commitComposition(_ sender: Any!) {
+        tap = nil
         guard let client = (sender as? IMKTextInput) ?? self.client() else { return }
         send("commit", client: client, ["caret": ["moved": true, "passed": 0]])
     }

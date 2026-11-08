@@ -101,6 +101,10 @@ private:
     bool CapturesKey(UINT vk, LPARAM lParam) const;
     // listed: capture.keys のキー (入力モードを表示する位置も送る)。repeat: 押したままの自動の繰り返し
     void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed);
+    // 左右の Alt (VK_LMENU / VK_RMENU) を単独で押して離した
+    void HandleTap(ITfContext* context, UINT vk);
+    // 押したキーで、左右の Alt の単独押しの途中かを決め直す
+    void NoteTap(UINT vk, LPARAM lParam);
     bool IsReinjected(UINT vk);
     bool Reinject(UINT vk);
     void RememberPassed(UINT vk);
@@ -154,7 +158,7 @@ private:
     void AbandonComposition();
     void ResumeOrCommit(ITfContext* context);
     void SelectCandidate(int index, bool prediction);
-    void SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after);
+    void SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected);
     // 選択範囲の画面上の位置 (入力モードの表示に使う)。分からなければ空
     RECT CaretRect(TfEditCookie ec, ITfContext* context);
     bool ContextDisabled(ITfContext* context);
@@ -225,6 +229,8 @@ private:
     bool markerSeen_ = false;      // このアプリには送り直しの印が届く
     Reinjected reinjected_[4];     // 送り直して、まだ届いていないキー (それぞれ 1 回だけ素通しする)
     UINT passVk_ = 0;              // OnTestKeyDown で素通しにしたキー
+    UINT tapVk_ = 0;               // 単独で押している左右の Alt (VK_LMENU / VK_RMENU)。ほかのキーを押したら 0
+    bool tapEaten_ = false;        // OnTestKeyUp で、Alt の単独押しを受け取ると決めた (続く OnKeyUp で本体に送る)
     ULONGLONG passTime_ = 0;
     bool ownEdit_ = false;         // 自分の編集セッションが終わった通知を、キャレットが動いたことにしない
     bool secretChecked_ = false;   // このキーで、入力欄の種類 (パスワード欄でないこと) を確かめた

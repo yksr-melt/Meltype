@@ -6,6 +6,7 @@
 #include <InputScope.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cwctype>
 
@@ -720,10 +721,11 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
 
 bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& field) {
     if (IsSecretField(ec, context)) return false;
-    std::wstring before, after;
-    SurroundingText(ec, context, before, after);
+    std::wstring before, after, selection;
+    SurroundingText(ec, context, before, after, selection);
     field = "{\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + ",\"composing\":" +
-            (composition_ != nullptr ? "true" : "false") + (privateField_ ? ",\"private\":true" : "") + "}";
+            (composition_ != nullptr ? "true" : "false") + (selection.empty() ? "" : ",\"selection\":" + JsonString(selection)) +
+            (privateField_ ? ",\"traits\":[\"private\"]" : "") + "}";
     return true;
 }
 
@@ -1060,8 +1062,17 @@ bool TextService::IsReinjected(UINT vk) {
     return false;
 }
 
+void TextService::NoteTap(UINT vk, LPARAM lParam) {
+    // 押したままの自動の繰り返しは、単独押しの途中のまま
+    const UINT side = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 24)) ? VK_RMENU : VK_LMENU;
+    if (vk != VK_MENU) tapVk_ = 0;
+    else if (tapVk_ == 0 && !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN)) tapVk_ = side;
+    else if (tapVk_ != side) tapVk_ = 0;
+}
+
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     UINT vk = static_cast<UINT>(wParam);
+    NoteTap(vk, lParam);
     if (IsReinjected(vk)) {
         passVk_ = vk;  // アプリによっては、このあと OnKeyDown も呼ぶ
         passTime_ = GetTickCount64();
@@ -1078,6 +1089,7 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
 
 STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     UINT vk = static_cast<UINT>(wParam);
+    NoteTap(vk, lParam);
     if ((vk == passVk_ && GetTickCount64() - passTime_ < 500) || IsReinjected(vk)) {
         passVk_ = 0;
         *eaten = FALSE;
@@ -1108,6 +1120,15 @@ STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam,
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
         eatenDown_[ToggleShortcut::Hankaku] = false;
     }
+    // 左右の Alt の単独押し: 本体が受け取るように言ったものなら、離したことをアプリに渡さない (メニューバーに移らない)
+    const UINT side = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 24)) ? VK_RMENU : VK_LMENU;
+    tapEaten_ = wParam == VK_MENU && tapVk_ == side && !disabled_ &&
+        std::any_of(state_.keys.begin(), state_.keys.end(), [side](const ToggleShortcut& key) { return key.key == side && key.mods == 0; });
+    if (tapEaten_) {
+        *eaten = TRUE;
+        return S_OK;
+    }
+    if (wParam == VK_MENU) tapVk_ = 0;
     *eaten = wParam < 256 && eatenDown_[ShortcutSlot(static_cast<UINT>(wParam), lParam)] ? TRUE : FALSE;
     return S_OK;
 }
@@ -1117,6 +1138,15 @@ STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lPa
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
         eatenDown_[ToggleShortcut::Hankaku] = false;
     }
+    if (wParam == VK_MENU && tapVk_ != 0 && tapEaten_) {
+        const UINT side = tapVk_;
+        tapVk_ = 0;
+        tapEaten_ = false;
+        HandleTap(context, side);
+        *eaten = TRUE;
+        return S_OK;
+    }
+    if (wParam == VK_MENU) tapVk_ = 0;
     const UINT slot = ShortcutSlot(static_cast<UINT>(wParam), lParam);
     *eaten = wParam < 256 && eatenDown_[slot] ? TRUE : FALSE;
     if (wParam < 256) eatenDown_[slot] = false;
@@ -1200,6 +1230,22 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
     if (!inserted && (failed ? !modeKey : !consumed)) Reinject(vk);
 }
 
+void TextService::HandleTap(ITfContext* context, UINT vk) {
+    HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
+        std::string field;
+        if (!ReadField(ec, context, field)) return S_OK;
+        const RECT anchor = CaretRect(ec, context);
+        ownEdit_ = true;
+        JsonValue reply;
+        if (Send("key", field, ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tap\":true}", reply, 800, false, &anchor))
+            ApplyOutput(ec, context, reply);
+        return S_OK;
+    });
+    ownEdit_ = false;
+    if (FAILED(hr)) TipLog(L"編集セッションを始められません: 0x%08X", hr);
+    FlushOpen();
+}
+
 void TextService::RememberPassed(UINT vk) {
     passedVk_ = vk;
     passedControl_ = KeyDown(VK_CONTROL);
@@ -1259,7 +1305,7 @@ bool TextService::Reinject(UINT vk) {
     return true;
 }
 
-void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after) {
+void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected) {
     // 変換中なら、変換中の文字より前と後ろ。そうでなければキャレットの前と後ろ
     Microsoft::WRL::ComPtr<ITfRange> anchor;
     if (composition_ != nullptr && context == compositionContext_) {
@@ -1270,6 +1316,13 @@ void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wst
         if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0) anchor.Attach(selection.range);
     }
     if (!anchor) return;
+    // 選んでいる文字 (変換キーで再変換する)
+    constexpr LONG kSelection = 1000;
+    if (composition_ == nullptr) {
+        std::wstring text(kSelection, L'\0');
+        ULONG length = 0;
+        if (SUCCEEDED(anchor->GetText(ec, 0, text.data(), kSelection, &length))) selected.assign(text.data(), length);
+    }
     // 前は最大 4000 文字 (コードエディターで、複数行のコメント・文字列の中かを見分けるため。コードでなければ Meltype.exe が 20 文字にする)
     constexpr LONG kBefore = 4000;
     constexpr LONG kAfter = 20;

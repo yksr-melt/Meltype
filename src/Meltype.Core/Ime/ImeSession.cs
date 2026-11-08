@@ -15,13 +15,30 @@ namespace Meltype.Ime;
 ///   半角/全角 (切り替えキーに無いとき): 何もしない (アプリに通すと PowerShell (PSReadLine) が @ として入れる)
 ///   英数: 英数にする (変換中なら確定してから)
 ///   かな (ひらがな/カタカナ): 日本語にする
-///   変換・無変換: 設定「無変換で英数 / 変換で日本語」が ON なら、変換していないときに日本語 / 英数にする
+///   変換・無変換: 変換していないときに日本語 / 英数にする。日本語で文字を選んでいれば、変換は選んだ文字の再変換。親指シフトの配列では親指キー
+///   左右の Alt の単独押し: 設定「左 Alt で英数 / 右 Alt で日本語」が ON なら、英数 / 日本語にする
 ///   かな・変換・無変換は、設定「入力中のキーの役割を分ける」が ON で変換中なら、変換ボックスで使う
 /// 日本語 ⇔ 英数の切り替えは、表示しているモードを入れ替える。コードの行 (英数のまま通る所) で日本語にすると、その行を日本語にする。
+/// 入力欄の事実 (アプリ・性質) は、出来事に付いてきた最後のものを使う。
 /// </summary>
-internal sealed class ImeSession(IImeEnvironment environment)
+internal sealed class ImeSession
 {
-    private readonly MeltypeSession _session = environment.CreateSession();
+    private readonly IImeEnvironment _environment;
+    private readonly MeltypeSession _session;
+    private ImeField? _field;
+    private Settings _settings;
+    // 直前に入れた定型文 (すぐに Esc を押したら、打った ;名前 に戻す)
+    private (string Text, string Typed)? _lastSnippet;
+
+    public ImeSession(IImeEnvironment environment)
+    {
+        _environment = environment;
+        _settings = environment.Settings;
+        _session = environment.CreateSession(() => _settings);
+        _session.ReadingOf = environment.ReadingOf;
+        _session.ClipboardText = () => environment.ClipboardText;
+        _session.NowPlaying = () => environment.NowPlaying;
+    }
 
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
     private const int ContextLength = 20;
@@ -30,16 +47,33 @@ internal sealed class ImeSession(IImeEnvironment environment)
 
     public void Close() => _session.CommitPending();
 
-    public ImeOutput Handle(ImeEvent e, bool active, long rev)
+    /// <summary>この入力欄で入力を受け持つか (フロントが選ばれていて、一時停止中・アプリ別設定で OFF・ゲーム・パスワード欄でない)。</summary>
+    public static bool IsActive(IImeEnvironment environment, ImeField? field)
     {
         var settings = environment.Settings;
-        ApplyFacts(e);
+        var traits = field?.Traits ?? [];
+        return environment.Selected && settings.Enabled && !traits.Contains(ImeTrait.Password) &&
+            !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
+            settings.IsAppEnabled(field?.App) && !settings.IsGame(field?.App, traits.Contains(ImeTrait.Game));
+    }
+
+    public ImeOutput Handle(ImeEvent e, long rev)
+    {
+        var previousApp = _field?.App;
+        _field = e.Field ?? _field;
+        var settings = _settings = _environment.Settings.ForApp(_field?.App);
+        var active = IsActive(_environment, _field);
+        var lastSnippet = _lastSnippet;
+        if (e.Type == ImeEventType.Key || e.Caret?.Moved == true) _lastSnippet = null;
+        ApplyFacts(e, settings);
+        // 独自の種類で「最初は英数」にしたアプリに移った (入力欄を作ったときを含む)。OS の IME の開閉は、応答の open で合わせてもらう
+        if (_field?.App is { } app && app != previousApp && settings.KindFor(app) is { StartInEnglish: true }) _session.Direct = true;
         var before = Before(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
         var result = Verify(e.Type switch
         {
-            ImeEventType.Key when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, ref explicitChange) : Leave(),
+            ImeEventType.Key when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
             ImeEventType.Toggle when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
             ImeEventType.SetMode when active => Switch(e.Japanese, before, ref explicitChange, toggle: false),
             ImeEventType.Commit => _session.CommitPending(),
@@ -71,7 +105,7 @@ internal sealed class ImeSession(IImeEnvironment environment)
         Rev = rev,
     };
 
-    private void ApplyFacts(ImeEvent e)
+    private void ApplyFacts(ImeEvent e, Settings settings)
     {
         // OS の IME の開閉が変わった (アプリ・Windows が変えた・ほかのフロントの操作): 本体のモードを合わせる
         if (e.Open is { } open && _session.Direct == open)
@@ -90,9 +124,10 @@ internal sealed class ImeSession(IImeEnvironment environment)
             if (caret.Left) _session.ForgetCodeLine();
         }
         if (e.Field is not { } field) return;
-        _session.Private = field.Private;
+        _session.Private = field.Traits.Contains(ImeTrait.Private);
         _session.CanDeleteSurrounding = field.CanDelete;
-        if (environment.CodeFocus(field.Terminal) is { } focus)
+        _session.Selection = field.Selection;
+        if (CodeFocusOf(field, settings) is { } focus)
         {
             var code = focus != CodeFocus.None;
             if (_session.CodeInput != code) _session.CodeInput = code;
@@ -100,19 +135,38 @@ internal sealed class ImeSession(IImeEnvironment environment)
         }
     }
 
+    /// <summary>
+    /// フォーカスのある所の種類。OS がターミナルと知らせてきたか、アプリの種類が「コード」なら、ターミナル・エディターと要素の名前から決める。
+    /// README.md などの文章のファイルを開いているなら一般。打つと開く補完の一覧 (VS Code など) に移っただけなら null (今までのまま)。
+    /// </summary>
+    private static CodeFocus? CodeFocusOf(ImeField field, Settings settings)
+    {
+        if (field.Traits.Contains(ImeTrait.Terminal)) return CodeFocus.Terminal;
+        if (field.App is not { } app || settings.ProfileFor(app) != AppProfile.Code || field.Title is { } title && LineContext.IsDocumentTitle(title)) return CodeFocus.None;
+        // UI Automation のフォーカスは一覧の行に移るが、打った文字はエディターに入る
+        if (field.Element?.ClassName.Contains("monaco-list-row", StringComparison.Ordinal) == true) return null;
+        return LineContext.ClassifyFocus(app, field.Element);
+    }
+
     private string? Before(ImeField? field) =>
         field?.Before is { Length: > ContextLength } before && !_session.CodeInput ? before[^ContextLength..] : field?.Before;
 
-    private SessionResult HandleKey(ImeKey key, ImeField? field, string? before, Settings settings, ref bool explicitChange)
+    private SessionResult HandleKey(ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet,
+        ref bool explicitChange)
     {
         var composing = _session.IsComposing;
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
+        if (key.Tap)
+        {
+            return settings.AltKeysSwitchKeyboard && vk is VirtualKeys.LMenu or VirtualKeys.RMenu
+                ? Switch(vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false)
+                : Pass;
+        }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
-        if (key.Repeat && (toggle || plain && (vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana ||
-            vk is VirtualKeys.Convert or VirtualKeys.NonConvert && settings.ConvertKeysSwitchKeyboard))) return Consumed;
+        if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
         if (toggle && !composing) return Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !_session.IsConverting) return _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
@@ -121,9 +175,12 @@ internal sealed class ImeSession(IImeEnvironment environment)
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
         {
             if (_session.HandleRoleKey(vk) is { } role) return role;
-            if (!composing && (vk == VirtualKeys.Kana || settings.ConvertKeysSwitchKeyboard))
-                return Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
+            if (!composing && !IsThumbKey(vk, settings) && !(vk == VirtualKeys.Convert && ShowsJapanese(before) && field?.Selection is { Length: > 0 }))
+            {
+                return key.Repeat ? Consumed : Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
+            }
         }
+        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(vk, key, before, settings, lastSnippet) is { } snippet) return snippet;
         // 複数のスカラーの文字 (アプリが元のイベントで入れる): 先頭が結合文字なら直前の文字につなげて確定する
         if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
         {
@@ -144,6 +201,30 @@ internal sealed class ImeSession(IImeEnvironment environment)
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
         return result;
+    }
+
+    /// <summary>親指シフトのかな配列 (NICOLA・中指NICOLA・TRON) の親指キー (無変換・変換)。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする。</summary>
+    private bool IsThumbKey(int vk, Settings settings) =>
+        settings.InputStyle == InputStyle.Kana && !_session.Direct && vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
+        settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
+
+    /// <summary>
+    /// 定型文 (issue #290)。;名前 の文字はそのままアプリへ渡し、続く Space / Tab で登録した文に置き換える。入れた直後の Esc で、打った ;名前 に戻す。
+    /// キャレットの前の文字が分からない・確定した文字を消せない入力欄では使わない。
+    /// </summary>
+    private SessionResult? Snippet(int vk, ImeKey key, string? before, Settings settings, (string Text, string Typed)? last)
+    {
+        if (before is null || !_session.CanDeleteSurrounding || settings.SnippetMark is not [_] || settings.InputStyle == InputStyle.Kana ||
+            _environment.Snippets.Count == 0) return null;
+        if (vk == VirtualKeys.Escape && last is { } undo)
+            return new SessionResult(true, [new TextEdit(undo.Text.Length, undo.Typed, undo.Text)], null);
+        if (vk is VirtualKeys.Space or VirtualKeys.Tab && !key.Shift && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed &&
+            _environment.Snippets.Get(typed[1..]) is { } text)
+        {
+            _lastSnippet = (text, typed);
+            return new SessionResult(true, [new TextEdit(typed.Length, text, typed)], null);
+        }
+        return key.Ch is > 0 and < 0x10000 && SnippetTrigger.PassesThrough(settings.SnippetMark, before, (char)key.Ch) ? _session.PassThrough() : null;
     }
 
     /// <summary>文字を入力するキーの仮想キーコード。特別な扱いのない文字 (記号など) は 0x07 (本体は文字だけを見る)。</summary>
@@ -225,11 +306,11 @@ internal sealed class ImeSession(IImeEnvironment environment)
     private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings)
     {
         if (!active) return new ImeCapture();
-        // 修飾キー単独の割り当て (左右の Alt) は、Windows のキーボードフックだけが見る
+        // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは設定「左 Alt で英数 / 右 Alt で日本語」
         var keys = settings.EffectiveToggleShortcuts.Where(shortcut => !ToggleShortcut.IsModifier(shortcut.Key))
             .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
-            .Concat(settings.ConvertKeysSwitchKeyboard ? [new ImeShortcut(VirtualKeys.Convert, 0), new ImeShortcut(VirtualKeys.NonConvert, 0)] : [])
+            .Concat(settings.AltKeysSwitchKeyboard ? [new ImeShortcut(VirtualKeys.LMenu, 0), new ImeShortcut(VirtualKeys.RMenu, 0)] : [])
             .ToList();
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection;
@@ -246,8 +327,9 @@ internal sealed class ImeSession(IImeEnvironment environment)
     /// <summary>英語の語の続きとして、英数のままアプリに通す文字。</summary>
     private const string EnglishWordCharacters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@_";
 
-    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな)。</summary>
-    private static readonly int[] ModeKeys = [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana];
+    /// <summary>設定によらず受け取る、モードを切り替えるキー (半角/全角 の 3 つのキーコード・英数・かな・変換・無変換)。</summary>
+    private static readonly int[] ModeKeys =
+        [ToggleShortcut.Hankaku, VirtualKeys.OemAuto, VirtualKeys.OemEnlw, VirtualKeys.OemAttn, VirtualKeys.Kana, VirtualKeys.Convert, VirtualKeys.NonConvert];
 
     private static SessionResult Pass => new(false, [], null);
 

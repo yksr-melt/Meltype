@@ -106,6 +106,16 @@ internal static class CompositionTests
             Document += text;
         }
 
+        /// <summary>アプリに届いたキー (そのまま通したキー・送り直したキー) の文字を入力欄に入れる。</summary>
+        public void Reached(KeyEvent e, bool shift)
+        {
+            if (e.IsUp) return;
+            if (e.Vk == VirtualKeys.Back) Document = Document[..Math.Max(0, Document.Length - 1)];
+            else if (e.Vk == VirtualKeys.Return) Document += "\n";
+            else if (e.Vk == VirtualKeys.Space) Document += " ";
+            else if (CharFromKey(e, shift) is { } c && !char.IsControl(c)) Document += c;
+        }
+
         /// <summary>アプリに送り直したキー (英数状態で判定した語など)。</summary>
         public event Action<KeyEvent>? Replayed;
 
@@ -255,7 +265,11 @@ internal static class CompositionTests
         public bool SigilWords { get; set; } = true;
 
         /// <summary>MeltypeEngine と同じく、アプリに届いた文字を追いかける。</summary>
-        public SigilWord Sigil { get; } = new();
+        /// <summary>キャレットの前の文字 (アプリに届いた文字。PrecedingText で決めたときはそれ)。</summary>
+        public string Before => Host.PrecedingText ?? Host.Document;
+
+        /// <summary>先頭か空白の直後の / $ @ で始まる名前を打っている途中か。</summary>
+        public bool InSigilWord => SigilWord.InNameAfter(Before);
 
         /// <summary>コードエディターのコードを打っているか (先頭の / を ・ にせず、そのまま渡す)。</summary>
         public bool Code { get; set; }
@@ -332,11 +346,6 @@ internal static class CompositionTests
                 EnglishFirstInput = () => EnglishFirstInput,
                 ConsonantAbbreviations = () => ConsonantAbbreviations,
             });
-            Controller.Committed += Sigil.Append;
-            Host.Replayed += e =>
-            {
-                if (!e.IsUp) Sigil.OnKey(e.Vk, Host.CharFromKey(e, _shiftHeld));
-            };
         }
 
         /// <summary>MeltypeEngine.StartsComposition と同じ条件。</summary>
@@ -346,9 +355,9 @@ internal static class CompositionTests
             if (k.Vk == VirtualKeys.Convert) return true;
             // 親指シフトのかな配列では、無変換も親指キーとして受け取る
             if (Kana && k.Vk == VirtualKeys.NonConvert && KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
-            if (SigilWords && (Direct || !Kana) && Host.CharFromKey(k, _shiftHeld) is { } typed && Sigil.PassesThrough(typed, Host.PrecedingText))
+            if (SigilWords && (Direct || !Kana) && Host.CharFromKey(k, _shiftHeld) is { } typed && SigilWord.PassesAfter(Before, typed))
             {
-                if (typed != '/' || Direct || Sigil.IsActive || Code) return false;
+                if (typed != '/' || Direct || InSigilWord || Code) return false;
                 Controller.MarkSlashAtStart();
                 return true;
             }
@@ -369,11 +378,7 @@ internal static class CompositionTests
             if (Direct && !up && !VirtualKeys.IsLetter(vk) && !VirtualKeys.IsModifier(vk)) _directEnglishWord = false;
             var swallowed = Gate.OnKey(e, Starts);
             if (!swallowed) Host.Events.Add($"{(up ? "passed-up" : "passed")}:{vk:X2}");
-            if (!swallowed && !up)
-            {
-                if (_ctrlHeld) Sigil.Lose();
-                else Sigil.OnKey(vk, Host.CharFromKey(e, _shiftHeld));
-            }
+            if (!swallowed && !_ctrlHeld) Host.Reached(e, _shiftHeld);
             Controller.Pump();
             return swallowed;
         }
@@ -5528,7 +5533,7 @@ internal static class CompositionTests
             k.Type(word);
             Assert.True(!k.Gate.IsCaptured && k.Showing is null, $"{word}: 変換ボックスを開かない");
             Assert.Equal(0, k.Host.Output.Count, word);
-            Assert.True(k.Sigil.IsActive, $"{word}: 名前の途中");
+            Assert.True(k.InSigilWord, $"{word}: 名前の途中");
         }
     }
 
@@ -5547,7 +5552,7 @@ internal static class CompositionTests
         Assert.Equal("/", k.Showing);
         k.Type("help");
         Assert.Equal("/", string.Concat(k.Host.Output));
-        Assert.True(!k.Gate.IsCaptured && k.Sigil.IsActive, "/help の help はアプリへ");
+        Assert.True(!k.Gate.IsCaptured && k.InSigilWord, "/help の help はアプリへ");
         Assert.True(k.Host.Events.Contains("down:48") && k.Host.Events.Contains("passed:50"), "help はアプリへ");
         k.Type(" kyou");
         Assert.Equal("きょう", k.Showing);
@@ -5558,7 +5563,7 @@ internal static class CompositionTests
         // コードエディターのコードの中は今までどおり、そのままアプリへ渡す。
         k = new Keyboard { Code = true };
         k.Type("/help");
-        Assert.True(!k.Gate.IsCaptured && k.Sigil.IsActive, "コードの /help はアプリへ");
+        Assert.True(!k.Gate.IsCaptured && k.InSigilWord, "コードの /help はアプリへ");
     }
 
     [Test]
@@ -5583,7 +5588,7 @@ internal static class CompositionTests
         // Enter (送信・改行) の後の行の先頭も。
         k.Press(VirtualKeys.Return);
         k.Type("$deploy");
-        Assert.True(!k.Gate.IsCaptured && k.Sigil.IsActive, "Enter の後の $deploy も通す");
+        Assert.True(!k.Gate.IsCaptured && k.InSigilWord, "Enter の後の $deploy も通す");
     }
 
     [Test]
@@ -5593,7 +5598,7 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("taro@example.com");
         Assert.True(k.Gate.IsCaptured && k.Showing!.Contains('@'), "taro@ の @ は変換ボックスの中");
-        Assert.True(!k.Sigil.IsActive, "名前として扱わない");
+        Assert.True(!k.InSigilWord, "名前として扱わない");
         // 日本語を確定した直後 (空白なし) の / も対象外。
         k = new Keyboard();
         k.Type("kyouha\n/");
@@ -5611,25 +5616,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void SigilWord_UnknownPositionAndBackspace()
-    {
-        // 矢印でキャレットを動かした後は前の文字が分からないので、普通に扱う。
-        var k = new Keyboard();
-        k.Press(VirtualKeys.Left);
-        k.Type("/");
-        Assert.True(k.Gate.IsCaptured, "前の文字が分からなければ / は変換ボックスに入れる");
-        // 記号まで消したら、記号の前 (先頭) に戻る。
-        k = new Keyboard { Code = true };
-        k.Type("/re\b\b\b");
-        Assert.True(!k.Sigil.IsActive, "/ を消したら名前ではない");
-        k.Type("kyou");
-        Assert.Equal("きょう", k.Showing);
-        k.Press(VirtualKeys.Escape);
-        k.Type("@file");
-        Assert.True(!k.Gate.IsCaptured, "消した後の先頭の @ も通す");
-    }
-
-    [Test]
     public static void SigilWord_DirectModeDoesNotDetectRomaji()
     {
         // 英数状態でも、/ の後ろの名前はローマ字として判定しない (/kensaku を日本語にしない)。
@@ -5637,23 +5623,6 @@ internal static class CompositionTests
         k.Type("/kensaku");
         Assert.True(k.Direct, "英数状態のまま");
         Assert.True(!k.Gate.IsCaptured && k.Host.Output.Count == 0, "打ったキーはそのままアプリへ");
-    }
-
-    [Test]
-    public static void SigilWord_FocusMoved()
-    {
-        // 補完の候補の一覧にフォーカスが移ったように見えても、名前の途中なら続ける。
-        var k = new Keyboard { Code = true };
-        k.Type("/re");
-        k.Sigil.FocusMoved();
-        k.Type("view");
-        Assert.True(!k.Gate.IsCaptured && k.Sigil.IsActive, "/review の続きもアプリへ");
-        // 名前の途中でなければ、次の文字は先頭とみなす (日本語の後でも)。
-        k = new Keyboard();
-        k.Type("kyouha\n");
-        k.Sigil.FocusMoved();
-        k.Type("@file");
-        Assert.True(!k.Gate.IsCaptured, "別の入力欄に移った後の @file はアプリへ");
     }
 
     [Test]

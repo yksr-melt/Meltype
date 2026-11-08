@@ -31,6 +31,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
+    private readonly Keyboard.KeyboardFront _keyboard;
     private readonly ToolStripMenuItem _tsfModeItem;
     private SettingsForm? _settingsForm;
     private LogForm? _logForm;
@@ -64,9 +65,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _composition = new Composition.CompositionService(_invoker, detector, new Composition.CompositionOptions
         {
             LiveConversion = () => _engine.AppSettings.LiveConversion,
-            DirectMode = () => _engine.KeyboardDirect,
             ClassifyDirect = _engine.ClassifyDirect,
-            DirectDecided = _engine.OnDirectDecided,
             AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.AutoDetection,
             Manual = () => !_engine.AppSettings.AutoDetection,
             Engine = () => _engine.Settings.ConversionEngine,
@@ -116,7 +115,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             KanaLayout = () => _engine.Settings.KanaLayout,
             RomajiLayout = () => _engine.Settings.RomajiLayout,
             ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
-            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
             ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
             Placement = () => _engine.Settings.CompositionPlacement,
             Size = () => _engine.Settings.CompositionSize,
@@ -126,7 +124,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
             LightTheme = () => _engine.Settings.CompositionIsLight(Meltype.Composition.CompositionWindow.WindowsUsesLightTheme()),
             Opacity = () => _engine.Settings.CompositionOpacityValue,
         });
-        _engine.AttachComposition(_composition);
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, () => _engine.Settings);
+        _keyboard.ModeChanged += OnEngineStatusChanged;
+        _engine.Keyboard = _keyboard;
+        _engine.Focus = _composition.Focus;
         _tipServer = new Tip.TipServer(_invoker, _composition, () => _engine.Settings);
         _tipServer.Start();
         IntroduceTsf();
@@ -590,8 +591,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         else
         {
-            _tray.Icon = _engine.KeyboardDirect ? _directIcon : _onIcon;
-            status = _engine.KeyboardDirect ? "キーボード: 直接入力 (半角/全角 で日本語)" : "キーボード: 日本語";
+            _tray.Icon = _keyboard.Japanese ? _onIcon : _directIcon;
+            status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
         var zenzai = _composition.ZenzaiStatus(settings.UseZenzai, settings.ZenzaiServerPath, settings.ZenzaiModelPath);
@@ -833,7 +834,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.StatusChanged -= OnEngineStatusChanged;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();
-        _engine.DetachComposition();
+        _engine.Keyboard = null;
+        _keyboard.Dispose();
         Composition.LearningSaves.FlushAll();
         _composition.Dispose();
         _settingsForm?.Close();

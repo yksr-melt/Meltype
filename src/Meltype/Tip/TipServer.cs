@@ -439,9 +439,9 @@ internal sealed class TipServer : IDisposable
         {
             pipe.Dispose();
             Interlocked.Decrement(ref _connections);
-            if (host.SessionCount > 0 && !_stop.IsCancellationRequested)
+            if (host.Host.SessionCount > 0 && !_stop.IsCancellationRequested)
             {
-                try { await InvokeAsync(() => { host.CloseAll(); return ""; }).ConfigureAwait(false); } catch { }
+                try { await InvokeAsync(() => { host.Host.CloseAll(); return ""; }).ConfigureAwait(false); } catch { }
             }
         }
     }
@@ -465,14 +465,20 @@ internal sealed class TipServer : IDisposable
     /// 1 つのつながりの入力の本体を作る。process は .exe を除いたプロセスの名前 (Meltype.exe 自身なら null)、processId はアプリ別の判定に使う
     /// (調べないなら 0)。DLL は自分のプロセスの名前を送らないので、つないできたプロセスから調べる。
     /// </summary>
-    internal ImeHost Connect(string? process, uint processId) => new(new TipEnvironment(this, process, processId));
+    internal TipConnection Connect(string? process, uint processId) => new(this, process, processId);
 
-    /// <summary>出来事を ImeHost で処理する。明示的にモードが変わったら、DLL が送ってきた位置に入力モードを一瞬表示する。</summary>
-    internal string Handle(ImeHost host, TipRequest request)
+    /// <summary>
+    /// 出来事を ImeHost で処理する。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) は、ここで足す。
+    /// 明示的にモードが変わったら、DLL が送ってきた位置に入力モードを一瞬表示する。
+    /// </summary>
+    internal string Handle(TipConnection connection, TipRequest request)
     {
         // 終わる途中 (変換エンジンなどを片付けた後) には何もしない
         if (_stop.IsCancellationRequested) return Inactive;
-        var output = host.Handle(request.Event);
+        var e = request.Event;
+        if (e.Field is { } field) e = e with { Field = connection.WithFacts(field) };
+        var output = connection.Host.Handle(e);
+        if (output.State.Active && connection.Process is { } process) Greet(process);
         if (output.State.Indicator && _settings().ShowTsfModeIndicator && request.Thread != 0)
             _composition.ShowMode(output.State.Japanese, request.Thread, request.Anchor);
         return output.ToJson();
@@ -506,46 +512,57 @@ internal sealed class TipServer : IDisposable
     private const int MaxGreeted = 256;
 
     /// <summary>
-    /// 1 つのつながり (= 1 つのアプリ) の環境。アプリ別設定・ゲームの判定・コードの入力欄の判定 (UI Automation) は Windows で調べる。
-    /// process は .exe を除いたプロセスの名前 (Meltype.exe 自身なら null)。
+    /// 1 つのつながり (= 1 つのアプリ) の入力の本体と環境。process は .exe を除いたプロセスの名前 (Meltype.exe 自身なら null)。
     /// </summary>
-    private sealed class TipEnvironment(TipServer server, string? process, uint processId) : IImeEnvironment
+    internal sealed class TipConnection : IImeEnvironment
     {
+        private readonly TipServer _server;
+        private readonly uint _processId;
         // つながったときにはまだウィンドウが無いことがあるので、Java のアプリ (Minecraft など) は要求のたびに前面のウィンドウを見る
-        private readonly bool _java = processId != 0 && ForegroundTracker.IsJava(processId);
-        private bool _looksLikeGame = processId != 0 && ForegroundTracker.LooksLikeGame(processId);
-        private string? Name => process is null ? null : process + ".exe";
+        private readonly bool _java;
+        private bool _looksLikeGame;
 
-        public Settings Settings => server._settings().ForApp(Name);
-
-        /// <summary>Meltype が有効で、動作モードが Meltype IME で、アプリ別設定で OFF にしたアプリと「ゲーム」のアプリでない。</summary>
-        public bool Active
+        public TipConnection(TipServer server, string? process, uint processId)
         {
-            get
+            _server = server;
+            _processId = processId;
+            Process = process;
+            _java = processId != 0 && ForegroundTracker.IsJava(processId);
+            _looksLikeGame = processId != 0 && ForegroundTracker.LooksLikeGame(processId);
+            Host = new ImeHost(this);
+        }
+
+        public ImeHost Host { get; }
+
+        public string? Process { get; }
+
+        /// <summary>DLL が読めない事実を足す。</summary>
+        public ImeField WithFacts(ImeField field)
+        {
+            if (_java && !_looksLikeGame) _looksLikeGame = ForegroundTracker.IsForegroundJavaGame(_processId);
+            var focus = _server._composition.Focus.Current;
+            return field with
             {
-                if (_java && !_looksLikeGame) _looksLikeGame = ForegroundTracker.IsForegroundJavaGame(processId);
-                var settings = server._settings();
-                var active = settings is { Enabled: true, Mode: InputMode.Tsf } && settings.IsAppEnabled(Name) && !settings.IsGame(Name, _looksLikeGame);
-                if (active && process is not null) server.Greet(process);
-                return active;
-            }
+                App = Process is null ? null : Process + ".exe",
+                Title = KeyText.WindowTitle(Native.GetForegroundWindow()),
+                Element = new ImeElement(focus.Name, focus.ClassName),
+                Traits = _looksLikeGame ? [.. field.Traits, ImeTrait.Game] : field.Traits,
+            };
         }
 
-        /// <summary>
-        /// アプリの種類が「コード」で、フォーカスがコードエディター・ターミナルなら、その種類。README.md などの文章のファイルと、
-        /// チャット・AI への入力欄 (UI Automation で調べた名前) は一般として扱う。打つと開く補完の一覧 (VS Code など) に移っただけなら null。
-        /// </summary>
-        public CodeFocus? CodeFocus(bool terminal)
-        {
-            if (Name is not { } name) return Input.CodeFocus.None;
-            if (server._settings().ProfileFor(name) != AppProfile.Code || LineContext.IsDocumentTitle(KeyText.WindowTitle(Native.GetForegroundWindow()))) return Input.CodeFocus.None;
-            var info = server._composition.Focus.Current;
-            // UI Automation のフォーカスは一覧の行に移るが、打った文字はエディターに入る
-            if (info.ClassName.Contains("monaco-list-row", StringComparison.Ordinal)) return null;
-            return LineContext.ClassifyFocus(name, info.Name, info.ClassName);
-        }
+        public Settings Settings => _server._settings();
 
-        public MeltypeSession CreateSession() => server._composition.CreateSession(() => Settings, directModeDetection: true);
+        public bool Selected => Settings.Mode == InputMode.Tsf;
+
+        public MeltypeSession CreateSession(Func<Settings> settings) => _server._composition.CreateSession(settings, directModeDetection: true);
+
+        public string? ReadingOf(string text) => _server._composition.GuessReading(text) is { Length: > 0 } reading ? reading : null;
+
+        public SnippetStore Snippets => _server._composition.Snippets;
+
+        public string? ClipboardText => CompositionService.ClipboardText;
+
+        public (string Title, string Artist)? NowPlaying => _server._composition.NowPlaying;
     }
 
     // Meltype IME のモードでないときも DLL はつなぐので、ログはアプリごとに 1 回だけ。

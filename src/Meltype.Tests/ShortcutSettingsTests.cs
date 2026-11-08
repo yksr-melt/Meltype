@@ -36,7 +36,6 @@ internal static class ShortcutSettingsTests
             var settings = new Settings { ShowNotifications = true }.Normalize();
             Assert.True(TrayApplicationContext.ProfileSwitchMessage(settings) is not null, "通常の切替では Info 通知");
             var values = settings.ProfileValues();
-            values[nameof(Settings.ConvertKeysSwitchKeyboard)] = true;
             values[nameof(Settings.ToggleShortcuts)] = new System.Text.Json.Nodes.JsonArray(new System.Text.Json.Nodes.JsonObject { ["Key"] = 28 });
             settings.Profiles.Add(new SettingsProfile { Name = "古い設定", Values = values });
             var next = settings.SwitchProfile("古い設定");
@@ -50,14 +49,14 @@ internal static class ShortcutSettingsTests
         finally { Meltype.Diagnostics.ShortcutExclusions.Drain(); }
     }
 
-    /// <summary>判定テストに入力した状態で競合設定を ON にしても除外を報告せず、画面の登録と既存の保存前検証を維持すること。</summary>
+    /// <summary>判定テストに入力した状態でも、編集中の競合 (無変換・変換の単独押し) は除外を報告せず、画面の登録と保存前検証を維持すること。</summary>
     [Test]
     public static void Shortcut_SettingsPreviewDoesNotReportExclusions()
     {
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            using var engine = new MeltypeEngine(new Settings { ConvertKeysSwitchKeyboard = false, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }] }, null, null);
+            using var engine = new MeltypeEngine(new Settings(), null, null);
             using var form = new SettingsForm(engine, new AppState());
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var input = (TextBox)typeof(SettingsForm).GetField("_testInput", flags)!.GetValue(form)!;
@@ -67,10 +66,8 @@ internal static class ShortcutSettingsTests
             pending.Enqueue(form);
             while (pending.TryDequeue(out var parent))
                 foreach (Control child in parent.Controls) { controls.Add(child); pending.Enqueue(child); }
-            var toggle = controls.OfType<ToggleSwitch>().Single(t => t.AccessibleName == "無変換で英数 / 変換で日本語");
             var editor = controls.OfType<ShortcutEditor>().Single();
-            input.Text = "nihongo";
-            toggle.Checked = true;
+            editor.LoadBindings([new() { Key = 28 }, new() { Key = 29 }]);
             input.Text = "nihongo english";
             var edited = (Settings)collect.Invoke(form, null)!;
             Assert.Equal(0, edited.EffectiveToggleShortcuts.Count, "判定用の複製は既存どおり正規化する");
@@ -78,11 +75,7 @@ internal static class ShortcutSettingsTests
             var raw = (Settings)typeof(SettingsForm).GetMethod("CollectValues", flags)!.Invoke(form, null)!;
             Assert.True(raw.EffectiveToggleShortcuts.All(b => ShortcutEditor.ValidationError(b, raw, []) is not null), "保存前の生の設定には競合が残る");
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "編集中は除外情報を追加しない");
-            Assert.True(!engine.Settings.ConvertKeysSwitchKeyboard, "未保存の変更をエンジンに反映しない");
-            toggle.Checked = false;
-            edited = (Settings)collect.Invoke(form, null)!;
-            Assert.True(edited.EffectiveToggleShortcuts.All(b => ShortcutEditor.ValidationError(b, edited, []) is null), "競合を直すと保存前検証を通る");
-            Assert.Equal(2, edited.EffectiveToggleShortcuts.Count, "修正後も登録を維持");
+            Assert.True(engine.Settings.EffectiveToggleShortcuts.All(b => b.Key is not (28 or 29)), "未保存の変更をエンジンに反映しない");
         }
         finally { Meltype.Diagnostics.ShortcutExclusions.Drain(); }
     }
@@ -94,7 +87,7 @@ internal static class ShortcutSettingsTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }] }.Normalize();
+            new Settings { ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }] }.Normalize();
             var message = TrayApplicationContext.TakeShortcutExclusionMessage(true);
             Assert.True(message is not null && message.Contains("変換") && message.Contains("無変換"), "トレイ生成前の複数の除外をまとめる");
             Assert.True(TrayApplicationContext.TakeShortcutExclusionMessage(true) is null, "消費後は再通知しない");
@@ -119,7 +112,7 @@ internal static class ShortcutSettingsTests
     [Test]
     public static void Shortcut_EditorRejectsConflicts()
     {
-        var settings = new Settings { ConvertKeysSwitchKeyboard = true, AltKeysSwitchKeyboard = true };
+        var settings = new Settings { AltKeysSwitchKeyboard = true };
         foreach (var binding in new ToggleShortcut[]
         {
             new() { Key = 0x19, Modifiers = ShortcutModifiers.Control },

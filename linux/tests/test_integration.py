@@ -35,7 +35,8 @@ class IntegrationTests(unittest.TestCase):
         cls.addClassCleanup(cls.data.cleanup)
         os.environ["MELTYPE_DATA_DIR"] = cls.data.name
         (Path(cls.data.name) / "config.json").write_text(json.dumps({
-            "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False}), encoding="utf-8")
+            "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False, "AltKeysSwitchKeyboard": True}),
+            encoding="utf-8")
         loader = importlib.machinery.SourceFileLoader(
             "meltype_integration_product", str(cls.package / "ibus-engine-meltype"))
         spec = importlib.util.spec_from_loader(loader.name, loader)
@@ -466,6 +467,32 @@ class IntegrationTests(unittest.TestCase):
         self.special(IBus.KEY_F6)
         self.special(IBus.KEY_Return)
         self.assertEqual("ka か", self.engine.document)
+
+    def test_input_purpose_and_app_are_facts(self):
+        # パスワード欄では本体が何も受け持たない
+        self.engine.do_set_content_type(IBus.InputPurpose.PASSWORD, 0)
+        self.type_text("ka")
+        self.assertEqual("ka", self.engine.document)
+        self.engine.do_set_content_type(IBus.InputPurpose.FREE_FORM, 0)
+        # 既定で「コード」のアプリ (VS Code) のコードの行は英数のまま
+        self.engine.document = "let x = "
+        self.engine.do_focus_in_id("/ic/1", "gtk3-im:code")
+        self.type_text("ka")
+        self.assertEqual("let x = ka", self.engine.document)
+
+    def test_alt_tap_sets_the_mode(self):
+        self.special(IBus.KEY_Alt_L)
+        self.assertTrue(self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK))
+        self.type_text("ka")
+        self.assertEqual("ka", self.engine.document)
+        # ほかのキーと一緒に押したら切り替えない
+        self.special(IBus.KEY_Alt_R)
+        self.scalar("x", IBus.ModifierType.MOD1_MASK)
+        self.assertFalse(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
+        self.special(IBus.KEY_Alt_R)
+        self.assertTrue(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
+        self.type_text("ka")
+        self.assertEqual("か", self.engine.marked)
 
     def test_release_ignored_and_shortcut_passed_once(self):
         self.type_text("@kuraido")

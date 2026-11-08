@@ -22,7 +22,8 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | 場所 | 中身 |
 |---|---|
 | `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 をビルド、`Register-Tip.ps1` で登録 |
-| `src/Meltype/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー |
+| `src/Meltype/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
+| `src/Meltype/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
 | `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
 | `src/Meltype.Core/Ime/` | フロント (TSF・IBus・fcitx5) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
 | `src/Meltype.Core.Tests/ImeContractTests.cs` | 境目の契約テスト。判断を持たないフロントで出来事を送り、確定・表示・モード・受け取るキーを確かめる (どの OS でも流れる) |
@@ -32,7 +33,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 設定「Meltype IME でも入力モードをカーソルの近くに表示」(`ShowTsfModeIndicator`、既定 OFF) を ON にすると、明示的に入力モードを切り替えたとき、入力位置の近くに「あ / A」を 1.2 秒表示します。
 明示的に切り替えたか (応答の `state.indicator`) は本体が決め、表示は Meltype.exe (`TipServer`) が出します。DLL は、入力モードのキーとタスクバーのボタンの出来事に、入力スレッドの ID と TSF の選択範囲の位置 (`GetTextExt`) を付けます。
 位置が分からなければ常駐側でキャレットを探し、それも分からなければマウス位置へ戻します (Terminal の入力欄の左上を入力位置と推測しません)。表示時に別の入力先へ移っていたら表示しません。
-アプリ・Windows による自動的な開閉やパスワード欄への移動だけでは表示されません。左右 Alt の単独押しは、常駐側で開閉の変更に成功したときに表示します。
+アプリ・Windows による自動的な開閉やパスワード欄への移動だけでは表示されません。
 既存の「入力モードをカーソルの近くに表示」(`ModeIndicator`) はキーボード方式だけに適用し、色の設定は共用します。
 
 DLL を更新した後の確認では、入力先アプリのプロセスを終了して起動し直します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い DLL が残ることがあります。
@@ -135,7 +136,9 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 ## Meltype.exe 側
 
-- 動作モードに `Tsf` (Meltype IME) を足した。Tsf のときは、キーボードフックは左右の Alt の単独押し (設定「左 Alt で英数 / 右 Alt で日本語」) だけを見て、前面のアプリの IME を IMC_SETOPENSTATUS で開く / 閉じる。今までの方式 (変換ボックス) も残している
+- 動作モードは `Tsf` (Meltype IME) と `Keyboard` (Meltype キーボード)。どちらのフロントも事実を同じ `ImeHost` に送るだけで、入力の判断は Core がする。
+  `MeltypeEngine` はアプリの部分 (設定・キーボードフックの取り込み・Ctrl + 半角/全角 の一時停止・打鍵数) だけを持ち、動作モードが Keyboard のときだけフックのキーを `KeyboardFront` に渡す
+- 左右の Alt の単独押しは、DLL が単独押しを見つけて (ほかのキーを押さずに離した) `key.tap` で送る。本体が受け取るように言っていれば (state.capture の 0xA4・0xA5)、離したことをアプリに渡さない
 - Meltype IME が登録されていて、このユーザーのキーボードの一覧にも入っていれば、一度だけ自動で Tsf にする。
   そのとき (とトレイで Meltype IME を選んだとき) は、いま使う入力方式も Meltype IME にする (ITfInputProcessorProfileMgr::ActivateProfile の TF_IPPMF_FORSESSION)
 - Meltype.exe 自身の画面 (はじめに・設定など) でも使える。そこでは UI スレッドが DLL の中で応答を待って止まるので、
@@ -174,7 +177,6 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 ## 未対応・確かめていないこと
 
-- Meltype キーボードから移せていない機能: アプリの種類ごとの「最初は英数」、選んだ文字の再変換
 - UILess (候補を自分で描くアプリ)、ARM64 (ARM64 の Windows ではインストールのときに Meltype IME を入れない)
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。
   実際のアプリ (メモ帳・Chrome・VS Code など)、表示スケール 150%、コード署名をしない DLL を読み込まないアプリがあるかは、まだ広くは確かめていない

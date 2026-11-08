@@ -28,16 +28,23 @@ internal static class ImeContractTests
 
         public Settings Settings { get; set; } = new() { LiveConversion = false };
 
-        /// <summary>アプリ別設定・動作モードで受け持たない (TSF では TipServer が決める)。</summary>
-        public bool AppEnabled { get; set; } = true;
+        /// <summary>このフロントが選ばれているか (Windows の動作モード)。</summary>
+        public bool Selected { get; set; } = true;
 
-        public bool Active => Settings.Enabled && AppEnabled;
+        public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+            new CompositionOptions { CursorIntoBrackets = () => settings().CursorIntoBrackets, LiveConversion = () => settings().LiveConversion },
+            settings, directModeDetection: true);
 
-        public CodeFocus? CodeFocus(bool terminal) => terminal ? Input.CodeFocus.Terminal : Input.CodeFocus.None;
+        /// <summary>再変換の読み (OS の機能の代わり)。</summary>
+        public Dictionary<string, string> Readings { get; } = [];
 
-        public MeltypeSession CreateSession() => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { CursorIntoBrackets = () => Settings.CursorIntoBrackets, LiveConversion = () => Settings.LiveConversion },
-            () => Settings, directModeDetection: true);
+        public string? ReadingOf(string text) => Readings.GetValueOrDefault(text);
+
+        public SnippetStore Snippets { get; } = new(null);
+
+        public string? ClipboardText => null;
+
+        public (string Title, string Artist)? NowPlaying => null;
 
         public int Sessions => _host.SessionCount;
 
@@ -46,7 +53,21 @@ internal static class ImeContractTests
         /// <summary>OS の IME の開閉 (TSF の OPENCLOSE)。</summary>
         public bool Open { get; set; } = true;
 
-        public bool Terminal { get; set; }
+        /// <summary>入力欄の性質 (OS が知らせるもの)。</summary>
+        public List<string> Traits { get; } = [];
+
+        public bool Terminal
+        {
+            set
+            {
+                if (value) Traits.Add("terminal");
+            }
+        }
+
+        public string? App { get; set; }
+
+        /// <summary>入力欄で選んでいる文字。</summary>
+        public string? Selection { get; set; }
 
         public Dictionary<string, string?> Composition { get; } = [];
 
@@ -71,7 +92,8 @@ internal static class ImeContractTests
             // キャレットが動いたことは、見つけたときに caret で送る
             if (moved) Event("caret", sid, ",\"caret\":{\"moved\":true,\"passed\":0}");
             var composing = Composition.GetValueOrDefault(sid) is not null;
-            var field = $"{{\"before\":{Json(Document)},\"after\":\"\",\"composing\":{(composing ? "true" : "false")},\"terminal\":{(Terminal ? "true" : "false")}}}";
+            var field = $"{{\"before\":{Json(Document)},\"after\":\"\",\"composing\":{(composing ? "true" : "false")},\"traits\":{JsonSerializer.Serialize(Traits)}" +
+                (App is null ? "" : $",\"app\":{Json(App)}") + (Selection is null ? "" : $",\"selection\":{Json(Selection)}") + "}";
             var output = Send($"{{\"v\":{ImeHost.Version},\"type\":\"{type}\",\"sid\":{Json(sid)},\"open\":{(Open ? "true" : "false")},\"field\":{field}{extra}}}");
             Apply(output, sid);
             return output;
@@ -294,7 +316,11 @@ internal static class ImeContractTests
     [Test]
     public static void Deactivated_WhileComposing_CommitsAndPassesTheKey()
     {
-        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.AppEnabled = false })
+        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.Selected = false, f =>
+        {
+            f.Settings.AppRules.Add(new AppRule { Process = "off.exe", Enabled = false });
+            f.App = "off.exe";
+        } })
         {
             var front = new Front();
             front.Type("kyouha");
@@ -305,7 +331,8 @@ internal static class ImeContractTests
             Assert.True(!Consumed(front.Key('b')), front.Trace);
             Assert.Equal(0, Capture(front.Event("sync")).GetProperty("keys").GetArrayLength(), "受け持たないときはキーを受け取らせない\n" + front.Trace);
             front.Settings.Enabled = true;
-            front.AppEnabled = true;
+            front.Selected = true;
+            front.App = null;
             front.Type("ka");
             Assert.Equal("か", front.Composition["t1"], "戻したら受け持つ\n" + front.Trace);
         }
@@ -338,7 +365,7 @@ internal static class ImeContractTests
         Assert.True(Consumed(toggle) && !Japanese(toggle), "登録したキーで切り替える\n" + front.Trace);
         var keys = Capture(toggle).GetProperty("keys").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
         Assert.True(keys.Contains((VirtualKeys.Space, 2)) && keys.Contains((ToggleShortcut.Hankaku, 0)), "受け取るキーに切り替えキーと 半角/全角 を入れる\n" + front.Trace);
-        Assert.True(!keys.Contains((VirtualKeys.LMenu, 0)), "修飾キー単独の割り当ては受け取らせない (キーボードフックが見る)\n" + front.Trace);
+        Assert.True(!keys.Contains((VirtualKeys.LMenu, 0)), "修飾キー単独の割り当ては受け取らせない\n" + front.Trace);
     }
 
     [Test]
@@ -382,16 +409,96 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void ConvertKeys_SwitchOnlyWithTheSetting()
+    public static void ConvertKeys_SetTheMode()
     {
         var front = new Front();
-        front.Key(VirtualKeys.NonConvert);
-        Assert.True(front.Open, "設定が OFF なら切り替えない\n" + front.Trace);
-        front.Settings.ConvertKeysSwitchKeyboard = true;
         front.Key(VirtualKeys.NonConvert);
         Assert.True(!front.Open, "無変換で英数\n" + front.Trace);
         front.Key(VirtualKeys.Convert);
         Assert.True(front.Open, "変換で日本語\n" + front.Trace);
+        var repeat = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"key\":{{\"vk\":{VirtualKeys.NonConvert},\"repeat\":true}}}}");
+        Assert.True(Consumed(repeat) && repeat.GetProperty("state").GetProperty("open").GetBoolean(), "押しっぱなしでは切り替えない\n" + front.Trace);
+        // 親指シフトの配列では親指キー (変換ボックスで使う)
+        front.Settings.InputStyle = InputStyle.Kana;
+        front.Settings.KanaLayout = KanaLayout.Nicola;
+        front.Key(VirtualKeys.NonConvert);
+        Assert.True(front.Open, "NICOLA の無変換は切り替えない\n" + front.Trace);
+    }
+
+    [Test]
+    public static void ConvertKey_ReconvertsTheSelection()
+    {
+        var front = new Front { Document = "a ", Selection = "kyouha" };
+        var convert = front.Key(VirtualKeys.Convert);
+        Assert.True(Consumed(convert) && front.Composition["t1"] is not null, "ローマ字のまま入った文を変換ボックスに入れる\n" + front.Trace);
+        front.Selection = null;
+        front.Key('\n');
+        Assert.Equal("a 今日は", front.Document, "選んでいた文字は、入れた文字でアプリが置き換える\n" + front.Trace);
+        // 読みが分からない文字は再変換しない
+        front = new Front { Selection = "漢字" };
+        front.Key(VirtualKeys.Convert);
+        Assert.True(front.Composition["t1"] is null && front.Open, front.Trace);
+    }
+
+    [Test]
+    public static void AltTap_SetsTheModeWithTheSetting()
+    {
+        var front = new Front();
+        string Tap(int vk) => $"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"field\":{{\"before\":\"\"}},\"key\":{{\"vk\":{vk},\"tap\":true}}}}";
+        Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LMenu))), "設定が OFF ならアプリに通す (メニューバーに移る)\n" + front.Trace);
+        front.Settings.AltKeysSwitchKeyboard = true;
+        front.Type("ka");
+        var left = front.Send(Tap(VirtualKeys.LMenu));
+        front.Apply(left, "t1");
+        Assert.True(Consumed(left) && !front.Open && front.Document == "か", "左 Alt で、変換中の文字を確定して英数\n" + front.Trace);
+        var right = front.Send(Tap(VirtualKeys.RMenu));
+        Assert.True(Consumed(right) && right.GetProperty("state").GetProperty("open").GetBoolean(), "右 Alt で日本語\n" + front.Trace);
+        Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LControl))), "ほかの修飾キーは使わない\n" + front.Trace);
+    }
+
+    [Test]
+    public static void InputFieldTraits_DecideWhatCoreDoes()
+    {
+        var front = new Front();
+        front.Traits.Add("password");
+        Assert.True(!Active(front.Key('a')) && front.Document == "a", "パスワード欄では受け持たない\n" + front.Trace);
+        front = new Front();
+        front.Traits.Add("game");
+        Assert.True(!Active(front.Key('a')), "ゲームでは受け持たない (設定「ゲームでは止める」)\n" + front.Trace);
+        front = new Front();
+        front.Settings.AppKinds.Add(new AppKind { Name = "英数から", StartInEnglish = true });
+        front.Settings.AppRules.Add(new AppRule { Process = "term.exe", Enabled = true, Kind = "英数から" });
+        front.App = "term.exe";
+        front.Event("sync");
+        Assert.True(!front.Key('k').GetProperty("state").GetProperty("open").GetBoolean(), "「最初は英数」のアプリに移ったら英数\n" + front.Trace);
+    }
+
+    [Test]
+    public static void CodeApps_ComeFromTheAppName()
+    {
+        // 既定で VS Code・ターミナルは「コード」(Windows・macOS・Linux の名前)
+        foreach (var app in new[] { "Code.exe", "com.microsoft.VSCode", "code", "com.apple.Terminal", "gnome-terminal-server" })
+        {
+            var front = new Front { App = app, Document = "let x = " };
+            Assert.True(!Consumed(front.Key('k')), $"{app}: コードの行は英数のまま\n" + front.Trace);
+        }
+        var text = new Front { App = "notes", Document = "let x = " };
+        Assert.True(Consumed(text.Key('k')), "一般のアプリ\n" + text.Trace);
+    }
+
+    [Test]
+    public static void Snippets_ExpandFromTheTextBeforeTheCaret()
+    {
+        var front = new Front();
+        front.Snippets.Set("ty", "ありがとう");
+        foreach (var c in ";ty") Assert.True(!Consumed(front.Key(c == ';' ? 0xBA : c - 'a' + 'A', c)), $"{c} はそのままアプリへ\n" + front.Trace);
+        front.Key(' ');
+        Assert.Equal("ありがとう", front.Document, front.Trace);
+        front.Key('\u001b');
+        Assert.Equal(";ty", front.Document, "すぐに Esc で戻す\n" + front.Trace);
+        front.Document = "a";
+        front.Key(0xBA, ';');
+        Assert.True(Consumed(front.Key('t')), "単語の途中の ; は定型文ではない\n" + front.Trace);
     }
 
     [Test]
