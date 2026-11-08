@@ -18,11 +18,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 押している左右の Option の仮想キーコード (Windows の左右の Alt)。ほかのキーを押したら nil (単独押しではない)
     private var tap: Int?
     private var candidateList: [String] = []
-    /// 出している一覧が予測変換の候補か (選んだら本体に伝える)
-    private var prediction = false
     private let modeIndicator = ModeIndicator.shared
-    private var suggestionPanel: NSPanel?
-    private var displayedSuggestion: String?
+    private var auxPanel: NSPanel?
+    private var displayedAux: String?
     private var dictionaryObserver: NSObjectProtocol?
 
     /// 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
@@ -63,8 +61,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         guard let output = NativeCore.shared.send(host, event) else { return nil }
         japanese = output.state.japanese
         if let client { apply(output.result, to: client) }
-        if output.state.indicator {
-            modeIndicator.show(japanese ? .japanese : .direct, caret: client.flatMap { modeIndicatorCaret($0) })
+        if output.state.indicatorMs > 0 {
+            modeIndicator.show(japanese ? .japanese : .direct, caret: client.flatMap { modeIndicatorCaret($0) }, milliseconds: output.state.indicatorMs)
         }
         return output
     }
@@ -93,7 +91,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         super.activateServer(sender)
         Self.active = self
         ModeServices.shared.activate(self)
-        send("focus", client: client())
+        send("caret", client: client(), ["caret": ["moved": true, "passed": 0, "entered": true]])
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -154,8 +152,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             send("commit", client: client, ["caret": ["moved": true, "passed": 0, "left": true]])
         }
         candidatesWindow?.hide()
-        suggestionPanel?.orderOut(nil)
-        displayedSuggestion = nil
+        auxPanel?.orderOut(nil)
+        displayedAux = nil
         meaningKey = nil
         candidateList = []
         super.deactivateServer(sender)
@@ -173,23 +171,23 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
               let index = candidateList.firstIndex(of: string) else { return }
         // クリックした候補が候補ウィンドウで選ばれているので、覚えている位置も合わせる。
         windowIndex = index
-        send("select", client: client, ["index": index, "prediction": prediction])
+        send("select", client: client, ["index": index])
     }
 
-    /// 候補ウィンドウの中で選択が動いた (マウスで選んだときなど)。本体の選択も合わせる。
+    /// 候補ウィンドウの中で選択が動いた (マウスで選んだときなど)。本体の選択も合わせる (highlight: 確定しない)。
     /// 本体の選択を候補ウィンドウに反映しているとき (selectingFromCore) にも呼ばれるので、そのときは何もしない。
     /// moveDown / moveUp の通知が遅れて届くと古い番号に戻してしまうので、マウスの操作のときだけ受け付ける。
     private var selectingFromCore = false
 
     override func candidateSelectionChanged(_ candidateString: NSAttributedString!) {
         let mouseTypes: [NSEvent.EventType] = [.leftMouseDown, .leftMouseUp, .leftMouseDragged]
-        guard !selectingFromCore, !prediction,
+        guard !selectingFromCore,
               let type = NSApp.currentEvent?.type, mouseTypes.contains(type),
               let client = self.client(),
               let string = candidateString?.string,
               let index = candidateList.firstIndex(of: string) else { return }
         windowIndex = index
-        send("select", client: client, ["index": index])
+        send("select", client: client, ["index": index, "highlight": true])
     }
 
     // ---- メニュー (メニューバーの入力メニュー) ----
@@ -291,12 +289,13 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     private func apply(_ result: SessionResult, to client: IMKTextInput) {
         for edit in result.commits {
-            // 確定し直し: キャレット (変換中の文字があればその先頭) の前の deleteBefore 文字を置き換える (本体が照合済み)
+            // 確定し直し: キャレット (変換中の文字があればその先頭) の前の remove を置き換える (本体が照合済み)
             var range = NSRange(location: NSNotFound, length: 0)
-            if edit.deleteBefore > 0 {
+            if let remove = edit.remove {
+                let length = (remove as NSString).length
                 let marked = client.markedRange()
                 let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
-                if caret != NSNotFound && caret >= edit.deleteBefore { range = NSRange(location: caret - edit.deleteBefore, length: edit.deleteBefore) }
+                if caret != NSNotFound && caret >= length { range = NSRange(location: caret - length, length: length) }
             }
             client.insertText(NSAttributedString(string: edit.text), replacementRange: range)
             hasMarkedText = false
@@ -326,7 +325,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
         updateCandidates(view.list, client: client)
-        showSuggestion(view.suggestion, client: client)
+        // 打ったキー・もしかして・案内を、入力位置の下のパネルに 1 行で出す
+        let aux = [view.typed, view.suggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
+        showAux(aux.isEmpty ? nil : aux, client: client)
     }
 
     private func hideComposition(client: IMKTextInput) {
@@ -336,34 +337,33 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             hasMarkedText = false
         }
         candidateList = []
-        prediction = false
         candidatesWindow?.hide()
-        suggestionPanel?.orderOut(nil)
-        displayedSuggestion = nil
+        auxPanel?.orderOut(nil)
+        displayedAux = nil
         meaningKey = nil
     }
 
-    private func showSuggestion(_ suggestion: String?, client: IMKTextInput) {
+    private func showAux(_ text: String?, client: IMKTextInput) {
         let selection = client.selectedRange()
-        guard let suggestion, selection.location != NSNotFound else {
-            suggestionPanel?.orderOut(nil)
-            displayedSuggestion = nil
+        guard let text, selection.location != NSNotFound else {
+            auxPanel?.orderOut(nil)
+            displayedAux = nil
             return
         }
         var caret = NSRect.zero
         _ = client.attributes(forCharacterIndex: selection.location, lineHeightRectangle: &caret)
         guard caret.minX.isFinite, caret.minY.isFinite,
               caret.width.isFinite, caret.height.isFinite, caret.height > 0 else {
-            suggestionPanel?.orderOut(nil)
-            displayedSuggestion = nil
+            auxPanel?.orderOut(nil)
+            displayedAux = nil
             return
         }
-        displayedSuggestion = suggestion
-        let label = NSTextField(labelWithString: suggestion)
+        displayedAux = text
+        let label = NSTextField(labelWithString: text)
         label.font = .systemFont(ofSize: 13)
         label.sizeToFit()
         let size = NSSize(width: label.frame.width + 24, height: label.frame.height + 16)
-        let panel = suggestionPanel ?? NSPanel(contentRect: NSRect(origin: .zero, size: size),
+        let panel = auxPanel ?? NSPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = panelLevel(.floating, above: client)
         panel.hasShadow = true
@@ -378,7 +378,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             panel.setFrameOrigin(NSPoint(x: max(visible.minX, min(caret.minX, visible.maxX - size.width)),
                 y: max(visible.minY, min(caret.minY - size.height - 6, visible.maxY - size.height))))
         }
-        suggestionPanel = panel
+        auxPanel = panel
         panel.orderFrontRegardless()
     }
 
@@ -396,7 +396,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         text.addAttributes(attributes, range: range)
     }
 
-    /// 候補で少し (1.5 秒) 止まったら、その候補の意味を候補ウィンドウの注釈に出す (Windows 版と同じ)。
+    /// 候補で本体が決めた時間 (meaningMs) 止まったら、その候補の意味を候補ウィンドウの注釈に出す。
     private var meaningKey: String?
 
     private func scheduleMeaning(_ list: CandidateList) {
@@ -404,7 +404,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         guard key != meaningKey else { return }
         meaningKey = key
         guard let key, let meaning = list.meaning else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(list.meaningMs)) { [weak self] in
             guard let self, self.meaningKey == key, let window = candidatesWindow, window.isVisible() else { return }
             window.showAnnotation(NSAttributedString(string: meaning))
         }
@@ -415,17 +415,17 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         guard let list else {
             meaningKey = nil
             candidateList = []
-            prediction = false
             window.hide()
             return
         }
         // 作り直し・選択で候補ウィンドウから candidateSelectionChanged が来ても、本体に返さない。
         selectingFromCore = true
         defer { selectingFromCore = false }
-        prediction = list.prediction
+        // 注記 (候補の種類など) は候補の後ろに付ける
+        let items = zip(list.items, list.notes).map { item, note in note.map { item + "　" + $0 } ?? item }
         // 一覧を作り直すと選択が先頭に戻るので、中身が変わったとき (別の文節に移ったときなど) だけ作り直す。
-        if candidateList != list.items || !window.isVisible() {
-            candidateList = list.items
+        if candidateList != items || !window.isVisible() {
+            candidateList = items
             // IMK が入力位置を取り直すよう、更新前にいったん非表示にする。
             window.hide()
             window.update()

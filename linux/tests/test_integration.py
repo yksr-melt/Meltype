@@ -425,14 +425,13 @@ class IntegrationTests(unittest.TestCase):
 
     def test_reconversion_replaces_matching_previous_text(self):
         self.engine.document = "previous"
-        self.engine._apply({"commits": [{"deleteBefore": 8, "expect": "previous", "text": "replacement"}], "view": None})
+        self.engine._apply({"commits": [{"remove": "previous", "text": "replacement"}], "view": None})
         self.assertEqual("replacement", self.engine.document)
 
     def test_reconversion_counts_code_points(self):
-        # 本体の deleteBefore は UTF-16 単位 (😊 は 2) だが、IBus はコードポイント単位 (😊 は 1)。
-        # 消す文字数は、確認できた expect から数える。
+        # IBus はコードポイント単位で消す (😊 は 1)。消す文字数は remove から数える。
         self.engine.document = "pasted😊"
-        self.engine._apply({"commits": [{"deleteBefore": 2, "expect": "😊", "text": "笑"}], "view": None})
+        self.engine._apply({"commits": [{"remove": "😊", "text": "笑"}], "view": None})
         self.assertEqual("pasted笑", self.engine.document)
 
     def test_typing_after_paste_keeps_pasted_text(self):
@@ -467,6 +466,20 @@ class IntegrationTests(unittest.TestCase):
         self.special(IBus.KEY_F6)
         self.special(IBus.KEY_Return)
         self.assertEqual("ka か", self.engine.document)
+
+    def test_caret_back_moves_into_the_brackets(self):
+        # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)
+        forwarded = []
+        self.engine.forward_key_event = lambda keyval, keycode, state: forwarded.append((keyval, state))
+        self.engine._apply({"commits": [{"text": "「」", "caretBack": 1}], "view": None})
+        self.assertEqual([(IBus.KEY_Left, 0), (IBus.KEY_Left, IBus.ModifierType.RELEASE_MASK)], forwarded)
+
+    def test_aux_shows_typed_suggestion_and_hint(self):
+        shown = []
+        self.engine.update_auxiliary_text = lambda text, visible: shown.append(text.get_text())
+        self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1,
+                                                    "hint": "Space 変換", "suggestion": "もしかして", "typed": "kan", "list": None}})
+        self.assertEqual(["kan　もしかして　Space 変換"], shown)
 
     def test_input_purpose_and_app_are_facts(self):
         # パスワード欄では本体が何も受け持たない
@@ -528,7 +541,7 @@ class IntegrationTests(unittest.TestCase):
                         "確定のあとに preedit を消す更新が送られていない")
 
     def test_recommit_deletes_without_hiding_preedit(self):
-        # 確定し直し (deleteBefore あり) でも、確定の前に preedit を消す更新を送らない。
+        # 確定し直し (remove あり) でも、確定の前に preedit を消す更新を送らない。
         # 送ると Chromium 系 (Wayland text-input-v3) が変換中の文字を確定と解釈して挿入し (issue #486)、
         # 続く削除がずれた位置を消して壊れる (い + want → いwanI want)。
         # 変換中の文字は surrounding の削除対象にならないので、消してから入れてよい。

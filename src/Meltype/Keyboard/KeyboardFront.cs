@@ -64,7 +64,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         _state = new ImeState { Capture = new ImeCapture() };
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
         composition.Focus.ForegroundProcessName = () => _foreground.Current.ProcessName;
-        composition.Focus.TextInputEntered += () => Post(() => Send(ImeEventType.Focus));
+        composition.Focus.TextInputEntered += () => Post(() => Send(ImeEventType.Caret, caret: new ImeCaret { Moved = true, Passed = 0, Entered = true }));
         // 入力欄でない所・パスワード欄に移った: 本体が受け持たなくなったら、変換中の文字は入れる先が無いので捨てる
         composition.Focus.CaptureLost += _ => Post(() =>
         {
@@ -301,7 +301,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             else _composition.Hide();
             _composing = output.Result.View is not null;
         }
-        if (output.State.Indicator) _composition.ShowMode(output.State.Japanese);
+        if (output.State.IndicatorMs > 0) _composition.ShowMode(output.State.Japanese, output.State.IndicatorMs);
         if (output.State.Japanese != wasJapanese) ModeChanged?.Invoke();
         return output;
     }

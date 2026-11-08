@@ -108,7 +108,7 @@ internal static unsafe class NativeBoundaryTests
         if (commit is not null)
         {
             Assert.Equal(commit, commits[0].GetProperty("text").GetString());
-            Assert.Equal(0, commits[0].GetProperty("deleteBefore").GetInt32());
+            Assert.True(!commits[0].TryGetProperty("remove", out _), "前の文字は消さない");
         }
         Assert.Equal(JsonValueKind.Null, root.GetProperty("view").ValueKind, "未確定表示を閉じる");
     }

@@ -426,10 +426,10 @@ internal sealed class CompositionService : IDisposable
     }
 
     /// <summary>
-    /// 入力モード (日本語なら「あ」、英数なら「A」) をカーソルの近くに一瞬出す。どのスレッドから呼んでもよい。
+    /// 入力モード (日本語なら「あ」、英数なら「A」) をカーソルの近くに milliseconds だけ出す。どのスレッドから呼んでもよい。
     /// 変換ボックスが出ているときは出さない。
     /// </summary>
-    public void ShowMode(bool japanese, uint inputThread = 0, Point? inputAnchor = null)
+    public void ShowMode(bool japanese, int milliseconds, uint inputThread = 0, Point? inputAnchor = null)
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
         _invoker.BeginInvoke(() =>
@@ -440,7 +440,7 @@ internal sealed class CompositionService : IDisposable
             var anchor = inputAnchor ?? (inputThread == 0 ? FindAnchor() : FindImeIndicatorAnchor());
             var (jp, direct, text) = _indicatorColors();
             _indicator.SetColors(Config.Settings.ParseColor(jp), Config.Settings.ParseColor(direct), Config.Settings.ParseColor(text));
-            _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2));
+            _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2), milliseconds);
         });
     }
 

@@ -31,8 +31,11 @@ internal static class ImeContractTests
         /// <summary>このフロントが Windows のどちらの入力方式か (null なら入力方式が 1 つしかない OS)。</summary>
         public InputMode? InputMethod { get; set; }
 
+        /// <summary>予測変換の候補を出すか (英語の語の補完)。</summary>
+        public bool Predicts { get; init; }
+
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions().WithSettings(settings), settings, directModeDetection: true);
+            new CompositionOptions().WithSettings(settings) with { Predictor = Predicts ? new Predictor(null, null, null) : null }, settings, directModeDetection: true);
 
         /// <summary>再変換の読み (OS の機能の代わり)。</summary>
         public Dictionary<string, string> Readings { get; } = [];
@@ -122,7 +125,7 @@ internal static class ImeContractTests
         public List<JsonElement> Type(string keys, string sid = "t1") => keys.Select(key => Key(key, sid)).ToList();
 
         /// <summary>
-        /// 確定を入れ、表示と開閉を置き換える。確定し直し (deleteBefore が 1 以上) は照合せずに、expect の分を消してから text を入れる
+        /// 確定を入れ、表示と開閉を置き換える。確定し直し (remove がある) は照合せずに、remove の分を消してから text を入れる
         /// (照合は本体の仕事。消す文字が入力欄の末尾に無ければ、本体が約束を破ったので Skipped に残して入れない)。
         /// </summary>
         public void Apply(JsonElement output, string sid)
@@ -133,9 +136,9 @@ internal static class ImeContractTests
             foreach (var commit in result.GetProperty("commits").EnumerateArray())
             {
                 var text = commit.GetProperty("text").GetString()!;
-                if (commit.GetProperty("deleteBefore").GetInt32() > 0)
+                if (commit.TryGetProperty("remove", out var remove))
                 {
-                    var expect = commit.GetProperty("expect").GetString()!;
+                    var expect = remove.GetString()!;
                     if (!Document.EndsWith(expect, StringComparison.Ordinal))
                     {
                         Skipped.Add(commit.GetRawText());
@@ -152,13 +155,16 @@ internal static class ImeContractTests
 
     private static string Json(string text) => JsonSerializer.Serialize(text);
 
+    /// <summary>入力欄にフォーカスが入った (caret の出来事に付ける)。</summary>
+    private const string Entered = ",\"caret\":{\"moved\":true,\"passed\":0,\"entered\":true}";
+
     private static bool Consumed(JsonElement output) => output.GetProperty("result").GetProperty("consumed").GetBoolean();
 
     private static bool Active(JsonElement output) => output.GetProperty("state").GetProperty("active").GetBoolean();
 
     private static bool Japanese(JsonElement output) => output.GetProperty("state").GetProperty("japanese").GetBoolean();
 
-    private static bool Indicator(JsonElement output) => output.GetProperty("state").GetProperty("indicator").GetBoolean();
+    private static bool Indicator(JsonElement output) => output.GetProperty("state").GetProperty("indicatorMs").GetInt32() > 0;
 
     private static JsonElement Capture(JsonElement output) => output.GetProperty("state").GetProperty("capture");
 
@@ -224,7 +230,7 @@ internal static class ImeContractTests
             return (front, outputs);
         }
         static bool Rewrites(List<JsonElement> outputs) =>
-            outputs.SelectMany(o => Commits(o).EnumerateArray()).Any(c => c.GetProperty("deleteBefore").GetInt32() > 0);
+            outputs.SelectMany(o => Commits(o).EnumerateArray()).Any(c => c.TryGetProperty("remove", out _));
 
         var (still, stillOutputs) = TypeWantAfterI(moved: false);
         Assert.True(Rewrites(stillOutputs), "動かさなければ、前の語を確定し直す\n" + still.Trace);
@@ -478,20 +484,79 @@ internal static class ImeContractTests
         // 変換中に OS がフォーカス・キャレットを知らせてきても、変換中の表示は消さない (view が null ならフロントは消す)
         var front = new Front();
         front.Type("ka");
-        foreach (var type in new[] { "focus", "sync", "refresh" })
-            Assert.Equal("か", front.Event(type).GetProperty("result").GetProperty("view").GetProperty("text").GetString(), type + "\n" + front.Trace);
+        foreach (var (type, extra) in new[] { ("caret", Entered), ("sync", ""), ("refresh", "") })
+            Assert.Equal("か", front.Event(type, extra: extra).GetProperty("result").GetProperty("view").GetProperty("text").GetString(), type + "\n" + front.Trace);
         front.Event("caret", extra: ",\"caret\":{\"moved\":false}");
         Assert.Equal("か", front.Composition["t1"], "caret\n" + front.Trace);
+    }
+
+    [Test]
+    public static void View_ShowsWhatWillBeCommitted()
+    {
+        // どのフロントも text をそのまま出す。確定される形 (OS が表示のまま確定しても同じになる) で、打っている途中の英字は typed で見える
+        var front = new Front();
+        front.Settings.ShowTypedKeys = true;
+        var view = front.Type("kan")[^1].GetProperty("result").GetProperty("view");
+        Assert.Equal("かん", view.GetProperty("text").GetString(), front.Trace);
+        Assert.Equal("kan", view.GetProperty("typed").GetString(), front.Trace);
+        Assert.True(!view.TryGetProperty("committed", out _), "見せる文字は 1 つだけ\n" + front.Trace);
+    }
+
+    [Test]
+    public static void List_IsOneAndSelectReadsTheLastOne()
+    {
+        // 入力中の変換の候補 (設定「入力中も変換候補をいくつか表示」) も、変換の候補と同じ一覧で渡す。select の番号は前の応答の一覧で読む
+        var front = new Front();
+        front.Settings.ShowCandidatesWhileTyping = true;
+        var list = front.Type("kyou")[^1].GetProperty("result").GetProperty("view").GetProperty("list");
+        Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 0 && !list.TryGetProperty("prediction", out _),
+            "入力中も一覧を出す\n" + front.Trace);
+        var second = list.GetProperty("items")[1].GetString();
+        var selected = front.Event("select", extra: ",\"index\":1");
+        Assert.Equal(second, selected.GetProperty("result").GetProperty("view").GetProperty("text").GetString(), "見えていた一覧の 2 番目\n" + front.Trace);
+    }
+
+    [Test]
+    public static void List_IsNumberedOnlyWhenNumberKeysSelect()
+    {
+        // 数字キーで選べるのは変換中の候補だけ。入力中の一覧の数字は、そのまま打つ文字になる
+        var front = new Front();
+        front.Settings.ShowCandidatesWhileTyping = true;
+        static bool Numbered(JsonElement output) => output.GetProperty("result").GetProperty("view").GetProperty("list").GetProperty("numbered").GetBoolean();
+        Assert.True(!Numbered(front.Type("kyou")[^1]), "入力中\n" + front.Trace);
+        Assert.True(Numbered(front.Key(' ')), "変換中\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Select_HighlightDoesNotCommitAPrediction()
+    {
+        // マウスでなぞった (highlight) だけでは予測変換の候補を確定しない。クリックしたら確定する
+        var front = new Front { Predicts = true };
+        front.Settings.PredictiveCandidates = true;
+        front.Document = "I made ";
+        var list = front.Type("decis")[^1].GetProperty("result").GetProperty("view").GetProperty("list");
+        Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 1, "予測変換の候補を出す\n" + front.Trace);
+        Assert.True(Commits(front.Event("select", extra: ",\"index\":1,\"highlight\":true")).GetArrayLength() == 0, "なぞっただけ\n" + front.Trace);
+        Assert.Equal(list.GetProperty("items")[1].GetString(), Commits(front.Event("select", extra: ",\"index\":1"))[0].GetProperty("text").GetString(),
+            "クリックした候補を確定する\n" + front.Trace);
+    }
+
+    [Test]
+    public static void ModeIndicator_IsNotShownWhileComposing()
+    {
+        var front = new Front();
+        front.Type("ka");
+        Assert.True(!Indicator(front.Event("caret", extra: Entered)), "変換中は出さない\n" + front.Trace);
     }
 
     [Test]
     public static void ModeIndicator_IsDecidedByTheSetting()
     {
         var front = new Front();
-        Assert.True(Indicator(front.Event("focus")), "既定では入力欄に入ったときも表示する\n" + front.Trace);
+        Assert.True(Indicator(front.Event("caret", extra: Entered)), "既定では入力欄に入ったときも表示する\n" + front.Trace);
         Assert.True(Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたら表示する\n" + front.Trace);
         front.Settings.ModeIndicator = ModeIndicatorTiming.OnSwitch;
-        Assert.True(!Indicator(front.Event("focus")) && Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたときだけ\n" + front.Trace);
+        Assert.True(!Indicator(front.Event("caret", extra: Entered)) && Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたときだけ\n" + front.Trace);
         front.Settings.ModeIndicator = ModeIndicatorTiming.Never;
         Assert.True(!Indicator(front.Key(ToggleShortcut.Hankaku)), "出さない設定\n" + front.Trace);
     }
@@ -642,7 +707,7 @@ internal static class ImeContractTests
         front.Type("kyou");
         var typing = front.Key(' ');
         var list = typing.GetProperty("result").GetProperty("view").GetProperty("list");
-        Assert.True(list.ValueKind == JsonValueKind.Object && !list.GetProperty("prediction").GetBoolean() && list.GetProperty("items").GetArrayLength() > 1,
+        Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 1,
             "変換中で候補が 2 つ以上なら一覧を出す\n" + front.Trace);
         Assert.True(!typing.GetProperty("result").TryGetProperty("showGuide", out _) && !typing.GetProperty("result").GetProperty("view").TryGetProperty("contextHint", out _),
             "案内は操作ガイドの設定を反映済みで渡す\n" + front.Trace);

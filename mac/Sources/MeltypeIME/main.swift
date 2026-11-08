@@ -77,9 +77,10 @@ func runChecks(inputPath: String?) -> Int32 {
             event.merge(fields) { _, new in new }
             let output = NativeCore.shared.send(host, event)
             for edit in output?.result.commits ?? [] {
-                // 確定し直しは本体が照合済み: 前の deleteBefore 文字 (UTF-16) を消してから入れる
+                // 確定し直しは本体が照合済み: 前の remove を消してから入れる
                 let current = text as NSString
-                text = current.substring(to: current.length - min(edit.deleteBefore, current.length)) + edit.text
+                let remove = ((edit.remove ?? "") as NSString).length
+                text = current.substring(to: current.length - min(remove, current.length)) + edit.text
             }
             return output
         }

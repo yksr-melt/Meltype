@@ -35,7 +35,7 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
     const bool open = (request.find("\"open\":true") != std::string::npos) != toggle;
     const char* shown = open ? "true" : "false";
     response = std::string("{\"v\":1,\"state\":{\"active\":true,\"open\":") + shown + ",\"japanese\":" + shown +
-               ",\"indicator\":" + (toggle ? "true" : "false") +
+               ",\"indicatorMs\":" + (toggle ? "1200" : "0") +
                ",\"capture\":{\"text\":true,\"except\":\"\",\"keys\":[]},\"rev\":" +
                std::to_string(++revision) + "},\"result\":{\"consumed\":true,\"commits\":[],\"view\":null}}";
     return true;

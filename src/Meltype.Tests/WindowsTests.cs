@@ -51,7 +51,7 @@ internal static class WindowsTests
             composition.ShowView(view, new Point(20, 20));
             Assert.True(composition.Visible && input.Focused, "変換ボックスを表示しても入力欄を維持する");
             composition.Hide();
-            indicator.Flash(true, new Point(40, 40));
+            indicator.Flash(true, new Point(40, 40), 1200);
             Assert.True(indicator.Visible && input.Focused, "入力モード表示でも入力欄を維持する");
             indicator.Hide();
         }

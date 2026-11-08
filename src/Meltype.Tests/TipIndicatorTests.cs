@@ -40,18 +40,18 @@ internal static class TipIndicatorTests
         var area = Screen.PrimaryScreen!.WorkingArea;
         var anchor = new Point(area.Left + 40, area.Top + 40);
         var foreground = Native.GetForegroundWindow();
-        composition.ShowMode(true, inputAnchor: anchor);
+        composition.ShowMode(true, 1200, inputAnchor: anchor);
         Application.DoEvents();
         Assert.True(indicator.Visible, "通知の受付だけでなく表示まで確認する");
         Assert.Equal(new Point(anchor.X + 2, anchor.Y + 2), indicator.Location, "入力欄の左上ではなく TSF の位置を使う");
         Assert.Equal(foreground, Native.GetForegroundWindow(), "入力先のフォーカスを奪わない");
 
         // ON/OFF の繰り返しでも、既に表示中の同じウィンドウを更新できる。
-        composition.ShowMode(false, inputAnchor: new Point(anchor.X + 30, anchor.Y + 20));
+        composition.ShowMode(false, 1200, inputAnchor: new Point(anchor.X + 30, anchor.Y + 20));
         Application.DoEvents();
         Assert.True(indicator.Visible, "2 回目も表示する");
         Assert.Equal(new Point(anchor.X + 32, anchor.Y + 22), indicator.Location);
-        composition.ShowMode(true, inputAnchor: anchor);
+        composition.ShowMode(true, 1200, inputAnchor: anchor);
         Application.DoEvents();
         Assert.True(indicator.Visible, "3 回目も表示する");
 

@@ -87,33 +87,43 @@ internal sealed class ImeSession
             ImeEventType.SetMode when active => Switch(e.Japanese, before, ref explicitChange, toggle: false),
             ImeEventType.Commit => _session.CommitPending(),
             ImeEventType.Committed => CommittedOutside(e.Field),
-            ImeEventType.Select => e.Prediction ? _session.SelectPrediction(e.Index) : _session.SelectCandidate(e.Index),
+            // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む
+            ImeEventType.Select when _listedPredictions => e.Highlight ? _session.Unchanged() : _session.SelectPrediction(e.Index),
+            ImeEventType.Select => _session.SelectCandidate(e.Index),
             ImeEventType.Refresh when active => _session.RefreshConversion() ?? _session.Unchanged(),
             // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
             _ => _session.Unchanged(),
         }, e.Field), settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
+        _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
+        var indicate = explicitChange && japanese != wasJapanese && settings.ModeIndicator != ModeIndicatorTiming.Never ||
+            e.Caret?.Entered == true && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
         return new(new ImeState
         {
             Active = active,
             Open = !_session.Direct,
             Japanese = active && japanese,
-            Indicator = active && (explicitChange && japanese != wasJapanese && settings.ModeIndicator != ModeIndicatorTiming.Never ||
-                e.Type == ImeEventType.Focus && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus),
+            IndicatorMs = active && indicate && result.View is null ? IndicatorMs : 0,
             Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys()),
             Rev = rev,
         }, result);
     }
 
+    /// <summary>入力モードを表示する時間。</summary>
+    private const int IndicatorMs = 1200;
+
+    // 前の応答の一覧が予測変換の候補だった (select の番号を読むため)
+    private bool _listedPredictions;
+
     /// <summary>入力の本体を作る前 (まだ打っていない入力欄) の状態。</summary>
-    /// <param name="focus">入力欄にフォーカスが入った (設定によっては入力モードを表示する)。</param>
-    public static ImeState InitialState(bool active, bool open, Settings settings, bool focus, long rev) => new()
+    /// <param name="entered">入力欄にフォーカスが入った (設定によっては入力モードを表示する)。</param>
+    public static ImeState InitialState(bool active, bool open, Settings settings, bool entered, long rev) => new()
     {
         Active = active,
         Open = open,
         Japanese = active && open,
-        Indicator = active && focus && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
+        IndicatorMs = active && entered && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? IndicatorMs : 0,
         Capture = Capture(active, !open, false, settings, []),
         Rev = rev,
     };
@@ -138,7 +148,7 @@ internal sealed class ImeSession
         }
         if (e.Field is not { } field) return;
         _session.Private = field.Traits.Contains(ImeTrait.Private);
-        _session.CanDeleteSurrounding = field.CanDelete;
+        _session.CanDeleteSurrounding = field.CanRemove;
         _session.Selection = field.Selection;
         if (CodeFocusOf(field, settings) is { } focus)
         {
@@ -292,7 +302,7 @@ internal sealed class ImeSession
     {
         _session.CanDeleteSurrounding = false;
         _session.CommitPending();
-        _session.CanDeleteSurrounding = field?.CanDelete ?? true;
+        _session.CanDeleteSurrounding = field?.CanRemove ?? true;
         return Consumed;
     }
 

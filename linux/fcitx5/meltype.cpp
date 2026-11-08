@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,6 +21,7 @@
 #include <fcitx-config/configuration.h>
 #include <fcitx-config/option.h>
 #include <fcitx-utils/capabilityflags.h>
+#include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
@@ -366,8 +368,10 @@ public:
     // Shift を押しているか。fcitx5 は Space のキーに Shift を付けて渡さないことがある (どの環境で起きるかは
     // 未確認。手元は KDE Plasma 6 / Wayland、X11 と GNOME は試していない) ので、キーから覚えておく: #1033
     bool shiftHeld = false;
-    // 入力モードの表示 (A / あ) を出したか。次のキーで 1 回だけ消す (#1034)。
-    bool modeShown = false;
+    // 入力モードの表示 (A / あ) と候補の意味を、本体が決めた時間のあとに消す・出すタイマー
+    std::unique_ptr<fcitx::EventSourceTime> modeTimer, meaningTimer;
+    // 意味を出すのを待っている候補 (選んでいる番号と意味)。変わったら待ち直す
+    std::string meaningKey;
     // 押している左右の Alt の仮想キーコード。ほかのキーを押したら 0 (単独押しではない)
     int tap = 0;
     // 変換中の文字 (preedit) を出しているか
@@ -380,14 +384,13 @@ private:
 
 class MeltypeCandidate : public fcitx::CandidateWord {
 public:
-    MeltypeCandidate(MeltypeEngine *engine, std::string text, int index, bool prediction)
-        : fcitx::CandidateWord(fcitx::Text(std::move(text))), engine_(engine), index_(index), prediction_(prediction) {}
+    MeltypeCandidate(MeltypeEngine *engine, std::string text, int index)
+        : fcitx::CandidateWord(fcitx::Text(std::move(text))), engine_(engine), index_(index) {}
     void select(fcitx::InputContext *ic) const override;
 
 private:
     MeltypeEngine *engine_;
     int index_;
-    bool prediction_;  // 予測変換の候補か
 };
 
 class MeltypeEngine : public fcitx::InputMethodEngineV2 {
@@ -430,11 +433,6 @@ public:
         }
         if (event.isRelease()) return;
         state->tap = 0;
-        // 出した A / あ は、次に実際のキーを押したときに消す (#1034)。離したときに消すと、押している間しか見えない
-        if (state->modeShown) {
-            showMode(ic, "");
-            state->modeShown = false;
-        }
         auto [vk, character] = virtualKey(key.sym());
         if (vk == 0 && character == 0) return;
         const auto states = key.states();
@@ -451,7 +449,7 @@ public:
     // 入力欄にフォーカスが入った・入力メソッドを Meltype にした
     void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         Json output;
-        send(event.inputContext(), "focus", "", output);
+        send(event.inputContext(), "caret", ",\"caret\":{\"moved\":true,\"passed\":0,\"entered\":true}", output);
     }
 
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
@@ -471,9 +469,9 @@ public:
 
     const fcitx::Configuration *getConfig() const override { return &config_; }
 
-    void selectCandidate(fcitx::InputContext *ic, int index, bool prediction) {
+    void selectCandidate(fcitx::InputContext *ic, int index) {
         Json output;
-        send(ic, "select", ",\"index\":" + std::to_string(index) + (prediction ? ",\"prediction\":true" : ""), output);
+        send(ic, "select", ",\"index\":" + std::to_string(index), output);
     }
 
 private:
@@ -516,10 +514,7 @@ private:
             "\",\"sid\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
-        if (const auto *shown = output.get("state"); shown->flag("indicator")) {
-            showMode(ic, shown->flag("japanese") ? "あ" : "A");
-            state->modeShown = true;
-        }
+        if (const auto *shown = output.get("state"); shown->integer("indicatorMs") > 0) showMode(ic, shown->flag("japanese") ? "あ" : "A", shown->integer("indicatorMs"));
         return true;
     }
 
@@ -546,22 +541,33 @@ private:
         }
         return "{\"before\":" + before + ",\"after\":" + after + ",\"selection\":" + selection +
             ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) + ",\"traits\":[" + traits + "]" +
-            (ic->program().empty() ? "" : ",\"app\":" + quote(ic->program())) + ",\"canDelete\":" + boolean(surrounding) + "}";
+            (ic->program().empty() ? "" : ",\"app\":" + quote(ic->program())) + ",\"canRemove\":" + boolean(surrounding) + "}";
     }
 
-    // 入力モード (A / あ) をカーソル位置に出す (Mozc と同じ入力パネルの枠)。空なら消す
-    static void showMode(fcitx::InputContext *ic, const std::string &mode) {
+    // 入力モード (A / あ) をカーソル位置に、本体が決めた時間だけ出す (Mozc と同じ入力パネルの枠)
+    void showMode(fcitx::InputContext *ic, const std::string &mode, int milliseconds) {
         ic->inputPanel().setAuxUp(fcitx::Text(mode));
         ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+        ic->propertyFor(&factory_)->modeTimer = after(milliseconds, [ic]() {
+            ic->inputPanel().setAuxUp(fcitx::Text());
+            ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+        });
+    }
+
+    std::unique_ptr<fcitx::EventSourceTime> after(int milliseconds, std::function<void()> action) {
+        return instance_->eventLoop().addTimeEvent(CLOCK_MONOTONIC, fcitx::now(CLOCK_MONOTONIC) + static_cast<uint64_t>(milliseconds) * 1000, 0,
+            [action](fcitx::EventSourceTime *, uint64_t) {
+                action();
+                return true;
+            });
     }
 
     void apply(fcitx::InputContext *ic, const Json &result) {
         if (auto *commits = result.get("commits"); commits && commits->kind == Json::Kind::Array) {
             for (const auto &edit : commits->items) {
-                // 確定し直し: 本体がキャレットの前と照合した前の文字 (expect) を消してから入れる。
-                // 本体の deleteBefore は UTF-16 の単位なので使わず、expect の文字数 (コードポイント) だけ消す
-                if (edit.integer("deleteBefore") > 0) {
-                    const size_t length = charLength(edit.str("expect"));
+                // 確定し直し: 本体がキャレットの前と照合した前の文字 (remove) を、文字数 (コードポイント) で消してから入れる
+                if (edit.get("remove")) {
+                    const size_t length = charLength(edit.str("remove"));
                     hidePreedit(ic);
                     ic->deleteSurroundingText(-static_cast<int>(length), static_cast<unsigned int>(length));
                 } else {
@@ -569,6 +575,11 @@ private:
                     ic->propertyFor(&factory_)->preeditVisible = false;
                 }
                 if (const auto committed = edit.str("text"); !committed.empty()) ic->commitString(committed);
+                // 確定した文字の中にキャレットを戻す (空の括弧の中など)。fcitx5 からキャレットは動かせないので、← をアプリに送る
+                for (int i = 0; i < edit.integer("caretBack"); i++) {
+                    ic->forwardKey(fcitx::Key(FcitxKey_Left), false);
+                    ic->forwardKey(fcitx::Key(FcitxKey_Left), true);
+                }
             }
         }
         auto *view = result.get("view");
@@ -579,9 +590,7 @@ private:
     void show(fcitx::InputContext *ic, const Json &view) {
         auto &panel = ic->inputPanel();
         panel.reset();
-        // 入力欄に出す変換中の文字は、フォーカスが外れたときに表示のまま確定されるので、確定される形 (「かn」でなく「かん」) を出す
-        const bool client = ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
-        const auto text = client ? view.str("committed") : view.str("text");
+        const auto text = view.str("text");
         const auto clauses = view.strings("clauses");
         const bool converting = view.flag("converting");
         const int selectedClause = view.integer("selectedClause", -1);
@@ -600,22 +609,43 @@ private:
         if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit)) panel.setClientPreedit(preedit);
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
-        auto hint = view.str("hint");
-        if (auto suggestion = view.str("suggestion"); !suggestion.empty())
-            hint = suggestion + (hint.empty() ? "" : "　" + hint);
-        if (!hint.empty()) panel.setAuxDown(fcitx::Text(hint));
-        if (const auto *listed = view.get("list"); listed && listed->kind == Json::Kind::Object) {
-            const auto candidates = listed->strings("items");
-            const bool prediction = listed->flag("prediction");
+        // 打ったキー・もしかして (書き間違い。Tab で直せる)・案内を 1 行で出す
+        std::string aux;
+        for (const auto &part : {view.str("typed"), view.str("suggestion"), view.str("hint")})
+            if (!part.empty()) aux += (aux.empty() ? "" : "　") + part;
+        if (!aux.empty()) panel.setAuxDown(fcitx::Text(aux));
+        auto *state = ic->propertyFor(&factory_);
+        const auto *listed = view.get("list");
+        if (!listed || listed->kind != Json::Kind::Object) {
+            state->meaningTimer.reset();
+            state->meaningKey.clear();
+        } else {
+            // 注記 (候補の種類など) は候補の後ろに付ける
+            auto candidates = listed->strings("items");
+            if (const auto *notes = listed->get("notes"); notes && notes->kind == Json::Kind::Array)
+                for (size_t i = 0; i < candidates.size() && i < notes->items.size(); i++)
+                    if (notes->items[i].kind == Json::Kind::String) candidates[i] += "　" + notes->items[i].string;
             auto list = std::make_unique<fcitx::CommonCandidateList>();
             list->setLayoutHint(fcitx::CandidateLayoutHint::Vertical);
             list->setPageSize(9);
-            list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
+            // 番号は本体が決める (数字キーで選べる一覧だけ)
+            if (listed->flag("numbered")) list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
+            else list->setLabels(std::vector<std::string>(9, ""));
             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);
-            for (size_t i = 0; i < candidates.size(); i++) list->append<MeltypeCandidate>(this, candidates[i], static_cast<int>(i), prediction);
+            for (size_t i = 0; i < candidates.size(); i++) list->append<MeltypeCandidate>(this, candidates[i], static_cast<int>(i));
             int selected = listed->integer("selected", -1);
             if (selected >= 0 && selected < static_cast<int>(candidates.size())) list->setGlobalCursorIndex(selected);
             panel.setCandidateList(std::move(list));
+            // 選んでいる候補で止まったら、本体が決めた時間のあとに意味を出す
+            const auto meaning = listed->str("meaning");
+            const auto key = meaning.empty() ? std::string() : std::to_string(selected) + ":" + meaning;
+            if (key != state->meaningKey) {
+                state->meaningKey = key;
+                state->meaningTimer = key.empty() ? nullptr : after(listed->integer("meaningMs"), [ic, meaning]() {
+                    ic->inputPanel().setAuxDown(fcitx::Text(meaning));
+                    ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+                });
+            }
         }
         ic->updatePreedit();
         ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
@@ -625,11 +655,14 @@ private:
         ic->inputPanel().reset();
         ic->updatePreedit();
         ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
-        ic->propertyFor(&factory_)->preeditVisible = false;
+        auto *state = ic->propertyFor(&factory_);
+        state->preeditVisible = false;
+        state->meaningTimer.reset();
+        state->meaningKey.clear();
     }
 };
 
-void MeltypeCandidate::select(fcitx::InputContext *ic) const { engine_->selectCandidate(ic, index_, prediction_); }
+void MeltypeCandidate::select(fcitx::InputContext *ic) const { engine_->selectCandidate(ic, index_); }
 
 class MeltypeEngineFactory : public fcitx::AddonFactory {
     fcitx::AddonInstance *create(fcitx::AddonManager *manager) override { return new MeltypeEngine(manager->instance()); }

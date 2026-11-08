@@ -294,7 +294,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     }
     open_ = !disabled_;
 
-    candidates_ = std::make_unique<CandidateWindow>([this](int index, bool prediction) { SelectCandidate(index, prediction); });
+    candidates_ = std::make_unique<CandidateWindow>([this](int index) { SelectCandidate(index); });
 
     if (!disabled_) {
         langBar_ = new LangBarButton(this);
@@ -418,14 +418,14 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
     ForgetSecretField();
     if (candidates_) candidates_->Hide();
     AdviseTextEditSink(focus);
-    if (focus != nullptr && !disabled_) Sync("focus");
+    if (focus != nullptr && !disabled_) Sync(true);
     return S_OK;
 }
 
 STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     if (!foreground && candidates_) candidates_->Hide();
     // 別アプリ (Meltype の設定画面など) から戻ったとき、キー入力の前に状態と設定を受け取り直す
-    if (foreground && !disabled_) Sync("focus");
+    if (foreground && !disabled_) Sync(true);
     // キーを受け取らなくなった (スレッドが前面でなくなった・ほかの IME に移った): 受け取ったキーを離したことは届かないかもしれないので忘れる
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
@@ -754,14 +754,14 @@ std::string TextService::CaretMoved(bool left) {
     return std::string(",\"caret\":{\"moved\":true,\"passed\":0") + (left ? ",\"left\":true" : "") + "}";
 }
 
-void TextService::Sync(const char* type) {
+void TextService::Sync(bool entered) {
     JsonValue reply;
     // 状態を受け取るだけ。応答が遅ければ待たない (次のキーで受け取る)。
     // フォーカスが入ったときは入力欄の事実も送る (アプリ別設定・コードの行で、受け持つか・入力モードを表示するかが変わる)
     std::string field;
     RECT anchor = {};
     Microsoft::WRL::ComPtr<ITfContext> context;
-    if (std::string_view(type) == "focus" && threadMgr_ != nullptr) {
+    if (entered && threadMgr_ != nullptr) {
         Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
         if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&context);
     }
@@ -773,7 +773,9 @@ void TextService::Sync(const char* type) {
             return S_OK;
         });
     }
-    if (Send(type, field, "", reply, 100, true, field.empty() ? nullptr : &anchor)) ApplyState(reply[L"state"]);
+    if (Send(entered ? "caret" : "sync", field, entered ? ",\"caret\":{\"moved\":true,\"passed\":0,\"entered\":true}" : "", reply, 100, true,
+             field.empty() ? nullptr : &anchor))
+        ApplyState(reply[L"state"]);
     FlushOpen();
 }
 
@@ -1400,7 +1402,9 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
     const JsonValue& view = result[L"view"];
     for (const JsonValue& edit : commits) {
         const std::wstring& text = edit[L"text"].Str();
-        int deleteBefore = edit[L"deleteBefore"].Int();
+        // 確定し直すときの、キャレットの前の消す文字 (本体が照合済み)
+        const JsonValue& remove = edit[L"remove"];
+        const LONG deleteBefore = remove.type == JsonValue::Type::String ? static_cast<LONG>(remove.Str().size()) : 0;
         int caretBack = edit[L"caretBack"].Int();
         int caretAfterCommit = 0;
         if (caretBack > 0) {
@@ -1433,16 +1437,15 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             // 同じ編集セッションで変換中の文字の外も書き換えると、Chrome はページに変換の終わり (compositionend) を伝えない。
             // 変換中の範囲を前に広げて書き換えると、Chrome では TF_E_RANGE_NOT_COVERED で失敗する (#262)
             if (!WriteCommit(ec, context, range.Get(), current.Str(), caretBack, &movedCaret)) continue;
-            const JsonValue& expect = edit[L"expect"];
             // 今の語の後ろの位置を覚えておき、書き換えるときにキャレットがそこにあるかを確かめる (後ろに文字が入っても動かないように、両端とも前に寄せる)
             Microsoft::WRL::ComPtr<ITfRange> end;
-            if (expect.type == JsonValue::Type::String && SUCCEEDED(range->Clone(&end)) && SUCCEEDED(end->Collapse(ec, TF_ANCHOR_END)) &&
+            if (SUCCEEDED(range->Clone(&end)) && SUCCEEDED(end->Collapse(ec, TF_ANCHOR_END)) &&
                 SUCCEEDED(end->SetGravity(ec, TF_GRAVITY_BACKWARD, TF_GRAVITY_BACKWARD)))
-                RewriteBeforeCaret(context, end.Get(), deleteBefore + static_cast<LONG>(current.Str().size()), expect.Str() + current.Str(), text);
+                RewriteBeforeCaret(context, end.Get(), deleteBefore + static_cast<LONG>(current.Str().size()), remove.Str() + current.Str(), text);
         } else {
             // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
             // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
-            if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
+            if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, remove)) continue;
             if (!WriteCommit(ec, context, range.Get(), text, caretBack, &movedCaret)) continue;
             if (caretAfterCommit > 0) MoveCaretAfterCommit(ec, context, range.Get(), text, caretAfterCommit);
         }
@@ -1906,17 +1909,17 @@ void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool kee
     if (candidates_) candidates_->Hide();
 }
 
-void TextService::SelectCandidate(int index, bool prediction) {
+void TextService::SelectCandidate(int index) {
     if (compositionContext_ == nullptr) return;
     Microsoft::WRL::ComPtr<ITfContext> context = compositionContext_;
     Microsoft::WRL::ComPtr<ITfComposition> target = composition_;
     Microsoft::WRL::ComPtr<TextService> self = this;
-    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, index, prediction](TfEditCookie ec) {
+    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, index](TfEditCookie ec) {
         // 動くまでに変換中の文字が変わっていたら選ばない
         if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
         self->ownEdit_ = true;
         JsonValue reply;
-        if (self->Send("select", "", ",\"index\":" + std::to_string(index) + (prediction ? ",\"prediction\":true" : ""), reply)) {
+        if (self->Send("select", "", ",\"index\":" + std::to_string(index), reply)) {
             self->ApplyOutput(ec, context.Get(), reply);
         }
         return S_OK;
@@ -1927,18 +1930,20 @@ void TextService::SelectCandidate(int index, bool prediction) {
 
 void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const JsonValue& view) {
     if (!candidates_) return;
-    // 出すもの (候補の一覧・もしかして・打ったキー) は Meltype.exe が決める。どれも無ければ出さない
+    // 出すもの (候補の一覧・もしかして・打ったキー・案内) は Meltype.exe が決める。どれも無ければ出さない
     CandidateView data;
     const JsonValue& list = view[L"list"];
     for (const JsonValue& item : list[L"items"].array) data.candidates.push_back(item.Str());
     for (const JsonValue& item : list[L"notes"].array) data.notes.push_back(item.Str());
     data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
-    data.prediction = list[L"prediction"].Bool();
+    data.numbered = list[L"numbered"].Bool();
     data.meaning = list[L"meaning"].Str();
+    data.meaningMs = static_cast<UINT>(list[L"meaningMs"].Int());
     data.suggestion = view[L"suggestion"].Str();
     data.typed = view[L"typed"].Str();
+    data.hint = view[L"hint"].Str();
     const bool converting = view[L"converting"].Bool();
-    if (data.candidates.empty() && data.suggestion.empty() && data.typed.empty()) {
+    if (data.candidates.empty() && data.suggestion.empty() && data.typed.empty() && data.hint.empty()) {
         candidates_->Hide();
         return;
     }

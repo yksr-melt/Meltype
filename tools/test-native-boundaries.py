@@ -77,7 +77,7 @@ class NativeBoundaryTests(unittest.TestCase):
 
     def assert_pass(self, result, text=None):
         self.assertFalse(result["consumed"])
-        self.assertEqual([] if text is None else [{"deleteBefore": 0, "text": text}], result["commits"])
+        self.assertEqual([] if text is None else [{"text": text}], result["commits"])
         self.assertIsNone(result["view"])
 
     def test_bmp_accent_keeps_raw_base(self):
@@ -137,7 +137,7 @@ class NativeBoundaryTests(unittest.TestCase):
         self.type_text("kyouha")
         enter = self.key(0, vk=0x0D)
         self.assertTrue(enter["consumed"])
-        self.assertEqual([{"deleteBefore": 0, "text": "きょうは"}], enter["commits"])
+        self.assertEqual([{"text": "きょうは"}], enter["commits"])
         self.assertIsNone(enter["view"])
 
     def test_direct_mode_passes_accent_without_commit(self):
@@ -166,7 +166,7 @@ class NativeBoundaryTests(unittest.TestCase):
         self.type_text("ka", after="world")
         result = self.key(0, vk=0x0D)
         self.assertTrue(result["consumed"])
-        self.assertEqual([{"deleteBefore": 0, "text": "か "}], result["commits"])
+        self.assertEqual([{"text": "か "}], result["commits"])
 
     def test_name_context_keeps_unknown_name(self):
         for char in "taro":
@@ -185,7 +185,7 @@ class NativeBoundaryTests(unittest.TestCase):
                     result = self.key(0, vk=action)
                     if action == 0x20:
                         result = self.key(0, vk=0x0D)
-                    self.assertEqual([{"deleteBefore": 0, "text": "きょうは「" + token + "」あした"}], result["commits"])
+                    self.assertEqual([{"text": "きょうは「" + token + "」あした"}], result["commits"])
                     self.assertIsNone(result["view"])
 
     def test_backspace_keeps_protected_char_of_crossing_unit(self):

@@ -45,7 +45,7 @@ enum BoundaryTests {
             precondition(result.commits.count == (expected == nil ? 0 : 1), "Unexpected edits")
             if let expected {
                 precondition(Array(result.commits[0].text.unicodeScalars) == Array(expected.unicodeScalars), "Unexpected committed scalars")
-                precondition(result.commits[0].deleteBefore == 0, "Unexpected deletion")
+                precondition(result.commits[0].remove == nil, "Unexpected deletion")
             }
             print("PASS: \(raw.debugDescription) + \(external.debugDescription)")
         }

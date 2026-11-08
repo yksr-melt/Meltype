@@ -480,8 +480,8 @@ internal sealed class TipServer : IDisposable
         if (e.Field is { } field) e = e with { Field = connection.WithFacts(field) };
         var output = connection.Host.Handle(e);
         if (output.State.Active && connection.Process is { } process) Greet(process);
-        if (output.State.Indicator && request.Thread != 0)
-            _composition.ShowMode(output.State.Japanese, request.Thread, request.Anchor);
+        if (output.State.IndicatorMs > 0 && request.Thread != 0)
+            _composition.ShowMode(output.State.Japanese, output.State.IndicatorMs, request.Thread, request.Anchor);
         return output.ToJson();
     }
 

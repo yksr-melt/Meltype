@@ -72,7 +72,8 @@ bool manualProposal(Instance *instance, AddonInstance *frontend) {
     type(frontend, uuid, "google");
     if (!expect(ic->inputPanel().clientPreedit().toString() == "ごおgぇ", "手動判定では勝手に英字へ変えない")) return false;
     const auto hint = ic->inputPanel().auxDown().toString();
-    if (!expect(hint == "Tab → google (英字に)", "固定ガイドを隠しても手動判定の英字提案は表示する")) return false;
+    // 打ったキーは、見えている文字と違うときだけ前に出す
+    if (!expect(hint == "google　Tab → google (英字に)", "固定ガイドを隠しても手動判定の英字提案は表示する: " + hint)) return false;
     if (!expect(press(frontend, uuid, "Tab"), "Tab で提案を採用する")) return false;
     if (!expect(ic->inputPanel().clientPreedit().toString() == "google", "提案どおり英字になる")) return false;
     const auto acceptedHint = ic->inputPanel().auxDown().toString();
@@ -94,12 +95,13 @@ bool compositionGuides(Instance *instance, AddonInstance *frontend, bool showGui
     type(frontend, uuid, "nihongo");
     if (!expect(ic->inputPanel().preedit().toString() == "にほんご", "ガイド設定によらず入力文字を表示する")) return false;
     const auto typingHint = ic->inputPanel().auxDown().toString();
-    if (!expect(showGuide ? typingHint.find("F7 カタカナ") != std::string::npos : typingHint.empty(),
+    // 固定ガイドを隠しても、打ったキーは出す
+    if (!expect((typingHint.find("F7 カタカナ") != std::string::npos) == showGuide && typingHint.rfind("nihongo", 0) == 0,
         showGuide ? "入力中の固定ガイドを表示する" : "入力中の固定ガイドを隠す")) return false;
     press(frontend, uuid, "space");
     if (!expect(ic->inputPanel().candidateList() != nullptr, "ガイド設定によらず変換候補を表示する")) return false;
     const auto convertingHint = ic->inputPanel().auxDown().toString();
-    if (!expect(showGuide ? convertingHint.find("←→ 文節") != std::string::npos : convertingHint.empty(),
+    if (!expect((convertingHint.find("←→ 文節") != std::string::npos) == showGuide,
         showGuide ? "変換中の固定ガイドを表示する" : "変換中の固定ガイドを隠す")) return false;
     const auto selected = ic->inputPanel().preedit().toString();
     if (!expect(!selected.empty(), "選択中の候補を表示する")) return false;
@@ -143,7 +145,7 @@ bool spellingProposal(Instance *instance, AddonInstance *frontend) {
     instance->setCurrentInputMethod(ic, "meltype", true);
     type(frontend, uuid, "buresureddo");
     if (!expect(ic->inputPanel().preedit().toString() == "ぶれすれっど", "訂正前の文字を表示する")) return false;
-    if (!expect(ic->inputPanel().auxDown().toString() == "もしかして: ブレスレット　<Tab>で修正", "実際の辞書の訂正提案だけを表示する")) return false;
+    if (!expect(ic->inputPanel().auxDown().toString() == "buresureddo　もしかして: ブレスレット　<Tab>で修正", "実際の辞書の訂正提案だけを表示する: " + ic->inputPanel().auxDown().toString())) return false;
     if (!expect(press(frontend, uuid, "Tab"), "Tab は変換より先に訂正提案を採用する")) return false;
     if (!expect(ic->inputPanel().preedit().toString() == "ぶれすれっと", "提案どおり訂正する")) return false;
     if (!expect(ic->inputPanel().auxDown().empty(), "採用済みの訂正提案を消す")) return false;

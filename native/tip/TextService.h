@@ -130,7 +130,8 @@ private:
     // 前の入力欄の、日本語にしていたコードの行などを忘れさせる (キャレットが動いた)
     void SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged);
     // 状態を受け取る。type は sync か focus (入力欄にフォーカスが入った)
-    void Sync(const char* type = "sync");
+    // entered: 入力欄にフォーカスが入った (入力欄の事実も送る)
+    void Sync(bool entered = false);
     // 変換中だけ、背景の変換の結果が届くのを専用の接続で待つ (Meltype.exe は応答でしか知らせられない)
     void StartConversionWait();
     void FinishConversionWait();
@@ -160,7 +161,7 @@ private:
     void CommittedOutside();
     void AbandonComposition();
     void ResumeOrCommit(ITfContext* context);
-    void SelectCandidate(int index, bool prediction);
+    void SelectCandidate(int index);
     void SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected);
     // 選択範囲の画面上の位置 (入力モードの表示に使う)。分からなければ空
     RECT CaretRect(TfEditCookie ec, ITfContext* context);

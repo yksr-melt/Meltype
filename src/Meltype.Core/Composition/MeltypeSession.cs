@@ -25,9 +25,8 @@ public readonly record struct TextEdit(int DeleteBefore, string Text, string? Ex
 public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commits, CompositionView? View)
 {
     /// <summary>
-    /// フロントに渡す JSON にする (NativeAOT でも使えるよう手書き)。表示するかの判断はここで済ませ、フロントは出すものだけを受け取る:
-    /// typed は見えている文字と違うときだけの打ったキー、
-    /// list は一覧に出す候補 (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補。出さないなら null)。
+    /// フロントに渡す JSON にする (NativeAOT でも使えるよう手書き)。View は <see cref="ForFront"/> で作ったもの。
+    /// 確定し直す (Commits の DeleteBefore が 1 以上) なら、消す文字 (Expect。ImeSession がキャレットの前と照合済み) を remove で渡す。
     /// </summary>
     public string ToJson()
     {
@@ -36,12 +35,12 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         for (var i = 0; i < Commits.Count; i++)
         {
             if (i > 0) builder.Append(',');
-            builder.Append("{\"deleteBefore\":").Append(Commits[i].DeleteBefore).Append(",\"text\":");
+            builder.Append("{\"text\":");
             AppendString(builder, Commits[i].Text);
-            if (Commits[i].DeleteBefore > 0 && Commits[i].Expect is { } expect)
+            if (Commits[i].DeleteBefore > 0)
             {
-                builder.Append(",\"expect\":");
-                AppendString(builder, expect);
+                builder.Append(",\"remove\":");
+                AppendString(builder, Commits[i].Expect ?? throw new InvalidOperationException("確定し直す文字が照合されていない"));
             }
             if (Commits[i].DeleteBefore > 0 && Commits[i].Current is { } current)
             {
@@ -60,9 +59,6 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         }
         builder.Append("{\"text\":");
         AppendString(builder, view.Text);
-        // この表示を確定したときに入る文字列 (IBus がフォーカスを外したときに確定するのは表示中の文字)。
-        builder.Append(",\"committed\":");
-        AppendString(builder, view.Committed ?? view.Text);
         builder.Append(",\"converting\":").Append(view.Converting ? "true" : "false");
         builder.Append(",\"clauses\":");
         AppendArray(builder, view.Clauses ?? []);
@@ -71,38 +67,66 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         AppendString(builder, view.Hint);
         builder.Append(",\"suggestion\":");
         AppendNullable(builder, view.Suggestion);
-        // 打ったキー (設定「打ったキーを表示」が OFF か、見えている文字と同じ (英字のまま) なら null)
         builder.Append(",\"typed\":");
-        AppendNullable(builder, view.Typed == view.Text ? null : view.Typed);
+        AppendNullable(builder, view.Typed);
         builder.Append(",\"list\":");
-        if (view.Converting && view.Candidates.Count > 1)
+        var predictions = ListsPredictions(view) == true;
+        var items = predictions ? view.Predictions! : view.Candidates;
+        if (items.Count == 0)
         {
-            builder.Append("{\"items\":");
-            AppendArray(builder, view.Candidates);
-            // 候補ごとの注記を表示用の文字列にする (注記が無ければ null)
-            builder.Append(",\"notes\":[");
-            for (var i = 0; i < view.Candidates.Count; i++)
-            {
-                if (i > 0) builder.Append(',');
-                AppendNullable(builder, view.Notes?[i].ToDisplayText());
-            }
-            builder.Append("],\"selected\":").Append(view.SelectedIndex).Append(",\"prediction\":false,\"meaning\":");
-            // 選んでいる候補の意味。少し止まってから出すのはフロント
-            AppendNullable(builder, view.Meaning);
-            builder.Append('}');
+            builder.Append("null}}");
+            return builder.ToString();
         }
-        else if (!view.Converting && view.Predictions is { Count: > 0 } predictions)
+        builder.Append("{\"items\":");
+        AppendArray(builder, items);
+        // 候補ごとの注記を表示用の文字列にする (注記が無ければ null)
+        builder.Append(",\"notes\":[");
+        for (var i = 0; i < items.Count; i++)
         {
-            builder.Append("{\"items\":");
-            AppendArray(builder, predictions);
-            builder.Append(",\"notes\":[],\"selected\":").Append(view.SelectedPrediction).Append(",\"prediction\":true,\"meaning\":null}");
+            if (i > 0) builder.Append(',');
+            AppendNullable(builder, predictions ? null : view.Notes?[i].ToDisplayText());
         }
-        else
-        {
-            builder.Append("null");
-        }
-        builder.Append("}}");
+        builder.Append("],\"numbered\":").Append(Numbered(view) ? "true" : "false");
+        builder.Append(",\"selected\":").Append(predictions ? view.SelectedPrediction : view.SelectedIndex)
+            .Append(",\"meaning\":");
+        AppendNullable(builder, view.Meaning);
+        // 一覧・view・result を閉じる
+        builder.Append(",\"meaningMs\":").Append(MeaningDelayMs).Append("}}}");
         return builder.ToString();
+    }
+
+    /// <summary>選んでいる候補で止まってから、その意味を出すまでの時間 (ミリ秒)。</summary>
+    public const int MeaningDelayMs = 1500;
+
+    /// <summary>フロントに渡した表示の一覧に番号を出すか。数字キー (テンキーも) で選べるのは変換中の候補だけ。</summary>
+    public static bool Numbered(CompositionView view) => view.Converting;
+
+    /// <summary>フロントに渡した表示 (<see cref="ForFront"/>) の一覧が、予測変換の候補か。一覧が無ければ null。</summary>
+    public static bool? ListsPredictions(CompositionView view) =>
+        view.Predictions is { Count: > 0 } ? true : view.Candidates.Count > 0 ? false : null;
+
+    /// <summary>
+    /// フロントに渡す表示。どのフロントも、ここに入っているものをそのまま出す:
+    /// text は確定される形 (OS が表示のまま確定しても、本体の確定と同じになる。打っている途中の英字は typed で見える)、
+    /// hint は操作ガイドの設定を反映した案内、typed は見えている文字と違うときだけの打ったキー、
+    /// 一覧は 1 つだけ (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補、無ければ入力中の変換の候補)。
+    /// </summary>
+    internal static CompositionView ForFront(CompositionView view, bool showGuide)
+    {
+        var predictions = !view.Converting && view.Predictions is { Count: > 0 };
+        var candidates = !predictions && (view.Converting ? view.Candidates.Count > 1 : view.Candidates.Count > 0);
+        return view with
+        {
+            Text = view.Committed ?? view.Text,
+            Hint = showGuide ? view.Hint : view.ContextHint ?? "",
+            Typed = view.Typed == view.Text ? null : view.Typed,
+            Candidates = candidates ? view.Candidates : [],
+            SelectedIndex = candidates ? view.SelectedIndex : -1,
+            Notes = candidates ? view.Notes : null,
+            Meaning = candidates ? view.Meaning : null,
+            Predictions = predictions ? view.Predictions : null,
+            SelectedPrediction = predictions ? view.SelectedPrediction : -1,
+        };
     }
 
     private static void AppendNullable(StringBuilder builder, string? text)
@@ -694,7 +718,7 @@ public sealed class MeltypeSession
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
             // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
-            var view = _hidden || _view is not { } shown ? null : settings().ShowGuide ? shown : shown with { Hint = shown.ContextHint ?? "" };
+            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowGuide);
             return new SessionResult(consumed, _commits.ToList(), view);
         }
 

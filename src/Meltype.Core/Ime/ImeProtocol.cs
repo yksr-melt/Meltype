@@ -33,8 +33,6 @@ public enum ImeEventType
     [JsonStringEnumMemberName("caret")] Caret,
     /// <summary>今の状態だけを受け取る (設定を変えたかもしれないときなど)。入力の本体は作らない。</summary>
     [JsonStringEnumMemberName("sync")] Sync,
-    /// <summary>入力欄にフォーカスが入った。今の状態を受け取る (設定によっては入力モードを表示する)。入力の本体は作らない。</summary>
-    [JsonStringEnumMemberName("focus")] Focus,
     [JsonStringEnumMemberName("close")] Close,
 }
 
@@ -59,11 +57,11 @@ public sealed record ImeEvent
     /// <summary>caret: どう動いたか。</summary>
     public ImeCaret? Caret { get; init; }
 
-    /// <summary>select: 候補の番号。</summary>
+    /// <summary>select: 前の応答の一覧 (view.list) の何番目か。</summary>
     public int Index { get; init; }
 
-    /// <summary>select: 予測変換の候補か。</summary>
-    public bool Prediction { get; init; }
+    /// <summary>select: 選択を動かすだけで、予測変換の候補を確定しない (マウスでなぞったとき)。</summary>
+    public bool Highlight { get; init; }
 
     /// <summary>setMode: 日本語にするか。</summary>
     public bool Japanese { get; init; }
@@ -142,9 +140,9 @@ public sealed record ImeField
     public ImeElement? Element { get; init; }
     // init にすると、source-gen の JSON は項目が無いときに初期値ではなく null を入れる
     public IReadOnlyList<ImeTrait> Traits { get; set; } = [];
-    /// <summary>確定した文字を消せる入力欄か (消せなければ確定し直さない)。</summary>
+    /// <summary>キャレットの前の文字を消せる入力欄か (消せなければ確定し直さない)。</summary>
     // init にすると、source-gen の JSON は項目が無いときに初期値ではなく false を入れる
-    public bool CanDelete { get; set; } = true;
+    public bool CanRemove { get; set; } = true;
 }
 
 public sealed record ImeCaret
@@ -155,6 +153,8 @@ public sealed record ImeCaret
     public int? Passed { get; init; }
     /// <summary>Passed のとき Ctrl を押していたか。</summary>
     public bool Ctrl { get; init; }
+    /// <summary>フォーカスが入力欄に入った (設定によっては入力モードを表示する)。</summary>
+    public bool Entered { get; init; }
     /// <summary>フォーカスが入力欄から外れた (日本語にしていたコードの行を英数に戻す)。</summary>
     public bool Left { get; init; }
 }
@@ -168,8 +168,11 @@ public sealed record ImeState
     public bool Open { get; init; }
     /// <summary>表示するモード (「あ」なら true)。コードの行では Open のまま「A」になる。</summary>
     public bool Japanese { get; init; }
-    /// <summary>入力モードを一瞬表示する (明示的に切り替えた・入力欄に入った。設定「入力モードをカーソルの近くに表示」による)。フロントはキャレットの近くに出す。</summary>
-    public bool Indicator { get; init; }
+    /// <summary>
+    /// 入力モードを表示する時間 (ミリ秒。0 なら出さない)。明示的に切り替えた・入力欄に入ったとき (設定「入力モードをカーソルの近くに表示」)。
+    /// 変換中は出さない。フロントはキャレットの近くに、この時間だけ出す。
+    /// </summary>
+    public int IndicatorMs { get; init; }
     /// <summary>変換していないときに受け取るキー。キーを受け取るかをその場で決めなければならないフロント (TSF) が使う。</summary>
     public required ImeCapture Capture { get; init; }
     /// <summary>状態の世代。非同期に受け取った古い状態で、新しい状態を上書きしないように比べる。</summary>

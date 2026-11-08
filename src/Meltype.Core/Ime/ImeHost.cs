@@ -91,7 +91,7 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             if (!active || e.Type is not (ImeEventType.Key or ImeEventType.Toggle or ImeEventType.SetMode) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.Open ?? true, current.ForApp(e.Field?.App), e.Type == ImeEventType.Focus, NextRev()), Pass);
+                return new(ImeSession.InitialState(active, e.Open ?? true, current.ForApp(e.Field?.App), e.Caret?.Entered == true, NextRev()), Pass);
             }
             session = new ImeSession(environment, settings);
             _sessions[e.Sid] = session;
