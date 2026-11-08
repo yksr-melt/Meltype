@@ -456,7 +456,7 @@ class MeltypeEngine(IBus.Engine):
                 self.commit_text(IBus.Text.new_from_string(text))
         view = result.get("view")
         if view:
-            self._show_preedit(view)
+            self._show_preedit(view, result.get("showGuide", True))
             self._show_candidates(view)
         else:
             self._hide_preedit()
@@ -479,7 +479,26 @@ class MeltypeEngine(IBus.Engine):
             return 0
         return length
 
-    def _show_preedit(self, view):
+    def _auxiliary_hint(self, view, show_guide):
+        """補助テキストに出す案内を返す。
+
+        固定の操作ガイド (Space で変換 など) は hint に入っている。ShowGuide が OFF のときは
+        hint を出さず、入力内容に応じた文脈の案内 (contextHint: 英字・予測・Zenzai の提案) だけを
+        残す (fcitx5 と同じ扱い)。もしかして (suggestion) はガイドではないので常に出す。
+        旧版の本体は案内を分けて返さない (contextHint の項目自体が無い) ので、そのときは
+        提案まで消さないよう従来の hint を使う。
+        """
+        if show_guide:
+            hint = view.get("hint") or ""
+        elif "contextHint" in view:
+            hint = view.get("contextHint") or ""
+        else:
+            hint = view.get("hint") or ""
+        if view.get("suggestion"):
+            hint = view["suggestion"] + ("　" + hint if hint else "")
+        return hint
+
+    def _show_preedit(self, view, show_guide=True):
         # IBus は「表示中の preedit」をそのまま確定する (COMMIT モード)。表示と確定が違うと、
         # フォーカスが外れたときに「かn」が入って本体の「かん」とずれるので、確定される形を出す。
         text = view.get("committed") or view.get("text", "")
@@ -503,11 +522,8 @@ class MeltypeEngine(IBus.Engine):
         self.update_preedit_text_with_mode(preedit, len(text), bool(text), IBus.PreeditFocusMode.COMMIT)
         self._preedit_visible = bool(text)
         self._preedit_text = text
-        # 案内 (Space で変換 など) は補助テキストに出す
-        hint = view.get("hint") or ""
-        # もしかして (書き間違い) は案内の先頭に出す (Tab で直せる)
-        if view.get("suggestion"):
-            hint = view["suggestion"] + "　" + hint
+        # 案内は補助テキストに出す (固定の操作ガイドは ShowGuide の設定に従う)
+        hint = self._auxiliary_hint(view, show_guide)
         if hint:
             self.update_auxiliary_text(IBus.Text.new_from_string(hint), True)
         else:
