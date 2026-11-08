@@ -182,7 +182,9 @@ internal sealed class ImeSession(IImeEnvironment environment)
     private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings)
     {
         if (!active) return new ImeCapture();
-        var keys = settings.EffectiveToggleShortcuts.Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
+        // 修飾キー単独の割り当て (左右の Alt) は、Windows のキーボードフックだけが見る
+        var keys = settings.EffectiveToggleShortcuts.Where(shortcut => !ToggleShortcut.IsModifier(shortcut.Key))
+            .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
             .Concat(settings.ConvertKeysSwitchKeyboard ? [new ImeShortcut(VirtualKeys.Convert, 0), new ImeShortcut(VirtualKeys.NonConvert, 0)] : [])
             .Distinct().ToList();

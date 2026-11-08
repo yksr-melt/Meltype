@@ -8,7 +8,7 @@ using Meltype.UI;
 
 namespace Meltype.Tests;
 
-/// <summary>設定画面 UI でのショートカットバリデーションと、TipServer (IPC) プロトコルでの設定同期テスト。</summary>
+/// <summary>設定画面 UI でのショートカットバリデーションのテスト。</summary>
 internal static class ShortcutSettingsTests
 {
     /// <summary>Control の割り当てと競合するキーは登録・保存時の共通検証で設定名を示して拒否し、割り当てを外すと許可すること。</summary>
@@ -132,39 +132,5 @@ internal static class ShortcutSettingsTests
         Assert.True(ShortcutEditor.ValidationError(valid, settings, []) is null, "Ctrl+Space は登録可能");
         Assert.True(ShortcutEditor.ValidationError(valid, settings, [valid]) is not null, "重複を拒否");
         Assert.True(ShortcutEditor.ValidationError(new ToggleShortcut { Key = 0xA5 }, new Settings(), []) is not null, "左右 Alt 設定が OFF でも単独押しを拒否");
-    }
-
-    /// <summary>TipServer の hello 応答に有効な割り当て・設定変更・空の一覧を反映し、一時停止中も一覧を返すこと。</summary>
-    [Test]
-    public static void Shortcut_ProtocolSnapshotsFollowChangesAndEmptyList()
-    {
-        var settings = new Settings { Mode = InputMode.Tsf, ToggleShortcuts = [new() { Key = 0x20, Modifiers = ShortcutModifiers.Control }, new() { Key = 0xA4 }] }.Normalize();
-        using var invoker = new Control();
-        using var service = TipHarness.CreateService(invoker);
-        using var server = new TipServer(invoker, service, () => settings);
-        var sessions = new Dictionary<string, Meltype.Composition.MeltypeSession>();
-        JsonDocument Hello() => JsonDocument.Parse(server.Handle("{\"op\":\"hello\",\"process\":\"harness\"}", sessions));
-        using var first = Hello();
-        Assert.True(first.RootElement.GetProperty("active").GetBoolean(), "IME モードでは有効");
-        Assert.True(!first.RootElement.GetProperty("fullWidthSpace").GetBoolean(), "全角スペースの既定値も送る");
-        var bindings = first.RootElement.GetProperty("toggleShortcuts");
-        Assert.Equal(1, bindings.GetArrayLength(), "単独押しを除外して IME に送る");
-        Assert.Equal(0x20, bindings[0].GetProperty("key").GetInt32());
-        Assert.Equal(2, bindings[0].GetProperty("mods").GetInt32());
-        settings.SpaceWidth = SpaceWidth.FullWidth;
-        using var same = Hello();
-        Assert.True(same.RootElement.GetProperty("fullWidthSpace").GetBoolean(), "キー一覧と全角スペースの設定を同時に反映");
-        Assert.True(!same.RootElement.GetProperty("modeIndicator").GetBoolean(), "IME の表示は既定 OFF なので DLL は問い合わせない");
-        settings.ShowTsfModeIndicator = true;
-        using var indicator = Hello();
-        Assert.True(indicator.RootElement.GetProperty("modeIndicator").GetBoolean(), "IME の表示を ON にしたら DLL に伝える");
-        Assert.Equal(bindings.GetRawText(), same.RootElement.GetProperty("toggleShortcuts").GetRawText(), "同じ設定の配列を送る");
-        settings = new Settings { Mode = InputMode.Tsf, ToggleShortcuts = [] }.Normalize();
-        using var cleared = Hello();
-        Assert.Equal(0, cleared.RootElement.GetProperty("toggleShortcuts").GetArrayLength(), "空も明示する");
-        settings.Enabled = false;
-        using var disabled = Hello();
-        Assert.True(!disabled.RootElement.GetProperty("active").GetBoolean(), "一時停止");
-        Assert.Equal(0, disabled.RootElement.GetProperty("toggleShortcuts").GetArrayLength(), "一時停止中も設定を送る");
     }
 }

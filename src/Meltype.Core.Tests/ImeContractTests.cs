@@ -344,13 +344,14 @@ internal static class ImeContractTests
     public static void Hankaku_WithoutTheShortcut_IsSwallowed()
     {
         var front = new Front();
-        front.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }];
+        front.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Control }, new() { Key = VirtualKeys.LMenu }];
         var hankaku = front.Key(ToggleShortcut.Hankaku);
         Assert.True(Consumed(hankaku) && Japanese(hankaku) && !Indicator(hankaku), "切り替えず、アプリにも通さない\n" + front.Trace);
         var toggle = front.Key(VirtualKeys.Space, ctrl: true);
         Assert.True(Consumed(toggle) && !Japanese(toggle), "登録したキーで切り替える\n" + front.Trace);
         var keys = Capture(toggle).GetProperty("keys").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
         Assert.True(keys.Contains((VirtualKeys.Space, 2)) && keys.Contains((ToggleShortcut.Hankaku, 0)), "受け取るキーに切り替えキーと 半角/全角 を入れる\n" + front.Trace);
+        Assert.True(!keys.Contains((VirtualKeys.LMenu, 0)), "修飾キー単独の割り当ては受け取らせない (キーボードフックが見る)\n" + front.Trace);
     }
 
     [Test]

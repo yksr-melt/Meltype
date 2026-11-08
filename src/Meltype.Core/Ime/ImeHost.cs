@@ -42,18 +42,29 @@ public sealed class ImeHost(IImeEnvironment environment)
     public int SessionCount => _sessions.Count;
 
     /// <summary>JSON の出来事を処理する。読めない・版が違う出来事には、何も受け持たない応答を返す。</summary>
-    public string Handle(string json)
+    public string Handle(string json) => (Parse(json) is { } e ? Handle(e) : Inactive()).ToJson();
+
+    /// <summary>JSON の出来事を読む。読めない・知らない項目がある出来事なら null。</summary>
+    public static ImeEvent? Parse(string json)
     {
-        ImeEvent? e;
         try
         {
-            e = JsonSerializer.Deserialize(json, ImeJsonContext.Default.ImeEvent);
+            return JsonSerializer.Deserialize(json, ImeJsonContext.Default.ImeEvent);
         }
         catch (JsonException)
         {
-            e = null;
+            return null;
         }
-        return (e is null ? Inactive() : Handle(e)).ToJson();
+    }
+
+    /// <summary>フロントがいなくなった (TSF のパイプが切れた): 入力欄をすべて閉じる。</summary>
+    public void CloseAll()
+    {
+        foreach (var session in _sessions.Values)
+        {
+            if (session.IsComposing) session.Close();
+        }
+        _sessions.Clear();
     }
 
     public ImeOutput Handle(ImeEvent e)

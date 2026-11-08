@@ -51,16 +51,19 @@ internal static class TipHarness
                 using var pipe = new NamedPipeClientStream(".", Tip.TipServer.PipeName, PipeDirection.InOut);
                 pipe.Connect(3000);
                 pipe.ReadMode = PipeTransmissionMode.Message;
-                Console.WriteLine(Send(pipe, "{\"op\":\"hello\",\"process\":\"harness\"}"));
+                // DLL と同じ封筒 (TipRequest) で、入力欄の事実を付けて送る (キャレットの前は、打ったものを入れずに空のまま)
+                string Event(string type, string fields = "") =>
+                    $"{{\"thread\":0,\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true,\"field\":{{\"before\":\"\"}}{fields}}}}}";
+                Console.WriteLine(Send(pipe, Event("sync")));
                 foreach (var c in keys)
                 {
                     // ' ' = Space、'\n' (\n と書く) = Enter
                     var vk = c switch { ' ' => 0x20, '\n' => 0x0D, >= 'a' and <= 'z' => c - 'a' + 'A', _ => (int)c };
-                    var ch = c == '\n' ? 13 : c;
+                    var ch = c is ' ' or '\n' ? 0 : c;
                     Console.WriteLine($"[{(c == '\n' ? "Enter" : c == ' ' ? "Space" : c.ToString())}] " +
-                        Send(pipe, $"{{\"op\":\"key\",\"sid\":\"t1\",\"vk\":{vk},\"ch\":{ch},\"mods\":0,\"process\":\"harness\"}}"));
+                        Send(pipe, Event("key", $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}")));
                 }
-                Console.WriteLine("[commit] " + Send(pipe, "{\"op\":\"commit\",\"sid\":\"t1\"}"));
+                Console.WriteLine("[commit] " + Send(pipe, Event("commit")));
             }
             catch (Exception ex)
             {

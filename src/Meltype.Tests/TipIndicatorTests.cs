@@ -33,15 +33,16 @@ internal static class TipIndicatorTests
     }
 
     [Test]
-    public static void Indicator_TsfPositionSupportsNegativeCoordinatesAndOldDlls()
+    public static void Indicator_TsfPositionSupportsNegativeCoordinates()
     {
-        using var negative = JsonDocument.Parse("{\"x\":-900,\"y\":-120}");
-        Assert.Equal<Point?>(new Point(-900, -120), Tip.TipServer.IndicatorAnchor(negative.RootElement), "左・上のモニターの座標も保持する");
-        foreach (var json in new[] { "{}", "{\"x\":100}", "{\"x\":100,\"y\":null}", "{\"x\":\"100\",\"y\":20}", "{\"x\":2147483648,\"y\":20}" })
+        static string Request(string position) => $"{{\"thread\":1{position},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"toggle\"}}}}";
+        Assert.Equal<Point?>(new Point(-900, -120), Tip.TipRequest.Parse(Request(",\"x\":-900,\"y\":-120"))?.Anchor, "左・上のモニターの座標も保持する");
+        foreach (var position in new[] { "", ",\"x\":100", ",\"x\":100,\"y\":null", ",\"x\":\"100\",\"y\":20", ",\"x\":2147483648,\"y\":20" })
         {
-            using var document = JsonDocument.Parse(json);
-            Assert.Equal<Point?>(null, Tip.TipServer.IndicatorAnchor(document.RootElement), "位置なし・不正な座標では従来の位置取得へ戻る");
+            var request = Tip.TipRequest.Parse(Request(position));
+            Assert.True(request is not null && request.Anchor is null, "位置なし・不正な座標では、常駐側で位置を探す: " + position);
         }
+        Assert.True(Tip.TipRequest.Parse("{\"op\":\"indicator\",\"thread\":1}") is null, "古い DLL の要求は読まない");
     }
 
     [Test]
@@ -88,7 +89,7 @@ internal static class TipIndicatorTests
     }
 
     [Test]
-    public static void Indicator_DoesNotCreateSessionsAndRejectsInvalidNotifications()
+    public static void Indicator_IsShownOnlyForExplicitChangesWithTheSetting()
     {
         var settings = new Settings { Mode = InputMode.Tsf };
         var displayRequests = 0;
@@ -104,36 +105,28 @@ internal static class TipIndicatorTests
             Engine = () => ConversionEngine.System,
         });
         using var server = new Tip.TipServer(invoker, composition, () => settings);
-        var sessions = new Dictionary<string, MeltypeSession>();
-        void Send(string json, bool looksLikeGame = false)
+        var host = server.Connect("harness", 0);
+        void Send(string type, uint thread = 1, string fields = "")
         {
-            server.Handle(json, sessions, looksLikeGame);
+            var request = Tip.TipRequest.Parse($"{{\"thread\":{thread},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true{fields}}}}}")!;
+            server.Handle(host, request);
             Application.DoEvents();
         }
 
-        // 実際の表示は設定で止め、UI への依頼だけ数える。IME OFF でもセッションは作らない。
-        Send("{\"op\":\"indicator\",\"process\":\"harness\",\"thread\":1,\"japanese\":true}");
-        Send("{\"op\":\"indicator\",\"process\":\"harness\",\"thread\":1,\"japanese\":false}");
-        Assert.Equal(2, displayRequests, "ON/OFF の両方を表示へ渡す");
-        Assert.Equal(0, sessions.Count, "表示のために入力状態を作らない");
-
-        Send("{\"op\":\"indicator\",\"thread\":0,\"japanese\":true}");
-        Send("{\"op\":\"indicator\",\"thread\":-1,\"japanese\":true}");
-        Send("{\"op\":\"indicator\",\"thread\":\"1\",\"japanese\":true}");
-        Send("{\"op\":\"indicator\",\"thread\":null,\"japanese\":true}");
-        Send("{\"op\":\"indicator\",\"thread\":1,\"japanese\":\"false\"}");
-        Send("{\"op\":\"indicator\",\"thread\":1}");
-        Assert.Equal(2, displayRequests, "不完全な通知は表示しない");
-
-        Send("{\"op\":\"indicator\",\"process\":\"harness\",\"thread\":1,\"japanese\":true}", looksLikeGame: true);
-        Assert.Equal(2, displayRequests, "ゲームとして判定された接続では表示を依頼しない");
-
-        settings.Enabled = false;
-        Send("{\"op\":\"indicator\",\"thread\":1,\"japanese\":true}");
-        settings.Enabled = true;
+        // 実際の表示は設定で止め、UI への依頼だけ数える
+        Send("toggle");
+        Assert.Equal(0, displayRequests, "設定「Meltype IME でも入力モードを表示」が OFF なら表示しない");
+        settings.ShowTsfModeIndicator = true;
+        Send("toggle");
+        Send("toggle");
+        Assert.Equal(2, displayRequests, "明示的な切り替えのたびに表示する");
+        Send("key", fields: ",\"key\":{\"vk\":65,\"ch\":97}");
+        Send("sync");
+        Assert.Equal(2, displayRequests, "切り替えでない出来事では表示しない");
+        Send("toggle", thread: 0);
+        Assert.Equal(2, displayRequests, "入力スレッドが分からなければ表示しない");
         settings.Mode = InputMode.Keyboard;
-        Send("{\"op\":\"indicator\",\"thread\":1,\"japanese\":true}");
-        Assert.Equal(2, displayRequests, "一時停止中とキーボード方式では TSF の通知を表示しない");
-        Assert.Equal(0, sessions.Count);
+        Send("toggle");
+        Assert.Equal(2, displayRequests, "キーボード方式では Meltype IME の切り替えを表示しない");
     }
 }
