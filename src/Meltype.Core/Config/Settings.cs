@@ -467,8 +467,8 @@ public sealed class Settings
      Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
     public bool ShowTypedKeys { get; set; } = true;
 
-    [Browsable(false), DisplayName("固定の操作ガイドを表示 (fcitx5)"),
-     Description("fcitx5 の候補窓に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
+    [Browsable(false), DisplayName("固定の操作ガイドを表示 (fcitx5 / IBus)"),
+     Description("fcitx5・IBus の候補窓に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
     public bool ShowGuide { get; set; } = true;
 
     [Category("4. 変換"), DisplayName("打ち間違いを直す"),
