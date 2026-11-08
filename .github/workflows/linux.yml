@@ -49,11 +49,13 @@ jobs:
             asset: linux
             bazelisk: amd64
             bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+            bazelisk-asset-id: 406879103
             manylinux: x86_64
           - runner: ubuntu-24.04-arm
             asset: linux-arm64
             bazelisk: arm64
             bazelisk-sha256: e20e8b0f4f240091b7a55bf17b9398bd4f40ee70ae0208dff95dd4c445fb4010
+            bazelisk-asset-id: 406879161
             manylinux: aarch64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
@@ -87,10 +89,14 @@ jobs:
           restore-keys: |
             mozc-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
       # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
+      # GitHub の一時的な 504 などでは再試行する。接続と 1 回の取得には上限を設ける。
+      # 通常の URL で取得できないときは、GitHub の Release Asset API から同じファイルを取る。
       - name: Bazelisk
         run: |
           mkdir -p "$HOME/tools"
-          curl -fsSL -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}
+          if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}; then
+            curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/${{ matrix.bazelisk-asset-id }}
+          fi
           echo "${{ matrix.bazelisk-sha256 }}  $HOME/tools/bazelisk" | sha256sum -c -
           chmod +x "$HOME/tools/bazelisk"
       # Mozc のヘルパーは、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux のコンテナでビルドする (#1484)
