@@ -13,6 +13,21 @@ namespace Meltype.Tests;
 internal static class WindowsTests
 {
     [Test]
+    public static void Native_CharBuffersAreUnicode()
+    {
+        // CharSet の既定は ANSI で、char[8] が 8 バイトのバッファとして渡される。ワイド文字の API が書くと溢れてヒープが壊れる (#1559)
+        var methods = typeof(Native).GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic)
+            .Where(m => m.GetParameters().Any(p => p.ParameterType == typeof(char[]) || p.ParameterType == typeof(System.Text.StringBuilder)))
+            .ToList();
+        Assert.True(methods.Count > 0, "文字のバッファを渡す関数がある");
+        foreach (var method in methods)
+        {
+            var import = System.Reflection.CustomAttributeExtensions.GetCustomAttribute<System.Runtime.InteropServices.DllImportAttribute>(method);
+            Assert.Equal(System.Runtime.InteropServices.CharSet.Unicode, import?.CharSet, method.Name);
+        }
+    }
+
+    [Test]
     public static void PopupWindows_ShowingPreservesInputFocusAndTopmost()
     {
         // 入力先にフォーカスした状態で、打ち始めやモードの表示を繰り返す。

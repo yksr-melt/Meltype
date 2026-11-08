@@ -14,7 +14,7 @@ internal static class SessionFacadeTests
     private static MeltypeSession Create() => new(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
 
     /// <summary>文字を 1 つずつ打つ (英字は大文字なら Shift 付き)。</summary>
-    private static List<SessionResult> Type(MeltypeSession session, string text, string? before = null)
+    internal static List<SessionResult> Type(MeltypeSession session, string text, string? before = null)
     {
         var results = new List<SessionResult>();
         foreach (var c in text)
@@ -29,14 +29,119 @@ internal static class SessionFacadeTests
                 '-' => VirtualKeys.OemMinus,
                 '"' or '\'' => 0xDE,
                 '#' => '3',
+                '(' => '9',
+                ')' => '0',
+                '[' or '{' => 0xDB,
+                ']' or '}' => 0xDD,
                 '/' => VirtualKeys.Oem2,
                 _ when char.IsAsciiLetter(c) => char.ToUpperInvariant(c),
                 _ => c,
             };
             char? ch = c is ' ' or '\n' or '\b' ? null : c;
-            results.Add(session.HandleKey(vk, ch, char.IsAsciiLetterUpper(c), false, false, false, before));
+            results.Add(session.HandleKey(vk, ch, char.IsAsciiLetterUpper(c) || c is '(' or ')' or '{' or '}', false, false, false, before));
         }
         return results;
+    }
+
+    [Test]
+    public static void Issue1581_BracketCommitConsumesEnter()
+    {
+        foreach (var enabled in new[] { false, true })
+        {
+            foreach (var live in new[] { false, true })
+            {
+                foreach (var control in new[] { false, true })
+                {
+                    foreach (var (raw, expected) in new[] { ("[]", "「」"), ("()", "()"), ("{}", "｛｝") })
+                    {
+                        var settings = new Settings { CursorIntoBrackets = enabled, LiveConversion = live };
+                        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                            new CompositionOptions { CursorIntoBrackets = () => settings.CursorIntoBrackets, LiveConversion = () => settings.LiveConversion },
+                            () => settings, directModeDetection: true);
+                        Type(session, raw);
+                        var result = session.HandleKey(VirtualKeys.Return, null, false, control, false, false);
+                        var context = $"{raw}, 設定={enabled}, ライブ変換={live}, Ctrl={control}: {result.ToJson()}";
+                        Assert.True(result.Consumed, "確定に使った Enter をアプリへ渡さない: " + context);
+                        Assert.Equal(expected, string.Concat(result.Commits.Select(c => c.Text)), context);
+                        Assert.True(result.View is null, context);
+                        Assert.Equal(enabled ? 1 : 0, result.Commits.Single().CaretBack, context);
+                        using var json = JsonDocument.Parse(result.ToJson());
+                        Assert.Equal(enabled, json.RootElement.GetProperty("commits")[0].TryGetProperty("caretBack", out _), context);
+                        Assert.True(!session.HandleKey(VirtualKeys.Return, null, false, control, false, false).Consumed,
+                            "確定後にもう一度押した Enter はアプリで使える: " + context);
+                    }
+                }
+            }
+        }
+    }
+
+    [Test]
+    public static void Issue1581_CaretBackFollowsTheSelectedPair()
+    {
+        foreach (var raw in new[] { "[]", "()", "{}" })
+        {
+            var expected = BracketCandidates.For(raw == "[]" ? "「」" : raw)!.Candidates;
+            for (var index = 0; index < expected.Count; index++)
+            {
+                var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                    new CompositionOptions { CursorIntoBrackets = () => true }, () => new Settings(), directModeDetection: true);
+                Type(session, raw + " ");
+                session.SelectCandidate(index);
+                var result = Type(session, "\n").Single();
+                var edit = result.Commits.Single();
+                Assert.True(result.Consumed, result.ToJson());
+                Assert.Equal(expected[index], edit.Text);
+                // 半角の ｢｣ は既存の BracketPairs の対象外。この修正では対象を広げない。
+                Assert.Equal(expected[index] == "｢｣" ? 0 : 1, edit.CaretBack, edit.Text);
+            }
+        }
+    }
+
+    [Test]
+    public static void Issue1581_BracketCandidateCommitCanStartTheNextComposition()
+    {
+        foreach (var enabled in new[] { false, true })
+        {
+            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionOptions { CursorIntoBrackets = () => enabled }, () => new Settings(), directModeDetection: true);
+            Type(session, "[] ");
+            var result = Type(session, "k").Single();
+            Assert.True(result.Consumed, result.ToJson());
+            Assert.Equal("「」", result.Commits.Single().Text);
+            Assert.Equal(enabled ? 1 : 0, result.Commits.Single().CaretBack);
+            Assert.Equal("k", result.View!.Text);
+        }
+    }
+
+    [Test]
+    public static void Issue1581_NonPairsDoNotRequestCaretMovement()
+    {
+        foreach (var raw in new[] { "[", "[a]", "abc" })
+        {
+            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionOptions { CursorIntoBrackets = () => true }, () => new Settings(), directModeDetection: true);
+            Type(session, raw);
+            var result = Type(session, "\n").Single();
+            Assert.True(result.Consumed, result.ToJson());
+            Assert.True(result.Commits.All(c => c.CaretBack == 0), result.ToJson());
+        }
+    }
+
+    [Test]
+    public static void Issue1581_CommitPendingReturnsTheCaretRequestWithoutPassingAKey()
+    {
+        foreach (var full in new[] { false, true })
+        {
+            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionOptions { CursorIntoBrackets = () => true, FullWidthParentheses = () => full },
+                () => new Settings(), directModeDetection: true);
+            Type(session, "()");
+            var result = session.CommitPending();
+            Assert.True(result.Consumed, result.ToJson());
+            Assert.Equal(full ? "（）" : "()", result.Commits.Single().Text);
+            Assert.Equal(1, result.Commits.Single().CaretBack);
+            Assert.Equal(0, session.CommitPending().Commits.Count, "次の要求に移動を持ち越さない");
+        }
     }
 
     [Test]

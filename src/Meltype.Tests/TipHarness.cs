@@ -77,7 +77,7 @@ internal static class TipHarness
         return failed;
     }
 
-    internal static Composition.CompositionService CreateService(Control invoker) =>
+    internal static Composition.CompositionService CreateService(Control invoker, Func<bool>? cursorIntoBrackets = null) =>
         new(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions
         {
             UserDictionary = new Composition.UserDictionary(null),
@@ -85,6 +85,7 @@ internal static class TipHarness
             Languages = new Composition.LanguageMemory(null),
             TranslationHistory = new Composition.TranslationHistory(null),
             Engine = () => Config.ConversionEngine.System,
+            CursorIntoBrackets = cursorIntoBrackets ?? (() => false),
         });
 
     private static string Send(NamedPipeClientStream pipe, string json)

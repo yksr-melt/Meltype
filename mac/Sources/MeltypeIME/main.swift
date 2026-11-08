@@ -13,6 +13,8 @@ if CommandLine.arguments.contains("--version") {
 if CommandLine.arguments.contains("--register-input-source") {
     let outcome = InputSourceRegistration.register()
     guard outcome == .ready else { exit(outcome.exitCode) }
+    // 更新時はメニューを再起動せず、前面アプリの入力接続を維持する。
+    if CommandLine.arguments.contains("--keep-input-menu") { exit(0) }
     let refresh = Process()
     refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
     refresh.arguments = ["TextInputMenuAgent"]
@@ -203,4 +205,5 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
 }
 candidatesWindow = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
+NativeCore.shared.startBackgroundConversion()
 NSApplication.shared.run()

@@ -70,6 +70,8 @@ Mac 版・Linux 版はプレビュー版です。気づいたことは小さな�
 <img src="docs/images/headings/contributing/09.svg" alt="Issue・Pull Request の扱い" height="53"><br>
 
 
+Issue・Pull Request の本文とコメントは日本語で書いてください。日本語が書けない場合は、機械翻訳でかまいません。
+
 `要トリアージ` が付いている Issue (メンテナーがまだ見ていないもの) には、基本的に着手しないでください。
 対応したい場合は、その Issue に対応したいことをコメントで残しておいてください。メンテナーが進めると判断したら、`/self-assign` とコメントしてから対応してください ([bot のコマンド](#bot-のコマンド))。
 
@@ -224,14 +226,14 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | web | `web/` が変わったとき | Web (Cloudflare Workers・報告フォーム) の構文・テスト |
 | 辞書の形式 | `dictionaries/` が変わったとき | 読めない行・ひらがなでない読み・重複など (`node tools/check-dictionaries.mjs` で手元でも確かめられます) |
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます。あわせて、よく使う語 (約 5.7 万語) の判定が main から変わった語を一覧にします (参考。失敗にはしません) |
-| 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」と、`Fixes #12` で閉じる誤判定の報告を、Pull Request のコードで確かめます |
+| 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc で確かめます |
 | CLA | 初めての方 | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」) |
 | フォーマット | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、違反があれば失敗 |
-| 静的解析 | いつも | Roslyn の解析の警告のうち、Pull Request で新しく出たものを注釈で出す (マージは止めません) |
+| 静的解析 | いつも | Roslyn の解析の警告が 1 件でもあれば失敗 |
 | CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
 | スクリプト | いつも | `.github/bot`・`tools` の Node のスクリプトのテスト |
 | 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
 
-フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析・CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。
+フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析は `dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true` で手元でも確かめられます (Linux・macOS でも Windows 版まで調べられます)。CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。

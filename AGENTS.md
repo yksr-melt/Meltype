@@ -1,10 +1,10 @@
 詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
 
-## 構成（どこを触るか）
+## 構成
 
 | 場所                         | 中身                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/Meltype.Core`         | OS 非依存の判定・変換コア（Composition / Detection / Input / Config / Diagnostics）。**判定・変換を直すときはまずここ** |
+| `src/Meltype.Core`         | OS 非依存の判定・変換コア（Composition / Detection / Input / Config / Diagnostics） |
 | `src/Meltype.Core.Tests`   | コアのテスト（どの OS でも動く）                                                                         |
 | `src/Meltype`              | Windows 版（TSF・UI・更新）                                                                       |
 | `src/Meltype.Tests`        | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる）                                                |
@@ -21,7 +21,6 @@
 ## ビルドとテスト
 
 ```bash
-
 dotnet build Meltype.sln
 
 # コアのテスト（Linux / macOS / Windows どれでも）
@@ -44,72 +43,81 @@ dotnet run --project src/Meltype.Tests -- --context この本は:あつい # 文
 
 # 辞書を変えたとき
 node tools/check-dictionaries.mjs
-
 ```
 
-- **Linux / macOS では `src/Meltype.Tests` は動かない。** `src/Meltype.Core.Tests` で確認する。
-- `--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する）。
-- ヘルパーは main の `linux.yml` 成果物 `meltype-linux` の zip 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。
-- `native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+Linux / macOS では `src/Meltype.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
+
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは main の `linux.yml` 成果物 `meltype-linux` の zip 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
-
-
 
 ## 作業後の確認
 
 ```bash
-
 # フォーマットを直す（CI は --verify-no-changes で同じ検査をする）
 dotnet format whitespace --folder
 
+# 静的解析（CI は警告が 1 件でもあれば失敗する。EnableWindowsTargeting で Linux / macOS でも Windows 版を調べられる）
+dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true
 ```
+
+## 判定・変換を直すとき
+
+- 辞書の追加で直るなら、辞書の追加で直す。
+- 報告された入力は症状の 1 例。原因を突き止め、同じ原因で起きる入力をまとめて直す。
+- 条件を過剰に一般化しない。`i18n`・`p2p` を英語にするために「英字 + 数字 + 英字」を英語と判定したら、`huusoku6me-toru` が `ふうそku6meーとる` になった。
 
 ## テストの書き方
 
-判定・変換を変えたら、報告された例をテストに足す。特に次を優先する。
+判定・変換を変えたら、次をテストに足す。
 
-- **リグレしそうなもの**（直した語の逆向き・似た入力）
-- **エッジケース**
+- 報告された例
+- リグレッションのありそうなもの（直した語の逆向きで似た入力。`issueni` → `issueに` に対して `issune` → `いっすね` など）
+- エッジケース
+- 将来の挙動を保証したいもの
 
-実装の写しのようなテストは書かない。将来の挙動を保証したいものも書く。
+報告された例は `src/Meltype.Core.Tests/data/issue-cases.tsv` にも `打ったもの<Tab>期待する結果` の形で足す。
+
+実装の写しのようなテストは書かない。
+
+テストを通すために実装を曲げない。既存のテストのケースが仕様として説明できないなら、実装を合わせずにテストを直し、PR にそう書く。
+
+## PR の「確かめること」
+
+`打ったもの → 期待する結果` の行を、チェック「報告の再現」が PR のコードで確かめる。`Fixes` で閉じる Issue の報告例と、直した語の逆向きで似た入力を書く。
+
+```
+- issueni → issueに
+- issune → いっすね
+- kyouhagoogle → 今日はgoogle
+- きょうは → 今日は
+```
+
+英字の入力は打つキーとして扱い、Enter で確定した結果か Space で変換した結果が期待と完全一致すれば通る。かなの入力は読みとして扱い、変換の候補に期待が含まれれば通る。
+
+`→`・`->` を含む行はすべて例として読まれる。補足を同じ行に書くと期待に混ざるので、別の行に書く。
+
+## 設定を足すとき
+
+ON と OFF のそれぞれに意味がある設定だけを足す。設定はユーザーの好みであって、判別をサボる理由にはならない。すべての設定項目の追加はユーザーの負担になるので、設定の追加には慎重になる。
 
 ## 守ること
 
-- **新しいソースファイルの先頭**にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
+- 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
 
 ```
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 あなたの名前
-
 ```
 
-- **PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。**
-- **「## 確かめること」は変換・判定の例を `打ったもの → 期待する結果` の形で書く。**
-
-```
-
-* kyouhagoogle → 今日はgoogle
-* midika → 身近
-* きょうは → 今日は（変換の候補に含まれていれば成功）
-
-```
-
-「Fixes」で閉じる誤変換 Issue の入力と期待した結果も、bot が PR のコードで自動に確かめる。
-
-- **AI を使ったことを PR に書く。** テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
-- **説明は日本語で書く。** PR の本文・コメント・文書は日本語で書く。
-- **PR と関係ない場所を変更しない。**
-- **PR に関係する箇所の文書が古ければ、利用者向けでも開発者向けでも直す。** 利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/*.md`）は常時メンテ対象で、挙動を変える PR では影響する箇所を探して同じ PR で直す。
-- **機能実装や枠組みを変える変更は、先に Issue で相談する。**
-- **報告された入力は症状の 1 例。原因を突き止め、同じ原因で起きる入力をまとめて直す。**
-
-## してはいけないこと
-
-- テストを消す・飛ばす・ゆるめることで通す。
-- 生成されたファイル（辞書から作るもの、`tools/make-*` で作るものなど）を手で直す。生成スクリプトを使う。
-- 頼まれていないのに、リリース・Homebrew cask・winget などの配布まわり（`.github/workflows`・`Casks/`・`packaging/`）を変える。
-
-## 迷ったとき
-
-1. **分からないことは聞く** … 著作権名、仕様の解釈、配布まわりなど、推測で進めない。
+- PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。
+- PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
+- AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
+- Issue・PR の本文・コメントと文書は日本語で書く。
+- PR と関係ない場所を変更しない。
+- PR に関係する箇所の文書が古ければ、利用者向けでも開発者向けでも直す。利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/*.md`）は常時メンテ対象で、挙動を変える PR では影響する箇所を探して同じ PR で直す。
+- 利用者が知る必要がないことを利用者向けの文書に書かない。
+- 機能実装や枠組みを変える変更は、先に Issue で相談する。
+- OS 間の差分はできるだけ作らない。
+- `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
+- 著作権名・仕様の解釈など、分からないことは推測で進めず聞く。

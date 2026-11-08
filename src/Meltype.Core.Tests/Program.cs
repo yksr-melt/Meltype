@@ -69,8 +69,9 @@ internal static class Program
                 Performance.Compare(args[1], args[2]);
                 return 0;
             case "--expect":
-                // --expect 入力ファイル 出力ファイル (Pull Request のチェック用)
+                // --expect 入力ファイル 出力ファイル (Pull Request のチェック用。MELTYPE_MOZC が要る)
                 Checks.Expect(args[1], args[2]);
+                Henkan.Shutdown();
                 return 0;
             case "--henkan":
                 Henkan.Run(string.Join(" ", args.Skip(1)));

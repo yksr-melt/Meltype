@@ -136,6 +136,8 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 
 設定は、アプリの一覧の「Meltype の設定」で変えられます。
 
+設定「カッコを打ったら中にカーソルを移動」は、fcitx5・IBus ともに未対応です。設定画面には項目が表示されます。
+
 設定と学習データは `~/.local/share/Meltype` にあります。画面に無い項目 (アプリ別設定など) は、Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
 
 ```json
