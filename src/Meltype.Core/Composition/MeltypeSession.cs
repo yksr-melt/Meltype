@@ -582,6 +582,13 @@ public sealed class MeltypeSession
     }
 
     /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
+    /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま (変換中ならその表示)。</summary>
+    public SessionResult Unchanged()
+    {
+        _host.Begin(null, false, null, null);
+        return _host.Result(consumed: true) with { Consumed = false };
+    }
+
     public SessionResult? RefreshConversion()
     {
         _host.Begin(null, false, null, null);

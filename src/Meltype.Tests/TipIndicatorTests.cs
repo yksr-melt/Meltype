@@ -68,7 +68,8 @@ internal static class TipIndicatorTests
     [Test]
     public static void Indicator_IsShownWhenTheCoreSaysSo()
     {
-        // 出すかは本体が state.indicator で決める (設定「入力モードをカーソルの近くに表示」)。TipServer は、入力スレッドが分かるときに出すだけ
+        // 出すかは本体が state.indicator で決める (設定「入力モードをカーソルの近くに表示」)。TipServer は、入力スレッドが分かるときに出すだけ。
+        // 表示は、前面のウィンドウが入力スレッドのものなときだけ出るので、前面のスレッドから来た要求にする
         var settings = new Settings { Mode = InputMode.Tsf, ModeIndicator = ModeIndicatorTiming.Never };
         using var invoker = new Control();
         invoker.CreateControl();
@@ -83,10 +84,12 @@ internal static class TipIndicatorTests
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
         using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));
         var host = server.Connect("harness", 0);
-        bool Shown(string type, uint thread = 1, string fields = "")
+        var foreground = IME.ImeTarget.FromForeground()?.ThreadId ?? 0;
+        Assert.True(foreground != 0, "前面の入力スレッドがある");
+        bool Shown(string type, uint? thread = null, string fields = "")
         {
             indicator.Hide();
-            var request = Tip.TipRequest.Parse($"{{\"thread\":{thread},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true{fields}}}}}")!;
+            var request = Tip.TipRequest.Parse($"{{\"thread\":{thread ?? foreground},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true{fields}}}}}")!;
             server.Handle(host, request);
             Application.DoEvents();
             return indicator.Visible;

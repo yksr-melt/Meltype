@@ -597,8 +597,11 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
             if (root.ValueKind != JsonValueKind.Object) return null;
             if (root.TryGetProperty("wait", out var wait)) return wait.TryGetInt64(out var since) ? new(0, null, Waiting, since) : null;
             if (!root.TryGetProperty("event", out var body) || ImeHost.Parse(body.GetRawText()) is not { } e) return null;
-            var thread = root.TryGetProperty("thread", out var t) && t.TryGetUInt32(out var id) ? id : 0;
-            var anchor = root.TryGetProperty("x", out var x) && x.TryGetInt32(out var left) && root.TryGetProperty("y", out var y) && y.TryGetInt32(out var bottom)
+            // 数でない値 (null・文字列) は TryGet… が例外を投げるので、先に種類を見る
+            static bool Number(JsonElement root, string name, out JsonElement value) =>
+                root.TryGetProperty(name, out value) && value.ValueKind == JsonValueKind.Number;
+            var thread = Number(root, "thread", out var t) && t.TryGetUInt32(out var id) ? id : 0;
+            var anchor = Number(root, "x", out var x) && x.TryGetInt32(out var left) && Number(root, "y", out var y) && y.TryGetInt32(out var bottom)
                 ? new Point(left, bottom) : (Point?)null;
             return new(thread, anchor, e, null);
         }

@@ -473,6 +473,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void EventsThatDoNotChangeTheInput_KeepTheView()
+    {
+        // 変換中に OS がフォーカス・キャレットを知らせてきても、変換中の表示は消さない (view が null ならフロントは消す)
+        var front = new Front();
+        front.Type("ka");
+        foreach (var type in new[] { "focus", "sync", "refresh" })
+            Assert.Equal("か", front.Event(type).GetProperty("result").GetProperty("view").GetProperty("text").GetString(), type + "\n" + front.Trace);
+        front.Event("caret", extra: ",\"caret\":{\"moved\":false}");
+        Assert.Equal("か", front.Composition["t1"], "caret\n" + front.Trace);
+    }
+
+    [Test]
     public static void ModeIndicator_IsDecidedByTheSetting()
     {
         var front = new Front();

@@ -88,8 +88,9 @@ internal sealed class ImeSession
             ImeEventType.Commit => _session.CommitPending(),
             ImeEventType.Committed => CommittedOutside(e.Field),
             ImeEventType.Select => e.Prediction ? _session.SelectPrediction(e.Index) : _session.SelectCandidate(e.Index),
-            ImeEventType.Refresh when active => _session.RefreshConversion() ?? Pass,
-            _ => Pass,
+            ImeEventType.Refresh when active => _session.RefreshConversion() ?? _session.Unchanged(),
+            // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
+            _ => _session.Unchanged(),
         }, e.Field), settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
