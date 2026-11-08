@@ -29,6 +29,35 @@ public sealed class SigilWord
     public bool IsActive { get { lock (_gate) return _length > 0; } }
 
     /// <summary>
+    /// キャレットの前の文字列 before の後に打った c を、変換せずにそのままアプリへ渡すか (状態を持たない版)。
+    /// 先頭か空白の直後の記号と、記号から続く名前の文字。before が分からなければ渡さない。
+    /// </summary>
+    public static bool PassesAfter(string? before, char c) =>
+        before is not null && (InNameAfter(before) ? IsNameChar(c) : IsSigil(c) && LastWord(before).IsEmpty);
+
+    /// <summary>before の後で、記号から始めた名前を打っている途中か。</summary>
+    public static bool InNameAfter(string? before)
+    {
+        if (before is null) return false;
+        var word = LastWord(before);
+        if (word.IsEmpty || !IsSigil(word[0])) return false;
+        foreach (var c in word)
+        {
+            if (!IsNameChar(c)) return false;
+        }
+        return true;
+    }
+
+    // キャレットの前の、最後の空白より後ろ。Discord は、空の入力欄でもキャレットの前に見えない文字 (U+FEFF) を返すので除く
+    private static ReadOnlySpan<char> LastWord(string before)
+    {
+        var text = before.AsSpan().TrimEnd("﻿​");
+        var start = text.Length;
+        while (start > 0 && !char.IsWhiteSpace(text[start - 1])) start--;
+        return text[start..];
+    }
+
+    /// <summary>
     /// 変換ボックスが空のときに打った文字を、変換せずにそのままアプリへ渡すか。
     /// before はホストが教えてくれたキャレットの前の文字列 (分からなければ null)。渡した文字も <see cref="Append"/> で伝える。
     /// </summary>

@@ -1,0 +1,89 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 aster-void
+
+using System.Text.Json;
+using Meltype.Composition;
+using Meltype.Config;
+using Meltype.Input;
+
+namespace Meltype.Ime;
+
+/// <summary>ImeHost が使う OS 側の機能。1 つのフロント (TSF ではパイプのつながり = 1 つのアプリ) ごとに 1 つ。</summary>
+public interface IImeEnvironment
+{
+    /// <summary>このアプリに適用する設定 (アプリ別設定を反映したもの)。</summary>
+    Settings Settings { get; }
+
+    /// <summary>このアプリで入力を受け持つか (一時停止・動作モード・アプリ別設定・ゲーム)。</summary>
+    bool Active { get; }
+
+    /// <summary>フォーカスのある所の種類。terminal は ImeField.Terminal。今までの判定のままにするなら null (補完の一覧に移っただけなど)。</summary>
+    CodeFocus? CodeFocus(bool terminal);
+
+    /// <summary>入力欄ごとの入力の本体。辞書・学習データはフロントの中で共有する。</summary>
+    MeltypeSession CreateSession();
+}
+
+/// <summary>
+/// フロントからの出来事を受け取り、入力欄ごとの <see cref="ImeSession"/> に振り分ける。
+/// 別の ImeHost の sid には触れない (TSF では、つなぎ直した DLL が古い入力の続きを拾わない・ほかのアプリの入力を読めない)。
+/// 呼ぶスレッドは 1 つに決める (排他しない)。
+/// </summary>
+public sealed class ImeHost(IImeEnvironment environment)
+{
+    public const int Version = 1;
+
+    /// <summary>1 つの ImeHost で持つ入力欄の数の上限 (TSF では 1 つのスレッドに 1 つなので、ふつうは 1 つ)。</summary>
+    private const int MaxSessions = 16;
+
+    private readonly Dictionary<string, ImeSession> _sessions = [];
+    private static long s_rev;
+
+    public int SessionCount => _sessions.Count;
+
+    /// <summary>JSON の出来事を処理する。読めない・版が違う出来事には、何も受け持たない応答を返す。</summary>
+    public string Handle(string json)
+    {
+        ImeEvent? e;
+        try
+        {
+            e = JsonSerializer.Deserialize(json, ImeJsonContext.Default.ImeEvent);
+        }
+        catch (JsonException)
+        {
+            e = null;
+        }
+        return (e is null ? Inactive() : Handle(e)).ToJson();
+    }
+
+    public ImeOutput Handle(ImeEvent e)
+    {
+        if (e.V != Version) return Inactive();
+        var active = environment.Active;
+        if (e.Type == ImeEventType.Close)
+        {
+            if (_sessions.Remove(e.Sid, out var closing) && closing.IsComposing) closing.Close();
+            return Inactive();
+        }
+        if (!_sessions.TryGetValue(e.Sid, out var session))
+        {
+            // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
+            // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
+            if (!active || e.Type is not (ImeEventType.Key or ImeEventType.Toggle or ImeEventType.SetMode) ||
+                e.Field?.Composing == true || _sessions.Count >= MaxSessions)
+            {
+                return new(ImeSession.InitialState(active, e.Open ?? true, environment.Settings, NextRev()), Pass);
+            }
+            session = new ImeSession(environment);
+            _sessions[e.Sid] = session;
+        }
+        return session.Handle(e, active, NextRev());
+    }
+
+    private static long NextRev() => Interlocked.Increment(ref s_rev);
+
+    private static SessionResult Pass => new(false, [], null);
+
+    private static ImeOutput Inactive() =>
+        new(new ImeState { Capture = new ImeCapture(), Rev = NextRev() }, Pass);
+}

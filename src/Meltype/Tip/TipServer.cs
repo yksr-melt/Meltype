@@ -583,6 +583,8 @@ internal sealed class TipServer : IDisposable
         }
         SessionResult result;
         var switchedToJapanese = false;
+        // 応答の english (コードの行か) に使うキャレットの前。key だけが送ってくる
+        string? before = null;
         switch (op)
         {
             case "key" when !active:
@@ -609,7 +611,7 @@ internal sealed class TipServer : IDisposable
                     // code を付けない DLL (Meltype を更新する前から動いているアプリが、古い DLL を読み込んだまま) は、toggle・mode を送らず、
                     // キャレットの前も 20 文字しか送らない。コードの入力欄として扱うと、コードの行を日本語にできないので、一般として扱う
                     var process = IsTrue(root, "code") ? String(root, "process") : null;
-                    var before = UpdateCodeInput(session, process, String(root, "before"));
+                    before = UpdateCodeInput(session, process, String(root, "before"));
                     // 設定「入力モード切り替えキー」は、この経路では読まない (#1033)。
                     // Meltype IME は DLL が打鍵ごとに direct を送ってくるので、本体が切り替えても次の打鍵で元に戻る。
                     // 設定は Meltype キーボード (MeltypeEngine) と、Mac 版・Linux 版が使う。
@@ -650,7 +652,7 @@ internal sealed class TipServer : IDisposable
             default:
                 return Inactive;
         }
-        return Reply(active, result, session.CodeInput, session.CodeEnglishAt(null),
+        return Reply(active, result, session.CodeInput, session.CodeEnglishAt(before),
             DirectDetectionFor(String(root, "process")), switchedToJapanese, session.DirectEnglishWord);
     }
 

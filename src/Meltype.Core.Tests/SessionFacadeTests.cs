@@ -19,28 +19,57 @@ internal static class SessionFacadeTests
         var results = new List<SessionResult>();
         foreach (var c in text)
         {
-            var vk = c switch
-            {
-                ' ' => VirtualKeys.Space,
-                '\n' => VirtualKeys.Return,
-                '\b' => VirtualKeys.Back,
-                ',' => VirtualKeys.OemComma,
-                '.' => VirtualKeys.OemPeriod,
-                '-' => VirtualKeys.OemMinus,
-                '"' or '\'' => 0xDE,
-                '#' => '3',
-                '(' => '9',
-                ')' => '0',
-                '[' or '{' => 0xDB,
-                ']' or '}' => 0xDD,
-                '/' => VirtualKeys.Oem2,
-                _ when char.IsAsciiLetter(c) => char.ToUpperInvariant(c),
-                _ => c,
-            };
-            char? ch = c is ' ' or '\n' or '\b' ? null : c;
-            results.Add(session.HandleKey(vk, ch, char.IsAsciiLetterUpper(c) || c is '(' or ')' or '{' or '}', false, false, false, before));
+            var (vk, ch, shift) = KeyOf(c);
+            results.Add(session.HandleKey(vk, ch, shift, false, false, false, before));
         }
         return results;
+    }
+
+    /// <summary>
+    /// フロントの代わりに、キーごとにキャレットの前の文字 (確定した文字とアプリに通した文字。変換中の文字は入れない) を渡して打つ。
+    /// 確定は、確定し直し (deleteBefore) も含めてそのまま field に入れる。
+    /// </summary>
+    internal static List<SessionResult> Type(MeltypeSession session, string text, Field field)
+    {
+        var results = new List<SessionResult>();
+        foreach (var c in text)
+        {
+            var (vk, ch, shift) = KeyOf(c);
+            var result = session.HandleKey(vk, ch, shift, false, false, false, field.Text);
+            foreach (var edit in result.Commits) field.Text = field.Text[..^Math.Min(edit.DeleteBefore, field.Text.Length)] + edit.Text;
+            if (!result.Consumed) field.Text = c == '\b' ? field.Text[..^Math.Min(1, field.Text.Length)] : field.Text + c;
+            results.Add(result);
+        }
+        return results;
+    }
+
+    internal sealed class Field(string text = "")
+    {
+        public string Text { get; set; } = text;
+    }
+
+    private static (int Vk, char? Ch, bool Shift) KeyOf(char c)
+    {
+        var vk = c switch
+        {
+            ' ' => VirtualKeys.Space,
+            '\n' => VirtualKeys.Return,
+            '\b' => VirtualKeys.Back,
+            ',' => VirtualKeys.OemComma,
+            '.' => VirtualKeys.OemPeriod,
+            '-' => VirtualKeys.OemMinus,
+            '"' or '\'' => 0xDE,
+            '#' => '3',
+            '(' => '9',
+            ')' => '0',
+            '[' or '{' => 0xDB,
+            ']' or '}' => 0xDD,
+            '/' => VirtualKeys.Oem2,
+            _ when char.IsAsciiLetter(c) => char.ToUpperInvariant(c),
+            _ => c,
+        };
+        char? ch = c is ' ' or '\n' or '\b' ? null : c;
+        return (vk, ch, char.IsAsciiLetterUpper(c) || c is '(' or ')' or '{' or '}');
     }
 
     [Test]
@@ -884,9 +913,9 @@ internal static class SessionFacadeTests
         var empty = Type(session, "\"", "x = \"")[0];
         Assert.True(!empty.Consumed && empty.Commits.Count == 0, "空の文字列を閉じる引用符は英数のまま通す");
         Assert.Equal("きょうは", Type(session, "kyouha", "x = \"")[^1].View?.Text);
-        var close = Type(session, "\"")[0];
+        var close = Type(session, "\"", "x = \"")[0];
         Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じる引用符は英数のまま通し、日本語は確定");
-        Assert.True(session.CodeEnglishAt(null), "閉じたあとは英数");
+        Assert.True(session.CodeEnglishAt("x = \"今日は\""), "閉じたあとは英数");
         Assert.True(Type(session, "abc", "x = \"今日は\"").All(r => !r.Consumed), "閉じたあとのキーは英数のまま通す");
     }
 
@@ -900,73 +929,41 @@ internal static class SessionFacadeTests
     }
 
     [Test]
-    public static void CodeInput_TracksTerminalQuotesWithoutSurroundingText()
+    public static void CodeInput_FollowsTerminalQuotesFromTheTextBeforeCaret()
     {
         var session = Create();
         session.CodeInput = true;
-        Assert.True(Type(session, "echo \"").All(r => !r.Consumed), "シェルのコマンドは直接入力");
-        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text);
-        var close = Type(session, "\"")[0];
+        var field = new Field();
+        Assert.True(Type(session, "echo \"", field).All(r => !r.Consumed), "シェルのコマンドは直接入力");
+        Assert.Equal("きょうは", Type(session, "kyouha", field)[^1].View?.Text);
+        var close = Type(session, "\"", field)[0];
         Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じ引用符は英数のまま通し、日本語は確定");
-        Assert.True(Type(session, "hello").All(r => !r.Consumed), "文字列の外では英数に戻す");
-        session.CodeInput = true;
-        Type(session, "# ");
-        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text);
+        Assert.True(Type(session, "hello", field).All(r => !r.Consumed), "文字列の外では英数に戻す");
+        Assert.True(Type(session, " \"\bkyouha", field).All(r => !r.Consumed), "打った引用符を消したらコード");
+        Type(session, " # ", field);
+        Assert.Equal("きょうは", Type(session, "kyouha", field)[^1].View?.Text);
     }
 
     [Test]
-    public static void CodeInput_TracksTerminalQuotesAfterCaretMoves()
+    public static void CodeInput_ReactivationClearsExplicitJapanese()
     {
+        // 同じ入力欄の再有効化 (Mac など): 明示的な日本語指定を引き継がない
         var session = Create();
         session.CodeInput = true;
-        Type(session, "echo ");
-        Assert.True(!session.HandleKey(VirtualKeys.Left, null, false, false, false, false).Consumed, "矢印はアプリへ");
-        Assert.True(Type(session, "ls").All(r => !r.Consumed), "矢印のあともコードは英数");
-        Assert.True(Type(session, "\"").All(r => !r.Consumed), "引用符はアプリへ");
-        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "矢印のあとに開いた引用符の中は日本語");
-        var close = Type(session, "\"")[0];
-        Assert.True(!close.Consumed && close.Commits.Single().Text == "きょうは", "閉じ引用符は英数のまま通し、日本語は確定");
-        Assert.True(Type(session, "hello").All(r => !r.Consumed), "閉じたあとは英数");
-
-        Assert.True(!session.HandleKey(VirtualKeys.Right, null, false, false, false, false).Consumed, "矢印はアプリへ");
-        Assert.True(Type(session, "\"\bkyouha").All(r => !r.Consumed), "打った引用符を消したらコード");
-
+        Assert.True(session.SetCodeLine(true, "echo "), "明示的な日本語指定を有効にする");
         session.CodeInput = true;
-        Assert.True(Type(session, "\b\b\"").All(r => !r.Consumed), "行頭を超えて消しても、コードは英数");
-        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text, "行頭を超えて消したあとに開いた引用符の中は日本語");
+        Assert.True(session.CodeEnglishAt("echo "), "再有効化で明示的な日本語指定を初期化する");
+        Assert.True(!Type(session, "k", "echo ").Single().Consumed, "コードの行に戻る");
     }
 
     [Test]
-    public static void CodeInput_ActivationSyncClearsTrackedContext()
+    public static void CodeInput_CommentSlashesWithSigilWordsEnabled()
     {
         var session = Create();
         session.CodeInput = true;
-        Assert.True(Type(session, "echo \"").All(r => !r.Consumed), "引用符の開始まではアプリへ渡す");
-        session.CommitPending();
-
-        // 同じ入力欄の再有効化 (Mac など): 周辺文字列がなくても、前の引用符を引き継がない。
-        session.Direct = false;
-        session.CodeInput = true;
-        var afterQuote = Type(session, "j").Single();
-        Assert.True(!afterQuote.Consumed && afterQuote.View is null && afterQuote.Commits.Count == 0,
-            "同じコード入力の設定も、既存の呼び出し元では文脈の初期化として使う");
-
-        Assert.True(session.SetCodeLine(true, null), "明示的な日本語指定を有効にする");
-        session.CommitPending();
-        session.Direct = false;
-        session.CodeInput = true;
-        var afterJapanese = Type(session, "k").Single();
-        Assert.True(!afterJapanese.Consumed && afterJapanese.View is null && afterJapanese.Commits.Count == 0,
-            "再有効化で明示的な日本語指定も初期化する");
-    }
-
-    [Test]
-    public static void CodeInput_TracksCommentSlashesWithSigilWordsEnabled()
-    {
-        var session = Create();
-        session.CodeInput = true;
-        Assert.True(Type(session, "// ").All(r => !r.Consumed), "コメントの開始は直接入力");
-        Assert.Equal("きょうは", Type(session, "kyouha")[^1].View?.Text);
+        var field = new Field();
+        Assert.True(Type(session, "// ", field).All(r => !r.Consumed), "コメントの開始は直接入力");
+        Assert.Equal("きょうは", Type(session, "kyouha", field)[^1].View?.Text);
     }
 
     [Test]
@@ -1016,13 +1013,16 @@ internal static class SessionFacadeTests
         // #193: 先頭の @review は打つたびにアプリへ渡し (補完を選べるように)、空白の後は日本語に戻る。
         // 文章の入力欄の先頭の / は ・ として変換ボックスに入れる ので、@ で確かめる。
         var session = Create();
-        Assert.True(Type(session, "@review").All(r => !r.Consumed && r.View is null), "@review はそのままアプリへ");
-        Assert.True(!Type(session, " ")[0].Consumed, "空白もアプリへ");
-        Assert.Equal("きょう", Type(session, "kyou")[^1].View?.Text);
+        var field = new Field();
+        Assert.True(Type(session, "@review", field).All(r => !r.Consumed && r.View is null), "@review はそのままアプリへ");
+        Assert.True(!Type(session, " ", field)[0].Consumed, "空白もアプリへ");
+        Assert.Equal("きょう", Type(session, "kyou", field)[^1].View?.Text);
         // google を確定した後の空白に続く @ も。
         session = Create();
-        Type(session, "google ");
-        Assert.True(Type(session, "@file").All(r => !r.Consumed), "空白の後の @file はアプリへ");
+        field = new Field();
+        Type(session, "google ", field);
+        Assert.True(Type(session, "@file", field).All(r => !r.Consumed), "空白の後の @file はアプリへ");
+        Assert.True(Type(session, "@file", (string?)null).All(r => r.Consumed), "キャレットの前を読めなければ普通の入力");
     }
 
     [Test]
@@ -1030,16 +1030,17 @@ internal static class SessionFacadeTests
     {
         // 文章の入力欄の先頭の / は ・。Space で / にして名前を打つと、/ を確定して名前はアプリへ。
         var session = Create();
-        Assert.Equal("・", Type(session, "/", before: "")[0].View?.Text);
-        Assert.Equal("/", Type(session, " ")[0].View?.Text);
-        var help = Type(session, "help");
+        var field = new Field();
+        Assert.Equal("・", Type(session, "/", field)[0].View?.Text);
+        Assert.Equal("/", Type(session, " ", field)[0].View?.Text);
+        var help = Type(session, "help", field);
         Assert.True(help[0].Commits.Single().Text == "/" && help.All(r => !r.Consumed && r.View is null), "/ を確定して help はアプリへ");
         // Discord は空の入力欄でも、キャレットの前に U+FEFF を返す。
         session = Create();
         Assert.Equal("・", Type(session, "/", before: "\uFEFF")[0].View?.Text);
         // /help を送信した後 (Enter は Meltype IME を通らない) の空の欄では、日本語に戻る。
         Type(session, " ");
-        Type(session, "help");
+        Type(session, "help", new Field("/"));
         Assert.Equal("きょう", Type(session, "kyou", before: "\uFEFF")[^1].View?.Text);
         // コードの入力欄では、今までどおりアプリへ。
         session = Create();
@@ -1055,7 +1056,7 @@ internal static class SessionFacadeTests
         // ターミナルの AI の入力行 (Claude Code の「> 」の後) は /command を打つ所なので、今までどおりアプリへ。
         session = Create();
         session.CodeInput = true;
-        Assert.True(!Type(session, "/", before: "> ")[0].Consumed && Type(session, "help").All(r => !r.Consumed), "AI の入力行の /help はアプリへ");
+        Assert.True(Type(session, "/help", new Field("> ")).All(r => !r.Consumed), "AI の入力行の /help はアプリへ");
     }
 
     [Test]
@@ -1066,16 +1067,14 @@ internal static class SessionFacadeTests
         foreach (var before in new[] { "@xyz ", "@xyz\r\n", "@xyz\n" })
         {
             var session = Create();
-            Assert.True(Type(session, "@xyz", before: "").All(r => !r.Consumed), "@xyz はアプリへ");
+            Assert.True(Type(session, "@xyz", new Field()).All(r => !r.Consumed), "@xyz はアプリへ");
             Assert.Equal("きょう", Type(session, "kyou", before)[^1].View?.Text, before);
         }
         // 名前の途中 (前が名前の文字) なら今までどおりアプリへ
         var typing = Create();
-        Type(typing, "@xy", before: "");
         Assert.True(!Type(typing, "z", before: "@xy")[0].Consumed, "名前の続きはアプリへ");
         // 空白の後の 2 つ目の @file も、そのままアプリへ
         typing = Create();
-        Type(typing, "@xyz", before: "");
         Assert.True(!Type(typing, "@", before: "@xyz ")[0].Consumed, "空白の後の @ はアプリへ");
     }
 
@@ -1088,12 +1087,12 @@ internal static class SessionFacadeTests
         session = Create();
         session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
         Assert.True(!Type(session, "@", before: "> ")[0].Consumed, "前が空白なら @ はアプリへ");
-        // 前の文字を打ったのを見ていれば、空 (前の文字を読めないアプリ) より自分の記録を信じる。
+        // 打ったキーは覚えず、フロントが渡す前の文字だけで決める (空は入力欄の先頭)
         session = Create();
         session.Direct = true;
         Type(session, "taro");
         session.Direct = false;
-        Assert.True(Type(session, "@", before: "")[0].Consumed, "taro と打った後の @ は変換ボックスへ");
+        Assert.True(!Type(session, "@", before: "")[0].Consumed, "入力欄の先頭の @ はアプリへ");
     }
 
     [Test]

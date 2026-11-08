@@ -156,7 +156,6 @@ public sealed class MeltypeSession
     private readonly Host _host;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
-    private readonly SigilWord _sigil = new();
     private readonly bool _directModeDetection;
     private bool _directEnglishWord;
     private bool _direct;
@@ -352,16 +351,17 @@ public sealed class MeltypeSession
     /// <summary>入力を覚えないように求める入力欄か (Windows のブラウザーのシークレット / InPrivate ウィンドウ)。true の間は学習しない。</summary>
     public bool Private { get; set; }
 
-    /// <summary>コードの入力欄ではコメント・文字列以外を直接入力する。</summary>
+    /// <summary>
+    /// コードの入力欄ではコメント・文字列以外を直接入力する。コメント・文字列の中かは、フロントが渡すキャレットの前の文字 (before) だけで決め、
+    /// 打ったキーから行を追いかけない。
+    /// </summary>
     private bool _codeInput;
-    private readonly LineTracker _codeLine = new();
     public bool CodeInput
     {
         get => _codeInput;
         set
         {
             _codeInput = value;
-            _codeLine.SetFromText("");
             _codeJapanese = false;
         }
     }
@@ -390,7 +390,6 @@ public sealed class MeltypeSession
     public bool SetCodeLine(bool japanese, string? before)
     {
         if (!CodeInput || Direct || _controller.IsComposing) return false;
-        before = SyncCodeLine(before);
         if (!japanese)
         {
             if (!_codeJapanese) return false;
@@ -406,12 +405,11 @@ public sealed class MeltypeSession
 
     /// <summary>
     /// 次に打つキーが、コードの行なので英数のままアプリに通るか (入力モードの表示に使う)。
-    /// before はキャレットの前 (null なら、打ったキーから追いかけた今の行)。
+    /// before はキャレットの前。
     /// </summary>
     public bool CodeEnglishAt(string? before)
     {
         if (!CodeInput || Direct || _controller.IsComposing) return false;
-        before = SyncCodeLine(before);
         return !_codeJapanese && CodeLineKind(before) == LineKind.Code;
     }
 
@@ -429,15 +427,8 @@ public sealed class MeltypeSession
         Diagnostics.Log.Info("コードの行: キャレットが別の場所に移ったので英数に戻す");
     }
 
-    /// <summary>今の行をキャレットの前で読み直す。今の行 (分からなければ null) を返す。</summary>
-    private string? SyncCodeLine(string? before)
-    {
-        if (before is not null) _codeLine.SetFromText(before);
-        return before ?? _codeLine.Text;
-    }
-
-    /// <summary>キャレットの位置の種類。今の行が分からなければ、分からなくなってから打った文字列で調べる (その前はコードとみなす)。</summary>
-    private LineKind CodeLineKind(string? before) => LineContext.ClassifyText(before ?? _codeLine.Tracked);
+    /// <summary>キャレットの位置の種類。キャレットの前が分からない入力欄 (周辺文字列を返さないターミナル) はコードの行とする (日本語にするには SetCodeLine)。</summary>
+    private static LineKind CodeLineKind(string? before) => before is null ? LineKind.Code : LineContext.ClassifyText(before);
 
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public bool CanDeleteSurrounding
@@ -457,16 +448,14 @@ public sealed class MeltypeSession
     public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
         bool toggleShortcuts = true)
     {
-        if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
-        // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
+        // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
+        // 変換中の before は、変換中の文字より前 (フロントが渡す)
         if (CodeInput && !Direct && !control && !alt && !command &&
-            ch is '"' or '\'' or '`' && _codeLine.Tracked is var line &&
+            ch is '"' or '\'' or '`' && before is { } line &&
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
         {
             var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
-            foreach (var edit in committed.Commits) _codeLine.Append(edit.Text);
-            TrackCodeKey(vk, ch, false);
             return committed with { Consumed = false };
         }
         _host.Begin(ch, shift, before, after);
@@ -490,7 +479,7 @@ public sealed class MeltypeSession
             var committed = new SessionResult(false, [], null);
             Direct = !Direct;
             _toggled = true;
-            return Track(committed with { Consumed = true }, vk, ch, modifier: false);
+            return committed with { Consumed = true };
         }
         if (Direct && _directModeDetection && _directEnglishWord &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
@@ -498,24 +487,22 @@ public sealed class MeltypeSession
             _directEnglishWord = false;
         if ((Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
-            return Track(_host.Result(consumed: false), vk, ch, modifier);
+            return _host.Result(consumed: false);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !_sigil.IsActive && _settings().SigilWordsDirect &&
-            _sigil.PassesThrough('/', before))
+        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && _settings().SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/'))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && _sigil.PassesThrough(c, before))
+        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
-            if (CodeInput) TrackCodeKey(vk, ch, modifier);
-            return Track(_host.Result(consumed: false), vk, ch, modifier);
+            return _host.Result(consumed: false);
         }
         if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
-            TrackCodeKey(vk, ch, modifier);
-            return Track(_host.Result(consumed: false), vk, ch, modifier);
+            return _host.Result(consumed: false);
         }
         // 英数へ切り替えるときなどに、Shift を押したことを変換ボックスにも伝える (Shift + 英字は大文字)。
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, false, false, down.TimeMs));
@@ -530,17 +517,7 @@ public sealed class MeltypeSession
         if (!consumed && !_controller.IsComposing) ForgetLastCommit();
         if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, true, false, down.TimeMs));
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, true, false, down.TimeMs));
-        var result = _host.Result(consumed);
-        if (CodeInput)
-        {
-            foreach (var edit in result.Commits)
-            {
-                for (var i = 0; i < edit.DeleteBefore; i++) _codeLine.Backspace();
-                _codeLine.Append(edit.Text);
-            }
-            if (!consumed) TrackCodeKey(vk, ch, modifier);
-        }
-        return Track(result, vk, ch, modifier);
+        return _host.Result(consumed);
     }
 
     /// <summary>
@@ -562,29 +539,7 @@ public sealed class MeltypeSession
     private bool PassesSlash(string? before) =>
         CodeInput && !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
 
-    private void TrackCodeKey(int vk, char? ch, bool modifier)
-    {
-        if (modifier || vk is VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Up or VirtualKeys.Down or 0x21 or 0x22 or 0x23 or 0x24 or 0x2E)
-            _codeLine.Invalidate();
-        else if (vk == VirtualKeys.Return) _codeLine.NewLine();
-        else if (vk == VirtualKeys.Back) _codeLine.Backspace();
-        else if (vk == VirtualKeys.Space) _codeLine.Append(" ");
-        else if (ch is { } character && !char.IsControl(character)) _codeLine.Append(character.ToString());
-    }
 
-    /// <summary>アプリに届いた文字 (確定した文字列と、使わなかったキー) を、/ $ @ の名前の判定のために追いかける。</summary>
-    private SessionResult Track(SessionResult result, int vk, char? ch, bool modifier)
-    {
-        foreach (var edit in result.Commits)
-        {
-            if (edit.Text.Length > 0) _sigil.Append(edit.Text);
-            else if (edit.DeleteBefore > 0) _sigil.Lose();
-        }
-        if (result.Consumed) return result;
-        if (modifier) _sigil.Lose();
-        else _sigil.OnKey(vk, ch);
-        return result;
-    }
 
     /// <summary>
     /// このセッションの外でキャレットが動いた (OS の IME がアプリに通したキー・クリック・別の入力欄に移った) とき。
@@ -608,8 +563,6 @@ public sealed class MeltypeSession
         _host.Begin(null, false, null, null);
         _controller.CommitPending();
         _controller.ResetContext();
-        // 別の入力欄に移ったかもしれない。次に打つ文字は先頭とみなす (前の文字はホストが教えてくれればそちらを使う)。
-        _sigil.Start();
         return _host.Result(consumed: true);
     }
 
@@ -805,7 +758,16 @@ public sealed class MeltypeSession
         /// <summary>入力欄の文字は、キーを渡されたその場で読んでもらっている (OS が渡してきた値をそのまま使う)。</summary>
         public bool SurroundingTextIsCurrent => true;
 
-        public void RequestSurroundingText(Action<string?, string?> callback) => callback(_before, _after);
+        /// <summary>キーを押す前のキャレットの前に、このキーで確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
+        public void RequestSurroundingText(Action<string?, string?> callback)
+        {
+            var before = _before;
+            if (before is not null)
+            {
+                foreach (var edit in _commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
+            }
+            callback(before, _after);
+        }
 
         public void Show(CompositionView view)
         {

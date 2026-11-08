@@ -142,26 +142,24 @@ internal static unsafe class NativeBoundaryTests
     }
 
     [Test]
-    public static void Native_CodeEnglishAtUsesUtf8AndTrackedContext()
+    public static void Native_CodeEnglishAtUsesUtf8Context()
     {
         using var native = new NativeSession();
         Assert.Equal(0, native.CodeEnglishAt("$ "), "コード入力でなければ英数の表示にしない");
         Assert.Equal(0, native.SetCodeLine(1), "コード入力以外のモード切り替えを扱わない");
         native.SetCodeInput(1);
         Assert.Equal(1, native.CodeEnglishAt("$ "), "シェルの行は英数");
-        Assert.Equal(1, native.CodeEnglishAt(), "NULL は追跡している行を使う");
+        Assert.Equal(1, native.CodeEnglishAt(), "キャレットの前が分からない (NULL) ならコードの行");
 
         Assert.Equal(0, native.SetCodeLine(1, "│ › 日本語😊 "), "UTF-8 の AI プロンプトでは切り替えを扱わない");
         Assert.Equal(0, native.CodeEnglishAt("│ › 日本語😊 "), "UTF-8 の AI プロンプトでは日本語");
-        Assert.Equal(0, native.CodeEnglishAt(), "UTF-8 の行も次の問い合わせに引き継ぐ");
-        Assert.Equal(0, native.SetCodeLine(1), "既に日本語の場所では切り替えを扱わない");
         Assert.Equal(0, native.CodeEnglishAt("printf \"日本語😊"), "文字列の中は日本語");
         Assert.Equal(1, native.CodeEnglishAt("printf \"日本語😊\""), "文字列の外は英数");
 
-        Assert.Equal(1, native.SetCodeLine(1), "コードの行だけ明示的に日本語にする");
-        Assert.Equal(0, native.CodeEnglishAt(), "明示的な日本語を表示に反映する");
+        Assert.Equal(1, native.SetCodeLine(1, "printf \"日本語😊\""), "コードの行だけ明示的に日本語にする");
+        Assert.Equal(0, native.CodeEnglishAt("printf \"日本語😊\""), "明示的な日本語を表示に反映する");
         Assert.Equal(1, native.SetCodeLine(0), "明示的に英数へ戻す");
-        Assert.Equal(1, native.CodeEnglishAt(), "英数への切り替えを表示に反映する");
+        Assert.Equal(1, native.CodeEnglishAt("printf \"日本語😊\""), "英数への切り替えを表示に反映する");
     }
 
     [Test]
