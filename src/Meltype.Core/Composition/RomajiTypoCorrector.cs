@@ -79,6 +79,9 @@ public sealed class RomajiTypoCorrector
     // 1 文字の語 (め・き)
     private const double SingleKanaWordCost = 1.5;
 
+    /// <summary>付属語 (助詞・助動詞・よく付く語: の・て・ので・ます) か。</summary>
+    internal static bool IsFunctionWord(ReadOnlySpan<char> kana) => Function.Contains(kana);
+
     private static double WordCost(ReadOnlySpan<char> word) => Function.Contains(word) ? FunctionWordCost : word.Length >= 2 ? WordCostPerWord : SingleKanaWordCost;
 
     // 助詞・助動詞・よく付く語。1 文字でも語として数える。

@@ -1724,6 +1724,37 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishWord_IsNotReadAsFunctionWordChain()
+    {
+        // 英単語の綴りを、文法に合わない付属語の読み (文の頭の の|て・きのう|の|て・きょう|は|の) にして日本語の語を続けず、英単語 + 日本語にする
+        // でも・まで のような 1 つの付属語の読みと、に|も は文法に合うので日本語のまま
+        // 英単語の後ろが語にならない (の + てきすと)・後ろが助詞のかな (tone + がわ)・頭を日本語の語で読む (これ|あれか)・短い英単語 (to・no) と、
+        // 前が日本語の文の途中 (あめな|ので) は日本語のまま。英単語の後ろが英語 (made|over)・何も無い (でも) ときも今までどおり
+        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("notemane-", "noteまねー"), ("noteakaunto", "noteあかうんと"), ("notekiji", "noteきじ"), ("notekijiwokaku", "noteきじをかく"),
+                ("notekisuto", "のてきすと"), ("tonegawa", "とねがわ"), ("koreareka", "これあれか"), ("toshite", "として"), ("nodo", "のど"), ("dayone", "だよね"),
+                ("desuyone", "ですよね"), ("nimotsu", "にもつ"), ("amenanodekaeru", "あめなのでかえる"), ("sasete", "させて"), ("madeover", "までover"), ("demo", "でも"),
+                ("kyouhanotekijiwokaita", "きょうはnoteきじをかいた"),
+                ("demokyou", "でもきょう"), ("demoano", "でもあの"), ("demokekkyoku", "でもけっきょく"), ("demosoreha", "でもそれは"),
+                ("madeiku", "までいく"), ("madeashita", "まであした"), ("madematsu", "までまつ"), ("nimodekakeru", "にもでかける"), ("nodekaeru", "のでかえる"),
+            })
+            {
+                var k = new Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, $"「{typed}」");
+            }
+        }
+        finally
+        {
+            Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void EnglishWord_StaysBeforeWordStartingWithParticleKana()
     {
         // カタカナ語の読みもある英単語 (java = じゃゔぁ) の後ろで、助詞と同じかなで始まる語 (のこ・でかく) が続いても、英単語のまま

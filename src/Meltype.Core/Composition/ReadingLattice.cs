@@ -75,6 +75,16 @@ public sealed partial class CompositionDetector
     private const double VowelAfterEnglishCost = 1;
     // 日本語の中の c 行の綴り (ca・ci・cu・ce・co。ch は除く) 1 つ: 日本語を打つときは k を使う
     private const double CRowCost = 0.5;
+    // 4 文字以上の知っている英単語 + 日本語の語 (note|きじ・note|まねー) を、英単語の綴りを付属語で読んで日本語の語を続ける道
+    // (の|てきじ・の|て|まねー) に足す。英単語 + 日本語の語の道は切り替えの重みを払うのに、付属語の道は払わないため。
+    // 足すのは、付属語の読みが文法に合わないときだけ: 文の頭が 1 文字の助詞 (の|てきじ)、または続かない助詞の並び
+    // (の|て・は|の: きのう|の|て|まねー・きょう|は|の|てきじ)。でも・まで (demo・made) のような 1 つの付属語の読みや、
+    // に|も (nimo|でかける) は文法に合うので足さない。英単語を短い英単語で切って日本語の語がまたぐ (no|てきじ) ときも足す。
+    // 英単語の後ろが助詞のかなで始まる (tone|がわ) ときは英単語の道も切り替えを払わないので足さない。後ろが語にならない (の|てきすと) なら日本語のまま。
+    // 前が日本語の文の途中 (きのう|note|まねー) は、英単語の道が前と後ろの 2 回切り替えを払うので、SwitchCost をもう 1 つ足す
+    private const double EnglishAsFunctionWordsCost = 1.5;
+    // EnglishAsFunctionWordsCost を見る英単語の長さ (to・no・do のような短い語は助詞の連なりと区別しない)
+    private const int EnglishAsFunctionWordsMinLength = 4;
     // 同じコストなら日本語にする
     private const double EnglishTieBreak = 1e-6;
     // 1 つの候補として見る長さの上限 (ローマ字の文字数)
@@ -133,6 +143,8 @@ public sealed partial class CompositionDetector
         }
 
         var best = new LatticeNode?[length + 1, LatticeState.Count];
+        // 4 文字以上の知っている英単語のうち、後ろが助詞のかなで始まらないもの (EnglishAsFunctionWordsCost)
+        var englishWords = new List<(int Start, int End)>();
         var start = new LatticeState(precedingEnglish switch { true => englishSentence ? Side.Sentence : Side.English, false => Side.Japanese, null => Side.None },
             false, true, precedingEnglish == true, ContextSwitch: precedingEnglish == true);
         best[0, start.Key] = new LatticeNode(0, null, default);
@@ -158,6 +170,47 @@ public sealed partial class CompositionDetector
 
         // position の英字が、次の文字と同じ子音を重ねたもの (tt の t = っ)
         bool DoubledAt(int position) => position + 1 < length && char.IsAsciiLetter(text[position]) && char.ToLowerInvariant(text[position + 1]) == char.ToLowerInvariant(text[position]);
+
+        // 日本語の語 edge が、英単語の終わりをまたぐか終わりから始まり、英単語の頭からここまでの付属語の読みが文法に合わないか
+        double EnglishAsFunctionWordsPenalty(LatticeNode from, LatticeEdge edge)
+        {
+            if (RomajiTypoCorrector.IsFunctionWord(edge.Kana)) return 0;
+            foreach (var (start, end) in englishWords)
+            {
+                var crosses = start < edge.Start && edge.Start < end && end < edge.End;
+                if (!crosses && edge.Start != end) continue;
+                LatticeEdge? later = null;
+                var japanese = false;
+                var ungrammatical = false;
+                for (var run = from; run.Previous is not null && run.Edge.End > start; run = run.Previous)
+                {
+                    var e = run.Edge;
+                    if (e.Neutral || !e.English && !RomajiTypoCorrector.IsFunctionWord(e.Kana)) break;
+                    if (!e.English)
+                    {
+                        japanese = true;
+                        if (later is { } next && !next.English && !next.Neutral && ParticlesDoNotFollow(e.Kana, next.Kana)) ungrammatical = true;
+                    }
+                    if (e.Start == start)
+                    {
+                        // 英単語を短い英単語で切って、日本語の語がまたぐ (no|てきじ)
+                        if (!japanese) { if (crosses) return Penalty(run); break; }
+                        if (e.English) break;
+                        if (start == 0 && precedingEnglish != false && SingleKanaParticles.Contains(e.Kana)) return Penalty(run);
+                        if (start > 0 && run.Previous.Previous is not null && run.Previous.Edge is { English: false, Neutral: false } before &&
+                            ParticlesDoNotFollow(before.Kana, e.Kana)) return Penalty(run);
+                        if (ungrammatical) return Penalty(run);
+                        break;
+                    }
+                    later = e;
+                }
+            }
+            return 0;
+
+            // 英単語の前が日本語なら、英単語の道は前でも切り替えを払う
+            double Penalty(LatticeNode first) =>
+                EnglishAsFunctionWordsCost + (first.Previous is { Previous: not null, Edge: { English: false, Neutral: false } } || first.Previous?.Previous is null && precedingEnglish == false ? SwitchCost : 0);
+        }
 
         void OfferEdge(LatticeNode from, LatticeState state, LatticeEdge edge, double cost)
         {
@@ -205,6 +258,7 @@ public sealed partial class CompositionDetector
                          !(edge.Kana.Length > 1 && NounParticles.Contains(edge.Kana[..1]) && from.Edge.English && from.Edge.End - from.Edge.Start >= 3)) step += SwitchCost;
                 // 前の英語の文脈からの切り替えは、英語の語から始めた道も最初の日本語で数える (hello + sushi|が を すしが と同じ重さの差で比べる)
                 if (state.ContextSwitch && edge.Start > 0) step += englishSentence ? SentenceSwitchCost : SwitchCost;
+                step += EnglishAsFunctionWordsPenalty(from, edge);
                 next = new LatticeState(Side.Japanese, edge.Particle, state.AllEnglish && !edge.Letters, false);
             }
             next = next with { Sokuon = japanese && edge.Kana.EndsWith('っ') && DoubledAt(edge.End - 1) };
@@ -217,6 +271,10 @@ public sealed partial class CompositionDetector
             if (!IsBoundary(p)) continue;
             var japanese = JapaneseEdges(units, text, p, unitOf, unitsEnd, pending, kanaInput);
             var english = EnglishEdges(text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
+            foreach (var (edge, cost) in english)
+                if (cost <= KnownEnglishCost && edge.End - edge.Start >= EnglishAsFunctionWordsMinLength && edge.End < unitsEnd && unitAt[edge.End] >= 0 &&
+                    units[unitAt[edge.End]].Kana is [var next, ..] && !NounParticles.Contains(next.ToString()))
+                    englishWords.Add((edge.Start, edge.End));
             var unit = p < unitsEnd ? unitAt[p] : -1;
             // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
@@ -305,7 +363,14 @@ public sealed partial class CompositionDetector
     /// <summary>名詞に付く付属語か (が・を・に・で・する …)。英単語との切り替えの重みを 0 にする。</summary>
     private static bool IsNounParticle(string kana) => NounParticles.Contains(kana) || IsSuruForm(kana) || kana is "し" or "さ" or "せ";
 
+    // 助詞の後ろに続かない助詞か (の|て・は|の)。て は動詞・助動詞の後ろ、の は は・が・を・も・に の後ろに来ない (での・との・への・からの は来る)
+    private static bool ParticlesDoNotFollow(string first, string second) =>
+        SingleKanaParticles.Contains(first) && (second == "て" || second == "の" && first is "は" or "が" or "を" or "も" or "に");
+
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
+
+    // 1 文字の助詞 (NounParticles のうち 1 文字のものと て)
+    private static readonly HashSet<string> SingleKanaParticles = [.. NounParticles.Where(particle => particle.Length == 1), "て"];
 
     /// <summary>かなを、語にならないかなとして読むときの重み (1 音 3、っ・ー は 0.5。小書きのかな ゃ・ぃ は前のかなと 1 音)。</summary>
     private static double UnknownKana(string kana) =>
