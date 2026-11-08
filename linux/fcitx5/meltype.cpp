@@ -498,9 +498,14 @@ private:
     MeltypeConfig config_;
 
     // 未確定の内容を確定する。キャレットはこの入力欄の外か、クリックした所に移る
+    // フォーカスが外れたとき、入力欄に出した変換中の文字 (client preedit) は、クライアント (ClientUnfocusCommit) か fcitx5 が
+    // 表示のまま確定するので、本体には「表示のまま確定された」と伝える (本体の確定も入れると二重になる)
     void leave(fcitx::InputContext *ic, bool focusOut) {
         Json output;
-        send(ic, "commit", std::string(",\"caret\":{\"moved\":true,\"passed\":0,\"left\":") + boolean(focusOut) + "}", output);
+        auto *state = ic->propertyFor(&factory_);
+        const bool committedByClient = focusOut && state->preeditVisible && ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
+        send(ic, committedByClient ? "committed" : "commit",
+             std::string(",\"caret\":{\"moved\":true,\"passed\":0,\"left\":") + boolean(focusOut) + "}", output);
     }
 
     // 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ false
@@ -574,7 +579,9 @@ private:
     void show(fcitx::InputContext *ic, const Json &view) {
         auto &panel = ic->inputPanel();
         panel.reset();
-        const auto text = view.str("text");
+        // 入力欄に出す変換中の文字は、フォーカスが外れたときに表示のまま確定されるので、確定される形 (「かn」でなく「かん」) を出す
+        const bool client = ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
+        const auto text = client ? view.str("committed") : view.str("text");
         const auto clauses = view.strings("clauses");
         const bool converting = view.flag("converting");
         const int selectedClause = view.integer("selectedClause", -1);

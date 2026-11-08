@@ -231,6 +231,24 @@ bool altTaps(Instance *instance, AddonInstance *frontend) {
     return true;
 }
 
+// 入力欄に出した変換中の文字は、フォーカスが外れたときにクライアントが表示のまま確定する。Meltype は確定し直さない
+bool focusOutLeavesClientPreedit(Instance *instance, AddonInstance *frontend) {
+    // foot は既定で「コード」のアプリなので、文章を書くアプリにする
+    ICUUID uuid = frontend->call<ITestFrontend::createInputContext>("gedit");
+    auto *ic = instance->inputContextManager().findByUUID(uuid);
+    if (!expect(ic != nullptr, "client preedit input context exists")) return false;
+    ic->setCapabilityFlags(CapabilityFlags{CapabilityFlag::ClientUnfocusCommit, CapabilityFlag::Preedit});
+    instance->setCurrentInputMethod(ic, "meltype", true);
+    type(frontend, uuid, "kan");
+    if (!expect(ic->inputPanel().clientPreedit().toString() == "かん", "client preedit shows what will be committed: " + ic->inputPanel().clientPreedit().toString())) return false;
+    // ここで Meltype が確定すると、testfrontend が期待していない確定として失敗する
+    ic->focusOut();
+    ic->focusIn();
+    frontend->call<ITestFrontend::destroyInputContext>(uuid);
+    std::cout << "PASS: focus out leaves the client preedit to the client\n";
+    return true;
+}
+
 // パスワード欄では何も受け持たない
 bool passwordPasses(Instance *instance, AddonInstance *frontend) {
     ICUUID uuid;
@@ -276,6 +294,7 @@ int main() {
             if (ok) ok = modeKeys(&instance, frontend, "Muhenkan", false);
             if (ok) ok = altTaps(&instance, frontend);
             if (ok) ok = passwordPasses(&instance, frontend);
+            if (ok) ok = focusOutLeavesClientPreedit(&instance, frontend);
             testResult = ok ? 0 : 1;
         } else {
             std::cerr << "FAIL: terminal test addons load\n";
