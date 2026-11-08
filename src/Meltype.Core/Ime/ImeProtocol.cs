@@ -82,6 +82,8 @@ public sealed record ImeKey
     public bool Command { get; init; }
     /// <summary>押したままの自動の繰り返し (OS が分かるときだけ)。入力モードのキーの繰り返しでは切り替えない。</summary>
     public bool Repeat { get; init; }
+    /// <summary>1 回のキーで入る文字が複数のスカラーのとき (結合文字・ZWJ の絵文字。Mac)、その文字列。Ch は 0。本体は未確定の内容を確定して、キーをアプリに通させる。</summary>
+    public string? Text { get; init; }
 }
 
 public sealed record ImeField

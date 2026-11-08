@@ -456,6 +456,9 @@ public sealed class CompositionController
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
     public bool IsComposing => !_text.IsEmpty || _heldLetters.Length > 0;
 
+    /// <summary>変換して候補を選んでいるか。</summary>
+    public bool IsConverting => _converting;
+
     /// <summary>直近に確定した文字列 (テスト・ログ用)。</summary>
     public event Action<string>? Committed;
 

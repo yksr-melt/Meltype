@@ -11,7 +11,7 @@ namespace Meltype.Ime;
 
 /// <summary>
 /// 1 つの入力欄。入力モード (日本語 / 英数・コードの行) とモードを切り替えるキーの意味は、どの OS のフロントでもここで決める。
-///   設定「入力モード切り替えキー」: 日本語 ⇔ 英数 (変換中は 半角/全角 と同じく、変換ボックスの英字表示の切り替え)
+///   設定「入力モード切り替えキー」: 日本語 ⇔ 英数。入力中は変換ボックスの英字表示の切り替え、変換中は変換ボックスのキー (Shift+Space は「前の候補へ」)
 ///   半角/全角 (切り替えキーに無いとき): 何もしない (アプリに通すと PowerShell (PSReadLine) が @ として入れる)
 ///   英数: 英数にする (変換中なら確定してから)
 ///   かな (ひらがな/カタカナ): 日本語にする
@@ -113,12 +113,9 @@ internal sealed class ImeSession(IImeEnvironment environment)
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && (vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana ||
             vk is VirtualKeys.Convert or VirtualKeys.NonConvert && settings.ConvertKeysSwitchKeyboard))) return Consumed;
-        if (toggle)
-        {
-            return composing
-                ? _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, toggleShortcuts: false)
-                : Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
-        }
+        if (toggle && !composing) return Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
+        // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
+        if (toggle && !_session.IsConverting) return _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
         if (vk == VirtualKeys.OemAttn && plain) return Switch(false, before, ref explicitChange, toggle: false);
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
@@ -126,6 +123,13 @@ internal sealed class ImeSession(IImeEnvironment environment)
             if (_session.HandleRoleKey(vk) is { } role) return role;
             if (!composing && (vk == VirtualKeys.Kana || settings.ConvertKeysSwitchKeyboard))
                 return Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
+        }
+        // 複数のスカラーの文字 (アプリが元のイベントで入れる): 先頭が結合文字なら直前の文字につなげて確定する
+        if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
+        {
+            return Rune.GetUnicodeCategory(first) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark
+                ? _session.CommitCombiningForPassThrough(preserveLatinRaw: first.Value is >= 0x0300 and <= 0x036F)
+                : _session.CommitForPassThrough();
         }
         // 不正な Unicode (負数・単独サロゲート・上限超過) は、状態を変えずにアプリへそのまま渡す
         if (key.Ch != 0 && !Rune.IsValid(key.Ch)) return _session.PassThrough();
@@ -136,8 +140,7 @@ internal sealed class ImeSession(IImeEnvironment environment)
             return _session.CommitCombiningForPassThrough(preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return _session.CommitForPassThrough();
-        var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command,
-            before, field?.After, toggleShortcuts: false);
+        var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
         return result;

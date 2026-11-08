@@ -65,46 +65,39 @@ func runChecks(inputPath: String?) -> Int32 {
         print("\(condition ? "PASS" : "FAIL") \(name)")
         if !condition { failures += 1 }
     }
-    check("reconversion: replaces matching previous text",
-          matchesExpectedText("って", expected: "って", deleteBefore: 2))
-    check("reconversion: preserves changed pasted text",
-          !matchesExpectedText("paste", expected: "って", deleteBefore: 2))
-    check("reconversion: counts UTF-16 units",
-          matchesExpectedText("😊", expected: "😊", deleteBefore: 2))
-    check("reconversion: rejects missing expected text",
-          !matchesExpectedText("って", expected: nil, deleteBefore: 2))
-    func type(_ text: String, session: UnsafeMutableRawPointer?, before: String? = nil) -> (String, SessionResult?) {
-        var output = ""
-        var last: SessionResult?
-        for character in text {
-            let vk: Int32
-            switch character {
-            case " ": vk = 0x20
-            case "\n": vk = 0x0D
-            case "\t": vk = 0x09
-            default: vk = Int32(character.uppercased().utf16.first ?? 0)
+    /// 入力欄の代わり (確定した文字とアプリに通した文字)。キーごとにキャレットの前として本体に渡す
+    final class Document {
+        var text = ""
+        let host = NativeCore.shared.createHost()
+        deinit { NativeCore.shared.destroyHost(host) }
+
+        @discardableResult
+        func send(_ type: String, _ fields: [String: Any] = [:]) -> ImeOutput? {
+            var event: [String: Any] = ["v": 1, "type": type, "sid": "self-test", "field": ["before": text]]
+            event.merge(fields) { _, new in new }
+            let output = NativeCore.shared.send(host, event)
+            for edit in output?.result.commits ?? [] {
+                // 確定し直しは本体が照合済み: 前の deleteBefore 文字 (UTF-16) を消してから入れる
+                let current = text as NSString
+                text = current.substring(to: current.length - min(edit.deleteBefore, current.length)) + edit.text
             }
-            let code = Int32(String(character).utf16.first ?? 0)
-            last = NativeCore.shared.handleKey(session, vk: vk, character: code,
-                modifiers: character.isUppercase ? 1 : 0, before: before, after: nil)
-            for edit in last?.commits ?? [] {
-                var text = edit.text
-                if edit.deleteBefore > 0 {
-                    let current = output as NSString
-                    // 消す文字を確認できないときは、前の文字は消さずに今打った文字 (edit.current) だけを入れる (入力欄と同じ扱い)。
-                    if edit.deleteBefore <= current.length,
-                       matchesExpectedText(current.substring(from: current.length - edit.deleteBefore),
-                                           expected: edit.expect, deleteBefore: edit.deleteBefore) {
-                        output = current.substring(to: current.length - edit.deleteBefore)
-                    } else {
-                        text = edit.current ?? edit.text
-                    }
-                }
-                output += text
-            }
-            if last?.consumed != true { output += String(character) }
+            return output
         }
-        return (output, last)
+    }
+    func type(_ text: String, into document: Document) -> ImeOutput? {
+        var last: ImeOutput?
+        for character in text {
+            var key: [String: Any] = ["shift": character.isUppercase]
+            switch character {
+            case " ": key["vk"] = 0x20; key["ch"] = 0x20
+            case "\n": key["vk"] = 0x0D
+            case "\t": key["vk"] = 0x09
+            default: key["ch"] = character.unicodeScalars.first!.value
+            }
+            last = document.send("key", ["key": key])
+            if last?.result.consumed != true && character != "\n" && character != "\t" { document.text += String(character) }
+        }
+        return last
     }
     if let inputPath {
         do {
@@ -113,9 +106,9 @@ func runChecks(inputPath: String?) -> Int32 {
             for line in content.split(separator: "\n") where !line.hasPrefix("#") {
                 let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
                 guard parts.count == 2 else { continue }
-                let session = NativeCore.shared.createSession()
-                let (output, _) = type(String(parts[0]) + "\n", session: session)
-                NativeCore.shared.destroySession(session)
+                let document = Document()
+                _ = type(String(parts[0]) + "\n", into: document)
+                let output = document.text
                 check(String(parts[0]), output == String(parts[1]))
                 if output != String(parts[1]) { print("expected: \(parts[1]); actual: \(output)") }
                 count += 1
@@ -131,29 +124,25 @@ func runChecks(inputPath: String?) -> Int32 {
                                ("I want to go to the park\n", "I want to go to the park"),
                                ("google github hello\n", "google github hello"),
                                ("seeyouagain\n", "see you again")] {
-        let session = NativeCore.shared.createSession()
-        let (output, _) = type(input, session: session)
-        print("result: \(output)")
-        check(input.trimmingCharacters(in: .whitespacesAndNewlines), output == expected)
-        NativeCore.shared.destroySession(session)
+        let document = Document()
+        _ = type(input, into: document)
+        print("result: \(document.text)")
+        check(input.trimmingCharacters(in: .whitespacesAndNewlines), document.text == expected)
     }
-    let englishSession = NativeCore.shared.createSession()
-    let (reflected, _) = type("reflectsareta\n", session: englishSession)
-    check("issue 77: reflect + Japanese", reflected == "reflectされた")
-    NativeCore.shared.destroySession(englishSession)
+    let english = Document()
+    _ = type("reflectsareta\n", into: english)
+    check("issue 77: reflect + Japanese", english.text == "reflectされた")
     let sentence = "kyouhagoogledekensakusitekekkawomiru\n"
     let started = Date()
     let checksBefore = NativeCore.shared.spellCheckCount
-    let firstSession = NativeCore.shared.createSession()
-    let (firstOutput, _) = type(sentence, session: firstSession)
-    NativeCore.shared.destroySession(firstSession)
+    let first = Document()
+    _ = type(sentence, into: first)
     let checksAfterFirst = NativeCore.shared.spellCheckCount
-    let secondSession = NativeCore.shared.createSession()
-    let (secondOutput, _) = type(sentence, session: secondSession)
-    NativeCore.shared.destroySession(secondSession)
+    let second = Document()
+    _ = type(sentence, into: second)
     let repeatedChecks = NativeCore.shared.spellCheckCount - checksAfterFirst
     print("issue 114: first checks=\(checksAfterFirst - checksBefore), repeat checks=\(repeatedChecks), elapsed=\(Date().timeIntervalSince(started))s")
-    check("issue 114: repeated spelling uses cache", repeatedChecks == 0 && firstOutput == secondOutput)
+    check("issue 114: repeated spelling uses cache", repeatedChecks == 0 && first.text == second.text)
     let other: [String: Any] = ["InputSourceKind": "Keyboard Layout", "KeyboardLayout Name": "ABC"]
     let duplicate: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier, "InputSourceKind": "Keyboard Input Method", "metadata": ["keep": true]]
     let duplicateMode: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier,
@@ -185,36 +174,29 @@ func runChecks(inputPath: String?) -> Int32 {
             check("issue 40: reimport is idempotent", MacUserDictionary.merge(entries, into: merged).1 == 0)
         }
     } catch { check("issue 40: plist parsing", false) }
-    let session = NativeCore.shared.createSession()
-    let (_, emoji) = type("egao ", session: session)
-    check("emoji candidate", emoji?.view?.candidates.contains("😊") == true)
-    _ = NativeCore.shared.commit(session)
-    let (_, typo) = type("buresureddo", session: session)
-    check("misspelling suggestion", typo?.view?.suggestion?.contains("ブレスレット") == true)
-    let (_, corrected) = type("\t", session: session)
-    print("corrected: \(corrected?.view?.text ?? "nil")")
-    check("misspelling correction", ["ぶれすれっと", "ブレスレット"].contains(corrected?.view?.text ?? ""))
-    _ = NativeCore.shared.commit(session)
-    NativeCore.shared.setCodeInput(session, true)
-    let (code, _) = type("kyouha", session: session, before: "let value = ")
-    check("code stays ASCII", code == "kyouha")
-    let (_, comment) = type("kyouha", session: session, before: "// ")
-    check("comment composes Japanese", comment?.view?.text.contains("きょう") == true || comment?.view?.text.contains("今日") == true)
-    NativeCore.shared.destroySession(session)
-    let stressSession = NativeCore.shared.createSession()
+    let document = Document()
+    let emoji = type("egao ", into: document)
+    check("emoji candidate", emoji?.result.view?.list?.items.contains("😊") == true)
+    document.send("commit")
+    let typo = type("buresureddo", into: document)
+    check("misspelling suggestion", typo?.result.view?.suggestion?.contains("ブレスレット") == true)
+    let corrected = type("\t", into: document)
+    print("corrected: \(corrected?.result.view?.text ?? "nil")")
+    check("misspelling correction", ["ぶれすれっと", "ブレスレット"].contains(corrected?.result.view?.text ?? ""))
+    document.send("commit")
+    let stress = Document()
     let stressStart = Date()
     for iteration in 0..<1000 {
-        _ = type("kyouhagoogledekensaku ", session: stressSession)
-        _ = NativeCore.shared.selectCandidate(stressSession, index: iteration % 2)
-        let committed = NativeCore.shared.commit(stressSession)
-        check("stress commit \(iteration)", committed?.view == nil)
-        NativeCore.shared.setDirect(stressSession, true)
-        _ = type("hello", session: stressSession)
-        NativeCore.shared.setDirect(stressSession, false)
-        let (output, _) = type("wsldeshell\n", session: stressSession)
-        check("stress mode switch \(iteration)", output == "wslでshell")
+        _ = type("kyouhagoogledekensaku ", into: stress)
+        stress.send("select", ["index": iteration % 2])
+        check("stress commit \(iteration)", stress.send("commit")?.result.view == nil)
+        stress.send("setMode", ["japanese": false])
+        _ = type("hello", into: stress)
+        stress.send("setMode", ["japanese": true])
+        stress.text = ""
+        _ = type("wsldeshell\n", into: stress)
+        check("stress mode switch \(iteration)", stress.text == "wslでshell")
     }
-    NativeCore.shared.destroySession(stressSession)
     print("1000 native input/candidate/commit/mode cycles in \(Date().timeIntervalSince(stressStart))s")
     return failures == 0 ? 0 : 1
 }

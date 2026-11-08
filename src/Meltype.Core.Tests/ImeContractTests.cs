@@ -342,6 +342,32 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void ToggleShortcuts_WhileComposing()
+    {
+        // #1033: Shift+Space を切り替えキーにしても、変換中は「前の候補へ」(docs/USAGE.md)。入力中は英字表示の切り替え
+        var front = new Front();
+        front.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Space, Modifiers = ShortcutModifiers.Shift }];
+        var shiftSpace = front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.True(Consumed(shiftSpace) && !front.Open && Commits(shiftSpace).GetArrayLength() == 0, "全角スペースを確定せずに英数にする\n" + front.Trace);
+        front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.True(front.Open, "もう一度で日本語に戻る\n" + front.Trace);
+        front.Type("kyou");
+        var english = front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.True(front.Open && Commits(english).GetArrayLength() == 0 && front.Composition["t1"] == "kyou",
+            "入力中は英字表示にする\n" + front.Trace);
+        front.Key(VirtualKeys.Space, ' ', shift: true);
+        front.Key(' ');
+        var previous = front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.True(front.Open && Commits(previous).GetArrayLength() == 0 && front.Composition["t1"] is not null, "変換中は切り替えず、確定もしない\n" + front.Trace);
+        front.Key('\n');
+        front.Key(VirtualKeys.Space, ' ', shift: true, ctrl: true);
+        Assert.True(front.Open, "Ctrl+Shift+Space は Shift+Space の割り当てではない\n" + front.Trace);
+        front.Settings.ToggleShortcuts = [];
+        var fullWidth = front.Key(VirtualKeys.Space, ' ', shift: true);
+        Assert.Equal("　", Commits(fullWidth)[0].GetProperty("text").GetString(), "割り当てが無ければ全角スペース\n" + front.Trace);
+    }
+
+    [Test]
     public static void EisuAndKana_SetTheMode()
     {
         var front = new Front();
@@ -412,6 +438,20 @@ internal static class ImeContractTests
         var view = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"sync\",\"sid\":\"t1\"}}");
         var enter = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":true}},\"key\":{{\"vk\":13}}}}");
         Assert.Equal("きょうは、", Commits(enter)[0].GetProperty("text").GetString(), front.Trace + view);
+    }
+
+    [Test]
+    public static void MultiScalarText_CommitsAndPasses()
+    {
+        // 1 回のキーで複数のスカラーが入る (Mac): 未確定の内容を確定してアプリに通させる。先頭が結合文字なら英字の原文につなげる
+        foreach (var (typed, text, expected) in new[] { ("e", "́̀", "e"), ("ka", "👩‍💻", "か") })
+        {
+            var front = new Front();
+            front.Type(typed);
+            var output = front.Event("key", extra: $",\"key\":{{\"text\":{JsonSerializer.Serialize(text)}}}");
+            Assert.True(!Consumed(output) && front.Composition["t1"] is null, "アプリに通す\n" + front.Trace);
+            Assert.Equal(expected, front.Document, "確定してから通す\n" + front.Trace);
+        }
     }
 
     [Test]

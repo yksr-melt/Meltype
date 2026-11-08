@@ -13,7 +13,7 @@ using Meltype.Input;
 namespace Meltype.Mac;
 
 /// <summary>
-/// Mac 版の IME (Swift, Input Method Kit) と Linux 版の IME (Python, IBus) から呼ぶ C の関数。
+/// Mac 版の IME (Swift, Input Method Kit) と Linux 版の IME (Python の IBus・C++ の fcitx5) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
 /// NativeAOT で libMeltypeNative.dylib (mac/build.sh) / libMeltypeNative.so (linux/build.sh) にする。
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
@@ -69,25 +69,9 @@ public static unsafe class Exports
     /// <summary>Mozc で変換するとき (Linux 版)。null なら登録された関数で変換する (Mac 版)。</summary>
     private static MozcConverter? s_mozc;
 
-    /// <summary>入力欄 (Input Method Kit のクライアント) ごとの入力の本体を作る。失敗したら NULL。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_create")]
-    public static IntPtr Create()
-    {
-        try
-        {
-            var session = MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null);
-            return GCHandle.ToIntPtr(GCHandle.Alloc(session));
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"Mac: 初期化できませんでした: {ex}");
-            return IntPtr.Zero;
-        }
-    }
-
     /// <summary>
-    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_create の前に 1 回呼ぶ。
-    /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
+    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_ime_create の前に 1 回呼ぶ。
+    /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に refresh の出来事を送る。
     /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、答えが出るまで待つ。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
@@ -111,29 +95,7 @@ public static unsafe class Exports
     /// <summary>入力欄が使う変換エンジン。Windows 版と同じ HybridConverter で、Mac 版は登録された関数だけ、Linux 版は Mozc だけを組み合わせる。</summary>
     private static HybridConverter s_converter = new(() => Config.ConversionEngine.System, null, s_callback, s_callback.Candidates);
 
-    /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
-    public static byte* Refresh(IntPtr handle)
-    {
-        try
-        {
-            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
-            return session.RefreshConversion() is { } result ? ToUtf8(result.ToJson()) : null;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
-            return null;
-        }
-    }
-
-    [UnmanagedCallersOnly(EntryPoint = "meltype_destroy")]
-    public static void Destroy(IntPtr handle)
-    {
-        if (handle != IntPtr.Zero) GCHandle.FromIntPtr(handle).Free();
-    }
-
-    /// <summary>フロント 1 つ (IBus のエンジン 1 つ) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
+    /// <summary>フロント 1 つ (IBus・fcitx5 のエンジン、Input Method Kit のコントローラー) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_ime_create")]
     public static IntPtr ImeCreate() => GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment())));
 
@@ -171,163 +133,6 @@ public static unsafe class Exports
         public MeltypeSession CreateSession() =>
             MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null,
                 directModeDetection: true);
-    }
-
-    /// <summary>
-    /// キーを 1 つ処理して、結果を JSON で返す (<see cref="SessionResult.ToJson"/>)。
-    /// vk は Windows の仮想キーコード、ch は入力する Unicode スカラー (無ければ 0)、
-    /// modifiers は Shift = 1, Control = 2, Option = 4, Command = 8。before / after はキャレットの前後の文字列 (NULL 可)。
-    /// </summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_handle_key")]
-    public static byte* HandleKey(IntPtr handle, int vk, int ch, int modifiers, byte* before, byte* after)
-    {
-        return Run(handle, session =>
-        {
-            // 文字を伴わない・扱えない入力。不正な Unicode (負数・単独サロゲート・上限超過) は
-            // 文字列を作らず、状態も変えずにアプリへそのまま渡す。
-            if (IsInvalidScalar(ch)) return session.PassThrough();
-            // 結合文字は、未確定表示に取り込まず直前の内容を確定して元のイベントを通す。
-            // U+0300..036F の Latin アクセントのみ ASCII 英字の原文を優先する。
-            // 濁点・異体字セレクターでは、日本語の表示や明示的な候補をそのまま確定する。
-            if (Rune.GetUnicodeCategory(new Rune(ch)) is UnicodeCategory.NonSpacingMark or
-                UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark)
-                return session.CommitCombiningForPassThrough(preserveLatinRaw: ch is >= 0x0300 and <= 0x036F);
-            // 補助面の有効なスカラー (U+10000..U+10FFFF) は char (UTF-16 1 コードユニット) へ切り詰められない。
-            // 未確定の内容をここで確定してから、元の OS イベントを 1 回だけアプリへ通す (Consumed = false)。
-            if (ch > 0xFFFF) return session.CommitForPassThrough();
-            return session.HandleKey(vk, ch > 0 ? (char)ch : null,
-                (modifiers & 1) != 0, (modifiers & 2) != 0, (modifiers & 4) != 0, (modifiers & 8) != 0, FromUtf8(before), FromUtf8(after));
-        });
-    }
-
-    /// <summary>
-    /// 変換・無変換・ひらがな/カタカナ キー (vk 0x1C / 0x1D / 0x15)。設定「入力中のキーの役割を分ける」が ON で入力中なら、
-    /// 変換ボックスで処理して結果を返す (issue #199)。そうでなければ NULL (今までどおり、英数 / 日本語の切り替えに使う)。
-    /// </summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_role_key")]
-    public static byte* RoleKey(IntPtr handle, int vk)
-    {
-        try
-        {
-            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
-            return session.HandleRoleKey(vk) is { } result ? ToUtf8(result.ToJson()) : null;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
-            return null;
-        }
-    }
-
-    /// <summary>不正な文字の引数か。0 は「文字を伴わないキー」なので不正ではない。</summary>
-    private static bool IsInvalidScalar(int ch) =>
-        ch < 0 || ch > 0x10FFFF || (ch >= 0xD800 && ch <= 0xDFFF);
-
-    /// <summary>未確定の内容を確定する (フォーカスが外れたときなど)。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_commit")]
-    public static byte* Commit(IntPtr handle) => Run(handle, session => session.CommitPending());
-
-    /// <summary>候補ウィンドウで候補を選んだ。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_select_candidate")]
-    public static byte* SelectCandidate(IntPtr handle, int index) => Run(handle, session => session.SelectCandidate(index));
-
-    /// <summary>英数 (直接入力) にするか (1) 日本語にするか (0)。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_set_direct")]
-    public static void SetDirect(IntPtr handle, int direct)
-    {
-        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.Direct = direct != 0;
-    }
-
-    /// <summary>
-    /// 直前のキーが、設定「入力モード切り替えキー」の切替として使われたか (1 / 0)。読むと印が消える (#1033)。
-    /// Mac・Linux のフロントエンドは、これと <c>meltype_is_direct</c> で、自分のモード (A / あ、入力メニュー) を本体に合わせる。
-    /// </summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_take_mode_toggled")]
-    public static int TakeToggled(IntPtr handle)
-    {
-        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.TakeToggled() ? 1 : 0;
-    }
-
-    /// <summary>本体のモード (1 = 英数 / 直接入力、0 = 日本語)。切り替えたあとにフロントエンドが読む (#1033)。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_is_direct")]
-    public static int IsDirect(IntPtr handle)
-    {
-        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.Direct ? 1 : 0;
-    }
-
-    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_input")]
-    public static void SetCodeInput(IntPtr handle, int enabled)
-    {
-        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.CodeInput = enabled != 0;
-    }
-
-    /// <summary>コードの入力欄がターミナル (非 0) / エディター (0) かを設定する。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_terminal")]
-    public static void SetCodeTerminal(IntPtr handle, int terminal)
-    {
-        try
-        {
-            if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
-                session.CodeTerminal = terminal != 0;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
-        }
-    }
-
-    /// <summary>コードの行を日本語 (非 0) / 英数 (0) にする。before は借用する UTF-8 (NULL 可)。扱ったら 1、それ以外・失敗時は 0。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_line")]
-    public static int SetCodeLine(IntPtr handle, int japanese, byte* before)
-    {
-        try
-        {
-            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return 0;
-            return session.SetCodeLine(japanese != 0, FromUtf8(before)) ? 1 : 0;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
-            return 0;
-        }
-    }
-
-    /// <summary>アプリに通したキーによるキャレット移動を通知する (消費したキーには呼ばない)。passedVk = 0 はキーなし、control は非 0 なら Ctrl。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_caret_moved")]
-    public static void CaretMoved(IntPtr handle, int passedVk, int control)
-    {
-        try
-        {
-            if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
-                session.CaretMoved(passedVk, control != 0);
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
-        }
-    }
-
-    /// <summary>次のキーをコードの英数として通すなら 1。それ以外・失敗時は 0。before は借用する UTF-8 (NULL 可)。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_code_english_at")]
-    public static int CodeEnglishAt(IntPtr handle, byte* before)
-    {
-        try
-        {
-            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return 0;
-            return session.CodeEnglishAt(FromUtf8(before)) ? 1 : 0;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
-            return 0;
-        }
-    }
-
-    /// <summary>入力欄が確定済みの文字の削除に対応しているか (1) いないか (0)。対応していなければ、確定し直しをしない。</summary>
-    [UnmanagedCallersOnly(EntryPoint = "meltype_set_can_delete")]
-    public static void SetCanDelete(IntPtr handle, int canDelete)
-    {
-        if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.CanDeleteSurrounding = canDelete != 0;
     }
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>
@@ -379,21 +184,6 @@ public static unsafe class Exports
 
     [UnmanagedCallersOnly(EntryPoint = "meltype_free")]
     public static void Free(byte* text) => NativeMemory.Free(text);
-
-    private static byte* Run(IntPtr handle, Func<MeltypeSession, SessionResult> action)
-    {
-        try
-        {
-            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
-            return ToUtf8(action(session).ToJson());
-        }
-        catch (Exception ex)
-        {
-            // 例外を Swift 側へ投げると IME ごと落ちるので、ここで止めてキーはアプリに渡す (NULL)。
-            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
-            return null;
-        }
-    }
 
     private static string[] MoreCandidates(string reading)
     {
