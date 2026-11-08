@@ -241,7 +241,8 @@ class MeltypeEngine(IBus.Engine):
         self._traits = [trait for trait, present in (
             ("terminal", purpose == IBus.InputPurpose.TERMINAL),
             ("password", purpose in (IBus.InputPurpose.PASSWORD, IBus.InputPurpose.PIN)),
-            ("private", bool(hints & IBus.InputHints.PRIVATE)),
+            # 古い IBus (RHEL 9 のもの) には InputHints.PRIVATE が無い
+            ("private", bool(hints & getattr(IBus.InputHints, "PRIVATE", 0))),
         ) if present]
 
     def do_candidate_clicked(self, index, button, state):

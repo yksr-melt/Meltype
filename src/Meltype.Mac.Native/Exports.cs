@@ -38,8 +38,12 @@ public static unsafe class Exports
         s_clauses = clauses;
         s_candidates = candidates;
         s_isWord = isWord;
+        LoadSettings();
         return 1;
     }
+
+    /// <summary>起動したときに config.json を読む (古い版の設定は、ここで移行して保存し直す。読めない設定もここでログに書く)。</summary>
+    private static void LoadSettings() => _ = MeltypeSession.DefaultSettings();
 
     /// <summary>
     /// 漢字変換を Mozc の変換ヘルパー (meltype_mozc_helper) で行う (Linux 版)。meltype_init の代わりに最初に 1 回呼ぶ。
@@ -50,6 +54,7 @@ public static unsafe class Exports
     {
         try
         {
+            LoadSettings();
             var path = FromUtf8(helper);
             if (string.IsNullOrEmpty(path)) return 0;
             s_mozc?.Dispose();
