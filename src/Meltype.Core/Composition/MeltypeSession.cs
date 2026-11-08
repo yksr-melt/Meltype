@@ -432,12 +432,12 @@ public sealed class MeltypeSession
     /// <summary>
     /// キャレットが動いた (passedVk はアプリに通したキー。0 ならクリックなど、control は Ctrl を押していたか)。
     /// 半角/全角 で日本語にしていたら、矢印・Tab・Ctrl の操作・クリックで英数に戻す (Meltype キーボードと同じ。改行では戻さない)。
-    /// ターミナルは、出力でもキャレットが動くので、キーなしの移動では戻さない。
+    /// アプリに通した Esc (vim などの操作に移る) でも戻す。ターミナルは、出力でもキャレットが動くので、キーなしの移動では戻さない。
     /// </summary>
     public void CaretMoved(int passedVk, bool control)
     {
         if (!_codeJapanese) return;
-        var moved = control || passedVk is VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
+        var moved = control || passedVk is VirtualKeys.Tab or VirtualKeys.Escape or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
         if (moved) ForgetCodeLine();
     }
 

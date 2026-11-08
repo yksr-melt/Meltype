@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 aster-void
 //
-// Meltype の fcitx5 のアドオン (issue #99)。IBus のエンジン (linux/ibus-engine-meltype) と同じく、キーを Meltype の本体
-// (libMeltypeNative.so、Windows 版と共通の C# の部分を NativeAOT にしたもの) に渡し、返ってきた結果 (確定する文字・変換中の文字・候補)
-// を入力欄に出す。本体は dlopen で読むので、ビルドに本体は要らない。
+// Meltype の fcitx5 のアドオン (issue #99)。fcitx5 から読んだ事実 (キー・キャレットの前後の文字・入力欄の種類) を
+// 本体 (libMeltypeNative.so の ImeHost) に渡し、返ってきた指示 (確定・変換中の表示・候補・入力モードの表示) を入力欄に出す。
+// 入力モードとモードを切り替えるキーの意味は本体が決めるので、ここでは持たない。本体は dlopen で読むので、ビルドに本体は要らない。
 
 #include <dlfcn.h>
 
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <memory>
 #include <string>
@@ -42,6 +44,13 @@
 
 namespace {
 
+// 本体のプロトコルの版 (ImeHost.Version)
+constexpr int ImeVersion = 1;
+
+// 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
+constexpr size_t BeforeLength = 4000;
+constexpr size_t AfterLength = 20;
+
 // libMeltypeNative.so と設定画面 (meltype-settings) を入れた場所
 std::string meltypeDir() {
     const char *dir = std::getenv("MELTYPE_DIR");
@@ -57,23 +66,10 @@ FCITX_CONFIGURATION(MeltypeConfig,
 struct Native {
     void *handle = nullptr;
     int (*initMozc)(const char *, const char *) = nullptr;
+    void (*setConversionReady)(void (*)()) = nullptr;
     void *(*create)() = nullptr;
+    char *(*handle_)(void *, const char *) = nullptr;
     void (*destroy)(void *) = nullptr;
-    char *(*handleKey)(void *, int, int, int, const char *, const char *) = nullptr;
-    char *(*commit)(void *) = nullptr;
-    char *(*selectCandidate)(void *, int) = nullptr;
-    void (*setConversionReady)(void (*)()) = nullptr; // 古い本体には無い (変換は同期のまま)
-    char *(*refresh)(void *) = nullptr;               // 古い本体には無い
-    void (*setDirect)(void *, int) = nullptr;
-    int (*takeModeToggled)(void *) = nullptr; // 古い本体には無い (#1033: 本体が切替キーで切り替えたか)
-    int (*isDirect)(void *) = nullptr;        // 古い本体には無い (#1033: 本体のモード。1 = 英数)
-    void (*setCanDelete)(void *, int) = nullptr; // 古い本体には無い
-    void (*setCodeInput)(void *, int) = nullptr; // 古い本体には無い (コード入力: ターミナルの入力欄で既定にする、#715)
-    int (*setCodeLine)(void *, int, const char *) = nullptr;
-    void (*setCodeTerminal)(void *, int) = nullptr;
-    int (*codeEnglishAt)(void *, const char *) = nullptr;
-    void (*caretMoved)(void *, int, int) = nullptr;
-    char *(*roleKey)(void *, int) = nullptr;     // 古い本体には無い (入力中のキーの役割: #199)
     void (*free)(void *) = nullptr;
 
     bool load() {
@@ -84,36 +80,24 @@ struct Native {
         }
         auto sym = [this](const char *name) { return dlsym(handle, name); };
         initMozc = reinterpret_cast<decltype(initMozc)>(sym("meltype_init_mozc"));
-        create = reinterpret_cast<decltype(create)>(sym("meltype_create"));
-        destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_destroy"));
-        handleKey = reinterpret_cast<decltype(handleKey)>(sym("meltype_handle_key"));
-        commit = reinterpret_cast<decltype(commit)>(sym("meltype_commit"));
-        selectCandidate = reinterpret_cast<decltype(selectCandidate)>(sym("meltype_select_candidate"));
-        setDirect = reinterpret_cast<decltype(setDirect)>(sym("meltype_set_direct"));
-        takeModeToggled = reinterpret_cast<decltype(takeModeToggled)>(sym("meltype_take_mode_toggled"));
-        isDirect = reinterpret_cast<decltype(isDirect)>(sym("meltype_is_direct"));
-        setCanDelete = reinterpret_cast<decltype(setCanDelete)>(sym("meltype_set_can_delete"));
-        setCodeInput = reinterpret_cast<decltype(setCodeInput)>(sym("meltype_set_code_input"));
-        setCodeLine = reinterpret_cast<decltype(setCodeLine)>(sym("meltype_set_code_line"));
-        setCodeTerminal = reinterpret_cast<decltype(setCodeTerminal)>(sym("meltype_set_code_terminal"));
-        codeEnglishAt = reinterpret_cast<decltype(codeEnglishAt)>(sym("meltype_code_english_at"));
-        caretMoved = reinterpret_cast<decltype(caretMoved)>(sym("meltype_caret_moved"));
-        roleKey = reinterpret_cast<decltype(roleKey)>(sym("meltype_role_key"));
-        free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
-        refresh = reinterpret_cast<decltype(refresh)>(sym("meltype_refresh"));
-        if (!create || !destroy || !handleKey || !commit || !selectCandidate || !setDirect || !free) {
+        create = reinterpret_cast<decltype(create)>(sym("meltype_ime_create"));
+        handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
+        destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
+        free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
+        if (!initMozc || !setConversionReady || !create || !handle_ || !destroy || !free) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
-        if (initMozc && !initMozc((meltypeDir() + "/mozc/meltype_mozc_helper").c_str(), nullptr)) {
+        if (!initMozc((meltypeDir() + "/mozc/meltype_mozc_helper").c_str(), nullptr)) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
         return true;
     }
 
-    // 本体が返した JSON を受け取って解放する。NULL なら空 (キーはアプリに渡す)。
-    std::string take(char *pointer) const {
+    // 出来事 (ImeEvent の JSON) を送って、応答 (ImeOutput の JSON) を受け取る。本体が処理できなければ空。
+    std::string send(void *host, const std::string &event) const {
+        char *pointer = handle_(host, event.c_str());
         if (!pointer) return {};
         std::string text(pointer);
         free(pointer);
@@ -121,7 +105,7 @@ struct Native {
     }
 };
 
-// ---- 本体が返す JSON (SessionResult) を読む。形が決まっているので、必要な分だけの小さな読み取り ----
+// ---- 本体が返す JSON (ImeOutput) を読む。形が決まっているので、必要な分だけの小さな読み取り ----
 
 struct Json {
     enum class Kind { Null, Bool, Number, String, Array, Object } kind = Kind::Null;
@@ -286,7 +270,28 @@ private:
     }
 };
 
-// ---- キー: fcitx5 のキー → Meltype の本体が使う Windows の仮想キーコード (ibus-engine-meltype と同じ) ----
+
+// JSON の文字列にする ("…" を含む)。text は UTF-8
+std::string quote(const std::string &text) {
+    std::string out = "\"";
+    for (unsigned char c : text) {
+        if (c == '"' || c == '\\') {
+            out += '\\';
+            out += static_cast<char>(c);
+        } else if (c < 0x20) {
+            char escaped[8];
+            std::snprintf(escaped, sizeof(escaped), "\\u%04x", c);
+            out += escaped;
+        } else {
+            out += static_cast<char>(c);
+        }
+    }
+    return out + "\"";
+}
+
+const char *boolean(bool value) { return value ? "true" : "false"; }
+
+// ---- キー: fcitx5 のキー → 本体が使う Windows の仮想キーコード (ibus-engine-meltype と同じ) ----
 
 constexpr int OtherCharacterKey = 0x07;
 
@@ -311,6 +316,12 @@ int specialKey(fcitx::KeySym sym) {
     case FcitxKey_F8: return 0x77;
     case FcitxKey_F9: return 0x78;
     case FcitxKey_F10: return 0x79;
+    // 入力モードのキー (意味は本体が決める)
+    case FcitxKey_Zenkaku_Hankaku: case FcitxKey_Hankaku: case FcitxKey_Zenkaku: return 0x19;
+    case FcitxKey_Eisu_toggle: return 0xF0;
+    case FcitxKey_Hiragana_Katakana: return 0x15;
+    case FcitxKey_Henkan: return 0x1C;
+    case FcitxKey_Muhenkan: return 0x1D;
     default: return 0;
     }
 }
@@ -352,34 +363,30 @@ size_t charLength(const std::string &text) {
     return n;
 }
 
+
 class MeltypeEngine;
 
-// 入力欄ごとの本体のセッション
+// 入力欄ごとの本体 (ImeHost)
 class MeltypeState : public fcitx::InputContextProperty {
 public:
     MeltypeState(const Native &native) : native_(native) {
-        if (native_.create) session_ = native_.create();
+        if (native_.create) host_ = native_.create();
     }
     ~MeltypeState() override {
-        if (session_ && native_.destroy) native_.destroy(session_);
+        if (host_) native_.destroy(host_);
     }
-    void *session() const { return session_; }
-    bool direct = false;
+    void *host() const { return host_; }
     // Shift を押しているか。fcitx5 は Space のキーに Shift を付けて渡さないことがある (どの環境で起きるかは
     // 未確認。手元は KDE Plasma 6 / Wayland、X11 と GNOME は試していない) ので、キーから覚えておく: #1033
     bool shiftHeld = false;
-    // 古い本体でも、同じモードの再設定で行の追跡状態を消さない。
-    bool codeInput = false;
-    // 明示的な日本語切り替えの入口が無い旧版の本体にだけ使う。
-    bool legacyJapanese = false;
-    // 切替で A / あ を出したか。次のキーで 1 回だけ消す (#1034)。
+    // 入力モードの表示 (A / あ) を出したか。次のキーで 1 回だけ消す (#1034)。
     bool modeShown = false;
-    // 変換ボックス (preedit) を出しているか。出している間は、周りの文字 (preedit を含む) を本体に渡さない
+    // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
 
 private:
     const Native &native_;
-    void *session_ = nullptr;
+    void *host_ = nullptr;
 };
 
 class MeltypeCandidate : public fcitx::CandidateWord {
@@ -398,7 +405,7 @@ public:
     explicit MeltypeEngine(fcitx::Instance *instance)
         : instance_(instance), factory_([this](fcitx::InputContext &) { return new MeltypeState(native_); }) {
         loaded_ = native_.load();
-        if (loaded_ && native_.setConversionReady && native_.refresh) {
+        if (loaded_) {
             dispatcher_.attach(&instance_->eventLoop());
             s_engine = this;
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
@@ -412,140 +419,47 @@ public:
         if (!loaded_) return;
         auto *ic = event.inputContext();
         auto *state = ic->propertyFor(&factory_);
-        // Shift そのものの押し下げと離しを覚えておく (Space には Shift が付いてこないことがある: #1033)
-        const auto shiftSym = event.key().sym();
-        if (shiftSym == FcitxKey_Shift_L || shiftSym == FcitxKey_Shift_R) {
+        const auto key = event.key();
+        if (key.sym() == FcitxKey_Shift_L || key.sym() == FcitxKey_Shift_R) {
             state->shiftHeld = !event.isRelease();
             return;
         }
         if (event.isRelease()) return;
-        // 切替で出した A / あ は、次に実際のキーを押したときに消す (#1034)。
-        // 押し下げを扱うここに置く: 切替の直後の「離し」で消すと、押している間しか見えない。
+        // 出した A / あ は、次に実際のキーを押したときに消す (#1034)。離したときに消すと、押している間しか見えない
         if (state->modeShown) {
-            clearMode(ic);
+            showMode(ic, "");
             state->modeShown = false;
         }
-        if (!state->session()) return;
-        syncCanDelete(ic, state);
-        const auto key = event.key();
-        const auto sym = key.sym();
-        // 入力中の 変換・無変換・ひらがな/カタカナ: 設定で役割を分けていれば、本体が変換ボックスで処理する (#199)
-        if (native_.roleKey && !state->direct &&
-            (sym == FcitxKey_Henkan || sym == FcitxKey_Muhenkan || sym == FcitxKey_Hiragana_Katakana)) {
-            int vk = sym == FcitxKey_Henkan ? 0x1C : sym == FcitxKey_Muhenkan ? 0x1D : 0x15;
-            auto handled = native_.take(native_.roleKey(state->session(), vk));
-            Json result;
-            if (!handled.empty() && JsonReader(handled).read(result)) {
-                apply(ic, result);
-                event.filterAndAccept();
-                return;
-            }
-        }
-        // 半角/全角: 英数 ⇔ 日本語。コードの日本語指定を解除するときは、直接入力ではなくコード保護へ戻す。
-        // 英数・ひらがなのキーでも切り替える (JIS キーボード)。
-        // 設定「日本語 / 英数を切り替えるキーを追加」の Space (Shift+Space など) で本体が切り替えたときは、
-        // 本体のモードをそのまま使う (fcitx5 の切替キーとしても受け取ると二重に切り替わる: #1033)。
-        if (sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku || sym == FcitxKey_Eisu_toggle ||
-            sym == FcitxKey_Hiragana_Katakana || sym == FcitxKey_Muhenkan || sym == FcitxKey_Henkan) {
-            bool codeEnglish = false;
-            if (!state->direct && !state->preeditVisible && ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal)) {
-                std::string before, after;
-                bool surrounding = readSurrounding(ic, before, after);
-                codeEnglish = native_.codeEnglishAt
-                    ? native_.codeEnglishAt(state->session(), surrounding ? before.c_str() : nullptr) != 0
-                    : state->codeInput && !state->legacyJapanese;
-            }
-            bool toggle = sym == FcitxKey_Zenkaku_Hankaku || sym == FcitxKey_Hankaku || sym == FcitxKey_Zenkaku;
-            bool toDirect = sym == FcitxKey_Eisu_toggle || sym == FcitxKey_Muhenkan ||
-                            (toggle && !state->direct && !codeEnglish);
-            switchMode(ic, state, toDirect, toggle);
-            event.filterAndAccept();
-            return;
-        }
-        auto [vk, character] = virtualKey(sym);
+        auto [vk, character] = virtualKey(key.sym());
         if (vk == 0) return;
         const auto states = key.states();
-        // Shift+Space は、fcitx5 の設定 (Hotkey/TriggerKeys) で日本語 / 英数の切替キーになっていることがある。
-        // Meltype の本体が切替として使った場合は、fcitx5 の切替キーとして受け取らない (#1033)。
-        // Shift を離したことが伝わらず shiftHeld が残っていても、Space 以外には印を付けない (Tab や矢印が
-        // Shift+Tab・Shift+矢印として扱われないようにする)。
+        // Shift を離したことが伝わらず shiftHeld が残っていても、Space 以外には付けない (Tab や矢印が Shift 付きにならないように)
         const bool shift = states.test(fcitx::KeyState::Shift) || (vk == 0x20 && state->shiftHeld);
-        int modifiers = 0;
-        if (shift) modifiers |= 1;
-        if (states.test(fcitx::KeyState::Ctrl)) modifiers |= 2;
-        if (states.test(fcitx::KeyState::Alt)) modifiers |= 4;
-        if (states.test(fcitx::KeyState::Super)) modifiers |= 8;
-        std::string before, after;
-        bool surrounding = !state->preeditVisible && readSurrounding(ic, before, after);
-        auto text = native_.take(native_.handleKey(state->session(), vk, static_cast<int>(character), modifiers,
-                                                   surrounding ? before.c_str() : nullptr, surrounding ? after.c_str() : nullptr));
-        if (text.empty()) return;
-        Json result;
-        if (!JsonReader(text).read(result)) return;
-        apply(ic, result);
-        // 本体が設定「日本語 / 英数を切り替えるキーを追加」の切替をしたときは、fcitx5 のモード (A / あ) も
-        // 本体に合わせる (#1033)。合わせないと、次に 半角/全角 を押したときの切り替え先がずれる。
-        if (native_.takeModeToggled && native_.takeModeToggled(state->session())) {
-            state->direct = native_.isDirect ? native_.isDirect(state->session()) != 0 : !state->direct;
-            // 利用者が自分で切り替えたときは、コード入力の保護より意思を優先する (Mac の「かな」キーと同じ)。
-            if (native_.setCodeInput) native_.setCodeInput(state->session(), 0);
-            state->codeInput = false;
-            showMode(ic, state->direct);
-            state->modeShown = true;
-        }
-        if (result.flag("consumed")) {
-            event.filterAndAccept();
-        } else {
-            // 本体が使わなかったキーは、ここで受け取らず fcitx5 とアプリに任せる (ほかのキーと同じ)。
-            // Shift+Space も同じ: 日本語入力では本体が全角スペースとして消費するので (testterminal で確認)、
-            // ここへ来るのは英数やコード入力など本体が使わなかったときだけ。フィルターすると、
-            // その空白がアプリに入らなくなる (#1034)。
-            // ターミナル用の後処理は、本体が使わなかったキーなら Shift+Space かどうかに関わらず行う。
-            // Shift+Space だけここを通さないと、Ctrl+Shift+Space の後に日本語のまま残り、次の j を本体が取り込む (#1034)。
-            if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal)) {
-                // 変換ボックスが使った矢印・Tab・Esc ではなく、アプリへ通した操作だけを通知する。
-                bool shortcut = (modifiers & (2 | 4 | 8)) != 0;
-                if (native_.caretMoved) native_.caretMoved(state->session(), vk, shortcut ? 1 : 0);
-                bool navigation = shortcut || vk == 0x09 || vk == 0x1B || (vk >= 0x21 && vk <= 0x28) || vk == 0x2E;
-                if (navigation) {
-                    // アプリへ通した Esc は vim 等の操作への境界。開いた引用符の追跡も捨てる (旧版の本体も同じ)。
-                    if (vk == 0x1B && state->codeInput && native_.setCodeInput) {
-                        native_.setCodeInput(state->session(), 0);
-                        state->codeInput = false;
-                    }
-                    state->legacyJapanese = false;
-                    syncCanDelete(ic, state);
-                }
-            }
-        }
+        const std::string fields = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(character) +
+            ",\"shift\":" + boolean(shift) + ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) +
+            ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}";
+        Json output;
+        // 本体が使わなかったキーは受け取らず、fcitx5 とアプリに任せる
+        if (send(ic, "key", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
     }
 
-    // Reset では未確定の内容を確定するが、日本語指定とコード行の追跡は消さない。
-    // フォーカスが外れると Shift の離しが届かないことがあるので、押し下げの記憶も戻す (#1033)。
+    // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
-        commitPending(event.inputContext());
+        leave(event.inputContext(), false);
     }
+
+    // フォーカスが外れた・入力メソッドを切り替えた。Shift を離したことは届かないことがあるので忘れる (#1033)
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
-        auto *ic = event.inputContext();
-        auto *state = ic->propertyFor(&factory_);
-        // フォーカスが外れると Shift の離しが届かないことがあるので、押し下げの記憶も戻す (#1033)。
-        state->shiftHeld = false;
-        if (!state->session()) return;
-        commitPending(ic);
-        // フォーカス移動・入力メソッドの無効化ではコード保護へ戻す。
-        if (state->codeInput && native_.setCodeInput) native_.setCodeInput(state->session(), 0);
-        state->codeInput = false;
-        state->legacyJapanese = false;
+        event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        leave(event.inputContext(), true);
     }
 
     const fcitx::Configuration *getConfig() const override { return &config_; }
 
     void selectCandidate(fcitx::InputContext *ic, int index) {
-        auto *state = ic->propertyFor(&factory_);
-        if (!state->session()) return;
-        syncCanDelete(ic, state);
-        apply(ic, native_.take(native_.selectCandidate(state->session(), index)));
+        Json output;
+        send(ic, "select", ",\"index\":" + std::to_string(index), output);
     }
 
 private:
@@ -558,8 +472,8 @@ private:
     void refreshConversion() {
         auto *ic = instance_->mostRecentInputContext();
         if (!ic || !ic->hasFocus() || instance_->inputMethodEngine(ic) != this) return;
-        auto *state = ic->propertyFor(&factory_);
-        if (state->session()) apply(ic, native_.take(native_.refresh(state->session())));
+        Json output;
+        send(ic, "refresh", "", output);
     }
 
     fcitx::Instance *instance_;
@@ -569,60 +483,48 @@ private:
     fcitx::FactoryFor<MeltypeState> factory_;
     MeltypeConfig config_;
 
-    void switchMode(fcitx::InputContext *ic, MeltypeState *state, bool toDirect, bool toggle) {
-        apply(ic, native_.take(native_.commit(state->session())));
-        // CodeLine は Direct 中には切り替えられないので、先に直接入力を解除する。
-        native_.setDirect(state->session(), 0);
-        bool codeLineHandled = false;
-        if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal)) {
-            std::string before, after;
-            bool surrounding = readSurrounding(ic, before, after);
-            if (native_.setCodeLine) {
-                codeLineHandled = native_.setCodeLine(state->session(), toDirect ? 0 : 1, surrounding ? before.c_str() : nullptr) != 0;
-            } else {
-                // 旧版では CodeInput の切替で日本語指定と解除を代用する。
-                codeLineHandled = state->legacyJapanese;
-                state->legacyJapanese = !toDirect;
-                syncCanDelete(ic, state);
-            }
-        }
-        // 半角/全角で日本語指定を解除したら IME は開いたまま。英数・無変換は従来どおり直接入力にする。
-        state->direct = toDirect && !(toggle && codeLineHandled);
-        native_.setDirect(state->session(), state->direct ? 1 : 0);
-        ic->inputPanel().setAuxUp(fcitx::Text(toDirect ? "A" : "あ"));
-        ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+    // 未確定の内容を確定する。キャレットはこの入力欄の外か、クリックした所に移る
+    void leave(fcitx::InputContext *ic, bool focusOut) {
+        Json output;
+        send(ic, "commit", std::string(",\"caret\":{\"moved\":true,\"passed\":0,\"left\":") + boolean(focusOut) + "}", output);
     }
 
-    void commitPending(fcitx::InputContext *ic) {
+    // 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ false
+    bool send(fcitx::InputContext *ic, const char *type, const std::string &fields, Json &output) {
         auto *state = ic->propertyFor(&factory_);
-        if (!state->session()) return;
-        syncCanDelete(ic, state);
-        apply(ic, native_.take(native_.commit(state->session())));
-    }
-
-    // 切り替えたモード (A / あ) をカーソル位置に出す (Mozc と同じ入力パネルの枠)。
-    static void showMode(fcitx::InputContext *ic, bool direct) {
-        ic->inputPanel().setAuxUp(fcitx::Text(direct ? "A" : "あ"));
-        ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
-    }
-
-    /// 切替で出した A / あ は、次のキーで 1 回だけ消す (残すと入力パネルに居座る)。
-    static void clearMode(fcitx::InputContext *ic) {
-        ic->inputPanel().setAuxUp(fcitx::Text());
-        ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
-    }
-
-    // 入力欄のキャレットの前後の文字列 (それぞれ 20 文字まで)。入力欄が対応していなければ false。
-    static bool readSurrounding(fcitx::InputContext *ic, std::string &before, std::string &after) {
-        if (!ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) || !ic->surroundingText().isValid()) return false;
-        const auto &text = ic->surroundingText().text();
-        if (text.empty()) return false;
-        size_t cursor = ic->surroundingText().cursor();
-        size_t start = cursor > 20 ? cursor - 20 : 0;
-        size_t from = byteOffset(text, start), at = byteOffset(text, cursor), to = byteOffset(text, cursor + 20);
-        before = text.substr(from, at - from);
-        after = text.substr(at, to - at);
+        if (!state->host()) return false;
+        const auto text = native_.send(state->host(), std::string("{\"v\":") + std::to_string(ImeVersion) + ",\"type\":\"" + type +
+            "\",\"sid\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
+        if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
+        apply(ic, *output.get("result"));
+        if (const auto *shown = output.get("state"); shown->flag("indicator")) {
+            showMode(ic, shown->flag("japanese") ? "あ" : "A");
+            state->modeShown = true;
+        }
         return true;
+    }
+
+    // 入力欄の事実 (ImeField)
+    std::string field(fcitx::InputContext *ic) {
+        const auto &flags = ic->capabilityFlags();
+        const bool surrounding = flags.test(fcitx::CapabilityFlag::SurroundingText) && ic->surroundingText().isValid();
+        std::string before = "null", after = "null";
+        if (surrounding) {
+            const auto &text = ic->surroundingText().text();
+            const size_t cursor = ic->surroundingText().cursor();
+            const size_t from = byteOffset(text, cursor > BeforeLength ? cursor - BeforeLength : 0);
+            const size_t at = byteOffset(text, cursor), to = byteOffset(text, cursor + AfterLength);
+            before = quote(text.substr(from, at - from));
+            after = quote(text.substr(at, to - at));
+        }
+        return "{\"before\":" + before + ",\"after\":" + after + ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) +
+            ",\"terminal\":" + boolean(flags.test(fcitx::CapabilityFlag::Terminal)) + ",\"canDelete\":" + boolean(surrounding) + "}";
+    }
+
+    // 入力モード (A / あ) をカーソル位置に出す (Mozc と同じ入力パネルの枠)。空なら消す
+    static void showMode(fcitx::InputContext *ic, const std::string &mode) {
+        ic->inputPanel().setAuxUp(fcitx::Text(mode));
+        ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
     }
 
     // キャレットの前が expected と一致すると確認できたら、消す文字数 (コードポイント) を返す。確認できないときは 0。
@@ -638,29 +540,6 @@ private:
         const size_t from = byteOffset(text, cursor - length);
         if (text.compare(from, byteOffset(text, cursor) - from, expected) != 0) return 0;
         return length;
-    }
-
-    // 確定し直し (DeleteBefore) は、入力欄が周りの文字の削除に対応しているときだけ本体が行う。
-    // 本体を呼ぶ前に毎回伝える (入力欄を移った最初のキーで、前の入力欄の値のまま確定し直さないように)。
-    void syncCanDelete(fcitx::InputContext *ic, MeltypeState *state) {
-        auto *session = state->session();
-        if (!session) return;
-        bool canDelete = ic->capabilityFlags().test(fcitx::CapabilityFlag::SurroundingText) && ic->surroundingText().isValid();
-        if (native_.setCanDelete) native_.setCanDelete(session, canDelete ? 1 : 0);
-        // ターミナルはコード入力を既定にする。同じ値では行の追跡状態を初期化しない。
-        bool terminal = ic->capabilityFlags().test(fcitx::CapabilityFlag::Terminal);
-        if (native_.setCodeTerminal) native_.setCodeTerminal(session, terminal ? 1 : 0);
-        bool codeInput = terminal && !state->legacyJapanese;
-        if (native_.setCodeInput && state->codeInput != codeInput) {
-            native_.setCodeInput(session, codeInput ? 1 : 0);
-            state->codeInput = codeInput;
-        }
-    }
-
-    void apply(fcitx::InputContext *ic, const std::string &text) {
-        if (text.empty()) return;
-        Json result;
-        if (JsonReader(text).read(result)) apply(ic, result);
     }
 
     void apply(fcitx::InputContext *ic, const Json &result) {
@@ -714,8 +593,7 @@ private:
         else panel.setPreedit(preedit);
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
         // 固定の操作一覧は既定で表示する。OFF でも手動判定・予測・書き間違いの提案は残す。
-        // 旧版の本体は案内を分けていないので、提案まで消さないよう従来の hint を使う。
-        auto hint = !showGuide && view.get("contextHint") ? view.str("contextHint") : view.str("hint");
+        auto hint = showGuide ? view.str("hint") : view.str("contextHint");
         if (auto suggestion = view.str("suggestion"); !suggestion.empty())
             hint = suggestion + (hint.empty() ? "" : "　" + hint);
         if (!hint.empty()) panel.setAuxDown(fcitx::Text(hint));
