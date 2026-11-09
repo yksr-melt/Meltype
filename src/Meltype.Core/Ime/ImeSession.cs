@@ -199,7 +199,8 @@ internal sealed class ImeSession
     // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 ====
     // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
     // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
-    // UI Automation で読み直す方法は、Windows Terminal で 1 回 150ms ほどかかったので採らなかった。
+    // Meltype IME の要求の中で UI Automation で読み直す方法は、待ち合いになるので採らなかった (Windows Terminal の UI Automation は
+    // XAML の automation peer で、アプリの UI スレッドで答える。そのスレッドは DLL の中で本体の応答を待って止まっている)。
     // ターミナルが渡すようになったら、_line・LineBefore・TrackLine・TypesText はまとめて消す。状態を足したり、ほかの判断に使い回したりしない。
 
     /// <summary>
