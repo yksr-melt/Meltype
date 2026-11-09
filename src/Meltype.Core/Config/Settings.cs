@@ -692,7 +692,7 @@ public sealed class Settings
             var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
             if (fileVersion < 8) MigrateToV8(raw);
             if (fileVersion < 9) MigrateToV9(raw);
-            if (fileVersion < 10) MigrateToV10(raw);
+            if (fileVersion < 10) MigrateToV10(raw, OperatingSystem.IsWindows());
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -1022,11 +1022,13 @@ public sealed class Settings
 
     /// <summary>
     /// v10: 入力モードの表示を、どのフロントも ModeIndicator で決めるようにした (Meltype IME だけの ShowTsfModeIndicator を消した)。
-    /// 動作モードが Meltype IME (既定) なら、今までの Meltype IME の表示 (切り替えたときだけ・既定は出さない) を ModeIndicator にする。
+    /// Windows で動作モードが Meltype IME (既定) なら、今までの Meltype IME の表示 (切り替えたときだけ・既定は出さない) を ModeIndicator にする。
+    /// Mac・Linux は Meltype IME が無いので、ModeIndicator はそのまま。
     /// </summary>
-    internal static void MigrateToV10(JsonObject values)
+    internal static void MigrateToV10(JsonObject values, bool windows)
     {
         var tsf = values.Remove("ShowTsfModeIndicator", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on) && on;
+        if (!windows) return;
         var keyboard = values[nameof(Mode)] is JsonValue mode && mode.TryGetValue<string>(out var name) && string.Equals(name, nameof(InputMode.Keyboard), StringComparison.OrdinalIgnoreCase);
         if (!keyboard) values[nameof(ModeIndicator)] = (tsf ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never).ToString();
     }
@@ -1160,9 +1162,9 @@ public sealed class Settings
         }
         if (version < 10)
         {
-            MigrateToV10(values);
+            MigrateToV10(values, OperatingSystem.IsWindows());
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
-                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV10(profileValues);
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV10(profileValues, OperatingSystem.IsWindows());
         }
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;

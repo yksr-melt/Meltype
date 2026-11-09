@@ -376,6 +376,8 @@ public:
     int tap = 0;
     // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
+    // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
+    std::string languageMode;
 
 private:
     const Native &native_;
@@ -407,6 +409,16 @@ public:
     }
 
     ~MeltypeEngine() override { s_engine = nullptr; }
+
+    // パネル (トレイ) の入力メソッドの表示。本体が最後に返した言語モードを出す
+    std::string subMode(const fcitx::InputMethodEntry &, fcitx::InputContext &ic) override {
+        const auto &mode = ic.propertyFor(&factory_)->languageMode;
+        return mode.empty() ? std::string() : mode == "Japanese" ? "日本語" : "英数";
+    }
+    std::string subModeLabelImpl(const fcitx::InputMethodEntry &, fcitx::InputContext &ic) override {
+        const auto &mode = ic.propertyFor(&factory_)->languageMode;
+        return mode.empty() ? std::string() : mode == "Japanese" ? "あ" : "A";
+    }
 
     void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) override {
         if (!loaded_) return;
@@ -514,7 +526,12 @@ private:
             "\",\"instance\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
-        if (const auto *shown = output.get("state"); shown->integer("modeIndicatorMs") > 0) showMode(ic, shown->str("languageMode") == "Japanese" ? "あ" : "A", shown->integer("modeIndicatorMs"));
+        const auto *shown = output.get("state");
+        if (const auto mode = shown->str("languageMode"); mode != state->languageMode) {
+            state->languageMode = mode;
+            ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
+        }
+        if (shown->integer("modeIndicatorMs") > 0) showMode(ic, shown->str("languageMode") == "Japanese" ? "あ" : "A", shown->integer("modeIndicatorMs"));
         return true;
     }
 

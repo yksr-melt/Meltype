@@ -142,6 +142,11 @@ class MeltypeEngine(IBus.Engine):
         self._meaning_key = None
         self._mode_shown = None
         self._properties = IBus.PropList()
+        # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
+        self._language_mode = None
+        self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
+                                            symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
+        self._properties.append(self._mode_property)
         self._properties.append(IBus.Property.new(
             "report", IBus.PropType.NORMAL, IBus.Text.new_from_string("不具合の報告・提案… (Linux 版はプレビュー版です)"),
             "", IBus.Text.new_from_string(""), True, True, IBus.PropState.UNCHECKED, IBus.PropList()))
@@ -159,6 +164,12 @@ class MeltypeEngine(IBus.Engine):
             return None
         output = json.loads(reply)
         self._apply(output["result"])
+        if output["state"]["languageMode"] != self._language_mode:
+            self._language_mode = output["state"]["languageMode"]
+            label = IBus.Text.new_from_string("あ" if self._language_mode == "Japanese" else "A")
+            self._mode_property.set_label(label)
+            self._mode_property.set_symbol(label)
+            self.update_property(self._mode_property)
         if output["state"]["modeIndicatorMs"]:
             self._show_mode(output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
         return output

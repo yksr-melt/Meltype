@@ -80,6 +80,15 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         typeKeys(frontend, uuid, "\n");
         FCITX_ASSERT(!ic->inputPanel().candidateList()) << "確定したら候補の一覧を閉じる";
 
+        // パネルの入力メソッドの表示は、本体の言語モード (英数・かなのキーで切り替える)
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), false);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "A") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), false);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+
         dispatcher->schedule([dispatcher, instance]() {
             dispatcher->detach();
             instance->exit();

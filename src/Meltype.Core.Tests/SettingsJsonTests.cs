@@ -33,7 +33,21 @@ internal static class SettingsJsonTests
     [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
-        // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま
+        // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人と Mac・Linux の ModeIndicator はそのまま
+        foreach (var (json, windows, expected) in new[]
+        {
+            ("{\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", true, "Never"),
+            ("{\"ShowTsfModeIndicator\":true}", true, "OnSwitch"),
+            ("{\"Mode\":\"Keyboard\",\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", true, "OnSwitch"),
+            ("{\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", false, "OnSwitchAndFocus"),
+            ("{\"ShowTsfModeIndicator\":true}", false, null),
+        })
+        {
+            var values = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            Settings.MigrateToV10(values, windows);
+            Assert.Equal(expected, values["ModeIndicator"]?.GetValue<string>(), $"{json} (Windows: {windows})");
+            Assert.True(!values.ContainsKey("ShowTsfModeIndicator"), "移した項目は消す: " + json);
+        }
         var directory = Path.Combine(Path.GetTempPath(), "meltype-indicator-settings-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         try
@@ -41,8 +55,7 @@ internal static class SettingsJsonTests
             var path = Path.Combine(directory, "config.json");
             foreach (var (json, expected) in new[]
             {
-                ("{\"SettingsVersion\":9,\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", ModeIndicatorTiming.Never),
-                ("{\"SettingsVersion\":9,\"ShowTsfModeIndicator\":true}", ModeIndicatorTiming.OnSwitch),
+                ("{\"SettingsVersion\":9,\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", OperatingSystem.IsWindows() ? ModeIndicatorTiming.Never : ModeIndicatorTiming.OnSwitchAndFocus),
                 ("{\"SettingsVersion\":9,\"Mode\":\"Keyboard\",\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", ModeIndicatorTiming.OnSwitch),
                 ($"{{\"SettingsVersion\":{Settings.CurrentVersion},\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}}", ModeIndicatorTiming.OnSwitchAndFocus),
             })

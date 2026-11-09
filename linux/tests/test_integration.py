@@ -57,6 +57,9 @@ class IntegrationTests(unittest.TestCase):
                 # (メソッド, 値) の発行順。送信順序 (確定と preedit 更新の前後) の検証に使う。
                 self.events = []
                 self.visible_candidates = []
+                # パネルの「あ / A」と補助テキスト
+                self.panel_mode = None
+                self.aux = None
                 super().__init__()
 
             def commit_text(self, text):
@@ -113,10 +116,14 @@ class IntegrationTests(unittest.TestCase):
                 self.visible_candidates = []
 
             def update_auxiliary_text(self, text, visible):
-                pass
+                self.aux = text.get_text() if visible else None
 
             def hide_auxiliary_text(self):
-                pass
+                self.aux = None
+
+            def update_property(self, prop):
+                if prop.get_key() == "InputMode":
+                    self.panel_mode = prop.get_symbol().get_text()
 
             def register_properties(self, properties):
                 pass
@@ -492,6 +499,16 @@ class IntegrationTests(unittest.TestCase):
         self.engine.do_focus_in_id("/ic/1", "gtk3-im:code")
         self.type_text("ka")
         self.assertEqual("let x = ka", self.engine.document)
+
+    def test_mode_is_shown_on_the_panel_and_near_the_caret(self):
+        self.engine.do_focus_in()
+        self.assertEqual("あ", self.engine.panel_mode)
+        self.special(IBus.KEY_Alt_L)
+        self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK)
+        self.assertEqual(("A", "A"), (self.engine.panel_mode, self.engine.aux))
+        self.special(IBus.KEY_Alt_R)
+        self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK)
+        self.assertEqual(("あ", "あ"), (self.engine.panel_mode, self.engine.aux))
 
     def test_alt_tap_sets_the_mode(self):
         self.special(IBus.KEY_Alt_L)
