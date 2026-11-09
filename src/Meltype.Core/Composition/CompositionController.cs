@@ -735,20 +735,6 @@ public sealed class CompositionController
         _correctable.Clear();
     }
 
-    /// <summary>入力言語が対象外になったとき。判定を止め、未処理のキー・クリックは順番どおりに通す。</summary>
-    public void SuspendInput()
-    {
-        Abandon("入力言語が日本語ではなくなった");
-        Reset();
-        ResetContext();
-        foreach (var input in _gate.Abort())
-        {
-            if (input.Key is { } key) _host.Replay(key);
-            else if (input.Mouse is { } mouse) _host.Replay(mouse);
-        }
-        _host.Hide();
-    }
-
     private void HandleMouse(MouseButtonEvent e)
     {
         // クリックで別の場所に移る前に、今の位置へ確定しておく。
