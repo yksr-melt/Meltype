@@ -1901,6 +1901,55 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void DictionaryAdditions_ReportedWordsStayEnglish()
+    {
+        // #1541・#1637・#1530・#1638: IME や OS の名前がかなに割れる
+        // #1615: 国名 / #1651: アーティスト名
+        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse" })
+        {
+            var k = new Keyboard();
+            k.Type(word + "\n");
+            Assert.Equal(word, k.Host.Document);
+        }
+
+        // #1607・#1557・#1556・#1487・#918・#1625・#1389・#1482: 英字のまま打つ語
+        foreach (var word in new[] { "colab", "qwen", "quickshare", "alma", "pure", "undef", "ifndef", "elifndef", "inotify", "dissatisfactio" })
+        {
+            var k = new Keyboard();
+            k.Type(word + "\n");
+            Assert.Equal(word, k.Host.Document);
+        }
+
+        // 逆向き: 語の後ろに続く日本語は日本語のまま
+        var follow = new Keyboard();
+        follow.Type("fcitx5no\n");
+        Assert.Equal("fcitx5の", follow.Host.Document);
+
+        follow = new Keyboard();
+        follow.Type("iGPUde\n");
+        Assert.Equal("iGPUで", follow.Host.Document);
+    }
+
+    [Test]
+    public static void DictionaryAdditions_CandidatesAndBrandNames()
+    {
+        // #1445・#1651: 変換の候補に出す語
+        var candidates = CandidateDictionary.Load(null);
+        Assert.True(candidates.Lookup("おねしょた").Contains("おねショタ"), "#1445 おねしょた");
+        Assert.True(candidates.Lookup("ちゅうに").Contains("厨二"), "#1651 ちゅうに");
+        Assert.True(candidates.Lookup("きめつ").Contains("鬼滅"), "#1651 きめつ");
+        Assert.True(candidates.Lookup("おしのこ").Contains("推しの子"), "#1651 おしのこ");
+
+        // #1548・#1490・#1460: 読みで英字の名前を出す
+        var predictor = new Predictor(null, null, null);
+        Assert.True(predictor.PredictEnglishNames("ぜんざい").Contains("Zenzai"), "#1548 ぜんざい");
+        Assert.True(predictor.PredictEnglishNames("あずーきー").Contains("azooKey"), "#1548 あずーきー");
+        Assert.True(predictor.PredictEnglishNames("もずきー").Contains("Mozkey"), "#1548 もずきー");
+        Assert.True(predictor.PredictEnglishNames("えくすぷろーらー").Contains("explorer"), "#1490 えくすぷろーらー");
+        Assert.True(predictor.PredictEnglishNames("さいき").Contains("PSYQUI"), "#1460 さいき");
+    }
+
+    [Test]
     public static void Issue346_FusionStaysEnglish()
     {
         var k = new Keyboard();
