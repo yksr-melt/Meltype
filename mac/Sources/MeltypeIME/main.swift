@@ -73,7 +73,7 @@ func runChecks(inputPath: String?) -> Int32 {
 
         @discardableResult
         func send(_ type: String, _ fields: [String: Any] = [:]) -> ImeOutput? {
-            var event: [String: Any] = ["v": 1, "type": type, "sid": "self-test", "field": ["before": text]]
+            var event: [String: Any] = ["v": 1, "type": type, "instance": "self-test", "field": ["before": text]]
             event.merge(fields) { _, new in new }
             let output = NativeCore.shared.send(host, event)
             for edit in output?.result.commits ?? [] {
@@ -95,7 +95,7 @@ func runChecks(inputPath: String?) -> Int32 {
             case "\t": key["vk"] = 0x09
             default: key["ch"] = character.unicodeScalars.first!.value
             }
-            last = document.send("key", ["key": key])
+            last = document.send("KeyPressed", ["key": key])
             if last?.result.consumed != true && character != "\n" && character != "\t" { document.text += String(character) }
         }
         return last
@@ -178,22 +178,22 @@ func runChecks(inputPath: String?) -> Int32 {
     let document = Document()
     let emoji = type("egao ", into: document)
     check("emoji candidate", emoji?.result.view?.list?.items.contains("😊") == true)
-    document.send("commit")
+    document.send("CommitRequested")
     let typo = type("buresureddo", into: document)
     check("misspelling suggestion", typo?.result.view?.suggestion?.contains("ブレスレット") == true)
     let corrected = type("\t", into: document)
     print("corrected: \(corrected?.result.view?.text ?? "nil")")
     check("misspelling correction", ["ぶれすれっと", "ブレスレット"].contains(corrected?.result.view?.text ?? ""))
-    document.send("commit")
+    document.send("CommitRequested")
     let stress = Document()
     let stressStart = Date()
     for iteration in 0..<1000 {
         _ = type("kyouhagoogledekensaku ", into: stress)
-        stress.send("select", ["index": iteration % 2])
-        check("stress commit \(iteration)", stress.send("commit")?.result.view == nil)
-        stress.send("setMode", ["japanese": false])
+        stress.send("CandidateClicked", ["index": iteration % 2])
+        check("stress commit \(iteration)", stress.send("CommitRequested")?.result.view == nil)
+        stress.send("ModeSelected", ["japanese": false])
         _ = type("hello", into: stress)
-        stress.send("setMode", ["japanese": true])
+        stress.send("ModeSelected", ["japanese": true])
         stress.text = ""
         _ = type("wsldeshell\n", into: stress)
         check("stress mode switch \(iteration)", stress.text == "wslでshell")

@@ -419,7 +419,7 @@ class IntegrationTests(unittest.TestCase):
         sent.clear()
         self.engine.do_focus_out()
 
-        self.assertEqual(["committed"], [event_type for event_type, _ in sent])
+        self.assertEqual(["CommittedByApp"], [event_type for event_type, _ in sent])
         self.assertEqual([], sent[0][1]["result"]["commits"], "本体は確定を返さない")
         self.assertEqual("I love sushi がすき", self.engine.document)
 

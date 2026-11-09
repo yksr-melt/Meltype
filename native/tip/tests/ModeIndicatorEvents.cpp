@@ -30,7 +30,7 @@ std::wstring FromUtf8(const std::string& text) {
 void PipeClient::Close() {}
 // Meltype.exe の代わり: 開閉の事実をそのまま返し、toggle なら開閉を入れ替えて、入力モードの表示を求める
 bool PipeClient::Transact(const std::string& request, std::string& response, DWORD, bool) {
-    const bool toggle = request.find("\"type\":\"toggle\"") != std::string::npos;
+    const bool toggle = request.find("\"type\":\"ModeToggleRequested\"") != std::string::npos;
     if (toggle) ++toggleRequests;
     const bool open = (request.find("\"open\":true") != std::string::npos) != toggle;
     const char* shown = open ? "true" : "false";

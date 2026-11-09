@@ -192,7 +192,7 @@ private:
     TfGuidAtom atomTarget_ = TF_INVALID_GUIDATOM;
 
     PipeClient pipe_;
-    std::string sid_;
+    std::string instance_;
     ServerState state_;
     bool open_ = true;             // TSF の IME の開閉 (OS の事実)
     int pendingOpen_ = -1;         // 応答の開閉を、編集セッションを終えてから入れる (-1 = 入れない)

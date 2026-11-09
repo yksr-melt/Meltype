@@ -50,7 +50,7 @@ internal static unsafe class NativeBoundaryTests
         {
             var field = $"{{\"composing\":{(IsComposing ? "true" : "false")}{(after is null ? "" : ",\"after\":" + JsonSerializer.Serialize(after))}}}";
             delegate* unmanaged<IntPtr, byte*, byte*> handle = &Exports.ImeHandle;
-            var json = Marshal.StringToCoTaskMemUTF8($"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"sid\":\"t\",\"field\":{field},\"key\":{key}}}");
+            var json = Marshal.StringToCoTaskMemUTF8($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t\",\"field\":{field},\"key\":{key}}}");
             byte* pointer;
             try { pointer = handle(GCHandle.ToIntPtr(_handle), (byte*)json); }
             finally { Marshal.FreeCoTaskMem(json); }

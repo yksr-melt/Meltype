@@ -32,7 +32,7 @@ public interface IImeEnvironment
 
 /// <summary>
 /// フロントからの出来事を受け取り、入力欄ごとの <see cref="ImeSession"/> に振り分ける。
-/// 別の ImeHost の sid には触れない (TSF では、つなぎ直した DLL が古い入力の続きを拾わない・ほかのアプリの入力を読めない)。
+/// 別の ImeHost の instance には触れない (TSF では、つなぎ直した DLL が古い入力の続きを拾わない・ほかのアプリの入力を読めない)。
 /// 呼ぶスレッドは 1 つに決める (排他しない)。
 /// </summary>
 /// <param name="settings">設定 (config.json)。アプリ別設定は ImeSession が ImeField.App で反映する。フロントは読まない。</param>
@@ -51,17 +51,26 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
     /// <summary>JSON の出来事を処理する。読めない・版が違う出来事には、何も受け持たない応答を返す。</summary>
     public string Handle(string json) => (Parse(json) is { } e ? Handle(e) : Inactive()).ToJson();
 
-    /// <summary>JSON の出来事を読む。読めない・知らない項目がある出来事なら null。</summary>
+    /// <summary>JSON の出来事を読む。読めない・知らない項目や値 (出来事・入力欄の性質の名前) がある出来事なら、警告をログに出して null。</summary>
     public static ImeEvent? Parse(string json)
     {
+        ImeEvent? e;
         try
         {
-            return JsonSerializer.Deserialize(json, ImeJsonContext.Default.ImeEvent);
+            e = JsonSerializer.Deserialize(json, ImeJsonContext.Default.ImeEvent);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            Diagnostics.Log.Warn($"フロントから読めない出来事が届いたので、受け持ちません: {ex.Message}");
             return null;
         }
+        // 文字列の名前のほかに数も読めてしまうので、名前の無い値も知らない値として扱う
+        if (e is not null && (!Enum.IsDefined(e.Type) || e.Field?.Traits.Any(trait => !Enum.IsDefined(trait)) == true))
+        {
+            Diagnostics.Log.Warn($"フロントから知らない値の出来事が届いたので、受け持ちません: {json}");
+            return null;
+        }
+        return e;
     }
 
     /// <summary>フロントがいなくなった (TSF のパイプが切れた): 入力欄をすべて閉じる。</summary>
@@ -76,25 +85,29 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
 
     public ImeOutput Handle(ImeEvent e)
     {
-        if (e.V != Version) return Inactive();
-        if (e.Type == ImeEventType.Close)
+        if (e.V != Version)
         {
-            if (_sessions.Remove(e.Sid, out var closing) && closing.IsComposing) closing.Close();
+            Diagnostics.Log.Warn($"フロントのプロトコルの版 ({e.V}) が本体 ({Version}) と違うので、受け持ちません");
             return Inactive();
         }
-        if (!_sessions.TryGetValue(e.Sid, out var session))
+        if (e.Type == ImeEventType.InstanceDestroyed)
+        {
+            if (_sessions.Remove(e.Instance, out var closing) && closing.IsComposing) closing.Close();
+            return Inactive();
+        }
+        if (!_sessions.TryGetValue(e.Instance, out var session))
         {
             var current = settings();
             var active = ImeSession.IsActive(environment, current, e.Field);
             // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
             // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
-            if (!active || e.Type is not (ImeEventType.Key or ImeEventType.Toggle or ImeEventType.SetMode) ||
+            if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.ModeSelected) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.Open ?? true, current.ForApp(e.Field?.App), e.Caret?.Entered == true, NextRev()), Pass);
+                return new(ImeSession.InitialState(active, e.Open ?? true, current.ForApp(e.Field?.App), e.Caret?.FocusEntered == true, NextRev()), Pass);
             }
             session = new ImeSession(environment, settings);
-            _sessions[e.Sid] = session;
+            _sessions[e.Instance] = session;
         }
         return session.Handle(e, NextRev());
     }

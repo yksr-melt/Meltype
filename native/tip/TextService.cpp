@@ -249,7 +249,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     // サインインや UAC の画面では何もしない。
     // Meltype.exe より高い権限で動いているアプリ (管理者として動くアプリなど) は、つなぐときに断る (Pipe.cpp の IsTrustedServer)
     disabled_ = (flags & TF_TMAE_SECUREMODE) != 0;
-    sid_ = RandomId();
+    instance_ = RandomId();
     TipLog(L"Activate (%s)%s", ProcessName().c_str(), disabled_ ? L" 無効: セキュリティ保護された画面" : L"");
 
     ITfSource* source = nullptr;
@@ -335,7 +335,7 @@ STDMETHODIMP TextService::Deactivate() {
     }
     if (!disabled_) {
         JsonValue reply;
-        Send("close", "", "", reply, 100, true);
+        Send("InstanceDestroyed", "", "", reply, 100, true);
     }
     // ここから後 (アプリが変換中の文字を確定した通知・あとから動く非同期の編集セッション) は、Meltype.exe につなぎ直さない
     deactivated_ = true;
@@ -411,7 +411,7 @@ STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
         if (!CommitNow(true, true)) CommitAsync(true, true);
     } else if (!disabled_) {
         JsonValue reply;
-        if (Send("caret", "", CaretMoved(true), reply, 100, true)) ApplyState(reply[L"state"]);
+        if (Send("CaretMoved", "", CaretMoved(true), reply, 100, true)) ApplyState(reply[L"state"]);
     }
     // アプリが確定した打ちかけの文字は、別の入力欄に移ったので確定したことにする
     ResumeOrCommit(nullptr);
@@ -511,12 +511,12 @@ void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selection
     const bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
     const bool recent = !clicked && GetTickCount64() - passedTime_ < 500;
     std::string caret = std::string(",\"caret\":{\"moved\":") + (selectionChanged || recent ? "true" : "false");
-    if (recent) caret += ",\"passed\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
-    else if (selectionChanged) caret += ",\"passed\":0";
+    if (recent) caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
+    else if (selectionChanged) caret += ",\"passedKey\":0";
     caret += "}";
     JsonValue reply;
     // キャレットを動かすたびに送るので、応答が遅ければ待たない (表示が次の出来事まで古いだけ)
-    if (Send("caret", field, caret, reply, 100, true)) {
+    if (Send("CaretMoved", field, caret, reply, 100, true)) {
         ApplyState(reply[L"state"]);
         UpdateLangBar();
     }
@@ -681,7 +681,7 @@ void TextService::ToggleInputMode(ITfContext* context) {
             const RECT anchor = CaretRect(ec, context);
             ownEdit_ = true;
             JsonValue reply;
-            if (Send("toggle", field, "", reply, 800, false, &anchor)) {
+            if (Send("ModeToggleRequested", field, "", reply, 800, false, &anchor)) {
                 ApplyOutput(ec, context, reply);
                 sent = true;
             }
@@ -702,7 +702,7 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
     std::string request = "{\"thread\":" + std::to_string(GetCurrentThreadId());
     if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
         request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
-    request += std::string(",\"event\":{\"v\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"sid\":\"" + sid_ +
+    request += std::string(",\"event\":{\"v\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +
                "\",\"open\":" + (open_ ? "true" : "false") + (field.empty() ? "" : ",\"field\":" + field) + fields + "}}";
     std::string response;
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
@@ -720,7 +720,7 @@ bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& f
     SurroundingText(ec, context, before, after, selection);
     field = "{\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + ",\"composing\":" +
             (composition_ != nullptr ? "true" : "false") + (selection.empty() ? "" : ",\"selection\":" + JsonString(selection)) +
-            (privateField_ ? ",\"traits\":[\"private\"]" : "") + "}";
+            (privateField_ ? ",\"traits\":[\"Private\"]" : "") + "}";
     return true;
 }
 
@@ -751,7 +751,7 @@ void TextService::ApplyState(const JsonValue& state) {
 }
 
 std::string TextService::CaretMoved(bool left) {
-    return std::string(",\"caret\":{\"moved\":true,\"passed\":0") + (left ? ",\"left\":true" : "") + "}";
+    return std::string(",\"caret\":{\"moved\":true,\"passedKey\":0") + (left ? ",\"focusLeft\":true" : "") + "}";
 }
 
 void TextService::Sync(bool entered) {
@@ -768,12 +768,12 @@ void TextService::Sync(bool entered) {
     if (context) {
         RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
             // パスワード欄の文字は読まずに、パスワード欄であることだけを伝える
-            if (!ReadField(ec, context.Get(), field)) field = "{\"traits\":[\"password\"]}";
+            if (!ReadField(ec, context.Get(), field)) field = "{\"traits\":[\"Password\"]}";
             anchor = CaretRect(ec, context.Get());
             return S_OK;
         });
     }
-    if (Send(entered ? "caret" : "sync", field, entered ? ",\"caret\":{\"moved\":true,\"passed\":0,\"entered\":true}" : "", reply, 100, true,
+    if (Send(entered ? "CaretMoved" : "StateRequested", field, entered ? ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusEntered\":true}" : "", reply, 100, true,
              field.empty() ? nullptr : &anchor))
         ApplyState(reply[L"state"]);
     FlushOpen();
@@ -863,7 +863,7 @@ void TextService::FinishConversionWait() {
             if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
             JsonValue reply;
             // consumed でなければ、Meltype.exe に入力の続きが無い。ここでは何もせず、次のキーで扱う
-            if (self->Send("refresh", "", "", reply) && reply[L"result"][L"consumed"].Bool()) {
+            if (self->Send("ConversionFinished", "", "", reply) && reply[L"result"][L"consumed"].Bool()) {
                 self->ownEdit_ = true;
                 self->ApplyOutput(ec, context.Get(), reply);
             }
@@ -1197,7 +1197,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
                                 ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") +
                                 (repeat ? ",\"repeat\":true" : "") + "}";
         JsonValue reply;
-        if (!Send("key", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
+        if (!Send("KeyPressed", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
             // Meltype.exe が応答しない: 変換中の文字はそのまま確定する。打った文字はここで入れる
             // (送り直すと、その間に打った次のキーより後に届いて順番が入れ替わる)
             failed = true;
@@ -1256,7 +1256,7 @@ void TextService::HandleTap(ITfContext* context, UINT vk) {
         const RECT anchor = CaretRect(ec, context);
         ownEdit_ = true;
         JsonValue reply;
-        if (Send("key", field, ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tap\":true}", reply, 800, false, &anchor))
+        if (Send("KeyPressed", field, ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tappedAlone\":true}", reply, 800, false, &anchor))
             ApplyOutput(ec, context, reply);
         return S_OK;
     });
@@ -1391,7 +1391,7 @@ bool TextService::ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonVa
 void TextService::CommittedOutside() {
     if (disabled_) return;
     JsonValue reply;
-    if (Send("committed", "", CaretMoved(false), reply)) ApplyState(reply[L"state"]);
+    if (Send("CommittedByApp", "", CaretMoved(false), reply)) ApplyState(reply[L"state"]);
 }
 
 void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& result) {
@@ -1902,7 +1902,7 @@ void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool kee
         std::string field;
         ReadField(ec, context, field);
         // クリック・別の入力欄で確定する (keepAppCaret) ときは、キャレットが動いたので前の語を確定し直さない
-        if (Send("commit", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply);
+        if (Send("CommitRequested", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply);
         keepAppCaret_ = false;
         EndComposition(ec);
     }
@@ -1919,7 +1919,7 @@ void TextService::SelectCandidate(int index) {
         if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
         self->ownEdit_ = true;
         JsonValue reply;
-        if (self->Send("select", "", ",\"index\":" + std::to_string(index), reply)) {
+        if (self->Send("CandidateClicked", "", ",\"index\":" + std::to_string(index), reply)) {
             self->ApplyOutput(ec, context.Get(), reply);
         }
         return S_OK;

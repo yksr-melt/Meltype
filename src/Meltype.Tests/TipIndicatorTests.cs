@@ -13,7 +13,7 @@ internal static class TipIndicatorTests
     [Test]
     public static void Indicator_TsfPositionSupportsNegativeCoordinates()
     {
-        static string Request(string position) => $"{{\"thread\":1{position},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"toggle\"}}}}";
+        static string Request(string position) => $"{{\"thread\":1{position},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"ModeToggleRequested\"}}}}";
         Assert.Equal<Point?>(new Point(-900, -120), Tip.TipRequest.Parse(Request(",\"x\":-900,\"y\":-120"))?.Anchor, "左・上のモニターの座標も保持する");
         foreach (var position in new[] { "", ",\"x\":100", ",\"x\":100,\"y\":null", ",\"x\":\"100\",\"y\":20", ",\"x\":2147483648,\"y\":20" })
         {
@@ -89,7 +89,7 @@ internal static class TipIndicatorTests
         bool Shown(string type, uint? thread = null, string fields = "")
         {
             indicator.Hide();
-            var request = Tip.TipRequest.Parse($"{{\"thread\":{thread ?? foreground},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true{fields}}}}}")!;
+            var request = Tip.TipRequest.Parse($"{{\"thread\":{thread ?? foreground},\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"instance\":\"t1\",\"open\":true{fields}}}}}")!;
             server.Handle(host, request);
             Application.DoEvents();
             return indicator.Visible;

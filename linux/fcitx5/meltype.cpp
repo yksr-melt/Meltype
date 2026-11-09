@@ -427,7 +427,7 @@ public:
             if (state->tap != vk) return;
             state->tap = 0;
             Json output;
-            if (send(ic, "key", ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tap\":true}", output) && output.get("result")->flag("consumed"))
+            if (send(ic, "KeyPressed", ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tappedAlone\":true}", output) && output.get("result")->flag("consumed"))
                 event.filterAndAccept();
             return;
         }
@@ -443,13 +443,13 @@ public:
             ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}";
         Json output;
         // 本体が使わなかったキーは受け取らず、fcitx5 とアプリに任せる
-        if (send(ic, "key", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
+        if (send(ic, "KeyPressed", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
     }
 
     // 入力欄にフォーカスが入った・入力メソッドを Meltype にした
     void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         Json output;
-        send(event.inputContext(), "caret", ",\"caret\":{\"moved\":true,\"passed\":0,\"entered\":true}", output);
+        send(event.inputContext(), "CaretMoved", ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusEntered\":true}", output);
     }
 
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
@@ -471,7 +471,7 @@ public:
 
     void selectCandidate(fcitx::InputContext *ic, int index) {
         Json output;
-        send(ic, "select", ",\"index\":" + std::to_string(index), output);
+        send(ic, "CandidateClicked", ",\"index\":" + std::to_string(index), output);
     }
 
 private:
@@ -485,7 +485,7 @@ private:
         auto *ic = instance_->mostRecentInputContext();
         if (!ic || !ic->hasFocus() || instance_->inputMethodEngine(ic) != this) return;
         Json output;
-        send(ic, "refresh", "", output);
+        send(ic, "ConversionFinished", "", output);
     }
 
     fcitx::Instance *instance_;
@@ -502,8 +502,8 @@ private:
         Json output;
         auto *state = ic->propertyFor(&factory_);
         const bool committedByClient = focusOut && state->preeditVisible && ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
-        send(ic, committedByClient ? "committed" : "commit",
-             std::string(",\"caret\":{\"moved\":true,\"passed\":0,\"left\":") + boolean(focusOut) + "}", output);
+        send(ic, committedByClient ? "CommittedByApp" : "CommitRequested",
+             std::string(",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusLeft\":") + boolean(focusOut) + "}", output);
     }
 
     // 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ false
@@ -511,7 +511,7 @@ private:
         auto *state = ic->propertyFor(&factory_);
         if (!state->host()) return false;
         const auto text = native_.send(state->host(), std::string("{\"v\":") + std::to_string(ImeVersion) + ",\"type\":\"" + type +
-            "\",\"sid\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
+            "\",\"instance\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
         if (const auto *shown = output.get("state"); shown->integer("indicatorMs") > 0) showMode(ic, shown->flag("japanese") ? "あ" : "A", shown->integer("indicatorMs"));
@@ -535,8 +535,8 @@ private:
             if (until > at) selection = quote(text.substr(at, until - at));
         }
         std::string traits;
-        for (const auto &[flag, name] : {std::pair{fcitx::CapabilityFlag::Terminal, "terminal"}, std::pair{fcitx::CapabilityFlag::Password, "password"},
-                                          std::pair{fcitx::CapabilityFlag::Sensitive, "private"}}) {
+        for (const auto &[flag, name] : {std::pair{fcitx::CapabilityFlag::Terminal, "Terminal"}, std::pair{fcitx::CapabilityFlag::Password, "Password"},
+                                          std::pair{fcitx::CapabilityFlag::Sensitive, "Private"}}) {
             if (flags.test(flag)) traits += std::string(traits.empty() ? "" : ",") + "\"" + name + "\"";
         }
         return "{\"before\":" + before + ",\"after\":" + after + ",\"selection\":" + selection +

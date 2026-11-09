@@ -30,7 +30,7 @@ enum BoundaryTests {
             guard let host = core.createHost() else { fatalError("Native host creation failed") }
             defer { core.destroyHost(host) }
             func send(_ key: [String: Any]) -> ImeOutput {
-                guard let output = core.send(host, ["v": 1, "type": "key", "sid": "t", "field": ["after": "world"], "key": key]) else {
+                guard let output = core.send(host, ["v": 1, "type": "KeyPressed", "instance": "t", "field": ["after": "world"], "key": key]) else {
                     fatalError("Key returned NULL")
                 }
                 return output

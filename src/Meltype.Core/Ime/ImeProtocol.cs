@@ -12,28 +12,33 @@ namespace Meltype.Ime;
 // どうするか (確定・表示・モード・どのキーを受け取るか) は ImeHost が ImeOutput で返す。
 // 同じプロセスのフロントは ImeHost.Handle(ImeEvent) を呼び、別プロセスのフロント (TSF の DLL) は 1 メッセージ 1 JSON で送る。
 
+/// <summary>フロントが送る出来事。JSON の名前はメンバー名のまま。知らない名前の出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeEventType
 {
-    [JsonStringEnumMemberName("key")] Key,
+    KeyPressed,
     /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
-    [JsonStringEnumMemberName("toggle")] Toggle,
+    ModeToggleRequested,
     /// <summary>モードを指定して切り替える (入力メニューで選んだなど)。</summary>
-    [JsonStringEnumMemberName("setMode")] SetMode,
+    ModeSelected,
     /// <summary>未確定の内容を確定する (フォーカスが移ったなど)。確定する文字は応答で返す。</summary>
-    [JsonStringEnumMemberName("commit")] Commit,
+    CommitRequested,
     /// <summary>OS・アプリが、変換中の文字を表示のまま確定した (IBus のフォーカスの移動・TSF の OnCompositionTerminated)。応答で確定はしない。</summary>
-    [JsonStringEnumMemberName("committed")] Committed,
-    [JsonStringEnumMemberName("select")] Select,
+    CommittedByApp,
+    /// <summary>前の応答の一覧 (view.list) の Index 番目をクリックした。予測変換の候補なら確定する。</summary>
+    CandidateClicked,
+    /// <summary>前の応答の一覧の Index 番目にマウスで選択を動かした。予測変換の候補は確定しない。</summary>
+    CandidateHighlighted,
     /// <summary>背景の変換の結果が届いた。</summary>
-    [JsonStringEnumMemberName("refresh")] Refresh,
+    ConversionFinished,
     /// <summary>
     /// フロントが自分で書き換えていないのに、キャレットが動いた・入力欄の文字が変わった (クリック・フロントがアプリに通したキー・アプリの編集)。
     /// フロントは見つけたらすぐ送る (Core は打ったキーからキャレットの位置を追いかけない)。
     /// </summary>
-    [JsonStringEnumMemberName("caret")] Caret,
+    CaretMoved,
     /// <summary>今の状態だけを受け取る (設定を変えたかもしれないときなど)。入力の本体は作らない。</summary>
-    [JsonStringEnumMemberName("sync")] Sync,
-    [JsonStringEnumMemberName("close")] Close,
+    StateRequested,
+    /// <summary>フロントの IME のインスタンス (Instance) がなくなった。未確定の文字は捨てる。</summary>
+    InstanceDestroyed,
 }
 
 public sealed record ImeEvent
@@ -43,9 +48,9 @@ public sealed record ImeEvent
 
     public required ImeEventType Type { get; init; }
 
-    /// <summary>入力欄 (TSF ではスレッド) ごとにフロントが振る ID。</summary>
+    /// <summary>フロントの IME のインスタンス (TSF ではスレッド) ごとにフロントが振る ID。</summary>
     // init にすると、source-gen の JSON は項目が無いときに初期値ではなく null を入れる
-    public string Sid { get; set; } = "";
+    public string Instance { get; set; } = "";
 
     public ImeKey? Key { get; init; }
 
@@ -54,16 +59,13 @@ public sealed record ImeEvent
     /// <summary>OS が持つ IME の開閉 (TSF の GUID_COMPARTMENT_KEYBOARD_OPENCLOSE)。OS が持たないフロントは送らない。</summary>
     public bool? Open { get; init; }
 
-    /// <summary>caret: どう動いたか。</summary>
+    /// <summary>CaretMoved・CommitRequested・CommittedByApp: キャレットがどう動いたか。</summary>
     public ImeCaret? Caret { get; init; }
 
-    /// <summary>select: 前の応答の一覧 (view.list) の何番目か。</summary>
+    /// <summary>CandidateClicked・CandidateHighlighted: 前の応答の一覧 (view.list) の何番目か。</summary>
     public int Index { get; init; }
 
-    /// <summary>select: 選択を動かすだけで、予測変換の候補を確定しない (マウスでなぞったとき)。</summary>
-    public bool Highlight { get; init; }
-
-    /// <summary>setMode: 日本語にするか。</summary>
+    /// <summary>ModeSelected: 日本語にするか。</summary>
     public bool Japanese { get; init; }
 }
 
@@ -88,28 +90,28 @@ public sealed record ImeKey
     /// 修飾キー (Vk は左右を分けたもの: 左 Alt 0xA4・右 Alt 0xA5 など) を、ほかのキー・マウスのボタンを押さずに離した。離したときに送る。
     /// consumed なら、フロントは離したことがアプリの操作 (メニューバーに移るなど) にならないようにする。
     /// </summary>
-    public bool Tap { get; init; }
+    public bool TappedAlone { get; init; }
 }
 
-/// <summary>OS (・Windows のフロントが調べた) 入力欄の性質。</summary>
+/// <summary>OS (・Windows のフロントが調べた) 入力欄の性質。JSON の名前はメンバー名のまま。知らない性質のある出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeTrait
 {
     /// <summary>ターミナル (IBus の InputPurpose.TERMINAL・fcitx5 の CapabilityFlag::Terminal)。</summary>
-    [JsonStringEnumMemberName("terminal")] Terminal,
+    Terminal,
     /// <summary>パスワード・暗証番号 (IBus の InputPurpose.PASSWORD / PIN・fcitx5 の CapabilityFlag::Password・TSF の IS_PASSWORD・UI Automation の IsPassword)。</summary>
-    [JsonStringEnumMemberName("password")] Password,
+    Password,
     /// <summary>入力を覚えないように求める (TSF の IS_PRIVATE・IBus の InputHints.PRIVATE・fcitx5 の CapabilityFlag::Sensitive)。</summary>
-    [JsonStringEnumMemberName("private")] Private,
+    Private,
     /// <summary>ゲームらしいウィンドウ (Windows のフロントが調べた全画面などの手がかり)。</summary>
-    [JsonStringEnumMemberName("game")] Game,
+    Game,
     /// <summary>全画面表示のウィンドウ (設定「全画面のアプリでは止める」)。</summary>
-    [JsonStringEnumMemberName("fullscreen")] Fullscreen,
+    Fullscreen,
     /// <summary>フォーカスのある所が入力欄ではない (UI Automation。キーボードフックのフロント)。</summary>
-    [JsonStringEnumMemberName("nonText")] NonText,
+    NonText,
     /// <summary>フロントがアプリに文字を送れない (管理者として動くアプリ・Meltype 自身の画面。キーボードフックのフロント)。</summary>
-    [JsonStringEnumMemberName("unreachable")] Unreachable,
+    Unreachable,
     /// <summary>入力先で日本語以外の入力言語 (キーボード) を選んでいる (キーボードフックのフロント)。</summary>
-    [JsonStringEnumMemberName("otherLanguage")] OtherLanguage,
+    OtherLanguage,
 }
 
 /// <summary>UI Automation で調べたフォーカスのある要素 (Windows)。</summary>
@@ -150,13 +152,13 @@ public sealed record ImeCaret
     /// <summary>キャレットが動いたかもしれない (クリック・フロントが通したキー・別の入力欄)。前の語を確定し直さない。</summary>
     public bool Moved { get; init; }
     /// <summary>キャレットを動かした、フロントがアプリに通したキー。0 はキーなし (クリックなど)。null は文字が変わっただけ。</summary>
-    public int? Passed { get; init; }
-    /// <summary>Passed のとき Ctrl を押していたか。</summary>
+    public int? PassedKey { get; init; }
+    /// <summary>PassedKey のとき Ctrl を押していたか。</summary>
     public bool Ctrl { get; init; }
     /// <summary>フォーカスが入力欄に入った (設定によっては入力モードを表示する)。</summary>
-    public bool Entered { get; init; }
+    public bool FocusEntered { get; init; }
     /// <summary>フォーカスが入力欄から外れた (日本語にしていたコードの行を英数に戻す)。</summary>
-    public bool Left { get; init; }
+    public bool FocusLeft { get; init; }
 }
 
 /// <summary>出来事を処理したあとの状態。フロントは毎回まるごと置き換え、自分では状態を持たない。</summary>

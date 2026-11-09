@@ -55,7 +55,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ nil。
     @discardableResult
     private func send(_ type: String, client: IMKTextInput?, _ fields: [String: Any] = [:]) -> ImeOutput? {
-        var event: [String: Any] = ["v": 1, "type": type, "sid": "mac"]
+        var event: [String: Any] = ["v": 1, "type": type, "instance": "mac"]
         if let client { event["field"] = field(of: client) }
         event.merge(fields) { _, new in new }
         guard let output = NativeCore.shared.send(host, event) else { return nil }
@@ -82,7 +82,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     func refreshConversion() {
-        send("refresh", client: client())
+        send("ConversionFinished", client: client())
     }
 
     // ---- Input Method Kit からの呼び出し ----
@@ -91,7 +91,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         super.activateServer(sender)
         Self.active = self
         ModeServices.shared.activate(self)
-        send("caret", client: client(), ["caret": ["moved": true, "passed": 0, "entered": true]])
+        send("CaretMoved", client: client(), ["caret": ["moved": true, "passedKey": 0, "focusEntered": true]])
     }
 
     override func recognizedEvents(_ sender: Any!) -> Int {
@@ -119,7 +119,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             key["ch"] = space ? 0x20 : scalar.value
             if space { key["vk"] = 0x20 }
         }
-        return send("key", client: client, ["key": key])?.result.consumed ?? false
+        return send("KeyPressed", client: client, ["key": key])?.result.consumed ?? false
     }
 
     /// 左右の Option を単独で押して離したら、本体に伝える (ほかの修飾キーの変化は単独押しを取り消す)
@@ -135,21 +135,21 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         defer { tap = nil }
         guard tap == option else { return false }
-        return send("key", client: client, ["key": ["vk": option, "tap": true]])?.result.consumed ?? false
+        return send("KeyPressed", client: client, ["key": ["vk": option, "tappedAlone": true]])?.result.consumed ?? false
     }
 
     /// フォーカスが外れた・クリックで別の場所に移ったときなど。未確定の内容をそのまま確定する。
     override func commitComposition(_ sender: Any!) {
         tap = nil
         guard let client = (sender as? IMKTextInput) ?? self.client() else { return }
-        send("commit", client: client, ["caret": ["moved": true, "passed": 0]])
+        send("CommitRequested", client: client, ["caret": ["moved": true, "passedKey": 0]])
     }
 
     override func deactivateServer(_ sender: Any!) {
         if Self.active === self { Self.active = nil }
         ModeServices.shared.deactivate(self)
         if let client = (sender as? IMKTextInput) ?? self.client() {
-            send("commit", client: client, ["caret": ["moved": true, "passed": 0, "left": true]])
+            send("CommitRequested", client: client, ["caret": ["moved": true, "passedKey": 0, "focusLeft": true]])
         }
         candidatesWindow?.hide()
         auxPanel?.orderOut(nil)
@@ -171,10 +171,10 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
               let index = candidateList.firstIndex(of: string) else { return }
         // クリックした候補が候補ウィンドウで選ばれているので、覚えている位置も合わせる。
         windowIndex = index
-        send("select", client: client, ["index": index])
+        send("CandidateClicked", client: client, ["index": index])
     }
 
-    /// 候補ウィンドウの中で選択が動いた (マウスで選んだときなど)。本体の選択も合わせる (highlight: 確定しない)。
+    /// 候補ウィンドウの中で選択が動いた (マウスで選んだときなど)。本体の選択も合わせる (確定はしない)。
     /// 本体の選択を候補ウィンドウに反映しているとき (selectingFromCore) にも呼ばれるので、そのときは何もしない。
     /// moveDown / moveUp の通知が遅れて届くと古い番号に戻してしまうので、マウスの操作のときだけ受け付ける。
     private var selectingFromCore = false
@@ -187,7 +187,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
               let string = candidateString?.string,
               let index = candidateList.firstIndex(of: string) else { return }
         windowIndex = index
-        send("select", client: client, ["index": index, "highlight": true])
+        send("CandidateHighlighted", client: client, ["index": index])
     }
 
     // ---- メニュー (メニューバーの入力メニュー) ----
@@ -209,15 +209,15 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         return menu
     }
 
-    @objc private func selectJapanese(_ sender: Any?) { send("setMode", client: client(), ["japanese": true]) }
-    @objc private func selectDirect(_ sender: Any?) { send("setMode", client: client(), ["japanese": false]) }
+    @objc private func selectJapanese(_ sender: Any?) { send("ModeSelected", client: client(), ["japanese": true]) }
+    @objc private func selectDirect(_ sender: Any?) { send("ModeSelected", client: client(), ["japanese": false]) }
 
     func selectModeFromService(_ action: ModeShortcutAction) -> Bool {
         guard let client = client() else { return false }
         switch action {
-        case .japanese: send("setMode", client: client, ["japanese": true])
-        case .direct: send("setMode", client: client, ["japanese": false])
-        case .toggle: send("toggle", client: client)
+        case .japanese: send("ModeSelected", client: client, ["japanese": true])
+        case .direct: send("ModeSelected", client: client, ["japanese": false])
+        case .toggle: send("ModeToggleRequested", client: client)
         }
         return true
     }

@@ -53,17 +53,17 @@ internal static class TipHarness
                 pipe.ReadMode = PipeTransmissionMode.Message;
                 // DLL と同じ封筒 (TipRequest) で、入力欄の事実を付けて送る (キャレットの前は、打ったものを入れずに空のまま)
                 string Event(string type, string fields = "") =>
-                    $"{{\"thread\":0,\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"sid\":\"t1\",\"open\":true,\"field\":{{\"before\":\"\"}}{fields}}}}}";
-                Console.WriteLine(Send(pipe, Event("sync")));
+                    $"{{\"thread\":0,\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"instance\":\"t1\",\"open\":true,\"field\":{{\"before\":\"\"}}{fields}}}}}";
+                Console.WriteLine(Send(pipe, Event("StateRequested")));
                 foreach (var c in keys)
                 {
                     // ' ' = Space、'\n' (\n と書く) = Enter
                     var vk = c switch { ' ' => 0x20, '\n' => 0x0D, >= 'a' and <= 'z' => c - 'a' + 'A', _ => (int)c };
                     var ch = c is ' ' or '\n' ? 0 : c;
                     Console.WriteLine($"[{(c == '\n' ? "Enter" : c == ' ' ? "Space" : c.ToString())}] " +
-                        Send(pipe, Event("key", $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}")));
+                        Send(pipe, Event("KeyPressed", $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}")));
                 }
-                Console.WriteLine("[commit] " + Send(pipe, Event("commit")));
+                Console.WriteLine("[commit] " + Send(pipe, Event("CommitRequested")));
             }
             catch (Exception ex)
             {

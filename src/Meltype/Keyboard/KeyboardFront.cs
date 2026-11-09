@@ -19,7 +19,7 @@ namespace Meltype.Keyboard;
 /// </summary>
 internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 {
-    private const string Sid = "keyboard";
+    private const string Instance = "keyboard";
 
     /// <summary>Windows の IME の ON/OFF を切り替えるときに、応答を待つ時間。</summary>
     private const int ImeTimeoutMs = 300;
@@ -64,13 +64,13 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         _state = new ImeState { Capture = new ImeCapture() };
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
         composition.Focus.ForegroundProcessName = () => _foreground.Current.ProcessName;
-        composition.Focus.TextInputEntered += () => Post(() => Send(ImeEventType.Caret, caret: new ImeCaret { Moved = true, Passed = 0, Entered = true }));
+        composition.Focus.TextInputEntered += () => Post(() => Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
         // 入力欄でない所・パスワード欄に移った: 本体が受け持たなくなったら、変換中の文字は入れる先が無いので捨てる
         composition.Focus.CaptureLost += _ => Post(() =>
         {
-            if (_composing && !Send(ImeEventType.Sync, apply: false).State.Active) Abandon();
+            if (_composing && !Send(ImeEventType.StateRequested, apply: false).State.Active) Abandon();
         });
-        composition.ConversionReady += () => Post(() => Send(ImeEventType.Refresh));
+        composition.ConversionReady += () => Post(() => Send(ImeEventType.ConversionFinished));
         _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, 250, 250);
     }
 
@@ -116,7 +116,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             if (e.IsUp) return UpOutside(e);
             if (Captures(e)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
-            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, Passed = e.Vk, Ctrl = IsDown(VirtualKeys.Control) }));
+            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = IsDown(VirtualKeys.Control) }));
         }
         return false;
     }
@@ -132,7 +132,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             if (!down) return false;
             _composition.Focus.NoteClick();
             _composition.Focus.Invalidate();
-            Enqueue(new Input(Caret: new ImeCaret { Moved = true, Passed = 0 }));
+            Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = 0 }));
         }
         return false;
     }
@@ -152,7 +152,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public void OnFocusChanged()
     {
         _stale = true;
-        lock (_gate) Enqueue(new Input(Caret: new ImeCaret { Moved = true, Passed = 0, Left = true }));
+        lock (_gate) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = 0, FocusLeft = true }));
     }
 
     // 受け取るキーか。本体の状態 (capture) どおりにする。ただし、フォーカスが移ってから本体の状態をまだ受け取っていないときと、
@@ -186,7 +186,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // 次の打鍵より先に届くように、ここだけはフックのスレッドで送る (押している間に送ると、すぐに離したときに Alt の解放が先に並ぶ)。
         // 管理者として動くアプリには送り直した Alt の解放が届かない (UIPI) ので止めない
         if (!_injector.Inject(MaskedAltRelease(e))) return false;
-        Enqueue(new Input(Event: new ImeKey { Vk = e.Vk, Tap = true }));
+        Enqueue(new Input(Event: new ImeKey { Vk = e.Vk, TappedAlone = true }));
         return true;
     }
 
@@ -248,12 +248,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     {
         if (input.Caret is { } caret)
         {
-            Send(ImeEventType.Caret, caret: caret);
+            Send(ImeEventType.CaretMoved, caret: caret);
             return;
         }
-        if (input.Event is { Tap: true } tap)
+        if (input.Event is { TappedAlone: true } tap)
         {
-            Send(ImeEventType.Key, tap);
+            Send(ImeEventType.KeyPressed, tap);
             return;
         }
         if (input.Mouse is { } mouse)
@@ -262,7 +262,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             {
                 _composition.Focus.NoteClick();
                 _composition.Focus.Invalidate();
-                Send(ImeEventType.Commit, caret: new ImeCaret { Moved = true, Passed = 0 });
+                Send(ImeEventType.CommitRequested, caret: new ImeCaret { Moved = true, PassedKey = 0 });
             }
             CompositionService.Replay(mouse);
             return;
@@ -276,7 +276,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             if (!consumed && e.IsUp) _composition.Replay(e);
             return;
         }
-        var output = Send(ImeEventType.Key, key);
+        var output = Send(ImeEventType.KeyPressed, key);
         if (!output.Result.Consumed)
         {
             _composition.Replay(e);
@@ -290,7 +290,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>
     private ImeOutput Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, bool apply = true)
     {
-        var output = _host.Handle(new ImeEvent { V = ImeHost.Version, Type = type, Sid = Sid, Key = key, Caret = caret, Field = Field() });
+        var output = _host.Handle(new ImeEvent { V = ImeHost.Version, Type = type, Instance = Instance, Key = key, Caret = caret, Field = Field() });
         var wasJapanese = _state.Japanese;
         _state = output.State;
         _stale = false;
@@ -346,7 +346,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>入れる先が無くなった: 変換中の文字を捨て、並んでいた入力をそのままアプリに通す。</summary>
     private void Abandon() => Post(() =>
     {
-        if (_composing) Send(ImeEventType.Commit, caret: new ImeCaret { Moved = true, Passed = 0, Left = true }, apply: false);
+        if (_composing) Send(ImeEventType.CommitRequested, caret: new ImeCaret { Moved = true, PassedKey = 0, FocusLeft = true }, apply: false);
         _composing = false;
         _composition.Hide();
         ReplayQueued();
@@ -470,17 +470,17 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public void Refresh()
     {
         _stale = true;
-        Send(ImeEventType.Sync, apply: false);
+        Send(ImeEventType.StateRequested, apply: false);
     }
 
     /// <summary>Meltype キーボードを使わなくなった・終了するとき (UI スレッド)。未確定の内容を確定し、並んでいた入力をそのままアプリに通す。</summary>
     public void Stop()
     {
-        if (_composing) Send(ImeEventType.Commit);
+        if (_composing) Send(ImeEventType.CommitRequested);
         _composing = false;
         _composition.Hide();
         ReplayQueued();
-        Send(ImeEventType.Sync, apply: false);
+        Send(ImeEventType.StateRequested, apply: false);
     }
 
     public void Dispose()

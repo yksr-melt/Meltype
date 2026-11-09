@@ -611,5 +611,5 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
         }
     }
 
-    private static readonly ImeEvent Waiting = new() { V = ImeHost.Version, Type = ImeEventType.Sync };
+    private static readonly ImeEvent Waiting = new() { V = ImeHost.Version, Type = ImeEventType.StateRequested };
 }

@@ -66,7 +66,7 @@ _focused = None
 
 def _refresh_focused():
     if _focused is not None:
-        _focused.send("refresh")
+        _focused.send("ConversionFinished")
     return False
 
 
@@ -153,7 +153,7 @@ class MeltypeEngine(IBus.Engine):
         if not self._host:
             return None
         self._check_replace()
-        event = {"v": IME_VERSION, "type": event_type, "sid": "ibus", "field": self._field(), **fields}
+        event = {"v": IME_VERSION, "type": event_type, "instance": "ibus", "field": self._field(), **fields}
         reply = _take(_lib.meltype_ime_handle(self._host, json.dumps(event).encode()))
         if reply is None:
             return None
@@ -180,7 +180,7 @@ class MeltypeEngine(IBus.Engine):
             if keyval != self._tap:
                 return False
             self._tap = None
-            output = self.send("key", key={"vk": TAP_KEYS[keyval], "tap": True})
+            output = self.send("KeyPressed", key={"vk": TAP_KEYS[keyval], "tappedAlone": True})
             return bool(output and output["result"]["consumed"])
         self._tap = keyval if keyval in TAP_KEYS else None
         vk, character = virtual_key(keyval)
@@ -190,7 +190,7 @@ class MeltypeEngine(IBus.Engine):
                "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
                "alt": bool(state & IBus.ModifierType.MOD1_MASK),
                "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
-        output = self.send("key", key=key)
+        output = self.send("KeyPressed", key=key)
         return bool(output and output["result"]["consumed"])
 
     def _leave(self, focus_out):
@@ -201,12 +201,12 @@ class MeltypeEngine(IBus.Engine):
         """
         # Alt + Tab などはウィンドウマネージャーが受け取るので、フォーカスが移ったら単独押しではない
         self._tap = None
-        caret = {"moved": True, "passed": 0, "left": focus_out}
+        caret = {"moved": True, "passedKey": 0, "focusLeft": focus_out}
         if self._preedit_visible:
             self._preedit_visible = False
-            self.send("committed", caret=caret)
+            self.send("CommittedByApp", caret=caret)
         else:
-            self.send("commit", caret=caret)
+            self.send("CommitRequested", caret=caret)
 
     def do_focus_in_id(self, object_path, client):
         # IBus 1.5.27 以降。client は「gtk4-im:gnome-text-editor」のように、IM モジュールとプログラムの名前
@@ -217,7 +217,7 @@ class MeltypeEngine(IBus.Engine):
         global _focused
         _focused = self
         self.register_properties(self._properties)
-        self.send("caret", caret={"moved": True, "passed": 0, "entered": True})
+        self.send("CaretMoved", caret={"moved": True, "passedKey": 0, "focusEntered": True})
 
     def do_focus_out(self):
         self._leave(focus_out=True)
@@ -237,15 +237,15 @@ class MeltypeEngine(IBus.Engine):
     def do_set_content_type(self, purpose, hints):
         # GNOME Terminal の VTE や Ghostty などは input-purpose: terminal を設定する
         self._traits = [trait for trait, present in (
-            ("terminal", purpose == IBus.InputPurpose.TERMINAL),
-            ("password", purpose in (IBus.InputPurpose.PASSWORD, IBus.InputPurpose.PIN)),
+            ("Terminal", purpose == IBus.InputPurpose.TERMINAL),
+            ("Password", purpose in (IBus.InputPurpose.PASSWORD, IBus.InputPurpose.PIN)),
             # 古い IBus (RHEL 9 のもの) には InputHints.PRIVATE が無い
-            ("private", bool(hints & getattr(IBus.InputHints, "PRIVATE", 0))),
+            ("Private", bool(hints & getattr(IBus.InputHints, "PRIVATE", 0))),
         ) if present]
 
     def do_candidate_clicked(self, index, button, state):
         page = self._lookup.get_cursor_pos() // self._lookup.get_page_size()
-        self.send("select", index=page * self._lookup.get_page_size() + index)
+        self.send("CandidateClicked", index=page * self._lookup.get_page_size() + index)
 
     def do_property_activate(self, prop_name, state):
         if prop_name == "report":
@@ -259,7 +259,6 @@ class MeltypeEngine(IBus.Engine):
         if _focused is self:
             _focused = None
         if self._host:
-            self.send("close")
             _lib.meltype_ime_destroy(self._host)
             self._host = None
         IBus.Engine.do_destroy(self)

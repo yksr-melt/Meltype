@@ -73,7 +73,7 @@ internal sealed class ImeSession
         var settings = _settings = all.ForApp(_field?.App);
         var active = IsActive(_environment, all, _field);
         var lastSnippet = _lastSnippet;
-        if (e.Type == ImeEventType.Key || e.Caret?.Moved == true) _lastSnippet = null;
+        if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) _lastSnippet = null;
         ApplyFacts(e, settings);
         // 独自の種類で「最初は英数」にしたアプリに移った (入力欄を作ったときを含む)。OS の IME の開閉は、応答の open で合わせてもらう
         if (_field?.App is { } app && app != previousApp && settings.KindFor(app) is { StartInEnglish: true }) _session.Direct = true;
@@ -82,15 +82,16 @@ internal sealed class ImeSession
         var explicitChange = false;
         var result = WithPaste(Verify(e.Type switch
         {
-            ImeEventType.Key when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
-            ImeEventType.Toggle when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
-            ImeEventType.SetMode when active => Switch(e.Japanese, before, ref explicitChange, toggle: false),
-            ImeEventType.Commit => _session.CommitPending(),
-            ImeEventType.Committed => CommittedOutside(e.Field),
+            ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
+            ImeEventType.ModeToggleRequested when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
+            ImeEventType.ModeSelected when active => Switch(e.Japanese, before, ref explicitChange, toggle: false),
+            ImeEventType.CommitRequested => _session.CommitPending(),
+            ImeEventType.CommittedByApp => CommittedOutside(e.Field),
             // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む
-            ImeEventType.Select when _listedPredictions => e.Highlight ? _session.Unchanged() : _session.SelectPrediction(e.Index),
-            ImeEventType.Select => _session.SelectCandidate(e.Index),
-            ImeEventType.Refresh when active => _session.RefreshConversion() ?? _session.Unchanged(),
+            ImeEventType.CandidateClicked when _listedPredictions => _session.SelectPrediction(e.Index),
+            ImeEventType.CandidateHighlighted when _listedPredictions => _session.Unchanged(),
+            ImeEventType.CandidateClicked or ImeEventType.CandidateHighlighted => _session.SelectCandidate(e.Index),
+            ImeEventType.ConversionFinished when active => _session.RefreshConversion() ?? _session.Unchanged(),
             // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
             _ => _session.Unchanged(),
         }, e.Field), settings);
@@ -98,7 +99,7 @@ internal sealed class ImeSession
         var japanese = ShowsJapanese(before);
         _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
         var indicate = explicitChange && japanese != wasJapanese && settings.ModeIndicator != ModeIndicatorTiming.Never ||
-            e.Caret?.Entered == true && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
+            e.Caret?.FocusEntered == true && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
         return new(new ImeState
         {
             Active = active,
@@ -143,8 +144,8 @@ internal sealed class ImeSession
                 _session.ForgetLastCommit();
                 _session.ForgetDirectInput();
             }
-            if (caret.Passed is { } vk) _session.CaretMoved(vk, caret.Ctrl);
-            if (caret.Left) _session.ForgetCodeLine();
+            if (caret.PassedKey is { } vk) _session.CaretMoved(vk, caret.Ctrl);
+            if (caret.FocusLeft) _session.ForgetCodeLine();
         }
         if (e.Field is not { } field) return;
         _session.Private = field.Traits.Contains(ImeTrait.Private);
@@ -181,7 +182,7 @@ internal sealed class ImeSession
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
-        if (key.Tap)
+        if (key.TappedAlone)
         {
             return settings.AltKeysSwitchKeyboard && vk is VirtualKeys.LMenu or VirtualKeys.RMenu
                 ? Switch(vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false)

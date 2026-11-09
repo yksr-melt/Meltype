@@ -58,7 +58,7 @@ class NativeBoundaryTests(unittest.TestCase):
 
     def send(self, event, host=None):
         """出来事 (ImeEvent) を送り、応答 (ImeOutput) の result を返す。"""
-        pointer = self.lib.meltype_ime_handle(host or self.host, json.dumps({"v": 1, "sid": "t", **event}).encode("utf-8"))
+        pointer = self.lib.meltype_ime_handle(host or self.host, json.dumps({"v": 1, "instance": "t", **event}).encode("utf-8"))
         self.assertTrue(pointer, "C ABI returned NULL")
         try:
             return json.loads(ctypes.string_at(pointer).decode("utf-8"))["result"]
@@ -69,7 +69,7 @@ class NativeBoundaryTests(unittest.TestCase):
         # 文字を入力するキーは文字だけを渡す (仮想キーコードは本体が決める)
         key = {"ch": scalar} if vk is None else {"vk": vk, "ch": scalar}
         field = {name: value for name, value in (("before", before), ("after", after)) if value is not None}
-        return self.send({"type": "key", "field": field, "key": key}, host)
+        return self.send({"type": "KeyPressed", "field": field, "key": key}, host)
 
     def type_text(self, text, after=None):
         for char in text:
@@ -141,7 +141,7 @@ class NativeBoundaryTests(unittest.TestCase):
         self.assertIsNone(enter["view"])
 
     def test_direct_mode_passes_accent_without_commit(self):
-        self.send({"type": "setMode", "japanese": False})
+        self.send({"type": "ModeSelected", "japanese": False})
         self.assert_pass(self.key(ord("e")))
         self.assert_pass(self.key(0x0301))
 
