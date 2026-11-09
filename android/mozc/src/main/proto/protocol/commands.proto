@@ -40,6 +40,7 @@ package mozc.commands;
 import "protocol/candidate_window.proto";
 import "protocol/config.proto";
 import "protocol/engine_builder.proto";
+import "protocol/user_dictionary_storage.proto";
 
 option java_outer_classname = "ProtoCommands";
 option java_package = "org.mozc.android.inputmethod.japanese.protobuf";
@@ -1123,8 +1124,8 @@ message Input {
 
     GET_SERVER_VERSION = 19;
 
-    reserved 31;
-    reserved "IMPORT_USER_DICTIONARY";
+    // Import user dictionary from client.
+    IMPORT_USER_DICTIONARY = 31;
 
     // Add a specific entry to the user history storage.
     ADD_USER_HISTORY = 32;
@@ -1192,7 +1193,9 @@ message Input {
   repeated TouchEvent touch_events = 12;
 
   reserved 13;  // deprecated user_dictionary_command
-  reserved 17;  // deprecated user_dictionary_import_data
+
+  optional mozc.user_dictionary.UserDictionaryImportData
+      user_dictionary_import_data = 17;
 
   // A flag to control if the server should return suggest-results or not.
   // If this is set to false, regardless of other configurations,
