@@ -547,13 +547,6 @@ internal sealed class TipServer : IDisposable
         {
             if (_java && !_looksLikeGame) _looksLikeGame = ForegroundTracker.IsForegroundJavaGame(_processId);
             var focus = _server._composition.Focus.Current;
-            // TSF の文書を持たない入力欄 (Windows Terminal は変換中の文字しか渡さない) では、キャレットの前が空で届く。
-            // 変換していなければ UI Automation で読み直す (変換中は、変換を始めたときの行のまま)
-            if (field.Before is not { Length: > 0 } && !field.Composing)
-            {
-                var (before, after, _) = _server._composition.Focus.ReadField(50);
-                if (before is { Length: > 0 }) field = field with { Before = before, After = field.After is { Length: > 0 } ? field.After : after };
-            }
             return field with
             {
                 App = Process is null ? null : Process + ".exe",

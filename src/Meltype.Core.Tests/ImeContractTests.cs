@@ -69,6 +69,9 @@ internal static class ImeContractTests
 
         public string? App { get; set; }
 
+        /// <summary>キャレットの前後を送るか。null は送らない (読めない)、"" は空で送る (Windows Terminal の TSF)。</summary>
+        public string? Sends { get; init; } = "Document";
+
         /// <summary>入力欄で選んでいる文字。</summary>
         public string? Selection { get; set; }
 
@@ -95,7 +98,8 @@ internal static class ImeContractTests
             // キャレットが動いたことは、見つけたときに caret で送る
             if (moved) Event("CaretMoved", instance, ",\"caret\":{\"moved\":true,\"passedKey\":0}");
             var composing = Composition.GetValueOrDefault(instance) is not null;
-            var field = $"{{\"before\":{Json(Document)},\"after\":\"\",\"composing\":{(composing ? "true" : "false")},\"traits\":{JsonSerializer.Serialize(Traits)}" +
+            var surrounding = Sends switch { "Document" => $"\"before\":{Json(Document)},\"after\":\"\",", null => "", _ => $"\"before\":{Json(Sends)},\"after\":\"\"," };
+            var field = $"{{{surrounding}\"composing\":{(composing ? "true" : "false")},\"traits\":{JsonSerializer.Serialize(Traits)}" +
                 (App is null ? "" : $",\"app\":{Json(App)}") + (Selection is null ? "" : $",\"selection\":{Json(Selection)}") + "}";
             var output = Send($"{{\"version\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)},\"imeOpen\":{(Open ? "true" : "false")},\"field\":{field}{extra}}}");
             Apply(output, instance);
@@ -110,6 +114,8 @@ internal static class ImeContractTests
             '\b' => Key(VirtualKeys.Back, instance: instance, moved: moved),
             '\u001b' => Key(VirtualKeys.Escape, instance: instance, moved: moved),
             '[' => Key(0xDB, key, instance: instance, moved: moved),
+            '/' => Key(0xBF, key, instance: instance, moved: moved),
+            '"' => Key(0xDE, key, shift: true, instance: instance, moved: moved),
             ']' => Key(0xDD, key, instance: instance, moved: moved),
             >= 'a' and <= 'z' => Key(key - 'a' + 'A', key, instance: instance, moved: moved),
             _ => throw new ArgumentException($"送れないキー: {key}"),
@@ -119,7 +125,7 @@ internal static class ImeContractTests
         {
             var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")}}}", moved);
             // 使わなかったキーは、アプリがそのまま入れる
-            if (!Consumed(output) && ch != '\0') Document += ch;
+            if (!Consumed(output) && (ch != '\0' || vk == VirtualKeys.Return)) Document += vk == VirtualKeys.Return ? '\n' : ch;
             return output;
         }
 
@@ -760,6 +766,25 @@ internal static class ImeContractTests
         front.Type("want ");
         Assert.True(front.Document.EndsWith("want ", StringComparison.Ordinal) && front.Document.StartsWith("pasted", StringComparison.Ordinal), front.Trace);
         Assert.Equal(0, front.Skipped.Count, "合わない確定し直しを出さない\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Terminal_WithoutTheTextBeforeTheCaret_DecidesLikeWithIt()
+    {
+        // Windows Terminal の TSF はキャレットの前を空で渡し、iTerm2 は日本語を出したあと読めないことがある。
+        // 本体が通したキーと確定から組み立てた今の行で、読めるときと同じに決める
+        string Run(string? sends)
+        {
+            var front = new Front { Terminal = true, Sends = sends };
+            front.Type("echo\"kome\"kome\n");
+            front.Type("echo\"kome");
+            front.Key('\n');
+            return front.Document + "|" + front.Composition.GetValueOrDefault("t1");
+        }
+        var readable = Run("Document");
+        Assert.Equal("echo\"こめ\"kome\necho\"こめ|", readable, "読めるときは引用符の中だけ日本語");
+        Assert.Equal(readable, Run(null), "読めない");
+        Assert.Equal(readable, Run(""), "空で届く");
     }
 
     [Test]

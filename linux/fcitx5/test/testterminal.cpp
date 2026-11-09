@@ -101,7 +101,12 @@ bool explicitJapaneseWithoutSurrounding(Instance *instance, AddonInstance *front
     auto *ic = terminal(instance, frontend, uuid);
     if (!expect(ic != nullptr, "terminal input context exists")) return false;
     if (!expect(passes(frontend, uuid, "j"), "ordinary terminal keys pass through")) return false;
-    if (!expect(passes(frontend, uuid, "echo \"kyouha"), "without surrounding text, quotes are not tracked from typed keys")) return false;
+    // キャレットの前が読めなくても、本体は通したキーと確定から今の行を組み立てる (引用符の中は日本語、閉じたら英数、Enter で次の行)
+    if (!expect(passes(frontend, uuid, "echo \""), "code keys and the opening quote pass through")) return false;
+    if (!composes(frontend, uuid, ic, "without surrounding text, the quote typed on this line is followed")) return false;
+    if (!expect(passes(frontend, uuid, "\""), "the closing quote passes through")) return false;
+    if (!expect(!press(frontend, uuid, "Return"), "Enter after the closed quote passes through")) return false;
+    if (!expect(passes(frontend, uuid, "kyouha"), "a new line is code again")) return false;
     if (!expect(press(frontend, uuid, "Hankaku"), "half/full is consumed")) return false;
     if (!composes(frontend, uuid, ic, "half/full selects Japanese on the code line")) return false;
     if (!composes(frontend, uuid, ic, "Japanese survives commit")) return false;

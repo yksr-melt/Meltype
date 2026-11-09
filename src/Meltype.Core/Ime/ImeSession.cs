@@ -77,7 +77,7 @@ internal sealed class ImeSession
         ApplyFacts(e, settings);
         // 独自の種類で「最初は英数」にしたアプリに移った (入力欄を作ったときを含む)。OS の IME の開閉は、応答の open で合わせてもらう
         if (_field?.App is { } app && app != previousApp && settings.KindFor(app) is { StartInEnglish: true }) _session.Direct = true;
-        var before = Before(e.Field);
+        var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
         var result = WithPaste(Verify(e.Type switch
@@ -96,6 +96,7 @@ internal sealed class ImeSession
             // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
             _ => _session.Unchanged(),
         }, e.Field), settings);
+        TrackLine(e, result);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
         _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
@@ -195,6 +196,51 @@ internal sealed class ImeSession
     private string? Before(ImeField? field) =>
         field?.Before is { Length: > ContextLength } before && !_session.CodeInput ? before[^ContextLength..] : field?.Before;
 
+    /// <summary>
+    /// コードの行の判断と変換の文脈に使うキャレットの前。ターミナルはキャレットの前を渡さないことがある
+    /// (Windows Terminal の TSF は空、iTerm2 は日本語を出したあと読めない) ので、そのときは <see cref="_line"/> を使う。
+    /// 定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
+    /// </summary>
+    private string? LineBefore(ImeField? field) =>
+        _session.CodeInput && field is { } f && (f.Before is null || f.Before.Length == 0 && _session.CodeTerminal) ? _line.ToString() : Before(field);
+
+    // この入力欄の今の行のうち、本体が知っている文字 (通したキーの文字と確定した文字)。キャレットが打つ以外で動いたら捨てる
+    private readonly StringBuilder _line = new();
+
+    private void TrackLine(ImeEvent e, SessionResult result)
+    {
+        if (e.Caret is { } caret && (caret.FocusEntered || caret.FocusLeft || caret.Moved && !TypesText(caret.PassedKey))) _line.Clear();
+        foreach (var edit in result.Commits)
+        {
+            _line.Length = Math.Max(0, _line.Length - edit.DeleteBefore);
+            AppendToLine(edit.Text);
+        }
+        if (e.Type != ImeEventType.KeyPressed || e.Key is not { TappedAlone: false } key || result.Consumed) return;
+        var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
+        if (key.Ctrl || key.Alt || key.Command) _line.Clear();
+        else if (key.Text is { Length: > 0 } text) AppendToLine(text);
+        else if (key.Ch is >= 0x20 and < 0x10000 && !char.IsControl((char)key.Ch)) AppendToLine(((char)key.Ch).ToString());
+        else if (vk == VirtualKeys.Back) _line.Length = Math.Max(0, _line.Length - 1);
+        else if (!VirtualKeys.IsModifier(vk)) _line.Clear();
+    }
+
+    private void AppendToLine(string text)
+    {
+        if (text.LastIndexOf('\n') is var newline and >= 0)
+        {
+            _line.Clear();
+            text = text[(newline + 1)..];
+        }
+        _line.Append(text);
+        if (_line.Length > MaxLine) _line.Remove(0, _line.Length - MaxLine);
+    }
+
+    private const int MaxLine = 4000;
+
+    /// <summary>アプリに通すと文字が入るキーか (キャレットが動いても、打った文字の後ろに進んだだけ)。null は文字が変わっただけ。</summary>
+    private static bool TypesText(int? vk) =>
+        vk is null or VirtualKeys.Back or VirtualKeys.Space or >= 0x30 and <= 0x5A or >= 0x60 and <= 0x6F or >= 0xBA and <= 0xE2;
+
     private SessionResult HandleKey(ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet,
         ref bool explicitChange)
     {
@@ -226,7 +272,7 @@ internal sealed class ImeSession
                 return key.Repeat ? Consumed : Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
             }
         }
-        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(vk, key, before, settings, lastSnippet) is { } snippet) return snippet;
+        if (!composing && !key.Ctrl && !key.Alt && !key.Command && Snippet(vk, key, Before(field), settings, lastSnippet) is { } snippet) return snippet;
         // 複数のスカラーの文字 (アプリが元のイベントで入れる): 先頭が結合文字なら直前の文字につなげて確定する
         if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
         {
