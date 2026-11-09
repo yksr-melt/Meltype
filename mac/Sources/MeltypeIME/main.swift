@@ -177,7 +177,7 @@ func runChecks(inputPath: String?) -> Int32 {
     } catch { check("issue 40: plist parsing", false) }
     let document = Document()
     let emoji = type("egao ", into: document)
-    check("emoji candidate", emoji?.result.view?.list?.items.contains("😊") == true)
+    check("emoji candidate", emoji?.result.view?.candidates?.items.contains("😊") == true)
     document.send("CommitRequested")
     let typo = type("buresureddo", into: document)
     check("misspelling suggestion", typo?.result.view?.spellingSuggestion?.contains("ブレスレット") == true)
