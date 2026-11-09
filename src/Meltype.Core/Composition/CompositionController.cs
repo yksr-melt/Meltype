@@ -908,7 +908,7 @@ public sealed class CompositionController
                 _spaceStartedConversion = true;
                 StartConversion();
                 return;
-            case VirtualKeys.NonConvert when _options.SeparateKeyRoles() && _options.NonConvertCyclesKana():
+            case VirtualKeys.NonConvert when _options.SeparateKeyRoles() && _options.NonConvertCyclesKana() && !IsProtectedInput:
                 // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の輪。今ひらがなで見えていなければ (変換した漢字・英字など)、まずひらがなにする
                 SetMode(NextKanaCycleMode());
                 _modeByKey = true;
