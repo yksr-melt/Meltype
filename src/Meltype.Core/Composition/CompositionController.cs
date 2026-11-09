@@ -198,6 +198,12 @@ public sealed record CompositionOptions
     /// </summary>
     public Func<bool> SeparateKeyRoles { get; init; } = () => false;
 
+    /// <summary>
+    /// 「入力中のキーの役割を分ける」も ON のとき、無変換を英字ではなく かな の循環にするか (設定)。
+    /// ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の輪。ひらがなで見えていなければ (変換後・英字) まずひらがな。
+    /// </summary>
+    public Func<bool> NonConvertCyclesKana { get; init; } = () => false;
+
     /// <summary>設定「英字を主に入力」: 自動判定をせず英字のまま入力中にし、変換キー / ↓ で日本語にする (issue #839)。</summary>
     public Func<bool> EnglishFirstInput { get; init; } = () => false;
 
@@ -901,6 +907,11 @@ public sealed class CompositionController
                 _text.FixTypos();
                 _spaceStartedConversion = true;
                 StartConversion();
+                return;
+            case VirtualKeys.NonConvert when _options.SeparateKeyRoles() && _options.NonConvertCyclesKana():
+                // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の輪。今ひらがなで見えていなければ (変換した漢字・英字など)、まずひらがなにする
+                SetMode(NextKanaCycleMode());
+                _modeByKey = true;
                 return;
             case VirtualKeys.NonConvert when _options.SeparateKeyRoles():
                 // 無変換: 今までの入力を英字にする (F10 と同じ。続けて押すと大文字・小文字も切り替わる)
@@ -1719,6 +1730,22 @@ public sealed class CompositionController
             {
                 foreach (var kana in clause.Reading) _text.AppendKana(kana, kana);
             }
+        }
+    }
+
+    /// <summary>無変換での かな の循環の次の表示。ひらがな・カタカナ・半角カタカナで見えているときだけ輪の次へ、それ以外 (変換後・英字) はひらがな。</summary>
+    private DisplayMode NextKanaCycleMode()
+    {
+        switch (_text.Mode)
+        {
+            case DisplayMode.Hiragana when !_converting: return DisplayMode.Katakana;
+            case DisplayMode.Katakana when !_converting: return DisplayMode.HalfWidthKatakana;
+            case DisplayMode.HalfWidthKatakana when !_converting: return DisplayMode.Hiragana;
+            case DisplayMode.Auto when !_converting:
+                // 自動判定で、かなだけ (漢字・英字を含まない) なら、ひらがなで見えている
+                var shown = CurrentDisplay(final: false);
+                return shown.Length > 0 && !shown.Any(c => c is >= 'A' and <= 'z' or >= '\u4E00' and <= '\u9FFF') ? DisplayMode.Katakana : DisplayMode.Hiragana;
+            default: return DisplayMode.Hiragana;
         }
     }
 

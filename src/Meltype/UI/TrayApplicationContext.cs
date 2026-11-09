@@ -81,6 +81,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             ContinueAfterConversion = () => _engine.Settings.ContinueAfterConversion,
             Learning = () => _engine.Settings.LearningEnabled,
             SeparateKeyRoles = () => _engine.Settings.SeparateKeyRoles,
+            NonConvertCyclesKana = () => _engine.Settings.NonConvertCyclesKana,
             EnglishFirstInput = () => _engine.Settings.EnglishFirstInput,
             ConsonantAbbreviations = () => _engine.Settings.ConsonantAbbreviations,
             CorrectTypos = () => _engine.Settings.CorrectTypos,

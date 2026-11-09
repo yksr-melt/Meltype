@@ -81,6 +81,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             ContinueAfterConversion = options.ContinueAfterConversion,
             Learning = options.Learning,
             SeparateKeyRoles = options.SeparateKeyRoles,
+            NonConvertCyclesKana = options.NonConvertCyclesKana,
             EnglishFirstInput = options.EnglishFirstInput,
             ConsonantAbbreviations = options.ConsonantAbbreviations,
             Meanings = options.Meanings ?? MeaningDictionary.Load(),

@@ -260,6 +260,7 @@ public sealed class MeltypeSession
             ContinueAfterConversion = () => settings().ContinueAfterConversion,
             Learning = () => settings().LearningEnabled,
             SeparateKeyRoles = () => settings().SeparateKeyRoles,
+            NonConvertCyclesKana = () => settings().NonConvertCyclesKana,
             EnglishFirstInput = () => settings().EnglishFirstInput,
             ConsonantAbbreviations = () => settings().ConsonantAbbreviations,
             CandidateMeanings = () => settings().ShowCandidateMeanings,
