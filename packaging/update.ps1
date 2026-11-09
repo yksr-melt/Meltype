@@ -74,10 +74,15 @@ try {
     Invoke-WebRequest -Uri $asset.browser_download_url -Headers @{ 'User-Agent' = 'Meltype-Updater' } -OutFile $zip -UseBasicParsing -TimeoutSec 600
 
     # GitHub が公開している SHA-256 と同じか (ダウンロードの途中で壊れていないか) を確かめる。
-    if ($asset.digest -like 'sha256:*') {
+    if ($asset.digest -match '^sha256:[0-9a-fA-F]{64}$') {
         $expected = $asset.digest.Substring(7).ToLowerInvariant()
         $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actual -ne $expected) { Remove-Item -LiteralPath $zip -Force; Write-Output 'error ダウンロードした zip のハッシュが違います'; exit 0 }
+    }
+    else {
+        # 確かめられない zip は展開しない (digest が無い・sha256 以外のとき)
+        Remove-Item -LiteralPath $zip -Force
+        Write-Output 'error リリースに SHA-256 の digest がないので、更新しません'; exit 0
     }
 
     if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }

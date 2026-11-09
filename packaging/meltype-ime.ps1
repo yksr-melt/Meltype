@@ -197,7 +197,8 @@ function Get-MeltypeImeSourceHashes([string]$Source) {
         if (-not $expected) { $expected = Read-HashFile "$dll.sha256" }
         if (-not (Test-Path -LiteralPath $dll)) { return $null }
         $actual = Get-Sha256 $dll
-        if ($expected -and $actual -ne $expected) { return $null }
+        # ハッシュのファイルが無い・空のときも登録しない (確かめられない DLL を、管理者として登録しない)
+        if (-not $expected -or $actual -ne $expected) { return $null }
         $hashes["$arch\MeltypeTip.dll"] = $actual
         # 署名する前の中身のハッシュ (Program Files に置き、次の更新で同じ DLL なら登録し直さないのに使う) も、すり替えられないように一緒に確かめる
         if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$arch\MeltypeTip.dll.sha256"] = Get-Sha256 "$dll.sha256" }
