@@ -55,8 +55,13 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         auto uuid = frontend->call<ITestFrontend::createInputContext>("testapp");
         auto *ic = instance->inputContextManager().findByUUID(uuid);
         FCITX_ASSERT(ic);
+        ic->focusIn();
         instance->setCurrentInputMethod(ic, "meltype", true);
         FCITX_ASSERT(instance->inputMethod(ic) == "meltype");
+        // 入力欄に入ったときの入力モードの表示は、アプリがキャレットの位置を知らせてから出す
+        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        ic->setCursorRect(Rect(100, 100, 101, 120));
+        FCITX_ASSERT(ic->inputPanel().auxUp().toString() == "あ") << ic->inputPanel().auxUp().toString();
 
         // ローマ字の日本語 (Mozc が無いのでひらがなのまま確定)
         frontend->call<ITestFrontend::pushCommitExpectation>("にほんご");

@@ -141,6 +141,9 @@ class MeltypeEngine(IBus.Engine):
         # 候補で少し (1.5 秒) 止まったら、その候補の意味を補助テキストに出す (Windows 版と同じ)
         self._meaning_key = None
         self._mode_shown = None
+        # 入力欄に入ったときの入力モードの表示 (あ / A, 時間)。アプリがキャレットの位置を知らせてから出す
+        self._defer_mode = False
+        self._pending_mode = None
         self._properties = IBus.PropList()
         # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
         self._language_mode = None
@@ -171,8 +174,23 @@ class MeltypeEngine(IBus.Engine):
             self._mode_property.set_symbol(label)
             self.update_property(self._mode_property)
         if output["state"]["modeIndicatorMs"]:
-            self._show_mode(output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
+            mode = (output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
+            if self._defer_mode:
+                # 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。知らせが来なければ、少し待ってから今の位置に出す
+                self._pending_mode = mode
+                GLib.timeout_add(150, self._show_pending_mode)
+            else:
+                self._show_mode(*mode)
         return output
+
+    def _show_pending_mode(self):
+        if self._pending_mode:
+            mode, self._pending_mode = self._pending_mode, None
+            self._show_mode(*mode)
+        return False
+
+    def do_set_cursor_location(self, x, y, w, h):
+        self._show_pending_mode()
 
     def _field(self):
         before, after, selection = self._surrounding_text()
@@ -228,9 +246,14 @@ class MeltypeEngine(IBus.Engine):
         global _focused
         _focused = self
         self.register_properties(self._properties)
-        self.send("CaretMoved", caret={"moved": True, "passedKey": 0, "focusEntered": True})
+        self._defer_mode = True
+        try:
+            self.send("CaretMoved", caret={"moved": True, "passedKey": 0, "focusEntered": True})
+        finally:
+            self._defer_mode = False
 
     def do_focus_out(self):
+        self._pending_mode = None
         self._leave(focus_out=True)
 
     def do_reset(self):

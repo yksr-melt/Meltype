@@ -508,6 +508,10 @@ class IntegrationTests(unittest.TestCase):
     def test_mode_is_shown_on_the_panel_and_near_the_caret(self):
         self.engine.do_focus_in()
         self.assertEqual("あ", self.engine.panel_mode)
+        # 入力欄に入ったときの表示は、アプリがキャレットの位置を知らせてから出す
+        self.assertIsNone(self.engine.aux)
+        self.engine.do_set_cursor_location(100, 100, 1, 20)
+        self.assertEqual("あ", self.engine.aux)
         self.special(IBus.KEY_Alt_L)
         self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK)
         self.assertEqual(("A", "A"), (self.engine.panel_mode, self.engine.aux))
