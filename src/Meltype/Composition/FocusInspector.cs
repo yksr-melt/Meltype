@@ -221,28 +221,44 @@ public sealed class FocusInspector : IDisposable
     /// <summary>
     /// フォーカスのある入力欄の、選んでいる文字の前 (最大 4000 文字)・後ろ (最大 20 文字) と、選んでいる文字を、このクラスのスレッドで読む。
     /// 待つのは UI スレッドだけで、フックでは呼ばない。読めない (TextPattern が無い・パスワード欄・待ちきれない) ものは null。
+    /// 読み取りは同時に 1 つだけ。前の読み取りが待ちきれずに残っていたら、新しく頼まずにその結果を待つ
+    /// (頼むたびにこのクラスのスレッドの行列が伸び、続けて打つほど待ちきれない読み取りが溜まって遅れていく)。
     /// </summary>
     public (string? Before, string? After, string? Selection) ReadField(int waitMs = 100)
     {
-        (string?, string?, string?) result = (null, null, null);
         var sequence = Interlocked.Read(ref _focusSequence);
-        var done = new ManualResetEventSlim();
-        Enqueue(() =>
+        Task<(string?, string?, string?)> reading;
+        lock (_readLock)
         {
-            try
+            if (_reading is not { IsCompleted: false })
             {
-                if (Automation()?.Focused() is not { IsPassword: false } element) return;
-                var surrounding = element.Surrounding(4000);
-                result = (surrounding?.Before, surrounding?.After is { Length: > 20 } after ? after[..20] : surrounding?.After, element.SelectedText(out _));
+                var read = new TaskCompletionSource<(string?, string?, string?)>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _reading = read.Task;
+                Enqueue(() =>
+                {
+                    (string?, string?, string?) result = (null, null, null);
+                    try
+                    {
+                        if (Automation()?.Focused() is { IsPassword: false } element)
+                        {
+                            var surrounding = element.Surrounding(4000);
+                            result = (surrounding?.Before, surrounding?.After is { Length: > 20 } after ? after[..20] : surrounding?.After, element.SelectedText(out _));
+                        }
+                    }
+                    catch
+                    {
+                        // 読めなければ分からないまま
+                    }
+                    finally { read.SetResult(result); }
+                });
             }
-            catch
-            {
-                // 読めなければ分からないまま
-            }
-            finally { done.Set(); }
-        });
-        return done.Wait(waitMs) && sequence == Interlocked.Read(ref _focusSequence) ? result : (null, null, null);
+            reading = _reading;
+        }
+        return reading.Wait(waitMs) && sequence == Interlocked.Read(ref _focusSequence) ? reading.Result : (null, null, null);
     }
+
+    private readonly Lock _readLock = new();
+    private Task<(string?, string?, string?)>? _reading;
 
     /// <summary>
     /// キャレット (入力位置) の画面上の四角形を UI Automation で調べる (Chrome・Discord など、Windows のキャレットを使わないアプリ用)。

@@ -364,16 +364,16 @@ internal sealed class TipServer : IDisposable
 
     /// <summary>
     /// 応答に時間がかかった要求をログに残す。DLL はキーの応答を 800ms まで待ち、来なければ打った文字のまま入れるので、
-    /// その原因を調べられるように (UI スレッドが空くのを待った時間も含む)。打った文字は書かない。
+    /// その原因を調べられるように、UI スレッドが空くのを待った時間と処理の時間を分けて書く。打った文字は書かない。
     /// 遅いことが続いてもほかのログを押し出さないように、書くのは 20 回まで。
     /// </summary>
-    private void LogSlow(TipRequest request, long elapsedMs)
+    private void LogSlow(TipRequest request, long waitedMs, long handledMs)
     {
-        if (elapsedMs < SlowRequestMs || Interlocked.Increment(ref _slowRequests) > 20) return;
-        Log.Warn($"Meltype IME: 要求 ({request.Type}) の応答に {elapsedMs}ms かかりました。");
+        if (waitedMs + handledMs < SlowRequestMs || Interlocked.Increment(ref _slowRequests) > 20) return;
+        Log.Warn($"Meltype IME: 要求 ({request.Type}) の応答に {waitedMs + handledMs}ms かかりました (UI スレッドが空くのを待った時間 {waitedMs}ms・処理 {handledMs}ms)。");
     }
 
-    private const int SlowRequestMs = 500;
+    private const int SlowRequestMs = 50;
     private int _slowRequests;
 
     private async Task Serve(NamedPipeServerStream pipe)
@@ -412,12 +412,17 @@ internal sealed class TipServer : IDisposable
                     else
                     {
                         var started = Environment.TickCount64;
+                        long began = started, ended = started;
+                        string Run()
+                        {
+                            began = Environment.TickCount64;
+                            try { return Handle(host, request); }
+                            finally { ended = Environment.TickCount64; }
+                        }
                         // Meltype.exe 自身の UI スレッドから来た要求: UI スレッドは DLL の中でこの応答を待って止まっているので、
                         // UI スレッドに頼むとお互いに待ち合って固まる。代わりにこのスレッドで処理する (ほかの処理と同時には動かない)
-                        reply = ownClient && _uiThread != 0 && request.Thread == _uiThread
-                            ? Handle(host, request)
-                            : await InvokeAsync(() => Handle(host, request)).ConfigureAwait(false);
-                        LogSlow(request, Environment.TickCount64 - started);
+                        reply = ownClient && _uiThread != 0 && request.Thread == _uiThread ? Run() : await InvokeAsync(Run).ConfigureAwait(false);
+                        LogSlow(request, began - started, ended - began);
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)

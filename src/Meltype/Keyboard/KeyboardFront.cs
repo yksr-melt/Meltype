@@ -218,6 +218,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         while (true)
         {
             Input input;
+            bool caretFollows;
             lock (_gate)
             {
                 if (!_queue.TryDequeue(out input))
@@ -227,10 +228,11 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 }
                 _busy = input.Caret is null;
                 if (_busy) _waiting--;
+                caretFollows = _queue.TryPeek(out var next) && next.Caret is not null;
             }
             try
             {
-                Process(input);
+                Process(input, caretFollows);
             }
             catch (Exception ex)
             {
@@ -244,11 +246,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         }
     }
 
-    private void Process(Input input)
+    /// <param name="caretFollows">次もキャレットの動き。入力欄を読むのは、続いた動きの最後の 1 回だけでよい (途中はキーの情報だけ送る)。</param>
+    private void Process(Input input, bool caretFollows)
     {
         if (input.Caret is { } caret)
         {
-            Send(ImeEventType.CaretMoved, caret: caret);
+            Send(ImeEventType.CaretMoved, caret: caret, readField: !caretFollows);
             return;
         }
         if (input.Event is { TappedAlone: true } tap)
@@ -288,9 +291,9 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     }
 
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>
-    private ImeOutput Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, bool apply = true)
+    private ImeOutput Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, bool apply = true, bool readField = true)
     {
-        var output = _host.Handle(new ImeEvent { Version = ImeHost.Version, Type = type, Instance = Instance, Key = key, Caret = caret, Field = Field() });
+        var output = _host.Handle(new ImeEvent { Version = ImeHost.Version, Type = type, Instance = Instance, Key = key, Caret = caret, Field = readField ? Field() : null });
         var wasMode = _state.LanguageMode;
         _state = output.State;
         _stale = false;
@@ -317,6 +320,16 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// 管理者として動くアプリ (UIPI) には SendInput が届かず、Meltype 自身の画面 (横取りしない所) には送らないので、文字を送れない所とする。
     /// </summary>
     private ImeField Field()
+    {
+        // 変換中の文字は Meltype の変換ボックスにあり、アプリの入力欄の文字は変わらないので、変換を始めたときに読んだものを使う
+        if (_composing && _fieldAtComposition is { } atComposition) return atComposition with { Composing = true };
+        _fieldAtComposition = ReadFacts();
+        return _fieldAtComposition;
+    }
+
+    private ImeField? _fieldAtComposition;
+
+    private ImeField ReadFacts()
     {
         var app = _foreground.Current;
         var text = _composition.Focus.CanCaptureWaiting();
