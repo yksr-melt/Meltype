@@ -1742,9 +1742,9 @@ public sealed class CompositionController
             case DisplayMode.Katakana when !_converting: return DisplayMode.HalfWidthKatakana;
             case DisplayMode.HalfWidthKatakana when !_converting: return DisplayMode.Hiragana;
             case DisplayMode.Auto when !_converting:
-                // 自動判定で、かなだけ (漢字・英字を含まない) なら、ひらがなで見えている
+                // 自動判定で、文字がひらがな (と長音) だけなら、ひらがなで見えている。英字・数字・漢字・カタカナを含むなら見えていない (記号は無視)
                 var shown = CurrentDisplay(final: false);
-                return shown.Length > 0 && !shown.Any(c => c is >= 'A' and <= 'z' or >= '\u4E00' and <= '\u9FFF') ? DisplayMode.Katakana : DisplayMode.Hiragana;
+                return shown.Length > 0 && shown.All(c => !char.IsLetterOrDigit(c) || c is >= '\u3041' and <= '\u309F' or '\u30FC') ? DisplayMode.Katakana : DisplayMode.Hiragana;
             default: return DisplayMode.Hiragana;
         }
     }

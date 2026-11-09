@@ -701,6 +701,16 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void NonConvertCyclesKana_DigitsMeanNotShownAsHiragana()
+    {
+        // 数字が混ざった表示は、ひらがなだけではない。最初の 1 回はカタカナにせず、ひらがなにする
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("123ka");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.True(!k.Showing.Contains('カ') && !k.Showing.Contains('ｶ'), "最初はカタカナにしない: " + k.Showing);
+    }
+
+    [Test]
     public static void NonConvertCyclesKana_OffKeepsAlphanumeric()
     {
         // 「役割を分ける」だけ ON で循環が OFF なら、今までどおり無変換で英字にする
