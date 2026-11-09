@@ -411,6 +411,8 @@ public:
     void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) override {
         if (!loaded_) return;
         auto *ic = event.inputContext();
+        // パスワード / PIN の欄では、キーを横取りせず (変換も学習もせず) そのままアプリに通す (Windows 版と同じ)
+        if (ic->capabilityFlags().test(fcitx::CapabilityFlag::Password)) return;
         auto *state = ic->propertyFor(&factory_);
         // Shift そのものの押し下げと離しを覚えておく (Space には Shift が付いてこないことがある: #1033)
         const auto shiftSym = event.key().sym();

@@ -233,6 +233,8 @@ class MeltypeEngine(IBus.Engine):
         self._replace_expect = None
         # 入力欄がターミナルでコード入力になっているか。日本語の指定は本体だけで持つ。
         self._code_input = False
+        # 入力欄がパスワード / PIN か。そうなら何も処理せずキーをそのままアプリに通す (Windows 版と同じ)。
+        self._secret = False
         self._lookup = IBus.LookupTable.new(9, 0, True, True)
         self._lookup.set_orientation(IBus.Orientation.VERTICAL)
         self._candidates = []
@@ -246,6 +248,9 @@ class MeltypeEngine(IBus.Engine):
     # IBus からの呼び出し
 
     def do_process_key_event(self, keyval, keycode, state):
+        # パスワード / PIN の欄では、キーを横取りせず (変換も学習もせず) そのままアプリに通す
+        if getattr(self, "_secret", False):
+            return False
         self._check_replace()
         if state & IBus.ModifierType.RELEASE_MASK or not self._session:
             return False
@@ -375,6 +380,14 @@ class MeltypeEngine(IBus.Engine):
         # コード入力を既定にする。j k やコマンド名が変換中の文字に入って、アプリに届かなくなるのを防ぐ
         # (Windows 版でターミナルが既定で「コード」なのと同じ)。
         # コード行は 半角/全角 で日本語にできる (下の _switch_mode)。
+        secret = purpose in (IBus.InputPurpose.PASSWORD, IBus.InputPurpose.PIN)
+        if secret != self._secret:
+            self._secret = secret
+            if secret:
+                # 打ちかけの内容が残らないようにする (確定してからパスワードの欄として扱う)
+                self._finalize_on_focus_loss()
+                self._hide_preedit()
+                self._hide_candidates()
         if not self._session:
             return
         # 切り替え・状態問い合わせの両方がある本体でだけ有効にする。古い本体では通常の IME 切り替えを使う。

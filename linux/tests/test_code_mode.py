@@ -20,12 +20,12 @@ class CodeModeTests(unittest.TestCase):
         parsed = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
         product = next(n for n in parsed.body if isinstance(n, ast.ClassDef) and n.name == "MeltypeEngine")
         names = {"_switch_mode", "_switch_code_mode", "_notify_caret_moved", "_reset_code_japanese",
-                 "do_set_content_type", "do_focus_out", "do_reset"}
+                 "do_set_content_type", "do_focus_out", "do_reset", "do_process_key_event"}
         methods = [n for n in product.body if isinstance(n, ast.FunctionDef) and n.name in names]
         engine = ast.ClassDef(name="Engine", bases=[], keywords=[], body=methods, decorator_list=[])
         if "type_params" in ast.ClassDef._fields:
             engine.type_params = []
-        self.lib = SimpleNamespace(meltype_commit=Mock(return_value=None), meltype_set_direct=Mock())
+        self.lib = SimpleNamespace(meltype_commit=Mock(return_value=None), meltype_set_direct=Mock(), meltype_handle_key=Mock())
         self.set_line = Mock(return_value=1)
         self.english_at = Mock(return_value=1)
         self.caret = Mock()
@@ -37,7 +37,7 @@ class CodeModeTests(unittest.TestCase):
             "_caret_moved": self.caret, "_set_code_input": self.set_input,
             "_set_code_terminal": self.set_terminal,
             "ALWAYS_DIRECT_KEYS": ("eisu", "muhenkan"), "ZENKAKU_HANKAKU_KEYS": ("toggle",),
-            "IBus": SimpleNamespace(InputPurpose=SimpleNamespace(TERMINAL="terminal")),
+            "IBus": SimpleNamespace(InputPurpose=SimpleNamespace(TERMINAL="terminal", PASSWORD="password", PIN="pin")),
         }
         module = ast.fix_missing_locations(ast.Module(body=[engine], type_ignores=[]))
         exec(compile(module, str(source), "exec"), self.namespace)
@@ -45,6 +45,11 @@ class CodeModeTests(unittest.TestCase):
         self.engine._session = 123
         self.engine._direct = False
         self.engine._code_input = True
+        self.engine._secret = False
+        self.engine._finalize_on_focus_loss = Mock()
+        self.engine._hide_preedit = Mock()
+        self.engine._hide_candidates = Mock()
+        self.engine._check_replace = Mock()
         self.engine._preedit_visible = False
         self.engine._apply = Mock()
         self.engine._surrounding_text = Mock(return_value=(None, None))
@@ -136,6 +141,25 @@ class CodeModeTests(unittest.TestCase):
                 self.assertTrue(self.engine._direct)
                 self.namespace[name] = original
         self.set_line.assert_not_called()
+
+    def test_password_and_pin_fields_are_not_handled(self):
+        for purpose in ("password", "pin"):
+            with self.subTest(purpose=purpose):
+                self.engine._secret = False
+                self.engine.do_set_content_type(purpose, 0)
+                self.assertTrue(self.engine._secret)
+                self.assertFalse(self.engine.do_process_key_event(0x61, 30, 0))
+                self.lib.meltype_handle_key.assert_not_called()
+
+    def test_leaving_password_field_handles_keys_again(self):
+        self.engine.do_set_content_type("password", 0)
+        self.engine.do_set_content_type("free", 0)
+        self.assertFalse(self.engine._secret)
+
+    def test_entering_password_field_drops_pending_input(self):
+        self.engine.do_set_content_type("password", 0)
+        self.engine._finalize_on_focus_loss.assert_called_once()
+        self.engine._hide_preedit.assert_called_once()
 
     def test_same_content_type_does_not_reset_native(self):
         self.engine.do_set_content_type("terminal", 0)
