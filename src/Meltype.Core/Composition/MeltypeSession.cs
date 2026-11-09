@@ -95,8 +95,8 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
     /// <summary>選んでいる候補で止まってから、その意味を出すまでの時間 (ミリ秒)。</summary>
     public const int MeaningDelayMs = 1500;
 
-    /// <summary>フロントに渡した表示の一覧に番号を出すか。数字キー (テンキーも) で選べるのは変換中の候補だけ。</summary>
-    public static bool Numbered(CompositionView view) => view.Converting;
+    /// <summary>フロントに渡した表示 (<see cref="ForFront"/>) の一覧に番号を出すか。</summary>
+    public static bool Numbered(CompositionView view) => view.Numbered;
 
     /// <summary>フロントに渡した表示 (<see cref="ForFront"/>) の一覧が、予測変換の候補か。一覧が無ければ null。</summary>
     public static bool? ListsPredictions(CompositionView view) =>
@@ -108,7 +108,8 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
     /// hint は操作ガイドの設定を反映した案内、typed は見えている文字と違うときだけの打ったキー、
     /// 一覧は 1 つだけ (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補、無ければ入力中の変換の候補)。
     /// </summary>
-    internal static CompositionView ForFront(CompositionView view, bool showGuide)
+    /// <param name="numberKeysSelect">設定「変換中の数字キーで候補を選ぶ」。番号は、数字キーで選べる変換中の候補だけに出す。</param>
+    internal static CompositionView ForFront(CompositionView view, bool showGuide, bool numberKeysSelect)
     {
         var predictions = !view.Converting && view.Predictions is { Count: > 0 };
         var candidates = !predictions && (view.Converting ? view.Candidates.Count > 1 : view.Candidates.Count > 0);
@@ -123,6 +124,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             Meaning = candidates ? view.Meaning : null,
             Predictions = predictions ? view.Predictions : null,
             SelectedPrediction = predictions ? view.SelectedPrediction : -1,
+            Numbered = candidates && view.Converting && numberKeysSelect,
         };
     }
 
@@ -715,7 +717,7 @@ public sealed class MeltypeSession
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
             // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
-            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowsGuide);
+            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowsGuide, settings().NumberKeysSelectCandidates);
             return new SessionResult(consumed, _commits.ToList(), view);
         }
 

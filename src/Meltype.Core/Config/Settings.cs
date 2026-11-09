@@ -297,7 +297,7 @@ public sealed class Settings
     public bool SpaceAroundNumbers { get; set; }
 
     [Category("4. 変換"), DisplayName("変換中の数字キーで候補を選ぶ"),
-     Description("Space・Tab で変換している間に、キーボードの上の段の 1〜9 を押すと、候補の一覧の番号で選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。テンキーの 1〜9 は、この設定に関係なく候補を選びます。")]
+     Description("Space・Tab で変換している間に、数字キー (上の段・テンキー) の 1〜9 を押すと、候補の一覧の番号で選びます。かな入力では上の段はかなのキーなので、テンキーで選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。")]
     public bool NumberKeysSelectCandidates { get; set; } = true;
 
     [Category("6. 記号・スペース"), DisplayName("スペースの幅"),

@@ -218,6 +218,16 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual("今日", self.engine.document)
         self.assertEqual("", self.engine.marked)
 
+    def test_numpad_without_numlock_moves_like_the_dedicated_keys(self):
+        # NumLock を切ったテンキーの ↓・PageDown も、専用のキーと同じく候補を動かす (PageUp の無いキーボード)
+        self.type_text("kyou")
+        self.assertTrue(self.special(IBus.KEY_space))
+        start = self.engine._lookup.get_cursor_pos()
+        self.assertTrue(self.special(IBus.KEY_KP_Down))
+        self.assertEqual(start + 1, self.engine._lookup.get_cursor_pos())
+        self.assertTrue(self.special(IBus.KEY_KP_Page_Down))
+        self.assertGreater(self.engine._lookup.get_cursor_pos(), start + 1)
+
     def test_protected_actions(self):
         for token in ("@kuraido", "https://sakura.jp/kana", "taro@example.com", "./shumire-shon", r"C:\tools\kana"):
             for action in (IBus.KEY_Return, IBus.KEY_space, IBus.KEY_Tab, None):

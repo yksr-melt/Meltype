@@ -88,6 +88,9 @@ SPECIAL_KEYS = {
     IBus.KEY_BackSpace: 0x08, IBus.KEY_Delete: 0x2E, IBus.KEY_Escape: 0x1B,
     IBus.KEY_Left: 0x25, IBus.KEY_Up: 0x26, IBus.KEY_Right: 0x27, IBus.KEY_Down: 0x28,
     IBus.KEY_Home: 0x24, IBus.KEY_End: 0x23, IBus.KEY_Page_Up: 0x21, IBus.KEY_Page_Down: 0x22,
+    # NumLock を切ったテンキー (Windows と同じく、専用のキーと同じにする。PageUp の無いキーボードで候補のページを送れる)
+    IBus.KEY_KP_Left: 0x25, IBus.KEY_KP_Up: 0x26, IBus.KEY_KP_Right: 0x27, IBus.KEY_KP_Down: 0x28,
+    IBus.KEY_KP_Home: 0x24, IBus.KEY_KP_End: 0x23, IBus.KEY_KP_Page_Up: 0x21, IBus.KEY_KP_Page_Down: 0x22, IBus.KEY_KP_Delete: 0x2E,
     IBus.KEY_F6: 0x75, IBus.KEY_F7: 0x76, IBus.KEY_F8: 0x77, IBus.KEY_F9: 0x78, IBus.KEY_F10: 0x79,
     # 入力モードのキー (意味は本体が決める)
     IBus.KEY_Zenkaku_Hankaku: 0x19, IBus.KEY_Hankaku: 0x19, IBus.KEY_Zenkaku: 0x19,

@@ -543,6 +543,22 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Numpad_FollowsTheNumberKeysSetting()
+    {
+        // テンキーも上の段の数字と同じく、設定「変換中の数字キーで候補を選ぶ」に従う (OFF なのにテンキーだけ番号で選んでいた)
+        var front = new Front();
+        front.Settings.NumberKeysSelectCandidates = false;
+        front.Type("kyouha");
+        var converting = front.Key(' ');
+        Assert.True(!converting.GetProperty("result").GetProperty("view").GetProperty("candidates").GetProperty("numbered").GetBoolean(),
+            "数字キーで選べないので番号を出さない\n" + front.Trace);
+        front.Key(0x61, '1');
+        front.Key(0x60, '0');
+        front.Key('\n');
+        Assert.Equal("今日は10", front.Document, "今の候補で確定してから数字を入力する\n" + front.Trace);
+    }
+
+    [Test]
     public static void List_IsNumberedOnlyWhenNumberKeysSelect()
     {
         // 数字キーで選べるのは変換中の候補だけ。入力中の一覧の数字は、そのまま打つ文字になる

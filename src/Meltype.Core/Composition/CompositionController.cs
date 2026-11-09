@@ -37,7 +37,9 @@ public sealed record CompositionView(
     int SelectedPrediction = -1,
     string? Typed = null,
     string? Committed = null,
-    string? ContextHint = null);
+    string? ContextHint = null,
+    // 一覧に番号を出すか (数字キーで選べる変換中の候補だけ。SessionResult.ForFront が決める)
+    bool Numbered = false);
 
 /// <summary>CompositionController が外界とやり取りする口。テストでは偽物に差し替える。</summary>
 public interface ICompositionHost
@@ -1617,10 +1619,10 @@ public sealed class CompositionController
                 _tabStartedConversion = false;
                 return true;
             case >= 0x31 and <= 0x39 when !shift && !_text.KanaInput && _options.NumberKeysSelectCandidates():
-            case >= 0x61 and <= 0x69 when !shift:
+            case >= 0x61 and <= 0x69 when !shift && _options.NumberKeysSelectCandidates():
                 // 候補の一覧の番号 (1〜9) で選ぶ。番号の無い候補 (一覧より後ろ) なら、普通に打った数字として扱う。
                 // かな入力では数字の段のキーは ぬふあうえおやゆよ なので、テンキーだけで選ぶ。
-                // 設定「変換中の数字キーで候補を選ぶ」が OFF なら、上の段の数字は普通に打った数字 (今の候補で確定して入力する: issue #989)。
+                // 設定「変換中の数字キーで候補を選ぶ」が OFF なら、上の段もテンキーも普通に打った数字 (今の候補で確定して入力する: issue #989)。
                 return SelectByNumber(vk >= 0x61 ? vk - 0x61 : vk - 0x31);
             default:
                 return false;

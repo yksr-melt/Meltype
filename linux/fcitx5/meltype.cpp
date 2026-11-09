@@ -302,16 +302,17 @@ int specialKey(fcitx::KeySym sym) {
     case FcitxKey_Tab: return 0x09;
     case FcitxKey_space: return 0x20;
     case FcitxKey_BackSpace: return 0x08;
-    case FcitxKey_Delete: return 0x2E;
+    // NumLock を切ったテンキーも、専用のキーと同じにする (Windows と同じ。PageUp の無いキーボードで候補のページを送れる)
+    case FcitxKey_Delete: case FcitxKey_KP_Delete: return 0x2E;
     case FcitxKey_Escape: return 0x1B;
-    case FcitxKey_Left: return 0x25;
-    case FcitxKey_Up: return 0x26;
-    case FcitxKey_Right: return 0x27;
-    case FcitxKey_Down: return 0x28;
-    case FcitxKey_Home: return 0x24;
-    case FcitxKey_End: return 0x23;
-    case FcitxKey_Page_Up: return 0x21;
-    case FcitxKey_Page_Down: return 0x22;
+    case FcitxKey_Left: case FcitxKey_KP_Left: return 0x25;
+    case FcitxKey_Up: case FcitxKey_KP_Up: return 0x26;
+    case FcitxKey_Right: case FcitxKey_KP_Right: return 0x27;
+    case FcitxKey_Down: case FcitxKey_KP_Down: return 0x28;
+    case FcitxKey_Home: case FcitxKey_KP_Home: return 0x24;
+    case FcitxKey_End: case FcitxKey_KP_End: return 0x23;
+    case FcitxKey_Page_Up: case FcitxKey_KP_Prior: return 0x21;
+    case FcitxKey_Page_Down: case FcitxKey_KP_Next: return 0x22;
     case FcitxKey_F6: return 0x75;
     case FcitxKey_F7: return 0x76;
     case FcitxKey_F8: return 0x77;
