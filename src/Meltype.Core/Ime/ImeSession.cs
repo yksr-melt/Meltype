@@ -166,7 +166,18 @@ internal sealed class ImeSession
             if (_session.CodeInput != code) _session.CodeInput = code;
             _session.CodeTerminal = focus == CodeFocus.Terminal;
         }
+        // コードの入力欄でキャレットの前を読めないと、コードの行として英数にする。読めない入力欄を調べられるように、変わったときだけ書く
+        var unreadable = _session.CodeInput && field.Before is null;
+        if (unreadable != _unreadableCode)
+        {
+            _unreadableCode = unreadable;
+            Diagnostics.Log.Decision(unreadable
+                ? $"コードの入力欄で、キャレットの前の文字が届かないので、コードの行として英数にします (アプリ: {field.App ?? "不明"})"
+                : "コードの入力欄で、キャレットの前の文字が届くようになりました");
+        }
     }
+
+    private bool _unreadableCode;
 
     /// <summary>
     /// フォーカスのある所の種類。OS がターミナルと知らせてきたか、アプリの種類が「コード」なら、ターミナル・エディターと要素の名前から決める。

@@ -73,12 +73,33 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if let app = client.bundleIdentifier() { field["app"] = app }
         let marked = client.markedRange()
         let anchor = marked.location != NSNotFound && marked.length > 0 ? marked : client.selectedRange()
-        guard anchor.location != NSNotFound else { return field }
+        guard anchor.location != NSNotFound else {
+            noteBefore(unreadable: true) { "selectedRange が NSNotFound" }
+            return field
+        }
         if anchor.length > 0, !hasMarkedText, let selection = client.attributedSubstring(from: anchor)?.string { field["selection"] = selection }
         let start = max(0, anchor.location - Self.beforeLength)
-        if let before = client.attributedSubstring(from: NSRange(location: start, length: anchor.location - start))?.string { field["before"] = before }
+        let requested = NSRange(location: start, length: anchor.location - start)
+        let before = client.attributedSubstring(from: requested)?.string
+        if let before { field["before"] = before }
+        noteBefore(unreadable: before == nil) {
+            // 原因を調べるために、短い範囲なら読めるかも書く
+            let shortStart = max(0, anchor.location - 20)
+            let short = client.attributedSubstring(from: NSRange(location: shortStart, length: anchor.location - shortStart)) != nil
+            return "頼んだ範囲 \(NSStringFromRange(requested))・selectedRange \(NSStringFromRange(client.selectedRange()))・" +
+                "markedRange \(NSStringFromRange(marked))・20 文字前からなら\(short ? "読めた" : "読めない")"
+        }
         if let after = client.attributedSubstring(from: NSRange(location: anchor.location + anchor.length, length: Self.afterLength))?.string { field["after"] = after }
         return field
+    }
+
+    /// キャレットの前の文字を読めないか (読めない入力欄を調べられるように、変わったときだけ Console に書く)
+    private var beforeUnreadable = false
+
+    private func noteBefore(unreadable: Bool, _ detail: () -> String) {
+        guard unreadable != beforeUnreadable else { return }
+        beforeUnreadable = unreadable
+        NSLog("Meltype: %@", unreadable ? "キャレットの前の文字を読めません (\(detail()))" : "キャレットの前の文字を読めるようになりました")
     }
 
     func refreshConversion() {

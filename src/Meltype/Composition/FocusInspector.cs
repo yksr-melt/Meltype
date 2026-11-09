@@ -237,24 +237,40 @@ public sealed class FocusInspector : IDisposable
                 Enqueue(() =>
                 {
                     (string?, string?, string?) result = (null, null, null);
+                    var failure = "";
                     try
                     {
-                        if (Automation()?.Focused() is { IsPassword: false } element)
-                        {
-                            var surrounding = element.Surrounding(4000);
-                            result = (surrounding?.Before, surrounding?.After is { Length: > 20 } after ? after[..20] : surrounding?.After, element.SelectedText(out _));
-                        }
+                        if (Automation()?.Focused() is not { } element) failure = "フォーカスのある要素が無い";
+                        else if (element.IsPassword) failure = "パスワード欄";
+                        else if (element.Surrounding(4000) is not { } surrounding) failure = "TextPattern で読めない";
+                        else result = (surrounding.Before, surrounding.After is { Length: > 20 } after ? after[..20] : surrounding.After, element.SelectedText(out _));
                     }
-                    catch
+                    catch (Exception ex)
                     {
                         // 読めなければ分からないまま
+                        failure = ex.Message;
                     }
                     finally { read.SetResult(result); }
+                    NoteReadFailure(failure);
                 });
             }
             reading = _reading;
         }
-        return reading.Wait(waitMs) && sequence == Interlocked.Read(ref _focusSequence) ? reading.Result : (null, null, null);
+        if (!reading.Wait(waitMs))
+        {
+            NoteReadFailure($"{waitMs}ms で読み終わらない");
+            return (null, null, null);
+        }
+        return sequence == Interlocked.Read(ref _focusSequence) ? reading.Result : (null, null, null);
+    }
+
+    // 入力欄の文字を読めない理由 (読めない入力欄を調べられるように、変わったときだけログに書く)
+    private string _readFailure = "";
+
+    private void NoteReadFailure(string failure)
+    {
+        if (Interlocked.Exchange(ref _readFailure, failure) == failure) return;
+        Diagnostics.Log.Decision(failure.Length > 0 ? $"入力欄の文字を読めません: {failure}" : "入力欄の文字を読めるようになりました");
     }
 
     private readonly Lock _readLock = new();

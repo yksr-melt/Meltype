@@ -717,8 +717,9 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
 bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& field) {
     if (IsSecretField(ec, context)) return false;
     std::wstring before, after, selection;
-    SurroundingText(ec, context, before, after, selection);
-    field = "{\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + ",\"composing\":" +
+    // 読めなければ before を送らない (空の文字列だと、本体は行の頭とみなす)
+    const bool read = SurroundingText(ec, context, before, after, selection);
+    field = std::string("{") + (read ? "\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + "," : "") + "\"composing\":" +
             (composition_ != nullptr ? "true" : "false") + (selection.empty() ? "" : ",\"selection\":" + JsonString(selection)) +
             (privateField_ ? ",\"traits\":[\"Private\"]" : "") + "}";
     return true;
@@ -1324,17 +1325,24 @@ bool TextService::Reinject(UINT vk) {
     return true;
 }
 
-void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected) {
+bool TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected) {
+    auto unreadable = [this](const wchar_t* where, HRESULT hr) {
+        if (!beforeUnreadable_) TipLog(L"キャレットの前の文字を読めません (%s: 0x%08X)", where, static_cast<unsigned>(hr));
+        beforeUnreadable_ = true;
+        return false;
+    };
     // 変換中なら、変換中の文字より前と後ろ。そうでなければキャレットの前と後ろ
     Microsoft::WRL::ComPtr<ITfRange> anchor;
     if (composition_ != nullptr && context == compositionContext_) {
-        composition_->GetRange(&anchor);
+        const HRESULT hr = composition_->GetRange(&anchor);
+        if (!anchor) return unreadable(L"変換中の文字の範囲", hr);
     } else {
         TF_SELECTION selection = {};
         ULONG fetched = 0;
-        if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0) anchor.Attach(selection.range);
+        const HRESULT hr = context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched);
+        if (FAILED(hr) || fetched == 0) return unreadable(L"選択範囲", hr);
+        anchor.Attach(selection.range);
     }
-    if (!anchor) return;
     // 選んでいる文字 (変換キーで再変換する)
     constexpr LONG kSelection = 1000;
     if (composition_ == nullptr) {
@@ -1347,13 +1355,17 @@ void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wst
     constexpr LONG kAfter = 20;
     std::wstring buffer(kBefore, L'\0');
     Microsoft::WRL::ComPtr<ITfRange> range;
-    if (SUCCEEDED(anchor->Clone(&range))) {
-        LONG moved = 0;
-        range->Collapse(ec, TF_ANCHOR_START);
-        range->ShiftStart(ec, -kBefore, &moved, nullptr);
-        ULONG length = 0;
-        if (SUCCEEDED(range->GetText(ec, 0, buffer.data(), kBefore, &length))) before.assign(buffer.data(), length);
-    }
+    HRESULT hr = anchor->Clone(&range);
+    if (FAILED(hr)) return unreadable(L"範囲の複製", hr);
+    LONG moved = 0;
+    range->Collapse(ec, TF_ANCHOR_START);
+    range->ShiftStart(ec, -kBefore, &moved, nullptr);
+    ULONG length = 0;
+    hr = range->GetText(ec, 0, buffer.data(), kBefore, &length);
+    if (FAILED(hr)) return unreadable(L"GetText", hr);
+    before.assign(buffer.data(), length);
+    if (beforeUnreadable_) TipLog(L"キャレットの前の文字を読めるようになりました");
+    beforeUnreadable_ = false;
     range.Reset();
     if (SUCCEEDED(anchor->Clone(&range))) {
         LONG moved = 0;
@@ -1362,6 +1374,7 @@ void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wst
         ULONG length = 0;
         if (SUCCEEDED(range->GetText(ec, 0, buffer.data(), kAfter, &length))) after.assign(buffer.data(), length);
     }
+    return true;
 }
 
 RECT TextService::CaretRect(TfEditCookie ec, ITfContext* context) {

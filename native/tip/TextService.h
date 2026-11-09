@@ -162,7 +162,9 @@ private:
     void AbandonComposition();
     void ResumeOrCommit(ITfContext* context);
     void SelectCandidate(int index);
-    void SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected);
+    // キャレットの前を読めたら true (読めなければ before は空のまま。読めない入力欄を調べられるように、変わったときだけ tip-log に書く)
+    bool SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected);
+    bool beforeUnreadable_ = false;
     // 選択範囲の画面上の位置 (入力モードの表示に使う)。分からなければ空
     RECT CaretRect(TfEditCookie ec, ITfContext* context);
     bool ContextDisabled(ITfContext* context);
