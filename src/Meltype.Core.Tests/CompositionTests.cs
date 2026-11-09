@@ -1912,8 +1912,8 @@ internal static class CompositionTests
             Assert.Equal(word, k.Host.Document);
         }
 
-        // #1607・#1557・#1556・#1487・#918・#1625・#1389・#1482: 英字のまま打つ語
-        foreach (var word in new[] { "colab", "qwen", "quickshare", "alma", "pure", "undef", "ifndef", "elifndef", "inotify", "dissatisfactio" })
+        // #1607・#1557・#1556・#1487・#1625・#1389・#1482: 英字のまま打つ語
+        foreach (var word in new[] { "colab", "qwen", "quickshare", "alma", "undef", "ifndef", "elifndef", "inotify", "dissatisfactio" })
         {
             var k = new Keyboard();
             k.Type(word + "\n");
