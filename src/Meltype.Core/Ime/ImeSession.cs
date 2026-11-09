@@ -196,7 +196,7 @@ internal sealed class ImeSession
     private string? Before(ImeField? field) =>
         field?.Before is { Length: > ContextLength } before && !_session.CodeInput ? before[^ContextLength..] : field?.Before;
 
-    // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 ====
+    // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 (#1687) ====
     // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
     // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
     // Meltype IME の要求の中で UI Automation で読み直す方法は、待ち合いになるので採らなかった (Windows Terminal の UI Automation は
