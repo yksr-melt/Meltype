@@ -22,13 +22,15 @@ public enum ImeEventType
     KeyPressed,
     /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
     ModeToggleRequested,
-    /// <summary>モードを指定して切り替える (入力メニューで選んだなど)。</summary>
-    ModeSelected,
+    /// <summary>キーを使わずに日本語を選んだ (入力メニューなど)。</summary>
+    JapaneseModeSelected,
+    /// <summary>キーを使わずに英数を選んだ (入力メニューなど)。</summary>
+    AlphanumericModeSelected,
     /// <summary>未確定の内容を確定する (フォーカスが移ったなど)。確定する文字は応答で返す。</summary>
     CommitRequested,
     /// <summary>OS・アプリが、変換中の文字を表示のまま確定した (IBus のフォーカスの移動・TSF の OnCompositionTerminated)。応答で確定はしない。</summary>
     CommittedByApp,
-    /// <summary>前の応答の一覧 (view.list) の Index 番目をクリックした。予測変換の候補なら確定する。</summary>
+    /// <summary>前の応答の一覧 (view.candidates) の Index 番目をクリックした。予測変換の候補なら確定する。</summary>
     CandidateClicked,
     /// <summary>前の応答の一覧の Index 番目にマウスで選択を動かした。予測変換の候補は確定しない。</summary>
     CandidateHighlighted,
@@ -69,11 +71,8 @@ public sealed record ImeEvent
     /// <summary>CaretMoved・CommitRequested・CommittedByApp: キャレットがどう動いたか。</summary>
     public ImeCaret? Caret { get; init; }
 
-    /// <summary>CandidateClicked・CandidateHighlighted: 前の応答の一覧 (view.list) の何番目か。</summary>
+    /// <summary>CandidateClicked・CandidateHighlighted: 前の応答の一覧 (view.candidates) の何番目か。</summary>
     public int Index { get; init; }
-
-    /// <summary>ModeSelected: 日本語にするか。</summary>
-    public bool Japanese { get; init; }
 }
 
 /// <summary>

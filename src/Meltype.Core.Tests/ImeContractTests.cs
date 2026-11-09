@@ -545,6 +545,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void ModeSelected_SetsTheModeWhateverItWas()
+    {
+        // 入力メニューで選んだモードは、切り替えでなく、選んだモードにする (同じモードを選んでも変わらない)
+        var front = new Front();
+        front.Settings.ModeIndicator = ModeIndicatorTiming.OnSwitch;
+        var direct = front.Event("AlphanumericModeSelected");
+        Assert.True(!Japanese(direct) && Indicator(direct), "英数にして表示する\n" + front.Trace);
+        Assert.True(!Japanese(front.Event("AlphanumericModeSelected")), "もう一度選んでも英数\n" + front.Trace);
+        Assert.True(Japanese(front.Event("JapaneseModeSelected")), "日本語にする\n" + front.Trace);
+    }
+
+    [Test]
     public static void ModeIndicator_IsNotShownWhileComposing()
     {
         var front = new Front();

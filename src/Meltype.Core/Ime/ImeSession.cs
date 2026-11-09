@@ -84,7 +84,8 @@ internal sealed class ImeSession
         {
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
             ImeEventType.ModeToggleRequested when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
-            ImeEventType.ModeSelected when active => Switch(e.Japanese, before, ref explicitChange, toggle: false),
+            ImeEventType.JapaneseModeSelected when active => Switch(true, before, ref explicitChange, toggle: false),
+            ImeEventType.AlphanumericModeSelected when active => Switch(false, before, ref explicitChange, toggle: false),
             ImeEventType.CommitRequested => _session.CommitPending(),
             ImeEventType.CommittedByApp => CommittedOutside(e.Field),
             // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む

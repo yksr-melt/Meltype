@@ -101,7 +101,7 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             var active = ImeSession.IsActive(environment, current, e.Field);
             // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
             // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
-            if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.ModeSelected) ||
+            if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.JapaneseModeSelected or ImeEventType.AlphanumericModeSelected) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
                 return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), e.Caret?.FocusEntered == true, NextRev()), Pass);

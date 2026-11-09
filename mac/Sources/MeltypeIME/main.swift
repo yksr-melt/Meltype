@@ -191,9 +191,9 @@ func runChecks(inputPath: String?) -> Int32 {
         _ = type("kyouhagoogledekensaku ", into: stress)
         stress.send("CandidateClicked", ["index": iteration % 2])
         check("stress commit \(iteration)", stress.send("CommitRequested")?.result.view == nil)
-        stress.send("ModeSelected", ["japanese": false])
+        stress.send("AlphanumericModeSelected")
         _ = type("hello", into: stress)
-        stress.send("ModeSelected", ["japanese": true])
+        stress.send("JapaneseModeSelected")
         stress.text = ""
         _ = type("wsldeshell\n", into: stress)
         check("stress mode switch \(iteration)", stress.text == "wslでshell")

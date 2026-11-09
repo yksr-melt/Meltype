@@ -209,14 +209,14 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         return menu
     }
 
-    @objc private func selectJapanese(_ sender: Any?) { send("ModeSelected", client: client(), ["japanese": true]) }
-    @objc private func selectDirect(_ sender: Any?) { send("ModeSelected", client: client(), ["japanese": false]) }
+    @objc private func selectJapanese(_ sender: Any?) { send("JapaneseModeSelected", client: client()) }
+    @objc private func selectDirect(_ sender: Any?) { send("AlphanumericModeSelected", client: client()) }
 
     func selectModeFromService(_ action: ModeShortcutAction) -> Bool {
         guard let client = client() else { return false }
         switch action {
-        case .japanese: send("ModeSelected", client: client, ["japanese": true])
-        case .direct: send("ModeSelected", client: client, ["japanese": false])
+        case .japanese: send("JapaneseModeSelected", client: client)
+        case .direct: send("AlphanumericModeSelected", client: client)
         case .toggle: send("ModeToggleRequested", client: client)
         }
         return true
