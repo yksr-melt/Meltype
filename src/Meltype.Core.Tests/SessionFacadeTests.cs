@@ -95,7 +95,7 @@ internal static class SessionFacadeTests
                         Assert.True(result.View is null, context);
                         Assert.Equal(enabled ? 1 : 0, result.Commits.Single().CaretBack, context);
                         using var json = JsonDocument.Parse(result.ToJson());
-                        Assert.Equal(enabled, json.RootElement.GetProperty("commits")[0].TryGetProperty("moveCaretBack", out _), context);
+                        Assert.Equal(enabled ? 1 : 0, json.RootElement.GetProperty("commits")[0].GetProperty("moveCaretBack").GetInt32(), context);
                         Assert.True(!session.HandleKey(VirtualKeys.Return, null, false, control, false, false).Consumed,
                             "確定後にもう一度押した Enter はアプリで使える: " + context);
                     }
@@ -548,7 +548,7 @@ internal static class SessionFacadeTests
         var session = Create();
         var commit = Type(session, "kyouha\n")[^1].Commits.Single();
         Assert.True(commit.Expect is null && commit.Current is null, "消さない確定には付けない");
-        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("removeBefore") && !new SessionResult(true, [commit], null).ToJson().Contains("currentWord"), "JSON にも入れない");
+        Assert.True(new SessionResult(true, [commit], null).ToJson().Contains("\"removeBefore\":null,\"currentWord\":null"), "JSON でも null");
     }
 
     [Test]
@@ -701,7 +701,7 @@ internal static class SessionFacadeTests
     public static void Json_IsEscaped()
     {
         var result = new SessionResult(true, [new TextEdit(2, "a\"b\\c\n", "\"\\")], new CompositionView("x", [], -1, true, "h", ["x"], 0));
-        const string expected = """{"consumed":true,"commits":[{"text":"a\"b\\c\n","removeBefore":"\"\\"}],"view":{"text":"x","converting":true,"clauses":["x"],"selectedClause":0,"hint":"h","spellingSuggestion":null,"typedKeys":null,"candidates":null}}""";
+        const string expected = """{"consumed":true,"commits":[{"text":"a\"b\\c\n","removeBefore":"\"\\","currentWord":null,"moveCaretBack":0,"insertByPaste":false}],"view":{"text":"x","converting":true,"clauses":["x"],"selectedClause":0,"hint":"h","spellingSuggestion":null,"typedKeys":null,"candidates":null}}""";
         Assert.Equal(expected, result.ToJson());
     }
 

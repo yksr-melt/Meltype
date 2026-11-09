@@ -566,7 +566,7 @@ private:
         if (auto *commits = result.get("commits"); commits && commits->kind == Json::Kind::Array) {
             for (const auto &edit : commits->items) {
                 // 確定し直し: 本体がキャレットの前と照合した前の文字 (removeBefore) を、文字数 (コードポイント) で消してから入れる
-                if (edit.get("removeBefore")) {
+                if (!edit.str("removeBefore").empty()) {
                     const size_t length = charLength(edit.str("removeBefore"));
                     hidePreedit(ic);
                     ic->deleteSurroundingText(-static_cast<int>(length), static_cast<unsigned int>(length));

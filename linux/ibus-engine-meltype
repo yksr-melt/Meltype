@@ -268,7 +268,7 @@ class MeltypeEngine(IBus.Engine):
     def _apply(self, result):
         for edit in result["commits"]:
             # 確定し直し: 本体がキャレットの前と照合した前の文字 (removeBefore) を消してから入れる
-            if "removeBefore" in edit:
+            if edit["removeBefore"] is not None:
                 # IBus は文字 (コードポイント) 単位で消す。消えたかどうかは送ったあとでしか分からないので、次の出来事のときに確かめる
                 length = len(edit["removeBefore"])
                 self._note_replace(length, edit["text"])
@@ -278,7 +278,7 @@ class MeltypeEngine(IBus.Engine):
             if edit["text"]:
                 self.commit_text(IBus.Text.new_from_string(edit["text"]))
             # 確定した文字の中にキャレットを戻す (空の括弧の中など)。IBus からキャレットは動かせないので、← をアプリに送る
-            for _ in range(edit.get("moveCaretBack", 0)):
+            for _ in range(edit["moveCaretBack"]):
                 self.forward_key_event(IBus.KEY_Left, KEYCODE_LEFT, 0)
                 self.forward_key_event(IBus.KEY_Left, KEYCODE_LEFT, IBus.ModifierType.RELEASE_MASK)
         view = result["view"]

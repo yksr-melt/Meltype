@@ -136,7 +136,7 @@ internal static class ImeContractTests
             foreach (var commit in result.GetProperty("commits").EnumerateArray())
             {
                 var text = commit.GetProperty("text").GetString()!;
-                if (commit.TryGetProperty("removeBefore", out var remove))
+                if (commit.GetProperty("removeBefore") is { ValueKind: JsonValueKind.String } remove)
                 {
                     var expect = remove.GetString()!;
                     if (!Document.EndsWith(expect, StringComparison.Ordinal))
@@ -230,7 +230,7 @@ internal static class ImeContractTests
             return (front, outputs);
         }
         static bool Rewrites(List<JsonElement> outputs) =>
-            outputs.SelectMany(o => Commits(o).EnumerateArray()).Any(c => c.TryGetProperty("removeBefore", out _));
+            outputs.SelectMany(o => Commits(o).EnumerateArray()).Any(c => c.GetProperty("removeBefore").ValueKind == JsonValueKind.String);
 
         var (still, stillOutputs) = TypeWantAfterI(moved: false);
         Assert.True(Rewrites(stillOutputs), "動かさなければ、前の語を確定し直す\n" + still.Trace);
@@ -266,8 +266,7 @@ internal static class ImeContractTests
                 var enter = front.Key('\n');
                 Assert.True(Consumed(enter), "確定に使った Enter はアプリに通さない\n" + front.Trace);
                 Assert.Equal("「」", front.Document, front.Trace);
-                Assert.Equal(enabled, Commits(enter)[0].TryGetProperty("moveCaretBack", out var caret), front.Trace);
-                if (enabled) Assert.Equal(1, caret.GetInt32(), front.Trace);
+                Assert.Equal(enabled ? 1 : 0, Commits(enter)[0].GetProperty("moveCaretBack").GetInt32(), front.Trace);
             }
             var next = new Front();
             next.Settings.CursorIntoBrackets = enabled;
@@ -571,7 +570,7 @@ internal static class ImeContractTests
         // キーを送って文字を入れるフロント向け: アプリ別設定の「確定した文字の入れ方」・Qt のアプリ・改行を含む文
         var front = new Front();
         front.Type("ka");
-        Assert.True(!Commits(front.Key('\n'))[0].TryGetProperty("insertByPaste", out _), "ふつうはキーで入れる\n" + front.Trace);
+        Assert.True(!Commits(front.Key('\n'))[0].GetProperty("insertByPaste").GetBoolean(), "ふつうはキーで入れる\n" + front.Trace);
         front.Settings.AppRules.Add(new AppRule { Process = "paste.exe", Enabled = true, Commit = CommitMethod.Paste });
         front.App = "paste.exe";
         front.Type("ka");

@@ -26,6 +26,8 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 {
     /// <summary>
     /// フロントに渡す JSON にする (NativeAOT でも使えるよう手書き)。View は <see cref="ForFront"/> で作ったもの。
+    /// 項目は値が無くても毎回すべて出す (null・0・false)。view と candidates だけは、出さないときに丸ごと null。
+    /// 項目を足したら、各フロントが読むか使わないかを FrontProtocolTests で決める。
     /// 確定し直す (Commits の DeleteBefore が 1 以上) なら、消す文字 (Expect。ImeSession がキャレットの前と照合済み) を removeBefore で渡す。
     /// </summary>
     public string ToJson()
@@ -35,20 +37,15 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         for (var i = 0; i < Commits.Count; i++)
         {
             if (i > 0) builder.Append(',');
+            var rewrite = Commits[i].DeleteBefore > 0;
             builder.Append("{\"text\":");
             AppendString(builder, Commits[i].Text);
-            if (Commits[i].DeleteBefore > 0)
-            {
-                builder.Append(",\"removeBefore\":");
-                AppendString(builder, Commits[i].Expect ?? throw new InvalidOperationException("確定し直す文字が照合されていない"));
-            }
-            if (Commits[i].DeleteBefore > 0 && Commits[i].Current is { } current)
-            {
-                builder.Append(",\"currentWord\":");
-                AppendString(builder, current);
-            }
-            if (Commits[i].CaretBack > 0) builder.Append(",\"moveCaretBack\":").Append(Commits[i].CaretBack);
-            if (Commits[i].Paste) builder.Append(",\"insertByPaste\":true");
+            builder.Append(",\"removeBefore\":");
+            AppendNullable(builder, rewrite ? Commits[i].Expect ?? throw new InvalidOperationException("確定し直す文字が照合されていない") : null);
+            builder.Append(",\"currentWord\":");
+            AppendNullable(builder, rewrite ? Commits[i].Current : null);
+            builder.Append(",\"moveCaretBack\":").Append(Commits[i].CaretBack);
+            builder.Append(",\"insertByPaste\":").Append(Commits[i].Paste ? "true" : "false");
             builder.Append('}');
         }
         builder.Append("],\"view\":");

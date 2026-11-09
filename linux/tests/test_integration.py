@@ -425,13 +425,13 @@ class IntegrationTests(unittest.TestCase):
 
     def test_reconversion_replaces_matching_previous_text(self):
         self.engine.document = "previous"
-        self.engine._apply({"commits": [{"removeBefore": "previous", "text": "replacement"}], "view": None})
+        self.engine._apply({"commits": [{"text": "replacement", "removeBefore": "previous", "currentWord": None, "moveCaretBack": 0, "insertByPaste": False}], "view": None})
         self.assertEqual("replacement", self.engine.document)
 
     def test_reconversion_counts_code_points(self):
         # IBus はコードポイント単位で消す (😊 は 1)。消す文字数は remove から数える。
         self.engine.document = "pasted😊"
-        self.engine._apply({"commits": [{"removeBefore": "😊", "text": "笑"}], "view": None})
+        self.engine._apply({"commits": [{"text": "笑", "removeBefore": "😊", "currentWord": None, "moveCaretBack": 0, "insertByPaste": False}], "view": None})
         self.assertEqual("pasted笑", self.engine.document)
 
     def test_typing_after_paste_keeps_pasted_text(self):
@@ -471,7 +471,7 @@ class IntegrationTests(unittest.TestCase):
         # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)
         forwarded = []
         self.engine.forward_key_event = lambda keyval, keycode, state: forwarded.append((keyval, state))
-        self.engine._apply({"commits": [{"text": "「」", "moveCaretBack": 1}], "view": None})
+        self.engine._apply({"commits": [{"text": "「」", "removeBefore": None, "currentWord": None, "moveCaretBack": 1, "insertByPaste": False}], "view": None})
         self.assertEqual([(IBus.KEY_Left, 0), (IBus.KEY_Left, IBus.ModifierType.RELEASE_MASK)], forwarded)
 
     def test_aux_shows_typed_suggestion_and_hint(self):

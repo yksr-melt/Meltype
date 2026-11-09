@@ -11,6 +11,10 @@ namespace Meltype.Ime;
 // フロント (TSF・Mac・IBus・fcitx5) と ImeHost のやり取り。フロントは OS から読んだ事実だけを ImeEvent で渡し、
 // どうするか (確定・表示・モード・どのキーを受け取るか) は ImeHost が ImeOutput で返す。
 // 同じプロセスのフロントは ImeHost.Handle(ImeEvent) を呼び、別プロセスのフロント (TSF の DLL) は 1 メッセージ 1 JSON で送る。
+// フロントは state を毎回まるごと置き換え、result をそのまま適用する。表示・時間・番号の出し分けもフロントは決めない。
+// 判断がフロントに残っているのは、ImeTrait.Game・NonText の推測と、TSF の DLL のパスワード欄の判定 (打鍵を Meltype.exe に送らない) だけ。
+// JSON の項目名を変えたら、JSON を読む 4 つのフロント (native/tip/TextService.cpp・linux/fcitx5/meltype.cpp・linux/ibus-engine-meltype・
+// mac/Sources/MeltypeIME/NativeCore.swift) を直す (FrontProtocolTests が突き合わせる)。
 
 /// <summary>フロントが送る出来事。JSON の名前はメンバー名のまま。知らない名前の出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeEventType
@@ -37,7 +41,10 @@ public enum ImeEventType
     CaretMoved,
     /// <summary>今の状態だけを受け取る (設定を変えたかもしれないときなど)。入力の本体は作らない。</summary>
     StateRequested,
-    /// <summary>フロントの IME のインスタンス (Instance) がなくなった。未確定の文字は捨てる。</summary>
+    /// <summary>
+    /// フロントの IME のインスタンス (Instance) がなくなった (TSF の Deactivate)。未確定の文字は捨てる。
+    /// インスタンスごとに ImeHost を持つフロント (Mac・IBus・fcitx5) は、ImeHost を捨てれば済むので送らない。
+    /// </summary>
     InstanceDestroyed,
 }
 
@@ -102,11 +109,11 @@ public enum ImeTrait
     Password,
     /// <summary>入力を覚えないように求める (TSF の IS_PRIVATE・IBus の InputHints.PRIVATE・fcitx5 の CapabilityFlag::Sensitive)。</summary>
     Private,
-    /// <summary>ゲームらしいウィンドウ (Windows のフロントが調べた全画面などの手がかり)。</summary>
+    /// <summary>ゲームらしいウィンドウ。事実でなく、Windows のフロントがウィンドウの形などの手がかりから推測した結果。</summary>
     Game,
     /// <summary>全画面表示のウィンドウ (設定「全画面のアプリでは止める」)。</summary>
     Fullscreen,
-    /// <summary>フォーカスのある所が入力欄ではない (UI Automation。キーボードフックのフロント)。</summary>
+    /// <summary>フォーカスのある所が入力欄ではない。事実でなく、キーボードフックのフロントが UI Automation から推測した結果。</summary>
     NonText,
     /// <summary>フロントがアプリに文字を送れない (管理者として動くアプリ・Meltype 自身の画面。キーボードフックのフロント)。</summary>
     Unreachable,
@@ -199,6 +206,19 @@ public sealed record ImeCapture
 /// <summary>Vk は Windows の仮想キーコード。Modifiers は Shift=1, Ctrl=2, Alt=4, Win=8 (<see cref="Input.ShortcutModifiers"/>)。</summary>
 public sealed record ImeShortcut(int Vk, int Modifiers);
 
+/// <summary>
+/// 出来事への応答。result (<see cref="SessionResult.ToJson"/>) をフロントはこう適用する:
+/// <list type="bullet">
+/// <item>consumed: true ならキーをアプリに通さない。</item>
+/// <item>commits: 順に text を確定する (前の確定の後ろに続ける)。removeBefore があれば、キャレットの前のその文字を消してから入れる (本体がキャレットの前と照合済み)。
+/// moveCaretBack は確定したあとにキャレットを左へ戻す数 (UTF-16)。insertByPaste はキーを送らずに貼り付けで入れる (キーを送って入れるフロントだけが使う)。
+/// currentWord は、確定し直すときに今確定した語 (TSF が Chrome で編集を 2 回に分けるのに使う)。</item>
+/// <item>view: null なら変換中の表示を消す。text (確定される形)・clauses・hint・spellingSuggestion・typedKeys は、あればそのまま出す。</item>
+/// <item>view.candidates: null なら一覧を出さない。番号は numbered のときだけ出す。selectedMeaning は選んでいる候補で meaningDelayMs 止まったら出す。
+/// 番号で選ぶ出来事 (CandidateClicked・CandidateHighlighted) の index は、この一覧の番号。</item>
+/// </list>
+/// state.modeIndicatorMs が 0 でなければ、「あ / A」をキャレットの近くにその時間だけ出す。
+/// </summary>
 public sealed record ImeOutput(ImeState State, SessionResult Result)
 {
     /// <summary>{"version":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
