@@ -506,15 +506,15 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual("let x = ka", self.engine.document)
 
     def test_mode_is_shown_on_the_panel_and_near_the_caret(self):
-        self.engine.do_set_cursor_location(10, 10, 1, 20)
-        self.engine.do_focus_in()
-        self.assertEqual("あ", self.engine.panel_mode)
-        # 入力欄に入ったときの表示は、アプリが新しいキャレットの位置を知らせてから出す
+        # どの入力欄にもフォーカスが無いときの仮の入力コンテキストは、入力欄ではない
+        self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_1", "fake")
+        self.engine.do_set_cursor_location(0, 0, 0, 0)
         self.assertIsNone(self.engine.aux)
-        self.engine.do_set_cursor_location(0, 0, 1, 20)
-        self.assertIsNone(self.engine.aux, "0, 0 は位置を知らない入力欄")
-        self.engine.do_set_cursor_location(10, 10, 1, 20)
-        self.assertIsNone(self.engine.aux, "前の入力欄の位置")
+        self.engine.do_focus_out()
+        self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_2", "gtk3-im:gedit")
+        self.assertEqual("あ", self.engine.panel_mode)
+        # 入力欄に入ったときの表示は、入ったあとアプリがキャレットの位置を知らせてから出す
+        self.assertIsNone(self.engine.aux)
         self.engine.do_set_cursor_location(100, 100, 1, 20)
         self.assertEqual("あ", self.engine.aux)
         self.special(IBus.KEY_Alt_L)
@@ -525,7 +525,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(("あ", "あ"), (self.engine.panel_mode, self.engine.aux))
 
     def test_app_comes_from_the_client_name(self):
-        for client, app in (("gtk4-im:gnome-text-editor", "gnome-text-editor"), ("gnome-shell", "gnome-shell"), ("", None)):
+        for client, app in (("gtk4-im:gnome-text-editor", "gnome-text-editor"), ("gnome-shell", "gnome-shell"), ("fake", None), ("", None)):
             self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_1", client)
             self.assertEqual(app, self.engine._app, client)
 

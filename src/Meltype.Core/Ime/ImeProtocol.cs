@@ -112,7 +112,10 @@ public enum ImeTrait
     Game,
     /// <summary>全画面表示のウィンドウ (設定「全画面のアプリでは止める」)。</summary>
     Fullscreen,
-    /// <summary>フォーカスのある所が入力欄ではない。事実でなく、キーボードフックのフロントが UI Automation から推測した結果。</summary>
+    /// <summary>
+    /// フォーカスのある所が入力欄ではない。キーボードフックのフロントは UI Automation から推測し (事実でない)、
+    /// IBus はどの入力欄にもフォーカスが無いときの仮の入力コンテキスト (クライアント名「fake」) で知る。
+    /// </summary>
     NonText,
     /// <summary>フロントがアプリに文字を送れない (管理者として動くアプリ・Meltype 自身の画面。キーボードフックのフロント)。</summary>
     Unreachable,

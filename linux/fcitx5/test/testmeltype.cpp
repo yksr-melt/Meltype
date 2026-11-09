@@ -6,12 +6,12 @@
 //   cmake -S linux/fcitx5 -B build -DBUILD_TESTING=ON && cmake --build build && MELTYPE_DIR=… ctest --test-dir build
 
 #include <testfrontend_public.h>
+#include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
 #include <fcitx-utils/log.h>
 #include <fcitx-utils/stringutils.h>
 #include <fcitx-utils/testing.h>
 #include <fcitx/addonmanager.h>
-#include <fcitx/candidatelist.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fcitx/inputmethodgroup.h>
 #include <fcitx/inputmethodmanager.h>
@@ -58,20 +58,6 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         ic->focusIn();
         instance->setCurrentInputMethod(ic, "meltype", true);
         FCITX_ASSERT(instance->inputMethod(ic) == "meltype");
-        // 入力欄に入ったときの入力モードの表示は、アプリがキャレットの位置を知らせてから出す
-        // (入力メソッドを切り替えたときは fcitx5 が自分で情報を出すことがあるので、フォーカスを入れ直して見る)
-        ic->setCursorRect(Rect(10, 10, 11, 30));
-        ic->focusOut();
-        ic->inputPanel().reset();
-        ic->focusIn();
-        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
-        // 0, 0 は位置を知らない入力欄、前と同じ位置は前の入力欄の位置
-        ic->setCursorRect(Rect(0, 0, 1, 20));
-        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
-        ic->setCursorRect(Rect(10, 10, 11, 30));
-        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
-        ic->setCursorRect(Rect(100, 100, 101, 120));
-        FCITX_ASSERT(ic->inputPanel().auxUp().toString() == "あ") << ic->inputPanel().auxUp().toString();
 
         // ローマ字の日本語 (Mozc が無いのでひらがなのまま確定)
         frontend->call<ITestFrontend::pushCommitExpectation>("にほんご");
@@ -116,10 +102,22 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), true);
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
 
-        dispatcher->schedule([dispatcher, instance]() {
-            dispatcher->detach();
-            instance->exit();
-        });
+        // 入力欄に入ったときの入力モードの表示は、アプリがキャレットの位置を知らせるのを少し待ってから出す
+        // (入力メソッドを切り替えたときは fcitx5 が自分で情報を出すことがあるので、フォーカスを入れ直して見る)
+        ic->focusOut();
+        ic->inputPanel().reset();
+        ic->focusIn();
+        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        static std::unique_ptr<EventSourceTime> later;
+        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
+            [dispatcher, instance, ic](EventSourceTime *, uint64_t) {
+                FCITX_ASSERT(ic->inputPanel().auxUp().toString() == "あ") << ic->inputPanel().auxUp().toString();
+                dispatcher->schedule([dispatcher, instance]() {
+                    dispatcher->detach();
+                    instance->exit();
+                });
+                return true;
+            });
     });
 }
 

@@ -62,8 +62,6 @@ if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
 _focused = None
-# どの入力欄かにかかわらず、最後に知らされたキャレットの位置
-_last_location = None
 
 
 def _refresh_focused():
@@ -132,6 +130,8 @@ class MeltypeEngine(IBus.Engine):
         self._surrounding = True
         self._traits = []
         self._app = None
+        # どの入力欄にもフォーカスが無いとき、IBus は仮の入力コンテキスト (クライアント名「fake」) にフォーカスを移す
+        self._fake = False
         # 押している修飾キー (左右の Alt)。ほかのキーを押したら None (単独押しではない)
         self._tap = None
         # 確定し直しで前の文字を消したのに残っていた入力欄 (Wayland + Chromium) は、これからも消せないとみなす
@@ -143,10 +143,9 @@ class MeltypeEngine(IBus.Engine):
         # 候補で少し (1.5 秒) 止まったら、その候補の意味を補助テキストに出す (Windows 版と同じ)
         self._meaning_key = None
         self._mode_shown = None
-        # 入力欄に入ったときの入力モードの表示 (あ / A, 時間)。アプリがキャレットの位置を知らせてから出す
+        # 入力欄に入ったときの入力モードの表示 (あ / A, 時間)。入ったあとアプリがキャレットの位置を知らせてから出す
         self._defer_mode = False
         self._pending_mode = None
-        self._location_at_focus = None
         self._properties = IBus.PropList()
         # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
         self._language_mode = None
@@ -179,29 +178,20 @@ class MeltypeEngine(IBus.Engine):
         if output["state"]["modeIndicatorMs"]:
             mode = (output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
             if self._defer_mode:
-                # 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。新しい位置の知らせを待ち、来なければ出さない
                 self._pending_mode = mode
-                self._location_at_focus = _last_location
-                GLib.timeout_add(150, self._forget_pending_mode)
             else:
                 self._show_mode(*mode)
         return output
 
-    def _forget_pending_mode(self):
-        self._pending_mode = None
-        return False
-
     def do_set_cursor_location(self, x, y, w, h):
-        global _last_location
-        # 入力欄の無いウィンドウは、0, 0 か前の入力欄の位置を知らせてくる
-        if self._pending_mode and (x, y) != (0, 0) and (x, y, w, h) != self._location_at_focus:
+        if self._pending_mode:
             mode, self._pending_mode = self._pending_mode, None
             self._show_mode(*mode)
-        _last_location = (x, y, w, h)
 
     def _field(self):
         before, after, selection = self._surrounding_text()
-        field = {"before": before, "after": after, "composing": self._preedit_visible, "traits": self._traits,
+        traits = self._traits + (["NonText"] if self._fake else [])
+        field = {"before": before, "after": after, "composing": self._preedit_visible, "traits": traits,
                  "canRemove": self._surrounding and not self._delete_failed}
         if selection:
             field["selection"] = selection
@@ -246,8 +236,9 @@ class MeltypeEngine(IBus.Engine):
 
     def do_focus_in_id(self, object_path, client):
         # IBus 1.5.27 以降。client は「gtk4-im:gnome-text-editor」のように、IM モジュールとプログラムの名前。
-        # GNOME Shell の画面は「gnome-shell」だけ
-        self._app = client.rpartition(":")[2] or None
+        # GNOME Shell の画面は「gnome-shell」だけ。仮の入力コンテキストは「fake」で、入力欄ではない
+        self._fake = client == "fake"
+        self._app = None if self._fake else client.rpartition(":")[2] or None
         self.do_focus_in()
 
     def do_focus_in(self):

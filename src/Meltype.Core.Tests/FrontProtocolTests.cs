@@ -34,7 +34,7 @@ internal static class FrontProtocolTests
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste"],
             // 送る入力欄の事実
-            Others: ["app", "selection"]),
+            Others: ["app", "selection", "NonText"]),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new(@"\blet (\w+):"),
             // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
