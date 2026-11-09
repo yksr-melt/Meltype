@@ -507,10 +507,12 @@ internal static class SessionFacadeTests
         // Meltype IME の DLL も予測変換の候補の一覧を出せるように、候補と Tab で選んでいる候補を JSON に入れる
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
             new CompositionOptions { Predictor = new Predictor(null, null, null), Predictions = () => true }, () => new Settings());
+        // 固定の操作ガイドを出さない OS・入力方式 (Settings.ShowsGuide) では、文脈の案内だけ
+        static string Guide(string hint) => new Settings().ShowsGuide ? hint : "";
         var typing = Type(session, "decis", "I made ")[^1];
         Assert.True(typing.View?.Predictions?.Contains("decision") == true, string.Join(",", typing.View?.Predictions ?? []));
         Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "予測の選択案内は固定の操作一覧と分けて返す");
-        Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "従来の予測の案内は変えない");
+        Assert.Equal("Tab 予測の候補を選ぶ" + Guide("　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字"), typing.View.Hint, "従来の予測の案内は変えない");
         Assert.True(typing.View.Suggestion is null, "予測の案内は書き間違いの修正ではない");
         Assert.True(typing.ToJson().Contains("\"candidates\":{\"items\":[\"") && typing.ToJson().Contains("\"selected\":-1,"), typing.ToJson());
         var tab = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false, "I made ");
@@ -523,10 +525,10 @@ internal static class SessionFacadeTests
         Assert.Equal(-1, back.View?.SelectedPrediction, "Shift+Tab で前に戻る (最初の前は選ばない状態)");
         var kana = session.HandleKey(VirtualKeys.F6, null, false, false, false, false).View!;
         Assert.True(kana.ContextHint is null, "予測を出さない表示では固定の操作一覧だけに戻る");
-        Assert.Equal("Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", kana.Hint);
+        Assert.Equal(Guide("Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字"), kana.Hint);
         var converting = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View!;
         Assert.True(converting.Converting && converting.ContextHint is null, "変換中の固定の操作一覧は文脈の案内に含めない");
-        Assert.Equal("←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る", converting.Hint);
+        Assert.Equal(Guide("←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る"), converting.Hint);
     }
 
     [Test]
