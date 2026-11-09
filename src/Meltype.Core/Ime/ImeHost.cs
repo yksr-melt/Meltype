@@ -85,9 +85,9 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
 
     public ImeOutput Handle(ImeEvent e)
     {
-        if (e.V != Version)
+        if (e.Version != Version)
         {
-            Diagnostics.Log.Warn($"フロントのプロトコルの版 ({e.V}) が本体 ({Version}) と違うので、受け持ちません");
+            Diagnostics.Log.Warn($"フロントのプロトコルの版 ({e.Version}) が本体 ({Version}) と違うので、受け持ちません");
             return Inactive();
         }
         if (e.Type == ImeEventType.InstanceDestroyed)
@@ -104,7 +104,7 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.ModeSelected) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.Open ?? true, current.ForApp(e.Field?.App), e.Caret?.FocusEntered == true, NextRev()), Pass);
+                return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), e.Caret?.FocusEntered == true, NextRev()), Pass);
             }
             session = new ImeSession(environment, settings);
             _sessions[e.Instance] = session;
@@ -117,5 +117,5 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
     private static SessionResult Pass => new(false, [], null);
 
     private static ImeOutput Inactive() =>
-        new(new ImeState { Capture = new ImeCapture(), Rev = NextRev() }, Pass);
+        new(new ImeState { Capture = new ImeCapture(), Revision = NextRev() }, Pass);
 }

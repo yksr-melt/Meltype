@@ -77,7 +77,7 @@ struct ImeState: Decodable {
     /// 表示するモード (「あ」なら true)
     let japanese: Bool
     /// 入力モードを表示する時間 (ミリ秒。0 なら出さない)
-    let indicatorMs: Int
+    let modeIndicatorMs: Int
 }
 
 struct SessionResult: Decodable {
@@ -86,10 +86,10 @@ struct SessionResult: Decodable {
     let view: CompositionView?
 }
 
-/// キャレットの前の remove (本体が照合済み) を消してから text を入れる
+/// キャレットの前の removeBefore (本体が照合済み) を消してから text を入れる
 struct TextEdit: Decodable {
     let text: String
-    let remove: String?
+    let removeBefore: String?
 }
 
 struct CompositionView: Decodable {
@@ -98,11 +98,11 @@ struct CompositionView: Decodable {
     let clauses: [String]
     let selectedClause: Int
     let hint: String
-    let suggestion: String?
+    let spellingSuggestion: String?
     /// 打ったキー (見えている文字と違うときだけ)
-    let typed: String?
+    let typedKeys: String?
     /// 一覧に出す候補 (出さないなら nil)
-    let list: CandidateList?
+    let candidates: CandidateList?
 }
 
 struct CandidateList: Decodable {
@@ -110,9 +110,9 @@ struct CandidateList: Decodable {
     /// 候補ごとの注記 (無ければ nil)
     let notes: [String?]
     let selected: Int
-    /// 選んでいる候補の意味。候補で meaningMs 止まったら注釈に出す
-    let meaning: String?
-    let meaningMs: Int
+    /// 選んでいる候補の意味。候補で meaningDelayMs 止まったら注釈に出す
+    let selectedMeaning: String?
+    let meaningDelayMs: Int
 }
 
 /// libMeltypeNative.dylib を読み込んで呼ぶ。Meltype.app/Contents/Frameworks に置く (build.sh)。

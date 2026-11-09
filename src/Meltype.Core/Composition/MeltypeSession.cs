@@ -26,7 +26,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 {
     /// <summary>
     /// フロントに渡す JSON にする (NativeAOT でも使えるよう手書き)。View は <see cref="ForFront"/> で作ったもの。
-    /// 確定し直す (Commits の DeleteBefore が 1 以上) なら、消す文字 (Expect。ImeSession がキャレットの前と照合済み) を remove で渡す。
+    /// 確定し直す (Commits の DeleteBefore が 1 以上) なら、消す文字 (Expect。ImeSession がキャレットの前と照合済み) を removeBefore で渡す。
     /// </summary>
     public string ToJson()
     {
@@ -39,16 +39,16 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             AppendString(builder, Commits[i].Text);
             if (Commits[i].DeleteBefore > 0)
             {
-                builder.Append(",\"remove\":");
+                builder.Append(",\"removeBefore\":");
                 AppendString(builder, Commits[i].Expect ?? throw new InvalidOperationException("確定し直す文字が照合されていない"));
             }
             if (Commits[i].DeleteBefore > 0 && Commits[i].Current is { } current)
             {
-                builder.Append(",\"current\":");
+                builder.Append(",\"currentWord\":");
                 AppendString(builder, current);
             }
-            if (Commits[i].CaretBack > 0) builder.Append(",\"caretBack\":").Append(Commits[i].CaretBack);
-            if (Commits[i].Paste) builder.Append(",\"paste\":true");
+            if (Commits[i].CaretBack > 0) builder.Append(",\"moveCaretBack\":").Append(Commits[i].CaretBack);
+            if (Commits[i].Paste) builder.Append(",\"insertByPaste\":true");
             builder.Append('}');
         }
         builder.Append("],\"view\":");
@@ -65,11 +65,11 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
-        builder.Append(",\"suggestion\":");
+        builder.Append(",\"spellingSuggestion\":");
         AppendNullable(builder, view.Suggestion);
-        builder.Append(",\"typed\":");
+        builder.Append(",\"typedKeys\":");
         AppendNullable(builder, view.Typed);
-        builder.Append(",\"list\":");
+        builder.Append(",\"candidates\":");
         var predictions = ListsPredictions(view) == true;
         var items = predictions ? view.Predictions! : view.Candidates;
         if (items.Count == 0)
@@ -88,10 +88,10 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         }
         builder.Append("],\"numbered\":").Append(Numbered(view) ? "true" : "false");
         builder.Append(",\"selected\":").Append(predictions ? view.SelectedPrediction : view.SelectedIndex)
-            .Append(",\"meaning\":");
+            .Append(",\"selectedMeaning\":");
         AppendNullable(builder, view.Meaning);
         // 一覧・view・result を閉じる
-        builder.Append(",\"meaningMs\":").Append(MeaningDelayMs).Append("}}}");
+        builder.Append(",\"meaningDelayMs\":").Append(MeaningDelayMs).Append("}}}");
         return builder.ToString();
     }
 

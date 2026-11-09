@@ -96,7 +96,7 @@ internal static class ImeContractTests
             var composing = Composition.GetValueOrDefault(instance) is not null;
             var field = $"{{\"before\":{Json(Document)},\"after\":\"\",\"composing\":{(composing ? "true" : "false")},\"traits\":{JsonSerializer.Serialize(Traits)}" +
                 (App is null ? "" : $",\"app\":{Json(App)}") + (Selection is null ? "" : $",\"selection\":{Json(Selection)}") + "}";
-            var output = Send($"{{\"v\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)},\"open\":{(Open ? "true" : "false")},\"field\":{field}{extra}}}");
+            var output = Send($"{{\"version\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)},\"imeOpen\":{(Open ? "true" : "false")},\"field\":{field}{extra}}}");
             Apply(output, instance);
             return output;
         }
@@ -130,13 +130,13 @@ internal static class ImeContractTests
         /// </summary>
         public void Apply(JsonElement output, string instance)
         {
-            Assert.Equal(ImeHost.Version, output.GetProperty("v").GetInt32(), Trace);
+            Assert.Equal(ImeHost.Version, output.GetProperty("version").GetInt32(), Trace);
             State = output.GetProperty("state");
             var result = output.GetProperty("result");
             foreach (var commit in result.GetProperty("commits").EnumerateArray())
             {
                 var text = commit.GetProperty("text").GetString()!;
-                if (commit.TryGetProperty("remove", out var remove))
+                if (commit.TryGetProperty("removeBefore", out var remove))
                 {
                     var expect = remove.GetString()!;
                     if (!Document.EndsWith(expect, StringComparison.Ordinal))
@@ -149,7 +149,7 @@ internal static class ImeContractTests
                 Document += text;
             }
             Composition[instance] = result.GetProperty("view") is { ValueKind: JsonValueKind.Object } view ? view.GetProperty("text").GetString() : null;
-            if (Active(output)) Open = State.GetProperty("open").GetBoolean();
+            if (Active(output)) Open = State.GetProperty("imeOpen").GetBoolean();
         }
     }
 
@@ -160,11 +160,11 @@ internal static class ImeContractTests
 
     private static bool Consumed(JsonElement output) => output.GetProperty("result").GetProperty("consumed").GetBoolean();
 
-    private static bool Active(JsonElement output) => output.GetProperty("state").GetProperty("active").GetBoolean();
+    private static bool Active(JsonElement output) => output.GetProperty("state").GetProperty("handlesInput").GetBoolean();
 
     private static bool Japanese(JsonElement output) => output.GetProperty("state").GetProperty("japanese").GetBoolean();
 
-    private static bool Indicator(JsonElement output) => output.GetProperty("state").GetProperty("indicatorMs").GetInt32() > 0;
+    private static bool Indicator(JsonElement output) => output.GetProperty("state").GetProperty("modeIndicatorMs").GetInt32() > 0;
 
     private static JsonElement Capture(JsonElement output) => output.GetProperty("state").GetProperty("capture");
 
@@ -230,7 +230,7 @@ internal static class ImeContractTests
             return (front, outputs);
         }
         static bool Rewrites(List<JsonElement> outputs) =>
-            outputs.SelectMany(o => Commits(o).EnumerateArray()).Any(c => c.TryGetProperty("remove", out _));
+            outputs.SelectMany(o => Commits(o).EnumerateArray()).Any(c => c.TryGetProperty("removeBefore", out _));
 
         var (still, stillOutputs) = TypeWantAfterI(moved: false);
         Assert.True(Rewrites(stillOutputs), "動かさなければ、前の語を確定し直す\n" + still.Trace);
@@ -266,7 +266,7 @@ internal static class ImeContractTests
                 var enter = front.Key('\n');
                 Assert.True(Consumed(enter), "確定に使った Enter はアプリに通さない\n" + front.Trace);
                 Assert.Equal("「」", front.Document, front.Trace);
-                Assert.Equal(enabled, Commits(enter)[0].TryGetProperty("caretBack", out var caret), front.Trace);
+                Assert.Equal(enabled, Commits(enter)[0].TryGetProperty("moveCaretBack", out var caret), front.Trace);
                 if (enabled) Assert.Equal(1, caret.GetInt32(), front.Trace);
             }
             var next = new Front();
@@ -304,13 +304,13 @@ internal static class ImeContractTests
         foreach (var json in new[]
                  {
                      "{\"op\":\"key\",\"instance\":\"t1\",\"vk\":65,\"ch\":97}",
-                     $"{{\"v\":{ImeHost.Version + 1},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}}}}",
-                     $"{{\"v\":{ImeHost.Version},\"type\":\"jump\",\"instance\":\"t1\"}}",
-                     $"{{\"v\":{ImeHost.Version},\"type\":\"key\",\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}}}}",
-                     $"{{\"v\":{ImeHost.Version},\"type\":99,\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}}}}",
-                     $"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"traits\":[\"Hologram\"]}},\"key\":{{\"vk\":65,\"ch\":97}}}}",
-                     $"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"traits\":[42]}},\"key\":{{\"vk\":65,\"ch\":97}}}}",
-                     $"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}},\"code\":true}}",
+                     $"{{\"version\":{ImeHost.Version + 1},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}}}}",
+                     $"{{\"version\":{ImeHost.Version},\"type\":\"jump\",\"instance\":\"t1\"}}",
+                     $"{{\"version\":{ImeHost.Version},\"type\":\"key\",\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}}}}",
+                     $"{{\"version\":{ImeHost.Version},\"type\":99,\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}}}}",
+                     $"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"traits\":[\"Hologram\"]}},\"key\":{{\"vk\":65,\"ch\":97}}}}",
+                     $"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"traits\":[42]}},\"key\":{{\"vk\":65,\"ch\":97}}}}",
+                     $"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":65,\"ch\":97}},\"code\":true}}",
                      "not json",
                  })
         {
@@ -318,7 +318,7 @@ internal static class ImeContractTests
             Assert.True(!Active(output) && !Consumed(output), "版の違う・知らない出来事・知らない性質のある出来事は受け持たない: " + json);
         }
         Assert.Equal(0, front.Sessions, front.Trace);
-        var noInstance = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"key\":{{\"vk\":65,\"ch\":97}}}}");
+        var noInstance = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"key\":{{\"vk\":65,\"ch\":97}}}}");
         Assert.True(Active(noInstance) && Consumed(noInstance), "instance を省いた出来事も、空の instance の入力欄として受け持つ");
     }
 
@@ -338,7 +338,7 @@ internal static class ImeContractTests
             Assert.True(!Active(key) && !Consumed(key), "受け持たないことを伝え、キーはアプリに通す\n" + front.Trace);
             Assert.Equal("きょうはa", front.Document, "変換中の文字を確定してからキーを通す\n" + front.Trace);
             Assert.True(!Consumed(front.Key('b')), front.Trace);
-            Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("keys").GetArrayLength(), "受け持たないときはキーを受け取らせない\n" + front.Trace);
+            Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("shortcuts").GetArrayLength(), "受け持たないときはキーを受け取らせない\n" + front.Trace);
             front.Settings.Enabled = true;
             front.InputMethod = null;
             front.App = null;
@@ -372,7 +372,7 @@ internal static class ImeContractTests
         Assert.True(Consumed(hankaku) && Japanese(hankaku) && !Indicator(hankaku), "切り替えず、アプリにも通さない\n" + front.Trace);
         var toggle = front.Key(VirtualKeys.Space, ctrl: true);
         Assert.True(Consumed(toggle) && !Japanese(toggle), "登録したキーで切り替える\n" + front.Trace);
-        var keys = Capture(toggle).GetProperty("keys").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
+        var keys = Capture(toggle).GetProperty("shortcuts").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
         Assert.True(keys.Contains((VirtualKeys.Space, 2)) && keys.Contains((ToggleShortcut.Hankaku, 0)), "受け取るキーに切り替えキーと 半角/全角 を入れる\n" + front.Trace);
         Assert.True(!keys.Contains((VirtualKeys.LMenu, 0)), "修飾キー単独の割り当ては受け取らせない\n" + front.Trace);
     }
@@ -425,8 +425,8 @@ internal static class ImeContractTests
         Assert.True(!front.Open, "無変換で英数\n" + front.Trace);
         front.Key(VirtualKeys.Convert);
         Assert.True(front.Open, "変換で日本語\n" + front.Trace);
-        var repeat = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":{VirtualKeys.NonConvert},\"repeat\":true}}}}");
-        Assert.True(Consumed(repeat) && repeat.GetProperty("state").GetProperty("open").GetBoolean(), "押しっぱなしでは切り替えない\n" + front.Trace);
+        var repeat = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":{VirtualKeys.NonConvert},\"repeat\":true}}}}");
+        Assert.True(Consumed(repeat) && repeat.GetProperty("state").GetProperty("imeOpen").GetBoolean(), "押しっぱなしでは切り替えない\n" + front.Trace);
         // 親指シフトの配列では親指キー (変換ボックスで使う)
         front.Settings.InputStyle = InputStyle.Kana;
         front.Settings.KanaLayout = KanaLayout.Nicola;
@@ -453,7 +453,7 @@ internal static class ImeContractTests
     public static void AltTap_SetsTheModeWithTheSetting()
     {
         var front = new Front();
-        string Tap(int vk) => $"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\"}},\"key\":{{\"vk\":{vk},\"tappedAlone\":true}}}}";
+        string Tap(int vk) => $"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\"}},\"key\":{{\"vk\":{vk},\"tappedAlone\":true}}}}";
         Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LMenu))), "設定が OFF ならアプリに通す (メニューバーに移る)\n" + front.Trace);
         front.Settings.AltKeysSwitchKeyboard = true;
         front.Type("ka");
@@ -461,7 +461,7 @@ internal static class ImeContractTests
         front.Apply(left, "t1");
         Assert.True(Consumed(left) && !front.Open && front.Document == "か", "左 Alt で、変換中の文字を確定して英数\n" + front.Trace);
         var right = front.Send(Tap(VirtualKeys.RMenu));
-        Assert.True(Consumed(right) && right.GetProperty("state").GetProperty("open").GetBoolean(), "右 Alt で日本語\n" + front.Trace);
+        Assert.True(Consumed(right) && right.GetProperty("state").GetProperty("imeOpen").GetBoolean(), "右 Alt で日本語\n" + front.Trace);
         Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LControl))), "ほかの修飾キーは使わない\n" + front.Trace);
     }
 
@@ -479,7 +479,7 @@ internal static class ImeContractTests
         front.Settings.AppRules.Add(new AppRule { Process = "term.exe", Enabled = true, Kind = "英数から" });
         front.App = "term.exe";
         front.Event("StateRequested");
-        Assert.True(!front.Key('k').GetProperty("state").GetProperty("open").GetBoolean(), "「最初は英数」のアプリに移ったら英数\n" + front.Trace);
+        Assert.True(!front.Key('k').GetProperty("state").GetProperty("imeOpen").GetBoolean(), "「最初は英数」のアプリに移ったら英数\n" + front.Trace);
     }
 
     [Test]
@@ -502,7 +502,7 @@ internal static class ImeContractTests
         front.Settings.ShowTypedKeys = true;
         var view = front.Type("kan")[^1].GetProperty("result").GetProperty("view");
         Assert.Equal("かん", view.GetProperty("text").GetString(), front.Trace);
-        Assert.Equal("kan", view.GetProperty("typed").GetString(), front.Trace);
+        Assert.Equal("kan", view.GetProperty("typedKeys").GetString(), front.Trace);
         Assert.True(!view.TryGetProperty("committed", out _), "見せる文字は 1 つだけ\n" + front.Trace);
     }
 
@@ -512,7 +512,7 @@ internal static class ImeContractTests
         // 入力中の変換の候補 (設定「入力中も変換候補をいくつか表示」) も、変換の候補と同じ一覧で渡す。select の番号は前の応答の一覧で読む
         var front = new Front();
         front.Settings.ShowCandidatesWhileTyping = true;
-        var list = front.Type("kyou")[^1].GetProperty("result").GetProperty("view").GetProperty("list");
+        var list = front.Type("kyou")[^1].GetProperty("result").GetProperty("view").GetProperty("candidates");
         Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 0 && !list.TryGetProperty("prediction", out _),
             "入力中も一覧を出す\n" + front.Trace);
         var second = list.GetProperty("items")[1].GetString();
@@ -526,7 +526,7 @@ internal static class ImeContractTests
         // 数字キーで選べるのは変換中の候補だけ。入力中の一覧の数字は、そのまま打つ文字になる
         var front = new Front();
         front.Settings.ShowCandidatesWhileTyping = true;
-        static bool Numbered(JsonElement output) => output.GetProperty("result").GetProperty("view").GetProperty("list").GetProperty("numbered").GetBoolean();
+        static bool Numbered(JsonElement output) => output.GetProperty("result").GetProperty("view").GetProperty("candidates").GetProperty("numbered").GetBoolean();
         Assert.True(!Numbered(front.Type("kyou")[^1]), "入力中\n" + front.Trace);
         Assert.True(Numbered(front.Key(' ')), "変換中\n" + front.Trace);
     }
@@ -538,7 +538,7 @@ internal static class ImeContractTests
         var front = new Front { Predicts = true };
         front.Settings.PredictiveCandidates = true;
         front.Document = "I made ";
-        var list = front.Type("decis")[^1].GetProperty("result").GetProperty("view").GetProperty("list");
+        var list = front.Type("decis")[^1].GetProperty("result").GetProperty("view").GetProperty("candidates");
         Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 1, "予測変換の候補を出す\n" + front.Trace);
         Assert.True(Commits(front.Event("CandidateHighlighted", extra: ",\"index\":1")).GetArrayLength() == 0, "なぞっただけ\n" + front.Trace);
         Assert.Equal(list.GetProperty("items")[1].GetString(), Commits(front.Event("CandidateClicked", extra: ",\"index\":1"))[0].GetProperty("text").GetString(),
@@ -571,28 +571,28 @@ internal static class ImeContractTests
         // キーを送って文字を入れるフロント向け: アプリ別設定の「確定した文字の入れ方」・Qt のアプリ・改行を含む文
         var front = new Front();
         front.Type("ka");
-        Assert.True(!Commits(front.Key('\n'))[0].TryGetProperty("paste", out _), "ふつうはキーで入れる\n" + front.Trace);
+        Assert.True(!Commits(front.Key('\n'))[0].TryGetProperty("insertByPaste", out _), "ふつうはキーで入れる\n" + front.Trace);
         front.Settings.AppRules.Add(new AppRule { Process = "paste.exe", Enabled = true, Commit = CommitMethod.Paste });
         front.App = "paste.exe";
         front.Type("ka");
-        Assert.True(Commits(front.Key('\n'))[0].GetProperty("paste").GetBoolean(), "アプリ別設定で貼り付け\n" + front.Trace);
+        Assert.True(Commits(front.Key('\n'))[0].GetProperty("insertByPaste").GetBoolean(), "アプリ別設定で貼り付け\n" + front.Trace);
         front = new Front();
         front.Snippets.Set("sig", "--\nメルト");
         front.Key(0xBA, ';');
         front.Type("sig");
-        Assert.True(Commits(front.Key(' '))[0].GetProperty("paste").GetBoolean(), "改行を含む定型文は貼り付け\n" + front.Trace);
+        Assert.True(Commits(front.Key(' '))[0].GetProperty("insertByPaste").GetBoolean(), "改行を含む定型文は貼り付け\n" + front.Trace);
     }
 
     [Test]
     public static void Capture_ListsControlKeysUsedWhileComposing()
     {
         var front = new Front();
-        Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("composing").GetArrayLength(), "入力していなければ空\n" + front.Trace);
+        Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("ctrlKeysWhileComposing").GetArrayLength(), "入力していなければ空\n" + front.Trace);
         var typing = front.Key('k');
-        var keys = Capture(typing).GetProperty("composing").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
+        var keys = Capture(typing).GetProperty("ctrlKeysWhileComposing").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
         Assert.True(keys.Contains(('U', 2)) && keys.Contains(('H', 2)) && !keys.Contains(('J', 2)), "Ctrl+U・Ctrl+H は変換ボックスで使う\n" + front.Trace);
         front.Settings.ControlKeys = ControlKeyLayout.Mac;
-        keys = Capture(front.Key('a')).GetProperty("composing").EnumerateArray().Select(k => (k.GetProperty("key").GetInt32(), k.GetProperty("mods").GetInt32())).ToList();
+        keys = Capture(front.Key('a')).GetProperty("ctrlKeysWhileComposing").EnumerateArray().Select(k => (k.GetProperty("vk").GetInt32(), k.GetProperty("modifiers").GetInt32())).ToList();
         Assert.True(keys.Contains(('J', 2)) && keys.Contains(('E', 2)), "macOS 風の割り当て\n" + front.Trace);
     }
 
@@ -662,19 +662,19 @@ internal static class ImeContractTests
     public static void Capture_FollowsTheModeAndSettings()
     {
         static bool HasKey(JsonElement capture, int key, int mods) =>
-            capture.GetProperty("keys").EnumerateArray().Any(k => k.GetProperty("key").GetInt32() == key && k.GetProperty("mods").GetInt32() == mods);
+            capture.GetProperty("shortcuts").EnumerateArray().Any(k => k.GetProperty("vk").GetInt32() == key && k.GetProperty("modifiers").GetInt32() == mods);
         var front = new Front();
         var japanese = Capture(front.Event("StateRequested"));
-        Assert.True(japanese.GetProperty("text").GetBoolean() && japanese.GetProperty("except").GetString() == "", "日本語では文字を受け取る\n" + front.Trace);
+        Assert.True(japanese.GetProperty("printableAscii").GetBoolean() && japanese.GetProperty("printableAsciiExcept").GetString() == "", "日本語では文字を受け取る\n" + front.Trace);
         Assert.True(HasKey(japanese, VirtualKeys.Space, 1) && !HasKey(japanese, VirtualKeys.Space, 0), "Shift+Space は受け取り、半角の Space は通す\n" + front.Trace);
         front.Settings.SpaceWidth = SpaceWidth.FullWidth;
         Assert.True(HasKey(Capture(front.Event("StateRequested")), VirtualKeys.Space, 0), "全角スペースなら Space も受け取る\n" + front.Trace);
         front.Open = false;
         var english = Capture(front.Event("StateRequested"));
-        Assert.True(english.GetProperty("text").GetBoolean(), "英数でもローマ字を見分けるので受け取る\n" + front.Trace);
+        Assert.True(english.GetProperty("printableAscii").GetBoolean(), "英数でもローマ字を見分けるので受け取る\n" + front.Trace);
         front.Settings.DirectModeAutoDetect = false;
         english = Capture(front.Event("StateRequested"));
-        Assert.True(!english.GetProperty("text").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "見分けないなら通す\n" + front.Trace);
+        Assert.True(!english.GetProperty("printableAscii").GetBoolean() && !HasKey(english, VirtualKeys.Space, 1), "見分けないなら通す\n" + front.Trace);
         Assert.True(HasKey(english, ToggleShortcut.Hankaku, 0), "英数でも切り替えキーは受け取る\n" + front.Trace);
     }
 
@@ -684,9 +684,9 @@ internal static class ImeContractTests
         // 文字を入力するキーは ch だけで送れる (仮想キーコードは本体が決める)
         var front = new Front();
         foreach (var c in "kyouha,")
-            front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":{(c == 'k' ? "false" : "true")}}},\"key\":{{\"ch\":{(int)c}}}}}");
-        var view = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"StateRequested\",\"instance\":\"t1\"}}");
-        var enter = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":true}},\"key\":{{\"vk\":13}}}}");
+            front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":{(c == 'k' ? "false" : "true")}}},\"key\":{{\"ch\":{(int)c}}}}}");
+        var view = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"StateRequested\",\"instance\":\"t1\"}}");
+        var enter = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\",\"composing\":true}},\"key\":{{\"vk\":13}}}}");
         Assert.Equal("きょうは、", Commits(enter)[0].GetProperty("text").GetString(), front.Trace + view);
     }
 
@@ -710,7 +710,7 @@ internal static class ImeContractTests
         var front = new Front();
         front.Type("kyou");
         var typing = front.Key(' ');
-        var list = typing.GetProperty("result").GetProperty("view").GetProperty("list");
+        var list = typing.GetProperty("result").GetProperty("view").GetProperty("candidates");
         Assert.True(list.ValueKind == JsonValueKind.Object && list.GetProperty("items").GetArrayLength() > 1,
             "変換中で候補が 2 つ以上なら一覧を出す\n" + front.Trace);
         Assert.True(!typing.GetProperty("result").TryGetProperty("showGuide", out _) && !typing.GetProperty("result").GetProperty("view").TryGetProperty("contextHint", out _),
@@ -808,7 +808,7 @@ internal static class ImeContractTests
         var close = front.Key(0xDE, '"');
         Assert.True(!Consumed(close) && front.Document == "echo \"きょうは\"", "閉じる引用符は確定してからアプリへ\n" + front.Trace);
         Assert.True(!Japanese(front.Event("CaretMoved", extra: ",\"caret\":{\"passedKey\":222}")), "閉じたあとは英数\n" + front.Trace);
-        var unknown = front.Send($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"open\":true,\"field\":{{\"traits\":[\"Terminal\"]}},\"key\":{{\"vk\":75,\"ch\":107}}}}");
+        var unknown = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"imeOpen\":true,\"field\":{{\"traits\":[\"Terminal\"]}},\"key\":{{\"vk\":75,\"ch\":107}}}}");
         Assert.True(Active(unknown) && !Consumed(unknown), "キャレットの前を読めないコードの入力欄は、コードの行として英数\n" + front.Trace);
     }
 }

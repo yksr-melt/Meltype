@@ -32,11 +32,11 @@ void PipeClient::Close() {}
 bool PipeClient::Transact(const std::string& request, std::string& response, DWORD, bool) {
     const bool toggle = request.find("\"type\":\"ModeToggleRequested\"") != std::string::npos;
     if (toggle) ++toggleRequests;
-    const bool open = (request.find("\"open\":true") != std::string::npos) != toggle;
+    const bool open = (request.find("\"imeOpen\":true") != std::string::npos) != toggle;
     const char* shown = open ? "true" : "false";
-    response = std::string("{\"v\":1,\"state\":{\"active\":true,\"open\":") + shown + ",\"japanese\":" + shown +
-               ",\"indicatorMs\":" + (toggle ? "1200" : "0") +
-               ",\"capture\":{\"text\":true,\"except\":\"\",\"keys\":[]},\"rev\":" +
+    response = std::string("{\"version\":1,\"state\":{\"handlesInput\":true,\"imeOpen\":") + shown + ",\"japanese\":" + shown +
+               ",\"modeIndicatorMs\":" + (toggle ? "1200" : "0") +
+               ",\"capture\":{\"printableAscii\":true,\"printableAsciiExcept\":\"\",\"shortcuts\":[]},\"revision\":" +
                std::to_string(++revision) + "},\"result\":{\"consumed\":true,\"commits\":[],\"view\":null}}";
     return true;
 }

@@ -102,17 +102,17 @@ internal sealed class ImeSession
             e.Caret?.FocusEntered == true && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
         return new(new ImeState
         {
-            Active = active,
-            Open = !_session.Direct,
+            HandlesInput = active,
+            ImeOpen = !_session.Direct,
             Japanese = active && japanese,
-            IndicatorMs = active && indicate && result.View is null ? IndicatorMs : 0,
+            ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
             Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys()),
-            Rev = rev,
+            Revision = rev,
         }, result);
     }
 
     /// <summary>入力モードを表示する時間。</summary>
-    private const int IndicatorMs = 1200;
+    private const int ModeIndicatorMs = 1200;
 
     // 前の応答の一覧が予測変換の候補だった (select の番号を読むため)
     private bool _listedPredictions;
@@ -121,18 +121,18 @@ internal sealed class ImeSession
     /// <param name="entered">入力欄にフォーカスが入った (設定によっては入力モードを表示する)。</param>
     public static ImeState InitialState(bool active, bool open, Settings settings, bool entered, long rev) => new()
     {
-        Active = active,
-        Open = open,
+        HandlesInput = active,
+        ImeOpen = open,
         Japanese = active && open,
-        IndicatorMs = active && entered && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? IndicatorMs : 0,
+        ModeIndicatorMs = active && entered && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
         Capture = Capture(active, !open, false, settings, []),
-        Rev = rev,
+        Revision = rev,
     };
 
     private void ApplyFacts(ImeEvent e, Settings settings)
     {
         // OS の IME の開閉が変わった (アプリ・Windows が変えた・ほかのフロントの操作): 本体のモードを合わせる
-        if (e.Open is { } open && _session.Direct == open)
+        if (e.ImeOpen is { } open && _session.Direct == open)
         {
             _session.Direct = !open;
             _session.ForgetDirectInput();
@@ -353,10 +353,10 @@ internal sealed class ImeSession
         if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
         return new ImeCapture
         {
-            Text = !direct || detects,
-            Except = direct && directEnglishWord ? EnglishWordCharacters : "",
-            Keys = keys.Distinct().ToList(),
-            Composing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
+            PrintableAscii = !direct || detects,
+            PrintableAsciiExcept = direct && directEnglishWord ? EnglishWordCharacters : "",
+            Shortcuts = keys.Distinct().ToList(),
+            CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
         };
     }
 

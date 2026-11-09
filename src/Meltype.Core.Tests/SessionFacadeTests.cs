@@ -95,7 +95,7 @@ internal static class SessionFacadeTests
                         Assert.True(result.View is null, context);
                         Assert.Equal(enabled ? 1 : 0, result.Commits.Single().CaretBack, context);
                         using var json = JsonDocument.Parse(result.ToJson());
-                        Assert.Equal(enabled, json.RootElement.GetProperty("commits")[0].TryGetProperty("caretBack", out _), context);
+                        Assert.Equal(enabled, json.RootElement.GetProperty("commits")[0].TryGetProperty("moveCaretBack", out _), context);
                         Assert.True(!session.HandleKey(VirtualKeys.Return, null, false, control, false, false).Consumed,
                             "確定後にもう一度押した Enter はアプリで使える: " + context);
                     }
@@ -494,11 +494,11 @@ internal static class SessionFacadeTests
         var correction = commits[index];
         Assert.Equal(first, correction.Expect);
         Assert.Equal(first.Length, correction.DeleteBefore);
-        Assert.True(new SessionResult(true, [correction], null).ToJson().Contains($"\"remove\":\"{first}\""), "JSON には消す文字を入れる");
+        Assert.True(new SessionResult(true, [correction], null).ToJson().Contains($"\"removeBefore\":\"{first}\""), "JSON には消す文字を入れる");
         // 前の文字を消せないときに今の語だけを入れられるように、今の語も分けて渡す (Text をそのまま入れると I が二重に入る)
         Assert.Equal("I want ", correction.Text);
         Assert.Equal("want ", correction.Current);
-        Assert.True(new SessionResult(true, [correction], null).ToJson().Contains("\"current\":\"want \""), "JSON にも入れる");
+        Assert.True(new SessionResult(true, [correction], null).ToJson().Contains("\"currentWord\":\"want \""), "JSON にも入れる");
     }
 
     [Test]
@@ -512,7 +512,7 @@ internal static class SessionFacadeTests
         Assert.Equal("Tab 予測の候補を選ぶ", typing.View!.ContextHint, "予測の選択案内は固定の操作一覧と分けて返す");
         Assert.Equal("Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", typing.View.Hint, "従来の予測の案内は変えない");
         Assert.True(typing.View.Suggestion is null, "予測の案内は書き間違いの修正ではない");
-        Assert.True(typing.ToJson().Contains("\"list\":{\"items\":[\"") && typing.ToJson().Contains("\"selected\":-1,"), typing.ToJson());
+        Assert.True(typing.ToJson().Contains("\"candidates\":{\"items\":[\"") && typing.ToJson().Contains("\"selected\":-1,"), typing.ToJson());
         var tab = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false, "I made ");
         Assert.True(tab.Consumed, "Tab は予測の候補を選ぶのに使う");
         Assert.Equal(0, tab.View?.SelectedPrediction);
@@ -548,7 +548,7 @@ internal static class SessionFacadeTests
         var session = Create();
         var commit = Type(session, "kyouha\n")[^1].Commits.Single();
         Assert.True(commit.Expect is null && commit.Current is null, "消さない確定には付けない");
-        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("remove") && !new SessionResult(true, [commit], null).ToJson().Contains("current"), "JSON にも入れない");
+        Assert.True(!new SessionResult(true, [commit], null).ToJson().Contains("removeBefore") && !new SessionResult(true, [commit], null).ToJson().Contains("currentWord"), "JSON にも入れない");
     }
 
     [Test]
@@ -701,7 +701,7 @@ internal static class SessionFacadeTests
     public static void Json_IsEscaped()
     {
         var result = new SessionResult(true, [new TextEdit(2, "a\"b\\c\n", "\"\\")], new CompositionView("x", [], -1, true, "h", ["x"], 0));
-        const string expected = """{"consumed":true,"commits":[{"text":"a\"b\\c\n","remove":"\"\\"}],"view":{"text":"x","converting":true,"clauses":["x"],"selectedClause":0,"hint":"h","suggestion":null,"typed":null,"list":null}}""";
+        const string expected = """{"consumed":true,"commits":[{"text":"a\"b\\c\n","removeBefore":"\"\\"}],"view":{"text":"x","converting":true,"clauses":["x"],"selectedClause":0,"hint":"h","spellingSuggestion":null,"typedKeys":null,"candidates":null}}""";
         Assert.Equal(expected, result.ToJson());
     }
 
@@ -735,7 +735,7 @@ internal static class SessionFacadeTests
         using var json = JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
         var result = json.RootElement.GetProperty("view");
         Assert.Equal(hint, result.GetProperty("hint").GetString(), "引用符・バックスラッシュ・制御文字をエスケープする");
-        Assert.Equal(suggestion, result.GetProperty("suggestion").GetString(), "書き間違いの修正は独立して残す");
+        Assert.Equal(suggestion, result.GetProperty("spellingSuggestion").GetString(), "書き間違いの修正は独立して残す");
     }
 
     [Test]
@@ -743,7 +743,7 @@ internal static class SessionFacadeTests
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionOptions { ShowTypedKeys = () => true }, () => new Settings());
         var json = Type(session, "kyou")[^1].ToJson();
-        Assert.True(json.Contains("\"typed\":\"kyou\""), json);
+        Assert.True(json.Contains("\"typedKeys\":\"kyou\""), json);
     }
 
     [Test]

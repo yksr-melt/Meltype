@@ -510,11 +510,11 @@ private:
     bool send(fcitx::InputContext *ic, const char *type, const std::string &fields, Json &output) {
         auto *state = ic->propertyFor(&factory_);
         if (!state->host()) return false;
-        const auto text = native_.send(state->host(), std::string("{\"v\":") + std::to_string(ImeVersion) + ",\"type\":\"" + type +
+        const auto text = native_.send(state->host(), std::string("{\"version\":") + std::to_string(ImeVersion) + ",\"type\":\"" + type +
             "\",\"instance\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
-        if (const auto *shown = output.get("state"); shown->integer("indicatorMs") > 0) showMode(ic, shown->flag("japanese") ? "あ" : "A", shown->integer("indicatorMs"));
+        if (const auto *shown = output.get("state"); shown->integer("modeIndicatorMs") > 0) showMode(ic, shown->flag("japanese") ? "あ" : "A", shown->integer("modeIndicatorMs"));
         return true;
     }
 
@@ -565,9 +565,9 @@ private:
     void apply(fcitx::InputContext *ic, const Json &result) {
         if (auto *commits = result.get("commits"); commits && commits->kind == Json::Kind::Array) {
             for (const auto &edit : commits->items) {
-                // 確定し直し: 本体がキャレットの前と照合した前の文字 (remove) を、文字数 (コードポイント) で消してから入れる
-                if (edit.get("remove")) {
-                    const size_t length = charLength(edit.str("remove"));
+                // 確定し直し: 本体がキャレットの前と照合した前の文字 (removeBefore) を、文字数 (コードポイント) で消してから入れる
+                if (edit.get("removeBefore")) {
+                    const size_t length = charLength(edit.str("removeBefore"));
                     hidePreedit(ic);
                     ic->deleteSurroundingText(-static_cast<int>(length), static_cast<unsigned int>(length));
                 } else {
@@ -576,7 +576,7 @@ private:
                 }
                 if (const auto committed = edit.str("text"); !committed.empty()) ic->commitString(committed);
                 // 確定した文字の中にキャレットを戻す (空の括弧の中など)。fcitx5 からキャレットは動かせないので、← をアプリに送る
-                for (int i = 0; i < edit.integer("caretBack"); i++) {
+                for (int i = 0; i < edit.integer("moveCaretBack"); i++) {
                     ic->forwardKey(fcitx::Key(FcitxKey_Left), false);
                     ic->forwardKey(fcitx::Key(FcitxKey_Left), true);
                 }
@@ -611,11 +611,11 @@ private:
         ic->propertyFor(&factory_)->preeditVisible = !text.empty();
         // 打ったキー・もしかして (書き間違い。Tab で直せる)・案内を 1 行で出す
         std::string aux;
-        for (const auto &part : {view.str("typed"), view.str("suggestion"), view.str("hint")})
+        for (const auto &part : {view.str("typedKeys"), view.str("spellingSuggestion"), view.str("hint")})
             if (!part.empty()) aux += (aux.empty() ? "" : "　") + part;
         if (!aux.empty()) panel.setAuxDown(fcitx::Text(aux));
         auto *state = ic->propertyFor(&factory_);
-        const auto *listed = view.get("list");
+        const auto *listed = view.get("candidates");
         if (!listed || listed->kind != Json::Kind::Object) {
             state->meaningTimer.reset();
             state->meaningKey.clear();
@@ -637,11 +637,11 @@ private:
             if (selected >= 0 && selected < static_cast<int>(candidates.size())) list->setGlobalCursorIndex(selected);
             panel.setCandidateList(std::move(list));
             // 選んでいる候補で止まったら、本体が決めた時間のあとに意味を出す
-            const auto meaning = listed->str("meaning");
+            const auto meaning = listed->str("selectedMeaning");
             const auto key = meaning.empty() ? std::string() : std::to_string(selected) + ":" + meaning;
             if (key != state->meaningKey) {
                 state->meaningKey = key;
-                state->meaningTimer = key.empty() ? nullptr : after(listed->integer("meaningMs"), [ic, meaning]() {
+                state->meaningTimer = key.empty() ? nullptr : after(listed->integer("meaningDelayMs"), [ic, meaning]() {
                     ic->inputPanel().setAuxDown(fcitx::Text(meaning));
                     ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
                 });

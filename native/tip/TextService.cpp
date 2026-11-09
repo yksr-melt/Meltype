@@ -702,8 +702,8 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
     std::string request = "{\"thread\":" + std::to_string(GetCurrentThreadId());
     if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
         request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
-    request += std::string(",\"event\":{\"v\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +
-               "\",\"open\":" + (open_ ? "true" : "false") + (field.empty() ? "" : ",\"field\":" + field) + fields + "}}";
+    request += std::string(",\"event\":{\"version\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +
+               "\",\"imeOpen\":" + (open_ ? "true" : "false") + (field.empty() ? "" : ",\"field\":" + field) + fields + "}}";
     std::string response;
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
     if (!ParseJson(response, reply) || reply[L"state"].IsNull() || reply[L"result"].IsNull()) {
@@ -725,23 +725,23 @@ bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& f
 }
 
 void TextService::ApplyState(const JsonValue& state) {
-    if (state.IsNull() || state[L"rev"].number < state_.rev) return;
+    if (state.IsNull() || state[L"revision"].number < state_.rev) return;
     ServerState next;
     next.known = true;
-    next.active = state[L"active"].Bool();
-    next.open = state[L"open"].Bool();
+    next.active = state[L"handlesInput"].Bool();
+    next.open = state[L"imeOpen"].Bool();
     next.japanese = state[L"japanese"].Bool();
-    next.rev = state[L"rev"].number;
+    next.rev = state[L"revision"].number;
     const JsonValue& capture = state[L"capture"];
-    next.text = capture[L"text"].Bool();
-    next.except = capture[L"except"].Str();
+    next.text = capture[L"printableAscii"].Bool();
+    next.except = capture[L"printableAsciiExcept"].Str();
     next.keys.clear();
-    for (const JsonValue& key : capture[L"keys"].array) {
-        const int vk = key[L"key"].Int(), mods = key[L"mods"].Int();
+    for (const JsonValue& key : capture[L"shortcuts"].array) {
+        const int vk = key[L"vk"].Int(), mods = key[L"modifiers"].Int();
         if (vk > 0 && vk < 256 && mods >= 0 && mods <= 15) next.keys.push_back({static_cast<unsigned>(vk), mods});
     }
-    for (const JsonValue& key : capture[L"composing"].array) {
-        const int vk = key[L"key"].Int();
+    for (const JsonValue& key : capture[L"ctrlKeysWhileComposing"].array) {
+        const int vk = key[L"vk"].Int();
         if (vk > 0 && vk < 256) next.composing.push_back(static_cast<UINT>(vk));
     }
     if (next.active != state_.active || !state_.known) TipLog(L"Meltype.exe: %s", next.active ? L"受け持ちます" : L"受け持ちません");
@@ -1403,9 +1403,9 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
     for (const JsonValue& edit : commits) {
         const std::wstring& text = edit[L"text"].Str();
         // 確定し直すときの、キャレットの前の消す文字 (本体が照合済み)
-        const JsonValue& remove = edit[L"remove"];
+        const JsonValue& remove = edit[L"removeBefore"];
         const LONG deleteBefore = remove.type == JsonValue::Type::String ? static_cast<LONG>(remove.Str().size()) : 0;
-        int caretBack = edit[L"caretBack"].Int();
+        int caretBack = edit[L"moveCaretBack"].Int();
         int caretAfterCommit = 0;
         if (caretBack > 0) {
             TF_STATUS status = {};
@@ -1419,7 +1419,7 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
                 caretBack = 0;
             }
         }
-        const JsonValue& current = edit[L"current"];
+        const JsonValue& current = edit[L"currentWord"];
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (composition_ != nullptr) {
             composition_->GetRange(&range);
@@ -1932,15 +1932,15 @@ void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const Jso
     if (!candidates_) return;
     // 出すもの (候補の一覧・もしかして・打ったキー・案内) は Meltype.exe が決める。どれも無ければ出さない
     CandidateView data;
-    const JsonValue& list = view[L"list"];
+    const JsonValue& list = view[L"candidates"];
     for (const JsonValue& item : list[L"items"].array) data.candidates.push_back(item.Str());
     for (const JsonValue& item : list[L"notes"].array) data.notes.push_back(item.Str());
     data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
     data.numbered = list[L"numbered"].Bool();
-    data.meaning = list[L"meaning"].Str();
-    data.meaningMs = static_cast<UINT>(list[L"meaningMs"].Int());
-    data.suggestion = view[L"suggestion"].Str();
-    data.typed = view[L"typed"].Str();
+    data.meaning = list[L"selectedMeaning"].Str();
+    data.meaningMs = static_cast<UINT>(list[L"meaningDelayMs"].Int());
+    data.suggestion = view[L"spellingSuggestion"].Str();
+    data.typed = view[L"typedKeys"].Str();
     data.hint = view[L"hint"].Str();
     const bool converting = view[L"converting"].Bool();
     if (data.candidates.empty() && data.suggestion.empty() && data.typed.empty() && data.hint.empty()) {

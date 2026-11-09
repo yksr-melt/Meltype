@@ -53,7 +53,7 @@ internal static class TipHarness
                 pipe.ReadMode = PipeTransmissionMode.Message;
                 // DLL と同じ封筒 (TipRequest) で、入力欄の事実を付けて送る (キャレットの前は、打ったものを入れずに空のまま)
                 string Event(string type, string fields = "") =>
-                    $"{{\"thread\":0,\"event\":{{\"v\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"instance\":\"t1\",\"open\":true,\"field\":{{\"before\":\"\"}}{fields}}}}}";
+                    $"{{\"thread\":0,\"event\":{{\"version\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"instance\":\"t1\",\"imeOpen\":true,\"field\":{{\"before\":\"\"}}{fields}}}}}";
                 Console.WriteLine(Send(pipe, Event("StateRequested")));
                 foreach (var c in keys)
                 {

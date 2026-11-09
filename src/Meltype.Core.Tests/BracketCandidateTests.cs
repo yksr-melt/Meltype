@@ -306,7 +306,7 @@ internal static class BracketCandidateTests
         using var json = JsonDocument.Parse(result.ToJson());
         var view = json.RootElement.GetProperty("view");
         Assert.Equal(1, view.GetProperty("clauses").GetArrayLength());
-        var list = view.GetProperty("list");
+        var list = view.GetProperty("candidates");
         Assert.Equal(7, list.GetProperty("items").GetArrayLength());
         Assert.Equal("全角", list.GetProperty("notes")[0].GetString());
         Assert.Equal("半角", list.GetProperty("notes")[1].GetString());

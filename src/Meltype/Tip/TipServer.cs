@@ -479,9 +479,9 @@ internal sealed class TipServer : IDisposable
         var e = request.Event;
         if (e.Field is { } field) e = e with { Field = connection.WithFacts(field) };
         var output = connection.Host.Handle(e);
-        if (output.State.Active && connection.Process is { } process) Greet(process);
-        if (output.State.IndicatorMs > 0 && request.Thread != 0)
-            _composition.ShowMode(output.State.Japanese, output.State.IndicatorMs, request.Thread, request.Anchor);
+        if (output.State.HandlesInput && connection.Process is { } process) Greet(process);
+        if (output.State.ModeIndicatorMs > 0 && request.Thread != 0)
+            _composition.ShowMode(output.State.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
         return output.ToJson();
     }
 
@@ -611,5 +611,5 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
         }
     }
 
-    private static readonly ImeEvent Waiting = new() { V = ImeHost.Version, Type = ImeEventType.StateRequested };
+    private static readonly ImeEvent Waiting = new() { Version = ImeHost.Version, Type = ImeEventType.StateRequested };
 }

@@ -425,13 +425,13 @@ class IntegrationTests(unittest.TestCase):
 
     def test_reconversion_replaces_matching_previous_text(self):
         self.engine.document = "previous"
-        self.engine._apply({"commits": [{"remove": "previous", "text": "replacement"}], "view": None})
+        self.engine._apply({"commits": [{"removeBefore": "previous", "text": "replacement"}], "view": None})
         self.assertEqual("replacement", self.engine.document)
 
     def test_reconversion_counts_code_points(self):
         # IBus はコードポイント単位で消す (😊 は 1)。消す文字数は remove から数える。
         self.engine.document = "pasted😊"
-        self.engine._apply({"commits": [{"remove": "😊", "text": "笑"}], "view": None})
+        self.engine._apply({"commits": [{"removeBefore": "😊", "text": "笑"}], "view": None})
         self.assertEqual("pasted笑", self.engine.document)
 
     def test_typing_after_paste_keeps_pasted_text(self):
@@ -471,14 +471,14 @@ class IntegrationTests(unittest.TestCase):
         # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)
         forwarded = []
         self.engine.forward_key_event = lambda keyval, keycode, state: forwarded.append((keyval, state))
-        self.engine._apply({"commits": [{"text": "「」", "caretBack": 1}], "view": None})
+        self.engine._apply({"commits": [{"text": "「」", "moveCaretBack": 1}], "view": None})
         self.assertEqual([(IBus.KEY_Left, 0), (IBus.KEY_Left, IBus.ModifierType.RELEASE_MASK)], forwarded)
 
     def test_aux_shows_typed_suggestion_and_hint(self):
         shown = []
         self.engine.update_auxiliary_text = lambda text, visible: shown.append(text.get_text())
         self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1,
-                                                    "hint": "Space 変換", "suggestion": "もしかして", "typed": "kan", "list": None}})
+                                                    "hint": "Space 変換", "spellingSuggestion": "もしかして", "typedKeys": "kan", "candidates": None}})
         self.assertEqual(["kan　もしかして　Space 変換"], shown)
 
     def test_input_purpose_and_app_are_facts(self):

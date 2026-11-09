@@ -55,14 +55,14 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ nil。
     @discardableResult
     private func send(_ type: String, client: IMKTextInput?, _ fields: [String: Any] = [:]) -> ImeOutput? {
-        var event: [String: Any] = ["v": 1, "type": type, "instance": "mac"]
+        var event: [String: Any] = ["version": 1, "type": type, "instance": "mac"]
         if let client { event["field"] = field(of: client) }
         event.merge(fields) { _, new in new }
         guard let output = NativeCore.shared.send(host, event) else { return nil }
         japanese = output.state.japanese
         if let client { apply(output.result, to: client) }
-        if output.state.indicatorMs > 0 {
-            modeIndicator.show(japanese ? .japanese : .direct, caret: client.flatMap { modeIndicatorCaret($0) }, milliseconds: output.state.indicatorMs)
+        if output.state.modeIndicatorMs > 0 {
+            modeIndicator.show(japanese ? .japanese : .direct, caret: client.flatMap { modeIndicatorCaret($0) }, milliseconds: output.state.modeIndicatorMs)
         }
         return output
     }
@@ -291,7 +291,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         for edit in result.commits {
             // 確定し直し: キャレット (変換中の文字があればその先頭) の前の remove を置き換える (本体が照合済み)
             var range = NSRange(location: NSNotFound, length: 0)
-            if let remove = edit.remove {
+            if let remove = edit.removeBefore {
                 let length = (remove as NSString).length
                 let marked = client.markedRange()
                 let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
@@ -324,9 +324,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
-        updateCandidates(view.list, client: client)
+        updateCandidates(view.candidates, client: client)
         // 打ったキー・もしかして・案内を、入力位置の下のパネルに 1 行で出す
-        let aux = [view.typed, view.suggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
+        let aux = [view.typedKeys, view.spellingSuggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
         showAux(aux.isEmpty ? nil : aux, client: client)
     }
 
@@ -396,15 +396,15 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         text.addAttributes(attributes, range: range)
     }
 
-    /// 候補で本体が決めた時間 (meaningMs) 止まったら、その候補の意味を候補ウィンドウの注釈に出す。
+    /// 候補で本体が決めた時間 (meaningDelayMs) 止まったら、その候補の意味を候補ウィンドウの注釈に出す。
     private var meaningKey: String?
 
     private func scheduleMeaning(_ list: CandidateList) {
-        let key = list.meaning.map { "\(list.selected):\($0)" }
+        let key = list.selectedMeaning.map { "\(list.selected):\($0)" }
         guard key != meaningKey else { return }
         meaningKey = key
-        guard let key, let meaning = list.meaning else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(list.meaningMs)) { [weak self] in
+        guard let key, let meaning = list.selectedMeaning else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(list.meaningDelayMs)) { [weak self] in
             guard let self, self.meaningKey == key, let window = candidatesWindow, window.isVisible() else { return }
             window.showAnnotation(NSAttributedString(string: meaning))
         }

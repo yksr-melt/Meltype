@@ -73,13 +73,13 @@ func runChecks(inputPath: String?) -> Int32 {
 
         @discardableResult
         func send(_ type: String, _ fields: [String: Any] = [:]) -> ImeOutput? {
-            var event: [String: Any] = ["v": 1, "type": type, "instance": "self-test", "field": ["before": text]]
+            var event: [String: Any] = ["version": 1, "type": type, "instance": "self-test", "field": ["before": text]]
             event.merge(fields) { _, new in new }
             let output = NativeCore.shared.send(host, event)
             for edit in output?.result.commits ?? [] {
                 // 確定し直しは本体が照合済み: 前の remove を消してから入れる
                 let current = text as NSString
-                let remove = ((edit.remove ?? "") as NSString).length
+                let remove = ((edit.removeBefore ?? "") as NSString).length
                 text = current.substring(to: current.length - min(remove, current.length)) + edit.text
             }
             return output
@@ -180,7 +180,7 @@ func runChecks(inputPath: String?) -> Int32 {
     check("emoji candidate", emoji?.result.view?.list?.items.contains("😊") == true)
     document.send("CommitRequested")
     let typo = type("buresureddo", into: document)
-    check("misspelling suggestion", typo?.result.view?.suggestion?.contains("ブレスレット") == true)
+    check("misspelling suggestion", typo?.result.view?.spellingSuggestion?.contains("ブレスレット") == true)
     let corrected = type("\t", into: document)
     print("corrected: \(corrected?.result.view?.text ?? "nil")")
     check("misspelling correction", ["ぶれすれっと", "ブレスレット"].contains(corrected?.result.view?.text ?? ""))

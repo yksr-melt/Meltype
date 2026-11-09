@@ -58,7 +58,7 @@ class NativeBoundaryTests(unittest.TestCase):
 
     def send(self, event, host=None):
         """出来事 (ImeEvent) を送り、応答 (ImeOutput) の result を返す。"""
-        pointer = self.lib.meltype_ime_handle(host or self.host, json.dumps({"v": 1, "instance": "t", **event}).encode("utf-8"))
+        pointer = self.lib.meltype_ime_handle(host or self.host, json.dumps({"version": 1, "instance": "t", **event}).encode("utf-8"))
         self.assertTrue(pointer, "C ABI returned NULL")
         try:
             return json.loads(ctypes.string_at(pointer).decode("utf-8"))["result"]

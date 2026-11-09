@@ -68,7 +68,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // 入力欄でない所・パスワード欄に移った: 本体が受け持たなくなったら、変換中の文字は入れる先が無いので捨てる
         composition.Focus.CaptureLost += _ => Post(() =>
         {
-            if (_composing && !Send(ImeEventType.StateRequested, apply: false).State.Active) Abandon();
+            if (_composing && !Send(ImeEventType.StateRequested, apply: false).State.HandlesInput) Abandon();
         });
         composition.ConversionReady += () => Post(() => Send(ImeEventType.ConversionFinished));
         _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, 250, 250);
@@ -164,11 +164,11 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         var state = _state;
         var mods = (IsDown(VirtualKeys.Shift) ? 1 : 0) | (IsDown(VirtualKeys.Control) ? 2 : 0) | (IsDown(VirtualKeys.Menu) ? 4 : 0) |
             (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? 8 : 0);
-        if (state.Active && !_stale)
+        if (state.HandlesInput && !_stale)
         {
-            if (state.Capture.Keys.Any(key => ToggleShortcut.NormalizeHankakuKey(key.Key) == ToggleShortcut.NormalizeHankakuKey(e.ShortcutKey) && key.Mods == mods)) return true;
+            if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeHankakuKey(key.Vk) == ToggleShortcut.NormalizeHankakuKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
             return (mods & ~1) == 0 && KeyText.CharFromKey(e.Vk, e.Scan, (mods & 1) != 0) is { } c && c is > ' ' and <= '~' &&
-                state.Capture.Text && !state.Capture.Except.Contains(c);
+                state.Capture.PrintableAscii && !state.Capture.PrintableAsciiExcept.Contains(c);
         }
         if ((mods & ~1) != 0) return false;
         return _stale || TextFocusRechecked();
@@ -181,7 +181,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (e.Vk is not (VirtualKeys.LMenu or VirtualKeys.RMenu) || _tap != e.Vk) return false;
         _tap = 0;
         var state = _state;
-        if (!state.Active || !state.Capture.Keys.Any(key => key.Key == e.Vk && key.Mods == 0) || !ForegroundTracker.CanSendInputTo(_foreground.Current)) return false;
+        if (!state.HandlesInput || !state.Capture.Shortcuts.Any(key => key.Vk == e.Vk && key.Modifiers == 0) || !ForegroundTracker.CanSendInputTo(_foreground.Current)) return false;
         // メニューバーに移らないよう、Alt の解放を止めて、何もしないキー (0xE8、割り当てなし) のあとに送り直す。
         // 次の打鍵より先に届くように、ここだけはフックのスレッドで送る (押している間に送ると、すぐに離したときに Alt の解放が先に並ぶ)。
         // 管理者として動くアプリには送り直した Alt の解放が届かない (UIPI) ので止めない
@@ -290,7 +290,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>
     private ImeOutput Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, bool apply = true)
     {
-        var output = _host.Handle(new ImeEvent { V = ImeHost.Version, Type = type, Instance = Instance, Key = key, Caret = caret, Field = Field() });
+        var output = _host.Handle(new ImeEvent { Version = ImeHost.Version, Type = type, Instance = Instance, Key = key, Caret = caret, Field = Field() });
         var wasJapanese = _state.Japanese;
         _state = output.State;
         _stale = false;
@@ -301,7 +301,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             else _composition.Hide();
             _composing = output.Result.View is not null;
         }
-        if (output.State.IndicatorMs > 0) _composition.ShowMode(output.State.Japanese, output.State.IndicatorMs);
+        if (output.State.ModeIndicatorMs > 0) _composition.ShowMode(output.State.Japanese, output.State.ModeIndicatorMs);
         if (output.State.Japanese != wasJapanese) ModeChanged?.Invoke();
         return output;
     }
@@ -445,7 +445,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 if (_lastLayout != IntPtr.Zero) Log.Info($"キーボード/IME が切り替わりました (HKL {_lastLayout:X} → {layout:X}, IME: {state})。");
                 _lastLayout = layout;
             }
-            if (state.Mode != IME.ImeMode.Open || !_state.Active) return;
+            if (state.Mode != IME.ImeMode.Open || !_state.HandlesInput) return;
             // ユーザーが IME を ON にし続ける (閉じてもすぐ開く) なら、10 秒に 3 回までにして奪い合わない
             var now = Environment.TickCount64;
             if (now - _lastForcedClose > 10000) _forcedCloses = 0;

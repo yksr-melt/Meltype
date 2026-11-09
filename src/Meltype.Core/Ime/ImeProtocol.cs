@@ -44,7 +44,7 @@ public enum ImeEventType
 public sealed record ImeEvent
 {
     /// <summary>プロトコルの版。<see cref="ImeHost.Version"/> と違えば、ImeHost は何も受け持たない。</summary>
-    public required int V { get; init; }
+    public required int Version { get; init; }
 
     public required ImeEventType Type { get; init; }
 
@@ -57,7 +57,7 @@ public sealed record ImeEvent
     public ImeField? Field { get; init; }
 
     /// <summary>OS が持つ IME の開閉 (TSF の GUID_COMPARTMENT_KEYBOARD_OPENCLOSE)。OS が持たないフロントは送らない。</summary>
-    public bool? Open { get; init; }
+    public bool? ImeOpen { get; init; }
 
     /// <summary>CaretMoved・CommitRequested・CommittedByApp: キャレットがどう動いたか。</summary>
     public ImeCaret? Caret { get; init; }
@@ -165,50 +165,50 @@ public sealed record ImeCaret
 public sealed record ImeState
 {
     /// <summary>この入力欄を受け持つか。false ならフロントは何もせずにキーを通す。</summary>
-    public bool Active { get; init; }
-    /// <summary>OS の IME の開閉をこれに合わせる (ImeEvent.Open を送るフロント)。</summary>
-    public bool Open { get; init; }
-    /// <summary>表示するモード (「あ」なら true)。コードの行では Open のまま「A」になる。</summary>
+    public bool HandlesInput { get; init; }
+    /// <summary>OS の IME の開閉をこれに合わせる (ImeEvent.ImeOpen を送るフロント)。</summary>
+    public bool ImeOpen { get; init; }
+    /// <summary>表示するモード (「あ」なら true)。コードの行では ImeOpen のまま「A」になる。</summary>
     public bool Japanese { get; init; }
     /// <summary>
     /// 入力モードを表示する時間 (ミリ秒。0 なら出さない)。明示的に切り替えた・入力欄に入ったとき (設定「入力モードをカーソルの近くに表示」)。
     /// 変換中は出さない。フロントはキャレットの近くに、この時間だけ出す。
     /// </summary>
-    public int IndicatorMs { get; init; }
+    public int ModeIndicatorMs { get; init; }
     /// <summary>変換していないときに受け取るキー。キーを受け取るかをその場で決めなければならないフロント (TSF) が使う。</summary>
     public required ImeCapture Capture { get; init; }
     /// <summary>状態の世代。非同期に受け取った古い状態で、新しい状態を上書きしないように比べる。</summary>
-    public long Rev { get; init; }
+    public long Revision { get; init; }
 }
 
 /// <summary>
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
-/// Text は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。Except はそのうち受け取らない文字。
-/// Keys は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
-/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.Tap) を受け取る。
+/// PrintableAscii は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。PrintableAsciiExcept はそのうち受け取らない文字。
+/// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
+/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.TappedAlone) を受け取る。
 /// </summary>
 public sealed record ImeCapture
 {
-    public bool Text { get; init; }
-    public string Except { get; init; } = "";
-    public IReadOnlyList<ImeShortcut> Keys { get; init; } = [];
+    public bool PrintableAscii { get; init; }
+    public string PrintableAsciiExcept { get; init; } = "";
+    public IReadOnlyList<ImeShortcut> Shortcuts { get; init; } = [];
     /// <summary>変換中に Ctrl と一緒に押しても変換ボックスで使うキー (設定「Control キーの割り当て」)。ほかの Ctrl・Alt・Win と一緒のキーは、確定してアプリに通す。</summary>
-    public IReadOnlyList<ImeShortcut> Composing { get; init; } = [];
+    public IReadOnlyList<ImeShortcut> CtrlKeysWhileComposing { get; init; } = [];
 }
 
-/// <summary>Mods は Shift=1, Ctrl=2, Alt=4, Win=8 (<see cref="Input.ShortcutModifiers"/>)。</summary>
-public sealed record ImeShortcut(int Key, int Mods);
+/// <summary>Vk は Windows の仮想キーコード。Modifiers は Shift=1, Ctrl=2, Alt=4, Win=8 (<see cref="Input.ShortcutModifiers"/>)。</summary>
+public sealed record ImeShortcut(int Vk, int Modifiers);
 
 public sealed record ImeOutput(ImeState State, SessionResult Result)
 {
-    /// <summary>{"v":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
+    /// <summary>{"version":…,"state":{…},"result":{…}}。result は <see cref="SessionResult.ToJson"/> と同じ形。</summary>
     public string ToJson()
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
         {
             writer.WriteStartObject();
-            writer.WriteNumber("v", ImeHost.Version);
+            writer.WriteNumber("version", ImeHost.Version);
             writer.WritePropertyName("state");
             JsonSerializer.Serialize(writer, State, ImeJsonContext.Default.ImeState);
             writer.WritePropertyName("result");

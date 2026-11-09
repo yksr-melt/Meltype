@@ -4495,7 +4495,7 @@ internal static class CompositionTests
         var view = new CompositionView("@", ["@", "＠", "river", "川"], 0, true, "",
             Notes: [CandidateNote.HalfWidth, CandidateNote.FullWidth, CandidateNote.Translation, CandidateNote.None]);
         using var json = System.Text.Json.JsonDocument.Parse(new SessionResult(true, [], view).ToJson());
-        var notes = json.RootElement.GetProperty("view").GetProperty("list").GetProperty("notes");
+        var notes = json.RootElement.GetProperty("view").GetProperty("candidates").GetProperty("notes");
         Assert.Equal(4, notes.GetArrayLength());
         Assert.Equal("半角", notes[0].GetString());
         Assert.Equal("全角", notes[1].GetString());
@@ -4503,7 +4503,7 @@ internal static class CompositionTests
         Assert.Equal(System.Text.Json.JsonValueKind.Null, notes[3].ValueKind);
 
         using var unlabelled = System.Text.Json.JsonDocument.Parse(new SessionResult(true, [], view with { Notes = null }).ToJson());
-        var emptyNotes = unlabelled.RootElement.GetProperty("view").GetProperty("list").GetProperty("notes");
+        var emptyNotes = unlabelled.RootElement.GetProperty("view").GetProperty("candidates").GetProperty("notes");
         Assert.Equal(4, emptyNotes.GetArrayLength());
         Assert.True(emptyNotes.EnumerateArray().All(n => n.ValueKind == System.Text.Json.JsonValueKind.Null), "注記リストが無ければ各候補の注記は null");
     }

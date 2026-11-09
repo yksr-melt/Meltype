@@ -50,7 +50,7 @@ internal static unsafe class NativeBoundaryTests
         {
             var field = $"{{\"composing\":{(IsComposing ? "true" : "false")}{(after is null ? "" : ",\"after\":" + JsonSerializer.Serialize(after))}}}";
             delegate* unmanaged<IntPtr, byte*, byte*> handle = &Exports.ImeHandle;
-            var json = Marshal.StringToCoTaskMemUTF8($"{{\"v\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t\",\"field\":{field},\"key\":{key}}}");
+            var json = Marshal.StringToCoTaskMemUTF8($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t\",\"field\":{field},\"key\":{key}}}");
             byte* pointer;
             try { pointer = handle(GCHandle.ToIntPtr(_handle), (byte*)json); }
             finally { Marshal.FreeCoTaskMem(json); }
@@ -108,7 +108,7 @@ internal static unsafe class NativeBoundaryTests
         if (commit is not null)
         {
             Assert.Equal(commit, commits[0].GetProperty("text").GetString());
-            Assert.True(!commits[0].TryGetProperty("remove", out _), "前の文字は消さない");
+            Assert.True(!commits[0].TryGetProperty("removeBefore", out _), "前の文字は消さない");
         }
         Assert.Equal(JsonValueKind.Null, root.GetProperty("view").ValueKind, "未確定表示を閉じる");
     }
@@ -124,8 +124,8 @@ internal static unsafe class NativeBoundaryTests
             var view = conversion.RootElement.GetProperty("view");
             Assert.True(view.GetProperty("converting").GetBoolean(), input);
             Assert.Equal(1, view.GetProperty("clauses").GetArrayLength(), input);
-            Assert.Equal(count, view.GetProperty("list").GetProperty("items").GetArrayLength(), input);
-            Assert.Equal(expected, view.GetProperty("list").GetProperty("items")[1].GetString(), input);
+            Assert.Equal(count, view.GetProperty("candidates").GetProperty("items").GetArrayLength(), input);
+            Assert.Equal(expected, view.GetProperty("candidates").GetProperty("items")[1].GetString(), input);
             using var selected = native.Key('2', 0x32);
             Assert.Equal(expected, selected.RootElement.GetProperty("commits")[0].GetProperty("text").GetString(), input);
             Assert.Equal(JsonValueKind.Null, selected.RootElement.GetProperty("view").ValueKind, input);

@@ -153,14 +153,14 @@ class MeltypeEngine(IBus.Engine):
         if not self._host:
             return None
         self._check_replace()
-        event = {"v": IME_VERSION, "type": event_type, "instance": "ibus", "field": self._field(), **fields}
+        event = {"version": IME_VERSION, "type": event_type, "instance": "ibus", "field": self._field(), **fields}
         reply = _take(_lib.meltype_ime_handle(self._host, json.dumps(event).encode()))
         if reply is None:
             return None
         output = json.loads(reply)
         self._apply(output["result"])
-        if output["state"]["indicatorMs"]:
-            self._show_mode(output["state"]["japanese"], output["state"]["indicatorMs"])
+        if output["state"]["modeIndicatorMs"]:
+            self._show_mode(output["state"]["japanese"], output["state"]["modeIndicatorMs"])
         return output
 
     def _field(self):
@@ -267,10 +267,10 @@ class MeltypeEngine(IBus.Engine):
 
     def _apply(self, result):
         for edit in result["commits"]:
-            # 確定し直し: 本体がキャレットの前と照合した前の文字 (remove) を消してから入れる
-            if "remove" in edit:
+            # 確定し直し: 本体がキャレットの前と照合した前の文字 (removeBefore) を消してから入れる
+            if "removeBefore" in edit:
                 # IBus は文字 (コードポイント) 単位で消す。消えたかどうかは送ったあとでしか分からないので、次の出来事のときに確かめる
-                length = len(edit["remove"])
+                length = len(edit["removeBefore"])
                 self._note_replace(length, edit["text"])
                 self.delete_surrounding_text(-length, length)
             # 消すだけの preedit 更新を確定の前に送らない。Chromium 系 (Wayland text-input-v3) は
@@ -278,7 +278,7 @@ class MeltypeEngine(IBus.Engine):
             if edit["text"]:
                 self.commit_text(IBus.Text.new_from_string(edit["text"]))
             # 確定した文字の中にキャレットを戻す (空の括弧の中など)。IBus からキャレットは動かせないので、← をアプリに送る
-            for _ in range(edit.get("caretBack", 0)):
+            for _ in range(edit.get("moveCaretBack", 0)):
                 self.forward_key_event(IBus.KEY_Left, KEYCODE_LEFT, 0)
                 self.forward_key_event(IBus.KEY_Left, KEYCODE_LEFT, IBus.ModifierType.RELEASE_MASK)
         view = result["view"]
@@ -311,7 +311,7 @@ class MeltypeEngine(IBus.Engine):
         self.update_preedit_text_with_mode(preedit, len(text), bool(text), IBus.PreeditFocusMode.COMMIT)
         self._preedit_visible = bool(text)
         # 打ったキー・もしかして (書き間違い。Tab で直せる)・案内を、補助テキストに 1 行で出す
-        aux = "　".join(part for part in (view["typed"], view["suggestion"], view["hint"]) if part)
+        aux = "　".join(part for part in (view["typedKeys"], view["spellingSuggestion"], view["hint"]) if part)
         if aux:
             self.update_auxiliary_text(IBus.Text.new_from_string(aux), True)
         else:
@@ -337,7 +337,7 @@ class MeltypeEngine(IBus.Engine):
         GLib.timeout_add(milliseconds, hide)
 
     def _show_candidates(self, view):
-        listed = view["list"]
+        listed = view["candidates"]
         if not listed:
             self._hide_candidates()
             return
@@ -359,7 +359,7 @@ class MeltypeEngine(IBus.Engine):
         self._schedule_meaning(listed)
 
     def _schedule_meaning(self, listed):
-        meaning = listed["meaning"]
+        meaning = listed["selectedMeaning"]
         key = f"{listed['selected']}:{meaning}" if meaning else None
         if key == self._meaning_key:
             return
@@ -372,7 +372,7 @@ class MeltypeEngine(IBus.Engine):
                 self.update_auxiliary_text(IBus.Text.new_from_string(meaning), True)
             return False
 
-        GLib.timeout_add(listed["meaningMs"], show)
+        GLib.timeout_add(listed["meaningDelayMs"], show)
 
     def _hide_candidates(self):
         self._meaning_key = None
