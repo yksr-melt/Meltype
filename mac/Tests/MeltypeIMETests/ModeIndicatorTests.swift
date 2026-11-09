@@ -39,7 +39,7 @@ final class ModeIndicatorTests: XCTestCase {
             for mode in MacInputMode.allCases {
                 let view = ModeIndicator.content(mode: mode, compact: compact)
                 let labels = view.subviews.flatMap(\.subviews).compactMap { $0 as? NSTextField }
-                XCTAssertEqual(labels.map(\.stringValue), ["自動", "英数", "Code"])
+                XCTAssertEqual(labels.map(\.stringValue), ["あ", "A"])
                 let rows = view.subviews.filter { !$0.subviews.isEmpty }
                 let selected = rows.filter { $0.layer?.backgroundColor != nil }
                 XCTAssertEqual(selected.flatMap(\.subviews).compactMap { ($0 as? NSTextField)?.stringValue }, [mode.shortTitle])
