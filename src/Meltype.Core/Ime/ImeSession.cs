@@ -196,15 +196,21 @@ internal sealed class ImeSession
     private string? Before(ImeField? field) =>
         field?.Before is { Length: > ContextLength } before && !_session.CodeInput ? before[^ContextLength..] : field?.Before;
 
+    // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 ====
+    // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
+    // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
+    // UI Automation で読み直す方法は、Windows Terminal で 1 回 150ms ほどかかったので採らなかった。
+    // ターミナルが渡すようになったら、_line・LineBefore・TrackLine・TypesText はまとめて消す。状態を足したり、ほかの判断に使い回したりしない。
+
     /// <summary>
-    /// コードの行の判断と変換の文脈に使うキャレットの前。ターミナルはキャレットの前を渡さないことがある
-    /// (Windows Terminal の TSF は空、iTerm2 は日本語を出したあと読めない) ので、そのときは <see cref="_line"/> を使う。
-    /// 定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
+    /// コードの行の判断と変換の文脈に使うキャレットの前。コードの入力欄でキャレットの前が届かない (ターミナルで空のときも) ときだけ、
+    /// <see cref="_line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
     /// </summary>
     private string? LineBefore(ImeField? field) =>
         _session.CodeInput && field is { } f && (f.Before is null || f.Before.Length == 0 && _session.CodeTerminal) ? _line.ToString() : Before(field);
 
-    // この入力欄の今の行のうち、本体が知っている文字 (通したキーの文字と確定した文字)。キャレットが打つ以外で動いたら捨てる
+    // ワークアラウンド: この入力欄の今の行のうち、本体が知っている文字 (通したキーの文字と確定した文字)。
+    // キャレットが打つ以外で動いたら、空 (作ったときと同じ状態) に戻す
     private readonly StringBuilder _line = new();
 
     private void TrackLine(ImeEvent e, SessionResult result)
