@@ -1736,12 +1736,14 @@ public sealed class CompositionController
     /// <summary>無変換での かな の循環の次の表示。ひらがな・カタカナ・半角カタカナで見えているときだけ輪の次へ、それ以外 (変換後・英字) はひらがな。</summary>
     private DisplayMode NextKanaCycleMode()
     {
+        // 変換中は、まずひらがなに戻す
+        if (_converting) return DisplayMode.Hiragana;
         switch (_text.Mode)
         {
-            case DisplayMode.Hiragana when !_converting: return DisplayMode.Katakana;
-            case DisplayMode.Katakana when !_converting: return DisplayMode.HalfWidthKatakana;
-            case DisplayMode.HalfWidthKatakana when !_converting: return DisplayMode.Hiragana;
-            case DisplayMode.Auto when !_converting:
+            case DisplayMode.Hiragana: return DisplayMode.Katakana;
+            case DisplayMode.Katakana: return DisplayMode.HalfWidthKatakana;
+            case DisplayMode.HalfWidthKatakana: return DisplayMode.Hiragana;
+            case DisplayMode.Auto:
                 // 自動判定で、文字がひらがな (と長音) だけなら、ひらがなで見えている。英字・数字・漢字・カタカナを含むなら見えていない (記号は無視)
                 var shown = CurrentDisplay(final: false);
                 return shown.Length > 0 && shown.All(c => !char.IsLetterOrDigit(c) || c is >= '\u3041' and <= '\u309F' or '\u30FC') ? DisplayMode.Katakana : DisplayMode.Hiragana;

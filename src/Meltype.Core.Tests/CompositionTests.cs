@@ -706,8 +706,23 @@ internal static class CompositionTests
         // 数字が混ざった表示は、ひらがなだけではない。最初の 1 回はカタカナにせず、ひらがなにする
         var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
         k.Type("123ka");
+        var before = k.Showing;
         k.Press(VirtualKeys.NonConvert);
-        Assert.True(!k.Showing.Contains('カ') && !k.Showing.Contains('ｶ'), "最初はカタカナにしない: " + k.Showing);
+        Assert.Equal("123か", k.Showing, "最初の 1 回はひらがな (表示: " + before + ")");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("123カ", k.Showing, "次に全角カタカナ");
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_AfterHalfWidthKatakanaKeyReturnsToHiragana()
+    {
+        // F8 で半角カタカナにしたあとに押すと、輪の次のひらがなへ
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("kana");
+        k.Press(VirtualKeys.F8);
+        Assert.Equal("ｶﾅ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("かな", k.Showing);
     }
 
     [Test]
