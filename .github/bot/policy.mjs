@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 yksr-melt
-// PR の件数制限と、投稿者の返事を待っている Issue・PR の期限管理。
+// PR の件数制限と、投稿者の返事を待っている Issue・PR の期限管理。4 週間だれも担当しない good first issue のラベルを外す。
 // 件数の超過は Draft にせず「PR上限超過」を付けて順番待ちにし (枠が空いたら外す)、PR要対応・情報待ちは通知から 14 日で閉じる。
 // 件数には Draft も含める (Draft を作業中の下書きにだけ使い、上限を避けるために Draft にしなくてよいように)。
 // メンテナーが「次にレビュー」を付けた PR は、件数を数えるときに古い PR より先に枠へ入れる。
@@ -12,6 +12,9 @@ import { pathToFileURL } from 'node:url';
 
 export const Labels = { limit: 'PR上限超過', rule: 'PR要対応', info: '情報待ち', exempt: 'No Close', next: '次にレビュー' };
 export const WaitMs = 14 * 24 * 60 * 60 * 1000;
+// good first issue は、ラベルを付けてから 4 週間だれも担当しなければ外す (初めての人のために取っておく期間)
+export const GoodFirst = 'good first issue';
+export const GoodFirstMs = 28 * 24 * 60 * 60 * 1000;
 // 件数の超過は 14 日で閉じる通知 (版 1)、24 時間で Draft にする通知 (版 2) から、順番待ちの通知 (版 3) に変えた。
 // 前の版の通知は、順番待ちの通知に書き直す。
 const Versions = { limit: 3, rule: 1, info: 1 };
@@ -82,6 +85,16 @@ export function decision(item, kind, comments, events, now) {
   // 件数の超過は順番待ちにするだけで、期限で Draft にも閉じもしない。
   if (limit) return { action: 'wait', notice };
   return { action: now - since >= WaitMs ? 'close' : 'wait', notice };
+}
+
+/** good first issue を外すか。担当がいれば外さない。期間は最後にラベルを付けたときから数える (付け直せば数え直す)。 */
+export function staleGoodFirst(issue, events, now) {
+  if (issue.state !== 'open' || issue.pull_request || !names(issue).has(GoodFirst)) return false;
+  if ((issue.assignees ?? []).length > 0) return false;
+  const labeled = events.filter(e => e.event === 'labeled' && e.label?.name === GoodFirst)
+    .map(e => Date.parse(e.created_at)).filter(Number.isFinite);
+  const since = labeled.length > 0 ? Math.max(...labeled) : Date.parse(issue.created_at);
+  return Number.isFinite(since) && now - since >= GoodFirstMs;
 }
 
 function render(state) {
@@ -176,6 +189,17 @@ export async function runPolicy(api, event, eventName, now = Date.now()) {
 
   for (const [number, isPr] of candidates) {
     await inspect(number, isPr);
+  }
+
+  if (canClose) {
+    for (const issue of await list(`/issues?state=open&labels=${encodeURIComponent(GoodFirst)}`)) {
+      if (issue.pull_request || (issue.assignees ?? []).length > 0) continue;
+      if (!staleGoodFirst(issue, await list(`/issues/${issue.number}/events`), now)) continue;
+      await request('DELETE', `/issues/${issue.number}/labels/${encodeURIComponent(GoodFirst)}`);
+      await request('POST', `/issues/${issue.number}/comments`, {
+        body: `${Marker}\n4 週間だれも担当しなかったので、\`${GoodFirst}\` を外しました。これからは、だれでも \`/self-assign\` して担当できます。`,
+      });
+    }
   }
 
   async function snapshot(number, isPr) {

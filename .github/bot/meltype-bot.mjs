@@ -189,7 +189,7 @@ const Help = [
   '| `/test-explain <SHA> <キー>` | PR のコードで `/explain` | メンテナー |',
   '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でないか、docs/release-notes/<版>.md が無ければ止める | 管理者 |',
   '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1` の形) | 管理者 |',
-  '| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる)。`要トリアージ` の間はメンテナーだけ | だれでも |',
+  '| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる)。`要トリアージ` の間はメンテナーだけ。`good first issue` は初めて貢献する人だけ | だれでも |',
   '| `/help` | この一覧 | だれでも |',
   '',
   'PR のコードを動かすコマンドの `<SHA>` は、中身を確かめた commit の SHA (40 桁)。PR の今の head と違えば動かしません。',
@@ -247,6 +247,12 @@ async function releaseCommand(issue, command, version) {
 const Untriaged = '要トリアージ';
 const UntriagedNote = 'この Issue はまだメンテナーが確認していません (`要トリアージ`)。対応したい場合は、そのことをコメントで残しておいてください。メンテナーが進めると決めて `要トリアージ` を外したら、`/self-assign` とだけコメントしてから対応してください。';
 const untriaged = () => event.issue.labels?.some(l => (l.name ?? l) === Untriaged);
+// good first issue は初めて貢献する人のために取っておく。リポジトリに commit が入ったことのある人
+// (CONTRIBUTOR) とメンテナーは /self-assign できない (bot・AI の自動化も含む)。4 週間だれも担当しなければ policy.mjs がラベルを外す
+const GoodFirst = 'good first issue';
+const GoodFirstNote = 'この Issue は `good first issue` (Meltype に初めて貢献する人のために取っておいている Issue) です。Pull Request がマージされたことのある人・メンテナーは担当になれません。4 週間だれも担当しなければラベルが外れ、だれでも担当できるようになります。';
+const goodFirst = () => event.issue.labels?.some(l => (l.name ?? l) === GoodFirst);
+const isFirstTimer = association => !['OWNER', 'MEMBER', 'COLLABORATOR', 'CONTRIBUTOR'].includes(association);
 const isClaim = line => /^(これ[はをも]?|この\s*issue\s*[はをも]?|私が|わたしが|僕が|ぼくが|自分が)?\s*(着手|対応|担当|作業)(します|しています|してみます|させてください|させていただきます)[。.!！]*$/i.test(line.replace(/\s+$/, ''));
 
 async function selfAssign(issue, login) {
@@ -335,6 +341,10 @@ async function parse() {
     }
     if (untriaged() && !maintainer) {
       await upsertComment(issue, `error-${event.comment.id}`, UntriagedNote);
+      return output({ action: 'none' });
+    }
+    if (goodFirst() && !isFirstTimer(event.comment.author_association)) {
+      await upsertComment(issue, `error-${event.comment.id}`, GoodFirstNote);
       return output({ action: 'none' });
     }
     await selfAssign(issue, event.comment.user.login);

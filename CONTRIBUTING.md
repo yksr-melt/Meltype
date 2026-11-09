@@ -75,6 +75,12 @@ Issue・Pull Request の本文とコメントは日本語で書いてくださ�
 `要トリアージ` が付いている Issue (メンテナーがまだ見ていないもの) には、基本的に着手しないでください。
 対応したい場合は、その Issue に対応したいことをコメントで残しておいてください。メンテナーが進めると判断したら、`/self-assign` とコメントしてから対応してください ([bot のコマンド](#bot-のコマンド))。
 
+`good first issue` が付いている Issue は、Meltype に初めて貢献する人のために取っておいています。
+
+- 初めての人は、AI を使ってもかまいません ([AI の利用について](#ai-の利用について) のとおり、使ったら Pull Request に書いてください)。
+- Pull Request がマージされたことのある人・メンテナーは、担当になれません (`/self-assign` を bot が断ります)。メンテナー側の bot・AI の自動化も同じです。
+- ラベルを付けてから 4 週間だれも担当しなければ、bot がラベルを外します。そのあとは、だれでも担当できます。
+
 - 「[やらないこと](#やらないこと)」に当たる要望は、理由を添えてすぐに閉じます。
 - 情報が足りない報告には `情報待ち` を付けて聞き返します ([期限](#pull-request-を送る場合))。
 
@@ -190,7 +196,7 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 | `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す (最新のコードと最新のリリース) | だれでも |
 | `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |
 | `/pack <SHA>` | Pull Request のコードで Windows のテスト版の zip を作る | メンテナー |
-| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる) | だれでも |
+| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる)。`要トリアージ` の間はメンテナーだけ。`good first issue` は初めて貢献する人だけ | だれでも |
 | `/help` | コマンドの一覧 | だれでも |
 
 `/test`・`/pack` の `<SHA>` は、中身を確かめた commit の SHA (40 桁) です。PR の今の head と違えば動かしません。
@@ -198,6 +204,7 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 「変換・判定の間違い」の Issue を作ると、`/repro` と同じことを自動で行います (「打ったもの」がキーの英字なら、ほかの欄が足りなくても行います)。漢字の変換は再現しません (日本語 / 英語の判定だけを見ます)。
 
 `要トリアージ` が付いている Issue では、メンテナー以外は `/self-assign` できません ([Issue・Pull Request の扱い](#issuepull-request-の扱い))。
+`good first issue` が付いている Issue では、初めて貢献する人だけが `/self-assign` できます。
 
 <a name="自動の仕分け"></a>
 <img src="docs/images/headings/contributing/s06.svg" alt="自動の仕分け" height="40">

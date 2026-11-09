@@ -2,7 +2,7 @@
 // Copyright (C) 2026 yksr-melt
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decision, excessPulls, githubApi, Labels, runPolicy, WaitMs } from './policy.mjs';
+import { decision, excessPulls, githubApi, GoodFirst, GoodFirstMs, Labels, runPolicy, staleGoodFirst, WaitMs } from './policy.mjs';
 
 const start = Date.parse('2026-10-25T00:00:00Z');
 const user = login => ({ login, type: 'User' });
@@ -35,7 +35,10 @@ function fixture(items) {
     async list(path) {
       if (path.startsWith('/pulls?')) return structuredClone([...records.values()].filter(i => i.pull_request && i.state === 'open'));
       if (path === '/labels') return Object.values(Labels).map(name => ({ name }));
-      if (path.startsWith('/issues?')) return structuredClone([...records.values()].filter(i => i.state === 'open' && i.labels.some(l => l.name === Labels.info)));
+      if (path.startsWith('/issues?')) {
+        const label = decodeURIComponent(path.match(/labels=([^&]+)/)[1]);
+        return structuredClone([...records.values()].filter(i => i.state === 'open' && i.labels.some(l => l.name === label)));
+      }
       const reviewMatch = path.match(/^\/pulls\/(\d+)\/(comments|reviews)$/);
       if (reviewMatch) return structuredClone((reviewMatch[2] === 'reviews' ? reviews : reviewComments).get(+reviewMatch[1]));
       const [, n, collection] = path.match(/^\/issues\/(\d+)\/(comments|events)$/) ?? [];
@@ -406,4 +409,35 @@ test('通知の投稿が遅れた場合も、実際の通知から丸 14 日待�
   assert.equal(f.records.get(1).state, 'open');
   await f.run(start + WaitMs + 60_000);
   assert.equal(f.records.get(1).state, 'closed');
+});
+
+test('good first issue: 担当のいないまま 4 週間たったらラベルを外して知らせる', async () => {
+  const f = fixture([issue(1)]);
+  await f.api.request('POST', '/issues/1/labels', { labels: [GoodFirst] });
+  await f.run(start + GoodFirstMs - 60_000);
+  assert.ok(f.records.get(1).labels.some(l => l.name === GoodFirst));
+  await f.run(start + GoodFirstMs);
+  assert.ok(!f.records.get(1).labels.some(l => l.name === GoodFirst));
+  assert.equal(f.records.get(1).state, 'open');
+  assert.match(f.comments.get(1).at(-1).body, /4 週間/);
+});
+
+test('good first issue: 担当がいれば、期間が過ぎても外さない', () => {
+  const item = { ...issue(1, [GoodFirst]), assignees: [user('bob')] };
+  assert.equal(staleGoodFirst(item, [], start + GoodFirstMs * 2), false);
+});
+
+test('good first issue: 付け直したら、そこから数え直す', () => {
+  const item = issue(1, [GoodFirst]);
+  const labeled = at => ({ event: 'labeled', label: { name: GoodFirst }, created_at: new Date(at).toISOString() });
+  const events = [labeled(start), labeled(start + 10 * Day)];
+  assert.equal(staleGoodFirst(item, events, start + GoodFirstMs), false);
+  assert.equal(staleGoodFirst(item, events, start + 10 * Day + GoodFirstMs), true);
+});
+
+test('good first issue: イベントで動いたときは外さない (定期実行だけで外す)', async () => {
+  const f = fixture([issue(1)]);
+  await f.api.request('POST', '/issues/1/labels', { labels: [GoodFirst] });
+  await f.run(start + GoodFirstMs * 2, 'issues', { issue: f.records.get(1) });
+  assert.ok(f.records.get(1).labels.some(l => l.name === GoodFirst));
 });
