@@ -415,8 +415,9 @@ public:
             [this](fcitx::Event &event) {
                 auto *ic = static_cast<fcitx::InputContextEvent &>(event).inputContext();
                 if (instance_->inputMethodEngine(ic) != this) return;
-                if (!ic->propertyFor(&factory_)->pendingMode.empty()) showPendingMode(ic);
-                else if (!ic->inputPanel().empty()) ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+                if (!ic->propertyFor(&factory_)->pendingMode.empty()) {
+                    if (knowsCaret(ic)) showPendingMode(ic);
+                } else if (!ic->inputPanel().empty()) ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
             });
     }
 
@@ -551,10 +552,14 @@ private:
         if (const int ms = shown->integer("modeIndicatorMs"); ms > 0) {
             const std::string mode = shown->str("languageMode") == "Japanese" ? "あ" : "A";
             if (state->deferMode) {
-                // 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。知らせが来なければ、少し待ってから今の位置に出す
+                // 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。位置の知らせを待つ。
+                // 前と同じ位置なら知らせが来ないので、少し待ってから今の位置に出す (位置を知らない入力欄には出さない)
                 state->pendingMode = mode;
                 state->pendingModeMs = ms;
-                state->modeTimer = after(150, [this, ic]() { showPendingMode(ic); });
+                state->modeTimer = after(150, [this, ic]() {
+                    if (knowsCaret(ic)) showPendingMode(ic);
+                    else ic->propertyFor(&factory_)->pendingMode.clear();
+                });
             } else {
                 showMode(ic, mode, ms);
             }
@@ -596,6 +601,13 @@ private:
             ic->inputPanel().setAuxUp(fcitx::Text());
             ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
         });
+    }
+
+    // 入力モードを出せる入力欄か: フォーカスがあり、キャレットの位置を知らせている
+    // (アプリが入力を無効 (Disable) にしたら fcitx5 が deactivate するので、待っていた表示はそこで捨てる)
+    static bool knowsCaret(fcitx::InputContext *ic) {
+        const auto &rect = ic->cursorRect();
+        return ic->hasFocus() && (rect.left() != 0 || rect.top() != 0 || rect.width() != 0 || rect.height() != 0);
     }
 
     void showPendingMode(fcitx::InputContext *ic) {

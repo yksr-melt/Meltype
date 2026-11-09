@@ -510,6 +510,8 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual("あ", self.engine.panel_mode)
         # 入力欄に入ったときの表示は、アプリがキャレットの位置を知らせてから出す
         self.assertIsNone(self.engine.aux)
+        self.engine.do_set_cursor_location(0, 0, 0, 0)
+        self.assertIsNone(self.engine.aux, "位置を知らない入力欄には出さない")
         self.engine.do_set_cursor_location(100, 100, 1, 20)
         self.assertEqual("あ", self.engine.aux)
         self.special(IBus.KEY_Alt_L)

@@ -176,21 +176,22 @@ class MeltypeEngine(IBus.Engine):
         if output["state"]["modeIndicatorMs"]:
             mode = (output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
             if self._defer_mode:
-                # 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。知らせが来なければ、少し待ってから今の位置に出す
+                # 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。位置の知らせを待ち、来なければ出さない
                 self._pending_mode = mode
-                GLib.timeout_add(150, self._show_pending_mode)
+                GLib.timeout_add(150, self._forget_pending_mode)
             else:
                 self._show_mode(*mode)
         return output
 
-    def _show_pending_mode(self):
-        if self._pending_mode:
-            mode, self._pending_mode = self._pending_mode, None
-            self._show_mode(*mode)
+    def _forget_pending_mode(self):
+        self._pending_mode = None
         return False
 
     def do_set_cursor_location(self, x, y, w, h):
-        self._show_pending_mode()
+        # 位置を知らない入力欄は 0, 0 (大きさ 0) を知らせてくる
+        if self._pending_mode and (x, y, w, h) != (0, 0, 0, 0):
+            mode, self._pending_mode = self._pending_mode, None
+            self._show_mode(*mode)
 
     def _field(self):
         before, after, selection = self._surrounding_text()
