@@ -117,6 +117,8 @@ def read_schema(directory):
 
 
 def main():
+    # 画面の文字列は日本語。ja_JP 以外のロケールでも漢字を日本語の字形で描く。
+    os.environ["PANGO_LANGUAGE"] = ":".join(filter(None, ["ja", os.environ.get("PANGO_LANGUAGE")]))
     import gi
     gi.require_version("Gtk", "4.0")
     gi.require_version("Gdk", "4.0")
