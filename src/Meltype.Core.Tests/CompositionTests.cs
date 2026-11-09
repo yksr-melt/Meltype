@@ -1931,6 +1931,65 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void DictionaryAdditions2_ReportedWords()
+    {
+        // #1609: 固有名詞がかなに割れる
+        var k = new Keyboard();
+        k.Type("Kaggle\n");
+        Assert.Equal("Kaggle", k.Host.Document);
+
+        k = new Keyboard();
+        k.Type("kaggle\n");
+        Assert.Equal("kaggle", k.Host.Document);
+
+        // 逆向き: 語の後ろに続く日本語は日本語のまま
+        k = new Keyboard();
+        k.Type("kaggleno\n");
+        Assert.Equal("kaggleの", k.Host.Document);
+
+        // #1390: stat の後ろに続く日本語は日本語のまま
+        foreach (var word in new[] { "stat", "stats" })
+        {
+            var e = new Keyboard();
+            e.Type(word + "\n");
+            Assert.Equal(word, e.Host.Document);
+        }
+
+        k = new Keyboard();
+        k.Type("statsuruno\n");
+        Assert.Equal("statするの", k.Host.Document);
+
+        // #1545・#1652・#1614・#1653・#1442: 読みが無くて英日に割れる日本語
+        foreach (var (typed, expected) in new[]
+        {
+            ("botto", "ぼっと"),
+            ("pien", "ぴえん"),
+            ("onnatsu", "おんあつ"),
+            ("guguru", "ぐぐる"),
+            ("himoduke", "ひもづけ"),
+        })
+        {
+            var j = new Keyboard();
+            j.Type(typed + "\n");
+            Assert.Equal(expected, j.Host.Document);
+        }
+
+        // 逆向き・似た入力: 追加した読みの前後で既存の判定が変わらない
+        foreach (var (typed, expected) in new[]
+        {
+            ("korosuzobot", "ころすぞbot"),
+            ("bot", "bot"),
+            ("guru", "guru"),
+            ("sinbun", "しんぶん"),
+        })
+        {
+            var r = new Keyboard();
+            r.Type(typed + "\n");
+            Assert.Equal(expected, r.Host.Document);
+        }
+    }
+
+    [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
         // #1445・#1651: 変換の候補に出す語
