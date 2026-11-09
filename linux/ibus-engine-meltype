@@ -239,8 +239,9 @@ class MeltypeEngine(IBus.Engine):
             self.send("CommitRequested", caret=caret)
 
     def do_focus_in_id(self, object_path, client):
-        # IBus 1.5.27 以降。client は「gtk4-im:gnome-text-editor」のように、IM モジュールとプログラムの名前
-        self._app = client.rpartition(":")[2] if ":" in client else None
+        # IBus 1.5.27 以降。client は「gtk4-im:gnome-text-editor」のように、IM モジュールとプログラムの名前。
+        # GNOME Shell の画面は「gnome-shell」だけ
+        self._app = client.rpartition(":")[2] or None
         self.do_focus_in()
 
     def do_focus_in(self):

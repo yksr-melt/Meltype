@@ -100,7 +100,7 @@ internal sealed class ImeSession
         var japanese = ShowsJapanese(before);
         _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
         var indicate = explicitChange && japanese != wasJapanese && settings.ModeIndicator != ModeIndicatorTiming.Never ||
-            e.Caret?.FocusEntered == true && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
+            AnnouncesFocus(e) && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
         return new(new ImeState
         {
             HandlesInput = active,
@@ -112,6 +112,14 @@ internal sealed class ImeSession
         }, result);
     }
 
+    /// <summary>
+    /// 入力欄に入ったことを、入力モードの表示で知らせるか。OS のシェルの画面 (GNOME のアプリ一覧の検索欄など) は、
+    /// 開くアニメーションの途中のキャレットの位置しか知らせてこないので、入ったときは出さない。
+    /// </summary>
+    public static bool AnnouncesFocus(ImeEvent e) => e.Caret?.FocusEntered == true && !ShellApps.Contains(e.Field?.App ?? "");
+
+    private static readonly HashSet<string> ShellApps = new(StringComparer.Ordinal) { "gnome-shell" };
+
     /// <summary>入力モードを表示する時間。</summary>
     private const int ModeIndicatorMs = 1200;
 
@@ -119,7 +127,7 @@ internal sealed class ImeSession
     private bool _listedPredictions;
 
     /// <summary>入力の本体を作る前 (まだ打っていない入力欄) の状態。</summary>
-    /// <param name="entered">入力欄にフォーカスが入った (設定によっては入力モードを表示する)。</param>
+    /// <param name="entered">入力欄に入ったことを知らせる (<see cref="AnnouncesFocus"/>。設定によっては入力モードを表示する)。</param>
     public static ImeState InitialState(bool active, bool open, Settings settings, bool entered, long rev) => new()
     {
         HandlesInput = active,

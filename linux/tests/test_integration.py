@@ -521,6 +521,11 @@ class IntegrationTests(unittest.TestCase):
         self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK)
         self.assertEqual(("あ", "あ"), (self.engine.panel_mode, self.engine.aux))
 
+    def test_app_comes_from_the_client_name(self):
+        for client, app in (("gtk4-im:gnome-text-editor", "gnome-text-editor"), ("gnome-shell", "gnome-shell"), ("", None)):
+            self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_1", client)
+            self.assertEqual(app, self.engine._app, client)
+
     def test_alt_tap_sets_the_mode(self):
         self.special(IBus.KEY_Alt_L)
         self.assertTrue(self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK))

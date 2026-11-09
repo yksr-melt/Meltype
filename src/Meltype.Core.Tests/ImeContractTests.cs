@@ -583,6 +583,9 @@ internal static class ImeContractTests
     [Test]
     public static void ModeIndicator_IsDecidedByTheSetting()
     {
+        var shell = new Front { App = "gnome-shell" };
+        Assert.True(!Indicator(shell.Event("CaretMoved", extra: Entered)), "GNOME Shell の画面では、入ったときは表示しない\n" + shell.Trace);
+        Assert.True(Indicator(shell.Key(ToggleShortcut.Hankaku)), "切り替えたら表示する\n" + shell.Trace);
         var front = new Front();
         Assert.True(Indicator(front.Event("CaretMoved", extra: Entered)), "既定では入力欄に入ったときも表示する\n" + front.Trace);
         Assert.True(Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたら表示する\n" + front.Trace);
