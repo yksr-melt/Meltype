@@ -200,7 +200,9 @@ internal sealed class ImeSession
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
         {
             if (_session.HandleRoleKey(vk) is { } role) return role;
-            if (!composing && !IsThumbKey(vk, settings) && !(vk == VirtualKeys.Convert && ShowsJapanese(before) && field?.Selection is { Length: > 0 }))
+            // 入力中の無変換は、英数キーと同じく確定してから英数にする。入力中の変換・かなは変換ボックスのキー
+            var switches = composing ? vk == VirtualKeys.NonConvert : !(vk == VirtualKeys.Convert && ShowsJapanese(before) && field?.Selection is { Length: > 0 });
+            if (switches && !IsThumbKey(vk, settings))
             {
                 return key.Repeat ? Consumed : Switch(vk != VirtualKeys.NonConvert, before, ref explicitChange, toggle: false);
             }

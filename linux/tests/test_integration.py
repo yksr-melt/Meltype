@@ -473,6 +473,11 @@ class IntegrationTests(unittest.TestCase):
         self.special(IBus.KEY_F6)
         self.special(IBus.KEY_Return)
         self.assertEqual("ka か", self.engine.document)
+        # 入力中の無変換は、確定してから英数にする
+        self.type_text("ka")
+        self.special(IBus.KEY_Muhenkan)
+        self.type_text("ka")
+        self.assertEqual("ka かかka", self.engine.document)
 
     def test_caret_back_moves_into_the_brackets(self):
         # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)

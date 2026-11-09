@@ -527,7 +527,7 @@ public sealed class MeltypeSession
 
     /// <summary>
     /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON で入力中なら、変換ボックスで処理する (issue #199)。
-    /// そうでなければ null (Linux の IBus・fcitx5 は、今までどおり英数 / 日本語の切り替えに使う)。
+    /// そうでなければ null (ImeSession が英数 / 日本語の切り替えに使う)。
     /// </summary>
     public SessionResult? HandleRoleKey(int vk)
     {

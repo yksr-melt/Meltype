@@ -426,6 +426,22 @@ internal static class ImeContractTests
         Assert.True(front.Open, "変換で日本語\n" + front.Trace);
         var repeat = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"key\":{{\"vk\":{VirtualKeys.NonConvert},\"repeat\":true}}}}");
         Assert.True(Consumed(repeat) && repeat.GetProperty("state").GetProperty("imeOpen").GetBoolean(), "押しっぱなしでは切り替えない\n" + front.Trace);
+        // 入力中の無変換は、英数キーと同じく確定してから英数。入力中の変換は変換する
+        front.Type("ka");
+        front.Key(VirtualKeys.NonConvert);
+        Assert.True(front.Document == "か" && !front.Open, "入力中の無変換は確定してから英数\n" + front.Trace);
+        front.Key(VirtualKeys.Convert);
+        front.Type("kyou");
+        var converting = front.Key(VirtualKeys.Convert).GetProperty("result").GetProperty("view");
+        Assert.True(converting.GetProperty("converting").GetBoolean() && front.Document == "か", "入力中の変換は変換する\n" + front.Trace);
+        front.Key('\n');
+        front.Settings.SeparateKeyRoles = true;
+        front.Type("ka");
+        var role = front.Key(VirtualKeys.NonConvert);
+        Assert.True(front.Open && role.GetProperty("result").GetProperty("view").GetProperty("text").GetString() == "ka",
+            "入力中のキーの役割を分けるなら、無変換は英字にする\n" + front.Trace);
+        front.Key('\n');
+        front.Settings.SeparateKeyRoles = false;
         // 親指シフトの配列では親指キー (変換ボックスで使う)
         front.Settings.InputStyle = InputStyle.Kana;
         front.Settings.KanaLayout = KanaLayout.Nicola;
