@@ -32,9 +32,10 @@ internal static class UserDictionaryFileTests
         var msime = "!Microsoft IME Dictionary Tool\r\n!Version:\r\n!Format:WORDLIST\r\n\r\nゆきしろ\t雪代\t人名\r\nメルタイプ\tMeltype\t固有名詞\r\nあ\t亜\t名詞\r\n";
         var result = UserDictionaryFile.Parse([.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(msime)]);
         Assert.Equal("UTF-16", result.Encoding);
-        Assert.Equal(2, result.Words.Count, "1 文字の読み (あ) は飛ばす");
+        Assert.Equal(3, result.Words.Count);
         Assert.Equal(new UserWord("めるたいぷ", "Meltype"), result.Words[1], "カタカナの読みはひらがなにする");
-        Assert.Equal(1, result.Skipped);
+        Assert.Equal(new UserWord("あ", "亜"), result.Words[2], "1 文字の読みも取り込む");
+        Assert.Equal(0, result.Skipped);
 
         // Google 日本語入力のエクスポート (UTF-8、BOM なし、4 列)
         var google = Encoding.UTF8.GetBytes("# コメント\nきごうとう\t記号等\t名詞\t\nkaomoji\t(^^)\t顔文字\tコメント\n");
@@ -51,11 +52,15 @@ internal static class UserDictionaryFileTests
     {
         var dictionary = new UserDictionary(null, builtIn: false);
         Assert.Equal(2, dictionary.AddRange([new UserWord("ゆきしろ", "雪代"), new UserWord("めるたいぷ", "Meltype"), new UserWord("ゆきしろ", "雪代")]), "同じ語は 1 回だけ");
+        Assert.True(dictionary.Add("き", "木") is null, "画面からの登録と同じ方法で 1 文字の読みを登録する");
         var bytes = UserDictionaryFile.Export(dictionary.Words);
         Assert.True(bytes is [0xFF, 0xFE, ..], "Microsoft IME と同じ UTF-16 LE (BOM 付き)");
         var back = UserDictionaryFile.Parse(bytes);
-        Assert.Equal(2, back.Words.Count, "書き出したものを取り込める");
-        Assert.Equal(0, dictionary.AddRange(back.Words), "登録済みの語は増やさない");
+        Assert.Equal(0, back.Skipped, "書き出した語はすべて取り込める");
+        var imported = new UserDictionary(null, builtIn: false);
+        Assert.Equal(3, imported.AddRange(back.Words), "空の辞書に取り込める");
+        Assert.Equal("木", imported.Lookup("き").Single(), "書き出した 1 文字の読みも登録される");
+        Assert.Equal(0, imported.AddRange(back.Words), "登録済みの語は増やさない");
     }
 
     // macOS の「ユーザ辞書」から Finder にドラッグして書き出した plist (#40)
