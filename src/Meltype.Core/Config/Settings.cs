@@ -451,7 +451,7 @@ public sealed class Settings
      Description("入力中 (変換ボックスに文字があるとき) の Space・変換・無変換・ひらがな/カタカナ キーの役割を分けます。Space: 英語・日本語の判定にかかわらず候補を開く (英字で見えている語も、確定して空白を入れずに候補を出す)。変換: 日本語を優先して変換。無変換: 英字にする。ひらがな/カタカナ: ひらがな ⇔ カタカナ。確定は Enter です。何も打っていないときの各キーは今までどおりです。")]
     public bool SeparateKeyRoles { get; set; }
 
-    [Category("7. キー操作"), DisplayName("無変換でカタカナを切り替える"),
+    [Category("7. キー操作"), DisplayName("無変換でカタカナを切り替える"), Platforms(Platform.Windows | Platform.Linux),
      Description("「入力中のキーの役割を分ける」も ON のとき、入力中の 無変換 キーを、英字にする代わりに Microsoft IME のように切り替えます。ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に、押すたびに循環します。ひらがなで見えていないとき (変換したあと・英字で見えているとき) は、まずひらがなにします。")]
     public bool NonConvertCyclesKana { get; set; }
 
