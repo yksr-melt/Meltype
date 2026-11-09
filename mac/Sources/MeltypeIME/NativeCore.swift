@@ -73,9 +73,14 @@ struct ImeOutput: Decodable {
     let result: SessionResult
 }
 
+/// 打ったら効く言語モード (表示する「あ / A」)
+enum LanguageMode: String, Decodable {
+    case japanese = "Japanese"
+    case alphanumeric = "Alphanumeric"
+}
+
 struct ImeState: Decodable {
-    /// 表示するモード (「あ」なら true)
-    let japanese: Bool
+    let languageMode: LanguageMode
     /// 入力モードを表示する時間 (ミリ秒。0 なら出さない)
     let modeIndicatorMs: Int
 }

@@ -514,7 +514,7 @@ private:
             "\",\"instance\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
-        if (const auto *shown = output.get("state"); shown->integer("modeIndicatorMs") > 0) showMode(ic, shown->flag("japanese") ? "あ" : "A", shown->integer("modeIndicatorMs"));
+        if (const auto *shown = output.get("state"); shown->integer("modeIndicatorMs") > 0) showMode(ic, shown->str("languageMode") == "Japanese" ? "あ" : "A", shown->integer("modeIndicatorMs"));
         return true;
     }
 

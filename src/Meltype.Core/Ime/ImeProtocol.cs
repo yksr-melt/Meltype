@@ -167,6 +167,13 @@ public sealed record ImeCaret
     public bool FocusLeft { get; init; }
 }
 
+/// <summary>言語モード。JSON の名前はメンバー名のまま。</summary>
+public enum ImeLanguageMode
+{
+    Japanese,
+    Alphanumeric,
+}
+
 /// <summary>出来事を処理したあとの状態。フロントは毎回まるごと置き換え、自分では状態を持たない。</summary>
 public sealed record ImeState
 {
@@ -174,8 +181,8 @@ public sealed record ImeState
     public bool HandlesInput { get; init; }
     /// <summary>OS の IME の開閉をこれに合わせる (ImeEvent.ImeOpen を送るフロント)。</summary>
     public bool ImeOpen { get; init; }
-    /// <summary>表示するモード (「あ」なら true)。コードの行では ImeOpen のまま「A」になる。</summary>
-    public bool Japanese { get; init; }
+    /// <summary>打ったら効く言語モード (表示する「あ / A」)。コードの行では、日本語を選んでいても ImeOpen のまま Alphanumeric になる。</summary>
+    public ImeLanguageMode LanguageMode { get; init; } = ImeLanguageMode.Alphanumeric;
     /// <summary>
     /// 入力モードを表示する時間 (ミリ秒。0 なら出さない)。明示的に切り替えた・入力欄に入ったとき (設定「入力モードをカーソルの近くに表示」)。
     /// 変換中は出さない。フロントはキャレットの近くに、この時間だけ出す。

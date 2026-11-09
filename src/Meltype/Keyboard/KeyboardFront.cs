@@ -75,7 +75,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     }
 
     /// <summary>入力モード (トレイのアイコン)。</summary>
-    public bool Japanese => _state.Japanese;
+    public bool Japanese => _state.LanguageMode == ImeLanguageMode.Japanese;
 
     /// <summary>入力モードが変わった (UI スレッドで呼ぶ)。</summary>
     public event Action? ModeChanged;
@@ -291,7 +291,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private ImeOutput Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, bool apply = true)
     {
         var output = _host.Handle(new ImeEvent { Version = ImeHost.Version, Type = type, Instance = Instance, Key = key, Caret = caret, Field = Field() });
-        var wasJapanese = _state.Japanese;
+        var wasMode = _state.LanguageMode;
         _state = output.State;
         _stale = false;
         if (apply)
@@ -301,8 +301,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             else _composition.Hide();
             _composing = output.Result.View is not null;
         }
-        if (output.State.ModeIndicatorMs > 0) _composition.ShowMode(output.State.Japanese, output.State.ModeIndicatorMs);
-        if (output.State.Japanese != wasJapanese) ModeChanged?.Invoke();
+        if (output.State.ModeIndicatorMs > 0) _composition.ShowMode(output.State.LanguageMode == ImeLanguageMode.Japanese, output.State.ModeIndicatorMs);
+        if (output.State.LanguageMode != wasMode) ModeChanged?.Invoke();
         return output;
     }
 

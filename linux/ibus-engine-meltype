@@ -160,7 +160,7 @@ class MeltypeEngine(IBus.Engine):
         output = json.loads(reply)
         self._apply(output["result"])
         if output["state"]["modeIndicatorMs"]:
-            self._show_mode(output["state"]["japanese"], output["state"]["modeIndicatorMs"])
+            self._show_mode(output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
         return output
 
     def _field(self):

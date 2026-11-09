@@ -481,7 +481,7 @@ internal sealed class TipServer : IDisposable
         var output = connection.Host.Handle(e);
         if (output.State.HandlesInput && connection.Process is { } process) Greet(process);
         if (output.State.ModeIndicatorMs > 0 && request.Thread != 0)
-            _composition.ShowMode(output.State.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
+            _composition.ShowMode(output.State.LanguageMode == ImeLanguageMode.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
         return output.ToJson();
     }
 

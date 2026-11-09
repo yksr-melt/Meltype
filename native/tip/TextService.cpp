@@ -730,7 +730,7 @@ void TextService::ApplyState(const JsonValue& state) {
     next.known = true;
     next.active = state[L"handlesInput"].Bool();
     next.open = state[L"imeOpen"].Bool();
-    next.japanese = state[L"japanese"].Bool();
+    next.japanese = state[L"languageMode"].Str() == L"Japanese";
     next.rev = state[L"revision"].number;
     const JsonValue& capture = state[L"capture"];
     next.text = capture[L"printableAscii"].Bool();

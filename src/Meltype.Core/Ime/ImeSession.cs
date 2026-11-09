@@ -105,7 +105,7 @@ internal sealed class ImeSession
         {
             HandlesInput = active,
             ImeOpen = !_session.Direct,
-            Japanese = active && japanese,
+            LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
             Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys()),
             Revision = rev,
@@ -124,7 +124,7 @@ internal sealed class ImeSession
     {
         HandlesInput = active,
         ImeOpen = open,
-        Japanese = active && open,
+        LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
         ModeIndicatorMs = active && entered && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
         Capture = Capture(active, !open, false, settings, []),
         Revision = rev,

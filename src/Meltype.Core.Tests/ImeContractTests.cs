@@ -162,7 +162,7 @@ internal static class ImeContractTests
 
     private static bool Active(JsonElement output) => output.GetProperty("state").GetProperty("handlesInput").GetBoolean();
 
-    private static bool Japanese(JsonElement output) => output.GetProperty("state").GetProperty("japanese").GetBoolean();
+    private static bool Japanese(JsonElement output) => output.GetProperty("state").GetProperty("languageMode").GetString() == "Japanese";
 
     private static bool Indicator(JsonElement output) => output.GetProperty("state").GetProperty("modeIndicatorMs").GetInt32() > 0;
 
