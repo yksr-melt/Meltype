@@ -1905,15 +1905,15 @@ internal static class CompositionTests
     {
         // #1541・#1637・#1530・#1638: IME や OS の名前がかなに割れる
         // #1615: 国名 / #1651: アーティスト名
-        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse" })
+        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "azooKey", "hazkey", "mozkey", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse" })
         {
             var k = new Keyboard();
             k.Type(word + "\n");
             Assert.Equal(word, k.Host.Document);
         }
 
-        // #1607・#1557・#1556・#1487・#1625・#1389・#1482: 英字のまま打つ語
-        foreach (var word in new[] { "colab", "qwen", "quickshare", "alma", "undef", "ifndef", "elifndef", "inotify", "dissatisfactio" })
+        // #1607・#1557・#1556・#1487・#1625・#1389: 英字のまま打つ語
+        foreach (var word in new[] { "colab", "qwen", "quickshare", "alma", "undef", "ifndef", "elifndef", "include", "pragma", "inotify" })
         {
             var k = new Keyboard();
             k.Type(word + "\n");

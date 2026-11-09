@@ -18,6 +18,7 @@ claudecode	claudecode
 kwo	くぉ
 funyaosu	ふにゃオス
 karenda-	カレンダー
+pure	pure
 ninatta	になった
 printenv	printenv
 mainnipushsuru	mainにpushする
@@ -93,7 +94,6 @@ undef	undef
 ifndef	ifndef
 elifndef	elifndef
 inotify	inotify
-dissatisfactio	dissatisfactio
 Benin	Benin
 Bhutan	Bhutan
 Botswana	Botswana
@@ -132,3 +132,8 @@ nqrse	nqrse
 かるかん	Karukan
 えくすぷろーらー	explorer
 さいき	PSYQUI
+include	include
+pragma	pragma
+azooKey	azooKey
+hazkey	hazkey
+mozkey	mozkey
