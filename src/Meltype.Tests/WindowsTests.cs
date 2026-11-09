@@ -4,7 +4,7 @@
 using Meltype.Config;
 using Meltype.Input;
 using Meltype.Composition;
-using Meltype.IME;
+using Meltype.WindowsIme;
 using System.Diagnostics;
 
 namespace Meltype.Tests;

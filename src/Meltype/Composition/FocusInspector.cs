@@ -552,9 +552,9 @@ public sealed class FocusInspector : IDisposable
 
     private static bool HasActiveImeContext(IntPtr foreground, IntPtr contextWindow)
     {
-        bool StillFocused() => contextWindow != IntPtr.Zero && IME.ImeTarget.FromForeground() is { } target &&
+        bool StillFocused() => contextWindow != IntPtr.Zero && WindowsIme.ImeTarget.FromForeground() is { } target &&
             target.TopLevel == foreground && target.Focus == contextWindow;
-        return StillFocused() && IME.Imm32ImeController.HasInputContext(contextWindow, 20) && StillFocused();
+        return StillFocused() && WindowsIme.Imm32ImeController.HasInputContext(contextWindow, 20) && StillFocused();
     }
 
     /// <summary>入力欄が UI Automation に出てこない、画面をすべて自分で描くエディターのウィンドウのクラス名。</summary>

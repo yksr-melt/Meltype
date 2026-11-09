@@ -81,7 +81,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public event Action? ModeChanged;
 
     /// <summary>前面のアプリの Windows の IME の状態 (ログの画面に出す)。</summary>
-    public IME.ImeState? SystemImeState { get; private set; }
+    public WindowsIme.ImeState? SystemImeState { get; private set; }
 
     // ---- IImeEnvironment ----
 
@@ -326,7 +326,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (focus.IsPassword) traits.Add(ImeTrait.Password);
         if (!text) traits.Add(ImeTrait.NonText);
         if (app.Window == IntPtr.Zero || app.IsOwnProcess || !ForegroundTracker.CanSendInputTo(app)) traits.Add(ImeTrait.Unreachable);
-        if (IME.ImeTarget.FromForeground() is not { ThreadId: not 0 } target || !IsJapaneseLayout(Native.GetKeyboardLayout(target.ThreadId))) traits.Add(ImeTrait.OtherLanguage);
+        if (WindowsIme.ImeTarget.FromForeground() is not { ThreadId: not 0 } target || !IsJapaneseLayout(Native.GetKeyboardLayout(target.ThreadId))) traits.Add(ImeTrait.OtherLanguage);
         if (app.LooksLikeGame) traits.Add(ImeTrait.Game);
         if (app.IsFullscreen) traits.Add(ImeTrait.Fullscreen);
         return new ImeField
@@ -436,8 +436,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (Interlocked.Exchange(ref _polling, 1) == 1) return;
         try
         {
-            if (ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow()) || IME.ImeTarget.FromForeground() is not { } target) return;
-            var state = IME.Imm32ImeController.GetState(target);
+            if (ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow()) || WindowsIme.ImeTarget.FromForeground() is not { } target) return;
+            var state = WindowsIme.Imm32ImeController.GetState(target);
             SystemImeState = state;
             var layout = Native.GetKeyboardLayout(target.ThreadId);
             if (layout != _lastLayout)
@@ -445,14 +445,14 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 if (_lastLayout != IntPtr.Zero) Log.Info($"キーボード/IME が切り替わりました (HKL {_lastLayout:X} → {layout:X}, IME: {state})。");
                 _lastLayout = layout;
             }
-            if (state.Mode != IME.ImeMode.Open || !_state.HandlesInput) return;
+            if (state.Mode != WindowsIme.ImeMode.Open || !_state.HandlesInput) return;
             // ユーザーが IME を ON にし続ける (閉じてもすぐ開く) なら、10 秒に 3 回までにして奪い合わない
             var now = Environment.TickCount64;
             if (now - _lastForcedClose > 10000) _forcedCloses = 0;
             if (_forcedCloses >= 3) return;
             _forcedCloses++;
             _lastForcedClose = now;
-            var closed = IME.Imm32ImeController.TrySetOpen(target, false, null, ImeTimeoutMs);
+            var closed = WindowsIme.Imm32ImeController.TrySetOpen(target, false, null, ImeTimeoutMs);
             Log.Warn($"Meltype キーボードの使用中に Windows の IME が ON になっていました ({state}) → {(closed ? "OFF にしました" : "OFF にできませんでした")}。" +
                      (_forcedCloses == 3 ? " (続けて ON になるため、しばらく自動で OFF にしません。IME を使うときは Ctrl+半角/全角 で Meltype を一時停止してください)" : ""));
         }

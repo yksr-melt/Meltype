@@ -350,10 +350,10 @@ internal sealed class CompositionService : IDisposable
     {
         try
         {
-            if (IME.ImeTarget.FromForeground() is not { } target) return;
-            var state = IME.Imm32ImeController.GetState(target);
-            if (state.Mode != IME.ImeMode.Open) return;
-            var closed = IME.Imm32ImeController.TrySetOpen(target, false, null, 150);
+            if (WindowsIme.ImeTarget.FromForeground() is not { } target) return;
+            var state = WindowsIme.Imm32ImeController.GetState(target);
+            if (state.Mode != WindowsIme.ImeMode.Open) return;
+            var closed = WindowsIme.Imm32ImeController.TrySetOpen(target, false, null, 150);
             Diagnostics.Log.Warn($"確定時に Microsoft IME が ON になっていました ({state}) → {(closed ? "OFF にしてから入力します" : "OFF にできませんでした")}。");
         }
         catch (Exception ex)
@@ -436,7 +436,7 @@ internal sealed class CompositionService : IDisposable
         {
             if (_window.Visible) return;
             // TSF の通知が届くまでに別の入力先へ移っていたら表示しない。
-            if (inputThread != 0 && IME.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
+            if (inputThread != 0 && WindowsIme.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
             var anchor = inputAnchor ?? (inputThread == 0 ? FindAnchor() : FindImeIndicatorAnchor());
             var (jp, direct, text) = _indicatorColors();
             _indicator.SetColors(Config.Settings.ParseColor(jp), Config.Settings.ParseColor(direct), Config.Settings.ParseColor(text));

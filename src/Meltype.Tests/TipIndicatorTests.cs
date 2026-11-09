@@ -84,7 +84,7 @@ internal static class TipIndicatorTests
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
         using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));
         var host = server.Connect("harness", 0);
-        var foreground = IME.ImeTarget.FromForeground()?.ThreadId ?? 0;
+        var foreground = WindowsIme.ImeTarget.FromForeground()?.ThreadId ?? 0;
         Assert.True(foreground != 0, "前面の入力スレッドがある");
         bool Shown(string type, uint? thread = null, string fields = "")
         {
