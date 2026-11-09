@@ -151,6 +151,12 @@ internal sealed class MeltypeEngine : IDisposable
         if (_settings.Mode == InputMode.Keyboard) Keyboard?.OnFocusChanged();
     }
 
+    /// <summary>入力欄に入った (FocusInspector のスレッドから呼ばれる)。</summary>
+    public void OnTextInputEntered()
+    {
+        if (_settings.Mode == InputMode.Keyboard) Keyboard?.OnTextInputEntered();
+    }
+
     /// <summary>
     /// 打鍵数に数えてよいか。Meltype を一時停止しているとき・アプリ別に OFF のとき・パスワード欄では数えない。
     /// フォーカスが移った先をまだ調べている間も数えない (前の入力欄の判定のままパスワード欄の打鍵を数えないように)。

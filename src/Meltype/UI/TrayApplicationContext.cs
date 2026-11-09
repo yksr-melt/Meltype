@@ -75,6 +75,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _keyboard.ModeChanged += OnEngineStatusChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
+        _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
         _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
         _tipServer.Start();
         IntroduceTsf();

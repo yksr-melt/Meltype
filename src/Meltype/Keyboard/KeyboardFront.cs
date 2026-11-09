@@ -64,13 +64,16 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         _state = new ImeState { Capture = new ImeCapture() };
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
         composition.Focus.ForegroundProcessName = () => _foreground.Current.ProcessName;
-        composition.Focus.TextInputEntered += () => Post(() => Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
         // 入力欄でない所・パスワード欄に移った: 本体が受け持たなくなったら、変換中の文字は入れる先が無いので捨てる
         composition.Focus.CaptureLost += _ => Post(() =>
         {
             if (_composing && !Send(ImeEventType.StateRequested, apply: false).State.HandlesInput) Abandon();
         });
-        composition.ConversionReady += () => Post(() => Send(ImeEventType.ConversionFinished));
+        // 変換の答えで作り直すのは、このフロントの変換中の表示だけ (Meltype IME で打っているときの答えでは何もしない)
+        composition.ConversionReady += () => Post(() =>
+        {
+            if (_composing) Send(ImeEventType.ConversionFinished);
+        });
         _pollTimer = new System.Threading.Timer(_ => PollSystemIme(), null, 250, 250);
     }
 
@@ -149,6 +152,9 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     }
 
     /// <summary>同じウィンドウの中で、フォーカスが別の要素に移った。</summary>
+    /// <summary>入力欄に入った (FocusInspector のスレッドから呼ばれる)。</summary>
+    public void OnTextInputEntered() => Post(() => Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 0, FocusEntered = true }));
+
     public void OnFocusChanged()
     {
         _stale = true;
