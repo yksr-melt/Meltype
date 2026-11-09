@@ -410,13 +410,6 @@ public:
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
         }
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
-        // アプリがキャレットの位置を知らせたら、出している入力パネルをその位置に置き直す
-        cursorRectChanged_ = instance_->watchEvent(fcitx::EventType::InputContextCursorRectChanged, fcitx::EventWatcherPhase::Default,
-            [this](fcitx::Event &event) {
-                auto *ic = static_cast<fcitx::InputContextEvent &>(event).inputContext();
-                if (instance_->inputMethodEngine(ic) == this && !ic->inputPanel().empty())
-                    ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
-            });
     }
 
     ~MeltypeEngine() override { s_engine = nullptr; }
@@ -521,7 +514,6 @@ private:
     fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
     MeltypeConfig config_;
-    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> cursorRectChanged_;
 
     // 未確定の内容を確定する。キャレットはこの入力欄の外か、クリックした所に移る
     // フォーカスが外れたとき、入力欄に出した変換中の文字 (client preedit) は、クライアント (ClientUnfocusCommit) か fcitx5 が
