@@ -11,6 +11,7 @@
 #include <fcitx-utils/stringutils.h>
 #include <fcitx-utils/testing.h>
 #include <fcitx/addonmanager.h>
+#include <fcitx/candidatelist.h>
 #include <fcitx/inputcontextmanager.h>
 #include <fcitx/inputmethodgroup.h>
 #include <fcitx/inputmethodmanager.h>
@@ -82,13 +83,13 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
 
         // 10 個目の候補を選んだら、一覧は 2 ページ目を出す
         typeKeys(frontend, uuid, "kyou ");
-        list = ic->inputPanel().candidateList();
-        FCITX_ASSERT(list && list->toBulk() && list->toBulk()->totalSize() > 9) << "候補が 10 個ない";
+        auto *common = dynamic_cast<CommonCandidateList *>(ic->inputPanel().candidateList().get());
+        FCITX_ASSERT(common && common->totalSize() > 9) << "候補が 10 個ない";
         typeKeys(frontend, uuid, "         ");
-        list = ic->inputPanel().candidateList();
-        FCITX_ASSERT(list->toBulkCursor()->globalCursorIndex() == 9 && list->toPageable()->currentPage() == 1)
-            << list->toBulkCursor()->globalCursorIndex() << " " << list->toPageable()->currentPage();
-        frontend->call<ITestFrontend::pushCommitExpectation>(list->candidate(list->cursorIndex()).text().toString());
+        common = dynamic_cast<CommonCandidateList *>(ic->inputPanel().candidateList().get());
+        FCITX_ASSERT(common && common->globalCursorIndex() == 9 && common->currentPage() == 1)
+            << common->globalCursorIndex() << " " << common->currentPage();
+        frontend->call<ITestFrontend::pushCommitExpectation>(common->candidate(common->cursorIndex()).text().toString());
         typeKeys(frontend, uuid, "\n");
 
         // パネルの入力メソッドの表示は、本体の言語モード (英数・かなのキーで切り替える)
