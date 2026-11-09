@@ -99,8 +99,8 @@ internal sealed class ImeSession
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
         _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
-        var indicate = explicitChange && japanese != wasJapanese && settings.ModeIndicator != ModeIndicatorTiming.Never ||
-            AnnouncesFocus(e) && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
+        var indicate = explicitChange && japanese != wasJapanese && settings.EffectiveModeIndicator != ModeIndicatorTiming.Never ||
+            AnnouncesFocus(e) && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
         return new(new ImeState
         {
             HandlesInput = active,
@@ -133,7 +133,7 @@ internal sealed class ImeSession
         HandlesInput = active,
         ImeOpen = open,
         LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
-        ModeIndicatorMs = active && entered && settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
+        ModeIndicatorMs = active && entered && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
         Capture = Capture(active, !open, false, settings, []),
         Revision = rev,
     };

@@ -130,6 +130,8 @@ public enum ControlKeyLayout
 /// <summary>Meltype キーボードで、入力モード (あ / A) をカーソルの近くに出すとき。</summary>
 public enum ModeIndicatorTiming
 {
+    /// <summary>OS と入力方式ごとの既定 (<see cref="Settings.EffectiveModeIndicator"/>)。</summary>
+    [Description("OS と入力方式の既定")] Default,
     [Description("表示しない")] Never,
     [Description("切り替えたとき")] OnSwitch,
     [Description("切り替えたときと入力欄に入ったとき")] OnSwitchAndFocus,
@@ -467,6 +469,12 @@ public sealed class Settings
      Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
     public bool ShowGuide { get; set; } = true;
 
+    /// <summary>
+    /// 固定の操作ガイドを出すか。Mac と Meltype IME は、表示を揃える前 (1.5.0) と同じく出さない
+    /// (Mac は候補ウィンドウに重なる)。フロントごとの表示を揃えるときは、ここと <see cref="EffectiveModeIndicator"/> を直す。
+    /// </summary>
+    public bool ShowsGuide => ShowGuide && !OperatingSystem.IsMacOS() && !(OperatingSystem.IsWindows() && Mode == InputMode.Tsf);
+
     [Category("4. 変換"), DisplayName("打ち間違いを直す"),
      Description("Space・Enter で変換・確定するときに打ち間違いを直します。ローマ字: 読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。英語: Windows の自動修正の一覧にある打ち間違いを直します (teh → the、recieve → receive)。")]
     public bool CorrectTypos { get; set; } = true;
@@ -481,7 +489,15 @@ public sealed class Settings
 
     [Category("2. 入力モード"), DisplayName("入力モードをカーソルの近くに表示"),
      Description("入力モードを切り替えたとき (と入力欄に入ったとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
-    public ModeIndicatorTiming ModeIndicator { get; set; } = ModeIndicatorTiming.OnSwitchAndFocus;
+    public ModeIndicatorTiming ModeIndicator { get; set; } = ModeIndicatorTiming.Default;
+
+    /// <summary>
+    /// 入力モードを表示するとき。既定は、表示を揃える前 (1.5.0) のフロントごとの既定と同じ:
+    /// Meltype キーボードは入力欄に入ったときも、Meltype IME は出さない、Mac・Linux は切り替えたときだけ。
+    /// </summary>
+    public ModeIndicatorTiming EffectiveModeIndicator => ModeIndicator != ModeIndicatorTiming.Default ? ModeIndicator
+        : OperatingSystem.IsWindows() ? Mode == InputMode.Keyboard ? ModeIndicatorTiming.OnSwitchAndFocus : ModeIndicatorTiming.Never
+        : ModeIndicatorTiming.OnSwitch;
 
 
     [Category("2. 入力モード"), DisplayName("入力モードの表示の色: 日本語 (あ)"), Platforms(Platform.Windows),

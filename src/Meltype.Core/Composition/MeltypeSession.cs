@@ -715,7 +715,7 @@ public sealed class MeltypeSession
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
             // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
-            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowGuide);
+            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowsGuide);
             return new SessionResult(consumed, _commits.ToList(), view);
         }
 

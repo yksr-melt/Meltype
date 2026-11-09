@@ -31,6 +31,22 @@ internal static class SettingsJsonTests
     }
 
     [Test]
+    public static void Display_DefaultsFollowEachFrontBeforeTheyWereUnified()
+    {
+        // 表示を揃える前 (1.5.0) の、フロントごとの既定
+        foreach (var mode in new[] { InputMode.Keyboard, InputMode.Tsf })
+        {
+            var settings = new Settings { Mode = mode };
+            var (indicator, guide) = OperatingSystem.IsWindows()
+                ? mode == InputMode.Keyboard ? (ModeIndicatorTiming.OnSwitchAndFocus, true) : (ModeIndicatorTiming.Never, false)
+                : (ModeIndicatorTiming.OnSwitch, !OperatingSystem.IsMacOS());
+            Assert.Equal(indicator, settings.EffectiveModeIndicator, mode.ToString());
+            Assert.Equal(guide, settings.ShowsGuide, mode.ToString());
+        }
+        Assert.Equal(ModeIndicatorTiming.Never, new Settings { ModeIndicator = ModeIndicatorTiming.Never }.EffectiveModeIndicator, "選んだ値はそのまま");
+    }
+
+    [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
         // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人と Mac・Linux の ModeIndicator はそのまま

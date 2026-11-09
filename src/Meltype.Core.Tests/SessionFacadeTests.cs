@@ -712,17 +712,18 @@ internal static class SessionFacadeTests
         foreach (var showGuide in new[] { true, false })
         {
             var settings = new Settings { ShowGuide = showGuide };
+            var guide = settings.ShowsGuide;
             var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
                 new CompositionOptions { Predictor = new Predictor(null, null, null), Predictions = () => true }, () => settings);
             var typing = Type(session, "decis", "I made ")[^1];
-            Assert.Equal(showGuide ? "Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字" : "Tab 予測の候補を選ぶ", typing.View!.Hint,
+            Assert.Equal(guide ? "Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字" : "Tab 予測の候補を選ぶ", typing.View!.Hint,
                 "ガイドを出さない設定では文脈の案内だけ");
             using var json = JsonDocument.Parse(typing.ToJson());
             Assert.Equal(typing.View.Hint, json.RootElement.GetProperty("view").GetProperty("hint").GetString(), "JSON は表示のまま");
             Assert.True(typing.View.Predictions!.Contains("decision"), "表示設定によらず予測候補を残す");
             session.HandleKey(VirtualKeys.F6, null, false, false, false, false);
             var converting = session.HandleKey(VirtualKeys.Space, null, false, false, false, false);
-            Assert.True(converting.View is { Converting: true, ContextHint: null } view && (showGuide ? view.Hint.Length > 0 : view.Hint == ""), "変換中も表示設定を反映する");
+            Assert.True(converting.View is { Converting: true, ContextHint: null } view && (guide ? view.Hint.Length > 0 : view.Hint == ""), "変換中も表示設定を反映する");
         }
     }
 

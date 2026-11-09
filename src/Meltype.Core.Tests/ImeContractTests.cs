@@ -26,7 +26,8 @@ internal static class ImeContractTests
 
         public Front() => _host = new ImeHost(this, () => Settings);
 
-        public Settings Settings { get; set; } = new() { LiveConversion = false };
+        // 入力モードの表示の既定は OS と入力方式で違うので、どの OS でも同じに決めておく
+        public Settings Settings { get; set; } = new() { LiveConversion = false, ModeIndicator = ModeIndicatorTiming.OnSwitchAndFocus };
 
         /// <summary>このフロントが Windows のどちらの入力方式か (null なら入力方式が 1 つしかない OS)。</summary>
         public InputMode? InputMethod { get; set; }
@@ -587,7 +588,7 @@ internal static class ImeContractTests
         Assert.True(!Indicator(shell.Event("CaretMoved", extra: Entered)), "GNOME Shell の画面では、入ったときは表示しない\n" + shell.Trace);
         Assert.True(Indicator(shell.Key(ToggleShortcut.Hankaku)), "切り替えたら表示する\n" + shell.Trace);
         var front = new Front();
-        Assert.True(Indicator(front.Event("CaretMoved", extra: Entered)), "既定では入力欄に入ったときも表示する\n" + front.Trace);
+        Assert.True(Indicator(front.Event("CaretMoved", extra: Entered)), "入力欄に入ったときも表示する\n" + front.Trace);
         Assert.True(Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたら表示する\n" + front.Trace);
         front.Settings.ModeIndicator = ModeIndicatorTiming.OnSwitch;
         Assert.True(!Indicator(front.Event("CaretMoved", extra: Entered)) && Indicator(front.Key(ToggleShortcut.Hankaku)), "切り替えたときだけ\n" + front.Trace);

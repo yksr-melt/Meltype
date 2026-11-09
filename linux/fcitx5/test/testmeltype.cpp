@@ -5,6 +5,8 @@
 // 本体 (libMeltypeNative.so) の場所を環境変数 MELTYPE_DIR で渡す (Mozc が無ければ、変換はひらがなのまま)。
 //   cmake -S linux/fcitx5 -B build -DBUILD_TESTING=ON && cmake --build build && MELTYPE_DIR=… ctest --test-dir build
 
+#include <cstdlib>
+#include <fstream>
 #include <testfrontend_public.h>
 #include <fcitx-utils/event.h>
 #include <fcitx-utils/eventdispatcher.h>
@@ -125,6 +127,11 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
 
 int main() {
     setupTestingEnvironment(FCITX5_MELTYPE_BINARY_DIR, {FCITX5_MELTYPE_BINARY_DIR, FCITX5_SYSTEM_ADDON_DIR}, {"test"});
+    // 入力欄に入ったときの入力モードの表示を確かめる (Linux の既定は切り替えたときだけ)
+    char data[] = "/tmp/meltype-test-XXXXXX";
+    FCITX_ASSERT(mkdtemp(data));
+    std::ofstream(std::string(data) + "/config.json") << R"({"ModeIndicator":"OnSwitchAndFocus"})";
+    FCITX_ASSERT(setenv("MELTYPE_DATA_DIR", data, 1) == 0);
     char arg0[] = "testmeltype";
     char arg1[] = "--disable=all";
     char arg2[] = "--enable=testfrontend,testui,testim,keyboard,meltype";
