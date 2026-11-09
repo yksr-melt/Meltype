@@ -651,7 +651,11 @@ private:
             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);
             for (size_t i = 0; i < candidates.size(); i++) list->append<MeltypeCandidate>(this, candidates[i], static_cast<int>(i));
             int selected = listed->integer("selected", -1);
-            if (selected >= 0 && selected < static_cast<int>(candidates.size())) list->setGlobalCursorIndex(selected);
+            // setGlobalCursorIndex はページを変えないので、選んでいる候補のページに移ってから置く
+            if (selected >= 0 && selected < static_cast<int>(candidates.size())) {
+                list->setPage(selected / list->pageSize());
+                list->setGlobalCursorIndex(selected);
+            }
             panel.setCandidateList(std::move(list));
             // 選んでいる候補で止まったら、本体が決めた時間のあとに意味を出す
             const auto meaning = listed->str("selectedMeaning");

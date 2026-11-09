@@ -80,6 +80,17 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         typeKeys(frontend, uuid, "\n");
         FCITX_ASSERT(!ic->inputPanel().candidateList()) << "確定したら候補の一覧を閉じる";
 
+        // 10 個目の候補を選んだら、一覧は 2 ページ目を出す
+        typeKeys(frontend, uuid, "kyou ");
+        list = ic->inputPanel().candidateList();
+        FCITX_ASSERT(list && list->toBulk() && list->toBulk()->totalSize() > 9) << "候補が 10 個ない";
+        typeKeys(frontend, uuid, "         ");
+        list = ic->inputPanel().candidateList();
+        FCITX_ASSERT(list->toBulkCursor()->globalCursorIndex() == 9 && list->toPageable()->currentPage() == 1)
+            << list->toBulkCursor()->globalCursorIndex() << " " << list->toPageable()->currentPage();
+        frontend->call<ITestFrontend::pushCommitExpectation>(list->candidate(list->cursorIndex()).text().toString());
+        typeKeys(frontend, uuid, "\n");
+
         // パネルの入力メソッドの表示は、本体の言語モード (英数・かなのキーで切り替える)
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), false);
