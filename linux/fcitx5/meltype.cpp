@@ -378,10 +378,12 @@ public:
     bool preeditVisible = false;
     // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
     std::string languageMode;
-    // 入力欄に入ったときの入力モードの表示。アプリがキャレットの位置を知らせてから出す
+    // 入力欄に入ったときの入力モードの表示。アプリが新しいキャレットの位置を知らせてから出す
     bool deferMode = false;
     std::string pendingMode;
     int pendingModeMs = 0;
+    // 入る前に最後に知らされたキャレットの位置 (前の入力欄のもの)
+    fcitx::Rect rectAtFocus;
 
 private:
     const Native &native_;
@@ -415,9 +417,15 @@ public:
             [this](fcitx::Event &event) {
                 auto *ic = static_cast<fcitx::InputContextEvent &>(event).inputContext();
                 if (instance_->inputMethodEngine(ic) != this) return;
-                if (!ic->propertyFor(&factory_)->pendingMode.empty()) {
-                    if (knowsCaret(ic)) showPendingMode(ic);
-                } else if (!ic->inputPanel().empty()) ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+                const auto rect = ic->cursorRect();
+                auto *state = ic->propertyFor(&factory_);
+                // 入力欄の無いウィンドウは、0, 0 か前の入力欄の位置を知らせてくる
+                if (!state->pendingMode.empty()) {
+                    if (ic->hasFocus() && (rect.left() != 0 || rect.top() != 0) && rect != state->rectAtFocus) showPendingMode(ic);
+                } else if (!ic->inputPanel().empty()) {
+                    ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+                }
+                lastCursorRect_ = rect;
             });
     }
 
@@ -475,6 +483,7 @@ public:
     void activate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         Json output;
         auto *state = event.inputContext()->propertyFor(&factory_);
+        state->rectAtFocus = lastCursorRect_;
         state->deferMode = true;
         send(event.inputContext(), "CaretMoved", ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusEntered\":true}", output);
         state->deferMode = false;
@@ -524,6 +533,8 @@ private:
     fcitx::FactoryFor<MeltypeState> factory_;
     MeltypeConfig config_;
     std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> cursorRectChanged_;
+    // どの入力欄かにかかわらず、最後に知らされたキャレットの位置
+    fcitx::Rect lastCursorRect_;
 
     // 未確定の内容を確定する。キャレットはこの入力欄の外か、クリックした所に移る
     // フォーカスが外れたとき、入力欄に出した変換中の文字 (client preedit) は、クライアント (ClientUnfocusCommit) か fcitx5 が
@@ -552,14 +563,10 @@ private:
         if (const int ms = shown->integer("modeIndicatorMs"); ms > 0) {
             const std::string mode = shown->str("languageMode") == "Japanese" ? "あ" : "A";
             if (state->deferMode) {
-                // 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。位置の知らせを待つ。
-                // 前と同じ位置なら知らせが来ないので、少し待ってから今の位置に出す (位置を知らない入力欄には出さない)
+                // 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。新しい位置の知らせを待ち、来なければ出さない
                 state->pendingMode = mode;
                 state->pendingModeMs = ms;
-                state->modeTimer = after(150, [this, ic]() {
-                    if (knowsCaret(ic)) showPendingMode(ic);
-                    else ic->propertyFor(&factory_)->pendingMode.clear();
-                });
+                state->modeTimer = after(150, [this, ic]() { ic->propertyFor(&factory_)->pendingMode.clear(); });
             } else {
                 showMode(ic, mode, ms);
             }
@@ -601,13 +608,6 @@ private:
             ic->inputPanel().setAuxUp(fcitx::Text());
             ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
         });
-    }
-
-    // 入力モードを出せる入力欄か: フォーカスがあり、キャレットの位置を知らせている
-    // (アプリが入力を無効 (Disable) にしたら fcitx5 が deactivate するので、待っていた表示はそこで捨てる)
-    static bool knowsCaret(fcitx::InputContext *ic) {
-        const auto &rect = ic->cursorRect();
-        return ic->hasFocus() && (rect.left() != 0 || rect.top() != 0 || rect.width() != 0 || rect.height() != 0);
     }
 
     void showPendingMode(fcitx::InputContext *ic) {

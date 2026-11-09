@@ -60,9 +60,15 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         FCITX_ASSERT(instance->inputMethod(ic) == "meltype");
         // 入力欄に入ったときの入力モードの表示は、アプリがキャレットの位置を知らせてから出す
         // (入力メソッドを切り替えたときは fcitx5 が自分で情報を出すことがあるので、フォーカスを入れ直して見る)
+        ic->setCursorRect(Rect(10, 10, 11, 30));
         ic->focusOut();
         ic->inputPanel().reset();
         ic->focusIn();
+        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        // 0, 0 は位置を知らない入力欄、前と同じ位置は前の入力欄の位置
+        ic->setCursorRect(Rect(0, 0, 1, 20));
+        FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        ic->setCursorRect(Rect(10, 10, 11, 30));
         FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
         ic->setCursorRect(Rect(100, 100, 101, 120));
         FCITX_ASSERT(ic->inputPanel().auxUp().toString() == "あ") << ic->inputPanel().auxUp().toString();

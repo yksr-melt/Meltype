@@ -506,12 +506,15 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual("let x = ka", self.engine.document)
 
     def test_mode_is_shown_on_the_panel_and_near_the_caret(self):
+        self.engine.do_set_cursor_location(10, 10, 1, 20)
         self.engine.do_focus_in()
         self.assertEqual("あ", self.engine.panel_mode)
-        # 入力欄に入ったときの表示は、アプリがキャレットの位置を知らせてから出す
+        # 入力欄に入ったときの表示は、アプリが新しいキャレットの位置を知らせてから出す
         self.assertIsNone(self.engine.aux)
-        self.engine.do_set_cursor_location(0, 0, 0, 0)
-        self.assertIsNone(self.engine.aux, "位置を知らない入力欄には出さない")
+        self.engine.do_set_cursor_location(0, 0, 1, 20)
+        self.assertIsNone(self.engine.aux, "0, 0 は位置を知らない入力欄")
+        self.engine.do_set_cursor_location(10, 10, 1, 20)
+        self.assertIsNone(self.engine.aux, "前の入力欄の位置")
         self.engine.do_set_cursor_location(100, 100, 1, 20)
         self.assertEqual("あ", self.engine.aux)
         self.special(IBus.KEY_Alt_L)

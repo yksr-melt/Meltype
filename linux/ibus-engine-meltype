@@ -62,6 +62,8 @@ if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
 _focused = None
+# どの入力欄かにかかわらず、最後に知らされたキャレットの位置
+_last_location = None
 
 
 def _refresh_focused():
@@ -144,6 +146,7 @@ class MeltypeEngine(IBus.Engine):
         # 入力欄に入ったときの入力モードの表示 (あ / A, 時間)。アプリがキャレットの位置を知らせてから出す
         self._defer_mode = False
         self._pending_mode = None
+        self._location_at_focus = None
         self._properties = IBus.PropList()
         # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
         self._language_mode = None
@@ -176,8 +179,9 @@ class MeltypeEngine(IBus.Engine):
         if output["state"]["modeIndicatorMs"]:
             mode = (output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
             if self._defer_mode:
-                # 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。位置の知らせを待ち、来なければ出さない
+                # 入ったばかりの入力欄は、キャレットの位置がまだ前の入力欄のもの。新しい位置の知らせを待ち、来なければ出さない
                 self._pending_mode = mode
+                self._location_at_focus = _last_location
                 GLib.timeout_add(150, self._forget_pending_mode)
             else:
                 self._show_mode(*mode)
@@ -188,10 +192,12 @@ class MeltypeEngine(IBus.Engine):
         return False
 
     def do_set_cursor_location(self, x, y, w, h):
-        # 位置を知らない入力欄は 0, 0 (大きさ 0) を知らせてくる
-        if self._pending_mode and (x, y, w, h) != (0, 0, 0, 0):
+        global _last_location
+        # 入力欄の無いウィンドウは、0, 0 か前の入力欄の位置を知らせてくる
+        if self._pending_mode and (x, y) != (0, 0) and (x, y, w, h) != self._location_at_focus:
             mode, self._pending_mode = self._pending_mode, None
             self._show_mode(*mode)
+        _last_location = (x, y, w, h)
 
     def _field(self):
         before, after, selection = self._surrounding_text()
