@@ -2030,6 +2030,30 @@ internal static class CompositionTests
         // #365・#1597・#1667・#1671・#1574・#1322・#836 の語句は BuiltInPhrases_AreSplitOut で確かめる
         // (語句の表面は変換エンジンが出すので、打鍵の確定では読みのままになる)
 
+        // 逆向き・似た入力: 追加した語・読みの前後で既存の判定が変わらない
+        foreach (var (typed, expected) in new[]
+        {
+            ("pixi", "ぴぃ"),
+            ("sabi", "さび"),
+            ("SBI", "SBI"),
+            ("spica", "spいか"),
+            ("kennpou", "けんぽう"),
+            ("pachi", "ぱち"),
+            ("vrchat", "vrchat"),
+            ("chatto", "ちゃっと"),
+            ("sitatokiha", "したときは"),
+            ("taiwane", "たいわね"),
+            ("nitasu", "にたす"),
+            ("kutta", "くった"),
+            ("dounikasitai", "どうにかしたい"),
+            ("ikuka", "いくか"),
+        })
+        {
+            var r = new Keyboard();
+            r.Type(typed + "\n");
+            Assert.Equal(expected, r.Host.Document);
+        }
+
         // 既存の判定が変わらないこと: #1545 で外した bot+と の入力と、けんぱ の読みが当たる kenpachi
         foreach (var (typed, expected) in new[]
         {
