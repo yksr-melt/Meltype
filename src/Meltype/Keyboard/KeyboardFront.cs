@@ -67,6 +67,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // 入力欄でない所・パスワード欄に移った: 本体が受け持たなくなったら、変換中の文字は入れる先が無いので捨てる
         composition.Focus.CaptureLost += _ => Post(() =>
         {
+            // 変換を始めたときに読んだ入力欄でなく、移った先の入力欄で判断する
+            _fieldAtComposition = null;
             if (_composing && !Send(ImeEventType.StateRequested, apply: false).State.HandlesInput) Abandon();
         });
         // 変換の答えで作り直すのは、このフロントの変換中の表示だけ (Meltype IME で打っているときの答えでは何もしない)
