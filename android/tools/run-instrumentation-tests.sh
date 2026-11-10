@@ -40,20 +40,31 @@ test -n "$PACKAGE" && test -n "$TEST_PACKAGE" && test "$TEST_PACKAGE" = "$PACKAG
   exit 2
 }
 printf 'app_id=%s\ntest_id=%s\n' "$PACKAGE" "$TEST_PACKAGE" >> "$REPORT/device-info.txt"
-# "sys.boot_completed" can be set before the package service accepts calls;
-# an install sent in that gap fails with "Failure calling service package".
-# Wait for the service, and retry an install that still hits the gap.
-wait_for_package_service() {
-  for _ in $(seq 1 60); do
-    if adb shell pm path android 2>/dev/null | grep -q '^package:'; then return 0; fi
-    sleep 2
+# "sys.boot_completed" does not mean the system is usable. The Android 17
+# image restarts its system services once right after the first boot: calls
+# sent in that window fail with "Failure calling service package" and
+# "Cannot broadcast before boot completed", and an activity started just
+# after the install is reported as missing. Wait until boot, the package
+# service and the activity service all answer on several polls in a row.
+system_ready() {
+  test "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 &&
+    adb shell pm path android 2>/dev/null | grep -q '^package:' &&
+    adb shell cmd activity get-current-user >/dev/null 2>&1
+}
+wait_for_stable_system() {
+  stable=0
+  for _ in $(seq 1 90); do
+    if system_ready; then stable=$((stable + 1)); else stable=0; fi
+    if test "$stable" -ge 4; then return 0; fi
+    sleep 3
   done
-  echo 'Android package service did not become ready' >&2
+  echo 'Android system services did not become stable' >&2
+  adb logcat -d -b crash 2>/dev/null | tail -n 40 >&2 || true
   return 1
 }
 install_apk() {
   for attempt in 1 2 3 4 5; do
-    wait_for_package_service
+    wait_for_stable_system
     if adb install -r "$1"; then return 0; fi
     echo "Install attempt $attempt failed for $1; retrying" >&2
     sleep 5
@@ -63,7 +74,21 @@ install_apk() {
 install_apk "$APP"
 install_apk "$TEST"
 adb shell pm path "$PACKAGE" | grep -F 'package:'
-adb shell am start -W -n "$PACKAGE/io.github.ninjin0802.keyboard.app.MainActivity"
+start_main_activity() {
+  for attempt in 1 2 3 4 5 6; do
+    wait_for_stable_system
+    # "am start" exits 0 even when it prints an error, so read its output.
+    if adb shell am start -W -n "$PACKAGE/io.github.ninjin0802.keyboard.app.MainActivity" 2>&1 |
+        tee "$REPORT/main-activity-start.txt" | grep -q '^Status: ok'; then
+      return 0
+    fi
+    cat "$REPORT/main-activity-start.txt" >&2
+    echo "Start attempt $attempt failed; retrying" >&2
+    sleep 5
+  done
+  return 1
+}
+start_main_activity
 status=0
 : > "$REPORT/instrumentation.log"
 run_group() {
