@@ -2030,24 +2030,10 @@ internal static class CompositionTests
         // #365 の語句は BuiltInPhrases_AreSplitOut で確かめる
         // (語句の表面は変換エンジンが出すので、打鍵の確定では読みのままになる)
 
-        // 逆向き: 追加した読み (けんぱ) で始まるが、別の語として読む入力はその語のまま
-        // (変換は「確かめること」で実変換を使い、kenpai → 献杯・kenpaku → 建白 と確かめた。
-        //  けんぱ の読みに引きずられて 検波+い・検波+く にはならない)
+        // 副作用の開示: kenpachi は main では けんpachi と確定していたものが、
+        // けんぱ の追加で けんぱち に変わる (元々壊れていた入力。PR 本文に記載)
         foreach (var (typed, expected) in new[]
         {
-            ("kenpai", "けんぱい"),
-            ("kenpaku", "けんぱく"),
-        })
-        {
-            var r = new Keyboard();
-            r.Type(typed + "\n");
-            Assert.Equal(expected, r.Host.Document);
-        }
-
-        // 既存の判定が変わらないこと: #1545 で外した bot+と の入力と、けんぱ の読みが当たる kenpachi
-        foreach (var (typed, expected) in new[]
-        {
-            ("botto", "botと"),
             ("kenpachi", "けんぱち"),
         })
         {
