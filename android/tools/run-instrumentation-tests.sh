@@ -97,6 +97,14 @@ else
     fi
     adb shell dumpsys input_method > "$REPORT/ime-window-state.txt" || true
     adb logcat -d -v threadtime -s AndroidRuntime:E > "$REPORT/ime-fatal-logcat.txt" || true
+    # Print the IME state into the job log too, so a failure can be read
+    # without downloading the artifact.
+    echo '--- IME state after the on-screen typing test'
+    grep -E 'mCurMethodId|mCurId=|mInputShown|mShowRequested|mCurFocusedWindow|mBoundToMethod|mHaveConnection' \
+      "$REPORT/ime-window-state.txt" | head -n 20 || true
+    adb logcat -d -v time -s KeyboardService:V InputMethodManagerService:V AndroidRuntime:E \
+      > "$REPORT/ime-logcat.txt" || true
+    tail -n 40 "$REPORT/ime-logcat.txt" || true
     if grep -Fq "Process: $PACKAGE," "$REPORT/ime-fatal-logcat.txt"; then
       echo "Fatal keyboard exception detected; see ime-fatal-logcat.txt" >&2
       status=1

@@ -26,14 +26,60 @@ class ImeLaunchDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val target = instrumentation.targetContext
 
-    private fun waitUntil(label: String, millis: Long = 15_000, check: () -> Boolean) {
+    private fun waitUntil(
+        label: String,
+        millis: Long = 15_000,
+        retryEveryMillis: Long = 0,
+        retry: () -> Unit = {},
+        describe: () -> String = { "" },
+        check: () -> Boolean,
+    ) {
         val deadline = SystemClock.elapsedRealtime() + millis
+        var nextRetry = SystemClock.elapsedRealtime() + retryEveryMillis
         while (SystemClock.elapsedRealtime() < deadline) {
             instrumentation.waitForIdleSync()
             if (check()) return
+            if (retryEveryMillis > 0 && SystemClock.elapsedRealtime() >= nextRetry) {
+                retry()
+                nextRetry = SystemClock.elapsedRealtime() + retryEveryMillis
+            }
             Thread.sleep(200)
         }
-        throw AssertionError("IME smoke timed out: $label")
+        throw AssertionError("IME smoke timed out: $label ${describe()}".trim())
+    }
+
+    /**
+     * Asks Android to show the keyboard for [editor].
+     *
+     * A single request is not enough. Android drops it when the window has
+     * not gained focus yet, and starting instrumentation restarts the app
+     * process that hosts the IME, so the first request can arrive while the
+     * system is still reconnecting to the keyboard service. restartInput
+     * makes the system bind the service again instead of waiting for it.
+     */
+    private fun requestKeyboard(activity: ImeSmokeActivity, editor: android.widget.EditText) {
+        instrumentation.runOnMainSync {
+            if (!activity.hasWindowFocus()) return@runOnMainSync
+            val imm = activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                as InputMethodManager
+            editor.requestFocus()
+            imm.restartInput(editor)
+            imm.showSoftInput(editor, 0)
+        }
+    }
+
+    private fun describeImeState(activity: ImeSmokeActivity): String {
+        val service = KeyboardService.activeForSmokeTest?.get()
+        val keys = service?.activeKeysForSmokeTest()
+        val defaultIme = Settings.Secure.getString(
+            target.contentResolver, Settings.Secure.DEFAULT_INPUT_METHOD)
+        val size = if (keys == null) "none" else keys.width.toString() + "x" + keys.height
+        return "(windowFocus=" + activity.hasWindowFocus() +
+            ", editorFocus=" + activity.editor.hasFocus() +
+            ", defaultIme=" + defaultIme +
+            ", serviceCreated=" + (service != null) +
+            ", inputViewShown=" + service?.isInputViewShown +
+            ", keys=" + size + ")"
     }
 
     @Test fun selectedKeyboardOpensAndTypesThroughOnscreenTouch() {
@@ -45,12 +91,14 @@ class ImeLaunchDeviceTest {
             Intent(target, ImeSmokeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         ) as ImeSmokeActivity
         try {
-            instrumentation.runOnMainSync {
-                activity.editor.requestFocus()
-                (activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
-                    as InputMethodManager).showSoftInput(activity.editor, InputMethodManager.SHOW_IMPLICIT)
-            }
-            waitUntil("IME service and the input window shown") {
+            requestKeyboard(activity, activity.editor)
+            waitUntil(
+                "IME service and the input window shown",
+                millis = 45_000,
+                retryEveryMillis = 2_000,
+                retry = { requestKeyboard(activity, activity.editor) },
+                describe = { describeImeState(activity) },
+            ) {
                 val service = KeyboardService.activeForSmokeTest?.get()
                 service?.activeKeysForSmokeTest()?.let {
                     it.isAttachedToWindow && it.isShown && it.width > 100 && it.height > 100
