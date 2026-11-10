@@ -4,6 +4,7 @@
 import Carbon.HIToolbox
 import Cocoa
 import InputMethodKit
+import UniformTypeIdentifiers
 
 /// 入力欄 (クライアント) ごとの IME。キーを本体 (libMeltypeNative.dylib) に渡し、
 /// 返ってきた結果 (確定する文字・変換中の表示・候補) を入力欄に反映する。
@@ -269,13 +270,11 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     private static func importUserDictionaryFile() {
         let panel = NSOpenPanel()
-        let fileManager = FileManager.default
-        let keyboardServices = fileManager.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/KeyboardServices", isDirectory: true)
-        var isDirectory: ObjCBool = false
-        panel.directoryURL = fileManager.fileExists(atPath: keyboardServices.path, isDirectory: &isDirectory) && isDirectory.boolValue
-            ? keyboardServices
-            : fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
+        // 取り込めるのは、macOS の「ユーザ辞書」から書き出した plist だけ。
+        // ~/Library/KeyboardServices の TextReplacements.db は Apple 内部の形式なので読まない。
+        panel.message = MacUserDictionary.exportGuide
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        panel.allowedContentTypes = [.propertyList]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let source = panel.url,
@@ -288,7 +287,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             NotificationCenter.default.post(name: Notification.Name("MeltypeUserDictionaryChanged"), object: nil)
         } catch {
             alert.messageText = "ユーザー辞書を取り込めませんでした"
-            alert.informativeText = error.localizedDescription
+            alert.informativeText = error.localizedDescription + "\n\n" + MacUserDictionary.exportGuide
         }
         alert.runModal()
     }
