@@ -103,6 +103,21 @@ void MaskSystemModifier() {
     SendInput(2, mask, sizeof(INPUT));
 }
 
+// 止めた Alt の単独押しの解放を、何もしないキー 0xE8 のあとに送り直す。アプリには押下と解放の組がそろって届き、
+// 間に別のキーがあるので、単独押しの操作 (メニューバーに移る) にはならない。解放だけを止めると、アプリには Alt を押したままに見える
+void MaskAltRelease(UINT side) {
+    INPUT keys[3] = {};
+    for (auto& key : keys) {
+        key.type = INPUT_KEYBOARD;
+        key.ki.dwExtraInfo = kReinjectMarker;
+    }
+    keys[0].ki.wVk = keys[1].ki.wVk = 0xE8;
+    keys[1].ki.dwFlags = KEYEVENTF_KEYUP;
+    keys[2].ki.wVk = static_cast<WORD>(side);
+    keys[2].ki.dwFlags = KEYEVENTF_KEYUP | (side == VK_RMENU ? KEYEVENTF_EXTENDEDKEY : 0);
+    SendInput(3, keys, sizeof(INPUT));
+}
+
 // そのキーで入力される文字 (無ければ 0)
 wchar_t CharOf(UINT vk, LPARAM lParam) {
     BYTE state[256] = {};
@@ -1198,6 +1213,7 @@ STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lPa
         const UINT side = tapVk_;
         SetTap(0);
         tapEaten_ = false;
+        MaskAltRelease(side);
         HandleTap(context, side);
         *eaten = TRUE;
         return S_OK;

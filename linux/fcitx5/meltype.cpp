@@ -26,7 +26,6 @@
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
 #include <fcitx-utils/log.h>
-#include <fcitx-utils/rect.h>
 #include <fcitx-utils/textformatflags.h>
 #include <fcitx/addonfactory.h>
 #include <fcitx/addoninstance.h>
@@ -369,18 +368,6 @@ public:
     std::unique_ptr<fcitx::EventSourceTime> enterTimer;
     // 意味を出すのを待っている候補 (選んでいる番号と意味)。変わったら待ち直す
     std::string meaningKey;
-    // 押している左右の Alt の仮想キーコード。ほかのキーを押した・キャレットが動いたら 0 (単独押しではない)
-    int tap = 0;
-    // 単独押しの途中で取り消した Alt (押したままの自動の繰り返しで、単独押しに戻さない)
-    int tapCancelled = 0;
-    // アプリに渡さなかった Alt の押下 (仮想キーコード。離したことも渡さない)
-    std::vector<int> altEaten;
-    // アプリが最後に知らせたキャレットの位置 (同じ位置を知らせ直しても、動いたとみなさない)
-    fcitx::Rect cursor;
-    void cancelTap() {
-        if (tap != 0) tapCancelled = tap;
-        tap = 0;
-    }
     // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
     // 入力欄に入ったときの出来事を送っているか (入力モードの表示を遅らせる)
@@ -410,15 +397,6 @@ public:
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
         }
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
-        // fcitx5 はマウスのボタンを知らせない。Alt を押している間にキャレットが動いたら、Alt+クリックとみなす
-        cursorWatcher_ = instance_->watchEvent(fcitx::EventType::InputContextCursorRectChanged, fcitx::EventWatcherPhase::Default,
-                                               [this](fcitx::Event &event) {
-                                                   auto *ic = static_cast<fcitx::InputContextEvent &>(event).inputContext();
-                                                   auto *state = ic->propertyFor(&factory_);
-                                                   if (ic->cursorRect() == state->cursor) return;
-                                                   state->cursor = ic->cursorRect();
-                                                   if (instance_->inputMethodEngine(ic) == this) state->cancelTap();
-                                               });
     }
 
     ~MeltypeEngine() override {
@@ -441,40 +419,9 @@ public:
         const auto key = event.key();
         if (key.sym() == FcitxKey_Shift_L || key.sym() == FcitxKey_Shift_R) {
             state->shiftHeld = !event.isRelease();
-            state->cancelTap();
-            return;
-        }
-        if (key.sym() == FcitxKey_Alt_L || key.sym() == FcitxKey_Alt_R) {
-            const int vk = key.sym() == FcitxKey_Alt_L ? 0xA4 : 0xA5;
-            if (!event.isRelease()) {
-                // 押したままの自動の繰り返しは、単独押しの途中か (取り消したか) を変えない
-                if (vk != state->tap && vk != state->tapCancelled) {
-                    state->tap = vk;
-                    state->tapCancelled = 0;
-                }
-                // 本体が単独押しを使う Alt は、押下も解放もアプリに渡さない。解放だけを止めると、アプリには Alt を押したままに見え、
-                // 続けて打った文字が Alt + 文字 (VS Code のメニューのアクセスキー) になる。Alt + 文字・Alt + クリックは、修飾キーの状態でアプリに届く
-                if (std::find(altKeys_.begin(), altKeys_.end(), vk) != altKeys_.end()) {
-                    if (std::find(state->altEaten.begin(), state->altEaten.end(), vk) == state->altEaten.end()) state->altEaten.push_back(vk);
-                    event.filterAndAccept();
-                }
-                return;
-            }
-            if (state->tapCancelled == vk) state->tapCancelled = 0;
-            const auto eaten = std::find(state->altEaten.begin(), state->altEaten.end(), vk);
-            if (eaten != state->altEaten.end()) {
-                state->altEaten.erase(eaten);
-                event.filterAndAccept();
-            }
-            if (state->tap != vk) return;
-            state->tap = 0;
-            Json output;
-            if (send(ic, "KeyPressed", ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tappedAlone\":true}", output) && output.get("result")->flag("consumed"))
-                event.filterAndAccept();
             return;
         }
         if (event.isRelease()) return;
-        state->cancelTap();
         auto [vk, character] = virtualKey(key.sym());
         if (vk == 0 && character == 0) return;
         const auto states = key.states();
@@ -500,16 +447,12 @@ public:
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
-        // Reset はクリックでも来る (Alt+クリック)
-        event.inputContext()->propertyFor(&factory_)->cancelTap();
         leave(event.inputContext(), false);
     }
 
     // フォーカスが外れた・入力メソッドを切り替えた。Shift を離したことは届かないことがあるので忘れる (#1033)
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
-        // Alt + Tab などはウィンドウマネージャーが受け取るので、フォーカスが移ったら単独押しではない
-        event.inputContext()->propertyFor(&factory_)->cancelTap();
         event.inputContext()->propertyFor(&factory_)->enterTimer.reset();
         leave(event.inputContext(), true);
     }
@@ -540,12 +483,9 @@ private:
     void *host_ = nullptr;
     // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
     std::string languageMode_;
-    // 本体が単独押しを受け取る左右の Alt (capture.shortcuts)
-    std::vector<int> altKeys_;
     bool loaded_ = false;
     fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
-    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> cursorWatcher_;
     MeltypeConfig config_;
 
     // 未確定の内容を確定する。キャレットはこの入力欄の外か、クリックした所に移る
@@ -568,10 +508,6 @@ private:
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
         const auto *shown = output.get("state");
-        altKeys_.clear();
-        if (const auto *capture = shown->get("capture"); capture && capture->get("shortcuts"))
-            for (const auto &key : capture->get("shortcuts")->items)
-                if (const int vk = key.integer("vk"); (vk == 0xA4 || vk == 0xA5) && key.integer("modifiers") == 0) altKeys_.push_back(vk);
         if (const auto mode = shown->str("languageMode"); mode != languageMode_) {
             languageMode_ = mode;
             ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);

@@ -114,14 +114,19 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         {
             repeat = !_held.Add(e.PhysicalId);
             // 押したままの自動の繰り返しは、単独押しの途中か (クリックで取り消したか) を変えない
+            // ほかのソフトが送った Alt (キーの割り当てを変えるツールなど) は単独押しにしない
             if (!(repeat && e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu))
-                _tap = e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu && (_tap == e.Vk || _tap == 0 && !OtherModifiersDown()) ? e.Vk : 0;
+                _tap = e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu && !e.Injected && (_tap == e.Vk || _tap == 0 && !OtherModifiersDown()) ? e.Vk : 0;
         }
         else _held.Remove(e.PhysicalId);
         var input = new Input(e, Event: e.IsDown ? KeyOf(e, repeat) : null);
         lock (_gate)
         {
-            if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId)) return Enqueue(input);
+            if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId))
+            {
+                // 並んでいる間の Alt の単独押しは、押下をアプリに送り直したあとで、解放を UI スレッドで送り直す (QueuedTap)
+                return Enqueue(e.IsUp && TakeTap(e) ? input with { Event = new ImeKey { Vk = e.Vk, TappedAlone = true } } : input);
+            }
             if (e.IsUp) return UpOutside(e);
             if (Captures(e)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
@@ -190,16 +195,41 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private bool UpOutside(KeyEvent e)
     {
         if (_consumed.Remove(e.PhysicalId)) return true;
-        if (e.Vk is not (VirtualKeys.LMenu or VirtualKeys.RMenu) || _tap != e.Vk) return false;
-        _tap = 0;
-        var state = _state;
-        if (!state.HandlesInput || !state.Capture.Shortcuts.Any(key => key.Vk == e.Vk && key.Modifiers == 0) || !ForegroundTracker.CanSendInputTo(_foreground.Current)) return false;
+        if (!TakeTap(e) || !MasksTap(e)) return false;
         // メニューバーに移らないよう、Alt の解放を止めて、何もしないキー (0xE8、割り当てなし) のあとに送り直す。
         // 次の打鍵より先に届くように、ここだけはフックのスレッドで送る (押している間に送ると、すぐに離したときに Alt の解放が先に並ぶ)。
         // 管理者として動くアプリには送り直した Alt の解放が届かない (UIPI) ので止めない
         if (!_injector.Inject(MaskedAltRelease(e))) return false;
         Enqueue(new Input(Event: new ImeKey { Vk = e.Vk, TappedAlone = true }));
         return true;
+    }
+
+    /// <summary>離したのが、単独で押していた左右の Alt か (フックのスレッドで呼ぶ)。</summary>
+    private bool TakeTap(KeyEvent release)
+    {
+        if (release.Vk is not (VirtualKeys.LMenu or VirtualKeys.RMenu) || _tap != release.Vk) return false;
+        _tap = 0;
+        return true;
+    }
+
+    /// <summary>本体が Alt の単独押しを使うので、解放を止めて送り直すか。</summary>
+    private bool MasksTap(KeyEvent release)
+    {
+        var state = _state;
+        return state.HandlesInput && state.Capture.Shortcuts.Any(key => key.Vk == release.Vk && key.Modifiers == 0) && ForegroundTracker.CanSendInputTo(_foreground.Current);
+    }
+
+    /// <summary>並んでいる間に離した Alt の単独押し (UI スレッド)。押下は先に送り直してあるので、解放も順番どおりここで送る。</summary>
+    private void QueuedTap(KeyEvent release, ImeKey tap)
+    {
+        bool consumed;
+        lock (_gate) consumed = _consumed.Remove(release.PhysicalId);
+        if (!consumed && !(MasksTap(release) && _injector.Inject(MaskedAltRelease(release))))
+        {
+            _composition.Replay(release);
+            return;
+        }
+        Send(ImeEventType.KeyPressed, tap);
     }
 
     /// <summary>Alt の単独押しの解放 release の代わりに送るキー (0xE8 の押下・解放のあとに、release をそのまま。右 Alt の拡張キーの印も残す)。</summary>
@@ -268,7 +298,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         }
         if (input.Event is { TappedAlone: true } tap)
         {
-            Send(ImeEventType.KeyPressed, tap);
+            if (input.Key is { } release) QueuedTap(release, tap);
+            else Send(ImeEventType.KeyPressed, tap);
             return;
         }
         if (input.Mouse is { } mouse)

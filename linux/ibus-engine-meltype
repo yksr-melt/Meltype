@@ -97,9 +97,6 @@ SPECIAL_KEYS = {
     IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
 }
 
-# 単独で押して離したことを本体に伝える修飾キー (左右の Alt)
-TAP_KEYS = {IBus.KEY_Alt_L: 0xA4, IBus.KEY_Alt_R: 0xA5}
-
 
 def virtual_key(keyval):
     """(仮想キーコード, 入力する文字) を返す。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら (None, 0)。"""
@@ -145,15 +142,6 @@ class MeltypeEngine(IBus.Engine):
         self._app = None
         # どの入力欄にもフォーカスが無いとき、IBus は仮の入力コンテキスト (クライアント名「fake」) にフォーカスを移す
         self._fake = False
-        # 押している修飾キー (左右の Alt)。ほかのキーを押したら None (単独押しではない)
-        self._tap = None
-        # 単独押しの途中で取り消した修飾キー (押したままの自動の繰り返しで、単独押しに戻さない)
-        self._tap_cancelled = None
-        # 本体が単独押しを受け取る左右の Alt (capture.shortcuts) と、アプリに渡さなかった Alt の押下
-        self._alt_keys = set()
-        self._alt_eaten = set()
-        # アプリが最後に知らせたキャレットの位置
-        self._cursor = None
         # 確定し直しで前の文字を消したのに残っていた入力欄 (Wayland + Chromium) は、これからも消せないとみなす
         self._delete_failed = False
         self._replace_expect = None
@@ -190,8 +178,6 @@ class MeltypeEngine(IBus.Engine):
             return None
         output = json.loads(reply)
         self._apply(output["result"])
-        self._alt_keys = {key["vk"] for key in output["state"]["capture"]["shortcuts"]
-                          if key["vk"] in TAP_KEYS.values() and key["modifiers"] == 0}
         if output["state"]["languageMode"] != self._language_mode:
             self._language_mode = output["state"]["languageMode"]
             label = IBus.Text.new_from_string("あ" if self._language_mode == "Japanese" else "A")
@@ -207,10 +193,6 @@ class MeltypeEngine(IBus.Engine):
         return output
 
     def do_set_cursor_location(self, x, y, w, h):
-        # IBus はマウスのボタンを知らせない。Alt を押している間にキャレットが動いたら、Alt+クリックとみなす
-        if (x, y, w, h) != self._cursor:
-            self._cancel_tap()
-        self._cursor = (x, y, w, h)
         if self._pending_mode:
             mode, self._pending_mode = self._pending_mode, None
             self._show_mode(*mode)
@@ -230,24 +212,7 @@ class MeltypeEngine(IBus.Engine):
 
     def do_process_key_event(self, keyval, keycode, state):
         if state & IBus.ModifierType.RELEASE_MASK:
-            if keyval == self._tap_cancelled:
-                self._tap_cancelled = None
-            eaten = keyval in self._alt_eaten
-            self._alt_eaten.discard(keyval)
-            if keyval != self._tap:
-                return eaten
-            self._tap = None
-            output = self.send("KeyPressed", key={"vk": TAP_KEYS[keyval], "tappedAlone": True})
-            return eaten or bool(output and output["result"]["consumed"])
-        # 押したままの自動の繰り返しは、単独押しの途中か (取り消したか) を変えない
-        if keyval not in TAP_KEYS or keyval not in (self._tap, self._tap_cancelled):
-            self._tap = keyval if keyval in TAP_KEYS else None
-            self._tap_cancelled = None
-        # 本体が単独押しを使う Alt は、押下も解放もアプリに渡さない。解放だけを止めると、アプリには Alt を押したままに見え、
-        # 続けて打った文字が Alt + 文字 (VS Code のメニューのアクセスキー) になる。Alt + 文字・Alt + クリックは、修飾キーの状態でアプリに届く
-        if TAP_KEYS.get(keyval) in self._alt_keys:
-            self._alt_eaten.add(keyval)
-            return True
+            return False
         vk, character = virtual_key(keyval)
         if vk is None:
             return False
@@ -258,18 +223,12 @@ class MeltypeEngine(IBus.Engine):
         output = self.send("KeyPressed", key=key)
         return bool(output and output["result"]["consumed"])
 
-    def _cancel_tap(self):
-        if self._tap is not None:
-            self._tap_cancelled, self._tap = self._tap, None
-
     def _leave(self, focus_out):
         """フォーカスが外れる・Reset (クリックなど)。キャレットはこの入力欄の外か、クリックした所に移る。
 
         表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
-        # Alt + Tab などはウィンドウマネージャーが受け取るので、フォーカスが移ったら単独押しではない。Reset はクリックでも来る
-        self._cancel_tap()
         caret = {"moved": True, "passedKey": 0, "focusLeft": focus_out}
         if self._preedit_visible:
             self._preedit_visible = False

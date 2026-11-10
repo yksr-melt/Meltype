@@ -98,8 +98,9 @@ public sealed record ImeKey
     /// <summary>1 回のキーで入る文字が複数のスカラーのとき (結合文字・ZWJ の絵文字。Mac)、その文字列。Ch は 0。本体は未確定の内容を確定して、キーをアプリに通させる。</summary>
     public string? Text { get; init; }
     /// <summary>
-    /// 修飾キー (Vk は左右を分けたもの: 左 Alt 0xA4・右 Alt 0xA5 など) を、ほかのキー・マウスのボタンを押さずに離した。離したときに送る。
-    /// consumed なら、フロントは離したことがアプリの操作 (メニューバーに移るなど) にならないようにする。
+    /// 修飾キー (Vk は左右を分けたもの: 左 Alt 0xA4・右 Alt 0xA5 など) を、ほかのキー・マウスのボタンを押さずに離した。離したときに送る (Windows のフロントだけ)。
+    /// consumed なら、フロントは押下と解放の組をアプリに崩さずに届け、単独押しの操作 (メニューバーに移るなど) にならないようにする
+    /// (押下はそのまま、解放は止めて、何もしないキー 0xE8 のあとに送り直す。解放だけを止めると、アプリには Alt を押したままに見える)。
     /// </summary>
     public bool TappedAlone { get; init; }
     /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
@@ -208,8 +209,7 @@ public sealed record ImeState
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
 /// PrintableAscii は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。PrintableAsciiExcept はそのうち受け取らない文字。
 /// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
-/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.TappedAlone) を受け取る。IBus・fcitx5 は、ここにある Alt の押下と解放をアプリに渡さない
-/// (解放だけを止めると、アプリには Alt を押したままに見える)。
+/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.TappedAlone) を受け取る。
 /// </summary>
 public sealed record ImeCapture
 {

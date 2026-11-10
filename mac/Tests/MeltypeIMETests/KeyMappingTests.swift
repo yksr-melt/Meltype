@@ -73,30 +73,4 @@ final class KeyMappingTests: XCTestCase {
             XCTAssertEqual(KeyMapping.text(for: input), text)
         }
     }
-
-    func testOptionTapIgnoresRepeatedNotifications() {
-        // VS Code は 1 回の単独押しで「押下 → 押下 → 解放 → 解放」を知らせる
-        var tap = OptionTap()
-        tap.press(0xA4, others: false)
-        tap.press(0xA4, others: false)
-        XCTAssertEqual(tap.release(0xA4), 0xA4)
-        XCTAssertNil(tap.release(0xA4))
-        // すぐに押し直したら、別の単独押し
-        tap.press(0xA5, others: false)
-        XCTAssertEqual(tap.release(0xA5), 0xA5)
-    }
-
-    func testOptionTapIsCancelledByOtherInput() {
-        var tap = OptionTap()
-        tap.press(0xA4, others: false)
-        tap.cancel()
-        // 取り消したあとに同じ押下がもう一度届いても、単独押しに戻さない
-        tap.press(0xA4, others: false)
-        XCTAssertNil(tap.release(0xA4))
-        tap.press(0xA4, others: true)
-        XCTAssertNil(tap.release(0xA4), "Command などと一緒")
-        tap.press(0xA4, others: false)
-        tap.press(0xA5, others: false)
-        XCTAssertNil(tap.release(0xA5), "左右の Option を両方押した")
-    }
 }

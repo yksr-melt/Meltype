@@ -33,7 +33,7 @@ public:
         if (!created) return false;
         directory_ = created;
         std::ofstream config(directory_ + "/config.json");
-        config << R"({"LiveConversion":false,"LearningEnabled":false,"AltKeysSwitchKeyboard":true})";
+        config << R"({"LiveConversion":false,"LearningEnabled":false})";
         return config.good() && setenv("MELTYPE_DATA_DIR", directory_.c_str(), 1) == 0;
     }
 
@@ -217,27 +217,6 @@ bool modeKeys(Instance *instance, AddonInstance *frontend, const std::string &en
 }
 }
 
-// 左右の Alt の単独押しで英数 / 日本語。ほかのキーと一緒に押したら切り替えない
-bool altTaps(Instance *instance, AddonInstance *frontend) {
-    ICUUID uuid;
-    auto *ic = terminal(instance, frontend, uuid, false);
-    if (!expect(ic != nullptr, "alt tap input context exists")) return false;
-    // 単独押しを使う Alt は、押下も解放もアプリに渡さない (解放だけを止めると、アプリには Alt を押したままに見える)
-    if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), false), "left Alt press is consumed")) return false;
-    if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), true), "left Alt tap is consumed")) return false;
-    if (!expect(passes(frontend, uuid, "echo \"kyouha"), "left Alt tap enters direct English")) return false;
-    frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), false);
-    if (!expect(!frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt+x"), false), "Alt + x reaches the app")) return false;
-    if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), true), "the release of a consumed Alt press is consumed")) return false;
-    if (!expect(passes(frontend, uuid, "k"), "right Alt with another key is not a tap")) return false;
-    frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), false);
-    if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), true), "right Alt tap is consumed")) return false;
-    if (!composes(frontend, uuid, ic, "right Alt tap selects Japanese")) return false;
-    frontend->call<ITestFrontend::destroyInputContext>(uuid);
-    std::cout << "PASS: Alt taps set the mode\n";
-    return true;
-}
-
 // 入力欄に出した変換中の文字は、フォーカスが外れたときにクライアントが表示のまま確定する。Meltype は確定し直さない
 bool focusOutLeavesClientPreedit(Instance *instance, AddonInstance *frontend) {
     // foot は既定で「コード」のアプリなので、文章を書くアプリにする
@@ -299,7 +278,6 @@ int main() {
             if (ok) ok = modeKeys(&instance, frontend, "Eisu_toggle", true);
             if (ok) ok = modeKeys(&instance, frontend, "Muhenkan", true);
             if (ok) ok = modeKeys(&instance, frontend, "Muhenkan", false);
-            if (ok) ok = altTaps(&instance, frontend);
             if (ok) ok = passwordPasses(&instance, frontend);
             if (ok) ok = focusOutLeavesClientPreedit(&instance, frontend);
             testResult = ok ? 0 : 1;

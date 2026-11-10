@@ -66,30 +66,3 @@ enum KeyMapping {
     }
 }
 
-/// 左右の Option (Windows の左右の Alt。0xA4・0xA5) の単独押し。アプリによっては (VS Code)、1 回の単独押しで押下と解放をそれぞれ 2 回知らせるので、
-/// 押している間の同じ Option の押下と、離したあとの解放は無視する。
-struct OptionTap {
-    /// 押している Option
-    private var held: Int?
-    /// 単独押しの途中の Option。ほかのキー・マウスのボタンを押したら nil
-    private var candidate: Int?
-
-    /// Option を押した。others: Shift・Control・Command も押している
-    mutating func press(_ option: Int, others: Bool) {
-        if held == option { return }
-        candidate = held == nil && !others ? option : nil
-        held = option
-    }
-
-    /// Option を離した。単独押しだったら、その Option
-    mutating func release(_ option: Int) -> Int? {
-        defer {
-            held = nil
-            candidate = nil
-        }
-        return candidate == option ? option : nil
-    }
-
-    /// 単独押しでなくなった (ほかのキー・修飾キー・マウスのボタン・フォーカスの移動)
-    mutating func cancel() { candidate = nil }
-}

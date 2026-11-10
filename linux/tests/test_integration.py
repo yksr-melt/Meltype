@@ -35,7 +35,7 @@ class IntegrationTests(unittest.TestCase):
         cls.addClassCleanup(cls.data.cleanup)
         os.environ["MELTYPE_DATA_DIR"] = cls.data.name
         (Path(cls.data.name) / "config.json").write_text(json.dumps({
-            "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False, "AltKeysSwitchKeyboard": True,
+            "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False,
             "ModeIndicator": "OnSwitchAndFocus", "SettingsVersion": 10}),
             encoding="utf-8")
         loader = importlib.machinery.SourceFileLoader(
@@ -534,49 +534,15 @@ class IntegrationTests(unittest.TestCase):
         self.assertIsNone(self.engine.aux)
         self.engine.do_set_cursor_location(100, 100, 1, 20)
         self.assertEqual("あ", self.engine.aux)
-        self.special(IBus.KEY_Alt_L)
-        self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK)
+        self.special(IBus.KEY_Eisu_toggle)
         self.assertEqual(("A", "A"), (self.engine.panel_mode, self.engine.aux))
-        self.special(IBus.KEY_Alt_R)
-        self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK)
+        self.special(IBus.KEY_Hiragana_Katakana)
         self.assertEqual(("あ", "あ"), (self.engine.panel_mode, self.engine.aux))
 
     def test_app_comes_from_the_client_name(self):
         for client, app in (("gtk4-im:gnome-text-editor", "gnome-text-editor"), ("gnome-shell", "gnome-shell"), ("fake", None), ("", None)):
             self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_1", client)
             self.assertEqual(app, self.engine._app, client)
-
-    def test_alt_tap_sets_the_mode(self):
-        # 本体が単独押しを使う Alt は、押下も解放もアプリに渡さない (解放だけを止めると、アプリには Alt を押したままに見える)
-        self.engine.do_focus_in()
-        self.assertTrue(self.special(IBus.KEY_Alt_L))
-        self.assertTrue(self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK))
-        self.type_text("ka")
-        self.assertEqual("ka", self.engine.document)
-        # ほかのキーと一緒に押したら切り替えない (Alt + x はアプリに渡す)
-        self.assertTrue(self.special(IBus.KEY_Alt_R))
-        self.assertFalse(self.scalar("x", IBus.ModifierType.MOD1_MASK))
-        self.assertTrue(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
-        self.type_text("ka")
-        self.assertEqual("kaka", self.engine.document, "英数のまま")
-        self.special(IBus.KEY_Alt_R)
-        self.assertTrue(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
-        self.type_text("ka")
-        self.assertEqual("か", self.engine.marked)
-
-    def test_alt_click_is_not_a_tap(self):
-        # Alt+クリック (VS Code のカーソルを増やす操作): 押している間にキャレットが動いたら、切り替えない
-        self.engine.do_focus_in()
-        self.engine.do_set_cursor_location(10, 10, 1, 20)
-        self.special(IBus.KEY_Alt_L)
-        self.engine.do_set_cursor_location(10, 10, 1, 20)
-        self.special(IBus.KEY_Alt_L)
-        self.engine.do_set_cursor_location(80, 10, 1, 20)
-        # 押したままの自動の繰り返しでも、単独押しに戻さない
-        self.special(IBus.KEY_Alt_L)
-        self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK)
-        self.type_text("ka")
-        self.assertEqual("か", self.engine.marked, "日本語のまま")
 
     def test_release_ignored_and_shortcut_passed_once(self):
         self.type_text("@kuraido")

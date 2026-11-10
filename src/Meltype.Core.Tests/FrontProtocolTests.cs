@@ -27,12 +27,11 @@ internal static class FrontProtocolTests
             // Meltype.exe との、背景の変換の結果の待ち合わせ
             Others: ["generation"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
-            // capture.shortcuts は、左右の Alt の単独押しを使うかだけを読む
-            Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept",
+            Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             Others: []),
         new("IBus", "linux/ibus-engine-meltype", source => source, new(@"\[""(\w+)""\]|\.get\(""(\w+)"""),
-            Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept",
+            Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
