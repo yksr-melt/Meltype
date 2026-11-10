@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using Meltype.Composition;
+using Meltype.Composition.Utility;
 using Meltype.Input;
 
 namespace Meltype.Tests;
@@ -2392,42 +2393,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue344_Issue341_NumbersOfferKanjiAndEra()
-    {
-        Assert.Equal("二〇二六|二千二十六|弐千弐拾六|令和8年", string.Join("|", NumberCandidates.For("2026")), "2026");
-        Assert.Equal("一二三四五|一万二千三百四十五|壱万弐千参百四拾五", string.Join("|", NumberCandidates.For("12345")), "12345");
-        Assert.Equal("一〇〇|百|壱百", string.Join("|", NumberCandidates.For("100")), "100");
-        Assert.Equal("一〇〇〇〇|一万|壱万", string.Join("|", NumberCandidates.For("10000")), "10000");
-        Assert.Equal("〇〇一", string.Join("|", NumberCandidates.For("001")), "先頭が 0 の数字は位取りしない");
-        Assert.Equal("一九八九|千九百八十九|壱千九百八拾九|平成元年", string.Join("|", NumberCandidates.For("1989")), "1989 = 平成元年");
-        Assert.Equal(0, NumberCandidates.For("abc").Count, "数字でなければ候補なし");
-    }
-
-    [Test]
-    public static void NumberAndEraCandidates_DoNotDependOnCurrentCulture()
-    {
-        var previous = System.Globalization.CultureInfo.CurrentCulture;
-        try
-        {
-            System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("ar-SA");
-            Assert.True(NumberCandidates.For("２０２６").Contains("令和8年"), "全角数字をいつも同じ元号にする");
-            Assert.Equal("2026年|2026", string.Join("|", CompositionController.EraToYear("れいわ８ねん")!));
-        }
-        finally { System.Globalization.CultureInfo.CurrentCulture = previous; }
-    }
-
-    [Test]
-    public static void Issue344_DigitsOfferKanjiWhenConverting()
-    {
-        var k = new Keyboard();
-        k.Type("2026");
-        k.Host.PhysicalShift = true;
-        k.Press(VirtualKeys.Space);
-        var candidates = k.Host.View!.Candidates;
-        Assert.True(candidates.Contains("二〇二六") && candidates.Contains("令和8年"), "数字の候補に漢数字・元号: " + string.Join(",", candidates));
-    }
-
-    [Test]
     public static void Issue411_ChangeStaysEnglish()
     {
         var k = new Keyboard();
@@ -2747,24 +2712,12 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue341_EraYearOffersGregorianYear()
-    {
-        var k = new Keyboard();
-        k.Type("reiwagannnenn ");
-        Assert.True(k.Host.View!.Candidates.Contains("2019年"), "令和元年: " + string.Join(",", k.Host.View.Candidates));
-        Assert.Equal("2026年", CompositionController.EraToYear("れいわ8ねん")!.First(), "令和8年");
-        Assert.Equal("1989年", CompositionController.EraToYear("へいせいがんねん")!.First(), "平成元年");
-        Assert.Equal("1926年", CompositionController.EraToYear("しょうわ1ねん")!.First(), "昭和1年");
-        Assert.True(CompositionController.EraToYear("へいせい40ねん") is null, "平成は 31 年まで");
-    }
-
-    [Test]
     public static void Issue340_TraditionalUnitsOfferMetricSize()
     {
-        Assert.Equal("3尺|約90.91cm", string.Join("|", CompositionController.TypedUnitCandidates("3しゃく")!), "3 尺");
-        Assert.Equal("1坪|約3.31㎡", string.Join("|", CompositionController.TypedUnitCandidates("1つぼ")!), "1 坪");
-        Assert.Equal("2貫|約7.5kg", string.Join("|", CompositionController.TypedUnitCandidates("2かん")!), "2 貫");
-        Assert.True(CompositionController.TypedUnitCandidates("かん") is null, "数字が無ければ対象外");
+        Assert.Equal("3尺|約90.91cm", string.Join("|", TraditionalUnitConversion.Candidates("3しゃく")!), "3 尺");
+        Assert.Equal("1坪|約3.31㎡", string.Join("|", TraditionalUnitConversion.Candidates("1つぼ")!), "1 坪");
+        Assert.Equal("2貫|約7.5kg", string.Join("|", TraditionalUnitConversion.Candidates("2かん")!), "2 貫");
+        Assert.True(TraditionalUnitConversion.Candidates("かん") is null, "数字が無ければ対象外");
         var k = new Keyboard();
         k.Type("3syaku ");
         Assert.True(k.Host.View!.Candidates.Contains("3尺") && k.Host.View.Candidates.Contains("約90.91cm"), string.Join(",", k.Host.View.Candidates));
@@ -3106,7 +3059,7 @@ internal static class CompositionTests
         off.Host.ClipboardText = "コピーした語";
         off.Type("kurippubo-do ");
         Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("コピーした語"), "OFF はクリップボードを読まない");
-        Assert.True(CompositionController.ClipboardLine("a\nb") is null && CompositionController.ClipboardLine(new string('あ', 201)) is null && CompositionController.ClipboardLine(" ") is null, "複数行・長い・空は出さない");
+        Assert.True(ClipboardConversion.Line("a\nb") is null && ClipboardConversion.Line(new string('あ', 201)) is null && ClipboardConversion.Line(" ") is null, "複数行・長い・空は出さない");
     }
 
     [Test]
@@ -4327,7 +4280,7 @@ internal static class CompositionTests
         Assert.Equal("ＡＢＣ", CompositionController.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
     }
 
-    /// <summary>決めた文節に区切る変換エンジン (計算の言葉のテスト用)。</summary>
+    /// <summary>決めた文節に区切る変換エンジン。</summary>
     private sealed class ClauseConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
     {
         private readonly FakeConverter _inner = new();
@@ -4337,38 +4290,16 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void MathWordsAfterDigits_OfferSymbols()
+    public static void MathWordSymbolFromEngine_IsNotLearned()
     {
-        // #293: 数字のすぐ後ろの かける・わる は × ÷ を最初の候補に。変換エンジンが数字と同じ文節にしても (3かける) 別の文節にしても
-        var converter = new ClauseConverter(new()
-        {
-            ["3かける4"] = [new("3", "3"), new("かける", "掛ける"), new("4", "4")],
-            ["10わる2"] = [new("10わる", "10割る"), new("2", "2")],
-            ["1たす1は2"] = [new("1", "1"), new("たす", "足す"), new("1は2", "1は2")],
-            ["5ふんかける"] = [new("5ふん", "5分"), new("かける", "かける")],
-            ["でんわをかける"] = [new("でんわを", "電話を"), new("かける", "かける")],
-        });
-        foreach (var (typed, expected) in new[]
-        {
-            ("3kakeru4 \n", "3×4"), ("10waru2 \n", "10÷2"), ("1tasu1ha2 \n", "1足す1は2"),
-            ("5hunkakeru \n", "5分かける"), ("denwawokakeru \n", "電話をかける"),
-        })
-        {
-            var k = new Keyboard(converter: converter);
-            k.Type(typed);
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
-
-        // たす は記号を 2 番目の候補に足す (動詞のことも多いので最初にはしない)。選んでも覚えない
+        // #293: 3かける4 の × は変換エンジン (Mozc) の候補から選ぶ。選んでも覚えない (覚えると 電話をかける まで × になる)
         var history = new ConversionHistory(null);
-        var tasu = new Keyboard(converter: converter, history: history);
-        tasu.Type("1tasu1ha2 ");
-        tasu.Press(VirtualKeys.Right);
-        Assert.Equal("+", tasu.Host.View!.Candidates[1], string.Join(",", tasu.Host.View!.Candidates));
-        tasu.Press(VirtualKeys.Space);
-        tasu.Press(VirtualKeys.Return);
-        Assert.Equal("1+1は2", tasu.Host.Document);
-        Assert.True(history.Get("たす") is null, "記号を選んでも学習しない");
+        var k = new Keyboard(history: history, moreCandidates: reading => reading == "かける" ? ["×"] : []);
+        k.Type("kakeru ");
+        for (var i = 0; i < 20 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "×"; i++) k.Press(VirtualKeys.Space);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("×", k.Host.Document);
+        Assert.True(history.Get("かける") is null, "記号を選んでも学習しない");
     }
 
     /// <summary>覚えさせた文節を記録する変換エンジン (Mozc の代わり)。</summary>

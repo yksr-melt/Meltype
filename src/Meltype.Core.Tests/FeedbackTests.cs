@@ -1077,19 +1077,19 @@ internal static class LanguageLearningTests
         var history = new ConversionHistory(null);
         var phrases = new PhraseHistory(null);
         var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
-        keyboard.Type("mukasinoba-jonn ");
-        keyboard.Press(VirtualKeys.Right);
+        keyboard.Type("ba-jonn ");
         var version = $"Meltype-{ProjectInfo.CoreVersion}";
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.Controller.SelectCandidate(index);
         keyboard.Press(VirtualKeys.Return);
-        Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
+        Assert.Equal(version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
         Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
-        Assert.True(!phrases.StartingWith("むかしの").Any(), "語句の履歴にも覚えない");
 
-        // 普通の「昔のバージョン」は覚える
+        // 版は入力の全体が ばーじょん のときだけ出す。普通の「昔のバージョン」は覚える
         keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Right);
+        Assert.True(!keyboard.Host.View!.Candidates.Contains(version), "文の途中の ばーじょん には版を出さない");
         keyboard.Press(VirtualKeys.Return);
         Assert.True(phrases.StartingWith("むかしの").Contains("昔のバージョン"), "通常の語句は覚える");
     }
