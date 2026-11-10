@@ -10,17 +10,13 @@ using Meltype.Input;
 namespace Meltype.Composition;
 
 /// <summary>
-/// 入力欄への書き込み 1 回分。DeleteBefore 文字をキャレットの前から消してから Text を入れる (確定し直すとき以外は 0)。
-/// Expect は消す文字 (このセッションで確定した文字。分からなければ null)。
-/// Current は、確定し直すときに Text の後ろに続けて入る、今確定した語 (確定し直しは今の語の確定とまとめて届く)。
-/// フロントは、キャレットの前が Expect と一致すると確認できたときだけ消す。確認できないときは前の文字を消さずに Current を入れる
-/// (Current が無ければ Text)。Text を入れると、直した前の語が二重に入る。Edit ごと捨てると、打った文字が消えて入力欄と本体がずれる。
-/// Current だけを入れたときも、本体は Text が入った前提で確定した文字を覚える。直せなかった前の語まで消す確定し直しは、
-/// 次の Expect が入力欄と合わないので、フロントは前の文字を消さない (それ以上その語は直さない)。
-/// DeleteBefore は本体の単位 (UTF-16) の長さなので、消す文字数は Expect から入力欄の単位で数える。
+/// 入力欄への書き込み 1 回分。キャレットの前の Expect (DeleteBefore 文字) を消してから Text を入れる (確定し直すとき以外は DeleteBefore が 0)。
+/// 確定し直しは、ImeSession がフロントの渡したキャレットの前の文字と Expect を照合してから出す。フロントは照合せずに、Expect の長さ (入力欄の単位) だけ消す。
+/// Current は、確定し直すときに Text の後ろに続けて入る、今確定した語 (先に今の語を入れてから前を書き換えるフロント向け)。
 /// CaretBack は、この確定を入れた後、末尾から左へ戻す UTF-16 の文字数。クリックなどで入力先が移ったときは、フロント側で移動を適用しない。
 /// </summary>
-public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null, int CaretBack = 0);
+/// Paste は、キーを送って文字を入れるフロント (Meltype キーボード) が、貼り付けで入れるか (アプリ別設定の「確定した文字の入れ方」・改行を含む文)。
+public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null, int CaretBack = 0, bool Paste = false);
 
 /// <summary>
 /// 1 回のキー入力の結果。Consumed が false ならそのキーはアプリにそのまま渡す (Commits を入れた後で)。
@@ -28,31 +24,28 @@ public readonly record struct TextEdit(int DeleteBefore, string Text, string? Ex
 /// </summary>
 public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commits, CompositionView? View)
 {
-    /// <summary>固定の操作ガイドを表示するか。対応するフロントだけが使い、Hint と ContextHint の内容は変えない。</summary>
-    public bool ShowGuide { get; init; } = true;
-
-    /// <summary>Swift などから読みやすいように JSON にする (NativeAOT でも使えるよう手書き)。</summary>
+    /// <summary>
+    /// フロントに渡す JSON にする (NativeAOT でも使えるよう手書き)。View は <see cref="ForFront"/> で作ったもの。
+    /// 項目は値が無くても毎回すべて出す (null・0・false)。view と candidates だけは、出さないときに丸ごと null。
+    /// 項目を足したら、各フロントが読むか使わないかを FrontProtocolTests で決める。
+    /// 確定し直す (Commits の DeleteBefore が 1 以上) なら、消す文字 (Expect。ImeSession がキャレットの前と照合済み) を removeBefore で渡す。
+    /// </summary>
     public string ToJson()
     {
         var builder = new StringBuilder();
-        builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false");
-        builder.Append(",\"showGuide\":").Append(ShowGuide ? "true" : "false").Append(",\"commits\":[");
+        builder.Append("{\"consumed\":").Append(Consumed ? "true" : "false").Append(",\"commits\":[");
         for (var i = 0; i < Commits.Count; i++)
         {
             if (i > 0) builder.Append(',');
-            builder.Append("{\"deleteBefore\":").Append(Commits[i].DeleteBefore).Append(",\"text\":");
+            var rewrite = Commits[i].DeleteBefore > 0;
+            builder.Append("{\"text\":");
             AppendString(builder, Commits[i].Text);
-            if (Commits[i].Expect is { } expect)
-            {
-                builder.Append(",\"expect\":");
-                AppendString(builder, expect);
-            }
-            if (Commits[i].Current is { } current)
-            {
-                builder.Append(",\"current\":");
-                AppendString(builder, current);
-            }
-            if (Commits[i].CaretBack > 0) builder.Append(",\"caretBack\":").Append(Commits[i].CaretBack);
+            builder.Append(",\"removeBefore\":");
+            AppendNullable(builder, rewrite ? Commits[i].Expect ?? throw new InvalidOperationException("確定し直す文字が照合されていない") : null);
+            builder.Append(",\"currentWord\":");
+            AppendNullable(builder, rewrite ? Commits[i].Current : null);
+            builder.Append(",\"moveCaretBack\":").Append(Commits[i].CaretBack);
+            builder.Append(",\"insertByPaste\":").Append(Commits[i].Paste ? "true" : "false");
             builder.Append('}');
         }
         builder.Append("],\"view\":");
@@ -63,49 +56,82 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
         }
         builder.Append("{\"text\":");
         AppendString(builder, view.Text);
-        // この表示を確定したときに入る文字列 (IBus がフォーカスを外したときに確定するのは表示中の文字)。
-        builder.Append(",\"committed\":");
-        if (view.Committed is { } committed) AppendString(builder, committed);
-        else builder.Append("null");
         builder.Append(",\"converting\":").Append(view.Converting ? "true" : "false");
-        builder.Append(",\"selectedIndex\":").Append(view.SelectedIndex);
+        builder.Append(",\"clauses\":");
+        AppendArray(builder, view.Clauses ?? []);
         builder.Append(",\"selectedClause\":").Append(view.SelectedClause);
         builder.Append(",\"hint\":");
         AppendString(builder, view.Hint);
-        // null も必ず出し、この項目に対応していない古い本体 (項目なし) と区別する。
-        builder.Append(",\"contextHint\":");
-        if (view.ContextHint is { } contextHint) AppendString(builder, contextHint);
-        else builder.Append("null");
+        builder.Append(",\"spellingSuggestion\":");
+        AppendNullable(builder, view.Suggestion);
+        builder.Append(",\"typedKeys\":");
+        AppendNullable(builder, view.Typed);
         builder.Append(",\"candidates\":");
-        AppendArray(builder, view.Candidates);
-        builder.Append(",\"clauses\":");
-        AppendArray(builder, view.Clauses ?? []);
-        // 選んでいる候補の意味 (無ければ null)。少し止まってから出すのは Swift・Python 側
-        builder.Append(",\"suggestion\":");
-        if (view.Suggestion is { } suggestion) AppendString(builder, suggestion);
-        else builder.Append("null");
-        builder.Append(",\"meaning\":");
-        if (view.Meaning is { } meaning) AppendString(builder, meaning);
-        else builder.Append("null");
+        var predictions = ListsPredictions(view) == true;
+        var items = predictions ? view.Predictions! : view.Candidates;
+        if (items.Count == 0)
+        {
+            builder.Append("null}}");
+            return builder.ToString();
+        }
+        builder.Append("{\"items\":");
+        AppendArray(builder, items);
         // 候補ごとの注記を表示用の文字列にする (注記が無ければ null)
         builder.Append(",\"notes\":[");
-        for (var i = 0; i < view.Candidates.Count; i++)
+        for (var i = 0; i < items.Count; i++)
         {
             if (i > 0) builder.Append(',');
-            if (view.Notes?[i].ToDisplayText() is { } note) AppendString(builder, note);
-            else builder.Append("null");
+            AppendNullable(builder, predictions ? null : view.Notes?[i].ToDisplayText());
         }
-        builder.Append(']');
-        // 予測変換の候補 (変換していないときだけ) と、Tab で選んでいる候補 (選んでいなければ -1)
-        builder.Append(",\"predictions\":");
-        AppendArray(builder, view.Predictions ?? []);
-        builder.Append(",\"selectedPrediction\":").Append(view.SelectedPrediction);
-        // 打ったキー (設定「打ったキーを表示」が OFF なら null)
-        builder.Append(",\"typed\":");
-        if (view.Typed is { } typed) AppendString(builder, typed);
-        else builder.Append("null");
-        builder.Append("}}");
+        builder.Append("],\"numbered\":").Append(Numbered(view) ? "true" : "false");
+        builder.Append(",\"selected\":").Append(predictions ? view.SelectedPrediction : view.SelectedIndex)
+            .Append(",\"selectedMeaning\":");
+        AppendNullable(builder, view.Meaning);
+        // 一覧・view・result を閉じる
+        builder.Append(",\"meaningDelayMs\":").Append(MeaningDelayMs).Append("}}}");
         return builder.ToString();
+    }
+
+    /// <summary>選んでいる候補で止まってから、その意味を出すまでの時間 (ミリ秒)。</summary>
+    public const int MeaningDelayMs = 1500;
+
+    /// <summary>フロントに渡した表示 (<see cref="ForFront"/>) の一覧に番号を出すか。</summary>
+    public static bool Numbered(CompositionView view) => view.Numbered;
+
+    /// <summary>フロントに渡した表示 (<see cref="ForFront"/>) の一覧が、予測変換の候補か。一覧が無ければ null。</summary>
+    public static bool? ListsPredictions(CompositionView view) =>
+        view.Predictions is { Count: > 0 } ? true : view.Candidates.Count > 0 ? false : null;
+
+    /// <summary>
+    /// フロントに渡す表示。どのフロントも、ここに入っているものをそのまま出す:
+    /// text は確定される形 (OS が表示のまま確定しても、本体の確定と同じになる。打っている途中の英字は typed で見える)、
+    /// hint は操作ガイドの設定を反映した案内、typed は見えている文字と違うときだけの打ったキー、
+    /// 一覧は 1 つだけ (変換中で候補が 2 つ以上なら変換の候補、変換していなければ予測変換の候補、無ければ入力中の変換の候補)。
+    /// </summary>
+    /// <param name="numberKeysSelect">設定「変換中の数字キーで候補を選ぶ」。番号は、数字キーで選べる変換中の候補だけに出す。</param>
+    internal static CompositionView ForFront(CompositionView view, bool showGuide, bool numberKeysSelect)
+    {
+        var predictions = !view.Converting && view.Predictions is { Count: > 0 };
+        var candidates = !predictions && (view.Converting ? view.Candidates.Count > 1 : view.Candidates.Count > 0);
+        return view with
+        {
+            Text = view.Committed ?? view.Text,
+            Hint = showGuide ? view.Hint : view.ContextHint ?? "",
+            Typed = view.Typed == view.Text ? null : view.Typed,
+            Candidates = candidates ? view.Candidates : [],
+            SelectedIndex = candidates ? view.SelectedIndex : -1,
+            Notes = candidates ? view.Notes : null,
+            Meaning = candidates ? view.Meaning : null,
+            Predictions = predictions ? view.Predictions : null,
+            SelectedPrediction = predictions ? view.SelectedPrediction : -1,
+            Numbered = candidates && view.Converting && numberKeysSelect,
+        };
+    }
+
+    private static void AppendNullable(StringBuilder builder, string? text)
+    {
+        if (text is null) builder.Append("null");
+        else AppendString(builder, text);
     }
 
     private static void AppendArray(StringBuilder builder, IReadOnlyList<string> items)
@@ -156,7 +182,6 @@ public sealed class MeltypeSession
     private readonly Host _host;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
-    private readonly SigilWord _sigil = new();
     private readonly bool _directModeDetection;
     private bool _directEnglishWord;
     private bool _direct;
@@ -191,10 +216,28 @@ public sealed class MeltypeSession
     /// 既定の辞書・学習データ (保存場所は <see cref="AppPaths"/>) で作る。converter は OS 側の変換エンジン、
     /// moreCandidates は読みに対する候補の一覧 (無ければ null)、wordChecker は OS のスペルチェッカー (無ければ null)。
     /// </summary>
-    public static MeltypeSession CreateDefault(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false)
+    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
+    public static MeltypeSession CreateDefault(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false,
+        bool directModeDetection = false, Func<Settings>? settings = null)
     {
         AppPaths.MigrateFromOldName();
-        return CreateDefault(AppPaths.DataDirectory, converter, moreCandidates, wordChecker, autoSpacing);
+        return CreateDefault(AppPaths.DataDirectory, converter, moreCandidates, wordChecker, autoSpacing, directModeDetection, settings);
+    }
+
+    /// <summary>既定の保存場所の定型文 (snippets.json)。入力欄で共有する。</summary>
+    public static SnippetStore DefaultSnippets()
+    {
+        AppPaths.MigrateFromOldName();
+        return s_snippets ??= new SnippetStore(AppPaths.SnippetsFile);
+    }
+
+    private static SnippetStore? s_snippets;
+
+    /// <summary>既定の保存場所の設定 (config.json。変わったら読み直す)。CreateDefault の入力欄と同じものを返す。</summary>
+    public static Settings DefaultSettings()
+    {
+        AppPaths.MigrateFromOldName();
+        return Shared(AppPaths.DataDirectory).Settings.Current;
     }
 
     // 辞書・検出器・学習データは、入力欄 (セッション) がいくつあってもプロセスで 1 つだけ作って共有する (Windows 版の CompositionService.CreateSession と同じ)。
@@ -206,7 +249,33 @@ public sealed class MeltypeSession
     private static readonly GitHubIssueTitles s_githubTitles = new();
 
     /// <summary>dataDirectory に置いた設定・辞書・学習データで作る (テストでは一時フォルダーを渡す)。</summary>
-    internal static MeltypeSession CreateDefault(string dataDirectory, IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false)
+    internal static MeltypeSession CreateDefault(string dataDirectory, IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false,
+        bool directModeDetection = false, Func<Settings>? appSettings = null)
+    {
+        var shared = Shared(dataDirectory);
+        var userDirectory = Path.Combine(dataDirectory, "dictionaries");
+        var file = shared.Settings;
+        var settings = appSettings ?? (() => file.Current);
+        // 入力欄を作ったときにも読み直す (ログの設定を、入力の前に入れる)
+        _ = settings();
+        var detector = shared.Detector;
+        // OS のスペルチェッカーが無ければ (Linux)、同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。
+        detector.SpellChecker = wordChecker is { IsAvailable: true } ? wordChecker : Detection.BuiltInWordChecker.Shared;
+        // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
+        // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
+        var userDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory);
+        var options = shared.Options.WithSettings(settings) with
+        {
+            UserDictionary = userDictionary,
+            Predictor = new Predictor(shared.Options.Predictor?.Phrases, userDictionary, shared.Options.History),
+            MoreCandidates = moreCandidates,
+            GitHubTitles = () => s_githubTitles,
+            AutomaticEnglishSpacing = () => autoSpacing,
+        };
+        return new MeltypeSession(detector, converter, options, settings, directModeDetection);
+    }
+
+    private static (string Directory, CompositionDetector Detector, CompositionOptions Options, SettingsFile Settings) Shared(string dataDirectory)
     {
         Directory.CreateDirectory(dataDirectory);
         var userDirectory = Path.Combine(dataDirectory, "dictionaries");
@@ -235,64 +304,12 @@ public sealed class MeltypeSession
                 Meanings = MeaningDictionary.Load(),
                 RomajiTypos = RomajiTypoCorrector.Load(created.Romaji),
                 TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
+                // 予測変換のために覚えた語句 (入力欄で共有する。ユーザー辞書は入力欄ごとの Predictor に渡す)
+                Predictor = new Predictor(new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt")), null, null),
             }, settingsFile);
             s_shared = shared;
         }
-        var file = shared.Settings;
-        Func<Settings> settings = () => file.Current;
-        // 入力欄を作ったときにも読み直す (ログの設定を、入力の前に入れる)
-        _ = settings();
-        var detector = shared.Detector;
-        // OS のスペルチェッカーが無ければ (Linux)、同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。
-        detector.SpellChecker = wordChecker is { IsAvailable: true } ? wordChecker : Detection.BuiltInWordChecker.Shared;
-        var options = shared.Options with
-        {
-            LiveConversion = () => settings().LiveConversion,
-            ClockTimeZone = () => settings().ClockTimeZone,
-            AutoCorrect = () => settings().AutoCorrectAfterCommit && settings().AutoDetection,
-            Manual = () => !settings().AutoDetection,
-            // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
-            // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
-            UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory),
-            MoreCandidates = moreCandidates,
-            TranslationCandidates = () => settings().TranslationCandidates,
-            TabConversion = () => settings().TabConversion,
-            ContinueAfterConversion = () => settings().ContinueAfterConversion,
-            Learning = () => settings().LearningEnabled,
-            SeparateKeyRoles = () => settings().SeparateKeyRoles,
-            EnglishFirstInput = () => settings().EnglishFirstInput,
-            ConsonantAbbreviations = () => settings().ConsonantAbbreviations,
-            CandidateMeanings = () => settings().ShowCandidateMeanings,
-            CorrectTypos = () => settings().CorrectTypos,
-            Slash = () => settings().Slash,
-            ZSymbols = () => settings().ZSymbols,
-            SpaceAroundEnglish = () => settings().SpaceAroundEnglish,
-            SpaceAroundNumbers = () => settings().SpaceAroundNumbers,
-            NumberKeysSelectCandidates = () => settings().NumberKeysSelectCandidates,
-            SpaceWidth = () => settings().SpaceWidth,
-            EnterCommitsAsShown = () => settings().EnterCommitsAsShown,
-            AlphanumericKeyStartsAsTyped = () => settings().AlphanumericKeyStartsAsTyped,
-            FullWidthParentheses = () => settings().FullWidthParentheses,
-            SquareBrackets = () => settings().SquareBrackets,
-            EscStepsBack = () => settings().EscStepsBack,
-            EscRevertsSelectedClause = () => settings().EscRevertsSelectedClause,
-            FunctionKeysAffectSelectedClause = () => settings().FunctionKeysAffectSelectedClause,
-            ControlKeys = () => settings().ControlKeys,
-            PartialCommit = () => settings().PartialCommit,
-            CursorIntoBrackets = () => settings().CursorIntoBrackets,
-            ControlKeyBindings = () => settings().ControlKeyBindings,
-            CalculatorCandidates = () => settings().CalculatorCandidates,
-            LaughterAfterKana = () => settings().LaughterAfterKana,
-            ContextualLearning = () => settings().ContextualLearning,
-            ShowCandidatesWhileTyping = () => settings().ShowCandidatesWhileTyping,
-            GitHubIssueCandidates = () => settings().GitHubIssueCandidates,
-            GitHubRepository = () => settings().GitHubRepository,
-            GitHubTitles = () => s_githubTitles,
-            ClipboardCandidates = () => settings().ClipboardCandidates,
-            AutomaticEnglishSpacing = () => autoSpacing,
-            Punctuation = () => settings().Punctuation,
-        };
-        return new MeltypeSession(detector, converter, options, settings);
+        return shared;
     }
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
@@ -313,55 +330,20 @@ public sealed class MeltypeSession
 
     public bool DirectEnglishWord => _directEnglishWord;
 
-    /// <summary>
-    /// 直前のキーが、設定「入力モード切り替えキー」の切替として使われたか (#1033)。
-    /// Mac・Linux のフロントエンドは、これを見て自分のモード (A / あ、入力メニュー) を本体に合わせる。
-    /// 読むだけでは変わらず、<see cref="TakeToggled"/> で読むと false に戻る。
-    /// </summary>
-    public bool Toggled => _toggled;
-
-    /// <summary><see cref="Toggled"/> を読み、印を消す。</summary>
-    public bool TakeToggled()
-    {
-        var toggled = _toggled;
-        _toggled = false;
-        return toggled;
-    }
-
-    private bool _toggled;
-
-    /// <summary>
-    /// 押されたキーが、設定「入力モード切り替えキー」の割り当てのどれかか (#1033)。
-    /// 修飾キーは、どのフロントエンドも Ctrl と Shift を別々のビットで渡す (macOS・fcitx5・IBus とも)。
-    /// 修飾キーなし・Shift だけのキーをどう扱うか (半角/全角・変換・無変換・Shift+Space 以外は外す) は
-    /// <see cref="Meltype.Input.ToggleShortcutValidator"/> が設定の読み込みで決めるので、ここでは見ない。
-    /// </summary>
-    private static bool IsToggleShortcut(IReadOnlyList<Meltype.Input.ToggleShortcut> shortcuts, int vk, bool ctrl, bool alt, bool shift, bool command)
-    {
-        var modifiers = (shift ? Meltype.Input.ShortcutModifiers.Shift : Meltype.Input.ShortcutModifiers.None)
-            | (ctrl ? Meltype.Input.ShortcutModifiers.Control : Meltype.Input.ShortcutModifiers.None)
-            | (alt ? Meltype.Input.ShortcutModifiers.Alt : Meltype.Input.ShortcutModifiers.None)
-            | (command ? Meltype.Input.ShortcutModifiers.Win : Meltype.Input.ShortcutModifiers.None);
-        foreach (var shortcut in shortcuts)
-        {
-            if (shortcut.Matches(vk, modifiers)) return true;
-        }
-        return false;
-    }
-
     /// <summary>入力を覚えないように求める入力欄か (Windows のブラウザーのシークレット / InPrivate ウィンドウ)。true の間は学習しない。</summary>
     public bool Private { get; set; }
 
-    /// <summary>コードの入力欄ではコメント・文字列以外を直接入力する。</summary>
+    /// <summary>
+    /// コードの入力欄ではコメント・文字列以外を直接入力する。コメント・文字列の中かは、フロントが渡すキャレットの前の文字 (before) だけで決め、
+    /// 打ったキーから行を追いかけない。
+    /// </summary>
     private bool _codeInput;
-    private readonly LineTracker _codeLine = new();
     public bool CodeInput
     {
         get => _codeInput;
         set
         {
             _codeInput = value;
-            _codeLine.SetFromText("");
             _codeJapanese = false;
         }
     }
@@ -390,7 +372,6 @@ public sealed class MeltypeSession
     public bool SetCodeLine(bool japanese, string? before)
     {
         if (!CodeInput || Direct || _controller.IsComposing) return false;
-        before = SyncCodeLine(before);
         if (!japanese)
         {
             if (!_codeJapanese) return false;
@@ -406,38 +387,36 @@ public sealed class MeltypeSession
 
     /// <summary>
     /// 次に打つキーが、コードの行なので英数のままアプリに通るか (入力モードの表示に使う)。
-    /// before はキャレットの前 (null なら、打ったキーから追いかけた今の行)。
+    /// before はキャレットの前。
     /// </summary>
     public bool CodeEnglishAt(string? before)
     {
         if (!CodeInput || Direct || _controller.IsComposing) return false;
-        before = SyncCodeLine(before);
         return !_codeJapanese && CodeLineKind(before) == LineKind.Code;
     }
 
     /// <summary>
     /// キャレットが動いた (passedVk はアプリに通したキー。0 ならクリックなど、control は Ctrl を押していたか)。
     /// 半角/全角 で日本語にしていたら、矢印・Tab・Ctrl の操作・クリックで英数に戻す (Meltype キーボードと同じ。改行では戻さない)。
-    /// ターミナルは、出力でもキャレットが動くので、キーなしの移動では戻さない。
+    /// アプリに通した Esc (vim などの操作に移る) でも戻す。ターミナルは、出力でもキャレットが動くので、キーなしの移動では戻さない。
     /// </summary>
     public void CaretMoved(int passedVk, bool control)
     {
         if (!_codeJapanese) return;
-        var moved = control || passedVk is VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
-        if (!moved) return;
+        var moved = control || passedVk is VirtualKeys.Tab or VirtualKeys.Escape or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
+        if (moved) ForgetCodeLine();
+    }
+
+    /// <summary>コードの行を日本語にしていたのをやめる (キャレットが別の場所に移った・フォーカスが外れた)。</summary>
+    public void ForgetCodeLine()
+    {
+        if (!_codeJapanese) return;
         _codeJapanese = false;
         Diagnostics.Log.Info("コードの行: キャレットが別の場所に移ったので英数に戻す");
     }
 
-    /// <summary>今の行をキャレットの前で読み直す。今の行 (分からなければ null) を返す。</summary>
-    private string? SyncCodeLine(string? before)
-    {
-        if (before is not null) _codeLine.SetFromText(before);
-        return before ?? _codeLine.Text;
-    }
-
-    /// <summary>キャレットの位置の種類。今の行が分からなければ、分からなくなってから打った文字列で調べる (その前はコードとみなす)。</summary>
-    private LineKind CodeLineKind(string? before) => LineContext.ClassifyText(before ?? _codeLine.Tracked);
+    /// <summary>キャレットの位置の種類。キャレットの前が分からない入力欄 (周辺文字列を返さないターミナル) はコードの行とする (日本語にするには SetCodeLine)。</summary>
+    private static LineKind CodeLineKind(string? before) => before is null ? LineKind.Code : LineContext.ClassifyText(before);
 
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public bool CanDeleteSurrounding
@@ -449,24 +428,60 @@ public sealed class MeltypeSession
     /// <summary>変換ボックスに何か入っているか。</summary>
     public bool IsComposing => _controller.IsComposing;
 
+    /// <summary>変換して候補を選んでいるか。</summary>
+    public bool IsConverting => _controller.IsConverting;
+
+    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
+    public IReadOnlyList<int> ComposingControlKeys() => _controller.ComposingControlKeys();
+
+    /// <summary>ユーザーが判定を直した (英字 / かなに直した語。トレイの「直した誤判定を報告...」)。</summary>
+    public event Action<Correction>? Corrected
+    {
+        add => _controller.Corrected += value;
+        remove => _controller.Corrected -= value;
+    }
+
+    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
+    public string? Selection
+    {
+        get => _host.Selection;
+        set => _host.Selection = value;
+    }
+
+    /// <summary>漢字かな交じりの文の読み (再変換。OS の機能)。分からなければ null。</summary>
+    public Func<string, string?> ReadingOf
+    {
+        set => _host.ReadingOf = value;
+    }
+
+    /// <summary>クリップボードの文字 (OS の機能)。読めなければ null。</summary>
+    public Func<string?> ClipboardText
+    {
+        set => _host.Clipboard = value;
+    }
+
+    /// <summary>今再生している曲 (OS の機能)。読めなければ null。</summary>
+    public Func<(string Title, string Artist)?> NowPlaying
+    {
+        set => _host.Playing = value;
+    }
+
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
-    /// toggleShortcuts は、設定「入力モード切り替えキー」をこの経路で読むか。
-    /// Meltype IME (Windows の TSF) は DLL が打鍵ごとに direct を送ってくるので、そちらからは false にして読ませない (#1033)。
+    /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
     /// </summary>
+    /// <param name="releaseFollows">ワークアラウンド (ImeEventType.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
     public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
-        bool toggleShortcuts = true)
+        bool releaseFollows = false)
     {
-        if (CodeInput && !_controller.IsComposing) before = SyncCodeLine(before);
-        // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)
+        // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
+        // 変換中の before は、変換中の文字より前 (フロントが渡す)
         if (CodeInput && !Direct && !control && !alt && !command &&
-            ch is '"' or '\'' or '`' && _codeLine.Tracked is var line &&
+            ch is '"' or '\'' or '`' && before is { } line &&
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
         {
             var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
-            foreach (var edit in committed.Commits) _codeLine.Append(edit.Text);
-            TrackCodeKey(vk, ch, false);
             return committed with { Consumed = false };
         }
         _host.Begin(ch, shift, before, after);
@@ -475,47 +490,28 @@ public sealed class MeltypeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = _settings();
-        // 設定「入力モード切り替えキー」(#1033)。Windows 版のフックは MeltypeEngine が読む。
-        // Mac・Linux の本体はここで読むので、Shift+Space を切替に指定でき、全角スペースを確定してしまわない。
-        // Meltype IME (Windows の TSF) は DLL が打鍵ごとに direct を送ってくるので、toggleShortcuts を false にして読ませない。
-        // 半角/全角 キーは、本体 (変換ボックス) がすでに英字表示との切り替えに使っている (#662 の既定の
-        // 切り替えキーにも入っている)。フロントエンドもこのキーは自分で扱うので、ここでは横取りしない。
-        var hankaku = Meltype.Input.ToggleShortcut.NormalizeHankakuKey(vk) == Meltype.Input.ToggleShortcut.Hankaku;
-        // 変換中は切り替えない: Shift+Space は変換中の「前の候補へ」として docs/USAGE.md に書いてあり、
-        // 切り替えキーに登録した人でも、変換の操作を奪わない (変換を終えてから押せば切り替わる)。
-        if (toggleShortcuts && !hankaku && !_controller.IsComposing &&
-            IsToggleShortcut(settings.EffectiveToggleShortcuts, vk, control, alt, shift, command))
-        {
-            // 変換中はここへ来ない (条件で除いている) ので、確定するものは無い。
-            var committed = new SessionResult(false, [], null);
-            Direct = !Direct;
-            _toggled = true;
-            return Track(committed with { Consumed = true }, vk, ch, modifier: false);
-        }
         if (Direct && _directModeDetection && _directEnglishWord &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
             _directEnglishWord = false;
         if ((Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
-            return Track(_host.Result(consumed: false), vk, ch, modifier);
+            return _host.Result(consumed: false);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !_sigil.IsActive && _settings().SigilWordsDirect &&
-            _sigil.PassesThrough('/', before))
+        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && _settings().SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/'))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && _sigil.PassesThrough(c, before))
+        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
-            if (CodeInput) TrackCodeKey(vk, ch, modifier);
-            return Track(_host.Result(consumed: false), vk, ch, modifier);
+            return _host.Result(consumed: false);
         }
         if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
-            TrackCodeKey(vk, ch, modifier);
-            return Track(_host.Result(consumed: false), vk, ch, modifier);
+            return _host.Result(consumed: false);
         }
         // 英数へ切り替えるときなどに、Shift を押したことを変換ボックスにも伝える (Shift + 英字は大文字)。
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, false, false, down.TimeMs));
@@ -524,28 +520,29 @@ public sealed class MeltypeSession
         var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().SpaceWidth == SpaceWidth.FullWidth)));
         // このキーをアプリに送り直した (= 使わなかった) なら、アプリに渡す。
         var consumed = swallowed && !_host.ReplayedCurrent;
-        Feed(down with { IsUp = true });
+        if (!releaseFollows) Feed(down with { IsUp = true });
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (Windows のフックの方式と同じ。消す位置がずれて関係ない文字を消さないように)
         if (!consumed && !_controller.IsComposing) ForgetLastCommit();
         if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, true, false, down.TimeMs));
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, true, false, down.TimeMs));
-        var result = _host.Result(consumed);
-        if (CodeInput)
-        {
-            foreach (var edit in result.Commits)
-            {
-                for (var i = 0; i < edit.DeleteBefore; i++) _codeLine.Backspace();
-                _codeLine.Append(edit.Text);
-            }
-            if (!consumed) TrackCodeKey(vk, ch, modifier);
-        }
-        return Track(result, vk, ch, modifier);
+        return _host.Result(consumed);
+    }
+
+    /// <summary>
+    /// ワークアラウンド (ImeEventType.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
+    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
+    /// </summary>
+    public SessionResult HandleKeyUp(int vk, string? before, string? after)
+    {
+        _host.Begin(null, false, before, after);
+        Feed(new KeyEvent(vk, 0, false, true, false, _timeMs()));
+        return _host.Result(consumed: false);
     }
 
     /// <summary>
     /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON で入力中なら、変換ボックスで処理する (issue #199)。
-    /// そうでなければ null (Linux の IBus・fcitx5 は、今までどおり英数 / 日本語の切り替えに使う)。
+    /// そうでなければ null (ImeSession が英数 / 日本語の切り替えに使う)。
     /// </summary>
     public SessionResult? HandleRoleKey(int vk)
     {
@@ -562,29 +559,7 @@ public sealed class MeltypeSession
     private bool PassesSlash(string? before) =>
         CodeInput && !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
 
-    private void TrackCodeKey(int vk, char? ch, bool modifier)
-    {
-        if (modifier || vk is VirtualKeys.Left or VirtualKeys.Right or VirtualKeys.Up or VirtualKeys.Down or 0x21 or 0x22 or 0x23 or 0x24 or 0x2E)
-            _codeLine.Invalidate();
-        else if (vk == VirtualKeys.Return) _codeLine.NewLine();
-        else if (vk == VirtualKeys.Back) _codeLine.Backspace();
-        else if (vk == VirtualKeys.Space) _codeLine.Append(" ");
-        else if (ch is { } character && !char.IsControl(character)) _codeLine.Append(character.ToString());
-    }
 
-    /// <summary>アプリに届いた文字 (確定した文字列と、使わなかったキー) を、/ $ @ の名前の判定のために追いかける。</summary>
-    private SessionResult Track(SessionResult result, int vk, char? ch, bool modifier)
-    {
-        foreach (var edit in result.Commits)
-        {
-            if (edit.Text.Length > 0) _sigil.Append(edit.Text);
-            else if (edit.DeleteBefore > 0) _sigil.Lose();
-        }
-        if (result.Consumed) return result;
-        if (modifier) _sigil.Lose();
-        else _sigil.OnKey(vk, ch);
-        return result;
-    }
 
     /// <summary>
     /// このセッションの外でキャレットが動いた (OS の IME がアプリに通したキー・クリック・別の入力欄に移った) とき。
@@ -608,8 +583,6 @@ public sealed class MeltypeSession
         _host.Begin(null, false, null, null);
         _controller.CommitPending();
         _controller.ResetContext();
-        // 別の入力欄に移ったかもしれない。次に打つ文字は先頭とみなす (前の文字はホストが教えてくれればそちらを使う)。
-        _sigil.Start();
         return _host.Result(consumed: true);
     }
 
@@ -645,6 +618,13 @@ public sealed class MeltypeSession
     }
 
     /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
+    /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま (変換中ならその表示)。</summary>
+    public SessionResult Unchanged()
+    {
+        _host.Begin(null, false, null, null);
+        return _host.Result(consumed: true) with { Consumed = false };
+    }
+
     public SessionResult? RefreshConversion()
     {
         _host.Begin(null, false, null, null);
@@ -674,9 +654,12 @@ public sealed class MeltypeSession
         return swallowed;
     }
 
-    /// <summary>変換ボックスを開くキーか (Windows 版の MeltypeEngine.StartsComposition と同じ考え方)。</summary>
-    private static bool StartsComposition(KeyEvent e, char? ch, bool shift)
+    /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
+    private bool StartsComposition(KeyEvent e, char? ch, bool shift)
     {
+        if (e.Vk == VirtualKeys.Convert && _host.Selection is { Length: > 0 }) return true;
+        if (e.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !_direct && _settings() is { InputStyle: InputStyle.Kana } settings &&
+            settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
         if (ch is not { } c) return false;
         if (VirtualKeys.IsLetter(e.Vk) && char.IsAsciiLetter(c)) return true;
         // 句読点・かぎかっこ・長音・数字・記号 (Shift で打つものも)
@@ -704,6 +687,31 @@ public sealed class MeltypeSession
 
         public bool CanDeleteBackward { get; set; } = true;
 
+        public string? Selection { get; set; }
+
+        public Func<string, string?> ReadingOf { get; set; } = _ => null;
+
+        public Func<string?> Clipboard { get; set; } = () => null;
+
+        public Func<(string Title, string Artist)?> Playing { get; set; } = () => null;
+
+        public string? ClipboardText => Clipboard();
+
+        public (string Title, string Artist)? NowPlaying => Playing();
+
+        /// <summary>ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
+        public ReconversionSelection? GetReconversionSelection() =>
+            Selection is { Length: > 0 } text && (CompositionController.IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
+                ? new ReconversionSelection(text, reading)
+                : null;
+
+        /// <summary>入れた文字は、アプリが選択していた文字と置き換える。</summary>
+        public bool TryReplaceSelection(ReconversionSelection selection, string text)
+        {
+            CommitText(text);
+            return true;
+        }
+
         public void Begin(char? ch, bool shift, string? before, string? after)
         {
             _commits.Clear();
@@ -721,7 +729,9 @@ public sealed class MeltypeSession
             if (_pendingDelete > 0) Add("");
             // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
             if (!consumed) ForgetCommitted();
-            return new SessionResult(consumed, _commits.ToList(), _hidden ? null : _view) { ShowGuide = settings().ShowGuide };
+            // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
+            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowsGuide, settings().NumberKeysSelectCandidates);
+            return new SessionResult(consumed, _commits.ToList(), view);
         }
 
         public void CommitText(string text) => Add(text);
@@ -805,7 +815,16 @@ public sealed class MeltypeSession
         /// <summary>入力欄の文字は、キーを渡されたその場で読んでもらっている (OS が渡してきた値をそのまま使う)。</summary>
         public bool SurroundingTextIsCurrent => true;
 
-        public void RequestSurroundingText(Action<string?, string?> callback) => callback(_before, _after);
+        /// <summary>キーを押す前のキャレットの前に、このキーで確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
+        public void RequestSurroundingText(Action<string?, string?> callback)
+        {
+            var before = _before;
+            if (before is not null)
+            {
+                foreach (var edit in _commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
+            }
+            callback(before, _after);
+        }
 
         public void Show(CompositionView view)
         {

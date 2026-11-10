@@ -52,7 +52,7 @@ internal sealed class LogForm : Form
 
     private void RefreshLog()
     {
-        var state = _engine.CurrentImeState;
+        var state = _engine.Keyboard?.SystemImeState;
         _imeState.Text = $"前面アプリの IME: {(state is { } s ? s.ToString() : "不明")}";
 
         var version = Log.Version;

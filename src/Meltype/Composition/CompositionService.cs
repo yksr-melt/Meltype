@@ -7,22 +7,22 @@ using Meltype.Input;
 namespace Meltype.Composition;
 
 /// <summary>
-/// Meltype キーボードを Windows につなぐ部分 (UI スレッドで作る)。
-///   フック → CaptureGate → (BeginInvoke) → CompositionController → 変換ボックス表示 / SendInput で確定
+/// Meltype.exe の 2 つのフロント (Meltype キーボード・Meltype IME) が使う Windows の部品 (UI スレッドで作る)。
+/// 変換エンジン・辞書・学習データ (入力欄ごとの <see cref="MeltypeSession"/> で共有する)、フォーカスのある要素 (UI Automation)、
+/// 入力モードの表示と、Meltype キーボードの変換ボックス・確定した文字の送り込み (SendInput・貼り付け)。判断はしない。
 /// </summary>
-internal sealed class CompositionService : ICompositionHost, IDisposable
+internal sealed class CompositionService : IDisposable
 {
     private readonly Control _invoker;
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
-    private readonly Func<bool> _showIndicator;
     private readonly Func<Config.CompositionPlacement> _placement;
     private readonly Func<Config.CompositionSize> _size;
     private readonly Func<string> _font;
     private readonly Func<bool> _lightTheme;
     private readonly Func<double> _opacity;
     private readonly Func<(string Japanese, string Direct, string Text)> _indicatorColors;
-    private readonly Func<bool> _directMode;
+    private readonly Func<bool> _useZenzai;
     // Microsoft IME と Windows の候補は、応答に上限が無い (WinRT は最大 500ms 待つ) ので入力スレッドで呼ばない。_sta のスレッドからだけ使う
     private readonly StaThread _sta = new("Meltype Microsoft IME");
     private readonly MsImeKanjiConverter _converter = new();
@@ -39,15 +39,12 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     private readonly ZenzaiHolder _zenzai = new();
     private ZenzaiConverter? CurrentZenzai(CompositionOptions options) =>
         options.UseZenzai() ? _zenzai.Get(ZenzaiBundle.ServerPath(options.ZenzaiServerPath()), ZenzaiBundle.ModelPath(options.ZenzaiModelPath()), options.ZenzaiDevice()) : _zenzai.Get("", "");
-    private readonly System.Windows.Forms.Timer _tick = new() { Interval = 100 };
-    private int _pumpScheduled;
 
     /// <param name="options">LiveConversion などの設定。Candidates を指定しなければ組み込みの補助辞書を読む。</param>
     public CompositionService(Control invoker, CompositionDetector detector, CompositionOptions options)
     {
         _invoker = invoker;
         _nowPlaying = new NowPlaying(options.NowPlayingCandidates);
-        Gate = new CaptureGate(SchedulePump);
         // 補助辞書・文脈の手がかり・学習データは、指定がなければ既定の場所から読む。
         var userDirectory = Config.AppPaths.UserDictionaryDirectory;
         History = options.History ?? new ConversionHistory(Config.AppPaths.ConversionHistoryFile);
@@ -58,9 +55,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         var resolved = new CompositionOptions
         {
             LiveConversion = options.LiveConversion,
-            DirectMode = options.DirectMode,
             ClassifyDirect = options.ClassifyDirect,
-            DirectDecided = options.DirectDecided,
             Candidates = options.Candidates ?? CandidateDictionary.Load(userDirectory),
             ContextRules = options.ContextRules ?? ContextRules.Load(userDirectory),
             History = History,
@@ -125,37 +120,16 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
         _hybrid = new HybridConverter(options.Engine, _mozc, _system, _system.Candidates, () => CurrentZenzai(options), _zenzai.Failed);
         _resolved = resolved;
-        Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
-        _hybrid.ResultReady += () =>
-        {
-            if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(() => Safely(() => Controller.RefreshConversion()));
-            ConversionReady?.Invoke();
-        };
-        // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
-        Controller.Corrected += correction => Corrections.Add(correction with { Zenzai = options.UseZenzai() });
+        _hybrid.ResultReady += () => ConversionReady?.Invoke();
+        _useZenzai = options.UseZenzai;
         if (options.Engine() != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
-        _showIndicator = options.ModeIndicator;
         _placement = options.Placement;
         _size = options.Size;
         _font = options.Font;
         _lightTheme = options.LightTheme;
         _opacity = options.Opacity;
         _indicatorColors = options.ModeIndicatorColors;
-        _directMode = options.DirectMode;
-        var onFocus = options.ModeIndicatorOnFocus;
-        Focus.TextInputEntered += () =>
-        {
-            if (!onFocus()) return;
-            if (ShowModeOnFocus is { } show) show();
-            else ShowMode(!_directMode());
-        };
-        Focus.CaptureLost += Abandon;
-        Controller.Committed += text => Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(text.Length > 20 ? text[..20] + "…" : text)}");
-        _tick.Tick += (_, _) => Safely(() => Controller.Tick(Environment.TickCount64));
-        _tick.Start();
     }
-
-    public CaptureGate Gate { get; }
 
     private readonly CompositionOptions _resolved;
 
@@ -163,21 +137,21 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// Meltype IME (TSF) の入力欄 1 つ分の入力の本体を作る。辞書・学習データ・変換エンジンは変換ボックスと共有する
     /// (UI スレッドからだけ使うので排他は要らない)。英数状態は IME の ON/OFF で決まるので、フック用の英数の判定は外す。
     /// </summary>
-    public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false) =>
-        new(_detector, _hybrid, _resolved with
+    public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false)
+    {
+        var session = new MeltypeSession(_detector, _hybrid, _resolved.WithSettings(settings) with
         {
             DirectMode = () => false,
             ClassifyDirect = directModeDetection ? _resolved.ClassifyDirect : null,
             DirectDecided = null,
         }, settings, directModeDetection);
+        // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
+        session.Corrected += correction => Corrections.Add(correction with { Zenzai = _useZenzai() });
+        return session;
+    }
 
-    public CompositionController Controller { get; }
-
-    /// <summary>背景の変換の結果が届いた (Meltype IME の入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
+    /// <summary>背景の変換の結果が届いた (入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
     public event Action? ConversionReady;
-
-    /// <summary>入力言語による制限。フックで保留した後・タイマーで判定する前にも確かめる。</summary>
-    public Func<bool> InputAllowed { get; set; } = () => true;
 
     /// <summary>選び直した変換の学習データ (トレイの「学習データをリセット」で消す)。</summary>
     public ConversionHistory History { get; }
@@ -241,150 +215,44 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public bool ConverterAvailable => _converter.IsAvailable;
 
-    private void SchedulePump()
-    {
-        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
-        if (Interlocked.Exchange(ref _pumpScheduled, 1) == 1) return;
-        _invoker.BeginInvoke(() =>
-        {
-            Volatile.Write(ref _pumpScheduled, 0);
-            Safely(Controller.Pump);
-        });
-    }
-
-    /// <summary>フックのスレッドから、UI スレッドで行う処理を頼む (定型文を入れる: issue #290)。</summary>
-    public void Post(Action action)
-    {
-        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
-        _invoker.BeginInvoke(() => Safely(action));
-    }
-
     /// <summary>
-    /// 変換ボックスの処理で例外が起きたら、未確定の内容と状態を捨てて、残りの入力はそのまま通す。
-    /// 状態を捨てないと、次の打鍵でも同じ例外が起きて英字しか入力できなくなる。
+    /// 確定した文字を入れる: 前の count 文字を消してから text を入れる。paste なら貼り付けで入れる (貼り付けられなければキーで送る。改行は Shift+Enter)。
+    /// キーで送るときは、BackSpace と新しい文字を 1 回の SendInput でまとめて送る (間に物理キーやほかの入力が割り込まないように。issue #227)。
     /// </summary>
-    private void Safely(Action action)
-    {
-        try
-        {
-            if (!InputAllowed())
-            {
-                Controller.SuspendInput();
-                return;
-            }
-            action();
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Error($"変換ボックスで例外が起きたので入力をリセットしました: {ex}");
-            try { Controller.Reset(); } catch { }
-            ReplayAll(Gate.Abort());
-            Hide();
-        }
-    }
-
-    /// <summary>フォーカス変更・クリックでキャレットが動いたとき (どのスレッドからでも呼べる)。直前の英語/日本語の文脈を忘れる。</summary>
-    /// <summary>Meltype を通らずにキーが押された (キャレットが動いたかもしれない) とき (どのスレッドからでも呼べる)。</summary>
-    public void ForgetLastCommit()
-    {
-        if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(Controller.ForgetLastCommit);
-    }
-
-    /// <summary>
-    /// 入力先が変わった (別のウィンドウ・パスワード欄・入力欄でない所) とき (どのスレッドからでも呼べる)。
-    /// 変換中の内容は確定せずに捨て、そのあと届いていたキー・クリックは変換ボックスを通さずにそのままアプリに通す。
-    /// </summary>
-    public void Abandon(string reason)
-    {
-        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
-        _invoker.BeginInvoke(() => Safely(() =>
-        {
-            if (!Controller.Abandon(reason)) return;
-            ReplayAll(Gate.Abort());
-            Hide();
-        }));
-    }
-
-    public void ResetContext()
-    {
-        if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(Controller.ResetContext);
-    }
-
-    /// <summary>Meltype を止めたときなど。未確定の内容を確定し、残りの入力を通す。</summary>
-    public void Flush()
-    {
-        if (!InputAllowed())
-        {
-            Controller.SuspendInput();
-            return;
-        }
-        Controller.CommitPending();
-        ReplayAll(Gate.Abort());
-        Hide();
-    }
-
-    private void ReplayAll(List<CapturedInput> inputs)
-    {
-        foreach (var input in inputs)
-        {
-            if (input.Key is { } key) Replay(key);
-            else if (input.Mouse is { } mouse) Replay(mouse);
-        }
-    }
-
-    // ---- ICompositionHost ----
-
-    private ReconversionSelection? _reconversionSelection;
-
-    public ReconversionSelection? GetReconversionSelection()
-    {
-        // 再変換のときは、IME の逆変換で出てくる読みを使う。
-        _reconversionSelection = null;
-        if (Focus.SelectedText() is not { } text) return null;
-        // ローマ字のまま入った文 (kyouhaiitenki) は、逆変換せずにそのまま渡す (Meltype の判定で日本語にする: issue #288)
-        var reading = CompositionController.IsRomajiText(text) ? text : GuessReading(text);
-        if (string.IsNullOrWhiteSpace(reading))
-        {
-            Diagnostics.Log.Info("再変換: 選択文字の読みを取得できませんでした。");
-            return null;
-        }
-        return _reconversionSelection = new ReconversionSelection(text, reading);
-    }
-
-    public bool TryReplaceSelection(ReconversionSelection selection, string text)
-    {
-        // 選択範囲が変わったか確認できないときは、置換を取り消す
-        if (!ReferenceEquals(selection, _reconversionSelection) || !InputAllowed() || !Focus.SelectionUnchanged())
-        {
-            _reconversionSelection = null;
-            Diagnostics.Log.Info("再変換: 選択範囲が変わったか確認できないため、置換を取り消しました。");
-            return false;
-        }
-
-        _reconversionSelection = null;
-        CommitText(text);
-        return true;
-    }
-
-    /// <summary>入力欄にフォーカスが移ったときに、次に打つキーのモード (あ / A) を出す (フォーカスを調べるスレッドから呼ばれる)。null なら英数 / 日本語 をそのまま出す。</summary>
-    public Action? ShowModeOnFocus { get; set; }
-
-    /// <summary>前面のアプリで、確定した文字を貼り付けで入れるか (アプリ別設定の「確定した文字の入れ方」)。</summary>
-    public Func<bool> PasteCommit { get; set; } = () => false;
-
-    public void CommitText(string text)
+    public void Insert(int count, string text, bool paste)
     {
         // 変換ボックスを出したまま確定して、続けて打っている (kyouha Space iitenki): 次に見せるときに、確定した分だけ右へずらす
         if (_window.Visible) _committedWhileVisible += text;
         EnsureSystemImeClosed();
-        if (PasteCommit() && TryPaste(text))
+        if (!paste)
+        {
+            SendText(count, text);
+            return;
+        }
+        DeleteBackward(count);
+        if (TryPaste(text.ReplaceLineEndings("\r\n")))
         {
             Diagnostics.Log.Info($"確定した文字を貼り付けで入力しました ({text.Length} 文字)。");
             return;
         }
-        var inputs = new List<Native.INPUT>(text.Length * 2);
+        Diagnostics.Log.Warn("貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
+        foreach (var (line, i) in text.Split('\n').Select((line, i) => (line, i)))
+        {
+            if (i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
+            SendText(0, line);
+        }
+    }
+
+    private static void SendText(int count, string text)
+    {
+        var inputs = new List<Native.INPUT>(count * 2 + text.Length * 2);
+        for (var i = 0; i < count; i++)
+        {
+            inputs.Add(KeyInput(VirtualKeys.Back, up: false));
+            inputs.Add(KeyInput(VirtualKeys.Back, up: true));
+        }
         AddUnicodeText(inputs, text);
-        Native.SendAll(inputs.ToArray(), "確定文字列の入力");
+        Native.SendAll(inputs.ToArray(), count > 0 ? "確定し直し" : "確定文字列の入力");
     }
 
     private DataObject? _savedClipboard;
@@ -478,15 +346,14 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     /// IME が開いたままだと、送り込んだ文字の一部を IME が抱え込み、後から来た文字と順番が入れ替わることがある
     /// (「やあやあ、私だよ」→「やあやあ、だよ私」)。
     /// </summary>
-    private void EnsureSystemImeClosed()
+    private static void EnsureSystemImeClosed()
     {
         try
         {
-            if (!InputAllowed()) return;
-            if (IME.ImeTarget.FromForeground() is not { } target) return;
-            var state = IME.Imm32ImeController.GetState(target);
-            if (state.Mode != IME.ImeMode.Open) return;
-            var closed = IME.Imm32ImeController.TrySetOpen(target, false, null, 150);
+            if (WindowsIme.ImeTarget.FromForeground() is not { } target) return;
+            var state = WindowsIme.Imm32ImeController.GetState(target);
+            if (state.Mode != WindowsIme.ImeMode.Open) return;
+            var closed = WindowsIme.Imm32ImeController.TrySetOpen(target, false, null, 150);
             Diagnostics.Log.Warn($"確定時に Microsoft IME が ON になっていました ({state}) → {(closed ? "OFF にしてから入力します" : "OFF にできませんでした")}。");
         }
         catch (Exception ex)
@@ -495,20 +362,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         }
     }
 
-    /// <summary>
-    /// Meltype がアプリへ送り直したキー (矢印・Ctrl の操作・確定し直しの BackSpace など)。
-    /// 自分で送ったキーはフックに届かないので、今の行の追いかけ (コードのコメント判定) に使う。
-    /// </summary>
-    public event Action<KeyEvent>? KeyReplayed;
-
-    /// <summary>送り直したクリック (キャレットが動く)。</summary>
-    public event Action? MouseReplayed;
-
-    public void Replay(KeyEvent e)
-    {
-        _injector.Inject([e]);
-        KeyReplayed?.Invoke(e);
-    }
+    public void Replay(KeyEvent e) => _injector.Inject([e]);
 
     public void MoveCaretBackward(int count)
     {
@@ -524,7 +378,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         if (count <= 0) return;
         // Microsoft IME が ON のままだと、BackSpace と後から送る文字の順番が入れ替わることがある (issue #227: wanI t)
         EnsureSystemImeClosed();
-        for (var i = 0; i < count; i++) KeyReplayed?.Invoke(new KeyEvent(VirtualKeys.Back, 0, false, false, false, 0));
         var events = new List<KeyEvent>(count * 2);
         for (var i = 0; i < count; i++)
         {
@@ -534,63 +387,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         _injector.Inject(events);
     }
 
-    /// <summary>
-    /// 定型文を入れる: 打った ;名前 (count 文字) を消してから text を入れる (issue #290)。複数行の文は、改行を Enter として送ると
-    /// チャットでは途中で送信されてしまうので、貼り付けで入れる。1 行の文は、確定し直しと同じく 1 回の SendInput で送る。
-    /// </summary>
-    public void InsertSnippet(int count, string text)
-    {
-        if (!InputAllowed()) return;
-        if (text.Contains('\n'))
-        {
-            DeleteBackward(count);
-            EnsureSystemImeClosed();
-            if (TryPaste(text.ReplaceLineEndings("\r\n"))) return;
-            Diagnostics.Log.Warn("定型文を貼り付けられなかったので、1 文字ずつ送ります (改行は Shift+Enter)。");
-            foreach (var line in text.Split('\n').Select((line, i) => (line, i)))
-            {
-                if (line.i > 0) KeyInjector.SendShortcut(VirtualKeys.Shift, VirtualKeys.Return);
-                CommitText(line.line);
-            }
-            return;
-        }
-        ReplaceBackward(count, text);
-    }
-
-    /// <summary>
-    /// 確定し直し: BackSpace と新しい文字を 1 回の SendInput でまとめて送る (間に物理キーやほかの入力が割り込まないように。issue #227)。
-    /// 貼り付けで入れるアプリでは、消してから貼り付ける。
-    /// </summary>
-    public void ReplaceBackward(int count, string text)
-    {
-        if (count <= 0 || PasteCommit())
-        {
-            DeleteBackward(count);
-            CommitText(text);
-            return;
-        }
-        if (_window.Visible) _committedWhileVisible += text;
-        EnsureSystemImeClosed();
-        for (var i = 0; i < count; i++) KeyReplayed?.Invoke(new KeyEvent(VirtualKeys.Back, 0, false, false, false, 0));
-        var inputs = new List<Native.INPUT>(count * 2 + text.Length * 2);
-        for (var i = 0; i < count; i++)
-        {
-            inputs.Add(KeyInput(VirtualKeys.Back, up: false));
-            inputs.Add(KeyInput(VirtualKeys.Back, up: true));
-        }
-        AddUnicodeText(inputs, text);
-        Native.SendAll(inputs.ToArray(), "確定し直し");
-    }
-
-    public void RequestSurroundingText(Action<string?, string?> callback)
-    {
-        Focus.RequestSurroundingText((before, after) =>
-        {
-            if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(() => Safely(() => callback(before, after)));
-        });
-    }
-
-    public void Replay(MouseButtonEvent e)
+    public static void Replay(MouseButtonEvent e)
     {
         var (button, data) = e.Message switch
         {
@@ -605,7 +402,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
             _ => (0u, 0u),
         };
         if (button == 0) return;
-        MouseReplayed?.Invoke();
         // 元のクリック位置で再生する (保留中にカーソルが動いていても同じ場所をクリックする)。
         var left = Native.GetSystemMetrics(Native.SM_XVIRTUALSCREEN);
         var top = Native.GetSystemMetrics(Native.SM_YVIRTUALSCREEN);
@@ -629,25 +425,23 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         Native.SendAll([input], "クリックの再生");
     }
 
-    public char? CharFromKey(KeyEvent e, bool shift) => KeyText.CharFromKey(e.Vk, e.Scan, shift);
-
     /// <summary>
-    /// 入力モード (日本語なら「あ」、英数なら「A」) をカーソルの近くに一瞬出す。どのスレッドから呼んでもよい。
+    /// 入力モード (日本語なら「あ」、英数なら「A」) をカーソルの近くに milliseconds だけ出す。どのスレッドから呼んでもよい。
     /// 変換ボックスが出ているときは出さない。
     /// </summary>
-    public void ShowMode(bool japanese, uint inputThread = 0, Point? inputAnchor = null)
+    public void ShowMode(bool japanese, int milliseconds, uint inputThread = 0, Point? inputAnchor = null)
     {
         if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
-        _invoker.BeginInvoke(() => Safely(() =>
+        _invoker.BeginInvoke(() =>
         {
-            if (!_showIndicator() || _window.Visible) return;
+            if (_window.Visible) return;
             // TSF の通知が届くまでに別の入力先へ移っていたら表示しない。
-            if (inputThread != 0 && IME.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
+            if (inputThread != 0 && WindowsIme.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
             var anchor = inputAnchor ?? (inputThread == 0 ? FindAnchor() : FindImeIndicatorAnchor());
             var (jp, direct, text) = _indicatorColors();
             _indicator.SetColors(Config.Settings.ParseColor(jp), Config.Settings.ParseColor(direct), Config.Settings.ParseColor(text));
-            _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2));
-        }));
+            _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2), milliseconds);
+        });
     }
 
     private Point FindImeIndicatorAnchor()
@@ -658,13 +452,11 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         return new Point(cursor.X + 12, cursor.Y + 20);
     }
 
-    public bool IsShiftDown() => (Native.GetAsyncKeyState(VirtualKeys.Shift) & 0x8000) != 0;
-
     /// <summary>今再生している曲 (曲が変わったときに裏で読んだもの。保存しない・送らない)。</summary>
     public (string Title, string Artist)? NowPlaying => _nowPlaying.Read();
 
     /// <summary>クリップボードの文字 (変換した瞬間に 1 回だけ読む)。履歴に残さない印のある内容 (パスワード管理ソフトなど) は読まない。</summary>
-    public string? ClipboardText
+    public static string? ClipboardText
     {
         get
         {
@@ -952,7 +744,6 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public void Dispose()
     {
-        _tick.Dispose();
         Focus.Dispose();
         _system.Dispose();
         _sta.Invoke(() =>

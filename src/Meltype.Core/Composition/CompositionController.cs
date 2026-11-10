@@ -37,7 +37,9 @@ public sealed record CompositionView(
     int SelectedPrediction = -1,
     string? Typed = null,
     string? Committed = null,
-    string? ContextHint = null);
+    string? ContextHint = null,
+    // 一覧に番号を出すか (数字キーで選べる変換中の候補だけ。SessionResult.ForFront が決める)
+    bool Numbered = false);
 
 /// <summary>CompositionController が外界とやり取りする口。テストでは偽物に差し替える。</summary>
 public interface ICompositionHost
@@ -123,6 +125,59 @@ public sealed record ReconversionSelection(string Text, string Reading);
 /// <summary>CompositionController の設定と、外の判定器へのつなぎ。</summary>
 public sealed record CompositionOptions
 {
+    /// <summary>
+    /// 設定で決まる項目を、settings (入力欄のアプリの設定) から読むようにしたもの。どの OS のフロントの入力欄もこれで作る。
+    /// 辞書・学習データ・変換エンジン・変換ボックスの見た目は、呼ぶ側が決めたまま。
+    /// </summary>
+    public CompositionOptions WithSettings(Func<Config.Settings> settings) => this with
+    {
+        LiveConversion = () => settings().LiveConversion,
+        AutoCorrect = () => settings().AutoCorrectAfterCommit && settings().AutoDetection,
+        Manual = () => !settings().AutoDetection,
+        TranslationCandidates = () => settings().TranslationCandidates,
+        CandidateMeanings = () => settings().ShowCandidateMeanings,
+        ShowTypedKeys = () => settings().ShowTypedKeys,
+        TabConversion = () => settings().TabConversion,
+        ContinueAfterConversion = () => settings().ContinueAfterConversion,
+        Learning = () => settings().LearningEnabled,
+        SeparateKeyRoles = () => settings().SeparateKeyRoles,
+        EnglishFirstInput = () => settings().EnglishFirstInput,
+        ConsonantAbbreviations = () => settings().ConsonantAbbreviations,
+        CorrectTypos = () => settings().CorrectTypos,
+        Slash = () => settings().Slash,
+        ZSymbols = () => settings().ZSymbols,
+        SpaceAroundEnglish = () => settings().SpaceAroundEnglish,
+        SpaceAroundNumbers = () => settings().SpaceAroundNumbers,
+        NumberKeysSelectCandidates = () => settings().NumberKeysSelectCandidates,
+        SpaceWidth = () => settings().SpaceWidth,
+        EnterCommitsAsShown = () => settings().EnterCommitsAsShown,
+        AlphanumericKeyStartsAsTyped = () => settings().AlphanumericKeyStartsAsTyped,
+        FullWidthParentheses = () => settings().FullWidthParentheses,
+        SquareBrackets = () => settings().SquareBrackets,
+        EscStepsBack = () => settings().EscStepsBack,
+        EscRevertsSelectedClause = () => settings().EscRevertsSelectedClause,
+        FunctionKeysAffectSelectedClause = () => settings().FunctionKeysAffectSelectedClause,
+        ControlKeys = () => settings().ControlKeys,
+        PartialCommit = () => settings().PartialCommit,
+        CursorIntoBrackets = () => settings().CursorIntoBrackets,
+        ControlKeyBindings = () => settings().ControlKeyBindings,
+        CalculatorCandidates = () => settings().CalculatorCandidates,
+        LaughterAfterKana = () => settings().LaughterAfterKana,
+        ContextualLearning = () => settings().ContextualLearning,
+        ShowCandidatesWhileTyping = () => settings().ShowCandidatesWhileTyping,
+        GitHubIssueCandidates = () => settings().GitHubIssueCandidates,
+        GitHubRepository = () => settings().GitHubRepository,
+        ClipboardCandidates = () => settings().ClipboardCandidates,
+        NowPlayingCandidates = () => settings().NowPlayingCandidates,
+        ClockTimeZone = () => settings().ClockTimeZone,
+        Punctuation = () => settings().Punctuation,
+        KanaInput = () => settings().InputStyle == Config.InputStyle.Kana,
+        KanaLayout = () => settings().KanaLayout,
+        RomajiLayout = () => settings().RomajiLayout,
+        Predictions = () => settings().PredictiveCandidates,
+        EnglishNamePredictions = () => settings().EnglishNamePredictions,
+    };
+
     /// <summary>打ったそばから漢字に変換して見せるか。</summary>
     public Func<bool> LiveConversion { get; init; } = () => false;
 
@@ -287,9 +342,6 @@ public sealed record CompositionOptions
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }
 
-    /// <summary>入力欄に入ったときなどに、入力モード (あ / A) をカーソルの近くに出すか。</summary>
-    public Func<bool> ModeIndicator { get; init; } = () => false;
-
     /// <summary>変換ボックスを出す位置 (入力位置に重ねる / カーソルの下)。</summary>
     public Func<Config.CompositionPlacement> Placement { get; init; } = () => Config.CompositionPlacement.Overlay;
 
@@ -313,9 +365,6 @@ public sealed record CompositionOptions
 
     /// <summary>変換ボックスの不透明度 (0.7〜1)。</summary>
     public Func<double> Opacity { get; init; } = () => 1.0;
-
-    /// <summary>入力欄に入った (フォーカスが入った) ときにも入力モードを出すか。false なら 半角/全角 を押したときだけ。</summary>
-    public Func<bool> ModeIndicatorOnFocus { get; init; } = () => true;
 
     /// <summary>入力モードの表示の色 (日本語の背景・英数の背景・文字。#RRGGBB、空なら既定: issue #359)。</summary>
     public Func<(string Japanese, string Direct, string Text)> ModeIndicatorColors { get; init; } = () => ("", "", "");
@@ -456,14 +505,11 @@ public sealed class CompositionController
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
     public bool IsComposing => !_text.IsEmpty || _heldLetters.Length > 0;
 
+    /// <summary>変換して候補を選んでいるか。</summary>
+    public bool IsConverting => _converting;
+
     /// <summary>直近に確定した文字列 (テスト・ログ用)。</summary>
     public event Action<string>? Committed;
-
-    /// <summary>選択範囲を置換した。入力先の行を読み直すための通知。</summary>
-    public event Action? ReconversionCommitted;
-
-    /// <summary>登録キーの処理を入力順に行うため、UI スレッドへ対象のウィンドウを通知する。</summary>
-    public event Action<nint>? ToggleModeRequested;
 
     /// <summary>キューにたまった入力をすべて処理する。UI スレッドで呼ぶ。</summary>
     public void Pump()
@@ -475,7 +521,6 @@ public sealed class CompositionController
                 _budget?.Start(InputBudgetMs);
                 if (input.Key is { } key) HandleKey(key);
                 else if (input.Mouse is { } mouse) HandleMouse(mouse);
-                else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
             }
             UpdateView();
             // 親指キーを押したままなら、離したことを受け取るまで横取りを続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
@@ -690,20 +735,6 @@ public sealed class CompositionController
         _lastCommitText = null;
         _caretBefore = null;
         _correctable.Clear();
-    }
-
-    /// <summary>入力言語が対象外になったとき。判定を止め、未処理のキー・クリックは順番どおりに通す。</summary>
-    public void SuspendInput()
-    {
-        Abandon("入力言語が日本語ではなくなった");
-        Reset();
-        ResetContext();
-        foreach (var input in _gate.Abort())
-        {
-            if (input.Key is { } key) _host.Replay(key);
-            else if (input.Mouse is { } mouse) _host.Replay(mouse);
-        }
-        _host.Hide();
     }
 
     private void HandleMouse(MouseButtonEvent e)
@@ -1588,10 +1619,10 @@ public sealed class CompositionController
                 _tabStartedConversion = false;
                 return true;
             case >= 0x31 and <= 0x39 when !shift && !_text.KanaInput && _options.NumberKeysSelectCandidates():
-            case >= 0x61 and <= 0x69 when !shift:
+            case >= 0x61 and <= 0x69 when !shift && _options.NumberKeysSelectCandidates():
                 // 候補の一覧の番号 (1〜9) で選ぶ。番号の無い候補 (一覧より後ろ) なら、普通に打った数字として扱う。
                 // かな入力では数字の段のキーは ぬふあうえおやゆよ なので、テンキーだけで選ぶ。
-                // 設定「変換中の数字キーで候補を選ぶ」が OFF なら、上の段の数字は普通に打った数字 (今の候補で確定して入力する: issue #989)。
+                // 設定「変換中の数字キーで候補を選ぶ」が OFF なら、上の段もテンキーも普通に打った数字 (今の候補で確定して入力する: issue #989)。
                 return SelectByNumber(vk >= 0x61 ? vk - 0x61 : vk - 0x31);
             default:
                 return false;
@@ -3011,7 +3042,6 @@ public sealed class CompositionController
             {
                 if (converting) Learn();
                 ResetContext();
-                ReconversionCommitted?.Invoke();
             }
             ClearComposition();
             return;
@@ -3151,7 +3181,12 @@ public sealed class CompositionController
     private bool _tabStartedConversion;
 
     /// <summary>キャレットが動いたかもしれないとき (Meltype を通らなかったキー・クリック)。直前の語は確定し直さない。</summary>
-    public void ForgetLastCommit() => _correctable.Clear();
+    public void ForgetLastCommit()
+    {
+        _correctable.Clear();
+        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う
+        _lastCommitTime = long.MinValue / 2;
+    }
 
     /// <summary>
     /// 今確定しようとしている語 (raw) で文脈がはっきりしたら、直前に確定した英語とも日本語とも読める語を確定し直す。
@@ -3591,6 +3626,23 @@ public sealed class CompositionController
             _boundKeys = ControlKeyBindingParser.Parse(text);
         }
         return _boundKeys.TryGetValue(vk, out var key) ? key : null;
+    }
+
+    /// <summary>
+    /// 入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー (設定「Control キーの割り当て」による。HandleKey の Ctrl の処理と同じ順に見る)。
+    /// 入力していなければ空。ほかの Ctrl のキーは、確定してアプリへ送る。
+    /// </summary>
+    public IReadOnlyList<int> ComposingControlKeys()
+    {
+        if (_text.IsEmpty) return [];
+        var keys = new HashSet<int>();
+        if (_converting && _options.ControlKeys() == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
+        if (!string.IsNullOrWhiteSpace(_options.ControlKeyBindings())) keys.UnionWith(ControlKeyBindingParser.Parse(_options.ControlKeyBindings()).Keys);
+        for (var vk = 'A'; vk <= 'Z'; vk++)
+        {
+            if ((_options.ControlKeys() == Config.ControlKeyLayout.Mac ? MacControlShortcut(vk) : null) is not null || ControlShortcut(vk) is not null) keys.Add(vk);
+        }
+        return [.. keys.Order()];
     }
 
     /// <summary>入力中の Ctrl+英字で、ほかのキーと同じ働きをするもの (U ひらがな / I カタカナ / O 半角英数 / P 全角英数 / H BackSpace)。</summary>

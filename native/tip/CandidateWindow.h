@@ -19,14 +19,15 @@ struct CandidateView {
     int selected = -1;
     std::wstring suggestion;  // もしかして (無ければ空)
     std::wstring meaning;     // 選んでいる候補の意味 (無ければ空)
-    bool prediction = false;  // candidates が予測変換の候補か (番号を出さない。クリックすると確定する)
+    bool numbered = false;    // 番号を出すか (数字キーで選べる一覧)
     std::wstring typed;       // 打ったキー (ローマ字。出さないなら空)
+    std::wstring hint;        // 案内 (無ければ空)
+    UINT meaningMs = 0;       // 選んでいる候補で止まってから意味を出すまで
 };
 
 class CandidateWindow {
 public:
-    // prediction は、予測変換の候補をクリックしたか
-    using SelectHandler = std::function<void(int index, bool prediction)>;
+    using SelectHandler = std::function<void(int index)>;
 
     explicit CandidateWindow(SelectHandler onSelect);
     ~CandidateWindow();

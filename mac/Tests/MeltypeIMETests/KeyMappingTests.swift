@@ -23,7 +23,7 @@ final class KeyMappingTests: XCTestCase {
         for (keyCode, scalar, expectedKey) in cases {
             for flags: NSEvent.ModifierFlags in [[], .command, .shift] {
                 let input = event(keyCode, String(UnicodeScalar(scalar)!), flags: flags)
-                let vk = KeyMapping.virtualKey(for: input)!
+                let vk = KeyMapping.virtualKey(for: input)
                 XCTAssertEqual(vk, expectedKey)
                 XCTAssertEqual(KeyMapping.text(for: input), "")
             }
@@ -58,7 +58,7 @@ final class KeyMappingTests: XCTestCase {
         for (keyCode, scalar, expectedKey) in cases {
             for flags: NSEvent.ModifierFlags in [[], .command, .shift, .control, .option] {
                 let input = event(keyCode, String(UnicodeScalar(scalar)!), flags: flags)
-                let vk = KeyMapping.virtualKey(for: input)!
+                let vk = KeyMapping.virtualKey(for: input)
                 XCTAssertEqual(vk, expectedKey)
                 XCTAssertEqual(KeyMapping.text(for: input), "")
             }
@@ -68,7 +68,8 @@ final class KeyMappingTests: XCTestCase {
     func testTextAndSpaceArePreserved() {
         for (keyCode, text) in [(kVK_ANSI_A, "a"), (kVK_ANSI_E, "e\u{301}"), (kVK_Space, " "), (kVK_ANSI_A, ""), (kVK_ANSI_A, "\u{E000}"), (kVK_ANSI_A, "👩‍💻")] {
             let input = event(keyCode, text)
-            XCTAssertNotNil(KeyMapping.virtualKey(for: input))
+            // 文字のキーの仮想キーコードは本体が決める (Space だけは文字の無いキーとして渡す)
+            XCTAssertEqual(KeyMapping.virtualKey(for: input), keyCode == kVK_Space ? 0x20 : 0)
             XCTAssertEqual(KeyMapping.text(for: input), text)
         }
     }

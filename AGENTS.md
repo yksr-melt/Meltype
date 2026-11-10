@@ -18,6 +18,18 @@
 | `docs/`                    | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート                                              |
 | `docs/dev/`                | 開発者向けの文書（開発・設計・リリースの手順）                                                                     |
 
+## 入力のフロント
+
+入力の判断は `src/Meltype.Core/Ime/` (`ImeSession`) がする。フロントは OS の事実を送り、返ってきた指示を適用する。
+
+| フロント | 場所 |
+| --- | --- |
+| Windows: Meltype IME (TSF) | `native/tip/` (DLL)・`src/Meltype/Tip/TipServer.cs` (Meltype.exe 側) |
+| Windows: Meltype キーボード | `src/Meltype/Keyboard/KeyboardFront.cs` |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` |
+| Linux: IBus | `linux/ibus-engine-meltype` |
+| Linux: fcitx5 | `linux/fcitx5/meltype.cpp` |
+
 ## ビルドとテスト
 
 ```bash

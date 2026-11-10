@@ -87,7 +87,7 @@ internal static class TipEndToEnd
                 Engine = () => Config.ConversionEngine.System,
                 CursorIntoBrackets = () => settings.CursorIntoBrackets,
             });
-            using var server = new Tip.TipServer(invoker, service, () => settings);
+            using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
             server.Start();
             ready.Set();
             Application.Run();

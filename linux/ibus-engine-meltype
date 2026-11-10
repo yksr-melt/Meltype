@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
+# Copyright (C) 2026 aster-void
 #
-# Meltype の Linux 版 (IBus の入力エンジン)。キーを受け取って Meltype の本体 (libMeltypeNative.so、
-# Windows 版と共通の C# の部分を NativeAOT にしたもの) に渡し、返ってきた結果 (確定する文字・変換中の文字・候補) を
-# 入力欄に出す。漢字変換は Mozc の変換ヘルパー (meltype_mozc_helper) を本体が呼ぶ。
+# Meltype の Linux 版 (IBus の入力エンジン)。IBus から読んだ事実 (キー・キャレットの前後の文字・入力欄の種類) を
+# 本体 (libMeltypeNative.so の ImeHost) に渡し、返ってきた指示 (確定・変換中の表示・候補・入力モードの表示) を入力欄に出す。
+# 入力モードとモードを切り替えるキーの意味は本体が決めるので、ここでは持たない。漢字変換は Mozc の変換ヘルパーを本体が呼ぶ。
 #   ibus-engine-meltype --ibus   IBus から起動されるとき (コンポーネントの <exec>)
 #   ibus-engine-meltype --version  版だけを出して終わる
+import ctypes
 import json
 import os
 import subprocess
@@ -14,169 +16,71 @@ import sys
 
 HERE = os.path.dirname(os.path.realpath(__file__))
 
+_lib = ctypes.CDLL(os.path.join(HERE, "libMeltypeNative.so"))
+_lib.meltype_free.argtypes = [ctypes.c_void_p]
+_lib.meltype_version.restype = ctypes.c_void_p
+_lib.meltype_report_url.argtypes = [ctypes.c_char_p]
+_lib.meltype_report_url.restype = ctypes.c_void_p
+_lib.meltype_init_mozc.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+_lib.meltype_init_mozc.restype = ctypes.c_int
+_lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
+_lib.meltype_set_conversion_ready.restype = None
+_lib.meltype_ime_create.restype = ctypes.c_void_p
+_lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+_lib.meltype_ime_handle.restype = ctypes.c_void_p
+_lib.meltype_ime_destroy.argtypes = [ctypes.c_void_p]
 
-def _version_from_native():
-    so = os.path.join(HERE, "libMeltypeNative.so")
-    import ctypes
+# 本体のプロトコルの版 (ImeHost.Version)
+IME_VERSION = 1
 
-    lib = ctypes.CDLL(so)
-    lib.meltype_version.restype = ctypes.c_void_p
-    lib.meltype_free.argtypes = [ctypes.c_void_p]
-    pointer = lib.meltype_version()
+
+def _take(pointer):
+    """本体が返した文字列を読んで解放する。NULL なら None。"""
     if not pointer:
-        raise ValueError("meltype_version が NULL を返しました")
+        return None
     try:
-        version = ctypes.string_at(pointer).decode("utf-8")
-        if not version.strip():
-            raise ValueError("meltype_version が空の版を返しました")
-        return version
+        return ctypes.string_at(pointer).decode("utf-8")
     finally:
-        lib.meltype_free(pointer)
+        _lib.meltype_free(pointer)
 
 
 if "--version" in sys.argv[1:]:
-    try:
-        version = _version_from_native()
-    except (OSError, AttributeError, ValueError) as error:
-        print(f"Meltype: 本体の版を取得できません: {error}", file=sys.stderr)
+    version = _take(_lib.meltype_version())
+    if not version or not version.strip():
+        print("Meltype: 本体の版を取得できません", file=sys.stderr)
         raise SystemExit(1)
     print(f"Meltype {version}")
     raise SystemExit(0)
-
-import ctypes
 
 import gi
 
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, GObject, IBus  # noqa: E402
 
-# ---- 本体 (libMeltypeNative.so) ----
-
-_lib = ctypes.CDLL(os.path.join(HERE, "libMeltypeNative.so"))
-_lib.meltype_init_mozc.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-_lib.meltype_init_mozc.restype = ctypes.c_int
-_lib.meltype_create.restype = ctypes.c_void_p
-_lib.meltype_destroy.argtypes = [ctypes.c_void_p]
-_lib.meltype_handle_key.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p]
-_lib.meltype_handle_key.restype = ctypes.c_void_p
-_lib.meltype_commit.argtypes = [ctypes.c_void_p]
-_lib.meltype_commit.restype = ctypes.c_void_p
-_lib.meltype_select_candidate.argtypes = [ctypes.c_void_p, ctypes.c_int]
-_lib.meltype_select_candidate.restype = ctypes.c_void_p
-_lib.meltype_set_direct.argtypes = [ctypes.c_void_p, ctypes.c_int]
-_lib.meltype_set_can_delete.argtypes = [ctypes.c_void_p, ctypes.c_int]
-# 本体が設定「日本語 / 英数を切り替えるキーを追加」で切り替えたかと、そのあとの本体のモード (#1033)。古い本体には無い
-_take_mode_toggled = getattr(_lib, "meltype_take_mode_toggled", None)
-if _take_mode_toggled is not None:
-    _take_mode_toggled.argtypes = [ctypes.c_void_p]
-    _take_mode_toggled.restype = ctypes.c_int
-_is_direct = getattr(_lib, "meltype_is_direct", None)
-if _is_direct is not None:
-    _is_direct.argtypes = [ctypes.c_void_p]
-    _is_direct.restype = ctypes.c_int
-# コード入力 (コメント・文字列は日本語、それ以外は英字のまま)。ターミナルの入力欄で既定にする (issue #715)
-_set_code_input = getattr(_lib, "meltype_set_code_input", None)
-if _set_code_input is not None:
-    _set_code_input.argtypes = [ctypes.c_void_p, ctypes.c_int]
-# コード行を日本語にする (半角/全角)。古い本体には無い
-_set_code_line = getattr(_lib, "meltype_set_code_line", None)
-if _set_code_line is not None:
-    _set_code_line.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p]
-    _set_code_line.restype = ctypes.c_int
-_code_english_at = getattr(_lib, "meltype_code_english_at", None)
-if _code_english_at is not None:
-    _code_english_at.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
-    _code_english_at.restype = ctypes.c_int
-_set_code_terminal = getattr(_lib, "meltype_set_code_terminal", None)
-if _set_code_terminal is not None:
-    _set_code_terminal.argtypes = [ctypes.c_void_p, ctypes.c_int]
-    _set_code_terminal.restype = None
-# アプリに通したキーでキャレットが動いた (矢印・Tab・Ctrl)。古い本体には無い
-_caret_moved = getattr(_lib, "meltype_caret_moved", None)
-if _caret_moved is not None:
-    _caret_moved.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
-    _caret_moved.restype = None
-_lib.meltype_free.argtypes = [ctypes.c_void_p]
-_lib.meltype_report_url.argtypes = [ctypes.c_char_p]
-_lib.meltype_report_url.restype = ctypes.c_void_p
-# 入力中の 変換・無変換・ひらがな/カタカナ キー (設定「入力中のキーの役割を分ける」: issue #199)。古い本体には無い
-_role_key = getattr(_lib, "meltype_role_key", None)
-if _role_key is not None:
-    _role_key.argtypes = [ctypes.c_void_p, ctypes.c_int]
-    _role_key.restype = ctypes.c_void_p
-
-ROLE_KEYS = {IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D, IBus.KEY_Hiragana_Katakana: 0x15}
-
-# 半角/全角: 英数 (直接入力) ⇔ 日本語。英数・ひらがなのキーでも切り替える (JIS キーボード)。
-ZENKAKU_HANKAKU_KEYS = (IBus.KEY_Zenkaku_Hankaku, IBus.KEY_Hankaku, IBus.KEY_Zenkaku)
-ALWAYS_DIRECT_KEYS = (IBus.KEY_Eisu_toggle, IBus.KEY_Muhenkan)
-MODE_SWITCH_KEYS = ZENKAKU_HANKAKU_KEYS + ALWAYS_DIRECT_KEYS + (IBus.KEY_Hiragana_Katakana, IBus.KEY_Henkan)
-
-# IBus の修飾キー → 本体が使うビット (Shift=1, Ctrl=2, Alt=4, Win=8)
-MODIFIER_BITS = (
-    (IBus.ModifierType.SHIFT_MASK, 1),
-    (IBus.ModifierType.CONTROL_MASK, 2),
-    (IBus.ModifierType.MOD1_MASK, 4),
-    (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK, 8),
-)
-
-
-def modifier_flags(state):
-    """IBus の state から、本体へ渡す修飾キーのビットを作る。"""
-    return sum(bit for mask, bit in MODIFIER_BITS if state & mask)
-
-
-def _report_url():
-    """不具合報告を開く URL (OS・版・実行環境を入れたもの)。"""
-    pointer = _lib.meltype_report_url(b"Linux")
-    if not pointer:
-        return "https://github.com/yksr-melt/Meltype/issues/new/choose"
-    try:
-        return ctypes.string_at(pointer).decode("utf-8")
-    finally:
-        _lib.meltype_free(pointer)
-
 if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").encode(), None):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
-# (フォーカスが外れた入力欄は確定済みで、meltype_refresh は NULL を返す)
 _focused = None
 
 
 def _refresh_focused():
     if _focused is not None:
-        _focused.refresh_conversion()
+        _focused.send("ConversionFinished")
     return False
 
 
 # ワーカーのスレッドで呼ばれるので、メインループに移す。ctypes の関数オブジェクトはプロセスが終わるまで持つ
 _conversion_ready = ctypes.CFUNCTYPE(None)(lambda: GLib.idle_add(_refresh_focused) and None)
-# 古い本体には無い (変換は同期のままなので、知らせを待たなくてよい)
-_set_conversion_ready = getattr(_lib, "meltype_set_conversion_ready", None)
-_refresh = getattr(_lib, "meltype_refresh", None)
-if _set_conversion_ready is not None and _refresh is not None:
-    _set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
-    _set_conversion_ready.restype = None
-    _set_conversion_ready(_conversion_ready)
-    _refresh.argtypes = [ctypes.c_void_p]
-    _refresh.restype = ctypes.c_void_p
+_lib.meltype_set_conversion_ready(_conversion_ready)
 
 
-def _result(pointer):
-    """本体が返した JSON (SessionResult) を読んで解放する。NULL なら None (キーはアプリに渡す)。"""
-    if not pointer:
-        return None
-    try:
-        return json.loads(ctypes.string_at(pointer).decode("utf-8"))
-    finally:
-        _lib.meltype_free(pointer)
+def _report_url():
+    """不具合報告を開く URL (OS・版・実行環境を入れたもの)。"""
+    return _take(_lib.meltype_report_url(b"Linux")) or "https://github.com/yksr-melt/Meltype/issues/new/choose"
 
 
-# ---- キー: IBus のキー (keyval) → Meltype の本体が使う Windows の仮想キーコード ----
-
-# 文字を入力するキーで、特別な扱いのないもの (記号など)。本体では文字だけを見る。
-OTHER_CHARACTER_KEY = 0x07
+# ---- キー: 文字の無いキー (keyval) → 本体が使う Windows の仮想キーコード。文字を入力するキーは文字だけを渡す ----
 
 SPECIAL_KEYS = {
     IBus.KEY_Return: 0x0D, IBus.KEY_KP_Enter: 0x0D, IBus.KEY_Tab: 0x09, IBus.KEY_ISO_Left_Tab: 0x09,
@@ -184,218 +88,199 @@ SPECIAL_KEYS = {
     IBus.KEY_BackSpace: 0x08, IBus.KEY_Delete: 0x2E, IBus.KEY_Escape: 0x1B,
     IBus.KEY_Left: 0x25, IBus.KEY_Up: 0x26, IBus.KEY_Right: 0x27, IBus.KEY_Down: 0x28,
     IBus.KEY_Home: 0x24, IBus.KEY_End: 0x23, IBus.KEY_Page_Up: 0x21, IBus.KEY_Page_Down: 0x22,
+    # NumLock を切ったテンキー (Windows と同じく、専用のキーと同じにする。PageUp の無いキーボードで候補のページを送れる)
+    IBus.KEY_KP_Left: 0x25, IBus.KEY_KP_Up: 0x26, IBus.KEY_KP_Right: 0x27, IBus.KEY_KP_Down: 0x28,
+    IBus.KEY_KP_Home: 0x24, IBus.KEY_KP_End: 0x23, IBus.KEY_KP_Page_Up: 0x21, IBus.KEY_KP_Page_Down: 0x22, IBus.KEY_KP_Delete: 0x2E,
     IBus.KEY_F6: 0x75, IBus.KEY_F7: 0x76, IBus.KEY_F8: 0x77, IBus.KEY_F9: 0x78, IBus.KEY_F10: 0x79,
+    # 入力モードのキー (意味は本体が決める)
+    IBus.KEY_Zenkaku_Hankaku: 0x19, IBus.KEY_Hankaku: 0x19, IBus.KEY_Zenkaku: 0x19,
+    IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
 }
-
-SYMBOL_KEYS = {",": 0xBC, ".": 0xBE, "-": 0xBD, "/": 0xBF, "[": 0xDB, "]": 0xDD}
 
 
 def virtual_key(keyval):
-    """(仮想キーコード, 入力する文字) を返す。Meltype が扱わないキーなら (None, 0)。
-
-    英字の仮想キーへ写像するのは ASCII の A-Z / a-z だけにする。以前は character.lower() してから
-    ord() を呼んでいたため、トルコ語の İ (U+0130) のように小文字化で 1 文字でなくなる (i + 結合ドット)
-    文字で例外になっていた。非 ASCII は小文字化せず、元のコードポイントのまま他文字キーとして渡す。
-    """
+    """(仮想キーコード, 入力する文字) を返す。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら (None, 0)。"""
     if keyval in SPECIAL_KEYS:
         return SPECIAL_KEYS[keyval], (0x20 if keyval == IBus.KEY_space else 0)
     character = IBus.keyval_to_unicode(keyval)
-    # 空・複数スカラーは ord() の前に弾く (先頭 1 文字へ黙って切り詰めない)。
-    if not character or len(character) != 1:
+    # 空・複数スカラー・制御文字は渡さない (先頭 1 文字へ黙って切り詰めない)。
+    if not character or len(character) != 1 or ord(character) < 0x20:
         return None, 0
-    codepoint = ord(character)
-    if codepoint < 0x20:
-        return None, 0
-    if "A" <= character <= "Z":
-        return codepoint, codepoint
-    if "a" <= character <= "z":
-        return codepoint - 0x20, codepoint
-    if "0" <= character <= "9":
-        return codepoint, codepoint
-    return SYMBOL_KEYS.get(character, OTHER_CHARACTER_KEY), codepoint
+    return 0, ord(character)
+
+
+# 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
+BEFORE_LENGTH = 4000
+AFTER_LENGTH = 20
+
+# 矢印キー (←) のキーコード (確定したあとにキャレットを戻す)
+KEYCODE_LEFT = 105
 
 
 # ---- 入力エンジン ----
+
+# 入力の本体 (ImeHost)。IBus は入力欄ごとにエンジンを作るが、入力モードはすべての入力欄で同じにするので、プロセスで 1 つにする
+_host = None
+
+
+def _shared_host():
+    global _host
+    if not _host:
+        _host = _lib.meltype_ime_create()
+    return _host
+
 
 class MeltypeEngine(IBus.Engine):
     __gtype_name__ = "MeltypeEngine"
 
     def __init__(self):
         super().__init__()
-        self._session = _lib.meltype_create()
-        self._direct = False
         self._preedit_visible = False
-        # 表示中の preedit の文字列 (フォーカスが外れたとき、この分は IBus が確定する)
-        self._preedit_text = ""
-        # 入力欄が周りの文字 (surrounding text) に対応しているか (本体の既定は「消せる」)
-        self._can_delete = True
-        # 確定し直しが実際に効いたかを次の入力で確かめるための期待値 (効かなければ以降やめる)
+        # 入力欄の事実 (IBus が知らせてくる)
+        self._surrounding = True
+        self._traits = []
+        self._app = None
+        # どの入力欄にもフォーカスが無いとき、IBus は仮の入力コンテキスト (クライアント名「fake」) にフォーカスを移す
+        self._fake = False
+        # 確定し直しで前の文字を消したのに残っていた入力欄 (Wayland + Chromium) は、これからも消せないとみなす
+        self._delete_failed = False
         self._replace_expect = None
-        # 入力欄がターミナルでコード入力になっているか。日本語の指定は本体だけで持つ。
-        self._code_input = False
         self._lookup = IBus.LookupTable.new(9, 0, True, True)
         self._lookup.set_orientation(IBus.Orientation.VERTICAL)
         self._candidates = []
         # 候補で少し (1.5 秒) 止まったら、その候補の意味を補助テキストに出す (Windows 版と同じ)
         self._meaning_key = None
-        # 入力メソッドのメニュー (GNOME の入力ソースのメニューなど) に出す項目
+        self._mode_shown = None
+        # 入力欄に入ったときの入力モードの表示 (あ / A, 時間)。入ったあとアプリがキャレットの位置を知らせてから出す
+        self._defer_mode = False
+        self._pending_mode = None
         self._properties = IBus.PropList()
-        self._properties.append(IBus.Property(key="report", label=IBus.Text.new_from_string("不具合の報告・提案… (Linux 版はプレビュー版です)"),
-                                              type=IBus.PropType.NORMAL, sensitive=True, visible=True))
+        # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
+        self._language_mode = None
+        self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
+                                            symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
+        self._properties.append(self._mode_property)
+        self._properties.append(IBus.Property.new(
+            "report", IBus.PropType.NORMAL, IBus.Text.new_from_string("不具合の報告・提案… (Linux 版はプレビュー版です)"),
+            "", IBus.Text.new_from_string(""), True, True, IBus.PropState.UNCHECKED, IBus.PropList()))
 
-    # IBus からの呼び出し
+    # ---- 本体とのやり取り ----
+
+    def send(self, event_type, **fields):
+        """出来事を本体に送り、返ってきた指示を入力欄に出す。応答 (ImeOutput) を返す。本体が処理できなければ None。"""
+        host = _shared_host()
+        if not host:
+            return None
+        self._check_replace()
+        event = {"version": IME_VERSION, "type": event_type, "instance": "ibus", "field": self._field(), **fields}
+        reply = _take(_lib.meltype_ime_handle(host, json.dumps(event).encode()))
+        if reply is None:
+            return None
+        output = json.loads(reply)
+        self._apply(output["result"])
+        if output["state"]["languageMode"] != self._language_mode:
+            self._language_mode = output["state"]["languageMode"]
+            label = IBus.Text.new_from_string("あ" if self._language_mode == "Japanese" else "A")
+            self._mode_property.set_label(label)
+            self._mode_property.set_symbol(label)
+            self.update_property(self._mode_property)
+        if output["state"]["modeIndicatorMs"]:
+            mode = (output["state"]["languageMode"] == "Japanese", output["state"]["modeIndicatorMs"])
+            if self._defer_mode:
+                self._pending_mode = mode
+            else:
+                self._show_mode(*mode)
+        return output
+
+    def do_set_cursor_location(self, x, y, w, h):
+        if self._pending_mode:
+            mode, self._pending_mode = self._pending_mode, None
+            self._show_mode(*mode)
+
+    def _field(self):
+        before, after, selection = self._surrounding_text()
+        traits = self._traits + (["NonText"] if self._fake else [])
+        field = {"before": before, "after": after, "composing": self._preedit_visible, "traits": traits,
+                 "canRemove": self._surrounding and not self._delete_failed}
+        if selection:
+            field["selection"] = selection
+        if self._app:
+            field["app"] = self._app
+        return field
+
+    # ---- IBus からの呼び出し ----
 
     def do_process_key_event(self, keyval, keycode, state):
-        self._check_replace()
-        if state & IBus.ModifierType.RELEASE_MASK or not self._session:
+        if state & IBus.ModifierType.RELEASE_MASK:
             return False
-        # 入力中の 変換・無変換・ひらがな/カタカナ: 設定で役割を分けていれば、本体が変換ボックスで処理する (#199)
-        if keyval in ROLE_KEYS and _role_key is not None and not self._direct:
-            pointer = _role_key(self._session, ROLE_KEYS[keyval])
-            if pointer:
-                self._apply(_result(pointer))
-                return True
-        if keyval in MODE_SWITCH_KEYS:
-            self._switch_mode(keyval)
-            return True
         vk, character = virtual_key(keyval)
         if vk is None:
             return False
-        modifiers = modifier_flags(state)
-        before, after = (None, None) if self._preedit_visible else self._surrounding_text()
-        result = _result(_lib.meltype_handle_key(
-            self._session, vk, character, modifiers,
-            before.encode() if before is not None else None,
-            after.encode() if after is not None else None))
-        if result is None:
-            self._notify_caret_moved(vk, bool(modifiers & 2))
-            return False
-        self._apply(result)
-        consumed = bool(result.get("consumed"))
-        # 本体が設定「入力モード切り替えキー」の切替をしたときは、こちらのモードも合わせる (#1033)。
-        # 合わせないと、次に 半角/全角 を押したときの切り替え先 (not self._direct) と、役割キーの判定がずれる。
-        if _take_mode_toggled is not None and _take_mode_toggled(self._session):
-            self._direct = bool(_is_direct(self._session)) if _is_direct is not None else not self._direct
-            # 利用者が自分で切り替えたときは、コード入力の保護より意思を優先する (Mac の「かな」キーと同じ)。
-            # 変わったときだけ本体へ伝える (同じ値で呼ぶと本体が行の追跡を落とす)。
-            if self._code_input and _set_code_input is not None:
-                _set_code_input(self._session, 0)
-            self._code_input = False
-        # アプリに通したキー (矢印・Tab・Ctrl など) はキャレットを動かすかもしれない。
-        # コード行を日本語にしていたら、別の場所へ移った時点で英数に戻す。
-        if not consumed:
-            self._notify_caret_moved(vk, bool(modifiers & 2))
-        return consumed
+        key = {"vk": vk, "ch": character,
+               "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
+               "alt": bool(state & IBus.ModifierType.MOD1_MASK),
+               "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
+        output = self.send("KeyPressed", key=key)
+        return bool(output and output["result"]["consumed"])
 
-    def _notify_caret_moved(self, vk, control):
-        """アプリに通したキーを本体へ伝える。日本語を解除する条件は本体だけで判断する。"""
-        if not self._code_input or _caret_moved is None:
-            return
-        _caret_moved(self._session, vk, 1 if control else 0)
+    def _leave(self, focus_out):
+        """フォーカスが外れる・Reset (クリックなど)。キャレットはこの入力欄の外か、クリックした所に移る。
 
-    def _finalize_on_focus_loss(self):
-        """フォーカスが外れる・Reset のときの後始末。
-
-        表示は確定される形にしてあるので、確定そのものは IBus が preedit から行う。ここで確定を
-        送ると二重になる。ただし表示していないのに未確定が残っているときは、送らないと文字が消える。
+        表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
+        届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
-        if not self._session:
-            return
-        # 表示中の preedit は IBus がそのまま確定する。エンジンがここで送る文字はフォーカスが
-        # 外れたあとで届かない (実 IBus で確認) うえ、届いても順序が壊れる (I love sushi gasuki で
-        # がすき のあとに すし が入る)。直前の確定文字列への置換はあきらめ、本体の状態だけを
-        # 「今の preedit を確定した」に進めて文書と合わせる (置換を混ぜたまま進めると、本体だけが
-        # 直った前提になり、文書とずれる)。meltype_commit は結果を返すだけでなく本体の状態を
-        # 進めるので、置換を無効にするのは**呼ぶ前**でなければならない (あとからでは取り消せない)。
-        replacing = self._preedit_visible
-        if replacing:
-            _lib.meltype_set_can_delete(self._session, 0)
-        edit = _result(_lib.meltype_commit(self._session))
-        if replacing:
-            _lib.meltype_set_can_delete(self._session, 1 if self._can_delete else 0)
-            return
-        if (edit or {}).get("commits"):
-            self._apply(edit)
+        caret = {"moved": True, "passedKey": 0, "focusLeft": focus_out}
+        if self._preedit_visible:
+            self._preedit_visible = False
+            self.send("CommittedByApp", caret=caret)
+        else:
+            self.send("CommitRequested", caret=caret)
 
-    def _switch_mode(self, keyval):
-        """未確定の内容を確定してから、コード行なら日本語/英数を、そうでなければ直接入力を切り替える。"""
-        self._apply(_result(_lib.meltype_commit(self._session)))
-        before, _after = (None, None) if self._preedit_visible else self._surrounding_text()
-        was_direct = self._direct
-        if self._switch_code_mode(keyval, before):
-            return
-        to_direct = keyval in ALWAYS_DIRECT_KEYS or (keyval in ZENKAKU_HANKAKU_KEYS and not was_direct)
-        self._direct = to_direct
-        _lib.meltype_set_direct(self._session, 1 if to_direct else 0)
-
-    def _switch_code_mode(self, keyval, before):
-        """コード行の切り替えを扱ったら True。文字列・コメント内などは通常の切り替えに任せる。"""
-        if not self._code_input or _set_code_line is None or _code_english_at is None:
-            return False
-        if self._direct:
-            if keyval in ALWAYS_DIRECT_KEYS:
-                return False
-            self._direct = False
-            _lib.meltype_set_direct(self._session, 0)
-        before_utf8 = before.encode() if before is not None else None
-        if keyval in ALWAYS_DIRECT_KEYS:
-            _set_code_line(self._session, 0, before_utf8)
-            # 英数・無変換は文字列内でも Direct にするため、通常の切り替えへ進む。
-            return False
-        # 英数のコード行なら日本語へ、それ以外なら明示的な日本語の解除を試す。
-        # 文字列・コメント内でも 0 になるが、SetCodeLine が扱わなければ通常の切り替えへ進む。
-        japanese = True
-        if keyval in ZENKAKU_HANKAKU_KEYS:
-            japanese = bool(_code_english_at(self._session, before_utf8))
-        return bool(_set_code_line(self._session, 1 if japanese else 0, before_utf8))
-
-    def _reset_code_japanese(self):
-        """コード行の日本語をやめる (フォーカスが外れたとき)。"""
-        if self._code_input and _set_code_line is not None:
-            _set_code_line(self._session, 0, None)
-
-    def do_focus_out(self):
-        # 別の入力欄・アプリに移るときは、未確定の内容を確定する。
-        self._finalize_on_focus_loss()
-        self._reset_code_japanese()
-
-    def refresh_conversion(self):
-        if self._session:
-            self._apply(_result(_refresh(self._session)))
-
-    def do_set_capabilities(self, caps):
-        # 周りの文字 (surrounding text) に対応していない入力欄では、確定済みの文字を消せない。
-        # 消せないのに確定し直すと、元の文字が残ったまま書き足される (api → apiあぴ) ので、本体に確定し直しをやめさせる。
-        self._can_delete = bool(caps & IBus.Capabilite.SURROUNDING_TEXT)
-        if self._session:
-            _lib.meltype_set_can_delete(self._session, 1 if self._can_delete else 0)
-
-    def do_set_content_type(self, purpose, hints):
-        # 入力欄がターミナル (GNOME Terminal の VTE や Ghostty などは input-purpose: terminal を設定する) なら、
-        # コード入力を既定にする。j k やコマンド名が変換中の文字に入って、アプリに届かなくなるのを防ぐ
-        # (Windows 版でターミナルが既定で「コード」なのと同じ)。
-        # コード行は 半角/全角 で日本語にできる (下の _switch_mode)。
-        if not self._session:
-            return
-        # 切り替え・状態問い合わせの両方がある本体でだけ有効にする。古い本体では通常の IME 切り替えを使う。
-        code_input = (purpose == IBus.InputPurpose.TERMINAL and _set_code_input is not None
-                      and _set_code_line is not None and _code_english_at is not None)
-        if code_input != self._code_input:
-            # 変わったときだけ本体へ伝える。同じ値で meltype_set_code_input を呼ぶと本体が行の追跡と日本語の指定を
-            # 初期化してしまうので、変わらない再通知では呼ばない。別の種類の入力欄へ移ったら初期化する。
-            self._code_input = code_input
-            if _set_code_input is not None:
-                _set_code_input(self._session, 1 if code_input else 0)
-            if code_input and self._direct:
-                self._direct = False
-                _lib.meltype_set_direct(self._session, 0)
-        if _set_code_terminal is not None:
-            _set_code_terminal(self._session, 1 if code_input else 0)
+    def do_focus_in_id(self, object_path, client):
+        # IBus 1.5.27 以降。client は「gtk4-im:gnome-text-editor」のように、IM モジュールとプログラムの名前。
+        # GNOME Shell の画面は「gnome-shell」だけ。仮の入力コンテキストは「fake」で、入力欄ではない
+        self._fake = client == "fake"
+        self._app = None if self._fake else client.rpartition(":")[2] or None
+        self.do_focus_in()
 
     def do_focus_in(self):
         global _focused
         _focused = self
         self.register_properties(self._properties)
+        self._defer_mode = True
+        try:
+            self.send("CaretMoved", caret={"moved": True, "passedKey": 0, "focusEntered": True})
+        finally:
+            self._defer_mode = False
+
+    def do_focus_out(self):
+        self._pending_mode = None
+        self._leave(focus_out=True)
+
+    def do_reset(self):
+        # Reset は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
+        self._leave(focus_out=False)
+        self._hide_preedit()
+        self._hide_candidates()
+
+    def do_disable(self):
+        self._leave(focus_out=True)
+
+    def do_set_capabilities(self, caps):
+        self._surrounding = bool(caps & IBus.Capabilite.SURROUNDING_TEXT)
+
+    def do_set_content_type(self, purpose, hints):
+        # GNOME Terminal の VTE や Ghostty などは input-purpose: terminal を設定する
+        self._traits = [trait for trait, present in (
+            ("Terminal", purpose == IBus.InputPurpose.TERMINAL),
+            ("Password", purpose in (IBus.InputPurpose.PASSWORD, IBus.InputPurpose.PIN)),
+            # 古い IBus (RHEL 9 のもの) には InputHints.PRIVATE が無い
+            ("Private", bool(hints & getattr(IBus.InputHints, "PRIVATE", 0))),
+        ) if present]
+
+    def do_candidate_clicked(self, index, button, state):
+        page = self._lookup.get_cursor_pos() // self._lookup.get_page_size()
+        self.send("CandidateClicked", index=page * self._lookup.get_page_size() + index)
 
     def do_property_activate(self, prop_name, state):
         if prop_name == "report":
@@ -404,57 +289,31 @@ class MeltypeEngine(IBus.Engine):
             except OSError as error:
                 print(f"Meltype: 報告の画面を開けませんでした: {error}", file=sys.stderr)
 
-    def do_reset(self):
-        # Reset でも IBus は「表示中の preedit」を確定する。表示は確定される形にしてある。
-        # コード行の日本語は Reset では消さない (Enter のたびに Reset が来るクライアントで、
-        # 続けて日本語を打てなくなるため。フォーカスが外れたときは do_focus_out で消す)。
-        self._finalize_on_focus_loss()
-        self._hide_preedit()
-        self._hide_candidates()
-
-    def do_disable(self):
-        self.do_focus_out()
-
-    def do_candidate_clicked(self, index, button, state):
-        if not self._session:
-            return
-        page = self._lookup.get_cursor_pos() // self._lookup.get_page_size()
-        self._apply(_result(_lib.meltype_select_candidate(self._session, page * self._lookup.get_page_size() + index)))
-
     def do_destroy(self):
-        if self._session:
-            _lib.meltype_destroy(self._session)
-            self._session = None
+        global _focused
+        if _focused is self:
+            _focused = None
         IBus.Engine.do_destroy(self)
 
-    # 結果を入力欄に出す
+    # ---- 指示を入力欄に出す ----
 
     def _apply(self, result):
-        if not result:
-            return
-        for edit in result.get("commits", []):
-            delete_before = edit.get("deleteBefore", 0)
-            # 確定し直し: 消す文字が今もキャレットの前にあると確認できたときだけ消し、今打った文字を入れる。
-            # 確認できない (入力欄が周りの文字に対応していない・確定したときと変わった) ときは、前の文字は
-            # 消さずに今打った文字 (current) だけを入れる (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
-            length = self._expected_before_caret(edit.get("expect")) if delete_before > 0 else 0
-            text = edit.get("text")
-            if delete_before > 0 and not length:
-                print("Meltype: 確定し直す文字を確認できないため、前の文字を消しません", file=sys.stderr)
-                text = edit.get("current", text)
-            # 消すだけの preedit 更新を確定の前に送らない。Chromium 系 (Wayland text-input-v3) は
-            # それを変換中の文字の確定と解釈して挿入し (issue #486 と同じ問題)、確定し直しでは
-            # さらに続く削除の位置がずれて壊れる。変換中の表示を消すのは確定のあと (下の else)。
-            # surrounding の削除は変換中の文字には触れないので、表示を消す前に消してよい。
-            if length:
-                # キャレットの前の文字を消してから入れる (入力欄が対応していれば)。
-                # 消えたかどうかは送ったあとでしか分からないので、次の入力のときに確かめる
-                # (Wayland + Chromium は削除要求を無視するため、前の文字が残って二重になる)。
-                self._note_replace(length, text or "")
+        for edit in result["commits"]:
+            # 確定し直し: 本体がキャレットの前と照合した前の文字 (removeBefore) を消してから入れる
+            if edit["removeBefore"] is not None:
+                # IBus は文字 (コードポイント) 単位で消す。消えたかどうかは送ったあとでしか分からないので、次の出来事のときに確かめる
+                length = len(edit["removeBefore"])
+                self._note_replace(length, edit["text"])
                 self.delete_surrounding_text(-length, length)
-            if text:
-                self.commit_text(IBus.Text.new_from_string(text))
-        view = result.get("view")
+            # 消すだけの preedit 更新を確定の前に送らない。Chromium 系 (Wayland text-input-v3) は
+            # それを変換中の文字の確定と解釈して挿入する (issue #486)。変換中の表示を消すのは確定のあと (下の else)
+            if edit["text"]:
+                self.commit_text(IBus.Text.new_from_string(edit["text"]))
+            # 確定した文字の中にキャレットを戻す (空の括弧の中など)。IBus からキャレットは動かせないので、← をアプリに送る
+            for _ in range(edit["moveCaretBack"]):
+                self.forward_key_event(IBus.KEY_Left, KEYCODE_LEFT, 0)
+                self.forward_key_event(IBus.KEY_Left, KEYCODE_LEFT, IBus.ModifierType.RELEASE_MASK)
+        view = result["view"]
         if view:
             self._show_preedit(view)
             self._show_candidates(view)
@@ -462,36 +321,17 @@ class MeltypeEngine(IBus.Engine):
             self._hide_preedit()
             self._hide_candidates()
 
-    def _expected_before_caret(self, expected):
-        """キャレットの前が expected と一致すると確認できたら、消す文字数 (コードポイント) を返す。確認できないときは 0。"""
-        if not isinstance(expected, str) or not expected:
-            return 0
-        try:
-            text, cursor, _anchor = self.get_surrounding_text()
-            value = text.get_text() if text else ""
-        except Exception as error:
-            print(f"Meltype: 確定し直す文字を確認できませんでした: {error}", file=sys.stderr)
-            return 0
-        # IBus は文字 (コードポイント) 単位。本体の deleteBefore (UTF-16) ではなく、確認できた文字列から数える
-        # (絵文字など、2 単位の文字でもそろえる)。
-        length = len(expected)
-        if not (0 <= cursor <= len(value) and cursor >= length) or value[cursor - length:cursor] != expected:
-            return 0
-        return length
-
     def _show_preedit(self, view):
-        # IBus は「表示中の preedit」をそのまま確定する (COMMIT モード)。表示と確定が違うと、
-        # フォーカスが外れたときに「かn」が入って本体の「かん」とずれるので、確定される形を出す。
-        text = view.get("committed") or view.get("text", "")
+        text = view["text"]
         attributes = IBus.AttrList()
-        clauses = view.get("clauses") or []
-        if view.get("converting") and clauses:
+        clauses = view["clauses"]
+        if view["converting"] and clauses:
             # 変換中: 文節ごとに下線。選んでいる文節は背景を付ける。
             position = 0
             for index, clause in enumerate(clauses):
                 end = position + len(clause)
                 attributes.append(IBus.attr_underline_new(IBus.AttrUnderline.SINGLE, position, end))
-                if index == view.get("selectedClause", -1):
+                if index == view["selectedClause"]:
                     attributes.append(IBus.attr_background_new(0x4CA0FF, position, end))
                     attributes.append(IBus.attr_foreground_new(0xFFFFFF, position, end))
                 position = end
@@ -499,17 +339,13 @@ class MeltypeEngine(IBus.Engine):
             attributes.append(IBus.attr_underline_new(IBus.AttrUnderline.SINGLE, 0, len(text)))
         preedit = IBus.Text.new_from_string(text)
         preedit.set_attributes(attributes)
-        # フォーカスが外れたら、変換中の文字をそのまま確定する (COMMIT)。
+        # IBus は「表示中の preedit」をそのまま確定する (COMMIT モード)。本体は確定される形を出すので、本体の確定と同じになる
         self.update_preedit_text_with_mode(preedit, len(text), bool(text), IBus.PreeditFocusMode.COMMIT)
         self._preedit_visible = bool(text)
-        self._preedit_text = text
-        # 案内 (Space で変換 など) は補助テキストに出す
-        hint = view.get("hint") or ""
-        # もしかして (書き間違い) は案内の先頭に出す (Tab で直せる)
-        if view.get("suggestion"):
-            hint = view["suggestion"] + "　" + hint
-        if hint:
-            self.update_auxiliary_text(IBus.Text.new_from_string(hint), True)
+        # 打ったキー・もしかして (書き間違い。Tab で直せる)・案内を、補助テキストに 1 行で出す
+        aux = "　".join(part for part in (view["typedKeys"], view["spellingSuggestion"], view["hint"]) if part)
+        if aux:
+            self.update_auxiliary_text(IBus.Text.new_from_string(aux), True)
         else:
             self.hide_auxiliary_text()
 
@@ -517,28 +353,46 @@ class MeltypeEngine(IBus.Engine):
         if self._preedit_visible:
             self.update_preedit_text_with_mode(IBus.Text.new_from_string(""), 0, False, IBus.PreeditFocusMode.CLEAR)
             self._preedit_visible = False
-            self._preedit_text = ""
         self.hide_auxiliary_text()
 
+    def _show_mode(self, japanese, milliseconds):
+        """入力モードを切り替えたとき、補助テキストに「あ / A」を本体が決めた時間だけ出す。"""
+        token = object()
+        self._mode_shown = token
+        self.update_auxiliary_text(IBus.Text.new_from_string("あ" if japanese else "A"), True)
+
+        def hide():
+            if self._mode_shown is token and not self._preedit_visible:
+                self.hide_auxiliary_text()
+            return False
+
+        GLib.timeout_add(milliseconds, hide)
+
     def _show_candidates(self, view):
-        candidates = view.get("candidates") or []
-        if not (view.get("converting") and len(candidates) > 1):
+        listed = view["candidates"]
+        if not listed:
             self._hide_candidates()
             return
+        # 注記 (候補の種類など) は候補の後ろに付ける
+        candidates = [item + ("　" + note if note else "") for item, note in zip(listed["items"], listed["notes"])]
         if candidates != self._candidates:
             self._lookup.clear()
             for candidate in candidates:
                 self._lookup.append_candidate(IBus.Text.new_from_string(candidate))
             self._candidates = candidates
-        selected = view.get("selectedIndex", 0)
+        # 番号は本体が決める (数字キーで選べる一覧だけ)。空のラベルなら IBus のパネルは番号を出さない
+        for index in range(self._lookup.get_page_size()):
+            label = f"{index + 1}." if listed["numbered"] else ""
+            self._lookup.set_label(index, IBus.Text.new_from_string(label))
+        selected = listed["selected"]
         if 0 <= selected < len(candidates):
             self._lookup.set_cursor_pos(selected)
         self.update_lookup_table(self._lookup, True)
-        self._schedule_meaning(view)
+        self._schedule_meaning(listed)
 
-    def _schedule_meaning(self, view):
-        meaning = view.get("meaning")
-        key = f"{view.get('selectedIndex')}:{meaning}" if meaning else None
+    def _schedule_meaning(self, listed):
+        meaning = listed["selectedMeaning"]
+        key = f"{listed['selected']}:{meaning}" if meaning else None
         if key == self._meaning_key:
             return
         self._meaning_key = key
@@ -550,7 +404,7 @@ class MeltypeEngine(IBus.Engine):
                 self.update_auxiliary_text(IBus.Text.new_from_string(meaning), True)
             return False
 
-        GLib.timeout_add(1500, show)
+        GLib.timeout_add(listed["meaningDelayMs"], show)
 
     def _hide_candidates(self):
         self._meaning_key = None
@@ -559,53 +413,61 @@ class MeltypeEngine(IBus.Engine):
             self._candidates = []
         self.hide_lookup_table()
 
-    def _surrounding_text(self):
-        """入力欄のキャレットの前後の文字列 (それぞれ 20 文字まで)。入力欄が対応していなければ (None, None)。"""
-        try:
-            text, cursor, _anchor = self.get_surrounding_text()
-            value = text.get_text() if text else ""
-            if not value:
-                return None, None
-            return value[max(0, cursor - 20):cursor], value[cursor:cursor + 20]
-        except Exception:
-            return None, None
+    # ---- 入力欄の文字 ----
 
     def _surrounding_value(self):
-        """入力欄に入っている文字列とキャレットの位置 (取り出せなければ None)。"""
+        """入力欄の確定した文字列とキャレットの位置。入力欄が対応していない・読めなければ None。
+
+        IBus は、クライアントが周辺の文字を送ってこないときも空の文字列を返すので、空は入力欄の先頭と見分けられない (None にする)。
+        """
+        if not self._surrounding:
+            return None
         try:
             text, cursor, _anchor = self.get_surrounding_text()
-            return ((text.get_text() if text else ""), cursor)
         except Exception:
             return None
+        value = text.get_text() if text else ""
+        return (value, cursor) if value else None
+
+    def _surrounding_text(self):
+        """選んでいる文字の前・後ろの文字列と、選んでいる文字。読めなければ (None, None, None)。"""
+        if not self._surrounding:
+            return None, None, None
+        try:
+            text, cursor, anchor = self.get_surrounding_text()
+        except Exception:
+            return None, None, None
+        value = text.get_text() if text else ""
+        if not value:
+            return None, None, None
+        start, end = min(cursor, anchor), max(cursor, anchor)
+        return value[max(0, start - BEFORE_LENGTH):start], value[end:end + AFTER_LENGTH], value[start:end]
 
     def _note_replace(self, count, text):
-        """確定し直しのあと、実際に入力欄から消えているかを、次の入力のときに確かめる。
-
-        Wayland + Chromium では delete_surrounding_text が無視されることがあり、その場合は
-        前の語が残ったまま書き足されて文書が壊れる (I love sushi すしがすき)。消えたかどうかは
-        送ったあとでしか分からないので、ここで期待する文字列を控えておく。
-        """
+        """確定し直しのあと、実際に入力欄から消えているかを、次の入力のときに確かめるために期待する文字列を控える。"""
         self._replace_expect = None
         surrounding = self._surrounding_value()
         if surrounding is None:
             return
         value, cursor = surrounding
-        if cursor < count:
-            return
-        self._replace_expect = value[:cursor - count] + text
+        if cursor >= count:
+            self._replace_expect = value[:cursor - count] + text
 
     def _check_replace(self):
-        """前回の確定し直しが実際に効いていたかを確かめる。効いていなければ以降はやめる。"""
-        expected, self._replace_expect = self._replace_expect, None
-        if expected is None or not self._session:
+        """前回の確定し直しが実際に効いていたかを確かめる。効いていなければ、この入力欄は消せないと本体に伝える。
+        入力欄の文字を読めなければ、次に読めるときまで確かめるのを待つ。
+        """
+        expected = self._replace_expect
+        if expected is None:
             return
         surrounding = self._surrounding_value()
         if surrounding is None:
             return
+        self._replace_expect = None
         value, cursor = surrounding
         if value[:cursor] == expected:
             return
-        _lib.meltype_set_can_delete(self._session, 0)
+        self._delete_failed = True
         print("Meltype: この入力欄は文字を消せないため、確定し直しをやめます "
               f"(期待 {expected!r} / 実際 {value[:cursor]!r})", file=sys.stderr)
 

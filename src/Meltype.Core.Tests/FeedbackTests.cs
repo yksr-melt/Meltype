@@ -611,33 +611,6 @@ internal static class MisspellingTests
 internal static class CodeProfileTests
 {
     [Test]
-    public static void LineTracker_FollowsTypingAndResets()
-    {
-        var line = new LineTracker();
-        Assert.True(line.Text is null, "最初は分からない");
-        line.NewLine();
-        line.Append("x = 1 ");
-        Assert.Equal(LineKind.Code, LineContext.Classify(line.Text!));
-        line.Append("// ");
-        Assert.Equal(LineKind.Comment, LineContext.Classify(line.Text!), "// の後はコメント");
-        line.Backspace();
-        line.Backspace();
-        line.Backspace();
-        Assert.Equal("x = 1 ", line.Text);
-        line.NewLine();
-        Assert.Equal("x = 1 \n", line.Text, "改行で新しい行 (前の行も持っておく)");
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText(line.Text!));
-        line.Invalidate();
-        Assert.True(line.Text is null, "キャレットが動いたら分からない");
-        line.Append("\"a");
-        line.Backspace();
-        Assert.True(line.Text is null, "打っても分からないまま");
-        Assert.Equal("\"", line.Tracked, "分からなくなってから打った文字列は追いかける");
-        line.SetFromText("first line\r\n    print(\"こん");
-        Assert.Equal(LineKind.String, LineContext.ClassifyText(line.Text!), "UI Automation で読んだ文字列の、今の行で調べる");
-    }
-
-    [Test]
     public static void LineContext_MultiLineStringsAndComments()
     {
         // Python の """ の中の行 (本文) で日本語が打てなかった
@@ -701,13 +674,12 @@ internal static class CodeProfileTests
         var settings = new Settings
         {
             AutoDetection = true,
-            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false, StartInEnglish = true }],
+            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false }],
             AppRules = [new AppRule { Process = "Discord.exe", Kind = "チャット" }, new AppRule { Process = "Code.exe", Profile = AppProfile.Code }],
         };
         Assert.True(!settings.ForApp("discord.exe").AutoDetection, "独自の種類の自動判定");
         Assert.True(!settings.ForApp("Discord.exe").LiveConversion, "独自の種類のライブ変換");
         Assert.True(settings.ForApp("chrome.exe").AutoDetection, "ほかのアプリは全体の設定");
-        Assert.True(settings.KindFor("Discord.exe")?.StartInEnglish == true, "最初は英数");
         Assert.Equal(AppProfile.Code, settings.ProfileFor("Code.exe"));
 
         var path = Path.Combine(Path.GetTempPath(), $"meltype-kinds-{Guid.NewGuid():N}.json");
@@ -717,6 +689,9 @@ internal static class CodeProfileTests
             var loaded = Settings.Load(path);
             Assert.Equal("チャット", loaded.KindFor("Discord.exe")?.Name, "保存して読み込んでも種類を保つ");
             Assert.True(!loaded.Clone().ForApp("Discord.exe").AutoDetection, "複製しても保つ");
+            // 消した項目 (独自の種類の「最初は英数」) が残っている config.json も読める
+            File.WriteAllText(path, $"{{\"SettingsVersion\":{Settings.CurrentVersion},\"AppKinds\":[{{\"Name\":\"チャット\",\"StartInEnglish\":true}}]}}");
+            Assert.Equal("チャット", Settings.Load(path).AppKinds.Single().Name, "消した項目は無視する");
         }
         finally
         {
@@ -1417,7 +1392,8 @@ internal static class LanguageLearningTests
                 // 先頭の @ の語 (#193) はそのままアプリへ渡すので、ここは変換ボックスに入れたときの扱いを確かめる。
                 var k = new CompositionTests.Keyboard { SigilWords = false };
                 k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
+                // 変換ボックスが空のときの Enter は、改行としてアプリに届く
+                Assert.Equal(expected, k.Host.Document.TrimEnd('\n'), typed);
             }
         }
         finally
