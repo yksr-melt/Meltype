@@ -187,7 +187,7 @@ internal static class DictionaryMemory
         Console.OutputEncoding = new UTF8Encoding(false);
         var detector = CompositionDetector.CreateDefault();
         detector.SpellChecker = BuiltInWordChecker.Shared;
-        var options = new CompositionOptions
+        var services = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(null),
             Translations = TranslationDictionary.Load(),
@@ -213,7 +213,7 @@ internal static class DictionaryMemory
         var allocations = new List<double>();
         for (var round = 0; round < rounds; round++)
         {
-            var session = new MeltypeSession(detector, new Identity(), options, () => new Settings());
+            var session = new MeltypeSession(detector, new Identity(), services, () => new Settings());
             var allocated = GC.GetAllocatedBytesForCurrentThread();
             var watch = Stopwatch.StartNew();
             foreach (var input in inputs)

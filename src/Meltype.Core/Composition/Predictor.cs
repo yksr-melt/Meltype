@@ -33,6 +33,8 @@ public sealed class PhraseHistory
                 var parts = line.Split('\t');
                 if (parts.Length < 4 || parts[0].Length == 0 || parts[1].Length == 0) continue;
                 if (!int.TryParse(parts[2], out var count) || !long.TryParse(parts[3], out var used)) continue;
+                // 日時・版から作る語は、以前の版で覚えてしまったものを使わない
+                if (CompositionLearning.IsStale(parts[0], parts[1])) continue;
                 _entries[(parts[0], parts[1])] = (Math.Max(1, count), used);
             }
         }

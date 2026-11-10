@@ -36,7 +36,7 @@ internal static class ImeContractTests
         public bool Predicts { get; init; }
 
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions().WithSettings(settings) with { Predictor = Predicts ? new Predictor(null, null, null) : null }, settings, directModeDetection: true);
+            new CompositionServices { Predictor = Predicts ? new Predictor(null, null, null) : null }, settings, directModeDetection: true);
 
         /// <summary>再変換の読み (OS の機能の代わり)。</summary>
         public Dictionary<string, string> Readings { get; } = [];

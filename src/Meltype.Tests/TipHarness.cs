@@ -80,15 +80,13 @@ internal static class TipHarness
         return failed;
     }
 
-    internal static Composition.CompositionService CreateService(Control invoker, Func<bool>? cursorIntoBrackets = null) =>
-        new(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions
+    internal static Composition.CompositionService CreateService(Control invoker) =>
+        new(invoker, Composition.CompositionDetector.CreateDefault(), () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System }, new Composition.CompositionServices
         {
             UserDictionary = new Composition.UserDictionary(null),
             History = new Composition.ConversionHistory(null),
             Languages = new Composition.LanguageMemory(null),
             TranslationHistory = new Composition.TranslationHistory(null),
-            Engine = () => Config.ConversionEngine.System,
-            CursorIntoBrackets = cursorIntoBrackets ?? (() => false),
         });
 
     private static string Send(NamedPipeClientStream pipe, string json)

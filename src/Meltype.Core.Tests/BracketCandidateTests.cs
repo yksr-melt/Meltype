@@ -220,7 +220,7 @@ internal static class BracketCandidateTests
     public static void Brackets_SessionContinuesTypingWithoutCommittingAndRestoresSelection()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { ContinueAfterConversion = () => true, LiveConversion = () => true }, () => new Settings());
+            new CompositionServices(), () => new Settings { ContinueAfterConversion = true, LiveConversion = true });
         session.HandleKey(0xDB, '[', false, false, false, false);
         session.HandleKey(0xDD, ']', false, false, false, false);
         var original = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View!;
@@ -299,7 +299,7 @@ internal static class BracketCandidateTests
     public static void Brackets_SessionJsonAndClicksKeepNotesOutOfCommits()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { TabConversion = () => true }, () => new Settings());
+            new CompositionServices(), () => new Settings { TabConversion = true });
         session.HandleKey(0xDB, '[', false, false, false, false);
         session.HandleKey(0xDD, ']', false, false, false, false);
         var result = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false);

@@ -966,7 +966,7 @@ internal static class LanguageLearningTests
             Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
             var settings = new Settings { LiveConversion = true, UseZenzai = false };
             var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-                new CompositionOptions { LiveConversion = () => true, Languages = memory }, () => settings);
+                new CompositionServices { Languages = memory }, () => settings);
             foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
             var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
             Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
@@ -1051,11 +1051,13 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue1488_OldVersionInHistoryDoesNotOverrideNormalConversion()
     {
-        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても、通常の「バージョン」にする
+        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても (conversions.json)、通常の「バージョン」にする
         foreach (var old in new[] { "Meltype-1.4.1-pre.2", "Mozc-3.34.6239.102+24.11.oss" })
         {
-            var history = new ConversionHistory(null);
-            history.Remember("ばーじょん", old);
+            var path = Path.Combine(Path.GetTempPath(), $"meltype-version-{Guid.NewGuid():N}.json");
+            File.WriteAllText(path, $"{{\"ばーじょん\":{{\"Text\":\"{old}\",\"Used\":\"2026-11-01T00:00:00Z\"}}}}");
+            var history = new ConversionHistory(path);
+            File.Delete(path);
             foreach (var live in new[] { false, true })
             {
                 var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new VersionConverter());
@@ -1077,19 +1079,19 @@ internal static class LanguageLearningTests
         var history = new ConversionHistory(null);
         var phrases = new PhraseHistory(null);
         var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
-        keyboard.Type("mukasinoba-jonn ");
-        keyboard.Press(VirtualKeys.Right);
+        keyboard.Type("ba-jonn ");
         var version = $"Meltype-{ProjectInfo.CoreVersion}";
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.Controller.SelectCandidate(index);
         keyboard.Press(VirtualKeys.Return);
-        Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
+        Assert.Equal(version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
         Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
-        Assert.True(!phrases.StartingWith("むかしの").Any(), "語句の履歴にも覚えない");
 
-        // 普通の「昔のバージョン」は覚える
+        // 版は入力の全体が ばーじょん のときだけ出す。普通の「昔のバージョン」は覚える
         keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Right);
+        Assert.True(!keyboard.Host.View!.Candidates.Contains(version), "文の途中の ばーじょん には版を出さない");
         keyboard.Press(VirtualKeys.Return);
         Assert.True(phrases.StartingWith("むかしの").Contains("昔のバージョン"), "通常の語句は覚える");
     }

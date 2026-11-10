@@ -16,13 +16,7 @@ internal sealed class CompositionService : IDisposable
     private readonly Control _invoker;
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
-    private readonly Func<Config.CompositionPlacement> _placement;
-    private readonly Func<Config.CompositionSize> _size;
-    private readonly Func<string> _font;
-    private readonly Func<bool> _lightTheme;
-    private readonly Func<double> _opacity;
-    private readonly Func<(string Japanese, string Direct, string Text)> _indicatorColors;
-    private readonly Func<bool> _useZenzai;
+    private readonly Func<Config.Settings> _settings;
     // Microsoft IME と Windows の候補は、応答に上限が無い (WinRT は最大 500ms 待つ) ので入力スレッドで呼ばない。_sta のスレッドからだけ使う
     private readonly StaThread _sta = new("Meltype Microsoft IME");
     private readonly MsImeKanjiConverter _converter = new();
@@ -37,101 +31,49 @@ internal sealed class CompositionService : IDisposable
 
     // Zenzai (llama-server + zenz の GGUF。場所が空なら同梱のもの)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
     private readonly ZenzaiHolder _zenzai = new();
-    private ZenzaiConverter? CurrentZenzai(CompositionOptions options) =>
-        options.UseZenzai() ? _zenzai.Get(ZenzaiBundle.ServerPath(options.ZenzaiServerPath()), ZenzaiBundle.ModelPath(options.ZenzaiModelPath()), options.ZenzaiDevice()) : _zenzai.Get("", "");
+    private ZenzaiConverter? CurrentZenzai() =>
+        _settings() is { UseZenzai: true } settings ? _zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath), settings.ZenzaiDevice) : _zenzai.Get("", "");
 
-    /// <param name="options">LiveConversion などの設定。Candidates を指定しなければ組み込みの補助辞書を読む。</param>
-    public CompositionService(Control invoker, CompositionDetector detector, CompositionOptions options)
+    /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="CreateSession"/> で渡す)。変換ボックスの見た目・変換エンジンを決める。</param>
+    /// <param name="services">辞書・学習データ。指定しなければ既定の場所から読む。</param>
+    public CompositionService(Control invoker, CompositionDetector detector, Func<Config.Settings> settings, CompositionServices services)
     {
         _invoker = invoker;
-        _nowPlaying = new NowPlaying(options.NowPlayingCandidates);
+        _settings = settings;
+        _nowPlaying = new NowPlaying(() => settings().NowPlayingCandidates);
         // 補助辞書・文脈の手がかり・学習データは、指定がなければ既定の場所から読む。
         var userDirectory = Config.AppPaths.UserDictionaryDirectory;
-        History = options.History ?? new ConversionHistory(Config.AppPaths.ConversionHistoryFile);
-        Languages = options.Languages ?? new LanguageMemory(Config.AppPaths.LanguageMemoryFile);
+        History = services.History ?? new ConversionHistory(Config.AppPaths.ConversionHistoryFile);
+        Languages = services.Languages ?? new LanguageMemory(Config.AppPaths.LanguageMemoryFile);
         detector.Memory = Languages;
-        UserDictionary = options.UserDictionary ?? new UserDictionary(Config.AppPaths.UserDictionaryFile);
+        UserDictionary = services.UserDictionary ?? new UserDictionary(Config.AppPaths.UserDictionaryFile);
         _detector = detector;
-        var resolved = new CompositionOptions
+        var resolved = services with
         {
-            LiveConversion = options.LiveConversion,
-            ClassifyDirect = options.ClassifyDirect,
-            Candidates = options.Candidates ?? CandidateDictionary.Load(userDirectory),
-            ContextRules = options.ContextRules ?? ContextRules.Load(userDirectory),
+            Candidates = services.Candidates ?? CandidateDictionary.Load(userDirectory),
+            ContextRules = services.ContextRules ?? ContextRules.Load(userDirectory),
             History = History,
             UserDictionary = UserDictionary,
-            MoreCandidates = options.MoreCandidates ?? (reading => _hybrid.Candidates(reading)),
-            AutoCorrect = options.AutoCorrect,
-            Manual = options.Manual,
-            KanaInput = options.KanaInput,
-            KanaLayout = options.KanaLayout,
-            RomajiLayout = options.RomajiLayout,
-            Misspellings = options.Misspellings ?? MisspellingDictionary.Load(userDirectory),
+            MoreCandidates = services.MoreCandidates ?? (reading => _hybrid.Candidates(reading)),
+            Misspellings = services.Misspellings ?? MisspellingDictionary.Load(userDirectory),
             Languages = Languages,
-            Translations = options.Translations ?? TranslationDictionary.Load(),
-            TranslationCandidates = options.TranslationCandidates,
-            CandidateMeanings = options.CandidateMeanings,
-            ShowTypedKeys = options.ShowTypedKeys,
-            TabConversion = options.TabConversion,
-            ContinueAfterConversion = options.ContinueAfterConversion,
-            Learning = options.Learning,
-            SeparateKeyRoles = options.SeparateKeyRoles,
-            EnglishFirstInput = options.EnglishFirstInput,
-            ConsonantAbbreviations = options.ConsonantAbbreviations,
-            Meanings = options.Meanings ?? MeaningDictionary.Load(),
-            RomajiTypos = options.RomajiTypos ?? RomajiTypoCorrector.Load(detector.Romaji),
-            CorrectTypos = options.CorrectTypos,
-            Slash = options.Slash,
-            ZSymbols = options.ZSymbols,
-            SpaceAroundEnglish = options.SpaceAroundEnglish,
-            SpaceAroundNumbers = options.SpaceAroundNumbers,
-            NumberKeysSelectCandidates = options.NumberKeysSelectCandidates,
-            SpaceWidth = options.SpaceWidth,
-            EnterCommitsAsShown = options.EnterCommitsAsShown,
-            AlphanumericKeyStartsAsTyped = options.AlphanumericKeyStartsAsTyped,
-            FullWidthParentheses = options.FullWidthParentheses,
-            SquareBrackets = options.SquareBrackets,
-            EscStepsBack = options.EscStepsBack,
-            EscRevertsSelectedClause = options.EscRevertsSelectedClause,
-            FunctionKeysAffectSelectedClause = options.FunctionKeysAffectSelectedClause,
-            ControlKeys = options.ControlKeys,
-            PartialCommit = options.PartialCommit,
-            CursorIntoBrackets = options.CursorIntoBrackets,
-            ControlKeyBindings = options.ControlKeyBindings,
-            CalculatorCandidates = options.CalculatorCandidates,
-            LaughterAfterKana = options.LaughterAfterKana,
-            ContextualLearning = options.ContextualLearning,
-            ShowCandidatesWhileTyping = options.ShowCandidatesWhileTyping,
-            GitHubIssueCandidates = options.GitHubIssueCandidates,
-            GitHubRepository = options.GitHubRepository,
-            GitHubTitles = options.GitHubTitles,
-            ClipboardCandidates = options.ClipboardCandidates,
-            NowPlayingCandidates = options.NowPlayingCandidates,
-            ClockTimeZone = options.ClockTimeZone,
-            Punctuation = options.Punctuation,
-            TranslationHistory = options.TranslationHistory ?? new TranslationHistory(Config.AppPaths.TranslationHistoryFile),
-            Predictor = options.Predictor ?? new Predictor(new PhraseHistory(Config.AppPaths.PhraseHistoryFile), UserDictionary, History),
-            Predictions = options.Predictions,
-            EnglishNamePredictions = options.EnglishNamePredictions,
+            Translations = services.Translations ?? TranslationDictionary.Load(),
+            Meanings = services.Meanings ?? MeaningDictionary.Load(),
+            RomajiTypos = services.RomajiTypos ?? RomajiTypoCorrector.Load(detector.Romaji),
+            TranslationHistory = services.TranslationHistory ?? new TranslationHistory(Config.AppPaths.TranslationHistoryFile),
+            Predictor = services.Predictor ?? new Predictor(new PhraseHistory(Config.AppPaths.PhraseHistoryFile), UserDictionary, History),
         };
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
         _mozc.Budget.Enable();
         _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
-        _hybrid = new HybridConverter(options.Engine, _mozc, _system, _system.Candidates, () => CurrentZenzai(options), _zenzai.Failed);
+        _hybrid = new HybridConverter(() => settings().ConversionEngine, _mozc, _system, _system.Candidates, CurrentZenzai, _zenzai.Failed);
         _resolved = resolved;
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
-        _useZenzai = options.UseZenzai;
-        if (options.Engine() != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
-        _placement = options.Placement;
-        _size = options.Size;
-        _font = options.Font;
-        _lightTheme = options.LightTheme;
-        _opacity = options.Opacity;
-        _indicatorColors = options.ModeIndicatorColors;
+        if (settings().ConversionEngine != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
     }
 
-    private readonly CompositionOptions _resolved;
+    private readonly CompositionServices _resolved;
 
     /// <summary>
     /// Meltype IME (TSF) の入力欄 1 つ分の入力の本体を作る。辞書・学習データ・変換エンジンは変換ボックスと共有する
@@ -139,14 +81,14 @@ internal sealed class CompositionService : IDisposable
     /// </summary>
     public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false)
     {
-        var session = new MeltypeSession(_detector, _hybrid, _resolved.WithSettings(settings) with
+        var session = new MeltypeSession(_detector, _hybrid, _resolved with
         {
             DirectMode = () => false,
             ClassifyDirect = directModeDetection ? _resolved.ClassifyDirect : null,
             DirectDecided = null,
         }, settings, directModeDetection);
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
-        session.Corrected += correction => Corrections.Add(correction with { Zenzai = _useZenzai() });
+        session.Corrected += correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai });
         return session;
     }
 
@@ -438,7 +380,7 @@ internal sealed class CompositionService : IDisposable
             // TSF の通知が届くまでに別の入力先へ移っていたら表示しない。
             if (inputThread != 0 && WindowsIme.ImeTarget.FromForeground()?.ThreadId != inputThread) return;
             var anchor = inputAnchor ?? (inputThread == 0 ? FindAnchor() : FindImeIndicatorAnchor());
-            var (jp, direct, text) = _indicatorColors();
+            var (jp, direct, text) = (_settings().ModeIndicatorJapaneseColor, _settings().ModeIndicatorDirectColor, _settings().ModeIndicatorTextColor);
             _indicator.SetColors(Config.Settings.ParseColor(jp), Config.Settings.ParseColor(direct), Config.Settings.ParseColor(text));
             _indicator.Flash(japanese, new Point(anchor.X + 2, anchor.Y + 2), milliseconds);
         });
@@ -536,14 +478,14 @@ internal sealed class CompositionService : IDisposable
             { } c => c.Height,
         };
         Diagnostics.Log.Info($"変換ボックスを出す入力位置: {(caret is { } r ? $"{r.X},{r.Y} 高さ {r.Height}{(wholeField ? " (入力欄の枠)" : "")}" : "分からない")}");
-        _window.SetFontFamily(_font());
-        _window.SetAppearance(_lightTheme(), _opacity());
+        _window.SetFontFamily(_settings().CompositionFont);
+        _window.SetAppearance(_settings().CompositionIsLight(CompositionWindow.WindowsUsesLightTheme()), _settings().CompositionOpacityValue);
         // 出すモニターの拡大率に合わせる (入力位置のモニター。分からなければ変換ボックスを置く位置のモニター)
         var monitorScale = MonitorScale(caret?.Location ?? FindAnchor(caret, caretSearched: true));
         _window.SetMonitorScale(monitorScale);
         // 文字の大きさ: 自動なら、入力欄の文字の高さに合わせる。小さな入力欄で大きく出すぎないように。
         // 入力位置の高さはそのモニターのピクセルなので、拡大率の分を除いてから比べる
-        _window.SetScale(_size() switch
+        _window.SetScale(_settings().CompositionSize switch
         {
             Config.CompositionSize.Small => 0.8F,
             Config.CompositionSize.Large => 1.25F,
@@ -584,7 +526,7 @@ internal sealed class CompositionService : IDisposable
             return;
         }
         // 入力位置に重ねる: 変換ボックスの文字の行を、入力位置の行の高さの真ん中にそろえる。
-        if (_placement() == Config.CompositionPlacement.Overlay && caret is { } at)
+        if (_settings().CompositionPlacement == Config.CompositionPlacement.Overlay && caret is { } at)
         {
             var offset = _window.TextOffset;
             // 1 行の入力欄の枠なら、その上下の真ん中。複数行の欄全体 (高すぎる) なら、上端の 1 行目。
@@ -593,7 +535,7 @@ internal sealed class CompositionService : IDisposable
             return;
         }
         // カーソルの上: 入力位置の上に出す (候補の一覧で入力欄や下の行を隠さない)。
-        if (_placement() == Config.CompositionPlacement.AboveCaret && caret is { } line)
+        if (_settings().CompositionPlacement == Config.CompositionPlacement.AboveCaret && caret is { } line)
         {
             _window.ShowView(view, new Point(line.Left, line.Top - 4), above: true, belowY: FindAnchor(caret).Y);
             return;

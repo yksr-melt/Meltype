@@ -138,7 +138,7 @@ internal sealed class MeltypeEngine : IDisposable
         return settings.Mode == InputMode.Keyboard ? Keyboard?.OnKey(e) == true : ImeServer?.OnKey(e, _foreground.Current) == true;
     }
 
-    private bool OnMouseButton(Composition.MouseButtonEvent e)
+    private bool OnMouseButton(MouseButtonEvent e)
     {
         if (_settings.Mode == InputMode.Keyboard) return Keyboard?.OnMouseButton(e) == true;
         ImeServer?.OnMouseButton(e);
