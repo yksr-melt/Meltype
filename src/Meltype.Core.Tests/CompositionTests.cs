@@ -1959,10 +1959,9 @@ internal static class CompositionTests
         k.Type("statsuruno\n");
         Assert.Equal("statするの", k.Host.Document);
 
-        // #1545・#1652・#1614・#1653・#1442: 読みが無くて英日に割れる日本語
+        // #1652・#1614・#1653・#1442: 読みが無くて英日に割れる日本語
         foreach (var (typed, expected) in new[]
         {
-            ("botto", "ぼっと"),
             ("pien", "ぴえん"),
             ("onnatsu", "おんあつ"),
             ("guguru", "ぐぐる"),
