@@ -333,9 +333,9 @@ public sealed partial class CompositionController
         // そのままの文節にする。設定の「，．」も渡さない。渡すと半角の , . に戻る (4 文字以上のライブ変換、issue #498)。
         // 数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
         // それ以外は変換エンジンに渡す (2026ねん → 2026年)。
+        // 「，．」は「、。」と同じく数字をつなぎ止めないので、数字を見終えてから keep にする (りんご，3こ の 3 を こ と一緒に渡して 3個 にする)。
         var keep = new bool[kana.Length];
-        for (var i = 0; i < kana.Length; i++)
-            keep[i] = kana[i] is >= '!' and <= '~' && !char.IsAsciiDigit(kana[i]) || kana[i] is '，' or '．';
+        for (var i = 0; i < kana.Length; i++) keep[i] = kana[i] is >= '!' and <= '~' && !char.IsAsciiDigit(kana[i]);
         for (var i = 0; i < kana.Length; i++)
         {
             if (!char.IsAsciiDigit(kana[i])) continue;
@@ -345,6 +345,7 @@ public sealed partial class CompositionController
             for (var k = i; k < end; k++) keep[k] = touches;
             i = end - 1;
         }
+        for (var i = 0; i < kana.Length; i++) keep[i] |= kana[i] is '，' or '．';
         if (keep.Any(k => k))
         {
             var result = new List<Clause>();
