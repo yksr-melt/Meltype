@@ -137,7 +137,9 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 - 動作モードは `Tsf` (Meltype IME) と `Keyboard` (Meltype キーボード)。どちらのフロントも事実を同じ `ImeHost` に送るだけで、入力の判断は Core がする。
   `MeltypeEngine` はアプリの部分 (設定・キーボードフックの取り込み・Ctrl + 半角/全角 の一時停止・打鍵数) だけを持ち、動作モードが Keyboard のときだけフックのキーを `KeyboardFront` に渡す
-- 左右の Alt の単独押しは、DLL が単独押しを見つけて (ほかのキーを押さずに離した) `key.tap` で送る。本体が受け取るように言っていれば (state.capture の 0xA4・0xA5)、離したことをアプリに渡さない
+- 左右の Alt の単独押し: キーのシンクには Alt が届かないので、`TipServer.OnKey` が低レベルフックで見て、DLL の入力スレッドのメッセージ用のウィンドウに知らせる。
+  DLL は押下を `KeyPressed`、解放を `KeyReleased` で送り、単独押しかは Core が決める。前面のスレッドの最後の応答が `capture.altKeys` のときだけ知らせる。
+  解放は、単独押しでないとフックで分かるとき以外は 0xE8 のあとに送り直す (Core の答えは待たない)
 - Meltype IME が登録されていて、このユーザーのキーボードの一覧にも入っていれば、一度だけ自動で Tsf にする。
   そのとき (とトレイで Meltype IME を選んだとき) は、いま使う入力方式も Meltype IME にする (ITfInputProcessorProfileMgr::ActivateProfile の TF_IPPMF_FORSESSION)
 - Meltype.exe 自身の画面 (はじめに・設定など) でも使える。そこでは UI スレッドが DLL の中で応答を待って止まるので、

@@ -99,7 +99,7 @@ public sealed record ImeKey
     public bool Repeat { get; init; }
     /// <summary>1 回のキーで入る文字が複数のスカラーのとき (結合文字・ZWJ の絵文字。Mac)、その文字列。Ch は 0。本体は未確定の内容を確定して、キーをアプリに通させる。</summary>
     public string? Text { get; init; }
-    /// <summary>KeyReleased: 押してから離すまでに、ほかのキー (修飾キーを含む)・マウスのボタンを押した。</summary>
+    /// <summary>KeyReleased: 離すまでのあいだに、ほかのキー (修飾キーを含む)・マウスのボタンを押していた (このキーより先に押していたものも含む)。</summary>
     public bool Interrupted { get; init; }
     /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
     public bool ReleaseFollows { get; init; }
