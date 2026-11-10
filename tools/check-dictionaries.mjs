@@ -29,6 +29,14 @@ const formats = {
   'propernouns.txt': words(w => /^[A-Za-z][A-Za-z0-9.+&'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
   'english.txt': words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   'english-words.txt': words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
+  // 繋げた形<Tab>空白で区切った語句。繋げた形が、語句の空白を除いた形と一致することまで確かめる
+  'english-phrases.txt': tabbed(2, 2, ([joined, phrase]) => [
+    /^[a-z]+$/.test(joined) ? null : `「${joined}」が小文字の英字でない`,
+    phrase.split(' ').every(w => /^[a-z]+$/.test(w)) ? null : `語句「${phrase}」が小文字の英字の語でない`,
+    joined === phrase.replace(/ /g, '') ? null : `「${joined}」が語句「${phrase}」を繋げた形でない`,
+  ]),
+  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ
+  'english-readable.txt': words(w => /^[a-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の小文字の英字の語でない`),
   'japanese.txt': words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
   'contexts.txt': line => {
     const [left, right] = line.split(' : ');
