@@ -503,6 +503,8 @@ internal sealed class TipServer : IDisposable
     private int _alt;
     private IntPtr _altWindow;
     private bool _altInterrupted;
+    // 最後に Alt を本体に送らなかった理由 (ログ)
+    private string? _altSkipped;
 
     /// <summary>DLL の TextService::kAltKey。wParam は仮想キーコード、lParam は AltFlags。</summary>
     private const uint AltKeyMessage = 0x8000 + 2;
@@ -523,13 +525,26 @@ internal sealed class TipServer : IDisposable
             if (_alt != 0 && e.Vk != _alt) _altInterrupted = true;
             if (!alt || repeat || _alt != 0) return false;
             var thread = Native.GetWindowThreadProcessId(foreground.Window, out _);
-            if (!_altKeys.TryGetValue(thread, out var wanted) || !wanted || !ForegroundTracker.CanSendInputTo(foreground) || MessageWindow(thread) is not { } window) return false;
+            var window = MessageWindow(thread);
+            var skipped = !_altKeys.TryGetValue(thread, out var wanted) ? $"前面のウィンドウのスレッド {thread} から、Meltype IME の要求が来ていない"
+                : !wanted ? "本体が受け持っていないか、設定「左 Alt で英数 / 右 Alt で日本語」が OFF"
+                : !ForegroundTracker.CanSendInputTo(foreground) ? "管理者として動くアプリには、止めた解放を送り直せない"
+                : window is null ? $"スレッド {thread} に Meltype IME のメッセージ用のウィンドウが無い"
+                : null;
+            if (skipped is not null || window is not { } target)
+            {
+                // 同じ理由を Alt を押すたびに書かない
+                if (skipped != _altSkipped) Log.Info($"左右の Alt を本体に送りません ({foreground.ProcessName}): {skipped}");
+                _altSkipped = skipped;
+                return false;
+            }
+            _altSkipped = null;
             _alt = e.Vk;
-            _altWindow = window;
+            _altWindow = target;
             _altInterrupted = false;
             var flags = (IsDown(VirtualKeys.Shift) ? AltFlags.Shift : 0) | (IsDown(VirtualKeys.Control) ? AltFlags.Ctrl : 0) |
                 (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? AltFlags.Command : 0);
-            Native.PostMessageW(window, AltKeyMessage, e.Vk, (int)flags);
+            Native.PostMessageW(target, AltKeyMessage, e.Vk, (int)flags);
             return false;
         }
         _held.Remove(e.PhysicalId);
