@@ -63,87 +63,81 @@ internal static class CompositionTests
         }
     }
 
-    internal sealed class FakeHost : ICompositionHost
+    /// <summary>
+    /// 入力欄のアプリ。確定した文字・アプリに通したキーを入力欄の文字 (Document) に入れ、出来事を Events に記録する
+    /// (text:確定した文字、bs:確定し直しで消した数、down:本体が受け取ってからアプリに通したキー、passed:本体を通らずにアプリに届いたキー、
+    /// replace:選択していた文字:置き換えた文字)。
+    /// </summary>
+    internal sealed class FakeHost
     {
         public List<string> Output { get; } = [];
         public List<string> Events { get; } = [];
-        public CompositionView? View { get; private set; }
+
+        /// <summary>変換ボックスの表示 (フロントに渡す形にする前のもの)。</summary>
+        public CompositionView? View => ViewSource();
+        public Func<CompositionView?> ViewSource { get; set; } = () => null;
         public bool PhysicalShift { get; set; }
         public bool CanDeleteBackward { get; set; } = true;
+
+        /// <summary>入力欄で選んでいる文字と、OS が求めたその読み (再変換)。確定した文字で置き換わる。</summary>
         public ReconversionSelection? Selection { get; set; }
 
-        public ReconversionSelection? GetReconversionSelection() => Selection;
-
-        public bool TryReplaceSelection(ReconversionSelection selection, string text)
-        {
-            if (!ReferenceEquals(Selection, selection)) return false;
-            Events.Add($"replace:{selection.Text}:{text}");
-            Selection = null;
-            Document = text;
-            return true;
-        }
-
-        /// <summary>入力欄のキャレットの直前にある (と見なす) 確定済みの文字列。</summary>
+        /// <summary>入力欄のキャレットの直前にある (と見なす) 確定済みの文字列。null なら入力欄の文字。</summary>
         public string? PrecedingText { get; set; }
 
         /// <summary>入力欄のキャレットの後ろにある (と見なす) 文字列。</summary>
         public string? FollowingText { get; set; }
 
-        public void RequestSurroundingText(Action<string?, string?> callback) => callback(PrecedingText ?? (Document.Length > 0 ? Document : null), FollowingText);
+        /// <summary>フロントが渡すキャレットの前の文字。</summary>
+        public string? Before => PrecedingText ?? (Document.Length > 0 ? Document : null);
 
         /// <summary>入力欄の中身 (確定した文字列と、確定し直すときの削除を反映したもの)。</summary>
         public string Document { get; private set; } = "";
 
-        public void DeleteBackward(int count)
-        {
-            Events.Add($"bs:{count}");
-            Document = Document[..Math.Max(0, Document.Length - count)];
-        }
+        public string? ClipboardText { get; set; }
+        public (string Title, string Artist)? NowPlaying { get; set; }
 
-        public void CommitText(string text)
+        /// <summary>本体が返した結果を入力欄に当てる。キーをアプリに通したなら、そのキーの文字も入れる。</summary>
+        public void Apply(SessionResult result, int vk, bool shift, bool control = false, bool captured = true)
         {
-            Output.Add(text);
-            Events.Add($"text:{text}");
-            Document += text;
-        }
-
-        /// <summary>アプリに届いたキー (そのまま通したキー・送り直したキー) の文字を入力欄に入れる。</summary>
-        public void Reached(KeyEvent e, bool shift)
-        {
-            if (e.IsUp) return;
-            if (e.Vk == VirtualKeys.Back) Document = Document[..Math.Max(0, Document.Length - 1)];
-            else if (e.Vk == VirtualKeys.Return) Document += "\n";
-            else if (e.Vk == VirtualKeys.Space) Document += " ";
-            else if (CharFromKey(e, shift) is { } c && !char.IsControl(c)) Document += c;
-        }
-
-        /// <summary>アプリに送り直したキー (英数状態で判定した語など)。</summary>
-        public event Action<KeyEvent>? Replayed;
-
-        public void Replay(KeyEvent e)
-        {
-            Events.Add($"{(e.IsUp ? "up" : "down")}:{e.Vk:X2}");
-            Replayed?.Invoke(e);
-        }
-
-        public void MoveCaretBackward(int count)
-        {
-            for (var i = 0; i < count; i++)
+            foreach (var edit in result.Commits)
             {
-                Replay(new KeyEvent(VirtualKeys.Left, 0, false, false, false, 0));
-                Replay(new KeyEvent(VirtualKeys.Left, 0, false, true, false, 0));
+                if (edit.DeleteBefore > 0)
+                {
+                    Events.Add($"bs:{edit.DeleteBefore}");
+                    Document = Document[..Math.Max(0, Document.Length - edit.DeleteBefore)];
+                }
+                if (Selection is { } selection)
+                {
+                    Events.Add($"replace:{selection.Text}:{edit.Text}");
+                    Selection = null;
+                    Document = edit.Text;
+                }
+                else if (edit.Text.Length > 0)
+                {
+                    Output.Add(edit.Text);
+                    Events.Add($"text:{edit.Text}");
+                    Document += edit.Text;
+                }
+                for (var i = 0; i < edit.CaretBack; i++) Events.Add("down:25");
             }
+            if (result.Consumed || vk == 0) return;
+            Events.Add($"{(captured ? "down" : "passed")}:{vk:X2}");
+            // Ctrl と一緒のキーは、アプリの操作 (コピーなど) で文字を入れない
+            if (control) return;
+            if (vk == VirtualKeys.Back) Document = Document[..Math.Max(0, Document.Length - 1)];
+            else if (vk == VirtualKeys.Return) Document += "\n";
+            else if (vk == VirtualKeys.Space) Document += " ";
+            else if (CharFromKey(vk, shift) is { } c && !char.IsControl(c)) Document += c;
         }
 
-        public void Replay(MouseButtonEvent e) => Events.Add($"mouse:{e.Message:X}");
-
-        public char? CharFromKey(KeyEvent e, bool shift)
+        public char? CharFromKey(int vk, bool shift)
         {
-            if (VirtualKeys.IsLetter(e.Vk)) return shift || PhysicalShift ? (char)e.Vk : char.ToLowerInvariant((char)e.Vk);
+            if (VirtualKeys.IsLetter(vk)) return shift || PhysicalShift ? (char)vk : char.ToLowerInvariant((char)vk);
             var shifted = shift || PhysicalShift;
             foreach (var (c, key) in JisKeys)
             {
-                if (key.Vk == e.Vk && key.Shift == shifted) return c;
+                if (key.Vk == vk && key.Shift == shifted) return c;
             }
             return null;
         }
@@ -162,22 +156,12 @@ internal static class CompositionTests
             ['_'] = (0xE2, true),
         };
 
-        public bool IsShiftDown() => PhysicalShift;
-
-        /// <summary>入力欄の文字を、キーを処理しているその場で読めているか (Mac と同じ環境にするとき true)。</summary>
-        public bool SurroundingTextIsCurrent { get; set; }
-        public string? ClipboardText { get; set; }
-        public (string Title, string Artist)? NowPlaying { get; set; }
-
-        public void Show(CompositionView view) => View = view;
-        public void Hide() => View = null;
     }
 
     internal sealed class Keyboard
     {
         private long _now = 1000;
         private bool _ctrlHeld;
-        public CaptureGate Gate { get; } = new(() => { });
         public FakeHost Host { get; } = new();
         public CompositionController Controller { get; }
 
@@ -244,17 +228,9 @@ internal static class CompositionTests
         {
             foreach (var (vk, shift) in keys)
             {
-                if (shift)
-                {
-                    Host.PhysicalShift = true;
-                    Key(VirtualKeys.LShift);
-                }
+                if (shift) Key(VirtualKeys.LShift);
                 Press(vk);
-                if (shift)
-                {
-                    Key(VirtualKeys.LShift, up: true);
-                    Host.PhysicalShift = false;
-                }
+                if (shift) Key(VirtualKeys.LShift, up: true);
             }
         }
 
@@ -297,7 +273,7 @@ internal static class CompositionTests
                 EnglishNamePredictions = englishNamePredictions,
                 NowPlayingCandidates = false,
             };
-            Controller = new CompositionController(Gate, Detector, converter ?? Converter, Host, () => Settings, new CompositionServices
+            Controller = new CompositionController(Detector, converter ?? Converter, () => Settings, new CompositionServices
             {
                 DirectMode = () => Direct,
                 ClassifyDirect = (letters, final) => DirectEngine.Evaluate(new Detection.DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final)).Verdict,
@@ -318,42 +294,62 @@ internal static class CompositionTests
                 Predictor = predictor,
                 Now = now ?? (() => DateTime.Now),
             });
+            Host.ViewSource = () => Controller.View;
+            Controller.Clipboard = () => Host.ClipboardText;
+            Controller.NowPlaying = () => Host.NowPlaying;
+            Controller.ReadingOf = text => Host.Selection is { } selection && selection.Text == text ? selection.Reading : null;
         }
 
-        /// <summary>MeltypeEngine.StartsComposition と同じ条件。</summary>
-        private bool Starts(KeyEvent k)
+        /// <summary>
+        /// 本体に渡さずにアプリに通すキーか (フロントの判断: 先頭か空白の直後の /command・$skill・@ファイル名、英数状態で英語と分かった語)。
+        /// 文章の入力欄の打ち始めの / は、本体に ・ にしてもらう。
+        /// </summary>
+        private bool PassesDirectly(int vk)
         {
-            if (!k.IsDown || _ctrlHeld) return false;
-            if (k.Vk == VirtualKeys.Convert) return true;
-            // 親指シフトのかな配列では、無変換も親指キーとして受け取る
-            if (Kana && k.Vk == VirtualKeys.NonConvert && KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
-            if (SigilWords && (Direct || !Kana) && Host.CharFromKey(k, _shiftHeld) is { } typed && SigilWord.PassesAfter(Before, typed))
+            if (Controller.IsComposing || _ctrlHeld || vk == VirtualKeys.Convert) return false;
+            if (SigilWords && (Direct || !Kana) && Host.CharFromKey(vk, _shiftHeld) is { } typed && SigilWord.PassesAfter(Before, typed))
             {
-                if (typed != '/' || Direct || InSigilWord || Code) return false;
+                if (typed != '/' || Direct || InSigilWord || Code) return true;
                 Controller.MarkSlashAtStart();
-                return true;
+                return false;
             }
-            var letter = VirtualKeys.IsLetter(k.Vk);
-            if (Direct) return letter && !_directEnglishWord && !Manual;
-            if (Kana && Detection.KanaDetector.IsKanaKey(k.Vk)) return true;
-            if (k.Vk == VirtualKeys.Space && (_shiftHeld || SpaceWidth == Meltype.Config.SpaceWidth.FullWidth && !Direct)) return true;
-            return letter || k.Vk is >= 0x30 and <= 0x39 or >= 0xBA and <= 0xC0 or >= 0xDB and <= 0xDF or 0xE2;
+            return Direct && (_directEnglishWord || Manual || !VirtualKeys.IsLetter(vk));
         }
 
-        /// <summary>フックと同じく、関所が閉じていれば英字キーで変換ボックスを開く。</summary>
+        /// <summary>キーを押す・離す。本体が受け取った (アプリに通さなかった) なら true。</summary>
         public bool Key(int vk, bool up = false)
         {
-            var e = new KeyEvent(vk, 0, false, up, false, _now += 30);
-            // 実際のフックと同じく、Ctrl が押されている間は変換ボックスを開かない。
-            if (vk == VirtualKeys.LControl) _ctrlHeld = !up;
-            if (vk == VirtualKeys.LShift) _shiftHeld = !up;
+            _now += 30;
+            if (vk is VirtualKeys.LControl or VirtualKeys.RControl) _ctrlHeld = !up;
+            if (vk is VirtualKeys.LShift or VirtualKeys.RShift) _shiftHeld = !up;
             if (Direct && !up && !VirtualKeys.IsLetter(vk) && !VirtualKeys.IsModifier(vk)) _directEnglishWord = false;
-            var swallowed = Gate.OnKey(e, Starts);
-            if (!swallowed) Host.Events.Add($"{(up ? "passed-up" : "passed")}:{vk:X2}");
-            if (!swallowed && !_ctrlHeld) Host.Reached(e, _shiftHeld);
-            Controller.Pump();
-            return swallowed;
+            var shift = _shiftHeld || Host.PhysicalShift;
+            Controller.CanDeleteBackward = Host.CanDeleteBackward;
+            Controller.Selection = Host.Selection?.Text;
+            if (up)
+            {
+                if (VirtualKeys.IsModifier(vk)) return false;
+                var released = Controller.Release(vk, Host.Before, Host.FollowingText);
+                Host.Apply(released, released.Consumed ? 0 : vk, shift, _ctrlHeld);
+                return false;
+            }
+            if (PassesDirectly(vk))
+            {
+                Host.Apply(Controller.Pass(_now), vk, shift, _ctrlHeld, captured: false);
+                return false;
+            }
+            var composing = Controller.IsComposing;
+            var result = Controller.Press(new KeyPress(vk, Host.CharFromKey(vk, shift), shift, _ctrlHeld, false, false, _now), Host.Before, Host.FollowingText, releaseFollows: true);
+            Host.Apply(result, vk, shift, _ctrlHeld, captured: composing || Controller.IsComposing);
+            if (!result.Consumed && !Controller.IsComposing) Controller.ForgetLastCommit();
+            return result.Consumed;
         }
+
+        /// <summary>何も打たずに時間がたった (英数状態で判定中の語を英語とみなす)。</summary>
+        public void Idle() => Host.Apply(Controller.Pass(_now), 0, false);
+
+        /// <summary>変換ボックスに入力中か (本体がキーを受け取るか)。</summary>
+        public bool Captured => Controller.IsComposing;
 
         /// <summary>次の打鍵まで時間を空ける (ミリ秒)。</summary>
         public void Wait(int ms) => _now += ms;
@@ -370,22 +366,18 @@ internal static class CompositionTests
             {
                 if (char.IsAsciiLetterUpper(c))
                 {
-                    Host.PhysicalShift = !Gate.IsCaptured;
                     Key(VirtualKeys.LShift);
                     Press(c);
                     Key(VirtualKeys.LShift, up: true);
-                    Host.PhysicalShift = false;
                 }
                 else if (c == ' ') Press(VirtualKeys.Space);
                 else if (c == '\n') Press(VirtualKeys.Return);
                 else if (c == '\b') Press(VirtualKeys.Back);
                 else if (FakeHost.JisKeys.TryGetValue(c, out var key) && key.Shift)
                 {
-                    Host.PhysicalShift = !Gate.IsCaptured;
                     Key(VirtualKeys.LShift);
                     Press(key.Vk);
                     Key(VirtualKeys.LShift, up: true);
-                    Host.PhysicalShift = false;
                 }
                 else if (FakeHost.JisKeys.TryGetValue(c, out key)) Press(key.Vk);
                 else Press(char.ToUpperInvariant(c));
@@ -641,7 +633,7 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Return);
         Assert.Equal(candidate, k.Host.Document);
         Assert.True(k.Host.Events.Any(e => e.StartsWith("replace:今日:", StringComparison.Ordinal)), "選択範囲を置き換える");
-        Assert.True(!k.Gate.IsCaptured, "確定後はキーを解放する");
+        Assert.True(!k.Captured, "確定後はキーを解放する");
     }
 
     [Test]
@@ -654,23 +646,11 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Escape);
         Assert.True(ReferenceEquals(selection, k.Host.Selection), "Esc で元の選択文字が残る");
         Assert.True(!k.Host.Events.Any(e => e.StartsWith("replace:", StringComparison.Ordinal)), "取消時は置換しない");
-        Assert.True(!k.Gate.IsCaptured, "取消後はキーを解放する");
+        Assert.True(!k.Captured, "取消後はキーを解放する");
+        k.Host.Selection = null; // 選択を外してから打つ
         k.Type("kana");
         k.Press(VirtualKeys.Return);
         Assert.True(k.Host.Output.Count > 0, "取消後も通常入力できる");
-    }
-
-    [Test]
-    public static void Reconversion_ChangedSelectionIsNotReplaced()
-    {
-        var k = new Keyboard();
-        k.Host.Selection = new ReconversionSelection("今日", "きょう");
-        k.Press(VirtualKeys.Convert);
-        k.Host.Selection = new ReconversionSelection("橋", "はし");
-        k.Press(VirtualKeys.Return);
-        Assert.True(!k.Host.Events.Any(e => e.StartsWith("replace:", StringComparison.Ordinal)), "別の選択範囲を置換しない");
-        Assert.Equal(0, k.Host.Output.Count);
-        Assert.True(!k.Gate.IsCaptured, "置換失敗後もキーを解放する");
     }
 
     [Test]
@@ -686,7 +666,7 @@ internal static class CompositionTests
         k.Host.PhysicalShift = false;
         k.Type("tarou\n");
         Assert.Equal("たなか　たろう", k.Host.Document);
-        Assert.True(!k.Gate.IsCaptured, "全角スペースの後は横取りしない");
+        Assert.True(!k.Captured, "全角スペースの後は横取りしない");
     }
 
     [Test]
@@ -1251,7 +1231,7 @@ internal static class CompositionTests
     [Test]
     public static void CtrlShiftShortcut_SendsModifiersInOrder()
     {
-        // Ctrl+Shift+Z: 確定してから Ctrl → Shift → Z の順に送り、離したことも送る
+        // Ctrl+Shift+Z: 確定してから Z をアプリに通す (Ctrl と Shift は Z と一緒に届いている)
         var k = new Keyboard();
         k.Type("kana");
         k.Key(VirtualKeys.LControl);
@@ -1259,63 +1239,8 @@ internal static class CompositionTests
         k.Press('Z');
         k.Key(VirtualKeys.LShift, up: true);
         k.Key(VirtualKeys.LControl, up: true);
-        var events = string.Join("|", k.Host.Events);
-        Assert.True(events.StartsWith("text:かな|down:A2|down:A0|down:5A", StringComparison.Ordinal), events);
-        Assert.True(events.Contains("up:A0") || events.Contains("passed-up:A0"), "Shift を離したことも届く: " + events);
-        Assert.True(events.Contains("up:A2") || events.Contains("passed-up:A2"), "Ctrl を離したことも届く: " + events);
-        Assert.True(!k.Gate.IsCaptured, "ショートカットの後は横取りをやめる");
-    }
-
-    [Test]
-    public static void CtrlClick_CommitsThenSendsCtrlWithClick()
-    {
-        // Ctrl を押したままクリック: 確定してから、Ctrl とクリックを送る
-        var k = new Keyboard();
-        k.Type("kana");
-        k.Key(VirtualKeys.LControl);
-        k.Gate.OnMouseButton(new MouseButtonEvent(0x201, 10, 20, 0));
-        k.Controller.Pump();
-        var events = string.Join("|", k.Host.Events);
-        Assert.True(events.StartsWith("text:かな|down:A2|mouse:201", StringComparison.Ordinal), events);
-        k.Key(VirtualKeys.LControl, up: true);
-        Assert.True(string.Join("|", k.Host.Events).Contains("A2", StringComparison.Ordinal) && k.Host.Events.Count(e => e.Contains(":A2")) == 2, "Ctrl の上げ下げがそろう: " + string.Join("|", k.Host.Events));
-    }
-
-    [Test]
-    public static void CaptureGate_StartCheckDoesNotBlockQueue()
-    {
-        // 打ち始めの判定 (フォーカスを調べ終わるのを待つことがある) の間も、UI スレッドはキューを読める
-        var gate = new CaptureGate(() => { });
-        using var entered = new ManualResetEventSlim();
-        using var release = new ManualResetEventSlim();
-        var hook = Task.Run(() => gate.OnKey(new KeyEvent('A', 0, false, false, false, 0), _ =>
-        {
-            entered.Set();
-            release.Wait(5000);
-            return true;
-        }));
-        Assert.True(entered.Wait(5000), "判定が始まる");
-        var ui = Task.Run(() => gate.TryDequeue(out _) || gate.IsCaptured || !gate.TryRelease());
-        var finished = ui.Wait(2000);
-        release.Set();
-        Assert.True(finished && !ui.Result, "判定の間も、キューの出し入れと関所の開け閉めは待たされない");
-        Assert.True(hook.Result && gate.IsCaptured, "判定が済んだら横取りを始める");
-        Assert.True(gate.TryDequeue(out var input) && input.Key?.Vk == 'A' && !gate.TryDequeue(out _), "判定した打鍵を 1 回だけ積む");
-    }
-
-    [Test]
-    public static void ShiftClick_CommitsThenSendsShiftWithClick()
-    {
-        // Shift を押したままクリック (範囲選択): 確定してから、Shift とクリックを送る
-        var k = new Keyboard();
-        k.Type("kana");
-        k.Key(VirtualKeys.LShift);
-        k.Gate.OnMouseButton(new MouseButtonEvent(0x201, 10, 20, 0));
-        k.Controller.Pump();
-        var events = string.Join("|", k.Host.Events);
-        Assert.True(events.StartsWith("text:かな|down:A0|mouse:201", StringComparison.Ordinal), events);
-        k.Key(VirtualKeys.LShift, up: true);
-        Assert.True(k.Host.Events.Count(e => e.Contains(":A0")) == 2, "Shift の上げ下げがそろう: " + string.Join("|", k.Host.Events));
+        Assert.Equal("text:かな|down:5A", string.Join("|", k.Host.Events));
+        Assert.True(!k.Captured, "ショートカットの後は受け取らない");
     }
 
     [Test]
@@ -1325,8 +1250,7 @@ internal static class CompositionTests
         k.Type("aiueo");
         CtrlPress(k, 'C');
         Assert.Equal("あいうえお", k.Host.Document);
-        var down = k.Host.Events.IndexOf("down:A2");
-        Assert.True(down >= 0 && k.Host.Events.IndexOf("down:43") > down, "確定してから Ctrl+C を送る: " + string.Join(" ", k.Host.Events));
+        Assert.Equal("text:あいうえお|down:43", string.Join("|", k.Host.Events), "確定してから Ctrl+C を通す");
     }
 
     [Test]
@@ -1340,7 +1264,7 @@ internal static class CompositionTests
         var second = view.Candidates[1];
         k.Press('2');
         Assert.Equal(second, k.Host.Document);
-        Assert.True(!k.Gate.IsCaptured, "最後の文節を番号で選んだら確定する");
+        Assert.True(!k.Captured, "最後の文節を番号で選んだら確定する");
     }
 
     [Test]
@@ -1403,7 +1327,7 @@ internal static class CompositionTests
         var second = view.Candidates[1];
         k.Press(0x62);
         Assert.Equal(second, k.Host.Document);
-        Assert.True(!k.Gate.IsCaptured, "最後の文節を番号で選んだら確定する");
+        Assert.True(!k.Captured, "最後の文節を番号で選んだら確定する");
     }
 
     [Test]
@@ -1427,7 +1351,7 @@ internal static class CompositionTests
     {
         var k = new Keyboard();
         k.Press(VirtualKeys.Convert);
-        Assert.True(!k.Gate.IsCaptured, "選択文字なしでは変換を開始しない");
+        Assert.True(!k.Captured, "選択文字なしでは変換を開始しない");
         Assert.True(!k.Host.Events.Contains("down:1C"), "Windows IME に変換キーを渡さない");
         Assert.Equal(0, k.Host.Output.Count);
     }
@@ -1441,23 +1365,12 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Back); // 候補選択から読みの編集に戻る。
         k.Press(VirtualKeys.Back);
         k.Press(VirtualKeys.Back);
-        Assert.True(!k.Gate.IsCaptured, "読みを消し切ったら再変換を終了する");
+        Assert.True(!k.Captured, "読みを消し切ったら再変換を終了する");
+        k.Host.Selection = null; // 選択を外してから打つ
         k.Type("kana");
         k.Press(VirtualKeys.Return);
         Assert.True(!k.Host.Events.Any(e => e.StartsWith("replace:", StringComparison.Ordinal)), "次の入力に再変換の状態を持ち越さない");
         Assert.True(k.Host.Output.Count > 0, "次の入力は普通に確定する");
-    }
-
-    [Test]
-    public static void Reconversion_FocusLossAbandonsWithoutReplacement()
-    {
-        var k = new Keyboard();
-        k.Host.Selection = new ReconversionSelection("今日", "きょう");
-        k.Press(VirtualKeys.Convert);
-        Assert.True(k.Controller.Abandon("フォーカスが変わった"), "再変換を破棄する");
-        k.Controller.Pump();
-        Assert.True(!k.Gate.IsCaptured, "フォーカス喪失後はキーを解放する");
-        Assert.True(!k.Host.Events.Any(e => e.StartsWith("replace:", StringComparison.Ordinal)), "フォーカス喪失時は置換しない");
     }
 
     [Test]
@@ -1485,7 +1398,7 @@ internal static class CompositionTests
         k.Type("\n");
         Assert.Equal("こんにちは", k.Host.Output.Single());
         Assert.True(k.Showing is null, "確定したら変換ボックスを閉じる");
-        Assert.True(!k.Gate.IsCaptured, "確定後はキーを横取りしない");
+        Assert.True(!k.Captured, "確定後はキーを横取りしない");
     }
 
     [Test]
@@ -3323,11 +3236,12 @@ internal static class CompositionTests
         var k = new Keyboard(direct: true);
         k.Type("ka");
         Assert.Equal(2, k.Host.Events.Count(e => e.StartsWith("down:", StringComparison.Ordinal)), "判定中でも打った英字はすぐ送る");
-        Assert.True(k.Gate.IsCaptured, "判定中は打鍵を受け取る");
-        k.Controller.Tick(k.Now + 1000);
+        Assert.True(k.Captured, "判定中は打鍵を受け取る");
+        k.Wait(1000);
+        k.Idle();
         Assert.Equal(2, k.Host.Events.Count(e => e.StartsWith("down:", StringComparison.Ordinal)), "しばらく打たなければ英語とみなす (送り直さない)");
         Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:", StringComparison.Ordinal)), "消さない");
-        Assert.True(!k.Gate.IsCaptured, "判定をやめたら横取りもやめる");
+        Assert.True(!k.Captured, "判定をやめたら横取りもやめる");
     }
 
     [Test]
@@ -3336,30 +3250,12 @@ internal static class CompositionTests
         // 英数状態で英字を打った直後に押した Shift がアプリに届かず、(bow) の ) が Shift なしの 0 になっていた。
         var k = new Keyboard(direct: true);
         k.Type("bow");
-        Assert.True(k.Gate.IsCaptured, "bow はまだ判定中");
-        k.Host.Events.Clear();
+        Assert.True(k.Captured, "bow はまだ判定中");
         k.Key(VirtualKeys.LShift);
-        k.Press(0x30);
+        k.Press(0x39); // JIS 配列の Shift+9 は )
         k.Key(VirtualKeys.LShift, up: true);
-        var shift = k.Host.Events.IndexOf("down:A0");
-        Assert.True(shift >= 0 && shift < k.Host.Events.IndexOf("passed:30"), $"Shift を 0 より先にアプリへ送る ({string.Join(",", k.Host.Events)})");
-        Assert.True(!k.Gate.IsCaptured, "判定をやめたら横取りもやめる");
-    }
-
-    [Test]
-    public static void ShiftRepeatWhileComposing_ReleaseReachesApp()
-    {
-        // キーボードが 2 台だと、文字を打っても Shift のリピートが止まらず、離しても Shift が押されたままになっていた (issue #617)。
-        var k = new Keyboard();
-        k.Host.PhysicalShift = true; // Shift の押下は、変換ボックスが開く前にアプリへ届いている
-        k.Press(0x41);
-        Assert.True(k.Gate.IsCaptured, "A で変換ボックスが開く");
-        k.Key(VirtualKeys.RShift); // リピート
-        k.Press(0x41);
-        k.Key(VirtualKeys.RShift);
-        k.Host.Events.Clear();
-        k.Key(VirtualKeys.RShift, up: true);
-        Assert.True(k.Host.Events.Contains("up:A1"), $"Shift を離したことをアプリに伝える ({string.Join(",", k.Host.Events)})");
+        Assert.Equal("bow)", k.Host.Document, "Shift と一緒のキーは ) のままアプリに届く");
+        Assert.True(!k.Captured, "判定をやめたら受け取らない");
     }
 
     [Test]
@@ -3754,10 +3650,15 @@ internal static class CompositionTests
         // 報告 (#137): 確定した後に別の場所をクリックしてから英語の語を確定すると、前の語ではなく
         // 「今のキャレットの前の文字」が消される。Mac はクリックを知らされない (ForgetLastCommit が呼ばれない) ので、
         // 消す前に「直前に確定した語が今のキャレットの位置にあるか」を入力欄に確かめる。
+        var stays = new Keyboard();
+        stays.Type("i ");
+        stays.Press(VirtualKeys.Return);
+        stays.Type("want ");
+        Assert.True(stays.Host.Events.Any(e => e.StartsWith("bs:", StringComparison.Ordinal)), $"キャレットが前の語の後ろにあれば直す: {string.Join("|", stays.Host.Events)}");
         var k = new Keyboard();
-        k.Host.SurroundingTextIsCurrent = true;
         k.Type("i ");
-        k.Host.PrecedingText = "ほかのところ"; // 別の場所をクリックした (Mac なので知らされない)
+        k.Press(VirtualKeys.Return);
+        k.Host.PrecedingText = "ほかのところ"; // 確定した後で別の場所をクリックした (クリックを知らされない)
         k.Type("want ");
         Assert.True(!k.Host.Events.Any(e => e.StartsWith("bs:", StringComparison.Ordinal)), $"前の語が今のキャレットの位置に無いので消さない: {string.Join("|", k.Host.Events)}");
     }
@@ -3767,21 +3668,8 @@ internal static class CompositionTests
     {
         // Mac (入力欄の文字をその場で読める) でも、キャレットの直前に前の語があるなら今までどおり直す。
         var k = new Keyboard();
-        k.Host.SurroundingTextIsCurrent = true;
         k.Type("i want ");
         Assert.Equal("I want ", k.Host.Document, string.Join("|", k.Host.Events));
-    }
-
-    [Test]
-    public static void AutoCorrect_StillCorrectsWhenSurroundingTextIsNotCurrent()
-    {
-        // Windows は入力欄の文字を別のスレッドで後から読むので、届いた値が古いことがある (キャレットが動いたことは
-        // ForgetLastCommit で知らされる)。読めていない環境では今までどおり直す。
-        var k = new Keyboard();
-        k.Type("i ");
-        k.Host.PrecedingText = "ほかのところ";
-        k.Type("want ");
-        Assert.True(k.Host.Events.Any(e => e.StartsWith("bs:", StringComparison.Ordinal)), $"読めていない環境では直す: {string.Join("|", k.Host.Events)}");
     }
 
     [Test]
@@ -5105,7 +4993,7 @@ internal static class CompositionTests
         k.Type("kak\b");
         Assert.Equal("か", k.Showing);
         k.Type("\b\b");
-        Assert.True(k.Showing is null && !k.Gate.IsCaptured, "空になったら閉じる");
+        Assert.True(k.Showing is null && !k.Captured, "空になったら閉じる");
         Assert.Equal(0, k.Host.Output.Count);
 
         k.Type("abc");
@@ -5181,7 +5069,7 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("kana");
         k.Press(VirtualKeys.Tab);
-        Assert.Equal("text:かな|down:09|passed-up:09", string.Join("|", k.Host.Events), "確定後の キーアップ は関所を通らず直接届く");
+        Assert.Equal("text:かな|down:09", string.Join("|", k.Host.Events), "確定してから Tab を通す");
     }
 
     private static void ShiftTab(Keyboard k)
@@ -5313,7 +5201,7 @@ internal static class CompositionTests
         var k = new Keyboard(tabConversion: true);
         k.Type("hello");
         k.Press(VirtualKeys.Tab);
-        Assert.Equal("text:hello|down:09|passed-up:09", string.Join("|", k.Host.Events));
+        Assert.Equal("text:hello|down:09", string.Join("|", k.Host.Events));
     }
 
     [Test]
@@ -5374,9 +5262,9 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LControl);
         k.Press('C');
         k.Key(VirtualKeys.LControl, up: true);
-        // 入力中の Ctrl は次のキーを見るまで送らない (Ctrl+U/I/O/P はかな・英字の切り替え)。ほかのキーなら確定 → Ctrl → そのキーの順に送る
-        Assert.Equal("text:かな|down:A2|down:43|passed-up:43|passed-up:A2", string.Join("|", k.Host.Events), "確定 → Ctrl → C を送る → 以降は直接アプリへ");
-        Assert.True(!k.Gate.IsCaptured, "ショートカットの後は横取りをやめる");
+        // 入力中の Ctrl + キーは、Ctrl+U/I/O/P ならかな・英字の切り替え。ほかのキーなら確定してからそのキーを通す
+        Assert.Equal("text:かな|down:43", string.Join("|", k.Host.Events), "確定 → Ctrl+C を通す");
+        Assert.True(!k.Captured, "ショートカットの後は受け取らない");
     }
 
     [Test]
@@ -5399,18 +5287,7 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LShift);
         k.Press(0x25); // ←
         k.Key(VirtualKeys.LShift, up: true);
-        Assert.Equal("text:hello|down:A0|down:25|passed-up:25|passed-up:A0", string.Join("|", k.Host.Events), "範囲選択のための Shift はアプリに届く");
-    }
-
-    [Test]
-    public static void MouseClick_CommitsBeforeClicking()
-    {
-        var k = new Keyboard();
-        k.Type("kana");
-        Assert.True(k.Gate.OnMouseButton(new MouseButtonEvent(0x201, 10, 20, 0)), "変換中のクリックは一旦止める");
-        k.Controller.Pump();
-        Assert.Equal("text:かな|mouse:201", string.Join("|", k.Host.Events), "確定してからクリックを再生");
-        Assert.True(!k.Gate.OnMouseButton(new MouseButtonEvent(0x202, 10, 20, 0)), "確定後のクリックは素通し");
+        Assert.Equal("text:hello|down:25", string.Join("|", k.Host.Events), "確定してから Shift+← (範囲選択) を通す");
     }
 
     [Test]
@@ -5420,16 +5297,6 @@ internal static class CompositionTests
         Assert.True(!k.Key(VirtualKeys.Space), "変換ボックスが無いときの Space は素通し");
         Assert.True(!k.Key(VirtualKeys.Tab), "Tab など文字を生まないキーは素通し");
         Assert.True(k.Key(0x31), "数字は変換ボックスに入る (数字だけなら半角のまま、Space で空白)");
-    }
-
-    [Test]
-    public static void KeyUpOfKeyPressedBeforeCapture_IsReplayed()
-    {
-        // Shift を押したまま大文字で打ち始めた場合、Shift の押下は関所の前にアプリへ届いている。
-        var k = new Keyboard();
-        k.Key('T');
-        k.Key(VirtualKeys.LShift, up: true);
-        Assert.True(k.Host.Events.Contains("up:A0"), "離したことを伝えないと Shift が押しっぱなしになる");
     }
 
     [Test]
@@ -5596,7 +5463,7 @@ internal static class CompositionTests
             // 先頭の / をそのまま渡すのはコードエディターのコードの中だけ (文章の入力欄では ・ にする)。
             var k = new Keyboard { Code = word[0] == '/' };
             k.Type(word);
-            Assert.True(!k.Gate.IsCaptured && k.Showing is null, $"{word}: 変換ボックスを開かない");
+            Assert.True(!k.Captured && k.Showing is null, $"{word}: 変換ボックスを開かない");
             Assert.Equal(0, k.Host.Output.Count, word);
             Assert.True(k.InSigilWord, $"{word}: 名前の途中");
         }
@@ -5617,7 +5484,7 @@ internal static class CompositionTests
         Assert.Equal("/", k.Showing);
         k.Type("help");
         Assert.Equal("/", string.Concat(k.Host.Output));
-        Assert.True(!k.Gate.IsCaptured && k.InSigilWord, "/help の help はアプリへ");
+        Assert.True(!k.Captured && k.InSigilWord, "/help の help はアプリへ");
         Assert.True(k.Host.Events.Contains("down:48") && k.Host.Events.Contains("passed:50"), "help はアプリへ");
         k.Type(" kyou");
         Assert.Equal("きょう", k.Showing);
@@ -5628,7 +5495,7 @@ internal static class CompositionTests
         // コードエディターのコードの中は今までどおり、そのままアプリへ渡す。
         k = new Keyboard { Code = true };
         k.Type("/help");
-        Assert.True(!k.Gate.IsCaptured && k.InSigilWord, "コードの /help はアプリへ");
+        Assert.True(!k.Captured && k.InSigilWord, "コードの /help はアプリへ");
     }
 
     [Test]
@@ -5649,11 +5516,11 @@ internal static class CompositionTests
         var k = new Keyboard { Code = true };
         k.Type("google /help");
         Assert.Equal("google ", string.Concat(k.Host.Output));
-        Assert.True(!k.Gate.IsCaptured, "/help は変換ボックスに入れない");
+        Assert.True(!k.Captured, "/help は変換ボックスに入れない");
         // Enter (送信・改行) の後の行の先頭も。
         k.Press(VirtualKeys.Return);
         k.Type("$deploy");
-        Assert.True(!k.Gate.IsCaptured && k.InSigilWord, "Enter の後の $deploy も通す");
+        Assert.True(!k.Captured && k.InSigilWord, "Enter の後の $deploy も通す");
     }
 
     [Test]
@@ -5662,22 +5529,22 @@ internal static class CompositionTests
         // メールアドレスの @ (前が英字) は対象外。変換ボックスの中で打った @ もそのまま変換ボックスで扱う。
         var k = new Keyboard();
         k.Type("taro@example.com");
-        Assert.True(k.Gate.IsCaptured && k.Showing!.Contains('@'), "taro@ の @ は変換ボックスの中");
+        Assert.True(k.Captured && k.Showing!.Contains('@'), "taro@ の @ は変換ボックスの中");
         Assert.True(!k.InSigilWord, "名前として扱わない");
         // 日本語を確定した直後 (空白なし) の / も対象外。
         k = new Keyboard();
         k.Type("kyouha\n/");
-        Assert.True(k.Gate.IsCaptured, "今日は/ の / は変換ボックスに入れる");
+        Assert.True(k.Captured, "今日は/ の / は変換ボックスに入れる");
         // ホストが前の文字を教えてくれれば、それで決める (打ち始めでも前が英字なら対象外)。
         k = new Keyboard();
         k.Host.PrecedingText = "taro";
         k.Type("@");
-        Assert.True(k.Gate.IsCaptured, "前が taro なら @ は変換ボックスに入れる");
+        Assert.True(k.Captured, "前が taro なら @ は変換ボックスに入れる");
         k = new Keyboard { Code = true };
         k.Host.PrecedingText = "> ";
         k.Press(VirtualKeys.Left);
         k.Type("/");
-        Assert.True(!k.Gate.IsCaptured, "前の文字が空白と分かれば、キャレットを動かした後でも / を通す");
+        Assert.True(!k.Captured, "前の文字が空白と分かれば、キャレットを動かした後でも / を通す");
     }
 
     [Test]
@@ -5687,7 +5554,7 @@ internal static class CompositionTests
         var k = new Keyboard(direct: true);
         k.Type("/kensaku");
         Assert.True(k.Direct, "英数状態のまま");
-        Assert.True(!k.Gate.IsCaptured && k.Host.Output.Count == 0, "打ったキーはそのままアプリへ");
+        Assert.True(!k.Captured && k.Host.Output.Count == 0, "打ったキーはそのままアプリへ");
     }
 
     [Test]
@@ -5695,7 +5562,7 @@ internal static class CompositionTests
     {
         var k = new Keyboard { SigilWords = false };
         k.Type("/review");
-        Assert.True(k.Gate.IsCaptured, "OFF なら今までどおり変換ボックスに入れる");
+        Assert.True(k.Captured, "OFF なら今までどおり変換ボックスに入れる");
     }
 
     [Test]

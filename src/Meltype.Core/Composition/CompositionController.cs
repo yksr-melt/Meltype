@@ -42,85 +42,13 @@ public sealed record CompositionView(
     // 一覧に番号を出すか (数字キーで選べる変換中の候補だけ。SessionResult.ForFront が決める)
     bool Numbered = false);
 
-/// <summary>CompositionController が外界とやり取りする口。テストでは偽物に差し替える。</summary>
-public interface ICompositionHost
+/// <summary>キーを 1 つ押した。Ch は入力する文字 (キーボード配列は OS 側で解決済み。文字を生まないキーなら null)。</summary>
+public readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
 {
-    /// <summary>選択中の確定済み文字と、その読み。取得できなければ null。</summary>
-    ReconversionSelection? GetReconversionSelection() => null;
-
-    /// <summary>元の選択範囲が維持されている場合だけ置換する。</summary>
-    bool TryReplaceSelection(ReconversionSelection selection, string text) => false;
-
-    /// <summary>確定した文字列を、フォーカスのあるテキストボックスへ入力する。</summary>
-    void CommitText(string text);
-
-    /// <summary>直前に確定した文字の末尾から、キャレットを count 文字だけ左へ戻す。現在の打鍵の通過とは別の操作。</summary>
-    void MoveCaretBackward(int count);
-
-    /// <summary>握りつぶしていた打鍵を、そのままアプリへ送り直す。</summary>
-    void Replay(KeyEvent e);
-
-    /// <summary>キャレットの前の文字を count 文字消す (確定し直すとき)。</summary>
-    void DeleteBackward(int count);
-
-    /// <summary>
-    /// キャレットの前の count 文字を text に置き換える (確定し直すとき)。消すのと入れるのを、間に何も挟まらないようにまとめて送る。
-    /// </summary>
-    void ReplaceBackward(int count, string text)
-    {
-        DeleteBackward(count);
-        CommitText(text);
-    }
-
-    /// <summary>
-    /// 確定し直し: キャレットの前の count 文字を replacement に置き換えて、続けて今確定した語 (current) を入れる。
-    /// 前の文字を消せなかったときに current だけを入れられるように、分けて渡す (Meltype IME など。<see cref="TextEdit"/>)。
-    /// </summary>
-    void ReplaceBackward(int count, string replacement, string current) => ReplaceBackward(count, replacement + current);
-
-    void RecordDirectReplay(char c) { }
-
-    /// <summary>
-    /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
-    /// 確定し直すと元の文字が残ったまま書き足されてしまう (api → apiあぴ) ので、確定し直さない。
-    /// </summary>
-    bool CanDeleteBackward => true;
-
-    void Replay(MouseButtonEvent e);
-
-    /// <summary>その打鍵で入力される文字 (記号・数字を含む)。文字を生まないキーなら null。</summary>
-    char? CharFromKey(KeyEvent e, bool shift);
-
-    /// <summary>今 Shift キーが押されているか (かな入力の小書き文字・句読点の判定に使う)。</summary>
-    bool IsShiftDown() => false;
-
-    /// <summary>
-    /// 入力欄の文字を、キーを処理しているその場で読めているか。読めている環境 (Mac) では、渡された
-    /// 「キャレットの前の文字」は今のキャレットの位置のものだと信じられる。読めていない環境 (Windows は別のスレッドで
-    /// 後から読む) では届く値が古いことがあるので、キャレットが動いたかの判断には使わない。
-    /// </summary>
-    bool SurroundingTextIsCurrent => false;
-
-    /// <summary>
-    /// クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に 1 回読む)。
-    /// 読めない・文字ではない・履歴に残さない印がある (パスワード管理ソフトなど) ときは null。
-    /// </summary>
-    string? ClipboardText => null;
-
-    /// <summary>今再生している曲 (曲名・アーティスト。「なう」の候補に出す。issue #1400)。読めない・再生していなければ null。</summary>
-    (string Title, string Artist)? NowPlaying => null;
-
-    /// <summary>
-    /// 入力欄のキャレットの前後の文字列 (確定済みの文字) を取りに行く。結果は後から UI スレッドで callback(前, 後ろ) に渡す。
-    /// 取れなければ null を渡す。
-    /// </summary>
-    void RequestSurroundingText(Action<string?, string?> callback);
-
-    void Show(CompositionView view);
-
-    void Hide();
+    public bool Modifier => Control || Alt || Command;
 }
 
+/// <summary>選択中の確定済みの文字と、その読み (再変換)。</summary>
 public sealed record ReconversionSelection(string Text, string Reading);
 
 /// <summary>CompositionController が使う辞書・学習データと、設定でない外の入力。設定は <see cref="Config.Settings"/> を別に渡す。</summary>
@@ -138,7 +66,6 @@ public sealed record CompositionServices
     /// <summary>英数状態での判定結果を知らせる (true: 日本語だったので日本語入力に戻った / false: 英語だった)。</summary>
     public Action<bool>? DirectDecided { get; init; }
 
-    public Action? DirectHoldCleared { get; init; }
 
     /// <summary>同音異義語などの補助候補。</summary>
     public CandidateDictionary? Candidates { get; init; }
@@ -202,9 +129,9 @@ public sealed record CompositionServices
 ///   Enter   → 確定してテキストボックスへ入力
 ///   BackSpace / Esc → 1 音削除 / 変換取り消し・入力取り消し
 ///   F6 / F7 / F8 / F9 / F10, 半角/全角 → ひらがな / カタカナ / 半角カタカナ / 全角英数 / 半角英数 (続けて押すと 大文字 → 先頭だけ大文字) / 日本語⇔英字
-///   その他のキー・クリック → 確定してからそのキーやクリックを通す
+///   その他のキー → 確定してからそのキーを通す
 /// 英数状態でも、打ち始めの数文字でローマ字 (日本語) かを判定し (打鍵は待たせずに送る)、日本語なら送った分を消して日本語入力に戻し、変換ボックスに入れる。
-/// UI スレッドだけで動く。フックからは CaptureGate 経由で入力が順番どおり届く。
+/// 出来事を 1 つ受け取るたびに、確定・表示・キーをアプリに通すかを <see cref="SessionResult"/> で返す。1 つのスレッドから使う。
 /// </summary>
 public sealed class CompositionController
 {
@@ -226,22 +153,23 @@ public sealed class CompositionController
     /// <summary>自分が確定してから、この時間内はアプリ側のテキストがまだ更新されていないかもしれないので自分の記録を優先する。</summary>
     private const long OwnCommitTrustMs = 1500;
 
-    private readonly CaptureGate _gate;
+    private readonly Output _out = new();
     private readonly CompositionText _text;
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     private KanaLayoutEngine _kanaLayout = new(KanaLayout.Jis);
     private bool _bypassKanaLayout;
     private readonly CompositionDetector _detector;
     private readonly IKanjiConverter _converter;
-    private readonly ICompositionHost _host;
     private readonly Func<Config.Settings> _settings;
     private readonly CompositionServices _services;
     private readonly Dictionary<string, List<(string Reading, string Text)>> _liveCache = new(StringComparer.Ordinal);
     private readonly ConversionBudget? _budget;
-    private readonly HashSet<int> _swallowedShift = [];
-    private readonly HashSet<int> _swallowedControl = [];
-    private readonly HashSet<int> _replayedDown = [];
-    private readonly HashSet<int> _capturedDown = [];
+    // 処理中のキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)
+    private bool _shift;
+    private bool _control;
+    private bool _modifier;
+    // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
+    private readonly HashSet<int> _pressed = [];
     private List<Clause> _clauses = [];
     private bool _conversionPrefersJapanese;
     // 文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える
@@ -255,7 +183,6 @@ public sealed class CompositionController
     /// <summary>入力欄が教えてくれた、キャレットの直前の確定済みの文字 (読めなければ null)。確定し直してよいかの判断に使う。</summary>
     private string? _caretBefore;
     private long _lastCommitTime = long.MinValue / 2;
-    private int _compositionId;
     private ReconversionSelection? _reconversion;
 
     // 予測変換: 打ちかけの読み・英字の続きの候補と、Tab で選んでいるもの (-1 なら選んでいない)。
@@ -311,14 +238,12 @@ public sealed class CompositionController
         public HashSet<string> Translations { get; } = new(StringComparer.Ordinal);
     }
 
-    public CompositionController(CaptureGate gate, CompositionDetector detector, IKanjiConverter converter, ICompositionHost host, Func<Config.Settings> settings, CompositionServices? services = null)
+    public CompositionController(CompositionDetector detector, IKanjiConverter converter, Func<Config.Settings> settings, CompositionServices? services = null)
     {
-        _gate = gate;
         _text = new CompositionText(detector);
         _detector = detector;
         _converter = converter;
         _budget = (converter as IBackgroundConverter)?.Budget;
-        _host = host;
         _settings = settings;
         _services = services ?? new CompositionServices();
         _text.Manual = () => !_settings().AutoDetection;
@@ -330,7 +255,12 @@ public sealed class CompositionController
         _text.CorrectTypos = () => _settings().CorrectTypos;
         _text.Slash = () => _settings().Slash;
         _text.ZSymbols = () => _settings().ZSymbols;
-        _text.SlashAtStart = () => Interlocked.Exchange(ref _slashAtStart, 0) == 1;
+        _text.SlashAtStart = () =>
+        {
+            var marked = _slashAtStart;
+            _slashAtStart = false;
+            return marked;
+        };
     }
 
     /// <summary>入力を覚えないように求める入力欄か。true の間は学習しない。</summary>
@@ -352,40 +282,138 @@ public sealed class CompositionController
     /// <summary>直近に確定した文字列 (テスト・ログ用)。</summary>
     public event Action<string>? Committed;
 
-    /// <summary>キューにたまった入力をすべて処理する。UI スレッドで呼ぶ。</summary>
-    public void Pump()
+    /// <summary>
+    /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
+    /// 確定し直すと元の文字が残ったまま書き足されてしまう (api → apiあぴ) ので、確定し直さない。
+    /// </summary>
+    public bool CanDeleteBackward { get; set; } = true;
+
+    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
+    public string? Selection { get; set; }
+
+    /// <summary>漢字かな交じりの文の読み (再変換。OS の機能)。分からなければ null。</summary>
+    public Func<string, string?> ReadingOf { get; set; } = _ => null;
+
+    /// <summary>
+    /// クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に 1 回読む)。
+    /// 読めない・文字ではない・履歴に残さない印がある (パスワード管理ソフトなど) ときは null。
+    /// </summary>
+    public Func<string?> Clipboard { get; set; } = () => null;
+
+    /// <summary>今再生している曲 (曲名・アーティスト。「なう」の候補に出す。issue #1400)。読めない・再生していなければ null。</summary>
+    public Func<(string Title, string Artist)?> NowPlaying { get; set; } = () => null;
+
+    /// <summary>
+    /// キーを押した。before / after は入力欄のキャレットの前後の確定済みの文字 (分かれば)。
+    /// 変換ボックスに入力していないときは、入力を始めるキー (<see cref="StartsComposition"/>) だけを受け取り、ほかはアプリに通す。
+    /// releaseFollows なら、離したことは <see cref="Release"/> で届く (false なら押した直後に離したとみなす)。
+    /// </summary>
+    public SessionResult Press(KeyPress key, string? before = null, string? after = null, bool releaseFollows = false)
     {
-        while (true)
+        _out.Begin(before, after);
+        Tick(key.TimeMs);
+        var consumed = Handle(key);
+        if (!releaseFollows) HandleRelease(key.Vk);
+        Settle();
+        return Result(consumed);
+    }
+
+    /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>
+    public SessionResult Release(int vk, string? before = null, string? after = null)
+    {
+        _out.Begin(before, after);
+        HandleRelease(vk);
+        Settle();
+        // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
+        return Result(consumed: true);
+    }
+
+    /// <summary>キーをアプリに通す。変換ボックスの状態は変えない (英数状態で判定中の語は、しばらく打たなければ英語とみなす)。</summary>
+    public SessionResult Pass(long nowMs)
+    {
+        _out.Begin(null, null);
+        Tick(nowMs);
+        return Result(consumed: false);
+    }
+
+    /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま。</summary>
+    public SessionResult Current()
+    {
+        _out.Begin(null, null);
+        return Result(consumed: true) with { Consumed = false };
+    }
+
+    /// <summary>変換ボックスの表示 (フロントに渡す形にする前のもの。テストで見る)。出していなければ null。</summary>
+    internal CompositionView? View => _out.View;
+
+    private SessionResult Result(bool consumed) => _out.Result(consumed && !_out.PassedCurrent, _settings());
+
+    /// <summary>キーを 1 つ処理する。アプリに通さないなら true。</summary>
+    private bool Handle(KeyPress key)
+    {
+        (_shift, _control, _modifier) = (key.Shift, key.Control, key.Modifier);
+        if (!IsComposing && !_kanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(key))) return false;
+        _budget?.Start(InputBudgetMs);
+        _pressed.Add(key.Vk);
+        HandleKey(new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs));
+        return true;
+    }
+
+    /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
+    private bool StartsComposition(KeyPress key)
+    {
+        var direct = _services.DirectMode();
+        if (key.Vk == VirtualKeys.Convert && Selection is { Length: > 0 }) return true;
+        if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && KanaInput &&
+            _settings().KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
+        // かな入力: かなのキーならすべて入力を始める (StartWith)
+        if (KanaInput && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
+        // 日本語入力の Shift+Space・設定「スペースの幅」が全角の Space は、全角スペースにする (StartWith)
+        if (key.Vk == VirtualKeys.Space) return key.Shift || !direct && _settings().SpaceWidth == Config.SpaceWidth.FullWidth;
+        if (key.Ch is not { } c) return false;
+        if (VirtualKeys.IsLetter(key.Vk) && char.IsAsciiLetter(c)) return true;
+        // 句読点・かぎかっこ・長音・数字・記号 (Shift で打つものも)
+        return StartsWithSymbol(c);
+    }
+
+    private void HandleRelease(int vk)
+    {
+        var pressed = _pressed.Remove(vk);
+        if (!IsComposing && !_kanaLayout.ThumbHeld) return;
+        var kanaUp = _kanaLayout.Up(vk);
+        // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
+        if (kanaUp.Stroke.Handled && IsComposing) ApplyKanaStroke(kanaUp.Stroke);
+        // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
+        if (kanaUp.ThumbTap && pressed)
         {
-            while (_gate.TryDequeue(out var input))
-            {
-                _budget?.Start(InputBudgetMs);
-                if (input.Key is { } key) HandleKey(key);
-                else if (input.Mouse is { } mouse) HandleMouse(mouse);
-            }
-            UpdateView();
-            // 親指キーを押したままなら、離したことを受け取るまで横取りを続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
-            if (IsComposing || _kanaLayout.ThumbHeld) return;
-            // 読みをすべて削除した場合も、元の選択範囲は置換せず再変換を終了する。
-            if (_reconversion is not null) ClearComposition();
-            // 送らずにいた Shift (押したまま) は、横取りをやめる前に送る。送らないと、次に打つキーが Shift なしでアプリに届く
-            // (英数状態で判定中の語を Shift で打ち切ったとき、(bow) の ) が 0 になっていた)。
-            ReplaySwallowed(_swallowedShift);
-            if (_gate.TryRelease())
-            {
-                // 以降のキーアップはフックを素通りしてアプリに直接届くので、追跡をやめる。
-                ForgetTrackedKeys();
-                return;
-            }
-            // 解放しようとした間に新しい入力が届いた。続けて処理する。
+            _bypassKanaLayout = true;
+            try { HandleKey(new KeyEvent(vk, 0, false, false, false, 0)); }
+            finally { _bypassKanaLayout = false; }
         }
+    }
+
+    /// <summary>出来事を処理した後。表示を作り直し、入力が終わったら再変換の状態と押したキーを忘れる。</summary>
+    private void Settle()
+    {
+        UpdateView();
+        // 親指キーを押したままなら、離したことを受け取るまで受け取り続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
+        if (IsComposing || _kanaLayout.ThumbHeld) return;
+        // 読みをすべて削除した場合も、元の選択範囲は置換せず再変換を終了する。
+        if (_reconversion is not null) ClearComposition();
+        _pressed.Clear();
     }
 
     /// <summary>
     /// 背景の変換の結果が届いた。入力スレッドで呼ぶ。変換エンジンが使えなかった間の結果を捨てて、入力中の表示を作り直す。
     /// 表示を作り直したなら true。
     /// </summary>
-    public bool RefreshConversion()
+    public SessionResult? RefreshConversion()
+    {
+        _out.Begin(null, null);
+        return Refresh() ? Result(consumed: true) : null;
+    }
+
+    private bool Refresh()
     {
         _liveCache.Clear();
         if (_text.IsEmpty || _converting && !RefreshOpenConversion()) return false;
@@ -434,22 +462,24 @@ public sealed class CompositionController
         return true;
     }
 
-    /// <summary>定期的に呼ぶ。英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
-    public void Tick(long nowMs)
+    /// <summary>英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
+    private void Tick(long nowMs)
     {
         if (_heldLetters.Length == 0 || nowMs - _heldLastKeyTime < DirectHoldIdleMs) return;
         DecideHeld(final: true);
-        Pump();
     }
 
-    public void AbandonDirectHold()
-    {
-        ClearHeld();
-        _replayedDown.Clear();
-    }
+    public void AbandonDirectHold() => ClearHeld();
 
     /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
-    public void SelectCandidate(int index)
+    public SessionResult SelectCandidate(int index)
+    {
+        _out.Begin(null, null);
+        SelectCandidateAt(index);
+        return Result(consumed: true);
+    }
+
+    private void SelectCandidateAt(int index)
     {
         // 入力中に出した候補 (設定「入力中も変換候補をいくつか表示」) をクリックしたら、変換を始めてからその候補を選ぶ
         // 入力中の候補は読み全体の候補なので、変換を始めて文節に分かれると一覧が変わり、番号が別の語を指す。
@@ -470,17 +500,20 @@ public sealed class CompositionController
     }
 
     /// <summary>予測変換の候補を番号で選んで確定する (Meltype IME の候補の一覧をクリックしたとき)。</summary>
-    public void CommitPredictionAt(int index)
+    public SessionResult CommitPredictionAt(int index)
     {
-        if (_converting) return;
+        _out.Begin(null, null);
         var predictions = CurrentPredictions();
-        if (index < 0 || index >= predictions.Count) return;
-        CommitPrediction(predictions[index]);
-        UpdateView();
+        if (!_converting && index >= 0 && index < predictions.Count)
+        {
+            CommitPrediction(predictions[index]);
+            UpdateView();
+        }
+        return Result(consumed: true);
     }
 
     /// <summary>未確定文字を確定せず日本語／英字へ切り替える。未確定入力がなければ false。</summary>
-    public bool TogglePendingInput()
+    private bool TogglePendingInput()
     {
         // 英数状態の自動判定中の文字はすでにアプリへ渡しているので、未確定文字には含めない。
         if (_text.IsEmpty)
@@ -493,10 +526,18 @@ public sealed class CompositionController
         return true;
     }
 
-    /// <summary>無効化・フォーカス喪失などで、未確定の内容をそのまま確定する。</summary>
-    public void CommitPending() => CommitPending(preserveLatinRaw: false, preserveText: false);
+    /// <summary>
+    /// 無効化・フォーカス喪失などで、未確定の内容をそのまま確定する。consumed: 出来事をアプリに通さないか。
+    /// preserveLatinRaw: 結合アクセントが続くので、明示的に選択していない ASCII 英字の原文を確定する。preserveText: 確定する文字列に自動空白を加えない。
+    /// </summary>
+    public SessionResult CommitPending(bool consumed = true, bool preserveLatinRaw = false, bool preserveText = false)
+    {
+        _out.Begin(null, null);
+        CommitAll(preserveLatinRaw, preserveText);
+        return Result(consumed);
+    }
 
-    internal void CommitPending(bool preserveLatinRaw, bool preserveText)
+    private void CommitAll(bool preserveLatinRaw, bool preserveText)
     {
         _budget?.Start(InputBudgetMs);
         if (_heldLetters.Length > 0) ReleaseHeldAsEnglish();
@@ -513,56 +554,11 @@ public sealed class CompositionController
         UpdateView();
     }
 
-    /// <summary>
-    /// 入力先が変わった (別のウィンドウ・パスワード欄・入力欄でない所にフォーカスが移った) とき。未確定の内容を確定せずに捨てる。
-    /// 確定すると、移った先 (別のアプリやパスワード欄) に入ってしまうため。捨てたら true。
-    /// </summary>
-    public bool Abandon(string reason)
-    {
-        // 英数状態で判定中の語は、もうアプリに送ってあるので判定をやめるだけ。
-        ClearHeld();
-        if (!IsComposing) return false;
-        Diagnostics.Log.Warn($"{reason}ので、変換中の入力を取り消しました (移った先に入らないように)。");
-        Reset();
-        _correctable.Clear();
-        UpdateView();
-        return true;
-    }
-
-    /// <summary>例外からの復旧用。未確定の内容と追跡中の状態をすべて捨てる (次の入力で同じ例外を繰り返さないように)。</summary>
-    public void Reset()
-    {
-        ClearComposition();
-        ClearHeld();
-        ForgetTrackedKeys();
-    }
-
-    /// <summary>送らずにいた Shift / Ctrl を (押したままとして) アプリに送り、送ったものとして覚える。</summary>
-    private void ReplaySwallowed(HashSet<int> swallowed, long timeMs = 0)
-    {
-        foreach (var vk in swallowed)
-        {
-            _host.Replay(new KeyEvent(vk, 0, false, false, false, timeMs));
-            _replayedDown.Add(vk);
-        }
-        swallowed.Clear();
-    }
-
-    /// <summary>追跡中のキー (送らずにいた修飾キー・送ったキー・横取りしたキー) をすべて忘れる。</summary>
-    private void ForgetTrackedKeys()
-    {
-        _swallowedShift.Clear();
-        _swallowedControl.Clear();
-        _replayedDown.Clear();
-        _capturedDown.Clear();
-    }
-
     /// <summary>変換中の文節・候補・選択中の文節をすべて消す。再変換の状態も消す。</summary>
     //追加処理に伴って、整理のための関数追加
     private void ClearComposition()
     {
         _reconversion = null;
-        ++_compositionId;
         _text.Clear();
         _converting = false;
         _clauses = [];
@@ -579,46 +575,12 @@ public sealed class CompositionController
         _correctable.Clear();
     }
 
-    private void HandleMouse(MouseButtonEvent e)
-    {
-        // クリックで別の場所に移る前に、今の位置へ確定しておく。
-        CommitPending();
-        // 送らずにいた Shift / Ctrl は、クリックと一緒に送る (Shift+クリックの範囲選択、Ctrl+クリック)。
-        ReplaySwallowed(_swallowedShift);
-        ReplaySwallowed(_swallowedControl);
-        _correctable.Clear();
-        _host.Replay(e);
-    }
-
     private void HandleKey(KeyEvent e)
     {
         var vk = e.Vk;
-        if (e.IsUp)
-        {
-            var kanaUp = _kanaLayout.Up(vk);
-            // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
-            if (kanaUp.Stroke.Handled && IsComposing) ApplyKanaStroke(kanaUp.Stroke);
-            // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
-            if (kanaUp.ThumbTap && _capturedDown.Contains(vk))
-            {
-                _bypassKanaLayout = true;
-                try { HandleKey(e with { IsUp = false }); }
-                finally { _bypassKanaLayout = false; }
-            }
-            _swallowedShift.Remove(vk);
-            _swallowedControl.Remove(vk);
-            // 押下をアプリに送ったキー、または押下が関所を閉じる前に通っていたキーは、離したこともアプリに伝える。
-            var replayed = _replayedDown.Remove(vk);
-            var capturedHere = _capturedDown.Remove(vk);
-            if (replayed || !capturedHere) _host.Replay(e);
-            return;
-        }
-        // 押したままの Shift のリピートは数えない。最初の押下はアプリに届いているので、離したことも伝える (issue #617)。
-        if (!IsShift(vk) || !_host.IsShiftDown()) _capturedDown.Add(vk);
-
         if (_heldLetters.Length > 0)
         {
-            if (VirtualKeys.IsLetter(vk) && _swallowedShift.Count == 0 && !VirtualKeys.IsModifier(vk))
+            if (VirtualKeys.IsLetter(vk) && !_shift && !_modifier)
             {
                 Hold(e);
                 return;
@@ -627,7 +589,7 @@ public sealed class CompositionController
             // 読めれば日本語に戻す。英語の接頭辞 (e-mail、co-op) かもしれないときは - も送って判定を続け、- の後ろで決める
             // (e-mail → 英語、e-me-ru → えーめーる)。
             var part = LastHyphenPart();
-            if (vk == VirtualKeys.OemMinus && _swallowedShift.Count == 0 && part.Length > 0 &&
+            if (vk == VirtualKeys.OemMinus && !_shift && !_modifier && part.Length > 0 &&
                 _detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" })
             {
                 var prefix = !_heldLetters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
@@ -642,25 +604,17 @@ public sealed class CompositionController
                 SwitchHeldToJapanese();
                 return;
             }
-            // 英字以外のキー・Shift で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
-            Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {_swallowedShift.Count})");
+            // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
+            Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {_shift})");
             ReleaseHeldAsEnglish();
         }
 
-        if (IsShift(vk))
+        // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。
+        if (IsShift(vk)) return;
+        if (_control && !_text.IsEmpty)
         {
-            // 大文字入力や文節の区切り変更のための Shift はアプリに渡さない。ほかのキーと一緒に送り直すときにまとめて送る。
-            _swallowedShift.Add(vk);
-            return;
-        }
-        if (IsControl(vk) && !_text.IsEmpty)
-        {
-            // 変換ボックスに入力中の Ctrl は、次のキーを見るまで送らない (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから送る)。
-            _swallowedControl.Add(vk);
-            return;
-        }
-        if (_swallowedControl.Count > 0)
-        {
+            // 変換ボックスに入力中の Ctrl + キー (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから通す)。
+            if (IsControl(vk)) return;
             // 設定「Control キーの割り当て」が ATOK 風: Ctrl + K / L で文節の長さを変える。変換中だけ (Shift + ← → と同じ。issue #599)
             if (_converting && _settings().ControlKeys == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
             {
@@ -694,29 +648,21 @@ public sealed class CompositionController
                 // (X のリプライで「田所工事」と「田所工事だよ」が二重に投稿された)。日本語 IME の通例どおり、
                 // 変換中の Enter は確定、送信は次の Enter にする。
                 CommitIfAny();
-                _swallowedControl.Clear();
                 return;
             }
             else
             {
                 // ほかのショートカット (Ctrl+C・Ctrl+Z …) は、確定してから Ctrl と一緒にアプリへ送る。
                 CommitIfAny();
-                ReplaySwallowed(_swallowedControl, e.TimeMs);
-                ReplayDown(e);
+                PassKey();
                 return;
             }
         }
-        if (VirtualKeys.IsModifier(vk))
+        else if (_modifier || VirtualKeys.IsModifier(vk))
         {
-            // Ctrl / Alt / Win: ショートカットの前に確定する。
+            // Ctrl / Alt / Command のショートカットの前に確定する。
             CommitIfAny();
-            ReplayDown(e);
-            return;
-        }
-        if (_replayedDown.Any(IsCommandModifier))
-        {
-            CommitIfAny();
-            ReplayDown(e);
+            PassKey();
             return;
         }
         if (!_bypassKanaLayout && HandleKanaLayout(e)) return;
@@ -744,7 +690,7 @@ public sealed class CompositionController
                 StartConversion(preferJapanese: true);
                 return;
             case VirtualKeys.Space when _settings().EnglishFirstInput && _text.Mode == DisplayMode.HalfWidthAlphanumeric && !_modeByKey && !IsProtectedInput &&
-                                        _swallowedShift.Count == 0 && !_host.IsShiftDown():
+                                        !_shift:
                 // 設定「英字を主に入力」: Space は変換ではなく、ふつうの空白として入力中の文字に足す (ls -la)
                 _text.Append(' ');
                 return;
@@ -762,7 +708,7 @@ public sealed class CompositionController
                 _text.FixTypos(correct: !_settings().EnterCommitsAsShown);
                 Commit();
                 return;
-            case VirtualKeys.Space when _swallowedShift.Count > 0 || _host.IsShiftDown():
+            case VirtualKeys.Space when _shift:
                 // Shift+Space: 英語と判定した語でも、ローマ字として読んで変換する (go → 語、camera → かめら)。
                 _text.FixTypos();
                 _spaceStartedConversion = true;
@@ -844,10 +790,10 @@ public sealed class CompositionController
                 return;
             case VirtualKeys.Tab when CurrentPredictions().Count > 0:
                 // 予測変換の候補を選ぶ (Tab で次、Shift+Tab で前。最後の次は選ばない状態に戻る)。
-                var step = _swallowedShift.Count > 0 ? -1 : 1;
+                var step = _shift ? -1 : 1;
                 _predictionIndex = (_predictionIndex + 1 + step + _predictions.Count + 1) % (_predictions.Count + 1) - 1;
                 return;
-            case VirtualKeys.Tab when !_converting && _swallowedShift.Count == 0 && !_host.IsShiftDown() && _settings().TabConversion && TabStartsConversion():
+            case VirtualKeys.Tab when !_converting && !_shift && _settings().TabConversion && TabStartsConversion():
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。
                 StartConversion();
                 _tabStartedConversion = _converting;
@@ -876,13 +822,13 @@ public sealed class CompositionController
             return;
         }
 
-        if (_host.CharFromKey(e, _swallowedShift.Count > 0) is { } ch && !char.IsControl(ch) && ch != ' ')
+        if (CharOf(e) is { } ch && !char.IsControl(ch) && ch != ' ')
         {
             // 打ち始めの ・ を Space で / にしてから打った名前 (/help) は、/ を確定して半角のままアプリへ渡す。
             if (_converting && _text.IsSlashAtStart && _clauses is [{ Text: "/" }] && SigilWord.IsNameChar(ch))
             {
                 Commit();
-                ReplayDown(e);
+                PassKey();
                 return;
             }
             CommitBeforeTyping();
@@ -892,10 +838,10 @@ public sealed class CompositionController
 
         // 矢印 (英字だけのとき)・Tab・Delete などは確定してから通す。
         Commit();
-        ReplayDown(e);
+        PassKey();
     }
 
-    /// <summary>変換ボックスを開く記号・数字 (フック側の MeltypeEngine.StartsComposition と合わせる)。</summary>
+    /// <summary>変換ボックスを開く記号・数字。</summary>
     internal static bool StartsWithSymbol(char c) => c is >= '!' and <= '~' && !char.IsAsciiLetter(c);
 
     /// <summary>変換ボックスが空のときの最初の打鍵。英字・句読点なら入力を始め、それ以外はそのまま通す。</summary>
@@ -903,7 +849,7 @@ public sealed class CompositionController
     {
         if (e.Vk == VirtualKeys.Convert)
         {
-            if (_host.GetReconversionSelection() is not { } selection || string.IsNullOrWhiteSpace(selection.Reading)) return;
+            if (ReconversionSelectionNow() is not { } selection || string.IsNullOrWhiteSpace(selection.Reading)) return;
             _correctable.Clear();
             // ローマ字のまま入った文は、日本語にする所が無ければ何もしない (英字をローマ字として読んだ候補を出さない)
             if (IsRomajiText(selection.Text))
@@ -921,10 +867,10 @@ public sealed class CompositionController
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。英数状態では普通の空白のまま。
         // 設定「スペースの幅」が全角では、Space が全角で Shift+Space が半角 (issue #259)
         var spaceWidth = _settings().SpaceWidth;
-        if (e.Vk == VirtualKeys.Space && !_services.DirectMode() && (spaceWidth == Config.SpaceWidth.FullWidth || _swallowedShift.Count > 0 || _host.IsShiftDown()))
+        if (e.Vk == VirtualKeys.Space && !_services.DirectMode() && (spaceWidth == Config.SpaceWidth.FullWidth || _shift))
         {
             // 「スペースの幅」が半角なら Shift+Space も半角 (issue #708)
-            var shifted = _swallowedShift.Count > 0 || _host.IsShiftDown();
+            var shifted = _shift;
             var halfWidth = spaceWidth switch
             {
                 Config.SpaceWidth.FullWidth => shifted,
@@ -942,15 +888,15 @@ public sealed class CompositionController
             _text.AppendKana(key.Raw, key.Kana);
             return;
         }
-        var c = _host.CharFromKey(e, _swallowedShift.Count > 0);
+        var c = CharOf(e);
         var letter = VirtualKeys.IsLetter(e.Vk) && c is { } l && char.IsAsciiLetter(l);
         if (letter && _services.DirectMode())
         {
             // 英数状態: ローマ字かどうか判定する (打鍵はすぐ送る)。大文字で始まる語は英語なのでそのまま通す。
-            if (_services.ClassifyDirect is null || _swallowedShift.Count > 0 || char.IsAsciiLetterUpper(c!.Value))
+            if (_services.ClassifyDirect is null || _shift || char.IsAsciiLetterUpper(c!.Value))
             {
                 Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(c.ToString()!)}は大文字 / Shift なので英語のまま");
-                ReplayDown(e);
+                PassKey();
                 _services.DirectDecided?.Invoke(false);
             }
             else Hold(e);
@@ -963,7 +909,7 @@ public sealed class CompositionController
             _text.Append(c!.Value);
             return;
         }
-        ReplayDown(e);
+        PassKey();
     }
 
     /// <summary>
@@ -1102,37 +1048,30 @@ public sealed class CompositionController
         _text.FullWidthParentheses = _settings().FullWidthParentheses;
         _text.SquareBrackets = _settings().SquareBrackets;
         _text.LaughterAfterKana = _settings().LaughterAfterKana;
-        var id = ++_compositionId;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = Environment.TickCount64 - _lastCommitTime < OwnCommitTrustMs;
         _precedingText = _lastCommitEnglish is null ? null : _lastCommitText;
         UpdateWideContext();
         _followingText = null;
-        _caretBefore = null; // 読み直せなければ (返ってこなければ) キャレットの位置は確かめない = 今までどおり直す
         _text.PrecedingEnglish = _lastCommitEnglish;
         UpdateLearningContext();
         _text.PrecedingEnglishSentence = _lastCommitEnglish == true && IsEnglishSentence(_lastCommitText);
         _text.PrecedingEnglishName = _lastCommitEnglish == true && IsEnglishNameContext(_lastCommitText);
-        _text.FollowingEnglish = null;
-        _host.RequestSurroundingText((before, after) =>
+        // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
+        // 確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
+        var before = _out.Before;
+        _caretBefore = before;
+        if (!recentOwnCommit && before is not null)
         {
-            // 返ってくるまでに別の入力になっていたら使わない。
-            if (id != _compositionId) return;
-            // キャレットの前の文字は、確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
-            _caretBefore = before;
-            if (!recentOwnCommit && before is not null)
-            {
-                _precedingText = before;
-                UpdateWideContext();
-                if (LanguageOf(before) is { } english) _text.PrecedingEnglish = english;
-                UpdateLearningContext();
-                _text.PrecedingEnglishSentence = IsEnglishSentence(before);
-                _text.PrecedingEnglishName = IsEnglishNameContext(before);
-            }
-            _followingText = after;
-            _text.FollowingEnglish = LanguageOfStart(after);
-            UpdateView();
-        });
+            _precedingText = before;
+            UpdateWideContext();
+            if (LanguageOf(before) is { } english) _text.PrecedingEnglish = english;
+            UpdateLearningContext();
+            _text.PrecedingEnglishSentence = IsEnglishSentence(before);
+            _text.PrecedingEnglishName = IsEnglishNameContext(before);
+        }
+        _followingText = _out.After;
+        _text.FollowingEnglish = LanguageOfStart(_out.After);
     }
 
     /// <summary>
@@ -1225,9 +1164,8 @@ public sealed class CompositionController
     /// </summary>
     private void SendHeld(KeyEvent e)
     {
-        _host.Replay(e);
-        if (_host.CharFromKey(e, _swallowedShift.Count > 0) is { } c) _host.RecordDirectReplay(c);
-        _replayedDown.Add(e.Vk);
+        _out.PassCurrent();
+        if (CharOf(e) is { } c) _out.RecordHeldPassed(c);
         _heldSent++;
     }
 
@@ -1263,7 +1201,7 @@ public sealed class CompositionController
         var letters = _heldLetters.ToString();
         var sent = _heldSent;
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
-        _host.DeleteBackward(sent);
+        _out.DeleteHeld(sent);
         ClearHeld();
         _services.DirectDecided?.Invoke(true);
         BeginComposition();
@@ -1283,7 +1221,7 @@ public sealed class CompositionController
         if (!KanaInput && !_services.DirectMode() && _settings().RomajiLayout == RomajiLayout.Sky)
         {
             // SKY 配列: キーをローマ字の綴りにして足す。英語の判定はしない (ひらがなで見せる)
-            if (_swallowedShift.Count > 0 || _host.IsShiftDown() || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
+            if (_shift || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
             if (!IsComposing) BeginComposition();
             else CommitBeforeTyping();
             if (_text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.Hiragana;
@@ -1294,14 +1232,14 @@ public sealed class CompositionController
         if (_kanaLayout.Layout != layout) _kanaLayout = new KanaLayoutEngine(layout);
         if (layout == KanaLayout.Jis) return false;
         // 親指キーは (入力していないとき・変換中も) 受け取っておき、文字に使わずに離したらもとの働き (再変換・変換・無変換) をする
-        // (文頭の 変換 + W を再変換にしない・変換中の 変換 + W をシフト面にする。フックは親指シフトの配列では親指キーで変換ボックスを開く)
+        // (文頭の 変換 + W を再変換にしない・変換中の 変換 + W をシフト面にする。親指シフトの配列では親指キーで変換ボックスを開く: StartsComposition)
         // 前置シフトの直後の BackSpace は、シフトのキーを打ち消す (前の文字は消さない)
         if (e.Vk == VirtualKeys.Back && _kanaLayout.HasPrefix)
         {
             _kanaLayout.Reset();
             return true;
         }
-        var shift = _swallowedShift.Count > 0 || _host.IsShiftDown();
+        var shift = _shift;
         var stroke = _kanaLayout.Down(e.Vk, shift, e.TimeMs);
         if (!stroke.Handled)
         {
@@ -1326,9 +1264,9 @@ public sealed class CompositionController
     /// <summary>かな入力で、その打鍵が入力するかなと、そのキーの英字 (英語として見せるとき用)。かなのキーでなければ null。</summary>
     private (char Raw, char Kana)? KanaOf(KeyEvent e)
     {
-        var shift = _swallowedShift.Count > 0 || _host.IsShiftDown();
+        var shift = _shift;
         if (Detection.KanaDetector.KanaForKey(e.Vk, shift) is not { } kana) return null;
-        var raw = _host.CharFromKey(e, _swallowedShift.Count > 0) ?? kana;
+        var raw = CharOf(e) ?? kana;
         // Shift で打った小書き文字 (っ = Shift+Z、ぃ = Shift+E) は、大文字で打った英語 (Z・E) ではない
         // (きのうはたのしかった が たのしかZq になっていた)。
         if (shift && kana != Detection.KanaDetector.KanaForKey(e.Vk, false)) raw = char.ToLowerInvariant(raw);
@@ -1347,7 +1285,7 @@ public sealed class CompositionController
     {
         _heldLetters.Clear();
         _heldSent = 0;
-        _services.DirectHoldCleared?.Invoke();
+        _out.ResetHeldPassed();
     }
 
     // ---- 変換 (文節) ----
@@ -1386,10 +1324,10 @@ public sealed class CompositionController
     /// <summary>変換中だけ意味を持つキー。処理したら true。</summary>
     private bool HandleConversionKey(int vk)
     {
-        var shift = _swallowedShift.Count > 0;
+        var shift = _shift;
         switch (vk)
         {
-            case VirtualKeys.Space when shift || _host.IsShiftDown():
+            case VirtualKeys.Space when shift || _shift:
                 // Shift+Space: 前の候補へ (Microsoft IME と同じ。Mac でも Shift を押したまま Space で戻れるように: issue #140)
                 NextCandidate(-1);
                 return true;
@@ -1438,7 +1376,7 @@ public sealed class CompositionController
                 return true;
             case VirtualKeys.Tab when _tabStartedConversion:
                 // Tab で始めた変換の中では、Tab が次の候補、Shift+Tab が前の候補 (issue #219)。
-                NextCandidate(shift || _host.IsShiftDown() ? -1 : +1);
+                NextCandidate(shift || _shift ? -1 : +1);
                 return true;
             case VirtualKeys.Escape when _settings().EscRevertsSelectedClause && _clauses.Count > 1 &&
                                          !_clauses[_selectedClause].IsEnglish && _clauses[_selectedClause].Text != _clauses[_selectedClause].Reading:
@@ -1505,7 +1443,7 @@ public sealed class CompositionController
     {
         StartConversion();
         if (!_converting) return;
-        var shift = _swallowedShift.Count > 0;
+        var shift = _shift;
         _selectedClause = vk == VirtualKeys.Left ? _clauses.Count - 1 : 0;
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
         else if (vk == VirtualKeys.Up) NextCandidate(-1);
@@ -1737,7 +1675,7 @@ public sealed class CompositionController
     private UtilityCandidates? Utilities(IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(_settings(), _services.Now(), _services.UtcNow(), _services.LocalTimeZone(), () => _host.ClipboardText, () => _host.NowPlaying, _services.GitHubTitles());
+        var context = new UtilityContext(_settings(), _services.Now(), _services.UtcNow(), _services.LocalTimeZone(), Clipboard, NowPlaying, _services.GitHubTitles());
         return UtilityConversions.Convert(new UtilityInput(_text, reading, _services.DirectMode(), context));
     }
 
@@ -1772,11 +1710,11 @@ public sealed class CompositionController
 
     /// <summary>
     /// 次に空の変換ボックスへ入れる / は、文章の入力欄の打ち始め (先頭か空白の直後) に打ったもの。・ にする。
-    /// フックのスレッドから、その / で変換ボックスを開くときに呼ぶ。
+    /// フロントが、その / を本体に渡す前に呼ぶ。
     /// </summary>
-    public void MarkSlashAtStart() => Interlocked.Exchange(ref _slashAtStart, 1);
+    public void MarkSlashAtStart() => _slashAtStart = true;
 
-    private int _slashAtStart;
+    private bool _slashAtStart;
 
     /// <summary>
     /// 英訳の候補 (複雑な → complex, complicated …) を、日本語の候補の後ろに足す。
@@ -2556,13 +2494,12 @@ public sealed class CompositionController
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
         var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
-        if (_reconversion is { } selection)
+        if (_reconversion is not null)
         {
-            if (_host.TryReplaceSelection(selection, text + suffix))
-            {
-                if (converting) Learn();
-                ResetContext();
-            }
+            // 入れた文字は、アプリが選択していた文字と置き換える。
+            _out.Commit(text + suffix);
+            if (converting) Learn();
+            ResetContext();
             ClearComposition();
             return;
         }
@@ -2705,6 +2642,7 @@ public sealed class CompositionController
     public void ForgetLastCommit()
     {
         _correctable.Clear();
+        _out.ForgetCommitted();
         // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う
         _lastCommitTime = long.MinValue / 2;
     }
@@ -2715,7 +2653,7 @@ public sealed class CompositionController
     /// </summary>
     private string? CorrectPreviousCommit(string raw, bool english)
     {
-        if (_correctable.Count == 0 || !AutoCorrect || !_host.CanDeleteBackward) return null;
+        if (_correctable.Count == 0 || !AutoCorrect || !CanDeleteBackward) return null;
         var previous = _correctable[^1];
         List<CommitRecord> targets = [];
         string? replacement = null;
@@ -2762,7 +2700,7 @@ public sealed class CompositionController
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。
-        if (_host.SurroundingTextIsCurrent && _caretBefore is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
+        if (_caretBefore is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
         {
             Diagnostics.Log.Decision($"キャレットの位置が変わっているので確定し直しません: {Diagnostics.Log.Text(original)}");
             _correctable.Clear();
@@ -2883,13 +2821,13 @@ public sealed class CompositionController
         if (_pendingReplace is var (count, replacement))
         {
             _pendingReplace = null;
-            _host.ReplaceBackward(count, replacement, text);
+            _out.ReplaceBackward(count, replacement, text);
         }
-        else _host.CommitText(text);
+        else _out.Commit(text);
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
-        // Replay で頼むと、セッション方式では確定に使ったキーまで未消費になる (#991・#1353・#1404・#1581)。
+        // 確定に付けて返す (キーをアプリに通して動かすと、確定に使ったキーまでアプリに通ってしまう: #991・#1353・#1404・#1581)。
         if (_settings().CursorIntoBrackets && text.Length == 2 && BracketPairs.Contains(text))
-            _host.MoveCaretBackward(1);
+            _out.MoveCaretBackward(1);
         Committed?.Invoke(text);
     }
 
@@ -2946,22 +2884,13 @@ public sealed class CompositionController
     private bool EndsWithEnglish() =>
         _text.Mode == DisplayMode.Auto && _text.Segments() is { Count: > 0 } segments && segments[^1].IsEnglish;
 
-    private void ReplayDown(KeyEvent e)
-    {
-        // Meltype を通らないキーを送る = キャレットが動くかもしれないので、直前の語はもう確定し直さない。
-        _correctable.Clear();
-        // 握りつぶしていた Shift を先に送る (Shift+矢印 の範囲選択、Ctrl+Shift+Z など)。
-        ReplaySwallowed(_swallowedShift, e.TimeMs);
-        _host.Replay(e);
-        _replayedDown.Add(e.Vk);
-    }
 
     private void UpdateView()
     {
         if (_text.IsEmpty)
         {
             // 英数状態の判定中は何も表示しない (英語ならそのまま出るだけ)。
-            _host.Hide();
+            _out.Hide();
             return;
         }
         if (_converting && _clauses.Count > 0)
@@ -2971,7 +2900,7 @@ public sealed class CompositionController
             if (!selected.Expanded) Expand(selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = _clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
-            _host.Show(new CompositionView(
+            _out.Show(new CompositionView(
                 string.Concat(_clauses.Select(c => c.Text)),
                 selected.Candidates,
                 selected.Index,
@@ -3005,7 +2934,7 @@ public sealed class CompositionController
             var display = selected ?? CurrentDisplay(final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates() : null;
-            _host.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
+            _out.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
                 Predictions: _predictions.Count > 0 ? _predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
                 Committed: selected ?? CurrentDisplay(final: true), ContextHint: contextHint));
         }
@@ -3178,4 +3107,155 @@ public sealed class CompositionController
     };
 
     private static bool IsCommandModifier(int vk) => VirtualKeys.IsModifier(vk) && !IsShift(vk);
+
+    /// <summary>そのキーで入力する文字 (記号・数字を含む)。文字を生まないキーなら null。</summary>
+    private static char? CharOf(KeyEvent e) => e.Scan is > 0 and < 0x10000 ? (char)e.Scan : null;
+
+    /// <summary>今のキーをアプリに通す。キャレットが動くかもしれないので、直前の語はもう確定し直さない。</summary>
+    private void PassKey()
+    {
+        _correctable.Clear();
+        _out.PassCurrent();
+    }
+
+    /// <summary>選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
+    private ReconversionSelection? ReconversionSelectionNow() =>
+        Selection is { Length: > 0 } text && (IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
+            ? new ReconversionSelection(text, reading)
+            : null;
+
+    /// <summary>出来事 1 つの間の、入力欄への書き込み (<see cref="TextEdit"/>)・変換ボックスの表示・キーをアプリに通すか。</summary>
+    private sealed class Output
+    {
+        private readonly List<TextEdit> _commits = [];
+        private int _pendingDelete;
+        private string? _pendingExpect;
+        // 続けて確定した文字の終わりの部分 (確定し直しで消す文字を、フロントで確かめられるように)
+        private readonly StringBuilder _committed = new();
+        private const int MaxCommitted = 256;
+        // 英数状態で判定中の語のうち、アプリに通した文字 (日本語と分かったら消す)
+        private readonly StringBuilder _heldPassed = new();
+        private string? _before;
+        private CompositionView? _view;
+        private bool _hidden;
+
+        /// <summary>今のキーをアプリに通すか。</summary>
+        public bool PassedCurrent { get; private set; }
+
+        /// <summary>キャレットの前の文字。出来事の前の文字に、この出来事で確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
+        public string? Before
+        {
+            get
+            {
+                var before = _before;
+                if (before is null) return null;
+                foreach (var edit in _commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
+                return before;
+            }
+        }
+
+        public string? After { get; private set; }
+
+        public CompositionView? View => _hidden ? null : _view;
+
+        public void Begin(string? before, string? after)
+        {
+            _commits.Clear();
+            _pendingDelete = 0;
+            _pendingExpect = null;
+            _before = before;
+            After = after;
+            PassedCurrent = false;
+            _hidden = false;
+        }
+
+        public SessionResult Result(bool consumed, Config.Settings settings)
+        {
+            if (_pendingDelete > 0) Add("");
+            // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
+            if (!consumed) _committed.Clear();
+            // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
+            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings.ShowsGuide, settings.NumberKeysSelectCandidates);
+            return new SessionResult(consumed, _commits.ToList(), view);
+        }
+
+        public void PassCurrent() => PassedCurrent = true;
+
+        public void Commit(string text) => Add(text);
+
+        /// <summary>直前に確定した文字の末尾から、キャレットを count 文字だけ左へ戻す。</summary>
+        public void MoveCaretBackward(int count)
+        {
+            var last = _commits[^1];
+            _commits[^1] = last with { CaretBack = last.CaretBack + count };
+        }
+
+        /// <summary>
+        /// 確定し直し: キャレットの前の count 文字を replacement に置き換えて、続けて今確定した語 (current) を入れる。
+        /// 前の文字を消せなかったときに current だけを入れられるように、分けて渡す (Meltype IME など。<see cref="TextEdit"/>)。
+        /// </summary>
+        public void ReplaceBackward(int count, string replacement, string current)
+        {
+            _pendingDelete += count;
+            Add(replacement + current, current);
+        }
+
+        /// <summary>
+        /// 英数状態で判定中の語 (count 文字) を消す (日本語と分かったとき)。今のキーも通すところだったなら、通さずに消す数から引く。
+        /// 消す文字は、アプリに通した文字で確かめる。
+        /// </summary>
+        public void DeleteHeld(int count)
+        {
+            if (PassedCurrent) count--;
+            PassedCurrent = false;
+            _pendingExpect = count > 0 && _heldPassed.Length >= count ? _heldPassed.ToString(0, count) : null;
+            _heldPassed.Clear();
+            _pendingDelete += Math.Max(0, count);
+        }
+
+        public void RecordHeldPassed(char c)
+        {
+            if (char.IsAscii(c) && !char.IsControl(c)) _heldPassed.Append(c);
+        }
+
+        public void ResetHeldPassed() => _heldPassed.Clear();
+
+        public void ForgetCommitted() => _committed.Clear();
+
+        public void Show(CompositionView view)
+        {
+            _view = view;
+            _hidden = false;
+        }
+
+        public void Hide()
+        {
+            _view = null;
+            _hidden = true;
+        }
+
+        private void Add(string text, string? current = null)
+        {
+            string? expect = null;
+            if (_pendingDelete > 0)
+            {
+                if (_pendingExpect is { } expected)
+                {
+                    expect = expected;
+                    _pendingExpect = null;
+                    _committed.Clear();
+                }
+                else if (_committed.Length >= _pendingDelete)
+                {
+                    expect = _committed.ToString(_committed.Length - _pendingDelete, _pendingDelete);
+                    _committed.Length -= _pendingDelete;
+                }
+                else _committed.Clear();
+            }
+            _commits.Add(new TextEdit(_pendingDelete, text, expect, _pendingDelete > 0 ? current : null));
+            _pendingDelete = 0;
+            _committed.Append(text);
+            if (_committed.Length > MaxCommitted) _committed.Remove(0, _committed.Length - MaxCommitted);
+        }
+    }
 }

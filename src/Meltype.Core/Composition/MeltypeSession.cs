@@ -168,18 +168,15 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 }
 
 /// <summary>
-/// OS の正式な IME の仕組み (Mac の Input Method Kit、Linux の IBus / fcitx5) から使う、Meltype の入力の本体。
-/// Windows 版はキーボードフックで打鍵を横取りするが、正式な IME では OS がキーを 1 つずつ渡してきて、
-/// 「使ったか (アプリに渡さないか)」をその場で返す。そのやり取りを同期的に行う。
+/// 入力欄 1 つ分の Meltype の入力の本体 (<see cref="Ime.ImeSession"/> が使う)。フロントはキーを 1 つずつ渡し、
+/// 「使ったか (アプリに渡さないか)」をその場で受け取る。コードの行・/command・英数状態の判断をして、残りを <see cref="CompositionController"/> に渡す。
 ///
 /// キーは Windows の仮想キーコード (A-Z = 0x41-0x5A、Space = 0x20 …) で渡す。入力する文字は ch で渡す (キーボード配列の違いは OS 側で解決済み)。
 /// 変換ボックスの表示・確定する文字は、戻り値の <see cref="SessionResult"/> で返す。1 つのスレッドから使う。
 /// </summary>
 public sealed class MeltypeSession
 {
-    private readonly CaptureGate _gate;
     private readonly CompositionController _controller;
-    private readonly Host _host;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly bool _directModeDetection;
@@ -190,10 +187,8 @@ public sealed class MeltypeSession
         bool directModeDetection = false, Func<long>? timeMs = null)
     {
         _settings = settings;
-        _host = new Host(settings);
         _timeMs = timeMs ?? (() => Environment.TickCount64);
         _directModeDetection = directModeDetection;
-        _gate = new CaptureGate(() => { });
         var controllerServices = directModeDetection
             ? services with
             {
@@ -203,11 +198,9 @@ public sealed class MeltypeSession
                     Direct = !japanese;
                     _directEnglishWord = !japanese;
                 },
-                DirectHoldCleared = _host.ResetDirectReplay,
             }
             : services;
-        _host.DeferCurrentReplayOnDelete = directModeDetection;
-        _controller = new CompositionController(_gate, detector, converter, _host, settings, controllerServices);
+        _controller = new CompositionController(detector, converter, settings, controllerServices);
     }
 
     /// <summary>
@@ -423,8 +416,8 @@ public sealed class MeltypeSession
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public bool CanDeleteSurrounding
     {
-        get => _host.CanDeleteBackward;
-        set => _host.CanDeleteBackward = value;
+        get => _controller.CanDeleteBackward;
+        set => _controller.CanDeleteBackward = value;
     }
 
     /// <summary>変換ボックスに何か入っているか。</summary>
@@ -446,26 +439,26 @@ public sealed class MeltypeSession
     /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
     public string? Selection
     {
-        get => _host.Selection;
-        set => _host.Selection = value;
+        get => _controller.Selection;
+        set => _controller.Selection = value;
     }
 
     /// <summary>漢字かな交じりの文の読み (再変換。OS の機能)。分からなければ null。</summary>
     public Func<string, string?> ReadingOf
     {
-        set => _host.ReadingOf = value;
+        set => _controller.ReadingOf = value;
     }
 
     /// <summary>クリップボードの文字 (OS の機能)。読めなければ null。</summary>
     public Func<string?> ClipboardText
     {
-        set => _host.Clipboard = value;
+        set => _controller.Clipboard = value;
     }
 
     /// <summary>今再生している曲 (OS の機能)。読めなければ null。</summary>
     public Func<(string Title, string Artist)?> NowPlaying
     {
-        set => _host.Playing = value;
+        set => _controller.NowPlaying = value;
     }
 
     /// <summary>
@@ -486,9 +479,7 @@ public sealed class MeltypeSession
             var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
             return committed with { Consumed = false };
         }
-        _host.Begin(ch, shift, before, after);
-        var down = new KeyEvent(vk, ch ?? 0, false, false, false, _timeMs());
-        if (_directModeDetection) _controller.Tick(down.TimeMs);
+        var now = _timeMs();
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = _settings();
@@ -498,37 +489,28 @@ public sealed class MeltypeSession
             _directEnglishWord = false;
         if ((Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
-            return _host.Result(consumed: false);
+            return _controller.Pass(now);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && _settings().SigilWordsDirect &&
+        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
             SigilWord.PassesAfter(before, '/'))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && _settings().SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
-            return _host.Result(consumed: false);
+            return _controller.Pass(now);
         }
         if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
-            return _host.Result(consumed: false);
+            return _controller.Pass(now);
         }
-        // 英数へ切り替えるときなどに、Shift を押したことを変換ボックスにも伝える (Shift + 英字は大文字)。
-        if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, false, false, down.TimeMs));
-        if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, false, false, down.TimeMs));
-
-        var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().SpaceWidth == SpaceWidth.FullWidth)));
-        // このキーをアプリに送り直した (= 使わなかった) なら、アプリに渡す。
-        var consumed = swallowed && !_host.ReplayedCurrent;
-        if (!releaseFollows) Feed(down with { IsUp = true });
+        var result = _controller.Press(new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
-        // 前に確定した語を確定し直さない (Windows のフックの方式と同じ。消す位置がずれて関係ない文字を消さないように)
-        if (!consumed && !_controller.IsComposing) ForgetLastCommit();
-        if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, true, false, down.TimeMs));
-        if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, true, false, down.TimeMs));
-        return _host.Result(consumed);
+        // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
+        if (!result.Consumed && !_controller.IsComposing) ForgetLastCommit();
+        return result;
     }
 
     /// <summary>
@@ -537,9 +519,7 @@ public sealed class MeltypeSession
     /// </summary>
     public SessionResult HandleKeyUp(int vk, string? before, string? after)
     {
-        _host.Begin(null, false, before, after);
-        Feed(new KeyEvent(vk, 0, false, true, false, _timeMs()));
-        return _host.Result(consumed: false);
+        return _controller.Release(vk, before, after);
     }
 
     /// <summary>
@@ -570,7 +550,6 @@ public sealed class MeltypeSession
     public void ForgetLastCommit()
     {
         _controller.ForgetLastCommit();
-        _host.ForgetCommitted();
     }
 
     public void ForgetDirectInput()
@@ -582,21 +561,16 @@ public sealed class MeltypeSession
     /// <summary>フォーカスが外れたときなど。未確定の内容をそのまま確定する。</summary>
     public SessionResult CommitPending()
     {
-        _host.Begin(null, false, null, null);
-        _controller.CommitPending();
+        var result = _controller.CommitPending();
         _controller.ResetContext();
-        return _host.Result(consumed: true);
+        return result;
     }
 
     /// <summary>
     /// 文字を伴わない・扱えないキーを、変換ボックスの状態を変えずにアプリへそのまま渡す (Consumed = false)。
     /// 不正な C ABI の引数で不正な文字列を作らないための経路。
     /// </summary>
-    public SessionResult PassThrough()
-    {
-        _host.Begin(null, false, null, null);
-        return _host.Result(consumed: false);
-    }
+    public SessionResult PassThrough() => _controller.Pass(_timeMs());
 
     /// <summary>
     /// 未確定の内容を確定したうえで、元の OS イベントを 1 回だけアプリへ通す (Consumed = false)。
@@ -613,231 +587,20 @@ public sealed class MeltypeSession
 
     private SessionResult CommitForPassThrough(bool preserveLatinRaw, bool preserveText)
     {
-        _host.Begin(null, false, null, null);
-        _controller.CommitPending(preserveLatinRaw, preserveText);
+        var result = _controller.CommitPending(consumed: false, preserveLatinRaw, preserveText);
         _controller.ResetContext();
-        return _host.Result(consumed: false);
+        return result;
     }
 
     /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
     /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま (変換中ならその表示)。</summary>
-    public SessionResult Unchanged()
-    {
-        _host.Begin(null, false, null, null);
-        return _host.Result(consumed: true) with { Consumed = false };
-    }
+    public SessionResult Unchanged() => _controller.Current();
 
-    public SessionResult? RefreshConversion()
-    {
-        _host.Begin(null, false, null, null);
-        return _controller.RefreshConversion() ? _host.Result(consumed: true) : null;
-    }
+    public SessionResult? RefreshConversion() => _controller.RefreshConversion();
 
     /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>
-    public SessionResult SelectCandidate(int index)
-    {
-        _host.Begin(null, false, null, null);
-        _controller.SelectCandidate(index);
-        return _host.Result(consumed: true);
-    }
+    public SessionResult SelectCandidate(int index) => _controller.SelectCandidate(index);
 
     /// <summary>候補の一覧で予測変換の候補をクリックしたとき。その候補を確定する。</summary>
-    public SessionResult SelectPrediction(int index)
-    {
-        _host.Begin(null, false, null, null);
-        _controller.CommitPredictionAt(index);
-        return _host.Result(consumed: true);
-    }
-
-    private bool Feed(KeyEvent e, Func<KeyEvent, bool>? starts = null)
-    {
-        var swallowed = _gate.OnKey(e, starts ?? (_ => false));
-        _controller.Pump();
-        return swallowed;
-    }
-
-    /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
-    private bool StartsComposition(KeyEvent e, char? ch, bool shift)
-    {
-        if (e.Vk == VirtualKeys.Convert && _host.Selection is { Length: > 0 }) return true;
-        if (e.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !_direct && _settings() is { InputStyle: InputStyle.Kana } settings &&
-            settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
-        if (ch is not { } c) return false;
-        if (VirtualKeys.IsLetter(e.Vk) && char.IsAsciiLetter(c)) return true;
-        // 句読点・かぎかっこ・長音・数字・記号 (Shift で打つものも)
-        return CompositionController.StartsWithSymbol(c);
-    }
-
-    /// <summary>変換ボックスからの指示を集めて、1 回のキー入力の結果にまとめる。</summary>
-    private sealed class Host(Func<Settings> settings) : ICompositionHost
-    {
-        private readonly List<TextEdit> _commits = [];
-        private int _pendingDelete;
-        // このセッションで続けて確定した文字の終わりの部分 (確定し直しで消す文字を、DLL などで確かめられるように)
-        private readonly StringBuilder _committed = new();
-        private readonly StringBuilder _directReplay = new();
-        private const int MaxCommitted = 256;
-        private char? _char;
-        private bool _shift;
-        private string? _before, _after;
-        private CompositionView? _view;
-        private bool _hidden;
-        public bool DeferCurrentReplayOnDelete { get; set; }
-        private string? _pendingExpectOverride;
-
-        public bool ReplayedCurrent { get; private set; }
-
-        public bool CanDeleteBackward { get; set; } = true;
-
-        public string? Selection { get; set; }
-
-        public Func<string, string?> ReadingOf { get; set; } = _ => null;
-
-        public Func<string?> Clipboard { get; set; } = () => null;
-
-        public Func<(string Title, string Artist)?> Playing { get; set; } = () => null;
-
-        public string? ClipboardText => Clipboard();
-
-        public (string Title, string Artist)? NowPlaying => Playing();
-
-        /// <summary>ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
-        public ReconversionSelection? GetReconversionSelection() =>
-            Selection is { Length: > 0 } text && (CompositionController.IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
-                ? new ReconversionSelection(text, reading)
-                : null;
-
-        /// <summary>入れた文字は、アプリが選択していた文字と置き換える。</summary>
-        public bool TryReplaceSelection(ReconversionSelection selection, string text)
-        {
-            CommitText(text);
-            return true;
-        }
-
-        public void Begin(char? ch, bool shift, string? before, string? after)
-        {
-            _commits.Clear();
-            _pendingDelete = 0;
-            _char = ch;
-            _shift = shift;
-            _before = before;
-            _after = after;
-            ReplayedCurrent = false;
-            _hidden = false;
-        }
-
-        public SessionResult Result(bool consumed)
-        {
-            if (_pendingDelete > 0) Add("");
-            // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
-            if (!consumed) ForgetCommitted();
-            // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
-            var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings().ShowsGuide, settings().NumberKeysSelectCandidates);
-            return new SessionResult(consumed, _commits.ToList(), view);
-        }
-
-        public void CommitText(string text) => Add(text);
-
-        public void MoveCaretBackward(int count)
-        {
-            var last = _commits[^1];
-            _commits[^1] = last with { CaretBack = last.CaretBack + count };
-        }
-
-        public void ReplaceBackward(int count, string replacement, string current)
-        {
-            DeleteBackward(count);
-            Add(replacement + current, current);
-        }
-
-        public void ForgetCommitted() => _committed.Clear();
-
-        private void Add(string text, string? current = null)
-        {
-            string? expect = null;
-            if (_pendingDelete > 0)
-            {
-                if (_pendingExpectOverride is { } expected)
-                {
-                    expect = expected;
-                    _pendingExpectOverride = null;
-                    _committed.Clear();
-                }
-                else if (_committed.Length >= _pendingDelete)
-                {
-                    expect = _committed.ToString(_committed.Length - _pendingDelete, _pendingDelete);
-                    _committed.Length -= _pendingDelete;
-                }
-                else _committed.Clear();
-            }
-            _commits.Add(new TextEdit(_pendingDelete, text, expect, _pendingDelete > 0 ? current : null));
-            _pendingDelete = 0;
-            _committed.Append(text);
-            if (_committed.Length > MaxCommitted) _committed.Remove(0, _committed.Length - MaxCommitted);
-        }
-
-        public void DeleteBackward(int count)
-        {
-            if (DeferCurrentReplayOnDelete)
-            {
-                if (ReplayedCurrent) count--;
-                ReplayedCurrent = false;
-                _pendingExpectOverride = null;
-                if (count > 0 && _directReplay.Length >= count)
-                    _pendingExpectOverride = _directReplay.ToString(0, count);
-                _directReplay.Clear();
-            }
-            _pendingDelete += Math.Max(0, count);
-        }
-
-        public void RecordDirectReplay(char c)
-        {
-            if (DeferCurrentReplayOnDelete && char.IsAscii(c) && !char.IsControl(c)) _directReplay.Append(c);
-        }
-
-        public void Replay(KeyEvent e)
-        {
-            // 送り直すのは「今処理しているキー」(押したとき)。修飾キーやキーを離したことは、OS がアプリに渡すので何もしない。
-            if (e.IsDown && !VirtualKeys.IsModifier(e.Vk))
-            {
-                ReplayedCurrent = true;
-            }
-        }
-
-        public void ResetDirectReplay() => _directReplay.Clear();
-
-        public void Replay(MouseButtonEvent e)
-        {
-        }
-
-        public char? CharFromKey(KeyEvent e, bool shift) => e.Scan is > 0 and < 0x10000 ? (char)e.Scan : null;
-
-        public bool IsShiftDown() => _shift;
-
-        /// <summary>入力欄の文字は、キーを渡されたその場で読んでもらっている (OS が渡してきた値をそのまま使う)。</summary>
-        public bool SurroundingTextIsCurrent => true;
-
-        /// <summary>キーを押す前のキャレットの前に、このキーで確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
-        public void RequestSurroundingText(Action<string?, string?> callback)
-        {
-            var before = _before;
-            if (before is not null)
-            {
-                foreach (var edit in _commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
-            }
-            callback(before, _after);
-        }
-
-        public void Show(CompositionView view)
-        {
-            _view = view;
-            _hidden = false;
-        }
-
-        public void Hide()
-        {
-            _view = null;
-            _hidden = true;
-        }
-    }
+    public SessionResult SelectPrediction(int index) => _controller.CommitPredictionAt(index);
 }
