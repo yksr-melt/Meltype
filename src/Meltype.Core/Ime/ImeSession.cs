@@ -68,7 +68,6 @@ internal sealed class ImeSession
 
     public ImeOutput Handle(ImeEvent e, long rev)
     {
-        var previousApp = _field?.App;
         _field = e.Field ?? _field;
         var all = _source();
         var settings = _settings = all.ForApp(_field?.App);
@@ -77,8 +76,6 @@ internal sealed class ImeSession
         if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) _lastSnippet = null;
         NoteAltInterruption(e);
         ApplyFacts(e, settings);
-        // 独自の種類で「最初は英数」にしたアプリに移った (入力欄を作ったときを含む)。OS の IME の開閉は、応答の open で合わせてもらう
-        if (_field?.App is { } app && app != previousApp && settings.KindFor(app) is { StartInEnglish: true }) _session.Direct = true;
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;

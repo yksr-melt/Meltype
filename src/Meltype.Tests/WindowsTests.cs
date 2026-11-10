@@ -534,9 +534,9 @@ internal static class WindowsTests
         Assert.Equal(settings + 2, controls.OfType<UI.ToggleSwitch>().Count(), "ON/OFF の設定 + 上の表示オプション 2 つ");
         Assert.True(!controls.OfType<ComboBox>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "ON/OFF だけのプルダウンが残っていない");
         Assert.True(!controls.OfType<CheckBox>().Any(), "チェックボックスが残っていない");
-        // 表の ON/OFF の列 (アプリ別設定の「有効」「入力欄とみなす」・独自の種類の「最初は英数」) もスイッチで、値は bool
+        // 表の ON/OFF の列 (アプリ別設定の「有効」「入力欄とみなす」) もスイッチで、値は bool
         var columns = controls.OfType<DataGridView>().SelectMany(g => g.Columns.Cast<DataGridViewColumn>()).ToList();
-        Assert.Equal(3, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
+        Assert.Equal(2, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
         Assert.True(!columns.OfType<DataGridViewComboBoxColumn>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "表に ON/OFF だけのプルダウンの列が残っていない");
         var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名", StringComparison.Ordinal));
         Assert.Equal(false, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "mstsc.exe")).Cells[1].Value, "mstsc.exe は OFF");

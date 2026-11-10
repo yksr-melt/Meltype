@@ -183,7 +183,7 @@ public sealed class AppRule
 }
 
 /// <summary>
-/// ユーザーが作るアプリの種類 (例: 「チャット」「ゲーム」)。一般 / コード を元に、自動判定・ライブ変換・最初の入力モードを変えられる。
+/// ユーザーが作るアプリの種類 (例: 「チャット」「ゲーム」)。一般 / コード を元に、自動判定・ライブ変換を変えられる。
 /// null の項目は全体の設定のまま。
 /// </summary>
 public sealed class AppKind
@@ -192,8 +192,6 @@ public sealed class AppKind
     public AppProfile Base { get; set; } = AppProfile.General;
     public bool? AutoDetection { get; set; }
     public bool? LiveConversion { get; set; }
-    /// <summary>このアプリに切り替えたら英数 (直接入力) から始める。</summary>
-    public bool StartInEnglish { get; set; }
 
     public AppKind Clone() => (AppKind)MemberwiseClone();
 }
@@ -869,7 +867,7 @@ public sealed class Settings
     [Category("10. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
     public List<AppRule> AppRules { get; set; } = DefaultAppRules();
 
-    [Category("10. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
+    [Category("10. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
     [Category("11. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。判定した語の先頭の数文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]

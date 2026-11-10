@@ -674,13 +674,12 @@ internal static class CodeProfileTests
         var settings = new Settings
         {
             AutoDetection = true,
-            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false, StartInEnglish = true }],
+            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false }],
             AppRules = [new AppRule { Process = "Discord.exe", Kind = "チャット" }, new AppRule { Process = "Code.exe", Profile = AppProfile.Code }],
         };
         Assert.True(!settings.ForApp("discord.exe").AutoDetection, "独自の種類の自動判定");
         Assert.True(!settings.ForApp("Discord.exe").LiveConversion, "独自の種類のライブ変換");
         Assert.True(settings.ForApp("chrome.exe").AutoDetection, "ほかのアプリは全体の設定");
-        Assert.True(settings.KindFor("Discord.exe")?.StartInEnglish == true, "最初は英数");
         Assert.Equal(AppProfile.Code, settings.ProfileFor("Code.exe"));
 
         var path = Path.Combine(Path.GetTempPath(), $"meltype-kinds-{Guid.NewGuid():N}.json");
@@ -690,6 +689,9 @@ internal static class CodeProfileTests
             var loaded = Settings.Load(path);
             Assert.Equal("チャット", loaded.KindFor("Discord.exe")?.Name, "保存して読み込んでも種類を保つ");
             Assert.True(!loaded.Clone().ForApp("Discord.exe").AutoDetection, "複製しても保つ");
+            // 消した項目 (独自の種類の「最初は英数」) が残っている config.json も読める
+            File.WriteAllText(path, $"{{\"SettingsVersion\":{Settings.CurrentVersion},\"AppKinds\":[{{\"Name\":\"チャット\",\"StartInEnglish\":true}}]}}");
+            Assert.Equal("チャット", Settings.Load(path).AppKinds.Single().Name, "消した項目は無視する");
         }
         finally
         {

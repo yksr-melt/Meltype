@@ -524,14 +524,6 @@ internal static class ImeContractTests
         front = new Front();
         front.Traits.Add("Game");
         Assert.True(!Active(front.Key('a')), "ゲームでは受け持たない (設定「ゲームでは止める」)\n" + front.Trace);
-        front = new Front();
-        front.Settings.AppKinds.Add(new AppKind { Name = "英数から", StartInEnglish = true });
-        front.Settings.AppRules.Add(new AppRule { Process = "term.exe", Enabled = true, Kind = "英数から" });
-        front.App = "term.exe";
-        var entered = front.Event("CaretMoved", extra: Entered).GetProperty("state");
-        Assert.True(!entered.GetProperty("imeOpen").GetBoolean() && entered.GetProperty("languageMode").GetString() == "Alphanumeric",
-            "打つ前 (入力の本体を作る前) から英数\n" + front.Trace);
-        Assert.True(!front.Key('k').GetProperty("state").GetProperty("imeOpen").GetBoolean(), "「最初は英数」のアプリに移ったら英数\n" + front.Trace);
     }
 
     [Test]
