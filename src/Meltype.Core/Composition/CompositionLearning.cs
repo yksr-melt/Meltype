@@ -22,7 +22,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     /// <summary>確定したこの文節を学習するか。ユーティリティ変換の候補・日時や版から作る語・計算の言葉の記号は学習しない。</summary>
     public static bool Learnable(Clause clause) =>
-        !clause.NotLearned.Contains(clause.Text) && !IsVolatile(clause.Reading, clause.Text) && !IsOperatorChoice(clause);
+        !clause.NotLearned.Contains(clause.Text) && !IsStale(clause.Reading, clause.Text) && !IsOperatorChoice(clause);
 
     /// <summary>
     /// 変換エンジンが今の日時・版から作る語か (きょう → 2026/11/10・火曜日、ことし → 令和八年、ばーじょん → Mozc-2.31)。学習しない。
@@ -36,11 +36,13 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     private static bool IsDigit(char c) => char.IsAsciiDigit(c) || c is >= '０' and <= '９';
 
     /// <summary>
-    /// 学習データに入っていても使わない語 (読み込むときに捨てる)。日時・版から作る語と、前の版が学習から外し漏れていた
-    /// ユーティリティ変換の候補 (時候の挨拶・クリップボードの文字)。
+    /// 覚えない語 (学習データに入っていても、読み込むときに捨てる)。日時・版から作る語、前の版が学習から外し漏れていた
+    /// ユーティリティ変換の候補 (時候の挨拶・クリップボードの文字)、アプリの画面の文字が混ざった語 (U+FFFC を含む。
+    /// Discord の画面の文字が文脈に入り、Zenzai がそれをそのまま返した: issue #1537)。
     /// </summary>
     public static bool IsStale(string reading, string text) =>
         IsVolatile(reading, text) ||
+        text.Contains('\uFFFC', StringComparison.Ordinal) ||
         reading is "じこう" or "じこうのあいさつ" && text.Contains("の候", StringComparison.Ordinal) ||
         reading is "くりっぷぼーど" or "ぺーすと" && text != CompositionText.ToKatakana(reading);
 
@@ -142,7 +144,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     {
         if (services.Predictor?.Phrases is not { } phrases) return;
         if (!text.Any(c => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿') || reading.Length < 3 || reading.Any(char.IsAsciiLetter)) return;
-        if (IsVolatile(reading, text)) return;
+        if (IsStale(reading, text)) return;
         phrases.Remember(reading, text);
     }
 }

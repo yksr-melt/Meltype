@@ -154,20 +154,33 @@ internal static class UtilityConversionTests
             string[][] entries =
             [
                 ["あした", "2026/11/11"], ["きのう", "月曜日"], ["ことし", "令和八年"], ["ばーじょん", "Meltype-1.4.1"],
-                ["じこう", "晩秋の候"], ["くりっぷぼーど", "パスワード123"],
+                ["じこう", "晩秋の候"], ["くりっぷぼーど", "パスワード123"], ["ほかの", "！\uFFFC他のメッセージオプション"],
                 ["きょう", "京"], ["かようび", "火曜日"], ["じこう", "時効"], ["れいわ8ねん", "2026年"], ["くりっぷぼーど", "クリップボード"],
             ];
-            File.WriteAllText(conversions, "{" + string.Join(",", entries.Take(8).Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
+            File.WriteAllText(conversions, "{" + string.Join(",", entries.Take(9).Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
             var history = new ConversionHistory(conversions);
-            foreach (var reading in new[] { "あした", "きのう", "ことし", "ばーじょん" }) Assert.True(history.Get(reading) is null, $"{reading} は捨てる");
+            foreach (var reading in new[] { "あした", "きのう", "ことし", "ばーじょん", "ほかの" }) Assert.True(history.Get(reading) is null, $"{reading} は捨てる");
             Assert.Equal("京", history.Get("きょう"));
             Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある語は残す");
             foreach (var (reading, text, kept) in new[] { ("じこう", "晩秋の候", false), ("くりっぷぼーど", "パスワード123", false), ("じこう", "時効", true), ("れいわ8ねん", "2026年", true), ("くりっぷぼーど", "クリップボード", true) })
                 Assert.Equal(!kept, CompositionLearning.IsStale(reading, text), $"{reading} → {text}");
             var phrases = Path.Combine(directory, "phrases.txt");
-            File.WriteAllLines(phrases, ["きょうは\t2026/11/10は\t3\t0", "きょうは\t今日は\t3\t0"]);
+            File.WriteAllLines(phrases, ["きょうは\t2026/11/10は\t3\t0", "きょうは\t今日は\t3\t0", "きょうの\t今日の！\uFFFC他のメッセージオプション\t3\t0"]);
             Assert.Equal("今日は", string.Join(",", new PhraseHistory(phrases).StartingWith("きょ")), "予測変換の語句も捨てる");
         }
         finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
+    public static void ScreenTextInACandidate_IsNotLearned()
+    {
+        // 画面の文字 (U+FFFC を含む) が混ざった候補は、選んでも覚えない (issue #1537)
+        var history = new ConversionHistory(null);
+        var k = new Keyboard(history: history, moreCandidates: reading => reading == "ほかの" ? ["他の", "！\uFFFC他のメッセージオプション"] : []);
+        Choose(k, "hokano", "！\uFFFC他のメッセージオプション");
+        Assert.True(history.Get("ほかの") is null, "変換履歴に覚えない");
+        var ordinary = new Keyboard(history: history, moreCandidates: reading => reading == "ほかの" ? ["他の", "外の"] : []);
+        Choose(ordinary, "hokano", "外の");
+        Assert.Equal("外の", history.Get("ほかの"), "普通の語は覚える");
     }
 }
