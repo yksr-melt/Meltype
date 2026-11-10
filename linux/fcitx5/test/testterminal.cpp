@@ -222,12 +222,14 @@ bool altTaps(Instance *instance, AddonInstance *frontend) {
     ICUUID uuid;
     auto *ic = terminal(instance, frontend, uuid, false);
     if (!expect(ic != nullptr, "alt tap input context exists")) return false;
-    frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), false);
+    // 単独押しを使う Alt は、押下も解放もアプリに渡さない (解放だけを止めると、アプリには Alt を押したままに見える)
+    if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), false), "left Alt press is consumed")) return false;
     if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), true), "left Alt tap is consumed")) return false;
     if (!expect(passes(frontend, uuid, "echo \"kyouha"), "left Alt tap enters direct English")) return false;
     frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), false);
-    frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("x"), false);
-    if (!expect(!frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), true), "right Alt with another key is not a tap")) return false;
+    if (!expect(!frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt+x"), false), "Alt + x reaches the app")) return false;
+    if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), true), "the release of a consumed Alt press is consumed")) return false;
+    if (!expect(passes(frontend, uuid, "k"), "right Alt with another key is not a tap")) return false;
     frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), false);
     if (!expect(frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_R"), true), "right Alt tap is consumed")) return false;
     if (!composes(frontend, uuid, ic, "right Alt tap selects Japanese")) return false;

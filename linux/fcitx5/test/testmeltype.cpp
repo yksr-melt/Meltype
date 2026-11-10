@@ -104,14 +104,14 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), true);
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
 
-        // 左右の Alt の単独押しで英数・日本語。Alt+クリック (押している間にキャレットが動いた) では切り替えず、Alt の解放をアプリに渡す
+        // 左右の Alt の単独押しで英数・日本語。Alt+クリック (押している間にキャレットが動いた) では切り替えない
         ic->setCursorRect(Rect(10, 10, 11, 30));
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), false);
         ic->setCursorRect(Rect(80, 10, 81, 30));
         // 押したままの自動の繰り返しでも、単独押しに戻さない
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), false);
-        FCITX_ASSERT(!frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), true)) << "Alt+クリックの Alt の解放はアプリへ";
-        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << "Alt+クリックでは切り替えない: " << instance->inputMethodLabel(ic);
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), false);
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), true);
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "A") << instance->inputMethodLabel(ic);

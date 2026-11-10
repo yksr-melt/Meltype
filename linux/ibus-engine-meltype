@@ -149,6 +149,9 @@ class MeltypeEngine(IBus.Engine):
         self._tap = None
         # 単独押しの途中で取り消した修飾キー (押したままの自動の繰り返しで、単独押しに戻さない)
         self._tap_cancelled = None
+        # 本体が単独押しを受け取る左右の Alt (capture.shortcuts) と、アプリに渡さなかった Alt の押下
+        self._alt_keys = set()
+        self._alt_eaten = set()
         # アプリが最後に知らせたキャレットの位置
         self._cursor = None
         # 確定し直しで前の文字を消したのに残っていた入力欄 (Wayland + Chromium) は、これからも消せないとみなす
@@ -187,6 +190,8 @@ class MeltypeEngine(IBus.Engine):
             return None
         output = json.loads(reply)
         self._apply(output["result"])
+        self._alt_keys = {key["vk"] for key in output["state"]["capture"]["shortcuts"]
+                          if key["vk"] in TAP_KEYS.values() and key["modifiers"] == 0}
         if output["state"]["languageMode"] != self._language_mode:
             self._language_mode = output["state"]["languageMode"]
             label = IBus.Text.new_from_string("あ" if self._language_mode == "Japanese" else "A")
@@ -227,15 +232,22 @@ class MeltypeEngine(IBus.Engine):
         if state & IBus.ModifierType.RELEASE_MASK:
             if keyval == self._tap_cancelled:
                 self._tap_cancelled = None
+            eaten = keyval in self._alt_eaten
+            self._alt_eaten.discard(keyval)
             if keyval != self._tap:
-                return False
+                return eaten
             self._tap = None
             output = self.send("KeyPressed", key={"vk": TAP_KEYS[keyval], "tappedAlone": True})
-            return bool(output and output["result"]["consumed"])
+            return eaten or bool(output and output["result"]["consumed"])
         # 押したままの自動の繰り返しは、単独押しの途中か (取り消したか) を変えない
         if keyval not in TAP_KEYS or keyval not in (self._tap, self._tap_cancelled):
             self._tap = keyval if keyval in TAP_KEYS else None
             self._tap_cancelled = None
+        # 本体が単独押しを使う Alt は、押下も解放もアプリに渡さない。解放だけを止めると、アプリには Alt を押したままに見え、
+        # 続けて打った文字が Alt + 文字 (VS Code のメニューのアクセスキー) になる。Alt + 文字・Alt + クリックは、修飾キーの状態でアプリに届く
+        if TAP_KEYS.get(keyval) in self._alt_keys:
+            self._alt_eaten.add(keyval)
+            return True
         vk, character = virtual_key(keyval)
         if vk is None:
             return False

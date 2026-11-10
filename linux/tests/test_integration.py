@@ -547,21 +547,26 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual(app, self.engine._app, client)
 
     def test_alt_tap_sets_the_mode(self):
-        self.special(IBus.KEY_Alt_L)
+        # 本体が単独押しを使う Alt は、押下も解放もアプリに渡さない (解放だけを止めると、アプリには Alt を押したままに見える)
+        self.engine.do_focus_in()
+        self.assertTrue(self.special(IBus.KEY_Alt_L))
         self.assertTrue(self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK))
         self.type_text("ka")
         self.assertEqual("ka", self.engine.document)
-        # ほかのキーと一緒に押したら切り替えない
-        self.special(IBus.KEY_Alt_R)
-        self.scalar("x", IBus.ModifierType.MOD1_MASK)
-        self.assertFalse(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
+        # ほかのキーと一緒に押したら切り替えない (Alt + x はアプリに渡す)
+        self.assertTrue(self.special(IBus.KEY_Alt_R))
+        self.assertFalse(self.scalar("x", IBus.ModifierType.MOD1_MASK))
+        self.assertTrue(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
+        self.type_text("ka")
+        self.assertEqual("kaka", self.engine.document, "英数のまま")
         self.special(IBus.KEY_Alt_R)
         self.assertTrue(self.special(IBus.KEY_Alt_R, IBus.ModifierType.RELEASE_MASK))
         self.type_text("ka")
         self.assertEqual("か", self.engine.marked)
 
     def test_alt_click_is_not_a_tap(self):
-        # Alt+クリック (VS Code のカーソルを増やす操作): 押している間にキャレットが動いたら、切り替えずに Alt の解放をアプリに渡す
+        # Alt+クリック (VS Code のカーソルを増やす操作): 押している間にキャレットが動いたら、切り替えない
+        self.engine.do_focus_in()
         self.engine.do_set_cursor_location(10, 10, 1, 20)
         self.special(IBus.KEY_Alt_L)
         self.engine.do_set_cursor_location(10, 10, 1, 20)
@@ -569,7 +574,7 @@ class IntegrationTests(unittest.TestCase):
         self.engine.do_set_cursor_location(80, 10, 1, 20)
         # 押したままの自動の繰り返しでも、単独押しに戻さない
         self.special(IBus.KEY_Alt_L)
-        self.assertFalse(self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK))
+        self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK)
         self.type_text("ka")
         self.assertEqual("か", self.engine.marked, "日本語のまま")
 

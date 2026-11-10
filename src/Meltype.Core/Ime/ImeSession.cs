@@ -281,9 +281,10 @@ internal sealed class ImeSession
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
         if (key.TappedAlone)
         {
+            // 切り替えないなら、変換中の表示はそのまま
             return settings.AltKeysSwitchKeyboard && vk is VirtualKeys.LMenu or VirtualKeys.RMenu
                 ? Switch(vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false)
-                : Pass;
+                : _session.PassThrough();
         }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない

@@ -373,6 +373,8 @@ public:
     int tap = 0;
     // 単独押しの途中で取り消した Alt (押したままの自動の繰り返しで、単独押しに戻さない)
     int tapCancelled = 0;
+    // アプリに渡さなかった Alt の押下 (仮想キーコード。離したことも渡さない)
+    std::vector<int> altEaten;
     // アプリが最後に知らせたキャレットの位置 (同じ位置を知らせ直しても、動いたとみなさない)
     fcitx::Rect cursor;
     void cancelTap() {
@@ -450,9 +452,20 @@ public:
                     state->tap = vk;
                     state->tapCancelled = 0;
                 }
+                // 本体が単独押しを使う Alt は、押下も解放もアプリに渡さない。解放だけを止めると、アプリには Alt を押したままに見え、
+                // 続けて打った文字が Alt + 文字 (VS Code のメニューのアクセスキー) になる。Alt + 文字・Alt + クリックは、修飾キーの状態でアプリに届く
+                if (std::find(altKeys_.begin(), altKeys_.end(), vk) != altKeys_.end()) {
+                    if (std::find(state->altEaten.begin(), state->altEaten.end(), vk) == state->altEaten.end()) state->altEaten.push_back(vk);
+                    event.filterAndAccept();
+                }
                 return;
             }
             if (state->tapCancelled == vk) state->tapCancelled = 0;
+            const auto eaten = std::find(state->altEaten.begin(), state->altEaten.end(), vk);
+            if (eaten != state->altEaten.end()) {
+                state->altEaten.erase(eaten);
+                event.filterAndAccept();
+            }
             if (state->tap != vk) return;
             state->tap = 0;
             Json output;
@@ -527,6 +540,8 @@ private:
     void *host_ = nullptr;
     // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
     std::string languageMode_;
+    // 本体が単独押しを受け取る左右の Alt (capture.shortcuts)
+    std::vector<int> altKeys_;
     bool loaded_ = false;
     fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
@@ -553,6 +568,10 @@ private:
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
         const auto *shown = output.get("state");
+        altKeys_.clear();
+        if (const auto *capture = shown->get("capture"); capture && capture->get("shortcuts"))
+            for (const auto &key : capture->get("shortcuts")->items)
+                if (const int vk = key.integer("vk"); (vk == 0xA4 || vk == 0xA5) && key.integer("modifiers") == 0) altKeys_.push_back(vk);
         if (const auto mode = shown->str("languageMode"); mode != languageMode_) {
             languageMode_ = mode;
             ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);

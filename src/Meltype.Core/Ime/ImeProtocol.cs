@@ -208,7 +208,8 @@ public sealed record ImeState
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
 /// PrintableAscii は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。PrintableAsciiExcept はそのうち受け取らない文字。
 /// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
-/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.TappedAlone) を受け取る。
+/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.TappedAlone) を受け取る。IBus・fcitx5 は、ここにある Alt の押下と解放をアプリに渡さない
+/// (解放だけを止めると、アプリには Alt を押したままに見える)。
 /// </summary>
 public sealed record ImeCapture
 {

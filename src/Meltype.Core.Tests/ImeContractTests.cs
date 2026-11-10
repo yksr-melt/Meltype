@@ -477,8 +477,11 @@ internal static class ImeContractTests
         var front = new Front();
         string Tap(int vk) => $"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\"}},\"key\":{{\"vk\":{vk},\"tappedAlone\":true}}}}";
         Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LMenu))), "設定が OFF ならアプリに通す (メニューバーに移る)\n" + front.Trace);
-        front.Settings.AltKeysSwitchKeyboard = true;
         front.Type("ka");
+        var off = front.Send(Tap(VirtualKeys.LMenu));
+        front.Apply(off, "t1");
+        Assert.True(!Consumed(off) && front.Composition["t1"] == "か" && front.Document == "", "設定が OFF なら、変換中の文字はそのまま\n" + front.Trace);
+        front.Settings.AltKeysSwitchKeyboard = true;
         var left = front.Send(Tap(VirtualKeys.LMenu));
         front.Apply(left, "t1");
         Assert.True(Consumed(left) && !front.Open && front.Document == "か", "左 Alt で、変換中の文字を確定して英数\n" + front.Trace);
