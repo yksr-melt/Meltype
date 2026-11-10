@@ -15,6 +15,7 @@ public readonly record struct Misspelling(int Start, int Length, string Wrong, s
 /// 正しい形だけの行 (と、誤りの行の正しい形) は、濁点・半濁点・促音 (ッ)・長音 (ー)・小書き文字だけが違う
 /// 綴り (ブレスレッド、ブレースレット) を見つけるのにも使う。偶然の一致を避けるため 5 文字以上の語だけ。
 /// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
 public sealed class MisspellingDictionary
 {
     private const int FuzzyMinimumLength = 5;
@@ -122,8 +123,15 @@ public sealed class MisspellingDictionary
             if (c is 'ッ' or 'ー' || CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
             builder.Append(c switch
             {
-                'ァ' => 'ア', 'ィ' => 'イ', 'ゥ' => 'ウ', 'ェ' => 'エ', 'ォ' => 'オ',
-                'ャ' => 'ヤ', 'ュ' => 'ユ', 'ョ' => 'ヨ', 'ヮ' => 'ワ',
+                'ァ' => 'ア',
+                'ィ' => 'イ',
+                'ゥ' => 'ウ',
+                'ェ' => 'エ',
+                'ォ' => 'オ',
+                'ャ' => 'ヤ',
+                'ュ' => 'ユ',
+                'ョ' => 'ヨ',
+                'ヮ' => 'ワ',
                 _ => c,
             });
         }

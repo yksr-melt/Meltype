@@ -10,22 +10,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 INSTALL=1
-# 入力ソースの「+」の一覧に Meltype が出ない Mac がある (自分で署名した版、macOS 26、#21)。
-# アプリ内の登録処理で、有効な入力ソースを追加し、Meltype の重複だけを整理する。
-enable_input_source() {
-    "$TARGET/Meltype.app/Contents/MacOS/Meltype" --register-input-source
-    killall TextInputMenuAgent 2>/dev/null || true
-    echo "入力ソースに Meltype を追加しました"
-}
-
-# 入力ソースの登録をやり直す (#134)。Meltype.app を入れ替えるとき、バンドルが無い一瞬に入力ソースの
-# 走査が走ると、macOS は登録を消す。消えたあとは、バンドルを戻して走査し直しても戻らないことがあり、
-# これまではログアウトするしかなかった。TISRegisterInputSource なら実行中でも戻せる。
-register_input_source() {
-    local tool="$TARGET/Meltype.app/Contents/MacOS/MeltypeRegisterInputSource"
-    "$tool" "$TARGET/Meltype.app" ||
-        echo "入力ソースに登録できませんでした。ログアウトしてログインし直すと直ります。" >&2
-}
 [[ "${1:-}" == "--no-install" ]] && INSTALL=0
 
 case "$(uname -m)" in
@@ -45,7 +29,7 @@ mkdir -p "$BUILD"
 echo "== 1/3 本体 (C#, NativeAOT) をビルド"
 # リポジトリの nuget.config は NuGet を使わない設定 (Windows の開発環境用) なので、NativeAOT のコンパイラを取るために nuget.org を指定する。
 dotnet publish ../src/Meltype.Mac.Native/Meltype.Mac.Native.csproj -c Release -r "$RID" \
-    -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:Version="$VERSION" \
+    -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:Version="$VERSION" -p:TreatWarningsAsErrors=true \
     --source https://api.nuget.org/v3/index.json -o "$BUILD/native"
 
 echo "== 2/3 IME (Swift) をビルド (初回は azooKey の変換エンジンと辞書のダウンロードに時間がかかります)"
@@ -57,6 +41,7 @@ BIN="$(swift build -c release --show-bin-path)"
 cp "$BIN/MeltypeIME" "$APP/Contents/MacOS/Meltype"
 # 入力ソースの登録をやり直す小さな道具 (#134)。install.sh が入れ替えたあとに呼ぶ。
 cp "$BIN/RegisterInputSource" "$APP/Contents/MacOS/MeltypeRegisterInputSource"
+cp "$BIN/InstallSupport" "$APP/Contents/MacOS/MeltypeInstallSupport"
 # azooKey が使う llama.framework などの動的なフレームワークも同梱する。
 # 入れていなかったため、1.0.0 は起動できなかった (dyld: Library not loaded: @rpath/llama.framework、#13)。
 for framework in "$BIN"/*.framework; do
@@ -97,6 +82,28 @@ cp -R Resources/ja.lproj Resources/en.lproj "$APP/Contents/Resources/"
 for bundle in "$BIN"/*.bundle; do
     [[ -e "$bundle" ]] && cp -R "$bundle" "$APP/Contents/Resources/"
 done
+# Zenzai のモデル zenz-v3.2-small (Apache-2.0) を同梱する (issue #1130)。版とハッシュは native/zenzai/zenzai.env (Windows と共通)。
+# 取れないとき: リリースのビルド (タグ v*) なら止める (Zenzai は既定 ON なので、無いまま配らない)。
+# 自分の Mac で使うビルドなら、同梱せずに続ける (Zenzai なしで、azooKey の辞書だけで変換する)
+# shellcheck source=../native/zenzai/zenzai.env
+source ../native/zenzai/zenzai.env
+ZENZ_CACHE="$BUILD/cache/$ZENZ_NAME"
+mkdir -p "$BUILD/cache"
+if [[ ! -f "$ZENZ_CACHE" ]] || [[ "$(shasum -a 256 "$ZENZ_CACHE" | cut -d' ' -f1)" != "$ZENZ_SHA256" ]]; then
+    curl -fsSL -o "$ZENZ_CACHE" "https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf/resolve/$ZENZ_COMMIT/ggml-model-Q5_K_M.gguf" || rm -f "$ZENZ_CACHE"
+fi
+if [[ -f "$ZENZ_CACHE" ]] && [[ "$(shasum -a 256 "$ZENZ_CACHE" | cut -d' ' -f1)" == "$ZENZ_SHA256" ]]; then
+    mkdir -p "$APP/Contents/Resources/zenz"
+    cp "$ZENZ_CACHE" "$APP/Contents/Resources/zenz/$ZENZ_NAME"
+    echo "Zenzai のモデルを同梱しました: $ZENZ_NAME"
+else
+    rm -f "$ZENZ_CACHE"
+    if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+        echo "Zenzai のモデルを取れませんでした。リリースのビルドなので止めます" >&2
+        exit 1
+    fi
+    echo "警告: Zenzai のモデルを取れなかったので、同梱しません (Zenzai なしで変換します)" >&2
+fi
 # 署名: 環境変数 MELTYPE_MAC_IDENTITY (Developer ID Application の証明書の名前) があれば配布用に署名する
 # (Hardened Runtime・タイムスタンプ付き。公証 (notarization) は mac.yml で行う)。無ければ自分の Mac で使うための署名。
 if [[ -n "${MELTYPE_MAC_IDENTITY:-}" ]]; then
@@ -114,14 +121,8 @@ if [[ $INSTALL -eq 1 ]]; then
     TARGET="$HOME/Library/Input Methods"
     bash "$PWD/install-app.sh" "$APP" "$TARGET/Meltype.app"
     echo "インストールしました: $TARGET/Meltype.app"
-    enable_input_source
-    register_input_source
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$TARGET/Meltype.app"
     # Keep the build copy out of the input-source add dialog after installing.
     /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$PWD/$APP" 2>/dev/null || true
-    if [[ "${MELTYPE_SKIP_START:-0}" != 1 ]]; then
-        bash "$PWD/start-input-method.sh" "$TARGET/Meltype.app"
-    fi
     echo "初めてのときは、いったんログアウトしてログインし直してから、"
     echo "システム設定 → キーボード → 入力ソース →「編集…」→「+」→ 日本語 → Meltype を追加してください。"
 fi

@@ -3,28 +3,41 @@
 
 namespace Meltype.Config;
 
-/// <summary>保存場所はすべて %LOCALAPPDATA%\Meltype\ 配下 (設計書 §21)。ネットワークには何も送らない。</summary>
+/// <summary>通常版とポータブル版でデータの保存先を切り替える。</summary>
 internal static class AppPaths
 {
+    private const string PortableMarker = "Meltype.portable";
+
+    /// <summary>app フォルダーにポータブル版のマーカーがあれば有効。</summary>
+    public static bool IsPortable { get; } = File.Exists(Path.Combine(AppContext.BaseDirectory, PortableMarker));
+
     /// <summary>
-    /// 設定・学習・ユーザー辞書の保存場所。既定は OS のローカルアプリデータ (%LOCALAPPDATA% 相当) の下の Meltype。
-    /// テストや検証で実データに触れないよう、環境変数 <c>MELTYPE_DATA_DIR</c> があればそこを使う (通常の実行では未設定)。
+    /// 設定・学習データ・辞書の保存場所。MELTYPE_DATA_DIR は開発時の上書きに使う。
+    /// ポータブル版は app の隣、通常版は LocalAppData を使う。
     /// </summary>
-    public static string DataDirectory { get; } =
-        Environment.GetEnvironmentVariable("MELTYPE_DATA_DIR") is { Length: > 0 } overrideDirectory
-            ? overrideDirectory
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Meltype");
+    public static string DataDirectory { get; } = ResolveDataDirectory(
+        IsPortable,
+        Environment.GetEnvironmentVariable("MELTYPE_DATA_DIR"),
+        AppContext.BaseDirectory,
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData));
+
+    internal static string ResolveDataDirectory(bool isPortable, string? overrideDirectory, string appBaseDirectory, string localAppDataDirectory)
+    {
+        if (overrideDirectory is { Length: > 0 })
+            return overrideDirectory;
+        if (isPortable)
+            return Path.Combine(appBaseDirectory, "data");
+        return Path.Combine(localAppDataDirectory, "Meltype");
+    }
 
     /// <summary>旧名 (AutoIME) のときの保存場所。</summary>
     private static string OldDataDirectory =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AutoIME");
 
-    /// <summary>
-    /// 旧名 (AutoIME) の設定・学習データ・ユーザー辞書があれば、新しい保存場所に移す (新しい場所がまだ無いときだけ)。
-    /// 起動時に 1 回呼ぶ。移せなくても旧データは消さず、既定値で動く。
-    /// </summary>
+    /// <summary>旧名 (AutoIME) の設定・学習データ・ユーザー辞書があれば、新しい保存場所に移す。</summary>
     public static void MigrateFromOldName()
     {
+        if (IsPortable) return;
         try
         {
             if (Directory.Exists(DataDirectory) || !Directory.Exists(OldDataDirectory)) return;
@@ -40,17 +53,17 @@ internal static class AppPaths
     }
 
     public static string ConfigFile => Path.Combine(DataDirectory, "config.json");
+    public static string StateFile => Path.Combine(DataDirectory, "state.json");
     public static string ConversionHistoryFile => Path.Combine(DataDirectory, "conversions.json");
     public static string TranslationHistoryFile => Path.Combine(DataDirectory, "translations.json");
     public static string LanguageMemoryFile => Path.Combine(DataDirectory, "languages.json");
     public static string PhraseHistoryFile => Path.Combine(DataDirectory, "phrases.txt");
     public static string UserDictionaryFile => Path.Combine(DataDirectory, "userdict.txt");
     public static string SnippetsFile => Path.Combine(DataDirectory, "snippets.json");
+    public static string KeyCountFile => Path.Combine(DataDirectory, "keycount.json");
     public static string LogFile => Path.Combine(DataDirectory, "meltype.log");
-
     /// <summary>落ちたときの例外 (ファイルへのログが OFF でも書く)。</summary>
     public static string CrashLogFile => Path.Combine(DataDirectory, "crash.log");
-
     /// <summary>ユーザー辞書 (japanese.txt / english.txt) を置くと組み込み辞書に追加される。</summary>
     public static string UserDictionaryDirectory => Path.Combine(DataDirectory, "dictionaries");
 }

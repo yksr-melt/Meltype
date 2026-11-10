@@ -1,0 +1,49 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Konayukiw -->
+<!-- リンクを貼ったときの画像 (public/og.png) の元。make-images.mjs が 1200x630 で撮る -->
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@700;900&display=block">
+<style>
+  html, body {
+    margin: 0;
+    width: 1200px;
+    height: 630px;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(150deg, #dff3fe 0%, #ffffff 55%, #ffeef5 100%);
+    font-family: "Zen Maru Gothic", sans-serif;
+  }
+
+  .logo {
+    width: 900px;
+    height: 448px;
+    margin-top: 40px;
+  }
+
+  .catch {
+    margin: 22px 0 0;
+    padding: 12px 54px 14px;
+    background: #fff;
+    border: 3px solid #7391ee;
+    border-radius: 999px;
+    box-shadow: 0 6px 0 rgba(115, 145, 238, 0.55);
+    color: #33415c;
+    font-size: 38px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body>
+  <img class="logo" src="../public/assets/img/logo.png" alt="">
+  <p class="catch">半角/全角 キーは、もう押さなくていい！</p>
+</body>
+</html>

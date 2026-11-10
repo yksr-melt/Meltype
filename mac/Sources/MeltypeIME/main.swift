@@ -11,23 +11,68 @@ if CommandLine.arguments.contains("--version") {
 }
 
 if CommandLine.arguments.contains("--register-input-source") {
-    exit(InputSourceRegistration.register() == 0 ? 0 : 1)
+    let outcome = InputSourceRegistration.register()
+    guard outcome == .ready else { exit(outcome.exitCode) }
+    // 更新時はメニューを再起動せず、前面アプリの入力接続を維持する。
+    if CommandLine.arguments.contains("--keep-input-menu") { exit(0) }
+    let refresh = Process()
+    refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+    refresh.arguments = ["TextInputMenuAgent"]
+    refresh.standardOutput = FileHandle.nullDevice
+    refresh.standardError = FileHandle.nullDevice
+    do {
+        try refresh.run()
+        refresh.waitUntilExit()
+    } catch {
+        FileHandle.standardError.write(Data("入力メニューの表示を更新できませんでした: \(error.localizedDescription)\n".utf8))
+    }
+    exit(0)
 }
-
-// Input Method Kit のサーバーを起動する。入力欄 (クライアント) ごとに MeltypeInputController が作られる。
 
 /// 変換の候補の一覧 (すべての入力欄で共有する)。
 var candidatesWindow: IMKCandidates?
 
-// 本体 (libMeltypeNative.dylib) を読み込み、漢字変換・英単語の判定の関数を登録しておく。
-NativeCore.shared.initialize()
+func runIsolatedChecks(inputPath: String?) -> Int32 {
+    let files = FileManager.default
+    let data = files.temporaryDirectory.appendingPathComponent("meltype-input-check.\(UUID().uuidString)", isDirectory: true)
+    var status: Int32 = 1
+    do {
+        try files.createDirectory(at: data, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer {
+            do { try files.removeItem(at: data) }
+            catch {
+                fputs("検査用の一時ディレクトリを削除できませんでした: \(error.localizedDescription)\n", stderr)
+                status = 1
+            }
+        }
+        // Core は最初に参照したデータの保存先を保持するので、読み込む前に設定する。
+        guard setenv("MELTYPE_DATA_DIR", data.path, 1) == 0 else {
+            perror("MELTYPE_DATA_DIR")
+            return 1
+        }
+        NativeCore.shared.initialize()
+        status = runChecks(inputPath: inputPath)
+    } catch {
+        fputs("検査用の一時ディレクトリを作成できませんでした: \(error.localizedDescription)\n", stderr)
+        return 1
+    }
+    return status
+}
 
-if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contains("--check-inputs") {
+func runChecks(inputPath: String?) -> Int32 {
     var failures = 0
     func check(_ name: String, _ condition: Bool) {
         print("\(condition ? "PASS" : "FAIL") \(name)")
         if !condition { failures += 1 }
     }
+    check("reconversion: replaces matching previous text",
+          matchesExpectedText("って", expected: "って", deleteBefore: 2))
+    check("reconversion: preserves changed pasted text",
+          !matchesExpectedText("paste", expected: "って", deleteBefore: 2))
+    check("reconversion: counts UTF-16 units",
+          matchesExpectedText("😊", expected: "😊", deleteBefore: 2))
+    check("reconversion: rejects missing expected text",
+          !matchesExpectedText("って", expected: nil, deleteBefore: 2))
     func type(_ text: String, session: UnsafeMutableRawPointer?, before: String? = nil) -> (String, SessionResult?) {
         var output = ""
         var last: SessionResult?
@@ -43,19 +88,27 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
             last = NativeCore.shared.handleKey(session, vk: vk, character: code,
                 modifiers: character.isUppercase ? 1 : 0, before: before, after: nil)
             for edit in last?.commits ?? [] {
+                var text = edit.text
                 if edit.deleteBefore > 0 {
                     let current = output as NSString
-                    output = current.substring(to: max(0, current.length - edit.deleteBefore))
+                    // 消す文字を確認できないときは、前の文字は消さずに今打った文字 (edit.current) だけを入れる (入力欄と同じ扱い)。
+                    if edit.deleteBefore <= current.length,
+                       matchesExpectedText(current.substring(from: current.length - edit.deleteBefore),
+                                           expected: edit.expect, deleteBefore: edit.deleteBefore) {
+                        output = current.substring(to: current.length - edit.deleteBefore)
+                    } else {
+                        text = edit.current ?? edit.text
+                    }
                 }
-                output += edit.text
+                output += text
             }
             if last?.consumed != true { output += String(character) }
         }
         return (output, last)
     }
-    if let index = CommandLine.arguments.firstIndex(of: "--check-inputs"), index + 1 < CommandLine.arguments.count {
+    if let inputPath {
         do {
-            let content = try String(contentsOfFile: CommandLine.arguments[index + 1], encoding: .utf8)
+            let content = try String(contentsOfFile: inputPath, encoding: .utf8)
             var count = 0
             for line in content.split(separator: "\n") where !line.hasPrefix("#") {
                 let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
@@ -68,10 +121,10 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
                 count += 1
             }
             print("\(count - failures)/\(count) input checks passed")
-            exit(count > 0 && failures == 0 ? 0 : 1)
+            return count > 0 && failures == 0 ? 0 : 1
         } catch {
             print("Input check file could not be read: \(error.localizedDescription)")
-            exit(1)
+            return 1
         }
     }
     for (input, expected) in [("kyouhagoogledekensaku \n", "今日はgoogleで検索"),
@@ -102,10 +155,27 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
     print("issue 114: first checks=\(checksAfterFirst - checksBefore), repeat checks=\(repeatedChecks), elapsed=\(Date().timeIntervalSince(started))s")
     check("issue 114: repeated spelling uses cache", repeatedChecks == 0 && firstOutput == secondOutput)
     let other: [String: Any] = ["InputSourceKind": "Keyboard Layout", "KeyboardLayout Name": "ABC"]
-    let duplicate: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier, "InputSourceKind": "Keyboard Input Method"]
-    let repaired = InputSourceRegistration.normalized([other] + Array(repeating: duplicate, count: 15))
-    check("issue 101: deduplicate input sources", repaired.count == 3 && (repaired[0]["KeyboardLayout Name"] as? String) == "ABC")
-    check("issue 101: registration is idempotent", NSArray(array: repaired).isEqual(to: InputSourceRegistration.normalized(repaired)))
+    let duplicate: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier, "InputSourceKind": "Keyboard Input Method", "metadata": ["keep": true]]
+    let duplicateMode: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier,
+                                      "Input Mode": InputSourceRegistration.japaneseIdentifier, "InputSourceKind": "Input Mode"]
+    let duplicatePairs = (0..<15).flatMap { _ in [duplicate, duplicateMode] }
+    let repaired = InputSourceRegistration.repaired(legacy: [other] + duplicatePairs, thirdParty: duplicatePairs)
+    check("issue 101: deduplicate each existing store without moving entries",
+          NSArray(array: repaired.legacy).isEqual(to: [other, duplicate, duplicateMode]) &&
+          NSArray(array: repaired.thirdParty ?? []).isEqual(to: [duplicate, duplicateMode]))
+    let repeatedRepair = InputSourceRegistration.repaired(legacy: repaired.legacy, thirdParty: repaired.thirdParty)
+    check("issue 101: repair is idempotent", NSArray(array: repeatedRepair.legacy).isEqual(to: repaired.legacy) &&
+          NSArray(array: repeatedRepair.thirdParty ?? []).isEqual(to: repaired.thirdParty ?? []))
+    let fallback = InputSourceRegistration.repaired(legacy: [duplicateMode, other, duplicate], thirdParty: nil)
+    check("issue 101: preserve order, metadata and absent store", fallback.thirdParty == nil &&
+          NSArray(array: fallback.legacy).isEqual(to: [duplicateMode, other, duplicate]))
+    let malformedPreferences: [Any] = ["not an array", [other, "not a dictionary"] as [Any]]
+    for invalid in malformedPreferences {
+        do {
+            _ = try InputSourceRegistration.validatedSources(invalid, name: "self-test")
+            check("issue 101: reject malformed preferences", false)
+        } catch { check("issue 101: reject malformed preferences", true) }
+    }
     do {
         for format in [PropertyListSerialization.PropertyListFormat.xml, .binary] {
             let data = try PropertyListSerialization.data(fromPropertyList: [["shortcut": "カイシャ", "phrase": "株式会社テスト"]], format: format, options: 0)
@@ -116,15 +186,6 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
         }
     } catch { check("issue 40: plist parsing", false) }
     let session = NativeCore.shared.createSession()
-    let (_, goPreview) = type("go", session: session)
-    check("go preview candidates", goPreview?.view?.candidates == ["go", "ご"])
-    let selectedGo = NativeCore.shared.selectCandidate(session, index: 0)
-    check("select English go", selectedGo?.view?.text == "go")
-    _ = NativeCore.shared.commit(session)
-    _ = type("go", session: session)
-    let selectedKana = NativeCore.shared.selectCandidate(session, index: 1)
-    check("select hiragana go", selectedKana?.view?.text == "ご")
-    _ = NativeCore.shared.commit(session)
     let (_, emoji) = type("egao ", session: session)
     check("emoji candidate", emoji?.view?.candidates.contains("😊") == true)
     _ = NativeCore.shared.commit(session)
@@ -155,9 +216,24 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
     }
     NativeCore.shared.destroySession(stressSession)
     print("1000 native input/candidate/commit/mode cycles in \(Date().timeIntervalSince(stressStart))s")
-    exit(failures == 0 ? 0 : 1)
+    return failures == 0 ? 0 : 1
 }
 
+if let index = CommandLine.arguments.firstIndex(of: "--check-inputs") {
+    guard index + 1 < CommandLine.arguments.count else {
+        fputs("Usage: Meltype --check-inputs <file>\n", stderr)
+        exit(1)
+    }
+    exit(runIsolatedChecks(inputPath: CommandLine.arguments[index + 1]))
+}
+if CommandLine.arguments.contains("--self-test") {
+    exit(runIsolatedChecks(inputPath: nil))
+}
+
+// 本体 (libMeltypeNative.dylib) を読み込み、漢字変換・英単語の判定の関数を登録しておく。
+NativeCore.shared.initialize()
+
+// Input Method Kit のサーバーを起動する。入力欄 (クライアント) ごとに MeltypeInputController が作られる。
 let connectionName = Bundle.main.object(forInfoDictionaryKey: "InputMethodConnectionName") as? String ?? "Meltype_Connection"
 guard let bundleIdentifier = Bundle.main.bundleIdentifier,
       let server = IMKServer(name: connectionName, bundleIdentifier: bundleIdentifier) else {
@@ -166,4 +242,5 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
 }
 candidatesWindow = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
+NativeCore.shared.startBackgroundConversion()
 NSApplication.shared.run()

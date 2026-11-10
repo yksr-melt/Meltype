@@ -30,7 +30,9 @@ internal sealed class ReportDialog : Form
             AutoSize = true,
             Padding = new Padding(10, 10, 10, 6),
             MaximumSize = new Size(Width - 40, 0),
-            Text = "「フォームで報告」を押すと、報告のフォームがブラウザーで開きます (改善の提案もここから送れます)。下の実行環境は自動でフォームに入ります。\n"
+            Text = (Config.ProjectInfo.HasReportForm
+                    ? "「フォームで報告」を押すと、報告のフォームがブラウザーで開きます (改善の提案もここから送れます)。下の実行環境は自動でフォームに入ります。\n"
+                    : "「GitHub で不具合を報告」を押すと、GitHub の不具合の報告の画面がブラウザーで開きます (改善の提案は下のリンクから)。下の実行環境と版は自動で入ります。\n")
                 + "ログは「ログをコピー」を押して、フォームの「ログ」の欄に貼り付けてください。見られて困る部分があれば、ここで消してからコピーしてください。",
         };
 
@@ -53,7 +55,8 @@ internal sealed class ReportDialog : Form
         var reportBox = new GroupBox { Dock = DockStyle.Bottom, Height = 150, Text = "報告する", Padding = new Padding(8) };
 
         var copy = new Button { Text = "ログをコピー", AutoSize = true };
-        var open = new Button { Text = "フォームで報告 (おすすめ・アカウント不要)", AutoSize = true };
+        // フォームが無いときは GitHub の「不具合の報告」のひな形を、実行環境などを入れて開く (issue #877)
+        var open = new Button { Text = Config.ProjectInfo.HasReportForm ? "フォームで報告 (おすすめ・アカウント不要)" : "GitHub で不具合を報告", AutoSize = true };
         var close = new Button { Text = "閉じる", AutoSize = true, DialogResult = DialogResult.Cancel };
         var copied = new Label { AutoSize = true, ForeColor = SystemColors.GrayText, Padding = new Padding(0, 8, 0, 0) };
         copy.Click += (_, _) =>
@@ -96,7 +99,7 @@ internal sealed class ReportDialog : Form
     }
 
     /// <summary>「GitHub で報告: 不具合 / 変換・判定の間違い / 改善の提案」のリンク。</summary>
-    private Control GitHubLinks()
+    private LinkLabel GitHubLinks()
     {
         const string prefix = "GitHub のアカウントがある人は GitHub で報告 (返事や修正の通知が届きます)\n報告リンク: ";
         (string Text, string Template)[] kinds = [("不具合", "1-bug.yml"), ("変換・判定の間違い", "2-misdetection.yml"), ("改善の提案", "4-idea.yml")];

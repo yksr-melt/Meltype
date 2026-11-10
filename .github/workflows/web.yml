@@ -1,0 +1,40 @@
+name: web
+
+on:
+  pull_request:
+    paths: &paths
+      - 'web/**'
+      - '.github/workflows/web.yml'
+  push:
+    branches: [main]
+    paths: *paths
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Install
+        run: npm ci
+      - name: Check syntax
+        run: npm run check
+      - name: Test
+        run: npm test
+      - name: Check wrangler config
+        run: npx wrangler deploy --dry-run --outdir dist

@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Diagnostics;
-using System.Text;
 using Meltype.Config;
 
 namespace Meltype.Input;
@@ -14,6 +13,7 @@ public sealed record AppInfo(IntPtr Window, uint ProcessId, string ProcessName, 
 }
 
 /// <summary>打鍵を保留してよいかの判断。</summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "打鍵を保留してよいかの結果を表す既存の公開名。セキュリティ権限の型ではない。")]
 public readonly record struct CollectPermission(bool Allowed, string Reason)
 {
     public static CollectPermission Allow { get; } = new(true, "");
@@ -28,25 +28,48 @@ public readonly record struct CollectPermission(bool Allowed, string Reason)
 internal sealed class ForegroundTracker
 {
     private static readonly uint OwnProcessId = (uint)Environment.ProcessId;
-    private static readonly bool SelfElevated = QueryElevation(Process.GetCurrentProcess().Handle) ?? false;
+    internal static readonly bool SelfElevated = QueryElevation(Process.GetCurrentProcess().Handle) ?? false;
     private readonly object _gate = new();
     private AppInfo _current = AppInfo.None;
     private long _checkedAt;
     private const long FullscreenRecheckMs = 500;
 
     /// <summary>
-    /// Meltype 自身のウィンドウのうち、Meltype キーボードで入力してよいもの (ユーザー辞書の登録画面)。
+    /// Meltype 自身のウィンドウのうち、Meltype キーボードで入力してよいもの (ユーザー辞書・定型文・プロファイルの名前など、日本語を打つ画面)。
     /// ほかの自分のウィンドウ (設定画面など) では横取りしない。
     /// </summary>
     public static System.Collections.Concurrent.ConcurrentDictionary<IntPtr, bool> TypingAllowedWindows { get; } = new();
 
-    /// <summary>Meltype 自身のウィンドウで、入力してよい画面 (ユーザー辞書) ではないもの。</summary>
+    /// <summary>入力してよい画面の中で、横取りしない欄 (英数のまま打つ定型文の名前・選ぶだけのドロップダウンなど)。</summary>
+    public static System.Collections.Concurrent.ConcurrentDictionary<IntPtr, bool> DirectInputControls { get; } = new();
+
+    /// <summary>
+    /// Meltype 自身の画面 form でも、Meltype キーボードで日本語を打てるようにする (窓ができたら登録し、閉じたら外す)。
+    /// direct の欄では横取りしない。
+    /// </summary>
+    public static void AllowTyping(Form form, params Control[] direct)
+    {
+        Track(form, TypingAllowedWindows);
+        foreach (var control in direct) Track(control, DirectInputControls);
+    }
+
+    private static void Track(Control control, System.Collections.Concurrent.ConcurrentDictionary<IntPtr, bool> handles)
+    {
+        if (control.IsHandleCreated) handles[control.Handle] = true;
+        control.HandleCreated += (_, _) => handles[control.Handle] = true;
+        control.HandleDestroyed += (_, _) => handles.TryRemove(control.Handle, out _);
+    }
+
+    /// <summary>Meltype 自身のウィンドウで、入力してよい画面 (ユーザー辞書など) ではないもの。</summary>
     public static bool IsOwnWindow(IntPtr window)
     {
         if (window == IntPtr.Zero) return false;
-        Native.GetWindowThreadProcessId(window, out var processId);
+        if (Native.GetWindowThreadProcessId(window, out var processId) == 0) return false;
         return processId == OwnProcessId && !TypingAllowedWindows.ContainsKey(window);
     }
+
+    /// <summary>このアプリに SendInput の入力が届くか (管理者として動くアプリには、Meltype も管理者でなければ届かない: UIPI)。</summary>
+    public static bool CanSendInputTo(AppInfo app) => app.IsElevated == false || SelfElevated;
 
     public AppInfo Current => CurrentFor(Native.GetForegroundWindow(), Environment.TickCount64);
 
@@ -105,7 +128,7 @@ internal sealed class ForegroundTracker
     private static AppInfo Describe(IntPtr window)
     {
         if (window == IntPtr.Zero) return AppInfo.None;
-        Native.GetWindowThreadProcessId(window, out var processId);
+        if (Native.GetWindowThreadProcessId(window, out var processId) == 0) return AppInfo.None;
         if (processId == OwnProcessId) return new AppInfo(window, processId, "Meltype.exe", false, false, !TypingAllowedWindows.ContainsKey(window));
 
         var name = "";
@@ -116,12 +139,13 @@ internal sealed class ForegroundTracker
         {
             try
             {
-                var builder = new StringBuilder(1024);
-                var size = builder.Capacity;
-                if (Native.QueryFullProcessImageName(process, 0, builder, ref size))
+                var buffer = new char[1024];
+                var size = buffer.Length;
+                if (Native.QueryFullProcessImageName(process, 0, buffer, ref size))
                 {
-                    name = Path.GetFileName(builder.ToString());
-                    looksLikeGame = LooksLikeGame(builder.ToString());
+                    var path = new string(buffer, 0, size);
+                    name = Path.GetFileName(path);
+                    looksLikeGame = LooksLikeGame(path) || (IsJava(name) && IsJavaGameWindow(window));
                 }
                 elevated = QueryElevation(process);
             }
@@ -140,7 +164,54 @@ internal sealed class ForegroundTracker
         @"\Ubisoft Game Launcher\games\", @"\Battle.net\", @"\XboxGames\", @"\GOG Galaxy\Games\", @"\Origin Games\",
         // 専用のランチャーから入れるゲーム (PSO2 NGS: …\PHANTASYSTARONLINE2_JP\pso2_bin\pso2.exe)
         @"\pso2_bin\",
+        // Minecraft (Java 版) はフォルダーではなく、ウィンドウのクラスで見分ける (IsJavaGameWindow)
     ];
+
+    /// <summary>そのプロセスの実行ファイルがゲームのフォルダーにあるか。調べられなければ false。</summary>
+    public static bool LooksLikeGame(uint processId) => ImagePath(processId) is { } path && LooksLikeGame(path);
+
+    /// <summary>そのプロセスが Java (java.exe / javaw.exe) か。調べられなければ false。</summary>
+    public static bool IsJava(uint processId) => ImagePath(processId) is { } path && IsJava(Path.GetFileName(path));
+
+    public static bool IsJava(string processName) =>
+        processName.Equals("javaw.exe", StringComparison.OrdinalIgnoreCase) || processName.Equals("java.exe", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Java で動くゲームのウィンドウか。Minecraft (Java 版) は、ランチャーや入れた Java の場所によらず、このウィンドウで見分ける。
+    /// LWJGL 3 (GLFW。Minecraft 1.13 から) のウィンドウのクラスは GLFW30、LWJGL 2 (Minecraft 1.12.2 まで) は LWJGL
+    /// </summary>
+    public static bool IsJavaGameWindow(IntPtr window)
+    {
+        var className = new char[16];
+        var length = Native.GetClassName(window, className, className.Length);
+        return length > 0 && IsJavaGameWindowClass(new string(className, 0, length));
+    }
+
+    public static bool IsJavaGameWindowClass(string className) => className is "GLFW30" or "LWJGL";
+
+    /// <summary>前面のウィンドウが、そのプロセスの Java で動くゲームのウィンドウか。</summary>
+    public static bool IsForegroundJavaGame(uint processId)
+    {
+        var window = Native.GetForegroundWindow();
+        return window != IntPtr.Zero && Native.GetWindowThreadProcessId(window, out var foreground) != 0 &&
+               foreground == processId && IsJavaGameWindow(window);
+    }
+
+    private static string? ImagePath(uint processId)
+    {
+        var process = Native.OpenProcess(Native.PROCESS_QUERY_LIMITED_INFORMATION, false, processId);
+        if (process == IntPtr.Zero) return null;
+        try
+        {
+            var buffer = new char[1024];
+            var size = buffer.Length;
+            return Native.QueryFullProcessImageName(process, 0, buffer, ref size) ? new string(buffer, 0, size) : null;
+        }
+        finally
+        {
+            Native.CloseHandle(process);
+        }
+    }
 
     public static bool LooksLikeGame(string path) =>
         GameFolders.Any(folder => path.Contains(folder, StringComparison.OrdinalIgnoreCase)) &&
@@ -164,9 +235,9 @@ internal sealed class ForegroundTracker
     private static bool IsFullscreen(IntPtr window)
     {
         if (window == Native.GetShellWindow() || window == Native.GetDesktopWindow()) return false;
-        var className = new StringBuilder(64);
-        Native.GetClassName(window, className, className.Capacity);
-        if (className.ToString() is "Progman" or "WorkerW") return false;
+        var className = new char[64];
+        var length = Native.GetClassName(window, className, className.Length);
+        if (length == 0 || new string(className, 0, length) is "Progman" or "WorkerW") return false;
         // タイトルバーのあるウィンドウは最大化されているだけ (タスクバー自動非表示だと画面全体を覆う)。
         const long WS_CAPTION = 0x00C00000;
         if ((Native.GetWindowLongPtr(window, Native.GWL_STYLE).ToInt64() & WS_CAPTION) == WS_CAPTION) return false;

@@ -92,6 +92,17 @@ internal static class SnippetTests
     }
 
     [Test]
+    public static void Store_RejectsControlCharsExceptLineBreaksAndTab()
+    {
+        // ESC・Ctrl+U などは、入れるとアプリにキー操作として届く (bash で行が実行されうる)
+        var store = new SnippetStore(null);
+        Assert.True(store.Set("sig", "--\r\n雪代\tメルト"), "改行・タブは使える");
+        Assert.True(!store.Set("esc", "a\u001Bb") && !store.Set("ctlu", "a\u0015b") && !store.Set("c1", "a\u0085b"), "ほかの制御文字は登録しない");
+        Assert.Equal(1, store.Import("{\"ok\":\"x\",\"esc\":\"a\\u001Bb\",\"ctlo\":\"a\\u000Fb\"}"), "取り込みでも制御文字を含む文は飛ばす");
+        Assert.True(store.Get("esc") is null && store.Get("ctlo") is null && store.Get("ok") == "x", "制御文字のない文だけ取り込む");
+    }
+
+    [Test]
     public static void Store_SavesExportsAndImports()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-snippets-" + Guid.NewGuid().ToString("N"));

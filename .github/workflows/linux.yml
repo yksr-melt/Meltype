@@ -1,20 +1,35 @@
+# Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
+#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
+#   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
+#   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
+# リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
+# Mozc のビルドは初回 30〜40 分かかるので、Bazel の結果をキャッシュして次から速くする。
 name: linux
 
-# Linux 版 (linux/、IBus) をビルドして、テスター向けの zip を実行結果 (Artifacts) に置く。
-# Actions の画面から手動で実行するか、Linux 版・Mozc のヘルパー・共通部分を変えて push したとき。タグ (v*) ならリリースにも添付する。
-# Mozc のビルドは初回 30〜40 分かかるので、Bazel の結果をキャッシュして次から速くする。
 on:
-  workflow_dispatch:
-  push:
-    branches: ['**']
-    tags: ['v*']
-    paths:
+  pull_request:
+    paths: &paths
       - 'linux/**'
       - 'native/mozc/**'
       - 'src/Meltype.Core/**'
+      - 'src/Meltype.Mac.Native/**'
       - 'dictionaries/**'
+      - 'nuget.config'
+      - 'global.json'
+      - 'Directory.Build.props'
+      - 'Directory.Build.targets'
+      - 'Directory.Packages.props'
+      - 'src/Directory.Build.props'
+      - 'src/Directory.Build.targets'
+      - 'src/Directory.Packages.props'
       - 'tools/test-native-boundaries.py'
+      - 'tools/ime-tests/**'
       - '.github/workflows/linux.yml'
+  push:
+    branches: [main]
+    paths: *paths
+  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -25,44 +40,73 @@ concurrency:
 
 jobs:
   app:
-    runs-on: ubuntu-24.04
+    # x64 と arm64 を、それぞれの CPU のランナーでビルドする (Mozc の Bazel のビルドは、ビルドしているマシンの CPU 向けになる)。
+    # zip の名前の最後 (asset) は、x64 は以前からの linux のまま (nix-meltype などがこの名前でリリースから取るため)
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            asset: linux
+            bazelisk: amd64
+            bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+            bazelisk-asset-id: 406879103
+            manylinux: x86_64
+          - runner: ubuntu-24.04-arm
+            asset: linux-arm64
+            bazelisk: arm64
+            bazelisk-sha256: e20e8b0f4f240091b7a55bf17b9398bd4f40ee70ae0208dff95dd4c445fb4010
+            bazelisk-asset-id: 406879161
+            manylinux: aarch64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
-    # タグ時の softprops/action-gh-release 用。permissions は式が使えないため常に write。
-    permissions:
-      contents: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       # IBus のエンジン (Python) の書き間違いを、時間のかかるビルドの前に見つける
       - name: Check Python
-        run: python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
-      - uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5.4.0
+        run: |
+          python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
+          python3 linux/tests/test_virtual_key.py
+          python3 linux/tests/test_code_mode.py
+          python3 linux/tests/test_settings.py
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      # Mozc の Linux のビルドと、NativeAOT のリンクに使うもの
+      # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
       - name: Packages
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
             ibus dbus-x11 xvfb xauth \
-            libdbus-1-dev libglib2.0-dev libgtk-3-dev libibus-1.0-dev libxcb-xfixes0-dev qt6-base-dev \
             cmake fcitx5 fcitx5-modules-dev libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev
-      - uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/bazel-cache
             ~/mozc/src/third_party_cache
-          key: mozc-linux-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          key: mozc-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
           restore-keys: |
-            mozc-linux-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+            mozc-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
       # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
+      # GitHub の一時的な 504 などでは再試行する。接続と 1 回の取得には上限を設ける。
+      # 通常の URL で取得できないときは、GitHub の Release Asset API から同じファイルを取る。
       - name: Bazelisk
         run: |
           mkdir -p "$HOME/tools"
-          curl -fsSL -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-amd64
-          echo "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992  $HOME/tools/bazelisk" | sha256sum -c -
+          if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}; then
+            curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/${{ matrix.bazelisk-asset-id }}
+          fi
+          echo "${{ matrix.bazelisk-sha256 }}  $HOME/tools/bazelisk" | sha256sum -c -
           chmod +x "$HOME/tools/bazelisk"
+      # Mozc のヘルパーは、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux のコンテナでビルドする (#1484)
       - name: Build Mozc helper
-        run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-helper.sh "$HOME/mozc" "$HOME/bazel-cache"
+        run: |
+          mkdir -p "$HOME/mozc" "$HOME/bazel-cache"
+          docker run --rm --user "$(id -u):$(id -g)" -e USER -e HOME=/tmp/home -e BAZEL=/tools/bazelisk \
+            -v "$PWD:/repo" -v "$HOME/mozc:/mozc" -v "$HOME/bazel-cache:/cache" -v "$HOME/tools:/tools:ro" -w /repo \
+            quay.io/pypa/manylinux_2_34_${{ matrix.manylinux }}:2026.11.01-2 \
+            native/mozc/build-mozc-helper.sh /mozc /cache
       - name: Build
         run: linux/build.sh
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
@@ -81,16 +125,222 @@ jobs:
         run: timeout 120 xvfb-run -a dbus-run-session -- python3 linux/tests/test_daemon.py linux/build/Meltype-linux
       - name: Package
         run: |
-          # タグ (v1.0.0) なら Meltype-1.0.0-linux.zip、それ以外はテスト版の名前
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-linux.zip"; else name="Meltype-linux-test-$(date +%Y%m%d-%H%M).zip"; fi
+          # タグ (v1.0.0) なら Meltype-1.0.0-linux.zip (arm64 は Meltype-1.0.0-linux-arm64.zip)、それ以外はテスト版の名前
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then name="Meltype-${GITHUB_REF_NAME#v}-${{ matrix.asset }}.zip"; else name="Meltype-${{ matrix.asset }}-test-$(date +%Y%m%d-%H%M).zip"; fi
           (cd linux/build && zip -qr "$name" Meltype-linux)
+      # apt で入れられる .deb (#863)。タグなら版、それ以外は meltype.xml の版 + テスト版の印
+      - name: Package (.deb)
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
+            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' linux/build/Meltype-linux/meltype.xml | head -n 1)~test.$(date +%Y%m%d%H%M)"; fi
+          linux/build-deb.sh "$version" linux/build/Meltype-linux linux/build
+          dpkg-deb --info linux/build/meltype_*.deb
+          dpkg-deb --contents linux/build/meltype_*.deb
           ls -la linux/build
-      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+      # 実際に apt で入れて、決まった場所に置かれるか・外せるかを確かめる
+      - name: Test .deb
+        run: |
+          sudo apt-get install -y ./linux/build/meltype_*.deb
+          test -x /opt/meltype/ibus-engine-meltype
+          test -x /opt/meltype/mozc/meltype_mozc_helper
+          grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
+          test -f /usr/share/fcitx5/inputmethod/meltype.conf
+          test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' | head -n 1)")/meltype.so"
+          sudo apt-get remove -y meltype
+          test ! -e /opt/meltype/ibus-engine-meltype
+          test ! -e /usr/share/ibus/component/meltype.xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meltype-${{ matrix.asset }}
+          path: |
+            linux/build/Meltype-*.zip
+            linux/build/meltype_*.deb
+          retention-days: 14
+
+  # dnf で入れられる .rpm (Fedora・RHEL 9 系)。本体と Mozc のヘルパーは app のジョブがビルドした zip のものを使い、
+  # fcitx5 のアドオン (meltype-fcitx5) だけ Fedora の fcitx5 に対してビルドし直す (Ubuntu 24.04 の fcitx5 とは版が違う)
+  rpm:
+    needs: app
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            asset: linux
+          - runner: ubuntu-24.04-arm
+            asset: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    # registry.fedoraproject.org への接続が切れてジョブを開始できないため、Fedora 公式の Quay から取得する。
+    # https://fedoraproject.org/en/misc/
+    container: quay.io/fedora/fedora:44
+    timeout-minutes: 30
+    steps:
+      - name: Packages
+        run: |
+          dnf install -y git unzip rpm-build cmake gcc-c++ fcitx5 fcitx5-devel ibus python3 python3-gobject procps-ng
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: meltype-${{ matrix.asset }}
+          path: linux/build/artifact
+      - name: Build fcitx5 addon
+        run: |
+          (cd linux/build && unzip -q artifact/Meltype-*.zip)
+          cmake -S linux/fcitx5 -B linux/build/fcitx5 -DMELTYPE_DIR=/opt/meltype -DCMAKE_BUILD_TYPE=Release
+          cmake --build linux/build/fcitx5
+          cp linux/build/fcitx5/meltype.so linux/build/Meltype-linux/fcitx5/meltype.so
+      - name: Test fcitx5 addon
+        run: |
+          mkdir -p linux/build/fcitx5-native
+          cp linux/build/Meltype-linux/libMeltypeNative.so linux/build/fcitx5-native/
+          cmake -S linux/fcitx5 -B linux/build/fcitx5-test -DBUILD_TESTING=ON
+          cmake --build linux/build/fcitx5-test
+          HOME="$RUNNER_TEMP/fcitx5-home" MELTYPE_DIR="$PWD/linux/build/fcitx5-native" ctest --test-dir linux/build/fcitx5-test --output-on-failure
+      # app のジョブがビルドした本体と Mozc のヘルパーが、Fedora のライブラリで動くか
+      - name: IBus and real Mozc integration tests
+        run: timeout 120 python3 linux/tests/test_integration.py linux/build/Meltype-linux
+      - name: Package (.rpm)
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
+            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' linux/build/Meltype-linux/meltype.xml | head -n 1)~test.$(date +%Y%m%d%H%M)"; fi
+          linux/build-rpm.sh "$version" linux/build/Meltype-linux linux/build
+          rpm -qpi linux/build/meltype-*.rpm
+          rpm -qpR linux/build/meltype-*.rpm
+          rpm -qpl linux/build/meltype-*.rpm
+      # 実際に dnf で入れて、決まった場所に置かれるか・IBus の一覧に載るか・外せるかを確かめる
+      - name: Test .rpm
+        run: |
+          dnf install -y ./linux/build/meltype-*.rpm
+          test -x /opt/meltype/ibus-engine-meltype
+          test -x /opt/meltype/mozc/meltype_mozc_helper
+          grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
+          ibus read-cache --system | grep -q /opt/meltype/ibus-engine-meltype
+          test -f /usr/share/fcitx5/inputmethod/meltype.conf
+          test -f /usr/lib64/fcitx5/meltype.so
+          dnf remove -y meltype
+          test ! -e /opt/meltype/ibus-engine-meltype
+          test ! -e /usr/share/ibus/component/meltype.xml
+          test ! -e /usr/lib64/fcitx5/meltype.so
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meltype-${{ matrix.asset }}-rpm
+          path: linux/build/meltype-*.rpm
+          retention-days: 14
+
+  # RHEL 9 系 (glibc 2.34・Python 3.9) は、サポートする中で一番古い環境。meltype が dnf で入り、IBus と Mozc で動くかを確かめる。
+  # RHEL 9 系には fcitx5 が無いので meltype-fcitx5 は入れない
+  rpm-el9:
+    needs: rpm
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            asset: linux
+          - runner: ubuntu-24.04-arm
+            asset: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    container: quay.io/almalinux/almalinux:9
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: meltype-${{ matrix.asset }}-rpm
+          path: rpms
+      - name: Install .rpm
+        run: dnf install -y ./rpms/meltype-[0-9]*.rpm
+      - name: Python tests
+        run: |
+          python3 linux/tests/test_virtual_key.py
+          python3 linux/tests/test_code_mode.py
+          python3 linux/tests/test_settings.py
+      - name: IBus and real Mozc integration tests
+        run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
+
+  # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
+  ime-ci:
+    name: IME CI tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: tools/ime-tests
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/ime-tests/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Linux session control tests
+        run: python3 scripts/test_linux_ime.py
+      - name: Typecheck and test-page contracts
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/checkout-sha.txt
+          # teeでログを残しても、テストの非0終了をジョブの失敗として伝える。
+          set -o pipefail
+          npm run test:ci 2>&1 | tee artifacts/ci.log
+      - name: Results and failure traces
+        # テスト失敗時にも観測・traceを取得できるよう、成果物保存は成功条件にしない。
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ime-tests
+          path: tools/ime-tests/artifacts/
+          if-no-files-found: warn
+          retention-days: 14
+
+  # app が作った x64 の zip を、IBus と Chromium で属性・操作ごとに実際に打って確かめる
+  ime-real:
+    name: IME real input (Linux)
+    needs: [app, ime-ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/ime-tests/package-lock.json
+      # linux_ime.py が実行環境の記録 (session.json) に dotnet の版を書く
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install IBus and the test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
+          npm --prefix tools/ime-tests ci
+          cd tools/ime-tests
+          npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: meltype-linux
-          path: linux/build/Meltype-*.zip
-          retention-days: 14
-      - if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@e598afbe1493e6b1bafb1f389cabb956eab91231 # v3.0.3
+          path: linux/build/artifact
+      - run: (cd linux/build && unzip -q artifact/Meltype-*.zip)
+      - name: OS keys through IBus, product Core and Chromium
+        working-directory: tools/ime-tests
+        env:
+          MELTYPE_PACKAGE_DIR: ${{ github.workspace }}/linux/build/Meltype-linux
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: npm run test:ime:linux:ci
+      - name: Real IME observations and process logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          files: linux/build/Meltype-*.zip
+          name: ime-real-input-linux
+          path: tools/ime-tests/artifacts/
+          if-no-files-found: warn
+          retention-days: 14

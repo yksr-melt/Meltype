@@ -9,15 +9,10 @@ namespace Meltype.Detection;
 /// </summary>
 public sealed class DictionaryDetector
 {
-    public WordList Words { get; } = new();
+    public WordList Words { get; }
 
-    public DictionaryDetector(IEnumerable<string> canonicalWords, RomajiDetector romaji)
-    {
-        foreach (var word in canonicalWords)
-        {
-            foreach (var variant in romaji.SpellingVariants(word)) Words.Add(variant);
-        }
-    }
+    public DictionaryDetector(IEnumerable<string> canonicalWords, RomajiDetector romaji) =>
+        Words = new(canonicalWords.SelectMany(word => romaji.SpellingVariants(word)));
 
     public bool IsPrefix(string letters) => Words.HasPrefix(letters);
 

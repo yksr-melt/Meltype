@@ -11,6 +11,7 @@ namespace Meltype.Tests;
 /// </summary>
 internal static class Repro
 {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     /// <summary>打つ文字の上限 (bot に長い文を渡されても時間がかからないように)。</summary>
     private const int MaxKeys = 300;
 
@@ -74,13 +75,13 @@ internal static class Repro
             candidates,
             // 英語のスペルチェッカーを使ったか (Windows では使う。使わないと英単語の判定が実際のアプリと違うことがある)
             spellChecker = CompositionTests.Detector.SpellChecker is not null,
-        }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        }, Json));
 
         if (hasMozc) Henkan.Shutdown();
     }
 }
 
-/// <summary>Pull Request のチェック (.github/workflows/pr-checks.yml) で使う結果の出力。</summary>
+/// <summary>Pull Request のチェック (.github/workflows/core.yml・pr-expectations.yml) で使う結果の出力。</summary>
 internal static class Checks
 {
     private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, WriteIndented = true };
@@ -98,41 +99,44 @@ internal static class Checks
     }
 
     /// <summary>
-    /// 「入力 → 期待」の一覧 (1 行に「入力&lt;Tab&gt;期待」) を確かめて JSON で出す。
+    /// 「入力 → 期待」の一覧 (1 行に「入力&lt;Tab&gt;期待」) を、アプリと同じ Meltype キーボードと Mozc で確かめて JSON で出す (MELTYPE_MOZC が要る)。
     ///   入力がかな (しゃおみ) … 変換の候補に期待した語 (Xiaomi) が出るか
-    ///   入力が英字 (nihongowohanasu) … 打って Enter した結果が期待どおりか。期待に漢字が入っていれば、日本語 / 英語の分かれ方だけを比べる
-    ///   (テストでは変換エンジンを使わず漢字にしないため)。カタカナも同じ理由で、ひらがなに直して比べる (ホスティング = ほすてぃんぐ)。そのとき英字の大小は無視する (OEM = oem)。
+    ///   入力が英字 (nihongowohanasu) … 打って Enter で確定した結果か Space で変換した結果が期待と同じか
     /// </summary>
     public static void Expect(string input, string output)
     {
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
+        var mozc = Henkan.Engine ?? throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
         var candidates = Composition.CandidateDictionary.Load(null);
         var results = new List<object>();
         foreach (var line in File.ReadAllLines(input))
         {
             var parts = line.Split('\t');
-            if (parts.Length != 2) continue;
+            if (parts.Length != 2) throw new FormatException($"Expected exactly two tab-separated columns in {input}: {line}");
             var (typed, expected) = (parts[0].Trim(), parts[1].Trim());
             if (typed.Length == 0 || expected.Length == 0) continue;
             if (typed.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー' or >= 'ァ' and <= 'ヺ'))
             {
                 var reading = new string(typed.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
-                var list = candidates.Lookup(reading);
+                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading)).Distinct().ToList();
                 results.Add(new { typed, expected, kind = "候補", actual = string.Join(" ", list.Take(12)), ok = list.Contains(expected) });
+                Henkan.Reset();
                 continue;
             }
-            var k = new CompositionTests.Keyboard();
-            k.Type(new string(typed.Where(c => c is >= ' ' and <= '~').Take(300).ToArray()) + "\n");
-            var actual = k.Host.Document;
-            var kanji = expected.Any(c => c is >= '㐀' and <= '鿿');
-            var katakana = !kanji && expected.Any(c => c is >= 'ァ' and <= 'ヶ');
-            var ok = kanji
-                ? Words(actual) == Words(expected)
-                : katakana
-                    ? AsciiLower(Hiragana(actual)) == AsciiLower(Hiragana(expected))
-                    : Hiragana(actual) == Hiragana(expected);
-            results.Add(new { typed, expected, kind = kanji ? "判定 (英字の部分だけ比べる)" : katakana ? "入力 (カタカナはかなとして比べる)" : "入力", actual, ok });
+            var keys = new string(typed.Where(c => c is >= ' ' and <= '~').Take(300).ToArray());
+            var k = Henkan.Keyboard();
+            k.Type(keys + "\n");
+            var entered = k.Host.Document;
+            Henkan.Reset();
+            var s = Henkan.Keyboard();
+            s.Type(keys + " ");
+            var view = s.Host.View;
+            var converted = view is { Converting: true } ? s.Host.Document + string.Concat(view.Clauses ?? [view.Text]) : s.Host.Document.TrimEnd();
+            Henkan.Reset();
+            var actual = entered == converted ? entered : $"Enter: {entered} / Space: {converted}";
+            results.Add(new { typed, expected, kind = "入力", actual, ok = entered == expected || converted == expected });
         }
+        // MozcConverter は失敗を null や空の候補で返すので、Mozc なしの結果で通っていないことを確かめる
+        if (mozc.Convert("にほんご") is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
         File.WriteAllText(output, JsonSerializer.Serialize(results, Json));
     }
 
@@ -177,13 +181,6 @@ internal static class Checks
     private static string Hiragana(string text) =>
         new(text.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
 
-    /// <summary>カタカナの期待では、英字の大小だけを無視する (OEM = oem)。</summary>
-    private static string AsciiLower(string text) =>
-        new(text.Select(c => c is >= 'A' and <= 'Z' ? (char)(c + 32) : c).ToArray());
-
-    /// <summary>英字の語だけを取り出す (日本語 / 英語の分かれ方を比べる)。</summary>
-    private static string Words(string text) =>
-        string.Join(" ", System.Text.RegularExpressions.Regex.Matches(text, "[A-Za-z][A-Za-z'’-]*").Select(m => m.Value.ToLowerInvariant()));
 }
 
 /// <summary>
@@ -193,6 +190,7 @@ internal static class Checks
 /// </summary>
 internal static class Henkan
 {
+    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private const int MaxKeys = 300;
 
     /// <summary>Mozc の学習データの場所。bot が同時にいくつも動かすので、プロセスごとに分ける (終わったら消す)。</summary>
@@ -235,7 +233,7 @@ internal static class Henkan
         // 確かめたいのは、まだ何も覚えていない人の最初の変換)
         var converter = Mozc.Value is { } engine ? new WithoutLearning(engine) : FallbackConverter;
         return new(live: true, converter: converter, moreCandidates: Mozc.Value is { } mozc ? mozc.Candidates : null,
-            userDictionary: new Composition.UserDictionary(null), translations: Translations.Value);
+            userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
     }
 
     /// <summary>変換だけを頼み、覚えさせない変換エンジン (ILearningConverter を持たない)。</summary>
@@ -275,7 +273,7 @@ internal static class Henkan
             converted,
             clauses,
             candidates,
-        }, new JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+        }, Json));
     }
 }
 
@@ -287,6 +285,7 @@ internal static class Henkan
 /// </summary>
 internal static class MozcCompare
 {
+    private static readonly JsonSerializerOptions Json = new() { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private const string Placeholder = "えっくす";
     private const string PlaceholderText = "エックス";
 
@@ -320,7 +319,7 @@ internal static class MozcCompare
             var reading = System.Text.RegularExpressions.Regex.Replace(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*", Placeholder);
             var clauses = mozc.ConvertClauses(reading) ?? [];
             var text = string.Concat(clauses.Select(c => c.Text));
-            var placeholders = System.Text.RegularExpressions.Regex.Matches(text, PlaceholderText).Count;
+            var placeholders = System.Text.RegularExpressions.Regex.Count(text, PlaceholderText);
             string whole;
             if (placeholders == english.Count)
             {
@@ -337,7 +336,7 @@ internal static class MozcCompare
             results.Add(new { typed, expected, shown, current, whole, wholeClauses = clauses.Select(c => c.Reading + ":" + c.Text), currentOk = ok1, wholeOk = ok2 });
         }
         File.WriteAllText(output, JsonSerializer.Serialize(new { currentOk, wholeOk, total = results.Count, cases = results },
-            new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+            Json));
         Console.WriteLine($"今の変換 {currentOk}/{results.Count}、丸ごと {wholeOk}/{results.Count}");
     }
 

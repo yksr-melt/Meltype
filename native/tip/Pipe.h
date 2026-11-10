@@ -25,13 +25,15 @@ public:
 
 private:
     bool Connect();
-    bool Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred);
+    bool Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred, DWORD& error);
+    void TimedOut(bool optional);
 
     static constexpr size_t kMaxResponse = 1024 * 1024;
     HANDLE pipe_ = INVALID_HANDLE_VALUE;
     HANDLE event_ = nullptr;
     // つながらなかったとき、すぐにまた試さない (Meltype.exe が動いていないときに毎回待たないように)
     ULONGLONG retryAfter_ = 0;
+    ULONGLONG lastTimeout_ = 0;   // 最後に時間切れになった時刻 (optional の問い合わせは数えない)
     DWORD lastConnectError_ = 0;  // 最後につながらなかった理由 (同じ理由をログに書き続けない)
     bool refusalLogged_ = false;  // つなぐのを断ったことをログに書いた (続けて書かない)
 };

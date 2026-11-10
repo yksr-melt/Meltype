@@ -30,7 +30,8 @@ public sealed class GitHubIssueTitles
     private readonly Func<string, int, Task<string?>> _fetch;
 
     /// <summary>1 回の問い合わせを待つ長さ。</summary>
-    public TimeSpan Timeout { get; init; } = TimeSpan.FromMilliseconds(300);
+    /// 最初の問い合わせは HTTPS の接続から始まり 300ms では間に合わないことが多いので、少し長めに待つ (issue #866)。
+    public TimeSpan Timeout { get; init; } = TimeSpan.FromMilliseconds(1500);
 
     public GitHubIssueTitles(Func<string, int, Task<string?>>? fetch = null, Func<long>? now = null)
     {
@@ -41,6 +42,7 @@ public sealed class GitHubIssueTitles
     /// <summary>repository は「所有者/名前」。タイトルが分かれば返す (調べて待つのは Timeout まで)。無い・調べられない・時間切れは null。</summary>
     public string? Lookup(string repository, int number)
     {
+        repository = Normalize(repository);
         if (!IsRepository(repository) || number <= 0) return null;
         var key = (repository, number);
         var entry = _cache.GetOrAdd(key, k => new Entry(Task.Run(() => _fetch(k.Repository, k.Number)), _now()));
@@ -62,6 +64,24 @@ public sealed class GitHubIssueTitles
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// 設定に書かれたリポジトリを「所有者/名前」にそろえる (issue #866)。前後の空白、
+    /// https://github.com/所有者/名前 の URL、github.com/所有者/名前、末尾の / や .git も受け付ける。
+    /// </summary>
+    public static string Normalize(string? text)
+    {
+        var value = (text ?? "").Trim().TrimEnd('/');
+        foreach (var prefix in (string[])["https://", "http://"])
+        {
+            if (value.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) value = value[prefix.Length..];
+        }
+        if (value.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) value = value[4..];
+        if (value.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase)) value = value["github.com/".Length..];
+        if (value.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) value = value[..^4];
+        // URL の続き (/issues/123 など) は捨てる
+        return value.Split('/') is [var owner, var name, ..] ? $"{owner.Trim()}/{name.Trim()}" : value;
     }
 
     /// <summary>「所有者/名前」の形か (英数字と - _ . だけ)。</summary>

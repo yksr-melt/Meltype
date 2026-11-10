@@ -23,28 +23,29 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
 
     private readonly string _helperPath;
     private readonly string? _profileDirectory;
+    // ヘルパーとのやり取りの順番を守る。応答を待つ間も持つので、入力スレッドでは取らない
     private readonly object _gate = new();
+    // 変換の結果の控えと、その回数を守る。ヘルパーの応答を待つ間は持たない (_gate の中で取ってよい。逆は取らない)
+    private readonly object _resultsGate = new();
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
+    private readonly LatestRequestWorker<(string, string)> _worker;
     private Process? _process;
-    private int _failures;
+    private volatile int _failures;
 
-    // 性能の計測用の回数と時間 (--perf)。_gate の中で数えるだけなので、ふだんの入力は遅くならない
+    // 性能の計測用の回数と時間 (--perf)。ロックの中で数えるだけなので、ふだんの入力は遅くならない
     private long _requests;
     private long _cacheHits;
     private long _candidateRequests;
     private long _candidateCacheHits;
     private long _helperCalls;
     private long _helperTicks;
-    // 起動はバックグラウンドで行い、そのあいだの変換は待たずに null を返す (変換は UI スレッドで動くので、READY を待つと入力が止まる)
-    private Task? _starting;
-    private bool _started;
 
     // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
-    private bool _missingDependency;
+    private volatile bool _missingDependency;
 
-    // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない (_gate の中で読み書きする)
-    private bool _disposed;
+    // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない
+    private volatile bool _disposed;
 
     // Windows: 子プロセスを起動するあいだ、DLL が見つからないときのエラーの画面を出さない (子プロセスはこの設定を引き継ぐ)。
     // 子プロセスが引き継ぐのはプロセス全体の設定だけなので、SetThreadErrorMode では効かない。起動したらすぐ戻す
@@ -66,27 +67,39 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     {
         _helperPath = helperPath;
         _profileDirectory = profileDirectory;
+        _worker = new LatestRequestWorker<(string, string)>(ProcessBackground);
     }
+
+    public ConversionBudget Budget { get; } = new();
+
+    public event Action? ResultReady;
 
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => File.Exists(_helperPath);
 
-    /// <summary>使えるか。何度も失敗したら諦める (毎回起動し直して入力が遅くなるのを避ける)。</summary>
+    /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3 && !_missingDependency;
 
     public string? Convert(string hiragana) =>
         ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+        ConvertWithCandidates(hiragana, context)?.Select(s => s.Clause).ToList();
+
+    /// <summary>
+    /// ConvertClauses と同じ文節と、この変換で受け取った文節ごとの候補。
+    /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
+    /// </summary>
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null)
     {
-        if (Request(context ?? "", hiragana) is not { Count: > 0 } segments) return null;
-        return segments.Select(s => new ConversionClause(s.Reading, s.Candidates.FirstOrDefault() ?? s.Reading)).ToList();
+        if (Query(context ?? "", hiragana) is not { Count: > 0 } segments) return null;
+        return segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList();
     }
 
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
     public IReadOnlyList<string> Candidates(string reading)
     {
-        lock (_gate)
+        lock (_resultsGate)
         {
             _candidateRequests++;
             if (_candidates.TryGetValue(reading, out var cached))
@@ -95,10 +108,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                 return cached;
             }
         }
-        var segments = Request("", reading);
+        var segments = Query("", reading);
         if (segments is null) return [];
         // 1 文節ならその候補。複数の文節に分かれたなら、最初の候補をつなげたものだけ。
-        return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => s.Candidates.FirstOrDefault() ?? s.Reading))];
+        return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading))];
     }
 
     // 学習データを保存する間隔 (覚えさせた回数)。Meltype を終了するときにも保存する。
@@ -114,8 +127,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         {
             if (_disposed) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
-            _candidates.Clear();
-            _conversions.Clear();
+            ClearCache();
             var result = Send($"L\t{Clean(context ?? "")}\t{records}");
             if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
             {
@@ -126,34 +138,92 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     }
 
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
-private string? Send(string request)
-{
-    try
+    private string? Send(string request)
     {
-        var started = Stopwatch.GetTimestamp();
-        if (Start() is not { } process) return null;
-
-        process.StandardInput.Write(request + "\n");
-        process.StandardInput.Flush();
-        var line = ReadLine(process, TimeoutMs);
-        _helperCalls++;
-        _helperTicks += Stopwatch.GetTimestamp() - started;
-
-        if (line is null)
+        try
         {
-            Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
-            Fail();
-            return null;
-        }
+            var started = Stopwatch.GetTimestamp();
+            var process = Start();
 
-        _failures = 0;
-        return line;
-    }
+            process.StandardInput.Write(request + "\n");
+            process.StandardInput.Flush();
+            var line = ReadLine(process, TimeoutMs);
+            _helperCalls++;
+            _helperTicks += Stopwatch.GetTimestamp() - started;
+
+            if (line is null)
+            {
+                Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
+                Fail();
+                return null;
+            }
+
+            _failures = 0;
+            return line;
+        }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
             Fail();
             return null;
+        }
+    }
+
+    /// <summary>入力スレッドからの問い合わせ。Budget を使っているときは、キャッシュに無ければワーカーに頼み、Budget の間だけ待つ。</summary>
+    private List<(string Reading, IReadOnlyList<string> Candidates)>? Query(string context, string reading)
+    {
+        if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
+        var request = (Clean(context), Clean(reading));
+        if (TryCached(request, out var result)) return result;
+        _worker.Submit(request);
+        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, out result) ? result : null;
+    }
+
+    private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
+    {
+        result = null;
+        if (_disposed) return false;
+        lock (_resultsGate)
+        {
+            if (!_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
+            _requests++;
+            _cacheHits++;
+            foreach (var (segmentReading, candidates) in result ?? []) _candidates[segmentReading] = candidates;
+            return true;
+        }
+    }
+
+    private void ProcessBackground((string Context, string Reading) request)
+    {
+        // 読みが空の要求は WarmUp。起動だけして知らせる
+        if (request.Reading.Length == 0)
+        {
+            if (StartNow()) ResultReady?.Invoke();
+            return;
+        }
+        Request(request.Context, request.Reading);
+        // 失敗 (キャッシュに入らない) は知らせない。知らせると再描画がまた同じ要求を出して、失敗のたびに繰り返す
+        bool cached;
+        lock (_resultsGate) cached = _conversions.ContainsKey(request.Context + "\t" + request.Reading);
+        if (cached) ResultReady?.Invoke();
+    }
+
+    private bool StartNow()
+    {
+        lock (_gate)
+        {
+            if (_disposed || !IsAvailable) return false;
+            try
+            {
+                Start();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
+                Fail();
+                return false;
+            }
         }
     }
 
@@ -167,13 +237,16 @@ private string? Send(string request)
             if (_disposed) return null;
             // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す (覚えさせたら捨てる)。
             var key = context + "\t" + reading;
-            _requests++;
-            if (_conversions.TryGetValue(key, out var known))
+            lock (_resultsGate)
             {
-                _cacheHits++;
-                // 候補の控えは「直前の変換」のものを使うので、使い回したときも控えを入れ直す
-                foreach (var (segmentReading, candidates) in known ?? []) _candidates[segmentReading] = candidates;
-                return known;
+                _requests++;
+                if (_conversions.TryGetValue(key, out var known))
+                {
+                    _cacheHits++;
+                    // 候補の控えは「直前の変換」のものを使うので、使い回したときも控えを入れ直す
+                    foreach (var (segmentReading, candidates) in known ?? []) _candidates[segmentReading] = candidates;
+                    return known;
+                }
             }
             try
             {
@@ -187,8 +260,11 @@ private string? Send(string request)
                     if (fields[0].Length == 0) continue;
                     var candidates = fields.Skip(1).Where(c => c.Length > 0).Distinct().ToList();
                     segments.Add((fields[0], candidates));
-                    if (_candidates.Count > 512) _candidates.Clear();
-                    _candidates[fields[0]] = candidates;
+                    lock (_resultsGate)
+                    {
+                        if (_candidates.Count > 512) _candidates.Clear();
+                        _candidates[fields[0]] = candidates;
+                    }
                 }
                 return Remember(key, segments);
             }
@@ -204,7 +280,7 @@ private string? Send(string request)
     /// <summary>候補の控えと変換の結果の控えを捨てる (前の入力の控えを次の入力に持ち越さない。テストで文ごとに使う)。</summary>
     public void ClearCache()
     {
-        lock (_gate)
+        lock (_resultsGate)
         {
             _candidates.Clear();
             _conversions.Clear();
@@ -228,68 +304,34 @@ private string? Send(string request)
             catch
             {
             }
-            return new MozcStatistics(_requests, _cacheHits, _candidateRequests, _candidateCacheHits, _helperCalls,
-                Stopwatch.GetElapsedTime(0, _helperTicks), workingSet);
+            lock (_resultsGate)
+            {
+                return new MozcStatistics(_requests, _cacheHits, _candidateRequests, _candidateCacheHits, _helperCalls,
+                    Stopwatch.GetElapsedTime(0, _helperTicks), workingSet);
+            }
         }
     }
 
-    /// <summary>変換の結果を覚えておく (_gate の中で呼ぶ)。</summary>
+    /// <summary>変換の結果を覚えておく。</summary>
     private List<(string Reading, IReadOnlyList<string> Candidates)>? Remember(string key, List<(string Reading, IReadOnlyList<string> Candidates)>? segments)
     {
-        if (_conversions.Count > 512) _conversions.Clear();
-        _conversions[key] = segments;
+        lock (_resultsGate)
+        {
+            if (_conversions.Count > 512) _conversions.Clear();
+            _conversions[key] = segments;
+        }
         return segments;
     }
 
     // タブ・改行は区切りに使うので空白にする。
     private static string Clean(string text) => text.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
 
-    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければバックグラウンドで起動して null を返す。
-    /// WarmUp を呼ばずに初めて変換するとき (テストの道具など) だけは、その場で起動して待つ。</summary>
-    private Process? Start()
+    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければ起動して READY を待つ。入力スレッドは _gate を取らないので、入力は止まらない。</summary>
+    private Process Start()
     {
         if (_process is { HasExited: false } running) return running;
         _process?.Dispose();
-        _process = null;
-        if (_starting is { IsCompleted: false }) return null;
-        if (!_started)
-        {
-            _started = true;
-            return _process = Launch();
-        }
-        StartInBackground();
-        return null;
-    }
-
-    /// <summary>バックグラウンドで起動する (_gate の中で呼ぶ)。READY を待つあいだは _gate を持たない。</summary>
-    private void StartInBackground()
-    {
-        _started = true;
-        _starting = Task.Run(() =>
-        {
-            try
-            {
-                var process = Launch();
-                lock (_gate)
-                {
-                    if (_disposed)
-                    {
-                        try { process.Kill(); } catch { }
-                        process.Dispose();
-                        return;
-                    }
-                    _process = process;
-                }
-            }
-            catch (Exception ex)
-            {
-                lock (_gate)
-                {
-                    Diagnostics.Log.Warn($"Mozc を使えませんでした: {ex.Message}");
-                    Fail();
-                }
-            }
-        });
+        return _process = Launch();
     }
 
     private Process Launch()
@@ -316,7 +358,8 @@ private string? Send(string request)
         if (OperatingSystem.IsWindows())
         {
             previousMode = GetErrorMode();
-            SetErrorMode(previousMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
+            // 戻り値は以前のモード (エラーコードではない)。復元には直前に読んだモードを使う。
+            _ = SetErrorMode(previousMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
         }
         try
         {
@@ -324,7 +367,7 @@ private string? Send(string request)
         }
         finally
         {
-            if (OperatingSystem.IsWindows()) SetErrorMode(previousMode);
+            if (OperatingSystem.IsWindows()) _ = SetErrorMode(previousMode);
         }
         // Mozc のログ (標準エラー) は読み捨てる (溜まるとヘルパーが止まる)。
         process.ErrorDataReceived += (_, _) => { };
@@ -366,16 +409,11 @@ private string? Send(string request)
     }
 
     /// <summary>起動しておく (最初の変換で待たないように)。</summary>
-    public void WarmUp()
-    {
-        lock (_gate)
-        {
-            if (!_started && IsAvailable) StartInBackground();
-        }
-    }
+    public void WarmUp() => _worker.Submit(("", ""));
 
     public void Dispose()
     {
+        _worker.Dispose();
         lock (_gate)
         {
             _disposed = true;

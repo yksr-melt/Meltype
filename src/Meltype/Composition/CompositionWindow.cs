@@ -65,6 +65,7 @@ internal sealed class CompositionWindow : PopupForm
     private Font _candidateFont = new(DefaultFamily, 11F);
     private Font _hintFont = new(DefaultFamily, 8.5F);
     private float _scale = 1F;
+    private float _monitorScale = 1F;
     private string _family = DefaultFamily;
     private string? _requestedFamily;
 
@@ -74,6 +75,18 @@ internal sealed class CompositionWindow : PopupForm
         scale = Math.Clamp(scale, 0.6F, 2F);
         if (Math.Abs(scale - _scale) < 0.01F) return;
         _scale = scale;
+        RebuildFonts();
+    }
+
+    /// <summary>
+    /// 出すモニターの DPI とシステムの DPI の比 (1 = 同じ)。変わったときだけ作り直す。
+    /// Meltype は PerMonitorV2 で、文字の pt は起動したときのシステムの DPI で px にされるので、拡大率の違うモニターでは合わせないと小さく / 大きく出る。
+    /// </summary>
+    public void SetMonitorScale(float scale)
+    {
+        scale = Math.Clamp(scale, 0.25F, 5F);
+        if (Math.Abs(scale - _monitorScale) < 0.01F) return;
+        _monitorScale = scale;
         RebuildFonts();
     }
 
@@ -101,13 +114,13 @@ internal sealed class CompositionWindow : PopupForm
         _textFont.Dispose();
         _candidateFont.Dispose();
         _hintFont.Dispose();
-        _textFont = new Font(_family, 13F * _scale);
-        _candidateFont = new Font(_family, 11F * _scale);
+        _textFont = new Font(_family, 13F * _scale * _monitorScale);
+        _candidateFont = new Font(_family, 11F * _scale * _monitorScale);
         // 案内の文字は小さくしすぎると読めないので、縮めるのは少しだけ
-        _hintFont = new Font(_family, 8.5F * Math.Max(_scale, 0.9F));
+        _hintFont = new Font(_family, 8.5F * Math.Max(_scale, 0.9F) * _monitorScale);
     }
 
-    /// <summary>倍率 1 のときの、打った文字の行の高さ (ピクセル)。</summary>
+    /// <summary>倍率 1 のときの、打った文字の行の高さ (システムの DPI のピクセル)。</summary>
     public int BaseTextHeight { get; } = MeasureBaseHeight();
 
     private static int MeasureBaseHeight()
@@ -132,12 +145,14 @@ internal sealed class CompositionWindow : PopupForm
     /// <param name="overlay">anchor が入力位置に重ねる位置か。画面の下からはみ出すときは、候補の一覧が入るだけ上にずらす。</param>
     /// <param name="above">anchor が入力位置の上 (変換ボックスの左下の角を置く位置) か。候補の一覧が出て高くなっても下の端をそろえる。
     /// 画面の上に入らなければ belowY (入力位置の下) に出す。</param>
-    public void ShowView(CompositionView view, Point? anchor, bool overlay = false, bool above = false, int belowY = 0)
+    /// <param name="rightEdge">右の端をここにそろえる (Windows の検索の画面の左に出すとき)。左の端は作業領域の中に収める。</param>
+    public void ShowView(CompositionView view, Point? anchor, bool overlay = false, bool above = false, int belowY = 0, int? rightEdge = null)
     {
         _view = view;
         var size = Measure(view);
         if (anchor is not null) _above = above ? (anchor.Value.Y, belowY) : null;
         var location = anchor ?? Location;
+        if (rightEdge is { } edge) location.X = Math.Max(Screen.FromPoint(new Point(edge - 1, location.Y)).WorkingArea.Left, edge - size.Width);
         // 画面からはみ出さないようにする。
         var screen = Screen.FromPoint(location).WorkingArea;
         if (_above is { } a) location.Y = a.Bottom - size.Height >= screen.Top ? a.Bottom - size.Height : a.BelowY;
@@ -262,7 +277,8 @@ internal sealed class CompositionWindow : PopupForm
     private static string? ShowsTyped(CompositionView view) =>
         view.Typed is { Length: > 0 } typed && typed != view.Text ? typed : null;
 
-    private Size Measure(CompositionView view)
+    /// <summary>view を出したときの変換ボックスの大きさ (出す場所を決めるのにも使う)。</summary>
+    public Size Measure(CompositionView view)
     {
         using var g = CreateGraphics();
         var width = TextRenderer.MeasureText(g, view.Text, _textFont).Width + 20;
@@ -286,8 +302,8 @@ internal sealed class CompositionWindow : PopupForm
         {
             for (var i = 0; i < view.Candidates.Count; i++)
             {
-                // 英訳の候補は、右に「英訳」と出す分だけ広くする
-                var note = view.Notes?.ElementAtOrDefault(i) is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
+                // 候補の右に注記を出す分だけ広くする
+                var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
                 width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {view.Candidates[i]}", _candidateFont).Width + 28 + note);
             }
             height += Math.Min(view.Candidates.Count, PageSize) * (_candidateFont.Height + 4) + 6;
@@ -302,7 +318,8 @@ internal sealed class CompositionWindow : PopupForm
         }
         width = Math.Max(width, TextRenderer.MeasureText(g, view.Hint, _hintFont).Width + 16);
         height += _hintFont.Height + 6;
-        return new Size(Math.Min(width, 900), height);
+        // 幅の上限も文字と同じくモニターの拡大率に合わせる (どのモニターでも入る字数を同じにする)
+        return new Size(Math.Min(width, (int)(900 * _monitorScale)), height);
     }
 
     protected override void OnPaint(PaintEventArgs e)
@@ -382,9 +399,9 @@ internal sealed class CompositionWindow : PopupForm
                 DrawText(g, $"{i - first + 1}  {view.Candidates[i]}", _candidateFont, new Point(12, y),
                     i == view.SelectedIndex ? _palette.Text : _palette.Candidate,
                     i == view.SelectedIndex ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
-                if (view.Notes?.ElementAtOrDefault(i) is { } note)
+                if (view.Notes?[i].ToDisplayText() is { } note)
                 {
-                    // 英訳の候補: 右端に小さく「英訳」
+                    // 候補の注記を右端に小さく出す
                     var noteWidth = TextRenderer.MeasureText(g, note, _hintFont).Width;
                     TextRenderer.DrawText(g, note, _hintFont, new Point(Width - noteWidth - 10, y + (_candidateFont.Height - _hintFont.Height) / 2), Accent, TextFormatFlags.NoPrefix);
                 }

@@ -16,9 +16,13 @@ private typealias HandleKeyFunction = @convention(c) (UnsafeMutableRawPointer?, 
 private typealias CommitFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutablePointer<CChar>?
 private typealias SelectFunction = @convention(c) (UnsafeMutableRawPointer?, Int32) -> UnsafeMutablePointer<CChar>?
 private typealias SetDirectFunction = @convention(c) (UnsafeMutableRawPointer?, Int32) -> Void
+private typealias TakeModeToggledFunction = @convention(c) (UnsafeMutableRawPointer?) -> Int32
+private typealias IsDirectFunction = @convention(c) (UnsafeMutableRawPointer?) -> Int32
 private typealias DataDirectoryFunction = @convention(c) () -> UnsafeMutablePointer<CChar>?
 private typealias ReportUrlFunction = @convention(c) (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
 private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
+private typealias ConversionReadyCallback = @convention(c) () -> Void
+private typealias SetConversionReadyFunction = @convention(c) (ConversionReadyCallback) -> Void
 
 // ---- 本体から呼ばれる関数 (文字列は strdup したものを返し、本体が free する) ----
 
@@ -28,6 +32,11 @@ private let clausesCallback: ClausesCallback = { hiragana, context in
     let clauses = MeltypeConverter.shared.clauses(for: String(cString: hiragana), context: context.map { String(cString: $0) })
     guard !clauses.isEmpty else { return nil }
     return strdup(clauses.map { "\($0.reading)\t\($0.text)" }.joined(separator: "\n"))
+}
+
+/// 背景の変換の結果が届いた (ワーカーのスレッドで呼ばれる)。
+private let conversionReadyCallback: ConversionReadyCallback = {
+    DispatchQueue.main.async { MeltypeInputController.active?.refreshConversion() }
 }
 
 /// 読み → 候補を改行でつないだもの。
@@ -73,6 +82,18 @@ struct SessionResult: Decodable {
 struct TextEdit: Decodable {
     let deleteBefore: Int
     let text: String
+    let expect: String?
+    /// 確定し直すときに text の後ろに続けて入る、今確定した語。前の文字を消せないときは、これだけを入れる
+    let current: String?
+}
+
+// DeleteBefore uses UTF-16 units, matching .NET string lengths and AppKit ranges.
+func matchesExpectedText(_ actual: String?, expected: String?, deleteBefore: Int) -> Bool {
+    guard deleteBefore > 0,
+          let expected,
+          (expected as NSString).length == deleteBefore,
+          actual == expected else { return false }
+    return true
 }
 
 struct CompositionView: Decodable {
@@ -102,9 +123,14 @@ final class NativeCore {
     private let selectFunction: SelectFunction?
     private let setDirectFunction: SetDirectFunction?
     private let setCodeInputFunction: SetDirectFunction?
+    private let takeModeToggledFunction: TakeModeToggledFunction?
+    private let isDirectFunction: IsDirectFunction?
     private let dataDirectoryFunction: DataDirectoryFunction?
     private let reportUrlFunction: ReportUrlFunction?
+    private let zenzaiModelFunction: DataDirectoryFunction?
     private let freeFunction: FreeFunction?
+    private let setConversionReadyFunction: SetConversionReadyFunction?
+    private let refreshFunction: CommitFunction?
 
     private init() {
         let path = (Bundle.main.privateFrameworksPath ?? "") + "/libMeltypeNative.dylib"
@@ -126,13 +152,29 @@ final class NativeCore {
         selectFunction = symbol("meltype_select_candidate", as: SelectFunction.self)
         setDirectFunction = symbol("meltype_set_direct", as: SetDirectFunction.self)
         setCodeInputFunction = symbol("meltype_set_code_input", as: SetDirectFunction.self)
+        takeModeToggledFunction = symbol("meltype_take_mode_toggled", as: TakeModeToggledFunction.self)
+        isDirectFunction = symbol("meltype_is_direct", as: IsDirectFunction.self)
         dataDirectoryFunction = symbol("meltype_data_directory", as: DataDirectoryFunction.self)
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
+        zenzaiModelFunction = symbol("meltype_zenzai_model", as: DataDirectoryFunction.self)
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
+        setConversionReadyFunction = symbol("meltype_set_conversion_ready", as: SetConversionReadyFunction.self)
+        refreshFunction = symbol("meltype_refresh", as: CommitFunction.self)
     }
 
     func initialize() {
         _ = initFunction?(clausesCallback, candidatesCallback, isWordCallback)
+    }
+
+    /// 変換エンジンを入力のスレッドで待たないようにする (入力欄を作る前に呼ぶ)。呼ばなければ変換は同期のまま (--self-test)。
+    func startBackgroundConversion() {
+        setConversionReadyFunction?(conversionReadyCallback)
+    }
+
+    /// 入力中の表示を、届いた変換結果で作り直す。表示が変わらないなら nil。
+    func refresh(_ session: UnsafeMutableRawPointer?) -> SessionResult? {
+        guard let refreshFunction else { return nil }
+        return decode(refreshFunction(session))
     }
 
     func createSession() -> UnsafeMutableRawPointer? { createFunction?() }
@@ -178,6 +220,25 @@ final class NativeCore {
 
     func setCodeInput(_ session: UnsafeMutableRawPointer?, _ enabled: Bool) {
         setCodeInputFunction?(session, enabled ? 1 : 0)
+    }
+
+    /// Zenzai の設定 (issue #1130)。「Zenzai を使う」が OFF なら nil、ON なら設定のモデルの場所 (空なら同梱のモデル)。
+    var zenzaiModelSetting: String? {
+        guard let pointer = zenzaiModelFunction?() else { return nil }
+        defer { freeFunction?(pointer) }
+        return String(cString: pointer)
+    }
+
+    /// 直前のキーで、設定「日本語 / 英数を切り替えるキーを追加」の切替をしたか (#1033)。読むと印が消える。
+    func takeModeToggled(_ session: UnsafeMutableRawPointer?) -> Bool {
+        guard let takeModeToggledFunction, let session else { return false }
+        return takeModeToggledFunction(session) != 0
+    }
+
+    /// 本体のモード (true = 英数 / 直接入力)。切替のあとに読んで、モード表示と入力メニューを合わせる (#1033)。
+    func isDirect(_ session: UnsafeMutableRawPointer?) -> Bool {
+        guard let isDirectFunction, let session else { return false }
+        return isDirectFunction(session) != 0
     }
 
     /// 設定・学習データ・ユーザー辞書の保存場所。

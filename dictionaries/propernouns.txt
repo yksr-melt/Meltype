@@ -7,10 +7,10 @@
 # IT・サービス
 Amazon Google Apple Microsoft Windows macOS iOS iPadOS Android Linux Ubuntu Debian Fedora
 GitHub Meltype GitLab Bitbucket Docker Kubernetes Azure AWS Heroku Vercel Netlify Firebase Supabase Cloudflare
-YouTube Twitter Facebook Instagram TikTok LINE Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
+YouTube Twitter Facebook Instagram TikTok LINE mixi Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
 Netflix Spotify Hulu Disney Prime Twitch Reddit Pinterest LinkedIn Tumblr Medium Substack
 Yahoo Bing DuckDuckGo Baidu Naver Kakao WeChat WhatsApp Telegram Signal Messenger Skype Webex
-ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL
+ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL Kaggle
 iPhone iPad iPod iMac MacBook AirPods Pixel Galaxy Xperia Surface Kindle Echo Alexa Siri Cortana
 Chrome Firefox Safari Edge Opera Brave Vivaldi
 Excel Word PowerPoint Outlook OneDrive OneNote SharePoint Access Visio Dropbox Evernote Box
@@ -19,7 +19,7 @@ Python JavaScript TypeScript Java Kotlin Swift Rust Ruby PHP Perl Haskell Scala 
 Node Deno Bun Django Flask Rails Laravel Spring Next Nuxt Vite Webpack Tailwind Bootstrap jQuery
 MySQL PostgreSQL SQLite MongoDB Redis Oracle Elasticsearch Kafka Nginx Apache Tomcat
 Steam PlayStation Xbox Switch Minecraft Fortnite Roblox Valorant Apex Overwatch Tetris
-Uber Airbnb Tesla Paypal Stripe Shopify Etsy eBay
+Uber Airbnb Tesla Paypal Stripe Shopify Etsy eBay DLsite
 Visa Mastercard JCB Amex
 
 # 企業・ブランド
@@ -77,3 +77,16 @@ Suica DCafe ProBot Carlbot Disboard TaCZ NSFW
 Khalifa Ariana Grande Sheeran Marshmello Beabadoobee Chainsmokers Iann Dior Dobby
 # Issue #268
 DeVito
+# Issue #1391 (BIOS の American Megatrends)・#1319・#1402・#1276
+America American Megatrends iZotope Neovide pH
+# Issue #1013 (英字・数字の名前。数字の前で区切らない)
+yachi8000
+
+# Issue #1541・#1530・#1637・#1638・#1548 (IME・OS の名前)
+fcitx5 iCloud iGPU AsahiLinux azooKey Hazkey Mozkey
+
+# Issue #1615 (国名)
+Benin Bhutan Botswana Bulgaria Eswatini Czechia Dominica Ghana Grenada Haiti Liberia Libya Kiribati Namibia Madagascar Palestine Panama Suriname Rwanda Tonga Uganda
+
+# Issue #1651 (アーティスト名)
+picco nqrse

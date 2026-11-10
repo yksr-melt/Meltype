@@ -1,0 +1,59 @@
+# コンフリクトのお知らせ (.github/bot/conflicts.mjs)。
+#   いまのコンフリクト: main とコンフリクトしている Pull Request に、ラベルとコメントを付ける (解消したら外す)
+#   マージ後の予告:     「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」をコメントする
+# いつ動くか:
+#   main に push されたとき       … 開いている Pull Request を全部調べる
+#   Pull Request を作った・更新したとき … その Pull Request と、同じファイルを変えている Pull Request を調べる
+# pull_request_target だが、Pull Request のコードは git の中に取ってくるだけで、実行しない
+# (スクリプトは main のものを使い、コンフリクトは git merge-tree で確かめる)。
+name: conflicts
+
+on:
+  push:
+    branches: [main]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: conflicts
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      # bot のスクリプトは main から取る (Pull Request のスクリプトは使わない)
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - id: app
+        if: vars.BOT_APP_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+      - name: git の設定 (手元で merge の commit を作るため。push はしない)
+        run: |
+          git config user.name meltype-bot
+          git config user.email meltype-bot@users.noreply.github.com
+      - name: 開いている Pull Request を全部調べる
+        if: github.event_name != 'pull_request_target'
+        run: node .github/bot/conflicts.mjs main
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+      - name: この Pull Request を調べる
+        if: github.event_name == 'pull_request_target'
+        run: node .github/bot/conflicts.mjs pr "$NUMBER"
+        env:
+          GITHUB_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}

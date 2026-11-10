@@ -80,6 +80,11 @@ public sealed class FocusInspector : IDisposable
     /// </summary>
     public bool CanCaptureWaiting(int waitMs = 80)
     {
+        // Meltype 自身の画面 (プロファイルの名前の入力など) では、自分のプロセスの WinEvent を受けないので、窓やフォーカスが移っても通知が来ない。
+        // 前に調べたのが別のウィンドウ・別の欄 (Tab で移ったとき) なら、移った直後として調べ直す。
+        var foreground = Native.GetForegroundWindow();
+        if (Input.ForegroundTracker.TypingAllowedWindows.ContainsKey(foreground) && Interlocked.Read(ref _resolvedSequence) == Interlocked.Read(ref _focusSequence) &&
+            (foreground != _inspectedForeground || FocusedWindow(foreground) != _inspectedFocus)) InvalidateForeground();
         // 待つのは、同じウィンドウで直前に調べた所が入力欄だったときだけ (Discord の # の候補)。
         // ゲームなど入力欄の無いウィンドウでは待たない: クリックのたびに調べ直すので、
         // キーを押すたびにフックで最大 waitMs 止まり、ゲームの操作が遅れていた (PSO2 NGS)。
@@ -125,6 +130,9 @@ public sealed class FocusInspector : IDisposable
 
     public FocusInfo Current => _info;
 
+    /// <summary>最新のフォーカスを調べ終わっているか (移った直後で、まだ調べている最中なら false)。</summary>
+    public bool Resolved => Interlocked.Read(ref _resolvedSequence) == Interlocked.Read(ref _focusSequence);
+
     private long _lastRecheck;
     private long _lastRecheckForeground;
 
@@ -156,8 +164,53 @@ public sealed class FocusInspector : IDisposable
         return CanCapture;
     }
 
+    // 最後にクリックした時刻 (クリック直後の打ち始めで使ったら 0) と、入力欄を見たことのある前面のウィンドウ (値は最後に見た時刻)
+    private long _lastClick;
+    private readonly ConcurrentDictionary<IntPtr, long> _windowsWithTextInput = new();
+
+    /// <summary>マウスのボタンを押したとき (フックのスレッドから呼ばれる。ブロックしない)。</summary>
+    public void NoteClick() => Interlocked.Exchange(ref _lastClick, Environment.TickCount64);
+
+    /// <summary>クリックの直後 (windowMs 以内) か。lastClick が 0 なら、クリックしていない (1 回使った後)。</summary>
+    internal static bool IsRightAfterClick(long now, long lastClick, int windowMs = 1000) => lastClick != 0 && now - lastClick <= windowMs;
+
     /// <summary>
-    /// 前面のアプリが設定「入力欄とみなすアプリ」にあるか (このクラスのスレッドから呼ばれる)。
+    /// クリックの直後 (1 秒以内) に、入力欄ではない所で打ち始めた: 今のフォーカスを調べ直させ、調べ終わるのを最大 waitMs 待つ。入力欄 (パスワード以外) なら true。
+    /// 入力欄をクリックしてすぐ打つと、クリックで移るはずのフォーカスがまだ前の場所 (入力欄でない所) のまま調べ終わっていて、
+    /// 最初の 1 文字が変換ボックスを通らずにアプリへ渡って消えることがあった (フォーカスの通知がキーより 30ms ほど遅れて届く。
+    /// 通知はフックと同じスレッドに届くので、通知は待たずに直接調べ直す)。
+    /// 待つのは、クリック 1 回につき最初の 1 回だけ (調べるのが遅いアプリでも、止まるのはクリックごとに最大 waitMs)、
+    /// それも、そのウィンドウで前に入力欄を見たことがあるときだけ (ゲームなど入力欄の無いウィンドウでは、クリックしてすぐキーを押しても待たない)。
+    /// 別のウィンドウに移った直後は、<see cref="CanCaptureWaiting"/> が待つ。
+    /// </summary>
+    /// <param name="waitedMs">待った時間 (調べ直さなかったときは -1)。</param>
+    public bool RecheckAfterClick(out long waitedMs, int waitMs = 100)
+    {
+        waitedMs = -1;
+        var now = Environment.TickCount64;
+        if (!IsRightAfterClick(now, Interlocked.Exchange(ref _lastClick, 0))) return false;
+        var foreground = Native.GetForegroundWindow();
+        if (!_windowsWithTextInput.ContainsKey(foreground)) return false;
+        // このキーで RecheckStale がもう調べ直していたら (ブラウザー・LINE)、もう一度は待たない
+        if (Interlocked.Read(ref _lastRecheckForeground) == foreground.ToInt64() && now - Interlocked.Read(ref _lastRecheck) < 200) return CanCapture;
+        Invalidate();
+        var deadline = now + waitMs;
+        while (Interlocked.Read(ref _resolvedSequence) != Interlocked.Read(ref _focusSequence) && Environment.TickCount64 < deadline) Thread.Sleep(5);
+        waitedMs = Environment.TickCount64 - now;
+        return CanCapture;
+    }
+
+    /// <summary>入力欄を見た前面のウィンドウを覚える (このクラスのスレッドから呼ばれる)。多くなったら古いものから忘れる。</summary>
+    private void RememberTextInputWindow(IntPtr window)
+    {
+        if (window == IntPtr.Zero) return;
+        _windowsWithTextInput[window] = Environment.TickCount64;
+        if (_windowsWithTextInput.Count <= 64) return;
+        foreach (var old in _windowsWithTextInput.OrderBy(pair => pair.Value).Take(_windowsWithTextInput.Count - 32)) _windowsWithTextInput.TryRemove(old.Key, out _);
+    }
+
+    /// <summary>
+    /// 前面のアプリがアプリ別設定で「入力欄とみなす」か (このクラスのスレッドから呼ばれる)。
     /// そのアプリでは、入力欄と判定できなくてもフォーカスのある所を入力欄として扱う (issue #52)。
     /// </summary>
     public Func<bool>? TreatsAsTextInput { get; set; }
@@ -305,13 +358,14 @@ public sealed class FocusInspector : IDisposable
 
         // 変換中に入力先がパスワード欄・入力欄でない所に変わったら、変換中の内容を捨てさせる (移った先に入らないように)。
         // UI Automation で調べられなかっただけ (確認できない・フォーカスなし) のときは捨てない。
-        if (sequence == Interlocked.Read(ref _focusSequence) && (info.IsPassword || !info.IsTextInput && !info.Description.StartsWith("確認できない") && info.Description != "フォーカスなし"))
+        if (sequence == Interlocked.Read(ref _focusSequence) && (info.IsPassword || !info.IsTextInput && !info.Description.StartsWith("確認できない", StringComparison.Ordinal) && info.Description != "フォーカスなし"))
         {
             CaptureLost?.Invoke(info.IsPassword ? "パスワード欄にフォーカスが移った" : "入力欄でない所にフォーカスが移った");
         }
 
         if (info.IsTextInput && !info.IsPassword)
         {
+            RememberTextInputWindow(_inspectedForeground);
             var key = (info.Description, info.Bounds);
             if (_lastTextInput != key)
             {
@@ -349,21 +403,55 @@ public sealed class FocusInspector : IDisposable
         return _automation;
     }
 
-    /// <summary>最後に調べたときの前面のウィンドウ。</summary>
+    /// <summary>最後に調べたときの前面のウィンドウと、その中でフォーカスのあったウィンドウ (欄)。</summary>
     private IntPtr _inspectedForeground;
+    private IntPtr _inspectedFocus;
+
+    /// <summary>そのウィンドウのスレッドでフォーカスのあるウィンドウ。取れなければ IntPtr.Zero。</summary>
+    private static IntPtr FocusedWindow(IntPtr foreground)
+    {
+        var info = new Native.GUITHREADINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<Native.GUITHREADINFO>() };
+        return Native.GetGUIThreadInfo(Native.GetWindowThreadProcessId(foreground, out _), ref info) ? info.hwndFocus : IntPtr.Zero;
+    }
+
+    /// <summary>その前に調べたときの前面のウィンドウと、調べた時刻。</summary>
+    private IntPtr _inspectedForegroundBefore;
+    private long _inspectedAt, _inspectedAtBefore;
+
+    /// <summary>
+    /// 種類も名前もクラス名も無い要素 (Chrome 系の自動入力の候補を閉じた直後に一瞬フォーカスが来る) で、
+    /// 同じウィンドウで直前 (2 秒以内) に調べた所が入力欄の候補の行だったなら、打った文字は候補の元の入力欄に入るので入力欄として扱う。
+    /// 直前が候補の行のときだけにするので、この判定が次の要素へ引き継がれていくことは無い
+    /// (記録では、候補の行の 0.7 秒後にこの要素が来て、その 1.4 秒後にフォーカスが入力欄に戻っていた)。
+    /// </summary>
+    internal static bool KeepsPreviousTextInput(int controlType, string? name, string? className, FocusInfo previous, bool sameForeground, long sincePreviousMs) =>
+        controlType == 0 && string.IsNullOrEmpty(name) && string.IsNullOrEmpty(className) &&
+        IsSuggestionRow(previous.ClassName) && previous.IsTextInput && !previous.IsPassword && sameForeground && sincePreviousMs is >= 0 and <= 2000;
+
+    /// <summary>入力欄の候補の一覧の行 (フォーカスは候補に移るが、打った文字は入力欄に入る)。</summary>
+    internal static bool IsSuggestionRow(string? className) =>
+        className is not null && (className.Contains("autocomplete", StringComparison.OrdinalIgnoreCase) ||
+            className.Contains("OmniLinkItem", StringComparison.Ordinal) || className == "PopupRowContentView");
 
     private FocusInfo Inspect(out IntPtr affinityWindow)
     {
         affinityWindow = IntPtr.Zero;
         try
         {
+            _inspectedForegroundBefore = _inspectedForeground;
             _inspectedForeground = Native.GetForegroundWindow();
+            _inspectedFocus = FocusedWindow(_inspectedForeground);
+            _inspectedAtBefore = _inspectedAt;
+            _inspectedAt = Environment.TickCount64;
             // Meltype 自身の画面 (設定のドロップダウンなど) には UI Automation で問い合わせない。
             // 自分の UI スレッドに問い合わせが割り込むと、開いているドロップダウンが閉じてしまう。
             if (Input.ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow())) return new FocusInfo(false, false, null, "Meltype の画面");
             var forced = TreatsAsTextInput?.Invoke() == true;
             var element = Automation()?.Focused();
             if (element is null) return forced ? new FocusInfo(true, false, null, "フォーカスなし (入力欄とみなすアプリ)") : new FocusInfo(false, false, null, "フォーカスなし");
+            // クリックで調べ始めたときは、フォーカスがまだ前の欄にあることがあるので、UI Automation で取った欄の窓で見る
+            if (Input.ForegroundTracker.TypingAllowedWindows.ContainsKey(_inspectedForeground) &&
+                Input.ForegroundTracker.DirectInputControls.ContainsKey(new IntPtr(element.NativeWindowHandle))) return new FocusInfo(false, false, null, "Meltype の画面 (横取りしない欄)");
             var type = element.ControlType;
             var description = $"{ControlTypeName(type)} \"{Trim(element.Name)}\" ({element.ClassName})";
             if (element.IsPassword) return new FocusInfo(true, true, element.Bounds, description);
@@ -378,12 +466,19 @@ public sealed class FocusInspector : IDisposable
                 // 選ぶだけのドロップダウン (設定画面の はい/いいえ など) は文字を打つ欄ではない。打ち込める ComboBox だけ。
                 editable = element.HasValuePattern && !element.IsReadOnly;
             }
-            else if (element.ClassName?.Contains("autocomplete", StringComparison.OrdinalIgnoreCase) == true ||
-                element.ClassName?.Contains("OmniLinkItem", StringComparison.Ordinal) == true)
+            else if (IsSuggestionRow(element.ClassName))
             {
-                // 入力欄の候補の一覧 (Discord の @メンション・#チャンネルの候補、Vivaldi の検索欄・アドレスバーの候補)。
-                // フォーカスは候補の行に移るが、打った文字は入力欄に入るので、入力欄として扱う。
+                // 入力欄の候補の一覧 (Discord の @メンション・#チャンネルの候補、Vivaldi の検索欄・アドレスバーの候補、
+                // Chrome・Edge・Vivaldi のフォームの自動入力の候補 PopupRowContentView)。
+                // フォーカスは候補の行に移るが、打った文字は入力欄に入るので、入力欄として扱う
+                // (Vivaldi の金額の欄で 25000 と打つと、候補が出ていて最初の 2 が変換ボックスを通らずに消えていた)。
                 editable = true;
+            }
+            else if (KeepsPreviousTextInput(type, element.Name, element.ClassName, _info, _inspectedForegroundBefore == _inspectedForeground, _inspectedAt - _inspectedAtBefore))
+            {
+                // 自動入力の候補を閉じた直後に一瞬フォーカスが来る、種類も名前も無い要素。
+                editable = true;
+                description += " (直前の入力欄のまま)";
             }
             else if (element.HasTextPattern && element.IsKeyboardFocusable)
             {
@@ -408,7 +503,9 @@ public sealed class FocusInspector : IDisposable
 
             // UI Automation では入力欄と分からなくても、Windows のキャレット (点滅する縦線) を出しているなら文字を打つ所
             // (サクラエディタなど、独自の編集画面を持つ Win32 のアプリ)。
-            if (!editable && HasCaret())
+            // ただし一覧・ツリーの行 (Outlook のメール一覧の LeafRow など) は、キャレットがあっても入力欄ではない。
+            // 入力欄とみなすと、フォルダを開いたときに Outlook が固まって落ちていた (#1226)。
+            if (!editable && !IsListRow(type, element.ClassName) && HasCaret())
             {
                 editable = true;
                 description += " (キャレットあり)";
@@ -439,8 +536,8 @@ public sealed class FocusInspector : IDisposable
                     description += " (Affinity のキャンバス)";
                 }
             }
-            // それでも分からないアプリ (Premiere Pro など、画面を自分で描くアプリ) は、設定「入力欄とみなすアプリ」に
-            // 書いてあれば入力欄として扱う。1 文字のショートカットが多いアプリもあるので、既定では何もしない。
+            // それでも分からないアプリ (Premiere Pro など、画面を自分で描くアプリ) は、アプリ別設定で「入力欄とみなす」が
+            // ON なら入力欄として扱う。1 文字のショートカットが多いアプリもあるので、既定では何もしない。
             if (!editable && forced && affinityWindow == IntPtr.Zero)
             {
                 editable = true;
@@ -478,6 +575,13 @@ public sealed class FocusInspector : IDisposable
         }
         return false;
     }
+
+    /// <summary>
+    /// 一覧・ツリーの行と、Outlook のメール一覧の行。キャレットがあっても文字を打つ所ではない。
+    /// DataItem は Excel のセルでもある (選んでそのまま打てる) ので、Outlook の行 (LeafRow) だけにする。
+    /// </summary>
+    private static bool IsListRow(int controlType, string? className) =>
+        controlType is 50007 /* ListItem */ or 50024 /* TreeItem */ || (controlType == 50029 /* DataItem */ && className == "LeafRow");
 
     private static readonly string[] NotInputParts = ["group", "wrap", "container", "label", "button", "btn", "icon"];
     private const int ControlTypeWindow = 50032, ControlTypePane = 50033;

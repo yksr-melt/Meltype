@@ -3,6 +3,7 @@
 
 #include "Pipe.h"
 
+#include <aclapi.h>
 #include <sddl.h>
 
 namespace meltype {
@@ -52,19 +53,41 @@ static DWORD SelfIntegrity() {
 // 自分が整合性レベル Low 以下 (ストアアプリ・サンドボックス) で動いているか
 static bool SelfIsLowIntegrity() { return SelfIntegrity() < SECURITY_MANDATORY_MEDIUM_RID; }
 
+// パイプの所有者が自分と同じユーザーか。所有者は作ったプロセスのユーザーになり、ほかのユーザーには自分の SID を所有者にできない。
+// 整合性レベルの印は、Meltype.exe もストアアプリのために Low にしているので見ない。
+// 読むのに要る READ_CONTROL は、つなぐときの GENERIC_READ と、Meltype.exe がストアアプリに渡す権限に含まれる
+static bool PipeOwnedBySelf(HANDLE pipe) {
+    PSID owner = nullptr;
+    PSECURITY_DESCRIPTOR descriptor = nullptr;
+    if (GetSecurityInfo(pipe, SE_KERNEL_OBJECT, OWNER_SECURITY_INFORMATION, &owner, nullptr, nullptr, nullptr, &descriptor) != ERROR_SUCCESS) return false;
+    bool same = false;
+    HANDLE token = nullptr;
+    if (owner != nullptr && OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+        DWORD size = 0;
+        GetTokenInformation(token, TokenUser, nullptr, 0, &size);
+        std::vector<BYTE> user(size);
+        if (size > 0 && GetTokenInformation(token, TokenUser, user.data(), size, &size)) {
+            same = EqualSid(owner, reinterpret_cast<TOKEN_USER*>(user.data())->User.Sid) != FALSE;
+        }
+        CloseHandle(token);
+    }
+    LocalFree(descriptor);
+    return same;
+}
+
 // つないだパイプのサーバーが、自分と同じユーザーの、整合性レベル Medium 以上で、自分より低くないプロセスか。
 // (Meltype.exe が動いていない間に、権限の低いプログラムが同じ名前のパイプを作って打鍵を受け取るのを防ぐ。
 //  管理者として動いているアプリの打鍵を、ふつうの権限で動く Meltype.exe に渡さない。UAC を切っていて、
 //  アプリも Meltype.exe も管理者として動いている PC では使える)
-// ストアアプリなど自分が Low のときは、ほかのプロセスを調べられないので確かめない。このときは、Meltype.exe が動いていない間に
-// 同じユーザーの Low のプロセスが同じ名前のパイプを作ると見分けられない (SECURITY.md。Meltype.exe は先に作られていたらログに書く)
+// ストアアプリなど自分が Low のときは、ほかのプロセスを調べられないので、パイプの所有者が自分と同じユーザーかだけを確かめる。このときは、
+// Meltype.exe が動いていない間に同じユーザーの Low のプロセスが同じ名前のパイプを作ると見分けられない (SECURITY.md。Meltype.exe は先に作られていたらログに書く)
 // lower: 相手が自分より低い権限だったので断った (Meltype.exe を起動し直すまで変わらない)
 static bool IsTrustedServer(HANDLE pipe, bool& lower) {
     lower = false;
     ULONG pid = 0;
     if (!GetNamedPipeServerProcessId(pipe, &pid)) return false;
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (process == nullptr) return SelfIsLowIntegrity();
+    if (process == nullptr) return SelfIsLowIntegrity() && PipeOwnedBySelf(pipe);
     bool trusted = false;
     HANDLE token = nullptr;
     if (OpenProcessToken(process, TOKEN_QUERY, &token)) {
@@ -149,13 +172,38 @@ void PipeClient::Close() {
     }
 }
 
-bool PipeClient::Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred) {
+// 終わらなかったときの error は、時間切れなら WAIT_TIMEOUT、それより前に失敗で終わったらそのエラー (切れていたなど)。
+bool PipeClient::Wait(OVERLAPPED& overlapped, DWORD timeoutMs, DWORD& transferred, DWORD& error) {
+    error = ERROR_SUCCESS;
     if (WaitForSingleObject(event_, timeoutMs) != WAIT_OBJECT_0) {
         CancelIoEx(pipe_, &overlapped);
         GetOverlappedResult(pipe_, &overlapped, &transferred, TRUE);
+        error = WAIT_TIMEOUT;
         return false;
     }
-    return GetOverlappedResult(pipe_, &overlapped, &transferred, FALSE) != FALSE || GetLastError() == ERROR_MORE_DATA;
+    if (GetOverlappedResult(pipe_, &overlapped, &transferred, FALSE)) return true;
+    error = GetLastError();
+    return error == ERROR_MORE_DATA;
+}
+
+namespace {
+// 前の Meltype.exe とのつながりが切れていたときのエラー (起動し直した)
+bool IsDisconnected(DWORD error) {
+    return error == ERROR_NO_DATA || error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED;
+}
+}  // namespace
+
+// 書き込み・読み取りが時間内に終わらなかった。閉じる (閉じないと、遅れて来た応答を次の要求の応答として読んでしまう)。
+// 応答しない Meltype.exe を毎回待つと、どのアプリでも打鍵のたびに止まるので、少し前にも時間切れになっていたら、しばらくつながない。
+// 1 回だけなら閉じるだけにする。Meltype.exe の画面のスレッドが少しふさがっただけでも時間切れになり、
+// しばらくつながないと、その間に打ったキーが打った文字のまま入る。
+// optional の問い合わせは待つ時間が短く、時間切れになりやすいので数えない
+void PipeClient::TimedOut(bool optional) {
+    Close();
+    if (optional) return;
+    ULONGLONG now = GetTickCount64();
+    if (lastTimeout_ != 0 && now - lastTimeout_ < 5000) retryAfter_ = now + 3000;
+    lastTimeout_ = now;
 }
 
 bool PipeClient::Transact(const std::string& request, std::string& response, DWORD timeoutMs, bool optional) {
@@ -179,17 +227,23 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
         Close();
         // 前の Meltype.exe とのつながりが切れていた (起動し直した): まだ何も送っていないので、つなぎ直して 1 回だけ送り直す。
         // 送り直さないと、起動し直した後の最初のキーが、応答が無いときと同じく打った文字のまま入る
-        if (reused && (error == ERROR_NO_DATA || error == ERROR_BROKEN_PIPE || error == ERROR_PIPE_NOT_CONNECTED)) {
+        if (reused && IsDisconnected(error)) {
             TipLog(L"つなぎ直して送り直します");
             return Transact(request, response, remaining(), optional);
         }
         return false;
     }
-    if (!Wait(overlapped, remaining(), transferred)) {
-        // 読み取りが時間内に終わらないときと同じく、応答しない Meltype.exe をしばらく待たない
-        TipLog(L"パイプへの書き込みが終わりません");
-        Close();
-        if (!optional) retryAfter_ = GetTickCount64() + 3000;
+    DWORD waitError = ERROR_SUCCESS;
+    if (!Wait(overlapped, remaining(), transferred, waitError)) {
+        // WriteFile は ERROR_IO_PENDING を返し、切れていたことは終わるのを待って分かることが多い (#1112)。
+        // その場で失敗したときと同じく、つなぎ直して 1 回だけ送り直す (時間切れとは分けて、TimedOut にしない)
+        if (reused && IsDisconnected(waitError)) {
+            TipLog(L"パイプへの書き込みが切れていました (エラー %lu)。つなぎ直して送り直します", waitError);
+            Close();
+            return Transact(request, response, remaining(), optional);
+        }
+        TipLog(L"パイプへの書き込みが終わりません (エラー %lu)", waitError);
+        TimedOut(optional);
         return false;
     }
 
@@ -207,14 +261,9 @@ bool PipeClient::Transact(const std::string& request, std::string& response, DWO
             retryAfter_ = GetTickCount64() + 2000;
             return false;
         }
-        if (!Wait(overlapped, remaining(), transferred)) {
-            // 応答しない Meltype.exe を毎回待つと、どのアプリでも打鍵のたびに止まるので、しばらくつながない。
-            // ただし optional の問い合わせは待つ時間が短く、Meltype.exe の画面のスレッドが少しふさがっただけでも時間切れになる。
-            // しばらくつながないと、その間に打ったキーが打った文字のまま入るので、閉じるだけにする
-            // (閉じないと、遅れて来た応答を次の要求の応答として読んでしまう)
-            TipLog(L"Meltype.exe の応答が時間内に来ません");
-            Close();
-            if (!optional) retryAfter_ = GetTickCount64() + 3000;
+        if (!Wait(overlapped, remaining(), transferred, waitError)) {
+            TipLog(L"Meltype.exe の応答が時間内に来ません (エラー %lu)", waitError);
+            TimedOut(optional);
             return false;
         }
         response.append(buffer, transferred);

@@ -7,7 +7,7 @@ using Meltype.Input;
 
 namespace Meltype.Tests;
 
-/// <summary>区切りを点数で選ぶ (α版、設定「区切りを点数で選ぶ (α版)」) のテスト。</summary>
+/// <summary>区切りを重みで選ぶ (ReadingLattice.cs) のテスト。α版「区切りを点数で選ぶ」(#235) のときに足した例。</summary>
 internal static class ScoredSegmentationTests
 {
     private static readonly CompositionDetector Detector = CreateDetector();
@@ -16,7 +16,6 @@ internal static class ScoredSegmentationTests
     {
         var detector = CompositionDetector.CreateDefault();
         detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        detector.UseScoredSegmentation = () => true;
         return detector;
     }
 
@@ -62,6 +61,33 @@ internal static class ScoredSegmentationTests
     {
         // 長い 1 語 (string・glowers) を、短い語の組 (most + ring) や前の日本語を巻き込んだ並び (buglowers) より優先する
         foreach (var (typed, expected) in new[] { ("kyoumostringkamo", "きょうもstringかも"), ("zenbuglowerswo", "ぜんぶglowersを"), ("macOSnoupdate", "macOSのupdate"), ("seeyoulater", "seeyoulater") })
+            Assert.Equal(expected, Type(typed), typed);
+    }
+
+    [Test]
+    public static void Acronym_HeadIsNotReadAsKana()
+    {
+        // 大文字に大文字が続く略語の頭 (IME の I) は、英語の区間にできるならかなにしない。
+        // 辞書に無い略語 (IME) より、頭をかなにして残りを英単語にした区切り (い|ME) の点が高くなり、googleいME になっていた
+        foreach (var (typed, expected) in new[] {
+            ("IME", "IME"), ("googleIME", "googleIME"), ("theIMEis", "theIMEis"), ("KYOUHA", "KYOUHA"),
+            ("kyouhaIMEwotsukau", "きょうはIMEをつかう"), ("AutoIMEnotesuto", "AutoIMEのてすと") })
+            Assert.Equal(expected, Type(typed), typed);
+    }
+
+    [Test]
+    public static void KnownWord_NeedsWordCasing()
+    {
+        // iTs は its の書き方ではないので、知っている英単語にしない (#351: やばiTsはつやさん になっていた)
+        foreach (var (typed, expected) in new[] { ("yabaiTshatuyasann", "やばいTしゃつやさん"), ("Its", "Its"), ("ITS", "ITS"), ("GitHubni", "GitHubに") })
+            Assert.Equal(expected, Type(typed), typed);
+    }
+
+    [Test]
+    public static void DoubledConsonantSokuon_IsBetweenKana()
+    {
+        // 子音を重ねて打った っ は、前後をかなに挟まれているときだけ (excelとっpt・pythonとっfmpeg にしない)
+        foreach (var (typed, expected) in new[] { ("exceltoppt", "excelとppt"), ("pythontoffmpeg", "pythonとffmpeg"), ("mottekita", "もってきた") })
             Assert.Equal(expected, Type(typed), typed);
     }
 }

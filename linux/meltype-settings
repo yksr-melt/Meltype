@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 aster-void
+#
+# Meltype の設定画面 (GTK 4)。IBus のエンジンの設定 (meltype.xml の <setup>) と
+# fcitx5 の設定ツール (meltype.cpp の getConfig) から起動する。
+# 画面は config.schema.json (Meltype.Core の SettingsSchema が Settings から作る) から組み立てるので、
+# Settings に項目を足しても、この画面は直さなくてよい。
+# GTK 4 と PyGObject は Windows・Mac でも動く。OS ごとの違いは PLATFORM と data_directory だけに置く (今は Linux だけ)。
+
+import json
+import os
+import re
+import sys
+import tempfile
+from pathlib import Path
+
+CONFIG = "config.json"
+SCHEMA = "config.schema.json"
+OTHER_CATEGORY = "その他"
+# この OS の名前 (Meltype.Core の Platform。schema の x-platforms に出る名前)
+PLATFORM = "Linux"
+
+
+def data_directory():
+    """Meltype.Core の AppPaths.DataDirectory と同じ場所 (.NET の LocalApplicationData は Linux では XDG_DATA_HOME)。"""
+    override = os.environ.get("MELTYPE_DATA_DIR")
+    if override:
+        return Path(override)
+    xdg = os.environ.get("XDG_DATA_HOME")
+    return (Path(xdg) if xdg and os.path.isabs(xdg) else Path.home() / ".local" / "share") / "Meltype"
+
+
+class SettingsError(Exception):
+    pass
+
+
+def load_items(schema):
+    """設定画面に出す項目 (title があり、この OS で使う項目) を、分類ごとに schema の順で返す: [(分類, [(キー, schema)])]。"""
+    groups = {}
+    for key, prop in schema.get("properties", {}).items():
+        if "title" in prop and PLATFORM in prop.get("x-platforms", [PLATFORM]):
+            groups.setdefault(prop.get("x-category", OTHER_CATEGORY), []).append((key, prop))
+    # 分類は "1. 全般" のように番号から始まり、番号の順に並べる (Windows 版の SettingsForm.CategoryNumber と同じ)。番号の無い分類は最後
+    def number(category):
+        match = re.match(r"(\d+)\. ", category)
+        return int(match[1]) if match else sys.maxsize
+    return sorted(groups.items(), key=lambda group: number(group[0]))
+
+
+def category_label(category):
+    return re.sub(r"^\d+\.\s*", "", category)
+
+
+def kind(prop):
+    """項目の値の種類: "enum"・"boolean"・"integer"・"number"・"string"。画面で編集しない種類 (配列など) は None。"""
+    if "enum" in prop:
+        return "enum"
+    types = prop.get("type")
+    types = [types] if isinstance(types, str) else [t for t in types or [] if t != "null"]
+    if len(types) == 1 and types[0] in ("boolean", "integer", "number", "string"):
+        return types[0]
+    return None
+
+
+class ConfigFile:
+    """config.json。set は save まで書かない。save は編集した項目だけを、そのときの中身に重ねて書く
+    (開いている間に Meltype やエディターが書いた項目を残す。Windows 版の Settings.MergeEdits と同じ)。"""
+
+    def __init__(self, directory, schema):
+        self.path = Path(directory) / CONFIG
+        self.settings_version = schema["properties"]["SettingsVersion"]["default"]
+        self.defaults = {key: prop.get("default") for key, prop in schema["properties"].items()}
+        self.opened = self._read()
+        self.edits = {}
+
+    def _read(self):
+        try:
+            text = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            # SettingsVersion の無い config.json は、Meltype が古い版の設定として読んで移行するので、今の版を書いておく
+            return {"$schema": "./" + SCHEMA, "SettingsVersion": self.settings_version}
+        try:
+            values = json.loads(text)
+        except json.JSONDecodeError as error:
+            # Meltype はコメントと末尾の , を許すが、ここでは読めない。保存で消さないように止める
+            raise SettingsError(f"{self.path} を読めません (コメントや末尾の , があると読めません): {error}") from error
+        if not isinstance(values, dict):
+            raise SettingsError(f"{self.path} の中身がオブジェクト ({{ … }}) ではありません")
+        return values
+
+    def get(self, key):
+        return self.opened.get(key, self.defaults.get(key))
+
+    def set(self, key, value):
+        if value == self.get(key):
+            self.edits.pop(key, None)
+        else:
+            self.edits[key] = value
+
+    def save(self):
+        if not self.edits:
+            return
+        values = {**self._read(), **self.edits}
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=self.path.parent, prefix=CONFIG + ".", delete=False) as temp:
+            temp.write(json.dumps(values, ensure_ascii=False, indent=2) + "\n")
+        os.replace(temp.name, self.path)
+
+
+def read_schema(directory):
+    path = Path(directory) / SCHEMA
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as error:
+        raise SettingsError(f"{path} がありません。Meltype で一度文字を入力してから、設定画面を開き直してください") from error
+
+
+def main():
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Gdk", "4.0")
+    gi.require_version("Graphene", "1.0")
+    gi.require_version("Pango", "1.0")
+    from gi.repository import Gdk, Graphene, Gtk, Pango
+
+    class SettingsWindow(Gtk.ApplicationWindow):
+        def __init__(self, app, schema, config):
+            super().__init__(application=app, title="Meltype の設定", default_width=900, default_height=640)
+            self.schema = schema
+            self.config = config
+            header = Gtk.HeaderBar()
+            self.search = Gtk.SearchEntry(placeholder_text="設定を検索")
+            self.search.connect("search-changed", lambda _: self.list.invalidate_filter())
+            header.set_title_widget(self.search)
+            self.set_titlebar(header)
+
+            self.list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+            self.list.add_css_class("rich-list")
+            self.list.set_filter_func(self._matches)
+            self.list.set_header_func(self._header)
+            self.sidebar = Gtk.ListBox(selection_mode=Gtk.SelectionMode.SINGLE, width_request=160)
+            self.sidebar.add_css_class("navigation-sidebar")
+            for category, _ in load_items(schema):
+                self.sidebar.append(Gtk.Label(label=category_label(category), xalign=0))
+            self._fill_list()
+            self.sidebar.connect("row-activated", lambda _, row: self._scroll_to(self.first_rows[row.get_index()]))
+            self.sidebar.select_row(self.sidebar.get_row_at_index(0))
+
+            # どのエディターで開くかは環境で違うので、開くボタンは置かずにパスとコピーのボタンを出す
+            message = Gtk.Label(label="変更は「適用」を押すと 1 秒ほどで入力に反映します。画面に無い項目は、次のファイルを直接編集します。",
+                                xalign=0, wrap=True)
+            message.add_css_class("dim-label")
+            path = Gtk.Label(label=str(config.path), xalign=0, wrap=True, wrap_mode=Pango.WrapMode.CHAR, selectable=True, hexpand=True)
+            path.add_css_class("monospace")
+            copy = Gtk.Button(icon_name="edit-copy-symbolic", tooltip_text="パスをコピー", valign=Gtk.Align.CENTER)
+            copy.add_css_class("flat")
+
+            def copy_path(button):
+                button.get_clipboard().set_content(Gdk.ContentProvider.new_for_value(str(config.path)))
+                button.set_icon_name("object-select-symbolic")
+            copy.connect("clicked", copy_path)
+            path_row = Gtk.Box(spacing=6)
+            path_row.append(path)
+            path_row.append(copy)
+            note = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_start=12, margin_end=12, margin_top=8, margin_bottom=8)
+            note.append(message)
+            note.append(path_row)
+            self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.content.append(note)
+            self.content.append(self.list)
+            self.scroller = Gtk.ScrolledWindow(child=self.content, hexpand=True, vexpand=True)
+            self.scroller.get_vadjustment().connect("value-changed", self._follow_scroll)
+
+            layout = Gtk.Box()
+            layout.append(Gtk.ScrolledWindow(child=self.sidebar, hscrollbar_policy=Gtk.PolicyType.NEVER))
+            layout.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL))
+            layout.append(self.scroller)
+
+            # 適用は保存して開いたまま。キャンセルと × は、未保存の変更を捨てて閉じる
+            cancel = Gtk.Button(label="キャンセル")
+            cancel.connect("clicked", lambda _: self.close())
+            self.apply_button = Gtk.Button(label="適用", width_request=80, sensitive=False)
+            self.apply_button.add_css_class("suggested-action")
+            self.apply_button.connect("clicked", lambda _: self._save())
+            buttons = Gtk.Box(spacing=8, halign=Gtk.Align.END, margin_start=12, margin_end=12, margin_top=8, margin_bottom=8)
+            buttons.append(cancel)
+            buttons.append(self.apply_button)
+            root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            root.append(layout)
+            root.append(Gtk.Separator())
+            root.append(buttons)
+            self.set_child(root)
+
+        def _fill_list(self):
+            while row := self.list.get_row_at_index(0):
+                self.list.remove(row)
+            self.first_rows = []
+            for category, items in load_items(self.schema):
+                for index, (key, prop) in enumerate(items):
+                    row = self._row(key, prop)
+                    row.category = category
+                    if index == 0:
+                        self.first_rows.append(row)
+                    self.list.append(row)
+
+        def _row(self, key, prop):
+            title = Gtk.Label(label=prop["title"], xalign=0, wrap=True)
+            title.add_css_class("heading")
+            text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True)
+            text.append(title)
+            if prop.get("description"):
+                description = Gtk.Label(label=prop["description"], xalign=0, wrap=True, max_width_chars=70)
+                description.add_css_class("dim-label")
+                text.append(description)
+            box = Gtk.Box(spacing=24, margin_start=12, margin_end=12, margin_top=10, margin_bottom=10)
+            box.append(text)
+            box.append(self._editor(key, prop))
+            row = Gtk.ListBoxRow(child=box, activatable=False)
+            row.search_text = f"{key}\n{prop['title']}\n{prop.get('description', '')}".casefold()
+            return row
+
+        def _editor(self, key, prop):
+            value = self.config.get(key)
+            value_kind = kind(prop)
+            if value_kind == "boolean":
+                editor = Gtk.Switch(active=bool(value))
+                editor.connect("notify::active", lambda switch, _: self._edit(key, switch.get_active()))
+            elif value_kind == "enum":
+                choices = prop["enum"]
+                descriptions = prop.get("enumDescriptions", [])
+                labels = [(descriptions[i] if i < len(descriptions) and descriptions[i] else None) or choice or "(指定なし)"
+                          for i, choice in enumerate(choices)]
+                editor = Gtk.DropDown.new_from_strings(labels)
+                if value in choices:
+                    editor.set_selected(choices.index(value))
+                editor.connect("notify::selected", lambda dropdown, _: self._edit(key, choices[dropdown.get_selected()]))
+            elif value_kind in ("integer", "number"):
+                integer = value_kind == "integer"
+                editor = Gtk.SpinButton.new_with_range(-1_000_000, 1_000_000, 1 if integer else 0.1)
+                editor.set_digits(0 if integer else 2)
+                editor.set_value(value or 0)
+                editor.connect("value-changed", lambda spin: self._edit(key, spin.get_value_as_int() if integer else spin.get_value()))
+            elif value_kind == "string":
+                editor = Gtk.Entry(text=value or "", width_chars=24)
+                editor.connect("changed", lambda entry: self._edit(key, entry.get_text()))
+            else:
+                editor = Gtk.Label(label="config.json で編集します")
+                editor.add_css_class("dim-label")
+            editor.set_valign(Gtk.Align.CENTER)
+            return editor
+
+        def _edit(self, key, value):
+            self.config.set(key, value)
+            self.apply_button.set_sensitive(bool(self.config.edits))
+
+        def _save(self):
+            try:
+                self.config.save()
+                self.config = ConfigFile(self.config.path.parent, self.schema)
+            except (SettingsError, OSError) as error:
+                Gtk.AlertDialog(message="設定を保存できませんでした", detail=str(error)).show(self)
+                return
+            self._fill_list()
+            self.apply_button.set_sensitive(False)
+
+        def _matches(self, row):
+            query = self.search.get_text().strip().casefold()
+            return not query or all(word in row.search_text for word in query.split())
+
+        def _header(self, row, before):
+            if before is not None and before.category == row.category:
+                row.set_header(None)
+                return
+            label = Gtk.Label(label=category_label(row.category), xalign=0, margin_start=12, margin_top=18, margin_bottom=6)
+            label.add_css_class("title-4")
+            row.set_header(label)
+
+        def _top(self, row):
+            """分類の見出しの、content の中での位置 (隠れていれば None)。"""
+            # scroller の子 (Gtk.Viewport) はスクロールで動くので、動かない content からの位置を使う
+            point = (row.get_header() or row).compute_point(self.content, Graphene.Point())
+            return point[1].y if point[0] else None
+
+        def _scroll_to(self, row):
+            self.search.set_text("")
+            if (top := self._top(row)) is not None:
+                self.scroller.get_vadjustment().set_value(top)
+
+        def _follow_scroll(self, adjustment):
+            """サイドバーで、いま上端に見えている分類を選ぶ。"""
+            if self.search.get_text():
+                return
+            value = adjustment.get_value()
+            tops = [self._top(row) for row in self.first_rows]
+            current = max((i for i, top in enumerate(tops) if top is not None and top <= value + 1), default=0)
+            # 最後のほうの分類は上端まで来ない。一番下では、選んでいる分類が見えていれば選んだままにする
+            selected = self.sidebar.get_selected_row()
+            if value >= adjustment.get_upper() - adjustment.get_page_size() - 1:
+                current = selected.get_index() if selected and (tops[selected.get_index()] or 0) >= value else len(tops) - 1
+            if selected is None or selected.get_index() != current:
+                self.sidebar.select_row(self.sidebar.get_row_at_index(current))
+
+    def activate(app):
+        if window := app.get_active_window():
+            window.present()
+            return
+        directory = data_directory()
+        try:
+            schema = read_schema(directory)
+            config = ConfigFile(directory, schema)
+        except (SettingsError, OSError) as error:
+            # ウィンドウが無いと AlertDialog を閉じたときに終わらないので、閉じたら終わる
+            app.hold()
+            Gtk.AlertDialog(message="Meltype の設定を開けません", detail=str(error)).choose(None, None, lambda *_: app.release())
+            return
+        SettingsWindow(app, schema, config).present()
+
+    app = Gtk.Application(application_id="io.github.yksr_melt.Meltype.Settings")
+    app.connect("activate", activate)
+    return app.run(sys.argv)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

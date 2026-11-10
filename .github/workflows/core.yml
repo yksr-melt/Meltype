@@ -1,0 +1,136 @@
+# 判定・変換のコア (Meltype.Core) と辞書のチェック。Windows 版のビルドとテストは windows.yml。
+#   core         … いつも: Meltype.Core のテストを Linux と Mac で流す (Mac 版・Linux 版の土台)。main の必須チェック
+#   辞書の形式   … dictionaries/ が変わったとき: 読めない行・ひらがなでない読み・重複など
+#   精度の比較   … 判定・変換の本体か辞書が変わったとき: main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。main の必須チェック
+#                  あわせて、よく使う語の判定が main から変わった語を一覧にする (参考。失敗にはしない)
+#                  Core・辞書を変えない Pull Request では skipped になり、skipped は必須チェックを満たす (比べずにマージできる)
+# 本文を読む「報告の再現」は pr-expectations.yml。ここは本文の編集 (edited) では流さない
+# (承認待ちのフォークの Pull Request で、編集のたびに run が積まれて取り消し合い、必須チェックが報告されないまま残るため)。
+# pull_request なので、フォークからの Pull Request でも書き込みの権限は持たない (結果は Summary とチェックの成否で返す)。
+name: core
+
+on:
+  # paths で絞ると、当たらない Pull Request で必須チェックが報告されずマージできなくなる
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Test
+        run: dotnet run --project src/Meltype.Core.Tests/Meltype.Core.Tests.csproj -c Release
+      - name: Linux Unicode key mapping (without IBus)
+        run: python3 linux/tests/test_virtual_key.py
+      # Mozc-UT の辞書の統合 (native/mozc/merge-ut-dictionary.py)。本物の Mozc も辞書も要らない。
+      - name: Test Mozc-UT dictionary merge
+        run: python3 native/mozc/tests/test_merge_ut_dictionary.py
+
+  # Pull Request で変わったファイルから、辞書の形式・精度の比較を流すか決める
+  changes:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      dictionaries: ${{ steps.diff.outputs.dictionaries }}
+      core: ${{ steps.diff.outputs.core }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          files="$(git diff --name-only "$BASE...$HEAD")"
+          echo "$files"
+          if grep -q '^dictionaries/' <<< "$files"; then echo "dictionaries=true" >> "$GITHUB_OUTPUT"; fi
+          if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
+
+  dictionaries:
+    name: 辞書の形式
+    needs: changes
+    if: needs.changes.outputs.dictionaries == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: node tools/check-dictionaries.mjs
+
+  quality:
+    name: 精度の比較
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: 品質テスト (Pull Request)
+        run: |
+          dotnet run --project src/Meltype.Core.Tests -c Release -- --eval-json "$RUNNER_TEMP/pr.json"
+          dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus "$RUNNER_TEMP/pr-words.tsv"
+      - name: 品質テスト (main)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "$BASE"
+          # main をビルドできなければ比べない (pr-checks.mjs が「比べられません」と出す)。
+          # 失敗にすると、main を直す Pull Request もこのチェックでマージできなくなる (#1453)
+          if ! dotnet build "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release; then
+            echo "::warning::main ($BASE) をビルドできないため、精度を比べません"
+            exit 0
+          fi
+          # main にまだ --eval-json が無ければ比べない (pr-checks.mjs が「比べられません」と出す)
+          if grep -q -- '--eval-json' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
+            dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --eval-json "$RUNNER_TEMP/base.json"
+          fi
+          # main にまだ --judge-corpus が無ければ比べない
+          if grep -q -- '--judge-corpus' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
+            # Pull Request の一覧の語も判定する (Pull Request で辞書に足した語も比べる)
+            dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --judge-corpus "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv"
+          fi
+      - name: よく使う語の判定の変化 (参考)
+        run: |
+          # main の一覧の語も Pull Request で判定し直す (Pull Request で辞書から消した語も比べる)
+          if [ -f "$RUNNER_TEMP/base-words.tsv" ]; then
+            dotnet run --project src/Meltype.Core.Tests -c Release -- --judge-corpus "$RUNNER_TEMP/pr-words.tsv" "$RUNNER_TEMP/base-words.tsv"
+          fi
+          mkdir -p "$RUNNER_TEMP/judged-words"
+          cp "$RUNNER_TEMP"/*-words.tsv "$RUNNER_TEMP/judged-words/" 2>/dev/null || true
+          node .github/bot/pr-checks.mjs impact "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv" "$RUNNER_TEMP/judged-words/changes.tsv"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: judged-words
+          path: ${{ runner.temp }}/judged-words
+          if-no-files-found: ignore
+      - name: 比べる
+        run: node .github/bot/pr-checks.mjs compare "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json"

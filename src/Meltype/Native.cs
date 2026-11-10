@@ -21,7 +21,6 @@ internal static class Native
     public const uint WINEVENT_OUTOFCONTEXT = 0x0000, WINEVENT_SKIPOWNPROCESS = 0x0002;
 
     public delegate IntPtr HookProc(int code, IntPtr wParam, IntPtr lParam);
-    public delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
     public delegate void WinEventProc(IntPtr hook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint thread, uint time);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -72,24 +71,8 @@ internal static class Native
     [DllImport("user32.dll")] public static extern bool UnhookWinEvent(IntPtr hook);
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] public static extern IntPtr GetModuleHandle(string? moduleName);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
-    /// <summary>このプロセスにコンソール窓があるか (ターミナルから起動した Exe か)。</summary>
-    [DllImport("kernel32.dll")] public static extern IntPtr GetConsoleWindow();
-    /// <summary>コンソールを外す (常駐 GUI 起動時に黒い窓を消す)。</summary>
-    [DllImport("kernel32.dll", SetLastError = true)] public static extern bool FreeConsole();
-    /// <summary>このコンソールに繋がっているプロセス数 (親シェルと共有なら 2 以上)。</summary>
-    [DllImport("kernel32.dll", SetLastError = true)] public static extern uint GetConsoleProcessList(uint[] processList, uint count);
-
-    /// <summary>
-    /// 親のターミナル (cmd / PowerShell) とコンソールを共有しているか。
-    /// エクスプローラー起動など、Windows がこのプロセス専用にコンソールを付けた場合は false。
-    /// </summary>
-    public static bool SharesConsoleWithParent()
-    {
-        if (GetConsoleWindow() == IntPtr.Zero) return false;
-        // 要素 1 つだけ渡すと「足りない」ときに実際の数が返る。2 以上なら親と共有。
-        var count = GetConsoleProcessList(new uint[1], 1);
-        return count > 1;
-    }
+    /// <summary>親プロセスのコンソールにつなぐ (WinExe の --version など)。ATTACH_PARENT_PROCESS = 0xFFFFFFFF。</summary>
+    [DllImport("kernel32.dll", SetLastError = true)] public static extern bool AttachConsole(uint processId);
 
     [DllImport("user32.dll")] public static extern int GetMessage(out MSG msg, IntPtr hwnd, uint min, uint max);
     [DllImport("user32.dll")] public static extern bool TranslateMessage(ref MSG msg);
@@ -127,19 +110,16 @@ internal static class Native
     public const uint OBJID_CARET = 0xFFFFFFF8;
     [DllImport("oleacc.dll")] public static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out object? accessible);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
-    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
-    public const int DWMWA_CLOAKED = 14;
-    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
     [DllImport("user32.dll")] public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
     [DllImport("user32.dll")] public static extern bool GetMonitorInfo(IntPtr monitor, ref MONITORINFO info);
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hwnd, System.Text.StringBuilder name, int max);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hwnd, [Out] char[] name, int max);
     [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr hwnd, int index);
     public const int GWL_STYLE = -16;
     [DllImport("user32.dll")] public static extern IntPtr GetShellWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();
 
     [DllImport("user32.dll")] public static extern IntPtr GetKeyboardLayout(uint threadId);
+    [DllImport("user32.dll", EntryPoint = "MapVirtualKeyExW")] public static extern uint MapVirtualKeyEx(uint code, uint mapType, IntPtr layout);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int InternalGetWindowText(IntPtr hwnd, [Out] char[] text, int max);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out IntPtr result);
@@ -147,7 +127,7 @@ internal static class Native
 
     [DllImport("kernel32.dll", SetLastError = true)] public static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
     [DllImport("kernel32.dll", SetLastError = true)] public static extern bool CloseHandle(IntPtr handle);
-    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool QueryFullProcessImageName(IntPtr process, uint flags, System.Text.StringBuilder name, ref int size);
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool QueryFullProcessImageName(IntPtr process, uint flags, [Out] char[] name, ref int size);
     [DllImport("advapi32.dll", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
     [DllImport("advapi32.dll", SetLastError = true)] public static extern bool GetTokenInformation(IntPtr token, int infoClass, out int info, int length, out int returned);
 
@@ -160,7 +140,7 @@ internal static class Native
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 
-    [DllImport("user32.dll")] public static extern int ToUnicodeEx(uint vk, uint scan, byte[] keyState, [Out] char[] buffer, int bufferSize, uint flags, IntPtr hkl);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int ToUnicodeEx(uint vk, uint scan, byte[] keyState, [Out] char[] buffer, int bufferSize, uint flags, IntPtr hkl);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);
@@ -168,4 +148,9 @@ internal static class Native
     public const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000, TOKEN_QUERY = 0x0008;
     public const int TokenElevation = 20;
     public const uint MONITOR_DEFAULTTONEAREST = 2;
+    [DllImport("user32.dll")] public static extern IntPtr MonitorFromPoint(POINT point, uint flags);
+    /// <summary>モニターの DPI (dpiType 0 = MDT_EFFECTIVE_DPI: 拡大率を反映した値)。Windows 8.1 以降。</summary>
+    [DllImport("shcore.dll")] public static extern int GetDpiForMonitor(IntPtr monitor, int dpiType, out uint dpiX, out uint dpiY);
+    /// <summary>システムの DPI (サインインしたときのメインのモニターの DPI)。Windows 10 1607 以降。</summary>
+    [DllImport("user32.dll")] public static extern uint GetDpiForSystem();
 }

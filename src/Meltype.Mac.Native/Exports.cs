@@ -16,7 +16,7 @@ namespace Meltype.Mac;
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Swift 側が登録する関数 (漢字変換・候補・英単語の判定) が返す文字列は malloc したもので、こちらで free する。
-/// Input Method Kit はメインスレッドから呼ぶので、排他はしない。
+/// Input Method Kit はメインスレッドから呼ぶので、排他はしない。漢字変換・候補の関数はワーカーのスレッドから呼ぶ (BackgroundCallbackConverter)。
 /// </summary>
 public static unsafe class Exports
 {
@@ -52,6 +52,7 @@ public static unsafe class Exports
             if (string.IsNullOrEmpty(path)) return 0;
             s_mozc?.Dispose();
             s_mozc = new MozcConverter(path, FromUtf8(profile) ?? Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
+            s_converter = new HybridConverter(() => Config.ConversionEngine.Mozc, s_mozc, null, null);
             if (!s_mozc.IsInstalled) return 0;
             s_mozc.WarmUp();
             return 1;
@@ -72,15 +73,55 @@ public static unsafe class Exports
     {
         try
         {
-            var session = s_mozc is { } mozc
-                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker())
-                : MeltypeSession.CreateDefault(new CallbackConverter(), MoreCandidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true);
+            var session = MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null);
             return GCHandle.ToIntPtr(GCHandle.Alloc(session));
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Error($"Mac: 初期化できませんでした: {ex}");
             return IntPtr.Zero;
+        }
+    }
+
+    /// <summary>
+    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_create の前に 1 回呼ぶ。
+    /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
+    /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、答えが出るまで待つ。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
+    public static void SetConversionReady(delegate* unmanaged<void> notify)
+    {
+        try
+        {
+            s_converter.Budget.Enable();
+            s_converter.ResultReady += () => notify();
+            if (s_mozc is null) s_callback.WarmUp();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"変換の結果の通知を登録できませんでした: {ex}");
+        }
+    }
+
+    /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
+    private static readonly BackgroundCallbackConverter s_callback = new(new CallbackConverter().ConvertClauses, MoreCandidates);
+
+    /// <summary>入力欄が使う変換エンジン。Windows 版と同じ HybridConverter で、Mac 版は登録された関数だけ、Linux 版は Mozc だけを組み合わせる。</summary>
+    private static HybridConverter s_converter = new(() => Config.ConversionEngine.System, null, s_callback, s_callback.Candidates);
+
+    /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
+    public static byte* Refresh(IntPtr handle)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
+            return session.RefreshConversion() is { } result ? ToUtf8(result.ToJson()) : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
+            return null;
         }
     }
 
@@ -155,10 +196,89 @@ public static unsafe class Exports
         if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.Direct = direct != 0;
     }
 
+    /// <summary>
+    /// 直前のキーが、設定「入力モード切り替えキー」の切替として使われたか (1 / 0)。読むと印が消える (#1033)。
+    /// Mac・Linux のフロントエンドは、これと <c>meltype_is_direct</c> で、自分のモード (A / あ、入力メニュー) を本体に合わせる。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_take_mode_toggled")]
+    public static int TakeToggled(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.TakeToggled() ? 1 : 0;
+    }
+
+    /// <summary>本体のモード (1 = 英数 / 直接入力、0 = 日本語)。切り替えたあとにフロントエンドが読む (#1033)。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_is_direct")]
+    public static int IsDirect(IntPtr handle)
+    {
+        return handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session && session.Direct ? 1 : 0;
+    }
+
     [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_input")]
     public static void SetCodeInput(IntPtr handle, int enabled)
     {
         if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session) session.CodeInput = enabled != 0;
+    }
+
+    /// <summary>コードの入力欄がターミナル (非 0) / エディター (0) かを設定する。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_terminal")]
+    public static void SetCodeTerminal(IntPtr handle, int terminal)
+    {
+        try
+        {
+            if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+                session.CodeTerminal = terminal != 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+        }
+    }
+
+    /// <summary>コードの行を日本語 (非 0) / 英数 (0) にする。before は借用する UTF-8 (NULL 可)。扱ったら 1、それ以外・失敗時は 0。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_code_line")]
+    public static int SetCodeLine(IntPtr handle, int japanese, byte* before)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return 0;
+            return session.SetCodeLine(japanese != 0, FromUtf8(before)) ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+            return 0;
+        }
+    }
+
+    /// <summary>アプリに通したキーによるキャレット移動を通知する (消費したキーには呼ばない)。passedVk = 0 はキーなし、control は非 0 なら Ctrl。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_caret_moved")]
+    public static void CaretMoved(IntPtr handle, int passedVk, int control)
+    {
+        try
+        {
+            if (handle != IntPtr.Zero && GCHandle.FromIntPtr(handle).Target is MeltypeSession session)
+                session.CaretMoved(passedVk, control != 0);
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+        }
+    }
+
+    /// <summary>次のキーをコードの英数として通すなら 1。それ以外・失敗時は 0。before は借用する UTF-8 (NULL 可)。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_code_english_at")]
+    public static int CodeEnglishAt(IntPtr handle, byte* before)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return 0;
+            return session.CodeEnglishAt(FromUtf8(before)) ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Mac: 入力の処理で例外: {ex}");
+            return 0;
+        }
     }
 
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (1) いないか (0)。対応していなければ、確定し直しをしない。</summary>
@@ -171,6 +291,26 @@ public static unsafe class Exports
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_data_directory")]
     public static byte* DataDirectory() => ToUtf8(Config.AppPaths.DataDirectory);
+
+    /// <summary>
+    /// Zenzai の設定 (Mac 版。issue #1130)。「Zenzai を使う」が OFF なら NULL、ON なら設定のモデルの場所
+    /// (空文字列なら Meltype.app に同梱のモデルを使う)。meltype_free で解放する。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_zenzai_model")]
+    public static byte* ZenzaiModel()
+    {
+        try
+        {
+            var settings = Config.Settings.Load(Config.AppPaths.ConfigFile);
+            return settings.UseZenzai ? ToUtf8(settings.ZenzaiModelPath.Trim()) : null;
+        }
+        catch (Exception ex)
+        {
+            // 読めないときは使わない (打鍵のたびに推論が走るので、分からないまま ON にしない)
+            Diagnostics.Log.Error($"Zenzai の設定を読めませんでした。Zenzai を使わずに変換します: {ex}");
+            return null;
+        }
+    }
 
     /// <summary>Meltype.Core の版 (csproj の Version)。meltype_free で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_version")]
@@ -213,7 +353,7 @@ public static unsafe class Exports
         }
     }
 
-    private static IReadOnlyList<string> MoreCandidates(string reading)
+    private static string[] MoreCandidates(string reading)
     {
         if (s_candidates == null) return [];
         var text = TakeUtf8(s_candidates(ToUtf8(reading, out var buffer)));

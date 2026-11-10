@@ -48,6 +48,9 @@ async function changedFiles(number) {
 /** patch の足された行 (先頭の + を外す)。 */
 const addedLines = patch => (patch ?? '').split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++')).map(l => l.slice(1));
 
+/** コードスパン。ファイル名・著作権の行は PR の作者が書けるので、バッククォートで抜けられないようにする (meltype-bot.mjs と同じ)。 */
+const code = text => '`' + String(text ?? '').replace(/`/g, 'ˋ') + '`';
+
 const copyrightOf = line => /copyright\s*(\(c\)|©)?\s*\d{4}/i.test(line) ? line.replace(/^[\s#/;*!<>-]*(rem\s+)?/i, '').trim() : null;
 
 function check(files, author) {
@@ -64,20 +67,20 @@ function check(files, author) {
       if (!head.some(l => l.includes('SPDX-License-Identifier'))) problems.push('`SPDX-License-Identifier: GPL-3.0-or-later` がありません');
       const copyright = head.map(copyrightOf).find(c => c);
       if (!copyright) problems.push('`Copyright (C) <年> <あなたの名前>` がありません');
-      else if (!isOwner && OwnerName.test(copyright)) problems.push(`著作権の行が作者の名義になっています (\`${copyright}\`)。あなたの名前にしてください`);
+      else if (!isOwner && OwnerName.test(copyright)) problems.push(`著作権の行が作者の名義になっています (${code(copyright)})。あなたの名前にしてください`);
       if (problems.length) findings.push({ file: file.filename, problems });
     }
     else if (!isOwner) {
       // 既存のファイルに、作者の名義の著作権の行を足していないか
       const copyright = added.map(copyrightOf).find(c => c && OwnerName.test(c));
-      if (copyright) findings.push({ file: file.filename, problems: [`作者の名義の著作権の行を足しています (\`${copyright}\`)。あなたが書いた部分なら、あなたの名前の行を足してください`] });
+      if (copyright) findings.push({ file: file.filename, problems: [`作者の名義の著作権の行を足しています (${code(copyright)})。あなたが書いた部分なら、あなたの名前の行を足してください`] });
     }
   }
   return findings;
 }
 
 function message(findings, author) {
-  const list = findings.map(f => `- \`${f.file}\`\n${f.problems.map(p => `  - ${p}`).join('\n')}`).join('\n');
+  const list = findings.map(f => `- ${code(f.file)}\n${f.problems.map(p => `  - ${p}`).join('\n')}`).join('\n');
   return [
     `@${author} さん、ソースファイルの先頭のライセンス・著作権の表記を確認させてください。`,
     '',

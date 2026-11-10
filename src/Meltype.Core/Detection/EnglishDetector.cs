@@ -10,12 +10,9 @@ namespace Meltype.Detection;
 /// </summary>
 public sealed class EnglishDetector
 {
-    public WordList Words { get; } = new();
+    public WordList Words { get; }
 
-    public EnglishDetector(IEnumerable<string> words)
-    {
-        foreach (var word in words) Words.Add(word);
-    }
+    public EnglishDetector(IEnumerable<string> words) => Words = new(words);
 
     public bool IsPrefix(string letters) => letters.Length >= 2 && Words.HasPrefix(letters);
 

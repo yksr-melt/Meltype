@@ -26,6 +26,19 @@ function Test-MeltypeImeRegistered {
     return Test-Path -LiteralPath 'HKLM:\SOFTWARE\Microsoft\CTF\TIP\{417D801B-A9BD-4C26-BD16-356A825A6998}'
 }
 
+# DLL の登録 (InprocServer32) が 64 ビット・32 ビットの両方にあり、その DLL があるか。
+# TIP のキーだけ残り、これが無いことがある (セキュリティソフトが登録を途中で止めたとき)
+function Test-MeltypeImeServer {
+    foreach ($view in [Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32) {
+        $key = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, $view).OpenSubKey('SOFTWARE\Classes\CLSID\{417D801B-A9BD-4C26-BD16-356A825A6998}\InprocServer32')
+        if (-not $key) { return $false }
+        try { $dll = $key.GetValue('') }
+        finally { $key.Dispose() }
+        if (-not $dll -or -not (Test-Path -LiteralPath $dll)) { return $false }
+    }
+    return $true
+}
+
 # 管理者として動かす処理。確かめてから使うまでの間にファイルをすり替えられないように、ユーザーが書き換えられない
 # Program Files の下に写してから、昇格する前に確かめたハッシュと比べ、合ったものだけで Register-Tip.ps1 を動かす。
 # この処理はファイルではなくコマンドとして渡す (ユーザーのフォルダーにあるスクリプトを、管理者として直接動かさない)
@@ -138,6 +151,8 @@ function Get-Sha256([string]$path) {
 # 登録済みの DLL が、これから入れるものと同じか
 function Test-MeltypeImeCurrent([string]$Source) {
     if (-not (Test-MeltypeImeRegistered)) { return $false }
+    # 途中で止まった登録は、DLL が同じでも登録し直す
+    if (-not (Test-MeltypeImeServer)) { return $false }
     # 登録を外すときに使うスクリプト (Program Files に置いたもの) も同じか (DLL が同じでも、スクリプトを直したら置き直す)
     $installedScript = Join-Path $MeltypeProgramFiles 'Meltype\tip\Register-Tip.ps1'
     $newScript = Join-Path $Source 'Register-Tip.ps1'

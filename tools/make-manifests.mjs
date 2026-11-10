@@ -2,20 +2,23 @@
 // Copyright (C) 2026 Yukishiro
 //
 // 公開版のリリースから、パッケージマネージャーに出すマニフェストを作る (winget・Scoop・Homebrew)。
-//   node tools/make-manifests.mjs <版> <Windows の zip> [Mac の zip] [Windows のインストーラー (setup.exe)]
+//   node tools/make-manifests.mjs <版> [Windows の zip] [Mac の zip] [Windows のインストーラー (setup.exe)]
 //   例: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
+//   Homebrew だけ: node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip (release.yml がタグのときに作る)
+// ファイルは名前で見分ける (-mac.zip は Mac、ほかの .zip は Windows、-setup.exe はインストーラー)。
 // zip・setup.exe は GitHub のリリース (v<版>) に同じ名前で上げたもの。SHA-256 をここで計算する。
 // winget はインストーラー (setup.exe) があればそれを使う (Meltype IME・起動時の起動・Meltype の自動更新と同じ場所に入る: issue #367)。
-// できたものは dist/manifests/ に置く。出し方は docs/RELEASE.md。
+// できたものは dist/manifests/ に置く。出し方は docs/dev/RELEASE.md。
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const [version, windowsZip, ...rest] = process.argv.slice(2);
-const windowsSetup = rest.find(file => file.endsWith('-setup.exe'));
-const macZip = rest.find(file => file.endsWith('.zip'));
-if (!version || !windowsZip) {
-  console.error('使い方: node tools/make-manifests.mjs <版> <Windows の zip> [Mac の zip] [Windows の setup.exe]');
+const [version, ...files] = process.argv.slice(2);
+const windowsSetup = files.find(file => file.endsWith('-setup.exe'));
+const macZip = files.find(file => file.endsWith('-mac.zip'));
+const windowsZip = files.find(file => file.endsWith('.zip') && file !== macZip);
+if (!version || (!windowsZip && !macZip)) {
+  console.error('使い方: node tools/make-manifests.mjs <版> [Windows の zip] [Mac の zip] [Windows の setup.exe]');
   process.exit(1);
 }
 const repo = 'https://github.com/yksr-melt/Meltype';
@@ -29,6 +32,7 @@ const write = (file, text) => {
   console.log('作成しました:', path.join(out, file));
 };
 
+if (windowsZip) {
 // --- Scoop (自分のバケット yksr-melt/scoop-bucket に置く想定) ---
 const windowsName = path.basename(windowsZip);
 const windowsHash = sha256(windowsZip);
@@ -106,8 +110,17 @@ Tags:
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
 `);
+}
 
-// --- Homebrew (自分の tap yksr-melt/homebrew-tap に置く想定) ---
+// --- Homebrew Cask (このリポジトリを URL 指定の tap として使う) ---
+// installer script で zip の中 (Meltype-mac/) の install.sh を動かし、手動インストールと同じこと
+// (~/Library/Input Methods に入れる・隔離属性を外す・入力ソースに登録・LaunchServices に登録・GUI のセッションで起動) をする。
+// postflight は Homebrew 7.0.0 で非推奨になり、代わりの postflight_steps はサンドボックスの中で動くため、
+// 入力ソースへの登録や GUI のセッションでの起動ができない。installer script はサンドボックスの外で動く (#1397)。
+// installer は input_method より先に動くので、input_method は使わない。
+// uninstall delete: は常に sudo で消すので、ホームの下のアプリは uninstall script で利用者の権限のまま消す。
+// --homebrew で、入力ソースを切り替えず、手動で入れたアプリがあれば止め、配置したあとの登録・起動の失敗は
+// 警告にする (Homebrew は失敗した installer script が置いたアプリを戻さないため。くわしくは install.sh)。
 if (macZip) {
   const macName = path.basename(macZip);
   write('homebrew/Casks/meltype.rb', `cask "meltype" do
@@ -119,13 +132,36 @@ if (macZip) {
   desc "${description}"
   homepage "${repo}"
 
-  depends_on macos: ">= :ventura"
-  depends_on arch: :arm64
+  livecheck do
+    url :url
+    strategy :github_latest
+  end
 
-  input_method "Meltype-mac/Meltype.app"
+  depends_on arch: :arm64
+  depends_on macos: :ventura
+
+  installer script: {
+    executable: "Meltype-mac/install.sh",
+    args:       ["--homebrew"],
+  }
+
+  uninstall launchctl: "io.github.yksr-melt.Meltype.manual",
+            quit:      "io.github.yksr-melt.inputmethod.Meltype",
+            script:    {
+              executable: "/bin/rm",
+              args:       ["-rf", "#{Dir.home}/Library/Input Methods/Meltype.app"],
+            }
+
+  zap trash: [
+    "~/Library/Application Support/Meltype",
+    "~/Library/Logs/Meltype.stderr.log",
+    "~/Library/Logs/Meltype.stdout.log",
+  ]
 
   caveats <<~EOS
-    ログアウトしてログインし直してから、システム設定 → キーボード → 入力ソース →「編集…」→「+」→ 日本語 → Meltype を追加してください。
+    初めてのときは、システム設定 → キーボード → 入力ソース →「編集…」→「+」→ 日本語 → Meltype を追加してください
+    (出てこないときは、ログアウトしてログインし直してください)。
+    設定と学習データも消すときは brew uninstall --zap --cask meltype です。
     Meltype for Mac はプレビュー版です。
   EOS
 end

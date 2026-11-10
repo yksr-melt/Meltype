@@ -59,11 +59,6 @@ internal sealed class WelcomeForm : Form
         ]));
         body.Controls.Add(Paragraph("候補で少し止まると、その語の意味が出ます (設定で OFF にできます)。"));
 
-        body.Controls.Add(Heading("試してみる"));
-        body.Controls.Add(Paragraph("下の欄をクリックして打ってみてください (例: kyouhameetinggaarimasu、nihongotoenglish)。"));
-        var practice = new TextBox { Width = width, Height = 70, Multiline = true, Font = new Font("Yu Gothic UI", 12F), Margin = new Padding(0, 0, 0, 8) };
-        body.Controls.Add(practice);
-
         body.Controls.Add(Heading("困ったら"));
         var last = Paragraph("画面右下のタスクトレイの Meltype のアイコン (あ / A) を右クリックすると、設定・ユーザー辞書 (ほかの日本語入力の辞書の取り込みもここ)・学習した語・不具合の報告があります。この画面はトレイの「使い方...」でまた開けます。");
         // 自動スクロールの枠は下の余白 (Padding) を含めないので、最後の段落の下に余白を取って見切れないようにする
@@ -75,12 +70,34 @@ internal sealed class WelcomeForm : Form
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10), BackColor = SystemColors.Control };
         buttons.Controls.Add(close);
 
+        // 「試してみる」はスクロールする本文の外に置く。本文の中だと、打っている途中にスクロールしたとき、
+        // 欄だけが動いて変換ボックスが元の位置に残っていた
+        var trial = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(20, 0, 20, 8),
+        };
+        var hint = Paragraph("下の欄をクリックして打ってみてください (例: kyouhameetinggaarimasu、nihongotoenglish)。");
+        var practice = new TextBox { Width = width, Height = 70, Multiline = true, Font = new Font("Yu Gothic UI", 12F), Margin = new Padding(0) };
+        trial.Controls.Add(Heading("試してみる"));
+        trial.Controls.Add(hint);
+        trial.Controls.Add(practice);
+        // 本文と違って横にスクロールしないので、窓の幅に合わせる (狭めたときに右が切れないように)
+        ClientSizeChanged += (_, _) =>
+        {
+            var inner = Math.Max(100, ClientSize.Width - trial.Padding.Horizontal);
+            practice.Width = inner;
+            hint.MaximumSize = new Size(inner, 0);
+        };
+
         Controls.Add(body);
+        Controls.Add(trial);
         Controls.Add(buttons);
         AcceptButton = close;
-        // 「試してみる」の欄にフォーカスが行くと下までスクロールして開くので、ボタンにフォーカスを置いて上から見せる
         ActiveControl = close;
-        Shown += (_, _) => body.AutoScrollPosition = Point.Empty;
     }
 
     // この画面では Meltype キーボードで打てるようにする (「試してみる」の欄。ほかの Meltype の画面では横取りしない)

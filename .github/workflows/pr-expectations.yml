@@ -1,0 +1,50 @@
+# Pull Request のチェック「報告の再現」。
+#   本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc のヘルパーで確かめる
+# 本文を読むので、本文の編集 (edited) でも流す。必須チェックにはしない
+# (edited の run は取り消し合い、最新の run がこのチェックを報告しないまま残ることがある)。
+# pull_request なので、フォークからの Pull Request でも書き込みの権限は持たない (結果は Summary とチェックの成否で返す)。
+name: pr-expectations
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-expectations-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  expectations:
+    name: 報告の再現
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: cases
+        run: node .github/bot/pr-checks.mjs cases "$RUNNER_TEMP/cases.txt"
+      - if: steps.cases.outputs.count != '0'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Mozc helper from latest release
+        if: steps.cases.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download --repo "$GITHUB_REPOSITORY" --pattern 'Meltype-*-linux.zip' --dir "$RUNNER_TEMP/release"
+          unzip -q "$RUNNER_TEMP"/release/*.zip -d "$RUNNER_TEMP/release"
+          helper="$RUNNER_TEMP/release/Meltype-linux/mozc/meltype_mozc_helper"
+          chmod +x "$helper"
+          echo "MELTYPE_MOZC=$helper" >> "$GITHUB_ENV"
+      - if: steps.cases.outputs.count != '0'
+        run: |
+          dotnet run --project src/Meltype.Core.Tests -c Release -- --expect "$RUNNER_TEMP/cases.txt" "$RUNNER_TEMP/cases.json"
+          node .github/bot/pr-checks.mjs expect "$RUNNER_TEMP/cases.json"

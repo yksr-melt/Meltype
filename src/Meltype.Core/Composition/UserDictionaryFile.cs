@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Globalization;
 using System.Text;
 using System.Xml;
 
@@ -36,7 +37,8 @@ public static class UserDictionaryFile
             }
             var reading = KanaChars.ToHiragana(fields[0].Trim());
             var word = fields[1].Trim();
-            if (reading.Length < UserDictionary.MinReadingLength || word.Length == 0 || !reading.All(IsReadingChar))
+            // 語の途中の CR・ESC などは確定するとアプリにキー操作として届くので、制御文字を含む語は取り込まない
+            if (reading.Length < UserDictionary.MinRegisteredReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.Any(char.IsControl))
             {
                 skipped++;
                 continue;
@@ -87,10 +89,10 @@ public static class UserDictionaryFile
                 if (children[i].InnerText == "shortcut") reading = children[i + 1].InnerText;
                 else if (children[i].InnerText == "phrase") word = children[i + 1].InnerText;
             }
-            // 複数行の定型文は userdict.txt (1 行に 1 語) に入らないので飛ばす
+            // 複数行の定型文は userdict.txt (1 行に 1 語) に入らないので飛ばす。ESC などほかの制御文字を含む語も飛ばす
             reading = KanaChars.ToHiragana(reading?.Trim() ?? "");
             word = word?.Trim() ?? "";
-            if (reading.Length < UserDictionary.MinReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.IndexOfAny(['\t', '\r', '\n']) >= 0)
+            if (reading.Length < UserDictionary.MinRegisteredReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.Any(char.IsControl))
             {
                 skipped++;
                 continue;
@@ -109,8 +111,8 @@ public static class UserDictionaryFile
         builder.Append("!Format:WORDLIST\r\n");
         builder.Append("!User Dictionary Name: Meltype\r\n");
         builder.Append("!Output File Name:\r\n");
-        builder.Append($"!DateTime:{DateTime.Now:yyyy/MM/dd HH:mm:ss}\r\n\r\n");
-        foreach (var word in words) builder.Append($"{word.Reading}\t{word.Word}\t名詞\r\n");
+        builder.Append(CultureInfo.InvariantCulture, $"!DateTime:{DateTime.Now:yyyy/MM/dd HH:mm:ss}\r\n\r\n");
+        foreach (var word in words) builder.Append(CultureInfo.InvariantCulture, $"{word.Reading}\t{word.Word}\t名詞\r\n");
         return [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(builder.ToString())];
     }
 

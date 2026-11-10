@@ -1,0 +1,206 @@
+# リリース。タグ (v*) の push と、bot の /release・/pre-release (タグで workflow_dispatch する) で動く。
+# windows.yml・mac.yml・linux.yml を呼んで配布物を作り、タグならリリースに添付する。
+#   publish             … 配布物をタグのリリースに添付する (bot が作った下書きがあれば、それに付ける)
+#   homebrew            … Casks/meltype.rb の更新 PR を作る (main は PR 必須のため)
+#   *-repositories      … apt と dnf のリポジトリを GitHub Pages に公開する
+# homebrew・*-repositories は publish のあと (どれかの OS が失敗したら、どこにも公開しない)。
+# タグでなく手動実行したときは、3 つの OS のテスト版の配布物を Artifacts に置くだけ。
+# 呼ぶワークフローには書き込みの権限を渡さない。書き込みはこのファイルのジョブだけがする。
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    uses: ./.github/workflows/windows.yml
+    secrets: inherit
+  mac:
+    uses: ./.github/workflows/mac.yml
+    secrets: inherit
+  linux:
+    uses: ./.github/workflows/linux.yml
+    secrets: inherit
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, mac, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: meltype-*
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        with:
+          files: |
+            dist/Meltype-*.zip
+            dist/Meltype-*-setup.exe
+            dist/meltype_*.deb
+            dist/meltype-*.rpm
+          fail_on_unmatched_files: true
+
+  # Homebrew の cask をこのリリースの zip の SHA-256 で作る (#863)。同じリポジトリを tap として使い、Casks/ に更新する。
+  homebrew:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: meltype-mac
+          path: dist
+      - name: Homebrew cask
+        run: |
+          node tools/make-manifests.mjs "${GITHUB_REF_NAME#v}" "dist/Meltype-${GITHUB_REF_NAME#v}-mac.zip"
+          cat dist/manifests/homebrew/Casks/meltype.rb
+      # GitHub App のトークンなら、作成した PR の CI も起動する (bot.yml / sponsors.yml と同じ)。
+      - id: app-token
+        if: vars.BOT_APP_ID != ''
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ vars.BOT_APP_ID }}
+          private-key: ${{ secrets.BOT_APP_PRIVATE_KEY }}
+      # main は PR 必須のため、リリースごとに更新 PR を作る。
+      - name: Create Homebrew cask update PR
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || github.token }}
+        run: |
+          cask='dist/manifests/homebrew/Casks/meltype.rb'
+          version="${GITHUB_REF_NAME#v}"
+          branch="homebrew-cask-${version}"
+          current_cask_sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/Casks/meltype.rb" --jq .sha)"
+          generated_cask_sha="$(git hash-object "$cask")"
+          if [[ "$current_cask_sha" == "$generated_cask_sha" ]]; then
+            echo "Homebrew cask is already up to date for $version."
+            exit 0
+          fi
+
+          if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" >/dev/null 2>&1; then
+            main_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)"
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/heads/$branch" -f sha="$main_sha"
+          fi
+
+          content="$(base64 < "$cask" | tr -d '\n')"
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/contents/Casks/meltype.rb?ref=$branch" --jq .sha)"
+          gh api --method PUT "repos/$GITHUB_REPOSITORY/contents/Casks/meltype.rb" \
+            -f message="Update Homebrew cask to $version" \
+            -f branch="$branch" -f content="$content" -f sha="$sha"
+
+          existing_pr="$(gh pr list --repo "$GITHUB_REPOSITORY" \
+            --head "$GITHUB_REPOSITORY_OWNER:$branch" --base main --state open \
+            --json number --jq '.[0].number // empty')"
+          if [[ -n "$existing_pr" ]]; then
+            echo "Updated Homebrew cask PR #$existing_pr."
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+              --title "Update Homebrew cask to $version" \
+              --body "Updates the Homebrew cask and SHA-256 for the $version release."
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: homebrew-cask
+          path: dist/manifests/homebrew/Casks/meltype.rb
+          retention-days: 90
+
+  # apt と dnf のリポジトリを同じ鍵で署名して、1 つの GitHub Pages の成果物にする
+  # (Pages は deploy のたびにサイト全体を置き換えるので、別々のジョブで deploy すると片方が消える)
+  build-repositories:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: publish
+    runs-on: ubuntu-24.04
+    outputs:
+      ready: ${{ steps.signing.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check apt signing key
+        id: signing
+        env:
+          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
+        run: |
+          if [[ -z "$APT_SIGNING_KEY_B64" ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::APT_SIGNING_KEY_B64 is not set; skipping apt and dnf repository publication.'
+          else
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download Linux packages
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: meltype-linux*
+          path: ${{ runner.temp }}/meltype-artifacts
+          merge-multiple: true
+      - name: Install repository tools
+        if: steps.signing.outputs.ready == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apt-utils gnupg rpm createrepo-c
+      - name: Build signed apt repository
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
+          APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
+        run: |
+          mapfile -d '' -t debs < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype_*.deb' -print0 | sort -z)
+          if (("${#debs[@]}" != 2)); then
+            echo "Expected amd64 and arm64 .deb packages; found ${#debs[@]}." >&2
+            exit 1
+          fi
+          bash linux/build-apt-repository.sh "${debs[@]}" "$RUNNER_TEMP/meltype-pages"
+      - name: Build signed dnf repository
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
+          APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
+        run: |
+          mapfile -d '' -t rpms < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype-*.rpm' -print0 | sort -z)
+          bash linux/build-rpm-repository.sh "$RUNNER_TEMP/meltype-pages" "${rpms[@]}"
+      - name: Upload apt and dnf repositories for GitHub Pages
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: ${{ runner.temp }}/meltype-pages
+
+  publish-repositories:
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build-repositories.outputs.ready == 'true'
+    needs: build-repositories
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: meltype-pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy apt and dnf repositories to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

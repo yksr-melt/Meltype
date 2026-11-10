@@ -15,9 +15,15 @@ public sealed class PhraseHistory
     private const int MaxEntries = 3000;
     private readonly string? _path;
     private readonly Dictionary<(string Reading, string Text), (int Count, long Used)> _entries = new();
+    private readonly object _gate = new();
+    private readonly object _fileGate = new();
+    private readonly DeferredSaver _saver;
+    private int _version;
+    private (int Version, (string Reading, string Text, int Count, long Used, int Order)[] Items)? _index;
 
     public PhraseHistory(string? path)
     {
+        _saver = new DeferredSaver(Write);
         _path = path;
         if (path is null || !File.Exists(path)) return;
         try
@@ -43,23 +49,47 @@ public sealed class PhraseHistory
     {
         if (reading.Length < 3 || text.Length == 0 || text == reading || text.Contains('\t') || text.Contains('\n')) return;
         var key = (reading, text);
-        var count = _entries.TryGetValue(key, out var old) ? old.Count + 1 : 1;
-        _entries[key] = (count, DateTime.UtcNow.Ticks);
-        if (_entries.Count > MaxEntries)
+        lock (_gate)
         {
-            foreach (var stale in _entries.OrderBy(e => e.Value.Used).Take(_entries.Count - MaxEntries * 9 / 10).Select(e => e.Key).ToList())
+            var count = _entries.TryGetValue(key, out var old) ? old.Count + 1 : 1;
+            _entries[key] = (count, DateTime.UtcNow.Ticks);
+            if (_entries.Count > MaxEntries)
             {
-                _entries.Remove(stale);
+                foreach (var stale in _entries.OrderBy(e => e.Value.Used).Take(_entries.Count - MaxEntries * 9 / 10).Select(e => e.Key).ToList())
+                {
+                    _entries.Remove(stale);
+                }
             }
+            _version++;
         }
-        Save();
+        _saver.Request();
     }
 
     /// <summary>読みが prefix で始まり、prefix より長い語句 (よく使う順 → 新しい順)。</summary>
-    public IEnumerable<string> StartingWith(string prefix) =>
-        _entries.Where(e => e.Key.Reading.Length > prefix.Length && e.Key.Reading.StartsWith(prefix, StringComparison.Ordinal))
-            .OrderByDescending(e => e.Value.Count).ThenByDescending(e => e.Value.Used)
-            .Select(e => e.Key.Text);
+    public IEnumerable<string> StartingWith(string prefix)
+    {
+        // 読みで並べた索引から、前方一致する範囲だけを見る (並びは、全部を順に見て安定に並べ替えたときと同じ)
+        if (_index is not { } index || index.Version != _version)
+        {
+            var order = 0;
+            var items = _entries.Select(e => (e.Key.Reading, e.Key.Text, e.Value.Count, e.Value.Used, order++)).ToArray();
+            Array.Sort(items, (a, b) => string.CompareOrdinal(a.Reading, b.Reading));
+            _index = index = (_version, items);
+        }
+        int low = 0, high = index.Items.Length;
+        while (low < high)
+        {
+            var middle = (low + high) / 2;
+            if (string.CompareOrdinal(index.Items[middle].Reading, prefix) < 0) low = middle + 1;
+            else high = middle;
+        }
+        var matches = new List<(string Text, int Count, long Used, int Order)>();
+        for (var i = low; i < index.Items.Length && index.Items[i].Reading.StartsWith(prefix, StringComparison.Ordinal); i++)
+        {
+            if (index.Items[i].Reading.Length > prefix.Length) matches.Add((index.Items[i].Text, index.Items[i].Count, index.Items[i].Used, index.Items[i].Order));
+        }
+        return matches.OrderByDescending(m => m.Count).ThenByDescending(m => m.Used).ThenBy(m => m.Order).Select(m => m.Text);
+    }
 
     /// <summary>覚えている語句の読みのうち、typed で始まるもの (予測の候補を確定したときに、同じ読みで覚え直すため)。</summary>
     public string? ReadingOf(string text, string typed) =>
@@ -68,47 +98,69 @@ public sealed class PhraseHistory
     /// <summary>覚えている語句 text を、読みにかかわらずすべて忘れる (予測変換の候補を Delete で消す)。忘れた数を返す。</summary>
     public int Forget(string text)
     {
-        var keys = _entries.Keys.Where(k => k.Text == text).ToList();
-        if (keys.Count == 0) return 0;
-        foreach (var key in keys) _entries.Remove(key);
-        Save();
+        List<(string Reading, string Text)> keys;
+        lock (_gate)
+        {
+            keys = _entries.Keys.Where(k => k.Text == text).ToList();
+            if (keys.Count == 0) return 0;
+            foreach (var key in keys) _entries.Remove(key);
+            _version++;
+        }
+        _saver.WriteNow();
         return keys.Count;
     }
 
     public void Clear()
     {
-        _entries.Clear();
-        Save();
+        lock (_gate)
+        {
+            _entries.Clear();
+            _version++;
+        }
+        _saver.WriteNow();
     }
 
     /// <summary>sinceUtc より後に覚えた (確定した) 語句を忘れる (トレイの「最近の学習を消す」)。忘れた数を返す。</summary>
     public int ForgetSince(DateTime sinceUtc)
     {
-        var recent = _entries.Where(e => e.Value.Used >= sinceUtc.Ticks).Select(e => e.Key).ToList();
-        if (recent.Count == 0) return 0;
-        foreach (var key in recent) _entries.Remove(key);
-        Save();
+        List<(string Reading, string Text)> recent;
+        lock (_gate)
+        {
+            recent = _entries.Where(e => e.Value.Used >= sinceUtc.Ticks).Select(e => e.Key).ToList();
+            if (recent.Count == 0) return 0;
+            foreach (var key in recent) _entries.Remove(key);
+            _version++;
+        }
+        _saver.WriteNow();
         return recent.Count;
     }
 
-    private void Save()
+    private bool Write()
     {
-        if (_path is null) return;
+        if (_path is null) return true;
         try
         {
-            Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, _entries.Select(e => $"{e.Key.Reading}\t{e.Key.Text}\t{e.Value.Count}\t{e.Value.Used}"), Encoding.UTF8));
+            lock (_fileGate)
+            {
+                List<string> lines;
+                lock (_gate) lines = _entries.Select(e => $"{e.Key.Reading}\t{e.Key.Text}\t{e.Value.Count}\t{e.Value.Used}").ToList();
+                Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, Encoding.UTF8));
+            }
+            return true;
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"予測変換の学習データを保存できませんでした: {ex.Message}");
+            return false;
         }
     }
 }
 
 /// <summary>
 /// 予測変換の候補 (issue #38)。打っている途中の読み・英字から、続きの候補を出す。
-///   日本語: 前に確定した語句 (PhraseHistory) → ユーザー辞書 → 選び直した変換の学習 の、読みが前方一致する語
+///   日本語: 前に確定した語句 (PhraseHistory) → ユーザー辞書 → 選び直した変換の学習 → 同梱の定型句 (greetings.txt、issue #1213) の、読みが前方一致する語
 ///   英語: よく使う英単語 (english.txt) → 同梱の英単語の一覧 (english-words.txt) の、前方一致する語 (短い順)
+///   英字の名前 (設定が ON のとき、issue #890): 社名・サービス名 (brands.txt) → 英字で書く語 (loanwords.txt) の、読みが前方一致する語 (しゃお → Xiaomi)
 /// </summary>
 public sealed class Predictor
 {
@@ -118,10 +170,18 @@ public sealed class Predictor
     /// <summary>この文字数から予測する (短いと候補が多すぎて当たらない)。</summary>
     public const int MinKanaLength = 2, MinEnglishLength = 3;
 
+    /// <summary>英字の名前を読みから予測する文字数 (2 文字だと あい → IIS, IaaS … のように当たらない候補が多すぎる)。</summary>
+    public const int MinEnglishNameKanaLength = 3;
+
     private readonly PhraseHistory? _phrases;
     private readonly UserDictionary? _userDictionary;
     private readonly ConversionHistory? _history;
     private readonly Lazy<(string[] Common, string[] All)> _english;
+    private readonly Lazy<EnglishName[]> _englishNames = new(LoadEnglishNames);
+    private readonly Lazy<(string Reading, string Phrase, string Start)[]> _greetings = new(LoadGreetings);
+
+    /// <summary>英字の名前の読みと語。Brand は社名・サービス名の辞書 (brands.txt) のもの、Order は辞書に書いた順。</summary>
+    private readonly record struct EnglishName(string Reading, string Word, bool Brand, int Order);
 
     public Predictor(PhraseHistory? phrases, UserDictionary? userDictionary, ConversionHistory? history)
     {
@@ -140,6 +200,20 @@ public sealed class Predictor
 
     public PhraseHistory? Phrases => _phrases;
 
+    /// <summary>
+    /// 版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) を含むか。
+    /// 予測候補・学習には使わない (更新後は古い版になる。issue #1488)。
+    /// </summary>
+    internal static bool IsVersionText(string text)
+    {
+        foreach (var name in (ReadOnlySpan<string>)["Meltype-", "Mozc-"])
+        {
+            var i = text.IndexOf(name, StringComparison.Ordinal);
+            if (i >= 0 && i + name.Length < text.Length && char.IsAsciiDigit(text[i + name.Length])) return true;
+        }
+        return false;
+    }
+
     /// <summary>打ちかけの読み (ひらがな) の続きの候補。</summary>
     public IReadOnlyList<string> PredictJapanese(string kana)
     {
@@ -150,14 +224,18 @@ public sealed class Predictor
             foreach (var word in words)
             {
                 if (result.Count >= MaxPredictions) return;
-                if (word.Length > 0 && !result.Contains(word)) result.Add(word);
+                if (word.Length > 0 && !IsVersionText(word) && !result.Contains(word)) result.Add(word);
             }
         }
         if (_phrases is not null) Add(_phrases.StartingWith(kana));
         if (_userDictionary is not null)
             Add(_userDictionary.Words.Where(w => w.Reading.Length > kana.Length && w.Reading.StartsWith(kana, StringComparison.Ordinal)).Select(w => w.Word));
         if (_history is not null)
-            Add(_history.Entries().Where(e => e.Reading.Length > kana.Length && e.Reading.StartsWith(kana, StringComparison.Ordinal)).Select(e => e.Text));
+            Add(_history.TextsStartingWith(kana));
+        // 学習がなくても出す定型句 (おはよ → おはようございます)。出し始める読みまで打ったら出す (ほかの語の打ち始めでは出さない)。
+        // 打ち終えた読みと同じ語句 (こんにちは) は、続きではないので出さない
+        Add(_greetings.Value.Where(g => g.Reading.Length > kana.Length && g.Reading.StartsWith(kana, StringComparison.Ordinal)
+            && kana.StartsWith(g.Start, StringComparison.Ordinal)).Select(g => g.Phrase));
         return result;
     }
 
@@ -176,6 +254,62 @@ public sealed class Predictor
             .Select(w => MatchCase(w.Word, raw));
         return words.ToList();
     }
+
+    /// <summary>
+    /// 打ちかけの読み (ひらがな) から、英字で書く社名・サービス名・語の候補 (しゃお → Xiaomi、ぎっとは → GitHub)。
+    /// 社名・サービス名を先に、それぞれ読みの短い順。読みと同じ長さ (読みを打ち終わったもの) も出す。
+    /// 読みで並べた一覧を二分探索するので、打つたびに全部を見ることはしない。
+    /// </summary>
+    public IReadOnlyList<string> PredictEnglishNames(string kana)
+    {
+        if (kana.Length < MinEnglishNameKanaLength) return [];
+        var names = _englishNames.Value;
+        var matches = new List<EnglishName>();
+        for (var i = FirstReadingAtOrAfter(names, kana); i < names.Length && names[i].Reading.StartsWith(kana, StringComparison.Ordinal); i++) matches.Add(names[i]);
+        return matches.OrderByDescending(n => n.Brand).ThenBy(n => n.Reading.Length).ThenBy(n => n.Order)
+            .Select(n => n.Word).Distinct().Take(MaxPredictions).ToList();
+    }
+
+    /// <summary>読みが prefix 以上になる最初の位置 (読みは序数順に並べてある)。</summary>
+    private static int FirstReadingAtOrAfter(EnglishName[] names, string prefix)
+    {
+        int low = 0, high = names.Length;
+        while (low < high)
+        {
+            var mid = (low + high) / 2;
+            if (string.CompareOrdinal(names[mid].Reading, prefix) < 0) low = mid + 1;
+            else high = mid;
+        }
+        return low;
+    }
+
+    /// <summary>brands.txt・loanwords.txt (読み 英字 英字 …) から、英字を含む語だけを読みの順に並べる。</summary>
+    private static EnglishName[] LoadEnglishNames()
+    {
+        var names = new List<EnglishName>();
+        void Add(string file, bool brand)
+        {
+            foreach (var line in Detection.DictionarySource.LinesWithoutComments(Detection.DictionarySource.ReadEmbedded(file)))
+            {
+                var parts = line.Split([' ', '\t', '\r', '　'], StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 2) continue;
+                foreach (var word in parts.Skip(1))
+                {
+                    if (word.Any(char.IsAsciiLetter)) names.Add(new(parts[0], word, brand, names.Count));
+                }
+            }
+        }
+        Add("brands.txt", brand: true);
+        Add("loanwords.txt", brand: false);
+        return names.OrderBy(n => n.Reading, StringComparer.Ordinal).ThenBy(n => n.Order).ToArray();
+    }
+
+    /// <summary>greetings.txt (読み<Tab>語句<Tab>出し始める読み)。</summary>
+    private static (string Reading, string Phrase, string Start)[] LoadGreetings() =>
+        Detection.DictionarySource.LinesWithoutComments(Detection.DictionarySource.ReadEmbedded("greetings.txt"))
+            .Select(line => line.TrimEnd('\r').Split('\t'))
+            .Where(parts => parts.Length == 3 && parts.All(p => p.Length > 0))
+            .Select(parts => (parts[0], parts[1], parts[2])).ToArray();
 
     private static IEnumerable<string> StartingWith(string[] sorted, string prefix)
     {

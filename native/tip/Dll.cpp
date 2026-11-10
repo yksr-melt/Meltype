@@ -33,8 +33,26 @@ std::wstring FromUtf8(const std::string& text) {
     return out;
 }
 
+// 自分 (IME を読み込んだアプリ) の整合性レベルが Medium 以下か。読めなければ false
+// (管理者として動くアプリは、ふつうの権限のプログラムがジャンクションで向けた先にログを作ってしまうので書かない)
+static bool SelfIsMediumOrLower() {
+    HANDLE token = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) return false;
+    DWORD level = 0;
+    DWORD size = 0;
+    GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
+    std::vector<BYTE> buffer(size);
+    if (size > 0 && GetTokenInformation(token, TokenIntegrityLevel, buffer.data(), size, &size)) {
+        PSID sid = reinterpret_cast<TOKEN_MANDATORY_LABEL*>(buffer.data())->Label.Sid;
+        level = *GetSidSubAuthority(sid, *GetSidSubAuthorityCount(sid) - 1);
+    }
+    CloseHandle(token);
+    return level != 0 && level <= SECURITY_MANDATORY_MEDIUM_RID;
+}
+
 void TipLog(const wchar_t* format, ...) {
     static int enabled = -1;
+    if (enabled < 0 && !SelfIsMediumOrLower()) enabled = 0;
     if (enabled < 0) {
         wchar_t value[8] = {};
         enabled = GetEnvironmentVariableW(L"MELTYPE_TIP_LOG", value, 8) > 0 && value[0] == L'1' ? 1 : 0;

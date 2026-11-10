@@ -34,7 +34,7 @@ jobs:
 
           # 最新リリースの Windows の zip に入っているランタイムの版
           tag=$(gh api "repos/$REPO/releases/latest" --jq .tag_name)
-          url=$(gh api "repos/$REPO/releases/latest" --jq '[.assets[] | select(.name | endswith("-windows.zip"))][0].browser_download_url // ""')
+          url=$(gh api "repos/$REPO/releases/latest" --jq '[.assets[] | select(.name | endswith("-windows.zip") and startswith("Meltype-"))][0].browser_download_url // ""')
           if [[ -z "$url" ]]; then echo "最新リリース $tag に Windows の zip がありません"; exit 0; fi
           curl -fsSL --retry 3 -o "$RUNNER_TEMP/meltype.zip" "$url"
           bundled=$(unzip -Z1 "$RUNNER_TEMP/meltype.zip" | grep -oE 'dotnet[\\/]host[\\/]fxr[\\/][0-9]+\.[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1 || true)
@@ -74,7 +74,7 @@ jobs:
             echo "## やること"
             echo
             echo "コードの変更は要りません。CI (setup-dotnet の \`10.0.x\`) がビルドのたびに最新の .NET を入れるので、"
-            echo "[docs/RELEASE.md]($GITHUB_SERVER_URL/$REPO/blob/main/docs/RELEASE.md) の手順で版を上げてタグを付ければ、Windows (同梱のランタイム)・Mac / Linux (NativeAOT) とも新しい .NET になります。"
+            echo "[docs/dev/RELEASE.md]($GITHUB_SERVER_URL/$REPO/blob/main/docs/dev/RELEASE.md) の手順で版を上げてタグを付ければ、Windows (同梱のランタイム)・Mac / Linux (NativeAOT) とも新しい .NET になります。"
             echo
             echo "この Issue は dotnet-update ワークフローが立てました (毎週水曜日に確認)。"
           } > "$RUNNER_TEMP/body.md"

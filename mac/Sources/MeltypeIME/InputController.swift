@@ -21,8 +21,17 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private var displayedSuggestion: String?
     private var dictionaryObserver: NSObjectProtocol?
 
+    /// フォーカスのある入力欄。背景の変換の結果が届いたら、この入力欄の表示を作り直す。メインスレッドからだけ使う。
+    nonisolated(unsafe) static weak var active: MeltypeInputController?
+
+    func refreshConversion() {
+        guard let client = self.client() else { return }
+        apply(NativeCore.shared.refresh(session), to: client)
+    }
+
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
+        Self.active = self
         ModeServices.shared.activate(self)
         let selected = ModeSelection.shared.current
         if mode != selected {
@@ -38,7 +47,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         session = NativeCore.shared.createSession()
         NativeCore.shared.setDirect(session, directInput)
         NativeCore.shared.setCodeInput(session, codeInput)
-        dictionaryObserver = DistributedNotificationCenter.default().addObserver(
+        // 送るのは同じプロセスの importUserDictionary だけなので、ほかのプロセスから届く分散通知では受けない
+        dictionaryObserver = NotificationCenter.default.addObserver(
             forName: Notification.Name("MeltypeUserDictionaryChanged"), object: nil, queue: .main
         ) { [weak self] _ in
             guard let self else { return }
@@ -51,7 +61,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     deinit {
-        if let dictionaryObserver { DistributedNotificationCenter.default().removeObserver(dictionaryObserver) }
+        if let dictionaryObserver { NotificationCenter.default.removeObserver(dictionaryObserver) }
         NativeCore.shared.destroySession(session)
     }
 
@@ -92,9 +102,10 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         // (補助面の文字・結合文字・ZWJ 絵文字・異体字セレクター)。1 要素へ切り詰めたり 0 に置き換えたりしない。
         // 1 スカラーならそのコードポイントのまま本体へ渡し、複数スカラーは未確定内容だけ確定して
         // 元のイベントを 1 回アプリへ通す (本体側の pass-through 契約と対にする)。
-        let scalars = Array((event.characters ?? "").unicodeScalars)
+        let text = KeyMapping.text(for: event)
+        let scalars = Array(text.unicodeScalars)
         if scalars.count > 1 {
-            apply(NativeCore.shared.commitBeforeExternalText(session, text: event.characters ?? ""), to: client)
+            apply(NativeCore.shared.commitBeforeExternalText(session, text: text), to: client)
             return false
         }
         let character: Int32 = scalars.count == 1 ? Int32(scalars[0].value) : 0
@@ -110,6 +121,14 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             return false
         }
         apply(result, to: client)
+        // 本体が設定「日本語 / 英数を切り替えるキーを追加」の切替をしたときは、モード表示と入力メニューも合わせる (#1033)。
+        // 合わせないと、別のアプリに移ったときの activateServer で、本体のモードが元に戻ってしまう。
+        if NativeCore.shared.takeModeToggled(session) {
+            directInput = NativeCore.shared.isDirect(session)
+            codeInput = false
+            NativeCore.shared.setCodeInput(session, false)
+            rememberMode(caret: modeIndicatorCaret(client))
+        }
         return result.consumed
     }
 
@@ -120,6 +139,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     override func deactivateServer(_ sender: Any!) {
+        if Self.active === self { Self.active = nil }
         ModeServices.shared.deactivate(self)
         commitComposition(sender)
         candidatesWindow?.hide()
@@ -235,8 +255,19 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     @objc private func importUserDictionary(_ sender: Any?) {
         commitComposition(client())
-        // 入力メソッドは背景のアプリなので、前面に出さないと、開いた画面がほかのウィンドウに触れた瞬間に消える (issue #716)
-        NSApp.activate(ignoringOtherApps: true)
+        // 入力メニューの処理を抜けてから、操作できる画面として表示する。
+        DispatchQueue.main.async {
+            do {
+                try ImportDialogPresentation.run {
+                    Self.importUserDictionaryFile()
+                }
+            } catch {
+                NSLog("Meltype: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    private static func importUserDictionaryFile() {
         let panel = NSOpenPanel()
         let fileManager = FileManager.default
         let keyboardServices = fileManager.homeDirectoryForCurrentUser
@@ -247,17 +278,14 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             : fileManager.urls(for: .desktopDirectory, in: .userDomainMask).first
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.level = .floating
-        panel.makeKeyAndOrderFront(nil)
         guard panel.runModal() == .OK, let source = panel.url,
               let directory = NativeCore.shared.dataDirectory else { return }
-        NSApp.activate(ignoringOtherApps: true)
         let alert = NSAlert()
         do {
-            let count = try MacUserDictionary.importFile(source, directory: directory)
-            alert.messageText = "ユーザー辞書に\(count)語を追加しました"
-            DistributedNotificationCenter.default().postNotificationName(
-                Notification.Name("MeltypeUserDictionaryChanged"), object: nil, userInfo: nil, deliverImmediately: true)
+            let result = try MacUserDictionary.importFile(source, directory: directory)
+            alert.messageText = "ユーザー辞書に\(result.added)語を追加しました"
+            alert.informativeText = "無効な項目・登録済みの項目を\(result.skipped)語飛ばしました。"
+            NotificationCenter.default.post(name: Notification.Name("MeltypeUserDictionaryChanged"), object: nil)
         } catch {
             alert.messageText = "ユーザー辞書を取り込めませんでした"
             alert.informativeText = error.localizedDescription
@@ -271,11 +299,12 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     /// 設定ファイル (Windows 版と共通の config.json) を、無ければ空の設定で作ってから、既定のエディターで開く (issue #508)。
+    /// 空の設定にも、本体が隣に書く config.schema.json を指定しておく (エディターで項目の補完・説明が出る)。
     @objc private func openConfigFile(_ sender: Any?) {
         guard let directory = NativeCore.shared.dataDirectory else { return }
         let url = URL(fileURLWithPath: directory, isDirectory: true).appendingPathComponent("config.json")
         if !FileManager.default.fileExists(atPath: url.path) {
-            try? "{\n}\n".write(to: url, atomically: true, encoding: .utf8)
+            try? "{\n  \"$schema\": \"./config.schema.json\"\n}\n".write(to: url, atomically: true, encoding: .utf8)
         }
         NSWorkspace.shared.open(url)
     }
@@ -291,16 +320,19 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         guard let result else { return }
         for edit in result.commits {
             var range = NSRange(location: NSNotFound, length: 0)
+            var text = edit.text
             if edit.deleteBefore > 0 {
-                // 確定し直し: キャレット (変換中の文字があればその先頭) の前の文字を置き換える。
-                let marked = client.markedRange()
-                let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
-                if caret != NSNotFound {
-                    let length = min(edit.deleteBefore, caret)
-                    range = NSRange(location: caret - length, length: length)
+                if let verified = verifiedRange(for: edit, client: client) {
+                    // 確定し直し: キャレットの前の文字を置き換える。
+                    range = verified
+                } else {
+                    // 消す文字を確認できないときは、前の文字は消さずに今打った文字だけを入れる
+                    // (text には直した前の語も入っている。edit ごと捨てると、今打った文字まで消える)。
+                    NSLog("Meltype: 確定し直す文字を確認できないため、前の文字を消しません")
+                    text = edit.current ?? edit.text
                 }
             }
-            client.insertText(NSAttributedString(string: edit.text), replacementRange: range)
+            client.insertText(NSAttributedString(string: text), replacementRange: range)
             hasMarkedText = false
         }
         if let view = result.view {
@@ -308,6 +340,17 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         } else {
             hideComposition(client: client)
         }
+    }
+
+    /// 消してよいと確認できた範囲 (キャレット (変換中の文字があればその先頭) の前の DeleteBefore 文字)。確認できないときは nil。
+    private func verifiedRange(for edit: TextEdit, client: IMKTextInput) -> NSRange? {
+        let marked = client.markedRange()
+        let caret = marked.location != NSNotFound && marked.length > 0 ? marked.location : client.selectedRange().location
+        guard caret != NSNotFound, caret >= edit.deleteBefore else { return nil }
+        let candidate = NSRange(location: caret - edit.deleteBefore, length: edit.deleteBefore)
+        let previous = client.attributedSubstring(from: candidate)?.string
+        guard matchesExpectedText(previous, expected: edit.expect, deleteBefore: edit.deleteBefore) else { return nil }
+        return candidate
     }
 
     /// 変換中の文字を入力欄に下線付きで出す (変換中は文節ごと、選んでいる文節は太い下線)。
@@ -327,7 +370,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
-        updateCandidates(view)
+        updateCandidates(view, client: client)
         showSuggestion(view.suggestion, client: client)
     }
 
@@ -366,7 +409,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         let size = NSSize(width: label.frame.width + 24, height: label.frame.height + 16)
         let panel = suggestionPanel ?? NSPanel(contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.level = .floating
+        panel.level = panelLevel(.floating, above: client)
         panel.hasShadow = true
         panel.backgroundColor = .windowBackgroundColor
         panel.ignoresMouseEvents = true
@@ -411,7 +454,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
     }
 
-    private func updateCandidates(_ view: CompositionView) {
+    private func updateCandidates(_ view: CompositionView, client: IMKTextInput) {
         guard let window = candidatesWindow else { return }
         if view.candidates.count > 1 {
             // 作り直し・選択で候補ウィンドウから candidateSelectionChanged が来ても、本体に返さない。
@@ -420,10 +463,16 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             // 一覧を作り直すと選択が先頭に戻るので、中身が変わったとき (別の文節に移ったときなど) だけ作り直す。
             if candidateList != view.candidates || !window.isVisible() {
                 candidateList = view.candidates
+                // IMK が入力位置を取り直すよう、更新前にいったん非表示にする。
+                window.hide()
                 window.update()
+                window.show(kIMKLocateCandidatesBelowHint)
+                // macOS 26 の IMK は入力位置の更新前に画面を選ぶため、画面移動直後は以前の画面に収まる。
+                // 更新された入力位置で画面を選び直し、その後で選択位置を本体とそろえる。
                 window.show(kIMKLocateCandidatesBelowHint)
                 windowIndex = 0
             }
+            setCandidatesWindowLevel(above: client)
             if view.selectedIndex >= 0 && view.selectedIndex < view.candidates.count {
                 selectInWindow(window, index: view.selectedIndex)
             }
@@ -437,6 +486,23 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     /// 候補ウィンドウで今選ばれている候補の番号 (一覧を作り直すと先頭に戻る)。
     private var windowIndex = 0
+
+    /// 候補ウィンドウ (IMKUIPanel) のもともとの表示レベル (macOS 15 で確かめた値。IMK のウィンドウはこの 1 つだけだった)。
+    private static let defaultCandidatesLevel = NSWindow.Level(rawValue: 20)
+
+    /// Spotlight のように、ふつうのウィンドウより高い表示レベルの入力欄では、候補ウィンドウや予測候補のパネルが入力欄の裏に隠れる。
+    /// なので、もともとの表示レベルと「入力欄より 1 つ上」の高い方にする。
+    /// 候補ウィンドウはすべての入力欄で共有するので、前の入力欄で上げたままにしないよう、毎回入れ直す。
+    private func panelLevel(_ base: NSWindow.Level, above client: IMKTextInput) -> NSWindow.Level {
+        NSWindow.Level(rawValue: max(base.rawValue, Int(client.windowLevel()) + 1))
+    }
+
+    /// IMKCandidates には表示レベルを変える口が無いので、このプロセスにある IMK のウィンドウ (候補ウィンドウは IMKUIPanel) を探して変える。
+    private func setCandidatesWindowLevel(above client: IMKTextInput) {
+        for window in NSApp.windows where String(describing: type(of: window)).hasPrefix("IMK") {
+            window.level = panelLevel(Self.defaultCandidatesLevel, above: client)
+        }
+    }
 
     /// 候補ウィンドウの選択を index 番目の候補に合わせる。
     /// selectCandidate(withIdentifier:) では選択が動かず、selectedCandidate() も今の選択とずれることがある (macOS 26)。

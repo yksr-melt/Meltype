@@ -40,6 +40,8 @@ class SyntheticClient:
         value = text.get_text()
         self.document += value
         self.commits.append(value)
+        # 実際のクライアント (GTK / Qt / Chromium) は commit-text で変換中の表示を消す
+        self.preedit = ""
 
     def preedit_updated(self, context, text, cursor, visible, *mode):
         self.preedit = text.get_text() if visible else ""
@@ -115,6 +117,7 @@ class PrivateDaemonTests(unittest.TestCase):
         cls.client = SyntheticClient()
         for name, callback in (("commit-text", cls.client.committed),
                                ("update-preedit-text", cls.client.preedit_updated),
+                               ("update-preedit-text-with-mode", cls.client.preedit_updated),
                                ("hide-preedit-text", cls.client.preedit_hidden),
                                ("update-lookup-table", cls.client.lookup_updated),
                                ("hide-lookup-table", cls.client.lookup_hidden),
@@ -286,6 +289,18 @@ class PrivateDaemonTests(unittest.TestCase):
         self.assertTrue(self.key(self.IBus.KEY_Return))
         self.assert_document("今日")
 
+    def test_ctrl_enter_during_composition_commits_without_sending(self):
+        control = self.IBus.ModifierType.CONTROL_MASK
+        self.type_text("kyouha")
+        self.assertTrue(self.key(self.IBus.KEY_Return, None, control),
+                        "変換中の Ctrl+Enter はアプリへ渡さない")
+        self.assert_document("きょうは")
+        self.assertEqual(["きょうは"], self.client.commits)
+        self.assertFalse(self.key(self.IBus.KEY_Return, None, control),
+                         "確定後の Ctrl+Enter はアプリへ渡す (アプリが送信できる)")
+        self.assert_document("きょうは")
+        self.assertEqual(["きょうは"], self.client.commits, "2回目は何も確定しない")
+
     def test_focus_out_commits_once(self):
         self.type_text("@kuraido")
         self.context.focus_out()
@@ -294,6 +309,107 @@ class PrivateDaemonTests(unittest.TestCase):
         self.pump(0.2)
         self.assert_document("@kuraido")
         self.assertEqual(["@kuraido"], self.client.commits)
+
+    def test_reset_during_composition_commits_once(self):
+        for client_commits in (False, True):
+            with self.subTest(client_commit_preedit=client_commits):
+                self.context.set_client_commit_preedit(client_commits)
+                try:
+                    self.reset_client()
+                    self.type_text("kyouha")
+                    shown = self.client.preedit
+                    self.assertTrue(shown, self.client.describe())
+                    if client_commits:
+                        # このモードでは実クライアントが Reset 前に表示をローカルで確定する。
+                        self.client.document += shown
+                        self.client.preedit = ""
+                    self.context.reset()
+                    self.pump(0.2)
+                    self.context.reset()
+                    self.pump(0.1)
+                    self.assert_document(shown)
+                    self.assertEqual([] if client_commits else [shown], self.client.commits)
+                    self.context.focus_out()
+                    self.pump()
+                    self.context.focus_in()
+                    self.pump()
+                    self.type_text("ka")
+                    self.assertTrue(self.key(self.IBus.KEY_Return))
+                    self.assert_document(shown + "か")
+                finally:
+                    self.context.set_client_commit_preedit(False)
+                    self.pump()
+
+    def test_reset_commits_the_text_that_would_be_committed(self):
+        # 表示と確定が違う入力 (語末の n)。IBus は Reset で「表示中の preedit」を確定するので、
+        # 表示が「かn」のままだと文書に「かn」が入り、本体が確定した「かん」とずれる。
+        for client_commits in (False, True):
+            with self.subTest(client_commit_preedit=client_commits):
+                self.context.set_client_commit_preedit(client_commits)
+                try:
+                    self.reset_client()
+                    self.type_text("kan")
+                    shown = self.client.preedit
+                    # 確定される形が表示されていること (ここが「かn」だと文書と本体がずれる)
+                    self.assertEqual("かん", shown, self.client.describe())
+                    if client_commits:
+                        # このモードでは実クライアントが Reset のときに表示をローカルで確定する。
+                        self.client.document += shown
+                        self.client.preedit = ""
+                    self.context.reset()
+                    self.pump(0.3)
+                    self.assert_document("かん")
+                    self.assertEqual([] if client_commits else ["かん"], self.client.commits,
+                                     self.client.describe())
+                finally:
+                    self.context.set_client_commit_preedit(False)
+                    self.pump()
+
+    def test_focus_out_commits_the_text_that_would_be_committed(self):
+        for client_commits in (False, True):
+            with self.subTest(client_commit_preedit=client_commits):
+                self.context.set_client_commit_preedit(client_commits)
+                try:
+                    self.reset_client()
+                    self.type_text("shinbun")
+                    shown = self.client.preedit
+                    self.assertEqual("しんぶん", shown, self.client.describe())
+                    if client_commits:
+                        self.client.document += shown
+                        self.client.preedit = ""
+                    self.context.focus_out()
+                    self.pump(0.3)
+                    self.assert_document("しんぶん")
+                    self.assertEqual([] if client_commits else ["しんぶん"], self.client.commits,
+                                     self.client.describe())
+                finally:
+                    self.context.set_client_commit_preedit(False)
+                    self.context.focus_in()
+                    self.pump()
+
+    def test_reset_selected_candidate_commits_once(self):
+        self.type_text("kyou")
+        self.assertTrue(self.key(self.IBus.KEY_space))
+        self.assertTrue(self.client.candidates, self.client.describe())
+        shown = self.client.preedit
+        self.context.reset()
+        self.pump(0.2)
+        self.assert_document(shown)
+        self.assertEqual([shown], self.client.commits)
+        self.assertEqual([], self.client.candidates)
+
+    def test_reset_after_enter_does_not_commit_again(self):
+        self.type_text("kyouha")
+        self.assertTrue(self.key(self.IBus.KEY_Return))
+        commits = list(self.client.commits)
+        document = self.client.document
+        self.context.reset()
+        self.pump(0.2)
+        self.context.focus_out()
+        self.context.focus_in()
+        self.pump(0.2)
+        self.assert_document(document)
+        self.assertEqual(commits, self.client.commits)
 
     def mixed_protection(self, action):
         for token in ("@kuraido", "./shumire-shon"):
@@ -334,6 +450,147 @@ class PrivateDaemonTests(unittest.TestCase):
 
     def test_mixed_protection_focus(self):
         self.mixed_protection("focus")
+
+    def test_terminal_code_input_toggles_japanese(self):
+        # ターミナル (VTE) は input-purpose: terminal を設定する。コード行は英字のままアプリへ通し、
+        # 半角/全角 で日本語に切り替えられること (#715)。
+        terminal = self.IBus.InputPurpose.TERMINAL
+        free = self.IBus.InputPurpose.FREE_FORM
+        self.context.set_content_type(terminal, 0)
+        self.pump(0.2)
+        try:
+            self.reset_client()
+            # コード行: 英字はアプリへ届き、変換ボックスは出ない
+            self.assertFalse(self.scalar("n"))
+            self.assertEqual("", self.client.preedit, self.client.describe())
+
+            # 行の追跡を初期化する (実際の入力欄の切り替えに相当。n が残ると英語との間に空白が入る)
+            self.context.set_content_type(free, 0)
+            self.pump(0.2)
+            self.context.set_content_type(terminal, 0)
+            self.pump(0.2)
+            self.reset_client()
+            # 半角/全角 でコード行を日本語に
+            self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+            self.type_text("ni")
+            self.assertEqual("に", self.client.preedit, self.client.describe())
+
+            # 同じ content type が再通知されても、日本語の指定と行の追跡は消えない
+            self.context.set_content_type(terminal, 0)
+            self.pump(0.2)
+            self.type_text("hongo")
+            self.assertEqual("にほんご", self.client.preedit, self.client.describe())
+            self.assertTrue(self.key(self.IBus.KEY_Return))
+            self.assertEqual("にほんご", self.client.document, self.client.describe())
+
+            # 矢印で別の場所に移ったら英数に戻る
+            self.key(self.IBus.KEY_Left)
+            self.assertFalse(self.scalar("k"))
+            self.assertEqual("", self.client.preedit, self.client.describe())
+        finally:
+            self.context.set_content_type(free, 0)
+            self.pump(0.2)
+
+    def test_terminal_string_toggles_direct_and_japanese(self):
+        # 文字列の中はコード入力でも日本語寄り。1回目の 半角/全角 で英数 (Direct)、
+        # 2回目で日本語に戻れること。コード行の外では SetCodeLine が 0 を返す経路の回帰テスト。
+        terminal = self.IBus.InputPurpose.TERMINAL
+        free = self.IBus.InputPurpose.FREE_FORM
+        self.context.set_content_type(terminal, 0)
+        self.pump(0.2)
+        try:
+            self.reset_client()
+            self.type_text('echo "')
+            self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+            self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+            self.type_text("nihongo")
+            self.assertEqual("にほんご", self.client.preedit, self.client.describe())
+            self.assertTrue(self.key(self.IBus.KEY_Return))
+            self.assertEqual('echo "にほんご', self.client.document, self.client.describe())
+        finally:
+            self.context.set_content_type(free, 0)
+            self.pump(0.2)
+
+
+    def test_terminal_eisu_enters_direct(self):
+        # 英数/無変換は、コード行の外 (ここでは # コメント) でも Direct にして英語に戻す。
+        terminal = self.IBus.InputPurpose.TERMINAL
+        free = self.IBus.InputPurpose.FREE_FORM
+        self.context.set_content_type(terminal, 0)
+        self.pump(0.2)
+        try:
+            self.reset_client()
+            self.type_text("aa")
+            self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+            self.type_text("ni")
+            self.assertEqual("に", self.client.preedit, self.client.describe())
+            self.assertTrue(self.key(self.IBus.KEY_Eisu_toggle))
+            self.type_text("# ls")
+            self.assertEqual("", self.client.preedit, self.client.describe())
+            self.assertTrue(self.client.document.endswith("# ls"), self.client.describe())
+        finally:
+            self.context.set_content_type(free, 0)
+            self.pump(0.2)
+
+
+    def test_terminal_japanese_can_be_reenabled_after_navigation(self):
+        terminal = self.IBus.InputPurpose.TERMINAL
+        free = self.IBus.InputPurpose.FREE_FORM
+        actions = ((self.IBus.KEY_Left, 0), (self.IBus.KEY_Tab, 0),
+                   (self.IBus.KEY_c, self.IBus.ModifierType.CONTROL_MASK))
+        for keyval, state in actions:
+            with self.subTest(keyval=keyval, state=state):
+                self.context.set_content_type(terminal, 0)
+                self.pump(0.2)
+                try:
+                    self.reset_client()
+                    self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+                    # 未確定文字がない状態で移動キーをアプリへ渡すと、本体が英数へ戻る。
+                    self.assertFalse(self.key(keyval, state=state))
+                    self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+                    self.type_text("nihongo")
+                    self.assertEqual("にほんご", self.client.preedit, self.client.describe())
+                    self.assertTrue(self.key(self.IBus.KEY_Return))
+                    self.assert_document("にほんご")
+                finally:
+                    self.context.set_content_type(free, 0)
+                    self.pump(0.2)
+
+    def test_terminal_reset_preserves_japanese(self):
+        terminal = self.IBus.InputPurpose.TERMINAL
+        free = self.IBus.InputPurpose.FREE_FORM
+        self.context.set_content_type(terminal, 0)
+        self.pump(0.2)
+        try:
+            self.reset_client()
+            self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+            self.context.reset()
+            self.pump()
+            self.type_text("nihongo")
+            self.assertEqual("にほんご", self.client.preedit, self.client.describe())
+            self.assertTrue(self.key(self.IBus.KEY_Return))
+            self.assert_document("にほんご")
+        finally:
+            self.context.set_content_type(free, 0)
+            self.pump(0.2)
+
+    def test_terminal_focus_out_clears_japanese(self):
+        terminal = self.IBus.InputPurpose.TERMINAL
+        free = self.IBus.InputPurpose.FREE_FORM
+        self.context.set_content_type(terminal, 0)
+        self.pump(0.2)
+        try:
+            self.reset_client()
+            self.assertTrue(self.key(self.IBus.KEY_Zenkaku_Hankaku))
+            self.context.focus_out()
+            self.pump()
+            self.context.focus_in()
+            self.pump()
+            self.assertFalse(self.scalar("k"))
+            self.assertEqual("", self.client.preedit, self.client.describe())
+        finally:
+            self.context.set_content_type(free, 0)
+            self.pump(0.2)
 
 
 def main():

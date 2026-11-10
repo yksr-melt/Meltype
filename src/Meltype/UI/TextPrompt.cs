@@ -22,6 +22,8 @@ internal static class TextPrompt
             AutoSizeMode = AutoSizeMode.GrowAndShrink,
             Padding = new Padding(12),
         };
+        // プロファイルの名前などは日本語で付けることがあるので、Meltype キーボードで打てるようにする
+        Input.ForegroundTracker.AllowTyping(form);
         var layout = new TableLayoutPanel { AutoSize = true, ColumnCount = 1, Dock = DockStyle.Fill };
         var label = new Label { Text = message, AutoSize = true, MaximumSize = new Size(360, 0), Margin = new Padding(0, 0, 0, 6) };
         var input = new TextBox { Text = initial, Width = 360, Margin = new Padding(0, 0, 0, 10) };

@@ -13,6 +13,7 @@ namespace Meltype.Input;
 /// そのためこのスレッドは自前のメッセージループだけを回し、IME 操作や SendInput など
 /// 待ちが発生しうる処理は行わない (それらは再入力ワーカーの仕事)。
 /// 例外は打ち始めの判定で、フォーカスを調べ終わるのを合わせて 150ms ほどまで待つ (FocusInspector.CanCaptureWaiting・RecheckStale)。
+/// もう 1 つの例外は Alt の単独押しの解放で、止めた解放を 0xE8 のあとにこのスレッドから送り直す (次の打鍵より先に届くように。MeltypeEngine.MaskAltTap)。
 /// LowLevelHooksTimeout の値が無いときは 300ms ほどとされ (Microsoft のドキュメントには書かれていない)、これより短い。
 /// </summary>
 internal sealed class KeyboardMonitor : IDisposable
@@ -103,6 +104,11 @@ internal sealed class KeyboardMonitor : IDisposable
                             IsUp: (data.flags & Native.LLKHF_UP) != 0,
                             Injected: (data.flags & Native.LLKHF_INJECTED) != 0,
                             TimeMs: Environment.TickCount64);
+                        if (e.Scan == 0x29 && !e.Extended)
+                        {
+                            var thread = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out _);
+                            e = e with { UnmodifiedKey = (int)Native.MapVirtualKeyEx(0x29, 3, Native.GetKeyboardLayout(thread)) };
+                        }
                         if (_onKey(e)) return new IntPtr(1);
                     }
                 }
