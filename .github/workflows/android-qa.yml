@@ -117,8 +117,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: android-actions/setup-android@v3
         with:
-          # Android 17 is published as API 37.0, not "android-37".
-          # The emulator runner installs the matching API 37.0 platform/image.
           packages: 'platform-tools build-tools;36.0.0'
       - name: Reuse debug APKs built in Android QA
         uses: actions/download-artifact@v4
@@ -129,16 +127,28 @@ jobs:
         run: |
           test -s android/app/build/outputs/apk/debug/app-debug.apk
           test -s android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+      - name: Update Android command-line tools
+        # The runner image's tools predate "major.minor" platform names such
+        # as android-37.0 and cannot create an emulator for them.
+        run: |
+          yes | sdkmanager --install 'cmdline-tools;latest' > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+      - name: Enable hardware acceleration
+        run: |
+          test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
       - name: Verify actual selected IME input on Android 17
         uses: reactivecircus/android-emulator-runner@v2
         with:
+          # Android 17 is published as API 37.0, not "android-37". Its
+          # stable-channel x86_64 image is the 16 KB page size one
+          # (google_apis_ps16k), so no preview channel is needed.
           api-level: '37.0'
-          channel: canary
-          target: google_apis
+          target: google_apis_ps16k
           arch: x86_64
           disk-size: 2048M
           partition-size: 1024M
           ram-size: 2048M
+          disable-linux-hw-accel: false
           emulator-boot-timeout: 900
           disable-animations: true
           script: |
