@@ -543,6 +543,25 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void LockKeys_PassWithoutCommitting()
+    {
+        // CapsLock・NumLock・ScrollLock は文字を入れないので、打ちかけを確定せずにアプリに通す (フロントによって確定していた)
+        foreach (var vk in new[] { 0x14, 0x90, 0x91 })
+        {
+            var front = new Front();
+            front.Type("ka");
+            var pressed = front.Key(vk);
+            Assert.True(!Consumed(pressed) && front.Composition["t1"] == "か" && front.Document == "", $"0x{vk:X2}: 打ちかけのまま\n" + front.Trace);
+            front.Key('\n');
+            Assert.Equal("か", front.Document, front.Trace);
+        }
+        // 切り替えキーに登録した CapsLock (JIS の Shift+英数) は切り替えに使う
+        var toggle = new Front();
+        toggle.Settings.ToggleShortcuts = [new() { Key = 0x14 }];
+        Assert.True(Consumed(toggle.Key(0x14)) && !toggle.Open, "切り替えキーの CapsLock で英数\n" + toggle.Trace);
+    }
+
+    [Test]
     public static void Numpad_FollowsTheNumberKeysSetting()
     {
         // テンキーも上の段の数字と同じく、設定「変換中の数字キーで候補を選ぶ」に従う (OFF なのにテンキーだけ番号で選んでいた)

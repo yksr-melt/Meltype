@@ -228,7 +228,7 @@ internal sealed class ImeSession
         else if (key.Text is { Length: > 0 } text) AppendToLine(text);
         else if (key.Ch is >= 0x20 and < 0x10000 && !char.IsControl((char)key.Ch)) AppendToLine(((char)key.Ch).ToString());
         else if (vk == VirtualKeys.Back) _line.Length = Math.Max(0, _line.Length - 1);
-        else if (!VirtualKeys.IsModifier(vk)) _line.Clear();
+        else if (!VirtualKeys.IsModifier(vk) && !IsLockKey(vk)) _line.Clear();
     }
 
     private void AppendToLine(string text)
@@ -267,6 +267,8 @@ internal sealed class ImeSession
         if (toggle && !composing) return Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !_session.IsConverting) return _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
+        // ロックのキーは文字を入れないので、打ちかけに触らずにアプリに通す (切り替えキーに登録したものは、上で切り替えに使った)
+        if (IsLockKey(vk)) return _session.PassThrough();
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
         if (vk == VirtualKeys.OemAttn && plain) return Switch(false, before, ref explicitChange, toggle: false);
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
@@ -301,6 +303,9 @@ internal sealed class ImeSession
         if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
         return result;
     }
+
+    /// <summary>CapsLock・NumLock・ScrollLock。</summary>
+    private static bool IsLockKey(int vk) => vk is 0x14 or 0x90 or 0x91;
 
     /// <summary>親指シフトのかな配列 (NICOLA・中指NICOLA・TRON) の親指キー (無変換・変換)。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする。</summary>
     private bool IsThumbKey(int vk, Settings settings) =>
