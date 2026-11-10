@@ -935,6 +935,27 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void CodeLine_AltTapsSelectTheLanguage()
+    {
+        // 右 Alt の単独押しでコードの行を日本語にし、左 Alt で英数に戻す (設定「左 Alt で英数 / 右 Alt で日本語」)
+        var front = new Front { Terminal = true, Document = "ls " };
+        front.Settings.AltKeysSwitchKeyboard = true;
+        JsonElement Tap(int vk)
+        {
+            front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"alt\":true}}");
+            return front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk}}}");
+        }
+        var japanese = Tap(VirtualKeys.RMenu);
+        Assert.True(Consumed(japanese) && Japanese(japanese) && front.Open, "コードの行を日本語にする\n" + front.Trace);
+        front.Type("kyou");
+        Assert.Equal("きょう", front.Composition["t1"], front.Trace);
+        front.Key('\n');
+        var back = Tap(VirtualKeys.LMenu);
+        Assert.True(Consumed(back) && !Japanese(back), "左 Alt で英数\n" + front.Trace);
+        Assert.True(!Consumed(front.Key('k')), "コードの行は英数のまま\n" + front.Trace);
+    }
+
+    [Test]
     public static void CodeLine_ToggleShortcutWorksLikeHankaku()
     {
         // #1184: 設定「入力モード切り替えキー」(Shift+Space) も、半角/全角 と同じくコードの行を日本語にして、もう一度で英数に戻す
