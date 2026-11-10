@@ -3181,7 +3181,12 @@ public sealed class CompositionController
     private bool _tabStartedConversion;
 
     /// <summary>キャレットが動いたかもしれないとき (Meltype を通らなかったキー・クリック)。直前の語は確定し直さない。</summary>
-    public void ForgetLastCommit() => _correctable.Clear();
+    public void ForgetLastCommit()
+    {
+        _correctable.Clear();
+        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う
+        _lastCommitTime = long.MinValue / 2;
+    }
 
     /// <summary>
     /// 今確定しようとしている語 (raw) で文脈がはっきりしたら、直前に確定した英語とも日本語とも読める語を確定し直す。

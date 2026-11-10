@@ -576,6 +576,29 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void OwnCommit_IsNotTrustedAfterTheCaretMoves()
+    {
+        // 確定した直後はキャレットの前より自分の確定を信じるが、キャレットが動いたら (別の入力欄・アプリに通したキー) 読めた文字を使う
+        foreach (var moved in new[] { "", Entered })
+        {
+            var front = new Front();
+            front.Settings.SpaceAroundEnglish = true;
+            front.Settings.LiveConversion = false;
+            front.Type("ka\n");
+            front.Document = "";
+            if (moved.Length > 0) front.Event("CaretMoved", extra: moved);
+            // 英数で ka を入れてから日本語で「か」: 前の英単語との間に空白
+            front.Key(0xF0);
+            front.Type("ka");
+            front.Key(0x15);
+            front.Type("ka");
+            front.Key(0x75);
+            front.Key('\n');
+            Assert.Equal("ka か", front.Document, front.Trace);
+        }
+    }
+
+    [Test]
     public static void ThumbShift_HoldsTheThumbKeyUntilItIsReleased()
     {
         // ワークアラウンド (KeyReleased): 親指シフトの配列のときだけ、離したことも受け取る
