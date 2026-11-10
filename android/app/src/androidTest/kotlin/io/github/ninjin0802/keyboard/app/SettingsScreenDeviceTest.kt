@@ -63,6 +63,27 @@ class SettingsScreenDeviceTest {
         }
     }
 
+    @Test fun launcherAlwaysOffersEscapeWhenTheInputMethodCannotStart() {
+        val activity = open()
+        try {
+            instrumentation.runOnMainSync {
+                val root = activity.window.decorView
+                val picker = findText(root, "別のキーボードに切り替える")
+                val systemSettings = findText(root, "Androidのキーボード設定を開く")
+                assertNotNull("System IME picker must be reachable without launching the IME",
+                    picker)
+                assertNotNull("Android keyboard settings must remain reachable independently",
+                    systemSettings)
+                val pickerRow = (picker!!.parent as View).parent as View
+                val settingsRow = (systemSettings!!.parent as View).parent as View
+                assertTrue(pickerRow.hasOnClickListeners())
+                assertTrue(settingsRow.hasOnClickListeners())
+            }
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
     @Test fun liveConversionSwitchChangesAndPersistsItsValue() {
         val settings = Settings(instrumentation.targetContext)
         val previous = settings.liveConversionEnabled

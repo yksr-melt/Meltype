@@ -79,6 +79,7 @@ jobs:
           emulator-boot-timeout: 900
           disable-animations: true
           script: |
+            set -eu
             bash android/tools/run-instrumentation-tests.sh
             cd android && ./gradlew --no-daemon :mozc:connectedDebugAndroidTest
       - name: Display per-case report in Actions
@@ -103,5 +104,48 @@ jobs:
             android/mozc/build/outputs/androidTest-results/connected/
             android/app/build/outputs/apk/debug/app-debug.apk
             android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+  # A second Android platform verifies this same compiled APK, not a new build.
+  ime-smoke-android-17:
+    name: Android 17 — launch and type with Meltype IME
+    needs: android-source-build-and-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-37 build-tools;36.0.0'
+      - name: Reuse debug APKs built in Android QA
+        uses: actions/download-artifact@v4
+        with:
+          name: android-qa-report-and-debug-apk
+          path: android
+      - name: Assert APKs exist
+        run: |
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          test -s android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+      - name: Verify actual selected IME input on Android 17
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 37
+          target: google_apis
+          arch: x86_64
+          disk-size: 2048M
+          partition-size: 1024M
+          ram-size: 2048M
+          emulator-boot-timeout: 900
+          disable-animations: true
+          script: |
+            set -eu
+            bash android/tools/run-instrumentation-tests.sh
+      - name: Upload Android 17 IME test and recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-17-ime-smoke-report
+          path: android/build/qa/
           retention-days: 30
           if-no-files-found: warn

@@ -55,14 +55,65 @@ run_group() {
 # bridge test uses a different directory, so run it in a fresh process.
 run_group 'io.github.ninjin0802.keyboard.app.core.LanguageDetectionDeviceTest,io.github.ninjin0802.keyboard.app.SettingsScreenDeviceTest,io.github.ninjin0802.keyboard.app.DeleteLengthDeviceTest,io.github.ninjin0802.keyboard.app.KeyboardViewTouchTest'
 run_group 'io.github.ninjin0802.keyboard.app.core.MeltypeCoreBridgeDeviceTest'
+
+# Validate the installed InputMethodService, not just view construction.
+# "ime list -s" shows only enabled IMEs on some Android releases, so
+# include disabled IMEs with -a before first enabling Meltype.
+IME="$PACKAGE/io.github.ninjin0802.keyboard.app.KeyboardService"
+adb shell ime list -a -s | tr -d '\r' | tee "$REPORT/installed-ime-list.txt"
+if ! grep -Fx "$IME" "$REPORT/installed-ime-list.txt"; then
+  echo "APK did not register its InputMethodService: $IME" >&2
+  adb shell dumpsys input_method > "$REPORT/ime-registration-diagnostic.txt" || true
+  status=1
+else
+  previous_ime="$(adb shell settings get secure default_input_method | tr -d '\r')"
+  other_ime="$(adb shell ime list -a -s | tr -d '\r' | grep -Fxv "$IME" | head -1 || true)"
+  if test -z "$other_ime"; then
+    echo "No alternative keyboard exists for safe test recovery" >&2
+    status=1
+  else
+    recover_ime() {
+      adb shell ime enable "$other_ime" >/dev/null 2>&1 || true
+      if test -n "$previous_ime" && test "$previous_ime" != "null"; then
+        adb shell ime set "$previous_ime" >/dev/null 2>&1 ||
+          adb shell ime set "$other_ime" >/dev/null 2>&1 || true
+      else
+        adb shell ime set "$other_ime" >/dev/null 2>&1 || true
+      fi
+    }
+    trap recover_ime EXIT
+    if adb shell ime enable "$IME" && adb shell ime set "$IME"; then
+      selected_ime="$(adb shell settings get secure default_input_method | tr -d '\r')"
+      if test "$selected_ime" = "$IME"; then
+        adb logcat -c || true
+        run_group 'io.github.ninjin0802.keyboard.app.ImeLaunchDeviceTest'
+      else
+        echo "Android did not select requested IME: $selected_ime" >&2
+        status=1
+      fi
+    else
+      echo "Android refused to enable/select the installed IME" >&2
+      status=1
+    fi
+    adb shell dumpsys input_method > "$REPORT/ime-window-state.txt" || true
+    adb logcat -d -v threadtime -s AndroidRuntime:E > "$REPORT/ime-fatal-logcat.txt" || true
+    if grep -Fq "Process: $PACKAGE," "$REPORT/ime-fatal-logcat.txt"; then
+      echo "Fatal keyboard exception detected; see ime-fatal-logcat.txt" >&2
+      status=1
+    fi
+    recover_ime
+    trap - EXIT
+  fi
+fi
 python3 "$ROOT/tools/instrumentation-report.py" \
   --log "$REPORT/instrumentation.log" \
   --device "$REPORT/device-info.txt" \
-  --expected-runs 2 \
+  --expected-runs 3 \
   --sources "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt" \
+            "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/ImeLaunchDeviceTest.kt" \
   --output "$REPORT" || status=1
 exit "$status"

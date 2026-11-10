@@ -4,6 +4,9 @@ package io.github.ninjin0802.keyboard.app
 
 import android.content.SharedPreferences
 import android.graphics.Color
+import android.content.Intent
+import android.widget.TextView
+import java.lang.ref.WeakReference
 import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.Handler
@@ -191,8 +194,13 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     private var createdAtNanos = 0L
 
+    /** Exposes the displayed IME keys to real touch-injection tests. */
+    internal fun activeKeysForSmokeTest(): KeyboardView? =
+        keyboardView?.takeIf { it.isAttachedToWindow && it.isShown && it.width > 0 && it.height > 0 }
+
     override fun onCreate() {
         super.onCreate()
+        activeForSmokeTest = WeakReference(this)
         createdAtNanos = System.nanoTime()
         Settings(this).let {
             nav.choose(it.japaneseLayout, it.englishLayout)
@@ -237,6 +245,7 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     override fun onDestroy() {
+        if (activeForSmokeTest?.get() === this) activeForSmokeTest = null
         Settings(this).unregisterChangeListener(settingsListener)
         fieldGeneration++
         runner.cancelPending()
@@ -254,7 +263,62 @@ class KeyboardService : InputMethodService(), KeyListener {
     /** 横向きでも入力欄を全画面にしない（アプリの画面を見ながら打てるようにする）。 */
     override fun onEvaluateFullscreenMode(): Boolean = false
 
-    override fun onCreateInputView(): View {
+    override fun onCreateInputView(): View = try {
+        buildNormalKeyboardView()
+    } catch (error: Exception) {
+        Log.e(TAG, "Keyboard UI failed; opening emergency selector", error)
+        buildEmergencyKeyboardView()
+    } catch (error: LinkageError) {
+        Log.e(TAG, "Keyboard native dependency failed; opening emergency selector", error)
+        buildEmergencyKeyboardView()
+    }
+
+    /** No native converter or keyboard assets are used in this emergency UI. */
+    private fun buildEmergencyKeyboardView(): View {
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad, pad, pad)
+            setBackgroundColor(Color.WHITE)
+            addView(TextView(this@KeyboardService).apply {
+                text = "Meltype を起動できませんでした"
+                textSize = 16f
+                setTextColor(Color.BLACK)
+            })
+            addView(TextView(this@KeyboardService).apply {
+                text = "別のキーボードに切り替える"
+                contentDescription = text
+                textSize = 16f
+                setTextColor(Color.BLUE)
+                setPadding(0, pad, 0, pad)
+                isClickable = true
+                setOnClickListener {
+                    try {
+                        (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                            .showInputMethodPicker()
+                    } catch (error: RuntimeException) {
+                        Log.w(TAG, "Input method picker unavailable", error)
+                        startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            })
+            addView(TextView(this@KeyboardService).apply {
+                text = "Android のキーボード設定"
+                contentDescription = text
+                textSize = 14f
+                setTextColor(Color.BLUE)
+                setPadding(0, pad, 0, pad)
+                isClickable = true
+                setOnClickListener {
+                    startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            })
+        }
+    }
+
+    private fun buildNormalKeyboardView(): View {
         val start = System.nanoTime()
         val bar = CandidateBarView(this).also { it.onPick = { index ->
             if (core != null && nav.current == LayoutId.ROMAJI) {
@@ -405,6 +469,18 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
+        try {
+            startNormalInputView(info, restarting)
+        } catch (error: Exception) {
+            Log.e(TAG, "Keyboard start failed; opening emergency selector", error)
+            setInputView(buildEmergencyKeyboardView())
+        } catch (error: LinkageError) {
+            Log.e(TAG, "Keyboard native startup failed; opening emergency selector", error)
+            setInputView(buildEmergencyKeyboardView())
+        }
+    }
+
+    private fun startNormalInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         // Also refresh this on every editor focus, not only layout changes.
         keyboardView?.hapticEnabled = Settings(this).hapticEnabled
@@ -769,8 +845,9 @@ class KeyboardService : InputMethodService(), KeyListener {
         override fun learn(clauses: List<Clause>, context: String?) { mozc.get()?.learn(clauses, context) }
     }
 
-    private companion object {
-        const val TAG = "KeyboardService"
-        const val CONTEXT_LENGTH = 20
+    companion object {
+        @Volatile internal var activeForSmokeTest: WeakReference<KeyboardService>? = null
+        private const val TAG = "KeyboardService"
+        private const val CONTEXT_LENGTH = 20
     }
 }

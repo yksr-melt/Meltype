@@ -279,6 +279,19 @@ class MainActivity : Activity() {
             }.setNegativeButton(android.R.string.cancel, null).show()
     }
 
+    /** Remains accessible from the launcher even when the IME process crashes. */
+    private fun showSystemKeyboardPicker() {
+        try {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
+        } catch (error: RuntimeException) {
+            showSystemKeyboardSettings()
+        }
+    }
+
+    private fun showSystemKeyboardSettings() {
+        startActivity(Intent(SystemSettings.ACTION_INPUT_METHOD_SETTINGS))
+    }
+
     private fun setupStatus(): Int {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
         val id = ComponentName(this, KeyboardService::class.java).flattenToShortString()
@@ -366,6 +379,18 @@ class MainActivity : Activity() {
                 entry("Meltypeを選択する", "入力方法として有効にする", "⌨") {
                     (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
                 }
+            }
+        }
+        // Never hide the emergency exits behind IME enable/selection state.
+        card(content, "緊急時の切り替え") {
+            entry("別のキーボードに切り替える",
+                "Meltypeが動かない場合もAndroidの切替画面を開く", "⌨") {
+                showSystemKeyboardPicker()
+            }
+            divider()
+            entry("Androidのキーボード設定を開く",
+                "ほかのキーボードを選び直す", "⚙") {
+                showSystemKeyboardSettings()
             }
         }
         card(content) {
