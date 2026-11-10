@@ -21,8 +21,10 @@ public enum ImeEventType
 {
     KeyPressed,
     /// <summary>
-    /// ワークアラウンド: 親指シフトの同時打鍵のためだけの出来事。ImeCapture.KeyReleases のあいだに ImeKey.ReleaseFollows を付けて送ったキーを離した (Key.Vk だけ)。
-    /// 送るのは Meltype キーボードだけで、ほかのフロントでは親指シフトの同時打鍵が効かない。
+    /// キーを離した (Key.Vk と Key.Interrupted)。送るのは次の 2 つだけ:
+    /// ImeCapture.AltKeys のあいだに KeyPressed で送った左右の Alt (Windows のフロント)。
+    /// ワークアラウンド: 親指シフトの同時打鍵のために、ImeCapture.KeyReleases のあいだに ImeKey.ReleaseFollows を付けて送ったキー
+    /// (送るのは Meltype キーボードだけで、ほかのフロントでは親指シフトの同時打鍵が効かない)。
     /// </summary>
     KeyReleased,
     /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
@@ -97,12 +99,10 @@ public sealed record ImeKey
     public bool Repeat { get; init; }
     /// <summary>1 回のキーで入る文字が複数のスカラーのとき (結合文字・ZWJ の絵文字。Mac)、その文字列。Ch は 0。本体は未確定の内容を確定して、キーをアプリに通させる。</summary>
     public string? Text { get; init; }
-    /// <summary>
-    /// 修飾キー (Vk は左右を分けたもの: 左 Alt 0xA4・右 Alt 0xA5 など) を、ほかのキー・マウスのボタンを押さずに離した。離したときに送る (Windows のフロントだけ)。
-    /// consumed なら、フロントは押下と解放の組をアプリに崩さずに届け、単独押しの操作 (メニューバーに移るなど) にならないようにする
-    /// (押下はそのまま、解放は止めて、何もしないキー 0xE8 のあとに送り直す。解放だけを止めると、アプリには Alt を押したままに見える)。
-    /// </summary>
-    public bool TappedAlone { get; init; }
+    /// <summary>KeyReleased: 押してから離すまでに、ほかのキー (修飾キーを含む)・マウスのボタンを押した。</summary>
+    public bool Interrupted { get; init; }
+    /// <summary>ほかのソフトが送ったキー (キーの割り当てを変えるツールなど。Windows の低レベルフックが分かるときだけ)。</summary>
+    public bool Injected { get; init; }
     /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
     public bool ReleaseFollows { get; init; }
 }
@@ -209,7 +209,6 @@ public sealed record ImeState
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
 /// PrintableAscii は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。PrintableAsciiExcept はそのうち受け取らない文字。
 /// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
-/// 左右の Alt (0xA4・0xA5) は、単独で押して離したこと (ImeKey.TappedAlone) を受け取る。
 /// </summary>
 public sealed record ImeCapture
 {
@@ -220,6 +219,15 @@ public sealed record ImeCapture
     public IReadOnlyList<ImeShortcut> CtrlKeysWhileComposing { get; init; } = [];
     /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): 親指シフトのかな配列なので、送ったキーを離したことも受け取る。</summary>
     public bool KeyReleases { get; init; }
+    /// <summary>
+    /// 左右の Alt (0xA4・0xA5) の押下を KeyPressed で、解放を KeyReleased で送る (設定「左 Alt で英数 / 右 Alt で日本語」。Windows のフロント)。
+    /// 単独押しかは本体が決める。押下は本体に送ってからアプリに通す (consumed にならない)。解放はいったん止めて、
+    /// consumed なら何もしないキー 0xE8 のあとに、そうでなければそのまま送り直す。アプリには押下と解放の組がそろって届き、
+    /// 単独押しで切り替えたときは、間に 0xE8 があるのでアプリの単独押しの操作 (メニューバーに移る) にならない。
+    /// Meltype IME は Alt を Meltype.exe のフックで見て DLL に知らせる (TSF のキーのシンクに Alt が届かない) ので、本体の答えを待てず、
+    /// いつも 0xE8 のあとに送り直す (単独押しでない解放は、送り直しても単独押しの操作にならない)。
+    /// </summary>
+    public bool AltKeys { get; init; }
 }
 
 /// <summary>Vk は Windows の仮想キーコード。Modifiers は Shift=1, Ctrl=2, Alt=4, Win=8 (<see cref="Input.ShortcutModifiers"/>)。</summary>

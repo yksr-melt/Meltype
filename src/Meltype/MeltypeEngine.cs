@@ -67,6 +67,9 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>Meltype キーボード (UI スレッドで作ったもの)。</summary>
     public Keyboard.KeyboardFront? Keyboard { get; set; }
 
+    /// <summary>Meltype IME (TSF)。フックで見た左右の Alt を DLL に知らせる (TipServer.OnKey)。</summary>
+    public Tip.TipServer? ImeServer { get; set; }
+
     /// <summary>フォーカスのある要素 (打鍵数をパスワード欄で数えないため)。</summary>
     public Composition.FocusInspector? Focus { get; set; }
 
@@ -132,10 +135,15 @@ internal sealed class MeltypeEngine : IDisposable
             ToggleRequested?.Invoke();
             return true;
         }
-        return settings.Mode == InputMode.Keyboard && Keyboard?.OnKey(e) == true;
+        return settings.Mode == InputMode.Keyboard ? Keyboard?.OnKey(e) == true : ImeServer?.OnKey(e, _foreground.Current) == true;
     }
 
-    private bool OnMouseButton(Composition.MouseButtonEvent e) => _settings.Mode == InputMode.Keyboard && Keyboard?.OnMouseButton(e) == true;
+    private bool OnMouseButton(Composition.MouseButtonEvent e)
+    {
+        if (_settings.Mode == InputMode.Keyboard) return Keyboard?.OnMouseButton(e) == true;
+        ImeServer?.OnMouseButton(e);
+        return false;
+    }
 
     // フォーカスのある要素は、どちらのフロントも入力欄の事実として使う (Meltype IME はコードの入力欄の判定に)
     private void OnForegroundChanged(IntPtr window)

@@ -474,20 +474,45 @@ internal static class ImeContractTests
     [Test]
     public static void AltTap_SetsTheModeWithTheSetting()
     {
+        // 左右の Alt の押下を KeyPressed、解放を KeyReleased で受け取り、単独押しかは本体が決める (Windows のフロント)
         var front = new Front();
-        string Tap(int vk) => $"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"instance\":\"t1\",\"field\":{{\"before\":\"\"}},\"key\":{{\"vk\":{vk},\"tappedAlone\":true}}}}";
-        Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LMenu))), "設定が OFF ならアプリに通す (メニューバーに移る)\n" + front.Trace);
+        JsonElement Press(int vk, bool ctrl = false, bool repeat = false, bool injected = false) => front.Event("KeyPressed",
+            extra: $",\"key\":{{\"vk\":{vk},\"alt\":true,\"ctrl\":{(ctrl ? "true" : "false")},\"repeat\":{(repeat ? "true" : "false")},\"injected\":{(injected ? "true" : "false")}}}");
+        JsonElement Release(int vk, bool interrupted = false) =>
+            front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk},\"interrupted\":{(interrupted ? "true" : "false")}}}");
+        bool Tap(int vk, bool interrupted = false)
+        {
+            Assert.True(!Consumed(Press(vk)), "押下はアプリに通す\n" + front.Trace);
+            return Consumed(Release(vk, interrupted));
+        }
+        Assert.True(!Capture(front.Event("StateRequested")).GetProperty("altKeys").GetBoolean(), "設定が OFF なら Alt を受け取らない\n" + front.Trace);
         front.Type("ka");
-        var off = front.Send(Tap(VirtualKeys.LMenu));
-        front.Apply(off, "t1");
-        Assert.True(!Consumed(off) && front.Composition["t1"] == "か" && front.Document == "", "設定が OFF なら、変換中の文字はそのまま\n" + front.Trace);
+        Assert.True(!Tap(VirtualKeys.LMenu) && front.Composition["t1"] == "か" && front.Open, "設定が OFF なら切り替えず、変換中の文字もそのまま\n" + front.Trace);
+        front.Key('\n');
         front.Settings.AltKeysSwitchKeyboard = true;
-        var left = front.Send(Tap(VirtualKeys.LMenu));
-        front.Apply(left, "t1");
-        Assert.True(Consumed(left) && !front.Open && front.Document == "か", "左 Alt で、変換中の文字を確定して英数\n" + front.Trace);
-        var right = front.Send(Tap(VirtualKeys.RMenu));
-        Assert.True(Consumed(right) && right.GetProperty("state").GetProperty("imeOpen").GetBoolean(), "右 Alt で日本語\n" + front.Trace);
-        Assert.True(!Consumed(front.Send(Tap(VirtualKeys.LControl))), "ほかの修飾キーは使わない\n" + front.Trace);
+        Assert.True(Capture(front.Event("StateRequested")).GetProperty("altKeys").GetBoolean(), front.Trace);
+        front.Type("ka");
+        Assert.True(Tap(VirtualKeys.LMenu) && !front.Open && front.Document == "かか", "左 Alt で、変換中の文字を確定して英数\n" + front.Trace);
+        Assert.True(Tap(VirtualKeys.RMenu) && front.Open, "右 Alt で日本語\n" + front.Trace);
+        // 押したままの自動の繰り返しは単独押しのまま
+        Press(VirtualKeys.LMenu);
+        Press(VirtualKeys.LMenu, repeat: true);
+        Assert.True(Consumed(Release(VirtualKeys.LMenu)) && !front.Open, "自動の繰り返し\n" + front.Trace);
+        Tap(VirtualKeys.RMenu);
+        // 単独押しにしないとき: 押している間のほかの入力 (フロントが見たもの・本体に届いた出来事)、ほかの修飾キーと一緒、ほかのソフトが送った、左右両方
+        Assert.True(!Tap(VirtualKeys.LMenu, interrupted: true) && front.Open, "Alt + クリック・Alt + Shift\n" + front.Trace);
+        Press(VirtualKeys.LMenu);
+        front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":88}");
+        Assert.True(!Consumed(Release(VirtualKeys.LMenu)) && front.Open, "Alt + X (アプリに通したキー)\n" + front.Trace);
+        Press(VirtualKeys.LMenu, ctrl: true);
+        Assert.True(!Consumed(Release(VirtualKeys.LMenu)) && front.Open, "Ctrl + Alt\n" + front.Trace);
+        Press(VirtualKeys.LMenu, injected: true);
+        Assert.True(!Consumed(Release(VirtualKeys.LMenu)) && front.Open, "ほかのソフトが送った\n" + front.Trace);
+        Press(VirtualKeys.LMenu);
+        Press(VirtualKeys.RMenu);
+        Assert.True(!Consumed(Release(VirtualKeys.RMenu)) && !Consumed(Release(VirtualKeys.LMenu)) && front.Open, "左右の Alt を両方\n" + front.Trace);
+        Assert.True(!Consumed(Release(VirtualKeys.LMenu)), "押したことを受け取っていない解放\n" + front.Trace);
+        Assert.True(Tap(VirtualKeys.LMenu) && !front.Open, "そのあとは、また単独押し\n" + front.Trace);
     }
 
     [Test]

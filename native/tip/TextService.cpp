@@ -103,21 +103,6 @@ void MaskSystemModifier() {
     SendInput(2, mask, sizeof(INPUT));
 }
 
-// 止めた Alt の単独押しの解放を、何もしないキー 0xE8 のあとに送り直す。アプリには押下と解放の組がそろって届き、
-// 間に別のキーがあるので、単独押しの操作 (メニューバーに移る) にはならない。解放だけを止めると、アプリには Alt を押したままに見える
-void MaskAltRelease(UINT side) {
-    INPUT keys[3] = {};
-    for (auto& key : keys) {
-        key.type = INPUT_KEYBOARD;
-        key.ki.dwExtraInfo = kReinjectMarker;
-    }
-    keys[0].ki.wVk = keys[1].ki.wVk = 0xE8;
-    keys[1].ki.dwFlags = KEYEVENTF_KEYUP;
-    keys[2].ki.wVk = static_cast<WORD>(side);
-    keys[2].ki.dwFlags = KEYEVENTF_KEYUP | (side == VK_RMENU ? KEYEVENTF_EXTENDEDKEY : 0);
-    SendInput(3, keys, sizeof(INPUT));
-}
-
 // そのキーで入力される文字 (無ければ 0)
 wchar_t CharOf(UINT vk, LPARAM lParam) {
     BYTE state[256] = {};
@@ -334,7 +319,6 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
 }
 
 STDMETHODIMP TextService::Deactivate() {
-    SetTap(0);
     DestroyMessageWindow();
     UnpreserveKeys();
     TipLog(L"Deactivate");
@@ -807,6 +791,10 @@ LRESULT CALLBACK TextService::MessageWindowProc(HWND window, UINT message, WPARA
         self->FinishConversionWait();
         return 0;
     }
+    if (message == kAltKey && self) {
+        self->HandleAltKey(static_cast<UINT>(wParam), static_cast<UINT>(lParam));
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
@@ -1098,52 +1086,8 @@ bool TextService::IsReinjected(UINT vk) {
     return false;
 }
 
-void TextService::NoteTap(UINT vk, LPARAM lParam) {
-    const UINT side = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 24)) ? VK_RMENU : VK_LMENU;
-    // 押したままの自動の繰り返し (直前も押していた) は、単独押しの途中か (クリックで取り消したか) を変えない
-    const bool repeat = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 30)) != 0;
-    if (vk != VK_MENU) SetTap(0);
-    else if (repeat) return;
-    else if (tapVk_ == 0 && !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN)) SetTap(side);
-    else if (tapVk_ != side) SetTap(0);
-}
-
-namespace {
-// マウスのフックが知らせる先 (TIP はスレッドごとに作られる)
-thread_local TextService* t_tapping = nullptr;
-}  // namespace
-
-void TextService::SetTap(UINT vk) {
-    tapVk_ = vk;
-    if (vk != 0 && tapMouseHook_ == nullptr) {
-        t_tapping = this;
-        tapMouseHook_ = SetWindowsHookExW(WH_MOUSE, &TextService::TapMouseProc, nullptr, GetCurrentThreadId());
-    } else if (vk == 0 && tapMouseHook_ != nullptr) {
-        UnhookWindowsHookEx(tapMouseHook_);
-        tapMouseHook_ = nullptr;
-        t_tapping = nullptr;
-    }
-}
-
-LRESULT CALLBACK TextService::TapMouseProc(int code, WPARAM wParam, LPARAM lParam) {
-    // フックはこの中では外さない (次に Alt のキーを受け取ったときの SetTap(0) で外す)
-    if (code == HC_ACTION && t_tapping != nullptr) {
-        switch (wParam) {
-        case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN: case WM_XBUTTONDOWN:
-        case WM_LBUTTONDBLCLK: case WM_RBUTTONDBLCLK: case WM_MBUTTONDBLCLK: case WM_XBUTTONDBLCLK:
-        case WM_NCLBUTTONDOWN: case WM_NCRBUTTONDOWN: case WM_NCMBUTTONDOWN: case WM_NCXBUTTONDOWN:
-            t_tapping->tapVk_ = 0;
-            break;
-        default:
-            break;
-        }
-    }
-    return CallNextHookEx(nullptr, code, wParam, lParam);
-}
-
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     UINT vk = static_cast<UINT>(wParam);
-    NoteTap(vk, lParam);
     if (IsReinjected(vk)) {
         passVk_ = vk;  // アプリによっては、このあと OnKeyDown も呼ぶ
         passTime_ = GetTickCount64();
@@ -1160,7 +1104,6 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
 
 STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     UINT vk = static_cast<UINT>(wParam);
-    NoteTap(vk, lParam);
     if ((vk == passVk_ && GetTickCount64() - passTime_ < 500) || IsReinjected(vk)) {
         passVk_ = 0;
         *eaten = FALSE;
@@ -1191,34 +1134,15 @@ STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam,
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
         eatenDown_[ToggleShortcut::Hankaku] = false;
     }
-    // 左右の Alt の単独押し: 本体が受け取るように言ったものなら、離したことをアプリに渡さない (メニューバーに移らない)
-    const UINT side = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 24)) ? VK_RMENU : VK_LMENU;
-    tapEaten_ = wParam == VK_MENU && tapVk_ == side && !disabled_ &&
-        std::any_of(state_.keys.begin(), state_.keys.end(), [side](const ToggleShortcut& key) { return key.key == side && key.mods == 0; });
-    if (tapEaten_) {
-        *eaten = TRUE;
-        return S_OK;
-    }
-    if (wParam == VK_MENU) SetTap(0);
     *eaten = wParam < 256 && eatenDown_[ShortcutSlot(static_cast<UINT>(wParam), lParam)] ? TRUE : FALSE;
     return S_OK;
 }
 
-STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
+STDMETHODIMP TextService::OnKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
         eatenDown_[ToggleShortcut::Hankaku] = false;
     }
-    if (wParam == VK_MENU && tapVk_ != 0 && tapEaten_) {
-        const UINT side = tapVk_;
-        SetTap(0);
-        tapEaten_ = false;
-        MaskAltRelease(side);
-        HandleTap(context, side);
-        *eaten = TRUE;
-        return S_OK;
-    }
-    if (wParam == VK_MENU) SetTap(0);
     const UINT slot = ShortcutSlot(static_cast<UINT>(wParam), lParam);
     *eaten = wParam < 256 && eatenDown_[slot] ? TRUE : FALSE;
     if (wParam < 256) eatenDown_[slot] = false;
@@ -1302,19 +1226,44 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
     if (!inserted && (failed ? !modeKey : !consumed)) Reinject(vk);
 }
 
-void TextService::HandleTap(ITfContext* context, UINT vk) {
-    HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
-        std::string field;
-        if (!ReadField(ec, context, field)) return S_OK;
-        const RECT anchor = CaretRect(ec, context);
-        ownEdit_ = true;
+void TextService::HandleAltKey(UINT vk, UINT flags) {
+    const bool released = (flags & kAltReleased) != 0;
+    std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk);
+    if (released) {
+        key += std::string(",\"interrupted\":") + ((flags & kAltInterrupted) ? "true" : "false");
+    } else {
+        key += std::string(",\"alt\":true,\"shift\":") + ((flags & kAltShift) ? "true" : "false") + ",\"ctrl\":" + ((flags & kAltCtrl) ? "true" : "false") +
+               ",\"command\":" + ((flags & kAltCommand) ? "true" : "false");
+    }
+    key += "}";
+    const char* type = released ? "KeyReleased" : "KeyPressed";
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&context);
+    }
+    // 単独押しで切り替えるときは変換中の文字を確定するので、入力欄を書き換えられる編集で送る
+    bool sent = false;
+    if (context) {
+        const HRESULT hr = RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
+            // パスワード欄の文字は読まずに、パスワード欄であることだけを伝える
+            std::string field;
+            if (!ReadField(ec, context.Get(), field)) field = "{\"traits\":[\"Password\"]}";
+            const RECT anchor = CaretRect(ec, context.Get());
+            ownEdit_ = true;
+            JsonValue reply;
+            sent = Send(type, field, key, reply, 800, false, &anchor);
+            if (sent) ApplyOutput(ec, context.Get(), reply);
+            return S_OK;
+        });
+        ownEdit_ = false;
+        if (FAILED(hr)) TipLog(L"編集セッションを始められません: 0x%08X", hr);
+    }
+    // 入力欄が無い・編集できない: 本体には知らせる (押下と解放が対にならないと、次の単独押しを見分けられない)
+    if (!sent) {
         JsonValue reply;
-        if (Send("KeyPressed", field, ",\"key\":{\"vk\":" + std::to_string(vk) + ",\"tappedAlone\":true}", reply, 800, false, &anchor))
-            ApplyOutput(ec, context, reply);
-        return S_OK;
-    });
-    ownEdit_ = false;
-    if (FAILED(hr)) TipLog(L"編集セッションを始められません: 0x%08X", hr);
+        if (Send(type, "", key, reply, 800, true)) ApplyState(reply[L"state"]);
+    }
     FlushOpen();
 }
 

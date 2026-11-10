@@ -75,6 +75,7 @@ internal sealed class ImeSession
         var active = IsActive(_environment, all, _field);
         var lastSnippet = _lastSnippet;
         if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) _lastSnippet = null;
+        NoteAltInterruption(e);
         ApplyFacts(e, settings);
         // 独自の種類で「最初は英数」にしたアプリに移った (入力欄を作ったときを含む)。OS の IME の開閉は、応答の open で合わせてもらう
         if (_field?.App is { } app && app != previousApp && settings.KindFor(app) is { StartInEnglish: true }) _session.Direct = true;
@@ -84,6 +85,7 @@ internal sealed class ImeSession
         var result = WithPaste(Verify(e.Type switch
         {
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
+            ImeEventType.KeyReleased when active && e.Key is { Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } alt => AltReleased(alt, before, settings, ref explicitChange),
             ImeEventType.KeyReleased when active && e.Key is { } released =>
                 _session.HandleKeyUp(ToggleShortcut.NormalizeHankakuKey(released.Vk), before, e.Field?.After),
             ImeEventType.ModeToggleRequested when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
@@ -115,6 +117,48 @@ internal sealed class ImeSession
             Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys(), _snippetKeys),
             Revision = rev,
         }, result);
+    }
+
+    // ---- 左右の Alt の単独押し (設定「左 Alt で英数 / 右 Alt で日本語」) ----
+
+    // 押している左右の Alt と、単独押しにしない理由 (null なら、まだ単独押しの途中)
+    private int _altDown;
+    private string? _altNotAlone;
+
+    private void AltPressed(ImeKey key, int vk)
+    {
+        if (key.Repeat && _altDown == vk) return;
+        _altNotAlone = _altDown != 0 && _altDown != vk ? "左右の Alt を両方押した"
+            : key.Shift || key.Ctrl || key.Command ? "Shift・Ctrl・Windows キーと一緒に押した"
+            : key.Injected ? "ほかのソフトが送った Alt"
+            : null;
+        _altDown = vk;
+    }
+
+    /// <summary>Alt を押している間のほかの出来事 (アプリに通したキー・クリック・フォーカスの移動など) があれば、単独押しにしない。</summary>
+    private void NoteAltInterruption(ImeEvent e)
+    {
+        if (_altDown == 0 || _altNotAlone is not null || e.Key?.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu ||
+            e.Type is ImeEventType.StateRequested or ImeEventType.ConversionFinished) return;
+        _altNotAlone = $"押している間に {e.Type} があった";
+    }
+
+    private SessionResult AltReleased(ImeKey key, string? before, Settings settings, ref bool explicitChange)
+    {
+        var vk = key.Vk;
+        var notAlone = !settings.AltKeysSwitchKeyboard ? "設定が OFF"
+            : _altDown != vk ? "押したことを受け取っていない"
+            : _altNotAlone ?? (key.Interrupted ? "押している間にほかのキー・マウスのボタンを押した" : null);
+        _altDown = 0;
+        _altNotAlone = null;
+        var side = vk == VirtualKeys.RMenu ? "右" : "左";
+        if (notAlone is not null)
+        {
+            Diagnostics.Log.Decision($"{side} Alt: 単独押しにしません ({notAlone})");
+            return _session.PassThrough();
+        }
+        Diagnostics.Log.Decision($"{side} Alt の単独押しで{(vk == VirtualKeys.RMenu ? "日本語" : "英数")}にします");
+        return Switch(vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false);
     }
 
     // 次に受け取る、定型文のキー (SnippetKeys)
@@ -246,7 +290,7 @@ internal sealed class ImeSession
             _line.Length = Math.Max(0, _line.Length - edit.DeleteBefore);
             AppendToLine(edit.Text);
         }
-        if (e.Type != ImeEventType.KeyPressed || e.Key is not { TappedAlone: false } key || result.Consumed) return;
+        if (e.Type != ImeEventType.KeyPressed || e.Key is not { } key || result.Consumed) return;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
         if (key.Ctrl || key.Alt || key.Command) _line.Clear();
         else if (key.Text is { Length: > 0 } text) AppendToLine(text);
@@ -279,12 +323,11 @@ internal sealed class ImeSession
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
-        if (key.TappedAlone)
+        // 左右の Alt の押下は、単独押しかを見分けるためだけに受け取る (変換中の文字はそのまま。アプリに通す)
+        if (vk is VirtualKeys.LMenu or VirtualKeys.RMenu)
         {
-            // 切り替えないなら、変換中の表示はそのまま
-            return settings.AltKeysSwitchKeyboard && vk is VirtualKeys.LMenu or VirtualKeys.RMenu
-                ? Switch(vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false)
-                : _session.PassThrough();
+            AltPressed(key, vk);
+            return _session.PassThrough();
         }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
@@ -449,11 +492,10 @@ internal sealed class ImeSession
         IReadOnlyList<int> snippetKeys)
     {
         if (!active) return new ImeCapture();
-        // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは設定「左 Alt で英数 / 右 Alt で日本語」
+        // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは AltKeys
         var keys = settings.EffectiveToggleShortcuts.Where(shortcut => !ToggleShortcut.IsModifier(shortcut.Key))
             .Select(shortcut => new ImeShortcut(shortcut.Key, (int)shortcut.Modifiers))
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
-            .Concat(settings.AltKeysSwitchKeyboard ? [new ImeShortcut(VirtualKeys.LMenu, 0), new ImeShortcut(VirtualKeys.RMenu, 0)] : [])
             .ToList();
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection;
@@ -467,6 +509,7 @@ internal sealed class ImeSession
             Shortcuts = keys.Distinct().ToList(),
             CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
             KeyReleases = settings.InputStyle == InputStyle.Kana && settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron,
+            AltKeys = settings.AltKeysSwitchKeyboard,
         };
     }
 

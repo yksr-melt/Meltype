@@ -103,13 +103,9 @@ private:
     bool CapturesKey(UINT vk, LPARAM lParam) const;
     // listed: capture.keys のキー (入力モードを表示する位置も送る)。repeat: 押したままの自動の繰り返し
     void HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed);
-    // 左右の Alt (VK_LMENU / VK_RMENU) を単独で押して離した
-    void HandleTap(ITfContext* context, UINT vk);
-    // 押したキーで、左右の Alt の単独押しの途中かを決め直す
-    void NoteTap(UINT vk, LPARAM lParam);
-    // 単独で押している左右の Alt を変える。押している間は、マウスのボタンを押したら単独押しでなくする (Alt+クリック)
-    void SetTap(UINT vk);
-    static LRESULT CALLBACK TapMouseProc(int code, WPARAM wParam, LPARAM lParam);
+    // 左右の Alt (VK_LMENU / VK_RMENU) の押下・解放を本体に送る (ImeCapture.AltKeys)。キーのシンクには Alt (WM_SYSKEYDOWN) が届かないので、
+    // Meltype.exe の低レベルフックが見て kAltKey で知らせる (TipServer.OnKey)。単独押しかは本体が決め、解放は Meltype.exe が送り直す
+    void HandleAltKey(UINT vk, UINT flags);
     bool IsReinjected(UINT vk);
     bool Reinject(UINT vk);
     void RememberPassed(UINT vk);
@@ -139,6 +135,9 @@ private:
     void StartConversionWait();
     void FinishConversionWait();
     static constexpr UINT kConversionWaitDone = WM_APP + 1;
+    // Meltype.exe (TipServer.AltKeyMessage) が送る、左右の Alt の押下・解放。wParam は仮想キーコード、lParam は次の印 (TipServer.AltFlags と同じ)
+    static constexpr UINT kAltKey = WM_APP + 2;
+    static constexpr UINT kAltShift = 1, kAltCtrl = 2, kAltCommand = 8, kAltReleased = 0x100, kAltInterrupted = 0x200;
     void CreateMessageWindow();
     void DestroyMessageWindow();
     static LRESULT CALLBACK MessageWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam);
@@ -238,9 +237,6 @@ private:
     bool markerSeen_ = false;      // このアプリには送り直しの印が届く
     Reinjected reinjected_[4];     // 送り直して、まだ届いていないキー (それぞれ 1 回だけ素通しする)
     UINT passVk_ = 0;              // OnTestKeyDown で素通しにしたキー
-    UINT tapVk_ = 0;               // 単独で押している左右の Alt (VK_LMENU / VK_RMENU)。ほかのキー・マウスのボタンを押したら 0。SetTap で変える
-    HHOOK tapMouseHook_ = nullptr; // Alt を単独で押している間だけ付ける、このスレッドのマウスのフック
-    bool tapEaten_ = false;        // OnTestKeyUp で、Alt の単独押しを受け取ると決めた (続く OnKeyUp で本体に送る)
     ULONGLONG passTime_ = 0;
     bool ownEdit_ = false;         // 自分の編集セッションが終わった通知を、キャレットが動いたことにしない
     bool secretChecked_ = false;   // このキーで、入力欄の種類 (パスワード欄でないこと) を確かめた

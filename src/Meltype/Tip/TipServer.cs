@@ -484,11 +484,81 @@ internal sealed class TipServer : IDisposable
         var e = request.Event;
         if (e.Field is { } field) e = e with { Field = connection.WithFacts(field) };
         var output = connection.Host.Handle(e);
+        if (request.Thread != 0) _altKeys[request.Thread] = output.State.HandlesInput && output.State.Capture.AltKeys;
         if (output.State.HandlesInput && connection.Process is { } process) Greet(process);
         if (output.State.ModeIndicatorMs > 0 && request.Thread != 0)
             _composition.ShowMode(output.State.LanguageMode == ImeLanguageMode.Japanese, output.State.ModeIndicatorMs, request.Thread, request.Anchor);
         return output.ToJson();
     }
+
+    // ---- 左右の Alt (ImeCapture.AltKeys) ----
+    // TSF のキーのシンクには Alt の押下・解放 (WM_SYSKEYDOWN・WM_SYSKEYUP) が届かないので、Meltype.exe の低レベルフックで見て、
+    // DLL の入力スレッドのメッセージ用のウィンドウに知らせる (DLL が本体に送り、答えを入力欄に反映する)。単独押しかは本体が決める
+
+    // DLL の入力スレッド → 最後の状態で、左右の Alt を受け取るか
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _altKeys = new();
+    // ここから下はフックのスレッドだけが使う
+    private readonly HashSet<int> _held = [];
+    private readonly KeyInjector _injector = new();
+    private int _alt;
+    private IntPtr _altWindow;
+    private bool _altInterrupted;
+
+    /// <summary>DLL の TextService::kAltKey。wParam は仮想キーコード、lParam は AltFlags。</summary>
+    private const uint AltKeyMessage = 0x8000 + 2;
+
+    [Flags]
+    private enum AltFlags
+    {
+        Shift = 1, Ctrl = 2, Command = 8, Released = 0x100, Interrupted = 0x200,
+    }
+
+    /// <summary>Meltype IME のときの低レベルフックのキー (true ならアプリに渡さない)。foreground は前面のアプリ。</summary>
+    public bool OnKey(KeyEvent e, Input.AppInfo foreground)
+    {
+        var alt = e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu;
+        if (e.IsDown)
+        {
+            var repeat = !_held.Add(e.PhysicalId);
+            if (_alt != 0 && e.Vk != _alt) _altInterrupted = true;
+            if (!alt || repeat || _alt != 0) return false;
+            var thread = Native.GetWindowThreadProcessId(foreground.Window, out _);
+            if (!_altKeys.TryGetValue(thread, out var wanted) || !wanted || !ForegroundTracker.CanSendInputTo(foreground) || MessageWindow(thread) is not { } window) return false;
+            _alt = e.Vk;
+            _altWindow = window;
+            _altInterrupted = false;
+            var flags = (IsDown(VirtualKeys.Shift) ? AltFlags.Shift : 0) | (IsDown(VirtualKeys.Control) ? AltFlags.Ctrl : 0) |
+                (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? AltFlags.Command : 0);
+            Native.PostMessageW(window, AltKeyMessage, e.Vk, (int)flags);
+            return false;
+        }
+        _held.Remove(e.PhysicalId);
+        if (!alt || e.Vk != _alt) return false;
+        _alt = 0;
+        Native.PostMessageW(_altWindow, AltKeyMessage, e.Vk, (int)(AltFlags.Released | (_altInterrupted ? AltFlags.Interrupted : 0)));
+        // 本体の答えは DLL が受け取るので待てない。いつも何もしないキー (0xE8) のあとに送り直す (単独押しでなければ、送り直しても単独押しの操作にはならない)。
+        // 入力モードの切り替えより先に解放がアプリに届いても、DLL への知らせはアプリの入力より先に処理される (送ったメッセージは入力より先)
+        return _injector.Inject(Keyboard.KeyboardFront.MaskedAltRelease(e));
+    }
+
+    /// <summary>Meltype IME のときの低レベルフックのマウスのボタン。</summary>
+    public void OnMouseButton(MouseButtonEvent e)
+    {
+        if (_alt != 0 && e.Message is Native.WM_LBUTTONDOWN or Native.WM_RBUTTONDOWN or Native.WM_MBUTTONDOWN or Native.WM_XBUTTONDOWN) _altInterrupted = true;
+    }
+
+    /// <summary>DLL がそのスレッドに作ったメッセージ用のウィンドウ (TextService::CreateMessageWindow)。</summary>
+    private static IntPtr? MessageWindow(uint thread)
+    {
+        for (var window = Native.FindWindowExW(Native.HWND_MESSAGE, IntPtr.Zero, "Meltype.Tip.Messages", null); window != IntPtr.Zero;
+             window = Native.FindWindowExW(Native.HWND_MESSAGE, window, "Meltype.Tip.Messages", null))
+        {
+            if (Native.GetWindowThreadProcessId(window, out _) == thread) return window;
+        }
+        return null;
+    }
+
+    private static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 
     // UI スレッドの処理が終わるまでプールのスレッドをふさがない。Mozc や Zenzai の出力の読み取りもプールのスレッドで動くので、
     // アプリの数だけ同期で待つと空きがなくなり、Mozc の応答を読めなくなる (#1506)

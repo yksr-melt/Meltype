@@ -22,24 +22,24 @@ internal static class FrontProtocolTests
     private static readonly FrontSource[] Fronts =
     [
         new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new(@"\[L""(\w+)""\]"),
-            // 入力モードは Meltype.exe (TipServer) が出す
-            Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases"],
+            // 入力モードと、左右の Alt (フックで見る) は Meltype.exe (TipServer) が使う
+            Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases", "altKeys"],
             // Meltype.exe との、背景の変換の結果の待ち合わせ
             Others: ["generation"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
             Others: []),
         new("IBus", "linux/ibus-engine-meltype", source => source, new(@"\[""(\w+)""\]|\.get\(""(\w+)"""),
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new(@"\blet (\w+):"),
             // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered", "keyReleases"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered", "keyReleases", "altKeys"],
             Others: []),
     ];
 
