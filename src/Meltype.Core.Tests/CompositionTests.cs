@@ -1989,6 +1989,61 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void DictionaryAdditions3_ReportedWords()
+    {
+        // #1696・#499: 固有名詞がかなに割れる
+        foreach (var (typed, expected) in new[]
+        {
+            ("pixiv", "pixiv"),
+            ("sbisinnseiginnkou", "sbiしんせいぎんこう"),
+        })
+        {
+            var e = new Keyboard();
+            e.Type(typed + "\n");
+            Assert.Equal(expected, e.Host.Document);
+        }
+
+        // 固有名詞の後ろに続く日本語は日本語のまま
+        foreach (var (typed, expected) in new[]
+        {
+            ("pixivno", "pixivの"),
+            ("sbini", "sbiに"),
+        })
+        {
+            var e = new Keyboard();
+            e.Type(typed + "\n");
+            Assert.Equal(expected, e.Host.Document);
+        }
+
+        // #1456・#1491: 読みが無くて英日に割れる日本語 (確定はかな。変換は変換エンジンに任せる)
+        foreach (var (typed, expected) in new[]
+        {
+            ("supika", "すぴか"),
+            ("kennpa", "けんぱ"),
+        })
+        {
+            var j = new Keyboard();
+            j.Type(typed + "\n");
+            Assert.Equal(expected, j.Host.Document);
+        }
+
+        // #365 の語句は BuiltInPhrases_AreSplitOut で確かめる
+        // (語句の表面は変換エンジンが出すので、打鍵の確定では読みのままになる)
+
+        // 副作用の開示: kenpachi は main では けんpachi と確定していたものが、
+        // けんぱ の追加で けんぱち に変わる (元々壊れていた入力。PR 本文に記載)
+        foreach (var (typed, expected) in new[]
+        {
+            ("kenpachi", "けんぱち"),
+        })
+        {
+            var r = new Keyboard();
+            r.Type(typed + "\n");
+            Assert.Equal(expected, r.Host.Document);
+        }
+    }
+
+    [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
         // #1445・#1651: 変換の候補に出す語
@@ -4150,6 +4205,7 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("ふぉろばく")?.Any(p => p.Word == "フォロ爆") == true, "ふぉろばく → フォロ爆 (#1268)");
         Assert.True(dictionary.Split("きゅうくらりん")?.Any(p => p.Word == "きゅうくらりん") == true, "きゅうくらりん → きゅうくらりん (#1278)");
         Assert.True(dictionary.Split("ぶいすぽ")?.Any(p => p.Word == "ぶいすぽ") == true, "ぶいすぽ → ぶいすぽ (#1286)");
+        Assert.True(dictionary.Split("ぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "ぶいあーるちゃっと → VRChat (#365)");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
