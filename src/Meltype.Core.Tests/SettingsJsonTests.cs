@@ -9,6 +9,28 @@ namespace Meltype.Tests;
 internal static class SettingsJsonTests
 {
     [Test]
+    public static void ContextualSlash_SettingRoundTripsWithoutChangingTheDefault()
+    {
+        Assert.Equal(SlashStyle.Slash, new Settings().Slash, "新規の既定値は変えない");
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-contextual-slash-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            foreach (var style in Enum.GetValues<SlashStyle>())
+            {
+                new Settings { Slash = style }.Save(path);
+                Assert.Equal(style, Settings.Load(path).Slash, "保存して再起動しても選択を保持する");
+            }
+            File.WriteAllText(path, "{ \"SettingsVersion\": 7, \"SlashAsMiddleDot\": true }");
+            Assert.Equal(SlashStyle.MiddleDot, Settings.Load(path).Slash, "既存の中黒設定は自動判定に移さない");
+            File.WriteAllText(path, "{ \"SettingsVersion\": 7, \"FullWidthSlash\": true }");
+            Assert.Equal(SlashStyle.FullWidth, Settings.Load(path).Slash, "既存の全角設定は自動判定に移さない");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void SettingsJson_ShowGuideDefaultsOnAndRoundTrips()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-guide-settings-" + Guid.NewGuid().ToString("N"));

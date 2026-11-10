@@ -1881,8 +1881,8 @@ public sealed class CompositionController
         // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
         foreach (var clause in clauses)
             if (_keptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
-        // 打ち始めの ・ は、Space で / にする。
-        if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
+        // / だけを ・ にしているときは、文中でも Space で / にする。
+        if (_text.IsSingleSlash && clauses is [var slash]) Prefer(slash, "/");
         _clauses = clauses;
         _selectedClause = 0;
         _converting = true;
