@@ -4,7 +4,7 @@
 using Meltype.Config;
 using Meltype.Input;
 using Meltype.Composition;
-using Meltype.IME;
+using Meltype.WindowsIme;
 using System.Diagnostics;
 
 namespace Meltype.Tests;
@@ -51,7 +51,7 @@ internal static class WindowsTests
             composition.ShowView(view, new Point(20, 20));
             Assert.True(composition.Visible && input.Focused, "変換ボックスを表示しても入力欄を維持する");
             composition.Hide();
-            indicator.Flash(true, new Point(40, 40));
+            indicator.Flash(true, new Point(40, 40), 1200);
             Assert.True(indicator.Visible && input.Focused, "入力モード表示でも入力欄を維持する");
             indicator.Hide();
         }
@@ -235,11 +235,11 @@ internal static class WindowsTests
     public static void Line_RechecksStaleFocusOnKey()
     {
         // 起動直後の LINE は、入力欄の通知が来ず「入力欄ではない」のままキーが素通しになる。打った時点で調べ直す。
-        Assert.True(MeltypeEngine.RechecksStaleFocus("LINE.exe"), "LINE は打鍵時に入力欄を調べ直す");
-        Assert.True(MeltypeEngine.RechecksStaleFocus("line.EXE"), "大小文字は無視");
-        Assert.True(MeltypeEngine.RechecksStaleFocus("firefox.exe"), "ブラウザーは今までどおり");
-        Assert.True(!MeltypeEngine.RechecksStaleFocus("notepad.exe"), "関係ないアプリは調べ直さない");
-        Assert.True(!MeltypeEngine.RechecksStaleFocus(null), "プロセス名が無いときは調べ直さない");
+        Assert.True(Keyboard.KeyboardFront.RechecksStaleFocus("LINE.exe"), "LINE は打鍵時に入力欄を調べ直す");
+        Assert.True(Keyboard.KeyboardFront.RechecksStaleFocus("line.EXE"), "大小文字は無視");
+        Assert.True(Keyboard.KeyboardFront.RechecksStaleFocus("firefox.exe"), "ブラウザーは今までどおり");
+        Assert.True(!Keyboard.KeyboardFront.RechecksStaleFocus("notepad.exe"), "関係ないアプリは調べ直さない");
+        Assert.True(!Keyboard.KeyboardFront.RechecksStaleFocus(null), "プロセス名が無いときは調べ直さない");
     }
 
     [Test]
@@ -257,7 +257,7 @@ internal static class WindowsTests
     {
         // 右 Alt (拡張キー) の単独押しの解放: 0xE8 の押下・解放のあとに、解放をそのまま送り直す (先に解放が届くとメニューバーに移る)
         var release = new KeyEvent(VirtualKeys.RMenu, 0x38, Extended: true, IsUp: true, Injected: false, TimeMs: 0);
-        var events = MeltypeEngine.MaskedAltRelease(release);
+        var events = Keyboard.KeyboardFront.MaskedAltRelease(release);
         Assert.Equal(3, events.Length);
         Assert.True(events[0] is { Vk: 0xE8, IsUp: false } && events[1] is { Vk: 0xE8, IsUp: true }, "先に 0xE8 を押して離す");
         Assert.True(events[2] is { Vk: VirtualKeys.RMenu, Scan: 0x38, Extended: true, IsUp: true }, "解放は右 Alt の拡張キーのまま");
@@ -534,9 +534,9 @@ internal static class WindowsTests
         Assert.Equal(settings + 2, controls.OfType<UI.ToggleSwitch>().Count(), "ON/OFF の設定 + 上の表示オプション 2 つ");
         Assert.True(!controls.OfType<ComboBox>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "ON/OFF だけのプルダウンが残っていない");
         Assert.True(!controls.OfType<CheckBox>().Any(), "チェックボックスが残っていない");
-        // 表の ON/OFF の列 (アプリ別設定の「有効」「入力欄とみなす」・独自の種類の「最初は英数」) もスイッチで、値は bool
+        // 表の ON/OFF の列 (アプリ別設定の「有効」「入力欄とみなす」) もスイッチで、値は bool
         var columns = controls.OfType<DataGridView>().SelectMany(g => g.Columns.Cast<DataGridViewColumn>()).ToList();
-        Assert.Equal(3, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
+        Assert.Equal(2, columns.OfType<UI.ToggleSwitchColumn>().Count(), "表のスイッチの列");
         Assert.True(!columns.OfType<DataGridViewComboBoxColumn>().Any(c => c.Items.Count == 2 && c.Items.Contains("ON")), "表に ON/OFF だけのプルダウンの列が残っていない");
         var rules = controls.OfType<DataGridView>().First(g => g.Columns[0].HeaderText.StartsWith("プロセス名", StringComparison.Ordinal));
         Assert.Equal(false, rules.Rows.Cast<DataGridViewRow>().First(r => Equals(r.Cells[0].Value, "mstsc.exe")).Cells[1].Value, "mstsc.exe は OFF");

@@ -24,7 +24,7 @@ internal static class TipHarness
         using var invoker = new Control();
         invoker.CreateControl();
         using var service = CreateService(invoker);
-        using var server = new Tip.TipServer(invoker, service, () => settings);
+        using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
         server.Start();
         Console.WriteLine($"\\\\.\\pipe\\{Tip.TipServer.PipeName} で待っています ({seconds} 秒)");
         using var timer = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
@@ -41,7 +41,7 @@ internal static class TipHarness
         using var invoker = new Control();
         invoker.CreateControl();
         using var service = CreateService(invoker);
-        using var server = new Tip.TipServer(invoker, service, () => settings);
+        using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
         server.Start();
         var failed = 0;
         var thread = new Thread(() =>
@@ -51,16 +51,19 @@ internal static class TipHarness
                 using var pipe = new NamedPipeClientStream(".", Tip.TipServer.PipeName, PipeDirection.InOut);
                 pipe.Connect(3000);
                 pipe.ReadMode = PipeTransmissionMode.Message;
-                Console.WriteLine(Send(pipe, "{\"op\":\"hello\",\"process\":\"harness\"}"));
+                // DLL と同じ封筒 (TipRequest) で、入力欄の事実を付けて送る (キャレットの前は、打ったものを入れずに空のまま)
+                string Event(string type, string fields = "") =>
+                    $"{{\"thread\":0,\"event\":{{\"version\":{Ime.ImeHost.Version},\"type\":\"{type}\",\"instance\":\"t1\",\"imeOpen\":true,\"field\":{{\"before\":\"\"}}{fields}}}}}";
+                Console.WriteLine(Send(pipe, Event("StateRequested")));
                 foreach (var c in keys)
                 {
                     // ' ' = Space、'\n' (\n と書く) = Enter
                     var vk = c switch { ' ' => 0x20, '\n' => 0x0D, >= 'a' and <= 'z' => c - 'a' + 'A', _ => (int)c };
-                    var ch = c == '\n' ? 13 : c;
+                    var ch = c is ' ' or '\n' ? 0 : c;
                     Console.WriteLine($"[{(c == '\n' ? "Enter" : c == ' ' ? "Space" : c.ToString())}] " +
-                        Send(pipe, $"{{\"op\":\"key\",\"sid\":\"t1\",\"vk\":{vk},\"ch\":{ch},\"mods\":0,\"process\":\"harness\"}}"));
+                        Send(pipe, Event("KeyPressed", $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}")));
                 }
-                Console.WriteLine("[commit] " + Send(pipe, "{\"op\":\"commit\",\"sid\":\"t1\"}"));
+                Console.WriteLine("[commit] " + Send(pipe, Event("CommitRequested")));
             }
             catch (Exception ex)
             {
@@ -77,15 +80,13 @@ internal static class TipHarness
         return failed;
     }
 
-    internal static Composition.CompositionService CreateService(Control invoker, Func<bool>? cursorIntoBrackets = null) =>
-        new(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions
+    internal static Composition.CompositionService CreateService(Control invoker) =>
+        new(invoker, Composition.CompositionDetector.CreateDefault(), () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System }, new Composition.CompositionServices
         {
             UserDictionary = new Composition.UserDictionary(null),
             History = new Composition.ConversionHistory(null),
             Languages = new Composition.LanguageMemory(null),
             TranslationHistory = new Composition.TranslationHistory(null),
-            Engine = () => Config.ConversionEngine.System,
-            CursorIntoBrackets = cursorIntoBrackets ?? (() => false),
         });
 
     private static string Send(NamedPipeClientStream pipe, string json)

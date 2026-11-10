@@ -143,13 +143,13 @@ internal static class TestRunner
             var engine = new MeltypeEngine(new Config.Settings(), null, null);
             using var invoker = new Control();
             invoker.CreateControl();
-            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions { UserDictionary = new Composition.UserDictionary(null) });
+            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), () => engine.Settings, new Composition.CompositionServices { UserDictionary = new Composition.UserDictionary(null) });
             service.UserDictionary.Add("きごうとう", "記号等");
             var composition = new Composition.CompositionWindow();
             // 候補が 9 個より多いとき (ページに分けて出す) の見た目。2 ページ目の候補を選んでいる。
             composition.ShowView(new Composition.CompositionView("ぶれすれっど", ["ブレスレッド", "ぶれすれっど", "buresureddo"], 0, true, "Space/↓ 候補", Suggestion: "もしかして: ブレスレット　<Tab>で修正"), new Point(-5000, -5000));
             var indicator = new Composition.ModeIndicatorWindow();
-            indicator.Flash(true, new Point(-5000, -5000));
+            indicator.Flash(true, new Point(-5000, -5000), 1200);
             foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(), new Composition.ConversionHistory(null)), new UI.WelcomeForm(), indicator, composition })
             {
                 using (form)

@@ -16,7 +16,7 @@ internal sealed class ModeIndicatorWindow : PopupForm
     // 設定で変えた色 (issue #359)。
     private Color _japaneseColor = DefaultJapaneseColor, _directColor = DefaultDirectColor, _textColor = Color.White;
     private readonly Font _font = new("Yu Gothic UI", 14F, FontStyle.Bold);
-    private readonly System.Windows.Forms.Timer _hideTimer = new() { Interval = 1200 };
+    private readonly System.Windows.Forms.Timer _hideTimer = new();
     private string _text = "あ";
 
     public ModeIndicatorWindow()
@@ -42,7 +42,7 @@ internal sealed class ModeIndicatorWindow : PopupForm
     }
 
     /// <summary>japanese なら「あ」、そうでなければ「A」を location に出し、しばらくしたら消す。</summary>
-    public void Flash(bool japanese, Point location)
+    public void Flash(bool japanese, Point location, int milliseconds)
     {
         _text = japanese ? "あ" : "A";
         BackColor = japanese ? _japaneseColor : _directColor;
@@ -53,6 +53,7 @@ internal sealed class ModeIndicatorWindow : PopupForm
         if (!Visible) Show();
         Invalidate();
         _hideTimer.Stop();
+        _hideTimer.Interval = milliseconds;
         _hideTimer.Start();
     }
 
