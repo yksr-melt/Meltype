@@ -12,10 +12,13 @@ namespace Meltype.Composition;
 // NativeAOT features are enabled only for the Android publication.
 internal static class AndroidNativeRuntime
 {
+    // A property, not a field: a field initialized to false is flagged as
+    // CA1805, and a const would make the desktop branches unreachable code.
+    internal static bool Enabled =>
 #if MELTYPE_ANDROID_NATIVE
-    internal static readonly bool Enabled = true;
+        true;
 #else
-    internal static readonly bool Enabled = false;
+        false;
 #endif
 }
 
