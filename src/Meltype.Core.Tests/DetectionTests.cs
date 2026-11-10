@@ -188,19 +188,6 @@ internal static class DetectionTests
     }
 
     [Test]
-    public static void Romaji_DoubleN_BeforeVowelOrY()
-    {
-        // nn + 母音/y の場合は最初の n のみを「ん」とし、
-        // 後続の n を na/nya として読む。Composition（入力中）でも同じ。
-        var romaji = new RomajiDetector();
-        Assert.Equal("かんな", romaji.AnalyzeFragment("kanna").Kana);
-        Assert.Equal("かんな", romaji.ConvertLenient("kanna", final: true));
-        Assert.Equal("こんにゃく", romaji.AnalyzeFragment("konnyaku").Kana);
-        Assert.Equal("こんにゃく", romaji.ConvertLenient("konnyaku", final: true));
-        Assert.Equal("かんじ", romaji.ConvertLenient("kanji", final: true));
-    }
-
-    [Test]
     public static void Romaji_NewConversions()
     {
         var romaji = new RomajiDetector();

@@ -260,7 +260,7 @@ public sealed class RomajiDetector
                 if (allowCustomWait && _custom is not null && CustomPrefixTail(s, i) is { } nWaiting)
                     return new RomajiAnalysis(true, tokens.ToArray(), nWaiting, null, strongYouon, tsu, sokuon, longVowels);
                 var consumed = 1;
-                if (s[i + 1] == 'n' && (i + 2 >= s.Length || !(IsVowel(s[i + 2]) || s[i + 2] == 'y'))) consumed = 2;
+                if (s[i + 1] == 'n' && (composition || i + 2 >= s.Length || !(IsVowel(s[i + 2]) || s[i + 2] == 'y'))) consumed = 2;
                 tokens.Add(new RomajiToken(s.Substring(i, consumed), "ん"));
                 i += consumed;
                 continue;
