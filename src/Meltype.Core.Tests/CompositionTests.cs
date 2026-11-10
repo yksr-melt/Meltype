@@ -1989,6 +1989,61 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void DictionaryAdditions3_ReportedWords()
+    {
+        // #1696・#499: 固有名詞がかなに割れる
+        foreach (var (typed, expected) in new[]
+        {
+            ("pixiv", "pixiv"),
+            ("sbisinnseiginnkou", "sbiしんせいぎんこう"),
+        })
+        {
+            var e = new Keyboard();
+            e.Type(typed + "\n");
+            Assert.Equal(expected, e.Host.Document);
+        }
+
+        // 逆向き: 語の後ろに続く日本語は日本語のまま
+        foreach (var (typed, expected) in new[]
+        {
+            ("pixivno", "pixivの"),
+            ("sbini", "sbiに"),
+        })
+        {
+            var e = new Keyboard();
+            e.Type(typed + "\n");
+            Assert.Equal(expected, e.Host.Document);
+        }
+
+        // #1456・#1491: 読みが無くて英日に割れる日本語 (確定はかな。変換は変換エンジンに任せる)
+        foreach (var (typed, expected) in new[]
+        {
+            ("supika", "すぴか"),
+            ("kennpa", "けんぱ"),
+        })
+        {
+            var j = new Keyboard();
+            j.Type(typed + "\n");
+            Assert.Equal(expected, j.Host.Document);
+        }
+
+        // #365・#1597・#1667・#1671・#1574・#1322・#836 の語句は BuiltInPhrases_AreSplitOut で確かめる
+        // (語句の表面は変換エンジンが出すので、打鍵の確定では読みのままになる)
+
+        // 既存の判定が変わらないこと: #1545 で外した bot+と の入力と、けんぱ の読みが当たる kenpachi
+        foreach (var (typed, expected) in new[]
+        {
+            ("botto", "botと"),
+            ("kenpachi", "けんぱち"),
+        })
+        {
+            var r = new Keyboard();
+            r.Type(typed + "\n");
+            Assert.Equal(expected, r.Host.Document);
+        }
+    }
+
+    [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
         // #1445・#1651: 変換の候補に出す語
@@ -4150,6 +4205,15 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("ふぉろばく")?.Any(p => p.Word == "フォロ爆") == true, "ふぉろばく → フォロ爆 (#1268)");
         Assert.True(dictionary.Split("きゅうくらりん")?.Any(p => p.Word == "きゅうくらりん") == true, "きゅうくらりん → きゅうくらりん (#1278)");
         Assert.True(dictionary.Split("ぶいすぽ")?.Any(p => p.Word == "ぶいすぽ") == true, "ぶいすぽ → ぶいすぽ (#1286)");
+        Assert.True(dictionary.Split("ぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "ぶいあーるちゃっと → VRChat (#365)");
+        Assert.True(dictionary.Split("したときに")?.Any(p => p.Word == "した時に") == true, "したときに → した時に (#1597)");
+        Assert.True(dictionary.Split("したいわね")?.Any(p => p.Word == "したいわね") == true, "したいわね → したいわね (#1667)");
+        Assert.True(dictionary.Split("にたすね")?.Any(p => p.Word == "に足すね") == true, "にたすね → に足すね (#1671)");
+        Assert.True(dictionary.Split("くっとんねん")?.Any(p => p.Word == "食っとんねん") == true, "くっとんねん → 食っとんねん (#1574)");
+        Assert.True(dictionary.Split("どうにかしたいすねえ")?.Any(p => p.Word == "どうにかしたいすねえ") == true, "どうにかしたいすねえ → どうにかしたいすねえ (#1322)");
+        Assert.True(dictionary.Split("いくかいかないか")?.Any(p => p.Word == "行くか行かないか") == true, "いくかいかないか → 行くか行かないか (#836)");
+        // | の区切りで 2 つの文節にする (行くか|行かないか)
+        Assert.Equal("いくか:行くか|いかないか:行かないか", string.Join("|", dictionary.Clauses("いくかいかないか", "行くか行かないか").Select(c => $"{c.Reading}:{c.Word}")), "行くか|行かないか (#836)");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
