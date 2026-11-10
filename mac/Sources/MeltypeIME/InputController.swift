@@ -14,8 +14,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 本体が最後に返した表示のモード (入力メニューのチェックに使う)
     private var japanese = true
     private var hasMarkedText = false
-    /// 押している左右の Option の仮想キーコード (Windows の左右の Alt)。ほかのキーを押したら nil (単独押しではない)
-    private var tap: Int?
+    private var optionTap = OptionTap()
     private var candidateList: [String] = []
     private let modeIndicator = ModeIndicator.shared
     private var auxPanel: NSPanel?
@@ -121,7 +120,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else { return false }
         if event.type == .flagsChanged { return flagsChanged(event, client: client) }
-        tap = nil
+        optionTap.cancel()
         guard event.type == .keyDown else { return false }
         let flags = event.modifierFlags
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
@@ -146,21 +145,20 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private func flagsChanged(_ event: NSEvent, client: IMKTextInput) -> Bool {
         let option = [kVK_Option: 0xA4, kVK_RightOption: 0xA5][Int(event.keyCode)]
         guard let option else {
-            tap = nil
+            optionTap.cancel()
             return false
         }
         if event.modifierFlags.contains(.option) {
-            tap = tap == nil && event.modifierFlags.intersection([.shift, .control, .command]).isEmpty ? option : nil
+            optionTap.press(option, others: !event.modifierFlags.intersection([.shift, .control, .command]).isEmpty)
             return false
         }
-        defer { tap = nil }
-        guard tap == option else { return false }
+        guard optionTap.release(option) != nil else { return false }
         return send("KeyPressed", client: client, ["key": ["vk": option, "tappedAlone": true]])?.result.consumed ?? false
     }
 
     /// フォーカスが外れた・クリックで別の場所に移ったときなど。未確定の内容をそのまま確定する。
     override func commitComposition(_ sender: Any!) {
-        tap = nil
+        optionTap.cancel()
         guard let client = (sender as? IMKTextInput) ?? self.client() else { return }
         send("CommitRequested", client: client, ["caret": ["moved": true, "passedKey": 0]])
     }
