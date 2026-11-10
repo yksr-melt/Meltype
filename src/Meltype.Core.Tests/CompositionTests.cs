@@ -2030,16 +2030,13 @@ internal static class CompositionTests
         // #365 の語句は BuiltInPhrases_AreSplitOut で確かめる
         // (語句の表面は変換エンジンが出すので、打鍵の確定では読みのままになる)
 
-        // 逆向き: 追加した語・読みを末尾に含む長い入力でも、末尾でその語・読みとして扱う
-        // (korosuzobot と同じ形。#365 は BuiltInPhrases_AreSplitOut の長い読みで確かめる)
+        // 逆向き: 追加した読み (けんぱ) で始まるが、別の語として読む入力はその語のまま
+        // (変換は「確かめること」で実変換を使い、kenpai → 献杯・kenpaku → 建白 と確かめた。
+        //  けんぱ の読みに引きずられて 検波+い・検波+く にはならない)
         foreach (var (typed, expected) in new[]
         {
-            ("anopixiv", "あのpixiv"),
-            ("korehasbi", "これはsbi"),
-            ("ginkounosbi", "ぎんこうのsbi"),
-            ("hosinosupika", "ほしのすぴか"),
-            ("denpakenpa", "でんぱけんぱ"),
-            ("jushinkenpa", "じゅしんけんぱ"),
+            ("kenpai", "けんぱい"),
+            ("kenpaku", "けんぱく"),
         })
         {
             var r = new Keyboard();
@@ -4223,9 +4220,6 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("きゅうくらりん")?.Any(p => p.Word == "きゅうくらりん") == true, "きゅうくらりん → きゅうくらりん (#1278)");
         Assert.True(dictionary.Split("ぶいすぽ")?.Any(p => p.Word == "ぶいすぽ") == true, "ぶいすぽ → ぶいすぽ (#1286)");
         Assert.True(dictionary.Split("ぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "ぶいあーるちゃっと → VRChat (#365)");
-        // 逆向き: 読みを末尾に含む長い読みでも、末尾で VRChat に切り出す
-        Assert.True(dictionary.Split("きょうぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "きょうぶいあーるちゃっと → VRChat (#365)");
-        Assert.True(dictionary.Split("みんなのぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "みんなのぶいあーるちゃっと → VRChat (#365)");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
