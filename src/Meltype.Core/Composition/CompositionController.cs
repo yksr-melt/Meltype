@@ -157,8 +157,8 @@ public sealed partial class CompositionController
         /// <summary>候補と同じ順・件数の注記 (ユーティリティ変換が決めたもの)。null なら候補から決める (<see cref="CandidateNotes"/>)。</summary>
         public IReadOnlyList<CandidateNote>? Notes { get; init; }
 
-        /// <summary>候補のうちユーティリティ変換が作ったもの。選んでも学習しない。</summary>
-        public HashSet<string> Generated { get; } = new(StringComparer.Ordinal);
+        /// <summary>候補のうち、選んでも学習しないユーティリティ変換の候補 (<see cref="Utility.UtilityCandidates.NotLearned"/>)。</summary>
+        public HashSet<string> NotLearned { get; } = new(StringComparer.Ordinal);
 
         /// <summary>この文節の読みを打ったときの英字 (あぴ → api)。分からなければ null。</summary>
         public string? Raw { get; set; }
@@ -388,7 +388,7 @@ public sealed partial class CompositionController
                 fresh.Index = fresh.Candidates.IndexOf(previous.Text);
                 fresh.Changed = true;
                 fresh.Translations.UnionWith(previous.Translations);
-                fresh.Generated.UnionWith(previous.Generated);
+                fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
         _selectedClause = selected;

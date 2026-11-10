@@ -47,14 +47,26 @@ internal enum UtilityPlacement
 }
 
 /// <summary>
-/// ユーティリティ変換の候補。どれを選んでも学習しない。
+/// ユーティリティ変換の候補。
 /// Reading は Replace の文節の読み (null なら打った英字の英語の文節)。Notes は Replace の候補と同じ順・件数の注記。
 /// </summary>
 internal sealed record UtilityCandidates(IReadOnlyList<string> Candidates, UtilityPlacement Placement)
 {
+    private readonly IReadOnlyList<string>? _notLearned;
+
     public string? Reading { get; init; }
 
     public IReadOnlyList<CandidateNote>? Notes { get; init; }
+
+    /// <summary>選んだら学習してよいか。時刻・設定・外の値で変わらない候補 (漢数字) だけ true にする。</summary>
+    public bool Learnable { get; init; }
+
+    /// <summary>選んでも学習しない候補。</summary>
+    public IReadOnlyList<string> NotLearned
+    {
+        get => _notLearned ?? (Learnable ? [] : Candidates);
+        init => _notLearned = value;
+    }
 }
 
 internal static class UtilityConversions
@@ -67,6 +79,7 @@ internal static class UtilityConversions
         new SlashDateConversion(),
         new GitHubIssueConversion(),
         new TypedDateConversion(),
+        new KanjiNumberConversion(),
         new TodayConversion(),
         new NowConversion(),
         new ClockConversion(),
@@ -86,6 +99,7 @@ internal static class UtilityConversions
         return new UtilityCandidates(matches.SelectMany(m => m.Candidates).Distinct(StringComparer.Ordinal).ToList(), replace?.Placement ?? UtilityPlacement.Append)
         {
             Reading = replace?.Reading,
+            NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),
         };
     }
 

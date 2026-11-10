@@ -22,7 +22,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     /// <summary>確定したこの文節を学習するか。ユーティリティ変換の候補・日時や版から作る語・計算の言葉の記号は学習しない。</summary>
     public static bool Learnable(Clause clause) =>
-        !clause.Generated.Contains(clause.Text) && !IsVolatile(clause.Reading, clause.Text) && !IsOperatorChoice(clause);
+        !clause.NotLearned.Contains(clause.Text) && !IsVolatile(clause.Reading, clause.Text) && !IsOperatorChoice(clause);
 
     /// <summary>
     /// 変換エンジンが今の日時・版から作る語か (きょう → 2026/11/10・火曜日、ことし → 令和八年、ばーじょん → Mozc-2.31)。学習しない。
@@ -35,16 +35,21 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     private static bool IsDigit(char c) => char.IsAsciiDigit(c) || c is >= '０' and <= '９';
 
+    /// <summary>
+    /// 学習データに入っていても使わない語 (読み込むときに捨てる)。日時・版から作る語と、前の版が学習から外し漏れていた
+    /// ユーティリティ変換の候補 (時候の挨拶・クリップボードの文字)。
+    /// </summary>
+    public static bool IsStale(string reading, string text) =>
+        IsVolatile(reading, text) ||
+        reading is "じこう" or "じこうのあいさつ" && text.Contains("の候", StringComparison.Ordinal) ||
+        reading is "くりっぷぼーど" or "ぺーすと" && text != CompositionText.ToKatakana(reading);
+
     /// <summary>計算の言葉の文節で、変換エンジンの記号の候補 (3かける4 → 3×4) を選んだか。学習しない (覚えると 電話をかける まで × になる)。</summary>
     private static bool IsOperatorChoice(Clause clause) =>
         MathOperator().IsMatch(clause.Reading) && clause.Text.IndexOfAny(['×', '÷', '+', '＋', '-', '－', '=', '＝']) >= 0;
 
-    /// <summary>変換履歴の語。日時・版から作る語 (<see cref="IsVolatile"/>) は、前に覚えたものも使わない。</summary>
-    public string? LearnedConversion(string reading)
-    {
-        var text = services.History?.Get(reading);
-        return text is not null && IsVolatile(reading, text) ? null : text;
-    }
+    /// <summary>変換履歴の語。</summary>
+    public string? LearnedConversion(string reading) => services.History?.Get(reading);
 
     /// <summary>確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。context は変換エンジンに渡す文脈。</summary>
     public void Learn(IReadOnlyList<Clause> clauses, string? context)
@@ -97,7 +102,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         }
         foreach (var clause in clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.Generated.Contains(clause.Text) || IsOperatorChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.NotLearned.Contains(clause.Text) || IsOperatorChoice(clause))
             {
                 Flush();
                 continue;

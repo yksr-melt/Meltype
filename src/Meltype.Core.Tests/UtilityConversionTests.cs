@@ -123,4 +123,51 @@ internal static class UtilityConversionTests
         for (var i = 0; i < 100 && converter.Learned.Count == 0; i++) Thread.Sleep(10);
         lock (converter.Learned) Assert.Equal("いちばん=1番", converter.Learned.SingleOrDefault() ?? "(なし)");
     }
+
+    [Test]
+    public static void KanjiNumbers_AreOfferedForDigitsOnly()
+    {
+        // Mac の azooKey は打った数字を漢数字にしないので、どの OS でも出るように Meltype が出す (issue #344)
+        var history = new ConversionHistory(null);
+        var k = new Keyboard(history: history);
+        k.Type("2026 ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.True(candidates.Contains("二〇二六") && candidates.Contains("二千二十六") && candidates.Contains("弐千弐拾六"), string.Join(",", candidates));
+        Choose(new Keyboard(history: history), "12345", "一万二千三百四十五");
+        Assert.Equal("一万二千三百四十五", history.Get("12345"), "選んだ漢数字は覚える (issue #672)");
+        Assert.Equal("〇〇一", string.Join("|", KanjiNumberConversion.Candidates("001")), "先頭が 0 の数字は位取りしない");
+        Assert.Equal(0, KanjiNumberConversion.Candidates("12a").Count, "数字だけでなければ出さない");
+        var sentence = new Keyboard();
+        sentence.Type("2026nen ");
+        Assert.True(!sentence.Host.View!.Candidates.Contains("二〇二六"), "文の途中の数字には出さない");
+    }
+
+    [Test]
+    public static void StaleLearning_IsDroppedWhenLoaded()
+    {
+        // 前の版が覚えてしまった日時・版・時候の挨拶・クリップボードの文字は、読み込むときに捨てる。普通の語は残す
+        var directory = Path.Combine(Path.GetTempPath(), $"meltype-stale-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var conversions = Path.Combine(directory, "conversions.json");
+            string[][] entries =
+            [
+                ["あした", "2026/11/11"], ["きのう", "月曜日"], ["ことし", "令和八年"], ["ばーじょん", "Meltype-1.4.1"],
+                ["じこう", "晩秋の候"], ["くりっぷぼーど", "パスワード123"],
+                ["きょう", "京"], ["かようび", "火曜日"], ["じこう", "時効"], ["れいわ8ねん", "2026年"], ["くりっぷぼーど", "クリップボード"],
+            ];
+            File.WriteAllText(conversions, "{" + string.Join(",", entries.Take(8).Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
+            var history = new ConversionHistory(conversions);
+            foreach (var reading in new[] { "あした", "きのう", "ことし", "ばーじょん" }) Assert.True(history.Get(reading) is null, $"{reading} は捨てる");
+            Assert.Equal("京", history.Get("きょう"));
+            Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある語は残す");
+            foreach (var (reading, text, kept) in new[] { ("じこう", "晩秋の候", false), ("くりっぷぼーど", "パスワード123", false), ("じこう", "時効", true), ("れいわ8ねん", "2026年", true), ("くりっぷぼーど", "クリップボード", true) })
+                Assert.Equal(!kept, CompositionLearning.IsStale(reading, text), $"{reading} → {text}");
+            var phrases = Path.Combine(directory, "phrases.txt");
+            File.WriteAllLines(phrases, ["きょうは\t2026/11/10は\t3\t0", "きょうは\t今日は\t3\t0"]);
+            Assert.Equal("今日は", string.Join(",", new PhraseHistory(phrases).StartingWith("きょ")), "予測変換の語句も捨てる");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
 }

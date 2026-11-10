@@ -103,7 +103,7 @@ public sealed partial class CompositionController
                 Fixed = true,
                 Notes = utility.Notes,
             };
-            fixedClause.Generated.UnionWith(utility.Candidates);
+            fixedClause.NotLearned.UnionWith(utility.NotLearned);
             // 続けて入力する前の選択だけを復元し、候補の順 (注記と同じ順) は変えない。
             if (_keptChoices.TryGetValue(fixedClause.Reading, out var kept) && fixedClause.Candidates.IndexOf(kept) is >= 0 and var index)
                 fixedClause.Index = index;
@@ -207,9 +207,9 @@ public sealed partial class CompositionController
         var katakana = CompositionText.ToKatakana(reading);
         var at = new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) }.Max(clause.Candidates.IndexOf) + 1;
         if (at == 0) at = clause.Candidates.Count;
+        clause.NotLearned.UnionWith(utility.NotLearned);
         foreach (var text in utility.Candidates)
         {
-            clause.Generated.Add(text);
             if (clause.Candidates.Contains(text)) continue;
             clause.Candidates.Insert(at++, text);
         }

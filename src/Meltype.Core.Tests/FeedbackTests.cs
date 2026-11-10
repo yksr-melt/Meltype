@@ -1051,11 +1051,13 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue1488_OldVersionInHistoryDoesNotOverrideNormalConversion()
     {
-        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても、通常の「バージョン」にする
+        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても (conversions.json)、通常の「バージョン」にする
         foreach (var old in new[] { "Meltype-1.4.1-pre.2", "Mozc-3.34.6239.102+24.11.oss" })
         {
-            var history = new ConversionHistory(null);
-            history.Remember("ばーじょん", old);
+            var path = Path.Combine(Path.GetTempPath(), $"meltype-version-{Guid.NewGuid():N}.json");
+            File.WriteAllText(path, $"{{\"ばーじょん\":{{\"Text\":\"{old}\",\"Used\":\"2026-11-01T00:00:00Z\"}}}}");
+            var history = new ConversionHistory(path);
+            File.Delete(path);
             foreach (var live in new[] { false, true })
             {
                 var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new VersionConverter());
