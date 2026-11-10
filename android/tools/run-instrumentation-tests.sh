@@ -40,8 +40,28 @@ test -n "$PACKAGE" && test -n "$TEST_PACKAGE" && test "$TEST_PACKAGE" = "$PACKAG
   exit 2
 }
 printf 'app_id=%s\ntest_id=%s\n' "$PACKAGE" "$TEST_PACKAGE" >> "$REPORT/device-info.txt"
-adb install -r "$APP"
-adb install -r "$TEST"
+# "sys.boot_completed" can be set before the package service accepts calls;
+# an install sent in that gap fails with "Failure calling service package".
+# Wait for the service, and retry an install that still hits the gap.
+wait_for_package_service() {
+  for _ in $(seq 1 60); do
+    if adb shell pm path android 2>/dev/null | grep -q '^package:'; then return 0; fi
+    sleep 2
+  done
+  echo 'Android package service did not become ready' >&2
+  return 1
+}
+install_apk() {
+  for attempt in 1 2 3 4 5; do
+    wait_for_package_service
+    if adb install -r "$1"; then return 0; fi
+    echo "Install attempt $attempt failed for $1; retrying" >&2
+    sleep 5
+  done
+  return 1
+}
+install_apk "$APP"
+install_apk "$TEST"
 adb shell pm path "$PACKAGE" | grep -F 'package:'
 adb shell am start -W -n "$PACKAGE/io.github.ninjin0802.keyboard.app.MainActivity"
 status=0

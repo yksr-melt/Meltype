@@ -145,9 +145,8 @@ jobs:
           api-level: '37.0'
           target: google_apis_ps16k
           arch: x86_64
-          disk-size: 2048M
-          partition-size: 1024M
-          ram-size: 2048M
+          disk-size: 4096M
+          ram-size: 4096M
           disable-linux-hw-accel: false
           emulator-boot-timeout: 900
           disable-animations: true
