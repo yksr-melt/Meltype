@@ -40,12 +40,11 @@ test -n "$PACKAGE" && test -n "$TEST_PACKAGE" && test "$TEST_PACKAGE" = "$PACKAG
   exit 2
 }
 printf 'app_id=%s\ntest_id=%s\n' "$PACKAGE" "$TEST_PACKAGE" >> "$REPORT/device-info.txt"
-# "sys.boot_completed" does not mean the system is usable. The Android 17
-# image restarts its system services once right after the first boot: calls
-# sent in that window fail with "Failure calling service package" and
-# "Cannot broadcast before boot completed", and an activity started just
-# after the install is reported as missing. Wait until boot, the package
-# service and the activity service all answer on several polls in a row.
+# "sys.boot_completed" does not mean the system is usable: if surfaceflinger
+# or system_server restarts, calls fail with "Failure calling service
+# package" and an activity started just after the install is reported as
+# missing. Wait until boot, the package service and the activity service all
+# answer on several polls in a row.
 system_ready() {
   test "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = 1 &&
     adb shell pm path android 2>/dev/null | grep -q '^package:' &&
@@ -117,7 +116,18 @@ else
     echo "No alternative keyboard exists for safe test recovery" >&2
     status=1
   else
+    # Emulators report an alphabetic hardware keyboard ("AT Translated Set 2
+    # keyboard"). With one attached, InputMethodService keeps its input view
+    # hidden (Android 17 logs "ImeTracker: onFailed at
+    # PHASE_IME_ON_SHOW_SOFT_INPUT_TRUE"), so the on-screen keys could never
+    # be touched. Phones have no such keyboard; show the IME as they would.
+    previous_show_with_hard="$(adb shell settings get secure show_ime_with_hard_keyboard | tr -d '\r')"
     recover_ime() {
+      if test -n "$previous_show_with_hard" && test "$previous_show_with_hard" != "null"; then
+        adb shell settings put secure show_ime_with_hard_keyboard "$previous_show_with_hard" >/dev/null 2>&1 || true
+      else
+        adb shell settings delete secure show_ime_with_hard_keyboard >/dev/null 2>&1 || true
+      fi
       adb shell ime enable "$other_ime" >/dev/null 2>&1 || true
       if test -n "$previous_ime" && test "$previous_ime" != "null"; then
         adb shell ime set "$previous_ime" >/dev/null 2>&1 ||
@@ -127,6 +137,7 @@ else
       fi
     }
     trap recover_ime EXIT
+    adb shell settings put secure show_ime_with_hard_keyboard 1
     if adb shell ime enable "$IME" && adb shell ime set "$IME"; then
       selected_ime="$(adb shell settings get secure default_input_method | tr -d '\r')"
       if test "$selected_ime" = "$IME"; then

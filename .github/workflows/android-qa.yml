@@ -124,9 +124,12 @@ jobs:
           name: android-qa-report-and-debug-apk
           path: android
       - name: Assert APKs exist
+        # The artifact also carries the Android 15 report. Drop it so a failed
+        # Android 17 run cannot upload or show that report as its own.
         run: |
           test -s android/app/build/outputs/apk/debug/app-debug.apk
           test -s android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          rm -rf android/build/qa
       - name: Update Android command-line tools
         # The runner image's tools predate "major.minor" platform names such
         # as android-37.0 and cannot create an emulator for them.
@@ -150,6 +153,15 @@ jobs:
           disable-linux-hw-accel: false
           emulator-boot-timeout: 900
           disable-animations: true
+          # The Android 17 gralloc mapper aborts ("Assertion failed:
+          # !rcEnc->featureInfo()->hasReadColorBufferDma") whenever a GPU
+          # buffer is read by the CPU, e.g. SurfaceFlinger region sampling or
+          # task snapshots. That kills surfaceflinger or system_server every
+          # ~40 s, so installs and launches fail at random. The host offers
+          # read-color-buffer DMA only with these two features on.
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+            -feature GLDirectMem,HasSharedSlotsHostMemoryAllocator
           script: |
             set -eu
             bash android/tools/run-instrumentation-tests.sh
