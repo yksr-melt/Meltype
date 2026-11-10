@@ -70,6 +70,21 @@ internal static class UtilityConversionTests
     }
 
     [Test]
+    public static void ChoiceInAJoinedClause_IsUsedNextTime()
+    {
+        // 変換エンジンが分けた文節 (じこうの|あいさつ) を 1 つにまとめても、選び直した普通の候補は次の変換で先頭になる (#1716 のレビュー)
+        var converter = new SplitConverter(new() { ["じこうのあいさつ"] = [new("じこうの", "時候の"), new("あいさつ", "挨拶")] });
+        var history = new ConversionHistory(null);
+        IReadOnlyList<string> More(string reading) => reading == "じこうのあいさつ" ? ["時候のあいさつ"] : [];
+        Choose(new Keyboard(converter: converter, history: history, moreCandidates: More, now: () => Tuesday), "jikounoaisatu", "時候のあいさつ");
+        Assert.Equal("時候のあいさつ", history.Get("じこうのあいさつ"), "普通の候補は覚える");
+        var next = new Keyboard(converter: converter, history: history, moreCandidates: More, now: () => Tuesday);
+        next.Type("jikounoaisatu ");
+        Assert.Equal("時候のあいさつ", next.Host.View!.Candidates[next.Host.View.SelectedIndex], string.Join(",", next.Host.View.Candidates));
+        Assert.True(next.Host.View.Candidates.Contains("晩秋の候"), "ユーティリティの候補も出る");
+    }
+
+    [Test]
     public static void UtilityCandidates_AreNotLearned()
     {
         var history = new ConversionHistory(null);

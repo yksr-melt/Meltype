@@ -219,6 +219,10 @@ public sealed partial class CompositionController
     private Clause WholeClause(List<Clause> clauses, string reading)
     {
         var clause = new Clause(reading, false, JapaneseCandidates(reading, string.Concat(clauses.Select(c => c.Text)))) { Raw = _text.Raw };
+        // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
+        var surrounding = (_precedingText ?? "") + (_followingText ?? "");
+        if ((_services.ContextRules?.Choose(reading, surrounding, clause.Text, Standalone) ?? _learning.LearnedConversion(reading)) is { } preferred)
+            Prefer(clause, preferred);
         AddOldKana(clause);
         AddTranslations(clause);
         AddRawCandidates(clause);
