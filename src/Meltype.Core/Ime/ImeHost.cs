@@ -104,7 +104,10 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.JapaneseModeSelected or ImeEventType.AlphanumericModeSelected) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
+                // 独自の種類で「最初は英数」にしたアプリは、入力の本体を作るとき (ImeSession) と同じく英数から
+                var app = current.ForApp(e.Field?.App);
+                var open = (e.ImeOpen ?? true) && app.KindFor(e.Field?.App) is not { StartInEnglish: true };
+                return new(ImeSession.InitialState(active, open, app, ImeSession.AnnouncesFocus(e), NextRev()), Pass);
             }
             session = new ImeSession(environment, settings);
             _sessions[e.Instance] = session;

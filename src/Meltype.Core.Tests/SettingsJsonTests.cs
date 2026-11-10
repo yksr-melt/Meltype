@@ -49,20 +49,23 @@ internal static class SettingsJsonTests
     [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
-        // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人と Mac・Linux の ModeIndicator はそのまま
-        foreach (var (json, windows, expected) in new[]
+        // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま。
+        // Mac・Linux の ModeIndicator は前は読んでいなかったので既定に戻し、Mac のメニューで OFF にしていたら出さない
+        foreach (var (json, windows, keyboard, expected) in new[]
         {
-            ("{\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", true, "Never"),
-            ("{\"ShowTsfModeIndicator\":true}", true, "OnSwitch"),
-            ("{\"Mode\":\"Keyboard\",\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", true, "OnSwitch"),
-            ("{\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", false, "OnSwitchAndFocus"),
-            ("{\"ShowTsfModeIndicator\":true}", false, null),
+            ("{\"ModeIndicator\":\"OnSwitchAndFocus\"}", true, false, "Never"),
+            ("{\"ShowTsfModeIndicator\":true}", true, false, "OnSwitch"),
+            ("{\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", true, true, "OnSwitch"),
+            ("{\"ModeIndicator\":\"OnSwitchAndFocus\"}", false, false, null),
+            ("{\"ShowTsfModeIndicator\":true}", false, false, null),
+            ("{\"ModeIndicator\":\"OnSwitchAndFocus\",\"MacShowModeIndicator\":false}", false, false, "Never"),
+            ("{\"MacShowModeIndicator\":true}", false, false, null),
         })
         {
             var values = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
-            Settings.MigrateToV10(values, windows);
-            Assert.Equal(expected, values["ModeIndicator"]?.GetValue<string>(), $"{json} (Windows: {windows})");
-            Assert.True(!values.ContainsKey("ShowTsfModeIndicator"), "移した項目は消す: " + json);
+            Settings.MigrateToV10(values, windows, keyboard);
+            Assert.Equal(expected, values["ModeIndicator"]?.GetValue<string>(), $"{json} (Windows: {windows}・キーボード: {keyboard})");
+            Assert.True(!values.ContainsKey("ShowTsfModeIndicator") && !values.ContainsKey("MacShowModeIndicator"), "移した項目は消す: " + json);
         }
         var directory = Path.Combine(Path.GetTempPath(), "meltype-indicator-settings-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
@@ -71,8 +74,8 @@ internal static class SettingsJsonTests
             var path = Path.Combine(directory, "config.json");
             foreach (var (json, expected) in new[]
             {
-                ("{\"SettingsVersion\":9,\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", OperatingSystem.IsWindows() ? ModeIndicatorTiming.Never : ModeIndicatorTiming.OnSwitchAndFocus),
-                ("{\"SettingsVersion\":9,\"Mode\":\"Keyboard\",\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", ModeIndicatorTiming.OnSwitch),
+                ("{\"SettingsVersion\":9,\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}", OperatingSystem.IsWindows() ? ModeIndicatorTiming.Never : ModeIndicatorTiming.Default),
+                ("{\"SettingsVersion\":9,\"Mode\":\"Keyboard\",\"ModeIndicator\":\"OnSwitch\",\"ShowTsfModeIndicator\":true}", OperatingSystem.IsWindows() ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Default),
                 ($"{{\"SettingsVersion\":{Settings.CurrentVersion},\"Mode\":\"Tsf\",\"ModeIndicator\":\"OnSwitchAndFocus\"}}", ModeIndicatorTiming.OnSwitchAndFocus),
             })
             {
@@ -80,6 +83,10 @@ internal static class SettingsJsonTests
                 Assert.Equal(expected, Settings.Load(path).ModeIndicator, json);
                 Assert.True(!File.ReadAllText(path).Contains("ShowTsfModeIndicator"), "移した項目を保存し直して消す: " + json);
             }
+            // プロファイルの値には動作モードが無いので、一番上の動作モードで移す
+            File.WriteAllText(path, "{\"SettingsVersion\":9,\"Mode\":\"Keyboard\",\"Profiles\":[{\"Name\":\"別\",\"Values\":{\"ModeIndicator\":\"OnSwitch\"}}]}");
+            Assert.Equal(OperatingSystem.IsWindows() ? "OnSwitch" : null,
+                Settings.Load(path).Profiles.Single(profile => profile.Name == "別").Values?["ModeIndicator"]?.GetValue<string>(), "Meltype キーボードの人の別のプロファイル");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
@@ -239,7 +246,8 @@ internal static class SettingsJsonTests
             Assert.Equal(SlashStyle.MiddleDot, loaded.Slash, "中黒が ON なら中黒 (前も中黒が優先)");
             Assert.Equal(SpaceWidth.HalfWidth, loaded.SpaceWidth, "Shift + Space で半角 → どちらも半角");
             Assert.Equal(ControlKeyLayout.Atok, loaded.ControlKeys, "Ctrl + K / L → ATOK 風");
-            Assert.Equal(ModeIndicatorTiming.OnSwitch, loaded.ModeIndicator, "入力欄に入ったときは出さない → 切り替えたとき");
+            // Mac・Linux では、v10 で Meltype キーボードだけの設定だった ModeIndicator を既定に戻す
+            Assert.Equal(OperatingSystem.IsWindows() ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Default, loaded.ModeIndicator, "入力欄に入ったときは出さない → 切り替えたとき");
             Assert.Equal(CommitMethod.Paste, loaded.CommitMethodFor("foo.exe"), "貼り付けで入力するアプリ → 貼り付け");
             Assert.Equal(CommitMethod.Paste, loaded.CommitMethodFor("Resolve.exe"));
             Assert.Equal(CommitMethod.Keys, loaded.CommitMethodFor("LINE.exe"), "貼り付けを使わないアプリ → 1 文字ずつ");
@@ -252,7 +260,7 @@ internal static class SettingsJsonTests
             var hobby = loaded.SwitchProfile("趣味");
             Assert.Equal(SlashStyle.FullWidth, hobby.Slash, "プロファイルの中も移す");
             Assert.Equal(ControlKeyLayout.Mac, hobby.ControlKeys, "macOS 風と ATOK 風の両方なら macOS 風");
-            Assert.Equal(ModeIndicatorTiming.Never, hobby.ModeIndicator);
+            Assert.Equal(OperatingSystem.IsWindows() ? ModeIndicatorTiming.Never : ModeIndicatorTiming.Default, hobby.ModeIndicator);
             Assert.Equal(SpaceWidth.FullWidth, hobby.SpaceWidth, "スペースを全角で入力が優先 (前も Shift + Space で半角だった)");
             Assert.True(!hobby.AutoDetection, "数値で書いた 手動 (3) → 自動判定 OFF");
 

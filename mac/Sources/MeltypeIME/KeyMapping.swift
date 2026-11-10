@@ -8,8 +8,10 @@ import Carbon.HIToolbox
 /// 文字を入力するキーは文字だけを渡す (仮想キーコードは本体が文字から決める)。
 enum KeyMapping {
     /// 操作キーの characters は操作を表す特殊コードであり、入力文字ではない。
+    /// Ctrl を押したキーの characters は制御文字 (Ctrl+H は 0x08) なので、キーの文字 (h) を渡す (fcitx5・IBus の keysym と同じ)。
     static func text(for event: NSEvent) -> String {
         if operationVirtualKey(for: event.keyCode) != nil { return "" }
+        if event.modifierFlags.contains(.control) { return event.charactersIgnoringModifiers ?? "" }
         return event.characters ?? ""
     }
 

@@ -708,7 +708,7 @@ public sealed class Settings
             var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
             if (fileVersion < 8) MigrateToV8(raw);
             if (fileVersion < 9) MigrateToV9(raw);
-            if (fileVersion < 10) MigrateToV10(raw, OperatingSystem.IsWindows());
+            if (fileVersion < 10) MigrateToV10(raw, OperatingSystem.IsWindows(), Mode == InputMode.Keyboard);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -1037,17 +1037,27 @@ public sealed class Settings
     }
 
     /// <summary>
-    /// v10: 入力モードの表示を、どのフロントも ModeIndicator で決めるようにした (Meltype IME だけの ShowTsfModeIndicator を消した)。
-    /// Windows で動作モードが Meltype IME (既定) なら、今までの Meltype IME の表示 (切り替えたときだけ・既定は出さない) を ModeIndicator にする。
-    /// Mac・Linux は Meltype IME が無いので、ModeIndicator はそのまま。
+    /// v10: 入力モードの表示を、どのフロントも ModeIndicator で決めるようにした (前の ModeIndicator は Meltype キーボードだけの設定)。
+    /// Windows で動作モードが Meltype IME (既定) なら、今までの Meltype IME の表示 (ShowTsfModeIndicator。切り替えたときだけ・既定は出さない) にする。
+    /// Mac・Linux は前の ModeIndicator を読んでいなかった (1.5.0 は全項目を保存するので、既定の値が書いてある) ので消して既定に戻す。
+    /// Mac のメニューで表示を OFF にしていたら (MacShowModeIndicator。Mac のフロントが UserDefaults から移す) 出さない。
     /// </summary>
-    internal static void MigrateToV10(JsonObject values, bool windows)
+    /// <param name="keyboard">動作モードが Meltype キーボードか。動作モードは全プロファイル共通で、config.json の一番上にだけある。</param>
+    internal static void MigrateToV10(JsonObject values, bool windows, bool keyboard)
     {
         var tsf = values.Remove("ShowTsfModeIndicator", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on) && on;
-        if (!windows) return;
-        var keyboard = values[nameof(Mode)] is JsonValue mode && mode.TryGetValue<string>(out var name) && string.Equals(name, nameof(InputMode.Keyboard), StringComparison.OrdinalIgnoreCase);
-        if (!keyboard) values[nameof(ModeIndicator)] = (tsf ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never).ToString();
+        var macOff = values.Remove("MacShowModeIndicator", out var mac) && mac is JsonValue macValue && macValue.TryGetValue<bool>(out var macOn) && !macOn;
+        if (windows)
+        {
+            if (!keyboard) values[nameof(ModeIndicator)] = (tsf ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never).ToString();
+            return;
+        }
+        values.Remove(nameof(ModeIndicator));
+        if (macOff) values[nameof(ModeIndicator)] = ModeIndicatorTiming.Never.ToString();
     }
+
+    private static bool IsKeyboardMode(JsonObject values) =>
+        values[nameof(Mode)] is JsonValue mode && mode.TryGetValue<string>(out var name) && string.Equals(name, nameof(InputMode.Keyboard), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// v9: Zenzai を同梱して既定 ON にした。前の既定 (OFF・場所が空) のままなら ON にする。
@@ -1178,9 +1188,10 @@ public sealed class Settings
         }
         if (version < 10)
         {
-            MigrateToV10(values, OperatingSystem.IsWindows());
+            var keyboard = IsKeyboardMode(values);
+            MigrateToV10(values, OperatingSystem.IsWindows(), keyboard);
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
-                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV10(profileValues, OperatingSystem.IsWindows());
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV10(profileValues, OperatingSystem.IsWindows(), keyboard);
         }
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;

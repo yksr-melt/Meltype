@@ -500,7 +500,9 @@ internal static class ImeContractTests
         front.Settings.AppKinds.Add(new AppKind { Name = "英数から", StartInEnglish = true });
         front.Settings.AppRules.Add(new AppRule { Process = "term.exe", Enabled = true, Kind = "英数から" });
         front.App = "term.exe";
-        front.Event("StateRequested");
+        var entered = front.Event("CaretMoved", extra: Entered).GetProperty("state");
+        Assert.True(!entered.GetProperty("imeOpen").GetBoolean() && entered.GetProperty("languageMode").GetString() == "Alphanumeric",
+            "打つ前 (入力の本体を作る前) から英数\n" + front.Trace);
         Assert.True(!front.Key('k').GetProperty("state").GetProperty("imeOpen").GetBoolean(), "「最初は英数」のアプリに移ったら英数\n" + front.Trace);
     }
 
@@ -559,6 +561,41 @@ internal static class ImeContractTests
         var toggle = new Front();
         toggle.Settings.ToggleShortcuts = [new() { Key = 0x14 }];
         Assert.True(Consumed(toggle.Key(0x14)) && !toggle.Open, "切り替えキーの CapsLock で英数\n" + toggle.Trace);
+    }
+
+    [Test]
+    public static void CtrlH_DeletesWhetherTheFrontSendsTheKeyOrItsCharacter()
+    {
+        // Meltype キーボードは仮想キーコード、Mac・IBus・fcitx5 はキーの文字 (h) を送る
+        foreach (var (vk, ch) in new[] { (0x48, '\0'), (0, 'h') })
+        {
+            var front = new Front();
+            front.Type("kana");
+            Assert.True(Consumed(front.Key(vk, ch, ctrl: true)) && front.Composition["t1"] == "か" && front.Document == "", $"vk {vk:X2}: 1 音消す\n" + front.Trace);
+        }
+    }
+
+    [Test]
+    public static void ThumbShift_HoldsTheThumbKeyUntilItIsReleased()
+    {
+        // ワークアラウンド (KeyReleased): 親指シフトの配列のときだけ、離したことも受け取る
+        var front = new Front();
+        Assert.True(!front.Event("StateRequested").GetProperty("state").GetProperty("capture").GetProperty("keyReleases").GetBoolean(), front.Trace);
+        front.Settings.InputStyle = InputStyle.Kana;
+        front.Settings.KanaLayout = KanaLayout.Nicola;
+        JsonElement Press(int vk, char ch = '\0') =>
+            front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"releaseFollows\":true}}");
+        JsonElement Release(int vk) => front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk}}}");
+        Assert.True(Press(VirtualKeys.Convert).GetProperty("state").GetProperty("capture").GetProperty("keyReleases").GetBoolean(), front.Trace);
+        // 右親指 (変換) を押したまま W: 右シフト面の「が」
+        Press('W', 'w');
+        Release('W');
+        Release(VirtualKeys.Convert);
+        Assert.Equal("が", front.Composition["t1"], "親指キーを離すまでシフト面\n" + front.Trace);
+        // 離してから打った W はふつうの面の「か」
+        Press('W', 'w');
+        Release('W');
+        Assert.Equal("がか", front.Composition["t1"], front.Trace);
     }
 
     [Test]
@@ -704,10 +741,20 @@ internal static class ImeContractTests
     [Test]
     public static void Snippets_ExpandFromTheTextBeforeTheCaret()
     {
+        // 何も打っていないときの Space・Tab・Esc は受け取らないキーなので、定型文に使うときだけ capture に入れる (TSF・Meltype キーボードはほかを通す)
+        static IEnumerable<int> Plain(JsonElement output) => output.GetProperty("state").GetProperty("capture").GetProperty("shortcuts").EnumerateArray()
+            .Where(k => k.GetProperty("modifiers").GetInt32() == 0).Select(k => k.GetProperty("vk").GetInt32());
         var front = new Front();
         front.Snippets.Set("ty", "ありがとう");
-        foreach (var c in ";ty") Assert.True(!Consumed(front.Key(c == ';' ? 0xBA : c - 'a' + 'A', c)), $"{c} はそのままアプリへ\n" + front.Trace);
-        front.Key(' ');
+        JsonElement typed = default;
+        foreach (var c in ";ty")
+        {
+            Assert.True(!Plain(typed.ValueKind == JsonValueKind.Undefined ? front.Event("StateRequested") : typed).Contains(VirtualKeys.Tab), $"{c} の前は Tab を通す\n" + front.Trace);
+            typed = front.Key(c == ';' ? 0xBA : c - 'a' + 'A', c);
+            Assert.True(!Consumed(typed), $"{c} はそのままアプリへ\n" + front.Trace);
+        }
+        Assert.True(Plain(typed).Contains(VirtualKeys.Space) && Plain(typed).Contains(VirtualKeys.Tab), "登録した名前を打ったら Space・Tab を受け取る\n" + front.Trace);
+        Assert.True(Plain(front.Key(' ')).Contains(VirtualKeys.Escape), "入れた直後は Esc を受け取る\n" + front.Trace);
         Assert.Equal("ありがとう", front.Document, front.Trace);
         front.Key('\u001b');
         Assert.Equal(";ty", front.Document, "すぐに Esc で戻す\n" + front.Trace);

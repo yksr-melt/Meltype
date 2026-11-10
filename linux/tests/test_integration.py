@@ -36,7 +36,7 @@ class IntegrationTests(unittest.TestCase):
         os.environ["MELTYPE_DATA_DIR"] = cls.data.name
         (Path(cls.data.name) / "config.json").write_text(json.dumps({
             "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False, "AltKeysSwitchKeyboard": True,
-            "ModeIndicator": "OnSwitchAndFocus"}),
+            "ModeIndicator": "OnSwitchAndFocus", "SettingsVersion": 10}),
             encoding="utf-8")
         loader = importlib.machinery.SourceFileLoader(
             "meltype_integration_product", str(cls.package / "ibus-engine-meltype"))
@@ -132,9 +132,15 @@ class IntegrationTests(unittest.TestCase):
         cls.engine_class = ClientEngine
 
     def setUp(self):
+        # 本体はプロセスで 1 つ (入力モードをすべての入力欄で同じにする)。テストごとに、エンジンを捨てたあとで作り直す
+        self.addCleanup(self.reset_host)
         self.engine = self.engine_class()
-        self.assertTrue(self.engine._host)
+        self.assertTrue(self.product._shared_host())
         self.addCleanup(self.engine.destroy)
+
+    def reset_host(self):
+        self.product._lib.meltype_ime_destroy(self.product._host)
+        self.product._host = None
 
     def scalar(self, text, state=0):
         keyval = IBus.unicode_to_keyval(text)

@@ -213,6 +213,28 @@ if CommandLine.arguments.contains("--self-test") {
     exit(runIsolatedChecks(inputPath: nil))
 }
 
+/// 1.5.0 はメニューで切り替えた入力モードの表示を UserDefaults (MacShowModeIndicator) に持っていた。OFF にしていたら、
+/// まだ移行していない (v10 より前の) config.json に同じ名前で書き、本体の移行 (Settings.MigrateToV10) で ModeIndicator にしてもらう。
+func moveModeIndicatorSettingToConfig() {
+    let key = "MacShowModeIndicator"
+    let defaults = UserDefaults.standard
+    guard defaults.object(forKey: key) != nil else { return }
+    defer { defaults.removeObject(forKey: key) }
+    guard !defaults.bool(forKey: key), let directory = NativeCore.shared.dataDirectory else { return }
+    let url = URL(fileURLWithPath: directory).appendingPathComponent("config.json")
+    var config: [String: Any] = [:]
+    if let data = try? Data(contentsOf: url) {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        config = object
+    }
+    guard (config["SettingsVersion"] as? Int ?? 1) < 10 else { return }
+    config[key] = false
+    try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    if let data = try? JSONSerialization.data(withJSONObject: config, options: [.prettyPrinted]) { try? data.write(to: url) }
+}
+
+moveModeIndicatorSettingToConfig()
+
 // 本体 (libMeltypeNative.dylib) を読み込み、漢字変換・英単語の判定の関数を登録しておく。
 NativeCore.shared.initialize()
 

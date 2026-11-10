@@ -356,16 +356,9 @@ size_t charLength(const std::string &text) {
 
 class MeltypeEngine;
 
-// 入力欄ごとの本体 (ImeHost)
+// 入力欄ごとの表示の状態。入力の本体 (ImeHost) はエンジンに 1 つで、入力モードはすべての入力欄で同じ
 class MeltypeState : public fcitx::InputContextProperty {
 public:
-    MeltypeState(const Native &native) : native_(native) {
-        if (native_.create) host_ = native_.create();
-    }
-    ~MeltypeState() override {
-        if (host_) native_.destroy(host_);
-    }
-    void *host() const { return host_; }
     // Shift を押しているか。fcitx5 は Space のキーに Shift を付けて渡さないことがある (どの環境で起きるかは
     // 未確認。手元は KDE Plasma 6 / Wayland、X11 と GNOME は試していない) ので、キーから覚えておく: #1033
     bool shiftHeld = false;
@@ -379,14 +372,8 @@ public:
     int tap = 0;
     // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
-    // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
-    std::string languageMode;
     // 入力欄に入ったときの出来事を送っているか (入力モードの表示を遅らせる)
     bool entering = false;
-
-private:
-    const Native &native_;
-    void *host_ = nullptr;
 };
 
 class MeltypeCandidate : public fcitx::CandidateWord {
@@ -403,9 +390,10 @@ private:
 class MeltypeEngine : public fcitx::InputMethodEngineV2 {
 public:
     explicit MeltypeEngine(fcitx::Instance *instance)
-        : instance_(instance), factory_([this](fcitx::InputContext &) { return new MeltypeState(native_); }) {
+        : instance_(instance), factory_([](fcitx::InputContext &) { return new MeltypeState(); }) {
         loaded_ = native_.load();
         if (loaded_) {
+            host_ = native_.create();
             dispatcher_.attach(&instance_->eventLoop());
             s_engine = this;
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
@@ -413,16 +401,17 @@ public:
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
     }
 
-    ~MeltypeEngine() override { s_engine = nullptr; }
+    ~MeltypeEngine() override {
+        s_engine = nullptr;
+        if (host_) native_.destroy(host_);
+    }
 
     // パネル (トレイ) の入力メソッドの表示。本体が最後に返した言語モードを出す
-    std::string subMode(const fcitx::InputMethodEntry &, fcitx::InputContext &ic) override {
-        const auto &mode = ic.propertyFor(&factory_)->languageMode;
-        return mode.empty() ? std::string() : mode == "Japanese" ? "日本語" : "英数";
+    std::string subMode(const fcitx::InputMethodEntry &, fcitx::InputContext &) override {
+        return languageMode_.empty() ? std::string() : languageMode_ == "Japanese" ? "日本語" : "英数";
     }
-    std::string subModeLabelImpl(const fcitx::InputMethodEntry &, fcitx::InputContext &ic) override {
-        const auto &mode = ic.propertyFor(&factory_)->languageMode;
-        return mode.empty() ? std::string() : mode == "Japanese" ? "あ" : "A";
+    std::string subModeLabelImpl(const fcitx::InputMethodEntry &, fcitx::InputContext &) override {
+        return languageMode_.empty() ? std::string() : languageMode_ == "Japanese" ? "あ" : "A";
     }
 
     void keyEvent(const fcitx::InputMethodEntry &, fcitx::KeyEvent &event) override {
@@ -511,6 +500,9 @@ private:
 
     fcitx::Instance *instance_;
     Native native_;
+    void *host_ = nullptr;
+    // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
+    std::string languageMode_;
     bool loaded_ = false;
     fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
@@ -530,14 +522,14 @@ private:
     // 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ false
     bool send(fcitx::InputContext *ic, const char *type, const std::string &fields, Json &output) {
         auto *state = ic->propertyFor(&factory_);
-        if (!state->host()) return false;
-        const auto text = native_.send(state->host(), std::string("{\"version\":") + std::to_string(ImeVersion) + ",\"type\":\"" + type +
+        if (!host_) return false;
+        const auto text = native_.send(host_, std::string("{\"version\":") + std::to_string(ImeVersion) + ",\"type\":\"" + type +
             "\",\"instance\":\"fcitx5\",\"field\":" + field(ic) + fields + "}");
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
         const auto *shown = output.get("state");
-        if (const auto mode = shown->str("languageMode"); mode != state->languageMode) {
-            state->languageMode = mode;
+        if (const auto mode = shown->str("languageMode"); mode != languageMode_) {
+            languageMode_ = mode;
             ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
         }
         if (const int ms = shown->integer("modeIndicatorMs"); ms > 0) {

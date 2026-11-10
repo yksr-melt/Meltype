@@ -130,7 +130,7 @@ int main() {
     // 入力欄に入ったときの入力モードの表示を確かめる (Linux の既定は切り替えたときだけ)
     char data[] = "/tmp/meltype-test-XXXXXX";
     FCITX_ASSERT(mkdtemp(data));
-    std::ofstream(std::string(data) + "/config.json") << R"({"ModeIndicator":"OnSwitchAndFocus"})";
+    std::ofstream(std::string(data) + "/config.json") << R"({"ModeIndicator":"OnSwitchAndFocus","SettingsVersion":10})";
     FCITX_ASSERT(setenv("MELTYPE_DATA_DIR", data, 1) == 0);
     char arg0[] = "testmeltype";
     char arg1[] = "--disable=all";

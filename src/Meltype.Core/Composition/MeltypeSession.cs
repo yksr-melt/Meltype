@@ -470,7 +470,9 @@ public sealed class MeltypeSession
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
     /// </summary>
-    public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null)
+    /// <param name="releaseFollows">ワークアラウンド (ImeEventType.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
+    public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
+        bool releaseFollows = false)
     {
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
         // 変換中の before は、変換中の文字より前 (フロントが渡す)
@@ -518,13 +520,24 @@ public sealed class MeltypeSession
         var swallowed = Feed(down, e => !modifier && (StartsComposition(e, ch, shift) || e.Vk == VirtualKeys.Space && (shift || !_direct && _settings().SpaceWidth == SpaceWidth.FullWidth)));
         // このキーをアプリに送り直した (= 使わなかった) なら、アプリに渡す。
         var consumed = swallowed && !_host.ReplayedCurrent;
-        Feed(down with { IsUp = true });
+        if (!releaseFollows) Feed(down with { IsUp = true });
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (Windows のフックの方式と同じ。消す位置がずれて関係ない文字を消さないように)
         if (!consumed && !_controller.IsComposing) ForgetLastCommit();
         if (modifier && _controller.IsComposing) Feed(new KeyEvent(control ? VirtualKeys.LControl : VirtualKeys.LMenu, 0, false, true, false, down.TimeMs));
         if (shift && _controller.IsComposing) Feed(new KeyEvent(VirtualKeys.LShift, 0, false, true, false, down.TimeMs));
         return _host.Result(consumed);
+    }
+
+    /// <summary>
+    /// ワークアラウンド (ImeEventType.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
+    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
+    /// </summary>
+    public SessionResult HandleKeyUp(int vk, string? before, string? after)
+    {
+        _host.Begin(null, false, before, after);
+        Feed(new KeyEvent(vk, 0, false, true, false, _timeMs()));
+        return _host.Result(consumed: false);
     }
 
     /// <summary>

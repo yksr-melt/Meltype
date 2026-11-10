@@ -122,12 +122,22 @@ KEYCODE_LEFT = 105
 
 # ---- 入力エンジン ----
 
+# 入力の本体 (ImeHost)。IBus は入力欄ごとにエンジンを作るが、入力モードはすべての入力欄で同じにするので、プロセスで 1 つにする
+_host = None
+
+
+def _shared_host():
+    global _host
+    if not _host:
+        _host = _lib.meltype_ime_create()
+    return _host
+
+
 class MeltypeEngine(IBus.Engine):
     __gtype_name__ = "MeltypeEngine"
 
     def __init__(self):
         super().__init__()
-        self._host = _lib.meltype_ime_create()
         self._preedit_visible = False
         # 入力欄の事実 (IBus が知らせてくる)
         self._surrounding = True
@@ -163,11 +173,12 @@ class MeltypeEngine(IBus.Engine):
 
     def send(self, event_type, **fields):
         """出来事を本体に送り、返ってきた指示を入力欄に出す。応答 (ImeOutput) を返す。本体が処理できなければ None。"""
-        if not self._host:
+        host = _shared_host()
+        if not host:
             return None
         self._check_replace()
         event = {"version": IME_VERSION, "type": event_type, "instance": "ibus", "field": self._field(), **fields}
-        reply = _take(_lib.meltype_ime_handle(self._host, json.dumps(event).encode()))
+        reply = _take(_lib.meltype_ime_handle(host, json.dumps(event).encode()))
         if reply is None:
             return None
         output = json.loads(reply)
@@ -294,9 +305,6 @@ class MeltypeEngine(IBus.Engine):
         global _focused
         if _focused is self:
             _focused = None
-        if self._host:
-            _lib.meltype_ime_destroy(self._host)
-            self._host = None
         IBus.Engine.do_destroy(self)
 
     # ---- 指示を入力欄に出す ----

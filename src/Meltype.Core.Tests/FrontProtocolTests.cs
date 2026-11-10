@@ -23,23 +23,23 @@ internal static class FrontProtocolTests
     [
         new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new(@"\[L""(\w+)""\]"),
             // 入力モードは Meltype.exe (TipServer) が出す
-            Unused: ["version", "modeIndicatorMs", "insertByPaste"],
+            Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases"],
             // Meltype.exe との、背景の変換の結果の待ち合わせ
             Others: ["generation"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             Others: []),
         new("IBus", "linux/ibus-engine-meltype", source => source, new(@"\[""(\w+)""\]|\.get\(""(\w+)"""),
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new(@"\blet (\w+):"),
             // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered", "keyReleases"],
             Others: []),
     ];
 

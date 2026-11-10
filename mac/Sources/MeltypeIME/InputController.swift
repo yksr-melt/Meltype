@@ -11,7 +11,6 @@ import InputMethodKit
 /// Info.plist の InputMethodServerControllerClass に書いた名前で、Input Method Kit が作る。
 @objc(MeltypeInputController)
 final class MeltypeInputController: IMKInputController, ModeServiceTarget {
-    private var host: UnsafeMutableRawPointer?
     /// 本体が最後に返した表示のモード (入力メニューのチェックに使う)
     private var japanese = true
     private var hasMarkedText = false
@@ -21,7 +20,6 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private let modeIndicator = ModeIndicator.shared
     private var auxPanel: NSPanel?
     private var displayedAux: String?
-    private var dictionaryObserver: NSObjectProtocol?
 
     /// 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
     private static let beforeLength = 4000
@@ -30,24 +28,23 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// フォーカスのある入力欄。背景の変換の結果が届いたら、この入力欄の表示を作り直す。メインスレッドからだけ使う。
     nonisolated(unsafe) static weak var active: MeltypeInputController?
 
-    override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
-        super.init(server: server, delegate: delegate, client: inputClient)
-        host = NativeCore.shared.createHost()
-        // 送るのは同じプロセスの importUserDictionary だけなので、ほかのプロセスから届く分散通知では受けない
-        dictionaryObserver = NotificationCenter.default.addObserver(
-            forName: Notification.Name("MeltypeUserDictionaryChanged"), object: nil, queue: .main
-        ) { [weak self] _ in
-            guard let self else { return }
-            // 取り込んだユーザー辞書は、入力の本体を作るときに読む
-            self.commitComposition(self.client())
-            NativeCore.shared.destroyHost(self.host)
-            self.host = NativeCore.shared.createHost()
-        }
+    /// 入力の本体 (ImeHost)。Input Method Kit は入力欄ごとにこのクラスを作るが、入力モードはすべての入力欄で同じにするので、プロセスで 1 つにする。
+    /// メインスレッドからだけ使う。
+    nonisolated(unsafe) private static var host = NativeCore.shared.createHost()
+
+    /// 送るのは同じプロセスの importUserDictionary だけなので、ほかのプロセスから届く分散通知では受けない
+    nonisolated(unsafe) private static let dictionaryObserver = NotificationCenter.default.addObserver(
+        forName: Notification.Name("MeltypeUserDictionaryChanged"), object: nil, queue: .main
+    ) { _ in
+        // 取り込んだユーザー辞書は、入力の本体を作るときに読む
+        if let active = MeltypeInputController.active { active.commitComposition(active.client()) }
+        NativeCore.shared.destroyHost(MeltypeInputController.host)
+        MeltypeInputController.host = NativeCore.shared.createHost()
     }
 
-    deinit {
-        if let dictionaryObserver { NotificationCenter.default.removeObserver(dictionaryObserver) }
-        NativeCore.shared.destroyHost(host)
+    override init!(server: IMKServer!, delegate: Any!, client inputClient: Any!) {
+        super.init(server: server, delegate: delegate, client: inputClient)
+        _ = Self.dictionaryObserver
     }
 
     // ---- 本体とのやり取り ----
@@ -58,7 +55,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         var event: [String: Any] = ["version": 1, "type": type, "instance": "mac"]
         if let client { event["field"] = field(of: client) }
         event.merge(fields) { _, new in new }
-        guard let output = NativeCore.shared.send(host, event) else { return nil }
+        guard let output = NativeCore.shared.send(Self.host, event) else { return nil }
         japanese = output.state.languageMode == .japanese
         if let client { apply(output.result, to: client) }
         if output.state.modeIndicatorMs > 0 {

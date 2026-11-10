@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text;
 using Meltype.Composition;
@@ -83,6 +84,8 @@ internal sealed class ImeSession
         var result = WithPaste(Verify(e.Type switch
         {
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
+            ImeEventType.KeyReleased when active && e.Key is { } released =>
+                _session.HandleKeyUp(ToggleShortcut.NormalizeHankakuKey(released.Vk), before, e.Field?.After),
             ImeEventType.ModeToggleRequested when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
             ImeEventType.JapaneseModeSelected when active => Switch(true, before, ref explicitChange, toggle: false),
             ImeEventType.AlphanumericModeSelected when active => Switch(false, before, ref explicitChange, toggle: false),
@@ -97,6 +100,7 @@ internal sealed class ImeSession
             _ => _session.Unchanged(),
         }, e.Field), settings);
         TrackLine(e, result);
+        _snippetKeys = SnippetKeys(e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
         _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
@@ -108,9 +112,28 @@ internal sealed class ImeSession
             ImeOpen = !_session.Direct,
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys()),
+            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys(), _snippetKeys),
             Revision = rev,
         }, result);
+    }
+
+    // 次に受け取る、定型文のキー (SnippetKeys)
+    private List<int> _snippetKeys = [];
+
+    /// <summary>
+    /// 何も打っていないときにふつうはアプリに通すが、定型文に使うので受け取るキー: キャレットの前が登録した ;名前 で終わっていたら Space・Tab、
+    /// 定型文を入れた直後なら Esc。キャレットの前は、この出来事の入力欄に、アプリに通させた文字を足したもの。
+    /// </summary>
+    private List<int> SnippetKeys(ImeEvent e, SessionResult result, Settings settings)
+    {
+        if (_session.IsComposing) return [];
+        var before = Before(e.Field);
+        if (e.Type == ImeEventType.KeyPressed && !result.Consumed && e.Key is { Ch: > 0 and < 0x10000 } key) before += (char)key.Ch;
+        var keys = new List<int>();
+        if (SnippetUsable(before, settings) && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed && _environment.Snippets.Get(typed[1..]) is not null)
+            keys.AddRange([VirtualKeys.Space, VirtualKeys.Tab]);
+        if (_lastSnippet is not null) keys.Add(VirtualKeys.Escape);
+        return keys;
     }
 
     /// <summary>
@@ -135,7 +158,7 @@ internal sealed class ImeSession
         ImeOpen = open,
         LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
         ModeIndicatorMs = active && entered && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
-        Capture = Capture(active, !open, false, settings, []),
+        Capture = Capture(active, !open, false, settings, [], []),
         Revision = rev,
     };
 
@@ -155,7 +178,8 @@ internal sealed class ImeSession
                 _session.ForgetDirectInput();
             }
             if (caret.PassedKey is { } vk) _session.CaretMoved(vk, caret.Ctrl);
-            if (caret.FocusLeft) _session.ForgetCodeLine();
+            // 入力欄を出入りした (入った知らせだけで、出た知らせが来ないこともある)
+            if (caret.FocusLeft || caret.FocusEntered) _session.ForgetCodeLine();
         }
         if (e.Field is not { } field) return;
         _session.Private = field.Traits.Contains(ImeTrait.Private);
@@ -298,7 +322,7 @@ internal sealed class ImeSession
             return _session.CommitCombiningForPassThrough(preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return _session.CommitForPassThrough();
-        var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After);
+        var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
         return result;
@@ -318,8 +342,7 @@ internal sealed class ImeSession
     /// </summary>
     private SessionResult? Snippet(int vk, ImeKey key, string? before, Settings settings, (string Text, string Typed)? last)
     {
-        if (before is null || !_session.CanDeleteSurrounding || settings.SnippetMark is not [_] || settings.InputStyle == InputStyle.Kana ||
-            _environment.Snippets.Count == 0) return null;
+        if (!SnippetUsable(before, settings)) return null;
         if (vk == VirtualKeys.Escape && last is { } undo)
             return new SessionResult(true, [new TextEdit(undo.Text.Length, undo.Typed, undo.Text)], null);
         if (vk is VirtualKeys.Space or VirtualKeys.Tab && !key.Shift && SnippetTrigger.TypedBefore(settings.SnippetMark, before) is { } typed &&
@@ -330,6 +353,9 @@ internal sealed class ImeSession
         }
         return key.Ch is > 0 and < 0x10000 && SnippetTrigger.PassesThrough(settings.SnippetMark, before, (char)key.Ch) ? _session.PassThrough() : null;
     }
+
+    private bool SnippetUsable([NotNullWhen(true)] string? before, Settings settings) =>
+        before is not null && _session.CanDeleteSurrounding && settings.SnippetMark is [_] && settings.InputStyle != InputStyle.Kana && _environment.Snippets.Count > 0;
 
     /// <summary>文字を入力するキーの仮想キーコード。特別な扱いのない文字 (記号など) は 0x07 (本体は文字だけを見る)。</summary>
     private static int VirtualKeyOf(int ch) => ch switch
@@ -418,7 +444,8 @@ internal sealed class ImeSession
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
-    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, IEnumerable<int> composingControlKeys)
+    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, IEnumerable<int> composingControlKeys,
+        IReadOnlyList<int> snippetKeys)
     {
         if (!active) return new ImeCapture();
         // 修飾キー単独の割り当ては使えない (設定の読み込みで外す)。左右の Alt の単独押しは設定「左 Alt で英数 / 右 Alt で日本語」
@@ -431,12 +458,14 @@ internal sealed class ImeSession
         var detects = settings.DirectModeAutoDetect && settings.AutoDetection;
         if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
         if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
+        keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
         return new ImeCapture
         {
             PrintableAscii = !direct || detects,
             PrintableAsciiExcept = direct && directEnglishWord ? EnglishWordCharacters : "",
             Shortcuts = keys.Distinct().ToList(),
             CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
+            KeyReleases = settings.InputStyle == InputStyle.Kana && settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron,
         };
     }
 

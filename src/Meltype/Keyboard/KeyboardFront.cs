@@ -36,6 +36,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly HashSet<int> _held = [];
     // 本体が使った押下 (離したこともアプリに通さない)。_gate で守る
     private readonly HashSet<int> _consumed = [];
+    // ワークアラウンド (ImeEventType.KeyReleased): 離したことも本体に送る押下。_gate で守る
+    private readonly HashSet<int> _releaseFollows = [];
     // 並んでいるキー・クリックの数と、UI スレッドで処理しているか (どちらかなら、後のキー・クリックも並べる)。_gate で守る。
     // アプリに通した入力の知らせ (Caret) は順番どおりに本体に送るが、後のキーを並ばせない
     private int _waiting;
@@ -117,7 +119,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         var input = new Input(e, Event: e.IsDown ? KeyOf(e, repeat) : null);
         lock (_gate)
         {
-            if (_waiting > 0 || _busy || _composing) return Enqueue(input);
+            if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId)) return Enqueue(input);
             if (e.IsUp) return UpOutside(e);
             if (Captures(e)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
@@ -282,10 +284,21 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (input.Event is not { } key)
         {
             // 離したキー: 本体が使った押下なら通さない
-            bool consumed;
-            lock (_gate) consumed = _consumed.Remove(e.PhysicalId);
+            bool consumed, follows;
+            lock (_gate)
+            {
+                consumed = _consumed.Remove(e.PhysicalId);
+                follows = _releaseFollows.Remove(e.PhysicalId);
+            }
+            // 変換していないときは入力欄を読まない (離すたびに UI Automation で読むと打鍵が遅れる)
+            if (follows) Send(ImeEventType.KeyReleased, new ImeKey { Vk = e.ShortcutKey }, readField: _composing);
             if (!consumed && e.IsUp) _composition.Replay(e);
             return;
+        }
+        if (_state.Capture.KeyReleases && !VirtualKeys.IsModifier(e.Vk))
+        {
+            key = key with { ReleaseFollows = true };
+            lock (_gate) _releaseFollows.Add(e.PhysicalId);
         }
         var output = Send(ImeEventType.KeyPressed, key);
         if (!output.Result.Consumed)

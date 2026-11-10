@@ -20,6 +20,11 @@ namespace Meltype.Ime;
 public enum ImeEventType
 {
     KeyPressed,
+    /// <summary>
+    /// ワークアラウンド: 親指シフトの同時打鍵のためだけの出来事。ImeCapture.KeyReleases のあいだに ImeKey.ReleaseFollows を付けて送ったキーを離した (Key.Vk だけ)。
+    /// 送るのは Meltype キーボードだけで、ほかのフロントでは親指シフトの同時打鍵が効かない。
+    /// </summary>
+    KeyReleased,
     /// <summary>キーを使わない日本語 ⇔ 英数の切り替え (タスクバーのボタンなど)。</summary>
     ModeToggleRequested,
     /// <summary>キーを使わずに日本語を選んだ (入力メニューなど)。</summary>
@@ -45,7 +50,7 @@ public enum ImeEventType
     StateRequested,
     /// <summary>
     /// フロントの IME のインスタンス (Instance) がなくなった (TSF の Deactivate)。未確定の文字は捨てる。
-    /// インスタンスごとに ImeHost を持つフロント (Mac・IBus・fcitx5) は、ImeHost を捨てれば済むので送らない。
+    /// 1 つのインスタンスですべての入力欄を受け持つフロント (Meltype キーボード・Mac・IBus・fcitx5) は送らない。
     /// </summary>
     InstanceDestroyed,
 }
@@ -97,6 +102,8 @@ public sealed record ImeKey
     /// consumed なら、フロントは離したことがアプリの操作 (メニューバーに移るなど) にならないようにする。
     /// </summary>
     public bool TappedAlone { get; init; }
+    /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
+    public bool ReleaseFollows { get; init; }
 }
 
 /// <summary>OS (・Windows のフロントが調べた) 入力欄の性質。JSON の名前はメンバー名のまま。知らない性質のある出来事は、警告をログに出して受け持たない。</summary>
@@ -210,6 +217,8 @@ public sealed record ImeCapture
     public IReadOnlyList<ImeShortcut> Shortcuts { get; init; } = [];
     /// <summary>変換中に Ctrl と一緒に押しても変換ボックスで使うキー (設定「Control キーの割り当て」)。ほかの Ctrl・Alt・Win と一緒のキーは、確定してアプリに通す。</summary>
     public IReadOnlyList<ImeShortcut> CtrlKeysWhileComposing { get; init; } = [];
+    /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): 親指シフトのかな配列なので、送ったキーを離したことも受け取る。</summary>
+    public bool KeyReleases { get; init; }
 }
 
 /// <summary>Vk は Windows の仮想キーコード。Modifiers は Shift=1, Ctrl=2, Alt=4, Win=8 (<see cref="Input.ShortcutModifiers"/>)。</summary>
