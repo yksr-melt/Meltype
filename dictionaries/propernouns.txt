@@ -10,7 +10,7 @@ GitHub Meltype GitLab Bitbucket Docker Kubernetes Azure AWS Heroku Vercel Netlif
 YouTube Twitter Facebook Instagram TikTok LINE mixi Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
 Netflix Spotify Hulu Disney Prime Twitch Reddit Pinterest LinkedIn Tumblr Medium Substack
 Yahoo Bing DuckDuckGo Baidu Naver Kakao WeChat WhatsApp Telegram Signal Messenger Skype Webex
-ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL
+ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL Kaggle
 iPhone iPad iPod iMac MacBook AirPods Pixel Galaxy Xperia Surface Kindle Echo Alexa Siri Cortana
 Chrome Firefox Safari Edge Opera Brave Vivaldi
 Excel Word PowerPoint Outlook OneDrive OneNote SharePoint Access Visio Dropbox Evernote Box
