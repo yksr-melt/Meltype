@@ -55,21 +55,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var detector = Composition.CompositionDetector.CreateDefault(AppPaths.UserDictionaryDirectory);
         detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
         detector.UseJapanesePunctuationAfterEnglish = () => _engine.Settings.JapanesePunctuationAfterEnglish;
-        _composition = new Composition.CompositionService(_invoker, detector, new Composition.CompositionOptions
+        _composition = new Composition.CompositionService(_invoker, detector, () => _engine.Settings, new Composition.CompositionServices
         {
             ClassifyDirect = _engine.ClassifyDirect,
-            Engine = () => _engine.Settings.ConversionEngine,
-            UseZenzai = () => _engine.Settings.UseZenzai,
-            ZenzaiServerPath = () => _engine.Settings.ZenzaiServerPath,
-            ZenzaiModelPath = () => _engine.Settings.ZenzaiModelPath,
-            ZenzaiDevice = () => _engine.Settings.ZenzaiDevice,
             GitHubTitles = () => GitHubTitlesShared,
-            ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
-            Placement = () => _engine.Settings.CompositionPlacement,
-            Size = () => _engine.Settings.CompositionSize,
-            Font = () => _engine.Settings.CompositionFont,
-            LightTheme = () => _engine.Settings.CompositionIsLight(Meltype.Composition.CompositionWindow.WindowsUsesLightTheme()),
-            Opacity = () => _engine.Settings.CompositionOpacityValue,
         });
         _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
         _keyboard.ModeChanged += OnEngineStatusChanged;

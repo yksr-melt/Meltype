@@ -186,7 +186,7 @@ public sealed class MeltypeSession
     private bool _directEnglishWord;
     private bool _direct;
 
-    public MeltypeSession(CompositionDetector detector, IKanjiConverter converter, CompositionOptions options, Func<Settings> settings,
+    public MeltypeSession(CompositionDetector detector, IKanjiConverter converter, CompositionServices services, Func<Settings> settings,
         bool directModeDetection = false, Func<long>? timeMs = null)
     {
         _settings = settings;
@@ -194,8 +194,8 @@ public sealed class MeltypeSession
         _timeMs = timeMs ?? (() => Environment.TickCount64);
         _directModeDetection = directModeDetection;
         _gate = new CaptureGate(() => { });
-        var controllerOptions = directModeDetection
-            ? options with
+        var controllerServices = directModeDetection
+            ? services with
             {
                 DirectMode = () => Direct,
                 DirectDecided = japanese =>
@@ -205,11 +205,9 @@ public sealed class MeltypeSession
                 },
                 DirectHoldCleared = _host.ResetDirectReplay,
             }
-            : options;
-        // 入力を覚えないように求める入力欄 (Private) では学習しない
-        controllerOptions = controllerOptions with { Learning = () => !Private && options.Learning() };
+            : services;
         _host.DeferCurrentReplayOnDelete = directModeDetection;
-        _controller = new CompositionController(_gate, detector, converter, _host, controllerOptions);
+        _controller = new CompositionController(_gate, detector, converter, _host, settings, controllerServices);
     }
 
     /// <summary>
@@ -243,7 +241,7 @@ public sealed class MeltypeSession
     // 辞書・検出器・学習データは、入力欄 (セッション) がいくつあってもプロセスで 1 つだけ作って共有する (Windows 版の CompositionService.CreateSession と同じ)。
     // 入力欄ごとに作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
     // Input Method Kit・fcitx5・IBus はどれも 1 つのスレッド (メインループ) から呼ぶので、排他はしない。
-    private static (string Directory, CompositionDetector Detector, CompositionOptions Options, SettingsFile Settings)? s_shared;
+    private static (string Directory, CompositionDetector Detector, CompositionServices Services, SettingsFile Settings)? s_shared;
 
     // #123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。セッションの間だけ覚える
     private static readonly GitHubIssueTitles s_githubTitles = new();
@@ -264,18 +262,18 @@ public sealed class MeltypeSession
         // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
         // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
         var userDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory);
-        var options = shared.Options.WithSettings(settings) with
+        var services = shared.Services with
         {
             UserDictionary = userDictionary,
-            Predictor = new Predictor(shared.Options.Predictor?.Phrases, userDictionary, shared.Options.History),
+            Predictor = new Predictor(shared.Services.Predictor?.Phrases, userDictionary, shared.Services.History),
             MoreCandidates = moreCandidates,
             GitHubTitles = () => s_githubTitles,
             AutomaticEnglishSpacing = () => autoSpacing,
         };
-        return new MeltypeSession(detector, converter, options, settings, directModeDetection);
+        return new MeltypeSession(detector, converter, services, settings, directModeDetection);
     }
 
-    private static (string Directory, CompositionDetector Detector, CompositionOptions Options, SettingsFile Settings) Shared(string dataDirectory)
+    private static (string Directory, CompositionDetector Detector, CompositionServices Services, SettingsFile Settings) Shared(string dataDirectory)
     {
         Directory.CreateDirectory(dataDirectory);
         var userDirectory = Path.Combine(dataDirectory, "dictionaries");
@@ -293,7 +291,7 @@ public sealed class MeltypeSession
             created.UseJapanesePunctuationAfterEnglish = () => settingsFile.Current.JapanesePunctuationAfterEnglish;
             var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
             created.Memory = languages;
-            shared = (dataDirectory, created, new CompositionOptions
+            shared = (dataDirectory, created, new CompositionServices
             {
                 Candidates = CandidateDictionary.Load(userDirectory),
                 ContextRules = ContextRules.Load(userDirectory),
@@ -331,7 +329,11 @@ public sealed class MeltypeSession
     public bool DirectEnglishWord => _directEnglishWord;
 
     /// <summary>入力を覚えないように求める入力欄か (Windows のブラウザーのシークレット / InPrivate ウィンドウ)。true の間は学習しない。</summary>
-    public bool Private { get; set; }
+    public bool Private
+    {
+        get => _controller.Private;
+        set => _controller.Private = value;
+    }
 
     /// <summary>
     /// コードの入力欄ではコメント・文字列以外を直接入力する。コメント・文字列の中かは、フロントが渡すキャレットの前の文字 (before) だけで決め、

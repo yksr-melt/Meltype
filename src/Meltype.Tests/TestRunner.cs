@@ -143,7 +143,7 @@ internal static class TestRunner
             var engine = new MeltypeEngine(new Config.Settings(), null, null);
             using var invoker = new Control();
             invoker.CreateControl();
-            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions { UserDictionary = new Composition.UserDictionary(null) });
+            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), () => engine.Settings, new Composition.CompositionServices { UserDictionary = new Composition.UserDictionary(null) });
             service.UserDictionary.Add("きごうとう", "記号等");
             var composition = new Composition.CompositionWindow();
             // 候補が 9 個より多いとき (ページに分けて出す) の見た目。2 ページ目の候補を選んでいる。

@@ -28,13 +28,12 @@ internal static class TipIndicatorTests
     {
         using var invoker = new Control();
         invoker.CreateControl();
-        using var composition = new CompositionService(invoker, CompositionDetector.CreateDefault(), new CompositionOptions
+        using var composition = new CompositionService(invoker, CompositionDetector.CreateDefault(), () => new Settings { ConversionEngine = ConversionEngine.System }, new CompositionServices
         {
             UserDictionary = new UserDictionary(null),
             History = new ConversionHistory(null),
             Languages = new LanguageMemory(null),
             TranslationHistory = new TranslationHistory(null),
-            Engine = () => ConversionEngine.System,
         });
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
         var area = Screen.PrimaryScreen!.WorkingArea;
@@ -73,13 +72,12 @@ internal static class TipIndicatorTests
         var settings = new Settings { Mode = InputMode.Tsf, ModeIndicator = ModeIndicatorTiming.Never };
         using var invoker = new Control();
         invoker.CreateControl();
-        using var composition = new CompositionService(invoker, CompositionDetector.CreateDefault(), new CompositionOptions
+        using var composition = new CompositionService(invoker, CompositionDetector.CreateDefault(), () => new Settings { ConversionEngine = ConversionEngine.System }, new CompositionServices
         {
             UserDictionary = new UserDictionary(null),
             History = new ConversionHistory(null),
             Languages = new LanguageMemory(null),
             TranslationHistory = new TranslationHistory(null),
-            Engine = () => ConversionEngine.System,
         });
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
         using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));

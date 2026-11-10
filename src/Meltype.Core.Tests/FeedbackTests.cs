@@ -966,7 +966,7 @@ internal static class LanguageLearningTests
             Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
             var settings = new Settings { LiveConversion = true, UseZenzai = false };
             var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-                new CompositionOptions { LiveConversion = () => true, Languages = memory }, () => settings);
+                new CompositionServices { Languages = memory }, () => settings);
             foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
             var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
             Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");

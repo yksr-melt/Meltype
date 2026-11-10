@@ -24,7 +24,7 @@ internal static class BackgroundConversionTests
     private static MeltypeSession Session(IKanjiConverter converter)
     {
         (converter as IBackgroundConverter)?.Budget.Enable();
-        return new(CompositionTests.Detector, converter, new CompositionOptions { LiveConversion = () => true }, () => new Settings());
+        return new(CompositionTests.Detector, converter, new CompositionServices(), () => new Settings { LiveConversion = true });
     }
 
     [Test]
@@ -146,7 +146,7 @@ internal static class BackgroundConversionTests
         var phrases = new PhraseHistory(null);
         phrases.Remember("とることができる", "取ることができる");
         var session = new MeltypeSession(CompositionTests.Detector, converter,
-            new CompositionOptions { LiveConversion = () => true, Predictor = new Predictor(phrases, null, null), Predictions = () => true }, () => new Settings());
+            new CompositionServices { Predictor = new Predictor(phrases, null, null) }, () => new Settings { LiveConversion = true, PredictiveCandidates = true });
         Assert.Equal(0, SessionFacadeTests.Type(session, "tanniwotoru")[^1].View?.Predictions?.Count ?? 0);
 
         release.Set();
@@ -305,7 +305,7 @@ internal static class BackgroundConversionTests
     {
         // --repro・--self-test: 結果を受け取る経路が無いので、打鍵ごとに答えを待つ
         using var converter = Slow(delayMs: 50);
-        var session = new MeltypeSession(CompositionTests.Detector, converter, new CompositionOptions { LiveConversion = () => true }, () => new Settings());
+        var session = new MeltypeSession(CompositionTests.Detector, converter, new CompositionServices(), () => new Settings { LiveConversion = true });
         Assert.Equal("日本語", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
     }
 

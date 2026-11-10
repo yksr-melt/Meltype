@@ -180,6 +180,9 @@ internal static class CompositionTests
         public FakeHost Host { get; } = new();
         public CompositionController Controller { get; }
 
+        /// <summary>入力欄のアプリの設定。下の設定のプロパティはこれを読み書きする。</summary>
+        public Meltype.Config.Settings Settings { get; }
+
         private static readonly Detection.ScoreEngine DirectEngine = TestSupport.CreateEngine();
         private static readonly CandidateDictionary Candidates = CandidateDictionary.Load(null);
         private static readonly ContextRules Rules = ContextRules.Load(null);
@@ -189,51 +192,51 @@ internal static class CompositionTests
         private bool _directEnglishWord;
 
         /// <summary>自動判定を使わない (設定 AutoDetection が OFF)。</summary>
-        public bool Manual { get; set; }
+        public bool Manual { get => !Settings.AutoDetection; set => Settings.AutoDetection = !value; }
 
         private bool _shiftHeld;
 
         /// <summary>かな入力 (JIS) か。</summary>
-        public bool Kana { get; set; }
-        public KanaLayout KanaLayout { get; set; }
-        public RomajiLayout RomajiLayout { get; set; }
-        public bool CorrectTypos { get; set; } = true;
-        public bool ZSymbols { get; set; } = true;
-        public bool NumberKeysSelectCandidates { get; set; } = true;
-        public bool SpaceAroundEnglish { get; set; }
-        public Meltype.Config.SpaceWidth SpaceWidth { get; set; }
-        public bool EnterCommitsAsShown { get; set; }
-        public bool AlphanumericKeyStartsAsTyped { get; set; }
-        public bool FullWidthParentheses { get; set; }
-        public Meltype.Config.SlashStyle Slash { get; set; }
-        public bool SquareBrackets { get; set; }
-        public bool EscStepsBack { get; set; }
-        public bool EscRevertsSelectedClause { get; set; }
-        public bool FunctionKeysAffectSelectedClause { get; set; }
-        public Meltype.Config.ControlKeyLayout ControlKeys { get; set; }
-        public bool PartialCommit { get; set; }
-        public bool CursorIntoBrackets { get; set; }
-        public string ControlKeyBindings { get; set; } = "";
-        public bool CalculatorCandidates { get; set; }
-        public bool LaughterAfterKana { get; set; }
-        public bool ContextualLearning { get; set; }
-        public bool ShowCandidatesWhileTyping { get; set; }
-        public bool GitHubIssueCandidates { get; set; }
-        public string GitHubRepository { get; set; } = "";
+        public bool Kana { get => Settings.InputStyle == Meltype.Config.InputStyle.Kana; set => Settings.InputStyle = value ? Meltype.Config.InputStyle.Kana : Meltype.Config.InputStyle.Romaji; }
+        public KanaLayout KanaLayout { get => Settings.KanaLayout; set => Settings.KanaLayout = value; }
+        public RomajiLayout RomajiLayout { get => Settings.RomajiLayout; set => Settings.RomajiLayout = value; }
+        public bool CorrectTypos { get => Settings.CorrectTypos; set => Settings.CorrectTypos = value; }
+        public bool ZSymbols { get => Settings.ZSymbols; set => Settings.ZSymbols = value; }
+        public bool NumberKeysSelectCandidates { get => Settings.NumberKeysSelectCandidates; set => Settings.NumberKeysSelectCandidates = value; }
+        public bool SpaceAroundEnglish { get => Settings.SpaceAroundEnglish; set => Settings.SpaceAroundEnglish = value; }
+        public Meltype.Config.SpaceWidth SpaceWidth { get => Settings.SpaceWidth; set => Settings.SpaceWidth = value; }
+        public bool EnterCommitsAsShown { get => Settings.EnterCommitsAsShown; set => Settings.EnterCommitsAsShown = value; }
+        public bool AlphanumericKeyStartsAsTyped { get => Settings.AlphanumericKeyStartsAsTyped; set => Settings.AlphanumericKeyStartsAsTyped = value; }
+        public bool FullWidthParentheses { get => Settings.FullWidthParentheses; set => Settings.FullWidthParentheses = value; }
+        public Meltype.Config.SlashStyle Slash { get => Settings.Slash; set => Settings.Slash = value; }
+        public bool SquareBrackets { get => Settings.SquareBrackets; set => Settings.SquareBrackets = value; }
+        public bool EscStepsBack { get => Settings.EscStepsBack; set => Settings.EscStepsBack = value; }
+        public bool EscRevertsSelectedClause { get => Settings.EscRevertsSelectedClause; set => Settings.EscRevertsSelectedClause = value; }
+        public bool FunctionKeysAffectSelectedClause { get => Settings.FunctionKeysAffectSelectedClause; set => Settings.FunctionKeysAffectSelectedClause = value; }
+        public Meltype.Config.ControlKeyLayout ControlKeys { get => Settings.ControlKeys; set => Settings.ControlKeys = value; }
+        public bool PartialCommit { get => Settings.PartialCommit; set => Settings.PartialCommit = value; }
+        public bool CursorIntoBrackets { get => Settings.CursorIntoBrackets; set => Settings.CursorIntoBrackets = value; }
+        public string ControlKeyBindings { get => Settings.ControlKeyBindings; set => Settings.ControlKeyBindings = value; }
+        public bool CalculatorCandidates { get => Settings.CalculatorCandidates; set => Settings.CalculatorCandidates = value; }
+        public bool LaughterAfterKana { get => Settings.LaughterAfterKana; set => Settings.LaughterAfterKana = value; }
+        public bool ContextualLearning { get => Settings.ContextualLearning; set => Settings.ContextualLearning = value; }
+        public bool ShowCandidatesWhileTyping { get => Settings.ShowCandidatesWhileTyping; set => Settings.ShowCandidatesWhileTyping = value; }
+        public bool GitHubIssueCandidates { get => Settings.GitHubIssueCandidates; set => Settings.GitHubIssueCandidates = value; }
+        public string GitHubRepository { get => Settings.GitHubRepository; set => Settings.GitHubRepository = value; }
         public GitHubIssueTitles? GitHubTitles { get; set; }
-        public bool ClipboardCandidates { get; set; }
-        public bool NowPlayingCandidates { get; set; }
-        public string ClockTimeZone { get; set; } = "";
+        public bool ClipboardCandidates { get => Settings.ClipboardCandidates; set => Settings.ClipboardCandidates = value; }
+        public bool NowPlayingCandidates { get => Settings.NowPlayingCandidates; set => Settings.NowPlayingCandidates = value; }
+        public string ClockTimeZone { get => Settings.ClockTimeZone; set => Settings.ClockTimeZone = value; }
         public DateTime UtcNow { get; set; } = DateTime.UtcNow;
         public TimeZoneInfo LocalTimeZone { get; set; } = TimeZoneInfo.Utc;
-        public bool ContinueAfterConversion { get; set; }
-        public bool Learning { get; set; } = true;
-        public bool SeparateKeyRoles { get; set; }
-        public bool EnglishFirstInput { get; set; }
-        public bool ConsonantAbbreviations { get; set; }
+        public bool ContinueAfterConversion { get => Settings.ContinueAfterConversion; set => Settings.ContinueAfterConversion = value; }
+        public bool Learning { get => Settings.LearningEnabled; set => Settings.LearningEnabled = value; }
+        public bool SeparateKeyRoles { get => Settings.SeparateKeyRoles; set => Settings.SeparateKeyRoles = value; }
+        public bool EnglishFirstInput { get => Settings.EnglishFirstInput; set => Settings.EnglishFirstInput = value; }
+        public bool ConsonantAbbreviations { get => Settings.ConsonantAbbreviations; set => Settings.ConsonantAbbreviations = value; }
 
         /// <summary>句読点の組み合わせ (設定)。</summary>
-        public Meltype.Config.PunctuationStyle Punctuation { get; set; }
+        public Meltype.Config.PunctuationStyle Punctuation { get => Settings.Punctuation; set => Settings.Punctuation = value; }
 
         /// <summary>かな入力で、仮想キーを順に打つ (shift: その打鍵で Shift を押す)。</summary>
         public void TypeKeys(params (int Vk, bool Shift)[] keys)
@@ -284,9 +287,17 @@ internal static class CompositionTests
             Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
         {
             Direct = direct;
-            Controller = new CompositionController(Gate, Detector, converter ?? Converter, Host, new CompositionOptions
+            Settings = new Meltype.Config.Settings
             {
-                LiveConversion = () => live,
+                LiveConversion = live,
+                ShowTypedKeys = showTypedKeys,
+                TabConversion = tabConversion,
+                PredictiveCandidates = predictor is not null,
+                EnglishNamePredictions = englishNamePredictions,
+                NowPlayingCandidates = false,
+            };
+            Controller = new CompositionController(Gate, Detector, converter ?? Converter, Host, () => Settings, new CompositionServices
+            {
                 DirectMode = () => Direct,
                 ClassifyDirect = (letters, final) => DirectEngine.Evaluate(new Detection.DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final)).Verdict,
                 DirectDecided = japanese => { if (japanese) Direct = false; else _directEnglishWord = true; },
@@ -295,56 +306,16 @@ internal static class CompositionTests
                 History = history ?? new ConversionHistory(null),
                 MoreCandidates = moreCandidates,
                 UserDictionary = userDictionary,
-                Manual = () => Manual,
-                KanaInput = () => Kana,
-                KanaLayout = () => KanaLayout,
-                RomajiLayout = () => RomajiLayout,
                 Misspellings = Misspellings,
                 Languages = languages,
                 Translations = translations,
                 TranslationHistory = translationHistory,
                 RomajiTypos = Typos,
-                CorrectTypos = () => CorrectTypos,
-                ZSymbols = () => ZSymbols,
-                NumberKeysSelectCandidates = () => NumberKeysSelectCandidates,
-                SpaceAroundEnglish = () => SpaceAroundEnglish,
-                SpaceWidth = () => SpaceWidth,
-                EnterCommitsAsShown = () => EnterCommitsAsShown,
-                AlphanumericKeyStartsAsTyped = () => AlphanumericKeyStartsAsTyped,
-                FullWidthParentheses = () => FullWidthParentheses,
-                SquareBrackets = () => SquareBrackets,
-                EscStepsBack = () => EscStepsBack,
-                EscRevertsSelectedClause = () => EscRevertsSelectedClause,
-                FunctionKeysAffectSelectedClause = () => FunctionKeysAffectSelectedClause,
-                ControlKeys = () => ControlKeys,
-                PartialCommit = () => PartialCommit,
-                CursorIntoBrackets = () => CursorIntoBrackets,
-                ControlKeyBindings = () => ControlKeyBindings,
-                CalculatorCandidates = () => CalculatorCandidates,
-                LaughterAfterKana = () => LaughterAfterKana,
-                ContextualLearning = () => ContextualLearning,
-                ShowCandidatesWhileTyping = () => ShowCandidatesWhileTyping,
-                GitHubIssueCandidates = () => GitHubIssueCandidates,
-                GitHubRepository = () => GitHubRepository,
                 GitHubTitles = () => GitHubTitles,
-                ClipboardCandidates = () => ClipboardCandidates,
-                NowPlayingCandidates = () => NowPlayingCandidates,
-                ClockTimeZone = () => ClockTimeZone,
                 UtcNow = () => UtcNow,
                 LocalTimeZone = () => LocalTimeZone,
                 Predictor = predictor,
-                Predictions = () => predictor is not null,
-                EnglishNamePredictions = () => englishNamePredictions,
-                Punctuation = () => Punctuation,
-                Slash = () => Slash,
                 Now = now ?? (() => DateTime.Now),
-                ShowTypedKeys = () => showTypedKeys,
-                TabConversion = () => tabConversion,
-                ContinueAfterConversion = () => ContinueAfterConversion,
-                Learning = () => Learning,
-                SeparateKeyRoles = () => SeparateKeyRoles,
-                EnglishFirstInput = () => EnglishFirstInput,
-                ConsonantAbbreviations = () => ConsonantAbbreviations,
             });
         }
 

@@ -107,7 +107,7 @@ internal static class ProtectionTests
     {
         CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
         // 製品の CreateDefault と同じく、候補辞書・誤字補正・文脈辞書を入れる (実経路と同じ条件で検査する)。
-        var options = new CompositionOptions
+        var services = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(null),
             ContextRules = ContextRules.Load(null),
@@ -115,10 +115,9 @@ internal static class ProtectionTests
             Misspellings = MisspellingDictionary.Load(null),
             RomajiTypos = RomajiTypoCorrector.Load(CompositionTests.Detector.Romaji),
             Languages = languages,
-            SpaceAroundEnglish = () => spaceAroundEnglish,
         };
         // 行頭の @・/ (#193 の「そのままアプリへ渡す」) を切り、変換ボックスの中の保護区間の扱いを確かめる。
-        return new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), options, () => new Settings { SigilWordsDirect = false });
+        return new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), services, () => new Settings { SigilWordsDirect = false, SpaceAroundEnglish = spaceAroundEnglish });
     }
 
     private static SessionResult TypeOne(MeltypeSession session, char c)
