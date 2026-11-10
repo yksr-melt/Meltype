@@ -101,8 +101,6 @@ public sealed record ImeKey
     public string? Text { get; init; }
     /// <summary>KeyReleased: 押してから離すまでに、ほかのキー (修飾キーを含む)・マウスのボタンを押した。</summary>
     public bool Interrupted { get; init; }
-    /// <summary>ほかのソフトが送ったキー (キーの割り当てを変えるツールなど。Windows の低レベルフックが分かるときだけ)。</summary>
-    public bool Injected { get; init; }
     /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): このキーを離したら KeyReleased を送る。false なら本体は押した直後に離したとみなす。</summary>
     public bool ReleaseFollows { get; init; }
 }

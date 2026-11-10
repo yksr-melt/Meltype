@@ -127,7 +127,6 @@ internal sealed class ImeSession
         if (key.Repeat && _altDown == vk) return;
         _altNotAlone = _altDown != 0 && _altDown != vk ? "左右の Alt を両方押した"
             : key.Shift || key.Ctrl || key.Command ? "Shift・Ctrl・Windows キーと一緒に押した"
-            : key.Injected ? "ほかのソフトが送った Alt"
             : null;
         _altDown = vk;
     }

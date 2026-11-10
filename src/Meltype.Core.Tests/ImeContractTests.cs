@@ -476,8 +476,8 @@ internal static class ImeContractTests
     {
         // 左右の Alt の押下を KeyPressed、解放を KeyReleased で受け取り、単独押しかは本体が決める (Windows のフロント)
         var front = new Front();
-        JsonElement Press(int vk, bool ctrl = false, bool repeat = false, bool injected = false) => front.Event("KeyPressed",
-            extra: $",\"key\":{{\"vk\":{vk},\"alt\":true,\"ctrl\":{(ctrl ? "true" : "false")},\"repeat\":{(repeat ? "true" : "false")},\"injected\":{(injected ? "true" : "false")}}}");
+        JsonElement Press(int vk, bool ctrl = false, bool repeat = false) => front.Event("KeyPressed",
+            extra: $",\"key\":{{\"vk\":{vk},\"alt\":true,\"ctrl\":{(ctrl ? "true" : "false")},\"repeat\":{(repeat ? "true" : "false")}}}");
         JsonElement Release(int vk, bool interrupted = false) =>
             front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk},\"interrupted\":{(interrupted ? "true" : "false")}}}");
         bool Tap(int vk, bool interrupted = false)
@@ -499,15 +499,13 @@ internal static class ImeContractTests
         Press(VirtualKeys.LMenu, repeat: true);
         Assert.True(Consumed(Release(VirtualKeys.LMenu)) && !front.Open, "自動の繰り返し\n" + front.Trace);
         Tap(VirtualKeys.RMenu);
-        // 単独押しにしないとき: 押している間のほかの入力 (フロントが見たもの・本体に届いた出来事)、ほかの修飾キーと一緒、ほかのソフトが送った、左右両方
+        // 単独押しにしないとき: 押している間のほかの入力 (フロントが見たもの・本体に届いた出来事)、ほかの修飾キーと一緒、左右両方
         Assert.True(!Tap(VirtualKeys.LMenu, interrupted: true) && front.Open, "Alt + クリック・Alt + Shift\n" + front.Trace);
         Press(VirtualKeys.LMenu);
         front.Event("CaretMoved", extra: ",\"caret\":{\"moved\":true,\"passedKey\":88}");
         Assert.True(!Consumed(Release(VirtualKeys.LMenu)) && front.Open, "Alt + X (アプリに通したキー)\n" + front.Trace);
         Press(VirtualKeys.LMenu, ctrl: true);
         Assert.True(!Consumed(Release(VirtualKeys.LMenu)) && front.Open, "Ctrl + Alt\n" + front.Trace);
-        Press(VirtualKeys.LMenu, injected: true);
-        Assert.True(!Consumed(Release(VirtualKeys.LMenu)) && front.Open, "ほかのソフトが送った\n" + front.Trace);
         Press(VirtualKeys.LMenu);
         Press(VirtualKeys.RMenu);
         Assert.True(!Consumed(Release(VirtualKeys.RMenu)) && !Consumed(Release(VirtualKeys.LMenu)) && front.Open, "左右の Alt を両方\n" + front.Trace);

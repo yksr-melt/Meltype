@@ -541,9 +541,9 @@ internal sealed class TipServer : IDisposable
             _altSkipped = null;
             _alt = e.Vk;
             _altWindow = target;
-            _altInterrupted = false;
             var flags = (IsDown(VirtualKeys.Shift) ? AltFlags.Shift : 0) | (IsDown(VirtualKeys.Control) ? AltFlags.Ctrl : 0) |
                 (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? AltFlags.Command : 0);
+            _altInterrupted = flags != 0;
             Native.PostMessageW(target, AltKeyMessage, e.Vk, (int)flags);
             return false;
         }
@@ -551,9 +551,10 @@ internal sealed class TipServer : IDisposable
         if (!alt || e.Vk != _alt) return false;
         _alt = 0;
         Native.PostMessageW(_altWindow, AltKeyMessage, e.Vk, (int)(AltFlags.Released | (_altInterrupted ? AltFlags.Interrupted : 0)));
-        // 本体の答えは DLL が受け取るので待てない。いつも何もしないキー (0xE8) のあとに送り直す (単独押しでなければ、送り直しても単独押しの操作にはならない)。
+        // 本体の答えは DLL が受け取るので待てない。単独押しでないとここで分かる (ほかのキー・修飾キー・マウスのボタンと一緒) なら、解放をそのまま通す。
+        // それ以外は何もしないキー (0xE8) のあとに送り直す。
         // 入力モードの切り替えより先に解放がアプリに届いても、DLL への知らせはアプリの入力より先に処理される (送ったメッセージは入力より先)
-        return _injector.Inject(Keyboard.KeyboardFront.MaskedAltRelease(e));
+        return !_altInterrupted && _injector.Inject(Keyboard.KeyboardFront.MaskedAltRelease(e));
     }
 
     /// <summary>Meltype IME のときの低レベルフックのマウスのボタン。</summary>
