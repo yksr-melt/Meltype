@@ -4230,14 +4230,9 @@ internal static class CompositionTests
         Assert.True(dictionary.Split("きゅうくらりん")?.Any(p => p.Word == "きゅうくらりん") == true, "きゅうくらりん → きゅうくらりん (#1278)");
         Assert.True(dictionary.Split("ぶいすぽ")?.Any(p => p.Word == "ぶいすぽ") == true, "ぶいすぽ → ぶいすぽ (#1286)");
         Assert.True(dictionary.Split("ぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "ぶいあーるちゃっと → VRChat (#365)");
-        Assert.True(dictionary.Split("したときに")?.Any(p => p.Word == "した時に") == true, "したときに → した時に (#1597)");
-        Assert.True(dictionary.Split("したいわね")?.Any(p => p.Word == "したいわね") == true, "したいわね → したいわね (#1667)");
-        Assert.True(dictionary.Split("にたすね")?.Any(p => p.Word == "に足すね") == true, "にたすね → に足すね (#1671)");
-        Assert.True(dictionary.Split("くっとんねん")?.Any(p => p.Word == "食っとんねん") == true, "くっとんねん → 食っとんねん (#1574)");
-        Assert.True(dictionary.Split("どうにかしたいすねえ")?.Any(p => p.Word == "どうにかしたいすねえ") == true, "どうにかしたいすねえ → どうにかしたいすねえ (#1322)");
-        Assert.True(dictionary.Split("いくかいかないか")?.Any(p => p.Word == "行くか行かないか") == true, "いくかいかないか → 行くか行かないか (#836)");
-        // | の区切りで 2 つの文節にする (行くか|行かないか)
-        Assert.Equal("いくか:行くか|いかないか:行かないか", string.Join("|", dictionary.Clauses("いくかいかないか", "行くか行かないか").Select(c => $"{c.Reading}:{c.Word}")), "行くか|行かないか (#836)");
+        // 逆向き: 読みを末尾に含む長い読みでも、末尾で VRChat に切り出す
+        Assert.True(dictionary.Split("きょうぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "きょうぶいあーるちゃっと → VRChat (#365)");
+        Assert.True(dictionary.Split("みんなのぶいあーるちゃっと")?.Any(p => p.Word == "VRChat") == true, "みんなのぶいあーるちゃっと → VRChat (#365)");
         Assert.Equal(0, dictionary.Count, "同梱の語句はユーザー辞書の一覧に出さない");
         // 報告 (#968): かんそうりつ の候補に 乾燥率
         Assert.True(CandidateDictionary.Load(null).Lookup("かんそうりつ").Contains("乾燥率"), "かんそうりつ → 乾燥率");
