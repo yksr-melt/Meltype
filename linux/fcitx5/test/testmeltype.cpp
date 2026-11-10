@@ -104,6 +104,21 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Hiragana_Katakana"), true);
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
 
+        // 左右の Alt の単独押しで英数・日本語。Alt+クリック (押している間にキャレットが動いた) では切り替えず、Alt の解放をアプリに渡す
+        ic->setCursorRect(Rect(10, 10, 11, 30));
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), false);
+        ic->setCursorRect(Rect(80, 10, 81, 30));
+        // 押したままの自動の繰り返しでも、単独押しに戻さない
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), false);
+        FCITX_ASSERT(!frontend->call<ITestFrontend::sendKeyEvent>(uuid, Key("Alt_L"), true)) << "Alt+クリックの Alt の解放はアプリへ";
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), false);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_L"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "A") << instance->inputMethodLabel(ic);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_R"), false);
+        frontend->call<ITestFrontend::keyEvent>(uuid, Key("Alt_R"), true);
+        FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
+
         // 入力欄に入ったときの入力モードの表示は、アプリがキャレットの位置を知らせるのを少し待ってから出す
         // (入力メソッドを切り替えたときは fcitx5 が自分で情報を出すことがあるので、フォーカスを入れ直して見る)
         ic->focusOut();
@@ -127,10 +142,10 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
 
 int main() {
     setupTestingEnvironment(FCITX5_MELTYPE_BINARY_DIR, {FCITX5_MELTYPE_BINARY_DIR, FCITX5_SYSTEM_ADDON_DIR}, {"test"});
-    // 入力欄に入ったときの入力モードの表示を確かめる (Linux の既定は切り替えたときだけ)
+    // 入力欄に入ったときの入力モードの表示 (Linux の既定は切り替えたときだけ) と、左右の Alt の単独押しを確かめる
     char data[] = "/tmp/meltype-test-XXXXXX";
     FCITX_ASSERT(mkdtemp(data));
-    std::ofstream(std::string(data) + "/config.json") << R"({"ModeIndicator":"OnSwitchAndFocus","SettingsVersion":10})";
+    std::ofstream(std::string(data) + "/config.json") << R"({"ModeIndicator":"OnSwitchAndFocus","AltKeysSwitchKeyboard":true,"SettingsVersion":10})";
     FCITX_ASSERT(setenv("MELTYPE_DATA_DIR", data, 1) == 0);
     char arg0[] = "testmeltype";
     char arg1[] = "--disable=all";

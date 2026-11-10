@@ -560,6 +560,19 @@ class IntegrationTests(unittest.TestCase):
         self.type_text("ka")
         self.assertEqual("か", self.engine.marked)
 
+    def test_alt_click_is_not_a_tap(self):
+        # Alt+クリック (VS Code のカーソルを増やす操作): 押している間にキャレットが動いたら、切り替えずに Alt の解放をアプリに渡す
+        self.engine.do_set_cursor_location(10, 10, 1, 20)
+        self.special(IBus.KEY_Alt_L)
+        self.engine.do_set_cursor_location(10, 10, 1, 20)
+        self.special(IBus.KEY_Alt_L)
+        self.engine.do_set_cursor_location(80, 10, 1, 20)
+        # 押したままの自動の繰り返しでも、単独押しに戻さない
+        self.special(IBus.KEY_Alt_L)
+        self.assertFalse(self.special(IBus.KEY_Alt_L, IBus.ModifierType.RELEASE_MASK))
+        self.type_text("ka")
+        self.assertEqual("か", self.engine.marked, "日本語のまま")
+
     def test_release_ignored_and_shortcut_passed_once(self):
         self.type_text("@kuraido")
         self.assertFalse(self.scalar("a", IBus.ModifierType.RELEASE_MASK))

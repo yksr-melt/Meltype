@@ -112,15 +112,17 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         send("CaretMoved", client: client(), ["caret": ["moved": true, "passedKey": 0, "focusEntered": true]])
     }
 
+    /// マウスのボタンは、Option の単独押しを取り消すためだけに受け取る (Option+クリック)
     override func recognizedEvents(_ sender: Any!) -> Int {
-        Int(NSEvent.EventTypeMask.keyDown.rawValue | NSEvent.EventTypeMask.flagsChanged.rawValue)
+        let mask: NSEvent.EventTypeMask = [.keyDown, .flagsChanged, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        return Int(mask.rawValue)
     }
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, let client = sender as? IMKTextInput else { return false }
         if event.type == .flagsChanged { return flagsChanged(event, client: client) }
-        guard event.type == .keyDown else { return false }
         tap = nil
+        guard event.type == .keyDown else { return false }
         let flags = event.modifierFlags
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
@@ -140,7 +142,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         return send("KeyPressed", client: client, ["key": key])?.result.consumed ?? false
     }
 
-    /// 左右の Option を単独で押して離したら、本体に伝える (ほかの修飾キーの変化は単独押しを取り消す)
+    /// 左右の Option を単独で押して離したら、本体に伝える (ほかの修飾キーの変化・キー・マウスのボタンは単独押しを取り消す)
     private func flagsChanged(_ event: NSEvent, client: IMKTextInput) -> Bool {
         let option = [kVK_Option: 0xA4, kVK_RightOption: 0xA5][Int(event.keyCode)]
         guard let option else {

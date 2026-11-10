@@ -26,6 +26,7 @@
 #include <fcitx-utils/key.h>
 #include <fcitx-utils/keysym.h>
 #include <fcitx-utils/log.h>
+#include <fcitx-utils/rect.h>
 #include <fcitx-utils/textformatflags.h>
 #include <fcitx/addonfactory.h>
 #include <fcitx/addoninstance.h>
@@ -368,8 +369,16 @@ public:
     std::unique_ptr<fcitx::EventSourceTime> enterTimer;
     // 意味を出すのを待っている候補 (選んでいる番号と意味)。変わったら待ち直す
     std::string meaningKey;
-    // 押している左右の Alt の仮想キーコード。ほかのキーを押したら 0 (単独押しではない)
+    // 押している左右の Alt の仮想キーコード。ほかのキーを押した・キャレットが動いたら 0 (単独押しではない)
     int tap = 0;
+    // 単独押しの途中で取り消した Alt (押したままの自動の繰り返しで、単独押しに戻さない)
+    int tapCancelled = 0;
+    // アプリが最後に知らせたキャレットの位置 (同じ位置を知らせ直しても、動いたとみなさない)
+    fcitx::Rect cursor;
+    void cancelTap() {
+        if (tap != 0) tapCancelled = tap;
+        tap = 0;
+    }
     // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
     // 入力欄に入ったときの出来事を送っているか (入力モードの表示を遅らせる)
@@ -399,6 +408,15 @@ public:
             native_.setConversionReady(&MeltypeEngine::onConversionReady);
         }
         instance_->inputContextManager().registerProperty("meltypeState", &factory_);
+        // fcitx5 はマウスのボタンを知らせない。Alt を押している間にキャレットが動いたら、Alt+クリックとみなす
+        cursorWatcher_ = instance_->watchEvent(fcitx::EventType::InputContextCursorRectChanged, fcitx::EventWatcherPhase::Default,
+                                               [this](fcitx::Event &event) {
+                                                   auto *ic = static_cast<fcitx::InputContextEvent &>(event).inputContext();
+                                                   auto *state = ic->propertyFor(&factory_);
+                                                   if (ic->cursorRect() == state->cursor) return;
+                                                   state->cursor = ic->cursorRect();
+                                                   if (instance_->inputMethodEngine(ic) == this) state->cancelTap();
+                                               });
     }
 
     ~MeltypeEngine() override {
@@ -421,15 +439,20 @@ public:
         const auto key = event.key();
         if (key.sym() == FcitxKey_Shift_L || key.sym() == FcitxKey_Shift_R) {
             state->shiftHeld = !event.isRelease();
-            state->tap = 0;
+            state->cancelTap();
             return;
         }
         if (key.sym() == FcitxKey_Alt_L || key.sym() == FcitxKey_Alt_R) {
             const int vk = key.sym() == FcitxKey_Alt_L ? 0xA4 : 0xA5;
             if (!event.isRelease()) {
-                state->tap = vk;
+                // 押したままの自動の繰り返しは、単独押しの途中か (取り消したか) を変えない
+                if (vk != state->tap && vk != state->tapCancelled) {
+                    state->tap = vk;
+                    state->tapCancelled = 0;
+                }
                 return;
             }
+            if (state->tapCancelled == vk) state->tapCancelled = 0;
             if (state->tap != vk) return;
             state->tap = 0;
             Json output;
@@ -438,7 +461,7 @@ public:
             return;
         }
         if (event.isRelease()) return;
-        state->tap = 0;
+        state->cancelTap();
         auto [vk, character] = virtualKey(key.sym());
         if (vk == 0 && character == 0) return;
         const auto states = key.states();
@@ -464,7 +487,8 @@ public:
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
-        event.inputContext()->propertyFor(&factory_)->tap = 0;
+        // Reset はクリックでも来る (Alt+クリック)
+        event.inputContext()->propertyFor(&factory_)->cancelTap();
         leave(event.inputContext(), false);
     }
 
@@ -472,7 +496,7 @@ public:
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
         // Alt + Tab などはウィンドウマネージャーが受け取るので、フォーカスが移ったら単独押しではない
-        event.inputContext()->propertyFor(&factory_)->tap = 0;
+        event.inputContext()->propertyFor(&factory_)->cancelTap();
         event.inputContext()->propertyFor(&factory_)->enterTimer.reset();
         leave(event.inputContext(), true);
     }
@@ -506,6 +530,7 @@ private:
     bool loaded_ = false;
     fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
+    std::unique_ptr<fcitx::HandlerTableEntry<fcitx::EventHandler>> cursorWatcher_;
     MeltypeConfig config_;
 
     // 未確定の内容を確定する。キャレットはこの入力欄の外か、クリックした所に移る

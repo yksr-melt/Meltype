@@ -113,7 +113,9 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (e.IsDown)
         {
             repeat = !_held.Add(e.PhysicalId);
-            _tap = e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu && (_tap == e.Vk || _tap == 0 && !OtherModifiersDown()) ? e.Vk : 0;
+            // 押したままの自動の繰り返しは、単独押しの途中か (クリックで取り消したか) を変えない
+            if (!(repeat && e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu))
+                _tap = e.Vk is VirtualKeys.LMenu or VirtualKeys.RMenu && (_tap == e.Vk || _tap == 0 && !OtherModifiersDown()) ? e.Vk : 0;
         }
         else _held.Remove(e.PhysicalId);
         var input = new Input(e, Event: e.IsDown ? KeyOf(e, repeat) : null);

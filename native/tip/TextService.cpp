@@ -319,6 +319,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
 }
 
 STDMETHODIMP TextService::Deactivate() {
+    SetTap(0);
     DestroyMessageWindow();
     UnpreserveKeys();
     TipLog(L"Deactivate");
@@ -1083,11 +1084,46 @@ bool TextService::IsReinjected(UINT vk) {
 }
 
 void TextService::NoteTap(UINT vk, LPARAM lParam) {
-    // 押したままの自動の繰り返しは、単独押しの途中のまま
     const UINT side = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 24)) ? VK_RMENU : VK_LMENU;
-    if (vk != VK_MENU) tapVk_ = 0;
-    else if (tapVk_ == 0 && !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN)) tapVk_ = side;
-    else if (tapVk_ != side) tapVk_ = 0;
+    // 押したままの自動の繰り返し (直前も押していた) は、単独押しの途中か (クリックで取り消したか) を変えない
+    const bool repeat = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 30)) != 0;
+    if (vk != VK_MENU) SetTap(0);
+    else if (repeat) return;
+    else if (tapVk_ == 0 && !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN)) SetTap(side);
+    else if (tapVk_ != side) SetTap(0);
+}
+
+namespace {
+// マウスのフックが知らせる先 (TIP はスレッドごとに作られる)
+thread_local TextService* t_tapping = nullptr;
+}  // namespace
+
+void TextService::SetTap(UINT vk) {
+    tapVk_ = vk;
+    if (vk != 0 && tapMouseHook_ == nullptr) {
+        t_tapping = this;
+        tapMouseHook_ = SetWindowsHookExW(WH_MOUSE, &TextService::TapMouseProc, nullptr, GetCurrentThreadId());
+    } else if (vk == 0 && tapMouseHook_ != nullptr) {
+        UnhookWindowsHookEx(tapMouseHook_);
+        tapMouseHook_ = nullptr;
+        t_tapping = nullptr;
+    }
+}
+
+LRESULT CALLBACK TextService::TapMouseProc(int code, WPARAM wParam, LPARAM lParam) {
+    // フックはこの中では外さない (次に Alt のキーを受け取ったときの SetTap(0) で外す)
+    if (code == HC_ACTION && t_tapping != nullptr) {
+        switch (wParam) {
+        case WM_LBUTTONDOWN: case WM_RBUTTONDOWN: case WM_MBUTTONDOWN: case WM_XBUTTONDOWN:
+        case WM_LBUTTONDBLCLK: case WM_RBUTTONDBLCLK: case WM_MBUTTONDBLCLK: case WM_XBUTTONDBLCLK:
+        case WM_NCLBUTTONDOWN: case WM_NCRBUTTONDOWN: case WM_NCMBUTTONDOWN: case WM_NCXBUTTONDOWN:
+            t_tapping->tapVk_ = 0;
+            break;
+        default:
+            break;
+        }
+    }
+    return CallNextHookEx(nullptr, code, wParam, lParam);
 }
 
 STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
@@ -1148,7 +1184,7 @@ STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam,
         *eaten = TRUE;
         return S_OK;
     }
-    if (wParam == VK_MENU) tapVk_ = 0;
+    if (wParam == VK_MENU) SetTap(0);
     *eaten = wParam < 256 && eatenDown_[ShortcutSlot(static_cast<UINT>(wParam), lParam)] ? TRUE : FALSE;
     return S_OK;
 }
@@ -1160,13 +1196,13 @@ STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lPa
     }
     if (wParam == VK_MENU && tapVk_ != 0 && tapEaten_) {
         const UINT side = tapVk_;
-        tapVk_ = 0;
+        SetTap(0);
         tapEaten_ = false;
         HandleTap(context, side);
         *eaten = TRUE;
         return S_OK;
     }
-    if (wParam == VK_MENU) tapVk_ = 0;
+    if (wParam == VK_MENU) SetTap(0);
     const UINT slot = ShortcutSlot(static_cast<UINT>(wParam), lParam);
     *eaten = wParam < 256 && eatenDown_[slot] ? TRUE : FALSE;
     if (wParam < 256) eatenDown_[slot] = false;
