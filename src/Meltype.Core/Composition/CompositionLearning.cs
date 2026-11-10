@@ -28,6 +28,9 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// 変換エンジンが今の日時・版から作る語か (きょう → 2026/11/10・火曜日、ことし → 令和八年、ばーじょん → Mozc-2.31)。学習しない。
     /// 読みに無い数字・元号を含むか、読みに無い「曜日」で終わる語。いちばん → 1番 も当てはまるが、Meltype の学習から外すだけで、Mozc は自分で学習する。
     /// </summary>
+    // TODO: 推測をやめ、変換エンジンが付ける「学習しない」の印で決める。Mozc は日時・版の候補に NO_LEARNING を付けているので、
+    // meltype_mozc_helper が候補と一緒に返す。azooKey (特別な候補) と Microsoft IME も同じ印を返せるようにする。
+    // そうすれば いちばん → 1番 を巻き添えにしない。
     public static bool IsVolatile(string reading, string text) =>
         !reading.Any(IsDigit) && text.Any(IsDigit) ||
         EraNames.Any(text.Contains) && !EraReadings.Any(reading.Contains) ||
