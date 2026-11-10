@@ -773,7 +773,7 @@ internal static class ToggleShortcutTests
             Assert.Equal(1, settings.EffectiveToggleShortcuts.Count, "旧設定の Shift+Space を残す");
             Assert.Equal(VirtualKeys.Space, settings.EffectiveToggleShortcuts[0].Key);
             Assert.Equal(ShortcutModifiers.Shift, settings.EffectiveToggleShortcuts[0].Modifiers);
-            Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Count(), "除外しない");
+            Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "除外しない");
         }
         finally
         {

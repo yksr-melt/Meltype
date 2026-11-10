@@ -39,10 +39,15 @@ let package = Package(
                 .linkedFramework("Carbon"),
             ]
         ),
+        .executableTarget(
+            name: "InstallSupport",
+            path: "Sources/InstallSupport"
+        ),
         .testTarget(
             name: "MeltypeIMETests",
             dependencies: ["MeltypeIME"],
-            path: "Tests/MeltypeIMETests"
+            path: "Tests/MeltypeIMETests",
+            swiftSettings: [.interoperabilityMode(.Cxx)]
         ),
     ],
     swiftLanguageModes: [.v5]

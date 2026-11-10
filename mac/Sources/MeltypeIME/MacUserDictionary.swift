@@ -21,7 +21,7 @@ enum MacUserDictionary {
                   let phrase = (row["phrase"] ?? row["word"]) as? String else { return nil }
             let reading = (raw.applyingTransform(.hiraganaToKatakana, reverse: true) ?? raw).trimmingCharacters(in: .whitespacesAndNewlines)
             let word = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard reading.utf16.count >= 2, !word.isEmpty,
+            guard !reading.isEmpty, !word.isEmpty,
                   !reading.unicodeScalars.contains(where: isControl),
                   !word.unicodeScalars.contains(where: isControl) else { return nil }
             return (reading, word)

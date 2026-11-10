@@ -200,6 +200,20 @@ public sealed class Predictor
 
     public PhraseHistory? Phrases => _phrases;
 
+    /// <summary>
+    /// 版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) を含むか。
+    /// 予測候補・学習には使わない (更新後は古い版になる。issue #1488)。
+    /// </summary>
+    internal static bool IsVersionText(string text)
+    {
+        foreach (var name in (ReadOnlySpan<string>)["Meltype-", "Mozc-"])
+        {
+            var i = text.IndexOf(name, StringComparison.Ordinal);
+            if (i >= 0 && i + name.Length < text.Length && char.IsAsciiDigit(text[i + name.Length])) return true;
+        }
+        return false;
+    }
+
     /// <summary>打ちかけの読み (ひらがな) の続きの候補。</summary>
     public IReadOnlyList<string> PredictJapanese(string kana)
     {
@@ -210,7 +224,7 @@ public sealed class Predictor
             foreach (var word in words)
             {
                 if (result.Count >= MaxPredictions) return;
-                if (word.Length > 0 && !result.Contains(word)) result.Add(word);
+                if (word.Length > 0 && !IsVersionText(word) && !result.Contains(word)) result.Add(word);
             }
         }
         if (_phrases is not null) Add(_phrases.StartingWith(kana));

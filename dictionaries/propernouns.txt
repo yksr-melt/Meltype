@@ -10,7 +10,7 @@ GitHub Meltype GitLab Bitbucket Docker Kubernetes Azure AWS Heroku Vercel Netlif
 YouTube Twitter Facebook Instagram TikTok LINE mixi Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
 Netflix Spotify Hulu Disney Prime Twitch Reddit Pinterest LinkedIn Tumblr Medium Substack
 Yahoo Bing DuckDuckGo Baidu Naver Kakao WeChat WhatsApp Telegram Signal Messenger Skype Webex
-ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL
+ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL Kaggle
 iPhone iPad iPod iMac MacBook AirPods Pixel Galaxy Xperia Surface Kindle Echo Alexa Siri Cortana
 Chrome Firefox Safari Edge Opera Brave Vivaldi
 Excel Word PowerPoint Outlook OneDrive OneNote SharePoint Access Visio Dropbox Evernote Box
@@ -81,3 +81,12 @@ DeVito
 America American Megatrends iZotope Neovide pH
 # Issue #1013 (英字・数字の名前。数字の前で区切らない)
 yachi8000
+
+# Issue #1541・#1530・#1637・#1638・#1548 (IME・OS の名前)
+fcitx5 iCloud iGPU AsahiLinux azooKey Hazkey Mozkey
+
+# Issue #1615 (国名)
+Benin Bhutan Botswana Bulgaria Eswatini Czechia Dominica Ghana Grenada Haiti Liberia Libya Kiribati Namibia Madagascar Palestine Panama Suriname Rwanda Tonga Uganda
+
+# Issue #1651 (アーティスト名)
+picco nqrse

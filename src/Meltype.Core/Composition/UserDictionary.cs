@@ -19,10 +19,7 @@ public sealed record UserWord(string Reading, string Word);
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
 public sealed class UserDictionary
 {
-    /// <summary>他の辞書 (Microsoft IME・Google 日本語入力・macOS の plist) から取り込む読みの最小の長さ。</summary>
-    public const int MinReadingLength = 2;
-
-    /// <summary>自分で登録する (画面・userdict.txt) 読みの最小の長さ。</summary>
+    /// <summary>登録・取り込みできる読みの最小の長さ。</summary>
     public const int MinRegisteredReadingLength = 1;
 
     /// <summary>

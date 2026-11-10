@@ -16,7 +16,7 @@ namespace Meltype.Mac;
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Swift 側が登録する関数 (漢字変換・候補・英単語の判定) が返す文字列は malloc したもので、こちらで free する。
-/// Input Method Kit はメインスレッドから呼ぶので、排他はしない。
+/// Input Method Kit はメインスレッドから呼ぶので、排他はしない。漢字変換・候補の関数はワーカーのスレッドから呼ぶ (BackgroundCallbackConverter)。
 /// </summary>
 public static unsafe class Exports
 {
@@ -52,6 +52,7 @@ public static unsafe class Exports
             if (string.IsNullOrEmpty(path)) return 0;
             s_mozc?.Dispose();
             s_mozc = new MozcConverter(path, FromUtf8(profile) ?? Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
+            s_converter = new HybridConverter(() => Config.ConversionEngine.Mozc, s_mozc, null, null);
             if (!s_mozc.IsInstalled) return 0;
             s_mozc.WarmUp();
             return 1;
@@ -72,15 +73,55 @@ public static unsafe class Exports
     {
         try
         {
-            var session = s_mozc is { } mozc
-                ? MeltypeSession.CreateDefault(mozc, mozc.Candidates, s_isWord == null ? null : new CallbackWordChecker())
-                : MeltypeSession.CreateDefault(new CallbackConverter(), MoreCandidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: true);
+            var session = MeltypeSession.CreateDefault(s_converter, s_converter.Candidates, s_isWord == null ? null : new CallbackWordChecker(), autoSpacing: s_mozc is null);
             return GCHandle.ToIntPtr(GCHandle.Alloc(session));
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Error($"Mac: 初期化できませんでした: {ex}");
             return IntPtr.Zero;
+        }
+    }
+
+    /// <summary>
+    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_create の前に 1 回呼ぶ。
+    /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に meltype_refresh を呼ぶ。
+    /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、答えが出るまで待つ。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_conversion_ready")]
+    public static void SetConversionReady(delegate* unmanaged<void> notify)
+    {
+        try
+        {
+            s_converter.Budget.Enable();
+            s_converter.ResultReady += () => notify();
+            if (s_mozc is null) s_callback.WarmUp();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"変換の結果の通知を登録できませんでした: {ex}");
+        }
+    }
+
+    /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
+    private static readonly BackgroundCallbackConverter s_callback = new(new CallbackConverter().ConvertClauses, MoreCandidates);
+
+    /// <summary>入力欄が使う変換エンジン。Windows 版と同じ HybridConverter で、Mac 版は登録された関数だけ、Linux 版は Mozc だけを組み合わせる。</summary>
+    private static HybridConverter s_converter = new(() => Config.ConversionEngine.System, null, s_callback, s_callback.Candidates);
+
+    /// <summary>入力中の表示を、届いた変換結果で作り直して JSON で返す。入力中でなければ NULL。</summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_refresh")]
+    public static byte* Refresh(IntPtr handle)
+    {
+        try
+        {
+            if (handle == IntPtr.Zero || GCHandle.FromIntPtr(handle).Target is not MeltypeSession session) return null;
+            return session.RefreshConversion() is { } result ? ToUtf8(result.ToJson()) : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"入力の処理で例外: {ex}");
+            return null;
         }
     }
 
@@ -333,7 +374,7 @@ public static unsafe class Exports
         }
     }
 
-    private static IReadOnlyList<string> MoreCandidates(string reading)
+    private static string[] MoreCandidates(string reading)
     {
         if (s_candidates == null) return [];
         var text = TakeUtf8(s_candidates(ToUtf8(reading, out var buffer)));

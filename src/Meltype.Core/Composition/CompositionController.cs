@@ -53,6 +53,9 @@ public interface ICompositionHost
     /// <summary>確定した文字列を、フォーカスのあるテキストボックスへ入力する。</summary>
     void CommitText(string text);
 
+    /// <summary>直前に確定した文字の末尾から、キャレットを count 文字だけ左へ戻す。現在の打鍵の通過とは別の操作。</summary>
+    void MoveCaretBackward(int count);
+
     /// <summary>握りつぶしていた打鍵を、そのままアプリへ送り直す。</summary>
     void Replay(KeyEvent e);
 
@@ -341,6 +344,9 @@ public sealed class CompositionController
     /// </summary>
     private const int LiveConversionMinLength = 4;
 
+    /// <summary>Space・確定など、結果が今すぐ要る 1 回の入力で変換エンジンを待つ時間の合計。Meltype IME の DLL の応答期限 (800ms、TextService.h) より短くする。</summary>
+    private const int InputBudgetMs = 400;
+
     /// <summary>候補の一覧の 1 ページの数 (変換ボックス・Linux の候補の一覧と合わせる)。数字キー 1〜9 でこのページの中から選ぶ。</summary>
     internal const int CandidatePageSize = 9;
 
@@ -359,14 +365,16 @@ public sealed class CompositionController
     private readonly IKanjiConverter _converter;
     private readonly ICompositionHost _host;
     private readonly CompositionOptions _options;
-    private readonly Dictionary<string, string> _conversionCache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, string> _standaloneCache = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, string Text)>> _liveCache = new(StringComparer.Ordinal);
+    private readonly ConversionBudget? _budget;
     private readonly HashSet<int> _swallowedShift = [];
     private readonly HashSet<int> _swallowedControl = [];
     private readonly HashSet<int> _replayedDown = [];
     private readonly HashSet<int> _capturedDown = [];
     private List<Clause> _clauses = [];
+    private bool _conversionPrefersJapanese;
+    // 文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える
+    private bool _clausesEdited;
     private int _selectedClause;
     private bool _converting;
     private bool? _lastCommitEnglish;
@@ -380,7 +388,7 @@ public sealed class CompositionController
     private ReconversionSelection? _reconversion;
 
     // 予測変換: 打ちかけの読み・英字の続きの候補と、Tab で選んでいるもの (-1 なら選んでいない)。
-    private IReadOnlyList<Prediction> _predictions = [];
+    private List<Prediction> _predictions = [];
     private string _predictionKey = "";
     private int _predictionIndex = -1;
 
@@ -432,6 +440,7 @@ public sealed class CompositionController
         _text = new CompositionText(detector);
         _detector = detector;
         _converter = converter;
+        _budget = (converter as IBackgroundConverter)?.Budget;
         _host = host;
         _options = options ?? new CompositionOptions();
         _text.Manual = () => _options.Manual();
@@ -465,6 +474,7 @@ public sealed class CompositionController
         {
             while (_gate.TryDequeue(out var input))
             {
+                _budget?.Start(InputBudgetMs);
                 if (input.Key is { } key) HandleKey(key);
                 else if (input.Mouse is { } mouse) HandleMouse(mouse);
                 else if (input.ToggleTarget is { } target) ToggleModeRequested?.Invoke(target);
@@ -485,6 +495,58 @@ public sealed class CompositionController
             }
             // 解放しようとした間に新しい入力が届いた。続けて処理する。
         }
+    }
+
+    /// <summary>
+    /// 背景の変換の結果が届いた。入力スレッドで呼ぶ。変換エンジンが使えなかった間の結果を捨てて、入力中の表示を作り直す。
+    /// 表示を作り直したなら true。
+    /// </summary>
+    public bool RefreshConversion()
+    {
+        _liveCache.Clear();
+        if (_text.IsEmpty || _converting && !RefreshOpenConversion()) return false;
+        // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
+        if (_predictionIndex < 0) _predictionKey = "\u0000";
+        UpdateView();
+        return true;
+    }
+
+    /// <summary>
+    /// 候補を開いた後に届いた答えを反映する。文節の区切りを動かしたあとは置き換えない。
+    /// 文節の並びが変わる答えは、候補を選び直したか、別の文節へ移動したあとなら置き換えない (選んでいる文節がずれる)。
+    /// 候補を選び直した文節は、選んでいる候補を変えずに、新しい候補を上に入れる。何も変わらなければ false。
+    /// </summary>
+    private bool RefreshOpenConversion()
+    {
+        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0) return false;
+        var (old, selected, tabStarted) = (_clauses, _selectedClause, _tabStartedConversion);
+        WithoutWaiting(() =>
+        {
+            StartConversion(_conversionPrefersJapanese);
+            return true;
+        });
+        _tabStartedConversion = tabStarted;
+        var sameClauses = _clauses.Count == old.Count && _clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
+        var nothingNew = sameClauses && _clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
+        if (nothingNew || !sameClauses && (selected != 0 || old.Any(c => c.Changed)))
+        {
+            _clauses = old;
+            _selectedClause = selected;
+            return false;
+        }
+        if (sameClauses)
+        {
+            foreach (var (fresh, previous) in _clauses.Zip(old))
+            {
+                if (!previous.Changed) continue;
+                fresh.Candidates = Distinct([.. fresh.Candidates, .. previous.Candidates]);
+                fresh.Index = fresh.Candidates.IndexOf(previous.Text);
+                fresh.Changed = true;
+                fresh.Translations.UnionWith(previous.Translations);
+            }
+        }
+        _selectedClause = selected;
+        return true;
     }
 
     /// <summary>定期的に呼ぶ。英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
@@ -551,6 +613,7 @@ public sealed class CompositionController
 
     internal void CommitPending(bool preserveLatinRaw, bool preserveText)
     {
+        _budget?.Start(InputBudgetMs);
         if (_heldLetters.Length > 0) ReleaseHeldAsEnglish();
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
@@ -863,6 +926,11 @@ public sealed class CompositionController
                 {
                     _spaceStartedConversion = true;
                     StartConversion();
+                }
+                else if (SpaceCommitsMarkdownMarker())
+                {
+                    // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
+                    CommitText(_text.Raw + " ", english: false, preserveText: true);
                 }
                 else if (SpaceCommitsAlphanumeric())
                 {
@@ -1424,6 +1492,8 @@ public sealed class CompositionController
         (_options.UserDictionary?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 } ||
          _options.ConsonantAbbreviations() && _options.Candidates?.Lookup(raw.ToLowerInvariant()) is { Count: > 0 });
 
+    private bool SpaceCommitsMarkdownMarker() => _text.Mode == DisplayMode.Auto && _text.IsMarkdownMarker;
+
     private bool SpaceCommitsAlphanumeric() =>
         _text.IsAlphanumericAt(final: true) && !(_text.Mode == DisplayMode.Auto && _text.IsNumeric && _text.Raw.All(char.IsAsciiDigit) && _text.PrecedingEnglish != true);
 
@@ -1692,6 +1762,8 @@ public sealed class CompositionController
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
+        _conversionPrefersJapanese = preferJapanese;
+        _clausesEdited = false;
         _tabStartedConversion = false;
         // 括弧単独は生成した候補だけで完結させる仕様 (issue #870)。辞書・履歴・エンジンの候補で補わない。
         // Expanded=true は追加漏れではなく、表示時の Expand も呼ばないための指定。ペアの終端までを1文節にする。
@@ -1881,6 +1953,13 @@ public sealed class CompositionController
                 if (!clause.Candidates.Contains(word)) clause.Candidates.Add(word);
             }
         }
+        // 入力中の表示が半角の記号 (* が 2 個以上・---) のときは、最初の候補も同じ半角にする。
+        if (_text.Mode == DisplayMode.Auto && clause.Candidates.Count > 0 &&
+            _text.AsDisplayedHalfWidth(clause.Candidates[0], clause.Raw) is var shown && shown != clause.Candidates[0])
+        {
+            clause.Candidates.Remove(shown);
+            clause.Candidates.Insert(0, shown);
+        }
         // 全角にした記号 (＃ （ ％) は、半角に戻した候補も出す (Space を続けて押すと半角の # ( %)。
         if (clause.Candidates.Count > 0 && CompositionText.SymbolsToHalfWidth(clause.Candidates[0]) is var half && half != clause.Candidates[0] &&
             !clause.Candidates.Contains(half))
@@ -1985,7 +2064,7 @@ public sealed class CompositionController
         {
             if (parts.Contains(clause)) continue;
             var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _options.History?.Get(clause.Reading) : null);
+            var preferred = _options.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? LearnedConversion(clause.Reading) : null);
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
@@ -2059,6 +2138,31 @@ public sealed class CompositionController
     }
 
     /// <summary>
+    /// 「に」で始まる読みのうち、助詞の「に」に続くことが多い語 (なる・ついて・よって など) で始まるものか。
+    /// 「にわ (庭)」「にほん (日本)」のように「に」で始まる語まで仮の文脈で助詞と読ませると、
+    /// Zenzai が「に|ワニ|は」のように崩すので、助詞らしい続きのときだけにする。
+    /// </summary>
+    internal static bool StartsWithParticleNi(string kana)
+    {
+        if (kana.Length < 3 || kana[0] != 'に') return false;
+        var rest = kana.AsSpan(1);
+        foreach (var next in ParticleNiContinuations)
+        {
+            if (rest.StartsWith(next, StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
+    private static readonly string[] ParticleNiContinuations =
+    [
+        "なる", "なっ", "なり", "なら", "なれ", "なろ", "ついて", "ついての", "つき", "よっ", "よる", "より", "よれ",
+        "とって", "とっての", "たいし", "たいする", "かんし", "かんする", "おいて", "おける", "むけ", "むか", "わたっ", "わたる",
+        "あたっ", "あたり", "して", "した", "する", "すぎ", "さえ", "しか", "ちがい", "そって", "そう", "もとづ", "くらべ",
+        "かけ", "かわっ", "かわり", "ともな", "つれ", "あわせ", "おうじ", "はいっ", "いく", "いっ", "いれ", "いる", "いた",
+        "きた", "くる", "きて", "でき", "みえ", "きこえ", "かんじ", "おもえ",
+    ];
+
+    /// <summary>
     /// 日本語のかなを変換エンジンで文節に区切って変換する。各文節の最初の候補は次の順で決める:
     ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
     ///   2. ユーザーが前に選び直した変換 (学習)
@@ -2073,7 +2177,7 @@ public sealed class CompositionController
         var context = ConversionContext();
         var parts = engine ?? (context is not null
             ? ConvertWithContext(kana, context)
-            : _converter.ConvertClauses(kana, kana.Length >= 3 && kana[0] == 'に' ? "これ" : null));
+            : _converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
         parts ??= [new ConversionClause(kana, _converter.Convert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _options.Candidates?.Contains(kana) == true)
@@ -2089,7 +2193,7 @@ public sealed class CompositionController
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (_precedingText ?? "") + others + (_followingText ?? "");
-            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? _options.History?.Get(clauses[i].Reading);
+            var preferred = _options.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
@@ -2513,7 +2617,7 @@ public sealed class CompositionController
     /// 10がつ9にち → DateCandidates (10/9 / 10/09 / 10月9日 / 10/9(金) …: #935)、3じ15ふん → 3:15 / 03:15。
     /// ありえない日付・時刻 (13がつ、2がつ30にち、25じ) なら null。日付・時刻でなければ null。
     /// </summary>
-    private IEnumerable<string>? TypedDateCandidates(string reading)
+    private string[]? TypedDateCandidates(string reading)
     {
         static int Number(string digits) => int.Parse(new string(digits.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c).ToArray()), CultureInfo.InvariantCulture);
         if (DateReading.Match(reading) is { Success: true } date)
@@ -2560,6 +2664,19 @@ public sealed class CompositionController
     private static bool IsNowPlayingChoice(Clause clause) => clause.Reading == "なう";
 
     /// <summary>
+    /// 「ばーじょん」で選んだ版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) の文節か。
+    /// 覚えない (更新後に古い版が通常の「バージョン」より先に出る。issue #1488)。過去に覚えたものも使わない。
+    /// </summary>
+    private static bool IsVersionChoice(string reading, string? text) =>
+        text is not null && reading.Contains("ばーじょん", StringComparison.Ordinal) && Predictor.IsVersionText(text);
+
+    private string? LearnedConversion(string reading)
+    {
+        var text = _options.History?.Get(reading);
+        return IsVersionChoice(reading, text) ? null : text;
+    }
+
+    /// <summary>
     /// 日付・時刻の候補 (いま → 17:22、きょう → 10月9日、10がつ9にち → 10/9) を選んだ文節か。
     /// 学習しない (覚えると、次に打ったときに古い日時・違う日付が最初に出る)。
     /// </summary>
@@ -2569,7 +2686,7 @@ public sealed class CompositionController
         (NowReadings.Contains(clause.Reading) || ClockReadings.Contains(clause.Reading) || clause.Reading == "きょう") && (clause.Text.Any(char.IsAsciiDigit) || clause.Text.EndsWith("曜日", StringComparison.Ordinal));
 
     /// <summary>打った日付・時刻の読みから作る候補 (変換したときと同じもの)。日付・時刻でなければ null。</summary>
-    private IEnumerable<string>? DateTimeCandidatesOf(string reading) =>
+    private string[]? DateTimeCandidatesOf(string reading) =>
         SlashDate.Match(reading) is { Success: true } date
             ? DateCandidates(int.Parse(date.Groups["m"].Value, CultureInfo.InvariantCulture), int.Parse(date.Groups["d"].Value, CultureInfo.InvariantCulture))
             : TypedDateCandidates(reading);
@@ -2721,6 +2838,7 @@ public sealed class CompositionController
     /// </summary>
     private void Resize(int delta)
     {
+        _clausesEdited = true;
         var current = _clauses[_selectedClause];
         // 空のペアは左右を一度に選択・確定する単位。区切り操作で片側の文節へ戻さない。
         if (current.Brackets is not null) return;
@@ -2804,18 +2922,10 @@ public sealed class CompositionController
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
-        if (_options.History?.Get(clause.Reading) is { } learned) Prefer(clause, learned);
+        if (LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
-    /// <summary>同じかなを何度も変換しないようにキャッシュする。</summary>
-    private string Convert(string kana)
-    {
-        if (_conversionCache.TryGetValue(kana, out var cached)) return cached;
-        var converted = NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
-        if (_conversionCache.Count > 256) _conversionCache.Clear();
-        _conversionCache[kana] = converted;
-        return converted;
-    }
+    private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
 
     /// <summary>
     /// 文の中での変換結果がある文節の候補に足す「その読みだけの変換」。Zenzai を使える変換エンジンでも Zenzai には頼まない (IStandaloneConverter)。
@@ -2824,11 +2934,7 @@ public sealed class CompositionController
     private string Standalone(string kana)
     {
         if (_converter is not IStandaloneConverter standalone) return Convert(kana);
-        if (_standaloneCache.TryGetValue(kana, out var cached)) return cached;
-        var converted = NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
-        if (_standaloneCache.Count > 256) _standaloneCache.Clear();
-        _standaloneCache[kana] = converted;
-        return converted;
+        return NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
     }
 
     /// <summary>
@@ -2838,20 +2944,24 @@ public sealed class CompositionController
     private string LiveConvert(string kana)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') < LiveConversionMinLength) return kana;
+        if (!CountsAsLive(kana)) return kana;
         return string.Concat(LiveClauses(kana).Select(c => c.Text));
     }
+
+    private static bool CountsAsLive(string kana) => kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') >= LiveConversionMinLength;
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     private List<(string Reading, string Text)> LiveClauses(string kana)
     {
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _options.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
     }
+
+    private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithLimit(0, convert);
 
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private string CurrentDisplay(bool final) =>
@@ -2875,7 +2985,11 @@ public sealed class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
-        var text = converting ? string.Concat(_clauses.Select(c => c.Text)) : CurrentDisplay(final: true);
+        // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
+        var text = converting ? string.Concat(_clauses.Select(c => c.Text))
+            : _budget is { Enabled: true } && !_options.EnterCommitsAsShown()
+                ? _text.Display(final: true, _options.LiveConversion() ? kana => CountsAsLive(kana) ? string.Concat(ConvertJapanese(kana).Select(c => c.Text)) : kana : null)
+                : CurrentDisplay(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
         if (!converting && _text.Mode == DisplayMode.Auto && !_text.KanaInput && _text.PrecedingEnglish == true && CurrentDisplay(final: false) is { Length: > 0 } shown &&
@@ -2962,6 +3076,7 @@ public sealed class CompositionController
     {
         if (english || !_options.Learning() || _options.Predictor?.Phrases is not { } phrases || !_options.Predictions()) return;
         if (!text.Any(c => c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿') || reading.Length < 3 || reading.Any(char.IsAsciiLetter)) return;
+        if (Predictor.IsVersionText(text)) return;
         phrases.Remember(reading, text);
     }
 
@@ -3143,7 +3258,7 @@ public sealed class CompositionController
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause)) continue;
+            if (IsDateTimeChoice(clause) || IsMathSymbolChoice(clause) || IsNowPlayingChoice(clause) || IsVersionChoice(clause.Reading, clause.Text)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -3220,12 +3335,10 @@ public sealed class CompositionController
             _host.ReplaceBackward(count, replacement, text);
         }
         else _host.CommitText(text);
-        // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、← を送って中に入る (issue #72)
+        // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
+        // Replay で頼むと、セッション方式では確定に使ったキーまで未消費になる (#991・#1353・#1404・#1581)。
         if (_options.CursorIntoBrackets() && text.Length == 2 && BracketPairs.Contains(text))
-        {
-            _host.Replay(new KeyEvent(VirtualKeys.Left, 0, false, false, false, Environment.TickCount64));
-            _host.Replay(new KeyEvent(VirtualKeys.Left, 0, false, true, false, Environment.TickCount64));
-        }
+            _host.MoveCaretBackward(1);
         Committed?.Invoke(text);
     }
 
@@ -3352,7 +3465,7 @@ public sealed class CompositionController
         if (!_options.ShowCandidatesWhileTyping() || _text.Mode != DisplayMode.Auto || _text.KanaInput || _text.IsAlphanumeric || _text.IsEmpty) return null;
         var kana = _text.AllKana(final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = JapaneseCandidates(kana, null).Take(5).ToList();
+        var candidates = WithoutWaiting(() => JapaneseCandidates(kana, null).Take(5).ToList());
         return candidates.Count > 1 ? candidates : null;
     }
 
@@ -3429,7 +3542,7 @@ public sealed class CompositionController
     private string PredictionKey() => _text.Raw + "\u0001" + _text.Mode;
 
     /// <summary>今の打ちかけの予測の候補 (キーをまとめて処理しているときにも、打った内容に合わせて作り直す)。</summary>
-    private IReadOnlyList<Prediction> CurrentPredictions()
+    private List<Prediction> CurrentPredictions()
     {
         UpdatePredictions(blocked: false);
         return _predictions;

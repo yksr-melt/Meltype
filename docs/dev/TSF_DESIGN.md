@@ -24,6 +24,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 をビルド、`Register-Tip.ps1` で登録 |
 | `src/Meltype/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー |
 | `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
+| `src/Meltype.Tests/TipContractTests.cs` | DLL と Meltype.exe の境目の契約テスト。DLL と同じ要求 (key・commit・close・hello) を `TipServer.Handle` に送り、確定・表示・キーを使ったかを確かめる。`dotnet run --project src/Meltype.Tests -- TipContract` で流せ、GitHub Actions (build.yml の test) でも毎回流れる |
 | `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
 | `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
 
@@ -78,6 +79,11 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 3. `commits` を確定し、`view` を未確定の文字として置く。`deleteBefore` は前に確定した文字を消して入れ直す (確定し直し)。
    消す文字 `expect` が入力欄の文字と違えば (アプリが書き換えた・前の文字を読めない) 消さない。1 つの応答の中の確定は、前の確定の後ろに続けて入れる
    (クリックで確定したとき、クリックした所に入らないように)。クリック・別の入力欄・アプリが確定したときの `commit` には `moved` を付け、確定し直さない
+   通常のコンテキストでは、`caretBack` のある確定と同じ編集セッションで選択位置を移し、続きも反映する。
+   一時コンテキストでは、入力を消費して括弧だけを確定した場合に、非同期の編集セッションで入力先・確定文字・選択位置を確かめ、アプリに左キーを送る。
+   修飾キーが押されている場合は、左キーによる選択範囲の変更やショートカットの実行を避けるため送らない。
+   後続の確定または未確定文字がある場合は、閉じ括弧を保持するため括弧の末尾に続ける。
+   確定に使った Enter は消費し、アプリへ送り直さない。
 4. 変換中で候補が 2 つ以上あるか、「もしかして」があれば、候補の一覧を出す
 5. 受け取ったあとでサーバーが使わなかったキー (変換中に一時停止した・時間内に応答が無かったときの Enter など) は、確定してから SendInput でアプリに送り直す
    (送り直したキーには印 dwExtraInfo を付けて見分ける)。送り込みを許されていないアプリ (ストアアプリなど) では届かないことがあるので、
@@ -100,7 +106,7 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 ## 通信
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON
-- 1 キーごとに同期で 1 往復。待つのは最大 800ms (初めての変換で Mozc を起動するときがあるため)。応答が無ければ、変換中の文字はそのまま確定し、打った文字はその場で入れる。
+- 1 キーごとに同期で 1 往復。待つのは最大 800ms。応答が無ければ、変換中の文字はそのまま確定し、打った文字はその場で入れる。
   書き込み・読み取りが時間内に終わらなかったら、閉じて、次の要求でつなぎ直す。5 秒以内にまた時間切れになったら、そのあと 3 秒はつながない (応答しない Meltype.exe を、どのアプリでも打鍵のたびに待たないように)。
   1 回の時間切れで 3 秒つながないと、Meltype.exe の画面のスレッドが少しふさがっただけで、その間に打ったキーが打った文字のまま入る。入力モードの問い合わせなど、待つ時間の短い問い合わせの時間切れは数えない。
   Meltype.exe を起動し直して前のつながりが切れていたら (書き込みが ERROR_NO_DATA などで失敗する)、つなぎ直して 1 回だけ送り直す
@@ -126,7 +132,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - Meltype IME が登録されていて、このユーザーのキーボードの一覧にも入っていれば、一度だけ自動で Tsf にする。
   そのとき (とトレイで Meltype IME を選んだとき) は、いま使う入力方式も Meltype IME にする (ITfInputProcessorProfileMgr::ActivateProfile の TF_IPPMF_FORSESSION)
 - Meltype.exe 自身の画面 (はじめに・設定など) でも使える。そこでは UI スレッドが DLL の中で応答を待って止まるので、
-  UI スレッドからの要求 (要求に付けたスレッドの ID で見分ける) は、Invoke せずにパイプのスレッドで処理する (UI スレッドは止まっているので、ほかの処理と同時には動かない)
+  UI スレッドからの要求 (要求に付けたスレッドの ID で見分ける) は、UI スレッドに移さずにパイプのスレッドで処理する (UI スレッドは止まっているので、ほかの処理と同時には動かない)
 - `CompositionService.CreateSession` で、辞書・学習データ・変換エンジンを変換ボックスと共有したセッションを作る。すべて UI スレッドで動かす
 
 ## インストール
@@ -165,6 +171,20 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 - UILess (候補を自分で描くアプリ)、ARM64 (ARM64 の Windows ではインストールのときに Meltype IME を入れない)
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。
   実際のアプリ (メモ帳・Chrome・VS Code など)、表示スケール 150%、コード署名をしない DLL を読み込まないアプリがあるかは、まだ広くは確かめていない
+
+**自動テストで確かめている範囲** (issue #1215):
+
+| 層 | テスト | CI | 確かめること |
+|---|---|---|---|
+| 入力の本体 (MeltypeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
+| DLL と Meltype.exe の境目 (TipServer の JSON) | `src/Meltype.Tests/TipContractTests.cs` | Windows (build.yml の test) | 入力 → 変換 → 確定 → 続けて入力、BackSpace・Esc、アプリの確定 (フォーカスの移動) で変換を終える、キャレットを動かしたら前の確定を直さない、入力欄 (sid) ごとに分ける・閉じる、つなぎ直した DLL の続きを受け持たない、変換中の一時停止・モードの切り替え、アプリ別設定 |
+| パイプ | `--tip-client` | 手で流す | 実際のパイプでのやり取り |
+| DLL を含めた全体 | `--tip-e2e` | 手で流す (人が操作しているデスクトップが要る) | 登録した DLL で、RichEdit の入力欄に実際に打つ |
+
+- **契約テストが通っても、実際の Windows のデスクトップでキーが届き、正しく打てることは保証しない。** DLL (native/tip、C++) の TSF の処理 (キーの受け取り・未確定の文字の表示・フォーカスの通知・候補の一覧の描画) と、OS がキーを IME に配る部分は、自動テストでは通らない
+- 自動テストに無いもの: Tab で選んだ予測の候補のあとに続けて打つとき (#974 で入った動き)、選んだ文字の再変換 (#313、#1182 で作っている)、設定の読み直し (config.json の書き換え) をはさむ流れ、コードのアプリの toggle・mode
+- DLL まで含めた実際の打鍵のテスト (`--tip-e2e`) を定期的に流すなら、隔離した対話型の Windows で、任意または定期の実行にする。外部の Pull Request のコードを、個人の PC や権限の強いセルフホストランナーで無条件に動かさない
+- 不具合の報告を直したら、Core で確かめられることは Core のテストに、DLL との境目の受け渡しで起きることは `TipContractTests` に、操作の順番どおりに足す
 
 ## ビルドに要るもの
 

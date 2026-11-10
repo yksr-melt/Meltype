@@ -36,19 +36,19 @@ Linux 版のインストール・設定・困ったときの説明です。IBus 
 <a name="動く環境"></a>
 <img src="images/headings/linux/01.svg" alt="動く環境" height="53"><br>
 
-- Ubuntu 24.04・Debian・Fedora 44 など (x86_64 / ARM64)
+- Ubuntu 24.04・Debian・Fedora 44・AlmaLinux 9 などの RHEL 9 系 (x86_64 / ARM64)
 - 入力の仕組みが IBus (GNOME、Ubuntu の標準) か fcitx5 (KDE など) のもの
 
-fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
+fcitx5 のアドオンは、`.deb` は Ubuntu 24.04 の fcitx5 5.1、`.rpm` は Fedora 44 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
 
 <br>
 
 <a name="インストール"></a>
 <img src="images/headings/linux/02.svg" alt="インストール" height="53"><br>
 
-Ubuntu・Debian は apt で、Fedora は dnf で入れます。どちらも IBus と fcitx5 の両方に入れます。
+Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
 
-以前の版の zip にあった `install.sh` で入れていても、先に外す必要はありません。apt / dnf で入れると、`install.sh` が入れたファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、先に外す必要はありません。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
 <a name="ubuntu--debian"></a>
 <img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
@@ -82,17 +82,28 @@ IBus の部品は「おすすめ」なので、ふつうは一緒に入ります
 <a name="fedora"></a>
 <img src="images/headings/linux/s02.svg" alt="Fedora" height="40">
 
-Fedora 44 でビルドしています。dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
+dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
 
 ```bash
 sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo
 sudo dnf install meltype
 ```
 
-リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` (x86_64 は `meltype-<version>-1.x86_64.rpm`、ARM64 は `meltype-<version>-1.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。
+AlmaLinux 9・Rocky Linux 9 などの RHEL 9 系では、リポジトリを次のコマンドで登録します。
+
+```bash
+sudo dnf install dnf-plugins-core
+sudo dnf config-manager --add-repo https://yksr-melt.github.io/Meltype/rpm/meltype.repo
+sudo dnf install meltype
+```
+
+fcitx5 のアドオンは別のパッケージ `meltype-fcitx5` です。fcitx5 が入っていれば、dnf が `meltype` と一緒に入れます。
+
+リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` (x86_64 は `meltype-<version>-1.x86_64.rpm`、ARM64 は `meltype-<version>-1.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。fcitx5 で使うときは、`meltype-fcitx5-<version>-1.x86_64.rpm` も一緒に入れます。
 
 ```bash
 sudo dnf install ./meltype-<version>-1.x86_64.rpm
+sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x86_64.rpm  # fcitx5 で使うとき
 ```
 
 <a name="ほかのディストリビューション"></a>
@@ -125,6 +136,8 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm
 
 設定は、アプリの一覧の「Meltype の設定」で変えられます。
 
+設定「カッコを打ったら中にカーソルを移動」は、fcitx5・IBus ともに未対応です。設定画面には項目が表示されます。
+
 設定と学習データは `~/.local/share/Meltype` にあります。画面に無い項目 (アプリ別設定など) は、Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
 
 ```json
@@ -154,4 +167,4 @@ ibus restart; sleep 2; pkill -f ibus-engine-meltype; /opt/meltype/ibus-engine-me
 <a name="アンインストール"></a>
 <img src="images/headings/linux/05.svg" alt="アンインストール" height="53"><br>
 
-Ubuntu / Debian は `sudo apt remove meltype`、Fedora は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
+Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。

@@ -179,11 +179,7 @@ jobs:
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
         run: |
           mapfile -d '' -t rpms < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype-*.rpm' -print0 | sort -z)
-          if (("${#rpms[@]}" != 2)); then
-            echo "Expected x86_64 and aarch64 .rpm packages; found ${#rpms[@]}." >&2
-            exit 1
-          fi
-          bash linux/build-rpm-repository.sh "${rpms[@]}" "$RUNNER_TEMP/meltype-pages"
+          bash linux/build-rpm-repository.sh "$RUNNER_TEMP/meltype-pages" "${rpms[@]}"
       - name: Upload apt and dnf repositories for GitHub Pages
         if: steps.signing.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

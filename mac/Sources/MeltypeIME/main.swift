@@ -13,6 +13,8 @@ if CommandLine.arguments.contains("--version") {
 if CommandLine.arguments.contains("--register-input-source") {
     let outcome = InputSourceRegistration.register()
     guard outcome == .ready else { exit(outcome.exitCode) }
+    // 更新時はメニューを再起動せず、前面アプリの入力接続を維持する。
+    if CommandLine.arguments.contains("--keep-input-menu") { exit(0) }
     let refresh = Process()
     refresh.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
     refresh.arguments = ["TextInputMenuAgent"]
@@ -27,15 +29,37 @@ if CommandLine.arguments.contains("--register-input-source") {
     exit(0)
 }
 
-// Input Method Kit のサーバーを起動する。入力欄 (クライアント) ごとに MeltypeInputController が作られる。
-
 /// 変換の候補の一覧 (すべての入力欄で共有する)。
 var candidatesWindow: IMKCandidates?
 
-// 本体 (libMeltypeNative.dylib) を読み込み、漢字変換・英単語の判定の関数を登録しておく。
-NativeCore.shared.initialize()
+func runIsolatedChecks(inputPath: String?) -> Int32 {
+    let files = FileManager.default
+    let data = files.temporaryDirectory.appendingPathComponent("meltype-input-check.\(UUID().uuidString)", isDirectory: true)
+    var status: Int32 = 1
+    do {
+        try files.createDirectory(at: data, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
+        defer {
+            do { try files.removeItem(at: data) }
+            catch {
+                fputs("検査用の一時ディレクトリを削除できませんでした: \(error.localizedDescription)\n", stderr)
+                status = 1
+            }
+        }
+        // Core は最初に参照したデータの保存先を保持するので、読み込む前に設定する。
+        guard setenv("MELTYPE_DATA_DIR", data.path, 1) == 0 else {
+            perror("MELTYPE_DATA_DIR")
+            return 1
+        }
+        NativeCore.shared.initialize()
+        status = runChecks(inputPath: inputPath)
+    } catch {
+        fputs("検査用の一時ディレクトリを作成できませんでした: \(error.localizedDescription)\n", stderr)
+        return 1
+    }
+    return status
+}
 
-if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contains("--check-inputs") {
+func runChecks(inputPath: String?) -> Int32 {
     var failures = 0
     func check(_ name: String, _ condition: Bool) {
         print("\(condition ? "PASS" : "FAIL") \(name)")
@@ -82,9 +106,9 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
         }
         return (output, last)
     }
-    if let index = CommandLine.arguments.firstIndex(of: "--check-inputs"), index + 1 < CommandLine.arguments.count {
+    if let inputPath {
         do {
-            let content = try String(contentsOfFile: CommandLine.arguments[index + 1], encoding: .utf8)
+            let content = try String(contentsOfFile: inputPath, encoding: .utf8)
             var count = 0
             for line in content.split(separator: "\n") where !line.hasPrefix("#") {
                 let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false)
@@ -97,10 +121,10 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
                 count += 1
             }
             print("\(count - failures)/\(count) input checks passed")
-            exit(count > 0 && failures == 0 ? 0 : 1)
+            return count > 0 && failures == 0 ? 0 : 1
         } catch {
             print("Input check file could not be read: \(error.localizedDescription)")
-            exit(1)
+            return 1
         }
     }
     for (input, expected) in [("kyouhagoogledekensaku \n", "今日はgoogleで検索"),
@@ -192,9 +216,24 @@ if CommandLine.arguments.contains("--self-test") || CommandLine.arguments.contai
     }
     NativeCore.shared.destroySession(stressSession)
     print("1000 native input/candidate/commit/mode cycles in \(Date().timeIntervalSince(stressStart))s")
-    exit(failures == 0 ? 0 : 1)
+    return failures == 0 ? 0 : 1
 }
 
+if let index = CommandLine.arguments.firstIndex(of: "--check-inputs") {
+    guard index + 1 < CommandLine.arguments.count else {
+        fputs("Usage: Meltype --check-inputs <file>\n", stderr)
+        exit(1)
+    }
+    exit(runIsolatedChecks(inputPath: CommandLine.arguments[index + 1]))
+}
+if CommandLine.arguments.contains("--self-test") {
+    exit(runIsolatedChecks(inputPath: nil))
+}
+
+// 本体 (libMeltypeNative.dylib) を読み込み、漢字変換・英単語の判定の関数を登録しておく。
+NativeCore.shared.initialize()
+
+// Input Method Kit のサーバーを起動する。入力欄 (クライアント) ごとに MeltypeInputController が作られる。
 let connectionName = Bundle.main.object(forInfoDictionaryKey: "InputMethodConnectionName") as? String ?? "Meltype_Connection"
 guard let bundleIdentifier = Bundle.main.bundleIdentifier,
       let server = IMKServer(name: connectionName, bundleIdentifier: bundleIdentifier) else {
@@ -203,4 +242,5 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
 }
 candidatesWindow = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
+NativeCore.shared.startBackgroundConversion()
 NSApplication.shared.run()

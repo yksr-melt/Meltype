@@ -28,8 +28,9 @@ internal static class AndroidNativeRuntime
 /// Current だけを入れたときも、本体は Text が入った前提で確定した文字を覚える。直せなかった前の語まで消す確定し直しは、
 /// 次の Expect が入力欄と合わないので、フロントは前の文字を消さない (それ以上その語は直さない)。
 /// DeleteBefore は本体の単位 (UTF-16) の長さなので、消す文字数は Expect から入力欄の単位で数える。
+/// CaretBack は、この確定を入れた後、末尾から左へ戻す UTF-16 の文字数。クリックなどで入力先が移ったときは、フロント側で移動を適用しない。
 /// </summary>
-public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null);
+public readonly record struct TextEdit(int DeleteBefore, string Text, string? Expect = null, string? Current = null, int CaretBack = 0);
 
 /// <summary>
 /// 1 回のキー入力の結果。Consumed が false ならそのキーはアプリにそのまま渡す (Commits を入れた後で)。
@@ -61,6 +62,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
                 builder.Append(",\"current\":");
                 AppendString(builder, current);
             }
+            if (Commits[i].CaretBack > 0) builder.Append(",\"caretBack\":").Append(Commits[i].CaretBack);
             builder.Append('}');
         }
         builder.Append("],\"view\":");
@@ -668,6 +670,13 @@ public sealed class MeltypeSession
         return _host.Result(consumed: false);
     }
 
+    /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
+    public SessionResult? RefreshConversion()
+    {
+        _host.Begin(null, false, null, null);
+        return _controller.RefreshConversion() ? _host.Result(consumed: true) : null;
+    }
+
     /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>
     public SessionResult SelectCandidate(int index)
     {
@@ -742,6 +751,12 @@ public sealed class MeltypeSession
         }
 
         public void CommitText(string text) => Add(text);
+
+        public void MoveCaretBackward(int count)
+        {
+            var last = _commits[^1];
+            _commits[^1] = last with { CaretBack = last.CaretBack + count };
+        }
 
         public void ReplaceBackward(int count, string replacement, string current)
         {

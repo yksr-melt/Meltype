@@ -21,8 +21,17 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private var displayedSuggestion: String?
     private var dictionaryObserver: NSObjectProtocol?
 
+    /// フォーカスのある入力欄。背景の変換の結果が届いたら、この入力欄の表示を作り直す。メインスレッドからだけ使う。
+    nonisolated(unsafe) static weak var active: MeltypeInputController?
+
+    func refreshConversion() {
+        guard let client = self.client() else { return }
+        apply(NativeCore.shared.refresh(session), to: client)
+    }
+
     override func activateServer(_ sender: Any!) {
         super.activateServer(sender)
+        Self.active = self
         ModeServices.shared.activate(self)
         let selected = ModeSelection.shared.current
         if mode != selected {
@@ -130,6 +139,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     override func deactivateServer(_ sender: Any!) {
+        if Self.active === self { Self.active = nil }
         ModeServices.shared.deactivate(self)
         commitComposition(sender)
         candidatesWindow?.hide()

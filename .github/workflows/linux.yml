@@ -1,5 +1,5 @@
 # Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
-#   app・rpm … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
+#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
 #   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
 # リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
@@ -49,10 +49,14 @@ jobs:
             asset: linux
             bazelisk: amd64
             bazelisk-sha256: 5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992
+            bazelisk-asset-id: 406879103
+            manylinux: x86_64
           - runner: ubuntu-24.04-arm
             asset: linux-arm64
             bazelisk: arm64
             bazelisk-sha256: e20e8b0f4f240091b7a55bf17b9398bd4f40ee70ae0208dff95dd4c445fb4010
+            bazelisk-asset-id: 406879161
+            manylinux: aarch64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
@@ -69,31 +73,40 @@ jobs:
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: 10.0.x
-      # Mozc の Linux のビルドと、NativeAOT のリンクに使うもの
+      # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
       - name: Packages
         run: |
           sudo apt-get update
           sudo apt-get install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
             ibus dbus-x11 xvfb xauth \
-            libdbus-1-dev libglib2.0-dev libgtk-3-dev libibus-1.0-dev libxcb-xfixes0-dev qt6-base-dev \
             cmake fcitx5 fcitx5-modules-dev libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/bazel-cache
             ~/mozc/src/third_party_cache
-          key: mozc-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          key: mozc-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
           restore-keys: |
-            mozc-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+            mozc-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
       # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
+      # GitHub の一時的な 504 などでは再試行する。接続と 1 回の取得には上限を設ける。
+      # 通常の URL で取得できないときは、GitHub の Release Asset API から同じファイルを取る。
       - name: Bazelisk
         run: |
           mkdir -p "$HOME/tools"
-          curl -fsSL -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}
+          if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-${{ matrix.bazelisk }}; then
+            curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/${{ matrix.bazelisk-asset-id }}
+          fi
           echo "${{ matrix.bazelisk-sha256 }}  $HOME/tools/bazelisk" | sha256sum -c -
           chmod +x "$HOME/tools/bazelisk"
+      # Mozc のヘルパーは、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux のコンテナでビルドする (#1484)
       - name: Build Mozc helper
-        run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-helper.sh "$HOME/mozc" "$HOME/bazel-cache"
+        run: |
+          mkdir -p "$HOME/mozc" "$HOME/bazel-cache"
+          docker run --rm --user "$(id -u):$(id -g)" -e USER -e HOME=/tmp/home -e BAZEL=/tools/bazelisk \
+            -v "$PWD:/repo" -v "$HOME/mozc:/mozc" -v "$HOME/bazel-cache:/cache" -v "$HOME/tools:/tools:ro" -w /repo \
+            quay.io/pypa/manylinux_2_34_${{ matrix.manylinux }}:2026.11.01-2 \
+            native/mozc/build-mozc-helper.sh /mozc /cache
       - name: Build
         run: linux/build.sh
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
@@ -144,8 +157,8 @@ jobs:
             linux/build/meltype_*.deb
           retention-days: 14
 
-  # dnf で入れられる .rpm (Fedora)。本体と Mozc のヘルパーは app のジョブが Ubuntu でビルドした zip のものを使い、
-  # fcitx5 のアドオンだけ Fedora の fcitx5 に対してビルドし直す (Ubuntu 24.04 の fcitx5 とは版が違う)
+  # dnf で入れられる .rpm (Fedora・RHEL 9 系)。本体と Mozc のヘルパーは app のジョブがビルドした zip のものを使い、
+  # fcitx5 のアドオン (meltype-fcitx5) だけ Fedora の fcitx5 に対してビルドし直す (Ubuntu 24.04 の fcitx5 とは版が違う)
   rpm:
     needs: app
     strategy:
@@ -184,7 +197,7 @@ jobs:
           cmake -S linux/fcitx5 -B linux/build/fcitx5-test -DBUILD_TESTING=ON
           cmake --build linux/build/fcitx5-test
           HOME="$RUNNER_TEMP/fcitx5-home" MELTYPE_DIR="$PWD/linux/build/fcitx5-native" ctest --test-dir linux/build/fcitx5-test --output-on-failure
-      # Ubuntu でビルドした本体と Mozc のヘルパーが、Fedora のライブラリで動くか
+      # app のジョブがビルドした本体と Mozc のヘルパーが、Fedora のライブラリで動くか
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py linux/build/Meltype-linux
       - name: Package (.rpm)
@@ -208,11 +221,44 @@ jobs:
           dnf remove -y meltype
           test ! -e /opt/meltype/ibus-engine-meltype
           test ! -e /usr/share/ibus/component/meltype.xml
+          test ! -e /usr/lib64/fcitx5/meltype.so
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-${{ matrix.asset }}-rpm
           path: linux/build/meltype-*.rpm
           retention-days: 14
+
+  # RHEL 9 系 (glibc 2.34・Python 3.9) は、サポートする中で一番古い環境。meltype が dnf で入り、IBus と Mozc で動くかを確かめる。
+  # RHEL 9 系には fcitx5 が無いので meltype-fcitx5 は入れない
+  rpm-el9:
+    needs: rpm
+    strategy:
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            asset: linux
+          - runner: ubuntu-24.04-arm
+            asset: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    container: quay.io/almalinux/almalinux:9
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: meltype-${{ matrix.asset }}-rpm
+          path: rpms
+      - name: Install .rpm
+        run: dnf install -y ./rpms/meltype-[0-9]*.rpm
+      - name: Python tests
+        run: |
+          python3 linux/tests/test_virtual_key.py
+          python3 linux/tests/test_code_mode.py
+          python3 linux/tests/test_settings.py
+      - name: IBus and real Mozc integration tests
+        run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
 
   # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
   ime-ci:

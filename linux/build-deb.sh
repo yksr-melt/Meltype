@@ -83,9 +83,8 @@ License: GPL-3.0-or-later
 EOF
 find "$root" -type d -exec chmod 755 {} +
 
-# 依存: 本体 (NativeAOT) と Mozc の変換ヘルパーが使う C / C++ のライブラリと zlib、IBus のエンジン (Python)。
+# 依存: 本体 (NativeAOT) と Mozc の変換ヘルパーが使う C / C++ のライブラリと zlib、IBus のエンジンと設定画面 (Python・GTK 4)。
 # IBus は fcitx5 だけで使う人もいるので Recommends にする
-# 設定画面 (GTK 4) は無くても入力はできるので Recommends にする
 installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
 {
     echo "Package: meltype"
@@ -93,8 +92,8 @@ installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
     echo "Architecture: $arch"
     echo "Maintainer: Yukishiro <https://github.com/yksr-melt/Meltype>"
     echo "Installed-Size: $installed_size"
-    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3"
-    echo "Recommends: ibus, python3-gi, gir1.2-ibus-1.0, gir1.2-gtk-4.0"
+    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9), python3-gi, gir1.2-gtk-4.0"
+    echo "Recommends: ibus, gir1.2-ibus-1.0"
     if $with_fcitx5; then echo "Suggests: fcitx5"; fi
     echo "Section: utils"
     echo "Priority: optional"

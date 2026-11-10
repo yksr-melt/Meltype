@@ -140,7 +140,7 @@ internal static class Native
 
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
 
-    [DllImport("user32.dll")] public static extern int ToUnicodeEx(uint vk, uint scan, byte[] keyState, [Out] char[] buffer, int bufferSize, uint flags, IntPtr hkl);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int ToUnicodeEx(uint vk, uint scan, byte[] keyState, [Out] char[] buffer, int bufferSize, uint flags, IntPtr hkl);
     [DllImport("user32.dll")] public static extern bool ClientToScreen(IntPtr hwnd, ref POINT point);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern int GetSystemMetrics(int index);

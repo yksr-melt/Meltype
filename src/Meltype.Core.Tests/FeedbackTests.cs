@@ -951,6 +951,55 @@ internal static class LanguageLearningTests
     }
 
     [Test]
+    public static void Issue1512_LearnedNoteDoesNotSplitJapaneseWord()
+    {
+        var memory = new LanguageMemory(null);
+        CompositionTests.Detector.Memory = memory;
+        try
+        {
+            // 環境によって未学習の note 自体が英語と判定されるため、学習時は日本語に見える状態から F10 で直す。
+            var teach = new CompositionTests.Keyboard(languages: memory) { Manual = true };
+            teach.Type("note");
+            teach.Press(VirtualKeys.F10);
+            teach.Press(VirtualKeys.Return);
+            Assert.Equal("note", teach.Host.Document, "F10 で英字にして確定する");
+            Assert.True(memory.Get("note") == true, "英語の学習が有効");
+            foreach (var checker in new IWordChecker?[] { null, BuiltInWordChecker.Shared, TestSupport.WordChecker })
+            {
+                CompositionTests.Detector.SpellChecker = checker;
+                foreach (var live in new[] { false, true })
+                {
+                    foreach (var (typed, expected) in new[]
+                    {
+                        ("konotennmo", "このてんも"), ("konotenmo", "このてんも"),
+                        ("sonotennmo", "そのてんも"), ("konotennki", "このてんき"),
+                        ("donotenpo", "どのてんぽ"), ("anotensai", "あのてんさい"),
+                        ("sonotesuto", "そのてすと"), ("konotesuto", "このてすと"),
+                    })
+                    {
+                        var keyboard = new CompositionTests.Keyboard(live: live, languages: memory);
+                        keyboard.Type(typed + "\n");
+                        Assert.Equal(expected, keyboard.Host.Document, typed + " は日本語のまま");
+                    }
+                }
+            }
+            var english = new CompositionTests.Keyboard(languages: memory);
+            english.Type("note\n");
+            Assert.Equal("note", english.Host.Document, "単独の note は学習どおり英語");
+            var mixed = new CompositionTests.Keyboard(languages: memory);
+            mixed.Type("notewomiru\n");
+            Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
+            var settings = new Settings { LiveConversion = true, UseZenzai = false };
+            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionOptions { LiveConversion = () => true, Languages = memory }, () => settings);
+            foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
+            var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
+            Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
+        }
+        finally { CompositionTests.Detector.Memory = null; CompositionTests.Detector.SpellChecker = null; }
+    }
+
+    [Test]
     public static void Issue959_VersionCandidate_CanBeSelectedAndCommitted()
     {
         var expected = $"Meltype-{ProjectInfo.CoreVersion}";
@@ -1004,6 +1053,85 @@ internal static class LanguageLearningTests
         var english = new CompositionTests.Keyboard();
         english.Type("version\n");
         Assert.Equal("version", english.Host.Document);
+    }
+
+    /// <summary>Mozc のように「ばーじょん」を「バージョン」にする変換エンジン (版番号は学習しない)。</summary>
+    private sealed class VersionConverter : IKanjiConverter
+    {
+        public string? Convert(string reading) => reading switch
+        {
+            "ばーじょん" => "バージョン",
+            "むかしの" => "昔の",
+            "むかしのばーじょん" => "昔のバージョン",
+            _ => null,
+        };
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => reading switch
+        {
+            "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", "バージョン")],
+            "ばーじょん" => [new(reading, "バージョン")],
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Issue1488_OldVersionInHistoryDoesNotOverrideNormalConversion()
+    {
+        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても、通常の「バージョン」にする
+        foreach (var old in new[] { "Meltype-1.4.1-pre.2", "Mozc-3.34.6239.102+24.11.oss" })
+        {
+            var history = new ConversionHistory(null);
+            history.Remember("ばーじょん", old);
+            foreach (var live in new[] { false, true })
+            {
+                var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new VersionConverter());
+                keyboard.Type("mukasinoba-jonn ");
+                Assert.Equal("昔のバージョン", keyboard.Host.View!.Text, old);
+                keyboard.Press(VirtualKeys.Return);
+                Assert.Equal("昔のバージョン", keyboard.Host.Document, old);
+            }
+            var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
+            standalone.Type("ba-jonn ");
+            Assert.Equal("バージョン", standalone.Host.View!.Text, old);
+            Assert.True(standalone.Host.View.Candidates.Contains($"Meltype-{ProjectInfo.CoreVersion}"), "現在の版は引き続き選べる");
+        }
+    }
+
+    [Test]
+    public static void Issue1488_SelectingVersionIsNotRemembered()
+    {
+        var history = new ConversionHistory(null);
+        var phrases = new PhraseHistory(null);
+        var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
+        keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Right);
+        var version = $"Meltype-{ProjectInfo.CoreVersion}";
+        var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
+        Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
+        keyboard.Controller.SelectCandidate(index);
+        keyboard.Press(VirtualKeys.Return);
+        Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
+        Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
+        Assert.True(!phrases.StartingWith("むかしの").Any(), "語句の履歴にも覚えない");
+
+        // 普通の「昔のバージョン」は覚える
+        keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Return);
+        Assert.True(phrases.StartingWith("むかしの").Contains("昔のバージョン"), "通常の語句は覚える");
+    }
+
+    [Test]
+    public static void Issue1488_OldVersionIsNotPredicted()
+    {
+        // 前の版で覚えた版番号は、予測の候補に出さない (更新後は古い版になる)
+        var history = new ConversionHistory(null);
+        history.Remember("ばーじょん", "Meltype-1.4.1-pre.2");
+        history.Remember("ばーじょんあっぷ", "バージョンアップ");
+        var phrases = new PhraseHistory(null);
+        phrases.Remember("むかしのばーじょん", "昔のMeltype-1.4.1-pre.5");
+        phrases.Remember("むかしのばーじょんあっぷ", "昔のバージョンアップ");
+        var predictor = new Predictor(phrases, null, history);
+        Assert.Equal("バージョンアップ", string.Join(",", predictor.PredictJapanese("ばーじょ")));
+        Assert.Equal("昔のバージョンアップ", string.Join(",", predictor.PredictJapanese("むかしのばー")));
     }
 
     [Test]
@@ -1610,7 +1738,7 @@ internal static class RomajiTypoTests
             {
                 ("kore`git status`dekakunin", "これ`git status`でかくにん"),
                 ("`npm install`wojikkou", "`npm install`をじっこう"),
-                ("`kakko`", "｀かっこ｀"),
+                ("`kakko`", "`かっこ`"),   // 後ろが日本語でも半角 (#1301 から。以前は ｀)
             })
             {
                 var k = new CompositionTests.Keyboard();

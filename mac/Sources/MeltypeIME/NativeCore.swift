@@ -21,6 +21,8 @@ private typealias IsDirectFunction = @convention(c) (UnsafeMutableRawPointer?) -
 private typealias DataDirectoryFunction = @convention(c) () -> UnsafeMutablePointer<CChar>?
 private typealias ReportUrlFunction = @convention(c) (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
 private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
+private typealias ConversionReadyCallback = @convention(c) () -> Void
+private typealias SetConversionReadyFunction = @convention(c) (ConversionReadyCallback) -> Void
 
 // ---- 本体から呼ばれる関数 (文字列は strdup したものを返し、本体が free する) ----
 
@@ -30,6 +32,11 @@ private let clausesCallback: ClausesCallback = { hiragana, context in
     let clauses = MeltypeConverter.shared.clauses(for: String(cString: hiragana), context: context.map { String(cString: $0) })
     guard !clauses.isEmpty else { return nil }
     return strdup(clauses.map { "\($0.reading)\t\($0.text)" }.joined(separator: "\n"))
+}
+
+/// 背景の変換の結果が届いた (ワーカーのスレッドで呼ばれる)。
+private let conversionReadyCallback: ConversionReadyCallback = {
+    DispatchQueue.main.async { MeltypeInputController.active?.refreshConversion() }
 }
 
 /// 読み → 候補を改行でつないだもの。
@@ -122,6 +129,8 @@ final class NativeCore {
     private let reportUrlFunction: ReportUrlFunction?
     private let zenzaiModelFunction: DataDirectoryFunction?
     private let freeFunction: FreeFunction?
+    private let setConversionReadyFunction: SetConversionReadyFunction?
+    private let refreshFunction: CommitFunction?
 
     private init() {
         let path = (Bundle.main.privateFrameworksPath ?? "") + "/libMeltypeNative.dylib"
@@ -149,10 +158,23 @@ final class NativeCore {
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
         zenzaiModelFunction = symbol("meltype_zenzai_model", as: DataDirectoryFunction.self)
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
+        setConversionReadyFunction = symbol("meltype_set_conversion_ready", as: SetConversionReadyFunction.self)
+        refreshFunction = symbol("meltype_refresh", as: CommitFunction.self)
     }
 
     func initialize() {
         _ = initFunction?(clausesCallback, candidatesCallback, isWordCallback)
+    }
+
+    /// 変換エンジンを入力のスレッドで待たないようにする (入力欄を作る前に呼ぶ)。呼ばなければ変換は同期のまま (--self-test)。
+    func startBackgroundConversion() {
+        setConversionReadyFunction?(conversionReadyCallback)
+    }
+
+    /// 入力中の表示を、届いた変換結果で作り直す。表示が変わらないなら nil。
+    func refresh(_ session: UnsafeMutableRawPointer?) -> SessionResult? {
+        guard let refreshFunction else { return nil }
+        return decode(refreshFunction(session))
     }
 
     func createSession() -> UnsafeMutableRawPointer? { createFunction?() }

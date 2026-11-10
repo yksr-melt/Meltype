@@ -23,9 +23,12 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     private readonly Func<double> _opacity;
     private readonly Func<(string Japanese, string Direct, string Text)> _indicatorColors;
     private readonly Func<bool> _directMode;
+    // Microsoft IME と Windows の候補は、応答に上限が無い (WinRT は最大 500ms 待つ) ので入力スレッドで呼ばない。_sta のスレッドからだけ使う
+    private readonly StaThread _sta = new("Meltype Microsoft IME");
     private readonly MsImeKanjiConverter _converter = new();
     private readonly KeyInjector _injector = new();
     private readonly WinRtCandidates _windowsCandidates = new();
+    private BackgroundCallbackConverter _system = null!;
     // 「なう」の候補に出す再生中の曲 (issue #1400)
     private readonly NowPlaying _nowPlaying;
     // Mozc (同梱の mozc/meltype_mozc_helper.exe) と Microsoft IME を組み合わせた変換エンジン。
@@ -118,9 +121,16 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         };
         Phrases = resolved.Predictor?.Phrases;
         TranslationHistory = resolved.TranslationHistory;
-        _hybrid = new HybridConverter(options.Engine, _mozc, _converter, reading => _windowsCandidates.Get(reading), () => CurrentZenzai(options), _zenzai.Failed);
+        _mozc.Budget.Enable();
+        _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
+        _hybrid = new HybridConverter(options.Engine, _mozc, _system, _system.Candidates, () => CurrentZenzai(options), _zenzai.Failed);
         _resolved = resolved;
         Controller = new CompositionController(Gate, detector, _hybrid, this, resolved);
+        _hybrid.ResultReady += () =>
+        {
+            if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(() => Safely(() => Controller.RefreshConversion()));
+            ConversionReady?.Invoke();
+        };
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
         Controller.Corrected += correction => Corrections.Add(correction with { Zenzai = options.UseZenzai() });
         if (options.Engine() != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
@@ -163,6 +173,9 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
 
     public CompositionController Controller { get; }
 
+    /// <summary>背景の変換の結果が届いた (Meltype IME の入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
+    public event Action? ConversionReady;
+
     /// <summary>入力言語による制限。フックで保留した後・タイマーで判定する前にも確かめる。</summary>
     public Func<bool> InputAllowed { get; set; } = () => true;
 
@@ -204,7 +217,7 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
         if (word.All(c => KanaChars.IsHiraganaOrLongMark(c) || KanaChars.IsKatakana(c))) return KanaChars.ToHiragana(word);
         try
         {
-            return _converter.Reading(word) ?? "";
+            return _sta.Invoke(() => _converter.Reading(word)) ?? "";
         }
         catch (Exception ex)
         {
@@ -218,8 +231,8 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     {
         var list = new List<string>();
         void Add(string? word) { if (!string.IsNullOrEmpty(word) && !list.Contains(word)) list.Add(word); }
-        Add(_converter.Convert(reading));
-        foreach (var word in _windowsCandidates.Get(reading, 30)) Add(word);
+        Add(_sta.Invoke(() => _converter.Convert(reading)));
+        foreach (var word in _sta.Invoke(() => _windowsCandidates.Get(reading, 30))) Add(word);
         Add(CompositionText.ToKatakana(reading));
         return list;
     }
@@ -495,6 +508,15 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     {
         _injector.Inject([e]);
         KeyReplayed?.Invoke(e);
+    }
+
+    public void MoveCaretBackward(int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            Replay(new KeyEvent(VirtualKeys.Left, 0, false, false, false, Environment.TickCount64));
+            Replay(new KeyEvent(VirtualKeys.Left, 0, false, true, false, Environment.TickCount64));
+        }
     }
 
     public void DeleteBackward(int count)
@@ -932,8 +954,14 @@ internal sealed class CompositionService : ICompositionHost, IDisposable
     {
         _tick.Dispose();
         Focus.Dispose();
-        _converter.Dispose();
-        _windowsCandidates.Dispose();
+        _system.Dispose();
+        _sta.Invoke(() =>
+        {
+            _converter.Dispose();
+            _windowsCandidates.Dispose();
+            return true;
+        });
+        _sta.Dispose();
         _nowPlaying.Dispose();
         _mozc.Dispose();
         _zenzai.Dispose();

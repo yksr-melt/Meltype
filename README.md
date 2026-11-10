@@ -162,7 +162,7 @@ General Public License for more details.
     </td>
     <td align="center">
       <a href="https://github.com/konayukiw"><img src="https://github.com/konayukiw.png?size=200" width="100" alt="@konayukiw"><br><b>@konayukiw</b></a><br>
-      <sub>メインメンテナー</sub>
+      <sub>メインメンテナー/公式サイト作者</sub>
     </td>
   </tr>
 </table>
@@ -195,6 +195,7 @@ General Public License for more details.
   <a href="https://github.com/r67018"><img src="https://github.com/r67018.png?size=120" width="60" alt="@r67018" title="@r67018"></a>
   <a href="https://github.com/itouuuuuuuuu"><img src="https://github.com/itouuuuuuuuu.png?size=120" width="60" alt="@itouuuuuuuuu" title="@itouuuuuuuuu"></a>
   <a href="https://github.com/organic817"><img src="https://github.com/organic817.png?size=120" width="60" alt="@organic817" title="@organic817"></a>
+  <a href="https://github.com/amanetoki7"><img src="https://github.com/amanetoki7.png?size=120" width="60" alt="@amanetoki7" title="@amanetoki7"></a>
 </p>
 <!-- sponsors:end -->
 <sub>名前を公開にして応援してくださった方を載せています。</sub>
