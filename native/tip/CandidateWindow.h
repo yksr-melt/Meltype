@@ -39,11 +39,6 @@ public:
     void Hide();
     bool Visible() const;
 
-    static void RegisterClasses();
-    static void UnregisterClasses();
-    // DllCanUnloadNow で S_OK を返すときに呼ぶ。DllMain からは呼ばない
-    static void ReleaseFactories();
-
     struct Impl;
 
 private:

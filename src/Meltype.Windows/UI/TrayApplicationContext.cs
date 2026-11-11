@@ -60,6 +60,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
         _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
         _engine.ImeServer = _tipServer;
+        _tipServer.ClientOutdated += process =>
+        {
+            // DLL は動作モードが Meltype キーボードのときもつないでくる
+            if (_engine.Running.Mode != InputMode.Tsf) return;
+            ShowBalloonTip(10000, "Meltype IME", $"「{process}」を起動し直すと、「{process}」でも Meltype IME で入力できます (更新する前の Meltype IME が残っています)。");
+        };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
         IntroduceTsf();

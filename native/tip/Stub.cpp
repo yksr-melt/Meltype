@@ -1,0 +1,206 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 aster-void
+//
+// どの impl を使うかは、stub と同じフォルダーの MeltypeTipImpl.dll.sha256 (impl の SHA-256) に書いてあり、
+// impl は impl\<SHA-256>.dll にある (どちらも Register-Tip.ps1 が置く)。Meltype.exe からは指定させない
+// (Meltype.exe になりすましたプロセスが、古い impl を読み込ませられないように)。
+// 読み込んだ impl は FreeLibrary しない。
+
+#include "Stub.h"
+
+#include <new>
+
+namespace meltype {
+namespace {
+
+std::wstring StubFolder() {
+    wchar_t path[MAX_PATH] = {};
+    GetModuleFileNameW(g_module, path, MAX_PATH);
+    std::wstring folder = path;
+    return folder.substr(0, folder.find_last_of(L'\\'));
+}
+
+// MeltypeTipImpl.dll.sha256 の中身 (16 進 64 文字)。読めない・形が違うなら空
+std::wstring CurrentImpl() {
+    HANDLE file = CreateFileW((StubFolder() + L"\\MeltypeTipImpl.dll.sha256").c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+                              nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (file == INVALID_HANDLE_VALUE) return {};
+    char buffer[128] = {};
+    DWORD read = 0;
+    ReadFile(file, buffer, sizeof(buffer), &read, nullptr);
+    CloseHandle(file);
+    std::wstring hash;
+    for (DWORD i = 0; i < read; i++) {
+        const char c = buffer[i];
+        if (c == ' ' || c == '\r' || c == '\n') continue;
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f'))) return {};
+        hash += static_cast<wchar_t>(c);
+    }
+    return hash.size() == 64 ? hash : std::wstring();
+}
+
+ITfTextInputProcessorEx* CreateInner(const std::wstring& hash, HWND window) {
+    if (hash.empty()) {
+        TipLog(L"stub: MeltypeTipImpl.dll.sha256 を読めません");
+        return nullptr;
+    }
+    std::wstring path = StubFolder() + L"\\impl\\" + hash + L".dll";
+    HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
+    if (module == nullptr) {
+        TipLog(L"stub: %s を読み込めません: %lu", path.c_str(), GetLastError());
+        return nullptr;
+    }
+    auto create = reinterpret_cast<MeltypeTipCreateFn>(reinterpret_cast<void*>(GetProcAddress(module, "MeltypeTipCreate")));
+    ITfTextInputProcessorEx* inner = nullptr;
+    if (create == nullptr || FAILED(create(window, &inner))) {
+        TipLog(L"stub: %s の TextService を作れません", path.c_str());
+        return nullptr;
+    }
+    return inner;
+}
+
+constexpr wchar_t kWindowClass[] = L"Meltype.Tip.Stub";
+
+class StubService final : public ITfTextInputProcessorEx, public ITfDisplayAttributeProvider {
+public:
+    StubService() {
+        WNDCLASSW cls{};
+        cls.lpfnWndProc = WindowProc;
+        cls.hInstance = g_module;
+        cls.lpszClassName = kWindowClass;
+        RegisterClassW(&cls);
+        window_ = CreateWindowExW(0, kWindowClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_module, nullptr);
+        if (window_) SetWindowLongPtrW(window_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        loaded_ = CurrentImpl();
+        inner_ = CreateInner(loaded_, window_);
+    }
+
+    // IUnknown
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
+        if (ppv == nullptr) return E_INVALIDARG;
+        *ppv = nullptr;
+        if (IsEqualIID(riid, IID_IUnknown) || IsEqualIID(riid, IID_ITfTextInputProcessor) || IsEqualIID(riid, IID_ITfTextInputProcessorEx)) {
+            *ppv = static_cast<ITfTextInputProcessorEx*>(this);
+        } else if (IsEqualIID(riid, IID_ITfDisplayAttributeProvider)) {
+            *ppv = static_cast<ITfDisplayAttributeProvider*>(this);
+        }
+        if (*ppv == nullptr) return E_NOINTERFACE;
+        AddRef();
+        return S_OK;
+    }
+    STDMETHODIMP_(ULONG) AddRef() override { return InterlockedIncrement(&refs_); }
+    STDMETHODIMP_(ULONG) Release() override {
+        ULONG count = InterlockedDecrement(&refs_);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    // ITfTextInputProcessorEx
+    STDMETHODIMP Activate(ITfThreadMgr* threadMgr, TfClientId clientId) override { return ActivateEx(threadMgr, clientId, 0); }
+    STDMETHODIMP ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientId, DWORD flags) override {
+        if (inner_ == nullptr) {
+            // 作ったときは impl を置いている途中だった
+            loaded_ = CurrentImpl();
+            inner_ = CreateInner(loaded_, window_);
+        }
+        if (inner_ == nullptr) return E_FAIL;
+        threadMgr_ = threadMgr;
+        threadMgr_->AddRef();
+        clientId_ = clientId;
+        flags_ = flags;
+        return inner_->ActivateEx(threadMgr_, clientId_, flags_);
+    }
+    STDMETHODIMP Deactivate() override {
+        HRESULT hr = inner_ ? inner_->Deactivate() : S_OK;
+        if (threadMgr_) {
+            threadMgr_->Release();
+            threadMgr_ = nullptr;
+        }
+        return hr;
+    }
+
+    // ITfDisplayAttributeProvider
+    STDMETHODIMP EnumDisplayAttributeInfo(IEnumTfDisplayAttributeInfo** ppEnum) override {
+        ITfDisplayAttributeProvider* provider = Provider();
+        if (provider == nullptr) return E_FAIL;
+        HRESULT hr = provider->EnumDisplayAttributeInfo(ppEnum);
+        provider->Release();
+        return hr;
+    }
+    STDMETHODIMP GetDisplayAttributeInfo(REFGUID guid, ITfDisplayAttributeInfo** ppInfo) override {
+        ITfDisplayAttributeProvider* provider = Provider();
+        if (provider == nullptr) return E_FAIL;
+        HRESULT hr = provider->GetDisplayAttributeInfo(guid, ppInfo);
+        provider->Release();
+        return hr;
+    }
+
+private:
+    ~StubService() {
+        if (window_) DestroyWindow(window_);
+        if (inner_) inner_->Release();
+    }
+
+    ITfDisplayAttributeProvider* Provider() {
+        ITfDisplayAttributeProvider* provider = nullptr;
+        if (inner_) inner_->QueryInterface(IID_ITfDisplayAttributeProvider, reinterpret_cast<void**>(&provider));
+        return provider;
+    }
+
+    static LRESULT CALLBACK WindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+        auto* self = reinterpret_cast<StubService*>(GetWindowLongPtrW(window, GWLP_USERDATA));
+        if (message == kStubImplStale && self != nullptr) {
+            self->Reload();
+            return 0;
+        }
+        return DefWindowProcW(window, message, wParam, lParam);
+    }
+
+    // MeltypeTipImpl.dll.sha256 が読み込んだ impl と違えば、同じ ITfThreadMgr・TfClientId のまま impl を入れ替える。
+    // impl の Deactivate が変換中の文字を確定する
+    void Reload() {
+        // 入れ替える impl が無い間 (Meltype.exe だけが違うビルド) は、impl が要求のたびに知らせてくる
+        const ULONGLONG now = GetTickCount64();
+        if (now - lastReload_ < 1000) return;
+        lastReload_ = now;
+        const std::wstring hash = CurrentImpl();
+        if (hash.empty() || hash == loaded_) return;
+        ITfTextInputProcessorEx* next = CreateInner(hash, window_);
+        if (next == nullptr) return;
+        TipLog(L"stub: impl を入れ替えます: %s → %s", loaded_.c_str(), hash.c_str());
+        // 入れ替えの途中で TSF が Release しても消えないようにする
+        AddRef();
+        if (inner_) {
+            if (threadMgr_) inner_->Deactivate();
+            inner_->Release();
+        }
+        inner_ = next;
+        loaded_ = hash;
+        if (threadMgr_) {
+            HRESULT hr = inner_->ActivateEx(threadMgr_, clientId_, flags_);
+            if (FAILED(hr)) TipLog(L"stub: 新しい impl を Activate できません: 0x%08lX", hr);
+        }
+        Release();
+    }
+
+    LONG refs_ = 1;
+    HWND window_ = nullptr;        // impl が kStubImplStale を送る先
+    std::wstring loaded_;          // inner_ を作った impl の SHA-256
+    ULONGLONG lastReload_ = 0;
+    ITfTextInputProcessorEx* inner_ = nullptr;
+    ITfThreadMgr* threadMgr_ = nullptr;  // Activate から Deactivate までの間だけ持つ
+    TfClientId clientId_ = TF_CLIENTID_NULL;
+    DWORD flags_ = 0;
+};
+
+}  // namespace
+
+HRESULT CreateStubService(REFIID riid, void** ppv) {
+    auto* service = new (std::nothrow) StubService();
+    if (service == nullptr) return E_OUTOFMEMORY;
+    HRESULT hr = service->QueryInterface(riid, ppv);
+    service->Release();
+    return hr;
+}
+
+}  // namespace meltype

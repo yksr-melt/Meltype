@@ -227,7 +227,7 @@ if (-not $Portable) {
     if ($imeBuilt) {
         foreach ($arch in 'x64', 'x86') {
             New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
-            Copy-Item -LiteralPath (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll"), (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll.sha256") -Destination (Join-Path $tip $arch)
+            Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
         }
         Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
         Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
@@ -246,7 +246,7 @@ if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
     if (-not $signtool) { throw 'signtool.exe が見つかりません (Windows SDK が必要です)。' }
-    $targets = @('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe', 'tip\x64\MeltypeTip.dll', 'tip\x86\MeltypeTip.dll') |
+    $targets = @('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe', 'tip\x64\MeltypeTip.dll', 'tip\x86\MeltypeTip.dll', 'tip\x64\MeltypeTipImpl.dll', 'tip\x86\MeltypeTipImpl.dll') |
         ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ }
     & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $targets
     if ($LASTEXITCODE -ne 0) { throw "署名に失敗しました (exit code $LASTEXITCODE)。" }
@@ -258,8 +258,8 @@ else {
 
 # 配布する Meltype IME の DLL (署名した後) のハッシュ。インストールのとき、管理者として登録する前に、DLL が書き換えられていないかを確かめるのに使う。
 # (MeltypeTip.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う)
-foreach ($arch in @(if ($imeBuilt) { 'x64', 'x86' })) {
-    $dll = Join-Path $app "tip\$arch\MeltypeTip.dll"
+foreach ($relative in @(if ($imeBuilt) { 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll' })) {
+    $dll = Join-Path $app "tip\$relative"
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $hash = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($dll))).Replace('-', '') } finally { $sha.Dispose() }
     [IO.File]::WriteAllText("$dll.package.sha256", $hash)

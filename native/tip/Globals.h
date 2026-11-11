@@ -40,10 +40,16 @@ inline constexpr LANGID kLangId = MAKELANGID(LANG_JAPANESE, SUBLANG_JAPANESE_JAP
 inline constexpr wchar_t kDisplayName[] = L"Meltype";
 
 extern HINSTANCE g_module;
-extern LONG g_locks;
 
-inline void DllAddRef() { InterlockedIncrement(&g_locks); }
-inline void DllRelease() { InterlockedDecrement(&g_locks); }
+// ---- stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の境目 ----
+// stub は COM に登録する DLL で、アプリを起動し直すまで古いものが残る。impl は stub がアプリを起動し直さずに入れ替える。
+// 古い stub が新しい impl を読み込むので、この 2 つは変えない (変えた更新は、アプリを起動し直すまで入れ替わらない)。
+
+// impl が公開する関数 MeltypeTipCreate。stub は stub が持つウィンドウ。TextService を 1 つ作って返す
+using MeltypeTipCreateFn = HRESULT(STDAPICALLTYPE*)(HWND stub, ITfTextInputProcessorEx** service);
+
+// impl が stub のウィンドウに PostMessage する。Meltype.exe に「この impl は Meltype.exe と違うビルド」と言われた
+inline constexpr UINT kStubImplStale = WM_APP + 1;
 
 // 文字コードの変換
 std::string ToUtf8(const std::wstring& text);

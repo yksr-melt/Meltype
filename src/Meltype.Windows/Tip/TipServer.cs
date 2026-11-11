@@ -60,22 +60,31 @@ internal sealed class TipServer : IDisposable
     /// <summary>Meltype IME (native/tip の DLL) が Windows に登録されているか。</summary>
     public static bool IsRegistered => Registration() == true;
 
-    /// <summary>動作モードに Meltype IME を選べるか (ARM64 の Windows でなく、登録されていて、このユーザーのキーボードの一覧にある)。</summary>
+    /// <summary>
+    /// 動作モードに Meltype IME を選べるか (ARM64 の Windows でなく、登録されていて、登録した impl がこの Meltype.exe と同じビルドで、
+    /// このユーザーのキーボードの一覧にある)。
+    /// </summary>
     public static bool IsUsable =>
         System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.Arm64 &&
-        IsRegistered && IsInUserLanguageList;
+        IsInstalledBuild && IsInUserLanguageList;
+
+    /// <summary>登録されていて、登録した impl がこの Meltype.exe と同じビルドか (Meltype を更新したときに、Meltype IME の登録し直しを断ると違うビルドになる)。</summary>
+    private static bool IsInstalledBuild => RegisteredStub() is { Length: > 0 } stub && TipBuild.Shipped.IsInstalled(stub);
 
     // 登録されているか。レジストリを読めなければ null。
     // TIP のキーだけ残り、DLL の登録 (InprocServer32) や DLL が無いことがある (セキュリティソフトが登録を途中で止めたとき)。
     // そのときは登録されていないとみなす (Meltype キーボードで動かす)
-    private static bool? Registration()
+    private static bool? Registration() => RegisteredStub() is { } stub ? stub.Length > 0 : null;
+
+    // 登録した stub (MeltypeTip.dll) のパス。登録されていなければ空、レジストリを読めなければ null
+    private static string? RegisteredStub()
     {
         try
         {
             using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\CTF\TIP\{417D801B-A9BD-4C26-BD16-356A825A6998}");
-            if (key is null) return false;
+            if (key is null) return "";
             using var server = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Classes\CLSID\{417D801B-A9BD-4C26-BD16-356A825A6998}\InprocServer32");
-            return server?.GetValue(null) is string dll && File.Exists(dll);
+            return server?.GetValue(null) is string dll && File.Exists(dll) ? dll : "";
         }
         catch
         {
@@ -382,6 +391,8 @@ internal sealed class TipServer : IDisposable
         var host = ownClient ? Connect(null, 0) : Connect(ProcessName(clientProcess), clientProcess);
         var buffer = new byte[64 * 1024];
         using var message = new MemoryStream();
+        // このつながりで、違うビルドの impl に初めて応答した時刻 (0 = まだ)
+        long staleSince = 0;
         try
         {
             while (pipe.IsConnected && !_stop.IsCancellationRequested)
@@ -399,8 +410,23 @@ internal sealed class TipServer : IDisposable
                 string reply;
                 try
                 {
-                    var request = TipRequest.Parse(Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length));
-                    if (request is null)
+                    var json = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
+                    if (!_build.Matches(json))
+                    {
+                        // stub は、この応答を受けて impl を入れ替え、つなぎ直す。同じつながりから違うビルドの要求が届き続けるなら、入れ替えられなかった
+                        var now = Environment.TickCount64;
+                        if (staleSince == 0)
+                        {
+                            staleSince = now;
+                        }
+                        else if (now - staleSince >= StaleNoticeMs)
+                        {
+                            staleSince = now;
+                            if (host.Process is { } process) ReportOutdated(process);
+                        }
+                        reply = Stale;
+                    }
+                    else if (TipRequest.Parse(json) is not { } request)
                     {
                         reply = Inactive;
                     }
@@ -590,8 +616,41 @@ internal sealed class TipServer : IDisposable
         return await done.Task.WaitAsync(_stop.Token).ConfigureAwait(false);
     }
 
-    /// <summary>読めない要求 (版の違う DLL) への応答。Meltype を更新する前から動いているアプリの古い DLL も、これで何もせずにキーを通す。</summary>
+    /// <summary>読めない要求への応答。DLL は何もせずにキーを通す。</summary>
     private const string Inactive = "{\"active\":false,\"consumed\":false,\"commits\":[],\"view\":null}";
+
+    /// <summary>
+    /// 違うビルドの impl への応答。impl は何もせずにキーを通し、stub に入れ替えを頼む (native/tip の kStubImplStale)。
+    /// stub と impl に分ける前の DLL (Meltype を更新する前から動いているアプリに残る) も、何もせずにキーを通す。
+    /// </summary>
+    private const string Stale = "{\"stale\":true}";
+
+    /// <summary>stub が impl を入れ替えるのを待つ時間。これを過ぎても同じつながりから違うビルドの要求が届いたら、<see cref="ClientOutdated"/> で知らせる。</summary>
+    private const int StaleNoticeMs = 3000;
+
+    private readonly TipBuild _build = TipBuild.Shipped;
+
+    // 知らせたアプリ (アプリごとに 1 回だけ)
+    private readonly HashSet<string> _outdated = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// アプリ (.exe を除いたプロセスの名前) を起動し直すまで、そのアプリでは Meltype IME で入力できない
+    /// (stub と impl に分ける前の DLL か、今の impl を読み込めない古い stub が、アプリに残っている)。UI スレッドで呼ぶ。
+    /// </summary>
+    public event Action<string>? ClientOutdated;
+
+    private void ReportOutdated(string process)
+    {
+        // 登録した impl の方が違うビルド (この Meltype.exe に更新する途中・Meltype IME の登録し直しを断った) なら、アプリを起動し直しても変わらない
+        if (!IsInstalledBuild) return;
+        process = Shown(process);
+        lock (_outdated)
+        {
+            if (_outdated.Count >= MaxGreeted || !_outdated.Add(process)) return;
+        }
+        Log.Warn($"Meltype IME: {process} に、更新する前の Meltype IME が残っています。{process} を起動し直すまで、Meltype IME で入力できません。");
+        if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(() => ClientOutdated?.Invoke(process));
+    }
 
     /// <summary>同時につながる数の上限 (アプリのスレッドごとに 1 つなので、ふつうは数十まで)。</summary>
     private const int MaxConnections = 1024;
@@ -653,13 +712,16 @@ internal sealed class TipServer : IDisposable
 
     }
 
-    // Meltype IME のモードでないときも DLL はつなぐので、ログはアプリごとに 1 回だけ。
-    // 名前はアプリの側から来るので、ログを崩さないように短くして、改行などは消す
+    // Meltype IME のモードでないときも DLL はつなぐので、ログはアプリごとに 1 回だけ
     private void Greet(string process)
     {
-        var shown = new string(process.Where(c => !char.IsControl(c) && !char.IsSurrogate(c) && char.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.Format).Take(64).ToArray());
+        var shown = Shown(process);
         if (_greeted.Count < MaxGreeted && _greeted.Add(shown)) Log.Info($"Meltype IME: {shown} からつながりました。");
     }
+
+    // 名前はアプリの側から来るので、ログと通知を崩さないように短くして、改行などは消す
+    private static string Shown(string process) =>
+        new(process.Where(c => !char.IsControl(c) && !char.IsSurrogate(c) && char.GetUnicodeCategory(c) != System.Globalization.UnicodeCategory.Format).Take(64).ToArray());
 
     public void Dispose()
     {
