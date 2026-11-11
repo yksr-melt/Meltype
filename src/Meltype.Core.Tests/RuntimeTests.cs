@@ -56,6 +56,23 @@ internal static class RuntimeTests
     }
 
     [Test]
+    public static void UserDictionary_ExternalWriteIsReadForTheNextSession()
+    {
+        // Mac は取り込んだ語を Swift で userdict.txt に書き、入力欄を作り直す
+        WithRuntime((runtime, directory) =>
+        {
+            runtime.UserDictionary.Add("あおい", "葵");
+            var registered = runtime.UserDictionary;
+            runtime.CreateSession(new CompositionTests.FakeConverter());
+            Assert.True(ReferenceEquals(registered, runtime.UserDictionary), "自分で保存した分では読み直さない");
+            File.WriteAllText(Path.Combine(directory, "userdict.txt"), "あおい\t葵\nゆきしろ\t雪代\n");
+            File.SetLastWriteTimeUtc(Path.Combine(directory, "userdict.txt"), DateTime.UtcNow.AddMinutes(1));
+            runtime.CreateSession(new CompositionTests.FakeConverter());
+            Assert.Equal("雪代", runtime.UserDictionary.Lookup("ゆきしろ") is [var word, ..] ? word : "(なし)");
+        });
+    }
+
+    [Test]
     public static void SettingsApply_SavesAndNotifies()
     {
         WithRuntime((runtime, directory) =>

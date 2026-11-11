@@ -82,7 +82,7 @@ public sealed class MeltypeRuntime : IDisposable
 
     public CompositionDetector Detector { get; }
 
-    /// <summary>ユーザー辞書。dictionaries/ の .plist が変わったら、次に入力欄を作るときに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直す)。</summary>
+    /// <summary>ユーザー辞書。userdict.txt・dictionaries/ の .plist が外で変わったら、次に入力欄を作るときに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直す)。</summary>
     public UserDictionary UserDictionary { get; private set; }
 
     public ConversionHistory History => _shared.History!;
@@ -110,7 +110,7 @@ public sealed class MeltypeRuntime : IDisposable
         bool autoSpacing = false, bool directModeDetection = false)
     {
         var current = settings ?? (() => Settings.Current);
-        if (PlistSignature() is var plists && plists != _plists)
+        if (PlistSignature() is var plists && (plists != _plists || UserDictionary.IsStale))
         {
             _plists = plists;
             UserDictionary = LoadUserDictionary();

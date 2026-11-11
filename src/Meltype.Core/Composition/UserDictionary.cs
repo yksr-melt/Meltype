@@ -14,7 +14,7 @@ public sealed record UserWord(string Reading, string Word);
 /// 登録した単語にする (きごうとう → 記号等 を登録すると、きごうとうふくめ → 記号等|含め)。
 /// トレイの「ユーザー辞書...」から登録・削除する。
 /// importDirectory (Mac / Linux は データフォルダ/dictionaries) に置いた .plist (macOS の「ユーザ辞書」を書き出したもの) の語も使う (#40)。
-/// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む (ファイルを置き換えれば次の起動で入れ替わる)。
+/// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
 public sealed class UserDictionary
@@ -40,6 +40,8 @@ public sealed class UserDictionary
     private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
+    // 読んだ・保存したときの userdict.txt の更新時刻
+    private DateTime _fileTime;
 
     public UserDictionary(string? path, bool builtIn = true, string? importDirectory = null)
     {
@@ -52,6 +54,7 @@ public sealed class UserDictionary
         }
         try
         {
+            _fileTime = FileTime();
             if (path is not null && File.Exists(path)) Parse(File.ReadAllLines(path, Encoding.UTF8), _words);
         }
         catch (Exception ex)
@@ -280,10 +283,16 @@ public sealed class UserDictionary
             var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」" };
             lines.AddRange(_words.Select(w => $"{w.Reading}\t{w.Word}"));
             Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
+            _fileTime = FileTime();
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"ユーザー辞書を保存できませんでした: {ex.Message}");
         }
     }
+
+    /// <summary>このオブジェクトの外 (Mac の Swift 側の取り込み) で userdict.txt を書き換えた。</summary>
+    public bool IsStale => FileTime() != _fileTime;
+
+    private DateTime FileTime() => _path is null ? default : File.GetLastWriteTimeUtc(_path);
 }
