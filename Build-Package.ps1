@@ -148,7 +148,7 @@ Copy-Item -LiteralPath (Join-Path $dotnetRoot 'LICENSE.txt') -Destination $runti
 Copy-Item -LiteralPath (Join-Path $dotnetRoot 'ThirdPartyNotices.txt') -Destination $runtime -ErrorAction SilentlyContinue
 
 # スマホからも受け取れる大きさ (30MB 未満) にするため、ランタイムから Meltype が使わないものを 2 段階で削る。
-#   1. 参照をたどって削る: Meltype.dll が実際に使う型からたどって必要なアセンブリだけ残す (Meltype.Tests の --runtime-closure)。
+#   1. 参照をたどって削る: Meltype.dll が実際に使う型からたどって必要なアセンブリだけ残す (Meltype.Windows.Tests の --runtime-closure)。
 #      ネイティブの DLL は、デバッグ用 (mscordaccore, mscordbi, DiaSymReader, createdump) と WPF の描画用を削る。
 #   2. 実際に読み込まれたかで削る: 1 の状態で自己診断を走らせ、読み込まれなかった大きなアセンブリ (512KB 超) を削る
 #      (XML・ネットワーク・暗号などは WinForms から参照されているが、Meltype の使い方では読み込まれない)。

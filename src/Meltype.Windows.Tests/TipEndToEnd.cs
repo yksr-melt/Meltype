@@ -8,7 +8,7 @@ namespace Meltype.Tests;
 
 /// <summary>
 /// 調査用: 登録した Meltype IME (TSF の DLL) を、このプロセスの入力欄で実際に動かして確かめる。
-///   Meltype.Tests --tip-e2e
+///   Meltype.Windows.Tests --tip-e2e
 /// サーバー (TipServer) は別のスレッドで動かす (DLL は UI スレッドで同期的にサーバーを待つため)。
 /// 打鍵は SendInput で送るので、数秒間このウィンドウが前面に出る。
 /// </summary>
@@ -78,7 +78,8 @@ internal static class TipEndToEnd
             invoker.CreateControl();
             serverInvoker = invoker;
             serverThreadId = GetCurrentThreadId();
-            using var service = new Composition.CompositionService(invoker, TestRuntime.Create(), () => settings);
+            using var runtime = TestRuntime.Create();
+            using var service = new Composition.CompositionService(invoker, runtime, () => settings);
             using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
             server.Start();
             ready.Set();

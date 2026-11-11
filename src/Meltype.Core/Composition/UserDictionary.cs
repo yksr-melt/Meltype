@@ -40,29 +40,68 @@ public sealed class UserDictionary
     private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
-    // 読んだ・保存したときの userdict.txt の更新時刻
+    private readonly string? _importDirectory;
+    // 読んだ・保存したときの userdict.txt の更新時刻と、読んだときの .plist の一覧 (更新時刻つき)
     private DateTime _fileTime;
+    private string _plists = "";
 
     public UserDictionary(string? path, bool builtIn = true, string? importDirectory = null)
     {
         _path = path;
+        _importDirectory = importDirectory;
         if (builtIn)
         {
             Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
             MarkHeadOnly();
             SplitBuiltInClauses();
         }
+        Load();
+    }
+
+    /// <summary>
+    /// userdict.txt・.plist がこのオブジェクトの外 (Mac の Swift 側の取り込み・.plist を置いた) で変わっていたら、読み直す。
+    /// 入力欄はすべてこのオブジェクトを使うので、開いている入力欄にも効く。
+    /// </summary>
+    public void Refresh()
+    {
+        if (FileTime() == _fileTime && Plists() == _plists) return;
+        _words.Clear();
+        _imported.Clear();
+        Load();
+        Diagnostics.Log.Info("ユーザー辞書が変わったので読み直しました。");
+    }
+
+    private void Load()
+    {
+        _fileTime = FileTime();
+        _plists = Plists();
         try
         {
-            _fileTime = FileTime();
-            if (path is not null && File.Exists(path)) Parse(File.ReadAllLines(path, Encoding.UTF8), _words);
+            if (_path is not null && File.Exists(_path)) Parse(File.ReadAllLines(_path, Encoding.UTF8), _words);
         }
         catch (Exception ex)
         {
             Diagnostics.Log.Warn($"ユーザー辞書を読めませんでした: {ex.Message}");
         }
-        if (importDirectory is not null) LoadPlists(importDirectory);
+        if (_importDirectory is not null) LoadPlists(_importDirectory);
         Rebuild();
+    }
+
+    private DateTime FileTime() => _path is null ? default : File.GetLastWriteTimeUtc(_path);
+
+    private string Plists()
+    {
+        try
+        {
+            if (_importDirectory is null || !Directory.Exists(_importDirectory)) return "";
+            var files = Directory.GetFiles(_importDirectory, "*.plist");
+            Array.Sort(files, StringComparer.Ordinal);
+            return string.Join("\n", files.Select(f => $"{f}\t{File.GetLastWriteTimeUtc(f).Ticks}"));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return _plists;
+        }
     }
 
     /// <summary>フォルダの .plist を読む。読めないファイル (バイナリの plist など) は飛ばす。</summary>
@@ -290,9 +329,4 @@ public sealed class UserDictionary
             Diagnostics.Log.Warn($"ユーザー辞書を保存できませんでした: {ex.Message}");
         }
     }
-
-    /// <summary>このオブジェクトの外 (Mac の Swift 側の取り込み) で userdict.txt を書き換えた。</summary>
-    public bool IsStale => FileTime() != _fileTime;
-
-    private DateTime FileTime() => _path is null ? default : File.GetLastWriteTimeUtc(_path);
 }

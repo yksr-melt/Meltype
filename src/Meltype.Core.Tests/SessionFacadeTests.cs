@@ -1025,7 +1025,7 @@ internal static class SessionFacadeTests
         var directory = Path.Combine(Path.GetTempPath(), "meltype-session-reload-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var runtime = new MeltypeRuntime(directory);
+            using var runtime = new MeltypeRuntime(directory);
             var session = runtime.CreateSession(new CompositionTests.FakeConverter());
             Assert.Equal("ね、", Type(session, "ne,\n")[^1].Commits.Single().Text, "既定の句読点");
             var config = Path.Combine(directory, "config.json");
@@ -1054,7 +1054,7 @@ internal static class SessionFacadeTests
                 "あつい" => ["熱い", "暑い", "厚い"],
                 _ => [],
             };
-            var runtime = new MeltypeRuntime(directory);
+            using var runtime = new MeltypeRuntime(directory);
             var a = runtime.CreateSession(new CompositionTests.FakeConverter(), moreCandidates: More);
             var b = runtime.CreateSession(new CompositionTests.FakeConverter(), moreCandidates: More);
             void Choose(MeltypeSession session, string typed, string word)

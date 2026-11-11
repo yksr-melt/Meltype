@@ -28,7 +28,8 @@ internal static class TipIndicatorTests
     {
         using var invoker = new Control();
         invoker.CreateControl();
-        using var composition = new Composition.CompositionService(invoker, TestRuntime.Create(), () => new Settings { ConversionEngine = ConversionEngine.System });
+        using var runtime = TestRuntime.Create();
+        using var composition = new Composition.CompositionService(invoker, runtime, () => new Settings { ConversionEngine = ConversionEngine.System });
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
         var area = Screen.PrimaryScreen!.WorkingArea;
         var anchor = new Point(area.Left + 40, area.Top + 40);
@@ -66,7 +67,8 @@ internal static class TipIndicatorTests
         var settings = new Settings { Mode = InputMode.Tsf, ModeIndicator = ModeIndicatorTiming.Never };
         using var invoker = new Control();
         invoker.CreateControl();
-        using var composition = new Composition.CompositionService(invoker, TestRuntime.Create(), () => new Settings { ConversionEngine = ConversionEngine.System });
+        using var runtime = TestRuntime.Create();
+        using var composition = new Composition.CompositionService(invoker, runtime, () => new Settings { ConversionEngine = ConversionEngine.System });
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
         using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));
         var host = server.Connect("harness", 0);

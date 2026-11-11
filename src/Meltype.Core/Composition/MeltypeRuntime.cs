@@ -19,11 +19,12 @@ public sealed class MeltypeRuntime : IDisposable
     private readonly CompositionServices _shared;
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
-    private string _plists;
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
     /// <param name="wordChecker">OS のスペルチェッカー。使えなければ同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。</param>
-    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null)
+    /// <param name="usableSettings">config.json から読んだ・変えた設定を、この OS で使える設定に直す (Windows: 使えない Meltype IME の動作モード)。</param>
+    /// <param name="nowPlaying">再生中の曲を OS から読み始める (テストでは読まない)。</param>
+    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null, Func<Settings, Settings>? usableSettings = null, bool nowPlaying = false)
     {
         DataDirectory = dataDirectory;
         Directory.CreateDirectory(dataDirectory);
@@ -35,7 +36,7 @@ public sealed class MeltypeRuntime : IDisposable
             Diagnostics.Log.SetFileOutput(loaded.FileLog ? Path.Combine(dataDirectory, "meltype.log") : null);
             Diagnostics.Log.RecordText = loaded.LogTypedText;
             SettingsChanged?.Invoke(loaded);
-        });
+        }, usable: usableSettings);
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
@@ -58,18 +59,18 @@ public sealed class MeltypeRuntime : IDisposable
             GitHubTitles = () => GitHubTitles,
         };
         Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
-        _plists = PlistSignature();
-        UserDictionary = LoadUserDictionary();
+        // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
+        UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: _userDirectory);
         Snippets = new SnippetStore(Path.Combine(dataDirectory, "snippets.json"));
         _directEngine = new(() => ScoreEngine.CreateDefault(() => Settings.Current, _userDirectory));
-        _nowPlaying = NowPlayingSource.Create(() => Settings.Current.NowPlayingCandidates);
+        if (nowPlaying) _nowPlaying = NowPlayingSource.Create(() => Settings.Current.NowPlayingCandidates);
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
-    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null)
+    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null, Func<Settings, Settings>? usableSettings = null, bool nowPlaying = true)
     {
         AppPaths.MigrateFromOldName();
-        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker);
+        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker, usableSettings, nowPlaying);
     }
 
     public string DataDirectory { get; }
@@ -77,13 +78,13 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>config.json の設定 (変わったら読み直す。同じプロセスの設定画面は Apply で変える)。</summary>
     internal SettingsFile Settings { get; }
 
-    /// <summary>設定を読み直した・変えた (どのスレッドからも呼ばれる)。</summary>
+    /// <summary>設定を読み直した・変えた。設定の lock の中で、読んだ・変えたスレッドから呼ぶので、受け手は待たない (UI は BeginInvoke で触る)。</summary>
     public event Action<Settings>? SettingsChanged;
 
     public CompositionDetector Detector { get; }
 
-    /// <summary>ユーザー辞書。userdict.txt・dictionaries/ の .plist が外で変わったら、次に入力欄を作るときに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直す)。</summary>
-    public UserDictionary UserDictionary { get; private set; }
+    /// <summary>ユーザー辞書。入力欄を作ったとき・入力を始めたときに、外で変わっていたら読み直す (<see cref="UserDictionary.Refresh"/>)。</summary>
+    public UserDictionary UserDictionary { get; }
 
     public ConversionHistory History => _shared.History!;
 
@@ -110,11 +111,7 @@ public sealed class MeltypeRuntime : IDisposable
         bool autoSpacing = false, bool directModeDetection = false)
     {
         var current = settings ?? (() => Settings.Current);
-        if (PlistSignature() is var plists && (plists != _plists || UserDictionary.IsStale))
-        {
-            _plists = plists;
-            UserDictionary = LoadUserDictionary();
-        }
+        UserDictionary.Refresh();
         var services = _shared with
         {
             UserDictionary = UserDictionary,
@@ -161,25 +158,5 @@ public sealed class MeltypeRuntime : IDisposable
         }
         if (result.Verdict == Verdict.Japanese) Diagnostics.Log.Decision($"英数状態でローマ字を検知: {result.Describe()}");
         return result.Verdict;
-    }
-
-    // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
-    private UserDictionary LoadUserDictionary() => new(Path.Combine(DataDirectory, "userdict.txt"), importDirectory: _userDirectory);
-
-    private string PlistSignature()
-    {
-        try
-        {
-            if (!Directory.Exists(_userDirectory)) return "";
-            return string.Join("\n", Directory.GetFiles(_userDirectory, "*.plist").Order(StringComparer.Ordinal).Select(f => $"{f}\t{File.GetLastWriteTimeUtc(f).Ticks}"));
-        }
-        catch (IOException)
-        {
-            return _plists;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return _plists;
-        }
     }
 }

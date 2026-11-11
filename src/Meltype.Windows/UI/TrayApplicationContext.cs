@@ -45,6 +45,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _autoUpdateItem;
     private int _exclusionNotificationScheduled;
     private volatile bool _exiting;
+    // 入力していない間も config.json の書き換えを読む (読み直すと MeltypeRuntime.SettingsChanged が届く)
+    private readonly System.Windows.Forms.Timer _settingsCheck = new() { Interval = (int)SettingsFile.CheckIntervalMs };
 
     public TrayApplicationContext(MeltypeEngine engine, AppState state)
     {
@@ -61,6 +63,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
         _engine.ImeServer = _tipServer;
         _tipServer.Start();
+        _engine.SettingsChanged += OnEngineSettingsChanged;
+        _settingsCheck.Tick += (_, _) => _ = _engine.Runtime.Settings.Current;
+        _settingsCheck.Start();
         IntroduceTsf();
 
         var menu = new ContextMenuStrip();
@@ -137,7 +142,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _registerHotkey = new HotkeyWindow(RegisterSelectedWord, HotkeyWindow.RegisterWordKeys, "単語の登録");
         _engine.ToggleRequested += OnToggleRequested;
         _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
-        _engine.SettingsChanged += OnEngineSettingsChanged;
         _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate, () => Prerelease);
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
@@ -762,6 +766,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         _exiting = true;
         Diagnostics.ShortcutExclusions.Added -= OnShortcutExcluded;
+        _settingsCheck.Dispose();
         _engine.SettingsChanged -= OnEngineSettingsChanged;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();

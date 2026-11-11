@@ -71,7 +71,7 @@ internal static class SettingsSchemaTests
         var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-schema-" + Guid.NewGuid().ToString("N"));
         try
         {
-            _ = new MeltypeRuntime(directory);
+            new MeltypeRuntime(directory).Dispose();
             Assert.Equal(SettingsSchema.Create(), File.ReadAllText(Path.Combine(directory, SettingsSchema.FileName)), "config.json の隣に schema を書く");
         }
         finally { Directory.Delete(directory, recursive: true); }

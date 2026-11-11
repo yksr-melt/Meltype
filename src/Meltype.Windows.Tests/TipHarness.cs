@@ -8,8 +8,8 @@ namespace Meltype.Tests;
 
 /// <summary>
 /// 調査用: Meltype IME (TSF) のサーバーを、学習データを保存しない設定で単独で動かす / パイプにキーを送ってみる。
-///   Meltype.Tests --tip-server [秒]     … サーバーだけを動かす (DLL を試すとき。Meltype.exe は止めておく)
-///   Meltype.Tests --tip-client kyouha   … サーバーを動かし、打鍵を送って応答を出す
+///   Meltype.Windows.Tests --tip-server [秒]     … サーバーだけを動かす (DLL を試すとき。Meltype.exe は止めておく)
+///   Meltype.Windows.Tests --tip-client kyouha   … サーバーを動かし、打鍵を送って応答を出す
 /// </summary>
 internal static class TipHarness
 {
@@ -23,7 +23,8 @@ internal static class TipHarness
         var settings = new Config.Settings { Mode = Config.InputMode.Tsf };
         using var invoker = new Control();
         invoker.CreateControl();
-        using var service = CreateService(invoker);
+        using var runtime = TestRuntime.Create();
+        using var service = CreateService(invoker, runtime);
         using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
         server.Start();
         Console.WriteLine($"\\\\.\\pipe\\{Tip.TipServer.PipeName} で待っています ({seconds} 秒)");
@@ -40,7 +41,8 @@ internal static class TipHarness
         var settings = new Config.Settings { Mode = Config.InputMode.Tsf, LiveConversion = false };
         using var invoker = new Control();
         invoker.CreateControl();
-        using var service = CreateService(invoker);
+        using var runtime = TestRuntime.Create();
+        using var service = CreateService(invoker, runtime);
         using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
         server.Start();
         var failed = 0;
@@ -80,8 +82,8 @@ internal static class TipHarness
         return failed;
     }
 
-    internal static Composition.CompositionService CreateService(Control invoker) =>
-        new(invoker, TestRuntime.Create(), () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System });
+    internal static Composition.CompositionService CreateService(Control invoker, Composition.MeltypeRuntime runtime) =>
+        new(invoker, runtime, () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System });
 
     private static string Send(NamedPipeClientStream pipe, string json)
     {

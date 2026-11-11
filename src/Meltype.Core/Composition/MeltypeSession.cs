@@ -180,6 +180,9 @@ public sealed class MeltypeSession
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly bool _directModeDetection;
+    private readonly UserDictionary? _userDictionary;
+    private const long UserDictionaryCheckMs = 1000;
+    private long _userDictionaryCheckedMs;
     private bool _directEnglishWord;
     private bool _direct;
 
@@ -189,6 +192,8 @@ public sealed class MeltypeSession
         _settings = settings;
         _timeMs = timeMs ?? (() => Environment.TickCount64);
         _directModeDetection = directModeDetection;
+        _userDictionary = services.UserDictionary;
+        _userDictionaryCheckedMs = _timeMs();
         var controllerServices = directModeDetection
             ? services with
             {
@@ -405,6 +410,12 @@ public sealed class MeltypeSession
         if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
             return _controller.Pass(now);
+        }
+        // 入力欄を作り直さないフロント (Meltype キーボード) でも、外で変えたユーザー辞書を使う
+        if (!_controller.IsComposing && now - _userDictionaryCheckedMs >= UserDictionaryCheckMs)
+        {
+            _userDictionaryCheckedMs = now;
+            _userDictionary?.Refresh();
         }
         var result = _controller.Press(new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。

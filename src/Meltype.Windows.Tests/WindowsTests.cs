@@ -354,8 +354,8 @@ internal static class WindowsTests
     public static void Portable_StartupResetsModeToKeyboard()
     {
         var x64 = System.Runtime.InteropServices.Architecture.X64;
-        Assert.True(global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Tsf }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
-        Assert.True(!global::Meltype.Program.ShouldUseKeyboardOnStartup(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
+        Assert.True(global::Meltype.Program.ShouldUseKeyboard(new Settings { Mode = InputMode.Tsf }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
+        Assert.True(!global::Meltype.Program.ShouldUseKeyboard(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
     }
 
     [Test]

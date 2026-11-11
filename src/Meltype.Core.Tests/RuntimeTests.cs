@@ -12,7 +12,11 @@ internal static class RuntimeTests
     private static void WithRuntime(Action<MeltypeRuntime, string> body)
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-runtime-" + Guid.NewGuid().ToString("N"));
-        try { body(new MeltypeRuntime(directory), directory); }
+        try
+        {
+            using var runtime = new MeltypeRuntime(directory);
+            body(runtime, directory);
+        }
         finally { Directory.Delete(directory, recursive: true); }
     }
 
@@ -49,27 +53,65 @@ internal static class RuntimeTests
                 """);
             runtime.CreateSession(new CompositionTests.FakeConverter());
             Assert.Equal("雪代", runtime.UserDictionary.Lookup("ゆきしろ") is [var word, ..] ? word : "(なし)");
-            var before = runtime.UserDictionary;
-            runtime.CreateSession(new CompositionTests.FakeConverter());
-            Assert.True(ReferenceEquals(before, runtime.UserDictionary), "変わらなければ読み直さない (登録の画面の語を、開いている入力欄でもすぐ使う)");
         });
     }
 
     [Test]
-    public static void UserDictionary_ExternalWriteIsReadForTheNextSession()
+    public static void UserDictionary_ExternalWriteReachesOpenSessions()
     {
-        // Mac は取り込んだ語を Swift で userdict.txt に書き、入力欄を作り直す
+        // Mac は取り込んだ語を Swift で userdict.txt に書く。Meltype キーボードは入力欄が変わっても同じ本体を使うので、入力を始めたときに確かめる
         WithRuntime((runtime, directory) =>
         {
+            var now = 0L;
+            var session = new MeltypeSession(runtime.Detector, new CompositionTests.FakeConverter(), new CompositionServices { UserDictionary = runtime.UserDictionary },
+                () => runtime.Settings.Current, timeMs: () => now);
             runtime.UserDictionary.Add("あおい", "葵");
-            var registered = runtime.UserDictionary;
-            runtime.CreateSession(new CompositionTests.FakeConverter());
-            Assert.True(ReferenceEquals(registered, runtime.UserDictionary), "自分で保存した分では読み直さない");
-            File.WriteAllText(Path.Combine(directory, "userdict.txt"), "あおい\t葵\nゆきしろ\t雪代\n");
-            File.SetLastWriteTimeUtc(Path.Combine(directory, "userdict.txt"), DateTime.UtcNow.AddMinutes(1));
-            runtime.CreateSession(new CompositionTests.FakeConverter());
-            Assert.Equal("雪代", runtime.UserDictionary.Lookup("ゆきしろ") is [var word, ..] ? word : "(なし)");
+            var path = Path.Combine(directory, "userdict.txt");
+            File.WriteAllText(path, "あおい\t葵\nゆきしろ\t雪代\n");
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+            now = 1000;
+            session.HandleKey('A', 'a', false, false, false, false);
+            Assert.Equal("雪代", runtime.UserDictionary.Lookup("ゆきしろ") is [var word, ..] ? word : "(なし)", "開いている入力欄で読み直す");
+            Assert.Equal("葵", runtime.UserDictionary.Lookup("あおい") is [var registered, ..] ? registered : "(なし)", "自分で登録した語も残る");
         });
+    }
+
+    [Test]
+    public static void UsableSettings_AppliesToEveryRead()
+    {
+        // OS で使えない設定 (Windows の使えない Meltype IME) は、起動したとき・外で書き換えたとき・設定画面で変えたときのどれでも直す
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-runtime-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            Directory.CreateDirectory(directory);
+            new Settings { Mode = InputMode.Tsf }.Save(path);
+            using var runtime = new MeltypeRuntime(directory, usableSettings: settings =>
+            {
+                if (settings.Mode != InputMode.Tsf) return settings;
+                var usable = settings.Clone();
+                usable.Mode = InputMode.Keyboard;
+                return usable;
+            });
+            Assert.Equal(InputMode.Keyboard, runtime.Settings.Current.Mode, "起動したとき (保存できなかった設定を読んでも)");
+            Settings? notified = null;
+            runtime.SettingsChanged += next => notified = next;
+            var next = runtime.Settings.Current.Clone();
+            next.Mode = InputMode.Tsf;
+            runtime.Settings.Apply(next);
+            Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "設定画面で変えたとき");
+            notified = null;
+            next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
+            next.Save(path);
+            File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
+            Thread.Sleep((int)SettingsFile.CheckIntervalMs + 50);
+            Assert.Equal(InputMode.Keyboard, runtime.Settings.Current.Mode, "外で書き換えたとき");
+            Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "知らせる設定も直した後のもの");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Test]

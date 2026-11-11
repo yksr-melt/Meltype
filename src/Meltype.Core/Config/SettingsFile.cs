@@ -9,7 +9,8 @@ namespace Meltype.Config;
 /// 同じプロセスの設定画面 (Windows) は <see cref="Apply"/> で変える。どのスレッドから読んでもよい。
 /// </summary>
 /// <param name="loaded">読んだ・読み直した・変えたときに、lock の中で呼ぶ (待つ処理をしない)。</param>
-internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null)
+/// <param name="usable">読んだ・変えた設定を、この OS で使える設定に直す (<see cref="Current"/> と loaded には直した後の設定を渡す)。</param>
+internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null, Func<Settings, Settings>? usable = null)
 {
     private readonly object _gate = new();
 
@@ -33,7 +34,7 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
     /// <summary>設定を変えて config.json に保存する。保存できなくても、このプロセスでは変えた設定を使う。</summary>
     public Settings Apply(Settings settings)
     {
-        var next = settings.Clone().Normalize();
+        var next = Usable(settings.Clone().Normalize());
         lock (_gate)
         {
             try
@@ -65,7 +66,7 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
         // 読み直せなかったときは、更新時刻が変わらなくても (権限を直したなど) 次の間隔でまた読む
         if (_settings is not null && !changed && !_failed) return _settings;
         _writeTime = writeTime;
-        if (_settings is null) _settings = Settings.Load(path);
+        if (_settings is null) _settings = Usable(Settings.Load(path));
         else
         {
             // 読み直しで無い・読めないのは、エディターが書いている途中のことがある (元のファイルを別名に移してから書くエディターもある)。
@@ -73,7 +74,7 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             if (!File.Exists(path)) return _settings;
             try
             {
-                _settings = Settings.LoadOrThrow(path);
+                _settings = Usable(Settings.LoadOrThrow(path));
                 _failed = false;
             }
             catch (Exception ex)
@@ -87,4 +88,6 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
         loaded?.Invoke(_settings);
         return _settings;
     }
+
+    private Settings Usable(Settings settings) => usable is null ? settings : usable(settings);
 }

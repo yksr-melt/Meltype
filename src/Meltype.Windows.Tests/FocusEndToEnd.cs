@@ -8,7 +8,7 @@ namespace Meltype.Tests;
 
 /// <summary>
 /// 調査用: クリックの直後に打ち始めたときのフォーカスの判定を、実際のウィンドウで確かめる。
-///   Meltype.Tests --focus-e2e
+///   Meltype.Windows.Tests --focus-e2e
 /// マウスを SendInput で動かしてクリックするので、数秒間このウィンドウが前面に出る (キーは送らない)。
 /// キーを押したときの判定は MeltypeEngine と同じ順 (CanCaptureWaiting → RecheckAfterClick) で呼び、
 /// 変換ボックスに入れるか (= キーを横取りするか) と、フックで止まった時間を測る。
