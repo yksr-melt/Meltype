@@ -4869,6 +4869,103 @@ internal static class CompositionTests
         Assert.Equal("今日はgoogleで検索", k.Host.Output.Single());
     }
 
+    /// <summary>変換エンジンは渡された「，．」を半角に戻す (issue #498 の再現)。</summary>
+    private sealed class HalfWidthPunctuationConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            Map(hiragana) is { } text ? [new(hiragana.Replace('，', ',').Replace('．', '.'), text)] : null;
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "わたしは" => "私は",
+            "わたしは，" or "わたしは," => "私は,",
+            "わたしは．" or "わたしは." => "私は.",
+            "わたしは，そうです" or "わたしは,そうです" => "私は,そうです",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Issue498_FullWidthPunctuationSurvivesLiveConversion()
+    {
+        // #498: 句読点を「，．」にして 4 文字以上をライブ変換すると、，． が半角の , . になっていた。
+        Keyboard Type(string keys)
+        {
+            var k = new Keyboard(live: true, converter: new HalfWidthPunctuationConverter())
+            {
+                Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod,
+            };
+            k.Type(keys);
+            return k;
+        }
+
+        var comma = Type("watasiha,");
+        Assert.Equal("私は，", comma.Showing);
+        comma.Type("\n");
+        Assert.Equal("私は，", comma.Host.Output.Single());
+        Assert.Equal("私は．", Type("watasiha.").Showing);
+        Assert.Equal("私は，そうです", Type("watasiha,soudesu").Showing);
+        Assert.Equal("は，", Type("ha,").Showing, "4 文字未満はかなのまま、句読点も設定どおり");
+    }
+
+    /// <summary>数字と続くかなをまとめて渡されたときだけ「3個」にする変換エンジン。</summary>
+    private sealed class CounterConverter : IKanjiConverter
+    {
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana) is { } text ? [new(hiragana, text)] : null;
+        }
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "りんご" => "林檎",
+            "こ" => "子",
+            "3こ" => "3個",
+            "りんご、3こ" => "林檎、3個",
+            "3こ、りんご" => "3個、林檎",
+            "りんご、3こ。" => "林檎、3個。",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Issue498_FullWidthPunctuationDoesNotHoldDigits()
+    {
+        // 「，．」は変換エンジンに渡さないが、「、。」と同じく隣の数字をつなぎ止めない。
+        // つなぎ止めると ringo,3ko の こ だけが渡って「3個」にならなかった (PR #620 のレビュー)。
+        (string? Showing, string Output, List<string> Received) Type(string keys, Meltype.Config.PunctuationStyle style)
+        {
+            var converter = new CounterConverter();
+            var k = new Keyboard(live: true, converter: converter) { Punctuation = style };
+            k.Type(keys);
+            var showing = k.Showing;
+            k.Type("\n");
+            return (showing, k.Host.Output.Single(), converter.Received);
+        }
+
+        const Meltype.Config.PunctuationStyle Period = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod;
+        const Meltype.Config.PunctuationStyle Japanese = Meltype.Config.PunctuationStyle.Japanese;
+
+        var full = Type("ringo,3ko", Period);
+        Assert.Equal("林檎，3個", full.Showing, "レビューで報告された例");
+        Assert.Equal("林檎，3個", full.Output);
+        Assert.True(!full.Received.Any(r => r.Contains('，')), "「，」は変換エンジンに渡さない");
+        Assert.True(!full.Received.Contains("こ"), "3 と こ を分けて渡さない");
+        Assert.Equal("林檎、3個", Type("ringo,3ko", Japanese).Output, "「、。」の設定は今までどおり");
+        Assert.Equal("3個，林檎", Type("3ko,ringo", Period).Output, "数字が「，」の前にあっても渡す");
+        Assert.Equal("3個、林檎", Type("3ko,ringo", Japanese).Output);
+        Assert.Equal("林檎，3個．", Type("ringo,3ko.", Period).Output, "「．」が後ろにあっても");
+        Assert.Equal("林檎、3個。", Type("ringo,3ko.", Japanese).Output);
+        Assert.Equal("1.5と1,000", Type("1.5to1,000", Period).Output, "半角の記号とつながる数字は今までどおりそのまま");
+    }
+
     [Test]
     public static void LiveConversion_SpaceShowsAlternatives()
     {
