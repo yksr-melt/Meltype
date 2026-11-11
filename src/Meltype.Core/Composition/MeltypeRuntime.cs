@@ -3,6 +3,7 @@
 
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.NowPlaying;
 
 namespace Meltype.Composition;
 
@@ -11,12 +12,13 @@ namespace Meltype.Composition;
 /// 入力欄ごとの本体 (<see cref="MeltypeSession"/>) は <see cref="CreateSession"/> で作る。
 /// 入力欄ごとに辞書・学習データを作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
 /// </summary>
-public sealed class MeltypeRuntime
+public sealed class MeltypeRuntime : IDisposable
 {
     private readonly string _userDirectory;
     private readonly IWordChecker _wordChecker;
     private readonly CompositionServices _shared;
     private readonly Lazy<ScoreEngine> _directEngine;
+    private readonly INowPlayingSource? _nowPlaying;
     private string _plists;
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
@@ -60,6 +62,7 @@ public sealed class MeltypeRuntime
         UserDictionary = LoadUserDictionary();
         Snippets = new SnippetStore(Path.Combine(dataDirectory, "snippets.json"));
         _directEngine = new(() => ScoreEngine.CreateDefault(() => Settings.Current, _userDirectory));
+        _nowPlaying = NowPlayingSource.Create(() => Settings.Current.NowPlayingCandidates);
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
@@ -120,8 +123,26 @@ public sealed class MeltypeRuntime
             AutomaticEnglishSpacing = () => autoSpacing,
             ClassifyDirect = directModeDetection ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
         };
-        return new MeltypeSession(Detector, converter, services, current, directModeDetection);
+        return new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
     }
+
+    public void Dispose() => _nowPlaying?.Dispose();
+
+    /// <summary>学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて消す。ユーザー辞書と設定は消さない。</summary>
+    public void ResetLearning()
+    {
+        History.Clear();
+        Languages.Clear();
+        Phrases.Clear();
+        TranslationHistory.Clear();
+        Diagnostics.Log.Info("学習データをリセットしました。");
+    }
+
+    /// <summary>
+    /// sinceUtc より後に覚えたものだけを消す (一時的な入力・間違えて覚えたものを、全体をリセットせずに消す: issue #277)。消した数を返す。
+    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳の記録は覚えた時刻を持たないので、<see cref="ResetLearning"/> で消す。
+    /// </summary>
+    public int ForgetLearningSince(DateTime sinceUtc) => History.ForgetSince(sinceUtc) + Languages.ForgetSince(sinceUtc) + Phrases.ForgetSince(sinceUtc);
 
     /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (設定画面の判定のテストにも使う)。final は、もう続きが無いか。</summary>
     public DetectionResult Evaluate(string letters, bool final, Settings settings) =>

@@ -144,8 +144,6 @@ public static unsafe class Exports
         public SnippetStore Snippets => Runtime.Snippets;
 
         public string? ClipboardText => null;
-
-        public (string Title, string Artist)? NowPlaying => null;
     }
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>
@@ -186,7 +184,7 @@ public static unsafe class Exports
         {
             var name = FromUtf8(platform) ?? "Mac";
             var settings = Runtime.Settings.Current;
-            return ToUtf8(Config.ProjectInfo.ReportUrl($"{name} (プレビュー版)", Config.ProjectInfo.CoreVersion, Config.ProjectInfo.Environment(settings, name)));
+            return ToUtf8(Config.ProjectInfo.ReportUrl($"{name} (プレビュー版)", Config.ProjectInfo.CoreVersion, Config.ProjectInfo.Environment(settings, $"{Config.ProjectInfo.CoreVersion} ({name}、プレビュー版)", $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})")));
         }
         catch (Exception ex)
         {

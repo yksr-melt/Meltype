@@ -109,7 +109,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     public string? ClipboardText => CompositionService.ClipboardText;
 
-    public (string Title, string Artist)? NowPlaying => _composition.NowPlaying;
 
     // ---- フックのスレッド ----
 

@@ -212,6 +212,7 @@ internal sealed class MeltypeEngine : IDisposable
         _keyCountTimer.Dispose();
         _discordPresence.Dispose();
         KeyCounter.Save();
+        Runtime.Dispose();
         Log.Info("Meltype を終了しました。");
         Log.FlushFile();
     }

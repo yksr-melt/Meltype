@@ -22,28 +22,16 @@ internal static class ReportInfo
     /// <summary>OS の名前 (フォームの OS の選択肢と同じ形)。</summary>
     public static string OsName => System.Environment.OSVersion.Version.Build >= 22000 ? "Windows 11" : "Windows 10";
 
-    /// <summary>実行環境 (1 行ずつ「項目: 値」)。</summary>
-    public static string Environment(Config.Settings settings)
-    {
-        var lines = new List<string>
-        {
-            $"Meltype: {AppInfo.Version}",
-            $"OS: {OsName} {WindowsVersion()} ({RuntimeInformation.OSArchitecture})",
-            $".NET: {System.Environment.Version}",
-            $"管理者として実行: {(IsAdministrator() ? "はい" : "いいえ")}",
-            $"モード: {settings.Mode}",
-            $"変換エンジン: {settings.ConversionEngine} (Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")})",
-            $"Zenzai: {(settings.UseZenzai ? "ON" : "OFF")}",
-            $"自動判定: {(settings.AutoDetection ? "ON" : "OFF")}",
-            $"入力方式: {settings.InputStyle}",
-            $"ライブ変換: {(settings.LiveConversion ? "ON" : "OFF")}",
-            $"変換ボックス: {settings.CompositionPlacement} / {settings.CompositionSize} / {settings.CompositionTheme} / {settings.CompositionOpacity}",
-            $"キーボード: {KeyboardKind()}",
-            $"画面: {Screen.AllScreens.Length} 枚、拡大率 {Scaling()}%",
-            $"言語: {CultureInfo.CurrentUICulture.Name}",
-        };
-        return string.Join("\n", lines);
-    }
+    /// <summary>実行環境 (<see cref="Config.ProjectInfo.Environment"/> に、Windows でだけ分かる項目を足したもの)。</summary>
+    public static string Environment(Config.Settings settings) => Config.ProjectInfo.Environment(settings, AppInfo.Version, $"{OsName} {WindowsVersion()} ({RuntimeInformation.OSArchitecture})",
+    [
+        $"管理者として実行: {(IsAdministrator() ? "はい" : "いいえ")}",
+        $"モード: {settings.Mode}",
+        $"変換エンジン: {settings.ConversionEngine} (Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")})",
+        $"変換ボックス: {settings.CompositionPlacement} / {settings.CompositionSize} / {settings.CompositionTheme} / {settings.CompositionOpacity}",
+        $"キーボード: {KeyboardKind()}",
+        $"画面: {Screen.AllScreens.Length} 枚、拡大率 {Scaling()}%",
+    ]);
 
     /// <summary>最近のログ (新しいものほど後ろ)。</summary>
     public static string RecentLog()

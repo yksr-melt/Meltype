@@ -2,8 +2,9 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
-namespace Meltype.Composition;
+namespace Meltype.NowPlaying;
 
 /// <summary>
 /// 今再生している曲 (曲名・アーティスト) を、Windows のメディアの操作
@@ -24,7 +25,8 @@ namespace Meltype.Composition;
 /// event の受け手 (TypedEventHandler&lt;TSender, TArgs&gt;) は IUnknown + Invoke (3) の COM オブジェクトを自分で作る (EventHandlers)。
 /// 使えない環境・再生していないときは null。
 /// </summary>
-public sealed unsafe class NowPlaying : IDisposable
+[SupportedOSPlatform("windows")]
+internal sealed unsafe class WindowsMediaSession : INowPlayingSource
 {
     private static readonly Guid IidStatics = new("2050c4ee-11a0-57de-aed7-c97c70338245");
     private static readonly Guid IidAsyncInfo = new("00000036-0000-0000-C000-000000000046");
@@ -50,10 +52,10 @@ public sealed unsafe class NowPlaying : IDisposable
     private readonly List<(IntPtr Session, long Playback, long Media)> _sessionTokens = [];
 
     // event の受け手から呼ぶ (Meltype の中で 1 つだけ)
-    private static volatile NowPlaying? s_instance;
+    private static volatile WindowsMediaSession? s_instance;
 
     /// <param name="enabled">設定「なうで再生中の曲を候補に出す」。OFF の間は読まない・event も受け取らない。</param>
-    public NowPlaying(Func<bool> enabled)
+    public WindowsMediaSession(Func<bool> enabled)
     {
         _enabled = enabled;
         s_instance = this;

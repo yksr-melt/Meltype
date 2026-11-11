@@ -23,8 +23,6 @@ internal sealed class CompositionService : IDisposable
     private readonly KeyInjector _injector = new();
     private readonly WinRtCandidates _windowsCandidates = new();
     private BackgroundCallbackConverter _system = null!;
-    // 「なう」の候補に出す再生中の曲 (issue #1400)
-    private readonly NowPlaying _nowPlaying;
     // Mozc (同梱の mozc/meltype_mozc_helper.exe) と Microsoft IME を組み合わせた変換エンジン。
     private readonly MozcConverter _mozc = new(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe"), Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
     private HybridConverter _hybrid = null!;
@@ -41,7 +39,6 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
-        _nowPlaying = new NowPlaying(() => settings().NowPlayingCandidates);
         _mozc.Budget.Enable();
         _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
         _hybrid = new HybridConverter(() => settings().ConversionEngine, _mozc, _system, _system.Candidates, CurrentZenzai, _zenzai.Failed);
@@ -364,8 +361,6 @@ internal sealed class CompositionService : IDisposable
         return new Point(cursor.X + 12, cursor.Y + 20);
     }
 
-    /// <summary>今再生している曲 (曲が変わったときに裏で読んだもの。保存しない・送らない)。</summary>
-    public (string Title, string Artist)? NowPlaying => _nowPlaying.Read();
 
     /// <summary>クリップボードの文字 (変換した瞬間に 1 回だけ読む)。履歴に残さない印のある内容 (パスワード管理ソフトなど) は読まない。</summary>
     public static string? ClipboardText
@@ -665,7 +660,6 @@ internal sealed class CompositionService : IDisposable
             return true;
         });
         _sta.Dispose();
-        _nowPlaying.Dispose();
         _mozc.Dispose();
         _zenzai.Dispose();
         _window.Dispose();

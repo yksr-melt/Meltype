@@ -652,7 +652,6 @@ internal sealed class TipServer : IDisposable
 
         public string? ClipboardText => CompositionService.ClipboardText;
 
-        public (string Title, string Artist)? NowPlaying => _server._composition.NowPlaying;
     }
 
     // Meltype IME のモードでないときも DLL はつなぐので、ログはアプリごとに 1 回だけ。

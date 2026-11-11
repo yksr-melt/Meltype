@@ -7,6 +7,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- OS の API を COM の関数表で直接呼ぶため (NowPlaying/WindowsMediaSession.cs) -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <AssemblyName>Meltype.Core</AssemblyName>
     <RootNamespace>Meltype</RootNamespace>
     <Version>1.5.0</Version>

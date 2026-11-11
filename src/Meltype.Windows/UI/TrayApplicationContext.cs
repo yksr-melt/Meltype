@@ -692,25 +692,15 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void ResetLearning()
     {
         var answer = MessageBox.Show("学習データ (選び直した変換 conversions.json、英字 / かなに直した語 languages.json、予測変換の語句 phrases.txt、選んだ英訳 translations.json) をすべて削除します。よろしいですか？\n\nユーザー辞書 (userdict.txt) と設定は消えません。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
-        if (answer == DialogResult.OK)
-        {
-            _composition.History.Clear();
-            _composition.Languages.Clear();
-            _composition.Phrases?.Clear();
-            _composition.TranslationHistory?.Clear();
-            Diagnostics.Log.Info("学習データをリセットしました。");
-        }
+        if (answer == DialogResult.OK) _composition.Runtime.ResetLearning();
     }
 
-    /// <summary>
-    /// 最近覚えたものだけを忘れる (一時的な入力・間違えて覚えたものを、全体をリセットせずに消す: issue #277)。
-    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳の記録は覚えた時刻を持たないので、「すべて」で消す。
-    /// </summary>
+    /// <summary>最近覚えたものだけを忘れる (<see cref="Composition.MeltypeRuntime.ForgetLearningSince"/>)。</summary>
     private void ForgetRecentLearning(DateTime sinceUtc, string label)
     {
         var answer = MessageBox.Show($"{label}に覚えた学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
         if (answer != DialogResult.OK) return;
-        var count = _composition.History.ForgetSince(sinceUtc) + _composition.Languages.ForgetSince(sinceUtc) + (_composition.Phrases?.ForgetSince(sinceUtc) ?? 0);
+        var count = _composition.Runtime.ForgetLearningSince(sinceUtc);
         Diagnostics.Log.Info($"{label}に覚えた学習データを削除しました ({count} 件)。");
         MessageBox.Show(count > 0 ? $"{count} 件削除しました。" : "削除するものはありませんでした。", "Meltype", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
