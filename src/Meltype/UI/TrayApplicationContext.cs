@@ -31,6 +31,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
+    private readonly Keyboard.KeyboardFront _keyboard;
     private readonly ToolStripMenuItem _tsfModeItem;
     private SettingsForm? _settingsForm;
     private LogForm? _logForm;
@@ -46,13 +47,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private int _exclusionNotificationScheduled;
     private volatile bool _exiting;
 
-    internal static bool ShouldShowModeIndicator(Settings settings) => settings.Enabled && (settings.Mode switch
-    {
-        InputMode.Keyboard => settings.ModeIndicator != ModeIndicatorTiming.Never,
-        InputMode.Tsf => settings.ShowTsfModeIndicator,
-        _ => false,
-    });
-
     public TrayApplicationContext(MeltypeEngine engine, AppState state)
     {
         _engine = engine;
@@ -61,73 +55,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var detector = Composition.CompositionDetector.CreateDefault(AppPaths.UserDictionaryDirectory);
         detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
         detector.UseJapanesePunctuationAfterEnglish = () => _engine.Settings.JapanesePunctuationAfterEnglish;
-        _composition = new Composition.CompositionService(_invoker, detector, new Composition.CompositionOptions
+        _composition = new Composition.CompositionService(_invoker, detector, () => _engine.Settings, new Composition.CompositionServices
         {
-            LiveConversion = () => _engine.AppSettings.LiveConversion,
-            DirectMode = () => _engine.KeyboardDirect,
             ClassifyDirect = _engine.ClassifyDirect,
-            DirectDecided = _engine.OnDirectDecided,
-            AutoCorrect = () => _engine.Settings.AutoCorrectAfterCommit && _engine.AppSettings.AutoDetection,
-            Manual = () => !_engine.AppSettings.AutoDetection,
-            Engine = () => _engine.Settings.ConversionEngine,
-            UseZenzai = () => _engine.Settings.UseZenzai,
-            ZenzaiServerPath = () => _engine.Settings.ZenzaiServerPath,
-            ZenzaiModelPath = () => _engine.Settings.ZenzaiModelPath,
-            ZenzaiDevice = () => _engine.Settings.ZenzaiDevice,
-            TranslationCandidates = () => _engine.Settings.TranslationCandidates,
-            CandidateMeanings = () => _engine.Settings.ShowCandidateMeanings,
-            ShowTypedKeys = () => _engine.Settings.ShowTypedKeys,
-            TabConversion = () => _engine.Settings.TabConversion,
-            ContinueAfterConversion = () => _engine.Settings.ContinueAfterConversion,
-            Learning = () => _engine.Settings.LearningEnabled,
-            SeparateKeyRoles = () => _engine.Settings.SeparateKeyRoles,
-            EnglishFirstInput = () => _engine.Settings.EnglishFirstInput,
-            ConsonantAbbreviations = () => _engine.Settings.ConsonantAbbreviations,
-            CorrectTypos = () => _engine.Settings.CorrectTypos,
-            Slash = () => _engine.Settings.Slash,
-            ZSymbols = () => _engine.Settings.ZSymbols,
-            SpaceAroundEnglish = () => _engine.Settings.SpaceAroundEnglish,
-            SpaceAroundNumbers = () => _engine.Settings.SpaceAroundNumbers,
-            NumberKeysSelectCandidates = () => _engine.Settings.NumberKeysSelectCandidates,
-            SpaceWidth = () => _engine.Settings.SpaceWidth,
-            EnterCommitsAsShown = () => _engine.Settings.EnterCommitsAsShown,
-            AlphanumericKeyStartsAsTyped = () => _engine.Settings.AlphanumericKeyStartsAsTyped,
-            FullWidthParentheses = () => _engine.Settings.FullWidthParentheses,
-            SquareBrackets = () => _engine.Settings.SquareBrackets,
-            EscStepsBack = () => _engine.Settings.EscStepsBack,
-            EscRevertsSelectedClause = () => _engine.Settings.EscRevertsSelectedClause,
-            FunctionKeysAffectSelectedClause = () => _engine.Settings.FunctionKeysAffectSelectedClause,
-            ControlKeys = () => _engine.Settings.ControlKeys,
-            PartialCommit = () => _engine.Settings.PartialCommit,
-            CursorIntoBrackets = () => _engine.Settings.CursorIntoBrackets,
-            ControlKeyBindings = () => _engine.Settings.ControlKeyBindings,
-            CalculatorCandidates = () => _engine.Settings.CalculatorCandidates,
-            LaughterAfterKana = () => _engine.Settings.LaughterAfterKana,
-            ContextualLearning = () => _engine.Settings.ContextualLearning,
-            ShowCandidatesWhileTyping = () => _engine.Settings.ShowCandidatesWhileTyping,
-            GitHubIssueCandidates = () => _engine.Settings.GitHubIssueCandidates,
-            GitHubRepository = () => _engine.Settings.GitHubRepository,
             GitHubTitles = () => GitHubTitlesShared,
-            ClipboardCandidates = () => _engine.Settings.ClipboardCandidates,
-            NowPlayingCandidates = () => _engine.Settings.NowPlayingCandidates,
-            ClockTimeZone = () => _engine.Settings.ClockTimeZone,
-            Punctuation = () => _engine.Settings.Punctuation,
-            KanaInput = () => _engine.Settings.InputStyle == InputStyle.Kana,
-            KanaLayout = () => _engine.Settings.KanaLayout,
-            RomajiLayout = () => _engine.Settings.RomajiLayout,
-            ModeIndicator = () => ShouldShowModeIndicator(_engine.Settings),
-            ModeIndicatorOnFocus = () => _engine.Settings.Mode == InputMode.Keyboard && _engine.Settings.ModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus,
-            ModeIndicatorColors = () => (_engine.Settings.ModeIndicatorJapaneseColor, _engine.Settings.ModeIndicatorDirectColor, _engine.Settings.ModeIndicatorTextColor),
-            Placement = () => _engine.Settings.CompositionPlacement,
-            Size = () => _engine.Settings.CompositionSize,
-            Predictions = () => _engine.Settings.PredictiveCandidates,
-            EnglishNamePredictions = () => _engine.Settings.EnglishNamePredictions,
-            Font = () => _engine.Settings.CompositionFont,
-            LightTheme = () => _engine.Settings.CompositionIsLight(Meltype.Composition.CompositionWindow.WindowsUsesLightTheme()),
-            Opacity = () => _engine.Settings.CompositionOpacityValue,
         });
-        _engine.AttachComposition(_composition);
-        _tipServer = new Tip.TipServer(_invoker, _composition, () => _engine.Settings);
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
+        _keyboard.ModeChanged += OnEngineStatusChanged;
+        _engine.Keyboard = _keyboard;
+        _engine.Focus = _composition.Focus;
+        _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
+        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
+        _engine.ImeServer = _tipServer;
         _tipServer.Start();
         IntroduceTsf();
 
@@ -590,8 +529,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         }
         else
         {
-            _tray.Icon = _engine.KeyboardDirect ? _directIcon : _onIcon;
-            status = _engine.KeyboardDirect ? "キーボード: 直接入力 (半角/全角 で日本語)" : "キーボード: 日本語";
+            _tray.Icon = _keyboard.Japanese ? _onIcon : _directIcon;
+            status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
         var zenzai = _composition.ZenzaiStatus(settings.UseZenzai, settings.ZenzaiServerPath, settings.ZenzaiModelPath);
@@ -833,7 +772,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.StatusChanged -= OnEngineStatusChanged;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();
-        _engine.DetachComposition();
+        _engine.Keyboard = null;
+        _keyboard.Dispose();
         Composition.LearningSaves.FlushAll();
         _composition.Dispose();
         _settingsForm?.Close();

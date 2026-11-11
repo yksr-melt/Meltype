@@ -71,23 +71,21 @@ internal static class TipEndToEnd
         var ready = new ManualResetEventSlim();
         Control? serverInvoker = null;
         uint serverThreadId = 0;
-        var settings = new Config.Settings { Mode = Config.InputMode.Tsf, LiveConversion = false };
+        var settings = new Config.Settings { Mode = Config.InputMode.Tsf, LiveConversion = false, ConversionEngine = Config.ConversionEngine.System };
         var serverThread = new Thread(() =>
         {
             var invoker = new Control();
             invoker.CreateControl();
             serverInvoker = invoker;
             serverThreadId = GetCurrentThreadId();
-            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), new Composition.CompositionOptions
+            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), () => settings, new Composition.CompositionServices
             {
                 UserDictionary = new Composition.UserDictionary(null),
                 History = new Composition.ConversionHistory(null),
                 Languages = new Composition.LanguageMemory(null),
                 TranslationHistory = new Composition.TranslationHistory(null),
-                Engine = () => Config.ConversionEngine.System,
-                CursorIntoBrackets = () => settings.CursorIntoBrackets,
             });
-            using var server = new Tip.TipServer(invoker, service, () => settings);
+            using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
             server.Start();
             ready.Set();
             Application.Run();

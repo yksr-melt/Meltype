@@ -122,7 +122,7 @@ internal static class ZenzaiConverterTests
         var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
         var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, null, null, () => zenzai);
         hybrid.Budget.Enable();
-        var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionOptions { LiveConversion = () => true }, () => new Settings());
+        var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionServices(), () => new Settings { LiveConversion = true });
         // Mozc の起動を待つ
         hybrid.Budget.Start(10000);
         mozc.ConvertClauses("あ");

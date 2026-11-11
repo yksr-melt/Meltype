@@ -210,12 +210,6 @@ public sealed class FocusInspector : IDisposable
     }
 
     /// <summary>
-    /// 前面のアプリがアプリ別設定で「入力欄とみなす」か (このクラスのスレッドから呼ばれる)。
-    /// そのアプリでは、入力欄と判定できなくてもフォーカスのある所を入力欄として扱う (issue #52)。
-    /// </summary>
-    public Func<bool>? TreatsAsTextInput { get; set; }
-
-    /// <summary>
     /// 前面のアプリが、フォーカスがウィンドウそのもの (Window・Pane) にあるときも入力欄として扱うアプリか (issue #373: LINE)。
     /// LINE (Qt) は、ウィンドウを切り替えた直後、入力欄をクリックするまで変換ボックスが出なかった。そのときの UI Automation のフォーカスはウィンドウにあると見ている。
     /// </summary>
@@ -224,50 +218,63 @@ public sealed class FocusInspector : IDisposable
     /// <summary>アプリ固有の入力欄判定に使う、前面アプリのプロセス名。このクラスのスレッドから呼ぶ。</summary>
     public Func<string>? ForegroundProcessName { get; set; }
 
-    private Func<UiAutomation.Element, bool>? _selectionMatches;
-    private long _selectionSequence;
-    private IntPtr _selectionForeground;
-
-    /// <summary>UIA 専用スレッドで選択文字を取得する。待つのは UI スレッドだけで、フックでは呼ばない。</summary>
-    public string? SelectedText(int waitMs = 250)
+    /// <summary>
+    /// フォーカスのある入力欄の、選んでいる文字の前 (最大 4000 文字)・後ろ (最大 20 文字) と、選んでいる文字を、このクラスのスレッドで読む。
+    /// 待つのは UI スレッドだけで、フックでは呼ばない。読めない (TextPattern が無い・パスワード欄・待ちきれない) ものは null。
+    /// 読み取りは同時に 1 つだけ。前の読み取りが待ちきれずに残っていたら、新しく頼まずにその結果を待つ
+    /// (頼むたびにこのクラスのスレッドの行列が伸び、続けて打つほど待ちきれない読み取りが溜まって遅れていく)。
+    /// </summary>
+    public (string? Before, string? After, string? Selection) ReadField(int waitMs = 100)
     {
-        string? result = null;
         var sequence = Interlocked.Read(ref _focusSequence);
-        var foreground = Native.GetForegroundWindow();
-        var done = new ManualResetEventSlim();
-        Enqueue(() =>
+        Task<(string?, string?, string?)> reading;
+        lock (_readLock)
         {
-            try
+            if (_reading is not { IsCompleted: false })
             {
-                _selectionMatches = null;
-                if (!CanCapture || Input.ForegroundTracker.IsOwnWindow(foreground) ||
-                    sequence != Interlocked.Read(ref _focusSequence) || foreground != Native.GetForegroundWindow()) return;
-                if (Automation()?.Focused() is not { IsPassword: false, IsReadOnly: false } element) return;
-                result = element.SelectedText(out _selectionMatches);
-                _selectionSequence = sequence;
-                _selectionForeground = foreground;
+                var read = new TaskCompletionSource<(string?, string?, string?)>(TaskCreationOptions.RunContinuationsAsynchronously);
+                _reading = read.Task;
+                Enqueue(() =>
+                {
+                    (string?, string?, string?) result = (null, null, null);
+                    var failure = "";
+                    try
+                    {
+                        if (Automation()?.Focused() is not { } element) failure = "フォーカスのある要素が無い";
+                        else if (element.IsPassword) failure = "パスワード欄";
+                        else if (element.Surrounding(4000) is not { } surrounding) failure = "TextPattern で読めない";
+                        else result = (surrounding.Before, surrounding.After is { Length: > 20 } after ? after[..20] : surrounding.After, element.SelectedText(out _));
+                    }
+                    catch (Exception ex)
+                    {
+                        // 読めなければ分からないまま
+                        failure = ex.Message;
+                    }
+                    finally { read.SetResult(result); }
+                    NoteReadFailure(failure);
+                });
             }
-            finally { done.Set(); }
-        });
-        return done.Wait(waitMs) && sequence == Interlocked.Read(ref _focusSequence) && foreground == Native.GetForegroundWindow() ? result : null;
+            reading = _reading;
+        }
+        if (!reading.Wait(waitMs))
+        {
+            NoteReadFailure($"{waitMs}ms で読み終わらない");
+            return (null, null, null);
+        }
+        return sequence == Interlocked.Read(ref _focusSequence) ? reading.Result : (null, null, null);
     }
 
-    public bool SelectionUnchanged(int waitMs = 250)
+    // 入力欄の文字を読めない理由 (読めない入力欄を調べられるように、変わったときだけログに書く)
+    private string _readFailure = "";
+
+    private void NoteReadFailure(string failure)
     {
-        var result = false;
-        var done = new ManualResetEventSlim();
-        Enqueue(() =>
-        {
-            try
-            {
-                result = CanCapture && _selectionSequence == Interlocked.Read(ref _focusSequence) &&
-                    _selectionForeground == Native.GetForegroundWindow() &&
-                    Automation()?.Focused() is { IsPassword: false, IsReadOnly: false } element && _selectionMatches?.Invoke(element) == true;
-            }
-            finally { done.Set(); }
-        });
-        return done.Wait(waitMs) && result && _selectionSequence == Interlocked.Read(ref _focusSequence) && _selectionForeground == Native.GetForegroundWindow();
+        if (Interlocked.Exchange(ref _readFailure, failure) == failure) return;
+        Diagnostics.Log.Decision(failure.Length > 0 ? $"入力欄の文字を読めません: {failure}" : "入力欄の文字を読めるようになりました");
     }
+
+    private readonly Lock _readLock = new();
+    private Task<(string?, string?, string?)>? _reading;
 
     /// <summary>
     /// キャレット (入力位置) の画面上の四角形を UI Automation で調べる (Chrome・Discord など、Windows のキャレットを使わないアプリ用)。
@@ -316,13 +323,6 @@ public sealed class FocusInspector : IDisposable
             System.Runtime.InteropServices.Marshal.ReleaseComObject(caret);
         }
     }
-
-    /// <summary>キャレットの前後の文字列 (それぞれ最大 20 文字) を調べて callback(前, 後ろ) に渡す (このクラスのスレッドから呼ばれる)。</summary>
-    public void RequestSurroundingText(Action<string?, string?> callback) => Enqueue(() =>
-    {
-        var (before, after) = ReadSurroundingText();
-        callback(before, after);
-    });
 
     private void Enqueue(Action action)
     {
@@ -446,9 +446,8 @@ public sealed class FocusInspector : IDisposable
             // Meltype 自身の画面 (設定のドロップダウンなど) には UI Automation で問い合わせない。
             // 自分の UI スレッドに問い合わせが割り込むと、開いているドロップダウンが閉じてしまう。
             if (Input.ForegroundTracker.IsOwnWindow(Native.GetForegroundWindow())) return new FocusInfo(false, false, null, "Meltype の画面");
-            var forced = TreatsAsTextInput?.Invoke() == true;
             var element = Automation()?.Focused();
-            if (element is null) return forced ? new FocusInfo(true, false, null, "フォーカスなし (入力欄とみなすアプリ)") : new FocusInfo(false, false, null, "フォーカスなし");
+            if (element is null) return new FocusInfo(false, false, null, "フォーカスなし");
             // クリックで調べ始めたときは、フォーカスがまだ前の欄にあることがあるので、UI Automation で取った欄の窓で見る
             if (Input.ForegroundTracker.TypingAllowedWindows.ContainsKey(_inspectedForeground) &&
                 Input.ForegroundTracker.DirectInputControls.ContainsKey(new IntPtr(element.NativeWindowHandle))) return new FocusInfo(false, false, null, "Meltype の画面 (横取りしない欄)");
@@ -536,13 +535,6 @@ public sealed class FocusInspector : IDisposable
                     description += " (Affinity のキャンバス)";
                 }
             }
-            // それでも分からないアプリ (Premiere Pro など、画面を自分で描くアプリ) は、アプリ別設定で「入力欄とみなす」が
-            // ON なら入力欄として扱う。1 文字のショートカットが多いアプリもあるので、既定では何もしない。
-            if (!editable && forced && affinityWindow == IntPtr.Zero)
-            {
-                editable = true;
-                description += " (入力欄とみなすアプリ)";
-            }
             return new FocusInfo(editable, false, element.Bounds, description, element.Name, element.ClassName ?? "");
         }
         catch (Exception ex)
@@ -592,9 +584,9 @@ public sealed class FocusInspector : IDisposable
 
     private static bool HasActiveImeContext(IntPtr foreground, IntPtr contextWindow)
     {
-        bool StillFocused() => contextWindow != IntPtr.Zero && IME.ImeTarget.FromForeground() is { } target &&
+        bool StillFocused() => contextWindow != IntPtr.Zero && WindowsIme.ImeTarget.FromForeground() is { } target &&
             target.TopLevel == foreground && target.Focus == contextWindow;
-        return StillFocused() && IME.Imm32ImeController.HasInputContext(contextWindow, 20) && StillFocused();
+        return StillFocused() && WindowsIme.Imm32ImeController.HasInputContext(contextWindow, 20) && StillFocused();
     }
 
     /// <summary>入力欄が UI Automation に出てこない、画面をすべて自分で描くエディターのウィンドウのクラス名。</summary>
@@ -618,48 +610,6 @@ public sealed class FocusInspector : IDisposable
         UiAutomation.ControlTypeComboBox => "ComboBox",
         _ => $"ControlType {type}",
     };
-
-    /// <summary>
-    /// キャレットの前後の文字列。TextPattern (Chrome, Word, メモ帳など) ならキャレット位置から前後 20 文字ずつ、
-    /// 無ければ ValuePattern の値の末尾 (キャレットが末尾にあるとみなす) を前として返す。取れなければ null。
-    /// </summary>
-    private (string? Before, string? After) ReadSurroundingText()
-    {
-        try
-        {
-            var element = Automation()?.Focused();
-            if (element is null || element.IsPassword) return (null, null);
-            if (element.Surrounding(20) is { } surrounding) return surrounding;
-            if (element.HasValuePattern)
-            {
-                var value = element.Value;
-                return (value.Length > 20 ? value[^20..] : value, null);
-            }
-        }
-        catch
-        {
-            // 取れなければ自分の確定履歴で判断する。
-        }
-        return (null, null);
-    }
-
-    /// <summary>
-    /// キャレットより前の文字列 (最大 300 文字) を読んで callback に渡す (このクラスのスレッドから呼ばれる)。
-    /// コードエディターで、キャレットがコメントや文字列の中にあるかを調べるのに使う。TextPattern が無ければ null。
-    /// </summary>
-    public void RequestTextBeforeCaret(Action<string?> callback) => Enqueue(() =>
-    {
-        string? before = null;
-        try
-        {
-            if (Automation()?.Focused() is { IsPassword: false } element) before = element.Surrounding(3000)?.Before;
-        }
-        catch
-        {
-            // 読めなければ分からないまま (コードとして扱う)。
-        }
-        callback(before);
-    });
 
     /// <summary>自己診断用: UI Automation でデスクトップの要素を取れるか。</summary>
     public static string Probe() => new UiAutomation().Root() is { } root ? ControlTypeName(root.ControlType) : "(取れない)";

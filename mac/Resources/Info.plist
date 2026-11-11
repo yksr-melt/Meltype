@@ -36,7 +36,7 @@
 			<dict><key>default</key><string>Meltype：日本語・英語の自動判定</string></dict>
 			<key>NSMessage</key><string>changeInputMode</string>
 			<key>NSPortName</key><string>MeltypeModeServices</string>
-			<key>NSUserData</key><string>automatic</string>
+			<key>NSUserData</key><string>japanese</string>
 			<key>NSRequiredContext</key><dict/>
 		</dict>
 		<dict>
@@ -49,18 +49,10 @@
 		</dict>
 		<dict>
 			<key>NSMenuItem</key>
-			<dict><key>default</key><string>Meltype：コード入力 (コメント・文字列は日本語)</string></dict>
+			<dict><key>default</key><string>Meltype：日本語 ⇔ 英数</string></dict>
 			<key>NSMessage</key><string>changeInputMode</string>
 			<key>NSPortName</key><string>MeltypeModeServices</string>
-			<key>NSUserData</key><string>code</string>
-			<key>NSRequiredContext</key><dict/>
-		</dict>
-		<dict>
-			<key>NSMenuItem</key>
-			<dict><key>default</key><string>Meltype：次の入力モード</string></dict>
-			<key>NSMessage</key><string>changeInputMode</string>
-			<key>NSPortName</key><string>MeltypeModeServices</string>
-			<key>NSUserData</key><string>cycle</string>
+			<key>NSUserData</key><string>toggle</string>
 			<key>NSRequiredContext</key><dict/>
 		</dict>
 	</array>

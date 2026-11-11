@@ -31,7 +31,7 @@ internal static class InputCoverageTests
             var detector = CompositionDetector.CreateDefault();
             detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
             var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(),
-                new CompositionOptions { AutomaticEnglishSpacing = () => true, SpaceAroundEnglish = () => true, AutoCorrect = () => true }, () => new Settings());
+                new CompositionServices { AutomaticEnglishSpacing = () => true }, () => new Settings { SpaceAroundEnglish = true, AutoCorrectAfterCommit = true, LiveConversion = false });
             var output = "";
             foreach (var character in input + "\n")
             {
@@ -61,7 +61,7 @@ internal static class InputCoverageTests
         {
             var detector = CompositionDetector.CreateDefault();
             detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
-            var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
+            var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings());
             var output = "";
             foreach (var character in phrase + "\n")
             {

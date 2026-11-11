@@ -570,8 +570,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
                     {
                         grid.Rows.Add(kind.Name, EnumName(typeof(AppProfile), kind.Base),
                             kind.AutoDetection is { } auto ? (auto ? On : Off) : SameAsGlobal,
-                            kind.LiveConversion is { } live ? (live ? On : Off) : SameAsGlobal,
-                            kind.StartInEnglish);
+                            kind.LiveConversion is { } live ? (live ? On : Off) : SameAsGlobal);
                     }
                 },
                 s => property.SetValue(s, ReadKinds(grid)));
@@ -590,7 +589,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
             Base = Equals(r.Cells[1].Value, EnumName(typeof(AppProfile), AppProfile.Code)) ? AppProfile.Code : AppProfile.General,
             AutoDetection = Equals(r.Cells[2].Value, On) ? true : Equals(r.Cells[2].Value, Off) ? false : null,
             LiveConversion = Equals(r.Cells[3].Value, On) ? true : Equals(r.Cells[3].Value, Off) ? false : null,
-            StartInEnglish = r.Cells[4].Value is true,
         })
         .GroupBy(k => k.Name).Select(g => g.First())
         .ToList();
@@ -625,15 +623,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
         grid.Columns.Add(Choices("元にする種類", 18, Enum.GetValues<AppProfile>().Select(p => EnumName(typeof(AppProfile), p))));
         grid.Columns.Add(Choices("自動判定", 20, [SameAsGlobal, On, Off]));
         grid.Columns.Add(Choices("ライブ変換", 18, [SameAsGlobal, On, Off]));
-        grid.Columns.Add(new ToggleSwitchColumn("最初は英数", 18));
         grid.DefaultValuesNeeded += (_, e) =>
         {
             e.Row.Cells[1].Value = EnumName(typeof(AppProfile), AppProfile.General);
             e.Row.Cells[2].Value = SameAsGlobal;
             e.Row.Cells[3].Value = SameAsGlobal;
-            e.Row.Cells[4].Value = false;
         };
-        CommitSwitchesImmediately(grid);
         // 種類を足したり名前を変えたりしたら、アプリ別設定の「種類」の選択肢にすぐ出す。
         void Changed()
         {
