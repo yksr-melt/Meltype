@@ -13,8 +13,8 @@ using Meltype.Input;
 namespace Meltype.Mac;
 
 /// <summary>
-/// Mac 版の IME (Swift, Input Method Kit) と Linux 版の IME (Python の IBus・C++ の fcitx5) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
-/// NativeAOT で libMeltypeNative.dylib (mac/build.sh) / libMeltypeNative.so (linux/build.sh) にする。
+/// Mac 版の IME (Swift, Input Method Kit) と Linux 版の IME (Python の IBus・C++ の fcitx5)、Android 版 (JNI) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
+/// NativeAOT で libMeltypeNative.dylib (mac/build.sh) / libMeltypeNative.so (linux/build.sh・android/tools/build-meltype-native.sh) にする。
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Swift 側が登録する関数 (漢字変換・候補・英単語の判定) が返す文字列は malloc したもので、こちらで free する。

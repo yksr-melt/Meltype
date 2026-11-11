@@ -29,6 +29,7 @@
 | macOS | `mac/Sources/MeltypeIME/InputController.swift` |
 | Linux: IBus | `linux/ibus-engine-meltype` |
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` |
+| Android | `android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt`（出来事と応答の JSON）・`KeyboardService.kt` |
 
 ## ビルドとテスト
 
