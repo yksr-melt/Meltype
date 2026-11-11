@@ -104,6 +104,10 @@ internal static class MozcConverterTests
         Assert.Equal("かんじ", mozc.Reading("漢字"));
         Assert.True(mozc.Reading("読めない") is null, "逆変換できなければ null");
         Assert.True(mozc.IsAvailable, "逆変換できなくても使える");
+        // かなだけの文字列はヘルパーに聞かずにひらがなにする
+        var hybrid = new HybridConverter(mozc);
+        Assert.Equal("めるたいぷ", hybrid.Reading("メルタイプ"));
+        Assert.Equal("かんじ", hybrid.Reading("漢字"));
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)
