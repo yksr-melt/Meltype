@@ -137,8 +137,9 @@ class ImeLaunchDeviceTest {
             retry = { requestKeyboard(activity, editor) },
             describe = { describeImeState(activity) },
         ) {
-            KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()?.layout?.id ==
-                io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
+            editor.hasFocus() &&
+                KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()?.layout?.id ==
+                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
         }
     }
 
@@ -221,6 +222,8 @@ class ImeLaunchDeviceTest {
         val japanese = activity.japaneseEditor
         focusJapanese(activity, japanese)
         instrumentation.runOnMainSync { japanese.setText("") }
+        // setText can restart editor input asynchronously; wait for Japanese focus again.
+        focusJapanese(activity, japanese)
         typeRomaji("ka")
         waitUntil("か is composing", describe = { "text=" + japanese.text }) {
             japanese.text.toString() == "か" && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(japanese.text) >= 0
