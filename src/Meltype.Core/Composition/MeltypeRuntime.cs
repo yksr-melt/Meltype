@@ -24,9 +24,8 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
     /// <param name="wordChecker">OS のスペルチェッカー。使えなければ同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。</param>
-    /// <param name="meltypeImeAvailable">動作モード「Meltype IME」を使えるか (Windows: ポータブル版でなく、ARM64 でなく、登録されていて、キーボードの一覧にある)。null なら確かめない。</param>
     /// <param name="nowPlaying">再生中の曲を OS から読み始める (テストでは読まない)。</param>
-    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null, Func<bool>? meltypeImeAvailable = null, bool nowPlaying = false)
+    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null, bool nowPlaying = false)
     {
         DataDirectory = dataDirectory;
         Directory.CreateDirectory(dataDirectory);
@@ -38,7 +37,7 @@ public sealed class MeltypeRuntime : IDisposable
             Diagnostics.Log.SetFileOutput(loaded.FileLog ? Path.Combine(dataDirectory, "meltype.log") : null);
             Diagnostics.Log.RecordText = loaded.LogTypedText;
             SettingsChanged?.Invoke(loaded);
-        }, meltypeImeAvailable: meltypeImeAvailable);
+        });
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         _settingsCheck = new Timer(_ => _ = Settings.Current, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
@@ -70,10 +69,10 @@ public sealed class MeltypeRuntime : IDisposable
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
-    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null, Func<bool>? meltypeImeAvailable = null, bool nowPlaying = true)
+    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null, bool nowPlaying = true)
     {
         AppPaths.MigrateFromOldName();
-        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker, meltypeImeAvailable, nowPlaying);
+        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker, nowPlaying);
     }
 
     public string DataDirectory { get; }

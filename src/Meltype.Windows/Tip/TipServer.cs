@@ -32,6 +32,7 @@ internal sealed class TipServer : IDisposable
 {
     private readonly Control _invoker;
     private readonly CompositionService _composition;
+    private readonly Func<bool> _selected;
     private readonly Func<IImeEnvironment, ImeHost> _createHost;
     private readonly CancellationTokenSource _stop = new();
 
@@ -39,10 +40,12 @@ internal sealed class TipServer : IDisposable
     private const int MaxRequestBytes = 64 * 1024;
 
     /// <param name="createHost">つながり 1 つの入力の本体を作る (設定は本体に渡す。TipServer は読まない)。</param>
-    public TipServer(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost)
+    /// <param name="selected">動作モードが Meltype IME で動いているか (<see cref="MeltypeEngine.Mode"/>)。</param>
+    public TipServer(Control invoker, CompositionService composition, Func<bool> selected, Func<IImeEnvironment, ImeHost> createHost)
     {
         _invoker = invoker;
         _composition = composition;
+        _selected = selected;
         _createHost = createHost;
         composition.ConversionReady += _conversion.Notify;
     }
@@ -641,7 +644,7 @@ internal sealed class TipServer : IDisposable
             };
         }
 
-        public InputMode? InputMethod => InputMode.Tsf;
+        public bool Selected => _server._selected();
 
         public MeltypeSession CreateSession(Func<Settings> settings) => _server._composition.CreateSession(settings, directModeDetection: true);
 

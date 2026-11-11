@@ -77,38 +77,45 @@ internal static class RuntimeTests
     }
 
     [Test]
-    public static void UnavailableMeltypeIme_UsesKeyboardOnEveryRead()
+    public static void ExternalWrite_NotifiesWithoutInput()
     {
-        // 使えない Meltype IME は、起動したとき・外で書き換えたとき・設定画面で変えたときのどれでも Meltype キーボードで動かす
-        var directory = Path.Combine(Path.GetTempPath(), "meltype-runtime-" + Guid.NewGuid().ToString("N"));
-        try
+        // config.json を外で書き換えたら、入力しなくても MeltypeRuntime が自分で確かめて知らせる
+        WithRuntime((runtime, directory) =>
         {
-            var path = Path.Combine(directory, "config.json");
-            Directory.CreateDirectory(directory);
-            new Settings { Mode = InputMode.Tsf }.Save(path);
-            using var runtime = new MeltypeRuntime(directory, meltypeImeAvailable: () => false);
-            Assert.Equal(InputMode.Keyboard, runtime.Settings.Current.Mode, "起動したとき");
             Settings? notified = null;
             runtime.SettingsChanged += next => notified = next;
             var next = runtime.Settings.Current.Clone();
-            next.Mode = InputMode.Tsf;
-            runtime.Settings.Apply(next);
-            Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "設定画面で変えたとき");
-            Assert.Equal(InputMode.Tsf, Settings.Load(path).Mode, "config.json には選んだまま書く (Meltype IME を入れ直せば、次に読んだときから使う)");
-            notified = null;
             next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
+            var path = Path.Combine(directory, "config.json");
             next.Save(path);
             File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
-            // 入力しなくても、MeltypeRuntime が自分で確かめて知らせる
             var deadline = Environment.TickCount64 + SettingsFile.CheckIntervalMs * 3;
             while (Volatile.Read(ref notified) is null && Environment.TickCount64 < deadline) Thread.Sleep(20);
-            Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, notified?.Punctuation ?? PunctuationStyle.Japanese, "外で書き換えたら、入力しなくても知らせる");
-            Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "外で書き換えたときも直す");
-        }
-        finally
+            Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, notified?.Punctuation ?? PunctuationStyle.Japanese);
+        });
+    }
+
+    [Test]
+    public static void UserDictionary_KeepsWordsWhileFileIsUnreadable()
+    {
+        // 読めない間 (ほかのプロセスが開いている) は前の語のままにし、登録で上書きしない。読めるようになったら読み直す
+        WithRuntime((runtime, directory) =>
         {
-            Directory.Delete(directory, recursive: true);
-        }
+            runtime.UserDictionary.Add("あおい", "葵");
+            var path = Path.Combine(directory, "userdict.txt");
+            var changedAt = DateTime.UtcNow.AddMinutes(1);
+            using (var locked = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+            {
+                File.SetLastWriteTimeUtc(path, changedAt);
+                runtime.UserDictionary.Refresh();
+                Assert.Equal("葵", runtime.UserDictionary.Lookup("あおい") is [var kept, ..] ? kept : "(なし)", "読めなければ前の語のまま");
+                Assert.True(runtime.UserDictionary.Add("ゆきしろ", "雪代") is not null, "読めない間は登録しない");
+            }
+            File.WriteAllText(path, "あおい\t葵\nみどり\t翠\n");
+            File.SetLastWriteTimeUtc(path, changedAt);
+            runtime.UserDictionary.Refresh();
+            Assert.Equal("翠", runtime.UserDictionary.Lookup("みどり") is [var word, ..] ? word : "(なし)", "読めるようになったら、更新時刻が同じでも読み直す");
+        });
     }
 
     [Test]

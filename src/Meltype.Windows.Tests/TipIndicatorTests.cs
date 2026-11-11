@@ -70,7 +70,7 @@ internal static class TipIndicatorTests
         using var runtime = TestRuntime.Create();
         using var composition = new Composition.CompositionService(invoker, runtime, () => new Settings { ConversionEngine = ConversionEngine.System });
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
-        using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));
+        using var server = new Tip.TipServer(invoker, composition, () => true, environment => new Ime.ImeHost(environment, () => settings));
         var host = server.Connect("harness", 0);
         var foreground = WindowsIme.ImeTarget.FromForeground()?.ThreadId ?? 0;
         Assert.True(foreground != 0, "前面の入力スレッドがある");

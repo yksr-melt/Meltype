@@ -9,8 +9,7 @@ namespace Meltype.Config;
 /// 同じプロセスの設定画面 (Windows) は <see cref="Apply"/> で変える。どのスレッドから読んでもよい。
 /// </summary>
 /// <param name="loaded">読んだ・読み直した・変えたときに、lock の中で呼ぶ (待つ処理をしない)。</param>
-/// <param name="meltypeImeAvailable">動作モード「Meltype IME」を使えるか。使えなければ、読んだ・変えた設定を Meltype キーボードで動かす (config.json には Meltype IME のまま書く)。</param>
-internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null, Func<bool>? meltypeImeAvailable = null)
+internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null)
 {
     private readonly object _gate = new();
 
@@ -34,13 +33,12 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
     /// <summary>設定を変えて config.json に保存する。保存できなくても、このプロセスでは変えた設定を使う。</summary>
     public Settings Apply(Settings settings)
     {
-        var chosen = settings.Clone().Normalize();
-        var next = Usable(chosen);
+        var next = settings.Clone().Normalize();
         lock (_gate)
         {
             try
             {
-                chosen.Save(path);
+                next.Save(path);
                 _writeTime = File.GetLastWriteTimeUtc(path);
             }
             catch (Exception ex)
@@ -52,8 +50,8 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             _failed = false;
             // 受け手が前の設定と比べるので、読み直しと同じく lock の中で知らせる
             loaded?.Invoke(next);
+            return next;
         }
-        return next;
     }
 
     private Settings Read()
@@ -62,12 +60,21 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
         if (_settings is not null && now - _checkedMs < CheckIntervalMs) return _settings;
         _checkedMs = now;
         // 読む前の時刻を覚える。読んでいる間に書かれても、次に読み直す (Load の移行で保存したときも 1 回読み直す)
-        var writeTime = File.GetLastWriteTimeUtc(path);
+        DateTime writeTime;
+        try
+        {
+            writeTime = File.GetLastWriteTimeUtc(path);
+        }
+        catch (Exception ex) when (_settings is not null && ex is IOException or UnauthorizedAccessException)
+        {
+            // 更新時刻を読めなければ、前の設定を使い続けて次の間隔でまた確かめる
+            return _settings;
+        }
         var changed = writeTime != _writeTime;
         // 読み直せなかったときは、更新時刻が変わらなくても (権限を直したなど) 次の間隔でまた読む
         if (_settings is not null && !changed && !_failed) return _settings;
         _writeTime = writeTime;
-        if (_settings is null) _settings = Usable(Settings.Load(path));
+        if (_settings is null) _settings = Settings.Load(path);
         else
         {
             // 読み直しで無い・読めないのは、エディターが書いている途中のことがある (元のファイルを別名に移してから書くエディターもある)。
@@ -75,7 +82,7 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             if (!File.Exists(path)) return _settings;
             try
             {
-                _settings = Usable(Settings.LoadOrThrow(path));
+                _settings = Settings.LoadOrThrow(path);
                 _failed = false;
             }
             catch (Exception ex)
@@ -88,14 +95,5 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
         }
         loaded?.Invoke(_settings);
         return _settings;
-    }
-
-    private Settings Usable(Settings settings)
-    {
-        if (settings.Mode != InputMode.Tsf || meltypeImeAvailable?.Invoke() != false) return settings;
-        Diagnostics.Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
-        var usable = settings.Clone();
-        usable.Mode = InputMode.Keyboard;
-        return usable;
     }
 }

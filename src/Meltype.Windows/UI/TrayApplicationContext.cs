@@ -53,12 +53,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _invoker.CreateControl();
         _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Settings);
         // 入力の本体は土台の設定を読む (config.json が変わったら読み直す。_engine.Settings はフックのスレッド用の写し)
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, () => _engine.Mode == InputMode.Keyboard, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
         _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
-        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
+        _tipServer = new Tip.TipServer(_invoker, _composition, () => _engine.Mode == InputMode.Tsf, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
         _engine.ImeServer = _tipServer;
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
@@ -184,7 +184,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
             RuntimeInformation.OSArchitecture == Architecture.Arm64) return;
-        var wasTsf = _engine.Settings.Mode == InputMode.Tsf;
+        var wasTsf = _engine.Mode == InputMode.Tsf;
         _state.TsfIntroduced = true;
         _state.Save();
         var next = _engine.Settings.Clone();
@@ -404,14 +404,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(UpdateStatus);
     }
 
-    private void OnEngineSettingsChanged(Settings previous, Settings next)
+    // MeltypeRuntime のタイマーのスレッドからも呼ばれる
+    private void OnEngineSettingsChanged(MeltypeEngine.Running previous, MeltypeEngine.Running next)
     {
-        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
-        _invoker.BeginInvoke(() =>
+        try
         {
-            _engine.OnSettingsChanged(previous, next);
-            UpdateStatus();
-        });
+            _invoker.BeginInvoke(() =>
+            {
+                _engine.OnSettingsChanged(previous, next);
+                UpdateStatus();
+            });
+        }
+        catch (InvalidOperationException)
+        {
+            // 終了してハンドルを破棄した
+        }
     }
 
     private void ToggleEnabled()
@@ -494,7 +501,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void SetMode(InputMode mode)
     {
         if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
-        var wasTsf = _engine.Settings.Mode == InputMode.Tsf;
+        var wasTsf = _engine.Mode == InputMode.Tsf;
         var next = _engine.Settings.Clone();
         next.Mode = mode;
         next.Enabled = true;
@@ -507,8 +514,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var settings = _engine.Settings;
         var enabled = settings.Enabled;
-        var keyboard = settings.Mode == InputMode.Keyboard;
-        var tsf = settings.Mode == InputMode.Tsf;
+        var keyboard = _engine.Mode == InputMode.Keyboard;
+        var tsf = _engine.Mode == InputMode.Tsf;
         _enabledItem.Checked = enabled;
         _keyboardModeItem.Checked = keyboard;
         _tsfModeItem.Checked = tsf;

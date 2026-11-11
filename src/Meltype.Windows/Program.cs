@@ -104,7 +104,7 @@ internal static class Program
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared, () => !AppPaths.IsPortable && Tip.TipServer.IsUsable));
+            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared));
             engine.Start();
         }
         catch (Exception ex)

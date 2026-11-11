@@ -21,10 +21,15 @@ internal sealed class MeltypeEngine : IDisposable
     private readonly RemoteControl _remote = new();
     // フックのスレッドで読む設定の写し (フックの中でファイルを見に行かないように。土台が読み直したら差し替える)
     private volatile Settings _settings;
+    // 動かしている動作モード (フックの中でレジストリを読まないように、設定が変わったときに決める)
+    private volatile InputMode _mode;
     private bool _disposed;
 
-    /// <summary>設定を変えた・config.json を読み直した (previous は前の設定)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
-    public event Action<Settings, Settings>? SettingsChanged;
+    /// <summary>動かしている状態。設定の動作モードが Meltype IME でも、使えなければ Mode は Meltype キーボード。</summary>
+    internal readonly record struct Running(bool Enabled, InputMode Mode);
+
+    /// <summary>設定を変えた・config.json を読み直した (前と後の状態)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
+    public event Action<Running, Running>? SettingsChanged;
 
     /// <summary>Ctrl + 半角/全角 が押された (フックのスレッドから呼ばれる。受け取った側で UI スレッドに移して切り替える)。</summary>
     public event Action? ToggleRequested;
@@ -47,11 +52,13 @@ internal sealed class MeltypeEngine : IDisposable
     {
         Runtime = runtime;
         _settings = runtime.Settings.Current;
+        _mode = RunningMode(null, _settings);
         runtime.SettingsChanged += next =>
         {
-            var previous = _settings;
+            var previous = new Running(_settings.Enabled, _mode);
+            _mode = RunningMode(_settings, next);
             _settings = next;
-            SettingsChanged?.Invoke(previous, next);
+            SettingsChanged?.Invoke(previous, new Running(next.Enabled, _mode));
         };
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
         KeyCounter = new KeyCounter(Path.Combine(runtime.DataDirectory, "keycount.json"));
@@ -64,7 +71,20 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
     public Composition.MeltypeRuntime Runtime { get; }
 
+    /// <summary>config.json の設定 (設定画面・トレイはこれを写して変える)。</summary>
     public Settings Settings => _settings;
+
+    /// <summary>動かしている動作モード。</summary>
+    public InputMode Mode => _mode;
+
+    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い)、Meltype キーボードで動かす。
+    // config.json は書き換えないので、Meltype IME を入れ直してから読み直すと Meltype IME で動く
+    private static InputMode RunningMode(Settings? previous, Settings next)
+    {
+        if (next.Mode != InputMode.Tsf || (!AppPaths.IsPortable && Tip.TipServer.IsUsable)) return next.Mode;
+        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
+        return InputMode.Keyboard;
+    }
 
     /// <summary>前面のアプリの独自の種類 (自動判定・ライブ変換) を反映した設定。</summary>
     public Settings AppSettings => _settings.ForApp(_foreground.Current.ProcessName);
@@ -81,7 +101,7 @@ internal sealed class MeltypeEngine : IDisposable
     public void Start()
     {
         _monitor.Start();
-        Log.Info($"Meltype を開始しました (モード: {_settings.Mode}, 有効: {(_settings.Enabled ? "ON" : "OFF")})。");
+        Log.Info($"Meltype を開始しました (モード: {_mode}, 有効: {(_settings.Enabled ? "ON" : "OFF")})。");
     }
 
     public bool Enabled
@@ -124,7 +144,7 @@ internal sealed class MeltypeEngine : IDisposable
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。
         // Chrome リモート デスクトップ・Parsec で操作されている間も同じ (#372)。
         if (e.Injected && (settings.AllowInjectedInput || _remote.Active is not null)) e = e with { Injected = false };
-        else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
+        else if (e.Injected && e.IsDown && !_injectedHintLogged && _mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
         {
             // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)
             _injectedHintLogged = true;
@@ -140,12 +160,12 @@ internal sealed class MeltypeEngine : IDisposable
             ToggleRequested?.Invoke();
             return true;
         }
-        return settings.Mode == InputMode.Keyboard ? Keyboard?.OnKey(e) == true : ImeServer?.OnKey(e, _foreground.Current) == true;
+        return _mode == InputMode.Keyboard ? Keyboard?.OnKey(e) == true : ImeServer?.OnKey(e, _foreground.Current) == true;
     }
 
     private bool OnMouseButton(MouseButtonEvent e)
     {
-        if (_settings.Mode == InputMode.Keyboard) return Keyboard?.OnMouseButton(e) == true;
+        if (_mode == InputMode.Keyboard) return Keyboard?.OnMouseButton(e) == true;
         ImeServer?.OnMouseButton(e);
         return false;
     }
@@ -155,19 +175,19 @@ internal sealed class MeltypeEngine : IDisposable
     {
         _foreground.Refresh(window);
         Focus?.InvalidateForeground();
-        if (_settings.Mode == InputMode.Keyboard) Keyboard?.OnForegroundChanged(window);
+        if (_mode == InputMode.Keyboard) Keyboard?.OnForegroundChanged(window);
     }
 
     private void OnFocusChanged()
     {
         Focus?.Invalidate();
-        if (_settings.Mode == InputMode.Keyboard) Keyboard?.OnFocusChanged();
+        if (_mode == InputMode.Keyboard) Keyboard?.OnFocusChanged();
     }
 
     /// <summary>入力欄に入った (FocusInspector のスレッドから呼ばれる)。</summary>
     public void OnTextInputEntered()
     {
-        if (_settings.Mode == InputMode.Keyboard) Keyboard?.OnTextInputEntered();
+        if (_mode == InputMode.Keyboard) Keyboard?.OnTextInputEntered();
     }
 
     /// <summary>
@@ -177,21 +197,21 @@ internal sealed class MeltypeEngine : IDisposable
     private bool KeyCountAllowed(Settings settings) =>
         settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
-    /// <summary>設定を変えて保存する。Meltype IME を使えなければ、MeltypeRuntime が Meltype キーボードで動かす。</summary>
     public void ApplySettings(Settings settings) => Runtime.Settings.Apply(settings);
 
     /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
-    public void OnSettingsChanged(Settings previous, Settings next)
+    internal void OnSettingsChanged(Running previous, Running next)
     {
         // Meltype キーボードを使わなくなった: 変換中の内容を確定する。どちらでも、本体の状態を受け取り直す
         if (previous is { Enabled: true, Mode: InputMode.Keyboard } && next is not { Enabled: true, Mode: InputMode.Keyboard }) Keyboard?.Stop();
         else Keyboard?.Refresh();
         // Meltype IME のモードにしたら (トレイでも設定画面でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
         if (SwitchesToTsf(previous.Mode, next.Mode)) Tip.TipServer.ActivateForSession();
-        Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 自動判定: {(next.AutoDetection ? "ON" : "OFF")}, 入力方式: {next.InputStyle})。");
+        var settings = _settings;
+        Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 自動判定: {(settings.AutoDetection ? "ON" : "OFF")}, 入力方式: {settings.InputStyle})。");
     }
 
-    /// <summary>動作モードを Meltype IME に変えたか (使えずに元のモードに戻したときは、戻した後のモードで見る)。</summary>
+    /// <summary>動かす動作モードを Meltype IME に変えたか (選んでも使えなければ Meltype キーボードのまま)。</summary>
     internal static bool SwitchesToTsf(InputMode previous, InputMode next) => previous != InputMode.Tsf && next == InputMode.Tsf;
 
     public DetectionResult Evaluate(string letters, Settings? settings = null) => Runtime.Evaluate(letters, final: false, settings ?? _settings);

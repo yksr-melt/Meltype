@@ -29,8 +29,8 @@ internal static class ImeContractTests
         // 入力モードの表示の既定は OS と入力方式で違うので、どの OS でも同じに決めておく
         public Settings Settings { get; set; } = new() { LiveConversion = false, ModeIndicator = ModeIndicatorTiming.OnSwitchAndFocus };
 
-        /// <summary>このフロントが Windows のどちらの入力方式か (null なら入力方式が 1 つしかない OS)。</summary>
-        public InputMode? InputMethod { get; set; }
+        /// <summary>このフロントで入力するか (Windows で、動作モードがもう一方の入力方式なら false)。</summary>
+        public bool Selected { get; set; } = true;
 
         /// <summary>予測変換の候補を出すか (英語の語の補完)。</summary>
         public bool Predicts { get; init; }
@@ -329,7 +329,7 @@ internal static class ImeContractTests
     [Test]
     public static void Deactivated_WhileComposing_CommitsAndPassesTheKey()
     {
-        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.InputMethod = InputMode.Keyboard, f =>
+        foreach (var change in new Action<Front>[] { f => f.Settings.Enabled = false, f => f.Selected = false, f =>
         {
             f.Settings.AppRules.Add(new AppRule { Process = "off.exe", Enabled = false });
             f.App = "off.exe";
@@ -344,7 +344,7 @@ internal static class ImeContractTests
             Assert.True(!Consumed(front.Key('b')), front.Trace);
             Assert.Equal(0, Capture(front.Event("StateRequested")).GetProperty("shortcuts").GetArrayLength(), "受け持たないときはキーを受け取らせない\n" + front.Trace);
             front.Settings.Enabled = true;
-            front.InputMethod = null;
+            front.Selected = true;
             front.App = null;
             front.Type("ka");
             Assert.Equal("か", front.Composition["t1"], "戻したら受け持つ\n" + front.Trace);

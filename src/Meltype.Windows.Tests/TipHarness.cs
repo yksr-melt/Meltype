@@ -25,7 +25,7 @@ internal static class TipHarness
         invoker.CreateControl();
         using var runtime = TestRuntime.Create();
         using var service = CreateService(invoker, runtime);
-        using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
+        using var server = new Tip.TipServer(invoker, service, () => true, environment => new Ime.ImeHost(environment, () => settings));
         server.Start();
         Console.WriteLine($"\\\\.\\pipe\\{Tip.TipServer.PipeName} で待っています ({seconds} 秒)");
         using var timer = new System.Windows.Forms.Timer { Interval = seconds * 1000 };
@@ -43,7 +43,7 @@ internal static class TipHarness
         invoker.CreateControl();
         using var runtime = TestRuntime.Create();
         using var service = CreateService(invoker, runtime);
-        using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
+        using var server = new Tip.TipServer(invoker, service, () => true, environment => new Ime.ImeHost(environment, () => settings));
         server.Start();
         var failed = 0;
         var thread = new Thread(() =>

@@ -80,7 +80,7 @@ internal static class TipEndToEnd
             serverThreadId = GetCurrentThreadId();
             using var runtime = TestRuntime.Create();
             using var service = new Composition.CompositionService(invoker, runtime, () => settings);
-            using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
+            using var server = new Tip.TipServer(invoker, service, () => true, environment => new Ime.ImeHost(environment, () => settings));
             server.Start();
             ready.Set();
             Application.Run();
