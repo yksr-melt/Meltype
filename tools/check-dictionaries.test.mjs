@@ -34,6 +34,14 @@ test('english-phrases: 繋げた形と語句が合わない行はエラー', () 
   assert.deepEqual(messages(errors), ['1: 「seeyou」が語句「see me」を繋げた形でない']);
 });
 
+test('english-phrases: 語句が 1 語だけの行はエラー (空白が入らず、定型句にする意味が無い)', () => {
+  const { errors } = checkDictionary('english-phrases.txt', 'seeyou\tseeyou\nhello\thello\nseeyou\tsee you\n');
+  assert.deepEqual(messages(errors), [
+    '1: 語句「seeyou」が 1 語だけ (定型句は 2 語以上。空白が入らないので登録する意味が無い)',
+    '2: 語句「hello」が 1 語だけ (定型句は 2 語以上。空白が入らないので登録する意味が無い)',
+  ]);
+});
+
 test('english-phrases: 行頭の空白はエラー (Core は繋げた形が合わず登録しない)', () => {
   const { errors } = checkDictionary('english-phrases.txt', ' bytheway\tby the way\n');
   assert.deepEqual(messages(errors), ['1: 欄の前後に空白がある']);
