@@ -29,7 +29,6 @@ public sealed partial class CompositionController
         // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
         if (_settings().EnglishFirstInput && !KanaInput && _text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.HalfWidthAlphanumeric;
         _text.KanaInput = KanaInput;
-        _text.Punctuation = _settings().Punctuation;
         _text.FullWidthParentheses = _settings().FullWidthParentheses;
         _text.SquareBrackets = _settings().SquareBrackets;
         _text.LaughterAfterKana = _settings().LaughterAfterKana;
