@@ -8,7 +8,7 @@ namespace Meltype.Config;
 /// 更新時刻を見て、変わっていれば読み直す (Mac・Linux 版では、設定画面やエディターが入力とは別のプロセスで config.json を書く)。
 /// 同じプロセスの設定画面 (Windows) は <see cref="Apply"/> で変える。どのスレッドから読んでもよい。
 /// </summary>
-/// <param name="loaded">読んだ・読み直した・変えたときに呼ぶ。</param>
+/// <param name="loaded">読んだ・読み直した・変えたときに、lock の中で呼ぶ (待つ処理をしない)。</param>
 internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null)
 {
     private readonly object _gate = new();
@@ -48,8 +48,9 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
             _settings = next;
             _checkedMs = _timeMs();
             _failed = false;
+            // 受け手が前の設定と比べるので、読み直しと同じく lock の中で知らせる
+            loaded?.Invoke(next);
         }
-        loaded?.Invoke(next);
         return next;
     }
 

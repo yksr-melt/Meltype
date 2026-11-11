@@ -23,7 +23,8 @@ internal sealed class MeltypeEngine : IDisposable
     private volatile Settings _settings;
     private bool _disposed;
 
-    public event Action? StatusChanged;
+    /// <summary>設定を変えた・config.json を読み直した (previous は前の設定)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
+    public event Action<Settings, Settings>? SettingsChanged;
 
     /// <summary>Ctrl + 半角/全角 が押された (フックのスレッドから呼ばれる。受け取った側で UI スレッドに移して切り替える)。</summary>
     public event Action? ToggleRequested;
@@ -48,8 +49,9 @@ internal sealed class MeltypeEngine : IDisposable
         _settings = runtime.Settings.Current;
         runtime.SettingsChanged += next =>
         {
+            var previous = _settings;
             _settings = next;
-            StatusChanged?.Invoke();
+            SettingsChanged?.Invoke(previous, next);
         };
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
         KeyCounter = new KeyCounter(Path.Combine(runtime.DataDirectory, "keycount.json"));
@@ -186,14 +188,18 @@ internal sealed class MeltypeEngine : IDisposable
             next.Mode = previous.Mode;
             Log.Warn("Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードは変えません。");
         }
-        _settings = Runtime.Settings.Apply(next);
+        Runtime.Settings.Apply(next);
+    }
+
+    /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
+    public void OnSettingsChanged(Settings previous, Settings next)
+    {
         // Meltype キーボードを使わなくなった: 変換中の内容を確定する。どちらでも、本体の状態を受け取り直す
         if (previous is { Enabled: true, Mode: InputMode.Keyboard } && next is not { Enabled: true, Mode: InputMode.Keyboard }) Keyboard?.Stop();
         else Keyboard?.Refresh();
         // Meltype IME のモードにしたら (トレイでも設定画面でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
         if (SwitchesToTsf(previous.Mode, next.Mode)) Tip.TipServer.ActivateForSession();
         Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 自動判定: {(next.AutoDetection ? "ON" : "OFF")}, 入力方式: {next.InputStyle})。");
-        StatusChanged?.Invoke();
     }
 
     /// <summary>動作モードを Meltype IME に変えたか (使えずに元のモードに戻したときは、戻した後のモードで見る)。</summary>

@@ -54,7 +54,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Settings);
         // 入力の本体は土台の設定を読む (config.json が変わったら読み直す。_engine.Settings はフックのスレッド用の写し)
         _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
-        _keyboard.ModeChanged += OnEngineStatusChanged;
+        _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
@@ -137,7 +137,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _registerHotkey = new HotkeyWindow(RegisterSelectedWord, HotkeyWindow.RegisterWordKeys, "単語の登録");
         _engine.ToggleRequested += OnToggleRequested;
         _enabledItem.Text = _hotkey.Name is { } hotkey ? $"Meltype を有効にする (Ctrl+半角/全角, {hotkey})" : "Meltype を有効にする (Ctrl+半角/全角)";
-        _engine.StatusChanged += OnEngineStatusChanged;
+        _engine.SettingsChanged += OnEngineSettingsChanged;
         _updater = new Updater(() => !AppPaths.IsPortable && _engine.Settings.AutoUpdate, () => Prerelease);
         _updater.Ready += OnUpdateReady;
         ShowUpdateItem();
@@ -190,7 +190,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var next = _engine.Settings.Clone();
         next.Mode = InputMode.Tsf;
         _engine.ApplySettings(next);
-        // ほかのモードからなら ApplySettings が切り替える。もう Meltype IME のモードだったときも、入力方式を Meltype IME にする
+        // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードだったときも、入力方式を Meltype IME にする
         if (wasTsf) Tip.TipServer.ActivateForSession();
         Diagnostics.Log.Info("Meltype IME が入っているので、動作モードを Meltype IME にしました。");
     }
@@ -399,9 +399,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(ToggleEnabled);
     }
 
-    private void OnEngineStatusChanged()
+    private void OnKeyboardModeChanged()
     {
         if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(UpdateStatus);
+    }
+
+    private void OnEngineSettingsChanged(Settings previous, Settings next)
+    {
+        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
+        _invoker.BeginInvoke(() =>
+        {
+            _engine.OnSettingsChanged(previous, next);
+            UpdateStatus();
+        });
     }
 
     private void ToggleEnabled()
@@ -489,7 +499,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         next.Mode = mode;
         next.Enabled = true;
         _engine.ApplySettings(next);
-        // ほかのモードからなら ApplySettings が切り替える。もう Meltype IME のモードで選び直したとき (Win + Space でほかの IME にしていた) も、入力方式を Meltype IME に戻す
+        // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードで選び直したとき (Win + Space でほかの IME にしていた) も、入力方式を Meltype IME に戻す
         if (wasTsf && mode == InputMode.Tsf) Tip.TipServer.ActivateForSession();
     }
 
@@ -752,7 +762,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         _exiting = true;
         Diagnostics.ShortcutExclusions.Added -= OnShortcutExcluded;
-        _engine.StatusChanged -= OnEngineStatusChanged;
+        _engine.SettingsChanged -= OnEngineSettingsChanged;
         _engine.ToggleRequested -= OnToggleRequested;
         _tipServer.Dispose();
         _engine.Keyboard = null;
