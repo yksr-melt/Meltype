@@ -36,8 +36,8 @@ for spec in "arm64-v8a:linux-bionic-arm64:aarch64-linux-android" "x86_64:linux-b
     -p:AndroidApiLevelMin=26 \
     -p:RestoreSources=https://api.nuget.org/v3/index.json
   OUTPUT_DIR="$ROOT/src/Meltype.Mac.Native/bin/Release/net10.0/$RID/publish"
-ls -lah "$OUTPUT_DIR"
-SOURCE="$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name "*.so" -print -quit)"
+  ls -lah "$OUTPUT_DIR"
+  SOURCE="$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name "*.so" -print -quit)"
   [[ -f "$SOURCE" ]] || { echo "NativeAOT output not found: $SOURCE" >&2; exit 1; }
   DEST="$ROOT/android/app/prebuilt/$ABI"
   mkdir -p "$DEST"
@@ -45,7 +45,10 @@ SOURCE="$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name "*.so" -print -quit)"
   # Android dynamic linker resolves DT_NEEDED by soname, not CI filesystem path.
   # Without an explicit SONAME, CMake records the absolute imported path
   # in libmeltype_jni.so and the IME fails to load on real Android devices.
-  command -v patchelf >/dev/null || { echo "Install patchelf for Android SONAME" >&2; exit 1; }
-  # SONAME is set by the native linker. patchelf corrupts Android ELF PT_LOAD alignment.  readelf -d "$DEST/libMeltypeNative.so" | grep -q 'Library soname: \[libMeltypeNative.so\]'
+  # SONAME is set by the native linker (Meltype.Mac.Native.csproj). Do not use
+  # patchelf: it corrupts Android ELF PT_LOAD alignment.
+  DYNAMIC="$("$TOOLCHAIN/llvm-readelf" -d "$DEST/libMeltypeNative.so")"
+  grep -q 'Library soname: \[libMeltypeNative.so\]' <<< "$DYNAMIC" \
+    || { echo "libMeltypeNative.so has no SONAME libMeltypeNative.so" >&2; exit 1; }
   echo "Wrote $DEST/libMeltypeNative.so"
 done
