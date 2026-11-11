@@ -69,7 +69,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
         var opening = System.Diagnostics.Stopwatch.StartNew();
         _engine = engine;
         _state = state;
-        _draft = engine.Settings.Clone().Normalize();
+        // 動かしている設定を見せる (Meltype IME を使えなければ Meltype キーボード)。変えなかった項目は、閉じるときに MergeEdits が config.json の値のままにする
+        _draft = engine.Running.Clone().Normalize();
         Text = "Meltype 設定";
         StartPosition = FormStartPosition.CenterScreen;
         // 上のプロファイルの欄のボタンが 1 段に並ぶ幅に、左の分類の一覧の幅を足す。高さは分類の一覧を足す前の幅と同じにする。
@@ -470,7 +471,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
             var combo = DropDown(values.Select(v => EnumName(type, v)).ToArray());
             // Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) なら、灰色にして選ばせない
             if (!AppPaths.IsPortable && property.Name == nameof(Settings.Mode) &&
-                _engine.Settings.Mode != InputMode.Tsf && !Tip.TipServer.IsUsable)
+                _engine.Running.Mode != InputMode.Tsf && !Tip.TipServer.IsUsable)
                 DisableChoice(combo, values.IndexOf(InputMode.Tsf));
             return new Binding(property, combo,
                 s => combo.SelectedIndex = values.IndexOf(property.GetValue(s)!),

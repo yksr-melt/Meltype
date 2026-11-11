@@ -40,7 +40,6 @@ public sealed class MeltypeRuntime : IDisposable
         });
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
-        _settingsCheck = new Timer(_ => _ = Settings.Current, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
         Detector = CompositionDetector.CreateDefault(_userDirectory);
         Detector.SpellChecker = _wordChecker;
         Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
@@ -66,6 +65,7 @@ public sealed class MeltypeRuntime : IDisposable
         Snippets = new SnippetStore(Path.Combine(dataDirectory, "snippets.json"));
         _directEngine = new(() => ScoreEngine.CreateDefault(() => Settings.Current, _userDirectory));
         if (nowPlaying) _nowPlaying = NowPlayingSource.Create(() => Settings.Current.NowPlayingCandidates);
+        _settingsCheck = new Timer(_ => _ = Settings.Current, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
@@ -85,7 +85,10 @@ public sealed class MeltypeRuntime : IDisposable
 
     public CompositionDetector Detector { get; }
 
-    /// <summary>ユーザー辞書。入力欄を作ったとき・入力を始めたときに、外で変わっていたら読み直す (<see cref="UserDictionary.Refresh"/>)。</summary>
+    /// <summary>
+    /// ユーザー辞書。入力欄を作ったとき・入力を始めたときに、外で変わっていたら読み直す (<see cref="UserDictionary.Refresh"/>)。
+    /// 入力欄の本体 (<see cref="MeltypeSession"/>) と同じスレッドからだけ使う (Windows は UI スレッド。排他しない)。
+    /// </summary>
     public UserDictionary UserDictionary { get; }
 
     public ConversionHistory History => _shared.History!;

@@ -50,14 +50,14 @@ internal sealed class ImeSession
     public void Close() => _session.CommitPending();
 
     /// <summary>
-    /// この入力欄で入力を受け持つか。このフロントで入力し (<see cref="IImeEnvironment.Selected"/>)、一時停止中・アプリ別設定で OFF・ゲーム・パスワード欄・全画面 (設定)・
+    /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・ゲーム・パスワード欄・全画面 (設定)・
     /// 日本語以外の入力言語 (設定)・フロントが文字を送れない所・入力欄でない所 (アプリ別設定で「入力欄とみなす」アプリとターミナルを除く) でない。
     /// </summary>
     public static bool IsActive(IImeEnvironment environment, Settings settings, ImeField? field)
     {
         var traits = field?.Traits ?? [];
         var app = field?.App;
-        return environment.Selected && settings.Enabled &&
+        return (environment.InputMethod is not { } method || settings.Mode == method) && settings.Enabled &&
             !traits.Contains(ImeTrait.Password) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&

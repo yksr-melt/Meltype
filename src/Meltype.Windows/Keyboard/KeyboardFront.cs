@@ -26,7 +26,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     private readonly Control _invoker;
     private readonly CompositionService _composition;
-    private readonly Func<bool> _selected;
     private readonly ForegroundTracker _foreground = new();
     private readonly KeyInjector _injector = new();
     private readonly ImeHost _host;
@@ -66,12 +65,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     }
 
     /// <param name="createHost">入力の本体を作る (設定は本体に渡す。フロントは読まない)。</param>
-    /// <param name="selected">動作モードが Meltype キーボードで動いているか (<see cref="MeltypeEngine.Mode"/>)。</param>
-    public KeyboardFront(Control invoker, CompositionService composition, Func<bool> selected, Func<IImeEnvironment, ImeHost> createHost)
+    public KeyboardFront(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost)
     {
         _invoker = invoker;
         _composition = composition;
-        _selected = selected;
         _host = createHost(this);
         _state = new ImeState { Capture = new ImeCapture() };
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
@@ -102,7 +99,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     // ---- IImeEnvironment ----
 
-    public bool Selected => _selected();
+    public InputMode? InputMethod => InputMode.Keyboard;
 
     public MeltypeSession CreateSession(Func<Settings> settings) => _composition.CreateSession(settings, directModeDetection: true);
 

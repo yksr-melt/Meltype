@@ -51,14 +51,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine = engine;
         _state = state;
         _invoker.CreateControl();
-        _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Settings);
-        // 入力の本体は土台の設定を読む (config.json が変わったら読み直す。_engine.Settings はフックのスレッド用の写し)
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, () => _engine.Mode == InputMode.Keyboard, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
+        // 入力・表示は、動かしている設定 (Meltype IME を使えなければ Meltype キーボード) を読む
+        _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Running);
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
         _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
-        _tipServer = new Tip.TipServer(_invoker, _composition, () => _engine.Mode == InputMode.Tsf, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
+        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
         _engine.ImeServer = _tipServer;
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
@@ -102,7 +102,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         backup.DropDownItems.Add("バックアップから戻す...", null, (_, _) => RestoreBackup());
         menu.Items.Add(backup);
         menu.Items.Add("不具合の報告・提案...", null, (_, _) => OpenReport());
-        menu.Items.Add("直した誤判定を報告...", null, (_, _) => new CorrectionReportDialog(_composition.Corrections, _engine.Settings).Show());
+        menu.Items.Add("直した誤判定を報告...", null, (_, _) => new CorrectionReportDialog(_composition.Corrections, _engine.Running).Show());
         menu.Items.Add("Meltype について...", null, (_, _) => MessageBox.Show(AppInfo.AboutText, "Meltype について", MessageBoxButtons.OK, MessageBoxIcon.Information));
         menu.Items.Add("学習した語...", null, (_, _) => ShowLearnedWords());
         menu.Items.Add("打鍵数...", null, (_, _) => ShowKeyCount());
@@ -184,7 +184,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
             RuntimeInformation.OSArchitecture == Architecture.Arm64) return;
-        var wasTsf = _engine.Mode == InputMode.Tsf;
+        var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         _state.TsfIntroduced = true;
         _state.Save();
         var next = _engine.Settings.Clone();
@@ -405,7 +405,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     }
 
     // MeltypeRuntime のタイマーのスレッドからも呼ばれる
-    private void OnEngineSettingsChanged(MeltypeEngine.Running previous, MeltypeEngine.Running next)
+    private void OnEngineSettingsChanged(Settings previous, Settings next)
     {
         try
         {
@@ -439,7 +439,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _reportDialog.Activate();
             return;
         }
-        using var dialog = new ReportDialog(_engine.Settings);
+        using var dialog = new ReportDialog(_engine.Running);
         _reportDialog = dialog;
         dialog.FormClosed += (_, _) => _reportDialog = null;
         dialog.ShowDialog();
@@ -501,7 +501,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void SetMode(InputMode mode)
     {
         if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
-        var wasTsf = _engine.Mode == InputMode.Tsf;
+        var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         var next = _engine.Settings.Clone();
         next.Mode = mode;
         next.Enabled = true;
@@ -512,10 +512,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void UpdateStatus()
     {
-        var settings = _engine.Settings;
+        var settings = _engine.Running;
         var enabled = settings.Enabled;
-        var keyboard = _engine.Mode == InputMode.Keyboard;
-        var tsf = _engine.Mode == InputMode.Tsf;
+        var keyboard = settings.Mode == InputMode.Keyboard;
+        var tsf = settings.Mode == InputMode.Tsf;
         _enabledItem.Checked = enabled;
         _keyboardModeItem.Checked = keyboard;
         _tsfModeItem.Checked = tsf;

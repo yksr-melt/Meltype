@@ -65,13 +65,12 @@ internal static class TipIndicatorTests
         // 出すかは本体が state.modeIndicatorMs で決める (設定「入力モードをカーソルの近くに表示」)。TipServer は、入力スレッドが分かるときに出すだけ。
         // 表示は、前面のウィンドウが入力スレッドのものなときだけ出るので、前面のスレッドから来た要求にする
         var settings = new Settings { Mode = InputMode.Tsf, ModeIndicator = ModeIndicatorTiming.Never };
-        var selected = true;
         using var invoker = new Control();
         invoker.CreateControl();
         using var runtime = TestRuntime.Create();
         using var composition = new Composition.CompositionService(invoker, runtime, () => new Settings { ConversionEngine = ConversionEngine.System });
         var indicator = (ModeIndicatorWindow)typeof(CompositionService).GetField("_indicator", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(composition)!;
-        using var server = new Tip.TipServer(invoker, composition, () => selected, environment => new Ime.ImeHost(environment, () => settings));
+        using var server = new Tip.TipServer(invoker, composition, environment => new Ime.ImeHost(environment, () => settings));
         var host = server.Connect("harness", 0);
         var foreground = WindowsIme.ImeTarget.FromForeground()?.ThreadId ?? 0;
         Assert.True(foreground != 0, "前面の入力スレッドがある");
@@ -89,7 +88,7 @@ internal static class TipIndicatorTests
         Assert.True(Shown("ModeToggleRequested") && Shown("ModeToggleRequested"), "明示的な切り替えのたびに出す");
         Assert.True(!Shown("KeyPressed", fields: ",\"key\":{\"vk\":65,\"ch\":97}") && !Shown("StateRequested"), "切り替えでない出来事では出さない");
         Assert.True(!Shown("ModeToggleRequested", thread: 0), "入力スレッドが分からなければ出さない");
-        selected = false;
-        Assert.True(!Shown("ModeToggleRequested"), "Meltype キーボードで動かしているなら (MeltypeEngine.Mode)、Meltype IME の切り替えでは出さない");
+        settings.Mode = InputMode.Keyboard;
+        Assert.True(!Shown("ModeToggleRequested"), "動作モードが Meltype キーボードなら、Meltype IME の切り替えでは出さない");
     }
 }

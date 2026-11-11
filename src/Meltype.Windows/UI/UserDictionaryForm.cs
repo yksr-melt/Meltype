@@ -184,9 +184,16 @@ internal sealed class UserDictionaryForm : Form
 
     private void RemoveSelected()
     {
-        foreach (DataGridViewRow row in _grid.SelectedRows)
+        try
         {
-            if (row.Tag is UserWord word) _service.UserDictionary.Remove(word);
+            foreach (DataGridViewRow row in _grid.SelectedRows)
+            {
+                if (row.Tag is UserWord word) _service.UserDictionary.Remove(word);
+            }
+        }
+        catch (IOException ex)
+        {
+            MessageBox.Show(this, $"消せませんでした。\n\n{ex.Message}", "ユーザー辞書", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         Reload();
     }

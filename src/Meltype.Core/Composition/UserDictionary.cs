@@ -41,8 +41,10 @@ public sealed class UserDictionary
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
     private readonly string? _importDirectory;
-    // 読んだ・保存したときの userdict.txt の更新時刻と、読んだときの .plist の一覧 (更新時刻つき)
-    private DateTime _fileTime;
+    // 最後に読んだ (読もうとした)・保存したときの userdict.txt の更新時刻と、読めたか。同じ更新時刻のまま読めなければ、読み直さない (警告を繰り返さない)
+    private DateTime? _fileTime;
+    private bool _read;
+    // 読んだときの .plist の一覧 (更新時刻つき)
     private string _plists = "";
 
     public UserDictionary(string? path, bool builtIn = true, string? importDirectory = null)
@@ -55,48 +57,72 @@ public sealed class UserDictionary
             MarkHeadOnly();
             SplitBuiltInClauses();
         }
-        Load();
+        Load(FileTime(), ReadWords(warn: true));
     }
 
     /// <summary>
     /// userdict.txt・.plist がこのオブジェクトの外 (Mac の Swift 側の取り込み・.plist を置いた) で変わっていたら、読み直す。
-    /// 入力欄はすべてこのオブジェクトを使うので、開いている入力欄にも効く。userdict.txt を読めなければ前の語のまま false を返す (次の Refresh でまた読む)。
+    /// 入力欄はすべてこのオブジェクトを使うので、開いている入力欄にも効く。
+    /// userdict.txt の今の中身を持っていると確かめられなければ (更新時刻・中身を読めない)、前の語のまま false を返す。
     /// </summary>
     public bool Refresh()
     {
-        if (FileTime() == _fileTime && Plists() == _plists) return true;
-        var loaded = Load();
+        if (FileTime() is not { } fileTime) return false;
+        if (_read && fileTime == _fileTime && Plists() == _plists) return true;
+        // 読めなかったときと同じ更新時刻なら、警告を繰り返さずに読み直す (ほかのソフトが閉じれば読める)
+        if (ReadWords(warn: _read || fileTime != _fileTime) is not { } words)
+        {
+            _fileTime = fileTime;
+            _read = false;
+            return false;
+        }
+        Load(fileTime, words);
         Version++;
         Diagnostics.Log.Info("ユーザー辞書が変わったので読み直しました。");
-        return loaded;
+        return true;
     }
 
-    // 読めたものだけ入れ替える。userdict.txt を読めなければ、前に読んだ語と更新時刻のまま false を返す
-    private bool Load()
+    // 登録・削除の前に Refresh が false なら: 保存すると読めなかった語が消えるので変えない
+    private const string Unreadable = "ユーザー辞書 (userdict.txt) を読めないので、変えられません。ファイルを開いているほかのソフトを閉じてから、やり直してください。";
+
+    // words が null (userdict.txt を読めなかった) なら、前に読んだ語のまま
+    private void Load(DateTime? fileTime, List<UserWord>? words)
     {
-        var loaded = true;
-        var fileTime = FileTime();
-        try
+        _fileTime = fileTime;
+        _read = fileTime is not null && words is not null;
+        if (words is not null)
         {
-            List<UserWord> words = [];
-            if (_path is not null && File.Exists(_path)) Parse(File.ReadAllLines(_path, Encoding.UTF8), words);
             _words.Clear();
             _words.AddRange(words);
-            _fileTime = fileTime;
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"ユーザー辞書を読めませんでした: {ex.Message}");
-            loaded = false;
         }
         _plists = Plists();
         _imported.Clear();
         if (_importDirectory is not null) LoadPlists(_importDirectory);
         Rebuild();
-        return loaded;
     }
 
-    private DateTime FileTime()
+    // 読めなければ null
+    private List<UserWord>? ReadWords(bool warn)
+    {
+        List<UserWord> words = [];
+        try
+        {
+            if (_path is not null) Parse(File.ReadAllLines(_path, Encoding.UTF8), words);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            // まだ登録していない
+        }
+        catch (Exception ex)
+        {
+            if (warn) Diagnostics.Log.Warn($"ユーザー辞書を読めませんでした: {ex.Message}");
+            return null;
+        }
+        return words;
+    }
+
+    // 読めなければ null (変わったか分からない)
+    private DateTime? FileTime()
     {
         try
         {
@@ -104,7 +130,7 @@ public sealed class UserDictionary
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return _fileTime;
+            return null;
         }
     }
 
@@ -230,18 +256,18 @@ public sealed class UserDictionary
         if (word.Length == 0) return "単語を入力してください。";
         // CR・ESC などは確定するとアプリにキー操作として届く
         if (reading.Any(char.IsControl) || word.Any(char.IsControl)) return "タブ・改行などの制御文字は使えません。";
-        // 外で書き換えた語の上に足す。読めなければ、保存すると読めなかった語が消えるので登録しない
-        if (!Refresh()) return "ユーザー辞書 (userdict.txt) を読めないので、登録できません。";
+        // 外で書き換えた語の上に足す
+        if (!Refresh()) return Unreadable;
         if (_words.Any(w => w.Reading == reading && w.Word == word)) return null;
         _words.Add(new UserWord(reading, word));
         Changed();
         return null;
     }
 
-    /// <summary>まとめて登録する (取り込み)。読みと単語が同じものが既にあれば飛ばす。登録した数を返す。</summary>
+    /// <summary>まとめて登録する (取り込み)。読みと単語が同じものが既にあれば飛ばす。登録した数を返す。userdict.txt を読めなければ IOException。</summary>
     public int AddRange(IEnumerable<UserWord> words)
     {
-        if (!Refresh()) return 0;
+        if (!Refresh()) throw new IOException(Unreadable);
         var added = 0;
         foreach (var word in words)
         {
@@ -254,9 +280,11 @@ public sealed class UserDictionary
         return added;
     }
 
+    /// <summary>消す。userdict.txt を読めなければ IOException。</summary>
     public void Remove(UserWord word)
     {
-        if (Refresh() && _words.Remove(word)) Changed();
+        if (!Refresh()) throw new IOException(Unreadable);
+        if (_words.Remove(word)) Changed();
     }
 
     /// <summary>読みに登録されている単語 (新しく登録したものが先)。</summary>
@@ -345,6 +373,7 @@ public sealed class UserDictionary
             lines.AddRange(_words.Select(w => $"{w.Reading}\t{w.Word}"));
             Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
             _fileTime = FileTime();
+            _read = _fileTime is not null;
         }
         catch (Exception ex)
         {

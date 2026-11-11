@@ -23,7 +23,7 @@ internal static unsafe class NativeBoundaryTests
 
         public Settings Settings { get; } = new() { SpaceAroundEnglish = true, LiveConversion = false };
 
-        public bool Selected => true;
+        public InputMode? InputMethod => null;
 
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
             new CompositionServices(), settings);

@@ -110,6 +110,10 @@ internal static class RuntimeTests
                 runtime.UserDictionary.Refresh();
                 Assert.Equal("葵", runtime.UserDictionary.Lookup("あおい") is [var kept, ..] ? kept : "(なし)", "読めなければ前の語のまま");
                 Assert.True(runtime.UserDictionary.Add("ゆきしろ", "雪代") is not null, "読めない間は登録しない");
+                var refused = false;
+                try { runtime.UserDictionary.AddRange([new UserWord("ゆきしろ", "雪代")]); }
+                catch (IOException) { refused = true; }
+                Assert.True(refused, "取り込みも、理由を返して止める");
             }
             File.WriteAllText(path, "あおい\t葵\nみどり\t翠\n");
             File.SetLastWriteTimeUtc(path, changedAt);
