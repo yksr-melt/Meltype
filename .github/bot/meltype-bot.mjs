@@ -294,7 +294,7 @@ async function parse() {
     if (misdetection && isKeys(keys)) {
       return output({
         action: 'repro', issue, repros: JSON.stringify([{ keys: keys.slice(0, MaxKeys), last: lastKey(field(form, '最後に押したキー')) }]),
-        reported: field(form, '出たもの'), expected: field(form, '期待した結果'), kind: field(form, '種類'),
+        reported: field(form, '出たもの'), expected: field(form, '期待した結果'),
       });
     }
     return output({ action: 'none' });
@@ -383,7 +383,7 @@ async function parse() {
       await upsertComment(issue, `error-${event.comment.id}`, `打ったキーを英字で書いてください (例: \`/${command} ${head} nihongowohanasu\`)。`);
       return output({ action: 'none' });
     }
-    if (command === 'test-repro') return output({ action: command, issue, repros: JSON.stringify([request]), reported: '', expected: '', kind: '', sha: pr.head.sha, comment: event.comment.id });
+    if (command === 'test-repro') return output({ action: command, issue, repros: JSON.stringify([request]), reported: '', expected: '', sha: pr.head.sha, comment: event.comment.id });
     return output({ action: command, issue, keys: request.keys, sha: pr.head.sha, comment: event.comment.id });
   }
 
@@ -407,7 +407,7 @@ async function parse() {
   }
   await react('eyes');
   if (command === 'explain') return output({ action: command, issue, keys: requests[0].keys, comment: event.comment.id });
-  return output({ action: command, issue, repros: JSON.stringify(requests), reported: '', expected: '', kind: '', comment: event.comment.id });
+  return output({ action: command, issue, repros: JSON.stringify(requests), reported: '', expected: '', comment: event.comment.id });
 }
 
 const keysOf = text => text.trim().split(/\s+/).join(' ').replace(/^`|`$/g, '').slice(0, MaxKeys);
