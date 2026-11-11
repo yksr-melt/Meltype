@@ -127,3 +127,17 @@ test('candidates: 全角空白は Core と同じく区切り', () => {
   const { errors } = checkDictionary('candidates.txt', 'はし　橋　箸\n');
   assert.deepEqual(errors, []);
 });
+
+test('propernouns: 大文字小文字だけ違う綴りはエラー (Core は先に出た綴りを正規形として表示する)', () => {
+  const { errors } = checkDictionary('propernouns.txt', 'Uber Paypal Stripe\nPayPal\nIkea IKEA\n');
+  assert.deepEqual(messages(errors), [
+    '2: 「paypal」が 1 行目と食い違う (「Paypal」と「PayPal」)',
+    '3: 「ikea」が 3 行目と食い違う (「Ikea」と「IKEA」)',
+  ]);
+});
+
+test('propernouns: 同じ綴りを繰り返すのは通す (Core の正規形は変わらない)', () => {
+  const { errors, warnings } = checkDictionary('propernouns.txt', 'Chrome Firefox\nPayPal Chrome # 注記\nPayPal\n');
+  assert.deepEqual(errors, []);
+  assert.deepEqual(warnings, []);
+});

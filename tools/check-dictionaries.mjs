@@ -21,6 +21,7 @@ const ascii = /^[\x21-\x7e]+$/;
  *   untrimmed … 前後の空白を除かずに format に渡すか。既定は除く
  *   keysOf    … 重複を見る単位 ([キー, 中身] の並び)。既定は行全体。
  *               キーが同じで中身が違えば、後の行が前の行を上書きするか、どちらが効くか決まらないのでエラー。中身まで同じなら警告
+ *   allowRepeats … 中身まで同じ重複を警告しないか。既定は警告する
  */
 const dictionaries = {
   // 読み 候補 候補 … (空白区切り)。読みは打ったときの読みと完全一致で引くので、キーを打って作れる文字列だけを通す。
@@ -43,6 +44,11 @@ const dictionaries = {
   },
   'propernouns.txt': {
     format: words(w => /^[A-Za-z][A-Za-z0-9.+&'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
+    // Core (ProperNouns) は空白・タブ・, で区切った英数字だけの語を小文字で引き、先に出た綴りを正規形として表示する。
+    // 小文字で同じ語に違う綴りがあると、後の綴りは使われない
+    keysOf: line => line.split(/[ \t,]+/).filter(w => /^[A-Za-z0-9]+$/.test(w)).map(w => [w.toLowerCase(), w]),
+    // 分類ごとに同じ語を置いてよい (同じ綴りなら正規形は変わらない)
+    allowRepeats: true,
   },
   // Core は小文字にして読むので、大文字を含んでも同じ語 (日本語由来の節は sections で見る)
   'english.txt': {
@@ -196,6 +202,7 @@ export function checkDictionary(file, text) {
     commentAt = line => line.indexOf('#'),
     untrimmed = false,
     keysOf = line => [[line.trim(), line.trim()]],
+    allowRepeats = false,
   } = config;
   const sectionCheck = sections[file]?.();
   const seen = new Map();
@@ -214,7 +221,7 @@ export function checkDictionary(file, text) {
       const first = seen.get(key);
       if (!first) seen.set(key, { lineNo, value, text: line.trim() });
       else if (first.value !== value) errors.push({ line: lineNo, message: `「${key}」が ${first.lineNo} 行目と食い違う (「${first.value}」と「${value}」)` });
-      else warnings.push({ line: lineNo, message: first.text === line.trim() ? `${first.lineNo} 行目と同じ行` : `「${key}」が ${first.lineNo} 行目と重複` });
+      else if (!allowRepeats) warnings.push({ line: lineNo, message: first.text === line.trim() ? `${first.lineNo} 行目と同じ行` : `「${key}」が ${first.lineNo} 行目と重複` });
     }
   });
   return { errors, warnings };
