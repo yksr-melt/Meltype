@@ -15,9 +15,9 @@ import io.github.ninjin0802.keyboard.engine.CandidateKind
  * completely before anything is written.
  */
 internal class CoreInputAdapter(
-    private val connection: () -> InputConnection?,
     /** Records where these edits leave the caret, to tell them from moves by the user or the app. */
     private val caret: CaretWatch = CaretWatch(),
+    private val connection: () -> InputConnection?,
 ) {
     /** The composing text this adapter shows in the editor ("" if none). */
     var shown: String = ""

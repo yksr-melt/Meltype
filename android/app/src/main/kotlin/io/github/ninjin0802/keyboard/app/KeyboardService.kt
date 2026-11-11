@@ -97,7 +97,7 @@ class KeyboardService : InputMethodService(), KeyListener {
     private val bridge = EditorBridge { currentInputConnection }
     /** Where the Core's edits leave the caret; any other move is reported to the Core (CaretMoved). */
     private val caretWatch = CaretWatch()
-    private val coreInput = CoreInputAdapter({ currentInputConnection }, caretWatch)
+    private val coreInput = CoreInputAdapter(caretWatch) { currentInputConnection }
     private var core: MeltypeCoreHost? = null
     private var nativeCoreUnavailable = false
 

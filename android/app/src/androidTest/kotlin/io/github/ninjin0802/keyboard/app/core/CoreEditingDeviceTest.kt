@@ -20,7 +20,7 @@ class CoreEditingDeviceTest {
 
     /** Types into [editor] through the Core, sending each key as KeyboardService does. */
     private inner class Typist(var editor: TestEditor = TestEditor()) {
-        val adapter = CoreInputAdapter({ editor })
+        val adapter = CoreInputAdapter { editor }
 
         fun field() = adapter.field(emptyList(), app = "io.github.ninjin0802.test")
 
@@ -68,7 +68,7 @@ class CoreEditingDeviceTest {
     @Test fun removeBeforeTakesAwayTheComposingTextFirst() {
         val editor = TestEditor()
         editor.commitText("い ", 1)
-        val adapter = CoreInputAdapter({ editor })
+        val adapter = CoreInputAdapter { editor }
         adapter.apply(response("[]", """{"text":"want","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,"typedKeys":null,"candidates":null}"""))
         assertEquals("い want", editor.content)
         adapter.apply(response("""[{"text":"I want ","removeBefore":"い ","currentWord":null,"moveCaretBack":0,"insertByPaste":false}]""", "null"))
@@ -81,7 +81,7 @@ class CoreEditingDeviceTest {
     @Test fun moveCaretBackPutsTheCaretInsideTheCommit() {
         val editor = TestEditor()
         editor.commitText("abc", 1)
-        val adapter = CoreInputAdapter({ editor })
+        val adapter = CoreInputAdapter { editor }
         adapter.apply(response("[]", """{"text":"[]","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,"typedKeys":null,"candidates":null}"""))
         adapter.apply(response("""[{"text":"「」","removeBefore":null,"currentWord":null,"moveCaretBack":1,"insertByPaste":false}]""", "null"))
         assertEquals("abc「」", editor.content)
@@ -111,7 +111,7 @@ class CoreEditingDeviceTest {
     @Test fun anEditorWithoutItsOwnTextSendsNoTextAndCannotRemove() {
         val editor = TestEditor()
         editor.commitText("abc", 1)
-        val facts = CoreInputAdapter({ editor }).field(emptyList(), readable = false)
+        val facts = CoreInputAdapter { editor }.field(emptyList(), readable = false)
         assertNull(facts.before)
         assertNull(facts.after)
         assertTrue(!facts.canRemove)
@@ -121,7 +121,7 @@ class CoreEditingDeviceTest {
         val editor = TestEditor()
         editor.commitText("abcd", 1)
         editor.setSelection(1, 3)
-        val adapter = CoreInputAdapter({ editor })
+        val adapter = CoreInputAdapter { editor }
         assertEquals("bc", adapter.field(emptyList(), selected = true).selection)
         assertEquals("a", adapter.field(emptyList(), selected = true).before)
         assertNull(adapter.field(emptyList(), selected = false).selection)

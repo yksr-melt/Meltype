@@ -35,12 +35,12 @@ internal object DeviceTestCore {
 
 /** An editor of its own text, which also tells where the caret is (as TextView does; BaseInputConnection alone does not). */
 internal class TestEditor : BaseInputConnection(View(InstrumentationRegistry.getInstrumentation().targetContext), true) {
-    val content: String get() = editable.toString()
-    val caret: Int get() = Selection.getSelectionEnd(editable)
-    val composingStart: Int get() = BaseInputConnection.getComposingSpanStart(editable)
+    val content: String get() = editable!!.toString()
+    val caret: Int get() = Selection.getSelectionEnd(editable!!)
+    val composingStart: Int get() = BaseInputConnection.getComposingSpanStart(editable!!)
 
     override fun getExtractedText(request: ExtractedTextRequest?, flags: Int): ExtractedText {
-        val all = editable
+        val all = editable!!
         return ExtractedText().also {
             it.text = all.toString()
             it.startOffset = 0

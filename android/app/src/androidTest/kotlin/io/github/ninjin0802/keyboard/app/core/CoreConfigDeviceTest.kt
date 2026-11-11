@@ -54,7 +54,7 @@ class CoreConfigDeviceTest {
 
     @Test fun liveConversionTakesEffectFromTheNextKey() {
         val editor = TestEditor()
-        val adapter = CoreInputAdapter({ editor })
+        val adapter = CoreInputAdapter { editor }
         set(CoreConfig.LIVE_CONVERSION, false)
         type(editor, adapter, "kyouha")
         assertEquals("Live conversion OFF shows the reading", "きょうは", adapter.shown)
@@ -70,7 +70,7 @@ class CoreConfigDeviceTest {
     @Test fun bracketsPutTheCaretInsideWhenTheSettingIsOn() {
         set("CursorIntoBrackets", true)
         val editor = TestEditor()
-        val adapter = CoreInputAdapter({ editor })
+        val adapter = CoreInputAdapter { editor }
         type(editor, adapter, "[]\n")
         assertEquals("「」", editor.content)
         assertEquals("The caret goes back inside the brackets (moveCaretBack)", 1, editor.caret)
