@@ -49,17 +49,19 @@ class CoreEditingDeviceTest {
         assertEquals(-1, typist.editor.composingStart)
     }
 
-    @Test fun aCaretMovedElsewhereKeepsThePreviousWord() {
-        // Committed with Enter, い is still re-committed by the next English word while the caret stays.
+    @Test fun aCommittedWordCanBeRecommittedWhenCaretHasNotMoved() {
+        // Keep this in its own Core host. ImeHost's "android" instance is stateful across editors.
         val stays = Typist()
-        stays.type("i \n")
-        val committed = stays.editor.content
+        stays.type("i \\n")
         stays.type("want ")
         assertTrue("Not re-committed: " + stays.editor.content, stays.editor.content.startsWith("I"))
-        // After the caret moved (a tap; here back to the same place), the word before it is not touched.
+    }
+
+    @Test fun aCaretMovedElsewhereKeepsThePreviousWord() {
+        // A distinct host reproduces a fresh editor: the first scenario must not leak into this one.
         val moved = Typist()
-        moved.type("i \n")
-        assertEquals(committed, moved.editor.content)
+        moved.type("i \\n")
+        val committed = moved.editor.content
         moved.send(ImeJson.caretMoved(moved.field()))
         moved.type("want ")
         assertEquals(committed + "want ", moved.editor.content)
