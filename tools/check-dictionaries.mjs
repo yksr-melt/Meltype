@@ -30,11 +30,12 @@ const formats = {
   'english.txt': words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   'english-words.txt': words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   // 繋げた形<Tab>空白で区切った語句。繋げた形が、語句の空白を除いた形と一致することまで確かめる
-  'english-phrases.txt': tabbed(2, 2, ([joined, phrase]) => [
+  // コメントは行頭の # だけ (comments を見る)。行末に # を書くと Core はその行を登録しない
+  'english-phrases.txt': noInlineComment(tabbed(2, 2, ([joined, phrase]) => [
     /^[a-z]+$/.test(joined) ? null : `「${joined}」が小文字の英字でない`,
     phrase.split(' ').every(w => /^[a-z]+$/.test(w)) ? null : `語句「${phrase}」が小文字の英字の語でない`,
     joined === phrase.replace(/ /g, '') ? null : `「${joined}」が語句「${phrase}」を繋げた形でない`,
-  ]),
+  ])),
   // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ
   'english-readable.txt': words(w => /^[a-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の小文字の英字の語でない`),
   'japanese.txt': words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
@@ -67,6 +68,10 @@ const formats = {
   'emoji-cldr.txt': tabbed(2, 99, () => []),
 };
 
+function noInlineComment(check) {
+  return line => line.includes('#') ? ['行末にコメントは書けない (コメントは行頭の # だけ。行末に書くとこの行は読み込まれない)'] : check(line);
+}
+
 function spaced(check) {
   return line => {
     const [reading, ...rest] = line.split(/[ \t　]+/).filter(Boolean);
@@ -87,36 +92,72 @@ function tabbed(min, max, check) {
   };
 }
 
-const files = process.argv.slice(2).length > 0
-  ? process.argv.slice(2).map(f => path.basename(f)).filter(f => f.endsWith('.txt'))
-  : fs.readdirSync(root).filter(f => f.endsWith('.txt'));
-let errors = 0, warnings = 0;
-const report = [];
-for (const file of files) {
-  const full = path.join(root, file);
-  if (!fs.existsSync(full)) continue; // 消した辞書
+/** コメントの始まり (無ければ -1)。Core の読み方に合わせる。ふつうは # から行末まで。 */
+const comments = {
+  // 顔文字に # が入るので、行頭の # だけがコメント
+  'emoji.txt': line => line.trimStart().startsWith('#') ? 0 : -1,
+  'emoji-cldr.txt': line => line.trimStart().startsWith('#') ? 0 : -1,
+  // Core (EnglishPhraseSpacing) は 1 文字目の # だけをコメントとして読み飛ばす。行末の # 以降は欄に残り、その行は登録されない
+  'english-phrases.txt': line => line.startsWith('#') ? 0 : -1,
+};
+
+/**
+ * 重複を見る単位 ([キー, 中身] の並び)。ふつうは行全体。
+ * キーが同じで中身が違えば、後の行が前の行を上書きするか、どちらが効くか決まらないのでエラー。中身まで同じなら警告。
+ */
+const keys = {
+  // Core は繋げた形をキーに、後の行で上書きする
+  'english-phrases.txt': line => { const [joined, phrase] = line.split('\t'); return [[joined, phrase]]; },
+  // 1 行に複数の語を置けるので、語ごとに見る
+  'english-readable.txt': line => line.split(/\s+/).filter(Boolean).map(w => [w, w]),
+};
+
+/** 辞書 file の本文 text を確かめ、{ errors, warnings } (どちらも { line, message } の並び。line は無いこともある) を返す。 */
+export function checkDictionary(file, text) {
+  const errors = [], warnings = [];
+  if (text.charCodeAt(0) === 0xfeff) warnings.push({ message: '先頭に BOM がある' });
   const format = formats[file];
-  const text = fs.readFileSync(full, 'utf8');
-  if (text.charCodeAt(0) === 0xfeff) { report.push(`::warning file=dictionaries/${file}::先頭に BOM がある`); warnings++; }
-  if (!format) { report.push(`::warning file=dictionaries/${file}::形式を確かめる決まりが無い辞書 (tools/check-dictionaries.mjs に足してください)`); warnings++; continue; }
+  if (!format) { warnings.push({ message: '形式を確かめる決まりが無い辞書 (tools/check-dictionaries.mjs に足してください)' }); return { errors, warnings }; }
+  const commentAt = comments[file] ?? (line => line.indexOf('#'));
+  const keysOf = keys[file] ?? (line => [[line.trim(), line.trim()]]);
   const seen = new Map();
   text.split('\n').forEach((raw, i) => {
     const lineNo = i + 1;
     let line = raw.replace(/\r$/, '');
-    // 絵文字の辞書は顔文字に # が入るので、行頭の # だけがコメント
-    const hash = file.startsWith('emoji') ? (line.trimStart().startsWith('#') ? 0 : -1) : line.indexOf('#');
+    const hash = commentAt(line);
     if (hash >= 0) line = line.slice(0, hash);
     if (line.trim() === '') return;
-    if (/[ \t]$/.test(raw.replace(/\r$/, '')) && hash < 0) { report.push(`::warning file=dictionaries/${file},line=${lineNo}::行の終わりに空白がある`); warnings++; }
-    for (const problem of format(line.trim() === line || file.startsWith('emoji') ? line : line.trim()).filter(Boolean)) {
-      report.push(`::error file=dictionaries/${file},line=${lineNo}::${problem}`);
-      errors++;
+    if (/[ \t]$/.test(raw.replace(/\r$/, '')) && hash < 0) warnings.push({ line: lineNo, message: '行の終わりに空白がある' });
+    const problems = format(line.trim() === line || file.startsWith('emoji') ? line : line.trim()).filter(Boolean);
+    for (const problem of problems) errors.push({ line: lineNo, message: problem });
+    if (problems.length > 0) return; // 読めない行は重複を見ない
+    for (const [key, value] of keysOf(line.trim())) {
+      const first = seen.get(key);
+      if (!first) seen.set(key, { lineNo, value, text: line.trim() });
+      else if (first.value !== value) errors.push({ line: lineNo, message: `「${key}」が ${first.lineNo} 行目と食い違う (「${first.value}」と「${value}」)` });
+      else warnings.push({ line: lineNo, message: first.text === line.trim() ? `${first.lineNo} 行目と同じ行` : `「${key}」が ${first.lineNo} 行目と重複` });
     }
-    const key = line.trim();
-    if (seen.has(key)) { report.push(`::warning file=dictionaries/${file},line=${lineNo}::${seen.get(key)} 行目と同じ行`); warnings++; }
-    else seen.set(key, lineNo);
   });
+  return { errors, warnings };
 }
-console.log(report.join('\n'));
-console.log(`辞書の形式: ${files.length} ファイル、エラー ${errors}、警告 ${warnings}`);
-process.exitCode = errors > 0 ? 1 : 0;
+
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+  const files = process.argv.slice(2).length > 0
+    ? process.argv.slice(2).map(f => path.basename(f)).filter(f => f.endsWith('.txt'))
+    : fs.readdirSync(root).filter(f => f.endsWith('.txt'));
+  let errors = 0, warnings = 0;
+  const report = [];
+  for (const file of files) {
+    const full = path.join(root, file);
+    if (!fs.existsSync(full)) continue; // 消した辞書
+    const result = checkDictionary(file, fs.readFileSync(full, 'utf8'));
+    const where = p => `file=dictionaries/${file}${p.line ? `,line=${p.line}` : ''}`;
+    for (const p of result.errors) report.push(`::error ${where(p)}::${p.message}`);
+    for (const p of result.warnings) report.push(`::warning ${where(p)}::${p.message}`);
+    errors += result.errors.length;
+    warnings += result.warnings.length;
+  }
+  console.log(report.join('\n'));
+  console.log(`辞書の形式: ${files.length} ファイル、エラー ${errors}、警告 ${warnings}`);
+  process.exitCode = errors > 0 ? 1 : 0;
+}
