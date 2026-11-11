@@ -603,7 +603,7 @@ public sealed partial class CompositionController
     /// 区切りまで変わるなら文脈なしを使う。前に同じ語があると、変換エンジンは文脈に引きずられて区切りを変えてしまうため
     /// (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
     /// </summary>
-    private IReadOnlyList<ConversionClause>? ConvertWithContext(string kana, string context)
+    private List<ConversionClause>? ConvertWithContext(string kana, string context)
     {
         var withContext = EngineClauses(kana, context);
         var plain = EngineClauses(kana);
@@ -873,7 +873,7 @@ public sealed partial class CompositionController
     }
 
     /// <summary>文節に区切って変換する。区切れなければ null。</summary>
-    private IReadOnlyList<ConversionClause>? EngineClauses(string kana, string? context = null)
+    private List<ConversionClause>? EngineClauses(string kana, string? context = null)
     {
         var style = _settings().Punctuation;
         return _converter.ConvertClauses(CompositionText.ToEngineReading(kana, style), context)?
