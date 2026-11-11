@@ -52,7 +52,7 @@ class CoreEditingDeviceTest {
     @Test fun aCommittedWordCanBeRecommittedWhenCaretHasNotMoved() {
         // Keep this in its own Core host. ImeHost's "android" instance is stateful across editors.
         val stays = Typist()
-        stays.type("i \\n")
+        stays.type("i \n")
         stays.type("want ")
         assertTrue("Not re-committed: " + stays.editor.content, stays.editor.content.startsWith("I"))
     }
@@ -60,7 +60,7 @@ class CoreEditingDeviceTest {
     @Test fun aCaretMovedElsewhereKeepsThePreviousWord() {
         // A distinct host reproduces a fresh editor: the first scenario must not leak into this one.
         val moved = Typist()
-        moved.type("i \\n")
+        moved.type("i \n")
         val committed = moved.editor.content
         moved.send(ImeJson.caretMoved(moved.field()))
         moved.type("want ")
