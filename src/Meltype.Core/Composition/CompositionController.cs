@@ -84,7 +84,7 @@ public sealed partial class CompositionController
     /// <summary>自分が確定してから、この時間内はアプリ側のテキストがまだ更新されていないかもしれないので自分の記録を優先する。</summary>
     private const long OwnCommitTrustMs = 1500;
 
-    private readonly CompositionOutput _out = new();
+    private readonly CompositionOutput _out;
     private readonly CompositionText _text;
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     private KanaLayoutEngine _kanaLayout = new(KanaLayout.Jis);
@@ -177,6 +177,7 @@ public sealed partial class CompositionController
         _converter = converter;
         _budget = (converter as IBackgroundConverter)?.Budget;
         _settings = settings;
+        _out = new CompositionOutput(() => settings().Punctuation);
         _services = services ?? new CompositionServices();
         _learning = new CompositionLearning(_services, converter);
         _text.Manual = () => !_settings().AutoDetection;

@@ -3125,6 +3125,76 @@ internal static class CompositionTests
         Assert.Equal("x64，arm64", k.Host.Document);
     }
 
+    /// <summary>Mozc と同じく、読みの 、。 はそのまま、，． は半角の , . にして返す変換エンジン。渡された読みを覚える。</summary>
+    private sealed class PunctuationEchoConverter : IKanjiConverter
+    {
+        private static readonly (string Kana, string Text)[] Words = [("わたしは", "私は"), ("りんご", "林檎"), ("3こ", "3個")];
+
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana);
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            return [new(hiragana, Map(hiragana))];
+        }
+
+        private static string Map(string reading)
+        {
+            foreach (var (kana, text) in Words) reading = reading.Replace(kana, text, StringComparison.Ordinal);
+            return reading.Replace('，', ',').Replace('．', '.');
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingReachesConvertedText()
+    {
+        // #498・#1725: 設定の句読点が、Space の変換・ライブ変換のどちらでも変換結果に出る (，． を変換エンジンに渡すと半角の , . で返ってくる)
+        foreach (var (style, expected) in new[]
+        {
+            (Meltype.Config.PunctuationStyle.Japanese, "私は、林檎、3個。"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "私は，林檎，3個．"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaKuten, "私は，林檎，3個。"),
+            (Meltype.Config.PunctuationStyle.ToutenFullWidthPeriod, "私は、林檎、3個．"),
+        })
+        {
+            var name = style.ToString();
+            var converter = new PunctuationEchoConverter();
+            var k = new Keyboard(converter: converter) { Punctuation = style };
+            k.Type("watasiha,ringo,3ko. ");
+            Assert.Equal(expected, k.Showing, name + ": Space で変換");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Output.Single(), name + ": 変換して確定");
+            Assert.True(converter.Received.All(r => !r.Contains('，') && !r.Contains('．')), name + ": 変換エンジンには 、。 で渡す: " + string.Join(" / ", converter.Received));
+
+            var live = new Keyboard(live: true, converter: new PunctuationEchoConverter()) { Punctuation = style };
+            live.Type("watasiha,ringo,3ko.");
+            Assert.Equal(expected, live.Showing, name + ": ライブ変換");
+            live.Type("\n");
+            Assert.Equal(expected, live.Host.Output.Single(), name + ": ライブ変換のまま確定");
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingKeepsHalfWidthDotsAndCommas()
+    {
+        // 設定の句読点を当てるのは 、。 だけ。ドメイン・数字の半角の . , は変えない
+        foreach (var style in Enum.GetValues<Meltype.Config.PunctuationStyle>())
+        {
+            foreach (var (keys, expected) in new[] { ("example.com\n", "example.com"), ("1.5to1,000\n", "1.5と1,000") })
+            {
+                var k = new Keyboard { Punctuation = style };
+                k.Type(keys);
+                Assert.Equal(expected, k.Host.Document, style.ToString());
+            }
+        }
+    }
+
     [Test]
     public static void Punctuation_AfterEnglish_FollowsSetting()
     {

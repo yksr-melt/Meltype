@@ -60,7 +60,6 @@ public sealed partial class CompositionController
             {
                 PrecedingEnglish = englishWords > 0 ? true : null,
                 PrecedingEnglishSentence = englishWords >= 2,
-                Punctuation = _settings().Punctuation,
             };
             foreach (var c in word) typed.Append(c);
             var segments = typed.Segments();

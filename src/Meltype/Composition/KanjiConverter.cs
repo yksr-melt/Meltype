@@ -85,7 +85,7 @@ public sealed class MsImeKanjiConverter : IKanjiConverter, IDisposable
         var start = 0;
         while (text.Length - start > max)
         {
-            var cut = Find("。．！？!?") ?? Find("、，,") ?? Find("はがをにでともへやの") ?? start + max;
+            var cut = Find("。！？!?") ?? Find("、,") ?? Find("はがをにでともへやの") ?? start + max;
             parts.Add(text[start..cut]);
             start = cut;
         }
