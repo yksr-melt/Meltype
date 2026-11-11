@@ -37,7 +37,7 @@
         <li>Androidは入力欄の事実（アプリのパッケージ名、キャレットの前4000字・後ろ20字の文字（Mac・Linuxと同じ。変換中の文字は除く）、選択している文字、パスワード欄・学習しないでほしい欄の印）とキーを出来事のJSONで送る。自分の文字を持たない入力欄（<code>TYPE_NULL</code>）では前後の文字を送らず、前の文字を消せない欄として送る。JSONを作る・読むのは<code>core/ImeJson.kt</code>だけ。</li>
         <li>キーボード自身がCoreのために書き換えた分（確定・変換中の文字・Coreが通したキー）では、キャレットが動いたことにしない。それ以外の移動（タップ、矢印キー、アプリの書き換え、Kotlinの入力）は<code>CaretMoved</code>で伝え、Coreは前の語を確定し直さない。変換中なら、出ている文字のまま確定して<code>CommittedByApp</code>を送る。入力欄を離れるときも、出ている文字のまま確定する。</li>
         <li>Coreが日英の判別、未確定文字、変換・予測候補、学習するかを管理する。かな漢字変換には端末内のMozcを使用する。</li>
-        <li><code>CoreInputAdapter</code>がCoreの指示をAndroidの<code>InputConnection</code>へ反映する（確定し直すときは<code>removeBefore</code>の長さだけ消して入れる）。<code>CoreCandidateChoices</code>がCoreの一覧（変換の候補か予測変換の候補のどちらか1つ）の番号を保ち、入力中は「ひらがな」「カタカナ」「英字」の固定の候補を足す。</li>
+        <li><code>CoreInputAdapter</code>がCoreの指示をAndroidの<code>InputConnection</code>へ反映する（確定し直すときは<code>removeBefore</code>の長さだけ消して入れる）。<code>CoreCandidateChoices</code>がCoreの一覧（変換の候補か予測変換の候補のどちらか1つ）の番号を保ち、その一覧だけを候補バーに出す。</li>
       </ol>
       <p>Coreが利用できない場合は例外でIME全体を落とさず、既存のKotlin入力処理に戻る。入力欄の性質により変換や学習を抑止する（<a href="09-privacy-security.html">09</a>）。</p>
       <h2 id="設定">設定</h2>
@@ -45,7 +45,6 @@
       <h2 id="操作">操作</h2>
       <ul>
         <li>QWERTY入力では通常、言語切り替えキーを押す必要はない。</li>
-        <li>判別を訂正したいときは、「ひらがな」「カタカナ」「英字」の候補を選ぶ（F6・F7・F10のあと確定）。</li>
         <li>言語配列を明示的に選ぶ場合はスペースを長押しする。記号と数字には専用の2ページ配列を使用する。</li>
         <li>入力候補のタップ、句読点・確定操作は未確定文字と変換状態に応じて処理する。</li>
       </ul>

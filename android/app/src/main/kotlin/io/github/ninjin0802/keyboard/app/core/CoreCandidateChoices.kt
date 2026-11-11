@@ -2,30 +2,15 @@
 // Copyright (C) 2026 KoheiTakada
 package io.github.ninjin0802.keyboard.app.core
 
-/**
- * What a tap on a candidate does. [CORE] is an item of the Core's one list (view.candidates);
- * the others are fixed choices that send F6 / F7 / F10 and then Enter.
- */
-internal enum class CoreChoiceKind(val vk: Int) {
-    CORE(0), TO_HIRAGANA(0x75), TO_KATAKANA(0x76), TO_LATIN(0x79)
-}
-
+/** An item of the Core's one list (view.candidates). A tap sends CandidateClicked with [nativeIndex]. */
 internal data class CoreChoice(
     val label: String,
-    val kind: CoreChoiceKind,
-    /** Index in the Core's list for [CoreChoiceKind.CORE] (CandidateClicked), otherwise -1. */
-    val nativeIndex: Int = -1,
+    /** Index in the Core's list. */
+    val nativeIndex: Int,
 )
 
 /** Maps the Core's view to the Android candidate bar while preserving native indices. */
 internal object CoreCandidateChoices {
-    /** Labels of the fixed choices shown while typing (not converting). */
-    val fixedChoices = listOf(
-        CoreChoice("ひらがな", CoreChoiceKind.TO_HIRAGANA),
-        CoreChoice("カタカナ", CoreChoiceKind.TO_KATAKANA),
-        CoreChoice("英字", CoreChoiceKind.TO_LATIN),
-    )
-
     /** Screens out only candidates containing Unicode emoji, not ordinary punctuation. */
     fun hasEmoji(text: String): Boolean {
         var index = 0
@@ -41,16 +26,15 @@ internal object CoreCandidateChoices {
         return false
     }
 
-    /** The choices to show and which of them is selected. */
+    /** The choices to show (only the Core's list; nothing when the Core gives none) and which of them is selected. */
     fun fromView(view: ImeView?, allowEmoji: Boolean = true): Pair<List<CoreChoice>, Int?> {
         if (view == null || view.text.isEmpty()) return emptyList<CoreChoice>() to null
         val result = ArrayList<CoreChoice>()
         val list = view.candidates
         list?.items?.forEachIndexed { index, label ->
-            if (label.isNotBlank() && (allowEmoji || !hasEmoji(label))) result.add(CoreChoice(label, CoreChoiceKind.CORE, index))
+            if (label.isNotBlank() && (allowEmoji || !hasEmoji(label))) result.add(CoreChoice(label, index))
         }
         val selected = list?.let { l -> result.indexOfFirst { it.nativeIndex == l.selected }.takeIf { it >= 0 } }
-        if (!view.converting) result.addAll(fixedChoices)
         return result to selected
     }
 }

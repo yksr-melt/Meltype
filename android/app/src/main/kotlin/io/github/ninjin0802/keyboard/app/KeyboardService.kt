@@ -24,7 +24,6 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.view.Gravity
 import io.github.ninjin0802.keyboard.app.core.CaretWatch
-import io.github.ninjin0802.keyboard.app.core.CoreChoiceKind
 import io.github.ninjin0802.keyboard.app.core.CoreInputAdapter
 import io.github.ninjin0802.keyboard.app.core.CoreMozcCallbacks
 import io.github.ninjin0802.keyboard.app.core.ImeFieldFacts
@@ -172,7 +171,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         return coreSend(instance, ImeJson.characterKey(ch, shift, fieldFacts()))
     }
 
-    /** A key without a character (Back 0x08, Enter 0x0D, F6 0x75, F7 0x76, F10 0x79). */
+    /** A key without a character (Back 0x08, Enter 0x0D). */
     private fun coreVirtualKey(vk: Int): Boolean {
         val instance = coreForRomaji() ?: return false
         return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts()))
@@ -400,18 +399,11 @@ class KeyboardService : InputMethodService(), KeyListener {
             val instance = core
             if (instance != null && nav.current == LayoutId.ROMAJI) {
                 val choice = coreInput.choices.getOrNull(index)
-                when {
-                    choice == null -> Unit
-                    choice.kind == CoreChoiceKind.CORE -> {
-                        // A prediction is committed by the click itself. A conversion
-                        // candidate is only selected, so a tap also presses Enter.
-                        coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
-                        if (coreInput.composing) coreVirtualKey(0x0D)
-                    }
-                    else -> {
-                        coreVirtualKey(choice.kind.vk) // F6 / F7 / F10
-                        coreVirtualKey(0x0D) // Enter: commit the corrected text
-                    }
+                if (choice != null) {
+                    // A prediction is committed by the click itself. A conversion
+                    // candidate is only selected, so a tap also presses Enter.
+                    coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
+                    if (coreInput.composing) coreVirtualKey(0x0D)
                 }
             } else render(session.handle(Operation.Pick(index)))
         } }

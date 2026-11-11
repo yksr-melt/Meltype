@@ -122,8 +122,9 @@ class LanguageDetectionDeviceTest {
         )
         val (choices, selected) = CoreCandidateChoices.fromView(typing)
         assertEquals(null, selected)
-        assertEquals(listOf("hello", "help"), choices.filter { it.kind == CoreChoiceKind.CORE }.map { it.label })
-        assertEquals(listOf(0, 1), choices.filter { it.kind == CoreChoiceKind.CORE }.map { it.nativeIndex })
+        // Only the Core's list: nothing is added after it while typing.
+        assertEquals(listOf("hello", "help"), choices.map { it.label })
+        assertEquals(listOf(0, 1), choices.map { it.nativeIndex })
         val converted = viewOf(
             """{"text":"こんにちは","converting":true,"clauses":["こんにちは"],"selectedClause":0,"hint":"",
             "spellingSuggestion":null,"typedKeys":null,"candidates":{"items":["今日は","こんにちは"],"notes":[null,null],
@@ -133,19 +134,17 @@ class LanguageDetectionDeviceTest {
         assertEquals(1, selection)
         assertEquals("こんにちは", convertedChoices[1].label)
         assertEquals(1, convertedChoices[1].nativeIndex)
-        assertTrue("No fixed choices while converting", convertedChoices.all { it.kind == CoreChoiceKind.CORE })
+        assertEquals("Only the Core's list while converting", listOf("今日は", "こんにちは"), convertedChoices.map { it.label })
     }
 
-    @Test fun fixedCorrectionsAreOfferedWhileTyping() {
+    @Test fun typingWithoutCoreCandidatesShowsNoChoices() {
         val typing = viewOf(
             """{"text":"日本語","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,
             "typedKeys":null,"candidates":null}"""
         )
-        val (choices, _) = CoreCandidateChoices.fromView(typing)
-        assertEquals(
-            listOf(CoreChoiceKind.TO_HIRAGANA to 0x75, CoreChoiceKind.TO_KATAKANA to 0x76, CoreChoiceKind.TO_LATIN to 0x79),
-            choices.map { it.kind to it.kind.vk },
-        )
+        val (choices, selected) = CoreCandidateChoices.fromView(typing)
+        assertTrue("No fixed choices when the Core gives no list", choices.isEmpty())
+        assertEquals(null, selected)
         assertEquals(null, CoreCandidateChoices.fromView(null).second)
         assertTrue(CoreCandidateChoices.fromView(null).first.isEmpty())
     }
@@ -209,14 +208,15 @@ class LanguageDetectionDeviceTest {
         assertTrue(noEmoji.keys.none { it.action == io.github.ninjin0802.keyboard.app.layout.KeyAction.Emoji })
     }
 
-    @Test fun originalLatinCorrectionCanBeSelectedAndCommitted() {
+    @Test fun typingShowsOnlyTheCoreCandidates() {
         CoreTypist().use { typist ->
             typist.type("nihongo")
             assertTrue("Japanese romaji should be composing", typist.adapter.composing)
-            val latin = typist.adapter.choices.single { it.kind == CoreChoiceKind.TO_LATIN }
-            typist.key(latin.kind.vk) // F10: original Latin spelling
+            val labels = typist.adapter.choices.map { it.label }
+            assertTrue("No fixed kana / Latin choices: $labels", labels.none { it in setOf("ひらがな", "カタカナ", "英字") })
+            assertTrue("Every choice is an item of the Core's list", typist.adapter.choices.all { it.nativeIndex >= 0 })
             typist.key(0x0D) // Enter: commit
-            assertEquals("nihongo", typist.text)
+            assertTrue("Nothing is shown after the commit", typist.adapter.choices.isEmpty())
         }
     }
 
@@ -297,7 +297,7 @@ class LanguageDetectionDeviceTest {
         CoreTypist().use { typist ->
             typist.type("hell")
             val option = typist.adapter.choices.firstOrNull {
-                it.kind == CoreChoiceKind.CORE && it.label.startsWith("hell")
+                it.label.startsWith("hell")
             }
             assertTrue("No English prediction from Native Core for hell: " + typist.adapter.choices, option != null)
             // A prediction is committed by the click itself (no Enter).

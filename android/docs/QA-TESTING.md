@@ -40,11 +40,11 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | A01 | englishStaysLatin | hello / meeting | hello / meeting（英字保持） |
 | A02 | japaneseRomajiBecomesKana | arigatou / konnichiwa | ありがとう / こんいちわ（デスクトップ版と同じく nn は ん） |
 | A03 | mixedLanguagesWithoutManualToggle | hello arigatou | hello ありがとう |
-| A04 | choicesKeepTheCoreIndicesForClicks | Coreの一覧 hello,help、変換中の一覧2件 | Coreの番号0/1を保持し、変換中は固定の候補を出さない |
-| A05 | fixedCorrectionsAreOfferedWhileTyping | 入力中（一覧なし） | ひらがな・カタカナ・英字（F6・F7・F10）の固定の候補 |
+| A04 | choicesKeepTheCoreIndicesForClicks | Coreの一覧 hello,help、変換中の一覧2件 | Coreの番号0/1を保持し、入力中も変換中もCoreの一覧だけを出す |
+| A05 | typingWithoutCoreCandidatesShowsNoChoices | 入力中（一覧なし） | 候補を出さない（固定の候補を足さない） |
 | A06 | emojiPreferenceFiltersPredictionsWithoutShiftingIndices | ありがとう😊, ありがとうございます | 絵文字OFFでは絵文字付きだけ除外し、残りはCoreの番号のまま |
 | A07 | settingsPersistJapaneseSpaceAndEmojiPreferences | 日本語スペース/絵文字をOFF→ON | 設定を読み直しても反映 |
-| A08 | originalLatinCorrectionCanBeSelectedAndCommitted | nihongo→「英字」(F10)→Enter | nihongo確定 |
+| A08 | typingShowsOnlyTheCoreCandidates | nihongo→Enter | 入力中はCoreの一覧の候補だけ（ひらがな・カタカナ・英字の固定の候補なし）、確定後は候補なし |
 | A09 | digitsStayInCompositionUntilExplicitEnter | arigatou→テンキー123 | Enter前に未確定文字が消えない |
 | A10 | candidateBarTextIsReadableAndHasBreathingRoom | 410dpバー＋長い日本語候補 | 高さ≥68dp、文字・余白を保持 |
 | A11 | exteriorMarginsStayUnclickableWhileLetterKeysWork | 400dp幅で左右余白・上端・Qを判定 | 余白にキーなし、Qは認識 |
@@ -88,7 +88,7 @@ A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定J
 | M04 | 広い展開画面 | テンキー表示を確認 | しきい値とキー幅が仕様どおり |
 | M05 | 開閉と回転 | 候補・絵文字パネルの表示 | レイアウト追従・重なり無し |
 | M06 | 日本語QWERTY | 、。!?＋記号2ページ＋Space長押し→指を離さず上下スワイプ→選択した行で指を離す | 押下位置の真上に吹き出し表示、選択行を強調し、指を離した位置で言語が切り替わる。メニュー外ではキャンセル、空白の誤入力なし |
-| M07 | 変換訂正 | nihongo→英字訂正→Space/Enter | 重複・欠落なく確定 |
+| M07 | 変換確定 | nihongo→Space→Enter | 重複・欠落なく確定。候補バーにはCoreの一覧だけが出る |
 | M08 | 設定 | 保存と戻る操作 | 設定保存、ステータスバー非重複 |
 | M09 | 日本語QWERTY | i␣Enter のあと前の文をタップしてから want␣ | タップした所の前の語を書き換えない |
 | M10 | 日本語QWERTY | 変換中に入力欄の別の所をタップ | 出ていた文字のまま確定し、続けて打つと新しい位置に入る |

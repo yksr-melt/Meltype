@@ -44,7 +44,7 @@ internal object ImeJson {
     fun characterKey(ch: Int, shift: Boolean, field: ImeFieldFacts): String =
         event("KeyPressed", field) { put("key", JSONObject().put("ch", ch).put("shift", shift)) }
 
-    /** 文字の無いキー (Back 0x08・Enter 0x0D・F6 0x75・F7 0x76・F10 0x79 など)。vk は Windows の仮想キーコード。 */
+    /** 文字の無いキー (Back 0x08・Enter 0x0D など)。vk は Windows の仮想キーコード。 */
     fun virtualKey(vk: Int, field: ImeFieldFacts): String =
         event("KeyPressed", field) { put("key", JSONObject().put("vk", vk)) }
 

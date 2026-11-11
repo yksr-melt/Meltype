@@ -149,7 +149,7 @@
 </tbody></table>
 <p>目安を超えたら、原因を調べて直すか、この表の値を理由とともに見直す。</p>
 <h2 id="段階2と段階3のテスト">日英自動判別のテスト（実装済み）</h2>
-<p>日本語QWERTYはKotlin移植版ではなく、Android NativeAOT/JNIで共有したC# Coreを試験する。入力文字列（日本語・英語・混在）、予測・変換候補の選択、候補インデックス、英字・かな・カタカナ訂正、絵文字設定、画面回転と折りたたみ配列を確認する。キャレットの移動（キーボード自身の書き換えを移動と取り違えないこと、アプリが動かしたら前の語を確定し直さないこと）、入力欄の出入り、Coreの設定（<code>config.json</code>）が次のキーから効くことも確かめる（<a href="../QA-TESTING.md">QA-TESTING</a>）。</p>
+<p>日本語QWERTYはKotlin移植版ではなく、Android NativeAOT/JNIで共有したC# Coreを試験する。入力文字列（日本語・英語・混在）、予測・変換候補の選択、候補インデックス、Coreの一覧だけを出すこと、絵文字設定、画面回転と折りたたみ配列を確認する。キャレットの移動（キーボード自身の書き換えを移動と取り違えないこと、アプリが動かしたら前の語を確定し直さないこと）、入力欄の出入り、Coreの設定（<code>config.json</code>）が次のキーから効くことも確かめる（<a href="../QA-TESTING.md">QA-TESTING</a>）。</p>
 <p>2026-10-25のQAソースでは、Android 15エミュレーターのInstrumentationテスト18件がすべて成功。設定画面のシステムバー余白とBackの回帰も含む。<a href="https://github.com/KoheiTakada/Meltypetest/actions/runs/40163689812">CI証跡</a>。同日、Pixel 10 Pro Fold（Android 17）で実機確認済み。これは全Android端末への互換性を保証するものではない。</p>
 <p>読みから英字を推薦する独立機能（<a href="07-kana-to-english.html">07</a>）は未対応のため、日英自動判別の合格に含めない。</p>
       <nav class="pager" aria-label="前後の章">
