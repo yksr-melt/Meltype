@@ -20,7 +20,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
 
     public ConversionBudget Budget => mozc.Budget;
 
-    /// <summary>Mozc のヘルパーがあるか (不具合報告に出す)。</summary>
+    /// <summary>Mozc のヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool MozcInstalled => mozc.IsInstalled;
 
     public event Action? ResultReady

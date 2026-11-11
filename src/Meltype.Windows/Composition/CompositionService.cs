@@ -34,9 +34,6 @@ internal sealed class CompositionService : IDisposable
         _hybrid.WarmUp();
     }
 
-    /// <summary>Mozc のヘルパーがあるか (不具合報告に出す)。</summary>
-    public bool MozcInstalled => _hybrid.MozcInstalled;
-
     public MeltypeRuntime Runtime { get; }
 
     /// <summary>

@@ -127,9 +127,10 @@ if fetch_verified "https://github.com/ggml-org/llama.cpp/releases/download/$LLAM
         pending=("${pending[@]:1}")
         while read -r lib; do
             name="${lib#@rpath/}"
-            [[ -e "$ZENZAI/$name" ]] && continue
-            cp -L "$BUILD/llama/$name" "$ZENZAI/$name"
-            pending+=("$name")
+            if [[ ! -e "$ZENZAI/$name" ]]; then
+                cp -L "$BUILD/llama/$name" "$ZENZAI/$name"
+                pending+=("$name")
+            fi
         done < <(otool -L "$ZENZAI/$file" | awk '/@rpath\//{print $1}')
     done
     echo "Zenzai の llama-server を同梱しました: $LLAMA_BUILD"
@@ -141,7 +142,7 @@ fi
 # Contents/Resources の実行ファイル・ライブラリ (Mozc のヘルパー・llama-server) は --deep では署名されないので、1 つずつ署名する
 nested=("$APP/Contents/Frameworks/"* "$APP/Contents/Resources/mozc/meltype_mozc_helper")
 for item in "$ZENZAI"/llama-server "$ZENZAI"/*.dylib; do
-    [[ -e "$item" ]] && nested+=("$item")
+    if [[ -e "$item" ]]; then nested+=("$item"); fi
 done
 if [[ -n "${MELTYPE_MAC_IDENTITY:-}" ]]; then
     for item in "${nested[@]}"; do
