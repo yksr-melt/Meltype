@@ -625,36 +625,23 @@ public sealed partial class CompositionController
     /// </summary>
     private List<string> JapaneseCandidates(string reading, string? inContext)
     {
-        // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        var candidates = Distinct(inContext);
-        foreach (var word in _services.UserDictionary?.Lookup(reading) ?? []) if (!Listed(candidates, word)) candidates.Add(word);
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
-        if (!Listed(candidates, standalone)) candidates.Add(standalone);
-        foreach (var extra in _services.Candidates?.LookupWords(reading) ?? [])
-        {
-            if (!Listed(candidates, extra)) candidates.Add(extra);
-        }
         var katakana = CompositionText.ToKatakana(reading);
-        foreach (var kana in new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) })
-        {
-            if (!Listed(candidates, kana)) candidates.Add(kana);
-        }
-        foreach (var emoji in EmojiBlock(reading))
-        {
-            if (!Listed(candidates, emoji)) candidates.Add(emoji);
-        }
-        return candidates;
+        // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
+        return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
+            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
     }
 
     /// <summary>
-    /// 入力欄に出る文字が同じ候補が、一覧にもうあるか。句読点の設定が「，．」なら、変換エンジンが返す 、 と ， は同じ ， になる。
+    /// 入力欄に出る文字 (設定の句読点にした文字) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、変換エンジンが返す 、 と ， が同じ ， になる。
+    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。区間の種類を出口まで渡せば要らなくなる (#1735)。
     /// </summary>
-    private bool Listed(List<string> candidates, string candidate)
+    private List<string> DistinctShown(IEnumerable<string?> candidates)
     {
         var style = _settings().Punctuation;
-        var shown = CompositionOutput.ToSetting(style, candidate);
-        return candidates.Any(c => CompositionOutput.ToSetting(style, c) == shown);
+        var shown = new HashSet<string>(StringComparer.Ordinal);
+        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.ToSetting(style, c)))];
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -740,11 +727,7 @@ public sealed partial class CompositionController
         var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : 0;
         if (anchor < 0) return;
         var current = clause.Text;
-        var merged = clause.Candidates.Take(anchor + 1).ToList();
-        foreach (var candidate in more(reading).Select(c => NormalizeHalfWidth(c, reading)).Concat(clause.Candidates.Skip(anchor + 1)))
-        {
-            if (!Listed(merged, candidate)) merged.Add(candidate);
-        }
+        var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
     }

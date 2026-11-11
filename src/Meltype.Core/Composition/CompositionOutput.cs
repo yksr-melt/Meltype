@@ -9,6 +9,7 @@ namespace Meltype.Composition;
 /// 出来事 1 つの間の、入力欄への書き込み (<see cref="TextEdit"/>)・変換ボックスの表示・キーをアプリに通すか。
 /// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="CompositionText"/> の Symbol)、設定の句読点はここで書き込み・表示の文字に当てる。
 /// 入力欄から読んだ文字 (<see cref="Before"/>・<see cref="After"/>) は、設定の句読点を 、。 に戻して渡す。
+/// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) と候補の重複を消す所 (<see cref="ToSetting"/>) だけ。
 /// </summary>
 internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuation)
 {
@@ -21,7 +22,6 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
     // 英数状態で判定中の語のうち、アプリに通した文字 (日本語と分かったら消す)
     private readonly StringBuilder _heldPassed = new();
     private string? _before;
-    private string? _after;
     private CompositionView? _view;
     private bool _hidden;
 
@@ -40,7 +40,7 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
         }
     }
 
-    public string? After => _after is null ? null : FromSetting(punctuation(), _after);
+    public string? After { get; private set; }
 
     public CompositionView? View => _hidden ? null : _view;
 
@@ -50,7 +50,7 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
         _pendingDelete = 0;
         _pendingExpect = null;
         _before = before;
-        _after = after;
+        After = after is null ? null : FromSetting(punctuation(), after);
         PassedCurrent = false;
         _hidden = false;
     }

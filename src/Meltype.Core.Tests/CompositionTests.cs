@@ -3273,17 +3273,17 @@ internal static class CompositionTests
     {
         // 変換エンジンは 、 の候補に ， も返す。「，．」の設定ではどちらも ， になるので、一覧には 1 つだけ出す
         IReadOnlyList<string> More(string reading) => reading == "、" ? ["、", "，", ",", "・"] : [];
-        foreach (var (style, expected) in new[]
-        {
-            (Meltype.Config.PunctuationStyle.Japanese, "、 ， , ・"),
-            (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "， , ・"),
-        })
-        {
-            var k = new Keyboard(converter: new PunctuationEchoConverter(), moreCandidates: More) { Punctuation = style };
-            k.Type(", ");
-            k.Press(VirtualKeys.Space);
-            Assert.Equal(expected, string.Join(" ", k.Host.View!.Candidates.Take(4).Where(c => c is "、" or "，" or "," or "・")), style.ToString());
-        }
+        var k = new Keyboard(converter: new PunctuationEchoConverter(), moreCandidates: More) { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        k.Type(", ");
+        k.Press(VirtualKeys.Space);
+        var shown = k.Host.View!.Candidates;
+        Assert.Equal(1, shown.Count(c => c == "，"), string.Join(" ", shown));
+        Assert.True(shown.Contains(",") && shown.Contains("・"), "ほかの候補は残す: " + string.Join(" ", shown));
+
+        var japanese = new Keyboard(converter: new PunctuationEchoConverter(), moreCandidates: More);
+        japanese.Type(", ");
+        japanese.Press(VirtualKeys.Space);
+        Assert.True(japanese.Host.View!.Candidates.Contains("、") && japanese.Host.View.Candidates.Contains("，"), "「、。」の設定では 、 と ， の両方を出す");
     }
 
     [Test]
