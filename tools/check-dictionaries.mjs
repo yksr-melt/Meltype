@@ -55,8 +55,11 @@ const dictionaries = {
     // 分類ごとに同じ語を置いてよい (同じ綴りなら正規形は変わらない)
     allowRepeats: true,
   },
+  // Core は小文字にして読むので、大文字を含んでも同じ語 (日本語由来の節は sections で見る)
   'english.txt': {
-    format: words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
+    format: words(w => /^[A-Za-z][A-Za-z0-9_'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
+    // Core は小文字にして読む
+    keysOf: line => [[line.trim().toLowerCase(), line.trim().toLowerCase()]],
     sections: japaneseOriginSection,
   },
   'english-words.txt': {
@@ -79,11 +82,11 @@ const dictionaries = {
     // Core は繋げた形をキーに、後の行で上書きする
     keysOf: line => { const [joined, phrase] = line.split('\t'); return [[joined, phrase]]; },
   },
-  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ
+  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ。Core は小文字にして読む
   'english-readable.txt': {
-    format: words(w => /^[a-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の小文字の英字の語でない`),
-    // 1 行に複数の語を置けるので、語ごとに見る
-    keysOf: line => tokens(line).map(w => [w, w]),
+    format: words(w => /^[A-Za-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の英字の語でない`),
+    // 1 行に複数の語を置けるので、語ごとに見る。Core は小文字にして読むので、大文字小文字だけ違う語は同じ語
+    keysOf: line => tokens(line).map(w => [w.toLowerCase(), w.toLowerCase()]),
   },
   'japanese.txt': {
     format: words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
