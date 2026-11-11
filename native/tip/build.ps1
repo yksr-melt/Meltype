@@ -3,7 +3,7 @@
 #
 # Meltype IME (TSF の DLL) をビルドする。Visual Studio Build Tools (C++) が要る。
 #   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug]
-# 出力: native\tip\bin\x64\MeltypeTip.dll と native\tip\bin\x86\MeltypeTip.dll (32bit のアプリ用)
+# 出力: native\tip\bin\x64 と native\tip\bin\x86 (32bit のアプリ用) に、MeltypeTip.dll (stub) と MeltypeTipImpl.dll (impl)
 
 param([ValidateSet('Release', 'Debug')][string]$Configuration = 'Release')
 
@@ -24,7 +24,6 @@ function Get-Sha256([string]$path) {
     finally { $sha.Dispose() }
 }
 
-# stub (MeltypeTip.dll): COM に登録する DLL。impl (MeltypeTipImpl.dll): stub が読み込み、アプリを起動し直さずに入れ替える DLL
 $dlls = @(
     @{ Name = 'MeltypeTip'; Sources = 'Dll.cpp', 'Stub.cpp', 'Common.cpp' },
     @{ Name = 'MeltypeTipImpl'; Sources = 'Impl.cpp', 'TextService.cpp', 'CandidateWindow.cpp', 'DisplayAttributes.cpp', 'LangBar.cpp', 'Pipe.cpp', 'Json.cpp', 'Common.cpp' }

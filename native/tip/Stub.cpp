@@ -99,7 +99,7 @@ public:
     STDMETHODIMP Activate(ITfThreadMgr* threadMgr, TfClientId clientId) override { return ActivateEx(threadMgr, clientId, 0); }
     STDMETHODIMP ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientId, DWORD flags) override {
         if (inner_ == nullptr) {
-            // 作ったときは impl を置いている途中だった
+            // Register-Tip.ps1 が impl を置いている途中に作られた
             loaded_ = CurrentImpl();
             inner_ = CreateInner(loaded_, window_);
         }
@@ -156,10 +156,9 @@ private:
         return DefWindowProcW(window, message, wParam, lParam);
     }
 
-    // MeltypeTipImpl.dll.sha256 が読み込んだ impl と違えば、同じ ITfThreadMgr・TfClientId のまま impl を入れ替える。
-    // impl の Deactivate が変換中の文字を確定する
+    // 変換中の文字は、前の impl の Deactivate が確定する
     void Reload() {
-        // 入れ替える impl が無い間 (Meltype.exe だけが違うビルド) は、impl が要求のたびに知らせてくる
+        // 入れ替える impl が無い間 (Meltype.exe だけが違うビルド) は、impl が要求のたびに kStubImplStale を送ってくる
         const ULONGLONG now = GetTickCount64();
         if (now - lastReload_ < 1000) return;
         lastReload_ = now;

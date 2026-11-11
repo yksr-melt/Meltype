@@ -140,7 +140,7 @@ STDAPI DllGetClassObject(REFCLSID clsid, REFIID riid, void** ppv) {
     return g_factory.QueryInterface(riid, ppv);
 }
 
-// impl は外さないので、stub も外さない
+// stub も impl も、アプリが終わるまで外さない
 STDAPI DllCanUnloadNow() { return S_FALSE; }
 
 STDAPI DllRegisterServer() {
