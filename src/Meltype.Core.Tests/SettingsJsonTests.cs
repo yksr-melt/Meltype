@@ -175,7 +175,7 @@ internal static class SettingsJsonTests
             File.WriteAllText(path, "{ \"SettingsVersion\": 5, \"Mode\": \"AutoSwitch\", \"TsfIntroduced\": true, \"InputStyle\": \"Both\", \"SpaceAroundEnglish\": true, \"IdleFlushMs\": 900, " +
                                     "\"ActiveProfile\": \"仕事\", \"Profiles\": [ { \"Name\": \"仕事\" }, { \"Name\": \"趣味\", \"Values\": { \"InputStyle\": \"Both\", \"LiveConversion\": false } } ] }");
             var state = AppState.Load(Path.Combine(directory, "state.json"), path);
-            Assert.True(!state.TsfIntroduced, "初めて起動したときと同じく、Meltype IME を使えなければ Meltype キーボードに戻す (Program.ShouldFallBackToKeyboard)");
+            Assert.True(!state.TsfIntroduced, "初めて起動したときと同じく、Meltype IME を使えれば入力方式も Meltype IME にする (TrayApplicationContext.IntroduceTsf)");
             var loaded = Settings.Load(path);
             Assert.Equal(InputMode.Tsf, loaded.Mode);
             Assert.Equal(InputStyle.Romaji, loaded.InputStyle);

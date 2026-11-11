@@ -326,36 +326,10 @@ internal static class WindowsTests
     }
 
     [Test]
-    public static void Startup_FallsBackToKeyboardWhenMeltypeImeIsUnusable()
-    {
-        // #366: 動作モードの初期値は Meltype IME。使えないときは、起動したときに Meltype キーボードに戻す
-        var x64 = System.Runtime.InteropServices.Architecture.X64;
-        var arm64 = System.Runtime.InteropServices.Architecture.Arm64;
-        var fresh = new Settings();
-        Assert.Equal(InputMode.Tsf, fresh.Mode, "初期値は Meltype IME");
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: true, x64), "登録済みで一覧にもある");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: true, arm64), "ARM64 は登録済みで一覧にあっても戻す");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: true, inUserLanguageList: false, x64), "登録されていない");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: false, knownUnregistered: false, inUserLanguageList: false, x64), "まだ切り替えたことがなく、一覧に無い");
-
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: true, knownUnregistered: false, inUserLanguageList: false, x64), "使っていた人は、一覧に無くても戻さない");
-        Assert.True(global::Meltype.Program.ShouldFallBackToKeyboard(fresh, tsfIntroduced: true, knownUnregistered: false, inUserLanguageList: true, arm64), "使っていた人も、ARM64 なら戻す");
-        Assert.True(!global::Meltype.Program.ShouldFallBackToKeyboard(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, knownUnregistered: true, inUserLanguageList: false, arm64), "Meltype キーボードはそのまま");
-    }
-
-    [Test]
     public static void Portable_UsesDataFolderBesideExecutable()
     {
         Assert.Equal(Path.Combine(@"C:\Apps\Meltype", "data"), AppPaths.ResolveDataDirectory(true, null, @"C:\Apps\Meltype", @"C:\Users\User\AppData\Local"));
         Assert.Equal(@"D:\MeltypeData", AppPaths.ResolveDataDirectory(true, @"D:\MeltypeData", @"C:\Apps\Meltype", @"C:\Users\User\AppData\Local"), "開発用の上書き先は portable より優先");
-    }
-
-    [Test]
-    public static void Portable_StartupResetsModeToKeyboard()
-    {
-        var x64 = System.Runtime.InteropServices.Architecture.X64;
-        Assert.True(global::Meltype.Program.ShouldUseKeyboard(new Settings { Mode = InputMode.Tsf }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "ポータブル版は Meltype IME から戻す");
-        Assert.True(!global::Meltype.Program.ShouldUseKeyboard(new Settings { Mode = InputMode.Keyboard }, tsfIntroduced: false, isPortable: true, knownUnregistered: false, inUserLanguageList: true, x64), "キーボード方式は維持");
     }
 
     [Test]

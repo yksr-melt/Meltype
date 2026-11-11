@@ -77,29 +77,24 @@ internal static class RuntimeTests
     }
 
     [Test]
-    public static void UsableSettings_AppliesToEveryRead()
+    public static void UnavailableMeltypeIme_UsesKeyboardOnEveryRead()
     {
-        // OS で使えない設定 (Windows の使えない Meltype IME) は、起動したとき・外で書き換えたとき・設定画面で変えたときのどれでも直す
+        // 使えない Meltype IME は、起動したとき・外で書き換えたとき・設定画面で変えたときのどれでも Meltype キーボードで動かす
         var directory = Path.Combine(Path.GetTempPath(), "meltype-runtime-" + Guid.NewGuid().ToString("N"));
         try
         {
             var path = Path.Combine(directory, "config.json");
             Directory.CreateDirectory(directory);
             new Settings { Mode = InputMode.Tsf }.Save(path);
-            using var runtime = new MeltypeRuntime(directory, usableSettings: settings =>
-            {
-                if (settings.Mode != InputMode.Tsf) return settings;
-                var usable = settings.Clone();
-                usable.Mode = InputMode.Keyboard;
-                return usable;
-            });
-            Assert.Equal(InputMode.Keyboard, runtime.Settings.Current.Mode, "起動したとき (保存できなかった設定を読んでも)");
+            using var runtime = new MeltypeRuntime(directory, meltypeImeAvailable: () => false);
+            Assert.Equal(InputMode.Keyboard, runtime.Settings.Current.Mode, "起動したとき");
             Settings? notified = null;
             runtime.SettingsChanged += next => notified = next;
             var next = runtime.Settings.Current.Clone();
             next.Mode = InputMode.Tsf;
             runtime.Settings.Apply(next);
             Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "設定画面で変えたとき");
+            Assert.Equal(InputMode.Tsf, Settings.Load(path).Mode, "config.json には選んだまま書く (Meltype IME を入れ直せば、次に読んだときから使う)");
             notified = null;
             next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
             next.Save(path);

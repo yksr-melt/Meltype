@@ -57,7 +57,6 @@ internal sealed class TipServer : IDisposable
 
     /// <summary>Meltype IME が登録されていないと確かに分かるか (レジストリを読めないときは false)。</summary>
     public static bool IsKnownUnregistered => Registration() == false;
-
     /// <summary>Meltype IME (native/tip の DLL) が Windows に登録されているか。</summary>
     public static bool IsRegistered => Registration() == true;
 
@@ -68,7 +67,7 @@ internal sealed class TipServer : IDisposable
 
     // 登録されているか。レジストリを読めなければ null。
     // TIP のキーだけ残り、DLL の登録 (InprocServer32) や DLL が無いことがある (セキュリティソフトが登録を途中で止めたとき)。
-    // そのときは登録されていないとみなす (動作モードを Meltype キーボードに戻す)
+    // そのときは登録されていないとみなす (Meltype キーボードで動かす)
     private static bool? Registration()
     {
         try

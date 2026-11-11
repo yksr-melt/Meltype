@@ -92,14 +92,6 @@ internal static class Program
             try { settings.Save(AppPaths.ConfigFile); } catch { }
         }
 
-        // Meltype キーボードに戻した設定を保存しておくと、あとで前の版 (動作モード「Meltype IME」を読めない) を入れても、設定が初期化されない。
-        // 保存できなくても、MeltypeRuntime が読むたびに戻す
-        if (UsableSettings(settings, state) is var usable && usable != settings)
-        {
-            settings = usable;
-            try { settings.Save(AppPaths.ConfigFile); } catch { }
-        }
-
         // ダウンロード済みの新しい版があれば、起動せずに更新する (install.ps1 が新しい版を起動する)。
         if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease,
                 version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings))) return 0;
@@ -112,7 +104,7 @@ internal static class Program
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared, loaded => UsableSettings(loaded, state)));
+            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared, () => !AppPaths.IsPortable && Tip.TipServer.IsUsable));
             engine.Start();
         }
         catch (Exception ex)
@@ -133,33 +125,6 @@ internal static class Program
         Composition.LearningSaves.FlushAll();
         return 0;
     }
-
-    /// <summary>
-    /// 動作モードが Meltype IME なのに使えなければ、Meltype キーボードに戻した設定を返す (どこでも何も起きなくなるので。Meltype IME を入れ直したら、トレイで選び直す)。
-    /// 起動したとき・config.json を読み直したとき・設定を変えたときに通す。
-    /// </summary>
-    private static Settings UsableSettings(Settings settings, AppState state)
-    {
-        if (!ShouldUseKeyboard(settings, state.TsfIntroduced, AppPaths.IsPortable, Tip.TipServer.IsKnownUnregistered, Tip.TipServer.IsInUserLanguageList, System.Runtime.InteropServices.RuntimeInformation.OSArchitecture))
-            return settings;
-        Diagnostics.Log.Warn(AppPaths.IsPortable ? "ポータブル版では Meltype IME を使わないため、Meltype キーボードに戻しました。" : "Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードを Meltype キーボードに戻しました。");
-        var usable = settings.Clone();
-        usable.Mode = InputMode.Keyboard;
-        return usable;
-    }
-
-    /// <summary>
-    /// 動作モードを Meltype IME から Meltype キーボードに戻すか。
-    /// ARM64 の Windows (Meltype IME は対応していない)・Meltype IME が登録されていない (登録を外した・ほかのユーザーがアンインストールした) とき。
-    /// まだ Meltype IME に切り替えたことがない (初期値の Meltype IME のまま) ときは、このユーザーのキーボードの一覧に無いときも戻す
-    /// (ほかのユーザーが登録した PC で Meltype IME を断ると、Win + Space で選べない)。
-    /// </summary>
-    internal static bool ShouldFallBackToKeyboard(Settings settings, bool tsfIntroduced, bool knownUnregistered, bool inUserLanguageList, System.Runtime.InteropServices.Architecture architecture) =>
-        settings.Mode == InputMode.Tsf &&
-        (architecture == System.Runtime.InteropServices.Architecture.Arm64 || knownUnregistered || (!tsfIntroduced && !inUserLanguageList));
-
-    internal static bool ShouldUseKeyboard(Settings settings, bool tsfIntroduced, bool isPortable, bool knownUnregistered, bool inUserLanguageList, System.Runtime.InteropServices.Architecture architecture) =>
-        (isPortable && settings.Mode != InputMode.Keyboard) || ShouldFallBackToKeyboard(settings, tsfIntroduced, knownUnregistered, inUserLanguageList, architecture);
 
     /// <summary>
     /// 落ちたとき (起動できなかったとき) の例外を crash.log に書き足す。ファイルへのログ (設定) が OFF でも書く:

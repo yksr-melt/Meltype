@@ -9,8 +9,8 @@ namespace Meltype.Config;
 /// 同じプロセスの設定画面 (Windows) は <see cref="Apply"/> で変える。どのスレッドから読んでもよい。
 /// </summary>
 /// <param name="loaded">読んだ・読み直した・変えたときに、lock の中で呼ぶ (待つ処理をしない)。</param>
-/// <param name="usable">読んだ・変えた設定を、この OS で使える設定に直す (<see cref="Current"/> と loaded には直した後の設定を渡す)。</param>
-internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null, Func<Settings, Settings>? usable = null)
+/// <param name="meltypeImeAvailable">動作モード「Meltype IME」を使えるか。使えなければ、読んだ・変えた設定を Meltype キーボードで動かす (config.json には Meltype IME のまま書く)。</param>
+internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null, Func<bool>? meltypeImeAvailable = null)
 {
     private readonly object _gate = new();
 
@@ -34,12 +34,13 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
     /// <summary>設定を変えて config.json に保存する。保存できなくても、このプロセスでは変えた設定を使う。</summary>
     public Settings Apply(Settings settings)
     {
-        var next = Usable(settings.Clone().Normalize());
+        var chosen = settings.Clone().Normalize();
+        var next = Usable(chosen);
         lock (_gate)
         {
             try
             {
-                next.Save(path);
+                chosen.Save(path);
                 _writeTime = File.GetLastWriteTimeUtc(path);
             }
             catch (Exception ex)
@@ -89,5 +90,12 @@ internal sealed class SettingsFile(string path, Action<Settings>? loaded = null,
         return _settings;
     }
 
-    private Settings Usable(Settings settings) => usable is null ? settings : usable(settings);
+    private Settings Usable(Settings settings)
+    {
+        if (settings.Mode != InputMode.Tsf || meltypeImeAvailable?.Invoke() != false) return settings;
+        Diagnostics.Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
+        var usable = settings.Clone();
+        usable.Mode = InputMode.Keyboard;
+        return usable;
+    }
 }

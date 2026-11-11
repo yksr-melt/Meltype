@@ -177,19 +177,8 @@ internal sealed class MeltypeEngine : IDisposable
     private bool KeyCountAllowed(Settings settings) =>
         settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
-    public void ApplySettings(Settings settings)
-    {
-        var next = settings.Clone().Normalize();
-        var previous = _settings;
-        // 設定画面で Meltype IME を選んだ (「既定値に戻す」を含む) が、ARM64 の Windows か、登録されていないか、このユーザーのキーボードの一覧に無い:
-        // どこでも何も起きなくなるので選ばせない
-        if (next.Mode == InputMode.Tsf && previous.Mode != InputMode.Tsf && !Tip.TipServer.IsUsable)
-        {
-            next.Mode = previous.Mode;
-            Log.Warn("Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードは変えません。");
-        }
-        Runtime.Settings.Apply(next);
-    }
+    /// <summary>設定を変えて保存する。Meltype IME を使えなければ、MeltypeRuntime が Meltype キーボードで動かす。</summary>
+    public void ApplySettings(Settings settings) => Runtime.Settings.Apply(settings);
 
     /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
     public void OnSettingsChanged(Settings previous, Settings next)

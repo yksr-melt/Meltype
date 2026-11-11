@@ -159,9 +159,9 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
   Meltype IME が無かった版から更新した人には、Meltype.exe が起動したときに一度だけ聞き (`TsfOffered`)、「はい」ならインストール先の meltype-ime.ps1 で登録する。
   初めて起動したとき (インストーラーが聞いている)・前に Meltype IME を使っていたとき (`TsfIntroduced`)・前に断ったとき (ImeDeclined) は聞かない。
   ImeDeclined は、UAC で断ったときと、setup.exe で「Meltype IME を登録する」のチェックを外したときに残す
-- 動作モードが Meltype IME なのに、ARM64 の Windows か、登録されていなければ (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、起動したときに Meltype キーボードに戻して保存する
-  (入れ直したら、トレイで選び直す)。登録していないか、このユーザーのキーボードの一覧に無ければ、トレイでも設定画面でも Meltype IME は選べない。
-  設定の初期値は Meltype IME なので、まだ Meltype IME に切り替えたことがない (`TsfIntroduced` が false) ときは、キーボードの一覧に無いときも起動したときに Meltype キーボードにする
+- 動作モードが Meltype IME なのに、ポータブル版か、ARM64 の Windows か、登録されていないか (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、
+  このユーザーのキーボードの一覧に無ければ、Meltype キーボードで動かす。起動したとき・config.json を読み直したとき・トレイや設定画面で変えたときのどれでも同じ。
+  config.json には Meltype IME のまま残すので、Meltype IME を入れ直せば次に読んだときから Meltype IME で動く
 - 管理者として動かす前に、DLL が配布したときのハッシュ (`MeltypeTip.dll.package.sha256`、無ければ `.sha256`) と合うかを確かめる (壊れた DLL を登録しないため)。
   確かめてから使うまでにすり替えられないように、管理者として動く側は DLL と Register-Tip.ps1 を `C:\Program Files\Meltype` の下に写し、昇格する前に確かめたハッシュと合うものだけで登録する。
   その処理は、ファイルではなくコマンドとして渡す (ユーザーのフォルダーのスクリプトを、管理者として直接動かさない)
