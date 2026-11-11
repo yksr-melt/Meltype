@@ -42,7 +42,7 @@ jobs:
         shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'signpath-unsigned'
-          dotnet publish src/Meltype/Meltype.csproj -c Release -o $out -p:DebugType=none -p:IncludeSourceRevisionInInformationalVersion=false
+          dotnet publish src/Meltype.Windows/Meltype.Windows.csproj -c Release -o $out -p:DebugType=none -p:IncludeSourceRevisionInInformationalVersion=false
           if ($LASTEXITCODE -ne 0) { throw 'publish に失敗しました。' }
           Copy-Item LICENSE (Join-Path $out 'LICENSE.txt')
           Copy-Item THIRD-PARTY-NOTICES.md (Join-Path $out 'THIRD-PARTY-NOTICES.txt')
@@ -59,7 +59,7 @@ jobs:
       - name: Test application before uploading
         shell: pwsh
         run: |
-          dotnet run --project src/Meltype.Tests -c Release --no-build
+          dotnet run --project src/Meltype.Windows.Tests -c Release --no-build
           if ($LASTEXITCODE -ne 0) { throw 'テストに失敗しました。' }
       - name: Upload unsigned input for origin verification
         id: unsigned
