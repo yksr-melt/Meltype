@@ -30,7 +30,7 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 
 出力: instrumentation.log（生ログ）、instrumentation.xml（JUnit XML）、test-cases.md（ケース別成否）、summary.md、device-info.txt。実行スクリプトは実際の @Test fun 一覧と計測結果を照合し、未実行・予期しない・失敗ケースを検出する。
 
-アプリの計測は、下表の4クラスに加え、文字削除・タッチ操作・Coreブリッジの3クラスと、選んだキーボードで実際に打つ ImeLaunchDeviceTest も実行する。Coreのデータディレクトリはプロセスごとに固定されるため、別のディレクトリを使うブリッジ試験は別プロセスで実行し、2回分を集計する。各ケースの結果は `test-cases.md` と `instrumentation.xml` に記録する。Mozcの計測は別のGradleタスクで実行し、結果を `mozc/build/outputs/androidTest-results/connected/` に記録する。
+アプリの計測は下表のクラスに加え、文字削除・タッチ操作の検証と、選んだキーボードで実際に打つ ImeLaunchDeviceTest も実行する。Coreのデータディレクトリはプロセスごとに固定されるため、別のディレクトリを使うブリッジ試験は別プロセスで実行する。実IMEの入力試験も含む3回の計測結果を集計する。各ケースの結果は `test-cases.md` と `instrumentation.xml` に記録する。Mozcの計測は別のGradleタスクで実行し、結果を `mozc/build/outputs/androidTest-results/connected/` に記録する。
 
 コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [CoreEditingDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreEditingDeviceTest.kt) / [CoreConfigDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreConfigDeviceTest.kt) / [ImeLaunchDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/ImeLaunchDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt) / [DeleteLengthDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt) / [KeyboardViewTouchTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt) / [MeltypeCoreBridgeDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt) / [MozcConverterTest.kt](../mozc/src/androidTest/kotlin/io/github/ninjin0802/keyboard/mozc/MozcConverterTest.kt)。
 
@@ -59,22 +59,24 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | B04 | toolbarBackAndSystemBackBothReturnToSettingsHome | 画面内戻る→再入→OS Back | 両方とも設定ホームに復帰 |
 | B05 | unfoldedScreenKeepsCategoriesBesideActiveSettings | 設定を幅700dp以上/未満で表示 | 広画面2ペイン、狭画面スクロール |
 | C01 | aRecommitReplacesThePreviousWordInTheEditor | i want␣ | I want␣（前の語の確定し直しが入力欄に正しく入り、キャレットは末尾） |
-| C02 | aCaretMovedElsewhereKeepsThePreviousWord | i␣Enter→want␣、同じ入力の途中で CaretMoved | 動かさなければ I で始まる。CaretMoved のあとは確定した語＋want␣ のまま |
+| C02 | aCaretMovedElsewhereKeepsThePreviousWord | i␣Enter のあと CaretMoved→want␣ | キャレット移動前に確定した語を書き換えない |
 | C03 | removeBeforeTakesAwayTheComposingTextFirst | 「い 」＋変換中 want → removeBefore=「い 」 | 変換中の文字を消してから前を消し、I want␣ を入れる |
 | C04 | moveCaretBackPutsTheCaretInsideTheCommit | 「」を moveCaretBack=1 で確定 | キャレットが括弧の中 |
 | C05 | leavingAnEditorWhileComposingKeepsTheTextThereAndStartsAfresh | 欄Aで ka → 欄を移る → 欄Bで ki Enter | 欄Aは か、欄Bは き（持ち越さない） |
 | C06 | anEditorWithoutItsOwnTextSendsNoTextAndCannotRemove | 読めない入力欄（TYPE_NULL） | before・after を送らず canRemove=false |
 | C07 | theSelectedTextIsSentOnlyWhenTheEditorReportedASelection | abcd の bc を選択 | selection=bc、選択がないと送らない |
+| C08 | aCommittedWordCanBeRecommittedWhenCaretHasNotMoved | i␣Enter→want␣、キャレットを動かさない | 文脈が英語と判明したとき、直前の語を I に確定し直せる |
 | D01 | liveConversionTakesEffectFromTheNextKey | config.json の LiveConversion を OFF→ON、kyouha | OFF は きょうは、ON は 今日は（キーボードを作り直さずに効く） |
 | D02 | bracketsPutTheCaretInsideWhenTheSettingIsOn | CursorIntoBrackets を ON、[]Enter | 「」の中にキャレット |
 | D03 | settingOneItemKeepsTheRestOfTheFile | 項目の多い config.json の1項目を変える | ほかの項目・順序はそのまま。一時ファイルを残さない |
 | D04 | aFileThatCannotBeReadIsLeftAlone | 壊れた config.json | 書かずに失敗を返し、ファイルはそのまま |
 | D05 | aNewFileNamesTheSchemaAndTheVersion | config.json がない | $schema と SettingsVersion（schema の既定）を書く |
 | E01 | selectedKeyboardOpensAndTypesThroughOnscreenTouch | 選んだキーボードで asd、日本語欄で a | asd、日本語は Native Core を通る |
-| E02 | caretMovesByTheAppStopTheRecommitButOwnEditsDoNot | 日本語欄で i␣Enter want␣。次にアプリがキャレットを先頭へ動かして戻してから want␣ | 動かさなければ I で始まり、キーボード自身の書き換えは移動と数えない。動かしたあとは前の語を書き換えない |
+| E02 | caretMovesByTheAppStopRecommit | 日本語欄で i␣Enter のあとアプリがキャレットを先頭へ動かし末尾へ戻して want␣ | 前の語を確定し直さない |
 | E03 | leavingAnEditorCommitsTheCompositionThere | 日本語欄で ka → 別の欄 → 戻って a Enter | 日本語欄の か は確定され、かあ になる |
+| E04 | ownEditorWritesDoNotLookLikeCaretMoves | 日本語欄で i␣Enter→want␣、キャレットを外から動かさない | I に確定し直し、キーボード自身の編集は外からの移動と数えない |
 
-A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、D01〜D02はNative Coreとの接続を含む。E01〜E03は端末で選んだキーボードの画面のキーを押して確かめる。実機での画面開閉は自動計測とは別の手動テストである。
+A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08、D01〜D02はNative Coreとの接続を含む。E01〜E04は端末で選んだキーボードの画面のキーを押して確かめる。実機での画面開閉は自動計測とは別の手動テストである。
 
 ## 3. 画面開閉・実機での手動テスト
 実機名、Androidバージョン、ビルドソースSHA、日付、画面サイズ、実際に入力された文字列、スクリーンショットや失敗手順をPRに記録。**試していないケースを合格としない。**
