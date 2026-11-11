@@ -110,7 +110,7 @@ class LanguageDetectionDeviceTest {
     @Test fun japaneseRomajiBecomesKana() {
         assertEquals("ありがとう", type("arigatou"))
         // Core reads "nn" as ん, as on the desktop (CompositionTests: tanni → たんい,
-        // konnichiwq → こんいちwq). Type "konnnichiwa" for こんにちわ.
+        // konnichiwq → こんいちwq).
         assertEquals("こんいちわ", type("konnichiwa"))
     }
 
