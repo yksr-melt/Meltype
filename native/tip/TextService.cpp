@@ -166,8 +166,8 @@ bool IsChromiumBrowser() {
     return chromium;
 }
 
-// この impl のファイル名 (拡張子を除く。Register-Tip.ps1 が impl の SHA-256 を付ける) の JSON の文字列。
-// Meltype.exe が、自分と同じビルドの impl かを見分ける
+// この impl のファイル名 (拡張子を除く。Register-Tip.ps1 が impl の SHA-256 にする) の JSON の文字列。
+// Meltype.exe が、同梱の impl の SHA-256 と照合する
 const std::string& ImplId() {
     static const std::string id = [] {
         wchar_t path[MAX_PATH] = {};
@@ -718,7 +718,7 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
     const bool parsed = ParseJson(response, reply);
     if (parsed && reply[L"stale"].Bool()) {
-        // この impl は Meltype.exe と違うビルド: stub に入れ替えを頼む (入れ替わるまでは、応答が無いときと同じ)
+        // この impl は Meltype.exe と別ビルド: stub に差し替えを要求する (差し替わるまでは、タイムアウトと同じ扱い)
         if (stub_) PostMessageW(stub_, kStubImplStale, 0, 0);
         return false;
     }

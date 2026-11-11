@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 lnkiai
 //
-// stub (MeltypeTip.dll) の入口 (COM のクラスファクトリー) と、IME としての登録 (regsvr32)。
+// stub (MeltypeTip.dll) のエントリーポイント (COM のクラスファクトリー) と、IME としての登録 (regsvr32)。
 
 #include "Globals.h"
 #include "Stub.h"
@@ -140,7 +140,7 @@ STDAPI DllGetClassObject(REFCLSID clsid, REFIID riid, void** ppv) {
     return g_factory.QueryInterface(riid, ppv);
 }
 
-// stub も impl も、アプリが終わるまで外さない
+// stub も impl も、プロセスの終了までアンロードしない
 STDAPI DllCanUnloadNow() { return S_FALSE; }
 
 STDAPI DllRegisterServer() {

@@ -41,10 +41,10 @@ inline constexpr wchar_t kDisplayName[] = L"Meltype";
 
 extern HINSTANCE g_module;
 
-// ---- stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の境目 ----
-// アプリに残った古い stub が、新しい impl を読み込む。下の 2 つを変えると、アプリを起動し直すまで、そのアプリの impl は入れ替わらない
+// ---- stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の ABI ----
+// プロセスに残った古い stub が、新しい impl をロードする。下の 2 つを変更すると、プロセスを再起動するまで、そのプロセスの impl は差し替わらない
 
-// impl が公開する関数 MeltypeTipCreate。stub: kStubImplStale を送る先のウィンドウ
+// impl がエクスポートする関数 MeltypeTipCreate。stub: kStubImplStale の送信先のウィンドウ
 using MeltypeTipCreateFn = HRESULT(STDAPICALLTYPE*)(HWND stub, ITfTextInputProcessorEx** service);
 
 // impl が stub のウィンドウに PostMessage する: Meltype.exe が {"stale":true} を返した

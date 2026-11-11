@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 //
-// どの impl を使うかは、stub と同じフォルダーの MeltypeTipImpl.dll.sha256 (impl の SHA-256) に書いてあり、
-// impl は impl\<SHA-256>.dll にある (どちらも Register-Tip.ps1 が置く)。Meltype.exe からは指定させない
-// (Meltype.exe になりすましたプロセスが、古い impl を読み込ませられないように)。
-// 読み込んだ impl は FreeLibrary しない。
+// ロードする impl は、stub と同じフォルダーの MeltypeTipImpl.dll.sha256 (impl の SHA-256) で決まり、
+// impl は impl\<SHA-256>.dll にある (どちらも Register-Tip.ps1 が配置する)。Meltype.exe からは指定させない
+// (パイプのサーバーを偽装したプロセスによる、古い impl へのダウングレードを防ぐ)。
+// ロードした impl は FreeLibrary しない。
 
 #include "Stub.h"
 
@@ -20,7 +20,7 @@ std::wstring StubFolder() {
     return folder.substr(0, folder.find_last_of(L'\\'));
 }
 
-// MeltypeTipImpl.dll.sha256 の中身 (16 進 64 文字)。読めない・形が違うなら空
+// MeltypeTipImpl.dll.sha256 の内容 (16 進 64 文字)。読めない・形式が違うなら空
 std::wstring CurrentImpl() {
     HANDLE file = CreateFileW((StubFolder() + L"\\MeltypeTipImpl.dll.sha256").c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                               nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -47,13 +47,13 @@ ITfTextInputProcessorEx* CreateInner(const std::wstring& hash, HWND window) {
     std::wstring path = StubFolder() + L"\\impl\\" + hash + L".dll";
     HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (module == nullptr) {
-        TipLog(L"stub: %s を読み込めません: %lu", path.c_str(), GetLastError());
+        TipLog(L"stub: %s をロードできません: %lu", path.c_str(), GetLastError());
         return nullptr;
     }
     auto create = reinterpret_cast<MeltypeTipCreateFn>(reinterpret_cast<void*>(GetProcAddress(module, "MeltypeTipCreate")));
     ITfTextInputProcessorEx* inner = nullptr;
     if (create == nullptr || FAILED(create(window, &inner))) {
-        TipLog(L"stub: %s の TextService を作れません", path.c_str());
+        TipLog(L"stub: %s の TextService を生成できません", path.c_str());
         return nullptr;
     }
     return inner;
@@ -99,7 +99,7 @@ public:
     STDMETHODIMP Activate(ITfThreadMgr* threadMgr, TfClientId clientId) override { return ActivateEx(threadMgr, clientId, 0); }
     STDMETHODIMP ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientId, DWORD flags) override {
         if (inner_ == nullptr) {
-            // Register-Tip.ps1 が impl を置いている途中に作られた
+            // Register-Tip.ps1 が impl を配置している途中に生成された
             loaded_ = CurrentImpl();
             inner_ = CreateInner(loaded_, window_);
         }
@@ -156,9 +156,9 @@ private:
         return DefWindowProcW(window, message, wParam, lParam);
     }
 
-    // 変換中の文字は、前の impl の Deactivate が確定する
+    // 未確定文字列は、前の impl の Deactivate が確定する
     void Reload() {
-        // 入れ替える impl が無い間 (Meltype.exe だけが違うビルド) は、impl が要求のたびに kStubImplStale を送ってくる
+        // 差し替える impl が無い間 (Meltype.exe だけが別ビルド) は、impl が要求のたびに kStubImplStale を送ってくる
         const ULONGLONG now = GetTickCount64();
         if (now - lastReload_ < 1000) return;
         lastReload_ = now;
@@ -166,8 +166,8 @@ private:
         if (hash.empty() || hash == loaded_) return;
         ITfTextInputProcessorEx* next = CreateInner(hash, window_);
         if (next == nullptr) return;
-        TipLog(L"stub: impl を入れ替えます: %s → %s", loaded_.c_str(), hash.c_str());
-        // 入れ替えの途中で TSF が Release しても消えないようにする
+        TipLog(L"stub: impl を差し替えます: %s → %s", loaded_.c_str(), hash.c_str());
+        // 差し替えの途中で TSF が Release しても解放されないようにする
         AddRef();
         if (inner_) {
             if (threadMgr_) inner_->Deactivate();
@@ -183,11 +183,11 @@ private:
     }
 
     LONG refs_ = 1;
-    HWND window_ = nullptr;        // impl が kStubImplStale を送る先
-    std::wstring loaded_;          // inner_ を作った impl の SHA-256
+    HWND window_ = nullptr;        // kStubImplStale の送信先
+    std::wstring loaded_;          // inner_ を生成した impl の SHA-256
     ULONGLONG lastReload_ = 0;
     ITfTextInputProcessorEx* inner_ = nullptr;
-    ITfThreadMgr* threadMgr_ = nullptr;  // Activate から Deactivate までの間だけ持つ
+    ITfThreadMgr* threadMgr_ = nullptr;  // Activate から Deactivate までの間だけ保持する
     TfClientId clientId_ = TF_CLIENTID_NULL;
     DWORD flags_ = 0;
 };

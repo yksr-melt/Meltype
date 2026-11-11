@@ -39,7 +39,7 @@ constexpr float kMaxWidth = 520;
 constexpr float kMeaningMaxWidth = 320;
 
 // 1 つのアプリの中で、いくつもの UI スレッドが候補の一覧を出すことがある (エクスプローラーなど)。
-// ファクトリーはマルチスレッド用を 1 つだけ作る (impl の DLL は外さないので、解放しない)
+// ファクトリーはマルチスレッド用を 1 つだけ生成する (impl はアンロードしないので、解放しない)
 ID2D1Factory* g_d2d = nullptr;
 IDWriteFactory* g_dwrite = nullptr;
 std::mutex g_factoryMutex;

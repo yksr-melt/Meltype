@@ -48,7 +48,7 @@ class TextService final : public ITfTextInputProcessorEx,
                           public ITfCompartmentEventSink,
                           public ITfTextEditSink {
 public:
-    // stub: stub (MeltypeTip.dll) のウィンドウ。kStubImplStale を送る先
+    // stub: stub (MeltypeTip.dll) のウィンドウ。kStubImplStale の送信先
     explicit TextService(HWND stub);
 
     // IUnknown

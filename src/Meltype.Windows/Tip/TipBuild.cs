@@ -6,24 +6,24 @@ using System.Text.Json;
 namespace Meltype.Tip;
 
 /// <summary>
-/// Meltype IME の impl (native/tip の MeltypeTipImpl.dll) が、この Meltype.exe と一緒にビルドしたものかを見分ける。
-/// impl は、署名する前の中身の SHA-256 (MeltypeTipImpl.dll.sha256) を要求の impl に付ける。
-/// 違うビルドの impl とはやり取りしないので、Meltype.exe と impl のあいだのプロトコルは、前の版と互換にしなくてよい。
+/// Meltype IME の impl (native/tip の MeltypeTipImpl.dll) を、この Meltype.exe に同梱した impl と照合する。
+/// impl は、署名前のバイナリの SHA-256 (MeltypeTipImpl.dll.sha256) を要求の impl に付ける。
+/// 別ビルドの impl とは通信しないので、Meltype.exe と impl のあいだのプロトコルに後方互換性は要らない。
 /// </summary>
-/// <param name="folder">この Meltype.exe と一緒に配った tip フォルダー (x64・x86 の下に MeltypeTipImpl.dll.sha256)。</param>
+/// <param name="folder">この Meltype.exe に同梱した tip フォルダー (x64・x86 の下に MeltypeTipImpl.dll.sha256)。</param>
 internal sealed class TipBuild(string folder)
 {
     private static readonly string[] Architectures = ["x64", "x86"];
 
     public static TipBuild Shipped { get; } = new(Path.Combine(AppContext.BaseDirectory, "tip"));
 
-    // アーキテクチャ → impl の SHA-256。tip フォルダーが無い Meltype.exe (dotnet run・テスト・ポータブル版) では空で、何も見分けない
+    // アーキテクチャ → impl の SHA-256。tip フォルダーが無い Meltype.exe (dotnet run・テスト・ポータブル版) では空で、照合しない
     private readonly Dictionary<string, string> _hashes = Architectures
         .Select(arch => (arch, hash: ReadHash(Path.Combine(folder, arch))))
         .Where(pair => pair.hash is not null)
         .ToDictionary(pair => pair.arch, pair => pair.hash!);
 
-    /// <summary>要求 (<see cref="TipRequest"/> の JSON) を送ってきた impl が、同じビルドか。変換の結果を待つ要求 (wait) は見ない。</summary>
+    /// <summary>要求 (<see cref="TipRequest"/> の JSON) を送ってきた impl が、同梱の impl と同じビルドか。変換の結果を待つ要求 (wait) は照合しない。</summary>
     public bool Matches(string request)
     {
         if (_hashes.Count == 0) return true;
@@ -42,7 +42,7 @@ internal sealed class TipBuild(string folder)
         }
     }
 
-    /// <summary>stub (登録した MeltypeTip.dll) がこれから読み込む impl が、同じビルドか。</summary>
+    /// <summary>登録済みの stub (MeltypeTip.dll) がこれからロードする impl が、同梱の impl と同じビルドか。</summary>
     /// <param name="stub">64 ビットの stub のパス (…\tip\x64\MeltypeTip.dll)。</param>
     public bool IsInstalled(string stub)
     {

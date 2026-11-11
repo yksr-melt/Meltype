@@ -37,10 +37,10 @@ internal static class TipBuildTests
         Assert.True(build.Matches(Request($"\"impl\":\"{X64}\",")), "64 ビットのアプリの impl");
         Assert.True(build.Matches(Request($"\"impl\":\"{X86}\",")), "32 ビットのアプリの impl");
         Assert.True(build.Matches(Request($"\"impl\":\"{X64.ToLowerInvariant()}\",")), "ハッシュの大文字・小文字は区別しない");
-        Assert.True(!build.Matches(Request($"\"impl\":\"{Other}\",")), "違うビルドの impl");
-        Assert.True(!build.Matches(Request("")), "stub と impl に分ける前の DLL (impl を送らない)");
+        Assert.True(!build.Matches(Request($"\"impl\":\"{Other}\",")), "別ビルドの impl");
+        Assert.True(!build.Matches(Request("")), "stub と impl に分割する前の DLL (impl を送らない)");
         Assert.True(!build.Matches(Request("\"impl\":1,")), "impl が文字列でない");
-        Assert.True(!build.Matches("{"), "JSON として読めない");
+        Assert.True(!build.Matches("{"), "JSON としてパースできない");
         Assert.True(build.Matches("{\"wait\":3}"), "変換の結果を待つ要求は impl を送らない");
     });
 
@@ -48,9 +48,9 @@ internal static class TipBuildTests
     public static void TipBuild_WithoutShippedTipFolderAcceptsAnyImpl() => WithFolder(root =>
     {
         var build = new Tip.TipBuild(Path.Combine(root, "missing"));
-        Assert.True(build.Matches(Request($"\"impl\":\"{Other}\",")), "tip フォルダーが無い Meltype.exe は見分けない");
+        Assert.True(build.Matches(Request($"\"impl\":\"{Other}\",")), "tip フォルダーが無い Meltype.exe は照合しない");
         Assert.True(build.Matches(Request("")), "impl を送らない要求も受ける");
-        Assert.True(build.IsInstalled(Path.Combine(TipFolder(root, "installed", Other, Other), "x64", "MeltypeTip.dll")), "登録した impl も見分けない");
+        Assert.True(build.IsInstalled(Path.Combine(TipFolder(root, "installed", Other, Other), "x64", "MeltypeTip.dll")), "登録済みの impl も照合しない");
     });
 
     [Test]
@@ -58,8 +58,8 @@ internal static class TipBuildTests
     {
         var build = new Tip.TipBuild(TipFolder(root, "shipped", X64, X86));
         static string Stub(string folder) => Path.Combine(folder, "x64", "MeltypeTip.dll");
-        Assert.True(build.IsInstalled(Stub(TipFolder(root, "same", X64, X86))), "登録した impl が同じビルド");
-        Assert.True(!build.IsInstalled(Stub(TipFolder(root, "old-x86", X64, Other))), "32 ビットの impl だけ違うビルド");
-        Assert.True(!build.IsInstalled(Stub(TipFolder(root, "before-split", null, null))), "stub と impl に分ける前の登録 (MeltypeTipImpl.dll.sha256 が無い)");
+        Assert.True(build.IsInstalled(Stub(TipFolder(root, "same", X64, X86))), "登録済みの impl が同じビルド");
+        Assert.True(!build.IsInstalled(Stub(TipFolder(root, "old-x86", X64, Other))), "32 ビットの impl だけ別ビルド");
+        Assert.True(!build.IsInstalled(Stub(TipFolder(root, "before-split", null, null))), "stub と impl に分割する前の登録 (MeltypeTipImpl.dll.sha256 が無い)");
     });
 }

@@ -5,8 +5,8 @@
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64 と x86 のフォルダーがある所>
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Unregister
 # DLL は C:\Program Files\Meltype\tip にコピーする (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所に置く)。
-# 登録する DLL は stub (MeltypeTip.dll) で、stub が impl (impl\<SHA-256>.dll) を読み込む。
-# 使っているアプリが古い stub を掴んでいても入れ替えられるように、古いものは名前を変えて残し、次の登録のときに消す。
+# 登録する DLL は stub (MeltypeTip.dll) で、stub が impl (impl\<SHA-256>.dll) をロードする。
+# プロセスがロードしている stub は上書きできないので、リネームして残し、次の登録のときに削除する。
 
 param(
     [string]$Source = (Join-Path $PSScriptRoot 'bin'),
@@ -58,8 +58,8 @@ try {
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
         # 前の登録の残り (使われていて消せなかったもの) を片付ける
         Get-ChildItem -LiteralPath $folder -Filter '*.old' -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
-        # impl は、署名する前の中身のハッシュを名前にして置く (アプリが読み込んでいる前の impl は、そのまま残る)。
-        # stub が読み込む impl (MeltypeTipImpl.dll.sha256) は、impl を置いてから書き換える
+        # impl のファイル名は、署名前のバイナリの SHA-256 (プロセスがロードしている前の impl は、そのまま残る)。
+        # stub がロードする impl の指定 (MeltypeTipImpl.dll.sha256) は、impl を配置してから書き換える
         $implHash = "$(Get-Content -LiteralPath (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256") -Raw)".Trim().ToUpperInvariant()
         if ($implHash -notmatch '^[0-9A-F]{64}$') { throw "$arch\MeltypeTipImpl.dll.sha256 の中身が SHA-256 ではありません。" }
         $implFolder = Join-Path $folder 'impl'
@@ -69,12 +69,12 @@ try {
         Copy-Item -LiteralPath (Join-Path $Source "$arch\MeltypeTipImpl.dll") -Destination $staged -Force
         try { Move-Item -LiteralPath $staged -Destination $impl -Force }
         catch {
-            # 同じ impl をアプリが読み込んでいて置き換えられない: 置いてあるものを使う
+            # 同じ SHA-256 の impl をプロセスがロードしていて上書きできない: 配置済みのものを使う
             Remove-Item -LiteralPath $staged -Force
             if (-not (Test-Path -LiteralPath $impl)) { throw }
         }
         [IO.File]::WriteAllText((Join-Path $folder 'MeltypeTipImpl.dll.sha256'), $implHash)
-        # 前の impl は、どのアプリも読み込んでいなければ消える
+        # 前の impl は、どのプロセスもロードしていなければ削除できる
         Get-ChildItem -LiteralPath $implFolder -File | Where-Object { $_.FullName -ne $impl } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
         $old = $null
         if (Test-Path -LiteralPath $dll) {

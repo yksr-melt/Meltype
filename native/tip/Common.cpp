@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 lnkiai
 //
-// stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の両方に入れる、文字コードの変換とログ。
+// stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の両方にリンクする、文字コードの変換とログ。
 
 #include <strsafe.h>
 

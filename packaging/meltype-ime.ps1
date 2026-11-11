@@ -174,7 +174,7 @@ function Test-MeltypeImeCurrent([string]$Source) {
         if ((Get-Sha256 $installed) -ne (Get-Sha256 $new)) { return $false }
     }
     foreach ($arch in 'x64', 'x86') {
-        # stub が読み込む impl (Register-Tip.ps1 が impl\<署名する前の中身のハッシュ>.dll に置く)
+        # stub がロードする impl (Register-Tip.ps1 が impl\<署名前のバイナリの SHA-256>.dll に配置する)
         $implHash = Read-HashFile (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256")
         $folder = Join-Path $MeltypeProgramFiles "Meltype\tip\$arch"
         if (-not $implHash -or $implHash -ne (Read-HashFile (Join-Path $folder 'MeltypeTipImpl.dll.sha256'))) { return $false }

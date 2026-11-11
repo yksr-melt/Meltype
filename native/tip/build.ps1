@@ -49,7 +49,7 @@ foreach ($arch in 'x64', 'x86') {
     cmd /c $cmd
     if ($LASTEXITCODE -ne 0) { throw "$arch のビルドに失敗しました。" }
     # 署名する前の中身のハッシュ。インストールのとき、登録済みの DLL と同じかを比べるのに使う (署名には毎回違う時刻が入るため)。
-    # impl のハッシュは、インストール先での impl のファイル名にもなり、Meltype.exe が自分と同じビルドの impl かを見分けるのにも使う
+    # impl のハッシュは、インストール先での impl のファイル名にもなり、Meltype.exe が要求の impl と照合する
     foreach ($name in $dlls.Name) {
         $dll = Join-Path $out "$name.dll"
         [IO.File]::WriteAllText("$dll.sha256", (Get-Sha256 $dll))

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 //
-// impl (MeltypeTipImpl.dll) の入口。stub (MeltypeTip.dll) が読み込んで MeltypeTipCreate を呼ぶ。
+// impl (MeltypeTipImpl.dll) のエントリーポイント。stub (MeltypeTip.dll) がロードして MeltypeTipCreate を呼ぶ。
 
 #include <new>
 
