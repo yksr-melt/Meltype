@@ -92,7 +92,7 @@
 
 ## 日本語QWERTYの入力処理・Kotlinフォールバック用のローマ字表
 
-現在のQWERTYの主経路では、Kotlinだけでローマ字をかなに組み立てる旧設計は使わない。Kotlinフォールバックでは、[HTML仕様内の完全なローマ字変換表](../../spec/05-input-engine.html#ローマ字の表)に従う。この表は `RomajiTest.the_copy_of_the_table_is_the_table_in_the_spec` でエンジン実装と機械的に照合する。`KeyboardService`から`MeltypeCoreSession`、JNIを経由し、**共有C# Meltype.Core**が日英の判別・未確定文字・候補を管理する。通常候補・予測候補・原文の英字・かな・カタカナ訂正候補をAndroidの候補バーへ渡す。Coreが使用できない場合はKotlinエンジンへフォールバックする。[08 日英自動判別](08-auto-detection.md)を参照。
+現在のQWERTYの主経路では、Kotlinだけでローマ字をかなに組み立てる旧設計は使わない。Kotlinフォールバックでは、[HTML仕様内の完全なローマ字変換表](../../spec/05-input-engine.html#ローマ字の表)に従う。この表は `RomajiTest.the_copy_of_the_table_is_the_table_in_the_spec` でエンジン実装と機械的に照合する。`KeyboardService`から`MeltypeCoreHost`、JNIを経由し、**共有C# Meltype.Core**が日英の判別・未確定文字・候補を管理する。通常候補・予測候補・原文の英字・かな・カタカナ訂正候補をAndroidの候補バーへ渡す。Coreが使用できない場合はKotlinエンジンへフォールバックする。[08 日英自動判別](08-auto-detection.md)を参照。
 
 ## ライブ変換
 

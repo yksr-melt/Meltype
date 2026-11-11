@@ -18,7 +18,7 @@
 
 ```text
 KeyboardService (Kotlin IME)
-  ├─ 日本語QWERTY → MeltypeCoreSession → JNI → C# Meltype.Core (NativeAOT)
+  ├─ 日本語QWERTY → MeltypeCoreHost → JNI → C# Meltype.Core (NativeAOT)
   │                                      └→ Mozcの変換コールバック
   ├─ かな／英字フリック → Kotlin engine → Mozc (必要時)
   └─ 英字・数字／記号の直接入力
