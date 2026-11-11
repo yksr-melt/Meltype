@@ -332,6 +332,7 @@ public sealed partial class CompositionController
         // ローマ字として読めずに残った英字 (こほぃc の c) と半角の記号 (... @) は、変換エンジンに渡すと別の記号 (© ．．． ＠) にされるので、
         // そのままの文節にする。数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
         // それ以外は変換エンジンに渡す (2026ねん → 2026年)。
+        // 設定の句読点 (，．) は全角なので、「、。」と同じく変換エンジンに渡す (渡すときに「、。」にする: EngineClauses)。
         var keep = new bool[kana.Length];
         for (var i = 0; i < kana.Length; i++) keep[i] = kana[i] is >= '!' and <= '~' && !char.IsAsciiDigit(kana[i]);
         for (var i = 0; i < kana.Length; i++)
@@ -410,7 +411,7 @@ public sealed partial class CompositionController
     {
         var unchanged = pieces.Select(p => (p.Reading, p.Word, (IReadOnlyList<ConversionClause>?)null)).ToList();
         if (_services.UserDictionary is not { } dictionary) return unchanged;
-        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : _converter.ConvertClauses(kana);
+        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : EngineClauses(kana);
         if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return unchanged;
         var starts = new HashSet<int>();
         for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
@@ -500,8 +501,8 @@ public sealed partial class CompositionController
         var context = ConversionContext();
         var parts = engine ?? (context is not null
             ? ConvertWithContext(kana, context)
-            : _converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
-        parts ??= [new ConversionClause(kana, _converter.Convert(kana) ?? kana)];
+            : EngineClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
+        parts ??= [new ConversionClause(kana, EngineConvert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _services.Candidates?.Contains(kana) == true)
         {
@@ -604,8 +605,8 @@ public sealed partial class CompositionController
     /// </summary>
     private IReadOnlyList<ConversionClause>? ConvertWithContext(string kana, string context)
     {
-        var withContext = _converter.ConvertClauses(kana, context);
-        var plain = _converter.ConvertClauses(kana);
+        var withContext = EngineClauses(kana, context);
+        var plain = EngineClauses(kana);
         if (withContext is null || plain is null) return withContext ?? plain;
         return withContext.Select(c => c.Reading).SequenceEqual(plain.Select(c => c.Reading)) ? withContext : plain;
     }
@@ -732,7 +733,10 @@ public sealed partial class CompositionController
         if (anchor < 0) return;
         var current = clause.Text;
         var merged = clause.Candidates.Take(anchor + 1).ToList();
-        foreach (var candidate in more(reading).Select(c => NormalizeHalfWidth(c, reading)).Concat(clause.Candidates.Skip(anchor + 1)))
+        var style = _settings().Punctuation;
+        var engineReading = CompositionText.ToEngineReading(reading, style);
+        var candidates = more(engineReading).Select(c => CompositionText.FromEngineText(NormalizeHalfWidth(c, reading), engineReading, style));
+        foreach (var candidate in candidates.Concat(clause.Candidates.Skip(anchor + 1)))
         {
             if (!merged.Contains(candidate)) merged.Add(candidate);
         }
@@ -853,7 +857,29 @@ public sealed partial class CompositionController
         if (_learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
-    private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
+    private string Convert(string kana) => NormalizeHalfWidth(EngineConvert(kana) ?? kana, kana);
+
+    // ---- 変換エンジンとの境目 ----
+    // 変換エンジンには、読みの設定の句読点 (，．) を「、。」にして渡し、返ってきた読み・文字を設定の句読点に戻す (issue #1725。
+    // 写し方は CompositionText.ToEngineReading)。変換エンジンを呼ぶのはここの 3 つ (と Expand の MoreCandidates) だけにする。
+    // 読み・学習・ユーザー辞書・文脈の手がかりは、設定の句読点のままの読みで扱う。
+
+    /// <summary>読み全体を 1 回で変換する。変換できなければ null。</summary>
+    private string? EngineConvert(string kana)
+    {
+        var style = _settings().Punctuation;
+        var reading = CompositionText.ToEngineReading(kana, style);
+        return _converter.Convert(reading) is { } text ? CompositionText.FromEngineText(text, reading, style) : null;
+    }
+
+    /// <summary>文節に区切って変換する。区切れなければ null。</summary>
+    private IReadOnlyList<ConversionClause>? EngineClauses(string kana, string? context = null)
+    {
+        var style = _settings().Punctuation;
+        return _converter.ConvertClauses(CompositionText.ToEngineReading(kana, style), context)?
+            .Select(c => c with { Reading = CompositionText.FromEngineReading(c.Reading, style), Text = CompositionText.FromEngineText(c.Text, c.Reading, style) })
+            .ToList();
+    }
 
     /// <summary>
     /// 文の中での変換結果がある文節の候補に足す「その読みだけの変換」。Zenzai を使える変換エンジンでも Zenzai には頼まない (IStandaloneConverter)。
@@ -862,7 +888,9 @@ public sealed partial class CompositionController
     private string Standalone(string kana)
     {
         if (_converter is not IStandaloneConverter standalone) return Convert(kana);
-        return NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
+        var style = _settings().Punctuation;
+        var reading = CompositionText.ToEngineReading(kana, style);
+        return NormalizeHalfWidth(standalone.ConvertStandalone(reading) is { } text ? CompositionText.FromEngineText(text, reading, style) : kana, kana);
     }
 
     /// <summary>

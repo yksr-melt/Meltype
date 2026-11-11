@@ -53,6 +53,9 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     private static bool IsOperatorChoice(Clause clause) =>
         MathOperator().IsMatch(clause.Reading) && clause.Text.IndexOfAny(['×', '÷', '+', '＋', '-', '－', '=', '＝']) >= 0;
 
+    /// <summary>句読点の設定。変換エンジンに学習させるときは、変換するときと同じく句読点を「、。」にして渡す (issue #1725)。</summary>
+    public Func<Config.PunctuationStyle> Punctuation { get; init; } = () => Config.PunctuationStyle.Japanese;
+
     /// <summary>変換履歴の語。</summary>
     public string? LearnedConversion(string reading) => services.History?.Get(reading);
 
@@ -112,7 +115,8 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
                 Flush();
                 continue;
             }
-            run.Add(new ConversionClause(clause.Reading, clause.Text));
+            var style = Punctuation();
+            run.Add(new ConversionClause(CompositionText.ToEngineReading(clause.Reading, style), CompositionText.ToEngineText(clause.Text, clause.Reading, style)));
         }
         Flush();
     }

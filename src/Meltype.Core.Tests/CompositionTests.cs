@@ -4869,6 +4869,187 @@ internal static class CompositionTests
         Assert.Equal("今日はgoogleで検索", k.Host.Output.Single());
     }
 
+    /// <summary>変換エンジンは渡された「，．」を半角に戻す (issue #498 の再現)。「、。」はそのまま返す (Mozc と同じ)。</summary>
+    private sealed class HalfWidthPunctuationConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            Map(hiragana) is { } text ? [new(hiragana.Replace('，', ',').Replace('．', '.'), text)] : null;
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "わたしは" => "私は",
+            "わたしは，" or "わたしは," => "私は,",
+            "わたしは．" or "わたしは." => "私は.",
+            "わたしは，そうです" or "わたしは,そうです" => "私は,そうです",
+            "わたしは、" => "私は、",
+            "わたしは。" => "私は。",
+            "わたしは、そうです" => "私は、そうです",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Issue498_FullWidthPunctuationSurvivesLiveConversion()
+    {
+        // #498: 句読点を「，．」にして 4 文字以上をライブ変換すると、，． が半角の , . になっていた。
+        Keyboard Type(string keys)
+        {
+            var k = new Keyboard(live: true, converter: new HalfWidthPunctuationConverter())
+            {
+                Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod,
+            };
+            k.Type(keys);
+            return k;
+        }
+
+        var comma = Type("watasiha,");
+        Assert.Equal("私は，", comma.Showing);
+        comma.Type("\n");
+        Assert.Equal("私は，", comma.Host.Output.Single());
+        Assert.Equal("私は．", Type("watasiha.").Showing);
+        Assert.Equal("私は，そうです", Type("watasiha,soudesu").Showing);
+        Assert.Equal("は，", Type("ha,").Showing, "4 文字未満はかなのまま、句読点も設定どおり");
+    }
+
+    /// <summary>数字と続くかなをまとめて渡されたときだけ「3個」にする変換エンジン。</summary>
+    private sealed class CounterConverter : IKanjiConverter
+    {
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana) is { } text ? [new(hiragana, text)] : null;
+        }
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "りんご" => "林檎",
+            "こ" => "子",
+            "3こ" => "3個",
+            "りんご、3こ" => "林檎、3個",
+            "3こ、りんご" => "3個、林檎",
+            "りんご、3こ。" => "林檎、3個。",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Issue498_FullWidthPunctuationDoesNotHoldDigits()
+    {
+        // 「，．」も「、。」と同じく隣の数字をつなぎ止めない。
+        // つなぎ止めると ringo,3ko の こ だけが渡って「3個」にならなかった (PR #620 のレビュー)。
+        (string? Showing, string Output, List<string> Received) Type(string keys, Meltype.Config.PunctuationStyle style)
+        {
+            var converter = new CounterConverter();
+            var k = new Keyboard(live: true, converter: converter) { Punctuation = style };
+            k.Type(keys);
+            var showing = k.Showing;
+            k.Type("\n");
+            return (showing, k.Host.Output.Single(), converter.Received);
+        }
+
+        const Meltype.Config.PunctuationStyle Period = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod;
+        const Meltype.Config.PunctuationStyle Japanese = Meltype.Config.PunctuationStyle.Japanese;
+
+        var full = Type("ringo,3ko", Period);
+        Assert.Equal("林檎，3個", full.Showing, "報告された例");
+        Assert.Equal("林檎，3個", full.Output);
+        Assert.True(!full.Received.Any(r => r.Contains('，')), "「，」は変換エンジンに渡さない");
+        Assert.True(!full.Received.Contains("こ"), "3 と こ を分けて渡さない");
+        Assert.Equal("林檎、3個", Type("ringo,3ko", Japanese).Output, "「、。」の設定は今までどおり");
+        Assert.Equal("3個，林檎", Type("3ko,ringo", Period).Output, "数字が「，」の前にあっても渡す");
+        Assert.Equal("3個、林檎", Type("3ko,ringo", Japanese).Output);
+        Assert.Equal("林檎，3個．", Type("ringo,3ko.", Period).Output, "「．」が後ろにあっても");
+        Assert.Equal("林檎、3個。", Type("ringo,3ko.", Japanese).Output);
+        Assert.Equal("1.5と1,000", Type("1.5to1,000", Period).Output, "半角の記号とつながる数字は今までどおりそのまま");
+    }
+
+    /// <summary>
+    /// Mozc のように、句読点の後ろで文節を切り、読みの「、。」はそのまま、「，．」は半角の , . にして返す変換エンジン (issue #498・#1725)。
+    /// 渡された読みを覚える。
+    /// </summary>
+    private sealed class PunctuationEchoConverter : IKanjiConverter
+    {
+        private static readonly (string Kana, string Text)[] Words = [("わたしは", "私は"), ("りんご", "林檎"), ("3こ", "3個")];
+
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana);
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            var clauses = new List<ConversionClause>();
+            var start = 0;
+            for (var i = 0; i < hiragana.Length; i++)
+            {
+                if (hiragana[i] is not ('、' or '。' or '，' or '．')) continue;
+                clauses.Add(new(hiragana[start..(i + 1)], Map(hiragana[start..(i + 1)])));
+                start = i + 1;
+            }
+            if (start < hiragana.Length) clauses.Add(new(hiragana[start..], Map(hiragana[start..])));
+            return clauses;
+        }
+
+        private static string Map(string reading)
+        {
+            foreach (var (kana, text) in Words) reading = reading.Replace(kana, text, StringComparison.Ordinal);
+            return reading.Replace('，', ',').Replace('．', '.');
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingReachesConvertedText()
+    {
+        // #1725: 句読点の設定が、Space の変換・ライブ変換・Enter の確定のどれでも変換結果に出る。
+        // 変換エンジンには「、。」で渡し、返ってきた文字に設定の句読点を当てる (「，．」を渡すと半角の , . で返ってくる)。
+        foreach (var (style, expected) in new[]
+        {
+            (Meltype.Config.PunctuationStyle.Japanese, "私は、林檎、3個。"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "私は，林檎，3個．"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaKuten, "私は，林檎，3個。"),
+            (Meltype.Config.PunctuationStyle.ToutenFullWidthPeriod, "私は、林檎、3個．"),
+        })
+        {
+            var name = style.ToString();
+            var space = new PunctuationEchoConverter();
+            var k = new Keyboard(converter: space) { Punctuation = style };
+            k.Type("watasiha,ringo,3ko. ");
+            Assert.Equal(expected, k.Showing, name + ": Space で変換");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Output.Single(), name + ": 変換して確定");
+            Assert.True(space.Received.All(r => !r.Contains('，') && !r.Contains('．')), name + ": 変換エンジンには「、。」で渡す: " + string.Join(" / ", space.Received));
+
+            var live = new Keyboard(live: true, converter: new PunctuationEchoConverter()) { Punctuation = style };
+            live.Type("watasiha,ringo,3ko.");
+            Assert.Equal(expected, live.Showing, name + ": ライブ変換");
+            live.Type("\n");
+            Assert.Equal(expected, live.Host.Output.Single(), name + ": ライブ変換のまま確定");
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingDoesNotTouchOtherCandidates()
+    {
+        // 設定の句読点を当てるのは、読みの句読点に当たる文字だけ。読みに 。 が無い候補の顔文字の 。 は変えない
+        var k = new Keyboard(moreCandidates: reading => reading == "かお" ? ["(。・ω・。)"] : [])
+        {
+            Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod,
+        };
+        k.Type("kao  ");
+        Assert.True(k.Host.View!.Candidates.Contains("(。・ω・。)"), string.Join(",", k.Host.View.Candidates));
+        Assert.True(!k.Host.View.Candidates.Contains("(．・ω・．)"), "顔文字の 。 を ． にしない");
+    }
+
     [Test]
     public static void LiveConversion_SpaceShowsAlternatives()
     {

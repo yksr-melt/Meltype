@@ -178,7 +178,7 @@ public sealed partial class CompositionController
         _budget = (converter as IBackgroundConverter)?.Budget;
         _settings = settings;
         _services = services ?? new CompositionServices();
-        _learning = new CompositionLearning(_services, converter);
+        _learning = new CompositionLearning(_services, converter) { Punctuation = () => settings().Punctuation };
         _text.Manual = () => !_settings().AutoDetection;
         _text.TypoCorrector = _services.RomajiTypos;
         // よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは英語として覚えない。

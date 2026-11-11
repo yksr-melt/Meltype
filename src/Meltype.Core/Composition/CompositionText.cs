@@ -60,10 +60,41 @@ public sealed class CompositionText
     public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
 
     /// <summary>読点 (、 か ，)。</summary>
-    private char Comma => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.FullWidthCommaKuten ? '，' : '、';
+    private char Comma => CommaOf(Punctuation);
 
     /// <summary>句点 (。 か ．)。</summary>
-    private char Period => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.ToutenFullWidthPeriod ? '．' : '。';
+    private char Period => PeriodOf(Punctuation);
+
+    private static char CommaOf(PunctuationStyle style) => style is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.FullWidthCommaKuten ? '，' : '、';
+
+    private static char PeriodOf(PunctuationStyle style) => style is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.ToutenFullWidthPeriod ? '．' : '。';
+
+    // ---- 変換エンジンとやり取りする句読点 (issue #1725) ----
+    // 読みには設定の句読点 (，．) が入るが、変換エンジンには「、。」で渡す。変換エンジンは「，．」を句読点として扱わず、
+    // 半角の , . にして返したり (issue #498)、文節の区切りや数字とのつながりが「、。」のときと変わったりする。
+    // 渡す読みを「、。」にし、返ってきた読み・文字を設定の句読点に戻す。「、。」の設定では何も変えない。
+
+    /// <summary>設定の句読点の読みを、変換エンジンに渡す「、。」の読みにする。</summary>
+    internal static string ToEngineReading(string reading, PunctuationStyle style) =>
+        reading.Replace(CommaOf(style), '、').Replace(PeriodOf(style), '。');
+
+    /// <summary>変換エンジンが返した「、。」の読みを、設定の句読点の読みに戻す。</summary>
+    internal static string FromEngineReading(string reading, PunctuationStyle style) =>
+        reading.Replace('、', CommaOf(style)).Replace('。', PeriodOf(style));
+
+    /// <summary>
+    /// 変換エンジンが返した文字の「、。」を設定の句読点にする。engineReading は変換エンジンに渡した読み。
+    /// 読みの句読点と同じ数だけあるときだけ変える (読みに 。 の無い顔文字 (。・ω・。) の 。 は句読点ではない)。
+    /// </summary>
+    internal static string FromEngineText(string text, string engineReading, PunctuationStyle style) =>
+        Swap(Swap(text, engineReading, '、', CommaOf(style)), engineReading, '。', PeriodOf(style));
+
+    /// <summary>設定の句読点を当てた文字を、変換エンジンに渡す「、。」の形に戻す (変換エンジンに学習させるとき)。reading は設定の句読点の読み。</summary>
+    internal static string ToEngineText(string text, string reading, PunctuationStyle style) =>
+        Swap(Swap(text, reading, CommaOf(style), '、'), reading, PeriodOf(style), '。');
+
+    private static string Swap(string text, string reading, char from, char to) =>
+        from != to && reading.Contains(from) && text.Count(c => c == from) == reading.Count(c => c == from) ? text.Replace(from, to) : text;
 
     /// <summary>
     /// かな入力の 1 キー。raw はそのキーの英字 (英単語の判定と、英語として見せるときに使う)。
