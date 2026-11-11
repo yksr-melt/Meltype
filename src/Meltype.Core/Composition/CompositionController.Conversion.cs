@@ -627,24 +627,34 @@ public sealed partial class CompositionController
     {
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
         var candidates = Distinct(inContext);
-        foreach (var word in _services.UserDictionary?.Lookup(reading) ?? []) if (!candidates.Contains(word)) candidates.Add(word);
+        foreach (var word in _services.UserDictionary?.Lookup(reading) ?? []) if (!Listed(candidates, word)) candidates.Add(word);
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
-        if (!candidates.Contains(standalone)) candidates.Add(standalone);
+        if (!Listed(candidates, standalone)) candidates.Add(standalone);
         foreach (var extra in _services.Candidates?.LookupWords(reading) ?? [])
         {
-            if (!candidates.Contains(extra)) candidates.Add(extra);
+            if (!Listed(candidates, extra)) candidates.Add(extra);
         }
         var katakana = CompositionText.ToKatakana(reading);
         foreach (var kana in new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) })
         {
-            if (!candidates.Contains(kana)) candidates.Add(kana);
+            if (!Listed(candidates, kana)) candidates.Add(kana);
         }
         foreach (var emoji in EmojiBlock(reading))
         {
-            if (!candidates.Contains(emoji)) candidates.Add(emoji);
+            if (!Listed(candidates, emoji)) candidates.Add(emoji);
         }
         return candidates;
+    }
+
+    /// <summary>
+    /// 入力欄に出る文字が同じ候補が、一覧にもうあるか。句読点の設定が「，．」なら、変換エンジンが返す 、 と ， は同じ ， になる。
+    /// </summary>
+    private bool Listed(List<string> candidates, string candidate)
+    {
+        var style = _settings().Punctuation;
+        var shown = CompositionOutput.ToSetting(style, candidate);
+        return candidates.Any(c => CompositionOutput.ToSetting(style, c) == shown);
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -733,7 +743,7 @@ public sealed partial class CompositionController
         var merged = clause.Candidates.Take(anchor + 1).ToList();
         foreach (var candidate in more(reading).Select(c => NormalizeHalfWidth(c, reading)).Concat(clause.Candidates.Skip(anchor + 1)))
         {
-            if (!merged.Contains(candidate)) merged.Add(candidate);
+            if (!Listed(merged, candidate)) merged.Add(candidate);
         }
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
@@ -890,9 +900,14 @@ public sealed partial class CompositionController
 
     private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithLimit(0, convert);
 
-    /// <summary>選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
-    private ReconversionSelection? ReconversionSelectionNow() =>
-        Selection is { Length: > 0 } text && (IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
-            ? new ReconversionSelection(text, reading)
-            : null;
+    /// <summary>
+    /// 選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。
+    /// 読みの句読点は 、。 にする。
+    /// </summary>
+    private ReconversionSelection? ReconversionSelectionNow()
+    {
+        if (Selection is not { Length: > 0 } text) return null;
+        var reading = IsRomajiText(text) ? text : ReadingOf(text) is { } read ? CompositionOutput.FromSetting(_settings().Punctuation, read) : null;
+        return reading is { Length: > 0 } ? new ReconversionSelection(text, reading) : null;
+    }
 }

@@ -3125,7 +3125,7 @@ internal static class CompositionTests
         Assert.Equal("x64，arm64", k.Host.Document);
     }
 
-    /// <summary>Mozc と同じく、読みの 、。 はそのまま、，． は半角の , . にして返す変換エンジン。</summary>
+    /// <summary>読みの 、。 はそのまま、，． は半角の , . にして返す変換エンジン (半角の , . を確定して覚えた Mozc の代わり)。</summary>
     private sealed class PunctuationEchoConverter : IKanjiConverter
     {
         private static readonly (string Kana, string Text)[] Words = [("わたしは", "私は"), ("りんご", "林檎"), ("3こ", "3個")];
@@ -3193,6 +3193,135 @@ internal static class CompositionTests
                 Assert.Equal(expected, k.Host.Document, style.ToString());
             }
         }
+    }
+
+    [Test]
+    public static void Punctuation_SettingReachesShortAndPunctuationOnlyInput()
+    {
+        const Meltype.Config.PunctuationStyle Period = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod;
+        foreach (var (keys, expected) in new[] { ("ha, ", "は，"), (", ", "，"), (". ", "．") })
+        {
+            var k = new Keyboard(converter: new PunctuationEchoConverter()) { Punctuation = Period };
+            k.Type(keys);
+            Assert.Equal(expected, k.Showing, keys + "Space で変換");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Output.Single(), keys);
+        }
+
+        var after = new Keyboard(converter: new PunctuationEchoConverter()) { Punctuation = Period };
+        after.Type("watasiha \n,\n");
+        Assert.Equal("私は，", after.Host.Document, "確定したあとに句読点だけを打つ");
+
+        var typing = new Keyboard(converter: new PunctuationEchoConverter()) { Punctuation = Period };
+        typing.Type("watasiha,");
+        Assert.Equal("わたしは，", typing.Showing, "ライブ変換 OFF で変換する前");
+    }
+
+    /// <summary>数字と続くかなをまとめて渡されたときだけ「3個」にする変換エンジン。</summary>
+    private sealed class CounterConverter : IKanjiConverter
+    {
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana) is { } text ? [new(hiragana, text)] : null;
+        }
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "りんご" => "林檎",
+            "こ" => "子",
+            "3こ" => "3個",
+            "りんご、3こ" => "林檎、3個",
+            "3こ、りんご" => "3個、林檎",
+            "りんご、3こ。" => "林檎、3個。",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Punctuation_SettingDoesNotSplitDigits()
+    {
+        // #1712: 句読点の隣の数字も、かなと続けて変換エンジンに渡す (ringo,3ko の こ だけを渡すと「3個」にならない)
+        (string? Showing, string Output, List<string> Received) Type(string keys, Meltype.Config.PunctuationStyle style)
+        {
+            var converter = new CounterConverter();
+            var k = new Keyboard(live: true, converter: converter) { Punctuation = style };
+            k.Type(keys);
+            var showing = k.Showing;
+            k.Type("\n");
+            return (showing, k.Host.Output.Single(), converter.Received);
+        }
+
+        const Meltype.Config.PunctuationStyle Period = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod;
+        const Meltype.Config.PunctuationStyle Japanese = Meltype.Config.PunctuationStyle.Japanese;
+        var full = Type("ringo,3ko", Period);
+        Assert.Equal("林檎，3個", full.Showing);
+        Assert.Equal("林檎，3個", full.Output);
+        Assert.True(!full.Received.Contains("こ"), "3 と こ を分けて渡さない: " + string.Join(" / ", full.Received));
+        Assert.Equal("林檎、3個", Type("ringo,3ko", Japanese).Output);
+        Assert.Equal("3個，林檎", Type("3ko,ringo", Period).Output, "数字が句読点の前");
+        Assert.Equal("3個、林檎", Type("3ko,ringo", Japanese).Output);
+        Assert.Equal("林檎，3個．", Type("ringo,3ko.", Period).Output);
+    }
+
+    [Test]
+    public static void Punctuation_CandidatesAreDistinctAsShown()
+    {
+        // 変換エンジンは 、 の候補に ， も返す。「，．」の設定ではどちらも ， になるので、一覧には 1 つだけ出す
+        IReadOnlyList<string> More(string reading) => reading == "、" ? ["、", "，", ",", "・"] : [];
+        foreach (var (style, expected) in new[]
+        {
+            (Meltype.Config.PunctuationStyle.Japanese, "、 ， , ・"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "， , ・"),
+        })
+        {
+            var k = new Keyboard(converter: new PunctuationEchoConverter(), moreCandidates: More) { Punctuation = style };
+            k.Type(", ");
+            k.Press(VirtualKeys.Space);
+            Assert.Equal(expected, string.Join(" ", k.Host.View!.Candidates.Take(4).Where(c => c is "、" or "，" or "," or "・")), style.ToString());
+        }
+    }
+
+    [Test]
+    public static void Punctuation_ChoiceIsNotLearned()
+    {
+        // 句読点だけの文節で選んだ候補 (、 → ・) は覚えない。覚えると、ほかの句読点の設定や「わたしは、」の 、 まで ・ になる
+        var history = new ConversionHistory(null);
+        var converter = new LearningConverter();
+        var k = new Keyboard(history: history, converter: converter, moreCandidates: reading => reading == "、" ? ["、", "・"] : []);
+        k.Type(", ");
+        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "・"; i++) k.Press(VirtualKeys.Space);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("・", k.Host.Document);
+        Assert.True(history.Get("、") is null, "変換履歴に入れない");
+        Thread.Sleep(100);
+        lock (converter.Learned) Assert.True(!converter.Learned.Any(l => l.Contains("、=・")), "変換エンジンにも覚えさせない: " + string.Join(" / ", converter.Learned));
+    }
+
+    [Test]
+    public static void Punctuation_TextReadFromAppUsesKutouten()
+    {
+        // 入力欄から読んだキャレットの前の文字は、設定の句読点 (，) を 、 に戻して文脈にする
+        var k = new Keyboard { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        k.Host.PrecedingText = "はい，";
+        k.Type("kyou ");
+        Assert.Equal("はい、", k.Converter.LastContext, "文脈");
+    }
+
+    [Test]
+    public static void Punctuation_ReconversionReadingUsesKutouten()
+    {
+        // 再変換する文字の読みに入った設定の句読点 (，) は、、 にして変換エンジンに渡す
+        var converter = new PunctuationEchoConverter();
+        var k = new Keyboard(direct: true, converter: converter) { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        k.Host.Selection = new ReconversionSelection("わたしは，", "わたしは，");
+        k.Press(VirtualKeys.Convert);
+        Assert.Equal("私は，", k.Showing);
+        Assert.True(converter.Received.All(r => !r.Contains('，')), "変換エンジンには 、 で渡す: " + string.Join(" / ", converter.Received));
     }
 
     [Test]
