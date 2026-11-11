@@ -114,14 +114,14 @@ test('english-readable / english: 大文字を含む語はエラー', () => {
   assert.deepEqual(messages(checkDictionary('english.txt', 'hello\nHello\n').errors), ['2: 「Hello」が小文字の英字の語でない']);
 });
 
-test('contexts: : の前後の空白は問わない (Core は最初の : で分ける)', () => {
-  const { errors } = checkDictionary('contexts.txt', 'あつい 暑い :気温\nあつい 暑い: 天気\nあつい 暑い:夏\nあつい　暑い\t:\t季節\n');
-  assert.deepEqual(errors, []);
+test('contexts: 「 : 」以外の : はエラー', () => {
+  const { errors } = checkDictionary('contexts.txt', 'あつい 暑い :気温\nあつい 暑い: 天気\nあつい 暑い:夏\nあつい 暑い : 季節\n');
+  assert.deepEqual(messages(errors), ['1: 「読み 候補 : 手がかり …」の形でない', '2: 「読み 候補 : 手がかり …」の形でない', '3: 「読み 候補 : 手がかり …」の形でない']);
 });
 
 test('contexts: 読み・候補・手がかりが揃わない行はエラー', () => {
   const { errors } = checkDictionary('contexts.txt', 'あつい 暑い 気温\nあつい : 気温\nあつい 暑い 熱い : 気温\nあつい 暑い :\n');
-  assert.deepEqual(messages(errors), ['1: 「読み 候補 : 手がかり …」の形でない', '2: 候補が無い', '3: 候補は 1 つだけ', '4: 手がかりが無い']);
+  assert.deepEqual(messages(errors), ['1: 「読み 候補 : 手がかり …」の形でない', '2: 候補が無い', '3: 候補は 1 つだけ', '4: 「読み 候補 : 手がかり …」の形でない']);
 });
 
 test('candidates: 全角空白は Core と同じく区切り', () => {
