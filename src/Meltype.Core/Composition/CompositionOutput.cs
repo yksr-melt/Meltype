@@ -7,7 +7,7 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// 出来事 1 つの間の、入力欄への書き込み (<see cref="TextEdit"/>)・変換ボックスの表示・キーをアプリに通すか。
-/// 読み・変換・学習は句読点の設定によらず 、。 で扱い、設定の句読点 (，．) はここで書き込み・表示の文字に当てる (issue #1725)。
+/// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="CompositionText"/> の Symbol)、設定の句読点はここで書き込み・表示の文字に当てる。
 /// </summary>
 internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuation)
 {
@@ -120,7 +120,10 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
         _hidden = false;
     }
 
-    /// <summary>、。 を設定の句読点にする。</summary>
+    /// <summary>
+    /// 、。 をすべて設定の句読点にする。ここには文字しか届かないので、辞書の語・顔文字の 、。 (モーニング娘。) も変わる。
+    /// 句読点にだけ当てるには、区間の種類を出口まで渡す必要がある (#1735)。
+    /// </summary>
     private string Punctuate(string text) => punctuation() switch
     {
         Config.PunctuationStyle.Japanese => text,

@@ -22,6 +22,8 @@ namespace Meltype.Composition;
 /// 書き間違いの修正は Suggestion に入れる。案内が無ければ null。
 /// </para>
 /// Notes は Candidates と同じ順序・件数の注記。注記がない候補は None、リスト全体を省略するときは null。
+/// 入力欄に入りうる文字の欄 (Text・Candidates・Clauses・Suggestion・Predictions・Committed) は、CompositionOutput.Show が設定の句読点にする。
+/// そういう欄を足したら Show にも足す。
 /// </summary>
 public sealed record CompositionView(
     string Text,

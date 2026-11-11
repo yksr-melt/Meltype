@@ -3125,7 +3125,7 @@ internal static class CompositionTests
         Assert.Equal("x64，arm64", k.Host.Document);
     }
 
-    /// <summary>Mozc と同じく、読みの 、。 はそのまま、，． は半角の , . にして返す変換エンジン。渡された読みを覚える。</summary>
+    /// <summary>Mozc と同じく、読みの 、。 はそのまま、，． は半角の , . にして返す変換エンジン。</summary>
     private sealed class PunctuationEchoConverter : IKanjiConverter
     {
         private static readonly (string Kana, string Text)[] Words = [("わたしは", "私は"), ("りんご", "林檎"), ("3こ", "3個")];
@@ -3154,7 +3154,7 @@ internal static class CompositionTests
     [Test]
     public static void Punctuation_SettingReachesConvertedText()
     {
-        // #498・#1725: 設定の句読点が、Space の変換・ライブ変換のどちらでも変換結果に出る (，． を変換エンジンに渡すと半角の , . で返ってくる)
+        // #498: 設定の句読点が、Space の変換・ライブ変換のどちらでも変換結果に出る
         foreach (var (style, expected) in new[]
         {
             (Meltype.Config.PunctuationStyle.Japanese, "私は、林檎、3個。"),
