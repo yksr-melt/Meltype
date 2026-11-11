@@ -94,23 +94,24 @@ test('シンボリックリンク経由で起動しても辞書を検査する',
 });
 
 test('english: 日本語由来の節では行末のコメント・タブ・大文字はエラー (Core は # 以降も語として読み、空白でだけ区切り、小文字にしない)', () => {
-  const { errors } = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi ramen # 注記\n# 節の中のコメント行\ntofu\tmiso\nSake\n\nhello # 注記\nworld\tWide\n');
+  const { errors } = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi ramen # 注記\n# 節の中のコメント行\ntofu\tmiso\nSake\n\nhello # 注記\nworld\twide\n');
   assert.deepEqual(messages(errors), [
     '2: 日本語由来の節では行末にコメントを書けない (Core は # 以降も日本語由来の語として読む)',
     '4: 日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)',
     '5: 日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)',
+    '5: 「Sake」が小文字の英字の語でない',
   ]);
 });
 
 test('english: 日本語由来を含まない見出しの節は、ふつうの語として見る', () => {
-  const { errors, warnings } = checkDictionary('english.txt', '# --- 日本語辞書 (v2) の語と先頭が重なる英単語 ---\nhello # 注記\n# --- 技術用語 ---\nworld\tWide\n');
+  const { errors, warnings } = checkDictionary('english.txt', '# --- 日本語辞書 (v2) の語と先頭が重なる英単語 ---\nhello # 注記\n# --- 技術用語 ---\nworld\twide\n');
   assert.deepEqual(errors, []);
   assert.deepEqual(warnings, []);
 });
 
-test('english-readable / english: 大文字小文字だけ違う語は、Core と同じく同じ語の重複として警告', () => {
-  assert.deepEqual(checkDictionary('english-readable.txt', 'open\nOpen\n'), { errors: [], warnings: [{ line: 2, message: '「open」が 1 行目と重複' }] });
-  assert.deepEqual(checkDictionary('english.txt', 'hello\nHello\n'), { errors: [], warnings: [{ line: 2, message: '「hello」が 1 行目と重複' }] });
+test('english-readable / english: 大文字を含む語はエラー', () => {
+  assert.deepEqual(messages(checkDictionary('english-readable.txt', 'open\nOpen\n').errors), ['2: 「Open」が 3 文字以上の小文字の英字の語でない']);
+  assert.deepEqual(messages(checkDictionary('english.txt', 'hello\nHello\n').errors), ['2: 「Hello」が小文字の英字の語でない']);
 });
 
 test('contexts: : の前後の空白は問わない (Core は最初の : で分ける)', () => {
@@ -157,8 +158,8 @@ test('propernouns: , 区切りでも大文字小文字だけ違う綴りはエ�
 });
 
 test('english / english-readable / japanese: 全角空白は区切りでない (Core は全角空白で繋がった語を捨てる)', () => {
-  assert.deepEqual(messages(checkDictionary('english.txt', 'hello　world\n').errors), ['1: 「hello　world」が英字の語でない']);
-  assert.deepEqual(messages(checkDictionary('english-readable.txt', 'open　close\n').errors), ['1: 「open　close」が 3 文字以上の英字の語でない']);
+  assert.deepEqual(messages(checkDictionary('english.txt', 'hello　world\n').errors), ['1: 「hello　world」が小文字の英字の語でない']);
+  assert.deepEqual(messages(checkDictionary('english-readable.txt', 'open　close\n').errors), ['1: 「open　close」が 3 文字以上の小文字の英字の語でない']);
   assert.deepEqual(messages(checkDictionary('japanese.txt', 'kyou　ashita\n').errors), ['1: 「kyou　ashita」が小文字のローマ字でない']);
 });
 
