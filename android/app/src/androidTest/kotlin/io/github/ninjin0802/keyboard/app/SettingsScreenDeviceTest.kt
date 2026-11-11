@@ -11,6 +11,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Switch
 import android.widget.TextView
+import io.github.ninjin0802.keyboard.app.core.CoreConfig
+import io.github.ninjin0802.keyboard.app.core.coreDataDirectory
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -105,6 +107,8 @@ class SettingsScreenDeviceTest {
                 assertEquals(previous, toggles[0].isChecked)
                 toggles[0].isChecked = !previous
                 assertEquals(!previous, Settings(activity).liveConversionEnabled)
+                // Kept where the Core reads it (config.json), not in the keyboard's own preferences.
+                assertEquals(!previous, CoreConfig(coreDataDirectory(activity)).boolean(CoreConfig.LIVE_CONVERSION))
                 toggles[0].isChecked = previous
                 assertEquals(previous, settings.liveConversionEnabled)
             }

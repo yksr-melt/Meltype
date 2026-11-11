@@ -4,11 +4,18 @@ package io.github.ninjin0802.keyboard.app
 
 import android.content.Context
 import android.content.SharedPreferences
+import io.github.ninjin0802.keyboard.app.core.CoreConfig
+import io.github.ninjin0802.keyboard.app.core.coreDataDirectory
 import io.github.ninjin0802.keyboard.app.layout.LayoutId
 
-/** 設定の保存先。値はアプリ専用の領域に残る。 */
-class Settings(context: Context) {
+/**
+ * 設定の保存先。値はアプリ専用の領域に残る。
+ * キーボードの画面の設定（配列・振動・絵文字など）はここ（SharedPreferences）に、Core（Meltype.Core）の設定は
+ * ほかの OS と同じ config.json に持つ（[CoreConfig]）。
+ */
+class Settings(private val context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    private val core by lazy { CoreConfig(coreDataDirectory(context)) }
 
     var toggleEnabled: Boolean
         get() = prefs.getBoolean(KEY_TOGGLE_ENABLED, false)
@@ -42,10 +49,23 @@ class Settings(context: Context) {
         get() = prefs.getBoolean(KEY_HAPTIC_ENABLED, true)
         set(value) { prefs.edit().putBoolean(KEY_HAPTIC_ENABLED, value).apply() }
 
-    /** Controls live conversion in the shared C# Meltype.Core QWERTY engine. */
+    /**
+     * ライブ変換（Core の設定 LiveConversion。config.json に書く）。次に打つキーから効く。
+     * 前の版で SharedPreferences に残した値は、config.json に移す。
+     */
     var liveConversionEnabled: Boolean
-        get() = prefs.getBoolean(KEY_LIVE_CONVERSION_ENABLED, true)
-        set(value) { prefs.edit().putBoolean(KEY_LIVE_CONVERSION_ENABLED, value).apply() }
+        get() = core.boolean(CoreConfig.LIVE_CONVERSION) ?: movedLiveConversion() ?: LIVE_CONVERSION_DEFAULT
+        set(value) {
+            if (core.set(CoreConfig.LIVE_CONVERSION, value)) prefs.edit().remove(KEY_LIVE_CONVERSION_ENABLED).apply()
+        }
+
+    /** 前の版が SharedPreferences に保存したライブ変換の値を config.json に移して返す。保存がなければ null。 */
+    private fun movedLiveConversion(): Boolean? {
+        if (!prefs.contains(KEY_LIVE_CONVERSION_ENABLED)) return null
+        val saved = prefs.getBoolean(KEY_LIVE_CONVERSION_ENABLED, LIVE_CONVERSION_DEFAULT)
+        liveConversionEnabled = saved
+        return saved
+    }
 
     /** 値が変わったときの通知を受ける。呼び出し側が listener を強い参照で持つこと（保存先は弱い参照しか持たない）。 */
     fun registerChangeListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) =
@@ -59,7 +79,11 @@ class Settings(context: Context) {
         const val KEY_JAPANESE_SPACE_FULL_WIDTH = "japanese_space_full_width"
         const val KEY_EMOJI_ENABLED = "emoji_enabled"
         const val KEY_HAPTIC_ENABLED = "haptic_enabled"
-        const val KEY_LIVE_CONVERSION_ENABLED = "live_conversion_enabled"
+        /** 前の版がライブ変換を保存していた名前（今は config.json の LiveConversion）。 */
+        private const val KEY_LIVE_CONVERSION_ENABLED = "live_conversion_enabled"
+
+        /** config.json に LiveConversion が無いときの値（Core の Settings.LiveConversion の既定）。 */
+        private const val LIVE_CONVERSION_DEFAULT = true
         const val KEY_ENGLISH_LAYOUT = "english_layout"
 
         /** 保存してある値から日本語の配列を決める。未設定・不明な値はローマ字配列。 */

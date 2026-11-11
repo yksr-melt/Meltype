@@ -23,7 +23,6 @@ import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.view.Gravity
-import java.io.File
 import io.github.ninjin0802.keyboard.app.core.CaretWatch
 import io.github.ninjin0802.keyboard.app.core.CoreChoiceKind
 import io.github.ninjin0802.keyboard.app.core.CoreInputAdapter
@@ -31,6 +30,7 @@ import io.github.ninjin0802.keyboard.app.core.CoreMozcCallbacks
 import io.github.ninjin0802.keyboard.app.core.ImeFieldFacts
 import io.github.ninjin0802.keyboard.app.core.ImeJson
 import io.github.ninjin0802.keyboard.app.core.MeltypeCoreHost
+import io.github.ninjin0802.keyboard.app.core.coreDataDirectory
 import io.github.ninjin0802.keyboard.app.emoji.EmojiCatalog
 import io.github.ninjin0802.keyboard.app.emoji.EmojiPanelView
 import io.github.ninjin0802.keyboard.app.emoji.EmojiRecentsStore
@@ -110,7 +110,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         if (!policy.convert || !japaneseComposition || nativeCoreUnavailable) return null
         core?.let { return it }
         return try {
-            MeltypeCoreHost.open(File(noBackupFilesDir, "meltype"), CoreMozcCallbacks(converter))
+            MeltypeCoreHost.open(coreDataDirectory(this), CoreMozcCallbacks(converter))
                 .also { core = it }
         } catch (e: Exception) {
             nativeCoreUnavailable = true
