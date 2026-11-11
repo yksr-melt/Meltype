@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 KoheiTakada
-// Android JNI adapter for the existing Meltype.Native NativeAOT C ABI.
+// Android JNI adapter for the Meltype.Native NativeAOT C ABI (meltype_ime_*).
 #include <jni.h>
 #include <cstdint>
 #include <cstdlib>
@@ -15,17 +15,9 @@ extern "C" {
 int meltype_init(unsigned char* (*clauses)(unsigned char*, unsigned char*),
                  unsigned char* (*candidates)(unsigned char*),
                  int (*is_word)(unsigned char*));
-void* meltype_create();
-void meltype_destroy(void* handle);
-unsigned char* meltype_handle_key(void* handle, int vk, int ch, int modifiers,
-                                  unsigned char* before, unsigned char* after);
-unsigned char* meltype_commit(void* handle);
-unsigned char* meltype_select_candidate(void* handle, int index);
-unsigned char* meltype_select_prediction(void* handle, int index);
-void meltype_set_live_conversion(void* handle, int enabled);
-void meltype_set_private(void* handle, int is_private);
-void meltype_set_direct(void* handle, int direct);
-void meltype_set_can_delete(void* handle, int can_delete);
+void* meltype_ime_create();
+unsigned char* meltype_ime_handle(void* host, unsigned char* json);
+void meltype_ime_destroy(void* host);
 void meltype_free(unsigned char* ptr);
 }
 
@@ -182,65 +174,21 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_create(
         JNIEnv*, jobject) {
     std::lock_guard<std::mutex> guard(init_mutex);
     if (data_dir.empty()) return 0;
-    return static_cast<jlong>(reinterpret_cast<uintptr_t>(meltype_create()));
+    return static_cast<jlong>(reinterpret_cast<uintptr_t>(meltype_ime_create()));
 }
 
 extern "C" JNIEXPORT void JNICALL
 Java_io_github_ninjin0802_keyboard_app_core_NativeApi_destroy(
-        JNIEnv*, jobject, jlong handle) {
-    if (handle) meltype_destroy(as_handle(handle));
+        JNIEnv*, jobject, jlong host) {
+    if (host) meltype_ime_destroy(as_handle(host));
 }
 
+// One event (ImeEvent JSON) in, one response (ImeOutput JSON) out, both UTF-8.
 extern "C" JNIEXPORT jbyteArray JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_handleKey(
-        JNIEnv* env, jobject, jlong handle, jint vk, jint scalar, jint modifiers,
-        jbyteArray before, jbyteArray after) {
-    if (!handle) return nullptr;
-    auto lhs = read_utf8(env, before);
-    auto rhs = read_utf8(env, after);
+Java_io_github_ninjin0802_keyboard_app_core_NativeApi_handle(
+        JNIEnv* env, jobject, jlong host, jbyteArray event) {
+    if (!host || !event) return nullptr;
+    auto json = read_utf8(env, event);
     if (env->ExceptionCheck()) return nullptr;
-    return return_utf8(env, meltype_handle_key(as_handle(handle), vk, scalar, modifiers,
-        before ? lhs.data() : nullptr, after ? rhs.data() : nullptr));
-}
-
-extern "C" JNIEXPORT jbyteArray JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_commit(
-        JNIEnv* env, jobject, jlong handle) {
-    return handle ? return_utf8(env, meltype_commit(as_handle(handle))) : nullptr;
-}
-
-extern "C" JNIEXPORT jbyteArray JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_selectCandidate(
-        JNIEnv* env, jobject, jlong handle, jint index) {
-    return handle ? return_utf8(env, meltype_select_candidate(as_handle(handle), index)) : nullptr;
-}
-
-extern "C" JNIEXPORT jbyteArray JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_selectPrediction(
-        JNIEnv* env, jobject, jlong handle, jint index) {
-    return handle ? return_utf8(env, meltype_select_prediction(as_handle(handle), index)) : nullptr;
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_setLiveConversion(
-        JNIEnv*, jobject, jlong handle, jboolean enabled) {
-    if (handle) meltype_set_live_conversion(as_handle(handle), enabled == JNI_TRUE ? 1 : 0);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_setPrivate(
-        JNIEnv*, jobject, jlong handle, jboolean is_private) {
-    if (handle) meltype_set_private(as_handle(handle), is_private == JNI_TRUE ? 1 : 0);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_setDirect(
-        JNIEnv*, jobject, jlong handle, jboolean direct) {
-    if (handle) meltype_set_direct(as_handle(handle), direct == JNI_TRUE ? 1 : 0);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_io_github_ninjin0802_keyboard_app_core_NativeApi_setCanDelete(
-        JNIEnv*, jobject, jlong handle, jboolean can_delete) {
-    if (handle) meltype_set_can_delete(as_handle(handle), can_delete == JNI_TRUE ? 1 : 0);
+    return return_utf8(env, meltype_ime_handle(as_handle(host), json.data()));
 }

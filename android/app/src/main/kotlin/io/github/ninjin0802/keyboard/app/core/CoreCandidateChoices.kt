@@ -2,21 +2,30 @@
 // Copyright (C) 2026 KoheiTakada
 package io.github.ninjin0802.keyboard.app.core
 
-import org.json.JSONObject
-
-/** Every visible suggestion is exactly the string that a tap will commit. */
-internal enum class CoreChoiceKind {
-    CONVERSION, PREDICTION, KANA_CORRECTION, KATAKANA_CORRECTION, LATIN_CORRECTION
+/**
+ * What a tap on a candidate does. [CORE] is an item of the Core's one list (view.candidates);
+ * the others are fixed choices that send F6 / F7 / F10 and then Enter.
+ */
+internal enum class CoreChoiceKind(val vk: Int) {
+    CORE(0), TO_HIRAGANA(0x75), TO_KATAKANA(0x76), TO_LATIN(0x79)
 }
 
 internal data class CoreChoice(
     val label: String,
     val kind: CoreChoiceKind,
+    /** Index in the Core's list for [CoreChoiceKind.CORE] (CandidateClicked), otherwise -1. */
     val nativeIndex: Int = -1,
 )
 
-/** Maps Core JSON to Android candidate strings while preserving native indices. */
+/** Maps the Core's view to the Android candidate bar while preserving native indices. */
 internal object CoreCandidateChoices {
+    /** Labels of the fixed choices shown while typing (not converting). */
+    val fixedChoices = listOf(
+        CoreChoice("ひらがな", CoreChoiceKind.TO_HIRAGANA),
+        CoreChoice("カタカナ", CoreChoiceKind.TO_KATAKANA),
+        CoreChoice("英字", CoreChoiceKind.TO_LATIN),
+    )
+
     /** Screens out only candidates containing Unicode emoji, not ordinary punctuation. */
     fun hasEmoji(text: String): Boolean {
         var index = 0
@@ -32,60 +41,16 @@ internal object CoreCandidateChoices {
         return false
     }
 
-    fun fromView(view: JSONObject?, allowEmoji: Boolean = true): Pair<List<CoreChoice>, Int?> {
-        if (view == null || view.optString("text").isEmpty()) return emptyList<CoreChoice>() to null
-        val composing = view.optString("text")
-        val converting = view.optBoolean("converting", false)
+    /** The choices to show and which of them is selected. */
+    fun fromView(view: ImeView?, allowEmoji: Boolean = true): Pair<List<CoreChoice>, Int?> {
+        if (view == null || view.text.isEmpty()) return emptyList<CoreChoice>() to null
         val result = ArrayList<CoreChoice>()
-        val labels = HashSet<String>()
-        fun add(label: String, kind: CoreChoiceKind, nativeIndex: Int = -1) {
-            if (label.isNotBlank() && labels.add(label) && (allowEmoji || !hasEmoji(label))) {
-                result.add(CoreChoice(label, kind, nativeIndex))
-            }
+        val list = view.candidates
+        list?.items?.forEachIndexed { index, label ->
+            if (label.isNotBlank() && (allowEmoji || !hasEmoji(label))) result.add(CoreChoice(label, CoreChoiceKind.CORE, index))
         }
-        val ordinary = view.optJSONArray("candidates")
-        val predicted = view.optJSONArray("predictions")
-
-        if (converting) {
-            if (ordinary != null) for (i in 0 until ordinary.length()) {
-                add(ordinary.optString(i), CoreChoiceKind.CONVERSION, i)
-            }
-            val nativeSelected = view.optInt("selectedIndex", -1)
-            val selected = result.indexOfFirst {
-                it.kind == CoreChoiceKind.CONVERSION && it.nativeIndex == nativeSelected
-            }.takeIf { it >= 0 }
-            return result to selected
-        }
-
-        if (predicted != null) for (i in 0 until predicted.length()) {
-            add(predicted.optString(i), CoreChoiceKind.PREDICTION, i)
-        }
-        if (ordinary != null) for (i in 0 until ordinary.length()) {
-            add(ordinary.optString(i), CoreChoiceKind.CONVERSION, i)
-        }
-
-        // Core always retains the original keystrokes and their kana reading.
-        // Surface corrected text itself, not 'switch language' command buttons.
-        val original = view.optString("raw")
-        val kana = view.optString("kana")
-        if (original.isNotBlank() && original != composing) {
-            add(original, CoreChoiceKind.LATIN_CORRECTION)
-        }
-        if (kana.isNotBlank() && kana != composing && kana != original &&
-            kana.any { it in 'ぁ'..'ゖ' || it == 'ー' }) {
-            add(kana, CoreChoiceKind.KANA_CORRECTION)
-            val katakana = buildString {
-                kana.forEach { ch ->
-                    append(if (ch in 'ぁ'..'ゖ') (ch.code + 0x60).toChar() else ch)
-                }
-            }
-            if (katakana != kana) add(katakana, CoreChoiceKind.KATAKANA_CORRECTION)
-        }
-
-        val nativeSelected = view.optInt("selectedPrediction", -1)
-        val selected = result.indexOfFirst {
-            it.kind == CoreChoiceKind.PREDICTION && it.nativeIndex == nativeSelected
-        }.takeIf { it >= 0 }
+        val selected = list?.let { l -> result.indexOfFirst { it.nativeIndex == l.selected }.takeIf { it >= 0 } }
+        if (!view.converting) result.addAll(fixedChoices)
         return result to selected
     }
 }

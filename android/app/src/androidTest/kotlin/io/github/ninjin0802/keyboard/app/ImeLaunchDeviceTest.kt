@@ -87,6 +87,11 @@ class ImeLaunchDeviceTest {
         assertEquals("The actual keyboard must be the system-selected default",
             expectedIme, Settings.Secure.getString(target.contentResolver,
                 Settings.Secure.DEFAULT_INPUT_METHOD))
+        // The Japanese check below must take the QWERTY romaji path, which is the
+        // only one that goes through the native Core.
+        val settings = io.github.ninjin0802.keyboard.app.Settings(target)
+        val originalLayout = settings.japaneseLayout
+        settings.japaneseLayout = io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
         val activity = instrumentation.startActivitySync(
             Intent(target, ImeSmokeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         ) as ImeSmokeActivity
@@ -156,11 +161,9 @@ class ImeLaunchDeviceTest {
                     as InputMethodManager).showSoftInput(
                         activity.japaneseEditor, InputMethodManager.SHOW_IMPLICIT)
             }
-            waitUntil("Japanese text field opens the Japanese keyboard") {
-                val id = KeyboardService.activeForSmokeTest?.get()
-                    ?.activeKeysForSmokeTest()?.layout?.id
-                id == io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI ||
-                    id == io.github.ninjin0802.keyboard.app.layout.LayoutId.KANA
+            waitUntil("Japanese text field opens the Japanese romaji keyboard") {
+                KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()?.layout?.id ==
+                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
             }
             val japanese = KeyboardService.activeForSmokeTest?.get()
                 ?.activeKeysForSmokeTest() ?: throw AssertionError("Japanese keys not shown")
@@ -192,8 +195,16 @@ class ImeLaunchDeviceTest {
             waitUntil("Japanese key must write composing text into the editor") {
                 activity.japaneseEditor.text.isNotEmpty()
             }
+            // The Kotlin romaji path would also write text. Require that the key
+            // really went through the native Core and that it did not fail.
+            var native = false
+            instrumentation.runOnMainSync {
+                native = KeyboardService.activeForSmokeTest?.get()?.nativeCoreActiveForSmokeTest() == true
+            }
+            assertTrue("Japanese romaji did not go through the native Core", native)
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
+            settings.japaneseLayout = originalLayout
         }
     }
 }

@@ -60,30 +60,46 @@ class LanguageDetectionDeviceTest {
         }
     }
 
-    private fun type(text: String): String {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+    /**
+     * Sends events to the native Core the way KeyboardService does and applies the
+     * responses to a real InputConnection: a key the Core passes is typed by the "app".
+     */
+    private inner class CoreTypist : AutoCloseable {
+        private val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val connection = BaseInputConnection(View(ctx), true)
         val adapter = CoreInputAdapter { connection }
-        MeltypeCoreSession.open(File(ctx.noBackupFilesDir, "bilingual-device-test"), CoreMozcCallbacks(converter)).use { core ->
-            core.setCanDelete(true)
+        private val core = MeltypeCoreHost.open(File(ctx.noBackupFilesDir, "bilingual-device-test"), CoreMozcCallbacks(converter))
+
+        fun send(event: String): Boolean =
+            adapter.apply(core.handle(event) ?: error("Native Core returned null for $event"))
+
+        fun field() = adapter.field(emptyList())
+
+        /** Types [text]; characters the Core passes reach the editor as the app would insert them. */
+        fun type(text: String) {
             for (char in text) {
-                val preceding = connection.getTextBeforeCursor(50, 0)?.toString()
-                val response = core.handleKey(
-                    char.uppercaseChar().code,
-                    char.code,
-                    before = preceding,
-                ) ?: error("Native engine returned null on input '$text' after '$char'")
-                val consumed = adapter.apply(response)
+                val consumed = send(ImeJson.characterKey(char.code, false, field()))
                 if (!consumed) connection.commitText(char.toString(), 1)
-                println("MELTYPE_BILINGUAL_TRACE input=$text char=$char consumed=$consumed response=$response")
             }
-            val end = core.commit() ?: error("Native engine returned null on commit for '$text'")
-            adapter.apply(end)
-            connection.finishComposingText()
-            val actual = connection.getEditable().toString()
-            println("MELTYPE_BILINGUAL_RESULT input=$text actual=$actual")
-            return actual
         }
+
+        fun key(vk: Int): Boolean = send(ImeJson.virtualKey(vk, field()))
+
+        fun commit() {
+            send(ImeJson.commitRequested(field()))
+            connection.finishComposingText()
+        }
+
+        val text: String get() = connection.getEditable().toString()
+
+        override fun close() = core.close()
+    }
+
+    private fun type(text: String): String = CoreTypist().use { typist ->
+        typist.type(text)
+        typist.commit()
+        println("MELTYPE_BILINGUAL_RESULT input=$text actual=${typist.text}")
+        typist.text
     }
 
     @Test fun englishStaysLatin() {
@@ -93,60 +109,91 @@ class LanguageDetectionDeviceTest {
 
     @Test fun japaneseRomajiBecomesKana() {
         assertEquals("ありがとう", type("arigatou"))
-        val greeting = type("konnichiwa")
-        assertTrue("Expected Japanese kana for konnichiwa but got '$greeting'",
-            greeting == "こんにちは" || greeting == "こんにちわ")
+        // Core reads "nn" as ん, as on the desktop (CompositionTests: tanni → たんい,
+        // konnichiwq → こんいちwq). Type "konnnichiwa" for こんにちわ.
+        assertEquals("こんいちわ", type("konnichiwa"))
     }
 
     @Test fun mixedLanguagesWithoutManualToggle() {
         assertEquals("hello ありがとう", type("hello arigatou"))
     }
 
-    @Test fun predictionActionsAreMappedToNativeIndices() {
-        val view = org.json.JSONObject(
-            """{"text":"hel","converting":false,"candidates":[],"predictions":["hello","help"],"selectedPrediction":-1}"""
+    /** A whole response as the Core writes it (ImeOutput), with only the view varying. */
+    private fun response(view: String) =
+        """{"version":1,"state":{},"result":{"consumed":true,"commits":[],"view":$view}}"""
+
+    private fun viewOf(view: String) = ImeJson.parse(response(view)).view
+
+    @Test fun choicesKeepTheCoreIndicesForClicks() {
+        val typing = viewOf(
+            """{"text":"hel","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,
+            "typedKeys":null,"candidates":{"items":["hello","help"],"notes":[null,null],"numbered":false,"selected":-1,
+            "selectedMeaning":null,"meaningDelayMs":1500}}"""
         )
-        val (choices, selected) = CoreCandidateChoices.fromView(view)
+        val (choices, selected) = CoreCandidateChoices.fromView(typing)
         assertEquals(null, selected)
-        assertEquals(CoreChoiceKind.PREDICTION, choices[0].kind)
-        assertEquals(0, choices[0].nativeIndex)
-        assertEquals(CoreChoiceKind.PREDICTION, choices[1].kind)
-        assertEquals(1, choices[1].nativeIndex)
-        assertTrue("Correction row must not show operation buttons", choices.none {
-            it.label in setOf("変換", "かなに直す", "英字に直す")
-        })
-        val converted = org.json.JSONObject(
-            """{"text":"こんにちは","converting":true,"candidates":["今日は","こんにちは"],"selectedIndex":1}"""
+        assertEquals(listOf("hello", "help"), choices.filter { it.kind == CoreChoiceKind.CORE }.map { it.label })
+        assertEquals(listOf(0, 1), choices.filter { it.kind == CoreChoiceKind.CORE }.map { it.nativeIndex })
+        val converted = viewOf(
+            """{"text":"こんにちは","converting":true,"clauses":["こんにちは"],"selectedClause":0,"hint":"",
+            "spellingSuggestion":null,"typedKeys":null,"candidates":{"items":["今日は","こんにちは"],"notes":[null,null],
+            "numbered":true,"selected":1,"selectedMeaning":null,"meaningDelayMs":1500}}"""
         )
         val (convertedChoices, selection) = CoreCandidateChoices.fromView(converted)
         assertEquals(1, selection)
-        assertEquals(CoreChoiceKind.CONVERSION, convertedChoices[1].kind)
+        assertEquals("こんにちは", convertedChoices[1].label)
         assertEquals(1, convertedChoices[1].nativeIndex)
+        assertTrue("No fixed choices while converting", convertedChoices.all { it.kind == CoreChoiceKind.CORE })
     }
 
-    @Test fun correctionsShowRealWordsAndNeverCommandButtons() {
-        val view = org.json.JSONObject(
-            """{"text":"日本語","raw":"nihongo","kana":"にほんご","converting":false,
-            "candidates":[],"predictions":[],"selectedPrediction":-1}"""
+    @Test fun fixedCorrectionsAreOfferedWhileTyping() {
+        val typing = viewOf(
+            """{"text":"日本語","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,
+            "typedKeys":null,"candidates":null}"""
         )
-        val (choices, _) = CoreCandidateChoices.fromView(view)
-        assertTrue(choices.any { it.label == "nihongo" && it.kind == CoreChoiceKind.LATIN_CORRECTION })
-        assertTrue(choices.any { it.label == "にほんご" && it.kind == CoreChoiceKind.KANA_CORRECTION })
-        assertTrue(choices.any { it.label == "ニホンゴ" && it.kind == CoreChoiceKind.KATAKANA_CORRECTION })
-        assertTrue(choices.none { it.label in setOf("変換", "かなに直す", "英字に直す") })
+        val (choices, _) = CoreCandidateChoices.fromView(typing)
+        assertEquals(
+            listOf(CoreChoiceKind.TO_HIRAGANA to 0x75, CoreChoiceKind.TO_KATAKANA to 0x76, CoreChoiceKind.TO_LATIN to 0x79),
+            choices.map { it.kind to it.kind.vk },
+        )
+        assertEquals(null, CoreCandidateChoices.fromView(null).second)
+        assertTrue(CoreCandidateChoices.fromView(null).first.isEmpty())
     }
 
-    @Test fun emojiPreferenceFiltersPredictions() {
-        val view = org.json.JSONObject(
-            """{"text":"ありがとう","raw":"arigatou","kana":"ありがとう",
-            "predictions":["ありがとうございます","ありがとう😊"],"candidates":[],
-            "converting":false,"selectedPrediction":-1}"""
+    @Test fun emojiPreferenceFiltersPredictionsWithoutShiftingIndices() {
+        val typing = viewOf(
+            """{"text":"ありがとう","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,
+            "typedKeys":null,"candidates":{"items":["ありがとう😊","ありがとうございます"],"notes":[null,null],
+            "numbered":false,"selected":-1,"selectedMeaning":null,"meaningDelayMs":1500}}"""
         )
-        val enabled = CoreCandidateChoices.fromView(view, allowEmoji = true).first
-        val disabled = CoreCandidateChoices.fromView(view, allowEmoji = false).first
+        val enabled = CoreCandidateChoices.fromView(typing, allowEmoji = true).first
+        val disabled = CoreCandidateChoices.fromView(typing, allowEmoji = false).first
         assertTrue(enabled.any { it.label == "ありがとう😊" })
         assertTrue(disabled.none { it.label == "ありがとう😊" })
-        assertTrue(disabled.any { it.label == "ありがとうございます" })
+        // The Core still numbers the hidden emoji as 0, so the click must send 1.
+        assertEquals(1, disabled.single { it.label == "ありがとうございます" }.nativeIndex)
+    }
+
+    @Test fun malformedResponseLeavesTheEditorAlone() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val connection = BaseInputConnection(View(ctx), true)
+        connection.commitText("keep", 1)
+        val adapter = CoreInputAdapter { connection }
+        val broken = """{"version":1,"state":{},"result":{"consumed":true,"commits":[{"text":"x"}],"view":null}}"""
+        assertTrue(runCatching { adapter.apply(broken) }.isFailure)
+        assertEquals("keep", connection.getEditable().toString())
+    }
+
+    @Test fun removeBeforeReplacesTheTextBeforeTheCaret() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val connection = BaseInputConnection(View(ctx), true)
+        connection.commitText("今日は", 1)
+        val adapter = CoreInputAdapter { connection }
+        adapter.apply(
+            """{"version":1,"state":{},"result":{"consumed":true,"commits":[{"text":"京は","removeBefore":"今日は",
+            "currentWord":null,"moveCaretBack":0,"insertByPaste":false}],"view":null}}"""
+        )
+        assertEquals("京は", connection.getEditable().toString())
     }
 
     @Test fun settingsPersistJapaneseSpaceAndEmojiPreferences() {
@@ -173,52 +220,39 @@ class LanguageDetectionDeviceTest {
     }
 
     @Test fun originalLatinCorrectionCanBeSelectedAndCommitted() {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val connection = BaseInputConnection(View(ctx), true)
-        val adapter = CoreInputAdapter { connection }
-        MeltypeCoreSession.open(File(ctx.noBackupFilesDir, "bilingual-device-test"),
-            CoreMozcCallbacks(converter)).use { core ->
-            core.setCanDelete(true)
-            for (ch in "nihongo") {
-                val response = core.handleKey(ch.uppercaseChar().code, ch.code,
-                    before = connection.getTextBeforeCursor(50, 0)?.toString())
-                    ?: error("No result for char $ch")
-                if (!adapter.apply(response)) connection.commitText(ch.toString(), 1)
-            }
-            assertTrue(adapter.choices.any { it.label == "nihongo" &&
-                it.kind == CoreChoiceKind.LATIN_CORRECTION })
-            adapter.apply(core.handleKey(0x79, 0)) // F10: original Latin spelling
-            adapter.apply(core.handleKey(0x0D, 0)) // Enter: commit
-            assertEquals("nihongo", connection.getEditable().toString())
+        CoreTypist().use { typist ->
+            typist.type("nihongo")
+            assertTrue("Japanese romaji should be composing", typist.adapter.composing)
+            val latin = typist.adapter.choices.single { it.kind == CoreChoiceKind.TO_LATIN }
+            typist.key(latin.kind.vk) // F10: original Latin spelling
+            typist.key(0x0D) // Enter: commit
+            assertEquals("nihongo", typist.text)
+        }
+    }
+
+    @Test fun composingTextIsNotSentAsTextBeforeTheCaret() {
+        CoreTypist().use { typist ->
+            typist.connection.commitText("abc ", 1)
+            typist.type("ari")
+            assertTrue(typist.adapter.composing)
+            assertEquals("abc ", typist.field().before)
         }
     }
 
     @Test fun digitsStayInCompositionUntilExplicitEnter() {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val connection = BaseInputConnection(View(ctx), true)
-        val adapter = CoreInputAdapter { connection }
-        MeltypeCoreSession.open(File(ctx.noBackupFilesDir, "bilingual-device-test"), CoreMozcCallbacks(converter)).use { core ->
-            core.setCanDelete(true)
+        CoreTypist().use { typist ->
             for (ch in "arigatou") {
-                val payload = core.handleKey(ch.uppercaseChar().code, ch.code,
-                    before = connection.getTextBeforeCursor(50, 0)?.toString())
-                    ?: error("Native Core did not respond to romaji")
-                val consumed = adapter.apply(payload)
-                assertTrue("Kana romaji must enter composition for $ch", consumed)
+                assertTrue("Kana romaji must enter composition for $ch",
+                    typist.send(ImeJson.characterKey(ch.code, false, typist.field())))
             }
-            assertTrue("Japanese composition disappeared before keypad digits", adapter.composing)
+            assertTrue("Japanese composition disappeared before keypad digits", typist.adapter.composing)
             for (digit in "123") {
-                val payload = core.handleKey(digit.code, digit.code,
-                    before = connection.getTextBeforeCursor(50, 0)?.toString())
-                    ?: error("Core returned null for numeric keypad $digit")
                 assertTrue("Numpad digit $digit should be consumed as composition",
-                    adapter.apply(payload))
-                assertTrue("Numpad digit $digit unexpectedly committed text", adapter.composing)
+                    typist.send(ImeJson.characterKey(digit.code, false, typist.field())))
+                assertTrue("Numpad digit $digit unexpectedly committed text", typist.adapter.composing)
             }
-            assertTrue("Composition should be active before explicit Enter", adapter.composing)
-            val enter = core.handleKey(0x0D, 0) ?: error("Core did not handle Enter")
-            adapter.apply(enter)
-            assertTrue("Enter should terminate composition", !adapter.composing)
+            typist.key(0x0D)
+            assertTrue("Enter should terminate composition", !typist.adapter.composing)
         }
     }
 
@@ -270,26 +304,15 @@ class LanguageDetectionDeviceTest {
     }
 
     @Test fun englishPredictionsCanBeCommittedOnAndroid() {
-        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
-        val connection = BaseInputConnection(View(ctx), true)
-        val adapter = CoreInputAdapter { connection }
-        MeltypeCoreSession.open(File(ctx.noBackupFilesDir, "bilingual-device-test"), CoreMozcCallbacks(converter)).use { core ->
-            core.setCanDelete(true)
-            for (char in "hell") {
-                val response = core.handleKey(char.uppercaseChar().code, char.code,
-                    before = connection.getTextBeforeCursor(50, 0)?.toString())
-                    ?: error("Core returned null while collecting predictions")
-                val consumed = adapter.apply(response)
-                if (!consumed) connection.commitText(char.toString(), 1)
+        CoreTypist().use { typist ->
+            typist.type("hell")
+            val option = typist.adapter.choices.firstOrNull {
+                it.kind == CoreChoiceKind.CORE && it.label.startsWith("hell")
             }
-            val option = adapter.choices.firstOrNull {
-                it.kind == CoreChoiceKind.PREDICTION && it.label.startsWith("hell")
-            }
-            assertTrue("No English prediction from Native Core for hell: " + adapter.choices, option != null)
-            val selected = core.selectPrediction(option!!.nativeIndex)
-                ?: error("Native prediction-selection function missing")
-            adapter.apply(selected)
-            assertEquals(option.label, connection.getEditable().toString())
+            assertTrue("No English prediction from Native Core for hell: " + typist.adapter.choices, option != null)
+            // A prediction is committed by the click itself (no Enter).
+            typist.send(ImeJson.candidateClicked(option!!.nativeIndex, typist.field()))
+            assertEquals(option.label, typist.text)
         }
     }
 
