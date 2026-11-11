@@ -173,6 +173,11 @@ public sealed partial class CompositionController
                 _spaceStartedConversion = true;
                 StartConversion();
                 return;
+            case VirtualKeys.NonConvert when _settings().SeparateKeyRoles && _settings().NonConvertCyclesKana && !IsProtectedInput:
+                // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の輪。今ひらがなで見えていなければ (変換した漢字・英字など)、まずひらがなにする
+                SetMode(NextKanaCycleMode());
+                _modeByKey = true;
+                return;
             case VirtualKeys.NonConvert when _settings().SeparateKeyRoles:
                 // 無変換: 今までの入力を英字にする (F10 と同じ。続けて押すと大文字・小文字も切り替わる)
                 SetAlphanumericMode(DisplayMode.HalfWidthAlphanumeric);
@@ -790,6 +795,24 @@ public sealed partial class CompositionController
             {
                 foreach (var kana in clause.Reading) _text.AppendKana(kana, kana);
             }
+        }
+    }
+
+    /// <summary>無変換での かな の循環の次の表示。ひらがな・カタカナ・半角カタカナで見えているときだけ輪の次へ、それ以外 (変換後・英字) はひらがな。</summary>
+    private DisplayMode NextKanaCycleMode()
+    {
+        // 変換中は、まずひらがなに戻す
+        if (_converting) return DisplayMode.Hiragana;
+        switch (_text.Mode)
+        {
+            case DisplayMode.Hiragana: return DisplayMode.Katakana;
+            case DisplayMode.Katakana: return DisplayMode.HalfWidthKatakana;
+            case DisplayMode.HalfWidthKatakana: return DisplayMode.Hiragana;
+            case DisplayMode.Auto:
+                // 自動判定で、文字がひらがな (と長音) だけなら、ひらがなで見えている。英字・数字・漢字・カタカナを含むなら見えていない (記号は無視)
+                var shown = CurrentDisplay(final: false);
+                return shown.Length > 0 && shown.All(c => !char.IsLetterOrDigit(c) || c is >= '\u3041' and <= '\u309F' or '\u30FC') ? DisplayMode.Katakana : DisplayMode.Hiragana;
+            default: return DisplayMode.Hiragana;
         }
     }
 
