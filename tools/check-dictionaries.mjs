@@ -24,6 +24,7 @@ const tokens = line => line.split(/[ \t]+/).filter(Boolean);
  *   keysOf    … 重複を見る単位 ([キー, 中身] の並び)。既定は行全体。
  *               キーが同じで中身が違えば、後の行が前の行を上書きするか、どちらが効くか決まらないのでエラー。中身まで同じなら警告
  *   allowRepeats … 中身まで同じ重複を警告しないか。既定は警告する
+ *   sections  … 節で決まりが変わる辞書の検査を作る関数。作った検査に 1 行ずつ (\r を除いた行全体) 渡すとエラーの並びを返す。既定は無し
  */
 const dictionaries = {
   // 読み 候補 候補 … (空白区切り)。読みは打ったときの読みと完全一致で引くので、キーを打って作れる文字列だけを通す。
@@ -52,9 +53,9 @@ const dictionaries = {
     // 分類ごとに同じ語を置いてよい (同じ綴りなら正規形は変わらない)
     allowRepeats: true,
   },
-  // 日本語由来の節は sections で見る
   'english.txt': {
     format: words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
+    sections: japaneseOriginSection,
   },
   'english-words.txt': {
     format: words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
@@ -166,26 +167,24 @@ function tabbed(min, max, check) {
 }
 
 /**
- * 辞書の中の節で決まりが変わるもの。file ごとに、1 行ずつ (\r を除いた行全体) 渡すとエラーの並びを返す関数を作る。
+ * english.txt の日本語由来の節の検査を作る。
+ * Core (CompositionDetector.JapaneseOriginWords) は「# ---」で始まる行を節の見出しとし、「日本語由来」を含む節では
+ * 空行までの # で始まらない行を、# 以降も含めて半角空白だけで区切り、小文字にせずに日本語由来の語とする
  */
-const sections = {
-  // Core (CompositionDetector.JapaneseOriginWords) は「# ---」で始まる行を節の見出しとし、「日本語由来」を含む節では
-  // 空行までの # で始まらない行を、# 以降も含めて半角空白だけで区切り、小文字にせずに日本語由来の語とする
-  'english.txt': () => {
-    let inSection = false;
-    return line => {
-      if (line.startsWith('# ---')) { inSection = line.includes('日本語由来'); return []; }
-      if (!inSection || line.startsWith('#')) return [];
-      if (line.trim() === '') { inSection = false; return []; }
-      return [
-        line.includes('#') ? '日本語由来の節では行末にコメントを書けない (Core は # 以降も日本語由来の語として読む)' : null,
-        // Core と同じく半角空白で分けて前後の空白を除いた語に、タブ・全角空白・, が残れば、その語は日本語由来の語にならない
-        line.split(' ').some(w => /[\t\u3000,]/.test(w.trim())) ? '日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)' : null,
-        /[A-Z]/.test(line) ? '日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)' : null,
-      ].filter(Boolean);
-    };
-  },
-};
+function japaneseOriginSection() {
+  let inSection = false;
+  return line => {
+    if (line.startsWith('# ---')) { inSection = line.includes('日本語由来'); return []; }
+    if (!inSection || line.startsWith('#')) return [];
+    if (line.trim() === '') { inSection = false; return []; }
+    return [
+      line.includes('#') ? '日本語由来の節では行末にコメントを書けない (Core は # 以降も日本語由来の語として読む)' : null,
+      // Core と同じく半角空白で分けて前後の空白を除いた語に、タブ・全角空白・, が残れば、その語は日本語由来の語にならない
+      line.split(' ').some(w => /[\t\u3000,]/.test(w.trim())) ? '日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)' : null,
+      /[A-Z]/.test(line) ? '日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)' : null,
+    ].filter(Boolean);
+  };
+}
 
 /** 辞書 file の本文 text を確かめ、{ errors, warnings } (どちらも { line, message } の並び。line は無いこともある) を返す。 */
 export function checkDictionary(file, text) {
@@ -199,8 +198,9 @@ export function checkDictionary(file, text) {
     untrimmed = false,
     keysOf = line => [[line.trim(), line.trim()]],
     allowRepeats = false,
+    sections,
   } = config;
-  const sectionCheck = sections[file]?.();
+  const sectionCheck = sections?.();
   const seen = new Map();
   text.split('\n').forEach((raw, i) => {
     const lineNo = i + 1;
