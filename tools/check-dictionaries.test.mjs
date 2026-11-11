@@ -97,7 +97,7 @@ test('english: 日本語由来の節では行末のコメント・タブ・大�
   const { errors } = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi ramen # 注記\n# 節の中のコメント行\ntofu\tmiso\nSake\n\nhello # 注記\nworld\tWide\n');
   assert.deepEqual(messages(errors), [
     '2: 日本語由来の節では行末にコメントを書けない (Core は # 以降も日本語由来の語として読む)',
-    '4: 日本語由来の節では語をタブで区切れない (Core は空白でだけ区切る)',
+    '4: 日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)',
     '5: 日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)',
   ]);
 });
@@ -140,4 +140,37 @@ test('propernouns: 同じ綴りを繰り返すのは通す (Core の正規形は
   const { errors, warnings } = checkDictionary('propernouns.txt', 'Chrome Firefox\nPayPal Chrome # 注記\nPayPal\n');
   assert.deepEqual(errors, []);
   assert.deepEqual(warnings, []);
+});
+
+test('propernouns: Core が捨てる語 (英数字以外を含む・全角空白で繋がる) はエラー、, は Core と同じく区切り', () => {
+  const { errors } = checkDictionary('propernouns.txt', 'Foo,Bar\nC++ Notion+\nPayPal　Stripe\nGitHub, GitLab\n');
+  assert.deepEqual(messages(errors), [
+    '2: 「C++」が英字で始まる英数字だけの語でない (Core は登録しない)',
+    '2: 「Notion+」が英字で始まる英数字だけの語でない (Core は登録しない)',
+    '3: 「PayPal　Stripe」が英字で始まる英数字だけの語でない (Core は登録しない)',
+  ]);
+});
+
+test('propernouns: , 区切りでも大文字小文字だけ違う綴りはエラー', () => {
+  const { errors } = checkDictionary('propernouns.txt', 'Paypal,Stripe\nPayPal\n');
+  assert.deepEqual(messages(errors), ['2: 「paypal」が 1 行目と食い違う (「Paypal」と「PayPal」)']);
+});
+
+test('english / english-readable / japanese: 全角空白は区切りでない (Core は全角空白で繋がった語を捨てる)', () => {
+  assert.deepEqual(messages(checkDictionary('english.txt', 'hello　world\n').errors), ['1: 「hello　world」が英字の語でない']);
+  assert.deepEqual(messages(checkDictionary('english-readable.txt', 'open　close\n').errors), ['1: 「open　close」が 3 文字以上の英字の語でない']);
+  assert.deepEqual(messages(checkDictionary('japanese.txt', 'kyou　ashita\n').errors), ['1: 「kyou　ashita」が小文字のローマ字でない']);
+});
+
+test('english-readable: , は Core と同じく区切りで、語ごとに重複を見る', () => {
+  const { errors, warnings } = checkDictionary('english-readable.txt', 'open,close\nclose\n');
+  assert.deepEqual(errors, []);
+  assert.deepEqual(messages(warnings), ['2: 「close」が 1 行目と重複']);
+});
+
+test('english: 日本語由来の節で全角空白・, で区切った語はエラー (Core は半角空白でだけ区切る)。行の前後の空白は問わない', () => {
+  const { errors } = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi,ramen\ntofu miso\u3000\nkana \tsake\n');
+  assert.deepEqual(messages(errors), ['2: 日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)']);
+  const fullWidth = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi\u3000ramen\n');
+  assert.ok(messages(fullWidth.errors).includes('2: 日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)'));
 });
