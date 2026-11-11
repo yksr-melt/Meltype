@@ -40,7 +40,6 @@ internal sealed class ImeSession
         _session = environment.CreateSession(() => _settings);
         _session.ReadingOf = environment.ReadingOf;
         _session.ClipboardText = () => environment.ClipboardText;
-        _session.NowPlaying = () => environment.NowPlaying;
     }
 
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>

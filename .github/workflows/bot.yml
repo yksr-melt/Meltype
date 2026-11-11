@@ -133,7 +133,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
@@ -183,9 +183,11 @@ jobs:
           foreach ($r in ($env:REPROS | ConvertFrom-Json)) {
             $build = if ($i -gt 0) { '--no-build' }
             New-Item -ItemType Directory -Force "results/$i" | Out-Null
-            dotnet run --project src/Meltype.Tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-main.json" -Encoding utf8
+            dotnet run --project src/Meltype.Windows.Tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-main.json" -Encoding utf8
             if ($release) {
-              dotnet run --project ../release/src/Meltype.Tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-$tag.json" -Encoding utf8
+              # 前の版は Windows のテストが src/Meltype.Tests にある (src/Meltype.Windows.Tests に名前を変える前の版)
+              $releaseTests = if (Test-Path ../release/src/Meltype.Windows.Tests) { '../release/src/Meltype.Windows.Tests' } else { '../release/src/Meltype.Tests' }
+              dotnet run --project $releaseTests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-$tag.json" -Encoding utf8
             }
             $i++
           }
@@ -208,7 +210,7 @@ jobs:
         with:
           ref: ${{ needs.parse.outputs.sha }}
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
@@ -222,7 +224,9 @@ jobs:
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
           New-Item -ItemType Directory -Force results | Out-Null
           dotnet build Meltype.sln -c Release *> results/build.txt
-          dotnet run --project src/Meltype.Tests -c Release --no-build *> results/test.txt
+          # src/Meltype.Windows.Tests に名前を変える前の PR は、Windows のテストが src/Meltype.Tests にある
+          $windowsTests = if (Test-Path src/Meltype.Windows.Tests) { 'src/Meltype.Windows.Tests' } else { 'src/Meltype.Tests' }
+          dotnet run --project $windowsTests -c Release --no-build *> results/test.txt
       - name: Package
         if: needs.parse.outputs.action == 'pack'
         shell: powershell
@@ -245,7 +249,9 @@ jobs:
           } else {
             $r = $env:REPROS | ConvertFrom-Json
             New-Item -ItemType Directory -Force results/0 | Out-Null
-            dotnet run --project src/Meltype.Tests -c Release -- --repro "$($r.keys)" "$($r.last)" | Out-File results/0/repro-pr.json -Encoding utf8
+            # src/Meltype.Windows.Tests に名前を変える前の PR は、Windows のテストが src/Meltype.Tests にある
+            $windowsTests = if (Test-Path src/Meltype.Windows.Tests) { 'src/Meltype.Windows.Tests' } else { 'src/Meltype.Tests' }
+            dotnet run --project $windowsTests -c Release -- --repro "$($r.keys)" "$($r.last)" | Out-File results/0/repro-pr.json -Encoding utf8
           }
       - if: needs.parse.outputs.action != 'pack'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
