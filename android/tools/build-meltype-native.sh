@@ -33,7 +33,7 @@ for spec in "arm64-v8a:linux-bionic-arm64:aarch64-linux-android" "x86_64:linux-b
     -c Release -r "$RID" \
     -p:PublishAot=true -p:NativeLib=Shared \
     -p:DisableUnsupportedError=true -p:PublishAotUsingRuntimePack=true \
-    -p:AndroidApiLevelMin=26 -p:MeltypeAndroidNative=true \
+    -p:AndroidApiLevelMin=26 \
     -p:RestoreSources=https://api.nuget.org/v3/index.json
   OUTPUT_DIR="$ROOT/src/Meltype.Mac.Native/bin/Release/net10.0/$RID/publish"
 ls -lah "$OUTPUT_DIR"

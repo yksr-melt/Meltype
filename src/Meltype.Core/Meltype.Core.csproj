@@ -14,10 +14,6 @@
     <Authors>Yukishiro</Authors>
     <Copyright>Copyright (C) 2026 雪代 / Yukishiro. GPL-3.0-or-later</Copyright>
   </PropertyGroup>
-  <!-- Android NativeAOT feature flags must not change desktop Core behavior. -->
-  <PropertyGroup Condition="'$(MeltypeAndroidNative)' == 'true'">
-    <DefineConstants>$(DefineConstants);MELTYPE_ANDROID_NATIVE</DefineConstants>
-  </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Meltype" />
     <InternalsVisibleTo Include="Meltype.Tests" />

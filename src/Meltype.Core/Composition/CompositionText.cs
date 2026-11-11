@@ -138,19 +138,6 @@ public sealed class CompositionText
                 _units.Add(new CompositionUnit(c.ToString(), c.ToString()));
                 return;
             }
-            // Android QWERTY: "nn" has already been normalized to ん, but the
-            // second n must start the next syllable if a vowel or y follows.
-            // Otherwise "konnichiwa" becomes "こんいちわ" instead of "こんにちわ".
-            // Keep the upstream desktop composition logic unchanged.
-            if (AndroidNativeRuntime.Enabled &&
-                _pending.Length == 0 && _units.Count > 0 &&
-                _units[^1] is { Kana: "ん" } nnUnit &&
-                nnUnit.Raw.Equals("nn", StringComparison.OrdinalIgnoreCase) &&
-                char.ToLowerInvariant(c) is 'a' or 'i' or 'u' or 'e' or 'o' or 'y')
-            {
-                _units[^1] = new CompositionUnit("ん", nnUnit.Raw[..1]);
-                _pending.Append(nnUnit.Raw[1]);
-            }
             // 直前の「ローマ字として読めなかった英字」は、次の文字と合わせると読めることがある
             // (test の t を消して u を打つ → s + u = す)。入力途中の子音に戻して読み直す。略語の大文字 (TS の S) は戻さない。
             // 英単語との区切り (commit|suru の t|s) は、単位の途中でも区切りの側 (ReadingLattice.cs) で選ぶ。
