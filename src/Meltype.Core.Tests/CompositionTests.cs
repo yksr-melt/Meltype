@@ -486,7 +486,7 @@ internal static class CompositionTests
     [Test]
     public static void Issue674_ExtendedYoonSpellings()
     {
-        foreach (var (typed, expected) in new[] { ("kye", "きぇ"), ("gwi", "ぐぃ"), ("zwa", "ずぁ"), ("fya", "ふゃ"), ("mye", "みぇ") })
+        foreach (var (typed, expected) in new[] { ("kye", "きぇ"), ("gwi", "ぐぃ"), ("zwa", "ずぁ"), ("fya", "ふゃ"), ("mye", "みぇ"), ("syi", "しぃ"), ("ryi", "りぃ"), ("hwa", "ふぁ"), ("hye", "ひぇ"), ("swe", "すぇ"), ("gwo", "ぐぉ"), ("dwo", "どぉ"), ("rye", "りぇ") })
         {
             var k = new Keyboard();
             k.Type(typed);
@@ -495,7 +495,7 @@ internal static class CompositionTests
             Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
             try
             {
-                foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying" })
+                foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying", "two", "network", "bye", "rye" })
                 {
                     var e = new Keyboard();
                     e.Type(word);
