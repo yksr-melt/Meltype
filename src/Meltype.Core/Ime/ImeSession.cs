@@ -38,7 +38,6 @@ internal sealed class ImeSession
         _source = settings;
         _settings = settings();
         _session = environment.CreateSession(() => _settings);
-        _session.ReadingOf = environment.ReadingOf;
         _session.ClipboardText = () => environment.ClipboardText;
     }
 

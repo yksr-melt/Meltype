@@ -120,7 +120,7 @@ internal static class ZenzaiConverterTests
         };
         var zenzai = new ZenzaiConverter(server.Endpoint);
         var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, null, null, () => zenzai);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
         hybrid.Budget.Enable();
         var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionServices(), () => new Settings { LiveConversion = true });
         // Mozc の起動を待つ
@@ -267,15 +267,16 @@ internal static class ZenzaiConverterTests
     {
         using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "ひらがな" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
-        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
-        // FakeConverter は たんいをとる を 単位を|取る の 2 文節にする。同じ文字列なら、その区切りを使う
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => zenzai);
+        // 偽の Mozc は たんいをとる を 単位を|取る の 2 文節にする。同じ文字列なら、その区切りを使う
         var same = hybrid.ConvertClauses("たんいをとる");
         Assert.True(same is [{ Text: "単位を" }, { Text: "取る" }], "同じなら区切りを使う: " + string.Join("|", same?.Select(c => c.Text) ?? []));
         // 違えば Zenzai の結果
         var other = hybrid.ConvertClauses("たんい", "前の文");
         Assert.True(other is [{ Reading: "たんい", Text: "ひらがな" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
         // 使わない設定 (null) なら今までどおり
-        var off = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => null);
+        var off = new HybridConverter(mozc, () => null);
         Assert.Equal("単位", off.Convert("たんい") ?? "", "OFF は今までどおり");
     }
 
@@ -318,7 +319,7 @@ internal static class ZenzaiConverterTests
         };
         // 遅い PC でも時間切れ (5 秒 Zenzai を使わない) にならないよう、待つ時間を長くする
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
         mozc.WarmUp();
         for (var i = 0; i < 200 && mozc.ConvertClauses("きしゃがきた") is null; i++) Thread.Sleep(50);
         Assert.True(mozc.ConvertClauses("きしゃがきた") is [_, _], "偽の Mozc のヘルパーが 10 秒で起動しなかった");
@@ -356,7 +357,8 @@ internal static class ZenzaiConverterTests
         using var server = new FakeServer { Answer = _ => "単位を取る" };
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
         var useZenzai = true;
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => useZenzai ? zenzai : null);
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => useZenzai ? zenzai : null);
         Assert.True(hybrid.ConvertClauses("たんいをとる") is { } z && z.All(c => c.Zenzai), "Zenzai の答えの文節に印を付ける");
         // 変換ボックスの説明の行に出す。Zenzai の答えを出しているときだけ
         var k = new CompositionTests.Keyboard(converter: hybrid);
@@ -365,10 +367,10 @@ internal static class ZenzaiConverterTests
         Assert.Equal("Zenzai", k.Host.View.ContextHint, "固定ガイドを隠す表示にも、変換エンジンの案内だけを残す");
         useZenzai = false;
         Assert.True(hybrid.ConvertClauses("たんいをとる") is { } m && !m.Any(c => c.Zenzai), "Zenzai を使わなければ印を付けない");
-        var mozc = new CompositionTests.Keyboard(converter: hybrid);
-        mozc.Type("tanniwotoru ");
-        Assert.True(!mozc.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "Zenzai の答えでなければ出さない: " + mozc.Host.View.Hint);
-        Assert.True(mozc.Host.View.ContextHint is null, "Zenzai の答えでなければ文脈の案内にも出さない");
+        var plain = new CompositionTests.Keyboard(converter: hybrid);
+        plain.Type("tanniwotoru ");
+        Assert.True(!plain.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "Zenzai の答えでなければ出さない: " + plain.Host.View.Hint);
+        Assert.True(plain.Host.View.ContextHint is null, "Zenzai の答えでなければ文脈の案内にも出さない");
         // 学習した変換で Zenzai の答えと違う文字列にした文節は数えない
         useZenzai = true;
         var history = new ConversionHistory(null);
@@ -395,7 +397,8 @@ internal static class ZenzaiConverterTests
     public static void Hybrid_ZenzaiThatCannotBeCreated_FallsBackToOtherEngine()
     {
         // #973: 同梱の .NET に System.Net.Http が無く、Zenzai を作るたびに例外になった。例外が入力まで届き、日本語を打てなくなった
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null,
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc,
             () => throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"));
         Assert.True(hybrid.ConvertClauses("たんいをとる") is [{ Text: "単位を" }, { Text: "取る" }], "文節に分けた変換は、ほかの変換エンジンで");
         Assert.Equal("今日", hybrid.Convert("きょう") ?? "", "1 回の変換も、ほかの変換エンジンで");
@@ -411,7 +414,8 @@ internal static class ZenzaiConverterTests
         using var server = new FakeServer { RawBody = "{\"content\":1}" };
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
         var reported = new List<ZenzaiConverter>();
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => zenzai, reported.Add);
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => zenzai, reported.Add);
         Assert.True(hybrid.ConvertClauses("たんいをとる") is [{ Text: "単位を" }, { Text: "取る" }], "例外になっても、ほかの変換エンジンで変換する");
         int asked;
         lock (server.Prompts) asked = server.Prompts.Count;
@@ -581,7 +585,8 @@ internal static class ZenzaiConverterTests
         for (var i = 0; i < 100 && !zenzai.IsReady; i++) Thread.Sleep(300);
         Assert.True(zenzai.IsReady, "llama-server が起動しなかった");
 
-        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => zenzai);
         foreach (var (typed, context, expected) in new[]
         {
             ("zisyono", "このIMEを調べた。Mozcの", "辞書の"),

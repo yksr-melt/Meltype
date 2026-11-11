@@ -62,7 +62,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
     private const int SettleMs = 60;
 
-    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず今までの変換エンジンに任せる。
+    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
@@ -180,7 +180,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozcに任せる
         var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)

@@ -137,6 +137,20 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         }
     }
 
+    /// <summary>
+    /// 文字列 (漢字かな混じり) の読み (ひらがな)。逆変換できなければ null。
+    /// 再変換とユーザー辞書の登録で呼ぶ。キャッシュせず、ヘルパーの応答を待つ。
+    /// </summary>
+    public string? Reading(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text) || !IsAvailable) return null;
+        lock (_gate)
+        {
+            if (_disposed) return null;
+            return Send($"R\t{Clean(text)}") is { Length: > 0 } reading ? reading : null;
+        }
+    }
+
     /// <summary>1 行送って 1 行受け取る (_gate の中で呼ぶ)。失敗したら・起動しているあいだは null。</summary>
     private string? Send(string request)
     {

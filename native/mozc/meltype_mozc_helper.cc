@@ -6,6 +6,8 @@
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
 //   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
+//   R<TAB>文字列
+//       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -125,6 +127,19 @@ class Helper {
     return true;
   }
 
+  // 逆変換。文字列 (漢字かな混じり) の読みを返す。逆変換できなければ空。
+  std::string Reverse(absl::string_view text) {
+    mozc::Segments segments;
+    if (!converter_->StartReverseConversion(&segments, text)) return "";
+    std::string reading;
+    for (size_t i = 0; i < segments.conversion_segments_size(); ++i) {
+      const mozc::Segment& segment = segments.conversion_segment(i);
+      if (segment.candidates_size() == 0) return "";
+      reading += segment.candidate(0).value;
+    }
+    return reading;
+  }
+
   bool Save() { return engine_->Sync(); }
 
  private:
@@ -186,6 +201,8 @@ int main(int argc, char** argv) {
       std::cout << helper.Convert(fields[1], fields[2]) << "\n";
     } else if (fields[0] == "L" && fields.size() >= 3) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
+    } else if (fields[0] == "R" && fields.size() >= 2) {
+      std::cout << helper.Reverse(fields[1]) << "\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {

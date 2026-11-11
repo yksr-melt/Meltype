@@ -22,7 +22,7 @@ internal static class JapaneseParticles
 
 /// <summary>
 /// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、OS や外部の変換エンジンを借りる
-/// (Windows: Microsoft IME、Mac / Linux: Mozc など)。
+/// (Windows: Microsoft IME、Mac / Linux: Mozc)。
 /// </summary>
 public interface IKanjiConverter
 {

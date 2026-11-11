@@ -30,7 +30,7 @@ public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? 
     /// <summary>続けて使えないときに、待つ時間の上限。</summary>
     public TimeSpan MaxRetryAfter { get; init; } = TimeSpan.FromHours(1);
 
-    /// <summary>今の Zenzai。場所が空 (OFF) なら止めて null。作れない・止めて待っている間も null (変換は Mozc などで続ける)。</summary>
+    /// <summary>今の Zenzai。場所が空 (OFF) なら止めて null。作れない・止めて待っている間も null (変換は Mozc で続ける)。</summary>
     public ZenzaiConverter? Get(string serverPath, string modelPath, string device = "")
     {
         var server = serverPath.Trim();
@@ -63,12 +63,12 @@ public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? 
             }
             catch (Exception ex)
             {
-                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc などで続ける
+                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc で続ける
                 // (HybridConverter は Zenzai が無ければ今までどおり変換する)。例外の中身を書くのは、この場所で 1 回目だけ
                 var wait = WaitBeforeRetry();
                 var detail = _loggedCreateError ? ex.Message : ex.ToString();
                 _loggedCreateError = true;
-                Diagnostics.Log.Error($"Zenzai を使えないので、今までの変換エンジンで変換します ({wait.TotalMinutes} 分後にもう一度試します): {detail}");
+                Diagnostics.Log.Error($"Zenzai を使えないので、Mozc で変換します ({wait.TotalMinutes} 分後にもう一度試します): {detail}");
             }
         }
         return _zenzai;
