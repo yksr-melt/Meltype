@@ -27,7 +27,7 @@ class VirtualKeyTests(unittest.TestCase):
     def setUpClass(cls):
         source = Path(__file__).resolve().parents[1] / "ibus-engine-meltype"
         parsed = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        constants = {"OTHER_CHARACTER_KEY", "SPECIAL_KEYS", "SYMBOL_KEYS"}
+        constants = {"SPECIAL_KEYS"}
         nodes = [node for node in parsed.body if
                  isinstance(node, ast.FunctionDef) and node.name == "virtual_key" or
                  isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in constants
@@ -38,31 +38,10 @@ class VirtualKeyTests(unittest.TestCase):
         cls.ibus = namespace["IBus"]
         cls.special = namespace["SPECIAL_KEYS"]
 
-    def test_lower_ascii(self):
-        for c in "az":
-            self.assertEqual((ord(c.upper()), ord(c)), self.virtual_key(c))
-
-    def test_upper_ascii(self):
-        for c in "AZ":
-            self.assertEqual((ord(c), ord(c)), self.virtual_key(c))
-
-    def test_digits(self):
-        self.assertEqual((ord("9"), ord("9")), self.virtual_key("9"))
-
-    def test_symbol_key(self):
-        self.assertEqual((0xBE, ord(".")), self.virtual_key("."))
-
-    def test_other_ascii(self):
-        self.assertEqual((0x07, ord("@")), self.virtual_key("@"))
-
-    def test_turkish_capital_i(self):
-        self.assertEqual((0x07, 0x0130), self.virtual_key("İ"))
-
-    def test_non_ascii_letter(self):
-        self.assertEqual((0x07, 0x00C9), self.virtual_key("É"))
-
-    def test_supplementary_scalar(self):
-        self.assertEqual((0x07, 0x1F60A), self.virtual_key("😊"))
+    def test_characters_have_no_virtual_key(self):
+        # 文字を入力するキーは文字だけを渡す (仮想キーコードは本体が決める)
+        for c in ("a", "Z", "9", ".", "@", "İ", "É", "😊"):
+            self.assertEqual((0, ord(c)), self.virtual_key(c), c)
 
     def test_empty(self):
         self.assertEqual((None, 0), self.virtual_key(""))

@@ -17,12 +17,12 @@ final class MeltypeConverter {
     private var options: ConvertRequestOptions
     /// Zenzai (ニューラルかな漢字変換) のモデル。無ければ Zenzai を使わない。
     private let zenzModel: URL?
-    /// Zenzai の変換を待つ上限 (Windows の Zenzai と同じ 400 ms)。超えたら Zenzai なしの変換を使う。
-    private static let zenzaiTimeout: TimeInterval = 0.4
+    /// Zenzai の変換を待つ上限 (Windows の Zenzai と同じ 1500 ms)。超えたら Zenzai なしの変換を使う。ワーカーで待つので入力は止めない。
+    private static let zenzaiTimeout: TimeInterval = 1.5
     /// これより長い読みは Zenzai に渡さない (Windows の Zenzai と同じ。長いほど推論が長い)。
     private static let zenzaiMaxReading = 80
-    /// 打ち切ったときに Zenzai を使わない長さ (遅い Mac で何度も待たないように)。
-    private static let zenzaiPause: TimeInterval = 10 * 60
+    /// 打ち切ったときに Zenzai を使わない長さ (Windows の Zenzai と同じ 5 秒)。打ち切った変換が動いている間は .busy で断る。
+    private static let zenzaiPause: TimeInterval = 5
     /// Zenzai はこの時刻まで使わない。
     private var zenzaiPausedUntil = Date.distantPast
     /// Zenzai の変換は、別の変換エンジンで別のスレッドで動かす (待つ時間に上限を付けるため。azooKey の変換は途中で止められない)。
@@ -103,9 +103,11 @@ final class MeltypeConverter {
     /// Zenzai を使うときは、キャレットの前の文 (context) も文脈としてモデルに渡す (同じ読みでも前の文で変換が変わる)。
     private func results(for hiragana: String, context: String? = nil) -> [Candidate] {
         // Zenzai を使えるとき (止めていない・読みが長すぎない・前の変換が終わっている) だけ、上限付きで Zenzai に頼む
-        let useZenzai = zenzaiWorker != nil && Date() >= zenzaiPausedUntil && hiragana.count <= Self.zenzaiMaxReading
-        let tail = useZenzai ? Self.contextTail(context) : nil
-        let key = useZenzai ? (tail ?? "") + "\u{1}" + hiragana : hiragana
+        let canUseZenzai = zenzaiWorker != nil && hiragana.count <= Self.zenzaiMaxReading
+        let useZenzai = canUseZenzai && Date() >= zenzaiPausedUntil
+        let tail = canUseZenzai ? Self.contextTail(context) : nil
+        let key = canUseZenzai ? (tail ?? "") + "\u{1}" + hiragana : hiragana
+        // 止めている間も、Zenzai の答えを控えていればそれを返す (同じ読みを聞き直して azooKey の答えに戻さない)
         if let cached = resultCache[key] { return cached }
         var composing = ComposingText()
         composing.insertAtCursorPosition(hiragana, inputStyle: .direct)
@@ -116,7 +118,7 @@ final class MeltypeConverter {
                 results = zenzai
             case .timedOut:
                 zenzaiPausedUntil = Date().addingTimeInterval(Self.zenzaiPause)
-                NSLog("Meltype: Zenzai の変換が %.0f ms で終わらなかったので、10 分間 Zenzai を使いません", Self.zenzaiTimeout * 1000)
+                NSLog("Meltype: Zenzai の変換が %.0f ms で終わらなかったので、5 秒間 Zenzai を使いません", Self.zenzaiTimeout * 1000)
             case .busy, .notReady:
                 break
             }

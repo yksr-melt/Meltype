@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
-using Meltype.Config;
 
 namespace Meltype.Composition;
 
@@ -56,24 +55,12 @@ public sealed class CompositionText
     /// <summary>かな入力 (JIS) か。かな入力では <see cref="AppendKana"/> で 1 キー 1 文字ずつ入れる。</summary>
     public bool KanaInput { get; set; }
 
-    /// <summary>句読点の組み合わせ (設定)。, と . (かな入力の 、 。 のキー) で入れる文字。</summary>
-    public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
-
-    /// <summary>読点 (、 か ，)。</summary>
-    private char Comma => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.FullWidthCommaKuten ? '，' : '、';
-
-    /// <summary>句点 (。 か ．)。</summary>
-    private char Period => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.ToutenFullWidthPeriod ? '．' : '。';
-
     /// <summary>
     /// かな入力の 1 キー。raw はそのキーの英字 (英単語の判定と、英語として見せるときに使う)。
     /// 濁点・半濁点は直前のかなに付ける (か + ゛ → が)。
     /// </summary>
     public void AppendKana(char raw, char kana)
     {
-        // 、 。 のキーも設定の句読点にする。
-        if (kana == '、') kana = Comma;
-        else if (kana == '。') kana = Period;
         if (kana is '゛' or '゜' && _units.Count > 0 && _units[^1].Kana.Length == 1 &&
             Detection.KanaDetector.Combine(_units[^1].Kana[0], kana) is { } combined)
         {
@@ -126,7 +113,7 @@ public sealed class CompositionText
         if (!char.IsAsciiDigit(c) && _pending.Length == 0 && _units.Count >= 2 && _units[^1] is { Raw: ",", Kana: "," } &&
             _units[^2].Raw is [var digit] && char.IsAsciiDigit(digit))
         {
-            _units[^1] = _units[^1] with { Kana = Comma.ToString() };
+            _units[^1] = _units[^1] with { Kana = "、" };
         }
         if (char.IsAsciiLetter(c))
         {
@@ -419,6 +406,21 @@ public sealed class CompositionText
         DisplayMode.Auto => IsNumeric || Segments().All(s => s.IsEnglish),
         _ => false,
     };
+
+    /// <summary>Markdown 記法の記号だけ (- > * + # ## …) の入力か。Space で、半角の記号と空白で確定する。</summary>
+    public bool IsMarkdownMarker =>
+        !KanaInput && _units.Count > 0 &&
+        (Raw is "-" or ">" or "*" or "+" || (Raw.Length <= 6 && Raw.All(c => c == '#')));  // 見出しは 6 段まで
+
+    /// <summary>水平線・front matter の区切り (3 個以上の -) だけの入力か。打った半角のまま表示・確定する。</summary>
+    public bool IsHorizontalRule => !KanaInput && Raw.Length >= 3 && Raw.All(c => c == '-');
+
+    /// <summary>変換区間に * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
+    private string HalfWidthStars(string text) => !KanaInput && Raw.Count(c => c == '*') >= 2 ? text.Replace('＊', '*') : text;
+
+    /// <summary>変換の最初の候補を、入力中の表示と同じ半角にする (* が 2 個以上・---)。当てはまらなければそのまま返す。</summary>
+    public string AsDisplayedHalfWidth(string candidate, string? clauseRaw) =>
+        IsHorizontalRule ? clauseRaw ?? candidate : HalfWidthStars(candidate);
 
     /// <summary>自動判定の区間分け (Mode が Auto のときに使う)。</summary>
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
@@ -744,7 +746,7 @@ public sealed class CompositionText
         DisplayMode.Hiragana => AllKana(final),
         DisplayMode.Katakana => ToKatakana(AllKana(final)),
         DisplayMode.HalfWidthKatakana => ToHalfWidthKatakana(ToKatakana(AllKana(final))),
-        _ => IsNumeric ? Raw : RenderSegments(final, convert),
+        _ => IsNumeric || IsHorizontalRule ? Raw : RenderSegments(final, convert),
     };
 
     /// <summary>英字の大文字・小文字を変える (ai → AI / Ai)。</summary>
@@ -831,7 +833,7 @@ public sealed class CompositionText
             builder.Append(convert is not null && kana.Length > 0 ? convert(kana) : kana);
             builder.Append(pending);
         }
-        return builder.ToString();
+        return HalfWidthStars(builder.ToString());
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>
@@ -1125,9 +1127,9 @@ public sealed class CompositionText
     private char Symbol(char c) => c switch
     {
         '-' => 'ー',
-        // 句読点は設定の組み合わせ (、。 / ，． / ，。 / 、．)。
-        ',' => Comma,
-        '.' => Period,
+        // 句読点は、読みでは設定によらず 、。 (設定の句読点は CompositionOutput が当てる)。
+        ',' => '、',
+        '.' => '。',
         '[' => SquareBrackets ? '［' : '「',
         ']' => SquareBrackets ? '］' : '」',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。
@@ -1141,9 +1143,11 @@ public sealed class CompositionText
         '~' => '～',
         '\'' => '’',
         '"' => '”',
+        // ` は Markdown 記法に使うので、日本語の中でも半角のまま (Space で ‘ ｀)。
+        '`' => '`',
         // @ はメールアドレス・メンション、/ は URL・日付・パスで使うので、日本語の中でも半角のまま (Space で ＠ ／ ・)。
         '@' => '@',
-        // # はハッシュタグ・チャンネル名 (Discord の #雑談) で使うので半角のまま (Space で ＃)。
+        // # はハッシュタグ・チャンネル名 (Discord の #雑談) で使うので半角のまま (Space で # と半角空白に確定)。
         '#' => '#',
         '/' => '/',
         // JIS キーボードの ￥ キー

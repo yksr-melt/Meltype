@@ -106,12 +106,17 @@ public static class ProjectInfo
         (correction.Zenzai is { } on ? $"&zenzai={Uri.EscapeDataString(on ? "使っている" : "使っていない")}" : "") +
         $"&context={Uri.EscapeDataString(correction.Before)}";
 
-    /// <summary>Mac 版・Linux 版の実行環境 (不具合報告に入れる。入力した文字は入れない)。</summary>
-    public static string Environment(Settings settings, string platform) => string.Join("\n",
+    /// <summary>
+    /// 実行環境 (不具合報告に入れる。1 行ずつ「項目: 値」。入力した文字は入れない)。version は「Meltype:」の値、os は「OS:」の値。
+    /// osLines は、その OS でだけ分かる項目 (Windows の動作モード・画面など)。
+    /// </summary>
+    public static string Environment(Settings settings, string version, string os, IEnumerable<string>? osLines = null) => string.Join("\n",
     [
-        $"Meltype: {CoreVersion} ({platform}、プレビュー版)",
-        $"OS: {RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})",
+        $"Meltype: {version}",
+        $"OS: {os}",
         $".NET: {System.Environment.Version}",
+        .. osLines ?? [],
+        $"Zenzai: {(settings.UseZenzai ? "ON" : "OFF")}",
         $"自動判定: {(settings.AutoDetection ? "ON" : "OFF")}",
         $"入力方式: {settings.InputStyle}",
         $"ライブ変換: {(settings.LiveConversion ? "ON" : "OFF")}",

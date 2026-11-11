@@ -77,6 +77,7 @@ fi
 
 cd "$src"
 options=(build //converter:meltype_mozc_helper --config oss_linux --config release_build)
+options+=("--downloader_config=$here/bazel-downloader.cfg")
 [[ -n "$cache" ]] && options+=("--disk_cache=$cache")
 if ! "${BAZEL:-bazel}" "${options[@]}"; then
     # ビルドできなかったので、前のヘルパーとその印はそのまま残す。

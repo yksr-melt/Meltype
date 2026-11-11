@@ -23,7 +23,6 @@ constexpr wchar_t kClassName[] = L"MeltypeCandidateWindow";
 constexpr wchar_t kMeaningClassName[] = L"MeltypeMeaningWindow";
 constexpr int kPageSize = 9;
 constexpr UINT_PTR kMeaningTimer = 1;
-constexpr UINT kMeaningDelayMs = 1500;
 
 // 大きさ (DIP。96 dpi のときのピクセル)
 constexpr float kPadding = 4;        // 窓の縁から行まで
@@ -213,6 +212,7 @@ struct CandidateWindow::Impl {
         int rows = Paged() ? kPageSize : static_cast<int>(view.candidates.size());
         height += rows * kRowHeight;
         if (Paged()) height += kFooterHeight;
+        if (!view.hint.empty()) height += kTypedHeight;
         return height;
     }
 
@@ -228,6 +228,7 @@ struct CandidateWindow::Impl {
         float result = kPadding * 2 + kTextInset + kNumberWidth + widest + 16;
         if (!view.suggestion.empty()) result = std::max(result, kPadding * 2 + 12 + TextWidth(candidate, view.suggestion) + 16);
         if (!view.typed.empty()) result = std::max(result, kPadding * 2 + 12 + TextWidth(note, view.typed) + 16);
+        if (!view.hint.empty()) result = std::max(result, kPadding * 2 + 12 + TextWidth(note, view.hint) + 16);
         if (candidate) candidate->Release();
         if (note) note->Release();
         return std::clamp(result, kMinWidth, kMaxWidth);
@@ -293,8 +294,7 @@ struct CandidateWindow::Impl {
             } else if (index == hover) {
                 FillRounded(target, row, 4, p.hoverFill);
             }
-            // 予測変換の候補には番号を出さない (変換していないときの数字は、そのまま打つ文字になる)
-            if (!view.prediction) {
+            if (view.numbered) {
                 wchar_t number[4];
                 swprintf_s(number, L"%d", i + 1);
                 DrawText(target, note, number, D2D1::RectF(row.left + kTextInset, row.top, row.left + kTextInset + kNumberWidth, row.bottom), p.secondary);
@@ -316,7 +316,9 @@ struct CandidateWindow::Impl {
             swprintf_s(page, L"%d / %d", std::max(0, view.selected) + 1, static_cast<int>(view.candidates.size()));
             float pageWidth = TextWidth(note, page);
             DrawText(target, note, page, D2D1::RectF(width - kPadding - 12 - pageWidth, y, width - kPadding - 8, y + kFooterHeight), p.secondary);
+            y += kFooterHeight;
         }
+        if (!view.hint.empty()) DrawText(target, note, view.hint, D2D1::RectF(kPadding + 12, y, width - kPadding - 8, y + kTypedHeight), p.secondary);
 
         HRESULT hr = target->EndDraw();
         if (hr == D2DERR_RECREATE_TARGET) {
@@ -338,7 +340,7 @@ struct CandidateWindow::Impl {
         meaningKey = key;
         KillTimer(hwnd, kMeaningTimer);
         if (meaningHwnd != nullptr) ShowWindow(meaningHwnd, SW_HIDE);
-        if (!key.empty()) SetTimer(hwnd, kMeaningTimer, kMeaningDelayMs, nullptr);
+        if (!key.empty()) SetTimer(hwnd, kMeaningTimer, view.meaningMs, nullptr);
     }
 
     float MeaningSize(float& height) {
@@ -471,7 +473,7 @@ struct CandidateWindow::Impl {
                 return 0;
             case WM_LBUTTONUP: {
                 int hit = self->HitTest(GET_Y_LPARAM_SAFE(lParam) / self->scale);
-                if (hit >= 0 && self->onSelect) self->onSelect(hit, self->view.prediction);
+                if (hit >= 0 && self->onSelect) self->onSelect(hit);
                 return 0;
             }
             case WM_TIMER:
@@ -572,7 +574,7 @@ void CandidateWindow::Show(const CandidateView& view, const RECT& anchor) {
     if (scale <= 0) scale = 1;
     // DPI が変わったときも、描画 (render target) と当たり判定の scale がずれないように置き直す
     bool samePlace = Visible() && EqualRect(&d.anchor, &anchor) && d.view.candidates == view.candidates && d.view.suggestion == view.suggestion &&
-                     d.view.prediction == view.prediction && d.view.typed == view.typed && scale == d.scale;
+                     d.view.numbered == view.numbered && d.view.typed == view.typed && d.view.hint == view.hint && scale == d.scale;
     d.view = view;
     d.anchor = anchor;
     d.first = std::max(0, view.selected) / kPageSize * kPageSize;

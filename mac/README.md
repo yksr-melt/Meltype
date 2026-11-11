@@ -29,7 +29,7 @@ mac/build-cli.sh --setup --all
 ```bash
 mac/build-cli.sh --test      # テストだけ
 mac/build-cli.sh --build     # ビルドだけ
-mac/build-cli.sh --install   # インストールだけ
+mac/build-cli.sh --install   # ビルドしてインストール
 ```
 
 `mac/.build` (Swift のビルド結果) は azooKey の辞書の置き場所として使われることがあるので、消さないでください。
@@ -44,7 +44,7 @@ mac/build-cli.sh --install   # インストールだけ
 bash mac/update.sh
 ```
 
-次のことを順に行います。入力のチェックが失敗しても、入力メソッドは元に戻します。Git の変更を取り込んだり、ユーザー辞書を上書きしたりはしません。
+次のことを順に行います。入力のチェックは既定の設定で実行します。チェックに失敗した場合は入力ソースの選び直しを行わず、更新済みのアプリはそのまま残します。Git の変更を取り込んだり、ユーザー辞書を上書きしたりはしません。
 
 - 本体のテスト (OS に依存しない部分)
 - アプリのビルドとインストール
@@ -61,6 +61,8 @@ mac/build/Meltype.app/Contents/MacOS/Meltype --self-test
 swift test --package-path mac
 sbcl --script tests/test_mac_scripts.lisp
 ```
+
+`--check-inputs` と `--self-test` は、空の一時ディレクトリをデータの保存先にして実行します。利用者の Meltype の設定・学習データ・ユーザー辞書は読み書きせず、検査が終わると一時ディレクトリを削除します。
 
 `--self-test` は、同梱の変換エンジンを実際に使い、日本語と英語の混ざった入力・候補の選択・確定・直接入力の切り替え・絵文字の候補・綴りの提案・入力ソースの重複の整理・plist の辞書の読み込みを確かめます。Chrome・VS Code などの IMK クライアントでの動きや、OS の入力ソースの切り替えは確かめないので、実機で確認してください。
 

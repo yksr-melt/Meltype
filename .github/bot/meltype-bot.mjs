@@ -212,7 +212,7 @@ async function releaseCommand(issue, command, version) {
   await react('eyes');
   const read = async file => Buffer.from((await gh('GET', `/contents/${file}?ref=main`)).content, 'base64').toString('utf8');
   const mismatches = [];
-  for (const file of ['src/Meltype/Meltype.csproj', 'src/Meltype.Core/Meltype.Core.csproj']) {
+  for (const file of ['src/Meltype.Windows/Meltype.Windows.csproj', 'src/Meltype.Core/Meltype.Core.csproj']) {
     const found = (await read(file)).match(/<Version>([^<]+)<\/Version>/)?.[1];
     if (found !== version) mismatches.push(`${file}: ${found ?? '(版なし)'}`);
   }

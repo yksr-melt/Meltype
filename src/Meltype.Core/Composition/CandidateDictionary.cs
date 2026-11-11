@@ -30,8 +30,6 @@ public sealed class CandidateDictionary
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("loanwords.txt"));
         // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("brands.txt"));
-        // 実行中の版を出す (issue #959)。辞書に固定すると、更新後も古い版が候補に残ってしまう。
-        dictionary.Add("ばーじょん", [$"Meltype-{Config.ProjectInfo.CoreVersion}"]);
         if (userDirectory is not null)
         {
             var emoji = Path.Combine(userDirectory, "emoji.txt");
