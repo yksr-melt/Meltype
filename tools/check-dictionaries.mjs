@@ -29,7 +29,8 @@ const formats = {
   ]),
   'loanwords.txt': spaced((reading, rest) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, rest.length === 0 ? '候補が無い' : null]),
   'propernouns.txt': words(w => /^[A-Za-z][A-Za-z0-9.+&'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
-  'english.txt': words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
+  // Core は小文字にして読むので、大文字を含んでも同じ語 (日本語由来の節は sections で見る)
+  'english.txt': words(w => /^[A-Za-z][A-Za-z0-9_'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
   'english-words.txt': words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   // 繋げた形<Tab>空白で区切った語句。繋げた形が、語句の空白を除いた形と一致することまで確かめる
   // コメントは行頭の # だけ (comments を見る)。行末に # を書くと Core はその行を登録しない
@@ -38,14 +39,21 @@ const formats = {
     phrase.split(' ').every(w => /^[a-z]+$/.test(w)) ? null : `語句「${phrase}」が小文字の英字の語でない`,
     joined === phrase.replace(/ /g, '') ? null : `「${joined}」が語句「${phrase}」を繋げた形でない`,
   ])),
-  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ
-  'english-readable.txt': words(w => /^[a-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の小文字の英字の語でない`),
+  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ。Core は小文字にして読む
+  'english-readable.txt': words(w => /^[A-Za-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の英字の語でない`),
   'japanese.txt': words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
+  // 読み 候補 : 手がかり …。Core (ConversionPreferences) は最初の : で分け、前後を空白・タブ・全角空白で区切る (: の前後の空白は問わない)
   'contexts.txt': line => {
-    const [left, right] = line.split(' : ');
-    if (right === undefined) return ['「読み 候補 : 手がかり …」の形でない'];
-    const [reading, word, extra] = left.trim().split(/\s+/);
-    return [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, word ? null : '候補が無い', extra ? '候補は 1 つだけ' : null, right.trim() ? null : '手がかりが無い'];
+    const colon = line.indexOf(':');
+    if (colon < 0) return ['「読み 候補 : 手がかり …」の形でない'];
+    const [reading, word, extra] = line.slice(0, colon).split(/[ \t　]+/).filter(Boolean);
+    const cues = line.slice(colon + 1).split(/[ \t　]+/).filter(Boolean);
+    return [
+      reading === undefined || hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+      reading === undefined ? '読みが無い' : word ? null : '候補が無い',
+      extra ? '候補は 1 つだけ' : null,
+      cues.length > 0 ? null : '手がかりが無い',
+    ];
   },
   // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
   'phrases.txt': tabbed(2, 2, ([reading, word]) => [
@@ -94,6 +102,27 @@ function tabbed(min, max, check) {
   };
 }
 
+/**
+ * 辞書の中の節で決まりが変わるもの。file ごとに、1 行ずつ (\r を除いた行全体) 渡すとエラーの並びを返す関数を作る。
+ */
+const sections = {
+  // Core (CompositionDetector.JapaneseOriginWords) は「# ---」で始まる行を節の見出しとし、「日本語由来」を含む節では
+  // 空行までの # で始まらない行を、# 以降も含めて空白だけで区切り、小文字にせずに日本語由来の語とする
+  'english.txt': () => {
+    let inSection = false;
+    return line => {
+      if (line.startsWith('# ---')) { inSection = line.includes('日本語由来'); return []; }
+      if (!inSection || line.startsWith('#')) return [];
+      if (line.trim() === '') { inSection = false; return []; }
+      return [
+        line.includes('#') ? '日本語由来の節では行末にコメントを書けない (Core は # 以降も日本語由来の語として読む)' : null,
+        line.includes('\t') ? '日本語由来の節では語をタブで区切れない (Core は空白でだけ区切る)' : null,
+        /[A-Z]/.test(line) ? '日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)' : null,
+      ].filter(Boolean);
+    };
+  },
+};
+
 /** コメントの始まり (無ければ -1)。Core の読み方に合わせる。ふつうは # から行末まで。 */
 const comments = {
   // 顔文字に # が入るので、行頭の # だけがコメント
@@ -116,8 +145,10 @@ const untrimmed = new Set(['emoji.txt', 'emoji-cldr.txt', 'english-phrases.txt']
 const keys = {
   // Core は繋げた形をキーに、後の行で上書きする
   'english-phrases.txt': line => { const [joined, phrase] = line.split('\t'); return [[joined, phrase]]; },
-  // 1 行に複数の語を置けるので、語ごとに見る
-  'english-readable.txt': line => line.split(/\s+/).filter(Boolean).map(w => [w, w]),
+  // 1 行に複数の語を置けるので、語ごとに見る。Core は小文字にして読むので、大文字小文字だけ違う語は同じ語
+  'english-readable.txt': line => line.split(/\s+/).filter(Boolean).map(w => [w.toLowerCase(), w.toLowerCase()]),
+  // Core は小文字にして読む
+  'english.txt': line => [[line.trim().toLowerCase(), line.trim().toLowerCase()]],
 };
 
 /** 辞書 file の本文 text を確かめ、{ errors, warnings } (どちらも { line, message } の並び。line は無いこともある) を返す。 */
@@ -128,10 +159,12 @@ export function checkDictionary(file, text) {
   if (!format) { warnings.push({ message: '形式を確かめる決まりが無い辞書 (tools/check-dictionaries.mjs に足してください)' }); return { errors, warnings }; }
   const commentAt = comments[file] ?? (line => line.indexOf('#'));
   const keysOf = keys[file] ?? (line => [[line.trim(), line.trim()]]);
+  const sectionCheck = sections[file]?.();
   const seen = new Map();
   text.split('\n').forEach((raw, i) => {
     const lineNo = i + 1;
     let line = raw.replace(/\r$/, '');
+    for (const problem of sectionCheck?.(line) ?? []) errors.push({ line: lineNo, message: problem });
     const hash = commentAt(line);
     if (hash >= 0) line = line.slice(0, hash);
     if (line.trim() === '') return;
@@ -149,7 +182,17 @@ export function checkDictionary(file, text) {
   return { errors, warnings };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === self) {
+/** node で直接起動されたか。シンボリックリンク経由でも、実体のパスで比べる。 */
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return fs.realpathSync(process.argv[1]) === fs.realpathSync(self);
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
   const files = process.argv.slice(2).length > 0
     ? process.argv.slice(2).map(f => path.basename(f)).filter(f => f.endsWith('.txt'))
     : fs.readdirSync(root).filter(f => f.endsWith('.txt'));

@@ -76,3 +76,54 @@ test('空白を含むパスに置いても辞書を検査する', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('シンボリックリンク経由で起動しても辞書を検査する', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-dictionaries-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'tools'));
+    fs.mkdirSync(path.join(dir, 'dictionaries'));
+    fs.copyFileSync(fileURLToPath(new URL('./check-dictionaries.mjs', import.meta.url)), path.join(dir, 'tools', 'check-dictionaries.mjs'));
+    fs.writeFileSync(path.join(dir, 'dictionaries', 'english-phrases.txt'), 'seeyou\tsee me\n');
+    fs.symlinkSync(path.join(dir, 'tools', 'check-dictionaries.mjs'), path.join(dir, 'link.mjs'));
+    const run = spawnSync(process.execPath, [path.join(dir, 'link.mjs')], { encoding: 'utf8' });
+    assert.equal(run.status, 1, run.stdout + run.stderr);
+    assert.match(run.stdout, /辞書の形式: 1 ファイル、エラー 1、/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('english: 日本語由来の節では行末のコメント・タブ・大文字はエラー (Core は # 以降も語として読み、空白でだけ区切り、小文字にしない)', () => {
+  const { errors } = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi ramen # 注記\n# 節の中のコメント行\ntofu\tmiso\nSake\n\nhello # 注記\nworld\tWide\n');
+  assert.deepEqual(messages(errors), [
+    '2: 日本語由来の節では行末にコメントを書けない (Core は # 以降も日本語由来の語として読む)',
+    '4: 日本語由来の節では語をタブで区切れない (Core は空白でだけ区切る)',
+    '5: 日本語由来の節では大文字を使えない (Core は小文字にせずに読むので、小文字で引いても見つからない)',
+  ]);
+});
+
+test('english: 日本語由来を含まない見出しの節は、ふつうの語として見る', () => {
+  const { errors, warnings } = checkDictionary('english.txt', '# --- 日本語辞書 (v2) の語と先頭が重なる英単語 ---\nhello # 注記\n# --- 技術用語 ---\nworld\tWide\n');
+  assert.deepEqual(errors, []);
+  assert.deepEqual(warnings, []);
+});
+
+test('english-readable / english: 大文字小文字だけ違う語は、Core と同じく同じ語の重複として警告', () => {
+  assert.deepEqual(checkDictionary('english-readable.txt', 'open\nOpen\n'), { errors: [], warnings: [{ line: 2, message: '「open」が 1 行目と重複' }] });
+  assert.deepEqual(checkDictionary('english.txt', 'hello\nHello\n'), { errors: [], warnings: [{ line: 2, message: '「hello」が 1 行目と重複' }] });
+});
+
+test('contexts: : の前後の空白は問わない (Core は最初の : で分ける)', () => {
+  const { errors } = checkDictionary('contexts.txt', 'あつい 暑い :気温\nあつい 暑い: 天気\nあつい 暑い:夏\nあつい　暑い\t:\t季節\n');
+  assert.deepEqual(errors, []);
+});
+
+test('contexts: 読み・候補・手がかりが揃わない行はエラー', () => {
+  const { errors } = checkDictionary('contexts.txt', 'あつい 暑い 気温\nあつい : 気温\nあつい 暑い 熱い : 気温\nあつい 暑い :\n');
+  assert.deepEqual(messages(errors), ['1: 「読み 候補 : 手がかり …」の形でない', '2: 候補が無い', '3: 候補は 1 つだけ', '4: 手がかりが無い']);
+});
+
+test('candidates: 全角空白は Core と同じく区切り', () => {
+  const { errors } = checkDictionary('candidates.txt', 'はし　橋　箸\n');
+  assert.deepEqual(errors, []);
+});
