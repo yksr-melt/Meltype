@@ -34,29 +34,32 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 
 コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt) / [DeleteLengthDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt) / [KeyboardViewTouchTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt) / [MeltypeCoreBridgeDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt) / [MozcConverterTest.kt](../mozc/src/androidTest/kotlin/io/github/ninjin0802/keyboard/mozc/MozcConverterTest.kt)。
 
-### 日英判定・設定の計測テスト18件の入力と期待値
+### 日英判定・設定の計測テストの入力と期待値
 | ID | @Test fun | 入力・操作 | 期待値 |
 |---|---|---|---|
 | A01 | englishStaysLatin | hello / meeting | hello / meeting（英字保持） |
-| A02 | japaneseRomajiBecomesKana | arigatou / konnichiwa | ありがとう / こんにちは（またはこんにちわ） |
+| A02 | japaneseRomajiBecomesKana | arigatou / konnichiwa | ありがとう / こんいちわ（デスクトップ版と同じく nn は ん） |
 | A03 | mixedLanguagesWithoutManualToggle | hello arigatou | hello ありがとう |
-| A04 | predictionActionsAreMappedToNativeIndices | 候補hello,help、変換候補2件 | 候補インデックス0/1が保持され、操作ボタンが出ない |
-| A05 | correctionsShowRealWordsAndNeverCommandButtons | raw=nihongo、kana=にほんご | nihongo / にほんご / ニホンゴが訂正候補 |
-| A06 | emojiPreferenceFiltersPredictions | ありがとうございます, ありがとう😊 | 絵文字OFFでは絵文字付きだけ除外 |
+| A04 | choicesKeepTheCoreIndicesForClicks | Coreの一覧 hello,help、変換中の一覧2件 | Coreの番号0/1を保持し、変換中は固定の候補を出さない |
+| A05 | fixedCorrectionsAreOfferedWhileTyping | 入力中（一覧なし） | ひらがな・カタカナ・英字（F6・F7・F10）の固定の候補 |
+| A06 | emojiPreferenceFiltersPredictionsWithoutShiftingIndices | ありがとう😊, ありがとうございます | 絵文字OFFでは絵文字付きだけ除外し、残りはCoreの番号のまま |
 | A07 | settingsPersistJapaneseSpaceAndEmojiPreferences | 日本語スペース/絵文字をOFF→ON | 設定を読み直しても反映 |
-| A08 | originalLatinCorrectionCanBeSelectedAndCommitted | nihongo→英字訂正→Enter | nihongo確定 |
+| A08 | originalLatinCorrectionCanBeSelectedAndCommitted | nihongo→「英字」(F10)→Enter | nihongo確定 |
 | A09 | digitsStayInCompositionUntilExplicitEnter | arigatou→テンキー123 | Enter前に未確定文字が消えない |
 | A10 | candidateBarTextIsReadableAndHasBreathingRoom | 410dpバー＋長い日本語候補 | 高さ≥68dp、文字・余白を保持 |
 | A11 | exteriorMarginsStayUnclickableWhileLetterKeysWork | 400dp幅で左右余白・上端・Qを判定 | 余白にキーなし、Qは認識 |
-| A12 | englishPredictionsCanBeCommittedOnAndroid | hell→英語予測候補を選択 | Native Coreの予測語を確定 |
+| A12 | englishPredictionsCanBeCommittedOnAndroid | hell→英語予測候補をクリック（CandidateClicked） | Native Coreの予測語を確定 |
 | A13 | translucentKeyboardHasOnlyTopRoundedHairline | 装飾をビットマップへ描画 | 上端は半透明、内部は透明 |
+| A14 | malformedResponseLeavesTheEditorAlone | 項目の欠けたCoreの応答 | 例外になり、入力欄は書き換えない |
+| A15 | removeBeforeReplacesTheTextBeforeTheCaret | removeBefore=今日は、text=京は | キャレットの前を消してから入れる |
+| A16 | composingTextIsNotSentAsTextBeforeTheCaret | 「abc 」のあとにari | field.before に変換中の文字を含めない |
 | B01 | homeHasGboardStyleCategoriesWithoutDemoOrCompletedSteps | 設定ホームを開く | 4カテゴリがあり試し書き等がない |
 | B02 | liveConversionSwitchChangesAndPersistsItsValue | ライブ変換を切替 | 表示値と保存値が一致 |
 | B03 | systemBarsAreRespectedOnHomeAndDetailScreens | 実Insets・合成Insetsを設定 | 上端/下端のシステムUIと非重複 |
 | B04 | toolbarBackAndSystemBackBothReturnToSettingsHome | 画面内戻る→再入→OS Back | 両方とも設定ホームに復帰 |
 | B05 | unfoldedScreenKeepsCategoriesBesideActiveSettings | 設定を幅700dp以上/未満で表示 | 広画面2ペイン、狭画面スクロール |
 
-A04〜A06などには固定JSONで候補表示ロジックを検証するケースもある。A01〜A03、A08〜A09、A12はNative Coreとの接続を含む。実機での画面開閉は自動計測とは別の手動テストである。
+A04〜A06、A14〜A15はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16はNative Coreとの接続を含む。実機での画面開閉は自動計測とは別の手動テストである。
 
 ## 3. 画面開閉・実機での手動テスト
 実機名、Androidバージョン、ビルドソースSHA、日付、画面サイズ、実際に入力された文字列、スクリーンショットや失敗手順をPRに記録。**試していないケースを合格としない。**
