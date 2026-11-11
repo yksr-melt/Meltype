@@ -14,7 +14,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly MeltypeEngine _engine;
     private readonly AppState _state;
-    private static readonly Meltype.Composition.GitHubIssueTitles GitHubTitlesShared = new();
     private readonly NotifyIcon _tray;
     private readonly ToolStripMenuItem _statusItem;
     // Zenzai の状態 (「Zenzai を使う」が ON のときだけ出す。issue #1152)
@@ -52,20 +51,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine = engine;
         _state = state;
         _invoker.CreateControl();
-        var detector = Composition.CompositionDetector.CreateDefault(AppPaths.UserDictionaryDirectory);
-        detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
-        detector.UseJapanesePunctuationAfterEnglish = () => _engine.Settings.JapanesePunctuationAfterEnglish;
-        _composition = new Composition.CompositionService(_invoker, detector, () => _engine.Settings, new Composition.CompositionServices
-        {
-            ClassifyDirect = _engine.ClassifyDirect,
-            GitHubTitles = () => GitHubTitlesShared,
-        });
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
+        _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Settings);
+        // 入力の本体は土台の設定を読む (config.json が変わったら読み直す。_engine.Settings はフックのスレッド用の写し)
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
         _keyboard.ModeChanged += OnEngineStatusChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
-        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Settings));
+        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Runtime.Settings.Current));
         _engine.ImeServer = _tipServer;
         _tipServer.Start();
         IntroduceTsf();

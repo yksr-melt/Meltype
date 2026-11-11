@@ -78,13 +78,7 @@ internal static class TipEndToEnd
             invoker.CreateControl();
             serverInvoker = invoker;
             serverThreadId = GetCurrentThreadId();
-            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), () => settings, new Composition.CompositionServices
-            {
-                UserDictionary = new Composition.UserDictionary(null),
-                History = new Composition.ConversionHistory(null),
-                Languages = new Composition.LanguageMemory(null),
-                TranslationHistory = new Composition.TranslationHistory(null),
-            });
+            using var service = new Composition.CompositionService(invoker, TestRuntime.Create(), () => settings);
             using var server = new Tip.TipServer(invoker, service, environment => new Ime.ImeHost(environment, () => settings));
             server.Start();
             ready.Set();

@@ -56,7 +56,7 @@ internal static class ShortcutSettingsTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            using var engine = new MeltypeEngine(new Settings(), null, null);
+            using var engine = new MeltypeEngine(TestRuntime.Create());
             using var form = new SettingsForm(engine, new AppState());
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var input = (TextBox)typeof(SettingsForm).GetField("_testInput", flags)!.GetValue(form)!;

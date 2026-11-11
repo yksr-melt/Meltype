@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 aster-void
+
+using Meltype.Config;
+using Meltype.Detection;
+
+namespace Meltype.Composition;
+
+/// <summary>
+/// プロセスで 1 つの入力の土台: 設定・判定器・辞書・学習データ・定型文。どの OS のアプリもこれを 1 つ作り、
+/// 入力欄ごとの本体 (<see cref="MeltypeSession"/>) は <see cref="CreateSession"/> で作る。
+/// 入力欄ごとに辞書・学習データを作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
+/// </summary>
+public sealed class MeltypeRuntime
+{
+    private readonly string _userDirectory;
+    private readonly IWordChecker _wordChecker;
+    private readonly CompositionServices _shared;
+    private readonly Lazy<ScoreEngine> _directEngine;
+    private string _plists;
+
+    /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
+    /// <param name="wordChecker">OS のスペルチェッカー。使えなければ同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。</param>
+    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null)
+    {
+        DataDirectory = dataDirectory;
+        Directory.CreateDirectory(dataDirectory);
+        _userDirectory = Path.Combine(dataDirectory, "dictionaries");
+        _wordChecker = wordChecker is { IsAvailable: true } ? wordChecker : BuiltInWordChecker.Shared;
+        SettingsSchema.Write(dataDirectory);
+        Settings = new SettingsFile(Path.Combine(dataDirectory, "config.json"), loaded =>
+        {
+            Diagnostics.Log.SetFileOutput(loaded.FileLog ? Path.Combine(dataDirectory, "meltype.log") : null);
+            Diagnostics.Log.RecordText = loaded.LogTypedText;
+            SettingsChanged?.Invoke(loaded);
+        });
+        // ログの設定を、入力の前に入れる
+        _ = Settings.Current;
+        Detector = CompositionDetector.CreateDefault(_userDirectory);
+        Detector.SpellChecker = _wordChecker;
+        Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
+        var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
+        Detector.Memory = languages;
+        var history = new ConversionHistory(Path.Combine(dataDirectory, "conversions.json"));
+        _shared = new CompositionServices
+        {
+            Candidates = CandidateDictionary.Load(_userDirectory),
+            ContextRules = ContextRules.Load(_userDirectory),
+            History = history,
+            Misspellings = MisspellingDictionary.Load(_userDirectory),
+            Languages = languages,
+            Translations = TranslationDictionary.Load(),
+            Meanings = MeaningDictionary.Load(),
+            RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
+            TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
+            GitHubTitles = () => GitHubTitles,
+        };
+        Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
+        _plists = PlistSignature();
+        UserDictionary = LoadUserDictionary();
+        Snippets = new SnippetStore(Path.Combine(dataDirectory, "snippets.json"));
+        _directEngine = new(() => ScoreEngine.CreateDefault(() => Settings.Current, _userDirectory));
+    }
+
+    /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
+    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null)
+    {
+        AppPaths.MigrateFromOldName();
+        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker);
+    }
+
+    public string DataDirectory { get; }
+
+    /// <summary>config.json の設定 (変わったら読み直す。同じプロセスの設定画面は Apply で変える)。</summary>
+    internal SettingsFile Settings { get; }
+
+    /// <summary>設定を読み直した・変えた (どのスレッドからも呼ばれる)。</summary>
+    public event Action<Settings>? SettingsChanged;
+
+    public CompositionDetector Detector { get; }
+
+    /// <summary>ユーザー辞書。dictionaries/ の .plist が変わったら、次に入力欄を作るときに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直す)。</summary>
+    public UserDictionary UserDictionary { get; private set; }
+
+    public ConversionHistory History => _shared.History!;
+
+    public LanguageMemory Languages => _shared.Languages!;
+
+    public TranslationHistory TranslationHistory => _shared.TranslationHistory!;
+
+    /// <summary>予測変換のために覚えた、確定した語句。</summary>
+    public PhraseHistory Phrases { get; }
+
+    /// <summary>登録した定型文 (;名前 + Space で入れる: issue #290)。</summary>
+    public SnippetStore Snippets { get; }
+
+    /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。プロセスの間だけ覚える。</summary>
+    public GitHubIssueTitles GitHubTitles { get; } = new();
+
+    /// <summary>
+    /// 入力欄 1 つ分の本体を作る。converter は OS ごとの変換エンジン、moreCandidates は読みに対する OS の候補の一覧 (無ければ null)。
+    /// autoSpacing は、英単語の前後の空白を Meltype が整えるか (変換エンジンが空白を入れない OS)。
+    /// directModeDetection なら、英数状態で打ち始めた語がローマ字かを判定して日本語に戻す (設定「英数状態で自動判定」)。
+    /// </summary>
+    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
+    public MeltypeSession CreateSession(IKanjiConverter converter, Func<Settings>? settings = null, Func<string, IReadOnlyList<string>>? moreCandidates = null,
+        bool autoSpacing = false, bool directModeDetection = false)
+    {
+        var current = settings ?? (() => Settings.Current);
+        if (PlistSignature() is var plists && plists != _plists)
+        {
+            _plists = plists;
+            UserDictionary = LoadUserDictionary();
+        }
+        var services = _shared with
+        {
+            UserDictionary = UserDictionary,
+            Predictor = new Predictor(Phrases, UserDictionary, History),
+            MoreCandidates = moreCandidates,
+            AutomaticEnglishSpacing = () => autoSpacing,
+            ClassifyDirect = directModeDetection ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
+        };
+        return new MeltypeSession(Detector, converter, services, current, directModeDetection);
+    }
+
+    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (設定画面の判定のテストにも使う)。final は、もう続きが無いか。</summary>
+    public DetectionResult Evaluate(string letters, bool final, Settings settings) =>
+        _directEngine.Value.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
+
+    /// <summary>英数状態で打ち始めた英字 (letters) がローマ字 (日本語) かを判定する。final は、もう続きが無いか。</summary>
+    public Verdict ClassifyDirect(string letters, bool final, Settings settings)
+    {
+        var result = Evaluate(letters, final, settings);
+        // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、スペルチェッカーの語なら日本語にしない。
+        if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && _wordChecker.IsWord(letters.ToLowerInvariant()))
+        {
+            Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(letters)}は英単語 (スペルチェッカー) なので日本語にしない");
+            return final ? Verdict.English : Verdict.Undecided;
+        }
+        if (result.Verdict == Verdict.Japanese) Diagnostics.Log.Decision($"英数状態でローマ字を検知: {result.Describe()}");
+        return result.Verdict;
+    }
+
+    // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
+    private UserDictionary LoadUserDictionary() => new(Path.Combine(DataDirectory, "userdict.txt"), importDirectory: _userDirectory);
+
+    private string PlistSignature()
+    {
+        try
+        {
+            if (!Directory.Exists(_userDirectory)) return "";
+            return string.Join("\n", Directory.GetFiles(_userDirectory, "*.plist").Order(StringComparer.Ordinal).Select(f => $"{f}\t{File.GetLastWriteTimeUtc(f).Ticks}"));
+        }
+        catch (IOException)
+        {
+            return _plists;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return _plists;
+        }
+    }
+}

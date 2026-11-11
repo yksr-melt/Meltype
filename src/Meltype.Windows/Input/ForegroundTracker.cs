@@ -12,14 +12,6 @@ public sealed record AppInfo(IntPtr Window, uint ProcessId, string ProcessName, 
     public static AppInfo None { get; } = new(IntPtr.Zero, 0, "", false, false, false);
 }
 
-/// <summary>打鍵を保留してよいかの判断。</summary>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "打鍵を保留してよいかの結果を表す既存の公開名。セキュリティ権限の型ではない。")]
-public readonly record struct CollectPermission(bool Allowed, string Reason)
-{
-    public static CollectPermission Allow { get; } = new(true, "");
-    public static CollectPermission Deny(string reason) => new(false, reason);
-}
-
 /// <summary>
 /// 前面ウィンドウごとにプロセス名・権限・全画面かどうかをキャッシュする。
 /// フックのスレッドから呼ばれるので、取得は前面ウィンドウが変わったときの 1 回だけにする。
@@ -108,21 +100,6 @@ internal sealed class ForegroundTracker
             _checkedAt = now;
         }
         return info;
-    }
-
-    /// <summary>このアプリで打鍵を保留してよいか。</summary>
-    public CollectPermission Check(Settings settings)
-    {
-        if (!settings.Enabled) return CollectPermission.Deny("Meltype が無効");
-        var app = Current;
-        if (app.Window == IntPtr.Zero) return CollectPermission.Deny("前面ウィンドウがない");
-        if (app.IsOwnProcess) return CollectPermission.Deny("Meltype 自身のウィンドウ");
-        // 権限の高いアプリには SendInput が届かず (UIPI)、保留した入力を失うおそれがある。
-        if (app.IsElevated != false && !SelfElevated) return CollectPermission.Deny($"{app.ProcessName} は管理者権限で動作中 (または権限を確認できない)");
-        if (!settings.IsAppEnabled(app.ProcessName)) return CollectPermission.Deny($"{app.ProcessName} はアプリ別設定で OFF");
-        if (settings.ExcludeFullscreen && app.IsFullscreen) return CollectPermission.Deny($"{app.ProcessName} は全画面表示");
-        if (settings.IsGame(app.ProcessName, app.LooksLikeGame)) return CollectPermission.Deny($"{app.ProcessName} はゲーム");
-        return CollectPermission.Allow;
     }
 
     private static AppInfo Describe(IntPtr window)

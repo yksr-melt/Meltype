@@ -81,13 +81,7 @@ internal static class TipHarness
     }
 
     internal static Composition.CompositionService CreateService(Control invoker) =>
-        new(invoker, Composition.CompositionDetector.CreateDefault(), () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System }, new Composition.CompositionServices
-        {
-            UserDictionary = new Composition.UserDictionary(null),
-            History = new Composition.ConversionHistory(null),
-            Languages = new Composition.LanguageMemory(null),
-            TranslationHistory = new Composition.TranslationHistory(null),
-        });
+        new(invoker, TestRuntime.Create(), () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System });
 
     private static string Send(NamedPipeClientStream pipe, string json)
     {

@@ -15,12 +15,11 @@ namespace Meltype;
 /// </summary>
 internal sealed class MeltypeEngine : IDisposable
 {
-    private readonly string? _configPath;
-    private readonly ScoreEngine _scoreEngine;
     private readonly ForegroundTracker _foreground = new();
     private readonly KeyboardMonitor _monitor;
     // Chrome リモート デスクトップ・Parsec で操作されているか (#372)
     private readonly RemoteControl _remote = new();
+    // フックのスレッドで読む設定の写し (フックの中でファイルを見に行かないように。土台が読み直したら差し替える)
     private volatile Settings _settings;
     private bool _disposed;
 
@@ -43,21 +42,25 @@ internal sealed class MeltypeEngine : IDisposable
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
     private bool _injectedHintLogged;
 
-    public MeltypeEngine(Settings settings, string? configPath, string? userDictionaryDirectory)
+    public MeltypeEngine(Composition.MeltypeRuntime runtime)
     {
-        _settings = settings.Clone().Normalize();
-        _configPath = configPath;
-        Log.SetFileOutput(_settings.FileLog ? AppPaths.LogFile : null);
-        Log.RecordText = _settings.LogTypedText;
-
-        _scoreEngine = ScoreEngine.CreateDefault(() => _settings, userDictionaryDirectory);
+        Runtime = runtime;
+        _settings = runtime.Settings.Current;
+        runtime.SettingsChanged += next =>
+        {
+            _settings = next;
+            StatusChanged?.Invoke();
+        };
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
-        KeyCounter = new KeyCounter(configPath is null ? null : AppPaths.KeyCountFile);
+        KeyCounter = new KeyCounter(Path.Combine(runtime.DataDirectory, "keycount.json"));
         _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
         _discordPresence = new DiscordPresence(
             () => KeyCounter.DiscordPresence && KeyCounter.Enabled,
             () => new DiscordPresence.Stats(KeyCounter.OnDay(DateTime.Today), KeyCounter.Total));
     }
+
+    /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
+    public Composition.MeltypeRuntime Runtime { get; }
 
     public Settings Settings => _settings;
 
@@ -172,21 +175,6 @@ internal sealed class MeltypeEngine : IDisposable
     private bool KeyCountAllowed(Settings settings) =>
         settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
-    /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かを調べる。UI スレッドから呼ばれる。</summary>
-    public Verdict ClassifyDirect(string letters, bool final)
-    {
-        var keys = letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray();
-        var result = _scoreEngine.Evaluate(new DetectionInput(letters, keys, final), AppSettings);
-        // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、スペルチェッカーの語なら日本語にしない。
-        if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && Detection.WindowsSpellChecker.Shared.IsWord(letters.ToLowerInvariant()))
-        {
-            Log.Info($"英数状態: {Log.Text(letters)}は英単語 (スペルチェッカー) なので日本語にしない");
-            return final ? Verdict.English : Verdict.Undecided;
-        }
-        if (result.Verdict == Verdict.Japanese) Log.Decision($"英数状態でローマ字を検知: {result.Describe()}");
-        return result.Verdict;
-    }
-
     public void ApplySettings(Settings settings)
     {
         var next = settings.Clone().Normalize();
@@ -198,19 +186,12 @@ internal sealed class MeltypeEngine : IDisposable
             next.Mode = previous.Mode;
             Log.Warn("Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、動作モードは変えません。");
         }
-        _settings = next;
+        _settings = Runtime.Settings.Apply(next);
         // Meltype キーボードを使わなくなった: 変換中の内容を確定する。どちらでも、本体の状態を受け取り直す
         if (previous is { Enabled: true, Mode: InputMode.Keyboard } && next is not { Enabled: true, Mode: InputMode.Keyboard }) Keyboard?.Stop();
         else Keyboard?.Refresh();
         // Meltype IME のモードにしたら (トレイでも設定画面でも)、いま使う入力方式も Meltype IME にする (Win + Space で選び直さなくてよいように)
         if (SwitchesToTsf(previous.Mode, next.Mode)) Tip.TipServer.ActivateForSession();
-        Log.SetFileOutput(next.FileLog ? AppPaths.LogFile : null);
-        Log.RecordText = next.LogTypedText;
-        if (_configPath is not null)
-        {
-            try { next.Save(_configPath); }
-            catch (Exception ex) { Log.Warn($"config.json を保存できませんでした: {ex.Message}"); }
-        }
         Log.Info($"設定を反映しました (モード: {next.Mode}, 有効: {(next.Enabled ? "ON" : "OFF")}, 自動判定: {(next.AutoDetection ? "ON" : "OFF")}, 入力方式: {next.InputStyle})。");
         StatusChanged?.Invoke();
     }
@@ -218,8 +199,7 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動作モードを Meltype IME に変えたか (使えずに元のモードに戻したときは、戻した後のモードで見る)。</summary>
     internal static bool SwitchesToTsf(InputMode previous, InputMode next) => previous != InputMode.Tsf && next == InputMode.Tsf;
 
-    public DetectionResult Evaluate(string letters, Settings? settings = null) =>
-        _scoreEngine.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), IsFinal: false), settings ?? _settings);
+    public DetectionResult Evaluate(string letters, Settings? settings = null) => Runtime.Evaluate(letters, final: false, settings ?? _settings);
 
     private static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 

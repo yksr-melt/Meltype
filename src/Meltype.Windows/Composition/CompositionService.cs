@@ -34,59 +34,30 @@ internal sealed class CompositionService : IDisposable
     private ZenzaiConverter? CurrentZenzai() =>
         _settings() is { UseZenzai: true } settings ? _zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath), settings.ZenzaiDevice) : _zenzai.Get("", "");
 
+    /// <param name="runtime">設定・辞書・学習データ (どの OS も同じもの)。</param>
     /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="CreateSession"/> で渡す)。変換ボックスの見た目・変換エンジンを決める。</param>
-    /// <param name="services">辞書・学習データ。指定しなければ既定の場所から読む。</param>
-    public CompositionService(Control invoker, CompositionDetector detector, Func<Config.Settings> settings, CompositionServices services)
+    public CompositionService(Control invoker, MeltypeRuntime runtime, Func<Config.Settings> settings)
     {
         _invoker = invoker;
+        Runtime = runtime;
         _settings = settings;
         _nowPlaying = new NowPlaying(() => settings().NowPlayingCandidates);
-        // 補助辞書・文脈の手がかり・学習データは、指定がなければ既定の場所から読む。
-        var userDirectory = Config.AppPaths.UserDictionaryDirectory;
-        History = services.History ?? new ConversionHistory(Config.AppPaths.ConversionHistoryFile);
-        Languages = services.Languages ?? new LanguageMemory(Config.AppPaths.LanguageMemoryFile);
-        detector.Memory = Languages;
-        UserDictionary = services.UserDictionary ?? new UserDictionary(Config.AppPaths.UserDictionaryFile);
-        _detector = detector;
-        var resolved = services with
-        {
-            Candidates = services.Candidates ?? CandidateDictionary.Load(userDirectory),
-            ContextRules = services.ContextRules ?? ContextRules.Load(userDirectory),
-            History = History,
-            UserDictionary = UserDictionary,
-            MoreCandidates = services.MoreCandidates ?? (reading => _hybrid.Candidates(reading)),
-            Misspellings = services.Misspellings ?? MisspellingDictionary.Load(userDirectory),
-            Languages = Languages,
-            Translations = services.Translations ?? TranslationDictionary.Load(),
-            Meanings = services.Meanings ?? MeaningDictionary.Load(),
-            RomajiTypos = services.RomajiTypos ?? RomajiTypoCorrector.Load(detector.Romaji),
-            TranslationHistory = services.TranslationHistory ?? new TranslationHistory(Config.AppPaths.TranslationHistoryFile),
-            Predictor = services.Predictor ?? new Predictor(new PhraseHistory(Config.AppPaths.PhraseHistoryFile), UserDictionary, History),
-        };
-        Phrases = resolved.Predictor?.Phrases;
-        TranslationHistory = resolved.TranslationHistory;
         _mozc.Budget.Enable();
         _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
         _hybrid = new HybridConverter(() => settings().ConversionEngine, _mozc, _system, _system.Candidates, CurrentZenzai, _zenzai.Failed);
-        _resolved = resolved;
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         if (settings().ConversionEngine != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
     }
 
-    private readonly CompositionServices _resolved;
+    public MeltypeRuntime Runtime { get; }
 
     /// <summary>
-    /// Meltype IME (TSF) の入力欄 1 つ分の入力の本体を作る。辞書・学習データ・変換エンジンは変換ボックスと共有する
-    /// (UI スレッドからだけ使うので排他は要らない)。英数状態は IME の ON/OFF で決まるので、フック用の英数の判定は外す。
+    /// 入力欄 1 つ分の入力の本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄・変換ボックスと共有する
+    /// (UI スレッドからだけ使うので排他は要らない)。
     /// </summary>
     public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false)
     {
-        var session = new MeltypeSession(_detector, _hybrid, _resolved with
-        {
-            DirectMode = () => false,
-            ClassifyDirect = directModeDetection ? _resolved.ClassifyDirect : null,
-            DirectDecided = null,
-        }, settings, directModeDetection);
+        var session = Runtime.CreateSession(_hybrid, settings, reading => _hybrid.Candidates(reading), directModeDetection: directModeDetection);
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
         session.Corrected += correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai });
         return session;
@@ -96,27 +67,26 @@ internal sealed class CompositionService : IDisposable
     public event Action? ConversionReady;
 
     /// <summary>選び直した変換の学習データ (トレイの「学習データをリセット」で消す)。</summary>
-    public ConversionHistory History { get; }
+    public ConversionHistory History => Runtime.History;
 
     /// <summary>ユーザーが英字 / かなに直した語の学習 (トレイの「学習データをリセット」で消す)。</summary>
-    public LanguageMemory Languages { get; }
+    public LanguageMemory Languages => Runtime.Languages;
 
     /// <summary>選んだ英訳の記録 (トレイの「学習データをリセット」で消す)。</summary>
-    public TranslationHistory? TranslationHistory { get; }
+    public TranslationHistory TranslationHistory => Runtime.TranslationHistory;
 
     /// <summary>予測変換のために覚えた、確定した語句。</summary>
-    public PhraseHistory? Phrases { get; }
+    public PhraseHistory Phrases => Runtime.Phrases;
 
     /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
-    public UserDictionary UserDictionary { get; }
+    public UserDictionary UserDictionary => Runtime.UserDictionary;
 
     /// <summary>登録した定型文 (トレイの「定型文...」で編集する。;名前 + Space で入れる: issue #290)。</summary>
-    public SnippetStore Snippets { get; } = new(Config.AppPaths.SnippetsFile);
+    public SnippetStore Snippets => Runtime.Snippets;
 
     /// <summary>最近自分で直した誤判定 (メモリの中だけ。トレイの「直した誤判定を報告...」: issue #284)。</summary>
     public CorrectionLog Corrections { get; } = new();
 
-    private readonly CompositionDetector _detector;
 
     /// <summary>
     /// ユーザー辞書の登録画面用: 入力された読み (ローマ字でもよい) をひらがなにする。
@@ -124,7 +94,7 @@ internal sealed class CompositionService : IDisposable
     public string ToReading(string input)
     {
         var text = input.Trim();
-        return text.Any(char.IsAsciiLetter) ? _detector.Romaji.ConvertLenient(text.ToLowerInvariant(), final: true) : text;
+        return text.Any(char.IsAsciiLetter) ? Runtime.Detector.Romaji.ConvertLenient(text.ToLowerInvariant(), final: true) : text;
     }
 
     /// <summary>ユーザー辞書の登録画面用: 語の読みを推測する (かなならそのまま、漢字は Microsoft IME の逆変換)。分からなければ空。</summary>

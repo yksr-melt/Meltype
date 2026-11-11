@@ -81,10 +81,11 @@ internal static class SelfTest
         Check("UI Automation", () => { var result = ""; var thread = new Thread(() => result = FocusInspector.Probe()); thread.SetApartmentState(ApartmentState.MTA); thread.Start(); thread.Join(); return result; });
         Check("画面", () =>
         {
-            using var engine = new MeltypeEngine(new Config.Settings(), null, null);
+            using var data = new TemporaryData();
+            using var engine = new MeltypeEngine(new MeltypeRuntime(data.Directory));
             using var invoker = new Control();
             invoker.CreateControl();
-            using var service = new CompositionService(invoker, detector, () => engine.Settings, new CompositionServices { UserDictionary = new UserDictionary(null), History = new ConversionHistory(null) });
+            using var service = new CompositionService(invoker, engine.Runtime, () => engine.Settings);
             var names = new List<string>();
             foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
             {
@@ -103,7 +104,8 @@ internal static class SelfTest
         {
             // トレイのアイコン・メニュー・ホットキーを作ってすぐ閉じる (キーボードフックは掛けない)。
             // TsfIntroduced にしておく (作る人の PC に Meltype IME があると、入力方式が Meltype IME に切り替わってしまう)。
-            using var engine = new MeltypeEngine(new Config.Settings(), null, null);
+            using var data = new TemporaryData();
+            using var engine = new MeltypeEngine(new MeltypeRuntime(data.Directory));
             var tray = new UI.TrayApplicationContext(engine, new Config.AppState { TsfIntroduced = true });
             tray.ExitThread();
             return "OK";
@@ -185,5 +187,17 @@ internal static class SelfTest
         var body = Encoding.UTF8.GetBytes(json);
         stream.Write(Encoding.ASCII.GetBytes($"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {body.Length}\r\nConnection: close\r\n\r\n"));
         stream.Write(body);
+    }
+
+    /// <summary>設定・学習データを置く一時フォルダー (自己診断で、使っている人のデータに書かないように)。</summary>
+    internal sealed class TemporaryData : IDisposable
+    {
+        public string Directory { get; } = Path.Combine(Path.GetTempPath(), $"meltype-selftest-{Guid.NewGuid():N}");
+
+        public void Dispose()
+        {
+            try { System.IO.Directory.Delete(Directory, recursive: true); }
+            catch (IOException) { }
+        }
     }
 }

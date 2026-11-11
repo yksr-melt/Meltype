@@ -140,10 +140,10 @@ internal static class TestRunner
         {
             // 調査用: 設定画面とユーザー辞書の画面を表示せずに画像にする。
             Application.EnableVisualStyles();
-            var engine = new MeltypeEngine(new Config.Settings(), null, null);
+            var engine = new MeltypeEngine(TestRuntime.Create());
             using var invoker = new Control();
             invoker.CreateControl();
-            using var service = new Composition.CompositionService(invoker, Composition.CompositionDetector.CreateDefault(), () => engine.Settings, new Composition.CompositionServices { UserDictionary = new Composition.UserDictionary(null) });
+            using var service = new Composition.CompositionService(invoker, engine.Runtime, () => engine.Settings);
             service.UserDictionary.Add("きごうとう", "記号等");
             var composition = new Composition.CompositionWindow();
             // 候補が 9 個より多いとき (ページに分けて出す) の見た目。2 ページ目の候補を選んでいる。

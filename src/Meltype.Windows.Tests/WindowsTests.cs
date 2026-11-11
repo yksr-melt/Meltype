@@ -524,7 +524,7 @@ internal static class WindowsTests
     [Test]
     public static void SettingsForm_UsesToggleSwitchesForEveryOnOffSetting()
     {
-        using var engine = new MeltypeEngine(new Settings(), null, null);
+        using var engine = new MeltypeEngine(TestRuntime.Create());
         using var form = new UI.SettingsForm(engine, new AppState());
         var controls = Descendants(form).ToList();
         // 設定画面に出す bool の項目は、すべてスイッチ (ON/OFF だけのプルダウン・チェックボックスを残さない)

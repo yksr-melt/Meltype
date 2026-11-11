@@ -10,7 +10,7 @@ internal static class SettingsFormTests
     [Test]
     public static void SettingsForm_FontCanBeChangedWithoutOpeningDropDown()
     {
-        using var engine = new MeltypeEngine(new Settings(), null, null);
+        using var engine = new MeltypeEngine(TestRuntime.Create());
         using var form = new UI.SettingsForm(engine, new AppState());
         var combo = Descendants(form).OfType<ComboBox>().Single(c => c.AccessibleName == "変換ボックスのフォント");
         Assert.True(combo.Items.Count > 1, "開いた時点で、この PC のフォントを選べる");
@@ -28,7 +28,7 @@ internal static class SettingsFormTests
     [Test]
     public static void SettingsForm_RowsDoNotOverlapAfterOpeningAndResizing()
     {
-        using var engine = new MeltypeEngine(new Settings(), null, null);
+        using var engine = new MeltypeEngine(TestRuntime.Create());
         using var form = new UI.SettingsForm(engine, new AppState());
         form.Show();
         foreach (var width in new[] { form.Width, form.MinimumSize.Width })
@@ -55,11 +55,11 @@ internal static class SettingsFormTests
     [Test]
     public static void SettingsForm_CustomKindsLoadAndCanStillBeEdited()
     {
-        using var engine = new MeltypeEngine(new Settings
+        using var engine = new MeltypeEngine(TestRuntime.Create(new Settings
         {
             AppKinds = [new() { Name = "チャット", LiveConversion = false }, new() { Name = "仕事", Base = AppProfile.Code }],
             AppRules = [new() { Process = "chat.exe", Kind = "チャット" }],
-        }, null, null);
+        }));
         using var form = new UI.SettingsForm(engine, new AppState());
         var controls = Descendants(form).ToList();
         var rules = controls.OfType<DataGridView>().Single(g => g.Columns[0].HeaderText.StartsWith("プロセス名", StringComparison.Ordinal));

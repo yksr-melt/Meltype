@@ -87,7 +87,6 @@ internal static class Program
         if (restore is not null) RestoreBackup(restore);
         var state = AppState.Load(AppPaths.StateFile, AppPaths.ConfigFile);
         var settings = Settings.Load(AppPaths.ConfigFile);
-        SettingsSchema.Write(AppPaths.DataDirectory);
         if (!File.Exists(AppPaths.ConfigFile))
         {
             try { settings.Save(AppPaths.ConfigFile); } catch { }
@@ -115,7 +114,7 @@ internal static class Program
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(settings, AppPaths.ConfigFile, AppPaths.UserDictionaryDirectory);
+            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared));
             engine.Start();
         }
         catch (Exception ex)
