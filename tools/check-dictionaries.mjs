@@ -6,8 +6,10 @@
 // 読み込めない行 (エラー) があれば終了コード 1。直した方がよい行 (警告) は表示だけ。
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..', 'dictionaries');
+const self = fileURLToPath(import.meta.url);
+const root = path.join(path.dirname(self), '..', 'dictionaries');
 const hiragana = /^[ぁ-ゖー゛゜ゔ]+$/;
 const kana = /^[ぁ-ゖァ-ヺー・ゔヴ]+$/;
 const ascii = /^[\x21-\x7e]+$/;
@@ -102,6 +104,12 @@ const comments = {
 };
 
 /**
+ * 前後の空白を除かずに形式を確かめる辞書。
+ * 顔文字は空白も中身。english-phrases は Core が行を trim せずタブで分けるので、行頭の空白や行末の余分なタブがあると登録されない。
+ */
+const untrimmed = new Set(['emoji.txt', 'emoji-cldr.txt', 'english-phrases.txt']);
+
+/**
  * 重複を見る単位 ([キー, 中身] の並び)。ふつうは行全体。
  * キーが同じで中身が違えば、後の行が前の行を上書きするか、どちらが効くか決まらないのでエラー。中身まで同じなら警告。
  */
@@ -128,7 +136,7 @@ export function checkDictionary(file, text) {
     if (hash >= 0) line = line.slice(0, hash);
     if (line.trim() === '') return;
     if (/[ \t]$/.test(raw.replace(/\r$/, '')) && hash < 0) warnings.push({ line: lineNo, message: '行の終わりに空白がある' });
-    const problems = format(line.trim() === line || file.startsWith('emoji') ? line : line.trim()).filter(Boolean);
+    const problems = format(untrimmed.has(file) ? line : line.trim()).filter(Boolean);
     for (const problem of problems) errors.push({ line: lineNo, message: problem });
     if (problems.length > 0) return; // 読めない行は重複を見ない
     for (const [key, value] of keysOf(line.trim())) {
@@ -141,7 +149,7 @@ export function checkDictionary(file, text) {
   return { errors, warnings };
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1'))) {
+if (process.argv[1] && path.resolve(process.argv[1]) === self) {
   const files = process.argv.slice(2).length > 0
     ? process.argv.slice(2).map(f => path.basename(f)).filter(f => f.endsWith('.txt'))
     : fs.readdirSync(root).filter(f => f.endsWith('.txt'));
