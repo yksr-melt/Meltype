@@ -1074,4 +1074,75 @@ internal static class SessionFacadeTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    [Test]
+    public static void SlashAsMiddleDot_WorksAtStartEvenWhenSigilWordsDirectEnabled()
+    {
+        MeltypeSession CreateMiddleDotSession(bool codeInput = false, bool codeTerminal = false) =>
+            new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
+                new CompositionServices { Candidates = CandidateDictionary.Load(null) },
+                () => new Settings { Slash = SlashStyle.MiddleDot, SigilWordsDirect = true })
+            {
+                CodeInput = codeInput,
+                CodeTerminal = codeTerminal,
+            };
+
+        var session = CreateMiddleDotSession();
+        var slash = Type(session, "/", before: "")[0];
+        Assert.True(slash.Consumed, "中黒設定が ON なら先頭の / も変換ボックスへ入る");
+        Assert.Equal("・", slash.View?.Text);
+        Assert.Equal("・", Type(session, "\n")[0].Commits.Single().Text);
+
+        // 英語の箇条書き (・Windows11 → 改行 → ・Windows10): 直前の確定が英数字でも次の行の先頭の / が ・ になること
+        var bulletSession = CreateMiddleDotSession();
+        Assert.Equal("・Windows11", Type(bulletSession, "/Windows11", before: "")[^1].View?.Text);
+        Assert.Equal("・Windows11", Type(bulletSession, "\n")[0].Commits.Single().Text);
+        Assert.Equal("・Windows10", Type(bulletSession, "/Windows10", before: "・Windows11\n")[^1].View?.Text);
+        Assert.Equal("・Windows10", Type(bulletSession, "\n")[0].Commits.Single().Text);
+
+        // ターミナル・AI プロンプト (> )・コマンドパレット/クイックオープン/アドレスバー/コード行では、中黒設定が ON でも / を素通しする
+        var terminalSession = CreateMiddleDotSession(codeInput: true, codeTerminal: true);
+        Assert.True(!Type(terminalSession, "/", before: "")[0].Consumed, "ターミナルでは / を素通しする");
+        var promptSession = CreateMiddleDotSession(codeInput: true);
+        Assert.True(!Type(promptSession, "/", before: "> ")[0].Consumed, "AI プロンプト (> ) では / を素通しする");
+        var paletteSession = CreateMiddleDotSession(codeInput: true);
+        Assert.True(!Type(paletteSession, "/", before: "")[0].Consumed, "コマンドパレット・コード行では / を素通しする");
+        Assert.Equal(CodeFocus.Editor, LineContext.ClassifyFocus("Code.exe", "コマンド パレット", ""));
+        Assert.Equal(CodeFocus.Editor, LineContext.ClassifyFocus("Code.exe", "Quick Open", ""));
+        Assert.Equal(CodeFocus.Editor, LineContext.ClassifyFocus("Code.exe", "アドレスバー", ""));
+
+        // エディター内のコメント・文字列の中では、中黒設定が ON なら ・ になる
+        var commentSession = CreateMiddleDotSession(codeInput: true);
+        Assert.Equal("・", Type(commentSession, "/", before: "// ")[0].View?.Text);
+        var stringSession = CreateMiddleDotSession(codeInput: true);
+        Assert.Equal("・", Type(stringSession, "/", before: "var s = \"")[0].View?.Text);
+
+        // 数字を直接入力した後に Backspace で消して空に戻った場合も、状態を引きずらず中黒になること
+        var digitSession = CreateMiddleDotSession();
+        Type(digitSession, "1", before: "");
+        digitSession.HandleKey(VirtualKeys.Back, '\b', false, false, false, false);
+        var slashAfterDigit = Type(digitSession, "/", before: "")[0];
+        Assert.True(slashAfterDigit.Consumed, "数字を消して空になった後の / も中黒になる");
+        Assert.Equal("・", slashAfterDigit.View?.Text);
+
+        // 前の文字を読めないアプリ (before == null) で数字を消して / を打った場合も中黒になること
+        var nullDigitSession = CreateMiddleDotSession();
+        Type(nullDigitSession, "1", before: null);
+        nullDigitSession.HandleKey(VirtualKeys.Back, '\b', false, false, false, false);
+        var slashAfterNullDigit = Type(nullDigitSession, "/", before: null)[0];
+        Assert.True(slashAfterNullDigit.Consumed, "before が null でも数字を消した後の / は中黒になる");
+        Assert.Equal("・", slashAfterNullDigit.View?.Text);
+
+        // 直前が数字 (before: "1") の場合も、中黒設定が ON なら中黒として表示されること
+        var preDigitSession = CreateMiddleDotSession();
+        var slashAfterPreDigit = Type(preDigitSession, "/", before: "1")[0];
+        Assert.True(slashAfterPreDigit.Consumed, "直前が数字でも中黒になる");
+        Assert.Equal("・", slashAfterPreDigit.View?.Text);
+
+        // and/or・URL・kyou/exit の区間分けが変わらないこと
+        Assert.Equal("and/or", Type(CreateMiddleDotSession(), "and/or", before: "")[^1].View?.Text);
+        Assert.Equal("https://example.com/a/b", Type(CreateMiddleDotSession(), "https://example.com/a/b", before: "")[^1].View?.Text);
+        Assert.Equal("きょう・exit", Type(CreateMiddleDotSession(), "kyou/exit", before: "")[^1].View?.Text);
+        Assert.Equal("きょう/exit", Type(Create(), "kyou/exit", before: "")[^1].View?.Text);
+    }
 }

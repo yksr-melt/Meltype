@@ -491,14 +491,17 @@ public sealed class MeltypeSession
         {
             return _controller.Pass(now);
         }
-        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
-        // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
+        // 文章の入力欄の / や「/ キーで中黒」設定時は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
         if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(before, '/'))
+            (SigilWord.PassesAfter(before, '/') || (!Direct && settings.Slash == SlashStyle.MiddleDot && settings.InputStyle != InputStyle.Kana)))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
+        // ただし「/ キーで中黒」が ON の日本語入力時は、先頭の / も中黒 (・) として変換ボックスに入れる。
+        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect &&
+            !(c == '/' && !Direct && !PassesSlash(before) && settings.Slash == SlashStyle.MiddleDot && settings.InputStyle != InputStyle.Kana && !SigilWord.InNameAfter(before)) &&
+            SigilWord.PassesAfter(before, c))
         {
             return _controller.Pass(now);
         }
@@ -539,7 +542,7 @@ public sealed class MeltypeSession
     /// コメント・文字列の中は ・ にする (Meltype キーボードと同じ)。
     /// </summary>
     private bool PassesSlash(string? before) =>
-        CodeInput && !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
+        CodeInput && (CodeTerminal || !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt);
 
 
 
