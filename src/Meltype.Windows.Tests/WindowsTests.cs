@@ -519,7 +519,7 @@ internal static class WindowsTests
         var collect = form.GetType().GetMethod("Collect", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         var collected = (Settings)collect.Invoke(form, null)!;
         Assert.True(!collected.IsAppEnabled("mstsc.exe") && collected.IsAppEnabled("Code.exe"), "表の値がそのまま設定になる");
-        Assert.Equal(engine.Settings.Clone().Normalize().ToJson(), collected.ToJson(), "何も変えなければ値は変わらない (閉じるときに保存しない)");
+        Assert.Equal(engine.Running.Clone().Normalize().ToJson(), collected.ToJson(), "何も変えなければ、開いたときの値 (動かしている設定) のまま (閉じるときに保存しない)");
         var live = controls.OfType<UI.ToggleSwitch>().First(t => t.AccessibleName == "ライブ変換");
         Assert.True(live.Checked, "既定の ON が画面に出ている");
         live.Checked = false;

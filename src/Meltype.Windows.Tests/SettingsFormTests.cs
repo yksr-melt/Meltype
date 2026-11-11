@@ -66,7 +66,7 @@ internal static class SettingsFormTests
         var kinds = controls.OfType<DataGridView>().Single(g => g.AccessibleName == "独自の種類");
         Assert.Equal("チャット", rules.Rows[0].Cells[2].Value, "アプリの種類を読み込める");
         var collect = form.GetType().GetMethod("Collect", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        Assert.Equal(engine.Settings.Clone().Normalize().ToJson(), ((Settings)collect.Invoke(form, null)!).ToJson(), "読み込んだ値を失わない");
+        Assert.Equal(engine.Running.Clone().Normalize().ToJson(), ((Settings)collect.Invoke(form, null)!).ToJson(), "読み込んだ値を失わない (動かしている設定を見せる)");
         kinds.Rows[0].Cells[0].Value = "雑談";
         var choices = (DataGridViewComboBoxColumn)rules.Columns[2];
         Assert.True(choices.Items.Contains("雑談"), "読み込み後の編集は、アプリ別設定の選択肢にすぐ反映する");
