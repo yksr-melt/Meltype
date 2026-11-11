@@ -102,141 +102,19 @@ public sealed class SnippetStore
 /// <summary>
 /// ;名前 を見分ける (issue #290)。入力欄・行の先頭か空白の直後に打った記号 (既定 ;) と、続く名前は変換せずにそのままアプリへ渡し、
 /// Space / Tab を押したときに名前が登録したものなら、;名前 を消して定型文を入れる (一致しなければ何もしない)。
-/// for(;i&lt;n;i++)・a;b の ; は前が空白ではないので対象にしない。アプリに届いた文字を追いかけて、直前が先頭・空白かを覚えておく
-/// (/ $ @ の <see cref="SigilWord"/> と同じ考え方)。フックのスレッドと UI スレッドの両方から呼ばれる。
+/// for(;i&lt;n;i++)・a;b の ; は前が空白ではないので対象にしない。どれもキャレットの前の文字 (before) だけで決める。
 /// </summary>
-public sealed class SnippetTrigger
+public static class SnippetTrigger
 {
-    private readonly object _gate = new();
-    private bool? _boundary = true;
-    // 記号から打っている名前 (記号を含まない)。null なら名前の途中ではない。
-    private StringBuilder? _name;
+    /// <summary>キャレットの前に c を打つと、;名前 の途中になるか (変換せずにアプリへ渡す)。</summary>
+    public static bool PassesThrough(string mark, string before, char c) => IsTyped(mark, Word(before) + c);
 
-    /// <summary>名前の前に付ける記号 (設定。空なら定型文を使わない)。</summary>
-    public string Mark { get; set; } = ";";
+    /// <summary>キャレットの前が ;名前 で終わるなら、その ;名前。</summary>
+    public static string? TypedBefore(string mark, string before) => Word(before) is { Length: > 1 } word && IsTyped(mark, word) ? word : null;
 
-    /// <summary>記号から始めた名前を打っている途中か。</summary>
-    public bool IsActive { get { lock (_gate) return _name is not null; } }
+    private static bool IsTyped(string mark, string word) =>
+        mark is [var m] && word.Length > 0 && word[0] == m && word.Skip(1).All(SnippetStore.IsNameChar);
 
-    /// <summary>打っている途中の名前 (記号を含まない)。名前の途中でなければ null。</summary>
-    public string? Name { get { lock (_gate) return _name?.ToString(); } }
-
-    /// <summary>
-    /// 変換ボックスが空のときに打った文字を、変換せずにそのままアプリへ渡すか。渡した文字は <see cref="Append"/> で伝える
-    /// (ここでは名前を溜めない)。before はホストが教えてくれたキャレットの前の文字列 (分からなければ null)。
-    /// </summary>
-    public bool PassesThrough(char c, string? before = null)
-    {
-        lock (_gate)
-        {
-            if (_name is not null) return SnippetStore.IsNameChar(c);
-            if (Mark is not [var mark] || c != mark) return false;
-            if (!string.IsNullOrEmpty(before)) _boundary = char.IsWhiteSpace(before[^1]);
-            else if (before is not null && _boundary is null) _boundary = true;
-            return _boundary == true;
-        }
-    }
-
-    /// <summary>
-    /// Space / Tab を押したとき。名前が登録したものなら、消す文字数 (記号 + 名前) と入れる文を返し、名前の途中を終える。
-    /// 一致しなければ null (Space / Tab はそのままアプリへ)。
-    /// </summary>
-    public (int Delete, string Text, string Typed)? Expand(SnippetStore store)
-    {
-        lock (_gate)
-        {
-            if (_name is not { Length: > 0 } name || store.Get(name.ToString()) is not { } text) return null;
-            var typed = Mark + name;
-            _name = null;
-            _boundary = false;
-            return (typed.Length, text, typed);
-        }
-    }
-
-    /// <summary>アプリに届いた文字列 (そのまま渡した打鍵の文字・変換ボックスで確定した文字列)。</summary>
-    public void Append(string text)
-    {
-        lock (_gate)
-        {
-            foreach (var c in text)
-            {
-                if (_name is not null && SnippetStore.IsNameChar(c))
-                {
-                    _name.Append(c);
-                    continue;
-                }
-                if (_name is null && Mark is [var mark] && c == mark && _boundary == true)
-                {
-                    _name = new StringBuilder();
-                    _boundary = false;
-                    continue;
-                }
-                _name = null;
-                _boundary = char.IsWhiteSpace(c);
-            }
-        }
-    }
-
-    /// <summary>アプリに届いたキー (修飾キーと一緒のキー・キャレットを動かすキーは <see cref="Lose"/>)。</summary>
-    public void OnKey(int vk, char? ch)
-    {
-        switch (vk)
-        {
-            case Input.VirtualKeys.Return: Start(); return;
-            case Input.VirtualKeys.Back: Backspace(); return;
-            case Input.VirtualKeys.Space: Append(" "); return;
-            case Input.VirtualKeys.Escape: return;
-            case Input.VirtualKeys.Tab or (>= 0x21 and <= 0x28) or 0x2E: Lose(); return;
-        }
-        if (Input.VirtualKeys.IsModifier(vk)) return;
-        if (ch is { } c && !char.IsControl(c)) Append(c.ToString());
-    }
-
-    /// <summary>BackSpace がアプリに届いた。名前の途中なら 1 文字戻し、記号まで消したら記号の前 (先頭・空白) に戻る。</summary>
-    public void Backspace()
-    {
-        lock (_gate)
-        {
-            if (_name is null)
-            {
-                _boundary = null;
-                return;
-            }
-            if (_name.Length > 0) _name.Length--;
-            else
-            {
-                _name = null;
-                _boundary = true;
-            }
-        }
-    }
-
-    /// <summary>Enter (新しい行) や、別の入力欄に移ったとき。次の文字は先頭とみなす。</summary>
-    public void Start()
-    {
-        lock (_gate)
-        {
-            _boundary = true;
-            _name = null;
-        }
-    }
-
-    /// <summary>入力欄のフォーカスが移った。次に打つ文字は先頭とみなす (名前の途中なら続ける: 補完の一覧にフォーカスが移るアプリがある)。</summary>
-    public void FocusMoved()
-    {
-        lock (_gate)
-        {
-            if (_name is null) _boundary = true;
-        }
-    }
-
-    /// <summary>キャレットが動いた (矢印・クリック・ショートカット) ので、前の文字が分からない。</summary>
-    public void Lose()
-    {
-        lock (_gate)
-        {
-            _boundary = null;
-            _name = null;
-        }
-    }
+    // 空白の後ろ (無ければ先頭から)
+    private static string Word(string before) => before[(before.LastIndexOfAny([' ', '\t', '\n', '\r', '\u3000']) + 1)..];
 }

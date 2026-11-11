@@ -70,6 +70,8 @@ Mac 版・Linux 版はプレビュー版です。気づいたことは小さな�
 <img src="docs/images/headings/contributing/09.svg" alt="Issue・Pull Request の扱い" height="53"><br>
 
 
+Issue・Pull Request の本文とコメントは日本語で書いてください。日本語が書けない場合は、機械翻訳でかまいません。
+
 `要トリアージ` が付いている Issue (メンテナーがまだ見ていないもの) には、基本的に着手しないでください。
 対応したい場合は、その Issue に対応したいことをコメントで残しておいてください。メンテナーが進めると判断したら、`/self-assign` とコメントしてから対応してください ([bot のコマンド](#bot-のコマンド))。
 

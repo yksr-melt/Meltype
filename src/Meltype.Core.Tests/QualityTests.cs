@@ -465,7 +465,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         }
         foreach (var (process, name, className, expected) in Focuses)
         {
-            var actual = LineContext.ClassifyFocus(process, name, className);
+            var actual = LineContext.ClassifyFocus(process, new Ime.ImeElement(name, className));
             Score("入力欄の種類", actual == expected, $"{process} 「{name}」({className}) → {actual} (期待: {expected})");
         }
         foreach (var (title, expected) in Titles)

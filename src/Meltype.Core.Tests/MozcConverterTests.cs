@@ -27,6 +27,11 @@ internal static class MozcConverterTests
             {
                 case "C" when fields[2] == "おちる":
                     return 1;
+                // 応答が遅い読み (ヘルパーの応答を待っている間も、キャッシュの答えを読めるかのテスト)
+                case "C" when fields[2] == "おそい":
+                    Thread.Sleep(1000);
+                    output.WriteLine(fields[2] + '\x1f' + fields[2]);
+                    break;
                 // 2 つの文節に分けて、文節ごとの候補も返す (Zenzai の結果を Mozc の文節に当てはめるテスト: ZenzaiConverterTests)
                 case "C" when fields[2] == "きしゃがきた":
                     output.WriteLine("きしゃが\x1f記者が\x1f汽車が\x1f帰社が" + '\x1e' + "きた\x1f来た\x1f着た\x1f北");
@@ -54,6 +59,7 @@ internal static class MozcConverterTests
     {
         var profile = Path.Combine(Path.GetTempPath(), FakeHelperProfile);
         using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        mozc.Budget.Enable();
 
         // 起動しているあいだ (READY を待っているあいだ) の変換は、待たずに null を返す (呼び出し側が Microsoft IME で変換する)
         mozc.WarmUp();
@@ -63,7 +69,9 @@ internal static class MozcConverterTests
         Assert.True(WaitConverted(mozc, "い"), "起動したら変換する");
 
         // ヘルパーが落ちたら、起動し直しを待たずに null を返し、起動し直したらまた変換する
+        mozc.Budget.Start(5000);
         Assert.True(mozc.ConvertClauses("おちる") is null, "落ちた");
+        mozc.Budget.Start(0);
         watch.Restart();
         Assert.True(mozc.ConvertClauses("う") is null, "起動し直しを待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動し直しを待たない ({watch.ElapsedMilliseconds}ms)");

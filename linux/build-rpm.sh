@@ -57,6 +57,7 @@ trap 'rm -rf "$stage"' EXIT
 # fcitx5 のアドオンは Fedora の glibc を要求するので、サブパッケージ meltype-fcitx5 に分け、meltype は RHEL 9 系でも入るようにする。
 # meltype-fcitx5 は、fcitx5 が入っていれば dnf が meltype と一緒に入れる (Supplements)。
 # IBus の一覧 (ibus write-cache) は Fedora の ibus パッケージのファイルトリガーが作り直すので、ここでは実行しない
+# Fedora の gtk4 は、起動に要る cairo の typelib (gobject-introspection) と libGLESv2 (libglvnd-gles) を Requires に持たない
 cat > "$stage/meltype.spec" << 'EOF'
 %global debug_package %{nil}
 %global _build_id_links none
@@ -70,8 +71,8 @@ Release: 1
 Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
-Requires: libicu, python3 >= 3.9
-Recommends: ibus, python3-gobject, gtk4
+Requires: libicu, python3 >= 3.9, python3-gobject, gtk4, gobject-introspection, libglvnd-gles
+Recommends: ibus
 
 %description
 Meltype is a Japanese input method (IBus engine and fcitx5 addon).

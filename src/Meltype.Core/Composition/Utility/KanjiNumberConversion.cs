@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-// Copyright (C) 2026 Yukishiro
+// Copyright (C) 2026 aster-void
+
 using System.Globalization;
 using System.Text;
 
-namespace Meltype.Composition;
+namespace Meltype.Composition.Utility;
 
 /// <summary>
-/// 数字だけの区間を変換するときの候補: 漢数字 (二〇二六・二千二十六・弐千弐拾六)。
-/// 西暦に見える 4 桁は元号 (令和8年) も出す。
+/// 数字だけの入力に、漢数字 (二〇二六・二千二十六・弐千弐拾六) を出す (issue #344)。
+/// Mozc も同じ候補を出すが、Mac の azooKey は打った数字を漢数字にしないので、どの OS でも出るようにここで出す。
+/// 選んだ漢数字は学習する (1 → 一 を選んだら次も 一: issue #672)。
 /// </summary>
-public static class NumberCandidates
+internal sealed class KanjiNumberConversion : IUtilityConversion
 {
     private const string Digits = "〇一二三四五六七八九";
     private const string FormalDigits = "零壱弐参四五六七八九";
@@ -17,13 +19,18 @@ public static class NumberCandidates
     private static readonly string[] FormalSmallUnits = ["", "拾", "百", "千"];
     private static readonly string[] BigUnits = ["", "万", "億", "兆"];
 
-    /// <summary>数字だけの文字列 (全角でもよい) の候補。数字だけでなければ空。</summary>
-    public static List<string> For(string text)
+    public UtilityCandidates? Convert(UtilityInput input) =>
+        input.Reading is { } reading && Candidates(reading) is { Count: > 0 } candidates
+            ? new(candidates, UtilityPlacement.Append) { Learnable = true }
+            : null;
+
+    /// <summary>数字だけの文字列 (全角・3 桁ごとの , があってもよい) の漢数字。数字だけでなければ空。</summary>
+    internal static List<string> Candidates(string text)
     {
-        var half = text.Replace(",", "");
-        half = string.Concat(half.Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c));
+        var half = string.Concat(text.Replace(",", "").Select(c => c is >= '０' and <= '９' ? (char)(c - '０' + '0') : c));
         if (half.Length is 0 or > 16 || !half.All(char.IsAsciiDigit)) return [];
         var result = new List<string> { string.Concat(half.Select(c => Digits[c - '0'])) };
+        // 先頭が 0 の数字 (001) は位取りしない
         if (half.Length > 1 && half[0] == '0') return result;
         var value = ulong.Parse(half, CultureInfo.InvariantCulture);
         if (value > 0)
@@ -31,22 +38,7 @@ public static class NumberCandidates
             result.Add(ToKanji(value, Digits, SmallUnits, omitOne: true));
             result.Add(ToKanji(value, FormalDigits, FormalSmallUnits, omitOne: false));
         }
-        if (half.Length == 4 && ToEra((int)value) is { } era) result.Add(era);
         return result.Distinct().ToList();
-    }
-
-    /// <summary>西暦 → 元号 (明治 〜 令和)。範囲外は null。</summary>
-    public static string? ToEra(int year)
-    {
-        (string Name, int Start)[] eras = [("令和", 2019), ("平成", 1989), ("昭和", 1926), ("大正", 1912), ("明治", 1868)];
-        if (year > 2100) return null;
-        foreach (var (name, start) in eras)
-        {
-            if (year < start) continue;
-            var n = year - start + 1;
-            return $"{name}{(n == 1 ? "元" : n.ToString(CultureInfo.InvariantCulture))}年";
-        }
-        return null;
     }
 
     private static string ToKanji(ulong value, string digits, string[] units, bool omitOne)

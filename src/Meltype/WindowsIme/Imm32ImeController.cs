@@ -3,7 +3,7 @@
 
 using System.Diagnostics;
 
-namespace Meltype.IME;
+namespace Meltype.WindowsIme;
 
 /// <summary>
 /// IMM32 経由の IME 操作。ImmGetContext は別プロセスのウィンドウには使えないので、

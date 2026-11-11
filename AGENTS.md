@@ -19,6 +19,18 @@
 | `docs/`                    | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート                                              |
 | `docs/dev/`                | 開発者向けの文書（開発・設計・リリースの手順）                                                                     |
 
+## 入力のフロント
+
+入力の判断は `src/Meltype.Core/Ime/` (`ImeSession`) がする。フロントは OS の事実を送り、返ってきた指示を適用する。
+
+| フロント | 場所 |
+| --- | --- |
+| Windows: Meltype IME (TSF) | `native/tip/` (DLL)・`src/Meltype/Tip/TipServer.cs` (Meltype.exe 側) |
+| Windows: Meltype キーボード | `src/Meltype/Keyboard/KeyboardFront.cs` |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` |
+| Linux: IBus | `linux/ibus-engine-meltype` |
+| Linux: fcitx5 | `linux/fcitx5/meltype.cpp` |
+
 ## ビルドとテスト
 
 ```bash
@@ -120,7 +132,7 @@ ON と OFF のそれぞれに意味がある設定だけを足す。設定はユ
 - PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。
 - PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
 - AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
-- PR の本文・コメント・文書は日本語で書く。
+- Issue・PR の本文・コメントと文書は日本語で書く。
 - PR と関係ない場所を変更しない。
 - PR に関係する箇所の文書が古ければ、利用者向けでも開発者向けでも直す。利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/*.md`）は常時メンテ対象で、挙動を変える PR では影響する箇所を探して同じ PR で直す。
 - 利用者が知る必要がないことを利用者向けの文書に書かない。

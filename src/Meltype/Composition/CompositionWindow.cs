@@ -180,16 +180,14 @@ internal sealed class CompositionWindow : PopupForm
     /// <summary>候補の一覧に一度に出す数 (Microsoft IME と同じく 9 個)。</summary>
     private const int PageSize = 9;
 
-    /// <summary>候補で止まってから意味を出すまでの時間。</summary>
-    private const int MeaningDelayMs = 1500;
-    private readonly System.Windows.Forms.Timer _meaningTimer = new() { Interval = MeaningDelayMs };
+    private readonly System.Windows.Forms.Timer _meaningTimer = new() { Interval = SessionResult.MeaningDelayMs };
     private MeaningPopup? _meaningPopup;
     private string? _meaningKey;
 
     /// <summary>選んでいる候補が変わったら意味を消し、同じ候補のまましばらく止まったら意味を出す。</summary>
     private void UpdateMeaning(CompositionView view)
     {
-        var key = view is { Converting: true, Meaning: not null } && view.SelectedIndex >= 0 ? $"{view.SelectedIndex}\n{view.Candidates[view.SelectedIndex]}\n{view.Meaning}" : null;
+        var key = view.Meaning is not null && view.SelectedIndex >= 0 ? $"{view.SelectedIndex}\n{view.Candidates[view.SelectedIndex]}\n{view.Meaning}" : null;
         if (key == _meaningKey)
         {
             if (_meaningPopup is { Visible: true }) PlaceMeaning(view);
@@ -273,9 +271,11 @@ internal sealed class CompositionWindow : PopupForm
         }
     }
 
-    /// <summary>打ったキーを出すか。見えている文字と同じ (英字のまま) なら出さない。</summary>
-    private static string? ShowsTyped(CompositionView view) =>
-        view.Typed is { Length: > 0 } typed && typed != view.Text ? typed : null;
+    /// <summary>
+    /// 本体が渡す一覧 (<see cref="SessionResult.ForFront"/> で 1 つだけ) と、番号を出すか。
+    /// </summary>
+    private static (IReadOnlyList<string> Items, int Selected, bool Numbered) List(CompositionView view) =>
+        view.Predictions is { Count: > 0 } predictions ? (predictions, view.SelectedPrediction, false) : (view.Candidates, view.SelectedIndex, SessionResult.Numbered(view));
 
     /// <summary>view を出したときの変換ボックスの大きさ (出す場所を決めるのにも使う)。</summary>
     public Size Measure(CompositionView view)
@@ -288,7 +288,7 @@ internal sealed class CompositionWindow : PopupForm
             width = Math.Max(width, clausesWidth + 20);
         }
         var height = _textFont.Height + 16;
-        if (ShowsTyped(view) is { } typed)
+        if (view.Typed is { Length: > 0 } typed)
         {
             width = Math.Max(width, TextRenderer.MeasureText(g, typed, _hintFont).Width + 20);
             height += _hintFont.Height + 2;
@@ -298,23 +298,18 @@ internal sealed class CompositionWindow : PopupForm
             width = Math.Max(width, TextRenderer.MeasureText(g, suggestion, _candidateFont).Width + 32);
             height += SuggestionHeight;
         }
-        if (view.Converting)
+        var (items, _, _) = List(view);
+        if (items.Count > 0)
         {
-            for (var i = 0; i < view.Candidates.Count; i++)
+            for (var i = 0; i < items.Count; i++)
             {
                 // 候補の右に注記を出す分だけ広くする
                 var note = view.Notes?[i].ToDisplayText() is { } n ? TextRenderer.MeasureText(g, n, _hintFont).Width + 12 : 0;
-                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {view.Candidates[i]}", _candidateFont).Width + 28 + note);
+                width = Math.Max(width, TextRenderer.MeasureText(g, $"9  {items[i]}", _candidateFont).Width + 28 + note);
             }
-            height += Math.Min(view.Candidates.Count, PageSize) * (_candidateFont.Height + 4) + 6;
+            height += Math.Min(items.Count, PageSize) * (_candidateFont.Height + 4) + 6;
             // 2 ページ以上あるときは、下に「3 / 27」を出す分
-            if (view.Candidates.Count > PageSize) height += _hintFont.Height + 2;
-        }
-        else if (view.Predictions is { Count: > 0 } predictions)
-        {
-            // 予測変換の候補 (番号は付けない。Tab で選ぶ)
-            foreach (var prediction in predictions) width = Math.Max(width, TextRenderer.MeasureText(g, $"▸ {prediction}", _candidateFont).Width + 28);
-            height += predictions.Count * (_candidateFont.Height + 4) + 6;
+            if (items.Count > PageSize) height += _hintFont.Height + 2;
         }
         width = Math.Max(width, TextRenderer.MeasureText(g, view.Hint, _hintFont).Width + 16);
         height += _hintFont.Height + 6;
@@ -366,7 +361,7 @@ internal sealed class CompositionWindow : PopupForm
             y += 8;
         }
 
-        if (ShowsTyped(view) is { } typed)
+        if (view.Typed is { Length: > 0 } typed)
         {
             // 打ったキー (設定「打ったキーを表示」): 打ち間違いに気づけるように、文字の下に小さく出す
             TextRenderer.DrawText(g, typed, _hintFont, new Point(10, y - 2), _palette.Hint, TextFormatFlags.NoPrefix);
@@ -383,22 +378,23 @@ internal sealed class CompositionWindow : PopupForm
             y += SuggestionHeight;
         }
 
-        if (view.Converting)
+        var (items, selectedItem, numbered) = List(view);
+        if (items.Count > 0)
         {
             // 9 個ずつのページに分けて、選んでいる候補のページだけを出す (候補が多いと画面に収まらないため)。
-            var first = Math.Max(0, view.SelectedIndex) / PageSize * PageSize;
+            var first = Math.Max(0, selectedItem) / PageSize * PageSize;
             var listTop = y;
-            for (var i = first; i < Math.Min(view.Candidates.Count, first + PageSize); i++)
+            for (var i = first; i < Math.Min(items.Count, first + PageSize); i++)
             {
                 var rowHeight = _candidateFont.Height + 4;
-                if (i == view.SelectedIndex)
+                if (i == selectedItem)
                 {
                     using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
                     g.FillRectangle(highlight, 4, y - 2, Width - 8, rowHeight);
                 }
-                DrawText(g, $"{i - first + 1}  {view.Candidates[i]}", _candidateFont, new Point(12, y),
-                    i == view.SelectedIndex ? _palette.Text : _palette.Candidate,
-                    i == view.SelectedIndex ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
+                DrawText(g, $"{(numbered ? $"{i - first + 1}" : " ")}  {items[i]}", _candidateFont, new Point(12, y),
+                    i == selectedItem ? _palette.Text : _palette.Candidate,
+                    i == selectedItem ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
                 if (view.Notes?[i].ToDisplayText() is { } note)
                 {
                     // 候補の注記を右端に小さく出す
@@ -407,32 +403,14 @@ internal sealed class CompositionWindow : PopupForm
                 }
                 y += rowHeight;
             }
-            if (view.Candidates.Count > PageSize)
+            if (items.Count > PageSize)
             {
                 // 最後のページで候補が少なくても、ページ番号と案内は同じ位置に (ページを送っても窓の大きさが変わらないように)
                 y = listTop + PageSize * (_candidateFont.Height + 4);
-                var page = $"{Math.Max(0, view.SelectedIndex) + 1} / {view.Candidates.Count}";
+                var page = $"{Math.Max(0, selectedItem) + 1} / {items.Count}";
                 var pageWidth = TextRenderer.MeasureText(g, page, _hintFont).Width;
                 TextRenderer.DrawText(g, page, _hintFont, new Point(Width - pageWidth - 10, y + 1), _palette.Hint, TextFormatFlags.NoPrefix);
                 y += _hintFont.Height + 2;
-            }
-            y += 6;
-        }
-        else if (view.Predictions is { Count: > 0 } predictions)
-        {
-            for (var i = 0; i < predictions.Count; i++)
-            {
-                var rowHeight = _candidateFont.Height + 4;
-                var selected = i == view.SelectedPrediction;
-                if (selected)
-                {
-                    using var highlight = new SolidBrush(Color.FromArgb(60, Accent));
-                    g.FillRectangle(highlight, 4, y - 2, Width - 8, rowHeight);
-                }
-                DrawText(g, $"{(selected ? "▸" : "  ")} {predictions[i]}", _candidateFont, new Point(12, y),
-                    selected ? _palette.Text : _palette.Candidate,
-                    selected ? Blend(Background, Color.FromArgb(60, Accent)) : Background, TextFormatFlags.NoPrefix);
-                y += rowHeight;
             }
             y += 6;
         }
