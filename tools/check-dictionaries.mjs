@@ -91,13 +91,19 @@ const dictionaries = {
   'japanese.txt': {
     format: words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
   },
-  // 読み 候補 : 手がかり …
+  // 読み 候補 : 手がかり …。Core (ConversionPreferences) は最初の : で分け、前後を空白・タブ・全角空白で区切る (: の前後の空白は問わない)
   'contexts.txt': {
     format: line => {
-      const [left, right] = line.split(' : ');
-      if (right === undefined) return ['「読み 候補 : 手がかり …」の形でない'];
-      const [reading, word, extra] = left.trim().split(/\s+/);
-      return [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, word ? null : '候補が無い', extra ? '候補は 1 つだけ' : null, right.trim() ? null : '手がかりが無い'];
+      const colon = line.indexOf(':');
+      if (colon < 0) return ['「読み 候補 : 手がかり …」の形でない'];
+      const [reading, word, extra] = line.slice(0, colon).split(/[ \t　]+/).filter(Boolean);
+      const cues = line.slice(colon + 1).split(/[ \t　]+/).filter(Boolean);
+      return [
+        reading === undefined || hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+        reading === undefined ? '読みが無い' : word ? null : '候補が無い',
+        extra ? '候補は 1 つだけ' : null,
+        cues.length > 0 ? null : '手がかりが無い',
+      ];
     },
   },
   // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
