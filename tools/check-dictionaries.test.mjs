@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { checkDictionary } from './check-dictionaries.mjs';
 
 const messages = problems => problems.map(p => `${p.line}: ${p.message}`);
@@ -174,4 +174,14 @@ test('english: 日本語由来の節で全角空白・, で区切った語はエ
   ]);
   const fullWidth = checkDictionary('english.txt', '# --- 日本語由来の語 ---\nsushi\u3000ramen\n');
   assert.ok(messages(fullWidth.errors).includes('2: 日本語由来の節では語をタブ・全角空白・, で区切れない (Core は半角空白でだけ区切る)'));
+});
+
+test('起動したファイルの実体のパスを調べられないときは、検査せずにエラーで終わる', () => {
+  // process.argv[1] を存在しないパスにして読み込み、起動判定ができない状況を作る
+  const script = fileURLToPath(new URL('./check-dictionaries.mjs', import.meta.url));
+  const missing = path.join(os.tmpdir(), 'check-dictionaries-missing', 'check-dictionaries.mjs');
+  const code = `process.argv[1] = ${JSON.stringify(missing)}; await import(${JSON.stringify(pathToFileURL(script).href)});`;
+  const run = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8' });
+  assert.equal(run.status, 1, run.stdout + run.stderr);
+  assert.match(run.stderr, /起動したファイル .* の実体のパスを調べられない/);
 });

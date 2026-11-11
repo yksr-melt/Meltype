@@ -223,13 +223,17 @@ export function checkDictionary(file, text) {
   return { errors, warnings };
 }
 
-/** node で直接起動されたか。シンボリックリンク経由でも、実体のパスで比べる。 */
+/**
+ * node で直接起動されたか。シンボリックリンク経由でも、実体のパスで比べる。
+ * 実体のパスを調べられないときは、検査しないまま終了コード 0 で終わらないよう、エラーで終わる。
+ */
 function isMain() {
   if (!process.argv[1]) return false;
   try {
     return fs.realpathSync(process.argv[1]) === fs.realpathSync(self);
-  } catch {
-    return false;
+  } catch (e) {
+    console.error(`起動したファイル ${process.argv[1]} の実体のパスを調べられないので、辞書を検査できない: ${e.message}`);
+    process.exit(1);
   }
 }
 
