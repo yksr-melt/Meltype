@@ -43,10 +43,11 @@ internal static class FrontProtocolTests
             Others: []),
         new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
             new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
-            // 入力モード・受け取るキーは画面のキーボードなので使わない。文節・案内・綴りの候補・打ったキー・注記・意味はまだ出さない
+            // 入力モード・受け取るキーは画面のキーボードなので使わない。文節は候補のタップで次の文節へ進むのに読むが、区切りはまだ出さない。
+            // 案内・綴りの候補・打ったキー・注記・意味はまだ出さない
             Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii",
                 "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
-                "keyReleases", "altKeys", "clauses", "selectedClause", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
+                "keyReleases", "altKeys", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
                 "selectedMeaning", "meaningDelayMs"],
             Others: []),
     ];

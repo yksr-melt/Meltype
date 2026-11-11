@@ -29,6 +29,9 @@ internal class CoreInputAdapter(
             refreshChoices()
         }
     private var latestView: ImeView? = null
+
+    /** The view of the last response (null when nothing is composing). */
+    val view: ImeView? get() = latestView
     var choices: List<CoreChoice> = emptyList()
         private set
     var candidates: List<Candidate> = emptyList()

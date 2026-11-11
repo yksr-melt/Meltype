@@ -66,6 +66,11 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | C06 | anEditorWithoutItsOwnTextSendsNoTextAndCannotRemove | 読めない入力欄（TYPE_NULL） | before・after を送らず canRemove=false |
 | C07 | theSelectedTextIsSentOnlyWhenTheEditorReportedASelection | abcd の bc を選択 | selection=bc、選択がないと送らない |
 | C08 | aCommittedWordCanBeRecommittedWhenCaretHasNotMoved | i␣Enter→want␣、キャレットを動かさない | 文脈が英語と判明したとき、直前の語を I に確定し直せる |
+| C09 | aTapInTheFirstClauseChoosesItAndShowsTheNextClausesCandidates | hashiwokaminikaku␣（はしを／かみに／かくの3文節）→先頭の文節の別の候補をタップ | 確定しない。先頭の文節はタップした候補になり、候補バーは2つ目の文節（紙に・神に…）の候補に替わる |
+| C10 | aTapInALaterClauseChangesOnlyThatClauseAndTheLastTapCommitsAll | C09のあと2つ目の文節で別の候補→最後の文節で別の候補をタップ | 2つ目だけが替わり先頭は残る。最後のタップで選んだとおりの全文を確定 |
+| C11 | enterInTheMiddleCommitsTheWholeTextAsShown | C09のあと Enter | そのときの表示のまま全文を確定 |
+| C12 | aTapInAConversionOfOneClauseCommits | kyouha␣→今日はをタップ | 1つの文節の変換は、タップで確定（今日は） |
+| C13 | aTapOnAPredictionCommits | hell→予測候補をタップ | 予測候補はタップで確定 |
 | D01 | liveConversionTakesEffectFromTheNextKey | config.json の LiveConversion を OFF→ON、kyouha | OFF は きょうは、ON は 今日は（キーボードを作り直さずに効く） |
 | D02 | bracketsPutTheCaretInsideWhenTheSettingIsOn | CursorIntoBrackets を ON、[]Enter | 「」の中にキャレット |
 | D03 | settingOneItemKeepsTheRestOfTheFile | 項目の多い config.json の1項目を変える | ほかの項目・順序はそのまま。一時ファイルを残さない |
@@ -75,8 +80,9 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | E02 | caretMovesByTheAppStopRecommit | 日本語欄で i␣Enter のあとアプリがキャレットを先頭へ動かし末尾へ戻して want␣ | 前の語を確定し直さない |
 | E03 | leavingAnEditorCommitsTheCompositionThere | 日本語欄で ka → 別の欄 → 戻って a Enter | 日本語欄の か は確定され、かあ になる |
 | E04 | ownEditorWritesDoNotLookLikeCaretMoves | 日本語欄で i␣Enter→want␣、キャレットを外から動かさない | I に確定し直し、キーボード自身の編集は外からの移動と数えない |
+| E05 | candidateTapsFixAConversionClauseByClause | 日本語欄で watashinonamaehanakanodesu␣（実際のMozcで変換）→各文節で、いまと違う候補を候補バーでタップ | 最後の文節まで確定せず、タップのたびに次の文節へ進む。最後のタップで選んだとおりの全文を確定 |
 
-A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08、D01〜D02はNative Coreとの接続を含む。E01〜E04は端末で選んだキーボードの画面のキーを押して確かめる。実機での画面開閉は自動計測とは別の手動テストである。
+A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08〜C13、D01〜D02はNative Coreとの接続を含む（C09〜C12の変換は試験用の変換器で、文節の区切りと候補を固定する）。E01〜E05は端末で選んだキーボードの画面のキーを押して確かめる。実機での画面開閉は自動計測とは別の手動テストである。
 
 ## 3. 画面開閉・実機での手動テスト
 実機名、Androidバージョン、ビルドソースSHA、日付、画面サイズ、実際に入力された文字列、スクリーンショットや失敗手順をPRに記録。**試していないケースを合格としない。**
@@ -93,6 +99,7 @@ A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定J
 | M09 | 日本語QWERTY | i␣Enter のあと前の文をタップしてから want␣ | タップした所の前の語を書き換えない |
 | M10 | 日本語QWERTY | 変換中に入力欄の別の所をタップ | 出ていた文字のまま確定し、続けて打つと新しい位置に入る |
 | M11 | 設定 | ライブ変換をOFFにして、キーボードを閉じずに打つ | 次のキーから漢字にならない |
+| M12 | 日本語QWERTY | 長い文を打って Space で変換し、先頭の文節から順に候補をタップ。別に、途中で Enter・削除キーも試す | タップのたびに次の文節の候補に替わり、最後の文節のタップで全文を確定。途中の Enter はその時点の表示で確定、削除キーは変換を取り消してかなに戻る |
 
 ## 2026-10-25の統合版実機確認記録
 

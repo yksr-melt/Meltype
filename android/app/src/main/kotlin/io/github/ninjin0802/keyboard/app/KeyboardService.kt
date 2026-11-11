@@ -23,11 +23,13 @@ import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.view.Gravity
+import io.github.ninjin0802.keyboard.app.core.CandidateTap
 import io.github.ninjin0802.keyboard.app.core.CaretWatch
 import io.github.ninjin0802.keyboard.app.core.CoreInputAdapter
 import io.github.ninjin0802.keyboard.app.core.CoreMozcCallbacks
 import io.github.ninjin0802.keyboard.app.core.ImeFieldFacts
 import io.github.ninjin0802.keyboard.app.core.ImeJson
+import io.github.ninjin0802.keyboard.app.core.ImeView
 import io.github.ninjin0802.keyboard.app.core.MeltypeCoreHost
 import io.github.ninjin0802.keyboard.app.core.coreDataDirectory
 import io.github.ninjin0802.keyboard.app.emoji.EmojiCatalog
@@ -233,6 +235,12 @@ class KeyboardService : InputMethodService(), KeyListener {
     /** How many caret moves were taken as made by the user or the app (smoke test only). */
     internal fun outsideCaretMovesForSmokeTest(): Int = outsideCaretMoves
 
+    /** The Core's last view (smoke test only). */
+    internal fun coreViewForSmokeTest(): ImeView? = coreInput.view
+
+    /** The candidate bar, to tap a candidate as a finger would (smoke test only). */
+    internal fun candidateBarForSmokeTest(): CandidateBarView? = candidateBar
+
     private val languagePopup by lazy { LanguagePickerPopup(this) }
     private var keyboardView: KeyboardView? = null
     private var candidateBar: CandidateBarView? = null
@@ -400,10 +408,9 @@ class KeyboardService : InputMethodService(), KeyListener {
             if (instance != null && nav.current == LayoutId.ROMAJI) {
                 val choice = coreInput.choices.getOrNull(index)
                 if (choice != null) {
-                    // A prediction is committed by the click itself. A conversion
-                    // candidate is only selected, so a tap also presses Enter.
-                    coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
-                    if (coreInput.composing) coreVirtualKey(0x0D)
+                    // A prediction or a one-clause conversion is committed by the tap. In a conversion
+                    // of several clauses, the tap moves on to the next clause, and commits on the last.
+                    CandidateTap.tap(coreInput, choice.nativeIndex, { fieldFacts() }) { coreSend(instance, it) }
                 }
             } else render(session.handle(Operation.Pick(index)))
         } }

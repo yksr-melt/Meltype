@@ -22,10 +22,24 @@ internal object DeviceTestCore {
     val directory: File
         get() = File(InstrumentationRegistry.getInstrumentation().targetContext.noBackupFilesDir, "bilingual-device-test")
 
-    /** Converts only きょうは (to 今日は), so that live conversion can be seen; everything else stays kana. */
+    /**
+     * Converts only きょうは (to 今日は), so that live conversion can be seen, and はしをかみにかく in
+     * three clauses (each with its own candidates), so that a conversion of several clauses can be
+     * seen; everything else stays kana.
+     */
     private val converter = object : Converter {
-        override fun convert(reading: String, context: String?): List<Segment>? =
-            if (reading == "きょうは") listOf(Segment("きょうは", listOf("今日は"))) else null
+        private val byClause = mapOf(
+            "はしを" to listOf("箸を", "橋を", "端を"),
+            "かみに" to listOf("紙に", "神に", "髪に"),
+            "かく" to listOf("書く", "描く", "欠く"),
+        )
+
+        override fun convert(reading: String, context: String?): List<Segment>? = when (reading) {
+            "きょうは" -> listOf(Segment("きょうは", listOf("今日は")))
+            "はしをかみにかく" -> byClause.map { (clause, candidates) -> Segment(clause, candidates) }
+            in byClause -> listOf(Segment(reading, byClause.getValue(reading)))
+            else -> null
+        }
         override fun predict(reading: String): List<String> = emptyList()
         override fun learn(clauses: List<Clause>, context: String?) {}
     }

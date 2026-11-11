@@ -37,6 +37,28 @@ class CoreEditingDeviceTest {
         fun enter() {
             send(ImeJson.virtualKey(0x0D, field()))
         }
+
+        /** Taps the candidate [label] on the candidate bar, as KeyboardService does. */
+        fun tap(label: String) {
+            val choice = adapter.choices.firstOrNull { it.label == label }
+                ?: throw AssertionError("No candidate $label in " + adapter.choices.map { it.label })
+            CandidateTap.tap(adapter, choice.nativeIndex, { field() }) { send(it) }
+        }
+
+        /** A candidate of the shown clause from [labels], other than what the clause shows now. */
+        fun other(vararg labels: String): String {
+            val view = adapter.view ?: throw AssertionError("Not composing: " + editor.content)
+            return labels.first { it != view.clauses[view.selectedClause] }
+        }
+
+        /** Types はしをかみにかく and converts it (Space): three clauses, the first one selected. */
+        fun convertThreeClauses() {
+            type("hashiwokaminikaku ")
+            val view = adapter.view
+            assertTrue("Not a conversion: $view", view?.converting == true)
+            assertEquals("Not converted in three clauses: $view", 3, view!!.clauses.size)
+            assertEquals(0, view.selectedClause)
+        }
     }
 
     @Test fun aRecommitReplacesThePreviousWordInTheEditor() {
@@ -127,6 +149,74 @@ class CoreEditingDeviceTest {
         assertEquals("bc", adapter.field(emptyList(), selected = true).selection)
         assertEquals("a", adapter.field(emptyList(), selected = true).before)
         assertNull(adapter.field(emptyList(), selected = false).selection)
+    }
+
+    @Test fun aTapInTheFirstClauseChoosesItAndShowsTheNextClausesCandidates() {
+        val typist = Typist()
+        typist.convertThreeClauses()
+        val first = typist.other("橋を", "端を")
+        typist.tap(first)
+        val view = typist.adapter.view
+        assertTrue("The tap committed the whole text: " + typist.editor.content, typist.adapter.composing)
+        assertEquals(0, typist.editor.composingStart)
+        assertEquals(first, view!!.clauses[0])
+        assertEquals("Not moved on to the second clause", 1, view.selectedClause)
+        val labels = typist.adapter.choices.map { it.label }
+        assertTrue("The bar does not show the second clause's candidates: $labels", labels.containsAll(listOf("紙に", "神に")))
+        assertTrue("The bar still shows the first clause's candidates: $labels", "箸を" !in labels)
+    }
+
+    @Test fun aTapInALaterClauseChangesOnlyThatClauseAndTheLastTapCommitsAll() {
+        val typist = Typist()
+        typist.convertThreeClauses()
+        val first = typist.other("橋を", "端を")
+        typist.tap(first)
+        val second = typist.other("神に", "髪に")
+        typist.tap(second)
+        val view = typist.adapter.view!!
+        assertEquals(listOf(first, second), view.clauses.take(2))
+        assertEquals(2, view.selectedClause)
+        assertTrue(typist.adapter.composing)
+
+        val last = typist.other("描く", "欠く")
+        typist.tap(last)
+        assertEquals(first + second + last, typist.editor.content)
+        assertEquals(-1, typist.editor.composingStart)
+        assertTrue(!typist.adapter.composing)
+    }
+
+    @Test fun enterInTheMiddleCommitsTheWholeTextAsShown() {
+        val typist = Typist()
+        typist.convertThreeClauses()
+        val first = typist.other("橋を", "端を")
+        typist.tap(first)
+        val shown = typist.adapter.view!!.text
+        typist.enter()
+        assertEquals(shown, typist.editor.content)
+        assertTrue(typist.editor.content.startsWith(first))
+        assertEquals(-1, typist.editor.composingStart)
+    }
+
+    @Test fun aTapInAConversionOfOneClauseCommits() {
+        val typist = Typist()
+        typist.type("kyouha ")
+        val view = typist.adapter.view
+        assertTrue("Not a conversion: $view", view?.converting == true)
+        assertEquals(1, view!!.clauses.size)
+        typist.tap("今日は")
+        assertEquals("今日は", typist.editor.content)
+        assertEquals(-1, typist.editor.composingStart)
+    }
+
+    @Test fun aTapOnAPredictionCommits() {
+        val typist = Typist()
+        typist.type("hell")
+        assertTrue("Not a prediction: " + typist.adapter.view, typist.adapter.view?.converting == false)
+        val prediction = typist.adapter.choices.firstOrNull { it.label.startsWith("hell") }
+            ?: throw AssertionError("No prediction for hell: " + typist.adapter.choices)
+        typist.tap(prediction.label)
+        assertEquals(prediction.label, typist.editor.content)
+        assertTrue(!typist.adapter.composing)
     }
 
     /** A whole response as the Core writes it (ImeOutput). */

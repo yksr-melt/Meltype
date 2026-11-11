@@ -29,7 +29,16 @@ internal data class ImeCommit(val text: String, val removeBefore: String?, val m
 /** 一覧は 1 つだけ (変換の候補か予測変換の候補か)。CandidateClicked の番号はこの [items] の番号。 */
 internal data class ImeCandidates(val items: List<String>, val selected: Int)
 
-internal data class ImeView(val text: String, val converting: Boolean, val candidates: ImeCandidates?)
+/**
+ * 変換中の表示。[clauses] は変換中の文節 (変換していなければ空)、[selectedClause] は候補の一覧を出している文節の番号。
+ */
+internal data class ImeView(
+    val text: String,
+    val converting: Boolean,
+    val candidates: ImeCandidates?,
+    val clauses: List<String> = emptyList(),
+    val selectedClause: Int = 0,
+)
 
 internal data class ImeResult(val consumed: Boolean, val commits: List<ImeCommit>, val view: ImeView?)
 
@@ -44,7 +53,11 @@ internal object ImeJson {
     fun characterKey(ch: Int, shift: Boolean, field: ImeFieldFacts): String =
         event("KeyPressed", field) { put("key", JSONObject().put("ch", ch).put("shift", shift)) }
 
-    /** 文字の無いキー (Back 0x08・Enter 0x0D など)。vk は Windows の仮想キーコード。 */
+    /** Windows の仮想キーコード (Core の VirtualKeys と同じ値)。 */
+    const val VK_RETURN = 0x0D
+    const val VK_RIGHT = 0x27
+
+    /** 文字の無いキー (Back 0x08・Enter 0x0D・→ 0x27 など)。vk は Windows の仮想キーコード。 */
     fun virtualKey(vk: Int, field: ImeFieldFacts): String =
         event("KeyPressed", field) { put("key", JSONObject().put("vk", vk)) }
 
@@ -119,5 +132,7 @@ internal object ImeJson {
             val items = list.getJSONArray("items")
             ImeCandidates((0 until items.length()).map { items.getString(it) }, list.getInt("selected"))
         },
+        clauses = view.getJSONArray("clauses").let { clauses -> (0 until clauses.length()).map { clauses.getString(it) } },
+        selectedClause = view.getInt("selectedClause"),
     )
 }

@@ -247,6 +247,55 @@ class ImeLaunchDeviceTest {
         }
     }
 
+    private fun coreView(): io.github.ninjin0802.keyboard.app.core.ImeView? {
+        var view: io.github.ninjin0802.keyboard.app.core.ImeView? = null
+        instrumentation.runOnMainSync { view = KeyboardService.activeForSmokeTest?.get()?.coreViewForSmokeTest() }
+        return view
+    }
+
+    /** Taps a candidate on the candidate bar other than [current], as a finger would, and returns it. */
+    private fun tapCandidateOtherThan(current: String): String {
+        var tapped: String? = null
+        instrumentation.runOnMainSync {
+            val bar = KeyboardService.activeForSmokeTest?.get()?.candidateBarForSmokeTest() ?: return@runOnMainSync
+            val row = bar.getChildAt(0) as android.view.ViewGroup
+            val item = (0 until row.childCount).map { row.getChildAt(it) as android.widget.TextView }
+                .firstOrNull { it.text.isNotBlank() && it.text.toString() != current } ?: return@runOnMainSync
+            tapped = item.text.toString()
+            item.performClick()
+        }
+        instrumentation.waitForIdleSync()
+        return tapped ?: throw AssertionError("No candidate to tap other than $current; view=" + coreView())
+    }
+
+    /**
+     * With the real converter: after Space, a candidate tap chooses it for the selected clause and
+     * moves on to the next clause; the tap on the last clause commits the whole sentence.
+     */
+    @Test fun candidateTapsFixAConversionClauseByClause() = withRomajiActivity { activity ->
+        val editor = activity.japaneseEditor
+        focusJapanese(activity, editor)
+        clear(editor)
+        focusJapanese(activity, editor)
+        typeRomaji("watashinonamaehanakanodesu ")
+        waitUntil("the sentence is converted", describe = { "view=" + coreView() }) { coreView()?.converting == true }
+        val clauses = coreView()!!.clauses.size
+        assertTrue("The sentence was not split into clauses: " + coreView(), clauses >= 2)
+        var expected = ""
+        for (clause in 0 until clauses) {
+            val view = coreView() ?: throw AssertionError("Committed before clause $clause: " + editor.text)
+            assertEquals("Not moved on to clause $clause: $view", clause, view.selectedClause)
+            assertTrue("Not composing at clause $clause: " + editor.text,
+                android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) >= 0)
+            val label = tapCandidateOtherThan(view.clauses[clause])
+            expected = view.clauses.take(clause).joinToString("") + label + view.clauses.drop(clause + 1).joinToString("")
+        }
+        waitUntil("the sentence is committed as chosen", describe = { "text=" + editor.text + " expected=" + expected }) {
+            editor.text.toString() == expected &&
+                android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0
+        }
+    }
+
     @Test fun selectedKeyboardOpensAndTypesThroughOnscreenTouch() {
         val expectedIme = target.packageName + "/" + KeyboardService::class.java.name
         assertEquals("The actual keyboard must be the system-selected default",
