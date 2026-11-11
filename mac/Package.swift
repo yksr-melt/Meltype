@@ -46,7 +46,8 @@ let package = Package(
         .testTarget(
             name: "MeltypeIMETests",
             dependencies: ["MeltypeIME"],
-            path: "Tests/MeltypeIMETests"
+            path: "Tests/MeltypeIMETests",
+            swiftSettings: [.interoperabilityMode(.Cxx)]
         ),
     ],
     swiftLanguageModes: [.v5]

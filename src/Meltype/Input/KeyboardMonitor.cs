@@ -5,6 +5,9 @@ using System.Runtime.InteropServices;
 
 namespace Meltype.Input;
 
+/// <summary>マウスボタンの押下/解放 (変換中にクリックされたとき、確定してからクリックを通すため)。</summary>
+public readonly record struct MouseButtonEvent(int Message, int X, int Y, uint MouseData);
+
 /// <summary>
 /// キー入力監視 (設計書 §11)。WH_KEYBOARD_LL / WH_MOUSE_LL / WinEvent を専用スレッドで受ける。
 ///
@@ -13,7 +16,7 @@ namespace Meltype.Input;
 /// そのためこのスレッドは自前のメッセージループだけを回し、IME 操作や SendInput など
 /// 待ちが発生しうる処理は行わない (それらは再入力ワーカーの仕事)。
 /// 例外は打ち始めの判定で、フォーカスを調べ終わるのを合わせて 150ms ほどまで待つ (FocusInspector.CanCaptureWaiting・RecheckStale)。
-/// もう 1 つの例外は Alt の単独押しの解放で、止めた解放を 0xE8 のあとにこのスレッドから送り直す (次の打鍵より先に届くように。MeltypeEngine.MaskAltTap)。
+/// もう 1 つの例外は Alt の単独押しの解放で、止めた解放を 0xE8 のあとにこのスレッドから送り直す (次の打鍵より先に届くように。Meltype IME のときの TipServer.OnKey)。
 /// LowLevelHooksTimeout の値が無いときは 300ms ほどとされ (Microsoft のドキュメントには書かれていない)、これより短い。
 /// </summary>
 internal sealed class KeyboardMonitor : IDisposable
@@ -22,7 +25,7 @@ internal sealed class KeyboardMonitor : IDisposable
     public static readonly UIntPtr InjectedMarker = unchecked((UIntPtr)0x4D454C54u);
 
     private readonly Func<KeyEvent, bool> _onKey;
-    private readonly Func<Composition.MouseButtonEvent, bool> _onMouseButton;
+    private readonly Func<MouseButtonEvent, bool> _onMouseButton;
     private readonly Action<IntPtr> _onForegroundChanged;
     private readonly Action _onFocusChanged;
     private readonly Native.HookProc _keyboardProc;
@@ -34,7 +37,7 @@ internal sealed class KeyboardMonitor : IDisposable
     private uint _threadId;
     private IntPtr _keyboardHook, _mouseHook, _foregroundHook, _focusHook;
 
-    public KeyboardMonitor(Func<KeyEvent, bool> onKey, Func<Composition.MouseButtonEvent, bool> onMouseButton, Action<IntPtr> onForegroundChanged, Action onFocusChanged)
+    public KeyboardMonitor(Func<KeyEvent, bool> onKey, Func<MouseButtonEvent, bool> onMouseButton, Action<IntPtr> onForegroundChanged, Action onFocusChanged)
     {
         _onKey = onKey;
         _onMouseButton = onMouseButton;
@@ -134,7 +137,7 @@ internal sealed class KeyboardMonitor : IDisposable
                 {
                     var data = Marshal.PtrToStructure<Native.MSLLHOOKSTRUCT>(lParam);
                     if (data.dwExtraInfo != InjectedMarker &&
-                        _onMouseButton(new Composition.MouseButtonEvent(message, data.x, data.y, data.mouseData)))
+                        _onMouseButton(new MouseButtonEvent(message, data.x, data.y, data.mouseData)))
                     {
                         return new IntPtr(1);
                     }

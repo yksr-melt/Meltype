@@ -162,7 +162,7 @@ General Public License for more details.
     </td>
     <td align="center">
       <a href="https://github.com/konayukiw"><img src="https://github.com/konayukiw.png?size=200" width="100" alt="@konayukiw"><br><b>@konayukiw</b></a><br>
-      <sub>メインメンテナー</sub>
+      <sub>メインメンテナー/公式サイト作者</sub>
     </td>
   </tr>
 </table>
