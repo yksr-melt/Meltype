@@ -26,7 +26,7 @@
 
 <!-- 当てはまるものに x を付けてください -->
 
-- [ ] `dotnet run --project src/Meltype.Core.Tests` のテストが通る (Windows なら `src/Meltype.Tests`)
+- [ ] `dotnet run --project src/Meltype.Core.Tests` のテストが通る (Windows なら `src/Meltype.Windows.Tests`)
 - [ ] 判定・変換を変えたときは、報告された例と、逆向き・似た入力の例をテストに足した (「精度の比較」の「よく使う語の判定の変化」も確かめた)
 - [ ] 辞書だけの変更
 - [ ] 実際に打って確かめた (OS とアプリ: )

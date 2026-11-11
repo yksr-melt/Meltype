@@ -47,8 +47,6 @@ internal static class ImeContractTests
 
         public string? ClipboardText => null;
 
-        public (string Title, string Artist)? NowPlaying => null;
-
         public int Sessions => _host.SessionCount;
 
         public string Document { get; set; } = "";

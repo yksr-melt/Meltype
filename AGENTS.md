@@ -6,8 +6,8 @@
 | -------------------------- | ------------------------------------------------------------------------------------------ |
 | `src/Meltype.Core`         | OS 非依存の判定・変換コア（Composition / Detection / Input / Config / Diagnostics） |
 | `src/Meltype.Core.Tests`   | コアのテスト（どの OS でも動く）                                                                         |
-| `src/Meltype`              | Windows 版（TSF・UI・更新）                                                                       |
-| `src/Meltype.Tests`        | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる）                                                |
+| `src/Meltype.Windows`      | Windows 版（TSF・UI・更新）                                                                       |
+| `src/Meltype.Windows.Tests` | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる）                                                |
 | `src/Meltype.Mac.Native`   | Mac 版から呼ぶコアの出口                                                                             |
 | `native/tip`・`native/mozc` | ネイティブ（TSF の TIP・Mozc）                                                                      |
 | `mac/`                     | Mac 版（Swift）                                                                               |
@@ -24,12 +24,21 @@
 
 | フロント | 場所 |
 | --- | --- |
-| Windows: Meltype IME (TSF) | `native/tip/` (DLL)・`src/Meltype/Tip/TipServer.cs` (Meltype.exe 側) |
-| Windows: Meltype キーボード | `src/Meltype/Keyboard/KeyboardFront.cs` |
+| Windows: Meltype IME (TSF) | `native/tip/` (DLL)・`src/Meltype.Windows/Tip/TipServer.cs` (Meltype.exe 側) |
+| Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` |
 | macOS | `mac/Sources/MeltypeIME/InputController.swift` |
 | Linux: IBus | `linux/ibus-engine-meltype` |
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` |
 | Android | `android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt`（出来事と応答の JSON）・`KeyboardService.kt` |
+
+## OS ごとのコード
+
+`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`mac/`・`linux/` は OS の出入口で、OS の事実を読む・結果を書く・画面を描くだけにする。
+
+- 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。OS の出入口からは呼ぶだけにする
+- OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
+- Core にもう口がある OS の部品 (`IKanjiConverter`・`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
+- 設定・辞書・学習データは、どの OS も `MeltypeRuntime` で作る
 
 ## ビルドとテスト
 
@@ -47,18 +56,18 @@ dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/d
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json # 日本語文中の英単語の区切り
 dotnet run --project src/Meltype.Core.Tests -- --version
 
-# Windows 専用（src/Meltype.Tests。Windows のスペルチェッカーも使う）
-dotnet run --project src/Meltype.Tests
-dotnet run --project src/Meltype.Tests -- CompositionTests
-dotnet run --project src/Meltype.Tests -- --explain konnichiwa hello
-dotnet run --project src/Meltype.Tests -- --convert きょうはいいてんき # 変換結果と文節区切り
-dotnet run --project src/Meltype.Tests -- --context この本は:あつい # 文脈付き変換
+# Windows 専用（src/Meltype.Windows.Tests。Windows のスペルチェッカーも使う）
+dotnet run --project src/Meltype.Windows.Tests
+dotnet run --project src/Meltype.Windows.Tests -- CompositionTests
+dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
+dotnet run --project src/Meltype.Windows.Tests -- --convert きょうはいいてんき # 変換結果と文節区切り
+dotnet run --project src/Meltype.Windows.Tests -- --context この本は:あつい # 文脈付き変換
 
 # 辞書を変えたとき
 node tools/check-dictionaries.mjs
 ```
 
-Linux / macOS では `src/Meltype.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
+Linux / macOS では `src/Meltype.Windows.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
 
 `--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは main の `linux.yml` 成果物 `meltype-linux` の zip 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 

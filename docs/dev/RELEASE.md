@@ -3,7 +3,7 @@
 ## 版を出す
 
 1. 版を上げる
-   - `src/Meltype/Meltype.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
+   - `src/Meltype.Windows/Meltype.Windows.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
@@ -24,7 +24,7 @@ Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名
 - `/release 1.2.3` … 通常の版
 - `/pre-release 1.2.3-pre.1` … プレリリース
 
-bot は、main の `Meltype.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
+bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
 
 ### テスト版の配布物を作る
 
