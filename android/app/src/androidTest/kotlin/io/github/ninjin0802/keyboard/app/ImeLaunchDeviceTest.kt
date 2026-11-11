@@ -179,10 +179,12 @@ class ImeLaunchDeviceTest {
      * The keyboard's own edits are not caret moves: i + want re-commits i as I. A caret move by
      * the app is one: the Core is told and leaves the word before the caret alone.
      */
-    @Test fun caretMovesByTheAppStopTheRecommitButOwnEditsDoNot() = withRomajiActivity { activity ->
+    @Test fun ownEditorWritesDoNotLookLikeCaretMoves() = withRomajiActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)
+        // setText can restart an editor. Check that the actual keyboard still has Japanese focus.
+        focusJapanese(activity, editor)
         val start = outsideCaretMoves()
         val committed = commitI(editor)
         typeRomaji("want ")
@@ -190,9 +192,14 @@ class ImeLaunchDeviceTest {
         assertTrue("The previous word was not re-committed: " + editor.text,
             editor.text.toString() != committed + "want " && editor.text.startsWith("I"))
         assertEquals("Own edits were taken as caret moves", start, outsideCaretMoves())
+    }
 
+    @Test fun caretMovesByTheAppStopRecommit() = withRomajiActivity { activity ->
+        val editor = activity.japaneseEditor
+        focusJapanese(activity, editor)
         clear(editor)
-        val again = commitI(editor)
+        focusJapanese(activity, editor)
+        val committed = commitI(editor)
         val beforeMoves = outsideCaretMoves()
         // The app moves the caret away and back: the Core must not rewrite the word it can see again.
         instrumentation.runOnMainSync { editor.setSelection(0) }
@@ -205,7 +212,7 @@ class ImeLaunchDeviceTest {
         }
         typeRomaji("want ")
         waitUntil("want is typed after the word", describe = { "text=" + editor.text }) {
-            editor.text.toString() == again + "want "
+            editor.text.toString() == committed + "want "
         }
     }
 
