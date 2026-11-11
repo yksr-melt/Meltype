@@ -14,9 +14,9 @@ internal static class TestRunner
     {
         using var spellChecker = Detection.WindowsSpellChecker.Shared;
         TestSupport.WordChecker = Detection.WindowsSpellChecker.Shared;
-        // dotnet run --project src/Meltype.Tests -- --convert きょうはいいてんきです
+        // dotnet run --project src/Meltype.Windows.Tests -- --convert きょうはいいてんきです
         // で、Microsoft IME の変換エンジン (MSIME.Japan) が使えるかを確かめる。
-        // dotnet run --project src/Meltype.Tests -- --autocorrect teh recieve
+        // dotnet run --project src/Meltype.Windows.Tests -- --autocorrect teh recieve
         // で、Windows のスペルチェッカーの自動修正 (teh → the) を確かめる。
         if (args.FirstOrDefault() == "--autocorrect")
         {
@@ -69,7 +69,7 @@ internal static class TestRunner
         }
         if (args.FirstOrDefault() == "--type")
         {
-            // dotnet run --project src/Meltype.Tests -- --type "ke-kiwotabeta "
+            // dotnet run --project src/Meltype.Windows.Tests -- --type "ke-kiwotabeta "
             // 本物の変換エンジンをつないだ変換ボックスに 1 文字ずつ打ち、表示の変化を見る (ライブ変換 ON)。
             // 本物のアプリと同じく Windows のスペルチェッカーも使う。
             CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
@@ -109,7 +109,7 @@ internal static class TestRunner
         if (args.FirstOrDefault() == "--candidates") { using var winrt = new Composition.WinRtCandidates(); foreach (var r in args.Skip(1)) Console.WriteLine($"{r}: {string.Join(", ", winrt.Get(r))}"); foreach (var e in Diagnostics.Log.Snapshot()) Console.WriteLine(e); return 0; }
         if (args.FirstOrDefault() == "--mozc")
         {
-            // dotnet run --project src/Meltype.Tests -- --mozc <meltype_mozc_helper.exe> はははきょうしょくじにいきました ...
+            // dotnet run --project src/Meltype.Windows.Tests -- --mozc <meltype_mozc_helper.exe> はははきょうしょくじにいきました ...
             // Mozc と Microsoft IME の変換結果を並べて比べる。
             using var mozc = new Composition.MozcConverter(args[1], Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
             using var ime = new Composition.MsImeKanjiConverter();
@@ -187,7 +187,7 @@ internal static class TestRunner
         if (args.FirstOrDefault() == "--runtime-closure") { RuntimeClosure.Run(args[1]); return 0; }
         if (args.FirstOrDefault() == "--context")
         {
-            // dotnet run --project src/Meltype.Tests -- --context 財布の:かわ 川に:はし
+            // dotnet run --project src/Meltype.Windows.Tests -- --context 財布の:かわ 川に:はし
             using var converter = new Composition.MsImeKanjiConverter();
             foreach (var pair in args.Skip(1))
             {

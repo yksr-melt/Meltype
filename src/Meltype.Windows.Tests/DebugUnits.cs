@@ -5,7 +5,7 @@ namespace Meltype.Tests;
 
 /// <summary>
 /// 調査用: 打った英字がどう 1 音ずつの単位に分かれ、どこが英語の区間になるかを表示する (Windows のスペルチェッカーあり)。
-///   dotnet run --project src/Meltype.Tests -- --units meetingga
+///   dotnet run --project src/Meltype.Windows.Tests -- --units meetingga
 /// </summary>
 internal static class DebugUnits
 {

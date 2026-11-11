@@ -20,7 +20,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
-    <InternalsVisibleTo Include="Meltype.Tests" />
+    <InternalsVisibleTo Include="Meltype.Windows.Tests" />
     <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
   </ItemGroup>
   <ItemGroup>

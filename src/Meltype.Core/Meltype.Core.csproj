@@ -16,7 +16,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Meltype" />
-    <InternalsVisibleTo Include="Meltype.Tests" />
+    <InternalsVisibleTo Include="Meltype.Windows.Tests" />
     <InternalsVisibleTo Include="Meltype.Core.Tests" />
     <InternalsVisibleTo Include="MeltypeNative" />
     <EmbeddedResource Include="..\..\dictionaries\*.txt" LogicalName="Meltype.dictionaries.%(Filename)%(Extension)" />

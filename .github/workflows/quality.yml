@@ -41,8 +41,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { project: Meltype, os: windows-latest }
-          - { project: Meltype.Tests, os: windows-latest }
+          - { project: Meltype.Windows, os: windows-latest }
+          - { project: Meltype.Windows.Tests, os: windows-latest }
           - { project: Meltype.Core, os: ubuntu-latest }
           - { project: Meltype.Core.Tests, os: ubuntu-latest }
           - { project: Meltype.Mac.Native, os: ubuntu-latest }

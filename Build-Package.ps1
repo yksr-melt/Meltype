@@ -89,7 +89,7 @@ if ($Step -eq 'Sign') {
     $imeBuilt = Test-Path -LiteralPath (Join-Path $app 'tip')
 }
 else {
-dotnet publish (Join-Path $root 'src\Meltype\Meltype.csproj') -c Release -o $app -p:DebugType=none `
+dotnet publish (Join-Path $root 'src\Meltype.Windows\Meltype.Windows.csproj') -c Release -o $app -p:DebugType=none `
     -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=dotnet
 if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LASTEXITCODE)。" }
 
@@ -183,7 +183,7 @@ function Test-Managed([string]$path) {
 }
 
 # 1. 参照をたどって削る
-$keep = dotnet run --project (Join-Path $root 'src\Meltype.Tests\Meltype.Tests.csproj') -c Release -- --runtime-closure $app
+$keep = dotnet run --project (Join-Path $root 'src\Meltype.Windows.Tests\Meltype.Windows.Tests.csproj') -c Release -- --runtime-closure $app
 if ($LASTEXITCODE -ne 0) { throw "必要なアセンブリの洗い出しに失敗しました。" }
 $keep = @($keep | ForEach-Object { $_.Trim() } | Where-Object { $_ -like '*.dll' })
 $dropNative = @('Microsoft.DiaSymReader.Native.*', 'mscordaccore*', 'mscordbi.dll', 'createdump.exe', 'D3DCompiler_47_cor3.dll', 'PenImc_cor3.dll')

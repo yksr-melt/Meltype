@@ -10,7 +10,7 @@ namespace Meltype.Tests;
 /// Unicode CLDR の絵文字の日本語の名前・キーワード (common/annotations/ja.xml, annotationsDerived/ja.xml) から、
 /// 絵文字の辞書 dictionaries/emoji-cldr.txt を作る道具。読みは Microsoft IME の変換エンジンの逆変換で求める。
 ///
-///   dotnet run --project src/Meltype.Tests -- --gen-emoji ja.xml ja-derived.xml dictionaries/emoji-cldr.txt
+///   dotnet run --project src/Meltype.Windows.Tests -- --gen-emoji ja.xml ja-derived.xml dictionaries/emoji-cldr.txt
 /// </summary>
 internal static class EmojiGenerator
 {
@@ -70,7 +70,7 @@ internal static class EmojiGenerator
         builder.AppendLine("# 形式: 読み<Tab>絵文字<Tab>絵文字 …  (手で書いた emoji.txt の候補の後に並ぶ)");
         builder.AppendLine("# 元データ: Unicode CLDR common/annotations/ja.xml, common/annotationsDerived/ja.xml");
         builder.AppendLine("# Copyright © 1991-2026 Unicode, Inc. Unicode License v3 (SPDX: Unicode-3.0)。全文は THIRD-PARTY-NOTICES.md。");
-        builder.AppendLine("# 読みは Microsoft IME の変換エンジンの逆変換で求めた。作り直し: dotnet run --project src/Meltype.Tests -- --gen-emoji …");
+        builder.AppendLine("# 読みは Microsoft IME の変換エンジンの逆変換で求めた。作り直し: dotnet run --project src/Meltype.Windows.Tests -- --gen-emoji …");
         foreach (var (reading, list) in entries.OrderBy(e => e.Key, StringComparer.Ordinal))
         {
             builder.Append(reading);

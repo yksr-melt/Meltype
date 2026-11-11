@@ -22,13 +22,13 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | 場所 | 中身 |
 |---|---|
 | `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 をビルド、`Register-Tip.ps1` で登録 |
-| `src/Meltype/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
-| `src/Meltype/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
+| `src/Meltype.Windows/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
+| `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
 | `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
 | `src/Meltype.Core/Ime/` | フロント (TSF・IBus・fcitx5) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
 | `src/Meltype.Core.Tests/ImeContractTests.cs` | 境目の契約テスト。判断を持たないフロントで出来事を送り、確定・表示・モード・受け取るキーを確かめる (どの OS でも流れる) |
-| `src/Meltype.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
-| `src/Meltype.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
+| `src/Meltype.Windows.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
+| `src/Meltype.Windows.Tests/TipEndToEnd.cs` | `--tip-e2e [画像の保存先]` (登録した DLL を RichEdit の入力欄で動かす。数秒間ウィンドウが前面に出る。Meltype.exe は止めておく。`MELTYPE_E2E_EXTERNAL_SERVER=1` なら常駐している Meltype.exe につなぐ) |
 
 設定「入力モードをカーソルの近くに表示」(`ModeIndicator`。どのフロントも同じ設定) で、明示的に入力モードを切り替えたとき (と入力欄に入ったとき)、入力位置の近くに「あ / A」を表示します。既定 (`Default`) は、Meltype IME では表示しません (`Settings.EffectiveModeIndicator`)。
 出すかと表示する時間 (応答の `state.modeIndicatorMs`) は本体が決め、表示は Meltype.exe (`TipServer`) が出します。DLL は、入力モードのキーとタスクバーのボタンの出来事に、入力スレッドの ID と TSF の選択範囲の位置 (`GetTextExt`) を付けます。
@@ -188,7 +188,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 |---|---|---|---|
 | 入力の本体 (MeltypeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
 | フロントと本体の境目 (ImeHost の JSON) | `src/Meltype.Core.Tests/ImeContractTests.cs` | Windows・Linux・Mac | 入力 → 変換 → 確定 → 続けて入力、BackSpace・Esc、確定で変換を終える、キャレットを動かしたら前の確定を直さない、入力欄 (instance) ごとに分ける・閉じる、つなぎ直したフロントの続きを受け持たない、受け持たなくなったときの確定、入力モードのキー、受け取るキー、コードの行 |
-| TipServer の要求と入力モードの表示 | `src/Meltype.Tests/TipIndicatorTests.cs` | Windows (build.yml の test) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
+| TipServer の要求と入力モードの表示 | `src/Meltype.Windows.Tests/TipIndicatorTests.cs` | Windows (build.yml の test) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
 | パイプ | `--tip-client` | 手で流す | 実際のパイプでのやり取り |
 | DLL を含めた全体 | `--tip-e2e` | 手で流す (人が操作しているデスクトップが要る) | 登録した DLL で、RichEdit の入力欄に実際に打つ |
 
