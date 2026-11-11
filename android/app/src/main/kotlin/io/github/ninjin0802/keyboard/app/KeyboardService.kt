@@ -18,11 +18,13 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.WindowInsets
 import android.view.WindowInsetsController
+import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.view.Gravity
 import java.io.File
+import io.github.ninjin0802.keyboard.app.core.CaretWatch
 import io.github.ninjin0802.keyboard.app.core.CoreChoiceKind
 import io.github.ninjin0802.keyboard.app.core.CoreInputAdapter
 import io.github.ninjin0802.keyboard.app.core.CoreMozcCallbacks
@@ -93,7 +95,9 @@ class KeyboardService : InputMethodService(), KeyListener {
     private val runner = ConversionRunner(worker, { mainHandler.post(it) }, converter, ::logWorkerFailure)
     private val session = InputSession()
     private val bridge = EditorBridge { currentInputConnection }
-    private val coreInput = CoreInputAdapter { currentInputConnection }
+    /** Where the Core's edits leave the caret; any other move is reported to the Core (CaretMoved). */
+    private val caretWatch = CaretWatch()
+    private val coreInput = CoreInputAdapter({ currentInputConnection }, caretWatch)
     private var core: MeltypeCoreHost? = null
     private var nativeCoreUnavailable = false
 
@@ -122,10 +126,32 @@ class KeyboardService : InputMethodService(), KeyListener {
     /** What the editor tells about itself (ImeTrait names). Facts only: no keyboard policy. */
     private var fieldTraits: List<String> = emptyList()
 
-    private fun fieldFacts(): ImeFieldFacts = coreInput.field(fieldTraits)
+    /** The editor's app (EditorInfo.packageName), the name app rules use. */
+    private var fieldApp: String? = null
+
+    /** False for an editor without text of its own (TYPE_NULL): what it returns is not the app's text. */
+    private var fieldReadable = true
+
+    private fun fieldFacts(): ImeFieldFacts {
+        val start = System.nanoTime()
+        return coreInput.field(fieldTraits, fieldApp, fieldReadable, selected = selStart != selEnd).also {
+            if (PerfLog.enabled) PerfLog.event("field", (System.nanoTime() - start) / 1000, it.before?.length ?: -1)
+        }
+    }
+
+    /**
+     * The Core already knows that the caret may have moved (the last event said so and no key came
+     * since). Further moves tell it nothing new, so they are not sent again (the Kotlin input path
+     * moves the caret on every key).
+     */
+    private var coreKnowsMoved = false
+
+    /** Caret moves by the user or the app seen so far (smoke test only). */
+    private var outsideCaretMoves = 0
 
     /** Sends one event to the Core and applies the response. Returns whether the Core consumed it. */
-    private fun coreSend(instance: MeltypeCoreHost, event: String): Boolean {
+    private fun coreSend(instance: MeltypeCoreHost, event: String, moved: Boolean = false): Boolean {
+        coreKnowsMoved = moved
         return try {
             coreInput.emojiEnabled = Settings(this).emojiEnabled
             val consumed = coreInput.apply(instance.handle(event))
@@ -154,26 +180,46 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     private fun commitCore() {
         val instance = core ?: return
-        if (coreInput.composing) coreSend(instance, ImeJson.commitRequested(fieldFacts()))
+        if (coreInput.composing) coreSend(instance, ImeJson.commitRequested(fieldFacts()), moved = true)
     }
 
     /**
-     * The editor is going away or has already kept the composing text as shown
-     * (finishComposingText). Tell the Core so it does not keep composing; nothing is written.
+     * The editor keeps the composing text as shown (finishComposingText, or the editor itself
+     * when it loses focus): the Core takes it as committed by the app (CommittedByApp), as IBus
+     * does. Without composing text, the Core still commits what it may hold (CommitRequested).
+     * Either way the caret may be elsewhere next time. [field] is false when the editor is going
+     * away: the Core then keeps the facts it last had.
      */
-    private fun leaveCore(focusLeft: Boolean) {
-        val instance = core ?: return
-        try {
-            val event = if (coreInput.composing) ImeJson.committedByApp(null, focusLeft)
-            else ImeJson.commitRequested(null, focusLeft)
-            // Only the Core's state matters here: the editor already holds the text.
-            instance.handle(event)?.let(ImeJson::parse)
-        } catch (e: RuntimeException) {
-            Log.w(TAG, "Native Core rejected leaving the field: ${e.javaClass.simpleName}")
-            nativeCoreUnavailable = true
-            discardCore()
-        }
+    private fun leaveCore(focusLeft: Boolean, field: Boolean = false) {
+        val instance = core
+        val composing = coreInput.composing
         coreInput.clear()
+        if (instance == null) return
+        val facts = if (field) fieldFacts() else null
+        val event = if (composing) ImeJson.committedByApp(facts, focusLeft) else ImeJson.commitRequested(facts, focusLeft)
+        coreSend(instance, event, moved = true)
+    }
+
+    /**
+     * The user or the app moved the caret (a tap, the arrow keys, an edit by the app or by the
+     * Kotlin input path). Composing text stays where it is, committed as shown; otherwise the
+     * Core learns that the caret moved, so it does not re-commit the previous word there.
+     */
+    private fun caretMovedOutside() {
+        outsideCaretMoves++
+        val instance = core ?: return
+        if (coreInput.composing) {
+            currentInputConnection?.finishComposingText()
+            leaveCore(focusLeft = false, field = true)
+        } else if (!coreKnowsMoved) {
+            coreSend(instance, ImeJson.caretMoved(fieldFacts()), moved = true)
+        }
+    }
+
+    /** Inserts a character the Core passed on (did not consume), as the app would for a hardware key. */
+    private fun insertPassed(text: String) {
+        insert(text)
+        caretWatch.replaced(0, text.length)
     }
 
     private fun discardCore() {
@@ -184,6 +230,9 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     /** True once the Japanese QWERTY path has really gone through the native Core (smoke test only). */
     internal fun nativeCoreActiveForSmokeTest(): Boolean = core != null && !nativeCoreUnavailable
+
+    /** How many caret moves were taken as made by the user or the app (smoke test only). */
+    internal fun outsideCaretMovesForSmokeTest(): Int = outsideCaretMoves
 
     private val languagePopup by lazy { LanguagePickerPopup(this) }
     private var keyboardView: KeyboardView? = null
@@ -506,15 +555,21 @@ class KeyboardService : InputMethodService(), KeyListener {
         // 新しい入力欄では、何も書き込まない。
         currentInputConnection?.finishComposingText()
         dropComposition()
+        // Restarted in the same editor without finishing it: the editor kept the composing text.
+        if (coreInput.composing) leaveCore(focusLeft = false)
         policy = fieldPolicy(info.inputType, info.imeOptions)
         imeOptions = info.imeOptions
         fieldTraits = buildList {
             if (policy.isPassword) add("Password")
             if (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0) add("Private")
         }
-        core?.let { instance -> coreSend(instance, ImeJson.focusEntered(fieldFacts())) }
+        fieldApp = info.packageName
+        fieldReadable = info.inputType != InputType.TYPE_NULL
         selStart = info.initialSelStart
         selEnd = info.initialSelEnd
+        caretWatch.reset(selStart, selEnd)
+        core?.let { instance -> coreSend(instance, ImeJson.focusEntered(fieldFacts()), moved = true) }
+        coreInField = true
         val settings = Settings(this)
         session.config = SessionConfig(
             toggleEnabled = settings.toggleEnabled,
@@ -530,15 +585,28 @@ class KeyboardService : InputMethodService(), KeyListener {
         keyboardView?.cancelTouch()
         languagePopup.dismiss()
         emojiPanel?.cancelTouch()
-        dropComposition(focusLeft = true)
+        dropComposition()
+        leaveField()
         super.onFinishInputView(finishingInput)
     }
 
     override fun onFinishInput() {
         keyboardView?.cancelTouch()
         emojiPanel?.cancelTouch()
-        dropComposition(focusLeft = true)
+        dropComposition()
+        leaveField()
         super.onFinishInput()
+    }
+
+    /** Between onStartInputView and leaving it (both onFinishInputView and onFinishInput come). */
+    private var coreInField = false
+
+    /** The keyboard leaves the editor: the editor keeps the composing text as shown (focusLeft). */
+    private fun leaveField() {
+        if (!coreInField) return
+        coreInField = false
+        if (coreInput.composing) currentInputConnection?.finishComposingText()
+        leaveCore(focusLeft = true)
     }
 
     override fun onUpdateSelection(
@@ -552,19 +620,20 @@ class KeyboardService : InputMethodService(), KeyListener {
             dropComposition()
             currentInputConnection?.finishComposingText()
         }
+        // Core の書き換えでないキャレットの移動は、Core に知らせる（変換中なら、出ている文字のまま確定させる）。
+        if (!caretWatch.isOwn(newSelStart, newSelEnd, candidatesEnd, coreInput.composing)) caretMovedOutside()
     }
 
     /**
-     * 未確定文字を、入力欄に何も送らずに捨てる。頼んである変換の結果も受け取らない。
-     * Core には、入力欄が表示のまま確定したことを知らせる（Core を作り直さない）。
+     * Kotlin の入力の未確定文字を、入力欄に何も送らずに捨てる。頼んである変換の結果も受け取らない。
+     * Core の未確定文字は、呼ぶ側が [leaveCore] で扱う。
      */
-    private fun dropComposition(focusLeft: Boolean = false) {
+    private fun dropComposition() {
         fieldGeneration++
         session.reset()
         runner.cancelPending()
         bridge.forget()
         context.reset()
-        leaveCore(focusLeft)
         candidateBar?.show(emptyList(), null)
     }
 
@@ -614,7 +683,7 @@ class KeyboardService : InputMethodService(), KeyListener {
                             if (!consumed) {
                                 // A deliberately direct key still reaches the
                                 // editor, without a preceding commit of Japanese.
-                                insert(ch.toString())
+                                insertPassed(ch.toString())
                             }
                         }
                     } else {
@@ -629,7 +698,7 @@ class KeyboardService : InputMethodService(), KeyListener {
                 val scalar = if (shift != ShiftState.OFF) action.char.uppercaseChar() else action.char
                 val consumed = coreCharacter(scalar.code, shift = shift != ShiftState.OFF)
                 if (core != null) {
-                    if (!consumed) insert(scalar.toString())
+                    if (!consumed) insertPassed(scalar.toString())
                 } else if (shift != ShiftState.OFF && action.char.isLetter()) {
                     // ⇧ が効いているときは、ローマ字にしない。確定してから、大文字を1文字そのまま入れる。
                     commitComposing()
@@ -643,7 +712,10 @@ class KeyboardService : InputMethodService(), KeyListener {
             KeyAction.ToggleCase -> replaceLast(Operation.ToggleCase, Latin::toggleCase)
             KeyAction.Delete -> when {
                 coreInput.composing && coreForRomaji() != null -> {
-                    if (!coreVirtualKey(0x08)) bridge.deleteBeforeCursor()
+                    if (!coreVirtualKey(0x08)) {
+                        bridge.deleteBeforeCursor()
+                        caretWatch.lose()
+                    }
                 }
                 session.isComposing -> render(session.handle(Operation.Delete))
                 selStart != selEnd -> sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)   // 選んである範囲を消す
@@ -651,7 +723,7 @@ class KeyboardService : InputMethodService(), KeyListener {
             }
             KeyAction.Space -> {
                 if (coreInput.composing && coreForRomaji() != null) {
-                    if (!coreCharacter(' '.code)) insert(" ")
+                    if (!coreCharacter(' '.code)) insertPassed(" ")
                     return
                 }
                 val selecting = session.isComposing && !session.config.direct
@@ -664,6 +736,7 @@ class KeyboardService : InputMethodService(), KeyListener {
             }
             KeyAction.Enter -> if (coreInput.composing && coreForRomaji() != null) {
                 if (!coreVirtualKey(0x0D)) {
+                    caretWatch.lose()
                     val editorAction = enterAction(imeOptions)
                     if (editorAction != null) currentInputConnection?.performEditorAction(editorAction)
                     else sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)

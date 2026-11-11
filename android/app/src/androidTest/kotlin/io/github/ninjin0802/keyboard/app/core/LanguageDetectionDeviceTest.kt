@@ -5,13 +5,9 @@ import android.view.View
 import android.view.inputmethod.BaseInputConnection
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.ninjin0802.keyboard.app.layout.withoutEmoji
-import io.github.ninjin0802.keyboard.engine.Clause
-import io.github.ninjin0802.keyboard.engine.Converter
-import io.github.ninjin0802.keyboard.engine.Segment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.io.File
 
 /**
  * Device-level integration: NativeAOT/JNI -> original Meltype.Core language
@@ -19,12 +15,6 @@ import java.io.File
  * A successful build alone is NOT a successful bilingual regression test.
  */
 class LanguageDetectionDeviceTest {
-    private val converter = object : Converter {
-        override fun convert(reading: String, context: String?): List<Segment>? = null
-        override fun predict(reading: String): List<String> = emptyList()
-        override fun learn(clauses: List<Clause>, context: String?) {}
-    }
-
     @Test fun freshSettingsDefaultToRomajiHalfWidthAndNoEmoji() {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -68,7 +58,7 @@ class LanguageDetectionDeviceTest {
         private val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val connection = BaseInputConnection(View(ctx), true)
         val adapter = CoreInputAdapter { connection }
-        private val core = MeltypeCoreHost.open(File(ctx.noBackupFilesDir, "bilingual-device-test"), CoreMozcCallbacks(converter))
+        private val core = DeviceTestCore.open()
 
         fun send(event: String): Boolean =
             adapter.apply(core.handle(event) ?: error("Native Core returned null for $event"))

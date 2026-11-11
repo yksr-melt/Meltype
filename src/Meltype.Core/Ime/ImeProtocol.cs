@@ -147,7 +147,7 @@ public sealed record ImeField
     public bool Composing { get; init; }
     /// <summary>
     /// アプリ。アプリ別設定の名前と同じ形にする: Windows はプロセスの実行ファイル名 (Code.exe)、macOS は bundle ID (com.microsoft.VSCode)、
-    /// Linux は fcitx5 の program・IBus のクライアント名のプログラムの部分 (code)。分からなければ null。
+    /// Linux は fcitx5 の program・IBus のクライアント名のプログラムの部分 (code)、Android はパッケージ名 (com.example.app)。分からなければ null。
     /// </summary>
     public string? App { get; init; }
     /// <summary>ウィンドウのタイトル (README.md などの文章のファイルを開いているか)。分からなければ null。</summary>

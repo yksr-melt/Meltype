@@ -9,13 +9,18 @@ import org.json.JSONObject
 // FrontProtocolTests (src/Meltype.Core.Tests) がこのファイルから読む項目の名前を取り出して、Core が出す項目と突き合わせる。
 // Core は知らない項目のある出来事を受け持たないので、ImeProtocol.cs に無い項目を入れない。
 
-/** 入力欄の事実 (ImeField)。[before] は確定した文字のうち、キャレット (変換中なら変換中の文字) より前。 */
+/**
+ * 入力欄の事実 (ImeField)。[before] は確定した文字のうち、キャレット (変換中なら変換中の文字) より前。
+ * [selection] は選択している文字 (無ければ null)。[app] は入力欄のアプリのパッケージ名 (EditorInfo.packageName。アプリ別設定の名前)。
+ */
 internal data class ImeFieldFacts(
     val before: String?,
     val after: String?,
     val composing: Boolean,
     val traits: List<String> = emptyList(),
     val canRemove: Boolean = true,
+    val selection: String? = null,
+    val app: String? = null,
 )
 
 /** 確定する文字。[removeBefore] があれば、キャレットの前のその長さ (UTF-16) を消してから [text] を入れる (照合は Core が済ませている)。 */
@@ -55,6 +60,10 @@ internal object ImeJson {
     fun focusEntered(field: ImeFieldFacts?): String =
         event("CaretMoved", field) { put("caret", caret(focusEntered = true)) }
 
+    /** キーボードが書き換えていないのに、キャレットが動いた (タップ・矢印キー・アプリの編集)。 */
+    fun caretMoved(field: ImeFieldFacts?): String =
+        event("CaretMoved", field) { put("caret", caret()) }
+
     /** 前の応答の一覧の [index] 番目をタップした。 */
     fun candidateClicked(index: Int, field: ImeFieldFacts?): String =
         event("CandidateClicked", field) { put("index", index) }
@@ -78,7 +87,9 @@ internal object ImeJson {
         // null は「読めない」。JSONObject は null の項目を書かないので、Core は省いたものとして null を読む。
         field.before?.let { put("before", it) }
         field.after?.let { put("after", it) }
+        field.selection?.let { put("selection", it) }
         put("composing", field.composing)
+        field.app?.let { put("app", it) }
         put("traits", JSONArray(field.traits))
         put("canRemove", field.canRemove)
     }

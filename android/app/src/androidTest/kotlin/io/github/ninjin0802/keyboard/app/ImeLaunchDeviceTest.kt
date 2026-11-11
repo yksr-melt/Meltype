@@ -82,6 +82,161 @@ class ImeLaunchDeviceTest {
             ", keys=" + size + ")"
     }
 
+    /** Touches the on-screen key that [matches], as a finger would. */
+    private fun tap(keyboard: io.github.ninjin0802.keyboard.app.view.KeyboardView, label: String, matches: (KeyAction) -> Boolean) {
+        val key = keyboard.layout.keys.firstOrNull { matches(it.action) } ?: throw AssertionError("No on-screen key for $label")
+        val location = IntArray(2)
+        instrumentation.runOnMainSync { keyboard.getLocationOnScreen(location) }
+        val x = location[0] + keyboard.width * ((key.col + key.width / 2f) / keyboard.layout.columns)
+        val y = location[1] + keyboard.height * ((key.row + 0.5f) / keyboard.layout.rows)
+        val clock = SystemClock.uptimeMillis()
+        val down = MotionEvent.obtain(clock, clock, MotionEvent.ACTION_DOWN, x, y, 0)
+        val up = MotionEvent.obtain(clock, clock + 55, MotionEvent.ACTION_UP, x, y, 0)
+        down.source = InputDevice.SOURCE_TOUCHSCREEN
+        up.source = InputDevice.SOURCE_TOUCHSCREEN
+        try {
+            assertTrue("Touch DOWN not delivered for $label", instrumentation.uiAutomation.injectInputEvent(down, true))
+            assertTrue("Touch UP not delivered for $label", instrumentation.uiAutomation.injectInputEvent(up, true))
+        } finally {
+            down.recycle()
+            up.recycle()
+        }
+        instrumentation.waitForIdleSync()
+        // The editor and the keyboard exchange the edit and the new selection asynchronously.
+        Thread.sleep(150)
+        instrumentation.waitForIdleSync()
+    }
+
+    /** Types [keys] on the Japanese QWERTY (romaji) keyboard: letters, ' ' for Space and '\n' for Enter. */
+    private fun typeRomaji(keys: String) {
+        val keyboard = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
+            ?: throw AssertionError("Keys not shown")
+        assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI, keyboard.layout.id)
+        for (key in keys) when (key) {
+            ' ' -> tap(keyboard, "Space") { it == KeyAction.Space }
+            '\n' -> tap(keyboard, "Enter") { it == KeyAction.Enter }
+            else -> tap(keyboard, key.toString()) { it is KeyAction.Romaji && it.char == key }
+        }
+    }
+
+    private fun outsideCaretMoves(): Int {
+        var count = -1
+        instrumentation.runOnMainSync {
+            count = KeyboardService.activeForSmokeTest?.get()?.outsideCaretMovesForSmokeTest() ?: -1
+        }
+        return count
+    }
+
+    /** Focuses [editor] and waits until the Japanese QWERTY keyboard is shown for it. */
+    private fun focusJapanese(activity: ImeSmokeActivity, editor: android.widget.EditText) {
+        requestKeyboard(activity, editor)
+        waitUntil(
+            "Japanese QWERTY keyboard for the editor",
+            millis = 45_000,
+            retryEveryMillis = 2_000,
+            retry = { requestKeyboard(activity, editor) },
+            describe = { describeImeState(activity) },
+        ) {
+            KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()?.layout?.id ==
+                io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
+        }
+    }
+
+    /** Runs [block] with the Japanese layout set to QWERTY romaji, the layout that goes through the native Core. */
+    private fun withRomajiActivity(block: (ImeSmokeActivity) -> Unit) {
+        val settings = io.github.ninjin0802.keyboard.app.Settings(target)
+        val originalLayout = settings.japaneseLayout
+        settings.japaneseLayout = io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
+        val activity = instrumentation.startActivitySync(
+            Intent(target, ImeSmokeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        ) as ImeSmokeActivity
+        try {
+            block(activity)
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+            settings.japaneseLayout = originalLayout
+        }
+    }
+
+    /** Empties [editor] (the app restarts the input) and waits until the keyboard has settled. */
+    private fun clear(editor: android.widget.EditText) {
+        instrumentation.runOnMainSync { editor.setText("") }
+        instrumentation.waitForIdleSync()
+        Thread.sleep(500)
+        instrumentation.waitForIdleSync()
+    }
+
+    /** Types i, Space (convert) and Enter (commit): the Core may re-commit that word once the next one shows the language. */
+    private fun commitI(editor: android.widget.EditText): String {
+        typeRomaji("i \n")
+        waitUntil("i is converted and committed", describe = { "text=" + editor.text }) {
+            editor.text.isNotEmpty() && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0
+        }
+        return editor.text.toString()
+    }
+
+    /**
+     * The keyboard's own edits are not caret moves: i + want re-commits i as I. A caret move by
+     * the app is one: the Core is told and leaves the word before the caret alone.
+     */
+    @Test fun caretMovesByTheAppStopTheRecommitButOwnEditsDoNot() = withRomajiActivity { activity ->
+        val editor = activity.japaneseEditor
+        focusJapanese(activity, editor)
+        clear(editor)
+        val start = outsideCaretMoves()
+        val committed = commitI(editor)
+        typeRomaji("want ")
+        waitUntil("want is committed", describe = { "text=" + editor.text }) { editor.text.endsWith("want ") }
+        assertTrue("The previous word was not re-committed: " + editor.text,
+            editor.text.toString() != committed + "want " && editor.text.startsWith("I"))
+        assertEquals("Own edits were taken as caret moves", start, outsideCaretMoves())
+
+        clear(editor)
+        val again = commitI(editor)
+        val beforeMoves = outsideCaretMoves()
+        // The app moves the caret away and back: the Core must not rewrite the word it can see again.
+        instrumentation.runOnMainSync { editor.setSelection(0) }
+        waitUntil("the move to the start is seen", describe = { "moves=" + outsideCaretMoves() }) {
+            outsideCaretMoves() > beforeMoves
+        }
+        instrumentation.runOnMainSync { editor.setSelection(editor.text.length) }
+        waitUntil("the move back to the end is seen", describe = { "moves=" + outsideCaretMoves() }) {
+            outsideCaretMoves() > beforeMoves + 1
+        }
+        typeRomaji("want ")
+        waitUntil("want is typed after the word", describe = { "text=" + editor.text }) {
+            editor.text.toString() == again + "want "
+        }
+    }
+
+    /** Leaving an editor keeps the composing text there; the next editor starts without it. */
+    @Test fun leavingAnEditorCommitsTheCompositionThere() = withRomajiActivity { activity ->
+        val japanese = activity.japaneseEditor
+        focusJapanese(activity, japanese)
+        instrumentation.runOnMainSync { japanese.setText("") }
+        typeRomaji("ka")
+        waitUntil("か is composing", describe = { "text=" + japanese.text }) {
+            japanese.text.toString() == "か" && android.view.inputmethod.BaseInputConnection.getComposingSpanStart(japanese.text) >= 0
+        }
+        requestKeyboard(activity, activity.editor)
+        waitUntil("the other editor has the keyboard", describe = { describeImeState(activity) }) {
+            activity.editor.hasFocus() &&
+                KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()?.layout?.id ==
+                io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
+        }
+        assertEquals("か", japanese.text.toString())
+        assertEquals("The composing text was not committed", -1,
+            android.view.inputmethod.BaseInputConnection.getComposingSpanStart(japanese.text))
+
+        focusJapanese(activity, japanese)
+        instrumentation.runOnMainSync { japanese.setSelection(japanese.text.length) }
+        instrumentation.waitForIdleSync()
+        typeRomaji("a\n")
+        waitUntil("あ is typed after か", describe = { "text=" + japanese.text }) {
+            japanese.text.toString() == "かあ"
+        }
+    }
+
     @Test fun selectedKeyboardOpensAndTypesThroughOnscreenTouch() {
         val expectedIme = target.packageName + "/" + KeyboardService::class.java.name
         assertEquals("The actual keyboard must be the system-selected default",
