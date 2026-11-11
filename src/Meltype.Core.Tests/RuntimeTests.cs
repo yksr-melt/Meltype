@@ -17,9 +17,10 @@ internal static class RuntimeTests
     }
 
     [Test]
-    public static void DirectModeDetection_WorksOnEveryOs()
+    public static void DirectModeDetection_ReturnsRomajiToJapanese()
     {
-        // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。前は Windows の部品だけが判定を渡していた
+        // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。Mac・Linux ではまだ判定しない (#1724)
+        if (!OperatingSystem.IsWindows()) return;
         WithRuntime((runtime, _) =>
         {
             var session = runtime.CreateSession(new CompositionTests.FakeConverter(), directModeDetection: true);
