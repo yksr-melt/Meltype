@@ -48,6 +48,8 @@ const dictionaries = {
   'propernouns.txt': {
     // Core (ProperNouns) は区切った語のうち、ASCII の英数字だけの語を登録し、それ以外は黙って捨てる
     format: words(w => /^[A-Za-z][A-Za-z0-9]*$/.test(w) ? null : `「${w}」が英字で始まる英数字だけの語でない (Core は登録しない)`),
+    // Core は行を trim せず半角空白・タブで区切るので、行頭・行末の全角空白は隣の語に付いたまま残り、その語は登録されない
+    untrimmed: true,
     // Core は小文字で引き、先に出た綴りを正規形として表示する。小文字で同じ語に違う綴りがあると、後の綴りは使われない
     keysOf: line => tokens(line).map(w => [w.toLowerCase(), w]),
     // 分類ごとに同じ語を置いてよい (同じ綴りなら正規形は変わらない)

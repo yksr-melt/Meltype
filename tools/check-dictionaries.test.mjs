@@ -154,6 +154,14 @@ test('propernouns: Core が捨てる語 (英数字以外を含む・全角空白
   ]);
 });
 
+test('propernouns: 行頭・行末の全角空白はエラー (Core は全角空白で区切らず、その語を登録しない)。半角空白・タブは区切りなので通す', () => {
+  const { errors } = checkDictionary('propernouns.txt', '　ExampleBrand\nExampleOther　\n \tGitHub\tGitLab\n');
+  assert.deepEqual(messages(errors), [
+    '1: 「　ExampleBrand」が英字で始まる英数字だけの語でない (Core は登録しない)',
+    '2: 「ExampleOther　」が英字で始まる英数字だけの語でない (Core は登録しない)',
+  ]);
+});
+
 test('english-readable: , を含む語はエラー (, は区切りとして受け付けない)。重複と同じ区切りで見る', () => {
   const { errors, warnings } = checkDictionary('english-readable.txt', 'open,close\nclose\n');
   assert.deepEqual(messages(errors), ['1: 「open,close」が 3 文字以上の小文字の英字の語でない']);
