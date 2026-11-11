@@ -10,7 +10,7 @@ enum MacUserDictionary {
     }
 
     /// ファイルを選ぶ画面と、取り込めなかったときに出す書き出し方の案内。
-    static let exportGuide = "入力メニューの「ユーザ辞書を編集…」で取り込みたい単語を選び、右クリックの「書き出す」で保存した「ユーザ辞書.plist」を選んでください。"
+    static let exportGuide = "入力メニューの「ユーザ辞書を編集…」で取り込みたい単語を選び、右クリックの「書き出す…」で保存した「ユーザ辞書.plist」を選んでください。"
 
     static func entries(from data: Data) throws -> [(String, String)] {
         try parsedEntries(from: data).entries
