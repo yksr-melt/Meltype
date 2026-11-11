@@ -121,7 +121,7 @@ public sealed class MeltypeRuntime : IDisposable
             Predictor = new Predictor(Phrases, UserDictionary, History),
             MoreCandidates = moreCandidates,
             AutomaticEnglishSpacing = () => autoSpacing,
-            // Mac・Linux で判定すると、判定中の英字があるとかなキーで日本語に切り替わらない (#1724)
+            // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
             ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
         };
         return new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
