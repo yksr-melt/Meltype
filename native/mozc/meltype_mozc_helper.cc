@@ -119,7 +119,7 @@ class Helper {
           break;
         }
       }
-      // Mozc の候補に無い文字列 (Meltype の辞書や Microsoft IME の候補) は覚えさせられない。
+      // Mozc の候補に無い文字列 (Meltype の辞書の候補) は覚えさせられない。
       if (index < 0) return false;
       if (!converter_->CommitSegmentValue(&segments, i, index)) return false;
     }

@@ -48,7 +48,7 @@ jobs:
         shell: powershell
         run: .\tools\Test-WindowsPackageScan.ps1
 
-      # Microsoft IME (日本語) や英語のスペルチェッカーが無い環境では、それらを使うテストは飛ばされる。
+      # 英語のスペルチェッカーが無い環境では、それを使うテストは飛ばされる。
       - name: Test
         run: dotnet run --project src/Meltype.Windows.Tests/Meltype.Windows.Tests.csproj -c Release --no-build
 

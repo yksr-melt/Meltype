@@ -11,8 +11,8 @@ namespace Meltype.Composition;
 /// Mozc (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジン。
 /// 同梱の変換ヘルパー (meltype_mozc_helper) を別のプロセスで動かし、標準入出力で変換を頼む。
 ///
-/// やり取り (UTF-8、1 行ずつ): 「C[TAB]前の文字列[TAB]読み」を送ると、文節ごとに「読み[US]候補1[US]候補2…」を [RS] でつないだ 1 行が返る。
-/// ヘルパーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
+/// やり取り (UTF-8、1 行ずつ) は native/mozc/meltype_mozc_helper.cc の先頭に書いてある。
+/// ヘルパーが無い・起動できない・応答しないときは null を返す (呼び出し側はかなのまま見せる)。
 /// </summary>
 public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
 {
@@ -392,7 +392,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (process.WaitForExit(1000) && IsLoaderFailure(process.ExitCode))
             {
                 _missingDependency = true;
-                Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できません (DLL を読み込めない: 0x{process.ExitCode:X8}。同梱の Visual C++ のランタイムが無いか壊れている)。Microsoft IME だけで変換します。");
+                Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できません (DLL を読み込めない: 0x{process.ExitCode:X8}。同梱の Visual C++ のランタイムが無いか壊れている)。漢字に変換できません。");
             }
             try { process.Kill(); } catch { }
             process.Dispose();

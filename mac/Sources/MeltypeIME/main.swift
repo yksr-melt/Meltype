@@ -235,7 +235,7 @@ func moveModeIndicatorSettingToConfig() {
 
 moveModeIndicatorSettingToConfig()
 
-// 本体 (libMeltypeNative.dylib) を読み込み、漢字変換・英単語の判定の関数を登録しておく。
+// 本体 (libMeltypeNative.dylib) を読み込み、英単語の判定を登録して変換エンジン (Mozc) を起動しておく。
 NativeCore.shared.initialize()
 
 // Input Method Kit のサーバーを起動する。入力欄 (クライアント) ごとに MeltypeInputController が作られる。

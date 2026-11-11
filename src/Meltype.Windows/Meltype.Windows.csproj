@@ -16,7 +16,7 @@
     <!-- Meltype.exe のアイコン (インストーラーの「アプリと機能」にも出る)。web/scripts/make-icons.mjs で作る -->
     <ApplicationIcon>..\..\native\tip\meltype.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <!-- WinRtCandidates で COM の関数表を直接呼ぶため -->
+    <!-- UI Automation・DirectWrite の COM の関数表を直接呼ぶため (UiAutomation・ColorTextRenderer) -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>

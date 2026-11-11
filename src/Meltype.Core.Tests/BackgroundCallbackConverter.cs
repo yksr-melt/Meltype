@@ -70,7 +70,7 @@ internal sealed class BackgroundCallbackConverter(
         {
             if (_answers.TryGetValue(request, out var known))
             {
-                // 外の変換エンジンの答えは同じ読みでも変わる (Zenzai の準備中・処理中は azooKey の答え、Microsoft IME は単語の登録)。
+                // 外の変換エンジンの答えは同じ読みでも変わることがある。
                 // 控えを返して裏で聞き直し、変わっていれば Process が知らせる
                 worker.SubmitIfIdle(request);
                 return known;
@@ -90,7 +90,7 @@ internal sealed class BackgroundCallbackConverter(
             Kind.Candidates => new Answer(null, null, candidates(request.Reading)),
             _ => throw new InvalidOperationException($"不明な要求: {request.Kind}"),
         };
-        // 答えが無いのは準備前・一時的な失敗・時間切れ (WinRT) かもしれないので、覚えずに次もまた聞く
+        // 答えが無いのは準備前・一時的な失敗・時間切れかもしれないので、覚えずに次もまた聞く
         if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {
