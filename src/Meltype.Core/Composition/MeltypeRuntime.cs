@@ -19,6 +19,8 @@ public sealed class MeltypeRuntime : IDisposable
     private readonly CompositionServices _shared;
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
+    // 入力していない間も config.json の書き換えを読む (読み直したら SettingsChanged を出す)
+    private readonly Timer _settingsCheck;
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
     /// <param name="wordChecker">OS のスペルチェッカー。使えなければ同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。</param>
@@ -39,6 +41,7 @@ public sealed class MeltypeRuntime : IDisposable
         }, usable: usableSettings);
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
+        _settingsCheck = new Timer(_ => _ = Settings.Current, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
         Detector = CompositionDetector.CreateDefault(_userDirectory);
         Detector.SpellChecker = _wordChecker;
         Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
@@ -124,7 +127,11 @@ public sealed class MeltypeRuntime : IDisposable
         return new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
     }
 
-    public void Dispose() => _nowPlaying?.Dispose();
+    public void Dispose()
+    {
+        _settingsCheck.Dispose();
+        _nowPlaying?.Dispose();
+    }
 
     /// <summary>学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて消す。ユーザー辞書と設定は消さない。</summary>
     public void ResetLearning()

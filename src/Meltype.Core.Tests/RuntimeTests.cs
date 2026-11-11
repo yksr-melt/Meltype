@@ -104,9 +104,11 @@ internal static class RuntimeTests
             next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
             next.Save(path);
             File.SetLastWriteTimeUtc(path, DateTime.UtcNow.AddMinutes(1));
-            Thread.Sleep((int)SettingsFile.CheckIntervalMs + 50);
-            Assert.Equal(InputMode.Keyboard, runtime.Settings.Current.Mode, "外で書き換えたとき");
-            Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "知らせる設定も直した後のもの");
+            // 入力しなくても、MeltypeRuntime が自分で確かめて知らせる
+            var deadline = Environment.TickCount64 + SettingsFile.CheckIntervalMs * 3;
+            while (Volatile.Read(ref notified) is null && Environment.TickCount64 < deadline) Thread.Sleep(20);
+            Assert.Equal(PunctuationStyle.FullWidthCommaPeriod, notified?.Punctuation ?? PunctuationStyle.Japanese, "外で書き換えたら、入力しなくても知らせる");
+            Assert.Equal(InputMode.Keyboard, notified?.Mode ?? InputMode.Tsf, "外で書き換えたときも直す");
         }
         finally
         {
