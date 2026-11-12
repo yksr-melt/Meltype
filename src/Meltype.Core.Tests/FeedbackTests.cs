@@ -1679,6 +1679,37 @@ internal static class RomajiTypoTests
     }
 
     [Test]
+    public static void RomajiTypos_FixAShortEnglishWordShownInTheMiddle_WhenTheFixIsALongWord()
+    {
+        // すみ|mas|ね の mas は、同梱の英単語の一覧 (Linux・Mac のスペルチェッカーの代わり) にあるので、打っている途中は英字に見える。
+        // 直すと すみません (4 文字以上の 1 つの語) になるなら直す (issue #971)
+        var previous = CompositionTests.Detector.SpellChecker;
+        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("sumimasne", "すみません"),
+                // 直しても短い語 (たべ・たば) にしかならないものは英字のまま (issue #220)
+                ("tabde", "tabで"),
+                ("tabga", "tabが"),
+                ("kyouhatabdeyaru", "きょうはtabでやる"),
+                // できません / できますね のどちらか分からないものは直さない
+                ("dekimasne", "できmasね"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = previous;
+        }
+    }
+
+    [Test]
     public static void RomajiTypos_LeaveEnglishAndAbbreviations()
     {
         foreach (var (typed, expected) in new[]
