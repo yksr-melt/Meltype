@@ -8,7 +8,7 @@
 | fcitx5 のアドオン (`fcitx5/`, C++) | fcitx5 からキーを受け取り、判定の本体に渡す |
 | 設定画面 (`meltype-settings`, Python・GTK 4) | `config.schema.json` から画面を組み立てて、`config.json` を書く |
 | 判定の本体 (`libMeltypeNative.so`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`) を NativeAOT で Linux 用のライブラリにしたもの |
-| 漢字変換 | Mozc の変換ヘルパー (`native/mozc`) |
+| 漢字変換 | Mozc の変換ヘルパー (`native/mozc`) と Zenzai (llama.cpp の `llama-server` と zenz のモデル。`native/zenzai/get-zenzai.sh` が取ってきて `zenzai/` に同梱する) |
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。
 
@@ -20,7 +20,7 @@ Ubuntu・Debian (WSL を含む) と Fedora でビルドできます。`--setup` 
 bash linux/build-cli.sh --setup --all
 ```
 
-`--all` は、本体のテスト → Mozc のヘルパーのビルド → パッケージの作成までをまとめて行います。できたものは `linux/build/Meltype-linux/` に入ります。
+`--all` は、本体のテスト → Mozc のヘルパーのビルド → Zenzai の取得 → パッケージの作成までをまとめて行います。できたものは `linux/build/Meltype-linux/` に入ります。
 
 一部だけ行うときは、次のように分けて実行できます。
 

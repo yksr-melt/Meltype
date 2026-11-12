@@ -11,6 +11,7 @@ on:
     paths: &paths
       - 'linux/**'
       - 'native/mozc/**'
+      - 'native/zenzai/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Mac.Native/**'
       - 'dictionaries/**'
@@ -106,6 +107,9 @@ jobs:
             -v "$PWD:/repo" -v "$HOME/mozc:/mozc" -v "$HOME/bazel-cache:/cache" -v "$HOME/tools:/tools:ro" -w /repo \
             quay.io/pypa/manylinux_2_34_${{ matrix.manylinux }}:2026.11.01-2 \
             native/mozc/build-mozc-helper.sh /mozc /cache
+      # Zenzai (llama-server と zenz のモデル) を取ってくる。版とハッシュは native/zenzai/zenzai.env で固定している
+      - name: Get Zenzai
+        run: native/zenzai/get-zenzai.sh
       - name: Build
         run: linux/build.sh
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
@@ -142,6 +146,8 @@ jobs:
           sudo apt-get install -y ./linux/build/meltype_*.deb
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          test -x /opt/meltype/zenzai/llama-server
+          /opt/meltype/zenzai/llama-server --version
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
           test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' | head -n 1)")/meltype.so"

@@ -407,19 +407,19 @@ public sealed class Settings
      Description("かな漢字変換に使うエンジン。「両方」は Mozc (Google 日本語入力のオープンソース版) で変換し、Mozc が使えないときは Microsoft IME で変換します。候補には両方の候補が出ます。")]
     public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
 
-    [Category("4. 変換"), DisplayName("Zenzai を使う"), Platforms(Platform.Windows | Platform.Mac),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+    [Category("4. 変換"), DisplayName("Zenzai を使う"),
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows・Linux では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows・Linux の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
     public bool UseZenzai { get; set; } = true;
 
-    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows),
+    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows | Platform.Linux),
      Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiServerPath { get; set; } = "";
 
-    [Category("4. 変換"), DisplayName("Zenzai: モデル (GGUF) の場所"), Platforms(Platform.Windows | Platform.Mac),
+    [Category("4. 変換"), DisplayName("Zenzai: モデル (GGUF) の場所"),
      Description("zenz のモデルファイル (例: zenz-v3.2-small の ggml-model-Q5_K_M.gguf) の場所。空なら同梱の zenz-v3.2-small を使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiModelPath { get; set; } = "";
 
-    [Category("4. 変換"), DisplayName("Zenzai: 使う GPU"), Platforms(Platform.Windows),
+    [Category("4. 変換"), DisplayName("Zenzai: 使う GPU"), Platforms(Platform.Windows | Platform.Linux),
      Description("GPU 版 (Vulkan・CUDA) の llama-server で、計算に使う GPU の名前 (例: Vulkan0)。llama-server の --device に渡し、GPU に載せる量は llama-server が空いているメモリに合わせて決めます。空なら CPU だけで計算します (既定)。名前は llama-server --list-devices で確かめられます。変えると llama-server を起動し直します。")]
     public string ZenzaiDevice { get; set; } = "";
 

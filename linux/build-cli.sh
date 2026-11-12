@@ -168,6 +168,8 @@ fi
 if [[ $package -eq 1 ]]; then
     need dotnet
     need clang
+    # Zenzai (llama-server と zenz のモデル)。取ったものはキャッシュするので、2 回目からは取り直さない
+    bash "$root/native/zenzai/get-zenzai.sh"
     bash "$root/linux/build.sh"
 fi
 

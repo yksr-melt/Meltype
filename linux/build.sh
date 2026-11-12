@@ -5,6 +5,7 @@
 # Meltype の Linux 版 (IBus・fcitx5) を組み立てる。できたものは linux/build/Meltype-linux/ に置く。
 #   linux/build.sh
 # 先に Mozc の変換ヘルパーを native/mozc/build-mozc-helper.sh でビルドしておく (native/mozc/bin/linux/)。
+# Zenzai (llama-server と zenz のモデル) は native/zenzai/get-zenzai.sh で取ってくる (native/zenzai/bin/linux/)。無ければ同梱しない (リリースのビルドでは止める)。
 # 必要なもの: .NET 10 SDK、clang (NativeAOT のリンクに使う)、zlib (zlib1g-dev)
 # fcitx5 のアドオンは、cmake と fcitx5 の開発用のパッケージ (fcitx5-modules-dev) があればビルドする (無ければ IBus だけ)。
 set -euo pipefail
@@ -12,6 +13,7 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(dirname "$here")"
 out="$here/build/Meltype-linux"
 mozc="$root/native/mozc/bin/linux"
+zenzai="$root/native/zenzai/bin/linux"
 version="$(dotnet msbuild "$root/src/Meltype.Core/Meltype.Core.csproj" -nologo -getProperty:Version)"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
     echo "版番号が不正です: $version" >&2
@@ -29,6 +31,10 @@ case "$(uname -m)" in
 esac
 if [[ ! -x "$mozc/meltype_mozc_helper" ]]; then
     echo "Mozc の変換ヘルパーがありません。先に native/mozc/build-mozc-helper.sh を実行してください。" >&2
+    exit 1
+fi
+if [[ ! -x "$zenzai/llama-server" && "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+    echo "Zenzai がありません。リリースのビルドなので止めます (native/zenzai/get-zenzai.sh を実行してください)。" >&2
     exit 1
 fi
 
@@ -58,4 +64,9 @@ cp "$here/ibus-engine-meltype" "$here/meltype-settings" "$here/ibus-setup-meltyp
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$out/"
 cp "$mozc/meltype_mozc_helper" "$mozc/MOZC-LICENSE.txt" "$mozc/MOZC-CREDITS.html" "$out/mozc/"
 chmod +x "$out/ibus-engine-meltype" "$out/meltype-settings" "$out/mozc/meltype_mozc_helper"
+if [[ -x "$zenzai/llama-server" ]]; then
+    cp -RP "$zenzai" "$out/zenzai"
+else
+    echo "警告: Zenzai が無いので、同梱しません (Zenzai なしで変換します。native/zenzai/get-zenzai.sh で取ってこられます)" >&2
+fi
 echo "作成しました: $out"

@@ -56,6 +56,10 @@ mkdir -p "$root$target" "$root/usr/share/ibus/component" "$root/usr/share/doc/me
 cp -R "$src/libMeltypeNative.so" "$src/ibus-engine-meltype" "$src/meltype-settings" "$src/icon.png" "$src/mozc" "$src/LICENSE" "$src/THIRD-PARTY-NOTICES.md" "$root$target/"
 chmod 644 "$root$target/libMeltypeNative.so" "$root$target/icon.png" "$root$target/LICENSE" "$root$target/THIRD-PARTY-NOTICES.md"
 chmod 755 "$root$target/ibus-engine-meltype" "$root$target/meltype-settings" "$root$target/mozc/meltype_mozc_helper"
+# Zenzai (llama-server と zenz のモデル。linux/build.sh が同梱したときだけ)。ライブラリのシンボリックリンクはそのまま写す
+if [[ -x "$src/zenzai/llama-server" ]]; then
+    cp -RP "$src/zenzai" "$root$target/zenzai"
+fi
 sed "s|@DIR@|$target|g" "$src/meltype.xml" > "$root/usr/share/ibus/component/meltype.xml"
 ln -s "$target/meltype-settings" "$root/usr/bin/meltype-settings"
 sed "s|@DIR@|$target|g" "$src/ibus-setup-meltype.desktop" > "$root/usr/share/applications/ibus-setup-meltype.desktop"
@@ -92,7 +96,7 @@ installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
     echo "Architecture: $arch"
     echo "Maintainer: Yukishiro <https://github.com/yksr-melt/Meltype>"
     echo "Installed-Size: $installed_size"
-    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9), python3-gi, gir1.2-gtk-4.0"
+    echo "Depends: libc6, libstdc++6, libgcc-s1, libgomp1, libssl3 | libssl3t64, zlib1g, python3 (>= 3.9), python3-gi, gir1.2-gtk-4.0"
     echo "Recommends: ibus, gir1.2-ibus-1.0"
     if $with_fcitx5; then echo "Suggests: fcitx5"; fi
     echo "Section: utils"

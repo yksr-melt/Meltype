@@ -27,6 +27,13 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 | [swift-collections](https://github.com/apple/swift-collections)・[swift-algorithms](https://github.com/apple/swift-algorithms)・[swift-numerics](https://github.com/apple/swift-numerics) (Apple) | Apache License 2.0 | AzooKeyKanaKanjiConverter が使う部品として、一緒に Meltype.app に組み込まれる (`mac/Package.resolved` で版を固定) |
 | [Jinja](https://github.com/johnmai-dev/Jinja)・[swift-tokenizers](https://github.com/ensan-hcl/swift-tokenizers) | Apache License 2.0 | AzooKeyKanaKanjiConverter が依存する部品 (`mac/Package.resolved` で版を固定)。組み込まれる場合は、ライセンス表示を同梱する |
 
+## Linux 版 (linux/) に同梱するもの
+
+| 部品 | ライセンス | 使い方 |
+| --- | --- | --- |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` と共有ライブラリ (ubuntu の CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/zenzai.env` で固定) | MIT License (Copyright The ggml authors) | `/opt/meltype/zenzai/` (ライセンス: `zenzai/LICENSE-llama.cpp.txt`、`zenzai/ZENZAI-NOTICE.txt`) |
+| [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のかな漢字変換モデル。`zenz-v3.2-small-Q5_K_M.gguf`) | Apache License 2.0 (Miwa-Keita) | `/opt/meltype/zenzai/` (ライセンス: `zenzai/LICENSE-zenz.txt`) |
+
 ## 実行時に使う Windows の機能 (同梱しない)
 
 次は Windows に標準で入っているものを実行時に呼び出すだけで、Meltype には含まれません。

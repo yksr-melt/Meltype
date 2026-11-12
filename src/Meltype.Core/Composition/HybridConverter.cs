@@ -9,7 +9,7 @@ namespace Meltype.Composition;
 /// Mozc と OS の変換エンジン (Windows では Microsoft IME) を組み合わせる。
 /// 両方 (既定) なら Mozc で変換し、Mozc が使えない・変換できないときは OS の変換エンジンで変換する。
 /// 候補の一覧は Mozc の候補の後ろに OS の変換エンジンの候補を足す (Microsoft IME に登録した単語も出る)。
-/// 全 OS で使う。Mac 版は OS の変換エンジン (azooKey) だけ、Linux 版は Mozc だけ (system は null)。
+/// 全 OS で使う。Mac 版は OS の変換エンジン (azooKey) だけ、Linux 版は Mozc と Zenzai (system は null)。
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter? system,

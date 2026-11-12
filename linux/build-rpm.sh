@@ -64,6 +64,9 @@ cat > "$stage/meltype.spec" << 'EOF'
 # 本体とアドオンはビルド済み。rpmbuild の strip や #! の書き換えはしない
 %global __os_install_post %{nil}
 %global target /opt/meltype
+# 同梱の llama.cpp のライブラリ (zenzai/) を、システムのライブラリとして提供・要求しない (/opt/meltype/zenzai/ の中だけで使う)
+%global __provides_exclude_from ^%{target}/zenzai/.*$
+%global __requires_exclude ^lib(llama|ggml|mtmd).*$
 
 Name: meltype
 Version: %{meltype_version}
@@ -94,6 +97,9 @@ mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component %{buildroo
 cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
 chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
 chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper
+# Zenzai (linux/build.sh が同梱したときだけ。無ければ空のフォルダー)
+mkdir -p %{buildroot}%{target}/zenzai
+if [ -x %{meltype_src}/zenzai/llama-server ]; then cp -RP %{meltype_src}/zenzai/. %{buildroot}%{target}/zenzai/; fi
 sed "s|@DIR@|%{target}|g" %{meltype_src}/meltype.xml > %{buildroot}%{_datadir}/ibus/component/meltype.xml
 ln -s %{target}/meltype-settings %{buildroot}%{_bindir}/meltype-settings
 sed "s|@DIR@|%{target}|g" %{meltype_src}/ibus-setup-meltype.desktop > %{buildroot}%{_datadir}/applications/ibus-setup-meltype.desktop
@@ -119,6 +125,7 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 %{target}/meltype-settings
 %{target}/icon.png
 %{target}/mozc
+%{target}/zenzai
 %{target}/THIRD-PARTY-NOTICES.md
 %license %{target}/LICENSE
 %{_datadir}/ibus/component/meltype.xml

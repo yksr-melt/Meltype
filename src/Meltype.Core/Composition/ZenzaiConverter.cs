@@ -51,6 +51,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private readonly Dictionary<string, string?> _cache = new(StringComparer.Ordinal);
     private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private Process? _process;
+    // Linux・macOS: Meltype が消えたら llama-server を終わらせる見張り (WatchFromOutside)
+    private Process? _watchdog;
     private Uri? _endpoint;
     private Task? _starting;
     private bool _ready;
@@ -345,8 +347,10 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             KillStaleServer();
             var process = Process.Start(info);
             if (process is null) { Fail(); return; }
-            // Meltype が強制終了されても、llama-server が残らないようにする (Windows: ジョブに入れる。入れておくと、親が消えたとき OS が一緒に終わらせる)
+            // Meltype が強制終了されても、llama-server が残らないようにする (Windows: ジョブに入れる。入れておくと、親が消えたとき OS が一緒に終わらせる。
+            // Linux・macOS: 見張りのプロセスを置く)
             BindToThisProcess(process);
+            var watchdog = WatchFromOutside(process);
             WritePidFile(process);
             // 出力を読み捨てる (読まないとパイプが詰まってサーバーが止まる)
             process.OutputDataReceived += static (_, _) => { };
@@ -355,8 +359,9 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             process.BeginErrorReadLine();
             lock (_gate)
             {
-                if (_disposed) { Kill(process); return; }
+                if (_disposed) { Kill(process); StopWatchdog(watchdog); return; }
                 _process = process;
+                _watchdog = watchdog;
             }
             var endpoint = new Uri($"http://127.0.0.1:{port}/");
             var deadline = Environment.TickCount64 + StartTimeoutMs;
@@ -508,6 +513,36 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
 
+    /// <summary>
+    /// Windows 以外: Meltype (IBus・fcitx5 のエンジン) が強制終了されても llama-server が残らないように、見張りの sh を置く。
+    /// 見張りは標準入力のパイプが閉じる (Meltype が終わると OS が閉じる) まで待ち、閉じたら llama-server を終わらせる。
+    /// 子プロセスの PR_SET_PDEATHSIG は、起動したスレッドが終わっても届くので使わない (.NET はプールのスレッドから起動する)。
+    /// </summary>
+    private static Process? WatchFromOutside(Process server)
+    {
+        if (OperatingSystem.IsWindows()) return null;
+        try
+        {
+            var info = new ProcessStartInfo("/bin/sh") { UseShellExecute = false, RedirectStandardInput = true };
+            info.ArgumentList.Add("-c");
+            info.ArgumentList.Add("cat > /dev/null; kill \"$0\" 2> /dev/null");
+            info.ArgumentList.Add(server.Id.ToString(CultureInfo.InvariantCulture));
+            return Process.Start(info);
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
+    }
+
+    // 見張りを終わらせる (先に llama-server を終わらせてから。パイプを閉じると、見張りは終わったプロセスに kill を送って終わる)
+    private static void StopWatchdog(Process? watchdog)
+    {
+        if (watchdog is null) return;
+        try { watchdog.StandardInput.Close(); } catch (Exception ex) when (ex is IOException or InvalidOperationException) { }
+        watchdog.Dispose();
+    }
+
     private static void Kill(Process process)
     {
         try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
@@ -517,11 +552,14 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         _worker.Dispose();
         Process? process;
+        Process? watchdog;
         lock (_gate)
         {
             _disposed = true;
             process = _process;
+            watchdog = _watchdog;
             _process = null;
+            _watchdog = null;
             _ready = false;
         }
         if (process is not null)
@@ -529,6 +567,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             Kill(process);
             process.Dispose();
         }
+        StopWatchdog(watchdog);
         _http.Dispose();
     }
 }

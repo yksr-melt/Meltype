@@ -138,6 +138,8 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 
 設定「カッコを打ったら中にカーソルを移動」は、fcitx5・IBus ともに未対応です。設定画面には項目が表示されます。
 
+かな漢字変換では、同梱の Zenzai (llama.cpp の `llama-server` と zenz-v3.2-small) で、前の文脈を見て変換します (既定で ON。CPU で計算します)。使えないとき・応答が遅いときは Mozc で変換します。CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください。自分で用意した llama-server やモデルを使うときは「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に、GPU 版の llama-server で GPU を使うときは「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前を書きます。
+
 設定と学習データは `~/.local/share/Meltype` にあります。画面に無い項目 (アプリ別設定など) は、Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
 
 ```json

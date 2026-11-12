@@ -64,7 +64,10 @@ public static unsafe class Exports
             if (string.IsNullOrEmpty(path)) return 0;
             s_mozc?.Dispose();
             s_mozc = new MozcConverter(path, FromUtf8(profile) ?? Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
-            s_converter = new HybridConverter(() => Config.ConversionEngine.Mozc, s_mozc, null, null);
+            // Zenzai はパッケージの zenzai/ (Mozc のヘルパーのフォルダーの隣) に同梱した llama-server とモデルを使う。
+            // NativeAOT の共有ライブラリの AppContext.BaseDirectory は読み込んだ側 (IBus・fcitx5) のフォルダーなので、ヘルパーの場所から決める
+            s_zenzaiBase = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetFullPath(path)));
+            s_converter = new HybridConverter(() => Config.ConversionEngine.Mozc, s_mozc, null, null, CurrentZenzai, s_zenzai.Failed);
             if (!s_mozc.IsInstalled) return 0;
             s_mozc.WarmUp();
             return 1;
@@ -78,6 +81,28 @@ public static unsafe class Exports
 
     /// <summary>Mozc で変換するとき (Linux 版)。null なら登録された関数で変換する (Mac 版)。</summary>
     private static MozcConverter? s_mozc;
+
+    /// <summary>
+    /// Zenzai (Linux 版。llama-server + zenz の GGUF)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (Windows 版と同じ ZenzaiHolder)。
+    /// Mac 版は azooKey に組み込まれた Zenzai を Swift 側で使うので、これは使わない。
+    /// </summary>
+    private static readonly ZenzaiHolder s_zenzai = CreateZenzaiHolder();
+
+    // IBus・fcitx5 が普通に終わるときに llama-server を止める (強制終了のときは ZenzaiConverter の見張りが止める)
+    private static ZenzaiHolder CreateZenzaiHolder()
+    {
+        var holder = new ZenzaiHolder();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => holder.Dispose();
+        return holder;
+    }
+
+    /// <summary>同梱の zenzai/ があるフォルダー (Linux 版のパッケージのフォルダー。例: /opt/meltype)。</summary>
+    private static string? s_zenzaiBase;
+
+    private static ZenzaiConverter? CurrentZenzai() =>
+        Runtime.Settings.Current is { UseZenzai: true } settings
+            ? s_zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath, s_zenzaiBase), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath, s_zenzaiBase), settings.ZenzaiDevice)
+            : s_zenzai.Get("", "");
 
     /// <summary>
     /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init / meltype_init_mozc の後、meltype_ime_create の前に 1 回呼ぶ。
@@ -102,7 +127,7 @@ public static unsafe class Exports
     /// <summary>登録された関数で変換するとき (Mac 版)。入力欄がいくつあっても 1 つ (登録された関数を 1 つのワーカーからだけ呼ぶ)。</summary>
     private static readonly BackgroundCallbackConverter s_callback = new(new CallbackConverter().ConvertClauses, MoreCandidates);
 
-    /// <summary>入力欄が使う変換エンジン。Windows 版と同じ HybridConverter で、Mac 版は登録された関数だけ、Linux 版は Mozc だけを組み合わせる。</summary>
+    /// <summary>入力欄が使う変換エンジン。Windows 版と同じ HybridConverter で、Mac 版は登録された関数だけ、Linux 版は Mozc と Zenzai を組み合わせる。</summary>
     private static HybridConverter s_converter = new(() => Config.ConversionEngine.System, null, s_callback, s_callback.Candidates);
 
     /// <summary>フロント 1 つ (IBus・fcitx5 のエンジン、Input Method Kit のコントローラー) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
