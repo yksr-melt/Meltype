@@ -50,7 +50,7 @@ internal sealed class ModeIndicatorWindow : PopupForm
         location.X = Math.Clamp(location.X, screen.Left, screen.Right - Width);
         location.Y = Math.Clamp(location.Y, screen.Top, screen.Bottom - Height);
         Location = location;
-        if (!Visible) Show();
+        ShowOnTop();
         Invalidate();
         _hideTimer.Stop();
         _hideTimer.Interval = milliseconds;

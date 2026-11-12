@@ -159,7 +159,7 @@ internal sealed class CompositionWindow : PopupForm
         if (location.X + size.Width > screen.Right) location.X = Math.Max(screen.Left, screen.Right - size.Width);
         if (location.Y + size.Height > screen.Bottom) location.Y = overlay ? Math.Max(screen.Top, screen.Bottom - size.Height) : Math.Max(screen.Top, location.Y - size.Height - 28);
         SetBounds(location.X, location.Y, size.Width, size.Height);
-        if (!Visible) Show();
+        ShowOnTop();
         Invalidate();
         UpdateMeaning(view);
     }
@@ -206,7 +206,7 @@ internal sealed class CompositionWindow : PopupForm
         _meaningPopup ??= new MeaningPopup(_palette, Opacity);
         _meaningPopup.SetText(meaning, _candidateFont);
         PlaceMeaning(view);
-        if (!_meaningPopup.Visible) _meaningPopup.Show();
+        _meaningPopup.ShowOnTop();
     }
 
     /// <summary>意味の枠を、変換ボックスの右 (はみ出すなら左) の、選んでいる候補の行の高さに置く。</summary>
