@@ -933,7 +933,7 @@ public sealed class CompositionText
         var changed = false;
         // 今の表示で英字に見えている文字 (きょうは|meeting|です の meeting)。ここは直さない
         // (表示では英単語なのに、確定したら g が が に直されて めえちんがです になっていた)。
-        var shownEnglish = EnglishMask();
+        var shownEnglish = EnglishMask(out var firmEnglish);
         var offset = 0;
         var start = 0;
         while (start < _units.Count)
@@ -955,7 +955,7 @@ public sealed class CompositionText
                 UnitWords.Any(u => letters.StartsWith(u, StringComparison.OrdinalIgnoreCase));
             if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !_detector.IsKnownEnglishWord(letters) &&
                 corrector.FirstUnreadable(letters, final: true) is var first and > 0 &&
-                !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first]) &&
+                !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first] && (firmEnglish[runOffset + first] || !FixesIntoLongWord(corrector, letters, first))) &&
                 // 数字のすぐ前の短い英字 (kaibunsyo|rta|2026 の rta) は略語。打ち間違いとして直さない
                 !(end < _units.Count && _units[end].Raw is [var after] && char.IsAsciiDigit(after) && first >= letters.Length - 6) &&
                 !ContainsEnglishWord(letters, first) &&
@@ -1041,11 +1041,13 @@ public sealed class CompositionText
 
     /// <summary>
     /// 打った英字 (Raw) の 1 文字ずつが、今の表示で英単語 (5 文字以上の知っている語: meeting) の区間に入っているか。
+    /// firm は、そのうち守った区間か 5 文字以上の語 (短い語 mas と違い、直すと長い語になっても英字のまま)。
     /// 短い語 (onegai|shim|su の shim) は、ローマ字の途中に偶然現れることが多いので含めない (打ち間違いとして直す)。
     /// </summary>
-    private List<bool> EnglishMask()
+    private List<bool> EnglishMask(out List<bool> firm)
     {
         var mask = new List<bool>();
+        firm = [];
         var segments = Segments();
         for (var s = 0; s < segments.Count; s++)
         {
@@ -1053,7 +1055,11 @@ public sealed class CompositionText
             // 英語の語.の後ろの英字 (ドメイン・拡張子: Meltype.amr、MeltypeTip.dll) も、表示のまま英字にする (amr を あめ に直していた: issue #260)
             if (segment.IsEnglish && s >= 2 && segments[s - 1] is { IsEnglish: true, Raw: "." } && segments[s - 2].IsEnglish && segments[s - 2].Raw.Any(char.IsAsciiLetter))
             {
-                for (var i = 0; i < segment.Raw.Length; i++) mask.Add(true);
+                for (var i = 0; i < segment.Raw.Length; i++)
+                {
+                    mask.Add(true);
+                    firm.Add(true);
+                }
                 continue;
             }
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
@@ -1063,9 +1069,26 @@ public sealed class CompositionText
                 segment.Raw.Length == 4 && _detector.IsKnownEnglishWord(lower) && !_detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のスペルチェッカーの語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
                 segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && _detector.IsSpellWord(lower) && _detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
-            for (var i = 0; i < segment.Raw.Length; i++) mask.Add(word);
+            for (var i = 0; i < segment.Raw.Length; i++)
+            {
+                mask.Add(word);
+                // 守った区間と 5 文字以上の語 (shopping) は、直すと長い語になっても英字のまま (FixesIntoLongWord を見ない)
+                firm.Add(segment.IsProtected || segment.Raw.Length >= 5);
+            }
         }
         return mask;
+    }
+
+    /// <summary>
+    /// 表示で英字に見えている短い語 (すみ|mas|ね の mas) でも、直すとその前のかなと合わせて 4 文字以上の 1 つの語になるなら直す
+    /// (sumimasne → すみません: issue #971)。tab|de (たべ)・tab|ga (たば) のように、直しても短い語にしかならないものは英字のまま。
+    /// </summary>
+    private bool FixesIntoLongWord(RomajiTypoCorrector corrector, string letters, int first)
+    {
+        if (corrector.Fix(letters, final: true) is not { } fix || first > fix.Right.Length) return false;
+        // 読めない文字の直前のかな (sumima の ま) が、直した後の語に入っているか
+        var before = _detector.Romaji.AnalyzeFragment(fix.Right[..first]).Kana.Length;
+        return corrector.InLongWord(fix.Kana, before - 1, minLength: 4);
     }
 
     /// <summary>
