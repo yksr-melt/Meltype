@@ -101,6 +101,19 @@ public interface IBackgroundConverter
     event Action? ResultReady;
 }
 
+/// <summary>
+/// ユーザー辞書の語を自分の辞書に持てる変換エンジン (Mozc。issue #1262)。持てれば、登録した語とほかの語の取り合いを変換エンジンのコストで決め、
+/// Meltype は読みの中に登録した読みを見つけて区切らない (ちなみに を 千奈ミニ にしない: issue #487)。
+/// </summary>
+public interface IUserWordConverter
+{
+    /// <summary>
+    /// ユーザー辞書の語を変換エンジンに入れ直す (version が前と同じなら何もしない)。変換エンジンが今その語を持っていれば true
+    /// (使えない・古いヘルパーなら false で、Meltype が今までどおり区切る)。入力スレッドから呼ぶ。
+    /// </summary>
+    bool SetUserWords(IReadOnlyList<(string Reading, string Word)> words, int version);
+}
+
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
 public interface ILearningConverter
 {

@@ -355,6 +355,7 @@ public sealed partial class CompositionController
             }
             return result;
         }
+        SyncUserWords();
         if (_services.UserDictionary?.Split(kana) is not { } split) return ConvertWithEngine(kana);
         var pieces = AlignUserWords(kana, split);
         if (pieces.All(p => p.Word is null && p.Engine is null)) return ConvertWithEngine(kana);
@@ -388,6 +389,16 @@ public sealed partial class CompositionController
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
+    }
+
+    /// <summary>
+    /// ユーザー辞書の語を変換エンジン (Mozc) に入れ、入れられたら Meltype の当てはめ (Split) ではユーザーの語を使わない (issue #1262)。
+    /// 変換エンジンが辞書の版が変わったときだけ入れ直す。Microsoft IME で変換するときと、前の版のヘルパーでは、今までどおり Meltype が当てはめる。
+    /// </summary>
+    private void SyncUserWords()
+    {
+        if (_services.UserDictionary is not { } dictionary) return;
+        dictionary.UserWordsInEngine = _converter is IUserWordConverter engine && engine.SetUserWords(dictionary.UserWordsForEngine, dictionary.UserWordsVersion);
     }
 
     /// <summary>

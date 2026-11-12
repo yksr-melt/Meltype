@@ -14,7 +14,7 @@ namespace Meltype.Composition;
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter? mozc, IKanjiConverter? system,
     Func<string, IReadOnlyList<string>>? systemCandidates, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
+    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter, IUserWordConverter
 {
     /// <summary>Zenzai に渡す広い文脈 (Mozc / Microsoft IME には渡さない)。</summary>
     public string? WideContext { get; set; }
@@ -158,6 +158,10 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
             return false;
         }
     }
+
+    /// <summary>ユーザー辞書の語を Mozc に入れる。Mozc で変換しないとき (Microsoft IME) は入れず false (Meltype が今までどおり区切る)。</summary>
+    public bool SetUserWords(IReadOnlyList<(string Reading, string Word)> words, int version) =>
+        UseMozc && mozc!.SetUserWords(words, version);
 
     /// <summary>確定した文節を Mozc に覚えさせる (Microsoft IME の学習は Microsoft IME に任せる)。</summary>
     public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)

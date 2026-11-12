@@ -14,7 +14,7 @@ namespace Meltype.Composition;
 /// やり取り (UTF-8、1 行ずつ): 「C[TAB]前の文字列[TAB]読み」を送ると、文節ごとに「読み[US]候補1[US]候補2…」を [RS] でつないだ 1 行が返る。
 /// ヘルパーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
+public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IUserWordConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
@@ -134,6 +134,40 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                 _learnedSinceSave = 0;
                 Send("S");
             }
+        }
+    }
+
+    // ヘルパーに入れたユーザー辞書の版 (入れていなければ -1)。ヘルパーのユーザー辞書はファイルに残るので、起動し直しても入れ直さない
+    private int _userWordsVersion = -1;
+    // ユーザー辞書を入れるコマンドを知らない (前の版の) ヘルパー
+    private bool _userWordsUnsupported;
+
+    /// <summary>ユーザー辞書の語をヘルパーに入れ直す (IUserWordConverter)。入れたら、候補の控えを捨てる。</summary>
+    public bool SetUserWords(IReadOnlyList<(string Reading, string Word)> words, int version)
+    {
+        if (!IsAvailable || _userWordsUnsupported) return false;
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            if (version == _userWordsVersion) return true;
+            var records = string.Join(RecordSeparator, words
+                .Where(w => w.Reading.Length > 0 && w.Word.Length > 0)
+                .Select(w => Clean(w.Reading).Replace(UnitSeparator, ' ').Replace(RecordSeparator, ' ') + UnitSeparator + Clean(w.Word).Replace(UnitSeparator, ' ').Replace(RecordSeparator, ' ')));
+            var result = Send($"D\t{records}");
+            if (result == "OK")
+            {
+                _userWordsVersion = version;
+                ClearCache();
+                Diagnostics.Log.Info($"ユーザー辞書の語を Mozc に入れました ({words.Count} 語)。");
+                return true;
+            }
+            // 知らないコマンドには空行を返す (前の版のヘルパー)。このヘルパーでは、Meltype が今までどおり区切る
+            if (result == "")
+            {
+                _userWordsUnsupported = true;
+                Diagnostics.Log.Info("この Mozc の変換ヘルパーはユーザー辞書を受け取れないので、Meltype がユーザー辞書の語を当てはめます。");
+            }
+            return false;
         }
     }
 

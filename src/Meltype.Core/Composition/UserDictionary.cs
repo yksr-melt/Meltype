@@ -40,6 +40,9 @@ public sealed class UserDictionary
     private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
+    // 同梱の語句だけの読み (ユーザーの語を変換エンジンに任せたときに Split で使う)
+    private Dictionary<string, List<string>> _builtInByReading = new(StringComparer.Ordinal);
+    private int _builtInMaxReadingLength;
     private readonly string? _importDirectory;
     // 最後に読んだ (読もうとした)・保存したときの userdict.txt の更新時刻と、読めたか。同じ更新時刻のまま読めなければ、読み直さない (警告を繰り返さない)
     private DateTime? _fileTime;
@@ -292,12 +295,27 @@ public sealed class UserDictionary
         _byReading.TryGetValue(reading, out var words) ? words : [];
 
     /// <summary>
+    /// ユーザーの語 (userdict.txt と取り込んだ .plist) を、変換エンジンが自分の辞書に持っているか (issue #1262)。
+    /// true なら <see cref="Split"/> はユーザーの語を使わず (変換エンジンが取り合いを決める)、同梱の語句だけを当てはめる。
+    /// </summary>
+    public bool UserWordsInEngine { get; set; }
+
+    /// <summary>変換エンジンに入れるユーザーの語 (新しく登録したものが先。取り込んだ .plist の語はその後ろ)。</summary>
+    /// <summary>変換エンジンに入れたユーザーの語の版 (登録・削除・読み直しで変わる)。</summary>
+    public int UserWordsVersion => Version;
+
+    public IReadOnlyList<(string Reading, string Word)> UserWordsForEngine =>
+        [.. Enumerable.Reverse(_words).Concat(_imported).Select(w => (w.Reading, w.Word)).Distinct()];
+
+    /// <summary>
     /// かなを、登録した読みの部分とそれ以外に分ける。先頭から見て、その位置から始まる最も長い登録済みの読みを取る。
     /// 登録した読みが 1 つも含まれていなければ null。
     /// </summary>
     public List<(string Reading, string? Word)>? Split(string kana)
     {
-        if (_byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
+        var byReading = UserWordsInEngine ? _builtInByReading : _byReading;
+        var maxReadingLength = UserWordsInEngine ? _builtInMaxReadingLength : _maxReadingLength;
+        if (byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
         var pieces = new List<(string Reading, string? Word)>();
         var plain = new StringBuilder();
         var found = false;
@@ -305,11 +323,11 @@ public sealed class UserDictionary
         while (i < kana.Length)
         {
             string? matched = null;
-            for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
+            for (var length = Math.Min(maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
             {
                 // 拗音・小さい母音 (じょ・ふぁ) の途中では切らない (いしょくじょうたい が しょくじ|ょうたい で い食事ょうたい になっていた)
                 if (i + length < kana.Length && IsSmallKana(kana[i + length])) continue;
-                if (_byReading.ContainsKey(kana.Substring(i, length)))
+                if (byReading.ContainsKey(kana.Substring(i, length)))
                 {
                     matched = kana.Substring(i, length);
                     break;
@@ -326,7 +344,7 @@ public sealed class UserDictionary
                 pieces.Add((plain.ToString(), null));
                 plain.Clear();
             }
-            pieces.Add((matched, _byReading[matched][0]));
+            pieces.Add((matched, byReading[matched][0]));
             found = true;
             i += matched.Length;
         }
@@ -355,6 +373,14 @@ public sealed class UserDictionary
         }
         _byReading = byReading;
         _maxReadingLength = byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length);
+        var builtIn = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var word in _builtIn)
+        {
+            if (!builtIn.TryGetValue(word.Reading, out var list)) builtIn[word.Reading] = list = [];
+            if (!list.Contains(word.Word)) list.Add(word.Word);
+        }
+        _builtInByReading = builtIn;
+        _builtInMaxReadingLength = builtIn.Count == 0 ? 0 : builtIn.Keys.Max(k => k.Length);
         _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
     }
 

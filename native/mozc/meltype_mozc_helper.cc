@@ -6,6 +6,10 @@
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
 //   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
+//   D<TAB>読み1<US>単語1<RS>読み2<US>単語2…
+//       ユーザー辞書。Meltype のユーザー辞書の語を、Mozc のユーザー辞書の「Meltype」という辞書に入れ直す (前の語は消す。名詞として)。
+//       Mozc のユーザー辞書のファイル (学習データの保存先) に書き、読み込みが終わるまで待ってから "OK"、できなければ "NG"。
+//       語が無ければ (D<TAB> だけ) 辞書を空にする。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -17,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "base/init_mozc.h"
@@ -27,10 +32,12 @@
 #include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
+#include "dictionary/user_dictionary_storage.h"
 #include "engine/engine.h"
 #include "engine/engine_factory.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
+#include "protocol/user_dictionary_storage.pb.h"
 #include "request/conversion_request.h"
 
 #ifdef _WIN32
@@ -42,6 +49,7 @@ namespace {
 
 constexpr char kUnitSeparator = '\x1f';
 constexpr char kRecordSeparator = '\x1e';
+constexpr char kDictionaryName[] = "Meltype";
 
 class Helper {
  public:
@@ -127,6 +135,42 @@ class Helper {
 
   bool Save() { return engine_->Sync(); }
 
+  // Meltype のユーザー辞書の語を、Mozc のユーザー辞書の「Meltype」に入れ直す。
+  // Mozc の変換が、登録した語とほかの語の取り合いを、Mozc のコストで決めるようにする (ちなみに を 千奈ミニ にしない)。
+  // Engine::ImportUserDictionary は別のスレッドで読み込むので、読み込む前の変換と食い違う。ここでファイルに書いてから読み直し、終わるまで待つ。
+  bool SetUserWords(absl::string_view records) {
+    mozc::UserDictionaryStorage storage;
+    // 読めないファイルは書き直す (Meltype の辞書だけを持つファイルなので、Meltype の語を入れ直せば足りる)
+    (void)storage.Load();
+    uint64_t id = 0;
+    if (auto found = storage.GetUserDictionaryId(kDictionaryName); found.ok()) {
+      id = *found;
+    } else if (auto created = storage.CreateDictionary(kDictionaryName); created.ok()) {
+      id = *created;
+    } else {
+      return false;
+    }
+    mozc::user_dictionary::UserDictionary* dictionary = storage.GetUserDictionary(id);
+    if (dictionary == nullptr) return false;
+    dictionary->clear_entries();
+    if (!records.empty()) {
+      for (absl::string_view record : absl::StrSplit(records, kRecordSeparator)) {
+        const std::vector<std::string> fields = absl::StrSplit(record, kUnitSeparator);
+        if (fields.size() < 2 || fields[0].empty() || fields[1].empty()) continue;
+        if (dictionary->entries_size() >= static_cast<int>(mozc::UserDictionaryStorage::max_entry_size())) break;
+        auto* entry = dictionary->add_entries();
+        entry->set_key(fields[0]);
+        entry->set_value(fields[1]);
+        entry->set_pos(mozc::user_dictionary::UserDictionary::NOUN);
+      }
+    }
+    if (!storage.Lock()) return false;
+    const absl::Status saved = storage.Save();
+    storage.UnLock();
+    if (!saved.ok()) return false;
+    return engine_->ReloadAndWait();
+  }
+
  private:
   static bool SameKeys(const mozc::Segments& segments,
                        const std::vector<std::pair<std::string, std::string>>& chosen) {
@@ -186,6 +230,8 @@ int main(int argc, char** argv) {
       std::cout << helper.Convert(fields[1], fields[2]) << "\n";
     } else if (fields[0] == "L" && fields.size() >= 3) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
+    } else if (fields[0] == "D" && fields.size() >= 2) {
+      std::cout << (helper.SetUserWords(fields[1]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {
