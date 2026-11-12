@@ -4566,13 +4566,16 @@ internal static class CompositionTests
     [Test]
     public static void Issue1636_BackspaceAfterADoubledConsonant_LeavesTheConsonant()
     {
-        // #1636: ff (っf) の f・tch (っch) の ch を消したら、っ ではなく打ちかけの子音に戻す
+        // #1636: ff (っf) の f・tch (っch) の ch を消したら、っ ではなく打ちかけの子音に戻す (残った原文を打ち直す)
         foreach (var (keys, expected) in new[]
         {
             ("ff\buronto\n", "ふろんと"),
             ("kk\bakkou\n", "かっこう"),
             ("tt\betoka\n", "てとか"),
             ("tch\b\ba\n", "た"),
+            // っ に限らず、後ろのキーを見て決めた単位は、そのキーを消したら決め直す (nk の ん)
+            ("nk\ba\n", "な"),
+            ("kank\bi\n", "かに"),
             ("matcha\n", "まっちゃ"),
             // 子音の後ろを打ってからの っ は、今までどおり 1 音ずつ消す
             ("kitte\b\b\n", "き"),
