@@ -245,8 +245,10 @@ public sealed class CompositionText
         {
             // 打ちかけの子音を 1 文字消し、残った原文を打ち直す。後ろのキーを見て決めた単位 (ff の っ、nk の ん) は、
             // そのキーを消したら決め直す (ff + BackSpace + uronto が っうろんと、nk + BackSpace + a が んあ になっていた: issue #1636)
-            var truncated = Raw[..^1];
-            _units.Clear();
+            // 打ち始めの / を ・ にした単位は、打ち直すと / になる (・ にするかは打ち始めに 1 回だけ決める) ので、そのまま残す (/k + BackSpace は ・)
+            var keep = _units is [{ Kana: "・", Raw: "/" }, ..] ? 1 : 0;
+            var truncated = Raw[_units.Take(keep).Sum(u => u.Raw.Length)..^1];
+            _units.RemoveRange(keep, _units.Count - keep);
             _pending.Clear();
             foreach (var c in truncated) Append(c);
         }

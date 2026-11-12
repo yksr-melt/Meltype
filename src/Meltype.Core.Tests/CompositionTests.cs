@@ -4602,6 +4602,8 @@ internal static class CompositionTests
             ("ff\b", "f"),               // 後ろのキーで決めた っ は決め直す
             ("nk\b", "n"),               // 後ろのキーで決めた ん も決め直す
             ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
+            ("/k\b", "・"),               // 打ち始めの / を ・ にした単位は残す (打ち直すと / になる)
+            ("/kk\b", "・k"),
         })
         {
             var k = new Keyboard();
