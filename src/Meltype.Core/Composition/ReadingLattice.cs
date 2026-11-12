@@ -80,6 +80,12 @@ public sealed partial class CompositionDetector
     // 1 つの候補として見る長さの上限 (ローマ字の文字数)
     private const int MaxSpan = 48;
 
+    // ---- 変換の候補に出す区切りの別案 ----
+    // 最も軽い案からこれより重い案は出さない
+    private const double AlternativeMargin = 1;
+    // (位置, 状態) ごとに残す道の数。日本語の語の区切りだけが違う道 (ぼ|っと・ぼっと) が同じ案になるので、出す案の数より多く残す
+    private const int PathsPerState = 8;
+
     private enum Side : byte { None, Japanese, English, Sentence }
 
     /// <summary>区切りの 1 つの候補。Kana は日本語の候補の読み。Letters は英字を含む日本語の候補か。Neutral は記号・数字・空白 (言語を切り替えない)。</summary>
@@ -103,11 +109,20 @@ public sealed partial class CompositionDetector
     internal Action<string>? LatticeTrace { get; set; }
 
     private List<CompositionSegment> FindSpansByReading(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0)
+        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0) =>
+        FindSpanAlternatives(units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, englishBias, 1)[0];
+
+    /// <summary>
+    /// 区切りの上位 count 案を、軽い順に返す。先頭は <see cref="FindSpansByReading"/> と同じ。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
+    /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
+    /// </summary>
+    private List<List<CompositionSegment>> FindSpanAlternatives(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
+        bool manual, bool englishSentence, bool kanaInput, double englishBias, int count)
     {
         var text = _preparedRaw + pending;
         var length = text.Length;
-        if (length == 0) return [new CompositionSegment(false, "", "")];
+        if (length == 0) return [[new CompositionSegment(false, "", "")]];
+        var keep = count > 1 ? PathsPerState : 1;
         var unitsEnd = _preparedRaw.Length;
         // 文字の位置 → その位置から始まる単位 (単位の境目でなければ -1)
         var unitAt = new int[length + 1];
@@ -132,15 +147,20 @@ public sealed partial class CompositionDetector
             unknown[p + 1] = unknown[p] + (char.IsAsciiLetter(c) && unreadable ? 1 : 0);
         }
 
-        var best = new LatticeNode?[length + 1, LatticeState.Count];
+        // [位置, 状態, 軽い順]
+        var best = new LatticeNode?[length + 1, LatticeState.Count, keep];
         var start = new LatticeState(precedingEnglish switch { true => englishSentence ? Side.Sentence : Side.English, false => Side.Japanese, null => Side.None },
             false, true, precedingEnglish == true, ContextSwitch: precedingEnglish == true);
-        best[0, start.Key] = new LatticeNode(0, null, default);
+        best[0, start.Key, 0] = new LatticeNode(0, null, default);
 
         void Offer(int position, LatticeState state, LatticeNode node)
         {
-            ref var current = ref best[position, state.Key];
-            if (current is null || node.Cost < current.Cost) current = node;
+            var key = state.Key;
+            var at = keep;
+            while (at > 0 && (best[position, key, at - 1] is not { } worse || node.Cost < worse.Cost)) at--;
+            if (at == keep) return;
+            for (var k = keep - 1; k > at; k--) best[position, key, k] = best[position, key, k - 1];
+            best[position, key, at] = node;
         }
 
         // [start, end) の中の、ltu・xtu・ltsu・xtsu で打った っ のうち、後ろに入力が続くものの数
@@ -237,9 +257,10 @@ public sealed partial class CompositionDetector
                 if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
             }
 
-            for (var key = 0; key < LatticeState.Count; key++)
+            for (var slot = 0; slot < LatticeState.Count * keep; slot++)
             {
-                if (best[p, key] is not { } node) continue;
+                var key = slot / keep;
+                if (best[p, key, slot % keep] is not { } node) continue;
                 var state = LatticeState.FromKey(key);
                 var end = forced;
                 // ドメイン・拡張子の . の後ろ (tetr.io、MeltypeTip.dll)
@@ -269,9 +290,10 @@ public sealed partial class CompositionDetector
         LatticeNode? chosen = null;
         var chosenCost = double.MaxValue;
         var finals = new List<(double Cost, LatticeState State, LatticeNode Node)>();
-        for (var key = 0; key < LatticeState.Count; key++)
+        for (var slot = 0; slot < LatticeState.Count * keep; slot++)
         {
-            if (best[length, key] is not { } node) continue;
+            var key = slot / keep;
+            if (best[length, key, slot % keep] is not { } node) continue;
             var state = LatticeState.FromKey(key);
             var cost = node.Cost;
             if (state.Sokuon) cost += DanglingSokuonCost;
@@ -296,10 +318,22 @@ public sealed partial class CompositionDetector
                 trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {string.Join(" ", path)}");
             }
         }
-        var edges = new List<LatticeEdge>();
-        for (var node = chosen; node?.Previous is not null; node = node.Previous) edges.Add(node.Edge);
-        edges.Reverse();
-        return ToSegments(units, text, unitAt, unitsEnd, edges);
+        var alternatives = new List<List<CompositionSegment>> { Path(chosen) };
+        foreach (var (cost, _, node) in finals.OrderBy(f => f.Cost))
+        {
+            if (alternatives.Count >= count || cost > chosenCost + AlternativeMargin) break;
+            var segments = Path(node);
+            if (!alternatives.Any(a => a.SequenceEqual(segments))) alternatives.Add(segments);
+        }
+        return alternatives;
+
+        List<CompositionSegment> Path(LatticeNode? last)
+        {
+            var edges = new List<LatticeEdge>();
+            for (var node = last; node?.Previous is not null; node = node.Previous) edges.Add(node.Edge);
+            edges.Reverse();
+            return ToSegments(units, text, unitAt, unitsEnd, edges);
+        }
     }
 
     /// <summary>名詞に付く付属語か (が・を・に・で・する …)。英単語との切り替えの重みを 0 にする。</summary>

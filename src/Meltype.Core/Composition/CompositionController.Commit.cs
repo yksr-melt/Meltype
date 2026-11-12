@@ -33,6 +33,9 @@ public sealed partial class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
+        // 文全体の文節で区切りの案を選び直したら、選んだ案の文節で確定する (選び直したことは chosen に残す)
+        var chosenWhole = converting && _clauses is [{ Alternatives: not null, Changed: true }];
+        if (converting) SplitWholeSentence();
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? string.Concat(_clauses.Select(c => c.Text))
             : _budget is { Enabled: true } && !_settings().EnterCommitsAsShown
@@ -54,7 +57,7 @@ public sealed partial class CompositionController
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
-        var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
+        var chosen = converting ? chosenWhole || _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is not null)
         {
             // 入れた文字は、アプリが選択していた文字と置き換える。

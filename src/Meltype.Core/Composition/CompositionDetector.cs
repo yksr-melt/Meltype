@@ -136,12 +136,24 @@ public sealed partial class CompositionDetector
         // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
         Prepare(units);
         var token = _preparedRaw + pending;
-        // Structured Latin tokens are opaque; their components are not Japanese readings.
-        if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
-            (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
-            return [new CompositionSegment(true, "", token)];
+        if (IsOpaqueToken(token, kanaInput)) return [new CompositionSegment(true, "", token)];
         return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
     }
+
+    /// <summary><see cref="Segment"/> の区切りと、その別案 (軽い順に count 案まで)。先頭は <see cref="Segment"/> と同じ。</summary>
+    public IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentAlternatives(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish,
+        bool? followingEnglish, bool manual, bool englishSentence, bool kanaInput, int count)
+    {
+        Prepare(units);
+        var token = _preparedRaw + pending;
+        if (IsOpaqueToken(token, kanaInput)) return [[new CompositionSegment(true, "", token)]];
+        return FindSpanAlternatives(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, 0, count);
+    }
+
+    /// <summary>Structured Latin tokens are opaque; their components are not Japanese readings.</summary>
+    private static bool IsOpaqueToken(string token, bool kanaInput) =>
+        !kanaInput && token.All(c => c is >= '!' and <= '~') &&
+        (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token));
 
     /// <summary>
     /// 英語の候補を軽くして区切り直した結果 (変換の候補に、日本語にした語の英語を含む区切り midika → midiか を出すのに使う)。

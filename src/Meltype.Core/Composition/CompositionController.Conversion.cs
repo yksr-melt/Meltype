@@ -83,8 +83,7 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
-    /// 英語区間はそのまま、日本語区間は文脈を付けて変換エンジンで文節に区切って変換する。
-    /// 英語区間も、ローマ字として読めれば日本語の候補 (go → 語 ご ゴ) を後ろに足す。preferJapanese (Shift+Space) なら前に出す。
+    /// 区切りを文節にして変換する (<see cref="BuildClauses"/>)。英日の区切りの別案があれば、文全体を 1 つの文節にして、案ごとの文を候補にする。
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
@@ -128,6 +127,29 @@ public sealed partial class CompositionController
             _converting = true;
             return;
         }
+        // 区切りの別案があれば、別案ごとに変換した文を 1 つの文節の候補にする (issue #1737)
+        var alternatives = utility is null ? _text.ConversionSegmentAlternatives(MaxSegmentationAlternatives) : [segments];
+        var clauses = BuildClauses(alternatives[0], preferJapanese);
+        if (clauses.Count == 0) return;
+        if (alternatives.Count > 1 && WholeSentenceClause([clauses, .. alternatives.Skip(1).Select(a => BuildClauses(a, preferJapanese)).Where(c => c.Count > 0)]) is { } whole)
+            clauses = [whole];
+        if (utility is not null) clauses = [WithUtility(clauses, utility, segments[0].Kana)];
+        // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
+        foreach (var clause in clauses)
+            if (_keptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
+        // 打ち始めの ・ は、Space で / にする。
+        if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
+        _clauses = clauses;
+        _selectedClause = 0;
+        _converting = true;
+    }
+
+    /// <summary>
+    /// 区切りの 1 案の文節。英語区間はそのまま、日本語区間は文脈を付けて変換エンジンで文節に区切って変換する。
+    /// 英語区間も、ローマ字として読めれば日本語の候補 (go → 語 ご ゴ) を後ろに足す。preferJapanese (Shift+Space) なら前に出す。
+    /// </summary>
+    private List<Clause> BuildClauses(IReadOnlyList<CompositionSegment> segments, bool preferJapanese)
+    {
         var clauses = new List<Clause>();
         for (var s = 0; s < segments.Count; s++)
         {
@@ -156,7 +178,7 @@ public sealed partial class CompositionController
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
                     : Distinct([.. english, .. romaji]))
-                { Kana = _text.KanaForSegment(s) });
+                { Kana = _text.KanaForSegment(segments, s) });
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
@@ -167,7 +189,7 @@ public sealed partial class CompositionController
             var offset = 0;
             foreach (var clause in japanese)
             {
-                clause.Raw = _text.RawForReading(s, offset, clause.Reading.Length);
+                clause.Raw = _text.RawForReading(segments, s, offset, clause.Reading.Length);
                 offset += clause.Reading.Length;
                 AddOldKana(clause);
                 AddTranslations(clause);
@@ -176,16 +198,61 @@ public sealed partial class CompositionController
             }
             clauses.AddRange(japanese);
         }
-        if (clauses.Count == 0) return;
-        if (utility is not null) clauses = [WithUtility(clauses, utility, segments[0].Kana)];
-        // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
-        foreach (var clause in clauses)
-            if (_keptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
-        // 打ち始めの ・ は、Space で / にする。
-        if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
-        _clauses = clauses;
+        return clauses;
+    }
+
+    // 変換の候補に出す英日の区切りの案の数 (いちばん良い案を含む)
+    private const int MaxSegmentationAlternatives = 4;
+
+    /// <summary>
+    /// 区切りの案ごとの文節 (先頭がいちばん良い案) を、文全体の 1 つの文節にする。候補は案ごとの文 (botto → botと、ボット) の後ろに、
+    /// 文節が 1 つの案のその文節の候補 (sushi → 寿司 の 鮨・すし)。案の文がすべて同じなら null。
+    /// </summary>
+    private Clause? WholeSentenceClause(List<List<Clause>> alternatives)
+    {
+        var texts = new Dictionary<string, List<Clause>>(StringComparer.Ordinal);
+        foreach (var clauses in alternatives) texts.TryAdd(string.Concat(clauses.Select(c => c.Text)), clauses);
+        if (texts.Count < 2) return null;
+        var whole = new Clause(_text.AllKana(final: true), false, [.. texts.Keys]) { Raw = _text.Raw, Alternatives = texts };
+        AddSingleClauseCandidates(whole);
+        return whole;
+    }
+
+    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足す。</summary>
+    private static void AddSingleClauseCandidates(Clause whole)
+    {
+        foreach (var clauses in whole.Alternatives!.Values)
+        {
+            if (clauses is not [var only]) continue;
+            foreach (var candidate in only.Candidates)
+                if (!whole.Candidates.Contains(candidate)) whole.Candidates.Add(candidate);
+        }
+    }
+
+    /// <summary>
+    /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
+    /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
+    /// 文全体の文節でなければ何もしない。どの案にも無い文 (F6 でひらがなにした文) を選んでいれば、分けずに学習しない文節にする。
+    /// </summary>
+    private void SplitWholeSentence()
+    {
+        if (_clauses is not [{ Alternatives: { } alternatives } whole]) return;
+        if (alternatives.TryGetValue(whole.Text, out var clauses))
+        {
+            _clauses = clauses;
+        }
+        else if (alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text)) is [var single])
+        {
+            single.Index = single.Candidates.IndexOf(whole.Text);
+            single.Changed = whole.Changed;
+            _clauses = [single];
+        }
+        else
+        {
+            whole.NotLearned.Add(whole.Text);
+            return;
+        }
         _selectedClause = 0;
-        _converting = true;
     }
 
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
@@ -721,6 +788,13 @@ public sealed partial class CompositionController
     private void Expand(Clause clause)
     {
         clause.Expanded = true;
+        // 文全体の文節は、文節が 1 つの案のその文節の一覧を足す
+        if (clause.Alternatives is { } alternatives)
+        {
+            foreach (var only in alternatives.Values.Where(c => c.Count == 1).Select(c => c[0]).Where(c => !c.Expanded)) Expand(only);
+            AddSingleClauseCandidates(clause);
+            return;
+        }
         if (_services.MoreCandidates is not { } more) return;
         var reading = clause.IsEnglish ? RomajiReading(clause.Reading) : clause.Reading;
         if (reading is null) return;
@@ -759,6 +833,7 @@ public sealed partial class CompositionController
     private void Resize(int delta)
     {
         _clausesEdited = true;
+        SplitWholeSentence();
         var current = _clauses[_selectedClause];
         // ユーティリティ変換の Replace の文節 (空の括弧のペアなど) は、1 つの単位として選んで確定する。
         if (current.Fixed) return;
