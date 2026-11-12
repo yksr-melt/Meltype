@@ -39,6 +39,9 @@ internal sealed class CompositionService : IDisposable
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
+        // 設定「入力欄の外の言語を判定の手がかりにする (実験的)」: 入力欄に入ったときに画面の言語を読む (issue #287)
+        Focus.ReadsPageLanguage = () => _settings().PageLanguageHint;
+        runtime.PageEnglishRatio = () => Focus.PageEnglishRatio;
         _mozc.Budget.Enable();
         _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
         _hybrid = new HybridConverter(() => settings().ConversionEngine, _mozc, _system, _system.Candidates, CurrentZenzai, _zenzai.Failed);

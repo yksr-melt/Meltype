@@ -38,6 +38,8 @@ public sealed partial class CompositionController
         UpdateWideContext();
         _followingText = null;
         _text.PrecedingEnglish = _lastCommitEnglish;
+        // 設定「入力欄の外の言語を判定の手がかりにする (実験的)」: 入力欄の前に何も無い最初の語だけ、画面がほとんど英語なら少し英語に寄せる (issue #287)
+        _text.PageEnglishBias = _settings().PageLanguageHint ? PageLanguage.EnglishBias(_services.PageEnglishRatio()) : 0;
         UpdateLearningContext();
         _text.PrecedingEnglishSentence = _lastCommitEnglish == true && IsEnglishSentence(_lastCommitText);
         _text.PrecedingEnglishName = _lastCommitEnglish == true && IsEnglishNameContext(_lastCommitText);

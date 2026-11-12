@@ -53,6 +53,26 @@ internal sealed class UiAutomation
         return hr >= 0 && element is not null ? new Element(element) : null;
     }
 
+    /// <summary>
+    /// ウィンドウの中の文書 (ブラウザーのページ・チャットのメッセージの一覧) のうち、画面に見えている文字 (最大 limit 文字)。
+    /// 設定「入力欄の外の言語を判定の手がかりにする (実験的)」で、英語の割合を求めるのに使う (文字は覚えない。issue #287)。読めなければ null。
+    /// </summary>
+    public string? VisibleDocumentText(IntPtr window, int limit)
+    {
+        if (window == IntPtr.Zero || _automation.ElementFromHandle(window, out var root) < 0 || root is null ||
+            _automation.CreatePropertyCondition(ControlTypeProperty, ControlTypeDocument, out var condition) < 0 || condition is null ||
+            root.FindFirst(4 /* Descendants */, condition, out var document) < 0 || document is null ||
+            document.GetCurrentPattern(TextPatternId, out var value) < 0 || value is not IUIAutomationTextPattern pattern ||
+            pattern.GetVisibleRanges(out var ranges) < 0 || ranges is null || ranges.get_Length(out var count) < 0) return null;
+        var text = new System.Text.StringBuilder();
+        for (var i = 0; i < count && text.Length < limit; i++)
+        {
+            if (ranges.GetElement(i, out var range) < 0 || range is null || range.GetText(limit - text.Length, out var part) < 0 || part is null) continue;
+            text.Append(part).Append('\n');
+        }
+        return text.Length == 0 ? null : text.ToString();
+    }
+
     /// <summary>窓直下にも現れる Affinity の Static を、PART_RenderControl の子の HWND と照合する。</summary>
     public bool IsRenderControl(IntPtr foreground, Element focused, int focusedWindow)
     {
@@ -332,6 +352,7 @@ internal sealed class UiAutomation
         [PreserveSig] int RangeFromPoint();
         [PreserveSig] int RangeFromChild();
         [PreserveSig] int GetSelection(out IUIAutomationTextRangeArray? ranges);
+        [PreserveSig] int GetVisibleRanges(out IUIAutomationTextRangeArray? ranges);
     }
 
     [ComImport, Guid("CE4AE76A-E717-4C98-81EA-47371D028EB6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

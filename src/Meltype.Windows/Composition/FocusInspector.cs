@@ -34,6 +34,23 @@ public sealed class FocusInspector : IDisposable
     /// </summary>
     public event Action? TextInputEntered;
 
+    /// <summary>入力欄の外の言語を読むか (設定「入力欄の外の言語を判定の手がかりにする (実験的)」。issue #287)。</summary>
+    public Func<bool> ReadsPageLanguage { get; set; } = () => false;
+
+    // 最後に読んだ、前面のウィンドウの画面の英語の割合 (読んだ文字は覚えない)。ほかのスレッドから読むので、1 つの参照で入れ替える
+    private sealed record PageReading(IntPtr Window, double? Ratio);
+    private volatile PageReading? _pageLanguage;
+
+    /// <summary>前面のウィンドウの、画面に見えている文字の英語の割合 (入力欄に入ったときに読む)。読めない・ほかのウィンドウなら null。</summary>
+    public double? PageEnglishRatio
+    {
+        get
+        {
+            var page = _pageLanguage;
+            return page is not null && page.Window != IntPtr.Zero && page.Window == Native.GetForegroundWindow() ? page.Ratio : null;
+        }
+    }
+
     /// <summary>フォーカスが入力欄でない所・パスワード欄に移ったと分かったとき (このクラスのスレッドから呼ばれる)。引数は理由。</summary>
     public event Action<string>? CaptureLost;
 
@@ -366,6 +383,7 @@ public sealed class FocusInspector : IDisposable
         if (info.IsTextInput && !info.IsPassword)
         {
             RememberTextInputWindow(_inspectedForeground);
+            if (ReadsPageLanguage()) ReadPageLanguage(_inspectedForeground);
             var key = (info.Description, info.Bounds);
             if (_lastTextInput != key)
             {
@@ -388,6 +406,21 @@ public sealed class FocusInspector : IDisposable
     private bool _automationUnavailable;
 
     /// <summary>UI Automation はこのクラスのスレッド (MTA) で作り、そのスレッドからだけ使う。</summary>
+    /// <summary>このクラスのスレッドで、前面のウィンドウの画面に見えている文字を読み、英語の割合だけを覚える。</summary>
+    private void ReadPageLanguage(IntPtr window)
+    {
+        double? ratio = null;
+        try
+        {
+            ratio = Composition.PageLanguage.EnglishRatio(Automation()?.VisibleDocumentText(window, 2000));
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or InvalidCastException)
+        {
+            // 読めないアプリでは分からないまま
+        }
+        _pageLanguage = new PageReading(window, ratio);
+    }
+
     private UiAutomation? Automation()
     {
         if (_automation is not null || _automationUnavailable) return _automation;

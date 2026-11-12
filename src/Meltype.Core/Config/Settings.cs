@@ -367,6 +367,10 @@ public sealed class Settings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     internal string? LegacyToggleKeyboardShortcuts { get; set; }
 
+    [Category("3. 判定"), DisplayName("入力欄の外の言語を判定の手がかりにする (実験的)"), Platforms(Platform.Windows),
+     Description("入力欄の前に何も無いとき (チャットで新しいメッセージを打ち始めたときなど)、同じ画面に見えている文字がほとんど英語なら、最初の語を少し英語寄りに判定します (英語のスレッドで sure と打つと英語のまま)。画面の文字を UI Automation で読み、英語の割合だけを使います (文字は覚えず、送りません)。実験中の機能で、アプリによっては読めず、入力が少し重くなることがあります。")]
+    public bool PageLanguageHint { get; set; }
+
     [Category("5. 候補"), DisplayName("#番号で GitHub の Issue・PR のタイトルを候補に出す"),
      Description("#123 のように打って Space で変換すると、下の「GitHub のリポジトリ」の Issue・Pull Request のタイトルを候補に出します (開発者向け)。打った番号を GitHub (api.github.com) に問い合わせるので、既定は OFF です。非公開のリポジトリは、環境変数 MELTYPE_GITHUB_TOKEN にトークンを入れると読めます。調べた結果はこのセッションの間だけ覚えます。")]
     public bool GitHubIssueCandidates { get; set; }

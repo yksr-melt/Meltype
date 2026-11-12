@@ -476,7 +476,7 @@ public sealed class CompositionText
             .Append(FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(PrecedingEnglishSentence ? 'S' : '-').Append(KanaInput ? 'K' : '-')
             .Append(PrecedingEnglishName ? 'N' : '-').Append(FullWidthParentheses ? 'W' : '-').Append(LaughterAfterKana ? 'L' : '-')
-            .Append(EffectiveManual ? 'M' : '-').Append(':').Append(_detector.Memory?.Version ?? -1);
+            .Append(EffectiveManual ? 'M' : '-').Append(':').Append(_detector.Memory?.Version ?? -1).Append(':').Append(FirstWordBias);
         return key.ToString();
     }
 
@@ -498,7 +498,7 @@ public sealed class CompositionText
     {
         var spans = ProtectedSpans();
         if (spans.Count == 0)
-            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput);
+            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput, FirstWordBias);
         var raw = Raw;
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -517,7 +517,7 @@ public sealed class CompositionText
             var gapUnits = UnitsInRawRange(units, from, to, out var pending);
             var segments = _detector.Segment(gapUnits, pending, from == 0 ? PrecedingEnglish : false,
                 to == raw.Length ? FollowingEnglish : false, EffectiveManual,
-                from == 0 && PrecedingEnglishSentence, KanaInput);
+                from == 0 && PrecedingEnglishSentence, KanaInput, from == 0 ? FirstWordBias : 0);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
             if (to < raw.Length && pending.Length > 0 && !segments[^1].IsEnglish)
                 segments = [.. segments.Take(segments.Count - 1), segments[^1] with
@@ -606,7 +606,7 @@ public sealed class CompositionText
     public string? Suggestion()
     {
         if (Mode != DisplayMode.Auto || !EffectiveManual || IsNumeric) return null;
-        var suggested = _detector.Segment(_units, Pending, PrecedingEnglish, FollowingEnglish, false, PrecedingEnglishSentence, KanaInput);
+        var suggested = _detector.Segment(_units, Pending, PrecedingEnglish, FollowingEnglish, false, PrecedingEnglishSentence, KanaInput, FirstWordBias);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(Segments())) return null;
         return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
     }
@@ -616,6 +616,14 @@ public sealed class CompositionText
     /// 英語とも日本語とも読める語 (sushi など) の扱いを、後ろ (<see cref="FollowingEnglish"/>) と合わせて決める。
     /// </summary>
     public bool? PrecedingEnglish { get; set; }
+
+    /// <summary>
+    /// 入力欄の外 (同じ画面) の言語から、英語の区間に足す重み (PageLanguage.EnglishBias。設定が OFF なら 0)。
+    /// 入力欄の前の言語が分からない (<see cref="PrecedingEnglish"/> が null) 最初の語のときだけ使う。
+    /// </summary>
+    public double PageEnglishBias { get; set; }
+
+    private double FirstWordBias => PrecedingEnglish is null ? PageEnglishBias : 0;
 
     /// <summary>キャレットの前が英文の途中 ("I want ") か。日本語の文の中の英単語 (GitHub の) より強い英語の根拠。</summary>
     public bool PrecedingEnglishSentence { get; set; }

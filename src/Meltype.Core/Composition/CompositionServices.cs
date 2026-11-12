@@ -59,6 +59,9 @@ public sealed record CompositionServices
 
     public Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
+    /// <summary>入力欄の外 (同じ画面) の英語の割合 (PageLanguage.EnglishRatio)。分からなければ null (Windows だけ。issue #287)。</summary>
+    public Func<double?> PageEnglishRatio { get; init; } = () => null;
+
     /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
 

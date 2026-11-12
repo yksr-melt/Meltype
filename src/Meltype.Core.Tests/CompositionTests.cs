@@ -261,7 +261,8 @@ internal static class CompositionTests
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
-            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
+            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false,
+            Func<double?>? pageEnglishRatio = null)
         {
             Direct = direct;
             Settings = new Meltype.Config.Settings
@@ -293,6 +294,7 @@ internal static class CompositionTests
                 LocalTimeZone = () => LocalTimeZone,
                 Predictor = predictor,
                 Now = now ?? (() => DateTime.Now),
+                PageEnglishRatio = pageEnglishRatio ?? (() => null),
             });
             Host.ViewSource = () => Controller.View;
             Controller.Clipboard = () => Host.ClipboardText;
