@@ -219,7 +219,7 @@ public sealed partial class CompositionController
     {
         var clause = new Clause(reading, false, JapaneseCandidates(reading, string.Concat(clauses.Select(c => c.Text)))) { Raw = _text.Raw };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
-        var surrounding = (_precedingText ?? "") + (_followingText ?? "");
+        var surrounding = (_precedingText ?? "") + EnglishInComposition() + (_followingText ?? "");
         if ((_services.ContextRules?.Choose(reading, surrounding, clause.Text, Standalone) ?? _learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
         AddOldKana(clause);
@@ -385,7 +385,7 @@ public sealed partial class CompositionController
         foreach (var clause in clauses)
         {
             if (parts.Contains(clause)) continue;
-            var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
+            var surrounding = (_precedingText ?? "") + EnglishInComposition() + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
             var preferred = _services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _learning.LearnedConversion(clause.Reading) : null);
             if (preferred is not null) Prefer(clause, preferred);
         }
@@ -514,7 +514,7 @@ public sealed partial class CompositionController
         for (var i = 0; i < clauses.Count; i++)
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
-            var surrounding = (_precedingText ?? "") + others + (_followingText ?? "");
+            var surrounding = (_precedingText ?? "") + EnglishInComposition() + others + (_followingText ?? "");
             var preferred = _services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? _learning.LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
@@ -858,6 +858,12 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
+    /// 同じ変換ボックスの英字の区間 (ph|しけんし の ph)。日本語の区間は区間ごとに変換するので、文脈の手がかりに足す (issue #1276)。
+    /// </summary>
+    private string EnglishInComposition() =>
+        _text.IsEmpty ? "" : string.Concat(_text.ConversionSegments().Where(s => s.IsEnglish).Select(s => s.Raw + " "));
+
+    /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
@@ -873,7 +879,7 @@ public sealed partial class CompositionController
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     private List<(string Reading, string Text)> LiveClauses(string kana)
     {
-        var key = string.Join("\u0001", kana, _precedingText, _followingText, _services.History?.Version);
+        var key = string.Join("\u0001", kana, _precedingText, EnglishInComposition(), _followingText, _services.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();

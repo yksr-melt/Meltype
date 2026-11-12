@@ -4563,6 +4563,31 @@ internal static class CompositionTests
         Assert.Equal("やほやほ", k.Host.Document);
     }
 
+    /// <summary>しけんし を 試験し にする変換エンジン (issue #1276)。</summary>
+    private sealed class ShikenshiConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana == "しけんし" ? "試験し" : null;
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            hiragana == "しけんし" ? [new("しけんし", "試験し")] : null;
+    }
+
+    [Test]
+    public static void Issue1276_EnglishInTheSameCompositionIsAContextCue()
+    {
+        // #1276: ph|しけんし の しけんし は、同じ変換ボックスの英字 (ph) を手がかりに 試験紙 にする
+        foreach (var live in new[] { false, true })
+        {
+            var k = new Keyboard(live: live, converter: new ShikenshiConverter());
+            k.Type("phsikennsi ");
+            Assert.Equal("ph試験紙", k.Host.View?.Text, $"Space (ライブ変換 {live})");
+        }
+        // 手がかりが無ければ、変換エンジンのまま
+        var plain = new Keyboard(converter: new ShikenshiConverter());
+        plain.Type("sikennsi ");
+        Assert.Equal("試験し", plain.Host.View?.Text);
+    }
+
     [Test]
     public static void Ki_OffersOldKanji()
     {
