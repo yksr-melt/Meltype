@@ -34,22 +34,24 @@ internal static class TipBuildTests
     public static void TipBuild_AcceptsOnlyTheImplShippedWithThisExe() => WithFolder(root =>
     {
         var build = new Tip.TipBuild(TipFolder(root, "shipped", X64, X86));
-        Assert.True(build.Matches(Request($"\"impl\":\"{X64}\",")), "64 ビットのアプリの impl");
-        Assert.True(build.Matches(Request($"\"impl\":\"{X86}\",")), "32 ビットのアプリの impl");
-        Assert.True(build.Matches(Request($"\"impl\":\"{X64.ToLowerInvariant()}\",")), "ハッシュの大文字・小文字は区別しない");
-        Assert.True(!build.Matches(Request($"\"impl\":\"{Other}\",")), "別ビルドの impl");
-        Assert.True(!build.Matches(Request("")), "stub と impl に分割する前の DLL (impl を送らない)");
-        Assert.True(!build.Matches(Request("\"impl\":1,")), "impl が文字列でない");
-        Assert.True(!build.Matches("{"), "JSON としてパースできない");
-        Assert.True(build.Matches("{\"wait\":3}"), "変換の結果を待つ要求は impl を送らない");
+        Assert.Equal(Tip.TipClient.Same, build.Check(Request($"\"impl\":\"{X64}\",")), "64 ビットのアプリの impl");
+        Assert.Equal(Tip.TipClient.Same, build.Check(Request($"\"impl\":\"{X86}\",")), "32 ビットのアプリの impl");
+        Assert.Equal(Tip.TipClient.Same, build.Check(Request($"\"impl\":\"{X64.ToLowerInvariant()}\",")), "ハッシュの大文字・小文字は区別しない");
+        Assert.Equal(Tip.TipClient.Other, build.Check(Request($"\"impl\":\"{Other}\",")), "別ビルドの impl");
+#pragma warning disable CS0618 // 後方互換レイヤー (#1670)。削除するときは、この塊ごと消す (TipClient.LegacyBeforeSplit)
+        Assert.Equal(Tip.TipClient.LegacyBeforeSplit, build.Check(Request("")), "stub と impl に分割する前の DLL (impl を送らない)");
+#pragma warning restore CS0618
+        Assert.Equal(Tip.TipClient.Other, build.Check(Request("\"impl\":1,")), "impl が文字列でない");
+        Assert.Equal(Tip.TipClient.Other, build.Check("{"), "JSON としてパースできない");
+        Assert.Equal(Tip.TipClient.Same, build.Check("{\"wait\":3}"), "変換の結果を待つ要求は impl を送らない");
     });
 
     [Test]
     public static void TipBuild_WithoutShippedTipFolderAcceptsAnyImpl() => WithFolder(root =>
     {
         var build = new Tip.TipBuild(Path.Combine(root, "missing"));
-        Assert.True(build.Matches(Request($"\"impl\":\"{Other}\",")), "tip フォルダーが無い Meltype.exe は照合しない");
-        Assert.True(build.Matches(Request("")), "impl を送らない要求も受ける");
+        Assert.Equal(Tip.TipClient.Same, build.Check(Request($"\"impl\":\"{Other}\",")), "tip フォルダーが無い Meltype.exe は照合しない");
+        Assert.Equal(Tip.TipClient.Same, build.Check(Request("")), "impl を送らない要求も照合しない");
         Assert.True(build.IsInstalled(TipFolder(root, "installed", Other, Other)), "登録済みの impl も照合しない");
     });
 

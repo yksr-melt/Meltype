@@ -30,7 +30,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
-    // 「再起動すると Meltype IME で入力できる」と通知したアプリ (TipServer.ClientOutdated)
+    // 「再起動すると更新後の Meltype IME になる」と通知したアプリ (TipServer.ClientOutdated)
     private readonly HashSet<string> _outdatedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Keyboard.KeyboardFront _keyboard;
     private readonly ToolStripMenuItem _tsfModeItem;
@@ -66,9 +66,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             // DLL は動作モードが Meltype キーボードのときも接続してくる。通知はアプリごとに 1 回
             if (_engine.Running.Mode != InputMode.Tsf || !_outdatedApps.Add(process)) return;
-            Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
+            Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、更新後の Meltype IME になりません。");
             if (_engine.Settings.ShowNotifications)
-                ShowBalloonTip(10000, "Meltype IME", $"「{process}」を再起動すると、「{process}」でも Meltype IME で入力できます (更新前の Meltype IME が残っています)。");
+                ShowBalloonTip(10000, "Meltype IME", $"「{process}」は更新前の Meltype IME のままです。「{process}」を再起動すると、更新後の Meltype IME になります。");
         };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;

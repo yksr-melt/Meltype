@@ -74,8 +74,10 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   互換性が要るのは stub と impl の ABI (`Globals.h` の `MeltypeTipCreateFn`・`kStubImplStale`) で、変更したら `kStubImplAbi` を上げる。
   stub は impl の `MeltypeTipAbi` が自分の `kStubImplAbi` と一致しなければロードした impl を使わないので、ABI を変更した更新は、アプリを再起動するまでそのアプリに反映されない
 - 前の impl は `FreeLibrary` しない (プロセスの終了まで残る)。ファイルは、どのプロセスもロードしていなければ次の登録で削除する
-- 差し替えられないアプリ (stub と impl に分割する前の DLL が残っている・古い stub が今の impl をロードできない) は、登録済みの impl が Meltype.exe と同じビルドになってから 3 秒たっても、同じ接続から別ビルドの要求が届くことで検出する。
-  Meltype.exe が「アプリを再起動すると入力できる」と通知する (アプリごとに 1 回)
+- 差し替えられないアプリ (古い stub が今の impl をロードできない) は、登録済みの impl が Meltype.exe と同じビルドになってから 3 秒たっても、同じ接続から別ビルドの要求が届くことで検出する。
+  Meltype.exe が「アプリを再起動すると更新後の Meltype IME になる」と通知する (アプリごとに 1 回)
+- 後方互換レイヤー (#1670)。削除する (手順は `TipClient.LegacyBeforeSplit` のコメント)。
+  stub と impl に分割する前の DLL (要求に `impl` が無い) には、今までどおり応答し、上と同じ通知を出す
 - 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。Meltype IME を再登録せずに Meltype.exe だけを更新すると、こうなる
   (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
   動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (`ImeDeclined` は見ない。聞いたことを覚える状態は持たない)
