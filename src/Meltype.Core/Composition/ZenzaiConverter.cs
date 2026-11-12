@@ -244,12 +244,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <summary>
     /// 答えが読みと合っているか。答えのかな (カタカナはひらがなとして) と記号は、読みのその位置の文字と同じでないといけない。
     /// 漢字 1 文字と、英字・数字の並び 1 つは、読みの 1 文字以上に当たるとみなす (今日 → きょう、Microsoft → まいくろそふと)。
+    /// 語の区切りの記号 (アン・ハサウェイ、ジョン＝スミス、空白) は読みに無くてよい。
     /// モデルが読みに無いものを続けた答え (はーどうぇ → ハードウェアウェア: issue #1675、きょうはで → 今日はでで・直前の文節の混入: issue #1511) は合わない。
     /// </summary>
     internal static bool IsPlausible(string hiragana, string answer)
     {
         var tokens = Tokens(answer);
-        var reading = hiragana.Select(Normalize).ToArray();
+        var reading = hiragana.Select(Normalize).Where(c => !IsSeparator(c)).ToArray();
         var dead = new HashSet<(int, int)>();
         return Match(0, 0);
 
@@ -267,13 +268,18 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
     }
 
-    /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
+    /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。語の区切りの記号は除く。</summary>
     private static List<(string Text, bool Wildcard)> Tokens(string answer)
     {
         var tokens = new List<(string, bool)>();
         for (var i = 0; i < answer.Length;)
         {
             var c = Normalize(answer[i]);
+            if (IsSeparator(c))
+            {
+                i++;
+                continue;
+            }
             if (char.IsAsciiLetterOrDigit(c))
             {
                 var end = i;
@@ -289,6 +295,9 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
         return tokens;
     }
+
+    /// <summary>語の区切りの記号 (<see cref="Normalize"/> した後の字)。</summary>
+    private static bool IsSeparator(char c) => c is '・' or '=' or ' ' or '　';
 
     /// <summary>
     /// 比べるための文字: カタカナはひらがな (ヵ・ヶ は漢字と同じ扱いのまま)、づ・ぢ は ず・じ、全角の英数字・記号は半角。

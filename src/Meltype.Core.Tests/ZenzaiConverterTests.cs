@@ -119,6 +119,12 @@ internal static class ZenzaiConverterTests
         Assert.True(ZenzaiConverter.IsPlausible("はなじ", "はなぢ"), "じ の読みの ぢ");
         Assert.True(ZenzaiConverter.IsPlausible("つづく", "つずく"), "づ の読みの ず");
         Assert.True(!ZenzaiConverter.IsPlausible("きずく", "気すく"), "濁点の無い字は合わない");
+        // 語の区切りの記号は読みに無くてよい
+        Assert.True(ZenzaiConverter.IsPlausible("あんはさうぇい", "アン・ハサウェイ"), "中黒");
+        Assert.True(ZenzaiConverter.IsPlausible("じょんすみす", "ジョン＝スミス"), "＝");
+        Assert.True(ZenzaiConverter.IsPlausible("あいらぶゆー", "I love you"), "空白");
+        Assert.True(ZenzaiConverter.IsPlausible("あ・い", "アイ"), "読みの中黒");
+        Assert.True(!ZenzaiConverter.IsPlausible("あんはさうぇい", "アン・ハサウェイ・ハサウェイ"), "区切りの後ろに続けた答え");
         Assert.True(ZenzaiConverter.IsPlausible("ほんとう?", "本当？"), "全角の記号");
         Assert.True(ZenzaiConverter.IsPlausible("2026ねん", "2026年"), "数字");
     }
