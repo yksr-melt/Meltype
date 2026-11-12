@@ -4604,6 +4604,7 @@ internal static class CompositionTests
             ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
             ("/k\b", "・"),               // 打ち始めの / を ・ にした単位は残す (打ち直すと / になる)
             ("/kk\b", "・k"),
+            ("/\bka/", "か/"),                // 入力が空になったら、次の / は打ち始めの / ではない (かなの後ろの /)
         })
         {
             var k = new Keyboard();

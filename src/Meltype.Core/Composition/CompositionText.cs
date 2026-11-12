@@ -181,7 +181,7 @@ public sealed class CompositionText
             }
         }
         // 文章の入力欄で打ち始めに打った / は ・ (Microsoft IME と同じ)。Space で / にできる。
-        if (c == '/' && _units.Count == 0 && SlashAtStart())
+        if (c == '/' && _units.Count == 0 && SlashAtStart)
         {
             _units.Add(new CompositionUnit("・", "/"));
             return;
@@ -212,8 +212,11 @@ public sealed class CompositionText
     /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。OFF なら z はほかの英字と同じ: issue #1008)。</summary>
     public Func<bool> ZSymbols { get; set; } = () => true;
 
-    /// <summary>空の変換ボックスに打った / を、打ち始めの / として中黒 (・) にするか。読むと次からは false。</summary>
-    public Func<bool> SlashAtStart { get; set; } = () => false;
+    /// <summary>
+    /// この入力の打ち始めの / を中黒 (・) にするか (文章の入力欄で打ち始めた: 本体が入力を始めるときに決める)。
+    /// 入力の間は変えないので、BackSpace で原文を打ち直しても同じ結果になる。入力が空になったら false に戻す。
+    /// </summary>
+    public bool SlashAtStart { get; set; }
 
     /// <summary>打ち始めの / だけを ・ にして入れているか。</summary>
     public bool IsSlashAtStart => _pending.Length == 0 && _units is [{ Kana: "・", Raw: "/" }];
@@ -236,6 +239,7 @@ public sealed class CompositionText
                 {
                     Mode = DisplayMode.Auto;
                     SuggestionAccepted = false;
+                    SlashAtStart = false;
                 }
                 return;
             }
@@ -245,10 +249,8 @@ public sealed class CompositionText
         {
             // 打ちかけの子音を 1 文字消し、残った原文を打ち直す。後ろのキーを見て決めた単位 (ff の っ、nk の ん) は、
             // そのキーを消したら決め直す (ff + BackSpace + uronto が っうろんと、nk + BackSpace + a が んあ になっていた: issue #1636)
-            // 打ち始めの / を ・ にした単位は、打ち直すと / になる (・ にするかは打ち始めに 1 回だけ決める) ので、そのまま残す (/k + BackSpace は ・)
-            var keep = _units is [{ Kana: "・", Raw: "/" }, ..] ? 1 : 0;
-            var truncated = Raw[_units.Take(keep).Sum(u => u.Raw.Length)..^1];
-            _units.RemoveRange(keep, _units.Count - keep);
+            var truncated = Raw[..^1];
+            _units.Clear();
             _pending.Clear();
             foreach (var c in truncated) Append(c);
         }
@@ -270,6 +272,7 @@ public sealed class CompositionText
             Mode = DisplayMode.Auto;
             Case = LetterCase.AsTyped;
             SuggestionAccepted = false;
+            SlashAtStart = false;
         }
     }
 
@@ -293,6 +296,7 @@ public sealed class CompositionText
         Mode = DisplayMode.Auto;
         Case = LetterCase.AsTyped;
         SuggestionAccepted = false;
+        SlashAtStart = false;
     }
 
     /// <summary>
