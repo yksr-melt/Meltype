@@ -4970,6 +4970,29 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1737_SpaceAfterF6ConvertsEverythingAsJapanese()
+    {
+        // F6 でかなにして見せた入力は、Space でも英語の区間に戻さず、すべてローマ字として読んで変換する
+        var k = new Keyboard();
+        k.Type("kyouhaMake");
+        k.Press(VirtualKeys.F6);
+        k.Type(" ");
+        Assert.Equal("今日は|負け", string.Join("|", k.Host.View!.Clauses!));
+
+        var j = new Keyboard();
+        j.Type("botto");
+        j.Press(VirtualKeys.F6);
+        j.Type(" \n");
+        Assert.Equal("ぼっと", j.Host.Output.Single());
+
+        // F6 を押さなければ、今までどおり英語の区間は英語のまま
+        var auto = new Keyboard();
+        auto.Type("kyouhaMake");
+        auto.Press(VirtualKeys.Right);
+        Assert.Equal("今日は|Make", string.Join("|", auto.Host.View!.Clauses!));
+    }
+
+    [Test]
     public static void Issue1737_SingleClauseAlternativeKeepsItsCandidates()
     {
         // sushi は 英語 / すし の 1 文節ずつの案。文全体の候補の後ろに、それぞれの文節の候補 (スシ) も並べて、選んで確定できる

@@ -462,9 +462,12 @@ public sealed class CompositionText
         }
         foreach (var segments in _detector.SegmentAlternatives(_units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput, count).Skip(1))
             Add(WithFinalPending(Adjusted(segments)));
-        if (!KanaInput && AllKana(final: true) is var kana && !kana.Any(char.IsAsciiLetter)) Add([new CompositionSegment(false, kana, Raw)]);
+        if (!KanaInput && AllJapaneseSegments() is var japanese && !japanese[0].Kana.Any(char.IsAsciiLetter)) Add(japanese);
         return alternatives;
     }
+
+    /// <summary>打った英字をすべてローマ字として読んだ、日本語の 1 区間の区間分け (botto → ぼっと)。ローマ字として読めない英字は残る (google → ごおgぇ)。</summary>
+    public IReadOnlyList<CompositionSegment> AllJapaneseSegments() => [new CompositionSegment(false, AllKana(final: true), Raw)];
 
     /// <summary>
     /// 設定「かな + w を笑いにする」: 英語の区間が、1 つのかなの音 + w (new・saw) だけなら、かな (ね・さ) と笑いの w に分ける (issue #713・#492)。

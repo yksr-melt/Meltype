@@ -84,13 +84,15 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 区切りを文節にして変換する (<see cref="BuildClauses"/>)。英日の区切りの別案があれば、文全体を 1 つの文節にして、案ごとの文を候補にする。
+    /// F6〜F8 でかなにして見せているときは、打った英字をすべてローマ字として読んで変換する。
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
         _conversionPrefersJapanese = preferJapanese;
         _clausesEdited = false;
         _tabStartedConversion = false;
-        var segments = _text.ConversionSegments();
+        var asKana = _text.Mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
+        var segments = asKana ? _text.AllJapaneseSegments() : _text.ConversionSegments();
         var utility = Utilities(segments);
         if (utility is { Placement: UtilityPlacement.Replace })
         {
@@ -128,7 +130,7 @@ public sealed partial class CompositionController
             return;
         }
         // 区切りの別案があれば、別案ごとに変換した文を 1 つの文節の候補にする (issue #1737)
-        var alternatives = utility is null ? _text.ConversionSegmentAlternatives(MaxSegmentationAlternatives) : [segments];
+        var alternatives = utility is null && !asKana ? _text.ConversionSegmentAlternatives(MaxSegmentationAlternatives) : [segments];
         var clauses = BuildClauses(alternatives[0], preferJapanese);
         if (clauses.Count == 0) return;
         if (alternatives.Count > 1 && WholeSentenceClause([clauses, .. alternatives.Skip(1).Select(a => BuildClauses(a, preferJapanese)).Where(c => c.Count > 0)]) is { } whole)
