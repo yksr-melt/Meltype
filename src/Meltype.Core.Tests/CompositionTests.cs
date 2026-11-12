@@ -4579,6 +4579,29 @@ internal static class CompositionTests
         Assert.Equal("やほやほ", k.Host.Document);
     }
 
+    /// <summary>さいき を 再起 にする変換エンジン (issue #1681)。</summary>
+    private sealed class SaikiConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana == "さいき" ? "再起" : null;
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            hiragana == "さいき" ? [new("さいき", "再起")] : null;
+    }
+
+    [Test]
+    public static void Issue1681_DictionaryWordsComeBeforeTheEngineCandidates()
+    {
+        // #1681: 変換エンジンが知っている読みでは、同梱の辞書の語 (PSYQUI) が変換エンジンの候補の後ろ (58 件中 51 番目) に並んでいた。
+        // 最初の候補 (変換エンジンの答え) は変えず、その次に辞書の語、そのあとに変換エンジンの候補を並べる
+        string[] engine = ["再帰", "最期", "才気", "佐伯", "催奇", "祭器", "才木", "再期", "細期", "斎木"];
+        var k = new Keyboard(converter: new SaikiConverter(), moreCandidates: reading => reading == "さいき" ? engine : []);
+        k.Type("saiki ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.Equal("再起", candidates[0], "最初の候補は変換エンジンの答え");
+        Assert.Equal("PSYQUI", candidates[1], string.Join(" ", candidates));
+        Assert.Equal("再帰", candidates[2], "変換エンジンの候補は辞書の語の次から");
+    }
+
     [Test]
     public static void Ki_OffersOldKanji()
     {
