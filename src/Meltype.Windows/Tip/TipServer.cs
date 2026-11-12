@@ -400,9 +400,10 @@ internal sealed class TipServer : IDisposable
         using var message = new MemoryStream();
         // この接続で、別ビルドの impl に初めて応答した時刻 (0 = まだ)
         long staleSince = 0;
-        // 後方互換レイヤー (#1670)。削除するときは、この行も消す (TipClient.LegacyBeforeSplit)。
+        // ---- 後方互換レイヤー (#1670) ここから。削除するときは、ここまでを消す (TipClient.LegacyBeforeSplit) ----
         // この接続で、stub と impl に分割する前の DLL を最後に ClientOutdated で通知した時刻
         long legacyReported = -StaleNoticeMs;
+        // ---- 後方互換レイヤー (#1670) ここまで ----
         try
         {
             while (pipe.IsConnected && !_stop.IsCancellationRequested)
@@ -423,7 +424,7 @@ internal sealed class TipServer : IDisposable
                     var json = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
                     var client = _build.Check(json);
                     var now = Environment.TickCount64;
-#pragma warning disable CS0618 // 後方互換レイヤー (#1670)。削除するときは、この塊ごと消す (TipClient.LegacyBeforeSplit)
+                    // ---- 後方互換レイヤー (#1670) ここから。削除するときは、ここまでを消す (TipClient.LegacyBeforeSplit) ----
                     if (client == TipClient.LegacyBeforeSplit && now - legacyReported >= StaleNoticeMs)
                     {
                         // 今までどおり応答するが、再起動すると今の impl をロードするので通知する
@@ -431,7 +432,7 @@ internal sealed class TipServer : IDisposable
                         legacyReported = now;
                         if (InstalledBuild() == true && host.Process is { } process) ReportOutdated(process);
                     }
-#pragma warning restore CS0618
+                    // ---- 後方互換レイヤー (#1670) ここまで ----
                     if (client == TipClient.Other)
                     {
                         // stub は、この応答を受けて impl を差し替え、新しい impl は別の接続でつなぐ。

@@ -38,9 +38,9 @@ internal static class TipBuildTests
         Assert.Equal(Tip.TipClient.Same, build.Check(Request($"\"impl\":\"{X86}\",")), "32 ビットのアプリの impl");
         Assert.Equal(Tip.TipClient.Same, build.Check(Request($"\"impl\":\"{X64.ToLowerInvariant()}\",")), "ハッシュの大文字・小文字は区別しない");
         Assert.Equal(Tip.TipClient.Other, build.Check(Request($"\"impl\":\"{Other}\",")), "別ビルドの impl");
-#pragma warning disable CS0618 // 後方互換レイヤー (#1670)。削除するときは、この塊ごと消す (TipClient.LegacyBeforeSplit)
+        // ---- 後方互換レイヤー (#1670) ここから。削除するときは、ここまでを消す (TipClient.LegacyBeforeSplit) ----
         Assert.Equal(Tip.TipClient.LegacyBeforeSplit, build.Check(Request("")), "stub と impl に分割する前の DLL (impl を送らない)");
-#pragma warning restore CS0618
+        // ---- 後方互換レイヤー (#1670) ここまで ----
         Assert.Equal(Tip.TipClient.Other, build.Check(Request("\"impl\":1,")), "impl が文字列でない");
         Assert.Equal(Tip.TipClient.Other, build.Check("{"), "JSON としてパースできない");
         Assert.Equal(Tip.TipClient.Same, build.Check("{\"wait\":3}"), "変換の結果を待つ要求は impl を送らない");
