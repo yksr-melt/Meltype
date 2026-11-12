@@ -190,6 +190,24 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Numpad_IsPassedOnlyWhenNothingIsTyped()
+    {
+        // #460: Windows・Mac・fcitx5・IBus は、テンキーの数字・記号を「仮想キーコード (0x60〜0x6F) と文字」で送る。
+        // 上の段の数字は「仮想キーコード 0 と文字」(本体が文字から決める)。何も打っていないときのテンキーだけそのまま通す
+        var front = new Front();
+        front.Event("StateRequested");
+        Assert.True(!Consumed(front.Key(0x61, '1')) && !Consumed(front.Key(0x6E, '.')) && !Consumed(front.Key(0x65, '5')), "テンキーは通す\n" + front.Trace);
+        Assert.Equal("1.5", front.Document, front.Trace);
+        Assert.True(Consumed(front.Key(0, '1')), "上の段の数字 (仮想キーコード 0 と文字) は変換ボックスに入れる\n" + front.Trace);
+
+        front = new Front();
+        front.Event("StateRequested");
+        front.Type("ai");
+        Assert.True(Consumed(front.Key(0x61, '1')), "入力中のテンキーは変換ボックスに入れる\n" + front.Trace);
+        Assert.Equal("あい1", front.Composition["t1"], front.Trace);
+    }
+
+    [Test]
     public static void BackSpace_And_Esc()
     {
         var front = new Front();
