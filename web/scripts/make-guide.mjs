@@ -5,7 +5,7 @@
 //   node scripts/make-guide.mjs
 // デプロイ (npm run deploy) の前にも実行する。
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, posix } from "node:path";
+import { dirname, join, posix, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Marked } from "marked";
 
@@ -38,10 +38,33 @@ export function rewriteUrl(url) {
 
 const escapeHtml = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-/** Markdown を HTML にする。Markdown の中に直接書いた <img src> と <a href> も直す。 */
+/**
+ * GitHub と同じ見出しのアンカー (小文字にし、英数字・かな漢字・空白・- _ 以外を消し、空白を - にする。同じものは -1, -2 …)。
+ * 文書の中のリンク (USAGE.md#英字を主に入力したいとき) は GitHub の見出しのアンカーを指すので、ガイドでも同じ id にする。
+ */
+export function slugger() {
+  const seen = new Map();
+  return (text) => {
+    const base = text.trim().toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc} -]/gu, "").replace(/ /g, "-");
+    const count = seen.get(base) ?? 0;
+    seen.set(base, count + 1);
+    return count === 0 ? base : `${base}-${count}`;
+  };
+}
+
+/** Markdown を HTML にする。Markdown の中に直接書いた <img src> と <a href> も直す。見出しには GitHub と同じ id を付ける。 */
 export function render(markdown) {
   const marked = new Marked({ gfm: true });
-  marked.use({ walkTokens(token) { if (token.type === "link" || token.type === "image") token.href = rewriteUrl(token.href); } });
+  const slug = slugger();
+  marked.use({
+    walkTokens(token) { if (token.type === "link" || token.type === "image") token.href = rewriteUrl(token.href); },
+    renderer: {
+      heading({ tokens, depth, text }) {
+        const plain = text.replace(/<[^>]*>/g, "");
+        return `<h${depth} id="${escapeHtml(slug(plain))}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+      },
+    },
+  });
   return marked.parse(markdown).replace(/(<(?:img|a)\b[^>]*?\s(?:src|href)=")([^"]+)(")/g, (_, a, url, b) => a + rewriteUrl(url) + b);
 }
 
@@ -93,7 +116,9 @@ ${body}
 `;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// node scripts/make-guide.mjs で実行したときだけ作る (テストから読み込んだときは作らない)。
+// パスの書き方 (Windows のドライブ・空白・日本語) によらず、ファイルの場所で比べる
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   rmSync(out, { recursive: true, force: true });
   for (const p of PAGES) {
     const dir = p.slug ? join(out, p.slug) : out;

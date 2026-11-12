@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { PAGES, render, rewriteUrl } from "../scripts/make-guide.mjs";
+import { PAGES, render, rewriteUrl, slugger } from "../scripts/make-guide.mjs";
 
 describe("使い方ガイド", () => {
   it("ほかの文書へのリンクをガイドのページにする", () => {
@@ -27,6 +27,28 @@ describe("使い方ガイド", () => {
   it("外のリンクとページの中のリンクはそのまま", () => {
     assert.equal(rewriteUrl("https://example.com/a.md"), "https://example.com/a.md");
     assert.equal(rewriteUrl("#キー操作"), "#キー操作");
+  });
+
+  it("見出しに GitHub と同じ id を付ける", () => {
+    const slug = slugger();
+    assert.equal(slug("英字を主に入力したいとき"), "英字を主に入力したいとき");
+    assert.equal(slug("ATOK 風の操作で使いたいとき"), "atok-風の操作で使いたいとき");
+    assert.equal(slug("/ $ @ で始まる語 (AI)"), "---で始まる語-ai");
+    assert.equal(slug("ATOK 風の操作で使いたいとき"), "atok-風の操作で使いたいとき-1");
+    assert.match(render("## データと辞書"), /<h2 id="データと辞書">データと辞書<\/h2>/);
+  });
+
+  it("ガイドの中のページ内リンク・ほかのページの見出しへのリンクは、すべて行き先がある", () => {
+    const html = new Map(PAGES.map((p) => [p.slug ? `/guide/${p.slug}/` : "/guide/", render(readFileSync(new URL(`../../docs/${p.file}`, import.meta.url), "utf8"))]));
+    const targets = (page) => new Set([...html.get(page).matchAll(/\s(?:id|name)="([^"]*)"/g)].map((m) => m[1]));
+    for (const [page, body] of html) {
+      for (const [, href] of body.matchAll(/href="([^"]*#[^"]*)"/g)) {
+        const [path, hash] = href.split("#");
+        const target = path === "" ? page : path;
+        if (!html.has(target)) continue;
+        assert.ok(targets(target).has(decodeURIComponent(hash)), `${page} → ${href}`);
+      }
+    }
   });
 
   it("docs/ の文書がすべてあり、ほかの文書へのリンクがガイドの中で開ける", () => {
