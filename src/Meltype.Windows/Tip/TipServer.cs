@@ -50,13 +50,6 @@ internal sealed class TipServer : IDisposable
     private readonly ConversionSignal _conversion = new();
 
     /// <summary>
-    /// 変換の答えを待ち受けてきた (wait を送った) アプリのプロセス。DLL はプロセスごとに読み込まれるので、プロセスで見分ける。
-    /// v1.4.0 以前の DLL は wait を送らないので、答えが届いても表示を作り直せず、Enter までかなのままになる (#1754)。
-    /// 送ってこないプロセスでは、ライブ変換も入力の待ち時間の中で答えを待つ。
-    /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _waiters = new();
-
-    /// <summary>
     /// wait の要求を返さずに持つ時間。DLL が IME のスレッドを止めて終わりを待つことがある (終わるとき) ので短くする。
     /// DLL は入力中だけ、返ったらすぐ次の wait を送る。
     /// </summary>
@@ -413,7 +406,6 @@ internal sealed class TipServer : IDisposable
                     }
                     else if (request.WaitSince is { } since)
                     {
-                        _waiters[clientProcess] = true;
                         reply = $"{{\"generation\":{await _conversion.WaitAsync(since, ConversionWaitMs, _stop.Token).ConfigureAwait(false)}}}";
                     }
                     else
@@ -423,14 +415,8 @@ internal sealed class TipServer : IDisposable
                         string Run()
                         {
                             began = Environment.TickCount64;
-                            // 入力スレッドで変える (ConversionBudget は入力スレッドからだけ使う)。Meltype.exe 自身の DLL は今の版なので待たない
-                            _composition.Budget.WaitsInLiveConversion = !ownClient && !_waiters.ContainsKey(clientProcess);
                             try { return Handle(host, request); }
-                            finally
-                            {
-                                _composition.Budget.WaitsInLiveConversion = false;
-                                ended = Environment.TickCount64;
-                            }
+                            finally { ended = Environment.TickCount64; }
                         }
                         // Meltype.exe 自身の UI スレッドから来た要求: UI スレッドは DLL の中でこの応答を待って止まっているので、
                         // UI スレッドに頼むとお互いに待ち合って固まる。代わりにこのスレッドで処理する (ほかの処理と同時には動かない)

@@ -130,30 +130,6 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
-    public static void Live_WaitsForTheAnswer_WhenTheFrontCannotRefresh()
-    {
-        // v1.4.0 以前の Meltype IME の DLL は、答えが届いたことを受け取れない。待たないと Enter までかなのまま (#1754)
-        using var converter = Slow(delayMs: 50);
-        var session = Session(converter);
-        converter.Budget.WaitsInLiveConversion = true;
-        Assert.Equal("日本語", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
-    }
-
-    [Test]
-    public static void Live_ShowsKana_WhenTheAnswerIsLaterThanTheBudget_EvenIfWaiting()
-    {
-        // 待つのは入力の待ち時間の中だけ (答えが来なくても打鍵を止めない)
-        using var release = new ManualResetEventSlim();
-        using var converter = Slow(release: release);
-        var session = Session(converter);
-        converter.Budget.WaitsInLiveConversion = true;
-        var watch = Stopwatch.StartNew();
-        Assert.Equal("にほんご", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
-        Assert.True(watch.ElapsedMilliseconds < 5000, $"待ち時間の中で諦める ({watch.ElapsedMilliseconds}ms)");
-        release.Set();
-    }
-
-    [Test]
     public static void Refresh_RebuildsPredictionsFromTheArrivedClauses()
     {
         // 最後の文節 (とる) の予測は、文節が届くまで出せない (Prediction_FromLastClause の非同期の経路)
