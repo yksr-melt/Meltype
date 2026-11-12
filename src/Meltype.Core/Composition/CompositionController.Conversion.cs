@@ -714,7 +714,20 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
-    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を 2 番目以降に足す。
+    /// 候補の一覧で、ユーザー辞書・同梱の辞書 (candidates.txt・brands.txt) の語のうち、読み (かな) の候補より前にある最後のものの位置。
+    /// 無ければ 0 (最初の候補)。読みより後ろに回した辞書の語 (記号の 、 など) は数えない。
+    /// </summary>
+    private int DictionaryWordsEnd(Clause clause, string reading)
+    {
+        var kana = clause.Candidates.IndexOf(reading);
+        var limit = kana < 0 ? clause.Candidates.Count : kana;
+        var words = (_services.UserDictionary?.Lookup(reading) ?? []).Concat(_services.Candidates?.LookupWords(reading) ?? []);
+        return Math.Max(0, words.Select(word => clause.Candidates.IndexOf(word)).Where(index => index < limit).DefaultIfEmpty(-1).Max());
+    }
+
+    /// <summary>
+    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を足す。
+    /// 日本語の文節は、最初の候補とユーザー辞書・同梱の辞書の語の後ろに足す (DictionaryWordsEnd)。
     /// 英語の文節は、ローマ字として読んだかなで一覧を引き、かなの候補 (go → ご) の後ろに足す。
     /// 打つたびには呼ばない (時間がかかることがあるため。ライブ変換では呼ばない)。今選んでいる候補はそのまま選んだ状態にする。
     /// </summary>
@@ -724,7 +737,9 @@ public sealed partial class CompositionController
         if (_services.MoreCandidates is not { } more) return;
         var reading = clause.IsEnglish ? RomajiReading(clause.Reading) : clause.Reading;
         if (reading is null) return;
-        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : 0;
+        // 変換エンジンの候補は、日本語の文節では、最初の候補とユーザー辞書・同梱の辞書の語の後ろに入れる。
+        // 最初の候補のすぐ後ろに入れると、変換エンジンが知っている読みでは、辞書の語が候補の一覧の後ろに押しやられる (saiki → PSYQUI が 58 件中 51 番目: issue #1681)
+        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : DictionaryWordsEnd(clause, reading);
         if (anchor < 0) return;
         var current = clause.Text;
         var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
