@@ -180,6 +180,9 @@ public sealed class MeltypeSession
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly bool _directModeDetection;
+    private readonly UserDictionary? _userDictionary;
+    private const long UserDictionaryCheckMs = 1000;
+    private long _userDictionaryCheckedMs;
     private bool _directEnglishWord;
     private bool _direct;
 
@@ -189,6 +192,8 @@ public sealed class MeltypeSession
         _settings = settings;
         _timeMs = timeMs ?? (() => Environment.TickCount64);
         _directModeDetection = directModeDetection;
+        _userDictionary = services.UserDictionary;
+        _userDictionaryCheckedMs = _timeMs();
         var controllerServices = directModeDetection
             ? services with
             {
@@ -201,106 +206,6 @@ public sealed class MeltypeSession
             }
             : services;
         _controller = new CompositionController(detector, converter, settings, controllerServices);
-    }
-
-    /// <summary>
-    /// 既定の辞書・学習データ (保存場所は <see cref="AppPaths"/>) で作る。converter は OS 側の変換エンジン、
-    /// moreCandidates は読みに対する候補の一覧 (無ければ null)、wordChecker は OS のスペルチェッカー (無ければ null)。
-    /// </summary>
-    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
-    public static MeltypeSession CreateDefault(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false,
-        bool directModeDetection = false, Func<Settings>? settings = null)
-    {
-        AppPaths.MigrateFromOldName();
-        return CreateDefault(AppPaths.DataDirectory, converter, moreCandidates, wordChecker, autoSpacing, directModeDetection, settings);
-    }
-
-    /// <summary>既定の保存場所の定型文 (snippets.json)。入力欄で共有する。</summary>
-    public static SnippetStore DefaultSnippets()
-    {
-        AppPaths.MigrateFromOldName();
-        return s_snippets ??= new SnippetStore(AppPaths.SnippetsFile);
-    }
-
-    private static SnippetStore? s_snippets;
-
-    /// <summary>既定の保存場所の設定 (config.json。変わったら読み直す)。CreateDefault の入力欄と同じものを返す。</summary>
-    public static Settings DefaultSettings()
-    {
-        AppPaths.MigrateFromOldName();
-        return Shared(AppPaths.DataDirectory).Settings.Current;
-    }
-
-    // 辞書・検出器・学習データは、入力欄 (セッション) がいくつあってもプロセスで 1 つだけ作って共有する (Windows 版の CompositionService.CreateSession と同じ)。
-    // 入力欄ごとに作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
-    // Input Method Kit・fcitx5・IBus はどれも 1 つのスレッド (メインループ) から呼ぶので、排他はしない。
-    private static (string Directory, CompositionDetector Detector, CompositionServices Services, SettingsFile Settings)? s_shared;
-
-    // #123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。セッションの間だけ覚える
-    private static readonly GitHubIssueTitles s_githubTitles = new();
-
-    /// <summary>dataDirectory に置いた設定・辞書・学習データで作る (テストでは一時フォルダーを渡す)。</summary>
-    internal static MeltypeSession CreateDefault(string dataDirectory, IKanjiConverter converter, Func<string, IReadOnlyList<string>>? moreCandidates, IWordChecker? wordChecker, bool autoSpacing = false,
-        bool directModeDetection = false, Func<Settings>? appSettings = null)
-    {
-        var shared = Shared(dataDirectory);
-        var userDirectory = Path.Combine(dataDirectory, "dictionaries");
-        var file = shared.Settings;
-        var settings = appSettings ?? (() => file.Current);
-        // 入力欄を作ったときにも読み直す (ログの設定を、入力の前に入れる)
-        _ = settings();
-        var detector = shared.Detector;
-        // OS のスペルチェッカーが無ければ (Linux)、同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。
-        detector.SpellChecker = wordChecker is { IsAvailable: true } ? wordChecker : Detection.BuiltInWordChecker.Shared;
-        // ユーザー辞書は入力欄を作るたびに読み直す (Mac は辞書を取り込んだ後に入力欄を作り直して反映する)。
-        // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
-        var userDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: userDirectory);
-        var services = shared.Services with
-        {
-            UserDictionary = userDictionary,
-            Predictor = new Predictor(shared.Services.Predictor?.Phrases, userDictionary, shared.Services.History),
-            MoreCandidates = moreCandidates,
-            GitHubTitles = () => s_githubTitles,
-            AutomaticEnglishSpacing = () => autoSpacing,
-        };
-        return new MeltypeSession(detector, converter, services, settings, directModeDetection);
-    }
-
-    private static (string Directory, CompositionDetector Detector, CompositionServices Services, SettingsFile Settings) Shared(string dataDirectory)
-    {
-        Directory.CreateDirectory(dataDirectory);
-        var userDirectory = Path.Combine(dataDirectory, "dictionaries");
-        if (s_shared is not { } shared || shared.Directory != dataDirectory)
-        {
-            SettingsSchema.Write(dataDirectory);
-            // 設定は config.json が変わったら読み直す (入力欄を開いたままでも効く)。入力欄で共有する
-            var settingsFile = new SettingsFile(Path.Combine(dataDirectory, "config.json"), loaded =>
-            {
-                // 設定で「ファイルにログを書く」を ON にしていれば、Mac でも meltype.log に書く (動かないときの調査用)。
-                Diagnostics.Log.SetFileOutput(loaded.FileLog ? Path.Combine(dataDirectory, "meltype.log") : null);
-                Diagnostics.Log.RecordText = loaded.LogTypedText;
-            });
-            var created = CompositionDetector.CreateDefault(userDirectory);
-            created.UseJapanesePunctuationAfterEnglish = () => settingsFile.Current.JapanesePunctuationAfterEnglish;
-            var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
-            created.Memory = languages;
-            shared = (dataDirectory, created, new CompositionServices
-            {
-                Candidates = CandidateDictionary.Load(userDirectory),
-                ContextRules = ContextRules.Load(userDirectory),
-                History = new ConversionHistory(Path.Combine(dataDirectory, "conversions.json")),
-                Misspellings = MisspellingDictionary.Load(userDirectory),
-                Languages = languages,
-                Translations = TranslationDictionary.Load(),
-                Meanings = MeaningDictionary.Load(),
-                RomajiTypos = RomajiTypoCorrector.Load(created.Romaji),
-                TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
-                // 予測変換のために覚えた語句 (入力欄で共有する。ユーザー辞書は入力欄ごとの Predictor に渡す)
-                Predictor = new Predictor(new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt")), null, null),
-            }, settingsFile);
-            s_shared = shared;
-        }
-        return shared;
     }
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
@@ -505,6 +410,12 @@ public sealed class MeltypeSession
         if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
             return _controller.Pass(now);
+        }
+        // 入力欄を作り直さないフロント (Meltype キーボード) でも、外で変えたユーザー辞書を使う
+        if (!_controller.IsComposing && now - _userDictionaryCheckedMs >= UserDictionaryCheckMs)
+        {
+            _userDictionaryCheckedMs = now;
+            _userDictionary?.Refresh();
         }
         var result = _controller.Press(new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。

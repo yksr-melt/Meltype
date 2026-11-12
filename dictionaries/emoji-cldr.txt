@@ -2,7 +2,7 @@
 # 形式: 読み<Tab>絵文字<Tab>絵文字 …  (手で書いた emoji.txt の候補の後に並ぶ)
 # 元データ: Unicode CLDR common/annotations/ja.xml, common/annotationsDerived/ja.xml
 # Copyright © 1991-2026 Unicode, Inc. Unicode License v3 (SPDX: Unicode-3.0)。全文は THIRD-PARTY-NOTICES.md。
-# 読みは Microsoft IME の変換エンジンの逆変換で求めた。作り直し: dotnet run --project src/Meltype.Tests -- --gen-emoji …
+# 読みは Microsoft IME の変換エンジンの逆変換で求めた。作り直し: dotnet run --project src/Meltype.Windows.Tests -- --gen-emoji …
 あい	❤‍🔥	❤	🩷	💛	🩵	💜	🩶	🫰	🫶	🪉
 あいかた	👯
 あいさつ	👋	🫂

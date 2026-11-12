@@ -417,7 +417,8 @@ internal static class BackgroundConversionTests
 
         Volatile.Write(ref answer, "Zenzai");
         Assert.True(SpinWait.SpinUntil(() => converter.ConvertClauses("よみ")?[0].Text == "Zenzai", 5000), "聞き直して新しい答えになる");
-        Assert.Equal(2, Volatile.Read(ref notified), "答えが変わったら知らせる");
+        // 知らせるのは控えを書き換えた後なので、新しい答えが見えた時点ではまだ知らせていないことがある
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) == 2, 5000), "答えが変わったら知らせる");
 
         var before = Volatile.Read(ref asked);
         Assert.True(SpinWait.SpinUntil(() =>

@@ -5,6 +5,7 @@
 import Carbon.HIToolbox
 import Cocoa
 import InputMethodKit
+import UniformTypeIdentifiers
 
 /// 入力欄 (クライアント) ごとの IME。Input Method Kit から読んだ事実 (キー・キャレットの前後の文字) を本体 (libMeltypeNative.dylib の ImeHost) に渡し、
 /// 返ってきた指示 (確定する文字・変換中の表示・候補・入力モードの表示) を入力欄に反映する。入力モードは本体が決めるので、ここでは持たない。
@@ -243,6 +244,11 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     private static func importUserDictionaryFile() {
         let panel = NSOpenPanel()
+        // 取り込めるのは、macOS の「ユーザ辞書」から書き出した plist だけ。
+        // ~/Library/KeyboardServices の TextReplacements.db は Apple 内部の形式なので読まない。
+        panel.message = MacUserDictionary.exportGuide
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+        panel.allowedContentTypes = [.propertyList]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let source = panel.url,
@@ -255,7 +261,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             NotificationCenter.default.post(name: Notification.Name("MeltypeUserDictionaryChanged"), object: nil)
         } catch {
             alert.messageText = "ユーザー辞書を取り込めませんでした"
-            alert.informativeText = error.localizedDescription
+            alert.informativeText = error.localizedDescription + "\n\n" + MacUserDictionary.exportGuide
         }
         alert.runModal()
     }
