@@ -59,7 +59,7 @@ npx wrangler secret put TURNSTILE_SECRET
 
 2回目以降は `npm run deploy` で変更を反映しデプロイできます。
 
-main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.yml` の `deploy`) がテストの後に `npm run deploy` を実行して、自動でデプロイします。使うには、リポジトリの Settings → Environments に `web-production` を作り、次の secrets を入れてください (`CLOUDFLARE_API_TOKEN` が無いときはデプロイを飛ばします)。
+main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.yml` の `deploy`) がテストの後に `npm run deploy` を実行して、自動でデプロイします。使うには、リポジトリの Settings → Environments に `web-production` を作り、次の secrets を入れてください (無いときはデプロイのジョブが失敗します)。
 
 | 名前 | 中身 |
 |---|---|
