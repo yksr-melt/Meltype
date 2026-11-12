@@ -4,7 +4,7 @@
 
 | 場所                         | 中身                                                                                         |
 | -------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/Meltype.Core`         | OS 非依存の判定・変換コア（Composition / Detection / Input / Config / Diagnostics） |
+| `src/Meltype.Core`         | OS 非依存の判定・変換コア |
 | `src/Meltype.Core.Tests`   | コアのテスト（どの OS でも動く）                                                                         |
 | `src/Meltype.Windows`      | Windows 版（TSF・UI・更新）                                                                       |
 | `src/Meltype.Windows.Tests` | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる）                                                |
@@ -84,7 +84,7 @@ node tools/check-dictionaries.mjs
 
 Linux / macOS では `src/Meltype.Windows.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
 
-`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは main の `linux.yml` 成果物 `meltype-linux` の zip 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 
@@ -139,7 +139,7 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 設定は最小限にする。消せる設定は消す。
 
-ON と OFF のそれぞれに意味がある設定だけを足す。設定はユーザーの好みであって、判別をサボる理由にはならない。すべての設定項目の追加はユーザーの負担になるので、設定の追加には慎重になる。
+ON と OFF のそれぞれに意味がある設定だけを足す。設定はユーザーの好みであって、判別をサボる理由にはならない。
 
 ## 守ること
 
