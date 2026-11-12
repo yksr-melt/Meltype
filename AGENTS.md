@@ -2,21 +2,15 @@
 
 ## 構成
 
-| 場所                         | 中身                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------ |
-| `src/Meltype.Core`         | OS 非依存の判定・変換コア |
-| `src/Meltype.Core.Tests`   | コアのテスト（どの OS でも動く）                                                                         |
-| `src/Meltype.Windows`      | Windows 版（TSF・UI・更新）                                                                       |
-| `src/Meltype.Windows.Tests` | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる）                                                |
-| `src/Meltype.Mac.Native`   | Mac 版から呼ぶコアの出口                                                                             |
-| `native/tip`・`native/mozc` | ネイティブ（TSF の TIP・Mozc）                                                                      |
-| `mac/`                     | Mac 版（Swift）                                                                               |
-| `linux/`                   | Linux 版（fcitx5・ibus）とパッケージ                                                                 |
-| `web/`                     | Web（Cloudflare Workers・報告フォーム）                                                             |
-| `dictionaries/`            | 辞書                                                                                         |
-| `tools/`                   | 辞書生成・検査・ベンチ・テスト用スクリプト                                                                      |
-| `docs/`                    | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート                                              |
-| `docs/dev/`                | 開発者向けの文書（開発・設計・リリースの手順）                                                                     |
+| 場所 | 中身 |
+| --- | --- |
+| `src/Meltype.Core` | OS 非依存の判定・変換コア |
+| `src/Meltype.Windows.Tests` | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる） |
+| `src/Meltype.Mac.Native` | Mac 版から呼ぶコアの出口 |
+| `native/tip`・`native/mozc` | ネイティブ（TSF の TIP・Mozc） |
+| `web/` | Web（Cloudflare Workers・報告フォーム） |
+| `docs/` | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート |
+| `docs/dev/` | 開発者向けの文書（開発・設計・リリースの手順） |
 
 ## 入力のフロント
 
@@ -35,6 +29,7 @@
 - シンプルさを何よりも優先する。
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
+- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す。
 - 決まりを書くときは、「こうする」だけでなく、その場所に理由も書く。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
@@ -82,8 +77,6 @@ dotnet run --project src/Meltype.Windows.Tests -- --context この本は:あつ�
 node tools/check-dictionaries.mjs
 ```
 
-Linux / macOS では `src/Meltype.Windows.Tests` は動かない。`src/Meltype.Core.Tests` で確認する。
-
 `--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
@@ -111,8 +104,6 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 - 報告された例
 - リグレッションのありそうなもの（直した語の逆向きで似た入力。`issueni` → `issueに` に対して `issune` → `いっすね` など）
-- エッジケース
-- 将来の挙動を保証したいもの
 
 報告された例は `src/Meltype.Core.Tests/data/issue-cases.tsv` にも `打ったもの<Tab>期待する結果` の形で足す。
 
@@ -147,8 +138,6 @@ ON と OFF のそれぞれに意味がある設定だけを足す。設定はユ
 - PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
 - AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
 - Issue・PR の本文・コメントと文書は日本語で書く。
-- PR と関係ない場所を変更しない。
 - PR に関係する箇所の文書が古ければ、利用者向けでも開発者向けでも直す。利用者向けの文書（ルートの `README.md`・`SECURITY.md` と `docs/*.md`）は常時メンテ対象で、挙動を変える PR では影響する箇所を探して同じ PR で直す。
 - 利用者が知る必要がないことを利用者向けの文書に書かない。
 - 機能実装や枠組みを変える変更は、先に Issue で相談する。
-- 著作権名・仕様の解釈など、分からないことは推測で進めず聞く。
