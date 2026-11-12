@@ -4563,6 +4563,46 @@ internal static class CompositionTests
         Assert.Equal("やほやほ", k.Host.Document);
     }
 
+    /// <summary>動詞 + か を名詞にする変換エンジン (かくか → 各課、たつか → 立香。issue #1367)。</summary>
+    private sealed class VerbQuestionConverter : IKanjiConverter
+    {
+        private static string? Text(string hiragana) => hiragana switch
+        {
+            "かくか" => "各課",
+            "たつか" => "立香",
+            "かく" => "各",
+            "たつ" => "立つ",
+            "はるか" => "はるか",
+            "かくかいぎ" => "各会議",
+            _ => null,
+        };
+
+        public string? Convert(string hiragana) => Text(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            Text(hiragana) is { } text ? [new(hiragana, text)] : null;
+    }
+
+    [Test]
+    public static void Issue1367_VerbQuestionIsNotANoun()
+    {
+        // #1367: issue|かくか が issue各課 になっていた。動詞 + か は、動詞を変換して か を付ける (かく は候補から 書く を選ぶ)
+        foreach (var (typed, expected) in new[]
+        {
+            ("issuekakuka ", "issue書くか"),
+            ("kakuka ", "書くか"),
+            ("tatuka ", "立つか"),
+            // 読み全体が語 (はるか)・動詞 + か でないもの (各会議) は変換エンジンのまま
+            ("haruka ", "はるか"),
+            ("kakukaigi ", "各会議"),
+        })
+        {
+            var k = new Keyboard(converter: new VerbQuestionConverter(), moreCandidates: reading => reading == "かく" ? ["各", "書く", "核"] : []);
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.View?.Text, typed);
+        }
+    }
+
     [Test]
     public static void Ki_OffersOldKanji()
     {

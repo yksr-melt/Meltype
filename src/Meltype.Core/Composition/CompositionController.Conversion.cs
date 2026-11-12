@@ -528,9 +528,40 @@ public sealed partial class CompositionController
             // がち (ガチで) を、変換エンジンは 勝ち にしてしまう (勝ちでやばい)。勝ち の読みは かち なので、がち は ガチ にする
             preferred ??= clauses[i].Reading.StartsWith("がち", StringComparison.Ordinal) && clauses[i].Text.StartsWith("勝ち", StringComparison.Ordinal)
                 ? "ガチ" + clauses[i].Text["勝ち".Length..] : null;
+            // 動詞 + か (かくか・くうか・たつか) を、変換エンジンは名詞 (各課・空化・立香) にしてしまう。書くか の形の候補にする
+            preferred ??= VerbQuestion(clauses[i]);
             if (preferred is not null) Prefer(clauses[i], preferred);
         }
         return clauses;
+    }
+
+    /// <summary>よく使う動詞の終止形の読み (readings.txt の活用の種類が v で始まるもの)。</summary>
+    private static readonly Lazy<HashSet<string>> VerbReadings = new(() =>
+    {
+        var verbs = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var line in Detection.DictionarySource.DataLines(CommonReadings.ReadText()))
+        {
+            var parts = line.Split('\t');
+            if (parts.Length >= 2 && parts[1].Split(',').Any(kind => kind.StartsWith('v'))) verbs.Add(parts[0]);
+        }
+        return verbs;
+    });
+
+    /// <summary>
+    /// 文節の読みが「よく使う動詞の終止形 + か」(かく + か) で、読み全体は語でなく (はるか は 遥か)、変換エンジンの答えが「か」で終わらない
+    /// (各課・空化・立香) とき、動詞を変換して「か」を付けたもの (書くか)。動詞を漢字にできなければ null (issue #1367)。
+    /// </summary>
+    private string? VerbQuestion(Clause clause)
+    {
+        var reading = clause.Reading;
+        if (reading.Length < 3 || reading[^1] != 'か' || clause.Text.EndsWith('か') || CommonReadings.Words.Contains(reading)) return null;
+        var verb = reading[..^1];
+        if (!VerbReadings.Value.Contains(verb)) return null;
+        // 動詞の形の候補: 漢字で始まり、読みと同じ送り仮名で終わる (かく → 書く。各 や 核 ではなく)
+        bool IsVerbForm(string text) => text.Length >= 2 && !IsKana(text[0]) && text[^1] == verb[^1] && !text.Any(char.IsAsciiLetter);
+        var converted = Convert(verb);
+        if (IsVerbForm(converted)) return converted + "か";
+        return _services.MoreCandidates?.Invoke(verb).FirstOrDefault(IsVerbForm) is { } candidate ? candidate + "か" : null;
     }
 
     /// <summary>
