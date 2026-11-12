@@ -30,7 +30,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
-    // 「再起動すると更新後の Meltype IME になる」と通知したアプリ (TipServer.ClientOutdated)
+    // 更新前の Meltype IME が残っているアプリ (TipServer.ClientOutdated)
     private readonly HashSet<string> _outdatedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Keyboard.KeyboardFront _keyboard;
     private readonly ToolStripMenuItem _tsfModeItem;
@@ -64,11 +64,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.ImeServer = _tipServer;
         _tipServer.ClientOutdated += process =>
         {
-            // DLL は動作モードが Meltype キーボードのときも接続してくる。通知はアプリごとに 1 回
+            // DLL は動作モードが Meltype キーボードのときも接続してくる。ログはアプリごとに 1 回
             if (_engine.Running.Mode != InputMode.Tsf || !_outdatedApps.Add(process)) return;
-            Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、更新後の Meltype IME になりません。");
-            if (_engine.Settings.ShowNotifications)
-                ShowBalloonTip(10000, "Meltype IME", $"「{process}」は更新前の Meltype IME のままです。「{process}」を再起動すると、更新後の Meltype IME になります。");
+            Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
+            // 更新前から開いているアプリはすべて同じなので、アプリごとではなく、PC の再起動を 1 回だけ求める
+            if (_outdatedApps.Count == 1 && _engine.Settings.ShowNotifications)
+                ShowBalloonTip(10000, "Meltype IME", $"更新前から開いているアプリ (「{process}」など) は、PC を再起動するまで Meltype IME で入力できません。PC を再起動してください。");
         };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;

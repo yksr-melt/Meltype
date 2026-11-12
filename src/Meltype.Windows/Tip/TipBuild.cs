@@ -23,25 +23,22 @@ internal sealed class TipBuild(string folder)
         .Where(pair => pair.hash is not null)
         .ToDictionary(pair => pair.arch, pair => pair.hash!);
 
-    /// <summary>要求 (<see cref="TipRequest"/> の JSON) を送ってきた DLL を、同梱の impl と照合する。変換の結果を待つ要求 (wait) は照合しない。</summary>
-    public TipClient Check(string request)
+    /// <summary>要求 (<see cref="TipRequest"/> の JSON) を送ってきた impl が、同梱の impl と同じビルドか。変換の結果を待つ要求 (wait) は照合しない。</summary>
+    public bool Matches(string request)
     {
-        if (_hashes.Count == 0) return TipClient.Same;
+        if (_hashes.Count == 0) return true;
         try
         {
             using var document = JsonDocument.Parse(request);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return TipClient.Other;
-            if (root.TryGetProperty("wait", out _)) return TipClient.Same;
-            // ---- 後方互換レイヤー (#1670) ここから。削除するときは、ここまでを消す (TipClient.LegacyBeforeSplit) ----
-            if (!root.TryGetProperty("impl", out _)) return TipClient.LegacyBeforeSplit;
-            // ---- 後方互換レイヤー (#1670) ここまで ----
+            if (root.ValueKind != JsonValueKind.Object) return false;
+            if (root.TryGetProperty("wait", out _)) return true;
             return root.TryGetProperty("impl", out var impl) && impl.ValueKind == JsonValueKind.String &&
-                _hashes.Values.Contains(impl.GetString(), StringComparer.OrdinalIgnoreCase) ? TipClient.Same : TipClient.Other;
+                _hashes.Values.Contains(impl.GetString(), StringComparer.OrdinalIgnoreCase);
         }
         catch (JsonException)
         {
-            return TipClient.Other;
+            return false;
         }
     }
 
@@ -63,23 +60,4 @@ internal sealed class TipBuild(string folder)
             return null;
         }
     }
-}
-
-/// <summary>要求を送ってきた DLL (<see cref="TipBuild.Check"/>)。</summary>
-internal enum TipClient
-{
-    /// <summary>同梱の impl と同じビルドの impl。</summary>
-    Same,
-
-    /// <summary>別ビルドの impl。</summary>
-    Other,
-
-    /// <summary>
-    /// 後方互換レイヤー (#1670)。削除する。
-    /// stub と impl に分割する前の DLL (要求に impl が無い)。プロセスを再起動するまで差し替わらないので、今までどおり応答し、再起動を通知する。
-    /// 応答しないと、分割前の版から更新したとき、更新前から起動しているアプリが再起動まで英字しか入力できない。
-    /// 削除するときは、この値を消し、「後方互換レイヤー (#1670) ここから」から「ここまで」を消す (この値を使う塊はコンパイルエラーになる)。docs/dev/TSF_DESIGN.md の同じ目印の行も消す。
-    /// 削除した後は、分割前の DLL には {"stale":true} を返し、そのアプリは再起動まで英字のまま入る (再起動の通知は出る)。
-    /// </summary>
-    LegacyBeforeSplit,
 }
