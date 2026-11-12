@@ -59,8 +59,9 @@ export function render(markdown) {
   marked.use({
     walkTokens(token) { if (token.type === "link" || token.type === "image") token.href = rewriteUrl(token.href); },
     renderer: {
-      heading({ tokens, depth, text }) {
-        const plain = text.replace(/<[^>]*>/g, "");
+      heading({ tokens, depth }) {
+        // 見出しの文字だけ (リンク・強調・コードの印を除いたもの) で id を作る
+        const plain = this.parser.parseInline(tokens, this.parser.textRenderer);
         return `<h${depth} id="${escapeHtml(slug(plain))}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
       },
     },
