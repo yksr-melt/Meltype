@@ -13,6 +13,24 @@ namespace Meltype.Tests;
 internal static class WindowsTests
 {
     [Test]
+    public static void TouchKeyboard_IsShownOnlyWhileItsWindowIsVisibleAndEnabled()
+    {
+        // #729: タッチキーボードが出ている間だけ、ほかのソフトが送ったキー (タッチキーボードの打鍵) を手で打ったキーとして扱う。
+        // 隠したタッチキーボードもウィンドウは残る (Windows 10 は WS_DISABLED、Windows 11 は DWM で隠す) ので、見えているかまで見る
+        Assert.True(!TouchKeyboard.Shown(IntPtr.Zero), "ウィンドウが無い");
+        using var form = new Form { Text = "Meltype touch keyboard test", Width = 200, Height = 100, StartPosition = FormStartPosition.Manual, Location = new Point(200, 200), ShowInTaskbar = false };
+        form.CreateControl();
+        Assert.True(!TouchKeyboard.Shown(form.Handle), "表示していないウィンドウ");
+        form.Show();
+        Application.DoEvents();
+        Assert.True(TouchKeyboard.Shown(form.Handle), "表示しているウィンドウ");
+        form.Enabled = false;
+        Application.DoEvents();
+        Assert.True(!TouchKeyboard.Shown(form.Handle), "使えないウィンドウ (隠した Windows 10 のタッチキーボード)");
+        form.Close();
+    }
+
+    [Test]
     public static void Native_CharBuffersAreUnicode()
     {
         // CharSet の既定は ANSI で、char[8] が 8 バイトのバッファとして渡される。ワイド文字の API が書くと溢れてヒープが壊れる (#1559)
