@@ -59,9 +59,33 @@ enum KeyMapping {
         }
     }
 
-    /// 文字の無いキーの仮想キーコード。文字を入力するキーなら 0。
+    /// テンキーの数字・記号の仮想キーコード (Windows の VK_NUMPAD0〜9・VK_MULTIPLY など)。文字と一緒に渡す。
+    /// 本体は、何も打っていないときのテンキーをそのまま通す (上の段の数字とは分ける: issue #460)。
+    private static func keypadVirtualKey(for keyCode: UInt16) -> Int32? {
+        switch Int(keyCode) {
+        case kVK_ANSI_Keypad0: return 0x60
+        case kVK_ANSI_Keypad1: return 0x61
+        case kVK_ANSI_Keypad2: return 0x62
+        case kVK_ANSI_Keypad3: return 0x63
+        case kVK_ANSI_Keypad4: return 0x64
+        case kVK_ANSI_Keypad5: return 0x65
+        case kVK_ANSI_Keypad6: return 0x66
+        case kVK_ANSI_Keypad7: return 0x67
+        case kVK_ANSI_Keypad8: return 0x68
+        case kVK_ANSI_Keypad9: return 0x69
+        case kVK_ANSI_KeypadMultiply: return 0x6A
+        case kVK_ANSI_KeypadPlus: return 0x6B
+        case kVK_ANSI_KeypadMinus: return 0x6D
+        case kVK_ANSI_KeypadDecimal: return 0x6E
+        case kVK_ANSI_KeypadDivide: return 0x6F
+        default: return nil
+        }
+    }
+
+    /// 文字の無いキーと、テンキーの数字・記号の仮想キーコード。そのほかの文字を入力するキーなら 0。
     static func virtualKey(for event: NSEvent) -> Int32 {
         if let key = operationVirtualKey(for: event.keyCode) { return key }
+        if let key = keypadVirtualKey(for: event.keyCode) { return key }
         return Int(event.keyCode) == kVK_Space ? 0x20 : 0
     }
 }
