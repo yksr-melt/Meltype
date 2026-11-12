@@ -16,7 +16,8 @@ permissions:
 
 concurrency:
   group: web-${{ github.ref }}
-  cancel-in-progress: true
+  # main への push は取り消さない (deploy ジョブがマイグレーションと wrangler deploy の間で止まらないように)
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   web:
@@ -44,7 +45,7 @@ jobs:
         run: npx wrangler deploy --dry-run --outdir dist
 
   # main に入った web/ の変更を meltype.moe に出す (#1450)。
-  # Cloudflare のトークンは環境 web-production の secrets に置く (無ければ出さずに飛ばす。fork でも失敗にしない)
+  # Cloudflare のトークンは環境 web-production の secrets に置く (無ければ失敗にする。本番に出ていないことに気づけるように。fork では動かさない)
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'yksr-melt/Meltype'
     needs: web
@@ -64,26 +65,19 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - name: Check token
-        id: token
         working-directory: .
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
-            echo "::warning::CLOUDFLARE_API_TOKEN が無いので、デプロイを飛ばします"
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=true" >> "$GITHUB_OUTPUT"
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::環境 web-production に CLOUDFLARE_API_TOKEN と CLOUDFLARE_ACCOUNT_ID を入れてください (web/README.md の「デプロイ」)"
+            exit 1
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.token.outputs.ok == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: steps.token.outputs.ok == 'true'
         with:
           node-version: 24
       - name: Install
-        if: steps.token.outputs.ok == 'true'
         run: npm ci
       - name: Deploy
-        if: steps.token.outputs.ok == 'true'
         run: npm run deploy
