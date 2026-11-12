@@ -6,7 +6,7 @@ using System.Globalization;
 namespace Meltype.Composition;
 
 /// <summary>
-/// 通貨の換算に使う為替レート (設定「通貨を換算した候補を出す」。issue #342)。欧州中央銀行 (ECB) の参照レートを、
+/// 通貨の換算に使う為替レート (issue #342)。欧州中央銀行 (ECB) の参照レートを、
 /// リリースのときに tools/make-exchange-rates.mjs で dictionaries/exchange-rates.txt に書いて同梱する。使うときにネットにはつながない。
 /// </summary>
 public static class ExchangeRates

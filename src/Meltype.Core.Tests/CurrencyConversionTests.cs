@@ -6,7 +6,7 @@ using Meltype.Composition.Utility;
 
 namespace Meltype.Tests;
 
-/// <summary>通貨の換算 (設定「通貨を換算した候補を出す」。issue #342)。</summary>
+/// <summary>通貨の換算 (100どる → 約15,923円。issue #342)。</summary>
 internal static class CurrencyConversionTests
 {
     private const string Table = """
@@ -62,20 +62,11 @@ internal static class CurrencyConversionTests
     }
 
     [Test]
-    public static void Conversion_UsesTheBundledRatesWhenOn()
+    public static void Conversion_UsesTheBundledRates()
     {
         var k = new CompositionTests.Keyboard();
-        k.Settings.ExchangeRateCandidates = true;
         k.Type("100doru ");
         var date = ExchangeRates.Bundled!.Date.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(k.Host.View!.Candidates.Any(c => c.StartsWith('約') && c.EndsWith($"円（{date} のレート）", StringComparison.Ordinal)), string.Join(" ", k.Host.View.Candidates));
-    }
-
-    [Test]
-    public static void Conversion_IsOffByDefault()
-    {
-        var k = new CompositionTests.Keyboard();
-        k.Type("100doru ");
-        Assert.True(!k.Host.View!.Candidates.Any(c => c.StartsWith('約')), "既定 (OFF) では換算しない");
     }
 }

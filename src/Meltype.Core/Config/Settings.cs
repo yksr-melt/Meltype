@@ -367,10 +367,6 @@ public sealed class Settings
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     internal string? LegacyToggleKeyboardShortcuts { get; set; }
 
-    [Category("5. 候補"), DisplayName("通貨を換算した候補を出す"),
-     Description("金額と通貨の読み (100どる、1まんえんをゆーろ) を変換すると、別の通貨に換算した額を候補に出します (約15,923円)。レートは、この版を出したときの欧州中央銀行 (ECB) の参照レートで、候補にレートの日付を付けます (今のレートではありません。ネットにはつなぎません)。目安の額で、両替や取引の額とは違います。")]
-    public bool ExchangeRateCandidates { get; set; }
-
     [Category("5. 候補"), DisplayName("#番号で GitHub の Issue・PR のタイトルを候補に出す"),
      Description("#123 のように打って Space で変換すると、下の「GitHub のリポジトリ」の Issue・Pull Request のタイトルを候補に出します (開発者向け)。打った番号を GitHub (api.github.com) に問い合わせるので、既定は OFF です。非公開のリポジトリは、環境変数 MELTYPE_GITHUB_TOKEN にトークンを入れると読めます。調べた結果はこのセッションの間だけ覚えます。")]
     public bool GitHubIssueCandidates { get; set; }
