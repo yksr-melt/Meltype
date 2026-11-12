@@ -4587,6 +4587,40 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1689_DictionaryPlacementSettings()
+    {
+        // #1689: 同梱の辞書の語を、候補のどこに並べるかを選べる。ユーザー辞書の語は設定に関係なく最初の候補
+        string[] engine = ["再帰", "最期", "才気", "佐伯", "催奇", "祭器", "才木", "再期", "細期", "斎木"];
+        List<string> Candidates(Meltype.Config.DictionaryPlacement placement, out string text, UserDictionary? dictionary = null)
+        {
+            var k = new Keyboard(converter: new SaikiConverter(), moreCandidates: reading => reading == "さいき" ? engine : [],
+                userDictionary: dictionary ?? new UserDictionary(null));
+            k.Settings.BundledDictionaryPlacement = placement;
+            k.Type("saiki ");
+            text = k.Host.View!.Text;
+            return [.. k.Host.View!.Candidates];
+        }
+
+        // 既定: 変換エンジンの答えの次に同梱の辞書の語、そのあとに変換エンジンの候補
+        var normal = Candidates(Meltype.Config.DictionaryPlacement.AfterFirst, out var text);
+        Assert.Equal("再起", text);
+        Assert.Equal("再起 PSYQUI 再帰", string.Join(" ", normal.Take(3)));
+
+        Candidates(Meltype.Config.DictionaryPlacement.First, out text);
+        Assert.Equal("PSYQUI", text, "最初の候補にする");
+
+        var last = Candidates(Meltype.Config.DictionaryPlacement.Last, out text);
+        Assert.Equal("再起", text);
+        Assert.True(last.IndexOf("PSYQUI") > last.IndexOf("斎木"), "変換エンジンの候補の後ろ: " + string.Join(" ", last));
+
+        // ユーザー辞書の語は、同梱の辞書を「最初の候補にする」にしても最初の候補
+        var dictionary = new UserDictionary(null);
+        dictionary.Add("さいき", "彩希");
+        Candidates(Meltype.Config.DictionaryPlacement.First, out text, dictionary);
+        Assert.Equal("彩希", text);
+    }
+
+    [Test]
     public static void Ki_OffersOldKanji()
     {
         // #371: き の候補に 気 の旧字体 氣 も出す

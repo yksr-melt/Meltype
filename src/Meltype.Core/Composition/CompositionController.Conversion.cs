@@ -386,7 +386,7 @@ public sealed partial class CompositionController
         {
             if (parts.Contains(clause)) continue;
             var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
-            var preferred = _services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _learning.LearnedConversion(clause.Reading) : null);
+            var preferred = _services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _learning.LearnedConversion(clause.Reading) : FirstDictionaryWord(clause.Reading));
             if (preferred is not null) Prefer(clause, preferred);
         }
         return clauses;
@@ -528,6 +528,8 @@ public sealed partial class CompositionController
             // がち (ガチで) を、変換エンジンは 勝ち にしてしまう (勝ちでやばい)。勝ち の読みは かち なので、がち は ガチ にする
             preferred ??= clauses[i].Reading.StartsWith("がち", StringComparison.Ordinal) && clauses[i].Text.StartsWith("勝ち", StringComparison.Ordinal)
                 ? "ガチ" + clauses[i].Text["勝ち".Length..] : null;
+            // 設定「同梱の辞書の語の位置」が「最初の候補にする」なら、読みが同じ同梱の辞書の語を最初の候補にする
+            preferred ??= FirstDictionaryWord(clauses[i].Reading);
             if (preferred is not null) Prefer(clauses[i], preferred);
         }
         return clauses;
@@ -629,8 +631,10 @@ public sealed partial class CompositionController
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
-            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
+        // 設定「同梱の辞書の語の位置」が「変換エンジンの候補の後ろ」なら、同梱の辞書の語は読み・カタカナの後ろに回す (Expand で変換エンジンの候補の後ろにする)
+        var bundled = BundledWords(reading);
+        return DistinctShown([inContext, .. UserWords(reading), standalone, .. BundledLast ? [] : bundled,
+            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. BundledLast ? bundled : [], .. EmojiBlock(reading)]);
     }
 
     /// <summary>
@@ -726,9 +730,21 @@ public sealed partial class CompositionController
     {
         var kana = clause.Candidates.IndexOf(reading);
         var limit = kana < 0 ? clause.Candidates.Count : kana;
-        var words = (_services.UserDictionary?.Lookup(reading) ?? []).Concat(_services.Candidates?.LookupWords(reading) ?? []);
-        return Math.Max(0, words.Select(word => clause.Candidates.IndexOf(word)).Where(index => index < limit).DefaultIfEmpty(-1).Max());
+        return Math.Max(0, EarlyDictionaryWords(reading).Select(word => clause.Candidates.IndexOf(word)).Where(index => index < limit).DefaultIfEmpty(-1).Max());
     }
+
+    private IReadOnlyList<string> UserWords(string reading) => _services.UserDictionary?.Lookup(reading) ?? [];
+
+    private IReadOnlyList<string> BundledWords(string reading) => _services.Candidates?.LookupWords(reading) ?? [];
+
+    private bool BundledLast => _settings().BundledDictionaryPlacement == DictionaryPlacement.Last;
+
+    /// <summary>変換エンジンの候補より前に並べる辞書の語 (ユーザー辞書と、設定が「変換エンジンの候補の後ろ」でない同梱の辞書)。</summary>
+    private IEnumerable<string> EarlyDictionaryWords(string reading) => BundledLast ? UserWords(reading) : UserWords(reading).Concat(BundledWords(reading));
+
+    /// <summary>設定「同梱の辞書の語の位置」が「最初の候補にする」なら、読みが文節と同じ同梱の辞書の語のうち最初のもの。無ければ null。</summary>
+    private string? FirstDictionaryWord(string reading) =>
+        _settings().BundledDictionaryPlacement == DictionaryPlacement.First ? BundledWords(reading) is [var first, ..] ? first : null : null;
 
     private void Expand(Clause clause)
     {
@@ -742,6 +758,14 @@ public sealed partial class CompositionController
         if (anchor < 0) return;
         var current = clause.Text;
         var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
+        // 設定「同梱の辞書の語の位置」が「変換エンジンの候補の後ろ」なら、同梱の辞書の語は変換エンジンの候補をすべて並べた後ろ (絵文字の前) に回す
+        if (!clause.IsEnglish && BundledLast && BundledWords(reading).Where(w => w != current && merged.Contains(w)).ToList() is { Count: > 0 } last)
+        {
+            merged.RemoveAll(last.Contains);
+            var emoji = EmojiBlock(reading).ToHashSet();
+            var at = merged.FindIndex(emoji.Contains);
+            merged.InsertRange(at < 0 ? merged.Count : at, last);
+        }
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
     }
@@ -856,7 +880,7 @@ public sealed partial class CompositionController
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
-        if (_learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
+        if ((_learning.LearnedConversion(clause.Reading) ?? FirstDictionaryWord(clause.Reading)) is { } preferred) Prefer(clause, preferred);
     }
 
     private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);

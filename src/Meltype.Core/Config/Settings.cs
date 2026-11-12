@@ -79,6 +79,17 @@ public enum CompositionOpacity
 }
 
 /// <summary>かな漢字変換のエンジン。</summary>
+/// <summary>同梱の辞書の語を、変換の候補の一覧のどこに並べるか (issue #1689)。ユーザー辞書の語は、登録した読みを 1 つの文節にして最初の候補にする。</summary>
+public enum DictionaryPlacement
+{
+    /// <summary>読みが文節と同じとき、辞書の語を最初の候補にする。</summary>
+    [Description("最初の候補にする")] First,
+    /// <summary>既定。変換エンジンの答えの次に並べ、変換エンジンのほかの候補はその後ろ。</summary>
+    [Description("変換エンジンの答えの次")] AfterFirst,
+    /// <summary>変換エンジンの候補をすべて並べた後ろ。</summary>
+    [Description("変換エンジンの候補の後ろ")] Last,
+}
+
 public enum ConversionEngine
 {
     /// <summary>Mozc で変換し、使えないときは OS の変換エンジン。候補は両方。</summary>
@@ -426,6 +437,10 @@ public sealed class Settings
     [Category("5. 候補"), DisplayName("英訳の候補"),
      Description("変換の候補の後ろに英訳も出します (複雑な → complex, complicated)。JMdict のよく使う語から。選んだ英訳は少しずつ前に出ます。")]
     public bool TranslationCandidates { get; set; } = true;
+
+    [Category("5. 候補"), DisplayName("同梱の辞書の語の位置"),
+     Description("Meltype に同梱の辞書の語 (社名・サービス名・ネットの言葉など) を、変換の候補のどこに並べるかです。ユーザー辞書の語は、この設定に関係なく最初の候補にします。ふだん使わない語が前に出て邪魔なときは「変換エンジンの候補の後ろ」にします。")]
+    public DictionaryPlacement BundledDictionaryPlacement { get; set; } = DictionaryPlacement.AfterFirst;
 
     [Category("5. 候補"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
