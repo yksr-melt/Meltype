@@ -187,6 +187,32 @@ internal static class UtilityConversionTests
     }
 
     [Test]
+    public static void ZenzaiHallucinations_AreDroppedWhenLoaded()
+    {
+        // 前の版が覚えてしまった Zenzai の壊れた答え (かなが読みと合わない) は、読み込むときに捨てる (issue #1779)。
+        // かなを含まない記号・顔文字の候補は、読みと合わなくても残す
+        var directory = Path.Combine(Path.GetTempPath(), $"meltype-zenzai-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var conversions = Path.Combine(directory, "conversions.json");
+            string[][] entries =
+            [
+                ["はーどうぇ", "ハードウェアウェア"], ["きょうはで", "今日はでで"], ["なまえ", "名前は魚の"], ["はははははは", "ははははは"],
+                ["はーどうぇあ", "ハードウェア"], ["きょうは", "今日は"], ["まいくろそふと", "Microsoft"], ["ほし", "☆"], ["えがお", "(^_^)"],
+            ];
+            File.WriteAllText(conversions, "{" + string.Join(",", entries.Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
+            var history = new ConversionHistory(conversions);
+            foreach (var e in entries.Take(4)) Assert.True(history.Get(e[0]) is null, $"{e[0]} → {e[1]} は捨てる");
+            foreach (var e in entries.Skip(4)) Assert.Equal(e[1], history.Get(e[0]), $"{e[0]} → {e[1]} は残す");
+            var phrases = Path.Combine(directory, "phrases.txt");
+            File.WriteAllLines(phrases, ["なまえは\t名前は魚のは\t3\t0", "なまえは\t名前は\t3\t0"]);
+            Assert.Equal("名前は", string.Join(",", new PhraseHistory(phrases).StartingWith("なま")), "予測変換の語句も捨てる");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void ScreenTextInACandidate_IsNotLearned()
     {
         // 画面の文字 (U+FFFC を含む) が混ざった候補は、選んでも覚えない (issue #1537)

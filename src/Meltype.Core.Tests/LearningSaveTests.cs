@@ -26,14 +26,14 @@ internal static class LearningSaveTests
             var translations = new TranslationHistory(Path.Combine(directory, "translations.json"));
 
             languages.Remember("cafe", english: false, explicitChoice: true);
-            conversions.Remember("くらいど", "クラウド");
+            conversions.Remember("くらうど", "クラウド");
             phrases.Remember("きょうは", "今日は");
             translations.Remember("すし", "sushi");
             Assert.True(Directory.GetFiles(directory).Length == 0, "確定したときにはまだ書かない");
 
             LearningSaves.FlushAll();
             Assert.Equal(false, new LanguageMemory(Path.Combine(directory, "languages.json")).Get("cafe"));
-            Assert.Equal("クラウド", new ConversionHistory(Path.Combine(directory, "conversions.json")).Get("くらいど"));
+            Assert.Equal("クラウド", new ConversionHistory(Path.Combine(directory, "conversions.json")).Get("くらうど"));
             Assert.Equal("今日は", new PhraseHistory(Path.Combine(directory, "phrases.txt")).StartingWith("きょ").Single());
             Assert.Equal(1, new TranslationHistory(Path.Combine(directory, "translations.json")).Get("すし").Single().Count);
 

@@ -41,10 +41,15 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// <summary>
     /// 覚えない語 (学習データに入っていても、読み込むときに捨てる)。日時・版から作る語、前の版が学習から外し漏れていた
     /// ユーティリティ変換の候補 (時候の挨拶・クリップボードの文字)、アプリの画面の文字が混ざった語 (U+FFFC を含む。
-    /// Discord の画面の文字が文脈に入り、Zenzai がそれをそのまま返した: issue #1537)。
+    /// Discord の画面の文字が文脈に入り、Zenzai がそれをそのまま返した: issue #1537)、
+    /// かなが読みと合わない語 (前の版が使っていた Zenzai の壊れた答え: はーどうぇ → ハードウェアウェア。issue #1779)。
     /// </summary>
+    // かなを含まない語は読みと比べない。変換エンジンの記号の候補 (ほし → ☆) は読みと合わない。
+    // 英語の文節は読みが打った英字のまま (go → ご) なので比べない。
+    // candidates.txt の読みと合わない候補 (たべる → 召し上がる) も覚えなくなる。学習に候補の出どころを持たせれば (issue #1552) 覚えられる。
     public static bool IsStale(string reading, string text) =>
         IsVolatile(reading, text) ||
+        !reading.Any(char.IsAsciiLetter) && text.Any(c => KanaChars.IsHiragana(c) || KanaChars.IsKatakana(c)) && !ZenzaiConverter.IsPlausible(reading, text) ||
         text.Contains('\uFFFC', StringComparison.Ordinal) ||
         reading is "じこう" or "じこうのあいさつ" && text.Contains("の候", StringComparison.Ordinal) ||
         reading is "くりっぷぼーど" or "ぺーすと" && text != CompositionText.ToKatakana(reading);

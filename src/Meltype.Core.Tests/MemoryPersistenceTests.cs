@@ -29,7 +29,7 @@ internal static class MemoryPersistenceTests
             Assert.Equal(2, translations.Get("すし").Single().Count);
 
             languages.Remember("cafe", english: false, explicitChoice: true);
-            conversions.Remember("くらいど", "クラウド");
+            conversions.Remember("くらうど", "クラウド");
             translations.Remember("すし", "sushi");
 
             var restoredLanguages = new LanguageMemory(languagesPath);
@@ -37,7 +37,7 @@ internal static class MemoryPersistenceTests
             Assert.Equal(true, restoredLanguages.Get("sushi"));
             Assert.Equal(false, restoredLanguages.Get("cafe"));
             Assert.Equal("鮨", restoredConversions.Get("すし"));
-            Assert.Equal("クラウド", restoredConversions.Get("くらいど"));
+            Assert.Equal("クラウド", restoredConversions.Get("くらうど"));
             Assert.Equal(3, new TranslationHistory(translationsPath).Get("すし").Single().Count);
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -64,7 +64,7 @@ internal static class MemoryPersistenceTests
             var translations = new TranslationHistory(translationsPath);
             snippets.Set("ty", "ありがとうございます。");
             languages.Remember("cafe", english: false, explicitChoice: true);
-            conversions.Remember("くらいど", "クラウド");
+            conversions.Remember("くらうど", "クラウド");
             translations.Remember("すし", "sushi");
 
             foreach (var path in new[] { snippetsPath, languagesPath, conversionsPath, translationsPath })
