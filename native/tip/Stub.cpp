@@ -2,7 +2,7 @@
 // Copyright (C) 2026 aster-void
 //
 // ロードする impl は、stub と同じフォルダーの MeltypeTipImpl.dll.sha256 (impl の SHA-256) で決まり、
-// impl は impl\<SHA-256>.dll にある (どちらも Register-Tip.ps1 が配置する)。Meltype.exe からは指定させない
+// impl は impl\<SHA-256>\MeltypeTipImpl.dll にある (どちらも Register-Tip.ps1 が配置する)。Meltype.exe からは指定させない
 // (パイプのサーバーを偽装したプロセスによる、古い impl へのダウングレードを防ぐ)。
 // impl の中身の SHA-256 は照合しない。改竄は、置き場所 (Program Files) の ACL で防ぐ。管理者以外が書けるフォルダーに置くなら、中身を照合する。
 // TextService を生成した impl は FreeLibrary しない。
@@ -45,7 +45,9 @@ ITfTextInputProcessorEx* CreateInner(const std::wstring& hash, HWND window) {
         TipLog(L"stub: MeltypeTipImpl.dll.sha256 を読めません");
         return nullptr;
     }
-    std::wstring path = StubFolder() + L"\\impl\\" + hash + L".dll";
+    // SHA-256 はファイル名にしない。Gecko (Firefox など) は、ファイル名の . より前が 16 桁以上の 16 進数の DLL のロードを拒否する
+    // (browser/app/winlauncher/freestanding/DllBlocklist.cpp の DetermineBlockAction)。フォルダー名は判定しない
+    std::wstring path = StubFolder() + L"\\impl\\" + hash + L"\\MeltypeTipImpl.dll";
     HMODULE module = LoadLibraryExW(path.c_str(), nullptr, LOAD_WITH_ALTERED_SEARCH_PATH);
     if (module == nullptr) {
         TipLog(L"stub: %s をロードできません: %lu", path.c_str(), GetLastError());

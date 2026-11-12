@@ -174,11 +174,11 @@ function Test-MeltypeImeCurrent([string]$Source) {
         if ((Get-Sha256 $installed) -ne (Get-Sha256 $new)) { return $false }
     }
     foreach ($arch in 'x64', 'x86') {
-        # stub がロードする impl (Register-Tip.ps1 が impl\<署名前のバイナリの SHA-256>.dll に配置する)
+        # stub がロードする impl (Register-Tip.ps1 が impl\<署名前のバイナリの SHA-256>\MeltypeTipImpl.dll に配置する)
         $implHash = Read-HashFile (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256")
         $folder = Join-Path $MeltypeProgramFiles "Meltype\tip\$arch"
         if (-not $implHash -or $implHash -ne (Read-HashFile (Join-Path $folder 'MeltypeTipImpl.dll.sha256'))) { return $false }
-        if (-not (Test-Path -LiteralPath (Join-Path $folder "impl\$implHash.dll"))) { return $false }
+        if (-not (Test-Path -LiteralPath (Join-Path $folder "impl\$implHash\MeltypeTipImpl.dll"))) { return $false }
     }
     return $true
 }

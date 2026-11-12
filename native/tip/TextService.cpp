@@ -166,15 +166,15 @@ bool IsChromiumBrowser() {
     return chromium;
 }
 
-// この impl のファイル名 (拡張子を除く。Register-Tip.ps1 が impl の SHA-256 にする) の JSON の文字列。
+// この impl があるフォルダーの名前 (Register-Tip.ps1 が impl の SHA-256 にする) の JSON の文字列。
 // Meltype.exe が、同梱の impl の SHA-256 と照合する
 const std::string& ImplId() {
     static const std::string id = [] {
         wchar_t path[MAX_PATH] = {};
         GetModuleFileNameW(g_module, path, MAX_PATH);
-        const wchar_t* name = wcsrchr(path, L'\\');
-        std::wstring result = name ? name + 1 : path;
-        return JsonString(result.substr(0, result.find_last_of(L'.')));
+        std::wstring folder = path;
+        folder = folder.substr(0, folder.find_last_of(L'\\'));
+        return JsonString(folder.substr(folder.find_last_of(L'\\') + 1));
     }();
     return id;
 }
