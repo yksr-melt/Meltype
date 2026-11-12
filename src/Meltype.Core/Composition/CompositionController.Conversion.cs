@@ -133,7 +133,7 @@ public sealed partial class CompositionController
         var alternatives = utility is null && !asKana ? _text.ConversionSegmentAlternatives(MaxSegmentationAlternatives) : [segments];
         var clauses = BuildClauses(alternatives[0], preferJapanese);
         if (clauses.Count == 0) return;
-        if (alternatives.Count > 1 && WholeSentenceClause([clauses, .. alternatives.Skip(1).Select(a => BuildClauses(a, preferJapanese)).Where(c => c.Count > 0)]) is { } whole)
+        if (alternatives.Count > 1 && WholeSentenceClause([clauses, .. OtherAlternatives(alternatives, preferJapanese)]) is { } whole)
             clauses = [whole];
         if (utility is not null) clauses = [WithUtility(clauses, utility, segments[0].Kana)];
         // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
@@ -205,6 +205,33 @@ public sealed partial class CompositionController
 
     // 変換の候補に出す英日の区切りの案の数 (いちばん良い案を含む)
     private const int MaxSegmentationAlternatives = 4;
+
+    // 英日の区切りの案 (2 番目以降) を変換している間は true。Zenzai に頼まずに変換する (IStandaloneConverter)
+    private bool _convertingOtherAlternatives;
+
+    /// <summary>英日の区切りの案のうち 2 番目以降の文節。空になった案は除く。</summary>
+    private List<List<Clause>> OtherAlternatives(IReadOnlyList<IReadOnlyList<CompositionSegment>> alternatives, bool preferJapanese)
+    {
+        _convertingOtherAlternatives = true;
+        try
+        {
+            return [.. alternatives.Skip(1).Select(a => BuildClauses(a, preferJapanese)).Where(c => c.Count > 0)];
+        }
+        finally
+        {
+            _convertingOtherAlternatives = false;
+        }
+    }
+
+    /// <summary>変換エンジンで文節に区切って変換する。英日の区切りの案 (2 番目以降) では Zenzai に頼まない。</summary>
+    private IReadOnlyList<ConversionClause>? EngineClauses(string kana, string? context = null) =>
+        _convertingOtherAlternatives && _converter is IStandaloneConverter standalone
+            ? standalone.ConvertClausesStandalone(kana, context)
+            : _converter.ConvertClauses(kana, context);
+
+    /// <summary>変換エンジンで読み全体を変換する。英日の区切りの案 (2 番目以降) では Zenzai に頼まない。</summary>
+    private string? EngineConvert(string kana) =>
+        _convertingOtherAlternatives && _converter is IStandaloneConverter standalone ? standalone.ConvertStandalone(kana) : _converter.Convert(kana);
 
     /// <summary>
     /// 区切りの案ごとの文節 (先頭がいちばん良い案) を、文全体の 1 つの文節にする。候補は案ごとの文 (botto → botと、ボット) の後ろに、
@@ -478,7 +505,7 @@ public sealed partial class CompositionController
     {
         var unchanged = pieces.Select(p => (p.Reading, p.Word, (IReadOnlyList<ConversionClause>?)null)).ToList();
         if (_services.UserDictionary is not { } dictionary) return unchanged;
-        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : _converter.ConvertClauses(kana);
+        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : EngineClauses(kana);
         if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return unchanged;
         var starts = new HashSet<int>();
         for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
@@ -568,8 +595,8 @@ public sealed partial class CompositionController
         var context = ConversionContext();
         var parts = engine ?? (context is not null
             ? ConvertWithContext(kana, context)
-            : _converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
-        parts ??= [new ConversionClause(kana, _converter.Convert(kana) ?? kana)];
+            : EngineClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
+        parts ??= [new ConversionClause(kana, EngineConvert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _services.Candidates?.Contains(kana) == true)
         {
@@ -672,8 +699,8 @@ public sealed partial class CompositionController
     /// </summary>
     private IReadOnlyList<ConversionClause>? ConvertWithContext(string kana, string context)
     {
-        var withContext = _converter.ConvertClauses(kana, context);
-        var plain = _converter.ConvertClauses(kana);
+        var withContext = EngineClauses(kana, context);
+        var plain = EngineClauses(kana);
         if (withContext is null || plain is null) return withContext ?? plain;
         return withContext.Select(c => c.Reading).SequenceEqual(plain.Select(c => c.Reading)) ? withContext : plain;
     }
@@ -922,7 +949,7 @@ public sealed partial class CompositionController
         if (_learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
-    private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
+    private string Convert(string kana) => NormalizeHalfWidth(EngineConvert(kana) ?? kana, kana);
 
     /// <summary>
     /// 文の中での変換結果がある文節の候補に足す「その読みだけの変換」。Zenzai を使える変換エンジンでも Zenzai には頼まない (IStandaloneConverter)。
@@ -930,8 +957,8 @@ public sealed partial class CompositionController
     /// </summary>
     private string Standalone(string kana)
     {
-        if (_converter is not IStandaloneConverter standalone) return Convert(kana);
-        return NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
+        var converted = _converter is IStandaloneConverter standalone ? standalone.ConvertStandalone(kana) : _converter.Convert(kana);
+        return NormalizeHalfWidth(converted ?? kana, kana);
     }
 
     /// <summary>
