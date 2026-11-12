@@ -231,11 +231,9 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 次に空の変換ボックスへ入れる / は、文章の入力欄の打ち始め (先頭か空白の直後) に打ったもの。・ にする。
-    /// フロントが、その / を本体に渡す前に呼ぶ。
+    /// フロントが、その / を本体に渡す前に呼ぶ。この入力の間は変えない (BackSpace で打ち直しても ・ のまま)。
     /// </summary>
-    public void MarkSlashAtStart() => _slashAtStart = true;
-
-    private bool _slashAtStart;
+    public void MarkSlashAtStart() => _text.SlashAtStart = true;
 
     /// <summary>
     /// 英訳の候補 (複雑な → complex, complicated …) を、日本語の候補の後ろに足す。
