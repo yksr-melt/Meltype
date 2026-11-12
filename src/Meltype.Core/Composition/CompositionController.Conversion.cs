@@ -192,7 +192,7 @@ public sealed partial class CompositionController
     private UtilityCandidates? Utilities(IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(_settings(), _services.Now(), _services.UtcNow(), _services.LocalTimeZone(), Clipboard, NowPlaying, _services.GitHubTitles(), _services.ExchangeRates());
+        var context = new UtilityContext(_settings(), _services.Now(), _services.UtcNow(), _services.LocalTimeZone(), Clipboard, NowPlaying, _services.GitHubTitles());
         return UtilityConversions.Convert(new UtilityInput(_text, reading, _services.DirectMode(), context));
     }
 

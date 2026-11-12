@@ -8,7 +8,7 @@ namespace Meltype.Composition.Utility;
 
 /// <summary>
 /// 設定「通貨を換算した候補を出す」: 金額と通貨の読み (100どる、1まんえんをゆーろ) に、別の通貨に換算した額を出す (issue #342)。
-/// レートは ECB の参照レート (ExchangeRates) で、固定のレートに見えないように、候補にレートの日付を付ける。
+/// レートは同梱した ECB の参照レート (ExchangeRates。リリースのときのもの) で、今のレートに見えないように、候補にレートの日付を付ける。
 /// 通貨だけ (100どる) なら円に、円 (1000えん) ならドルとユーロにする。「〜を〜」で換算先を決められる。
 /// </summary>
 internal sealed partial class CurrencyConversion : IUtilityConversion
@@ -31,7 +31,7 @@ internal sealed partial class CurrencyConversion : IUtilityConversion
     public UtilityCandidates? Convert(UtilityInput input)
     {
         if (!input.Context.Settings.ExchangeRateCandidates || input.Reading is not { } reading || Parse(reading) is not { } parsed) return null;
-        if (input.Context.ExchangeRates?.Current(TimeSpan.FromMilliseconds(1500)) is not { } rates) return null;
+        if (ExchangeRates.Bundled is not { } rates) return null;
         var candidates = Candidates(parsed.Amount, parsed.From, parsed.To, rates);
         return candidates.Count > 0 ? new(candidates, UtilityPlacement.Append) : null;
     }

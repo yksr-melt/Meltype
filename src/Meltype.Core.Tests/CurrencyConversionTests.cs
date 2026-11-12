@@ -9,27 +9,28 @@ namespace Meltype.Tests;
 /// <summary>通貨の換算 (設定「通貨を換算した候補を出す」。issue #342)。</summary>
 internal static class CurrencyConversionTests
 {
-    private const string Xml = """
-        <gesmes:Envelope xmlns:gesmes="http://www.gesmes.org/xml/2002-08-01" xmlns="http://www.ecb.int/vocabulary/2002-08-01/eurofxref">
-          <Cube><Cube time='2026-11-11'>
-            <Cube currency='USD' rate='1.1127'/>
-            <Cube currency='JPY' rate='177.18'/>
-            <Cube currency='GBP' rate='0.83618'/>
-            <Cube currency='KRW' rate='1600.5'/>
-          </Cube></Cube>
-        </gesmes:Envelope>
+    private const string Table = """
+        # Meltype 通貨の換算に使うレート (1 ユーロあたりの各通貨の額)
+        # 日付: 2026-11-11
+        EUR	1
+        USD	1.1127
+        JPY	177.18
+        GBP	0.83618
+        KRW	1600.5
         """;
 
-    private static ExchangeRates.Snapshot Rates => ExchangeRates.Parse(Xml, new DateTime(2026, 11, 11, 16, 0, 0, DateTimeKind.Utc))!;
+    private static ExchangeRates.Snapshot Rates => ExchangeRates.Parse(Table)!;
 
     [Test]
-    public static void Parse_ReadsTheEcbReferenceRates()
+    public static void Parse_ReadsTheBundledTable()
     {
         var rates = Rates;
         Assert.Equal(new DateOnly(2026, 11, 11), rates.Date);
         Assert.Equal(1m, rates.Rates["EUR"], "ユーロは 1");
         Assert.Equal(177.18m, rates.Rates["JPY"]);
-        Assert.True(ExchangeRates.Parse("<html>メンテナンス中</html>", DateTime.UtcNow) is null, "読めないものは使わない");
+        Assert.True(ExchangeRates.Parse("EUR\t1\nJPY\t177.18\n") is null, "日付が無ければ使わない");
+        // 同梱した表 (tools/make-exchange-rates.mjs で作ったもの) を読める
+        Assert.True(ExchangeRates.Bundled is { } bundled && bundled.Rates.ContainsKey("JPY") && bundled.Rates.ContainsKey("USD"), "同梱した表");
     }
 
     [Test]
@@ -61,30 +62,13 @@ internal static class CurrencyConversionTests
     }
 
     [Test]
-    public static void Rates_AreRememberedAndUsedOffline()
+    public static void Conversion_UsesTheBundledRatesWhenOn()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"meltype-rates-{Guid.NewGuid():N}.json");
-        try
-        {
-            var now = new DateTime(2026, 11, 11, 16, 0, 0, DateTimeKind.Utc);
-            var online = new ExchangeRates(path, () => Task.FromResult<string?>(Xml), () => now);
-            Assert.Equal(177.18m, online.Current(TimeSpan.FromSeconds(5))?.Rates["JPY"], "読めたら使う");
-            Assert.True(SpinWait.SpinUntil(() => File.Exists(path), 5000), "ファイルに覚える");
-
-            // 次の日、ネットにつながらない: 最後に読めたレート (日付もそのまま) を使う
-            var offline = new ExchangeRates(path, () => throw new HttpRequestException("つながりません"), () => now.AddDays(1));
-            var remembered = offline.Current(TimeSpan.FromSeconds(5));
-            Assert.Equal(new DateOnly(2026, 11, 11), remembered?.Date, "覚えたレート");
-            Assert.Equal(177.18m, remembered?.Rates["JPY"]);
-
-            // 一度も読めていなければ出さない
-            var never = new ExchangeRates(null, () => Task.FromResult<string?>(null), () => now);
-            Assert.True(never.Current(TimeSpan.FromSeconds(5)) is null, "読めたことが無い");
-        }
-        finally
-        {
-            File.Delete(path);
-        }
+        var k = new CompositionTests.Keyboard();
+        k.Settings.ExchangeRateCandidates = true;
+        k.Type("100doru ");
+        var date = ExchangeRates.Bundled!.Date.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.True(k.Host.View!.Candidates.Any(c => c.StartsWith('約') && c.EndsWith($"円（{date} のレート）", StringComparison.Ordinal)), string.Join(" ", k.Host.View.Candidates));
     }
 
     [Test]

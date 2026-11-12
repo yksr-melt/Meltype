@@ -368,7 +368,7 @@ public sealed class Settings
     internal string? LegacyToggleKeyboardShortcuts { get; set; }
 
     [Category("5. 候補"), DisplayName("通貨を換算した候補を出す"),
-     Description("金額と通貨の読み (100どる、1まんえんをゆーろ) を変換すると、別の通貨に換算した額を候補に出します (約15,234円)。レートは欧州中央銀行 (ECB) が毎日公開している参照レートで、候補にレートの日付を付けます。レートを読むため ECB (www.ecb.europa.eu) に接続するので、既定は OFF です (打った文字は送りません)。ネットにつながらないときは、最後に読めたレートを使います。目安の額で、両替や取引の額とは違います。")]
+     Description("金額と通貨の読み (100どる、1まんえんをゆーろ) を変換すると、別の通貨に換算した額を候補に出します (約15,923円)。レートは、この版を出したときの欧州中央銀行 (ECB) の参照レートで、候補にレートの日付を付けます (今のレートではありません。ネットにはつなぎません)。目安の額で、両替や取引の額とは違います。")]
     public bool ExchangeRateCandidates { get; set; }
 
     [Category("5. 候補"), DisplayName("#番号で GitHub の Issue・PR のタイトルを候補に出す"),

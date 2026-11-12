@@ -29,7 +29,6 @@ public sealed class MeltypeRuntime : IDisposable
     {
         DataDirectory = dataDirectory;
         Directory.CreateDirectory(dataDirectory);
-        ExchangeRates = new ExchangeRates(Path.Combine(dataDirectory, "exchange-rates.json"));
         _userDirectory = Path.Combine(dataDirectory, "dictionaries");
         _wordChecker = wordChecker is { IsAvailable: true } ? wordChecker : BuiltInWordChecker.Shared;
         SettingsSchema.Write(dataDirectory);
@@ -59,7 +58,6 @@ public sealed class MeltypeRuntime : IDisposable
             RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
             TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
             GitHubTitles = () => GitHubTitles,
-            ExchangeRates = () => ExchangeRates,
         };
         Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
         // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
@@ -107,9 +105,6 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。プロセスの間だけ覚える。</summary>
     public GitHubIssueTitles GitHubTitles { get; } = new();
-
-    /// <summary>通貨の換算に使う為替レート (設定「通貨を換算した候補を出す」)。最後に読めたレートを exchange-rates.json に覚える。</summary>
-    public ExchangeRates ExchangeRates { get; }
 
     /// <summary>
     /// 入力欄 1 つ分の本体を作る。converter は OS ごとの変換エンジン、moreCandidates は読みに対する OS の候補の一覧 (無ければ null)。
