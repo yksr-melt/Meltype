@@ -50,6 +50,40 @@ internal sealed class TipServer : IDisposable
     private readonly ConversionSignal _conversion = new();
 
     /// <summary>
+    /// 読めない要求を送ってきた (前の版の Meltype IME の DLL を読み込んだままの) アプリのプロセス。DLL はプロセスごとに読み込まれ、
+    /// アプリを再起動するまで前の版のまま残る。前の版の DLL (v1.5.0 以前は {"op":…} の形) の要求は読めず、DLL はキーをそのまま通すので、
+    /// そのアプリでは日本語を入力できない (#1754)。前の版に合わせる処理は持たず、アプリか PC の再起動を案内する。
+    /// 次にやり取りを変えたときも、前の版の要求は読めない (形か ImeHost.Version が違う) ので、同じく見つけられる。
+    /// プロセスは PID と起動した時刻で見分ける (PID は使い回される)。
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _outdatedReported = new();
+
+    /// <summary>前の版の Meltype IME の DLL を読み込んだままのアプリが見つかった (引数はプロセス名)。UI スレッドでは呼ばない。</summary>
+    public event Action<string>? OutdatedDllFound;
+
+    /// <summary>プロセスを見分ける鍵 (PID と起動した時刻)。起動した時刻を読めなければ PID だけ。</summary>
+    private static string ProcessKey(uint processId)
+    {
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)processId);
+            return $"{processId}:{process.StartTime.ToFileTimeUtc()}";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return processId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    private void ReportOutdated(string process, uint processId)
+    {
+        if (!_outdatedReported.TryAdd(process, true)) return;
+        var name = ProcessName(processId) ?? $"プロセス {processId}";
+        Log.Warn($"Meltype IME: {name} は前の版の Meltype IME を読み込んだままで、要求を読めません (日本語を入力できません)。アプリか PC を再起動してください。");
+        OutdatedDllFound?.Invoke(name);
+    }
+
+    /// <summary>
     /// wait の要求を返さずに持つ時間。DLL が IME のスレッドを止めて終わりを待つことがある (終わるとき) ので短くする。
     /// DLL は入力中だけ、返ったらすぐ次の wait を送る。
     /// </summary>
@@ -380,6 +414,9 @@ internal sealed class TipServer : IDisposable
         var ownClient = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var clientProcess) && clientProcess == (uint)Environment.ProcessId;
         // このつながりの入力の本体 (UI スレッドからだけ触る。Meltype.exe 自身の UI スレッドのつながりは、UI スレッドが止まっている間に触る)
         var host = ownClient ? Connect(null, 0) : Connect(ProcessName(clientProcess), clientProcess);
+        var processKey = ownClient ? "" : ProcessKey(clientProcess);
+        // 前の版の DLL の要求は、つながりごとに 1 回だけ見る (読めない要求が来るたびにプロセスを調べない)
+        var checkedOutdated = false;
         var buffer = new byte[64 * 1024];
         using var message = new MemoryStream();
         try
@@ -400,8 +437,13 @@ internal sealed class TipServer : IDisposable
                 try
                 {
                     var request = TipRequest.Parse(Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length));
-                    if (request is null)
+                    if (request is null || request.WaitSince is null && request.Event.Version != ImeHost.Version)
                     {
+                        if (!ownClient && !checkedOutdated)
+                        {
+                            checkedOutdated = true;
+                            ReportOutdated(processKey, clientProcess);
+                        }
                         reply = Inactive;
                     }
                     else if (request.WaitSince is { } since)
