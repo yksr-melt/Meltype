@@ -82,9 +82,17 @@ dotnet format whitespace --folder
 dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true
 ```
 
+使わなくなったコードを消す。
+
+## コードの書き方
+
+- シンプルさを何よりも優先する。
+- 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
+- 未知の例外は握りつぶさず、例外として気付けるようにする。
+- 標準的でない決まり（`english-readable.txt` に 2 文字以下の語を入れない、など）を作るときは、その決まりを書いた場所に理由を書く。
+
 ## 判定・変換を直すとき
 
-- 辞書の追加で直るなら、辞書の追加で直す。
 - 報告された入力は症状の 1 例。原因を突き止め、同じ原因で起きる入力をまとめて直す。
 - 条件を過剰に一般化しない。`i18n`・`p2p` を英語にするために「英字 + 数字 + 英字」を英語と判定したら、`huusoku6me-toru` が `ふうそku6meーとる` になった。
 
@@ -118,7 +126,9 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 `→`・`->` を含む行はすべて例として読まれる。補足を同じ行に書くと期待に混ざるので、別の行に書く。
 
-## 設定を足すとき
+## 設定
+
+設定は最小限にする。消せる設定は消す。
 
 ON と OFF のそれぞれに意味がある設定だけを足す。設定はユーザーの好みであって、判別をサボる理由にはならない。すべての設定項目の追加はユーザーの負担になるので、設定の追加には慎重になる。
 
