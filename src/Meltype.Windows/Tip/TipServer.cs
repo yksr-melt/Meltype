@@ -71,6 +71,12 @@ internal sealed class TipServer : IDisposable
     /// <summary>登録されていて、登録済みの impl がこの Meltype.exe と同じビルドか (Meltype の更新時に Meltype IME の再登録を断ると、別ビルドになる)。</summary>
     private static bool IsInstalledBuild => RegisteredStub() is { Length: > 0 } stub && TipBuild.Shipped.IsInstalled(stub);
 
+    /// <summary>
+    /// 登録されているが、登録済みの impl がこの Meltype.exe と別ビルドか。Meltype IME の再登録 (UAC) をせずに Meltype.exe だけを更新すると、こうなる
+    /// (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
+    /// </summary>
+    public static bool IsOtherBuildRegistered => RegisteredStub() is { Length: > 0 } stub && !TipBuild.Shipped.IsInstalled(stub);
+
     // 登録されているか。レジストリを読めなければ null。
     // TIP のキーだけ残り、DLL の登録 (InprocServer32) や DLL が無いことがある (セキュリティソフトが登録を途中で止めたとき)。
     // そのときは登録されていないとみなす (Meltype キーボードで動かす)

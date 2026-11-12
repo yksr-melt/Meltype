@@ -73,7 +73,9 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 - 前の impl は `FreeLibrary` しない (プロセスの終了まで残る)。ファイルは、どのプロセスもロードしていなければ次の登録で削除する
 - 差し替えられないアプリ (stub と impl に分割する前の DLL が残っている・古い stub が今の impl をロードできない) は、同じ接続から 3 秒たっても別ビルドの要求が届くことで検出する。
   Meltype.exe が「アプリを再起動すると入力できる」と通知する (アプリごとに 1 回)
-- 登録済みの impl が Meltype.exe と別ビルドのとき (Meltype の更新時に Meltype IME の再登録を断った) は、Meltype キーボードで動かす (`TipServer.IsUsable`)
+- 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。Meltype IME を再登録せずに Meltype.exe だけを更新すると、こうなる
+  (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
+  動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (`ImeDeclined` は見ない。聞いたことを覚える状態は持たない)
 - `tip` フォルダーが無い Meltype.exe (`dotnet run`・テスト・ポータブル版) は、impl を照合しない
 
 プロトコルの版の番号 (`ImeEvent.version`) では照合しない。項目名を変更しても番号が `1` のままで、不一致を検出できていなかった。
