@@ -63,7 +63,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tipServer.OutdatedDllFound += name => _invoker.BeginInvoke(() =>
         {
             if (_engine.Settings.ShowNotifications)
-                ShowBalloonTip(10000, "Meltype IME を更新しきれていません", $"{name} は前の版の Meltype IME を使っています。{name} を閉じて開き直すか、PC を再起動してください。");
+                ShowBalloonTip(10000, "Meltype IME を更新しきれていません", $"{name} は前の版の Meltype IME を使っているので、日本語を入力できません。{name} を閉じて開き直すか、PC を再起動してください。");
         });
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
