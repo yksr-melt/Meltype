@@ -59,6 +59,9 @@ public sealed record CompositionServices
 
     public Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
+    /// <summary>通貨の換算に使う為替レート (設定「通貨を換算した候補を出す」)。</summary>
+    public Func<ExchangeRates?> ExchangeRates { get; init; } = () => null;
+
     /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
 
