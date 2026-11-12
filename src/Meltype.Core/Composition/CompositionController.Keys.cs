@@ -63,12 +63,10 @@ public sealed partial class CompositionController
 
         // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。
         if (IsShift(vk)) return;
-        // 設定「テンキーは直接入力」: テンキーの数字・記号は変換ボックスに入れず、確定してからそのまま通す (半角で入る: issue #460)。
-        // 変換中にテンキーの 1〜9 で候補を選ぶ (設定「変換中の数字キーで候補を選ぶ」) ときは、選ぶほうを優先する
-        if (_settings().NumpadDirectInput && !_control && !_modifier && vk is >= 0x60 and <= 0x6F &&
-            !(_converting && !_shift && vk is >= 0x61 and <= 0x69 && _settings().NumberKeysSelectCandidates))
+        // 何も打っていないときのテンキーの数字・記号は、変換ボックスに入れず、そのまま通す (半角で入る。Excel・CAD などで数値を打つとき: issue #460)。
+        // 入力中なら今までどおり変換ボックスに入れる (3 + ji → 3時 のように続けて変換できる)
+        if (_text.IsEmpty && !_control && !_modifier && vk is >= 0x60 and <= 0x6F)
         {
-            CommitIfAny();
             PassKey();
             return;
         }

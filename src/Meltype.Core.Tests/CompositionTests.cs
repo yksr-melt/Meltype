@@ -2758,31 +2758,23 @@ internal static class CompositionTests
     [Test]
     public static void Issue460_NumpadDirectInput()
     {
-        // #460: 設定「テンキーは直接入力」が ON なら、テンキーの数字・記号は変換ボックスに入れず、確定してから半角でそのまま入れる
+        // #460: 何も打っていないときのテンキーの数字・記号は、変換ボックスに入れず、半角でそのまま入れる
         var k = new Keyboard();
-        k.Settings.NumpadDirectInput = true;
         k.Press(0x61); k.Press(0x6B); k.Press(0x62); k.Press(0x6E); k.Press(0x65);
         Assert.Equal("1+2.5", k.Host.Document, "何も打っていないとき");
         Assert.True(!k.Captured, "変換ボックスは出さない");
 
-        k = new Keyboard();
-        k.Settings.NumpadDirectInput = true;
-        k.Type("ai");
-        k.Press(0x61);
-        Assert.Equal("あい1", k.Host.Document, "入力中の文字は確定してから入れる");
-
-        // 上の段の数字は今までどおり変換ボックスに入る
-        k = new Keyboard();
-        k.Settings.NumpadDirectInput = true;
-        k.Type("ai1");
-        Assert.True(k.Captured, "上の段の数字");
-
-        // OFF (既定) なら今までどおり変換ボックスに入れる
+        // 入力中なら今までどおり変換ボックスに入れる
         k = new Keyboard();
         k.Type("ai");
         k.Press(0x61);
-        Assert.Equal("あい1", k.Host.View?.Text, "OFF");
+        Assert.Equal("あい1", k.Host.View?.Text, "入力中");
         Assert.Equal("", k.Host.Document);
+
+        // 上の段の数字は、何も打っていないときも今までどおり変換ボックスに入る
+        k = new Keyboard();
+        k.Type("1");
+        Assert.True(k.Captured, "上の段の数字");
     }
 
     [Test]
