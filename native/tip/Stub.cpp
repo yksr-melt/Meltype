@@ -4,7 +4,8 @@
 // ロードする impl は、stub と同じフォルダーの MeltypeTipImpl.dll.sha256 (impl の SHA-256) で決まり、
 // impl は impl\<SHA-256>.dll にある (どちらも Register-Tip.ps1 が配置する)。Meltype.exe からは指定させない
 // (パイプのサーバーを偽装したプロセスによる、古い impl へのダウングレードを防ぐ)。
-// ロードした impl は FreeLibrary しない。
+// impl の中身の SHA-256 は照合しない。改竄は、置き場所 (Program Files) の ACL で防ぐ。管理者以外が書けるフォルダーに置くなら、中身を照合する。
+// TextService を生成した impl は FreeLibrary しない。
 
 #include "Stub.h"
 
@@ -53,12 +54,14 @@ ITfTextInputProcessorEx* CreateInner(const std::wstring& hash, HWND window) {
     auto abi = reinterpret_cast<MeltypeTipAbiFn>(reinterpret_cast<void*>(GetProcAddress(module, "MeltypeTipAbi")));
     if (abi == nullptr || abi() != kStubImplAbi) {
         TipLog(L"stub: %s は ABI が違います", path.c_str());
+        FreeLibrary(module);
         return nullptr;
     }
     auto create = reinterpret_cast<MeltypeTipCreateFn>(reinterpret_cast<void*>(GetProcAddress(module, "MeltypeTipCreate")));
     ITfTextInputProcessorEx* inner = nullptr;
     if (create == nullptr || FAILED(create(window, &inner))) {
         TipLog(L"stub: %s の TextService を生成できません", path.c_str());
+        FreeLibrary(module);
         return nullptr;
     }
     return inner;
@@ -171,9 +174,12 @@ private:
         if (now - lastReload_ < 1000) return;
         lastReload_ = now;
         const std::wstring hash = CurrentImpl();
-        if (hash.empty() || hash == loaded_) return;
+        if (hash.empty() || hash == loaded_ || hash == failed_) return;
         ITfTextInputProcessorEx* next = CreateInner(hash, window_);
-        if (next == nullptr) return;
+        if (next == nullptr) {
+            failed_ = hash;
+            return;
+        }
         TipLog(L"stub: impl を差し替えます: %s → %s", loaded_.c_str(), hash.c_str());
         // 差し替えの途中で TSF が Release しても解放されないようにする
         AddRef();
@@ -193,6 +199,7 @@ private:
     LONG refs_ = 1;
     HWND window_ = nullptr;        // kStubImplStale の送信先
     std::wstring loaded_;          // inner_ を生成した impl の SHA-256
+    std::wstring failed_;          // CreateInner が失敗した impl の SHA-256 (ABI が違う impl を、kStubImplStale のたびにロードし直さない)
     ULONGLONG lastReload_ = 0;
     ITfTextInputProcessorEx* inner_ = nullptr;
     ITfThreadMgr* threadMgr_ = nullptr;  // Activate から Deactivate までの間だけ保持する

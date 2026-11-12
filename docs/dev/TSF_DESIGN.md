@@ -62,6 +62,7 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 - stub は、TSF が IME のオブジェクトに QueryInterface する `ITfTextInputProcessorEx`・`ITfDisplayAttributeProvider` を impl の `TextService` に委譲するだけ。
   下の表のシンクは、impl の `TextService` が TSF に直接 Advise する
 - impl は `C:\Program Files\Meltype\tip\<x64|x86>\impl\<SHA-256>.dll` に配置する。ファイル名は署名前のバイナリの SHA-256。
+  stub は impl の中身の SHA-256 を照合しない。改竄は置き場所 (Program Files) の ACL で防ぐので、管理者以外が書けるフォルダーに移すなら、中身も照合する。
   stub がロードする impl は、stub と同じフォルダーの `MeltypeTipImpl.dll.sha256` で指定する。Meltype.exe からパイプで指定する形にはしない
   (パイプのサーバーを偽装したプロセスによる、残っている古い impl へのダウングレードを防ぐ)。
   `Register-Tip.ps1` は、stub を登録できてから `MeltypeTipImpl.dll.sha256` を書き換える (stub の登録に失敗して前の stub に戻したときは、前の impl を指したまま)
