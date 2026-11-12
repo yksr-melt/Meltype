@@ -191,12 +191,6 @@ public sealed partial class CompositionController
         _text.CorrectTypos = () => _settings().CorrectTypos;
         _text.Slash = () => _settings().Slash;
         _text.ZSymbols = () => _settings().ZSymbols;
-        _text.SlashAtStart = () =>
-        {
-            var marked = _slashAtStart;
-            _slashAtStart = false;
-            return marked;
-        };
     }
 
     /// <summary>入力を覚えないように求める入力欄か。true の間は学習しない。</summary>
