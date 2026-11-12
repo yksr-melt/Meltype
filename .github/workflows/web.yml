@@ -4,6 +4,8 @@ on:
   pull_request:
     paths: &paths
       - 'web/**'
+      - 'docs/*.md'
+      - 'docs/images/**'
       - '.github/workflows/web.yml'
   push:
     branches: [main]
@@ -36,6 +38,8 @@ jobs:
         run: npm run check
       - name: Test
         run: npm test
+      - name: Build guide
+        run: npm run guide
       - name: Check wrangler config
         run: npx wrangler deploy --dry-run --outdir dist
 
