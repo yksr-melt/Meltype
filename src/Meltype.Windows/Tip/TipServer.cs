@@ -50,26 +50,59 @@ internal sealed class TipServer : IDisposable
     private readonly ConversionSignal _conversion = new();
 
     /// <summary>
-    /// 変換の答えを待ち受けてきた (wait を送った) アプリのプロセスと、待ち受けずに受け取ったキーの数。DLL はプロセスごとに読み込まれる。
-    /// v1.4.0 以前の DLL は wait を送らないので、ライブ変換の答えが届いても表示を作り直せず、Enter までかなのままになる (#1754)。
-    /// 古い DLL を読み込んだままのアプリは、再起動すれば今の DLL を読み込むので、それを案内する。
+    /// DLL と Meltype.exe のやり取りの版 (native/tip の kDllRevision)。DLL はプロセスごとに読み込まれ、アプリを再起動するまで前の版のまま残る。
+    /// これより古い DLL を読み込んだままのアプリを見つけたら、アプリか PC の再起動を案内する (前の版に合わせる処理は持たない)。
+    /// 1: 変換の答えを wait で待ち受ける。待ち受けない v1.4.0 以前の DLL では、ライブ変換が Enter まで出ない (#1754)
     /// </summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _waiters = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, int> _keysWithoutWait = new();
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _outdatedReported = new();
+    internal const int CurrentDllRevision = 1;
 
-    /// <summary>今の DLL ならもう wait を送っているはずのキーの数 (今の DLL は、入力を始めた最初のキーの後に送る)。</summary>
-    private const int KeysBeforeOutdated = 10;
+    /// <summary>
+    /// 版を送らない DLL (v1.5.0 以前) のプロセスのうち、wait を送ってきたもの (v1.5.0) と、wait を送らずに変換中の文字を作った回数。
+    /// プロセスは PID と起動した時刻で見分ける (PID は使い回される)。
+    /// TODO: v1.5.0 以前から直接更新する人がいなくなったら (版を送らない DLL が残らなくなったら)、この数える判定は消し、版だけで見分ける
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _waiters = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _compositionsWithoutWait = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _outdatedReported = new();
+
+    /// <summary>v1.5.0 の DLL ならもう wait を送っているはずの、変換中の文字を作ったキーの数 (v1.5.0 の DLL は、変換中の文字を作るとすぐ送る)。</summary>
+    private const int CompositionsBeforeOutdated = 10;
 
     /// <summary>古い Meltype IME の DLL を読み込んだままのアプリが見つかった (引数はプロセス名)。UI スレッドでは呼ばない。</summary>
     public event Action<string>? OutdatedDllFound;
 
-    private void CheckOutdatedDll(uint process, TipRequest request)
+    /// <summary>プロセスを見分ける鍵 (PID と起動した時刻)。起動した時刻を読めなければ PID だけ。</summary>
+    private static string ProcessKey(uint processId)
     {
-        if (request.Event.Type != ImeEventType.KeyPressed || _waiters.ContainsKey(process)) return;
-        if (_keysWithoutWait.AddOrUpdate(process, 1, (_, n) => n + 1) != KeysBeforeOutdated || !_outdatedReported.TryAdd(process, true)) return;
-        var name = ProcessName(process) ?? $"プロセス {process}";
-        Log.Warn($"Meltype IME: {name} は前の版の Meltype IME を読み込んだままです (ライブ変換が Enter まで出ません)。アプリか PC を再起動してください。");
+        try
+        {
+            using var process = System.Diagnostics.Process.GetProcessById((int)processId);
+            return $"{processId}:{process.StartTime.ToFileTimeUtc()}";
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception or NotSupportedException)
+        {
+            return processId.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <param name="composing">この要求を処理したあと、その入力欄が変換中の文字を持っているか。</param>
+    private void CheckOutdatedDll(string process, uint processId, TipRequest request, bool composing)
+    {
+        if (request.Dll is { } revision)
+        {
+            if (revision < CurrentDllRevision) ReportOutdated(process, processId);
+            return;
+        }
+        // 版を送らない DLL: v1.5.0 なら、変換中の文字を作ったらすぐ wait を送る
+        if (!composing || request.Event.Type != ImeEventType.KeyPressed || _waiters.ContainsKey(process)) return;
+        if (_compositionsWithoutWait.AddOrUpdate(process, 1, (_, n) => n + 1) == CompositionsBeforeOutdated) ReportOutdated(process, processId);
+    }
+
+    private void ReportOutdated(string process, uint processId)
+    {
+        if (!_outdatedReported.TryAdd(process, true)) return;
+        var name = ProcessName(processId) ?? $"プロセス {processId}";
+        Log.Warn($"Meltype IME: {name} は前の版の Meltype IME を読み込んだままです。アプリか PC を再起動してください。");
         OutdatedDllFound?.Invoke(name);
     }
 
@@ -404,6 +437,7 @@ internal sealed class TipServer : IDisposable
         var ownClient = GetNamedPipeClientProcessId(pipe.SafePipeHandle, out var clientProcess) && clientProcess == (uint)Environment.ProcessId;
         // このつながりの入力の本体 (UI スレッドからだけ触る。Meltype.exe 自身の UI スレッドのつながりは、UI スレッドが止まっている間に触る)
         var host = ownClient ? Connect(null, 0) : Connect(ProcessName(clientProcess), clientProcess);
+        var processKey = ownClient ? "" : ProcessKey(clientProcess);
         var buffer = new byte[64 * 1024];
         using var message = new MemoryStream();
         try
@@ -430,24 +464,29 @@ internal sealed class TipServer : IDisposable
                     }
                     else if (request.WaitSince is { } since)
                     {
-                        _waiters[clientProcess] = true;
+                        if (!ownClient) _waiters[processKey] = true;
                         reply = $"{{\"generation\":{await _conversion.WaitAsync(since, ConversionWaitMs, _stop.Token).ConfigureAwait(false)}}}";
                     }
                     else
                     {
-                        if (!ownClient) CheckOutdatedDll(clientProcess, request);
                         var started = Environment.TickCount64;
                         long began = started, ended = started;
+                        var composing = false;
                         string Run()
                         {
                             began = Environment.TickCount64;
                             try { return Handle(host, request); }
-                            finally { ended = Environment.TickCount64; }
+                            finally
+                            {
+                                composing = host.Host.IsComposing(request.Event.Instance);
+                                ended = Environment.TickCount64;
+                            }
                         }
                         // Meltype.exe 自身の UI スレッドから来た要求: UI スレッドは DLL の中でこの応答を待って止まっているので、
                         // UI スレッドに頼むとお互いに待ち合って固まる。代わりにこのスレッドで処理する (ほかの処理と同時には動かない)
                         reply = ownClient && _uiThread != 0 && request.Thread == _uiThread ? Run() : await InvokeAsync(Run).ConfigureAwait(false);
                         LogSlow(request, began - started, ended - began);
+                        if (!ownClient) CheckOutdatedDll(processKey, clientProcess, request, composing);
                     }
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
@@ -698,7 +737,7 @@ internal sealed class TipServer : IDisposable
 /// パイプの 1 メッセージ。{"thread":…,"x":…,"y":…,"event":{ImeEvent}} か、変換の結果を待つ {"wait":世代}。
 /// thread は DLL の入力スレッド、x / y は入力モードを表示する画面の位置 (分からなければ省く)。どちらも Meltype.exe の側で使い、本体には渡さない。
 /// </summary>
-internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, long? WaitSince)
+internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, long? WaitSince, int? Dll = null)
 {
     public string Type => WaitSince is null ? Event.Type.ToString() : "wait";
 
@@ -718,7 +757,9 @@ internal sealed record TipRequest(uint Thread, Point? Anchor, ImeEvent Event, lo
             var thread = Number(root, "thread", out var t) && t.TryGetUInt32(out var id) ? id : 0;
             var anchor = Number(root, "x", out var x) && x.TryGetInt32(out var left) && Number(root, "y", out var y) && y.TryGetInt32(out var bottom)
                 ? new Point(left, bottom) : (Point?)null;
-            return new(thread, anchor, e, null);
+            // DLL と Meltype.exe のやり取りの版 (v1.5.0 以前の DLL は送らない)
+            var dll = Number(root, "dll", out var d) && d.TryGetInt32(out var revision) ? revision : (int?)null;
+            return new(thread, anchor, e, null, dll);
         }
         catch (JsonException)
         {

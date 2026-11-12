@@ -45,6 +45,9 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
 
     public int SessionCount => _sessions.Count;
 
+    /// <summary>この入力欄 (フロントの instance) が変換中の文字を持っているか。</summary>
+    public bool IsComposing(string? instance) => instance is not null && _sessions.TryGetValue(instance, out var session) && session.IsComposing;
+
     /// <summary>JSON の出来事を処理する。読めない・版が違う出来事には、何も受け持たない応答を返す。</summary>
     public string Handle(string json) => (Parse(json) is { } e ? Handle(e) : Inactive()).ToJson();
 

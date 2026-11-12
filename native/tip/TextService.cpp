@@ -18,6 +18,10 @@ namespace {
 
 // Meltype.exe のプロトコルの版 (ImeHost.Version)
 constexpr int kImeVersion = 1;
+// この DLL が分かる、DLL と Meltype.exe のやり取りの版 (TipServer.CurrentDllRevision)。やり取りを変えたら両方を 1 つ上げる。
+// Meltype.exe は、これより古い DLL を読み込んだままのアプリを見つけたら、アプリか PC の再起動を案内する。
+// 1: 変換の答えを wait で待ち受ける (v1.5.0 から。v1.5.0 の DLL はこの版を送らない)
+constexpr int kDllRevision = 1;
 
 class EditSession final : public ITfEditSession {
 public:
@@ -699,7 +703,7 @@ void TextService::ToggleInputMode(ITfContext* context) {
 bool TextService::Send(const char* type, const std::string& field, const std::string& fields, JsonValue& reply, DWORD timeoutMs, bool optional,
                        const RECT* anchor) {
     if (deactivated_) return false;
-    std::string request = "{\"thread\":" + std::to_string(GetCurrentThreadId());
+    std::string request = "{\"thread\":" + std::to_string(GetCurrentThreadId()) + ",\"dll\":" + std::to_string(kDllRevision);
     if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
         request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
     request += std::string(",\"event\":{\"version\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +

@@ -110,7 +110,7 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 ## 通信
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON。
-  要求は `{"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
+  要求は `{"thread":入力スレッド,"dll":やり取りの版,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。`dll` は DLL と Meltype.exe のやり取りの版 (`kDllRevision`・`TipServer.CurrentDllRevision`) で、やり取りを変えたら両方を 1 つ上げる。Meltype.exe は前の版に合わせる処理を持たず、古い DLL を読み込んだままのアプリを見つけたら、アプリか PC の再起動を案内する (v1.5.0 以前の DLL は `dll` を送らないので、変換中の文字を作っても `wait` を送らないことで見分ける)。
   応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。読めない要求 (版の違う DLL) には `{"active":false,…}` を返し、古い DLL も何もせずにキーを通す
 - 状態 (`StateRequested`) は、起動したとき・前面に戻ったとき・アプリや Windows が IME を開閉したときに受け取り直す (待つのは最大 100ms)。変換中だけ、背景の変換の結果を別のつながりの `{"wait":世代}` で待つ
 - 1 キーごとに同期で 1 往復。待つのは最大 800ms。応答が無ければ、変換中の文字はそのまま確定し、打った文字はその場で入れる。

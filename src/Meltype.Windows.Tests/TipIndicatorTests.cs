@@ -24,6 +24,16 @@ internal static class TipIndicatorTests
     }
 
     [Test]
+    public static void Request_ReadsTheDllRevision()
+    {
+        // DLL と Meltype.exe のやり取りの版 (#1754)。v1.5.0 以前の DLL は送らない
+        static string Request(string dll) => $"{{\"thread\":1{dll},\"event\":{{\"version\":{Ime.ImeHost.Version},\"type\":\"KeyPressed\"}}}}";
+        Assert.Equal<int?>(Tip.TipServer.CurrentDllRevision, Tip.TipRequest.Parse(Request($",\"dll\":{Tip.TipServer.CurrentDllRevision}"))?.Dll, "今の DLL");
+        Assert.True(Tip.TipRequest.Parse(Request(""))?.Dll is null, "版を送らない DLL");
+        Assert.True(Tip.TipRequest.Parse(Request(",\"dll\":\"1\""))?.Dll is null, "数でない版は読まない");
+    }
+
+    [Test]
     public static void Indicator_UsesTsfPositionAndExpiresWithoutTakingFocus()
     {
         using var invoker = new Control();
