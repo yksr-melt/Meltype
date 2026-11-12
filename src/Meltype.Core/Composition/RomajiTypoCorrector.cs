@@ -275,10 +275,42 @@ public sealed class RomajiTypoCorrector
     }
 
     /// <summary>
+    /// かなをよく使う語の読みで区切ったとき、at の位置のかなが minLength 文字以上の 1 つの語に入っているか
+    /// (sumimasne を すみません に直すとき、ま が すみません に入る)。
+    /// </summary>
+    public bool InLongWord(string kana, int at, int minLength)
+    {
+        if (at < 0 || at >= kana.Length) return false;
+        var (_, _, from) = SegmentPieces(kana);
+        for (var i = kana.Length; i > 0; i = from[i])
+        {
+            if (from[i] > at || i <= at) continue;
+            var piece = kana.AsSpan(from[i], i - from[i]);
+            return piece.Length >= minLength && IsWord(piece);
+        }
+        return false;
+    }
+
+    /// <summary>
     /// かなをよく使う語の読みで区切ったときの不自然さ (区切りの数。知らない文字は 1 文字 3)。
     /// あわせて、at の位置のかなが知っている語 (2 文字以上か付属語) に入っているかを返す。
     /// </summary>
     private (double Cost, bool Known) Segment(string kana, int at)
+    {
+        var (n, cost, from) = SegmentPieces(kana);
+        var known = at < 0;
+        for (var i = n; i > 0 && !known; i = from[i])
+        {
+            if (from[i] > at || i <= at) continue;
+            var piece = kana.AsSpan(from[i], i - from[i]);
+            known = IsWord(piece) && (piece.Length >= 2 || Function.Contains(piece));
+            break;
+        }
+        return (cost[n], known);
+    }
+
+    /// <summary>かなをよく使う語の読みで区切る。from[i] は i 文字目で終わる区切りの始まり。</summary>
+    private (int Length, double[] Cost, int[] From) SegmentPieces(string kana)
     {
         var n = kana.Length;
         var cost = new double[n + 1];
@@ -300,14 +332,6 @@ public sealed class RomajiTypoCorrector
                 }
             }
         }
-        var known = at < 0;
-        for (var i = n; i > 0 && !known; i = from[i])
-        {
-            if (from[i] > at || i <= at) continue;
-            var piece = kana.AsSpan(from[i], i - from[i]);
-            known = IsWord(piece) && (piece.Length >= 2 || Function.Contains(piece));
-            break;
-        }
-        return (cost[n], known);
+        return (n, cost, from);
     }
 }
