@@ -180,8 +180,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
-        var text = answer == hiragana ? null : answer;
+        // 読みのまま (変換していない: かんたん → かんたん) の答えと、壊れた答え (はーどうぇ → ハードウェアウェアウェア…) は使わない。Mozc などに任せる
+        var text = answer == hiragana || answer is not null && !IsPlausible(hiragana, answer) ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
@@ -239,6 +239,34 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// 変換の答えとしてありうるか。モデルが同じ並びを繰り返し続けた答え (はーどうぇ → ハードウェアウェアウェアウェア…: issue #1675、
+    /// きょうはで → 今日はでででで…: issue #1511) は使わない。
+    /// - 読みの 2 倍 + 4 文字より長い (変換で読みより長くなるのは英字にするときくらい: まいくろそふと → Microsoft)
+    /// - 1〜4 文字の並びが 4 回以上続くのに、読みには同じように続く所が無い (はははは・ーーーー は読みにもある)
+    /// </summary>
+    internal static bool IsPlausible(string hiragana, string answer)
+    {
+        if (answer.Length > hiragana.Length * 2 + 4) return false;
+        return !HasLongRepeat(answer) || HasLongRepeat(hiragana);
+    }
+
+    private static bool HasLongRepeat(string text)
+    {
+        const int times = 4;
+        for (var unit = 1; unit <= 4; unit++)
+        {
+            for (var start = 0; start + unit * times <= text.Length; start++)
+            {
+                var repeated = true;
+                for (var k = 1; k < times && repeated; k++)
+                    repeated = text.AsSpan(start, unit).SequenceEqual(text.AsSpan(start + unit * k, unit));
+                if (repeated) return true;
+            }
+        }
+        return false;
     }
 
     /// <summary>生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。空なら null。</summary>

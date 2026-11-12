@@ -94,6 +94,31 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void IsPlausible_RejectsRunawayRepeats()
+    {
+        // #1675: はーどうぇ (打ちかけ) を ハードウェアウェアウェア… にした答えは使わない
+        Assert.True(!ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェアウェアウェアウェアウェアウェア"), "繰り返し続けた答え");
+        // #1511: きょうはで の後ろに で が続く答え
+        Assert.True(!ZenzaiConverter.IsPlausible("きょうはで", "今日はでででで"), "同じ字が続く答え");
+        Assert.True(!ZenzaiConverter.IsPlausible("なまえ", "名前は魚の名前です。ハタハタは魚の名前です。"), "読みよりずっと長い答え");
+        // ふつうの答え・読みにも繰り返しがある答え・英字にした答えは使う
+        Assert.True(ZenzaiConverter.IsPlausible("はーどうぇあ", "ハードウェア"), "ハードウェア");
+        Assert.True(ZenzaiConverter.IsPlausible("はたはたはた", "ハタハタハタ"), "3 回までの繰り返し");
+        Assert.True(ZenzaiConverter.IsPlausible("はははははは", "ははははは"), "読みにも続く所がある");
+        Assert.True(ZenzaiConverter.IsPlausible("すごーーーーい", "すごーーーーい"), "長音の連続");
+        Assert.True(ZenzaiConverter.IsPlausible("まいくろそふと", "Microsoft"), "英字");
+        Assert.True(ZenzaiConverter.IsPlausible("きょうはいいてんき", "今日はいい天気"), "漢字");
+    }
+
+    [Test]
+    public static void Answers_ThatRepeatRunaway_AreNotUsed()
+    {
+        using var server = new FakeServer { Answer = _ => "ハードウェアウェアウェアウェアウェア</s>" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        Assert.True(zenzai.Convert("はーどうぇ") is null, "壊れた答えは Mozc などに任せる");
+    }
+
+    [Test]
     public static void Converts_ThroughCompletionEndpoint()
     {
         using var server = new FakeServer { Answer = p => p.Contains("キョウ") ? "今日</s>" : "" };
