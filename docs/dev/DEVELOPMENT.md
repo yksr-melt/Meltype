@@ -17,8 +17,11 @@
 | `src/Meltype.Windows.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
 | `dictionaries/` | 組み込みの辞書 |
 | `packaging/` | 配布用のファイル (インストーラー・Install.cmd など) |
+| `web/` | 公式サイトと報告フォーム (Cloudflare Workers) |
+| `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
+| `docs/dev/` | 開発者向けの文書 (開発・設計・リリースの手順) |
 
-`src/Meltype.Core/` の中は、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
+`src/Meltype.Core/` の中は、`Ime/` (`ImeSession`。入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`NowPlaying/` (再生中の曲を OS から読む)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
 
 ## Windows でビルドして試す
 
