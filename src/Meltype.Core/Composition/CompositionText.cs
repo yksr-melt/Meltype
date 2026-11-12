@@ -240,7 +240,19 @@ public sealed class CompositionText
                 return;
             }
         }
-        if (_pending.Length > 0) _pending.Length--;
+        if (_pending.Length > 0)
+        {
+            var removedPending = _pending[^1];
+            _pending.Length--;
+            // 同じ子音を 2 回打ってできた っ (ff の前の f) は、後ろの子音があってこその っ。後ろの子音を消したら、打ちかけの子音に戻す
+            // (ff + BackSpace + uronto が っうろんと になっていた: issue #1636)
+            if (_pending.Length == 0 && !KanaInput && _units.Count > 0 && _units[^1] is { Kana: "っ", Raw: [var doubled] } &&
+                char.ToLowerInvariant(doubled) == char.ToLowerInvariant(removedPending))
+            {
+                _units.RemoveAt(_units.Count - 1);
+                _pending.Append(doubled);
+            }
+        }
         else if (_units.Count > 0)
         {
             // 見えている最後の 1 音 (英字なら 1 文字) の分だけ後ろから単位を外し、外しすぎた原文を打ち直す。
