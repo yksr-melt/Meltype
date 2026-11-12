@@ -1,16 +1,4 @@
-詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
-
-## 構成
-
-| 場所 | 中身 |
-| --- | --- |
-| `src/Meltype.Core` | OS 非依存の判定・変換コア |
-| `src/Meltype.Windows.Tests` | Windows 版のテスト（Windows 専用。Core のテストもまとめて流せる） |
-| `src/Meltype.Mac.Native` | Mac 版から呼ぶコアの出口 |
-| `native/tip`・`native/mozc` | ネイティブ（TSF の TIP・Mozc） |
-| `web/` | Web（Cloudflare Workers・報告フォーム） |
-| `docs/` | 利用者向けの文書（使い方・OS ごとの説明）。`docs/release-notes/` はリリースノート |
-| `docs/dev/` | 開発者向けの文書（開発・設計・リリースの手順） |
+フォルダーの構成と詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
 
 ## 入力のフロント
 
@@ -29,7 +17,7 @@
 - シンプルさを何よりも優先する。
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
-- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。
+- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントと Core の間の口を変えるなら、先に Issue で相談する。
 - コードに決まりを入れるときは、コメントに理由も書く。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
@@ -77,13 +65,13 @@ dotnet run --project src/Meltype.Windows.Tests -- --context この本は:あつ�
 node tools/check-dictionaries.mjs
 ```
 
-`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper` を使う。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 
 ## 作業後の確認
 
-使わなくなったコードを消す。
+この変更で使わなくなったコードを消す。
 
 ```bash
 # フォーマットを直す（CI は --verify-no-changes で同じ検査をする）
