@@ -718,11 +718,6 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
-    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を 2 番目以降に足す。
-    /// 英語の文節は、ローマ字として読んだかなで一覧を引き、かなの候補 (go → ご) の後ろに足す。
-    /// 打つたびには呼ばない (時間がかかることがあるため。ライブ変換では呼ばない)。今選んでいる候補はそのまま選んだ状態にする。
-    /// </summary>
-    /// <summary>
     /// 候補の一覧で、ユーザー辞書・同梱の辞書 (candidates.txt・brands.txt) の語のうち、読み (かな) の候補より前にある最後のものの位置。
     /// 無ければ 0 (最初の候補)。読みより後ろに回した辞書の語 (記号の 、 など) は数えない。
     /// </summary>
@@ -746,6 +741,12 @@ public sealed partial class CompositionController
     private string? FirstDictionaryWord(string reading) =>
         _settings().BundledDictionaryPlacement == DictionaryPlacement.First ? BundledWords(reading) is [var first, ..] ? first : null : null;
 
+    /// <summary>
+    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を足す。
+    /// 日本語の文節は、最初の候補とユーザー辞書・同梱の辞書の語の後ろに足す (DictionaryWordsEnd)。同梱の辞書の語を「変換エンジンの候補の後ろ」にする設定なら、それはさらに後ろに回す。
+    /// 英語の文節は、ローマ字として読んだかなで一覧を引き、かなの候補 (go → ご) の後ろに足す。
+    /// 打つたびには呼ばない (時間がかかることがあるため。ライブ変換では呼ばない)。今選んでいる候補はそのまま選んだ状態にする。
+    /// </summary>
     private void Expand(Clause clause)
     {
         clause.Expanded = true;
