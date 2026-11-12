@@ -200,6 +200,7 @@ internal static class UtilityConversionTests
             [
                 ["はーどうぇ", "ハードウェアウェア"], ["きょうはで", "今日はでで"], ["なまえ", "名前は魚の"], ["はははははは", "ははははは"],
                 ["はーどうぇあ", "ハードウェア"], ["きょうは", "今日は"], ["まいくろそふと", "Microsoft"], ["ほし", "☆"], ["えがお", "(^_^)"],
+                ["きずく", "気づく"], ["うなずく", "うなづく"],
             ];
             File.WriteAllText(conversions, "{" + string.Join(",", entries.Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
             var history = new ConversionHistory(conversions);

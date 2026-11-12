@@ -290,9 +290,14 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         return tokens;
     }
 
-    /// <summary>比べるための文字: カタカナはひらがな (ヵ・ヶ は漢字と同じ扱いのまま)、全角の英数字・記号は半角。</summary>
+    /// <summary>
+    /// 比べるための文字: カタカナはひらがな (ヵ・ヶ は漢字と同じ扱いのまま)、づ・ぢ は ず・じ、全角の英数字・記号は半角。
+    /// 変換エンジンは ず の読みに づ の語を出す (きずく → 気づく、うなずく → うなづく)。
+    /// </summary>
     private static char Normalize(char c) => c switch
     {
+        'づ' or 'ヅ' => 'ず',
+        'ぢ' or 'ヂ' => 'じ',
         >= 'ァ' and <= 'ヴ' and not ('ヵ' or 'ヶ') => (char)(c - 0x60),
         >= '！' and <= '～' => (char)(c - 0xFEE0),
         _ => c,
