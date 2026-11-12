@@ -59,6 +59,15 @@ npx wrangler secret put TURNSTILE_SECRET
 
 2回目以降は `npm run deploy` で変更を反映しデプロイできます。
 
+main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.yml` の `deploy`) がテストの後に `npm run deploy` を実行して、自動でデプロイします。使うには、リポジトリの Settings → Environments に `web-production` を作り、次の secrets を入れてください (無いときはデプロイのジョブが失敗します)。
+
+| 名前 | 中身 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。テンプレート「Edit Cloudflare Workers」に、D1 の編集を足したもの |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
+
+`wrangler.jsonc` に D1・KV の ID を書いていないときは、wrangler がデプロイ済みの Worker の同じ名前のつながりを使います。初回のデプロイは手元で行ってください。
+
 ## 報告の受付について
 
 - 種類は 不具合・変換や判定の間違い・辞書に足してほしい語・改善や機能の提案 の 4 つで、GitHub の Issue のテンプレートに合わせています。

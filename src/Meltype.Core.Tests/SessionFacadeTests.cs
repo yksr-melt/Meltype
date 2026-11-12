@@ -895,6 +895,76 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void SpaceAroundEnglish_ForgetsOwnCommitAfterKeyPassedToTheApp()
+    {
+        // 設定「英単語の前後に半角スペース」: アプリに通したキー (BackSpace・改行・空白) の後は、前に確定した文字がキャレットの前に
+        // あるとは限らない。入力欄が前の文字を教えてくれなくても (readable = false)、消した後・行の先頭・空白の後に空白を足さない。
+        foreach (var readable in new[] { true, false })
+        {
+            foreach (var (steps, expected) in new (string[] Steps, string Expected)[]
+            {
+                // 報告された例: 打って、すべて消して、同じものを打つ
+                (["githubnipushsuru\n", new string('\b', "github に push する".Length), "githubnipushsuru\n"], "github に push する"),
+                (["pushsuru\n", "\n", "github\n"], "push する\ngithub"),
+                (["github\n", " ", "ni\n"], "github に"),
+                (["pushsuru\n", " ", "github\n"], "push する github"),
+                // 続けて確定したときは、前に確定した文字との間に入れる
+                (["github\n", "ni\n", "push\n", "suru\n"], "github に push する"),
+                (["pushsuru\n", "github\n"], "push する github"),
+            })
+            {
+                var detector = CompositionDetector.CreateDefault();
+                detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
+                var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(),
+                    () => new Settings { SpaceAroundEnglish = true, LiveConversion = false });
+                var document = "";
+                foreach (var c in string.Concat(steps))
+                {
+                    var (vk, ch, shift) = KeyOf(c);
+                    var result = session.HandleKey(vk, ch, shift, false, false, false, readable ? document : null);
+                    foreach (var edit in result.Commits) document = document[..^Math.Min(edit.DeleteBefore, document.Length)] + edit.Text;
+                    if (!result.Consumed) document = c == '\b' ? document[..^Math.Min(1, document.Length)] : document + c;
+                }
+                Assert.Equal(expected, document, $"{string.Concat(steps).Replace("\n", "⏎").Replace("\b", "⌫")} (前の文字を{(readable ? "読める" : "読めない")})");
+            }
+        }
+    }
+
+    [Test]
+    public static void LanguageContext_ForgetsOwnCommitAfterKeyPassedToTheApp()
+    {
+        // アプリに通したキーで前の確定を消した後は、前の確定が英語だったか日本語だったかも判定に持ち越さない
+        // (入力欄が空になったと分かるときも、前の文字を読めないときも、打ち始めと同じ判定にする)。
+        foreach (var readable in new[] { true, false })
+        {
+            foreach (var (steps, expected) in new (string[] Steps, string Expected)[]
+            {
+                (["sore\n"], "それ"),
+                (["hello\n", "\b\b\b\b\b", "sore\n"], "それ"),
+                (["game\n"], "game"),
+                (["suru\n", "\b\b", "game\n"], "game"),
+                // 続けて確定したときは、前の確定の言語を使う
+                (["hello\n", "sore\n"], "hellosore"),
+                (["suru\n", "game\n"], "するがme"),
+            })
+            {
+                var detector = CompositionDetector.CreateDefault();
+                detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
+                var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings { LiveConversion = false });
+                var document = "";
+                foreach (var c in string.Concat(steps))
+                {
+                    var (vk, ch, shift) = KeyOf(c);
+                    var result = session.HandleKey(vk, ch, shift, false, false, false, readable ? document : null);
+                    foreach (var edit in result.Commits) document = document[..^Math.Min(edit.DeleteBefore, document.Length)] + edit.Text;
+                    if (!result.Consumed) document = c == '\b' ? document[..^Math.Min(1, document.Length)] : document + c;
+                }
+                Assert.Equal(expected, document, $"{string.Concat(steps).Replace("\n", "⏎").Replace("\b", "⌫")} (前の文字を{(readable ? "読める" : "読めない")})");
+            }
+        }
+    }
+
+    [Test]
     public static void Misspelling_IsExposedAndCorrected()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
