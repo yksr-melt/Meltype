@@ -48,6 +48,9 @@ internal sealed class CompositionService : IDisposable
 
     public MeltypeRuntime Runtime { get; }
 
+    /// <summary>入力スレッドが変換エンジンを待ってよい時間 (Meltype IME が、答えを待ち受けない古い DLL のアプリでライブ変換を待たせるのに使う)。</summary>
+    public ConversionBudget Budget => _mozc.Budget;
+
     /// <summary>
     /// 入力欄 1 つ分の入力の本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄・変換ボックスと共有する
     /// (UI スレッドからだけ使うので排他は要らない)。

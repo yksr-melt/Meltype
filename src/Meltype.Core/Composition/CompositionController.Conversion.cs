@@ -875,7 +875,9 @@ public sealed partial class CompositionController
     {
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _services.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
+        // 答えが届いたことを受け取れないフロントでは、入力の待ち時間の中で答えを待つ (ConversionBudget.WaitsInLiveConversion)
+        List<(string Reading, string Text)> Run() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList();
+        var clauses = _budget is { WaitsInLiveConversion: true } ? Run() : WithoutWaiting(Run);
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;

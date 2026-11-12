@@ -65,6 +65,13 @@ public sealed class ConversionBudget
 
     public bool Enabled { get; private set; }
 
+    /// <summary>
+    /// ライブ変換も、入力の待ち時間の残りの中で答えを待つか (既定は待たず、答えが届いたら表示を作り直す)。
+    /// 答えが届いたことを受け取れないフロント (v1.4.0 以前の Meltype IME の DLL を読み込んだままのアプリ: #1754) のときだけ true にする。
+    /// 待たないと、そのアプリでは Enter を押すまでかなのままになる。
+    /// </summary>
+    public bool WaitsInLiveConversion { get; set; }
+
     public int RemainingMs => (int)Math.Clamp(_deadline - Environment.TickCount64, 0, int.MaxValue);
 
     public void Enable()
