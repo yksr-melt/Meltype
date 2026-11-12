@@ -875,11 +875,33 @@ public sealed partial class CompositionController
     {
         var key = string.Join("\u0001", kana, _precedingText, _followingText, _services.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, c.Text)).ToList());
+        // 打っている途中に、ふだん使わない漢字 (部首の名前の 禸部 など) を見せない。じゅうぶ (じゅうぶん の打ちかけ) が 禸部 になっていた (issue #1315)。
+        // Space で開く候補には今までどおり出す
+        var clauses = WithoutWaiting(() => ConvertJapanese(kana).Select(c => (c.Reading, HasUncommonKanji(c.Text) ? c.Reading : c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
     }
+
+    // 常用漢字 (2010 年に足した字) のうち、CP932 に無いもの
+    private const string JoyoOutsideCp932 = "𠮟剝塡頰";
+    private static readonly Encoding Cp932 = CodePagesEncodingProvider.Instance.GetEncoding(932, EncoderFallback.ExceptionFallback, DecoderFallback.ExceptionFallback)!;
+
+    /// <summary>
+    /// ふだん使わない漢字を含むか: CP932 (Windows の Shift_JIS。JIS 第 1・第 2 水準と NEC・IBM の拡張) に無く、常用漢字でもない漢字。
+    /// </summary>
+    internal static bool HasUncommonKanji(string text)
+    {
+        foreach (var rune in text.EnumerateRunes())
+        {
+            if (!IsKanji(rune) || JoyoOutsideCp932.Contains(rune.ToString(), StringComparison.Ordinal)) continue;
+            try { Cp932.GetByteCount(rune.ToString()); }
+            catch (EncoderFallbackException) { return true; }
+        }
+        return false;
+    }
+
+    private static bool IsKanji(Rune rune) => rune.Value is (>= 0x3400 and <= 0x4DBF) or (>= 0x4E00 and <= 0x9FFF) or (>= 0xF900 and <= 0xFAFF) or (>= 0x20000 and <= 0x3FFFF);
 
     private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithLimit(0, convert);
 

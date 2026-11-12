@@ -36,7 +36,7 @@ public sealed partial class CompositionController
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? string.Concat(_clauses.Select(c => c.Text))
             : _budget is { Enabled: true } && !_settings().EnterCommitsAsShown
-                ? _text.Display(final: true, _settings().LiveConversion ? kana => CountsAsLive(kana) ? string.Concat(ConvertJapanese(kana).Select(c => c.Text)) : kana : null)
+                ? _text.Display(final: true, _settings().LiveConversion ? kana => CountsAsLive(kana) ? string.Concat(ConvertJapanese(kana).Select(c => HasUncommonKanji(c.Text) ? c.Reading : c.Text)) : kana : null)
                 : CurrentDisplay(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる

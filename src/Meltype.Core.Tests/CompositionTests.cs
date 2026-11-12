@@ -4563,6 +4563,47 @@ internal static class CompositionTests
         Assert.Equal("やほやほ", k.Host.Document);
     }
 
+    /// <summary>じゅうぶ を 禸部 (部首の名前) にする変換エンジン (issue #1315)。</summary>
+    private sealed class RareKanjiConverter : IKanjiConverter
+    {
+        private static string? Text(string hiragana) => hiragana switch
+        {
+            "じゅうぶ" => "禸部",
+            "じゅうぶん" => "十分",
+            "ほおがあかい" => "頰が赤い",
+            "たかはしさん" => "髙橋さん",
+            _ => null,
+        };
+
+        public string? Convert(string hiragana) => Text(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            Text(hiragana) is { } text ? [new(hiragana, text)] : null;
+    }
+
+    [Test]
+    public static void Issue1315_LiveConversionDoesNotShowUncommonKanji()
+    {
+        // #1315: じゅうぶん の打ちかけ (じゅうぶ) が、ライブ変換で 禸部 になっていた
+        foreach (var (typed, expected) in new[]
+        {
+            ("juubu", "じゅうぶ"),
+            ("juubunn", "十分"),
+            // 常用漢字 (CP932 に無い 頰)・CP932 の拡張の字 (髙) は、今までどおり見せる
+            ("hoogaakai", "頰が赤い"),
+            ("takahasisann", "髙橋さん"),
+        })
+        {
+            var k = new Keyboard(live: true, converter: new RareKanjiConverter(), userDictionary: new UserDictionary(null));
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.View?.Text, typed);
+        }
+        // Space で開く候補には出す
+        var space = new Keyboard(live: true, converter: new RareKanjiConverter(), userDictionary: new UserDictionary(null));
+        space.Type("juubu ");
+        Assert.Equal("禸部", space.Host.View?.Text);
+    }
+
     [Test]
     public static void Ki_OffersOldKanji()
     {
