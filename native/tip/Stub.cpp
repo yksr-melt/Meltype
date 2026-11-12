@@ -50,6 +50,11 @@ ITfTextInputProcessorEx* CreateInner(const std::wstring& hash, HWND window) {
         TipLog(L"stub: %s をロードできません: %lu", path.c_str(), GetLastError());
         return nullptr;
     }
+    auto abi = reinterpret_cast<MeltypeTipAbiFn>(reinterpret_cast<void*>(GetProcAddress(module, "MeltypeTipAbi")));
+    if (abi == nullptr || abi() != kStubImplAbi) {
+        TipLog(L"stub: %s は ABI が違います", path.c_str());
+        return nullptr;
+    }
     auto create = reinterpret_cast<MeltypeTipCreateFn>(reinterpret_cast<void*>(GetProcAddress(module, "MeltypeTipCreate")));
     ITfTextInputProcessorEx* inner = nullptr;
     if (create == nullptr || FAILED(create(window, &inner))) {
@@ -64,11 +69,14 @@ constexpr wchar_t kWindowClass[] = L"Meltype.Tip.Stub";
 class StubService final : public ITfTextInputProcessorEx, public ITfDisplayAttributeProvider {
 public:
     StubService() {
-        WNDCLASSW cls{};
-        cls.lpfnWndProc = WindowProc;
-        cls.hInstance = g_module;
-        cls.lpszClassName = kWindowClass;
-        RegisterClassW(&cls);
+        static const ATOM registered = [] {
+            WNDCLASSW cls{};
+            cls.lpfnWndProc = WindowProc;
+            cls.hInstance = g_module;
+            cls.lpszClassName = kWindowClass;
+            return RegisterClassW(&cls);
+        }();
+        (void)registered;
         window_ = CreateWindowExW(0, kWindowClass, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_module, nullptr);
         if (window_) SetWindowLongPtrW(window_, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
         loaded_ = CurrentImpl();

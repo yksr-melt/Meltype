@@ -43,10 +43,9 @@ internal sealed class TipBuild(string folder)
     }
 
     /// <summary>登録済みの stub (MeltypeTip.dll) がこれからロードする impl が、同梱の impl と同じビルドか。</summary>
-    /// <param name="stub">64 ビットの stub のパス (…\tip\x64\MeltypeTip.dll)。</param>
-    public bool IsInstalled(string stub)
+    /// <param name="installed">登録済みの tip フォルダー (x64・x86 の下に MeltypeTip.dll と MeltypeTipImpl.dll.sha256)。</param>
+    public bool IsInstalled(string installed)
     {
-        if (Path.GetDirectoryName(Path.GetDirectoryName(stub)) is not { } installed) return false;
         return _hashes.All(pair => string.Equals(ReadHash(Path.Combine(installed, pair.Key)), pair.Value, StringComparison.OrdinalIgnoreCase));
     }
 

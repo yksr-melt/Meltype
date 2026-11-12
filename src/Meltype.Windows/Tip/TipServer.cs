@@ -66,16 +66,17 @@ internal sealed class TipServer : IDisposable
     /// </summary>
     public static bool IsUsable =>
         System.Runtime.InteropServices.RuntimeInformation.OSArchitecture != System.Runtime.InteropServices.Architecture.Arm64 &&
-        IsInstalledBuild && IsInUserLanguageList;
-
-    /// <summary>登録されていて、登録済みの impl がこの Meltype.exe と同じビルドか (Meltype の更新時に Meltype IME の再登録を断ると、別ビルドになる)。</summary>
-    private static bool IsInstalledBuild => RegisteredStub() is { Length: > 0 } stub && TipBuild.Shipped.IsInstalled(stub);
+        InstalledBuild() == true && IsInUserLanguageList;
 
     /// <summary>
     /// 登録されているが、登録済みの impl がこの Meltype.exe と別ビルドか。Meltype IME の再登録 (UAC) をせずに Meltype.exe だけを更新すると、こうなる
     /// (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
     /// </summary>
-    public static bool IsOtherBuildRegistered => RegisteredStub() is { Length: > 0 } stub && !TipBuild.Shipped.IsInstalled(stub);
+    public static bool IsOtherBuildRegistered => InstalledBuild() == false;
+
+    // 登録済みの impl がこの Meltype.exe と同じビルドか。登録されていなければ null
+    private static bool? InstalledBuild() =>
+        RegisteredStub() is { Length: > 0 } stub && Path.GetDirectoryName(Path.GetDirectoryName(stub)) is { } folder ? TipBuild.Shipped.IsInstalled(folder) : null;
 
     // 登録されているか。レジストリを読めなければ null。
     // TIP のキーだけ残り、DLL の登録 (InprocServer32) や DLL が無いことがある (セキュリティソフトが登録を途中で止めたとき)。
@@ -419,9 +420,15 @@ internal sealed class TipServer : IDisposable
                     var json = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
                     if (!_build.Matches(json))
                     {
-                        // stub は、この応答を受けて impl を差し替え、再接続する。同じ接続から別ビルドの要求が届き続けるなら、差し替えられなかった
+                        // stub は、この応答を受けて impl を差し替え、新しい impl は別の接続でつなぐ。
+                        // 登録済みの impl が同じビルドになってからも、同じ接続から別ビルドの要求が届き続けるなら、差し替えられなかった
+                        // (登録済みの impl の方が別ビルドの間は、アプリを再起動しても変わらないので数えない)
                         var now = Environment.TickCount64;
-                        if (staleSince == 0)
+                        if (InstalledBuild() != true)
+                        {
+                            staleSince = 0;
+                        }
+                        else if (staleSince == 0)
                         {
                             staleSince = now;
                         }
@@ -636,25 +643,16 @@ internal sealed class TipServer : IDisposable
 
     private readonly TipBuild _build = TipBuild.Shipped;
 
-    // 通知済みのアプリ (アプリごとに 1 回だけ通知する)
-    private readonly HashSet<string> _outdated = new(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>
     /// アプリ (.exe を除いたプロセスの名前) を再起動するまで、そのアプリでは Meltype IME で入力できない
-    /// (stub と impl に分割する前の DLL か、今の impl をロードできない古い stub が、プロセスに残っている)。UI スレッドで呼ぶ。
+    /// (stub と impl に分割する前の DLL か、今の impl をロードできない古い stub が、プロセスに残っている)。
+    /// UI スレッドで呼ぶ。同じアプリについて、接続ごとに <see cref="StaleNoticeMs"/> おきに呼ぶ。
     /// </summary>
     public event Action<string>? ClientOutdated;
 
     private void ReportOutdated(string process)
     {
-        // 登録済みの impl の方が別ビルド (この Meltype.exe への更新の途中・Meltype IME の再登録を断った) なら、アプリを再起動しても変わらない
-        if (!IsInstalledBuild) return;
         process = Shown(process);
-        lock (_outdated)
-        {
-            if (_outdated.Count >= MaxGreeted || !_outdated.Add(process)) return;
-        }
-        Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
         if (_invoker.IsHandleCreated && !_invoker.IsDisposed) _invoker.BeginInvoke(() => ClientOutdated?.Invoke(process));
     }
 

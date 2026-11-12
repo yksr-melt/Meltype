@@ -42,7 +42,14 @@ inline constexpr wchar_t kDisplayName[] = L"Meltype";
 extern HINSTANCE g_module;
 
 // ---- stub (MeltypeTip.dll) と impl (MeltypeTipImpl.dll) の ABI ----
-// プロセスに残った古い stub が、新しい impl をロードする。下の 2 つを変更すると、プロセスを再起動するまで、そのプロセスの impl は差し替わらない
+// プロセスに残った古い stub が、新しい impl をロードする。
+// stub は、impl の MeltypeTipAbi が自分の kStubImplAbi と一致したときだけ MeltypeTipCreate を呼ぶ。一致しなければ、プロセスを再起動するまで、そのプロセスの impl は差し替わらない
+
+// MeltypeTipCreateFn・kStubImplStale を変更したら上げる
+inline constexpr UINT kStubImplAbi = 1;
+
+// impl がエクスポートする関数 MeltypeTipAbi。impl の kStubImplAbi を返す。どの版の stub からも呼ぶので、シグネチャを変更しない
+using MeltypeTipAbiFn = UINT(STDAPICALLTYPE*)();
 
 // impl がエクスポートする関数 MeltypeTipCreate。stub: kStubImplStale の送信先のウィンドウ
 using MeltypeTipCreateFn = HRESULT(STDAPICALLTYPE*)(HWND stub, ITfTextInputProcessorEx** service);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 //
-// impl (MeltypeTipImpl.dll) のエントリーポイント。stub (MeltypeTip.dll) がロードして MeltypeTipCreate を呼ぶ。
+// impl (MeltypeTipImpl.dll) のエントリーポイント。stub (MeltypeTip.dll) がロードして MeltypeTipAbi を確かめ、MeltypeTipCreate を呼ぶ。
 
 #include <new>
 
@@ -16,6 +16,8 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID) {
     }
     return TRUE;
 }
+
+extern "C" UINT STDAPICALLTYPE MeltypeTipAbi() { return kStubImplAbi; }
 
 extern "C" HRESULT STDAPICALLTYPE MeltypeTipCreate(HWND stub, ITfTextInputProcessorEx** service) {
     if (service == nullptr) return E_INVALIDARG;

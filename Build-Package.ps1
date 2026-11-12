@@ -257,7 +257,8 @@ else {
 }
 
 # 配布する Meltype IME の DLL (署名した後) のハッシュ。インストールのとき、管理者として登録する前に、DLL が書き換えられていないかを確かめるのに使う。
-# (MeltypeTip.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う)
+# (MeltypeTip.dll.sha256・MeltypeTipImpl.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う。
+#  MeltypeTipImpl.dll.sha256 は、インストール先の impl のファイル名と、Meltype.exe が要求の impl を照合するのにも使う)
 foreach ($relative in @(if ($imeBuilt) { 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll' })) {
     $dll = Join-Path $app "tip\$relative"
     $sha = [System.Security.Cryptography.SHA256]::Create()

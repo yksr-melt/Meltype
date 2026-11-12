@@ -59,7 +59,7 @@ try {
         # 前の登録の残り (使われていて消せなかったもの) を片付ける
         Get-ChildItem -LiteralPath $folder -Filter '*.old' -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
         # impl のファイル名は、署名前のバイナリの SHA-256 (プロセスがロードしている前の impl は、そのまま残る)。
-        # stub がロードする impl の指定 (MeltypeTipImpl.dll.sha256) は、impl を配置してから書き換える
+        # stub がロードする impl の指定 (MeltypeTipImpl.dll.sha256) は、stub を登録できてから書き換える (前の stub に戻したときは、前の impl を指したまま)
         $implHash = "$(Get-Content -LiteralPath (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256") -Raw)".Trim().ToUpperInvariant()
         if ($implHash -notmatch '^[0-9A-F]{64}$') { throw "$arch\MeltypeTipImpl.dll.sha256 の中身が SHA-256 ではありません。" }
         $implFolder = Join-Path $folder 'impl'
@@ -73,9 +73,6 @@ try {
             Remove-Item -LiteralPath $staged -Force
             if (-not (Test-Path -LiteralPath $impl)) { throw }
         }
-        [IO.File]::WriteAllText((Join-Path $folder 'MeltypeTipImpl.dll.sha256'), $implHash)
-        # 前の impl は、どのプロセスもロードしていなければ削除できる
-        Get-ChildItem -LiteralPath $implFolder -File | Where-Object { $_.FullName -ne $impl } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
         $old = $null
         if (Test-Path -LiteralPath $dll) {
             $old = "$dll.$([DateTime]::Now.ToString('yyyyMMddHHmmss')).old"
@@ -101,6 +98,9 @@ try {
             }
             throw $registerError
         }
+        [IO.File]::WriteAllText((Join-Path $folder 'MeltypeTipImpl.dll.sha256'), $implHash)
+        # 前の impl は、どのプロセスもロードしていなければ削除できる
+        Get-ChildItem -LiteralPath $implFolder -File | Where-Object { $_.FullName -ne $impl } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
         # 署名する前の中身のハッシュ (次の更新で、同じ DLL なら登録し直さないため)
         $hash = Join-Path $Source "$arch\MeltypeTip.dll.sha256"
         if (Test-Path -LiteralPath $hash) { Copy-Item -LiteralPath $hash -Destination "$dll.sha256" -Force }
