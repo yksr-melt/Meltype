@@ -97,7 +97,7 @@ export const FORMS = [
       { id: "version", label: "Meltype の版", type: "text", placeholder: "1.4.0", hint: "「ばーじょん」と打って変換すると、候補に出ます" },
     ],
     optional: [
-      { id: "key", label: "最後に押したキー", type: "select", default: "打っている途中 (まだ確定していない)", options: ["打っている途中 (まだ確定していない)", "Space (変換)", "Enter (確定)", "句読点・記号", "そのほか"] },
+      { id: "key", label: "最後に押したキー", type: "select", options: ["Space (変換)", "Enter (確定)", "打っている途中 (まだ確定していない)", "句読点・記号", "そのほか"] },
       { id: "context", label: "前後の文", type: "textarea", placeholder: "前の行は「明日の会議の資料」", hint: "前の文によって判定が変わることがあります (英文の途中か、日本語の文の途中か)" },
       { id: "app", label: "どのアプリで", type: "text", placeholder: "VS Code のエディター / Slack", hint: "コードエディター・チャット・検索欄などで判定の仕方が変わります" },
       { id: "os", label: "OS", type: "select", options: OS_SIMPLE },

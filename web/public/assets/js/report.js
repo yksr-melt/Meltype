@@ -105,7 +105,7 @@ function fieldHtml(field, required) {
   let control = "";
   let counter = "";
   if (field.type === "select") {
-    control = `<select class="select" ${common}><option value="">選んでください</option>${field.options.map((o) => `<option${o === field.default ? " selected" : ""}>${escapeHtml(o)}</option>`).join("")}</select>`;
+    control = `<select class="select" ${common}><option value="">選んでください</option>${field.options.map((o) => `<option>${escapeHtml(o)}</option>`).join("")}</select>`;
   } else if (field.type === "checks") {
     control = `<div class="checks">${field.options
       .map((o, i) => `<label class="check"><input type="checkbox" name="${field.id}" value="${escapeHtml(o)}" id="${id}-${i}">${escapeHtml(o)}</label>`)

@@ -38,12 +38,11 @@ body:
     attributes:
       label: 最後に押したキー
       options:
-        - 打っている途中 (まだ確定していない)
         - Space (変換)
         - Enter (確定)
+        - 打っている途中 (まだ確定していない)
         - 句読点・記号
         - そのほか
-      default: 0
 
   - type: dropdown
     id: zenzai
