@@ -276,6 +276,19 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Refresh_DoesNotUndoSplittingTheWholeSentence()
+    {
+        // 英日の区切りの案を候補にした文全体の文節を ← で分けたら、届いた答えで文全体の文節に戻さない (issue #1737)
+        var converter = new ChangingAnswer { Clauses = [new("と", "と")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "botto ");
+        var split = session.HandleKey(VirtualKeys.Left, null, false, false, false, false).View;
+        Assert.Equal("bot,と", string.Join(",", split?.Clauses ?? []));
+        converter.Clauses = [new("と", "戸")];
+        Assert.True(session.RefreshConversion() is null, "分けた文節を置き換えない");
+    }
+
+    [Test]
     public static void Space_WaitsWithinTheBudget()
     {
         using var converter = Slow(delayMs: 50);

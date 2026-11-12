@@ -262,6 +262,7 @@ public sealed partial class CompositionController
     /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
     /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
     /// 文全体の文節でなければ何もしない。どの案にも無い文 (F6 でひらがなにした文) を選んでいれば、分けずに学習しない文節にする。
+    /// 分けたら、後から届いた変換エンジンの答えで文全体の文節に戻さない (_clausesEdited)。
     /// </summary>
     private void SplitWholeSentence()
     {
@@ -282,6 +283,7 @@ public sealed partial class CompositionController
             return;
         }
         _selectedClause = 0;
+        _clausesEdited = true;
     }
 
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
