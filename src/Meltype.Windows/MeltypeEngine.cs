@@ -146,9 +146,10 @@ internal sealed class MeltypeEngine : IDisposable
         if (e.Injected && (settings.AllowInjectedInput || _remote.Active is not null)) e = e with { Injected = false };
         else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
         {
-            // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)
+            // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)。
+            // Windows のタッチキーボードの打鍵も同じ (issue #729)
             _injectedHintLogged = true;
-            Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。ULE4JIS などキー配列を変えるソフトや遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
+            Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。Windows のタッチキーボード・ULE4JIS などキー配列を変えるソフト・遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
         }
         if (e.Injected) return false;
         KeyCounter.Count(e, DateTime.Now, KeyCountAllowed(settings));
