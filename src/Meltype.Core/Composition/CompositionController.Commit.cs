@@ -182,8 +182,11 @@ public sealed partial class CompositionController
     {
         _correctable.Clear();
         _out.ForgetCommitted();
-        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う
+        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
+        // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
         _lastCommitTime = long.MinValue / 2;
+        _lastCommitText = null;
+        _lastCommitEnglish = null;
     }
 
     /// <summary>
