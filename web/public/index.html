@@ -76,7 +76,7 @@
               </span>
             </a>
             <a class="btn btn-ghost btn-large" href="#install">
-              ほかの OS・zip 版
+              ほかの OS・ポータブル版
               <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>
             </a>
           </div>
@@ -342,13 +342,13 @@
             <li><b>準備完了</b><span>タスクトレイに「あ」が出たら、あとはいつもどおりローマ字で打つだけです。新しい版は自動で入ります</span></li>
           </ol>
           <div class="callouts">
-            <p class="callout is-info"><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>管理者権限の確認で「いいえ」を選んだ場合は、Meltype IME の代わりに、変換ボックスで入力する Meltype キーボードで動きます。</span></p>
+            <p class="callout is-info"><svg class="ic"><use href="/assets/img/icons.svg#i-info"/></svg><span>管理者権限の確認で「いいえ」を選んだ場合は、Meltype IME の代わりに、変換ボックスで入力する Meltype キーボードで動きます。あとから登録するときは、トレイのアイコンを右クリックして「Meltype IME」を選びます。</span></p>
             <p class="callout is-warn"><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>コード署名をしていないため、「Windows によって PC が保護されました」と出ることがあります。そのときは「詳細情報」→「実行」で進めてください。</span></p>
           </div>
           <details class="fold">
-            <summary>zip 版で入れる</summary>
+            <summary>インストールせずに使う (ポータブル版)</summary>
             <div class="fold-body">
-              <p><a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="windows.zip"><code>Meltype-&lt;version&gt;-windows.zip</code></a> を展開して <code>Install.cmd</code> をダブルクリックします。インストーラーでも zip でも、入る場所は同じ <code>%LOCALAPPDATA%\Programs\Meltype</code> です。</p>
+              <p><a href="https://github.com/yksr-melt/Meltype/releases/latest" data-asset-link="windows-portable.zip"><code>Meltype-&lt;version&gt;-windows-portable.zip</code></a> をフォルダーごと展開して <code>Meltype.exe</code> を実行します。設定と学習データは <code>Meltype.exe</code> の隣の <code>data</code> に入ります。Meltype IME・自動起動・自動更新は使えず、Meltype キーボードで動きます。</p>
               <p>必要なのは Windows 10 / 11 (64bit) と Microsoft IME だけで、.NET は同梱しています。</p>
             </div>
           </details>
@@ -362,14 +362,14 @@
                 <li>それでも検出されるときは、保護を切ったりフォルダーを除外したりせずに、「保護の履歴」で検出名を確かめて <a href="/report/?form=bug">報告</a> してください。個人名やパス、ダウンロード URL の一時トークンは隠してください</li>
               </ol>
               <p>ファイルが本物か確かめたいときは、PowerShell で次のコマンドを実行して、リリースのページにある SHA-256 と比べてください。</p>
-              <div class="codebox"><code>Get-FileHash .\Meltype-&lt;version&gt;-windows.zip</code><button class="copy" type="button" data-copy="Get-FileHash .\Meltype-&lt;version&gt;-windows.zip"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
+              <div class="codebox"><code>Get-FileHash .\Meltype-&lt;version&gt;-setup.exe</code><button class="copy" type="button" data-copy="Get-FileHash .\Meltype-&lt;version&gt;-setup.exe"><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg><span class="sr-only">コピー</span></button></div>
               <div class="hashes" data-hashes hidden></div>
             </div>
           </details>
           <details class="fold">
             <summary>アンインストール</summary>
             <div class="fold-body">
-              <p>トレイのアイコンを右クリックして「アンインストール...」を選ぶか、Windows の「設定」→「アプリ」から消せます。インストーラーで入れた場合は、最後に設定と学習データも消すかを聞かれます。zip 版は <code>Uninstall.cmd</code> でも消せて、こちらは設定と学習データもまとめて消えます。</p>
+              <p>トレイのアイコンを右クリックして「アンインストール...」を選ぶか、Windows の「設定」→「アプリ」から消せます。最後に設定と学習データも消すかを聞かれます。</p>
             </div>
           </details>
           <p class="more-link"><a href="https://github.com/yksr-melt/Meltype/blob/main/docs/WINDOWS.md">Windows 版の詳しい説明<svg class="ic"><use href="/assets/img/icons.svg#i-external"/></svg></a></p>

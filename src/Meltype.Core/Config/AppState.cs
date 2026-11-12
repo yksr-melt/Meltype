@@ -17,9 +17,6 @@ public sealed class AppState
     /// <summary>Meltype IME (TSF) が入っているのを見つけて、動作モードを Meltype IME にしたか (一度だけ切り替える。後でユーザーが戻したら、そのまま)。</summary>
     public bool TsfIntroduced { get; set; }
 
-    /// <summary>Meltype IME を入れるかを聞いたか (Meltype IME が入る前の版から更新した人に、起動したときに一度だけ聞く)。</summary>
-    public bool TsfOffered { get; set; }
-
     /// <summary>リリースノートを最後に見せた版 (更新したあとの初めての起動で一度だけ見せる。issue #1207)。</summary>
     public string? ReleaseNotesShown { get; set; }
 

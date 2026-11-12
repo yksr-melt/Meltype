@@ -9,30 +9,6 @@ namespace Meltype;
 
 internal static class Program
 {
-    /// <summary>
-    /// 語ごとの自動の判定 (学習は使わない)。今の版の判定にも同じものを使う (<see cref="Updater.PreviewChanges"/>)。
-    /// </summary>
-    internal static string JudgeWords(IEnumerable<string> words)
-    {
-        var detector = Composition.CompositionDetector.CreateDefault();
-        if (Detection.WindowsSpellChecker.Shared.IsAvailable) detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
-        return Composition.WordJudge.JudgeAll(detector, words);
-    }
-
-    private static int JudgeWords(string input, string output)
-    {
-        try
-        {
-            File.WriteAllText(output, JudgeWords(File.ReadAllLines(input)));
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine(ex.Message);
-            return 1;
-        }
-    }
-
     [STAThread]
     private static int Main(string[] args)
     {
@@ -50,9 +26,6 @@ internal static class Program
         if (args.FirstOrDefault() == "--selftest") return SelfTest.Run(args.ElementAtOrDefault(1));
         // Meltype.exe --exit: 動いている Meltype を終了させる (インストール・アンインストール用。管理者として動いていても止められる)。
         if (args.FirstOrDefault() == "--exit") return ExitSignal.Send() ? 0 : 1;
-        // Meltype.exe --judge-words <語の一覧> <結果>: 語ごとの自動の判定を書き出す。前の版の Meltype が、更新の前に
-        // 「あなたの打ち方で変わる語」を調べるために、ダウンロードした新しい版をこれで動かす (issue #285)。
-        if (args.FirstOrDefault() == "--judge-words" && args.Length >= 3) return JudgeWords(args[1], args[2]);
 
         // フックを二重に掛けると同じ打鍵を二重に保留・再入力してしまうので、多重起動させない。
         using var mutex = new Mutex(initiallyOwned: true, @"Local\Meltype.SingleInstance", out var createdNew);
@@ -92,9 +65,8 @@ internal static class Program
             try { settings.Save(AppPaths.ConfigFile); } catch { }
         }
 
-        // ダウンロード済みの新しい版があれば、起動せずに更新する (install.ps1 が新しい版を起動する)。
-        if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease,
-                version => UpdateChangesDialog.Confirm(new Composition.LanguageMemory(AppPaths.LanguageMemoryFile), version, settings))) return 0;
+        // ダウンロード済みの新しい版があれば、起動せずに更新する (インストーラーが新しい版を起動する)。
+        if (!AppPaths.IsPortable && Updater.ApplyStagedAtStartup(() => settings.AutoUpdate, settings.UpdatePrerelease)) return 0;
 
         // 学習データは確定のたびに書かず、少し後にまとめて書く。終了・ログオフのときに残りを書く
         // (更新の確認は学習データを別に読み込んで書くので、それより後で切り替える)

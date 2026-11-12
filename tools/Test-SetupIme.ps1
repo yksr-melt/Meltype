@@ -1,6 +1,9 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 MuNeNICK
 
+# setup-ime.ps1 が、meltype-ime.ps1 の結果を終了コードで返すか (setup.exe は、登録済みの Meltype IME を更新できなければ本体を入れ替えない)。
+# meltype-ime.ps1 は、引数と結果を確かめるダミーにする。
+
 $ErrorActionPreference = 'Stop'
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('meltype-setup-test-' + [guid]::NewGuid())
 $fixture = Join-Path $testRoot "app with spaces and 'quotes'"
@@ -12,69 +15,52 @@ try {
     $env:TEMP = $testRoot
     $helper = Join-Path $fixture 'meltype-ime.ps1'
     $log = Join-Path $testRoot 'Meltype-setup-ime.log'
+    $source = Join-Path $fixture 'tip'
     foreach ($case in @(
-        @{ Ask = $true; Registered = '$false'; Result = '$true' },
-        @{ Ask = $true; Registered = '$false'; Result = '$false' },
-        @{ Ask = $true; Registered = '$true'; Result = '$true' },
-        @{ Ask = $false; Registered = '$true'; Result = '$true' },
-        @{ Ask = $false; Registered = '$false'; Result = '$true' }
+        @{ Explain = $false; Result = '$true'; Code = 0 },
+        @{ Explain = $true; Result = '$true'; Code = 0 },
+        @{ Explain = $false; Result = '$false'; Code = 1 }
     )) {
         $stub = @'
-function Test-MeltypeImeRegistered { return REGISTERED }
-function Install-MeltypeIme([string]$Source, [switch]$Ask) {
-    if ([bool]$Ask -ne EXPECTEDASK) { throw 'Incorrect -Ask value' }
-    if ($Source -ne (Join-Path $PSScriptRoot 'tip')) { throw 'Incorrect source directory' }
-    Set-Content -LiteralPath (Join-Path $PSScriptRoot 'called') -Value 'called'
+function Install-MeltypeIme([string]$Source, [switch]$Explain) {
+    if ($Source -ne SOURCE) { throw "Incorrect source directory: $Source" }
+    if ([bool]$Explain -ne EXPLAIN) { throw 'Incorrect -Explain value' }
     Write-Host 'Registration attempted'
     return RESULT
 }
-function Set-MeltypeImeDeclined { Set-Content -LiteralPath (Join-Path $PSScriptRoot 'declined') -Value 'declined' }
+function Uninstall-MeltypeIme { throw 'Uninstall-MeltypeIme called during install' }
 '@
-        $expectedAsk = if ($case.Ask) { '$true' } else { '$false' }
-        Set-Content -LiteralPath $helper -Value $stub.Replace('RESULT', $case.Result).Replace('REGISTERED', $case.Registered).Replace('EXPECTEDASK', $expectedAsk) -Encoding UTF8
-        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $fixture 'setup-ime.ps1'))
-        if ($case.Ask) { $arguments += '-Ask' }
+        $explain = if ($case.Explain) { '$true' } else { '$false' }
+        Set-Content -LiteralPath $helper -Value $stub.Replace('SOURCE', "'" + $source.Replace("'", "''") + "'").Replace('EXPLAIN', $explain).Replace('RESULT', $case.Result) -Encoding UTF8
+        $arguments = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $fixture 'setup-ime.ps1'), '-Source', $source)
+        if ($case.Explain) { $arguments += '-Explain' }
         & $powershell @arguments
-        if ($LASTEXITCODE -ne 0) { throw 'Registration interrupted setup' }
-        $expectedCall = $case.Ask -or $case.Registered -eq '$true'
-        $called = Join-Path $fixture 'called'
-        if ((Test-Path -LiteralPath $called) -ne $expectedCall) { throw 'Incorrect registration decision' }
-        $text = Get-Content -LiteralPath $log -Raw
-        if ($expectedCall -and $text -notmatch 'Registration attempted') { throw 'Registration output was not logged' }
-        if ($case.Result -eq '$false' -and $text -notmatch 'Meltype キーボード方式') { throw 'Missing fallback message' }
-        if ($expectedCall) { Remove-Item -LiteralPath $called }
-        $declined = Join-Path $fixture 'declined'
-        if ((Test-Path -LiteralPath $declined) -eq $expectedCall) { throw 'Incorrect declined record' }
-        Remove-Item -LiteralPath $declined -ErrorAction SilentlyContinue
-        Write-Host "PASS: Ask=$($case.Ask), Registered=$($case.Registered), Result=$($case.Result)"
+        if ($LASTEXITCODE -ne $case.Code) { throw "Unexpected exit code $LASTEXITCODE" }
+        if ((Get-Content -LiteralPath $log -Raw) -notmatch 'Registration attempted') { throw 'Registration output was not logged' }
+        Write-Host "PASS: Explain=$($case.Explain), Result=$($case.Result)"
     }
-    foreach ($result in '$true', '$false') {
+    foreach ($case in @(@{ Result = '$true'; Code = 0 }, @{ Result = '$false'; Code = 1 })) {
         $stub = @'
-function Test-MeltypeImeRegistered { return $true }
 function Install-MeltypeIme { throw 'Install-MeltypeIme called during uninstall' }
-function Set-MeltypeImeDeclined { throw 'Set-MeltypeImeDeclined called during uninstall' }
 function Uninstall-MeltypeIme {
-    Set-Content -LiteralPath (Join-Path $PSScriptRoot 'uninstalled') -Value 'uninstalled'
+    Write-Host 'Unregistration attempted'
     return RESULT
 }
 '@
-        Set-Content -LiteralPath $helper -Value $stub.Replace('RESULT', $result) -Encoding UTF8
+        Set-Content -LiteralPath $helper -Value $stub.Replace('RESULT', $case.Result) -Encoding UTF8
         & $powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'setup-ime.ps1') -Uninstall
-        if ($LASTEXITCODE -ne 0) { throw 'Unregistration interrupted uninstall' }
-        $uninstalled = Join-Path $fixture 'uninstalled'
-        if (-not (Test-Path -LiteralPath $uninstalled)) { throw 'Unregistration was not attempted' }
-        Remove-Item -LiteralPath $uninstalled
-        if ($result -eq '$false' -and (Get-Content -LiteralPath $log -Raw) -notmatch '登録を外せませんでした') { throw 'Missing unregistration failure message' }
-        Write-Host "PASS: Uninstall, Result=$result"
+        if ($LASTEXITCODE -ne $case.Code) { throw "Unexpected exit code $LASTEXITCODE" }
+        if ((Get-Content -LiteralPath $log -Raw) -notmatch 'Unregistration attempted') { throw 'Unregistration output was not logged' }
+        Write-Host "PASS: Uninstall, Result=$($case.Result)"
     }
     Set-Content -LiteralPath $helper -Value "throw 'Registration fixture failure'" -Encoding UTF8
-    & $powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'setup-ime.ps1')
+    & $powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'setup-ime.ps1') -Source $source
     if ($LASTEXITCODE -ne 1 -or (Get-Content -LiteralPath $log -Raw) -notmatch 'Registration fixture failure') {
         throw 'Unexpected registration error was not reported'
     }
     Write-Host 'PASS: unexpected registration error is logged with exit code 1'
     Remove-Item -LiteralPath $helper
-    & $powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'setup-ime.ps1')
+    & $powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $fixture 'setup-ime.ps1') -Source $source
     if ($LASTEXITCODE -ne 1) { throw 'Missing registration helper was not reported' }
     Write-Host 'PASS: missing registration helper is reported'
     # The last child intentionally failed; do not propagate its exit code to CI.

@@ -183,7 +183,7 @@ const Help = [
   '| `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す | だれでも |',
   '| `/jht <出てほしい文> [/ 読み]` | 考えられるローマ字打ちで変換テスト (読みはオプション) | だれでも |',
   '| `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |',
-  '| `/pack <SHA>` | Pull Request のコードでテスト版の zip を作る | メンテナー |',
+  '| `/pack <SHA>` | Pull Request のコードでテスト版のインストーラー (setup.exe) を作る | メンテナー |',
   '| `/test-repro <SHA> <キー>` | PR のコードで `/repro` | メンテナー |',
   '| `/test-jht <SHA> <文> [/ 読み]` | PR のコードで `/jht` | メンテナー |',
   '| `/test-explain <SHA> <キー>` | PR のコードで `/explain` | メンテナー |',
@@ -622,8 +622,8 @@ async function report() {
   if (action === 'pack') {
     const ok = process.env.BOT_JOB_RESULT === 'success';
     await upsertComment(issue, `pack-${process.env.BOT_COMMENT_ID}`, ok
-      ? `📦 テスト版の zip を作りました (${process.env.BOT_SHA?.slice(0, 7)})。[実行結果](${runUrl}) の Artifacts の **meltype-pr-${issue}** からダウンロードできます (Windows 用)。`
-      : `❌ zip を作れませんでした。[実行結果](${runUrl})`);
+      ? `📦 テスト版のインストーラー (setup.exe) を作りました (${process.env.BOT_SHA?.slice(0, 7)})。[実行結果](${runUrl}) の Artifacts の **meltype-pr-${issue}** からダウンロードできます (Windows 用)。`
+      : `❌ インストーラーを作れませんでした。[実行結果](${runUrl})`);
   }
 }
 
