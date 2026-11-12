@@ -22,6 +22,8 @@ namespace Meltype.Composition;
 /// 書き間違いの修正は Suggestion に入れる。案内が無ければ null。
 /// </para>
 /// Notes は Candidates と同じ順序・件数の注記。注記がない候補は None、リスト全体を省略するときは null。
+/// 入力欄に入りうる文字の欄 (Text・Candidates・Clauses・Suggestion・Predictions・Committed) は、CompositionOutput.Show が設定の句読点にする。
+/// そういう欄を足したら Show にも足す。
 /// </summary>
 public sealed record CompositionView(
     string Text,
@@ -84,7 +86,7 @@ public sealed partial class CompositionController
     /// <summary>自分が確定してから、この時間内はアプリ側のテキストがまだ更新されていないかもしれないので自分の記録を優先する。</summary>
     private const long OwnCommitTrustMs = 1500;
 
-    private readonly CompositionOutput _out = new();
+    private readonly CompositionOutput _out;
     private readonly CompositionText _text;
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     private KanaLayoutEngine _kanaLayout = new(KanaLayout.Jis);
@@ -177,6 +179,7 @@ public sealed partial class CompositionController
         _converter = converter;
         _budget = (converter as IBackgroundConverter)?.Budget;
         _settings = settings;
+        _out = new CompositionOutput(() => settings().Punctuation);
         _services = services ?? new CompositionServices();
         _learning = new CompositionLearning(_services, converter);
         _text.Manual = () => !_settings().AutoDetection;

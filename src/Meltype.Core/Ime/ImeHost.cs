@@ -25,9 +25,6 @@ public interface IImeEnvironment
 
     /// <summary>クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に読む)。読めなければ null。</summary>
     string? ClipboardText { get; }
-
-    /// <summary>今再生している曲 (「なう」の候補。issue #1400)。読めない・再生していなければ null。</summary>
-    (string Title, string Artist)? NowPlaying { get; }
 }
 
 /// <summary>

@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
-using Meltype.Config;
 
 namespace Meltype.Composition;
 
@@ -56,24 +55,12 @@ public sealed class CompositionText
     /// <summary>かな入力 (JIS) か。かな入力では <see cref="AppendKana"/> で 1 キー 1 文字ずつ入れる。</summary>
     public bool KanaInput { get; set; }
 
-    /// <summary>句読点の組み合わせ (設定)。, と . (かな入力の 、 。 のキー) で入れる文字。</summary>
-    public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
-
-    /// <summary>読点 (、 か ，)。</summary>
-    private char Comma => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.FullWidthCommaKuten ? '，' : '、';
-
-    /// <summary>句点 (。 か ．)。</summary>
-    private char Period => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.ToutenFullWidthPeriod ? '．' : '。';
-
     /// <summary>
     /// かな入力の 1 キー。raw はそのキーの英字 (英単語の判定と、英語として見せるときに使う)。
     /// 濁点・半濁点は直前のかなに付ける (か + ゛ → が)。
     /// </summary>
     public void AppendKana(char raw, char kana)
     {
-        // 、 。 のキーも設定の句読点にする。
-        if (kana == '、') kana = Comma;
-        else if (kana == '。') kana = Period;
         if (kana is '゛' or '゜' && _units.Count > 0 && _units[^1].Kana.Length == 1 &&
             Detection.KanaDetector.Combine(_units[^1].Kana[0], kana) is { } combined)
         {
@@ -126,7 +113,7 @@ public sealed class CompositionText
         if (!char.IsAsciiDigit(c) && _pending.Length == 0 && _units.Count >= 2 && _units[^1] is { Raw: ",", Kana: "," } &&
             _units[^2].Raw is [var digit] && char.IsAsciiDigit(digit))
         {
-            _units[^1] = _units[^1] with { Kana = Comma.ToString() };
+            _units[^1] = _units[^1] with { Kana = "、" };
         }
         if (char.IsAsciiLetter(c))
         {
@@ -1140,9 +1127,9 @@ public sealed class CompositionText
     private char Symbol(char c) => c switch
     {
         '-' => 'ー',
-        // 句読点は設定の組み合わせ (、。 / ，． / ，。 / 、．)。
-        ',' => Comma,
-        '.' => Period,
+        // 句読点は、読みでは設定によらず 、。 (設定の句読点は CompositionOutput が当てる)。
+        ',' => '、',
+        '.' => '。',
         '[' => SquareBrackets ? '［' : '「',
         ']' => SquareBrackets ? '］' : '」',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。
