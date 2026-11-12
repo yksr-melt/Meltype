@@ -4589,6 +4589,28 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Backspace_RetypesTheRemainingRaw()
+    {
+        // BackSpace で消した後の状態は、残った原文を打ち直して作る (#1636)。消す量は見えている 1 音 (打ちかけの子音があればその 1 文字)
+        foreach (var (keys, expected) in new[]
+        {
+            ("reibunn\b", "れいぶ"),     // 基本: 最後の 1 音 (ん)
+            ("reibun\b", "れいぶ"),      // 打ちかけの n
+            ("akya\b", "あ"),            // 2 文字で 1 音 (きゃ)
+            ("akyak\b", "あきゃ"),       // 打ちかけの子音だけ消す
+            ("matcha\b", "まっ"),        // ちゃ を消す。子音の後ろまで打った っ は残す (kitte の っ と同じ)
+            ("ff\b", "f"),               // 後ろのキーで決めた っ は決め直す
+            ("nk\b", "n"),               // 後ろのキーで決めた ん も決め直す
+            ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
+        })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            Assert.Equal(expected, k.Host.View?.Text, keys.Replace("\b", "⌫"));
+        }
+    }
+
+    [Test]
     public static void Ki_OffersOldKanji()
     {
         // #371: き の候補に 気 の旧字体 氣 も出す
