@@ -50,6 +50,30 @@ internal sealed class TipServer : IDisposable
     private readonly ConversionSignal _conversion = new();
 
     /// <summary>
+    /// 変換の答えを待ち受けてきた (wait を送った) アプリのプロセスと、待ち受けずに受け取ったキーの数。DLL はプロセスごとに読み込まれる。
+    /// v1.4.0 以前の DLL は wait を送らないので、ライブ変換の答えが届いても表示を作り直せず、Enter までかなのままになる (#1754)。
+    /// 古い DLL を読み込んだままのアプリは、再起動すれば今の DLL を読み込むので、それを案内する。
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _waiters = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, int> _keysWithoutWait = new();
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<uint, bool> _outdatedReported = new();
+
+    /// <summary>今の DLL ならもう wait を送っているはずのキーの数 (今の DLL は、入力を始めた最初のキーの後に送る)。</summary>
+    private const int KeysBeforeOutdated = 10;
+
+    /// <summary>古い Meltype IME の DLL を読み込んだままのアプリが見つかった (引数はプロセス名)。UI スレッドでは呼ばない。</summary>
+    public event Action<string>? OutdatedDllFound;
+
+    private void CheckOutdatedDll(uint process, TipRequest request)
+    {
+        if (request.Event.Type != ImeEventType.KeyPressed || _waiters.ContainsKey(process)) return;
+        if (_keysWithoutWait.AddOrUpdate(process, 1, (_, n) => n + 1) != KeysBeforeOutdated || !_outdatedReported.TryAdd(process, true)) return;
+        var name = ProcessName(process) ?? $"プロセス {process}";
+        Log.Warn($"Meltype IME: {name} は前の版の Meltype IME を読み込んだままです (ライブ変換が Enter まで出ません)。アプリか PC を再起動してください。");
+        OutdatedDllFound?.Invoke(name);
+    }
+
+    /// <summary>
     /// wait の要求を返さずに持つ時間。DLL が IME のスレッドを止めて終わりを待つことがある (終わるとき) ので短くする。
     /// DLL は入力中だけ、返ったらすぐ次の wait を送る。
     /// </summary>
@@ -406,10 +430,12 @@ internal sealed class TipServer : IDisposable
                     }
                     else if (request.WaitSince is { } since)
                     {
+                        _waiters[clientProcess] = true;
                         reply = $"{{\"generation\":{await _conversion.WaitAsync(since, ConversionWaitMs, _stop.Token).ConfigureAwait(false)}}}";
                     }
                     else
                     {
+                        if (!ownClient) CheckOutdatedDll(clientProcess, request);
                         var started = Environment.TickCount64;
                         long began = started, ended = started;
                         string Run()
