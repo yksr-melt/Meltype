@@ -128,16 +128,36 @@ class Helper {
   }
 
   // 逆変換。文字列 (漢字かな混じり) の読みを返す。逆変換できなければ空。
+  // 半角の数字は 1 字ずつ読む (2026年 → にぜろにろくねん) ので、全角にして渡し (２０２６年 → ２０２６ねん)、読みの数字は半角に戻す。
   std::string Reverse(absl::string_view text) {
+    std::string key;
+    for (const char c : text) {
+      if (c >= '0' && c <= '9') {
+        key += "\xEF\xBC";  // U+FF10 (０) から
+        key += static_cast<char>('\x90' + (c - '0'));
+      } else {
+        key += c;
+      }
+    }
     mozc::Segments segments;
-    if (!converter_->StartReverseConversion(&segments, text)) return "";
+    if (!converter_->StartReverseConversion(&segments, key)) return "";
     std::string reading;
     for (size_t i = 0; i < segments.conversion_segments_size(); ++i) {
       const mozc::Segment& segment = segments.conversion_segment(i);
       if (segment.candidates_size() == 0) return "";
       reading += segment.candidate(0).value;
     }
-    return reading;
+    std::string half;
+    for (size_t i = 0; i < reading.size(); ++i) {
+      if (i + 2 < reading.size() && reading[i] == '\xEF' && reading[i + 1] == '\xBC' &&
+          reading[i + 2] >= '\x90' && reading[i + 2] <= '\x99') {
+        half += static_cast<char>('0' + (reading[i + 2] - '\x90'));
+        i += 2;
+      } else {
+        half += reading[i];
+      }
+    }
+    return half;
   }
 
   bool Save() { return engine_->Sync(); }
