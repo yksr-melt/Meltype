@@ -34,7 +34,8 @@ public sealed partial class CompositionController
         }
         var converting = _converting && _clauses.Count > 0;
         // 文全体の文節で区切りの案を選び直したら、選んだ案の文節で確定する (選び直したことは chosen に残す)。
-        // 選んだ案の英語 / 日本語は学習しない (LanguageMemory に覚えさせない)
+        // 選んだ案の英語 / 日本語は学習しない (LanguageMemory に覚えさせない)。日英判定の精度がまだ低く、間違えて選んだ案や
+        // その場限りの案まで覚えると、次からの判定を崩すため。判定の精度が上がったら、学習するかを見直す
         var chosenWhole = converting && _clauses is [{ Alternatives: not null, Changed: true }];
         if (converting) SplitWholeSentence();
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
