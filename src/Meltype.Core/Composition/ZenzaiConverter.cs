@@ -180,8 +180,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
-        var text = answer == hiragana ? null : answer;
+        // 読みのまま (変換していない: かんたん → かんたん) の答えと、壊れた答え (はーどうぇ → ハードウェアウェアウェア…) は使わない。Mozc などに任せる
+        var text = answer == hiragana || answer is not null && !IsPlausible(hiragana, answer) ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
@@ -240,6 +240,63 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             return null;
         }
     }
+
+    /// <summary>
+    /// 答えが読みと合っているか。答えのかな (カタカナはひらがなとして) と記号は、読みのその位置の文字と同じでないといけない。
+    /// 漢字 1 文字と、英字・数字の並び 1 つは、読みの 1 文字以上に当たるとみなす (今日 → きょう、Microsoft → まいくろそふと)。
+    /// モデルが読みに無いものを続けた答え (はーどうぇ → ハードウェアウェア: issue #1675、きょうはで → 今日はでで・直前の文節の混入: issue #1511) は合わない。
+    /// </summary>
+    internal static bool IsPlausible(string hiragana, string answer)
+    {
+        var tokens = Tokens(answer);
+        var reading = hiragana.Select(Normalize).ToArray();
+        var dead = new HashSet<(int, int)>();
+        return Match(0, 0);
+
+        // tokens[t] 以降で reading[r] 以降をちょうど作れるか (作れなかった組は覚えて、もう試さない)
+        bool Match(int t, int r)
+        {
+            if (t == tokens.Count) return r == reading.Length;
+            if (r == reading.Length || dead.Contains((t, r))) return false;
+            var (text, wildcard) = tokens[t];
+            if (!wildcard ? Normalize(text[0]) == reading[r] && Match(t + 1, r + 1)
+                : (text.Length == 1 && Normalize(text[0]) == reading[r] && Match(t + 1, r + 1)) || Enumerable.Range(r + 1, reading.Length - r).Any(end => Match(t + 1, end)))
+                return true;
+            dead.Add((t, r));
+            return false;
+        }
+    }
+
+    /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
+    private static List<(string Text, bool Wildcard)> Tokens(string answer)
+    {
+        var tokens = new List<(string, bool)>();
+        for (var i = 0; i < answer.Length;)
+        {
+            var c = Normalize(answer[i]);
+            if (char.IsAsciiLetterOrDigit(c))
+            {
+                var end = i;
+                while (end < answer.Length && char.IsAsciiLetterOrDigit(Normalize(answer[end]))) end++;
+                tokens.Add((answer[i..end], true));
+                i = end;
+                continue;
+            }
+            var length = char.IsSurrogatePair(answer, i) ? 2 : 1;
+            var kana = c is >= 'ぁ' and <= 'ゖ' or 'ー' or 'ゝ' or 'ゞ';
+            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !char.IsPunctuation(c) && !char.IsSymbol(c) && !char.IsWhiteSpace(c)));
+            i += length;
+        }
+        return tokens;
+    }
+
+    /// <summary>比べるための文字: カタカナはひらがな (ヵ・ヶ は漢字と同じ扱いのまま)、全角の英数字・記号は半角。</summary>
+    private static char Normalize(char c) => c switch
+    {
+        >= 'ァ' and <= 'ヴ' and not ('ヵ' or 'ヶ') => (char)(c - 0x60),
+        >= '！' and <= '～' => (char)(c - 0xFEE0),
+        _ => c,
+    };
 
     /// <summary>生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。空なら null。</summary>
     internal static string? Clean(string? content)
