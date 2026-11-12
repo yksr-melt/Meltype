@@ -94,6 +94,38 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void IsPlausible_RejectsRunawayRepeats()
+    {
+        // 答えのかなが読みと合わないものは使わない
+        // #1675: はーどうぇ (打ちかけ) を ハードウェアウェア… にした答え (繰り返しの回数によらない)
+        Assert.True(!ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェアウェアウェアウェアウェアウェア"), "繰り返し続けた答え");
+        Assert.True(!ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェアウェア"), "2 回の繰り返し");
+        // #1511: きょうはで の後ろに で が続く答え・直前の文節の混入
+        Assert.True(!ZenzaiConverter.IsPlausible("きょうはで", "今日はでで"), "同じ字が続く答え");
+        Assert.True(!ZenzaiConverter.IsPlausible("なまえ", "名前は魚の"), "直前の文節の混入");
+        Assert.True(!ZenzaiConverter.IsPlausible("はははははは", "ははははは"), "1 文字落ちた答え");
+        // 読みと合う答えは使う
+        Assert.True(ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェ"), "打ちかけのまま");
+        Assert.True(ZenzaiConverter.IsPlausible("きょうはで", "今日はで"), "今日はで");
+        Assert.True(ZenzaiConverter.IsPlausible("はたはたはた", "ハタハタハタ"), "読みにある繰り返し");
+        Assert.True(ZenzaiConverter.IsPlausible("すごーーーーい", "すごーーーーい"), "長音の連続");
+        Assert.True(ZenzaiConverter.IsPlausible("まいくろそふと", "Microsoft"), "英字の並び");
+        Assert.True(ZenzaiConverter.IsPlausible("ぐーぐるでけんさく", "Googleで検索"), "英字と漢字");
+        Assert.True(ZenzaiConverter.IsPlausible("きょうはいいてんき", "今日はいい天気"), "漢字");
+        Assert.True(ZenzaiConverter.IsPlausible("さんかげつ", "三ヶ月"), "ヶ は漢字と同じ");
+        Assert.True(ZenzaiConverter.IsPlausible("ほんとう?", "本当？"), "全角の記号");
+        Assert.True(ZenzaiConverter.IsPlausible("2026ねん", "2026年"), "数字");
+    }
+
+    [Test]
+    public static void Answers_ThatRepeatRunaway_AreNotUsed()
+    {
+        using var server = new FakeServer { Answer = _ => "ハードウェアウェアウェアウェアウェア</s>" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        Assert.True(zenzai.Convert("はーどうぇ") is null, "壊れた答えは Mozc に任せる");
+    }
+
+    [Test]
     public static void Converts_ThroughCompletionEndpoint()
     {
         using var server = new FakeServer { Answer = p => p.Contains("キョウ") ? "今日</s>" : "" };
@@ -265,7 +297,7 @@ internal static class ZenzaiConverterTests
     [Test]
     public static void Hybrid_PrefersZenzaiAndKeepsOtherClausesWhenSame()
     {
-        using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "ひらがな" };
+        using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "丹位" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         using var mozc = MozcConverterTests.Fake();
         var hybrid = new HybridConverter(mozc, () => zenzai);
@@ -274,7 +306,7 @@ internal static class ZenzaiConverterTests
         Assert.True(same is [{ Text: "単位を" }, { Text: "取る" }], "同じなら区切りを使う: " + string.Join("|", same?.Select(c => c.Text) ?? []));
         // 違えば Zenzai の結果
         var other = hybrid.ConvertClauses("たんい", "前の文");
-        Assert.True(other is [{ Reading: "たんい", Text: "ひらがな" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
+        Assert.True(other is [{ Reading: "たんい", Text: "丹位" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
         // 使わない設定 (null) なら今までどおり
         var off = new HybridConverter(mozc, () => null);
         Assert.Equal("単位", off.Convert("たんい") ?? "", "OFF は今までどおり");
@@ -315,7 +347,7 @@ internal static class ZenzaiConverterTests
         // ほかの読み (文節ごとの候補を作るときの きしゃが・きた など) は読みのまま返す。空を返すと失敗と数えられ、3 回で Zenzai を使わなくなる
         using var server = new FakeServer
         {
-            Answer = p => p.Contains("キシャガキタ") ? (p.Contains('外') ? "帰社が北よ" : "汽車が着た") : p.Contains("ニモツヲニカイニハコブ") ? "荷物を2階に運ぶ" : ReadingIn(p),
+            Answer = p => p.Contains("キシャガキタ") ? (p.Contains('外') ? "帰社が喜多" : "汽車が着た") : p.Contains("ニモツヲニカイニハコブ") ? "荷物を2階に運ぶ" : ReadingIn(p),
         };
         // 遅い PC でも時間切れ (5 秒 Zenzai を使わない) にならないよう、待つ時間を長くする
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
@@ -329,7 +361,7 @@ internal static class ZenzaiConverterTests
         Assert.True(aligned is [{ Reading: "きしゃが", Text: "汽車が" }, { Reading: "きた", Text: "着た" }], "Mozc の文節で返す: " + Joined(aligned));
         // 候補でできなければ、今までどおり読み全体で 1 つの文節
         var whole = hybrid.ConvertClauses("きしゃがきた", "外の文");
-        Assert.True(whole is [{ Reading: "きしゃがきた", Text: "帰社が北よ" }], "できなければ 1 文節: " + Joined(whole));
+        Assert.True(whole is [{ Reading: "きしゃがきた", Text: "帰社が喜多" }], "できなければ 1 文節: " + Joined(whole));
 
         // 文節が残るので、選び直して覚えた文節 (きしゃが → 帰社が) は Zenzai の結果の上から効く。1 文節だと効かなかった
         var history = new ConversionHistory(null);
@@ -436,7 +468,7 @@ internal static class ZenzaiConverterTests
         var now = 0L;
         var created = 0;
         using var holder = new ZenzaiHolder((s, m, _) => { created++; throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"); }, () => now);
-        Assert.True(holder.Get("server", "model") is null, "作れなければ null (Mozc などで変換する)");
+        Assert.True(holder.Get("server", "model") is null, "作れなければ null (Mozc で変換する)");
         Assert.True(holder.Get("server", "model") is null && created == 1, "すぐには作り直さない (打つたびに例外にしない)");
         now += (long)holder.RetryAfter.TotalMilliseconds;
         Assert.True(holder.Get("server", "model") is null && created == 2, "しばらくたったら、もう一度作る");

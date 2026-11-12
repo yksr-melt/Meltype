@@ -365,6 +365,12 @@ authorization of the copyright holder.
 SPDX-License-Identifier: Unicode-3.0
 ```
 
+### 通貨の換算に使うレート (dictionaries/exchange-rates.txt)
+
+欧州中央銀行 (European Central Bank) が公開している参照レート (https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml) を、`tools/make-exchange-rates.mjs` で取り出して作りました。ECB のウェブサイトの情報は、正確に載せ、ECB を出典として書けば自由に使えます (https://www.ecb.europa.eu/home/disclaimer/html/index.en.html の「Copyright」)。値は変えずに載せています。
+
+- 出典: European Central Bank
+
 ### そのほかの辞書
 
 `dictionaries/` の辞書 (日本語・英語の単語、固有名詞、同音異義語の候補、文脈の手がかり) は Meltype のために作成したもので、

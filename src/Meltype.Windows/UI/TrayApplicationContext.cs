@@ -60,6 +60,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
         _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
         _engine.ImeServer = _tipServer;
+        _tipServer.OutdatedDllFound += name => _invoker.BeginInvoke(() =>
+        {
+            if (_engine.Settings.ShowNotifications)
+                ShowBalloonTip(10000, "Meltype IME を更新しきれていません", $"{name} は前の版の Meltype IME を使っているので、日本語を入力できません。{name} を閉じて開き直すか、PC を再起動してください。");
+        });
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
         IntroduceTsf();

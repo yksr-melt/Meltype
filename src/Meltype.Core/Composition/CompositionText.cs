@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
-using Meltype.Config;
 
 namespace Meltype.Composition;
 
@@ -56,24 +55,12 @@ public sealed class CompositionText
     /// <summary>かな入力 (JIS) か。かな入力では <see cref="AppendKana"/> で 1 キー 1 文字ずつ入れる。</summary>
     public bool KanaInput { get; set; }
 
-    /// <summary>句読点の組み合わせ (設定)。, と . (かな入力の 、 。 のキー) で入れる文字。</summary>
-    public PunctuationStyle Punctuation { get; set; } = PunctuationStyle.Japanese;
-
-    /// <summary>読点 (、 か ，)。</summary>
-    private char Comma => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.FullWidthCommaKuten ? '，' : '、';
-
-    /// <summary>句点 (。 か ．)。</summary>
-    private char Period => Punctuation is PunctuationStyle.FullWidthCommaPeriod or PunctuationStyle.ToutenFullWidthPeriod ? '．' : '。';
-
     /// <summary>
     /// かな入力の 1 キー。raw はそのキーの英字 (英単語の判定と、英語として見せるときに使う)。
     /// 濁点・半濁点は直前のかなに付ける (か + ゛ → が)。
     /// </summary>
     public void AppendKana(char raw, char kana)
     {
-        // 、 。 のキーも設定の句読点にする。
-        if (kana == '、') kana = Comma;
-        else if (kana == '。') kana = Period;
         if (kana is '゛' or '゜' && _units.Count > 0 && _units[^1].Kana.Length == 1 &&
             Detection.KanaDetector.Combine(_units[^1].Kana[0], kana) is { } combined)
         {
@@ -126,7 +113,7 @@ public sealed class CompositionText
         if (!char.IsAsciiDigit(c) && _pending.Length == 0 && _units.Count >= 2 && _units[^1] is { Raw: ",", Kana: "," } &&
             _units[^2].Raw is [var digit] && char.IsAsciiDigit(digit))
         {
-            _units[^1] = _units[^1] with { Kana = Comma.ToString() };
+            _units[^1] = _units[^1] with { Kana = "、" };
         }
         if (char.IsAsciiLetter(c))
         {
@@ -194,7 +181,7 @@ public sealed class CompositionText
             }
         }
         // 文章の入力欄で打ち始めに打った / は ・ (Microsoft IME と同じ)。Space で / にできる。
-        if (c == '/' && _units.Count == 0 && SlashAtStart())
+        if (c == '/' && _units.Count == 0 && SlashAtStart)
         {
             _units.Add(new CompositionUnit("・", "/"));
             return;
@@ -225,8 +212,11 @@ public sealed class CompositionText
     /// <summary>z + 記号・hjkl を記号・矢印にするか (設定。OFF なら z はほかの英字と同じ: issue #1008)。</summary>
     public Func<bool> ZSymbols { get; set; } = () => true;
 
-    /// <summary>空の変換ボックスに打った / を、打ち始めの / として中黒 (・) にするか。読むと次からは false。</summary>
-    public Func<bool> SlashAtStart { get; set; } = () => false;
+    /// <summary>
+    /// この入力の打ち始めの / を中黒 (・) にするか (文章の入力欄で打ち始めた: 本体が入力を始めるときに決める)。
+    /// 入力の間は変えないので、BackSpace で原文を打ち直しても同じ結果になる。入力が空になったら false に戻す。
+    /// </summary>
+    public bool SlashAtStart { get; set; }
 
     /// <summary>打ち始めの / だけを ・ にして入れているか。</summary>
     public bool IsSlashAtStart => _pending.Length == 0 && _units is [{ Kana: "・", Raw: "/" }];
@@ -249,11 +239,21 @@ public sealed class CompositionText
                 {
                     Mode = DisplayMode.Auto;
                     SuggestionAccepted = false;
+                    SlashAtStart = false;
                 }
                 return;
             }
         }
-        if (_pending.Length > 0) _pending.Length--;
+        if (_pending.Length > 0 && KanaInput) _pending.Length--;
+        else if (_pending.Length > 0)
+        {
+            // 打ちかけの子音を 1 文字消し、残った原文を打ち直す。後ろのキーを見て決めた単位 (ff の っ、nk の ん) は、
+            // そのキーを消したら決め直す (ff + BackSpace + uronto が っうろんと、nk + BackSpace + a が んあ になっていた: issue #1636)
+            var truncated = Raw[..^1];
+            _units.Clear();
+            _pending.Clear();
+            foreach (var c in truncated) Append(c);
+        }
         else if (_units.Count > 0)
         {
             // 見えている最後の 1 音 (英字なら 1 文字) の分だけ後ろから単位を外し、外しすぎた原文を打ち直す。
@@ -272,6 +272,7 @@ public sealed class CompositionText
             Mode = DisplayMode.Auto;
             Case = LetterCase.AsTyped;
             SuggestionAccepted = false;
+            SlashAtStart = false;
         }
     }
 
@@ -295,6 +296,7 @@ public sealed class CompositionText
         Mode = DisplayMode.Auto;
         Case = LetterCase.AsTyped;
         SuggestionAccepted = false;
+        SlashAtStart = false;
     }
 
     /// <summary>
@@ -931,7 +933,7 @@ public sealed class CompositionText
         var changed = false;
         // 今の表示で英字に見えている文字 (きょうは|meeting|です の meeting)。ここは直さない
         // (表示では英単語なのに、確定したら g が が に直されて めえちんがです になっていた)。
-        var shownEnglish = EnglishMask();
+        var shownEnglish = EnglishMask(out var firmEnglish);
         var offset = 0;
         var start = 0;
         while (start < _units.Count)
@@ -953,7 +955,7 @@ public sealed class CompositionText
                 UnitWords.Any(u => letters.StartsWith(u, StringComparison.OrdinalIgnoreCase));
             if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !_detector.IsKnownEnglishWord(letters) &&
                 corrector.FirstUnreadable(letters, final: true) is var first and > 0 &&
-                !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first]) &&
+                !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first] && (firmEnglish[runOffset + first] || !FixesIntoLongWord(corrector, letters, first))) &&
                 // 数字のすぐ前の短い英字 (kaibunsyo|rta|2026 の rta) は略語。打ち間違いとして直さない
                 !(end < _units.Count && _units[end].Raw is [var after] && char.IsAsciiDigit(after) && first >= letters.Length - 6) &&
                 !ContainsEnglishWord(letters, first) &&
@@ -1039,11 +1041,13 @@ public sealed class CompositionText
 
     /// <summary>
     /// 打った英字 (Raw) の 1 文字ずつが、今の表示で英単語 (5 文字以上の知っている語: meeting) の区間に入っているか。
+    /// firm は、そのうち守った区間か 5 文字以上の語 (短い語 mas と違い、直すと長い語になっても英字のまま)。
     /// 短い語 (onegai|shim|su の shim) は、ローマ字の途中に偶然現れることが多いので含めない (打ち間違いとして直す)。
     /// </summary>
-    private List<bool> EnglishMask()
+    private List<bool> EnglishMask(out List<bool> firm)
     {
         var mask = new List<bool>();
+        firm = [];
         var segments = Segments();
         for (var s = 0; s < segments.Count; s++)
         {
@@ -1051,7 +1055,11 @@ public sealed class CompositionText
             // 英語の語.の後ろの英字 (ドメイン・拡張子: Meltype.amr、MeltypeTip.dll) も、表示のまま英字にする (amr を あめ に直していた: issue #260)
             if (segment.IsEnglish && s >= 2 && segments[s - 1] is { IsEnglish: true, Raw: "." } && segments[s - 2].IsEnglish && segments[s - 2].Raw.Any(char.IsAsciiLetter))
             {
-                for (var i = 0; i < segment.Raw.Length; i++) mask.Add(true);
+                for (var i = 0; i < segment.Raw.Length; i++)
+                {
+                    mask.Add(true);
+                    firm.Add(true);
+                }
                 continue;
             }
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
@@ -1061,9 +1069,26 @@ public sealed class CompositionText
                 segment.Raw.Length == 4 && _detector.IsKnownEnglishWord(lower) && !_detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のスペルチェッカーの語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
                 segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && _detector.IsSpellWord(lower) && _detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
-            for (var i = 0; i < segment.Raw.Length; i++) mask.Add(word);
+            for (var i = 0; i < segment.Raw.Length; i++)
+            {
+                mask.Add(word);
+                // 守った区間と 5 文字以上の語 (shopping) は、直すと長い語になっても英字のまま (FixesIntoLongWord を見ない)
+                firm.Add(segment.IsProtected || segment.Raw.Length >= 5);
+            }
         }
         return mask;
+    }
+
+    /// <summary>
+    /// 表示で英字に見えている短い語 (すみ|mas|ね の mas) でも、直すとその前のかなと合わせて 4 文字以上の 1 つの語になるなら直す
+    /// (sumimasne → すみません: issue #971)。tab|de (たべ)・tab|ga (たば) のように、直しても短い語にしかならないものは英字のまま。
+    /// </summary>
+    private bool FixesIntoLongWord(RomajiTypoCorrector corrector, string letters, int first)
+    {
+        if (corrector.Fix(letters, final: true) is not { } fix || first > fix.Right.Length) return false;
+        // 読めない文字の直前のかな (sumima の ま) が、直した後の語に入っているか
+        var before = _detector.Romaji.AnalyzeFragment(fix.Right[..first]).Kana.Length;
+        return corrector.InLongWord(fix.Kana, before - 1, minLength: 4);
     }
 
     /// <summary>
@@ -1140,9 +1165,9 @@ public sealed class CompositionText
     private char Symbol(char c) => c switch
     {
         '-' => 'ー',
-        // 句読点は設定の組み合わせ (、。 / ，． / ，。 / 、．)。
-        ',' => Comma,
-        '.' => Period,
+        // 句読点は、読みでは設定によらず 、。 (設定の句読点は CompositionOutput が当てる)。
+        ',' => '、',
+        '.' => '。',
         '[' => SquareBrackets ? '［' : '「',
         ']' => SquareBrackets ? '］' : '」',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。

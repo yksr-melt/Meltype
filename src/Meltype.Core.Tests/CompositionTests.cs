@@ -2754,6 +2754,22 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue209_MicrosoftImeControlKeysCanBeBound()
+    {
+        // #209: 使い方 (docs/USAGE.md) に書いた、Microsoft IME と同じ割り当て。Ctrl+O は「Control キーの割り当て」の F10 より、個別の割り当ての F8 を優先する
+        foreach (var (letter, expected) in new[] { ('U', "とうきょう"), ('I', "トウキョウ"), ('O', "ﾄｳｷｮｳ"), ('P', "ｔｏｕｋｙｏｕ"), ('T', "toukyou") })
+        {
+            var k = new Keyboard { ControlKeyBindings = "U=F6;I=F7;O=F8;P=F9;T=F10" };
+            k.Type("toukyou");
+            k.Key(VirtualKeys.LControl);
+            k.Key(letter);
+            k.Key(letter, up: true);
+            k.Key(VirtualKeys.LControl, up: true);
+            Assert.Equal(expected, k.Showing, $"Control+{letter}");
+        }
+    }
+
+    [Test]
     public static void Issue62_ConsonantAbbreviationOffersWord()
     {
         var k = new Keyboard { ConsonantAbbreviations = true };
@@ -3123,6 +3139,205 @@ internal static class CompositionTests
         var k = new Keyboard { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
         k.Type("x64,arm64\n");
         Assert.Equal("x64，arm64", k.Host.Document);
+    }
+
+    /// <summary>読みの 、。 はそのまま、，． は半角の , . にして返す変換エンジン (半角の , . を確定して覚えた Mozc の代わり)。</summary>
+    private sealed class PunctuationEchoConverter : IKanjiConverter
+    {
+        private static readonly (string Kana, string Text)[] Words = [("わたしは", "私は"), ("りんご", "林檎"), ("3こ", "3個")];
+
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana);
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            return [new(hiragana, Map(hiragana))];
+        }
+
+        private static string Map(string reading)
+        {
+            foreach (var (kana, text) in Words) reading = reading.Replace(kana, text, StringComparison.Ordinal);
+            return reading.Replace('，', ',').Replace('．', '.');
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingReachesConvertedText()
+    {
+        // #498: 設定の句読点が、Space の変換・ライブ変換のどちらでも変換結果に出る
+        foreach (var (style, expected) in new[]
+        {
+            (Meltype.Config.PunctuationStyle.Japanese, "私は、林檎、3個。"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaPeriod, "私は，林檎，3個．"),
+            (Meltype.Config.PunctuationStyle.FullWidthCommaKuten, "私は，林檎，3個。"),
+            (Meltype.Config.PunctuationStyle.ToutenFullWidthPeriod, "私は、林檎、3個．"),
+        })
+        {
+            var name = style.ToString();
+            var converter = new PunctuationEchoConverter();
+            var k = new Keyboard(converter: converter) { Punctuation = style };
+            k.Type("watasiha,ringo,3ko. ");
+            Assert.Equal(expected, k.Showing, name + ": Space で変換");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Output.Single(), name + ": 変換して確定");
+            Assert.True(converter.Received.All(r => !r.Contains('，') && !r.Contains('．')), name + ": 変換エンジンには 、。 で渡す: " + string.Join(" / ", converter.Received));
+
+            var live = new Keyboard(live: true, converter: new PunctuationEchoConverter()) { Punctuation = style };
+            live.Type("watasiha,ringo,3ko.");
+            Assert.Equal(expected, live.Showing, name + ": ライブ変換");
+            live.Type("\n");
+            Assert.Equal(expected, live.Host.Output.Single(), name + ": ライブ変換のまま確定");
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingKeepsHalfWidthDotsAndCommas()
+    {
+        // 設定の句読点を当てるのは 、。 だけ。ドメイン・数字の半角の . , は変えない
+        foreach (var style in Enum.GetValues<Meltype.Config.PunctuationStyle>())
+        {
+            foreach (var (keys, expected) in new[] { ("example.com\n", "example.com"), ("1.5to1,000\n", "1.5と1,000") })
+            {
+                var k = new Keyboard { Punctuation = style };
+                k.Type(keys);
+                Assert.Equal(expected, k.Host.Document, style.ToString());
+            }
+        }
+    }
+
+    [Test]
+    public static void Punctuation_SettingReachesShortAndPunctuationOnlyInput()
+    {
+        const Meltype.Config.PunctuationStyle Period = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod;
+        foreach (var (keys, expected) in new[] { ("ha, ", "は，"), (", ", "，"), (". ", "．") })
+        {
+            var k = new Keyboard(converter: new PunctuationEchoConverter()) { Punctuation = Period };
+            k.Type(keys);
+            Assert.Equal(expected, k.Showing, keys + "Space で変換");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Output.Single(), keys);
+        }
+
+        var after = new Keyboard(converter: new PunctuationEchoConverter()) { Punctuation = Period };
+        after.Type("watasiha \n,\n");
+        Assert.Equal("私は，", after.Host.Document, "確定したあとに句読点だけを打つ");
+
+        var typing = new Keyboard(converter: new PunctuationEchoConverter()) { Punctuation = Period };
+        typing.Type("watasiha,");
+        Assert.Equal("わたしは，", typing.Showing, "ライブ変換 OFF で変換する前");
+    }
+
+    /// <summary>数字と続くかなをまとめて渡されたときだけ「3個」にする変換エンジン。</summary>
+    private sealed class CounterConverter : IKanjiConverter
+    {
+        public List<string> Received { get; } = [];
+
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            Received.Add(hiragana);
+            return Map(hiragana) is { } text ? [new(hiragana, text)] : null;
+        }
+
+        private static string? Map(string hiragana) => hiragana switch
+        {
+            "りんご" => "林檎",
+            "こ" => "子",
+            "3こ" => "3個",
+            "りんご、3こ" => "林檎、3個",
+            "3こ、りんご" => "3個、林檎",
+            "りんご、3こ。" => "林檎、3個。",
+            _ => null,
+        };
+    }
+
+    [Test]
+    public static void Punctuation_SettingDoesNotSplitDigits()
+    {
+        // #1712: 句読点の隣の数字も、かなと続けて変換エンジンに渡す (ringo,3ko の こ だけを渡すと「3個」にならない)
+        (string? Showing, string Output, List<string> Received) Type(string keys, Meltype.Config.PunctuationStyle style)
+        {
+            var converter = new CounterConverter();
+            var k = new Keyboard(live: true, converter: converter) { Punctuation = style };
+            k.Type(keys);
+            var showing = k.Showing;
+            k.Type("\n");
+            return (showing, k.Host.Output.Single(), converter.Received);
+        }
+
+        const Meltype.Config.PunctuationStyle Period = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod;
+        const Meltype.Config.PunctuationStyle Japanese = Meltype.Config.PunctuationStyle.Japanese;
+        var full = Type("ringo,3ko", Period);
+        Assert.Equal("林檎，3個", full.Showing);
+        Assert.Equal("林檎，3個", full.Output);
+        Assert.True(!full.Received.Contains("こ"), "3 と こ を分けて渡さない: " + string.Join(" / ", full.Received));
+        Assert.Equal("林檎、3個", Type("ringo,3ko", Japanese).Output);
+        Assert.Equal("3個，林檎", Type("3ko,ringo", Period).Output, "数字が句読点の前");
+        Assert.Equal("3個、林檎", Type("3ko,ringo", Japanese).Output);
+        Assert.Equal("林檎，3個．", Type("ringo,3ko.", Period).Output);
+    }
+
+    [Test]
+    public static void Punctuation_CandidatesAreDistinctAsShown()
+    {
+        // 変換エンジンは 、 の候補に ， も返す。「，．」の設定ではどちらも ， になるので、一覧には 1 つだけ出す
+        IReadOnlyList<string> More(string reading) => reading == "、" ? ["、", "，", ",", "・"] : [];
+        var k = new Keyboard(converter: new PunctuationEchoConverter(), moreCandidates: More) { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        k.Type(", ");
+        k.Press(VirtualKeys.Space);
+        var shown = k.Host.View!.Candidates;
+        Assert.Equal(1, shown.Count(c => c == "，"), string.Join(" ", shown));
+        Assert.True(shown.Contains(",") && shown.Contains("・"), "ほかの候補は残す: " + string.Join(" ", shown));
+
+        var japanese = new Keyboard(converter: new PunctuationEchoConverter(), moreCandidates: More);
+        japanese.Type(", ");
+        japanese.Press(VirtualKeys.Space);
+        Assert.True(japanese.Host.View!.Candidates.Contains("、") && japanese.Host.View.Candidates.Contains("，"), "「、。」の設定では 、 と ， の両方を出す");
+    }
+
+    [Test]
+    public static void Punctuation_ChoiceIsNotLearned()
+    {
+        // 句読点だけの文節で選んだ候補 (、 → ・) は覚えない。覚えると、ほかの句読点の設定や「わたしは、」の 、 まで ・ になる
+        var history = new ConversionHistory(null);
+        var converter = new LearningConverter();
+        var k = new Keyboard(history: history, converter: converter, moreCandidates: reading => reading == "、" ? ["、", "・"] : []);
+        k.Type(", ");
+        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "・"; i++) k.Press(VirtualKeys.Space);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("・", k.Host.Document);
+        Assert.True(history.Get("、") is null, "変換履歴に入れない");
+        Thread.Sleep(100);
+        lock (converter.Learned) Assert.True(!converter.Learned.Any(l => l.Contains("、=・")), "変換エンジンにも覚えさせない: " + string.Join(" / ", converter.Learned));
+    }
+
+    [Test]
+    public static void Punctuation_TextReadFromAppUsesKutouten()
+    {
+        // 入力欄から読んだキャレットの前の文字は、設定の句読点 (，) を 、 に戻して文脈にする
+        var k = new Keyboard { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        k.Host.PrecedingText = "はい，";
+        k.Type("kyou ");
+        Assert.Equal("はい、", k.Converter.LastContext, "文脈");
+    }
+
+    [Test]
+    public static void Punctuation_ReconversionReadingUsesKutouten()
+    {
+        // 再変換する文字の読みに入った設定の句読点 (，) は、、 にして変換エンジンに渡す
+        var converter = new PunctuationEchoConverter();
+        var k = new Keyboard(direct: true, converter: converter) { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+        k.Host.Selection = new ReconversionSelection("わたしは，", "わたしは，");
+        k.Press(VirtualKeys.Convert);
+        Assert.Equal("私は，", k.Showing);
+        Assert.True(converter.Received.All(r => !r.Contains('，')), "変換エンジンには 、 で渡す: " + string.Join(" / ", converter.Received));
     }
 
     [Test]
@@ -4362,6 +4577,79 @@ internal static class CompositionTests
         var k = new Keyboard(live: true, converter: new YahoConverter(), userDictionary: new UserDictionary(null));
         k.Type("yahoyaho\n");
         Assert.Equal("やほやほ", k.Host.Document);
+    }
+
+    /// <summary>さいき を 再起 にする変換エンジン (issue #1681)。</summary>
+    private sealed class SaikiConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana == "さいき" ? "再起" : null;
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            hiragana == "さいき" ? [new("さいき", "再起")] : null;
+    }
+
+    [Test]
+    public static void Issue1681_DictionaryWordsComeBeforeTheEngineCandidates()
+    {
+        // #1681: 変換エンジンが知っている読みでは、同梱の辞書の語 (PSYQUI) が変換エンジンの候補の後ろ (58 件中 51 番目) に並んでいた。
+        // 最初の候補 (変換エンジンの答え) は変えず、その次に辞書の語、そのあとに変換エンジンの候補を並べる
+        string[] engine = ["再帰", "最期", "才気", "佐伯", "催奇", "祭器", "才木", "再期", "細期", "斎木"];
+        var k = new Keyboard(converter: new SaikiConverter(), moreCandidates: reading => reading == "さいき" ? engine : []);
+        k.Type("saiki ");
+        var candidates = k.Host.View!.Candidates;
+        Assert.Equal("再起", candidates[0], "最初の候補は変換エンジンの答え");
+        Assert.Equal("PSYQUI", candidates[1], string.Join(" ", candidates));
+        Assert.Equal("再帰", candidates[2], "変換エンジンの候補は辞書の語の次から");
+    }
+
+    [Test]
+    public static void Issue1636_BackspaceAfterADoubledConsonant_LeavesTheConsonant()
+    {
+        // #1636: ff (っf) の f・tch (っch) の ch を消したら、っ ではなく打ちかけの子音に戻す (残った原文を打ち直す)
+        foreach (var (keys, expected) in new[]
+        {
+            ("ff\buronto\n", "ふろんと"),
+            ("kk\bakkou\n", "かっこう"),
+            ("tt\betoka\n", "てとか"),
+            ("tch\b\ba\n", "た"),
+            // っ に限らず、後ろのキーを見て決めた単位は、そのキーを消したら決め直す (nk の ん)
+            ("nk\ba\n", "な"),
+            ("kank\bi\n", "かに"),
+            ("matcha\n", "まっちゃ"),
+            // 子音の後ろを打ってからの っ は、今までどおり 1 音ずつ消す
+            ("kitte\b\b\n", "き"),
+            ("kitte\b\n", "きっ"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            Assert.Equal(expected, k.Host.Document, keys.Replace("\b", "⌫").Replace("\n", "⏎"));
+        }
+    }
+
+    [Test]
+    public static void Backspace_RetypesTheRemainingRaw()
+    {
+        // BackSpace で消した後の状態は、残った原文を打ち直して作る (#1636)。消す量は見えている 1 音 (打ちかけの子音があればその 1 文字)
+        foreach (var (keys, expected) in new[]
+        {
+            ("reibunn\b", "れいぶ"),     // 基本: 最後の 1 音 (ん)
+            ("reibun\b", "れいぶ"),      // 打ちかけの n
+            ("akya\b", "あ"),            // 2 文字で 1 音 (きゃ)
+            ("akyak\b", "あきゃ"),       // 打ちかけの子音だけ消す
+            ("matcha\b", "まっ"),        // ちゃ を消す。子音の後ろまで打った っ は残す (kitte の っ と同じ)
+            ("ff\b", "f"),               // 後ろのキーで決めた っ は決め直す
+            ("nk\b", "n"),               // 後ろのキーで決めた ん も決め直す
+            ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
+            ("/k\b", "・"),               // 打ち始めの / を ・ にした単位は残す (打ち直すと / になる)
+            ("/kk\b", "・k"),
+            ("/\bka/", "か/"),                // 入力が空になったら、次の / は打ち始めの / ではない (かなの後ろの /)
+        })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            Assert.Equal(expected, k.Host.View?.Text, keys.Replace("\b", "⌫"));
+        }
     }
 
     [Test]
