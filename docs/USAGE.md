@@ -189,6 +189,14 @@ Windows 版は、同梱の Mozc と Microsoft IME で変換します。設定の
 
 - 設定「左 Alt で英数 / 右 Alt で日本語」を ON にすると、左右の Alt の単独押しで英数 / 日本語入力にします (半角/全角 キーの無い US 配列向け。既定は OFF。Windows)
 
+### 半角/全角・F キーが押しにくいとき
+
+US 配列のキーボードや、F キーに Fn が要るノートパソコン向けです。
+
+- **入力モードの切り替え**: 設定の「入力モード切り替えキー」に、好きなキー (Ctrl + Space・Shift + Space・Alt + ` など) を複数登録できます。Windows では「左 Alt で英数 / 右 Alt で日本語」も使えます
+- **F6〜F10 の代わり**: 入力中は Ctrl + U / I / O / P で F6 / F7 / F10 / F9 (ひらがな / カタカナ / 半角英数 / 全角英数) です。設定の「Control キーの割り当て」で ATOK 風・macOS 風にも変えられます
+- **自分で割り当てる**: 設定の「Control キーの個別の割り当て」に `英字=キー名` を ; で区切って書くと、入力中の Ctrl + 英字にそのキーの働きを割り当てます。Microsoft IME と同じにするなら `U=F6;I=F7;O=F8;P=F9;T=F10` です。キー名は F6〜F10・Left・Right・Up・Down・Home・End・Delete・Back・Enter・Esc・Tab です
+
 ### ATOK 風の操作で使いたいとき
 
 | ATOK 風の操作 | Meltype での設定・キー |
