@@ -24,8 +24,8 @@ internal static class FrontProtocolTests
         new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new(@"\[L""(\w+)""\]"),
             // 入力モードと、左右の Alt (フックで見る) は Meltype.exe (TipServer) が使う
             Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases", "altKeys"],
-            // Meltype.exe との、背景の変換の結果の待ち合わせ
-            Others: ["generation"]),
+            // Meltype.exe (TipServer) の応答: 背景の変換の結果の待ち合わせと、別ビルドの impl への応答
+            Others: ["generation", "stale"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
