@@ -27,7 +27,7 @@ class VirtualKeyTests(unittest.TestCase):
     def setUpClass(cls):
         source = Path(__file__).resolve().parents[1] / "ibus-engine-meltype"
         parsed = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
-        constants = {"SPECIAL_KEYS"}
+        constants = {"SPECIAL_KEYS", "KEYPAD_KEYS"}
         nodes = [node for node in parsed.body if
                  isinstance(node, ast.FunctionDef) and node.name == "virtual_key" or
                  isinstance(node, ast.Assign) and any(isinstance(target, ast.Name) and target.id in constants
