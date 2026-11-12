@@ -268,3 +268,6 @@ elifndef
 include
 pragma
 inotify
+# Issue #1390: stat・stats (statsuruno → statするの のように英字のまま打つ語)
+stat
+stats

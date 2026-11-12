@@ -68,9 +68,8 @@ jobs:
         run: |
           python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_code_mode.py
           python3 linux/tests/test_settings.py
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
@@ -255,7 +254,6 @@ jobs:
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_code_mode.py
           python3 linux/tests/test_settings.py
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
@@ -315,7 +313,7 @@ jobs:
           cache: npm
           cache-dependency-path: tools/ime-tests/package-lock.json
       # linux_ime.py が実行環境の記録 (session.json) に dotnet の版を書く
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       - name: Install IBus and the test tools

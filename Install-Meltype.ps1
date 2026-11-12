@@ -8,7 +8,7 @@ $ErrorActionPreference = 'Stop'
 
 # Meltype はタスクトレイに常駐するプロセス (Meltype.exe) と、Windows の IME として入力欄に直接入力する
 # Meltype IME (native\tip の TSF の DLL。入力の本体は Meltype.exe に問い合わせる) でできている。
-$project = Join-Path $PSScriptRoot 'src\Meltype\Meltype.csproj'
+$project = Join-Path $PSScriptRoot 'src\Meltype.Windows\Meltype.Windows.csproj'
 $output = Join-Path $PSScriptRoot 'app-build'
 
 # 旧名 (AutoIME) のときのものがあれば片付ける (設定と学習データは Meltype の初回起動時に引き継ぐ)。

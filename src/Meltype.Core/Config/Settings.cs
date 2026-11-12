@@ -130,6 +130,8 @@ public enum ControlKeyLayout
 /// <summary>Meltype キーボードで、入力モード (あ / A) をカーソルの近くに出すとき。</summary>
 public enum ModeIndicatorTiming
 {
+    /// <summary>OS と入力方式ごとの既定 (<see cref="Settings.EffectiveModeIndicator"/>)。</summary>
+    [Description("OS と入力方式の既定")] Default,
     [Description("表示しない")] Never,
     [Description("切り替えたとき")] OnSwitch,
     [Description("切り替えたときと入力欄に入ったとき")] OnSwitchAndFocus,
@@ -181,7 +183,7 @@ public sealed class AppRule
 }
 
 /// <summary>
-/// ユーザーが作るアプリの種類 (例: 「チャット」「ゲーム」)。一般 / コード を元に、自動判定・ライブ変換・最初の入力モードを変えられる。
+/// ユーザーが作るアプリの種類 (例: 「チャット」「ゲーム」)。一般 / コード を元に、自動判定・ライブ変換を変えられる。
 /// null の項目は全体の設定のまま。
 /// </summary>
 public sealed class AppKind
@@ -190,8 +192,6 @@ public sealed class AppKind
     public AppProfile Base { get; set; } = AppProfile.General;
     public bool? AutoDetection { get; set; }
     public bool? LiveConversion { get; set; }
-    /// <summary>このアプリに切り替えたら英数 (直接入力) から始める。</summary>
-    public bool StartInEnglish { get; set; }
 
     public AppKind Clone() => (AppKind)MemberwiseClone();
 }
@@ -266,12 +266,8 @@ public sealed class Settings
     [JsonIgnore, Browsable(false)]
     public IReadOnlyList<ToggleShortcut> EffectiveToggleShortcuts => ToggleShortcuts ?? ToggleShortcut.Defaults();
 
-    [Category("2. 入力モード"), DisplayName("無変換で英数 / 変換で日本語"), Platforms(Platform.Windows),
-     Description("Keyboard モードで、変換ボックスが出ていないときの 無変換 キーで英数 (直接入力) に、変換 キーで日本語入力にします (Mac の 英数 / かな キーと同じく、押す前のモードによらず決まったモードになります)。もう日本語入力のときの 変換 キーは今までどおり選択した文字の再変換です。変換ボックスが出ている間の 無変換・変換 は今までどおりで、切り替えません。「コード」のアプリのコードの行では、変換 キーでその行を日本語にします (半角/全角 と同じ)。")]
-    public bool ConvertKeysSwitchKeyboard { get; set; }
-
     [Category("2. 入力モード"), DisplayName("左 Alt で英数 / 右 Alt で日本語"), Platforms(Platform.Windows),
-     Description("左 Alt の単独押しで英数 (直接入力) に、右 Alt の単独押しで日本語入力にします (半角/全角 キーの無い US 配列向け。Meltype キーボードと Meltype IME で使えます)。Alt + Tab などの組み合わせや Alt + クリックでは切り替えません。単独押しでアプリのメニューバーに移らなくなります。Meltype キーボードでは、変換ボックスが出ている間は切り替えません (Meltype IME では、変換中の文字を確定して切り替えます)。「コード」のアプリのコードの行では、右 Alt でその行を日本語にします (半角/全角 と同じ。Meltype キーボード)。")]
+     Description("左 Alt の単独押しで英数 (直接入力) に、右 Alt の単独押しで日本語入力にします (半角/全角 キーの無い US 配列向け)。Alt + Tab などの組み合わせや Alt + クリックでは切り替えません。単独押しでアプリのメニューバーに移らなくなります。変換中なら、変換中の文字を確定して切り替えます。コードの行では、右 Alt でその行を日本語にします。")]
     public bool AltKeysSwitchKeyboard { get; set; }
 
     [Category("3. 判定"), DisplayName("確定後も文脈に合わせて直す"),
@@ -279,14 +275,14 @@ public sealed class Settings
     public bool AutoCorrectAfterCommit { get; set; } = true;
 
     [Category("3. 判定"), DisplayName("英数状態でもローマ字を検知"),
-     Description("Keyboard モードまたは Meltype IME の英数状態でも単語の打ち始めを判定し、ローマ字 (日本語) なら自動で日本語入力に戻します。")]
+     Description("英数状態でも単語の打ち始めを判定し、ローマ字 (日本語) なら自動で日本語入力に戻します。Mac 版では使えません。")]
     public bool DirectModeAutoDetect { get; set; } = true;
 
     [Category("3. 判定"), DisplayName("/ $ @ で始まる語はそのまま入力"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。文章の入力欄 (コードエディターのコード以外) の / は「・」として入り、Space で / にしてから名前を打つと、名前はそのまま渡します。")]
     public bool SigilWordsDirect { get; set; } = true;
 
-    [Category("5. 候補"), DisplayName("定型文を出す記号"), Platforms(Platform.Windows),
+    [Category("5. 候補"), DisplayName("定型文を出す記号"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後にこの記号と名前を打って Space / Tab を押すと、トレイの「定型文...」で登録した文に置き換えます (;sig + Space → 署名)。名前が登録したものでなければ何もしません。置き換えた直後に Esc を押すと、打った ;名前 に戻します。空にすると使いません。定型文を 1 つも登録していなければ、記号は今までどおり入力します。")]
     public string SnippetMark { get; set; } = ";";
 
@@ -299,7 +295,7 @@ public sealed class Settings
     public bool SpaceAroundNumbers { get; set; }
 
     [Category("4. 変換"), DisplayName("変換中の数字キーで候補を選ぶ"),
-     Description("Space・Tab で変換している間に、キーボードの上の段の 1〜9 を押すと、候補の一覧の番号で選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。テンキーの 1〜9 は、この設定に関係なく候補を選びます。")]
+     Description("Space・Tab で変換している間に、数字キー (上の段・テンキー) の 1〜9 を押すと、候補の一覧の番号で選びます。かな入力では上の段はかなのキーなので、テンキーで選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。")]
     public bool NumberKeysSelectCandidates { get; set; } = true;
 
     [Category("6. 記号・スペース"), DisplayName("スペースの幅"),
@@ -431,11 +427,11 @@ public sealed class Settings
      Description("変換の候補の後ろに英訳も出します (複雑な → complex, complicated)。JMdict のよく使う語から。選んだ英訳は少しずつ前に出ます。")]
     public bool TranslationCandidates { get; set; } = true;
 
-    [Category("5. 候補"), DisplayName("予測変換の候補"), Platforms(Platform.Windows),
+    [Category("5. 候補"), DisplayName("予測変換の候補"),
      Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
 
-    [Category("5. 候補"), DisplayName("予測変換に英字の社名・サービス名"), Platforms(Platform.Windows),
+    [Category("5. 候補"), DisplayName("予測変換に英字の社名・サービス名"),
      Description("「予測変換の候補」が ON のとき、読みを打ちかけたところで、英字で書く社名・サービス名・語の候補も出します (しゃお → Xiaomi、ぎっとは → GitHub)。読みを 3 文字以上打ったときだけ出します。英単語の続き (decis → decision) は「予測変換の候補」だけで出ます。")]
     public bool EnglishNamePredictions { get; set; }
 
@@ -467,9 +463,15 @@ public sealed class Settings
      Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
     public bool ShowTypedKeys { get; set; } = true;
 
-    [Browsable(false), DisplayName("固定の操作ガイドを表示 (fcitx5)"),
-     Description("fcitx5 の候補窓に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
+    [Browsable(false), DisplayName("固定の操作ガイドを表示"),
+     Description("変換中の表示に Space 変換・F7 カタカナ などの固定ガイドを表示します。OFF でも英字・予測・訂正の提案は表示します。")]
     public bool ShowGuide { get; set; } = true;
+
+    /// <summary>
+    /// 固定の操作ガイドを出すか。Mac と Meltype IME は、表示を揃える前 (1.5.0) と同じく出さない
+    /// (Mac は候補ウィンドウに重なる)。フロントごとの表示を揃えるときは、ここと <see cref="EffectiveModeIndicator"/> を直す。
+    /// </summary>
+    public bool ShowsGuide => ShowGuide && !OperatingSystem.IsMacOS() && !(OperatingSystem.IsWindows() && Mode == InputMode.Tsf);
 
     [Category("4. 変換"), DisplayName("打ち間違いを直す"),
      Description("Space・Enter で変換・確定するときに打ち間違いを直します。ローマ字: 読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。英語: Windows の自動修正の一覧にある打ち間違いを直します (teh → the、recieve → receive)。")]
@@ -483,13 +485,18 @@ public sealed class Settings
      Description("日本語入力のとき、z の後ろに記号や h j k l を打つと記号・矢印にします (Microsoft IME・Google 日本語入力と同じ。z/ → ・、z. → …、z, → ‥、z- → ～、z[ → 『、z] → 』、zh zj zk zl → ← ↓ ↑ →)。OFF にすると、z はほかの英字と同じに扱います (1000Hz. や quiz. の z. を … にしません)。")]
     public bool ZSymbols { get; set; } = true;
 
-    [Category("2. 入力モード"), DisplayName("入力モードをカーソルの近くに表示"), Platforms(Platform.Windows),
-     Description("Meltype キーボードで、半角/全角 を押したとき (と入力欄をクリックしたとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
-    public ModeIndicatorTiming ModeIndicator { get; set; } = ModeIndicatorTiming.OnSwitchAndFocus;
+    [Category("2. 入力モード"), DisplayName("入力モードをカーソルの近くに表示"),
+     Description("入力モードを切り替えたとき (と入力欄に入ったとき) に、カーソルの近くに「あ」(日本語) か「A」(英数) を一瞬表示します。Meltype キーボードの使用中は Windows の IME を OFF にしているので、タスクバーの IME の表示は常に「A」になります。今のモードはこの表示かトレイの Meltype のアイコンで確認してください。")]
+    public ModeIndicatorTiming ModeIndicator { get; set; } = ModeIndicatorTiming.Default;
 
-    [Category("2. 入力モード"), DisplayName("Meltype IME でも入力モードをカーソルの近くに表示"), Platforms(Platform.Windows),
-     Description("Meltype IME の入力モードを切り替えたとき、カーソルの近くに「あ」(日本語) か「A」(英数) を1.2秒表示します。Meltype キーボードの表示設定とは独立して切り替えられます。表示の色は共用です。")]
-    public bool ShowTsfModeIndicator { get; set; }
+    /// <summary>
+    /// 入力モードを表示するとき。既定は、表示を揃える前 (1.5.0) のフロントごとの既定と同じ:
+    /// Meltype キーボードは入力欄に入ったときも、Meltype IME は出さない、Mac・Linux は切り替えたときだけ。
+    /// </summary>
+    public ModeIndicatorTiming EffectiveModeIndicator => ModeIndicator != ModeIndicatorTiming.Default ? ModeIndicator
+        : OperatingSystem.IsWindows() ? Mode == InputMode.Keyboard ? ModeIndicatorTiming.OnSwitchAndFocus : ModeIndicatorTiming.Never
+        : ModeIndicatorTiming.OnSwitch;
+
 
     [Category("2. 入力モード"), DisplayName("入力モードの表示の色: 日本語 (あ)"), Platforms(Platform.Windows),
      Description("「あ」の背景色を #RRGGBB で書きます (例: #007ACC)。空なら青。壁紙・アプリのテーマで見えにくいときに変えます。")]
@@ -699,6 +706,7 @@ public sealed class Settings
             var fileVersion = file["version"] is JsonValue version && version.TryGetValue<int>(out var v) ? v : 1;
             if (fileVersion < 8) MigrateToV8(raw);
             if (fileVersion < 9) MigrateToV9(raw);
+            if (fileVersion < 10) MigrateToV10(raw, OperatingSystem.IsWindows(), Mode == InputMode.Keyboard);
             InitializeToggleShortcuts(raw, name.Length == 0 ? "読み込んだプロファイル" : name);
             // 既定の設定に、知っている項目だけを重ねてから読み直す (型の違う値はここで例外になる)
             var merged = JsonSerializer.SerializeToNode(new Settings().Normalize(), JsonType)!.AsObject();
@@ -826,7 +834,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 9;
+    public const int CurrentVersion = 10;
 
     [Category("9. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -856,10 +864,10 @@ public sealed class Settings
      Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype は何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
-    [Category("10. アプリ"), DisplayName("アプリ別設定"), Platforms(Platform.Windows), Description("プロセス名ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
+    [Category("10. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
     public List<AppRule> AppRules { get; set; } = DefaultAppRules();
 
-    [Category("10. アプリ"), DisplayName("独自の種類"), Platforms(Platform.Windows), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換・最初は英数にするか を変えられます (「全体と同じ」なら上の設定のまま)。")]
+    [Category("10. アプリ"), DisplayName("独自の種類"), Description("アプリ別設定の「種類」に使える、自分で作る種類です。一般 / コード を元に、自動判定・ライブ変換を変えられます (「全体と同じ」なら上の設定のまま)。")]
     public List<AppKind> AppKinds { get; set; } = [];
 
     [Category("11. ログ"), DisplayName("ファイルにログを書く"), Description("%LOCALAPPDATA%\\Meltype\\meltype.log にログを書きます (OFF でも、トレイの「ログ / 判定理由」で見られるログは Meltype が動いている間だけメモリに残ります)。判定した語の先頭の数文字・アプリ名・入力欄の名前が含まれます。確定した文字列などは「ログに入力した文字を残す」が ON のときだけ残ります。")]
@@ -891,6 +899,14 @@ public sealed class Settings
         "WindowsTerminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe", "wezterm-gui.exe", "alacritty.exe", "mintty.exe", "rio.exe",
         // アプリの中にスクリプトエディターがある 3DCG ソフト (Maya の Script Editor)
         "maya.exe",
+        // macOS (bundle ID)
+        "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.vscodium", "com.todesktop.230313mzl4w4u92", "com.exafunction.windsurf", "dev.zed.Zed",
+        "com.apple.dt.Xcode", "com.jetbrains.intellij", "com.jetbrains.intellij.ce", "com.jetbrains.pycharm", "com.jetbrains.pycharm.ce",
+        "com.jetbrains.WebStorm", "com.jetbrains.rider", "com.jetbrains.CLion", "com.jetbrains.goland", "com.google.android.studio", "com.sublimetext.4",
+        "com.apple.Terminal", "com.googlecode.iterm2", "com.github.wez.wezterm", "org.alacritty", "com.mitchellh.ghostty", "net.kovidgoyal.kitty", "dev.warp.Warp-Stable",
+        // Linux (プログラム名)
+        "code", "code-insiders", "codium", "cursor", "windsurf", "zed", "zeditor", "sublime_text",
+        "gnome-terminal-server", "konsole", "kitty", "alacritty", "wezterm-gui", "foot", "ghostty", "xterm", "tilix", "terminator", "xfce4-terminal",
     ];
 
     public bool IsAppEnabled(string? processName) => FindRule(processName)?.Enabled ?? true;
@@ -1019,6 +1035,29 @@ public sealed class Settings
     }
 
     /// <summary>
+    /// v10: 入力モードの表示を、どのフロントも ModeIndicator で決めるようにした (前の ModeIndicator は Meltype キーボードだけの設定)。
+    /// Windows で動作モードが Meltype IME (既定) なら、今までの Meltype IME の表示 (ShowTsfModeIndicator。切り替えたときだけ・既定は出さない) にする。
+    /// Mac・Linux は前の ModeIndicator を読んでいなかった (1.5.0 は全項目を保存するので、既定の値が書いてある) ので消して既定に戻す。
+    /// Mac のメニューで表示を OFF にしていたら (MacShowModeIndicator。Mac のフロントが UserDefaults から移す) 出さない。
+    /// </summary>
+    /// <param name="keyboard">動作モードが Meltype キーボードか。動作モードは全プロファイル共通で、config.json の一番上にだけある。</param>
+    internal static void MigrateToV10(JsonObject values, bool windows, bool keyboard)
+    {
+        var tsf = values.Remove("ShowTsfModeIndicator", out var shown) && shown is JsonValue value && value.TryGetValue<bool>(out var on) && on;
+        var macOff = values.Remove("MacShowModeIndicator", out var mac) && mac is JsonValue macValue && macValue.TryGetValue<bool>(out var macOn) && !macOn;
+        if (windows)
+        {
+            if (!keyboard) values[nameof(ModeIndicator)] = (tsf ? ModeIndicatorTiming.OnSwitch : ModeIndicatorTiming.Never).ToString();
+            return;
+        }
+        values.Remove(nameof(ModeIndicator));
+        if (macOff) values[nameof(ModeIndicator)] = ModeIndicatorTiming.Never.ToString();
+    }
+
+    private static bool IsKeyboardMode(JsonObject values) =>
+        values[nameof(Mode)] is JsonValue mode && mode.TryGetValue<string>(out var name) && string.Equals(name, nameof(InputMode.Keyboard), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
     /// v9: Zenzai を同梱して既定 ON にした。前の既定 (OFF・場所が空) のままなら ON にする。
     /// config.json の一番上・プロファイルの値・書き出したプロファイルの値 (どれも config.json と同じ形) に使う。
     /// </summary>
@@ -1144,6 +1183,13 @@ public sealed class Settings
             MigrateToV9(values);
             foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
                 if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV9(profileValues);
+        }
+        if (version < 10)
+        {
+            var keyboard = IsKeyboardMode(values);
+            MigrateToV10(values, OperatingSystem.IsWindows(), keyboard);
+            foreach (var profile in (values[nameof(Profiles)] as JsonArray ?? []).OfType<JsonObject>())
+                if (profile[nameof(SettingsProfile.Values)] is JsonObject profileValues) MigrateToV10(profileValues, OperatingSystem.IsWindows(), keyboard);
         }
         var settings = values.Deserialize(JsonType) ?? new Settings();
         settings.SettingsVersion = version;

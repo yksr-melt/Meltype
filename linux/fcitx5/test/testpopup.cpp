@@ -61,7 +61,7 @@ void type(AddonInstance *frontend, ICUUID uuid, const std::string &text) {
     for (char c : text) press(frontend, uuid, std::string(1, c));
 }
 
-bool manualProposal(Instance *instance, AddonInstance *frontend, bool legacy) {
+bool manualProposal(Instance *instance, AddonInstance *frontend) {
     const auto uuid = frontend->call<ITestFrontend::createInputContext>("testapp");
     auto *ic = instance->inputContextManager().findByUUID(uuid);
     if (!expect(ic != nullptr, "手動判定の入力欄を作れる")) return false;
@@ -72,22 +72,18 @@ bool manualProposal(Instance *instance, AddonInstance *frontend, bool legacy) {
     type(frontend, uuid, "google");
     if (!expect(ic->inputPanel().clientPreedit().toString() == "ごおgぇ", "手動判定では勝手に英字へ変えない")) return false;
     const auto hint = ic->inputPanel().auxDown().toString();
-    if (legacy) {
-        if (!expect(hint.find("Tab → google (英字に)") == 0 && hint.find("F7 カタカナ") != std::string::npos,
-            "案内が未分離の旧 Native では、提案ごと消さず従来の表示を保つ")) return false;
-    } else if (!expect(hint == "Tab → google (英字に)", "固定ガイドを隠しても手動判定の英字提案は表示する")) return false;
+    // 打ったキーは、見えている文字と違うときだけ前に出す
+    if (!expect(hint == "google　Tab → google (英字に)", "固定ガイドを隠しても手動判定の英字提案は表示する: " + hint)) return false;
     if (!expect(press(frontend, uuid, "Tab"), "Tab で提案を採用する")) return false;
     if (!expect(ic->inputPanel().clientPreedit().toString() == "google", "提案どおり英字になる")) return false;
     const auto acceptedHint = ic->inputPanel().auxDown().toString();
     if (!expect(acceptedHint.find("Tab → google") == std::string::npos, "採用した提案は残さない")) return false;
-    if (!legacy && !expect(acceptedHint.empty(), "案内が分離された Native では固定ガイドを表示しない")) return false;
+    if (!expect(acceptedHint.empty(), "固定ガイドを表示しない")) return false;
     frontend->call<ITestFrontend::pushCommitExpectation>("google");
     press(frontend, uuid, "Return");
     if (!expect(ic->inputPanel().clientPreedit().empty() && ic->inputPanel().auxDown().empty(), "確定後に表示を閉じる")) return false;
     frontend->call<ITestFrontend::destroyInputContext>(uuid);
-    std::cout << (legacy
-        ? "PASS: 旧 Native の固定ガイドを保ち、手動判定の提案・採用・確定を表示する\n"
-        : "PASS: 手動判定の提案・採用・確定を、長い固定ガイドなしで表示する\n");
+    std::cout << "PASS: 手動判定の提案・採用・確定を、長い固定ガイドなしで表示する\n";
     return true;
 }
 
@@ -99,12 +95,13 @@ bool compositionGuides(Instance *instance, AddonInstance *frontend, bool showGui
     type(frontend, uuid, "nihongo");
     if (!expect(ic->inputPanel().preedit().toString() == "にほんご", "ガイド設定によらず入力文字を表示する")) return false;
     const auto typingHint = ic->inputPanel().auxDown().toString();
-    if (!expect(showGuide ? typingHint.find("F7 カタカナ") != std::string::npos : typingHint.empty(),
+    // 固定ガイドを隠しても、打ったキーは出す
+    if (!expect((typingHint.find("F7 カタカナ") != std::string::npos) == showGuide && typingHint.rfind("nihongo", 0) == 0,
         showGuide ? "入力中の固定ガイドを表示する" : "入力中の固定ガイドを隠す")) return false;
     press(frontend, uuid, "space");
     if (!expect(ic->inputPanel().candidateList() != nullptr, "ガイド設定によらず変換候補を表示する")) return false;
     const auto convertingHint = ic->inputPanel().auxDown().toString();
-    if (!expect(showGuide ? convertingHint.find("←→ 文節") != std::string::npos : convertingHint.empty(),
+    if (!expect((convertingHint.find("←→ 文節") != std::string::npos) == showGuide,
         showGuide ? "変換中の固定ガイドを表示する" : "変換中の固定ガイドを隠す")) return false;
     const auto selected = ic->inputPanel().preedit().toString();
     if (!expect(!selected.empty(), "選択中の候補を表示する")) return false;
@@ -148,7 +145,7 @@ bool spellingProposal(Instance *instance, AddonInstance *frontend) {
     instance->setCurrentInputMethod(ic, "meltype", true);
     type(frontend, uuid, "buresureddo");
     if (!expect(ic->inputPanel().preedit().toString() == "ぶれすれっど", "訂正前の文字を表示する")) return false;
-    if (!expect(ic->inputPanel().auxDown().toString() == "もしかして: ブレスレット　<Tab>で修正", "実際の辞書の訂正提案だけを表示する")) return false;
+    if (!expect(ic->inputPanel().auxDown().toString() == "buresureddo　もしかして: ブレスレット　<Tab>で修正", "実際の辞書の訂正提案だけを表示する: " + ic->inputPanel().auxDown().toString())) return false;
     if (!expect(press(frontend, uuid, "Tab"), "Tab は変換より先に訂正提案を採用する")) return false;
     if (!expect(ic->inputPanel().preedit().toString() == "ぶれすれっと", "提案どおり訂正する")) return false;
     if (!expect(ic->inputPanel().auxDown().empty(), "採用済みの訂正提案を消す")) return false;
@@ -164,12 +161,12 @@ bool spellingProposal(Instance *instance, AddonInstance *frontend) {
 int main(int argc, char *args[]) {
     const std::string mode = argc > 1 ? args[1] : "manual";
     const bool guideTest = mode == "guide-default" || mode == "guide-on";
-    if (mode != "manual" && mode != "spelling" && mode != "legacy" && !guideTest) return 1;
-    // 既定値は項目を省いて検証する。非表示・旧 Native のテストでは明示的に OFF にする。
+    if (mode != "manual" && mode != "spelling" && !guideTest) return 1;
+    // 既定値は項目を省いて検証する。非表示のテストでは明示的に OFF にする。
     const std::string guideSetting = mode == "guide-default" ? "" : mode == "guide-on" ? ",\"ShowGuide\":true" : ",\"ShowGuide\":false";
     // Native の初期化より前に、実際のユーザー設定から隔離する。
     SettingsFixture settings;
-    if (!expect(settings.create(mode == "manual" || mode == "legacy", guideSetting), "テスト専用の設定を作れる")) return 1;
+    if (!expect(settings.create(mode == "manual", guideSetting), "テスト専用の設定を作れる")) return 1;
     setupTestingEnvironment(FCITX5_MELTYPE_BINARY_DIR,
         {FCITX5_MELTYPE_BINARY_DIR, FCITX5_SYSTEM_ADDON_DIR}, {"test"});
     char arg0[] = "testpopup";
@@ -191,7 +188,7 @@ int main(int argc, char *args[]) {
             group.setDefaultInputMethod("");
             instance.inputMethodManager().setGroup(group);
             bool ok = guideTest ? compositionGuides(&instance, frontend, true)
-                : mode == "spelling" ? spellingProposal(&instance, frontend) : manualProposal(&instance, frontend, mode == "legacy");
+                : mode == "spelling" ? spellingProposal(&instance, frontend) : manualProposal(&instance, frontend);
             if (ok && mode == "spelling") ok = compositionGuides(&instance, frontend, false);
             if (ok && (mode == "spelling" || guideTest)) ok = verticalCandidates(&instance, frontend);
             result = ok ? 0 : 1;

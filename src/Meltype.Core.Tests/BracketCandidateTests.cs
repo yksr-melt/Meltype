@@ -220,7 +220,7 @@ internal static class BracketCandidateTests
     public static void Brackets_SessionContinuesTypingWithoutCommittingAndRestoresSelection()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { ContinueAfterConversion = () => true, LiveConversion = () => true }, () => new Settings());
+            new CompositionServices(), () => new Settings { ContinueAfterConversion = true, LiveConversion = true });
         session.HandleKey(0xDB, '[', false, false, false, false);
         session.HandleKey(0xDD, ']', false, false, false, false);
         var original = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View!;
@@ -299,17 +299,18 @@ internal static class BracketCandidateTests
     public static void Brackets_SessionJsonAndClicksKeepNotesOutOfCommits()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions { TabConversion = () => true }, () => new Settings());
+            new CompositionServices(), () => new Settings { TabConversion = true });
         session.HandleKey(0xDB, '[', false, false, false, false);
         session.HandleKey(0xDD, ']', false, false, false, false);
         var result = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false);
         using var json = JsonDocument.Parse(result.ToJson());
         var view = json.RootElement.GetProperty("view");
         Assert.Equal(1, view.GetProperty("clauses").GetArrayLength());
-        Assert.Equal(7, view.GetProperty("candidates").GetArrayLength());
-        Assert.Equal("全角", view.GetProperty("notes")[0].GetString());
-        Assert.Equal("半角", view.GetProperty("notes")[1].GetString());
-        Assert.Equal(JsonValueKind.Null, view.GetProperty("notes")[2].ValueKind);
+        var list = view.GetProperty("candidates");
+        Assert.Equal(7, list.GetProperty("items").GetArrayLength());
+        Assert.Equal("全角", list.GetProperty("notes")[0].GetString());
+        Assert.Equal("半角", list.GetProperty("notes")[1].GetString());
+        Assert.Equal(JsonValueKind.Null, list.GetProperty("notes")[2].ValueKind);
         session.SelectCandidate(1);
         var committed = session.CommitPending();
         Assert.Equal("｢｣", string.Concat(committed.Commits.Select(c => c.Text)));

@@ -6,6 +6,7 @@
 #include <InputScope.h>
 #include <wrl/client.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <cwctype>
 
@@ -14,6 +15,9 @@
 
 namespace meltype {
 namespace {
+
+// Meltype.exe のプロトコルの版 (ImeHost.Version)
+constexpr int kImeVersion = 1;
 
 class EditSession final : public ITfEditSession {
 public:
@@ -63,8 +67,6 @@ bool IsModifier(UINT vk) {
     return ToggleShortcut::IsModifier(vk) || vk == VK_CAPITAL;
 }
 
-// 半角/全角 キー (日本語キーボード)
-bool IsHankakuZenkaku(UINT vk) { return vk == VK_KANJI || vk == 0xF3 || vk == 0xF4; }
 
 bool KeyDown(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
 
@@ -77,16 +79,6 @@ bool InMenuMode() {
 }
 
 // US 配列の Alt + ` (半角/全角キー相当)。Alt はキーイベントの lParam も確認する。
-bool IsAltGraveToggle(UINT vk, LPARAM lParam) {
-    const ULONG_PTR message = static_cast<ULONG_PTR>(lParam);
-    const UINT scan = static_cast<UINT>((message >> 16) & 0xFF);
-    const bool graveKey = vk == VK_OEM_3 || (scan == 0x29 && (message & (static_cast<ULONG_PTR>(1) << 24)) == 0);
-    const bool altDown = (static_cast<ULONG_PTR>(lParam) & (static_cast<ULONG_PTR>(1) << 29)) != 0 ||
-                         KeyDown(VK_MENU);
-    return graveKey && altDown && !KeyDown(VK_CONTROL) && !KeyDown(VK_SHIFT) &&
-           !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN);
-}
-
 UINT ShortcutKey(UINT vk, LPARAM lParam) {
     const auto bits = static_cast<ULONG_PTR>(lParam);
     const UINT scan = static_cast<UINT>((bits >> 16) & 0xFF);
@@ -109,12 +101,6 @@ void MaskSystemModifier() {
     mask[0].ki.dwExtraInfo = mask[1].ki.dwExtraInfo = kReinjectMarker;
     mask[1].ki.dwFlags = KEYEVENTF_KEYUP;
     SendInput(2, mask, sizeof(INPUT));
-}
-
-// 変換中に Meltype.exe が受け持つ Ctrl+英字 (CompositionController.ControlShortcut と合わせる)。Alt・Windows キーと一緒なら違う
-bool IsCompositionShortcut(UINT vk) {
-    if (!KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return false;
-    return vk == 'H' || vk == 'U' || vk == 'I' || vk == 'O' || vk == 'P';
 }
 
 // そのキーで入力される文字 (無ければ 0)
@@ -158,14 +144,6 @@ void ClearAttributeOf(TfEditCookie ec, ITfComposition* composition) {
     }
 }
 
-bool IsOwnProcess() {
-    wchar_t path[MAX_PATH] = {};
-    GetModuleFileNameW(nullptr, path, MAX_PATH);
-    const wchar_t* name = wcsrchr(path, L'\\');
-    name = name ? name + 1 : path;
-    return _wcsicmp(name, L"Meltype.exe") == 0;
-}
-
 std::wstring ProcessName() {
     wchar_t path[MAX_PATH] = {};
     GetModuleFileNameW(nullptr, path, MAX_PATH);
@@ -201,7 +179,10 @@ HRESULT RunEditSession(ITfContext* context, TfClientId clientId, DWORD flags, st
 
 TextService::TextService() { DllAddRef(); }
 
-TextService::~TextService() { StopHelloUpdates(); DllRelease(); }
+TextService::~TextService() {
+    DestroyMessageWindow();
+    DllRelease();
+}
 
 STDMETHODIMP TextService::QueryInterface(REFIID riid, void** ppv) {
     if (ppv == nullptr) return E_INVALIDARG;
@@ -234,6 +215,7 @@ STDMETHODIMP_(ULONG) TextService::Release() {
     return count;
 }
 
+
 // ---- 起動・終了 ----
 
 STDMETHODIMP TextService::Activate(ITfThreadMgr* threadMgr, TfClientId clientId) { return ActivateEx(threadMgr, clientId, 0); }
@@ -242,16 +224,11 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     threadMgr_ = threadMgr;
     threadMgr_->AddRef();
     clientId_ = clientId;
-    // Windows は、同じアプリの中で一度終えた IME を、同じオブジェクトのまま起動し直すことがある。前の状態をすべて初期化する
+    // Windows は、同じアプリの中で一度終えた IME を、同じオブジェクトのまま起動し直すことがある。前の状態を初期化する
     // (終わったときの印 deactivated_ が残ると、二度と Meltype.exe とやり取りしなくなる)
     deactivated_ = false;
-    serverActive_ = false;
-    serverStateKnown_ = false;
-    serverStateRevision_ = 0;
-    directDetection_ = false;
-    directEnglishWord_ = false;
-    lastHello_ = 0;
-    caretMoved_ = false;
+    state_ = ServerState{};
+    pendingOpen_ = -1;
     ownEdit_ = false;
     secretChecked_ = false;
     ForgetSecretField();
@@ -268,18 +245,12 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     for (Reinjected& pending : reinjected_) pending = {};
     passVk_ = 0;
     passReason_ = nullptr;
-    keyFailed_ = false;
-    consumed_ = true;
     for (bool& eaten : eatenDown_) eaten = false;
-    for (bool& toggle : toggleDown_) toggle = false;
     // サインインや UAC の画面では何もしない。
     // Meltype.exe より高い権限で動いているアプリ (管理者として動くアプリなど) は、つなぐときに断る (Pipe.cpp の IsTrustedServer)
-    // (Meltype.exe 自身の画面でも使う。そのときは Meltype.exe が画面のスレッドを通さずに処理する: TipServer の Serve)
-    const wchar_t* reason = (flags & TF_TMAE_SECUREMODE) ? L"セキュリティ保護された画面" : nullptr;
-    ownProcess_ = IsOwnProcess();
-    disabled_ = reason != nullptr;
-    sid_ = RandomId();
-    TipLog(L"Activate (%s)%s%s", ProcessName().c_str(), disabled_ ? L" 無効: " : L"", disabled_ ? reason : L"");
+    disabled_ = (flags & TF_TMAE_SECUREMODE) != 0;
+    instance_ = RandomId();
+    TipLog(L"Activate (%s)%s", ProcessName().c_str(), disabled_ ? L" 無効: セキュリティ保護された画面" : L"");
 
     ITfSource* source = nullptr;
     if (SUCCEEDED(threadMgr_->QueryInterface(IID_ITfSource, reinterpret_cast<void**>(&source)))) {
@@ -302,7 +273,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     }
 
     // 日本語 / 英数 (IME の ON/OFF)。Meltype は日本語から始める (半角/全角 を押さなくてよいのが Meltype なので)
-    // 何もしないプロセス (Meltype.exe 自身・サインインの画面) では、入力モードを変えず、タスクバーの「あ」も出さない (キーはそのまま通るので)
+    // 何もしないプロセス (サインインの画面) では、入力モードを変えず、タスクバーの「あ」も出さない (キーはそのまま通るので)
     ITfCompartmentMgr* compartments = nullptr;
     if (!disabled_ && SUCCEEDED(threadMgr_->QueryInterface(IID_ITfCompartmentMgr, reinterpret_cast<void**>(&compartments)))) {
         ITfCompartment* openClose = nullptr;
@@ -323,7 +294,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     }
     open_ = !disabled_;
 
-    candidates_ = std::make_unique<CandidateWindow>([this](int index, bool prediction) { SelectCandidate(index, prediction); });
+    candidates_ = std::make_unique<CandidateWindow>([this](int index) { SelectCandidate(index); });
 
     if (!disabled_) {
         langBar_ = new LangBarButton(this);
@@ -339,21 +310,24 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
         AdviseTextEditSink(focus);
         focus->Release();
     }
-    if (!disabled_) StartHelloUpdates();
+    if (!disabled_) {
+        CreateMessageWindow();
+        RefreshPreservedKeys();
+        Sync();
+    }
     return S_OK;
 }
 
 STDMETHODIMP TextService::Deactivate() {
-    StopHelloUpdates();
-    UnpreserveShortcuts();
+    DestroyMessageWindow();
+    UnpreserveKeys();
     TipLog(L"Deactivate");
     if (composition_ != nullptr && compositionContext_ != nullptr) {
         // 確定してから終わる
         ITfContext* context = compositionContext_;
         context->AddRef();
         RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [this, context](TfEditCookie ec) {
-            JsonValue reply;
-            if (Request(CommitRequest(true), reply)) Apply(ec, context, reply);
+            CommitInSession(ec, context, true, true);
             EndComposition(ec);
             return S_OK;
         });
@@ -361,7 +335,7 @@ STDMETHODIMP TextService::Deactivate() {
     }
     if (!disabled_) {
         JsonValue reply;
-        Request("{\"op\":\"close\",\"sid\":\"" + sid_ + "\"}", reply);
+        Send("InstanceDestroyed", "", "", reply, 100, true);
     }
     // ここから後 (アプリが変換中の文字を確定した通知・あとから動く非同期の編集セッション) は、Meltype.exe につなぎ直さない
     deactivated_ = true;
@@ -433,26 +407,29 @@ STDMETHODIMP TextService::Deactivate() {
 STDMETHODIMP TextService::OnSetFocus(ITfDocumentMgr* focus, ITfDocumentMgr*) {
     // 別の入力欄に移ったら、変換中の内容は確定する (前の入力欄のキャレットは動かさない)。
     // できればその場で確定する (あとで確定すると、それまでに新しい入力欄で打ったキーが、前の入力欄の変換中の文字に入る)
-    if (composition_ != nullptr && !CommitNow(true)) CommitAsync(true);
+    if (composition_ != nullptr) {
+        if (!CommitNow(true, true)) CommitAsync(true, true);
+    } else if (!disabled_) {
+        JsonValue reply;
+        if (Send("CaretMoved", "", CaretMoved(true), reply, 100, true)) ApplyState(reply[L"state"]);
+    }
     // アプリが確定した打ちかけの文字は、別の入力欄に移ったので確定したことにする
     ResumeOrCommit(nullptr);
-    directEnglishWord_ = false;
-    caretMoved_ = true;
     ForgetSecretField();
     if (candidates_) candidates_->Hide();
     AdviseTextEditSink(focus);
+    if (focus != nullptr && !disabled_) Sync(true);
     return S_OK;
 }
 
 STDMETHODIMP TextService::OnSetFocus(BOOL foreground) {
     if (!foreground && candidates_) candidates_->Hide();
-    // 別アプリの設定画面から戻ったとき、キー入力の前に最新設定を読み直す。
-    if (foreground && !disabled_) Hello();
+    // 別アプリ (Meltype の設定画面など) から戻ったとき、キー入力の前に状態と設定を受け取り直す
+    if (foreground && !disabled_) Sync(true);
     // キーを受け取らなくなった (スレッドが前面でなくなった・ほかの IME に移った): 受け取ったキーを離したことは届かないかもしれないので忘れる
     // (このスレッドで次に押したキーの、離したことまで受け取らないように)
     if (!foreground) {
         for (bool& eaten : eatenDown_) eaten = false;
-        for (bool& toggle : toggleDown_) toggle = false;
     }
     return S_OK;
 }
@@ -472,6 +449,77 @@ void TextService::AdviseTextEditSink(ITfDocumentMgr* documentMgr) {
     }
     ownEdit_ = false;
     context->Release();
+}
+
+void TextService::UnadviseTextEditSink() {
+    if (editSinkContext_ == nullptr) return;
+    ITfSource* source = nullptr;
+    if (SUCCEEDED(editSinkContext_->QueryInterface(IID_ITfSource, reinterpret_cast<void**>(&source)))) {
+        source->UnadviseSink(editSinkCookie_);
+        source->Release();
+    }
+    editSinkContext_->Release();
+    editSinkContext_ = nullptr;
+    editSinkCookie_ = TF_INVALID_COOKIE;
+}
+
+STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEditRecord* record) {
+    if (record == nullptr) return S_OK;
+    // 自分の編集 (確定・変換中の文字) が終わった通知は、キャレットが動いたことにしない
+    if (ownEdit_) {
+        ownEdit_ = false;
+        return S_OK;
+    }
+    BOOL changed = FALSE;
+    if (FAILED(record->GetSelectionStatus(&changed))) return S_OK;
+    if (composition_ == nullptr || context != compositionContext_) {
+        // 変換していないとき (変換中の文字が別の入力欄に残っているときも) に、キャレットが動いた・文字が変わった。
+        // コードの行の判定・前の語の確定し直しは、Meltype.exe が今のキャレットの前の文字で決める
+        SendCaret(ec, context, changed != FALSE);
+        return S_OK;
+    }
+    if (!changed) return S_OK;
+    // クリック・矢印などで、キャレットが変換中の文字の外に出たら確定する
+    TF_SELECTION selection = {};
+    ULONG fetched = 0;
+    if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return S_OK;
+    ITfRange* range = nullptr;
+    bool outside = false;
+    if (SUCCEEDED(composition_->GetRange(&range))) {
+        LONG startVsStart = 0, endVsEnd = 0;
+        selection.range->CompareStart(ec, range, TF_ANCHOR_START, &startVsStart);
+        selection.range->CompareEnd(ec, range, TF_ANCHOR_END, &endVsEnd);
+        outside = startVsStart < 0 || endVsEnd > 0;
+        range->Release();
+    }
+    selection.range->Release();
+    if (outside) {
+        TipLog(L"キャレットが変換中の文字の外に出たので確定します");
+        // 確定したあとで、キャレットを確定した文字の後ろに戻さない (クリックした所に打てるように)
+        CommitAsync(true);
+    }
+    return S_OK;
+}
+
+void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged) {
+    if (disabled_ || !state_.known || !state_.active) return;
+    std::string field;
+    if (!ReadField(ec, context, field)) return;
+    // passed: キャレットを動かしたキー (少し前にアプリに通したキー)。無ければ、キャレットが動いたなら 0 (クリックなど)、文字が変わっただけなら無し。
+    // 改行の後の自動のインデントなど、キーに続くアプリの編集でも通知が来るので、通したキーは少しの間覚えておく。
+    // ただし、マウスのボタンを押しているあいだに選択が変わったら、キーの直後でもクリックとして伝える
+    const bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
+    const bool recent = !clicked && GetTickCount64() - passedTime_ < 500;
+    std::string caret = std::string(",\"caret\":{\"moved\":") + (selectionChanged || recent ? "true" : "false");
+    if (recent) caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
+    else if (selectionChanged) caret += ",\"passedKey\":0";
+    caret += "}";
+    JsonValue reply;
+    // キャレットを動かすたびに送るので、応答が遅ければ待たない (表示が次の出来事まで古いだけ)
+    if (Send("CaretMoved", field, caret, reply, 100, true)) {
+        ApplyState(reply[L"state"]);
+        UpdateLangBar();
+    }
 }
 
 bool TextService::IsSecretField(TfEditCookie ec, ITfContext* context) {
@@ -563,66 +611,6 @@ int TextService::ReadSecretField(ITfContext* context) {
     return FAILED(hr) ? -1 : secret ? 1 : 0;
 }
 
-std::string TextService::CommitRequest(bool moved) const {
-    // moved: キャレットが動いた (クリック・別の入力欄・アプリが確定した) ので、前に確定した語を確定し直さない
-    return "{\"op\":\"commit\",\"sid\":\"" + sid_ + "\"" + (moved ? ",\"moved\":true" : "") + "}";
-}
-
-void TextService::UnadviseTextEditSink() {
-    if (editSinkContext_ == nullptr) return;
-    ITfSource* source = nullptr;
-    if (SUCCEEDED(editSinkContext_->QueryInterface(IID_ITfSource, reinterpret_cast<void**>(&source)))) {
-        source->UnadviseSink(editSinkCookie_);
-        source->Release();
-    }
-    editSinkContext_->Release();
-    editSinkContext_ = nullptr;
-    editSinkCookie_ = TF_INVALID_COOKIE;
-}
-
-STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEditRecord* record) {
-    if (record == nullptr) return S_OK;
-    // 自分の編集 (確定・変換中の文字) が終わった通知は、キャレットが動いたことにしない
-    if (ownEdit_) {
-        ownEdit_ = false;
-        return S_OK;
-    }
-    BOOL changed = FALSE;
-    if (FAILED(record->GetSelectionStatus(&changed))) return S_OK;
-    // コードエディターでは、キャレットのある所がコードの行かコメント・文字列の中かで、入力モードの表示を合わせる。
-    // VS Code は今の行の文字しか渡さないので、別の行に移ってもキャレットの位置が変わらないことがある。文字が変わった通知でも聞く
-    if (composition_ == nullptr) QueryMode(ec, context, changed != FALSE);
-    if (!changed) return S_OK;
-    if (composition_ == nullptr || context != compositionContext_) {
-        // 変換していないとき (変換中の文字が別の入力欄に残っているときも) に、クリックなどでキャレットが動いた: 前に確定した語を確定し直さない
-        if (((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0) directEnglishWord_ = false;
-        caretMoved_ = true;
-        return S_OK;
-    }
-    // クリック・矢印などで、キャレットが変換中の文字の外に出たら確定する
-    TF_SELECTION selection = {};
-    ULONG fetched = 0;
-    if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return S_OK;
-    ITfRange* range = nullptr;
-    bool outside = false;
-    if (SUCCEEDED(composition_->GetRange(&range))) {
-        LONG startVsStart = 0, endVsEnd = 0;
-        selection.range->CompareStart(ec, range, TF_ANCHOR_START, &startVsStart);
-        selection.range->CompareEnd(ec, range, TF_ANCHOR_END, &endVsEnd);
-        outside = startVsStart < 0 || endVsEnd > 0;
-        range->Release();
-    }
-    selection.range->Release();
-    if (outside) {
-        TipLog(L"キャレットが変換中の文字の外に出たので確定します");
-        // 確定したあとで、キャレットを確定した文字の後ろに戻さない (クリックした所に打てるように)
-        directEnglishWord_ = false;
-        caretMoved_ = true;
-        CommitAsync(true);
-    }
-    return S_OK;
-}
-
 // ---- 日本語 / 英数 ----
 
 STDMETHODIMP TextService::OnChange(REFGUID guid) {
@@ -635,7 +623,6 @@ STDMETHODIMP TextService::OnChange(REFGUID guid) {
         VariantInit(&value);
         if (SUCCEEDED(openClose->GetValue(&value))) {
             open_ = value.vt == VT_I4 && value.lVal != 0;
-            directEnglishWord_ = false;
             VariantClear(&value);
         }
         openClose->Release();
@@ -643,54 +630,14 @@ STDMETHODIMP TextService::OnChange(REFGUID guid) {
     compartments->Release();
     TipLog(L"入力モード: %s", open_ ? L"日本語" : L"英数");
     if (!open_ && composition_ != nullptr) CommitAsync(false);
+    // アプリ・Windows・Meltype.exe のキーボードフック (左右の Alt) が開閉を変えた: 次のキーを受け取るかが変わるので、すぐに伝える
+    if (!settingOpen_ && !disabled_) Sync();
     UpdateLangBar();
-    // アプリ・Windows による自動的な開閉 (パスワード欄への移動など) では表示しない。
-    // 明示的な切り替えの表示は ToggleInputMode の最後で 1 回だけ依頼する。
     return S_OK;
 }
 
-void TextService::FlashModeIndicator(ITfContext* context) {
-    // 設定が OFF なら、カーソル位置の取得も Meltype.exe への問い合わせもしない。
-    if (disabled_ || deactivated_ || !modeIndicator_) return;
-    // バックグラウンドの入力スレッドがモードを変えても、前面の入力欄に表示しない。
-    DWORD process = 0;
-    GetWindowThreadProcessId(GetForegroundWindow(), &process);
-    if (process != GetCurrentProcessId()) return;
-    // Terminal の UI Automation の選択範囲は実際のカーソル位置とは限らない。
-    // 候補ウィンドウと同じ TSF の入力コンテキストから、未変換時の位置も取得する。
-    Microsoft::WRL::ComPtr<ITfContext> focused;
-    if (context == nullptr && threadMgr_ != nullptr) {
-        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
-        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
-        context = focused.Get();
-    }
-    RECT anchor = {};
-    RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
-        TF_SELECTION selection = {};
-        ULONG fetched = 0;
-        if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0 && selection.range != nullptr) {
-            Microsoft::WRL::ComPtr<ITfRange> range;
-            range.Attach(selection.range);
-            range->Collapse(ec, selection.style.ase == TF_AE_START ? TF_ANCHOR_START : TF_ANCHOR_END);
-            Microsoft::WRL::ComPtr<ITfContextView> view;
-            BOOL clipped = FALSE;
-            if (SUCCEEDED(context->GetActiveView(&view)) &&
-                (FAILED(view->GetTextExt(ec, range.Get(), &anchor, &clipped)) || clipped)) anchor = {};
-        }
-        return S_OK;
-    });
-    std::string position;
-    if (anchor.bottom > anchor.top && anchor.bottom - anchor.top < 200)
-        position = ",\"x\":" + std::to_string(anchor.left) + ",\"y\":" + std::to_string(anchor.bottom + 4);
-    JsonValue reply;
-    // 表示は補助機能なので、常駐側が応答しなければ短い時間で諦める。
-    Request("{\"op\":\"indicator\",\"process\":" + JsonString(ProcessName()) +
-            ",\"thread\":" + std::to_string(GetCurrentThreadId()) +
-            ",\"japanese\":" + (IsOpen() ? "true" : "false") + position + "}", reply, 100, true);
-}
-
 void TextService::SetOpen(bool open) {
-    if (threadMgr_ == nullptr) return;
+    if (threadMgr_ == nullptr || open == open_) return;
     ITfCompartmentMgr* compartments = nullptr;
     if (FAILED(threadMgr_->QueryInterface(IID_ITfCompartmentMgr, reinterpret_cast<void**>(&compartments)))) return;
     ITfCompartment* openClose = nullptr;
@@ -699,56 +646,188 @@ void TextService::SetOpen(bool open) {
         VariantInit(&value);
         value.vt = VT_I4;
         value.lVal = open ? 1 : 0;
+        settingOpen_ = true;
         openClose->SetValue(clientId_, &value);  // OnChange が呼ばれる
+        settingOpen_ = false;
         openClose->Release();
     }
     compartments->Release();
+}
+
+void TextService::FlushOpen() {
+    const int open = pendingOpen_;
+    pendingOpen_ = -1;
+    if (open >= 0) SetOpen(open == 1);
+    UpdateLangBar();
 }
 
 void TextService::UpdateLangBar() {
     if (langBar_ != nullptr) langBar_->Update();
 }
 
-// ---- キー ----
-
-bool TextService::ContextDisabled(ITfContext* context) {
-    // IME を使わない入力欄 (パスワード欄は ReadSecretField で見る)
-    if (context == nullptr) return true;
-    ITfCompartmentMgr* compartments = nullptr;
-    if (FAILED(context->QueryInterface(IID_ITfCompartmentMgr, reinterpret_cast<void**>(&compartments)))) return false;
-    bool disabled = false;
-    for (const GUID* guid : {&GUID_COMPARTMENT_KEYBOARD_DISABLED, &GUID_COMPARTMENT_EMPTYCONTEXT}) {
-        ITfCompartment* compartment = nullptr;
-        if (SUCCEEDED(compartments->GetCompartment(*guid, &compartment))) {
-            VARIANT value;
-            VariantInit(&value);
-            if (SUCCEEDED(compartment->GetValue(&value)) && value.vt == VT_I4 && value.lVal != 0) disabled = true;
-            VariantClear(&value);
-            compartment->Release();
-        }
+void TextService::ToggleInputMode(ITfContext* context) {
+    if (disabled_) return;
+    Microsoft::WRL::ComPtr<ITfContext> focused;
+    if (context == nullptr && threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
+        context = focused.Get();
     }
-    compartments->Release();
-    return disabled;
+    bool sent = false;
+    if (context != nullptr) {
+        RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
+            std::string field;
+            if (!ReadField(ec, context, field)) return S_OK;
+            const RECT anchor = CaretRect(ec, context);
+            ownEdit_ = true;
+            JsonValue reply;
+            if (Send("ModeToggleRequested", field, "", reply, 800, false, &anchor)) {
+                ApplyOutput(ec, context, reply);
+                sent = true;
+            }
+            return S_OK;
+        });
+        ownEdit_ = false;
+    }
+    // Meltype.exe につながらない (管理者として動くアプリなど): 開閉だけを切り替える
+    if (!sent) pendingOpen_ = open_ ? 0 : 1;
+    FlushOpen();
 }
 
-// 通信側から TSF を触らず、IME のスレッドのタイマーで取得結果を反映する。
-LRESULT CALLBACK TextService::HelloWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
+// ---- Meltype.exe とのやり取り ----
+
+bool TextService::Send(const char* type, const std::string& field, const std::string& fields, JsonValue& reply, DWORD timeoutMs, bool optional,
+                       const RECT* anchor) {
+    if (deactivated_) return false;
+    std::string request = "{\"thread\":" + std::to_string(GetCurrentThreadId());
+    if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
+        request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
+    request += std::string(",\"event\":{\"version\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +
+               "\",\"imeOpen\":" + (open_ ? "true" : "false") + (field.empty() ? "" : ",\"field\":" + field) + fields + "}}";
+    std::string response;
+    if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
+    if (!ParseJson(response, reply) || reply[L"state"].IsNull() || reply[L"result"].IsNull()) {
+        // 版の違う Meltype.exe (更新の途中など)
+        TipLog(L"応答を読めません");
+        return false;
+    }
+    return true;
+}
+
+bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& field) {
+    if (IsSecretField(ec, context)) return false;
+    std::wstring before, after, selection;
+    // 読めなければ before を送らない (空の文字列だと、本体は行の頭とみなす)
+    const bool read = SurroundingText(ec, context, before, after, selection);
+    field = std::string("{") + (read ? "\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + "," : "") + "\"composing\":" +
+            (composition_ != nullptr ? "true" : "false") + (selection.empty() ? "" : ",\"selection\":" + JsonString(selection)) +
+            (privateField_ ? ",\"traits\":[\"Private\"]" : "") + "}";
+    return true;
+}
+
+void TextService::ApplyState(const JsonValue& state) {
+    if (state.IsNull() || state[L"revision"].number < state_.rev) return;
+    ServerState next;
+    next.known = true;
+    next.active = state[L"handlesInput"].Bool();
+    next.open = state[L"imeOpen"].Bool();
+    next.japanese = state[L"languageMode"].Str() == L"Japanese";
+    next.rev = state[L"revision"].number;
+    const JsonValue& capture = state[L"capture"];
+    next.text = capture[L"printableAscii"].Bool();
+    next.except = capture[L"printableAsciiExcept"].Str();
+    next.keys.clear();
+    for (const JsonValue& key : capture[L"shortcuts"].array) {
+        const int vk = key[L"vk"].Int(), mods = key[L"modifiers"].Int();
+        if (vk > 0 && vk < 256 && mods >= 0 && mods <= 15) next.keys.push_back({static_cast<unsigned>(vk), mods});
+    }
+    for (const JsonValue& key : capture[L"ctrlKeysWhileComposing"].array) {
+        const int vk = key[L"vk"].Int();
+        if (vk > 0 && vk < 256) next.composing.push_back(static_cast<UINT>(vk));
+    }
+    if (next.active != state_.active || !state_.known) TipLog(L"Meltype.exe: %s", next.active ? L"受け持ちます" : L"受け持ちません");
+    state_ = std::move(next);
+    if (state_.keys != preservedFrom_) RefreshPreservedKeys();
+    if (state_.active && state_.open != open_) pendingOpen_ = state_.open ? 1 : 0;
+}
+
+std::string TextService::CaretMoved(bool left) {
+    return std::string(",\"caret\":{\"moved\":true,\"passedKey\":0") + (left ? ",\"focusLeft\":true" : "") + "}";
+}
+
+void TextService::Sync(bool entered) {
+    JsonValue reply;
+    // 状態を受け取るだけ。応答が遅ければ待たない (次のキーで受け取る)。
+    // フォーカスが入ったときは入力欄の事実も送る (アプリ別設定・コードの行で、受け持つか・入力モードを表示するかが変わる)
+    std::string field;
+    RECT anchor = {};
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (entered && threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&context);
+    }
+    if (context) {
+        RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
+            // パスワード欄の文字は読まずに、パスワード欄であることだけを伝える
+            if (!ReadField(ec, context.Get(), field)) field = "{\"traits\":[\"Password\"]}";
+            anchor = CaretRect(ec, context.Get());
+            return S_OK;
+        });
+    }
+    if (Send(entered ? "CaretMoved" : "StateRequested", field, entered ? ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusEntered\":true}" : "", reply, 100, true,
+             field.empty() ? nullptr : &anchor))
+        ApplyState(reply[L"state"]);
+    FlushOpen();
+}
+
+// 通信の結果を、IME のスレッドで反映する
+LRESULT CALLBACK TextService::MessageWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_NCCREATE) {
         auto create = reinterpret_cast<CREATESTRUCTW*>(lParam);
         SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
     }
     auto self = reinterpret_cast<TextService*>(GetWindowLongPtrW(window, GWLP_USERDATA));
-    if (message == WM_TIMER && self) { self->Hello(); return 0; }
-    if (message == kConversionWaitDone && self) { self->FinishConversionWait(); return 0; }
+    if (message == kConversionWaitDone && self) {
+        self->FinishConversionWait();
+        return 0;
+    }
+    if (message == kAltKey && self) {
+        self->HandleAltKey(static_cast<UINT>(wParam), static_cast<UINT>(lParam));
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
+void TextService::CreateMessageWindow() {
+    WNDCLASSW cls{};
+    cls.lpfnWndProc = MessageWindowProc;
+    cls.hInstance = g_module;
+    cls.lpszClassName = L"Meltype.Tip.Messages";
+    RegisterClassW(&cls);
+    window_ = CreateWindowExW(0, cls.lpszClassName, L"", 0, 0, 0, 0, 0, HWND_MESSAGE, nullptr, g_module, this);
+}
+
+void TextService::DestroyMessageWindow() {
+    if (window_) {
+        DestroyWindow(window_);
+        window_ = nullptr;
+    }
+    // worker は this や TSF に触れない。DLL を解放する前に通信の終わりを待つ
+    if (conversionWait_.valid()) {
+        conversionWait_.wait();
+        conversionWait_.get();
+    }
+    conversionPipe_.reset();
+    // クラスはプロセス内で共有する。他スレッドのウィンドウが残る間の解除失敗は許容し、最後のインスタンスがウィンドウを破棄したときに解除する
+    UnregisterClassW(L"Meltype.Tip.Messages", g_module);
+}
+
 void TextService::StartConversionWait() {
-    if (composition_ == nullptr || conversionWait_.valid() || !helloWindow_ || deactivated_) return;
+    if (composition_ == nullptr || conversionWait_.valid() || !window_ || deactivated_) return;
     if (!conversionPipe_) conversionPipe_ = std::make_shared<PipeClient>();
     auto pipe = conversionPipe_;
-    HWND window = helloWindow_;
-    auto request = "{\"op\":\"wait\",\"since\":" + std::to_string(conversionGeneration_) + "}";
+    HWND window = window_;
+    auto request = "{\"wait\":" + std::to_string(conversionGeneration_) + "}";
     try {
         conversionWait_ = std::async(std::launch::async, [pipe, window, request]() {
             std::string response;
@@ -789,9 +868,9 @@ void TextService::FinishConversionWait() {
             if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
             JsonValue reply;
             // consumed でなければ、Meltype.exe に入力の続きが無い。ここでは何もせず、次のキーで扱う
-            if (self->Request("{\"op\":\"refresh\",\"process\":" + JsonString(ProcessName()) + ",\"sid\":\"" + self->sid_ + "\"}", reply) && reply[L"consumed"].Bool()) {
+            if (self->Send("ConversionFinished", "", "", reply) && reply[L"result"][L"consumed"].Bool()) {
                 self->ownEdit_ = true;
-                self->Apply(ec, context.Get(), reply);
+                self->ApplyOutput(ec, context.Get(), reply);
             }
             return S_OK;
         });
@@ -799,131 +878,57 @@ void TextService::FinishConversionWait() {
     StartConversionWait();
 }
 
-void TextService::StartHelloUpdates() {
-    WNDCLASSW cls{};
-    cls.lpfnWndProc = HelloWindowProc;
-    cls.hInstance = g_module;
-    cls.lpszClassName = L"Meltype.Tip.Hello";
-    RegisterClassW(&cls);
-    helloWindow_ = CreateWindowExW(0, cls.lpszClassName, L"", 0, 0, 0, 0, 0,
-        HWND_MESSAGE, nullptr, g_module, this);
-    helloPipe_ = std::make_shared<PipeClient>();
-    // 待機中は 2 秒ごとに取得する。要求中だけ短い間隔で完了を確認する。
-    if (helloWindow_) SetTimer(helloWindow_, 1, 2000, nullptr);
-    Hello();
-}
+// ---- キー ----
 
-void TextService::StopHelloUpdates() {
-    if (helloWindow_) { DestroyWindow(helloWindow_); helloWindow_ = nullptr; }
-    // worker は this や TSF に触れない。DLL を解放する前に通信終了を待つ。
-    if (helloResult_.valid()) { helloResult_.wait(); helloResult_.get(); }
-    helloPipe_.reset();
-    if (conversionWait_.valid()) { conversionWait_.wait(); conversionWait_.get(); }
-    conversionPipe_.reset();
-    // クラスはプロセス内で共有する。他スレッドのウィンドウが残る間の解除失敗は許容し、
-    // 最後のインスタンスがウィンドウを破棄したときに解除する。
-    UnregisterClassW(L"Meltype.Tip.Hello", g_module);
-}
-
-bool TextService::ServerReady() {
-    // 打鍵の経路では設定確認の通信をしない。未確認を無効扱いすると、取得前の先頭文字が素通しになる。
-    return !disabled_ && (!serverStateKnown_ || serverActive_);
-}
-
-void TextService::Hello() {
-    if (disabled_ || deactivated_ || !helloPipe_) return;
-    // 前の要求があれば追加で起動せず、下で完了だけを確認する。
-    if (!helloResult_.valid()) {
-        if (lastHello_ != 0 && GetTickCount64() - lastHello_ < 2000) return;
-        lastHello_ = GetTickCount64();
-        helloStateRevision_ = serverStateRevision_;
-        auto pipe = helloPipe_;
-        auto request = "{\"op\":\"hello\",\"process\":" + JsonString(ProcessName()) + "}";
-        // 専用の接続なので変換要求と競合しない。応答・TSF の反映は所有スレッドで行う。
-        try {
-            helloResult_ = std::async(std::launch::async, [pipe, request]() {
-                std::string response;
-                JsonValue reply;
-                try {
-                    // optional: 一時的な応答遅延で、次の設定取得まで再接続を抑制しない。
-                    const bool received = pipe->Transact(request, response, 100, true) && ParseJson(response, reply);
-                    return std::make_pair(received, std::move(reply));
-                } catch (...) {
-                    return std::make_pair(false, JsonValue{});
-                }
-            });
-            if (helloWindow_) SetTimer(helloWindow_, 1, 50, nullptr);
-        } catch (...) {
-            if (helloWindow_) SetTimer(helloWindow_, 1, 2000, nullptr);
-            TipLog(L"設定取得のスレッドを開始できません");
+bool TextService::ContextDisabled(ITfContext* context) {
+    // IME を使わない入力欄 (パスワード欄は ReadSecretField で見る)
+    if (context == nullptr) return true;
+    ITfCompartmentMgr* compartments = nullptr;
+    if (FAILED(context->QueryInterface(IID_ITfCompartmentMgr, reinterpret_cast<void**>(&compartments)))) return false;
+    bool disabled = false;
+    for (const GUID* guid : {&GUID_COMPARTMENT_KEYBOARD_DISABLED, &GUID_COMPARTMENT_EMPTYCONTEXT}) {
+        ITfCompartment* compartment = nullptr;
+        if (SUCCEEDED(compartments->GetCompartment(*guid, &compartment))) {
+            VARIANT value;
+            VariantInit(&value);
+            if (SUCCEEDED(compartment->GetValue(&value)) && value.vt == VT_I4 && value.lVal != 0) disabled = true;
+            VariantClear(&value);
+            compartment->Release();
         }
-        return;
     }
-    // 未完了ならすぐ戻る。get は完了が確認できた場合にだけ呼ぶ。
-    if (helloResult_.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready) return;
-    // 成功・失敗にかかわらず、結果を回収したら待機用の間隔へ戻す。
-    if (helloWindow_) SetTimer(helloWindow_, 1, 2000, nullptr);
-    auto result = helloResult_.get();
-    // 設定確認の失敗で、使えている変換接続まで無効にしない。
-    if (!result.first) return;
-    // 別接続の入力応答が先に反映された場合、古い有効状態で上書きしない。
-    const bool currentState = helloStateRevision_ == serverStateRevision_;
-    ApplyHello(result.second, currentState);
+    compartments->Release();
+    return disabled;
 }
 
-// 所有スレッドで設定と TSF のキー登録を更新する。
-void TextService::ApplyHello(const JsonValue& reply, bool currentState) {
-    const bool wasActive = serverActive_;
-    const bool wereShortcutsEnabled = shortcutsEnabled_;
-    bool bindingsChanged = false;
-    if (currentState) {
-        serverActive_ = reply[L"active"].Bool();
-        serverStateKnown_ = true;
-        directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
-        codeApp_ = serverActive_ && reply[L"code"].Bool();
-        fullWidthSpace_ = serverActive_ && reply[L"fullWidthSpace"].Bool();
-        modeIndicator_ = serverActive_ && reply[L"modeIndicator"].Bool();
-    }
-    if (serverStateKnown_) shortcutsEnabled_ = serverActive_;
-    // 入力応答にはキー一覧が含まれないので、状態が更新済みでも一覧はこの応答から取得する。
-    if (reply[L"toggleShortcuts"].type == JsonValue::Type::Array) {
-        std::vector<ToggleShortcut> shortcuts;
-        for (const auto& b : reply[L"toggleShortcuts"].array) {
-            const int key = b[L"key"].Int(), mods = b[L"mods"].Int();
-            if (key > 0 && key < 256 && !ToggleShortcut::IsModifier(key) && mods >= 0 && mods <= 15) shortcuts.push_back({static_cast<UINT>(key), mods});
-        }
-        bindingsChanged = shortcuts != toggleShortcuts_;
-        if (bindingsChanged) toggleShortcuts_.swap(shortcuts);
-    }
-    if (bindingsChanged || wereShortcutsEnabled != shortcutsEnabled_ || preservedToggles_.empty()) RefreshPreservedShortcuts();
-    if (wasActive != serverActive_) directEnglishWord_ = false;
-    if (wasActive != serverActive_) TipLog(L"Meltype.exe: %s", serverActive_ ? L"つながりました" : L"使えません (動いていない・モードが Meltype IME でない)");
-}
-
-void TextService::UnpreserveShortcuts() {
+void TextService::UnpreserveKeys() {
     Microsoft::WRL::ComPtr<ITfKeystrokeMgr> manager;
     if (threadMgr_ && SUCCEEDED(threadMgr_->QueryInterface(IID_PPV_ARGS(&manager))))
-        for (const auto& binding : preservedToggles_) manager->UnpreserveKey(binding.guid, &binding.key);
-    preservedToggles_.clear();
+        for (const auto& binding : preservedKeys_) manager->UnpreserveKey(binding.guid, &binding.key);
+    preservedKeys_.clear();
 }
 
-void TextService::RefreshPreservedShortcuts() {
+void TextService::RefreshPreservedKeys() {
     if (!threadMgr_) return;
     Microsoft::WRL::ComPtr<ITfKeystrokeMgr> manager;
     if (FAILED(threadMgr_->QueryInterface(IID_PPV_ARGS(&manager)))) return;
-    UnpreserveShortcuts();
-    if (disabled_ || !shortcutsEnabled_) return;
-    for (const auto& b : PreservedShortcutKeys(toggleShortcuts_, MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0)) == ToggleShortcut::Grave)) {
-        PreservedToggle entry{{b.key, b.flags}, {0x7118DA00u | b.key, static_cast<USHORT>(b.flags), 0x4AC2, {0xAA, 0x4D, 0xC5, 0x51, 0x17, 0x39, 0x61, 0xC3}}};
+    UnpreserveKeys();
+    preservedFrom_ = state_.keys;
+    if (disabled_) return;
+    // 修飾キー付きのキー (Ctrl+Space など) は、TSF に登録しないと IME に届かない
+    std::vector<ToggleShortcut> withModifiers;
+    for (const auto& key : state_.keys)
+        if (key.mods != 0) withModifiers.push_back(key);
+    for (const auto& b : PreservedShortcutKeys(withModifiers, MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0)) == ToggleShortcut::Grave)) {
+        PreservedKey entry{{b.key, b.flags}, {0x7118DA00u | b.key, static_cast<USHORT>(b.flags), 0x4AC2, {0xAA, 0x4D, 0xC5, 0x51, 0x17, 0x39, 0x61, 0xC3}}};
         const HRESULT hr = manager->PreserveKey(clientId_, entry.guid, &entry.key, nullptr, 0);
-        if (SUCCEEDED(hr)) preservedToggles_.push_back(entry);
+        if (SUCCEEDED(hr)) preservedKeys_.push_back(entry);
         else TipLog(L"ショートカットを登録できません: 0x%02X (0x%08X)", b.key, hr);
     }
 }
 
 STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL* eaten) {
     *eaten = FALSE;
-    for (const auto& binding : preservedToggles_) {
+    for (const auto& binding : preservedKeys_) {
         if (!IsEqualGUID(binding.guid, guid)) continue;
         const UINT scan = ToggleShortcut::NormalizeHankakuKey(binding.key.uVKey) == ToggleShortcut::Hankaku || binding.key.uVKey == ToggleShortcut::Grave
             ? 0x29 : MapVirtualKeyExW(binding.key.uVKey, MAPVK_VK_TO_VSC, GetKeyboardLayout(0));
@@ -931,30 +936,28 @@ STDMETHODIMP TextService::OnPreservedKey(ITfContext* context, REFGUID guid, BOOL
         const UINT slot = ShortcutSlot(binding.key.uVKey, keyParam);
         if (binding.key.uModifiers & TF_MOD_ON_KEYUP) {
             *eaten = eatenDown_[slot] ? TRUE : FALSE;
-            eatenDown_[slot] = toggleDown_[slot] = false;
+            eatenDown_[slot] = false;
             return S_OK;
         }
-        if (disabled_ || !shortcutsEnabled_ || ContextDisabled(context) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return S_OK;
-        if (!MatchesToggle(binding.key.uVKey, keyParam)) return S_OK;
+        if (disabled_ || ContextDisabled(context) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return S_OK;
+        if (!CapturesKey(binding.key.uVKey, keyParam)) return S_OK;
         *eaten = TRUE;
-        if (toggleDown_[slot]) return S_OK;
-        eatenDown_[slot] = toggleDown_[slot] = true;
-        if (composition_ == nullptr) ToggleInputMode(context);
-        else HandleKey(context, VK_KANJI, 0, true);
+        const bool repeat = eatenDown_[slot];
+        eatenDown_[slot] = true;
+        HandleKey(context, ShortcutKey(binding.key.uVKey, keyParam), 0, repeat, true);
         MaskSystemModifier();
         return S_OK;
     }
     return S_OK;
 }
 
-bool TextService::MatchesToggle(UINT vk, LPARAM lParam) {
-    if (!shortcutsEnabled_) return false;
+bool TextService::CapturesKey(UINT vk, LPARAM lParam) const {
     const auto bits = static_cast<ULONG_PTR>(lParam);
-    int mods = (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) |
+    const int mods = (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) |
         ((KeyDown(VK_MENU) || (bits & (static_cast<ULONG_PTR>(1) << 29))) ? 4 : 0) |
         (KeyDown(VK_LWIN) || KeyDown(VK_RWIN) ? 8 : 0);
-    for (const auto& b : toggleShortcuts_)
-        if (b.Matches(ShortcutKey(vk, lParam), mods)) return true;
+    for (const auto& key : state_.keys)
+        if (key.Matches(ShortcutKey(vk, lParam), mods)) return true;
     return false;
 }
 
@@ -968,7 +971,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     secretChecked_ = false;
     secretWhileComposing_ = false;
     if (disabled_ || vk >= 256) return false;
-    if (IsModifier(vk) && !MatchesToggle(vk, lParam)) return false;
+    const bool listed = CapturesKey(vk, lParam);
+    if (IsModifier(vk) && !listed) return false;
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
     ResumeOrCommit(context);
     // VK_PACKET: ほかのソフト (パスワード管理・AutoHotkey など) が送り込んだ文字。送り直せないので受け取らずに通す。
@@ -998,8 +1002,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
             AbandonComposition();
         }
     }
-    // 登録キーは通常の Ctrl/Alt 処理より先。確定は OnKeyDown で行う。
-    if (toggleDown_[ShortcutSlot(vk, lParam)] || MatchesToggle(vk, lParam)) return true;
+    // 受け取るように言われたキー (Space・半角/全角・切り替えキーなど) は、変換中でもそうでなくても、意味は Meltype.exe が決める
+    if (listed) return true;
     if (composition_ != nullptr) {
         // 変換中にアプリが入力欄の IME を無効にした (ブラウザーはパスワード欄に変えるとそうする): 変換中の文字を確定して、
         // このキーからは受け取らない。ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す
@@ -1016,38 +1020,25 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
         // Ctrl・Alt・Windows キーとの組み合わせ (Ctrl + S など): Meltype.exe も確定してアプリに渡すだけなので、ここで確定して
         // 受け取らずに通す (受け取ってから送り直すと、送り直しが届かないアプリでキーが消える)。
         // ここで確定できなければ受け取り、キーの処理の中で確定してから送り直す (キーが先に届いて、確定が後になるのを防ぐ)
-        // ただし変換ボックスの中で使う Ctrl+英字 (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace) は、確定せずに Meltype.exe に送る
-        if ((KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) && !IsCompositionShortcut(vk) && CommitNow()) return false;
+        // ただし変換ボックスの中で使う Ctrl+英字 (本体が capture.composing で知らせる) は、確定せずに Meltype.exe に送る
+        const bool used = KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
+            std::find(state_.composing.begin(), state_.composing.end(), vk) != state_.composing.end();
+        if ((KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) && !used && CommitNow()) return false;
         return true;  // 変換中はほかのキーを全部受け取る (つながらなければ確定して通す)
     }
-    // 半角/全角: 未登録ならモードは切り替えず、誤入力だけを防ぐ。Meltype.exe が使えないときも受け取る
-    // (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる。管理者として動くアプリでは Meltype.exe につながらない)
-    if (IsAltGraveToggle(vk, lParam)) return true;
-    if (IsHankakuZenkaku(vk)) return !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU);
     // 調べるとき用: 文字を生むキーを通した理由 (どのキーかは書かない)
     auto pass = [&](const wchar_t* reason) {
         if (passReason_ != reason) TipLog(L"キーを通します: %s", reason);
         passReason_ = reason;
         return false;
     };
-    // 設定が変わった場合も、英数状態での次の打鍵時に検知の有効/無効を更新する。
-    if (!open_ && !directDetection_ && serverStateKnown_) return pass(L"英数");
+    if (state_.known && !state_.active) return pass(L"Meltype.exe が受け持たない");
     if (InMenuMode()) return pass(L"メニューを開いている");
     if (KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return pass(L"Ctrl・Alt・Windows キーを押している");
     if (ContextDisabled(context)) return pass(L"この入力欄では使わない");
     ch = CharOf(vk, 0);
-    if (!open_ && directEnglishWord_) {
-        bool continuesWord = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') ||
-                             (ch >= L'0' && ch <= L'9') || ch == L'@' || ch == L'_';
-        if (continuesWord) return pass(L"英語の単語の続き");
-        directEnglishWord_ = false;
-    }
-    // Shift+Space は全角スペース (Microsoft IME と同じ。Meltype.exe が入れる: issue #246)
-    // 設定「スペースの幅」が全角なら、日本語入力のときの Space も受け取る (Space が全角・Shift+Space が半角。Meltype.exe が入れる: issue #881)
-    bool starts = (ch >= L'a' && ch <= L'z') || (ch >= L'A' && ch <= L'Z') || (ch >= L'!' && ch <= L'~') ||
-                  (vk == VK_SPACE && (KeyDown(VK_SHIFT) || (open_ && fullWidthSpace_)));
-    if (!starts) return false;
-    if (!ServerReady()) return pass(L"Meltype.exe が使えない");
+    // 受け取る文字は Meltype.exe が決める (英数では打っている英語の語の続きを通すなど)
+    if (!state_.text || ch < L'!' || ch > L'~' || state_.except.find(ch) != std::wstring::npos) return pass(L"受け取らない文字");
     // パスワード欄か。OnTestKeyDown で読んだ結果は、続く同じキー・同じ入力欄の OnKeyDown で 1 回だけ使う (ほかのキー・入力欄には使わない)
     ULONGLONG now = GetTickCount64();
     int secret;
@@ -1100,19 +1091,14 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
     if (IsReinjected(vk)) {
         passVk_ = vk;  // アプリによっては、このあと OnKeyDown も呼ぶ
         passTime_ = GetTickCount64();
-        directEnglishWord_ = false;
-        caretMoved_ = true;
         *eaten = FALSE;
         return S_OK;
     }
     passVk_ = 0;
     wchar_t ch = 0;
     *eaten = WouldEat(context, vk, lParam, ch, true) ? TRUE : FALSE;
-    // アプリにそのまま渡すキー (BackSpace・矢印・Enter・Space など) はキャレットを動かす: 前に確定した語を確定し直さない
-    if (!*eaten && !IsModifier(vk)) {
-        caretMoved_ = true;
-        RememberPassed(vk);
-    }
+    // アプリにそのまま渡すキー (BackSpace・矢印・Enter・Space など) はキャレットを動かす (編集の通知で Meltype.exe に伝える)
+    if (!*eaten && !IsModifier(vk)) RememberPassed(vk);
     return S_OK;
 }
 
@@ -1120,255 +1106,171 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     UINT vk = static_cast<UINT>(wParam);
     if ((vk == passVk_ && GetTickCount64() - passTime_ < 500) || IsReinjected(vk)) {
         passVk_ = 0;
-        directEnglishWord_ = false;
-        caretMoved_ = true;
         *eaten = FALSE;
         return S_OK;
     }
     passVk_ = 0;
     wchar_t ch = 0;
     if (!WouldEat(context, vk, lParam, ch, false)) {
-        if (!IsModifier(vk)) {
-            caretMoved_ = true;
-            RememberPassed(vk);
-        }
+        if (!IsModifier(vk)) RememberPassed(vk);
         *eaten = FALSE;
         return S_OK;
     }
     *eaten = TRUE;
-    // 押しっぱなしによる自動リピートで、入力モードを何度も切り替えない。
     const UINT slot = ShortcutSlot(vk, lParam);
-    const bool toggle = toggleDown_[slot] || MatchesToggle(vk, lParam);
-    if (toggle && eatenDown_[slot]) return S_OK;
+    const bool repeat = eatenDown_[slot];
     eatenDown_[slot] = true;
-    if (toggle) {
-        toggleDown_[slot] = true;
-        if (composition_ == nullptr) ToggleInputMode(context);
-        else HandleKey(context, VK_KANJI, 0, true);
+    if (CapturesKey(vk, lParam)) {
+        HandleKey(context, ShortcutKey(vk, lParam), vk == VK_SPACE ? L' ' : 0, repeat, true);
         MaskSystemModifier();
         return S_OK;
     }
-    // 登録キーの切り替えは上で処理済み。未登録の半角/全角は文字として送らない。
-    // 変換中は従来どおり HandleKey に渡す。
-    if (composition_ == nullptr && (IsAltGraveToggle(vk, lParam) ||
-        (IsHankakuZenkaku(vk) && !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU)))) {
-        MaskSystemModifier();
-        return S_OK;
-    }
-    ch = CharOf(vk, lParam);
-    HandleKey(context, vk, ch);
+    HandleKey(context, vk, CharOf(vk, lParam), repeat, false);
     return S_OK;
 }
 
 STDMETHODIMP TextService::OnTestKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
-        eatenDown_[ToggleShortcut::Hankaku] = toggleDown_[ToggleShortcut::Hankaku] = false;
+        eatenDown_[ToggleShortcut::Hankaku] = false;
     }
     *eaten = wParam < 256 && eatenDown_[ShortcutSlot(static_cast<UINT>(wParam), lParam)] ? TRUE : FALSE;
     return S_OK;
 }
 
-STDMETHODIMP TextService::OnKeyUp(ITfContext* context, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
+STDMETHODIMP TextService::OnKeyUp(ITfContext*, WPARAM wParam, LPARAM lParam, BOOL* eaten) {
     // VK_KANJI は解放通知が来ない環境があるので、Alt を離したら次の操作を受け付ける。
     if (wParam == VK_MENU || wParam == VK_LMENU || wParam == VK_RMENU) {
-        eatenDown_[ToggleShortcut::Hankaku] = toggleDown_[ToggleShortcut::Hankaku] = false;
+        eatenDown_[ToggleShortcut::Hankaku] = false;
     }
     const UINT slot = ShortcutSlot(static_cast<UINT>(wParam), lParam);
     *eaten = wParam < 256 && eatenDown_[slot] ? TRUE : FALSE;
-    if (wParam < 256) { eatenDown_[slot] = false; toggleDown_[slot] = false; }
+    if (wParam < 256) eatenDown_[slot] = false;
     return S_OK;
 }
 
-void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool toggleText) {
+void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repeat, bool listed) {
     // 8 = Windows キー (Meltype.exe は Mac の Command と同じく、確定してアプリに渡す)
-    int mods = (KeyDown(VK_SHIFT) ? 1 : 0) | (KeyDown(VK_CONTROL) ? 2 : 0) | (KeyDown(VK_MENU) ? 4 : 0) | (KeyDown(VK_LWIN) || KeyDown(VK_RWIN) ? 8 : 0);
-    // 登録キーの修飾キーは文字変換の指定には引き継がない。
-    if (toggleText) mods = 0;
-    keyFailed_ = false;
-    consumed_ = true;
-    bool insertedOnFailure = false;
-    bool insertedDirect = false;
-    bool switchToJapanese = false;
+    const bool shift = KeyDown(VK_SHIFT), control = KeyDown(VK_CONTROL), alt = KeyDown(VK_MENU), command = KeyDown(VK_LWIN) || KeyDown(VK_RWIN);
+    bool failed = false;
+    bool consumed = true;
+    bool inserted = false;
     HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
         // キーを受け取る前に入力欄の種類を読めなかった: ここで確かめ、パスワード欄なら Meltype.exe に送らずにアプリへ返す
         // (変換中なら、変換中の文字を確定してから。変換中にパスワード欄になったのに、受け取る前に確定できなかったときも)
         if (secretWhileComposing_ || (!secretChecked_ && IsSecretField(ec, context))) {
             if (composition_ != nullptr) CommitInSession(ec, context, true);
-            consumed_ = false;
+            consumed = false;
             TipLog(L"パスワードの入力欄なので何もしません");
             return S_OK;
         }
+        std::string field;
+        ReadField(ec, context, field);
+        // 受け取るように言われたキーは、入力モードを表示する位置も送る (切り替えたかは Meltype.exe が決める)
+        const RECT anchor = listed ? CaretRect(ec, context) : RECT{};
         ownEdit_ = true;
-        std::string request = "{\"op\":\"key\",\"sid\":\"" + sid_ + "\",\"vk\":" + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
-                              ",\"mods\":" + std::to_string(mods) + ",\"process\":" + JsonString(ProcessName()) + ",\"code\":true" +
-                              std::string(",\"direct\":") + (!open_ ? "true" : "false");
-        // 前に確定してからキャレットが動いた: Meltype.exe に、前の語を確定し直さないように伝える
-        if (caretMoved_) request += ",\"moved\":true";
-        // 入力を覚えないように求める入力欄: Meltype.exe に学習しないように伝える
-        if (privateField_) request += ",\"private\":true";
-        request += PendingPassed();
-        caretMoved_ = false;
-        if (composition_ == nullptr) {
-            std::wstring before, after;
-            SurroundingText(ec, context, before, after);
-            request += ",\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after);
-        } else {
-            // 変換中: Meltype.exe に入力の続きが無ければ (つなぎ直した)、新しく始めずに知らせてもらう
-            request += ",\"composing\":true";
-        }
-        request += "}";
+        const std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":" + std::to_string(ch) +
+                                ",\"shift\":" + (shift ? "true" : "false") + ",\"ctrl\":" + (control ? "true" : "false") +
+                                ",\"alt\":" + (alt ? "true" : "false") + ",\"command\":" + (command ? "true" : "false") +
+                                (repeat ? ",\"repeat\":true" : "") + "}";
         JsonValue reply;
-        if (!Request(request, reply)) {
+        if (!Send("KeyPressed", field, key, reply, 800, false, listed ? &anchor : nullptr)) {
             // Meltype.exe が応答しない: 変換中の文字はそのまま確定する。打った文字はここで入れる
             // (送り直すと、その間に打った次のキーより後に届いて順番が入れ替わる)
-            keyFailed_ = true;
-            ++serverStateRevision_;
-            serverStateKnown_ = false;
-            serverActive_ = false;
-            // 次のキーで、すぐに問い合わせ直す (Meltype.exe の画面のスレッドが少しふさがっただけなら、次のキーから使える)
-            lastHello_ = 0;
+            failed = true;
+            state_.known = false;
             if (candidates_) candidates_->Hide();
             EndComposition(ec);
-            // Ctrl・Alt・Windows キーとの組み合わせは、文字を入れずにアプリに送り直す
-            if (ch >= 0x20 && (mods & (2 | 4 | 8)) == 0) {
+            if (ch >= 0x20 && !control && !alt && !command) {
                 TF_SELECTION selection = {};
                 ULONG fetched = 0;
                 if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0) {
-                    insertedOnFailure = WriteCommit(ec, context, selection.range, std::wstring(1, ch));
+                    inserted = WriteCommit(ec, context, selection.range, std::wstring(1, ch));
                     selection.range->Release();
                 }
             }
             return S_OK;
         }
-        ++serverStateRevision_;
-        serverStateKnown_ = true;
-        serverActive_ = reply[L"active"].Bool();
-        directDetection_ = serverActive_ && reply[L"directDetection"].Bool();
-        directEnglishWord_ = directDetection_ && reply[L"directEnglishWord"].Bool();
-        fullWidthSpace_ = serverActive_ && reply[L"fullWidthSpace"].Bool();
-        modeIndicator_ = serverActive_ && reply[L"modeIndicator"].Bool();
-        switchToJapanese = reply[L"switchToJapanese"].Bool();
-        consumed_ = reply[L"consumed"].Bool();
-        ApplyMode(reply);
-        // 入力の続きが無いので受け持たなかっただけ (つなぎ直した) かもしれない: 次のキーで、すぐに問い合わせ直す
-        if (!serverActive_ && composition_ != nullptr) lastHello_ = 0;
-        Apply(ec, context, reply);
-        bool wasDirect = !open_ && !switchToJapanese;
-        if (!consumed_ && wasDirect && ch >= L' ' && ch <= L'~' && vk != VK_SPACE &&
-            (mods & (2 | 4 | 8)) == 0 && reply[L"commits"].array.empty() && reply[L"view"].IsNull()) {
+        consumed = ApplyOutput(ec, context, reply);
+        // 英数で使わなかった文字は、送り直さずにここで入れる (送り直しが届かないアプリがある)
+        const JsonValue& result = reply[L"result"];
+        if (!consumed && !open_ && ch >= L' ' && ch <= L'~' && vk != VK_SPACE && !control && !alt && !command &&
+            result[L"commits"].array.empty() && result[L"view"].IsNull()) {
             TF_SELECTION selection = {};
             ULONG fetched = 0;
             if (SUCCEEDED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) && fetched > 0) {
-                insertedDirect = WriteCommit(ec, context, selection.range, std::wstring(1, ch));
+                inserted = WriteCommit(ec, context, selection.range, std::wstring(1, ch));
                 selection.range->Release();
             }
-            if (!insertedDirect) TipLog(L"英数文字を直接入力できませんでした。キーをアプリへ送り直します");
+            if (!inserted) TipLog(L"英数文字を直接入力できませんでした。キーをアプリへ送り直します");
         }
         return S_OK;
     });
     // 同期の編集セッションの終わりの通知 (OnEndEdit) はもう来ている。何も変えなかったときに印が残らないように戻す
     ownEdit_ = false;
-    if (SUCCEEDED(hr) && switchToJapanese && !open_) SetOpen(true);
     if (FAILED(hr)) {
         TipLog(L"編集セッションを始められません: 0x%08X", hr);
-        keyFailed_ = true;
+        failed = true;
         // キーを送り直す前に、変換中の文字を確定する (キャレットは動かさない)
         if (composition_ != nullptr) CommitAsync(true);
-    } else if (keyFailed_) {
+    } else if (failed) {
         TipLog(L"Meltype.exe から応答が来ないので、打った文字をそのまま入れました");
     }
-    if (!toggleText && ((keyFailed_ && !insertedOnFailure) || (!consumed_ && !insertedDirect))) Reinject(vk);
+    // Meltype.exe につながらない (管理者として動くアプリなど) ときの 半角/全角・英数・かな: 開閉だけを切り替え、アプリには通さない
+    // (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる)
+    const UINT key = ToggleShortcut::NormalizeHankakuKey(vk);
+    const bool modeKey = key == ToggleShortcut::Hankaku || key == ToggleShortcut::Grave || key == 0xF0 || key == 0x15;
+    if (failed && modeKey && !repeat) pendingOpen_ = key == 0xF0 ? 0 : key == 0x15 ? 1 : open_ ? 0 : 1;
+    FlushOpen();
+    // Meltype.exe が使わなかったキーは、アプリに送り直す
+    if (!inserted && (failed ? !modeKey : !consumed)) Reinject(vk);
 }
 
-void TextService::ToggleInputMode(ITfContext* context) {
-    Microsoft::WRL::ComPtr<ITfContext> focused;
-    if (context == nullptr && threadMgr_ != nullptr) {
-        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
-        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&focused);
-        context = focused.Get();
-    }
-    const bool wasJapanese = IsOpen();
-    if (wasJapanese) {
-        // 日本語 → 英数。コードの行を日本語にしていたなら、その行を英数に戻す (IME は開いたまま。コメント・文字列はまた日本語になる)。
-        // それ以外は IME を閉じる
-        if (!codeApp_ || !SetCodeLine(context, false)) SetOpen(false);
+void TextService::HandleAltKey(UINT vk, UINT flags) {
+    const bool released = (flags & kAltReleased) != 0;
+    std::string key = std::string(",\"key\":{\"vk\":") + std::to_string(vk);
+    if (released) {
+        key += std::string(",\"interrupted\":") + ((flags & kAltInterrupted) ? "true" : "false");
     } else {
-        // 英数 → 日本語。コードの行なら、その行だけ日本語にする (改行・別の行に移ると英数に戻る)
-        if (!open_) SetOpen(true);
-        if (codeApp_ && codeEnglish_) SetCodeLine(context, true);
+        key += std::string(",\"alt\":true,\"shift\":") + ((flags & kAltShift) ? "true" : "false") + ",\"ctrl\":" + ((flags & kAltCtrl) ? "true" : "false") +
+               ",\"command\":" + ((flags & kAltCommand) ? "true" : "false");
     }
-    // Terminal・コードの行では IME 自体を開いたまま切り替わり、OnChange は来ない。
-    if (wasJapanese != IsOpen()) FlashModeIndicator(context);
-}
-
-bool TextService::SetCodeLine(ITfContext* context, bool japanese) {
-    if (context == nullptr || ContextDisabled(context) || !ServerReady()) return false;
-    std::string request = "{\"op\":\"toggle\",\"sid\":\"" + sid_ + "\",\"process\":" + JsonString(ProcessName()) +
-                          ",\"japanese\":" + (japanese ? "true" : "false") + PendingPassed();
-    bool secret = false;
-    std::wstring before, after;
-    // キャレットの前を読む。キーの処理の外 (タスクバーのボタン) で読めなければ、Meltype.exe が追いかけている今の行で決める
-    HRESULT hr = RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
-        secret = IsSecretField(ec, context);
-        if (!secret) SurroundingText(ec, context, before, after);
-        return S_OK;
-    });
-    // パスワード欄の文字は Meltype.exe に送らない
-    if (secret) return false;
-    if (SUCCEEDED(hr)) request += ",\"before\":" + JsonString(before);
-    request += "}";
-    JsonValue reply;
-    if (!Request(request, reply)) return false;
-    ApplyMode(reply);
-    bool done = reply[L"active"].Bool() && reply[L"consumed"].Bool();
-    if (done) TipLog(L"コードの行: %s", japanese ? L"日本語にしました" : L"英数に戻しました");
-    return done;
-}
-
-void TextService::QueryMode(TfEditCookie ec, ITfContext* context, bool selectionChanged) {
-    if (!codeApp_ || !serverActive_ || ContextDisabled(context) || IsSecretField(ec, context)) return;
-    std::wstring before, after;
-    SurroundingText(ec, context, before, after);
-    // passed: キャレットを動かしたキー (少し前にアプリに通したキー)。無ければ、キャレットが動いたなら 0 (クリックなど)、文字が変わっただけなら -1。
-    // 改行の後の自動のインデントなど、キーに続くアプリの編集でも通知が来るので、通したキーは少しの間覚えておく。
-    // ただし、マウスのボタンを押しているあいだに選択が変わったら、キーの直後でもクリックとして伝える
-    bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
-    bool recent = !clicked && GetTickCount64() - passedTime_ < 500;
-    int passed = recent ? static_cast<int>(passedVk_) : selectionChanged ? 0 : -1;
-    passedPending_ = false;
-    std::string request = "{\"op\":\"mode\",\"sid\":\"" + sid_ + "\",\"process\":" + JsonString(ProcessName()) +
-                          ",\"passed\":" + std::to_string(passed) + (recent && passedControl_ ? ",\"ctrl\":true" : "") +
-                          ",\"before\":" + JsonString(before) + "}";
-    JsonValue reply;
-    // キャレットを動かすたびに呼ぶので、応答が遅ければ待たない (表示が次のキーまで古いだけ)
-    if (Request(request, reply, 100, true)) {
-        ApplyMode(reply);
+    key += "}";
+    const char* type = released ? "KeyReleased" : "KeyPressed";
+    Microsoft::WRL::ComPtr<ITfContext> context;
+    if (threadMgr_ != nullptr) {
+        Microsoft::WRL::ComPtr<ITfDocumentMgr> documentMgr;
+        if (SUCCEEDED(threadMgr_->GetFocus(&documentMgr)) && documentMgr) documentMgr->GetTop(&context);
     }
+    // 単独押しで切り替えるときは変換中の文字を確定するので、入力欄を書き換えられる編集で送る
+    bool sent = false;
+    if (context) {
+        const HRESULT hr = RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
+            // パスワード欄の文字は読まずに、パスワード欄であることだけを伝える
+            std::string field;
+            if (!ReadField(ec, context.Get(), field)) field = "{\"traits\":[\"Password\"]}";
+            const RECT anchor = CaretRect(ec, context.Get());
+            ownEdit_ = true;
+            JsonValue reply;
+            sent = Send(type, field, key, reply, 800, false, &anchor);
+            if (sent) ApplyOutput(ec, context.Get(), reply);
+            return S_OK;
+        });
+        ownEdit_ = false;
+        if (FAILED(hr)) TipLog(L"編集セッションを始められません: 0x%08X", hr);
+    }
+    // 入力欄が無い・編集できない: 本体には知らせる (押下と解放が対にならないと、次の単独押しを見分けられない)
+    if (!sent) {
+        JsonValue reply;
+        if (Send(type, "", key, reply, 800, true)) ApplyState(reply[L"state"]);
+    }
+    FlushOpen();
 }
 
 void TextService::RememberPassed(UINT vk) {
     passedVk_ = vk;
     passedControl_ = KeyDown(VK_CONTROL);
     passedTime_ = GetTickCount64();
-    passedPending_ = true;
-}
-
-std::string TextService::PendingPassed() {
-    // アプリに通したキーを、まだ Meltype.exe に伝えていなければ伝える (編集の通知が来ないアプリでも、矢印などで移ったと分かるように)
-    if (!passedPending_) return "";
-    passedPending_ = false;
-    return ",\"passed\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
-}
-
-void TextService::ApplyMode(const JsonValue& reply) {
-    bool active = reply[L"active"].Bool();
-    codeApp_ = active && reply[L"code"].Bool();
-    bool english = codeApp_ && reply[L"english"].Bool();
-    if (english == codeEnglish_) return;
-    codeEnglish_ = english;
-    TipLog(L"入力モードの表示: %s", english ? L"英数 (コードの行)" : L"日本語");
-    UpdateLangBar();
 }
 
 bool TextService::Reinject(UINT vk) {
@@ -1424,79 +1326,114 @@ bool TextService::Reinject(UINT vk) {
     return true;
 }
 
-bool TextService::Request(const std::string& json, JsonValue& reply, DWORD timeoutMs, bool optional) {
-    if (deactivated_) return false;
-    std::string response;
-    // Meltype.exe 自身の中: どのスレッドからの要求かを付ける (画面のスレッドからなら、Meltype.exe はそのスレッドを待たずに処理する。
-    // 待つと、応答を待って止まっているこのスレッドとお互いに待ち合って固まる)
-    std::string request = json;
-    if (ownProcess_ && !request.empty() && request.back() == '}') {
-        request.insert(request.size() - 1, ",\"tid\":" + std::to_string(GetCurrentThreadId()));
-    }
-    if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
-    if (!ParseJson(response, reply)) {
-        TipLog(L"応答を読めません");
+bool TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after, std::wstring& selected) {
+    auto unreadable = [this](const wchar_t* where, HRESULT hr) {
+        if (!beforeUnreadable_) TipLog(L"キャレットの前の文字を読めません (%s: 0x%08X)", where, static_cast<unsigned>(hr));
+        beforeUnreadable_ = true;
         return false;
+    };
+    // 変換中なら、変換中の文字より前と後ろ。そうでなければキャレットの前と後ろ
+    Microsoft::WRL::ComPtr<ITfRange> anchor;
+    if (composition_ != nullptr && context == compositionContext_) {
+        const HRESULT hr = composition_->GetRange(&anchor);
+        if (!anchor) return unreadable(L"変換中の文字の範囲", hr);
+    } else {
+        TF_SELECTION selection = {};
+        ULONG fetched = 0;
+        const HRESULT hr = context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched);
+        if (FAILED(hr) || fetched == 0) return unreadable(L"選択範囲", hr);
+        anchor.Attach(selection.range);
+    }
+    // 選んでいる文字 (変換キーで再変換する)
+    constexpr LONG kSelection = 1000;
+    if (composition_ == nullptr) {
+        std::wstring text(kSelection, L'\0');
+        ULONG length = 0;
+        if (SUCCEEDED(anchor->GetText(ec, 0, text.data(), kSelection, &length))) selected.assign(text.data(), length);
+    }
+    // 前は最大 4000 文字 (コードエディターで、複数行のコメント・文字列の中かを見分けるため。コードでなければ Meltype.exe が 20 文字にする)
+    constexpr LONG kBefore = 4000;
+    constexpr LONG kAfter = 20;
+    std::wstring buffer(kBefore, L'\0');
+    Microsoft::WRL::ComPtr<ITfRange> range;
+    HRESULT hr = anchor->Clone(&range);
+    if (FAILED(hr)) return unreadable(L"範囲の複製", hr);
+    LONG moved = 0;
+    range->Collapse(ec, TF_ANCHOR_START);
+    range->ShiftStart(ec, -kBefore, &moved, nullptr);
+    ULONG length = 0;
+    hr = range->GetText(ec, 0, buffer.data(), kBefore, &length);
+    if (FAILED(hr)) return unreadable(L"GetText", hr);
+    before.assign(buffer.data(), length);
+    if (beforeUnreadable_) TipLog(L"キャレットの前の文字を読めるようになりました");
+    beforeUnreadable_ = false;
+    range.Reset();
+    if (SUCCEEDED(anchor->Clone(&range))) {
+        LONG moved = 0;
+        range->Collapse(ec, TF_ANCHOR_END);
+        range->ShiftEnd(ec, kAfter, &moved, nullptr);
+        ULONG length = 0;
+        if (SUCCEEDED(range->GetText(ec, 0, buffer.data(), kAfter, &length))) after.assign(buffer.data(), length);
     }
     return true;
 }
 
-void TextService::SurroundingText(TfEditCookie ec, ITfContext* context, std::wstring& before, std::wstring& after) {
+RECT TextService::CaretRect(TfEditCookie ec, ITfContext* context) {
+    RECT rect = {};
     TF_SELECTION selection = {};
     ULONG fetched = 0;
-    if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0) return;
-    // 前は最大 4000 文字 (コードエディターで、複数行のコメント・文字列の中かを見分けるため。コードでなければ Meltype.exe が 20 文字にする)
-    constexpr LONG kBefore = 4000;
-    std::wstring longBuffer(kBefore, L'\0');
-    wchar_t buffer[32];
-    ITfRange* range = nullptr;
-    if (SUCCEEDED(selection.range->Clone(&range))) {
-        LONG moved = 0;
-        range->Collapse(ec, TF_ANCHOR_START);
-        range->ShiftStart(ec, -kBefore, &moved, nullptr);
-        ULONG length = 0;
-        if (SUCCEEDED(range->GetText(ec, 0, longBuffer.data(), kBefore, &length))) before.assign(longBuffer.data(), length);
-        range->Release();
-    }
-    if (SUCCEEDED(selection.range->Clone(&range))) {
-        LONG moved = 0;
-        range->Collapse(ec, TF_ANCHOR_END);
-        range->ShiftEnd(ec, 20, &moved, nullptr);
-        ULONG length = 0;
-        if (SUCCEEDED(range->GetText(ec, 0, buffer, 20, &length))) after.assign(buffer, length);
-        range->Release();
-    }
-    selection.range->Release();
+    if (FAILED(context->GetSelection(ec, TF_DEFAULT_SELECTION, 1, &selection, &fetched)) || fetched == 0 || selection.range == nullptr) return rect;
+    Microsoft::WRL::ComPtr<ITfRange> range;
+    range.Attach(selection.range);
+    range->Collapse(ec, selection.style.ase == TF_AE_START ? TF_ANCHOR_START : TF_ANCHOR_END);
+    Microsoft::WRL::ComPtr<ITfContextView> view;
+    BOOL clipped = FALSE;
+    // Terminal の UI Automation の選択範囲は実際のカーソル位置とは限らないので、TSF の入力コンテキストから取る
+    if (SUCCEEDED(context->GetActiveView(&view)) && (FAILED(view->GetTextExt(ec, range.Get(), &rect, &clipped)) || clipped)) rect = {};
+    return rect;
 }
 
 // ---- 入力欄への反映 ----
 
-void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& reply) {
+bool TextService::ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonValue& reply) {
+    ApplyState(reply[L"state"]);
+    const JsonValue& result = reply[L"result"];
+    Apply(ec, context, result);
+    return result[L"consumed"].Bool();
+}
+
+void TextService::CommittedOutside() {
+    if (disabled_) return;
+    JsonValue reply;
+    if (Send("CommittedByApp", "", CaretMoved(false), reply)) ApplyState(reply[L"state"]);
+}
+
+void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& result) {
     // 1 つの応答の中の確定は、前の確定の後ろに続けて入れる (クリックで確定したときは、キャレットがもうクリックした所にあるので、
     // キャレットの位置に入れると、クリックした所に入ったり、選んでいた文字を上書きしたりする)
     Microsoft::WRL::ComPtr<ITfRange> next;
-    const auto& commits = reply[L"commits"].array;
-    const JsonValue& view = reply[L"view"];
+    const auto& commits = result[L"commits"].array;
+    const JsonValue& view = result[L"view"];
     for (const JsonValue& edit : commits) {
         const std::wstring& text = edit[L"text"].Str();
-        int deleteBefore = edit[L"deleteBefore"].Int();
-        int caretBack = edit[L"caretBack"].Int();
+        // 確定し直すときの、キャレットの前の消す文字 (本体が照合済み)
+        const JsonValue& remove = edit[L"removeBefore"];
+        const LONG deleteBefore = remove.type == JsonValue::Type::String ? static_cast<LONG>(remove.Str().size()) : 0;
+        int caretBack = edit[L"moveCaretBack"].Int();
         int caretAfterCommit = 0;
         if (caretBack > 0) {
             TF_STATUS status = {};
-            const HRESULT result = context->GetStatus(&status);
+            const HRESULT got = context->GetStatus(&status);
             const bool continues = &edit != &commits.back() || !view[L"text"].Str().empty();
-            if (SUCCEEDED(result) && (status.dwStaticFlags & TF_SS_TRANSITORY) != 0) {
+            if (SUCCEEDED(got) && (status.dwStaticFlags & TF_SS_TRANSITORY) != 0) {
                 // Chromium は次の変換の開始位置を確定範囲の境界に使う。続きがあるときは閉じ括弧の後ろから入力する。
-                if (!continues && deleteBefore == 0 && !keepAppCaret_ && reply[L"consumed"].Bool()) {
+                if (!continues && deleteBefore == 0 && !keepAppCaret_ && result[L"consumed"].Bool()) {
                     caretAfterCommit = caretBack;
                 }
                 caretBack = 0;
             }
         }
-        const JsonValue& current = edit[L"current"];
-        // 変換中は範囲外の確定語を置換せず、今の変換を保持する (今確定した語がある確定し直しは、下で今の語を確定してから書き換える)。
-        if (deleteBefore > 0 && composition_ != nullptr && current.type != JsonValue::Type::String) continue;
+        const JsonValue& current = edit[L"currentWord"];
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (composition_ != nullptr) {
             composition_->GetRange(&range);
@@ -1514,16 +1451,15 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             // 同じ編集セッションで変換中の文字の外も書き換えると、Chrome はページに変換の終わり (compositionend) を伝えない。
             // 変換中の範囲を前に広げて書き換えると、Chrome では TF_E_RANGE_NOT_COVERED で失敗する (#262)
             if (!WriteCommit(ec, context, range.Get(), current.Str(), caretBack, &movedCaret)) continue;
-            const JsonValue& expect = edit[L"expect"];
             // 今の語の後ろの位置を覚えておき、書き換えるときにキャレットがそこにあるかを確かめる (後ろに文字が入っても動かないように、両端とも前に寄せる)
             Microsoft::WRL::ComPtr<ITfRange> end;
-            if (expect.type == JsonValue::Type::String && SUCCEEDED(range->Clone(&end)) && SUCCEEDED(end->Collapse(ec, TF_ANCHOR_END)) &&
+            if (SUCCEEDED(range->Clone(&end)) && SUCCEEDED(end->Collapse(ec, TF_ANCHOR_END)) &&
                 SUCCEEDED(end->SetGravity(ec, TF_GRAVITY_BACKWARD, TF_GRAVITY_BACKWARD)))
-                RewriteBeforeCaret(context, end.Get(), deleteBefore + static_cast<LONG>(current.Str().size()), expect.Str() + current.Str(), text);
+                RewriteBeforeCaret(context, end.Get(), deleteBefore + static_cast<LONG>(current.Str().size()), remove.Str() + current.Str(), text);
         } else {
             // 確定し直し: 前に確定した文字を消して入れ直す。前の文字が確定したときのままでなければ (アプリが書き換えた・前の文字を読めない)、
             // 関係ない文字を消したり、古い文字に重ねて入れたりしないように、確定し直さない (変換中の文字は、次の確定でそのまま確定する)
-            if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, edit[L"expect"])) continue;
+            if (deleteBefore > 0 && !ExtendOverPrevious(ec, range.Get(), deleteBefore, remove)) continue;
             if (!WriteCommit(ec, context, range.Get(), text, caretBack, &movedCaret)) continue;
             if (caretAfterCommit > 0) MoveCaretAfterCommit(ec, context, range.Get(), text, caretAfterCommit);
         }
@@ -1541,7 +1477,7 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             // 変換中の文字を消した (BackSpace で全部消した・Esc で取り消した)。
             // Meltype.exe がこの入力を受け持っていない (一時停止した・つなぎ直して入力の続きが無い) ときは、消さずにそのまま確定する
             ITfRange* range = nullptr;
-            if (reply[L"active"].Bool() && SUCCEEDED(composition_->GetRange(&range))) {
+            if (state_.active && SUCCEEDED(composition_->GetRange(&range))) {
                 range->SetText(ec, 0, L"", 0);
                 range->Release();
             }
@@ -1561,13 +1497,13 @@ void TextService::MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITf
     }
     Microsoft::WRL::ComPtr<TextService> self = this;
     Microsoft::WRL::ComPtr<ITfContext> target = context;
-    const auto revision = serverStateRevision_;
+    const auto revision = state_.rev;
     const auto passed = passedTime_;
     RunEditSession(context, clientId_, TF_ES_ASYNC | TF_ES_READ, [self, target, committed, text, count, window, revision, passed](TfEditCookie cookie) {
         Microsoft::WRL::ComPtr<ITfDocumentMgr> document;
         Microsoft::WRL::ComPtr<ITfContext> focused;
         if (self->deactivated_ || self->threadMgr_ == nullptr || self->composition_ != nullptr ||
-            self->serverStateRevision_ != revision || self->passedTime_ != passed ||
+            self->state_.rev != revision || self->passedTime_ != passed ||
             FAILED(self->threadMgr_->GetFocus(&document)) || !document ||
             FAILED(document->GetTop(&focused)) || !SameObject(focused.Get(), target.Get())) {
             return S_OK;
@@ -1599,7 +1535,6 @@ void TextService::MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITf
         }
         for (int i = 0; i < count; ++i) {
             if (!self->Reinject(VK_LEFT)) return S_OK;
-            self->caretMoved_ = true;
         }
         return S_OK;
     });
@@ -1691,7 +1626,6 @@ bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* ra
             caret.style.fInterimChar = FALSE;
             const HRESULT result = context->SetSelection(ec, 1, &caret);
             if (inside && SUCCEEDED(result)) {
-                caretMoved_ = true;
                 if (movedCaret != nullptr) *movedCaret = target.Detach();
             } else if (inside) {
                 // 内側を指定できない場合も、通常の確定位置から続きの入力を反映する。
@@ -1844,12 +1778,7 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
     lastConverting_ = false;
     if (resumeRange_) return S_OK;
     // 入力欄の文字は、アプリが書き換えたかもしれない: 前に確定した語を、次のキーで確定し直さない (関係ない文字を消さないように)
-    directEnglishWord_ = false;
-    caretMoved_ = true;
-    if (!disabled_) {
-        JsonValue reply;
-        Request(CommitRequest(true), reply);
-    }
+    CommittedOutside();
     return S_OK;
 }
 
@@ -1895,21 +1824,18 @@ void TextService::ResumeOrCommit(ITfContext* context) {
         return;
     }
     // 戻せない (キャレットが動いた・文字が変わった・別の入力欄): 今までどおり確定したことにする
-    directEnglishWord_ = false;
-    caretMoved_ = true;
-    JsonValue reply;
-    Request(CommitRequest(true), reply);
+    CommittedOutside();
 }
 
-void TextService::CommitAsync(bool keepAppCaret) {
+void TextService::CommitAsync(bool keepAppCaret, bool left) {
     if (composition_ == nullptr || compositionContext_ == nullptr) return;
     // 非同期の編集セッションは、実行されずに捨てられることもある。参照は ComPtr に持たせ、セッションと一緒に解放する
     // 動くまでに変換中の文字が変わっていたら (確定し終えた・別の入力欄で新しく始めた) 何もしない
     Microsoft::WRL::ComPtr<ITfContext> context = compositionContext_;
     Microsoft::WRL::ComPtr<ITfComposition> target = composition_;
     Microsoft::WRL::ComPtr<TextService> self = this;
-    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, keepAppCaret](TfEditCookie ec) {
-        if (self->composition_ == target.Get()) self->CommitInSession(ec, context.Get(), keepAppCaret);
+    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, keepAppCaret, left](TfEditCookie ec) {
+        if (self->composition_ == target.Get()) self->CommitInSession(ec, context.Get(), keepAppCaret, left);
         return S_OK;
     });
 }
@@ -1941,10 +1867,7 @@ void TextService::AbandonComposition() {
     staleCommitTries_ = 0;
     staleVk_ = 0;
     if (candidates_) candidates_->Hide();
-    directEnglishWord_ = false;
-    caretMoved_ = true;
-    JsonValue reply;
-    Request(CommitRequest(true), reply);
+    CommittedOutside();
 }
 
 bool TextService::ForgetAbandoned(ITfComposition* composition) {
@@ -1971,47 +1894,47 @@ void TextService::EndAbandonedNow() {
     }
 }
 
-bool TextService::CommitNow(bool keepAppCaret) {
+bool TextService::CommitNow(bool keepAppCaret, bool left) {
     // 同期で確定する (キーをアプリに通す前・別の入力欄に移ったときに、変換中の文字を確定しておくため)
     if (composition_ == nullptr || compositionContext_ == nullptr) return true;
     Microsoft::WRL::ComPtr<ITfContext> context = compositionContext_;
-    HRESULT hr = RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READWRITE, [this, context, keepAppCaret](TfEditCookie ec) {
-        CommitInSession(ec, context.Get(), keepAppCaret);
+    HRESULT hr = RunEditSession(context.Get(), clientId_, TF_ES_SYNC | TF_ES_READWRITE, [this, context, keepAppCaret, left](TfEditCookie ec) {
+        CommitInSession(ec, context.Get(), keepAppCaret, left);
         return S_OK;
     });
     ownEdit_ = false;
     return SUCCEEDED(hr);
 }
 
-void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool keepAppCaret) {
+void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool keepAppCaret, bool left) {
     // 編集できるのは、この編集セッションの入力欄にある変換中の文字だけ
     if (composition_ != nullptr && context == compositionContext_) {
         // 終わりの通知 (OnEndEdit) が来るのは、今見ている入力欄だけ (フォーカスが移った後の前の入力欄では印を付けない。残ると次のクリックを見逃す)
         if (context == editSinkContext_) ownEdit_ = true;
         keepAppCaret_ = keepAppCaret;
         JsonValue reply;
+        std::string field;
+        ReadField(ec, context, field);
         // クリック・別の入力欄で確定する (keepAppCaret) ときは、キャレットが動いたので前の語を確定し直さない
-        if (Request(CommitRequest(keepAppCaret), reply)) Apply(ec, context, reply);
+        if (Send("CommitRequested", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply);
         keepAppCaret_ = false;
         EndComposition(ec);
     }
     if (candidates_) candidates_->Hide();
 }
 
-void TextService::SelectCandidate(int index, bool prediction) {
+void TextService::SelectCandidate(int index) {
     if (compositionContext_ == nullptr) return;
     Microsoft::WRL::ComPtr<ITfContext> context = compositionContext_;
     Microsoft::WRL::ComPtr<ITfComposition> target = composition_;
     Microsoft::WRL::ComPtr<TextService> self = this;
-    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, index, prediction](TfEditCookie ec) {
+    RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, index](TfEditCookie ec) {
         // 動くまでに変換中の文字が変わっていたら選ばない
         if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
         self->ownEdit_ = true;
         JsonValue reply;
-        if (self->Request("{\"op\":\"select\",\"sid\":\"" + self->sid_ + "\",\"index\":" + std::to_string(index) +
-                              (prediction ? ",\"prediction\":true" : "") + "}",
-                          reply)) {
-            self->Apply(ec, context.Get(), reply);
+        if (self->Send("CandidateClicked", "", ",\"index\":" + std::to_string(index), reply)) {
+            self->ApplyOutput(ec, context.Get(), reply);
         }
         return S_OK;
     });
@@ -2021,33 +1944,22 @@ void TextService::SelectCandidate(int index, bool prediction) {
 
 void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const JsonValue& view) {
     if (!candidates_) return;
+    // 出すもの (候補の一覧・もしかして・打ったキー・案内) は Meltype.exe が決める。どれも無ければ出さない
     CandidateView data;
-    for (const JsonValue& item : view[L"candidates"].array) data.candidates.push_back(item.Str());
-    for (const JsonValue& item : view[L"notes"].array) data.notes.push_back(item.Str());
-    data.selected = view[L"selectedIndex"].Int();
-    data.suggestion = view[L"suggestion"].Str();
-    data.meaning = view[L"meaning"].Str();
-    // 打ったキー: 見えている文字と同じ (英字のまま) なら出さない
-    if (view[L"typed"].Str() != view[L"text"].Str()) data.typed = view[L"typed"].Str();
-    bool converting = view[L"converting"].Bool();
-    const auto& predictions = view[L"predictions"].array;
-    if (!((converting && data.candidates.size() > 1) || !data.suggestion.empty() || (!converting && !predictions.empty()) || !data.typed.empty())) {
+    const JsonValue& list = view[L"candidates"];
+    for (const JsonValue& item : list[L"items"].array) data.candidates.push_back(item.Str());
+    for (const JsonValue& item : list[L"notes"].array) data.notes.push_back(item.Str());
+    data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
+    data.numbered = list[L"numbered"].Bool();
+    data.meaning = list[L"selectedMeaning"].Str();
+    data.meaningMs = static_cast<UINT>(list[L"meaningDelayMs"].Int());
+    data.suggestion = view[L"spellingSuggestion"].Str();
+    data.typed = view[L"typedKeys"].Str();
+    data.hint = view[L"hint"].Str();
+    const bool converting = view[L"converting"].Bool();
+    if (data.candidates.empty() && data.suggestion.empty() && data.typed.empty() && data.hint.empty()) {
         candidates_->Hide();
         return;
-    }
-    // 打ったキーだけを出すときは、候補が 1 つでも一覧にしない
-    if (converting && data.candidates.size() <= 1) {
-        data.candidates.clear();
-        data.meaning.clear();
-    }
-    if (!converting) {
-        // 変換していないときは、予測変換の候補を出す (Tab で選ぶ。無ければ「もしかして」だけ)
-        data.candidates.clear();
-        for (const JsonValue& item : predictions) data.candidates.push_back(item.Str());
-        data.notes.clear();
-        data.selected = predictions.empty() ? -1 : view[L"selectedPrediction"].Int();
-        data.meaning.clear();
-        data.prediction = !predictions.empty();
     }
 
     // 選んでいる文節の画面上の位置

@@ -42,7 +42,7 @@ internal abstract class RemovedChoiceJsonConverter<T>(string removed, T replacem
     private static JsonConverter<T> Names(JsonSerializerOptions options) => (JsonConverter<T>)new JsonStringEnumConverter<T>().CreateConverter(typeof(T), options);
 }
 
-/// <summary>動作モードの IME 自動切替 (消した) は、初期値の Meltype IME として読む (使えない PC では、起動したときに Meltype キーボードに戻す)。</summary>
+/// <summary>動作モードの IME 自動切替 (消した) は、初期値の Meltype IME として読む (使えない PC では Meltype キーボードで動かす)。</summary>
 internal sealed class InputModeJsonConverter() : RemovedChoiceJsonConverter<InputMode>("AutoSwitch", InputMode.Tsf);
 
 /// <summary>入力方式の「両方を判定」(IME 自動切替でしか効かなかったので消した) は、ローマ字入力として読む。</summary>

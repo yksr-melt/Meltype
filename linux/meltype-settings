@@ -122,7 +122,7 @@ def main():
     gi.require_version("Gdk", "4.0")
     gi.require_version("Graphene", "1.0")
     gi.require_version("Pango", "1.0")
-    from gi.repository import Gdk, Graphene, Gtk, Pango
+    from gi.repository import Gdk, GObject, Graphene, Gtk, Pango
 
     class SettingsWindow(Gtk.ApplicationWindow):
         def __init__(self, app, schema, config):
@@ -300,6 +300,15 @@ def main():
                 current = selected.get_index() if selected and (tops[selected.get_index()] or 0) >= value else len(tops) - 1
             if selected is None or selected.get_index() != current:
                 self.sidebar.select_row(self.sidebar.get_row_at_index(current))
+
+    # 画面の文字列は日本語。GTK は widget の言語を LC_CTYPE から決めるので、GTK 内部の widget も含めて realize した widget すべてを ja にする。
+    # emission hook は Gtk.Widget のクラスの初期化後でないと登録できない。上の SettingsWindow の定義で初期化される
+    japanese = Pango.Language.from_string("ja")
+
+    def use_japanese(widget):
+        widget.get_pango_context().set_language(japanese)
+        return True
+    GObject.add_emission_hook(Gtk.Widget, "realize", use_japanese)
 
     def activate(app):
         if window := app.get_active_window():
