@@ -4,26 +4,20 @@
 name: policy
 
 on:
-  pull_request_target:
-    types: [opened, reopened, closed, ready_for_review, converted_to_draft, synchronize, edited, labeled, unlabeled]
   issues:
     types: [opened, edited, labeled, unlabeled, reopened]
   issue_comment:
     types: [created, edited]
   schedule:
-    # 件数の超過のラベルの付け外しと、14 日の期限の確認は 1 時間ごとにする
+    # 件数の超過のラベルの付け外し・14 日の期限・担当でない人の PR の確認は 1 時間ごとにする (PR のイベントでは動かさない)
     - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
-  # policy-enforce の並び待ちで取り消された run は PR の Checks に cancelled で残るので、PR のイベントでは動かさない。
-  # PR の変化は、次の Issue・コメントのイベントか定期実行で拾う。
   enforce:
-    if: >-
-      github.event_name != 'pull_request_target' &&
-      (github.event_name != 'issue_comment' || github.event.comment.user.type != 'Bot')
+    if: github.event_name != 'issue_comment' || github.event.comment.user.type != 'Bot'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     concurrency:
@@ -43,17 +37,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
 
-  # 閉じる Issue の担当でない人の PR を Draft にする。件数の job (policy-enforce) と同じ並び待ちに入れると、
-  # 待っている間に別のイベントが来たとき取り消されて検査が抜けるので、PR ごとに分ける。
-  # 定期実行では開いているすべての PR を確かめ、取り消されたイベントの分も拾う。
+  # 閉じる Issue の担当でない人の PR を Draft にする。開いているすべての PR を確かめる
   assignee:
-    if: >-
-      contains(fromJSON('["pull_request_target","schedule","workflow_dispatch"]'), github.event_name) &&
-      github.event.pull_request.user.type != 'Bot'
+    if: contains(fromJSON('["schedule","workflow_dispatch"]'), github.event_name)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     concurrency:
-      group: policy-assignee-${{ github.event.pull_request.number || 'all' }}
+      group: policy-assignee
       cancel-in-progress: false
     permissions:
       contents: read

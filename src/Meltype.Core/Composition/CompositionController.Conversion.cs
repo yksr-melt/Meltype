@@ -60,7 +60,6 @@ public sealed partial class CompositionController
             {
                 PrecedingEnglish = englishWords > 0 ? true : null,
                 PrecedingEnglishSentence = englishWords >= 2,
-                Punctuation = _settings().Punctuation,
             };
             foreach (var c in word) typed.Append(c);
             var segments = typed.Segments();
@@ -626,26 +625,23 @@ public sealed partial class CompositionController
     /// </summary>
     private List<string> JapaneseCandidates(string reading, string? inContext)
     {
-        // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        var candidates = Distinct(inContext);
-        foreach (var word in _services.UserDictionary?.Lookup(reading) ?? []) if (!candidates.Contains(word)) candidates.Add(word);
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
-        if (!candidates.Contains(standalone)) candidates.Add(standalone);
-        foreach (var extra in _services.Candidates?.LookupWords(reading) ?? [])
-        {
-            if (!candidates.Contains(extra)) candidates.Add(extra);
-        }
         var katakana = CompositionText.ToKatakana(reading);
-        foreach (var kana in new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) })
-        {
-            if (!candidates.Contains(kana)) candidates.Add(kana);
-        }
-        foreach (var emoji in EmojiBlock(reading))
-        {
-            if (!candidates.Contains(emoji)) candidates.Add(emoji);
-        }
-        return candidates;
+        // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
+        return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
+            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
+    }
+
+    /// <summary>
+    /// 入力欄に出る文字 (設定の句読点にした文字) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、変換エンジンが返す 、 と ， が同じ ， になる。
+    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。区間の種類を出口まで渡せば要らなくなる (#1735)。
+    /// </summary>
+    private List<string> DistinctShown(IEnumerable<string?> candidates)
+    {
+        var style = _settings().Punctuation;
+        var shown = new HashSet<string>(StringComparer.Ordinal);
+        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.ToSetting(style, c)))];
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -731,11 +727,7 @@ public sealed partial class CompositionController
         var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : 0;
         if (anchor < 0) return;
         var current = clause.Text;
-        var merged = clause.Candidates.Take(anchor + 1).ToList();
-        foreach (var candidate in more(reading).Select(c => NormalizeHalfWidth(c, reading)).Concat(clause.Candidates.Skip(anchor + 1)))
-        {
-            if (!merged.Contains(candidate)) merged.Add(candidate);
-        }
+        var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
     }
@@ -891,9 +883,14 @@ public sealed partial class CompositionController
 
     private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithLimit(0, convert);
 
-    /// <summary>選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
-    private ReconversionSelection? ReconversionSelectionNow() =>
-        Selection is { Length: > 0 } text && (IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
-            ? new ReconversionSelection(text, reading)
-            : null;
+    /// <summary>
+    /// 選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。
+    /// 読みの句読点は 、。 にする。
+    /// </summary>
+    private ReconversionSelection? ReconversionSelectionNow()
+    {
+        if (Selection is not { Length: > 0 } text) return null;
+        var reading = IsRomajiText(text) ? text : ReadingOf(text) is { } read ? CompositionOutput.FromSetting(_settings().Punctuation, read) : null;
+        return reading is { Length: > 0 } ? new ReconversionSelection(text, reading) : null;
+    }
 }

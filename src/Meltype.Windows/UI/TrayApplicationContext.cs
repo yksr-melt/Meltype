@@ -67,7 +67,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
             // DLL は動作モードが Meltype キーボードのときも接続してくる。通知はアプリごとに 1 回
             if (_engine.Running.Mode != InputMode.Tsf || !_outdatedApps.Add(process)) return;
             Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
-            ShowBalloonTip(10000, "Meltype IME", $"「{process}」を再起動すると、「{process}」でも Meltype IME で入力できます (更新前の Meltype IME が残っています)。");
+            if (_engine.Settings.ShowNotifications)
+                ShowBalloonTip(10000, "Meltype IME", $"「{process}」を再起動すると、「{process}」でも Meltype IME で入力できます (更新前の Meltype IME が残っています)。");
         };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
