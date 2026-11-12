@@ -294,6 +294,10 @@ public sealed class Settings
      Description("確定するときに、日本語と半角数字の間に半角スペースを入れます (この処理を3回実行します → この処理を 3 回実行します)。技術文書などの表記に合わせるとき用です。全角数字 (３回) には入れません。")]
     public bool SpaceAroundNumbers { get; set; }
 
+    [Category("7. キー操作"), DisplayName("テンキーは直接入力"),
+     Description("テンキーの数字と記号 (+ - * / .) を、日本語入力のときも変換ボックスに入れず、半角でそのまま入力します (Excel・CAD などで数値を打つとき用)。入力中の文字があれば、確定してから入れます。変換中は「変換中の数字キーで候補を選ぶ」が ON なら、テンキーの 1〜9 で候補を選びます。")]
+    public bool NumpadDirectInput { get; set; }
+
     [Category("4. 変換"), DisplayName("変換中の数字キーで候補を選ぶ"),
      Description("Space・Tab で変換している間に、数字キー (上の段・テンキー) の 1〜9 を押すと、候補の一覧の番号で選びます。かな入力では上の段はかなのキーなので、テンキーで選びます。OFF にすると、今の候補で確定してから数字を入力します (zu Space 1 → 図1、hyou Space 10 → 表10)。")]
     public bool NumberKeysSelectCandidates { get; set; } = true;

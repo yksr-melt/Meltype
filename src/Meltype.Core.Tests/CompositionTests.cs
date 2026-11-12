@@ -134,6 +134,8 @@ internal static class CompositionTests
         public char? CharFromKey(int vk, bool shift)
         {
             if (VirtualKeys.IsLetter(vk)) return shift || PhysicalShift ? (char)vk : char.ToLowerInvariant((char)vk);
+            // テンキー (NumLock が ON のときの数字・記号)
+            if (vk is >= 0x60 and <= 0x6F && "0123456789*+\0-./"[vk - 0x60] is var pad and not '\0') return pad;
             var shifted = shift || PhysicalShift;
             foreach (var (c, key) in JisKeys)
             {
@@ -2751,6 +2753,36 @@ internal static class CompositionTests
         k.Key('Y', up: true);
         k.Key(VirtualKeys.LControl, up: true);
         Assert.Equal("とうきょう", k.Showing, "Control+Y = F6 (ひらがな)");
+    }
+
+    [Test]
+    public static void Issue460_NumpadDirectInput()
+    {
+        // #460: 設定「テンキーは直接入力」が ON なら、テンキーの数字・記号は変換ボックスに入れず、確定してから半角でそのまま入れる
+        var k = new Keyboard();
+        k.Settings.NumpadDirectInput = true;
+        k.Press(0x61); k.Press(0x6B); k.Press(0x62); k.Press(0x6E); k.Press(0x65);
+        Assert.Equal("1+2.5", k.Host.Document, "何も打っていないとき");
+        Assert.True(!k.Captured, "変換ボックスは出さない");
+
+        k = new Keyboard();
+        k.Settings.NumpadDirectInput = true;
+        k.Type("ai");
+        k.Press(0x61);
+        Assert.Equal("あい1", k.Host.Document, "入力中の文字は確定してから入れる");
+
+        // 上の段の数字は今までどおり変換ボックスに入る
+        k = new Keyboard();
+        k.Settings.NumpadDirectInput = true;
+        k.Type("ai1");
+        Assert.True(k.Captured, "上の段の数字");
+
+        // OFF (既定) なら今までどおり変換ボックスに入れる
+        k = new Keyboard();
+        k.Type("ai");
+        k.Press(0x61);
+        Assert.Equal("あい1", k.Host.View?.Text, "OFF");
+        Assert.Equal("", k.Host.Document);
     }
 
     [Test]
