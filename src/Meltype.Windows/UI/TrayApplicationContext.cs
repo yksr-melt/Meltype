@@ -273,7 +273,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             "Meltype IME", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes) return;
         await RegisterTsf();
-        if (Tip.TipServer.IsOtherBuildRegistered)
+        if (!Tip.TipServer.IsUsable)
         {
             MessageBox.Show("Meltype IME を更新できませんでした。Meltype キーボードのまま使えます。", "Meltype IME", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
