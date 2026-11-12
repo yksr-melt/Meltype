@@ -5,8 +5,68 @@ using System.Text;
 
 namespace Meltype.Composition;
 
-/// <summary>ユーザー辞書の 1 語。</summary>
-public sealed record UserWord(string Reading, string Word);
+/// <summary>ユーザー辞書の 1 語。Kind は品詞 (指定なしなら今までどおり、読みが見つかればどこでも使う)。</summary>
+public sealed record UserWord(string Reading, string Word, UserWordKind Kind = UserWordKind.None);
+
+/// <summary>
+/// ユーザー辞書の語の品詞 (issue #487)。名詞・人名・地名は、読みの後ろが入力の終わりか助詞・敬称 (は が の さん …) のときだけ使う
+/// (ちな → 千奈 を登録しても、ちなみに を 千奈ミニ にしない)。短縮よみは、入力の全体が読みと同じときだけ使う。
+/// </summary>
+public enum UserWordKind
+{
+    [System.ComponentModel.Description("指定なし")] None,
+    [System.ComponentModel.Description("名詞")] Noun,
+    [System.ComponentModel.Description("人名")] PersonName,
+    [System.ComponentModel.Description("地名")] PlaceName,
+    [System.ComponentModel.Description("短縮よみ")] Abbreviation,
+}
+
+/// <summary>品詞の名前 (userdict.txt の 3 列目・Microsoft IME と Google 日本語入力の品詞) との変換。</summary>
+public static class UserWordKinds
+{
+    public static string Label(UserWordKind kind) => kind switch
+    {
+        UserWordKind.Noun => "名詞",
+        UserWordKind.PersonName => "人名",
+        UserWordKind.PlaceName => "地名",
+        UserWordKind.Abbreviation => "短縮よみ",
+        _ => "",
+    };
+
+    /// <summary>品詞の名前を読む。知らない名前・動詞などは「指定なし」(今までどおりどこでも使う)。</summary>
+    public static UserWordKind Parse(string? label) => (label ?? "").Trim() switch
+    {
+        "名詞" or "固有名詞" or "組織" or "名詞サ変" or "名詞形動" => UserWordKind.Noun,
+        "人名" or "姓" or "名" => UserWordKind.PersonName,
+        "地名" => UserWordKind.PlaceName,
+        "短縮よみ" => UserWordKind.Abbreviation,
+        _ => UserWordKind.None,
+    };
+
+    /// <summary>
+    /// ほかの日本語入力の辞書から取り込むときの品詞。人名・地名・短縮よみだけを品詞として読み、名詞・固有名詞などは「指定なし」にする
+    /// (Microsoft IME はほとんどの語を名詞で書き出すので、名詞として扱うと、今まで使えていた所 (きごうとう|ふくめ) で使えなくなる)。
+    /// </summary>
+    public static UserWordKind ParseImported(string? label) =>
+        Parse(label) is var kind and (UserWordKind.PersonName or UserWordKind.PlaceName or UserWordKind.Abbreviation) ? kind : UserWordKind.None;
+
+    /// <summary>名詞・人名・地名の語の後ろに続いてよい語 (助詞・敬称・だ / です)。</summary>
+    private static readonly string[] AfterNoun =
+    [
+        "は", "が", "を", "に", "で", "と", "も", "の", "へ", "や", "か", "ね", "よ", "な", "って", "から", "まで", "より", "だけ", "しか", "など", "こそ",
+        "さん", "くん", "ちゃん", "さま", "様", "せんせい", "せんぱい", "たち", "ら", "だ", "です", "でし", "じゃ", "ちゃ", "けど", "し",
+    ];
+
+    /// <summary>読み reading が kana の start から見つかったとき、品詞 kind の語として使ってよいか。</summary>
+    public static bool Fits(UserWordKind kind, string kana, int start, int length) => kind switch
+    {
+        UserWordKind.Abbreviation => start == 0 && length == kana.Length,
+        UserWordKind.Noun or UserWordKind.PersonName or UserWordKind.PlaceName =>
+            start + length == kana.Length || !KanaChars.IsHiraganaOrLongMark(kana[start + length]) ||
+            AfterNoun.Any(after => kana.AsSpan(start + length).StartsWith(after, StringComparison.Ordinal)),
+        _ => true,
+    };
+}
 
 /// <summary>
 /// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」)。
@@ -191,7 +251,7 @@ public sealed class UserDictionary
             // 制御文字 (ESC など) の入った語は、確定するとアプリにキー操作として届くので読まない
             if (parts.Length >= 2 && parts[0].Trim().Length >= MinRegisteredReadingLength && parts[1].Trim().Length > 0 && !parts[0].Any(char.IsControl) && !parts[1].Any(char.IsControl))
             {
-                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim()));
+                words.Add(new UserWord(parts[0].Trim(), parts[1].Trim(), parts.Length >= 3 ? UserWordKinds.Parse(parts[2]) : UserWordKind.None));
             }
         }
     }
@@ -248,7 +308,7 @@ public sealed class UserDictionary
     public IReadOnlyList<UserWord> Words => _words;
 
     /// <summary>登録する。同じ読み・同じ単語が既にあれば何もしない。登録できなければ理由を返す。</summary>
-    public string? Add(string reading, string word)
+    public string? Add(string reading, string word, UserWordKind kind = UserWordKind.None)
     {
         reading = reading.Trim();
         word = word.Trim();
@@ -259,7 +319,7 @@ public sealed class UserDictionary
         // 外で書き換えた語の上に足す
         if (!Refresh()) return Unreadable;
         if (_words.Any(w => w.Reading == reading && w.Word == word)) return null;
-        _words.Add(new UserWord(reading, word));
+        _words.Add(new UserWord(reading, word, kind));
         Changed();
         return null;
     }
@@ -309,7 +369,8 @@ public sealed class UserDictionary
             {
                 // 拗音・小さい母音 (じょ・ふぁ) の途中では切らない (いしょくじょうたい が しょくじ|ょうたい で い食事ょうたい になっていた)
                 if (i + length < kana.Length && IsSmallKana(kana[i + length])) continue;
-                if (_byReading.ContainsKey(kana.Substring(i, length)))
+                // 品詞を決めた語は、読みの後ろに続くものが合うときだけ (ちな = 千奈 (人名) は ちなみに の中では使わない: issue #487)
+                if (_byReading.ContainsKey(kana.Substring(i, length)) && UserWordKinds.Fits(_kinds.GetValueOrDefault(kana.Substring(i, length)), kana, i, length))
                 {
                     matched = kana.Substring(i, length);
                     break;
@@ -347,16 +408,26 @@ public sealed class UserDictionary
     private void Rebuild()
     {
         var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var kinds = new Dictionary<string, UserWordKind>(StringComparer.Ordinal);
         // 後から登録したものを先にする。.plist の語はユーザーの登録の後、同梱の語句はさらに後。
         foreach (var word in Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn))
         {
-            if (!byReading.TryGetValue(word.Reading, out var list)) byReading[word.Reading] = list = [];
+            if (!byReading.TryGetValue(word.Reading, out var list))
+            {
+                byReading[word.Reading] = list = [];
+                // 読みの中に見つけたときに使うのは最初の語なので、その語の品詞で決める
+                kinds[word.Reading] = word.Kind;
+            }
             if (!list.Contains(word.Word)) list.Add(word.Word);
         }
+        _kinds = kinds;
         _byReading = byReading;
         _maxReadingLength = byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length);
         _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
     }
+
+    // 読みごとの、最初の語の品詞
+    private Dictionary<string, UserWordKind> _kinds = new(StringComparer.Ordinal);
 
     // 同梱の語句だけにある読み (ユーザーが登録した語ではない)。
     private HashSet<string> _builtInOnly = new(StringComparer.Ordinal);
@@ -369,8 +440,8 @@ public sealed class UserDictionary
         if (_path is null) return;
         try
         {
-            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」" };
-            lines.AddRange(_words.Select(w => $"{w.Reading}\t{w.Word}"));
+            var lines = new List<string> { "# Meltype ユーザー辞書: 1 行に「読み<Tab>単語」(品詞を決めた語は「読み<Tab>単語<Tab>品詞」)" };
+            lines.AddRange(_words.Select(w => w.Kind == UserWordKind.None ? $"{w.Reading}\t{w.Word}" : $"{w.Reading}\t{w.Word}\t{UserWordKinds.Label(w.Kind)}"));
             Config.DataFile.Write(_path, temp => File.WriteAllLines(temp, lines, new UTF8Encoding(true)));
             _fileTime = FileTime();
             _read = _fileTime is not null;

@@ -17,6 +17,8 @@ internal sealed class UserDictionaryForm : Form
     private readonly TextBox _reading = new() { Width = 220 };
     private readonly Label _readingPreview = new() { AutoSize = true, ForeColor = SystemColors.GrayText, Padding = new Padding(0, 6, 0, 0) };
     private readonly ComboBox _word = new() { Width = 220, DropDownStyle = ComboBoxStyle.DropDown };
+    // 品詞 (issue #487)。名詞・人名・地名は、読みの後ろが助詞・敬称のときだけ使う
+    private readonly ComboBox _kind = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly DataGridView _grid = FormControls.ReadOnlyGrid();
     private readonly Label _message = FormControls.ErrorLabel();
     private readonly System.Windows.Forms.Timer _suggestTimer = new() { Interval = 300 };
@@ -40,7 +42,16 @@ internal sealed class UserDictionaryForm : Form
         entry.Controls.Add(new Label { Text = "単語 (候補から選ぶか直接入力)", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 1);
         entry.Controls.Add(_word, 1, 1);
         entry.Controls.Add(add, 2, 1);
-        entry.Controls.Add(_message, 1, 2);
+        entry.Controls.Add(new Label { Text = "品詞", AutoSize = true, Padding = new Padding(0, 6, 8, 0) }, 0, 2);
+        foreach (var kind in Enum.GetValues<UserWordKind>()) _kind.Items.Add(KindText(kind));
+        _kind.SelectedIndex = 0;
+        entry.Controls.Add(_kind, 1, 2);
+        entry.Controls.Add(new Label
+        {
+            Text = "名詞・人名・地名: 後ろが助詞 (は が の …)・さん などのときだけ使う\n短縮よみ: 読みだけを打ったときだけ使う",
+            AutoSize = true, ForeColor = SystemColors.GrayText,
+        }, 2, 2);
+        entry.Controls.Add(_message, 1, 3);
         entry.SetColumnSpan(_message, 2);
 
         var remove = new Button { Text = "選んだ語を削除", AutoSize = true };
@@ -57,6 +68,7 @@ internal sealed class UserDictionaryForm : Form
 
         _grid.Columns.Add("reading", "読み");
         _grid.Columns.Add("word", "単語");
+        _grid.Columns.Add("kind", "品詞");
         var gridPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8, 0, 8, 0) };
         gridPanel.Controls.Add(_grid);
 
@@ -109,7 +121,7 @@ internal sealed class UserDictionaryForm : Form
     private void Register()
     {
         var reading = _service.ToReading(_reading.Text);
-        var error = _service.UserDictionary.Add(reading, _word.Text);
+        var error = _service.UserDictionary.Add(reading, _word.Text, (UserWordKind)Math.Max(0, _kind.SelectedIndex));
         if (error is not null)
         {
             _message.Text = error;
@@ -120,6 +132,7 @@ internal sealed class UserDictionaryForm : Form
         _reading.Clear();
         _word.Text = "";
         _word.Items.Clear();
+        _kind.SelectedIndex = 0;
         Reload();
         _reading.Focus();
     }
@@ -135,6 +148,8 @@ internal sealed class UserDictionaryForm : Form
         _reading.Focus();
         _reading.SelectAll();
     }
+
+    private static string KindText(UserWordKind kind) => kind == UserWordKind.None ? "指定なし" : UserWordKinds.Label(kind);
 
     private void Import()
     {
@@ -203,7 +218,7 @@ internal sealed class UserDictionaryForm : Form
         _grid.Rows.Clear();
         foreach (var word in _service.UserDictionary.Words.Reverse())
         {
-            var index = _grid.Rows.Add(word.Reading, word.Word);
+            var index = _grid.Rows.Add(word.Reading, word.Word, word.Kind == UserWordKind.None ? "" : UserWordKinds.Label(word.Kind));
             _grid.Rows[index].Tag = word;
         }
     }

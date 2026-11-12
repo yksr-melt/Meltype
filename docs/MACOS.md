@@ -98,7 +98,7 @@ brew install --cask yksr-melt/Meltype/meltype
 <a name="ユーザー辞書"></a>
 <img src="images/headings/mac/s02.svg" alt="ユーザー辞書" height="40">
 
-ユーザー辞書は、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。変換では最優先に使います。1 文字の読みは、その 1 文字だけを変換するときだけ使います。
+ユーザー辞書は、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。3 列目に品詞 (名詞・人名・地名・短縮よみ) を書くと、その品詞として使います ([USAGE.md の「ユーザー辞書」](USAGE.md#ユーザー辞書))。変換では最優先に使います。1 文字の読みは、その 1 文字だけを変換するときだけ使います。
 
 macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取り込めます。
 

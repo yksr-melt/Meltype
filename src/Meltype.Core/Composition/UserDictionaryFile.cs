@@ -10,7 +10,8 @@ namespace Meltype.Composition;
 /// <summary>
 /// ユーザー辞書の取り込み・書き出し (ほかの日本語入力から乗り換えるとき・別の PC に移すとき)。
 /// 取り込める形式: Microsoft IME の「一覧の出力」(UTF-16、「読み[Tab]語句[Tab]品詞」)、Google 日本語入力の「エクスポート」
-/// (UTF-8、「読み[Tab]単語[Tab]品詞[Tab]コメント」)、Meltype の userdict.txt (「読み[Tab]単語」)。! と # で始まる行は飛ばす。
+/// (UTF-8、「読み[Tab]単語[Tab]品詞[Tab]コメント」)、Meltype の userdict.txt (「読み[Tab]単語[Tab]品詞」、品詞は無くてよい)。! と # で始まる行は飛ばす。
+/// 品詞は人名・地名・短縮よみだけを読む (UserWordKinds.ParseImported)。
 /// macOS の「ユーザ辞書」から Finder にドラッグして書き出した .plist (XML、各要素の shortcut = 読み、phrase = 語) も読む (#40)。
 /// 書き出しは Microsoft IME の形式 (Microsoft IME・Google 日本語入力・ATOK のどれでも取り込める)。
 /// </summary>
@@ -43,7 +44,7 @@ public static class UserDictionaryFile
                 skipped++;
                 continue;
             }
-            words.Add(new UserWord(reading, word));
+            words.Add(new UserWord(reading, word, fields.Length >= 3 ? UserWordKinds.ParseImported(fields[2]) : UserWordKind.None));
         }
         return new ImportResult(words, skipped, encoding);
     }
@@ -102,7 +103,7 @@ public static class UserDictionaryFile
         return new ImportResult(words, skipped, "plist");
     }
 
-    /// <summary>Microsoft IME の一覧の形式 (UTF-16 LE、BOM 付き) で書き出す。品詞はすべて名詞。</summary>
+    /// <summary>Microsoft IME の一覧の形式 (UTF-16 LE、BOM 付き) で書き出す。品詞を決めていない語は名詞にする。</summary>
     public static byte[] Export(IEnumerable<UserWord> words)
     {
         var builder = new StringBuilder();
@@ -112,7 +113,7 @@ public static class UserDictionaryFile
         builder.Append("!User Dictionary Name: Meltype\r\n");
         builder.Append("!Output File Name:\r\n");
         builder.Append(CultureInfo.InvariantCulture, $"!DateTime:{DateTime.Now:yyyy/MM/dd HH:mm:ss}\r\n\r\n");
-        foreach (var word in words) builder.Append(CultureInfo.InvariantCulture, $"{word.Reading}\t{word.Word}\t名詞\r\n");
+        foreach (var word in words) builder.Append(CultureInfo.InvariantCulture, $"{word.Reading}\t{word.Word}\t{(word.Kind == UserWordKind.None ? "名詞" : UserWordKinds.Label(word.Kind))}\r\n");
         return [.. Encoding.Unicode.GetPreamble(), .. Encoding.Unicode.GetBytes(builder.ToString())];
     }
 
