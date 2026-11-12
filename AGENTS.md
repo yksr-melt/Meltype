@@ -130,7 +130,9 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 設定は最小限にする。消せる設定は消す。
 
-全員が ON にして困るケースがない機能は、設定にせず常に ON にする。設定はユーザーの好みであって、判別をサボる理由にはならない。
+全員が ON にして困るケースがない機能は、設定にせず常に ON にする。
+
+設定はユーザーの好みであって、判別をサボる理由にはならない。
 
 ## 守ること
 
