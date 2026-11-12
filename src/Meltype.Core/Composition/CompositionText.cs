@@ -242,15 +242,14 @@ public sealed class CompositionText
         }
         if (_pending.Length > 0)
         {
-            var removedPending = _pending[^1];
             _pending.Length--;
-            // 同じ子音を 2 回打ってできた っ (ff の前の f) は、後ろの子音があってこその っ。後ろの子音を消したら、打ちかけの子音に戻す
-            // (ff + BackSpace + uronto が っうろんと になっていた: issue #1636)
-            if (_pending.Length == 0 && !KanaInput && _units.Count > 0 && _units[^1] is { Kana: "っ", Raw: [var doubled] } &&
-                char.ToLowerInvariant(doubled) == char.ToLowerInvariant(removedPending))
+            // 子音 1 文字の っ (ff・tch の前の f・t) は、後ろに続く子音があってこその っ。後ろの打ちかけの子音を消しきったら、
+            // っ も打ちかけの子音に戻す (ff + BackSpace + uronto が っうろんと、tch + BackSpace 2 回 + a が っあ になっていた: issue #1636)
+            if (_pending.Length == 0 && !KanaInput && _units.Count > 0 && _units[^1] is { Kana: "っ", Raw: [var consonant] } &&
+                char.IsAsciiLetter(consonant) && consonant is not ('a' or 'i' or 'u' or 'e' or 'o' or 'A' or 'I' or 'U' or 'E' or 'O' or 'n' or 'N'))
             {
                 _units.RemoveAt(_units.Count - 1);
-                _pending.Append(doubled);
+                _pending.Append(consonant);
             }
         }
         else if (_units.Count > 0)
