@@ -6,7 +6,7 @@
 # 使う前に (docs/dev/RELEASE.md の「パッケージマネージャー」):
 #   1. 最初の版だけは、tools/make-manifests.mjs で作ったマニフェストを手で winget-pkgs に出し、取り込まれるのを待つ
 #   2. microsoft/winget-pkgs をフォークし、public_repo の権限のトークンを秘密 WINGET_TOKEN に登録する
-# WINGET_TOKEN が無ければ何もしない。
+# WINGET_TOKEN が無ければ失敗する (何もせずに成功すると、winget に出ていないことに気付けない: #1558)。
 name: winget
 
 on:
@@ -27,19 +27,15 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Check token
-        id: token
         shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           if ([string]::IsNullOrEmpty($env:WINGET_TOKEN)) {
-            Write-Output '::notice::WINGET_TOKEN が無いので、winget には出しません (docs/dev/RELEASE.md)。'
-            'ready=false' >> $env:GITHUB_OUTPUT
-          } else {
-            'ready=true' >> $env:GITHUB_OUTPUT
+            Write-Output '::error::WINGET_TOKEN が無いので、winget に出せません。docs/dev/RELEASE.md の「パッケージマネージャー」の手順で登録してください。'
+            exit 1
           }
-      - if: steps.token.outputs.ready == 'true'
-        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: Yukishiro.Meltype
           installers-regex: '-setup\.exe$'
