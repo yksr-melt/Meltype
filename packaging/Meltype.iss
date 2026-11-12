@@ -138,6 +138,9 @@ begin
 end;
 #endif
 
+// Meltype IME の登録を断られた・失敗したときに本体を入れるかは、実行する前から登録されていたかで決める。
+//   登録済み: 本体も入れない (本体だけ入れると、Meltype.exe が別ビルドの impl と通信できず Meltype キーボードで動く)
+//   未登録: 本体は入れる (Meltype IME が無いので版はずれず、Meltype キーボードで動く)
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 #if HasMeltypeIme
 var
