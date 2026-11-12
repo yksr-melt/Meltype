@@ -30,7 +30,7 @@
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
 - 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。
-- 決まりを書くときは、「こうする」だけでなく、その場所に理由も書く。
+- コードに決まりを入れるときは、コメントに理由も書く。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
 
@@ -83,6 +83,8 @@ node tools/check-dictionaries.mjs
 
 ## 作業後の確認
 
+使わなくなったコードを消す。
+
 ```bash
 # フォーマットを直す（CI は --verify-no-changes で同じ検査をする）
 dotnet format whitespace --folder
@@ -90,8 +92,6 @@ dotnet format whitespace --folder
 # 静的解析（CI は警告が 1 件でもあれば失敗する。EnableWindowsTargeting で Linux / macOS でも Windows 版を調べられる）
 dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true
 ```
-
-使わなくなったコードを消す。
 
 ## 判定・変換を直すとき
 
