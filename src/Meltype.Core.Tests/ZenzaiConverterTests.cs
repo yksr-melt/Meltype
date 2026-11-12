@@ -113,6 +113,12 @@ internal static class ZenzaiConverterTests
         Assert.True(ZenzaiConverter.IsPlausible("ぐーぐるでけんさく", "Googleで検索"), "英字と漢字");
         Assert.True(ZenzaiConverter.IsPlausible("きょうはいいてんき", "今日はいい天気"), "漢字");
         Assert.True(ZenzaiConverter.IsPlausible("さんかげつ", "三ヶ月"), "ヶ は漢字と同じ");
+        // 変換エンジンは ず・じ の読みに づ・ぢ の語を出す (きずく → 気づく)
+        Assert.True(ZenzaiConverter.IsPlausible("きずく", "気づく"), "ず の読みの づ");
+        Assert.True(ZenzaiConverter.IsPlausible("うなずく", "ウナヅク"), "ず の読みの ヅ");
+        Assert.True(ZenzaiConverter.IsPlausible("はなじ", "はなぢ"), "じ の読みの ぢ");
+        Assert.True(ZenzaiConverter.IsPlausible("つづく", "つずく"), "づ の読みの ず");
+        Assert.True(!ZenzaiConverter.IsPlausible("きずく", "気すく"), "濁点の無い字は合わない");
         Assert.True(ZenzaiConverter.IsPlausible("ほんとう?", "本当？"), "全角の記号");
         Assert.True(ZenzaiConverter.IsPlausible("2026ねん", "2026年"), "数字");
     }
