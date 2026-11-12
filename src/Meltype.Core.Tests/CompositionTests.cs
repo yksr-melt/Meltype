@@ -4603,6 +4603,56 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1636_BackspaceAfterADoubledConsonant_LeavesTheConsonant()
+    {
+        // #1636: ff (っf) の f・tch (っch) の ch を消したら、っ ではなく打ちかけの子音に戻す (残った原文を打ち直す)
+        foreach (var (keys, expected) in new[]
+        {
+            ("ff\buronto\n", "ふろんと"),
+            ("kk\bakkou\n", "かっこう"),
+            ("tt\betoka\n", "てとか"),
+            ("tch\b\ba\n", "た"),
+            // っ に限らず、後ろのキーを見て決めた単位は、そのキーを消したら決め直す (nk の ん)
+            ("nk\ba\n", "な"),
+            ("kank\bi\n", "かに"),
+            ("matcha\n", "まっちゃ"),
+            // 子音の後ろを打ってからの っ は、今までどおり 1 音ずつ消す
+            ("kitte\b\b\n", "き"),
+            ("kitte\b\n", "きっ"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            Assert.Equal(expected, k.Host.Document, keys.Replace("\b", "⌫").Replace("\n", "⏎"));
+        }
+    }
+
+    [Test]
+    public static void Backspace_RetypesTheRemainingRaw()
+    {
+        // BackSpace で消した後の状態は、残った原文を打ち直して作る (#1636)。消す量は見えている 1 音 (打ちかけの子音があればその 1 文字)
+        foreach (var (keys, expected) in new[]
+        {
+            ("reibunn\b", "れいぶ"),     // 基本: 最後の 1 音 (ん)
+            ("reibun\b", "れいぶ"),      // 打ちかけの n
+            ("akya\b", "あ"),            // 2 文字で 1 音 (きゃ)
+            ("akyak\b", "あきゃ"),       // 打ちかけの子音だけ消す
+            ("matcha\b", "まっ"),        // ちゃ を消す。子音の後ろまで打った っ は残す (kitte の っ と同じ)
+            ("ff\b", "f"),               // 後ろのキーで決めた っ は決め直す
+            ("nk\b", "n"),               // 後ろのキーで決めた ん も決め直す
+            ("kyouhagoogle\b", "きょうはgoogl"), // 英語の区間は 1 文字
+            ("/k\b", "・"),               // 打ち始めの / を ・ にした単位は残す (打ち直すと / になる)
+            ("/kk\b", "・k"),
+            ("/\bka/", "か/"),                // 入力が空になったら、次の / は打ち始めの / ではない (かなの後ろの /)
+        })
+        {
+            var k = new Keyboard();
+            k.Type(keys);
+            Assert.Equal(expected, k.Host.View?.Text, keys.Replace("\b", "⌫"));
+        }
+    }
+
+    [Test]
     public static void Ki_OffersOldKanji()
     {
         // #371: き の候補に 気 の旧字体 氣 も出す
