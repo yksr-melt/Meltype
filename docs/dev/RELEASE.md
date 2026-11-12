@@ -12,8 +12,9 @@
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb`、Fedora・RHEL 9 系向けの `meltype-<版>-1.x86_64.rpm` と `meltype-<版>-1.aarch64.rpm`、fcitx5 のアドオンの `meltype-fcitx5-<版>-1.x86_64.rpm` と `meltype-fcitx5-<版>-1.aarch64.rpm` (どれもプレビュー版。.deb と .rpm の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
    - リリースに付けたあと、Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
    - リリースに付けたあと、apt・dnf のリポジトリを GitHub Pages に公開します (下の「パッケージマネージャー」の署名鍵があるときだけ)
-4. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
-5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
+4. **公開する前に、Windows の zip に作者の署名を付ける** (下の「自動更新の署名」)。署名の無いリリースは、Meltype の自動更新が入れません
+5. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
+6. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
 
 Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名の設定手順](SIGNPATH-SETUP.md)。テスト署名は独立した手動ワークフローで、現在の配布手順は変更しません。
 
@@ -25,6 +26,28 @@ Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名
 - `/pre-release 1.2.3-pre.1` … プレリリース
 
 bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
+
+### 自動更新の署名
+
+Meltype (Windows) の自動更新は、`Meltype-<版>-windows.zip` と一緒に置いた `Meltype-<版>-windows.zip.sig` を、埋め込んだ公開鍵 (`src/Meltype.Core/Update/UpdateSignature.cs` の `PublicKey`) で確かめてから入れます。署名が無い・合わない zip は展開しません。GitHub のアカウント・トークン・CI が乗っ取られても偽の更新を入れないように、**秘密鍵は GitHub・CI に置かず、作者の手元だけに置きます**。
+
+最初の 1 回だけ、鍵を作って公開鍵を `UpdateSignature.PublicKey` に入れます (Node.js が要ります)。
+
+```bash
+node tools/sign-update.mjs keygen <秘密鍵を書き出す場所 (リポジトリの外)>
+```
+
+秘密鍵は無くさないようにバックアップします。無くすと、それまでの版の Meltype は次の版を自動更新で入れられなくなります (鍵を作り直したら、公開鍵を入れ替えた版を手で入れてもらうことになります)。
+
+リリースのたびに、下書きに付いた zip をダウンロードして署名し、`.sig` を下書きに付けてから公開します。
+
+```bash
+gh release download v1.2.3 --pattern 'Meltype-1.2.3-windows.zip'
+node tools/sign-update.mjs sign <秘密鍵> 1.2.3 Meltype-1.2.3-windows.zip
+gh release upload v1.2.3 Meltype-1.2.3-windows.zip.sig
+```
+
+版にはタグの `v` を付けません (`1.2.3`、`1.2.3-pre.1`)。版も署名に入るので、ほかの版の zip を出し直しても確かめを通りません。
 
 ### テスト版の配布物を作る
 
@@ -45,6 +68,7 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 - Settings → Security → **Private vulnerability reporting** を ON にする ([SECURITY.md](../../SECURITY.md) の報告先)
 - Settings → Rules → Rulesets で main の ruleset を作り、必須のチェック (Require status checks to pass) に **test**・**core (ubuntu-latest)**・**core (macos-latest)**・**精度の比較** を入れる (「CLA」は入れない。同意の確認はレビューする人がする)
 - (任意) bot の名前を変える: GitHub App を作り、変数 `BOT_APP_ID` と秘密 `BOT_APP_PRIVATE_KEY` を登録する
+- Settings → General → Releases の **Immutable releases** を ON にする (公開したリリースの配布物を差し替えられなくする)。公開すると `.sig` を後から付けられないので、署名は下書きのうちに付ける
 - 不具合報告のフォーム: [tools/report-form/README.md](../../tools/report-form/README.md) の手順で作り、`src/Meltype.Core/Config/ProjectInfo.cs` の `ReportForm` に URL を書く
 
 ## パッケージマネージャー
