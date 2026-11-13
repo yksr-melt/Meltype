@@ -167,7 +167,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         try
         {
-            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)
+            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
+            // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
             if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
         }
         catch (Exception ex)
@@ -180,8 +181,9 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えと、壊れた答え (はーどうぇ → ハードウェアウェアウェア…) は使わない。Mozc などに任せる
-        var text = answer == hiragana || answer is not null && !IsPlausible(hiragana, answer) ? null : answer;
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる。
+        // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
+        var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
