@@ -253,7 +253,7 @@ function Install-MeltypeIme([string]$Source, [switch]$Explain) {
 
 function Uninstall-MeltypeIme {
     try { Remove-MeltypeImeFromLanguageList } catch { }
-    # 1.5.0 以前の Meltype が、登録を断った記録 (ImeDeclined) を置いていた
+    # 1.5.1 以前の Meltype が、登録を断った記録 (ImeDeclined) を置いていた
     Remove-Item -LiteralPath 'HKCU:\Software\Meltype' -Recurse -Force -ErrorAction SilentlyContinue
     if (-not (Test-MeltypeImeRegistered)) { return $true }
     $register = Join-Path $MeltypeProgramFiles 'Meltype\tip\Register-Tip.ps1'

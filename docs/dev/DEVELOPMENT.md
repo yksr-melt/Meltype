@@ -116,7 +116,7 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
 
 `dist\Meltype\app` にビルド済みのアプリを作り、そこから Inno Setup でインストーラー `dist\Meltype-test-<日時>-setup.exe` を作ります ([packaging/Meltype.iss](../../packaging/Meltype.iss))。リリースビルドでは版番号を含む `Meltype-<版>-setup.exe` になります。
 新規インストール・アプリ内の自動更新・winget・`Install-Meltype.ps1` は、どれもこのインストーラーで入れます。
-あわせて作る `Meltype-<版>-windows.zip` は、1.5.0 以前の Meltype の自動更新用です (インストーラーと、それを実行するだけの `install.ps1` が入っています)。
+あわせて作る `Meltype-<版>-windows.zip` は、1.5.1 以前の Meltype の自動更新用です (インストーラーと、それを実行するだけの `install.ps1` が入っています)。
 
 - .NET のランタイムを `app\dotnet` に同梱しているので、使う人の PC に .NET は要りません (`Meltype.exe` がそこを使う: `AppHostDotNetSearch=AppRelative`)
 - 小さくする (30MB 未満) ために、ランタイムから Meltype が使わない部品を削ります

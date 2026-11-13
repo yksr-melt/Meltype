@@ -180,7 +180,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 - IME の登録は HKLM に要る (HKCU だけでは ActivateProfile が失敗した) ので、登録するときだけ UAC で管理者権限を求める。本体 (`%LOCALAPPDATA%\Programs\Meltype`) の入れ替えには要らない
 - 本体を入れるのは setup.exe (`packaging/Meltype.iss`) だけ。新規インストール・アプリ内の自動更新 (`Updater.Apply` が `/VERYSILENT` で実行)・winget・`Install-Meltype.ps1` が同じ経路を通る。
-  1.5.0 以前の Meltype の自動更新は、リリースの `Meltype-<版>-windows.zip` の `install.ps1` を実行するので、その zip にはインストーラーと、それを同じ引数で実行するだけの `install.ps1` を入れる
+  1.5.1 以前の Meltype の自動更新は、リリースの `Meltype-<版>-windows.zip` の `install.ps1` を実行するので、その zip にはインストーラーと、それを同じ引数で実行するだけの `install.ps1` を入れる
 - setup.exe は `PrepareToInstall` (ファイルを入れ替える前) で Meltype IME を登録する。登録済みなら必ず登録し直し、UAC を断られたり失敗したりしたら、本体も入れ替えずにインストールを止め、前の版の Meltype.exe を起動し直す
   (本体だけ新しくすると、別ビルドの impl と通信できない)。未登録なら、ウィザードの「Meltype IME を登録する」を選んだときだけ登録し、断られても本体は入れる
 - ウィザードを出さない実行 (自動更新・`winget upgrade`) では、UAC の前に setup-ime.ps1 (`-Explain`) が Meltype からの確認だと分かる説明を出す。UAC には「Windows PowerShell」と読めない `-EncodedCommand` しか出ないため (#970)

@@ -9,7 +9,7 @@
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
 3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けず、下の Homebrew・apt・dnf にも出さない
-   - Windows: `Meltype-<版>-setup.exe` (インストーラー。自動更新もこれを使う)、`Meltype-<版>-windows-portable.zip`、`Meltype-<版>-windows.zip` (1.5.0 以前の Meltype の自動更新用。中身はインストーラーと、それを実行する `install.ps1`)
+   - Windows: `Meltype-<版>-setup.exe` (インストーラー。自動更新もこれを使う)、`Meltype-<版>-windows-portable.zip`、`Meltype-<版>-windows.zip` (1.5.1 以前の Meltype の自動更新用。中身はインストーラーと、それを実行する `install.ps1`)
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb`、Fedora・RHEL 9 系向けの `meltype-<版>-1.x86_64.rpm` と `meltype-<版>-1.aarch64.rpm`、fcitx5 のアドオンの `meltype-fcitx5-<版>-1.x86_64.rpm` と `meltype-fcitx5-<版>-1.aarch64.rpm` (どれもプレビュー版。.deb と .rpm の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
    - リリースに付けたあと、Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
    - リリースに付けたあと、apt・dnf のリポジトリを GitHub Pages に公開します (下の「パッケージマネージャー」の署名鍵があるときだけ)

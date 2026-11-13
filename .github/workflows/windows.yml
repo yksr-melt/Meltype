@@ -189,7 +189,7 @@ jobs:
         run: .\packaging\Find-InnoSetup.ps1 | Out-Null
       # コード署名の証明書 (秘密 SIGN_PFX_BASE64 = .pfx を Base64 にしたもの、SIGN_PASSWORD) があれば、Build-Package.ps1 が app とインストーラーに署名する。
       # 秘密が無いときは署名せずにインストーラーを作る。.pfx は署名したらすぐ消す。
-      # タグ (v1.0.0) なら版番号付き、手動実行なら日時付きのインストーラー (と、1.5.0 以前の自動更新用の zip) を作る。
+      # タグ (v1.0.0) なら版番号付き、手動実行なら日時付きのインストーラー (と、1.5.1 以前の自動更新用の zip) を作る。
       - name: Sign
         shell: powershell
         env:

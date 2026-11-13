@@ -71,7 +71,7 @@ Source: "{#SourceDir}\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#SourceDir}\THIRD-PARTY-NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [InstallDelete]
-; 1.5.0 以前の zip 版 (Install.cmd) が置いたアンインストーラー
+; 1.5.1 以前の zip 版 (Install.cmd) が置いたアンインストーラー
 Type: files; Name: "{app}\uninstall.ps1"
 
 [Icons]
@@ -175,7 +175,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // 1.5.0 以前の zip 版 (Install.cmd) の「設定 → アプリ」の項目は消す (このインストーラーの項目と二重にならないように)
+    // 1.5.1 以前の zip 版 (Install.cmd) の「設定 → アプリ」の項目は消す (このインストーラーの項目と二重にならないように)
     RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Microsoft\Windows\CurrentVersion\Uninstall\Meltype');
   end;
 end;

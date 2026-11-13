@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 # 版を付けなければ、協力者に渡すテスト版を作る: dist\Meltype-test-<日付>-setup.exe
 # 通常版は、ビルド済みの app フォルダー (.NET ランタイム同梱) から Inno Setup でインストーラーを作る (packaging\Meltype.iss)。
-# あわせて、1.5.0 以前の Meltype の自動更新用の zip (dist\Meltype-<版>-windows.zip) も作る (下の「互換の zip」)。
+# あわせて、1.5.1 以前の Meltype の自動更新用の zip (dist\Meltype-<版>-windows.zip) も作る (下の「互換の zip」)。
 #
 # .NET の同梱: この環境は NuGet が使えないので自己完結ビルド (--self-contained) の代わりに、
 # この PC にインストール済みの .NET ランタイムを app\dotnet にコピーし、Meltype.exe がそこを使うようにする
@@ -311,7 +311,7 @@ if ($signtool) {
     if ($LASTEXITCODE -ne 0) { throw "インストーラーの署名に失敗しました (exit code $LASTEXITCODE)。" }
 }
 
-# 互換の zip: 1.5.0 以前の Meltype の自動更新は、リリースの Meltype-<版>-windows.zip を展開して install.ps1 を実行する。
+# 互換の zip: 1.5.1 以前の Meltype の自動更新は、リリースの Meltype-<版>-windows.zip を展開して install.ps1 を実行する。
 # 更新を強制できない前の版のために、インストーラーと、それを実行するだけの install.ps1 を入れる。
 $bridge = Join-Path $dist 'Meltype-update'
 if (Test-Path -LiteralPath $bridge) { Remove-Item -LiteralPath $bridge -Recurse -Force }

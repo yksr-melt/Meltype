@@ -2,7 +2,7 @@
 # Copyright (C) 2026 penta2himajin
 # Copyright (C) 2026 aster-void
 
-# インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe で作り、インストール → 自動更新 → 1.5.0 以前の自動更新 (互換の zip の install.ps1)
+# インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe で作り、インストール → 自動更新 → 1.5.1 以前の自動更新 (互換の zip の install.ps1)
 # → アンインストールの順に通す。場面ごとに前の場面の状態を引き継ぐ。Meltype IME (管理者権限が要る) は入れない。
 # 実際の %LOCALAPPDATA%\Programs\Meltype を入れ替えるので、CI の使い捨ての環境でしか動かさない。
 
@@ -99,9 +99,9 @@ try {
     Assert-True (Test-Path -LiteralPath $log) '更新のログが無い'
     Write-Host 'PASS: 自動更新'
 
-    # 1.5.0 以前の zip 版 (Install.cmd) で入れた人を、1.5.0 以前の Meltype が互換の zip で更新する
+    # 1.5.1 以前の zip 版 (Install.cmd) で入れた人を、1.5.1 以前の Meltype が互換の zip で更新する
     New-Item -Path $zipKey -Force | Out-Null
-    Set-Content -LiteralPath (Join-Path $target 'uninstall.ps1') -Value '# 1.5.0 以前のアンインストーラー'
+    Set-Content -LiteralPath (Join-Path $target 'uninstall.ps1') -Value '# 1.5.1 以前のアンインストーラー'
     $bridge = Join-Path $testRoot 'bridge'
     New-Item -ItemType Directory -Path $bridge | Out-Null
     Copy-Item -LiteralPath (New-Setup '3.0.0'), (Join-Path $repo 'packaging\install.ps1') -Destination $bridge
@@ -113,7 +113,7 @@ try {
     Assert-True (Test-Path -LiteralPath $log) '互換の zip の更新のログが無い'
     Assert-True (-not (Test-Path -LiteralPath $zipKey)) 'zip 版の「設定 → アプリ」の項目が残った'
     Assert-True (-not (Test-Path -LiteralPath (Join-Path $target 'uninstall.ps1'))) 'zip 版のアンインストーラーが残った'
-    Write-Host 'PASS: 1.5.0 以前の自動更新 (互換の zip)'
+    Write-Host 'PASS: 1.5.1 以前の自動更新 (互換の zip)'
 
     $code = Invoke-Wait (Join-Path $target 'unins000.exe') @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
     Assert-True ($code -eq 0) "アンインストールの終了コード: $code"
