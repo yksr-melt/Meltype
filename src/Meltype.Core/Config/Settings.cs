@@ -456,7 +456,7 @@ public sealed class Settings
     public bool ConsonantAbbreviations { get; set; }
 
     [Category("5. 候補"), DisplayName("候補の意味を表示"),
-     Description("変換中に選んでいる候補の意味を、ウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge。英訳の候補は、その英訳を持つ語: complicated → ややこしい、複雑)。同音異義語・英訳を選ぶときの手がかりに。")]
+     Description("変換中に選んでいる候補の意味を、ウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge。英訳の候補は、その英訳を持つ語: complicated → 複雑、難しい)。同音異義語・英訳を選ぶときの手がかりに。")]
     public bool ShowCandidateMeanings { get; set; } = true;
 
     [Category("8. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),

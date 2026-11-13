@@ -160,6 +160,9 @@ internal static class PackedDictionaryTests
         // かなだけの語は後ろ
         Assert.Equal("複雑、難しい、ややこしい", translations.Meaning("complicated"));
         Assert.Equal(null, translations.Meaning("complex"));
+        // 同じ語の行が複数あれば、その英訳を一番前に持つ行で並べる
+        var twoLines = TranslationDictionary.Parse("複雑\tna\tA,B,complicated\n難しい\ti\tC,complicated\n複雑\tn\tcomplicated\n");
+        Assert.Equal("複雑、難しい", twoLines.Meaning("complicated"));
     }
 
     [Test]

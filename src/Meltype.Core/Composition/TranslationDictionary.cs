@@ -95,7 +95,7 @@ public sealed class TranslationDictionary
     /// <summary>
     /// 変換の候補の意味 (橋 → bridge、箸 → chopsticks)。候補の先頭から一番長く辞書に一致する語を引く (橋を → 橋、持って → 持つ は引けない)。
     /// 残りに漢字・カタカナが入る (語の一部しか一致しない: 今日は → 今) なら null。かなだけの候補も null。
-    /// 英字の候補は、その英訳を持つ語を出す (complicated → ややこしい、複雑、…)。
+    /// 英字の候補は、その英訳を持つ語を出す (complicated → 複雑、難しい、…)。
     /// </summary>
     public string? Meaning(string text)
     {
@@ -142,8 +142,12 @@ public sealed class TranslationDictionary
             {
                 if (translations[range].SequenceEqual(word))
                 {
+                    // 同じ語の行 (品詞ごと) が複数あれば、一番前に英訳を持つ行で並べる
                     var key = _lines.Key(k - 1).ToString();
-                    if (!found.Exists(f => f.Word == key)) found.Add((!key.Any(KanaChars.IsKanji), rank, _lines.Position(k - 1), key));
+                    var entry = (!key.Any(KanaChars.IsKanji), rank, _lines.Position(k - 1), key);
+                    var same = found.FindIndex(f => f.Word == key);
+                    if (same < 0) found.Add(entry);
+                    else if (rank < found[same].Rank) found[same] = entry;
                     break;
                 }
                 rank++;
