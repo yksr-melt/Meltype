@@ -130,7 +130,8 @@ begin
   ExtractTemporaryFiles('{app}\tip\x86\*');
   ExtractTemporaryFiles('{app}\meltype-ime.ps1');
   ExtractTemporaryFiles('{app}\setup-ime.ps1');
-  Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\{app}\setup-ime.ps1') + '" -Source "' + ExpandConstant('{tmp}\{app}\tip') + '"';
+  // ExtractTemporaryFiles は {tmp} の下の「{app}」という名前のフォルダーに展開するので、{app} は展開しない
+  Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{tmp}\') + '{app}\setup-ime.ps1" -Source "' + ExpandConstant('{tmp}\') + '{app}\tip"';
   // ウィザードを出さないとき (自動更新・winget) は、UAC の前に Meltype からの確認だと分かる説明を出す (#970)
   if WizardSilent() then Parameters := Parameters + ' -Explain';
   // 言語の一覧は元のユーザーの設定なので、元のユーザーの権限で動かす (PC 全体への登録だけ setup-ime.ps1 が昇格する)
