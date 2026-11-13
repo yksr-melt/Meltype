@@ -19,6 +19,13 @@ concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
 
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+
 jobs:
   test:
     runs-on: windows-latest
@@ -41,7 +48,6 @@ jobs:
 
       # Meltype IME (入力欄に直接入力する TSF の DLL)。C++ なので dotnet build とは別にビルドする (x64 と x86)。
       - name: Build Meltype IME
-        shell: pwsh
         run: ./native/tip/build.ps1 -Configuration Release
 
       - name: Test package scan failure handling
@@ -62,7 +68,6 @@ jobs:
         shell: powershell
         run: .\tools\Test-SetupIme.ps1
       - name: Compile installer script
-        shell: pwsh
         run: |
           $iscc = .\packaging\Find-InnoSetup.ps1
           $stage = Join-Path $env:RUNNER_TEMP 'Meltype'
@@ -71,13 +76,11 @@ jobs:
           Copy-Item -LiteralPath LICENSE -Destination (Join-Path $stage 'LICENSE.txt')
           Copy-Item -LiteralPath THIRD-PARTY-NOTICES.md -Destination (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
           & $iscc /Q "/DAppVersion=0.0.0-check" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
-          if ($LASTEXITCODE -ne 0) { throw "インストーラーの台本を Inno Setup で通せませんでした (exit code $LASTEXITCODE)。" }
           # IME を同梱する場合のチェックボックス・起動処理もコンパイルする。
           New-Item -ItemType Directory -Force -Path (Join-Path $stage 'app\tip') | Out-Null
           Set-Content -LiteralPath (Join-Path $stage 'app\meltype-ime.ps1') -Value '# dummy'
           Set-Content -LiteralPath (Join-Path $stage 'app\tip\Register-Tip.ps1') -Value '# dummy'
           & $iscc /Q "/DAppVersion=0.0.0-check-ime" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
-          if ($LASTEXITCODE -ne 0) { throw "IME 同梱のインストーラーを Inno Setup で通せませんでした (exit code $LASTEXITCODE)。" }
 
   # インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe でインストール → 更新 → アンインストールの順に通す (tools/Test-InstallLifecycle.ps1)。
   #   Meltype IME の登録 (管理者権限が要る) は通さない。
@@ -112,7 +115,7 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
-          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || git diff --name-only "$BEFORE" "$GITHUB_SHA" -- native/mozc .github/workflows/windows.yml | grep -q .; then
+          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || git diff --name-only "$BEFORE" "$GITHUB_SHA" -- native/mozc .github/workflows/windows.yml | grep . >/dev/null; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "native/mozc は変わっていないので、Mozc のビルドは飛ばします。"
@@ -126,7 +129,6 @@ jobs:
           python-version: '3.12'
       - name: Bazelisk
         if: steps.check.outputs.build == 'true'
-        shell: pwsh
         run: |
           # 版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
           $version = 'v1.29.0'
