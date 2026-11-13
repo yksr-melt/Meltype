@@ -36,6 +36,10 @@ internal static class MozcConverterTests
                 case "C" when fields[2] == "きしゃがきた":
                     output.WriteLine("きしゃが\x1f記者が\x1f汽車が\x1f帰社が" + '\x1e' + "きた\x1f来た\x1f着た\x1f北");
                     break;
+                // 読みと表記が違う候補 (ず の読みの 気づく) がある (Zenzai の答えを Mozc の候補で確かめるテスト: ZenzaiConverterTests)
+                case "C" when fields[2] == "きずくのがはやい":
+                    output.WriteLine("きずくのが\x1f築くのが\x1f気づくのが" + '\x1e' + "はやい\x1f早い\x1f速い");
+                    break;
                 // 助詞だけの文節 (に) の候補に数字がある (Zenzai の 荷物を2階に運ぶ を当てはめると、に を 2 にしてしまう)
                 case "C" when fields[2] == "にもつをにかいにはこぶ":
                     // (\x1f の後ろに 2 を続けて書くと \x1f2 という 1 文字になるので、区切りは別の文字として足す)

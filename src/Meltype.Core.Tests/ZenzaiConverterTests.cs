@@ -118,11 +118,43 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Answers_ThatRepeatRunaway_AreNotUsed()
+    public static void Answers_AreCheckedWithMozcCandidates()
     {
-        using var server = new FakeServer { Answer = _ => "ハードウェアウェアウェアウェアウェア</s>" };
-        using var zenzai = new ZenzaiConverter(server.Endpoint);
-        Assert.True(zenzai.Convert("はーどうぇ") is null, "壊れた答えは Mozc に任せる");
+        // 偽の Mozc のヘルパーは、きずくのがはやい を 築くのが|早い で返し、文節ごとの候補に 気づくのが・速い もある。ほかの読みは読みのまま返す
+        var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
+        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var server = new FakeServer
+        {
+            Answer = p => p.Contains("キズクノガハヤイ") ? "気づくのが早い" : p.Contains("ハードウェ") ? "ハードウェアウェアウェア" : p.Contains("ナマエ") ? "名前は魚の" : ReadingIn(p),
+        };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
+        mozc.WarmUp();
+        for (var i = 0; i < 200 && mozc.ConvertClauses("きずくのがはやい") is null; i++) Thread.Sleep(50);
+        Assert.True(mozc.ConvertClauses("きずくのがはやい") is [_, _], "偽の Mozc のヘルパーが 10 秒で起動しなかった");
+
+        // かなが読みと合わない答え (ず の読みの づ) も、Mozc の候補で作れるなら使う
+        var variant = hybrid.ConvertClauses("きずくのがはやい", "前の文");
+        Assert.True(variant is [{ Text: "気づくのが" }, { Text: "早い" }], "Mozc の候補にある表記: " + Joined(variant));
+        Assert.Equal("気づくのが早い", hybrid.Convert("きずくのがはやい") ?? "", "その読みだけの変換も同じ");
+        // Mozc の候補で作れず、かなが読みと合わない答え (#1675・#1511) は、Zenzai が答えても使わず、Mozc に任せる
+        Assert.Equal("ハードウェアウェアウェア", Answered("はーどうぇ", "前の文"), "Zenzai は答えをそのまま返す");
+        Assert.True(hybrid.ConvertClauses("はーどうぇ", "前の文") is [{ Text: "はーどうぇ" }], "繰り返し続けた答え");
+        Assert.Equal("名前は魚の", Answered("なまえ", "前の文"), "Zenzai は答えをそのまま返す");
+        Assert.True(hybrid.ConvertClauses("なまえ", "前の文") is [{ Text: "なまえ" }], "直前の文節の混入");
+        Assert.Equal("名前は魚の", Answered("なまえ", null), "Zenzai は答えをそのまま返す");
+        Assert.Equal("なまえ", hybrid.Convert("なまえ") ?? "", "その読みだけの変換も Mozc に任せる");
+
+        // Zenzai が答えるまで待って、その答え (覚えているので、HybridConverter が聞くと同じ答えが返る)
+        string? Answered(string reading, string? context)
+        {
+            for (var i = 0; i < 200; i++)
+            {
+                if (zenzai.ConvertClauses(reading, context) is [var clause]) return clause.Text;
+                Thread.Sleep(50);
+            }
+            return null;
+        }
     }
 
     [Test]

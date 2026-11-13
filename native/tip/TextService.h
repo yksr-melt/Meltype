@@ -48,7 +48,8 @@ class TextService final : public ITfTextInputProcessorEx,
                           public ITfCompartmentEventSink,
                           public ITfTextEditSink {
 public:
-    TextService();
+    // stub: stub (MeltypeTip.dll) のウィンドウ。kStubImplStale の送信先
+    explicit TextService(HWND stub);
 
     // IUnknown
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
@@ -195,6 +196,7 @@ private:
     TfGuidAtom atomConverted_ = TF_INVALID_GUIDATOM;
     TfGuidAtom atomTarget_ = TF_INVALID_GUIDATOM;
 
+    const HWND stub_;
     PipeClient pipe_;
     std::string instance_;
     ServerState state_;
