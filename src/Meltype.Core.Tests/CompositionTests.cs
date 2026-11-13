@@ -3089,7 +3089,10 @@ internal static class CompositionTests
         Assert.Equal("bridge", translations.Meaning("橋"));
         Assert.Equal("chopsticks", translations.Meaning("箸を"), "助詞が付いても");
         Assert.Equal(null, translations.Meaning("はし"), "かなだけの候補には出さない");
-        Assert.Equal(null, translations.Meaning("bridge"));
+        // 英字の候補には、その英訳を主な訳にしている語から出す (issue #1801)
+        Assert.True(translations.Meaning("deviation")?.StartsWith("逸脱", StringComparison.Ordinal) == true, "いつだつ の英訳 deviation");
+        Assert.True(translations.Meaning("bridgeを")?.Contains('橋', StringComparison.Ordinal) == true, "助詞が付いても");
+        Assert.Equal(null, translations.Meaning("deviant"), "英訳の表に無い英単語には出さない");
     }
 
     [Test]

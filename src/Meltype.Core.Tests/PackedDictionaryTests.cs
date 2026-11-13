@@ -154,6 +154,15 @@ internal static class PackedDictionaryTests
     }
 
     [Test]
+    public static void Translations_EnglishMeaningPrefersWordsWithItAsMainTranslation()
+    {
+        var translations = TranslationDictionary.Parse("ややこしい\ti\tcomplicated\n難しい\ti\tdifficult,complicated\n複雑\tna\tcomplicated\n複雑\tn\tcomplicated\n");
+        // かなだけの語は後ろ
+        Assert.Equal("複雑、難しい、ややこしい", translations.Meaning("complicated"));
+        Assert.Equal(null, translations.Meaning("complex"));
+    }
+
+    [Test]
     public static void Candidates_KeepAddedOrderAndDropRepeatedWords()
     {
         var dictionary = new CandidateDictionary();
