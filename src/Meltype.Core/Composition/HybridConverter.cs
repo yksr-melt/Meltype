@@ -94,8 +94,14 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     private bool UseSystem => engine() != ConversionEngine.Mozc || mozc is not { IsAvailable: true };
 
     public string? Convert(string hiragana) =>
-        (Zenzai(hiragana, null) is [var z] && (ZenzaiConverter.IsPlausible(hiragana, z.Text) || (UseMozc ? AskMozc(() => mozc!.ConvertWithCandidates(hiragana)) : null) is { } fromMozc && Align(fromMozc, z.Text) is not null)
-            ? z.Text : null) ?? ConvertStandalone(hiragana);
+        (Zenzai(hiragana, null) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
+
+    /// <summary>Zenzai の答えを使えるか (<see cref="ConvertClauses"/> と同じ決め方): かなが読みと合うか、Mozc の文節ごとの候補をつないで作れるか。</summary>
+    private bool IsUsable(string hiragana, string answer) =>
+        ZenzaiConverter.IsPlausible(hiragana, answer) || IsBuiltFromMozcCandidates(hiragana, answer);
+
+    private bool IsBuiltFromMozcCandidates(string hiragana, string answer) =>
+        UseMozc && AskMozc(() => mozc!.ConvertWithCandidates(hiragana)) is { } fromMozc && Align(fromMozc, answer) is not null;
 
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
     public string? ConvertStandalone(string hiragana) =>
