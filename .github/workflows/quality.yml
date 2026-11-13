@@ -129,8 +129,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # 版を固定して go の checksum データベースで確かめて入れる (YAML のアンカーに対応した版が要る)
-      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.8
+      # 版を固定して go の checksum データベースで確かめて入れる (YAML のアンカーに対応したのは v1.7.10 から)
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
       - run: '"$(go env GOPATH)/bin/actionlint"'
 
   dependencies:
