@@ -68,7 +68,7 @@ internal static class FrontProtocolTests
         var view = new CompositionView("x", ["x", "y"], 0, true, "h", ["x"], 0);
         var json = new ImeOutput(state, new SessionResult(true, [new TextEdit(0, "x")], view)).ToJson();
         var names = new HashSet<string>();
-        Collect(JsonDocument.Parse(json).RootElement, names);
+        Collect(JsonElement.Parse(json), names);
         return names;
     }
 
