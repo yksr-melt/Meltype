@@ -67,7 +67,8 @@ try {
 
     $setup = Join-Path $Directory $asset.name
     $ready = Join-Path $Directory 'ready.txt'
-    if ((Test-Path -LiteralPath $ready) -and ((Get-Content -LiteralPath $ready -Raw) -like "$latest`t*")) { Write-Output "ready $latest"; exit 0 }
+    # 1.5.1 以前の Meltype が書いた ready.txt (2 列目が zip を展開したフォルダー) は、同じ版でもダウンロードし直す
+    if ((Test-Path -LiteralPath $ready) -and ((Get-Content -LiteralPath $ready -Raw).Trim() -eq "$latest`t$setup") -and (Test-Path -LiteralPath $setup -PathType Leaf)) { Write-Output "ready $latest"; exit 0 }
 
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $download = "$setup.download"
