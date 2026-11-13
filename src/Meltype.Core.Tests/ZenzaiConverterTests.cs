@@ -60,7 +60,7 @@ internal static class ZenzaiConverterTests
                     var context = _listener.GetContext();
                     var body = new StreamReader(context.Request.InputStream, Encoding.UTF8).ReadToEnd();
                     var prompt = "";
-                    if (body.Length > 0) prompt = JsonDocument.Parse(body).RootElement.GetProperty("prompt").GetString() ?? "";
+                    if (body.Length > 0) prompt = JsonElement.Parse(body).GetProperty("prompt").GetString() ?? "";
                     lock (Prompts) Prompts.Add(prompt);
                     context.Response.StatusCode = Status;
                     var answer = Answer(prompt);
