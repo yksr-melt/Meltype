@@ -156,7 +156,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         UpdateStatus();
         // 前回の更新に失敗していたら知らせる (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
         if (Updater.FailedVersion is { } failed)
-            _invoker.BeginInvoke(() => _tray.ShowBalloonTip(10000, "Meltype - 更新失敗", UpdateFailedMessage(failed), ToolTipIcon.Warning));
+            _invoker.BeginInvoke(() => _tray.ShowBalloonTip(10000, "Meltype - 更新失敗", UpdateFailedMessage(failed, _engine.Settings.AutoUpdate), ToolTipIcon.Warning));
         // 初めて起動したら使い方を見せる (見せたことは state.json に残す)
         var firstRun = !_state.WelcomeShown;
         if (firstRun)
@@ -297,8 +297,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
         ? $"Meltype {version} を準備しました。次に Windows にサインインしたときに更新します。ここをクリックすると今すぐ更新します。"
         : $"Meltype {version} を準備しました。トレイの「更新」→「Meltype {version} に更新して再起動」で更新できます。ここをクリックすると今すぐ更新します。";
 
-    internal static string UpdateFailedMessage(string version) =>
-        $"Meltype {version} への更新に失敗しました。今のバージョンで動いています。自動ではもう一度試しません。記録: {Updater.InstallLog}";
+    /// <summary>
+    /// 自動更新が ON なら、Updater がダウンロードし直し、次のサインインでもう一度更新する。
+    /// Meltype IME を更新できなかったとき (UAC を断った) も、インストーラーが本体を入れ替えずに止めるので、この通知になる。
+    /// </summary>
+    internal static string UpdateFailedMessage(string version, bool autoUpdate) => autoUpdate
+        ? $"Meltype {version} に更新できませんでした。今の版のまま動いています。次に Windows にサインインしたときに、もう一度更新します。記録: {Updater.InstallLog}"
+        : $"Meltype {version} に更新できませんでした。今の版のまま動いています。トレイの「更新」→「今すぐ更新を確認」から、もう一度更新できます。記録: {Updater.InstallLog}";
 
     private void OnUpdateBalloonClicked(object? sender, EventArgs e)
     {
