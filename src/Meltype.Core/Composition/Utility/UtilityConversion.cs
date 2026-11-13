@@ -29,7 +29,8 @@ internal sealed record UtilityContext(
     TimeZoneInfo LocalTimeZone,
     Func<string?> Clipboard,
     Func<(string Title, string Artist)?> NowPlaying,
-    GitHubIssueTitles? GitHubTitles)
+    GitHubIssueTitles? GitHubTitles,
+    ExchangeRates? ExchangeRates)
 {
     /// <summary>設定「時計の候補のタイムゾーン」の今の時刻。設定が空ならこの PC の時刻。</summary>
     public DateTime ClockNow => ClockConversion.Zone(Settings.ClockTimeZone) is { } zone

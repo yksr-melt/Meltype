@@ -69,4 +69,48 @@ internal static class CurrencyConversionTests
         var date = ExchangeRates.Bundled!.Date.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(k.Host.View!.Candidates.Any(c => c.StartsWith('約') && c.EndsWith($"円（{date} のレート）", StringComparison.Ordinal)), string.Join(" ", k.Host.View.Candidates));
     }
+
+    private const string Ecb = """
+        <gesmes:Envelope><Cube><Cube time='2099-11-13'>
+        <Cube currency='USD' rate='1.1'/><Cube currency='JPY' rate='180'/>
+        </Cube></Cube></gesmes:Envelope>
+        """;
+
+    [Test]
+    public static void ParseEcb_ReadsTheDailyXml()
+    {
+        Assert.True(ExchangeRates.ParseEcb(Ecb) is { Date: var date } s && date == new DateOnly(2099, 11, 13) && s.Rates["EUR"] == 1m && s.Rates["JPY"] == 180m, "ECB の XML");
+        Assert.True(ExchangeRates.ParseEcb("<html>error</html>") is null, "XML でなければ null");
+        Assert.True(ExchangeRates.Parse(ExchangeRates.ParseEcb(Ecb)!.Format()) is { Date.Year: 2099 } again && again.Rates["USD"] == 1.1m, "保存した形を読み戻せる");
+    }
+
+    [Test]
+    public static void Current_FetchesOnlyWhenOnline()
+    {
+        var calls = 0;
+        var rates = new ExchangeRates(null, () => { calls++; return Task.FromResult(Ecb); });
+        Assert.True(rates.Current(online: false) == ExchangeRates.Bundled && calls == 0, "OFF なら取らずに同梱した表");
+        Assert.True(rates.Current(online: true) is { Date.Year: 2099 } && calls == 1, "ON なら取った表");
+        rates.Current(online: true);
+        Assert.Equal(1, calls, "取ってすぐは取り直さない");
+        Assert.True(rates.Current(online: false) is { Date.Year: 2099 }, "取った表は OFF にしても使う");
+
+        var offline = new ExchangeRates(null, () => Task.FromException<string>(new HttpRequestException("offline")));
+        Assert.True(offline.Current(online: true) == ExchangeRates.Bundled, "取れなければ同梱した表");
+    }
+
+    [Test]
+    public static void UpdateAsync_SavesForTheNextStart()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"meltype-rates-{Guid.NewGuid():N}.txt");
+        try
+        {
+            new ExchangeRates(path, () => Task.FromResult(Ecb)).UpdateAsync().GetAwaiter().GetResult();
+            Assert.True(new ExchangeRates(path, () => throw new InvalidOperationException()).Current(online: false) is { Date.Year: 2099 }, "手動で更新した表を次の起動でも使う");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

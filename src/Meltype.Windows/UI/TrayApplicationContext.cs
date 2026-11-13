@@ -109,6 +109,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("ログ / 判定理由...", null, (_, _) => ShowLog());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("データフォルダを開く", null, (_, _) => OpenDataFolder());
+        menu.Items.Add("為替レートを更新", null, (_, _) => UpdateExchangeRates());
         var backup = new ToolStripMenuItem("バックアップ");
         backup.DropDownItems.Add("バックアップを書き出す...", null, (_, _) => CreateBackup());
         backup.DropDownItems.Add("バックアップから戻す...", null, (_, _) => RestoreBackup());
@@ -760,6 +761,20 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         var answer = MessageBox.Show("学習データ (選び直した変換 conversions.json、英字 / かなに直した語 languages.json、予測変換の語句 phrases.txt、選んだ英訳 translations.json) をすべて削除します。よろしいですか？\n\nユーザー辞書 (userdict.txt) と設定は消えません。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
         if (answer == DialogResult.OK) _composition.Runtime.ResetLearning();
+    }
+
+    /// <summary>通貨の換算に使う為替レートを ECB から取って保存する (設定「為替レートを毎回取得する」が OFF のときの手動の更新)。</summary>
+    private async void UpdateExchangeRates()
+    {
+        try
+        {
+            var rates = await _composition.Runtime.ExchangeRates.UpdateAsync();
+            MessageBox.Show($"為替レートを {rates.Date:yyyy/MM/dd} のものに更新しました。", "為替レート", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or FormatException)
+        {
+            MessageBox.Show($"為替レートを取れませんでした。\n\n{e.Message}", "為替レート", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     /// <summary>最近覚えたものだけを忘れる (<see cref="Composition.MeltypeRuntime.ForgetLearningSince"/>)。</summary>

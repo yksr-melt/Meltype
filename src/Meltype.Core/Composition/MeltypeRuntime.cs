@@ -58,11 +58,13 @@ public sealed class MeltypeRuntime : IDisposable
             RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
             TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
             GitHubTitles = () => GitHubTitles,
+            ExchangeRates = () => ExchangeRates,
         };
         Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
         // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
         UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: _userDirectory);
         Snippets = new SnippetStore(Path.Combine(dataDirectory, "snippets.json"));
+        ExchangeRates = new ExchangeRates(Path.Combine(dataDirectory, "exchange-rates.txt"));
         _directEngine = new(() => ScoreEngine.CreateDefault(() => Settings.Current, _userDirectory));
         if (nowPlaying) _nowPlaying = NowPlayingSource.Create(() => Settings.Current.NowPlayingCandidates);
         _settingsCheck = new Timer(_ => _ = Settings.Current, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
@@ -105,6 +107,9 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。プロセスの間だけ覚える。</summary>
     public GitHubIssueTitles GitHubTitles { get; } = new();
+
+    /// <summary>通貨の換算に使う為替レート。ECB から取った表は exchange-rates.txt に保存する (手動の更新・設定「為替レートを毎回取得する」)。</summary>
+    public ExchangeRates ExchangeRates { get; }
 
     /// <summary>
     /// 入力欄 1 つ分の本体を作る。converter は OS ごとの変換エンジン、moreCandidates は読みに対する OS の候補の一覧 (無ければ null)。
