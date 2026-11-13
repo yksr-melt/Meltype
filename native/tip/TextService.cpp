@@ -166,6 +166,19 @@ bool IsChromiumBrowser() {
     return chromium;
 }
 
+// この impl があるフォルダーの名前 (Register-Tip.ps1 が impl の SHA-256 にする) の JSON の文字列。
+// Meltype.exe が、同梱の impl の SHA-256 と照合する
+const std::string& ImplId() {
+    static const std::string id = [] {
+        wchar_t path[MAX_PATH] = {};
+        GetModuleFileNameW(g_module, path, MAX_PATH);
+        std::wstring folder = path;
+        folder = folder.substr(0, folder.find_last_of(L'\\'));
+        return JsonString(folder.substr(folder.find_last_of(L'\\') + 1));
+    }();
+    return id;
+}
+
 }  // namespace
 
 HRESULT RunEditSession(ITfContext* context, TfClientId clientId, DWORD flags, std::function<HRESULT(TfEditCookie)> action) {
@@ -177,12 +190,9 @@ HRESULT RunEditSession(ITfContext* context, TfClientId clientId, DWORD flags, st
     return FAILED(hr) ? hr : result;
 }
 
-TextService::TextService() { DllAddRef(); }
+TextService::TextService(HWND stub) : stub_(stub) {}
 
-TextService::~TextService() {
-    DestroyMessageWindow();
-    DllRelease();
-}
+TextService::~TextService() { DestroyMessageWindow(); }
 
 STDMETHODIMP TextService::QueryInterface(REFIID riid, void** ppv) {
     if (ppv == nullptr) return E_INVALIDARG;
@@ -699,14 +709,20 @@ void TextService::ToggleInputMode(ITfContext* context) {
 bool TextService::Send(const char* type, const std::string& field, const std::string& fields, JsonValue& reply, DWORD timeoutMs, bool optional,
                        const RECT* anchor) {
     if (deactivated_) return false;
-    std::string request = "{\"thread\":" + std::to_string(GetCurrentThreadId());
+    std::string request = "{\"impl\":" + ImplId() + ",\"thread\":" + std::to_string(GetCurrentThreadId());
     if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
         request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
     request += std::string(",\"event\":{\"version\":") + std::to_string(kImeVersion) + ",\"type\":\"" + type + "\",\"instance\":\"" + instance_ +
                "\",\"imeOpen\":" + (open_ ? "true" : "false") + (field.empty() ? "" : ",\"field\":" + field) + fields + "}}";
     std::string response;
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
-    if (!ParseJson(response, reply) || reply[L"state"].IsNull() || reply[L"result"].IsNull()) {
+    const bool parsed = ParseJson(response, reply);
+    if (parsed && reply[L"stale"].Bool()) {
+        // この impl は Meltype.exe と別ビルド: stub に差し替えを要求する (差し替わるまでは、タイムアウトと同じ扱い)
+        if (stub_) PostMessageW(stub_, kStubImplStale, 0, 0);
+        return false;
+    }
+    if (!parsed || reply[L"state"].IsNull() || reply[L"result"].IsNull()) {
         // 版の違う Meltype.exe (更新の途中など)
         TipLog(L"応答を読めません");
         return false;

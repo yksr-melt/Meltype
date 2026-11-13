@@ -173,6 +173,13 @@ function Test-MeltypeImeCurrent([string]$Source) {
         }
         if ((Get-Sha256 $installed) -ne (Get-Sha256 $new)) { return $false }
     }
+    foreach ($arch in 'x64', 'x86') {
+        # stub がロードする impl (Register-Tip.ps1 が impl\<署名前のバイナリの SHA-256>\MeltypeTipImpl.dll に配置する)
+        $implHash = Read-HashFile (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256")
+        $folder = Join-Path $MeltypeProgramFiles "Meltype\tip\$arch"
+        if (-not $implHash -or $implHash -ne (Read-HashFile (Join-Path $folder 'MeltypeTipImpl.dll.sha256'))) { return $false }
+        if (-not (Test-Path -LiteralPath (Join-Path $folder "impl\$implHash\MeltypeTipImpl.dll"))) { return $false }
+    }
     return $true
 }
 
@@ -190,17 +197,17 @@ function Read-HashFile([string]$path) {
 # 確かめたファイル (Register-Tip.ps1 も) のハッシュを返す。管理者として動く側は、写したものがこれと合うかを確かめる。合わなければ $null
 function Get-MeltypeImeSourceHashes([string]$Source) {
     $hashes = @{}
-    foreach ($arch in 'x64', 'x86') {
-        $dll = Join-Path $Source "$arch\MeltypeTip.dll"
+    foreach ($relative in 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll') {
+        $dll = Join-Path $Source $relative
         # 配布用のパッケージなら署名した後のハッシュ、ソースから入れたとき (署名しない) は署名する前のハッシュ
         $expected = Read-HashFile "$dll.package.sha256"
         if (-not $expected) { $expected = Read-HashFile "$dll.sha256" }
         if (-not (Test-Path -LiteralPath $dll)) { return $null }
         $actual = Get-Sha256 $dll
         if ($expected -and $actual -ne $expected) { return $null }
-        $hashes["$arch\MeltypeTip.dll"] = $actual
+        $hashes[$relative] = $actual
         # 署名する前の中身のハッシュ (Program Files に置き、次の更新で同じ DLL なら登録し直さないのに使う) も、すり替えられないように一緒に確かめる
-        if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$arch\MeltypeTip.dll.sha256"] = Get-Sha256 "$dll.sha256" }
+        if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$relative.sha256"] = Get-Sha256 "$dll.sha256" }
     }
     $hashes['Register-Tip.ps1'] = Get-Sha256 (Join-Path $Source 'Register-Tip.ps1')
     return $hashes
