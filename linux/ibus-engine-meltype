@@ -94,6 +94,8 @@ SPECIAL_KEYS = {
     IBus.KEY_F6: 0x75, IBus.KEY_F7: 0x76, IBus.KEY_F8: 0x77, IBus.KEY_F9: 0x78, IBus.KEY_F10: 0x79,
     # 入力モードのキー (意味は本体が決める)
     IBus.KEY_Zenkaku_Hankaku: 0x19, IBus.KEY_Hankaku: 0x19, IBus.KEY_Zenkaku: 0x19,
+    # 左右の Alt (単独押しかは本体が決める。ImeCapture.AltKeys)
+    IBus.KEY_Alt_L: 0xA4, IBus.KEY_Alt_R: 0xA5,
     IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
 }
 
@@ -122,6 +124,8 @@ def virtual_key(keyval):
 # 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
 BEFORE_LENGTH = 4000
 AFTER_LENGTH = 20
+
+ALT_KEYS = (0xA4, 0xA5)
 
 # 矢印キー (←) のキーコード (確定したあとにキャレットを戻す)
 KEYCODE_LEFT = 105
@@ -167,6 +171,10 @@ class MeltypeEngine(IBus.Engine):
         self._properties = IBus.PropList()
         # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
         self._language_mode = None
+        # 左右の Alt (ImeCapture.AltKeys): 本体が受け取るか、押している Alt (0 なら無し)、押している間にほかのキーを押したか
+        self._alt_keys = False
+        self._alt_down = 0
+        self._alt_interrupted = False
         self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
                                             symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
         self._properties.append(self._mode_property)
@@ -188,6 +196,7 @@ class MeltypeEngine(IBus.Engine):
             return None
         output = json.loads(reply)
         self._apply(output["result"])
+        self._alt_keys = output["state"]["capture"]["altKeys"]
         if output["state"]["languageMode"] != self._language_mode:
             self._language_mode = output["state"]["languageMode"]
             label = IBus.Text.new_from_string("あ" if self._language_mode == "Japanese" else "A")
@@ -221,16 +230,42 @@ class MeltypeEngine(IBus.Engine):
     # ---- IBus からの呼び出し ----
 
     def do_process_key_event(self, keyval, keycode, state):
-        if state & IBus.ModifierType.RELEASE_MASK:
-            return False
+        released = bool(state & IBus.ModifierType.RELEASE_MASK)
         vk, character = virtual_key(keyval)
+        if vk in ALT_KEYS:
+            return self._alt_key(vk, state, released)
+        if released:
+            return False
+        if self._alt_down:
+            self._alt_interrupted = True
         if vk is None:
             return False
-        key = {"vk": vk, "ch": character,
-               "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
-               "alt": bool(state & IBus.ModifierType.MOD1_MASK),
-               "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
-        output = self.send("KeyPressed", key=key)
+        output = self.send("KeyPressed", key=self._key(vk, character, state))
+        return bool(output and output["result"]["consumed"])
+
+    @staticmethod
+    def _key(vk, character, state):
+        return {"vk": vk, "ch": character,
+                "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
+                "alt": bool(state & IBus.ModifierType.MOD1_MASK),
+                "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
+
+    def _alt_key(self, vk, state, released):
+        """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたときだけアプリに通さない。"""
+        if not released:
+            # 押したままの自動の繰り返しは、最初の押下だけを送る
+            if not self._alt_keys or self._alt_down == vk:
+                return False
+            self._alt_interrupted = self._alt_down != 0
+            self._alt_down = vk
+            self.send("KeyPressed", key=self._key(vk, 0, state))
+            return False
+        if self._alt_down != vk:
+            return False
+        interrupted = self._alt_interrupted
+        self._alt_down = 0
+        self._alt_interrupted = False
+        output = self.send("KeyReleased", key={"vk": vk, "interrupted": interrupted})
         return bool(output and output["result"]["consumed"])
 
     def _leave(self, focus_out):

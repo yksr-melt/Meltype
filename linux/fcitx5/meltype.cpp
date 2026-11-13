@@ -382,6 +382,9 @@ public:
     // Shift を押しているか。fcitx5 は Space のキーに Shift を付けて渡さないことがある (どの環境で起きるかは
     // 未確認。手元は KDE Plasma 6 / Wayland、X11 と GNOME は試していない) ので、キーから覚えておく: #1033
     bool shiftHeld = false;
+    // 押している左右の Alt の仮想キーコード (0 なら無し) と、押している間にほかのキーを押したか (ImeCapture.AltKeys)
+    int altDown = 0;
+    bool altInterrupted = false;
     // 入力モードの表示 (A / あ) と候補の意味を、本体が決めた時間のあとに消す・出すタイマー
     std::unique_ptr<fcitx::EventSourceTime> modeTimer, meaningTimer;
     // 入力欄に入ったときの入力モードを出すまでのタイマー
@@ -441,7 +444,13 @@ public:
             state->shiftHeld = !event.isRelease();
             return;
         }
+        const int alt = key.sym() == FcitxKey_Alt_L ? 0xA4 : key.sym() == FcitxKey_Alt_R ? 0xA5 : 0;
+        if (alt) {
+            altKey(ic, state, alt, key.states(), event);
+            return;
+        }
         if (event.isRelease()) return;
+        if (state->altDown) state->altInterrupted = true;
         auto [vk, character] = virtualKey(key.sym());
         if (vk == 0 && character == 0) return;
         const auto states = key.states();
@@ -453,6 +462,27 @@ public:
         Json output;
         // 本体が使わなかったキーは受け取らず、fcitx5 とアプリに任せる
         if (send(ic, "KeyPressed", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
+    }
+
+    // 左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたときだけアプリに通さない
+    void altKey(fcitx::InputContext *ic, MeltypeState *state, int vk, fcitx::KeyStates states, fcitx::KeyEvent &event) {
+        Json output;
+        if (!event.isRelease()) {
+            // 押したままの自動の繰り返しは、最初の押下だけを送る
+            if (!altKeys_ || state->altDown == vk) return;
+            state->altInterrupted = state->altDown != 0;
+            state->altDown = vk;
+            send(ic, "KeyPressed", std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":0,\"shift\":" + boolean(states.test(fcitx::KeyState::Shift)) +
+                ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) + ",\"alt\":false,\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}", output);
+            return;
+        }
+        if (state->altDown != vk) return;
+        const bool interrupted = state->altInterrupted;
+        state->altDown = 0;
+        state->altInterrupted = false;
+        if (send(ic, "KeyReleased", std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"interrupted\":" + boolean(interrupted) + "}", output) &&
+            output.get("result")->flag("consumed"))
+            event.filterAndAccept();
     }
 
     // 入力欄にフォーカスが入った・入力メソッドを Meltype にした
@@ -467,12 +497,14 @@ public:
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        event.inputContext()->propertyFor(&factory_)->altDown = 0;
         leave(event.inputContext(), false);
     }
 
     // フォーカスが外れた・入力メソッドを切り替えた。Shift を離したことは届かないことがあるので忘れる (#1033)
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
+        event.inputContext()->propertyFor(&factory_)->altDown = 0;
         event.inputContext()->propertyFor(&factory_)->enterTimer.reset();
         leave(event.inputContext(), true);
     }
@@ -504,6 +536,8 @@ private:
     // 本体が最後に返した言語モード (パネルの「あ / A」に出す)
     std::string languageMode_;
     bool loaded_ = false;
+    // 本体が左右の Alt の押下・解放を受け取るか (最後に返した state.capture.altKeys)
+    bool altKeys_ = false;
     fcitx::EventDispatcher dispatcher_;
     fcitx::FactoryFor<MeltypeState> factory_;
     MeltypeConfig config_;
@@ -528,6 +562,7 @@ private:
         if (text.empty() || !JsonReader(text).read(output) || !output.get("state") || !output.get("result")) return false;
         apply(ic, *output.get("result"));
         const auto *shown = output.get("state");
+        altKeys_ = shown->get("capture") && shown->get("capture")->flag("altKeys");
         if (const auto mode = shown->str("languageMode"); mode != languageMode_) {
             languageMode_ = mode;
             ic->updateUserInterface(fcitx::UserInterfaceComponent::StatusArea);
