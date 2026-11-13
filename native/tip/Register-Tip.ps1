@@ -2,7 +2,7 @@
 # Copyright (C) 2026 lnkiai
 #
 # Meltype IME (TSF の DLL) を Windows に登録する / 登録を外す。管理者権限が要る (IME の登録は PC 全体の設定のため)。
-#   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64 と x86 のフォルダーがある所>
+#   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64・arm64・x86 のフォルダーがある所>
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Unregister
 # DLL は C:\Program Files\Meltype\tip にコピーする (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所に置く)。
 # 登録する DLL は stub (MeltypeTip.dll) で、stub が impl (impl\<SHA-256>\MeltypeTipImpl.dll) をロードする。
@@ -23,6 +23,10 @@ $target = Join-Path $programFiles 'Meltype\tip'
 $regsvr64 = Join-Path $windows 'System32\regsvr32.exe'
 if (-not [Environment]::Is64BitProcess -and [Environment]::Is64BitOperatingSystem) { $regsvr64 = Join-Path $windows 'Sysnative\regsvr32.exe' }
 $regsvr32 = Join-Path $windows 'SysWOW64\regsvr32.exe'
+# 64 ビットのアプリ用の DLL。ARM64 の Windows では、ARM64 と x64 のアプリのどちらにも読み込める ARM64X の DLL (arm64) を登録する。
+# ARM64 か x64 かは、Windows の設定 (HKLM) から読む (x64 のエミュレーションで動く PowerShell では、プロセスの環境変数が AMD64 になる)
+$nativeArch = [Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'PROCESSOR_ARCHITECTURE', '')
+$arch64 = if ($nativeArch -eq 'ARM64') { 'arm64' } else { 'x64' }
 
 function Write-Log([string]$message) {
     Write-Host $message
@@ -42,8 +46,10 @@ function Invoke-Regsvr([string]$exe, [string]$dll, [switch]$Remove) {
 
 $unregisterFailed = $false
 try {
-    foreach ($arch in 'x64', 'x86') {
-        $exe = if ($arch -eq 'x64') { $regsvr64 } else { $regsvr32 }
+    # 登録を外すときは、どちらの 64 ビットの DLL も外す (無い DLL は Invoke-Regsvr が飛ばす)
+    $architectures = if ($Unregister) { 'x64', 'arm64', 'x86' } else { $arch64, 'x86' }
+    foreach ($arch in $architectures) {
+        $exe = if ($arch -eq 'x86') { $regsvr32 } else { $regsvr64 }
         $dll = Join-Path $target "$arch\MeltypeTip.dll"
         if ($Unregister) {
             # 外せなくても (DLL が壊れているなど)、もう一方の DLL・レジストリ・ファイルは片付ける

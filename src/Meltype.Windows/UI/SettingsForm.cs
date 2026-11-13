@@ -481,7 +481,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         {
             var values = Enum.GetValues(type).Cast<object>().ToList();
             var combo = DropDown(values.Select(v => EnumName(type, v)).ToArray());
-            // Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) なら、灰色にして選ばせない
+            // Meltype IME を使えない (登録されていない・キーボードの一覧に無い) なら、灰色にして選ばせない
             if (!AppPaths.IsPortable && property.Name == nameof(Settings.Mode) &&
                 _engine.Running.Mode != InputMode.Tsf && !Tip.TipServer.IsUsable)
                 DisableChoice(combo, values.IndexOf(InputMode.Tsf));

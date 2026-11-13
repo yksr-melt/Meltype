@@ -37,7 +37,7 @@ if (-not $NoIme) {
     try {
         & (Join-Path $PSScriptRoot 'native\tip\build.ps1') -Configuration Release
         $tip = Join-Path $output 'tip'
-        foreach ($arch in 'x64', 'x86') {
+        foreach ($arch in 'x64', 'arm64', 'x86') {
             New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
             Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $PSScriptRoot "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch) -Force
         }

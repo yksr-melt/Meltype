@@ -189,7 +189,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
   Meltype IME が無かった版から更新した人には、Meltype.exe が起動したときに一度だけ聞き (`TsfOffered`)、「はい」ならインストール先の meltype-ime.ps1 で登録する。
   初めて起動したとき (インストーラーが聞いている)・前に Meltype IME を使っていたとき (`TsfIntroduced`)・前に断ったとき (ImeDeclined) は聞かない。
   ImeDeclined は、UAC で断ったときと、setup.exe で「Meltype IME を登録する」のチェックを外したときに残す
-- 動作モードが Meltype IME なのに、ポータブル版か、ARM64 の Windows か、登録されていないか (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、
+- 動作モードが Meltype IME なのに、ポータブル版か、登録されていないか (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、
   このユーザーのキーボードの一覧に無ければ、Meltype キーボードで動かす。起動したとき・config.json を読み直したとき・トレイや設定画面で変えたときのどれでも同じ。
   config.json は書き換えない (動かしている動作モードは `MeltypeEngine.Mode`)。Meltype IME を入れ直したら、Meltype.exe を起動し直すか、トレイで Meltype IME を選び直すと Meltype IME で動く
 - 管理者として動かす前に、DLL が配布したときのハッシュ (`MeltypeTip.dll.package.sha256`、無ければ `.sha256`) と合うかを確かめる (壊れた DLL を登録しないため)。
@@ -208,7 +208,9 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 ## 未対応・確かめていないこと
 
-- UILess (候補を自分で描くアプリ)、ARM64 (ARM64 の Windows ではインストールのときに Meltype IME を入れない)
+- UILess (候補を自分で描くアプリ)
+- ARM64 の Windows では、64 ビットのアプリ用に ARM64X の DLL (`tip\arm64`。ARM64 と x64 のアプリのどちらにも読み込める) を登録する。
+  ARM64 の実機では、まだ広くは確かめていない
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。
   実際のアプリ (メモ帳・Chrome・VS Code など)、表示スケール 150%、コード署名をしない DLL を読み込まないアプリがあるかは、まだ広くは確かめていない
 

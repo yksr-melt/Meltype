@@ -46,7 +46,7 @@ jobs:
       - name: Test Mozc-UT dictionary merge
         run: python native/mozc/tests/test_merge_ut_dictionary.py
 
-      # Meltype IME (入力欄に直接入力する TSF の DLL)。C++ なので dotnet build とは別にビルドする (x64 と x86)。
+      # Meltype IME (入力欄に直接入力する TSF の DLL)。C++ なので dotnet build とは別にビルドする (x64・ARM64X・x86)。
       - name: Build Meltype IME
         run: ./native/tip/build.ps1 -Configuration Release
 

@@ -191,12 +191,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// <summary>
     /// Meltype IME (TSF) を入れたら、一度だけ動作モードを Meltype IME にする
     /// (PC に登録されていても、このユーザーのキーボードの一覧に無ければ Win + Space で選べないので切り替えない)
-    /// (ARM64 の Windows には Meltype IME は対応していないので切り替えない)
     /// </summary>
     private void IntroduceTsf()
     {
-        if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
-            RuntimeInformation.OSArchitecture == Architecture.Arm64) return;
+        if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList) return;
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         _state.TsfIntroduced = true;
         _state.Save();
@@ -214,7 +212,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// </summary>
     private bool CanOfferTsf()
     {
-        if (_state.TsfIntroduced || !Tip.TipServer.IsKnownUnregistered || RuntimeInformation.OSArchitecture == Architecture.Arm64) return false;
+        if (_state.TsfIntroduced || !Tip.TipServer.IsKnownUnregistered) return false;
         if (!File.Exists(Path.Combine(AppContext.BaseDirectory, "meltype-ime.ps1")) || !Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"))) return false;
         try
         {
@@ -258,7 +256,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// ImeDeclined は見ない (断ったあとも Meltype キーボードで動き続けるので、起動のたびに聞く)。
     /// </summary>
     private bool CanOfferTsfUpdate() =>
-        !AppPaths.IsPortable && _engine.Settings.Mode == InputMode.Tsf && RuntimeInformation.OSArchitecture != Architecture.Arm64 &&
+        !AppPaths.IsPortable && _engine.Settings.Mode == InputMode.Tsf &&
         Tip.TipServer.IsOtherBuildRegistered &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "meltype-ime.ps1")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"));
 
@@ -569,7 +567,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _enabledItem.Checked = enabled;
         _keyboardModeItem.Checked = keyboard;
         _tsfModeItem.Checked = tsf;
-        // Meltype IME を使えない (ARM64 の Windows・登録されていない・キーボードの一覧に無い) なら選べない
+        // Meltype IME を使えない (登録されていない・キーボードの一覧に無い) なら選べない
         // (選ぶとキーボードフックが止まり、どこでも何も起きなくなる)
         var registered = Tip.TipServer.IsRegistered;
         _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable;

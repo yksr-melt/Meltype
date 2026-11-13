@@ -10,10 +10,13 @@ namespace Meltype.Tip;
 /// impl は、署名前のバイナリの SHA-256 (MeltypeTipImpl.dll.sha256) を要求の impl に付ける。
 /// 別ビルドの impl とは通信しないので、Meltype.exe と impl のあいだのプロトコルに後方互換性は要らない。
 /// </summary>
-/// <param name="folder">この Meltype.exe に同梱した tip フォルダー (x64・x86 の下に MeltypeTipImpl.dll.sha256)。</param>
+/// <param name="folder">この Meltype.exe に同梱した tip フォルダー (x64・arm64・x86 の下に MeltypeTipImpl.dll.sha256)。</param>
 internal sealed class TipBuild(string folder)
 {
-    private static readonly string[] Architectures = ["x64", "x86"];
+    // この PC に登録する impl のアーキテクチャ (packaging/meltype-ime.ps1 の Get-MeltypeImeArchitectures と同じ)。
+    // ARM64 の Windows では、64 ビットは ARM64 と x64 のアプリのどちらにも読み込める ARM64X の DLL (arm64) を登録する
+    private static readonly string[] Architectures =
+        [System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64", "x86"];
 
     public static TipBuild Shipped { get; } = new(Path.Combine(AppContext.BaseDirectory, "tip"));
 
@@ -43,7 +46,7 @@ internal sealed class TipBuild(string folder)
     }
 
     /// <summary>登録済みの stub (MeltypeTip.dll) がこれからロードする impl が、同梱の impl と同じビルドか。</summary>
-    /// <param name="installed">登録済みの tip フォルダー (x64・x86 の下に MeltypeTip.dll と MeltypeTipImpl.dll.sha256)。</param>
+    /// <param name="installed">登録済みの tip フォルダー (x64 か arm64・x86 の下に MeltypeTip.dll と MeltypeTipImpl.dll.sha256)。</param>
     public bool IsInstalled(string installed)
     {
         return _hashes.All(pair => string.Equals(ReadHash(Path.Combine(installed, pair.Key)), pair.Value, StringComparison.OrdinalIgnoreCase));
