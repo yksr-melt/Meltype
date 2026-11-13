@@ -53,12 +53,6 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     private static bool IsOperatorChoice(Clause clause) =>
         MathOperator().IsMatch(clause.Reading) && clause.Text.IndexOfAny(['×', '÷', '+', '＋', '-', '－', '=', '＝']) >= 0;
 
-    /// <summary>
-    /// 句読点だけの文節か。学習しない (変換エンジンにも覚えさせない)。読みの 、。 は句読点の設定によらず同じなので、
-    /// ここで選んだ候補 (、 → ・) を覚えると、ほかの句読点の設定や、句読点を含む文節 (わたしは、 → 私は・) にも効く。
-    /// </summary>
-    private static bool IsPunctuationOnly(Clause clause) => clause.Reading.All(c => c is '、' or '。');
-
     /// <summary>変換履歴の語。</summary>
     public string? LearnedConversion(string reading) => services.History?.Get(reading);
 
@@ -91,7 +85,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (!Learnable(clause) || IsPunctuationOnly(clause)) continue;
+            if (!Learnable(clause)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -113,7 +107,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         }
         foreach (var clause in clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.NotLearned.Contains(clause.Text) || IsOperatorChoice(clause) || IsPunctuationOnly(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.NotLearned.Contains(clause.Text) || IsOperatorChoice(clause))
             {
                 Flush();
                 continue;

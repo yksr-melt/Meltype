@@ -528,7 +528,34 @@ public sealed partial class CompositionController
                 ? "ガチ" + clauses[i].Text["勝ち".Length..] : null;
             if (preferred is not null) Prefer(clauses[i], preferred);
         }
+        KeepTypedSymbols(clauses, kana);
         return clauses;
+    }
+
+    /// <summary>
+    /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol が決めた文字) は、最初の候補でも読みの文字のままにする。
+    /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
+    /// (ライブ変換で 例文？ が 例文? に: issue #519、「今日は が ［今日は に: issue #1669、わたしは、 が 私は・ に)。別の候補は一覧に残す。
+    /// 記号だけを変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。
+    /// 記号の数が読みと違う答え (から → ～、あんはさうぇい → アン・ハサウェイ) は、どの記号がどれに当たるか分からないので変えない。
+    /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
+    /// </summary>
+    private static void KeepTypedSymbols(List<Clause> clauses, string kana)
+    {
+        if (!kana.Any(char.IsLetterOrDigit)) return;
+        var typed = kana.Where(IsSymbol).ToList();
+        if (clauses.Sum(c => c.Text.Count(IsSymbol)) != typed.Count) return;
+        var next = 0;
+        foreach (var clause in clauses)
+        {
+            var text = string.Concat(clause.Text.Select(c => IsSymbol(c) ? typed[next++] : c));
+            if (text == clause.Text) continue;
+            if (clause.ZenzaiText == clause.Text) clause.ZenzaiText = text;
+            Prefer(clause, text);
+        }
+
+        // 絵文字 (サロゲートペア) は打った記号に当たらないので数えない (置き換えると壊れた文字になる)
+        static bool IsSymbol(char c) => !char.IsLetterOrDigit(c) && !char.IsWhiteSpace(c) && !char.IsSurrogate(c);
     }
 
     /// <summary>
