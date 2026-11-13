@@ -25,7 +25,7 @@ Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名
 - `/release 1.2.3` … 通常の版
 - `/pre-release 1.2.3-pre.1` … プレリリース
 
-bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると下書きに配布物が付くので、中身を確かめてから公開します。
+bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plist` の版が書いた版と合っているかを確かめ (版の上げ忘れを防ぐため、合っていなければ止めます)、`docs/release-notes/<版>.md` があるかを確かめ (無ければ止めます)、タグ `v1.2.3` とリリースの下書き (本文はそのファイル) を作って、そのタグで release.yml を始めます。ビルドが終わると、release.yml が下書きに配布物を付けて公開します。
 
 ### テスト版の配布物を作る
 
@@ -60,7 +60,7 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.
 
 - **winget**: `winget/manifests/...` を [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) に Pull Request で出す (`winget validate` で確かめてから)。審査があり、署名の無い実行ファイルは止められることがあります
   - インストーラー (このユーザーだけに入れる・管理者権限なし) のマニフェストです。Meltype の自動更新と同じインストーラーなので、Meltype IME・起動時の起動が入ります。`winget upgrade` (サイレント実行) でも、Meltype IME の DLL が変わっていれば管理者権限の確認が出ます
-  - **2 つ目の版からは自動**: 最初の版が取り込まれたら、`microsoft/winget-pkgs` をフォークし、`public_repo` の権限のトークンを秘密 `WINGET_TOKEN` に登録します。以後はリリースを公開するたびに `.github/workflows/winget.yml` が新しい版の Pull Request を出します (`WINGET_TOKEN` が無ければ何もしません)。使う人は `winget install Yukishiro.Meltype` / `winget upgrade Yukishiro.Meltype`
+  - **2 つ目の版からは自動**: 最初の版が取り込まれたら、`microsoft/winget-pkgs` をフォークし、`public_repo` の権限のトークンを秘密 `WINGET_TOKEN` に登録します。以後は正式版のリリースのたびに、release.yml が配布物を付けたあと `.github/workflows/winget.yml` が新しい版の Pull Request を出します (`WINGET_TOKEN` が無ければ失敗します)。使う人は `winget install Yukishiro.Meltype` / `winget upgrade Yukishiro.Meltype`
 - **Homebrew Cask**: タグのリリース時に `Casks/meltype.rb` の更新 PR が自動で作られます。PR を main に入れると、新しい版をこのリポジトリからインストールできます。このリポジトリを tap として登録します:
   ```bash
   brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git
