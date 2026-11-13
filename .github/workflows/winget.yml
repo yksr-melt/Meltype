@@ -2,7 +2,9 @@
 # Copyright (C) 2026 Yukishiro
 #
 # 公開版のリリースを winget (microsoft/winget-pkgs) に出す (issue #367)。
-# リリースが公開されたら、インストーラー (Meltype-<版>-setup.exe) から新しい版のマニフェストを作り、winget-pkgs に Pull Request を出す。
+# インストーラー (Meltype-<版>-setup.exe) から新しい版のマニフェストを作り、winget-pkgs に Pull Request を出す。
+# release.yml が、配布物をリリースに付けたあとに呼ぶ。release: released では起動しない
+# (release.yml はリリースを GITHUB_TOKEN で公開するので、そのイベントではほかのワークフローが起動しない)。
 # 使う前に (docs/dev/RELEASE.md の「パッケージマネージャー」):
 #   1. 最初の版だけは、tools/make-manifests.mjs で作ったマニフェストを手で winget-pkgs に出し、取り込まれるのを待つ
 #   2. microsoft/winget-pkgs をフォークし、public_repo の権限のトークンを秘密 WINGET_TOKEN に登録する
@@ -10,8 +12,11 @@
 name: winget
 
 on:
-  release:
-    types: [released]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -39,5 +44,5 @@ jobs:
         with:
           identifier: Yukishiro.Meltype
           installers-regex: '-setup\.exe$'
-          release-tag: ${{ inputs.tag || github.event.release.tag_name }}
+          release-tag: ${{ inputs.tag }}
           token: ${{ secrets.WINGET_TOKEN }}
