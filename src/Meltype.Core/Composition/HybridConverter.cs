@@ -103,6 +103,13 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     private bool IsBuiltFromMozcCandidates(string hiragana, string answer) =>
         UseMozc && AskMozc(() => mozc!.ConvertWithCandidates(hiragana)) is { } fromMozc && Align(fromMozc, answer) is not null;
 
+    /// <summary>
+    /// <see cref="IsBuiltFromMozcCandidates"/> と同じ (文脈なし)。Mozc を使わない・答えなかったら null。
+    /// ヘルパーが答えるまで待つので、入力スレッドでは呼ばない (<see cref="MeltypeRuntime.ForgetZenzaiHallucinations"/> が裏のスレッドで呼ぶ)。
+    /// </summary>
+    public bool? IsBuiltFromMozcCandidatesNow(string hiragana, string answer) =>
+        UseMozc && mozc!.ConvertWithCandidatesNow(hiragana) is { } fromMozc ? Align(fromMozc, answer) is not null : null;
+
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
     public string? ConvertStandalone(string hiragana) =>
         (UseMozc ? AskMozc(() => mozc!.Convert(hiragana)) : null) ?? (UseSystem ? system?.Convert(hiragana) : null);

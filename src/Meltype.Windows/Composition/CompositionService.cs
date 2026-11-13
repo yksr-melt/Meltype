@@ -44,6 +44,10 @@ internal sealed class CompositionService : IDisposable
         _hybrid = new HybridConverter(() => settings().ConversionEngine, _mozc, _system, _system.Candidates, CurrentZenzai, _zenzai.Failed);
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         if (settings().ConversionEngine != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
+        runtime.ForgetZenzaiHallucinations(_hybrid, forget =>
+        {
+            if (invoker.IsHandleCreated && !invoker.IsDisposed) invoker.BeginInvoke(forget);
+        });
     }
 
     public MeltypeRuntime Runtime { get; }

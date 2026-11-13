@@ -151,6 +151,38 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     public int ForgetLearningSince(DateTime sinceUtc) => History.ForgetSince(sinceUtc) + Languages.ForgetSince(sinceUtc) + Phrases.ForgetSince(sinceUtc);
 
+    /// <summary>
+    /// 前の版が学習した Zenzai の壊れた答え (はーどうぇ → ハードウェアウェア、なまえは → 名前は魚のは: issue #1779) を、
+    /// 選び直した変換と予測変換の語句から消す。#1776 から壊れた答えは使わないので、新しく学習することはない。
+    /// 消すのは、かなを含み、かなが読みと合わず (<see cref="ZenzaiConverter.IsPlausible"/>)、ユーザー辞書・補助辞書の候補でもなく、
+    /// Mozc の文節ごとの候補をつないでも作れない語 (<see cref="HybridConverter"/> が Zenzai の答えを使うかと同じ決め方)。
+    /// 読みと比べるだけだと、Mozc の辞書の表記が読みと違う語 (あんはさうぇい → アン・ハサウェイ) を約 3.4 万件巻き添えにする (#1788)。
+    /// Mozc を使わない・Mozc が答えないときは消さない。消したかは覚えず、起動するたびに呼ぶ (読みと合わない語は少ないので、Mozc に聞くのは数件)。
+    /// 入力スレッドから呼ぶ。Mozc には裏のスレッドで聞き、学習データは post で入力スレッドに戻してから消す (学習データは入力スレッドで読む)。
+    /// </summary>
+    public void ForgetZenzaiHallucinations(HybridConverter converter, Action<Action> post)
+    {
+        bool Suspect(string reading, string text) =>
+            text.Any(c => KanaChars.IsHiragana(c) || KanaChars.IsKatakana(c)) && !ZenzaiConverter.IsPlausible(reading, text) &&
+            !UserDictionary.Lookup(reading).Contains(text) && _shared.Candidates?.Lookup(reading).Contains(text) != true;
+        var conversions = History.Entries().Where(e => Suspect(e.Reading, e.Text)).Select(e => (e.Reading, e.Text)).ToList();
+        var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text)).ToList();
+        if (conversions.Count == 0 && phrases.Count == 0) return;
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            var brokenConversions = conversions.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
+            var brokenPhrases = phrases.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
+            if (brokenConversions.Count == 0 && brokenPhrases.Count == 0) return;
+            post(() =>
+            {
+                // Mozc に聞いている間に選び直した変換は消さない
+                foreach (var (reading, text) in brokenConversions) if (History.Get(reading) == text) History.Forget(reading);
+                foreach (var (_, text) in brokenPhrases) Phrases.Forget(text);
+                Diagnostics.Log.Info($"Zenzai の壊れた答えを学習から消しました (選び直した変換 {brokenConversions.Count} 件、予測変換の語句 {brokenPhrases.Count} 件)。");
+            });
+        });
+    }
+
     /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (設定画面の判定のテストにも使う)。final は、もう続きが無いか。</summary>
     public DetectionResult Evaluate(string letters, bool final, Settings settings) =>
         _directEngine.Value.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
