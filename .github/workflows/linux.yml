@@ -38,6 +38,11 @@ concurrency:
   group: linux-${{ github.ref }}
   cancel-in-progress: true
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   app:
     # x64 と arm64 を、それぞれの CPU のランナーでビルドする (Mozc の Bazel のビルドは、ビルドしているマシンの CPU 向けになる)。
@@ -131,7 +136,7 @@ jobs:
       - name: Package (.deb)
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
-            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' linux/build/Meltype-linux/meltype.xml | head -n 1)~test.$(date +%Y%m%d%H%M)"; fi
+            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
           linux/build-deb.sh "$version" linux/build/Meltype-linux linux/build
           dpkg-deb --info linux/build/meltype_*.deb
           dpkg-deb --contents linux/build/meltype_*.deb
@@ -144,7 +149,7 @@ jobs:
           test -x /opt/meltype/mozc/meltype_mozc_helper
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
-          test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' | head -n 1)")/meltype.so"
+          test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' -print -quit)")/meltype.so"
           sudo apt-get remove -y meltype
           test ! -e /opt/meltype/ibus-engine-meltype
           test ! -e /usr/share/ibus/component/meltype.xml
@@ -202,7 +207,7 @@ jobs:
       - name: Package (.rpm)
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
-            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' linux/build/Meltype-linux/meltype.xml | head -n 1)~test.$(date +%Y%m%d%H%M)"; fi
+            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
           linux/build-rpm.sh "$version" linux/build/Meltype-linux linux/build
           rpm -qpi linux/build/meltype-*.rpm
           rpm -qpR linux/build/meltype-*.rpm
@@ -214,7 +219,7 @@ jobs:
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
-          ibus read-cache --system | grep -q /opt/meltype/ibus-engine-meltype
+          ibus read-cache --system | grep /opt/meltype/ibus-engine-meltype >/dev/null
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
           test -f /usr/lib64/fcitx5/meltype.so
           dnf remove -y meltype

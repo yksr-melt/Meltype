@@ -19,6 +19,11 @@ concurrency:
   group: dotnet-update
   cancel-in-progress: false
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -53,7 +58,7 @@ jobs:
 
           title="同梱の .NET を $latest に更新する (リリースし直す)"
           # このワークフローが立てた Issue (閉じたものも) に同じ題名があれば立てない
-          if gh api --paginate "repos/$REPO/issues?state=all&creator=github-actions%5Bbot%5D&per_page=100" --jq '.[].title' | grep -Fxq "$title"; then
+          if gh api --paginate "repos/$REPO/issues?state=all&creator=github-actions%5Bbot%5D&per_page=100" --jq '.[].title' | grep -Fx "$title" >/dev/null; then
             echo "Issue は立て済みです"
             exit 0
           fi
@@ -63,7 +68,7 @@ jobs:
             while read -r v; do
               if [[ "$v" =~ $version_re && "$v" != "$bundled" && "$(printf '%s\n%s\n' "$bundled" "$v" | sort -V | tail -1)" == "$v" ]]; then echo "$v"; fi
             done | sort -V | paste -sd ' ' -)
-          notes=$(jq -r --arg v "$latest" '.releases[] | select(.["release-version"] == $v) | .["release-notes"] // ""' <<<"$metadata" | head -1)
+          notes=$(jq -r --arg v "$latest" 'first(.releases[] | select(.["release-version"] == $v) | .["release-notes"] // "") // ""' <<<"$metadata")
 
           {
             echo "最新リリース **$tag** に同梱している .NET ランタイムは **$bundled** ですが、**$latest** が出ています。"

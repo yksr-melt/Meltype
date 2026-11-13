@@ -5,6 +5,7 @@
 #                    結果は SARIF にして Code scanning に送る。大きな移行の note は IDE に残す。命名は理由付きのソース内抑制を反映する (tools/filter-sarif.mjs)。
 #   スクリプト     … .github/bot と tools の Node のスクリプトのテスト
 #   表記           … Pull Request で足したソースファイルの先頭に、ライセンス・著作権の表記があるか
+#   ワークフロー   … .github/workflows を actionlint と shellcheck で調べ、指摘があれば失敗
 #   依存関係       … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
 # セキュリティの解析 (CodeQL) は codeql.yml。
 name: quality
@@ -21,6 +22,11 @@ permissions:
 concurrency:
   group: quality-${{ github.ref }}
   cancel-in-progress: true
+
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
 
 jobs:
   format:
@@ -113,6 +119,19 @@ jobs:
       - run: node .github/bot/notices.mjs
         env:
           GITHUB_TOKEN: ${{ github.token }}
+
+  # ワークフローの検査 (actionlint。run の中は shellcheck)。#1842
+  #   steps.<id>.outputs の書き間違いや、無い needs を参照すると、式が空になり step が黙って飛ばされる。それをマージ前に見つける
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # 版を固定して go の checksum データベースで確かめて入れる (YAML のアンカーに対応した版が要る)
+      - run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.8
+      - run: '"$(go env GOPATH)/bin/actionlint"'
 
   dependencies:
     if: github.event_name == 'pull_request'

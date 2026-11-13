@@ -27,6 +27,11 @@ concurrency:
   group: mac-${{ github.ref }}
   cancel-in-progress: true
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   app:
     runs-on: macos-15
@@ -67,7 +72,11 @@ jobs:
           echo "$MAC_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$keychain" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
-          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          # 既にある keychain も検索の対象に残す (1 行に 1 つ、"…" で囲まれて出る)
+          # macOS の bash 3.2 には mapfile が無いので read で読む
+          keychains=()
+          while IFS= read -r line; do keychains+=("$line"); done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"(.*)"$/\1/')
+          security list-keychains -d user -s "$keychain" "${keychains[@]}"
           rm "$RUNNER_TEMP/cert.p12"
           echo "MELTYPE_MAC_IDENTITY=$MAC_IDENTITY" >> "$GITHUB_ENV"
       - name: Build

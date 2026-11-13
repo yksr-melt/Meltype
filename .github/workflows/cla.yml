@@ -15,6 +15,11 @@ on:
 
 permissions: {}
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   bot:
     if: >-
