@@ -252,13 +252,6 @@ public sealed partial class CompositionController
                 var step = _shift ? -1 : 1;
                 _predictionIndex = (_predictionIndex + 1 + step + _predictions.Count + 1) % (_predictions.Count + 1) - 1;
                 return;
-            case VirtualKeys.Tab when !_converting && TypingCandidates() is { } typing:
-                // 入力中に出した候補 (設定「入力中も変換候補をいくつか表示」) は、予測の候補と同じく Tab で選ぶ (Shift+Tab は最後から)。
-                // Space と同じ変換を始めると、文節に分かれて見えていた一覧と別の語になる (犬神家の一族 → 犬が mike の 一族)。
-                // クリックと同じく見えていた一覧のまま選び、続く Tab / Shift+Tab はその一覧の次・前の候補にする
-                SelectCandidateAt(_shift ? typing.Count - 1 : 0);
-                _tabStartedConversion = _converting;
-                return;
             case VirtualKeys.Tab when !_converting && !_shift && _settings().TabConversion && TabStartsConversion():
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。
                 StartConversion();

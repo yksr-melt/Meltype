@@ -431,22 +431,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void TabSelectsFromTypingCandidates()
-    {
-        // 入力中に出した候補は Tab で選ぶ。変換を始めて文節に分けず、見えていた一覧のまま (犬神家の一族 が 犬が mike の 一族 になっていた)
-        var k = new Keyboard(live: true) { ShowCandidatesWhileTyping = true };
-        k.Type("tanniwotoru");
-        var shown = k.Host.View!.Candidates.ToList();
-        Assert.True(shown.Count >= 2, "候補が出ている: " + string.Join(",", shown));
-        k.Press(VirtualKeys.Tab);
-        Assert.Equal(shown[0], k.Showing, "Tab で見えていた先頭の語");
-        k.Press(VirtualKeys.Tab);
-        Assert.Equal(shown[1], k.Showing, "続く Tab で次の語");
-        k.Type("\n");
-        Assert.Equal(shown[1], k.Host.Document, "その語で確定");
-    }
-
-    [Test]
     public static void Issue887_ExeStaysEnglish()
     {
         // xe (ぇ) の小書きの綴りで最後まで読めても、拡張子の exe は英字のまま (えぇ になっていた)
