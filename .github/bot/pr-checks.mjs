@@ -44,8 +44,9 @@ function expect(resultFile) {
 
 function compare(baseFile, prFile) {
   const pr = JSON.parse(fs.readFileSync(prFile, 'utf8'));
-  let base = null;
-  try { base = JSON.parse(fs.readFileSync(baseFile, 'utf8')); } catch { /* main に --eval-json がまだ無いか、main をビルドできない */ }
+  // ファイルが無いのは main をビルドできなかったときだけ (core.yml)。壊れた JSON などは失敗にする (#1842)
+  const baseText = readIfExists(baseFile);
+  const base = baseText === null ? null : JSON.parse(baseText);
   const baseCases = new Map((base?.cases ?? []).map(c => [c.key, c]));
   const broken = pr.cases.filter(c => !c.ok && baseCases.get(c.key)?.ok === true);
   const fixed = pr.cases.filter(c => c.ok && baseCases.get(c.key)?.ok === false);
@@ -72,10 +73,20 @@ function compare(baseFile, prFile) {
   }
 }
 
+/** ファイルを読む。無いときだけ null (ほかの読めない理由は例外のまま気付けるようにする)。 */
+function readIfExists(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch (e) {
+    if (e.code === 'ENOENT') return null;
+    throw e;
+  }
+}
+
 /** 「語[Tab]見え方」の行を読む (無ければ null)。 */
 function readJudged(file) {
-  let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  const text = readIfExists(file);
+  if (text === null) return null;
   const map = new Map();
   for (const line of text.split('\n')) {
     const tab = line.indexOf('\t');
@@ -98,7 +109,7 @@ function impact(baseFile, prFile, allFile) {
   const pr = readJudged(prFile), base = readJudged(baseFile);
   summary('## よく使う語の判定の変化 (参考)\n');
   if (!pr || !base) {
-    summary('main にまだこの仕組みが無いか、main をビルドできないため、比べられません。');
+    summary('main をビルドできないため、比べられません。');
     return;
   }
   const changes = judgedChanges(base, pr);
@@ -123,3 +134,5 @@ if (mode === 'cases') cases(a);
 else if (mode === 'expect') expect(a);
 else if (mode === 'compare') compare(a, b);
 else if (mode === 'impact') impact(a, b, process.argv[5]);
+// 知らないモードを何もせずに成功にしない (#1842)
+else throw new Error(`知らないモードです: ${mode}`);

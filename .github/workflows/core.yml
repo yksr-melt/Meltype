@@ -109,15 +109,11 @@ jobs:
             echo "::warning::main ($BASE) をビルドできないため、精度を比べません"
             exit 0
           fi
-          # main にまだ --eval-json が無ければ比べない (pr-checks.mjs が「比べられません」と出す)
-          if grep -q -- '--eval-json' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
-            dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --eval-json "$RUNNER_TEMP/base.json"
-          fi
-          # main にまだ --judge-corpus が無ければ比べない
-          if grep -q -- '--judge-corpus' "$RUNNER_TEMP/base/src/Meltype.Core.Tests/Program.cs"; then
-            # Pull Request の一覧の語も判定する (Pull Request で辞書に足した語も比べる)
-            dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release -- --judge-corpus "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv"
-          fi
+          # main はもう --eval-json・--judge-corpus を持つので、無いときに飛ばす分岐は置かない
+          # (フラグの名前を変えたときに、比べないまま成功にならないようにする。#1842)
+          dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release --no-build -- --eval-json "$RUNNER_TEMP/base.json"
+          # Pull Request の一覧の語も判定する (Pull Request で辞書に足した語も比べる)
+          dotnet run --project "$RUNNER_TEMP/base/src/Meltype.Core.Tests" -c Release --no-build -- --judge-corpus "$RUNNER_TEMP/base-words.tsv" "$RUNNER_TEMP/pr-words.tsv"
       - name: よく使う語の判定の変化 (参考)
         run: |
           # main の一覧の語も Pull Request で判定し直す (Pull Request で辞書から消した語も比べる)

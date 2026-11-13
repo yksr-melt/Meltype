@@ -111,13 +111,14 @@ jobs:
           $api = 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest'
           $rel = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'meltype-bot' }
           $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' } | Select-Object -First 1
-          if (-not $asset) { Write-Host 'Windows リリースが見つかりません (Mozc なしで続行)'; exit 0 }
+          # Mozc なしだと、かなのまま確定した結果を変換の結果のように返してしまうので止める (#1842)
+          if (-not $asset) { throw '最新のリリースに Windows の zip がありません' }
           $zip = Join-Path $env:RUNNER_TEMP 'meltype-win.zip'
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
           $extract = Join-Path $env:RUNNER_TEMP 'meltype-win'
           Expand-Archive -LiteralPath $zip -DestinationPath $extract -Force
           $helper = Get-ChildItem -Path $extract -Recurse -Filter 'meltype_mozc_helper.exe' | Select-Object -First 1
-          if (-not $helper) { Write-Host 'zip に meltype_mozc_helper.exe がありません'; exit 0 }
+          if (-not $helper) { throw 'zip に meltype_mozc_helper.exe がありません' }
           Copy-Item $helper.FullName (Join-Path $bin 'meltype_mozc_helper.exe') -Force
           $full = (Resolve-Path (Join-Path $bin 'meltype_mozc_helper.exe')).Path
           "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
