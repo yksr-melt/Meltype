@@ -160,6 +160,8 @@ public sealed class MeltypeRuntime : IDisposable
     /// Mozc を使わない・Mozc が答えないときは消さない。消したかは覚えず、起動するたびに呼ぶ (読みと合わない語は少ないので、Mozc に聞くのは数件)。
     /// 入力スレッドから呼ぶ。Mozc には裏のスレッドで聞き、学習データは post で入力スレッドに戻してから消す (学習データは入力スレッドで読む)。
     /// </summary>
+    // TODO: 壊れた答えを学習したのは 1.5.0 以前 (#1776 は 1.5.1 から)。1.5.0 以前から更新する人がいなくなったら、
+    // これと、これだけが使う HybridConverter.IsBuiltFromMozcCandidatesNow・MozcConverter.ConvertWithCandidatesNow・PhraseHistory.Entries を消す
     public void ForgetZenzaiHallucinations(HybridConverter converter, Action<Action> post)
     {
         bool Suspect(string reading, string text) =>
