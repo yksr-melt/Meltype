@@ -1134,7 +1134,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     }
     *eaten = TRUE;
     const UINT slot = ShortcutSlot(vk, lParam);
-    const bool repeat = eatenDown_[slot];
+    const bool repeat = (lParam & (1 << 30)) != 0;
     eatenDown_[slot] = true;
     if (CapturesKey(vk, lParam)) {
         HandleKey(context, ShortcutKey(vk, lParam), vk == VK_SPACE ? L' ' : 0, repeat, true);
