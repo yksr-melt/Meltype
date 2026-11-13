@@ -64,13 +64,18 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _engine.ImeServer = _tipServer;
         _tipServer.ClientOutdated += process =>
         {
-            // DLL は動作モードが Meltype キーボードのときも接続してくる。ログはアプリごとに 1 回
-            if (_engine.Running.Mode != InputMode.Tsf || !_outdatedApps.Add(process)) return;
+            // DLL は動作モードが Meltype キーボードのときも接続してくる
+            if (_engine.Running.Mode != InputMode.Tsf) return;
+            // 通知は見逃すことがあるので、そのアプリで打っている間 (同じ接続から別ビルドの要求が届くたび、3 秒おき) は、打っている所にも出す。
+            // 古い DLL が残っているかは届いた要求で分かるので、アプリを再起動して直れば、覚えておく状態なしに出なくなる
+            _composition.ShowNotice($"「{process}」を再起動してください (前の版の Meltype IME が残っていて、入力できません)", 3000);
+            // ログはアプリごとに 1 回
+            if (!_outdatedApps.Add(process)) return;
             Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
-            // 打てない理由が分かるように、アプリごとに 1 回知らせる (1 回だけだと、見逃したあとに別のアプリで打てなくても理由が分からない)。
-            // 設定「通知を表示」にかかわらず出す。入力を止めないように、ダイアログではなく通知にする。通知を見逃しても、トレイの状態の行に残す
-            ShowBalloonTip(10000, "Meltype IME", $"「{process}」は、前の版の Meltype IME を読み込んだままなので、Meltype IME で入力できません。「{process}」を再起動してください (直らなければ PC を再起動してください)。");
-            UpdateStatus();
+            // 更新前から開いているアプリはすべて同じなので、アプリごとではなく、PC の再起動を 1 回だけ求める
+            // (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
+            if (_outdatedApps.Count == 1)
+                ShowBalloonTip(10000, "Meltype IME", $"更新前から開いているアプリ (「{process}」など) は、PC を再起動するまで Meltype IME で入力できません。PC を再起動してください。");
         };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
@@ -592,8 +597,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _tray.Icon = _keyboard.Japanese ? _onIcon : _directIcon;
             status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
-        // Meltype IME で入力できないアプリ (TipServer.ClientOutdated) を、通知を見逃しても分かるように出す
-        if (tsf && _outdatedApps.Count > 0) status += $"\n再起動が必要なアプリ: {string.Join("、", _outdatedApps)}";
         _statusItem.Text = status;
         var zenzai = _composition.ZenzaiStatus(settings.UseZenzai, settings.ZenzaiServerPath, settings.ZenzaiModelPath);
         _zenzaiItem.Visible = zenzai is not null;
