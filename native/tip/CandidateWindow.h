@@ -21,7 +21,8 @@ struct CandidateView {
     std::wstring meaning;     // 選んでいる候補の意味 (無ければ空)
     bool numbered = false;    // 番号を出すか (数字キーで選べる一覧)
     std::wstring typed;       // 打ったキー (ローマ字。出さないなら空)
-    std::wstring hint;        // 案内 (無ければ空)};
+    std::wstring hint;        // 案内 (無ければ空)
+};
 
 class CandidateWindow {
 public:
