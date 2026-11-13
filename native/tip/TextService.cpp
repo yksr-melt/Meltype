@@ -717,11 +717,9 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
     std::string response;
     if (!pipe_.Transact(request, response, timeoutMs, optional)) return false;
     const bool parsed = ParseJson(response, reply);
-    if (parsed && reply[L"stale"].Bool()) {
-        // この impl は Meltype.exe と別ビルド: stub に差し替えを要求する (差し替わるまでは、タイムアウトと同じ扱い)
-        if (stub_) PostMessageW(stub_, kStubImplStale, 0, 0);
-        return false;
-    }
+    // この impl は Meltype.exe と別ビルド: stub に差し替えを要求する。差し替わるまでは、応答をそのまま使う
+    // (Meltype.exe は別ビルドの impl にも今の形式で応答する。形式が合わなければ下で読めずに捨てる)
+    if (parsed && reply[L"stale"].Bool() && stub_) PostMessageW(stub_, kStubImplStale, 0, 0);
     if (!parsed || reply[L"state"].IsNull() || reply[L"result"].IsNull()) {
         // 版の違う Meltype.exe (更新の途中など)
         TipLog(L"応答を読めません");

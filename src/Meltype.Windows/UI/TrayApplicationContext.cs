@@ -66,11 +66,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             // DLL は動作モードが Meltype キーボードのときも接続してくる。ログはアプリごとに 1 回
             if (_engine.Running.Mode != InputMode.Tsf || !_outdatedApps.Add(process)) return;
-            Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
-            // 更新前から開いているアプリはすべて同じなので、アプリごとではなく、PC の再起動を 1 回だけ求める
-            // (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
-            if (_outdatedApps.Count == 1)
-                ShowBalloonTip(10000, "Meltype IME", $"更新前から開いているアプリ (「{process}」など) は、PC を再起動するまで Meltype IME で入力できません。PC を再起動してください。");
+            // 前の版の DLL にも今の形式で応答するので、入力は止まらない。通知は出さずにログだけ残す
+            Diagnostics.Log.Info($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、前の版の Meltype IME で動きます。");
         };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;

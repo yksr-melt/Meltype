@@ -67,16 +67,17 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   stub がロードする impl は、stub と同じフォルダーの `MeltypeTipImpl.dll.sha256` で指定する。Meltype.exe からパイプで指定する形にはしない
   (パイプのサーバーを偽装したプロセスによる、残っている古い impl へのダウングレードを防ぐ)。
   `Register-Tip.ps1` は、stub を登録できてから `MeltypeTipImpl.dll.sha256` を書き換える (stub の登録に失敗して前の stub に戻したときは、前の impl を指したまま)
-- impl は要求に自分の SHA-256 (`impl`) を付ける。Meltype.exe は、同梱の `tip\<x64|x86>\MeltypeTipImpl.dll.sha256` と一致しなければ `{"stale":true}` を返す (`TipBuild`)。
+- impl は要求に自分の SHA-256 (`impl`) を付ける。Meltype.exe は、同梱の `tip\<x64|x86>\MeltypeTipImpl.dll.sha256` と一致しなければ、ふつうの応答に `"stale":true` を足して返す (`TipBuild`)。
   impl は stub のウィンドウに `kStubImplStale` を PostMessage し、stub は `MeltypeTipImpl.dll.sha256` を読み直して、変わっていたら前の impl を `Deactivate` し、
   新しい impl を同じ `ITfThreadMgr`・`TfClientId` で `ActivateEx` する (未確定文字列は、前の impl の `Deactivate` が確定する)。
-  差し替わるまでのキーは、Meltype.exe の応答がタイムアウトしたときと同じ扱いになる
-- 別ビルドの impl とは通信しないので、パイプのプロトコルに後方互換性は要らない。
+  差し替わるまでのキーも、その応答で処理する
+- 別ビルドの impl にも今の形式で応答する (差し替わるまで・差し替えられないアプリでも打てるように)。要求を読めなければ `{"active":false,…}`、`ImeEvent` の `version` が違えば本体が受け持たないので、形式を変えても誤動作はしない。
+  形式を変えるときは `ImeHost.Version` を上げる。
   互換性が要るのは stub と impl の ABI (`Globals.h` の `MeltypeTipCreateFn`・`kStubImplStale`) で、変更したら `kStubImplAbi` を上げる。
   stub は impl の `MeltypeTipAbi` が自分の `kStubImplAbi` と一致しなければロードした impl を使わないので、ABI を変更した更新は、アプリを再起動するまでそのアプリに反映されない
 - 前の impl は `FreeLibrary` しない (プロセスの終了まで残る)。ファイルは、どのプロセスもロードしていなければ次の登録で削除する
 - 差し替えられないアプリ (stub と impl に分割する前の DLL が残っている・古い stub が今の impl をロードできない) は、登録済みの impl が Meltype.exe と同じビルドになってから 3 秒たっても、同じ接続から別ビルドの要求が届くことで検出する。
-  分割前の DLL は更新前から開いているアプリすべてに残るので、Meltype.exe は PC の再起動を求める通知を 1 回だけ出す。分割前の DLL には今までの形式で応答しない (後方互換レイヤーを持たない)
+  分割前の DLL や差し替えられない impl にも今の形式で応答するので入力は止まらず、ログに残すだけにする (通知は出さない)
 - 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。Meltype IME を再登録せずに Meltype.exe だけを更新すると、こうなる
   (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
   動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (`ImeDeclined` は見ない。聞いたことを覚える状態は持たない)
@@ -141,7 +142,7 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON。
   要求は `{"impl":impl の SHA-256,"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
-  応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。別ビルドの impl には `{"stale":true}` (上の「stub と impl」)、パースできない要求には `{"active":false,…}` を返し、DLL はどちらもキーを消費しない
+  応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。別ビルドの impl には `"stale":true` を足す (上の「stub と impl」)。パースできない要求には `{"active":false,…}` を返し、DLL はキーを消費しない
 - 状態 (`StateRequested`) は、起動したとき・前面に戻ったとき・アプリや Windows が IME を開閉したときに受け取り直す (待つのは最大 100ms)。変換中だけ、背景の変換の結果を別のつながりの `{"wait":世代}` で待つ
 - 1 キーごとに同期で 1 往復。待つのは最大 800ms。応答が無ければ、変換中の文字はそのまま確定し、打った文字はその場で入れる。
   書き込み・読み取りが時間内に終わらなかったら、閉じて、次の要求でつなぎ直す。5 秒以内にまた時間切れになったら、そのあと 3 秒はつながない (応答しない Meltype.exe を、どのアプリでも打鍵のたびに待たないように)。
