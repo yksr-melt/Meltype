@@ -32,8 +32,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly System.Threading.Timer _pollTimer;
     private readonly object _gate = new();
     private readonly Queue<Input> _queue = new();
-    // 押している物理キー (自動の繰り返しを見分ける)。フックのスレッドだけが使う
-    private readonly HashSet<int> _held = [];
+    // 押している物理キー (PhysicalId → 仮想キーと押した時刻)。自動の繰り返しと、押している修飾キーを見分ける。フックのスレッドだけが使う
+    private readonly Dictionary<int, (int Vk, long TimeMs)> _held = [];
     // 本体が使った押下 (離したこともアプリに通さない)。_gate で守る
     private readonly HashSet<int> _consumed = [];
     // ワークアラウンド (ImeEventType.KeyReleased): 離したことも本体に送る押下。_gate で守る
@@ -118,7 +118,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         var repeat = false;
         if (e.IsDown)
         {
-            repeat = !_held.Add(e.PhysicalId);
+            repeat = !_held.TryAdd(e.PhysicalId, (e.Vk, e.TimeMs));
             if (_alt != 0 && e.Vk != _alt) _altInterrupted = true;
         }
         else _held.Remove(e.PhysicalId);
@@ -147,7 +147,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             }
             if (Captures(e)) return Enqueue(input);
             // アプリに通したキーはキャレットを動かすかもしれない (後のキーより先に本体に知らせる)
-            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = IsDown(VirtualKeys.Control) }));
+            if (!VirtualKeys.IsModifier(e.Vk)) Enqueue(new Input(Caret: new ImeCaret { Moved = true, PassedKey = e.Vk, Ctrl = IsDown(VirtualKeys.Control, e.TimeMs) }));
         }
         return false;
     }
@@ -196,8 +196,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     {
         if (VirtualKeys.IsModifier(e.Vk)) return false;
         var state = _state;
-        var mods = (IsDown(VirtualKeys.Shift) ? 1 : 0) | (IsDown(VirtualKeys.Control) ? 2 : 0) | (IsDown(VirtualKeys.Menu) ? 4 : 0) |
-            (IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin) ? 8 : 0);
+        var mods = (IsDown(VirtualKeys.Shift, e.TimeMs) ? 1 : 0) | (IsDown(VirtualKeys.Control, e.TimeMs) ? 2 : 0) | (IsDown(VirtualKeys.Menu, e.TimeMs) ? 4 : 0) |
+            (IsDown(VirtualKeys.LWin, e.TimeMs) || IsDown(VirtualKeys.RWin, e.TimeMs) ? 8 : 0);
         if (state.HandlesInput && !_stale)
         {
             if (state.Capture.Shortcuts.Any(key => ToggleShortcut.NormalizeHankakuKey(key.Vk) == ToggleShortcut.NormalizeHankakuKey(e.ShortcutKey) && key.Modifiers == mods)) return true;
@@ -224,9 +224,9 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return true;
     }
 
-    private static ImeKey KeyOf(KeyEvent e, bool repeat)
+    private ImeKey KeyOf(KeyEvent e, bool repeat)
     {
-        bool shift = IsDown(VirtualKeys.Shift), ctrl = IsDown(VirtualKeys.Control), alt = IsDown(VirtualKeys.Menu), command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
+        bool shift = IsDown(VirtualKeys.Shift, e.TimeMs), ctrl = IsDown(VirtualKeys.Control, e.TimeMs), alt = IsDown(VirtualKeys.Menu, e.TimeMs), command = IsDown(VirtualKeys.LWin, e.TimeMs) || IsDown(VirtualKeys.RWin, e.TimeMs);
         var ch = !ctrl && !alt && !command && KeyText.CharFromKey(e.Vk, e.Scan, shift) is { } c && !char.IsControl(c) ? c : 0;
         return new ImeKey { Vk = e.ShortcutKey, Ch = ch, Shift = shift, Ctrl = ctrl, Alt = alt, Command = command, Repeat = repeat };
     }
@@ -460,7 +460,23 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return capture;
     }
 
-    private static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
+    // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直すので、
+    // 送り直すまでは GetAsyncKeyState に表れない (止めたキーは反映されない)。フックが見た押下からも見る。
+    // そうしないと、変換中に Shift + / を打つと Shift が離れて見え、? が / (・) になる。
+    // ただし離したことがフックに届かないことがある (Win + L でロック画面に移ったときなど) ので、送り直しを待つほど長くない
+    // 1 秒以内の押下だけを見る (押したままに見え続けると、打つ文字がすべて Shift・Windows キー付きになる)。フックのスレッドから呼ぶ
+    private bool IsDown(int vk, long nowMs) =>
+        (Native.GetAsyncKeyState(vk) & 0x8000) != 0 ||
+        _held.Values.Any(held => (held.Vk == vk || GenericModifier(held.Vk) == vk) && nowMs - held.TimeMs < 1000);
+
+    /// <summary>左右を区別する修飾キーの、区別しない仮想キー (修飾キーでなければ 0)。</summary>
+    private static int GenericModifier(int vk) => vk switch
+    {
+        VirtualKeys.LShift or VirtualKeys.RShift => VirtualKeys.Shift,
+        VirtualKeys.LControl or VirtualKeys.RControl => VirtualKeys.Control,
+        VirtualKeys.LMenu or VirtualKeys.RMenu => VirtualKeys.Menu,
+        _ => 0,
+    };
 
     /// <summary>入力先のスレッドで選んでいる入力言語が日本語か (物理配列ではない。HKL の下位ワードが言語 ID で、上位ワード (配列・IME の識別子) と開閉状態には依存しない)。</summary>
     internal static bool IsJapaneseLayout(IntPtr layout) => (layout.ToInt64() & 0xFFFF) == 0x0411;
