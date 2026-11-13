@@ -94,7 +94,14 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     private bool UseSystem => engine() != ConversionEngine.Mozc || mozc is not { IsAvailable: true };
 
     public string? Convert(string hiragana) =>
-        (Zenzai(hiragana, null) is { Count: > 0 } z ? string.Concat(z.Select(c => c.Text)) : null) ?? ConvertStandalone(hiragana);
+        (Zenzai(hiragana, null) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
+
+    /// <summary>Zenzai の答えを使えるか (<see cref="ConvertClauses"/> と同じ決め方): かなが読みと合うか、Mozc の文節ごとの候補をつないで作れるか。</summary>
+    private bool IsUsable(string hiragana, string answer) =>
+        ZenzaiConverter.IsPlausible(hiragana, answer) || IsBuiltFromMozcCandidates(hiragana, answer);
+
+    private bool IsBuiltFromMozcCandidates(string hiragana, string answer) =>
+        UseMozc && AskMozc(() => mozc!.ConvertWithCandidates(hiragana)) is { } fromMozc && Align(fromMozc, answer) is not null;
 
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
     public string? ConvertStandalone(string hiragana) =>
@@ -106,6 +113,8 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
     /// 違う文字列でも、Mozc の文節ごとの候補を 1 つずつ選んでつなげると作れるなら、Mozc の文節の区切りで返す (Align)。
     /// 1 つの文節のままだと、文節ごとに候補を選び直せず、前に選び直して覚えた変換 (文節の読みごと) も効かない。
     /// Mozc の文節で返した結果は、確定すると Mozc にも覚えさせる (Mozc の候補に無い 1 つの文節は、Mozc が覚えない)。
+    /// Mozc の候補で作れない答えは、かなが読みと合うときだけ使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
+    /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
     /// </summary>
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
@@ -116,7 +125,8 @@ public sealed class HybridConverter(Func<ConversionEngine> engine, MozcConverter
         if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();
         // 候補は、この変換で文節と一緒に受け取ったものを使う (ヘルパーには聞き直さない)。
         // 文節の読みは Mozc が返したまま (全角の（ を ( にするなど、読み全体と少し違うことがある。Mozc だけで変換するときと同じ)
-        return (fromMozc is not null ? Align(fromMozc, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() : null) ?? z;
+        return (fromMozc is not null ? Align(fromMozc, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() : null)
+            ?? (ZenzaiConverter.IsPlausible(hiragana, z[0].Text) ? z : other);
     }
 
     /// <summary>
