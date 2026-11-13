@@ -1,9 +1,10 @@
 # リリース。タグ (v*) の push と、bot の /release・/pre-release (タグで workflow_dispatch する) で動く。
 # windows.yml・mac.yml・linux.yml を呼んで配布物を作り、タグならリリースに添付する。
-#   publish             … 配布物をタグのリリースに添付する (bot が作った下書きがあれば、それに付ける)
+#   publish             … 配布物をタグのリリースに添付して公開する (bot が作った下書きがあれば、それに付ける)
 #   homebrew            … Casks/meltype.rb の更新 PR を作る (main は PR 必須のため)
+#   winget              … winget-pkgs に新しい版の PR を出す (winget.yml。プレリリースは出さない)
 #   *-repositories      … apt と dnf のリポジトリを GitHub Pages に公開する
-# homebrew・*-repositories は publish のあと (どれかの OS が失敗したら、どこにも公開しない)。
+# homebrew・winget・*-repositories は publish のあと (どれかの OS が失敗したら、どこにも公開しない)。
 # タグでなく手動実行したときは、3 つの OS のテスト版の配布物を Artifacts に置くだけ。
 # 呼ぶワークフローには書き込みの権限を渡さない。書き込みはこのファイルのジョブだけがする。
 name: release
@@ -53,6 +54,14 @@ jobs:
             dist/meltype_*.deb
             dist/meltype-*.rpm
           fail_on_unmatched_files: true
+
+  winget:
+    if: startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-')
+    needs: publish
+    uses: ./.github/workflows/winget.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit
 
   # Homebrew の cask をこのリリースの zip の SHA-256 で作る (#863)。同じリポジトリを tap として使い、Casks/ に更新する。
   homebrew:

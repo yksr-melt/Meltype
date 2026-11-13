@@ -75,12 +75,13 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動かしている設定。入力・表示・報告はこれを読む。動作モードが Meltype IME でも、使えなければ Meltype キーボード。</summary>
     public Settings Running => _running;
 
-    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い)、Meltype キーボードで動かす。
+    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・
+    // キーボードの一覧に無い)、Meltype キーボードで動かす。
     // config.json は書き換えないので、Meltype IME を入れ直してから読み直すと Meltype IME で動く
     private static Settings RunningSettings(Settings? previous, Settings next)
     {
         if (next.Mode != InputMode.Tsf || (!AppPaths.IsPortable && Tip.TipServer.IsUsable)) return next;
-        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
+        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
         var running = next.Clone();
         running.Mode = InputMode.Keyboard;
         return running;
