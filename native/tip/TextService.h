@@ -119,7 +119,7 @@ private:
     // 出来事を送って応答を読む。field は ImeField の JSON (読まないなら空)、anchor は入力モードを表示する位置
     bool Send(const char* type, const std::string& field, const std::string& fields, JsonValue& reply, DWORD timeoutMs = 800,
               bool optional = false, const RECT* anchor = nullptr);
-    // 入力欄の事実 (ImeField) を読む (編集セッションの中で)。パスワード欄なら false (Meltype.exe に文字を送らない)
+    // 入力欄の事実 (ImeField) を読む。パスワード欄なら属性だけを入れる。種類が読めなければ field は空のまま。
     bool ReadField(TfEditCookie ec, ITfContext* context, std::string& field);
     // 応答の状態を覚える。古い状態 (rev が小さい) では上書きしない
     void ApplyState(const JsonValue& state);
@@ -161,7 +161,9 @@ private:
     bool CommitNow(bool keepAppCaret = false, bool left = false);
     void CommitInSession(TfEditCookie ec, ITfContext* context, bool keepAppCaret, bool left = false);
     // アプリ (や、確定できない前の入力欄) が変換中の文字を表示のまま確定した: Meltype.exe も確定したことにする
-    void CommittedOutside();
+    void CommittedOutside(const std::string& field = {});
+    // パスワード欄に変わったとき、表示済みの文字を確定して属性を通知する。
+    void FinishPasswordTransition(TfEditCookie ec, ITfContext* context);
     void AbandonComposition();
     void ResumeOrCommit(ITfContext* context);
     void SelectCandidate(int index);
@@ -173,9 +175,10 @@ private:
     bool ContextDisabled(ITfContext* context);
     void AdviseTextEditSink(ITfDocumentMgr* documentMgr);
     void UnadviseTextEditSink();
-    bool IsSecretField(TfEditCookie ec, ITfContext* context);
-    // 入力欄の種類を読む読み取りの編集セッション。1 = パスワード欄、0 = 違う、-1 = 読めない (キーの編集セッションの中で読む)
-    int ReadSecretField(ITfContext* context);
+    enum class FieldScope { Regular, Password, Unreadable };
+    FieldScope ReadFieldScope(TfEditCookie ec, ITfContext* context);
+    // キーを受け取る前の読み取り専用セッション。セッションを開けなければキーの処理の中で読み直す。
+    FieldScope ProbeFieldScope(ITfContext* context);
     void SetOpen(bool open);
     void UpdateLangBar();
     bool ForgetAbandoned(ITfComposition* composition);
@@ -224,6 +227,7 @@ private:
     Microsoft::WRL::ComPtr<ITfRange> resumeRange_;  // アプリが確定した打ちかけの文字 (次のキーで変換中に戻す)
     Microsoft::WRL::ComPtr<ITfContext> resumeContext_;
     std::wstring resumeText_;
+    bool resumePrivate_ = false;
     bool lastConverting_ = false;  // 最後に置いた変換中の文字が、変換した状態か (打っている途中なら false)
     int staleCommitTries_ = 0;     // 前の入力欄に残った変換中の文字を確定しようとした回数 (打鍵ごとに 1 回)
     UINT staleVk_ = 0;             // OnTestKeyDown で数えたキーと時刻 (続く OnKeyDown で数え直さない)
@@ -241,13 +245,11 @@ private:
     UINT passVk_ = 0;              // OnTestKeyDown で素通しにしたキー
     ULONGLONG passTime_ = 0;
     bool ownEdit_ = false;         // 自分の編集セッションが終わった通知を、キャレットが動いたことにしない
-    bool secretChecked_ = false;   // このキーで、入力欄の種類 (パスワード欄でないこと) を確かめた
-    bool secretWhileComposing_ = false;  // 変換中にパスワード欄になったが、受け取る前に確定できなかった (キーの処理の中で確定して送り直す)
+    bool passwordNotified_ = false; // Password の応答で捕捉を止めた後、同じ入力先でも属性を読み直す
     UINT secretVk_ = 0;            // OnTestKeyDown で入力欄の種類を読んだキー・入力欄・時刻・結果 (続く OnKeyDown で 1 回だけ使う)
     Microsoft::WRL::ComPtr<ITfContext> secretContext_;
     ULONGLONG secretTime_ = 0;
-    int secretResult_ = -1;
-    bool secretPrivate_ = false;
+    FieldScope secretResult_ = FieldScope::Regular;
     std::wstring lastSecretScopes_;  // 調べるとき用: 前にパスワードとみなした入力欄の種類 (同じならログに書かない)
     bool privateField_ = false;    // 前に入力欄の種類を読んだとき、入力を覚えないように求める入力欄 (IS_PRIVATE) だった
     const wchar_t* scopeSource_ = nullptr;  // 入力欄の種類を前に読んだところ (ログ用)

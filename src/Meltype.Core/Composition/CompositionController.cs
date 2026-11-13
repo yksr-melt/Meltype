@@ -193,10 +193,21 @@ public sealed partial class CompositionController
         _text.ZSymbols = () => _settings().ZSymbols;
     }
 
-    /// <summary>入力を覚えないように求める入力欄か。true の間は学習しない。</summary>
-    public bool Private { get; set; }
+    private bool _privateField;
+    private bool _privateComposition;
 
-    private bool Learning => _settings().LearningEnabled && !Private;
+    /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
+    public bool Private
+    {
+        get => _privateField;
+        set
+        {
+            _privateField = value;
+            if (value && IsComposing) _privateComposition = true;
+        }
+    }
+
+    private bool Learning => _settings().LearningEnabled && !Private && !_privateComposition;
 
     private bool KanaInput => _settings().InputStyle == Config.InputStyle.Kana;
 
@@ -205,6 +216,8 @@ public sealed partial class CompositionController
 
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
     public bool IsComposing => !_text.IsEmpty || _heldLetters.Length > 0;
+
+    internal bool HasPendingInput => IsComposing || _kanaLayout.ThumbHeld || _kanaLayout.HasPrefix;
 
     /// <summary>変換して候補を選んでいるか。</summary>
     public bool IsConverting => _converting;
@@ -479,6 +492,28 @@ public sealed partial class CompositionController
         _clauses = [];
         _spaceStartedConversion = false;
         _tabStartedConversion = false;
+    }
+
+    /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>
+    internal void CancelPending()
+    {
+        ClearComposition();
+        ClearHeld();
+        ForgetLastCommit();
+        _caretBefore = null;
+        _precedingText = null;
+        _followingText = null;
+        _pendingReplace = null;
+        _privateComposition = false;
+        _keptChoices.Clear();
+        _liveCache.Clear();
+        _predictions = [];
+        _predictionKey = "";
+        _predictionIndex = -1;
+        _pressed.Clear();
+        _kanaLayout.Reset();
+        _out.Begin(null, null);
+        _out.Hide();
     }
 
     /// <summary>フォーカスが変わったときなど。前の入力欄の文脈を持ち越さない。</summary>

@@ -83,7 +83,7 @@ internal static class TipIndicatorTests
             return indicator.Visible;
         }
 
-        Assert.True(!Shown("ModeToggleRequested"), "出さない設定");
+        Assert.True(!Shown("ModeToggleRequested", fields: ",\"field\":{}"), "出さない設定");
         settings.ModeIndicator = ModeIndicatorTiming.OnSwitch;
         Assert.True(Shown("ModeToggleRequested") && Shown("ModeToggleRequested"), "明示的な切り替えのたびに出す");
         Assert.True(!Shown("KeyPressed", fields: ",\"key\":{\"vk\":65,\"ch\":97}") && !Shown("StateRequested"), "切り替えでない出来事では出さない");
