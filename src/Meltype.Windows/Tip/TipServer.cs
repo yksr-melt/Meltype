@@ -418,12 +418,9 @@ internal sealed class TipServer : IDisposable
                 try
                 {
                     var json = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
-                    // 別ビルドの impl にも、今の形式で応答する (stub と impl に分割する前の DLL や、差し替えられなかった impl でも打てるように)。
-                    // 要求を読めなければ Inactive、プロトコルの版が違えば ImeHost が受け持たないので、形式が変わっていても誤動作はしない
-                    var stale = !_build.Matches(json);
-                    if (stale)
+                    if (!_build.Matches(json))
                     {
-                        // stub は "stale" を受けて impl を差し替え、新しい impl は別の接続でつなぐ。
+                        // stub は、この応答を受けて impl を差し替え、新しい impl は別の接続でつなぐ。
                         // 登録済みの impl が同じビルドになってからも、同じ接続から別ビルドの要求が届き続けるなら、差し替えられなかった
                         // (登録済みの impl の方が別ビルドの間は、アプリを再起動しても変わらないので数えない)
                         var now = Environment.TickCount64;
@@ -440,8 +437,9 @@ internal sealed class TipServer : IDisposable
                             staleSince = now;
                             if (host.Process is { } process) ReportOutdated(process);
                         }
+                        reply = Stale;
                     }
-                    if (TipRequest.Parse(json) is not { } request)
+                    else if (TipRequest.Parse(json) is not { } request)
                     {
                         reply = Inactive;
                     }
@@ -464,7 +462,6 @@ internal sealed class TipServer : IDisposable
                         reply = ownClient && _uiThread != 0 && request.Thread == _uiThread ? Run() : await InvokeAsync(Run).ConfigureAwait(false);
                         LogSlow(request, began - started, ended - began);
                     }
-                    if (stale) reply = "{\"stale\":true," + reply[1..];
                 }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
@@ -635,13 +632,19 @@ internal sealed class TipServer : IDisposable
     /// <summary>パースできない要求への応答。DLL はキーを消費しない。</summary>
     private const string Inactive = "{\"active\":false,\"consumed\":false,\"commits\":[],\"view\":null}";
 
+    /// <summary>
+    /// 別ビルドの impl への応答。impl はキーを消費せず、stub に差し替えを要求する (native/tip の kStubImplStale)。
+    /// stub と impl に分割する前の DLL (更新前から動いているプロセスに残る) も、キーを消費しない。
+    /// </summary>
+    private const string Stale = "{\"stale\":true}";
+
     /// <summary>stub による impl の差し替えを待つ時間。これを過ぎても同じ接続から別ビルドの要求が届いたら、<see cref="ClientOutdated"/> で通知する。</summary>
     private const int StaleNoticeMs = 3000;
 
     private readonly TipBuild _build = TipBuild.Shipped;
 
     /// <summary>
-    /// アプリ (.exe を除いたプロセスの名前) を再起動するまで、そのアプリでは前の版の Meltype IME で動く
+    /// アプリ (.exe を除いたプロセスの名前) を再起動するまで、そのアプリでは Meltype IME で入力できない
     /// (stub と impl に分割する前の DLL か、今の impl をロードできない古い stub が、プロセスに残っている)。
     /// UI スレッドで呼ぶ。同じアプリについて、接続ごとに <see cref="StaleNoticeMs"/> おきに呼ぶ。
     /// </summary>
