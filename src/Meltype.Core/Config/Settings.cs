@@ -359,7 +359,7 @@ public sealed class Settings
     public bool ContextualLearning { get; set; }
 
     [Category("4. 変換"), DisplayName("入力中も変換候補をいくつか表示"),
-     Description("ひらがなを打っている間も、Space を押す前から変換候補を (5 件まで) 変換ボックスに出します。候補をクリックすると、その候補で変換を始めます。")]
+     Description("ひらがなを打っている間も、Space を押す前から変換候補を (5 件まで) 変換ボックスに出します。候補をクリックするか Tab で選ぶと、その候補で変換を始めます。")]
     public bool ShowCandidatesWhileTyping { get; set; }
 
     /// <summary>旧形式の追加キーを読み込むためだけの項目。正規化時に一覧へ移し、保存時には出力しない。</summary>
