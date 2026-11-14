@@ -4,9 +4,6 @@ package io.github.ninjin0802.keyboard.mozc
 
 import android.os.SystemClock
 import android.util.Log
-import io.github.ninjin0802.keyboard.engine.Clause
-import io.github.ninjin0802.keyboard.engine.Converter
-import io.github.ninjin0802.keyboard.engine.Segment
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.CompositionMode
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Context
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input
@@ -24,11 +21,11 @@ class MozcConverter internal constructor(
     private val engine: MozcEngine?,
     private val now: () -> Long,
     private val eval: (Input) -> Output? = { engine?.eval(it) },
-) : Converter {
+) : MozcBackend {
 
     constructor(engine: MozcEngine?) : this(engine, SystemClock::elapsedRealtime)
 
-    override fun convert(reading: String, context: String?): List<Segment>? =
+    override fun convert(reading: String, context: String?): List<MozcSegment>? =
         withSession(reading, context) { session ->
             session.compose()
             var output = session.startConversion()
@@ -37,7 +34,7 @@ class MozcConverter internal constructor(
             clauseReadings(output, reading).mapIndexed { index, clauseReading ->
                 if (index > 0) output = session.focusNextClause()
                 val alternatives = output.allCandidateWords.candidatesList.map { it.value }
-                Segment(clauseReading, (listOf(values[index]) + alternatives).filter { it.isNotEmpty() }.distinct())
+                MozcSegment(clauseReading, (listOf(values[index]) + alternatives).filter { it.isNotEmpty() }.distinct())
             }
         }
 
@@ -46,7 +43,7 @@ class MozcConverter internal constructor(
             session.compose().allCandidateWords.candidatesList.map { it.value }.filter { it.isNotEmpty() }.distinct()
         } ?: emptyList()
 
-    override fun learn(clauses: List<Clause>, context: String?) {
+    override fun learn(clauses: List<MozcClause>, context: String?) {
         if (clauses.isEmpty()) return
         val reading = clauses.joinToString("") { it.reading }
         withSession(reading, context) { session ->
