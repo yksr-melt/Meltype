@@ -206,6 +206,24 @@ class KeyboardService : InputMethodService(), KeyListener {
         }
     }
 
+    /**
+     * A send button outside the IME can empty the editor without a focus change.
+     * The editor's old composing text is gone; do not finish or reinsert it.
+     * Notify the Core that its composition was handled by the app, without
+     * generating an editor commit. Only a readable, completely empty editor
+     * qualifies; a normal caret move must keep its existing behavior.
+     */
+    private fun forgetCompositionIfEditorWasCleared(): Boolean {
+        if (!coreInput.composing || !fieldReadable) return false
+        val input = currentInputConnection ?: return false
+        if (input.getTextBeforeCursor(1, 0)?.isEmpty() != true ||
+            input.getTextAfterCursor(1, 0)?.isEmpty() != true) return false
+        leaveCore(focusLeft = false, field = true)
+        dropComposition()
+        caretWatch.reset(selStart, selEnd)
+        return true
+    }
+
     /** Inserts a character the Core passed on (did not consume), as the app would for a hardware key. */
     private fun insertPassed(text: String) {
         insert(text)
@@ -543,6 +561,8 @@ class KeyboardService : InputMethodService(), KeyListener {
         val identity = FieldIdentity(info.packageName, info.fieldId, info.inputType, info.imeOptions)
         val keepSelectedLanguage = restarting && info.fieldId != View.NO_ID && identity == lastFieldIdentity
         super.onStartInputView(info, restarting)
+        // A restart after an external send must not revive a composition the app deleted.
+        forgetCompositionIfEditorWasCleared()
         // Also refresh this on every editor focus, not only layout changes.
         keyboardView?.hapticEnabled = Settings(this).hapticEnabled
         // 同じ入力欄のまま始め直されることがある（アプリが作り直されない画面の回転など）。そのとき入力欄には
@@ -604,6 +624,8 @@ class KeyboardService : InputMethodService(), KeyListener {
         super.onUpdateSelection(oldSelStart, oldSelEnd, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         selStart = newSelStart
         selEnd = newSelEnd
+        // An app-level send can clear the entire editor while leaving IME focus here.
+        if (forgetCompositionIfEditorWasCleared()) return
         // Core の書き換えでないキャレットの移動は、Core に知らせる（変換中なら、出ている文字のまま確定させる）。
         if (!caretWatch.isOwn(newSelStart, newSelEnd, candidatesEnd, coreInput.composing)) caretMovedOutside()
     }
@@ -614,6 +636,8 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     override fun onKey(action: KeyAction, direction: Direction, timeMs: Long) {
+        // Some editors do not deliver a selection callback when their Send button clears text.
+        forgetCompositionIfEditorWasCleared()
         // 1つのキーで確定と入力の両方が起きることがある。入力欄には、まとめて1回の操作として届ける。
         val connection = currentInputConnection
         val start = System.nanoTime()

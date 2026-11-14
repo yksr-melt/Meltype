@@ -298,6 +298,32 @@ class ImeLaunchDeviceTest {
         }
     }
 
+    /** Sending from a button outside the IME must not keep or reinsert unsent composition. */
+    @Test fun externalSendClearsCompositionWithoutReinsertingOldText() = withRomajiActivity { activity ->
+        val editor = activity.japaneseEditor
+        focusJapanese(activity, editor)
+        clear(editor)
+        focusJapanese(activity, editor)
+        typeRomaji("ka")
+        waitUntil("か before external Send", describe = { "text=" + editor.text }) {
+            editor.text.toString() == "か" &&
+                android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) >= 0
+        }
+        instrumentation.runOnMainSync { activity.sendButton.performClick() }
+        waitUntil("external Send must clear the editor and the Core composition",
+            describe = { "text=" + editor.text + ", core=" + coreView() }) {
+            editor.hasFocus() && editor.text.isEmpty() && coreView() == null
+        }
+        assertEquals("か", activity.lastSentMessage)
+        // Continue in the very same editor without restarting the keyboard.
+        typeRomaji("a")
+        waitUntil("new input must not resurrect the previous message",
+            describe = { "text=" + editor.text }) {
+            editor.text.toString() == "あ"
+        }
+        assertEquals("あ", editor.text.toString())
+    }
+
     /** Leaving an editor keeps the composing text there; the next editor starts without it. */
     @Test fun leavingAnEditorCommitsTheCompositionThere() = withRomajiActivity { activity ->
         val japanese = activity.japaneseEditor

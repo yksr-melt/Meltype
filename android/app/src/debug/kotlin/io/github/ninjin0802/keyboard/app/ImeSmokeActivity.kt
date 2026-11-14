@@ -14,6 +14,10 @@ class ImeSmokeActivity : Activity() {
         private set
     lateinit var japaneseEditor: EditText
         private set
+    lateinit var sendButton: android.widget.Button
+        private set
+    var lastSentMessage = ""
+        private set
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
@@ -32,11 +36,22 @@ class ImeSmokeActivity : Activity() {
             isFocusableInTouchMode = true
             textSize = 20f
         }
+        sendButton = android.widget.Button(this).apply {
+            text = "Send"
+            isFocusable = false
+            isFocusableInTouchMode = false
+            setOnClickListener {
+                lastSentMessage = japaneseEditor.text.toString()
+                // Keep focus: many chat apps clear the field from an external Send button.
+                japaneseEditor.setText("")
+            }
+        }
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(24, 80, 24, 24)
             addView(editor, LinearLayout.LayoutParams(-1, -2))
             addView(japaneseEditor, LinearLayout.LayoutParams(-1, -2))
+            addView(sendButton, LinearLayout.LayoutParams(-1, -2))
         })
         window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE)
         editor.requestFocus()

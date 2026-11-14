@@ -229,7 +229,7 @@ public static unsafe class Exports
             }
         }
 
-        public IReadOnlyList<string> Candidates(string reading)
+        public string[] Candidates(string reading)
         {
             var input = ToUtf8(reading, out var inputBuffer);
             try
