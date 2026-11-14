@@ -424,8 +424,7 @@ describe("Issue にする内容", () => {
   const fields = {
     os: "Windows 11",
     version: "1.2.1",
-    steps: "kyouha と打って Space",
-    actual: "変換されない",
+    actual: "kyouha と打って Space を押しても変換されない",
     log: "secret log",
     environment: "OS: Windows 11 26200",
     contact: "Discord: someone",
@@ -439,8 +438,12 @@ describe("Issue にする内容", () => {
     }
   });
 
+  it("フォームから外した欄も、保存済みの報告なら載せる", () => {
+    assert.match(toMarkdown(formById("bug"), { ...fields, expected: "変換されてほしい" }), /### どうなってほしかったか\n\n変換されてほしい/);
+  });
+
   it("外した欄の名前を返す (書かれていない欄は返さない)", () => {
-    assert.deepEqual(privateLabels(formById("bug"), fields), ["ログ", "実行環境", "連絡先"]);
+    assert.deepEqual(privateLabels(formById("bug"), fields), ["実行環境", "ログ", "連絡先"]);
     assert.deepEqual(privateLabels(formById("bug"), { ...fields, log: "", environment: undefined }), ["連絡先"]);
   });
 });

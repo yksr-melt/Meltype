@@ -92,13 +92,12 @@ public static class ProjectInfo
 
     /// <summary>
     /// 自分で直した誤判定を、「変換・判定の間違い」のひな形 (2-misdetection.yml) に入れた状態で開く URL (issue #284)。
-    /// 欄の id (kind・typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
+    /// 欄の id (typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
     /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
     public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
         $"&title={Uri.EscapeDataString("[誤判定] " + correction.Typed)}" +
-        $"&kind={Uri.EscapeDataString(correction.Kind)}" +
         $"&typed={Uri.EscapeDataString(correction.Typed)}" +
         $"&actual={Uri.EscapeDataString(correction.Shown)}" +
         $"&expected={Uri.EscapeDataString(correction.Corrected)}" +
