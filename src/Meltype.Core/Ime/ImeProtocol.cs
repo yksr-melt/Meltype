@@ -206,7 +206,7 @@ public sealed record ImeState
 /// <summary>
 /// 変換していないときに受け取るキー。変換中はすべてのキーを受け取る。
 /// PrintableAscii は、Ctrl・Alt・Command を押さずに打った ASCII の文字 (! から ~ まで。空白は含まない) を受け取るか。PrintableAsciiExcept はそのうち受け取らない文字。
-/// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は修飾キー付きのものを PreserveKey で登録する)。
+/// Shortcuts は文字に関係なく受け取るキー (Space・Shift+Space・入力モードのキーなど。TSF は Alt 付きのものを PreserveKey で登録する)。
 /// </summary>
 public sealed record ImeCapture
 {

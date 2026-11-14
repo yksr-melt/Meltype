@@ -111,7 +111,7 @@ private:
     bool Reinject(UINT vk);
     void RememberPassed(UINT vk);
     void ForgetSecretField();
-    // Meltype.exe から受け取った切り替えキーのうち、修飾キー付きのものを TSF (PreserveKey) に登録し直す
+    // Meltype.exe から受け取った切り替えキーのうち、Alt 付きのものを TSF (PreserveKey) に登録し直す
     void RefreshPreservedKeys();
     void UnpreserveKeys();
 
