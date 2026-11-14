@@ -4,6 +4,9 @@ merge_queue:
   mode: serial
   max_parallel_checks: 1
   reset_on_external_merge: always
+  # チェックを入れるとキューに入るコメントは出さない。全部の PR に英語のコメントが付いてうるさいため (#1888)。
+  # キューには @mergifyio queue のコメントで入れる。
+  queue_controls_comment: false
 
 queue_rules:
   - name: main
