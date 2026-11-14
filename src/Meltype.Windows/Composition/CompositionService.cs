@@ -32,6 +32,10 @@ internal sealed class CompositionService : IDisposable
         _hybrid.Budget.Enable();
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         _hybrid.WarmUp();
+        runtime.ForgetZenzaiHallucinations(_hybrid, forget =>
+        {
+            if (invoker.IsHandleCreated && !invoker.IsDisposed) invoker.BeginInvoke(forget);
+        });
     }
 
     public MeltypeRuntime Runtime { get; }

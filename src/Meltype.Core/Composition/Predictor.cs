@@ -93,6 +93,9 @@ public sealed class PhraseHistory
         return matches.OrderByDescending(m => m.Count).ThenByDescending(m => m.Used).ThenBy(m => m.Order).Select(m => m.Text);
     }
 
+    /// <summary>覚えている語句 (読みと語句) の一覧。</summary>
+    public IReadOnlyList<(string Reading, string Text)> Entries() => _entries.Keys.ToList();
+
     /// <summary>覚えている語句の読みのうち、typed で始まるもの (予測の候補を確定したときに、同じ読みで覚え直すため)。</summary>
     public string? ReadingOf(string text, string typed) =>
         _entries.Keys.Where(k => k.Text == text && k.Reading.StartsWith(typed, StringComparison.Ordinal)).Select(k => k.Reading).FirstOrDefault();

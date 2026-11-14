@@ -118,6 +118,47 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void LearnedHallucinations_AreForgottenWithMozcCandidates()
+    {
+        // 前の版が学習した Zenzai の壊れた答えは消し、表記が読みと違う Mozc の候補・ユーザー辞書の語は残す (issue #1779)。
+        // 偽の Mozc のヘルパーは、きずくのがはやい の文節ごとの候補に 気づくのが・早い があり、ほかの読みは読みのまま返す
+        var directory = Path.Combine(Path.GetTempPath(), $"meltype-hallucinations-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string[][] conversions =
+            [
+                ["はーどうぇ", "ハードウェアウェア"], ["きょうはで", "今日はでで"],
+                ["きずくのがはやい", "気づくのが早い"], ["おせわ", "お世話になっております"], ["はーどうぇあ", "ハードウェア"], ["ほし", "☆"],
+            ];
+            File.WriteAllText(Path.Combine(directory, "conversions.json"),
+                "{" + string.Join(",", conversions.Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
+            File.WriteAllLines(Path.Combine(directory, "phrases.txt"), ["なまえは\t名前は魚のは\t3\t0", "なまえは\t名前は\t3\t0", "きずくのがはやい\t気づくのが早い\t3\t0"]);
+            File.WriteAllText(Path.Combine(directory, "userdict.txt"), "おせわ\tお世話になっております\n");
+            using var runtime = new MeltypeRuntime(directory);
+            using var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
+            var hybrid = new HybridConverter(mozc);
+
+            using var forgotten = new ManualResetEventSlim();
+            runtime.ForgetZenzaiHallucinations(hybrid, forget =>
+            {
+                forget();
+                forgotten.Set();
+            });
+            Assert.True(forgotten.Wait(15000), "偽の Mozc のヘルパーが 15 秒で答えなかった");
+            foreach (var e in conversions.Take(2)) Assert.True(runtime.History.Get(e[0]) is null, $"{e[0]} → {e[1]} は消す");
+            foreach (var e in conversions.Skip(2)) Assert.Equal(e[1], runtime.History.Get(e[0]), $"{e[0]} → {e[1]} は残す");
+            Assert.Equal("名前は", string.Join(",", runtime.Phrases.StartingWith("なま")), "予測変換の語句も消す");
+            Assert.Equal("気づくのが早い", string.Join(",", runtime.Phrases.StartingWith("きず")), "Mozc の候補で作れる語句は残す");
+
+            // Mozc が答えないときは、Mozc の候補で作れるか分からないので消さない
+            using var missing = new MozcConverter(Path.Combine(directory, "missing-helper"), null);
+            Assert.True(new HybridConverter(missing).IsBuiltFromMozcCandidatesNow("きょうはで", "今日はでで") is null, "Mozc が無い");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    [Test]
     public static void Answers_AreCheckedWithMozcCandidates()
     {
         // 偽の Mozc のヘルパーは、きずくのがはやい を 築くのが|早い で返し、文節ごとの候補に 気づくのが・速い もある。ほかの読みは読みのまま返す
