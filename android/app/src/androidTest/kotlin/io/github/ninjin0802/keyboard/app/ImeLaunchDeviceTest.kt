@@ -156,40 +156,27 @@ class ImeLaunchDeviceTest {
         return null
     }
 
-    /** Always provide an exit directly in the IME, even if candidates or native components fail. */
-    @Test fun systemImePickerIsVisibleWithoutOpeningSettings() = withRomajiActivity { activity ->
-        val settings = io.github.ninjin0802.keyboard.app.Settings(target)
-        val wasEmoji = settings.emojiEnabled
-        try {
-            focusJapanese(activity, activity.japaneseEditor)
-            val service = KeyboardService.activeForSmokeTest?.get()
-                ?: throw AssertionError("Keyboard service missing")
-            instrumentation.runOnMainSync {
-                val root = service.window?.window?.decorView
-                    ?: throw AssertionError("IME window not available")
-                val picker = findImePicker(root)
-                assertNotNull("Normal keyboard must have a persistent system picker", picker)
-                assertTrue("Picker must be visible", picker!!.isShown)
-                assertTrue("Picker must be clickable", picker.isClickable)
+    /** Normal typing shows no extra switch button; recovery offers direct system IME selection. */
+    @Test fun keyboardProvidesImePickerOnlyInEmergency() = withRomajiActivity { activity ->
+        focusJapanese(activity, activity.japaneseEditor)
+        val service = KeyboardService.activeForSmokeTest?.get()
+            ?: throw AssertionError("Keyboard service missing")
+        instrumentation.runOnMainSync {
+            val root = service.window?.window?.decorView
+                ?: throw AssertionError("IME window not available")
+            assertTrue("Normal keyboard must not add a custom IME switch button",
+                findImePicker(root) == null)
 
-                val emergency = service.emergencyKeyboardForSmokeTest()
-                val emergencyPicker = findImePicker(emergency)
-                assertNotNull("Emergency view needs direct IME switching", emergencyPicker)
-                assertTrue("Emergency picker must be clickable", emergencyPicker!!.isClickable)
-                fun containsSettingsLink(v: View): Boolean =
-                    (v is android.widget.TextView && v.text.contains("キーボード設定")) ||
-                        (v is ViewGroup && (0 until v.childCount).any { containsSettingsLink(v.getChildAt(it)) })
-                assertTrue("Emergency UI must not open an app or Android settings screen",
-                    !containsSettingsLink(emergency))
-            }
-            settings.emojiEnabled = true
-            instrumentation.runOnMainSync {
-                service.onKey(KeyAction.Emoji, Direction.TAP, SystemClock.uptimeMillis())
-                val picker = findImePicker(service.window!!.window!!.decorView)
-                assertTrue("Picker must survive switching to emoji", picker?.isShown == true)
-            }
-        } finally {
-            settings.emojiEnabled = wasEmoji
+            val emergency = service.emergencyKeyboardForSmokeTest()
+            val picker = findImePicker(emergency)
+            assertNotNull("Emergency view must offer direct system IME selection", picker)
+            assertTrue("Emergency picker must be clickable", picker!!.isClickable)
+
+            fun containsSettingsLink(v: View): Boolean =
+                (v is android.widget.TextView && v.text.contains("キーボード設定")) ||
+                    (v is ViewGroup && (0 until v.childCount).any { containsSettingsLink(v.getChildAt(it)) })
+            assertTrue("Recovery must not send the user to a settings screen",
+                !containsSettingsLink(emergency))
         }
     }
 
