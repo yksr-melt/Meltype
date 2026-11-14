@@ -142,7 +142,7 @@ internal static class UtilityConversionTests
     [Test]
     public static void KanjiNumbers_AreOfferedForDigitsOnly()
     {
-        // Mac の azooKey は打った数字を漢数字にしないので、どの OS でも出るように Meltype が出す (issue #344)
+        // 変換エンジンによっては打った数字を漢数字にしないので、Meltype が出す (issue #344)
         var history = new ConversionHistory(null);
         var k = new Keyboard(history: history);
         k.Type("2026 ");
@@ -197,5 +197,64 @@ internal static class UtilityConversionTests
         var ordinary = new Keyboard(history: history, moreCandidates: reading => reading == "ほかの" ? ["他の", "外の"] : []);
         Choose(ordinary, "hokano", "外の");
         Assert.Equal("外の", history.Get("ほかの"), "普通の語は覚える");
+    }
+
+    [Test]
+    public static void Issue345_KanjiFromRadicalNames()
+    {
+        // #345: 部首の呼び名を「に」でつなぐと、それらを含む漢字を、説明どおりの字から最初の候補に出す。
+        // 後ろに変換エンジンの候補 (言偏にふるとり。字の書き方を説明するときに打つ) も残す
+        var converter = new SplitConverter(new() { ["ごんべんにふるとり"] = [new("ごんべんに", "言偏に"), new("ふるとり", "ふるとり")] });
+        var k = new Keyboard(converter: converter, now: () => Tuesday);
+        k.Type("gonbennnifurutori ");
+        var shown = k.Host.View!.Candidates.ToList();
+        Assert.Equal("誰", k.Host.View!.Candidates[k.Host.View.SelectedIndex], string.Join(",", shown));
+        Assert.Equal("誰", shown[0], string.Join(",", shown));
+        Assert.True(shown.Contains("言偏にふるとり") && shown.Contains("ごんべんにふるとり"), "変換エンジンの候補とかなも残す: " + string.Join(",", shown));
+
+        // 候補の一覧を広げても、変換エンジンの候補は漢字の後ろに入る (漢字の間に入らない)
+        IReadOnlyList<string> More(string reading) => reading == "ごんべんにふるとり" ? ["言偏にふるとり", "ごんべんにふるとり"] : [];
+        var expanded = new Keyboard(converter: converter, moreCandidates: More, now: () => Tuesday);
+        expanded.Type("gonbennnifurutori ");
+        var all = expanded.Host.View!.Candidates.ToList();
+        Assert.True(all.IndexOf("言偏にふるとり") > all.IndexOf("讎"), string.Join(",", all));
+
+        // 説明どおりの字 (余分な要素の無い字) が先。ほかの要素も含む字 (護・体・深) はその後ろ
+        Assert.Equal("誰", Kanji("ごんべんにふるとり")[0], string.Join(",", Kanji("ごんべんにふるとり")));
+        Assert.Equal("休", Kanji("にんべんにき")[0], string.Join(",", Kanji("にんべんにき")));
+        Assert.Equal("沐", Kanji("さんずいにき")[0], string.Join(",", Kanji("さんずいにき")));
+        // 呼び名の揺れ (ことばへん)。呼び名の中の「に」(にんべん) は区切りでない
+        Assert.Equal("誰", Kanji("ことばへんにふるとり")[0]);
+    }
+
+    [Test]
+    public static void Issue345_EverydayWordsAreNotRadicalNames()
+    {
+        // 逆向き: 呼び名 1 つだけ・「と」でつないだもの・呼び名でない語は出さない
+        Assert.True(Kanji("ごんべん").Count == 0, "1 つだけ");
+        Assert.True(Kanji("ごんべんとふるとり").Count == 0, "と ではつながない");
+        // 「名詞 に 動詞」の句 (きにかける = 気にかける)。先頭は部首にしか使わない名前だけにする
+        foreach (var phrase in new[] { "ひとくち", "ひとつき", "ひととき", "ひとめ", "かねとひと", "いしとき", "にほんにいく", "きのうにいった",
+            "きにかける", "ひにかける", "めにみる", "てにいれる", "みみにいれる", "こころにきめる", "かいにいく", "やまにのぼる", "かわにいく", "いしにかく" })
+            Assert.True(Kanji(phrase).Count == 0, phrase);
+        // よく使う語 (readings.txt) とカタカナ語は、どれも呼び名の並びにならない。なれば、普通の変換が漢字の候補に置き換わる
+        foreach (var name in new[] { "readings.txt", "readings-extra.txt", "katakana.txt" })
+        {
+            var words = Meltype.Detection.DictionarySource.DataLines(Meltype.Detection.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
+            Assert.Equal("", string.Join(",", words.Where(w => Kanji(w).Count > 0).Take(10)), name);
+        }
+    }
+
+    private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
+
+    [Test]
+    public static void Issue1868_VersionShowsCommitAndFront()
+    {
+        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どちらも OS とフロントを付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME)", VersionConversion.Text("1.5.1", "Windows / Meltype IME"));
+        Assert.Equal("Meltype-1.5.1+abc1234 (Linux)", VersionConversion.Text("1.5.1+abc1234", "Linux"));
+        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux")), "学習・予測には使わない");
+        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings());
+        Assert.True(candidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) && candidate.EndsWith(')'), candidate);
     }
 }

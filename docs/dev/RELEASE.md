@@ -5,7 +5,7 @@
 1. 版を上げる
    - `src/Meltype.Windows/Meltype.Windows.csproj`・`src/Meltype.Core/Meltype.Core.csproj` の `<Version>`
    - `mac/Resources/Info.plist` の `CFBundleShortVersionString` と `CFBundleVersion` (Mac 版の表示の版は Info.plist から読みます)
-   - 通貨の換算に使うレートを作り直す: `node tools/make-exchange-rates.mjs` (欧州中央銀行の参照レートを `dictionaries/exchange-rates.txt` に書く。100どる → 約15,923円 の候補で使う)
+   - 通貨の換算に使うレートを作り直す: `node tools/make-exchange-rates.mjs` (欧州中央銀行の参照レートを `dictionaries/exchange-rates.txt` に書く。100どる → 約1.6万円 の候補で使う)
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
 3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けず、下の Homebrew・apt・dnf にも出さない

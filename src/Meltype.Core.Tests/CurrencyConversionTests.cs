@@ -6,7 +6,7 @@ using Meltype.Composition.Utility;
 
 namespace Meltype.Tests;
 
-/// <summary>通貨の換算 (100どる → 約15,923円。issue #342)。</summary>
+/// <summary>通貨の換算 (100どる → 約1.6万円。issue #342)。</summary>
 internal static class CurrencyConversionTests
 {
     private const string Table = """
@@ -36,14 +36,14 @@ internal static class CurrencyConversionTests
     [Test]
     public static void Candidates_ConvertWithTheRateDate()
     {
-        // 100 ドル = 100 / 1.1127 * 177.18 = 15,923.42… 円
-        Assert.Equal("約15,923円（2026/11/11 のレート）|約15,923円",
+        // 100 ドル = 100 / 1.1127 * 177.18 = 15,923.42… 円。有効数字 2 桁に丸める
+        Assert.Equal("約1.6万円（2026/11/11 のレート）|約1.6万円",
             string.Join("|", CurrencyConversion.Candidates(100, ("USD", "ドル"), null, Rates)));
         // 円はドルとユーロに
-        Assert.Equal("約62.8ドル（2026/11/11 のレート）|約62.8ドル|約56.44ユーロ（2026/11/11 のレート）|約56.44ユーロ",
+        Assert.Equal("約63ドル（2026/11/11 のレート）|約63ドル|約56ユーロ（2026/11/11 のレート）|約56ユーロ",
             string.Join("|", CurrencyConversion.Candidates(10000, ("JPY", "円"), null, Rates)));
         // 換算先を決めたとき
-        Assert.Equal("約56.44ユーロ（2026/11/11 のレート）|約56.44ユーロ",
+        Assert.Equal("約56ユーロ（2026/11/11 のレート）|約56ユーロ",
             string.Join("|", CurrencyConversion.Candidates(10000, ("JPY", "円"), ("EUR", "ユーロ"), Rates)));
         Assert.Equal(0, CurrencyConversion.Candidates(100, ("THB", "バーツ"), null, Rates).Count, "レートの無い通貨は出さない");
     }
@@ -68,5 +68,18 @@ internal static class CurrencyConversionTests
         k.Type("100doru ");
         var date = ExchangeRates.Bundled!.Date.ToString("yyyy/MM/dd", System.Globalization.CultureInfo.InvariantCulture);
         Assert.True(k.Host.View!.Candidates.Any(c => c.StartsWith('約') && c.EndsWith($"円（{date} のレート）", StringComparison.Ordinal)), string.Join(" ", k.Host.View.Candidates));
+    }
+
+    [Test]
+    public static void Format_RoundsToTwoSignificantDigits()
+    {
+        // 古いレートの概算なので、精度があるように見せない
+        Assert.Equal("1.6万", CurrencyConversion.Format(15923.42m));
+        Assert.Equal("63", CurrencyConversion.Format(62.8m));
+        Assert.Equal("1,000", CurrencyConversion.Format(999.6m), "繰り上がり");
+        Assert.Equal("1,200万", CurrencyConversion.Format(12345678m));
+        Assert.Equal("1.2億", CurrencyConversion.Format(123456789m));
+        Assert.Equal("1.6兆", CurrencyConversion.Format(1_592_342_000_000m), "100おくどる");
+        Assert.Equal("0.063", CurrencyConversion.Format(0.0634m), "1 より小さい額");
     }
 }

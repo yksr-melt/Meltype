@@ -93,7 +93,7 @@ dotnet publish (Join-Path $root 'src\Meltype.Windows\Meltype.Windows.csproj') -c
     -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=dotnet
 if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LASTEXITCODE)。" }
 
-# Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ Microsoft IME だけで動く。
+# Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ漢字に変換できない (かなのまま)。
 if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
     # 前の版の Build-MozcHelper.ps1 で作った bin には無い。版がずれないよう、ほかから補わずに止める
@@ -110,7 +110,7 @@ if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     Write-Host 'Mozc の変換ヘルパーを同梱しました。'
 }
 else {
-    Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。Microsoft IME だけで変換します。'
+    Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。漢字に変換できません (かなのまま確定します)。'
 }
 
 # Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。

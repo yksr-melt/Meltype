@@ -12,15 +12,9 @@ public sealed record Correction(string Typed, string Shown, string Corrected, st
     /// <summary>直したときに「Zenzai を使う」が ON だったか (分からなければ null。報告の「Zenzai (zenz) を使っているか」に入れる。issue #1197)。</summary>
     public bool? Zenzai { get; init; }
 
-    /// <summary>報告の種類 (ひな形の選択肢)。</summary>
-    public string Kind =>
-        Corrected.Any(char.IsAsciiLetter) && !Shown.Any(char.IsAsciiLetter) ? "英語のつもりがかなになった (みいてぃんg)" :
-        Shown.Any(char.IsAsciiLetter) && !Corrected.Any(char.IsAsciiLetter) ? "日本語のつもりが英字になった (にほんgo)" : "そのほか";
-
     /// <summary>コピーして貼り付ける用の文 (GitHub・報告フォームの欄に合わせた並び)。</summary>
     public string ToReportText() => string.Join("\n",
     [
-        $"種類: {Kind}",
         $"打ったもの (キーをそのまま): {Typed}",
         $"出たもの: {Shown}",
         $"期待した結果: {Corrected}",

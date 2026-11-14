@@ -21,8 +21,8 @@ _lib.meltype_free.argtypes = [ctypes.c_void_p]
 _lib.meltype_version.restype = ctypes.c_void_p
 _lib.meltype_report_url.argtypes = [ctypes.c_char_p]
 _lib.meltype_report_url.restype = ctypes.c_void_p
-_lib.meltype_init_mozc.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-_lib.meltype_init_mozc.restype = ctypes.c_int
+_lib.meltype_init.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
+_lib.meltype_init.restype = ctypes.c_int
 _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
 _lib.meltype_set_conversion_ready.restype = None
 _lib.meltype_ime_create.restype = ctypes.c_void_p
@@ -57,7 +57,8 @@ import gi
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, GObject, IBus  # noqa: E402
 
-if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").encode(), None):
+# 英単語の判定は同梱の一覧 (None)
+if not _lib.meltype_init(HERE.encode(), None):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
