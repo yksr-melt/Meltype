@@ -65,6 +65,31 @@ class SettingsScreenDeviceTest {
         }
     }
 
+    @Test fun languageSettingsOfferOnlyJapaneseAndEnglishQwerty() {
+        val activity = open()
+        try {
+            instrumentation.runOnMainSync {
+                val label = findText(activity.window.decorView, "言語")
+                    ?: throw AssertionError("Languages category missing")
+                ((label.parent as View).parent as View).performClick()
+                val root = activity.window.decorView
+                val japanese = findText(root, "QWERTY（ローマ字）")
+                val english = findText(root, "QWERTY")
+                assertNotNull("Japanese QWERTY must be shown", japanese)
+                assertNotNull("English QWERTY must be shown", english)
+                assertTrue("Flick layouts must not be offered in #1149",
+                    findText(root, "12キー（フリック）") == null &&
+                    findText(root, "12-key flick") == null)
+                assertFalse("Japanese layout is fixed, not selectable",
+                    ((japanese!!.parent as View).parent as View).hasOnClickListeners())
+                assertFalse("English layout is fixed, not selectable",
+                    ((english!!.parent as View).parent as View).hasOnClickListeners())
+            }
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
     @Test fun launcherAlwaysOffersEscapeWhenTheInputMethodCannotStart() {
         val activity = open()
         try {
