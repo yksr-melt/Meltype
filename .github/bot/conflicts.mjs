@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 //
-// コンフリクトのお知らせ (.github/workflows/conflicts.yml)。
-//   node conflicts.mjs main      … main に push されたとき: 開いている Pull Request を全部調べる
-//   node conflicts.mjs pr <番号>  … Pull Request が更新されたとき: その Pull Request を調べる
+// コンフリクトのお知らせ (.github/workflows/conflicts.yml)。開いている Pull Request を全部調べる。
 //
 // 2 つのことを知らせる。
 //   1. いまのコンフリクト: main とコンフリクトしている Pull Request に「コンフリクト」のラベルとコメントを付ける。
@@ -190,12 +188,6 @@ async function mergedPull(sha) {
   return pulls.find(p => p.merged_at) ?? null;
 }
 
-const [mode, arg] = process.argv.slice(2);
-if (!(mode === 'main' || (mode === 'pr' && /^\d+$/.test(arg ?? '')))) {
-  console.error('使い方: node conflicts.mjs main | pr <番号>');
-  process.exit(1);
-}
-
 await ensureLabel();
 git(['fetch', '--quiet', '--no-tags', 'origin', '+refs/heads/main:refs/remotes/origin/main']);
 const main = git(['rev-parse', 'refs/remotes/origin/main']).out.trim();
@@ -212,30 +204,14 @@ for (const pr of prs) {
 }
 const clean = prs.filter(p => !now.get(p.number).length);
 
-const targets = mode === 'main' ? prs : prs.filter(p => p.number === Number(arg));
-const cause = mode === 'main' ? await mergedPull(process.env.GITHUB_SHA) : null;
+// main への push なら、その push でマージした Pull Request を原因として書く (定期実行では原因が分からない)
+const cause = process.env.GITHUB_EVENT_NAME === 'push' ? await mergedPull(process.env.GITHUB_SHA) : null;
 
-for (const pr of targets) {
+for (const pr of prs) {
   try {
     await reportNow(pr, now.get(pr.number), cause);
     await reportForecast(pr, forecast(main, pr, clean, changed));
   } catch (e) {
     console.log(`#${pr.number}: ${e.message}`);
-  }
-}
-
-// pr のときは、相手側の予告も古くなるので、この Pull Request と同じファイルを変えている Pull Request の予告も更新する
-if (mode === 'pr') {
-  const self = prs.find(p => p.number === Number(arg));
-  if (self) {
-    const mine = changed.get(self.number);
-    for (const other of prs) {
-      if (other.number === self.number || ![...changed.get(other.number)].some(f => mine.has(f))) continue;
-      try {
-        await reportForecast(other, forecast(main, other, clean, changed));
-      } catch (e) {
-        console.log(`#${other.number}: ${e.message}`);
-      }
-    }
   }
 }

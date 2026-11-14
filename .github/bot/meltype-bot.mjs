@@ -108,7 +108,7 @@ const Help = [
 //   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
-//   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物が付く
+//   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物を付けて公開する
 // タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
 async function releaseCommand(issue, command, version) {
   const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
@@ -143,7 +143,7 @@ async function releaseCommand(issue, command, version) {
   await reply([
     `✅ タグ \`${tag}\` (${sha.slice(0, 7)}) とリリースの下書き (${pre ? 'プレリリース' : '通常'}、本文は \`${notesFile}\`) を作りました。`,
     failed === null
-      ? '\nビルド (release.yml) を始めました。終わると下書きに配布物が付くので、中身を確かめてから公開してください。'
+      ? '\nビルド (release.yml) を始めました。終わると下書きに配布物を付けて公開します。'
       : `\n⚠ ビルド (release.yml) を始められませんでした (Actions の画面から ${tag} で手で実行してください): ${failed}`,
   ].join('\n'));
 }
@@ -179,7 +179,7 @@ async function parse() {
     if (misdetection && isKeys(keys)) {
       return output({
         action: 'repro', issue, repros: JSON.stringify([{ keys: keys.slice(0, MaxKeys), last: lastKey(field(form, '最後に押したキー')) }]),
-        reported: field(form, '出たもの'), expected: field(form, '期待した結果'), kind: field(form, '種類'),
+        reported: field(form, '出たもの'), expected: field(form, '期待した結果'),
       });
     }
     return output({ action: 'none' });
@@ -268,7 +268,7 @@ async function parse() {
       await upsertComment(issue, `error-${event.comment.id}`, `打ったキーを英字で書いてください (例: \`/${command} ${head} nihongowohanasu\`)。`);
       return output({ action: 'none' });
     }
-    if (command === 'test-repro') return output({ action: command, issue, repros: JSON.stringify([request]), reported: '', expected: '', kind: '', sha: pr.head.sha, comment: event.comment.id });
+    if (command === 'test-repro') return output({ action: command, issue, repros: JSON.stringify([request]), reported: '', expected: '', sha: pr.head.sha, comment: event.comment.id });
     return output({ action: command, issue, keys: request.keys, sha: pr.head.sha, comment: event.comment.id });
   }
 
@@ -292,7 +292,7 @@ async function parse() {
   }
   await react('eyes');
   if (command === 'explain') return output({ action: command, issue, keys: requests[0].keys, comment: event.comment.id });
-  return output({ action: command, issue, repros: JSON.stringify(requests), reported: '', expected: '', kind: '', comment: event.comment.id });
+  return output({ action: command, issue, repros: JSON.stringify(requests), reported: '', expected: '', comment: event.comment.id });
 }
 
 const keysOf = text => text.trim().split(/\s+/).join(' ').replace(/^`|`$/g, '').slice(0, MaxKeys);

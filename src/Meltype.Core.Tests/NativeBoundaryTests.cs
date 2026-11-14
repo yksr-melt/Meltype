@@ -28,7 +28,6 @@ internal static unsafe class NativeBoundaryTests
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
             new CompositionServices(), settings);
 
-        public string? ReadingOf(string text) => null;
 
         public SnippetStore Snippets { get; } = new(null);
 

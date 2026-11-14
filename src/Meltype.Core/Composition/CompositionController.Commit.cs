@@ -33,6 +33,8 @@ public sealed partial class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
+        // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
+        var rules = new List<string>();
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? string.Concat(_clauses.Select(c => c.Text))
             : _budget is { Enabled: true } && !_settings().EnterCommitsAsShown
@@ -44,20 +46,28 @@ public sealed partial class CompositionController
             shown.All(char.IsAsciiLetter) && shown != text && text.Any(c => c > 0x7F))
         {
             text = shown;
+            rules.Add("英語の文脈なので見えていた英字のまま (#127)");
         }
         // 設定「Enter は見えているとおりに確定」: かな + 語末の n (かんたn) は、確定でライブ変換が漢字にせず、見えていたかなに n を ん にしただけで確定する (issue #677)
         if (!converting && _settings().EnterCommitsAsShown && _text.Mode == DisplayMode.Auto && _text.Pending == "n" &&
             CurrentDisplay(final: false) is { Length: > 1 } shownKana && shownKana[^1] == 'n' && shownKana[^2] is >= '\u3041' and <= '\u3096')
         {
             text = shownKana[..^1] + "ん";
+            rules.Add("見えていたかなのまま (#677)");
         }
-        if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
+        if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto && FixEnglishTypo(text) is var fixedText && fixedText != text)
+        {
+            text = fixedText;
+            rules.Add("英語の打ち間違いを直した");
+        }
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
         var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is not null)
         {
             // 入れた文字は、アプリが選択していた文字と置き換える。
+            rules.Add("選択していた文字の再変換");
+            LogCommit(text + suffix, string.Join("、", rules));
             _out.Commit(text + suffix);
             if (converting) LearnClauses();
             ResetContext();
@@ -69,7 +79,26 @@ public sealed partial class CompositionController
         else if (Learning && !_escReverted) _learning.LearnLanguage(_text);
         if (!converting || _clauses.All(CompositionLearning.Learnable))
             RememberPhrase(converting ? string.Concat(_clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : _text.AllKana(final: true), text, english);
-        CommitText(text + suffix, english, _text.Raw, chosen, preserveText);
+        CommitText(text + suffix, english, _text.Raw, chosen, preserveText, string.Join("、", rules));
+    }
+
+    /// <summary>
+    /// 確定のたびに、確定した文字と、そう決めた理由 (区切りの重み・次点・文節・通った決まり) を残す (issue #1644)。
+    /// 誤変換の報告を、利用者のログから読み解けるようにする。打った文字は設定「ログに入力した文字を残す」に従う。
+    /// </summary>
+    /// <param name="rule">区切りの重みでは決まらなかった確定の決まりの名前 (#127 で見えていた英字のまま、など)。</param>
+    private void LogCommit(string text, string rule)
+    {
+        if (_text.IsEmpty) return;
+        var parts = new List<string>();
+        if (Diagnostics.Log.RecordText) parts.Add($"読み「{_text.AllKana(final: true)}」");
+        // 区切りは、表示に使ったのと同じ計算 (Segments) から取る
+        if (_text.Mode == DisplayMode.Auto) parts.Add(_text.ExplainSegments());
+        else parts.Add($"F6〜F10 で選んだ表示 ({_text.Mode})");
+        if (_clauses.Count > 0)
+            parts.Add("文節 " + string.Join(" | ", _clauses.Select(c => (Diagnostics.Log.RecordText ? $"{c.Reading}→{c.Text}" : $"({c.Reading.Length} 文字)") + (c.Changed ? " (選び直した)" : ""))));
+        if (rule.Length > 0) parts.Add(rule);
+        Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(_text.Raw)}→{Diagnostics.Log.Text(text)}; {string.Join("; ", parts.Where(p => p.Length > 0))}");
     }
 
     /// <summary>
@@ -115,7 +144,7 @@ public sealed partial class CompositionController
         _clauses = [];
         _correctable.Clear();
         // raw を空にして渡し、保護原文を確定後補正・学習の対象にしない (INV-06)。
-        CommitText(text, english: false, preserveText: true);
+        CommitText(text, english: false, preserveText: true, rule: "保護区間 (メンション・URL・メール・パス) で終わるので、打ったまま");
     }
 
     /// <summary>確定した日本語の語句を、予測変換のために覚える (設定「予測変換」が ON のとき)。</summary>
@@ -182,8 +211,11 @@ public sealed partial class CompositionController
     {
         _correctable.Clear();
         _out.ForgetCommitted();
-        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う
+        // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
+        // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
         _lastCommitTime = long.MinValue / 2;
+        _lastCommitText = null;
+        _lastCommitEnglish = null;
     }
 
     /// <summary>
@@ -259,19 +291,14 @@ public sealed partial class CompositionController
     private static readonly HashSet<string> BracketPairs = ["「」", "『』", "（）", "()", "［］", "[]", "｛｝", "{}", "【】", "〈〉", "《》", "〔〕", "\"\"", "“”"];
 
     /// <summary>確定して入力する。英語だったか日本語だったか・確定した文字列を、次の入力の文脈として覚えておく。</summary>
-    private void CommitText(string text, bool english, string raw = "", bool chosen = false, bool preserveText = false)
+    private void CommitText(string text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
+        LogCommit(text, rule);
         var formatEnglish = _services.AutomaticEnglishSpacing() && _text.Mode == DisplayMode.Auto;
         var spaceIntended = _spaceStartedConversion;
         var afterEnglish = _text.PrecedingEnglish == true;
         _spaceStartedConversion = false;
         _tabStartedConversion = false;
-        // 誤変換の報告を調べられるように、打った英字・読み・文節の区切りもログに残す (ログはファイルに書く設定のときだけ保存される)。
-        if (!_text.IsEmpty)
-        {
-            var clauses = _clauses.Count > 0 ? "　文節 " + string.Join(" | ", _clauses.Select(c => $"{c.Reading}→{c.Text}")) : "";
-            if (Diagnostics.Log.RecordText) Diagnostics.Log.Info($"確定の内訳: 打った英字「{_text.Raw}」　読み「{_text.AllKana(final: true)}」{clauses}");
-        }
         _text.Clear();
         _converting = false;
         _clauses = [];

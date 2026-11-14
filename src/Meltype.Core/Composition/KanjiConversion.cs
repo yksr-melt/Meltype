@@ -21,8 +21,7 @@ internal static class JapaneseParticles
 }
 
 /// <summary>
-/// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、OS や外部の変換エンジンを借りる
-/// (Windows: Microsoft IME、Mac / Linux: Mozc など)。
+/// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、全 OS で Mozc (と Zenzai) を使う (<see cref="HybridConverter"/>)。
 /// </summary>
 public interface IKanjiConverter
 {
@@ -36,7 +35,7 @@ public interface IKanjiConverter
 }
 
 /// <summary>
-/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc / Microsoft IME に合わせて同じ文の最大 10 文字だけだが、
+/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
 /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
 /// 入力を始めるたびに、キャレットの前の日本語の文章 (文をまたいで最大 100 文字) を入れる。無ければ null。
 /// </summary>

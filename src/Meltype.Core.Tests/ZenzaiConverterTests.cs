@@ -60,7 +60,7 @@ internal static class ZenzaiConverterTests
                     var context = _listener.GetContext();
                     var body = new StreamReader(context.Request.InputStream, Encoding.UTF8).ReadToEnd();
                     var prompt = "";
-                    if (body.Length > 0) prompt = JsonDocument.Parse(body).RootElement.GetProperty("prompt").GetString() ?? "";
+                    if (body.Length > 0) prompt = JsonElement.Parse(body).GetProperty("prompt").GetString() ?? "";
                     lock (Prompts) Prompts.Add(prompt);
                     context.Response.StatusCode = Status;
                     var answer = Answer(prompt);
@@ -94,6 +94,70 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void IsPlausible_RejectsRunawayRepeats()
+    {
+        // 答えのかなが読みと合わないものは使わない
+        // #1675: はーどうぇ (打ちかけ) を ハードウェアウェア… にした答え (繰り返しの回数によらない)
+        Assert.True(!ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェアウェアウェアウェアウェアウェア"), "繰り返し続けた答え");
+        Assert.True(!ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェアウェア"), "2 回の繰り返し");
+        // #1511: きょうはで の後ろに で が続く答え・直前の文節の混入
+        Assert.True(!ZenzaiConverter.IsPlausible("きょうはで", "今日はでで"), "同じ字が続く答え");
+        Assert.True(!ZenzaiConverter.IsPlausible("なまえ", "名前は魚の"), "直前の文節の混入");
+        Assert.True(!ZenzaiConverter.IsPlausible("はははははは", "ははははは"), "1 文字落ちた答え");
+        // 読みと合う答えは使う
+        Assert.True(ZenzaiConverter.IsPlausible("はーどうぇ", "ハードウェ"), "打ちかけのまま");
+        Assert.True(ZenzaiConverter.IsPlausible("きょうはで", "今日はで"), "今日はで");
+        Assert.True(ZenzaiConverter.IsPlausible("はたはたはた", "ハタハタハタ"), "読みにある繰り返し");
+        Assert.True(ZenzaiConverter.IsPlausible("すごーーーーい", "すごーーーーい"), "長音の連続");
+        Assert.True(ZenzaiConverter.IsPlausible("まいくろそふと", "Microsoft"), "英字の並び");
+        Assert.True(ZenzaiConverter.IsPlausible("ぐーぐるでけんさく", "Googleで検索"), "英字と漢字");
+        Assert.True(ZenzaiConverter.IsPlausible("きょうはいいてんき", "今日はいい天気"), "漢字");
+        Assert.True(ZenzaiConverter.IsPlausible("さんかげつ", "三ヶ月"), "ヶ は漢字と同じ");
+        Assert.True(ZenzaiConverter.IsPlausible("ほんとう?", "本当？"), "全角の記号");
+        Assert.True(ZenzaiConverter.IsPlausible("2026ねん", "2026年"), "数字");
+    }
+
+    [Test]
+    public static void Answers_AreCheckedWithMozcCandidates()
+    {
+        // 偽の Mozc のヘルパーは、きずくのがはやい を 築くのが|早い で返し、文節ごとの候補に 気づくのが・速い もある。ほかの読みは読みのまま返す
+        var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
+        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var server = new FakeServer
+        {
+            Answer = p => p.Contains("キズクノガハヤイ") ? "気づくのが早い" : p.Contains("ハードウェ") ? "ハードウェアウェアウェア" : p.Contains("ナマエ") ? "名前は魚の" : ReadingIn(p),
+        };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
+        mozc.WarmUp();
+        for (var i = 0; i < 200 && mozc.ConvertClauses("きずくのがはやい") is null; i++) Thread.Sleep(50);
+        Assert.True(mozc.ConvertClauses("きずくのがはやい") is [_, _], "偽の Mozc のヘルパーが 10 秒で起動しなかった");
+
+        // かなが読みと合わない答え (ず の読みの づ) も、Mozc の候補で作れるなら使う
+        var variant = hybrid.ConvertClauses("きずくのがはやい", "前の文");
+        Assert.True(variant is [{ Text: "気づくのが" }, { Text: "早い" }], "Mozc の候補にある表記: " + Joined(variant));
+        Assert.Equal("気づくのが早い", hybrid.Convert("きずくのがはやい") ?? "", "その読みだけの変換も同じ");
+        // Mozc の候補で作れず、かなが読みと合わない答え (#1675・#1511) は、Zenzai が答えても使わず、Mozc に任せる
+        Assert.Equal("ハードウェアウェアウェア", Answered("はーどうぇ", "前の文"), "Zenzai は答えをそのまま返す");
+        Assert.True(hybrid.ConvertClauses("はーどうぇ", "前の文") is [{ Text: "はーどうぇ" }], "繰り返し続けた答え");
+        Assert.Equal("名前は魚の", Answered("なまえ", "前の文"), "Zenzai は答えをそのまま返す");
+        Assert.True(hybrid.ConvertClauses("なまえ", "前の文") is [{ Text: "なまえ" }], "直前の文節の混入");
+        Assert.Equal("名前は魚の", Answered("なまえ", null), "Zenzai は答えをそのまま返す");
+        Assert.Equal("なまえ", hybrid.Convert("なまえ") ?? "", "その読みだけの変換も Mozc に任せる");
+
+        // Zenzai が答えるまで待って、その答え (覚えているので、HybridConverter が聞くと同じ答えが返る)
+        string? Answered(string reading, string? context)
+        {
+            for (var i = 0; i < 200; i++)
+            {
+                if (zenzai.ConvertClauses(reading, context) is [var clause]) return clause.Text;
+                Thread.Sleep(50);
+            }
+            return null;
+        }
+    }
+
+    [Test]
     public static void Converts_ThroughCompletionEndpoint()
     {
         using var server = new FakeServer { Answer = p => p.Contains("キョウ") ? "今日</s>" : "" };
@@ -120,7 +184,7 @@ internal static class ZenzaiConverterTests
         };
         var zenzai = new ZenzaiConverter(server.Endpoint);
         var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, null, null, () => zenzai);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
         hybrid.Budget.Enable();
         var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionServices(), () => new Settings { LiveConversion = true });
         // Mozc の起動を待つ
@@ -143,7 +207,8 @@ internal static class ZenzaiConverterTests
             Assert.True(SpinWait.SpinUntil(() => { Record(); return seen[^1] == "汽車が来た"; }, 5000), "あとから Zenzai の答え: " + string.Join(" -> ", seen));
             Thread.Sleep(200);
             Record();
-            Assert.Equal("きしゃがきた -> 記者が来た -> 汽車が来た", string.Join(" -> ", seen), "戻らない");
+            // 打ち終わる前に Mozc のワーカーが答え終われば、最初の表示がもう Mozc の答えになる (速いマシン)。かなの表示は有っても無くてもよい
+            Assert.Equal("記者が来た -> 汽車が来た", string.Join(" -> ", seen.SkipWhile(text => text == "きしゃがきた")), "戻らない");
             // Mozc の文節の区切りのまま (Align) なので、文節ごとに選び直せる
             Assert.Equal("汽車が,来た", string.Join(",", SessionFacadeTests.Type(session, " ")[^1].View?.Clauses ?? []));
         }
@@ -265,17 +330,18 @@ internal static class ZenzaiConverterTests
     [Test]
     public static void Hybrid_PrefersZenzaiAndKeepsOtherClausesWhenSame()
     {
-        using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "ひらがな" };
+        using var server = new FakeServer { Answer = p => p.Contains("タンイヲトル") ? "単位を取る" : "丹位" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
-        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
-        // FakeConverter は たんいをとる を 単位を|取る の 2 文節にする。同じ文字列なら、その区切りを使う
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => zenzai);
+        // 偽の Mozc は たんいをとる を 単位を|取る の 2 文節にする。同じ文字列なら、その区切りを使う
         var same = hybrid.ConvertClauses("たんいをとる");
         Assert.True(same is [{ Text: "単位を" }, { Text: "取る" }], "同じなら区切りを使う: " + string.Join("|", same?.Select(c => c.Text) ?? []));
         // 違えば Zenzai の結果
         var other = hybrid.ConvertClauses("たんい", "前の文");
-        Assert.True(other is [{ Reading: "たんい", Text: "ひらがな" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
+        Assert.True(other is [{ Reading: "たんい", Text: "丹位" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
         // 使わない設定 (null) なら今までどおり
-        var off = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => null);
+        var off = new HybridConverter(mozc, () => null);
         Assert.Equal("単位", off.Convert("たんい") ?? "", "OFF は今までどおり");
     }
 
@@ -314,11 +380,11 @@ internal static class ZenzaiConverterTests
         // ほかの読み (文節ごとの候補を作るときの きしゃが・きた など) は読みのまま返す。空を返すと失敗と数えられ、3 回で Zenzai を使わなくなる
         using var server = new FakeServer
         {
-            Answer = p => p.Contains("キシャガキタ") ? (p.Contains('外') ? "帰社が北よ" : "汽車が着た") : p.Contains("ニモツヲニカイニハコブ") ? "荷物を2階に運ぶ" : ReadingIn(p),
+            Answer = p => p.Contains("キシャガキタ") ? (p.Contains('外') ? "帰社が喜多" : "汽車が着た") : p.Contains("ニモツヲニカイニハコブ") ? "荷物を2階に運ぶ" : ReadingIn(p),
         };
         // 遅い PC でも時間切れ (5 秒 Zenzai を使わない) にならないよう、待つ時間を長くする
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, new CompositionTests.FakeConverter(), null, () => zenzai);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
         mozc.WarmUp();
         for (var i = 0; i < 200 && mozc.ConvertClauses("きしゃがきた") is null; i++) Thread.Sleep(50);
         Assert.True(mozc.ConvertClauses("きしゃがきた") is [_, _], "偽の Mozc のヘルパーが 10 秒で起動しなかった");
@@ -328,7 +394,7 @@ internal static class ZenzaiConverterTests
         Assert.True(aligned is [{ Reading: "きしゃが", Text: "汽車が" }, { Reading: "きた", Text: "着た" }], "Mozc の文節で返す: " + Joined(aligned));
         // 候補でできなければ、今までどおり読み全体で 1 つの文節
         var whole = hybrid.ConvertClauses("きしゃがきた", "外の文");
-        Assert.True(whole is [{ Reading: "きしゃがきた", Text: "帰社が北よ" }], "できなければ 1 文節: " + Joined(whole));
+        Assert.True(whole is [{ Reading: "きしゃがきた", Text: "帰社が喜多" }], "できなければ 1 文節: " + Joined(whole));
 
         // 文節が残るので、選び直して覚えた文節 (きしゃが → 帰社が) は Zenzai の結果の上から効く。1 文節だと効かなかった
         var history = new ConversionHistory(null);
@@ -356,7 +422,8 @@ internal static class ZenzaiConverterTests
         using var server = new FakeServer { Answer = _ => "単位を取る" };
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
         var useZenzai = true;
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => useZenzai ? zenzai : null);
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => useZenzai ? zenzai : null);
         Assert.True(hybrid.ConvertClauses("たんいをとる") is { } z && z.All(c => c.Zenzai), "Zenzai の答えの文節に印を付ける");
         // 変換ボックスの説明の行に出す。Zenzai の答えを出しているときだけ
         var k = new CompositionTests.Keyboard(converter: hybrid);
@@ -365,10 +432,10 @@ internal static class ZenzaiConverterTests
         Assert.Equal("Zenzai", k.Host.View.ContextHint, "固定ガイドを隠す表示にも、変換エンジンの案内だけを残す");
         useZenzai = false;
         Assert.True(hybrid.ConvertClauses("たんいをとる") is { } m && !m.Any(c => c.Zenzai), "Zenzai を使わなければ印を付けない");
-        var mozc = new CompositionTests.Keyboard(converter: hybrid);
-        mozc.Type("tanniwotoru ");
-        Assert.True(!mozc.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "Zenzai の答えでなければ出さない: " + mozc.Host.View.Hint);
-        Assert.True(mozc.Host.View.ContextHint is null, "Zenzai の答えでなければ文脈の案内にも出さない");
+        var plain = new CompositionTests.Keyboard(converter: hybrid);
+        plain.Type("tanniwotoru ");
+        Assert.True(!plain.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "Zenzai の答えでなければ出さない: " + plain.Host.View.Hint);
+        Assert.True(plain.Host.View.ContextHint is null, "Zenzai の答えでなければ文脈の案内にも出さない");
         // 学習した変換で Zenzai の答えと違う文字列にした文節は数えない
         useZenzai = true;
         var history = new ConversionHistory(null);
@@ -395,7 +462,8 @@ internal static class ZenzaiConverterTests
     public static void Hybrid_ZenzaiThatCannotBeCreated_FallsBackToOtherEngine()
     {
         // #973: 同梱の .NET に System.Net.Http が無く、Zenzai を作るたびに例外になった。例外が入力まで届き、日本語を打てなくなった
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null,
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc,
             () => throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"));
         Assert.True(hybrid.ConvertClauses("たんいをとる") is [{ Text: "単位を" }, { Text: "取る" }], "文節に分けた変換は、ほかの変換エンジンで");
         Assert.Equal("今日", hybrid.Convert("きょう") ?? "", "1 回の変換も、ほかの変換エンジンで");
@@ -411,7 +479,8 @@ internal static class ZenzaiConverterTests
         using var server = new FakeServer { RawBody = "{\"content\":1}" };
         using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
         var reported = new List<ZenzaiConverter>();
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, null, new CompositionTests.FakeConverter(), null, () => zenzai, reported.Add);
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => zenzai, reported.Add);
         Assert.True(hybrid.ConvertClauses("たんいをとる") is [{ Text: "単位を" }, { Text: "取る" }], "例外になっても、ほかの変換エンジンで変換する");
         int asked;
         lock (server.Prompts) asked = server.Prompts.Count;
@@ -432,7 +501,7 @@ internal static class ZenzaiConverterTests
         var now = 0L;
         var created = 0;
         using var holder = new ZenzaiHolder((s, m, _) => { created++; throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"); }, () => now);
-        Assert.True(holder.Get("server", "model") is null, "作れなければ null (Mozc などで変換する)");
+        Assert.True(holder.Get("server", "model") is null, "作れなければ null (Mozc で変換する)");
         Assert.True(holder.Get("server", "model") is null && created == 1, "すぐには作り直さない (打つたびに例外にしない)");
         now += (long)holder.RetryAfter.TotalMilliseconds;
         Assert.True(holder.Get("server", "model") is null && created == 2, "しばらくたったら、もう一度作る");
@@ -481,6 +550,17 @@ internal static class ZenzaiConverterTests
         Assert.Equal(",Vulkan0", string.Join(",", devices), "使う GPU を変えたら、その名前で作り直す");
         holder.Get("server", "model", " Vulkan0 ");
         Assert.Equal(2, devices.Count, "前後の空白だけの違いでは作り直さない");
+    }
+
+    [Test]
+    public static void Holder_DoesNotCreateAfterDispose()
+    {
+        // Meltype の終了 (meltype_shutdown) で止めた後に変換が来ても、llama-server を作らない (作ると止める人がいない)
+        var created = 0;
+        var holder = new ZenzaiHolder((s, m, d) => { created++; return new ZenzaiConverter(new Uri("http://127.0.0.1:1/")); });
+        holder.Dispose();
+        Assert.True(holder.Get("server", "model") is null, "止めた後は null");
+        Assert.Equal(0, created, "止めた後は作らない");
     }
 
     [Test]
@@ -581,7 +661,8 @@ internal static class ZenzaiConverterTests
         for (var i = 0; i < 100 && !zenzai.IsReady; i++) Thread.Sleep(300);
         Assert.True(zenzai.IsReady, "llama-server が起動しなかった");
 
-        var hybrid = new HybridConverter(() => ConversionEngine.System, null, new CompositionTests.FakeConverter(), null, () => zenzai);
+        using var mozc = MozcConverterTests.Fake();
+        var hybrid = new HybridConverter(mozc, () => zenzai);
         foreach (var (typed, context, expected) in new[]
         {
             ("zisyono", "このIMEを調べた。Mozcの", "辞書の"),
@@ -599,25 +680,43 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void StaleServerFromAKilledMeltype_IsEndedOnNextStart()
+    public static void StaleServerFromAKilledMeltype_IsEnded()
     {
-        // Meltype が強制終了されて llama-server が残ったときは、次に起動するときに終わらせる (PID ファイルの PID と名前と起動した時刻が合うときだけ)
+        // Meltype が強制終了されて llama-server が残ったときは、次の Meltype が終わらせる (PID と名前と起動した時刻が合うときだけ)
         if (OperatingSystem.IsWindows() || !File.Exists("/bin/sleep")) return;
-        using var stale = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "120") { UseShellExecute = false })!;
-        var pidFile = Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
-        File.WriteAllText(pidFile, $"{stale.Id}\nsleep\n{stale.StartTime.ToUniversalTime().Ticks}");
-        var model = Path.GetTempFileName();
+        using var stale = Sleep();
+        var (ownerPid, ownerTicks) = EndedProcess();
+        var file = ZenzaiConverter.RecordServer(stale.Id, "sleep", Ticks(stale), ownerPid, ownerTicks);
         try
         {
-            using var zenzai = new ZenzaiConverter("/bin/sleep", model);
-            zenzai.WarmUp();
-            Assert.True(stale.WaitForExit(5000), "残っていたサーバーが終わる");
+            ZenzaiConverter.EndStaleServers();
+            Assert.True(stale.WaitForExit(5000), "持ち主が終わったサーバーを終わらせる");
+            Assert.True(!File.Exists(file), "終わらせたサーバーの記録は消す");
         }
         finally
         {
-            File.Delete(model);
             if (!stale.HasExited) stale.Kill();
-            File.Delete(pidFile);
+            if (file is not null) File.Delete(file);
+        }
+    }
+
+    [Test]
+    public static void ServerOfARunningMeltype_IsNotEnded()
+    {
+        // 自己診断 (--self-test) などで別の Meltype が Zenzai を起動しても、動いている IME の llama-server は止めない
+        if (OperatingSystem.IsWindows() || !File.Exists("/bin/sleep")) return;
+        using var server = Sleep();
+        var file = ZenzaiConverter.RecordServer(server.Id, "sleep", Ticks(server), Environment.ProcessId, Ticks(System.Diagnostics.Process.GetCurrentProcess()));
+        try
+        {
+            ZenzaiConverter.EndStaleServers();
+            Assert.True(!server.WaitForExit(2000), "持ち主が動いているサーバーは終わらせない");
+            Assert.True(File.Exists(file), "持ち主が動いている間は記録を残す");
+        }
+        finally
+        {
+            if (!server.HasExited) server.Kill();
+            if (file is not null) File.Delete(file);
         }
     }
 
@@ -626,21 +725,32 @@ internal static class ZenzaiConverterTests
     {
         // PID が使い回されて、同じ名前の別のプロセス (ユーザーが自分で動かしている llama-server など) になっていたら終わらせない
         if (OperatingSystem.IsWindows() || !File.Exists("/bin/sleep")) return;
-        using var other = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "120") { UseShellExecute = false })!;
-        var pidFile = Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
-        File.WriteAllText(pidFile, $"{other.Id}\nsleep\n{other.StartTime.ToUniversalTime().AddMinutes(-5).Ticks}");
-        var model = Path.GetTempFileName();
+        using var other = Sleep();
+        var (ownerPid, ownerTicks) = EndedProcess();
+        var file = ZenzaiConverter.RecordServer(other.Id, "sleep", other.StartTime.ToUniversalTime().AddMinutes(-5).Ticks, ownerPid, ownerTicks);
         try
         {
-            using var zenzai = new ZenzaiConverter("/bin/sleep", model);
-            zenzai.WarmUp();
+            ZenzaiConverter.EndStaleServers();
             Assert.True(!other.WaitForExit(2000), "起動した時刻が違うプロセスは終わらせない");
         }
         finally
         {
-            File.Delete(model);
             if (!other.HasExited) other.Kill();
-            File.Delete(pidFile);
+            if (file is not null) File.Delete(file);
         }
+    }
+
+    private static System.Diagnostics.Process Sleep() =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "120") { UseShellExecute = false })!;
+
+    private static long Ticks(System.Diagnostics.Process process) => process.StartTime.ToUniversalTime().Ticks;
+
+    /// <summary>終わったプロセス (強制終了された持ち主の Meltype の代わり) の PID と起動した時刻。</summary>
+    private static (int Pid, long Ticks) EndedProcess()
+    {
+        using var ended = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "0.2") { UseShellExecute = false })!;
+        var ticks = Ticks(ended);
+        ended.WaitForExit();
+        return (ended.Id, ticks);
     }
 }

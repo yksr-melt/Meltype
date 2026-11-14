@@ -1,26 +1,32 @@
 # 貢献者ライセンス同意 (CLA) の bot。初めて Pull Request を出した人に、コメントで同意してもらう (.github/bot/cla.mjs)。
-# pull_request_target は書き込みの権限を持つので、Pull Request のコードはチェックアウトしない (main の bot のスクリプトだけを使う)。
+#   core.yml が Pull Request で終わったとき … head に「CLA」の status を出し、同意がまだならお願いのコメントを書く
+#   Pull Request へのコメント              … 「CLA に同意します」なら記録し、「CLA」の status を成功にする
+# 「CLA」は必須チェックではない。マージの前の確認はレビューする人がする。
+# workflow_run・issue_comment は main のワークフローで動き、書き込みの権限を持つので、Pull Request のコードはチェックアウトしない
+# (main の bot のスクリプトだけを使う)。
 name: cla
 
 on:
-  pull_request_target:
-    types: [opened, reopened, synchronize]
+  workflow_run:
+    workflows: [core]
+    types: [completed]
   issue_comment:
     types: [created]
 
 permissions: {}
 
 jobs:
-  cla:
-    # コメントは Pull Request のものだけ
-    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+  bot:
+    if: >-
+      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request') ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: write        # 同意の記録 (cla-signatures ブランチ)
       pull-requests: write
       issues: write
-      statuses: write        # 「CLA」のチェック
+      statuses: write        # 「CLA」の status
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

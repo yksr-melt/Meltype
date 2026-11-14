@@ -6,6 +6,8 @@
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
 //   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
+//   R<TAB>文字列
+//       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -117,12 +119,45 @@ class Helper {
           break;
         }
       }
-      // Mozc の候補に無い文字列 (Meltype の辞書や Microsoft IME の候補) は覚えさせられない。
+      // Mozc の候補に無い文字列 (Meltype の辞書の候補) は覚えさせられない。
       if (index < 0) return false;
       if (!converter_->CommitSegmentValue(&segments, i, index)) return false;
     }
     converter_->FinishConversion(Request(), &segments);
     return true;
+  }
+
+  // 逆変換。文字列 (漢字かな混じり) の読みを返す。逆変換できなければ空。
+  // 半角の数字は 1 字ずつ読む (2026年 → にぜろにろくねん) ので、全角にして渡し (２０２６年 → ２０２６ねん)、読みの数字は半角に戻す。
+  std::string Reverse(absl::string_view text) {
+    std::string key;
+    for (const char c : text) {
+      if (c >= '0' && c <= '9') {
+        key += "\xEF\xBC";  // U+FF10 (０) から
+        key += static_cast<char>('\x90' + (c - '0'));
+      } else {
+        key += c;
+      }
+    }
+    mozc::Segments segments;
+    if (!converter_->StartReverseConversion(&segments, key)) return "";
+    std::string reading;
+    for (size_t i = 0; i < segments.conversion_segments_size(); ++i) {
+      const mozc::Segment& segment = segments.conversion_segment(i);
+      if (segment.candidates_size() == 0) return "";
+      reading += segment.candidate(0).value;
+    }
+    std::string half;
+    for (size_t i = 0; i < reading.size(); ++i) {
+      if (i + 2 < reading.size() && reading[i] == '\xEF' && reading[i + 1] == '\xBC' &&
+          reading[i + 2] >= '\x90' && reading[i + 2] <= '\x99') {
+        half += static_cast<char>('0' + (reading[i + 2] - '\x90'));
+        i += 2;
+      } else {
+        half += reading[i];
+      }
+    }
+    return half;
   }
 
   bool Save() { return engine_->Sync(); }
@@ -186,6 +221,8 @@ int main(int argc, char** argv) {
       std::cout << helper.Convert(fields[1], fields[2]) << "\n";
     } else if (fields[0] == "L" && fields.size() >= 3) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
+    } else if (fields[0] == "R" && fields.size() >= 2) {
+      std::cout << helper.Reverse(fields[1]) << "\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {

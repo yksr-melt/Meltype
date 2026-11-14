@@ -63,6 +63,13 @@ public sealed partial class CompositionController
 
         // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。
         if (IsShift(vk)) return;
+        // 何も打っていないときのテンキーの数字・記号は、変換ボックスに入れず、そのまま通す (半角で入る。Excel・CAD などで数値を打つとき: issue #460)。
+        // 入力中なら今までどおり変換ボックスに入れる (3 + ji → 3時 のように続けて変換できる)
+        if (_text.IsEmpty && !_control && !_modifier && vk is >= 0x60 and <= 0x6F)
+        {
+            PassKey();
+            return;
+        }
         if (_control && !_text.IsEmpty)
         {
             // 変換ボックスに入力中の Ctrl + キー (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから通す)。
@@ -199,14 +206,14 @@ public sealed partial class CompositionController
                 else if (SpaceCommitsMarkdownMarker())
                 {
                     // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
-                    CommitText(_text.Raw + " ", english: false, preserveText: true);
+                    CommitText(_text.Raw + " ", english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
                 }
                 else if (SpaceCommitsAlphanumeric())
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null)) + " ", english: true, _text.Raw);
-                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw);
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
                     // Space で変換した = 語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
