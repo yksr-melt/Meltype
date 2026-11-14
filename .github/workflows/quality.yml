@@ -121,7 +121,9 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
 
   # ワークフローの検査 (actionlint。run の中は shellcheck)。#1842
-  #   steps.<id>.outputs の書き間違いや、無い needs を参照すると、式が空になり step が黙って飛ばされる。それをマージ前に見つける
+  #   式で無いものを参照すると空になり、if: の step が黙って飛ばされる。そのうち次をマージ前に見つける
+  #   (無い step の id・action の出力の名前の書き間違い・無い needs の job・job の outputs に無い名前)。
+  #   run: が $GITHUB_OUTPUT に書く出力の名前は調べられない
   workflows:
     runs-on: ubuntu-latest
     timeout-minutes: 10
