@@ -6046,4 +6046,45 @@ internal static class CompositionTests
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
+
+    [Test]
+    public static void Issue1644_CommitLogsSegmentReason()
+    {
+        // 確定のたびに、区切りの重みと次点をログに残す。既定では打った文字を出さず、区間の言語と文字数だけ
+        var recordText = Meltype.Diagnostics.Log.RecordText;
+        try
+        {
+            foreach (var withText in new[] { false, true })
+            {
+                Meltype.Diagnostics.Log.RecordText = withText;
+                var entry = CommitLog(new Keyboard(), "kyouhagoogle\n");
+                Assert.True(entry.Contains("区切り ") && entry.Contains("次点 "), "区切りと次点: " + entry);
+                Assert.Equal(withText, entry.Contains("google"), "打った文字は設定どおり: " + entry);
+                if (!withText) Assert.True(entry.Contains("EN(6)"), "文字の代わりに文字数: " + entry);
+            }
+
+            // ログの区切りは、実際に確定した区切りと同じ計算から取る。区間分けの後の書き換え (笑いの w) もログに出る
+            Meltype.Diagnostics.Log.RecordText = true;
+            var laughter = new Keyboard { LaughterAfterKana = true };
+            var laughed = CommitLog(laughter, "naruhodonew\n");
+            Assert.Equal("なるほどねw", laughter.Host.Document, "笑いの w で確定");
+            Assert.True(laughed.Contains("かな + w に分けた"), "笑いの w に分けたことがログに出る: " + laughed);
+
+            // 保護区間を含む入力も、保護区間以外の区切りの重みを出す
+            var text = new CompositionText(Detector);
+            foreach (var c in "@kuraido kyouha") text.Append(c);
+            var mention = text.ExplainSegments();
+            Assert.True(mention.Contains("保護区間") && mention.Contains("区切り "), "保護区間と、ほかの区間の区切り: " + mention);
+        }
+        finally
+        {
+            Meltype.Diagnostics.Log.RecordText = recordText;
+        }
+
+        static string CommitLog(Keyboard k, string keys)
+        {
+            k.Type(keys);
+            return Meltype.Diagnostics.Log.Snapshot().Last(e => e.Level == Meltype.Diagnostics.LogLevel.Decision && e.Message.StartsWith("確定:", StringComparison.Ordinal)).Message;
+        }
+    }
 }
