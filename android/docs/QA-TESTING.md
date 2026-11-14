@@ -17,7 +17,7 @@ PR #1149 の後続開発者は **テストコード、入力例、期待結果�
     bash android/tools/build-mozc.sh
     bash android/tools/build-meltype-native.sh
     cd android
-    ./gradlew --no-daemon :engine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+    ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
 
 Mozcの初回ソースビルドは大量の依存を取得する。版・SHAをチェックし、異なる版の.soを黙って代用しない。CI定義は [.github/workflows/android-qa.yml](../../.github/workflows/android-qa.yml) に含める。
 
@@ -32,7 +32,7 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 
 アプリの計測は下表のクラスに加え、文字削除・タッチ操作の検証と、選んだキーボードで実際に打つ ImeLaunchDeviceTest も実行する。Coreのデータディレクトリはプロセスごとに固定されるため、別のディレクトリを使うブリッジ試験は別プロセスで実行する。実IMEの入力試験も含む3回の計測結果を集計する。各ケースの結果は `test-cases.md` と `instrumentation.xml` に記録する。Mozcの計測は別のGradleタスクで実行し、結果を `mozc/build/outputs/androidTest-results/connected/` に記録する。
 
-コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [CoreEditingDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreEditingDeviceTest.kt) / [CoreConfigDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreConfigDeviceTest.kt) / [ImeLaunchDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/ImeLaunchDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt) / [DeleteLengthDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt) / [KeyboardViewTouchTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt) / [MeltypeCoreBridgeDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt) / [MozcConverterTest.kt](../mozc/src/androidTest/kotlin/io/github/ninjin0802/keyboard/mozc/MozcConverterTest.kt)。
+コード: [LanguageDetectionDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/LanguageDetectionDeviceTest.kt) / [CoreEditingDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreEditingDeviceTest.kt) / [CoreConfigDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreConfigDeviceTest.kt) / [ImeLaunchDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/ImeLaunchDeviceTest.kt) / [SettingsScreenDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt) / [DeleteLengthDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt) / [MeltypeCoreBridgeDeviceTest.kt](../app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt) / [MozcConverterTest.kt](../mozc/src/androidTest/kotlin/io/github/ninjin0802/keyboard/mozc/MozcConverterTest.kt)。
 
 ### 日英判定・設定の計測テストの入力と期待値
 | ID | @Test fun | 入力・操作 | 期待値 |
@@ -82,8 +82,9 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | E04 | ownEditorWritesDoNotLookLikeCaretMoves | 日本語欄で i␣Enter→want␣、キャレットを外から動かさない | I に確定し直し、キーボード自身の編集は外からの移動と数えない |
 | E05 | candidateTapsFixAConversionClauseByClause | 日本語欄で watashinonamaehanakanodesu␣（実際のMozcで変換）→各文節で、いまと違う候補を候補バーでタップ | 最後の文節まで確定せず、タップのたびに次の文節へ進む。最後のタップで選んだとおりの全文を確定 |
 | E06 | keyboardProvidesImePickerOnlyInEmergency | 通常の実IMEと障害時の退避用Viewを確認 | 通常画面に独自IME切り替えボタンはなく、退避用Viewの切り替え操作でAndroid標準IME選択を呼べる。設定画面へのリンクはない |
+| E07 | emailFieldAcceptsLiteralRomajiAfterLanguageSwitch | メール欄で英字QWERTYから日本語QWERTYに切り替えて a をタップ | 変換を無効にした入力欄でも英字 a が直接入力され、Core障害扱いにならない |
 
-A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08〜C13、D01〜D02はNative Coreとの接続を含む（C09〜C12の変換は試験用の変換器で、文節の区切りと候補を固定する）。E01〜E06は端末で選んだキーボードを操作して確かめる（E06は退避用Viewの構築も確認する）。実機での画面開閉は自動計測とは別の手動テストである。
+A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08〜C13、D01〜D02はNative Coreとの接続を含む（C09〜C12の変換は試験用の変換器で、文節の区切りと候補を固定する）。E01〜E07は端末で選んだキーボードを操作して確かめる（E06は退避用Viewの構築も確認する）。実機での画面開閉は自動計測とは別の手動テストである。
 
 ## 3. 画面開閉・実機での手動テスト
 
@@ -117,7 +118,7 @@ A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定J
 ## 4. CI / 証跡
 Actionsはビルド時のSHAとGradle単体テストJUnit XML、Android計測テストのケース別JUnit XML・ログ・端末条件をArtifactとJob Summaryで公開する。失敗時もArtifactを保存する。再検証の際は同じブランチ・コミットをcheckoutしてコマンドを再実行する。
 
-テストコードは `android/app/src/androidTest/`、JVMテストは `android/engine/src/test/`・`android/app/src/test/` にあり、この文書だけでテストを代替しない。
+テストコードは `android/app/src/androidTest/`、JVMテストは `android/app/src/test/` にあり、この文書だけでテストを代替しない。
 
 ## 2026-10-29：スペース長押し言語ピッカーの追加QA
 
@@ -126,5 +127,5 @@ Actionsはビルド時のSHAとGradle単体テストJUnit XML、Android計測テ
 - 指を離さず日本語・English間で上下にスワイプするとハイライトが移動し、その行で離したときだけ切り替わること。
 - 押したままメニューの外へ移動して離したら切り替えず、スペースも入らないこと。
 - 絵文字ON/OFFで項目数が正しく変わること。折りたたみ開閉・画面回転中のタッチキャンセルも確認。
-- `LanguagePickerHitTest`（境界判定）と `KeyboardViewTouchTest`（単一タッチを長押しからUPまで維持）は自動テストである。
+- `LanguagePickerHitTest` は言語ピッカーの境界判定、`ImeLaunchDeviceTest` は実IMEの画面タッチ入力を自動で検証する。スペース長押しから指を離すまでの一連の操作は上記手動QAでも確認する。
 - ビルドAPKは `.github/workflows/android-qa.yml` の `android-qa-report-and-debug-apk` に含まれる。
