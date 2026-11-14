@@ -1,5 +1,5 @@
-name: 改善の提案
-description: こうなったら使いやすい、という提案
+name: 改善・機能の提案
+description: こうなったら使いやすい、こんな機能がほしい
 title: "[提案] "
 labels: ["提案"]
 body:
@@ -13,7 +13,7 @@ body:
     attributes:
       label: 困っていること
       description: どんな場面で、何が不便か
-      placeholder: Discord で絵文字を打つとき、毎回 : を打つのが面倒
+      placeholder: "Discord で絵文字を打つとき、毎回 : を打つのが面倒"
     validations:
       required: true
 
@@ -21,15 +21,6 @@ body:
     id: idea
     attributes:
       label: こうなってほしい
+      description: 具体例があれば書いてください
     validations:
       required: true
-
-  - type: dropdown
-    id: os
-    attributes:
-      label: OS
-      multiple: true
-      options:
-        - Windows
-        - Mac
-        - Linux
