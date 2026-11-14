@@ -14,4 +14,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "keyboard"
-include(":engine", ":mozc", ":app")
+include(":mozc", ":app")

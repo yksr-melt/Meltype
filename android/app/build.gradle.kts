@@ -98,7 +98,6 @@ kotlin {
 }
 
 dependencies {
-    implementation(project(":engine"))
     implementation(project(":mozc"))
 
     testImplementation(libs.junit)

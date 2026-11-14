@@ -72,7 +72,6 @@ tasks.named("preBuild") {
 }
 
 dependencies {
-    api(project(":engine"))
     api(libs.protobuf.javalite)
     // テストを動かすためだけのもの。アプリには入らない。
     androidTestImplementation(libs.androidx.test.runner)

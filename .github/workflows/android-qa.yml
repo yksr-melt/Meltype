@@ -59,7 +59,7 @@ jobs:
         run: |
           cd android
           chmod +x ./gradlew
-          ./gradlew --no-daemon :engine:test :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Verify Android 16 KiB ELF and APK alignment
         run: python3 android/tools/check-apk-16k.py android/app/build/outputs/apk/debug/app-debug.apk
       - name: Enable hardware acceleration
@@ -99,7 +99,6 @@ jobs:
           name: android-qa-report-and-debug-apk
           path: |
             android/build/qa/
-            android/engine/build/test-results/test/
             android/app/build/test-results/testDebugUnitTest/
             android/mozc/build/outputs/androidTest-results/connected/
             android/app/build/outputs/apk/debug/app-debug.apk
