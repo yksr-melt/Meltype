@@ -671,16 +671,29 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void NonConvertCyclesKana_DigitsMeanNotShownAsHiragana()
+    public static void NonConvertCyclesKana_DigitsDoNotPreventKatakana()
     {
-        // 数字が混ざった表示は、ひらがなだけではない。最初の 1 回はカタカナにせず、ひらがなにする
+        // 数字が混ざっていても、ひらがなが含まれていれば最初の無変換で全角カタカナにする
         var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
         k.Type("123ka");
-        var before = k.Showing;
+        Assert.Equal("123か", k.Showing);
         k.Press(VirtualKeys.NonConvert);
-        Assert.Equal("123か", k.Showing, "最初の 1 回はひらがな (表示: " + before + ")");
+        Assert.Equal("123カ", k.Showing);
         k.Press(VirtualKeys.NonConvert);
-        Assert.Equal("123カ", k.Showing, "次に全角カタカナ");
+        Assert.Equal("123ｶ", k.Showing);
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_WorksWithoutSeparateKeyRoles()
+    {
+        var k = new Keyboard { SeparateKeyRoles = false, NonConvertCyclesKana = true };
+        k.Type("kana");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("カナ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("ｶﾅ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("かな", k.Showing);
     }
 
     [Test]

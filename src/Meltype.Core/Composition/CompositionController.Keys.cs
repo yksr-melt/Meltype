@@ -180,8 +180,8 @@ public sealed partial class CompositionController
                 _spaceStartedConversion = true;
                 StartConversion();
                 return;
-            case VirtualKeys.NonConvert when _settings().SeparateKeyRoles && _settings().NonConvertCyclesKana && !IsProtectedInput:
-                // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の輪。今ひらがなで見えていなければ (変換した漢字・英字など)、まずひらがなにする
+            case VirtualKeys.NonConvert when _settings().NonConvertCyclesKana && !IsProtectedInput:
+                // ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に循環する。自動判定中は、表示中の文字列にひらがな (長音を含む) があれば全角カタカナにし、なければひらがなにする。
                 SetMode(NextKanaCycleMode());
                 _modeByKey = true;
                 return;
@@ -805,7 +805,7 @@ public sealed partial class CompositionController
         }
     }
 
-    /// <summary>無変換での かな の循環の次の表示。ひらがな・カタカナ・半角カタカナで見えているときだけ輪の次へ、それ以外 (変換後・英字) はひらがな。</summary>
+    /// <summary>無変換でのかなの循環の次の表示。ひらがな・全角カタカナ・半角カタカナで見えているときは輪の次へ進む。自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれていれば全角カタカナにし、含まれていなければひらがなにする。</summary>
     private DisplayMode NextKanaCycleMode()
     {
         // 変換中は、まずひらがなに戻す
@@ -816,9 +816,9 @@ public sealed partial class CompositionController
             case DisplayMode.Katakana: return DisplayMode.HalfWidthKatakana;
             case DisplayMode.HalfWidthKatakana: return DisplayMode.Hiragana;
             case DisplayMode.Auto:
-                // 自動判定で、文字がひらがな (と長音) だけなら、ひらがなで見えている。英字・数字・漢字・カタカナを含むなら見えていない (記号は無視)
+                // 自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれているかで判定する。含まれていれば全角カタカナにし、含まれていなければひらがなにする。
                 var shown = CurrentDisplay(final: false);
-                return shown.Length > 0 && shown.All(c => !char.IsLetterOrDigit(c) || c is >= '\u3041' and <= '\u309F' or '\u30FC') ? DisplayMode.Katakana : DisplayMode.Hiragana;
+                return shown.Length > 0 && shown.Any(c => c is >= '\u3041' and <= '\u309F' or '\u30FC') ? DisplayMode.Katakana : DisplayMode.Hiragana;
             default: return DisplayMode.Hiragana;
         }
     }

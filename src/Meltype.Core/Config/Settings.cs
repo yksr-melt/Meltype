@@ -435,7 +435,7 @@ public sealed class Settings
     public bool SeparateKeyRoles { get; set; }
 
     [Category("7. キー操作"), DisplayName("無変換でカタカナを切り替える"), Platforms(Platform.Windows | Platform.Linux),
-     Description("「入力中のキーの役割を分ける」も ON のとき、入力中の 無変換 キーを、英字にする代わりに Microsoft IME のように切り替えます。ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に、押すたびに循環します。ひらがなで見えていないとき (変換したあと・英字で見えているとき) は、まずひらがなにします。")]
+     Description("入力中の無変換キーを、ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に、押すたびに循環します。自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれていれば最初から全角カタカナにし、含まれていなければひらがなにします。「入力中のキーの役割を分ける」の無変換キー動作を上書きします。")]
     public bool NonConvertCyclesKana { get; set; }
 
     [Category("3. 判定"), DisplayName("英字を主に入力 (変換キー / ↓ で日本語に)"),
