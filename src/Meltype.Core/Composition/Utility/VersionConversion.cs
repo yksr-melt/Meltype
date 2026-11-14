@@ -14,10 +14,9 @@ internal sealed class VersionConversion : IUtilityConversion
     public UtilityCandidates? Convert(UtilityInput input) =>
         input.Reading == "ばーじょん" ? new([Candidate(input.Context.Settings)], UtilityPlacement.Append) : null;
 
-    internal static string Candidate(Settings settings) => Text(ProjectInfo.CoreVersion, ProjectInfo.BuildCommit, Front(settings));
+    internal static string Candidate(Settings settings) => Text(ProjectInfo.WithCommit(ProjectInfo.CoreVersion), Front(settings));
 
-    internal static string Text(string version, string? commit, string front) =>
-        $"Meltype-{version}{(commit is null ? "" : "+" + commit)} ({front})";
+    internal static string Text(string version, string front) => $"Meltype-{version} ({front})";
 
     /// <summary>
     /// OS と入力のフロント。Windows は設定の動作モードで決まる (フロントは 2 つあり、使うのは設定のほう)。
