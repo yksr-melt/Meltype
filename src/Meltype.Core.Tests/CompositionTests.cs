@@ -1753,6 +1753,10 @@ internal static class CompositionTests
         Assert.True(dictionary.LookupDomain("いくせいしゃけん").Contains("育成者権"), "情報 (IDiME)");
         Assert.True(dictionary.LookupDomain("あいづかのうえき").Contains("会津加納駅"), "駅名 (SKK)");
         Assert.True(dictionary.LookupDomain("せんたんきょだいしょうの").Contains("先端巨大症の"), "助詞が付いても");
+        Assert.True(dictionary.LookupDomain("どくにんせい").Contains("独任制"), "一般の語 (SudachiDict)");
+        Assert.True(dictionary.LookupDomain("いなかじじい").Contains("田舎爺い"), "一般の語 (UniDic)");
+        Assert.True(dictionary.LookupDomain("おたいじゅく").Contains("小田井宿"), "固有名詞 (Wikidata)");
+        Assert.True(dictionary.LookupDomain("いなさか").Contains("稲阪"), "人名 (SudachiDict)");
         // 逆向き: よく使う語の読みには分野の語を足さない (きょう → 京・恭 が ひらがな より前に出ていた)
         Assert.Equal(0, dictionary.LookupDomain("きょう").Count);
         Assert.Equal(0, dictionary.LookupDomain("あい").Count);
