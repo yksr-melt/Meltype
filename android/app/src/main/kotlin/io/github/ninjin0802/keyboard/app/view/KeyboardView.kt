@@ -53,8 +53,8 @@ interface KeyListener {
  */
 class KeyboardView(context: Context) : View(context) {
     /** The mode selected by the IME is not overwritten by fold/unfold reflow. */
-    private var sourceLayout: KeyboardLayout = Layouts.romaji
-    private var displayedLayout: KeyboardLayout = Layouts.romaji
+    private var sourceLayout: KeyboardLayout = Layouts.kana
+    private var displayedLayout: KeyboardLayout = Layouts.kana
     var layout: KeyboardLayout
         get() = displayedLayout
         set(value) {
@@ -72,7 +72,7 @@ class KeyboardView(context: Context) : View(context) {
         set(value) { field = value; rebuildFaces(); invalidate() }
 
     /** 数字・記号の配列の戻るキーの行き先。キーに書く文字を決める。 */
-    var backTarget: LayoutId = LayoutId.ROMAJI
+    var backTarget: LayoutId = LayoutId.KANA
         set(value) { field = value; rebuildFaces(); invalidate() }
     var listener: KeyListener? = null
 
