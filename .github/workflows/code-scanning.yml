@@ -15,6 +15,11 @@ concurrency:
   group: code-scanning-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: true
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   summary:
     if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
