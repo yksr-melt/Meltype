@@ -50,7 +50,7 @@ internal sealed class ImeSession
     public void Close() => _session.CommitPending();
 
     /// <summary>
-    /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・ゲーム・パスワード欄・全画面 (設定)・
+    /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・ゲーム (Meltype キーボード)・パスワード欄・全画面 (設定)・
     /// 日本語以外の入力言語 (設定)・フロントが文字を送れない所・入力欄でない所 (アプリ別設定で「入力欄とみなす」アプリとターミナルを除く) でない。
     /// </summary>
     public static bool IsActive(IImeEnvironment environment, Settings settings, ImeField? field)
@@ -62,8 +62,16 @@ internal sealed class ImeSession
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
             !(traits.Contains(ImeTrait.NonText) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
-            settings.IsAppEnabled(app) && !settings.IsGame(app, traits.Contains(ImeTrait.Game));
+            settings.IsAppEnabled(app) && !(environment.InputMethod == InputMode.Keyboard && IsGame(settings, field));
     }
+
+    /// <summary>
+    /// ゲームか。Meltype キーボードはゲームでは止めて、チャットは Windows の IME で打ってもらう。
+    /// Meltype IME・macOS・Linux のフロントは OS の IME そのものなので、止めるとチャットで日本語を打てなくなる (#1805)。
+    /// 受け持ったまま英数で始め、英数ではキーを横取りしない (自動判定もしない) ので、操作のキーはそのままゲームに届く。
+    /// </summary>
+    public static bool IsGame(Settings settings, ImeField? field) =>
+        settings.IsGame(field?.App, field?.Traits.Contains(ImeTrait.Game) == true);
 
     public ImeOutput Handle(ImeEvent e, long rev)
     {
@@ -75,6 +83,10 @@ internal sealed class ImeSession
         if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) _lastSnippet = null;
         NoteAltInterruption(e);
         ApplyFacts(e, settings);
+        // ゲームに入ったら英数にする (IsGame)
+        var game = IsGame(all, _field);
+        if (game && !_game) _session.Direct = true;
+        _game = game;
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
@@ -110,10 +122,13 @@ internal sealed class ImeSession
             ImeOpen = !_session.Direct,
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, _session.ComposingControlKeys(), _snippetKeys),
+            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, game, _session.ComposingControlKeys(), _snippetKeys),
             Revision = rev,
         }, result);
     }
+
+    // 前の出来事の入力欄がゲームだった
+    private bool _game;
 
     // ---- 左右の Alt の単独押し (設定「左 Alt で英数 / 右 Alt で日本語」) ----
 
@@ -191,15 +206,20 @@ internal sealed class ImeSession
 
     /// <summary>入力の本体を作る前 (まだ打っていない入力欄) の状態。</summary>
     /// <param name="entered">入力欄に入ったことを知らせる (<see cref="AnnouncesFocus"/>。設定によっては入力モードを表示する)。</param>
-    public static ImeState InitialState(bool active, bool open, Settings settings, bool entered, long rev) => new()
+    /// <param name="game">ゲーム (<see cref="IsGame"/>)。英数で始める。</param>
+    public static ImeState InitialState(bool active, bool open, Settings settings, bool game, bool entered, long rev)
     {
-        HandlesInput = active,
-        ImeOpen = open,
-        LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
-        ModeIndicatorMs = active && entered && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
-        Capture = Capture(active, !open, false, settings, [], []),
-        Revision = rev,
-    };
+        open &= !game;
+        return new()
+        {
+            HandlesInput = active,
+            ImeOpen = open,
+            LanguageMode = active && open ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
+            ModeIndicatorMs = active && entered && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus ? ModeIndicatorMs : 0,
+            Capture = Capture(active, !open, false, settings, game, [], []),
+            Revision = rev,
+        };
+    }
 
     private void ApplyFacts(ImeEvent e, Settings settings)
     {
@@ -483,7 +503,7 @@ internal sealed class ImeSession
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
         (key.Alt ? ShortcutModifiers.Alt : 0) | (key.Command ? ShortcutModifiers.Win : 0);
 
-    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, IEnumerable<int> composingControlKeys,
+    private static ImeCapture Capture(bool active, bool direct, bool directEnglishWord, Settings settings, bool game, IEnumerable<int> composingControlKeys,
         IReadOnlyList<int> snippetKeys)
     {
         if (!active) return new ImeCapture();
@@ -493,7 +513,8 @@ internal sealed class ImeSession
             .Concat(ModeKeys.Select(key => new ImeShortcut(key, 0)))
             .ToList();
         // 英数でもローマ字を見分ける (英語の語を打っている途中は、続きの英字をそのまま通す)
-        var detects = settings.DirectModeAutoDetect && settings.AutoDetection;
+        // ゲームの英数では判定しない: 英字を受け取って送り直すと、移動のキーが一回目に反応しない・離しても押したままになる (#1447)
+        var detects = settings.DirectModeAutoDetect && settings.AutoDetection && !game;
         if (!direct || detects) keys.Add(new ImeShortcut(VirtualKeys.Space, (int)ShortcutModifiers.Shift));
         if (!direct && settings.SpaceWidth == SpaceWidth.FullWidth) keys.Add(new ImeShortcut(VirtualKeys.Space, 0));
         keys.AddRange(snippetKeys.Select(key => new ImeShortcut(key, 0)));
