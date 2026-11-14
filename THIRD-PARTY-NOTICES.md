@@ -16,23 +16,19 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 
 ポータブル版も通常版と同じフォルダー構成で配布します。アプリと .NET ランタイムに関するライセンス・第三者通知、および Mozc をビルドに含める場合のライセンス・辞書クレジットは、各配布物に同梱します。Mozc の VC ランタイム DLL は元のバイナリを変更せずに実行し、対象ファイルの一覧を `VC-RUNTIME.txt` に記載します。
 
-## Mac 版 (mac/) がビルド時に取り込むもの
+## Mac 版 (mac/) に同梱するもの
 
 | 部品 | ライセンス | 使い方 |
 | --- | --- | --- |
-| [AzooKeyKanaKanjiConverter](https://github.com/azooKey/AzooKeyKanaKanjiConverter) (azooKey の変換エンジンと辞書) | MIT License | Swift Package として取り込み、Meltype.app に組み込む (漢字変換)。Meltype.app を配布するときは、azooKey のライセンス表示も同梱する |
 | .NET ランタイム (NativeAOT) | MIT License | libMeltypeNative.dylib に組み込まれる |
-| [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `mac/build.sh` が取ってきて `Meltype.app/Contents/Resources/zenz/` に同梱する |
-| [llama.cpp](https://github.com/ggml-org/llama.cpp) | MIT License | AzooKeyKanaKanjiConverter の `ZenzaiCPU` トレイトで、llama.framework として Meltype.app に組み込まれる |
-| [swift-collections](https://github.com/apple/swift-collections)・[swift-algorithms](https://github.com/apple/swift-algorithms)・[swift-numerics](https://github.com/apple/swift-numerics) (Apple) | Apache License 2.0 | AzooKeyKanaKanjiConverter が使う部品として、一緒に Meltype.app に組み込まれる (`mac/Package.resolved` で版を固定) |
-| [Jinja](https://github.com/johnmai-dev/Jinja)・[swift-tokenizers](https://github.com/ensan-hcl/swift-tokenizers) | Apache License 2.0 | AzooKeyKanaKanjiConverter が依存する部品 (`mac/Package.resolved` で版を固定)。組み込まれる場合は、ライセンス表示を同梱する |
+| [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper`。Windows 版と同じソース) | Windows 版と同じ | `Meltype.app/Contents/Resources/mozc/` (ライセンス: `MOZC-LICENSE.txt`、辞書とライブラリの全文: `MOZC-CREDITS.html`) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` と dylib (Zenzai に使う。版とハッシュは `native/zenzai/zenzai.env` で固定) | MIT License (Copyright The ggml authors) | `Meltype.app/Contents/Resources/zenzai/` (ライセンス: `LICENSE-llama.cpp.txt`) |
+| [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `Meltype.app/Contents/Resources/zenzai/` (ライセンス: `LICENSE-zenz.txt`) |
 
 ## 実行時に使う Windows の機能 (同梱しない)
 
 次は Windows に標準で入っているものを実行時に呼び出すだけで、Meltype には含まれません。
 
-- Microsoft IME の変換エンジン (IFELanguage)
-- Windows の変換候補 API (Windows.Data.Text.TextConversionGenerator)
 - Windows のスペルチェッカー (ISpellChecker)
 - UI Automation、IMM32、Text Services Framework
 

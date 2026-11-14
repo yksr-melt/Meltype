@@ -5,11 +5,9 @@ import AppKit
 import Foundation
 
 // libMeltypeNative.dylib (C# の Meltype.Core を NativeAOT にしたもの) の関数。src/Meltype.Mac.Native/Exports.cs と合わせる。
-typealias ClausesCallback = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
-typealias CandidatesCallback = @convention(c) (UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
 typealias IsWordCallback = @convention(c) (UnsafePointer<CChar>?) -> Int32
 
-private typealias InitFunction = @convention(c) (ClausesCallback, CandidatesCallback, IsWordCallback) -> Int32
+private typealias InitFunction = @convention(c) (UnsafePointer<CChar>?, IsWordCallback) -> Int32
 private typealias CreateFunction = @convention(c) () -> UnsafeMutableRawPointer?
 private typealias DestroyFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
 private typealias HandleFunction = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
@@ -18,27 +16,13 @@ private typealias ReportUrlFunction = @convention(c) (UnsafePointer<CChar>?) -> 
 private typealias FreeFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
 private typealias ConversionReadyCallback = @convention(c) () -> Void
 private typealias SetConversionReadyFunction = @convention(c) (ConversionReadyCallback) -> Void
+private typealias ShutdownFunction = @convention(c) () -> Void
 
-// ---- 本体から呼ばれる関数 (文字列は strdup したものを返し、本体が free する) ----
-
-/// (ひらがな, 文脈) → 「読み\t変換結果」を改行でつないだもの (文節ごと)。
-private let clausesCallback: ClausesCallback = { hiragana, context in
-    guard let hiragana else { return nil }
-    let clauses = MeltypeConverter.shared.clauses(for: String(cString: hiragana), context: context.map { String(cString: $0) })
-    guard !clauses.isEmpty else { return nil }
-    return strdup(clauses.map { "\($0.reading)\t\($0.text)" }.joined(separator: "\n"))
-}
+// ---- 本体から呼ばれる関数 ----
 
 /// 背景の変換の結果が届いた (ワーカーのスレッドで呼ばれる)。
 private let conversionReadyCallback: ConversionReadyCallback = {
     DispatchQueue.main.async { MeltypeInputController.active?.refreshConversion() }
-}
-
-/// 読み → 候補を改行でつないだもの。
-private let candidatesCallback: CandidatesCallback = { reading in
-    guard let reading else { return nil }
-    let candidates = MeltypeConverter.shared.candidates(for: String(cString: reading))
-    return strdup(candidates.joined(separator: "\n"))
 }
 
 /// 英単語として正しい綴りか (macOS のスペルチェッカー、英語で調べる)。
@@ -132,9 +116,9 @@ final class NativeCore {
     private let handleFunction: HandleFunction?
     private let dataDirectoryFunction: DataDirectoryFunction?
     private let reportUrlFunction: ReportUrlFunction?
-    private let zenzaiModelFunction: DataDirectoryFunction?
     private let freeFunction: FreeFunction?
     private let setConversionReadyFunction: SetConversionReadyFunction?
+    private let shutdownFunction: ShutdownFunction?
 
     private init() {
         let path = (Bundle.main.privateFrameworksPath ?? "") + "/libMeltypeNative.dylib"
@@ -154,13 +138,23 @@ final class NativeCore {
         handleFunction = symbol("meltype_ime_handle", as: HandleFunction.self)
         dataDirectoryFunction = symbol("meltype_data_directory", as: DataDirectoryFunction.self)
         reportUrlFunction = symbol("meltype_report_url", as: ReportUrlFunction.self)
-        zenzaiModelFunction = symbol("meltype_zenzai_model", as: DataDirectoryFunction.self)
         freeFunction = symbol("meltype_free", as: FreeFunction.self)
         setConversionReadyFunction = symbol("meltype_set_conversion_ready", as: SetConversionReadyFunction.self)
+        shutdownFunction = symbol("meltype_shutdown", as: ShutdownFunction.self)
     }
 
+    /// 本体に英単語の判定を登録し、変換エンジンを用意する。Mozc のヘルパー (mozc/) と Zenzai (zenzai/) は Contents/Resources に置く (build.sh)。
     func initialize() {
-        _ = initFunction?(clausesCallback, candidatesCallback, isWordCallback)
+        guard let initFunction else { return }
+        let resources = Bundle.main.resourcePath ?? ""
+        if resources.withCString({ initFunction($0, isWordCallback) }) == 0 {
+            NSLog("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)")
+        }
+    }
+
+    /// 終了する前に呼ぶ。変換エンジンを止める (Zenzai の llama-server を終わらせ、Mozc の学習を保存する)。
+    func shutdown() {
+        shutdownFunction?()
     }
 
     /// 変換エンジンを入力のスレッドで待たないようにする (入力欄を作る前に呼ぶ)。呼ばなければ変換は同期のまま (--self-test)。
@@ -186,13 +180,6 @@ final class NativeCore {
             NSLog("Meltype: 応答を読めませんでした: %@", String(describing: error))
             return nil
         }
-    }
-
-    /// Zenzai の設定 (issue #1130)。「Zenzai を使う」が OFF なら nil、ON なら設定のモデルの場所 (空なら同梱のモデル)。
-    var zenzaiModelSetting: String? {
-        guard let pointer = zenzaiModelFunction?() else { return nil }
-        defer { freeFunction?(pointer) }
-        return String(cString: pointer)
     }
 
     /// 設定・学習データ・ユーザー辞書の保存場所。
