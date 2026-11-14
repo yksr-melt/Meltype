@@ -38,11 +38,6 @@ internal static class ImeContractTests
         public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
             new CompositionServices { Predictor = Predicts ? new Predictor(null, null, null) : null }, settings, directModeDetection: true);
 
-        /// <summary>再変換の読み (OS の機能の代わり)。</summary>
-        public Dictionary<string, string> Readings { get; } = [];
-
-        public string? ReadingOf(string text) => Readings.GetValueOrDefault(text);
-
         public SnippetStore Snippets { get; } = new(null);
 
         public string? ClipboardText => null;

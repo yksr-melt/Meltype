@@ -129,15 +129,18 @@ public sealed partial class CompositionDetector
     /// <param name="manual">自動判定を使わない (設定 AutoDetection が OFF)。Shift で打った大文字始まりの語だけを英語にする。</param>
     /// <param name="englishSentence">キャレットの前が英文 (空白で区切った英単語が 2 語以上続いて空白で終わる: "I want ")。
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
+    /// <param name="reasons">渡したら、区切りを選んだ理由を足す (確定のログ用。issue #1644)。文字列にするのはログに書くときだけ。</param>
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        bool manual = false, bool englishSentence = false, bool kanaInput = false)
+        bool manual = false, bool englishSentence = false, bool kanaInput = false, List<Func<string>>? reasons = null)
     {
-        // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の Segment 呼び出しの間だけ、
-        // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
         Prepare(units);
         var token = _preparedRaw + pending;
-        if (IsOpaqueToken(token, kanaInput)) return [new CompositionSegment(true, "", token)];
-        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
+        if (IsOpaqueToken(token, kanaInput))
+        {
+            reasons?.Add(() => "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま");
+            return [new CompositionSegment(true, "", token)];
+        }
+        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, reasons: reasons);
     }
 
     /// <summary><see cref="Segment"/> の区切りと、その別案 (軽い順に count 案まで)。先頭は <see cref="Segment"/> と同じ。</summary>
@@ -150,7 +153,9 @@ public sealed partial class CompositionDetector
         return FindSpanAlternatives(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, 0, count);
     }
 
-    /// <summary>Structured Latin tokens are opaque; their components are not Japanese readings.</summary>
+    // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の区間分けの間だけ、Prepare で連結した原文と各位置のオフセットを使い回す
+    // (内容・順序は同じで、文字列を毎回連結しない)。
+    // Structured Latin tokens are opaque; their components are not Japanese readings.
     private static bool IsOpaqueToken(string token, bool kanaInput) =>
         !kanaInput && token.All(c => c is >= '!' and <= '~') &&
         (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token));

@@ -462,7 +462,7 @@ function reset() {
   state.files.forEach((entry) => entry.url && URL.revokeObjectURL(entry.url));
   state.files = [];
   const keep = {};
-  for (const key of ["os", "version", "environment", "mode", "contact", "os-detail"]) {
+  for (const key of ["os", "frontend", "version", "environment", "contact"]) {
     if (state.values[key]) keep[key] = state.values[key];
   }
   state.values = keep;

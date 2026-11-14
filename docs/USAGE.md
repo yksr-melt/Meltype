@@ -25,7 +25,7 @@ Windows・Mac・Linux で共通の機能とキー操作です。OS ごとの設�
 | F6 / F7 / F8 / F9 / F10 | ひらがな / カタカナ / 半角カタカナ / 全角英数 / 半角英数 にする。F9 / F10 を続けて押すと 大文字 → 先頭だけ大文字 → 小文字 と切り替わる (ai → AI → Ai → ai)。F6 / F7 / F8 の後の Space は、英語と判定した所もローマ字として読んで変換する |
 | Ctrl+U / I / P / O (入力中) | F6 / F7 / F9 / F10 と同じ |
 | 入力モード切り替えキー (初期: 半角/全角、Alt + `) | 入力中: 日本語 ⇔ 英字。何も打っていないとき: 日本語入力 ⇔ 英数 (直接入力)。Shift+Space も登録できる (`#1033`)。変換中は切り替えず、上の「前の候補へ」のまま |
-| 変換 (日本語で文字を選んでいるとき) | 選んだ文字を再変換する。ローマ字のまま入った文 (`asita no meeting de review shimasu`) は、日本語の所だけを日本語にした文 (明日の meeting で review します) にする。漢字の文は Windows だけ (読みを Windows の機能で調べる) |
+| 変換 (日本語で文字を選んでいるとき) | 選んだ文字を再変換する。ローマ字のまま入った文 (`asita no meeting de review shimasu`) は、日本語の所だけを日本語にした文 (明日の meeting で review します) にする。漢字の文は、読みを Mozc で調べて再変換する (Windows と Linux の IBus。Mac・fcitx5 では、選んだ文字を Meltype が受け取れないので使えない) |
 | Space・変換・無変換・ひらがな/カタカナ (入力中) | 設定の「入力中のキーの役割を分ける」が ON のとき: Space は常に候補を開く、変換は日本語を優先して変換、無変換は英字にする、ひらがな/カタカナ (Mac は かな) は ひらがな ⇔ カタカナ (変換・無変換 キーは Windows・Linux) |
 | その他のキー・クリック | 確定してから、そのキーやクリックをアプリに通す。CapsLock・NumLock・ScrollLock は確定せずに通す |
 
@@ -130,13 +130,7 @@ Meltype の動きを変える「モード」は、次の 5 つが重なってい
 <a name="変換"></a>
 <img src="images/headings/usage/07.svg" alt="変換" height="53"><br>
 
-Windows 版は、同梱の Mozc と Microsoft IME で変換します。設定の「変換エンジン」で選べます。Mac 版は azooKey、Linux 版は Mozc で変換します。
-
-| 変換エンジン | 動き |
-| --- | --- |
-| 両方 (Mozc を優先) (既定) | Mozc で変換し、Mozc が使えないときは Microsoft IME で変換する。候補の一覧は、Mozc の候補の後ろに Microsoft IME の候補 (Microsoft IME に登録した単語も) を足す |
-| Mozc | Mozc だけで変換する |
-| Microsoft IME | Microsoft IME だけで変換する |
+どの OS でも、同梱の Mozc で変換します。Windows・Mac 版は、Zenzai (ニューラルかな漢字変換) で前の文脈も見て変換します。
 
 - **ライブ変換**: 4 文字以上の日本語は、Space を押さなくても打ったそばから漢字で表示します (設定で OFF にできます)
 - **英単語の前後に半角スペース**: 設定の「全般」で ON にすると、日本語と英単語の間に半角スペースを入れます (今日は GitHub に push した。既定は OFF)

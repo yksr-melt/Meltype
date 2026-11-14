@@ -448,16 +448,26 @@ public sealed class CompositionText
         {
             return cached.Segments;
         }
-        var result = Adjusted(ComputeSegments());
-        _segmentsCache = (key, _detector.Memory, _detector.SpellChecker, result);
+        // 区切りを選んだ理由も、区切りと同じ計算から取る (確定のログが、実際に確定した区切りと食い違わないように。issue #1644)
+        var reasons = new List<Func<string>>();
+        var result = Adjusted(ComputeSegments(reasons), reasons);
+        _segmentsCache = (key, _detector.Memory, _detector.SpellChecker, result, reasons);
         return result;
     }
 
-    /// <summary>区間分けに、設定の区間の直し (全角の括弧・かな + w の笑い) をかける。</summary>
-    private IReadOnlyList<CompositionSegment> Adjusted(IReadOnlyList<CompositionSegment> result)
+    /// <summary>区間分けに、設定の区間の直し (全角の括弧・かな + w の笑い) をかける。直したら理由を reasons に足す。</summary>
+    private IReadOnlyList<CompositionSegment> Adjusted(IReadOnlyList<CompositionSegment> result, List<Func<string>> reasons)
     {
-        if (FullWidthParentheses) result = [.. result.Select(s => s.IsEnglish && s.Raw is "(" or ")" ? new CompositionSegment(false, s.Raw == "(" ? "（" : "）", s.Raw) : s)];
-        if (LaughterAfterKana) result = SplitLaughter(result);
+        if (FullWidthParentheses && result.Any(s => s.IsEnglish && s.Raw is "(" or ")"))
+        {
+            result = [.. result.Select(s => s.IsEnglish && s.Raw is "(" or ")" ? new CompositionSegment(false, s.Raw == "(" ? "（" : "）", s.Raw) : s)];
+            reasons.Add(() => "設定「カッコを全角で入力」で ( ) を全角に");
+        }
+        if (LaughterAfterKana && SplitLaughter(result) is var split && !ReferenceEquals(split, result))
+        {
+            result = split;
+            reasons.Add(() => "設定「かな + w を笑い (ねw・さw) にする」で かな + w に分けた");
+        }
         return result;
     }
 
@@ -465,24 +475,32 @@ public sealed class CompositionText
     /// 変換用の区間分けと、その英日の区切りの別案 (軽い順。先頭は <see cref="ConversionSegments"/>)。
     /// 別案は、ラティスの上位案と、打った英字をすべてローマ字として読んだ案 (botto → ぼっと)。
     /// 保護区間・半角の開き括弧・英文の中の名前のように、ラティスの外の決まりで区切ったときは別案を出さない。
+    /// 別案の区切りの理由は確定のログに書かない (確定のログは <see cref="Segments"/> の理由)。
     /// </summary>
     public IReadOnlyList<IReadOnlyList<CompositionSegment>> ConversionSegmentAlternatives(int count)
     {
         var first = ConversionSegments();
-        if (EffectiveManual || IsNameInEnglishSentence || ProtectedSpans().Count > 0 || HalfWidthOpeners(SegmentWithProtection(_units)) is not null) return [first];
+        if (EffectiveManual || IsNameInEnglishSentence || ProtectedSpans().Count > 0 || HalfWidthOpeners(SegmentWithProtection(_units, [])) is not null) return [first];
         var alternatives = new List<IReadOnlyList<CompositionSegment>> { first };
         void Add(IReadOnlyList<CompositionSegment> segments)
         {
             if (alternatives.Count < count && !alternatives.Any(a => a.SequenceEqual(segments))) alternatives.Add(segments);
         }
         foreach (var segments in _detector.SegmentAlternatives(_units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput, count).Skip(1))
-            Add(WithFinalPending(Adjusted(segments)));
+            Add(WithFinalPending(Adjusted(segments, [])));
         if (!KanaInput && AllJapaneseSegments() is var japanese && !japanese[0].Kana.Any(char.IsAsciiLetter)) Add(japanese);
         return alternatives;
     }
 
     /// <summary>打った英字をすべてローマ字として読んだ、日本語の 1 区間の区間分け (botto → ぼっと)。ローマ字として読めない英字は残る (google → ごおgぇ)。</summary>
     public IReadOnlyList<CompositionSegment> AllJapaneseSegments() => [new CompositionSegment(false, AllKana(final: true), Raw)];
+
+    /// <summary>今の区切り (Segments) を選んだ理由。確定のログに書く (issue #1644)。</summary>
+    public string ExplainSegments()
+    {
+        Segments();
+        return string.Join("; ", _segmentsCache!.Value.Reasons.Select(r => r()));
+    }
 
     /// <summary>
     /// 設定「かな + w を笑いにする」: 英語の区間が、1 つのかなの音 + w (new・saw) だけなら、かな (ね・さ) と笑いの w に分ける (issue #713・#492)。
@@ -508,7 +526,7 @@ public sealed class CompositionText
         return changed ?? segments;
     }
 
-    private (string Key, LanguageMemory? Memory, Detection.IWordChecker? SpellChecker, IReadOnlyList<CompositionSegment> Segments)? _segmentsCache;
+    private (string Key, LanguageMemory? Memory, Detection.IWordChecker? SpellChecker, IReadOnlyList<CompositionSegment> Segments, List<Func<string>> Reasons)? _segmentsCache;
 
     /// <summary>区間分けの結果を決めるもの (打った単位・入力途中の子音・前後・自動判定を使うか・学習した語の版) をつないだもの。</summary>
     private string SegmentsKey()
@@ -532,20 +550,26 @@ public sealed class CompositionText
         !KanaInput && PrecedingEnglishName && FollowingEnglish != false && !EffectiveManual &&
         Raw is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && _detector.Memory?.Get(raw.ToLowerInvariant()) != false;
 
-    private IReadOnlyList<CompositionSegment> ComputeSegments()
+    private IReadOnlyList<CompositionSegment> ComputeSegments(List<Func<string>> reasons)
     {
-        if (IsNameInEnglishSentence) return [new CompositionSegment(true, "", Raw)];
-        var segments = SegmentWithProtection(_units);
-        return HalfWidthOpeners(segments) is { } adjusted
-            ? SegmentWithProtection(adjusted)
-            : segments;
+        if (IsNameInEnglishSentence)
+        {
+            reasons.Add(() => "名前を紹介する英文の続きなので英字のまま");
+            return [new CompositionSegment(true, "", Raw)];
+        }
+        var segments = SegmentWithProtection(_units, reasons);
+        if (HalfWidthOpeners(segments) is not { } adjusted) return segments;
+        // 区切り直した結果だけが確定するので、最初の区切りの理由は捨てる
+        reasons.Clear();
+        reasons.Add(() => "後ろが英語なので開きの記号を半角にして区切り直した");
+        return SegmentWithProtection(adjusted, reasons);
     }
 
-    private IReadOnlyList<CompositionSegment> SegmentWithProtection(IReadOnlyList<CompositionUnit> units)
+    private IReadOnlyList<CompositionSegment> SegmentWithProtection(IReadOnlyList<CompositionUnit> units, List<Func<string>> reasons)
     {
         var spans = ProtectedSpans();
         if (spans.Count == 0)
-            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput);
+            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput, reasons);
         var raw = Raw;
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -553,6 +577,8 @@ public sealed class CompositionText
         {
             AddGap(start, span.Start);
             result.Add(new CompositionSegment(true, "", raw.Substring(span.Start, span.Length)) { IsProtected = true });
+            var length = span.Length;
+            reasons.Add(() => $"保護区間 ({length} 文字。メンション・URL・メール・パス) は英字のまま");
             start = span.End;
         }
         AddGap(start, raw.Length);
@@ -564,7 +590,7 @@ public sealed class CompositionText
             var gapUnits = UnitsInRawRange(units, from, to, out var pending);
             var segments = _detector.Segment(gapUnits, pending, from == 0 ? PrecedingEnglish : false,
                 to == raw.Length ? FollowingEnglish : false, EffectiveManual,
-                from == 0 && PrecedingEnglishSentence, KanaInput);
+                from == 0 && PrecedingEnglishSentence, KanaInput, reasons);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
             if (to < raw.Length && pending.Length > 0 && !segments[^1].IsEnglish)
                 segments = [.. segments.Take(segments.Count - 1), segments[^1] with
