@@ -112,6 +112,15 @@ try {
                 }
                 catch { Write-Log "前の DLL に戻せませんでした: $($_.Exception.Message)" }
             }
+            elseif ($arch -eq 'arm64' -and (Test-Path -LiteralPath (Join-Path $target 'x64\MeltypeTip.dll'))) {
+                # ARM64 の Windows に、前は x64 の DLL を登録していた (ARM64 に対応する前に手で登録したもの)。
+                # x64 と arm64 は 64 ビットの同じ登録を使うので、x64 の DLL を登録し直して前の状態に戻す
+                try {
+                    Invoke-Regsvr $exe (Join-Path $target 'x64\MeltypeTip.dll')
+                    Write-Log '前の x64 の DLL の登録に戻しました。'
+                }
+                catch { Write-Log "前の x64 の DLL の登録に戻せませんでした: $($_.Exception.Message)" }
+            }
             throw $registerError
         }
         [IO.File]::WriteAllText((Join-Path $folder 'MeltypeTipImpl.dll.sha256'), $implHash)
