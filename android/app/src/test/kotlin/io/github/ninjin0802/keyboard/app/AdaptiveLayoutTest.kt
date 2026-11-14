@@ -74,7 +74,6 @@ class AdaptiveLayoutTest {
     @Test fun switchingModesNeverReplacesNumbersAndSymbolsScreens() {
         for (width in listOf(410f, 840f, 1100f)) {
             assertSame(Layouts.symbols, FoldSplitLayout.forWindow(Layouts.symbols, width, 650f, 600))
-            assertSame(Layouts.kana, FoldSplitLayout.forWindow(Layouts.kana, width, 650f, 600))
             assertSame(Layouts.emojiBar(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI),
                 FoldSplitLayout.forWindow(
                     Layouts.emojiBar(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI),

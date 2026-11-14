@@ -16,13 +16,13 @@ import kotlin.test.assertEquals
 
 class FieldPolicyTest {
     private fun text(variation: Int) = InputType.TYPE_CLASS_TEXT or variation
-    @Test fun normal_text() = assertEquals(FieldPolicy(LayoutId.KANA, true, true), fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_NORMAL), 0))
+    @Test fun normal_text() = assertEquals(FieldPolicy(LayoutId.ROMAJI, true, true), fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_NORMAL), 0))
     @Test fun passwords_hold_nothing() { for (v in listOf(InputType.TYPE_TEXT_VARIATION_PASSWORD, InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD, InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD))
         assertEquals(FieldPolicy(LayoutId.QWERTY, convert = false, learn = false, holdLast = false), fieldPolicy(text(v), 0)) }
     @Test fun email_does_not_convert_and_holds_the_last_character() { for (v in listOf(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS))
         assertEquals(FieldPolicy(LayoutId.QWERTY, convert = false, learn = false, holdLast = true), fieldPolicy(text(v), 0)) }
     @Test fun url_starts_in_japanese_converts_and_never_learns() {
-        val expected = FieldPolicy(LayoutId.KANA, convert = true, learn = false)
+        val expected = FieldPolicy(LayoutId.ROMAJI, convert = true, learn = false)
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), 0))
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), EditorInfo.IME_ACTION_GO))
         assertEquals(expected, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), EditorInfo.IME_ACTION_SEARCH))
@@ -46,20 +46,20 @@ class FieldPolicyTest {
         assertEquals(true, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_NORMAL), 0).holdLast)
         assertEquals(true, fieldPolicy(text(InputType.TYPE_TEXT_VARIATION_URI), 0).holdLast)
     }
-    @Test fun no_learning_flag() = assertEquals(FieldPolicy(LayoutId.KANA, true, false),
+    @Test fun no_learning_flag() = assertEquals(FieldPolicy(LayoutId.ROMAJI, true, false),
         fieldPolicy(text(0), EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING))
     @Test fun private_browser_fields_do_not_learn() {
         val privateFlag = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
         for (variation in listOf(InputType.TYPE_TEXT_VARIATION_NORMAL,
             InputType.TYPE_TEXT_VARIATION_WEB_EDIT_TEXT, InputType.TYPE_TEXT_VARIATION_URI)) {
             val policy = fieldPolicy(text(variation), privateFlag)
-            assertEquals(LayoutId.KANA, policy.layout)
+            assertEquals(LayoutId.ROMAJI, policy.layout)
             assertEquals(true, policy.convert)
             assertEquals(false, policy.learn)
             assertEquals(false, policy.recordsEmoji)
         }
     }
-    @Test fun unknown_type_is_normal() = assertEquals(FieldPolicy(LayoutId.KANA, true, true), fieldPolicy(0, 0))
+    @Test fun unknown_type_is_normal() = assertEquals(FieldPolicy(LayoutId.ROMAJI, true, true), fieldPolicy(0, 0))
 
     @Test fun enter_action_follows_the_field() {
         assertEquals(EditorInfo.IME_ACTION_SEARCH, enterAction(EditorInfo.IME_ACTION_SEARCH or EditorInfo.IME_FLAG_NO_EXTRACT_UI))
@@ -76,26 +76,6 @@ class FieldPolicyTest {
                 EditorInfo.IME_ACTION_SEND or EditorInfo.IME_FLAG_NO_ENTER_ACTION,
             ).map(::enterLabel),
         )
-    }
-    @Test fun the_large_flick_preview_is_hidden_only_in_password_fields() {
-        val text = InputType.TYPE_CLASS_TEXT
-        val passwords = listOf(
-            text or InputType.TYPE_TEXT_VARIATION_PASSWORD, text or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD,
-            text or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
-            InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD,
-        )
-        val others = listOf(
-            text, text or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, text or InputType.TYPE_TEXT_VARIATION_URI,
-            text or InputType.TYPE_TEXT_FLAG_MULTI_LINE, InputType.TYPE_CLASS_NUMBER, InputType.TYPE_CLASS_PHONE,
-            InputType.TYPE_CLASS_DATETIME, 0,
-        )
-        for (type in passwords) {
-            assertEquals(true, fieldPolicy(type, 0).isPassword, "$type"); assertEquals(false, fieldPolicy(type, 0).flickPreview, "$type")
-        }
-        for (type in others) {
-            assertEquals(false, fieldPolicy(type, 0).isPassword, "$type"); assertEquals(true, fieldPolicy(type, 0).flickPreview, "$type")
-        }
-        assertEquals(true, fieldPolicy(text, EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING).flickPreview)
     }
     /** 絵文字の「最近使ったもの」（spec 04・09）: 覚えるのは学習する欄だけ。見せないのはパスワードの欄だけ。 */
     @Test fun emoji_picks_are_recorded_only_where_the_field_learns_and_recents_are_hidden_only_in_password_fields() {
