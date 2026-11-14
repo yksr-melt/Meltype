@@ -65,15 +65,34 @@ internal sealed partial class CurrencyConversion : IUtilityConversion
         foreach (var (code, unit) in targets)
         {
             if (rates.Convert(amount, from.Code, code) is not { } value) continue;
-            var text = $"約{Format(value, code)}{unit}";
+            var text = $"約{Format(value)}{unit}";
             candidates.Add($"{text}（{date} のレート）");
             candidates.Add(text);
         }
         return candidates;
     }
 
-    /// <summary>円・ウォンは整数、ほかは小数 2 桁まで。3 桁ごとに , を入れる。</summary>
-    private static string Format(decimal value, string code) => code is "JPY" or "KRW"
-        ? Math.Round(value, MidpointRounding.AwayFromZero).ToString("#,0", CultureInfo.InvariantCulture)
-        : Math.Round(value, 2, MidpointRounding.AwayFromZero).ToString("#,0.##", CultureInfo.InvariantCulture);
+    /// <summary>
+    /// 額を有効数字 2 桁に丸め、1 万以上は 万・億 で書く (15,923 → 1.6万、62.8 → 63)。
+    /// 古いレートの概算なので、1 の位まで出して精度があるように見せない (#1871)。
+    /// </summary>
+    internal static string Format(decimal value)
+    {
+        if (value <= 0) return "0";
+        var drop = (int)Math.Floor(Math.Log10((double)value)) + 1 - SignificantDigits;
+        var rounded = drop <= 0
+            ? Math.Round(value, -drop, MidpointRounding.AwayFromZero)
+            : Math.Round(value / Pow10(drop), MidpointRounding.AwayFromZero) * Pow10(drop);
+        var (shown, suffix) = rounded >= 100_000_000m ? (rounded / 100_000_000m, "億") : rounded >= 10_000m ? (rounded / 10_000m, "万") : (rounded, "");
+        return shown.ToString("#,0.##########", CultureInfo.InvariantCulture) + suffix;
+    }
+
+    private const int SignificantDigits = 2;
+
+    private static decimal Pow10(int exponent)
+    {
+        var result = 1m;
+        for (var i = 0; i < exponent; i++) result *= 10;
+        return result;
+    }
 }
