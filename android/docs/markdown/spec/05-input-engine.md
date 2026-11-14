@@ -2,9 +2,9 @@
 
 # 05 入力エンジン
 
-確定（段階1の範囲）
+現行実装：共有C# Core（QWERTY）。フリック用Kotlinセッションの記述は旧設計。
 
-既存Kotlin `engine`は主にかな／英字フリックとライブ変換を扱う。**日本語QWERTYの日英自動判別はKotlin入力セッションではなく共有C# `Meltype.Core`が担当する**（[08](08-auto-detection.md)）。この章のKotlin操作規則はフリック用エンジンを中心に記述する。
+PR #1149では日本語QWERTYの入力判断を共有C# `Meltype.Core`（`ImeHost`）に一本化し、Kotlinの旧`engine`モジュールを削除した。以下のフリック用セッション・操作規則は未実装の旧設計資料で、再設計は[Issue #1885](https://github.com/yksr-melt/Meltype/issues/1885)の対象。英字QWERTY・数字記号・変換無効の入力欄は文字を直接入力する。
 
 ## 入力セッション
 
@@ -90,9 +90,9 @@
 
 その候補を確定する。候補が読みの先頭の一部だけに対応するものなら、残りの読みは未確定のまま残し、ライブ変換を続ける。
 
-## 日本語QWERTYの入力処理・Kotlinフォールバック用のローマ字表
+## 旧Kotlinローマ字表（現行Androidでは未使用）
 
-現在のQWERTYの主経路では、Kotlinだけでローマ字をかなに組み立てる旧設計は使わない。Kotlinフォールバックでは、[HTML仕様内の完全なローマ字変換表](../../spec/05-input-engine.html#ローマ字の表)に従う。この表は `RomajiTest.the_copy_of_the_table_is_the_table_in_the_spec` でエンジン実装と機械的に照合する。`KeyboardService`から`MeltypeCoreHost`、JNIを経由し、**共有C# Meltype.Core**が日英の判別・未確定文字・候補を管理する。Coreの候補の一覧（変換候補か予測候補のどちらか1つ）をAndroidの候補バーへ渡す。Coreが使用できない場合はKotlinエンジンへフォールバックする。[08 日英自動判別](08-auto-detection.md)を参照。
+以下の[HTML仕様内のローマ字変換表](../../spec/05-input-engine.html#ローマ字の表)は削除済みのKotlin入力エンジンの設計記録であり、現行Androidでは使用しない。日本語QWERTYは`KeyboardService`から`MeltypeCoreHost`、JNIを経由し、共有C# `Meltype.Core`が入力の判別・未確定文字・候補を管理する。Coreが利用できない場合は未確定文字を保持して入力を停止し、Android標準のIME選択画面に切り替えられる退避UIを表示する。別のKotlinローマ字処理にフォールバックしない。[08 日英自動判別](08-auto-detection.md)を参照。
 
 日本語QWERTYの候補バーのタップ: 予測候補と、1つの文節だけの変換候補は、タップで確定する。空白キーで変換した文が2つ以上の文節に分かれているときは、先頭の文節から順に候補を選べる。タップした候補をいまの文節に選び、次の文節へ進んで、候補バーをその文節の候補に替える。最後の文節でタップすると、選んだとおりに文全体を確定する。途中で確定キーを押すと、そのときの表示のまま文全体を確定する。
 

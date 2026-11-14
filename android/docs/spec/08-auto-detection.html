@@ -29,17 +29,17 @@
       <p class="status"><span class="badge fixed">実装済み</span> 日本語QWERTYで利用可能（2026-10-25検証）</p>
       <h2 id="適用範囲">適用範囲</h2>
       <p>日本語QWERTY（ローマ字入力）では、英語・日本語・日英混在を手動切り替えなしで入力できる。従来の「判別は未実装、C#をKotlinに移植する」という設計は採用しない。<strong>Windows等と同じC# <code>Meltype.Core</code>を共有</strong>する。</p>
-      <p>12キーのかなフリック／英字フリックと独立した英字入力配列は、引き続き既存のKotlinエンジンを使用する。全配列での日英自動判別を保証するものではない。</p>
+      <p>共有Coreによる日英自動判別は日本語QWERTYのみ。英字QWERTY・数字記号および変換無効の入力欄は文字を直接入力する。12キー・フリックは提供せず、<a href="https://github.com/yksr-melt/Meltype/issues/1885">Issue #1885</a> で別途設計する。</p>
       <h2 id="実装">実装</h2>
       <ol>
         <li>Androidの<code>KeyboardService</code>が日本語QWERTYの入力を受ける。</li>
         <li><code>MeltypeCoreHost</code>がJNIの<code>libMeltypeNative.so</code>（<code>meltype_ime_create</code> / <code>meltype_ime_handle</code> / <code>meltype_ime_destroy</code>）を呼ぶ。デスクトップ版と同じ入力の仕組み（<code>ImeHost</code>）で、キーボード全体で1つ持つ。C# <code>Meltype.Core</code>はAndroid向けにNativeAOTでビルドする（arm64-v8a/x86_64）。</li>
         <li>Androidは入力欄の事実（アプリのパッケージ名、キャレットの前4000字・後ろ20字の文字（Mac・Linuxと同じ。変換中の文字は除く）、選択している文字、パスワード欄・学習しないでほしい欄の印）とキーを出来事のJSONで送る。自分の文字を持たない入力欄（<code>TYPE_NULL</code>）では前後の文字を送らず、前の文字を消せない欄として送る。JSONを作る・読むのは<code>core/ImeJson.kt</code>だけ。</li>
-        <li>キーボード自身がCoreのために書き換えた分（確定・変換中の文字・Coreが通したキー）では、キャレットが動いたことにしない。それ以外の移動（タップ、矢印キー、アプリの書き換え、Kotlinの入力）は<code>CaretMoved</code>で伝え、Coreは前の語を確定し直さない。変換中なら、出ている文字のまま確定して<code>CommittedByApp</code>を送る。入力欄を離れるときも、出ている文字のまま確定する。</li>
+        <li>キーボード自身がCoreのために書き換えた分（確定・変換中の文字・Coreが通したキー）では、キャレットが動いたことにしない。それ以外の移動（タップ、矢印キー、アプリの書き換え）は<code>CaretMoved</code>で伝え、Coreは前の語を確定し直さない。変換中なら、出ている文字のまま確定して<code>CommittedByApp</code>を送る。入力欄を離れるときも、出ている文字のまま確定する。</li>
         <li>Coreが日英の判別、未確定文字、変換・予測候補、学習するかを管理する。かな漢字変換には端末内のMozcを使用する。</li>
         <li><code>CoreInputAdapter</code>がCoreの指示をAndroidの<code>InputConnection</code>へ反映する（確定し直すときは<code>removeBefore</code>の長さだけ消して入れる）。<code>CoreCandidateChoices</code>がCoreの一覧（変換の候補か予測変換の候補のどちらか1つ）の番号を保ち、その一覧だけを候補バーに出す。</li>
       </ol>
-      <p>Coreが利用できない場合は例外でIME全体を落とさず、既存のKotlin入力処理に戻る。入力欄の性質により変換や学習を抑止する（<a href="09-privacy-security.html">09</a>）。</p>
+      <p>Coreが利用できない場合は未確定文字を保護して入力を停止し、Android標準のIME選択画面を直接開ける退避UIを表示する。Kotlinのローマ字エンジンには戻さない。変換を禁止する入力欄では文字を直接入力する（<a href="09-privacy-security.html">09</a>）。</p>
       <h2 id="設定">設定</h2>
       <p>ライブ変換のオン・オフはCoreの設定で、ほかのOSと同じ<code>config.json</code>（アプリ専用の領域の<code>meltype/config.json</code>）に書く。Coreは変わった<code>config.json</code>を読み直すので、キーボードを閉じなくても次のキーから効く。配列・振動・絵文字・日本語入力時のスペースなどキーボードの画面の設定は、アプリの設定（SharedPreferences）に持つ。</p>
       <h2 id="操作">操作</h2>

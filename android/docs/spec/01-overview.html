@@ -32,11 +32,11 @@
 <h2 id="作るもの">作るもの</h2>
 <p>Android の仮想キーボード（IME アプリ）。次の3つを柱にする。</p>
 <ol>
-<li><strong>ライブ変換</strong>: 12キーのフリックでかなを打つと、変換キーを押さなくても打つそばから漢字になる。</li>
+<li><strong>ライブ変換</strong>: 現行版では日本語QWERTYの共有Coreで提供する。12キーのフリック入力は今後の設計対象。</li>
 <li><strong>読みから英字（未対応）</strong>: フリックで打った外来語を英字候補として推薦する独立機能は将来の対象。</li>
 <li><strong>日英自動判別（実装済み）</strong>: 日本語QWERTYから日本語・英語・混在の入力を判別する。既存C# <code>Meltype.Core</code>をAndroid NativeAOT/JNI経由で共有し、Kotlinには判別ロジックを移植しない（<a href="08-auto-detection.html">08</a>）。</li>
 </ol>
-<p>かな12キーフリックは既存Kotlinエンジン、日英自動判別は日本語QWERTYの共有C# Coreが処理する。読みから英字を推薦する独立機能は未対応。</p>
+<p>本家PR #1149は日本語QWERTY・英字QWERTY・数字記号のみ。旧Kotlin入力エンジンは削除済みで、12キー・フリックの再設計は <a href="https://github.com/yksr-melt/Meltype/issues/1885">Issue #1885</a> の対象。日英判別は共有C# Coreが処理する。読みから英字を推薦する独立機能は未対応。</p>
 <h2 id="利用者">利用者</h2>
 <p>まず開発者本人が自分の端末で普段使いする。使えるものになったら、本家の <a href="https://github.com/yksr-melt/Meltype">Meltype</a> に取り込んでもらう予定。「Meltype」の名前を使うことと取り込みの方針は、本家の作者から許諾を得ている（2026-10-13、開発者が確認）。取り込みの時期と形（どのリポジトリに、どの単位で出すか）は、本家の作者と相談して決める。出すときは本家の <code>CONTRIBUTING.md</code> と CLA の手続きに従う。</p>
 <h2 id="成功の基準">成功の基準</h2>

@@ -45,7 +45,7 @@
 </tr>
 <tr>
 <td>言語</td>
-<td>Kotlin（Android UI・フリック処理）、C#（共有Meltype.Core、NativeAOT）、C++（JNI・Mozc）</td>
+<td>Kotlin（Android UI・QWERTY入力フロント）、C#（共有Meltype.Core、NativeAOT）、C++（JNI・Mozc）</td>
 </tr>
 <tr>
 <td>ビルド</td>
@@ -65,7 +65,7 @@
 </tr>
 </tbody></table>
 <h2 id="モジュール">モジュール</h2>
-<p>既存のGradle 3モジュールに、共有C# CoreとJNIの経路を追加する。</p>
+<p>Gradleモジュールは<code>app</code>と<code>mozc</code>の2つ。入力判断は共有C# Coreに一本化し、Kotlinの旧入力エンジンは削除した。</p>
 <table>
 <thead>
 <tr>
@@ -76,13 +76,8 @@
 </thead>
 <tbody><tr>
 <td><code>app</code></td>
-<td>キーボード本体。配列の描画、タッチとフリックの判定、候補バー、入力欄とのやり取り、導入画面</td>
+<td>キーボード本体。QWERTY・記号配列の描画、タッチ判定、候補バー、入力欄とのやり取り、導入画面</td>
 <td>あり</td>
-</tr>
-<tr>
-<td><code>engine</code></td>
-<td>12キーフリック等の既存の入力セッションとライブ変換を処理。日英判別の本体はここには移植しない</td>
-<td>なし（純粋な Kotlin）</td>
 </tr>
 <tr>
 <td><code>mozc</code></td>
@@ -92,25 +87,25 @@
 <tr><td><code>src/Meltype.Core/</code>（共有）</td><td>QWERTYローマ字入力の日英自動判別、未確定文字と候補の管理</td><td>C#（Android向けNativeAOT出力）</td></tr>
 <tr><td><code>app/src/main/cpp/</code></td><td>C# NativeAOTライブラリとのJNI接続、Kotlinからのコールバック</td><td>あり（NDK）</td></tr></tbody></table>
 <h3 id="依存の向き">依存の向き</h3>
-<pre>app ──→ engine ──→ mozc   （フリック等）
- │
- └──→ JNI ──→ C# Meltype.Core (NativeAOT) ──→ Mozc （日本語QWERTY）
+<pre>日本語QWERTY: app ──→ JNI ──→ C# Meltype.Core (NativeAOT)
+                                   └──→ Mozc変換コールバック（端末内）
+英字QWERTY・数字記号・変換無効欄: app ──→ InputConnection
 </pre>
 <ul>
-<li><code>engine</code> は他のどのモジュールにも依存しない。変換は <code>Converter</code> という窓口（<a href="06-conversion-mozc.html">06</a>）越しに頼む。</li>
-<li><code>mozc</code> はその窓口を実装する。<code>engine</code> は相手が Mozc であることを知らない。</li>
-<li><code>app</code> は日本語QWERTYで共有Coreを呼び、他の入力方式は既存engineへ接続する。変換は端末内で完結させる。</li>
+<li><code>app</code> は入力欄の事実とキーを共有Coreへ送り、その応答を入力欄に適用する。</li>
+<li><code>mozc</code> は共有Coreから要求されたかな漢字変換を端末内で実行する。</li>
+<li>変換無効の入力欄では、キーの文字を直接入力する。12キー・フリックの実装は含まれない。</li>
 </ul>
-<p>こう分ける理由は、<code>engine</code> を PC 上の単体テストだけで確かめられるようにするため。テストでは <code>Converter</code> を偽物に差し替える。</p>
+<p>入力判断を共有Coreに一本化することで、デスクトップ版との二重実装による挙動差を避ける。Coreが利用できない場合は別のローマ字エンジンへ切り替えず、退避用IME選択画面を出す。</p>
 <h2 id="処理の流れ">処理の流れ</h2>
 <ol>
-<li>利用者がキーを押す。<code>app</code> がタッチ位置とフリック方向から、どの操作かを決める（例: 「か」を入力、「削除」）。</li>
-<li><code>app</code> は日本語QWERTYならJNI経由でC# Coreへ、他の配列ならKotlin <code>engine</code> へ操作を渡す。</li>
-<li>入力方式に応じてC# CoreまたはKotlin engineが未確定文字と変換状態を更新し、必要ならMozcに変換を依頼する。</li>
-<li>Coreまたはengineが未確定文字、確定文字、候補を返す。Androidのアダプターが表示・入力指示へ変換する。</li>
-<li><code>app</code> がその指示どおりに、入力欄と候補バーを更新する。</li>
+<li>利用者がQWERTYのキーを押すと、<code>app</code> がAndroidのキー操作と入力欄の状態を取得する。</li>
+<li>日本語QWERTYではJNI経由でC# Coreへ出来事を送る。変換が必要ならCoreからMozcを呼ぶ。</li>
+<li>Coreが返した指示をアダプターが入力欄と候補バーに適用する。</li>
+<li>英字QWERTY・数字記号・変換無効欄では、必要に応じて文字を直接入力する。</li>
+<li>Coreの初期化・応答が失敗した場合は未確定文字を保護し、Android標準のIME選択画面に退避できる。</li>
 </ol>
-<p>C# CoreとKotlin engineはいずれもAndroidの入力欄に直接触れない。入力欄への書き込みは<code>app</code>の<code>InputConnection</code>アダプターが行う。詳しくは<a href="08-auto-detection.html">08</a>。</p>
+<p>C# CoreはAndroidの入力欄に直接触れない。入力欄への書き込みは<code>app</code>の<code>InputConnection</code>アダプターが行う。詳しくは<a href="08-auto-detection.html">08</a>。</p>
 <h2 id="スレッド">スレッド</h2>
 <ul>
 <li>キーの描画とタッチの処理は、画面のスレッドで行う。</li>
