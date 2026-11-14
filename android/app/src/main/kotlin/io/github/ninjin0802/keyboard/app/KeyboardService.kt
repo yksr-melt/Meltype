@@ -103,13 +103,15 @@ class KeyboardService : InputMethodService(), KeyListener {
     private var core: MeltypeCoreHost? = null
     private var nativeCoreUnavailable = false
 
+    /** A Japanese QWERTY layout, including its symbol pages, must use the shared Core. */
+    private fun japaneseCoreLayout(): Boolean =
+        nav.current == LayoutId.ROMAJI ||
+            ((nav.current == LayoutId.SYMBOLS || nav.current == LayoutId.SYMBOLS2) &&
+                nav.backTarget == LayoutId.ROMAJI)
+
     /** Keep the same C# Core (ImeHost) as Windows/Mac/Linux for QWERTY romaji. */
     private fun coreForRomaji(): MeltypeCoreHost? {
-        val japaneseComposition =
-            nav.current == LayoutId.ROMAJI ||
-                ((nav.current == LayoutId.SYMBOLS || nav.current == LayoutId.SYMBOLS2) &&
-                    nav.backTarget == LayoutId.ROMAJI)
-        if (!policy.convert || !japaneseComposition || nativeCoreUnavailable) return null
+        if (!policy.convert || !japaneseCoreLayout() || nativeCoreUnavailable) return null
         core?.let { return it }
         return try {
             MeltypeCoreHost.open(coreDataDirectory(this), CoreMozcCallbacks(converter))
@@ -692,6 +694,9 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     private fun handleKey(action: KeyAction, direction: Direction, timeMs: Long) {
+        // An error has already put the editor into emergency mode. Never keep typing into it
+        // from queued touch events, and never silently fall back to raw/Kotlin Japanese input.
+        if (nativeCoreUnavailable && policy.convert && japaneseCoreLayout()) return
         when (action) {
             is KeyAction.Flick -> render(
                 session.handle(
@@ -706,6 +711,7 @@ class KeyboardService : InputMethodService(), KeyListener {
                 if (punctuation) {
                     // Only punctuation or the explicit Return key can confirm.
                     commitComposing()
+                    if (nativeCoreUnavailable && policy.convert && japaneseCoreLayout()) return
                     insert(typed)
                 } else {
                     // A center numpad digit or symbol page input is a composing
@@ -723,7 +729,9 @@ class KeyboardService : InputMethodService(), KeyListener {
                                 insertPassed(ch.toString())
                             }
                         }
-                    } else {
+                    } else if (!policy.convert || !japaneseCoreLayout()) {
+                        // Direct-input fields and English QWERTY still use Android's editor.
+                        // The Japanese Core path is never replaced with a second input engine.
                         insert(typed)
                     }
                 }
