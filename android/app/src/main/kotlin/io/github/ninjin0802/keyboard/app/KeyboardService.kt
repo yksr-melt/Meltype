@@ -369,7 +369,7 @@ class KeyboardService : InputMethodService(), KeyListener {
     override fun onEvaluateFullscreenMode(): Boolean = false
 
     override fun onCreateInputView(): View = try {
-        buildNormalKeyboardView()
+        if (nativeCoreUnavailable) buildEmergencyKeyboardView() else buildNormalKeyboardView()
     } catch (error: Exception) {
         Log.e(TAG, "Keyboard UI failed; opening emergency selector", error)
         buildEmergencyKeyboardView()
@@ -386,20 +386,6 @@ class KeyboardService : InputMethodService(), KeyListener {
             // An IME cannot force the system picker when Android refuses this request.
             Log.e(TAG, "Android input method picker unavailable", error)
         }
-    }
-
-    /** Independent of native libraries, candidates, and the currently selected keyboard layout. */
-    private fun imePickerButton(): TextView = TextView(this).apply {
-        text = "切替"
-        contentDescription = "別のキーボードに切り替える"
-        gravity = Gravity.CENTER
-        textSize = 14f
-        setTextColor(Palette.of(this@KeyboardService).text)
-        minimumHeight = (44 * resources.displayMetrics.density).toInt()
-        minimumWidth = (48 * resources.displayMetrics.density).toInt()
-        isClickable = true
-        isFocusable = true
-        setOnClickListener { showSystemImePicker() }
     }
 
     /** No native converter or keyboard assets are used in this emergency UI. */
@@ -459,19 +445,9 @@ class KeyboardService : InputMethodService(), KeyListener {
         val background = Palette.of(this).background
         styleNavigationBar(background)
         ImeGlassSurface.configureWindow(window?.window, this)
-        // The picker is independent of candidate updates and remains visible on the emoji screen.
-        val header = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(bar, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(imePickerButton(), LinearLayout.LayoutParams(
-                (48 * resources.displayMetrics.density).toInt(),
-                (44 * resources.displayMetrics.density).toInt(),
-            ))
-        }
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(bar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(keys, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(emoji, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
@@ -573,6 +549,11 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
+        if (nativeCoreUnavailable) {
+            super.onStartInputView(info, restarting)
+            setInputView(buildEmergencyKeyboardView())
+            return
+        }
         try {
             startNormalInputView(info, restarting)
         } catch (error: Exception) {
