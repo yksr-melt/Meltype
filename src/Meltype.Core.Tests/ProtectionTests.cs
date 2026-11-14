@@ -105,7 +105,6 @@ internal static class ProtectionTests
 
     private static MeltypeSession Create(LanguageMemory? languages = null, bool spaceAroundEnglish = false)
     {
-        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
         // 製品の CreateDefault と同じく、候補辞書・誤字補正・文脈辞書を入れる (実経路と同じ条件で検査する)。
         var services = new CompositionServices
         {

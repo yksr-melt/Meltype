@@ -93,9 +93,6 @@ public sealed partial class CompositionDetector
 
     public RomajiDetector Romaji => _romaji;
 
-    /// <summary>普通の英単語の判定に使う Windows のスペルチェッカー。null なら同梱の辞書だけ。</summary>
-    public IWordChecker? SpellChecker { get; set; }
-
     /// <summary>ユーザーが英字 / かなに直して覚えた語 (自動の判定より優先する)。</summary>
     public LanguageMemory? Memory { get; set; }
 
@@ -196,7 +193,7 @@ public sealed partial class CompositionDetector
         var analysis = _romaji.Analyze(lower);
         if (!analysis.IsValid) return _english.Words.ContainsWord(lower) || _english.IsPrefix(lower) || lower.Length >= 4;
         // 確定するときに呼ぶので、語は打ち終わっている (it が itai の打ちかけかは気にしない)。
-        var word = _english.Words.ContainsWord(lower) || IsSpellWord(lower);
+        var word = _english.Words.ContainsWord(lower) || IsCommonEnglishWord(lower);
         return word && analysis.Partial.Length > 0 && analysis.Partial != "n";
     }
 
@@ -210,29 +207,18 @@ public sealed partial class CompositionDetector
         var lower = raw.ToLowerInvariant();
         var analysis = _romaji.Analyze(lower);
         if (!analysis.IsValid || analysis.Partial.Length == 0 || analysis.Partial is "n" or "nn") return false;
-        return _english.Words.ContainsWord(lower) || IsSpellWord(lower);
+        return _english.Words.ContainsWord(lower) || IsCommonEnglishWord(lower);
     }
 
-    /// <summary>スペルチェッカーが正しいと言う英単語か、よくある打ち間違い (teh、recieve) か。</summary>
-    internal bool IsSpellWord(string lower) => SpellChecker is { } checker && (checker.IsWord(lower) || checker.AutoCorrection(lower) is not null);
+    /// <summary>同梱のよく使う英単語の一覧 (english-words.txt) にある語か。</summary>
+    internal static bool IsCommonEnglishWord(string lower) => BuiltInWordChecker.Shared.IsWord(lower);
 
-    /// <summary>よくある英語の打ち間違いなら正しい綴り (teh → the)。大文字で始まる語は大文字で始める。</summary>
-    public string? EnglishAutoCorrection(string word)
-    {
-        if (word.Length < 2 || !word.All(char.IsAsciiLetter)) return null;
-        // -pedia / -pedias 複合はスペルチェッカーが別綴りに「訂正」してしまうことがあるので触らない。
-        if (IsPediaEnglishWord(word.ToLowerInvariant())) return null;
-        if (SpellChecker?.AutoCorrection(word.ToLowerInvariant()) is not { } right) return null;
-        if (word.All(char.IsAsciiLetterUpper) && word.Length > 1) return right.ToUpperInvariant();
-        return char.IsAsciiLetterUpper(word[0]) ? char.ToUpperInvariant(right[0]) + right[1..] : right;
-    }
-
-    /// <summary>同梱の英単語の辞書・固有名詞にある語か、ユーザーが英字に直して覚えた語か (ok、github)。スペルチェッカーは使わない。</summary>
+    /// <summary>同梱の英単語の辞書・固有名詞にある語か、ユーザーが英字に直して覚えた語か (ok、github)。よく使う英単語の一覧は使わない。</summary>
     public bool IsListedEnglishWord(string lower) =>
         lower.Length >= 2 && (Memory?.Get(lower) ?? (_english.Words.ContainsWord(lower) || _proper.Contains(lower)));
 
     /// <summary>
-    /// 知っている英単語か (同梱の辞書・固有名詞・ユーザーが英字に直して覚えた語・4 文字以上ならスペルチェッカー)。
+    /// 知っている英単語か (同梱の辞書・固有名詞・ユーザーが英字に直して覚えた語・4 文字以上ならよく使う英単語の一覧)。
     /// python + no の n のように、英単語の最後の n と次の音がくっつくのを防ぐのに使う。
     /// </summary>
     public bool IsKnownEnglishWord(string word)
@@ -240,7 +226,7 @@ public sealed partial class CompositionDetector
         var lower = word.ToLowerInvariant();
         if (lower.Length < 3 || !lower.All(char.IsAsciiLetterLower)) return false;
         if (Memory?.Get(lower) is { } learned) return learned;
-        if (_english.Words.ContainsWord(lower) || _proper.Contains(lower) || (lower.Length >= 4 && IsSpellWord(lower))) return true;
+        if (_english.Words.ContainsWord(lower) || _proper.Contains(lower) || (lower.Length >= 4 && IsCommonEnglishWord(lower))) return true;
         // english-readable.txt / -pedia。打ち間違い直しが英字の語を崩さないようにする。
         if (lower.Length >= 4 && ReadableEnglish.Value.ContainsWord(lower)) return true;
         return IsPediaEnglishWord(lower);
@@ -288,8 +274,7 @@ public sealed partial class CompositionDetector
         var dash = lower.IndexOf('-');
         if (dash <= 0 || lower.IndexOf('-', dash + 1) >= 0) return false;
         var rest = lower[(dash + 1)..];
-        // - の後ろの語は、区間分けと同じ基準 (OS のスペルチェッカーだけが知っている語は数えない) で英単語か見る。
-        // Windows のスペルチェッカーは tori も語にするので、re-torimitto を re-tori|みっと にしていた (issue #705)
+        // - の後ろの語は、区間分けと同じ基準で英単語か見る (re-torimitto を re-tori|みっと にしない。issue #705)
         return HyphenPrefixes.Contains(lower[..dash]) && rest.Length >= 3 && rest.All(char.IsAsciiLetterLower) && IsLatticeEnglishWord(rest);
     }
 

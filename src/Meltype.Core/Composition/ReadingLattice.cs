@@ -35,7 +35,7 @@ public sealed partial class CompositionDetector
     private const double DanglingSokuonCost = UnknownKanaCost - LightKanaCost;
 
     // ---- 英語のノードの生起コスト ----
-    // 知っている英単語 (english.txt・固有名詞・english-words.txt のうちスペルチェッカーも知っている語)
+    // 知っている英単語 (english.txt・固有名詞・english-words.txt)
     private const double KnownEnglishCost = 1;
     // english-readable.txt の語 (open・feature): ローマ字としても読めるが、英語で打つことの多い語
     private const double ReadableEnglishCost = 0.7;
@@ -571,22 +571,16 @@ public sealed partial class CompositionDetector
         (start == 0 ? afterEnglish : !char.IsAsciiLetter(text[start - 1])) && (end == text.Length || !char.IsAsciiLetter(text[end]));
 
     /// <summary>
-    /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・決まり文句・ユーザーが英字に直して覚えた語)。
+    /// 知っている英単語か (同梱の辞書・固有名詞・よく使う英単語の一覧・english-readable.txt・-pedia・決まり文句・ユーザーが英字に直して覚えた語)。
     /// 1 文字は a・i と、チャットの略し方の u (you)・r (are) だけ。
     /// </summary>
     private bool IsLatticeEnglishWord(string lower)
     {
         if (Memory?.Get(lower) is { } learned) return learned;
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
-        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsLatticeSpellWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
+        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsCommonEnglishWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
             IsPediaEnglishWord(lower) || EnglishPhraseSpacing.IsPhrase(lower);
     }
-
-    /// <summary>
-    /// スペルチェッカーが知っている語のうち、同梱のよく使う英単語 (english-words.txt) にもある語。
-    /// OS のスペルチェッカー (Windows) は kore・cy・gattaw も語にするので、OS のスペルチェッカーだけが知っている語は数えない。
-    /// </summary>
-    private bool IsLatticeSpellWord(string lower) => IsSpellWord(lower) && Detection.BuiltInWordChecker.Shared.IsWord(lower);
 
     /// <summary>選んだ候補の並びを、英語・日本語の区間の並びにする (続いた日本語の候補は 1 つの区間にする。英語の候補は 1 つずつの区間)。</summary>
     private List<CompositionSegment> ToSegments(IReadOnlyList<CompositionUnit> units, string text, int[] unitAt, int unitsEnd, List<LatticeEdge> edges)

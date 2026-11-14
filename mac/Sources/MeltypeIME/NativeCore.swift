@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-import AppKit
 import Foundation
 
 // libMeltypeNative.dylib (C# の Meltype.Core を NativeAOT にしたもの) の関数。src/Meltype.Mac.Native/Exports.cs と合わせる。
-typealias IsWordCallback = @convention(c) (UnsafePointer<CChar>?) -> Int32
-
-private typealias InitFunction = @convention(c) (UnsafePointer<CChar>?, IsWordCallback) -> Int32
+private typealias InitFunction = @convention(c) (UnsafePointer<CChar>?) -> Int32
 private typealias CreateFunction = @convention(c) () -> UnsafeMutableRawPointer?
 private typealias DestroyFunction = @convention(c) (UnsafeMutableRawPointer?) -> Void
 private typealias HandleFunction = @convention(c) (UnsafeMutableRawPointer?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
@@ -23,32 +20,6 @@ private typealias ShutdownFunction = @convention(c) () -> Void
 /// 背景の変換の結果が届いた (ワーカーのスレッドで呼ばれる)。
 private let conversionReadyCallback: ConversionReadyCallback = {
     DispatchQueue.main.async { MeltypeInputController.active?.refreshConversion() }
-}
-
-/// 英単語として正しい綴りか (macOS のスペルチェッカー、英語で調べる)。
-private let spellCacheLock = NSLock()
-nonisolated(unsafe) private var spellCache: [String: Bool] = [:]
-nonisolated(unsafe) private var spellCacheExpiration = Date.distantPast
-nonisolated(unsafe) private var spellChecks = 0
-private let isWordCallback: IsWordCallback = { word in
-    guard let word else { return 0 }
-    let text = String(cString: word)
-    let cached: Bool? = spellCacheLock.withLock {
-        if Date() >= spellCacheExpiration {
-            spellCache.removeAll(keepingCapacity: true)
-            spellCacheExpiration = Date().addingTimeInterval(300)
-        }
-        return spellCache[text]
-    }
-    if let cached { return cached ? 1 : 0 }
-    let misspelled = NSSpellChecker.shared.checkSpelling(of: text, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
-    let valid = misspelled.location == NSNotFound
-    spellCacheLock.withLock {
-        spellChecks += 1
-        if spellCache.count >= 4096 { spellCache.removeAll(keepingCapacity: true) }
-        spellCache[text] = valid
-    }
-    return valid ? 1 : 0
 }
 
 /// 本体の応答 (ImeOutput) のうち、Mac で使う項目。
@@ -107,7 +78,6 @@ struct CandidateList: Decodable {
 /// libMeltypeNative.dylib を読み込んで呼ぶ。Meltype.app/Contents/Frameworks に置く (build.sh)。
 final class NativeCore {
     static let shared = NativeCore()
-    var spellCheckCount: Int { spellCacheLock.withLock { spellChecks } }
 
     private let library: UnsafeMutableRawPointer?
     private let initFunction: InitFunction?
@@ -143,11 +113,11 @@ final class NativeCore {
         shutdownFunction = symbol("meltype_shutdown", as: ShutdownFunction.self)
     }
 
-    /// 本体に英単語の判定を登録し、変換エンジンを用意する。Mozc のヘルパー (mozc/) と Zenzai (zenzai/) は Contents/Resources に置く (build.sh)。
+    /// 変換エンジンを用意する。Mozc のヘルパー (mozc/) と Zenzai (zenzai/) は Contents/Resources に置く (build.sh)。
     func initialize() {
         guard let initFunction else { return }
         let resources = Bundle.main.resourcePath ?? ""
-        if resources.withCString({ initFunction($0, isWordCallback) }) == 0 {
+        if resources.withCString({ initFunction($0) }) == 0 {
             NSLog("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)")
         }
     }

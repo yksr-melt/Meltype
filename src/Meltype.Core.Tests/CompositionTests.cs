@@ -495,19 +495,11 @@ internal static class CompositionTests
             Assert.Equal(expected, k.Showing, typed);
         }
         // これらの綴りを含む英単語は、かなにしない
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying", "two", "network", "bye", "rye" })
         {
-            foreach (var word in new[] { "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying", "two", "network", "bye", "rye" })
-            {
-                var e = new Keyboard();
-                e.Type(word);
-                Assert.Equal(word, e.Showing, word);
-            }
-        }
-        finally
-        {
-            Detector.SpellChecker = null;
+            var e = new Keyboard();
+            e.Type(word);
+            Assert.Equal(word, e.Showing, word);
         }
     }
 
@@ -515,37 +507,29 @@ internal static class CompositionTests
     public static void Reconversion_RomajiTextBecomesJapanese()
     {
         // #288: ローマ字のまま入った文を選んで変換キー → Meltype の判定で日本語の所だけを日本語にして候補に出す。Enter で置き換える
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var (selected, expected) in new[]
         {
-            foreach (var (selected, expected) in new[]
-            {
-                ("kyouha iitenki desu ne", "きょうはいいてんきですね"),
-                ("asita no meeting de review shimasu", "あしたの meeting で review します"),
-                ("PR no review onegai shimasu", "PR の review おねがいします"),
-            })
-            {
-                var k = new Keyboard(direct: true);
-                var selection = new ReconversionSelection(selected, selected);
-                k.Host.Selection = selection;
-                k.Press(VirtualKeys.Convert);
-                Assert.True(k.Host.View?.Converting == true, selected + ": 候補を出す");
-                Assert.Equal(expected, k.Showing, selected);
-                Assert.True(k.Host.View!.Candidates.Contains(selected), "選んだままの文も候補に");
-                Assert.Equal(0, k.Host.Output.Count, "Enter まで置き換えない");
-                k.Press(VirtualKeys.Return);
-                Assert.True(k.Host.Events.Any(e => e == $"replace:{selected}:{expected}"), string.Join(" ", k.Host.Events));
-            }
-            // 日本語にする所が無い英文は、今までの再変換と同じく扱う (英文を勝手に日本語にしない)
-            var english = new Keyboard(direct: true);
-            english.Host.Selection = new ReconversionSelection("this is a pen", "this is a pen");
-            english.Press(VirtualKeys.Convert);
-            Assert.True(english.Showing is null || !english.Showing.Any(c => c is >= 'ぁ' and <= 'ゖ'), "英文を日本語にしない: " + english.Showing);
-        }
-        finally
+            ("kyouha iitenki desu ne", "きょうはいいてんきですね"),
+            ("asita no meeting de review shimasu", "あしたの meeting で review します"),
+            ("PR no review onegai shimasu", "PR の review おねがいします"),
+        })
         {
-            Detector.SpellChecker = null;
+            var k = new Keyboard(direct: true);
+            var selection = new ReconversionSelection(selected, selected);
+            k.Host.Selection = selection;
+            k.Press(VirtualKeys.Convert);
+            Assert.True(k.Host.View?.Converting == true, selected + ": 候補を出す");
+            Assert.Equal(expected, k.Showing, selected);
+            Assert.True(k.Host.View!.Candidates.Contains(selected), "選んだままの文も候補に");
+            Assert.Equal(0, k.Host.Output.Count, "Enter まで置き換えない");
+            k.Press(VirtualKeys.Return);
+            Assert.True(k.Host.Events.Any(e => e == $"replace:{selected}:{expected}"), string.Join(" ", k.Host.Events));
         }
+        // 日本語にする所が無い英文は、今までの再変換と同じく扱う (英文を勝手に日本語にしない)
+        var english = new Keyboard(direct: true);
+        english.Host.Selection = new ReconversionSelection("this is a pen", "this is a pen");
+        english.Press(VirtualKeys.Convert);
+        Assert.True(english.Showing is null || !english.Showing.Any(c => c is >= 'ぁ' and <= 'ゖ'), "英文を日本語にしない: " + english.Showing);
     }
 
     [Test]
@@ -1585,33 +1569,25 @@ internal static class CompositionTests
     [Test]
     public static void ReadableEnglishWords_DoNotSwallowJapanese()
     {
-        // 英単語と同じ綴りの日本語 (mite = 見て、kite = 来て) が、英単語の辞書・スペルチェッカーの語より日本語として読まれる
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        // 英単語と同じ綴りの日本語 (mite = 見て、kite = 来て) が、英単語の辞書・よく使う英単語の一覧の語より日本語として読まれる
+        var cases = new Dictionary<string, string>
         {
-            var cases = new Dictionary<string, string>
-            {
-                ["mitemite"] = "みてみて",
-                ["mitekudasai"] = "みてください",
-                ["kitekudasai"] = "きてください",
-                ["kitemo"] = "きても",
-                ["kitekara"] = "きてから",
-                ["mitemiru"] = "みてみる",
-                ["kitekure"] = "きてくれ",
-                ["here"] = "here",
-                ["hero"] = "hero",
-                ["I fly a kite"] = "I fly a kite",
-            };
-            foreach (var (typed, expected) in cases)
-            {
-                var k = new Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, $"「{typed}」");
-            }
-        }
-        finally
+            ["mitemite"] = "みてみて",
+            ["mitekudasai"] = "みてください",
+            ["kitekudasai"] = "きてください",
+            ["kitemo"] = "きても",
+            ["kitekara"] = "きてから",
+            ["mitemiru"] = "みてみる",
+            ["kitekure"] = "きてくれ",
+            ["here"] = "here",
+            ["hero"] = "hero",
+            ["I fly a kite"] = "I fly a kite",
+        };
+        foreach (var (typed, expected) in cases)
         {
-            Detector.SpellChecker = null;
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, $"「{typed}」");
         }
     }
 
@@ -1762,17 +1738,9 @@ internal static class CompositionTests
     [Test]
     public static void Issue469_HoloXStaysEnglish()
     {
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
-        {
-            var k = new Keyboard();
-            k.Type("holoX\n");
-            Assert.Equal("holoX", k.Host.Document);
-        }
-        finally
-        {
-            Detector.SpellChecker = null;
-        }
+        var k = new Keyboard();
+        k.Type("holoX\n");
+        Assert.Equal("holoX", k.Host.Document);
     }
 
     [Test]
@@ -1976,89 +1944,65 @@ internal static class CompositionTests
     public static void Issue1132_ShortEnglishThenJapanese()
     {
         // 短い英単語の後ろが読める日本語でも、#537 の補正で全文英字に戻っていた。
-        var spellChecker = Detector.SpellChecker;
-        try
+        foreach (var live in new[] { false, true })
         {
-            foreach (var spell in new[] { false, true })
+            foreach (var (typed, expected) in new[]
             {
-                foreach (var live in new[] { false, true })
-                {
-                    Detector.SpellChecker = spell ? Detection.BuiltInWordChecker.Shared : null;
-                    foreach (var (typed, expected) in new[]
-                    {
                 ("usbtunaide", "usbつないで"), ("usbtsunaide", "usbつないで"),
                 ("USBtunaide", "USBつないで"), ("pctunaide", "pcつないで"),
                 ("usbsuru", "usbする"), ("usbtsukatte", "usbつかって"),
                 ("usbnuite", "usbぬいて"), ("usbwotunaide", "usbをつないで"),
                 ("hdmitunaide", "hdmiつないで"),
             })
-                    {
-                        var message = $"{typed} (スペル: {spell}, ライブ変換: {live})";
-                        var k = new Keyboard(live: live);
-                        k.Type(typed);
-                        Assert.Equal(expected, k.Showing, message + " 表示");
-                        k.Type("\n");
-                        Assert.Equal(expected, k.Host.Document, message + " Enter");
+            {
+                var message = $"{typed} (ライブ変換: {live})";
+                var k = new Keyboard(live: live);
+                k.Type(typed);
+                Assert.Equal(expected, k.Showing, message + " 表示");
+                k.Type("\n");
+                Assert.Equal(expected, k.Host.Document, message + " Enter");
 
-                        k = new Keyboard(live: live);
-                        k.Type(typed + " ");
-                        Assert.True(k.Host.View?.Converting == true, message + " Space で変換を始める");
-                        k.Type("\n");
-                        Assert.Equal(expected, k.Host.Document, message + " Space → Enter");
-                    }
-                }
+                k = new Keyboard(live: live);
+                k.Type(typed + " ");
+                Assert.True(k.Host.View?.Converting == true, message + " Space で変換を始める");
+                k.Type("\n");
+                Assert.Equal(expected, k.Host.Document, message + " Space → Enter");
             }
-        }
-        finally
-        {
-            Detector.SpellChecker = spellChecker;
         }
     }
 
     [Test]
     public static void Issue1132_ShortEnglishThenPendingJapanese()
     {
-        var spellChecker = Detector.SpellChecker;
-        try
+        foreach (var live in new[] { false, true })
         {
-            foreach (var spell in new[] { false, true })
+            foreach (var (typed, showing, committed) in new[]
             {
-                foreach (var live in new[] { false, true })
-                {
-                    Detector.SpellChecker = spell ? Detection.BuiltInWordChecker.Shared : null;
-                    foreach (var (typed, showing, committed) in new[]
-                    {
                 ("usbtun", "usbつn", "usbつん"),
                 ("usbtsukatt", "usbつかっt", "usbつかっt"),
             })
-                    {
-                        var message = $"{typed} (スペル: {spell}, ライブ変換: {live})";
-                        var k = new Keyboard(live: live);
-                        k.Type(typed);
-                        Assert.Equal(showing, k.Showing, message + " 入力途中");
-                        k.Type("\n");
-                        Assert.Equal(committed, k.Host.Document, message + " Enter");
+            {
+                var message = $"{typed} (ライブ変換: {live})";
+                var k = new Keyboard(live: live);
+                k.Type(typed);
+                Assert.Equal(showing, k.Showing, message + " 入力途中");
+                k.Type("\n");
+                Assert.Equal(committed, k.Host.Document, message + " Enter");
 
-                        k = new Keyboard(live: live);
-                        k.Type(typed + " ");
-                        if (committed.All(char.IsAsciiLetter))
-                        {
-                            Assert.True(k.Host.View?.Converting != true, message + " Space で英字を確定する");
-                            Assert.Equal(committed + " ", k.Host.Document, message + " Space");
-                        }
-                        else
-                        {
-                            Assert.True(k.Host.View?.Converting == true, message + " Space で日本語を変換する");
-                            k.Type("\n");
-                            Assert.Equal(committed, k.Host.Document, message + " Space → Enter");
-                        }
-                    }
+                k = new Keyboard(live: live);
+                k.Type(typed + " ");
+                if (committed.All(char.IsAsciiLetter))
+                {
+                    Assert.True(k.Host.View?.Converting != true, message + " Space で英字を確定する");
+                    Assert.Equal(committed + " ", k.Host.Document, message + " Space");
+                }
+                else
+                {
+                    Assert.True(k.Host.View?.Converting == true, message + " Space で日本語を変換する");
+                    k.Type("\n");
+                    Assert.Equal(committed, k.Host.Document, message + " Space → Enter");
                 }
             }
-        }
-        finally
-        {
-            Detector.SpellChecker = spellChecker;
         }
     }
 
@@ -2066,23 +2010,11 @@ internal static class CompositionTests
     public static void Issue1132_KnownLimitation_ReadableEnglishAfterShortPrefix()
     {
         // 既知の問題: 本来は pronate のまま英字にしたいが、pro + なて と読めるため日本語との区別がつかない。
-        var spellChecker = Detector.SpellChecker;
-        try
-        {
-            foreach (var spell in new[] { false, true })
-            {
-                Detector.SpellChecker = spell ? Detection.BuiltInWordChecker.Shared : null;
-                var k = new Keyboard();
-                k.Type("pronate");
-                Assert.Equal("proなて", k.Showing, "既知の問題の現在の表示");
-                k.Type("\n");
-                Assert.Equal("proなて", k.Host.Document, "本来の期待は pronate。判定を改善したときに更新する");
-            }
-        }
-        finally
-        {
-            Detector.SpellChecker = spellChecker;
-        }
+        var k = new Keyboard();
+        k.Type("pronate");
+        Assert.Equal("proなて", k.Showing, "既知の問題の現在の表示");
+        k.Type("\n");
+        Assert.Equal("proなて", k.Host.Document, "本来の期待は pronate。判定を改善したときに更新する");
     }
 
     [Test]
@@ -4206,25 +4138,17 @@ internal static class CompositionTests
     {
         // 報告 (#301 / #457): おぺんこで・tむx に割れず、ツール名のまま英字にする
         // discode は固有名詞でないので discoで (#145 メンテナー判断)
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        var cases = new Dictionary<string, string>
         {
-            var cases = new Dictionary<string, string>
-            {
-                ["discode"] = "discoで",
-                ["opencode"] = "opencode",
-                ["tmux"] = "tmux",
-            };
-            foreach (var (typed, expected) in cases)
-            {
-                var k = new Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, $"「{typed}」");
-            }
-        }
-        finally
+            ["discode"] = "discoで",
+            ["opencode"] = "opencode",
+            ["tmux"] = "tmux",
+        };
+        foreach (var (typed, expected) in cases)
         {
-            Detector.SpellChecker = null;
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, $"「{typed}」");
         }
     }
 
@@ -5079,13 +5003,13 @@ internal static class CompositionTests
         k.Key(VirtualKeys.LShift, up: true);
 
         k = new Keyboard();
-        k.Type("tanniGithubde ");
-        Assert.Equal("単位|Github|で", string.Join("|", k.Host.View!.Clauses!));
+        k.Type("nihongoGithubde ");
+        Assert.Equal("日本語|Github|で", string.Join("|", k.Host.View!.Clauses!));
         k.Key(VirtualKeys.LShift);
         k.Press(VirtualKeys.Left);
-        Assert.Equal("たん|い|Github|で", string.Join("|", k.Host.View.Clauses!), "縮めて空いた分は、後ろの英語の文節を変えずに新しい文節にする");
+        Assert.Equal("にほん|ご|Github|で", string.Join("|", k.Host.View.Clauses!), "縮めて空いた分は、後ろの英語の文節を変えずに新しい文節にする");
         k.Press(VirtualKeys.Right);
-        Assert.Equal("単位|Github|で", string.Join("|", k.Host.View.Clauses!), "伸ばして戻す");
+        Assert.Equal("日本語|Github|で", string.Join("|", k.Host.View.Clauses!), "伸ばして戻す");
         k.Key(VirtualKeys.LShift, up: true);
     }
 
@@ -5633,18 +5557,9 @@ internal static class CompositionTests
             ("mudawodecluttersuru", "むだをdeclutterする"),
         })
         {
-            // 実際と同じく、辞書にない英単語 (website) はスペルチェッカーで見る
-            Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-            try
-            {
-                var k = new Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
-            }
-            finally
-            {
-                Detector.SpellChecker = null;
-            }
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 
@@ -5678,19 +5593,11 @@ internal static class CompositionTests
             ("googleshimasen", "googleしませn", "googleしません"),
         })
         {
-            Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-            try
-            {
-                var k = new Keyboard();
-                k.Type(typed);
-                Assert.Equal(expected, k.Showing, typed);
-                k.Type(" ");
-                Assert.Equal(converted, k.Showing, typed + " (Space)");
-            }
-            finally
-            {
-                Detector.SpellChecker = null;
-            }
+            var k = new Keyboard();
+            k.Type(typed);
+            Assert.Equal(expected, k.Showing, typed);
+            k.Type(" ");
+            Assert.Equal(converted, k.Showing, typed + " (Space)");
         }
     }
 
@@ -5742,27 +5649,19 @@ internal static class CompositionTests
     public static void SpaceAroundEnglish_WhenTypingInTheCompositionBox()
     {
         // #248: 英数を使わず、変換ボックスの中で英語と日本語を判定して打っても、設定「英単語の前後に半角スペース」が効く
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var (typed, expected) in new[]
         {
-            foreach (var (typed, expected) in new[]
-            {
-                ("kyouhaGooglenipushshita\n", "きょうは Google に push した"),
-                ("pingwoutsu\n", "ping をうつ"),
-                ("meetingga\n", "meeting が"),
-                ("kyouhashoppingniiku\n", "きょうは shopping にいく"),
-                // 別々に確定しても、前に確定した英単語との間に入れる
-                ("GitHub\nni\n", "GitHub に"),
-            })
-            {
-                var k = new Keyboard { SpaceAroundEnglish = true };
-                k.Type(typed);
-                Assert.Equal(expected, k.Host.Document, typed);
-            }
-        }
-        finally
+            ("kyouhaGooglenipushshita\n", "きょうは Google に push した"),
+            ("pingwoutsu\n", "ping をうつ"),
+            ("meetingga\n", "meeting が"),
+            ("kyouhashoppingniiku\n", "きょうは shopping にいく"),
+            // 別々に確定しても、前に確定した英単語との間に入れる
+            ("GitHub\nni\n", "GitHub に"),
+        })
         {
-            Detector.SpellChecker = null;
+            var k = new Keyboard { SpaceAroundEnglish = true };
+            k.Type(typed);
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 
@@ -5922,7 +5821,7 @@ internal static class CompositionTests
         foreach (var (typed, expected) in new[]
         {
             ("zh", "←"), ("zj", "↓"), ("zk", "↑"), ("zl", "→"),
-            ("z/", "・"), ("zu", "ず"), ("puzzle", "ぷっぞえ"),
+            ("z/", "・"), ("zu", "ず"), ("puzzle", "puzzle"),
         })
         {
             var k = new Keyboard();

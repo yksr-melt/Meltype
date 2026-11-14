@@ -210,10 +210,10 @@ public sealed partial class CompositionController
                 }
                 else if (SpaceCommitsAlphanumeric())
                 {
-                    Commit(suffix: " ", fixEnglish: true);
+                    Commit(suffix: " ");
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
-                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
+                else if (EndsWithEnglish()) CommitText(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (SpaceCommitsAutoEnglish()) CommitText(_text.Raw + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
                     // Space で変換した = 語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。

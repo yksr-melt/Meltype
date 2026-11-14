@@ -886,9 +886,7 @@ internal static class SessionFacadeTests
             ("reflectsareta", "reflectされた"), ("reflectsita", "reflectした"),
             ("reflectsaseru", "reflectさせる"), ("reflected", "reflected"), ("reflects", "reflects") })
         {
-            var detector = CompositionDetector.CreateDefault();
-            detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
-            var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings());
+            var session = new MeltypeSession(CompositionDetector.CreateDefault(), new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings());
             var results = Type(session, input + "\n");
             Assert.Equal(expected, string.Concat(results.SelectMany(r => r.Commits).Select(e => e.Text)));
         }
@@ -914,7 +912,6 @@ internal static class SessionFacadeTests
             })
             {
                 var detector = CompositionDetector.CreateDefault();
-                detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
                 var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(),
                     () => new Settings { SpaceAroundEnglish = true, LiveConversion = false });
                 var document = "";
@@ -949,7 +946,6 @@ internal static class SessionFacadeTests
             })
             {
                 var detector = CompositionDetector.CreateDefault();
-                detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
                 var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings { LiveConversion = false });
                 var document = "";
                 foreach (var c in string.Concat(steps))

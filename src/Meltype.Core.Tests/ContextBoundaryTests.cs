@@ -12,7 +12,6 @@ internal static class ContextBoundaryTests
     private static CompositionText Create(string before = "", bool manual = false, LanguageMemory? memory = null)
     {
         var detector = CompositionDetector.CreateDefault();
-        detector.SpellChecker = BuiltInWordChecker.Shared;
         detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
         return new CompositionText(detector)

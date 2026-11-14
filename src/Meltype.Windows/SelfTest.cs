@@ -63,8 +63,6 @@ internal static class SelfTest
             foreach (var c in "kyouhagoogle") text.Append(c);
             return text.Display(final: false);
         });
-        Check("英語のスペルチェッカー", () => WindowsSpellChecker.Shared.IsAvailable ? $"meeting={WindowsSpellChecker.Shared.IsWord("meeting")}" : "(使えない: 同梱の辞書だけで判定)");
-        detector.SpellChecker = WindowsSpellChecker.Shared;
         Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
         Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温", "厚い", _ => null) ?? "(なし)");

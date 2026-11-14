@@ -68,7 +68,7 @@ FCITX_CONFIGURATION(MeltypeConfig,
 
 struct Native {
     void *handle = nullptr;
-    int (*init)(const char *, int (*)(const char *)) = nullptr;
+    int (*init)(const char *) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
@@ -92,8 +92,7 @@ struct Native {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
-        // 英単語の判定は同梱の一覧 (nullptr)
-        if (!init(meltypeDir().c_str(), nullptr)) {
+        if (!init(meltypeDir().c_str())) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
         return true;

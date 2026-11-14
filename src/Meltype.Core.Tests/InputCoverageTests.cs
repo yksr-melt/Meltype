@@ -29,7 +29,6 @@ internal static class InputCoverageTests
         foreach (var (input, expected) in new[] { ("seeyouagain", "see you again"), ("kyouhagoogledekensaku", "きょうは google でけんさく"), ("nice to meet you", "nice to meet you") })
         {
             var detector = CompositionDetector.CreateDefault();
-            detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
             var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(),
                 new CompositionServices { AutomaticEnglishSpacing = () => true }, () => new Settings { SpaceAroundEnglish = true, AutoCorrectAfterCommit = true, LiveConversion = false });
             var output = "";
@@ -60,7 +59,6 @@ internal static class InputCoverageTests
             "I want to go to the park", "I am going home", "my name is Taro" })
         {
             var detector = CompositionDetector.CreateDefault();
-            detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
             var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings());
             var output = "";
             foreach (var character in phrase + "\n")

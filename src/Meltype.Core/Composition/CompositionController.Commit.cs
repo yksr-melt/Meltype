@@ -25,7 +25,7 @@ public sealed partial class CompositionController
     /// <summary>今の未確定入力が、自動では変換してはいけない保護区間か (F9/F10 などの明示指定は除く)。</summary>
     private bool IsProtectedInput => !_converting && _text.Mode == DisplayMode.Auto && _text.HasProtectedTail;
 
-    private void Commit(string suffix = "", bool fixEnglish = false, bool preserveText = false)
+    private void Commit(string suffix = "", bool preserveText = false)
     {
         if (IsProtectedInput)
         {
@@ -54,11 +54,6 @@ public sealed partial class CompositionController
         {
             text = shownKana[..^1] + "ん";
             rules.Add("見えていたかなのまま (#677)");
-        }
-        if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto && FixEnglishTypo(text) is var fixedText && fixedText != text)
-        {
-            text = fixedText;
-            rules.Add("英語の打ち間違いを直した");
         }
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
@@ -174,19 +169,6 @@ public sealed partial class CompositionController
     /// <summary>予測の候補の読み (前に確定したときの読み)。分からなければ打ちかけの読み。</summary>
     private string PredictionReading(string prediction, string typed) =>
         _services.Predictor?.Phrases?.ReadingOf(prediction, typed) ?? typed;
-
-    /// <summary>
-    /// 英単語で終わる文字列の最後の語が、よくある打ち間違い (teh、recieve) なら正しい綴りにする (Space で確定するとき)。
-    /// </summary>
-    private string FixEnglishTypo(string text)
-    {
-        if (!_settings().CorrectTypos) return text;
-        var start = text.Length;
-        while (start > 0 && char.IsAsciiLetter(text[start - 1])) start--;
-        if (start == text.Length || _detector.EnglishAutoCorrection(text[start..]) is not { } right) return text;
-        Diagnostics.Log.Decision($"英語の打ち間違いを直しました: {Diagnostics.Log.Text(text[start..])}→{Diagnostics.Log.Text(right)}");
-        return text[..start] + right;
-    }
 
 
     /// <summary>

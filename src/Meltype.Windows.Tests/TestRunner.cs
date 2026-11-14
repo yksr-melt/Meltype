@@ -4,23 +4,13 @@
 namespace Meltype.Tests;
 
 /// <summary>
-/// Windows 版のテストと調査用の道具。Meltype.Core.Tests のテスト (OS に依存しない部分) もまとめて流し、
-/// そのときは Windows のスペルチェッカーを使う。
+/// Windows 版のテストと調査用の道具。Meltype.Core.Tests のテスト (OS に依存しない部分) もまとめて流す。
 /// </summary>
 internal static class TestRunner
 {
     [STAThread]
     public static int Main(string[] args)
     {
-        using var spellChecker = Detection.WindowsSpellChecker.Shared;
-        TestSupport.WordChecker = Detection.WindowsSpellChecker.Shared;
-        // dotnet run --project src/Meltype.Windows.Tests -- --autocorrect teh recieve
-        // で、Windows のスペルチェッカーの自動修正 (teh → the) を確かめる。
-        if (args.FirstOrDefault() == "--autocorrect")
-        {
-            foreach (var word in args.Skip(1)) Console.WriteLine($"{word} → {Detection.WindowsSpellChecker.Shared.AutoCorrection(word) ?? "(なし)"}");
-            return 0;
-        }
         // 不具合報告のフォームに自動で入れる実行環境 (Meltype の「不具合の報告・提案...」と同じもの)
         if (args.FirstOrDefault() == "--report-info")
         {
@@ -30,12 +20,9 @@ internal static class TestRunner
             Console.WriteLine(AppInfo.GitHubReportUrl("2-misdetection.yml", environment));
             return 0;
         }
-        if (args.FirstOrDefault() == "--units") { DebugUnits.Run(args[1]); return 0; }
-        // henkan-test / japanese-henkan-test を Windows で: アプリと同じく Windows のスペルチェッカーを使う。
-        // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの。
+        // henkan-test / japanese-henkan-test を Windows で。Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの。
         if (args.FirstOrDefault() is "--henkan" or "--jht" or "--jht-batch")
         {
-            if (Detection.WindowsSpellChecker.Shared.IsAvailable) CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
             if (MozcHelper() is { } helper) Environment.SetEnvironmentVariable("MELTYPE_MOZC", helper);
             if (args[0] == "--jht-batch")
             {
@@ -57,8 +44,7 @@ internal static class TestRunner
         }
         if (args.FirstOrDefault() == "--repro")
         {
-            // GitHub の bot 用: 報告された打鍵を打ってみて JSON で返す (Meltype.Core.Tests の --repro に、アプリと同じ Windows のスペルチェッカーを足したもの)。
-            if (Detection.WindowsSpellChecker.Shared.IsAvailable) CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
+            // GitHub の bot 用: 報告された打鍵を打ってみて JSON で返す (Meltype.Core.Tests の --repro と同じ)。
             Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
             return 0;
         }
@@ -66,8 +52,6 @@ internal static class TestRunner
         {
             // dotnet run --project src/Meltype.Windows.Tests -- --type "ke-kiwotabeta "
             // 本物の変換エンジンをつないだ変換ボックスに 1 文字ずつ打ち、表示の変化を見る (ライブ変換 ON)。
-            // 本物のアプリと同じく Windows のスペルチェッカーも使う。
-            CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
             // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの (Zenzai は使わない)。
             using var mozc = new Composition.MozcConverter(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
             var converter = new Composition.HybridConverter(mozc);
