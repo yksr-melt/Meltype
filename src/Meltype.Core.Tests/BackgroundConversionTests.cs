@@ -276,6 +276,32 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Refresh_DoesNotUndoSplittingTheWholeSentence()
+    {
+        // 英日の区切りの案を候補にした文全体の文節を ← で分けたら、届いた答えで文全体の文節に戻さない (issue #1737)
+        var converter = new ChangingAnswer { Clauses = [new("と", "と")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "botto ");
+        var split = session.HandleKey(VirtualKeys.Left, null, false, false, false, false).View;
+        Assert.Equal("bot,と", string.Join(",", split?.Clauses ?? []));
+        converter.Clauses = [new("と", "戸")];
+        Assert.True(session.RefreshConversion() is null, "分けた文節を置き換えない");
+    }
+
+    [Test]
+    public static void Refresh_DoesNotReplaceTheWholeSentenceAfterChoosingAnAlternative()
+    {
+        // 文全体の文節で案を選び直したあとに届いた答えで作り直すと、選んだ文が新しい案に無くなり、その案の文節に分けられなくなる (issue #1737)
+        var converter = new ChangingAnswer { Clauses = [new("と", "と")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "botto ");
+        var chosen = SessionFacadeTests.Type(session, " ")[^1].View;
+        Assert.True(chosen?.Clauses is [var text] && text != "botと", string.Join(",", chosen?.Clauses ?? []));
+        converter.Clauses = [new("と", "戸")];
+        Assert.True(session.RefreshConversion() is null, "選び直した文全体の文節を置き換えない");
+    }
+
+    [Test]
     public static void Space_WaitsWithinTheBudget()
     {
         using var converter = Slow(delayMs: 50);

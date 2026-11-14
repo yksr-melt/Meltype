@@ -83,15 +83,16 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
-    /// 英語区間はそのまま、日本語区間は文脈を付けて変換エンジンで文節に区切って変換する。
-    /// 英語区間も、ローマ字として読めれば日本語の候補 (go → 語 ご ゴ) を後ろに足す。preferJapanese (Shift+Space) なら前に出す。
+    /// 区切りを文節にして変換する (<see cref="BuildClauses"/>)。英日の区切りの別案があれば、文全体を 1 つの文節にして、案ごとの文を候補にする。
+    /// F6〜F8 でかなにして見せているときは、打った英字をすべてローマ字として読んで変換する。
     /// </summary>
     private void StartConversion(bool preferJapanese = false)
     {
         _conversionPrefersJapanese = preferJapanese;
         _clausesEdited = false;
         _tabStartedConversion = false;
-        var segments = _text.ConversionSegments();
+        var asKana = _text.Mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
+        var segments = asKana ? _text.AllJapaneseSegments() : _text.ConversionSegments();
         var utility = Utilities(segments);
         if (utility is { Placement: UtilityPlacement.Replace })
         {
@@ -128,6 +129,29 @@ public sealed partial class CompositionController
             _converting = true;
             return;
         }
+        // 区切りの別案があれば、別案ごとに変換した文を 1 つの文節の候補にする (issue #1737)
+        var alternatives = utility is null && !asKana ? _text.ConversionSegmentAlternatives(MaxSegmentationAlternatives) : [segments];
+        var clauses = BuildClauses(alternatives[0], preferJapanese);
+        if (clauses.Count == 0) return;
+        if (alternatives.Count > 1 && WholeSentenceClause([clauses, .. OtherAlternatives(alternatives, preferJapanese)]) is { } whole)
+            clauses = [whole];
+        if (utility is not null) clauses = [WithUtility(clauses, utility, segments[0].Kana)];
+        // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
+        foreach (var clause in clauses)
+            if (_keptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
+        // 打ち始めの ・ は、Space で / にする。
+        if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
+        _clauses = clauses;
+        _selectedClause = 0;
+        _converting = true;
+    }
+
+    /// <summary>
+    /// 区切りの 1 案の文節。英語区間はそのまま、日本語区間は文脈を付けて変換エンジンで文節に区切って変換する。
+    /// 英語区間も、ローマ字として読めれば日本語の候補 (go → 語 ご ゴ) を後ろに足す。preferJapanese (Shift+Space) なら前に出す。
+    /// </summary>
+    private List<Clause> BuildClauses(IReadOnlyList<CompositionSegment> segments, bool preferJapanese)
+    {
         var clauses = new List<Clause>();
         for (var s = 0; s < segments.Count; s++)
         {
@@ -156,7 +180,7 @@ public sealed partial class CompositionController
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
                     : Distinct([.. english, .. romaji]))
-                { Kana = _text.KanaForSegment(s) });
+                { Kana = _text.KanaForSegment(segments, s) });
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
@@ -167,7 +191,7 @@ public sealed partial class CompositionController
             var offset = 0;
             foreach (var clause in japanese)
             {
-                clause.Raw = _text.RawForReading(s, offset, clause.Reading.Length);
+                clause.Raw = _text.RawForReading(segments, s, offset, clause.Reading.Length);
                 offset += clause.Reading.Length;
                 AddOldKana(clause);
                 AddTranslations(clause);
@@ -176,16 +200,90 @@ public sealed partial class CompositionController
             }
             clauses.AddRange(japanese);
         }
-        if (clauses.Count == 0) return;
-        if (utility is not null) clauses = [WithUtility(clauses, utility, segments[0].Kana)];
-        // 変換したあとに続けて打っていたら、前に選んでいた候補を同じ読みの文節で使う
-        foreach (var clause in clauses)
-            if (_keptChoices.TryGetValue(clause.Reading, out var kept) && clause.Candidates.Contains(kept)) Prefer(clause, kept);
-        // 打ち始めの ・ は、Space で / にする。
-        if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
-        _clauses = clauses;
+        return clauses;
+    }
+
+    // 変換の候補に出す英日の区切りの案の数 (いちばん良い案を含む)
+    private const int MaxSegmentationAlternatives = 4;
+
+    // 英日の区切りの案 (2 番目以降) を変換している間は true。Zenzai に頼まずに変換する (IStandaloneConverter)
+    private bool _convertingOtherAlternatives;
+
+    /// <summary>英日の区切りの案のうち 2 番目以降の文節。空になった案は除く。</summary>
+    private List<List<Clause>> OtherAlternatives(IReadOnlyList<IReadOnlyList<CompositionSegment>> alternatives, bool preferJapanese)
+    {
+        _convertingOtherAlternatives = true;
+        try
+        {
+            return [.. alternatives.Skip(1).Select(a => BuildClauses(a, preferJapanese)).Where(c => c.Count > 0)];
+        }
+        finally
+        {
+            _convertingOtherAlternatives = false;
+        }
+    }
+
+    /// <summary>変換エンジンで文節に区切って変換する。英日の区切りの案 (2 番目以降) では Zenzai に頼まない。</summary>
+    private IReadOnlyList<ConversionClause>? EngineClauses(string kana, string? context = null) =>
+        _convertingOtherAlternatives && _converter is IStandaloneConverter standalone
+            ? standalone.ConvertClausesStandalone(kana, context)
+            : _converter.ConvertClauses(kana, context);
+
+    /// <summary>変換エンジンで読み全体を変換する。英日の区切りの案 (2 番目以降) では Zenzai に頼まない。</summary>
+    private string? EngineConvert(string kana) =>
+        _convertingOtherAlternatives && _converter is IStandaloneConverter standalone ? standalone.ConvertStandalone(kana) : _converter.Convert(kana);
+
+    /// <summary>
+    /// 区切りの案ごとの文節 (先頭がいちばん良い案) を、文全体の 1 つの文節にする。候補は案ごとの文 (botto → botと、ボット) の後ろに、
+    /// 文節が 1 つの案のその文節の候補 (sushi → 寿司 の 鮨・すし)。案の文がすべて同じなら null。
+    /// </summary>
+    private Clause? WholeSentenceClause(List<List<Clause>> alternatives)
+    {
+        var texts = new Dictionary<string, List<Clause>>(StringComparer.Ordinal);
+        foreach (var clauses in alternatives) texts.TryAdd(string.Concat(clauses.Select(c => c.Text)), clauses);
+        if (texts.Count < 2) return null;
+        var whole = new Clause(_text.AllKana(final: true), false, [.. texts.Keys]) { Raw = _text.Raw, Alternatives = texts };
+        AddSingleClauseCandidates(whole);
+        return whole;
+    }
+
+    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足す。</summary>
+    private static void AddSingleClauseCandidates(Clause whole)
+    {
+        foreach (var clauses in whole.Alternatives!.Values)
+        {
+            if (clauses is not [var only]) continue;
+            foreach (var candidate in only.Candidates)
+                if (!whole.Candidates.Contains(candidate)) whole.Candidates.Add(candidate);
+        }
+    }
+
+    /// <summary>
+    /// 文全体の文節 (<see cref="Clause.Alternatives"/>) を、選んでいる案の文節に分ける。文節ごとに候補を選び直す・区切りを動かす・確定する前に呼ぶ。
+    /// 文節が 1 つの案の候補を選んでいれば、その文節でその候補を選ぶ。
+    /// 文全体の文節でなければ何もしない。どの案にも無い文 (打ち始めの ・ を Space で / にした文) を選んでいれば、分けずに学習しない文節にする。
+    /// 分けたら、後から届いた変換エンジンの答えで文全体の文節に戻さない (_clausesEdited)。
+    /// </summary>
+    private void SplitWholeSentence()
+    {
+        if (_clauses is not [{ Alternatives: { } alternatives } whole]) return;
+        if (alternatives.TryGetValue(whole.Text, out var clauses))
+        {
+            _clauses = clauses;
+        }
+        else if (alternatives.Values.FirstOrDefault(c => c is [var only] && only.Candidates.Contains(whole.Text)) is [var single])
+        {
+            single.Index = single.Candidates.IndexOf(whole.Text);
+            single.Changed = whole.Changed;
+            _clauses = [single];
+        }
+        else
+        {
+            whole.NotLearned.Add(whole.Text);
+            return;
+        }
         _selectedClause = 0;
-        _converting = true;
+        _clausesEdited = true;
     }
 
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
@@ -407,7 +505,7 @@ public sealed partial class CompositionController
     {
         var unchanged = pieces.Select(p => (p.Reading, p.Word, (IReadOnlyList<ConversionClause>?)null)).ToList();
         if (_services.UserDictionary is not { } dictionary) return unchanged;
-        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : _converter.ConvertClauses(kana);
+        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context) : EngineClauses(kana);
         if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return unchanged;
         var starts = new HashSet<int>();
         for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
@@ -497,8 +595,8 @@ public sealed partial class CompositionController
         var context = ConversionContext();
         var parts = engine ?? (context is not null
             ? ConvertWithContext(kana, context)
-            : _converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
-        parts ??= [new ConversionClause(kana, _converter.Convert(kana) ?? kana)];
+            : EngineClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
+        parts ??= [new ConversionClause(kana, EngineConvert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _services.Candidates?.Contains(kana) == true)
         {
@@ -601,8 +699,8 @@ public sealed partial class CompositionController
     /// </summary>
     private IReadOnlyList<ConversionClause>? ConvertWithContext(string kana, string context)
     {
-        var withContext = _converter.ConvertClauses(kana, context);
-        var plain = _converter.ConvertClauses(kana);
+        var withContext = EngineClauses(kana, context);
+        var plain = EngineClauses(kana);
         if (withContext is null || plain is null) return withContext ?? plain;
         return withContext.Select(c => c.Reading).SequenceEqual(plain.Select(c => c.Reading)) ? withContext : plain;
     }
@@ -734,6 +832,13 @@ public sealed partial class CompositionController
     private void Expand(Clause clause)
     {
         clause.Expanded = true;
+        // 文全体の文節は、文節が 1 つの案のその文節の一覧を足す
+        if (clause.Alternatives is { } alternatives)
+        {
+            foreach (var only in alternatives.Values.Where(c => c.Count == 1).Select(c => c[0]).Where(c => !c.Expanded)) Expand(only);
+            AddSingleClauseCandidates(clause);
+            return;
+        }
         if (_services.MoreCandidates is not { } more) return;
         var reading = clause.IsEnglish ? RomajiReading(clause.Reading) : clause.Reading;
         if (reading is null) return;
@@ -774,6 +879,7 @@ public sealed partial class CompositionController
     private void Resize(int delta)
     {
         _clausesEdited = true;
+        SplitWholeSentence();
         var current = _clauses[_selectedClause];
         // ユーティリティ変換の Replace の文節 (空の括弧のペアなど) は、1 つの単位として選んで確定する。
         if (current.Fixed) return;
@@ -860,7 +966,7 @@ public sealed partial class CompositionController
         if (_learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
     }
 
-    private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);
+    private string Convert(string kana) => NormalizeHalfWidth(EngineConvert(kana) ?? kana, kana);
 
     /// <summary>
     /// 文の中での変換結果がある文節の候補に足す「その読みだけの変換」。Zenzai を使える変換エンジンでも Zenzai には頼まない (IStandaloneConverter)。
@@ -868,8 +974,8 @@ public sealed partial class CompositionController
     /// </summary>
     private string Standalone(string kana)
     {
-        if (_converter is not IStandaloneConverter standalone) return Convert(kana);
-        return NormalizeHalfWidth(standalone.ConvertStandalone(kana) ?? kana, kana);
+        var converted = _converter is IStandaloneConverter standalone ? standalone.ConvertStandalone(kana) : _converter.Convert(kana);
+        return NormalizeHalfWidth(converted ?? kana, kana);
     }
 
     /// <summary>

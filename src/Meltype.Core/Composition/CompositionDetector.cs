@@ -131,16 +131,31 @@ public sealed partial class CompositionDetector
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
     /// <param name="reasons">渡したら、区切りを選んだ理由を足す (確定のログ用。issue #1644)。文字列にするのはログに書くときだけ。</param>
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        bool manual = false, bool englishSentence = false, bool kanaInput = false, List<Func<string>>? reasons = null)
+        bool manual = false, bool englishSentence = false, bool kanaInput = false, List<Func<string>>? reasons = null) =>
+        SegmentAlternatives(units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, 1, reasons)[0];
+
+    /// <summary>
+    /// <see cref="Segment"/> の区切りと、その別案 (軽い順に count 案まで)。先頭は <see cref="Segment"/> と同じ。
+    /// 別案は、ラティスの上位案と、打った英字をすべてローマ字として読んだ案 (botto → ぼっと)。記号の入った語は別案を出さない。
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentAlternatives(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish,
+        bool? followingEnglish, bool manual, bool englishSentence, bool kanaInput, int count, List<Func<string>>? reasons = null)
     {
         Prepare(units);
         var token = _preparedRaw + pending;
         if (IsOpaqueToken(token, kanaInput))
         {
             reasons?.Add(() => "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま");
-            return [new CompositionSegment(true, "", token)];
+            return [[new CompositionSegment(true, "", token)]];
         }
-        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, reasons: reasons);
+        var alternatives = FindSpanAlternatives(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, 0, count, reasons);
+        // すべてローマ字として読んだ案。入力途中の子音は含めない (日本語の区間と同じく、変換するときに足す)。
+        // ローマ字として読めない英字が残る読み (google → ごおgぇ) は、日本語の案にならないので出さない
+        if (alternatives.Count < count && !kanaInput && string.Concat(units.Select(u => u.Kana)) is var kana &&
+            !(kana + _romaji.ConvertLenient(pending.ToLowerInvariant(), final: true)).Any(char.IsAsciiLetter) &&
+            new CompositionSegment(false, kana, token) is var japanese && !alternatives.Any(a => a.SequenceEqual([japanese])))
+            alternatives.Add([japanese]);
+        return alternatives;
     }
 
     // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の区間分けの間だけ、Prepare で連結した原文と各位置のオフセットを使い回す

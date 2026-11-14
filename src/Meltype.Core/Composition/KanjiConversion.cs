@@ -45,13 +45,18 @@ public interface IWideContextConverter
 }
 
 /// <summary>
-/// 文節ごとの候補に足す「その読みだけの変換」を、Zenzai を使わずに出せる変換エンジン (HybridConverter)。
-/// 文節の数だけ頼むので、Zenzai に頼むと 1 文節ごとに待たされる (CPU のみで、文節に分かれた文の変換 1 回あたり中央値 98 ミリ秒増えた)。
+/// Zenzai を使わずに変換できる変換エンジン (HybridConverter)。
+/// ConvertStandalone は文節ごとの候補に足す「その読みだけの変換」。文節の数だけ頼むので、Zenzai に頼むと 1 文節ごとに待たされる
+/// (CPU のみで、文節に分かれた文の変換 1 回あたり中央値 98 ミリ秒増えた)。
+/// ConvertClausesStandalone は英日の区切りの案 (2 番目以降) の変換。Zenzai は最後に頼まれた 1 件だけを裏で処理するので、
+/// 案ごとに頼むと、いちばん良い案の依頼が後の案の依頼に上書きされて、その答えが遅れる。
 /// 最初の候補 (文の中での変換結果) は ConvertClauses のままなので、Zenzai の結果が使われる。
 /// </summary>
 public interface IStandaloneConverter
 {
     string? ConvertStandalone(string hiragana);
+
+    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null);
 }
 
 /// <summary>

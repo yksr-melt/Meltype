@@ -33,6 +33,13 @@ public sealed partial class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
+        // 文全体の文節で区切りの案を選び直したら、選んだ案の文節で確定する (選び直したことは chosen に残す)。
+        // 案の文 (botと・ボット) を選んだときは、英語 / 日本語を学習しない (LanguageMemory に覚えさせない)。日英判定の精度がまだ低く、
+        // 間違えて選んだ案やその場限りの案まで覚えると、次からの判定を崩すため。判定の精度が上がったら、学習するかを見直す。
+        // 文節が 1 つの案の、その文節の候補 (Shift+Space で変換した make の まけ) を選んだときは、その文節で選んだときと同じく学習する。
+        // 案が 1 つだけで文全体の文節にならなかったときと、同じ候補を選んで学習が変わらないようにするため
+        var chosenWhole = converting && _clauses is [{ Alternatives: not null, Changed: true }];
+        if (converting) SplitWholeSentence();
         // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
         var rules = new List<string>();
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
@@ -62,7 +69,7 @@ public sealed partial class CompositionController
         }
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
-        var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
+        var chosen = converting ? chosenWhole || _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is not null)
         {
             // 入れた文字は、アプリが選択していた文字と置き換える。

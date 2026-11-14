@@ -620,9 +620,11 @@ public sealed partial class CompositionController
                 Resize(-1);
                 return true;
             case VirtualKeys.Right:
+                SplitWholeSentence();
                 _selectedClause = Math.Min(_selectedClause + 1, _clauses.Count - 1);
                 return true;
             case VirtualKeys.Left:
+                SplitWholeSentence();
                 _selectedClause = Math.Max(_selectedClause - 1, 0);
                 return true;
             case VirtualKeys.Return when shift && _settings().PartialCommit && _selectedClause < _clauses.Count - 1:
@@ -710,6 +712,7 @@ public sealed partial class CompositionController
     {
         StartConversion();
         if (!_converting) return;
+        SplitWholeSentence();
         var shift = _shift;
         _selectedClause = vk == VirtualKeys.Left ? _clauses.Count - 1 : 0;
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
