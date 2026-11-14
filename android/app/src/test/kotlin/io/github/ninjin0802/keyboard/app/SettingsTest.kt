@@ -23,11 +23,13 @@ class SettingsTest {
         for (saved in listOf(null, "", "qwerty", "flick", "KANA", "x")) assertEquals(LayoutId.ROMAJI, Settings.japaneseOf(saved), "$saved")
         for (saved in listOf(null, "", "kana", "romaji", "QWERTY", "x")) assertEquals(LayoutId.QWERTY, Settings.englishOf(saved), "$saved")
     }
-    @Test fun layout_choices_read_back_what_was_saved() {
-        for (layout in listOf(LayoutId.KANA, LayoutId.ROMAJI)) assertEquals(layout, Settings.japaneseOf(Settings.savedName(layout)))
-        for (layout in listOf(LayoutId.QWERTY, LayoutId.LATIN_FLICK)) assertEquals(layout, Settings.englishOf(Settings.savedName(layout)))
-        assertEquals(listOf("kana", "romaji", "qwerty", "flick"),
-            listOf(LayoutId.KANA, LayoutId.ROMAJI, LayoutId.QWERTY, LayoutId.LATIN_FLICK).map(Settings::savedName))
+    @Test fun legacy_flick_choices_are_disabled_without_ever_being_selected() {
+        for (saved in listOf(null, "kana", "romaji", "flick", "qwerty")) {
+            assertEquals(LayoutId.ROMAJI, Settings.japaneseOf(saved))
+            assertEquals(LayoutId.QWERTY, Settings.englishOf(saved))
+        }
+        assertEquals("romaji", Settings.savedName(LayoutId.ROMAJI))
+        assertEquals("qwerty", Settings.savedName(LayoutId.QWERTY))
     }
     @Test fun a_layout_of_the_wrong_kind_is_saved_as_the_default_of_that_setting() {
         assertEquals(LayoutId.ROMAJI, Settings.japaneseOf(Settings.savedName(LayoutId.SYMBOLS)))
