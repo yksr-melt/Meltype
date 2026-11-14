@@ -395,7 +395,7 @@ SPDX-License-Identifier: Unicode-3.0
 | `domain-propernouns-wikidata.txt` | [Wikidata](https://www.wikidata.org/) の、かなの名前 (P1814) を持つ項目の日本語の名前 | Wikidata の編集者 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
 | `domain-laws.txt` | [e-Gov 法令検索](https://laws.e-gov.go.jp/) の法令 API の、今ある法律の題名と読み | デジタル庁 | [公共データ利用規約 (第1.0版)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0) (CC BY 4.0 と互換)。出典: e-Gov 法令検索。題名と読みを取り出して加工した |
 
-SudachiDict・UniDic・Wikidata から作ったものは、Mozc が読みから出せる語を除いています (Mozc の変換ヘルパーに読みを変換させて比べた)。SudachiDict の地名 (固有名詞,地名,一般) は、町名・字名がほとんどなので入れていません。
+どの辞書も、Mozc が読みから出せる語を除いています (Mozc の変換ヘルパーに読みを変換させて比べた)。SudachiDict の地名 (固有名詞,地名,一般) は、町名・字名がほとんどなので入れていません。
 
 現代書き言葉UniDic の修正 BSD ライセンス (配布物の license/BSD):
 
