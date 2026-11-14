@@ -18,7 +18,7 @@ public sealed class CandidateDictionary
     private readonly Dictionary<string, string[]> _emoji = new(StringComparer.Ordinal);
 
     // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には誤った候補になりうるので、
-    // ほかの候補と分けて持ち、変換エンジンの候補の後ろ (ひらがなの前) に並べる (#1650)。
+    // ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
     private readonly Dictionary<string, string[]> _domain = new(StringComparer.Ordinal);
 
     public int Count => _entries.Count + _emoji.Keys.Count(k => !_entries.ContainsKey(k));

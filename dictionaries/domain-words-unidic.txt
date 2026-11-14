@@ -4,7 +4,7 @@
 # 加工: 漢字を含む名詞の書字形と仮名形を取り出し、よく使う語の読み (readings.txt) を除いた。
 # Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
 # 作り直し: MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py unidic …
-# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)
+# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、ひらがな・カタカナの後ろに並ぶ)
 あいあ	愛蛙
 あいあい	愛愛	相合
 あいい	哀意

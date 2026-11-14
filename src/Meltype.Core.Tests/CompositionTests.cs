@@ -1763,14 +1763,13 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue1650_DomainTermsComeAfterEngineCandidates()
+    public static void Issue1650_DomainTermsComeAfterEverydayCandidates()
     {
-        // 分野の語は、ふだん使わない人には誤った候補になりうるので、変換エンジンの答え (このテストの変換エンジンはかなを返す) より後ろに並べる
+        // 分野の語は、使わない人には要らない候補なので、ふだんの候補 (変換エンジンの答え・ひらがな・カタカナ) を後ろに押さない
         var k = new Keyboard();
         k.Type("sentankyodaishou ");
         var shown = k.Host.View!.Candidates.ToList();
-        Assert.Equal("せんたんきょだいしょう", shown[0], string.Join(" ", shown));
-        Assert.Equal(1, shown.IndexOf("先端巨大症"), string.Join(" ", shown));
+        Assert.Equal("せんたんきょだいしょう,センタンキョダイショウ,ｾﾝﾀﾝｷｮﾀﾞｲｼｮｳ,先端巨大症", string.Join(",", shown.Take(4)), string.Join(" ", shown));
     }
 
     [Test]

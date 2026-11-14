@@ -281,7 +281,7 @@ def main():
         print(line)
     print('# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。')
     print(f'# 作り直し: MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py {" ".join([kind, *args[:1]]) if kind == "sudachi" else kind} …')
-    print('# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)')
+    print('# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、ひらがな・カタカナの後ろに並ぶ)')
     for reading in sorted(entries):
         print(reading + '\t' + '\t'.join(entries[reading]))
 
