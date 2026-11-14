@@ -23,7 +23,7 @@ internal static class ReportInfo
     public static string OsName => System.Environment.OSVersion.Version.Build >= 22000 ? "Windows 11" : "Windows 10";
 
     /// <summary>実行環境 (<see cref="Config.ProjectInfo.Environment"/> に、Windows でだけ分かる項目を足したもの)。</summary>
-    public static string Environment(Config.Settings settings) => Config.ProjectInfo.Environment(settings, AppInfo.Version, $"{OsName} {WindowsVersion()} ({RuntimeInformation.OSArchitecture})",
+    public static string Environment(Config.Settings settings) => Config.ProjectInfo.Environment(settings, Config.ProjectInfo.WithCommit(AppInfo.Version), $"{OsName} {WindowsVersion()} ({RuntimeInformation.OSArchitecture})",
     [
         $"管理者として実行: {(IsAdministrator() ? "はい" : "いいえ")}",
         $"モード: {settings.Mode}",
