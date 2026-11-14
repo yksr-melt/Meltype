@@ -555,7 +555,17 @@ internal static class ImeContractTests
         Assert.True(Consumed(front.Key(ToggleShortcut.Hankaku)) && front.Open, "半角/全角 で日本語にできる\n" + front.Trace);
         front.Type("ka");
         front.Key('\n');
-        Assert.Equal("wasdか", front.Document, front.Trace);
+        Assert.True(front.Document == "wasdか" && !front.Open, "Enter で確定したら英数に戻す (チャットを閉じたことは分からない)\n" + front.Trace);
+        front.Type("w");
+        Assert.Equal("wasdかw", front.Document, "閉じたあとの移動のキーはゲームに届く\n" + front.Trace);
+        front.Key(ToggleShortcut.Hankaku);
+        front.Type("ka");
+        front.Key('\u001b');
+        Assert.True(!front.Open, "Esc で取り消しても英数に戻す\n" + front.Trace);
+        front.Key(ToggleShortcut.Hankaku);
+        front.Type("ka ");
+        front.Type("ki");
+        Assert.True(front.Open, "変換して打ち続けて確定したときは日本語のまま\n" + front.Trace);
         // ゲームでない入力欄は、OS の開閉のまま
         var general = new Front { InputMethod = InputMode.Tsf };
         Assert.True(general.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("imeOpen").GetBoolean(), general.Trace);

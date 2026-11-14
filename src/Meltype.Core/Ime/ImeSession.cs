@@ -90,6 +90,7 @@ internal sealed class ImeSession
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
+        var composing = _session.IsComposing;
         var result = WithPaste(Verify(e.Type switch
         {
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
@@ -109,6 +110,9 @@ internal sealed class ImeSession
             // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
             _ => _session.Unchanged(),
         }, e.Field), settings);
+        // ゲームでは、Enter で確定・Esc で取り消したら英数に戻す。ゲーム (Minecraft 26.2 までの GLFW など) はチャットを閉じたことを知らせてこないので、
+        // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
+        if (game && composing && !_session.IsComposing && e.Key?.Vk is VirtualKeys.Return or VirtualKeys.Escape) _session.Direct = true;
         TrackLine(e, result);
         _snippetKeys = SnippetKeys(e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
