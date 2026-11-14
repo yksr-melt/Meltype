@@ -51,7 +51,7 @@ Android用の仮想キーボード（IME）。日本語QWERTYでは **日英自�
 cd android
 bash tools/build-mozc.sh
 ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash tools/build-meltype-native.sh
-./gradlew :engine:test :app:testDebugUnitTest :app:assembleDebug
+./gradlew :app:testDebugUnitTest :app:assembleDebug
 ```
 
 Android APK: `android/app/build/outputs/apk/debug/app-debug.apk`。端末テストには別途Androidのテスト用APKとエミュレーター／実機が必要です。
@@ -63,7 +63,6 @@ MozcのJNI／辞書成果物やC# NativeAOTの生成物、配布署名鍵はソ�
 | パス | 役割 |
 | --- | --- |
 | `android/app/` | Android IME・画面・設定・候補バー・C JNIブリッジ |
-| `android/engine/` | フリックと従来入力用のKotlinエンジン |
 | `android/mozc/` | ローカルMozcのJNIと辞書 |
 | `src/Meltype.Core/` | Windows等と共有するC#日英判別・未確定文字の処理 |
 | `android/tools/build-meltype-native.sh` | C# NativeAOTのAndroid向けビルド |
