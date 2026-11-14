@@ -30,7 +30,7 @@ for (const name of [...names].sort()) {
 }
 
 console.log([
-  '# Meltype 英語として扱う国名の語 (propernouns.txt と同じ形式)',
+  '# Meltype 英語として扱う国名の語 (propernouns.txt と同じ形式)。ローマ字として最後まで読める語 (Oman・San) は Core が読み込むときに外す (ProperNouns.Load)',
   '# Unicode CLDR common/main/en.xml の国・地域名 (別名を含む) を語に分け、よく使う英単語 (english-words.txt) にある語を除いた。',
   '# Copyright © 1991-2026 Unicode, Inc. Unicode License v3 (SPDX: Unicode-3.0)。全文は THIRD-PARTY-NOTICES.md。',
   '# 作り直し: node tools/make-countries.mjs en.xml dictionaries/english-words.txt > dictionaries/countries.txt',

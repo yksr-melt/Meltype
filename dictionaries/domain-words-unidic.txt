@@ -1,7 +1,8 @@
 # Meltype 分野の辞書: 一般の語 (現代書き言葉UniDic ver.2025.12 から作成)
 # 元データ: 現代書き言葉UniDic https://clrd.ninjal.ac.jp/unidic/。Copyright 国立国語研究所
 # ライセンス: GPL v2.0 / LGPL v2.1 / 修正 BSD のうち、修正 BSD (BSD-3-Clause) を選んで使う。全文は THIRD-PARTY-NOTICES.md。
-# 加工: 漢字を含む名詞の書字形と仮名形を取り出し、Mozc が読みから出せる語・よく使う語の読み (readings.txt) を除いた。
+# 加工: 漢字を含む名詞の書字形と仮名形を取り出し、よく使う語の読み (readings.txt) を除いた。
+# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
 # 作り直し: python3 tools/make-domain-dictionaries.py unidic …
 # 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)
 あいあ	愛蛙

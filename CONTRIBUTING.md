@@ -64,7 +64,7 @@ Mac 版・Linux 版はプレビュー版です。気づいたことは小さな�
 
 `dictionaries/` の辞書 (英単語・固有名詞・同音異義語の候補・文脈の手がかり) への追加は、Pull Request か Issue でお送りください。
 
-外部の辞書から作る分野の辞書 (`dictionaries/domain-*.txt`) は、ライセンスが GPL-3.0 と両立するもの (CC0・CC BY・CC BY-SA・Apache-2.0・GPL-2.0-or-later・修正 BSD など) だけを同梱します。分野ごとにファイルを分け、先頭のコメントと [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) に出典とライセンスを書きます。再配布できないもの・条件が分からないものは同梱せず、利用者が自分でデータのフォルダーに置きます。
+外部の辞書から作る分野の辞書 (`dictionaries/domain-*.txt`) は、ライセンスが GPL-3.0 と両立するもの (CC0・CC BY・CC BY-SA・Apache-2.0・GPL-2.0-or-later・修正 BSD など) だけを同梱します。分野ごとにファイルを分け、先頭のコメントと [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) に出典とライセンスを書きます。再配布できないもの・条件が分からないものは同梱せず、利用者が自分で `candidates.txt` の形式にしてデータのフォルダーに置きます。
 
 <br>
 

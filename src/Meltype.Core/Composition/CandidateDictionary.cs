@@ -48,19 +48,6 @@ public sealed class CandidateDictionary
             {
                 Diagnostics.Log.Warn($"ユーザーの絵文字辞書を読めませんでした: {ex.Message}");
             }
-            // 利用者が置いた分野の辞書 (同梱と同じ形式。人と共有した辞書パックを置けば使い、消せば外れる)
-            try
-            {
-                if (Directory.Exists(userDirectory))
-                {
-                    foreach (var file in Directory.GetFiles(userDirectory, "domain-*.txt").Order(StringComparer.Ordinal))
-                        dictionary.AddDomainText(DomainOf(Path.GetFileName(file)), File.ReadAllText(file));
-                }
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの分野の辞書を読めませんでした: {ex.Message}");
-            }
             var path = Path.Combine(userDirectory, "candidates.txt");
             try
             {
@@ -100,7 +87,7 @@ public sealed class CandidateDictionary
     }
 
     /// <summary>分野の辞書 (domain-*.txt)。形式は「読み<Tab>表記<Tab>表記 …」、行頭が # の行はコメント。</summary>
-    /// <summary>分野の辞書のファイル名の分野 (domain-names-sudachi.txt → names、domain-dev.txt → dev)。</summary>
+    /// <summary>分野の辞書のファイル名の分野 (domain-names-sudachi.txt → names)。</summary>
     public static string DomainOf(string fileName) =>
         Path.GetFileNameWithoutExtension(fileName)["domain-".Length..].Split('-')[0];
 

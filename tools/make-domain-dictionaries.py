@@ -4,12 +4,12 @@
 # 分野ごとの辞書 dictionaries/domain-*.txt を、外部の辞書から作る (#1650)。
 # 形式は「読み<Tab>表記<Tab>表記 …」(読みはひらがな、1 つの読みは 1 行)。出典とライセンスはファイルの先頭のコメントに書く。
 #
-#   python3 tools/make-domain-dictionaries.py medical JMED_DICT_mini_v1.1.2/ > dictionaries/domain-medical.txt
-#   python3 tools/make-domain-dictionaries.py it IDiME_for_Meltype.tsv > dictionaries/domain-it.txt
-#   python3 tools/make-domain-dictionaries.py skk SKK-JISYO.station > dictionaries/domain-stations.txt
-#   python3 tools/make-domain-dictionaries.py skk SKK-JISYO.propernoun > dictionaries/domain-propernouns.txt
-#   python3 tools/make-domain-dictionaries.py skk SKK-JISYO.jinmei SKK-JISYO.fullname > dictionaries/domain-names.txt
-#   python3 tools/make-domain-dictionaries.py laws <e-Gov の laws-*.json のフォルダー> > dictionaries/domain-laws.txt
+#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py medical JMED_DICT_mini_v1.1.2/ > dictionaries/domain-medical.txt
+#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py it IDiME_for_Meltype.tsv > dictionaries/domain-it.txt
+#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py skk SKK-JISYO.station > dictionaries/domain-stations.txt
+#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py skk SKK-JISYO.propernoun > dictionaries/domain-propernouns.txt
+#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py skk SKK-JISYO.jinmei SKK-JISYO.fullname > dictionaries/domain-names.txt
+#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py laws <e-Gov の laws-*.json のフォルダー> > dictionaries/domain-laws.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py sudachi names core_lex.csv > dictionaries/domain-names-sudachi.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py sudachi propernouns core_lex.csv > dictionaries/domain-propernouns-sudachi.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py sudachi words core_lex.csv > dictionaries/domain-words-sudachi.txt
@@ -17,7 +17,7 @@
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py unidic sys.dic > dictionaries/domain-words-unidic.txt
 #
 # ファイル名の domain- の次の語 (names・propernouns …) が分野で、設定の ON / OFF は分野ごと (Settings.DomainDictionaryEnabled)。
-# SudachiDict・Wikidata は大きいので、Mozc の変換ヘルパー (環境変数 MELTYPE_MOZC) に読みを変換させ、Mozc が出せない語だけを入れる。
+# どの辞書も、Mozc の変換ヘルパー (環境変数 MELTYPE_MOZC) に読みを変換させ、Mozc が出せない語だけを入れる。
 #
 # 入手先:
 #   JMED-DICT-mini: https://sociocom.naist.jp/jmed-dict/ (zip を展開したフォルダーを渡す)
@@ -226,9 +226,9 @@ def sudachi(kind, path):
         f'# Meltype 分野の辞書: {dict(names="人名", propernouns="固有名詞", words="一般の語")[kind]} (SudachiDict core から作成)',
         '# 元データ: SudachiDict (株式会社ワークスアプリケーションズ) https://github.com/WorksApplications/SudachiDict',
         '# ライセンス: Apache License 2.0。SudachiDict は UniDic の一部 (BSD-3-Clause、Copyright (c) 2011-2013, The UniDic Consortium) を含む。全文は THIRD-PARTY-NOTICES.md。',
-        '# 加工: 漢字を含む名詞の表記と読みを取り出し、Mozc が読みから出せる語・かなだけで書く語・よく使う語の読み (readings.txt) を除いた。',
+        '# 加工: 漢字を含む名詞の表記と読みを取り出し、かなだけで書く語・よく使う語の読み (readings.txt) を除いた。',
     ]
-    return header, known_to_mozc(entries)
+    return header, entries
 
 
 def wikidata(path):
@@ -244,9 +244,9 @@ def wikidata(path):
         '# Meltype 分野の辞書: 固有名詞 (Wikidata の、かなの名前 (P1814) を持つ項目の日本語の名前)',
         '# 元データ: Wikidata https://www.wikidata.org/',
         '# ライセンス: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)',
-        '# 加工: 漢字を含む日本語の名前と、かなの名前を取り出し、Mozc が読みから出せる語・よく使う語の読み (readings.txt) を除いた。',
+        '# 加工: 漢字を含む日本語の名前と、かなの名前を取り出し、よく使う語の読み (readings.txt) を除いた。',
     ]
-    return header, known_to_mozc(entries)
+    return header, entries
 
 
 def unidic(path):
@@ -266,9 +266,9 @@ def unidic(path):
         '# Meltype 分野の辞書: 一般の語 (現代書き言葉UniDic ver.2025.12 から作成)',
         '# 元データ: 現代書き言葉UniDic https://clrd.ninjal.ac.jp/unidic/。Copyright 国立国語研究所',
         '# ライセンス: GPL v2.0 / LGPL v2.1 / 修正 BSD のうち、修正 BSD (BSD-3-Clause) を選んで使う。全文は THIRD-PARTY-NOTICES.md。',
-        '# 加工: 漢字を含む名詞の書字形と仮名形を取り出し、Mozc が読みから出せる語・よく使う語の読み (readings.txt) を除いた。',
+        '# 加工: 漢字を含む名詞の書字形と仮名形を取り出し、よく使う語の読み (readings.txt) を除いた。',
     ]
-    return header, known_to_mozc(entries)
+    return header, entries
 
 
 def main():
@@ -276,8 +276,11 @@ def main():
     header, entries = {'medical': medical, 'it': it, 'skk': skk, 'laws': laws, 'sudachi': sudachi, 'wikidata': wikidata, 'unidic': unidic}[kind](*args)
     out = sys.stdout
     out.reconfigure(encoding='utf-8', newline='\n')
+    # どの辞書も、Mozc が読みから出せる語は入れない。変換エンジンの候補と同じ語を足しても、読み込みの時間とメモリが増えるだけ
+    entries = known_to_mozc(entries)
     for line in header:
         print(line)
+    print('# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。')
     print(f'# 作り直し: python3 tools/make-domain-dictionaries.py {" ".join([kind, *args[:1]]) if kind == "sudachi" else kind} …')
     print('# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)')
     for reading in sorted(entries):

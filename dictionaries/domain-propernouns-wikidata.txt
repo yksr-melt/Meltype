@@ -1,7 +1,8 @@
 # Meltype 分野の辞書: 固有名詞 (Wikidata の、かなの名前 (P1814) を持つ項目の日本語の名前)
 # 元データ: Wikidata https://www.wikidata.org/
 # ライセンス: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)
-# 加工: 漢字を含む日本語の名前と、かなの名前を取り出し、Mozc が読みから出せる語・よく使う語の読み (readings.txt) を除いた。
+# 加工: 漢字を含む日本語の名前と、かなの名前を取り出し、よく使う語の読み (readings.txt) を除いた。
+# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
 # 作り直し: python3 tools/make-domain-dictionaries.py wikidata …
 # 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)
 あいあむ	愛あむ

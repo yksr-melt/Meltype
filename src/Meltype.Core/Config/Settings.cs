@@ -488,10 +488,7 @@ public sealed class Settings
      Description("今ある法律の名前を、変換の候補 (ふだんの語の後ろ) に出します (人事訴訟法)。e-Gov 法令から。")]
     public bool LawDictionary { get; set; } = true;
 
-    /// <summary>
-    /// 分野の辞書 (ファイル名の domain- の次の語) を使うか。設定に無い分野 (利用者が置いた domain-dev.txt) は、
-    /// 置いたこと自体が使うという意思なので、いつも使う。
-    /// </summary>
+    /// <summary>同梱の分野の辞書 (ファイル名の domain- の次の語) を使うか。</summary>
     public bool DomainDictionaryEnabled(string domain) => domain switch
     {
         "medical" => MedicalDictionary,
@@ -501,7 +498,8 @@ public sealed class Settings
         "names" => NameDictionary,
         "words" => WordDictionary,
         "laws" => LawDictionary,
-        _ => true,
+        // 分野を足したら設定も足す。足し忘れは例外で気付けるようにする
+        _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, "設定の無い分野の辞書"),
     };
 
     [Category("8. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),

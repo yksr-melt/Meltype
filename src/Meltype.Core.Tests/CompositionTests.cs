@@ -1750,30 +1750,12 @@ internal static class CompositionTests
         // #1650: 分野の辞書 (医療・情報・駅名・固有名詞・人名) の語を候補に出す
         var dictionary = CandidateDictionary.Load(null);
         Assert.True(dictionary.LookupDomain("せんたんきょだいしょう").Contains("先端巨大症"), "医療 (JMED-DICT)");
-        Assert.True(dictionary.LookupDomain("とくめいかこうじょうほう").Contains("匿名加工情報"), "情報 (IDiME)");
-        Assert.True(dictionary.LookupDomain("あいおいえき").Contains("相生駅"), "駅名 (SKK)");
+        Assert.True(dictionary.LookupDomain("いくせいしゃけん").Contains("育成者権"), "情報 (IDiME)");
+        Assert.True(dictionary.LookupDomain("あいづかのうえき").Contains("会津加納駅"), "駅名 (SKK)");
         Assert.True(dictionary.LookupDomain("せんたんきょだいしょうの").Contains("先端巨大症の"), "助詞が付いても");
         // 逆向き: よく使う語の読みには分野の語を足さない (きょう → 京・恭 が ひらがな より前に出ていた)
         Assert.Equal(0, dictionary.LookupDomain("きょう").Count);
         Assert.Equal(0, dictionary.LookupDomain("あい").Count);
-    }
-
-    [Test]
-    public static void Issue1650_UserDomainDictionaryIsUsedWhilePlaced()
-    {
-        // 利用者がデータのフォルダーに置いた分野の辞書 (人と共有した辞書パック) も読む。消せば外れる
-        var directory = Directory.CreateTempSubdirectory("meltype-domain-").FullName;
-        try
-        {
-            File.WriteAllText(Path.Combine(directory, "domain-dev.txt"), "# 開発の用語\nくろーど\tClaude\n");
-            Assert.True(CandidateDictionary.Load(directory).LookupDomain("くろーど").Contains("Claude"), "置いた辞書の語");
-            File.Delete(Path.Combine(directory, "domain-dev.txt"));
-            Assert.Equal(0, CandidateDictionary.Load(directory).LookupDomain("くろーど").Count);
-        }
-        finally
-        {
-            Directory.Delete(directory, true);
-        }
     }
 
     [Test]
@@ -1801,13 +1783,14 @@ internal static class CompositionTests
 
         k = new Keyboard();
         k.Settings.MedicalDictionary = false;
-        k.Type("aioieki ");
-        Assert.True(k.Host.View!.Candidates.Contains("相老駅"), "駅名は使う: " + string.Join(" ", k.Host.View!.Candidates));
+        k.Type("aidukanoueki ");
+        Assert.True(k.Host.View!.Candidates.Contains("会津加納駅"), "駅名は使う: " + string.Join(" ", k.Host.View!.Candidates));
 
-        // ファイル名の domain- の次の語が分野。設定に無い分野 (利用者が置いた辞書) はいつも使う
+        // ファイル名の domain- の次の語が分野。同梱の分野にはどれも設定がある
         Assert.Equal("names", CandidateDictionary.DomainOf("domain-names-sudachi.txt"));
-        Assert.True(new Meltype.Config.Settings { NameDictionary = false }.DomainDictionaryEnabled("dev"), "利用者が置いた分野");
         Assert.True(!new Meltype.Config.Settings { NameDictionary = false }.DomainDictionaryEnabled("names"), "外した分野");
+        foreach (var name in Meltype.Detection.DictionarySource.EmbeddedNames("domain-"))
+            _ = new Meltype.Config.Settings().DomainDictionaryEnabled(CandidateDictionary.DomainOf(name));
     }
 
     [Test]
@@ -1865,7 +1848,7 @@ internal static class CompositionTests
         // #1615: 国名 / #1651: アーティスト名
         foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "azooKey", "hazkey", "mozkey", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse",
             // #1650: CLDR の国・地域名から作った countries.txt
-            "Bermuda", "Mayotte", "Puerto Rico", "Central African Republic", "Clipperton Island", "Palestinian Territories", "Congo - Kinshasa" })
+            "Bermuda", "Puerto Rico", "Central African Republic", "Clipperton Island", "Palestinian Territories", "Congo - Kinshasa" })
         {
             var k = new Keyboard();
             k.Type(word + "\n");
@@ -1889,8 +1872,8 @@ internal static class CompositionTests
         follow.Type("iGPUde\n");
         Assert.Equal("iGPUで", follow.Host.Document);
 
-        // 逆向き (#1650): 国名の語に似たローマ字 (San・Jan・Rica・Togo) の日本語は日本語のまま。小文字の語 (da) は国名の語に入れない
-        foreach (var (typed, expected) in new[] { ("tanakasan", "たなかさん"), ("iijan", "いいじゃん"), ("rikanojugyou", "りかのじゅぎょう"), ("iranai", "いらない"), ("togo", "とご"), ("sorehada", "それはだ") })
+        // 逆向き (#1650): 国名の語に似たローマ字 (San・Jan・Rica・Togo・Oman) の日本語は日本語のまま。ローマ字として読める国名の語 (Oman) と小文字の語 (da) は国名の語に入れない
+        foreach (var (typed, expected) in new[] { ("tanakasan", "たなかさん"), ("iijan", "いいじゃん"), ("rikanojugyou", "りかのじゅぎょう"), ("iranai", "いらない"), ("togo", "とご"), ("sorehada", "それはだ"), ("omanjuutabeta", "おまんじゅうたべた"), ("sannindekita", "さんにんできた"), ("janakatta", "じゃなかった") })
         {
             var k = new Keyboard();
             k.Type(typed + "\n");

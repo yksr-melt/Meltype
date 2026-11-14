@@ -1,7 +1,8 @@
 # Meltype 分野の辞書: 人名 (SudachiDict core から作成)
 # 元データ: SudachiDict (株式会社ワークスアプリケーションズ) https://github.com/WorksApplications/SudachiDict
 # ライセンス: Apache License 2.0。SudachiDict は UniDic の一部 (BSD-3-Clause、Copyright (c) 2011-2013, The UniDic Consortium) を含む。全文は THIRD-PARTY-NOTICES.md。
-# 加工: 漢字を含む名詞の表記と読みを取り出し、Mozc が読みから出せる語・かなだけで書く語・よく使う語の読み (readings.txt) を除いた。
+# 加工: 漢字を含む名詞の表記と読みを取り出し、かなだけで書く語・よく使う語の読み (readings.txt) を除いた。
+# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
 # 作り直し: python3 tools/make-domain-dictionaries.py sudachi names …
 # 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)
 ああい	亜愛
