@@ -180,6 +180,40 @@ class ImeLaunchDeviceTest {
         }
     }
 
+    /** A non-converting email editor still accepts literal keys if Japanese QWERTY is selected. */
+    @Test fun emailFieldAcceptsLiteralRomajiAfterLanguageSwitch() = withRomajiActivity { activity ->
+        requestKeyboard(activity, activity.editor)
+        waitUntil(
+            "English QWERTY in email editor", millis = 45_000,
+            retryEveryMillis = 2_000, retry = { requestKeyboard(activity, activity.editor) },
+            describe = { describeImeState(activity) },
+        ) {
+            activity.editor.hasFocus() &&
+                KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()?.layout?.id ==
+                    io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
+        }
+
+        // The language popup dispatches this key action; test the same path
+        // without relying on long-press gesture timing.
+        val service = KeyboardService.activeForSmokeTest?.get()
+            ?: throw AssertionError("Keyboard service missing")
+        instrumentation.runOnMainSync {
+            service.onKey(KeyAction.Language, Direction.TAP, SystemClock.uptimeMillis())
+        }
+        waitUntil("Japanese QWERTY after language switch") {
+            activity.editor.hasFocus() &&
+                service.activeKeysForSmokeTest()?.layout?.id ==
+                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
+        }
+        val keyboard = service.activeKeysForSmokeTest()
+            ?: throw AssertionError("Japanese keys not shown")
+        tap(keyboard, "a") { it is KeyAction.Romaji && it.char == 'a' }
+        waitUntil("literal romaji key appears in email editor") {
+            activity.editor.text.toString() == "a"
+        }
+        assertEquals("a", activity.editor.text.toString())
+    }
+
     /** Runs [block] with the Japanese layout set to QWERTY romaji, the layout that goes through the native Core. */
     private fun withRomajiActivity(block: (ImeSmokeActivity) -> Unit) {
         val settings = io.github.ninjin0802.keyboard.app.Settings(target)
