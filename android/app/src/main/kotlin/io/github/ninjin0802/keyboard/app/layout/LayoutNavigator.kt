@@ -7,7 +7,7 @@ package io.github.ninjin0802.keyboard.app.layout
  * 画面にも入力欄にも触らない。[japanese] と [english] は、設定で選んである日本語の配列と英語の配列。
  * 日本語の配列でないもの・英語の配列でないものを渡されたら、それぞれの最初の値を使う。
  */
-class LayoutNavigator(japanese: LayoutId = LayoutId.KANA, english: LayoutId = LayoutId.QWERTY) {
+class LayoutNavigator(japanese: LayoutId = LayoutId.ROMAJI, english: LayoutId = LayoutId.QWERTY) {
     private var japanese = japanese.takeIf { it.isJapanese } ?: LayoutId.KANA
     private var english = english.takeIf { it.isEnglish } ?: LayoutId.QWERTY
 
