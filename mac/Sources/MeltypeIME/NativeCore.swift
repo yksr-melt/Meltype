@@ -99,9 +99,8 @@ struct CandidateList: Decodable {
     /// 候補ごとの注記 (無ければ nil)
     let notes: [String?]
     let selected: Int
-    /// 選んでいる候補の意味。候補で meaningDelayMs 止まったら注釈に出す
+    /// 選んでいる候補の意味 (注釈に出す)
     let selectedMeaning: String?
-    let meaningDelayMs: Int
 }
 
 /// libMeltypeNative.dylib を読み込んで呼ぶ。Meltype.app/Contents/Frameworks に置く (build.sh)。

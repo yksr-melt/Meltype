@@ -13,7 +13,7 @@ namespace Meltype.Composition;
 /// <summary>変換ボックスの表示: 案内・候補の一覧・注記・予測変換の候補。</summary>
 public sealed partial class CompositionController
 {
-    /// <summary>選んでいる候補の意味: 日本語の意味 (ウィクショナリー)、無ければ英訳 (JMdict)。</summary>
+    /// <summary>選んでいる候補の意味: 日本語の意味 (ウィクショナリー)、無ければ英訳 (JMdict)。英字の候補はその英訳を持つ語 (JMdict)。</summary>
     private string? CandidateMeaning(Clause clause) =>
         _services.Meanings?.Lookup(clause.Text, clause.IsEnglish ? null : clause.Reading) ?? _services.Translations?.Meaning(clause.Text);
 

@@ -135,7 +135,6 @@ internal sealed class CompositionWindow : PopupForm
     {
         BackColor = Background;
         Size = new Size(200, 40);
-        _meaningTimer.Tick += (_, _) => ShowMeaning();
     }
 
     /// <summary>表示内容を更新する。anchor は表示位置 (キャレットの左下)。null なら今の位置のまま。</summary>
@@ -180,29 +179,16 @@ internal sealed class CompositionWindow : PopupForm
     /// <summary>候補の一覧に一度に出す数 (Microsoft IME と同じく 9 個)。</summary>
     private const int PageSize = 9;
 
-    private readonly System.Windows.Forms.Timer _meaningTimer = new() { Interval = SessionResult.MeaningDelayMs };
     private MeaningPopup? _meaningPopup;
-    private string? _meaningKey;
 
-    /// <summary>選んでいる候補が変わったら意味を消し、同じ候補のまましばらく止まったら意味を出す。</summary>
+    /// <summary>選んでいる候補の意味を出す (意味が無ければ消す)。</summary>
     private void UpdateMeaning(CompositionView view)
     {
-        var key = view.Meaning is not null && view.SelectedIndex >= 0 ? $"{view.SelectedIndex}\n{view.Candidates[view.SelectedIndex]}\n{view.Meaning}" : null;
-        if (key == _meaningKey)
+        if (view.Meaning is not { } meaning || view.SelectedIndex < 0)
         {
-            if (_meaningPopup is { Visible: true }) PlaceMeaning(view);
+            _meaningPopup?.Hide();
             return;
         }
-        _meaningKey = key;
-        _meaningTimer.Stop();
-        _meaningPopup?.Hide();
-        if (key is not null) _meaningTimer.Start();
-    }
-
-    private void ShowMeaning()
-    {
-        _meaningTimer.Stop();
-        if (_view is not { Meaning: { } meaning } view || !Visible) return;
         _meaningPopup ??= new MeaningPopup(_palette, Opacity);
         _meaningPopup.SetText(meaning, _candidateFont);
         PlaceMeaning(view);
@@ -226,10 +212,7 @@ internal sealed class CompositionWindow : PopupForm
     protected override void OnVisibleChanged(EventArgs e)
     {
         base.OnVisibleChanged(e);
-        if (Visible) return;
-        _meaningTimer.Stop();
-        _meaningKey = null;
-        _meaningPopup?.Hide();
+        if (!Visible) _meaningPopup?.Hide();
     }
 
     /// <summary>候補の意味を出す小さな枠 (フォーカスを奪わない)。</summary>
@@ -462,7 +445,6 @@ internal sealed class CompositionWindow : PopupForm
             _candidateFont.Dispose();
             _hintFont.Dispose();
             _color.Dispose();
-            _meaningTimer.Dispose();
             _meaningPopup?.Dispose();
         }
         base.Dispose(disposing);

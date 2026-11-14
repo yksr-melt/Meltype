@@ -14,8 +14,24 @@ public sealed class TranslationDictionary
 {
     // 書き方 [TAB] 品詞 [TAB] 英訳,英訳…
     private readonly Detection.PackedLines _lines;
+    // 英訳から、その英訳を持つ行の番号 + 1 を引く (英字の候補の意味に使う。deviation → 逸脱)。
+    private readonly Detection.HashIndex<int> _english;
 
-    private TranslationDictionary(Detection.PackedLines lines) => _lines = lines;
+    private TranslationDictionary(Detection.PackedLines lines)
+    {
+        _lines = lines;
+        var pairs = new List<(int Hash, int Line)>();
+        for (var k = 0; k < lines.LineCount; k++)
+        {
+            var translations = lines.Field(k, 2);
+            foreach (var range in translations.Split(','))
+            {
+                if (!translations[range].IsEmpty) pairs.Add((Detection.HashIndex.Of(translations[range]), k + 1));
+            }
+        }
+        _english = new(pairs.Count);
+        foreach (var (hash, line) in pairs) _english.Add(hash, line);
+    }
 
     public int Count => _lines.Count;
 
@@ -78,10 +94,14 @@ public sealed class TranslationDictionary
 
     /// <summary>
     /// 変換の候補の意味 (橋 → bridge、箸 → chopsticks)。候補の先頭から一番長く辞書に一致する語を引く (橋を → 橋、持って → 持つ は引けない)。
-    /// 残りに漢字・カタカナが入る (語の一部しか一致しない: 今日は → 今) なら null。かなだけの候補・英字の候補も null。
+    /// 残りに漢字・カタカナが入る (語の一部しか一致しない: 今日は → 今) なら null。かなだけの候補も null。
+    /// 英字の候補は、その英訳を持つ語を出す (complicated → 複雑、難しい、…)。
     /// </summary>
     public string? Meaning(string text)
     {
+        var english = text.Length;
+        while (english > 0 && KanaChars.IsHiragana(text[english - 1])) english--;
+        if (english > 0 && char.IsAsciiLetter(text[english - 1])) return JapaneseFor(text.AsSpan(0, english));
         var minLength = text.Length;
         while (minLength > 0 && !KanaChars.IsKanjiOrKatakana(text[minLength - 1])) minLength--;
         if (minLength == 0) return null;
@@ -105,6 +125,37 @@ public sealed class TranslationDictionary
             return words.Count == 0 ? null : string.Join(", ", words);
         }
         return null;
+    }
+
+    /// <summary>
+    /// 英訳 word を持つ語。漢字を含む語、その英訳を英訳の並びの前のほうに持つ語 (主な訳にしている語) の順に 5 つ。無ければ null。
+    /// かなだけの語を後ろにするのは、外来語の読み (ぶりっじ ← ブリッジ) が意味の手がかりにならないため。
+    /// </summary>
+    private string? JapaneseFor(ReadOnlySpan<char> word)
+    {
+        var found = new List<(bool KanaOnly, int Rank, int Position, string Word)>();
+        foreach (var k in _english.Candidates(Detection.HashIndex.Of(word)))
+        {
+            var translations = _lines.Field(k - 1, 2);
+            var rank = 0;
+            foreach (var range in translations.Split(','))
+            {
+                if (translations[range].SequenceEqual(word))
+                {
+                    // 同じ語の行 (品詞ごと) が複数あれば、一番前に英訳を持つ行で並べる
+                    var key = _lines.Key(k - 1).ToString();
+                    var entry = (!key.Any(KanaChars.IsKanji), rank, _lines.Position(k - 1), key);
+                    var same = found.FindIndex(f => f.Word == key);
+                    if (same < 0) found.Add(entry);
+                    else if (rank < found[same].Rank) found[same] = entry;
+                    break;
+                }
+                rank++;
+            }
+        }
+        if (found.Count == 0) return null;
+        found.Sort();
+        return string.Join("、", found.Take(5).Select(f => f.Word));
     }
 }
 

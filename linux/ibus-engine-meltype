@@ -159,8 +159,6 @@ class MeltypeEngine(IBus.Engine):
         self._lookup = IBus.LookupTable.new(9, 0, True, True)
         self._lookup.set_orientation(IBus.Orientation.VERTICAL)
         self._candidates = []
-        # 候補で少し (1.5 秒) 止まったら、その候補の意味を補助テキストに出す (Windows 版と同じ)
-        self._meaning_key = None
         self._mode_shown = None
         # 入力欄に入ったときの入力モードの表示 (あ / A, 時間)。入ったあとアプリがキャレットの位置を知らせてから出す
         self._defer_mode = False
@@ -399,26 +397,11 @@ class MeltypeEngine(IBus.Engine):
         if 0 <= selected < len(candidates):
             self._lookup.set_cursor_pos(selected)
         self.update_lookup_table(self._lookup, True)
-        self._schedule_meaning(listed)
-
-    def _schedule_meaning(self, listed):
-        meaning = listed["selectedMeaning"]
-        key = f"{listed['selected']}:{meaning}" if meaning else None
-        if key == self._meaning_key:
-            return
-        self._meaning_key = key
-        if key is None:
-            return
-
-        def show():
-            if self._meaning_key == key and self._candidates:
-                self.update_auxiliary_text(IBus.Text.new_from_string(meaning), True)
-            return False
-
-        GLib.timeout_add(listed["meaningDelayMs"], show)
+        # 選んでいる候補の意味は、案内の代わりに補助テキストに出す (_show_preedit が先に案内を出している)
+        if listed["selectedMeaning"]:
+            self.update_auxiliary_text(IBus.Text.new_from_string(listed["selectedMeaning"]), True)
 
     def _hide_candidates(self):
-        self._meaning_key = None
         if self._candidates:
             self._lookup.clear()
             self._candidates = []
