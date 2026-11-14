@@ -377,7 +377,7 @@ SPDX-License-Identifier: Unicode-3.0
 
 ### 国名の語 (dictionaries/countries.txt)
 
-ローマ字として読めても国名を英語にするのに使います。[Unicode CLDR](https://github.com/unicode-org/cldr) の `common/main/en.xml` の国・地域名を `tools/make-countries.mjs` で語に分けて作りました。著作権・ライセンスは絵文字の辞書と同じ (Unicode, Inc.、Unicode License v3) です。
+かなに割れる国名 (Bermuda → Bermuだ) を英語にするのに使います (ローマ字として最後まで読める語は今は使わない。#1869)。[Unicode CLDR](https://github.com/unicode-org/cldr) の `common/main/en.xml` の国・地域名を `tools/make-countries.mjs` で語に分けて作りました。著作権・ライセンスは絵文字の辞書と同じ (Unicode, Inc.、Unicode License v3) です。
 
 ### 分野の辞書 (dictionaries/domain-*.txt)
 

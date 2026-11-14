@@ -5,7 +5,8 @@
 // 英語として扱う国名の語の一覧 dictionaries/countries.txt を作る (#1615・#1650)。
 //   node tools/make-countries.mjs en.xml dictionaries/english-words.txt > dictionaries/countries.txt
 // en.xml は https://github.com/unicode-org/cldr の common/main/en.xml。
-// 英語と判定されるかは日英判別の重みで変わるので、いま英語になる国名も含めてすべて入れる (#1615)。
+// 英語と判定されるかは日英判別の重みで変わるので、いま英語になる国名も含めてすべての語を書く (#1615)。
+// ただし今は、ローマ字として最後まで読める語 (Oman・San) を Core が読み込むときに外している (ProperNouns.Load のワークアラウンド。#1869)。
 import fs from 'node:fs';
 
 const xml = fs.readFileSync(process.argv[2], 'utf8');
