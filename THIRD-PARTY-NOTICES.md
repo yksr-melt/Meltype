@@ -25,6 +25,15 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 | [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` と dylib (Zenzai に使う。版とハッシュは `native/zenzai/zenzai.env` で固定) | MIT License (Copyright The ggml authors) | `Meltype.app/Contents/Resources/zenzai/` (ライセンス: `LICENSE-llama.cpp.txt`) |
 | [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `Meltype.app/Contents/Resources/zenzai/` (ライセンス: `LICENSE-zenz.txt`) |
 
+## Linux 版 (linux/) に同梱するもの
+
+| 部品 | ライセンス | 使い方 |
+| --- | --- | --- |
+| .NET ランタイム (NativeAOT) | MIT License | libMeltypeNative.so に組み込まれる |
+| [Mozc](https://github.com/google/mozc) の変換エンジンと辞書 (`meltype_mozc_helper`。Windows 版と同じソース) | Windows 版と同じ | `/opt/meltype/mozc/` (ライセンス: `MOZC-LICENSE.txt`、辞書とライブラリの全文: `MOZC-CREDITS.html`) |
+| [llama.cpp](https://github.com/ggml-org/llama.cpp) の `llama-server` と共有ライブラリ (Ubuntu 向けの CPU 版。Zenzai に使う。版とハッシュは `native/zenzai/zenzai.env` で固定) | MIT License (Copyright The ggml authors) | `/opt/meltype/zenzai/` (ライセンス: `LICENSE-llama.cpp.txt`) |
+| [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Zenzai のモデル) | Apache License 2.0 (Miwa-Keita) | `/opt/meltype/zenzai/` (ライセンス: `LICENSE-zenz.txt`) |
+
 ## 実行時に使う Windows の機能 (同梱しない)
 
 次は Windows に標準で入っているものを実行時に呼び出すだけで、Meltype には含まれません。
