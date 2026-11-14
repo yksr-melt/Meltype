@@ -369,8 +369,11 @@ class ImeLaunchDeviceTest {
                 describe = { describeImeState(activity) },
             ) {
                 val service = KeyboardService.activeForSmokeTest?.get()
-                service?.activeKeysForSmokeTest()?.let {
-                    it.isAttachedToWindow && it.isShown && it.width > 100 && it.height > 100
+                // Previous editor's IME view can still be visible during a focus transition.
+                // Wait for this email field's English QWERTY layout, not just any key surface.
+                activity.editor.hasFocus() && service?.activeKeysForSmokeTest()?.let {
+                    it.isAttachedToWindow && it.isShown && it.width > 100 && it.height > 100 &&
+                        it.layout.id == io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
                 } == true
             }
             val service = KeyboardService.activeForSmokeTest?.get()
