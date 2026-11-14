@@ -30,7 +30,7 @@ internal static class Impact
         Console.WriteLine($"判定した語: {words.Distinct(StringComparer.Ordinal).Count()} 語");
     }
 
-    private static IEnumerable<string> Readings() => Lines("readings.txt").Select(line => line.Split('\t')[0]);
+    internal static IEnumerable<string> Readings() => Lines("readings.txt").Select(line => line.Split('\t')[0]);
 
     private static IEnumerable<string> EnglishWords() => Lines("english-words.txt").Where(w => w.All(char.IsAsciiLetterLower));
 

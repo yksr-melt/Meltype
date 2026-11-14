@@ -25,6 +25,9 @@ internal static class Program
             case "--eval":
                 Quality.Print(Quality.Run());
                 return 0;
+            case "--pass-through-bench":
+                PassThroughBench.Run(args[1]);
+                return 0;
             case "--repro":
                 // 打ったキーをそのまま打ってみて、結果を JSON で返す (GitHub の bot が報告を再現するのに使う)。
                 //   --repro nihongowohanasu [enter|space|none]
