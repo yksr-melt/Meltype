@@ -193,8 +193,8 @@ class ImeLaunchDeviceTest {
                     io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
         }
 
-        // The language popup dispatches this key action; test the same path
-        // without relying on long-press gesture timing.
+        // The space-bar language popup and this key action both use the same
+        // screen navigation. Avoid depending on long-press gesture timing.
         val service = KeyboardService.activeForSmokeTest?.get()
             ?: throw AssertionError("Keyboard service missing")
         instrumentation.runOnMainSync {
