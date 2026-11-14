@@ -284,7 +284,7 @@ class MainActivity : Activity() {
         try {
             (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
         } catch (error: RuntimeException) {
-            showSystemKeyboardSettings()
+            android.util.Log.e("Meltype", "Android IME picker unavailable", error)
         }
     }
 
@@ -387,12 +387,7 @@ class MainActivity : Activity() {
                 "Meltypeが動かない場合もAndroidの切替画面を開く", "⌨") {
                 showSystemKeyboardPicker()
             }
-            divider()
-            entry("Androidのキーボード設定を開く",
-                "ほかのキーボードを選び直す", "⚙") {
-                showSystemKeyboardSettings()
-            }
-        }
+         }
         card(content) {
             entry("言語", "日本語・English", "◎", selected = selected == Page.LANGUAGES) { navigate(Page.LANGUAGES) }
             divider()
