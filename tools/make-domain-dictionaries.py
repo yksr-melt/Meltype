@@ -179,6 +179,17 @@ def skk(*paths):
     return header, entries
 
 
+def kana_in_order(title, reading):
+    """題名のかなの並び (における・かつ …) が、読みの中に順に現れるか。"""
+    at = 0
+    for run in re.findall('[ぁ-ゖァ-ヶー]+', title):
+        at = reading.find(to_hiragana(run), at)
+        if at < 0:
+            return False
+        at += len(run)
+    return True
+
+
 def laws(folder):
     entries = {}
     for path in sorted(Path(folder).glob('laws-*.json')):
@@ -188,12 +199,20 @@ def laws(folder):
             # 打つのは今ある法律の名前。改正・施行・経過措置の法令の名前は長い文で、続けて打つことはない
             if info['law_type'] != 'Act' or info['repeal_status'] != 'None' or re.search('改正|施行|経過措置|廃止', title):
                 continue
-            add(entries, info['law_title_kana'], title)
+            reading = info['law_title_kana']
+            # 読みが改題前の題名のままの法律がある (…駐留軍用地跡地の有効かつ適切な… の読みが、旧題 …の返還に伴う… のもの)。
+            # 題名のかなが読みに順に現れない法律は、読みが今の題名と食い違うので入れない
+            if not kana_in_order(title, reading):
+                continue
+            add(entries, reading, title)
+            # 題名のカタカナの大きい ツ (あん摩マツサージ) は促音。ふだん打つ読み (まっさーじ) でも引けるようにする
+            for run in re.findall('[ァ-ヶー]*ツ[ァ-ヶー]*', title):
+                add(entries, reading.replace(to_hiragana(run), to_hiragana(run).replace('つ', 'っ'), 1), title)
     header = [
         '# Meltype 分野の辞書: 法令名 (今ある法律の名前)',
         '# 元データ: e-Gov 法令検索 法令 API (https://laws.e-gov.go.jp/)。デジタル庁',
         '# ライセンス: 公共データ利用規約 (第1.0版) (https://www.digital.go.jp/resources/open_data/public_data_license_v1.0)。CC BY 4.0 と互換。',
-        '# 加工: 廃止されていない法律の題名と読み (law_title_kana) を取り出した。改正・施行・経過措置・廃止の法律は除いた。',
+        '# 加工: 廃止されていない法律の題名と読み (law_title_kana) を取り出した。改正・施行・経過措置・廃止の法律と、読みが今の題名と食い違う法律 (改題前の読み) は除いた。題名の大きい ツ (マツサージ) は っ にした読みも足した。',
     ]
     return header, entries
 
