@@ -219,6 +219,7 @@ internal static class CompositionTests
         public bool ContinueAfterConversion { get => Settings.ContinueAfterConversion; set => Settings.ContinueAfterConversion = value; }
         public bool Learning { get => Settings.LearningEnabled; set => Settings.LearningEnabled = value; }
         public bool SeparateKeyRoles { get => Settings.SeparateKeyRoles; set => Settings.SeparateKeyRoles = value; }
+        public bool NonConvertCyclesKana { get => Settings.NonConvertCyclesKana; set => Settings.NonConvertCyclesKana = value; }
         public bool EnglishFirstInput { get => Settings.EnglishFirstInput; set => Settings.EnglishFirstInput = value; }
         public bool ConsonantAbbreviations { get => Settings.ConsonantAbbreviations; set => Settings.ConsonantAbbreviations = value; }
 
@@ -619,6 +620,102 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Kana);
         Assert.Equal("かな", k.Showing);
         Assert.Equal(0, k.Host.Output.Count, "確定しない");
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_BeforeConversion()
+    {
+        // 未変換: 全角カタカナ → 半角カタカナ → ひらがな → 全角カタカナ
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("kana");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("カナ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("ｶﾅ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("かな", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("カナ", k.Showing);
+        Assert.Equal(0, k.Host.Output.Count, "確定しない");
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_AfterConversion()
+    {
+        // 変換後: ひらがな → 全角カタカナ → 半角カタカナ → ひらがな
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("made");
+        k.Press(VirtualKeys.Convert);
+        Assert.True(k.Host.View?.Converting == true, "変換中");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("まで", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("マデ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("ﾏﾃﾞ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("まで", k.Showing);
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_StartsWithHiraganaWhenNotShownAsHiragana()
+    {
+        // 英字で見えているとき (ひらがなではないとき) は、まずひらがな。そのあとは輪の次へ
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("camera");
+        Assert.Equal("camera", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("かめら", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("カメラ", k.Showing);
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_DigitsDoNotPreventKatakana()
+    {
+        // 数字が混ざっていても、ひらがなが含まれていれば最初の無変換で全角カタカナにする
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("123ka");
+        Assert.Equal("123か", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("123カ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("123ｶ", k.Showing);
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_WorksWithoutSeparateKeyRoles()
+    {
+        var k = new Keyboard { SeparateKeyRoles = false, NonConvertCyclesKana = true };
+        k.Type("kana");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("カナ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("ｶﾅ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("かな", k.Showing);
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_AfterHalfWidthKatakanaKeyReturnsToHiragana()
+    {
+        // F8 で半角カタカナにしたあとに押すと、輪の次のひらがなへ
+        var k = new Keyboard { SeparateKeyRoles = true, NonConvertCyclesKana = true };
+        k.Type("kana");
+        k.Press(VirtualKeys.F8);
+        Assert.Equal("ｶﾅ", k.Showing);
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("かな", k.Showing);
+    }
+
+    [Test]
+    public static void NonConvertCyclesKana_OffKeepsAlphanumeric()
+    {
+        // 「役割を分ける」だけ ON で循環が OFF なら、今までどおり無変換で英字にする
+        var k = new Keyboard { SeparateKeyRoles = true };
+        k.Type("kana");
+        k.Press(VirtualKeys.NonConvert);
+        Assert.Equal("kana", k.Showing);
     }
 
     [Test]
