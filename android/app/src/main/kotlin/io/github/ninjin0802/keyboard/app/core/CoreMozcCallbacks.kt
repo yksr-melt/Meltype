@@ -2,10 +2,10 @@
 // Copyright (C) 2026 KoheiTakada
 package io.github.ninjin0802.keyboard.app.core
 
-import io.github.ninjin0802.keyboard.engine.Converter
+import io.github.ninjin0802.keyboard.mozc.MozcBackend
 
 /** JNI calls these synchronously while processing one core key. */
-internal class CoreMozcCallbacks(private val converter: Converter) {
+internal class CoreMozcCallbacks(private val converter: MozcBackend) {
     @Suppress("unused")
     fun clauses(readingBytes: ByteArray, contextBytes: ByteArray?): ByteArray? {
         val reading = readingBytes.decodeToString()
