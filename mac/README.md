@@ -6,7 +6,7 @@
 | --- | --- |
 | IME 本体 (`Sources/MeltypeIME`, Swift) | Input Method Kit でキーを受け取り、変換中の文字 (下線付き)・候補の一覧・確定を入力欄に反映する |
 | 判定の本体 (`src/Meltype.Mac.Native` → `libMeltypeNative.dylib`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`: 英語 / 日本語の判定・ローマ字・変換の流れ・学習・辞書) を NativeAOT で Mac 用のライブラリにしたもの |
-| 漢字変換 | [azooKey](https://github.com/azooKey/AzooKeyKanaKanjiConverter) の変換エンジン (MIT License、辞書付き)。Zenzai (`ZenzaiCPU` トレイト、llama.cpp を CPU で) と、`build.sh` が取ってきて `Resources/zenz/` に同梱する zenz-v3.2-small (Apache-2.0) |
+| 漢字変換 | 本体が `Resources/mozc/` の Mozc の変換ヘルパーを起動する (Windows・Linux 版と同じ)。Zenzai は、`build.sh` が取ってきて `Resources/zenzai/` に同梱する llama.cpp の llama-server (MIT) と zenz-v3.2-small (Apache-2.0) |
 | 英単語の判定 | macOS のスペルチェッカー (英語) |
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。コマンドはどれも、リポジトリのフォルダーで実行します。
@@ -17,12 +17,13 @@
 
 - Xcode、またはコマンドライン ツール (`xcode-select --install`)
 - .NET 10 SDK (<https://dotnet.microsoft.com/download>。または `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0`)
+- Mozc の変換ヘルパー (`native/mozc/bin/mac/`)。main の `mac.yml` の成果物 `meltype-mac` の `Meltype.app/Contents/Resources/mozc/` の 3 つのファイルを置く。ヘルパーのソースや `native/mozc/MOZC_COMMIT` を変えたときだけ、`native/mozc/build-mozc-helper.sh` (Bazelisk が要る。初回 30〜40 分) で作る
 
 ```bash
 mac/build-cli.sh --setup --all
 ```
 
-`--all` は、本体のテスト → `mac/build/Meltype.app` のビルド → `~/Library/Input Methods/Meltype.app` へのインストールまでをまとめて行います。初回は azooKey の変換エンジンと辞書のダウンロードで時間がかかります。ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません。
+`--all` は、本体のテスト → `mac/build/Meltype.app` のビルド → `~/Library/Input Methods/Meltype.app` へのインストールまでをまとめて行います。ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません。
 
 一部だけ行うときは、次のように分けて実行できます。`--build` はインストール・プロセスの停止・入力ソースの切り替えを行いません。
 
@@ -31,8 +32,6 @@ mac/build-cli.sh --test      # テストだけ
 mac/build-cli.sh --build     # ビルドだけ
 mac/build-cli.sh --install   # ビルドしてインストール
 ```
-
-`mac/.build` (Swift のビルド結果) は azooKey の辞書の置き場所として使われることがあるので、消さないでください。
 
 初めて入れたときに入力メニューに Meltype が出てこなければ、**システム設定 → キーボード →（テキスト入力の）入力ソース →「編集…」→「+」→ 日本語 → Meltype** で追加します (macOS 27 では、アプリからの有効化が通らず、この手順が必要になることがあります)。追加すると、同じログインセッションのまま入力メニューから選べます。それでも出てこなければ、ログアウトしてログインし直します。
 

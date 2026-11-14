@@ -8,10 +8,9 @@ Meltype の変換エンジン「Mozc」に、[Mozc-UT](https://github.com/utuhir
 **既定では統合しません。** 何も指定しなければ、これまでどおり Mozc だけのヘルパーを作ります。
 Mozc-UT の辞書を指定したときだけ、Mozc の辞書に足してビルドします。
 
-- Windows と Linux で同じ環境変数を使います: `MELTYPE_UT_DICTIONARY=/path/to/mozcdic-ut.txt`
+- Windows・Linux・macOS で同じ環境変数を使います: `MELTYPE_UT_DICTIONARY=/path/to/mozcdic-ut.txt`
 - Meltype の変換エンジン本体 (C#) は変わりません。変換ヘルパー (`meltype_mozc_helper`) を作り直すだけです。
 - 学習データの扱いは変わりません。
-- Mac 版は azooKey で変換するため、この機能の対象外です。
 
 ## 先に読んでください: ライセンスと再配布
 
@@ -191,7 +190,7 @@ python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src \
 
 ## 既知の制約
 
-- **Mozc の変換エンジンだけ**が対象です (Windows・Linux の `meltype_mozc_helper`)。Mac 版は azooKey なので対象外です。
+- **Mozc の変換エンジンだけ**が対象です (`meltype_mozc_helper`)。
 - UT 辞書はビルド時に Mozc の辞書へ足す方式です。辞書を切り替えるたびにヘルパーのビルド (辞書の組み込み直し) が要ります。ビルドのキャッシュが効くので、2 回目以降は数分です。
 - ビルドスクリプトは Mozc の `src/data/dictionary_oss/BUILD.bazel` に `dictionary_ut.txt` を足したままにします。`dictionary_ut.txt` を消すと、その Mozc のフォルダーで `bazel build` を直接実行したときに失敗します。ビルドはビルドスクリプトから実行してください。
 - UT 辞書の品質 (候補の順位・表記) は UT 側のものです。Meltype は並べ替えも選別もしません。

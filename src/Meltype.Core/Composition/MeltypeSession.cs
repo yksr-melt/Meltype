@@ -348,7 +348,7 @@ public sealed class MeltypeSession
         set => _controller.Selection = value;
     }
 
-    /// <summary>漢字かな交じりの文の読み (再変換。OS の機能)。分からなければ null。</summary>
+    /// <summary>漢字かな交じりの文の読み (再変換。Mozc の逆変換)。分からなければ null。</summary>
     public Func<string, string?> ReadingOf
     {
         set => _controller.ReadingOf = value;

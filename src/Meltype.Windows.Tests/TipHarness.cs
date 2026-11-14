@@ -83,7 +83,7 @@ internal static class TipHarness
     }
 
     internal static Composition.CompositionService CreateService(Control invoker, Composition.MeltypeRuntime runtime) =>
-        new(invoker, runtime, () => new Config.Settings { ConversionEngine = Config.ConversionEngine.System });
+        new(invoker, runtime, () => new Config.Settings());
 
     private static string Send(NamedPipeClientStream pipe, string json)
     {
