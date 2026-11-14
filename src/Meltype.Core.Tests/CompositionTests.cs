@@ -6012,4 +6012,28 @@ internal static class CompositionTests
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
+
+    [Test]
+    public static void Issue1644_CommitLogsSegmentReason()
+    {
+        // 確定のたびに、区切りの重みと次点をログに残す。既定では打った文字を出さず、区間の言語と文字数だけ
+        var recordText = Meltype.Diagnostics.Log.RecordText;
+        try
+        {
+            foreach (var withText in new[] { false, true })
+            {
+                Meltype.Diagnostics.Log.RecordText = withText;
+                var k = new Keyboard();
+                k.Type("kyouhagoogle\n");
+                var entry = Meltype.Diagnostics.Log.Snapshot().Last(e => e.Level == Meltype.Diagnostics.LogLevel.Decision && e.Message.StartsWith("確定:", StringComparison.Ordinal));
+                Assert.True(entry.Message.Contains("区切り ") && entry.Message.Contains("次点 "), "区切りと次点: " + entry.Message);
+                Assert.Equal(withText, entry.Message.Contains("google"), "打った文字は設定どおり: " + entry.Message);
+                if (!withText) Assert.True(entry.Message.Contains("EN(6)"), "文字の代わりに文字数: " + entry.Message);
+            }
+        }
+        finally
+        {
+            Meltype.Diagnostics.Log.RecordText = recordText;
+        }
+    }
 }

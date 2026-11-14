@@ -132,16 +132,32 @@ public sealed partial class CompositionDetector
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
         bool manual = false, bool englishSentence = false, bool kanaInput = false)
     {
-        // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の Segment 呼び出しの間だけ、
-        // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
         Prepare(units);
-        var token = _preparedRaw + pending;
-        // Structured Latin tokens are opaque; their components are not Japanese readings.
-        if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
-            (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
-            return [new CompositionSegment(true, "", token)];
-        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
+        return IsOpaqueToken(_preparedRaw + pending, kanaInput)
+            ? [new CompositionSegment(true, "", _preparedRaw + pending)]
+            : FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
     }
+
+    /// <summary>
+    /// Segment と同じ条件で区切ったときの、選んだ区切りと次点の重み (確定のログ用。issue #1644)。
+    /// 確定のときだけ呼ぶ: キーを打つたびの区間分けに、理由を作る手間を足さない。
+    /// </summary>
+    public string ExplainSegment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
+        bool manual = false, bool englishSentence = false, bool kanaInput = false)
+    {
+        Prepare(units);
+        if (IsOpaqueToken(_preparedRaw + pending, kanaInput)) return "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま";
+        var explanation = "";
+        FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, explain: e => explanation = e);
+        return explanation;
+    }
+
+    // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の区間分けの間だけ、Prepare で連結した原文と各位置のオフセットを使い回す
+    // (内容・順序は同じで、文字列を毎回連結しない)。
+    // Structured Latin tokens are opaque; their components are not Japanese readings.
+    private static bool IsOpaqueToken(string token, bool kanaInput) =>
+        !kanaInput && token.All(c => c is >= '!' and <= '~') &&
+        (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token));
 
     /// <summary>
     /// 英語の候補を軽くして区切り直した結果 (変換の候補に、日本語にした語の英語を含む区切り midika → midiか を出すのに使う)。

@@ -33,6 +33,8 @@ public sealed partial class CompositionController
             return;
         }
         var converting = _converting && _clauses.Count > 0;
+        // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
+        var rules = new List<string>();
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? string.Concat(_clauses.Select(c => c.Text))
             : _budget is { Enabled: true } && !_settings().EnterCommitsAsShown
@@ -44,15 +46,18 @@ public sealed partial class CompositionController
             shown.All(char.IsAsciiLetter) && shown != text && text.Any(c => c > 0x7F))
         {
             text = shown;
+            rules.Add("英語の文脈なので見えていた英字のまま (#127)");
         }
         // 設定「Enter は見えているとおりに確定」: かな + 語末の n (かんたn) は、確定でライブ変換が漢字にせず、見えていたかなに n を ん にしただけで確定する (issue #677)
         if (!converting && _settings().EnterCommitsAsShown && _text.Mode == DisplayMode.Auto && _text.Pending == "n" &&
             CurrentDisplay(final: false) is { Length: > 1 } shownKana && shownKana[^1] == 'n' && shownKana[^2] is >= '\u3041' and <= '\u3096')
         {
             text = shownKana[..^1] + "ん";
+            rules.Add("見えていたかなのまま (#677)");
         }
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto) text = FixEnglishTypo(text);
         var english = converting ? _clauses.All(c => c.IsEnglish) : _text.IsAlphanumericAt(final: true);
+        LogCommit(text, converting, rules);
         // F6〜F10 で、はっきり英字 / かなを選んで確定した語も、後から確定し直さない。
         var chosen = converting ? _clauses.Any(c => c.Changed) : _text.Mode != DisplayMode.Auto;
         if (_reconversion is not null)
@@ -70,6 +75,16 @@ public sealed partial class CompositionController
         if (!converting || _clauses.All(CompositionLearning.Learnable))
             RememberPhrase(converting ? string.Concat(_clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : _text.AllKana(final: true), text, english);
         CommitText(text + suffix, english, _text.Raw, chosen, preserveText);
+    }
+
+    /// <summary>確定のたびに、確定した文字と、そう決めた理由 (区切りの重み・次点・通った決まり) を残す (issue #1644)。</summary>
+    private void LogCommit(string text, bool converting, List<string> rules)
+    {
+        if (converting) rules.Add($"変換の文節から確定{(_clauses.Any(c => c.Changed) ? " (選び直した文節あり)" : "")}");
+        if (_text.Mode != DisplayMode.Auto) rules.Add($"F6〜F10 で選んだ表示 ({_text.Mode})");
+        var reason = _text.Mode == DisplayMode.Auto ? _text.ExplainSegments() : "";
+        Diagnostics.Log.Decision($"確定: {Diagnostics.Log.Text(_text.Raw)}→{Diagnostics.Log.Text(text)}" +
+            (reason.Length > 0 ? $"; {reason}" : "") + (rules.Count > 0 ? $"; {string.Join("、", rules)}" : ""));
     }
 
     /// <summary>

@@ -509,6 +509,19 @@ public sealed class CompositionText
             : segments;
     }
 
+    /// <summary>
+    /// Segments の区切りを選んだ理由 (確定のログ用。issue #1644)。保護区間 (メンション・URL など) を含む入力は、区切りを重みで比べないのでそう書く。
+    /// </summary>
+    public string ExplainSegments()
+    {
+        if (!KanaInput && PrecedingEnglishName && FollowingEnglish != false && !EffectiveManual &&
+            Raw.Length > 0 && Raw.All(char.IsAsciiLetter) && _detector.Memory?.Get(Raw.ToLowerInvariant()) != false)
+            return "名前を紹介する英文の続きなので英字のまま";
+        if (ProtectedSpans().Count > 0) return "保護区間 (メンション・URL・メール・パス) を含むので、その区間は英字のまま";
+        var units = HalfWidthOpeners(SegmentWithProtection(_units)) ?? _units;
+        return _detector.ExplainSegment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput);
+    }
+
     private IReadOnlyList<CompositionSegment> SegmentWithProtection(IReadOnlyList<CompositionUnit> units)
     {
         var spans = ProtectedSpans();
