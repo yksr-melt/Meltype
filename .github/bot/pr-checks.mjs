@@ -106,9 +106,11 @@ function judgedChanges(base, pr) {
 }
 
 function impact(baseFile, prFile, allFile) {
+  // Pull Request の一覧はいつも作るので、無ければ異常として失敗にする。無くてよいのは main の一覧だけ (main をビルドできないとき)
   const pr = readJudged(prFile), base = readJudged(baseFile);
+  if (!pr) throw new Error(`Pull Request の一覧がありません: ${prFile}`);
   summary('## よく使う語の判定の変化 (参考)\n');
-  if (!pr || !base) {
+  if (!base) {
     summary('main をビルドできないため、比べられません。');
     return;
   }

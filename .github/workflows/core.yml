@@ -66,7 +66,8 @@ jobs:
           files="$(git diff --name-only "$BASE...$HEAD")"
           echo "$files"
           if grep -q '^dictionaries/' <<< "$files"; then echo "dictionaries=true" >> "$GITHUB_OUTPUT"; fi
-          if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
+          # 比べ方 (このワークフローと pr-checks.mjs) を変えたときも流す。流さないと、変えた比べ方を確かめないままマージになる (#1842)
+          if grep -qE '^(dictionaries/|src/Meltype\.Core/|src/Meltype\.Core\.Tests/|\.github/workflows/core\.yml$|\.github/bot/pr-checks\.mjs$)' <<< "$files"; then echo "core=true" >> "$GITHUB_OUTPUT"; fi
 
   dictionaries:
     name: 辞書の形式
