@@ -71,15 +71,15 @@ class SettingsScreenDeviceTest {
             instrumentation.runOnMainSync {
                 val root = activity.window.decorView
                 val picker = findText(root, "別のキーボードに切り替える")
-                val systemSettings = findText(root, "Androidのキーボード設定を開く")
-                assertNotNull("System IME picker must be reachable without launching the IME",
+                assertNotNull("System IME picker remains a last resort if the IME process cannot start",
                     picker)
-                assertNotNull("Android keyboard settings must remain reachable independently",
-                    systemSettings)
                 val pickerRow = (picker!!.parent as View).parent as View
-                val settingsRow = (systemSettings!!.parent as View).parent as View
                 assertTrue(pickerRow.hasOnClickListeners())
-                assertTrue(settingsRow.hasOnClickListeners())
+                // Emergency switching must not require opening a Settings screen.
+                // Onboarding can still show Android setup before Meltype is enabled.
+                if (findText(root, "Meltypeを有効にする") == null) {
+                    assertTrue(findText(root, "Androidのキーボード設定を開く") == null)
+                }
             }
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
