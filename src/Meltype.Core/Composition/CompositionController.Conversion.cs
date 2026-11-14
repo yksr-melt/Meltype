@@ -618,7 +618,9 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 文節の候補: 文の中での変換結果 → その文節だけでの変換結果 → 補助辞書の同音異義語 → ひらがな → 全角カタカナ → 半角カタカナ
-    /// → 絵文字・顔文字 (逆順)。
+    /// → 分野の辞書の語 → 絵文字・顔文字 (逆順)。
+    /// 分野の辞書の語 (病名・駅名など) は、使わない人には要らない候補なので、ふだんの候補 (変換エンジンの候補・ひらがな・カタカナ) を
+    /// 1 つも後ろに押さないよう、その後ろに並べる。こうすれば誰にとっても困らないので、分野ごとに外す設定は作らない (#1650)。
     /// 絵文字・顔文字は最後に逆順で並べるので、変換してすぐ ↑ を押すと、いちばんよく使う絵文字 (えがお → 😊) になる (issue #133)。
     /// </summary>
     private List<string> JapaneseCandidates(string reading, string? inContext)
@@ -628,7 +630,7 @@ public sealed partial class CompositionController
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
         return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
-            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
+            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. _services.Candidates?.LookupDomain(reading) ?? [], .. EmojiBlock(reading)]);
     }
 
     /// <summary>
