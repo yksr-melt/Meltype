@@ -138,13 +138,6 @@ const dictionaries = {
       [...reading].length >= 3 ? null : `読み「${reading}」が 3 文字より短い`,
     ]),
   },
-  // 通貨コード<Tab>1 ユーロあたりのレート (tools/make-exchange-rates.mjs で作る。日付は「# 日付:」の行)
-  'exchange-rates.txt': {
-    format: tabbed(2, 2, ([code, rate]) => [
-      /^[A-Z]{3}$/.test(code) ? null : `通貨コード「${code}」が英大文字 3 文字でない`,
-      /^[0-9]+(\.[0-9]+)?$/.test(rate) && Number(rate) > 0 ? null : `レート「${rate}」が正の数でない`,
-    ]),
-  },
   'katakana.txt': {
     format: tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   },

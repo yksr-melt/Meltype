@@ -361,10 +361,6 @@ public sealed class Settings
      Description("#123 のように打って Space で変換すると、下の「GitHub のリポジトリ」の Issue・Pull Request のタイトルを候補に出します (開発者向け)。打った番号を GitHub (api.github.com) に問い合わせるので、既定は OFF です。非公開のリポジトリは、環境変数 MELTYPE_GITHUB_TOKEN にトークンを入れると読めます。調べた結果はこのセッションの間だけ覚えます。")]
     public bool GitHubIssueCandidates { get; set; }
 
-    [Category("5. 候補"), DisplayName("為替レートを毎回取得する"),
-     Description("「100どる」などを変換したときの換算に、欧州中央銀行 (ECB) の最新のレートを使います。変換したときに、取ってから 1 時間たっていれば ECB (www.ecb.europa.eu) から取り直します (送るのはレートの問い合わせだけで、打った文字は送りません)。OFF のときは、Meltype に同梱したレート (Meltype を更新すると新しくなります) か、手動で更新したレートを使います。手動の更新は、Windows ではトレイの「為替レートを更新」でできます。既定は OFF です。")]
-    public bool LiveExchangeRates { get; set; }
-
     [Category("5. 候補"), DisplayName("GitHub のリポジトリ"),
      Description("「#番号で GitHub の Issue・PR のタイトルを候補に出す」で問い合わせるリポジトリ。「所有者/名前」の形で書きます (例: yksr-melt/Meltype)。")]
     public string GitHubRepository { get; set; } = "";
