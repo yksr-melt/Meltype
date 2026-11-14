@@ -3,7 +3,7 @@
 # ライセンス: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)。この派生データも CC BY-SA 4.0。
 # 加工: 読みがひらがなだけの行を、読みで 1 行にまとめた。かなだけで書く語と、よく使う語の読み (readings.txt) は除いた。
 # Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
-# 作り直し: python3 tools/make-domain-dictionaries.py it …
+# 作り直し: MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py it …
 # 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、変換エンジンの候補の後、ひらがなの前に並ぶ)
 あかいけひろじ	赤池弘次
 あたいち	価値

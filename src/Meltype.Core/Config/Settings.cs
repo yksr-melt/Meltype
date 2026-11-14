@@ -459,49 +459,6 @@ public sealed class Settings
      Description("変換中に同じ候補で少し (約 1.5 秒) 止まると、その候補の意味をウィクショナリー日本語版から候補の一覧の横に出します (日本語の意味が無い語は JMdict の英訳: 橋 → bridge)。同音異義語を選ぶときの手がかりに。")]
     public bool ShowCandidateMeanings { get; set; } = true;
 
-    // 分野の辞書 (dictionaries/domain-*.txt)。分野の語は、ふだん使わない人には誤った候補になりうるので、分野ごとに外せるようにする (#1650)
-    [Category("5. 候補"), DisplayName("分野の辞書: 医療"),
-     Description("病名・症状・医薬品・体の部位を、変換の候補 (ふだんの語の後ろ) に出します (先端巨大症)。JMED-DICT-mini から。")]
-    public bool MedicalDictionary { get; set; } = true;
-
-    [Category("5. 候補"), DisplayName("分野の辞書: 情報"),
-     Description("高等学校の情報科の用語を、変換の候補 (ふだんの語の後ろ) に出します (匿名加工情報)。IDiME から。")]
-    public bool ItDictionary { get; set; } = true;
-
-    [Category("5. 候補"), DisplayName("分野の辞書: 駅名"),
-     Description("駅名を、変換の候補 (ふだんの語の後ろ) に出します (相老駅)。SKK 辞書から。")]
-    public bool StationDictionary { get; set; } = true;
-
-    [Category("5. 候補"), DisplayName("分野の辞書: 固有名詞"),
-     Description("会社・学校・施設・作品などの名前を、変換の候補 (ふだんの語の後ろ) に出します。SKK 辞書・SudachiDict・Wikidata から。")]
-    public bool ProperNounDictionary { get; set; } = true;
-
-    [Category("5. 候補"), DisplayName("分野の辞書: 人名"),
-     Description("人の名字・名前を、変換の候補 (ふだんの語の後ろ) に出します。SKK 辞書・SudachiDict から。")]
-    public bool NameDictionary { get; set; } = true;
-
-    [Category("5. 候補"), DisplayName("分野の辞書: 一般の語"),
-     Description("変換エンジンに無い名詞 (課税地・独任制) を、変換の候補 (ふだんの語の後ろ) に出します。SudachiDict・UniDic から。")]
-    public bool WordDictionary { get; set; } = true;
-
-    [Category("5. 候補"), DisplayName("分野の辞書: 法令名"),
-     Description("今ある法律の名前を、変換の候補 (ふだんの語の後ろ) に出します (人事訴訟法)。e-Gov 法令から。")]
-    public bool LawDictionary { get; set; } = true;
-
-    /// <summary>同梱の分野の辞書 (ファイル名の domain- の次の語) を使うか。</summary>
-    public bool DomainDictionaryEnabled(string domain) => domain switch
-    {
-        "medical" => MedicalDictionary,
-        "it" => ItDictionary,
-        "stations" => StationDictionary,
-        "propernouns" => ProperNounDictionary,
-        "names" => NameDictionary,
-        "words" => WordDictionary,
-        "laws" => LawDictionary,
-        // 分野を足したら設定も足す。足し忘れは例外で気付けるようにする
-        _ => throw new ArgumentOutOfRangeException(nameof(domain), domain, "設定の無い分野の辞書"),
-    };
-
     [Category("8. 表示"), DisplayName("打ったキーを表示"), Platforms(Platform.Windows),
      Description("打ったキー (ローマ字: kyouhagoogle) を小さく出します。Meltype キーボードでは変換ボックスの文字の下に、Meltype IME では候補の一覧の上に出します。打ち間違いに気づきやすくなります。")]
     public bool ShowTypedKeys { get; set; } = true;
