@@ -21,6 +21,12 @@ public static class ProjectInfo
     public static string CoreVersion =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+')[0] ?? "?";
 
+    /// <summary>
+    /// タグの無い自己ビルドのコミット ID (先頭 7 文字)。リリースのビルドは版にコミット ID を付けない (src/Directory.Build.props) ので null。
+    /// </summary>
+    public static string? BuildCommit =>
+        typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+') is [_, var commit, ..] ? commit[..Math.Min(7, commit.Length)] : null;
+
     /// <summary>公開した版 (1.0.0 以降。1.3.1-pre.3 などのプレリリースも) か。それまではリポジトリが非公開なので、GitHub で報告する道は出さない。</summary>
     public static bool IsPublicRelease(string version) => Version.TryParse(version.Split('-', 2)[0], out var parsed) && parsed.Major >= 1;
 
