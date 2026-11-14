@@ -60,7 +60,7 @@ internal static class ZenzaiConverterTests
                     var context = _listener.GetContext();
                     var body = new StreamReader(context.Request.InputStream, Encoding.UTF8).ReadToEnd();
                     var prompt = "";
-                    if (body.Length > 0) prompt = JsonDocument.Parse(body).RootElement.GetProperty("prompt").GetString() ?? "";
+                    if (body.Length > 0) prompt = JsonElement.Parse(body).GetProperty("prompt").GetString() ?? "";
                     lock (Prompts) Prompts.Add(prompt);
                     context.Response.StatusCode = Status;
                     var answer = Answer(prompt);
@@ -207,7 +207,8 @@ internal static class ZenzaiConverterTests
             Assert.True(SpinWait.SpinUntil(() => { Record(); return seen[^1] == "汽車が来た"; }, 5000), "あとから Zenzai の答え: " + string.Join(" -> ", seen));
             Thread.Sleep(200);
             Record();
-            Assert.Equal("きしゃがきた -> 記者が来た -> 汽車が来た", string.Join(" -> ", seen), "戻らない");
+            // 打ち終わる前に Mozc のワーカーが答え終われば、最初の表示がもう Mozc の答えになる (速いマシン)。かなの表示は有っても無くてもよい
+            Assert.Equal("記者が来た -> 汽車が来た", string.Join(" -> ", seen.SkipWhile(text => text == "きしゃがきた")), "戻らない");
             // Mozc の文節の区切りのまま (Align) なので、文節ごとに選び直せる
             Assert.Equal("汽車が,来た", string.Join(",", SessionFacadeTests.Type(session, " ")[^1].View?.Clauses ?? []));
         }
