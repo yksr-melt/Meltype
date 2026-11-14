@@ -277,6 +277,13 @@ class KeyboardView(context: Context) : View(context) {
         }
     }
 
+    /** A QA touch uses the painted key's actual geometry, including margins and fold reflow. */
+    internal fun keyCenterForSmokeTest(k: Key): Pair<Float, Float> {
+        val bounds = RectF()
+        keyRect(k, bounds)
+        return bounds.centerX() to bounds.centerY()
+    }
+
     private fun keyRect(k: Key, out: RectF) {
         out.set(
             outerSidePx + k.col * cellW + gapX / 2,

@@ -89,9 +89,16 @@ class ImeLaunchDeviceTest {
     private fun tap(keyboard: io.github.ninjin0802.keyboard.app.view.KeyboardView, label: String, matches: (KeyAction) -> Boolean) {
         val key = keyboard.layout.keys.firstOrNull { matches(it.action) } ?: throw AssertionError("No on-screen key for $label")
         val location = IntArray(2)
-        instrumentation.runOnMainSync { keyboard.getLocationOnScreen(location) }
-        val x = location[0] + keyboard.width * ((key.col + key.width / 2f) / keyboard.layout.columns)
-        val y = location[1] + keyboard.height * ((key.row + 0.5f) / keyboard.layout.rows)
+        val coords = FloatArray(2)
+        instrumentation.runOnMainSync {
+            assertTrue("IME key view is not attached and visible", keyboard.isAttachedToWindow && keyboard.isShown)
+            keyboard.getLocationOnScreen(location)
+            val center = keyboard.keyCenterForSmokeTest(key)
+            coords[0] = location[0] + center.first
+            coords[1] = location[1] + center.second
+        }
+        val x = coords[0]
+        val y = coords[1]
         val clock = SystemClock.uptimeMillis()
         val down = MotionEvent.obtain(clock, clock, MotionEvent.ACTION_DOWN, x, y, 0)
         val up = MotionEvent.obtain(clock, clock + 55, MotionEvent.ACTION_UP, x, y, 0)
@@ -451,9 +458,10 @@ class ImeLaunchDeviceTest {
                     describe = { describeImeState(activity) },
                 ) {
                     val current = KeyboardService.activeForSmokeTest?.get()
+                    val keys = current?.activeKeysForSmokeTest()
                     activity.hasWindowFocus() && activity.editor.hasFocus() &&
-                        current?.isInputViewShown == true &&
-                        current.activeKeysForSmokeTest()?.layout?.id ==
+                        current?.isInputViewShown == true && keys?.isAttachedToWindow == true &&
+                        keys.isShown && keys.layout.id ==
                             io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
                 }
                 val currentKeys = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
@@ -490,11 +498,16 @@ class ImeLaunchDeviceTest {
                 }
             } ?: throw AssertionError("No Japanese あ/A soft key")
             val location = IntArray(2)
-            instrumentation.runOnMainSync { japanese.getLocationOnScreen(location) }
-            val x = location[0] +
-                japanese.width * ((key.col + key.width / 2f) / japanese.layout.columns)
-            val y = location[1] +
-                japanese.height * ((key.row + 0.5f) / japanese.layout.rows)
+            val coords = FloatArray(2)
+            instrumentation.runOnMainSync {
+                assertTrue("Japanese IME key view is not attached", japanese.isAttachedToWindow && japanese.isShown)
+                japanese.getLocationOnScreen(location)
+                val center = japanese.keyCenterForSmokeTest(key)
+                coords[0] = location[0] + center.first
+                coords[1] = location[1] + center.second
+            }
+            val x = coords[0]
+            val y = coords[1]
             val clock = SystemClock.uptimeMillis()
             val down = MotionEvent.obtain(clock, clock, MotionEvent.ACTION_DOWN, x, y, 0)
             val up = MotionEvent.obtain(clock, clock + 55, MotionEvent.ACTION_UP, x, y, 0)
