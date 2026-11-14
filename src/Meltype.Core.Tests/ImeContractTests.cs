@@ -686,6 +686,26 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void PassThroughInput_PassesKeysAndReturnsToAlphanumericAfterCommit()
+    {
+        var front = new Front { Services = new CompositionServices { ClassifyDirect = (letters, _) => letters is "ka" or "ki" ? Verdict.Japanese : Verdict.Undecided } };
+        front.Settings.PassThroughInput = true;
+        front.Event("CaretMoved", extra: Entered);
+        front.Key('k');
+        Assert.True(front.Document == "k" && !front.Open, "英数で始め、判定がつくまでアプリに入れる\n" + front.Trace);
+        front.Key('a');
+        Assert.True(front.Document == "" && front.Composition["t1"] == "か", "ローマ字なら消して変換ボックスに入れ直す\n" + front.Trace);
+        front.Key('\n');
+        Assert.True(front.Document == "か" && !front.Open, "確定したら英数に戻す\n" + front.Trace);
+        Assert.True(Consumed(front.Key(ToggleShortcut.Hankaku)) && front.Open, "半角/全角 で日本語にできる\n" + front.Trace);
+        front.Type("su");
+        Assert.Equal("す", front.Composition["t1"], "日本語にした次の語は変換ボックスに入れる\n" + front.Trace);
+        front.Key('\n');
+        front.Key('k');
+        Assert.True(front.Document == "かすk" && !front.Open, "確定した後の語はまた素通しする\n" + front.Trace);
+    }
+
+    [Test]
     public static void Password_DropsTheViewBeforeDelayedConversionFinishes()
     {
         foreach (var restoreBeforeResult in new[] { false, true })

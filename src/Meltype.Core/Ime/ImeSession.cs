@@ -103,6 +103,7 @@ internal sealed class ImeSession
             if (e.ImeOpen is { } open) _session.Direct = !open;
             return new(InitialState(false, !_session.Direct, _settings, game: false, entered: false, rev), Pass);
         }
+        var first = _field is null;
         _field = field;
         var all = _source();
         var settings = _settings = all.ForApp(_field?.App);
@@ -115,6 +116,9 @@ internal sealed class ImeSession
         var game = IsGame(all, _field);
         if (game && !_game) _session.Direct = true;
         _game = game;
+        // 素通し入力 (#1911): 英数で始め、打った語を素通ししながら判定する
+        var passesThrough = active && settings.PassThroughInput;
+        if (passesThrough && first) _session.Direct = true;
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
@@ -141,6 +145,8 @@ internal sealed class ImeSession
         // ゲームでは、Enter で確定・Esc で取り消したら英数に戻す。ゲーム (Minecraft 26.2 までの GLFW など) はチャットを閉じたことを知らせてこないので、
         // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
         if (game && composing && !_session.IsComposing && e.Key?.Vk is VirtualKeys.Return or VirtualKeys.Escape) _session.Direct = true;
+        // 確定・取り消しで変換ボックスが空になったら英数に戻し、次の語も素通しする。半角/全角 などで日本語にしたときは、次の語を確定するまで日本語のまま
+        if (passesThrough && composing && !_session.IsComposing && !explicitChange) _session.Direct = true;
         TrackLine(e, result);
         _snippetKeys = SnippetKeys(e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる

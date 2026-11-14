@@ -268,6 +268,11 @@ public sealed class Settings
      Description("英数状態でも単語の打ち始めを判定し、ローマ字 (日本語) なら自動で日本語入力に戻します。Mac 版では使えません。")]
     public bool DirectModeAutoDetect { get; set; } = true;
 
+    // 稼働実績ができたら唯一の入力の流れにして、入力モードの区別と重なる設定を消す (#1911)
+    [Category("2. 入力モード"), DisplayName("打ったキーをそのまま入れ、日本語だけ変換する (Experimental)"), Platforms(Platform.Windows),
+     Description("打ったキーをそのままアプリに入れ、ローマ字 (日本語) と判定した語だけ消して変換ボックスに入れ直します。確定したら英数に戻ります。半角/全角 で日本語にすると、次の語を日本語で打てます。")]
+    public bool PassThroughInput { get; set; }
+
     [Category("3. 判定"), DisplayName("/ $ @ で始まる語はそのまま入力"),
      Description("Keyboard モードで、入力欄・行の先頭か空白の直後に打った / $ @ と、続く名前 (空白まで) は変換せず、打つたびにそのままアプリに渡します (AI エージェントの /command・$skill・@ファイル名 の補完を選びやすく)。名前の後に空白を打つと、普通の自動判定に戻ります。文章の入力欄 (コードエディターのコード以外) の / は「・」として入り、Space で / にしてから名前を打つと、名前はそのまま渡します。")]
     public bool SigilWordsDirect { get; set; } = true;
