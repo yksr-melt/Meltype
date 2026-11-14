@@ -393,16 +393,15 @@ public sealed class Settings
      Description("Keyboard モードで、Space を押さなくても打ったそばから漢字に変換して表示します。")]
     public bool LiveConversion { get; set; } = true;
 
-    // Linux 版は llama-server をまだ同梱していない (#1571)。同梱したら Platform.Linux を足す
-    [Category("4. 変換"), DisplayName("Zenzai を使う"), Platforms(Platform.Windows | Platform.Mac),
+    [Category("4. 変換"), DisplayName("Zenzai を使う"),
      Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。同梱の llama.cpp の llama-server と zenz-v3.2-small を使います。使えないとき・応答が遅いときは、Mozc で変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
     public bool UseZenzai { get; set; } = true;
 
-    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows | Platform.Mac),
+    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"),
      Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiServerPath { get; set; } = "";
 
-    [Category("4. 変換"), DisplayName("Zenzai: モデル (GGUF) の場所"), Platforms(Platform.Windows | Platform.Mac),
+    [Category("4. 変換"), DisplayName("Zenzai: モデル (GGUF) の場所"),
      Description("zenz のモデルファイル (例: zenz-v3.2-small の ggml-model-Q5_K_M.gguf) の場所。空なら同梱の zenz-v3.2-small を使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiModelPath { get; set; } = "";
 

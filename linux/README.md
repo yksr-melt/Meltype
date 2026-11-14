@@ -9,6 +9,7 @@
 | 設定画面 (`meltype-settings`, Python・GTK 4) | `config.schema.json` から画面を組み立てて、`config.json` を書く |
 | 判定の本体 (`libMeltypeNative.so`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`) を NativeAOT で Linux 用のライブラリにしたもの |
 | 漢字変換 | Mozc の変換ヘルパー (`native/mozc`) |
+| 文脈を見た変換 (Zenzai) | llama.cpp の llama-server と zenz のモデル。`linux/build.sh` が `native/zenzai/zenzai.env` の版を取ってきて `zenzai/` に置く (取れなければ同梱せず、Mozc だけで変換する) |
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。
 

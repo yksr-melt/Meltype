@@ -11,6 +11,7 @@ on:
     paths: &paths
       - 'linux/**'
       - 'native/mozc/**'
+      - 'native/zenzai/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Mac.Native/**'
       - 'dictionaries/**'
@@ -142,6 +143,9 @@ jobs:
           sudo apt-get install -y ./linux/build/meltype_*.deb
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          # Zenzai の llama-server が、同梱のライブラリと入れた依存 (libgomp・OpenSSL 3) で起動できるか
+          /opt/meltype/zenzai/llama-server --version
+          ls /opt/meltype/zenzai/*.gguf
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
           test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' | head -n 1)")/meltype.so"
@@ -213,6 +217,7 @@ jobs:
           dnf install -y ./linux/build/meltype-*.rpm
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          /opt/meltype/zenzai/llama-server --version
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           ibus read-cache --system | grep -q /opt/meltype/ibus-engine-meltype
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
@@ -251,6 +256,9 @@ jobs:
           path: rpms
       - name: Install .rpm
         run: dnf install -y ./rpms/meltype-[0-9]*.rpm
+      # 同梱の llama-server (Ubuntu でビルドしたもの) が、サポートする中で一番古い glibc 2.34 で起動できるか
+      - name: Zenzai llama-server
+        run: /opt/meltype/zenzai/llama-server --version
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py
