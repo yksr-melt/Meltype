@@ -15,11 +15,10 @@ $MeltypeImeTip = '0411:{417D801B-A9BD-4C26-BD16-356A825A6998}{21F643F4-72D5-4946
 # 環境変数 (ProgramW6432 など) はユーザーが上書きできるので、Windows の設定 (HKLM) から読む
 $MeltypeProgramFiles = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64).OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion').GetValue('ProgramFilesDir')
 
-# ARM64 の Windows か (x64 のエミュレーションで動いている PowerShell では、環境変数が AMD64 になるので、Windows の設定から読む)
+# ARM64 の Windows か。管理者として動く Register-Tip.ps1 と同じく、Windows の設定 (HKLM) だけから読む
+# (プロセスの環境変数は、x64 のエミュレーションでは AMD64 になり、ユーザーが上書きもできる。両側で食い違うと、確かめた DLL と登録する DLL が変わる)
 function Test-Arm64Windows {
-    if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { return $true }
-    $native = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE -ErrorAction SilentlyContinue).PROCESSOR_ARCHITECTURE
-    return $native -eq 'ARM64'
+    return [Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'PROCESSOR_ARCHITECTURE', '') -eq 'ARM64'
 }
 
 # この PC に登録する DLL のアーキテクチャ。ARM64 の Windows では、64 ビットは ARM64X の DLL (arm64。ARM64 と x64 のアプリのどちらにも読み込める)

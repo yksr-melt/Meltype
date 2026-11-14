@@ -2,18 +2,24 @@
 # Copyright (C) 2026 lnkiai
 #
 # Meltype IME (TSF の DLL) をビルドする。Visual Studio Build Tools (C++) が要る。
-#   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug]
+#   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug] [-Architectures x64,arm64,x86]
+# -Architectures を省くと、配布用に 3 つともビルドし、1 つでも失敗したら止める
 # 出力: native\tip\bin\x64・native\tip\bin\arm64・native\tip\bin\x86 (32bit のアプリ用) に、MeltypeTip.dll (stub) と MeltypeTipImpl.dll (impl)
 # arm64 は ARM64X (ARM64 と ARM64EC のコードを 1 つの DLL に入れたもの)。ARM64 の Windows では、ARM64 のアプリと x64 のアプリが
 # 64 ビットの同じレジストリ (InprocServer32) を見るので、どちらのプロセスにも読み込める DLL を 1 つ登録する
 
-param([ValidateSet('Release', 'Debug')][string]$Configuration = 'Release')
+param(
+    [ValidateSet('Release', 'Debug')][string]$Configuration = 'Release',
+    [ValidateSet('x64', 'arm64', 'x86')][string[]]$Architectures = ('x64', 'arm64', 'x86')
+)
 
 $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Visual Studio (Build Tools) の C++ ビルドツールが見つかりません。Meltype IME をビルドするには、Visual Studio Build Tools の「C++ によるデスクトップ開発」と「MSVC ARM64 ビルド ツール」を入れてください。' }
-$vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+if (-not (Test-Path -LiteralPath $vswhere)) { throw 'Visual Studio (Build Tools) の C++ ビルドツールが見つかりません。Meltype IME をビルドするには、Visual Studio Build Tools の「C++ によるデスクトップ開発」(arm64 もビルドするなら「MSVC ARM64 ビルド ツール」も) を入れてください。' }
+# ARM64 のビルドツールは、arm64 をビルドするときだけ求める (x64 の PC でソースから入れるときは要らない)
+$components = @('Microsoft.VisualStudio.Component.VC.Tools.x86.x64') + @(if ($Architectures -contains 'arm64') { 'Microsoft.VisualStudio.Component.VC.Tools.ARM64' })
+$vs = & $vswhere -latest -products * -requires $components -property installationPath
 if (-not $vs) { throw 'Visual Studio の C++ ビルドツールが見つかりません。' }
 $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvarsall.bat'
 # vcvarsall.bat は vswhere.exe を PATH から探すので、見つからないという表示が出ないように足しておく
@@ -32,12 +38,14 @@ $dlls = @(
 )
 # /Brepro: 同じソースからは同じ DLL にする (日時を埋め込まない)。入れ直したときに、変わっていない DLL を登録し直さない (UAC を出さない) ため
 $optimize = if ($Configuration -eq 'Release') { '/O2 /MT /DNDEBUG' } else { '/Od /MTd /Zi' }
+# cl と link を別々に呼ぶので、Debug の PDB は link に /DEBUG を渡して作る
+$linkDebug = if ($Configuration -eq 'Debug') { '/DEBUG' } else { '' }
 $libs = 'ole32.lib oleaut32.lib uuid.lib user32.lib gdi32.lib advapi32.lib d2d1.lib dwrite.lib dwmapi.lib'
 
 $cl = "cl /nologo /c /Brepro /std:c++17 /EHsc /W4 /wd4100 /utf-8 /DUNICODE /D_UNICODE $optimize"
 $sources = @($dlls.Sources | Select-Object -Unique)
 
-foreach ($arch in 'x64', 'arm64', 'x86') {
+foreach ($arch in $Architectures) {
     $out = Join-Path $here "bin\$arch"
     $obj = Join-Path $here "obj\$arch"
     $vcarch = @{ x64 = 'x64'; arm64 = 'x64_arm64'; x86 = 'x64_x86' }[$arch]
@@ -54,7 +62,7 @@ foreach ($arch in 'x64', 'arm64', 'x86') {
         $objects = foreach ($pass in $passes) { foreach ($source in $_.Sources) { "`"$($pass.Dir)\$([IO.Path]::ChangeExtension($source, 'obj'))`"" } }
         # ARM64X の DLL は、ARM64 から見える関数 (/DEFARM64NATIVE) と x64 から見える関数 (/DEF) を別々に指定する
         $def = if ($arch -eq 'arm64') { "/DEFARM64NATIVE:$name.def /DEF:$name.def" } else { "/DEF:$name.def" }
-        "link /nologo /DLL /Brepro $machine $def /IMPLIB:`"$obj\$name.lib`" /OUT:`"$out\$name.dll`" $($objects -join ' ') `"$obj\MeltypeTip.res`" $libs"
+        "link /nologo /DLL /Brepro $linkDebug $machine $def /IMPLIB:`"$obj\$name.lib`" /OUT:`"$out\$name.dll`" $($objects -join ' ') `"$obj\MeltypeTip.res`" $libs"
     }) -join ' && '
     Write-Host "== $arch =="
     cmd /c $cmd

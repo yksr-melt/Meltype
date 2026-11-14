@@ -46,6 +46,14 @@ function Invoke-Regsvr([string]$exe, [string]$dll, [switch]$Remove) {
 
 $unregisterFailed = $false
 try {
+    # 登録に要るファイルが揃っているかを、今の登録に触れる前に確かめる (途中で足りないと、前の登録を外したまま止まる)
+    if (-not $Unregister) {
+        foreach ($arch in $arch64, 'x86') {
+            foreach ($name in 'MeltypeTip.dll', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256') {
+                if (-not (Test-Path -LiteralPath (Join-Path $Source "$arch\$name"))) { throw "$arch\$name がありません。" }
+            }
+        }
+    }
     # 登録を外すときは、どちらの 64 ビットの DLL も外す (無い DLL は Invoke-Regsvr が飛ばす)
     $architectures = if ($Unregister) { 'x64', 'arm64', 'x86' } else { $arch64, 'x86' }
     foreach ($arch in $architectures) {

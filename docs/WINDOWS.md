@@ -36,7 +36,7 @@ Windows 版のインストール・設定・困ったときの説明です。キ
 <a name="動く環境"></a>
 <img src="images/headings/windows/01.svg" alt="動く環境" height="53"><br>
 
-- Windows 10 / 11 (64bit)
+- Windows 10 / 11 (64bit)。ARM64 は Windows 11
 - Microsoft IME (Windows 標準の日本語入力)
 
 .NET は同梱しているので、別にインストールする必要はありません。

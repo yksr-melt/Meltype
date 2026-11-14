@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace Meltype.Tip;
@@ -11,17 +12,17 @@ namespace Meltype.Tip;
 /// 別ビルドの impl とは通信しないので、Meltype.exe と impl のあいだのプロトコルに後方互換性は要らない。
 /// </summary>
 /// <param name="folder">この Meltype.exe に同梱した tip フォルダー (x64・arm64・x86 の下に MeltypeTipImpl.dll.sha256)。</param>
-internal sealed class TipBuild(string folder)
+/// <param name="os">Windows のアーキテクチャ。この PC に登録する impl を決める。</param>
+internal sealed class TipBuild(string folder, Architecture os)
 {
+    public static TipBuild Shipped { get; } = new(Path.Combine(AppContext.BaseDirectory, "tip"), RuntimeInformation.OSArchitecture);
+
     // この PC に登録する impl のアーキテクチャ (packaging/meltype-ime.ps1 の Get-MeltypeImeArchitectures と同じ)。
     // ARM64 の Windows では、64 ビットは ARM64 と x64 のアプリのどちらにも読み込める ARM64X の DLL (arm64) を登録する
-    private static readonly string[] Architectures =
-        [System.Runtime.InteropServices.RuntimeInformation.OSArchitecture == System.Runtime.InteropServices.Architecture.Arm64 ? "arm64" : "x64", "x86"];
-
-    public static TipBuild Shipped { get; } = new(Path.Combine(AppContext.BaseDirectory, "tip"));
+    private static string[] Architectures(Architecture os) => [os == Architecture.Arm64 ? "arm64" : "x64", "x86"];
 
     // アーキテクチャ → impl の SHA-256。tip フォルダーが無い Meltype.exe (dotnet run・テスト・ポータブル版) では空で、照合しない
-    private readonly Dictionary<string, string> _hashes = Architectures
+    private readonly Dictionary<string, string> _hashes = Architectures(os)
         .Select(arch => (arch, hash: ReadHash(Path.Combine(folder, arch))))
         .Where(pair => pair.hash is not null)
         .ToDictionary(pair => pair.arch, pair => pair.hash!);
