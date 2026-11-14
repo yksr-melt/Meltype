@@ -135,7 +135,7 @@ async function reportNow(pr, files, cause) {
     const lines = [`@${pr.user.login} この Pull Request は、main とコンフリクトしています。`];
     if (cause) lines.push('', `原因になったと思われる変更: #${cause.number} ${cause.title}`);
     lines.push('', 'コンフリクトしているファイル:', ...fileList(files));
-    lines.push('', 'お手数ですが、main に追従して解消してください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
+    lines.push('', '直せるときは main に追従して解消してください。直し方が分からないときや、メンテナー側の変更で起きたときは、そのままで構いません。メンテナーが直します ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
     await gh('POST', `/issues/${pr.number}/labels`, { labels: [Label] });
     await upsert(pr.number, NowMarker, lines.join('\n'));
     console.log(`#${pr.number}: コンフリクトを知らせました`);
