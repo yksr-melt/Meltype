@@ -88,6 +88,7 @@ internal static class UtilityConversions
         new CurrencyConversion(),
         new ClipboardConversion(),
         new VersionConversion(),
+        new KanjiPartsConversion(),
     ];
 
     /// <summary>一致したすべての変換の候補。1 つでも Replace なら Replace にする。どれも一致しなければ null。</summary>
