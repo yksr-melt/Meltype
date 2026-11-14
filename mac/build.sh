@@ -5,7 +5,7 @@
 # Meltype の Mac 版をビルドして ~/Library/Input Methods にインストールする。
 #   ./build.sh            ビルドしてインストール
 #   ./build.sh --no-install  ビルドだけ (build/Meltype.app)
-# 必要なもの: macOS 13 以降、Xcode (またはコマンドライン ツール: xcode-select --install)、.NET 10 SDK、
+# 必要なもの: macOS 13.3 以降、Xcode (またはコマンドライン ツール: xcode-select --install)、.NET 10 SDK、
 # Mozc の変換ヘルパー (先に native/mozc/build-mozc-helper.sh でビルドして native/mozc/bin/mac/ に置く)
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -137,6 +137,20 @@ if fetch_verified "https://github.com/ggml-org/llama.cpp/releases/download/$LLAM
 else
     zenzai_missing "llama-server"
 fi
+# 同梱する実行ファイル・ライブラリの最低の macOS が、Meltype.app の LSMinimumSystemVersion より新しければ止める
+# (Bazel でビルドした Mozc のヘルパーは、指定しないとビルドした Mac の SDK の版になり、古い macOS で起動できなかった)
+MIN_OS="$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist")"
+version_number() { echo "$1" | awk -F. '{ printf "%d%03d%03d\n", $1, $2, $3 }'; }
+too_new=0
+while IFS= read -r -d '' item; do
+    if ! file -b "$item" | grep -q Mach-O; then continue; fi
+    minos="$(otool -l "$item" | awk '/LC_BUILD_VERSION|LC_VERSION_MIN_MACOSX/ { found = 1 } found && ($1 == "minos" || $1 == "version") { print $2; exit }')"
+    if [[ -n "$minos" ]] && [[ "$(version_number "$minos")" -gt "$(version_number "$MIN_OS")" ]]; then
+        echo "最低の macOS ($minos) が Meltype.app の $MIN_OS より新しい: ${item#"$APP"/}" >&2
+        too_new=1
+    fi
+done < <(find "$APP/Contents" -type f -print0)
+if [[ $too_new -ne 0 ]]; then exit 1; fi
 # 署名: 環境変数 MELTYPE_MAC_IDENTITY (Developer ID Application の証明書の名前) があれば配布用に署名する
 # (Hardened Runtime・タイムスタンプ付き。公証 (notarization) は mac.yml で行う)。無ければ自分の Mac で使うための署名。
 # Contents/Resources の実行ファイル・ライブラリ (Mozc のヘルパー・llama-server) は --deep では署名されないので、1 つずつ署名する

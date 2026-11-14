@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/yksr-melt/Meltype/releases/latest"><img src="https://img.shields.io/github/v/release/yksr-melt/Meltype?color=5ec4f0" alt="release"></a>
-  <img src="https://img.shields.io/badge/macOS-13%2B-ff8ab4?logo=apple&logoColor=white" alt="macOS 13 以降">
+  <img src="https://img.shields.io/badge/macOS-13.3%2B-ff8ab4?logo=apple&logoColor=white" alt="macOS 13.3 以降">
   <img src="https://img.shields.io/badge/プレビュー版-7a96f0" alt="プレビュー版">
 </p>
 
@@ -36,7 +36,7 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 <a name="動く環境"></a>
 <img src="images/headings/mac/01.svg" alt="動く環境" height="53"><br>
 
-- macOS 13 以降
+- macOS 13.3 以降
 - 配布している zip は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
 
 <br>

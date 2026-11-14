@@ -10,7 +10,7 @@ import PackageDescription
 
 let package = Package(
     name: "MeltypeIME",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS("13.3")],
     targets: [
         .executableTarget(
             name: "MeltypeIME",
