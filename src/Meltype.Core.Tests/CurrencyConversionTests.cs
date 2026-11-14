@@ -79,6 +79,7 @@ internal static class CurrencyConversionTests
         Assert.Equal("1,000", CurrencyConversion.Format(999.6m), "繰り上がり");
         Assert.Equal("1,200万", CurrencyConversion.Format(12345678m));
         Assert.Equal("1.2億", CurrencyConversion.Format(123456789m));
+        Assert.Equal("1.6兆", CurrencyConversion.Format(1_592_342_000_000m), "100おくどる");
         Assert.Equal("0.063", CurrencyConversion.Format(0.0634m), "1 より小さい額");
     }
 }
