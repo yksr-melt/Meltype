@@ -32,7 +32,7 @@ internal static class Impact
 
     internal static IEnumerable<string> Readings() => Lines("readings.txt").Select(line => line.Split('\t')[0]);
 
-    private static IEnumerable<string> EnglishWords() => Lines("english-words.txt").Where(w => w.All(char.IsAsciiLetterLower));
+    internal static IEnumerable<string> EnglishWords() => Lines("english-words.txt").Where(w => w.All(char.IsAsciiLetterLower));
 
     private static List<string> Lines(string name)
     {
