@@ -329,7 +329,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             _composition.Replay(e);
             return;
         }
-        lock (_gate) _consumed.Add(e.PhysicalId);
+        // 修飾キーは、本体が使った押下でも離したことはアプリに通す。押下がアプリに届いたあとの自動の繰り返し
+        // (変換ボックスを出す前から押していた Shift など) を本体が使うと、離したことを止めたときアプリと OS では押したままになり、
+        // 打つ文字もクリックもすべて Shift 付きになる。押していないキーを離しても何も起きない
+        if (!VirtualKeys.IsModifier(e.Vk)) lock (_gate) _consumed.Add(e.PhysicalId);
         // Alt・Win と一緒に押したキー (US 配列の Alt + ` など) を使うと、アプリには修飾キーだけを押したように見えてメニューに移るので、何もしないキーを送る
         if (key.Alt || key.Command) KeyInjector.SendKey(0xE8);
     }
