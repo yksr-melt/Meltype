@@ -668,25 +668,43 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void StaleServerFromAKilledMeltype_IsEndedOnNextStart()
+    public static void StaleServerFromAKilledMeltype_IsEnded()
     {
-        // Meltype が強制終了されて llama-server が残ったときは、次に起動するときに終わらせる (PID ファイルの PID と名前と起動した時刻が合うときだけ)
+        // Meltype が強制終了されて llama-server が残ったときは、次の Meltype が終わらせる (PID と名前と起動した時刻が合うときだけ)
         if (OperatingSystem.IsWindows() || !File.Exists("/bin/sleep")) return;
-        using var stale = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "120") { UseShellExecute = false })!;
-        var pidFile = Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
-        File.WriteAllText(pidFile, $"{stale.Id}\nsleep\n{stale.StartTime.ToUniversalTime().Ticks}");
-        var model = Path.GetTempFileName();
+        using var stale = Sleep();
+        var (ownerPid, ownerTicks) = EndedProcess();
+        var file = ZenzaiConverter.RecordServer(stale.Id, "sleep", Ticks(stale), ownerPid, ownerTicks);
         try
         {
-            using var zenzai = new ZenzaiConverter("/bin/sleep", model);
-            zenzai.WarmUp();
-            Assert.True(stale.WaitForExit(5000), "残っていたサーバーが終わる");
+            ZenzaiConverter.EndStaleServers();
+            Assert.True(stale.WaitForExit(5000), "持ち主が終わったサーバーを終わらせる");
+            Assert.True(!File.Exists(file), "終わらせたサーバーの記録は消す");
         }
         finally
         {
-            File.Delete(model);
             if (!stale.HasExited) stale.Kill();
-            File.Delete(pidFile);
+            if (file is not null) File.Delete(file);
+        }
+    }
+
+    [Test]
+    public static void ServerOfARunningMeltype_IsNotEnded()
+    {
+        // 自己診断 (--self-test) などで別の Meltype が Zenzai を起動しても、動いている IME の llama-server は止めない
+        if (OperatingSystem.IsWindows() || !File.Exists("/bin/sleep")) return;
+        using var server = Sleep();
+        var file = ZenzaiConverter.RecordServer(server.Id, "sleep", Ticks(server), Environment.ProcessId, Ticks(System.Diagnostics.Process.GetCurrentProcess()));
+        try
+        {
+            ZenzaiConverter.EndStaleServers();
+            Assert.True(!server.WaitForExit(2000), "持ち主が動いているサーバーは終わらせない");
+            Assert.True(File.Exists(file), "持ち主が動いている間は記録を残す");
+        }
+        finally
+        {
+            if (!server.HasExited) server.Kill();
+            if (file is not null) File.Delete(file);
         }
     }
 
@@ -695,21 +713,32 @@ internal static class ZenzaiConverterTests
     {
         // PID が使い回されて、同じ名前の別のプロセス (ユーザーが自分で動かしている llama-server など) になっていたら終わらせない
         if (OperatingSystem.IsWindows() || !File.Exists("/bin/sleep")) return;
-        using var other = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "120") { UseShellExecute = false })!;
-        var pidFile = Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
-        File.WriteAllText(pidFile, $"{other.Id}\nsleep\n{other.StartTime.ToUniversalTime().AddMinutes(-5).Ticks}");
-        var model = Path.GetTempFileName();
+        using var other = Sleep();
+        var (ownerPid, ownerTicks) = EndedProcess();
+        var file = ZenzaiConverter.RecordServer(other.Id, "sleep", other.StartTime.ToUniversalTime().AddMinutes(-5).Ticks, ownerPid, ownerTicks);
         try
         {
-            using var zenzai = new ZenzaiConverter("/bin/sleep", model);
-            zenzai.WarmUp();
+            ZenzaiConverter.EndStaleServers();
             Assert.True(!other.WaitForExit(2000), "起動した時刻が違うプロセスは終わらせない");
         }
         finally
         {
-            File.Delete(model);
             if (!other.HasExited) other.Kill();
-            File.Delete(pidFile);
+            if (file is not null) File.Delete(file);
         }
+    }
+
+    private static System.Diagnostics.Process Sleep() =>
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "120") { UseShellExecute = false })!;
+
+    private static long Ticks(System.Diagnostics.Process process) => process.StartTime.ToUniversalTime().Ticks;
+
+    /// <summary>終わったプロセス (強制終了された持ち主の Meltype の代わり) の PID と起動した時刻。</summary>
+    private static (int Pid, long Ticks) EndedProcess()
+    {
+        using var ended = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("/bin/sleep", "0.2") { UseShellExecute = false })!;
+        var ticks = Ticks(ended);
+        ended.WaitForExit();
+        return (ended.Id, ticks);
     }
 }

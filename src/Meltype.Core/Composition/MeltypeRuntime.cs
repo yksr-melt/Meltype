@@ -113,6 +113,8 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     public HybridConverter CreateConverter(string appDirectory)
     {
+        // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
+        ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
         var mozc = new MozcConverter(helper, Path.Combine(DataDirectory, "mozc"));
         var zenzai = new ZenzaiHolder();

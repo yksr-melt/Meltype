@@ -77,6 +77,27 @@ public static unsafe class Exports
         }
     }
 
+    /// <summary>
+    /// 終了するときに 1 回呼ぶ。変換エンジンを止める (Zenzai の llama-server を終わらせ、Mozc の学習を保存する)。
+    /// 呼ばずに終わると llama-server が残り、次に起動した Meltype が終わらせるまで動き続ける。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_shutdown")]
+    public static void Shutdown()
+    {
+        // ログアウトでは、終了の通知と SIGTERM の両方から呼ばれることがある
+        if (Interlocked.Exchange(ref s_shutDown, 1) == 1) return;
+        try
+        {
+            s_runtime?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"変換エンジンを止められませんでした: {ex}");
+        }
+    }
+
+    private static int s_shutDown;
+
     /// <summary>フロント 1 つ (IBus・fcitx5 のエンジン、Input Method Kit のコントローラー) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_ime_create")]
     public static IntPtr ImeCreate() => GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), () => Runtime.Settings.Current)));

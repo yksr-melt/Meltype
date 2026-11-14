@@ -83,6 +83,8 @@ fi
 
 cd "$src"
 options=(build //converter:meltype_mozc_helper --config "$bazel_config" --config release_build)
+# 最低の macOS を Meltype.app (mac/Resources/Info.plist の LSMinimumSystemVersion) に合わせる (指定しないと、ビルドした Mac の SDK の版になる)
+if [[ $platform == mac ]]; then options+=(--macos_minimum_os=13.0); fi
 options+=("--downloader_config=$here/bazel-downloader.cfg")
 [[ -n "$cache" ]] && options+=("--disk_cache=$cache")
 if ! "${BAZEL:-bazel}" "${options[@]}"; then

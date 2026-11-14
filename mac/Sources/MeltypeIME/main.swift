@@ -52,6 +52,8 @@ func runIsolatedChecks(inputPath: String?) -> Int32 {
         }
         NativeCore.shared.initialize()
         status = runChecks(inputPath: inputPath)
+        // 検査で起動した llama-server を残さない
+        NativeCore.shared.shutdown()
     } catch {
         fputs("検査用の一時ディレクトリを作成できませんでした: \(error.localizedDescription)\n", stderr)
         return 1
@@ -248,4 +250,15 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
 candidatesWindow = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
 NativeCore.shared.startBackgroundConversion()
+// 終了するときに llama-server を止める (ログアウトなどの終了と、SIGTERM。強制終了で残ったものは、次に起動したときに止める)
+NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification, object: nil, queue: nil) { _ in
+    NativeCore.shared.shutdown()
+}
+signal(SIGTERM, SIG_IGN)
+let terminationSource = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+terminationSource.setEventHandler {
+    NativeCore.shared.shutdown()
+    exit(0)
+}
+terminationSource.resume()
 NSApplication.shared.run()
