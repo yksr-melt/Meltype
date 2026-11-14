@@ -1788,6 +1788,29 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1650_DomainDictionaryCanBeTurnedOff()
+    {
+        // 設定で分野ごとに外せる。外した分野の語だけが候補から消える (ファロー四徴症 は医療の辞書にだけある)
+        var k = new Keyboard();
+        k.Type("faro-shichoushou ");
+        Assert.True(k.Host.View!.Candidates.Contains("ファロー四徴症"), "医療: " + string.Join(" ", k.Host.View!.Candidates));
+        k = new Keyboard();
+        k.Settings.MedicalDictionary = false;
+        k.Type("faro-shichoushou ");
+        Assert.True(!k.Host.View!.Candidates.Contains("ファロー四徴症"), "医療を外した: " + string.Join(" ", k.Host.View!.Candidates));
+
+        k = new Keyboard();
+        k.Settings.MedicalDictionary = false;
+        k.Type("aioieki ");
+        Assert.True(k.Host.View!.Candidates.Contains("相老駅"), "駅名は使う: " + string.Join(" ", k.Host.View!.Candidates));
+
+        // ファイル名の domain- の次の語が分野。設定に無い分野 (利用者が置いた辞書) はいつも使う
+        Assert.Equal("names", CandidateDictionary.DomainOf("domain-names-sudachi.txt"));
+        Assert.True(new Meltype.Config.Settings { NameDictionary = false }.DomainDictionaryEnabled("dev"), "利用者が置いた分野");
+        Assert.True(!new Meltype.Config.Settings { NameDictionary = false }.DomainDictionaryEnabled("names"), "外した分野");
+    }
+
+    [Test]
     public static void Issue409_TanomeOffersBirthdaySlang()
     {
         var dictionary = CandidateDictionary.Load(null);
