@@ -417,9 +417,6 @@ internal static class BackgroundConversionTests
 
         Volatile.Write(ref answer, "Zenzai");
         Assert.True(SpinWait.SpinUntil(() => converter.ConvertClauses("よみ")?[0].Text == "Zenzai", 5000), "聞き直して新しい答えになる");
-        // Process stores the changed answer before invoking ResultReady on the worker thread.
-        // Reading the new cached answer does not guarantee that its notification has arrived.
-        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) >= 2, 5000), "変わった答えの通知を待つ");
         Assert.Equal(2, Volatile.Read(ref notified), "答えが変わったら知らせる");
 
         var before = Volatile.Read(ref asked);
