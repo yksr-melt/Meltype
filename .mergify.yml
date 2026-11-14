@@ -1,0 +1,27 @@
+# 1 PR ずつ元の PR 上で検査する。batch / 並列化や別の merge_conditions を足すと、
+# 一時 PR に切り替わるため、先に CI の設計を見直す。
+merge_queue:
+  mode: serial
+  max_parallel_checks: 1
+  reset_on_external_merge: always
+
+queue_rules:
+  - name: main
+    batch_size: 1
+    max_checks_retries: 0
+    branch_protection_injection_mode: queue
+    merge_method: merge
+    update_method: merge
+    queue_conditions:
+      - base = main
+      - -draft
+
+# Fast / Normal は優先順位の違い。CI・レビューの免除ではない。
+# merge:fast は緊急時の修正や、文書だけの修正など動作に影響しない小さな修正に使う。
+# メンテナーが merge:fast ラベルを付けた PR は、通常の PR より先にマージする (実行中のチェックは中断しない)。
+priority_rules:
+  - name: fast
+    conditions:
+      - label = merge:fast
+    priority: high
+    allow_checks_interruption: false

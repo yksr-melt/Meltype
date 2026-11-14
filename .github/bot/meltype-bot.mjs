@@ -12,7 +12,7 @@ import { codeCell } from './markdown.mjs';
 const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
 const repo = process.env.GITHUB_REPOSITORY;
 const token = process.env.GITHUB_TOKEN;
-// workflow_dispatch は bot の App に Actions の権限が無いので、job の GITHUB_TOKEN (actions: write) で叩く
+// workflow_dispatch とリリースのタグの作成は job の GITHUB_TOKEN で叩く (App に Actions の権限が無い・App で作ったタグは push でも release.yml を起動してしまう)
 const dispatchToken = process.env.BOT_DISPATCH_TOKEN || token;
 const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
 const Marker = '<!-- meltype-bot -->';
@@ -109,7 +109,8 @@ const Help = [
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
 //   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物を付けて公開する
-// タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
+// タグは job の GITHUB_TOKEN (dispatchToken) で作る。GITHUB_TOKEN の push では release.yml の push: tags が起動しないので、
+// workflow_dispatch で明示的に起動する。App のトークンで作ると push でも起動し、ビルドが 2 回走る。
 async function releaseCommand(issue, command, version) {
   const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
   const pre = command === 'pre-release';
@@ -136,7 +137,7 @@ async function releaseCommand(issue, command, version) {
   const tag = `v${version}`;
   if (await gh('GET', `/git/ref/tags/${tag}`).then(() => true).catch(() => false)) return reply(`❌ タグ \`${tag}\` はもうあります。`);
   const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
-  await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha });
+  await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha }, dispatchToken);
   await gh('POST', '/releases', { tag_name: tag, name: `Meltype ${version}`, draft: true, prerelease: pre, body: notes });
   const failed = await gh('POST', '/actions/workflows/release.yml/dispatches', { ref: tag }, dispatchToken)
     .then(() => null, error => error.message.slice(0, 120));

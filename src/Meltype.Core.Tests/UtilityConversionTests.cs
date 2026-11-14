@@ -198,4 +198,15 @@ internal static class UtilityConversionTests
         Choose(ordinary, "hokano", "外の");
         Assert.Equal("外の", history.Get("ほかの"), "普通の語は覚える");
     }
+
+    [Test]
+    public static void Issue1868_VersionShowsCommitAndFront()
+    {
+        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どちらも OS とフロントを付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME)", VersionConversion.Text("1.5.1", "Windows / Meltype IME"));
+        Assert.Equal("Meltype-1.5.1+abc1234 (Linux)", VersionConversion.Text("1.5.1+abc1234", "Linux"));
+        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux")), "学習・予測には使わない");
+        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings());
+        Assert.True(candidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) && candidate.EndsWith(')'), candidate);
+    }
 }
