@@ -7,9 +7,10 @@ using Meltype.Diagnostics;
 namespace Meltype;
 
 /// <summary>
-/// 自動更新。GitHub のリリースに新しい版があれば、同梱の update.ps1 でダウンロード・展開しておき、
-/// 次に Meltype を起動したとき (Windows へのサインイン時) か、トレイの「更新して再起動」で install.ps1 を実行する。
-/// ネットワーク・zip の処理は PowerShell に任せる (同梱の .NET ランタイムを小さく削っているため)。
+/// 自動更新。GitHub のリリースに新しい版があれば、同梱の update.ps1 で zip と作者の署名をダウンロードし、
+/// 署名を確かめて (UpdateSignature) から展開しておき、次に Meltype を起動したとき (Windows へのサインイン時) か、
+/// トレイの「更新して再起動」で install.ps1 を実行する。署名が無い・合わない zip は展開しない。
+/// ネットワークの処理は PowerShell に任せる (同梱の .NET ランタイムを小さく削っているため)。
 /// </summary>
 internal sealed class Updater : IDisposable
 {
@@ -220,6 +221,19 @@ internal sealed class Updater : IDisposable
                 Ready?.Invoke(version);
                 return $"Meltype {version} をダウンロードしました。";
             }
+            if (line.StartsWith("downloaded ", StringComparison.Ordinal))
+            {
+                var parts = line["downloaded ".Length..].Split('\t');
+                if (parts.Length != 3 || !IsNewer(parts[0])) return "更新を確認できませんでした: ダウンロードの結果を読めません";
+                if (StageVerified(parts[0], parts[1], parts[2]) is { } failure)
+                {
+                    Log.Warn($"Meltype {parts[0]} を入れませんでした: {failure}");
+                    return $"Meltype {parts[0]} を入れませんでした: {failure}";
+                }
+                Log.Info(_enabled() ? $"Meltype {parts[0]} をダウンロードしました。次の起動時に更新します。" : $"Meltype {parts[0]} をダウンロードしました。トレイの「更新」→「Meltype {parts[0]} に更新して再起動」で更新できます。");
+                Ready?.Invoke(parts[0]);
+                return $"Meltype {parts[0]} をダウンロードしました。";
+            }
             if (line == "none") return $"Meltype {AppInfo.Version} は最新です。";
             Log.Warn($"更新を確認できませんでした: {line}");
             return $"更新を確認できませんでした: {(line.StartsWith("error ", StringComparison.Ordinal) ? line[6..] : line)}";
@@ -232,6 +246,45 @@ internal sealed class Updater : IDisposable
         finally
         {
             Volatile.Write(ref _running, 0);
+        }
+    }
+
+    /// <summary>
+    /// ダウンロードした zip が、作者が版 version として署名したものか確かめ、合っていれば &lt;Directory&gt;\&lt;版&gt; に展開して ready.txt に書く。
+    /// 確かめる前・合わなかった zip は展開しない (中の install.ps1・Meltype.exe を動かさない)。zip と署名は、どちらでも消す。
+    /// 入れなかった理由を返す (入れたら null)。
+    /// </summary>
+    internal static string? StageVerified(string version, string zip, string signature)
+    {
+        try
+        {
+            var directory = Path.GetFullPath(Directory);
+            // update.ps1 が書いた場所が、更新のフォルダーの中か (ほかの場所の zip を展開しない)
+            if (!Path.GetFullPath(zip).StartsWith(directory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) ||
+                !Path.GetFullPath(signature).StartsWith(directory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                return "ダウンロードした場所が違います";
+            bool verified;
+            using (var stream = File.OpenRead(zip)) verified = Update.UpdateSignature.Verify(version, stream, File.ReadAllText(signature));
+            if (!verified) return "作者の署名と合いません (作者以外が作ったか、壊れています)";
+            var target = Path.Combine(directory, version);
+            if (System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, recursive: true);
+            System.IO.Compression.ZipFile.ExtractToDirectory(zip, target);
+            if (!File.Exists(Path.Combine(target, "install.ps1"))) return "zip に install.ps1 がありません";
+            // 古い版の展開先を片付ける
+            foreach (var old in System.IO.Directory.GetDirectories(directory).Where(d => !string.Equals(Path.GetFileName(d), version, StringComparison.OrdinalIgnoreCase)))
+            {
+                try { System.IO.Directory.Delete(old, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+            File.WriteAllText(ReadyFile, $"{version}\t{target}", new System.Text.UTF8Encoding(false));
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or ArgumentException or NotSupportedException)
+        {
+            return ex.Message;
+        }
+        finally
+        {
+            try { File.Delete(zip); File.Delete(signature); } catch (IOException) { } catch (UnauthorizedAccessException) { }
         }
     }
 

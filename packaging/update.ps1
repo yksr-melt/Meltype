@@ -4,9 +4,10 @@
 # Meltype の更新を確認して、新しい版があればダウンロードして展開しておく (Meltype が定期的に呼ぶ)。
 #   update.ps1 -Repository yksr-melt/Meltype -CurrentVersion 0.1.2 -Directory %LOCALAPPDATA%\Meltype\update [-Prerelease]
 # -Prerelease を付けると、プレリリース版 (v1.3.1-pre.4 など) も含めて一番新しい版を見る (付けなければ正式版の最新だけ)。
-# GitHub の最新のリリースに Windows 版の zip (Meltype-<版>-windows.zip、前の名前は Meltype-test-*.zip) があり、版 (タグ v0.1.3) が今の版より新しければ、
-# <Directory>\<版> に展開し、<Directory>\ready.txt に「版 TAB 展開した場所」を書く。インストールは Meltype が install.ps1 を呼んで行う。
-# 結果は標準出力に 1 行で返す: none (更新なし) / ready <版> / error <理由>
+# GitHub の最新のリリースに Windows 版の zip (Meltype-<版>-windows.zip、前の名前は Meltype-test-*.zip) と、作者の署名 (<zip の名前>.sig) があり、
+# 版 (タグ v0.1.3) が今の版より新しければ、zip と署名を <Directory> にダウンロードする。
+# 署名を確かめて展開し、<Directory>\ready.txt に「版 TAB 展開した場所」を書くのは Meltype (Updater.cs)。確かめる前の zip は展開しない。
+# 結果は標準出力に 1 行で返す: none (更新なし) / ready <版> (展開済み) / downloaded <版> TAB <zip> TAB <署名> / error <理由>
 
 param(
     [Parameter(Mandatory)] [string]$Repository,
@@ -65,30 +66,27 @@ try {
     $asset = @($release.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' -and $_.name -notlike '*-windows-portable.zip' }) + @($release.assets | Where-Object { $_.name -like 'Meltype-test-*.zip' }) | Select-Object -First 1
     if (-not $asset) { Write-Output "error リリース $latest に zip がありません"; exit 0 }
 
-    $target = Join-Path $Directory $latest
+    # 作者の署名。無いリリース (作者が署名し忘れた・作者以外が作った) は入れない
+    $signatureAsset = @($release.assets | Where-Object { $_.name -eq "$($asset.name).sig" }) | Select-Object -First 1
+    if (-not $signatureAsset) { Write-Output "error リリース $latest に作者の署名 ($($asset.name).sig) がありません"; exit 0 }
+
     $ready = Join-Path $Directory 'ready.txt'
     if ((Test-Path -LiteralPath $ready) -and ((Get-Content -LiteralPath $ready -Raw) -like "$latest`t*")) { Write-Output "ready $latest"; exit 0 }
 
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
     $zip = Join-Path $Directory $asset.name
+    $signature = Join-Path $Directory $signatureAsset.name
     Invoke-WebRequest -Uri $asset.browser_download_url -Headers @{ 'User-Agent' = 'Meltype-Updater' } -OutFile $zip -UseBasicParsing -TimeoutSec 600
+    Invoke-WebRequest -Uri $signatureAsset.browser_download_url -Headers @{ 'User-Agent' = 'Meltype-Updater' } -OutFile $signature -UseBasicParsing -TimeoutSec 60
 
-    # GitHub が公開している SHA-256 と同じか (ダウンロードの途中で壊れていないか) を確かめる。
+    # GitHub が公開している SHA-256 と同じか (ダウンロードの途中で壊れていないか) を確かめる。作者が作ったものかは、Meltype が署名で確かめる
     if ($asset.digest -like 'sha256:*') {
         $expected = $asset.digest.Substring(7).ToLowerInvariant()
         $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
         if ($actual -ne $expected) { Remove-Item -LiteralPath $zip -Force; Write-Output 'error ダウンロードした zip のハッシュが違います'; exit 0 }
     }
 
-    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
-    Expand-Archive -LiteralPath $zip -DestinationPath $target -Force
-    Remove-Item -LiteralPath $zip -Force
-    if (-not (Test-Path -LiteralPath (Join-Path $target 'install.ps1'))) { Write-Output 'error zip に install.ps1 がありません'; exit 0 }
-
-    # 古い版の展開先を片付ける
-    Get-ChildItem -LiteralPath $Directory -Directory | Where-Object { $_.Name -ne $latest } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-    [IO.File]::WriteAllText($ready, "$latest`t$target", (New-Object Text.UTF8Encoding $false))
-    Write-Output "ready $latest"
+    Write-Output "downloaded $latest`t$zip`t$signature"
 }
 catch {
     Write-Output "error $($_.Exception.Message)"
