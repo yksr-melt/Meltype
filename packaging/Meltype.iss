@@ -54,8 +54,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 #if HasMeltypeIme
-; 登録済みなら聞かずに更新する (PrepareToInstall)
-Name: "meltypeime"; Description: "Meltype IME を登録する (管理者権限が必要)"; GroupDescription: "入力方式:"; Check: not IsMeltypeImeRegistered
+; このユーザーが使っているなら聞かずに更新する (PrepareToInstall)
+Name: "meltypeime"; Description: "Meltype IME を登録する (管理者権限が必要)"; GroupDescription: "入力方式:"; Check: not IsMeltypeImeInUse
 #endif
 Name: "startup"; Description: "Windows の起動時に Meltype を起動する"; GroupDescription: "その他:"
 
@@ -92,9 +92,26 @@ Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Meltype /F"; Flags: run
 Type: filesandordirs; Name: "{app}"
 
 [Code]
-function IsMeltypeImeRegistered(): Boolean;
+// このユーザーが Meltype IME を使っているか: PC 全体に登録されていて、このユーザーの言語の一覧にある (TipServer.IsInUserLanguageList と同じ)。
+// 登録は PC で 1 つなので、ほかのユーザーが登録しただけなら使っていない
+function IsMeltypeImeInUse(): Boolean;
+var
+  Profiles: String;
+  Languages, Names: TArrayOfString;
+  I, J: Integer;
 begin
-  Result := RegKeyExists(HKLM, 'SOFTWARE\Microsoft\CTF\TIP\{417D801B-A9BD-4C26-BD16-356A825A6998}');
+  Result := False;
+  if not RegKeyExists(HKLM64, 'SOFTWARE\Microsoft\CTF\TIP\{417D801B-A9BD-4C26-BD16-356A825A6998}') then exit;
+  Profiles := 'Control Panel\International\User Profile';
+  if not RegGetSubkeyNames(HKCU, Profiles, Languages) then exit;
+  for I := 0 to GetArrayLength(Languages) - 1 do
+    if RegGetValueNames(HKCU, Profiles + '\' + Languages[I], Names) then
+      for J := 0 to GetArrayLength(Names) - 1 do
+        if Pos('{417D801B-A9BD-4C26-BD16-356A825A6998}', Uppercase(Names[J])) > 0 then
+        begin
+          Result := True;
+          exit;
+        end;
 end;
 
 function PowerShell(): String;
@@ -139,9 +156,9 @@ begin
 end;
 #endif
 
-// Meltype IME の登録を断られた・失敗したときに本体を入れるかは、実行する前から登録されていたかで決める。
-//   登録済み: 本体も入れない (本体だけ入れると、Meltype.exe が別ビルドの impl と通信できず Meltype キーボードで動く)
-//   未登録: 本体は入れる (Meltype IME が無いので版はずれず、Meltype キーボードで動く)
+// Meltype IME の登録を断られた・失敗したときに本体を入れるかは、実行する前からこのユーザーが Meltype IME を使っていたか (IsMeltypeImeInUse) で決める。
+//   使っている: 本体も入れない (本体だけ入れると、Meltype.exe が別ビルドの impl と通信できず Meltype キーボードで動く)
+//   使っていない: 本体は入れる (Meltype キーボードで動く)。ほかのユーザーが登録した PC で、このユーザーのインストール・更新を止めないため
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 #if HasMeltypeIme
 var
@@ -151,7 +168,7 @@ var
 begin
   Result := '';
 #if HasMeltypeIme
-  if IsMeltypeImeRegistered() then
+  if IsMeltypeImeInUse() then
   begin
     if not RegisterMeltypeIme() then
     begin

@@ -13,5 +13,6 @@ $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
 if ($UpdateLog) { $arguments += "/LOG=`"$UpdateLog`"" }
 # インストーラーが起動した Meltype は残り続ける。Start-Process -Wait は子孫のプロセスも待つので使わない
 $process = Start-Process -FilePath $setup.FullName -ArgumentList $arguments -PassThru
+$null = $process.Handle # Windows PowerShell 5.1 では、取っておかないと終了後に ExitCode が $null になる (exit $null は 0)
 $process.WaitForExit()
 exit $process.ExitCode
