@@ -1,0 +1,31 @@
+# Mergify のコメントを日本語でまとめる bot (.github/bot/mergify.mjs)。
+#   Mergify (mergify[bot]) が Pull Request にコメントを書いた・書き換えたら、日本語にして bot のコメントに書く。
+# Pull Request のコードはチェックアウトしない (main の bot のスクリプトだけを使い、イベントのコメントの本文を読む)。
+name: mergify
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+permissions: {}
+
+concurrency:
+  group: mergify-${{ github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  translate:
+    if: github.event.issue.pull_request && github.event.comment.user.login == 'mergify[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/bot
+          persist-credentials: false
+      - run: node .github/bot/mergify.mjs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

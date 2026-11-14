@@ -96,6 +96,7 @@ jobs:
         run: |
           node .github/bot/notices.mjs --self-test
           node .github/bot/code-scanning.mjs --self-test
+          node .github/bot/mergify.mjs --self-test
           node .github/bot/sponsors.mjs --self-test
 
   # 新しく足したソースファイルの先頭のライセンス・著作権の表記 (.github/bot/notices.mjs)
