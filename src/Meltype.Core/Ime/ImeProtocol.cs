@@ -22,7 +22,7 @@ public enum ImeEventType
     KeyPressed,
     /// <summary>
     /// キーを離した (Key.Vk と Key.Interrupted)。送るのは次の 2 つだけ:
-    /// ImeCapture.AltKeys のあいだに KeyPressed で送った左右の Alt (Windows のフロント)。
+    /// ImeCapture.AltKeys のあいだに KeyPressed で送った左右の Alt (Windows・Linux のフロント)。
     /// ワークアラウンド: 親指シフトの同時打鍵のために、ImeCapture.KeyReleases のあいだに ImeKey.ReleaseFollows を付けて送ったキー
     /// (送るのは Meltype キーボードだけで、ほかのフロントでは親指シフトの同時打鍵が効かない)。
     /// </summary>
@@ -218,7 +218,7 @@ public sealed record ImeCapture
     /// <summary>ワークアラウンド (<see cref="ImeEventType.KeyReleased"/>): 親指シフトのかな配列なので、送ったキーを離したことも受け取る。</summary>
     public bool KeyReleases { get; init; }
     /// <summary>
-    /// 左右の Alt (0xA4・0xA5) の押下を KeyPressed で、解放を KeyReleased で送る (設定「左 Alt で英数 / 右 Alt で日本語」。Windows のフロント)。
+    /// 左右の Alt (0xA4・0xA5) の押下を KeyPressed で、解放を KeyReleased で送る (設定「左 Alt で英数 / 右 Alt で日本語」。Windows・Linux のフロント)。
     /// 単独押しかは本体が決める。押下は本体に送ってからアプリに通す (consumed にならない)。解放はいったん止めて、
     /// consumed なら何もしないキー 0xE8 のあとに、そうでなければそのまま送り直す。アプリには押下と解放の組がそろって届き、
     /// 単独押しで切り替えたときは、間に 0xE8 があるのでアプリの単独押しの操作 (メニューバーに移る) にならない。
