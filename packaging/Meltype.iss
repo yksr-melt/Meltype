@@ -202,6 +202,7 @@ var
   Data: String;
 #if HasMeltypeIme
   ResultCode: Integer;
+  Parameters: String;
 #endif
 begin
   if CurUninstallStep = usUninstall then
@@ -209,9 +210,10 @@ begin
     StopMeltype();
 #if HasMeltypeIme
     // IME の登録を外す ({app} を消す前に)。PC 全体の登録を外すのは setup-ime.ps1 が昇格する。
-    // サイレント時には UAC を出さないので外さない。
-    if not UninstallSilent() then
-      Exec(PowerShell(), '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup-ime.ps1') + '" -Uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    // 画面の無いアンインストール (winget uninstall) でも外す。インストールと同じく、UAC の前に説明を出す
+    Parameters := '-NoProfile -ExecutionPolicy Bypass -File "' + ExpandConstant('{app}\setup-ime.ps1') + '" -Uninstall';
+    if UninstallSilent() then Parameters := Parameters + ' -Explain';
+    Exec(PowerShell(), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 #endif
   end;
   // 設定と学習データは入れ直したときにも使えるよう、聞いてから消す (既定は残す)。画面の無いアンインストールでは残す。

@@ -205,7 +205,19 @@ function Get-MeltypeImeSourceHashes([string]$Source) {
     return $hashes
 }
 
-# -Explain: UAC の前に、Meltype からの確認だと分かる説明を出す。「キャンセル」なら UAC を出さずに $false
+# UAC の前に、Meltype からの確認だと分かる説明を出す (ウィザードを出さない setup.exe・アンインストーラー: #970)。「OK」なら $true
+function Confirm-MeltypeElevation([string]$Text) {
+    Add-Type -AssemblyName System.Windows.Forms
+    # ウィンドウの無い PowerShell から出すので、ほかのウィンドウの後ろに隠れないよう最前面に出す (DefaultDesktopOnly)
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "$Text`n`n次に「Windows PowerShell」の管理者権限の確認が出たら「はい」を選んでください。",
+        'Meltype', 'OKCancel', 'Information', 'Button1', 'DefaultDesktopOnly')
+    if ($answer -eq 'OK') { return $true }
+    Write-Host '管理者権限の確認の前にキャンセルしました。'
+    return $false
+}
+
+# -Explain: UAC の前に Confirm-MeltypeElevation で説明を出す。「キャンセル」なら UAC を出さずに $false
 function Install-MeltypeIme([string]$Source, [switch]$Explain) {
     $register = Join-Path $Source 'Register-Tip.ps1'
     if (-not (Test-Path -LiteralPath $register)) { return $false }
@@ -223,16 +235,8 @@ function Install-MeltypeIme([string]$Source, [switch]$Explain) {
         try { Add-MeltypeImeToLanguageList } catch { }
         return $true
     }
-    if ($Explain) {
-        Add-Type -AssemblyName System.Windows.Forms
-        # ウィンドウの無い PowerShell から出すので、ほかのウィンドウの後ろに隠れないよう最前面に出す (DefaultDesktopOnly)
-        $answer = [System.Windows.Forms.MessageBox]::Show(
-            "Meltype のインストールで、Meltype IME を Windows に登録します。`n`n次に「Windows PowerShell」の管理者権限の確認が出たら「はい」を選んでください。`n「キャンセル」なら登録しません。登録済みの Meltype IME を更新するときは、Meltype も更新せずに前の版のまま使います。",
-            'Meltype', 'OKCancel', 'Information', 'Button1', 'DefaultDesktopOnly')
-        if ($answer -ne 'OK') {
-            Write-Host 'Meltype IME の登録をキャンセルしました。'
-            return $false
-        }
+    if ($Explain -and -not (Confirm-MeltypeElevation 'Meltype のインストールで、Meltype IME を Windows に登録します。「キャンセル」なら登録しません。登録済みの Meltype IME を更新するときは、Meltype も更新せずに前の版のまま使います。')) {
+        return $false
     }
     Write-Host 'Meltype IME (入力欄に直接入力) を Windows に登録します。'
     $result = Invoke-Elevated $Source $hashes 'Register'
@@ -251,7 +255,8 @@ function Install-MeltypeIme([string]$Source, [switch]$Explain) {
     return $true
 }
 
-function Uninstall-MeltypeIme {
+# このユーザーの言語の一覧からは必ず外す (管理者権限が要らない)。PC 全体の登録を外すのは UAC で断られたら残す (ほかのユーザーが使っていることもある)
+function Uninstall-MeltypeIme([switch]$Explain) {
     try { Remove-MeltypeImeFromLanguageList } catch { }
     # 1.5.1 以前の Meltype が、登録を断った記録 (ImeDeclined) を置いていた
     Remove-Item -LiteralPath 'HKCU:\Software\Meltype' -Recurse -Force -ErrorAction SilentlyContinue
@@ -260,6 +265,9 @@ function Uninstall-MeltypeIme {
     # Program Files に無ければ、同じ場所 (インストール先) の tip のもの
     if (-not (Test-Path -LiteralPath $register)) { $register = Join-Path $PSScriptRoot 'tip\Register-Tip.ps1' }
     if (-not (Test-Path -LiteralPath $register)) { return $false }
+    if ($Explain -and -not (Confirm-MeltypeElevation 'Meltype のアンインストールで、Meltype IME の登録を Windows から外します。「キャンセル」なら登録を残します (同じ PC のほかのユーザーは、そのまま Meltype IME を使えます)。')) {
+        return $false
+    }
     Write-Host 'Meltype IME の登録を外します。'
     return (Invoke-Elevated (Split-Path $register) @{ 'Register-Tip.ps1' = (Get-Sha256 $register) } 'Unregister') -eq 'ok'
 }

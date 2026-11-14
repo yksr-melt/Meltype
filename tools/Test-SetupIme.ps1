@@ -42,7 +42,8 @@ function Uninstall-MeltypeIme { throw 'Uninstall-MeltypeIme called during instal
     foreach ($case in @(@{ Result = '$true'; Code = 0 }, @{ Result = '$false'; Code = 1 })) {
         $stub = @'
 function Install-MeltypeIme { throw 'Install-MeltypeIme called during uninstall' }
-function Uninstall-MeltypeIme {
+function Uninstall-MeltypeIme([switch]$Explain) {
+    if ($Explain) { throw 'Unexpected -Explain value' }
     Write-Host 'Unregistration attempted'
     return RESULT
 }

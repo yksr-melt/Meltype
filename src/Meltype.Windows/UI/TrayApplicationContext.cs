@@ -174,6 +174,16 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _state.Save();
             if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true));
         }
+        // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
+        // (初めて起動した人には、インストーラーが聞いている)
+        if (!AppPaths.IsPortable && !_state.TsfOffered)
+        {
+            _state.TsfOffered = true;
+            _state.Save();
+            if (!firstRun && CanRegisterTsf && !_state.TsfIntroduced && Tip.TipServer.IsKnownUnregistered) _invoker.BeginInvoke(() => EnableTsf(
+                "Meltype IME を入れますか？\n\n" +
+                "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。変換ボックスが出ないアプリでも入力できます。「いいえ」なら、今の動作モードのまま使えます。"));
+        }
         // 動作モードが Meltype IME なのに、登録済みの impl がこの Meltype.exe と別ビルドで、Meltype キーボードで動いている
         // (登録した人が別の版の Meltype に更新した・同じ PC のほかのユーザーが別の版を入れた)。聞いたことは覚えず、起動のたびに聞く
         if (CanRegisterTsf && _engine.Settings.Mode == InputMode.Tsf && Tip.TipServer.IsOtherBuildRegistered) _invoker.BeginInvoke(OfferTsfUpdate);
@@ -206,17 +216,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private static bool CanRegisterTsf => !AppPaths.IsPortable && RuntimeInformation.OSArchitecture != Architecture.Arm64 &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "setup-ime.ps1")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"));
 
-    /// <summary>トレイで Meltype IME を選んだ。使えなければ、登録するかを聞いてから切り替える (登録を聞くのは、ここで選んだときだけ)。</summary>
-    private async void SelectTsf()
+    /// <summary>トレイで Meltype IME を選んだ。使えなければ、登録するかを聞いてから切り替える。</summary>
+    private void SelectTsf()
     {
-        if (!Tip.TipServer.IsUsable)
-        {
-            if (!await OfferRegisterTsf("Meltype IME を Windows に登録しますか？\n\n" +
-                "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。変換ボックスが出ないアプリでも入力できます。")) return;
-            // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
-            _state.TsfIntroduced = true;
-            _state.Save();
-        }
+        if (Tip.TipServer.IsUsable) SetMode(InputMode.Tsf);
+        else EnableTsf("Meltype IME を Windows に登録しますか？\n\n" +
+            "Meltype IME は Windows の IME として、打った文字を入力欄に直接入れます。変換ボックスが出ないアプリでも入力できます。");
+    }
+
+    /// <summary>Meltype IME を登録するかを聞き、使えるようになったら動作モードを Meltype IME にする。</summary>
+    private async void EnableTsf(string question)
+    {
+        if (!await OfferRegisterTsf(question)) return;
+        // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
+        _state.TsfIntroduced = true;
+        _state.Save();
         SetMode(InputMode.Tsf);
         UpdateStatus();
     }
