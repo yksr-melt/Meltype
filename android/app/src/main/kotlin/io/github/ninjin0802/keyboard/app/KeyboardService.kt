@@ -647,9 +647,15 @@ class KeyboardService : InputMethodService(), KeyListener {
             is KeyAction.Romaji -> {
                 // Core is the only Japanese QWERTY engine; failure shows the emergency picker.
                 val scalar = if (shift != ShiftState.OFF) action.char.uppercaseChar() else action.char
-                val consumed = coreCharacter(scalar.code, shift = shift != ShiftState.OFF)
-                // Never feed the same key to Kotlin after a Core failure.
-                if (core != null && !consumed) insertPassed(scalar.toString())
+                if (!policy.convert) {
+                    // Email, password, and other non-converting editors accept literal keys,
+                    // even after the user switches from English to Japanese QWERTY.
+                    insert(scalar.toString())
+                } else {
+                    val consumed = coreCharacter(scalar.code, shift = shift != ShiftState.OFF)
+                    // A Core failure shows recovery UI, never a second Japanese input engine.
+                    if (core != null && !consumed) insertPassed(scalar.toString())
+                }
                 setShift(shift.onCharTyped())
             }
             KeyAction.Delete -> {
