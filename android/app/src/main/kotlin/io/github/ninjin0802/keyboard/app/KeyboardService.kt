@@ -716,6 +716,7 @@ class KeyboardService : InputMethodService(), KeyListener {
                             // Only the character: the Core decides the key from it
                             // (a virtual key made from '.' would be Delete).
                             val consumed = coreCharacter(ch.code)
+                            if (core == null) return // Core failed: emergency picker, never replay the key.
                             if (!consumed) {
                                 // A deliberately direct key still reaches the
                                 // editor, without a preceding commit of Japanese.
@@ -750,10 +751,13 @@ class KeyboardService : InputMethodService(), KeyListener {
                 else -> bridge.deleteBeforeCursor()
             }
             KeyAction.Space -> {
-                if (coreInput.composing && coreForRomaji() != null) {
-                    if (!coreCharacter(' '.code)) insertPassed(" ")
+                // Core owns space even with an empty Japanese composition.
+                if (coreForRomaji() != null) {
+                    val consumed = coreCharacter(' '.code)
+                    if (core != null && !consumed) insertPassed(" ")
                     return
                 }
+                if (nativeCoreUnavailable && nav.current.isJapanese) return
                 val selecting = session.isComposing && !session.config.direct
                 // 変換する欄では次の候補を選ぶ。変換しない欄では、持っている1文字を確定するだけ。
                 render(session.handle(Operation.Space))
@@ -762,13 +766,16 @@ class KeyboardService : InputMethodService(), KeyListener {
                     insert(if (full) "　" else " ")
                 }
             }
-            KeyAction.Enter -> if (coreInput.composing && coreForRomaji() != null) {
-                if (!coreVirtualKey(0x0D)) {
+            KeyAction.Enter -> if (coreForRomaji() != null) {
+                val consumed = coreVirtualKey(0x0D)
+                if (core != null && !consumed) {
                     caretWatch.lose()
                     val editorAction = enterAction(imeOptions)
                     if (editorAction != null) currentInputConnection?.performEditorAction(editorAction)
                     else sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
                 }
+            } else if (nativeCoreUnavailable && nav.current.isJapanese) {
+                return
             } else if (session.isComposing && !session.config.direct) {
                 render(session.handle(Operation.Commit))
             } else {
