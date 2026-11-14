@@ -61,6 +61,9 @@ import io.github.ninjin0802.keyboard.app.view.ImeGlassSurface
 import io.github.ninjin0802.keyboard.app.view.KeyboardTopEdgeHighlight
 import io.github.ninjin0802.keyboard.app.view.Palette
 import io.github.ninjin0802.keyboard.app.view.bottomPaddingPx
+import io.github.ninjin0802.keyboard.engine.Clause
+import io.github.ninjin0802.keyboard.engine.Converter
+import io.github.ninjin0802.keyboard.engine.Segment
 import io.github.ninjin0802.keyboard.mozc.MozcConverter
 import io.github.ninjin0802.keyboard.mozc.MozcEngine
 import java.util.concurrent.LinkedBlockingQueue
@@ -822,7 +825,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         flickPopup?.showPreview = policy.flickPreview
     }
 
-     /**
+    /**
      * Mozc の用意ができるまでは、変換に失敗したものとして答える。用意に失敗していたら、
      * 変換や学習が頼まれたときに [mozc] がやり直す。変換のスレッドでだけ使う。
      */
