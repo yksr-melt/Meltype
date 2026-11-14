@@ -102,8 +102,10 @@ public sealed partial class CompositionDetector
     /// <summary>調べる用 (--segments): 区間分けのたびに、最後の状態ごとの一番軽い道と、候補ごとの重み (+) を 1 行ずつ渡す。* が選んだ道。</summary>
     internal Action<string>? LatticeTrace { get; set; }
 
+    /// <param name="reasons">渡したら、選んだ道と、言語の割り当てが違う一番軽い道 (次点) を書く関数を足す (確定のログ用。issue #1644)。
+    /// キーを打つたびに呼ばれるので、次点を探して文字列にするのは、ログに書くときだけにする。</param>
     private List<CompositionSegment> FindSpansByReading(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0)
+        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0, List<Func<string>>? reasons = null)
     {
         var text = _preparedRaw + pending;
         var length = text.Length;
@@ -288,18 +290,49 @@ public sealed partial class CompositionDetector
         {
             trace($"lattice {text} (manual {manual}, preceding {precedingEnglish?.ToString() ?? "-"}, following {followingEnglish?.ToString() ?? "-"}, bias {englishBias})");
             foreach (var (cost, state, node) in finals.OrderBy(f => f.Cost))
-            {
-                var path = new List<string>();
-                for (var at = node; at.Previous is { } previous; at = previous)
-                    path.Add($"{(at.Edge.English ? "EN" : at.Edge.Neutral ? "--" : "JA")}:{text[at.Edge.Start..at.Edge.End]}{(at.Edge.Kana.Length > 0 && at.Edge.Kana != text[at.Edge.Start..at.Edge.End] ? "=" + at.Edge.Kana : "")}+{at.Cost - previous.Cost:0.##}");
-                path.Reverse();
-                trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {string.Join(" ", path)}");
-            }
+                trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {DescribePath(node, text, true)}");
         }
+        if (reasons is not null && chosen is not null) reasons.Add(() => Explain(chosen, chosenCost, finals, text));
         var edges = new List<LatticeEdge>();
         for (var node = chosen; node?.Previous is not null; node = node.Previous) edges.Add(node.Edge);
         edges.Reverse();
         return ToSegments(units, text, unitAt, unitsEnd, edges);
+    }
+
+    /// <summary>選んだ道と次点の道。次点は、文字ごとの言語 (英語 / 日本語) が選んだ道と違う道のうち一番軽いもの (同じ区切りで状態だけ違う道は比べても意味がない)。</summary>
+    private static string Explain(LatticeNode chosen, double chosenCost, List<(double Cost, LatticeState State, LatticeNode Node)> finals, string text)
+    {
+        var languages = Languages(chosen, text.Length);
+        var (runnerCost, _, runner) = finals.Where(f => Languages(f.Node, text.Length) != languages).DefaultIfEmpty().MinBy(f => f.Node is null ? double.MaxValue : f.Cost);
+        return $"区切り {DescribePath(chosen, text, Diagnostics.Log.RecordText)} 計 {chosenCost:0.00}" +
+            (runner is null ? "、ほかの区切りなし" : $"、次点 {DescribePath(runner, text, Diagnostics.Log.RecordText)} 計 {runnerCost:0.00} (差 {runnerCost - chosenCost:0.00})");
+    }
+
+    /// <summary>
+    /// 道の候補ごとに 言語:打った文字=読み+重み を並べる (EN:google+1 JA:kyouha=きょうは+2)。
+    /// 打った文字を出さないなら、文字の代わりに文字数を出す (JA(6)+2)。
+    /// </summary>
+    private static string DescribePath(LatticeNode node, string text, bool withText)
+    {
+        var path = new List<string>();
+        for (var at = node; at.Previous is { } previous; at = previous)
+        {
+            var raw = text[at.Edge.Start..at.Edge.End];
+            var label = at.Edge.English ? "EN" : at.Edge.Neutral ? "--" : "JA";
+            var shown = withText ? $"{label}:{raw}{(at.Edge.Kana.Length > 0 && at.Edge.Kana != raw ? "=" + at.Edge.Kana : "")}" : $"{label}({raw.Length})";
+            path.Add($"{shown}+{at.Cost - previous.Cost:0.##}");
+        }
+        path.Reverse();
+        return string.Join(" ", path);
+    }
+
+    /// <summary>道が文字ごとに英語 (E) か日本語 (J) か。記号・数字 (-) は言語を変えないので比べない。</summary>
+    private static string Languages(LatticeNode node, int length)
+    {
+        var languages = new char[length];
+        for (var at = node; at.Previous is not null; at = at.Previous)
+            Array.Fill(languages, at.Edge.English ? 'E' : at.Edge.Neutral ? '-' : 'J', at.Edge.Start, at.Edge.End - at.Edge.Start);
+        return new string(languages);
     }
 
     /// <summary>名詞に付く付属語か (が・を・に・で・する …)。英単語との切り替えの重みを 0 にする。</summary>

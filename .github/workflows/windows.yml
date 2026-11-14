@@ -19,6 +19,13 @@ concurrency:
   group: windows-${{ github.ref }}
   cancel-in-progress: true
 
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+
 jobs:
   test:
     runs-on: windows-latest
@@ -41,14 +48,13 @@ jobs:
 
       # Meltype IME (入力欄に直接入力する TSF の DLL)。C++ なので dotnet build とは別にビルドする (x64 と x86)。
       - name: Build Meltype IME
-        shell: pwsh
         run: ./native/tip/build.ps1 -Configuration Release
 
       - name: Test package scan failure handling
         shell: powershell
         run: .\tools\Test-WindowsPackageScan.ps1
 
-      # Microsoft IME (日本語) や英語のスペルチェッカーが無い環境では、それらを使うテストは飛ばされる。
+      # 英語のスペルチェッカーが無い環境では、それを使うテストは飛ばされる。
       - name: Test
         run: dotnet run --project src/Meltype.Windows.Tests/Meltype.Windows.Tests.csproj -c Release --no-build
 
@@ -62,7 +68,6 @@ jobs:
         shell: powershell
         run: .\tools\Test-SetupIme.ps1
       - name: Compile installer script
-        shell: pwsh
         run: |
           $iscc = .\packaging\Find-InnoSetup.ps1
           $stage = Join-Path $env:RUNNER_TEMP 'Meltype'
@@ -71,13 +76,11 @@ jobs:
           Copy-Item -LiteralPath LICENSE -Destination (Join-Path $stage 'LICENSE.txt')
           Copy-Item -LiteralPath THIRD-PARTY-NOTICES.md -Destination (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
           & $iscc /Q "/DAppVersion=0.0.0-check" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
-          if ($LASTEXITCODE -ne 0) { throw "インストーラーの台本を Inno Setup で通せませんでした (exit code $LASTEXITCODE)。" }
           # IME を同梱する場合のチェックボックス・起動処理もコンパイルする。
           New-Item -ItemType Directory -Force -Path (Join-Path $stage 'app\tip') | Out-Null
           Set-Content -LiteralPath (Join-Path $stage 'app\meltype-ime.ps1') -Value '# dummy'
           Set-Content -LiteralPath (Join-Path $stage 'app\tip\Register-Tip.ps1') -Value '# dummy'
           & $iscc /Q "/DAppVersion=0.0.0-check-ime" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
-          if ($LASTEXITCODE -ne 0) { throw "IME 同梱のインストーラーを Inno Setup で通せませんでした (exit code $LASTEXITCODE)。" }
 
   # install.ps1 と uninstall.ps1 を、ダミーの Meltype.exe で通す (tools/Test-InstallLifecycle.ps1)。
   #   本物の配布物でのインストール → 更新 → アンインストールを確かめる統合テストが必要になったら、手動実行のワークフローを別に足す。
@@ -112,7 +115,7 @@ jobs:
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
             echo "build=true" >> "$GITHUB_OUTPUT"
-          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || git diff --name-only "$BEFORE" "$GITHUB_SHA" -- native/mozc .github/workflows/windows.yml | grep -q .; then
+          elif [[ -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || git diff --name-only "$BEFORE" "$GITHUB_SHA" -- native/mozc .github/workflows/windows.yml | grep . >/dev/null; then
             echo "build=true" >> "$GITHUB_OUTPUT"
           else
             echo "native/mozc は変わっていないので、Mozc のビルドは飛ばします。"
@@ -126,7 +129,6 @@ jobs:
           python-version: '3.12'
       - name: Bazelisk
         if: steps.check.outputs.build == 'true'
-        shell: pwsh
         run: |
           # 版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる。
           $version = 'v1.29.0'
@@ -205,14 +207,11 @@ jobs:
           }
       # インストーラー (dist\Meltype-<版>-setup.exe)。zip と同じ app フォルダーから作る (issue #161)。
       - name: Installer
-        shell: pwsh
         run: |
           $iscc = .\packaging\Find-InnoSetup.ps1
           $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { 'test-' + (Get-Date -Format 'yyyyMMdd-HHmm') }
           & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$PWD\dist\Meltype" "/DOutputDir=$PWD\dist" packaging\Meltype.iss
-          if ($LASTEXITCODE -ne 0) { throw "インストーラーを作れませんでした (exit code $LASTEXITCODE)。" }
       - name: Sign installer
-        shell: pwsh
         env:
           SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
           MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
@@ -225,7 +224,6 @@ jobs:
             $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
               Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
             & $signtool.FullName sign /f $pfx /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup.FullName
-            if ($LASTEXITCODE -ne 0) { throw "インストーラーの署名に失敗しました (exit code $LASTEXITCODE)。" }
           } finally {
             Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
           }
