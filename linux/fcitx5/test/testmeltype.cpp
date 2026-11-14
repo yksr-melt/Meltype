@@ -110,14 +110,23 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         ic->inputPanel().reset();
         ic->focusIn();
         FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        // fcitx5 activates the input method asynchronously, and Meltype waits 30ms
+        // after activation before showing the indicator. A fixed 100ms assertion
+        // can run before activation on a busy Fedora runner. Wait for the actual
+        // indicator, but still fail if it never appears.
+        const auto deadline = now(CLOCK_MONOTONIC) + 1000000;
         static std::unique_ptr<EventSourceTime> later;
-        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
-            [dispatcher, instance, ic](EventSourceTime *, uint64_t) {
-                FCITX_ASSERT(ic->inputPanel().auxUp().toString() == "あ") << ic->inputPanel().auxUp().toString();
-                dispatcher->schedule([dispatcher, instance]() {
-                    dispatcher->detach();
-                    instance->exit();
-                });
+        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 20000, 20000,
+            [dispatcher, instance, ic, deadline](EventSourceTime *, uint64_t) {
+                if (ic->inputPanel().auxUp().toString() == "あ") {
+                    dispatcher->schedule([dispatcher, instance]() {
+                        dispatcher->detach();
+                        instance->exit();
+                    });
+                    return false;
+                }
+                FCITX_ASSERT(now(CLOCK_MONOTONIC) < deadline)
+                    << "Input mode indicator did not appear: " << ic->inputPanel().auxUp().toString();
                 return true;
             });
     });
