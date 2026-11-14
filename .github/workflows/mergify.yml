@@ -1,6 +1,6 @@
 # Mergify のコメントを日本語でまとめる bot (.github/bot/mergify.mjs)。
-#   Mergify (mergify[bot]) が Pull Request にコメントを書いた・書き換えたら、その Pull Request の Mergify のコメントをすべて日本語にして、bot のコメント 1 つにまとめる。
-# Pull Request のコードはチェックアウトしない (main の bot のスクリプトだけを使い、イベントのコメントの本文を読む)。
+#   Mergify (mergify[bot]) がマージキューの状況のコメントを書いた・書き換えたら、状態と時刻を日本語にして bot のコメント 1 つに書く。
+# Pull Request のコードはチェックアウトしない (main の bot のスクリプトだけを使い、API で Mergify のコメントを読む)。
 name: mergify
 
 on:

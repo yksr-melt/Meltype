@@ -2,9 +2,9 @@
 // Copyright (C) 2026 Yukishiro
 //
 // Mergify のコメントを日本語でまとめる bot (.github/workflows/mergify.yml から呼ぶ)。
-//   Mergify (mergify[bot]) が Pull Request にコメントを書いた・書き換えたら、その Pull Request の Mergify のコメントを
-//   すべて日本語にして、bot のコメント 1 つにまとめる (毎回すべて読み直すので、こちらで状態を持たない)。
-//   Mergify のコメントはそのまま残す。チェックボックスなどの操作は Mergify のコメントにしか効かないため。
+//   Mergify (mergify[bot]) がマージキューの状況のコメントを書いた・書き換えたら、状態と時刻だけを日本語にして
+//   bot のコメント 1 つに書く。理由や条件などの詳しいことは訳さず、Mergify のコメントへのリンクで済ませる。
+//   チェックボックスのコメントは .mergify.yml の queue_controls_comment: false で出さない。
 // Pull Request のコードは動かさない。GitHub の API で、Mergify のコメントの本文を読むだけ。
 import fs from 'node:fs';
 
@@ -15,7 +15,10 @@ const token = process.env.GITHUB_TOKEN;
 const Marker = '<!-- meltype-bot --><!-- mergify -->';
 const Author = 'mergify[bot]';
 
-/** キューの状況のコメントの state (コメントの先頭の Mergify Payload)。無い state は英語の見出しを出す。 */
+/**
+ * キューの状況の state の日本語。Mergify の英語の文面は読まず、コメントの先頭の Mergify Payload (JSON) だけを読む。
+ * 文面は Mergify がよく変えるが、Payload は機械向けで変わりにくいため。無い state は名前をそのまま出す。
+ */
 const States = {
   queued: '🕐 マージキューに入っています',
   waiting_for_ci: '🕐 マージキューで CI を待っています',
@@ -25,65 +28,26 @@ const States = {
   failed: '❌ マージキューで失敗しました',
 };
 
-/** 「So far」の各行の先頭の太字。無いものは英語のまま出す。 */
-const Steps = {
-  'Entered the queue': 'キューに入りました',
-  'Checks skipped': 'CI を省きました (すでに main の最新を取り込んでいます)',
-  'Checks running': 'CI を動かしています',
-  'Checks passed': 'CI が通りました',
-  'Checks failed': 'CI が失敗しました',
-  'Merged': 'マージしました',
-  'Dequeued': 'キューから外れました',
-  'Left the queue': 'キューから外れました',
-};
-
-/** 状況のコメント以外の Mergify のコメント。英語の文が含まれていれば、その日本語を出す。 */
-const Phrases = [
-  ['Tick the box to add this pull request to the merge queue',
-    'Mergify のコメントの「Queue this pull request」にチェックを入れると、この Pull Request がマージキューに入ります (`@mergifyio queue` とコメントするのと同じです)。まだキューの条件を満たしていなければ、満たした時点でキューに入ります。'],
-  ['Naming a queue is deprecated',
-    '⚠️ キューの名前を付けるのは非推奨になりました。`@mergifyio queue` とだけコメントしてください (条件に合う最初のキューに入ります)。'],
-];
-
-/** Markdown を崩さず、@ で通知しないようにする。 */
-const plain = text => String(text ?? '').replace(/@/g, '@​');
-const quote = text => plain(text).split(/\r?\n/).map(l => `> ${l}`).join('\n');
+/** ISO の時刻を日本時間の「11/14 21:41」にする。 */
+const time = iso => iso && new Date(iso).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function payloadOf(body) {
-  const match = /-\*- Mergify Payload -\*-\s*([\s\S]*?)\s*-\*- Mergify Payload End -\*-/.exec(body);
+  const match = /-\*- Mergify Payload -\*-\s*([\s\S]*?)\s*-\*- Mergify Payload End -\*-/.exec(body ?? '');
   return match ? JSON.parse(match[1]) : null;
 }
 
-/** キューの状況のコメント。 */
-function status(body, payload) {
-  const heading = /^### (.*)$/m.exec(body)?.[1] ?? '';
-  const merged = /Merged into `([^`]+)` as `([^`]+)`/.exec(heading);
-  const title = merged ? `✅ \`${merged[1]}\` にマージしました (\`${merged[2]}\`)` : States[payload.state] ?? plain(heading);
-  const steps = [...body.matchAll(/^- (\S+) \*\*(.+?)\*\*(.*)$/gm)]
-    .map(([, icon, label, rest]) => `- ${icon} **${Steps[label] ?? plain(label)}**${plain(rest)}`);
-  const met = /(\d+) merge conditions? met/.exec(body);
-  return [
-    `**${title}**`,
-    ...(steps.length ? ['', ...steps] : []),
-    ...(met ? ['', `マージの条件を ${met[1]} 個満たしています。`] : []),
-  ];
-}
-
-/** Mergify のコメント 1 つの日本語の行。分からなければ英語を引用する (文面が変わっても黙って消さないため)。 */
-function translate(body) {
-  const payload = payloadOf(body);
-  if (payload) return status(body, payload);
-  const found = Phrases.filter(([en]) => body.includes(en)).map(([, ja]) => ja);
-  return found.length ? found : ['日本語の説明はまだありません。', '', quote(body)];
-}
-
-function message(comments) {
-  return [
-    '### 🤖 Mergify のお知らせ (日本語)',
-    ...comments.flatMap(c => ['', ...translate(c.body ?? ''), `<sub>[元のコメント](${c.html_url})</sub>`]),
+/** キューの状況の日本語の行。 */
+function message(payload, url) {
+  const lines = [
+    `### ${States[payload.state] ?? `マージキューの状態: \`${payload.state}\``}`,
     '',
-    '<sub>Mergify のコメントを日本語にしたものです。操作は Mergify のコメントでしてください。</sub>',
-  ].join('\n');
+    payload.queued_at && `- キューに入った時刻: ${time(payload.queued_at)}`,
+    payload.estimated_time_of_merge && `- マージの見込み: ${time(payload.estimated_time_of_merge)}`,
+    payload.left_at && `- キューを出た時刻: ${time(payload.left_at)}`,
+    '',
+    `<sub>時刻は日本時間です。理由や条件などの詳しいことは、[Mergify のコメント](${url}) を見てください。</sub>`,
+  ];
+  return lines.filter(l => typeof l === 'string').join('\n');
 }
 
 async function gh(method, url, body) {
@@ -104,9 +68,10 @@ async function main() {
     comments.push(...batch);
     if (batch.length < 100) break;
   }
-  const mergify = comments.filter(c => c.user?.login === Author);
-  if (!mergify.length) return console.log('Mergify のコメントがありません');
-  const body = `${Marker}\n${message(mergify)}`;
+  // キューの状況のコメントは PR に 1 つで、Mergify が書き換えていく
+  const status = comments.find(c => c.user?.login === Author && payloadOf(c.body));
+  if (!status) return console.log('Mergify のキューの状況のコメントがありません');
+  const body = `${Marker}\n${message(payloadOf(status.body), status.html_url)}`;
   const mine = comments.find(c => c.user?.type === 'Bot' && c.body?.includes(Marker));
   if (mine?.body === body) return;
   if (mine) await gh('PATCH', `/issues/comments/${mine.id}`, { body });
@@ -117,24 +82,14 @@ async function main() {
 function selfTest() {
   let failed = 0;
   const check = (name, ok) => { if (!ok) failed++; console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); };
-  const box = 'Tick the box to add this pull request to the merge queue (same as `@mergifyio queue`). If it does not match the queue conditions yet, it enters the queue once it does.\n\n- [ ] Queue this pull request <!-- mergify:queue-control:queue -->';
-  const deprecated = '> `queue main`\n\n⚠️ **Naming a queue is deprecated.** Post `@mergifyio queue` without a name instead.';
-  // #1886 の Mergify のコメント (条件の一覧は短くした)
-  const merged = '<!---\nDO NOT EDIT\n-*- Mergify Payload -*-\n{"version": 1, "state": "merged", "queue_rule_name": "main"}\n-*- Mergify Payload End -*-\n-->\n\n'
-    + '### ✅ Merged into `main` as `4bbc87e` at 12:41 UTC\n\nLess than a minute in the queue, with no time running CI.\n\n**So far**\n\n'
-    + '- ✅ **Entered the queue** Sat 14 Nov, 12:41 · rule `main` · triggered by @yksr-melt with the [`@mergifyio queue` command](https://example.com)\n'
-    + '- ✅ **Checks skipped** · PR is already up-to-date\n- ✅ **Merged** 12:41 · `4bbc87e` · merge\n\n<details>\n<summary>5 merge conditions met</summary>\n\n- [x] `check-success = test`\n</details>';
-  const text = message([box, deprecated, merged].map((body, i) => ({ body, html_url: `https://example.com/${i}` })));
-  check('チェックボックスを日本語にする', text.includes('マージキューに入ります') && !text.includes('Tick the box'));
-  check('キューの名前の非推奨を日本語にする', text.includes('非推奨'));
-  check('マージした見出しを日本語にする', text.includes('`main` にマージしました (`4bbc87e`)'));
-  check('経過の行を日本語にする', text.includes('**キューに入りました** Sat 14 Nov') && text.includes('**マージしました** 12:41'));
-  check('満たした条件の数を出す', text.includes('マージの条件を 5 個満たしています'));
-  check('@ で通知しない', !/@yksr-melt/.test(text));
-  const queued = translate('<!---\n-*- Mergify Payload -*-\n{"state": "queued"}\n-*- Mergify Payload End -*-\n-->\n### Queued');
-  check('payload の state で見出しを出す', queued[0] === '**🕐 マージキューに入っています**');
-  const unknown = translate('Something new\nping @someone').join('\n');
-  check('知らない文は英語を引用する', unknown.includes('> Something new') && !unknown.includes('@someone'));
+  // #1886 の Mergify のコメントの先頭
+  const merged = '<!---\nDO NOT EDIT\n-*- Mergify Payload -*-\n{"version": 1, "state": "merged", "queue_rule_name": "main", "queued_at": "2026-11-14T12:41:15.442558+00:00", "estimated_time_of_merge": null, "speculative_check_pr": null, "required_conditions": [], "left_at": "2026-11-14T12:41:23.914996+00:00"}\n-*- Mergify Payload End -*-\n-->\n\n### ✅ Merged into `main`';
+  const text = message(payloadOf(merged), 'https://example.com/1');
+  check('state を日本語にする', text.startsWith('### ✅ マージしました'));
+  check('時刻を日本時間で出す', text.includes('キューに入った時刻: 11/14 21:41'));
+  check('null の項目は出さない', !text.includes('見込み'));
+  check('知らない state は名前を出す', message({ state: 'something_new' }, '').includes('`something_new`'));
+  check('Payload の無いコメントは読まない', payloadOf('Tick the box') === null);
   if (failed) process.exit(1);
 }
 
