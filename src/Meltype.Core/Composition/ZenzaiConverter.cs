@@ -349,8 +349,11 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (process is null) { Fail(); return; }
             // Meltype が強制終了されても、llama-server が残らないようにする (Windows: ジョブに入れる。入れておくと、親が消えたとき OS が一緒に終わらせる)
             BindToThisProcess(process);
-            _pidFile = RecordServer(process.Id, Path.GetFileNameWithoutExtension(_serverPath), process.StartTime.ToUniversalTime().Ticks,
-                Environment.ProcessId, Process.GetCurrentProcess().StartTime.ToUniversalTime().Ticks);
+            using (var self = Process.GetCurrentProcess())
+            {
+                _pidFile = RecordServer(process.Id, Path.GetFileNameWithoutExtension(_serverPath), process.StartTime.ToUniversalTime().Ticks,
+                    self.Id, self.StartTime.ToUniversalTime().Ticks);
+            }
             // 出力を読み捨てる (読まないとパイプが詰まってサーバーが止まる)
             process.OutputDataReceived += static (_, _) => { };
             process.ErrorDataReceived += static (_, _) => { };

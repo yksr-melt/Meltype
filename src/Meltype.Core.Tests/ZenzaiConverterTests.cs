@@ -552,6 +552,17 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Holder_DoesNotCreateAfterDispose()
+    {
+        // Meltype の終了 (meltype_shutdown) で止めた後に変換が来ても、llama-server を作らない (作ると止める人がいない)
+        var created = 0;
+        var holder = new ZenzaiHolder((s, m, d) => { created++; return new ZenzaiConverter(new Uri("http://127.0.0.1:1/")); });
+        holder.Dispose();
+        Assert.True(holder.Get("server", "model") is null, "止めた後は null");
+        Assert.Equal(0, created, "止めた後は作らない");
+    }
+
+    [Test]
     public static void Holder_ZenzaiThatGaveUp_IsRecreatedAfterAWhile()
     {
         // llama-server が落ちたなどで 3 回続けて答えないと、ZenzaiConverter は諦める (例外にはならない)。それも作り直す
