@@ -402,7 +402,8 @@ class ImeLaunchDeviceTest {
                 val service = KeyboardService.activeForSmokeTest?.get()
                 // Previous editor's IME view can still be visible during a focus transition.
                 // Wait for this email field's English QWERTY layout, not just any key surface.
-                activity.editor.hasFocus() && service?.activeKeysForSmokeTest()?.let {
+                activity.hasWindowFocus() && activity.editor.hasFocus() &&
+                    service?.isInputViewShown == true && service.activeKeysForSmokeTest()?.let {
                     it.isAttachedToWindow && it.isShown && it.width > 100 && it.height > 100 &&
                         it.layout.id == io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
                 } == true
@@ -415,35 +416,26 @@ class ImeLaunchDeviceTest {
             assertEquals("A real email editor should select the English QWERTY keyboard",
                 io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY, keyboard.layout.id)
 
-            for (letter in listOf("a", "s", "d")) {
-                val key = keyboard.layout.keys.singleOrNull {
-                    (it.action as? KeyAction.Text)?.text == letter
+            for ((index, letter) in listOf("a", "s", "d").withIndex()) {
+                // The system may recreate the input view after an asynchronous restartInput.
+                // Do not inject against coordinates cached from a detached IME window.
+                waitUntil(
+                    "visible English keys before $letter", millis = 45_000,
+                    retryEveryMillis = 2_000, retry = { requestKeyboard(activity, activity.editor) },
+                    describe = { describeImeState(activity) },
+                ) {
+                    val current = KeyboardService.activeForSmokeTest?.get()
+                    activity.hasWindowFocus() && activity.editor.hasFocus() &&
+                        current?.isInputViewShown == true &&
+                        current.activeKeysForSmokeTest()?.layout?.id ==
+                            io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY
                 }
-                assertNotNull("No on-screen key for $letter", key)
-                val location = IntArray(2)
-                instrumentation.runOnMainSync { keyboard.getLocationOnScreen(location) }
-                val chosen = key!!
-                val x = location[0] +
-                    keyboard.width * ((chosen.col + chosen.width / 2f) / keyboard.layout.columns)
-                val y = location[1] +
-                    keyboard.height * ((chosen.row + 0.5f) / keyboard.layout.rows)
-                val clock = SystemClock.uptimeMillis()
-                val down = MotionEvent.obtain(clock, clock, MotionEvent.ACTION_DOWN, x, y, 0)
-                val up = MotionEvent.obtain(clock, clock + 55, MotionEvent.ACTION_UP, x, y, 0)
-                down.source = InputDevice.SOURCE_TOUCHSCREEN
-                up.source = InputDevice.SOURCE_TOUCHSCREEN
-                try {
-                    assertTrue("Touch DOWN not delivered to IME", instrumentation.uiAutomation
-                        .injectInputEvent(down, true))
-                    assertTrue("Touch UP not delivered to IME", instrumentation.uiAutomation
-                        .injectInputEvent(up, true))
-                } finally {
-                    down.recycle()
-                    up.recycle()
-                }
-                waitUntil("key $letter must enter the app's EditText") {
-                    activity.editor.text.toString().length >= letter.length +
-                        listOf("a", "s", "d").indexOf(letter)
+                val currentKeys = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
+                    ?: throw AssertionError("English keyboard detached before $letter")
+                tap(currentKeys, letter) { it is KeyAction.Text && it.text == letter }
+                waitUntil("key $letter must enter the app's EditText",
+                    describe = { describeImeState(activity) + ", text=" + activity.editor.text }) {
+                    activity.editor.text.toString().length >= index + 1
                 }
             }
             waitUntil("the three visible keys must generate text in the editor") {
