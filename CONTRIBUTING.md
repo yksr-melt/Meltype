@@ -140,6 +140,14 @@ Pull Request を作ると「notices」のチェックが確かめ、抜けや名
 Meltype の開発には AI (Claude Code など) を使っています (コミットの `Co-Authored-By` に書いています)。
 貢献でも、AI を使うこと自体は歓迎します。そのうえで、次のことをお願いします。
 
+Claude Code を使う場合は、次のコマンドが使えます (`.claude/commands/`)。
+
+| コマンド | すること |
+| --- | --- |
+| `/make-issue 起きたこと` | 起きたことを自分の言葉で書くと、足りないことを聞きながら詳しい Issue にします |
+| `/issue-pr やりたいこと` | Issue を立てて、それを直す Pull Request を作ります (機能の追加は Issue だけ) |
+| `/conflict-resolve 番号` | Pull Request のコンフリクトだけを解消します |
+
 <a name="pull-request"></a>
 <img src="docs/images/headings/contributing/s02.svg" alt="Pull Request" height="40">
 
