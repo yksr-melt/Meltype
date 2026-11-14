@@ -2,6 +2,7 @@
 // Copyright (C) 2026 KoheiTakada
 // Android JNI adapter for the Meltype.Native NativeAOT C ABI (meltype_ime_*).
 #include <jni.h>
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -23,11 +24,14 @@ void meltype_free(unsigned char* ptr);
 
 namespace {
 std::mutex init_mutex;
+std::mutex handle_mutex;
 std::string data_dir;
 // MELTYPE_DATA_DIR/AppPaths are process-global. A failed Core init cannot safely be retried
 // with a different directory after the native runtime may have read the old one.
 bool init_attempted = false;
-thread_local bool callback_exception = false;
+// Core callbacks may execute on another JNI-attached thread. The result must be visible
+// to the thread waiting for meltype_ime_handle to finish.
+std::atomic<bool> callback_exception{false};
 JavaVM* vm = nullptr;
 jobject callback_instance = nullptr;
 jmethodID clauses_method = nullptr;
@@ -39,7 +43,7 @@ void describe_callback_exception(JNIEnv* env) {
     if (!env->ExceptionCheck()) return;
     env->ExceptionDescribe();
     env->ExceptionClear();
-    callback_exception = true;
+    callback_exception.store(true);
 }
 
 struct CallbackEnvironment {
@@ -79,7 +83,7 @@ unsigned char* malloc_java_bytes(JNIEnv* env, jbyteArray result) {
 unsigned char* convert_clauses(unsigned char* reading, unsigned char* context) {
     CallbackEnvironment jni;
     if (!jni.env || !callback_instance || !clauses_method) {
-        callback_exception = true;
+        callback_exception.store(true);
         return nullptr;
     }
     auto* env = jni.env;
@@ -102,7 +106,7 @@ unsigned char* convert_clauses(unsigned char* reading, unsigned char* context) {
 unsigned char* convert_candidates(unsigned char* reading) {
     CallbackEnvironment jni;
     if (!jni.env || !callback_instance || !candidates_method) {
-        callback_exception = true;
+        callback_exception.store(true);
         return nullptr;
     }
     auto* env = jni.env;
@@ -217,9 +221,11 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_handle(
     if (!host || !event) return nullptr;
     auto json = read_utf8(env, event);
     if (env->ExceptionCheck()) return nullptr;
-    callback_exception = false;
+    // A callback error belongs to this handle invocation, never to another concurrent call.
+    std::lock_guard<std::mutex> handle_guard(handle_mutex);
+    callback_exception.store(false);
     auto* result = meltype_ime_handle(as_handle(host), json.data());
-    if (callback_exception) {
+    if (callback_exception.load()) {
         if (result) meltype_free(result);
         return nullptr; // Kotlin reports Core failure and offers the emergency IME picker.
     }
