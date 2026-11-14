@@ -415,19 +415,10 @@ class MainActivity : Activity() {
     private fun languages(content: LinearLayout) {
         title(content, "言語")
         card(content, "入力レイアウト") {
-            entry("日本語", if (settings.japaneseLayout == LayoutId.ROMAJI)
-                "QWERTY（ローマ字）" else "12キー（フリック）") {
-                choose("日本語の入力", if (settings.japaneseLayout == LayoutId.ROMAJI) 0 else 1,
-                    listOf("QWERTY（ローマ字）" to { settings.japaneseLayout = LayoutId.ROMAJI },
-                        "12キー（フリック）" to { settings.japaneseLayout = LayoutId.KANA }))
-            }
+            // Japanese and English are QWERTY-only in #1149. Flick design is tracked in #1885.
+            entry("日本語", "QWERTY（ローマ字）")
             divider()
-            entry("English", if (settings.englishLayout == LayoutId.QWERTY)
-                "QWERTY" else "12-key flick") {
-                choose("英語の入力", if (settings.englishLayout == LayoutId.QWERTY) 0 else 1,
-                    listOf("QWERTY" to { settings.englishLayout = LayoutId.QWERTY },
-                        "12-key flick" to { settings.englishLayout = LayoutId.LATIN_FLICK }))
-            }
+            entry("English", "QWERTY")
         }
         hint(content, "日本語QWERTYでは、入力内容から日本語と英語を自動判別する。")
     }
@@ -445,15 +436,7 @@ class MainActivity : Activity() {
                 checked = settings.hapticEnabled,
                 onToggle = { settings.hapticEnabled = it })
         }
-        card(content, "12キー") {
-            entry("トグル入力", "連続タップで同じキーの文字を切り替える",
-                checked = settings.toggleEnabled,
-                onToggle = { settings.toggleEnabled = it; render() })
-            if (settings.toggleEnabled) {
-                divider()
-                entry("トグル判定時間", waitText(settings.toggleWaitMs)) { timing() }
-            }
-        }
+        // 12-key toggle/timing controls will be designed with the flick input in #1885.
     }
 
     private fun timing() {
