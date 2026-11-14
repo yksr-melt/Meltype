@@ -747,6 +747,14 @@ void TextService::ToggleInputMode(ITfContext* context) {
 bool TextService::Send(const char* type, const std::string& field, const std::string& fields, JsonValue& reply, DWORD timeoutMs, bool optional,
                        const RECT* anchor) {
     if (deactivated_) return false;
+    // Password を送ると Core は未確定入力を捨てる。応答を待つ前に変換を切り離し、
+    // 遅れて動く旧欄の確定が空の応答で表示済みの文字を消したり、旧欄の属性を送り直したりしないようにする。
+    if (field == kPasswordField) {
+        resumeRange_.Reset();
+        resumeContext_.Reset();
+        resumeText_.clear();
+        if (composition_ != nullptr) EndCompositionAsync();
+    }
     std::string request = "{\"impl\":" + ImplId() + ",\"thread\":" + std::to_string(GetCurrentThreadId());
     if (anchor != nullptr && anchor->bottom > anchor->top && anchor->bottom - anchor->top < 200)
         request += ",\"x\":" + std::to_string(anchor->left) + ",\"y\":" + std::to_string(anchor->bottom + 4);
@@ -1063,7 +1071,8 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
                 if (!counted) CommitAsync(true);
                 return false;
             }
-            AbandonComposition();
+            EndCompositionAsync();
+            CommittedOutside();
         }
     }
     if (state_.input == ServerState::Input::Password) {
@@ -1937,9 +1946,9 @@ void TextService::CommitAsync(bool keepAppCaret, bool left) {
     });
 }
 
-void TextService::AbandonComposition() {
-    // 前の入力欄の変換中の文字を、入力欄には触らずに手放す (文字はそのまま残る)。Meltype.exe の側も確定したことにする
-    TipLog(L"前の入力欄の変換中の文字を確定できないので、手放します");
+void TextService::EndCompositionAsync() {
+    // 以後の確定や候補操作がこの変換に触れないよう、編集を待つ前に手放す。
+    TipLog(L"表示済みの文字を残して変換を終えます");
     Microsoft::WRL::ComPtr<ITfComposition> old;
     old.Attach(composition_);
     composition_ = nullptr;
@@ -1952,7 +1961,7 @@ void TextService::AbandonComposition() {
         if (abandoned_.size() >= 8) abandoned_.erase(abandoned_.begin());
         abandoned_.push_back({old, oldContext});
         Microsoft::WRL::ComPtr<TextService> self = this;
-        RunEditSession(oldContext.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, old](TfEditCookie ec) {
+        RunEditSession(oldContext.Get(), clientId_, TF_ES_ASYNC | TF_ES_READWRITE, [self, old](TfEditCookie ec) {
             // 終わった後 (Deactivate) は一覧を空にしているので、そのときも終える
             if (self->ForgetAbandoned(old.Get()) || self->deactivated_) {
                 ClearAttributeOf(ec, old.Get());
@@ -1963,8 +1972,8 @@ void TextService::AbandonComposition() {
     }
     staleCommitTries_ = 0;
     staleVk_ = 0;
+    lastConverting_ = false;
     if (candidates_) candidates_->Hide();
-    CommittedOutside();
 }
 
 bool TextService::ForgetAbandoned(ITfComposition* composition) {

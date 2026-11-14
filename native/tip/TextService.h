@@ -167,7 +167,8 @@ private:
     void CommittedOutside(const std::string& field = {});
     // パスワード欄に変わったとき、表示済みの文字を確定して属性を通知する。
     void FinishPasswordTransition(TfEditCookie ec, ITfContext* context);
-    void AbandonComposition();
+    // 変換を切り離し、表示済みの文字を残して TSF の変換だけを非同期で終える。
+    void EndCompositionAsync();
     void ResumeOrCommit(ITfContext* context);
     void SelectCandidate(int index);
     // キャレットの前を読めたら true (読めなければ before は空のまま。読めない入力欄を調べられるように、変わったときだけ tip-log に書く)
