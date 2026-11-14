@@ -153,6 +153,7 @@ internal static class SettingsJsonTests
             Assert.True(loaded.SpaceAroundEnglish, "保存に失敗しても既定値に戻さない");
             Assert.Equal(Settings.CurrentVersion, loaded.SettingsVersion, "移行は済ませる");
             Assert.True(loaded.AppRules.Any(r => r.Process == "maya.exe"), "移行で足したアプリの設定を残す");
+            Assert.True(loaded.AppRules.Any(r => r.Process == "JumpDesktop.exe" && !r.Enabled), "前の版の設定にも、既定で OFF にするリモートデスクトップを足す");
             Assert.True(!File.Exists(path + ".broken"), "保存の失敗を壊れたファイルとして扱わない");
         }
         finally
