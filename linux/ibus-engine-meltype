@@ -21,8 +21,8 @@ _lib.meltype_free.argtypes = [ctypes.c_void_p]
 _lib.meltype_version.restype = ctypes.c_void_p
 _lib.meltype_report_url.argtypes = [ctypes.c_char_p]
 _lib.meltype_report_url.restype = ctypes.c_void_p
-_lib.meltype_init_mozc.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
-_lib.meltype_init_mozc.restype = ctypes.c_int
+_lib.meltype_init.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
+_lib.meltype_init.restype = ctypes.c_int
 _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
 _lib.meltype_set_conversion_ready.restype = None
 _lib.meltype_ime_create.restype = ctypes.c_void_p
@@ -57,7 +57,8 @@ import gi
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, GObject, IBus  # noqa: E402
 
-if not _lib.meltype_init_mozc(os.path.join(HERE, "mozc", "meltype_mozc_helper").encode(), None):
+# 英単語の判定は同梱の一覧 (None)
+if not _lib.meltype_init(HERE.encode(), None):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
@@ -98,15 +99,25 @@ SPECIAL_KEYS = {
 }
 
 
+# テンキーの数字・記号の仮想キーコード (Windows の VK_NUMPAD0〜9・VK_MULTIPLY など)。文字と一緒に渡す。
+# 本体は、何も打っていないときのテンキーをそのまま通す (上の段の数字とは分ける: issue #460)
+KEYPAD_KEYS = {
+    **{getattr(IBus, f"KEY_KP_{n}"): 0x60 + n for n in range(10)},
+    IBus.KEY_KP_Multiply: 0x6A, IBus.KEY_KP_Add: 0x6B, IBus.KEY_KP_Separator: 0x6C,
+    IBus.KEY_KP_Subtract: 0x6D, IBus.KEY_KP_Decimal: 0x6E, IBus.KEY_KP_Divide: 0x6F,
+}
+
+
 def virtual_key(keyval):
-    """(仮想キーコード, 入力する文字) を返す。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら (None, 0)。"""
+    """(仮想キーコード, 入力する文字) を返す。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める。テンキーだけは文字と一緒に渡す)。
+    Meltype が扱わないキーなら (None, 0)。"""
     if keyval in SPECIAL_KEYS:
         return SPECIAL_KEYS[keyval], (0x20 if keyval == IBus.KEY_space else 0)
     character = IBus.keyval_to_unicode(keyval)
     # 空・複数スカラー・制御文字は渡さない (先頭 1 文字へ黙って切り詰めない)。
     if not character or len(character) != 1 or ord(character) < 0x20:
         return None, 0
-    return 0, ord(character)
+    return KEYPAD_KEYS.get(keyval, 0), ord(character)
 
 
 # 判定の文脈とコードの行の判定に使う、キャレットの前の文字数

@@ -95,7 +95,7 @@ const LabelInfo = {
   'win10': ['5E9ED6', 'Windows 10'],
   '企業PC': ['5319E7', 'Windows の Enterprise / Education (管理が厳しいことがある)'],
   '管理者で実行': ['D93F0B', 'Meltype を管理者として実行していた'],
-  'Mozcなし': ['E99695', 'Mozc の変換ヘルパーが無い (Microsoft IME だけで変換)'],
+  'Mozcなし': ['E99695', 'Mozc の変換ヘルパーが無い (漢字に変換できない)'],
   'かな入力': ['FEF2C0', 'かな入力 (JIS)'],
   'USキーボード': ['FEF2C0', '日本語 (JIS) 以外のキーボード'],
   '高DPI': ['FEF2C0', '画面の拡大率が 100% より大きい'],
@@ -134,7 +134,8 @@ function environmentLabels(text) {
   if (/Enterprise|Education/i.test(os)) result.push({ label: '企業PC', reason: 'Windows のエディションが Enterprise / Education (会社・学校の PC は制限があることが多い)' });
   if (/^Meltype \S/.test(`Meltype ${env['Meltype'] ?? ''}`) && /^\d+\.\d+\.\d+/.test(env['Meltype'] ?? '')) result.push({ label: `v${env['Meltype'].match(/^\d+\.\d+\.\d+/)[0]}`, reason: '実行環境の版' });
   if (/はい/.test(env['管理者として実行'] ?? '')) result.push({ label: '管理者で実行', reason: 'Meltype を管理者として実行していた' });
-  if (/Mozc:\s*なし/.test(env['変換エンジン'] ?? '')) result.push({ label: 'Mozcなし', reason: 'Mozc の変換ヘルパーが無い' });
+  // 「変換エンジン: Hybrid (Mozc: なし)」は、変換エンジンを選べた版 (#1740 より前) の報告
+  if (/Mozc:\s*なし/.test(env['変換エンジン'] ?? '') || env['Mozc'] === 'なし') result.push({ label: 'Mozcなし', reason: 'Mozc の変換ヘルパーが無い' });
   if (/Kana/.test(env['入力方式'] ?? '')) result.push({ label: 'かな入力', reason: '入力方式がかな入力' });
   if (/日本語以外/.test(env['キーボード'] ?? '')) result.push({ label: 'USキーボード', reason: `キーボードが ${md(env['キーボード'])}` });
   const scale = Number((env['画面'] ?? '').match(/拡大率\s*(\d+)/)?.[1] ?? 100);
@@ -200,7 +201,7 @@ const Help = [
 //   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
-//   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物が付く
+//   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物を付けて公開する
 // タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
 async function releaseCommand(issue, command, version) {
   const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
@@ -235,7 +236,7 @@ async function releaseCommand(issue, command, version) {
   await reply([
     `✅ タグ \`${tag}\` (${sha.slice(0, 7)}) とリリースの下書き (${pre ? 'プレリリース' : '通常'}、本文は \`${notesFile}\`) を作りました。`,
     failed === null
-      ? '\nビルド (release.yml) を始めました。終わると下書きに配布物が付くので、中身を確かめてから公開してください。'
+      ? '\nビルド (release.yml) を始めました。終わると下書きに配布物を付けて公開します。'
       : `\n⚠ ビルド (release.yml) を始められませんでした (Actions の画面から ${tag} で手で実行してください): ${failed}`,
   ].join('\n'));
 }
