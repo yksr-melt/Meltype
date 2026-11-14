@@ -33,7 +33,8 @@ class LanguageDetectionDeviceTest {
             settings.japaneseSpaceFullWidth = true
             settings.emojiEnabled = true
             val saved = io.github.ninjin0802.keyboard.app.Settings(ctx)
-            assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.KANA, saved.japaneseLayout)
+            // 12-key flick is not offered in PR #1149; even a legacy write must read as QWERTY.
+            assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI, saved.japaneseLayout)
             assertEquals(true, saved.japaneseSpaceFullWidth)
             assertEquals(true, saved.emojiEnabled)
         } finally {
