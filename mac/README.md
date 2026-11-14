@@ -7,7 +7,6 @@
 | IME 本体 (`Sources/MeltypeIME`, Swift) | Input Method Kit でキーを受け取り、変換中の文字 (下線付き)・候補の一覧・確定を入力欄に反映する |
 | 判定の本体 (`src/Meltype.Mac.Native` → `libMeltypeNative.dylib`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`: 英語 / 日本語の判定・ローマ字・変換の流れ・学習・辞書) を NativeAOT で Mac 用のライブラリにしたもの |
 | 漢字変換 | 本体が `Resources/mozc/` の Mozc の変換ヘルパーを起動する (Windows・Linux 版と同じ)。Zenzai は、`build.sh` が取ってきて `Resources/zenzai/` に同梱する llama.cpp の llama-server (MIT) と zenz-v3.2-small (Apache-2.0) |
-| 英単語の判定 | macOS のスペルチェッカー (英語) |
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。コマンドはどれも、リポジトリのフォルダーで実行します。
 

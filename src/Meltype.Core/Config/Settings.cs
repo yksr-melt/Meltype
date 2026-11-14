@@ -461,7 +461,7 @@ public sealed class Settings
     public bool ShowsGuide => ShowGuide && !OperatingSystem.IsMacOS() && !(OperatingSystem.IsWindows() && Mode == InputMode.Tsf);
 
     [Category("4. 変換"), DisplayName("打ち間違いを直す"),
-     Description("Space・Enter で変換・確定するときに打ち間違いを直します。ローマ字: 読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。英語: Windows の自動修正の一覧にある打ち間違いを直します (teh → the、recieve → receive)。")]
+     Description("Space・Enter で変換・確定するときに、ローマ字の打ち間違いを直します。読めない子音が残ったとき、隣のキーの押し間違い・入れ替わり・抜けを 1 文字だけ直します (onegaishimsu → お願いします、sumimasne → すみません。よく使う語の読みになるときだけ)。")]
     public bool CorrectTypos { get; set; } = true;
 
     [Category("6. 記号・スペース"), DisplayName("かなの後ろの /"),

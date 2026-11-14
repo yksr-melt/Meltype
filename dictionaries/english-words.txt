@@ -1,4 +1,4 @@
-# Meltype よく使う英単語 (スペルチェッカーが使えない Mac 版・Linux 版・テストで使う)
+# Meltype よく使う英単語
 # SCOWL (Spell Checker Oriented Word Lists) の大きさ 35 までの english / american から tools/make-english-words.mjs で作成。
 # Copyright 2000-2018 by Kevin Atkinson
 #   Permission to use, copy, modify, distribute and sell these word lists, the associated scripts, the output created from the scripts,

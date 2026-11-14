@@ -15,7 +15,6 @@ namespace Meltype.Composition;
 public sealed class MeltypeRuntime : IDisposable
 {
     private readonly string _userDirectory;
-    private readonly IWordChecker _wordChecker;
     private readonly CompositionServices _shared;
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
@@ -24,14 +23,12 @@ public sealed class MeltypeRuntime : IDisposable
     private readonly Timer _settingsCheck;
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
-    /// <param name="wordChecker">OS のスペルチェッカー。使えなければ同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。</param>
     /// <param name="nowPlaying">再生中の曲を OS から読み始める (テストでは読まない)。</param>
-    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null, bool nowPlaying = false)
+    public MeltypeRuntime(string dataDirectory, bool nowPlaying = false)
     {
         DataDirectory = dataDirectory;
         Directory.CreateDirectory(dataDirectory);
         _userDirectory = Path.Combine(dataDirectory, "dictionaries");
-        _wordChecker = wordChecker is { IsAvailable: true } ? wordChecker : BuiltInWordChecker.Shared;
         SettingsSchema.Write(dataDirectory);
         Settings = new SettingsFile(Path.Combine(dataDirectory, "config.json"), loaded =>
         {
@@ -42,7 +39,6 @@ public sealed class MeltypeRuntime : IDisposable
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
-        Detector.SpellChecker = _wordChecker;
         Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
         var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
         Detector.Memory = languages;
@@ -70,10 +66,10 @@ public sealed class MeltypeRuntime : IDisposable
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
-    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null, bool nowPlaying = true)
+    public static MeltypeRuntime OpenDefault(bool nowPlaying = true)
     {
         AppPaths.MigrateFromOldName();
-        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker, nowPlaying);
+        return new MeltypeRuntime(AppPaths.DataDirectory, nowPlaying);
     }
 
     public string DataDirectory { get; }
@@ -185,10 +181,10 @@ public sealed class MeltypeRuntime : IDisposable
     public Verdict ClassifyDirect(string letters, bool final, Settings settings)
     {
         var result = Evaluate(letters, final, settings);
-        // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、スペルチェッカーの語なら日本語にしない。
-        if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && _wordChecker.IsWord(letters.ToLowerInvariant()))
+        // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、よく使う英単語の一覧の語なら日本語にしない。
+        if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && BuiltInWordChecker.Shared.IsWord(letters.ToLowerInvariant()))
         {
-            Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(letters)}は英単語 (スペルチェッカー) なので日本語にしない");
+            Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(letters)}はよく使う英単語なので日本語にしない");
             return final ? Verdict.English : Verdict.Undecided;
         }
         if (result.Verdict == Verdict.Japanese) Diagnostics.Log.Decision($"英数状態でローマ字を検知: {result.Describe()}");

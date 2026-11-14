@@ -8,7 +8,7 @@
 | フォルダー | 中身 |
 |---|---|
 | `src/Meltype.Core/` | OS に依存しない部分 (Windows・Mac・Linux 共通)。英語 / 日本語の判定・ローマ字・変換ボックスの中身・辞書・学習・設定 |
-| `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・スペルチェッカー・トレイ) |
+| `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・トレイ) |
 | `src/Meltype.Mac.Native/` | Mac 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib にする) |
 | `mac/` | Mac 版の IME (Swift、Input Method Kit) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
@@ -66,7 +66,7 @@ OS に依存しない部分 (`src/Meltype.Core`) とそのテストは、Mac・L
 
 ```bash
 dotnet run --project src/Meltype.Core.Tests                 # すべてのテスト
-dotnet run --project src/Meltype.Core.Tests -- --eval       # 品質テスト (スペルチェッカーは使わない)
+dotnet run --project src/Meltype.Core.Tests -- --eval       # 品質テスト
 dotnet run --project src/Meltype.Core.Tests -- --version    # 版 (Meltype.Core)
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter   # 打ったときの見え方と確定の結果
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json       # 日本語の文の中の英単語が正しく分かれるか (約 550 例)
@@ -90,7 +90,6 @@ Windows のアプリ本体は GUI アプリ (WinExe) なので、cmd では版�
 期待値は「理想の結果」で書いてあり、`--eval` でカテゴリーごとの正解率と外れた例を表示します。
 
 - 通常のテストでは、全体 95% 以上・どのカテゴリーも 80% 以上を基準にしています (ある直しで別の場所が壊れたら気づけるように)
-- Windows の英語のスペルチェッカーが使える環境では、それも使います (`MELTYPE_NO_SPELLCHECK=1` で使わずに測れます)
 - Pull Request では「精度の比較」のチェックが main と比べ、新しく外れた例があれば失敗にします
 - 新しい不具合の報告を受けたら、まずここに例を足してから直すのがおすすめです
 - 直した語だけでなく、**逆向き・似た入力の例** も足してください。たとえば `midi` を英語にする直し (#1122) は、`midika` (身近) を `midiか` にしてしまいました (#1179)。英語にする直しなら、その語で始まる日本語の語を、日本語にする直しなら、その語を含む英単語を足します

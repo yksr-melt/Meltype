@@ -135,17 +135,6 @@ func runChecks(inputPath: String?) -> Int32 {
     let english = Document()
     _ = type("reflectsareta\n", into: english)
     check("issue 77: reflect + Japanese", english.text == "reflectされた")
-    let sentence = "kyouhagoogledekensakusitekekkawomiru\n"
-    let started = Date()
-    let checksBefore = NativeCore.shared.spellCheckCount
-    let first = Document()
-    _ = type(sentence, into: first)
-    let checksAfterFirst = NativeCore.shared.spellCheckCount
-    let second = Document()
-    _ = type(sentence, into: second)
-    let repeatedChecks = NativeCore.shared.spellCheckCount - checksAfterFirst
-    print("issue 114: first checks=\(checksAfterFirst - checksBefore), repeat checks=\(repeatedChecks), elapsed=\(Date().timeIntervalSince(started))s")
-    check("issue 114: repeated spelling uses cache", repeatedChecks == 0 && first.text == second.text)
     let other: [String: Any] = ["InputSourceKind": "Keyboard Layout", "KeyboardLayout Name": "ABC"]
     let duplicate: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier, "InputSourceKind": "Keyboard Input Method", "metadata": ["keep": true]]
     let duplicateMode: [String: Any] = ["Bundle ID": InputSourceRegistration.identifier,

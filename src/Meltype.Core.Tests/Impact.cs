@@ -20,9 +20,8 @@ internal static class Impact
 {
     public static void JudgeCorpus(string output, IEnumerable<string> extraLists)
     {
-        // 学習を付けない判定 (WordJudge と同じ)。スペルチェッカーは品質テスト・報告の再現と同じく組み込みの一覧
+        // 学習を付けない判定 (WordJudge と同じ)
         var detector = CompositionDetector.CreateDefault();
-        detector.SpellChecker ??= BuiltInWordChecker.Shared;
         // 渡した一覧を読めなければ、その語を比べられないので止める (File.ReadAllLines が例外を出す)
         var extra = extraLists.SelectMany(File.ReadAllLines).Select(line => line.Split('\t')[0].Trim());
         var words = Readings().Select(ToRomaji).OfType<string>().Concat(EnglishWords()).Concat(extra).ToList();

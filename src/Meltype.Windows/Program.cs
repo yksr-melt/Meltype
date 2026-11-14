@@ -12,12 +12,8 @@ internal static class Program
     /// <summary>
     /// 語ごとの自動の判定 (学習は使わない)。今の版の判定にも同じものを使う (<see cref="Updater.PreviewChanges"/>)。
     /// </summary>
-    internal static string JudgeWords(IEnumerable<string> words)
-    {
-        var detector = Composition.CompositionDetector.CreateDefault();
-        if (Detection.WindowsSpellChecker.Shared.IsAvailable) detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
-        return Composition.WordJudge.JudgeAll(detector, words);
-    }
+    internal static string JudgeWords(IEnumerable<string> words) =>
+        Composition.WordJudge.JudgeAll(Composition.CompositionDetector.CreateDefault(), words);
 
     private static int JudgeWords(string input, string output)
     {
@@ -36,7 +32,6 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        using var spellChecker = Detection.WindowsSpellChecker.Shared;
         // Meltype.exe --version: 版だけを出して終わる (フック・UI は起動しない)。
         // WinExe はコンソールを持たないので、親ターミナル (cmd / PowerShell) に付け直してから書く。
         if (args.FirstOrDefault() == "--version")
@@ -104,7 +99,7 @@ internal static class Program
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared));
+            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault());
             engine.Start();
         }
         catch (Exception ex)

@@ -71,7 +71,7 @@ internal static class DictionaryMemory
         Row("readings (RomajiTypoCorrector)", () => RomajiTypoCorrector.Load(detector!.Romaji));
         Row("英訳の候補 (TranslationDictionary)", TranslationDictionary.Load);
         Row("候補の意味 (MeaningDictionary)", MeaningDictionary.Load);
-        Row("スペルチェッカー (BuiltInWordChecker)", () => BuiltInWordChecker.Shared);
+        Row("よく使う英単語 (BuiltInWordChecker)", () => BuiltInWordChecker.Shared);
         Row("変換の候補 (CandidateDictionary)", () => CandidateDictionary.Load(null));
 
         Console.WriteLine("辞書\tマネージドヒープ\t読み込み");
@@ -122,7 +122,7 @@ internal static class DictionaryMemory
                 $"{Join(candidates.LookupEmoji(reading))} / {candidates.Contains(reading)} / {Join(candidates.Lookup(reading + "ふ"))}");
         }
 
-        // スペルチェッカー: 一覧の語と、少し変えた語
+        // よく使う英単語: 一覧の語と、少し変えた語
         var spell = BuiltInWordChecker.Shared;
         foreach (var word in DictionarySource.ReadEmbedded("english-words.txt").Split('\n').Select(w => w.Trim()))
         {
@@ -186,7 +186,6 @@ internal static class DictionaryMemory
         RequireRelease();
         Console.OutputEncoding = new UTF8Encoding(false);
         var detector = CompositionDetector.CreateDefault();
-        detector.SpellChecker = BuiltInWordChecker.Shared;
         var services = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(null),

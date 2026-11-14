@@ -15,7 +15,6 @@ internal static class ScoredSegmentationTests
     private static CompositionDetector CreateDetector()
     {
         var detector = CompositionDetector.CreateDefault();
-        detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
         return detector;
     }
 

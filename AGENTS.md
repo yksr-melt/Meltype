@@ -35,7 +35,8 @@ OS 間の差分はできるだけ作らない。
 
 - 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。OS の出入口からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
-- Core にもう口がある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
+- WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
+- 英単語の判定は全 OS で同梱の一覧 (`english-words.txt`) だけ (#1508)。OS のスペルチェッカーは使わない
 - 設定・辞書・学習データと変換エンジンは、どの OS も `MeltypeRuntime` で作る
 - 変換エンジンは全 OS で Mozc と Zenzai だけ (#1740)。OS の変換エンジン (Microsoft IME など) は足さない
 
@@ -55,7 +56,7 @@ dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/d
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json # 日本語文中の英単語の区切り
 dotnet run --project src/Meltype.Core.Tests -- --version
 
-# Windows 専用（src/Meltype.Windows.Tests。Windows のスペルチェッカーも使う）
+# Windows 専用（src/Meltype.Windows.Tests）
 dotnet run --project src/Meltype.Windows.Tests
 dotnet run --project src/Meltype.Windows.Tests -- CompositionTests
 dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
