@@ -200,7 +200,17 @@ class ImeLaunchDeviceTest {
         instrumentation.runOnMainSync {
             service.onKey(KeyAction.Language, Direction.TAP, SystemClock.uptimeMillis())
         }
-        waitUntil("Japanese QWERTY after language switch") {
+        waitUntil("Japanese QWERTY after language switch",
+            describe = { describeImeState(activity) + ", selected=" + service.activeKeysForSmokeTest()?.layout?.id }) {
+            activity.editor.hasFocus() &&
+                service.activeKeysForSmokeTest()?.layout?.id ==
+                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
+        }
+        // Android can restart input in the same editor after showing the IME.
+        // A restart must not reset the language that the user just selected.
+        requestKeyboard(activity, activity.editor)
+        waitUntil("Japanese QWERTY survives the same editor restart",
+            describe = { describeImeState(activity) + ", selected=" + service.activeKeysForSmokeTest()?.layout?.id }) {
             activity.editor.hasFocus() &&
                 service.activeKeysForSmokeTest()?.layout?.id ==
                     io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI

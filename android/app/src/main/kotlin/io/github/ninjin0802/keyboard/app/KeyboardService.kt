@@ -257,6 +257,10 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     private var policy = FieldPolicy(LayoutId.ROMAJI, convert = true, learn = true)
     private var imeOptions = 0
+    // A restart of the same editor must not undo a user-selected language.
+    // Field ID is required: two unlabelled editors in one app cannot be distinguished.
+    private data class FieldIdentity(val app: String?, val id: Int, val inputType: Int, val imeOptions: Int)
+    private var lastFieldIdentity: FieldIdentity? = null
     /** いまの配列と、あa・?123・絵文字・戻るキーの行き先。 */
     private val nav = LayoutNavigator()
     private val noEmojiLayouts = mutableMapOf<LayoutId, io.github.ninjin0802.keyboard.app.layout.KeyboardLayout>()
@@ -536,6 +540,8 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     private fun startNormalInputView(info: EditorInfo, restarting: Boolean) {
+        val identity = FieldIdentity(info.packageName, info.fieldId, info.inputType, info.imeOptions)
+        val keepSelectedLanguage = restarting && info.fieldId != View.NO_ID && identity == lastFieldIdentity
         super.onStartInputView(info, restarting)
         // Also refresh this on every editor focus, not only layout changes.
         keyboardView?.hapticEnabled = Settings(this).hapticEnabled
@@ -559,8 +565,8 @@ class KeyboardService : InputMethodService(), KeyListener {
         caretWatch.reset(selStart, selEnd)
         core?.let { instance -> coreSend(instance, ImeJson.focusEntered(fieldFacts()), moved = true) }
         coreInField = true
-        val settings = Settings(this)
-        screens.fieldStarted(policy.layout)
+        lastFieldIdentity = identity
+        if (keepSelectedLanguage) showLayout() else screens.fieldStarted(policy.layout)
         applyCurrentInsets()
     }
 
