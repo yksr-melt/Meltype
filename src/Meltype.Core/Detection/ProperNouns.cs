@@ -17,8 +17,10 @@ public sealed class ProperNouns
         var nouns = new ProperNouns();
         nouns.AddText(DictionarySource.ReadEmbedded("propernouns.txt"));
         // Unicode CLDR の国・地域名の語 (tools/make-countries.mjs で作る。#1615)。
-        // ローマ字として最後まで読める語 (Oman・San・Mayotte) は入れない。固有名詞は語の頭でも英語と判定するので、
-        // 日本語の語の頭とぶつかる (omanjuu → oman中)。そのうえで英語にしたい国名は、確かめて propernouns.txt に書く (Benin・Panama)
+        // ワークアラウンド (#1869): ローマ字として最後まで読める語 (Oman・San・Mayotte) は入れない。
+        // 固有名詞を語の頭でも英語と判定するので、日本語の語の頭とぶつかる (omanjuu → oman中)。
+        // #1869 で判定を直したら、この絞り込みを外して国名の語をすべて入れる (#1615 の方針)。
+        // それまで英語にしたい国名は、確かめて propernouns.txt に書く (Benin・Panama)
         var romaji = new RomajiDetector();
         nouns.AddText(DictionarySource.ReadEmbedded("countries.txt"), word => romaji.Analyze(word) is not { IsValid: true, Partial: "" or "n" });
         if (userDirectory is not null)
