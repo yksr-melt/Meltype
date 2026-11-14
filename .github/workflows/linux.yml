@@ -1,5 +1,5 @@
 # Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
-#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
+#   app・rpm・rpm-el9・aur … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
 #   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
 # リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
@@ -24,6 +24,7 @@ on:
       - 'src/Directory.Packages.props'
       - 'tools/test-native-boundaries.py'
       - 'tools/ime-tests/**'
+      - 'packaging/aur/**'
       - '.github/workflows/linux.yml'
   push:
     branches: [main]
@@ -257,6 +258,58 @@ jobs:
           python3 linux/tests/test_settings.py
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
+
+  # AUR の meltype-bin (packaging/aur) を、app が作った x64 の zip で makepkg し、Arch Linux に入れて外せるか確かめる (#1097)
+  # archlinux:latest はローリングリリースで、ミラーの障害や Arch の更新で落ちることがあるので、
+  # release.yml (タグ) から呼ばれたときは流さない (Windows・Mac を含むリリースを止めないため)
+  aur:
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+    needs: app
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    timeout-minutes: 20
+    steps:
+      - name: Packages
+        run: pacman -Syu --noconfirm --needed base-devel git unzip ibus python-gobject gtk4 fcitx5 procps-ng
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: meltype-linux
+          path: artifact
+      # zip を版 0.0.0 のリリースの名前で PKGBUILD の隣に置くと、makepkg はダウンロードせずにそれを使う
+      - name: makepkg
+        run: |
+          work="$RUNNER_TEMP/aur"
+          cp -R packaging/aur "$work"
+          cp artifact/Meltype-*.zip "$work/meltype-bin/Meltype-0.0.0-linux.zip"
+          bash "$work/update.sh" 0.0.0 "$work/meltype-bin/Meltype-0.0.0-linux.zip" "$work/meltype-bin/Meltype-0.0.0-linux.zip"
+          useradd -m builder
+          chown -R builder "$work"
+          su builder -c "cd '$work/meltype-bin' && makepkg --noconfirm && makepkg --printsrcinfo > .SRCINFO.makepkg"
+          # update.sh が作る .SRCINFO が makepkg の出力と同じか
+          diff "$work/meltype-bin/.SRCINFO" "$work/meltype-bin/.SRCINFO.makepkg"
+          pacman -U --noconfirm "$work"/meltype-bin/meltype-bin-0.0.0-*.pkg.tar.zst
+      - name: Installed files
+        run: |
+          test -x /opt/meltype/ibus-engine-meltype
+          test -x /opt/meltype/mozc/meltype_mozc_helper
+          grep -q '<exec>/opt/meltype/ibus-engine-meltype' /usr/share/ibus/component/meltype.xml
+          test -f /usr/lib/fcitx5/meltype.so
+          # fcitx5 のアドオンが Arch の fcitx5 のライブラリで読み込めるか (未解決のシンボルが無いか)
+          ! ldd -r /usr/lib/fcitx5/meltype.so 2>&1 | grep -E 'not found|undefined symbol'
+      - name: IBus and real Mozc integration tests
+        run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
+      - name: Remove
+        run: |
+          pacman -R --noconfirm meltype-bin
+          # /opt/meltype には、動かしたときに作られたファイル (パッケージに入っていないもの) が残ることがある
+          find /opt/meltype 2>/dev/null || true
+          test ! -e /opt/meltype/ibus-engine-meltype
+          test ! -e /opt/meltype/libMeltypeNative.so
+          test ! -e /usr/share/ibus/component/meltype.xml
+          test ! -e /usr/lib/fcitx5/meltype.so
 
   # IME の E2E の基盤 (tools/ime-tests) 自身の契約のテスト。製品はビルドしない
   ime-ci:

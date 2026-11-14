@@ -46,9 +46,9 @@ fcitx5 のアドオンは、`.deb` は Ubuntu 24.04 の fcitx5 5.1、`.rpm` は 
 <a name="インストール"></a>
 <img src="images/headings/linux/02.svg" alt="インストール" height="53"><br>
 
-Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
+Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で、Arch Linux は AUR から入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
 
-以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、先に外す必要はありません。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
+以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、apt / dnf なら先に外す必要はありません (Arch Linux は下を見てください)。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
 <a name="ubuntu--debian"></a>
 <img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
@@ -109,7 +109,17 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 <a name="ほかのディストリビューション"></a>
 <img src="images/headings/linux/s03.svg" alt="ほかのディストリビューション" height="40">
 
-ほかのディストリビューション向けのパッケージはまだありません。[Releases](https://github.com/yksr-melt/Meltype/releases/latest) の `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`) に、ビルド済みのファイルが入っています。
+Arch Linux は AUR の `meltype-bin` で入れられます。AUR ヘルパー (`yay` など) で入れると、以後 `yay -Syu` で更新できます。
+
+```bash
+yay -S meltype-bin
+```
+
+以前の zip の `install.sh` で入れていた場合は、同じ場所にファイルがあるため pacman が止まります。先にその zip の `uninstall.sh` (または `uninstall-legacy.sh`) で外してから入れてください。
+
+外すときは `sudo pacman -Rns meltype-bin` です。fcitx5 のアドオンは Ubuntu 24.04 の fcitx5 向けにビルドしたものなので、Arch の fcitx5 では読み込めないことがあります。
+
+それ以外のディストリビューション向けのパッケージはまだありません。[Releases](https://github.com/yksr-melt/Meltype/releases/latest) の `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`) に、ビルド済みのファイルが入っています。
 置く場所と、`@DIR@` を置いた場所に書き換えるファイルは、[linux/build-deb.sh](../linux/build-deb.sh) と同じです。zip の fcitx5 のアドオン (`fcitx5/meltype.so`) は Ubuntu 24.04 の fcitx5 向けです。
 ソースからビルドする方法は [linux/README.md](../linux/README.md) にあります。
 
@@ -167,4 +177,4 @@ ibus restart; sleep 2; pkill -f ibus-engine-meltype; /opt/meltype/ibus-engine-me
 <a name="アンインストール"></a>
 <img src="images/headings/linux/05.svg" alt="アンインストール" height="53"><br>
 
-Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
+Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype`、Arch Linux は `sudo pacman -Rns meltype-bin` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
