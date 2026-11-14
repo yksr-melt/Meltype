@@ -129,27 +129,18 @@ public sealed partial class CompositionDetector
     /// <param name="manual">自動判定を使わない (設定 AutoDetection が OFF)。Shift で打った大文字始まりの語だけを英語にする。</param>
     /// <param name="englishSentence">キャレットの前が英文 (空白で区切った英単語が 2 語以上続いて空白で終わる: "I want ")。
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
+    /// <param name="reasons">渡したら、区切りを選んだ理由を足す (確定のログ用。issue #1644)。文字列にするのはログに書くときだけ。</param>
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        bool manual = false, bool englishSentence = false, bool kanaInput = false)
+        bool manual = false, bool englishSentence = false, bool kanaInput = false, List<Func<string>>? reasons = null)
     {
         Prepare(units);
-        return IsOpaqueToken(_preparedRaw + pending, kanaInput)
-            ? [new CompositionSegment(true, "", _preparedRaw + pending)]
-            : FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
-    }
-
-    /// <summary>
-    /// Segment と同じ条件で区切ったときの、選んだ区切りと次点の重み (確定のログ用。issue #1644)。
-    /// 確定のときだけ呼ぶ: キーを打つたびの区間分けに、理由を作る手間を足さない。
-    /// </summary>
-    public string ExplainSegment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        bool manual = false, bool englishSentence = false, bool kanaInput = false)
-    {
-        Prepare(units);
-        if (IsOpaqueToken(_preparedRaw + pending, kanaInput)) return "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま";
-        var explanation = "";
-        FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, explain: e => explanation = e);
-        return explanation;
+        var token = _preparedRaw + pending;
+        if (IsOpaqueToken(token, kanaInput))
+        {
+            reasons?.Add(() => "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま");
+            return [new CompositionSegment(true, "", token)];
+        }
+        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, reasons: reasons);
     }
 
     // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の区間分けの間だけ、Prepare で連結した原文と各位置のオフセットを使い回す
