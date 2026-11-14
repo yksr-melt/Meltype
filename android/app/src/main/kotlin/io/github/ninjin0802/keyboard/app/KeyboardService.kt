@@ -114,13 +114,11 @@ class KeyboardService : InputMethodService(), KeyListener {
         return try {
             MeltypeCoreHost.open(coreDataDirectory(this), CoreMozcCallbacks(converter))
                 .also { core = it }
-        } catch (e: Exception) {
-            nativeCoreUnavailable = true
-            Log.w(TAG, "Native Core unavailable: ${e.javaClass.simpleName}")
+        } catch (error: RuntimeException) {
+            enterEmergencyMode(error)
             null
-        } catch (e: LinkageError) {
-            nativeCoreUnavailable = true
-            Log.w(TAG, "Native Core library unavailable: ${e.javaClass.simpleName}")
+        } catch (error: LinkageError) {
+            enterEmergencyMode(error)
             null
         }
     }
@@ -156,14 +154,16 @@ class KeyboardService : InputMethodService(), KeyListener {
         coreKnowsMoved = moved
         return try {
             coreInput.emojiEnabled = Settings(this).emojiEnabled
-            val consumed = coreInput.apply(instance.handle(event))
+            val response = instance.handle(event)
+                ?: throw IllegalStateException("Native Core returned no output")
+            val consumed = coreInput.apply(response)
             candidateBar?.show(coreInput.candidates, coreInput.selected)
             consumed
-        } catch (e: RuntimeException) {
-            // InputMethodService must keep typing even when a native response fails.
-            Log.w(TAG, "Native Core response rejected: ${e.javaClass.simpleName}")
-            nativeCoreUnavailable = true
-            discardCore()
+        } catch (error: RuntimeException) {
+            enterEmergencyMode(error)
+            false
+        } catch (error: LinkageError) {
+            enterEmergencyMode(error)
             false
         }
     }
@@ -228,6 +228,25 @@ class KeyboardService : InputMethodService(), KeyListener {
         core?.close()
         core = null
         coreInput.clear()
+    }
+
+    /** One Japanese engine only. Preserve existing text, then offer a system-level IME escape. */
+    private fun enterEmergencyMode(error: Throwable) {
+        Log.e(TAG, "Shared Core unavailable; opening emergency IME selector", error)
+        try {
+            currentInputConnection?.finishComposingText()
+        } catch (cleanupError: RuntimeException) {
+            Log.e(TAG, "Could not finish composing before emergency switch", cleanupError)
+        }
+        nativeCoreUnavailable = true
+        try {
+            discardCore()
+        } catch (cleanupError: Throwable) {
+            Log.e(TAG, "Could not dispose failed Core", cleanupError)
+            core = null
+            coreInput.clear()
+        }
+        setInputView(buildEmergencyKeyboardView())
     }
 
     /** True once the Japanese QWERTY path has really gone through the native Core (smoke test only). */
@@ -710,19 +729,11 @@ class KeyboardService : InputMethodService(), KeyListener {
                 if (upper) setShift(shift.onCharTyped())
             }
             is KeyAction.Romaji -> {
-                // Core runs exactly the desktop detection rules; fallback to the existing
-                // Kotlin romaji path only if the native shared library is unavailable.
+                // Core is the only Japanese QWERTY engine; failure shows the emergency picker.
                 val scalar = if (shift != ShiftState.OFF) action.char.uppercaseChar() else action.char
                 val consumed = coreCharacter(scalar.code, shift = shift != ShiftState.OFF)
-                if (core != null) {
-                    if (!consumed) insertPassed(scalar.toString())
-                } else if (shift != ShiftState.OFF && action.char.isLetter()) {
-                    // ⇧ が効いているときは、ローマ字にしない。確定してから、大文字を1文字そのまま入れる。
-                    commitComposing()
-                    insert(shift.apply(action.char.toString()))
-                } else {
-                    render(session.handle(Operation.Romaji(action.char)))
-                }
+                // Never feed the same key to Kotlin after a Core failure.
+                if (core != null && !consumed) insertPassed(scalar.toString())
                 setShift(shift.onCharTyped())
             }
             KeyAction.Modify -> replaceLast(Operation.Modify, Kana::modify)
