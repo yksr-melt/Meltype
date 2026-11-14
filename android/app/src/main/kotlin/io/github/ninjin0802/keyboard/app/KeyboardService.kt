@@ -388,10 +388,10 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     /** Independent of native libraries, candidates, and the currently selected keyboard layout. */
     private fun imePickerButton(): TextView = TextView(this).apply {
-        text = "⇄"
+        text = "切替"
         contentDescription = "別のキーボードに切り替える"
         gravity = Gravity.CENTER
-        textSize = 22f
+        textSize = 14f
         setTextColor(Palette.of(this@KeyboardService).text)
         minimumHeight = (44 * resources.displayMetrics.density).toInt()
         minimumWidth = (48 * resources.displayMetrics.density).toInt()
