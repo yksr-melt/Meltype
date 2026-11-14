@@ -19,7 +19,8 @@ public sealed class CandidateDictionary
 
     // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には誤った候補になりうるので、
     // ほかの候補と分けて持ち、変換エンジンの候補の後ろ (ひらがなの前) に並べる (#1650)。
-    private readonly Dictionary<string, string[]> _domain = new(StringComparer.Ordinal);
+    // 設定で分野ごとに ON / OFF するので、分野 (ファイル名の domain- の次の語: domain-names-sudachi.txt → names) ごとに持つ。
+    private readonly Dictionary<string, Dictionary<string, string[]>> _domains = new(StringComparer.Ordinal);
 
     public int Count => _entries.Count + _emoji.Keys.Count(k => !_entries.ContainsKey(k));
 
@@ -35,7 +36,7 @@ public sealed class CandidateDictionary
         // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("brands.txt"));
         foreach (var name in Detection.DictionarySource.EmbeddedNames("domain-"))
-            dictionary.AddDomainText(Detection.DictionarySource.ReadEmbedded(name));
+            dictionary.AddDomainText(DomainOf(name), Detection.DictionarySource.ReadEmbedded(name));
         if (userDirectory is not null)
         {
             var emoji = Path.Combine(userDirectory, "emoji.txt");
@@ -86,12 +87,17 @@ public sealed class CandidateDictionary
     }
 
     /// <summary>分野の辞書 (domain-*.txt)。形式は「読み<Tab>表記<Tab>表記 …」、行頭が # の行はコメント。</summary>
-    public void AddDomainText(string text)
+    /// <summary>分野の辞書のファイル名の分野 (domain-names-sudachi.txt → names)。</summary>
+    public static string DomainOf(string fileName) =>
+        Path.GetFileNameWithoutExtension(fileName)["domain-".Length..].Split('-')[0];
+
+    public void AddDomainText(string domain, string text)
     {
+        if (!_domains.TryGetValue(domain, out var entries)) _domains[domain] = entries = new(StringComparer.Ordinal);
         foreach (var line in Detection.DictionarySource.DataLines(text))
         {
             var parts = line.Split('\t', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length >= 2) Add(_domain, parts[0], parts.Skip(1));
+            if (parts.Length >= 2) Add(entries, parts[0], parts.Skip(1));
         }
     }
 
@@ -125,7 +131,9 @@ public sealed class CandidateDictionary
     public IReadOnlyList<string> LookupWords(string reading) => Lookup(_entries, reading);
 
     /// <summary>分野の辞書の候補 (病名・駅名・人名など)。</summary>
-    public IReadOnlyList<string> LookupDomain(string reading) => Lookup(_domain, reading);
+    /// <param name="enabled">分野を使うか (設定の ON / OFF)。null ならすべて使う。</param>
+    public IReadOnlyList<string> LookupDomain(string reading, Func<string, bool>? enabled = null) =>
+        _domains.Where(d => enabled?.Invoke(d.Key) != false).SelectMany(d => Lookup(d.Value, reading)).Distinct().ToList();
 
     /// <summary>絵文字・顔文字の候補 (手で書いた emoji.txt の順 → CLDR の順)。</summary>
     public IReadOnlyList<string> LookupEmoji(string reading) => Lookup(_emoji, reading);

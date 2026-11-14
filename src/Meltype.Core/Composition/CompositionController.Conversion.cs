@@ -629,7 +629,7 @@ public sealed partial class CompositionController
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
         return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
-            .. _services.Candidates?.LookupDomain(reading) ?? [], reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
+            .. _services.Candidates?.LookupDomain(reading, _settings().DomainDictionaryEnabled) ?? [], reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
     }
 
     /// <summary>
