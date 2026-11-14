@@ -10,11 +10,8 @@
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py skk SKK-JISYO.propernoun > dictionaries/domain-propernouns.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py skk SKK-JISYO.jinmei SKK-JISYO.fullname > dictionaries/domain-names.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py laws <e-Gov の laws-*.json のフォルダー> > dictionaries/domain-laws.txt
-#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py sudachi names core_lex.csv > dictionaries/domain-names-sudachi.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py sudachi propernouns core_lex.csv > dictionaries/domain-propernouns-sudachi.txt
 #   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py sudachi words core_lex.csv > dictionaries/domain-words-sudachi.txt
-#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py wikidata kana.tsv > dictionaries/domain-propernouns-wikidata.txt
-#   MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py unidic sys.dic > dictionaries/domain-words-unidic.txt
 #
 # どの辞書も、Mozc の変換ヘルパー (環境変数 MELTYPE_MOZC) に読みを変換させ、Mozc が出せない語だけを入れる。
 #
@@ -24,15 +21,11 @@
 #   SKK 辞書: https://github.com/skk-dev/dict
 #   e-Gov 法令: https://laws.e-gov.go.jp/api/2/laws?limit=1000&offset=0 (offset を 1000 ずつ増やして全部)
 #   SudachiDict: http://sudachi.s3-website-ap-northeast-1.amazonaws.com/sudachidict-raw/ の core_lex.zip
-#   UniDic: https://clrd.ninjal.ac.jp/unidic/ の 現代書き言葉UniDic (unidic-cwj-202512.zip) の sys.dic
-#   Wikidata: https://query.wikidata.org/sparql に
-#     SELECT ?i ?k ?l WHERE { ?i wdt:P1814 ?k . ?i rdfs:label ?l . FILTER(LANG(?l)="ja") } を TSV で
 # 標準ライブラリだけで動く (.xlsx は zip の中の XML を直接読む)。
 import csv
 import json
 import os
 import re
-import struct
 import subprocess
 import sys
 import threading
@@ -207,7 +200,7 @@ def laws(folder):
 
 # SudachiDict の分類 (品詞の 2〜4 番目) → 分野
 SUDACHI = {
-    'names': lambda pos: pos[0] == '固有名詞' and pos[1] == '人名',
+    # 人名 (固有名詞,人名) は入れない。まれな字の組み合わせ (粥多朗) が多く、名前として確かめられない
     'propernouns': lambda pos: pos[0] == '固有名詞' and pos[1] == '一般',
     'words': lambda pos: pos[0] == '普通名詞',
 }
@@ -217,62 +210,23 @@ def sudachi(kind, path):
     entries = {}
     with open(path, encoding='utf-8', newline='') as f:
         for row in csv.reader(f):
-            # 見出し, 左id, 右id, コスト, 表記, 品詞 1〜6, 読み, …。地名 (固有名詞,地名) は町名・字名がほとんどで、郵便番号の変換 (#343) で扱う
-            if len(row) < 12 or row[5] != '名詞' or not SUDACHI[kind](row[6:9]) or not KANJI.search(row[4]) or row[4][0].isdigit():
+            # 見出し, 左id, 右id, コスト, 表記, 品詞 1〜6, 読み, 正規化表記, …。地名 (固有名詞,地名) は町名・字名がほとんどで、郵便番号の変換 (#343) で扱う
+            # 正規化表記 (13 列目) と違う表記は異表記 (洗ひざらし・いとま乞ひ)。Mozc で絞ると異表記ばかり残るので、正規化表記と同じ表記だけ
+            if len(row) < 13 or row[5] != '名詞' or not SUDACHI[kind](row[6:9]) or not KANJI.search(row[4]) or row[4][0].isdigit() or row[4] != row[12]:
                 continue
             add(entries, row[11], row[4])
     header = [
-        f'# Meltype 分野の辞書: {dict(names="人名", propernouns="固有名詞", words="一般の語")[kind]} (SudachiDict core から作成)',
+        f'# Meltype 分野の辞書: {dict(propernouns="固有名詞", words="一般の語")[kind]} (SudachiDict core から作成)',
         '# 元データ: SudachiDict (株式会社ワークスアプリケーションズ) https://github.com/WorksApplications/SudachiDict',
         '# ライセンス: Apache License 2.0。SudachiDict は UniDic の一部 (BSD-3-Clause、Copyright (c) 2011-2013, The UniDic Consortium) を含む。全文は THIRD-PARTY-NOTICES.md。',
-        '# 加工: 漢字を含む名詞の表記と読みを取り出し、かなだけで書く語・よく使う語の読み (readings.txt) を除いた。',
-    ]
-    return header, entries
-
-
-def wikidata(path):
-    entries = {}
-    for line in Path(path).read_text(encoding='utf-8').splitlines()[1:]:
-        fields = line.split('\t')
-        if len(fields) != 3 or not fields[1].startswith('"') or not fields[2].endswith('"@ja'):
-            continue
-        label = fields[2][1:-len('"@ja')]
-        if KANJI.search(label) and not label[0].isdigit():
-            add(entries, fields[1].strip('"'), label)
-    header = [
-        '# Meltype 分野の辞書: 固有名詞 (Wikidata の、かなの名前 (P1814) を持つ項目の日本語の名前)',
-        '# 元データ: Wikidata https://www.wikidata.org/',
-        '# ライセンス: CC0 1.0 (https://creativecommons.org/publicdomain/zero/1.0/)',
-        '# 加工: 漢字を含む日本語の名前と、かなの名前を取り出し、よく使う語の読み (readings.txt) を除いた。',
-    ]
-    return header, entries
-
-
-def unidic(path):
-    """MeCab の辞書 sys.dic の素性 (品詞,…,書字形,…,仮名形,…) から名詞を取り出す。CSV は配布されていない。"""
-    entries = {}
-    with open(path, 'rb') as f:
-        # 見出し: magic, version, type, lexsize, lsize, rsize, dsize, tsize, fsize, dummy (各 4 バイト), charset (32 バイト)
-        dsize, tsize, fsize = struct.unpack('<10I', f.read(40))[6:9]
-        f.seek(72 + dsize + tsize)
-        features = f.read(fsize).split(b'\0')
-    for feature in features:
-        fields = feature.decode('utf-8').split(',')
-        # 書字形出現形 (8 番目) と 仮名形出現形 (20 番目)
-        if len(fields) > 20 and fields[0] == '名詞' and fields[1] != '数詞' and KANJI.search(fields[8]) and not fields[8][0].isdigit():
-            add(entries, fields[20], fields[8])
-    header = [
-        '# Meltype 分野の辞書: 一般の語 (現代書き言葉UniDic ver.2025.12 から作成)',
-        '# 元データ: 現代書き言葉UniDic https://clrd.ninjal.ac.jp/unidic/。Copyright 国立国語研究所',
-        '# ライセンス: GPL v2.0 / LGPL v2.1 / 修正 BSD のうち、修正 BSD (BSD-3-Clause) を選んで使う。全文は THIRD-PARTY-NOTICES.md。',
-        '# 加工: 漢字を含む名詞の書字形と仮名形を取り出し、よく使う語の読み (readings.txt) を除いた。',
+        '# 加工: 漢字を含む名詞のうち正規化表記と同じ表記と、読みを取り出し、かなだけで書く語・よく使う語の読み (readings.txt) を除いた。',
     ]
     return header, entries
 
 
 def main():
     kind, *args = sys.argv[1:]
-    header, entries = {'medical': medical, 'it': it, 'skk': skk, 'laws': laws, 'sudachi': sudachi, 'wikidata': wikidata, 'unidic': unidic}[kind](*args)
+    header, entries = {'medical': medical, 'it': it, 'skk': skk, 'laws': laws, 'sudachi': sudachi}[kind](*args)
     out = sys.stdout
     out.reconfigure(encoding='utf-8', newline='\n')
     # どの辞書も、Mozc が読みから出せる語は入れない。変換エンジンの候補と同じ語を足しても、読み込みの時間とメモリが増えるだけ

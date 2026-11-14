@@ -390,46 +390,10 @@ SPDX-License-Identifier: Unicode-3.0
 | `domain-stations.txt` | [SKK 辞書](https://github.com/skk-dev/dict) SKK-JISYO.station | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (Meltype では GPL-3.0-or-later で使う) |
 | `domain-propernouns.txt` | SKK 辞書 SKK-JISYO.propernoun | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (同上) |
 | `domain-names.txt` | SKK 辞書 SKK-JISYO.jinmei・SKK-JISYO.fullname | Wnn Consortium、SKK Development Team、Akie Kaidoh | GPL-2.0-or-later (同上) |
-| `domain-names-sudachi.txt`・`domain-propernouns-sudachi.txt`・`domain-words-sudachi.txt` | [SudachiDict](https://github.com/WorksApplications/SudachiDict) core (20261015) の人名・固有名詞・普通名詞 | Works Applications Co., Ltd.。一部は UniDic (Copyright (c) 2011-2013, The UniDic Consortium) | Apache License 2.0。UniDic 由来の部分は BSD-3-Clause (下の全文) |
-| `domain-words-unidic.txt` | [現代書き言葉UniDic](https://clrd.ninjal.ac.jp/unidic/) ver.2025.12 の名詞 | 国立国語研究所 | GPL v2.0 / LGPL v2.1 / 修正 BSD のうち、修正 BSD (BSD-3-Clause、下の全文) を選んで使う |
-| `domain-propernouns-wikidata.txt` | [Wikidata](https://www.wikidata.org/) の、かなの名前 (P1814) を持つ項目の日本語の名前 | Wikidata の編集者 | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) |
+| `domain-propernouns-sudachi.txt`・`domain-words-sudachi.txt` | [SudachiDict](https://github.com/WorksApplications/SudachiDict) core (20261015) の固有名詞 (一般)・普通名詞 (正規化表記と同じ表記だけ) | Works Applications Co., Ltd.。一部は UniDic (Copyright (c) 2011-2013, The UniDic Consortium) | Apache License 2.0。UniDic 由来の部分は BSD-3-Clause (下の全文) |
 | `domain-laws.txt` | [e-Gov 法令検索](https://laws.e-gov.go.jp/) の法令 API の、今ある法律の題名と読み | デジタル庁 | [公共データ利用規約 (第1.0版)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0) (CC BY 4.0 と互換)。出典: e-Gov 法令検索。題名と読みを取り出して加工した |
 
-どの辞書も、Mozc が読みから出せる語を除いています (Mozc の変換ヘルパーに読みを変換させて比べた)。SudachiDict・UniDic・Wikidata は漢字を含む表記だけを入れ、SudachiDict の地名 (固有名詞,地名,一般) は、町名・字名がほとんどなので入れていません。
-
-現代書き言葉UniDic の修正 BSD ライセンス (配布物の license/BSD):
-
-```
-Copyright (c) 2023 National Institute for Japanese Language and Linguistics
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are
-met:
-
- * Redistributions of source code must retain the above copyright
-   notice, this list of conditions and the following disclaimer.
-
- * Redistributions in binary form must reproduce the above copyright
-   notice, this list of conditions and the following disclaimer in the
-   documentation and/or other materials provided with the
-   distribution.
-
- * Neither the name of the UniDic Consortium nor the names of its
-   contributors may be used to endorse or promote products derived
-   from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-```
+どの辞書も、Mozc が読みから出せる語を除いています (Mozc の変換ヘルパーに読みを変換させて比べた)。SudachiDict は漢字を含む表記だけを入れ、人名 (固有名詞,人名。まれな字の組み合わせが多く、名前として確かめられない) と地名 (固有名詞,地名,一般。町名・字名がほとんど) は入れていません。
 
 SudachiDict に含まれる UniDic のライセンス (SudachiDict の LEGAL):
 
