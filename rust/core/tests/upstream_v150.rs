@@ -140,8 +140,16 @@ fn v150_version_numbers_are_not_predicted_or_learned() {
     let (_directory, _store, mut session) = session_with_phrases(json!([]));
     type_text(&mut session, "ba-jonn");
     let view = session.key(0x20, 0x20, 0).view.unwrap();
-    let current = format!("Meltype-FLASH {}", env!("CARGO_PKG_VERSION"));
-    assert!(view.candidates.contains(&current));
+    let current = format!(
+        "Meltype-FLASH {} ({})",
+        env!("CARGO_PKG_VERSION"),
+        meltype_core::version::front(&session.settings)
+    );
+    assert!(
+        view.candidates.contains(&current),
+        "{current} が無い: {:?}",
+        view.candidates
+    );
 }
 
 #[test]

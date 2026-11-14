@@ -254,10 +254,16 @@ impl Backend {
         }) {
             return ordinary;
         }
+        // Mozc の文節の候補を選んでつなげると作れる答え (読みと表記が違う語: きずく → 気づく) は、
+        // Mozc の文節の区切りで使う。作れない答えは、かなが読みと合うときだけ使う (壊れた答えを出さない)
         from_mozc
             .as_ref()
             .and_then(|segments| super::zenzai::align(segments, &text))
-            .or_else(|| Some(vec![(reading.to_owned(), text)]))
+            .or_else(|| {
+                super::zenzai::is_plausible(reading, &text)
+                    .then(|| vec![(reading.to_owned(), text)])
+            })
+            .or(ordinary)
     }
     fn candidates(&mut self, reading: &str) -> Vec<String> {
         let mut result = Vec::new();

@@ -175,19 +175,54 @@ fn group(value: u64) -> String {
     out
 }
 
-/// 円・ウォンは整数、ほかは小数 2 桁まで。3 桁ごとに , を入れる。
-fn format_value(value: f64, code: &str) -> String {
-    if matches!(code, "JPY" | "KRW") {
-        return group(value.round().max(0.0) as u64);
+/// 有効数字 2 桁。0 以下は 0。
+const SIGNIFICANT_DIGITS: i32 = 2;
+
+/// 額を有効数字 2 桁に丸め、1 万以上は 万・億・兆 で書く (15,923 → 1.6万、62.8 → 63)。
+/// 古いレートの概算なので、1 の位まで出して精度があるように見せない (#1871)。
+fn format_value(value: f64) -> String {
+    if value <= 0.0 {
+        return "0".into();
     }
-    let cents = (value * 100.0).round().max(0.0) as u64;
-    let (whole, fraction) = (cents / 100, cents % 100);
-    if fraction == 0 {
-        group(whole)
-    } else if fraction % 10 == 0 {
-        format!("{}.{}", group(whole), fraction / 10)
+    let drop = value.log10().floor() as i32 + 1 - SIGNIFICANT_DIGITS;
+    let rounded = if drop <= 0 {
+        let scale = pow10(-drop);
+        round_away(value * scale) / scale
     } else {
-        format!("{}.{:02}", group(whole), fraction)
+        let scale = pow10(drop);
+        round_away(value / scale) * scale
+    };
+    let (size, suffix) = [(1e12, "兆"), (1e8, "億"), (1e4, "万")]
+        .iter()
+        .find(|(size, _)| rounded >= *size)
+        .copied()
+        .unwrap_or((1.0, ""));
+    format!("{}{}", group_decimals(rounded / size), suffix)
+}
+
+/// 0 から遠いほうへ丸める (C# の MidpointRounding.AwayFromZero と同じ)。
+fn round_away(value: f64) -> f64 {
+    if value >= 0.0 {
+        (value + 0.5).floor()
+    } else {
+        (value - 0.5).ceil()
+    }
+}
+
+fn pow10(exponent: i32) -> f64 {
+    10f64.powi(exponent)
+}
+
+/// 3 桁ごとに , を入れ、小数は 0 でないところまで書く (1.6・63・1,234.5)。
+fn group_decimals(value: f64) -> String {
+    let text = format!("{value:.10}");
+    let (whole, fraction) = text.split_once('.').unwrap_or((text.as_str(), ""));
+    let whole = group(whole.parse::<u64>().unwrap_or(0));
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.is_empty() {
+        whole
+    } else {
+        format!("{whole}.{fraction}")
     }
 }
 
@@ -210,7 +245,7 @@ pub fn candidates_with(
         let Some(value) = rates.convert(amount, from.0, code) else {
             continue;
         };
-        let text = format!("約{}{}", format_value(value, code), unit);
+        let text = format!("約{}{}", format_value(value), unit);
         let dated = format!("{text}（{date} のレート）");
         for candidate in [dated, text] {
             if !values.contains(&candidate) {
@@ -265,23 +300,31 @@ KRW\t1600.5
     #[test]
     fn converts_with_the_rate_date() {
         let rates = rates();
+        // 100 ドル → 約 1.6 万円 (有効数字 2 桁。1 の位は出さない)
         assert_eq!(
             candidates_with(100.0, ("USD", "ドル"), None, &rates),
-            ["約15,923円（2026/11/11 のレート）", "約15,923円"]
+            ["約1.6万円（2026/11/11 のレート）", "約1.6万円"]
         );
         assert_eq!(
             candidates_with(10_000.0, ("JPY", "円"), None, &rates),
             [
-                "約62.8ドル（2026/11/11 のレート）",
-                "約62.8ドル",
-                "約56.44ユーロ（2026/11/11 のレート）",
-                "約56.44ユーロ"
+                "約63ドル（2026/11/11 のレート）",
+                "約63ドル",
+                "約56ユーロ（2026/11/11 のレート）",
+                "約56ユーロ"
             ]
         );
         assert_eq!(
             candidates_with(10_000.0, ("JPY", "円"), Some(("EUR", "ユーロ")), &rates),
-            ["約56.44ユーロ（2026/11/11 のレート）", "約56.44ユーロ"]
+            ["約56ユーロ（2026/11/11 のレート）", "約56ユーロ"]
         );
+        // 1 兆以上も兆で書く (丸めで 1 兆を超えても桁を落とさない)
+        assert_eq!(format_value(1_000_000_000_000.0), "1兆");
+        assert_eq!(format_value(15_923.0), "1.6万");
+        assert_eq!(format_value(62.8), "63");
+        assert_eq!(format_value(1_234.0), "1,200");
+        assert_eq!(format_value(0.004), "0.004");
+        assert_eq!(format_value(0.0), "0");
         assert!(candidates_with(100.0, ("THB", "バーツ"), None, &rates).is_empty());
     }
 

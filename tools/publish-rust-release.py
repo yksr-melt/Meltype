@@ -124,6 +124,14 @@ def parse_tag(tag):
     return match[1], match[2]
 
 
+def notes_heading(tag):
+    """リリースノートの見出し。タグはゼロ埋め (flash-v0001.0001.0019)、ノートは 1.1.19 と書く。"""
+    version, preview = parse_tag(tag)
+    normalized = ".".join(str(int(part)) for part in version.split("."))
+    suffix = f" Pre{preview}" if preview is not None else ""
+    return f"# Meltype-FLASH v{normalized}{suffix}" + "\n"
+
+
 def compose_body(tag, sha, benchmark, media_sha, changes):
     version, preview = parse_tag(tag)
     title = f"Meltype-FLASH v{version}" + (f" Pre{preview}" if preview is not None else "")
@@ -133,7 +141,7 @@ def compose_body(tag, sha, benchmark, media_sha, changes):
     # 同じ版の説明があれば、利用者向けの変更点をコミット一覧より先に載せる。
     notes_path = Path(__file__).resolve().parents[1] / "rust/RELEASE-NOTES.md"
     notes = normalize_markdown(notes_path.read_text(encoding="utf-8"))
-    heading = f"# {title}\n"
+    heading = notes_heading(tag)
     if notes.startswith(heading):
         section = notes[len(heading):].split("\n---\n", 1)[0]
         rows += [line for line in section.splitlines() if line.startswith("- ")]

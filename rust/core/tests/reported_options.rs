@@ -204,9 +204,11 @@ fn issues_959_1020_name_current_version_and_requested_numeric_candidate() {
     assert!(d
         .candidates("めるたいぷ", "Asia/Tokyo")
         .contains(&"Meltype-FLASH".into()));
-    assert!(d
-        .candidates("ばーじょん", "Asia/Tokyo")
-        .contains(&format!("Meltype-FLASH {}", env!("CARGO_PKG_VERSION"))));
+    assert!(d.candidates("ばーじょん", "Asia/Tokyo").contains(&format!(
+        "Meltype-FLASH {} ({})",
+        env!("CARGO_PKG_VERSION"),
+        meltype_core::version::default_front()
+    )));
     assert!(d
         .candidates("いいよこいよ", "Asia/Tokyo")
         .contains(&"114514".into()));
