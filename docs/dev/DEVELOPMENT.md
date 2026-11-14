@@ -8,17 +8,20 @@
 | フォルダー | 中身 |
 |---|---|
 | `src/Meltype.Core/` | OS に依存しない部分 (Windows・Mac・Linux 共通)。英語 / 日本語の判定・ローマ字・変換ボックスの中身・辞書・学習・設定 |
-| `src/Meltype/` | Windows 版 (キーボードフック・変換ボックスの画面・Microsoft IME の変換エンジン・IMM32 / TSF・UI Automation・スペルチェッカー・トレイ) |
+| `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・スペルチェッカー・トレイ) |
 | `src/Meltype.Mac.Native/` | Mac 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib にする) |
-| `mac/` | Mac 版の IME (Swift、Input Method Kit。漢字変換は azooKey) |
+| `mac/` | Mac 版の IME (Swift、Input Method Kit) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
 | `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
-| `src/Meltype.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
+| `src/Meltype.Windows.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
 | `dictionaries/` | 組み込みの辞書 |
 | `packaging/` | 配布用のファイル (インストーラー・Install.cmd など) |
+| `web/` | 公式サイトと報告フォーム (Cloudflare Workers) |
+| `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
+| `docs/dev/` | 開発者向けの文書 (開発・設計・リリースの手順) |
 
-`src/Meltype.Core/` の中は、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
+`src/Meltype.Core/` の中は、`Ime/` (`ImeSession`。入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`NowPlaying/` (再生中の曲を OS から読む)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
 
 ## Windows でビルドして試す
 
@@ -40,7 +43,6 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # �
 
 - Windows 10 / 11 (x64 / ARM64)
 - .NET 10 SDK
-- Microsoft IME (漢字変換に使います)
 - Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
 
 ## Mac・Linux でビルドする
@@ -52,12 +54,10 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # �
 
 ```powershell
 dotnet build Meltype.sln
-dotnet run --project src/Meltype.Tests                                   # すべてのテスト (Windows)
-dotnet run --project src/Meltype.Tests -- CompositionTests               # 名前に一致するテストだけ
-dotnet run --project src/Meltype.Tests -- --explain konnichiwa hello      # 1 文字ずつの判定理由 (英数状態の検知)
-dotnet run --project src/Meltype.Tests -- --convert きょうはいいてんき     # 変換エンジンの結果と文節の区切り
-dotnet run --project src/Meltype.Tests -- --context この本は:あつい        # 文脈を渡したときの変換結果
-dotnet run --project src/Meltype.Tests -- --eval                          # 品質テスト
+dotnet run --project src/Meltype.Windows.Tests                                   # すべてのテスト (Windows)
+dotnet run --project src/Meltype.Windows.Tests -- CompositionTests               # 名前に一致するテストだけ
+dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello      # 1 文字ずつの判定理由 (英数状態の検知)
+dotnet run --project src/Meltype.Windows.Tests -- --eval                          # 品質テスト
 ```
 
 ### Mac・Linux でのテスト
@@ -70,7 +70,7 @@ dotnet run --project src/Meltype.Core.Tests -- --eval       # 品質テスト (�
 dotnet run --project src/Meltype.Core.Tests -- --version    # 版 (Meltype.Core)
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter   # 打ったときの見え方と確定の結果
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json       # 日本語の文の中の英単語が正しく分かれるか (約 550 例)
-dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json  # 報告された誤変換
+dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json  # 報告された誤変換 (MELTYPE_MOZC が要る)
 dotnet run -c Release --project src/Meltype.Core.Tests -- --perf perf.json  # 変換エンジンの遅延 (p95 / p99)・候補の数・控え・メモリ・正解率 (MELTYPE_MOZC が要る)
 ```
 
@@ -151,11 +151,11 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-wi
 ### Meltype キーボード
 
 ```
-物理キー ─▶ KeyboardMonitor ─▶ CaptureGate (変換ボックスが開いている間は、キーとクリックをすべて順番どおりに保留)
+物理キー ─▶ KeyboardMonitor ─▶ KeyboardFront (変換ボックスが開いている間は、キーとクリックをすべて順番どおりに保留)
                                    │
-                                   ▼ (UI スレッド)
-                           CompositionController ◀─ CompositionDetector (英語の区間の判定)
-                                   │                  HybridConverter (Mozc / Microsoft IME の変換エンジン)
+                                   ▼ (UI スレッド。出来事を ImeHost に送り、確定・表示を受け取る)
+                    ImeSession ─▶ MeltypeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
+                                   │                  HybridConverter (Mozc と Zenzai)
                                    │                  ContextRules / ConversionHistory / CandidateDictionary
                                    │                  FocusInspector (UI Automation: 入力欄か・カーソルの前後の文字)
                                    ▼

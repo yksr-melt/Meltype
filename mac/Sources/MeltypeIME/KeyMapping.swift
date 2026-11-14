@@ -4,15 +4,14 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Mac のキー (キーコード・文字) を、Meltype の本体が使う Windows の仮想キーコードにする。
-/// 本体が見るのは「特別なキーか (Enter・矢印・F7 …)」と「英字・数字のキーか」だけで、入力する文字は別に渡す。
+/// Mac の文字の無いキー (Enter・矢印・F7・英数・かな …) を、Meltype の本体が使う Windows の仮想キーコードにする。
+/// 文字を入力するキーは文字だけを渡す (仮想キーコードは本体が文字から決める)。
 enum KeyMapping {
-    /// 文字を入力するキーで、特別な扱いのないもの (記号など)。本体では文字だけを見る。
-    private static let otherCharacterKey: Int32 = 0x07
-
     /// 操作キーの characters は操作を表す特殊コードであり、入力文字ではない。
+    /// Ctrl を押したキーの characters は制御文字 (Ctrl+H は 0x08) なので、キーの文字 (h) を渡す (fcitx5・IBus の keysym と同じ)。
     static func text(for event: NSEvent) -> String {
         if operationVirtualKey(for: event.keyCode) != nil { return "" }
+        if event.modifierFlags.contains(.control) { return event.charactersIgnoringModifiers ?? "" }
         return event.characters ?? ""
     }
 
@@ -53,25 +52,41 @@ enum KeyMapping {
         case kVK_F18: return 0x81
         case kVK_F19: return 0x82
         case kVK_F20: return 0x83
+        // 入力モードのキー (意味は本体が決める)
+        case kVK_JIS_Eisu: return 0xF0
+        case kVK_JIS_Kana: return 0x15
         default: return nil
         }
     }
 
-    static func virtualKey(for event: NSEvent) -> Int32? {
-        if let key = operationVirtualKey(for: event.keyCode) { return key }
-        if Int(event.keyCode) == kVK_Space { return 0x20 }
-        guard let scalar = event.charactersIgnoringModifiers?.lowercased().unicodeScalars.first else { return nil }
-        switch scalar {
-        case "a"..."z": return Int32(scalar.value) - 0x20   // A-Z = 0x41-0x5A
-        case "0"..."9": return Int32(scalar.value)          // 0-9 = 0x30-0x39
-        case ",": return 0xBC
-        case ".": return 0xBE
-        case "-": return 0xBD
-        case "/": return 0xBF
-        case "[": return 0xDB
-        case "]": return 0xDD
-        default:
-            return scalar.value >= 0x20 ? otherCharacterKey : nil
+    /// テンキーの数字・記号の仮想キーコード (Windows の VK_NUMPAD0〜9・VK_MULTIPLY など)。文字と一緒に渡す。
+    /// 本体は、何も打っていないときのテンキーをそのまま通す (上の段の数字とは分ける: issue #460)。
+    private static func keypadVirtualKey(for keyCode: UInt16) -> Int32? {
+        switch Int(keyCode) {
+        case kVK_ANSI_Keypad0: return 0x60
+        case kVK_ANSI_Keypad1: return 0x61
+        case kVK_ANSI_Keypad2: return 0x62
+        case kVK_ANSI_Keypad3: return 0x63
+        case kVK_ANSI_Keypad4: return 0x64
+        case kVK_ANSI_Keypad5: return 0x65
+        case kVK_ANSI_Keypad6: return 0x66
+        case kVK_ANSI_Keypad7: return 0x67
+        case kVK_ANSI_Keypad8: return 0x68
+        case kVK_ANSI_Keypad9: return 0x69
+        case kVK_ANSI_KeypadMultiply: return 0x6A
+        case kVK_ANSI_KeypadPlus: return 0x6B
+        case kVK_ANSI_KeypadMinus: return 0x6D
+        case kVK_ANSI_KeypadDecimal: return 0x6E
+        case kVK_ANSI_KeypadDivide: return 0x6F
+        default: return nil
         }
     }
+
+    /// 文字の無いキーと、テンキーの数字・記号の仮想キーコード。そのほかの文字を入力するキーなら 0。
+    static func virtualKey(for event: NSEvent) -> Int32 {
+        if let key = operationVirtualKey(for: event.keyCode) { return key }
+        if let key = keypadVirtualKey(for: event.keyCode) { return key }
+        return Int(event.keyCode) == kVK_Space ? 0x20 : 0
+    }
 }
+

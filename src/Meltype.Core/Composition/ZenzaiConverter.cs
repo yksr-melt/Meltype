@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
+using System.Buffers;
 using System.Globalization;
 using System.Diagnostics;
 using System.Net;
@@ -8,16 +9,16 @@ using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Meltype.Composition;
 
 /// <summary>
-/// Zenzai (azooKey のニューラルかな漢字変換モデル zenz) で変換する。モデルは llama.cpp の llama-server を別のプロセスで動かして使う
-/// (どちらも同梱しない。ユーザーが用意した llama-server の実行ファイルと zenz の GGUF ファイルの場所を設定する)。
+/// Zenzai (azooKey のニューラルかな漢字変換モデル zenz) で変換する。モデルは llama.cpp の llama-server を別のプロセスで動かして使う。
 ///
-/// 読み (ひらがな) をカタカナにして、zenz の入力の形 (U+EE00 読み U+EE02 文脈 U+EE01) で llama-server の /completion に頼み、
+/// 読み (ひらがな) をカタカナにして、zenz v3 系の入力の形 (U+EE02 文脈 U+EE00 読み U+EE01) で llama-server の /completion に頼み、
 /// 貪欲に生成した文字列を変換結果にする。サーバーが無い・起動できない・応答しないときは null を返すので、呼び出し側で別の変換エンジンを使う。
-/// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す (変換は UI スレッドで動く)。
+/// 起動はバックグラウンドで行い、準備できるまでの変換は待たずに null を返す。
 /// 結果は文節に区切らず、読み全体 1 つの文節で返す。
 /// </summary>
 public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
@@ -25,9 +26,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private const char InputMark = '';
     private const char OutputMark = '';
     private const char ContextMark = '';
+    private static readonly SearchValues<char> OutputBoundaries = SearchValues.Create("\uEE00\uEE01\uEE02\uEE03\uEE04\uEE05\uEE06\uEE07\uEE08\n");
     private const int StartTimeoutMs = 30000;
     private const int MaxReading = 80;
     private const int MaxContext = 100;
+
+    // ワーカーで待つ時間。入力は止めないので、CPU だけで計算する PC でも答えが届く長さにする (Space で待つのは ConversionBudget の間だけ)
+    private const int DefaultTimeoutMs = 1500;
     private const int MaxCache = 256;
 
     /// <summary>
@@ -50,10 +55,14 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private Task? _starting;
     private bool _ready;
     private volatile bool _disposed;
-    private int _failures;
+    private volatile int _failures;
+    private volatile bool _hasAnswered;
+    private readonly LatestRequestWorker<LiveRequest> _worker;
 
-    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず今までの変換エンジンに任せる。
-    // ライブ変換は 1 打鍵ごとに UI スレッドで変換を頼むので、遅いままだと入力が止まる
+    // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
+    private const int SettleMs = 60;
+
+    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
@@ -61,12 +70,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <param name="modelPath">zenz の GGUF ファイル。</param>
     /// <param name="timeoutMs">1 回の変換を待つ時間。</param>
     /// <param name="device">使う GPU (llama-server の --device)。空なら CPU だけで計算する。</param>
-    public ZenzaiConverter(string serverPath, string modelPath, int timeoutMs = 400, string device = "")
+    public ZenzaiConverter(string serverPath, string modelPath, int timeoutMs = DefaultTimeoutMs, string device = "")
     {
         _serverPath = serverPath;
         _modelPath = modelPath;
         _timeoutMs = timeoutMs;
         _device = device;
+        _worker = new LatestRequestWorker<LiveRequest>(ProcessBackground, SettleMs);
     }
 
     /// <summary>
@@ -85,7 +95,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>すでに動いている llama-server を使う (テスト用)。</summary>
-    internal ZenzaiConverter(Uri endpoint, int timeoutMs = 400) : this("", "", timeoutMs)
+    internal ZenzaiConverter(Uri endpoint, int timeoutMs = DefaultTimeoutMs) : this("", "", timeoutMs)
     {
         _fixedEndpoint = endpoint;
         _endpoint = endpoint;
@@ -95,7 +105,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <summary>llama-server と GGUF ファイルが指定の場所にあるか (起動できるかは使ってみるまで分からない)。</summary>
     public bool IsInstalled => _fixedEndpoint is not null || File.Exists(_serverPath) && File.Exists(_modelPath);
 
-    /// <summary>使えるか。何度も失敗したら諦める (毎回起動し直して入力が遅くなるのを避ける)。</summary>
+    /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3;
 
     /// <summary>何度も失敗して諦めたか (起動しない・答えない)。ファイルは見ない (ZenzaiHolder が変換のたびに見る)。</summary>
@@ -108,7 +118,11 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     public bool IsResting => Environment.TickCount64 < Interlocked.Read(ref _pausedUntil);
 
     /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
-    public bool HasAnswered { get; private set; }
+    public bool HasAnswered => _hasAnswered;
+
+    public ConversionBudget Budget { get; internal set; } = new();
+
+    public event Action? ResultReady;
 
     /// <summary>サーバーの起動をバックグラウンドで始める (入力を始める前に呼ぶ)。</summary>
     public void WarmUp()
@@ -122,6 +136,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
     {
+        ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
         context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
         var key = context + "\u0000" + hiragana;
@@ -131,18 +146,50 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             EnsureStarting();
             if (!_ready || _endpoint is null) return null;
         }
+        var request = new LiveRequest(hiragana, context, key);
+        _worker.Submit(request);
+        if (!_worker.Wait(request, Budget.RemainingMs)) return null;
+        ThrowWorkerFailure();
+        lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
+    }
+
+    // ワーカーの例外は入力スレッドで投げ直す (HybridConverter が受けて持ち主に知らせる: #973)
+    private Exception? _workerFailure;
+
+    private void ThrowWorkerFailure()
+    {
+        if (Interlocked.Exchange(ref _workerFailure, null) is { } failure) throw new InvalidOperationException("Zenzai の変換で例外になりました", failure);
+    }
+
+    private readonly record struct LiveRequest(string Hiragana, string Context, string Key);
+
+    private void ProcessBackground(LiveRequest request)
+    {
+        try
+        {
+            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
+            // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
+            if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Volatile.Write(ref _workerFailure, ex);
+        }
+    }
+
+    private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)
+    {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
-        var text = answer;
-        var unchanged = answer is not null && answer == hiragana;
-        if (unchanged) text = null;
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。
+        // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
+        var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
             if (slow) Interlocked.Exchange(ref _pausedUntil, Environment.TickCount64 + BackoffMs);
             if (answer is null && !slow) _failures++;
-            else if (answer is not null) { _failures = 0; HasAnswered = true; }
+            else if (answer is not null) { _failures = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
             // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
             if (answer is not null && !slow) _cache[key] = text;
@@ -150,13 +197,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         return text is null ? null : [new ConversionClause(hiragana, text)];
     }
 
-    /// <summary>zenz に渡す文: U+EE00 + カタカナの読み + (文脈があれば U+EE02 + 文脈) + U+EE01。</summary>
+    /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
     internal static string Prompt(string hiragana, string? context)
     {
         var sb = new StringBuilder();
-        sb.Append(InputMark).Append(ToKatakana(hiragana));
         if (!string.IsNullOrEmpty(context)) sb.Append(ContextMark).Append(context);
-        return sb.Append(OutputMark).ToString();
+        return sb.Append(InputMark).Append(ToKatakana(hiragana)).Append(OutputMark).ToString();
     }
 
     internal static string ToKatakana(string text) =>
@@ -170,7 +216,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         try
         {
-            var body = JsonSerializer.Serialize(new Dictionary<string, object>
+            var body = new JsonObject
             {
                 ["prompt"] = prompt,
                 ["n_predict"] = 96,
@@ -178,7 +224,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 ["top_k"] = 1,
                 ["cache_prompt"] = true,
                 ["parse_special"] = true,
-            });
+            }.ToJsonString();
             using var cts = new CancellationTokenSource(_timeoutMs);
             using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(_endpoint!, "completion"))
             {
@@ -191,17 +237,74 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             var content = json.RootElement.TryGetProperty("content", out var c) ? c.GetString() : null;
             return Clean(content);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException or ObjectDisposedException)
         {
             return null;
         }
     }
 
+    /// <summary>
+    /// 答えが読みと合っているか。答えのかな (カタカナはひらがなとして) と記号は、読みのその位置の文字と同じでないといけない。
+    /// 漢字 1 文字と、英字・数字の並び 1 つは、読みの 1 文字以上に当たるとみなす (今日 → きょう、Microsoft → まいくろそふと)。
+    /// モデルが読みに無いものを続けた答え (はーどうぇ → ハードウェアウェア: issue #1675、きょうはで → 今日はでで・直前の文節の混入: issue #1511) は合わない。
+    /// </summary>
+    internal static bool IsPlausible(string hiragana, string answer)
+    {
+        var tokens = Tokens(answer);
+        var reading = hiragana.Select(Normalize).ToArray();
+        var dead = new HashSet<(int, int)>();
+        return Match(0, 0);
+
+        // tokens[t] 以降で reading[r] 以降をちょうど作れるか (作れなかった組は覚えて、もう試さない)
+        bool Match(int t, int r)
+        {
+            if (t == tokens.Count) return r == reading.Length;
+            if (r == reading.Length || dead.Contains((t, r))) return false;
+            var (text, wildcard) = tokens[t];
+            if (!wildcard ? Normalize(text[0]) == reading[r] && Match(t + 1, r + 1)
+                : (text.Length == 1 && Normalize(text[0]) == reading[r] && Match(t + 1, r + 1)) || Enumerable.Range(r + 1, reading.Length - r).Any(end => Match(t + 1, end)))
+                return true;
+            dead.Add((t, r));
+            return false;
+        }
+    }
+
+    /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
+    private static List<(string Text, bool Wildcard)> Tokens(string answer)
+    {
+        var tokens = new List<(string, bool)>();
+        for (var i = 0; i < answer.Length;)
+        {
+            var c = Normalize(answer[i]);
+            if (char.IsAsciiLetterOrDigit(c))
+            {
+                var end = i;
+                while (end < answer.Length && char.IsAsciiLetterOrDigit(Normalize(answer[end]))) end++;
+                tokens.Add((answer[i..end], true));
+                i = end;
+                continue;
+            }
+            var length = char.IsSurrogatePair(answer, i) ? 2 : 1;
+            var kana = c is >= 'ぁ' and <= 'ゖ' or 'ー' or 'ゝ' or 'ゞ';
+            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !char.IsPunctuation(c) && !char.IsSymbol(c) && !char.IsWhiteSpace(c)));
+            i += length;
+        }
+        return tokens;
+    }
+
+    /// <summary>比べるための文字: カタカナはひらがな (ヵ・ヶ は漢字と同じ扱いのまま)、全角の英数字・記号は半角。</summary>
+    private static char Normalize(char c) => c switch
+    {
+        >= 'ァ' and <= 'ヴ' and not ('ヵ' or 'ヶ') => (char)(c - 0x60),
+        >= '！' and <= '～' => (char)(c - 0xFEE0),
+        _ => c,
+    };
+
     /// <summary>生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。空なら null。</summary>
     internal static string? Clean(string? content)
     {
         if (content is null) return null;
-        var end = content.IndexOfAny(['', '', '', '', '\n']);
+        var end = content.AsSpan().IndexOfAny(OutputBoundaries);
         if (end >= 0) content = content[..end];
         content = content.Replace("</s>", "").Replace("<s>", "").Trim();
         return content.Length == 0 ? null : content;
@@ -241,12 +344,16 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             info.ArgumentList.Add("--poll");
             info.ArgumentList.Add("0");
             info.Environment.TryAdd("KMP_BLOCKTIME", "5");
-            KillStaleServer();
+            EndStaleServers();
             var process = Process.Start(info);
             if (process is null) { Fail(); return; }
             // Meltype が強制終了されても、llama-server が残らないようにする (Windows: ジョブに入れる。入れておくと、親が消えたとき OS が一緒に終わらせる)
             BindToThisProcess(process);
-            WritePidFile(process);
+            using (var self = Process.GetCurrentProcess())
+            {
+                _pidFile = RecordServer(process.Id, Path.GetFileNameWithoutExtension(_serverPath), process.StartTime.ToUniversalTime().Ticks,
+                    self.Id, self.StartTime.ToUniversalTime().Ticks);
+            }
             // 出力を読み捨てる (読まないとパイプが詰まってサーバーが止まる)
             process.OutputDataReceived += static (_, _) => { };
             process.ErrorDataReceived += static (_, _) => { };
@@ -254,7 +361,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             process.BeginErrorReadLine();
             lock (_gate)
             {
-                if (_disposed) { Kill(process); return; }
+                if (_disposed)
+                {
+                    Kill(process);
+                    DeletePidFile();
+                    return;
+                }
                 _process = process;
             }
             var endpoint = new Uri($"http://127.0.0.1:{port}/");
@@ -264,6 +376,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
                 if (Ping(endpoint))
                 {
                     lock (_gate) { _endpoint = endpoint; _ready = true; }
+                    ResultReady?.Invoke();
                     return;
                 }
                 Thread.Sleep(200);
@@ -307,30 +420,70 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     // ---- llama-server を残さない ----
 
-    private static string PidFile => Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
+    // 起動した llama-server 1 つにつき 1 ファイル。同じ PC で Meltype が複数動く (IME と自己診断など) ので、持ち主の Meltype も書く
+    internal static string PidDirectory => Path.Combine(Path.GetTempPath(), "meltype-zenzai");
 
-    private void WritePidFile(Process process)
-    {
-        try { File.WriteAllText(PidFile, $"{process.Id}\n{Path.GetFileNameWithoutExtension(_serverPath)}\n{process.StartTime.ToUniversalTime().Ticks}"); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
-    }
+    private string? _pidFile;
 
-    /// <summary>
-    /// 前の Meltype が強制終了されて残った llama-server (PID ファイルに書いてあるもの) を終わらせる。
-    /// PID は使い回されるので、名前に加えて起動した時刻も同じときだけ (ユーザーが自分で動かしている別の llama-server を止めないように)。
-    /// </summary>
-    private static void KillStaleServer()
+    /// <summary>起動した llama-server と、持ち主の Meltype を書いておく (<see cref="EndStaleServers"/> が読む)。書いたファイルを返す。</summary>
+    internal static string? RecordServer(int pid, string name, long startTicks, int ownerPid, long ownerStartTicks)
     {
         try
         {
-            if (!File.Exists(PidFile)) return;
-            var lines = File.ReadAllLines(PidFile);
-            File.Delete(PidFile);
-            if (lines.Length < 3 || !int.TryParse(lines[0], out var pid) || pid == Environment.ProcessId || !long.TryParse(lines[2], out var startTicks)) return;
-            using var stale = Process.GetProcessById(pid);
-            if (string.Equals(stale.ProcessName, lines[1], StringComparison.OrdinalIgnoreCase) && stale.StartTime.ToUniversalTime().Ticks == startTicks) Kill(stale);
+            Directory.CreateDirectory(PidDirectory);
+            var file = Path.Combine(PidDirectory, $"{pid}.pid");
+            File.WriteAllText(file, $"{pid}\n{name}\n{startTicks}\n{ownerPid}\n{ownerStartTicks}");
+            return file;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>
+    /// 持ち主の Meltype が終わったのに残っている llama-server (強制終了されたときなど) を終わらせる。持ち主が動いているものは止めない。
+    /// PID は使い回されるので、プロセスは名前と起動した時刻も同じときだけ同じものとみなす (ユーザーが自分で動かしている別の llama-server を止めないように)。
+    /// </summary>
+    public static void EndStaleServers()
+    {
+        string[] files;
+        try { files = Directory.Exists(PidDirectory) ? Directory.GetFiles(PidDirectory, "*.pid") : []; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+        foreach (var file in files)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(file);
+                if (lines.Length < 5 || !int.TryParse(lines[0], out var pid) || !long.TryParse(lines[2], out var startTicks) ||
+                    !int.TryParse(lines[3], out var ownerPid) || !long.TryParse(lines[4], out var ownerStartTicks))
+                {
+                    File.Delete(file);
+                    continue;
+                }
+                if (IsRunning(ownerPid, null, ownerStartTicks)) continue;
+                File.Delete(file);
+                if (!IsRunning(pid, lines[1], startTicks)) continue;
+                using var stale = Process.GetProcessById(pid);
+                Kill(stale);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        }
+    }
+
+    private void DeletePidFile()
+    {
+        try { if (_pidFile is not null) File.Delete(_pidFile); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>pid のプロセスが動いていて、起動した時刻 (と name があれば名前) が同じか。</summary>
+    private static bool IsRunning(int pid, string? name, long startTicks)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return (name is null || string.Equals(process.ProcessName, name, StringComparison.OrdinalIgnoreCase)) &&
+                process.StartTime.ToUniversalTime().Ticks == startTicks;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return false; }
     }
 
     private static IntPtr s_job;
@@ -413,6 +566,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     public void Dispose()
     {
+        _worker.Dispose();
         Process? process;
         lock (_gate)
         {
@@ -426,6 +580,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             Kill(process);
             process.Dispose();
         }
+        DeletePidFile();
         _http.Dispose();
     }
 }

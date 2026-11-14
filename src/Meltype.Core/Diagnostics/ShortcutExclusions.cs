@@ -32,7 +32,7 @@ internal static class ShortcutExclusions
             ShortcutValidationError.Duplicate => "同じショートカットが登録済み",
             ShortcutValidationError.Conversion or ShortcutValidationError.FunctionKey => "既存の変換操作と競合",
             ShortcutValidationError.ControlKeyBinding => "「Control キーの割り当て」と競合",
-            ShortcutValidationError.ConvertKeys => "「無変換で英数 / 変換で日本語」と競合",
+            ShortcutValidationError.ConvertKeys => "英数・日本語にする 無変換・変換 キー",
             ShortcutValidationError.UnmodifiedKey => "通常の文字入力に使うキー",
             _ => "不正なキー登録",
         };

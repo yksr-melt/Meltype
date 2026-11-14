@@ -34,7 +34,7 @@ internal static class Impact
 
     private static IEnumerable<string> EnglishWords() => Lines("english-words.txt").Where(w => w.All(char.IsAsciiLetterLower));
 
-    private static IEnumerable<string> Lines(string name)
+    private static List<string> Lines(string name)
     {
         using var stream = typeof(CompositionDetector).Assembly.GetManifestResourceStream("Meltype.dictionaries." + name)
             ?? throw new InvalidOperationException($"辞書 {name} がありません");

@@ -2,16 +2,21 @@
 # Copyright (C) 2026 Yukishiro
 #
 # 公開版のリリースを winget (microsoft/winget-pkgs) に出す (issue #367)。
-# リリースが公開されたら、インストーラー (Meltype-<版>-setup.exe) から新しい版のマニフェストを作り、winget-pkgs に Pull Request を出す。
+# インストーラー (Meltype-<版>-setup.exe) から新しい版のマニフェストを作り、winget-pkgs に Pull Request を出す。
+# release.yml が、配布物をリリースに付けたあとに呼ぶ。release: released では起動しない
+# (release.yml はリリースを GITHUB_TOKEN で公開するので、そのイベントではほかのワークフローが起動しない)。
 # 使う前に (docs/dev/RELEASE.md の「パッケージマネージャー」):
 #   1. 最初の版だけは、tools/make-manifests.mjs で作ったマニフェストを手で winget-pkgs に出し、取り込まれるのを待つ
 #   2. microsoft/winget-pkgs をフォークし、public_repo の権限のトークンを秘密 WINGET_TOKEN に登録する
-# WINGET_TOKEN が無ければ何もしない。
+# WINGET_TOKEN が無ければ失敗する (何もせずに成功すると、winget に出ていないことに気付けない: #1558)。
 name: winget
 
 on:
-  release:
-    types: [released]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
   workflow_dispatch:
     inputs:
       tag:
@@ -21,27 +26,29 @@ on:
 permissions:
   contents: read
 
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+
 jobs:
   winget:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - name: Check token
-        id: token
-        shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |
           if ([string]::IsNullOrEmpty($env:WINGET_TOKEN)) {
-            Write-Output '::notice::WINGET_TOKEN が無いので、winget には出しません (docs/dev/RELEASE.md)。'
-            'ready=false' >> $env:GITHUB_OUTPUT
-          } else {
-            'ready=true' >> $env:GITHUB_OUTPUT
+            Write-Output '::error::WINGET_TOKEN が無いので、winget に出せません。docs/dev/RELEASE.md の「パッケージマネージャー」の手順で登録してください。'
+            exit 1
           }
-      - if: steps.token.outputs.ready == 'true'
-        uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
+      - uses: vedantmgoyal9/winget-releaser@b7370d4d152efdce803a26cc6ca9eee58cb2ad54 # v2
         with:
           identifier: Yukishiro.Meltype
           installers-regex: '-setup\.exe$'
-          release-tag: ${{ inputs.tag || github.event.release.tag_name }}
+          release-tag: ${{ inputs.tag }}
           token: ${{ secrets.WINGET_TOKEN }}

@@ -14,7 +14,7 @@ namespace Meltype.Tests;
 /// 期待値は「理想の結果」で書いてあり、今の実装で外れるものもある (外れたものは一覧に出る)。
 /// 正解率が基準を下回ったら失敗にして、ある直しで別の場所が壊れたことに気づけるようにする。
 ///
-///   dotnet run --project src/Meltype.Tests -- --eval     … カテゴリーごとの正解率と、外れた例の一覧
+///   dotnet run --project src/Meltype.Core.Tests -- --eval     … カテゴリーごとの正解率と、外れた例の一覧
 /// </summary>
 internal static class Quality
 {
@@ -465,7 +465,7 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
         }
         foreach (var (process, name, className, expected) in Focuses)
         {
-            var actual = LineContext.ClassifyFocus(process, name, className);
+            var actual = LineContext.ClassifyFocus(process, new Ime.ImeElement(name, className));
             Score("入力欄の種類", actual == expected, $"{process} 「{name}」({className}) → {actual} (期待: {expected})");
         }
         foreach (var (title, expected) in Titles)

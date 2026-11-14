@@ -21,8 +21,7 @@ internal static class JapaneseParticles
 }
 
 /// <summary>
-/// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、OS や外部の変換エンジンを借りる
-/// (Windows: Microsoft IME、Mac / Linux: Mozc など)。
+/// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、全 OS で Mozc (と Zenzai) を使う (<see cref="HybridConverter"/>)。
 /// </summary>
 public interface IKanjiConverter
 {
@@ -36,7 +35,7 @@ public interface IKanjiConverter
 }
 
 /// <summary>
-/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc / Microsoft IME に合わせて同じ文の最大 10 文字だけだが、
+/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
 /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
 /// 入力を始めるたびに、キャレットの前の日本語の文章 (文をまたいで最大 100 文字) を入れる。無ければ null。
 /// </summary>
@@ -53,6 +52,52 @@ public interface IWideContextConverter
 public interface IStandaloneConverter
 {
     string? ConvertStandalone(string hiragana);
+}
+
+/// <summary>
+/// 入力スレッドが変換エンジンを待ってよい時間。入力スレッドからだけ使う。
+/// Enable するまでは制限なし。結果を受け取る経路を持つフロントだけが Enable する (--repro・--self-test は答えが出るまで待つ)。
+/// </summary>
+public sealed class ConversionBudget
+{
+    private long _deadline = long.MaxValue;
+
+    public bool Enabled { get; private set; }
+
+    public int RemainingMs => (int)Math.Clamp(_deadline - Environment.TickCount64, 0, int.MaxValue);
+
+    public void Enable()
+    {
+        Enabled = true;
+        _deadline = Environment.TickCount64;
+    }
+
+    public void Start(int milliseconds)
+    {
+        if (Enabled) _deadline = Environment.TickCount64 + milliseconds;
+    }
+
+    /// <summary>convert の間は milliseconds までしか待たない (ライブ変換は 0。代わりの変換エンジンに待つ時間を残すときも使う)。</summary>
+    public T WithLimit<T>(int milliseconds, Func<T> convert)
+    {
+        if (!Enabled) return convert();
+        var previous = _deadline;
+        _deadline = Math.Min(previous, Environment.TickCount64 + milliseconds);
+        try { return convert(); }
+        finally { _deadline = previous; }
+    }
+}
+
+/// <summary>結果をワーカーで作り、できたら知らせる変換エンジン。</summary>
+public interface IBackgroundConverter
+{
+    ConversionBudget Budget { get; }
+
+    /// <summary>
+    /// 変換エンジンのキャッシュに結果が入った (または変換エンジンが使えるようになった)。ワーカーのスレッドで呼ぶ。
+    /// 受け取った側は入力スレッドに移して RefreshConversion を呼ぶ。結果を渡さないので、古い読みの結果は表示に使われない。
+    /// </summary>
+    event Action? ResultReady;
 }
 
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>

@@ -4,8 +4,7 @@
 namespace Meltype.Composition;
 
 /// <summary>
-/// 変換候補の補助辞書 (読み → 候補)。Microsoft IME の変換エンジンは最有力の 1 候補しか返さないので、
-/// 同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) はここから出す。
+/// 変換候補の補助辞書 (読み → 候補)。変換エンジンの候補に無い同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) を足す。
 /// 形式は 1 行に「読み 候補 候補 …」。# 以降はコメント。
 /// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
 /// </summary>
@@ -30,8 +29,6 @@ public sealed class CandidateDictionary
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("loanwords.txt"));
         // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("brands.txt"));
-        // 実行中の版を出す (issue #959)。辞書に固定すると、更新後も古い版が候補に残ってしまう。
-        dictionary.Add("ばーじょん", [$"Meltype-{Config.ProjectInfo.CoreVersion}"]);
         if (userDirectory is not null)
         {
             var emoji = Path.Combine(userDirectory, "emoji.txt");

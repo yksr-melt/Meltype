@@ -36,38 +36,22 @@ Linux 版のインストール・設定・困ったときの説明です。IBus 
 <a name="動く環境"></a>
 <img src="images/headings/linux/01.svg" alt="動く環境" height="53"><br>
 
-- Ubuntu 24.04 など (x86_64 / ARM64)
+- Ubuntu 24.04・Debian・Fedora 44・AlmaLinux 9 などの RHEL 9 系 (x86_64 / ARM64)
 - 入力の仕組みが IBus (GNOME、Ubuntu の標準) か fcitx5 (KDE など) のもの
 
-fcitx5 のアドオンは、Ubuntu 24.04 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
+fcitx5 のアドオンは、`.deb` は Ubuntu 24.04 の fcitx5 5.1、`.rpm` は Fedora 44 の fcitx5 5.1 で作っています。版が大きく違う fcitx5 では動かないことがあります。
 
 <br>
 
 <a name="インストール"></a>
 <img src="images/headings/linux/02.svg" alt="インストール" height="53"><br>
 
-1. [Releases](https://github.com/yksr-melt/Meltype/releases/latest) から `Meltype-<version>-linux.zip` (ARM64 のパソコンは `Meltype-<version>-linux-arm64.zip`) をダウンロードして展開する
-2. 「端末」(ターミナル) を開いて、展開したフォルダーで次を実行する (管理者のパスワードを聞かれます。足りない部品があれば自動で入れます)
-   ```bash
-   bash install.sh
-   ```
+Ubuntu・Debian は apt で、Fedora と RHEL 9 系は dnf で入れます。IBus と fcitx5 の両方に入れます (RHEL 9 系は IBus だけ)。
 
-Debian / Ubuntu では、`.deb` からも入れられます (apt で外せます。中身は `install.sh` で入れるものと同じです)。
-[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.deb` をダウンロードして、次のコマンドでインストールします。
+以前の版の zip にあった `install.sh` / `uninstall.sh`（後の `*-legacy.sh`）は廃止しました。今後の zip にはインストール・アンインストール用スクリプトを同梱しません。以前のスクリプトで入れた人も、先に外す必要はありません。apt / dnf で入れると、旧スクリプトが配置したファイルはパッケージのものに置き換わり、apt / dnf で外すときにまとめて消えます。
 
-x86_64:
-
-```bash
-sudo apt install ./meltype_<version>_amd64.deb
-```
-
-ARM64:
-
-```bash
-sudo apt install ./meltype_<version>_arm64.deb
-```
-
-`.deb` は IBus と fcitx5 の両方に入れます (IBus の部品は「おすすめ」なので、ふつうは一緒に入ります)。
+<a name="ubuntu--debian"></a>
+<img src="images/headings/linux/s01.svg" alt="Ubuntu / Debian" height="40">
 
 apt リポジトリから入れると、以後 `sudo apt update && sudo apt upgrade` で更新できます。初回だけ、公開鍵とリポジトリを登録します。
 
@@ -87,20 +71,16 @@ sudo apt update
 sudo apt install meltype
 ```
 
-Fedora では、`.rpm` から入れられます (dnf で外せます。中身は `.deb` と同じです。Fedora 44 でビルドしています)。
-[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` をダウンロードして、次のコマンドでインストールします。
-
-x86_64:
+リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.deb` (x86_64 は `meltype_<version>_amd64.deb`、ARM64 は `meltype_<version>_arm64.deb`) をダウンロードして、次のコマンドでインストールします。
 
 ```bash
-sudo dnf install ./meltype-<version>-1.x86_64.rpm
+sudo apt install ./meltype_<version>_amd64.deb
 ```
 
-ARM64:
+IBus の部品は「おすすめ」なので、ふつうは一緒に入ります。
 
-```bash
-sudo dnf install ./meltype-<version>-1.aarch64.rpm
-```
+<a name="fedora"></a>
+<img src="images/headings/linux/s02.svg" alt="Fedora" height="40">
 
 dnf リポジトリから入れると、以後 `sudo dnf upgrade` で更新できます。初回だけ、リポジトリを登録します (公開鍵は最初のインストールのときに確認を求められます)。
 
@@ -109,33 +89,54 @@ sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Melt
 sudo dnf install meltype
 ```
 
+AlmaLinux 9・Rocky Linux 9 などの RHEL 9 系では、リポジトリを次のコマンドで登録します。
+
+```bash
+sudo dnf install dnf-plugins-core
+sudo dnf config-manager --add-repo https://yksr-melt.github.io/Meltype/rpm/meltype.repo
+sudo dnf install meltype
+```
+
+fcitx5 のアドオンは別のパッケージ `meltype-fcitx5` です。fcitx5 が入っていれば、dnf が `meltype` と一緒に入れます。
+
+リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` (x86_64 は `meltype-<version>-1.x86_64.rpm`、ARM64 は `meltype-<version>-1.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。fcitx5 で使うときは、`meltype-fcitx5-<version>-1.x86_64.rpm` も一緒に入れます。
+
+```bash
+sudo dnf install ./meltype-<version>-1.x86_64.rpm
+sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x86_64.rpm  # fcitx5 で使うとき
+```
+
+<a name="ほかのディストリビューション"></a>
+<img src="images/headings/linux/s03.svg" alt="ほかのディストリビューション" height="40">
+
+ほかのディストリビューション向けのパッケージはまだありません。[Releases](https://github.com/yksr-melt/Meltype/releases/latest) の `Meltype-<version>-linux.zip` (ARM64 は `Meltype-<version>-linux-arm64.zip`) に、ビルド済みのファイルが入っています。
+置く場所と、`@DIR@` を置いた場所に書き換えるファイルは、[linux/build-deb.sh](../linux/build-deb.sh) と同じです。zip の fcitx5 のアドオン (`fcitx5/meltype.so`) は Ubuntu 24.04 の fcitx5 向けです。
+ソースからビルドする方法は [linux/README.md](../linux/README.md) にあります。
+
 <a name="ibus-のとき"></a>
-<img src="images/headings/linux/s01.svg" alt="IBus のとき" height="40">
+<img src="images/headings/linux/s04.svg" alt="IBus のとき" height="40">
 
 1. いったんログアウトしてログインし直す
 2. 設定 → キーボード → 入力ソース →「+ 入力ソースを追加」→ 日本語 → Meltype を追加
 3. 画面右上の入力ソースのメニュー (または <kbd>Super</kbd> + <kbd>Space</kbd>) で Meltype を選ぶ
 
 <a name="fcitx5-のとき"></a>
-<img src="images/headings/linux/s02.svg" alt="fcitx5 のとき" height="40">
+<img src="images/headings/linux/s05.svg" alt="fcitx5 のとき" height="40">
 
-fcitx5 が入っていれば、`install.sh` が fcitx5 にも入れます (fcitx5 だけに入れるなら `bash install.sh --fcitx5`)。
-
-1. fcitx5 の設定 (`fcitx5-configtool`) →「入力メソッド」で Meltype を追加する
-2. <kbd>Ctrl</kbd> + <kbd>Space</kbd> などで Meltype に切り替える
-
-動いている fcitx5 があれば、`install.sh` は Meltype を読み込ませます (入れ直したときは、新しい版に切り替えます)。
-「新しい Meltype を読み込ませられませんでした」と出たときは、案内のとおり fcitx5 を起動し直してください。
-KDE Plasma の Wayland では fcitx5 を KWin が起動しているため、ログアウトしてログインし直すのが確実です。
+1. いったんログアウトしてログインし直す (動いている fcitx5 は、起動し直すまで新しい Meltype を読み込みません)
+2. fcitx5 の設定 (`fcitx5-configtool`) →「入力メソッド」で Meltype を追加する
+3. <kbd>Ctrl</kbd> + <kbd>Space</kbd> などで Meltype に切り替える
 
 <br>
 
 <a name="使い方"></a>
 <img src="images/headings/linux/03.svg" alt="使い方" height="53"><br>
 
-<kbd>半角/全角</kbd> で英数と日本語を切り替えます。
+<kbd>半角/全角</kbd> で英数と日本語を切り替えます。<kbd>英数</kbd>・<kbd>無変換</kbd> で英数に、<kbd>ひらがな/カタカナ</kbd>・<kbd>変換</kbd> で日本語になります。切り替えたときは、入力位置の近くに「あ」か「A」を少しの間出します。入力欄に入ったときも出すには、設定 `ModeIndicator` を `OnSwitchAndFocus` にします。
 
 設定は、アプリの一覧の「Meltype の設定」で変えられます。
+
+設定「カッコを打ったら中にカーソルを移動」は、fcitx5・IBus ともに未対応です。設定画面には項目が表示されます。
 
 設定と学習データは `~/.local/share/Meltype` にあります。画面に無い項目 (アプリ別設定など) は、Windows 版と同じ `config.json` を直接編集します。先頭に `"$schema"` を書くと、エディターで項目の補完と説明が出ます。
 
@@ -166,12 +167,4 @@ ibus restart; sleep 2; pkill -f ibus-engine-meltype; /opt/meltype/ibus-engine-me
 <a name="アンインストール"></a>
 <img src="images/headings/linux/05.svg" alt="アンインストール" height="53"><br>
 
-展開したフォルダーで次を実行します。
-
-```bash
-bash uninstall.sh
-# 設定と学習データも消すなら
-bash uninstall.sh --data
-```
-
-`.deb` で入れたときは `sudo apt remove meltype`、`.rpm` で入れたときは `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。
+Ubuntu / Debian は `sudo apt remove meltype`、Fedora・RHEL 9 系は `sudo dnf remove meltype` で外します (設定と学習データ `~/.local/share/Meltype` は残るので、要らなければ消してください)。

@@ -34,8 +34,7 @@ japanese
 mobisode
 # Issue #411
 change
-# Issue #485
-open
+# Issue #485 (open は #669 で追加済み)
 # Issue #852
 image
 # Issue #876

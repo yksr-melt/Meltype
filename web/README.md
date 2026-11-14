@@ -14,6 +14,16 @@ npm test
 
 `npm test` は D1 の代わりに `node:sqlite` を使うので、Node 22.13 以降で動かしてください (CI は Node 24)。`.dev.vars.example` には手元用の値が入っています。TurnstilehaCloudflareのテスト用キーで、テスト用キーの hostname は `example.com` になるので `TURNSTILE_HOSTNAMES` は空にしてあります。`DASHBOARD_DEV_BYPASS=1` のときは、localhostからのダッシュボードだけアクセス確認を飛ばします。
 
+## 使い方ガイド
+
+`/guide/` の使い方ガイドは、`docs/` の利用者向けの文書 (`USAGE.md`・`WINDOWS.md`・`MACOS.md`・`LINUX.md`) から `scripts/make-guide.mjs` で作ります。中身を変えるときは `docs/` の Markdown を直してください (`public/guide/` は作るたびに作り直すので、コミットしません)。
+
+```bash
+npm run guide
+```
+
+`npm run dev`・`npm run deploy` も先に作り直します。ほかの文書へのリンクはガイドのページに、ガイドに無い文書・ソースへのリンクは GitHub に直します。
+
 ## 画像を作り直す
 
 リンクを貼ったときの画像 (`public/og.png`) は `scripts/og.html` をブラウザーで 1200x630 に描いて作ります。文字は Google Fonts の Zen Maru Gothic なので、ネットにつながった状態で実行してください。
@@ -58,6 +68,15 @@ npx wrangler secret put TURNSTILE_SECRET
 | `FILE_RETENTION_DAYS`・`REPORT_RETENTION_DAYS` | 添付と報告を残す日数 (30 日・180 日) |
 
 2回目以降は `npm run deploy` で変更を反映しデプロイできます。
+
+main に `web/` の変更が入ると、GitHub Actions (`.github/workflows/web.yml` の `deploy`) がテストの後に `npm run deploy` を実行して、自動でデプロイします。使うには、リポジトリの Settings → Environments に `web-production` を作り、次の secrets を入れてください (無いときはデプロイのジョブが失敗します)。
+
+| 名前 | 中身 |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | Cloudflare の API トークン。テンプレート「Edit Cloudflare Workers」に、D1 の編集を足したもの |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare のアカウント ID |
+
+`wrangler.jsonc` に D1・KV の ID を書いていないときは、wrangler がデプロイ済みの Worker の同じ名前のつながりを使います。初回のデプロイは手元で行ってください。
 
 ## 報告の受付について
 

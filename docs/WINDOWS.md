@@ -37,7 +37,6 @@ Windows 版のインストール・設定・困ったときの説明です。キ
 <img src="images/headings/windows/01.svg" alt="動く環境" height="53"><br>
 
 - Windows 10 / 11 (64bit)
-- Microsoft IME (Windows 標準の日本語入力)
 
 .NET は同梱しているので、別にインストールする必要はありません。
 
@@ -92,16 +91,18 @@ SmartScreen の警告とは別のものです。誤検知のこともありま�
 - 入れると、既定の入力方式が Meltype になります (自分で既定を決めていたときは変えません)。Microsoft IME など、ほかの IME との切り替えは <kbd>Win</kbd> + <kbd>Space</kbd> です
 - 日本語の入力方式が 2 つになるので、<kbd>Ctrl</kbd> + <kbd>Shift</kbd> でも入力方式が切り替わります。ゲームなどで困るときは、「設定」→「時刻と言語」→「入力」→「キーボードの詳細設定」→「入力言語のホット キー」→「キー シーケンスの変更」で、「キーボード レイアウトの切り替え」を「割り当てなし」にしてください
 - 打っている途中は点線、変換した文節は細い線、選んでいる文節は太い線の下線が付きます
+- 設定「カッコを打ったら中にカーソルを移動」が ON のとき、`「」`・`（）`・`()` などの空の括弧を <kbd>Enter</kbd> で確定すると、改行せず括弧の中へ移ります。Windows Terminal ではこの移動は未対応です
+- Chrome など一部の入力欄では、空の括弧を <kbd>Space</kbd> で変換し、続けて文字を打って括弧を確定すると、次の文字は閉じ括弧の後ろに入ります。括弧の中に入力するには、先に <kbd>Enter</kbd> で括弧を確定します
+- <kbd>Ctrl</kbd> + <kbd>Enter</kbd> は変換中でもアプリに渡るので、チャットの送信などに使えます
 - <kbd>半角/全角</kbd> か <kbd>Alt</kbd> + <kbd>&#96;</kbd> で日本語 ⇔ 英数です (設定の「入力モード切り替えキー」で変えられます)。タスクバーの「あ」「A」をクリックしても切り替わります
 - タスクトレイの Meltype が動いていない・一時停止中・動作モードが Meltype IME でないときは、Meltype IME を選んでいても英字がそのまま入ります
 - 管理者として動いているアプリ・サインインや UAC の画面・パスワードの入力欄・ブラウザーのシークレット / InPrivate ウィンドウ・アプリ別設定で OFF か「ゲーム」にしたアプリでは何もしません (英字がそのまま入ります)
 - IME の登録は PC 全体です。同じ PC のほかのユーザーも Meltype を使っているときにアンインストールすると、そのユーザーの Meltype IME も使えなくなります (そのユーザーが `Install.cmd` を実行し直せば戻ります)
-- アプリの種類ごとの「最初は英数」と、選んだ文字の再変換は、まだ Meltype キーボードでしか使えません
 
 <a name="今のモード-日本語--英数-の見分け方"></a>
 <img src="images/headings/windows/s04.svg" alt="今のモード (日本語 / 英数) の見分け方" height="40">
 
-Meltype IME では、タスクバーの「あ」「A」が今のモードです。設定の「Meltype IME でも入力モードをカーソルの近くに表示」を ON にすると、切り替えたときにカーソルの近くにも出ます。
+Meltype IME では、タスクバーの「あ」「A」が今のモードです。設定の「入力モードをカーソルの近くに表示」で、切り替えたとき (と入力欄に入ったとき) にカーソルの近くにも出せます。
 
 Meltype キーボードのときは、タスクバーの IME の表示は常に「A」になります (故障ではありません)。Meltype が Windows の IME を OFF にして、代わりに入力を受け持っているためです。今のモードは、次のどちらかで確かめてください。
 
@@ -158,7 +159,7 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 - 文字入力欄以外 (Gmail の `j`/`k` のようなショートカット、エクスプローラー、ゲーム)
 - パスワード欄
 - 管理者権限のアプリ、全画面のアプリ、アプリ別設定で OFF にしたアプリ (既定でリモートデスクトップと VM は OFF)
-- ほかのソフトが送ったキー (AnyDesk・VNC などの遠隔操作、ULE4JIS などキー配列を変えるソフト)。設定「遠隔操作などの入力も処理する」を ON にすると処理します。ULE4JIS は Meltype より後に起動してください
+- ほかのソフトが送ったキー (Windows のタッチキーボード、AnyDesk・VNC などの遠隔操作、ULE4JIS などキー配列を変えるソフト)。設定「遠隔操作などの入力も処理する」を ON にすると処理します。ULE4JIS は Meltype より後に起動してください
 
 出ない理由はトレイの「ログ / 判定理由」に「フォーカス → 入力欄ではない: …」のように残ります。
 
@@ -196,10 +197,10 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 
 [Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
-- Meltype が llama-server を 127.0.0.1 で起動します。使えないとき・0.4 秒で返らないときは、ふだんの変換エンジンで変換します
+- Meltype が llama-server を 127.0.0.1 で起動します。使えないときは、Mozc で変換します
 - Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
 - CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
-- 自分で用意した llama-server やモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
+- 自分で用意した llama-server や zenz v3 系のモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
 
 <br>
 
@@ -219,6 +220,10 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 
 <a name="おかしな動きがあったら"></a>
 <img src="images/headings/windows/10.svg" alt="おかしな動きがあったら" height="53"><br>
+
+Meltype を更新した後、前から開いていたアプリで日本語を入力できない (英字のまま入る) ときは、そのアプリが前の版の Meltype IME を読み込んだままです。PC を再起動してください (Meltype が見つけたときは通知でも知らせます)。
+
+漢字に変換されず、ひらがなのまま確定するときは、Meltype が同梱の Mozc (`app\mozc\meltype_mozc_helper.exe`) を起動できていません。ログ (右クリック →「ログ / 判定理由...」) に「Mozc の変換ヘルパーを起動できません」か「Mozc を使えませんでした」と出ていれば、Meltype を入れ直してください。会社の PC でアプリの実行が制限されているときは、管理者に `meltype_mozc_helper.exe` の実行を許可してもらってください。
 
 タスクトレイのアイコンを右クリック →「不具合の報告・提案...」から報告できます。次の 3 つを書いてもらえると助かります！
 

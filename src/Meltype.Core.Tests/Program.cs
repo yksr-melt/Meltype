@@ -11,7 +11,7 @@ namespace Meltype.Tests;
 ///   dotnet run --project src/Meltype.Core.Tests -- --eval       … 品質テストの正解率と外れた例
 ///   dotnet run --project src/Meltype.Core.Tests -- --version    … 版 (Meltype.Core)
 ///   dotnet run --project src/Meltype.Core.Tests -- --explain konnichiwa hello … 1 文字ずつの判定理由
-/// Windows では src/Meltype.Tests から実行すると、Windows のスペルチェッカーを使い、Windows 専用のテストもまとめて流す。
+/// Windows では src/Meltype.Windows.Tests から実行すると、Windows のスペルチェッカーを使い、Windows 専用のテストもまとめて流す。
 /// </summary>
 internal static class Program
 {
@@ -69,8 +69,9 @@ internal static class Program
                 Performance.Compare(args[1], args[2]);
                 return 0;
             case "--expect":
-                // --expect 入力ファイル 出力ファイル (Pull Request のチェック用)
+                // --expect 入力ファイル 出力ファイル (Pull Request のチェック用。MELTYPE_MOZC が要る)
                 Checks.Expect(args[1], args[2]);
+                Henkan.Shutdown();
                 return 0;
             case "--henkan":
                 Henkan.Run(string.Join(" ", args.Skip(1)));
@@ -81,13 +82,13 @@ internal static class Program
                 {
                     var text = string.Join(" ", args.Skip(1));
                     var slash = text.IndexOf(" / ", StringComparison.Ordinal);
-                    Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, null, Henkan.Keyboard, Henkan.EngineName);
+                    Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, Henkan.ReadingOf, Henkan.Keyboard, Henkan.EngineName);
                     Henkan.Shutdown();
                 }
                 return 0;
             case "--jht-batch":
                 // 標準入力から 1 行に 1 つ「出てほしい文 [/ 読み]」を受け取り、1 行ずつ結果を返す (多くの文を続けて試すとき。起動の待ちを省く)
-                Jht.Batch(null, Henkan.Keyboard, () => Henkan.EngineName);
+                Jht.Batch(Henkan.ReadingOf, Henkan.Keyboard, () => Henkan.EngineName);
                 Henkan.Shutdown();
                 return 0;
             case "--dictionary-memory":

@@ -70,6 +70,8 @@ Mac 版・Linux 版はプレビュー版です。気づいたことは小さな�
 <img src="docs/images/headings/contributing/09.svg" alt="Issue・Pull Request の扱い" height="53"><br>
 
 
+Issue・Pull Request の本文とコメントは日本語で書いてください。日本語が書けない場合は、機械翻訳でかまいません。
+
 `要トリアージ` が付いている Issue (メンテナーがまだ見ていないもの) には、基本的に着手しないでください。
 対応したい場合は、その Issue に対応したいことをコメントで残しておいてください。メンテナーが進めると判断したら、`/self-assign` とコメントしてから対応してください ([bot のコマンド](#bot-のコマンド))。
 
@@ -83,7 +85,7 @@ Mac 版・Linux 版はプレビュー版です。気づいたことは小さな�
 
 Issue を直す Pull Request を送るつもりの場合は、その Issue のコメントに自分が対応することを書いてから、修正に取りかかってください。
 同じ Issue を何人もが同時に直してしまうのを防ぐためです。
-本文の `Fixes #123` (Issue の URL でも可) などで閉じる Issue に担当 (Assignees) がいて、作成者がその担当に入っていない Pull Request は、bot が Draft にして理由をコメントします。担当のいない Issue なら、そのままです。担当に入ったら「Ready for review」で戻してください。
+本文の `Fixes #123` (Issue の URL でも可) などで閉じる Issue に担当 (Assignees) がいて、作成者がその担当に入っていない Pull Request は、bot が (1 時間ごとに確かめて) Draft にし、理由をコメントします。担当のいない Issue なら、そのままです。担当に入ったら「Ready for review」で戻してください。
 
 - **1 つの Pull Request は 1 つの目的にしてください。** その目的に必要な実装・テスト・文書は、一緒に入れて構いません。複数の目的をまとめた統合 PR は受け付けません。
 - **同時にレビューする Pull Request は、メンテナーの PR を除き 1 人 2 件までです (Draft も数えます)。** メンテナーは GitHub の `OWNER`・`MEMBER`・`COLLABORATOR` を指します。
@@ -94,7 +96,7 @@ Issue を直す Pull Request を送るつもりの場合は、その Issue の�
 
 「1 つの目的か」などの判断はメンテナーが行います。対応が必要なときは、理由をコメントして `PR要対応` を付けます。
 
-`PR要対応` の PR と `情報待ち` の Issue は、**bot の期限通知から 14 日間、投稿者の反応 (返信・本文の変更・push) がなければ閉じます。** 閉じた後に情報が揃ったら、再オープンを依頼してください。メンテナーが `No Close` を付けたものは、自動では閉じません。
+`PR要対応` の PR と `情報待ち` の Issue は、**bot の期限通知から 14 日間、投稿者の反応 (返信・本文の変更・push) がなければ閉じます。** 閉じた後に情報が揃ったら、再オープンを依頼してください。
 
 <br>
 
@@ -104,9 +106,8 @@ Issue を直す Pull Request を送るつもりの場合は、その Issue の�
 
 Meltype は GNU GPL v3 で公開していますが、GPL v3 の条件で使えない方 (非公開で利用したい方) には、作者が個別に相談して利用を認めることがあります。
 これを続けられるように、初めて Pull Request を送る方には次の同意 (CLA) をお願いしています。
-Pull Request を作ると bot がこの文面をコメントするので、同意していただける場合は、その Pull Request に **「CLA に同意します」** と 1 行だけコメントしてください (英語なら `I agree to the CLA`)。
+Pull Request を作ると、チェックが流れたあとに bot がこの文面をコメントするので、同意していただける場合は、その Pull Request に **「CLA に同意します」** と 1 行だけコメントしてください (英語なら `I agree to the CLA`)。
 同意は記録され (`cla-signatures` ブランチ)、次の Pull Request からは不要です。同意するまで、Pull Request の「CLA」のチェックは失敗のままになります。
-CLA bot は同意済みの作者 (または従来の免除対象) の Pull Request に `CLA確認済み` ラベルも付けます。このラベルは Merge Queue が作者を確認するためのもので、手動で付けないでください。
 
 > 私は、この Pull Request で提供する貢献 (コード・辞書・文書など) について、次のことに同意します。
 >
@@ -128,7 +129,7 @@ CLA bot は同意済みの作者 (または従来の免除対象) の Pull Reque
 // Copyright (C) 2026 あなたの名前
 ```
 
-Pull Request を作ると bot が確かめ、抜けや名前の間違いがあればコメントします。
+Pull Request を作ると「notices」のチェックが確かめ、抜けや名前の間違いがあればファイルに注釈を付けて失敗にします (直し方はチェックの Summary に出ます)。
 
 <br>
 
@@ -194,7 +195,7 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 
 `/test`・`/pack` の `<SHA>` は、中身を確かめた commit の SHA (40 桁) です。PR の今の head と違えば動かしません。
 
-「変換・判定の間違い」の Issue を作ると、`/repro` と同じことを自動で行います (「打ったもの」がキーの英字なら、ほかの欄が足りなくても行います)。漢字の変換は再現しません (日本語 / 英語の判定だけを見ます)。
+「変換・判定の間違い」の Issue を作ると、`/repro` と同じことを自動で行います (「打ったもの」がキーの英字のとき)。漢字の変換は再現しません (日本語 / 英語の判定だけを見ます)。
 
 `要トリアージ` が付いている Issue では、メンテナー以外は `/self-assign` できません ([Issue・Pull Request の扱い](#issuepull-request-の扱い))。
 
@@ -202,13 +203,10 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 <img src="docs/images/headings/contributing/s06.svg" alt="自動の仕分け" height="40">
 
 
-新しい報告には、bot が次のラベルを自動で付けます (どれも見当なので、作者が確認して直します)。
+新しい報告には、bot が次のラベルを自動で付けます。
 
 - `要トリアージ`: 作者がまだ見ていない (確認したら外す)
-- OS・環境: `windows` `mac` `linux` `win11` `win10` `企業PC` `管理者で実行` `Mozcなし` `かな入力` `USキーボード` `高DPI`、版 (`v0.2.0` など)。Meltype の「不具合の報告・提案...」から報告すると入る実行環境から付けます
-- 不具合の優先度: `優先: 高` (止まる・入力できない・文字が消えるなど) / `優先: 中`
-- 起きたアプリ: `アプリ: チャット` `アプリ: コード` `アプリ: ブラウザー` `アプリ: ゲーム` `アプリ: Office`、`インストール`
-- `情報待ち` (版や打ったキーが足りない)、`再現済み` (bot が再現した)
+- `再現済み`: bot が再現した
 
 <br>
 
@@ -225,14 +223,15 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | web | `web/` が変わったとき | Web (Cloudflare Workers・報告フォーム) の構文・テスト |
 | 辞書の形式 | `dictionaries/` が変わったとき | 読めない行・ひらがなでない読み・重複など (`node tools/check-dictionaries.mjs` で手元でも確かめられます) |
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます。あわせて、よく使う語 (約 5.7 万語) の判定が main から変わった語を一覧にします (参考。失敗にはしません) |
-| 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」と、`Fixes #12` で閉じる誤判定の報告を、Pull Request のコードで確かめます |
-| CLA | 初めての方 | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」) |
+| 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc で確かめます |
+| CLA | いつも | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」)。初めての方は、同意するまで失敗します |
+| notices | いつも | 足したソースファイルの先頭のライセンス・著作権の表記 (上の「ソースファイルの先頭の表記」) |
 | フォーマット | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、違反があれば失敗 |
-| 静的解析 | いつも | Roslyn の解析の警告のうち、Pull Request で新しく出たものを注釈で出す (マージは止めません) |
+| 静的解析 | いつも | Roslyn の解析の警告が 1 件でもあれば失敗 |
 | CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
 | スクリプト | いつも | `.github/bot`・`tools` の Node のスクリプトのテスト |
 | 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
 
-フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析・CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。
+フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析は `dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true` で手元でも確かめられます (Linux・macOS でも Windows 版まで調べられます)。CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。

@@ -7,7 +7,7 @@
 #   linux/build-deb.sh [版] [組み立てたフォルダー] [出力先]
 #   例: linux/build-deb.sh 1.2.2-pre.2 linux/build/Meltype-linux linux/build
 #   使う人: sudo apt install ./meltype_1.2.2~pre.2_amd64.deb / sudo apt remove meltype
-# 中身は install.sh が入れるものと同じ場所に置く:
+# 置く場所:
 #   /opt/meltype (本体)、/usr/share/ibus/component/meltype.xml (IBus)、
 #   /usr/bin/meltype-settings と /usr/share/applications/ibus-setup-meltype.desktop (設定画面)、
 #   fcitx5 のアドオンがあれば <ライブラリのフォルダー>/fcitx5/meltype.so と /usr/share/fcitx5/{addon,inputmethod}/meltype.conf
@@ -38,7 +38,6 @@ done
 command -v dpkg-deb > /dev/null || { echo "dpkg-deb がありません (Debian / Ubuntu で実行してください)" >&2; exit 1; }
 
 # CPU と、fcitx5 のアドオンの置き場所 (Debian / Ubuntu の multiarch のフォルダー)。
-# install.sh は libclassicui.so のあるフォルダーを探すが、Debian / Ubuntu ではここになる
 # libMeltypeNative.so (ELF) の e_machine (18 バイト目から 2 バイト) で見る
 machine="$(od -An -tx1 -j18 -N2 "$src/libMeltypeNative.so" | tr -d ' \n')"
 case "$machine" in
@@ -84,9 +83,8 @@ License: GPL-3.0-or-later
 EOF
 find "$root" -type d -exec chmod 755 {} +
 
-# 依存: 本体 (NativeAOT) と Mozc の変換ヘルパーが使う C / C++ のライブラリと zlib、IBus のエンジン (Python)。
-# IBus は fcitx5 だけで使う人もいるので Recommends にする (install.sh も fcitx5 だけなら IBus を入れない)
-# 設定画面 (GTK 4) は無くても入力はできるので Recommends にする
+# 依存: 本体 (NativeAOT) と Mozc の変換ヘルパーが使う C / C++ のライブラリと zlib、IBus のエンジンと設定画面 (Python・GTK 4)。
+# IBus は fcitx5 だけで使う人もいるので Recommends にする
 installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
 {
     echo "Package: meltype"
@@ -94,8 +92,8 @@ installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
     echo "Architecture: $arch"
     echo "Maintainer: Yukishiro <https://github.com/yksr-melt/Meltype>"
     echo "Installed-Size: $installed_size"
-    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3"
-    echo "Recommends: ibus, python3-gi, gir1.2-ibus-1.0, gir1.2-gtk-4.0"
+    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9), python3-gi, gir1.2-gtk-4.0"
+    echo "Recommends: ibus, gir1.2-ibus-1.0"
     if $with_fcitx5; then echo "Suggests: fcitx5"; fi
     echo "Section: utils"
     echo "Priority: optional"
@@ -117,7 +115,7 @@ if [ "$1" = configure ]; then
 fi
 exit 0
 EOF
-# 外す前・更新の前: 動いている IBus のエンジンを止める (IBus は次に使うときに新しいものを起動する。install.sh の ibus restart と同じ目的)
+# 外す前・更新の前: 動いている IBus のエンジンを止める (IBus は次に使うときに新しいものを起動する)
 cat > "$root/DEBIAN/prerm" << 'EOF'
 #!/bin/sh
 set -e

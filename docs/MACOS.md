@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/yksr-melt/Meltype/releases/latest"><img src="https://img.shields.io/github/v/release/yksr-melt/Meltype?color=5ec4f0" alt="release"></a>
-  <img src="https://img.shields.io/badge/macOS-13%2B-ff8ab4?logo=apple&logoColor=white" alt="macOS 13 以降">
+  <img src="https://img.shields.io/badge/macOS-13.3%2B-ff8ab4?logo=apple&logoColor=white" alt="macOS 13.3 以降">
   <img src="https://img.shields.io/badge/プレビュー版-7a96f0" alt="プレビュー版">
 </p>
 
@@ -36,7 +36,7 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 <a name="動く環境"></a>
 <img src="images/headings/mac/01.svg" alt="動く環境" height="53"><br>
 
-- macOS 13 以降
+- macOS 13.3 以降
 - 配布している zip は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
 
 <br>
@@ -51,9 +51,11 @@ Meltype はアプリではなく「入力ソース」(日本語入力) です。
    - 「開発元が未確認のため開けません」と出たら、右クリック (control + クリック) →「開く」→「開く」
    - macOS 15 以降は、一度ダブルクリックしてから、システム設定 → プライバシーとセキュリティ → 下のほうの「このまま開く」を押す
    - それでも開けないときは、「ターミナル」で `bash ~/Downloads/Meltype-mac/install.sh` を実行する
-3. インストーラーが Meltype を登録・起動し、入力ソースを選びます
+3. インストーラーが Meltype を登録・起動します。初回は Meltype の選択を試み、配布 ZIP の更新時は更新前の入力ソースへ戻します
 
 起動エラーが出たときは、入力メニューから ABC または標準の日本語入力を選んでください。入力メニューに Meltype が出てこないときは、[困ったとき](#困ったとき)を見てください。
+
+配布 ZIP からの更新も同じ手順です。`Meltype.app` を先に削除したり、手で上書きしたりせず、新しい ZIP 全体を展開してインストーラーを実行してください。ソースビルドからの更新も、外側のアプリを残して内容を交換します。更新時は入力メニューを再起動せず、更新前の入力ソースへ戻します。
 
 Homebrew から入れる場合は、最初に tap を追加してからインストールします。以後は `brew upgrade --cask meltype` で更新できます。
 
@@ -71,12 +73,12 @@ brew install --cask yksr-melt/Meltype/meltype
 
 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
 
-かな漢字変換では、azooKey に組み込まれた Zenzai (zenz-v3.2-small、同梱) で、キャレットの前の文 (20 文字まで) を文脈にして変換します (既定で ON。CPU で計算します。1 回の変換は 0.4 秒まで待ち、終わらなければその変換は今までの変換で出し、10 分間 Zenzai を使いません。80 文字より長い読みは Zenzai を使いません)。使わないときは `config.json` の `"UseZenzai": false`、自分のモデルを使うときは `"ZenzaiModelPath"` に GGUF の場所を書きます。変えたら Meltype を起動し直します。
+かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分の llama-server・モデルを使うときは `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
 
 <a name="入力モードのショートカット"></a>
 <img src="images/headings/mac/s06.svg" alt="入力モードのショートカット" height="40">
 
-入力メニューのモード (自動判定・英数の直接入力・コード入力) は、macOS の「サービス」にキーを割り当てて切り替えられます。最初はキーを割り当てていません。
+入力メニューのモード (日本語・英語の自動判定 / 英数の直接入力) は、macOS の「サービス」にキーを割り当てて切り替えられます。最初はキーを割り当てていません。
 
 1. Meltype をインストールした後、いったんログアウトしてログインし直す (サービスの一覧に Meltype の項目が出るようになります)
 2. **システム設定 → キーボード → キーボードショートカット → サービス → 一般** を開く
@@ -86,14 +88,12 @@ brew install --cask yksr-melt/Meltype/meltype
 | --- | --- |
 | 自動判定 | `Meltype：日本語・英語の自動判定` |
 | 英数の直接入力 | `Meltype：英数の直接入力` |
-| コード入力 | `Meltype：コード入力 (コメント・文字列は日本語)` |
-| 順次切り替え | `Meltype：次の入力モード` |
+| 日本語 ⇔ 英数 | `Meltype：日本語 ⇔ 英数` |
 
 - Meltype が入力ソースに選ばれている間に使えます。前面のアプリによっては、ショートカットが届かないことや、アプリのショートカットとぶつかることがあります
 - 割り当てが反映されないときは、アプリを開き直すか、ログアウトしてログインし直してください
-- 「次の入力モード」は 自動 → 英数 → Code → 自動 の順に切り替えます
-- 切り替えると、入力カーソルの下 (位置が分からないときは画面の中央) に「自動 | 英数 | Code」を約 1 秒出します。JIS の 英数 / かな キーで切り替えたときも出ます。入力メニューの「入力モードをミニウィンドウで表示」で OFF にできます
-- 最後に選んだモードは、別の入力ソースから Meltype に戻したときや、別の入力欄に移ったときにも使います
+- 切り替えると、入力カーソルの下 (位置が分からないときは画面の中央) に「あ」か「A」を約 1 秒出します。JIS の 英数 / かな キーで切り替えたときも出ます。出すかは設定 `ModeIndicator` で決めます (Windows 版と同じ。入力欄に入ったときも出すには `OnSwitchAndFocus`)
+- VS Code・ターミナルなど「コード」のアプリでは、コメント・文字列の外は英数のまま入ります (Windows 版と同じアプリ別設定。既定で主なエディター・ターミナルが入っています)
 
 <a name="ユーザー辞書"></a>
 <img src="images/headings/mac/s02.svg" alt="ユーザー辞書" height="40">
@@ -106,14 +106,13 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 2. 入力メニューの「macOSのユーザー辞書を取り込む…」で、そのファイルを選ぶ
 
 - 登録済みの語は残し、まったく同じ語は飛ばします。取り込んだ語はすぐに変換に使います
-- 2 文字より短い読みと、タブや改行を含む語は取り込みません
+- 空の読みと、タブや改行を含む語は取り込みません
 
 <a name="windows-版との違い"></a>
 <img src="images/headings/mac/s03.svg" alt="Windows 版との違い (今のところ)" height="40">
 
 - 設定画面・トレイ・ユーザー辞書の画面はありません (`config.json`・`userdict.txt` を直接編集。[ユーザー辞書](#ユーザー辞書))
-- VS Code などのアプリの種類 (コード / 一般) の判定は、まだ Mac では使っていません
-- 英数状態でローマ字を検知して日本語に戻す機能は、まだありません
+- 設定「カッコを打ったら中にカーソルを移動」は未対応です
 
 <br>
 
