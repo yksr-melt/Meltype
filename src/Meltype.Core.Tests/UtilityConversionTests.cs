@@ -202,24 +202,34 @@ internal static class UtilityConversionTests
     [Test]
     public static void Issue345_KanjiFromRadicalNames()
     {
-        // #345: 部首の呼び名を「に」「と」でつなぐと、それらをすべて含む漢字を、よく使う字から出す
+        // #345: 部首の呼び名を「に」でつなぐと、それらを含む漢字を、説明どおりの字から出す。変換エンジンの候補 (言偏にふるとり) は出さない
         var k = new Keyboard(now: () => Tuesday);
         k.Type("gonbennnifurutori ");
-        var shown = k.Host.View!.Candidates.ToList();
-        Assert.True(shown.Contains("誰"), string.Join(",", shown));
-        Assert.Equal("ごんべんにふるとり", shown[0], "普通の候補が先 (このテストの変換エンジンはかなを返す)");
+        Assert.Equal("誰", k.Host.View!.Candidates[0], string.Join(",", k.Host.View!.Candidates));
+        Assert.Equal("ごんべんにふるとり", k.Host.View!.Candidates[^1], "かなで確定したいときのために、読みも最後に置く");
 
-        // 呼び名の揺れ (ことばへん)、「と」でつなぐ、呼び名の中の「に」(にんべん) は区切りでない
-        Assert.True(Kanji("ことばへんとふるとり").Contains("誰"), "ことばへん");
-        Assert.True(Kanji("にんべんにき").Contains("休"), "にんべんにき → 休");
-        Assert.True(Kanji("さんずいにき").Contains("沐"), "さんずいにき → 沐");
-        // 要素を含む字はすべて当てはまる (体 = にんべん + 本 も 木 を含む)。よく使う字が先
-        Assert.Equal("体", Kanji("にんべんにき")[0], string.Join(",", Kanji("にんべんにき")));
+        // 説明どおりの字 (余分な要素の無い字) が先。ほかの要素も含む字 (護・体・深) はその後ろ
+        Assert.Equal("誰", Kanji("ごんべんにふるとり")[0], string.Join(",", Kanji("ごんべんにふるとり")));
+        Assert.Equal("休", Kanji("にんべんにき")[0], string.Join(",", Kanji("にんべんにき")));
+        Assert.Equal("沐", Kanji("さんずいにき")[0], string.Join(",", Kanji("さんずいにき")));
+        // 呼び名の揺れ (ことばへん)。呼び名の中の「に」(にんべん) は区切りでない
+        Assert.Equal("誰", Kanji("ことばへんにふるとり")[0]);
+    }
 
-        // 逆向き: 呼び名 1 つだけ・呼び名でない語は出さない
+    [Test]
+    public static void Issue345_EverydayWordsAreNotRadicalNames()
+    {
+        // 逆向き: 呼び名 1 つだけ・「と」でつないだもの・呼び名でない語は出さない
         Assert.True(Kanji("ごんべん").Count == 0, "1 つだけ");
-        Assert.True(Kanji("にほんにいく").Count == 0, "にほんにいく");
-        Assert.True(Kanji("きのうにいった").Count == 0, "きのうにいった");
+        Assert.True(Kanji("ごんべんとふるとり").Count == 0, "と ではつながない");
+        foreach (var phrase in new[] { "ひとくち", "ひとつき", "ひととき", "ひとめ", "かねとひと", "いしとき", "にほんにいく", "きのうにいった" })
+            Assert.True(Kanji(phrase).Count == 0, phrase);
+        // よく使う語 (readings.txt) とカタカナ語は、どれも呼び名の並びにならない。なれば、普通の変換が漢字の候補に置き換わる
+        foreach (var name in new[] { "readings.txt", "readings-extra.txt", "katakana.txt" })
+        {
+            var words = Meltype.Detection.DictionarySource.DataLines(Meltype.Detection.DictionarySource.ReadEmbedded(name)).Select(l => l.Split('\t')[0]);
+            Assert.Equal("", string.Join(",", words.Where(w => Kanji(w).Count > 0).Take(10)), name);
+        }
     }
 
     private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
