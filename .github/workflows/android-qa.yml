@@ -1,0 +1,176 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 KoheiTakada
+name: Android QA — reproducible device tests
+on:
+  push:
+    branches: [feat/android-bilingual-adaptive-ime]
+    paths:
+      - 'android/**'
+      - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.Tests/**'
+      - 'src/Meltype.Mac.Native/**'
+      - '.github/workflows/android-qa.yml'
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.Tests/**'
+      - 'src/Meltype.Mac.Native/**'
+      - '.github/workflows/android-qa.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-source-build-and-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: gradle/actions/wrapper-validation@v4
+      - name: Test instrumentation result aggregation
+        run: python3 android/tools/test-instrumentation-report.py
+      - name: Install Android NDK and source-build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y patchelf curl git python3 build-essential
+          sdkmanager 'ndk;28.2.13676358'
+      - name: Record exact tested revision
+        run: |
+          mkdir -p android/build/qa
+          git rev-parse HEAD | tee android/build/qa/source-commit.txt
+          cat android/mozc/MOZC_COMMIT | tee android/build/qa/mozc-source-commit.txt
+      - name: Rebuild pinned Mozc JNI/dictionary from source
+        run: bash android/tools/build-mozc.sh
+      - name: Rebuild shared C# Meltype.Core as Android NativeAOT (both ABIs)
+        env:
+          ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/28.2.13676358
+        run: bash android/tools/build-meltype-native.sh
+      - name: JVM engine and application tests; both installable APKs
+        run: |
+          cd android
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Verify Android 16 KiB ELF and APK alignment
+        run: python3 android/tools/check-apk-16k.py android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Enable hardware acceleration
+        run: |
+          test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
+      - name: Run Android 15 instrumentation and publish individual outcomes
+        id: device_tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          disk-size: 2048M
+          partition-size: 1024M
+          ram-size: 2048M
+          disable-linux-hw-accel: false
+          emulator-boot-timeout: 900
+          disable-animations: true
+          script: |
+            set -eu
+            bash android/tools/run-instrumentation-tests.sh
+            cd android && ./gradlew --no-daemon :mozc:connectedDebugAndroidTest
+      - name: Display per-case report in Actions
+        if: always()
+        run: |
+          echo '## App and Mozc device tests: ${{ steps.device_tests.outcome }}' >> "$GITHUB_STEP_SUMMARY"
+          if test -s android/build/qa/summary.md; then
+            cat android/build/qa/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo '## Android test results unavailable' >> "$GITHUB_STEP_SUMMARY"
+            echo 'A prerequisite failed before the emulator suite. Inspect the job log and JVM XML.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload test code reproducibility evidence and APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-qa-report-and-debug-apk
+          path: |
+            android/build/qa/
+            android/app/build/test-results/testDebugUnitTest/
+            android/mozc/build/outputs/androidTest-results/connected/
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+  # A second Android platform verifies this same compiled APK, not a new build.
+  ime-smoke-android-17:
+    name: Android 17 — launch and type with Meltype IME
+    needs: android-source-build-and-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools build-tools;36.0.0'
+      - name: Reuse debug APKs built in Android QA
+        uses: actions/download-artifact@v4
+        with:
+          name: android-qa-report-and-debug-apk
+          path: android
+      - name: Assert APKs exist
+        # The artifact also carries the Android 15 report. Drop it so a failed
+        # Android 17 run cannot upload or show that report as its own.
+        run: |
+          test -s android/app/build/outputs/apk/debug/app-debug.apk
+          test -s android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          rm -rf android/build/qa
+      - name: Update Android command-line tools
+        # The runner image's tools predate "major.minor" platform names such
+        # as android-37.0 and cannot create an emulator for them.
+        run: |
+          yes | sdkmanager --install 'cmdline-tools;latest' > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --version
+      - name: Enable hardware acceleration
+        run: |
+          test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
+      - name: Verify actual selected IME input on Android 17
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          # Android 17 is published as API 37.0, not "android-37". Its
+          # stable-channel x86_64 image is the 16 KB page size one
+          # (google_apis_ps16k), so no preview channel is needed.
+          api-level: '37.0'
+          target: google_apis_ps16k
+          arch: x86_64
+          disk-size: 4096M
+          ram-size: 4096M
+          disable-linux-hw-accel: false
+          emulator-boot-timeout: 900
+          disable-animations: true
+          # The Android 17 gralloc mapper aborts ("Assertion failed:
+          # !rcEnc->featureInfo()->hasReadColorBufferDma") whenever a GPU
+          # buffer is read by the CPU, e.g. SurfaceFlinger region sampling or
+          # task snapshots. That kills surfaceflinger or system_server every
+          # ~40 s, so installs and launches fail at random. The host offers
+          # read-color-buffer DMA only with these two features on.
+          emulator-options: >-
+            -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+            -feature GLDirectMem,HasSharedSlotsHostMemoryAllocator
+          script: |
+            set -eu
+            bash android/tools/run-instrumentation-tests.sh
+      - name: Upload Android 17 IME test and recovery evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-17-ime-smoke-report
+          path: android/build/qa/
+          retention-days: 30
+          if-no-files-found: warn

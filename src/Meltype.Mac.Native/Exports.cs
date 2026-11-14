@@ -13,7 +13,7 @@ using Meltype.Input;
 namespace Meltype.Mac;
 
 /// <summary>
-/// Mac 版の IME (Swift, Input Method Kit) と Linux 版の IME (Python の IBus・C++ の fcitx5) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
+/// Mac 版の IME (Swift, Input Method Kit)、Linux 版の IME (Python の IBus・C++ の fcitx5)、Android 版 (JNI) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
 /// NativeAOT で libMeltypeNative.dylib (mac/build.sh) / libMeltypeNative.so (linux/build.sh) にする。
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
@@ -57,6 +57,31 @@ public static unsafe class Exports
     private static HybridConverter Converter => s_converter ?? throw new InvalidOperationException("meltype_init を先に呼んでください");
 
     private static HybridConverter? s_converter;
+
+    // Android uses an in-process Mozc library, unlike the desktop platforms' helper process.
+    // It supplies only conversion data; input decisions remain in the shared ImeHost.
+    private static AndroidCallbackConverter? s_androidConverter;
+
+    [UnmanagedCallersOnly(EntryPoint = "meltype_android_init")]
+    public static int AndroidInit(
+        delegate* unmanaged<byte*, byte*, byte*> clauses,
+        delegate* unmanaged<byte*, byte*> candidates,
+        delegate* unmanaged<byte*, int> isWord)
+    {
+        try
+        {
+            if (clauses == null || candidates == null) return 0;
+            s_isWord = isWord;
+            _ = Runtime;
+            s_androidConverter = new AndroidCallbackConverter(clauses, candidates);
+            return 1;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"Android の Mozc 変換を登録できませんでした: {ex}");
+            return 0;
+        }
+    }
 
     /// <summary>
     /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init の後、meltype_ime_create の前に 1 回呼ぶ。
@@ -130,7 +155,9 @@ public static unsafe class Exports
         public Config.InputMode? InputMethod => null;
 
         public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
-            Runtime.CreateSession(Converter, settings, Converter.Candidates, autoSpacing: OperatingSystem.IsMacOS(), directModeDetection: true);
+            s_androidConverter is { } android
+                ? Runtime.CreateSession(android, settings, android.Candidates, directModeDetection: true)
+                : Runtime.CreateSession(Converter, settings, Converter.Candidates, autoSpacing: OperatingSystem.IsMacOS(), directModeDetection: true);
 
         public SnippetStore Snippets => Runtime.Snippets;
 
@@ -166,6 +193,60 @@ public static unsafe class Exports
 
     [UnmanagedCallersOnly(EntryPoint = "meltype_free")]
     public static void Free(byte* text) => NativeMemory.Free(text);
+
+    // JNI callbacks allocate UTF-8 results with malloc. TakeUtf8 releases them once.
+    // Exceptions from Kotlin are recorded by the JNI caller and cause handle to fail.
+    private sealed class AndroidCallbackConverter(
+        delegate* unmanaged<byte*, byte*, byte*> clauses,
+        delegate* unmanaged<byte*, byte*> candidates) : IKanjiConverter
+    {
+        public string? Convert(string hiragana) =>
+            ConvertClauses(hiragana) is { Count: > 0 } parts
+                ? string.Concat(parts.Select(c => c.Text)) : null;
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            var input = ToUtf8(hiragana, out var inputBuffer);
+            var contextPointer = context is null ? null : ToUtf8(context, out _);
+            try
+            {
+                var text = TakeUtf8(clauses(input, contextPointer));
+                if (text is null) return null;
+                var result = new List<ConversionClause>();
+                foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var tab = line.IndexOf('\t');
+                    if (tab <= 0) return null;
+                    result.Add(new ConversionClause(line[..tab], line[(tab + 1)..]));
+                }
+                return result.Count > 0 &&
+                    string.Concat(result.Select(c => c.Reading)) == hiragana ? result : null;
+            }
+            finally
+            {
+                NativeMemory.Free(inputBuffer);
+                if (contextPointer != null) NativeMemory.Free(contextPointer);
+            }
+        }
+
+        public IReadOnlyList<string> Candidates(string reading)
+        {
+            var input = ToUtf8(reading, out var inputBuffer);
+            try
+            {
+                var text = TakeUtf8(candidates(input));
+                return text is null ? [] : text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            }
+            finally { NativeMemory.Free(inputBuffer); }
+        }
+    }
+
+    private static string? TakeUtf8(byte* text)
+    {
+        if (text == null) return null;
+        try { return Marshal.PtrToStringUTF8((IntPtr)text); }
+        finally { NativeMemory.Free(text); }
+    }
 
     private sealed class CallbackWordChecker : IWordChecker
     {

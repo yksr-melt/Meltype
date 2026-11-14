@@ -8,13 +8,13 @@ using Meltype.Composition;
 
 namespace Meltype.Ime;
 
-// フロント (TSF・Mac・IBus・fcitx5) と ImeHost のやり取り。フロントは OS から読んだ事実だけを ImeEvent で渡し、
+// フロント (TSF・Mac・IBus・fcitx5・Android) と ImeHost のやり取り。フロントは OS から読んだ事実だけを ImeEvent で渡し、
 // どうするか (確定・表示・モード・どのキーを受け取るか) は ImeHost が ImeOutput で返す。
 // 同じプロセスのフロントは ImeHost.Handle(ImeEvent) を呼び、別プロセスのフロント (TSF の DLL) は 1 メッセージ 1 JSON で送る。
 // フロントは state を毎回まるごと置き換え、result をそのまま適用する。表示・時間・番号の出し分けもフロントは決めない。
 // 判断がフロントに残っているのは、ImeTrait.Game・NonText の推測と、TSF の DLL のパスワード欄の判定 (打鍵を Meltype.exe に送らない) だけ。
-// JSON の項目名を変えたら、JSON を読む 4 つのフロント (native/tip/TextService.cpp・linux/fcitx5/meltype.cpp・linux/ibus-engine-meltype・
-// mac/Sources/MeltypeIME/NativeCore.swift) を直す (FrontProtocolTests が突き合わせる)。
+// JSON の項目名を変えたら、JSON を読む 5 つのフロント (native/tip/TextService.cpp・linux/fcitx5/meltype.cpp・linux/ibus-engine-meltype・
+// mac/Sources/MeltypeIME/NativeCore.swift・android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt) を直す (FrontProtocolTests が突き合わせる)。
 
 /// <summary>フロントが送る出来事。JSON の名前はメンバー名のまま。知らない名前の出来事は、警告をログに出して受け持たない。</summary>
 public enum ImeEventType
@@ -52,7 +52,7 @@ public enum ImeEventType
     StateRequested,
     /// <summary>
     /// フロントの IME のインスタンス (Instance) がなくなった (TSF の Deactivate)。未確定の文字は捨てる。
-    /// 1 つのインスタンスですべての入力欄を受け持つフロント (Meltype キーボード・Mac・IBus・fcitx5) は送らない。
+    /// 1 つのインスタンスですべての入力欄を受け持つフロント (Meltype キーボード・Mac・IBus・fcitx5・Android) は送らない。
     /// </summary>
     InstanceDestroyed,
 }
@@ -110,9 +110,9 @@ public enum ImeTrait
 {
     /// <summary>ターミナル (IBus の InputPurpose.TERMINAL・fcitx5 の CapabilityFlag::Terminal)。</summary>
     Terminal,
-    /// <summary>パスワード・暗証番号 (IBus の InputPurpose.PASSWORD / PIN・fcitx5 の CapabilityFlag::Password・TSF の IS_PASSWORD・UI Automation の IsPassword)。</summary>
+    /// <summary>パスワード・暗証番号 (IBus の InputPurpose.PASSWORD / PIN・fcitx5 の CapabilityFlag::Password・TSF の IS_PASSWORD・UI Automation の IsPassword・Android の inputType のパスワード)。</summary>
     Password,
-    /// <summary>入力を覚えないように求める (TSF の IS_PRIVATE・IBus の InputHints.PRIVATE・fcitx5 の CapabilityFlag::Sensitive)。</summary>
+    /// <summary>入力を覚えないように求める (TSF の IS_PRIVATE・IBus の InputHints.PRIVATE・fcitx5 の CapabilityFlag::Sensitive・Android の IME_FLAG_NO_PERSONALIZED_LEARNING)。</summary>
     Private,
     /// <summary>ゲームらしいウィンドウ。事実でなく、Windows のフロントがウィンドウの形などの手がかりから推測した結果。</summary>
     Game,
@@ -147,7 +147,7 @@ public sealed record ImeField
     public bool Composing { get; init; }
     /// <summary>
     /// アプリ。アプリ別設定の名前と同じ形にする: Windows はプロセスの実行ファイル名 (Code.exe)、macOS は bundle ID (com.microsoft.VSCode)、
-    /// Linux は fcitx5 の program・IBus のクライアント名のプログラムの部分 (code)。分からなければ null。
+    /// Linux は fcitx5 の program・IBus のクライアント名のプログラムの部分 (code)、Android はパッケージ名 (com.example.app)。分からなければ null。
     /// </summary>
     public string? App { get; init; }
     /// <summary>ウィンドウのタイトル (README.md などの文章のファイルを開いているか)。分からなければ null。</summary>

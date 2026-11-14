@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>06 変換（Mozc） | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html" aria-current="page">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>06 変換（Mozc）</h1>
+      <p class="status"><span class="badge fixed">確定</span></p>
+<h2>変換の窓口（<code>Converter</code>）</h2>
+<p><code>engine</code> が定め、<code>mozc</code> が実装する。<code>engine</code> はこの窓口だけを通して変換を頼む。</p>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>渡すもの</th>
+<th>返るもの</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>変換</td>
+<td>読み（ひらがな）。あれば、カーソルの前の文脈</td>
+<td>文節の並び。各文節は、対応する読みと、候補の一覧（第一候補が先頭）を持つ</td>
+</tr>
+<tr>
+<td>予測</td>
+<td>読み</td>
+<td>読み全体に対する予測候補の一覧</td>
+</tr>
+<tr>
+<td>学習</td>
+<td>確定した文節の並び（読みと選んだ表記）。あれば文脈</td>
+<td>なし</td>
+</tr>
+</tbody></table>
+<p>文脈は、未確定文字の直前にある文章。app が、未確定文字が始まるときに、それを入力欄に出す前に1回だけ読む（かな配列では最初のかな、ローマ字配列では最初の打ちかけの英字を出す前）。出したあとに読むと、未確定文字そのものが文脈に混ざる。変換しない欄では読まない。読みの先頭だけを確定して残りが続くときは、確定した分を文脈の末尾に足す。</p>
+<p>決まりごと:</p>
+<ul>
+<li>返る文節の読みを順につなげると、渡した読みと一致する。一致しない結果は失敗として扱う。</li>
+<li>失敗したときは「結果なし」を返す。例外を <code>engine</code> に投げない。</li>
+<li>呼び出しは同時に1つだけ。<code>app</code> が用意する変換用のスレッドから呼ぶ。</li>
+<li>1回の呼び出しは 2 秒で打ち切る。</li>
+<li>学習は、渡した読みを Mozc が変換し直したときに、同じ文節の区切りで同じ表記が候補にある場合だけ行う。合わないときは何もしない（Mozc にない表記を作って覚えさせない）。このため、予測候補やカタカナを選んだときは学習されないことがある。</li>
+</ul>
+<h2 id="Mozc の組み込み">Mozc の組み込み</h2>
+<p>かな漢字変換には、オープンソース版の <a href="https://github.com/google/mozc">Mozc</a> を端末の中で動かす。</p>
+<p>同梱するもの:</p>
+<table>
+<thead>
+<tr>
+<th>ファイル</th>
+<th>中身</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>libmozc.so</code></td>
+<td>変換エンジン本体。arm64-v8a と x86_64 の2種類</td>
+</tr>
+<tr>
+<td><code>mozc.data</code></td>
+<td>変換用の辞書</td>
+</tr>
+</tbody></table>
+<p>呼び出し方:</p>
+<ul>
+<li>Mozc が Android 用に用意している JNI の入口を使う。入口のクラス名とメソッドは Mozc の側で固定されているので、それに合わせる（<code>com.google.android.apps.inputmethod.libs.mozc.session.MozcJni</code>）。</li>
+<li>やり取りは Mozc の命令形式（Protocol Buffers）で行う。命令の組み立てと結果の読み取りには、Mozc の定義ファイルから生成したコードを使う。</li>
+<li>変換は、セッションを作る → 読みを渡す → 変換を指示する → 文節と候補を読み取る → セッションを捨てる、の順で行う。この手順で動くことは、既存の移植（<a href="https://github.com/AoneSenbongi/Meltype-Android">Meltype-Android</a>）で確認されている。</li>
+</ul>
+<p>Mozc の学習データは、アプリ専用の領域に保存する。ほかのアプリからは読めない。</p>
+<h3 id="Mozcを開けなかったとき">Mozc を開けなかったとき</h3>
+<p>Mozc の用意（辞書を写して初期化する）は、キーボードが起動したときに変換用のスレッドで行う。失敗したら、変換は「結果なし」を返し、かなの入力だけで動き続ける。</p>
+<p>失敗をそのままにしない。キーボードのプロセスは何日も動き続けるので、一時的な失敗（空き容量の不足など）のあとも、やり直す。</p>
+<ul>
+<li>やり直すのは、あとの変換が頼まれたとき。変換用のスレッドで行う（画面のスレッドではやり直さない）。</li>
+<li>前の試みから 30 秒たつまでは、やり直さない。</li>
+<li>やり直しは 5 回まで。それでも開けなければ、そのプロセスのあいだは、かなの入力だけで静かに動き続ける。</li>
+</ul>
+<h2 id="Mozc のビルド">Mozc のビルド</h2>
+<p>Mozc は Git に入れず、手順をスクリプトにして再現できるようにする。</p>
+<ul>
+<li>ビルドする Mozc の版は、コミットを1つに固定してリポジトリに記録する。最初に使う版は <code>60fe4012e5eaa26805dbbb8e5548cbe6db4aaf98</code>（既存の移植が Android で動作を確かめた版）。</li>
+<li>スクリプト1本で、Mozc の取得、エンジン本体と辞書のビルド、<code>mozc</code> モジュール内の所定の場所への配置、ライセンス表記の収集までを行う。</li>
+<li>ビルドした成果物（<code>libmozc.so</code>、<code>mozc.data</code>）は Git に入れない。</li>
+<li>ビルドには Bazel（Bazelisk 経由）を使う。初回は依存の取得を含めて 30〜40 分かかる。</li>
+<li>成果物（<code>libmozc.so</code> 2種類、<code>mozc.data</code>、ライセンス表記の <code>MOZC_NOTICES.txt</code>）のどれかがない状態でアプリをビルドしようとしたら、スクリプトを先に実行するよう伝えるメッセージを出して止める。ライセンス表記も含めるのは、それがない APK は Mozc に含まれるものの配布条件を満たさないため。</li>
+</ul>
+<h2 id="版を上げるとき">版を上げるとき</h2>
+<p>Mozc の版を上げるのは、変換の質や不具合で必要になったときだけ。上げたら <a href="11-testing.html">11</a> の変換の確認をやり直す。</p>
+      <nav class="pager" aria-label="前後の章">
+        <a href="05-input-engine.html">← 05 入力エンジン</a>
+        <a href="07-kana-to-english.html">07 読みから英字 →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>

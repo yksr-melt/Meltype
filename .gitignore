@@ -37,3 +37,9 @@ native/tip/obj/
 # Python のキャッシュ (tools/*.py を動かすと作られる)
 __pycache__/
 llama.log
+# Android signing keys and private credentials (NEVER commit)
+*.p12
+*.jks
+*.keystore
+*.pfx
+*signing-setup.txt

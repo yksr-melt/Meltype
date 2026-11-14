@@ -35,6 +35,14 @@ internal static class FrontProtocolTests
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
+        new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
+            new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
+            // Android reports field facts to Core, and handles text edits and candidate choices from its output.
+            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii",
+                "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
+                "keyReleases", "altKeys", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
+                "selectedMeaning", "meaningDelayMs"],
+            Others: []),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new(@"\blet (\w+):"),
             // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
