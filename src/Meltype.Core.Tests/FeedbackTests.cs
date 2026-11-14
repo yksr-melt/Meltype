@@ -1581,6 +1581,7 @@ internal static class LanguageLearningTests
             {
                 var k = new CompositionTests.Keyboard { FunctionKeysAffectSelectedClause = true };
                 k.Type(typed + " ");
+                while (k.Host.View!.SelectedClause > 0) k.Press(VirtualKeys.Left);
                 for (var i = 0; i < rights; i++) k.Press(VirtualKeys.Right);
                 k.Press(VirtualKeys.F6);
                 Assert.Equal(expected, string.Join("|", k.Host.View!.Clauses!), typed);

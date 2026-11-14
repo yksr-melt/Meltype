@@ -171,14 +171,14 @@ public sealed partial class CompositionController
                 // Shift+Space: 英語と判定した語でも、ローマ字として読んで変換する (go → 語、camera → かめら)。
                 _text.FixTypos();
                 _spaceStartedConversion = true;
-                StartConversion(preferJapanese: true);
+                StartConversion(preferJapanese: true, selectLast: true);
                 return;
             case VirtualKeys.Space when _settings().SeparateKeyRoles && !IsProtectedInput:
                 // 設定「入力中のキーの役割を分ける」: Space は英語・日本語の判定にかかわらず候補を開く (英字のまま確定して空白を入れない)。
                 // 英字で見えている語も、英字を最初の候補に残し、ローマ字として読めれば日本語の候補も選べる (issue #199)
                 _text.FixTypos();
                 _spaceStartedConversion = true;
-                StartConversion();
+                StartConversion(selectLast: true);
                 return;
             case VirtualKeys.NonConvert when _settings().SeparateKeyRoles:
                 // 無変換: 今までの入力を英字にする (F10 と同じ。続けて押すと大文字・小文字も切り替わる)
@@ -201,7 +201,7 @@ public sealed partial class CompositionController
                 if (HasRegisteredReading())
                 {
                     _spaceStartedConversion = true;
-                    StartConversion();
+                    StartConversion(selectLast: true);
                 }
                 else if (SpaceCommitsMarkdownMarker())
                 {
@@ -218,7 +218,7 @@ public sealed partial class CompositionController
                 {
                     // Space で変換した = 語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
                     _spaceStartedConversion = true;
-                    StartConversion();
+                    StartConversion(selectLast: true);
                 }
                 return;
             case VirtualKeys.Back:
@@ -254,7 +254,7 @@ public sealed partial class CompositionController
                 return;
             case VirtualKeys.Tab when !_converting && !_shift && _settings().TabConversion && TabStartsConversion():
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。
-                StartConversion();
+                StartConversion(selectLast: true);
                 _tabStartedConversion = _converting;
                 return;
             case VirtualKeys.F6: SetMode(DisplayMode.Hiragana); _modeByKey = true; return;

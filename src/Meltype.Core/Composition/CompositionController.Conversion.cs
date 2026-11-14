@@ -86,11 +86,12 @@ public sealed partial class CompositionController
     /// 区切りを文節にして変換する (<see cref="BuildClauses"/>)。英日の区切りの別案があれば、文全体を 1 つの文節にして、案ごとの文を候補にする。
     /// F6〜F8 でかなにして見せているときは、打った英字をすべてローマ字として読んで変換する。
     /// </summary>
-    private void StartConversion(bool preferJapanese = false)
+    private void StartConversion(bool preferJapanese = false, bool selectLast = false)
     {
         _conversionPrefersJapanese = preferJapanese;
         _clausesEdited = false;
         _tabStartedConversion = false;
+        _selectLastClause = selectLast;
         var asKana = _text.Mode is DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana;
         var segments = asKana ? _text.AllJapaneseSegments() : _text.ConversionSegments();
         var utility = Utilities(segments);
@@ -142,7 +143,7 @@ public sealed partial class CompositionController
         // 打ち始めの ・ は、Space で / にする。
         if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
         _clauses = clauses;
-        _selectedClause = 0;
+        _selectedClause = selectLast ? _clauses.Count - 1 : 0;
         _converting = true;
     }
 

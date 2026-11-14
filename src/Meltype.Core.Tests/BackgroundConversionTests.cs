@@ -215,7 +215,9 @@ internal static class BackgroundConversionTests
         using (converter)
         {
             release.Set();
-            Assert.Equal("単位を,取る", string.Join(",", RefreshUntil(session, v => v.Clauses is { Count: 2 })?.Clauses ?? []));
+            var view = RefreshUntil(session, v => v.Clauses is { Count: 2 });
+            Assert.Equal("単位を,取る", string.Join(",", view?.Clauses ?? []));
+            Assert.Equal(1, view?.SelectedClause, "文節が増えても最後を選ぶ");
         }
     }
 
@@ -270,7 +272,7 @@ internal static class BackgroundConversionTests
         var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
         var session = Session(converter);
         SessionFacadeTests.Type(session, "tanniwotoru ");
-        session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
+        session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
         converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
         Assert.True(session.RefreshConversion() is null, "選んでいる文節がずれるので置き換えない");
     }
@@ -299,6 +301,31 @@ internal static class BackgroundConversionTests
         Assert.True(chosen?.Clauses is [var text] && text != "botと", string.Join(",", chosen?.Clauses ?? []));
         converter.Clauses = [new("と", "戸")];
         Assert.True(session.RefreshConversion() is null, "選び直した文全体の文節を置き換えない");
+    }
+
+    [Test]
+    public static void Refresh_ReturningToTheLastClauseAllowsNewSegmentation()
+    {
+        var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "tanniwotoru ");
+        session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
+        session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
+        converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+        var view = session.RefreshConversion()?.View;
+        Assert.Equal("短,意を,取る", string.Join(",", view?.Clauses ?? []));
+        Assert.Equal(2, view?.SelectedClause, "最後に戻れば新しい最後を選ぶ");
+    }
+
+    [Test]
+    public static void Refresh_DoesNotReplaceTheClausesAfterChoosingACandidate()
+    {
+        var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "tanniwotoru ");
+        session.HandleKey(VirtualKeys.Down, null, false, false, false, false);
+        converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+        Assert.True(session.RefreshConversion() is null, "選び直した候補を残す");
     }
 
     [Test]

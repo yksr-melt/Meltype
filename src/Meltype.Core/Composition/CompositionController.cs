@@ -109,6 +109,7 @@ public sealed partial class CompositionController
     // 文節の区切りを動かした。届いた答えで作り直すと、ユーザーの操作が消える
     private bool _clausesEdited;
     private int _selectedClause;
+    private bool _selectLastClause;
     private bool _converting;
     private bool? _lastCommitEnglish;
     private string? _lastCommitText;
@@ -366,16 +367,17 @@ public sealed partial class CompositionController
     private bool RefreshOpenConversion()
     {
         if (_clausesEdited || _reconversion is not null || _clauses.Count == 0 || _clauses is [{ Alternatives: not null, Changed: true }]) return false;
-        var (old, selected, tabStarted) = (_clauses, _selectedClause, _tabStartedConversion);
+        var (old, selected, tabStarted, selectLast) = (_clauses, _selectedClause, _tabStartedConversion, _selectLastClause);
         WithoutWaiting(() =>
         {
-            StartConversion(_conversionPrefersJapanese);
+            StartConversion(_conversionPrefersJapanese, selectLast);
             return true;
         });
         _tabStartedConversion = tabStarted;
         var sameClauses = _clauses.Count == old.Count && _clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && _clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
-        if (nothingNew || !sameClauses && (selected != 0 || old.Any(c => c.Changed)))
+        var initial = selectLast ? old.Count - 1 : 0;
+        if (nothingNew || !sameClauses && (selected != initial || old.Any(c => c.Changed)))
         {
             _clauses = old;
             _selectedClause = selected;
@@ -393,7 +395,7 @@ public sealed partial class CompositionController
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
-        _selectedClause = selected;
+        _selectedClause = sameClauses ? selected : selectLast ? _clauses.Count - 1 : 0;
         return true;
     }
 
