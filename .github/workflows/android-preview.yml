@@ -8,6 +8,7 @@ on:
       - '.github/workflows/android-preview.yml'
       - 'android/**'
       - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.Tests/**'
       - 'src/Meltype.Mac.Native/**'
   workflow_dispatch:
 

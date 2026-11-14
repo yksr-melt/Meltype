@@ -7,12 +7,14 @@ on:
     paths:
       - 'android/**'
       - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.Tests/**'
       - 'src/Meltype.Mac.Native/**'
       - '.github/workflows/android-qa.yml'
   pull_request:
     paths:
       - 'android/**'
       - 'src/Meltype.Core/**'
+      - 'src/Meltype.Core.Tests/**'
       - 'src/Meltype.Mac.Native/**'
       - '.github/workflows/android-qa.yml'
   workflow_dispatch:
