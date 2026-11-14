@@ -45,7 +45,6 @@ jobs:
       repros: ${{ steps.parse.outputs.repros }}
       reported: ${{ steps.parse.outputs.reported }}
       expected: ${{ steps.parse.outputs.expected }}
-      kind: ${{ steps.parse.outputs.kind }}
       sha: ${{ steps.parse.outputs.sha }}
       comment: ${{ steps.parse.outputs.comment }}
     steps:
@@ -271,7 +270,6 @@ jobs:
           BOT_REPROS: ${{ needs.parse.outputs.repros }}
           BOT_REPORTED: ${{ needs.parse.outputs.reported }}
           BOT_EXPECTED: ${{ needs.parse.outputs.expected }}
-          BOT_KIND: ${{ needs.parse.outputs.kind }}
           BOT_SHA: ${{ needs.parse.outputs.sha }}
           BOT_COMMENT_ID: ${{ needs.parse.outputs.comment }}
           BOT_JOB_RESULT: ${{ needs.run.result == 'success' && 'success' || needs.pr.result == 'success' && 'success' || 'failure' }}

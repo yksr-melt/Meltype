@@ -540,7 +540,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
-        var zenzai = _composition.ZenzaiStatus(settings.UseZenzai, settings.ZenzaiServerPath, settings.ZenzaiModelPath);
+        var zenzai = _composition.Runtime.ZenzaiStatus();
         _zenzaiItem.Visible = zenzai is not null;
         if (zenzai is not null) _zenzaiItem.Text = $"Zenzai: {zenzai}";
         var tip = $"Meltype — {status}";

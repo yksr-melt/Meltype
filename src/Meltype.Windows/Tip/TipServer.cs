@@ -706,8 +706,6 @@ internal sealed class TipServer : IDisposable
 
         public MeltypeSession CreateSession(Func<Settings> settings) => _server._composition.CreateSession(settings, directModeDetection: true);
 
-        public string? ReadingOf(string text) => _server._composition.GuessReading(text) is { Length: > 0 } reading ? reading : null;
-
         public SnippetStore Snippets => _server._composition.Snippets;
 
         public string? ClipboardText => CompositionService.ClipboardText;

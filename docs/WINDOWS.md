@@ -37,7 +37,6 @@ Windows 版のインストール・設定・困ったときの説明です。キ
 <img src="images/headings/windows/01.svg" alt="動く環境" height="53"><br>
 
 - Windows 10 / 11 (64bit)
-- Microsoft IME (Windows 標準の日本語入力)
 
 .NET は同梱しているので、別にインストールする必要はありません。
 
@@ -199,7 +198,7 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 
 [Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
-- Meltype が llama-server を 127.0.0.1 で起動します。使えないときは、ふだんの変換エンジンで変換します
+- Meltype が llama-server を 127.0.0.1 で起動します。使えないときは、Mozc で変換します
 - Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
 - CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
 - 自分で用意した llama-server や zenz v3 系のモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
@@ -223,6 +222,8 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 <img src="images/headings/windows/10.svg" alt="おかしな動きがあったら" height="53"><br>
 
 Meltype を更新した後、前から開いていたアプリで日本語を入力できない (英字のまま入る) ときは、そのアプリが前の版の Meltype IME を読み込んだままです。PC を再起動してください (Meltype が見つけたときは通知でも知らせます)。
+
+漢字に変換されず、ひらがなのまま確定するときは、Meltype が同梱の Mozc (`app\mozc\meltype_mozc_helper.exe`) を起動できていません。ログ (右クリック →「ログ / 判定理由...」) に「Mozc の変換ヘルパーを起動できません」か「Mozc を使えませんでした」と出ていれば、Meltype を入れ直してください。会社の PC でアプリの実行が制限されているときは、管理者に `meltype_mozc_helper.exe` の実行を許可してもらってください。
 
 タスクトレイのアイコンを右クリック →「不具合の報告・提案...」から報告できます。次の 3 つを書いてもらえると助かります！
 

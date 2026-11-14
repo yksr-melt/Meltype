@@ -35,8 +35,9 @@ OS 間の差分はできるだけ作らない。
 
 - 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。OS の出入口からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
-- Core にもう口がある OS の部品 (`IKanjiConverter`・`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
-- 設定・辞書・学習データは、どの OS も `MeltypeRuntime` で作る
+- Core にもう口がある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
+- 設定・辞書・学習データと変換エンジンは、どの OS も `MeltypeRuntime` で作る
+- 変換エンジンは全 OS で Mozc と Zenzai だけ (#1740)。OS の変換エンジン (Microsoft IME など) は足さない
 
 ## ビルドとテスト
 
@@ -58,8 +59,6 @@ dotnet run --project src/Meltype.Core.Tests -- --version
 dotnet run --project src/Meltype.Windows.Tests
 dotnet run --project src/Meltype.Windows.Tests -- CompositionTests
 dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
-dotnet run --project src/Meltype.Windows.Tests -- --convert きょうはいいてんき # 変換結果と文節区切り
-dotnet run --project src/Meltype.Windows.Tests -- --context この本は:あつい # 文脈付き変換
 
 # 辞書を変えたとき
 node tools/check-dictionaries.mjs

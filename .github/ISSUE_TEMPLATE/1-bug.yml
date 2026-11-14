@@ -9,83 +9,44 @@ body:
         報告ありがとうございます。日本語・英語の判定や変換の間違い (「日本語」が「にほんgo」になった など) は、「変換・判定の間違い」から報告してください。
         ⚠ パスワードや個人的な文章を貼らないでください。ログには直前に打った文字の一部が入ることがあります。見られて困る部分は消してから貼ってください。
 
-  - type: dropdown
-    id: os
+  - type: textarea
+    id: actual
     attributes:
-      label: OS
-      options:
-        - Windows 11
-        - Windows 10
-        - Mac (プレビュー版)
-        - Linux (プレビュー版)
+      label: 何が起きたか
+      description: どのアプリで・何をしたら・どうなったか・どうなってほしかったかを書いてください。スクリーンショットがあれば貼ってください
+      placeholder: Discord のメッセージ欄で kyouha と打って Space を押すと、打った文字が消えました。「今日は」に変換されてほしいです。
     validations:
       required: true
 
-  - type: input
-    id: os-detail
+  - type: dropdown
+    id: frontend
     attributes:
-      label: OS の詳細 (分かれば)
-      description: "Mac: macOS 15.2 / M2 など。Linux: Ubuntu 24.04 / GNOME / Wayland など"
-      placeholder: Ubuntu 24.04 / GNOME / Wayland
+      label: OS・フロントエンド
+      options:
+        - Windows (Meltype IME)
+        - Windows (Meltype キーボード)
+        - macOS
+        - Linux (fcitx5)
+        - Linux (IBus)
+        - 分からない・まだ入れていない
+    validations:
+      required: true
 
   - type: input
     id: version
     attributes:
       label: Meltype の版
-      description: "Windows: トレイのアイコンを右クリック →「Meltype について...」"
-      placeholder: 0.2.0
-    validations:
-      required: true
-
-  - type: dropdown
-    id: mode
-    attributes:
-      label: 使っていたモード (Windows)
-      options:
-        - Meltype IME (入力欄に直接入力)
-        - Meltype キーボード (変換ボックスで入力)
-        - 分からない / Mac・Linux
-
-  - type: input
-    id: app
-    attributes:
-      label: どのアプリで
-      placeholder: Discord / Chrome の検索欄 / VS Code / メモ帳
+      description: 「ばーじょん」と打って変換すると、候補に出ます。インストールできていないときは「未インストール」と書いてください
+      placeholder: 1.4.0
     validations:
       required: true
 
   - type: textarea
-    id: steps
+    id: environment
     attributes:
-      label: 何をしたら
-      description: できるだけ順番に。打ったキーはそのまま書いてください
-      placeholder: |
-        1. Discord のメッセージ欄をクリック
-        2. kyouha と打って Space
-    validations:
-      required: true
-
-  - type: textarea
-    id: actual
-    attributes:
-      label: どうなったか
-      description: スクリーンショットがあれば貼ってください
-    validations:
-      required: true
-
-  - type: textarea
-    id: expected
-    attributes:
-      label: どうなってほしかったか
-
-  - type: dropdown
-    id: frequency
-    attributes:
-      label: 起きる頻度
-      options:
-        - 毎回
-        - ときどき
-        - 一度だけ
+      label: 実行環境
+      description: Meltype の「不具合の報告・提案...」→「GitHub で報告」から開くと自動で入ります (入力した文字は入りません)。
+      render: text
 
   - type: textarea
     id: log
@@ -96,11 +57,4 @@ body:
         Windows の更新の不具合: %LOCALAPPDATA%\Meltype\update\install.log の中身
         Mac: ターミナルで log stream --predicate 'process == "Meltype"' --level debug を実行してから操作
         見られて困る部分は消してください。
-      render: text
-
-  - type: textarea
-    id: environment
-    attributes:
-      label: 実行環境
-      description: Meltype の「不具合の報告・提案...」→「GitHub で報告」から開くと自動で入ります (入力した文字は入りません)。
       render: text
