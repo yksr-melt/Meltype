@@ -3369,19 +3369,26 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Punctuation_ChoiceIsNotLearned()
+    public static void Punctuation_ChoiceStaysOnPunctuationOnlyInput()
     {
-        // 句読点だけの文節で選んだ候補 (、 → ・) は覚えない。覚えると、ほかの句読点の設定や「わたしは、」の 、 まで ・ になる
+        // 句読点だけを変換して選んだ候補 (、 → ・) は、句読点だけを変換したときにだけ出す。「わたしは、」の 、 は、覚えた変換履歴・Mozc の学習があっても 、 のまま
         var history = new ConversionHistory(null);
-        var converter = new LearningConverter();
-        var k = new Keyboard(history: history, converter: converter, moreCandidates: reading => reading == "、" ? ["、", "・"] : []);
+        var k = new Keyboard(history: history, moreCandidates: reading => reading == "、" ? ["、", "・"] : []);
         k.Type(", ");
         for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "・"; i++) k.Press(VirtualKeys.Space);
         k.Press(VirtualKeys.Return);
         Assert.Equal("・", k.Host.Document);
-        Assert.True(history.Get("、") is null, "変換履歴に入れない");
-        Thread.Sleep(100);
-        lock (converter.Learned) Assert.True(!converter.Learned.Any(l => l.Contains("、=・")), "変換エンジンにも覚えさせない: " + string.Join(" / ", converter.Learned));
+
+        var again = new Keyboard(history: history);
+        again.Type(", ");
+        Assert.Equal("・", again.Showing, "句読点だけを変換すると覚えた候補");
+
+        foreach (var style in Enum.GetValues<Meltype.Config.PunctuationStyle>())
+        {
+            var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true)) { Punctuation = style };
+            live.Type("watasiha,");
+            Assert.Equal(CompositionOutput.ToSetting(style, "私は、"), live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
+        }
     }
 
     [Test]
@@ -4447,6 +4454,88 @@ internal static class CompositionTests
         Assert.Equal("sだけが", CompositionController.NormalizeHalfWidth("ｓだけが", "sだけが"));
         Assert.Equal("2025年", CompositionController.NormalizeHalfWidth("２０２５年", "2025ねん"));
         Assert.Equal("ＡＢＣ", CompositionController.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
+    }
+
+    /// <summary>
+    /// 読みの記号を別の文字にして返す変換エンジン (？ → ? や 「 → ［ を覚えた Mozc、？ を ? にする Zenzai の代わり)。
+    /// split なら記号を 1 つずつの文節に区切り、そうでなければ読み全体を 1 つの文節で返す。
+    /// </summary>
+    private sealed class SymbolChangingConverter(bool split) : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            split ? System.Text.RegularExpressions.Regex.Matches(hiragana, @"[\p{L}\p{N}]+|.").Select(m => new ConversionClause(m.Value, Map(m.Value))).ToList() : [new(hiragana, Map(hiragana))];
+
+        private static string Map(string reading) => reading
+            .Replace("れいぶん", "例文").Replace("にほんご", "日本語").Replace("おもしろいね", "面白いね").Replace("きょうは", "今日は").Replace("わたしは", "私は")
+            .Replace('？', '?').Replace('！', '!').Replace('(', '（').Replace('「', '［').Replace('」', '】').Replace('、', '・');
+    }
+
+    [Test]
+    public static void TypedSymbols_StayAfterConversion()
+    {
+        // #519 #1669: 変換エンジン・Mozc の学習が記号を別の文字にしても、かなと一緒に打った記号は打ったときの文字 (CompositionText.Symbol) のまま
+        foreach (var split in new[] { true, false })
+        {
+            foreach (var (keys, expected) in new[]
+            {
+                ("reibunn?", "例文？"), ("omosiroine!nihongo?", "面白いね！日本語？"), ("nihongo(reibunn)", "日本語(例文)"),
+                ("[kyouha", "「今日は"), ("kyouha]", "今日は」"), ("watasiha,", "私は、"),
+            })
+            {
+                var name = $"{keys} (split: {split})";
+                var live = new Keyboard(live: true, converter: new SymbolChangingConverter(split));
+                live.Type(keys);
+                Assert.Equal(expected, live.Showing, name + ": ライブ変換");
+                live.Type("\n");
+                Assert.Equal(expected, live.Host.Document, name + ": ライブ変換のまま確定");
+
+                var space = new Keyboard(converter: new SymbolChangingConverter(split));
+                space.Type(keys + " ");
+                Assert.Equal(expected, space.Showing, name + ": Space で変換");
+            }
+        }
+    }
+
+    [Test]
+    public static void TypedSymbols_LearnedChoiceStaysOnSymbolOnlyInput()
+    {
+        // 記号だけを変換して選んだ候補 (？ → ⁉) は覚えて、次に記号だけを変換したときに出す (#672)。かなと一緒に打った ？ は ？ のまま (#519)
+        var history = new ConversionHistory(null);
+        var k = new Keyboard(history: history, moreCandidates: reading => reading == "？" ? ["？", "⁉"] : []);
+        k.Type("? ");
+        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "⁉"; i++) k.Press(VirtualKeys.Space);
+        k.Press(VirtualKeys.Return);
+        Assert.Equal("⁉", k.Host.Document);
+        Assert.Equal("⁉", history.Get("？"), "記号だけの文節で選んだ候補は覚える");
+
+        var again = new Keyboard(history: history);
+        again.Type("? ");
+        Assert.Equal("⁉", again.Showing, "記号だけを変換すると覚えた候補");
+
+        var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true));
+        live.Type("reibunn?");
+        Assert.Equal("例文？", live.Showing, "かなと一緒に打った記号は覚えた候補にしない");
+    }
+
+    [Test]
+    public static void TypedSymbols_StayAfterResizingClauses()
+    {
+        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)
+        var history = new ConversionHistory(null);
+        history.Remember("、", "・");
+        var k = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
+        k.Type("watasiha,kyouha? ");
+        Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!));
+        ShiftArrow(k, VirtualKeys.Right);
+        Assert.Equal("私は、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
+
+        var end = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
+        end.Type("kyouha, ");
+        ShiftArrow(end, VirtualKeys.Right);
+        ShiftArrow(end, VirtualKeys.Left);
+        Assert.Equal("今日は|、", string.Join("|", end.Host.View!.Clauses!), "縮めてできた 、 だけの文節も、覚えた ・ にしない");
     }
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
