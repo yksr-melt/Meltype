@@ -3,7 +3,7 @@
 #
 # Meltype IME (Windows の IME として入力欄に直接入力する。native\tip) を入れる / 外す。install.ps1・uninstall.ps1 から読み込んで使う。
 #   . .\meltype-ime.ps1
-#   Install-MeltypeIme -Source <x64 と x86 と Register-Tip.ps1 があるフォルダー>
+#   Install-MeltypeIme -Source <x64・arm64・x86 と Register-Tip.ps1 があるフォルダー>
 #   Uninstall-MeltypeIme
 # IME の登録は PC 全体の設定なので、ここだけ管理者権限を求める (UAC の確認が出る)。
 # 「言語と地域」のキーボードの一覧に足すのは、ふつうの権限で (今のユーザーの設定なので)。
@@ -15,11 +15,16 @@ $MeltypeImeTip = '0411:{417D801B-A9BD-4C26-BD16-356A825A6998}{21F643F4-72D5-4946
 # 環境変数 (ProgramW6432 など) はユーザーが上書きできるので、Windows の設定 (HKLM) から読む
 $MeltypeProgramFiles = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::LocalMachine, [Microsoft.Win32.RegistryView]::Registry64).OpenSubKey('SOFTWARE\Microsoft\Windows\CurrentVersion').GetValue('ProgramFilesDir')
 
-# ARM64 の Windows か (x64 のエミュレーションで動いている PowerShell では、環境変数が AMD64 になるので、Windows の設定から読む)
+# ARM64 の Windows か。管理者として動く Register-Tip.ps1 と同じく、Windows の設定 (HKLM) だけから読む
+# (プロセスの環境変数は、x64 のエミュレーションでは AMD64 になり、ユーザーが上書きもできる。両側で食い違うと、確かめた DLL と登録する DLL が変わる)
 function Test-Arm64Windows {
-    if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64' -or $env:PROCESSOR_ARCHITEW6432 -eq 'ARM64') { return $true }
-    $native = (Get-ItemProperty -LiteralPath 'HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Environment' -Name PROCESSOR_ARCHITECTURE -ErrorAction SilentlyContinue).PROCESSOR_ARCHITECTURE
-    return $native -eq 'ARM64'
+    return [Microsoft.Win32.Registry]::GetValue('HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Session Manager\Environment', 'PROCESSOR_ARCHITECTURE', '') -eq 'ARM64'
+}
+
+# この PC に登録する DLL のアーキテクチャ。ARM64 の Windows では、64 ビットは ARM64X の DLL (arm64。ARM64 と x64 のアプリのどちらにも読み込める)
+function Get-MeltypeImeArchitectures {
+    if (Test-Arm64Windows) { return 'arm64', 'x86' }
+    return 'x64', 'x86'
 }
 
 function Test-MeltypeImeRegistered {
@@ -158,7 +163,7 @@ function Test-MeltypeImeCurrent([string]$Source) {
     $newScript = Join-Path $Source 'Register-Tip.ps1'
     if (-not (Test-Path -LiteralPath $installedScript) -or -not (Test-Path -LiteralPath $newScript)) { return $false }
     if ((Get-Sha256 $installedScript) -ne (Get-Sha256 $newScript)) { return $false }
-    foreach ($arch in 'x64', 'x86') {
+    foreach ($arch in Get-MeltypeImeArchitectures) {
         $installed = Join-Path $MeltypeProgramFiles "Meltype\tip\$arch\MeltypeTip.dll"
         $new = Join-Path $Source "$arch\MeltypeTip.dll"
         if (-not (Test-Path -LiteralPath $installed) -or -not (Test-Path -LiteralPath $new)) { return $false }
@@ -173,7 +178,7 @@ function Test-MeltypeImeCurrent([string]$Source) {
         }
         if ((Get-Sha256 $installed) -ne (Get-Sha256 $new)) { return $false }
     }
-    foreach ($arch in 'x64', 'x86') {
+    foreach ($arch in Get-MeltypeImeArchitectures) {
         # stub がロードする impl (Register-Tip.ps1 が impl\<署名前のバイナリの SHA-256>\MeltypeTipImpl.dll に配置する)
         $implHash = Read-HashFile (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256")
         $folder = Join-Path $MeltypeProgramFiles "Meltype\tip\$arch"
@@ -197,7 +202,7 @@ function Read-HashFile([string]$path) {
 # 確かめたファイル (Register-Tip.ps1 も) のハッシュを返す。管理者として動く側は、写したものがこれと合うかを確かめる。合わなければ $null
 function Get-MeltypeImeSourceHashes([string]$Source) {
     $hashes = @{}
-    foreach ($relative in 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll') {
+    foreach ($relative in @(Get-MeltypeImeArchitectures | ForEach-Object { "$_\MeltypeTip.dll", "$_\MeltypeTipImpl.dll" })) {
         $dll = Join-Path $Source $relative
         # 配布用のパッケージなら署名した後のハッシュ、ソースから入れたとき (署名しない) は署名する前のハッシュ
         $expected = Read-HashFile "$dll.package.sha256"
@@ -217,11 +222,6 @@ function Get-MeltypeImeSourceHashes([string]$Source) {
 function Install-MeltypeIme([string]$Source, [switch]$Ask) {
     $register = Join-Path $Source 'Register-Tip.ps1'
     if (-not (Test-Path -LiteralPath $register)) { return $false }
-    # ARM64 の Windows では、ARM64 のアプリ (メモ帳・エクスプローラーなど) に x64 / x86 の DLL が読み込まれず、日本語が打てなくなる
-    if (Test-Arm64Windows) {
-        Write-Host 'ARM64 の Windows には Meltype IME はまだ対応していません。変換ボックスで入力する方式で使えます。'
-        return $false
-    }
     $hashes = Get-MeltypeImeSourceHashes $Source
     if (-not $hashes) {
         Write-Host 'Meltype IME の DLL が、ビルドしたときのものと違います (壊れているか、書き換えられています)。登録しません。'

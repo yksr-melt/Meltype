@@ -43,7 +43,8 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # �
 
 - Windows 10 / 11 (x64 / ARM64)
 - .NET 10 SDK
-- Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
+- Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC の x64/x86 のビルドツールと Windows SDK。ARM64 の PC では MSVC ARM64 のビルドツールも)。無ければ Meltype IME を入れずに続けます。
+  配布用のパッケージ (`Build-Package.ps1`) を作るときは、x64 の PC でも ARM64 のビルドツールが要ります
 
 ## Mac・Linux でビルドする
 
