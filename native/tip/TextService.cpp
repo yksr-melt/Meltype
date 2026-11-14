@@ -1136,6 +1136,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     }
     *eaten = TRUE;
     const UINT slot = ShortcutSlot(vk, lParam);
+    // lParam の 30bit 目にそのキーの前の状態（押されていたかどうか）が入るので, 30bit 目を AND で取得して長押しか判定する
     const bool repeat = (lParam & (1 << 30)) != 0;
     eatenDown_[slot] = true;
     if (CapturesKey(vk, lParam)) {
