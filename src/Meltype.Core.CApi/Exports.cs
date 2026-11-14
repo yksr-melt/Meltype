@@ -21,19 +21,15 @@ namespace Meltype.CApi;
 /// </summary>
 public static unsafe class Exports
 {
-    /// <summary>小文字の英単語 → 英語として正しい綴りなら 1 (Mac のスペルチェッカー)。</summary>
-    private static delegate* unmanaged<byte*, int> s_isWord;
-
     /// <summary>
     /// 最初に 1 回呼ぶ。appDirectory は同梱の Mozc のヘルパー (mozc/meltype_mozc_helper) と Zenzai (zenzai/) を置いたフォルダー。
-    /// isWord は英単語の判定 (NULL なら同梱の英単語の一覧)。Mozc のヘルパーがあれば 1、無ければ 0 (変換はかなのまま)。
+    /// Mozc のヘルパーがあれば 1、無ければ 0 (変換はかなのまま)。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_init")]
-    public static int Init(byte* appDirectory, delegate* unmanaged<byte*, int> isWord)
+    public static int Init(byte* appDirectory)
     {
         try
         {
-            s_isWord = isWord;
             var directory = FromUtf8(appDirectory);
             if (string.IsNullOrEmpty(directory)) throw new ArgumentException("appDirectory が空です");
             s_converter = Runtime.CreateConverter(directory);
@@ -48,8 +44,8 @@ public static unsafe class Exports
         }
     }
 
-    /// <summary>設定・辞書・学習データ。Swift 側のスペルチェッカーを登録した後 (meltype_init) に作る。</summary>
-    private static MeltypeRuntime Runtime => s_runtime ??= MeltypeRuntime.OpenDefault(s_isWord == null ? null : new CallbackWordChecker());
+    /// <summary>設定・辞書・学習データ (最初に使うときに作る)。</summary>
+    private static MeltypeRuntime Runtime => s_runtime ??= MeltypeRuntime.OpenDefault();
 
     private static MeltypeRuntime? s_runtime;
 
@@ -65,13 +61,11 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "meltype_android_init")]
     public static int AndroidInit(
         delegate* unmanaged<byte*, byte*, byte*> clauses,
-        delegate* unmanaged<byte*, byte*> candidates,
-        delegate* unmanaged<byte*, int> isWord)
+        delegate* unmanaged<byte*, byte*> candidates)
     {
         try
         {
             if (clauses == null || candidates == null) return 0;
-            s_isWord = isWord;
             _ = Runtime;
             s_androidConverter = new AndroidCallbackConverter(clauses, candidates);
             return 1;
@@ -206,8 +200,8 @@ public static unsafe class Exports
 
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
         {
-            var input = ToUtf8(hiragana, out var inputBuffer);
-            var contextPointer = context is null ? null : ToUtf8(context, out _);
+            var input = ToUtf8(hiragana);
+            var contextPointer = context is null ? null : ToUtf8(context);
             try
             {
                 var text = TakeUtf8(clauses(input, contextPointer));
@@ -224,20 +218,20 @@ public static unsafe class Exports
             }
             finally
             {
-                NativeMemory.Free(inputBuffer);
+                NativeMemory.Free(input);
                 if (contextPointer != null) NativeMemory.Free(contextPointer);
             }
         }
 
         public string[] Candidates(string reading)
         {
-            var input = ToUtf8(reading, out var inputBuffer);
+            var input = ToUtf8(reading);
             try
             {
                 var text = TakeUtf8(candidates(input));
                 return text is null ? [] : text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
             }
-            finally { NativeMemory.Free(inputBuffer); }
+            finally { NativeMemory.Free(input); }
         }
     }
 
@@ -248,36 +242,15 @@ public static unsafe class Exports
         finally { NativeMemory.Free(text); }
     }
 
-    private sealed class CallbackWordChecker : IWordChecker
-    {
-        public bool IsAvailable => s_isWord != null;
-
-        public bool IsWord(string lower)
-        {
-            if (s_isWord == null || lower.Length < 2) return false;
-            var pointer = ToUtf8(lower, out var buffer);
-            try
-            {
-                return s_isWord(pointer) != 0;
-            }
-            finally
-            {
-                NativeMemory.Free(buffer);
-            }
-        }
-    }
-
     // ---- UTF-8 の文字列 ----
 
     private static string? FromUtf8(byte* text) => text == null ? null : Marshal.PtrToStringUTF8((IntPtr)text);
 
     /// <summary>malloc した UTF-8 の文字列にする (呼び出し側が解放する)。</summary>
-    private static byte* ToUtf8(string text) => ToUtf8(text, out _);
-
-    private static byte* ToUtf8(string text, out byte* buffer)
+    private static byte* ToUtf8(string text)
     {
         var length = Encoding.UTF8.GetByteCount(text);
-        buffer = (byte*)NativeMemory.Alloc((nuint)length + 1);
+        var buffer = (byte*)NativeMemory.Alloc((nuint)length + 1);
         fixed (char* chars = text) Encoding.UTF8.GetBytes(chars, text.Length, buffer, length);
         buffer[length] = 0;
         return buffer;
