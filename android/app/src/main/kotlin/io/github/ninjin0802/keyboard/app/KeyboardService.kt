@@ -255,7 +255,7 @@ class KeyboardService : InputMethodService(), KeyListener {
     private var emojiPanel: EmojiPanelView? = null
     private val emojiRecents by lazy { EmojiRecentsStore(PrefsStore(this, "emoji")) }
 
-    private var policy = FieldPolicy(LayoutId.KANA, convert = true, learn = true)
+    private var policy = FieldPolicy(LayoutId.ROMAJI, convert = true, learn = true)
     private var imeOptions = 0
     /** いまの配列と、あa・?123・絵文字・戻るキーの行き先。 */
     private val nav = LayoutNavigator()

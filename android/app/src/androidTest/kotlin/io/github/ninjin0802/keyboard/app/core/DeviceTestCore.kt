@@ -8,9 +8,9 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
 import androidx.test.platform.app.InstrumentationRegistry
-import io.github.ninjin0802.keyboard.engine.Clause
-import io.github.ninjin0802.keyboard.engine.Converter
-import io.github.ninjin0802.keyboard.engine.Segment
+import io.github.ninjin0802.keyboard.mozc.MozcClause
+import io.github.ninjin0802.keyboard.mozc.MozcBackend
+import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import java.io.File
 
 /**
@@ -27,21 +27,21 @@ internal object DeviceTestCore {
      * three clauses (each with its own candidates), so that a conversion of several clauses can be
      * seen; everything else stays kana.
      */
-    private val converter = object : Converter {
+    private val converter = object : MozcBackend {
         private val byClause = mapOf(
             "はしを" to listOf("箸を", "橋を", "端を"),
             "かみに" to listOf("紙に", "神に", "髪に"),
             "かく" to listOf("書く", "描く", "欠く"),
         )
 
-        override fun convert(reading: String, context: String?): List<Segment>? = when (reading) {
-            "きょうは" -> listOf(Segment("きょうは", listOf("今日は")))
-            "はしをかみにかく" -> byClause.map { (clause, candidates) -> Segment(clause, candidates) }
-            in byClause -> listOf(Segment(reading, byClause.getValue(reading)))
+        override fun convert(reading: String, context: String?): List<MozcSegment>? = when (reading) {
+            "きょうは" -> listOf(MozcSegment("きょうは", listOf("今日は")))
+            "はしをかみにかく" -> byClause.map { (clause, candidates) -> MozcSegment(clause, candidates) }
+            in byClause -> listOf(MozcSegment(reading, byClause.getValue(reading)))
             else -> null
         }
         override fun predict(reading: String): List<String> = emptyList()
-        override fun learn(clauses: List<Clause>, context: String?) {}
+        override fun learn(clauses: List<MozcClause>, context: String?) {}
     }
 
     fun open(): MeltypeCoreHost = MeltypeCoreHost.open(directory, CoreMozcCallbacks(converter))

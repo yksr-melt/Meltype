@@ -8,19 +8,19 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.json.JSONObject
-import io.github.ninjin0802.keyboard.engine.Converter
-import io.github.ninjin0802.keyboard.engine.Clause
-import io.github.ninjin0802.keyboard.engine.Segment
+import io.github.ninjin0802.keyboard.mozc.MozcBackend
+import io.github.ninjin0802.keyboard.mozc.MozcClause
+import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import java.io.File
 
 class MeltypeCoreBridgeDeviceTest {
     @Test fun coreAnswersEventsThroughTheImeProtocol() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         MeltypeCoreHost.open(File(context.noBackupFilesDir, "meltype"),
-            CoreMozcCallbacks(object : Converter {
-                override fun convert(reading: String, context: String?): List<Segment>? = null
+            CoreMozcCallbacks(object : MozcBackend {
+                override fun convert(reading: String, context: String?): List<MozcSegment>? = null
                 override fun predict(reading: String): List<String> = emptyList()
-                override fun learn(clauses: List<Clause>, context: String?) = Unit
+                override fun learn(clauses: List<MozcClause>, context: String?) = Unit
             })).use { core ->
             // Check the JSON contract and the JNI round-trip. Japanese conversion
             // also needs the Mozc callback and InputConnection integration.

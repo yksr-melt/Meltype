@@ -14,7 +14,7 @@ class PerfKindTest {
     }
     @Test fun supportedKeysLogOnlyTheirKindNotUserContent() {
         val kinds = LayoutId.entries.flatMap { Layouts.of(it).keys }.map { perfKind(it.action) }.toSet()
-        assertEquals(setOf("romaji","text","delete","space","enter","shift","switch","back","emoji"), kinds)
+        assertEquals(setOf("romaji","text","delete","space","enter","shift","switch","back"), kinds)
         assertTrue(kinds.all { name -> name.all { it in 'a'..'z' } })
     }
 }

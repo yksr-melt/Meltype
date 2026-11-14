@@ -29,7 +29,7 @@ class LanguageDetectionDeviceTest {
             assertEquals(false, settings.japaneseSpaceFullWidth)
             assertEquals(false, settings.emojiEnabled)
 
-            settings.japaneseLayout = io.github.ninjin0802.keyboard.app.layout.LayoutId.KANA
+            check(prefs.edit().putString("japanese_layout", "kana").commit())
             settings.japaneseSpaceFullWidth = true
             settings.emojiEnabled = true
             val saved = io.github.ninjin0802.keyboard.app.Settings(ctx)
@@ -253,9 +253,7 @@ class LanguageDetectionDeviceTest {
         val scaled = ctx.resources.displayMetrics.scaledDensity
         val bar = io.github.ninjin0802.keyboard.app.view.CandidateBarView(ctx)
         val candidate = "これは少し長めの予測変換候補です"
-        bar.show(listOf(io.github.ninjin0802.keyboard.engine.Candidate(
-            candidate, 0, io.github.ninjin0802.keyboard.engine.CandidateKind.PREDICTION
-        )), null)
+        bar.show(listOf(DisplayCandidate(candidate)), null)
         bar.measure(
             View.MeasureSpec.makeMeasureSpec((410f*density).toInt(), View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED)

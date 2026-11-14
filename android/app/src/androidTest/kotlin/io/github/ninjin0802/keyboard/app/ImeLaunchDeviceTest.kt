@@ -424,7 +424,6 @@ class ImeLaunchDeviceTest {
             val key = japanese.layout.keys.firstOrNull {
                 when (val action = it.action) {
                     is KeyAction.Romaji -> action.char == 'a'
-                    is KeyAction.Flick -> action.key.chars.firstOrNull() == 'あ'
                     else -> false
                 }
             } ?: throw AssertionError("No Japanese あ/A soft key")
