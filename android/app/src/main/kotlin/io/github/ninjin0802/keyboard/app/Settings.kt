@@ -28,12 +28,12 @@ class Settings(private val context: Context) {
     /** 日本語を打つ配列（spec 04「設定」の「日本語の入力」）。かな配列かローマ字配列。 */
     var japaneseLayout: LayoutId
         get() = japaneseOf(prefs.getString(KEY_JAPANESE_LAYOUT, null))
-        set(value) { prefs.edit().putString(KEY_JAPANESE_LAYOUT, savedName(value)).apply() }
+        set(value) { prefs.edit().putString(KEY_JAPANESE_LAYOUT, savedName(LayoutId.ROMAJI)).apply() }
 
     /** 英字を打つ配列（「英字の入力」）。英字配列か英字フリック配列。 */
     var englishLayout: LayoutId
         get() = englishOf(prefs.getString(KEY_ENGLISH_LAYOUT, null))
-        set(value) { prefs.edit().putString(KEY_ENGLISH_LAYOUT, savedName(value)).apply() }
+        set(value) { prefs.edit().putString(KEY_ENGLISH_LAYOUT, savedName(LayoutId.QWERTY)).apply() }
 
     /** Japanese layout only. The default is a half-width space. */
     var japaneseSpaceFullWidth: Boolean
@@ -87,10 +87,10 @@ class Settings(private val context: Context) {
         const val KEY_ENGLISH_LAYOUT = "english_layout"
 
         /** 保存してある値から日本語の配列を決める。未設定・不明な値はローマ字配列。 */
-        fun japaneseOf(saved: String?): LayoutId = if (saved == savedName(LayoutId.KANA)) LayoutId.KANA else LayoutId.ROMAJI
+        fun japaneseOf(saved: String?): LayoutId = LayoutId.ROMAJI
 
         /** 保存してある値から、英語の配列を決める。保存がない・知らない値のときは、最初の値（英字配列）。 */
-        fun englishOf(saved: String?): LayoutId = if (saved == savedName(LayoutId.LATIN_FLICK)) LayoutId.LATIN_FLICK else LayoutId.QWERTY
+        fun englishOf(saved: String?): LayoutId = LayoutId.QWERTY
 
         /** 配列を保存するときの名前。選べない配列（数字・記号）は空で、読むと最初の値になる。 */
         fun savedName(layout: LayoutId): String = when (layout) {
