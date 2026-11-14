@@ -20,6 +20,7 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.view.Gravity
@@ -356,6 +357,30 @@ class KeyboardService : InputMethodService(), KeyListener {
         buildEmergencyKeyboardView()
     }
 
+    /** Use Android's system picker; never require launching our settings Activity to escape. */
+    private fun showSystemImePicker() {
+        try {
+            (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).showInputMethodPicker()
+        } catch (error: RuntimeException) {
+            // An IME cannot force the system picker when Android refuses this request.
+            Log.e(TAG, "Android input method picker unavailable", error)
+        }
+    }
+
+    /** Independent of native libraries, candidates, and the currently selected keyboard layout. */
+    private fun imePickerButton(): TextView = TextView(this).apply {
+        text = "⇄"
+        contentDescription = "別のキーボードに切り替える"
+        gravity = Gravity.CENTER
+        textSize = 22f
+        setTextColor(Palette.of(this@KeyboardService).text)
+        minimumHeight = (44 * resources.displayMetrics.density).toInt()
+        minimumWidth = (48 * resources.displayMetrics.density).toInt()
+        isClickable = true
+        isFocusable = true
+        setOnClickListener { showSystemImePicker() }
+    }
+
     /** No native converter or keyboard assets are used in this emergency UI. */
     private fun buildEmergencyKeyboardView(): View {
         val pad = (16 * resources.displayMetrics.density).toInt()
@@ -371,32 +396,13 @@ class KeyboardService : InputMethodService(), KeyListener {
             addView(TextView(this@KeyboardService).apply {
                 text = "別のキーボードに切り替える"
                 contentDescription = text
+                gravity = Gravity.CENTER
                 textSize = 16f
                 setTextColor(Color.BLUE)
-                setPadding(0, pad, 0, pad)
+                minimumHeight = (48 * resources.displayMetrics.density).toInt()
                 isClickable = true
-                setOnClickListener {
-                    try {
-                        (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
-                            .showInputMethodPicker()
-                    } catch (error: RuntimeException) {
-                        Log.w(TAG, "Input method picker unavailable", error)
-                        startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                    }
-                }
-            })
-            addView(TextView(this@KeyboardService).apply {
-                text = "Android のキーボード設定"
-                contentDescription = text
-                textSize = 14f
-                setTextColor(Color.BLUE)
-                setPadding(0, pad, 0, pad)
-                isClickable = true
-                setOnClickListener {
-                    startActivity(Intent(android.provider.Settings.ACTION_INPUT_METHOD_SETTINGS)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
+                isFocusable = true
+                setOnClickListener { showSystemImePicker() }
             })
         }
     }
@@ -430,9 +436,19 @@ class KeyboardService : InputMethodService(), KeyListener {
         val background = Palette.of(this).background
         styleNavigationBar(background)
         ImeGlassSurface.configureWindow(window?.window, this)
+        // The picker is independent of candidate updates and remains visible on the emoji screen.
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(bar, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            addView(imePickerButton(), LinearLayout.LayoutParams(
+                (48 * resources.displayMetrics.density).toInt(),
+                (44 * resources.displayMetrics.density).toInt(),
+            ))
+        }
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            addView(bar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
+            addView(header, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(keys, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(emoji, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
         }
