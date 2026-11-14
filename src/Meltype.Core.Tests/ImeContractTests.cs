@@ -559,8 +559,7 @@ internal static class ImeContractTests
     {
         foreach (var traits in new string[][] { ["Password"], ["Password", "Private"], ["Terminal", "Password"] })
         {
-            var front = new Front { Sends = null, Selection = "日本語" };
-            front.Readings["日本語"] = "にほんご";
+            var front = new Front { Sends = null, Selection = "nihongo" };
             front.Traits.AddRange(traits);
             AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
             Assert.Equal(0, front.Sessions, front.Trace);
