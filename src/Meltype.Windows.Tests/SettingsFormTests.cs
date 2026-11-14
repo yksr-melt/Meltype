@@ -8,6 +8,70 @@ namespace Meltype.Tests;
 internal static class SettingsFormTests
 {
     [Test]
+    public static void SettingsForm_ApplyKeepsWindowOpenAndCancelDiscardsLaterEdits()
+    {
+        using var engine = new MeltypeEngine(TestRuntime.Create());
+        using var form = new UI.SettingsForm(engine, new AppState());
+        form.Show();
+
+        var controls = Descendants(form).ToList();
+        var live = controls.OfType<UI.ToggleSwitch>()
+            .Single(c => c.AccessibleName == "ライブ変換");
+        var auto = controls.OfType<UI.ToggleSwitch>()
+            .Single(c => c.AccessibleName == "英語 / 日本語を自動で判定する");
+        var apply = controls.OfType<Button>().Single(c => c.Text == "適用");
+        var cancel = controls.OfType<Button>().Single(c => c.Text == "キャンセル");
+        var originalLive = live.Checked;
+        var originalAuto = auto.Checked;
+        var configPath = Path.Combine(engine.Runtime.DataDirectory, "config.json");
+
+        live.Checked = !originalLive;
+        apply.PerformClick();
+        Assert.True(form.Visible, "適用しても画面は開いたまま");
+        Assert.Equal(!originalLive, engine.Settings.LiveConversion, "変更を適用する");
+        Assert.Equal(!originalLive, Settings.Load(configPath).LiveConversion, "ファイルにも保存する");
+
+        live.Checked = originalLive;
+        apply.PerformClick();
+        Assert.Equal(originalLive, engine.Settings.LiveConversion, "元の値にも再適用できる");
+
+        auto.Checked = !originalAuto;
+        cancel.PerformClick();
+        Assert.True(form.IsDisposed, "キャンセルで画面を閉じる");
+        Assert.Equal(originalLive, engine.Settings.LiveConversion, "適用済みの値は残る");
+        Assert.Equal(originalAuto, engine.Settings.AutoDetection, "適用後の未適用の変更は捨てる");
+    }
+
+    [Test]
+    public static void SettingsForm_ApplyDoesNotOverwriteLaterTrayChange()
+    {
+        using var engine = new MeltypeEngine(TestRuntime.Create());
+        using var form = new UI.SettingsForm(engine, new AppState());
+        form.Show();
+
+        var controls = Descendants(form).ToList();
+        var live = controls.OfType<UI.ToggleSwitch>()
+            .Single(c => c.AccessibleName == "ライブ変換");
+        var apply = controls.OfType<Button>().Single(c => c.Text == "適用");
+        var original = live.Checked;
+
+        live.Checked = !original;
+        apply.PerformClick();
+        Assert.Equal(!original, engine.Settings.LiveConversion, "画面の変更を適用する");
+
+        // 設定画面を開いたまま、トレイ側で同じ項目を変更した状態を作る。
+        var traySettings = engine.Settings.Clone();
+        traySettings.LiveConversion = original;
+        engine.ApplySettings(traySettings);
+
+        apply.PerformClick();
+        Assert.Equal(original, engine.Settings.LiveConversion, "未編集の画面はトレイ側の変更を戻さない");
+
+        form.Close(); // × と同じく変更を反映して閉じる
+        Assert.Equal(original, engine.Settings.LiveConversion, "閉じるときもトレイ側の変更を戻さない");
+    }
+
+    [Test]
     public static void SettingsForm_FontCanBeChangedWithoutOpeningDropDown()
     {
         using var engine = new MeltypeEngine(TestRuntime.Create());

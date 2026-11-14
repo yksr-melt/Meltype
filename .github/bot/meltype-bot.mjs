@@ -95,7 +95,7 @@ const LabelInfo = {
   'win10': ['5E9ED6', 'Windows 10'],
   '企業PC': ['5319E7', 'Windows の Enterprise / Education (管理が厳しいことがある)'],
   '管理者で実行': ['D93F0B', 'Meltype を管理者として実行していた'],
-  'Mozcなし': ['E99695', 'Mozc の変換ヘルパーが無い (Microsoft IME だけで変換)'],
+  'Mozcなし': ['E99695', 'Mozc の変換ヘルパーが無い (漢字に変換できない)'],
   'かな入力': ['FEF2C0', 'かな入力 (JIS)'],
   'USキーボード': ['FEF2C0', '日本語 (JIS) 以外のキーボード'],
   '高DPI': ['FEF2C0', '画面の拡大率が 100% より大きい'],
@@ -134,7 +134,8 @@ function environmentLabels(text) {
   if (/Enterprise|Education/i.test(os)) result.push({ label: '企業PC', reason: 'Windows のエディションが Enterprise / Education (会社・学校の PC は制限があることが多い)' });
   if (/^Meltype \S/.test(`Meltype ${env['Meltype'] ?? ''}`) && /^\d+\.\d+\.\d+/.test(env['Meltype'] ?? '')) result.push({ label: `v${env['Meltype'].match(/^\d+\.\d+\.\d+/)[0]}`, reason: '実行環境の版' });
   if (/はい/.test(env['管理者として実行'] ?? '')) result.push({ label: '管理者で実行', reason: 'Meltype を管理者として実行していた' });
-  if (/Mozc:\s*なし/.test(env['変換エンジン'] ?? '')) result.push({ label: 'Mozcなし', reason: 'Mozc の変換ヘルパーが無い' });
+  // 「変換エンジン: Hybrid (Mozc: なし)」は、変換エンジンを選べた版 (#1740 より前) の報告
+  if (/Mozc:\s*なし/.test(env['変換エンジン'] ?? '') || env['Mozc'] === 'なし') result.push({ label: 'Mozcなし', reason: 'Mozc の変換ヘルパーが無い' });
   if (/Kana/.test(env['入力方式'] ?? '')) result.push({ label: 'かな入力', reason: '入力方式がかな入力' });
   if (/日本語以外/.test(env['キーボード'] ?? '')) result.push({ label: 'USキーボード', reason: `キーボードが ${md(env['キーボード'])}` });
   const scale = Number((env['画面'] ?? '').match(/拡大率\s*(\d+)/)?.[1] ?? 100);

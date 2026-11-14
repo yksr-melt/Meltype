@@ -21,6 +21,13 @@ concurrency:
   group: bot-${{ github.event_name }}-${{ github.event.issue.number }}-${{ github.event.comment.id || github.event.action }}
   cancel-in-progress: true
 
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+
 jobs:
   parse:
     runs-on: ubuntu-latest
@@ -104,7 +111,6 @@ jobs:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
         if: needs.parse.outputs.action == 'repro' || needs.parse.outputs.action == 'ca' || needs.parse.outputs.action == 'jht'
-        shell: pwsh
         run: &mozc-helper |
           $bin = 'native/mozc/bin'
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
@@ -123,7 +129,6 @@ jobs:
           "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "MELTYPE_MOZC=$full"
       - name: Run
-        shell: pwsh
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
@@ -157,7 +162,9 @@ jobs:
             }
             $i++
           }
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      # 途中で失敗しても、できた分の結果を返す
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bot-results
           path: results/
@@ -181,11 +188,9 @@ jobs:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
         if: needs.parse.outputs.action == 'test-repro' || needs.parse.outputs.action == 'test-jht'
-        shell: pwsh
         run: *mozc-helper
       - name: Test
         if: needs.parse.outputs.action == 'test'
-        shell: pwsh
         run: |
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
           New-Item -ItemType Directory -Force results | Out-Null
@@ -199,7 +204,6 @@ jobs:
         run: .\Build-Package.ps1
       - name: test-repro / test-jht / test-explain
         if: contains(fromJSON('["test-repro","test-jht","test-explain"]'), needs.parse.outputs.action)
-        shell: pwsh
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
@@ -219,7 +223,8 @@ jobs:
             $windowsTests = if (Test-Path src/Meltype.Windows.Tests) { 'src/Meltype.Windows.Tests' } else { 'src/Meltype.Tests' }
             dotnet run --project $windowsTests -c Release -- --repro "$($r.keys)" "$($r.last)" | Out-File results/0/repro-pr.json -Encoding utf8
           }
-      - if: needs.parse.outputs.action != 'pack'
+      # テストの失敗も結果として返すので、step が失敗しても上げる
+      - if: ${{ !cancelled() && needs.parse.outputs.action != 'pack' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bot-results
