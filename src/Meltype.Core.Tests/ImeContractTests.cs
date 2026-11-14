@@ -333,93 +333,6 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void InstanceSlots_ReuseTheOldestIdleSlot()
-    {
-        var front = new Front { Sends = null };
-        front.Type("ka", "t1");
-        front.Type("ki\n", "t2");
-        for (var i = 3; i <= 16; i++) front.Event("StateRequested", $"t{i}");
-        front.Event("StateRequested", "t2", omitField: true); // 読み直しても登録順は変わらない
-
-        front.Traits.Add("Password");
-        AssertPasswordPass(front, front.Event("CaretMoved", "t17", Entered));
-        front.Traits.Clear();
-        Assert.True(Active(front.Event("CaretMoved", "t18", Entered)), front.Trace);
-
-        foreach (var evicted in new[] { "t2", "t3" })
-        {
-            var result = front.Key('A', 'a', instance: evicted, omitField: true);
-            Assert.True(!Active(result) && !Consumed(result), "再通知まで追い出した入力先は受け持たない\n" + front.Trace);
-        }
-        Assert.True(Consumed(front.Key('A', 'a', instance: "t4", omitField: true)), front.Trace);
-        AssertPasswordPass(front, front.Key('A', 'a', instance: "t17", omitField: true));
-        Assert.True(Consumed(front.Key('A', 'a', instance: "t18", omitField: true)), front.Trace);
-        Assert.Equal("か", View(front.Event("StateRequested", "t1", omitField: true)).GetProperty("text").GetString(), front.Trace);
-        front.Event("InstanceDestroyed", "t2", omitField: true);
-        AssertPasswordPass(front, front.Event("StateRequested", "t17", omitField: true));
-        Assert.True(Active(front.Event("CaretMoved", "t2", Entered)), front.Trace);
-        Assert.True(Consumed(front.Key('A', 'a', instance: "t2", omitField: true)), "属性の再通知で受け持つ\n" + front.Trace);
-    }
-
-    [Test]
-    public static void InstanceSlots_EvictedPasswordWaitsForAFieldNotice()
-    {
-        var front = new Front { Sends = null };
-        front.Traits.Add("Password");
-        AssertPasswordPass(front, front.Event("CaretMoved", "t1", Entered));
-        front.Traits.Clear();
-        for (var i = 2; i <= 17; i++) front.Event("StateRequested", $"t{i}");
-        AssertPasswordPass(front, front.Key('S', 's', instance: "t1", omitField: true));
-        Assert.Equal(0, front.Sessions, front.Trace);
-        Assert.True(Consumed(front.Key('A', 'a', instance: "t17", omitField: true)), "属性を通知した17件目は変換できる\n" + front.Trace);
-        front.Traits.Add("Password");
-        AssertPasswordPass(front, front.Event("CaretMoved", "t1", Entered));
-        AssertPasswordPass(front, front.Key('A', 'a', instance: "t1", omitField: true));
-    }
-
-    [Test]
-    public static void InstanceSlots_KeepPendingInputWhenFull()
-    {
-        var front = new Front { Sends = null };
-        for (var i = 1; i <= 16; i++) front.Key('k', $"t{i}");
-        var full = front.Key('a', "t17");
-        Assert.True(!Active(full) && !Consumed(full), front.Trace);
-        Assert.Equal(16, front.Sessions, front.Trace);
-        front.Traits.Add("Password");
-        AssertPasswordPass(front, front.Event("CaretMoved", "t17", Entered));
-        front.Traits.Clear();
-        front.Event("InstanceDestroyed", "t16", omitField: true);
-        AssertPasswordPass(front, front.Key('S', 's', instance: "t17", omitField: true));
-        Assert.Equal("か", View(front.Key('A', 'a', instance: "t1", omitField: true)).GetProperty("text").GetString(), front.Trace);
-        Assert.True(Consumed(front.Key('a', "t17")), "空きができてから新しい通常欄の属性を通知したら変換する\n" + front.Trace);
-    }
-
-    [Test]
-    public static void InstanceSlots_KeepTerminalTraitsBeforeTheFirstKey()
-    {
-        var front = new Front { Terminal = true, Sends = null };
-        front.Event("CaretMoved", extra: Entered);
-        var first = front.Key('A', 'a', omitField: true);
-        Assert.True(Active(first) && !Japanese(first) && !Consumed(first), "打鍵の前に届いた Terminal 属性でコードの行として扱う\n" + front.Trace);
-        Assert.Equal("a", front.Document, front.Trace);
-    }
-
-    [Test]
-    public static void InstanceSlots_KeepAThumbKeyBeforeThePreeditAppears()
-    {
-        var front = new Front();
-        front.Settings.InputStyle = InputStyle.Kana;
-        front.Settings.KanaLayout = KanaLayout.Nicola;
-        front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{VirtualKeys.Convert},\"releaseFollows\":true}}");
-        Assert.Equal(null, front.Composition["t1"], front.Trace);
-        for (var i = 2; i <= 17; i++) front.Event("StateRequested", $"t{i}");
-        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":87,\"ch\":119,\"releaseFollows\":true}", omitField: true);
-        front.Event("KeyReleased", extra: ",\"key\":{\"vk\":87}", omitField: true);
-        front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{VirtualKeys.Convert}}}", omitField: true);
-        Assert.Equal("が", front.Composition["t1"], "枠の再利用後も親指キーのシフト面で入力する\n" + front.Trace);
-    }
-
-    [Test]
     public static void UnknownCompositionsAndProtocols_AreNotTakenOver()
     {
         var front = new Front();
@@ -427,7 +340,6 @@ internal static class ImeContractTests
         front.Composition["lost"] = "か";
         var lost = front.Key('a', instance: "lost");
         Assert.True(!Consumed(lost), "キーはアプリに通す\n" + front.Trace);
-        Assert.True(!Consumed(front.Key('A', 'a', instance: "lost", omitField: true)), "続きの通知でも変換中だったことを保持する\n" + front.Trace);
         Assert.Equal(0, front.Sessions, front.Trace);
         foreach (var json in new[]
                  {
@@ -447,8 +359,6 @@ internal static class ImeContractTests
         }
         Assert.Equal(0, front.Sessions, front.Trace);
         Assert.True(Active(front.Event("StateRequested", omitField: true)), "起動時は設定に従う捕捉条件を返す\n" + front.Trace);
-        var noField = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"key\":{{\"vk\":65,\"ch\":97}}}}");
-        Assert.True(!Active(noField) && !Consumed(noField), "属性を一度も通知していない入力先のキーはアプリに通す");
         var noInstance = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"field\":{{}},\"key\":{{\"vk\":65,\"ch\":97}}}}");
         Assert.True(Active(noInstance) && Consumed(noInstance), "instance を省いた出来事も、属性があれば空の instance として受け持つ");
     }
@@ -650,7 +560,7 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void Password_FirstFieldNoticeProtectsKeysWithoutFieldFacts()
+    public static void Password_PassesKeysWithoutCreatingASession()
     {
         foreach (var traits in new string[][] { ["Password"], ["Password", "Private"], ["Terminal", "Password"] })
         {
@@ -662,10 +572,11 @@ internal static class ImeContractTests
             foreach (var (vk, ch) in new[] { ((int)'S', (int)'s'), ((int)'A', (int)'a'), ((int)'1', (int)'1'), ((int)'2', (int)'2'),
                          (VirtualKeys.Space, 0), (VirtualKeys.Return, 0), (VirtualKeys.Convert, 0), (ToggleShortcut.Hankaku, 0) })
             {
-                AssertPasswordPass(front, front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}", omitField: true));
+                AssertPasswordPass(front, front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}"));
             }
-            AssertPasswordPass(front, front.Event("CandidateClicked", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateClicked"));
             AssertPasswordPass(front, front.Event("AlphanumericModeSelected"));
+            Assert.Equal(0, front.Sessions, front.Trace);
             front.Traits.Clear();
             Assert.True(Active(front.Event("CaretMoved", extra: Entered)), front.Trace);
             front.Type("sa");
@@ -866,7 +777,7 @@ internal static class ImeContractTests
         SetField(beforeCommit: false);
         // 最初の Private 通知は打鍵より先に届く。
         front.Event("CaretMoved", extra: Entered);
-        front.Event("KeyPressed", extra: ",\"key\":{\"vk\":78,\"ch\":110}", omitField: true);
+        front.Key('n');
         front.Type("ihongo");
         front.Key(VirtualKeys.F10);
         Commit("nihongo");
@@ -923,6 +834,28 @@ internal static class ImeContractTests
         front.Key('\n');
         Assert.True(front.Document.Length > "単位を".Length, front.Trace);
         Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+    }
+
+    [Test]
+    public static void Private_ReportedBeforeResumingDoesNotLearnOnLaterCommit()
+    {
+        var converter = new LearningConverter();
+        var front = new Front { Converter = converter };
+        front.Type("nihongo");
+
+        // TSF はアプリが表示済みの文字を確定した時点で Private を読み、再開を保留する前に知らせる。
+        front.Traits.Add("Private");
+        Assert.Equal("にほんご", View(front.Event("StateRequested")).GetProperty("text").GetString(), front.Trace);
+        front.Traits.Clear();
+        front.Key(' ');
+        Assert.Equal("日本語", front.Composition["t1"], front.Trace);
+        front.Key('\n');
+        Assert.Equal("日本語", front.Document, front.Trace);
+        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+
+        front.Type("kyou \n");
+        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), front.Trace);
+        Assert.Equal("今日", converter.Learned.Single().Clauses.Single().Text, front.Trace);
     }
 
     [Test]

@@ -28,7 +28,10 @@ class LangBarButton;
 // known が false の間 (まだ応答が無い・つながらない) は、日本語入力として文字と入力モードのキーを受け取る
 struct ServerState {
     bool known = false;
-    bool active = false;
+    // パスワード欄で止めたときだけ、通常欄に戻ったかを打鍵前にも確認する。
+    enum class Input { Inactive, Active, Password };
+    Input input = Input::Inactive;
+    bool Active() const { return input == Input::Active; }
     bool open = true;
     bool japanese = true;
     // 変換していないときに受け取るキー (ImeCapture)。text は ! から ~ までの文字 (except を除く)、keys はそれ以外に受け取るキー
@@ -90,7 +93,7 @@ public:
     STDMETHODIMP OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEditRecord* record) override;
 
     // タスクバーに出す入力モード (「あ」なら true)。コードの行では、IME は開いたまま「A」になる
-    bool IsOpen() const { return state_.known && state_.active ? state_.japanese : open_; }
+    bool IsOpen() const { return state_.known && state_.Active() ? state_.japanese : open_; }
     // タスクバーのボタンから日本語 ⇔ 英数を切り替える。context が null なら、フォーカスのある入力欄を使う
     void ToggleInputMode(ITfContext* context);
 
@@ -122,7 +125,7 @@ private:
     // 入力欄の事実 (ImeField) を読む。パスワード欄なら属性だけを入れる。種類が読めなければ field は空のまま。
     bool ReadField(TfEditCookie ec, ITfContext* context, std::string& field);
     // 応答の状態を覚える。古い状態 (rev が小さい) では上書きしない
-    void ApplyState(const JsonValue& state);
+    void ApplyState(const JsonValue& state, const std::string& field = {});
     // 応答の開閉を TSF のコンパートメントに入れる (編集セッションの外で)
     void FlushOpen();
     // 確定 (commit) の出来事の追加の項目
@@ -145,7 +148,7 @@ private:
 
     // ---- 入力欄への反映 ----
     // 応答 (ImeOutput) を入力欄に反映する (編集セッションの中で)。使ったキーなら true
-    bool ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonValue& reply);
+    bool ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonValue& reply, const std::string& field = {});
     void Apply(TfEditCookie ec, ITfContext* context, const JsonValue& result);
     void MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int count);
     bool ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect);
@@ -175,7 +178,7 @@ private:
     bool ContextDisabled(ITfContext* context);
     void AdviseTextEditSink(ITfDocumentMgr* documentMgr);
     void UnadviseTextEditSink();
-    enum class FieldScope { Regular, Password, Unreadable };
+    enum class FieldScope { Regular, Private, Password, Unreadable };
     FieldScope ReadFieldScope(TfEditCookie ec, ITfContext* context);
     // キーを受け取る前の読み取り専用セッション。セッションを開けなければキーの処理の中で読み直す。
     FieldScope ProbeFieldScope(ITfContext* context);
@@ -227,7 +230,6 @@ private:
     Microsoft::WRL::ComPtr<ITfRange> resumeRange_;  // アプリが確定した打ちかけの文字 (次のキーで変換中に戻す)
     Microsoft::WRL::ComPtr<ITfContext> resumeContext_;
     std::wstring resumeText_;
-    bool resumePrivate_ = false;
     bool lastConverting_ = false;  // 最後に置いた変換中の文字が、変換した状態か (打っている途中なら false)
     int staleCommitTries_ = 0;     // 前の入力欄に残った変換中の文字を確定しようとした回数 (打鍵ごとに 1 回)
     UINT staleVk_ = 0;             // OnTestKeyDown で数えたキーと時刻 (続く OnKeyDown で数え直さない)
@@ -245,13 +247,11 @@ private:
     UINT passVk_ = 0;              // OnTestKeyDown で素通しにしたキー
     ULONGLONG passTime_ = 0;
     bool ownEdit_ = false;         // 自分の編集セッションが終わった通知を、キャレットが動いたことにしない
-    bool passwordNotified_ = false; // Password の応答で捕捉を止めた後、同じ入力先でも属性を読み直す
     UINT secretVk_ = 0;            // OnTestKeyDown で入力欄の種類を読んだキー・入力欄・時刻・結果 (続く OnKeyDown で 1 回だけ使う)
     Microsoft::WRL::ComPtr<ITfContext> secretContext_;
     ULONGLONG secretTime_ = 0;
     FieldScope secretResult_ = FieldScope::Regular;
     std::wstring lastSecretScopes_;  // 調べるとき用: 前にパスワードとみなした入力欄の種類 (同じならログに書かない)
-    bool privateField_ = false;    // 前に入力欄の種類を読んだとき、入力を覚えないように求める入力欄 (IS_PRIVATE) だった
     const wchar_t* scopeSource_ = nullptr;  // 入力欄の種類を前に読んだところ (ログ用)
     bool keepAppCaret_ = false;    // 確定したあと、キャレットを動かさない (クリック・別の入力欄で確定したとき)
     const wchar_t* passReason_ = nullptr;  // 最後にキーを通した理由 (ログに同じ理由を続けて書かない)

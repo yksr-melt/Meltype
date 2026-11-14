@@ -70,7 +70,6 @@ public sealed record ImeEvent
 
     public ImeKey? Key { get; init; }
 
-    /// <summary>入力欄の事実。初めて入力を受け持つときや、Core がその Instance の事実を失ったときは、入力を始める前に送る。</summary>
     public ImeField? Field { get; init; }
 
     /// <summary>OS が持つ IME の開閉 (TSF の GUID_COMPARTMENT_KEYBOARD_OPENCLOSE)。OS が持たないフロントは送らない。</summary>

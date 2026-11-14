@@ -328,8 +328,6 @@ public sealed class MeltypeSession
     /// <summary>変換ボックスに何か入っているか。</summary>
     public bool IsComposing => _controller.IsComposing;
 
-    internal bool HasPendingInput => _controller.HasPendingInput;
-
     /// <summary>変換して候補を選んでいるか。</summary>
     public bool IsConverting => _controller.IsConverting;
 

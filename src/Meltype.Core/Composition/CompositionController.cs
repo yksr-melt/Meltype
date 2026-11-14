@@ -217,8 +217,6 @@ public sealed partial class CompositionController
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
     public bool IsComposing => !_text.IsEmpty || _heldLetters.Length > 0;
 
-    internal bool HasPendingInput => IsComposing || _kanaLayout.ThumbHeld || _kanaLayout.HasPrefix;
-
     /// <summary>変換して候補を選んでいるか。</summary>
     public bool IsConverting => _converting;
 

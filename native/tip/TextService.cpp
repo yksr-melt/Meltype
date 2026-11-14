@@ -242,7 +242,6 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     state_ = ServerState{};
     pendingOpen_ = -1;
     ownEdit_ = false;
-    passwordNotified_ = false;
     ForgetSecretField();
     markerSeen_ = false;
     resumeRange_.Reset();
@@ -531,7 +530,7 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEdi
 }
 
 void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged) {
-    if (disabled_ || !state_.known || (!state_.active && !passwordNotified_)) return;
+    if (disabled_ || !state_.known || state_.input == ServerState::Input::Inactive) return;
     std::string field;
     ReadField(ec, context, field);
     if (field.empty()) return;
@@ -547,7 +546,7 @@ void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selection
     JsonValue reply;
     // キャレットを動かすたびに送るので、応答が遅ければ待たない (表示が次の出来事まで古いだけ)
     if (Send("CaretMoved", field, caret, reply, 100, true)) {
-        ApplyState(reply[L"state"]);
+        ApplyState(reply[L"state"], field);
         UpdateLangBar();
     }
 }
@@ -561,8 +560,8 @@ TextService::FieldScope TextService::ReadFieldScope(TfEditCookie ec, ITfContext*
     // 種類の値はあるのに中身を読めないときは、パスワード欄かもしれないので、パスワード欄として扱う (打った文字を Meltype.exe に送らない)。
     // 問い合わせ自体ができないとき (対応していないアプリ・選択が無い) は、種類を決めていない入力欄と同じにする
     // (止めると、そのアプリでは Meltype IME がまったく使えなくなるため)
-    // 入力を覚えないように求める入力欄 (IS_PRIVATE。ブラウザーのシークレット / InPrivate ウィンドウ) かも、ここで読んで privateField_ に残す
-    privateField_ = false;
+    // 入力を覚えないように求める入力欄 (IS_PRIVATE。ブラウザーのシークレット / InPrivate ウィンドウ) もここで読む
+    bool privateField = false;
     Microsoft::WRL::ComPtr<ITfProperty> windowsProperty;
     Microsoft::WRL::ComPtr<ITfReadOnlyProperty> appProperty;
     if (FAILED(context->GetProperty(kPropInputScope, &windowsProperty))) windowsProperty.Reset();
@@ -603,7 +602,7 @@ TextService::FieldScope TextService::ReadFieldScope(TfEditCookie ec, ITfContext*
                         secretScopes += (secretScopes.empty() ? L"" : L", ") + std::wstring(fromApp ? L"アプリ " : L"Windows ") + std::to_wstring(static_cast<int>(scopes[i]));
                     }
                     if (scopes[i] == IS_PRIVATE) {
-                        privateField_ = true;
+                        privateField = true;
                         if (fromApp) appPrivate = true;
                     }
                 }
@@ -636,7 +635,7 @@ TextService::FieldScope TextService::ReadFieldScope(TfEditCookie ec, ITfContext*
         TipLog(L"入力欄の種類を読めないので、キーや周辺文字を送りません (%s)", failed);
         return FieldScope::Unreadable;
     }
-    return FieldScope::Regular;
+    return privateField ? FieldScope::Private : FieldScope::Regular;
 }
 
 TextService::FieldScope TextService::ProbeFieldScope(ITfContext* context) {
@@ -725,7 +724,7 @@ void TextService::ToggleInputMode(ITfContext* context) {
             ownEdit_ = true;
             JsonValue reply;
             if (Send("ModeToggleRequested", field, "", reply, 800, false, &anchor)) {
-                ApplyOutput(ec, context, reply);
+                ApplyOutput(ec, context, reply, field);
                 sent = true;
             }
             return S_OK;
@@ -760,13 +759,12 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
         TipLog(L"応答を読めません");
         return false;
     }
-    if (!field.empty()) passwordNotified_ = field == kPasswordField;
     return true;
 }
 
 bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& field) {
     const auto scope = ReadFieldScope(ec, context);
-    if (scope != FieldScope::Regular) {
+    if (scope == FieldScope::Password || scope == FieldScope::Unreadable) {
         if (scope == FieldScope::Password) field = kPasswordField;
         return false;
     }
@@ -775,15 +773,18 @@ bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& f
     const bool read = !ContextDisabled(context) && SurroundingText(ec, context, before, after, selection);
     field = std::string("{") + (read ? "\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + "," : "") + "\"composing\":" +
             (composition_ != nullptr ? "true" : "false") + (selection.empty() ? "" : ",\"selection\":" + JsonString(selection)) +
-            (privateField_ ? ",\"traits\":[\"Private\"]" : "") + "}";
+            (scope == FieldScope::Private ? ",\"traits\":[\"Private\"]" : "") + "}";
     return true;
 }
 
-void TextService::ApplyState(const JsonValue& state) {
+void TextService::ApplyState(const JsonValue& state, const std::string& field) {
     if (state.IsNull() || state[L"revision"].number < state_.rev) return;
     ServerState next;
     next.known = true;
-    next.active = state[L"handlesInput"].Bool();
+    // 入力の本体を作る前は、欄を省略した状態照会の応答だけでは Password を解除できない。
+    if (field == kPasswordField || (field.empty() && state_.input == ServerState::Input::Password))
+        next.input = ServerState::Input::Password;
+    else if (state[L"handlesInput"].Bool()) next.input = ServerState::Input::Active;
     next.open = state[L"imeOpen"].Bool();
     next.japanese = state[L"languageMode"].Str() == L"Japanese";
     next.rev = state[L"revision"].number;
@@ -799,10 +800,10 @@ void TextService::ApplyState(const JsonValue& state) {
         const int vk = key[L"vk"].Int();
         if (vk > 0 && vk < 256) next.composing.push_back(static_cast<UINT>(vk));
     }
-    if (next.active != state_.active || !state_.known) TipLog(L"Meltype.exe: %s", next.active ? L"受け持ちます" : L"受け持ちません");
+    if (next.Active() != state_.Active() || !state_.known) TipLog(L"Meltype.exe: %s", next.Active() ? L"受け持ちます" : L"受け持ちません");
     state_ = std::move(next);
     if (state_.keys != preservedFrom_) RefreshPreservedKeys();
-    if (state_.active && state_.open != open_) pendingOpen_ = state_.open ? 1 : 0;
+    if (state_.Active() && state_.open != open_) pendingOpen_ = state_.open ? 1 : 0;
 }
 
 std::string TextService::CaretMoved(bool left) {
@@ -830,7 +831,7 @@ void TextService::Sync(bool entered) {
     }
     if (Send(entered ? "CaretMoved" : "StateRequested", field, entered ? ",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusEntered\":true}" : "", reply, 100, true,
              field.empty() ? nullptr : &anchor))
-        ApplyState(reply[L"state"]);
+        ApplyState(reply[L"state"], field);
     FlushOpen();
 }
 
@@ -922,7 +923,7 @@ void TextService::FinishConversionWait() {
             if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
             const auto scope = self->ReadFieldScope(ec, context.Get());
             if (scope == FieldScope::Password) self->FinishPasswordTransition(ec, context.Get());
-            if (scope != FieldScope::Regular || self->ContextDisabled(context.Get())) return S_OK;
+            if (scope == FieldScope::Password || scope == FieldScope::Unreadable || self->ContextDisabled(context.Get())) return S_OK;
             JsonValue reply;
             // consumed でなければ、Meltype.exe に入力の続きが無い。ここでは何もせず、次のキーで扱う
             if (self->Send("ConversionFinished", "", "", reply) && reply[L"result"][L"consumed"].Bool()) {
@@ -1056,18 +1057,18 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
             AbandonComposition();
         }
     }
-    if (passwordNotified_) {
+    if (state_.input == ServerState::Input::Password) {
         // 同じ入力欄が通常欄へ戻ったときも、最初の打鍵の前に状態を受け取り直す。
         if (ContextDisabled(context)) return false;
         RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READ, [&](TfEditCookie ec) {
             std::string field;
             if (ReadField(ec, context, field)) {
                 JsonValue reply;
-                if (Send("StateRequested", field, "", reply, 100, true)) ApplyState(reply[L"state"]);
+                if (Send("StateRequested", field, "", reply, 100, true)) ApplyState(reply[L"state"], field);
             }
             return S_OK;
         });
-        if (passwordNotified_) return false;
+        if (state_.input == ServerState::Input::Password) return false;
     }
     // 受け取るように言われたキー (Space・半角/全角・切り替えキーなど) は、変換中でもそうでなくても、意味は Meltype.exe が決める
     if (composition_ != nullptr) {
@@ -1093,7 +1094,7 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
         passReason_ = reason;
         return false;
     };
-    if (state_.known && !state_.active) return pass(L"Meltype.exe が受け持たない");
+    if (state_.known && !state_.Active()) return pass(L"Meltype.exe が受け持たない");
     if (InMenuMode()) return pass(L"メニューを開いている");
     if (KeyDown(VK_CONTROL) || KeyDown(VK_MENU) || KeyDown(VK_LWIN) || KeyDown(VK_RWIN)) return pass(L"Ctrl・Alt・Windows キーを押している");
     if (ContextDisabled(context)) return pass(L"この入力欄では使わない");
@@ -1255,7 +1256,7 @@ void TextService::HandleKey(ITfContext* context, UINT vk, wchar_t ch, bool repea
             }
             return S_OK;
         }
-        consumed = ApplyOutput(ec, context, reply);
+        consumed = ApplyOutput(ec, context, reply, field);
         // 英数で使わなかった文字は、送り直さずにここで入れる (送り直しが届かないアプリがある)
         const JsonValue& result = reply[L"result"];
         if (!consumed && !open_ && ch >= L' ' && ch <= L'~' && vk != VK_SPACE && !control && !alt && !command &&
@@ -1321,7 +1322,7 @@ void TextService::HandleAltKey(UINT vk, UINT flags) {
             ownEdit_ = true;
             JsonValue reply;
             sent = Send(type, field, key, reply, 800, false, &anchor);
-            if (sent) ApplyOutput(ec, context.Get(), reply);
+            if (sent) ApplyOutput(ec, context.Get(), reply, field);
             return S_OK;
         });
         ownEdit_ = false;
@@ -1463,8 +1464,8 @@ RECT TextService::CaretRect(TfEditCookie ec, ITfContext* context) {
 
 // ---- 入力欄への反映 ----
 
-bool TextService::ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonValue& reply) {
-    ApplyState(reply[L"state"]);
+bool TextService::ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonValue& reply, const std::string& field) {
+    ApplyState(reply[L"state"], field);
     const JsonValue& result = reply[L"result"];
     Apply(ec, context, result);
     return result[L"consumed"].Bool();
@@ -1473,7 +1474,7 @@ bool TextService::ApplyOutput(TfEditCookie ec, ITfContext* context, const JsonVa
 void TextService::CommittedOutside(const std::string& field) {
     if (disabled_) return;
     JsonValue reply;
-    if (Send("CommittedByApp", field, CaretMoved(false), reply)) ApplyState(reply[L"state"]);
+    if (Send("CommittedByApp", field, CaretMoved(false), reply)) ApplyState(reply[L"state"], field);
 }
 
 void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& result) {
@@ -1545,7 +1546,7 @@ void TextService::Apply(TfEditCookie ec, ITfContext* context, const JsonValue& r
             // 変換中の文字を消した (BackSpace で全部消した・Esc で取り消した)。
             // Meltype.exe がこの入力を受け持っていない (一時停止した・つなぎ直して入力の続きが無い) ときは、消さずにそのまま確定する
             ITfRange* range = nullptr;
-            if (state_.active && SUCCEEDED(composition_->GetRange(&range))) {
+            if (state_.Active() && SUCCEEDED(composition_->GetRange(&range))) {
                 range->SetText(ec, 0, L"", 0);
                 range->Release();
             }
@@ -1821,17 +1822,21 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
     const bool canReadField = !disabled_ && !deactivated_ && compositionContext_ != nullptr;
     const auto scope = canReadField ? ReadFieldScope(ec, compositionContext_) : FieldScope::Unreadable;
     const bool password = scope == FieldScope::Password;
-    const bool privateField = canReadField && (privateField_ || scope == FieldScope::Unreadable);
-    if (scope == FieldScope::Regular && !lastConverting_ && !ContextDisabled(compositionContext_)) {
+    const bool privateField = canReadField && (scope == FieldScope::Private || scope == FieldScope::Unreadable);
+    if ((scope == FieldScope::Regular || scope == FieldScope::Private) && !lastConverting_ && !ContextDisabled(compositionContext_)) {
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (SUCCEEDED(composition->GetRange(&range))) {
             wchar_t buffer[65];
             ULONG length = 0;
             if (SUCCEEDED(range->GetText(ec, 0, buffer, 64, &length)) && length > 0 && length < 64) {
-                resumeRange_ = range;
-                resumeContext_ = compositionContext_;
-                resumeText_.assign(buffer, length);
-                resumePrivate_ = privateField;
+                // 再開まで Private を DLL に保持せず、未確定入力を持つ Core に先に渡す。
+                // 応答がなければ Core が同じ未確定入力を持つと分からないので、再開しない。
+                JsonValue reply;
+                if (!privateField || (Send("StateRequested", kPrivateField, "", reply, 100, true) && !reply[L"result"][L"view"].IsNull())) {
+                    resumeRange_ = range;
+                    resumeContext_ = compositionContext_;
+                    resumeText_.assign(buffer, length);
+                }
             }
         }
     }
@@ -1866,13 +1871,13 @@ void TextService::ResumeOrCommit(ITfContext* context) {
     resumeText_.clear();
     bool resumed = false;
     bool password = false;
-    bool privateField = resumePrivate_;
+    bool privateField = false;
     if (context != nullptr && resumeContext.Get() == context && composition_ == nullptr) {
         RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
             const auto scope = ReadFieldScope(ec, context);
             password = scope == FieldScope::Password;
-            privateField = privateField || privateField_ || scope == FieldScope::Unreadable;
-            if (scope != FieldScope::Regular || ContextDisabled(context)) return S_OK;
+            privateField = scope == FieldScope::Private || scope == FieldScope::Unreadable;
+            if (password || scope == FieldScope::Unreadable || ContextDisabled(context)) return S_OK;
             // 文字がアプリに確定されたときのままで、キャレットがその後ろにある (選んでいない) ときだけ
             wchar_t buffer[65];
             ULONG length = 0;
@@ -2007,7 +2012,7 @@ void TextService::CommitInSession(TfEditCookie ec, ITfContext* context, bool kee
         keepAppCaret_ = keepAppCaret;
         JsonValue reply;
         // クリック・別の入力欄で確定する (keepAppCaret) ときは、キャレットが動いたので前の語を確定し直さない
-        if (Send("CommitRequested", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply);
+        if (Send("CommitRequested", field, keepAppCaret ? CaretMoved(left) : "", reply)) ApplyOutput(ec, context, reply, field);
         keepAppCaret_ = false;
         EndComposition(ec);
     }
@@ -2034,14 +2039,14 @@ void TextService::SelectCandidate(int index) {
         if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
         const auto scope = self->ReadFieldScope(ec, context.Get());
         if (scope == FieldScope::Password) self->FinishPasswordTransition(ec, context.Get());
-        if (scope != FieldScope::Regular || self->ContextDisabled(context.Get())) return S_OK;
-        const std::string field = self->privateField_
+        if (scope == FieldScope::Password || scope == FieldScope::Unreadable || self->ContextDisabled(context.Get())) return S_OK;
+        const std::string field = scope == FieldScope::Private
             ? R"({"composing":true,"traits":["Private"]})"
             : R"({"composing":true})";
         self->ownEdit_ = true;
         JsonValue reply;
         if (self->Send("CandidateClicked", field, ",\"index\":" + std::to_string(index), reply)) {
-            self->ApplyOutput(ec, context.Get(), reply);
+            self->ApplyOutput(ec, context.Get(), reply, field);
         }
         return S_OK;
     });

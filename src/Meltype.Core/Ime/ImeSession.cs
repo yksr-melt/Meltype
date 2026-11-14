@@ -45,8 +45,6 @@ internal sealed class ImeSession
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
     private const int ContextLength = 20;
 
-    public bool HasPendingInput => _session.HasPendingInput || _altDown != 0;
-
     public void Close(ImeField? field = null)
     {
         field ??= _field;

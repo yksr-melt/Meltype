@@ -146,8 +146,7 @@ class NativeBoundaryTests(unittest.TestCase):
         self.assertIsNone(enter["view"])
 
     def test_direct_mode_passes_accent_without_commit(self):
-        # 新しい入力先では、入力モードの選択にも入力欄の事実を送る。
-        self.send({"type": "AlphanumericModeSelected", "field": {}})
+        self.send({"type": "AlphanumericModeSelected"})
         self.assert_pass(self.key(ord("e")))
         self.assert_pass(self.key(0x0301))
 

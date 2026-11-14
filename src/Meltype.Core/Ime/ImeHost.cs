@@ -37,22 +37,13 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
 {
     public const int Version = 1;
 
-    /// <summary>1 つの ImeHost が保持するインスタンスの上限 (TSF ではふつうは 1 つ)。</summary>
-    private const int MaxInstances = 16;
+    /// <summary>1 つの ImeHost で持つ入力欄の数の上限 (TSF では 1 つのスレッドに 1 つなので、ふつうは 1 つ)。</summary>
+    private const int MaxSessions = 16;
 
-    private sealed class Instance(string id, long registeredAt)
-    {
-        public string Id { get; } = id;
-        public long RegisteredAt { get; } = registeredAt;
-        public ImeSession? Session { get; set; }
-        // 入力の本体を作る前は、入力を受け持つか決めるための事実だけを持つ。
-        public ImeField? Field { get; set; }
-    }
-
-    private readonly Instance?[] _instances = new Instance?[MaxInstances];
+    private readonly Dictionary<string, ImeSession> _sessions = [];
     private static long s_rev;
 
-    public int SessionCount => _instances.Count(instance => instance?.Session is not null);
+    public int SessionCount => _sessions.Count;
 
     /// <summary>JSON の出来事を処理する。読めない・版が違う出来事には、何も受け持たない応答を返す。</summary>
     public string Handle(string json) => (Parse(json) is { } e ? Handle(e) : Inactive()).ToJson();
@@ -82,8 +73,11 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
     /// <summary>フロントがいなくなった (TSF のパイプが切れた): 入力欄をすべて閉じる。</summary>
     public void CloseAll()
     {
-        foreach (var instance in _instances) instance?.Session?.Close();
-        Array.Clear(_instances);
+        foreach (var session in _sessions.Values)
+        {
+            session.Close();
+        }
+        _sessions.Clear();
     }
 
     public ImeOutput Handle(ImeEvent e)
@@ -94,69 +88,26 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             return Inactive();
         }
         var id = e.Instance ?? "";
-        var slot = Array.FindIndex(_instances, instance => instance?.Id == id);
         if (e.Type == ImeEventType.InstanceDestroyed)
         {
-            if (slot >= 0)
-            {
-                var closing = _instances[slot];
-                _instances[slot] = null;
-                closing?.Session?.Close(e.Field);
-            }
+            if (_sessions.Remove(id, out var closing)) closing.Close(e.Field);
             return Inactive();
         }
-
-        var rev = NextRev();
-        var instance = slot >= 0 ? _instances[slot] : null;
-        if (instance?.Session is { } session) return session.Handle(e, rev);
-
-        var current = settings();
-        var field = e.Field ?? instance?.Field;
-        if (field is null)
+        if (!_sessions.TryGetValue(id, out var session))
         {
-            // TSF は起動時に設定による捕捉条件を先に問い合わせる。入力を始めるには入力欄の通知が要る。
-            var capture = e.Type == ImeEventType.StateRequested && ImeSession.IsActive(environment, current, null);
-            return new(ImeSession.InitialState(capture, e.ImeOpen ?? true, current, false, rev), Pass);
+            var current = settings();
+            var active = ImeSession.IsActive(environment, current, e.Field);
+            // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
+            // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
+            if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.JapaneseModeSelected or ImeEventType.AlphanumericModeSelected) ||
+                e.Field?.Composing == true || _sessions.Count >= MaxSessions)
+            {
+                return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
+            }
+            session = new ImeSession(environment, settings);
+            _sessions[id] = session;
         }
-
-        if (instance is null)
-        {
-            slot = FindAvailableSlot();
-            if (slot < 0) return new(ImeSession.InitialState(false, e.ImeOpen ?? true, current, false, rev), Pass);
-            // 以前の入力先の情報は、この枠を使う新しい instance に引き継がない。
-            instance = new Instance(id, rev);
-        }
-
-        var active = ImeSession.IsActive(environment, current, field);
-        // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
-        // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
-        if (!active || field.Composing ||
-            e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.JapaneseModeSelected or ImeEventType.AlphanumericModeSelected))
-        {
-            if (e.Field is not null)
-                instance.Field = new ImeField { App = field.App, Traits = [.. field.Traits], Composing = field.Composing, CanRemove = field.CanRemove };
-            _instances[slot] = instance;
-            return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(field.App), ImeSession.AnnouncesFocus(e), rev), Pass);
-        }
-        session = instance.Session = new ImeSession(environment, settings);
-        instance.Field = null;
-        _instances[slot] = instance;
-        return session.Handle(e.Field is null ? e with { Field = field } : e, rev);
-    }
-
-    /// <summary>空き枠を優先し、満杯なら入力が残っていない最古の枠を再利用する。</summary>
-    private int FindAvailableSlot()
-    {
-        var oldest = -1;
-        var registeredAt = long.MaxValue;
-        for (var slot = 0; slot < _instances.Length; slot++)
-        {
-            if (_instances[slot] is not { } instance) return slot;
-            if (instance.Session?.HasPendingInput == true || instance.RegisteredAt >= registeredAt) continue;
-            oldest = slot;
-            registeredAt = instance.RegisteredAt;
-        }
-        return oldest;
+        return session.Handle(e, NextRev());
     }
 
     private static long NextRev() => Interlocked.Increment(ref s_rev);
