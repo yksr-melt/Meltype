@@ -34,6 +34,10 @@ internal sealed class KanjiPartsConversion : IUtilityConversion
     {
         // 呼び名 2 つ以上。1 つだけ (ごんべん) は、その要素を含む字が多すぎて探す役に立たない
         var (names, kanji) = Data.Value;
+        // 先頭は部首にしか使わない名前 (ごんべん・さんずい) だけ。字の名前 (き・ひ・め) や、ふだんの語と同じ読みの名前
+        // (かける・こころ・れっか = 劣化) で始まると、「名詞 に 動詞」の句 (きにかける = 気にかける、めにみる) と区別できない。
+        // 2 つ目からは字の名前も使える (にんべんにき)
+        if (!StartsWithRadicalName(reading, names)) return [];
         var descriptions = Parse(reading, names).Where(parts => parts.Count >= 2).ToList();
         if (descriptions.Count == 0) return [];
         // 説明どおりの字 (説明に無い要素の少ない字) を先に。同じなら kanji-parts.txt の順 (よく使う字が先)。OrderBy は同じ値の順を保つ
@@ -42,6 +46,16 @@ internal sealed class KanjiPartsConversion : IUtilityConversion
             .Where(k => k.Extra >= 0)
             .OrderBy(k => k.Extra)
             .Select(k => k.Kanji).Take(MaxCandidates).ToList();
+    }
+
+    /// <summary>読みが、ふだんの語の読み (readings.txt) でない呼び名と「に」で始まるか。</summary>
+    private static bool StartsWithRadicalName(string reading, IReadOnlyDictionary<string, string> names)
+    {
+        for (var length = 1; length < reading.Length; length++)
+        {
+            if (reading[length] == 'に' && names.ContainsKey(reading[..length]) && !CommonReadings.Words.Contains(reading.AsSpan(0, length))) return true;
+        }
+        return false;
     }
 
     /// <summary>

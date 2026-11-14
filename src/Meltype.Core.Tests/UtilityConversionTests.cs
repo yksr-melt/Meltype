@@ -222,7 +222,9 @@ internal static class UtilityConversionTests
         // 逆向き: 呼び名 1 つだけ・「と」でつないだもの・呼び名でない語は出さない
         Assert.True(Kanji("ごんべん").Count == 0, "1 つだけ");
         Assert.True(Kanji("ごんべんとふるとり").Count == 0, "と ではつながない");
-        foreach (var phrase in new[] { "ひとくち", "ひとつき", "ひととき", "ひとめ", "かねとひと", "いしとき", "にほんにいく", "きのうにいった" })
+        // 「名詞 に 動詞」の句 (きにかける = 気にかける)。先頭は部首にしか使わない名前だけにする
+        foreach (var phrase in new[] { "ひとくち", "ひとつき", "ひととき", "ひとめ", "かねとひと", "いしとき", "にほんにいく", "きのうにいった",
+            "きにかける", "ひにかける", "めにみる", "てにいれる", "みみにいれる", "こころにきめる", "かいにいく", "やまにのぼる", "かわにいく", "いしにかく" })
             Assert.True(Kanji(phrase).Count == 0, phrase);
         // よく使う語 (readings.txt) とカタカナ語は、どれも呼び名の並びにならない。なれば、普通の変換が漢字の候補に置き換わる
         foreach (var name in new[] { "readings.txt", "readings-extra.txt", "katakana.txt" })
