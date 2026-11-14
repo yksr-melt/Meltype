@@ -5712,6 +5712,54 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1899_TechnicalWordBeforeSuru_StaysEnglish()
+    {
+        // #1899: share は しゃれ とも読める。前が日本語の語 (ファイルshareして) でも、技術用語 + する の活用なら英単語として読む。
+        foreach (var (typed, expected) in new[]
+        {
+            ("fairusharesite", "ふぁいるshareして"),
+            ("fairuwosharesite", "ふぁいるをshareして"),
+            ("fairushareshite", "ふぁいるshareして"),
+            ("fairusharesuru", "ふぁいるshareする"),
+            ("fairushareshita", "ふぁいるshareした"),
+            ("koresharesite", "これshareして"),
+            ("kyounosharesite", "きょうのshareして"),
+            ("mainnisharesite", "mainにshareして"),
+            // share 以外の技術用語も同じ (make は まけ とも読める)
+            ("fairumakeshite", "ふぁいるmakeして"),
+            // おしゃれ・おまけ は 1 語の日本語として読む (o + share / o + make に割らない)
+            ("osharesuru", "おしゃれする"),
+            ("oshareshite", "おしゃれして"),
+            ("omakesuru", "おまけする"),
+            ("omakeshite", "おまけして"),
+            // 2・3 文字の技術用語 (uri・sha) は、日本語の語 (うり・しゃ) のまま
+            ("koreurisuru", "これうりする"),
+            ("koreurishite", "これうりして"),
+            ("koreshasuru", "これしゃする"),
+            ("koreshashite", "これしゃして"),
+            ("koregotosuru", "これごとする"),
+            // 逆向き: 入力の先頭の share は今までどおり日本語 (しゃれ)
+            ("share", "しゃれ"),
+            ("sharesuru", "しゃれする"),
+            ("sharesite", "しゃれして"),
+            ("makeshite", "まけして"),
+            // 技術用語でない英単語 (memo) と付属語 (ため・ので) は今までどおり日本語
+            ("memoshite", "めもして"),
+            ("korememoshite", "これめもして"),
+            ("fairumemoshite", "ふぁいるめもして"),
+            ("tameshite", "ためして"),
+            ("korewotameshite", "これをためして"),
+            ("sounanodeshite", "そうなのでして"),
+            ("korekarasiteshite", "これからしてして"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void EnglishVerb_PlusSuru_PendingConsonantIsShownOnce()
     {
         // 英単語 + する の活用の打ちかけの子音が 2 回出ていた (googleしまss)。Space で変換する読みも同じ

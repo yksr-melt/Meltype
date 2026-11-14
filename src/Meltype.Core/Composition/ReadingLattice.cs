@@ -61,6 +61,9 @@ public sealed partial class CompositionDetector
     // ---- 連接コスト ----
     // 日本語と英語の切り替え。日本語の側が名詞に付く付属語 (が・を・に・で・する: github|で) なら 0
     private const double SwitchCost = 1;
+    // 日本語の語の綴りが技術用語の英単語と同じで、後ろが する の活用 (share|して) のとき: 英語の語 + する とも読める。
+    // 英語の道だけが日本語からの切り替えの重みを払うので、日本語の道にも切り替えの重みと、英語の方を選ぶ分 (0.5) を足す (issue #1899)
+    private const double AmbiguousSuruCost = SwitchCost + 0.5;
     // 英文の続き ("I want ") から日本語への切り替え。付属語でも足す
     private const double SentenceSwitchCost = 2;
     // 英単語どうしがスペースなしで続く
@@ -207,6 +210,16 @@ public sealed partial class CompositionDetector
                          !(edge.Kana.Length > 1 && NounParticles.Contains(edge.Kana[..1]) && from.Edge.English && from.Edge.End - from.Edge.Start >= 3)) step += SwitchCost;
                 // 前の英語の文脈からの切り替えは、英語の語から始めた道も最初の日本語で数える (hello + sushi|が を すしが と同じ重さの差で比べる)
                 if (state.ContextSwitch && edge.Start > 0) step += englishSentence ? SentenceSwitchCost : SwitchCost;
+                // 直前の日本語の語 (付属語でない) の綴りが技術用語 (share) で、後ろが する の活用 (して) なら、英単語 + する とも読める。
+                // 2・3 文字の語 (sha・uri) は日本語の語 (しゃ・うり) と紛れやすく、する を付けないので除く。
+                // 英語の道だけが日本語からの切り替えの重みを払うので、日本語の道に足して比べる (issue #1899)
+                if (state.Side == Side.Japanese && !from.Edge.English && !from.Edge.Neutral && !from.Edge.Particle && from.Edge.Start > 0 &&
+                    !RomajiTypoCorrector.IsFunctionWord(from.Edge.Kana) && (edge.Kana == "し" || IsSuruForm(edge.Kana)) &&
+                    from.Edge.End - from.Edge.Start >= 4 && char.IsAsciiLetterLower(text[from.Edge.Start]) && char.IsAsciiLetterLower(text[from.Edge.End - 1]))
+                {
+                    var previous = text[from.Edge.Start..from.Edge.End];
+                    if (previous.All(char.IsAsciiLetterLower) && IsTechnicalEnglishWord(previous) && !IsJapaneseOriginWord(previous)) step += AmbiguousSuruCost;
+                }
                 next = new LatticeState(Side.Japanese, edge.Particle, state.AllEnglish && !edge.Letters, false);
             }
             next = next with { Sokuon = japanese && edge.Kana.EndsWith('っ') && DoubledAt(edge.End - 1) };
