@@ -26,13 +26,19 @@ on:
 permissions:
   contents: read
 
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+
 jobs:
   winget:
     runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - name: Check token
-        shell: pwsh
         env:
           WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
         run: |

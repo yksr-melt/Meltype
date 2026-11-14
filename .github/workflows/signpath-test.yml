@@ -18,6 +18,13 @@ concurrency:
   group: signpath-test-${{ github.ref }}
   cancel-in-progress: false
 
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
+
 jobs:
   build:
     runs-on: windows-latest
@@ -33,17 +40,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Build
-        shell: pwsh
         run: |
           dotnet build Meltype.sln -c Release
-          if ($LASTEXITCODE -ne 0) { throw 'ビルドに失敗しました。' }
       - name: Publish unsigned application
         id: publish
-        shell: pwsh
         run: |
           $out = Join-Path $env:RUNNER_TEMP 'signpath-unsigned'
           dotnet publish src/Meltype.Windows/Meltype.Windows.csproj -c Release -o $out -p:DebugType=none -p:IncludeSourceRevisionInInformationalVersion=false
-          if ($LASTEXITCODE -ne 0) { throw 'publish に失敗しました。' }
           Copy-Item LICENSE (Join-Path $out 'LICENSE.txt')
           Copy-Item THIRD-PARTY-NOTICES.md (Join-Path $out 'THIRD-PARTY-NOTICES.txt')
           $version = [Diagnostics.FileVersionInfo]::GetVersionInfo((Join-Path $out 'Meltype.exe')).ProductVersion
@@ -57,10 +60,8 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
       # publish の構成も確かめた後、テスト成功を Artifact 保存と署名の必須条件にする。
       - name: Test application before uploading
-        shell: pwsh
         run: |
           dotnet run --project src/Meltype.Windows.Tests -c Release --no-build
-          if ($LASTEXITCODE -ne 0) { throw 'テストに失敗しました。' }
       - name: Upload unsigned input for origin verification
         id: unsigned
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -88,7 +89,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Check confirmed configuration
-        shell: pwsh
         # Environment の変数は runner が Environment を読み込んだ後、step で参照する。
         env:
           SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
@@ -130,7 +130,6 @@ jobs:
           parameters: |
             version: ${{ toJSON(needs.build.outputs.version) }}
       - name: Verify signed application
-        shell: pwsh
         env:
           SIGNPATH_TEST_CERTIFICATE_SHA256: ${{ vars.SIGNPATH_TEST_CERTIFICATE_SHA256 }}
         run: |
