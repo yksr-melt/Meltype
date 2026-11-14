@@ -382,6 +382,8 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     /** No native converter or keyboard assets are used in this emergency UI. */
+    internal fun emergencyKeyboardForSmokeTest(): View = buildEmergencyKeyboardView()
+
     private fun buildEmergencyKeyboardView(): View {
         val pad = (16 * resources.displayMetrics.density).toInt()
         return LinearLayout(this).apply {
