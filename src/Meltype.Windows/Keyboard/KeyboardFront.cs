@@ -103,8 +103,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     public MeltypeSession CreateSession(Func<Settings> settings) => _composition.CreateSession(settings, directModeDetection: true);
 
-    public string? ReadingOf(string text) => _composition.GuessReading(text) is { Length: > 0 } reading ? reading : null;
-
     public SnippetStore Snippets => _composition.Snippets;
 
     public string? ClipboardText => CompositionService.ClipboardText;

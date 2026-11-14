@@ -13,7 +13,7 @@ namespace Meltype.NowPlaying;
 /// 裏のスレッドで読み直し、Read はその結果をすぐ返す (「なう」を時間をあけて 1 回だけ変換しても、その場で曲が出るように)。
 /// 曲が変わらない間は何も読まない (polling しない)。覚えない (今の 1 曲だけ持つ)・送らない。
 ///
-/// WinRT の C# 投影が使えないので、WinRtCandidates と同じく COM の関数表 (vtable) を直接呼ぶ。
+/// WinRT の C# 投影が使えないので、COM の関数表 (vtable) を直接呼ぶ。
 /// 番号は Windows.Foundation.UniversalApiContract.winmd の定義に合わせてある:
 ///   IGlobalSystemMediaTransportControlsSessionManagerStatics : { RequestAsync }                  (6)
 ///   IGlobalSystemMediaTransportControlsSessionManager        : { GetCurrentSession, GetSessions, add/remove_CurrentSessionChanged, add/remove_SessionsChanged } (6..11)

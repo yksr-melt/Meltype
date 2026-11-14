@@ -14,8 +14,6 @@ internal static class TestRunner
     {
         using var spellChecker = Detection.WindowsSpellChecker.Shared;
         TestSupport.WordChecker = Detection.WindowsSpellChecker.Shared;
-        // dotnet run --project src/Meltype.Windows.Tests -- --convert きょうはいいてんきです
-        // で、Microsoft IME の変換エンジン (MSIME.Japan) が使えるかを確かめる。
         // dotnet run --project src/Meltype.Windows.Tests -- --autocorrect teh recieve
         // で、Windows のスペルチェッカーの自動修正 (teh → the) を確かめる。
         if (args.FirstOrDefault() == "--autocorrect")
@@ -33,18 +31,15 @@ internal static class TestRunner
             return 0;
         }
         if (args.FirstOrDefault() == "--units") { DebugUnits.Run(args[1]); return 0; }
-        // henkan-test / japanese-henkan-test を Windows で: アプリと同じく Windows のスペルチェッカーを使い、
-        // 漢字の読みは Microsoft IME の逆変換で求める。Mozc (MELTYPE_MOZC、無ければ native\mozc\bin) が無ければ Microsoft IME で変換する。
+        // henkan-test / japanese-henkan-test を Windows で: アプリと同じく Windows のスペルチェッカーを使う。
+        // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの。
         if (args.FirstOrDefault() is "--henkan" or "--jht" or "--jht-batch")
         {
             if (Detection.WindowsSpellChecker.Shared.IsAvailable) CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
-            var bundled = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "native", "mozc", "bin", "meltype_mozc_helper.exe");
-            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MELTYPE_MOZC")) && File.Exists(bundled)) Environment.SetEnvironmentVariable("MELTYPE_MOZC", Path.GetFullPath(bundled));
-            using var ime = new Composition.MsImeKanjiConverter();
-            Henkan.FallbackConverter = ime;
+            if (MozcHelper() is { } helper) Environment.SetEnvironmentVariable("MELTYPE_MOZC", helper);
             if (args[0] == "--jht-batch")
             {
-                Jht.Batch(ime.Reading, Henkan.Keyboard, () => Henkan.EngineName);
+                Jht.Batch(Henkan.ReadingOf, Henkan.Keyboard, () => Henkan.EngineName);
                 Henkan.Shutdown();
                 return 0;
             }
@@ -56,7 +51,7 @@ internal static class TestRunner
                 return 0;
             }
             var slash = text.IndexOf(" / ", StringComparison.Ordinal);
-            Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, ime.Reading, Henkan.Keyboard, Henkan.EngineName);
+            Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, Henkan.ReadingOf, Henkan.Keyboard, Henkan.EngineName);
             Henkan.Shutdown();
             return 0;
         }
@@ -73,14 +68,10 @@ internal static class TestRunner
             // 本物の変換エンジンをつないだ変換ボックスに 1 文字ずつ打ち、表示の変化を見る (ライブ変換 ON)。
             // 本物のアプリと同じく Windows のスペルチェッカーも使う。
             CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
-            using var ime = new Composition.MsImeKanjiConverter();
-            using var winrt = new Composition.WinRtCandidates();
-            // native\mozc\bin に Mozc の変換ヘルパーがあれば、アプリと同じく Mozc + Microsoft IME (両方) で変換する。
-            // MELTYPE_ENGINE=System なら Microsoft IME だけ。
-            using var mozc = new Composition.MozcConverter(Path.GetFullPath(Path.Combine("native", "mozc", "bin", "meltype_mozc_helper.exe")), Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
-            var engine = Enum.TryParse<Config.ConversionEngine>(Environment.GetEnvironmentVariable("MELTYPE_ENGINE"), out var chosen) ? chosen : Config.ConversionEngine.Hybrid;
-            var converter = new Composition.HybridConverter(() => engine, mozc.IsInstalled ? mozc : null, ime, r => winrt.Get(r));
-            Console.WriteLine($"変換エンジン: {(mozc.IsInstalled && engine != Config.ConversionEngine.System ? "Mozc + Microsoft IME" : "Microsoft IME")}");
+            // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの (Zenzai は使わない)。
+            using var mozc = new Composition.MozcConverter(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
+            var converter = new Composition.HybridConverter(mozc);
+            Console.WriteLine($"変換エンジン: {(mozc.IsInstalled ? "Mozc" : "なし (かなのまま)")}");
             var translations = Composition.TranslationDictionary.Load();
             foreach (var text in args.Skip(1))
             {
@@ -106,26 +97,6 @@ internal static class TestRunner
             return 0;
         }
         if (args.FirstOrDefault() == "--winmd") { WinMdProbe.Run(args[1], args.Skip(2)); return 0; }
-        if (args.FirstOrDefault() == "--candidates") { using var winrt = new Composition.WinRtCandidates(); foreach (var r in args.Skip(1)) Console.WriteLine($"{r}: {string.Join(", ", winrt.Get(r))}"); foreach (var e in Diagnostics.Log.Snapshot()) Console.WriteLine(e); return 0; }
-        if (args.FirstOrDefault() == "--mozc")
-        {
-            // dotnet run --project src/Meltype.Windows.Tests -- --mozc <meltype_mozc_helper.exe> はははきょうしょくじにいきました ...
-            // Mozc と Microsoft IME の変換結果を並べて比べる。
-            using var mozc = new Composition.MozcConverter(args[1], Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
-            using var ime = new Composition.MsImeKanjiConverter();
-            foreach (var reading in args.Skip(2))
-            {
-                var watch = System.Diagnostics.Stopwatch.StartNew();
-                var clauses = mozc.ConvertClauses(reading);
-                var elapsed = watch.ElapsedMilliseconds;
-                Console.WriteLine(reading);
-                Console.WriteLine($"  Mozc ({elapsed}ms): {(clauses is null ? "(失敗)" : string.Join("|", clauses.Select(c => c.Text)))}");
-                Console.WriteLine($"  IME : {string.Join("|", ime.ConvertClauses(reading)?.Select(c => c.Text) ?? [])}");
-            }
-            foreach (var entry in Diagnostics.Log.Snapshot()) Console.WriteLine($"  {entry}");
-            return 0;
-        }
-        if (args.FirstOrDefault() == "--reading") { using var c = new Composition.MsImeKanjiConverter(); foreach (var t in args.Skip(1)) Console.WriteLine($"{t} → {c.Reading(t) ?? "(なし)"}"); return 0; }
         if (args.FirstOrDefault() == "--gen-emoji") { EmojiGenerator.Run(args[1], args[2], args[3]); return 0; }
         if (args.FirstOrDefault() == "--eval") { Quality.Print(Quality.Run()); return 0; }
         if (args.FirstOrDefault() == "--tip-server") return TipHarness.Server(int.TryParse(args.ElementAtOrDefault(1), out var seconds) ? seconds : 600);
@@ -185,38 +156,17 @@ internal static class TestRunner
             return 0;
         }
         if (args.FirstOrDefault() == "--runtime-closure") { RuntimeClosure.Run(args[1]); return 0; }
-        if (args.FirstOrDefault() == "--context")
-        {
-            // dotnet run --project src/Meltype.Windows.Tests -- --context 財布の:かわ 川に:はし
-            using var converter = new Composition.MsImeKanjiConverter();
-            foreach (var pair in args.Skip(1))
-            {
-                var parts = pair.Split(':');
-                Console.WriteLine($"{parts[0]} + {parts[1]}: 単独={converter.Convert(parts[1])}  " +
-                    string.Join("  ", new uint[] { 0x10, 0x20, 0x30 }.Select(f => $"0x{f:X}={converter.ProbeWithContext(parts[0], parts[1], f)}")) +
-                    $"  読みごと={converter.Convert(parts[0] + parts[1])}");
-            }
-            return 0;
-        }
-        if (args.FirstOrDefault() == "--convert")
-        {
-            using var converter = new Composition.MsImeKanjiConverter();
-            var translations = Composition.TranslationDictionary.Load();
-            foreach (var text in args.Skip(1))
-            {
-                Console.WriteLine($"{text} → {converter.Convert(text) ?? "(変換できない)"}");
-                var clauses = converter.ConvertClauses(text);
-                Console.WriteLine("  解析: " + converter.DescribeMorph(text));
-                Console.WriteLine("  文脈付き (この本は): " + string.Join(" | ", converter.ConvertClauses(text, "この本は")?.Select(c => $"{c.Reading}={c.Text}") ?? ["(取れない)"]));
-                Console.WriteLine("  文節: " + (clauses is null ? "(取れない)" : string.Join(" | ", clauses.Select(c => $"{c.Reading}={c.Text}"))));
-            }
-            foreach (var entry in Diagnostics.Log.Snapshot()) Console.WriteLine(entry);
-            return converter.IsAvailable ? 0 : 1;
-        }
-
         if (args.FirstOrDefault() == "--explain") { TestHost.Explain(args.Skip(1)); return 0; }
 
         return TestHost.Run([typeof(TestSupport).Assembly, typeof(TestRunner).Assembly], args.FirstOrDefault());
+    }
+
+    /// <summary>Mozc の変換ヘルパー (MELTYPE_MOZC、無ければ native\mozc\bin のもの)。どちらも無ければ null。</summary>
+    internal static string? MozcHelper()
+    {
+        if (Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } configured) return configured;
+        var bundled = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "native", "mozc", "bin", "meltype_mozc_helper.exe"));
+        return File.Exists(bundled) ? bundled : null;
     }
 
     /// <summary>--render-forms 用の、学習した語の見本。</summary>

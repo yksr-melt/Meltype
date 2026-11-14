@@ -68,7 +68,7 @@ FCITX_CONFIGURATION(MeltypeConfig,
 
 struct Native {
     void *handle = nullptr;
-    int (*initMozc)(const char *, const char *) = nullptr;
+    int (*init)(const char *, int (*)(const char *)) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
@@ -82,17 +82,18 @@ struct Native {
             return false;
         }
         auto sym = [this](const char *name) { return dlsym(handle, name); };
-        initMozc = reinterpret_cast<decltype(initMozc)>(sym("meltype_init_mozc"));
+        init = reinterpret_cast<decltype(init)>(sym("meltype_init"));
         setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
         create = reinterpret_cast<decltype(create)>(sym("meltype_ime_create"));
         handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
         destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
-        if (!initMozc || !setConversionReady || !create || !handle_ || !destroy || !free) {
+        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
-        if (!initMozc((meltypeDir() + "/mozc/meltype_mozc_helper").c_str(), nullptr)) {
+        // 英単語の判定は同梱の一覧 (nullptr)
+        if (!init(meltypeDir().c_str(), nullptr)) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
         return true;

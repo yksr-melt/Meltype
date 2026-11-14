@@ -17,9 +17,6 @@ public interface IImeEnvironment
     /// <summary>入力欄ごとの入力の本体。settings は、その入力欄のアプリの設定。辞書・学習データはフロントの中で共有する。</summary>
     MeltypeSession CreateSession(Func<Settings> settings);
 
-    /// <summary>漢字かな交じりの文の読み (再変換)。OS の機能で分からなければ null。</summary>
-    string? ReadingOf(string text);
-
     /// <summary>ユーザーが登録した定型文。</summary>
     SnippetStore Snippets { get; }
 
