@@ -35,22 +35,48 @@ internal static partial class PassThroughBench
         {
             using var runtime = new MeltypeRuntime(directory);
             var settings = new Settings();
-            Verdict Classify(string letters, bool final) => runtime.ClassifyDirect(letters, final, settings);
+            Verdict Word(string letters, bool final) => runtime.ClassifyDirect(letters, final, settings);
+            // 案の語の判定: 語全体か、区間分けの日本語の区間 (kyouha|google|dekensaku の kyouha) が日本語。
+            // 区間分けの日本語の区間だけで決めると、短い識別子 (i・func・uint) を日本語にする (文字列の外で 2.37%)
+            Verdict Classify(string letters, bool final)
+            {
+                if (Word(letters, final) == Verdict.Japanese) return Verdict.Japanese;
+                var text = new CompositionText(runtime.Detector);
+                foreach (var c in letters) text.Append(c);
+                return text.Segments().Any(s => !s.IsEnglish && Word(s.Raw, true) == Verdict.Japanese) ? Verdict.Japanese : Verdict.English;
+            }
 
             var code = CodeTokens(root).ToList();
             var romaji = Impact.Readings().Select(Impact.ToRomaji).OfType<string>().Where(w => w.Length >= 2).Distinct()
                 .Select(w => new Token(w, "", "", "readings.txt")).ToList();
 
-            Report("今: 打ち始めから 1 文字ずつ判定", code, romaji, t => Incremental(t, Classify));
-            Report("語の形だけ: 語を打ち終えてから判定 (_・数字・大文字を含む語は英字)", code, romaji, t => Shape(t, Classify));
-            Report("語の形 + 直前の記号", code, romaji, t => !SymbolBefore(t) && Shape(t, Classify));
-            Report("語の形 + 直前の記号・キーワード", code, romaji, t => Before(t, Classify));
-            Report("語の形 + 直前の記号・キーワード + 直後の記号 (Space の後まで待つ)", code, romaji, t => Context(t, Classify));
-            Report("案: 語の形 + 語に接した前の記号 (. $ - / \\ @) + 語を打ち終えた記号", code, romaji, t => Proposal(t, Classify));
+            Report("今: 打ち始めから 1 文字ずつ判定", code, romaji, t => Incremental(t, Word));
+            Report("語の形だけ: 語を打ち終えてから判定 (_・数字・大文字を含む語は英字)", code, romaji, t => Shape(t, Word));
+            Report("語の形 + 直前の記号", code, romaji, t => !SymbolBefore(t) && Shape(t, Word));
+            Report("語の形 + 直前の記号・キーワード", code, romaji, t => Before(t, Word));
+            Report("語の形 + 直前の記号・キーワード + 直後の記号 (Space の後まで待つ)", code, romaji, t => Context(t, Word));
+            Report("案: 語の形 + 語に接した前の記号 (. $ - / \\ @) + 語を打ち終えた記号 + 語全体か日本語の区間を判定", code, romaji, t => Proposal(t, Classify));
+
+            // 英単語の混ざった日本語 (kyouha + google + dekensaku)。ローマ字 2 つの間に英単語を入れる
+            var random = new Random(1911);
+            var englishWords = Impact.EnglishWords().Where(w => w.Length is >= 4 and <= 8).ToList();
+            var romajiWords = romaji.Select(t => t.Text).Where(w => w.Length >= 4).ToList();
+            var mixed = Enumerable.Range(0, 3000).Select(_ => romajiWords[random.Next(romajiWords.Count)] + englishWords[random.Next(englishWords.Count)] +
+                romajiWords[random.Next(romajiWords.Count)]).ToList();
+            foreach (var (name, japanese) in new (string, Func<string, bool>)[]
+                     {
+                         ("今", w => Incremental(new Token(w, "", "", ""), Word)), ("語全体", w => Word(w, true) == Verdict.Japanese),
+                         ("案", w => Proposal(new Token(w, "", "", ""), Classify)),
+                     })
+            {
+                var missed = mixed.Where(w => !japanese(w)).ToList();
+                Console.WriteLine($"## 英単語の混ざった日本語を英字のままにした ({name}): {missed.Count} / {mixed.Count} ({Percent(missed.Count, mixed.Count)})");
+                Console.WriteLine("  " + string.Join(", ", missed.Take(15)));
+            }
 
             // 英語の文の語 (スペルチェッカーと同じ一覧なので、4 文字以上はスペルチェッカーが止める。止まらない 3 文字以下が要)
             var english = Impact.EnglishWords().Distinct().Select(w => new Token(w, "", "", "english-words.txt")).ToList();
-            foreach (var (name, japanese) in new (string, Func<Token, bool>)[] { ("今", t => Incremental(t, Classify)), ("案", t => Proposal(t, Classify)) })
+            foreach (var (name, japanese) in new (string, Func<Token, bool>)[] { ("今", t => Incremental(t, Word)), ("案", t => Proposal(t, Classify)) })
             {
                 var wrong = english.Where(japanese).ToList();
                 Console.WriteLine($"## 英単語を日本語にした ({name}): {wrong.Count} / {english.Count} ({Percent(wrong.Count, english.Count)})" +
@@ -117,9 +143,10 @@ internal static partial class PassThroughBench
     /// <summary>
     /// 判定は語を打ち終えたキーで決めるので、そのキー (After の先頭) までは使える。Space の後ろは使えない (Space は日本語なら変換に使う)。
     /// 前の記号は、文章には出てこないもの (メンバー・変数・オプション・パス) だけ。( や引用符の後には日本語を書く。
+    /// 打ち終えた . と , は文章の句読点 (arigatou. → ありがとう。) なので見ない。
     /// </summary>
     private static bool Proposal(Token t, Func<string, bool, Verdict> classify) =>
-        !(t.Before.Length > 0 && ".$-/\\@".Contains(t.Before[^1])) && !(t.After.Length > 0 && "(._=:[<{;,".Contains(t.After[0])) && Shape(t, classify);
+        !(t.Before.Length > 0 && ".$-/\\@".Contains(t.Before[^1])) && !(t.After.Length > 0 && "(=:[<{;".Contains(t.After[0])) && Shape(t, classify);
 
     private static bool Context(Token t, Func<string, bool, Verdict> classify)
     {
@@ -139,7 +166,7 @@ internal static partial class PassThroughBench
             {
                 // コメント (日本語の文) は除く。コードの部分だけ
                 var line = raw.Split("//")[0];
-                if (line.TrimStart().StartsWith('#') && !file.EndsWith(".cs")) continue;
+                if (line.TrimStart().StartsWith('#') && !file.EndsWith(".cs", StringComparison.Ordinal)) continue;
                 foreach (Match m in Identifier().Matches(line))
                 {
                     // 文字列の中の日本語の文の続きは除く (前に ASCII 以外がある行)

@@ -134,6 +134,8 @@ public sealed partial class CompositionController
     private readonly StringBuilder _heldLetters = new();
     private int _heldSent;
     private long _heldLastKeyTime;
+    // 素通し入力 (#1911) で、判定中の語の直前の文字 (語の前の記号を判定に使う)
+    private char? _heldBefore;
 
     /// <summary>変換中の文節。英語の区間も 1 つの文節として扱う (候補は英字/全角英字)。</summary>
     internal sealed class Clause(string reading, bool isEnglish, List<string> candidates)
@@ -412,7 +414,8 @@ public sealed partial class CompositionController
     /// <summary>英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
     private void Tick(long nowMs)
     {
-        if (_heldLetters.Length == 0 || nowMs - _heldLastKeyTime < DirectHoldIdleMs) return;
+        // 素通し入力 (#1911) の語は、打ち終えたキーで判定する (語を打ち終えたキーを判定に使うので、時間では決めない)
+        if (_heldLetters.Length == 0 || _settings().PassThroughInput || nowMs - _heldLastKeyTime < DirectHoldIdleMs) return;
         DecideHeld(final: true);
     }
 

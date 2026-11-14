@@ -56,6 +56,34 @@ internal static class RuntimeTests
     }
 
     [Test]
+    public static void PassThroughInput_DecidesWordsWithTheRealDetector()
+    {
+        // 素通し入力 (#1911) はどの OS でも判定する。日本語なら、語を打ち終えたキーを変換ボックスで受け取る (Space で変換・Enter で確定・. は 。)
+        WithRuntime((runtime, _) =>
+        {
+            var settings = new Settings { PassThroughInput = true };
+            foreach (var (typed, japanese) in new[]
+                     {
+                         ("kyouhagoogledekensaku ", true), ("arigatou.", true), ("nihongo\n", true),
+                         ("pub fn sakura(", false), ("x.sakura ", false), ("make ", false), ("abandon ", false), ("consumed ", false),
+                         ("git status ", false), ("kaisha_id ", false),
+                     })
+            {
+                var session = runtime.CreateSession(new CompositionTests.FakeConverter(), () => settings);
+                var before = "";
+                var consumed = false;
+                foreach (var c in typed)
+                {
+                    var vk = c switch { ' ' => 0x20, '\n' => 0x0D, '.' => 0xBE, '(' => '9', '_' => 0xBD, _ => char.ToUpperInvariant(c) };
+                    consumed = session.HandleKey(vk, c is ' ' or '\n' ? null : c, c is '(' or '_', false, false, false, before).Consumed;
+                    if (!consumed) before += c;
+                }
+                Assert.Equal(japanese, consumed, typed);
+            }
+        });
+    }
+
+    [Test]
     public static void DirectModeDetection_ReturnsRomajiToJapanese()
     {
         // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。Mac・Linux ではまだ判定しない (#1724)

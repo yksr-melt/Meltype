@@ -374,9 +374,11 @@ public sealed class MeltypeSession
     public SessionResult HandleKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
         bool releaseFollows = false)
     {
+        // 素通し入力 (#1911) は、コードの行・英数状態・/ $ @ で始まる語を区別しない。打ち終えた語の判定 (CompositionController) だけで決める
+        var passThrough = _settings().PassThroughInput;
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
         // 変換中の before は、変換中の文字より前 (フロントが渡す)
-        if (CodeInput && !Direct && !control && !alt && !command &&
+        if (!passThrough && CodeInput && !Direct && !control && !alt && !command &&
             ch is '"' or '\'' or '`' && before is { } line &&
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
@@ -392,22 +394,22 @@ public sealed class MeltypeSession
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
             _directEnglishWord = false;
-        if ((Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
+        if ((!passThrough && Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
             return _controller.Pass(now);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
+        if (!passThrough && !modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
             SigilWord.PassesAfter(before, '/'))
         {
             _controller.MarkSlashAtStart();
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        else if (!passThrough && !modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
             return _controller.Pass(now);
         }
-        if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
+        if (!passThrough && CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
         {
             return _controller.Pass(now);
         }

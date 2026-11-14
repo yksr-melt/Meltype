@@ -20,6 +20,8 @@ public sealed record CompositionServices
     /// <summary>英数状態での判定結果を知らせる (true: 日本語だったので日本語入力に戻った / false: 英語だった)。</summary>
     public Action<bool>? DirectDecided { get; init; }
 
+    /// <summary>素通し入力 (#1911) で、打ち終えた語がローマ字 (日本語) かを判定する。英数状態の判定と違い、どの OS でも使う。</summary>
+    public Func<string, Verdict>? ClassifyWord { get; init; }
 
     /// <summary>同音異義語などの補助候補。</summary>
     public CandidateDictionary? Candidates { get; init; }

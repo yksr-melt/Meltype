@@ -686,23 +686,46 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void PassThroughInput_PassesKeysAndReturnsToAlphanumericAfterCommit()
+    public static void PassThroughInput_DecidesEachWordWhenItEnds()
     {
-        var front = new Front { Services = new CompositionServices { ClassifyDirect = (letters, _) => letters is "ka" or "ki" ? Verdict.Japanese : Verdict.Undecided } };
-        front.Settings.PassThroughInput = true;
-        front.Event("CaretMoved", extra: Entered);
-        front.Key('k');
-        Assert.True(front.Document == "k" && !front.Open, "英数で始め、判定がつくまでアプリに入れる\n" + front.Trace);
-        front.Key('a');
-        Assert.True(front.Document == "" && front.Composition["t1"] == "か", "ローマ字なら消して変換ボックスに入れ直す\n" + front.Trace);
-        front.Key('\n');
-        Assert.True(front.Document == "か" && !front.Open, "確定したら英数に戻す\n" + front.Trace);
-        Assert.True(Consumed(front.Key(ToggleShortcut.Hankaku)) && front.Open, "半角/全角 で日本語にできる\n" + front.Trace);
-        front.Type("su");
-        Assert.Equal("す", front.Composition["t1"], "日本語にした次の語は変換ボックスに入れる\n" + front.Trace);
-        front.Key('\n');
-        front.Key('k');
-        Assert.True(front.Document == "かすk" && !front.Open, "確定した後の語はまた素通しする\n" + front.Trace);
+        static Front Typing(string document, string app = "notes")
+        {
+            var front = new Front
+            {
+                App = app,
+                Document = document,
+                Services = new CompositionServices { ClassifyWord = word => word is "kyouha" or "sakura" ? Verdict.Japanese : Verdict.English },
+            };
+            front.Settings.PassThroughInput = true;
+            return front;
+        }
+
+        var prose = Typing("");
+        prose.Type("kyouha");
+        Assert.Equal("kyouha", prose.Document, "打ち終えるまでアプリに入れる\n" + prose.Trace);
+        prose.Key(' ');
+        Assert.True(prose.Document == "" && prose.Composition["t1"] == "今日は", "ローマ字なら消して変換ボックスに入れ、Space で変換する\n" + prose.Trace);
+        prose.Key('\n');
+        prose.Type("sakura");
+        Assert.Equal("今日はsakura", prose.Document, "確定した後の語も素通しする\n" + prose.Trace);
+
+        var english = Typing("");
+        var ended = english.Type("make ")[^1];
+        Assert.Equal("", Capture(ended).GetProperty("printableAsciiExcept").GetString(), "英語の語の後も英字を受け取る\n" + english.Trace);
+        english.Type("make");
+        Assert.True(english.Document == "makemake" && english.Composition.GetValueOrDefault("t1") is null,
+            "英語なら Space もアプリに通し、次の語も素通しする\n" + english.Trace);
+
+        // コードモード・アプリ別の設定は使わない。識別子かどうかは語の前後の記号で決める
+        var member = Typing("x.", app: "Code.exe");
+        member.Type("sakura ");
+        Assert.Equal("x.sakura", member.Document, "メンバー (. の直後) は英字\n" + member.Trace);
+        var index = Typing("", app: "Code.exe");
+        index.Type("sakura[");
+        Assert.Equal("sakura[", index.Document, "[ が続く語は英字\n" + index.Trace);
+        var code = Typing("let x = ", app: "Code.exe");
+        code.Type("kyouha ");
+        Assert.Equal("今日は", code.Composition["t1"], "コードの入力欄でも、語の判定だけで決める\n" + code.Trace);
     }
 
     [Test]

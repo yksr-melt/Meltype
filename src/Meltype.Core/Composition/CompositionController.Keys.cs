@@ -30,7 +30,13 @@ public sealed partial class CompositionController
     private void HandleKey(KeyEvent e)
     {
         var vk = e.Vk;
-        if (_heldLetters.Length > 0)
+        if (_heldLetters.Length > 0 && _settings().PassThroughInput)
+        {
+            if (ContinuePassThroughWord(e)) return;
+            // 語を打ち終えたキー: 日本語なら変換ボックスに入れ直し、このキーは変換ボックスで処理する (Space は変換、Enter は確定)
+            DecidePassThroughWord(CharOf(e));
+        }
+        else if (_heldLetters.Length > 0)
         {
             if (VirtualKeys.IsLetter(vk) && !_shift && !_modifier)
             {
@@ -349,6 +355,12 @@ public sealed partial class CompositionController
         }
         var c = CharOf(e);
         var letter = VirtualKeys.IsLetter(e.Vk) && c is { } l && char.IsAsciiLetter(l);
+        if (letter && _text.IsEmpty && _settings().PassThroughInput)
+        {
+            _heldBefore = _out.Before is { Length: > 0 } before ? before[^1] : null;
+            ContinuePassThroughWord(e);
+            return;
+        }
         if (letter && _services.DirectMode())
         {
             // 英数状態: ローマ字かどうか判定する (打鍵はすぐ送る)。大文字で始まる語は英語なのでそのまま通す。
@@ -362,7 +374,7 @@ public sealed partial class CompositionController
             return;
         }
         // 句読点・かぎかっこ・長音・中黒・数字でも入力を始める (、。「」ー・)。英数状態ではそのまま通す。
-        if (letter || (c is { } symbol && StartsWithSymbol(symbol) && !_services.DirectMode()))
+        if (letter || (c is { } symbol && StartsWithSymbol(symbol) && !_services.DirectMode() && !_settings().PassThroughInput))
         {
             BeginComposition();
             _text.Append(c!.Value);
@@ -418,6 +430,55 @@ public sealed partial class CompositionController
     private bool _modeByKey;
 
     // - を付けて使う英語の接頭辞 (e-mail、re-do、co-op、x-ray)
+
+    /// <summary>素通し入力 (#1911): 語の続き (英字・数字・_) ならアプリに送って覚え、true を返す。</summary>
+    private bool ContinuePassThroughWord(KeyEvent e)
+    {
+        if (_modifier || CharOf(e) is not { } c || !(char.IsAsciiLetterOrDigit(c) || c == '_')) return false;
+        if (_heldLetters.Length == 0) _privateComposition = Private;
+        _heldLetters.Append(c);
+        SendHeld(e);
+        return true;
+    }
+
+    /// <summary>
+    /// 素通し入力 (#1911): 打ち終えた語を 1 回だけ判定する。打ちながら判定すると、打ち始めだけでローマ字に見える語
+    /// (abandon・consumed) を日本語にしてしまう。判定に使うのは、語の形・語に接した前の記号・語を打ち終えたキーだけ。
+    /// Space の後ろは使えない (日本語なら Space で変換するので、待てない)。
+    /// </summary>
+    private void DecidePassThroughWord(char? terminator)
+    {
+        var word = _heldLetters.ToString();
+        var japanese =
+            // _・数字・大文字を含む語は識別子・英語
+            word.All(char.IsAsciiLetterLower) &&
+            // メンバー・変数・オプション・パスの続き (foo.bar・$var・--flag・src/foo)。( や引用符の後は、日本語を書く場所でもあるので見ない
+            _heldBefore is not ('.' or '$' or '-' or '/' or '\\' or '@') &&
+            // 呼び出し・代入・型引数などが続く。. と , は文章の句読点なので見ない
+            terminator is not ('(' or '=' or ':' or '[' or '<' or '{' or ';') &&
+            IsJapaneseWord(word);
+        Diagnostics.Log.Info($"素通し入力の判定: {Diagnostics.Log.Text(word)}→ {(japanese ? "日本語" : "英語")}");
+        if (japanese) SwitchHeldToJapanese();
+        else
+        {
+            // 英数状態に知らせない (DirectDecided)。知らせると、次の語の英字を受け取らなくなる
+            ClearHeld();
+            _correctable.Clear();
+        }
+    }
+
+    /// <summary>
+    /// 語全体か、区間分けの日本語の区間 (kyouha|google|dekensaku の kyouha) がローマ字か。英単語の混ざった語は、語全体ではほぼ日本語にならない。
+    /// 区間分けだけで決めると、短い識別子 (i・func・uint) を日本語にする (区間分けは、変換ボックスの中なので日本語に寄せてある)。
+    /// </summary>
+    private bool IsJapaneseWord(string word)
+    {
+        var classify = _services.ClassifyWord ?? throw new InvalidOperationException("素通し入力には ClassifyWord が要る");
+        if (classify(word) == Verdict.Japanese) return true;
+        var text = new CompositionText(_detector);
+        foreach (var c in word) text.Append(c);
+        return text.Segments().Any(s => !s.IsEnglish && classify(s.Raw) == Verdict.Japanese);
+    }
 
     private void Hold(KeyEvent e)
     {
@@ -555,6 +616,7 @@ public sealed partial class CompositionController
     {
         _heldLetters.Clear();
         _heldSent = 0;
+        _heldBefore = null;
         _out.ResetHeldPassed();
     }
 

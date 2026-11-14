@@ -269,8 +269,8 @@ public sealed class Settings
     public bool DirectModeAutoDetect { get; set; } = true;
 
     // 稼働実績ができたら唯一の入力の流れにして、入力モードの区別と重なる設定を消す (#1911)
-    [Category("2. 入力モード"), DisplayName("打ったキーをそのまま入れ、日本語だけ変換する (Experimental)"), Platforms(Platform.Windows),
-     Description("打ったキーをそのままアプリに入れ、ローマ字 (日本語) と判定した語だけ消して変換ボックスに入れ直します。確定したら英数に戻ります。半角/全角 で日本語にすると、次の語を日本語で打てます。")]
+    [Category("2. 入力モード"), DisplayName("打ったキーをそのまま入れ、日本語だけ変換する (Experimental)"),
+     Description("打ったキーをそのままアプリに入れ、語を打ち終えたとき (Space・Enter・記号) にローマ字 (日本語) と判定した語だけ消して変換ボックスに入れ直します。英数 / 日本語の切り替えと、アプリの種類「コード」の区別はしません。")]
     public bool PassThroughInput { get; set; }
 
     [Category("3. 判定"), DisplayName("/ $ @ で始まる語はそのまま入力"),

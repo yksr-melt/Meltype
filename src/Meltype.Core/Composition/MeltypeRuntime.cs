@@ -148,6 +148,7 @@ public sealed class MeltypeRuntime : IDisposable
             AutomaticEnglishSpacing = () => autoSpacing,
             // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
             ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
+            ClassifyWord = word => ClassifyDirect(word, final: true, current()),
         };
         var session = new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
         if (converter is HybridConverter hybrid) session.ReadingOf = hybrid.Reading;
