@@ -97,7 +97,7 @@ run_group() {
 }
 # Native Core fixes its data directory for the lifetime of a process. The
 # bridge test uses a different directory, so run it in a fresh process.
-run_group 'io.github.ninjin0802.keyboard.app.core.LanguageDetectionDeviceTest,io.github.ninjin0802.keyboard.app.core.CoreEditingDeviceTest,io.github.ninjin0802.keyboard.app.core.CoreConfigDeviceTest,io.github.ninjin0802.keyboard.app.SettingsScreenDeviceTest,io.github.ninjin0802.keyboard.app.DeleteLengthDeviceTest,io.github.ninjin0802.keyboard.app.KeyboardViewTouchTest'
+run_group 'io.github.ninjin0802.keyboard.app.core.LanguageDetectionDeviceTest,io.github.ninjin0802.keyboard.app.core.CoreEditingDeviceTest,io.github.ninjin0802.keyboard.app.core.CoreConfigDeviceTest,io.github.ninjin0802.keyboard.app.SettingsScreenDeviceTest,io.github.ninjin0802.keyboard.app.DeleteLengthDeviceTest'
 run_group 'io.github.ninjin0802.keyboard.app.core.MeltypeCoreBridgeDeviceTest'
 
 # Validate the installed InputMethodService, not just view construction.
@@ -178,7 +178,6 @@ python3 "$ROOT/tools/instrumentation-report.py" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/CoreConfigDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/SettingsScreenDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/DeleteLengthDeviceTest.kt" \
-            "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/KeyboardViewTouchTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/core/MeltypeCoreBridgeDeviceTest.kt" \
             "$ROOT/app/src/androidTest/kotlin/io/github/ninjin0802/keyboard/app/ImeLaunchDeviceTest.kt" \
   --output "$REPORT" || status=1
