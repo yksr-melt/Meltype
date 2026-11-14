@@ -112,7 +112,7 @@ private:
     void HandleAltKey(UINT vk, UINT flags);
     bool IsReinjected(UINT vk);
     bool Reinject(UINT vk);
-    void RememberPassed(UINT vk);
+    void RememberPassed(ITfContext* context, UINT vk);
     void ForgetSecretField();
     // Meltype.exe から受け取った切り替えキーのうち、修飾キー付きのものを TSF (PreserveKey) に登録し直す
     void RefreshPreservedKeys();
@@ -180,6 +180,7 @@ private:
     void UnadviseTextEditSink();
     enum class FieldScope { Regular, Private, Password, Unreadable };
     FieldScope ReadFieldScope(TfEditCookie ec, ITfContext* context);
+    std::string FieldJson(TfEditCookie ec, ITfContext* context, FieldScope scope);
     // キーを受け取る前の読み取り専用セッション。セッションを開けなければキーの処理の中で読み直す。
     FieldScope ProbeFieldScope(ITfContext* context);
     void SetOpen(bool open);

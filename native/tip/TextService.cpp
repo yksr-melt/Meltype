@@ -49,6 +49,7 @@ private:
 // 入力欄の種類 (InputScope) のプロパティ。{1713DD5A-68E7-4A5B-9AF6-592A595C778D}
 constexpr GUID kPropInputScope = {0x1713dd5a, 0x68e7, 0x4a5b, {0x9a, 0xf6, 0x59, 0x2a, 0x59, 0x5c, 0x77, 0x8d}};
 constexpr char kPasswordField[] = "{\"traits\":[\"Password\"]}";
+// 欄の種類を読めないまま確定するときは、周辺文字列を読まずに学習だけを止める。
 constexpr char kPrivateField[] = "{\"traits\":[\"Private\"]}";
 
 // パスワード・暗証番号の入力欄か (入力欄の種類で知らせてくるアプリ向け。ストアアプリの PasswordBox など)
@@ -530,15 +531,20 @@ STDMETHODIMP TextService::OnEndEdit(ITfContext* context, TfEditCookie ec, ITfEdi
 }
 
 void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selectionChanged) {
-    if (disabled_ || !state_.known || state_.input == ServerState::Input::Inactive) return;
+    if (disabled_ || !state_.known || !state_.Active()) return;
     std::string field;
-    ReadField(ec, context, field);
-    if (field.empty()) return;
+    // パスワード欄や IME が無効な欄では、通したキーをキャレット通知に載せない。
+    if (!ReadField(ec, context, field) || ContextDisabled(context)) {
+        passedTime_ = 0;
+        // 先に編集通知で切り替わりを知った場合も、属性だけを送り Core の保留入力を捨てる。
+        if (field == kPasswordField) CommittedOutside(field);
+        return;
+    }
     // passed: キャレットを動かしたキー (少し前にアプリに通したキー)。無ければ、キャレットが動いたなら 0 (クリックなど)、文字が変わっただけなら無し。
     // 改行の後の自動のインデントなど、キーに続くアプリの編集でも通知が来るので、通したキーは少しの間覚えておく。
     // ただし、マウスのボタンを押しているあいだに選択が変わったら、キーの直後でもクリックとして伝える
     const bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
-    const bool recent = !clicked && GetTickCount64() - passedTime_ < 500;
+    const bool recent = !clicked && passedTime_ != 0 && GetTickCount64() - passedTime_ < 500;
     std::string caret = std::string(",\"caret\":{\"moved\":") + (selectionChanged || recent ? "true" : "false");
     if (recent) caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
     else if (selectionChanged) caret += ",\"passedKey\":0";
@@ -764,17 +770,19 @@ bool TextService::Send(const char* type, const std::string& field, const std::st
 
 bool TextService::ReadField(TfEditCookie ec, ITfContext* context, std::string& field) {
     const auto scope = ReadFieldScope(ec, context);
-    if (scope == FieldScope::Password || scope == FieldScope::Unreadable) {
-        if (scope == FieldScope::Password) field = kPasswordField;
-        return false;
-    }
+    field = FieldJson(ec, context, scope);
+    return scope == FieldScope::Regular || scope == FieldScope::Private;
+}
+
+std::string TextService::FieldJson(TfEditCookie ec, ITfContext* context, FieldScope scope) {
+    if (scope == FieldScope::Password) return kPasswordField;
+    if (scope == FieldScope::Unreadable) return {};
     std::wstring before, after, selection;
     // 読めなければ before を送らない (空の文字列だと、本体は行の頭とみなす)
     const bool read = !ContextDisabled(context) && SurroundingText(ec, context, before, after, selection);
-    field = std::string("{") + (read ? "\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + "," : "") + "\"composing\":" +
+    return std::string("{") + (read ? "\"before\":" + JsonString(before) + ",\"after\":" + JsonString(after) + "," : "") + "\"composing\":" +
             (composition_ != nullptr ? "true" : "false") + (selection.empty() ? "" : ",\"selection\":" + JsonString(selection)) +
             (scope == FieldScope::Private ? ",\"traits\":[\"Private\"]" : "") + "}";
-    return true;
 }
 
 void TextService::ApplyState(const JsonValue& state, const std::string& field) {
@@ -782,9 +790,10 @@ void TextService::ApplyState(const JsonValue& state, const std::string& field) {
     ServerState next;
     next.known = true;
     // 入力の本体を作る前は、欄を省略した状態照会の応答だけでは Password を解除できない。
-    if (field == kPasswordField || (field.empty() && state_.input == ServerState::Input::Password))
+    if (field == kPasswordField || (field.empty() && state_.input == ServerState::Input::Password)) {
         next.input = ServerState::Input::Password;
-    else if (state[L"handlesInput"].Bool()) next.input = ServerState::Input::Active;
+        passedTime_ = 0;
+    } else if (state[L"handlesInput"].Bool()) next.input = ServerState::Input::Active;
     next.open = state[L"imeOpen"].Bool();
     next.japanese = state[L"languageMode"].Str() == L"Japanese";
     next.rev = state[L"revision"].number;
@@ -1160,7 +1169,7 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
     wchar_t ch = 0;
     *eaten = WouldEat(context, vk, lParam, ch, true) ? TRUE : FALSE;
     // アプリにそのまま渡すキー (BackSpace・矢印・Enter・Space など) はキャレットを動かす (編集の通知で Meltype.exe に伝える)
-    if (!*eaten && !IsModifier(vk)) RememberPassed(vk);
+    if (!*eaten && !IsModifier(vk)) RememberPassed(context, vk);
     return S_OK;
 }
 
@@ -1174,7 +1183,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     passVk_ = 0;
     wchar_t ch = 0;
     if (!WouldEat(context, vk, lParam, ch, false)) {
-        if (!IsModifier(vk)) RememberPassed(vk);
+        if (!IsModifier(vk)) RememberPassed(context, vk);
         *eaten = FALSE;
         return S_OK;
     }
@@ -1336,7 +1345,12 @@ void TextService::HandleAltKey(UINT vk, UINT flags) {
     FlushOpen();
 }
 
-void TextService::RememberPassed(UINT vk) {
+void TextService::RememberPassed(ITfContext* context, UINT vk) {
+    // 通常欄に戻った直後の通知にも、秘密欄で通したキーを持ち越さない。
+    if (!state_.Active() || ContextDisabled(context)) {
+        passedTime_ = 0;
+        return;
+    }
     passedVk_ = vk;
     passedControl_ = KeyDown(VK_CONTROL);
     passedTime_ = GetTickCount64();
@@ -1821,8 +1835,9 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
     resumeText_.clear();
     const bool canReadField = !disabled_ && !deactivated_ && compositionContext_ != nullptr;
     const auto scope = canReadField ? ReadFieldScope(ec, compositionContext_) : FieldScope::Unreadable;
-    const bool password = scope == FieldScope::Password;
-    const bool privateField = canReadField && (scope == FieldScope::Private || scope == FieldScope::Unreadable);
+    std::string field;
+    if (scope == FieldScope::Private || scope == FieldScope::Password) field = FieldJson(ec, compositionContext_, scope);
+    else if (canReadField && scope == FieldScope::Unreadable) field = kPrivateField;
     if ((scope == FieldScope::Regular || scope == FieldScope::Private) && !lastConverting_ && !ContextDisabled(compositionContext_)) {
         Microsoft::WRL::ComPtr<ITfRange> range;
         if (SUCCEEDED(composition->GetRange(&range))) {
@@ -1832,7 +1847,7 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
                 // 再開まで Private を DLL に保持せず、未確定入力を持つ Core に先に渡す。
                 // 応答がなければ Core が同じ未確定入力を持つと分からないので、再開しない。
                 JsonValue reply;
-                if (!privateField || (Send("StateRequested", kPrivateField, "", reply, 100, true) && !reply[L"result"][L"view"].IsNull())) {
+                if (field.empty() || (Send("StateRequested", field, "", reply, 100, true) && !reply[L"result"][L"view"].IsNull())) {
                     resumeRange_ = range;
                     resumeContext_ = compositionContext_;
                     resumeText_.assign(buffer, length);
@@ -1855,9 +1870,7 @@ STDMETHODIMP TextService::OnCompositionTerminated(TfEditCookie ec, ITfCompositio
     TipLog(L"アプリが変換中の文字を確定しました");
     if (resumeRange_) return S_OK;
     // 入力欄の文字は、アプリが書き換えたかもしれない: 前に確定した語を、次のキーで確定し直さない (関係ない文字を消さないように)
-    if (password) CommittedOutside(kPasswordField);
-    else if (privateField) CommittedOutside(kPrivateField);
-    else CommittedOutside();
+    CommittedOutside(field);
     return S_OK;
 }
 
@@ -1870,14 +1883,13 @@ void TextService::ResumeOrCommit(ITfContext* context) {
     resumeContext_.Reset();
     resumeText_.clear();
     bool resumed = false;
-    bool password = false;
-    bool privateField = false;
+    std::string field;
     if (context != nullptr && resumeContext.Get() == context && composition_ == nullptr) {
         RunEditSession(context, clientId_, TF_ES_SYNC | TF_ES_READWRITE, [&](TfEditCookie ec) {
             const auto scope = ReadFieldScope(ec, context);
-            password = scope == FieldScope::Password;
-            privateField = scope == FieldScope::Private || scope == FieldScope::Unreadable;
-            if (password || scope == FieldScope::Unreadable || ContextDisabled(context)) return S_OK;
+            if (scope == FieldScope::Private || scope == FieldScope::Password) field = FieldJson(ec, context, scope);
+            else if (scope == FieldScope::Unreadable) field = kPrivateField;
+            if (scope == FieldScope::Password || scope == FieldScope::Unreadable || ContextDisabled(context)) return S_OK;
             // 文字がアプリに確定されたときのままで、キャレットがその後ろにある (選んでいない) ときだけ
             wchar_t buffer[65];
             ULONG length = 0;
@@ -1909,9 +1921,7 @@ void TextService::ResumeOrCommit(ITfContext* context) {
         return;
     }
     // 戻せない (キャレットが動いた・文字が変わった・別の入力欄): 今までどおり確定したことにする
-    if (password) CommittedOutside(kPasswordField);
-    else if (privateField) CommittedOutside(kPrivateField);
-    else CommittedOutside();
+    CommittedOutside(field);
 }
 
 void TextService::CommitAsync(bool keepAppCaret, bool left) {
@@ -2037,12 +2047,12 @@ void TextService::SelectCandidate(int index) {
     RunEditSession(context.Get(), clientId_, TF_ES_ASYNCDONTCARE | TF_ES_READWRITE, [self, context, target, index](TfEditCookie ec) {
         // 動くまでに変換中の文字が変わっていたら選ばない
         if (self->composition_ != target.Get() || self->compositionContext_ != context.Get()) return S_OK;
-        const auto scope = self->ReadFieldScope(ec, context.Get());
-        if (scope == FieldScope::Password) self->FinishPasswordTransition(ec, context.Get());
-        if (scope == FieldScope::Password || scope == FieldScope::Unreadable || self->ContextDisabled(context.Get())) return S_OK;
-        const std::string field = scope == FieldScope::Private
-            ? R"({"composing":true,"traits":["Private"]})"
-            : R"({"composing":true})";
+        std::string field;
+        if (!self->ReadField(ec, context.Get(), field)) {
+            if (!field.empty()) self->FinishPasswordTransition(ec, context.Get());
+            return S_OK;
+        }
+        if (self->ContextDisabled(context.Get())) return S_OK;
         self->ownEdit_ = true;
         JsonValue reply;
         if (self->Send("CandidateClicked", field, ",\"index\":" + std::to_string(index), reply)) {
