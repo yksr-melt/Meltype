@@ -190,8 +190,20 @@ impl Backend {
         self.shunti_candidates.clear();
         if let Some(clauses) = self.shunti.convert(reading, context) {
             for clause in &clauses {
-                self.shunti_candidates
-                    .insert(clause.reading.clone(), clause.candidates.clone());
+                // 変換候補の一覧にも、読みと合わない綴り返し・文節混入を出さない。
+                // 先頭の候補は shunti.convert で確かめてあるので、空にはならない
+                let candidates: Vec<_> = clause
+                    .candidates
+                    .iter()
+                    .filter(|candidate| {
+                        meltype_core::plausible::plausible(&clause.reading, candidate)
+                    })
+                    .cloned()
+                    .collect();
+                if !candidates.is_empty() {
+                    self.shunti_candidates
+                        .insert(clause.reading.clone(), candidates);
+                }
             }
             return Some(
                 clauses
@@ -260,7 +272,7 @@ impl Backend {
             .as_ref()
             .and_then(|segments| super::zenzai::align(segments, &text))
             .or_else(|| {
-                super::zenzai::is_plausible(reading, &text)
+                meltype_core::plausible::plausible(reading, &text)
                     .then(|| vec![(reading.to_owned(), text)])
             })
             .or(ordinary)

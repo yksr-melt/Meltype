@@ -43,6 +43,12 @@ impl Session {
         {
             return false;
         }
+        // 読みと合わない答え (繰り返し・直前の文節の混入) は使わない。Zenzai と同じ判定を、
+        // shuntelligence などほかの AI の候補にも当てる (#1675・#1511)
+        candidates.retain(|candidate| crate::plausible::plausible(&reading, candidate));
+        if candidates.is_empty() {
+            return false;
+        }
         let previous = self.clauses.iter().map(Clause::text).collect::<String>();
         if !previous.is_empty() && !candidates.contains(&previous) {
             candidates.push(previous);

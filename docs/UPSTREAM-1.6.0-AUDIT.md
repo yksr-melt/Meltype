@@ -10,7 +10,7 @@ Meltype-FLASH 1.1.19で、上流 [v1.6.0](https://github.com/yksr-melt/Meltype/r
 | 国名の語（#1615・#1861） | 上流の `dictionaries/countries.txt`（Unicode CLDR の国・地域名）を固有名詞として読み、大文字で始まる国名を日本語の文の中でも英字のまま残す。ローマ字として最後まで読める語・2文字の略・大文字だけの略・日本語の語のローマ字の途中と重なる語は入れない（下の「Flash独自の調整」） |
 | 通貨の換算の丸め（#1871・#1882） | 換算した額を有効数字2桁に丸め、1万以上は万・億・兆で書く（15,923 → 1.6万、62.8 → 63）。文書は `tools/make-exchange-rates.mjs` のまま |
 | 「ばーじょん」の候補（#1868） | `Meltype-FLASH 1.1.19 (Windows / IME方式)` のように、OSと入力方式（Windowsは設定の動作モードでIME方式・キーボード方式）を書く。入力欄では設定を知っているのでフロントまで、辞書だけを使う所ではOS名だけを書く |
-| Zenzaiの読み照合（#1675・#1511・#1800） | 上流 `ZenzaiConverter.IsPlausible` と同じ照合を移植した。Mozcの文節候補で作れず、かなが読みと合わない答え（繰り返し・直前の文節の混入）は使わずMozcに任せる。読みと表記が違う語（きずく → 気づく）は、Mozcの候補で作れるときだけMozcの区切りで使う |
+| AIの読み照合（#1675・#1511・#1800） | 上流 `ZenzaiConverter.IsPlausible` と同じ照合を共通Coreの `plausible::plausible` に置き、Zenzai 以外の AI にも当てた（Gamma・Qwen・Shion・Jinen・kanakanji-edge・shuntelligence）。Mozcの文節候補で作れず、かなが読みと合わない答え（繰り返し・直前の文節の混入）は使わずMozcに任せる。読みと表記が違う語（きずく → 気づく）は、Mozcの候補で作れるときだけMozcの区切りで使う |
 | 法令名の読み（#1650） | 上流の辞書のまま。大きいツをっにした読み（あんままっさーじ…）で引け、改題前の題名の読みでは引けないことを試験で確かめる |
 | 辞書のライセンス | `THIRD-PARTY-NOTICES.md` に分野の辞書と国名の語の出典・ライセンスを足した。`tools/check-dictionaries.mjs` は `countries.txt` と `domain-*.txt` の形式を確かめる |
 
@@ -40,7 +40,7 @@ Meltype-FLASH 1.1.19で、上流 [v1.6.0](https://github.com/yksr-melt/Meltype/r
 ## 検証
 
 - `cargo test -p meltype-core`：共通Coreの単体・統合試験が成功。新規に `upstream_v160.rs` を追加し、分野の辞書の語と並び順、国名の英字と日本語の逆方向、通貨の丸め（単体試験）、「ばーじょん」のOS・フロントを確認する。
-- `cargo test -p meltype-native --lib`：Zenzaiの読み照合（`ZenzaiConverter.IsPlausible` に当たる `is_plausible`）の試験を追加し、既存のワーカー・HTTP・プロセス管理の試験とともに成功。
+- `cargo test -p meltype-core`・`-p meltype-native --lib`：読み照合（`ZenzaiConverter.IsPlausible` に当たる `plausible::plausible`）の単体試験と、shuntelligence の文節が読みと合わないときに Mozc へ任せる試験を追加した。既存のワーカー・HTTP・プロセス管理の試験とともに成功。
 - `node tools/check-dictionaries.mjs`：`countries.txt` と `domain-*.txt` を含めて形式のエラーなし。
 - `cargo check --workspace --locked`：Windows上で全クレートのコンパイルを確認。
 
