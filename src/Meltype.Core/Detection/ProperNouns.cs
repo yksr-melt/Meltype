@@ -16,6 +16,8 @@ public sealed class ProperNouns
     {
         var nouns = new ProperNouns();
         nouns.AddText(DictionarySource.ReadEmbedded("propernouns.txt"));
+        // Unicode CLDR の国・地域名の語 (tools/make-countries.mjs で作る。#1615)
+        nouns.AddText(DictionarySource.ReadEmbedded("countries.txt"));
         if (userDirectory is not null)
         {
             var path = Path.Combine(userDirectory, "propernouns.txt");

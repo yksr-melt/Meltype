@@ -1745,6 +1745,49 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1650_DomainDictionariesOfferTerms()
+    {
+        // #1650: 分野の辞書 (医療・情報・駅名・固有名詞・人名) の語を候補に出す
+        var dictionary = CandidateDictionary.Load(null);
+        Assert.True(dictionary.LookupDomain("せんたんきょだいしょう").Contains("先端巨大症"), "医療 (JMED-DICT)");
+        Assert.True(dictionary.LookupDomain("とくめいかこうじょうほう").Contains("匿名加工情報"), "情報 (IDiME)");
+        Assert.True(dictionary.LookupDomain("あいおいえき").Contains("相生駅"), "駅名 (SKK)");
+        Assert.True(dictionary.LookupDomain("せんたんきょだいしょうの").Contains("先端巨大症の"), "助詞が付いても");
+        // 逆向き: よく使う語の読みには分野の語を足さない (きょう → 京・恭 が ひらがな より前に出ていた)
+        Assert.Equal(0, dictionary.LookupDomain("きょう").Count);
+        Assert.Equal(0, dictionary.LookupDomain("あい").Count);
+    }
+
+    [Test]
+    public static void Issue1650_UserDomainDictionaryIsUsedWhilePlaced()
+    {
+        // 利用者がデータのフォルダーに置いた分野の辞書 (人と共有した辞書パック) も読む。消せば外れる
+        var directory = Directory.CreateTempSubdirectory("meltype-domain-").FullName;
+        try
+        {
+            File.WriteAllText(Path.Combine(directory, "domain-dev.txt"), "# 開発の用語\nくろーど\tClaude\n");
+            Assert.True(CandidateDictionary.Load(directory).LookupDomain("くろーど").Contains("Claude"), "置いた辞書の語");
+            File.Delete(Path.Combine(directory, "domain-dev.txt"));
+            Assert.Equal(0, CandidateDictionary.Load(directory).LookupDomain("くろーど").Count);
+        }
+        finally
+        {
+            Directory.Delete(directory, true);
+        }
+    }
+
+    [Test]
+    public static void Issue1650_DomainTermsComeAfterEngineCandidates()
+    {
+        // 分野の語は、ふだん使わない人には誤った候補になりうるので、変換エンジンの答え (このテストの変換エンジンはかなを返す) より後ろに並べる
+        var k = new Keyboard();
+        k.Type("sentankyodaishou ");
+        var shown = k.Host.View!.Candidates.ToList();
+        Assert.Equal("せんたんきょだいしょう", shown[0], string.Join(" ", shown));
+        Assert.Equal(1, shown.IndexOf("先端巨大症"), string.Join(" ", shown));
+    }
+
+    [Test]
     public static void Issue409_TanomeOffersBirthdaySlang()
     {
         var dictionary = CandidateDictionary.Load(null);
@@ -1797,7 +1840,9 @@ internal static class CompositionTests
     {
         // #1541・#1637・#1530・#1638: IME や OS の名前がかなに割れる
         // #1615: 国名 / #1651: アーティスト名
-        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "azooKey", "hazkey", "mozkey", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse" })
+        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "azooKey", "hazkey", "mozkey", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse",
+            // #1650: CLDR の国・地域名から作った countries.txt
+            "Bermuda", "Mayotte", "Puerto Rico", "Central African Republic", "Clipperton Island", "Palestinian Territories", "Congo - Kinshasa" })
         {
             var k = new Keyboard();
             k.Type(word + "\n");
@@ -1820,6 +1865,14 @@ internal static class CompositionTests
         follow = new Keyboard();
         follow.Type("iGPUde\n");
         Assert.Equal("iGPUで", follow.Host.Document);
+
+        // 逆向き (#1650): 国名の語に似たローマ字 (San・Jan・Rica・Togo) の日本語は日本語のまま。小文字の語 (da) は国名の語に入れない
+        foreach (var (typed, expected) in new[] { ("tanakasan", "たなかさん"), ("iijan", "いいじゃん"), ("rikanojugyou", "りかのじゅぎょう"), ("iranai", "いらない"), ("togo", "とご"), ("sorehada", "それはだ") })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.True(k.Host.Document.All(c => c >= 0x3000), $"{typed} → {k.Host.Document} (期待: {expected} のような日本語)");
+        }
     }
 
     [Test]

@@ -375,6 +375,22 @@ SPDX-License-Identifier: Unicode-3.0
 
 - 出典: European Central Bank
 
+### 国名の語 (dictionaries/countries.txt)
+
+ローマ字として読めても国名を英語にするのに使います。[Unicode CLDR](https://github.com/unicode-org/cldr) の `common/main/en.xml` の国・地域名を `tools/make-countries.mjs` で語に分けて作りました。著作権・ライセンスは絵文字の辞書と同じ (Unicode, Inc.、Unicode License v3) です。
+
+### 分野の辞書 (dictionaries/domain-*.txt)
+
+変換の候補に専門用語・固有名詞を足すのに使います。`tools/make-domain-dictionaries.py` で、元の辞書から読みと表記を取り出し、読みで 1 行にまとめ、かなだけで書く語とよく使う語の読みを除いて作りました。
+
+| ファイル | 元データ | 著作権 | ライセンス |
+| --- | --- | --- | --- |
+| `domain-medical.txt` | [JMED-DICT-mini](https://sociocom.naist.jp/jmed-dict/) ver 1.1.2 (病名・医薬品・部位の各データの上位 10,000 行) | 奈良先端科学技術大学院大学 ソーシャル・コンピューティング研究室 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `domain-it.txt` | [IDiME](https://github.com/ssvp003/IDiME) (情報処理学会 情報入試委員会「情報科全教科書用語リスト 第2版」をもとにしたもの) | ssvp003、情報処理学会 情報入試委員会 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)。この派生データも CC BY-SA 4.0 |
+| `domain-stations.txt` | [SKK 辞書](https://github.com/skk-dev/dict) SKK-JISYO.station | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (Meltype では GPL-3.0-or-later で使う) |
+| `domain-propernouns.txt` | SKK 辞書 SKK-JISYO.propernoun | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (同上) |
+| `domain-names.txt` | SKK 辞書 SKK-JISYO.jinmei・SKK-JISYO.fullname | Wnn Consortium、SKK Development Team、Akie Kaidoh | GPL-2.0-or-later (同上) |
+
 ### そのほかの辞書
 
 `dictionaries/` の辞書 (日本語・英語の単語、固有名詞、同音異義語の候補、文脈の手がかり) は Meltype のために作成したもので、
