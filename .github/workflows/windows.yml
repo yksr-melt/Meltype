@@ -82,8 +82,8 @@ jobs:
           Set-Content -LiteralPath (Join-Path $stage 'app\tip\Register-Tip.ps1') -Value '# dummy'
           & $iscc /Q "/DAppVersion=0.0.0-check-ime" "/DSourceDir=$stage" "/DOutputDir=$env:RUNNER_TEMP" packaging\Meltype.iss
 
-  # install.ps1 と uninstall.ps1 を、ダミーの Meltype.exe で通す (tools/Test-InstallLifecycle.ps1)。
-  #   本物の配布物でのインストール → 更新 → アンインストールを確かめる統合テストが必要になったら、手動実行のワークフローを別に足す。
+  # インストーラー (packaging/Meltype.iss) を、ダミーの Meltype.exe でインストール → 更新 → アンインストールの順に通す (tools/Test-InstallLifecycle.ps1)。
+  #   Meltype IME の登録 (管理者権限が要る) は通さない。
   #   update.ps1 のダウンロードは、ここでは確かめていない (API の URL が固定で、偽のサーバーに向けられない)。別途、CI での検証が要る。
   lifecycle:
     runs-on: windows-latest
@@ -179,15 +179,19 @@ jobs:
       - name: Fetch Zenzai
         shell: powershell
         run: .\native\zenzai\Get-Zenzai.ps1
-      # 署名の秘密は、署名する step (Sign / Sign installer) にだけ渡す。ビルドしたもの (Meltype.exe --selftest と、
-      # それが起動する Mozc のヘルパー) は、秘密の無い step (Package / Installer / Portable) でだけ実行する。
+      # 署名の秘密は、署名する step (Sign) にだけ渡す。ビルドしたもの (Meltype.exe --selftest と、
+      # それが起動する Mozc のヘルパー) は、秘密の無い step (Package / Portable) でだけ実行する。
       - name: Package
         shell: powershell
-        # 通常版の app を作って自己診断する。zip は次の Sign で作る。
+        # 通常版の app を作って自己診断する。インストーラーは次の Sign で作る。
         run: .\Build-Package.ps1 -Step Build
-      # コード署名の証明書 (秘密 SIGN_PFX_BASE64 = .pfx を Base64 にしたもの、SIGN_PASSWORD) があれば、Build-Package.ps1 が署名する。
-      # 秘密が無いときは署名せずに zip だけ作る。.pfx は署名したらすぐ消す。
-      # タグ (v1.0.0) なら版番号付き、手動実行なら日時付きの zip を作る。
+      # Sign でインストーラーを作る Inno Setup を、秘密の無い step で入れておく (Find-InnoSetup.ps1 が Chocolatey で入れる)
+      - name: Inno Setup
+        shell: powershell
+        run: .\packaging\Find-InnoSetup.ps1 | Out-Null
+      # コード署名の証明書 (秘密 SIGN_PFX_BASE64 = .pfx を Base64 にしたもの、SIGN_PASSWORD) があれば、Build-Package.ps1 が app とインストーラーに署名する。
+      # 秘密が無いときは署名せずにインストーラーを作る。.pfx は署名したらすぐ消す。
+      # タグ (v1.0.0) なら版番号付き、手動実行なら日時付きのインストーラー (と、1.5.1 以前の自動更新用の zip) を作る。
       - name: Sign
         shell: powershell
         env:
@@ -202,28 +206,6 @@ jobs:
               $env:MELTYPE_SIGN_PFX = $pfx
             }
             .\Build-Package.ps1 -Version $version -Step Sign
-          } finally {
-            Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
-          }
-      # インストーラー (dist\Meltype-<版>-setup.exe)。zip と同じ app フォルダーから作る (issue #161)。
-      - name: Installer
-        run: |
-          $iscc = .\packaging\Find-InnoSetup.ps1
-          $version = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.Substring(1) } else { 'test-' + (Get-Date -Format 'yyyyMMdd-HHmm') }
-          & $iscc /Q "/DAppVersion=$version" "/DSourceDir=$PWD\dist\Meltype" "/DOutputDir=$PWD\dist" packaging\Meltype.iss
-      - name: Sign installer
-        env:
-          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
-          MELTYPE_SIGN_PASSWORD: ${{ secrets.SIGN_PASSWORD }}
-        run: |
-          if (-not $env:SIGN_PFX_BASE64) { exit 0 }
-          $setup = Get-ChildItem -LiteralPath dist -Filter 'Meltype-*-setup.exe' -File | Select-Object -First 1
-          $pfx = Join-Path $env:RUNNER_TEMP 'meltype-sign.pfx'
-          try {
-            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGN_PFX_BASE64))
-            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
-              Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
-            & $signtool.FullName sign /f $pfx /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup.FullName
           } finally {
             Remove-Item -LiteralPath $pfx -Force -ErrorAction SilentlyContinue
           }

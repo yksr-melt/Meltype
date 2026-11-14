@@ -16,7 +16,7 @@
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
 | `src/Meltype.Windows.Tests/` | Windows 版のテストと調査用の道具 (共通部分のテストもまとめて流す) |
 | `dictionaries/` | 組み込みの辞書 |
-| `packaging/` | 配布用のファイル (インストーラー・Install.cmd など) |
+| `packaging/` | 配布用のファイル (インストーラー・自動更新・Meltype IME の登録) |
 | `web/` | 公式サイトと報告フォーム (Cloudflare Workers) |
 | `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
 | `docs/dev/` | 開発者向けの文書 (開発・設計・リリースの手順) |
@@ -29,20 +29,17 @@
 powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
 ```
 
-ビルドしてスタートアップに登録し、起動します。タスクトレイに「あ」のアイコンが出れば動いています。
+配布用のインストーラーを作り ([配布用のパッケージを作る](#配布用のパッケージを作る))、それで `%LOCALAPPDATA%\Programs\Meltype` に入れて起動します。配布するものと同じ経路で入るので、自動更新とも同じ場所です。
+`-NoIme` を付けると、Meltype IME を新しく登録しません (登録済みなら、インストーラーが更新します)。
 `-ExecutionPolicy Bypass` はこのコマンドにだけ効き、PC 全体の設定は変えません。
 
-アンインストールは次のとおりです。Meltype IME を登録してあれば、その登録も外します (管理者権限の確認が出ます)。
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1            # 止めて、スタートアップから外す
-powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # 設定と学習データも消す
-```
+アンインストールは、ふつうに入れたときと同じく、トレイの「アンインストール...」か Windows の「設定」→「アプリ」です。
 
 必要なもの:
 
 - Windows 10 / 11 (x64 / ARM64)
 - .NET 10 SDK
+- Inno Setup 6 (インストーラーを作ります。無ければ Chocolatey で入れます)
 - Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
 
 ## Mac・Linux でビルドする
@@ -114,13 +111,15 @@ node .github/bot/pr-checks.mjs impact before.tsv after.tsv changes.tsv
 powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
 ```
 
-`dist\` に zip ができます。中身はビルド済みの `app` フォルダーと、`Install.cmd` / `Uninstall.cmd` (ダブルクリックで実行)、`README.txt` です。インストーラー (`setup.exe`) は、GitHub Actions がこの zip の中身から Inno Setup で作ります。
+`dist\Meltype\app` にビルド済みのアプリを作り、そこから Inno Setup でインストーラー `dist\Meltype-test-<日時>-setup.exe` を作ります ([packaging/Meltype.iss](../../packaging/Meltype.iss))。リリースビルドでは版番号を含む `Meltype-<版>-setup.exe` になります。
+新規インストール・アプリ内の自動更新・winget・`Install-Meltype.ps1` は、どれもこのインストーラーで入れます。
+あわせて作る `Meltype-<版>-windows.zip` は、1.5.1 以前の Meltype の自動更新用です (インストーラーと、それを実行するだけの `install.ps1` が入っています)。
 
 - .NET のランタイムを `app\dotnet` に同梱しているので、使う人の PC に .NET は要りません (`Meltype.exe` がそこを使う: `AppHostDotNetSearch=AppRelative`)
 - 小さくする (30MB 未満) ために、ランタイムから Meltype が使わない部品を削ります
   1. Meltype.dll が使う型から参照をたどり、要らないアセンブリを削る (`Meltype.Tests -- --runtime-closure`)
   2. 自己診断 (`Meltype.exe --selftest`) を走らせ、実際に読み込まれなかった大きなアセンブリを削る
-  3. もう一度自己診断を走らせ、削りすぎていないことを確かめる (失敗したら zip を作らない)
+  3. もう一度自己診断を走らせ、削りすぎていないことを確かめる (失敗したらインストーラーを作らない)
 - 自己診断は、設定・判定・辞書・変換エンジン・Windows の候補 API・UI Automation・各画面・タスクトレイ・データの保存を、キーボードフックを掛けずに一通り動かします
 - インストール先は `%LOCALAPPDATA%\Programs\Meltype` で、管理者権限は要りません。配布用のファイルの元は [packaging/](../../packaging/) にあります
 
@@ -134,11 +133,11 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1 -Portable
 
 ### ウイルス対策ソフトの検査
 
-GitHub Actions の配布ジョブは、公開する前に Microsoft Defender の定義を更新し、できたフォルダーと zip を検査します。検出・検査のエラー・Defender が無効のときは、公開を止めます。
+GitHub Actions の配布ジョブは、公開する前に Microsoft Defender の定義を更新し、できたフォルダー・zip・インストーラーを検査します。検出・検査のエラー・Defender が無効のときは、公開を止めます。
 手元で配布するときも、管理者の PowerShell で次を実行してください。
 
 ```powershell
-tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-windows.zip')
+tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-setup.exe')
 ```
 
 検査は駆除せずに行い、検出した内容をコマンドの出力に残します。検出されたら、対象のファイル・版・ハッシュ・Defender の定義の版を確かめ、誤検知が疑われるときは [Microsoft の審査窓口](https://www.microsoft.com/en-us/wdsi/filesubmission) に出してください。

@@ -12,13 +12,13 @@ namespace Meltype;
 /// スタートアップのフォルダー・HKCU の Run に置いたものは、Windows がサインインの後に数秒〜十数秒遅らせて起動するので、
 /// その間は Meltype を使えなかった (issue #283)。サインインしたらすぐ起動する、タスク スケジューラのタスク (このユーザーの
 /// ログオン時・管理者権限なし) で起動する。タスクを作れなければ、今までどおり HKCU の Run に登録する。
-/// Install.cmd・インストーラーはスタートアップのフォルダーにショートカットを置くので、起動したときにタスクへ移す (<see cref="MigrateToTask"/>)。
+/// インストーラーはスタートアップのフォルダーにショートカットを置くので、起動したときにタスクへ移す (<see cref="MigrateToTask"/>)。
 /// </summary>
 internal static class Startup
 {
     private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string ValueName = "Meltype";
-    /// <summary>タスク スケジューラのタスクの名前 (アンインストールで消す: uninstall.ps1・Meltype.iss と合わせる)。</summary>
+    /// <summary>タスク スケジューラのタスクの名前 (アンインストールで消す: Meltype.iss と合わせる)。</summary>
     internal const string TaskName = "Meltype";
 
     private static string Shortcut => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup), "Meltype.lnk");

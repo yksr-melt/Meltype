@@ -55,8 +55,6 @@ internal sealed class TipServer : IDisposable
     /// </summary>
     private const int ConversionWaitMs = 250;
 
-    /// <summary>Meltype IME が登録されていないと確かに分かるか (レジストリを読めないときは false)。</summary>
-    public static bool IsKnownUnregistered => Registration() == false;
     /// <summary>Meltype IME (native/tip の DLL) が Windows に登録されているか。</summary>
     public static bool IsRegistered => Registration() == true;
 

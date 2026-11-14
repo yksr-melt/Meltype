@@ -299,9 +299,9 @@ internal static class SettingsJsonTests
         {
             var config = Path.Combine(directory, "config.json");
             var statePath = Path.Combine(directory, "state.json");
-            File.WriteAllText(config, "{ \"SettingsVersion\": 7, \"WelcomeShown\": true, \"TsfIntroduced\": true, \"TsfOffered\": true, \"ReleaseNotesShown\": \"1.4.0\", \"SettingsShowHelp\": false, \"SettingsWheelChangesValue\": false }");
+            File.WriteAllText(config, "{ \"SettingsVersion\": 7, \"WelcomeShown\": true, \"TsfIntroduced\": true, \"ReleaseNotesShown\": \"1.4.0\", \"SettingsShowHelp\": false, \"SettingsWheelChangesValue\": false }");
             var state = AppState.Load(statePath, config);
-            Assert.True(state is { WelcomeShown: true, TsfIntroduced: true, TsfOffered: true, ReleaseNotesShown: "1.4.0", SettingsShowHelp: false, SettingsWheelChangesValue: false }, "config.json の値を引き継ぐ");
+            Assert.True(state is { WelcomeShown: true, TsfIntroduced: true, ReleaseNotesShown: "1.4.0", SettingsShowHelp: false, SettingsWheelChangesValue: false }, "config.json の値を引き継ぐ");
             Assert.True(File.Exists(statePath), "すぐに state.json に書く");
 
             Settings.Load(config);

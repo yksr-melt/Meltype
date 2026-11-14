@@ -9,12 +9,12 @@
    - `docs/release-notes/<版>.md` にリリースノートを書く (例: `docs/release-notes/1.4.0.md`)。配布物に同梱し、更新したあとの初めての起動で Meltype (Windows) が見せる。GitHub のリリースの本文にも同じものを使う。タグのビルドでは、このファイルが無ければ Windows 版のビルドが止まる
 2. コミットして main に入れ、タグを付けて push する: `git tag v1.1.1 && git push origin v1.1.1`
 3. タグの push で `.github/workflows/release.yml` が動き、Windows (windows.yml)・Mac (mac.yml)・Linux (linux.yml) の配布物を作って、全部できたらリリースに付ける。どれかが失敗したら、どの配布物も付けず、下の Homebrew・apt・dnf にも出さない
-   - Windows: `Meltype-<版>-setup.exe` (インストーラー)、`Meltype-<版>-windows.zip`、`Meltype-<版>-windows-portable.zip`
+   - Windows: `Meltype-<版>-setup.exe` (インストーラー。自動更新もこれを使う)、`Meltype-<版>-windows-portable.zip`、`Meltype-<版>-windows.zip` (1.5.1 以前の Meltype の自動更新用。中身はインストーラーと、それを実行する `install.ps1`)
    - Mac: `Meltype-<版>-mac.zip`、Linux: `Meltype-<版>-linux.zip` と `meltype_<版>_amd64.deb`、ARM64 の `Meltype-<版>-linux-arm64.zip` と `meltype_<版>_arm64.deb`、Fedora・RHEL 9 系向けの `meltype-<版>-1.x86_64.rpm` と `meltype-<版>-1.aarch64.rpm`、fcitx5 のアドオンの `meltype-fcitx5-<版>-1.x86_64.rpm` と `meltype-fcitx5-<版>-1.aarch64.rpm` (どれもプレビュー版。.deb と .rpm の版は `1.2.2-pre.2` なら `1.2.2~pre.2`)
    - リリースに付けたあと、Homebrew Cask の更新 PR を作ります。PR を main に入れると、このリポジトリの `Casks/meltype.rb` が更新されます
    - リリースに付けたあと、apt・dnf のリポジトリを GitHub Pages に公開します (下の「パッケージマネージャー」の署名鍵があるときだけ)
 4. リリースのページの本文が `docs/release-notes/<版>.md` と同じか確かめる (bot を使うと、そのファイルを本文にした下書きまで自動で作ります。下の「bot でリリースする」)。リリースのページだけ書き直すと、アプリで見せる本文と食い違うので、直すときはファイルも直す
-5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます
+5. 使っている人の Meltype (Windows) は、自動で新しい版に更新されます (`Meltype-<版>-setup.exe` をダウンロードし、次のサインインのときに実行する)
 
 Windows の [Code signing policy](CODE-SIGNING.md) と [SignPath テスト署名の設定手順](SIGNPATH-SETUP.md)。テスト署名は独立した手動ワークフローで、現在の配布手順は変更しません。
 
@@ -37,7 +37,7 @@ Actions の画面で release.yml をブランチに対して手で実行 (Run wo
 Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタイムを `app\dotnet` に同梱し、Mac・Linux は NativeAOT で組み込みます。
 なので、.NET に新しいパッチ (セキュリティの修正など) が出たら、コードを変えずに版を上げてリリースし直せば済みます。
 
-`.github/workflows/dotnet-update.yml` が毎週水曜日に、最新のリリースの zip に入っている版と、Microsoft が公開している最新の版を比べます。
+`.github/workflows/dotnet-update.yml` が毎週水曜日に、最新のリリースのポータブル版 zip に入っている版と、Microsoft が公開している最新の版を比べます。
 新しい版が出ていれば「同梱の .NET を <版> に更新する (リリースし直す)」の Issue を立てます (Actions の画面から手で実行することもできます)。
 .NET のメジャー版を上げる (net10.0 → net11.0) ときは、`*.csproj` の `TargetFramework` と、ワークフローの `dotnet-version` を手で変えます。
 
@@ -50,18 +50,17 @@ Windows は `Build-Package.ps1` が、入っている最新の 10.0 のランタ
 
 ## パッケージマネージャー
 
-リリースの zip から、winget・Scoop・Homebrew のマニフェストを作れます。Linux の .deb と .rpm は linux.yml が作ります。
+リリースの配布物から、winget・Homebrew のマニフェストを作れます。Linux の .deb と .rpm は linux.yml が作ります。
 
 ```
-node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
+node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-mac.zip dist/Meltype-1.2.0-setup.exe
 ```
 
 `dist/manifests/` にできたものを出します。
 
 - **winget**: `winget/manifests/...` を [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) に Pull Request で出す (`winget validate` で確かめてから)。審査があり、署名の無い実行ファイルは止められることがあります
-  - setup.exe を渡すと、インストーラー (このユーザーだけに入れる・管理者権限なし) のマニフェストになります。Meltype IME・起動時の起動が入り、Meltype の自動更新と同じ場所に入るので、こちらを使います (渡さなければ zip の portable)
+  - インストーラー (このユーザーだけに入れる・管理者権限なし) のマニフェストです。Meltype の自動更新と同じインストーラーなので、Meltype IME・起動時の起動が入ります。`winget upgrade` (サイレント実行) でも、Meltype IME の DLL が変わっていれば管理者権限の確認が出ます
   - **2 つ目の版からは自動**: 最初の版が取り込まれたら、`microsoft/winget-pkgs` をフォークし、`public_repo` の権限のトークンを秘密 `WINGET_TOKEN` に登録します。以後は正式版のリリースのたびに、release.yml が配布物を付けたあと `.github/workflows/winget.yml` が新しい版の Pull Request を出します (`WINGET_TOKEN` が無ければ失敗します)。使う人は `winget install Yukishiro.Meltype` / `winget upgrade Yukishiro.Meltype`
-- **Scoop**: 自分のバケット (例: `yksr-melt/scoop-bucket`) を作り、`scoop/meltype.json` を `bucket/` に置く。使う人は `scoop bucket add yksr-melt https://github.com/yksr-melt/scoop-bucket` → `scoop install meltype`
 - **Homebrew Cask**: タグのリリース時に `Casks/meltype.rb` の更新 PR が自動で作られます。PR を main に入れると、新しい版をこのリポジトリからインストールできます。このリポジトリを tap として登録します:
   ```bash
   brew tap yksr-melt/Meltype https://github.com/yksr-melt/Meltype.git
@@ -99,4 +98,3 @@ node tools/make-manifests.mjs 1.2.0 dist/Meltype-1.2.0-windows.zip dist/Meltype-
 - **dnf (.rpm)**: linux.yml が x86_64 / aarch64 の `meltype` と `meltype-fcitx5` の `.rpm` を Fedora 44 で作り、AlmaLinux 9 で `meltype` を入れて確かめて、release.yml がリリースに付けます。apt と同じ署名鍵 (`APT_SIGNING_KEY_B64`) で署名した dnf リポジトリを、apt リポジトリと一緒に GitHub Pages の `/rpm` に公開します (Pages の設定は apt と共通です)。
   - 使う人は `sudo dnf config-manager addrepo --from-repofile=https://yksr-melt.github.io/Meltype/rpm/meltype.repo` (RHEL 9 系は `sudo dnf config-manager --add-repo https://yksr-melt.github.io/Meltype/rpm/meltype.repo`) を一度行うと、`sudo dnf upgrade` で更新できます
 
-winget・Scoop で入れた場合は Install.cmd を使わないので、Windows の起動時に起動するには、トレイの「Windows の起動時に起動」を ON にしてもらいます。

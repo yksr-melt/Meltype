@@ -24,7 +24,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 | `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 の stub (`MeltypeTip.dll`) と impl (`MeltypeTipImpl.dll`) をビルド、`Register-Tip.ps1` で登録 |
 | `src/Meltype.Windows/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
 | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
-| `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
+| `packaging/meltype-ime.ps1`・`packaging/setup-ime.ps1` | IME を登録する / 外す。setup.exe (`packaging/Meltype.iss`)・アンインストーラー・Meltype.exe (トレイの「Meltype IME」) が setup-ime.ps1 を実行する |
 | `src/Meltype.Core/Ime/` | フロント (TSF・IBus・fcitx5) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
 | `src/Meltype.Core.Tests/ImeContractTests.cs` | 境目の契約テスト。判断を持たないフロントで出来事を送り、確定・表示・モード・受け取るキーを確かめる (どの OS でも流れる) |
 | `src/Meltype.Windows.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
@@ -77,9 +77,9 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 - 前の impl は `FreeLibrary` しない (プロセスの終了まで残る)。ファイルは、どのプロセスもロードしていなければ次の登録で削除する
 - 差し替えられないアプリ (stub と impl に分割する前の DLL が残っている・古い stub が今の impl をロードできない) は、登録済みの impl が Meltype.exe と同じビルドになってから 3 秒たっても、同じ接続から別ビルドの要求が届くことで検出する。
   分割前の DLL は更新前から開いているアプリすべてに残るので、Meltype.exe は PC の再起動を求める通知を 1 回だけ出す。分割前の DLL には今までの形式で応答しない (後方互換レイヤーを持たない)
-- 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。Meltype IME を再登録せずに Meltype.exe だけを更新すると、こうなる
-  (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
-  動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (`ImeDeclined` は見ない。聞いたことを覚える状態は持たない)
+- 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。setup.exe は Meltype IME を先に登録し、登録できなければ本体を入れ替えない (下の「インストール」) ので、
+  更新ではこうならない。残るのは、同じ PC のほかのユーザーが別の版の Meltype IME を登録したときと、Meltype IME を登録したあとに setup.exe がファイルのコピーに失敗して本体を戻したとき。
+  動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (聞いたことを覚える状態は持たない)
 - `tip` フォルダーが無い Meltype.exe (`dotnet run`・テスト・ポータブル版) は、impl を照合しない
 
 プロトコルの版の番号 (`ImeEvent.version`) では照合しない。項目名を変更しても番号が `1` のままで、不一致を検出できていなかった。
@@ -178,17 +178,19 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 ## インストール
 
-- IME の登録は HKLM に要る (HKCU だけでは ActivateProfile が失敗した) ので、インストールのときだけ UAC で管理者権限を求める。断ったら、今までどおり変換ボックスの方式で動く
-- DLL は `C:\Program Files\Meltype\tip` に置く (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所)。ロードされている stub はリネームして残し、次の登録で削除する
+- IME の登録は HKLM に要る (HKCU だけでは ActivateProfile が失敗した) ので、登録するときだけ UAC で管理者権限を求める。本体 (`%LOCALAPPDATA%\Programs\Meltype`) の入れ替えには要らない
+- 本体を入れるのは setup.exe (`packaging/Meltype.iss`) だけ。新規インストール・アプリ内の自動更新 (`Updater.Apply` が `/VERYSILENT` で実行)・winget・`Install-Meltype.ps1` が同じ経路を通る。
+  1.5.1 以前の Meltype の自動更新は、リリースの `Meltype-<版>-windows.zip` の `install.ps1` を実行するので、その zip にはインストーラーと、それを同じ引数で実行するだけの `install.ps1` を入れる
+- setup.exe は `PrepareToInstall` (ファイルを入れ替える前) で Meltype IME を登録する。このユーザーが使っている (PC に登録されていて、このユーザーの言語の一覧にある) なら必ず登録し直し、
+  UAC を断られたり失敗したりしたら、本体も入れ替えずにインストールを止め、前の版の Meltype.exe を起動し直す (本体だけ新しくすると、別ビルドの impl と通信できない)。
+  使っていなければ、ウィザードの「Meltype IME を登録する」を選んだときだけ登録し、断られても本体は入れる。
+  登録は PC で 1 つなので、ほかのユーザーが登録しただけの PC で、管理者でないユーザーのインストール・更新を止めないように、「登録済み」でなく「使っている」で分ける。
+  止めたインストールは、自動更新が ON なら次のサインインでもう一度試す (断った版を覚えて聞き直さないことはしない)
+- ウィザードを出さない実行 (自動更新・`winget upgrade`) では、UAC の前に setup-ime.ps1 (`-Explain`) が Meltype からの確認だと分かる説明を出す。UAC には「Windows PowerShell」と読めない `-EncodedCommand` しか出ないため (#970)
+- 未登録の人が後から登録するのは、トレイで Meltype IME を選んだときだけ (`TrayApplicationContext.SelectTsf`)。断ったことを覚える状態は持たない
 - 入れ直すたびに UAC を出さないように、stub と impl が同じ (署名する前の中身のハッシュ `MeltypeTip.dll.sha256`・`MeltypeTipImpl.dll.sha256` が同じ) なら登録し直さない。
   登録できてからハッシュを置くので、途中で失敗したら次に入れ直したときに登録し直す。新しい DLL を登録できなければ、前の DLL に戻して登録し直す。
-  TIP のキーだけ残り、COM の登録 (`InprocServer32`) か DLL が無いとき (セキュリティソフトが登録を途中で止めたとき) も、DLL が同じでも登録し直す。
-  断られたら覚えておき、Install.cmd・Install-Meltype.ps1 を自分で実行したときだけまた聞く
-- 自動更新で入れる install.ps1 は、もう登録してあるときだけ Meltype IME を登録し直す (頼まれていないのに管理者権限の確認を出さない)。
-  まだ入れていない人には、Install.cmd を自分で実行したとき (-Ask) に聞く。
-  Meltype IME が無かった版から更新した人には、Meltype.exe が起動したときに一度だけ聞き (`TsfOffered`)、「はい」ならインストール先の meltype-ime.ps1 で登録する。
-  初めて起動したとき (インストーラーが聞いている)・前に Meltype IME を使っていたとき (`TsfIntroduced`)・前に断ったとき (ImeDeclined) は聞かない。
-  ImeDeclined は、UAC で断ったときと、setup.exe で「Meltype IME を登録する」のチェックを外したときに残す
+  TIP のキーだけ残り、COM の登録 (`InprocServer32`) か DLL が無いとき (セキュリティソフトが登録を途中で止めたとき) も、DLL が同じでも登録し直す
 - 動作モードが Meltype IME なのに、ポータブル版か、ARM64 の Windows か、登録されていないか (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、
   このユーザーのキーボードの一覧に無ければ、Meltype キーボードで動かす。起動したとき・config.json を読み直したとき・トレイや設定画面で変えたときのどれでも同じ。
   config.json は書き換えない (動かしている動作モードは `MeltypeEngine.Mode`)。Meltype IME を入れ直したら、Meltype.exe を起動し直すか、トレイで Meltype IME を選び直すと Meltype IME で動く
@@ -230,4 +232,4 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 ## ビルドに要るもの
 
 - .NET 10 SDK
-- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ `Install-Meltype.ps1` は Meltype IME を入れずに続ける
+- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ `Build-Package.ps1` は Meltype IME を入れずにインストーラーを作る
