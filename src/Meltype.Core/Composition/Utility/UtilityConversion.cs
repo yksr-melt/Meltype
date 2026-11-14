@@ -42,6 +42,12 @@ internal enum UtilityPlacement
     /// <summary>普通の変換の候補の後ろに足す (きょう → 今日・京 … 2026年11月10日)。</summary>
     Append,
 
+    /// <summary>
+    /// 普通の変換の候補の前に足して、最初の候補にする (ごんべんにふるとり → 誰 讎 … 言偏にふるとり)。
+    /// 読みがほぼ確実にユーティリティ変換を指すが、変換エンジンの候補も使いたいとき。
+    /// </summary>
+    Prepend,
+
     /// <summary>ユーティリティの候補だけを出す。変換エンジンの候補を足さず、文節の区切りも動かさない (1+1 → 1+1・2・1+1=2)。</summary>
     Replace,
 }
@@ -91,14 +97,16 @@ internal static class UtilityConversions
         new KanjiPartsConversion(),
     ];
 
-    /// <summary>一致したすべての変換の候補。1 つでも Replace なら Replace にする。どれも一致しなければ null。</summary>
+    /// <summary>一致したすべての変換の候補。1 つでも Replace なら Replace、そうでなく 1 つでも Prepend なら Prepend にする。どれも一致しなければ null。</summary>
     internal static UtilityCandidates? Convert(UtilityInput input)
     {
         var matches = All.Select(c => c.Convert(input)).OfType<UtilityCandidates>().Where(m => m.Candidates.Count > 0).ToList();
         if (matches.Count == 0) return null;
         if (matches is [var only]) return only;
         var replace = matches.FirstOrDefault(m => m.Placement == UtilityPlacement.Replace);
-        return new UtilityCandidates(matches.SelectMany(m => m.Candidates).Distinct(StringComparer.Ordinal).ToList(), replace?.Placement ?? UtilityPlacement.Append)
+        // Replace が無ければ、1 つでも Prepend なら前に足す (その読みをほぼ確実に指す変換があるので)
+        var placement = replace?.Placement ?? (matches.Any(m => m.Placement == UtilityPlacement.Prepend) ? UtilityPlacement.Prepend : UtilityPlacement.Append);
+        return new UtilityCandidates(matches.SelectMany(m => m.Candidates).Distinct(StringComparer.Ordinal).ToList(), placement)
         {
             Reading = replace?.Reading,
             NotLearned = matches.SelectMany(m => m.NotLearned).ToList(),

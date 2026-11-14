@@ -202,11 +202,22 @@ internal static class UtilityConversionTests
     [Test]
     public static void Issue345_KanjiFromRadicalNames()
     {
-        // #345: 部首の呼び名を「に」でつなぐと、それらを含む漢字を、説明どおりの字から出す。変換エンジンの候補 (言偏にふるとり) は出さない
-        var k = new Keyboard(now: () => Tuesday);
+        // #345: 部首の呼び名を「に」でつなぐと、それらを含む漢字を、説明どおりの字から最初の候補に出す。
+        // 後ろに変換エンジンの候補 (言偏にふるとり。字の書き方を説明するときに打つ) も残す
+        var converter = new SplitConverter(new() { ["ごんべんにふるとり"] = [new("ごんべんに", "言偏に"), new("ふるとり", "ふるとり")] });
+        var k = new Keyboard(converter: converter, now: () => Tuesday);
         k.Type("gonbennnifurutori ");
-        Assert.Equal("誰", k.Host.View!.Candidates[0], string.Join(",", k.Host.View!.Candidates));
-        Assert.Equal("ごんべんにふるとり", k.Host.View!.Candidates[^1], "かなで確定したいときのために、読みも最後に置く");
+        var shown = k.Host.View!.Candidates.ToList();
+        Assert.Equal("誰", k.Host.View!.Candidates[k.Host.View.SelectedIndex], string.Join(",", shown));
+        Assert.Equal("誰", shown[0], string.Join(",", shown));
+        Assert.True(shown.Contains("言偏にふるとり") && shown.Contains("ごんべんにふるとり"), "変換エンジンの候補とかなも残す: " + string.Join(",", shown));
+
+        // 候補の一覧を広げても、変換エンジンの候補は漢字の後ろに入る (漢字の間に入らない)
+        IReadOnlyList<string> More(string reading) => reading == "ごんべんにふるとり" ? ["言偏にふるとり", "ごんべんにふるとり"] : [];
+        var expanded = new Keyboard(converter: converter, moreCandidates: More, now: () => Tuesday);
+        expanded.Type("gonbennnifurutori ");
+        var all = expanded.Host.View!.Candidates.ToList();
+        Assert.True(all.IndexOf("言偏にふるとり") > all.IndexOf("讎"), string.Join(",", all));
 
         // 説明どおりの字 (余分な要素の無い字) が先。ほかの要素も含む字 (護・体・深) はその後ろ
         Assert.Equal("誰", Kanji("ごんべんにふるとり")[0], string.Join(",", Kanji("ごんべんにふるとり")));

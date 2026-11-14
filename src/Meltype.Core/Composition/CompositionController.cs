@@ -156,6 +156,12 @@ public sealed partial class CompositionController
         /// <summary>ユーティリティ変換の Replace の文節。候補を足さず、文節の区切りも動かさない。</summary>
         public bool Fixed { get; init; }
 
+        /// <summary>
+        /// ユーティリティ変換の Prepend で、候補の先頭に足した候補の数。変換エンジンの候補の一覧 (Expand) は、その後ろに入れる
+        /// (先頭に足した漢字の間に 言偏にふるとり が入らないように)。
+        /// </summary>
+        public int Leading { get; set; }
+
         /// <summary>候補と同じ順・件数の注記 (ユーティリティ変換が決めたもの)。null なら候補から決める (<see cref="CandidateNotes"/>)。</summary>
         public IReadOnlyList<CandidateNote>? Notes { get; init; }
 

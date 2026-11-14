@@ -24,9 +24,9 @@ internal sealed class KanjiPartsConversion : IUtilityConversion
     {
         if (input.Reading is not { } reading || Find(reading) is not { Count: > 0 } found) return null;
         // 呼び名を「に」でつないだ読みは、ふだんの語・句には無い (readings.txt の語はどれも当てはまらないことをテストで確かめる)。
-        // 変換エンジンの候補 (言偏にふるとり) は要らないので、漢字だけを出す (Replace)。かなで確定したいときのために、読みも最後に置く。
+        // 漢字を最初の候補にし、後ろに変換エンジンの候補 (言偏にふるとり。字の書き方を説明するときに打つ) も残す (Prepend)。
         // 漢字は時刻や設定で変わらないので、選んだら学習してよい
-        return new UtilityCandidates([.. found, reading], UtilityPlacement.Replace) { Reading = reading, Learnable = true };
+        return new UtilityCandidates(found, UtilityPlacement.Prepend) { Learnable = true };
     }
 
     /// <summary>呼び名をつないだ読みに当てはまる漢字 (よく使う字から)。当てはまらなければ空。</summary>
