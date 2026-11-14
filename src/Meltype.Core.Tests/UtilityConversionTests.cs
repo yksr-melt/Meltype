@@ -142,7 +142,7 @@ internal static class UtilityConversionTests
     [Test]
     public static void KanjiNumbers_AreOfferedForDigitsOnly()
     {
-        // Mac の azooKey は打った数字を漢数字にしないので、どの OS でも出るように Meltype が出す (issue #344)
+        // 変換エンジンによっては打った数字を漢数字にしないので、Meltype が出す (issue #344)
         var history = new ConversionHistory(null);
         var k = new Keyboard(history: history);
         k.Type("2026 ");

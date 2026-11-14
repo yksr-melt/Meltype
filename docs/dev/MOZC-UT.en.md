@@ -8,10 +8,9 @@ which adds personal names, place names and Wikipedia-derived words to the conver
 **Nothing is merged by default.** Unless you ask for it, the helper is built from plain Mozc exactly as before.
 The UT dictionary is added only when you explicitly point to one.
 
-- The same environment variable works on Windows and Linux: `MELTYPE_UT_DICTIONARY=/path/to/mozcdic-ut.txt`
+- The same environment variable works on Windows, Linux, and macOS: `MELTYPE_UT_DICTIONARY=/path/to/mozcdic-ut.txt`
 - The C# conversion engine is not modified. Only the conversion helper (`meltype_mozc_helper`) is rebuilt.
 - Learning data is unaffected.
-- The macOS build uses azooKey and is not affected by this feature.
 
 ## Read this first: licenses and redistribution
 
@@ -188,7 +187,7 @@ python3 native/mozc/merge-ut-dictionary.py --mozc-src ~/mozc/src \
 
 ## Known limitations
 
-- **Only the Mozc engine** is affected (the Windows/Linux `meltype_mozc_helper`). The macOS build uses azooKey.
+- **Only the Mozc engine** is affected (`meltype_mozc_helper`).
 - The UT dictionary is added to Mozc at build time, so switching dictionaries requires rebuilding the helper (re-embedding the dictionary). Bazel's cache makes later builds take a few minutes.
 - The build script leaves `dictionary_ut.txt` listed in Mozc's `src/data/dictionary_oss/BUILD.bazel`. If you delete `dictionary_ut.txt`, running `bazel build` directly in that Mozc checkout fails. Build through the build script.
 - Candidate quality and ordering come from the UT dictionary; Meltype neither reorders nor filters it.

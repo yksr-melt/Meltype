@@ -8,9 +8,9 @@
 | フォルダー | 中身 |
 |---|---|
 | `src/Meltype.Core/` | OS に依存しない部分 (Windows・Mac・Linux 共通)。英語 / 日本語の判定・ローマ字・変換ボックスの中身・辞書・学習・設定 |
-| `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・Microsoft IME の変換エンジン・IMM32 / TSF・UI Automation・スペルチェッカー・トレイ) |
+| `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・スペルチェッカー・トレイ) |
 | `src/Meltype.Mac.Native/` | Mac 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib にする) |
-| `mac/` | Mac 版の IME (Swift、Input Method Kit。漢字変換は azooKey) |
+| `mac/` | Mac 版の IME (Swift、Input Method Kit) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
 | `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |
 | `src/Meltype.Core.Tests/` | 共通部分のテスト (判定・変換ボックス・学習・品質テスト)。Mac・Linux でも動く |
@@ -43,7 +43,6 @@ powershell -ExecutionPolicy Bypass -File .\Uninstall-Meltype.ps1 -RemoveData # �
 
 - Windows 10 / 11 (x64 / ARM64)
 - .NET 10 SDK
-- Microsoft IME (漢字変換に使います)
 - Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
 
 ## Mac・Linux でビルドする
@@ -58,8 +57,6 @@ dotnet build Meltype.sln
 dotnet run --project src/Meltype.Windows.Tests                                   # すべてのテスト (Windows)
 dotnet run --project src/Meltype.Windows.Tests -- CompositionTests               # 名前に一致するテストだけ
 dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello      # 1 文字ずつの判定理由 (英数状態の検知)
-dotnet run --project src/Meltype.Windows.Tests -- --convert きょうはいいてんき     # 変換エンジンの結果と文節の区切り
-dotnet run --project src/Meltype.Windows.Tests -- --context この本は:あつい        # 文脈を渡したときの変換結果
 dotnet run --project src/Meltype.Windows.Tests -- --eval                          # 品質テスト
 ```
 
@@ -158,7 +155,7 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-wi
                                    │
                                    ▼ (UI スレッド。出来事を ImeHost に送り、確定・表示を受け取る)
                     ImeSession ─▶ MeltypeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
-                                   │                  HybridConverter (Mozc / Microsoft IME の変換エンジン)
+                                   │                  HybridConverter (Mozc と Zenzai)
                                    │                  ContextRules / ConversionHistory / CandidateDictionary
                                    │                  FocusInspector (UI Automation: 入力欄か・カーソルの前後の文字)
                                    ▼
