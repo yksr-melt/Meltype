@@ -932,8 +932,10 @@ void TextService::RefreshPreservedKeys() {
     if (disabled_) return;
     // Alt 付きのキーは WM_SYSKEYDOWN になり、TSF に登録しないと IME に届かない
     std::vector<ToggleShortcut> withAlt;
-    for (const auto& key : state_.keys)
+    for (const auto& key : state_.keys) {
+        // Alt: 0100 (= 4)
         if (key.mods & 4) withAlt.push_back(key);
+    }
     for (const auto& b : PreservedShortcutKeys(withAlt, MapVirtualKeyExW(0x29, MAPVK_VSC_TO_VK_EX, GetKeyboardLayout(0)) == ToggleShortcut::Grave)) {
         PreservedKey entry{{b.key, b.flags}, {0x7118DA00u | b.key, static_cast<USHORT>(b.flags), 0x4AC2, {0xAA, 0x4D, 0xC5, 0x51, 0x17, 0x39, 0x61, 0xC3}}};
         const HRESULT hr = manager->PreserveKey(clientId_, entry.guid, &entry.key, nullptr, 0);
@@ -1113,6 +1115,7 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
     passVk_ = 0;
     wchar_t ch = 0;
     *eaten = WouldEat(context, vk, lParam, ch, true) ? TRUE : FALSE;
+    // OnKeyUp を呼ばないアプリでは印が残り、あとで通した同じキーの離した通知まで受け取ってしまうので、ここで消す
     if (!*eaten && vk < 256) eatenDown_[ShortcutSlot(vk, lParam)] = false;
     // アプリにそのまま渡すキー (BackSpace・矢印・Enter・Space など) はキャレットを動かす (編集の通知で Meltype.exe に伝える)
     if (!*eaten && !IsModifier(vk)) RememberPassed(vk);
@@ -1129,6 +1132,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     passVk_ = 0;
     wchar_t ch = 0;
     if (!WouldEat(context, vk, lParam, ch, false)) {
+        // OnTestKeyDown を呼ばないアプリでは印が残り、あとで通した同じキーの離した通知まで受け取ってしまうので、ここで消す
         if (vk < 256) eatenDown_[ShortcutSlot(vk, lParam)] = false;
         if (!IsModifier(vk)) RememberPassed(vk);
         *eaten = FALSE;
