@@ -375,6 +375,10 @@ SPDX-License-Identifier: Unicode-3.0
 
 - 出典: European Central Bank
 
+### 漢字の構成要素 (dictionaries/kanji-parts.txt)
+
+部首の呼び名から漢字を探すのに使います。[KRADFILE](https://www.edrdg.org/krad/kradinf.html) (漢字の構成要素) と [KANJIDIC2](https://www.edrdg.org/wiki/index.php/KANJIDIC_Project) (使われる頻度・画数) から `tools/make-kanji-parts.mjs` で作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。KRADFILE の著作権: Copyright 2001/2007 Michael Raine, James Breen and the Electronic Dictionary Research & Development Group。
+
 ### そのほかの辞書
 
 `dictionaries/` の辞書 (日本語・英語の単語、固有名詞、同音異義語の候補、文脈の手がかり) は Meltype のために作成したもので、

@@ -154,6 +154,24 @@ const dictionaries = {
     commentAt: line => line.trimStart().startsWith('#') ? 0 : -1,
     untrimmed: true,
   },
+  // 漢字<Tab>要素 要素 … (tools/make-kanji-parts.mjs で作る)
+  'kanji-parts.txt': {
+    format: tabbed(2, 2, ([kanji, parts]) => [
+      [...kanji].length === 1 ? null : `「${kanji}」が 1 文字でない`,
+      parts.split(' ').every(p => [...p].length === 1) ? null : `要素「${parts}」が 1 文字ずつの空白区切りでない`,
+    ]),
+    commentAt: line => line.startsWith('#') ? 0 : -1,
+    keysOf: line => [[line.split('\t')[0], line]],
+  },
+  // 部首の呼び名<Tab>要素 (手で書く)。Core は読み全体を呼び名で区切るので、読みはひらがな、要素は 1 文字
+  'radicals.txt': {
+    format: tabbed(2, 2, ([name, part]) => [
+      hiragana.test(name) ? null : `呼び名「${name}」がひらがなでない`,
+      [...part].length === 1 ? null : `要素「${part}」が 1 文字でない`,
+    ]),
+    commentAt: line => line.startsWith('#') ? 0 : -1,
+    keysOf: line => [[line.split('\t')[0], line]],
+  },
   'emoji-cldr.txt': {
     format: tabbed(2, 99, () => []),
     commentAt: line => line.trimStart().startsWith('#') ? 0 : -1,

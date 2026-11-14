@@ -198,4 +198,29 @@ internal static class UtilityConversionTests
         Choose(ordinary, "hokano", "外の");
         Assert.Equal("外の", history.Get("ほかの"), "普通の語は覚える");
     }
+
+    [Test]
+    public static void Issue345_KanjiFromRadicalNames()
+    {
+        // #345: 部首の呼び名を「に」「と」でつなぐと、それらをすべて含む漢字を、よく使う字から出す
+        var k = new Keyboard(now: () => Tuesday);
+        k.Type("gonbennnifurutori ");
+        var shown = k.Host.View!.Candidates.ToList();
+        Assert.True(shown.Contains("誰"), string.Join(",", shown));
+        Assert.Equal("ごんべんにふるとり", shown[0], "普通の候補が先 (このテストの変換エンジンはかなを返す)");
+
+        // 呼び名の揺れ (ことばへん)、「と」でつなぐ、呼び名の中の「に」(にんべん) は区切りでない
+        Assert.True(Kanji("ことばへんとふるとり").Contains("誰"), "ことばへん");
+        Assert.True(Kanji("にんべんにき").Contains("休"), "にんべんにき → 休");
+        Assert.True(Kanji("さんずいにき").Contains("沐"), "さんずいにき → 沐");
+        // 要素を含む字はすべて当てはまる (体 = にんべん + 本 も 木 を含む)。よく使う字が先
+        Assert.Equal("体", Kanji("にんべんにき")[0], string.Join(",", Kanji("にんべんにき")));
+
+        // 逆向き: 呼び名 1 つだけ・呼び名でない語は出さない
+        Assert.True(Kanji("ごんべん").Count == 0, "1 つだけ");
+        Assert.True(Kanji("にほんにいく").Count == 0, "にほんにいく");
+        Assert.True(Kanji("きのうにいった").Count == 0, "きのうにいった");
+    }
+
+    private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
 }
