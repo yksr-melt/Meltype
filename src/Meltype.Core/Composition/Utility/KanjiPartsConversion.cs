@@ -49,7 +49,7 @@ internal sealed class KanjiPartsConversion : IUtilityConversion
     }
 
     /// <summary>読みが、ふだんの語の読み (readings.txt) でない呼び名と「に」で始まるか。</summary>
-    private static bool StartsWithRadicalName(string reading, IReadOnlyDictionary<string, string> names)
+    private static bool StartsWithRadicalName(string reading, Dictionary<string, string> names)
     {
         for (var length = 1; length < reading.Length; length++)
         {
