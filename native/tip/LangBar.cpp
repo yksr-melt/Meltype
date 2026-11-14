@@ -80,11 +80,10 @@ HICON CreateTextIcon(const wchar_t* text) {
 
 }  // namespace
 
-LangBarButton::LangBarButton(TextService* service) : service_(service) { DllAddRef(); }
+LangBarButton::LangBarButton(TextService* service) : service_(service) {}
 
 LangBarButton::~LangBarButton() {
     if (sink_ != nullptr) sink_->Release();
-    DllRelease();
 }
 
 STDMETHODIMP LangBarButton::QueryInterface(REFIID riid, void** ppv) {

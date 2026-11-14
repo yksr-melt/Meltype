@@ -29,7 +29,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// 読みに無い数字・元号を含むか、読みに無い「曜日」で終わる語。いちばん → 1番 も当てはまるが、Meltype の学習から外すだけで、Mozc は自分で学習する。
     /// </summary>
     // TODO: 推測をやめ、変換エンジンが付ける「学習しない」の印で決める。Mozc は日時・版の候補に NO_LEARNING を付けているので、
-    // meltype_mozc_helper が候補と一緒に返す。azooKey (特別な候補) と Microsoft IME も同じ印を返せるようにする。
+    // meltype_mozc_helper が候補と一緒に返す。
     // そうすれば いちばん → 1番 を巻き添えにしない。
     public static bool IsVolatile(string reading, string text) =>
         !reading.Any(IsDigit) && text.Any(IsDigit) ||
@@ -52,6 +52,12 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// <summary>計算の言葉の文節で、変換エンジンの記号の候補 (3かける4 → 3×4) を選んだか。学習しない (覚えると 電話をかける まで × になる)。</summary>
     private static bool IsOperatorChoice(Clause clause) =>
         MathOperator().IsMatch(clause.Reading) && clause.Text.IndexOfAny(['×', '÷', '+', '＋', '-', '－', '=', '＝']) >= 0;
+
+    /// <summary>
+    /// 句読点だけの文節か。学習しない (変換エンジンにも覚えさせない)。読みの 、。 は句読点の設定によらず同じなので、
+    /// ここで選んだ候補 (、 → ・) を覚えると、ほかの句読点の設定や、句読点を含む文節 (わたしは、 → 私は・) にも効く。
+    /// </summary>
+    private static bool IsPunctuationOnly(Clause clause) => clause.Reading.All(c => c is '、' or '。');
 
     /// <summary>変換履歴の語。</summary>
     public string? LearnedConversion(string reading) => services.History?.Get(reading);
@@ -85,7 +91,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
             if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
-            if (!Learnable(clause)) continue;
+            if (!Learnable(clause) || IsPunctuationOnly(clause)) continue;
             history.Remember(clause.Reading, clause.Text);
         }
     }
@@ -107,7 +113,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         }
         foreach (var clause in clauses)
         {
-            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.NotLearned.Contains(clause.Text) || IsOperatorChoice(clause))
+            if (clause.IsEnglish || clause.Text == clause.Raw || clause.Translations.Contains(clause.Text) || clause.Reading.Any(char.IsAsciiLetterOrDigit) || clause.NotLearned.Contains(clause.Text) || IsOperatorChoice(clause) || IsPunctuationOnly(clause))
             {
                 Flush();
                 continue;

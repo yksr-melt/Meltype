@@ -13,8 +13,8 @@ const root = path.join(path.dirname(self), '..', 'dictionaries');
 const hiragana = /^[ぁ-ゖー゛゜ゔ]+$/;
 const kana = /^[ぁ-ゖァ-ヺー・ゔヴ]+$/;
 const ascii = /^[\x21-\x7e]+$/;
-// 1 行に並べた語の区切りは半角空白とタブだけ。全角空白は区切りでない (Core は全角空白を含むトークンを語にせず捨てる)
-const tokens = line => line.split(/[ \t]+/).filter(Boolean);
+// Core (WordList.ParseWords・ProperNouns.AddText) の語の区切り。全角空白は区切りでない (含むトークンは語にならず捨てられる)
+const coreTokens = line => line.split(/[ \t\r,]+/).filter(Boolean);
 
 /**
  * 辞書ごとの扱い。各辞書には既定 (checkDictionary) と違う項目だけを書く。
@@ -46,17 +46,20 @@ const dictionaries = {
     format: spaced((reading, rest) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, rest.length === 0 ? '候補が無い' : null]),
   },
   'propernouns.txt': {
-    // Core (ProperNouns) は区切った語のうち、ASCII の英数字だけの語を登録し、それ以外は黙って捨てる
+    // Core (ProperNouns) は空白・タブ・, で区切った語のうち、ASCII の英数字だけの語を登録し、それ以外は黙って捨てる
     format: words(w => /^[A-Za-z][A-Za-z0-9]*$/.test(w) ? null : `「${w}」が英字で始まる英数字だけの語でない (Core は登録しない)`),
-    // Core は行を trim せず半角空白・タブで区切るので、行頭・行末の全角空白は隣の語に付いたまま残り、その語は登録されない
+    // Core は行を trim せず半角空白・タブ・, で区切るので、行頭・行末の全角空白は隣の語に付いたまま残り、その語は登録されない
     untrimmed: true,
     // Core は小文字で引き、先に出た綴りを正規形として表示する。小文字で同じ語に違う綴りがあると、後の綴りは使われない
-    keysOf: line => tokens(line).map(w => [w.toLowerCase(), w]),
+    keysOf: line => coreTokens(line).map(w => [w.toLowerCase(), w]),
     // 分類ごとに同じ語を置いてよい (同じ綴りなら正規形は変わらない)
     allowRepeats: true,
   },
+  // Core は小文字にして読むので、大文字を含んでも同じ語 (日本語由来の節は sections で見る)
   'english.txt': {
-    format: words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
+    format: words(w => /^[A-Za-z][A-Za-z0-9_'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
+    // Core は小文字にして読む
+    keysOf: line => [[line.trim().toLowerCase(), line.trim().toLowerCase()]],
     sections: japaneseOriginSection,
   },
   'english-words.txt': {
@@ -79,22 +82,28 @@ const dictionaries = {
     // Core は繋げた形をキーに、後の行で上書きする
     keysOf: line => { const [joined, phrase] = line.split('\t'); return [[joined, phrase]]; },
   },
-  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ
+  // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ。Core は小文字にして読む
   'english-readable.txt': {
-    format: words(w => /^[a-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の小文字の英字の語でない`),
-    // 1 行に複数の語を置けるので、語ごとに見る
-    keysOf: line => tokens(line).map(w => [w, w]),
+    format: words(w => /^[A-Za-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の英字の語でない`),
+    // 1 行に複数の語を置けるので、語ごとに見る。Core は小文字にして読むので、大文字小文字だけ違う語は同じ語
+    keysOf: line => coreTokens(line).map(w => [w.toLowerCase(), w.toLowerCase()]),
   },
   'japanese.txt': {
     format: words(w => /^[a-z]+$/.test(w) ? null : `「${w}」が小文字のローマ字でない`),
   },
-  // 読み 候補 : 手がかり …
+  // 読み 候補 : 手がかり …。Core (ConversionPreferences) は最初の : で分け、前後を空白・タブ・全角空白で区切る (: の前後の空白は問わない)
   'contexts.txt': {
     format: line => {
-      const [left, right] = line.split(' : ');
-      if (right === undefined) return ['「読み 候補 : 手がかり …」の形でない'];
-      const [reading, word, extra] = left.trim().split(/\s+/);
-      return [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, word ? null : '候補が無い', extra ? '候補は 1 つだけ' : null, right.trim() ? null : '手がかりが無い'];
+      const colon = line.indexOf(':');
+      if (colon < 0) return ['「読み 候補 : 手がかり …」の形でない'];
+      const [reading, word, extra] = line.slice(0, colon).split(/[ \t　]+/).filter(Boolean);
+      const cues = line.slice(colon + 1).split(/[ \t　]+/).filter(Boolean);
+      return [
+        reading === undefined || hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+        reading === undefined ? '読みが無い' : word ? null : '候補が無い',
+        extra ? '候補は 1 つだけ' : null,
+        cues.length > 0 ? null : '手がかりが無い',
+      ];
     },
   },
   // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
@@ -129,6 +138,13 @@ const dictionaries = {
       [...reading].length >= 3 ? null : `読み「${reading}」が 3 文字より短い`,
     ]),
   },
+  // 通貨コード<Tab>1 ユーロあたりのレート (tools/make-exchange-rates.mjs で作る。日付は「# 日付:」の行)
+  'exchange-rates.txt': {
+    format: tabbed(2, 2, ([code, rate]) => [
+      /^[A-Z]{3}$/.test(code) ? null : `通貨コード「${code}」が英大文字 3 文字でない`,
+      /^[0-9]+(\.[0-9]+)?$/.test(rate) && Number(rate) > 0 ? null : `レート「${rate}」が正の数でない`,
+    ]),
+  },
   'katakana.txt': {
     format: tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   },
@@ -144,6 +160,22 @@ const dictionaries = {
     untrimmed: true,
   },
 };
+// 国名の語 (tools/make-countries.mjs で作る)。Core は propernouns.txt と同じく読む
+dictionaries['countries.txt'] = dictionaries['propernouns.txt'];
+
+/**
+ * 分野の辞書 (dictionaries/domain-*.txt。tools/make-domain-dictionaries.py で作る)。読み<Tab>表記<Tab>表記 …。
+ * Core (CandidateDictionary.AddDomainText) は行頭の # だけをコメントとし、タブだけで区切る。読みは打ったかなと完全一致で引く
+ */
+const domain = {
+  format: tabbed(2, Infinity, ([reading, ...words]) => [
+    hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+    ...words.filter(w => w === '').map(() => '空の表記がある'),
+  ]),
+  commentAt: line => line.startsWith('#') ? 0 : -1,
+  keysOf: line => [[line.split('\t')[0], line]],
+};
+const configOf = file => dictionaries[file] ?? (/^domain-[a-z-]+\.txt$/.test(file) ? domain : undefined);
 
 function noInlineComment(check) {
   return line => line.includes('#') ? ['行末にコメントは書けない (コメントは行頭の # だけ。行末に書くとこの行は読み込まれない)'] : check(line);
@@ -156,9 +188,9 @@ function spaced(check) {
   };
 }
 
-/** tokens で分けた語ごとに確かめる。 */
+/** Core と同じ区切りで分けた語ごとに確かめる。 */
 function words(check) {
-  return line => tokens(line).map(check);
+  return line => coreTokens(line).map(check);
 }
 
 function tabbed(min, max, check) {
@@ -194,7 +226,7 @@ function japaneseOriginSection() {
 export function checkDictionary(file, text) {
   const errors = [], warnings = [];
   if (text.charCodeAt(0) === 0xfeff) warnings.push({ message: '先頭に BOM がある' });
-  const config = dictionaries[file];
+  const config = configOf(file);
   if (!config) { warnings.push({ message: '形式を確かめる決まりが無い辞書 (tools/check-dictionaries.mjs に足してください)' }); return { errors, warnings }; }
   const {
     format,

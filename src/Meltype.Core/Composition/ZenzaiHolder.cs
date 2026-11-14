@@ -23,6 +23,8 @@ public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? 
     private int _failures;
     // 作れなかったときの例外の中身を、この場所でもう書いたか (2 回目からは要点だけ書く)
     private bool _loggedCreateError;
+    // 止めた (Meltype の終了)。止めた後に変換が来ても、llama-server を作り直さない (作ると止める人がいない)
+    private volatile bool _disposed;
 
     /// <summary>使えなくなってから、もう一度作るまでの最初の時間。</summary>
     public TimeSpan RetryAfter { get; init; } = TimeSpan.FromMinutes(5);
@@ -30,9 +32,10 @@ public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? 
     /// <summary>続けて使えないときに、待つ時間の上限。</summary>
     public TimeSpan MaxRetryAfter { get; init; } = TimeSpan.FromHours(1);
 
-    /// <summary>今の Zenzai。場所が空 (OFF) なら止めて null。作れない・止めて待っている間も null (変換は Mozc などで続ける)。</summary>
+    /// <summary>今の Zenzai。場所が空 (OFF) なら止めて null。作れない・止めて待っている間・止めた後も null (変換は Mozc で続ける)。</summary>
     public ZenzaiConverter? Get(string serverPath, string modelPath, string device = "")
     {
+        if (_disposed) return null;
         var server = serverPath.Trim();
         var model = modelPath.Trim();
         if (server.Length == 0 || model.Length == 0)
@@ -63,12 +66,12 @@ public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? 
             }
             catch (Exception ex)
             {
-                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc などで続ける
+                // 作れないとき (#973: 同梱の .NET に System.Net.Http が無い) は、変換は Mozc で続ける
                 // (HybridConverter は Zenzai が無ければ今までどおり変換する)。例外の中身を書くのは、この場所で 1 回目だけ
                 var wait = WaitBeforeRetry();
                 var detail = _loggedCreateError ? ex.Message : ex.ToString();
                 _loggedCreateError = true;
-                Diagnostics.Log.Error($"Zenzai を使えないので、今までの変換エンジンで変換します ({wait.TotalMinutes} 分後にもう一度試します): {detail}");
+                Diagnostics.Log.Error($"Zenzai を使えないので、Mozc で変換します ({wait.TotalMinutes} 分後にもう一度試します): {detail}");
             }
         }
         return _zenzai;
@@ -80,7 +83,11 @@ public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? 
         if (ReferenceEquals(failed, _zenzai)) StopAndWait("変換で例外になったので Zenzai を止めました");
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        _disposed = true;
+        Stop();
+    }
 
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・まだ一度も変換していなければ null。</summary>
     public string? Status => _key.Length == 0 ? null : _zenzai switch

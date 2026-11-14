@@ -14,14 +14,14 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 │ MeltypeTip.dll (C++, TSF)       │  名前付き   │ TipServer                        │
 │  - キーを受け取る               │  パイプ     │  - つながり・入力欄ごとに        │
 │  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    MeltypeSession                │
-│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Microsoft IME)    │
+│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Zenzai)           │
 │                                  │  = 1 JSON   │  - 学習データ・ユーザー辞書        │
 └──────────────────────────────┘            └───────────────────────────────┘
 ```
 
 | 場所 | 中身 |
 |---|---|
-| `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 をビルド、`Register-Tip.ps1` で登録 |
+| `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 の stub (`MeltypeTip.dll`) と impl (`MeltypeTipImpl.dll`) をビルド、`Register-Tip.ps1` で登録 |
 | `src/Meltype.Windows/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
 | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
 | `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
@@ -35,7 +35,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 位置が分からなければ常駐側でキャレットを探し、それも分からなければマウス位置へ戻します (Terminal の入力欄の左上を入力位置と推測しません)。表示時に別の入力先へ移っていたら表示しません。
 アプリ・Windows による自動的な開閉やパスワード欄への移動だけでは表示されません。
 
-DLL を更新した後の確認では、入力先アプリのプロセスを終了して起動し直します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い DLL が残ることがあります。
+impl を更新した後の確認では、入力先アプリの再起動は要りません (下の「stub と impl」)。stub (`Dll.cpp`・`Stub.cpp`・`Common.cpp`) を変更したときは、入力先アプリのプロセスを再起動します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い stub が残ることがあります。
 
 自動開閉の検証は次で行えます。短時間テスト画面が前面に出ます。Windows の実際の TSF コンパートメントと通常欄・パスワード欄を使い、プログラムからの開閉は明示的な切り替え (`ModeToggleRequested`) として送らず、タスクバーのボタンでは 1 回ずつ送ることを確認します。パイプ通信だけを記録用に置き換えており、通常の Meltype 本体・設定・学習データには接続しません。前面に出せない場合は終了コード 77 でスキップします。
 
@@ -54,7 +54,37 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 学習データ・ユーザー辞書を複数のプロセスが同時に書き換えて壊し、Mozc のヘルパーもアプリの数だけ起動する。
 そのため、Google 日本語入力 (Mozc) と同じく、本体は 1 つのプロセス (Meltype.exe) に置き、DLL は薄い殻にして通信する。
 
-## MeltypeTip.dll
+### stub と impl
+
+DLL は、COM に登録する stub (`MeltypeTip.dll`) と、TSF の処理を持つ impl (`MeltypeTipImpl.dll`) に分割する。プロセスがロードした DLL はプロセスの終了まで残るので、
+stub が impl をロードし、Meltype の更新後は、アプリを再起動せずに impl を差し替える (#1670)。
+
+- stub は、TSF が IME のオブジェクトに QueryInterface する `ITfTextInputProcessorEx`・`ITfDisplayAttributeProvider` を impl の `TextService` に委譲するだけ。
+  下の表のシンクは、impl の `TextService` が TSF に直接 Advise する
+- impl は `C:\Program Files\Meltype\tip\<x64|x86>\impl\<SHA-256>\MeltypeTipImpl.dll` に配置する。フォルダー名は署名前のバイナリの SHA-256。
+  SHA-256 をファイル名にすると、Gecko (Firefox・Thunderbird など) がロードを拒否する (ファイル名の `.` より前が 16 桁以上の 16 進数の DLL を拒否する)。
+  stub は impl の中身の SHA-256 を照合しない。改竄は置き場所 (Program Files) の ACL で防ぐので、管理者以外が書けるフォルダーに移すなら、中身も照合する。
+  stub がロードする impl は、stub と同じフォルダーの `MeltypeTipImpl.dll.sha256` で指定する。Meltype.exe からパイプで指定する形にはしない
+  (パイプのサーバーを偽装したプロセスによる、残っている古い impl へのダウングレードを防ぐ)。
+  `Register-Tip.ps1` は、stub を登録できてから `MeltypeTipImpl.dll.sha256` を書き換える (stub の登録に失敗して前の stub に戻したときは、前の impl を指したまま)
+- impl は要求に自分の SHA-256 (`impl`) を付ける。Meltype.exe は、同梱の `tip\<x64|x86>\MeltypeTipImpl.dll.sha256` と一致しなければ `{"stale":true}` を返す (`TipBuild`)。
+  impl は stub のウィンドウに `kStubImplStale` を PostMessage し、stub は `MeltypeTipImpl.dll.sha256` を読み直して、変わっていたら前の impl を `Deactivate` し、
+  新しい impl を同じ `ITfThreadMgr`・`TfClientId` で `ActivateEx` する (未確定文字列は、前の impl の `Deactivate` が確定する)。
+  差し替わるまでのキーは、Meltype.exe の応答がタイムアウトしたときと同じ扱いになる
+- 別ビルドの impl とは通信しないので、パイプのプロトコルに後方互換性は要らない。
+  互換性が要るのは stub と impl の ABI (`Globals.h` の `MeltypeTipCreateFn`・`kStubImplStale`) で、変更したら `kStubImplAbi` を上げる。
+  stub は impl の `MeltypeTipAbi` が自分の `kStubImplAbi` と一致しなければロードした impl を使わないので、ABI を変更した更新は、アプリを再起動するまでそのアプリに反映されない
+- 前の impl は `FreeLibrary` しない (プロセスの終了まで残る)。ファイルは、どのプロセスもロードしていなければ次の登録で削除する
+- 差し替えられないアプリ (stub と impl に分割する前の DLL が残っている・古い stub が今の impl をロードできない) は、登録済みの impl が Meltype.exe と同じビルドになってから 3 秒たっても、同じ接続から別ビルドの要求が届くことで検出する。
+  分割前の DLL は更新前から開いているアプリすべてに残るので、Meltype.exe は PC の再起動を求める通知を 1 回だけ出す。通知を見逃しても打てない理由が分かるように、そのアプリで打っている間は、入力モードの表示と同じ所にアプリの再起動を求める表示も出す (届いた要求から決めるので、覚えておく状態は持たない)。分割前の DLL には今までの形式で応答しない (後方互換レイヤーを持たない)
+- 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。Meltype IME を再登録せずに Meltype.exe だけを更新すると、こうなる
+  (setup.exe のサイレント実行・前に UAC を断ったあとの自動更新・Meltype IME の再登録後に失敗して前の版に戻した更新)。
+  動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (`ImeDeclined` は見ない。聞いたことを覚える状態は持たない)
+- `tip` フォルダーが無い Meltype.exe (`dotnet run`・テスト・ポータブル版) は、impl を照合しない
+
+プロトコルの版の番号 (`ImeEvent.version`) では照合しない。項目名を変更しても番号が `1` のままで、不一致を検出できていなかった。
+
+## MeltypeTip.dll・MeltypeTipImpl.dll
 
 | インターフェース | やること |
 |---|---|
@@ -110,8 +140,8 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 ## 通信
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON。
-  要求は `{"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
-  応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。読めない要求 (版の違う DLL) には `{"active":false,…}` を返し、古い DLL も何もせずにキーを通す
+  要求は `{"impl":impl の SHA-256,"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
+  応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。別ビルドの impl には `{"stale":true}` (上の「stub と impl」)、パースできない要求には `{"active":false,…}` を返し、DLL はどちらもキーを消費しない
 - 状態 (`StateRequested`) は、起動したとき・前面に戻ったとき・アプリや Windows が IME を開閉したときに受け取り直す (待つのは最大 100ms)。変換中だけ、背景の変換の結果を別のつながりの `{"wait":世代}` で待つ
 - 1 キーごとに同期で 1 往復。待つのは最大 800ms。応答が無ければ、変換中の文字はそのまま確定し、打った文字はその場で入れる。
   書き込み・読み取りが時間内に終わらなかったら、閉じて、次の要求でつなぎ直す。5 秒以内にまた時間切れになったら、そのあと 3 秒はつながない (応答しない Meltype.exe を、どのアプリでも打鍵のたびに待たないように)。
@@ -149,8 +179,8 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 ## インストール
 
 - IME の登録は HKLM に要る (HKCU だけでは ActivateProfile が失敗した) ので、インストールのときだけ UAC で管理者権限を求める。断ったら、今までどおり変換ボックスの方式で動く
-- DLL は `C:\Program Files\Meltype\tip` に置く (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所)。使っている DLL は名前を変えて残し、次の登録で消す
-- 入れ直すたびに UAC を出さないように、DLL が同じ (署名する前の中身のハッシュ `MeltypeTip.dll.sha256` が同じ) なら登録し直さない。
+- DLL は `C:\Program Files\Meltype\tip` に置く (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所)。ロードされている stub はリネームして残し、次の登録で削除する
+- 入れ直すたびに UAC を出さないように、stub と impl が同じ (署名する前の中身のハッシュ `MeltypeTip.dll.sha256`・`MeltypeTipImpl.dll.sha256` が同じ) なら登録し直さない。
   登録できてからハッシュを置くので、途中で失敗したら次に入れ直したときに登録し直す。新しい DLL を登録できなければ、前の DLL に戻して登録し直す。
   TIP のキーだけ残り、COM の登録 (`InprocServer32`) か DLL が無いとき (セキュリティソフトが登録を途中で止めたとき) も、DLL が同じでも登録し直す。
   断られたら覚えておき、Install.cmd・Install-Meltype.ps1 を自分で実行したときだけまた聞く

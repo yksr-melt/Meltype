@@ -23,11 +23,11 @@ internal static class ReportInfo
     public static string OsName => System.Environment.OSVersion.Version.Build >= 22000 ? "Windows 11" : "Windows 10";
 
     /// <summary>実行環境 (<see cref="Config.ProjectInfo.Environment"/> に、Windows でだけ分かる項目を足したもの)。</summary>
-    public static string Environment(Config.Settings settings) => Config.ProjectInfo.Environment(settings, AppInfo.Version, $"{OsName} {WindowsVersion()} ({RuntimeInformation.OSArchitecture})",
+    public static string Environment(Config.Settings settings) => Config.ProjectInfo.Environment(settings, Config.ProjectInfo.WithCommit(AppInfo.Version), $"{OsName} {WindowsVersion()} ({RuntimeInformation.OSArchitecture})",
     [
         $"管理者として実行: {(IsAdministrator() ? "はい" : "いいえ")}",
         $"モード: {settings.Mode}",
-        $"変換エンジン: {settings.ConversionEngine} (Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")})",
+        $"Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")}",
         $"変換ボックス: {settings.CompositionPlacement} / {settings.CompositionSize} / {settings.CompositionTheme} / {settings.CompositionOpacity}",
         $"キーボード: {KeyboardKind()}",
         $"画面: {Screen.AllScreens.Length} 枚、拡大率 {Scaling()}%",

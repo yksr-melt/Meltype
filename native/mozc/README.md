@@ -1,16 +1,16 @@
 # Mozc の変換ヘルパー
 
-Meltype の変換エンジン「Mozc」(設定の「変換エンジン」が 両方 / Mozc のとき) は、[Mozc](https://github.com/google/mozc)
-(Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジンを使う小さなプログラム `meltype_mozc_helper.exe` を別のプロセスで動かして使います。
+Meltype は全 OS で、[Mozc](https://github.com/google/mozc)
+(Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジンを使う小さなプログラム `meltype_mozc_helper` を別のプロセスで動かして変換します。
 
 | ファイル | 中身 |
 | --- | --- |
-| `meltype_mozc_helper.cc` | ヘルパーのソース。標準入出力で 変換 (`C`)・学習 (`L`)・保存 (`S`) を受け付ける (やり取りの形式はファイルの先頭に説明) |
+| `meltype_mozc_helper.cc` | ヘルパーのソース。標準入出力で 変換 (`C`)・学習 (`L`)・逆変換 (`R`)・保存 (`S`) を受け付ける (やり取りの形式はファイルの先頭に説明) |
 | `BUILD.fragment` | Mozc の `src/converter/BUILD.bazel` に足す Bazel の定義 |
 | `MOZC_COMMIT` | ビルドする Mozc の commit (動作を確かめた版に固定)。版を上げるときは、`src/data/dictionary_oss/BUILD.bazel` に `"dictionary09.txt",` の行が 1 か所だけあることを確かめる (`dictionary_ut.txt` を足す処理が目印にしている。直す場所は `build-mozc-helper.sh` のコメントに書いてある) |
 | `Build-MozcHelper.ps1` | Mozc を取得してヘルパーをビルドし、`bin\` にライセンスと一緒に置く |
-| `build-mozc-helper.sh` | 同じことを Linux で行う (`bin/linux/` に置く) |
-| `bazel-downloader.cfg` | Linux の Bazel が、GitHub Releases の依存ファイルを公式ミラーからも取得するための設定 |
+| `build-mozc-helper.sh` | 同じことを Linux・macOS で行う (`bin/linux/`・`bin/mac/` に置く) |
+| `bazel-downloader.cfg` | Linux・macOS の Bazel が、GitHub Releases の依存ファイルを公式ミラーからも取得するための設定 |
 | `merge-ut-dictionary.py` | Mozc-UT の辞書 (`mozcdic-ut.txt`) を Mozc の辞書に統合する (下の「Mozc-UT の辞書を使う」) |
 | `tests/` | `merge-ut-dictionary.py` のテスト。本物の Mozc も UT の辞書も要らない |
 | `bin\` | ビルドしたヘルパー (Git には入れない)。`Build-Package.ps1` / `Install-Meltype.ps1` が `app\mozc\` に同梱する |
@@ -26,7 +26,7 @@ Meltype の変換エンジン「Mozc」(設定の「変換エンジン」が 両
 初回は Mozc の依存関係 (LLVM など約 1 GB) の取得とビルドで 30〜40 分ほどかかります。
 GitHub Actions では `.github/workflows/windows.yml` の `mozc` ジョブが同じスクリプトでビルドし、`package` ジョブが同梱します。
 
-Linux では `native/mozc/build-mozc-helper.sh` でビルドします。GitHub Releases の依存ファイルは Bazel の公式ミラー (`mirror.bazel.build`) を先に試し、なければ元の URL から取得します。取得した内容は、依存関係の定義にあるハッシュで Bazel が検証します。
+Linux・macOS では `native/mozc/build-mozc-helper.sh` でビルドします (macOS は Xcode が要る。`mac.yml` の Mac 版のビルドも同じスクリプト)。GitHub Releases の依存ファイルは Bazel の公式ミラー (`mirror.bazel.build`) を先に試し、なければ元の URL から取得します。取得した内容は、依存関係の定義にあるハッシュで Bazel が検証します。
 
 学習データ (Mozc が覚えた変換) は `%LOCALAPPDATA%\Meltype\mozc\` に保存されます。
 
@@ -36,7 +36,7 @@ Linux では `native/mozc/build-mozc-helper.sh` でビルドします。GitHub R
 名前・地名・Wikipedia の語などが候補に出るようになります。**既定では統合しません**。何も指定しなければ、これまでどおり Mozc だけのヘルパーを作ります。
 
 統合するときは、環境変数 `MELTYPE_UT_DICTIONARY` に辞書のファイルを指定して、いつものビルドを実行します。
-Windows と Linux で同じ環境変数です。
+Windows・Linux・macOS で同じ環境変数です。
 
 ```bash
 # Linux

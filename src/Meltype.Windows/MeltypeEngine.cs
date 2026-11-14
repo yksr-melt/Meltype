@@ -75,12 +75,13 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動かしている設定。入力・表示・報告はこれを読む。動作モードが Meltype IME でも、使えなければ Meltype キーボード。</summary>
     public Settings Running => _running;
 
-    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い)、Meltype キーボードで動かす。
+    // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・
+    // キーボードの一覧に無い)、Meltype キーボードで動かす。
     // config.json は書き換えないので、Meltype IME を入れ直してから読み直すと Meltype IME で動く
     private static Settings RunningSettings(Settings? previous, Settings next)
     {
         if (next.Mode != InputMode.Tsf || (!AppPaths.IsPortable && Tip.TipServer.IsUsable)) return next;
-        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
+        if (previous?.Mode != next.Mode) Log.Warn("Meltype IME を使えない (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・キーボードの一覧に無い) ので、Meltype キーボードで動かします。");
         var running = next.Clone();
         running.Mode = InputMode.Keyboard;
         return running;
@@ -146,9 +147,10 @@ internal sealed class MeltypeEngine : IDisposable
         if (e.Injected && (settings.AllowInjectedInput || _remote.Active is not null)) e = e with { Injected = false };
         else if (e.Injected && e.IsDown && !_injectedHintLogged && settings.Mode == InputMode.Keyboard && KeyText.CharFromKey(e.Vk, e.Scan, false) is { } injected && injected > ' ')
         {
-            // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)
+            // キー配列を変えるソフト (ULE4JIS: US 配列にする) も、押したキーを別のキーとして送り直すので、ほかのソフトが送ったキーとして届く (issue #250)。
+            // Windows のタッチキーボードの打鍵も同じ (issue #729)
             _injectedHintLogged = true;
-            Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。ULE4JIS などキー配列を変えるソフトや遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
+            Log.Info("ほかのソフトが送ったキーを、変換せずにそのままアプリに通しました。Windows のタッチキーボード・ULE4JIS などキー配列を変えるソフト・遠隔操作で打っているなら、設定「遠隔操作などの入力も処理する」を ON にしてください。");
         }
         if (e.Injected) return false;
         KeyCounter.Count(e, DateTime.Now, KeyCountAllowed(settings));

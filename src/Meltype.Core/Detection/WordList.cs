@@ -112,6 +112,16 @@ public static class DictionarySource
         return reader.ReadToEnd();
     }
 
+    /// <summary>組み込み辞書のうち、名前が prefix で始まるもの (domain- の分野の辞書) の名前。名前の順。</summary>
+    public static IEnumerable<string> EmbeddedNames(string prefix)
+    {
+        const string resource = "Meltype.dictionaries.";
+        return typeof(DictionarySource).Assembly.GetManifestResourceNames()
+            .Where(n => n.StartsWith(resource + prefix, StringComparison.Ordinal))
+            .Select(n => n[resource.Length..])
+            .Order(StringComparer.Ordinal);
+    }
+
     /// <summary>辞書の本文を行に分ける。行末の \r を除き、空行と # で始まるコメント行は飛ばす。</summary>
     public static IEnumerable<string> DataLines(string text)
     {

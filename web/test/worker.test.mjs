@@ -22,6 +22,7 @@ const { _resetAccessCache } = await import("../src/access.js");
 const { cleanup } = await import("../src/cleanup.js");
 const { _resetGithubCache } = await import("../src/github.js");
 const { looksLike } = await import("../src/reports.js");
+const { readJson } = await import("../src/http.js");
 const { LIMITS, formById, privateLabels, toMarkdown, validateFiles } = await import("../public/assets/js/report-schema.js");
 
 const TEAM = "meltype-test.cloudflareaccess.com";
@@ -295,6 +296,84 @@ describe("R2 が無いとき", () => {
   });
 });
 
+describe("本文の上限 (readJson)", () => {
+  const MAX = 1024;
+  // Content-Length の無い本文を、chunk ずつ流す Request。読んだバイト数を数える
+  function streamed(chunkCount, chunkSize, headers = {}) {
+    const state = { pulled: 0, cancelled: false };
+    const body = new ReadableStream({
+      pull(controller) {
+        if (state.pulled >= chunkCount) return controller.close();
+        state.pulled++;
+        controller.enqueue(new Uint8Array(chunkSize).fill(0x20));
+      },
+      cancel() {
+        state.cancelled = true;
+      },
+    });
+    const request = new Request("https://meltype.moe/api/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body,
+      duplex: "half",
+    });
+    return { request, state };
+  }
+
+  it("Content-Length が無くても、上限を超えたら読むのをやめて 413 にする", async () => {
+    const { request, state } = streamed(4096, 1024);
+    const { error } = await readJson(request, MAX);
+    assert.equal(error.status, 413);
+    assert.ok(state.pulled * 1024 < 64 * 1024, `上限の後も ${state.pulled} KiB 読んだ`);
+    assert.equal(state.cancelled, true);
+  });
+
+  it("Content-Length を小さく偽っても同じ", async () => {
+    const { request } = streamed(4096, 1024, { "content-length": "10" });
+    const { error } = await readJson(request, MAX);
+    assert.equal(error.status, 413);
+  });
+
+  it("ちょうど上限なら読める。1 バイト超えたら 413", async () => {
+    const pad = (n) => `{"a":"${"x".repeat(n - 8)}"}`;
+    const ok = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "application/json" }, body: pad(MAX) });
+    assert.equal((await readJson(ok, MAX)).body.a.length, MAX - 8);
+    const over = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "application/json" }, body: pad(MAX + 1) });
+    assert.equal((await readJson(over, MAX)).error.status, 413);
+  });
+
+  it("日本語を含む本文は、文字数ではなくバイト数で数え、チャンクの途中で切れても読める", async () => {
+    const text = JSON.stringify({ a: "しゃおみ".repeat(50) });
+    const bytes = new TextEncoder().encode(text);
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(bytes.slice(0, 7));
+        controller.enqueue(bytes.slice(7));
+        controller.close();
+      },
+    });
+    const request = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "application/json" }, body, duplex: "half" });
+    assert.equal((await readJson(request, 4096)).body.a, "しゃおみ".repeat(50));
+    const tooSmall = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "application/json" }, body: text });
+    assert.equal((await readJson(tooSmall, bytes.length - 1)).error.status, 413);
+  });
+
+  it("本文が無い・JSON でないときは 400。JSON 以外の形式は 415", async () => {
+    const empty = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "application/json" } });
+    assert.equal((await readJson(empty, MAX)).error.status, 400);
+    const broken = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "application/json" }, body: "{" });
+    assert.equal((await readJson(broken, MAX)).error.status, 400);
+    const text = new Request("https://meltype.moe/", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" });
+    assert.equal((await readJson(text, MAX)).error.status, 415);
+  });
+
+  it("公開の報告 API でも、大きな本文は Turnstile の前に 413 になる", async () => {
+    const res = await report({ fields: { words: "x".repeat(300 * 1024) } });
+    assert.equal(res.status, 413);
+    assert.equal(turnstileRequests.length, 0);
+  });
+});
+
 describe("レートリミット (#3)", () => {
   it("同時に 5 件送っても 10 分に 3 件しか通らない", async () => {
     const responses = await Promise.all(Array.from({ length: 5 }, () => report()));
@@ -345,8 +424,7 @@ describe("Issue にする内容", () => {
   const fields = {
     os: "Windows 11",
     version: "1.2.1",
-    steps: "kyouha と打って Space",
-    actual: "変換されない",
+    actual: "kyouha と打って Space を押しても変換されない",
     log: "secret log",
     environment: "OS: Windows 11 26200",
     contact: "Discord: someone",
@@ -360,8 +438,12 @@ describe("Issue にする内容", () => {
     }
   });
 
+  it("フォームから外した欄も、保存済みの報告なら載せる", () => {
+    assert.match(toMarkdown(formById("bug"), { ...fields, expected: "変換されてほしい" }), /### どうなってほしかったか\n\n変換されてほしい/);
+  });
+
   it("外した欄の名前を返す (書かれていない欄は返さない)", () => {
-    assert.deepEqual(privateLabels(formById("bug"), fields), ["ログ", "実行環境", "連絡先"]);
+    assert.deepEqual(privateLabels(formById("bug"), fields), ["実行環境", "ログ", "連絡先"]);
     assert.deepEqual(privateLabels(formById("bug"), { ...fields, log: "", environment: undefined }), ["連絡先"]);
   });
 });

@@ -60,7 +60,6 @@ public sealed partial class CompositionController
             {
                 PrecedingEnglish = englishWords > 0 ? true : null,
                 PrecedingEnglishSentence = englishWords >= 2,
-                Punctuation = _settings().Punctuation,
             };
             foreach (var c in word) typed.Append(c);
             var segments = typed.Segments();
@@ -232,11 +231,9 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 次に空の変換ボックスへ入れる / は、文章の入力欄の打ち始め (先頭か空白の直後) に打ったもの。・ にする。
-    /// フロントが、その / を本体に渡す前に呼ぶ。
+    /// フロントが、その / を本体に渡す前に呼ぶ。この入力の間は変えない (BackSpace で打ち直しても ・ のまま)。
     /// </summary>
-    public void MarkSlashAtStart() => _slashAtStart = true;
-
-    private bool _slashAtStart;
+    public void MarkSlashAtStart() => _text.SlashAtStart = true;
 
     /// <summary>
     /// 英訳の候補 (複雑な → complex, complicated …) を、日本語の候補の後ろに足す。
@@ -621,31 +618,30 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 文節の候補: 文の中での変換結果 → その文節だけでの変換結果 → 補助辞書の同音異義語 → ひらがな → 全角カタカナ → 半角カタカナ
-    /// → 絵文字・顔文字 (逆順)。
+    /// → 分野の辞書の語 → 絵文字・顔文字 (逆順)。
+    /// 分野の辞書の語 (病名・駅名など) は、使わない人には要らない候補なので、ふだんの候補 (変換エンジンの候補・ひらがな・カタカナ) を
+    /// 1 つも後ろに押さないよう、その後ろに並べる。こうすれば誰にとっても困らないので、分野ごとに外す設定は作らない (#1650)。
     /// 絵文字・顔文字は最後に逆順で並べるので、変換してすぐ ↑ を押すと、いちばんよく使う絵文字 (えがお → 😊) になる (issue #133)。
     /// </summary>
     private List<string> JapaneseCandidates(string reading, string? inContext)
     {
-        // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        var candidates = Distinct(inContext);
-        foreach (var word in _services.UserDictionary?.Lookup(reading) ?? []) if (!candidates.Contains(word)) candidates.Add(word);
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
         var standalone = inContext is null ? Convert(reading) : Standalone(reading);
-        if (!candidates.Contains(standalone)) candidates.Add(standalone);
-        foreach (var extra in _services.Candidates?.LookupWords(reading) ?? [])
-        {
-            if (!candidates.Contains(extra)) candidates.Add(extra);
-        }
         var katakana = CompositionText.ToKatakana(reading);
-        foreach (var kana in new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) })
-        {
-            if (!candidates.Contains(kana)) candidates.Add(kana);
-        }
-        foreach (var emoji in EmojiBlock(reading))
-        {
-            if (!candidates.Contains(emoji)) candidates.Add(emoji);
-        }
-        return candidates;
+        // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
+        return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
+            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. _services.Candidates?.LookupDomain(reading) ?? [], .. EmojiBlock(reading)]);
+    }
+
+    /// <summary>
+    /// 入力欄に出る文字 (設定の句読点にした文字) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、変換エンジンが返す 、 と ， が同じ ， になる。
+    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。区間の種類を出口まで渡せば要らなくなる (#1735)。
+    /// </summary>
+    private List<string> DistinctShown(IEnumerable<string?> candidates)
+    {
+        var style = _settings().Punctuation;
+        var shown = new HashSet<string>(StringComparer.Ordinal);
+        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.ToSetting(style, c)))];
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -718,7 +714,20 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
-    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を 2 番目以降に足す。
+    /// 候補の一覧で、ユーザー辞書・同梱の辞書 (candidates.txt・brands.txt) の語のうち、読み (かな) の候補より前にある最後のものの位置。
+    /// 無ければ 0 (最初の候補)。読みより後ろに回した辞書の語 (記号の 、 など) は数えない。
+    /// </summary>
+    private int DictionaryWordsEnd(Clause clause, string reading)
+    {
+        var kana = clause.Candidates.IndexOf(reading);
+        var limit = kana < 0 ? clause.Candidates.Count : kana;
+        var words = (_services.UserDictionary?.Lookup(reading) ?? []).Concat(_services.Candidates?.LookupWords(reading) ?? []);
+        return Math.Max(0, words.Select(word => clause.Candidates.IndexOf(word)).Where(index => index < limit).DefaultIfEmpty(-1).Max());
+    }
+
+    /// <summary>
+    /// 変換中に文節を選んだときに、変換エンジンの候補の一覧 (はし → 橋 端 箸 …) を足す。
+    /// 日本語の文節は、最初の候補とユーザー辞書・同梱の辞書の語の後ろに足す (DictionaryWordsEnd)。
     /// 英語の文節は、ローマ字として読んだかなで一覧を引き、かなの候補 (go → ご) の後ろに足す。
     /// 打つたびには呼ばない (時間がかかることがあるため。ライブ変換では呼ばない)。今選んでいる候補はそのまま選んだ状態にする。
     /// </summary>
@@ -728,14 +737,12 @@ public sealed partial class CompositionController
         if (_services.MoreCandidates is not { } more) return;
         var reading = clause.IsEnglish ? RomajiReading(clause.Reading) : clause.Reading;
         if (reading is null) return;
-        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : 0;
+        // 変換エンジンの候補は、日本語の文節では、最初の候補とユーザー辞書・同梱の辞書の語の後ろに入れる。
+        // 最初の候補のすぐ後ろに入れると、変換エンジンが知っている読みでは、辞書の語が候補の一覧の後ろに押しやられる (saiki → PSYQUI が 58 件中 51 番目: issue #1681)
+        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : DictionaryWordsEnd(clause, reading);
         if (anchor < 0) return;
         var current = clause.Text;
-        var merged = clause.Candidates.Take(anchor + 1).ToList();
-        foreach (var candidate in more(reading).Select(c => NormalizeHalfWidth(c, reading)).Concat(clause.Candidates.Skip(anchor + 1)))
-        {
-            if (!merged.Contains(candidate)) merged.Add(candidate);
-        }
+        var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
     }
@@ -891,9 +898,14 @@ public sealed partial class CompositionController
 
     private T WithoutWaiting<T>(Func<T> convert) => _budget is null ? convert() : _budget.WithLimit(0, convert);
 
-    /// <summary>選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。</summary>
-    private ReconversionSelection? ReconversionSelectionNow() =>
-        Selection is { Length: > 0 } text && (IsRomajiText(text) ? text : ReadingOf(text)) is { Length: > 0 } reading
-            ? new ReconversionSelection(text, reading)
-            : null;
+    /// <summary>
+    /// 選択中の確定済みの文字と、その読み。ローマ字のまま入った文 (kyouhaiitenki) は、読みにせずにそのまま渡す (Meltype の判定で日本語にする: issue #288)。
+    /// 読みの句読点は 、。 にする。
+    /// </summary>
+    private ReconversionSelection? ReconversionSelectionNow()
+    {
+        if (Selection is not { Length: > 0 } text) return null;
+        var reading = IsRomajiText(text) ? text : ReadingOf(text) is { } read ? CompositionOutput.FromSetting(_settings().Punctuation, read) : null;
+        return reading is { Length: > 0 } ? new ReconversionSelection(text, reading) : null;
+    }
 }

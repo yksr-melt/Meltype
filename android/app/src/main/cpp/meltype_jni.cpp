@@ -13,7 +13,7 @@
 #include <vector>
 
 extern "C" {
-int meltype_init(unsigned char* (*clauses)(unsigned char*, unsigned char*),
+int meltype_android_init(unsigned char* (*clauses)(unsigned char*, unsigned char*),
                  unsigned char* (*candidates)(unsigned char*),
                  int (*is_word)(unsigned char*));
 void* meltype_ime_create();
@@ -191,7 +191,7 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
         callback_instance = nullptr;
         return JNI_FALSE;
     }
-    if (meltype_init(convert_clauses, convert_candidates, nullptr) != 1) {
+    if (meltype_android_init(convert_clauses, convert_candidates, nullptr) != 1) {
         env->DeleteGlobalRef(callback_instance);
         callback_instance = nullptr;
         return JNI_FALSE;

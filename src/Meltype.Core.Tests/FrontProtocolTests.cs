@@ -24,8 +24,8 @@ internal static class FrontProtocolTests
         new("Meltype IME (DLL)", "native/tip/TextService.cpp", source => source, new(@"\[L""(\w+)""\]"),
             // 入力モードと、左右の Alt (フックで見る) は Meltype.exe (TipServer) が使う
             Unused: ["version", "modeIndicatorMs", "insertByPaste", "keyReleases", "altKeys"],
-            // Meltype.exe との、背景の変換の結果の待ち合わせ
-            Others: ["generation"]),
+            // Meltype.exe (TipServer) の応答: 背景の変換の結果の待ち合わせと、別ビルドの impl への応答
+            Others: ["generation", "stale"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
@@ -35,20 +35,19 @@ internal static class FrontProtocolTests
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
+        new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
+            new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
+            // Android reports field facts to Core, and handles text edits and candidate choices from its output.
+            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii",
+                "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
+                "keyReleases", "altKeys", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
+                "selectedMeaning", "meaningDelayMs"],
+            Others: []),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new(@"\blet (\w+):"),
             // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
                 "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered", "keyReleases", "altKeys"],
-            Others: []),
-        new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
-            new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
-            // 入力モード・受け取るキーは画面のキーボードなので使わない。文節は候補のタップで次の文節へ進むのに読むが、区切りはまだ出さない。
-            // 案内・綴りの候補・打ったキー・注記・意味はまだ出さない
-            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii",
-                "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
-                "keyReleases", "altKeys", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
-                "selectedMeaning", "meaningDelayMs"],
             Others: []),
     ];
 
@@ -77,7 +76,7 @@ internal static class FrontProtocolTests
         var view = new CompositionView("x", ["x", "y"], 0, true, "h", ["x"], 0);
         var json = new ImeOutput(state, new SessionResult(true, [new TextEdit(0, "x")], view)).ToJson();
         var names = new HashSet<string>();
-        Collect(JsonDocument.Parse(json).RootElement, names);
+        Collect(JsonElement.Parse(json), names);
         return names;
     }
 

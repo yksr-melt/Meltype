@@ -30,6 +30,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _profileItem;
     private readonly Composition.CompositionService _composition;
     private readonly Tip.TipServer _tipServer;
+    // 更新前の Meltype IME が残っているアプリ (TipServer.ClientOutdated)
+    private readonly HashSet<string> _outdatedApps = new(StringComparer.OrdinalIgnoreCase);
     private readonly Keyboard.KeyboardFront _keyboard;
     private readonly ToolStripMenuItem _tsfModeItem;
     private SettingsForm? _settingsForm;
@@ -60,6 +62,21 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
         _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
         _engine.ImeServer = _tipServer;
+        _tipServer.ClientOutdated += process =>
+        {
+            // DLL は動作モードが Meltype キーボードのときも接続してくる
+            if (_engine.Running.Mode != InputMode.Tsf) return;
+            // 通知は見逃すことがあるので、そのアプリで打っている間 (同じ接続から別ビルドの要求が届くたび、3 秒おき) は、打っている所にも出す。
+            // 古い DLL が残っているかは届いた要求で分かるので、アプリを再起動して直れば、覚えておく状態なしに出なくなる
+            _composition.ShowNotice($"「{process}」を再起動してください (前の版の Meltype IME が残っていて、入力できません)", 3000);
+            // ログはアプリごとに 1 回
+            if (!_outdatedApps.Add(process)) return;
+            Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
+            // 更新前から開いているアプリはすべて同じなので、アプリごとではなく、PC の再起動を 1 回だけ求める
+            // (設定「通知を表示」にかかわらず。入力を止めないように、ダイアログではなく通知にする)
+            if (_outdatedApps.Count == 1)
+                ShowBalloonTip(10000, "Meltype IME", $"更新前から開いているアプリ (「{process}」など) は、PC を再起動するまで Meltype IME で入力できません。PC を再起動してください。");
+        };
         _tipServer.Start();
         _engine.SettingsChanged += OnEngineSettingsChanged;
         IntroduceTsf();
@@ -170,6 +187,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _state.Save();
             if (!firstRun && CanOfferTsf()) _invoker.BeginInvoke(OfferTsf);
         }
+        if (CanOfferTsfUpdate()) _invoker.BeginInvoke(OfferTsfUpdate);
         // 起動時の設定反映が終わってから、読み込み中に蓄積した除外をまとめて通知する。
         Diagnostics.ShortcutExclusions.Added += OnShortcutExcluded;
         OnShortcutExcluded();
@@ -225,6 +243,54 @@ internal sealed class TrayApplicationContext : ApplicationContext
             "入れるときに管理者権限の確認が出ます。「いいえ」なら、今の動作モードのまま使えます。",
             "Meltype IME", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
         if (answer != DialogResult.Yes) return;
+        await RegisterTsf();
+        // 登録できても、キーボードの一覧に足せなければ Win + Space で選べない
+        if (!Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList)
+        {
+            MessageBox.Show("Meltype IME を使えるようにできませんでした。今の動作モードのまま使えます。", "Meltype IME", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
+        _state.TsfIntroduced = true;
+        _state.Save();
+        SetMode(InputMode.Tsf);
+        UpdateStatus();
+    }
+
+    /// <summary>
+    /// 登録済みの Meltype IME を、この Meltype.exe に同梱のものに更新するかを聞けるか。動作モードが Meltype IME で、
+    /// 登録済みの impl がこの Meltype.exe と別ビルド (<see cref="Tip.TipServer.IsOtherBuildRegistered"/>) で、インストール先に meltype-ime.ps1 と DLL があるとき。
+    /// ImeDeclined は見ない (断ったあとも Meltype キーボードで動き続けるので、起動のたびに聞く)。
+    /// </summary>
+    private bool CanOfferTsfUpdate() =>
+        !AppPaths.IsPortable && _engine.Settings.Mode == InputMode.Tsf && RuntimeInformation.OSArchitecture != Architecture.Arm64 &&
+        Tip.TipServer.IsOtherBuildRegistered &&
+        File.Exists(Path.Combine(AppContext.BaseDirectory, "meltype-ime.ps1")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"));
+
+    /// <summary>登録済みの Meltype IME を更新するかを聞き、「はい」なら meltype-ime.ps1 で再登録して、Meltype IME で動かし直す。</summary>
+    private async void OfferTsfUpdate()
+    {
+        using var owner = new Form { TopMost = true };
+        var answer = MessageBox.Show(owner,
+            "Meltype IME を更新しますか？\n\n" +
+            "Windows に登録されている Meltype IME が、更新前の Meltype のものです。更新するまでは、Meltype キーボード (変換ボックスで入力) で動きます。\n\n" +
+            "更新するときに管理者権限の確認が出ます。",
+            "Meltype IME", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (answer != DialogResult.Yes) return;
+        await RegisterTsf();
+        if (!Tip.TipServer.IsUsable)
+        {
+            MessageBox.Show("Meltype IME を更新できませんでした。Meltype キーボードのまま使えます。", "Meltype IME", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        // 動かす動作モード (MeltypeEngine.Running) を決め直す
+        _engine.ApplySettings(_engine.Settings);
+        UpdateStatus();
+    }
+
+    /// <summary>meltype-ime.ps1 の Install-MeltypeIme で Meltype IME を登録する (UAC の確認が出る)。</summary>
+    private static async Task RegisterTsf()
+    {
         var directory = AppContext.BaseDirectory;
         var quote = (string text) => "'" + text.Replace("'", "''") + "'";
         var start = new ProcessStartInfo(Updater.PowerShell) { UseShellExecute = false, CreateNoWindow = true };
@@ -242,17 +308,6 @@ internal sealed class TrayApplicationContext : ApplicationContext
         {
             Diagnostics.Log.Warn($"Meltype IME を登録できませんでした: {ex.Message}");
         }
-        // 登録できても、キーボードの一覧に足せなければ Win + Space で選べない
-        if (!Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList)
-        {
-            MessageBox.Show("Meltype IME を使えるようにできませんでした。今の動作モードのまま使えます。", "Meltype IME", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        // 次に起動したとき IntroduceTsf で切り替え直さないように、切り替えたことも残す (あとでユーザーが戻したら、そのまま)
-        _state.TsfIntroduced = true;
-        _state.Save();
-        SetMode(InputMode.Tsf);
-        UpdateStatus();
     }
 
     private void ShowWelcome()
@@ -543,7 +598,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             status = _keyboard.Japanese ? "キーボード: 日本語" : "キーボード: 直接入力 (半角/全角 で日本語)";
         }
         _statusItem.Text = status;
-        var zenzai = _composition.ZenzaiStatus(settings.UseZenzai, settings.ZenzaiServerPath, settings.ZenzaiModelPath);
+        var zenzai = _composition.Runtime.ZenzaiStatus();
         _zenzaiItem.Visible = zenzai is not null;
         if (zenzai is not null) _zenzaiItem.Text = $"Zenzai: {zenzai}";
         var tip = $"Meltype — {status}";

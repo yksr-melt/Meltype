@@ -1,5 +1,5 @@
 # Meltype の GitHub bot。
-#   Issue を作った・直したとき: OS のラベルと「要トリアージ」を付け、足りない情報を聞き、誤判定の報告なら最新のコードで打ってみて結果を返す。
+#   Issue を作ったとき:「要トリアージ」を付ける。Issue を作った・直したとき: 誤判定の報告なら最新のコードで打ってみて結果を返す。
 #   コメントの行の先頭のコマンド (1 つのコメントに 1 つ。/repro だけは複数行):
 #     だれでも: /repro /explain /ca /jht /help
 #     メンテナー (PR のみ): /test /pack /test-repro /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
@@ -14,49 +14,22 @@ on:
     types: [opened, edited]
   issue_comment:
     types: [created]
-  pull_request_target:
-    types: [opened, reopened]
 
 permissions: {}
 
 concurrency:
-  group: bot-${{ github.event_name }}-${{ github.event.issue.number || github.event.pull_request.number }}-${{ github.event.comment.id || github.event.action || 'event' }}
+  group: bot-${{ github.event_name }}-${{ github.event.issue.number }}-${{ github.event.comment.id || github.event.action }}
   cancel-in-progress: true
 
-jobs:
-  # PR 作成時: pr ラベルを付ける (pull_request_target なので fork からも動く。コードは触らない)
-  pr-label:
-    if: github.event_name == 'pull_request_target'
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      issues: write
-    steps:
-      # コードは checkout しない (pull_request_target で PR のコードを動かさない)
-      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const name = 'pr';
-            try {
-              await github.rest.issues.createLabel({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                name,
-                color: '0E8A16',
-                description: 'Pull Request',
-              });
-            } catch (e) {
-              if (e.status !== 422) throw e; // 既にある
-            }
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.payload.pull_request.number,
-              labels: [name],
-            });
+# pwsh の外部コマンド (dotnet・git など) が失敗したら、その場で止める (#1842)。
+# 既定の pwsh は最後のコマンドの終了コードしか見ないので、途中の dotnet run が失敗しても成功になっていた。
+# {0} を . で読むので、step の中で $LASTEXITCODE を見なくてよい。
+defaults:
+  run:
+    shell: pwsh -NoProfile -Command "$ErrorActionPreference = 'Stop'; $PSNativeCommandUseErrorActionPreference = $true; . '{0}'"
 
+jobs:
   parse:
-    if: github.event_name != 'pull_request_target'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -72,7 +45,6 @@ jobs:
       repros: ${{ steps.parse.outputs.repros }}
       reported: ${{ steps.parse.outputs.reported }}
       expected: ${{ steps.parse.outputs.expected }}
-      kind: ${{ steps.parse.outputs.kind }}
       sha: ${{ steps.parse.outputs.sha }}
       comment: ${{ steps.parse.outputs.comment }}
     steps:
@@ -138,7 +110,6 @@ jobs:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
         if: needs.parse.outputs.action == 'repro' || needs.parse.outputs.action == 'ca' || needs.parse.outputs.action == 'jht'
-        shell: pwsh
         run: &mozc-helper |
           $bin = 'native/mozc/bin'
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
@@ -157,7 +128,6 @@ jobs:
           "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "MELTYPE_MOZC=$full"
       - name: Run
-        shell: pwsh
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
@@ -191,7 +161,9 @@ jobs:
             }
             $i++
           }
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      # 途中で失敗しても、できた分の結果を返す
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bot-results
           path: results/
@@ -215,11 +187,9 @@ jobs:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
         if: needs.parse.outputs.action == 'test-repro' || needs.parse.outputs.action == 'test-jht'
-        shell: pwsh
         run: *mozc-helper
       - name: Test
         if: needs.parse.outputs.action == 'test'
-        shell: pwsh
         run: |
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
           New-Item -ItemType Directory -Force results | Out-Null
@@ -233,7 +203,6 @@ jobs:
         run: .\Build-Package.ps1
       - name: test-repro / test-jht / test-explain
         if: contains(fromJSON('["test-repro","test-jht","test-explain"]'), needs.parse.outputs.action)
-        shell: pwsh
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
@@ -253,7 +222,8 @@ jobs:
             $windowsTests = if (Test-Path src/Meltype.Windows.Tests) { 'src/Meltype.Windows.Tests' } else { 'src/Meltype.Tests' }
             dotnet run --project $windowsTests -c Release -- --repro "$($r.keys)" "$($r.last)" | Out-File results/0/repro-pr.json -Encoding utf8
           }
-      - if: needs.parse.outputs.action != 'pack'
+      # テストの失敗も結果として返すので、step が失敗しても上げる
+      - if: ${{ !cancelled() && needs.parse.outputs.action != 'pack' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: bot-results
@@ -300,7 +270,6 @@ jobs:
           BOT_REPROS: ${{ needs.parse.outputs.repros }}
           BOT_REPORTED: ${{ needs.parse.outputs.reported }}
           BOT_EXPECTED: ${{ needs.parse.outputs.expected }}
-          BOT_KIND: ${{ needs.parse.outputs.kind }}
           BOT_SHA: ${{ needs.parse.outputs.sha }}
           BOT_COMMENT_ID: ${{ needs.parse.outputs.comment }}
           BOT_JOB_RESULT: ${{ needs.run.result == 'success' && 'success' || needs.pr.result == 'success' && 'success' || 'failure' }}
