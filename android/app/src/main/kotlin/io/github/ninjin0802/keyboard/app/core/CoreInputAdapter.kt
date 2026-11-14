@@ -5,12 +5,12 @@ package io.github.ninjin0802.keyboard.app.core
 import android.view.KeyEvent
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
-import io.github.ninjin0802.keyboard.engine.Candidate
-import io.github.ninjin0802.keyboard.engine.CandidateKind
+
+/** Candidate text presented by Android; indexes are preserved from the Core. */
+data class DisplayCandidate(val text: String)
 
 /**
- * Applies the Core's response (ImeOutput) to the Android editor. This is
- * intentionally separate from the existing flick-input EditorBridge.
+ * Applies the Core's response (ImeOutput) to the Android editor.
  * A malformed response must not erase existing editor text: it is parsed
  * completely before anything is written.
  */
@@ -34,7 +34,7 @@ internal class CoreInputAdapter(
     val view: ImeView? get() = latestView
     var choices: List<CoreChoice> = emptyList()
         private set
-    var candidates: List<Candidate> = emptyList()
+    var candidates: List<DisplayCandidate> = emptyList()
         private set
     var selected: Int? = null
         private set
@@ -50,8 +50,7 @@ internal class CoreInputAdapter(
     private fun refreshChoices() {
         val (nextChoices, nextSelected) = CoreCandidateChoices.fromView(latestView, emojiEnabled)
         choices = nextChoices
-        val kind = if (latestView?.converting == true) CandidateKind.CONVERSION else CandidateKind.PREDICTION
-        candidates = nextChoices.map { Candidate(it.label, 0, kind) }
+        candidates = nextChoices.map { DisplayCandidate(it.label) }
         selected = nextSelected
     }
 

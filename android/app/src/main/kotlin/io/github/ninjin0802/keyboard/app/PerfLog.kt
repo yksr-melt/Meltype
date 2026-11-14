@@ -3,7 +3,6 @@
 package io.github.ninjin0802.keyboard.app
 
 import android.util.Log
-import io.github.ninjin0802.keyboard.app.input.ConversionRunner
 import io.github.ninjin0802.keyboard.app.layout.KeyAction
 
 /**
@@ -48,16 +47,3 @@ internal fun perfKind(action: KeyAction): String = when (action) {
     KeyAction.Emoji -> "emoji"
 }
 
-/**
- * 変換のスレッドで起きた思いがけない失敗を、ログに出す形にする。[step] が null なら Mozc を開く途中。
- * 出すのは、どの作業か、と大まかな種類だけ。例外の中身は打った文字を含みうるので出さない。
- * クラス名も出さない（release ビルドでは書き換わっていて、役に立たない）。
- */
-internal fun workerFailureText(step: ConversionRunner.Step?, t: Throwable): String {
-    val during = when (step) {
-        ConversionRunner.Step.CONVERT -> "convert"
-        ConversionRunner.Step.LEARN -> "learn"
-        null -> "open"
-    }
-    return "$during failed (${if (t is Error) "error" else "exception"})"
-}

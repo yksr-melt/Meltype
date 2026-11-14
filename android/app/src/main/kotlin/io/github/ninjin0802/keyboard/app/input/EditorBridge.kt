@@ -7,51 +7,9 @@ import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.inputmethod.InputConnection
 import java.text.BreakIterator
-import io.github.ninjin0802.keyboard.engine.Kana
-import io.github.ninjin0802.keyboard.engine.Update
 
-/** engine が返した指示を入力欄に書く。入力欄にいま出している未確定文字を覚えておく。 */
+/** Android editor cursor and grapheme operations; no input composition or conversion decisions. */
 class EditorBridge(private val connection: () -> InputConnection?) {
-    private var composing = ""
-
-    /** いまの未確定文字を、入力欄が「未確定の範囲」として知らせてきたか。 */
-    private var shownByEditor = false
-
-    /** 確定を先に、次に未確定文字を反映する。入力欄がなくても、未確定文字の状態は更新する。 */
-    fun apply(update: Update) {
-        val edits = edits(composing, update)
-        if (composing.isEmpty() || update.composing.isEmpty()) shownByEditor = false   // 新しく始まった、または終わった
-        composing = update.composing
-        if (edits == null) return
-        val ic = connection() ?: return
-        ic.beginBatchEdit()
-        // 未確定文字が出ているあいだの commitText は、その未確定文字を置き換える。
-        edits.commit?.let { ic.commitText(it, 1) }
-        edits.composing?.let { ic.setComposingText(it, 1) }
-        ic.endBatchEdit()
-    }
-
-    /** 入力欄の側で未確定文字がなくなった（入力欄の切り替えなど）。入力欄には何も送らない。 */
-    fun forget() {
-        composing = ""
-        shownByEditor = false
-    }
-
-    /**
-     * 入力欄からカーソルの位置が知らされたとき。true ならセッションを捨てる。
-     * 未確定文字があるのに、入力欄がそれを外したか、カーソルがその末尾にないとき。
-     *
-     * 知らせは遅れて届く。確定のすぐあとに次の文字を打つと、確定についての知らせ（未確定の範囲なし）が、
-     * 次の未確定文字を出したあとに届く。これを「外された」と取り違えないよう、入力欄がいまの未確定文字の
-     * 範囲を一度知らせてくるまでは、範囲なしの知らせを無視する。
-     */
-    fun onSelectionChanged(newSelStart: Int, newSelEnd: Int, composingStart: Int, composingEnd: Int): Boolean {
-        if (composing.isEmpty()) return false
-        if (composingStart == -1) return shownByEditor
-        shownByEditor = true
-        return newSelStart != composingEnd || newSelEnd != composingEnd
-    }
-
     /**
      * カーソルの前の1文字を消す。サロゲートペアや、符号を組み合わせて1文字に見せているもの（絵文字、結合する濁点）は
      * まとめて消す。読めないときは削除キーを送る。読んだ文字は残さない。
@@ -66,18 +24,6 @@ class EditorBridge(private val connection: () -> InputConnection?) {
         }
     }
 
-    /**
-     * カーソルの前の1文字を、[change] が返す文字（濁点・半濁点・小文字の次の形、または大文字・小文字を入れ替えたもの）に
-     * 置き換える。未確定文字を持たない欄（パスワード）で使う。読めないとき、切り替えられない文字のときは何もしない。
-     */
-    fun modifyBeforeCursor(change: (Char) -> Char? = Kana::modify) {
-        val ic = connection() ?: return
-        val replacement = modified(ic.getTextBeforeCursor(1, 0), change) ?: return
-        ic.beginBatchEdit()
-        ic.deleteSurroundingText(1, 0)
-        ic.commitText(replacement, 1)
-        ic.endBatchEdit()
-    }
 
     /**
      * カーソルを [from] から [steps] 文字（右が正）動かし、動かした先の位置を返す。
@@ -115,14 +61,8 @@ class EditorBridge(private val connection: () -> InputConnection?) {
         }
     }
 
-    /** 入力欄への操作。null の項目は送らない。 */
-    data class Edits(val commit: String?, val composing: String?)
 
     companion object {
-        /** [textBeforeCursor] の最後の1文字を [change]（省くと ゛゜小）で切り替えた文字。切り替えられない、または読めなかったら null。 */
-        fun modified(textBeforeCursor: CharSequence?, change: (Char) -> Char? = Kana::modify): String? =
-            textBeforeCursor?.lastOrNull()?.let(change)?.toString()
-
         /** カーソルを [steps] 文字動かすために、動かす向きの側から読む長さ（UTF-16 の単位）。 */
         fun readLength(steps: Int): Int = (if (steps < 0) -steps else steps) * UNITS_PER_STEP
 
@@ -155,19 +95,5 @@ class EditorBridge(private val connection: () -> InputConnection?) {
          */
         fun deleteLength(textBeforeCursor: CharSequence?): Int = -(cursorDelta(textBeforeCursor, null, -1) ?: 0)
 
-        /**
-         * [previousComposing] が出ている入力欄を [update] のとおりにするための操作。変えるものがなければ null。
-         *
-         * 未確定文字がなくなるときは、空の文字で置き換える（[Edits.commit] が ""）。
-         * finishComposingText では、消したはずの文字が入力欄に残ってしまう。
-         */
-        fun edits(previousComposing: String, update: Update): Edits? {
-            val ends = previousComposing.isNotEmpty() && update.composing.isEmpty()
-            val commit = update.commit.takeIf { it.isNotEmpty() || ends }
-            val composing = update.composing.takeIf {
-                it.isNotEmpty() && (commit != null || it != previousComposing)
-            }
-            return if (commit == null && composing == null) null else Edits(commit, composing)
-        }
     }
 }
