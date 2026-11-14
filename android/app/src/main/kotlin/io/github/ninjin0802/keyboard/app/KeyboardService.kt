@@ -61,9 +61,9 @@ import io.github.ninjin0802.keyboard.app.view.ImeGlassSurface
 import io.github.ninjin0802.keyboard.app.view.KeyboardTopEdgeHighlight
 import io.github.ninjin0802.keyboard.app.view.Palette
 import io.github.ninjin0802.keyboard.app.view.bottomPaddingPx
-import io.github.ninjin0802.keyboard.engine.Clause
-import io.github.ninjin0802.keyboard.engine.Converter
-import io.github.ninjin0802.keyboard.engine.Segment
+import io.github.ninjin0802.keyboard.mozc.MozcClause
+import io.github.ninjin0802.keyboard.mozc.MozcBackend
+import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import io.github.ninjin0802.keyboard.mozc.MozcConverter
 import io.github.ninjin0802.keyboard.mozc.MozcEngine
 import java.util.concurrent.LinkedBlockingQueue
@@ -304,7 +304,7 @@ class KeyboardService : InputMethodService(), KeyListener {
      * Mozc を開く。開けなければ null（変換できないまま、かなの入力だけで動き続ける）。
      * 変換のスレッドで呼ばれる。失敗したときのやり直しは [RetryingOpener] が決める。
      */
-    private fun openMozc(): Converter? = try {
+    private fun openMozc(): MozcBackend? = try {
         val start = System.nanoTime()
         MozcEngine.open(applicationContext)?.let { engine ->
             MozcConverter(engine).also { PerfLog.event("mozc-open", (System.nanoTime() - start) / 1000) }
@@ -829,10 +829,10 @@ class KeyboardService : InputMethodService(), KeyListener {
      * Mozc の用意ができるまでは、変換に失敗したものとして答える。用意に失敗していたら、
      * 変換や学習が頼まれたときに [mozc] がやり直す。変換のスレッドでだけ使う。
      */
-    private class LateConverter(private val mozc: RetryingOpener<Converter>) : Converter {
+    private class LateConverter(private val mozc: RetryingOpener<MozcBackend>) : MozcBackend {
         fun open() { mozc.get() }
 
-        override fun convert(reading: String, context: String?): List<Segment>? =
+        override fun convert(reading: String, context: String?): List<MozcSegment>? =
             timed("convert", reading.length) { mozc.get()?.convert(reading, context) }
 
         override fun predict(reading: String): List<String> =
@@ -842,7 +842,7 @@ class KeyboardService : InputMethodService(), KeyListener {
             val start = System.nanoTime()
             return block().also { PerfLog.event(kind, (System.nanoTime() - start) / 1000, length) }
         }
-        override fun learn(clauses: List<Clause>, context: String?) { mozc.get()?.learn(clauses, context) }
+        override fun learn(clauses: List<MozcClause>, context: String?) { mozc.get()?.learn(clauses, context) }
     }
 
     companion object {
