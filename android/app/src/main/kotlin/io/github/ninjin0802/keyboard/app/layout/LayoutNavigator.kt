@@ -8,7 +8,7 @@ package io.github.ninjin0802.keyboard.app.layout
  * 日本語の配列でないもの・英語の配列でないものを渡されたら、それぞれの最初の値を使う。
  */
 class LayoutNavigator(japanese: LayoutId = LayoutId.ROMAJI, english: LayoutId = LayoutId.QWERTY) {
-    private var japanese = japanese.takeIf { it.isJapanese } ?: LayoutId.KANA
+    private var japanese = japanese.takeIf { it.isJapanese } ?: LayoutId.ROMAJI
     private var english = english.takeIf { it.isEnglish } ?: LayoutId.QWERTY
 
     /** いま出している配列。絵文字の画面が開いているあいだは、開く前の配列。 */

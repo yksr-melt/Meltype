@@ -53,7 +53,6 @@ import io.github.ninjin0802.keyboard.app.layout.withoutEmoji
 import io.github.ninjin0802.keyboard.app.layout.ScreenCoordinator
 import io.github.ninjin0802.keyboard.app.view.BottomInsets
 import io.github.ninjin0802.keyboard.app.view.CandidateBarView
-import io.github.ninjin0802.keyboard.app.view.FlickPopupView
 import io.github.ninjin0802.keyboard.app.view.KeyListener
 import io.github.ninjin0802.keyboard.app.view.KeyboardView
 import io.github.ninjin0802.keyboard.app.view.LanguagePickerPopup
@@ -253,7 +252,6 @@ class KeyboardService : InputMethodService(), KeyListener {
     private val languagePopup by lazy { LanguagePickerPopup(this) }
     private var keyboardView: KeyboardView? = null
     private var candidateBar: CandidateBarView? = null
-    private var flickPopup: FlickPopupView? = null
     private var emojiPanel: EmojiPanelView? = null
     private val emojiRecents by lazy { EmojiRecentsStore(PrefsStore(this, "emoji")) }
 
@@ -405,9 +403,7 @@ class KeyboardService : InputMethodService(), KeyListener {
                 }
             }
         } }
-        // フリックの案内は、候補バーとキーの両方（と下の余白）に重ねた View に描く。キーの View の外にも出られる。
-        val popup = FlickPopupView(this)
-        val keys = KeyboardView(this).also { it.listener = this; it.popup = popup }
+        val keys = KeyboardView(this).also { it.listener = this }
         // 絵文字の画面は、開いているあいだ、候補バーとキーの代わりに同じ場所に出る（高さは同じ）。
         val emoji = EmojiPanelView(this).also {
             it.keys.listener = this; it.recents = { emojiRecents.list }; it.onPick = ::onEmojiPicked; it.visibility = View.GONE
@@ -415,7 +411,6 @@ class KeyboardService : InputMethodService(), KeyListener {
         EmojiCatalog.load(this)   // 端末で描ける絵文字を、別のスレッドで調べておく
         candidateBar = bar
         keyboardView = keys
-        flickPopup = popup
         emojiPanel = emoji
         showLayout()
         val background = Palette.of(this).background
@@ -432,7 +427,6 @@ class KeyboardService : InputMethodService(), KeyListener {
             inputRoot = this
             this.background = ImeGlassSurface.keyboardBackground(this@KeyboardService)
             addView(column, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
-            addView(popup, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             // Top-only, anti-aliased 1dp hairline follows the keyboard's 28dp
             // rounded shoulders, like the user's iOS reference screenshot.
             // Decorative: does not consume touches or focus.
@@ -636,7 +630,6 @@ class KeyboardService : InputMethodService(), KeyListener {
         // from queued touch events, and never silently fall back to raw/Kotlin Japanese input.
         if (nativeCoreUnavailable && policy.convert && japaneseCoreLayout()) return
         when (action) {
-            is KeyAction.Flick -> return // Unavailable layout; no independent flick input engine.
             is KeyAction.Text -> {
                 val typed = if (nav.current == LayoutId.QWERTY) shift.apply(action.text) else action.text
                 if (policy.convert && japaneseCoreLayout()) {
@@ -659,7 +652,6 @@ class KeyboardService : InputMethodService(), KeyListener {
                 if (core != null && !consumed) insertPassed(scalar.toString())
                 setShift(shift.onCharTyped())
             }
-            KeyAction.Modify, KeyAction.ToggleCase -> return // 12-key-only controls are disabled.
             KeyAction.Delete -> {
                 if (policy.convert && japaneseCoreLayout()) {
                     if (coreForRomaji() == null) return
@@ -701,15 +693,9 @@ class KeyboardService : InputMethodService(), KeyListener {
                     sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
                 }
             }
-            KeyAction.Left, KeyAction.Right -> {
-                if (coreInput.composing) commitComposing()
-                val code = if (action == KeyAction.Left) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
-                sendDownUpKeyEvents(code)
-            }
             KeyAction.Shift -> setShift(shift.onShiftPressed())
             KeyAction.Language -> screens.language()
             is KeyAction.Switch -> screens.switchTo(action.to)
-            KeyAction.Undo -> return // Not present in either supported QWERTY layout.
             KeyAction.Emoji -> if (Settings(this).emojiEnabled) screens.openEmoji(timeMs)
             KeyAction.Back -> screens.back()
         }
@@ -822,7 +808,6 @@ class KeyboardService : InputMethodService(), KeyListener {
         val kind = enterKind(imeOptions)
         if (view.enterKind != kind) view.enterKind = kind
         if (view.backTarget != nav.backTarget) view.backTarget = nav.backTarget
-        flickPopup?.showPreview = policy.flickPreview
     }
 
     /**

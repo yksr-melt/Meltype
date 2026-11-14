@@ -22,16 +22,13 @@ fun keyIcon(action: KeyAction, shift: ShiftState, enter: EnterKind): KeyIcon? = 
         EnterKind.DONE -> KeyIcon.CHECK
         EnterKind.GO, EnterKind.NEXT, EnterKind.OTHER -> KeyIcon.ARROW
     }
-    KeyAction.Left -> KeyIcon.LEFT
-    KeyAction.Right -> KeyIcon.RIGHT
-    KeyAction.Undo -> KeyIcon.UNDO
     KeyAction.Emoji -> KeyIcon.EMOJI
     KeyAction.Shift -> when (shift) {
         ShiftState.OFF -> KeyIcon.SHIFT
         ShiftState.ONCE -> KeyIcon.SHIFT_ONCE
         ShiftState.LOCKED -> KeyIcon.SHIFT_LOCKED
     }
-    is KeyAction.Flick, is KeyAction.Romaji, is KeyAction.Text, KeyAction.Modify, KeyAction.ToggleCase,
+    is KeyAction.Romaji, is KeyAction.Text,
     KeyAction.Language, is KeyAction.Switch, KeyAction.Back -> null
 }
 

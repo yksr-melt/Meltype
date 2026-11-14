@@ -25,12 +25,12 @@ class Settings(private val context: Context) {
         get() = clampWait(prefs.getInt(KEY_TOGGLE_WAIT_MS, DEFAULT_WAIT_MS))
         set(value) { prefs.edit().putInt(KEY_TOGGLE_WAIT_MS, clampWait(value)).apply() }
 
-    /** 日本語を打つ配列（spec 04「設定」の「日本語の入力」）。かな配列かローマ字配列。 */
+    /** 日本語入力はローマ字QWERTYに固定する。旧設定値も同じ配列として読み込む。 */
     var japaneseLayout: LayoutId
         get() = japaneseOf(prefs.getString(KEY_JAPANESE_LAYOUT, null))
         set(value) { prefs.edit().putString(KEY_JAPANESE_LAYOUT, savedName(LayoutId.ROMAJI)).apply() }
 
-    /** 英字を打つ配列（「英字の入力」）。英字配列か英字フリック配列。 */
+    /** 英語入力はQWERTYに固定する。 */
     var englishLayout: LayoutId
         get() = englishOf(prefs.getString(KEY_ENGLISH_LAYOUT, null))
         set(value) { prefs.edit().putString(KEY_ENGLISH_LAYOUT, savedName(LayoutId.QWERTY)).apply() }
@@ -94,10 +94,8 @@ class Settings(private val context: Context) {
 
         /** 配列を保存するときの名前。選べない配列（数字・記号）は空で、読むと最初の値になる。 */
         fun savedName(layout: LayoutId): String = when (layout) {
-            LayoutId.KANA -> "kana"
             LayoutId.ROMAJI -> "romaji"
             LayoutId.QWERTY -> "qwerty"
-            LayoutId.LATIN_FLICK -> "flick"
             LayoutId.SYMBOLS, LayoutId.SYMBOLS2 -> ""
         }
 

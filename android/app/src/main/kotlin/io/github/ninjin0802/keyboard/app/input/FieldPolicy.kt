@@ -7,8 +7,7 @@ import android.view.inputmethod.EditorInfo
 import io.github.ninjin0802.keyboard.app.layout.LayoutId
 
 /**
- * [layout]: 最初に出す配列の種類。KANA は日本語の配列、QWERTY は英語の配列を表し、どちらも設定で選んである方が出る
- * （選ぶのは LayoutNavigator）。
+ * [layout]: 入力欄の種類に応じて表示する最初の配列。日本語QWERTYまたは英語QWERTY。
  * [holdLast]: 変換しない欄で、最後に打ったかな1文字を未確定で持つか（゛゜小 とトグル入力のため）。
  * パスワードの欄では持たない。未確定の文字は伏せ字にならず、次のキーまで読めてしまうため。
  */
@@ -50,10 +49,10 @@ fun fieldPolicy(inputType: Int, imeOptions: Int): FieldPolicy {
             FieldPolicy(LayoutId.QWERTY, convert = false, learn = false)
         // URL 欄は検索にも使うため日本語で始める。URL の直接入力は英字配列に切り替えられる。学習はしない。
         cls == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_URI ->
-            FieldPolicy(LayoutId.KANA, convert = true, learn = false)
+            FieldPolicy(LayoutId.ROMAJI, convert = true, learn = false)
         imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0 ->
-            FieldPolicy(LayoutId.KANA, convert = true, learn = false)
-        else -> FieldPolicy(LayoutId.KANA, convert = true, learn = true)
+            FieldPolicy(LayoutId.ROMAJI, convert = true, learn = false)
+        else -> FieldPolicy(LayoutId.ROMAJI, convert = true, learn = true)
     }
 }
 

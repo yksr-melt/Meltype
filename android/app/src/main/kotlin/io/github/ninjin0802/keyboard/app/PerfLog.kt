@@ -36,21 +36,15 @@ internal object PerfLog {
  * 文字のキーは、どのキーでも同じ種類にする（どの文字を打ったかが分からないように）。
  */
 internal fun perfKind(action: KeyAction): String = when (action) {
-    is KeyAction.Flick -> "flick"
     is KeyAction.Romaji -> "romaji"
     is KeyAction.Text -> "text"
-    KeyAction.Modify -> "modify"
-    KeyAction.ToggleCase -> "case"
     KeyAction.Delete -> "delete"
     KeyAction.Space -> "space"
     KeyAction.Enter -> "enter"
-    KeyAction.Left -> "left"
-    KeyAction.Right -> "right"
     KeyAction.Shift -> "shift"
     KeyAction.Language -> "language"
     is KeyAction.Switch -> "switch"
     KeyAction.Back -> "back"
-    KeyAction.Undo -> "undo"
     KeyAction.Emoji -> "emoji"
 }
 

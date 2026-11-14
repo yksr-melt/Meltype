@@ -16,7 +16,6 @@ import android.view.MotionEvent
 import android.view.View
 import io.github.ninjin0802.keyboard.app.input.Direction
 import io.github.ninjin0802.keyboard.app.input.EnterKind
-import io.github.ninjin0802.keyboard.app.input.FlickDetector
 import io.github.ninjin0802.keyboard.app.input.KeyRepeater
 import io.github.ninjin0802.keyboard.app.input.ShiftState
 import io.github.ninjin0802.keyboard.app.input.SoftKeyTapAcceptance
@@ -48,13 +47,13 @@ interface KeyListener {
 }
 
 /**
- * 配列を描き、タッチをキーの入力（フリックの向き付き）にする。描画で割り当てをしない。
- * キーの絵の形は [KeyIcons]、フリックの案内は [FlickPopupView] が受け持つ。
+ * QWERTY配列を描き、タッチを入力キーに変換する。
+ * 入力内容の判断はこのクラスでは行わない。
  */
 class KeyboardView(context: Context) : View(context) {
     /** The mode selected by the IME is not overwritten by fold/unfold reflow. */
-    private var sourceLayout: KeyboardLayout = Layouts.kana
-    private var displayedLayout: KeyboardLayout = Layouts.kana
+    private var sourceLayout: KeyboardLayout = Layouts.romaji
+    private var displayedLayout: KeyboardLayout = Layouts.romaji
     var layout: KeyboardLayout
         get() = displayedLayout
         set(value) {
@@ -72,12 +71,9 @@ class KeyboardView(context: Context) : View(context) {
         set(value) { field = value; rebuildFaces(); invalidate() }
 
     /** 数字・記号の配列の戻るキーの行き先。キーに書く文字を決める。 */
-    var backTarget: LayoutId = LayoutId.KANA
+    var backTarget: LayoutId = LayoutId.ROMAJI
         set(value) { field = value; rebuildFaces(); invalidate() }
     var listener: KeyListener? = null
-
-    /** フリックの案内を描く View。この View と候補バーの両方に重なっている。 */
-    var popup: FlickPopupView? = null
 
     private var palette = Palette.of(context)
     private val density = resources.displayMetrics.density
@@ -146,8 +142,6 @@ class KeyboardView(context: Context) : View(context) {
     private var pressed: Key? = null
     private var downX = 0f
     private var downY = 0f
-    private var direction = Direction.TAP
-    private val location = IntArray(2)
 
     private val cursorGesture = SpaceCursorGesture(SpaceCursorGesture.STEP_DP * density)
     private val longPress = Runnable {
@@ -240,7 +234,7 @@ class KeyboardView(context: Context) : View(context) {
             val isPressed = k === pressed
             val action = k.action
             val isPill = action == KeyAction.Enter
-            val isChar = action is KeyAction.Flick || action is KeyAction.Text || action is KeyAction.Romaji || action == KeyAction.Space
+            val isChar = action is KeyAction.Text || action is KeyAction.Romaji || action == KeyAction.Space
             fill.color = when {
                 isPill -> if (isPressed) palette.pillPressed else palette.pill
                 isChar -> if (isPressed) palette.keyPressed else palette.key
@@ -275,7 +269,6 @@ class KeyboardView(context: Context) : View(context) {
                 textPaint.color = foreground
                 textPaint.textSize = density * when {
                     label.length > 1 -> if (rect.width() < NARROW_KEY_DP * density) 12.5f else 15f
-                    action is KeyAction.Flick -> KANA_TEXT_DP
                     else -> 23f
                 }
                 textPaint.getFontMetrics(fm)
@@ -356,7 +349,6 @@ class KeyboardView(context: Context) : View(context) {
         val action = k.action
         when {
             action.repeats -> repeater.start({ holds(k) }) { fire(action, Direction.TAP, SystemClock.uptimeMillis()) }
-            action is KeyAction.Flick -> showPopup(k, action)
             action == KeyAction.Space -> {
                 cursorGesture.down(x, y, slopPx = cellW * k.width / 4, timeMs = time)
                 postDelayed(longPress, SpaceCursorGesture.LONG_PRESS_MS)
@@ -364,16 +356,6 @@ class KeyboardView(context: Context) : View(context) {
         }
         invalidate()
         return true
-    }
-
-    private fun showPopup(k: Key, action: KeyAction.Flick) {
-        val overlay = popup ?: return
-        direction = Direction.TAP
-        // この View のいちばん上の段が、案内の View の中でどの高さにあるか。
-        getLocationInWindow(location)
-        val top = location[1]
-        overlay.getLocationInWindow(location)
-        overlay.show(k, action.key, cellW, cellH, (top - location[1]).toFloat())
     }
 
     /** 押している指が動いた。案内の向きが変わったときだけ、案内を描き直す（この View は描き直さない）。 */
@@ -384,10 +366,6 @@ class KeyboardView(context: Context) : View(context) {
             return
         }
         when (k.action) {
-            is KeyAction.Flick -> {
-                val d = FlickDetector.direction(x - downX, y - downY, cellW * k.width)
-                if (d != direction) { direction = d; popup?.setDirection(d) }
-            }
             KeyAction.Space -> {
                 val steps = cursorGesture.move(x, y)
                 if (steps != 0) listener?.onCursorMove(steps)
@@ -403,8 +381,6 @@ class KeyboardView(context: Context) : View(context) {
             val action = k.action
             when {
                 action.repeats -> repeater.stop()
-                action is KeyAction.Flick ->
-                    fire(action, FlickDetector.direction(x - downX, y - downY, cellW * k.width), time)
                 // カーソルを動かしたあとは、空白を入れない。
                 action == KeyAction.Space && spaceMenuOpened -> {
                     // Clear before the callback: switching layouts cancels the active touch.
@@ -436,7 +412,6 @@ class KeyboardView(context: Context) : View(context) {
         repeater.stop()
         removeCallbacks(longPress)
         cursorGesture.cancel()
-        popup?.hide()
         if (pressed != null) { pressed = null; invalidate() }
     }
 
@@ -465,7 +440,6 @@ class KeyboardView(context: Context) : View(context) {
 
     companion object {
         /** かなのキーの文字の大きさ。フリックの案内も、選んでいない向きはこの大きさで書く。 */
-        const val KANA_TEXT_DP = 22f
 
         /** 絵の大きさ（中心から端まで）。 */
         private const val ICON_DP = 10.5f

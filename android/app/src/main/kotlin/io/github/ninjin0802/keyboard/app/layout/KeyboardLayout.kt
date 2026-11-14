@@ -2,37 +2,27 @@
 // Copyright (C) 2026 ninjin0802
 package io.github.ninjin0802.keyboard.app.layout
 
-import io.github.ninjin0802.keyboard.engine.FlickKey
-
 /**
- * 配列（spec 04「配列の種類」）。[KANA] と [ROMAJI] が日本語を打つ配列、[QWERTY] と [LATIN_FLICK] が英字を打つ配列。
- * それぞれ、設定で選んである方だけが出る。
+ * 入力配列。日本語は ROMAJI QWERTY、英語は QWERTY。
  */
 enum class LayoutId {
-    KANA, ROMAJI, QWERTY, LATIN_FLICK, SYMBOLS, SYMBOLS2;
+    ROMAJI, QWERTY, SYMBOLS, SYMBOLS2;
 
-    val isJapanese: Boolean get() = this == KANA || this == ROMAJI
-    val isEnglish: Boolean get() = this == QWERTY || this == LATIN_FLICK
+    val isJapanese: Boolean get() = this == ROMAJI
+    val isEnglish: Boolean get() = this == QWERTY
 }
 
 sealed interface KeyAction {
     /** 押し続けると繰り返すキーか。 */
     val repeats: Boolean get() = false
 
-    /** タップとフリックで文字が決まる（かな配列、英字フリック配列）。 */
-    data class Flick(val key: FlickKey) : KeyAction
     /** ローマ字配列の文字キー。[char] は英字の小文字か、- , . のどれか。 */
     data class Romaji(val char: Char) : KeyAction
     /** そのまま入力（英字・数字・記号）。 */
     data class Text(val text: String) : KeyAction
-    data object Modify : KeyAction
-    /** 直前の英字の、大文字と小文字を入れ替える（a⇔A）。 */
-    data object ToggleCase : KeyAction
     data object Delete : KeyAction { override val repeats get() = true }
     data object Space : KeyAction
     data object Enter : KeyAction
-    data object Left : KeyAction { override val repeats get() = true }
-    data object Right : KeyAction { override val repeats get() = true }
     data object Shift : KeyAction
     /** 日本語の配列と英語の配列を入れ替える（あa）。 */
     data object Language : KeyAction
@@ -40,8 +30,6 @@ sealed interface KeyAction {
     data class Switch(val to: LayoutId) : KeyAction
     /** 数字・記号から直前の配列へ。 */
     data object Back : KeyAction
-    /** 切り替え中の文字を1つ前に戻す、または候補の選択を解く。 */
-    data object Undo : KeyAction
     /** 絵文字の画面へ。 */
     data object Emoji : KeyAction
 }

@@ -2,9 +2,6 @@
 // Copyright (C) 2026 ninjin0802
 package io.github.ninjin0802.keyboard.app.layout
 
-import io.github.ninjin0802.keyboard.engine.FlickKey
-import io.github.ninjin0802.keyboard.engine.KanaKeys
-
 object Layouts {
     private class Spec(val action: KeyAction, val label: String, val name: String, val width: Float)
 
@@ -35,19 +32,6 @@ object Layouts {
     private fun moreSymbols() = key(KeyAction.Switch(LayoutId.SYMBOLS2), "#+=", "記号2ページ", 1.5f)
     private fun firstSymbols() = key(KeyAction.Switch(LayoutId.SYMBOLS), "123", "記号1ページ", 1.5f)
 
-    val kana: KeyboardLayout by lazy {
-        fun k(key: FlickKey) = key(KeyAction.Flick(key), if (key == KanaKeys.PUNCT) "、。?!" else key.chars.first().toString())
-        KeyboardLayout(LayoutId.KANA, 5f, 4, build(listOf(
-            0f to listOf(picture(KeyAction.Undo, "戻す"), k(KanaKeys.A), k(KanaKeys.KA), k(KanaKeys.SA), delete()),
-            0f to listOf(picture(KeyAction.Left, "左"), k(KanaKeys.TA), k(KanaKeys.NA), k(KanaKeys.HA), picture(KeyAction.Right, "右")),
-            0f to listOf(symbols(0.5f), emoji(0.5f), k(KanaKeys.MA), k(KanaKeys.YA), k(KanaKeys.RA), space()),
-            0f to listOf(
-                language(), key(KeyAction.Modify, "゛゜小", "濁点・半濁点・小文字"),
-                k(KanaKeys.WA), k(KanaKeys.PUNCT), enter(),
-            ),
-        )))
-    }
-
     val qwerty: KeyboardLayout by lazy {
         KeyboardLayout(LayoutId.QWERTY, 10f, 4, build(listOf(
             0f to texts("qwertyuiop"),
@@ -66,20 +50,6 @@ object Layouts {
             0f to letters("asdfghjkl") + mark('-', "ー"),
             0f to listOf(picture(KeyAction.Shift, "シフト", 1.5f)) + letters("zxcvbnm") + delete(1.5f),
             0f to listOf(symbols(1.65f), punct("、"), space(4.45f), punct("。"), enter(1.9f)),
-        )))
-    }
-
-    /** 12キーのフリックで英字を打つ配列。操作キーの並びと大きさは、かな配列と同じ。 */
-    val latinFlick: KeyboardLayout by lazy {
-        fun k(key: FlickKey) = key(KeyAction.Flick(key), LatinKeys.label(key))
-        KeyboardLayout(LayoutId.LATIN_FLICK, 5f, 4, build(listOf(
-            0f to listOf(picture(KeyAction.Undo, "戻す"), k(LatinKeys.SYMBOL), k(LatinKeys.ABC), k(LatinKeys.DEF), delete()),
-            0f to listOf(picture(KeyAction.Left, "左"), k(LatinKeys.GHI), k(LatinKeys.JKL), k(LatinKeys.MNO), picture(KeyAction.Right, "右")),
-            0f to listOf(symbols(0.5f), emoji(0.5f), k(LatinKeys.PQRS), k(LatinKeys.TUV), k(LatinKeys.WXYZ), space()),
-            0f to listOf(
-                language(), key(KeyAction.ToggleCase, "a⇔A", "大文字・小文字"),
-                k(LatinKeys.QUOTE), k(LatinKeys.PUNCT), enter(),
-            ),
         )))
     }
 
@@ -124,10 +94,8 @@ object Layouts {
     }
 
     fun of(id: LayoutId): KeyboardLayout = when (id) {
-        LayoutId.KANA -> kana
         LayoutId.ROMAJI -> romaji
         LayoutId.QWERTY -> qwerty
-        LayoutId.LATIN_FLICK -> latinFlick
         LayoutId.SYMBOLS -> symbols
         LayoutId.SYMBOLS2 -> symbols2
     }
