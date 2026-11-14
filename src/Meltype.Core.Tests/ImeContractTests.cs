@@ -530,9 +530,40 @@ internal static class ImeContractTests
         var front = new Front();
         front.Traits.Add("Password");
         Assert.True(!Active(front.Key('a')) && front.Document == "a", "パスワード欄では受け持たない\n" + front.Trace);
-        front = new Front();
+        front = new Front { InputMethod = InputMode.Keyboard };
         front.Traits.Add("Game");
-        Assert.True(!Active(front.Key('a')), "ゲームでは受け持たない (設定「ゲームでは止める」)\n" + front.Trace);
+        Assert.True(!Active(front.Key('a')), "Meltype キーボードはゲームでは受け持たない (チャットは Windows の IME で打つ)\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Game_StartsAlphanumericAndCanSwitchToJapanese()
+    {
+        // OS の IME そのもののフロントは、ゲームでも止めない。止めるとチャットで日本語を打てない (#1805)
+        var front = new Front { InputMethod = InputMode.Tsf };
+        front.Settings.DirectModeAutoDetect = true;
+        front.Traits.Add("Game");
+        var entered = front.Event("CaretMoved", extra: Entered);
+        Assert.True(Active(entered) && !front.Open, "英数で始める\n" + front.Trace);
+        Assert.True(!Capture(entered).GetProperty("printableAscii").GetBoolean(), "英字を横取りしない (移動のキーをゲームに直接届ける)\n" + front.Trace);
+        front.Type("wasd");
+        Assert.Equal("wasd", front.Document, front.Trace);
+        Assert.True(Consumed(front.Key(ToggleShortcut.Hankaku)) && front.Open, "半角/全角 で日本語にできる\n" + front.Trace);
+        front.Type("ka");
+        front.Key('\n');
+        Assert.True(front.Document == "wasdか" && !front.Open, "Enter で確定したら英数に戻す (チャットを閉じたことは分からない)\n" + front.Trace);
+        front.Type("w");
+        Assert.Equal("wasdかw", front.Document, "閉じたあとの移動のキーはゲームに届く\n" + front.Trace);
+        front.Key(ToggleShortcut.Hankaku);
+        front.Type("ka");
+        front.Key('\u001b');
+        Assert.True(!front.Open, "Esc で取り消しても英数に戻す\n" + front.Trace);
+        front.Key(ToggleShortcut.Hankaku);
+        front.Type("ka ");
+        front.Type("ki");
+        Assert.True(front.Open, "変換して打ち続けて確定したときは日本語のまま\n" + front.Trace);
+        // ゲームでない入力欄は、OS の開閉のまま
+        var general = new Front { InputMethod = InputMode.Tsf };
+        Assert.True(general.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("imeOpen").GetBoolean(), general.Trace);
     }
 
     [Test]

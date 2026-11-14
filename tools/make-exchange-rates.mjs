@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 //
 // 欧州中央銀行 (ECB) の参照レート (eurofxref-daily.xml) から、通貨の換算に使う表 dictionaries/exchange-rates.txt を作る
-// (100どる → 約15,923円 の候補。issue #342)。Meltype は使うときにネットにつながず、リリースのときに作った表を同梱する。
+// (100どる → 約1.6万円 の候補。issue #342)。Meltype は使うときにネットにつながず、リリースのときに作った表を同梱する。
 // リリースの前に実行してコミットする (docs/dev/RELEASE.md)。
 //   node tools/make-exchange-rates.mjs
 // ECB の参照レートは、出典を書けば再利用できる (https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html)。
