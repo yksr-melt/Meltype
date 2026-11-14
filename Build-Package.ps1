@@ -218,20 +218,15 @@ Invoke-SelfTest '読み込まれない部品も削った後' (Join-Path $app 'Me
 $tip = Join-Path $app 'tip'
 $imeBuilt = $false
 if (-not $Portable) {
+    # 1 つでもビルドに失敗したら止める (Meltype IME の欠けた通常版を配らない)
+    & (Join-Path $root 'native\tip\build.ps1') -Configuration Release
     $imeBuilt = $true
-    try { & (Join-Path $root 'native\tip\build.ps1') -Configuration Release }
-    catch {
-        $imeBuilt = $false
-        Write-Warning "Meltype IME をビルドできないので、入れずに作ります: $($_.Exception.Message)"
+    foreach ($arch in 'x64', 'arm64', 'x86') {
+        New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
+        Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
     }
-    if ($imeBuilt) {
-        foreach ($arch in 'x64', 'arm64', 'x86') {
-            New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
-            Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
-        }
-        Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
-        Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
-    }
+    Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
+    Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
 }
 }
 if ($Step -eq 'Build') {

@@ -2,7 +2,8 @@
 # Copyright (C) 2026 lnkiai
 #
 # Meltype IME (TSF の DLL) をビルドする。Visual Studio Build Tools (C++) が要る。
-#   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug] [-Architectures x64,arm64,x86]
+#   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug]
+#   PowerShell の中から: .\native\tip\build.ps1 -Architectures x64,x86 (-File 経由では、カンマ区切りが配列にならない)
 # -Architectures を省くと、配布用に 3 つともビルドし、1 つでも失敗したら止める
 # 出力: native\tip\bin\x64・native\tip\bin\arm64・native\tip\bin\x86 (32bit のアプリ用) に、MeltypeTip.dll (stub) と MeltypeTipImpl.dll (impl)
 # arm64 は ARM64X (ARM64 と ARM64EC のコードを 1 つの DLL に入れたもの)。ARM64 の Windows では、ARM64 のアプリと x64 のアプリが
