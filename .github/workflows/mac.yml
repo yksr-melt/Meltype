@@ -10,6 +10,8 @@ on:
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Mac.Native/**'
       - 'dictionaries/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
       - 'tools/test-native-boundaries.py'
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
@@ -30,7 +32,8 @@ concurrency:
 jobs:
   app:
     runs-on: macos-15
-    timeout-minutes: 60
+    # Mozc のビルドは初回 30〜40 分かかる (2 回目からは Bazel のキャッシュを使う)
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -43,12 +46,25 @@ jobs:
           sw_vers
           swift --version
           dotnet --version
-      # azooKey の変換エンジンと辞書 (Swift Package) は大きいので、次からはキャッシュを使う。
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: mac/.build
-          key: mac-swiftpm-${{ hashFiles('mac/Package.swift', 'mac/Package.resolved') }}
-          restore-keys: mac-swiftpm-
+          path: |
+            ~/bazel-cache
+            ~/mozc/src/third_party_cache
+          key: mozc-macos-arm64-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          restore-keys: |
+            mozc-macos-arm64-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+      # Bazelisk は版を固定し、ダウンロードしたものが公開されているものと同じか (SHA-256) を確かめる (linux.yml と同じ)
+      - name: Bazelisk
+        run: |
+          mkdir -p "$HOME/tools"
+          if ! curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-darwin-arm64; then
+            curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -H 'Accept: application/octet-stream' -o "$HOME/tools/bazelisk" https://api.github.com/repos/bazelbuild/bazelisk/releases/assets/406879037
+          fi
+          echo "cee851f726789227d5561004e9904a52be45c3efb56f8b38b6993d6adbaa0409  $HOME/tools/bazelisk" | shasum -a 256 -c -
+          chmod +x "$HOME/tools/bazelisk"
+      - name: Build Mozc helper
+        run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-helper.sh "$HOME/mozc" "$HOME/bazel-cache"
       # 配布用の署名 (Apple Developer Program の Developer ID の証明書があるときだけ。公証に時間がかかるので Pull Request ではしない)。秘密:
       #   MAC_CERT_P12_BASE64 (証明書の .p12 を Base64 にしたもの)、MAC_CERT_PASSWORD、MAC_IDENTITY ("Developer ID Application: 名前 (チームID)")
       - name: Signing certificate

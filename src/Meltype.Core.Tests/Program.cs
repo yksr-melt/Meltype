@@ -82,13 +82,13 @@ internal static class Program
                 {
                     var text = string.Join(" ", args.Skip(1));
                     var slash = text.IndexOf(" / ", StringComparison.Ordinal);
-                    Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, null, Henkan.Keyboard, Henkan.EngineName);
+                    Jht.Run(slash >= 0 ? text[..slash] : text, slash >= 0 ? text[(slash + 3)..] : null, Henkan.ReadingOf, Henkan.Keyboard, Henkan.EngineName);
                     Henkan.Shutdown();
                 }
                 return 0;
             case "--jht-batch":
                 // 標準入力から 1 行に 1 つ「出てほしい文 [/ 読み]」を受け取り、1 行ずつ結果を返す (多くの文を続けて試すとき。起動の待ちを省く)
-                Jht.Batch(null, Henkan.Keyboard, () => Henkan.EngineName);
+                Jht.Batch(Henkan.ReadingOf, Henkan.Keyboard, () => Henkan.EngineName);
                 Henkan.Shutdown();
                 return 0;
             case "--dictionary-memory":

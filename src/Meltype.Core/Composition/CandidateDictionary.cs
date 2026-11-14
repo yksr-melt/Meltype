@@ -4,8 +4,7 @@
 namespace Meltype.Composition;
 
 /// <summary>
-/// 変換候補の補助辞書 (読み → 候補)。Microsoft IME の変換エンジンは最有力の 1 候補しか返さないので、
-/// 同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) はここから出す。
+/// 変換候補の補助辞書 (読み → 候補)。変換エンジンの候補に無い同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) を足す。
 /// 形式は 1 行に「読み 候補 候補 …」。# 以降はコメント。
 /// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
 /// </summary>

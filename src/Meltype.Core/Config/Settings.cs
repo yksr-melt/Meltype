@@ -78,16 +78,6 @@ public enum CompositionOpacity
     [Description("70%")] Percent70,
 }
 
-/// <summary>かな漢字変換のエンジン。</summary>
-public enum ConversionEngine
-{
-    /// <summary>Mozc で変換し、使えないときは OS の変換エンジン。候補は両方。</summary>
-    [Description("両方 (Mozc を優先)")] Hybrid,
-    [Description("Mozc")] Mozc,
-    /// <summary>OS の変換エンジン (Windows では Microsoft IME)。</summary>
-    [Description("Microsoft IME")] System,
-}
-
 /// <summary>句読点の組み合わせ (Microsoft IME と同じ 4 通り)。, と . を打ったときに出す文字。</summary>
 public enum PunctuationStyle
 {
@@ -403,15 +393,12 @@ public sealed class Settings
      Description("Keyboard モードで、Space を押さなくても打ったそばから漢字に変換して表示します。")]
     public bool LiveConversion { get; set; } = true;
 
-    [Category("4. 変換"), DisplayName("変換エンジン"), Platforms(Platform.Windows),
-     Description("かな漢字変換に使うエンジン。「両方」は Mozc (Google 日本語入力のオープンソース版) で変換し、Mozc が使えないときは Microsoft IME で変換します。候補には両方の候補が出ます。")]
-    public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
-
+    // Linux 版は llama-server をまだ同梱していない (#1571)。同梱したら Platform.Linux を足す
     [Category("4. 変換"), DisplayName("Zenzai を使う"), Platforms(Platform.Windows | Platform.Mac),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。同梱の llama.cpp の llama-server と zenz-v3.2-small を使います。使えないとき・応答が遅いときは、Mozc で変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
     public bool UseZenzai { get; set; } = true;
 
-    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows),
+    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows | Platform.Mac),
      Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiServerPath { get; set; } = "";
 
