@@ -42,6 +42,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     // アプリに通した入力の知らせ (Caret) は順番どおりに本体に送るが、後のキーを並ばせない
     private int _waiting;
     private bool _busy;
+    // UI スレッドが _queue から取り出して処理している入力 (処理を終えるまで、アプリに送り直していない)。_gate で守る
+    private Input? _processing;
     private volatile bool _composing;
     private volatile ImeState _state;
     // 押下を本体に送った左右の Alt (ImeCapture.AltKeys) と、押している間にほかのキー・マウスのボタンを押したか。フックのスレッドだけが使う
@@ -222,7 +224,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return true;
     }
 
-    private static ImeKey KeyOf(KeyEvent e, bool repeat)
+    private ImeKey KeyOf(KeyEvent e, bool repeat)
     {
         bool shift = IsDown(VirtualKeys.Shift), ctrl = IsDown(VirtualKeys.Control), alt = IsDown(VirtualKeys.Menu), command = IsDown(VirtualKeys.LWin) || IsDown(VirtualKeys.RWin);
         var ch = !ctrl && !alt && !command && KeyText.CharFromKey(e.Vk, e.Scan, shift) is { } c && !char.IsControl(c) ? c : 0;
@@ -248,6 +250,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 _busy = input.Waits;
                 if (_busy) _waiting--;
                 caretFollows = _queue.TryPeek(out var next) && next.Caret is not null;
+                _processing = input;
             }
             try
             {
@@ -261,6 +264,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 _composing = false;
                 _composition.Hide();
                 ReplayQueued();
+            }
+            finally
+            {
+                lock (_gate) _processing = null;
             }
         }
     }
@@ -458,7 +465,34 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return capture;
     }
 
-    private static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
+    // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直すので、
+    // 送り直すまでは GetAsyncKeyState に表れない (止めたキーは反映されない)。そうしないと、変換中に Shift + / を打つと
+    // Shift が離れて見え、? が / (・) になる。GetAsyncKeyState に表れないのは、並べてまだ送り直していない押下 (処理中のものと _queue) だけなので、
+    // それも見る (同じ物理キーの解放が後ろに並んでいれば、離している)。並びが空なら GetAsyncKeyState だけで決まる
+    private bool IsDown(int vk)
+    {
+        if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) return true;
+        var down = new HashSet<int>();
+        lock (_gate)
+        {
+            foreach (var input in _processing is { } current ? _queue.Prepend(current) : _queue)
+            {
+                if (input.Key is not { } key || key.Vk != vk && GenericModifier(key.Vk) != vk) continue;
+                if (key.IsDown) down.Add(key.PhysicalId);
+                else down.Remove(key.PhysicalId);
+            }
+        }
+        return down.Count > 0;
+    }
+
+    /// <summary>左右を区別する修飾キーの、区別しない仮想キー (修飾キーでなければ 0)。</summary>
+    private static int GenericModifier(int vk) => vk switch
+    {
+        VirtualKeys.LShift or VirtualKeys.RShift => VirtualKeys.Shift,
+        VirtualKeys.LControl or VirtualKeys.RControl => VirtualKeys.Control,
+        VirtualKeys.LMenu or VirtualKeys.RMenu => VirtualKeys.Menu,
+        _ => 0,
+    };
 
     /// <summary>入力先のスレッドで選んでいる入力言語が日本語か (物理配列ではない。HKL の下位ワードが言語 ID で、上位ワード (配列・IME の識別子) と開閉状態には依存しない)。</summary>
     internal static bool IsJapaneseLayout(IntPtr layout) => (layout.ToInt64() & 0xFFFF) == 0x0411;

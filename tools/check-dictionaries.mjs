@@ -160,6 +160,22 @@ const dictionaries = {
     untrimmed: true,
   },
 };
+// 国名の語 (tools/make-countries.mjs で作る)。Core は propernouns.txt と同じく読む
+dictionaries['countries.txt'] = dictionaries['propernouns.txt'];
+
+/**
+ * 分野の辞書 (dictionaries/domain-*.txt。tools/make-domain-dictionaries.py で作る)。読み<Tab>表記<Tab>表記 …。
+ * Core (CandidateDictionary.AddDomainText) は行頭の # だけをコメントとし、タブだけで区切る。読みは打ったかなと完全一致で引く
+ */
+const domain = {
+  format: tabbed(2, Infinity, ([reading, ...words]) => [
+    hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+    ...words.filter(w => w === '').map(() => '空の表記がある'),
+  ]),
+  commentAt: line => line.startsWith('#') ? 0 : -1,
+  keysOf: line => [[line.split('\t')[0], line]],
+};
+const configOf = file => dictionaries[file] ?? (/^domain-[a-z-]+\.txt$/.test(file) ? domain : undefined);
 
 function noInlineComment(check) {
   return line => line.includes('#') ? ['行末にコメントは書けない (コメントは行頭の # だけ。行末に書くとこの行は読み込まれない)'] : check(line);
@@ -210,7 +226,7 @@ function japaneseOriginSection() {
 export function checkDictionary(file, text) {
   const errors = [], warnings = [];
   if (text.charCodeAt(0) === 0xfeff) warnings.push({ message: '先頭に BOM がある' });
-  const config = dictionaries[file];
+  const config = configOf(file);
   if (!config) { warnings.push({ message: '形式を確かめる決まりが無い辞書 (tools/check-dictionaries.mjs に足してください)' }); return { errors, warnings }; }
   const {
     format,

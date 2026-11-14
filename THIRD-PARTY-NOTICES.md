@@ -371,6 +371,149 @@ SPDX-License-Identifier: Unicode-3.0
 
 - 出典: European Central Bank
 
+### 国名の語 (dictionaries/countries.txt)
+
+かなに割れる国名 (Bermuda → Bermuだ) を英語にするのに使います (ローマ字として最後まで読める語は今は使わない。#1869)。[Unicode CLDR](https://github.com/unicode-org/cldr) の `common/main/en.xml` の国・地域名を `tools/make-countries.mjs` で語に分けて作りました。著作権・ライセンスは絵文字の辞書と同じ (Unicode, Inc.、Unicode License v3) です。
+
+### 分野の辞書 (dictionaries/domain-*.txt)
+
+変換の候補に専門用語・固有名詞を足すのに使います。`tools/make-domain-dictionaries.py` で、元の辞書から読みと表記を取り出し、読みで 1 行にまとめ、かなだけで書く語とよく使う語の読みを除いて作りました。
+
+| ファイル | 元データ | 著作権 | ライセンス |
+| --- | --- | --- | --- |
+| `domain-medical.txt` | [JMED-DICT-mini](https://sociocom.naist.jp/jmed-dict/) ver 1.1.2 (病名・医薬品・部位の各データの上位 10,000 行) | 奈良先端科学技術大学院大学 ソーシャル・コンピューティング研究室 | [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) |
+| `domain-it.txt` | [IDiME](https://github.com/ssvp003/IDiME) (情報処理学会 情報入試委員会「情報科全教科書用語リスト 第2版」をもとにしたもの) | ssvp003、情報処理学会 情報入試委員会 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)。この派生データも CC BY-SA 4.0 |
+| `domain-stations.txt` | [SKK 辞書](https://github.com/skk-dev/dict) SKK-JISYO.station | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (Meltype では GPL-3.0-or-later で使う) |
+| `domain-propernouns.txt` | SKK 辞書 SKK-JISYO.propernoun | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (同上) |
+| `domain-names.txt` | SKK 辞書 SKK-JISYO.jinmei・SKK-JISYO.fullname | Wnn Consortium、SKK Development Team、Akie Kaidoh | GPL-2.0-or-later (同上) |
+| `domain-propernouns-sudachi.txt`・`domain-words-sudachi.txt` | [SudachiDict](https://github.com/WorksApplications/SudachiDict) core (20261015) の固有名詞 (一般)・普通名詞 (正規化表記と同じ表記だけ) | Works Applications Co., Ltd.。一部は UniDic (Copyright (c) 2011-2013, The UniDic Consortium) | Apache License 2.0。UniDic 由来の部分は BSD-3-Clause (下の全文) |
+| `domain-laws.txt` | [e-Gov 法令検索](https://laws.e-gov.go.jp/) の法令 API の、今ある法律の題名と読み | デジタル庁 | [公共データ利用規約 (第1.0版)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0) (CC BY 4.0 と互換)。出典: e-Gov 法令検索。題名と読みを取り出して加工した |
+
+どの辞書も、Mozc が読みから出せる語を除いています (Mozc の変換ヘルパーに読みを変換させて比べた)。SudachiDict は漢字を含む表記だけを入れ、人名 (固有名詞,人名。まれな字の組み合わせが多く、名前として確かめられない) と地名 (固有名詞,地名,一般。町名・字名がほとんど) は入れていません。
+
+SudachiDict に含まれる UniDic のライセンス (SudachiDict の LEGAL):
+
+```
+Copyright (c) 2011-2013, The UniDic Consortium
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+ * Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+
+ * Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the
+   distribution.
+
+ * Neither the name of the UniDic Consortium nor the names of its
+   contributors may be used to endorse or promote products derived
+   from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+- src/main/text/core_lex.csv and src/main/text/notcore_lex.csv contain
+a part of NEologd (https://github.com/neologd/mecab-unidic-neologd).
+
+Copyright (C) 2015-2019 Toshinori Sato (@overlast)
+
+      https://github.com/neologd/mecab-unidic-neologd
+
+    i. 本データは、株式会社はてなが提供するはてなキーワード一覧ファイル
+       中の表記、及び、読み仮名の大半を使用している。
+
+       はてなキーワード一覧ファイルの著作権は、株式会社はてなにある。
+
+       はてなキーワード一覧ファイルの使用条件に基づき、また、
+       データ使用の許可を頂いたことに対する感謝の意を込めて、
+       以下に株式会社はてなおよびはてなキーワードへの参照をURLで示す。
+
+       株式会社はてな : http://hatenacorp.jp/information/outline
+
+       はてなキーワード :
+       http://developer.hatena.ne.jp/ja/documents/keyword/misc/catalog
+
+   ii. 本データは、日本郵便株式会社が提供する郵便番号データ中の表記、
+       及び、読み仮名を使用している。
+
+       日本郵便株式会社は、郵便番号データに限っては著作権を主張しないと
+       述べている。
+
+       日本郵便株式会社の郵便番号データに対する感謝の意を込めて、
+       以下に日本郵便株式会社および郵便番号データへの参照をURLで示す。
+
+       日本郵便株式会社 :
+         http://www.post.japanpost.jp/about/profile.html
+
+       郵便番号データ :
+         http://www.post.japanpost.jp/zipcode/dl/readme.html
+
+  iii. 本データは、スナフキん氏が提供する日本全国駅名一覧中の表記、及び
+       読み仮名を使用している。
+
+       日本全国駅名一覧の著作権は、スナフキん氏にある。
+
+       スナフキん氏は 「このデータを利用されるのは自由ですが、その際に
+       不利益を被ったりした場合でも、スナフキんは一切責任は負えません
+       ことをご承知おき下さい」と述べている。
+
+       スナフキん氏に対する感謝の意を込めて、
+       以下に日本全国駅名一覧のコーナーへの参照をURLで示す。
+
+       日本全国駅名一覧のコーナー :
+         http://www5a.biglobe.ne.jp/~harako/data/station.htm
+
+   iv. 本データは、工藤拓氏が提供する人名(姓/名)エントリデータ中の、
+       漢字表記の姓・名とそれに対応する読み仮名を使用している。
+
+       人名(姓/名)エントリデータは被災者・安否不明者の人名の
+       表記揺れ対策として、Mozcの人名辞書を活用できるという
+       工藤氏の考えによって提供されている。
+
+       工藤氏に対する感謝の意を込めて、
+       以下にデータ本体と経緯が分かる情報への参照をURLで示す。
+
+       人名(姓/名)エントリデータ :
+         http://chasen.org/~taku/software/misc/personal_name.zip
+
+       上記データが提供されることになった経緯
+         http://togetter.com/li/111529
+
+    v. 本データは、Web上からクロールした大量の文書データから抽出した
+       表記とそれに対応する読み仮名のデータを含んでいる。
+
+       抽出した表記とそれに対応する読み仮名の組は、上記の i. から iv.
+       の言語資源の組み合わせによって得られる組のみを採録した。
+
+       Web 上に文書データを公開して下さっている皆様に感謝いたします。
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
 ### そのほかの辞書
 
 `dictionaries/` の辞書 (日本語・英語の単語、固有名詞、同音異義語の候補、文脈の手がかり) は Meltype のために作成したもので、

@@ -1745,6 +1745,38 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1650_DomainDictionariesOfferTerms()
+    {
+        // #1650: 分野の辞書 (医療・情報・駅名・固有名詞・人名) の語を候補に出す
+        var dictionary = CandidateDictionary.Load(null);
+        Assert.True(dictionary.LookupDomain("せんたんきょだいしょう").Contains("先端巨大症"), "医療 (JMED-DICT)");
+        Assert.True(dictionary.LookupDomain("いくせいしゃけん").Contains("育成者権"), "情報 (IDiME)");
+        Assert.True(dictionary.LookupDomain("あいづかのうえき").Contains("会津加納駅"), "駅名 (SKK)");
+        Assert.True(dictionary.LookupDomain("せんたんきょだいしょうの").Contains("先端巨大症の"), "助詞が付いても");
+        Assert.True(dictionary.LookupDomain("どくにんせい").Contains("独任制"), "一般の語 (SudachiDict)");
+        Assert.True(dictionary.LookupDomain("ちゅうえつぱるぷ").Contains("中越パルプ"), "固有名詞 (SudachiDict)");
+        Assert.True(dictionary.LookupDomain("あまみぐんとうしんこうかいはつとくべつそちほう").Contains("奄美群島振興開発特別措置法"), "法令名 (e-Gov)");
+        // 法令名: 題名の大きい ツ (マツサージ) は、ふだん打つ読み (まっさーじ) でも引ける。読みが改題前の題名のままの法律は入れない
+        Assert.True(dictionary.LookupDomain("あんままっさーじしあつしはりしきゆうしとうにかんするほうりつ").Count > 0, "あんままっさーじ…");
+        Assert.True(dictionary.LookupDomain("おきなわけんにおけるちゅうりゅうぐんようちのへんかんにともなうとくべつそちにかんするほうりつ").Count == 0, "改題前の読み");
+        // 異表記 (洗ひざらし) は入れない
+        Assert.True(!dictionary.LookupDomain("あらいざらし").Contains("洗ひざらし"), "異表記");
+        // 逆向き: よく使う語の読みには分野の語を足さない (きょう → 京・恭 が ひらがな より前に出ていた)
+        Assert.Equal(0, dictionary.LookupDomain("きょう").Count);
+        Assert.Equal(0, dictionary.LookupDomain("あい").Count);
+    }
+
+    [Test]
+    public static void Issue1650_DomainTermsComeAfterEverydayCandidates()
+    {
+        // 分野の語は、使わない人には要らない候補なので、ふだんの候補 (変換エンジンの答え・ひらがな・カタカナ) を後ろに押さない
+        var k = new Keyboard();
+        k.Type("sentankyodaishou ");
+        var shown = k.Host.View!.Candidates.ToList();
+        Assert.Equal("せんたんきょだいしょう,センタンキョダイショウ,ｾﾝﾀﾝｷｮﾀﾞｲｼｮｳ,先端巨大症", string.Join(",", shown.Take(4)), string.Join(" ", shown));
+    }
+
+    [Test]
     public static void Issue409_TanomeOffersBirthdaySlang()
     {
         var dictionary = CandidateDictionary.Load(null);
@@ -1797,7 +1829,9 @@ internal static class CompositionTests
     {
         // #1541・#1637・#1530・#1638: IME や OS の名前がかなに割れる
         // #1615: 国名 / #1651: アーティスト名
-        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "azooKey", "hazkey", "mozkey", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse" })
+        foreach (var word in new[] { "fcitx5", "iGPU", "iCloud", "AsahiLinux", "azooKey", "hazkey", "mozkey", "Benin", "Panama", "Tonga", "Madagascar", "picco", "nqrse",
+            // #1650: CLDR の国・地域名から作った countries.txt
+            "Bermuda", "Puerto Rico", "Central African Republic", "Clipperton Island", "Palestinian Territories", "Congo - Kinshasa" })
         {
             var k = new Keyboard();
             k.Type(word + "\n");
@@ -1820,6 +1854,14 @@ internal static class CompositionTests
         follow = new Keyboard();
         follow.Type("iGPUde\n");
         Assert.Equal("iGPUで", follow.Host.Document);
+
+        // 逆向き (#1650): 国名の語に似たローマ字 (San・Jan・Rica・Togo・Oman) の日本語は日本語のまま。ローマ字として読める国名の語 (Oman) と小文字の語 (da) は国名の語に入れない
+        foreach (var (typed, expected) in new[] { ("tanakasan", "たなかさん"), ("iijan", "いいじゃん"), ("rikanojugyou", "りかのじゅぎょう"), ("iranai", "いらない"), ("togo", "とご"), ("sorehada", "それはだ"), ("omanjuutabeta", "おまんじゅうたべた"), ("sannindekita", "さんにんできた"), ("janakatta", "じゃなかった") })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.True(k.Host.Document.All(c => c >= 0x3000), $"{typed} → {k.Host.Document} (期待: {expected} のような日本語)");
+        }
     }
 
     [Test]
@@ -6100,5 +6142,46 @@ internal static class CompositionTests
             Assert.True(plain.Display(final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
         }
         finally { Directory.Delete(dir, recursive: true); }
+    }
+
+    [Test]
+    public static void Issue1644_CommitLogsSegmentReason()
+    {
+        // 確定のたびに、区切りの重みと次点をログに残す。既定では打った文字を出さず、区間の言語と文字数だけ
+        var recordText = Meltype.Diagnostics.Log.RecordText;
+        try
+        {
+            foreach (var withText in new[] { false, true })
+            {
+                Meltype.Diagnostics.Log.RecordText = withText;
+                var entry = CommitLog(new Keyboard(), "kyouhagoogle\n");
+                Assert.True(entry.Contains("区切り ") && entry.Contains("次点 "), "区切りと次点: " + entry);
+                Assert.Equal(withText, entry.Contains("google"), "打った文字は設定どおり: " + entry);
+                if (!withText) Assert.True(entry.Contains("EN(6)"), "文字の代わりに文字数: " + entry);
+            }
+
+            // ログの区切りは、実際に確定した区切りと同じ計算から取る。区間分けの後の書き換え (笑いの w) もログに出る
+            Meltype.Diagnostics.Log.RecordText = true;
+            var laughter = new Keyboard { LaughterAfterKana = true };
+            var laughed = CommitLog(laughter, "naruhodonew\n");
+            Assert.Equal("なるほどねw", laughter.Host.Document, "笑いの w で確定");
+            Assert.True(laughed.Contains("かな + w に分けた"), "笑いの w に分けたことがログに出る: " + laughed);
+
+            // 保護区間を含む入力も、保護区間以外の区切りの重みを出す
+            var text = new CompositionText(Detector);
+            foreach (var c in "@kuraido kyouha") text.Append(c);
+            var mention = text.ExplainSegments();
+            Assert.True(mention.Contains("保護区間") && mention.Contains("区切り "), "保護区間と、ほかの区間の区切り: " + mention);
+        }
+        finally
+        {
+            Meltype.Diagnostics.Log.RecordText = recordText;
+        }
+
+        static string CommitLog(Keyboard k, string keys)
+        {
+            k.Type(keys);
+            return Meltype.Diagnostics.Log.Snapshot().Last(e => e.Level == Meltype.Diagnostics.LogLevel.Decision && e.Message.StartsWith("確定:", StringComparison.Ordinal)).Message;
+        }
     }
 }

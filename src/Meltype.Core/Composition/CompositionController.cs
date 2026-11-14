@@ -464,7 +464,7 @@ public sealed partial class CompositionController
             !_text.IsEmpty && _text.Raw.All(char.IsAsciiLetter))
         {
             _correctable.Clear();
-            CommitText(_text.Raw, english: true, preserveText: true);
+            CommitText(_text.Raw, english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CommitIfAny(preserveText);
         UpdateView();
