@@ -222,6 +222,7 @@ public sealed partial class CompositionController
         var surrounding = (_precedingText ?? "") + (_followingText ?? "");
         if ((_services.ContextRules?.Choose(reading, surrounding, clause.Text, Standalone) ?? _learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
+        KeepTypedSymbols([clause], reading);
         AddOldKana(clause);
         AddTranslations(clause);
         AddRawCandidates(clause);
@@ -536,14 +537,16 @@ public sealed partial class CompositionController
     /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol が決めた文字) は、最初の候補でも読みの文字のままにする。
     /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
     /// (ライブ変換で 例文？ が 例文? に: issue #519、「今日は が ［今日は に: issue #1669、わたしは、 が 私は・ に)。別の候補は一覧に残す。
-    /// 記号だけを変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。
+    /// 記号だけを打って変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。記号だけかは、文節や
+    /// ユーザー辞書で分けた部分の読みでなく、打ったもの全体で決める (わたしは、 の区切りを変えてできた 、 だけの文節にも、覚えた ・ を出さない)。
     /// 記号の数が読みと違う答え (から → ～、あんはさうぇい → アン・ハサウェイ) は、どの記号がどれに当たるか分からないので変えない。
     /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
+    /// 最初の候補を決める所 (ConvertWithEngine・Reconvert・WholeClause) の最後に呼ぶ。
     /// </summary>
-    private static void KeepTypedSymbols(List<Clause> clauses, string kana)
+    private void KeepTypedSymbols(IReadOnlyList<Clause> clauses, string reading)
     {
-        if (!kana.Any(char.IsLetterOrDigit)) return;
-        var typed = kana.Where(IsSymbol).ToList();
+        if (!_text.Raw.Any(char.IsLetterOrDigit)) return;
+        var typed = reading.Where(IsSymbol).ToList();
         if (clauses.Sum(c => c.Text.Count(IsSymbol)) != typed.Count) return;
         var next = 0;
         foreach (var clause in clauses)
@@ -883,6 +886,7 @@ public sealed partial class CompositionController
         clause.Raw = null;
         clause.Translations.Clear();
         if (_learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
+        KeepTypedSymbols([clause], clause.Reading);
     }
 
     private string Convert(string kana) => NormalizeHalfWidth(_converter.Convert(kana) ?? kana, kana);

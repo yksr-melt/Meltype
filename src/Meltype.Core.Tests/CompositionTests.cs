@@ -4477,6 +4477,25 @@ internal static class CompositionTests
         Assert.Equal("例文？", live.Showing, "かなと一緒に打った記号は覚えた候補にしない");
     }
 
+    [Test]
+    public static void TypedSymbols_StayAfterResizingClauses()
+    {
+        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)
+        var history = new ConversionHistory(null);
+        history.Remember("、", "・");
+        var k = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
+        k.Type("watasiha,kyouha? ");
+        Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!));
+        ShiftArrow(k, VirtualKeys.Right);
+        Assert.Equal("私は、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
+
+        var end = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
+        end.Type("kyouha, ");
+        ShiftArrow(end, VirtualKeys.Right);
+        ShiftArrow(end, VirtualKeys.Left);
+        Assert.Equal("今日は|、", string.Join("|", end.Host.View!.Clauses!), "縮めてできた 、 だけの文節も、覚えた ・ にしない");
+    }
+
     /// <summary>決めた文節に区切る変換エンジン。</summary>
     private sealed class ClauseConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
     {
