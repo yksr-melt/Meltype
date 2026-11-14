@@ -5152,6 +5152,27 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1737_NoKanaAlternativeWithUnreadableLetters()
+    {
+        // ローマ字として読めない英字が残る読み (google → ごおgぇ) は日本語の案にならないので、すべてかなの案は出さない
+        var k = new Keyboard();
+        k.Type("kyouhagooglede ");
+        Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains("ごお", StringComparison.Ordinal)), string.Join(" ", k.Host.View.Candidates));
+    }
+
+    [Test]
+    public static void Issue1737_F7OnWholeSentenceCommitsKatakana()
+    {
+        // 文全体の文節で F7 を押すと、変換をやめて入力全体をカタカナにする (文節に分けずに確定する)
+        var k = new Keyboard();
+        k.Type("botto ");
+        Assert.Equal("botと", string.Join("|", k.Host.View!.Clauses!));
+        k.Press(VirtualKeys.F7);
+        k.Type("\n");
+        Assert.Equal("ボット", k.Host.Output.Single());
+    }
+
+    [Test]
     public static void Issue1737_SingleClauseAlternativeKeepsItsCandidates()
     {
         // sushi は 英語 / すし の 1 文節ずつの案。文全体の候補の後ろに、それぞれの文節の候補 (スシ) も並べて、選んで確定できる

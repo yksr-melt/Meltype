@@ -360,10 +360,12 @@ public sealed partial class CompositionController
     /// 候補を開いた後に届いた答えを反映する。文節の区切りを動かしたあとは置き換えない。
     /// 文節の並びが変わる答えは、候補を選び直したか、別の文節へ移動したあとなら置き換えない (選んでいる文節がずれる)。
     /// 候補を選び直した文節は、選んでいる候補を変えずに、新しい候補を上に入れる。何も変わらなければ false。
+    /// 英日の区切りの案を候補にした文全体の文節を選び直したあとも置き換えない。作り直すと選んだ文が新しい案に無くなることがあり、
+    /// その案の文節に分けられなくなる (← → で選び直せず、文節ごとの学習もできない)。
     /// </summary>
     private bool RefreshOpenConversion()
     {
-        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0) return false;
+        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0 || _clauses is [{ Alternatives: not null, Changed: true }]) return false;
         var (old, selected, tabStarted) = (_clauses, _selectedClause, _tabStartedConversion);
         WithoutWaiting(() =>
         {
