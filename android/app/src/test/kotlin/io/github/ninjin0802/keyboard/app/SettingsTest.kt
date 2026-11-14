@@ -7,17 +7,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class SettingsTest {
-    @Test fun clamp() {
-        assertEquals(300, Settings.clampWait(0))
-        assertEquals(2000, Settings.clampWait(9999))
-        assertEquals(700, Settings.clampWait(749))
-        assertEquals(800, Settings.clampWait(750))
-        assertEquals(1000, Settings.clampWait(1000))
-        assertEquals(300, Settings.clampWait(-500))
-        assertEquals(300, Settings.clampWait(Int.MIN_VALUE))
-        assertEquals(2000, Settings.clampWait(Int.MAX_VALUE))
-    }
-
     /** 日本語・英語ともに、未設定の入力配列はQWERTY。 */
     @Test fun layout_choices_default_when_nothing_or_something_unknown_is_saved() {
         for (saved in listOf(null, "", "qwerty", "flick", "KANA", "x")) assertEquals(LayoutId.ROMAJI, Settings.japaneseOf(saved), "$saved")

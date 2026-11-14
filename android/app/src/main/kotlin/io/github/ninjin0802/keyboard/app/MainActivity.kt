@@ -22,11 +22,9 @@ import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import io.github.ninjin0802.keyboard.app.layout.LayoutId
-import java.util.Locale
 
 /**
  * Settings screens inspired by the Android keyboard settings information
@@ -431,30 +429,6 @@ class MainActivity : Activity() {
                 checked = settings.hapticEnabled,
                 onToggle = { settings.hapticEnabled = it })
         }
-        // 12-key toggle/timing controls will be designed with the flick input in #1885.
-    }
-
-    private fun timing() {
-        val content = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(4))
-        }
-        val value = text(waitText(settings.toggleWaitMs), 17f)
-        content.addView(value)
-        content.addView(SeekBar(this).apply {
-            max = WAIT_STEPS - 1
-            progress = progressOf(settings.toggleWaitMs)
-            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-                override fun onProgressChanged(seek: SeekBar, n: Int, fromUser: Boolean) {
-                    value.text = waitText(waitOfProgress(n))
-                    if (fromUser) settings.toggleWaitMs = waitOfProgress(n)
-                }
-                override fun onStartTrackingTouch(seek: SeekBar) = Unit
-                override fun onStopTrackingTouch(seek: SeekBar) = Unit
-            })
-        })
-        AlertDialog.Builder(this).setTitle("トグル判定時間")
-            .setView(content).setPositiveButton(android.R.string.ok) { _, _ -> render() }.show()
     }
 
     private fun correction(content: LinearLayout) {
@@ -476,15 +450,5 @@ class MainActivity : Activity() {
         }
     }
 
-    companion object {
-        private const val WAIT_STEPS = 18
-        private const val WAIT_BASE_MS = 300
-        private const val WAIT_STEP_MS = 100
-        fun waitOfProgress(n: Int) =
-            WAIT_BASE_MS + n.coerceIn(0, WAIT_STEPS - 1) * WAIT_STEP_MS
-        fun progressOf(ms: Int) =
-            ((ms - WAIT_BASE_MS) / WAIT_STEP_MS).coerceIn(0, WAIT_STEPS - 1)
-        fun waitText(ms: Int) =
-            String.format(Locale.US, "%.1f 秒", ms / 1000.0)
-    }
+
 }

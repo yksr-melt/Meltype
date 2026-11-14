@@ -8,18 +8,11 @@ import io.github.ninjin0802.keyboard.app.layout.LayoutId
 
 /**
  * [layout]: 入力欄の種類に応じて表示する最初の配列。日本語QWERTYまたは英語QWERTY。
- * [holdLast]: 変換しない欄で、最後に打ったかな1文字を未確定で持つか（゛゜小 とトグル入力のため）。
- * パスワードの欄では持たない。未確定の文字は伏せ字にならず、次のキーまで読めてしまうため。
+ * [holdLast]: パスワード欄かどうかを判断するための互換プロパティ。パスワード欄では偽となる。
  */
 data class FieldPolicy(val layout: LayoutId, val convert: Boolean, val learn: Boolean, val holdLast: Boolean = true) {
     /** パスワードの欄（数字だけのパスワードを含む）。何も持たない欄が、ちょうどそれに当たる。 */
     val isPassword: Boolean get() = !holdLast
-
-    /**
-     * フリックの案内で、選んでいる文字を大きく出すか。パスワードの欄では出さない
-     * （入力欄が伏せ字にしている文字を、キーボードが大きく見せないため。spec 09）。
-     */
-    val flickPreview: Boolean get() = !isPassword
 
     /**
      * 絵文字の画面で選んだ絵文字を「最近使ったもの」に足すか。学習する欄だけ（spec 04・09）。

@@ -9,7 +9,7 @@ import io.github.ninjin0802.keyboard.app.input.ShiftState
 import io.github.ninjin0802.keyboard.app.layout.KeyAction
 
 /** キーに描く絵の種類（spec 04「キーの表示と名前」）。 */
-enum class KeyIcon { DELETE, SPACE, ENTER, SEARCH, SEND, ARROW, CHECK, LEFT, RIGHT, UNDO, EMOJI, SHIFT, SHIFT_ONCE, SHIFT_LOCKED }
+enum class KeyIcon { DELETE, SPACE, ENTER, SEARCH, SEND, ARROW, CHECK, EMOJI, SHIFT, SHIFT_ONCE, SHIFT_LOCKED }
 
 /** [action] のキーに描く絵。文字を書くキーなら null。 */
 fun keyIcon(action: KeyAction, shift: ShiftState, enter: EnterKind): KeyIcon? = when (action) {
@@ -69,15 +69,6 @@ object KeyIcons {
                 stroke.move(0.35f, -0.55f); stroke.line(0.9f, 0f); stroke.line(0.35f, 0.55f)
             }
             KeyIcon.CHECK -> { stroke.move(-0.85f, 0.05f); stroke.line(-0.3f, 0.6f); stroke.line(0.85f, -0.55f) }
-            KeyIcon.LEFT -> { fill.move(-0.6f, 0f); fill.line(0.45f, -0.7f); fill.line(0.45f, 0.7f); fill.close() }
-            KeyIcon.RIGHT -> { fill.move(0.6f, 0f); fill.line(-0.45f, -0.7f); fill.line(-0.45f, 0.7f); fill.close() }
-            KeyIcon.UNDO -> {
-                // 左回りの矢印: 左下から上を回って右下へ下りる弧と、弧の始まりに付けた矢じり。
-                stroke.arcTo(box(0.1f, 0.25f, 0.8f), 200f, 195f, true)
-                val ax = 0.1f - 0.8f * 0.9397f
-                val ay = 0.25f - 0.8f * 0.342f
-                stroke.move(ax - 0.12f, ay - 0.62f); stroke.line(ax, ay); stroke.line(ax + 0.6f, ay - 0.1f)
-            }
             KeyIcon.EMOJI -> {
                 stroke.circle(0f, 0f, 0.95f)
                 fill.circle(-0.33f, -0.25f, 0.13f); fill.circle(0.33f, -0.25f, 0.13f)

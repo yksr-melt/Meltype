@@ -17,14 +17,6 @@ class Settings(private val context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
     private val core by lazy { CoreConfig(coreDataDirectory(context)) }
 
-    var toggleEnabled: Boolean
-        get() = prefs.getBoolean(KEY_TOGGLE_ENABLED, false)
-        set(value) { prefs.edit().putBoolean(KEY_TOGGLE_ENABLED, value).apply() }
-
-    var toggleWaitMs: Int
-        get() = clampWait(prefs.getInt(KEY_TOGGLE_WAIT_MS, DEFAULT_WAIT_MS))
-        set(value) { prefs.edit().putInt(KEY_TOGGLE_WAIT_MS, clampWait(value)).apply() }
-
     /** 日本語入力はローマ字QWERTYに固定する。旧設定値も同じ配列として読み込む。 */
     var japaneseLayout: LayoutId
         get() = japaneseOf(prefs.getString(KEY_JAPANESE_LAYOUT, null))
@@ -99,17 +91,6 @@ class Settings(private val context: Context) {
             LayoutId.SYMBOLS, LayoutId.SYMBOLS2 -> ""
         }
 
-        private const val KEY_TOGGLE_ENABLED = "toggle_enabled"
-        private const val KEY_TOGGLE_WAIT_MS = "toggle_wait_ms"
-        private const val DEFAULT_WAIT_MS = 1000
-        private const val MIN_WAIT_MS = 300
-        private const val MAX_WAIT_MS = 2000
-        private const val STEP_MS = 100
 
-        /** 300〜2000 の範囲に収め、100 の倍数に丸める（半分は切り上げ）。 */
-        fun clampWait(ms: Int): Int {
-            val bounded = ms.coerceIn(MIN_WAIT_MS, MAX_WAIT_MS)
-            return (bounded + STEP_MS / 2) / STEP_MS * STEP_MS
-        }
     }
 }
