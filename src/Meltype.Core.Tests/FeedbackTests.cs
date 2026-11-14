@@ -1778,4 +1778,30 @@ internal static class RomajiTypoTests
             Assert.Equal(expected, k.Host.Document, typed);
         }
     }
+
+    [Test]
+    public static void VerbAuxiliary_AfterEnglishOrAtStart_IsNotAWord()
+    {
+        // Issue #1722・#1704・#1781・#1901: 英単語の後ろと入力の頭の う・れ を付属語として軽く読み、ローマ字の途中で英単語を切り出していた (get|う・hit|う・れ|pro)。
+        // 日本語の語の後ろの付属語と、付属語だけを打った入力 (masu) は今までどおり
+        CompositionTests.Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("getu", "げつ"), ("hituatu", "ひつあつ"), ("shunpatu", "しゅんぱつ"), ("repro", "repro"), ("diffmireba", "diffみれば"),
+                ("masu", "ます"), ("tari", "たり"), ("ikou", "いこう"), ("yomou", "よもう"), ("utau", "うたう"), ("ureta", "うれた"), ("reigai", "れいがい"), ("teire", "ていれ"),
+                ("getup", "getup"), ("pushsita", "pushした"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
 }

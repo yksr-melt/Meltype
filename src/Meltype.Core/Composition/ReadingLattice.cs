@@ -199,7 +199,11 @@ public sealed partial class CompositionDetector
             }
             else
             {
-                step = cost;
+                // 活用する語の後ろにしか付かない付属語 (う・た・れ・ます) は、英単語の後ろと、入力の頭で後ろに続きがあるときは、語にならないかなとして読む。
+                // 付属語の軽い重みのままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が軽くなる。
+                // 付属語だけを打った入力 (masu) は、前に確定した語の続きなので付属語のまま
+                var detached = state.IsEnglish || state.Side == Side.None && edge.End < length;
+                step = detached && VerbAuxiliaries.Contains(edge.Kana) ? Math.Max(cost, UnknownKana(edge.Kana)) : cost;
                 if (state.Side == Side.Sentence) step += SentenceSwitchCost;
                 // 3 文字以上の英単語の後ろの、助詞と同じかなで始まる語 (java|のこ・java|でかく) も、助詞からの切り替えと同じ重みにする
                 // (日本語の道だけが の|こ を のこ にまとめられて、英語が負ける。so|ですか・ma|のなか のような 2 文字の語は除く)
@@ -339,6 +343,14 @@ public sealed partial class CompositionDetector
     private static bool IsNounParticle(string kana) => NounParticles.Contains(kana) || IsSuruForm(kana) || kana is "し" or "さ" or "せ";
 
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
+
+    /// <summary>動詞・形容詞の活用形の後ろにしか付かない付属語 (名詞や英単語の後ろには付かない)。ちゃう は 違う の意味で名詞に付く (EDちゃう) ので入れない。</summary>
+    private static readonly HashSet<string> VerbAuxiliaries =
+    [
+        "う", "よう", "た", "て", "ば", "れ", "れる", "れた", "られ", "られる", "られた", "させ", "させる",
+        "ます", "まし", "ませ", "ましょ", "ました", "ません", "ましょう", "ませんでした", "たい", "たく", "たかっ", "たかった",
+        "ている", "ていた", "てい", "てる", "てた", "たら", "たり",
+    ];
 
     /// <summary>かなを、語にならないかなとして読むときの重み (1 音 3、っ・ー は 0.5。小書きのかな ゃ・ぃ は前のかなと 1 音)。</summary>
     private static double UnknownKana(string kana) =>
