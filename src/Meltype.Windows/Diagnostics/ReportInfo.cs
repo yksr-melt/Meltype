@@ -27,7 +27,7 @@ internal static class ReportInfo
     [
         $"管理者として実行: {(IsAdministrator() ? "はい" : "いいえ")}",
         $"モード: {settings.Mode}",
-        $"変換エンジン: {settings.ConversionEngine} (Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")})",
+        $"Mozc: {(File.Exists(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe")) ? "あり" : "なし")}",
         $"変換ボックス: {settings.CompositionPlacement} / {settings.CompositionSize} / {settings.CompositionTheme} / {settings.CompositionOpacity}",
         $"キーボード: {KeyboardKind()}",
         $"画面: {Screen.AllScreens.Length} 枚、拡大率 {Scaling()}%",

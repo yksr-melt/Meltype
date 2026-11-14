@@ -14,7 +14,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 │ MeltypeTip.dll (C++, TSF)       │  名前付き   │ TipServer                        │
 │  - キーを受け取る               │  パイプ     │  - つながり・入力欄ごとに        │
 │  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    MeltypeSession                │
-│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Microsoft IME)    │
+│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Zenzai)           │
 │                                  │  = 1 JSON   │  - 学習データ・ユーザー辞書        │
 └──────────────────────────────┘            └───────────────────────────────┘
 ```
