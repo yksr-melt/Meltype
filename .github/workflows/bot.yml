@@ -1,5 +1,5 @@
 # Meltype の GitHub bot。
-#   Issue を作った・直したとき: OS のラベルと「要トリアージ」を付け、足りない情報を聞き、誤判定の報告なら最新のコードで打ってみて結果を返す。
+#   Issue を作ったとき:「要トリアージ」を付ける。Issue を作った・直したとき: 誤判定の報告なら最新のコードで打ってみて結果を返す。
 #   コメントの行の先頭のコマンド (1 つのコメントに 1 つ。/repro だけは複数行):
 #     だれでも: /repro /explain /ca /jht /help
 #     メンテナー (PR のみ): /test /pack /test-repro /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
@@ -45,7 +45,6 @@ jobs:
       repros: ${{ steps.parse.outputs.repros }}
       reported: ${{ steps.parse.outputs.reported }}
       expected: ${{ steps.parse.outputs.expected }}
-      kind: ${{ steps.parse.outputs.kind }}
       sha: ${{ steps.parse.outputs.sha }}
       comment: ${{ steps.parse.outputs.comment }}
     steps:
@@ -271,7 +270,6 @@ jobs:
           BOT_REPROS: ${{ needs.parse.outputs.repros }}
           BOT_REPORTED: ${{ needs.parse.outputs.reported }}
           BOT_EXPECTED: ${{ needs.parse.outputs.expected }}
-          BOT_KIND: ${{ needs.parse.outputs.kind }}
           BOT_SHA: ${{ needs.parse.outputs.sha }}
           BOT_COMMENT_ID: ${{ needs.parse.outputs.comment }}
           BOT_JOB_RESULT: ${{ needs.run.result == 'success' && 'success' || needs.pr.result == 'success' && 'success' || 'failure' }}

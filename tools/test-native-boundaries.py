@@ -41,14 +41,19 @@ class NativeBoundaryTests(unittest.TestCase):
             encoding="utf-8",
         )
         cls.lib = ctypes.CDLL(str(cls.library_path))
-        cls.lib.meltype_init.argtypes = [ctypes.c_void_p] * 3
+        cls.lib.meltype_init.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
         cls.lib.meltype_init.restype = ctypes.c_int
         cls.lib.meltype_ime_create.restype = ctypes.c_void_p
         cls.lib.meltype_ime_destroy.argtypes = [ctypes.c_void_p]
         cls.lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
         cls.lib.meltype_ime_handle.restype = ctypes.c_void_p
         cls.lib.meltype_free.argtypes = [ctypes.c_void_p]
-        assert cls.lib.meltype_init(None, None, None) == 1
+        cls.lib.meltype_shutdown.restype = None
+        # Mozc のヘルパーを置かないフォルダー (変換はかなのまま)。英単語の判定は同梱の一覧
+        assert cls.lib.meltype_init(cls.data.name.encode(), None) == 0
+        # 終了するときの解放は、2 回呼ばれても 1 回だけ止める (一時フォルダーを消す前に)
+        cls.addClassCleanup(cls.lib.meltype_shutdown)
+        cls.addClassCleanup(cls.lib.meltype_shutdown)
 
     def setUp(self):
         self.host = self.lib.meltype_ime_create()

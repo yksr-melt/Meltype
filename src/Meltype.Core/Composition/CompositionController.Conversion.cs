@@ -204,20 +204,23 @@ public sealed partial class CompositionController
     private Clause WithUtility(List<Clause> clauses, UtilityCandidates utility, string reading)
     {
         var clause = clauses is [var only] && only.Reading == reading ? only : WholeClause(clauses, reading);
-        var katakana = CompositionText.ToKatakana(reading);
-        var at = utility.Placement == UtilityPlacement.Prepend ? 0
-            : new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) }.Max(clause.Candidates.IndexOf) + 1;
-        if (at == 0 && utility.Placement != UtilityPlacement.Prepend) at = clause.Candidates.Count;
         clause.NotLearned.UnionWith(utility.NotLearned);
+        if (utility.Placement == UtilityPlacement.Prepend)
+        {
+            // 変換エンジンの候補の一覧を先に足してから、ユーティリティの候補を前に置く。後で一覧を足す (Expand) と、
+            // ユーティリティの候補の間に入ってしまう (誰 言偏にふるとり 讎 …)。先に足せば、どこまでが前に置いた候補かを持たずに済む
+            if (!clause.Expanded) Expand(clause);
+            clause.Candidates = [.. utility.Candidates, .. clause.Candidates.Where(c => !utility.Candidates.Contains(c))];
+            clause.Index = 0;
+            return clause;
+        }
+        var katakana = CompositionText.ToKatakana(reading);
+        var at = new[] { reading, katakana, CompositionText.ToHalfWidthKatakana(katakana) }.Max(clause.Candidates.IndexOf) + 1;
+        if (at == 0) at = clause.Candidates.Count;
         foreach (var text in utility.Candidates)
         {
             if (clause.Candidates.Contains(text)) continue;
             clause.Candidates.Insert(at++, text);
-        }
-        if (utility.Placement == UtilityPlacement.Prepend)
-        {
-            clause.Index = 0;
-            clause.Leading = at;
         }
         return clause;
     }
@@ -625,7 +628,9 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 文節の候補: 文の中での変換結果 → その文節だけでの変換結果 → 補助辞書の同音異義語 → ひらがな → 全角カタカナ → 半角カタカナ
-    /// → 絵文字・顔文字 (逆順)。
+    /// → 分野の辞書の語 → 絵文字・顔文字 (逆順)。
+    /// 分野の辞書の語 (病名・駅名など) は、使わない人には要らない候補なので、ふだんの候補 (変換エンジンの候補・ひらがな・カタカナ) を
+    /// 1 つも後ろに押さないよう、その後ろに並べる。こうすれば誰にとっても困らないので、分野ごとに外す設定は作らない (#1650)。
     /// 絵文字・顔文字は最後に逆順で並べるので、変換してすぐ ↑ を押すと、いちばんよく使う絵文字 (えがお → 😊) になる (issue #133)。
     /// </summary>
     private List<string> JapaneseCandidates(string reading, string? inContext)
@@ -635,7 +640,7 @@ public sealed partial class CompositionController
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
         return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
-            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. EmojiBlock(reading)]);
+            reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. _services.Candidates?.LookupDomain(reading) ?? [], .. EmojiBlock(reading)]);
     }
 
     /// <summary>
@@ -744,7 +749,7 @@ public sealed partial class CompositionController
         if (reading is null) return;
         // 変換エンジンの候補は、日本語の文節では、最初の候補とユーザー辞書・同梱の辞書の語の後ろに入れる。
         // 最初の候補のすぐ後ろに入れると、変換エンジンが知っている読みでは、辞書の語が候補の一覧の後ろに押しやられる (saiki → PSYQUI が 58 件中 51 番目: issue #1681)
-        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : Math.Max(DictionaryWordsEnd(clause, reading), clause.Leading - 1);
+        var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : DictionaryWordsEnd(clause, reading);
         if (anchor < 0) return;
         var current = clause.Text;
         var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);

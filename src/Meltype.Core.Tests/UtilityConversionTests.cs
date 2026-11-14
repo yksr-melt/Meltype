@@ -142,7 +142,7 @@ internal static class UtilityConversionTests
     [Test]
     public static void KanjiNumbers_AreOfferedForDigitsOnly()
     {
-        // Mac の azooKey は打った数字を漢数字にしないので、どの OS でも出るように Meltype が出す (issue #344)
+        // 変換エンジンによっては打った数字を漢数字にしないので、Meltype が出す (issue #344)
         var history = new ConversionHistory(null);
         var k = new Keyboard(history: history);
         k.Type("2026 ");
@@ -219,6 +219,10 @@ internal static class UtilityConversionTests
         var all = expanded.Host.View!.Candidates.ToList();
         Assert.True(all.IndexOf("言偏にふるとり") > all.IndexOf("讎"), string.Join(",", all));
 
+        // 文節の区切りを動かしても、作り直した文節の候補に前の並びが残らない (Shift+← で ごんべんにふると|り)
+        ShiftArrow(expanded, VirtualKeys.Left);
+        Assert.True(!expanded.Host.View!.Candidates.Contains("誰"), "区切りを動かした文節は普通の候補: " + string.Join(",", expanded.Host.View!.Candidates));
+
         // 説明どおりの字 (余分な要素の無い字) が先。ほかの要素も含む字 (護・体・深) はその後ろ
         Assert.Equal("誰", Kanji("ごんべんにふるとり")[0], string.Join(",", Kanji("ごんべんにふるとり")));
         Assert.Equal("休", Kanji("にんべんにき")[0], string.Join(",", Kanji("にんべんにき")));
@@ -246,4 +250,15 @@ internal static class UtilityConversionTests
     }
 
     private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
+
+    [Test]
+    public static void Issue1868_VersionShowsCommitAndFront()
+    {
+        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どちらも OS とフロントを付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME)", VersionConversion.Text("1.5.1", "Windows / Meltype IME"));
+        Assert.Equal("Meltype-1.5.1+abc1234 (Linux)", VersionConversion.Text("1.5.1+abc1234", "Linux"));
+        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux")), "学習・予測には使わない");
+        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings());
+        Assert.True(candidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) && candidate.EndsWith(')'), candidate);
+    }
 }

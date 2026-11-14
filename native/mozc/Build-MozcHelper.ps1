@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Yukishiro
 #
 # Mozc の変換ヘルパー (meltype_mozc_helper.exe) をビルドして native\mozc\bin に置く。
-# Build-Package.ps1 / Install-Meltype.ps1 は、bin にヘルパーがあれば Meltype に同梱する (無ければ Microsoft IME だけで動く)。
+# Build-Package.ps1 / Install-Meltype.ps1 は、bin にヘルパーがあれば Meltype に同梱する (無ければ漢字に変換できない)。
 # GitHub Actions (.github/workflows/windows.yml の mozc) でも同じスクリプトでビルドする。
 #
 # 必要なもの (Mozc の docs/build_mozc_in_windows.md と同じ):
