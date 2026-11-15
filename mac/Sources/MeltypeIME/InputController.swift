@@ -364,14 +364,14 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     private func showAux(_ text: String?, client: IMKTextInput) {
-        let selection = client.selectedRange()
-        guard let text, selection.location != NSNotFound else {
+        guard let text else {
             auxPanel?.orderOut(nil)
             displayedAux = nil
             return
         }
+        // IMK の位置は未確定文字列からの相対値なので、先頭の 0 を渡す。
         var caret = NSRect.zero
-        _ = client.attributes(forCharacterIndex: selection.location, lineHeightRectangle: &caret)
+        _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &caret)
         guard caret.minX.isFinite, caret.minY.isFinite,
               caret.width.isFinite, caret.height.isFinite, caret.height > 0 else {
             auxPanel?.orderOut(nil)
