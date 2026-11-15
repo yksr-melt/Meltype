@@ -818,7 +818,7 @@ public sealed partial class CompositionController
             case DisplayMode.Auto:
                 // 自動判定中は、表示中の文字列にひらがな (長音を含む) が含まれているかで判定する。含まれていれば全角カタカナにし、含まれていなければひらがなにする。
                 var shown = CurrentDisplay(final: false);
-                return shown.Length > 0 && shown.Any(c => c is >= '\u3041' and <= '\u309F' or '\u30FC') ? DisplayMode.Katakana : DisplayMode.Hiragana;
+                return shown.Length > 0 && shown.Any(KanaChars.IsHiraganaOrLongMark) ? DisplayMode.Katakana : DisplayMode.Hiragana;
             default: return DisplayMode.Hiragana;
         }
     }

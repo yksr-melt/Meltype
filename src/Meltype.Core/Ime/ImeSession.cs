@@ -335,8 +335,7 @@ internal sealed class ImeSession
         if (vk == VirtualKeys.OemAttn && plain) return Switch(false, before, ref explicitChange, toggle: false);
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
         {
-            // 親指シフトの配列では変換・無変換は親指キー。役割のキーとしては使わない (カタカナの切り替えで親指キーが効かなくなる)
-            if (!IsThumbKey(vk, settings) && _session.HandleRoleKey(vk) is { } role) return role;
+            if (_session.HandleRoleKey(vk) is { } role) return role;
             // 入力中の無変換は、英数キーと同じく確定してから英数にする。入力中の変換・かなは変換ボックスのキー
             var switches = composing ? vk == VirtualKeys.NonConvert : !(vk == VirtualKeys.Convert && ShowsJapanese(before) && field?.Selection is { Length: > 0 });
             if (switches && !IsThumbKey(vk, settings))

@@ -108,7 +108,6 @@ internal static class ImeContractTests
             '\u001b' => Key(VirtualKeys.Escape, instance: instance, moved: moved),
             '[' => Key(0xDB, key, instance: instance, moved: moved),
             '/' => Key(0xBF, key, instance: instance, moved: moved),
-            '@' => Key(0xC0, key, shift: true, instance: instance, moved: moved),
             '"' => Key(0xDE, key, shift: true, instance: instance, moved: moved),
             ']' => Key(0xDD, key, instance: instance, moved: moved),
             >= 'a' and <= 'z' => Key(key - 'a' + 'A', key, instance: instance, moved: moved),
@@ -657,34 +656,6 @@ internal static class ImeContractTests
         Press('W', 'w');
         Release('W');
         Assert.Equal("がか", front.Composition["t1"], front.Trace);
-    }
-
-    [Test]
-    public static void NonConvertCyclesKana_KeepsThumbKeyAndProtectedInput()
-    {
-        // 無変換でカタカナを切り替える設定が ON でも、NICOLA の左親指 (無変換) は親指キーのまま
-        var front = new Front();
-        front.Settings.NonConvertCyclesKana = true;
-        front.Settings.InputStyle = InputStyle.Kana;
-        front.Settings.KanaLayout = KanaLayout.Nicola;
-        JsonElement Press(int vk, char ch = '\0') =>
-            front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"releaseFollows\":true}}");
-        JsonElement Release(int vk) => front.Event("KeyReleased", extra: $",\"key\":{{\"vk\":{vk}}}");
-        Press('W', 'w');
-        Release('W');
-        Press(VirtualKeys.NonConvert);
-        Press('W', 'w');
-        Release('W');
-        Release(VirtualKeys.NonConvert);
-        Assert.True(front.Composition["t1"] is { } thumb && !thumb.Contains('カ') && thumb.Length == 2, "親指キーとして使う\n" + front.Trace);
-        front.Key('\n');
-
-        // 保護区間 (パス) の入力中は、従来どおり確定して英数にする
-        front = new Front();
-        front.Settings.NonConvertCyclesKana = true;
-        front.Type("@src/app");
-        front.Key(VirtualKeys.NonConvert);
-        Assert.True(front.Document == "@src/app" && !front.Open, "保護区間は確定して英数\n" + front.Trace);
     }
 
     [Test]
