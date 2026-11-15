@@ -517,6 +517,18 @@ public sealed class Settings
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
 
+    [Category("8. 表示"), DisplayName("設定画面の背景の色"), Platforms(Platform.Windows),
+     Description("この設定画面の背景色を #RRGGBB で書きます (例: #202020)。空なら Windows の既定の色。")]
+    public string SettingsWindowBackColor { get; set; } = "";
+
+    [Category("8. 表示"), DisplayName("設定画面の文字の色"), Platforms(Platform.Windows),
+     Description("この設定画面の文字の色を #RRGGBB で書きます (例: #FFFFFF)。空なら Windows の既定の色。背景を暗くしたときは明るい色にします。")]
+    public string SettingsWindowTextColor { get; set; } = "";
+
+    [Category("8. 表示"), DisplayName("設定画面の背景の画像"), Platforms(Platform.Windows),
+     Description("この設定画面の設定の一覧の後ろに出す画像のファイルです (PNG・JPEG など)。空なら出しません。読めないファイルのときも出しません。")]
+    public string SettingsWindowBackgroundImage { get; set; } = "";
+
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch
     {

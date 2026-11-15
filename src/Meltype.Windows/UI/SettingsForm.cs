@@ -86,7 +86,54 @@ internal sealed class SettingsForm : Form, IMessageFilter
         }
 
         _opened = displayed;
+        ApplyLook(next);
         return true;
+    }
+
+    /// <summary>
+    /// 設定画面の背景色・文字色・背景の画像を反映する (issue #1509)。
+    /// 色は窓に設定し、子の部品は WinForms の「親の色を引き継ぐ」仕組みで同じ色になる。
+    /// 入力欄 (TextBox など) は既定で親の色を引き継がず Windows の色のままなので、文字が読めなくなることはない。
+    /// </summary>
+    private void ApplyLook(Settings settings)
+    {
+        BackColor = Settings.ParseColor(settings.SettingsWindowBackColor) is var (r, g, b) ? Color.FromArgb(r, g, b) : SystemColors.Control;
+        ForeColor = Settings.ParseColor(settings.SettingsWindowTextColor) is var (tr, tg, tb) ? Color.FromArgb(tr, tg, tb) : SystemColors.ControlText;
+        _help.ForeColor = Settings.ParseColor(settings.SettingsWindowTextColor) is null ? SystemColors.GrayText : ForeColor;
+
+        var image = LoadImage(settings.SettingsWindowBackgroundImage);
+        var old = _body.BackgroundImage;
+        _body.BackgroundImage = image;
+        _body.BackgroundImageLayout = ImageLayout.Zoom;
+        old?.Dispose();
+        // 画像の上の分類の枠は、透明にしないと枠の背景色で画像が隠れる
+        foreach (var group in _groups) group.BackColor = image is null ? Color.Empty : Color.Transparent;
+    }
+
+    /// <summary>背景の画像を読む。空・無いファイル・画像でないファイルなら null (画像を出さない)。</summary>
+    private static Bitmap? LoadImage(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return null;
+        try
+        {
+            // ファイルを開いたままにしない (開いている間に画像を差し替え・消せるように) よう、写しを持つ
+            using var stream = File.OpenRead(path);
+            using var loaded = Image.FromStream(stream);
+            return new Bitmap(loaded);
+        }
+        catch (ArgumentException)
+        {
+            // 画像として読めないファイル
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     public SettingsForm(MeltypeEngine engine, AppState state)
@@ -172,6 +219,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
         var controlsBuilt = opening.ElapsedMilliseconds;
         LoadFrom(_draft);
+        ApplyLook(_draft);
         RefreshProfiles();
         _opened = Collect();
         var valuesLoaded = opening.ElapsedMilliseconds;
@@ -504,18 +552,37 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 },
                 s => property.SetValue(s, combo.SelectedItem is string name && name != DefaultFontChoice ? name : ""));
         }
-        if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor))
+        if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor)
+            or nameof(Settings.SettingsWindowBackColor) or nameof(Settings.SettingsWindowTextColor))
         {
             var fallback = property.Name switch
             {
                 nameof(Settings.ModeIndicatorJapaneseColor) => ModeIndicatorWindow.DefaultJapaneseColor,
                 nameof(Settings.ModeIndicatorDirectColor) => ModeIndicatorWindow.DefaultDirectColor,
+                nameof(Settings.SettingsWindowBackColor) => SystemColors.Control,
+                nameof(Settings.SettingsWindowTextColor) => SystemColors.ControlText,
                 _ => Color.White,
             };
             var panel = ColorEditor(fallback, out var text);
             return new Binding(property, panel,
                 s => text.Text = (string?)property.GetValue(s) ?? "",
                 s => property.SetValue(s, text.Text.Trim()));
+        }
+        if (type == typeof(string) && property.Name == nameof(Settings.SettingsWindowBackgroundImage))
+        {
+            var box = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "空なら画像なし" };
+            var pick = new Button { Text = "選ぶ…", AutoSize = true, Dock = DockStyle.Right };
+            pick.Click += (_, _) =>
+            {
+                using var dialog = new OpenFileDialog { Filter = "画像 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|すべてのファイル (*.*)|*.*" };
+                if (dialog.ShowDialog(pick.FindForm()) == DialogResult.OK) box.Text = dialog.FileName;
+            };
+            var panel = new UserControl { Height = Math.Max(box.PreferredHeight, pick.PreferredSize.Height) + 4, Dock = DockStyle.Fill };
+            panel.Controls.Add(box);
+            panel.Controls.Add(pick);
+            return new Binding(property, panel,
+                s => box.Text = (string?)property.GetValue(s) ?? "",
+                s => property.SetValue(s, box.Text.Trim()));
         }
         if (type == typeof(string))
         {
