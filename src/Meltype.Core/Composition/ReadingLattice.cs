@@ -16,6 +16,7 @@ namespace Meltype.Composition;
 /// - 1 文字の英単語 (a・i・u・r) は、前後を英字以外で区切ったときだけノードにする。
 /// - 自動判定を使わないなら、Shift を押して打った大文字で始まる語だけを英語のノードにする。
 /// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
+/// - 技術用語の綴りのすぐ後ろが する の活用 (share|して・make|します) なら、その綴りを日本語の語 (しゃれ・まけ) として読まない (しゃれする・まけします は日本語でない)。ただし一段動詞の使役形 (make|させた) は日本語のまま。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
 /// </summary>
 public sealed partial class CompositionDetector
@@ -80,6 +81,12 @@ public sealed partial class CompositionDetector
     // 1 つの候補として見る長さの上限 (ローマ字の文字数)
     private const int MaxSpan = 48;
 
+    // ---- 変換の候補に出す区切りの別案 ----
+    // 最も軽い案からこれより重い案は出さない
+    private const double AlternativeMargin = 1;
+    // (位置, 状態) ごとに残す道の数。日本語の語の区切りだけが違う道 (ぼ|っと・ぼっと) が同じ案になるので、出す案の数より多く残す
+    private const int PathsPerState = 8;
+
     private enum Side : byte { None, Japanese, English, Sentence }
 
     /// <summary>区切りの 1 つの候補。Kana は日本語の候補の読み。Letters は英字を含む日本語の候補か。Neutral は記号・数字・空白 (言語を切り替えない)。</summary>
@@ -105,11 +112,21 @@ public sealed partial class CompositionDetector
     /// <param name="reasons">渡したら、選んだ道と、言語の割り当てが違う一番軽い道 (次点) を書く関数を足す (確定のログ用。issue #1644)。
     /// キーを打つたびに呼ばれるので、次点を探して文字列にするのは、ログに書くときだけにする。</param>
     private List<CompositionSegment> FindSpansByReading(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
-        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0, List<Func<string>>? reasons = null)
+        bool manual, bool englishSentence, bool kanaInput, double englishBias = 0, List<Func<string>>? reasons = null) =>
+        FindSpanAlternatives(units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, englishBias, 1, reasons)[0];
+
+    /// <summary>
+    /// 区切りの上位 count 案を、軽い順に返す。先頭は <see cref="FindSpansByReading"/> と同じ。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
+    /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
+    /// reasons には、いちばん良い案を選んだ理由を足す。
+    /// </summary>
+    private List<List<CompositionSegment>> FindSpanAlternatives(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
+        bool manual, bool englishSentence, bool kanaInput, double englishBias, int count, List<Func<string>>? reasons = null)
     {
         var text = _preparedRaw + pending;
         var length = text.Length;
-        if (length == 0) return [new CompositionSegment(false, "", "")];
+        if (length == 0) return [[new CompositionSegment(false, "", "")]];
+        var keep = count > 1 ? PathsPerState : 1;
         var unitsEnd = _preparedRaw.Length;
         // 文字の位置 → その位置から始まる単位 (単位の境目でなければ -1)
         var unitAt = new int[length + 1];
@@ -134,15 +151,20 @@ public sealed partial class CompositionDetector
             unknown[p + 1] = unknown[p] + (char.IsAsciiLetter(c) && unreadable ? 1 : 0);
         }
 
-        var best = new LatticeNode?[length + 1, LatticeState.Count];
+        // [位置, 状態, 軽い順]
+        var best = new LatticeNode?[length + 1, LatticeState.Count, keep];
         var start = new LatticeState(precedingEnglish switch { true => englishSentence ? Side.Sentence : Side.English, false => Side.Japanese, null => Side.None },
             false, true, precedingEnglish == true, ContextSwitch: precedingEnglish == true);
-        best[0, start.Key] = new LatticeNode(0, null, default);
+        best[0, start.Key, 0] = new LatticeNode(0, null, default);
 
         void Offer(int position, LatticeState state, LatticeNode node)
         {
-            ref var current = ref best[position, state.Key];
-            if (current is null || node.Cost < current.Cost) current = node;
+            var key = state.Key;
+            var at = keep;
+            while (at > 0 && (best[position, key, at - 1] is not { } worse || node.Cost < worse.Cost)) at--;
+            if (at == keep) return;
+            for (var k = keep - 1; k > at; k--) best[position, key, k] = best[position, key, k - 1];
+            best[position, key, at] = node;
         }
 
         // [start, end) の中の、ltu・xtu・ltsu・xtsu で打った っ のうち、後ろに入力が続くものの数
@@ -227,6 +249,8 @@ public sealed partial class CompositionDetector
 
             // 記号・数字の決まり (状態によらないもの)
             var forced = -1;
+            // 技術用語の綴り + する の活用 (share|して・make|します): 日本語の語 (しゃれ・まけ) には する を付けられないので、日本語の候補を出さない
+            var technical = !kanaInput && englishLevel && IsTechnicalWordBeforeSuru(text, p);
             // ローマ字として読める語 + . + ドメイン・拡張子 (llama.cpp・hoge.io): 句点の後ろの日本語 (ryoukaidesu.|deha) と重みで比べる
             var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(units, unit, pending) : -1;
             if (unit >= 0 && !kanaInput)
@@ -239,9 +263,10 @@ public sealed partial class CompositionDetector
                 if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
             }
 
-            for (var key = 0; key < LatticeState.Count; key++)
+            for (var slot = 0; slot < LatticeState.Count * keep; slot++)
             {
-                if (best[p, key] is not { } node) continue;
+                var key = slot / keep;
+                if (best[p, key, slot % keep] is not { } node) continue;
                 var state = LatticeState.FromKey(key);
                 var end = forced;
                 // ドメイン・拡張子の . の後ろ (tetr.io、MeltypeTip.dll)
@@ -250,6 +275,12 @@ public sealed partial class CompositionDetector
                 {
                     var to = end == units.Count ? length : _preparedRawOffsets[end];
                     OfferEdge(node, state, new LatticeEdge(p, to, true, "", false, false), KnownEnglishCost);
+                    continue;
+                }
+                if (technical)
+                {
+                    // 日本語の候補だけを出さない。英語の候補はそのまま使う (open は english-readable.txt の重み 0.7 のまま)
+                    foreach (var (edge, cost) in english) OfferEdge(node, state, edge, cost);
                     continue;
                 }
                 if (domain > unit)
@@ -271,9 +302,10 @@ public sealed partial class CompositionDetector
         LatticeNode? chosen = null;
         var chosenCost = double.MaxValue;
         var finals = new List<(double Cost, LatticeState State, LatticeNode Node)>();
-        for (var key = 0; key < LatticeState.Count; key++)
+        for (var slot = 0; slot < LatticeState.Count * keep; slot++)
         {
-            if (best[length, key] is not { } node) continue;
+            var key = slot / keep;
+            if (best[length, key, slot % keep] is not { } node) continue;
             var state = LatticeState.FromKey(key);
             var cost = node.Cost;
             if (state.Sokuon) cost += DanglingSokuonCost;
@@ -293,10 +325,22 @@ public sealed partial class CompositionDetector
                 trace($"  {(node == chosen ? "*" : " ")} {cost:0.00} {state.Side}{(state.Particle ? " particle" : "")}{(state.Sokuon ? " sokuon" : "")}: {DescribePath(node, text, true)}");
         }
         if (reasons is not null && chosen is not null) reasons.Add(() => Explain(chosen, chosenCost, finals, text));
-        var edges = new List<LatticeEdge>();
-        for (var node = chosen; node?.Previous is not null; node = node.Previous) edges.Add(node.Edge);
-        edges.Reverse();
-        return ToSegments(units, text, unitAt, unitsEnd, edges);
+        var alternatives = new List<List<CompositionSegment>> { Path(chosen) };
+        foreach (var (cost, _, node) in finals.OrderBy(f => f.Cost))
+        {
+            if (alternatives.Count >= count || cost > chosenCost + AlternativeMargin) break;
+            var segments = Path(node);
+            if (!alternatives.Any(a => a.SequenceEqual(segments))) alternatives.Add(segments);
+        }
+        return alternatives;
+
+        List<CompositionSegment> Path(LatticeNode? last)
+        {
+            var edges = new List<LatticeEdge>();
+            for (var node = last; node?.Previous is not null; node = node.Previous) edges.Add(node.Edge);
+            edges.Reverse();
+            return ToSegments(units, text, unitAt, unitsEnd, edges);
+        }
     }
 
     /// <summary>選んだ道と次点の道。次点は、文字ごとの言語 (英語 / 日本語) が選んだ道と違う道のうち一番軽いもの (同じ区切りで状態だけ違う道は比べても意味がない)。</summary>
@@ -339,6 +383,36 @@ public sealed partial class CompositionDetector
     private static bool IsNounParticle(string kana) => NounParticles.Contains(kana) || IsSuruForm(kana) || kana is "し" or "さ" or "せ";
 
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
+
+    /// <summary>
+    /// start から始まる技術用語の綴り (share・make) のすぐ後ろが する の活用 (して・します) か。
+    /// その綴りに付属語でない日本語の読み (しゃれ・まけ) があり、日本語由来の語 (ninja) でなければ、
+    /// その区間を日本語の語として読まない (issue #1899)。「しゃれする」「まけします」は日本語として成り立たないため。
+    /// ただし させ は一段動詞の使役形 (負けさせた・褒めさせて) とも読めるので、読みが一段動詞の語幹なら日本語のまま。
+    /// </summary>
+    private bool IsTechnicalWordBeforeSuru(string text, int start)
+    {
+        var runEnd = start;
+        while (runEnd < text.Length && char.IsAsciiLetter(text[runEnd])) runEnd++;
+        for (var end = start + 1; end < runEnd && end - start <= MaxSpan; end++)
+        {
+            var word = text[start..end];
+            // 日本語由来の語 (ninja) は、日本語の読み (にんじゃ) のまま使うことがある
+            if (!word.All(char.IsAsciiLetterLower) || !IsTechnicalEnglishWord(word) || IsJapaneseOriginWord(word)) continue;
+            // 日本語の読みがある語だけ (github のように読めない語は、日本語の道がもともと重い)
+            if (_romaji.ConvertLenient(word, final: true) is not { Length: > 0 } reading || !reading.All(KanaChars.IsHiraganaOrLongMark) ||
+                RomajiTypoCorrector.IsFunctionWord(reading)) continue;
+            // すぐ後ろが する の活用か (して・します・した …)。し だけは日本語の語の終わり (恩師・分子・如し) と紛れるので除く
+            if (_romaji.ConvertLenient(text[end..runEnd].ToLowerInvariant(), final: true) is var next && next.All(KanaChars.IsHiraganaOrLongMark) &&
+                IsSuruForm(next))
+            {
+                // 一段動詞の使役形 (負けさせた・褒めさせて) は する の使役形と同じかな。日本語の候補を残す
+                if (next.StartsWith("させ", StringComparison.Ordinal) && CommonReadings.IchidanStems.Contains(reading)) continue;
+                return true;
+            }
+        }
+        return false;
+    }
 
     /// <summary>かなを、語にならないかなとして読むときの重み (1 音 3、っ・ー は 0.5。小書きのかな ゃ・ぃ は前のかなと 1 音)。</summary>
     private static double UnknownKana(string kana) =>
