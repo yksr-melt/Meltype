@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Collections.Concurrent;
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
 using Meltype.Ime;
 using Meltype.Input;
 
@@ -32,17 +34,19 @@ internal static class ImeContractTests
         /// <summary>このフロントが Windows のどちらの入力方式か (null なら入力方式が 1 つしかない OS)。</summary>
         public InputMode? InputMethod { get; set; }
 
-        /// <summary>予測変換の候補を出すか (英語の語の補完)。</summary>
-        public bool Predicts { get; init; }
+        public IKanjiConverter Converter { get; init; } = new CompositionTests.FakeConverter();
+        public CompositionServices Services { get; init; } = new();
 
-        public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices { Predictor = Predicts ? new Predictor(null, null, null) : null }, settings, directModeDetection: true);
+        public MeltypeSession CreateSession(Func<Settings> settings) =>
+            new(CompositionTests.Detector, Converter, Services, settings, directModeDetection: true);
 
         public SnippetStore Snippets { get; } = new(null);
 
         public string? ClipboardText => null;
 
         public int Sessions => _host.SessionCount;
+
+        public void CloseAll() => _host.CloseAll();
 
         public string Document { get; set; } = "";
 
@@ -86,7 +90,7 @@ internal static class ImeContractTests
         }
 
         /// <summary>出来事を送る。キャレットの前は、確定した文字とアプリに通した文字 (Document。変換中の文字は入れない)。</summary>
-        public JsonElement Event(string type, string instance = "t1", string extra = "", bool moved = false)
+        public JsonElement Event(string type, string instance = "t1", string extra = "", bool moved = false, bool omitField = false)
         {
             // キャレットが動いたことは、見つけたときに caret で送る
             if (moved) Event("CaretMoved", instance, ",\"caret\":{\"moved\":true,\"passedKey\":0}");
@@ -94,7 +98,8 @@ internal static class ImeContractTests
             var surrounding = Sends switch { "Document" => $"\"before\":{Json(Document)},\"after\":\"\",", null => "", _ => $"\"before\":{Json(Sends)},\"after\":\"\"," };
             var field = $"{{{surrounding}\"composing\":{(composing ? "true" : "false")},\"traits\":{JsonSerializer.Serialize(Traits)}" +
                 (App is null ? "" : $",\"app\":{Json(App)}") + (Selection is null ? "" : $",\"selection\":{Json(Selection)}") + "}";
-            var output = Send($"{{\"version\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)},\"imeOpen\":{(Open ? "true" : "false")},\"field\":{field}{extra}}}");
+            var fieldFact = omitField ? "" : $",\"field\":{field}";
+            var output = Send($"{{\"version\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)},\"imeOpen\":{(Open ? "true" : "false")}{fieldFact}{extra}}}");
             Apply(output, instance);
             return output;
         }
@@ -114,9 +119,9 @@ internal static class ImeContractTests
             _ => throw new ArgumentException($"送れないキー: {key}"),
         };
 
-        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false)
+        public JsonElement Key(int vk, char ch = '\0', bool shift = false, bool ctrl = false, string instance = "t1", bool moved = false, bool omitField = false)
         {
-            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")}}}", moved);
+            var output = Event("KeyPressed", instance, $",\"key\":{{\"vk\":{vk},\"ch\":{(int)ch},\"shift\":{(shift ? "true" : "false")},\"ctrl\":{(ctrl ? "true" : "false")}}}", moved, omitField);
             // 使わなかったキーは、アプリがそのまま入れる
             if (!Consumed(output) && (ch != '\0' || vk == VirtualKeys.Return)) Document += vk == VirtualKeys.Return ? '\n' : ch;
             return output;
@@ -169,6 +174,19 @@ internal static class ImeContractTests
     private static JsonElement Capture(JsonElement output) => output.GetProperty("state").GetProperty("capture");
 
     private static JsonElement Commits(JsonElement output) => output.GetProperty("result").GetProperty("commits");
+
+    private static JsonElement View(JsonElement output) => output.GetProperty("result").GetProperty("view");
+
+    private static List<string?> Candidates(JsonElement output) =>
+        View(output).GetProperty("candidates").GetProperty("items").EnumerateArray().Select(item => item.GetString()).ToList();
+
+    private static void AssertPasswordPass(Front front, JsonElement output)
+    {
+        Assert.True(!Active(output) && !Consumed(output) && !Indicator(output), front.Trace);
+        Assert.Equal(0, Capture(output).GetProperty("shortcuts").GetArrayLength(), front.Trace);
+        Assert.Equal(0, Commits(output).GetArrayLength(), front.Trace);
+        Assert.Equal(JsonValueKind.Null, View(output).ValueKind, front.Trace);
+    }
 
     [Test]
     public static void Type_Convert_Commit_ThenTypeAgain()
@@ -335,8 +353,9 @@ internal static class ImeContractTests
             Assert.True(!Active(output) && !Consumed(output), "版の違う・知らない出来事・知らない性質のある出来事は受け持たない: " + json);
         }
         Assert.Equal(0, front.Sessions, front.Trace);
-        var noInstance = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"key\":{{\"vk\":65,\"ch\":97}}}}");
-        Assert.True(Active(noInstance) && Consumed(noInstance), "instance を省いた出来事も、空の instance の入力欄として受け持つ");
+        Assert.True(Active(front.Event("StateRequested", omitField: true)), "起動時は設定に従う捕捉条件を返す\n" + front.Trace);
+        var noInstance = front.Send($"{{\"version\":{ImeHost.Version},\"type\":\"KeyPressed\",\"field\":{{}},\"key\":{{\"vk\":65,\"ch\":97}}}}");
+        Assert.True(Active(noInstance) && Consumed(noInstance), "instance を省いた出来事も、属性があれば空の instance として受け持つ");
     }
 
     [Test]
@@ -567,6 +586,364 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Password_PassesKeysWithoutCreatingASession()
+    {
+        foreach (var traits in new string[][] { ["Password"], ["Password", "Private"], ["Terminal", "Password"] })
+        {
+            var front = new Front { Sends = null, Selection = "nihongo" };
+            front.Traits.AddRange(traits);
+            AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
+            Assert.Equal(0, front.Sessions, front.Trace);
+            foreach (var (vk, ch) in new[] { ((int)'S', (int)'s'), ((int)'A', (int)'a'), ((int)'1', (int)'1'), ((int)'2', (int)'2'),
+                         (VirtualKeys.Space, 0), (VirtualKeys.Return, 0), (VirtualKeys.Convert, 0), (ToggleShortcut.Hankaku, 0) })
+            {
+                AssertPasswordPass(front, front.Event("KeyPressed", extra: $",\"key\":{{\"vk\":{vk},\"ch\":{ch}}}"));
+            }
+            AssertPasswordPass(front, front.Event("CandidateClicked"));
+            AssertPasswordPass(front, front.Event("AlphanumericModeSelected"));
+            Assert.Equal(0, front.Sessions, front.Trace);
+            front.Traits.Clear();
+            Assert.True(Active(front.Event("CaretMoved", extra: Entered)), front.Trace);
+            front.Type("sa");
+            Assert.Equal("さ", front.Composition["t1"], "周辺文字列が届かない通常欄では変換する\n" + front.Trace);
+        }
+    }
+
+    [Test]
+    public static void Password_CancelsExistingInputOnTheFirstEvent()
+    {
+        foreach (var (type, extra) in new[]
+                 {
+                     ("KeyPressed", ",\"key\":{\"vk\":13}"), ("CaretMoved", Entered), ("CommitRequested", ""),
+                     ("CommittedByApp", ""), ("CandidateClicked", ",\"index\":0"), ("ModeToggleRequested", ""),
+                 })
+        {
+            var languages = new LanguageMemory(null);
+            var phrases = new PhraseHistory(null);
+            phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
+            var front = new Front { Services = new CompositionServices { Languages = languages, Predictor = new Predictor(phrases, null, null) } };
+            front.Settings.PredictiveCandidates = true;
+            Assert.True(Candidates(front.Type("nihongo")[^1]).Contains("日本語で入力"), front.Trace);
+            front.Traits.Add("Password");
+            AssertPasswordPass(front, front.Event(type, extra: extra));
+            AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
+            AssertPasswordPass(front, front.Event("CommitRequested", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateHighlighted", omitField: true));
+            AssertPasswordPass(front, front.Event("CandidateClicked", omitField: true));
+            AssertPasswordPass(front, front.Event("CommittedByApp", omitField: true));
+            Assert.Equal("", front.Document, front.Trace);
+            Assert.Equal(0, languages.Count, front.Trace);
+            front.Traits.Clear();
+            Assert.True(Japanese(front.Event("StateRequested")), front.Trace);
+            Assert.Equal(JsonValueKind.Null, View(front.Event("ConversionFinished")).ValueKind, front.Trace);
+            Assert.Equal(0, Commits(front.Event("CommitRequested")).GetArrayLength(), front.Trace);
+            front.Type("ka\n");
+            Assert.Equal("か", front.Document, front.Trace);
+        }
+    }
+
+    [Test]
+    public static void Password_DoesNotLearnWhenTheInstanceCloses()
+    {
+        foreach (var password in new[] { false, true })
+            foreach (var closing in new[] { "InstanceDestroyed", "CloseAll" })
+            {
+                var languages = new LanguageMemory(null);
+                var front = new Front { Services = new CompositionServices { Languages = languages } };
+                front.Type("nihongo");
+                front.Key(VirtualKeys.F10);
+                Assert.Equal("nihongo", front.Composition["t1"], front.Trace);
+                if (password) front.Traits.Add("Password");
+                if (closing == "InstanceDestroyed") AssertPasswordPass(front, front.Event(closing));
+                else
+                {
+                    if (password) AssertPasswordPass(front, front.Event("StateRequested"));
+                    front.CloseAll();
+                }
+                Assert.Equal(password ? 0 : 1, languages.Count, front.Trace);
+                Assert.Equal(0, front.Sessions, front.Trace);
+            }
+    }
+
+    [Test]
+    public static void Password_EndsDirectInputDetectionWithoutDeletingPassedKeys()
+    {
+        var front = new Front
+        {
+            Open = false,
+            Services = new CompositionServices { ClassifyDirect = (letters, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided },
+        };
+        front.Settings.DirectModeAutoDetect = true;
+        front.Key('k');
+        Assert.Equal("k", front.Document, front.Trace);
+        front.Traits.Add("Password");
+        AssertPasswordPass(front, front.Event("StateRequested"));
+        front.Traits.Clear();
+        var resumed = front.Key('a');
+        Assert.True(!Consumed(resumed) && !Japanese(resumed), front.Trace);
+        Assert.Equal(0, Commits(resumed).GetArrayLength(), front.Trace);
+        Assert.Equal("ka", front.Document, front.Trace);
+    }
+
+    [Test]
+    public static void Password_DropsTheViewBeforeDelayedConversionFinishes()
+    {
+        foreach (var restoreBeforeResult in new[] { false, true })
+        {
+            using var release = new ManualResetEventSlim();
+            using var ready = new ManualResetEventSlim();
+            using var converter = new BackgroundCallbackConverter((reading, _) =>
+            {
+                if (reading != "にほんご" || !release.Wait(5000)) return null;
+                return [new ConversionClause(reading, "日本語")];
+            }, _ => []);
+            converter.Budget.Enable();
+            converter.ResultReady += ready.Set;
+            var phrases = new PhraseHistory(null);
+            var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+            front.Settings.LiveConversion = true;
+            front.Settings.PredictiveCandidates = true;
+            Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
+            front.Traits.Add("Password");
+            AssertPasswordPass(front, front.Event("CaretMoved", extra: Entered));
+            if (restoreBeforeResult) front.Traits.Clear();
+            front.Event("StateRequested");
+            release.Set();
+            Assert.True(ready.Wait(5000), "遅れていた変換結果が届く");
+            var result = front.Event("ConversionFinished", omitField: true);
+            Assert.Equal(restoreBeforeResult, Active(result), front.Trace);
+            Assert.Equal(JsonValueKind.Null, View(result).ValueKind, front.Trace);
+            Assert.Equal(0, Commits(result).GetArrayLength(), front.Trace);
+            Assert.Equal(0, phrases.Count, front.Trace);
+        }
+    }
+
+    private sealed class LearningConverter : IKanjiConverter, ILearningConverter
+    {
+        private readonly CompositionTests.FakeConverter _converter = new();
+        public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
+        public string? Convert(string hiragana) => _converter.Convert(hiragana);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => _converter.ConvertClauses(hiragana, context);
+        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
+    }
+
+    [Test]
+    public static void PrivateAndLearningOff_ConvertButDoNotLearn()
+    {
+        foreach (var mode in new[] { "通常", "設定OFF", "Private", "Privateから通常欄へ移動", "Password" })
+        {
+            var directory = Directory.CreateTempSubdirectory();
+            var (deferred, delay) = (LearningSaves.Deferred, LearningSaves.Delay);
+            try
+            {
+                LearningSaves.Deferred = true;
+                LearningSaves.Delay = TimeSpan.FromMinutes(1);
+                CheckLearning(directory.FullName, mode);
+            }
+            finally
+            {
+                LearningSaves.FlushAll();
+                (LearningSaves.Deferred, LearningSaves.Delay) = (deferred, delay);
+                directory.Delete(recursive: true);
+            }
+        }
+    }
+
+    private static void CheckLearning(string directory, string mode)
+    {
+        var languagePath = Path.Combine(directory, "languages.json");
+        var historyPath = Path.Combine(directory, "conversions.json");
+        var phrasePath = Path.Combine(directory, "phrases.txt");
+        var translationPath = Path.Combine(directory, "translations.json");
+        var languages = new LanguageMemory(languagePath);
+        var history = new ConversionHistory(historyPath);
+        var phrases = new PhraseHistory(phrasePath);
+        phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
+        LearningSaves.FlushAll();
+        var originalPhrases = File.ReadAllText(phrasePath);
+        var translationHistory = new TranslationHistory(translationPath);
+        var converter = new LearningConverter();
+        var front = new Front
+        {
+            Converter = converter, Services = new CompositionServices
+            {
+                Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
+                Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
+                MoreCandidates = reading => reading == "にほんご" ? ["日本語", "日本語文"] : [],
+            }
+        };
+        front.Settings.PredictiveCandidates = true;
+        front.Settings.LearningEnabled = mode != "設定OFF";
+
+        void SetField(bool beforeCommit)
+        {
+            front.Traits.Clear();
+            if (mode == "Private" || mode == "Privateから通常欄へ移動" && !beforeCommit) front.Traits.Add("Private");
+            if (mode == "Password" && beforeCommit) front.Traits.Add("Password");
+        }
+
+        void Commit(string expected, string type = "CommitRequested", string extra = "")
+        {
+            SetField(beforeCommit: true);
+            var output = front.Event(type, extra: extra);
+            if (mode == "Password") AssertPasswordPass(front, output);
+            else Assert.Equal(expected, Commits(output)[0].GetProperty("text").GetString(), front.Trace);
+            SetField(beforeCommit: false);
+            front.Document = "";
+        }
+
+        void Select(JsonElement output, string candidate)
+        {
+            var index = Candidates(output).IndexOf(candidate);
+            Assert.True(index >= 0, front.Trace);
+            front.Event("CandidateClicked", extra: $",\"index\":{index}");
+        }
+
+        SetField(beforeCommit: false);
+        // 最初の Private 通知は打鍵より先に届く。
+        front.Event("CaretMoved", extra: Entered);
+        front.Key('n');
+        front.Type("ihongo");
+        front.Key(VirtualKeys.F10);
+        Commit("nihongo");
+
+        Select(front.Type("nihongo ")[^1], "日本語文");
+        Commit("日本語文");
+        Select(front.Type("kawa ")[^1], "river");
+        Commit("river");
+        var predictionIndex = Candidates(front.Type("nihongo")[^1]).IndexOf("日本語で入力");
+        Assert.True(predictionIndex >= 0, front.Trace);
+        Commit("日本語で入力", "CandidateClicked", $",\"index\":{predictionIndex}");
+
+        var learns = mode == "通常";
+        LearningSaves.FlushAll();
+        Assert.Equal(learns, languages.Get("nihongo") == true, mode);
+        Assert.Equal(learns ? "日本語文" : null, history.Get("にほんご"), mode);
+        Assert.Equal(learns ? 1 : 0, translationHistory.Get("かわ").Count, mode);
+        Assert.Equal(learns ? 2 : 1, phrases.Count, mode);
+        Assert.Equal(learns, originalPhrases != File.ReadAllText(phrasePath), mode);
+        Assert.Equal(learns ? 4 : 1, Directory.GetFiles(directory).Length, mode);
+        Assert.Equal(languages.Get("nihongo"), new LanguageMemory(languagePath).Get("nihongo"), mode);
+        Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
+        Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
+        Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
+        Assert.Equal(learns, SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, learns ? 5000 : 100), mode);
+        Assert.Equal(learns, converter.Learned.Any(request => request.Clauses.Any(clause => clause.Text == "日本語文")), mode);
+        if (mode == "Privateから通常欄へ移動")
+        {
+            // Private で始めた入力が終わったあと、同じ instance で始め直した通常入力は学習する。
+            front.Traits.Clear();
+            front.Type("nihongo");
+            front.Key(VirtualKeys.F10);
+            front.Key('\n');
+            Assert.Equal(true, languages.Get("nihongo"), front.Trace);
+            LearningSaves.FlushAll();
+        }
+    }
+
+    [Test]
+    public static void Private_StillSuppressesLearningAfterPartialCommit()
+    {
+        var converter = new LearningConverter();
+        var front = new Front { Converter = converter };
+        front.Settings.PartialCommit = true;
+        front.Traits.Add("Private");
+        front.Type("tanniwotoru ");
+        Assert.Equal("単位を取る", front.Composition["t1"], front.Trace);
+        front.Traits.Clear();
+        front.Key(VirtualKeys.Return, shift: true);
+        Assert.Equal("単位を", front.Document, front.Trace);
+        Assert.Equal("とる", front.Composition["t1"], front.Trace);
+        front.Key(' ');
+        Assert.True(View(front.Event("StateRequested")).GetProperty("converting").GetBoolean(), front.Trace);
+        front.Key('\n');
+        Assert.True(front.Document.Length > "単位を".Length, front.Trace);
+        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+    }
+
+    [Test]
+    public static void Private_ReportedBeforeResumingDoesNotLearnOnLaterCommit()
+    {
+        var converter = new LearningConverter();
+        var front = new Front { Converter = converter };
+        front.Type("nihongo");
+
+        // TSF はアプリが表示済みの文字を確定した時点で Private を読み、再開を保留する前に知らせる。
+        front.Traits.Add("Private");
+        Assert.Equal("にほんご", View(front.Event("StateRequested")).GetProperty("text").GetString(), front.Trace);
+        front.Traits.Clear();
+        front.Key(' ');
+        Assert.Equal("日本語", front.Composition["t1"], front.Trace);
+        front.Key('\n');
+        Assert.Equal("日本語", front.Document, front.Trace);
+        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+
+        front.Type("kyou \n");
+        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), front.Trace);
+        Assert.Equal("今日", converter.Learned.Single().Clauses.Single().Text, front.Trace);
+    }
+
+    [Test]
+    public static void CandidateClicked_UsesTheLatestPrivateTrait()
+    {
+        foreach (var isPrivate in new[] { false, true })
+        {
+            var directory = Directory.CreateTempSubdirectory();
+            try
+            {
+                var path = Path.Combine(directory.FullName, "phrases.txt");
+                var phrases = new PhraseHistory(path);
+                phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
+                LearningSaves.FlushAll();
+                var originalPhrases = File.ReadAllText(path);
+                var front = new Front
+                {
+                    Sends = null,
+                    Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) },
+                };
+                front.Settings.PredictiveCandidates = true;
+                var index = Candidates(front.Type("nihongo")[^1]).IndexOf("日本語で入力");
+                Assert.True(index >= 0, front.Trace);
+
+                // 候補を出したあと、属性の変化をクリックの出来事で初めて知らせる。
+                if (isPrivate) front.Traits.Add("Private");
+                front.Event("CandidateClicked", extra: $",\"index\":{index}");
+                Assert.Equal("日本語で入力", front.Document, front.Trace);
+                LearningSaves.FlushAll();
+                Assert.Equal(isPrivate, originalPhrases == File.ReadAllText(path), front.Trace);
+            }
+            finally
+            {
+                LearningSaves.FlushAll();
+                directory.Delete(recursive: true);
+            }
+        }
+    }
+
+    [Test]
+    public static void Learning_UsesSurroundingTextInAnOrdinaryFieldAfterPrivateInput()
+    {
+        var converter = new LearningConverter();
+        var front = new Front { Converter = converter };
+        front.Traits.Add("Private");
+        front.Type("nihongo \n");
+        Assert.Equal("日本語", front.Document, front.Trace);
+        front.Traits.Clear();
+        front.Document = "前置き";
+        front.Event("CaretMoved", extra: Entered);
+        front.Type("kyou \n");
+        AssertLearned(converter, "今日", "前置き", front.Trace);
+    }
+
+    private static void AssertLearned(LearningConverter converter, string text, string? context, string trace)
+    {
+        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), trace);
+        Assert.True(converter.Learned.TryDequeue(out var request), trace);
+        Assert.Equal(text, request.Clauses.Single().Text, trace);
+        Assert.Equal(context, request.Context, trace);
+    }
+
+    [Test]
     public static void EventsThatDoNotChangeTheInput_KeepTheView()
     {
         // 変換中に OS がフォーカス・キャレットを知らせてきても、変換中の表示は消さない (view が null ならフロントは消す)
@@ -712,7 +1089,7 @@ internal static class ImeContractTests
     public static void Select_HighlightDoesNotCommitAPrediction()
     {
         // マウスでなぞった (CandidateHighlighted) だけでは予測変換の候補を確定しない。クリックしたら確定する
-        var front = new Front { Predicts = true };
+        var front = new Front { Services = new CompositionServices { Predictor = new Predictor(null, null, null) } };
         front.Settings.PredictiveCandidates = true;
         front.Document = "I made ";
         var list = front.Type("decis")[^1].GetProperty("result").GetProperty("view").GetProperty("candidates");
