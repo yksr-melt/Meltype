@@ -116,7 +116,8 @@ internal sealed class ImeSession
         if (game && !_game) _session.Direct = true;
         _game = game;
         // 素通し入力 (#1911) は英数 / 日本語のモードを持たない (打ち終えた語ごとに判定する)。ゲームは英字を受け取らないために英数のまま (#1447)
-        if (active && settings.PassThroughInput && !game) _session.Direct = false;
+        var passThrough = active && settings.PassThroughInput && !game;
+        if (passThrough) _session.Direct = false;
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
@@ -127,6 +128,9 @@ internal sealed class ImeSession
             ImeEventType.KeyReleased when active && e.Key is { Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } alt => AltReleased(alt, before, settings, ref explicitChange),
             ImeEventType.KeyReleased when active && e.Key is { } released =>
                 _session.HandleKeyUp(ToggleShortcut.NormalizeHankakuKey(released.Vk), before, e.Field?.After),
+            // 素通し入力 (#1911): 切り替えの求めは 半角/全角 と同じく直前の語を変換する。英数 / 日本語の指定は、入力モードが無いので何もしない
+            ImeEventType.ModeToggleRequested when passThrough => composing && !_session.IsHolding ? _session.Unchanged() : _session.ConvertLastWord(before, e.Field?.After),
+            ImeEventType.JapaneseModeSelected or ImeEventType.AlphanumericModeSelected when passThrough => _session.Unchanged(),
             ImeEventType.ModeToggleRequested when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
             ImeEventType.JapaneseModeSelected when active => Switch(true, before, ref explicitChange, toggle: false),
             ImeEventType.AlphanumericModeSelected when active => Switch(false, before, ref explicitChange, toggle: false),
@@ -148,8 +152,9 @@ internal sealed class ImeSession
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(before);
         _listedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
-        var indicate = explicitChange && japanese != wasJapanese && settings.EffectiveModeIndicator != ModeIndicatorTiming.Never ||
-            AnnouncesFocus(e) && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus;
+        // 素通し入力 (#1911) には知らせる入力モードが無い
+        var indicate = !passThrough && (explicitChange && japanese != wasJapanese && settings.EffectiveModeIndicator != ModeIndicatorTiming.Never ||
+            AnnouncesFocus(e) && settings.EffectiveModeIndicator == ModeIndicatorTiming.OnSwitchAndFocus);
         return new(new ImeState
         {
             HandlesInput = active,
@@ -380,11 +385,14 @@ internal sealed class ImeSession
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
-        // 素通し入力 (#1911) には入力モードが無いので、入力モードを切り替えるキーは、何も打っていないときの Shift+Space と同じく直前の語を変換する。
-        // 変換ボックスに入力中なら変換ボックスのキー (英字表示の切り替え・変換中は前の候補)
-        if (settings.PassThroughInput && !_game && !_session.IsConverting && (toggle || plain && vk == ToggleShortcut.Hankaku) &&
-            (!composing || _session.IsHolding))
-            return _session.ConvertLastWord(before, field?.After);
+        // 素通し入力 (#1911) には入力モードが無い。入力モードを切り替えるキーと変換キーは、何も打っていないときの Shift+Space と同じく直前の語を変換し
+        // (変換ボックスに入力中なら変換ボックスのキー)、ほかの入力モードのキーは何もしない
+        if (settings.PassThroughInput && !_game)
+        {
+            if ((!composing || _session.IsHolding) && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.Convert))
+                return _session.ConvertLastWord(before, field?.After);
+            if (plain && vk is VirtualKeys.NonConvert or VirtualKeys.Kana or VirtualKeys.OemAttn) return _session.Unchanged() with { Consumed = true };
+        }
         if (toggle && !composing) return Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !_session.IsConverting) return _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
@@ -535,7 +543,8 @@ internal sealed class ImeSession
     /// <summary>受け持たなくなった (一時停止・動作モードの変更): 変換中の内容は確定して、キーはアプリに通す。</summary>
     private SessionResult Leave() => _session.IsComposing ? _session.CommitPending() with { Consumed = false } : Pass;
 
-    private bool ShowsJapanese(string? before) => !_session.Direct && !_session.CodeEnglishAt(before);
+    // 素通し入力 (#1911) はコードの行も区別しないので、IME は開いたまま (日本語) と知らせる
+    private bool ShowsJapanese(string? before) => !_session.Direct && (_settings.PassThroughInput || !_session.CodeEnglishAt(before));
 
     private static ShortcutModifiers Modifiers(ImeKey key) =>
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |

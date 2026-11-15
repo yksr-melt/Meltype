@@ -760,6 +760,13 @@ internal static class ImeContractTests
         var hankakuNone = Typing("x = ");
         Assert.True(Consumed(hankakuNone.Key(ToggleShortcut.Hankaku)) && hankakuNone.Document == "x = " && hankakuNone.Composition.GetValueOrDefault("t1") is null,
             "直前に英字の語が無ければ何もしない\n" + hankakuNone.Trace);
+        var convert = Typing("aka ");
+        Assert.True(Consumed(convert.Key(VirtualKeys.Convert)) && convert.Document == "" && convert.Composition["t1"] is not null, "変換キーも同じ\n" + convert.Trace);
+        // ほかの入力モードのキーは何もしない (入力中の文字も確定しない)
+        var nonConvert = Typing("");
+        nonConvert.Type("kyouha ");
+        Assert.True(Consumed(nonConvert.Key(VirtualKeys.NonConvert)) && nonConvert.Composition["t1"] is not null && nonConvert.Open,
+            "無変換\n" + nonConvert.Trace);
 
         // 日本語と判定された語は、Esc で打ったとおりの英字にする (変換中なら、かなに戻してから)
         var wrong = Typing("");
@@ -767,6 +774,18 @@ internal static class ImeContractTests
         wrong.Key('\u001b');
         wrong.Key('\u001b');
         Assert.True(wrong.Document == "kyouha" && wrong.Composition.GetValueOrDefault("t1") is null, "英字で確定する\n" + wrong.Trace);
+    }
+
+    [Test]
+    public static void PassThroughInput_HasNoModeToShow()
+    {
+        // コードの行も区別しないので、日本語 (IME は開いたまま) と知らせ、入力欄に入ったときも入力モードを出さない
+        var front = new Front { App = "Code.exe", Document = "let x = ", Services = new CompositionServices { ClassifyWord = _ => Verdict.English } };
+        front.Settings.PassThroughInput = true;
+        front.Settings.ModeIndicator = ModeIndicatorTiming.OnSwitchAndFocus;
+        front.Key('a');
+        var entered = front.Event("CaretMoved", extra: Entered);
+        Assert.True(Japanese(entered) && entered.GetProperty("state").GetProperty("modeIndicatorMs").GetInt32() == 0, front.Trace);
     }
 
     [Test]
