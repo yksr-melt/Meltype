@@ -55,6 +55,10 @@ public sealed class RomajiTypoCorrector
     // 同梱の読み (CommonReadings) から作った付属語・活用した形。Load で作る打ち間違い直しと、日英の区切り (CompositionDetector) で共有する
     private static readonly Lazy<PackedWordSet> CommonForms = new(() => BuildForms(CommonReadings.ReadText(), CommonReadings.Words));
 
+    private static readonly Lazy<PackedWordSet> RareForms = new(() => BuildForms(CommonReadings.RareText(), CommonReadings.Rare));
+    internal static bool IsRareWord(ReadOnlySpan<char> kana) => CommonReadings.Rare.Contains(kana) || RareForms.Value.Contains(kana);
+    internal static bool RareHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Rare.HasPrefix(kana) || RareForms.Value.HasPrefix(kana);
+
     public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
 
     public int Count { get; }

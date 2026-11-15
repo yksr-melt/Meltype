@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 //
 // JMdict (EDRDG、CC BY-SA 4.0) から、よく使う語の読みの一覧 dictionaries/readings.txt を作る。
+// よく使う語 (common) の読みと、それ以外の語のうちひらがなで 5 文字以上の読み (かんれんづける・くるまどめ) を入れる。
+// よく使う語でない読みは、短いと英単語の綴りとぶつかり (button = ぶっとん)、カタカナの読み (ヴィタミン) は外来語で英単語と同じ綴りになるので入れない。
 // ローマ字の打ち間違い (shimsu → shimasu) を直すとき、直した読みが日本語らしいかを調べるのに使う。
 //   node tools/make-readings.mjs JMdict_e.xml > dictionaries/readings.txt
 // 1 行に「読み」か「読み[TAB]活用の種類」(v1 = 一段、v5k など = 五段、vk = 来る、vs = する、i = い形容詞)。
@@ -11,6 +13,7 @@ import fs from 'node:fs';
 
 const xml = fs.readFileSync(process.argv[2], 'utf8');
 const common = /<re_pri>(?:ichi1|news1|spec1|spec2|gai1)<\/re_pri>/;
+const longHiragana = /<reb>[ぁ-ゖー]{5,}<\/reb>/;
 const toHiragana = s => s.replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
 
 function conjugation(pos) {
@@ -28,7 +31,7 @@ function conjugation(pos) {
 const lines = new Map();
 for (const [, entry] of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
   const readings = [...entry.matchAll(/<r_ele>([\s\S]*?)<\/r_ele>/g)]
-    .filter(m => common.test(m[1]))
+    .filter(m => common.test(m[1]) || longHiragana.test(m[1]))
     .map(m => toHiragana(m[1].match(/<reb>(.*?)<\/reb>/)[1]))
     .filter(r => /^[ぁ-ゖー]+$/.test(r));
   if (readings.length === 0) continue;
@@ -43,7 +46,7 @@ for (const [, entry] of xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)) {
 const out = [
   '# Meltype 読みの一覧 (よく使う語の読み [TAB] 活用の種類)',
   '# ローマ字の打ち間違いを直すとき、直した読みが日本語らしいかを調べるのに使う。',
-  '# JMdict (Electronic Dictionary Research and Development Group) のよく使う語から tools/make-readings.mjs で作成。',
+  '# JMdict (Electronic Dictionary Research and Development Group) のよく使う語と、ひらがなで 5 文字以上の読みの語から tools/make-readings.mjs で作成。',
   '# JMdict は Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) で公開されている: https://www.edrdg.org/edrdg/licence.html',
   ...[...lines].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([r, k]) => k.size > 0 ? `${r}\t${[...k].join(',')}` : r),
 ];
