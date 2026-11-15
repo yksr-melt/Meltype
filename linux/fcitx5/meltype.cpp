@@ -473,7 +473,7 @@ public:
             state->altInterrupted = state->altDown != 0;
             state->altDown = vk;
             send(ic, "KeyPressed", std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"ch\":0,\"shift\":" + boolean(states.test(fcitx::KeyState::Shift)) +
-                ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) + ",\"alt\":false,\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}", output);
+                ",\"ctrl\":" + boolean(states.test(fcitx::KeyState::Ctrl)) + ",\"alt\":" + boolean(states.test(fcitx::KeyState::Alt)) + ",\"command\":" + boolean(states.test(fcitx::KeyState::Super)) + "}", output);
             return;
         }
         if (state->altDown != vk) return;
