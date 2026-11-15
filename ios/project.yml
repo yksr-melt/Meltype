@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     ARCHS: arm64
-    MARKETING_VERSION: '1.1.20'
-    CURRENT_PROJECT_VERSION: '26'
+    MARKETING_VERSION: '1.1.21'
+    CURRENT_PROJECT_VERSION: '27'
     CODE_SIGNING_ALLOWED: NO
     MELTYPE_APP_GROUP: group.com.appipinopi.meltypeflash
 # 利用状況の集計 (Aptabase)。0.4.0 以降を使う。版を固定するときは exactVersion にする。

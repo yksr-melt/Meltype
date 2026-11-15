@@ -237,6 +237,10 @@ pub extern "C" fn meltype_set_converter(convert: Option<CandidatesCallback>) -> 
 /// Non-null helper/profile arguments must be valid NUL-terminated UTF-8 strings.
 #[no_mangle]
 pub unsafe extern "C" fn meltype_init_mozc(helper: *const c_char, profile: *const c_char) -> i32 {
+    // macOS の IME は meltype_init を、Linux の IBus・fcitx5 はこちらを呼ぶ。
+    // 通貨の自動のレートは、どちらの入口からでも取りに行く。
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    currency_auto::start();
     catch_unwind(|| {
         let Some(helper) = read(helper) else { return 0 };
         let profile = read(profile);
