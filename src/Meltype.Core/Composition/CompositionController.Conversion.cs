@@ -142,7 +142,7 @@ public sealed partial class CompositionController
         // 打ち始めの ・ は、Space で / にする。
         if (_text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
         _clauses = clauses;
-        _selectedClause = 0;
+        _selectedClause = _clauses.Count - 1;
         _converting = true;
     }
 
