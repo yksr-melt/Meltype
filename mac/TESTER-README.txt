@@ -3,7 +3,7 @@ Meltype for Mac (プレビュー版)
 Meltype はアプリではなく「入力ソース」(日本語入力) です。Meltype.app をダブルクリックしても何も起きません。
 
 ■ 動く環境
-  macOS 13 以降、Apple シリコン (M1 / M2 / M3 / M4 …) の Mac
+  macOS 13.3 以降、Apple シリコン (M1 / M2 / M3 / M4 …) の Mac
 
 ■ インストール
   1. この zip を全体ごと展開する

@@ -9,7 +9,7 @@
 
 <p align="center">
   <a href="https://github.com/yksr-melt/Meltype/releases/latest"><img src="https://img.shields.io/github/v/release/yksr-melt/Meltype?color=5ec4f0" alt="release"></a>
-  <img src="https://img.shields.io/badge/macOS-13%2B-ff8ab4?logo=apple&logoColor=white" alt="macOS 13 以降">
+  <img src="https://img.shields.io/badge/macOS-13.3%2B-ff8ab4?logo=apple&logoColor=white" alt="macOS 13.3 以降">
   <img src="https://img.shields.io/badge/プレビュー版-7a96f0" alt="プレビュー版">
 </p>
 
@@ -36,7 +36,7 @@ Mac 版のインストール・設定・困ったときの説明です。キー�
 <a name="動く環境"></a>
 <img src="images/headings/mac/01.svg" alt="動く環境" height="53"><br>
 
-- macOS 13 以降
+- macOS 13.3 以降
 - 配布している zip は Apple シリコン (M1 / M2 / M3 / M4 …) の Mac 用です。Intel の Mac では、[ソースからビルド](../mac/README.md#ビルドする)してください (ビルドした CPU 向けのアプリができるので、Apple シリコン版と Intel 版は互換ではありません)
 
 <br>
@@ -73,7 +73,7 @@ brew install --cask yksr-melt/Meltype/meltype
 
 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
 
-かな漢字変換では、azooKey に組み込まれた Zenzai (zenz-v3.2-small、同梱) で、キャレットの前の文 (20 文字まで) を文脈にして変換します (既定で ON。CPU で計算します。80 文字より長い読みは Zenzai を使いません)。使わないときは `config.json` の `"UseZenzai": false`、自分のモデルを使うときは `"ZenzaiModelPath"` に GGUF の場所を書きます。変えたら Meltype を起動し直します。
+かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分の llama-server・モデルを使うときは `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
 
 <a name="入力モードのショートカット"></a>
 <img src="images/headings/mac/s06.svg" alt="入力モードのショートカット" height="40">

@@ -58,10 +58,36 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private Settings _draft;
 
     /// <summary>開いた時点の画面の値。閉じるときに比べて、画面で変えた項目だけを今の設定に重ねる (開いている間にトレイで変えた設定を戻さない)。</summary>
-    private readonly Settings _opened = null!;
+    private Settings _opened = null!;
 
     /// <summary>1 項目分の部品と、設定値との受け渡し。</summary>
     private sealed record Binding(PropertyInfo Property, Control Control, Action<Settings> Load, Action<Settings> Store);
+
+    private bool ApplyChanges()
+    {
+        var edited = CollectValues();
+        foreach (var binding in edited.EffectiveToggleShortcuts)
+        {
+            if (ShortcutEditor.ValidationError(binding, edited, []) is not { } error) continue;
+            MessageBox.Show(this, error, "入力モード切り替えキー", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return false;
+        }
+
+        var displayed = edited.Clone().Normalize(reportShortcutExclusions: false);
+        var next = Settings.MergeEdits(_opened, displayed, _engine.Settings);
+        if (next.ToJson() != _engine.Settings.Clone().Normalize().ToJson())
+            _engine.ApplySettings(next);
+
+        if (_state.SettingsShowHelp != _showHelp.Checked || _state.SettingsWheelChangesValue != _wheelChangesValue.Checked)
+        {
+            _state.SettingsShowHelp = _showHelp.Checked;
+            _state.SettingsWheelChangesValue = _wheelChangesValue.Checked;
+            _state.Save();
+        }
+
+        _opened = displayed;
+        return true;
+    }
 
     public SettingsForm(MeltypeEngine engine, AppState state)
     {
@@ -109,11 +135,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
         testPanel.Controls.Add(_testInput);
         testPanel.Controls.Add(testLabel);
 
+        var apply = new Button { Text = "適用", AutoSize = true, Padding = new Padding(13, 4, 13, 4) };
         var ok = new Button { Text = "OK", AutoSize = true, Padding = new Padding(13, 4, 13, 4) };
         var cancel = new Button { Text = "キャンセル", AutoSize = true, DialogResult = DialogResult.Cancel, Padding = new Padding(13, 4, 13, 4) };
         var defaults = new Button { Text = "既定値に戻す", AutoSize = true, Padding = new Padding(13, 4, 13, 4) };
         // OK と × (閉じる) は保存する。変更を捨てるのは キャンセル だけ。
         var discard = false;
+        apply.Click += (_, _) => ApplyChanges();
         ok.Click += (_, _) => Close();
         cancel.Click += (_, _) =>
         {
@@ -122,23 +150,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
         };
         FormClosing += (_, e) =>
         {
-            if (discard) return;
-            var next = CollectValues();
-            foreach (var binding in next.EffectiveToggleShortcuts)
-            {
-                if (ShortcutEditor.ValidationError(binding, next, []) is not { } error) continue;
-                MessageBox.Show(this, error, "入力モード切り替えキー", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                e.Cancel = true;
-                return;
-            }
-            next = Settings.MergeEdits(_opened, next, _engine.Settings);
-            if (next.ToJson() != _engine.Settings.Clone().Normalize().ToJson()) _engine.ApplySettings(next);
-            if (_state.SettingsShowHelp != _showHelp.Checked || _state.SettingsWheelChangesValue != _wheelChangesValue.Checked)
-            {
-                _state.SettingsShowHelp = _showHelp.Checked;
-                _state.SettingsWheelChangesValue = _wheelChangesValue.Checked;
-                _state.Save();
-            }
+            if (!discard && !ApplyChanges()) e.Cancel = true;
         };
         defaults.Click += (_, _) =>
         {
@@ -146,7 +158,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
             RunTest();
         };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(6) };
-        buttons.Controls.AddRange(cancel, ok, defaults);
+        buttons.Controls.AddRange(cancel, ok, apply, defaults);
 
         Controls.Add(_body);
         Controls.Add(BuildCategoryList());
