@@ -90,7 +90,7 @@ targets:
   KeyboardTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [AISettings.swift, AISettingsTests.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift, MeltypeTextView.swift, KeyboardTests.swift]
+    sources: [AISettings.swift, AISettingsTests.swift, CurrencySettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift, MeltypeTextView.swift, KeyboardTests.swift]
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

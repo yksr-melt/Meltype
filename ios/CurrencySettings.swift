@@ -23,9 +23,12 @@ final class CurrencySettingsStore {
     var file: URL? { self.directory?.appendingPathComponent("settings.json") }
     func load() -> CurrencySelection {
         guard let file = file, let bytes = try? Data(contentsOf: file), bytes.count < 8192,
-              let value = try? JSONDecoder().decode(CurrencySelection.self, from: bytes),
-              CurrencySelection.modes.contains(value.mode) else { return CurrencySelection() }
+              let value = try? JSONDecoder().decode(CurrencySelection.self, from: bytes) else {
+            return CurrencySelection()
+        }
         var selection = value
+        // iOS は固定と手入力だけ。他の値 (自動など) が入っていたら固定に戻す
+        if !CurrencySelection.modes.contains(selection.mode) { selection.mode = "Fixed" }
         selection.decimals = min(max(value.decimals, 0), 4)
         return selection
     }

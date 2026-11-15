@@ -3,6 +3,25 @@
 import XCTest
 
 final class AISettingsTests: XCTestCase {
+    func testCurrencySelectionPersistsAndFallsBackToFixed() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = CurrencySettingsStore(directory: directory)
+        XCTAssertEqual(store.load(), CurrencySelection(), "未設定なら固定")
+        var selection = CurrencySelection()
+        selection.mode = "Manual"
+        selection.manual = "USD 150, EUR=170"
+        selection.decimals = 3
+        try store.save(selection)
+        XCTAssertEqual(store.load(), selection)
+        // 桁は 0〜4 に収め、知らない出どころは固定に戻す
+        selection.decimals = 9
+        try store.save(selection)
+        XCTAssertEqual(store.load().decimals, 4)
+        try Data(#"{"mode":"Auto","manual":"","decimals":1}"#.utf8)
+            .write(to: try XCTUnwrap(store.file), options: .atomic)
+        XCTAssertEqual(store.load().mode, "Fixed", "iOS は自動を使わない")
+    }
     func testSelectionIsOptionalAndDoesNotCreateOrRemoveModels() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
