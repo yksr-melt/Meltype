@@ -22,16 +22,15 @@ foreach (var c in cases)
         var languages = new LanguageMemory(null);
         detector.Memory = languages;
         var settings = new Settings { LiveConversion = false, PredictiveCandidates = false, LearningEnabled = false }.Normalize();
-        // Upstream 1.5.0 always uses the scored reading lattice; the former
-        // ScoredSegmentation switch no longer exists.
-        var options = new CompositionOptions
+        // Upstream 1.6.0 replaced CompositionOptions with CompositionServices, and
+        // live conversion / learning are read from Settings instead of delegates.
+        var services = new CompositionServices
         {
             Languages = languages, Candidates = CandidateDictionary.Load(null),
             ContextRules = ContextRules.Load(null), History = new ConversionHistory(null),
             Misspellings = MisspellingDictionary.Load(null), RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji),
-            LiveConversion = () => false, Learning = () => false,
         };
-        var session = new MeltypeSession(detector, new NullConverter(), options, () => settings);
+        var session = new MeltypeSession(detector, new NullConverter(), services, () => settings);
         session.CanDeleteSurrounding = true;
         var responses = new List<string>(c.keys.Length);
         var keysMs = new List<double>(c.keys.Length);
