@@ -14,6 +14,23 @@ spec.loader.exec_module(comparison)
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_verify_reads_rust_and_upstream_csharp_edit_protocols(self):
+        benchmark = comparison.benchmark
+        keys = [[0, ord("あ"), 0], [0, 0, 0]]
+        typed = json.dumps({"consumed": False, "commits": [], "view": None})
+        rust = json.dumps({"consumed": True, "commits": [
+            {"text": "亜", "deleteBefore": 1, "expect": "あ"}], "view": None})
+        csharp = json.dumps({"consumed": True, "commits": [
+            {"text": "亜", "removeBefore": "あ", "currentWord": None,
+             "moveCaretBack": 0, "insertByPaste": False}], "view": None})
+        rust_document, rust_trace = benchmark.verify([typed, rust], keys)
+        csharp_document, csharp_trace = benchmark.verify([typed, csharp], keys)
+        self.assertEqual(rust_document, "亜")
+        self.assertEqual(csharp_document, "亜")
+        # 同じ意味の書き換えは、どちらの JSON でも同じ記録になる (三者比較を比べられる)
+        self.assertEqual(rust_trace, csharp_trace)
+        self.assertEqual(rust_trace[1]["commits"], [dict(deleteBefore=1, text="亜", expect="あ")])
+
     def test_version_order_includes_previews_and_stable(self):
         versions = ["flash-v0.1.0-preview.2", "flash-v0.1.0-preview.10", "flash-v0.1.0", "flash-v0.1.1-preview.1"]
         self.assertEqual(sorted(reversed(versions), key=comparison.version_key), versions)
