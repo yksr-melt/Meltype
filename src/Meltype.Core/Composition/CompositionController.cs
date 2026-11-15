@@ -148,7 +148,7 @@ public sealed partial class CompositionController
         public bool Changed { get; set; }
 
         /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら「Zenzai」と出す。</summary>
-        public string? ZenzaiText { get; init; }
+        public string? ZenzaiText { get; set; }
 
         /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
         public bool Expanded { get; set; }
