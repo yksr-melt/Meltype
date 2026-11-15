@@ -239,7 +239,7 @@ public sealed record ImeShortcut(int Vk, int Modifiers);
 /// moveCaretBack は確定したあとにキャレットを左へ戻す数 (UTF-16)。insertByPaste はキーを送らずに貼り付けで入れる (キーを送って入れるフロントだけが使う)。
 /// currentWord は、確定し直すときに今確定した語 (TSF が Chrome で編集を 2 回に分けるのに使う)。</item>
 /// <item>view: null なら変換中の表示を消す。text (確定される形)・clauses・hint・spellingSuggestion・typedKeys は、あればそのまま出す。</item>
-/// <item>view.candidates: null なら一覧を出さない。番号は numbered のときだけ出す。selectedMeaning は選んでいる候補で meaningDelayMs 止まったら出す。
+/// <item>view.candidates: null なら一覧を出さない。番号は numbered のときだけ出す。selectedMeaning は選んでいる候補の意味で、すぐに出す。
 /// 番号で選ぶ出来事 (CandidateClicked・CandidateHighlighted) の index は、この一覧の番号。</item>
 /// </list>
 /// state.modeIndicatorMs が 0 でなければ、「あ / A」をキャレットの近くにその時間だけ出す。

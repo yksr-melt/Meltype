@@ -88,12 +88,9 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             .Append(",\"selectedMeaning\":");
         AppendNullable(builder, view.Meaning);
         // 一覧・view・result を閉じる
-        builder.Append(",\"meaningDelayMs\":").Append(MeaningDelayMs).Append("}}}");
+        builder.Append("}}}");
         return builder.ToString();
     }
-
-    /// <summary>選んでいる候補で止まってから、その意味を出すまでの時間 (ミリ秒)。</summary>
-    public const int MeaningDelayMs = 1500;
 
     /// <summary>フロントに渡した表示 (<see cref="ForFront"/>) の一覧に番号を出すか。</summary>
     public static bool Numbered(CompositionView view) => view.Numbered;

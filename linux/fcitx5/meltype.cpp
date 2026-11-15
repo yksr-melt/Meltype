@@ -382,12 +382,10 @@ public:
     // Shift を押しているか。fcitx5 は Space のキーに Shift を付けて渡さないことがある (どの環境で起きるかは
     // 未確認。手元は KDE Plasma 6 / Wayland、X11 と GNOME は試していない) ので、キーから覚えておく: #1033
     bool shiftHeld = false;
-    // 入力モードの表示 (A / あ) と候補の意味を、本体が決めた時間のあとに消す・出すタイマー
-    std::unique_ptr<fcitx::EventSourceTime> modeTimer, meaningTimer;
+    // 入力モードの表示 (A / あ) を、本体が決めた時間のあとに消すタイマー
+    std::unique_ptr<fcitx::EventSourceTime> modeTimer;
     // 入力欄に入ったときの入力モードを出すまでのタイマー
     std::unique_ptr<fcitx::EventSourceTime> enterTimer;
-    // 意味を出すのを待っている候補 (選んでいる番号と意味)。変わったら待ち直す
-    std::string meaningKey;
     // 変換中の文字 (preedit) を出しているか
     bool preeditVisible = false;
     // 入力欄に入ったときの出来事を送っているか (入力モードの表示を遅らせる)
@@ -637,12 +635,7 @@ private:
         for (const auto &part : {view.str("typedKeys"), view.str("spellingSuggestion"), view.str("hint")})
             if (!part.empty()) aux += (aux.empty() ? "" : "　") + part;
         if (!aux.empty()) panel.setAuxDown(fcitx::Text(aux));
-        auto *state = ic->propertyFor(&factory_);
-        const auto *listed = view.get("candidates");
-        if (!listed || listed->kind != Json::Kind::Object) {
-            state->meaningTimer.reset();
-            state->meaningKey.clear();
-        } else {
+        if (const auto *listed = view.get("candidates"); listed && listed->kind == Json::Kind::Object) {
             // 注記 (候補の種類など) は候補の後ろに付ける
             auto candidates = listed->strings("items");
             if (const auto *notes = listed->get("notes"); notes && notes->kind == Json::Kind::Array)
@@ -663,16 +656,8 @@ private:
                 list->setGlobalCursorIndex(selected);
             }
             panel.setCandidateList(std::move(list));
-            // 選んでいる候補で止まったら、本体が決めた時間のあとに意味を出す
-            const auto meaning = listed->str("selectedMeaning");
-            const auto key = meaning.empty() ? std::string() : std::to_string(selected) + ":" + meaning;
-            if (key != state->meaningKey) {
-                state->meaningKey = key;
-                state->meaningTimer = key.empty() ? nullptr : after(listed->integer("meaningDelayMs"), [ic, meaning]() {
-                    ic->inputPanel().setAuxDown(fcitx::Text(meaning));
-                    ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
-                });
-            }
+            // 選んでいる候補の意味は、案内の代わりに出す
+            if (const auto meaning = listed->str("selectedMeaning"); !meaning.empty()) panel.setAuxDown(fcitx::Text(meaning));
         }
         ic->updatePreedit();
         ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
@@ -684,8 +669,6 @@ private:
         ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
         auto *state = ic->propertyFor(&factory_);
         state->preeditVisible = false;
-        state->meaningTimer.reset();
-        state->meaningKey.clear();
     }
 };
 

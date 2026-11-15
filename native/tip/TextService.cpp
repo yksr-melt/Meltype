@@ -1968,7 +1968,6 @@ void TextService::ShowCandidates(TfEditCookie ec, ITfContext* context, const Jso
     data.selected = list.IsNull() ? -1 : list[L"selected"].Int();
     data.numbered = list[L"numbered"].Bool();
     data.meaning = list[L"selectedMeaning"].Str();
-    data.meaningMs = static_cast<UINT>(list[L"meaningDelayMs"].Int());
     data.suggestion = view[L"spellingSuggestion"].Str();
     data.typed = view[L"typedKeys"].Str();
     data.hint = view[L"hint"].Str();

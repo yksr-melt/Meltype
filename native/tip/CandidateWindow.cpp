@@ -22,7 +22,6 @@ namespace {
 constexpr wchar_t kClassName[] = L"MeltypeCandidateWindow";
 constexpr wchar_t kMeaningClassName[] = L"MeltypeMeaningWindow";
 constexpr int kPageSize = 9;
-constexpr UINT_PTR kMeaningTimer = 1;
 
 // 大きさ (DIP。96 dpi のときのピクセル)
 constexpr float kPadding = 4;        // 窓の縁から行まで
@@ -198,7 +197,6 @@ struct CandidateWindow::Impl {
     int hover = -1;
     float scale = 1;
     float width = kMinWidth;  // DIP
-    std::wstring meaningKey;
 
     float SuggestionHeight() const { return view.suggestion.empty() ? 0 : kRowHeight + (view.candidates.empty() ? 0 : 5); }
     // 候補の行より上 (打ったキー・もしかして) の高さ
@@ -331,18 +329,6 @@ struct CandidateWindow::Impl {
 
     // ---- 意味 ----
 
-    void ScheduleMeaning() {
-        std::wstring key = view.meaning.empty() || view.selected < 0 ? L"" : std::to_wstring(view.selected) + L"\n" + view.meaning;
-        if (key == meaningKey) {
-            if (meaningHwnd != nullptr && IsWindowVisible(meaningHwnd)) PlaceMeaning();
-            return;
-        }
-        meaningKey = key;
-        KillTimer(hwnd, kMeaningTimer);
-        if (meaningHwnd != nullptr) ShowWindow(meaningHwnd, SW_HIDE);
-        if (!key.empty()) SetTimer(hwnd, kMeaningTimer, view.meaningMs, nullptr);
-    }
-
     float MeaningSize(float& height) {
         IDWriteTextFormat* format = CreateFormat(kSmallFontSize + 1);
         if (format == nullptr) return 0;
@@ -363,9 +349,12 @@ struct CandidateWindow::Impl {
         return textWidth + 24;
     }
 
+    // 選んでいる候補の意味を出す (意味が無ければ消す)
     void ShowMeaning() {
-        KillTimer(hwnd, kMeaningTimer);
-        if (view.meaning.empty() || !IsWindowVisible(hwnd)) return;
+        if (view.meaning.empty() || view.selected < 0 || !IsWindowVisible(hwnd)) {
+            if (meaningHwnd != nullptr) ShowWindow(meaningHwnd, SW_HIDE);
+            return;
+        }
         if (meaningHwnd == nullptr) {
             meaningHwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW, kMeaningClassName, L"", WS_POPUP, 0, 0, 1, 1, nullptr, nullptr,
                                           g_module, this);
@@ -429,12 +418,8 @@ struct CandidateWindow::Impl {
     }
 
     void HideAll() {
-        if (hwnd != nullptr) {
-            KillTimer(hwnd, kMeaningTimer);
-            ShowWindow(hwnd, SW_HIDE);
-        }
+        if (hwnd != nullptr) ShowWindow(hwnd, SW_HIDE);
         if (meaningHwnd != nullptr) ShowWindow(meaningHwnd, SW_HIDE);
-        meaningKey.clear();
         hover = -1;
     }
 
@@ -476,9 +461,6 @@ struct CandidateWindow::Impl {
                 if (hit >= 0 && self->onSelect) self->onSelect(hit);
                 return 0;
             }
-            case WM_TIMER:
-                if (wParam == kMeaningTimer) self->ShowMeaning();
-                return 0;
             case WM_DPICHANGED:
                 return 0;
         }
@@ -583,7 +565,7 @@ void CandidateWindow::Show(const CandidateView& view, const RECT& anchor) {
         }
     }
     InvalidateRect(d.hwnd, nullptr, FALSE);
-    d.ScheduleMeaning();
+    d.ShowMeaning();
 }
 
 }  // namespace meltype
