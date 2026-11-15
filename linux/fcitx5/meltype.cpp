@@ -498,14 +498,12 @@ public:
     // Reset (クリックなど) は Enter のたびに来るクライアントがあるので、日本語にしていたコードの行はそのまま
     void reset(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
-        event.inputContext()->propertyFor(&factory_)->altDown = 0;
         leave(event.inputContext(), false);
     }
 
     // フォーカスが外れた・入力メソッドを切り替えた。Shift を離したことは届かないことがあるので忘れる (#1033)
     void deactivate(const fcitx::InputMethodEntry &, fcitx::InputContextEvent &event) override {
         event.inputContext()->propertyFor(&factory_)->shiftHeld = false;
-        event.inputContext()->propertyFor(&factory_)->altDown = 0;
         event.inputContext()->propertyFor(&factory_)->enterTimer.reset();
         leave(event.inputContext(), true);
     }
@@ -549,6 +547,13 @@ private:
     void leave(fcitx::InputContext *ic, bool focusOut) {
         Json output;
         auto *state = ic->propertyFor(&factory_);
+        // Alt + Tab などでフォーカスが移ると、Alt を離したことは届かない。本体には、割り込まれて離したと伝える
+        if (state->altDown) {
+            const int vk = state->altDown;
+            state->altDown = 0;
+            state->altInterrupted = false;
+            send(ic, "KeyReleased", std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"interrupted\":true}", output);
+        }
         const bool committedByClient = focusOut && state->preeditVisible && ic->capabilityFlags().test(fcitx::CapabilityFlag::Preedit);
         send(ic, committedByClient ? "CommittedByApp" : "CommitRequested",
              std::string(",\"caret\":{\"moved\":true,\"passedKey\":0,\"focusLeft\":") + boolean(focusOut) + "}", output);

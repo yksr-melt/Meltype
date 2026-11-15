@@ -275,9 +275,10 @@ class MeltypeEngine(IBus.Engine):
         表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
-        # Alt + Tab などでフォーカスが移ると、Alt を離したことはこのエンジンに届かない
-        self._alt_down = 0
-        self._alt_interrupted = False
+        # Alt + Tab などでフォーカスが移ると、Alt を離したことはこのエンジンに届かない。本体には、割り込まれて離したと伝える
+        if self._alt_down:
+            vk, self._alt_down, self._alt_interrupted = self._alt_down, 0, False
+            self.send("KeyReleased", key={"vk": vk, "interrupted": True})
         caret = {"moved": True, "passedKey": 0, "focusLeft": focus_out}
         if self._preedit_visible:
             self._preedit_visible = False
