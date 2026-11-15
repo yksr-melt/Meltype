@@ -729,6 +729,40 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void PassThroughInput_ShiftSpaceConvertsAndEscKeepsTheLetters()
+    {
+        static Front Typing(string document)
+        {
+            var front = new Front
+            {
+                Document = document,
+                Services = new CompositionServices { ClassifyWord = word => word == "kyouha" ? Verdict.Japanese : Verdict.English },
+            };
+            front.Settings.PassThroughInput = true;
+            return front;
+        }
+
+        // 英字のまま入ったローマ字は、Shift+Space で変換する (打ち終えた Space も消す)
+        var after = Typing("aka ");
+        Assert.True(Consumed(after.Key(VirtualKeys.Space, shift: true)) && after.Document == "" && after.Composition["t1"] is not null,
+            "直前の語を変換する\n" + after.Trace);
+        var typing = Typing("");
+        typing.Type("aka");
+        Assert.True(Consumed(typing.Key(VirtualKeys.Space, shift: true)) && typing.Document == "" && typing.Composition["t1"] is not null,
+            "判定を待っている語を変換する\n" + typing.Trace);
+        var none = Typing("x = ");
+        none.Key(VirtualKeys.Space, shift: true);
+        Assert.True(none.Composition.GetValueOrDefault("t1") is null, "直前に英字の語が無ければ変換しない\n" + none.Trace);
+
+        // 日本語と判定された語は、Esc で打ったとおりの英字にする (変換中なら、かなに戻してから)
+        var wrong = Typing("");
+        wrong.Type("kyouha ");
+        wrong.Key('\u001b');
+        wrong.Key('\u001b');
+        Assert.True(wrong.Document == "kyouha" && wrong.Composition.GetValueOrDefault("t1") is null, "英字で確定する\n" + wrong.Trace);
+    }
+
+    [Test]
     public static void Password_DropsTheViewBeforeDelayedConversionFinishes()
     {
         foreach (var restoreBeforeResult in new[] { false, true })

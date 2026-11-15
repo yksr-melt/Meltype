@@ -32,6 +32,7 @@ public sealed partial class CompositionController
         var vk = e.Vk;
         if (_heldLetters.Length > 0 && _settings().PassThroughInput)
         {
+            if (vk == VirtualKeys.Space && _shift && !_modifier && ConvertWordBefore()) return;
             if (ContinuePassThroughWord(e)) return;
             // 語を打ち終えたキー: 日本語なら変換ボックスに入れ直し、このキーは変換ボックスで処理する (Space は変換、Enter は確定)
             DecidePassThroughWord(CharOf(e));
@@ -240,6 +241,11 @@ public sealed partial class CompositionController
                 // 予測の候補を選んでいたら、選ぶのをやめるだけ (打った内容は残す)。
                 _predictionIndex = -1;
                 return;
+            case VirtualKeys.Escape when _settings().PassThroughInput && !IsProtectedInput:
+                // 素通し入力 (#1911): 変換ボックスの文字は、素通しした語を日本語と判定して入れ直したもの。Esc はその判定の取り消しなので、打ったとおりの英字で確定する
+                _text.Mode = DisplayMode.HalfWidthAlphanumeric;
+                Commit();
+                return;
             case VirtualKeys.Escape when _settings().EscStepsBack && StepBack():
                 return;
             case VirtualKeys.Escape:
@@ -312,6 +318,8 @@ public sealed partial class CompositionController
     /// <summary>変換ボックスが空のときの最初の打鍵。英字・句読点なら入力を始め、それ以外はそのまま通す。</summary>
     private void StartWith(KeyEvent e)
     {
+        // 直前に英字の語が無ければ、今までどおり空白を入れる
+        if (e.Vk == VirtualKeys.Space && _shift && !_modifier && _settings().PassThroughInput && ConvertWordBefore()) return;
         if (e.Vk == VirtualKeys.Convert)
         {
             if (ReconversionSelectionNow() is not { } selection || string.IsNullOrWhiteSpace(selection.Reading)) return;
@@ -465,6 +473,31 @@ public sealed partial class CompositionController
             ClearHeld();
             _correctable.Clear();
         }
+    }
+
+    /// <summary>
+    /// 素通し入力 (#1911) の Shift+Space: 判定を待っている語か、キャレットの直前の英字の語 (英字のまま入ったローマ字) を、判定によらず変換する。
+    /// 直前の語は、入力欄から読めるときだけ。素通しした語と同じく、消す文字をフロントに照合させる (DeleteHeld)。
+    /// </summary>
+    private bool ConvertWordBefore()
+    {
+        if (_heldLetters.Length == 0 && _out.Before is { } before)
+        {
+            // 語を打ち終えた Space (aka␣) も消す。日本語なら、その Space は変換のつもりだった
+            var spaced = before.EndsWith(' ');
+            var word = new string(before[..^(spaced ? 1 : 0)].Reverse().TakeWhile(char.IsAsciiLetter).Reverse().ToArray());
+            if (word.Length > 0)
+            {
+                _heldLetters.Append(word);
+                foreach (var c in word + (spaced ? " " : "")) _out.RecordHeldPassed(c);
+                _heldSent = word.Length + (spaced ? 1 : 0);
+            }
+        }
+        if (_heldLetters.Length == 0) return false;
+        Diagnostics.Log.Decision($"素通し入力: Shift+Space で {Diagnostics.Log.Text(_heldLetters.ToString())}を変換");
+        SwitchHeldToJapanese();
+        StartConversion(preferJapanese: true);
+        return true;
     }
 
     /// <summary>
