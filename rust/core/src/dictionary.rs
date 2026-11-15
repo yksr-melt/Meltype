@@ -795,6 +795,11 @@ impl Dictionary {
         let Some(start) = word.find(|c: char| c.is_ascii_digit()) else {
             return false;
         };
+        // 金額 (100doru・1manen) は、数字と通貨の読みでできていれば日本語の入力。
+        // 英語の綴りとして残すと、入力中の候補 (通貨の換算) が出ない。
+        if crate::currency::parse(&crate::romaji::hiragana(word, false)).is_some() {
+            return true;
+        }
         let suffix = word[start..].trim_start_matches(|c: char| c.is_ascii_digit());
         if start >= 2 && word.as_bytes()[start - 1].is_ascii_uppercase() {
             let stem = &word[..start - 1];

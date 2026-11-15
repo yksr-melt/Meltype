@@ -35,6 +35,10 @@ impl Prediction {
     }
 }
 
+/// 金額の読みに使う数字と小数点 (半角・全角)。
+fn amount_char(c: char) -> bool {
+    c.is_ascii_digit() || ('０'..='９').contains(&c) || matches!(c, '.' | '．')
+}
 fn is_zero(value: &u32) -> bool {
     *value == 0
 }
@@ -550,10 +554,12 @@ impl Session {
         } else {
             romaji::hiragana(&self.raw, false)
         };
+        // 金額 (100どる) は数字も読みのうち。数字を外すと通貨の換算が入力中に出ない。
         let kana = !english
+            && reading.chars().any(crate::linguistics::kana)
             && reading
                 .chars()
-                .all(|c| ('ぁ'..='ゖ').contains(&c) || c == 'ー');
+                .all(|c| crate::linguistics::kana(c) || c == 'ー' || amount_char(c));
         let mut predictions = if kana {
             // Whole reading, then the last live-conversion clause (#974).
             // The clause form lets a phrase learned from its beginning be
@@ -1308,10 +1314,12 @@ impl Session {
             && self.display(false) != self.raw
         {
             let reading = romaji::hiragana(&self.raw, false);
+            // 金額 (100どる) は数字も読みのうち。数字を外すと通貨の換算が入力中に出ない。
             if reading.chars().count() >= 2
+                && reading.chars().any(crate::linguistics::kana)
                 && reading
                     .chars()
-                    .all(|c| ('ぁ'..='ゖ').contains(&c) || c == 'ー')
+                    .all(|c| ('ぁ'..='ゖ').contains(&c) || c == 'ー' || amount_char(c))
             {
                 let mut values = self
                     .preferences
@@ -2140,6 +2148,9 @@ impl Session {
     }
     /// Request live conversion only for settled Japanese input. English islands
     /// and protected tokens retain their original text.
+    ///
+    /// 金額 (`100どる`・`1.5まんえん`) は、数字と小数点も読みのうちとして扱う。
+    /// 数字を除くと、通貨の換算の候補が入力中に出なくなる (#1901)。
     pub fn live_reading(&self) -> Option<String> {
         let _romaji = romaji::Scope::new(self.custom_romaji.clone());
         if !self.settings.boolean("LiveConversion")
@@ -2163,12 +2174,16 @@ impl Session {
         }
         if reading.encode_utf16().count() < 4
             || romaji::hiragana(&self.raw, false) != reading
-            || self
-                .dictionary()
-                .mixed(&self.raw, false)
+            || (!reading.chars().any(amount_char)
+                && self
+                    .dictionary()
+                    .mixed(&self.raw, false)
+                    .chars()
+                    .any(|c| c.is_ascii_alphabetic()))
+            || !reading.chars().any(crate::linguistics::kana)
+            || reading
                 .chars()
-                .any(|c| c.is_ascii_alphabetic())
-            || reading.chars().any(|c| !crate::linguistics::kana(c))
+                .any(|c| !crate::linguistics::kana(c) && !amount_char(c))
         {
             return None;
         }
@@ -3852,6 +3867,7 @@ pub mod report_corrections {
     #[cfg(test)]
     mod tests {
         use super::*;
+
         // Both scenarios exercise the process-wide best-effort registry.
         // Keep their full sequences uncontended; production deliberately drops
         // a report when another report operation owns that registry.
