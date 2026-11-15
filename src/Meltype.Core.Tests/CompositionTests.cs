@@ -5712,6 +5712,87 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1899_TechnicalWordBeforeSuru_StaysEnglish()
+    {
+        // #1899: share は しゃれ とも読めるが、しゃれする・まけします は日本語として成り立たない。
+        // 技術用語の綴りのすぐ後ろが する の活用なら、その区間は英単語として読む (文頭でも同じ)。
+        foreach (var (typed, expected) in new[]
+        {
+            ("fairusharesite", "ふぁいるshareして"),
+            ("fairuwosharesite", "ふぁいるをshareして"),
+            ("fairushareshite", "ふぁいるshareして"),
+            ("fairusharesuru", "ふぁいるshareする"),
+            ("fairushareshita", "ふぁいるshareした"),
+            ("koresharesite", "これshareして"),
+            ("kyounosharesite", "きょうのshareして"),
+            ("mainnisharesite", "mainにshareして"),
+            // share 以外の技術用語も同じ (make は まけ とも読める)
+            ("fairumakeshite", "ふぁいるmakeして"),
+            ("koremakeshimasu", "これmakeします"),
+            ("korecaseshimasu", "これcaseします"),
+            // おしゃれ・おまけ は 1 語の日本語として読む (お + share / お + make に割らない)
+            ("osharesuru", "おしゃれする"),
+            ("oshareshite", "おしゃれして"),
+            ("omakesuru", "おまけする"),
+            ("omakeshite", "おまけして"),
+            // 4 文字以上という条件は無い (uri・sha も技術用語なら英語)
+            ("koreurisuru", "これuriする"),
+            ("koreurishite", "これuriして"),
+            ("koreshasuru", "これshaする"),
+            ("koreshashite", "これshaして"),
+            // ごとする は日本語として成り立つので、goto は日本語のまま
+            ("koregotosuru", "これごとする"),
+            // 日本語由来の語 (ninja) は日本語の読みのまま
+            ("ninjashite", "にんじゃして"),
+            ("ninjasuru", "にんじゃする"),
+            // 逆向き: する が続かない share 単体は今までどおり日本語 (しゃれ)
+            ("share", "しゃれ"),
+            // 文頭でも、する の活用が続けば英語
+            ("sharesuru", "shareする"),
+            ("sharesite", "shareして"),
+            ("shareshitara", "shareしたら"),
+            // する の活用は しない・します なども同じ
+            ("shareshinai", "shareしない"),
+            ("shareshimasu", "shareします"),
+            ("shareshiteiru", "shareしている"),
+            ("sharesareru", "shareされる"),
+            ("sharesarenai", "shareされない"),
+            ("makeshite", "makeして"),
+            // させ は一段動詞の使役形 (負けさせた・褒めさせて) とも読む。読みが一段動詞の語幹なら日本語のまま
+            ("wazatomakesaseta", "わざとまけさせた"),
+            ("wazatomakesaserareta", "わざとまけさせられた"),
+            ("aitewomakesasenaiyounisuru", "あいてをまけさせないようにする"),
+            ("mottohomesasete", "もっとほめさせて"),
+            ("homesaseru", "ほめさせる"),
+            ("sharesaseru", "しゃれさせる"),
+            ("sharesaseta", "しゃれさせた"),
+            // され・せず は一段動詞の使役形ではないので、する の活用として英語のまま
+            ("makesareta", "makeされた"),
+            ("makesezu", "makeせず"),
+            // させず は使役形なので、一段動詞の語幹なら日本語のまま
+            ("makesasezu", "まけさせず"),
+            ("wazatomakesasezu", "わざとまけさせず"),
+            // 一段動詞の語幹でない技術用語は させ でも英語
+            ("casesaseru", "caseさせる"),
+            ("casesasezu", "caseさせず"),
+            ("urisaseru", "uriさせる"),
+            // 技術用語でない英単語 (memo・site) と付属語 (ため・ので) は今までどおり日本語
+            ("memoshite", "めもして"),
+            ("korememoshite", "これめもして"),
+            ("fairumemoshite", "ふぁいるめもして"),
+            ("tameshite", "ためして"),
+            ("korewotameshite", "これをためして"),
+            ("sounanodeshite", "そうなのでして"),
+            ("korekarasiteshite", "これからしてして"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void EnglishVerb_PlusSuru_PendingConsonantIsShownOnce()
     {
         // 英単語 + する の活用の打ちかけの子音が 2 回出ていた (googleしまss)。Space で変換する読みも同じ
