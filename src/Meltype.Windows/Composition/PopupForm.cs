@@ -37,22 +37,14 @@ internal abstract class PopupForm : Form
     private static readonly IntPtr HWND_TOPMOST = new(-1);
     private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
 
-    protected override void SetVisibleCore(bool value)
-    {
-        base.SetVisibleCore(value);
-        // 表示のたびに最前面の先頭へ上げる。SW_SHOWNOACTIVATE は Z オーダーを変えないので、
-        // 一度背面へ回ると以降の表示も背面に出続ける (issue #1549・#1613・#1655・#1727・#1731)
-        if (value) BringToTopmost();
-    }
-
-    /// <summary>表示する。表示中なら、ほかの最前面のウィンドウ (通知など) の下に回っていても先頭へ上げる。</summary>
+    /// <summary>表示して、最前面の先頭へ上げる。表示中なら、ほかの最前面のウィンドウ (通知など) の下に回っていても上げる。</summary>
     public void ShowOnTop()
     {
-        if (Visible) BringToTopmost();
-        else Show();
+        if (!Visible) Show();
+        // SW_SHOWNOACTIVATE は Z オーダーを変えないので、上げないと一度背面へ回ったあとの表示も背面に出続ける
+        // (issue #1549・#1613・#1655・#1727・#1731)
+        SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
-
-    private void BringToTopmost() => SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
     private const int WM_ACTIVATE = 0x0006, WA_INACTIVE = 0;
     private const int WM_MOUSEACTIVATE = 0x0021, MA_NOACTIVATE = 3;
