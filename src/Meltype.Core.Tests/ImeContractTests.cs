@@ -754,6 +754,13 @@ internal static class ImeContractTests
         none.Key(VirtualKeys.Space, shift: true);
         Assert.True(none.Composition.GetValueOrDefault("t1") is null, "直前に英字の語が無ければ変換しない\n" + none.Trace);
 
+        // 入力モードが無いので、半角/全角 は Shift+Space と同じ
+        var hankaku = Typing("aka ");
+        Assert.True(Consumed(hankaku.Key(ToggleShortcut.Hankaku)) && hankaku.Document == "" && hankaku.Composition["t1"] is not null, hankaku.Trace);
+        var hankakuNone = Typing("x = ");
+        Assert.True(Consumed(hankakuNone.Key(ToggleShortcut.Hankaku)) && hankakuNone.Document == "x = " && hankakuNone.Composition.GetValueOrDefault("t1") is null,
+            "直前に英字の語が無ければ何もしない\n" + hankakuNone.Trace);
+
         // 日本語と判定された語は、Esc で打ったとおりの英字にする (変換中なら、かなに戻してから)
         var wrong = Typing("");
         wrong.Type("kyouha ");

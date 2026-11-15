@@ -380,6 +380,11 @@ internal sealed class ImeSession
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
+        // 素通し入力 (#1911) には入力モードが無いので、入力モードを切り替えるキーは、何も打っていないときの Shift+Space と同じく直前の語を変換する。
+        // 変換ボックスに入力中なら変換ボックスのキー (英字表示の切り替え・変換中は前の候補)
+        if (settings.PassThroughInput && !_game && !_session.IsConverting && (toggle || plain && vk == ToggleShortcut.Hankaku) &&
+            (!composing || _session.IsHolding))
+            return _session.ConvertLastWord(before, field?.After);
         if (toggle && !composing) return Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
         if (toggle && !_session.IsConverting) return _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);

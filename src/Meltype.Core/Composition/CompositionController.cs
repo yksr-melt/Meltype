@@ -225,6 +225,9 @@ public sealed partial class CompositionController
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
     public bool IsComposing => !_text.IsEmpty || _heldLetters.Length > 0;
 
+    /// <summary>判定を待っている語だけがあり、変換ボックスは空か。</summary>
+    public bool IsHolding => _text.IsEmpty && _heldLetters.Length > 0;
+
     /// <summary>変換して候補を選んでいるか。</summary>
     public bool IsConverting => _converting;
 
@@ -265,6 +268,15 @@ public sealed partial class CompositionController
         if (!releaseFollows) HandleRelease(key.Vk);
         Settle();
         return Result(consumed);
+    }
+
+    /// <summary>素通し入力 (#1911) の、入力モードを切り替えるキー: 判定を待っている語か直前の英字の語を変換する。語が無ければ何もしない。</summary>
+    public SessionResult ConvertLastWord(string? before, string? after)
+    {
+        _out.Begin(before, after);
+        ConvertWordBefore();
+        Settle();
+        return Result(consumed: true);
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>

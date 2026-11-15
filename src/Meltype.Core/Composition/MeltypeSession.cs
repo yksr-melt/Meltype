@@ -430,6 +430,11 @@ public sealed class MeltypeSession
     /// ワークアラウンド (ImeEventType.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
     /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
     /// </summary>
+    public SessionResult ConvertLastWord(string? before, string? after) => _controller.ConvertLastWord(before, after);
+
+    /// <summary>判定を待っている語だけがあり、変換ボックスは空か。</summary>
+    public bool IsHolding => _controller.IsHolding;
+
     public SessionResult HandleKeyUp(int vk, string? before, string? after)
     {
         return _controller.Release(vk, before, after);
