@@ -12,7 +12,7 @@ import { codeCell } from './markdown.mjs';
 const api = process.env.GITHUB_API_URL ?? 'https://api.github.com';
 const repo = process.env.GITHUB_REPOSITORY;
 const token = process.env.GITHUB_TOKEN;
-// workflow_dispatch は bot の App に Actions の権限が無いので、job の GITHUB_TOKEN (actions: write) で叩く
+// workflow_dispatch とリリースのタグの作成は job の GITHUB_TOKEN で叩く (App に Actions の権限が無い・App で作ったタグは push でも release.yml を起動してしまう)
 const dispatchToken = process.env.BOT_DISPATCH_TOKEN || token;
 const event = JSON.parse(fs.readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'));
 const Marker = '<!-- meltype-bot -->';
@@ -52,14 +52,6 @@ function parseForm(body) {
 
 const field = (form, prefix) => Object.entries(form).find(([k]) => k.startsWith(prefix))?.[1] ?? '';
 
-function osLabels(os) {
-  const labels = [];
-  if (/Windows/i.test(os)) labels.push('windows');
-  if (/Mac/i.test(os)) labels.push('mac');
-  if (/Linux/i.test(os)) labels.push('linux');
-  return labels;
-}
-
 function lastKey(text) {
   if (/^Space/.test(text)) return 'space';
   if (/途中/.test(text)) return 'none';
@@ -87,91 +79,6 @@ async function upsertComment(issue, kind, text) {
 
 async function react(content) {
   if (event.comment) await gh('POST', `/issues/comments/${event.comment.id}/reactions`, { content }).catch(() => {});
-}
-
-const LabelInfo = {
-  '要トリアージ': ['FBCA04', '作者がまだ確認していない報告'],
-  'win11': ['0078D4', 'Windows 11'],
-  'win10': ['5E9ED6', 'Windows 10'],
-  '企業PC': ['5319E7', 'Windows の Enterprise / Education (管理が厳しいことがある)'],
-  '管理者で実行': ['D93F0B', 'Meltype を管理者として実行していた'],
-  'Mozcなし': ['E99695', 'Mozc の変換ヘルパーが無い (漢字に変換できない)'],
-  'かな入力': ['FEF2C0', 'かな入力 (JIS)'],
-  'USキーボード': ['FEF2C0', '日本語 (JIS) 以外のキーボード'],
-  '高DPI': ['FEF2C0', '画面の拡大率が 100% より大きい'],
-  '優先: 高': ['B60205', '入力できない・止まる・文字が消えるなど'],
-  '優先: 中': ['E99695', 'よくある不具合'],
-  '優先: 低': ['C5DEF5', '見た目だけ・一度だけ起きた・回避方法がある など'],
-  'アプリ: チャット': ['BFDADC', 'Discord・Slack・LINE など'],
-  'アプリ: コード': ['BFDADC', 'VS Code・ターミナル・Maya など'],
-  'アプリ: ブラウザー': ['BFDADC', 'Chrome・Edge・Firefox など'],
-  'アプリ: ゲーム': ['BFDADC', 'ゲーム'],
-  'アプリ: Office': ['BFDADC', 'Word・Excel・Outlook など'],
-  'インストール': ['BFDADC', 'インストール・更新・起動'],
-};
-
-const knownLabels = new Set();
-async function ensureLabel(name) {
-  if (knownLabels.has(name)) return;
-  knownLabels.add(name);
-  const [color, description] = LabelInfo[name] ?? (/^v\d/.test(name) ? ['EDEDED', 'Meltype の版'] : [null, null]);
-  if (!color) return;
-  await gh('POST', '/labels', { name, color, description })
-    .catch(() => gh('PATCH', `/labels/${encodeURIComponent(name)}`, { color, description }))
-    .catch(() => {});
-}
-
-function environmentLabels(text) {
-  const env = {};
-  for (const line of text.replace(/```\w*|<\/?details>|<summary>.*?<\/summary>/g, '').split('\n')) {
-    const colon = line.indexOf(':');
-    if (colon > 0) env[line.slice(0, colon).trim()] = line.slice(colon + 1).trim();
-  }
-  const result = [];
-  const os = env['OS'] ?? '';
-  if (/^Windows 11/.test(os)) result.push({ label: 'win11', reason: `OS が ${md(os)}` });
-  else if (/^Windows 10/.test(os)) result.push({ label: 'win10', reason: `OS が ${md(os)}` });
-  if (/Enterprise|Education/i.test(os)) result.push({ label: '企業PC', reason: 'Windows のエディションが Enterprise / Education (会社・学校の PC は制限があることが多い)' });
-  if (/^Meltype \S/.test(`Meltype ${env['Meltype'] ?? ''}`) && /^\d+\.\d+\.\d+/.test(env['Meltype'] ?? '')) result.push({ label: `v${env['Meltype'].match(/^\d+\.\d+\.\d+/)[0]}`, reason: '実行環境の版' });
-  if (/はい/.test(env['管理者として実行'] ?? '')) result.push({ label: '管理者で実行', reason: 'Meltype を管理者として実行していた' });
-  // 「変換エンジン: Hybrid (Mozc: なし)」は、変換エンジンを選べた版 (#1740 より前) の報告
-  if (/Mozc:\s*なし/.test(env['変換エンジン'] ?? '') || env['Mozc'] === 'なし') result.push({ label: 'Mozcなし', reason: 'Mozc の変換ヘルパーが無い' });
-  if (/Kana/.test(env['入力方式'] ?? '')) result.push({ label: 'かな入力', reason: '入力方式がかな入力' });
-  if (/日本語以外/.test(env['キーボード'] ?? '')) result.push({ label: 'USキーボード', reason: `キーボードが ${md(env['キーボード'])}` });
-  const scale = Number((env['画面'] ?? '').match(/拡大率\s*(\d+)/)?.[1] ?? 100);
-  if (scale > 100) result.push({ label: '高DPI', reason: `画面の拡大率が ${scale}%` });
-  return result;
-}
-
-function triageLabels(form, labels) {
-  const result = [];
-  const text = Object.entries(form).filter(([k]) => !/実行環境|ログ/.test(k)).map(([, v]) => v).join('\n');
-  const app = field(form, 'どのアプリで') + '\n' + text;
-  const isBug = labels.has('bug') || 'どうなったか' in form;
-  if (isBug && ![...labels].some(l => l.startsWith('優先: '))) {
-    const severe = text.match(/止ま|落ち|固ま|フリーズ|クラッシュ|入力できな|打てな|文字が消え|消えた|起動しな|起動でき|インストールでき|動かな|反映され[なず]|違う文字|別の文字|化け|連続で入力|勝手に|二重に|重複/);
-    const minor = text.match(/見た目|表示がずれ|位置がずれ|ちらつ|色が|文言|誤字|デザイン|アイコン/);
-    const once = field(form, '起きる頻度') === '一度だけ';
-    result.push(severe
-      ? { label: '優先: 高', reason: `本文に「${severe[0]}」とある (入力できない・止まる・違う文字が入る系)` }
-      : minor || once
-        ? { label: '優先: 低', reason: minor ? `本文に「${minor[0]}」とある (見た目の問題)` : '起きる頻度が「一度だけ」' }
-        : { label: '優先: 中', reason: '不具合の報告 (止まる・入力できない等の言葉はない)' });
-    const install = text.match(/インストール|アンインストール|更新|アップデート|起動/);
-    if (install) result.push({ label: 'インストール', reason: `本文に「${install[0]}」とある` });
-  }
-  const areas = [
-    ['アプリ: チャット', /Discord|Slack|LINE|Teams|Messenger|Telegram|チャット/i],
-    ['アプリ: コード', /VS ?Code|Visual Studio|Cursor|JetBrains|IntelliJ|ターミナル|Terminal|PowerShell|コマンドプロンプト|Maya|Blender|エディター|エディタ/i],
-    ['アプリ: ブラウザー', /Chrome|Edge|Firefox|Safari|Brave|ブラウザ/i],
-    ['アプリ: ゲーム', /ゲーム|Steam|Minecraft|Valorant|原神/i],
-    ['アプリ: Office', /Word|Excel|PowerPoint|Outlook|OneNote|Office/],
-  ];
-  for (const [label, pattern] of areas) {
-    const match = app.match(pattern);
-    if (match) result.push({ label, reason: `「${match[0]}」で起きた` });
-  }
-  return result;
 }
 
 const Help = [
@@ -202,7 +109,8 @@ const Help = [
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
 //   5. 配布物のビルド (release.yml) を、そのタグで始める。ビルドが終わると、下書きに配布物を付けて公開する
-// タグを GITHUB_TOKEN で作ると push の起動が掛からないので、workflow_dispatch で明示的に起動する。
+// タグは job の GITHUB_TOKEN (dispatchToken) で作る。GITHUB_TOKEN の push では release.yml の push: tags が起動しないので、
+// workflow_dispatch で明示的に起動する。App のトークンで作ると push でも起動し、ビルドが 2 回走る。
 async function releaseCommand(issue, command, version) {
   const reply = text => upsertComment(issue, `release-${event.comment.id}`, text);
   const pre = command === 'pre-release';
@@ -229,7 +137,7 @@ async function releaseCommand(issue, command, version) {
   const tag = `v${version}`;
   if (await gh('GET', `/git/ref/tags/${tag}`).then(() => true).catch(() => false)) return reply(`❌ タグ \`${tag}\` はもうあります。`);
   const sha = (await gh('GET', '/git/ref/heads/main')).object.sha;
-  await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha });
+  await gh('POST', '/git/refs', { ref: `refs/tags/${tag}`, sha }, dispatchToken);
   await gh('POST', '/releases', { tag_name: tag, name: `Meltype ${version}`, draft: true, prerelease: pre, body: notes });
   const failed = await gh('POST', '/actions/workflows/release.yml/dispatches', { ref: tag }, dispatchToken)
     .then(() => null, error => error.message.slice(0, 120));
@@ -264,34 +172,11 @@ async function parse() {
 
   if (!event.comment) {
     if (event.action !== 'opened' && event.action !== 'edited') return output({ action: 'none' });
+    if (event.action === 'opened') await gh('POST', `/issues/${issue}/labels`, { labels: [Untriaged] });
+
     const form = parseForm(event.issue.body);
-    const labels = new Set(event.issue.labels.map(l => l.name));
-    const add = new Set(osLabels(field(form, 'OS')));
-    if (event.action === 'opened') add.add('要トリアージ');
-    const reasons = [];
-    for (const { label, reason } of [...environmentLabels(field(form, '実行環境')), ...triageLabels(form, labels)]) {
-      if (!add.has(label)) reasons.push(`\`${label}\`: ${reason}`);
-      add.add(label);
-    }
-
-    const problems = [];
-    const version = field(form, 'Meltype の版');
-    if ('Meltype の版' in form && !/\d+\.\d+|^main$/i.test(version)) problems.push('**Meltype の版** を書いてください (Windows: トレイのアイコンを右クリック →「Meltype について...」)。');
-    const misdetection = labels.has('誤判定') || '出たもの' in form;
+    const misdetection = event.issue.labels.some(l => l.name === '誤判定') || '出たもの' in form;
     const keys = field(form, '打ったもの');
-    if (misdetection && !isKeys(keys)) problems.push('**打ったもの** は、変換された文字ではなく、押したキーをそのまま英字で書いてください (例: `nihongowohanasu`)。');
-
-    if (problems.length > 0) add.add('情報待ち');
-    else if (labels.has('情報待ち')) await gh('DELETE', `/issues/${issue}/labels/${encodeURIComponent('情報待ち')}`).catch(() => {});
-    for (const label of ['優先: 高', '優先: 中', '優先: 低', ...add]) await ensureLabel(label);
-    if (add.size > 0) await gh('POST', `/issues/${issue}/labels`, { labels: [...add] });
-
-    const text = [];
-    if (problems.length > 0) text.push('報告ありがとうございます。確認のために、もう少し教えてください。', '', ...problems.map(p => `- ${p}`), '', '本文を編集して直してもらえれば、自動でもう一度確認します。', '');
-    if (reasons.length > 0) text.push('<details><summary>🤖 自動の仕分け</summary>', '', ...reasons.map(r => `- ${r}`), '', '優先度・分類は本文からの見当です。作者が確認したら `要トリアージ` を外します。', '</details>');
-    if (text.length > 0) await upsertComment(issue, 'triage', text.join('\n'));
-
-    // 再現に使うのは打ったものと最後のキーだけなので、ほかの情報が足りなくても打ってみる
     if (misdetection && isKeys(keys)) {
       return output({
         action: 'repro', issue, repros: JSON.stringify([{ keys: keys.slice(0, MaxKeys), last: lastKey(field(form, '最後に押したキー')) }]),

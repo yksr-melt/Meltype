@@ -155,7 +155,7 @@ public static unsafe class Exports
         {
             var name = FromUtf8(platform) ?? "Mac";
             var settings = Runtime.Settings.Current;
-            return ToUtf8(Config.ProjectInfo.ReportUrl($"{name} (プレビュー版)", Config.ProjectInfo.CoreVersion, Config.ProjectInfo.Environment(settings, $"{Config.ProjectInfo.CoreVersion} ({name}、プレビュー版)", $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})")));
+            return ToUtf8(Config.ProjectInfo.ReportUrl($"{name} (プレビュー版)", Config.ProjectInfo.CoreVersion, Config.ProjectInfo.Environment(settings, $"{Config.ProjectInfo.WithCommit(Config.ProjectInfo.CoreVersion)} ({name}、プレビュー版)", $"{RuntimeInformation.OSDescription} ({RuntimeInformation.OSArchitecture})")));
         }
         catch (Exception ex)
         {
