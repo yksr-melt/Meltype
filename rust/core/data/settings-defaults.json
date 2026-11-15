@@ -297,6 +297,7 @@
   "SpaceAroundNumbers": false,
   "CurrencyRateMode": "Fixed",
   "CurrencyManualRates": "",
+  "CurrencyDecimals": 1,
   "NumberKeysSelectCandidates": true,
   "UseZenzai": false,
   "ZenzaiServerPath": "",

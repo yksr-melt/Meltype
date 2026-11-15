@@ -37,7 +37,8 @@ async function page(t, {available = true} = {}) {
   const fields = [...html.matchAll(/<(input|select)\b([^>]*\bdata-setting="([^"]+)"[^>]*)>/g)].map(([, tag, attrs, key]) => {
     const id = attrs.match(/\bid="([^"]+)"/)[1];
     const field = elements.get(`#${id}`); field.dataset.setting = key;
-    field.type = tag === "input" ? "checkbox" : "select-one";
+    // 実際の type をそのまま使う (checkbox・number・text)
+    field.type = tag === "select" ? "select-one" : (attrs.match(/\btype="([^"]+)"/)?.[1] ?? "text");
     if (tag === "select") {
       const contents = html.slice(html.indexOf(`<select${attrs}>`) + `<select${attrs}>`.length).split("</select>")[0];
       field.options = [...contents.matchAll(/value="([^"]+)"/g)].map(([, value]) => ({value}));
@@ -80,13 +81,22 @@ async function page(t, {available = true} = {}) {
 
 test("入力設定と詳細JSONを同期し、未知の設定・非表示の設定を保存後も保持する", async t => {
   const p = await page(t), get = id => p.elements.get(id);
-  assert.equal(Object.keys(p.fields).length, 7);
+  assert.equal(Object.keys(p.fields).length, 10);
   assert.equal(p.fields.AiModel.value, "None");
   assert.equal(get("#ai-details").hidden, true);
   assert.deepEqual(p.fields.AiModel.options.map(item => item.value), ["None", "Shunti"]);
   assert.equal(get("#core-controls").disabled, false);
   assert.equal(p.fields.DetectionLevel.value, "Balanced");
   assert.equal(p.fields.LearningEnabled.checked, true);
+  // 通貨の換算: ChromeOS は固定と手入力、それに小数の桁
+  assert.equal(p.fields.CurrencyRateMode.value, "Fixed");
+  assert.deepEqual(p.fields.CurrencyRateMode.options.map(item => item.value), ["Fixed", "Manual"]);
+  p.fields.CurrencyDecimals.value = "2";
+  await p.fields.CurrencyDecimals.fire("change");
+  assert.equal(JSON.parse(get("#settings").value).CurrencyDecimals, 2, "小数の桁は数で持つ");
+  p.fields.CurrencyRateMode.value = "Manual";
+  await p.fields.CurrencyRateMode.fire("change");
+  assert.equal(JSON.parse(get("#settings").value).CurrencyRateMode, "Manual");
   p.fields.TabConversion.checked = false;
   await p.fields.TabConversion.fire("change");
   p.fields.Punctuation.value = "FullWidthCommaPeriod";

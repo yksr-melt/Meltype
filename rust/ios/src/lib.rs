@@ -182,6 +182,53 @@ pub unsafe extern "C" fn meltype_ios_set_ai(
     }
 }
 
+/// Set the currency rate source from the containing app's shared settings.
+/// # Safety
+/// `mode` and `manual` point to length UTF-8 bytes, or are null when empty.
+#[no_mangle]
+pub unsafe extern "C" fn meltype_ios_set_currency(
+    handle: u64,
+    mode: *const c_char,
+    mode_length: u32,
+    manual: *const c_char,
+    manual_length: u32,
+    decimals: i32,
+) -> i32 {
+    let text = |pointer: *const c_char, length: u32| -> Option<String> {
+        if pointer.is_null() || length == 0 || length > 4096 {
+            return None;
+        }
+        let bytes = std::slice::from_raw_parts(pointer.cast::<u8>(), length as usize);
+        std::str::from_utf8(bytes).ok().map(str::to_owned)
+    };
+    let mode = text(mode, mode_length).unwrap_or_else(|| "Fixed".to_owned());
+    let Some(mode) = meltype_core::currency::Mode::parse(&mode) else {
+        return 0;
+    };
+    let manual = text(manual, manual_length).unwrap_or_default();
+    let decimals = decimals.clamp(0, meltype_core::currency::MAX_DECIMALS as i32);
+    let Ok(mut all) = sessions().lock() else {
+        return 0;
+    };
+    let Some(session) = all.get_mut(&handle) else {
+        return 0;
+    };
+    let settings = &mut session.settings;
+    if settings
+        .set("CurrencyRateMode", serde_json::json!(mode.value()))
+        .is_err()
+        || settings
+            .set("CurrencyManualRates", serde_json::json!(manual))
+            .is_err()
+        || settings
+            .set("CurrencyDecimals", serde_json::json!(decimals))
+            .is_err()
+    {
+        return 0;
+    }
+    1
+}
+
 #[no_mangle]
 pub extern "C" fn meltype_ios_select(handle: u64, index: u32) -> *mut c_char {
     run(handle, |session| session.select(index as usize))

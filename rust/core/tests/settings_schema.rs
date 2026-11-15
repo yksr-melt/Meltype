@@ -28,6 +28,19 @@ fn schema_covers_defaults_choices_labels_and_optional_fields() {
         schema["properties"]["CurrencyManualRates"]["type"],
         "string"
     );
+    // 換算した額の小数の桁 (0〜4。どのレートの出どころでも同じ設定を使う)
+    assert_eq!(schema["properties"]["CurrencyDecimals"]["default"], 1);
+    assert_eq!(schema["properties"]["CurrencyDecimals"]["type"], "integer");
+    let mut digits = Settings::default();
+    digits.set("CurrencyDecimals", json!(9)).unwrap();
+    assert_eq!(digits.integer("CurrencyDecimals"), 4);
+    digits.set("CurrencyDecimals", json!(-2)).unwrap();
+    assert_eq!(digits.integer("CurrencyDecimals"), 0);
+    assert!(
+        digits.set("CurrencyDecimals", json!("2")).is_err(),
+        "数でない値は受け付けない"
+    );
+    assert_eq!(digits.integer("CurrencyDecimals"), 0);
     let mut settings = Settings::default();
     settings.set("CurrencyRateMode", json!("Manual")).unwrap();
     settings.normalize();
