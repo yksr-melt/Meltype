@@ -4,6 +4,9 @@
 use meltype_core::{currency, Session};
 use serde_json::json;
 
+/// 自動のレートはプロセス全体で 1 つなので、触る試験は 1 つずつ流す。
+static AUTO_RATES: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn convert(settings: &[(&str, serde_json::Value)], raw: &str) -> Vec<String> {
     let mut session = Session::default();
     session
@@ -25,6 +28,7 @@ fn convert(settings: &[(&str, serde_json::Value)], raw: &str) -> Vec<String> {
 
 #[test]
 fn the_mode_chooses_fixed_auto_or_manual_rates() {
+    let _guard = AUTO_RATES.lock().unwrap_or_else(|error| error.into_inner());
     // 固定: 同梱の配布時のレート。近似の印 (≒) と小数第 1 位
     let fixed = convert(&[], "100どる");
     assert!(
@@ -75,6 +79,7 @@ fn the_mode_chooses_fixed_auto_or_manual_rates() {
 
 #[test]
 fn the_decimals_setting_applies_to_every_rate_source() {
+    let _guard = AUTO_RATES.lock().unwrap_or_else(|error| error.into_inner());
     // 手入力 (1 ドル = 159.2338 円) で桁を変える。≒ は出どころのまま付かない
     let with = |digits: i64| {
         convert(
