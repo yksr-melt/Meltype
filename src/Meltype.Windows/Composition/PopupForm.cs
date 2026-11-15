@@ -12,8 +12,8 @@ internal abstract class PopupForm : Form
     {
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
-        // 最前面には CreateParams の WS_EX_TOPMOST を使う。
-        // Form.TopMost を使うと、WinForms が表示時に SetFocus を呼んで入力欄のフォーカスを奪う。
+        // Form.TopMost は使わない。WinForms が表示時に SetFocus を呼んで入力欄のフォーカスを奪う。
+        // 最前面には CreateParams の WS_EX_TOPMOST で作り、表示・更新のたびに SetWindowPos で上げる。
         StartPosition = FormStartPosition.Manual;
         DoubleBuffered = true;
     }
@@ -32,6 +32,18 @@ internal abstract class PopupForm : Form
             if (ClickThrough) cp.ExStyle |= WS_EX_TRANSPARENT;
             return cp;
         }
+    }
+
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010;
+
+    /// <summary>表示して、最前面の先頭へ上げる。表示中なら、ほかの最前面のウィンドウ (通知など) の下に回っていても上げる。</summary>
+    public void ShowOnTop()
+    {
+        if (!Visible) Show();
+        // SW_SHOWNOACTIVATE は Z オーダーを変えないので、上げないと一度背面へ回ったあとの表示も背面に出続ける
+        // (issue #1549・#1613・#1655・#1727・#1731)
+        SetWindowPos(Handle, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
 
     private const int WM_ACTIVATE = 0x0006, WA_INACTIVE = 0;
@@ -59,4 +71,7 @@ internal abstract class PopupForm : Form
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
 }
