@@ -1806,4 +1806,32 @@ internal static class RomajiTypoTests
             CompositionTests.Detector.SpellChecker = null;
         }
     }
+
+    [Test]
+    public static void RareReadingsAndSpellOnlyWords_AfterJapanese()
+    {
+        // Issue #1784・#1761・#1764: よく使う語でない長い読み (かんれんづけ・くるまどめ・ぼごわしゃ) を日本語の語にする。カタカナの読みの外来語 (vitamin) は英語のまま。
+        // Issue #1873・#1699: english-words.txt にしかない、ローマ字で読める語 (chi・ma) を、日本語のすぐ後ろで英語にしていた (や|chi・USENさ|ma)。
+        // english.txt に選んで入れた語 (google・net) は今までどおり
+        CompositionTests.Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("kanrenduke", "かんれんづけ"), ("kurumadome", "くるまどめ"), ("bogowasha", "ぼごわしゃ"), ("yachi", "やち"), ("USENsama", "USENさま"),
+                ("kimochi", "きもち"), ("sukima", "すきま"), ("machi", "まち"), ("tamago", "たまご"),
+                ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("button", "button"), ("house", "house"),
+                ("kyouhagoogle", "きょうはgoogle"), ("dottonet", "dotとnet"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
 }
