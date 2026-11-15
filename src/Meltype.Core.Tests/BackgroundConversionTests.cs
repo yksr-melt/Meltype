@@ -177,9 +177,12 @@ internal static class BackgroundConversionTests
             (reading, _) =>
             {
                 release.Wait(10000);
-                return reading == "たんいをとる"
-                    ? [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")]
-                    : [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
+                return reading switch
+                {
+                    "たんいをとる" => [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")],
+                    "にほんごをかく" => [new ConversionClause("にほんごを", "日本語を"), new ConversionClause("かく", "書く")],
+                    _ => [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")],
+                };
             },
             _ => ["候補1", "候補2"]);
         converter.ResultReady += ready.Set;
@@ -212,12 +215,12 @@ internal static class BackgroundConversionTests
     [Test]
     public static void Refresh_SplitsAnUntouchedConversionIntoTheArrivedClauses()
     {
-        var (session, release, _, converter) = OpenWithoutAnswer("tanniwotoru");
+        var (session, release, _, converter) = OpenWithoutAnswer("nihongowokaku");
         using (converter)
         {
             release.Set();
             var view = RefreshUntil(session, v => v.Clauses is { Count: 2 });
-            Assert.Equal("単位を,取る", string.Join(",", view?.Clauses ?? []));
+            Assert.Equal("日本語を,書く", string.Join(",", view?.Clauses ?? []));
             Assert.Equal(1, view?.SelectedClause, "文節が増えても最後を選ぶ");
         }
     }
@@ -314,20 +317,20 @@ internal static class BackgroundConversionTests
     {
         foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Convert, VirtualKeys.Left, VirtualKeys.Down })
         {
-            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
             var session = Session(converter);
-            SessionFacadeTests.Type(session, "tanniwotoru");
+            SessionFacadeTests.Type(session, "nihongowokaku");
             var opened = session.HandleKey(key, null, false, false, false, false).View;
-            Assert.Equal("単位を,取る", string.Join(",", opened?.Clauses ?? []), $"変換開始: {key}");
+            Assert.Equal("日本語を,書く", string.Join(",", opened?.Clauses ?? []), $"変換開始: {key}");
             Assert.Equal(1, opened?.SelectedClause, $"最後の文節を選ぶ: {key}");
             if (key == VirtualKeys.Space)
             {
                 session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
                 session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
             }
-            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
             var view = session.RefreshConversion()?.View;
-            Assert.Equal("短,意を,取る", string.Join(",", view?.Clauses ?? []), $"新しい区切り: {key}");
+            Assert.Equal("日本,語を,書く", string.Join(",", view?.Clauses ?? []), $"新しい区切り: {key}");
             Assert.Equal(2, view?.SelectedClause, $"新しい最後の文節: {key}");
         }
     }
@@ -337,14 +340,14 @@ internal static class BackgroundConversionTests
     {
         foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Up })
         {
-            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
             var session = Session(converter);
-            SessionFacadeTests.Type(session, "tanniwotoru");
+            SessionFacadeTests.Type(session, "nihongowokaku");
             var view = session.HandleKey(key, null, false, false, false, false).View;
             if (key == VirtualKeys.Space) view = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
             Assert.Equal(1, view?.SelectedClause, "最後の文節を選ぶ");
-            Assert.True(view?.Clauses is ["単位を", var last] && last != "取る", "最後の文節の候補を選び直す");
-            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            Assert.True(view?.Clauses is ["日本語を", var last] && last != "書く", "最後の文節の候補を選び直す");
+            converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
             Assert.True(session.RefreshConversion() is null, "選び直した候補を残す");
         }
     }
