@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     ARCHS: arm64
-    MARKETING_VERSION: '1.1.19'
-    CURRENT_PROJECT_VERSION: '25'
+    MARKETING_VERSION: '1.1.20'
+    CURRENT_PROJECT_VERSION: '26'
     CODE_SIGNING_ALLOWED: NO
     MELTYPE_APP_GROUP: group.com.appipinopi.meltypeflash
 # 利用状況の集計 (Aptabase)。0.4.0 以降を使う。版を固定するときは exactVersion にする。
@@ -20,7 +20,7 @@ targets:
   MeltypeFlash:
     type: application
     platform: iOS
-    sources: [AISettings.swift, AISettingsViewController.swift, Analytics.swift, ../rust/ai/packages.json, ../rust/ai/model-catalog.json, App.swift, AppStyle.swift, MeltypeTextView.swift, KeyboardAppearance.swift, AppearanceViewController.swift, KeyboardDemoViewController.swift, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, Assets.xcassets]
+    sources: [AISettings.swift, AISettingsViewController.swift, Analytics.swift, CurrencySettings.swift, CurrencySettingsViewController.swift, ../rust/ai/packages.json, ../rust/ai/model-catalog.json, App.swift, AppStyle.swift, MeltypeTextView.swift, KeyboardAppearance.swift, AppearanceViewController.swift, KeyboardDemoViewController.swift, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, Assets.xcassets]
     entitlements:
       path: generated/App.entitlements
       properties:
@@ -49,7 +49,7 @@ targets:
   MeltypeFlashKeyboard:
     type: app-extension
     platform: iOS
-    sources: [AISettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift]
+    sources: [AISettings.swift, CurrencySettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift]
     entitlements:
       path: generated/Keyboard.entitlements
       properties:

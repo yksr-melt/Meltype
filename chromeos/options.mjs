@@ -137,7 +137,9 @@ function displayFields(value) {
 for (const field of fields) field.addEventListener("change", async () => {
   try {
     const value = parseSettings();
-    value[field.dataset.setting] = field.type === "checkbox" ? field.checked : field.value;
+    const raw = field.type === "checkbox" ? field.checked : field.value;
+    // 小数の桁は数として持つ設定 (文字列で入れると保存時に型が合わない)
+    value[field.dataset.setting] = field.type === "number" ? Number(raw) || 0 : raw;
     if (field.dataset.setting === "AiModel") {
       value.UseShunti = false; aiDetailsFor(value);
     }

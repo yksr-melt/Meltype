@@ -62,6 +62,23 @@
             <label class="setting-row toggle-row" for="space-around-english"><span>英語の前後に空白を入れる</span><span class="switch-control"><input id="space-around-english" type="checkbox" role="switch" data-setting="SpaceAroundEnglish" data-help="日本語の中の英語を確定するとき、前後の空白を調整します。"><span class="switch-state" aria-hidden="true"></span></span></label>
           </fieldset>
           <fieldset class="settings-group">
+            <legend>通貨の換算</legend>
+            <div class="setting-row">
+              <label for="currency-mode">通貨のレート</label>
+              <select id="currency-mode" data-setting="CurrencyRateMode" data-help="金額の換算に使うレートの出どころです。固定はこの版に同梱した配布時のレート、手入力は自分で入れた数です。ChromeOSではネットからレートを取りません。">
+                <option value="Fixed">固定（同梱のレート）</option><option value="Manual">手入力</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label for="currency-decimals">換算した額の小数の桁</label>
+              <input id="currency-decimals" type="number" min="0" max="4" step="1" data-setting="CurrencyDecimals" data-help="換算した額を小数第何位まで書くか（0〜4。既定は 1）。0 にすると 1 の位まで、4 にすると 1.5924万円 のように書きます。">
+            </div>
+            <div class="setting-row">
+              <label for="currency-manual">手入力のレート（1単位あたりの円）</label>
+              <input id="currency-manual" type="text" data-setting="CurrencyManualRates" data-help="1 単位あたりの円。数値だけなら米ドル（150 と書くと 1 ドル=150 円）、通貨コードを書くとその通貨（USD 150、EUR=170、GBP:200）。カンマ・セミコロン・改行で区切って複数書けます。">
+            </div>
+          </fieldset>
+          <fieldset class="settings-group">
             <legend>学習</legend>
             <label class="setting-row toggle-row" for="learning-enabled"><span>変換結果を学習する</span><span class="switch-control"><input id="learning-enabled" type="checkbox" role="switch" data-setting="LearningEnabled" data-help="変換結果をこの端末で学習します。オフにしても保存済みの履歴は残ります。削除は「学習とデータ」で行えます。"><span class="switch-state" aria-hidden="true"></span></span></label>
           </fieldset>

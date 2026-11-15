@@ -283,6 +283,16 @@ class KeyboardViewController: UIInputViewController, UIContextMenuInteractionDel
         if hasFullAccess, ai.selection() == "Shunti", ai.installed, let path = ai.dataDirectory?.path {
             _ = path.withCString { meltype_ios_set_ai(session, $0, UInt32(path.utf8.count), 1) }
         } else { _ = meltype_ios_set_ai(session, nil, 0, 0) }
+        applyCurrencySettings()
+    }
+    // 通貨のレートは App Group の設定をそのまま渡す (固定・手入力と小数の桁)。
+    private func applyCurrencySettings() {
+        let selection = CurrencySettingsStore().load()
+        _ = selection.mode.withCString { mode in
+            selection.manual.withCString { manual in
+                meltype_ios_set_currency(session, mode, UInt32(selection.mode.utf8.count), manual, UInt32(selection.manual.utf8.count), Int32(selection.decimals))
+            }
+        }
     }
     private func reloadAppearance() {
         appearance = appearanceStore.load()

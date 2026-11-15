@@ -142,11 +142,24 @@ fn auto_rates_lock() -> &'static RwLock<Option<Arc<Rates>>> {
 }
 
 /// 換算に使うレート一式。設定から作る。
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Currency {
     mode: Mode,
     manual: Option<Rates>,
     auto: Option<Arc<Rates>>,
+    /// 換算した額を書く小数の桁 (0..=MAX_DECIMALS)。既定は 1。
+    decimals: u32,
+}
+
+impl Default for Currency {
+    fn default() -> Self {
+        Self {
+            mode: Mode::Fixed,
+            manual: None,
+            auto: None,
+            decimals: 1,
+        }
+    }
 }
 
 impl Currency {
@@ -157,7 +170,19 @@ impl Currency {
             .then(|| manual_rates(settings.text("CurrencyManualRates")))
             .flatten();
         let auto = (mode == Mode::Auto).then(auto_rates).flatten();
-        Self { mode, manual, auto }
+        let decimals = settings
+            .integer("CurrencyDecimals")
+            .clamp(0, i64::from(MAX_DECIMALS)) as u32;
+        Self {
+            mode,
+            manual,
+            auto,
+            decimals,
+        }
+    }
+    /// 書く小数の桁 (0..=MAX_DECIMALS)。
+    pub fn decimals(&self) -> u32 {
+        self.decimals
     }
     pub fn mode(&self) -> Mode {
         self.mode
@@ -337,24 +362,35 @@ fn group(value: u64) -> String {
     out
 }
 
-/// 小数第 1 位に丸め、1 万以上は 万・億・兆 で書く (15,923 → 1.6万、62.8 → 62.8)。
+/// 設定した桁 (既定は小数第 1 位) に丸め、1 万以上は 万・億・兆 で書く
+/// (15,923 → 1.6万、62.8 → 62.8、桁を 0 にすれば 15,923 → 2万)。
 /// 丸めると 0 になる小さな額だけは、有効数字 2 桁で書く (0.004 → 0.004)。
-fn format_value(value: f64) -> String {
+fn format_value(value: f64, decimals: u32) -> String {
     if value <= 0.0 {
         return "0".into();
     }
+    let decimals = decimals.min(MAX_DECIMALS);
+    let scale = pow10(decimals as i32);
+    let round = |value: f64| round_away(value * scale) / scale;
     // 丸めた後の桁で 万・億・兆 を選ぶ (9,999.97 → 1万)
     let (size, suffix) = [(1e12, "兆"), (1e8, "億"), (1e4, "万")]
         .iter()
-        .find(|(size, _)| round_away(value * 10.0) / 10.0 >= *size)
+        .find(|(size, _)| round(value / size) >= 1.0)
         .copied()
         .unwrap_or((1.0, ""));
-    let rounded = round_away((value / size) * 10.0) / 10.0;
+    let rounded = round(value / size);
     if rounded <= 0.0 {
-        return format!("{}{}", significant_digits(value), suffix);
+        return if decimals == 0 {
+            format!("0{suffix}")
+        } else {
+            format!("{}{}", significant_digits(value), suffix)
+        };
     }
-    format!("{}{}", group_decimals(rounded), suffix)
+    format!("{}{}", group_decimals(rounded, decimals), suffix)
 }
+
+/// 小数の桁の上限。設定 `CurrencyDecimals` はこの範囲に収める。
+pub const MAX_DECIMALS: u32 = 4;
 
 /// 有効数字 2 桁で書く (0.004・0.05)。
 fn significant_digits(value: f64) -> String {
@@ -365,7 +401,7 @@ fn significant_digits(value: f64) -> String {
     } else {
         round_away(value / scale) * scale
     };
-    group_decimals(rounded)
+    group_decimals(rounded, MAX_DECIMALS)
 }
 
 /// 0 から遠いほうへ丸める (C# の MidpointRounding.AwayFromZero と同じ)。
@@ -381,9 +417,9 @@ fn pow10(exponent: i32) -> f64 {
     10f64.powi(exponent)
 }
 
-/// 3 桁ごとに , を入れ、小数第 1 位まで書く (.0 は省く。1.6・63・1,234.5)。
-fn group_decimals(value: f64) -> String {
-    let text = format!("{value:.10}");
+/// 3 桁ごとに , を入れ、`decimals` 桁まで書く (0 は省く。1.6・63・1,234.56)。
+fn group_decimals(value: f64, decimals: u32) -> String {
+    let text = format!("{value:.*}", decimals as usize);
     let (whole, fraction) = text.split_once('.').unwrap_or((text.as_str(), ""));
     let whole = group(whole.parse::<u64>().unwrap_or(0));
     let fraction = fraction.trim_end_matches('0');
@@ -404,6 +440,7 @@ pub fn candidates_with(
     rates: &Rates,
     approximate: bool,
     note: &str,
+    decimals: u32,
 ) -> Vec<String> {
     let targets: Vec<(&str, &str)> = match to {
         Some(target) => vec![target],
@@ -416,7 +453,7 @@ pub fn candidates_with(
         let Some(value) = rates.convert(amount, from.0, code) else {
             continue;
         };
-        let text = format!("{mark}{}{unit}", format_value(value));
+        let text = format!("{mark}{}{unit}", format_value(value, decimals));
         let mut texts = vec![];
         if !note.is_empty() {
             texts.push(format!("{text}（{note}）"));
@@ -447,6 +484,7 @@ impl Currency {
             rates,
             approximate,
             &note,
+            self.decimals,
         )
     }
 }
@@ -492,11 +530,11 @@ KRW\t1600.5
         let note = "2026/11/11 のレート";
         // 100 ドル → ≒1.6万円 (小数第 1 位に丸める。万で書く)
         assert_eq!(
-            candidates_with(100.0, ("USD", "ドル"), None, &rates, true, note),
+            candidates_with(100.0, ("USD", "ドル"), None, &rates, true, note, 1),
             ["≒1.6万円（2026/11/11 のレート）", "≒1.6万円"]
         );
         assert_eq!(
-            candidates_with(10_000.0, ("JPY", "円"), None, &rates, true, note),
+            candidates_with(10_000.0, ("JPY", "円"), None, &rates, true, note, 1),
             [
                 "≒62.8ドル（2026/11/11 のレート）",
                 "≒62.8ドル",
@@ -511,7 +549,8 @@ KRW\t1600.5
                 Some(("EUR", "ユーロ")),
                 &rates,
                 true,
-                note
+                note,
+                1
             ),
             ["≒56.4ユーロ（2026/11/11 のレート）", "≒56.4ユーロ"]
         );
@@ -523,19 +562,78 @@ KRW\t1600.5
                 None,
                 &rates,
                 false,
-                "手入力のレート"
+                "手入力のレート",
+                1
             ),
             ["1.6万円（手入力のレート）", "1.6万円"]
         );
         // 1 兆以上も兆で書く (丸めで 1 兆を超えても桁を落とさない)
-        assert_eq!(format_value(1_000_000_000_000.0), "1兆");
-        assert_eq!(format_value(15_923.0), "1.6万");
-        assert_eq!(format_value(9_999.97), "1万");
-        assert_eq!(format_value(62.8), "62.8");
-        assert_eq!(format_value(1_234.56), "1,234.6");
-        assert_eq!(format_value(0.004), "0.004");
-        assert_eq!(format_value(0.0), "0");
-        assert!(candidates_with(100.0, ("THB", "バーツ"), None, &rates, true, note).is_empty());
+        assert_eq!(format_value(1_000_000_000_000.0, 1), "1兆");
+        assert_eq!(format_value(15_923.0, 1), "1.6万");
+        assert_eq!(format_value(9_999.97, 1), "1万");
+        assert_eq!(format_value(62.8, 1), "62.8");
+        assert_eq!(format_value(1_234.56, 1), "1,234.6");
+        assert_eq!(format_value(0.004, 1), "0.004");
+        assert_eq!(format_value(0.0, 1), "0");
+        assert!(candidates_with(100.0, ("THB", "バーツ"), None, &rates, true, note, 1).is_empty());
+    }
+
+    #[test]
+    fn decimals_setting_changes_how_far_the_amount_is_written() {
+        assert_eq!(format_value(62.83, 0), "63");
+        assert_eq!(format_value(62.83, 1), "62.8");
+        assert_eq!(format_value(62.834, 2), "62.83");
+        assert_eq!(format_value(62.8344, 3), "62.834");
+        assert_eq!(format_value(62.83456, 4), "62.8346");
+        assert_eq!(format_value(62.83456, 9), "62.8346", "上限は 4 桁");
+        assert_eq!(format_value(15_923.0, 0), "2万");
+        assert_eq!(format_value(15_923.0, 2), "1.59万");
+        assert_eq!(format_value(1_234.567, 2), "1,234.57");
+        assert_eq!(format_value(0.4, 0), "0");
+        assert_eq!(format_value(0.004, 0), "0");
+        assert_eq!(format_value(0.004, 2), "0.004");
+        // 設定を通すと、固定・自動・手入力のどれでも同じ桁で書く
+        let mut settings = Settings::default();
+        assert_eq!(Currency::from_settings(&settings).decimals(), 1);
+        // 同梱の表に依らないよう、手入力のレート (1 ドル = 159.2338 円) で確かめる
+        settings
+            .set("CurrencyRateMode", serde_json::json!("Manual"))
+            .unwrap();
+        settings
+            .set("CurrencyManualRates", serde_json::json!("USD 159.2338"))
+            .unwrap();
+        for (digits, expected) in [
+            (0, "2万円"),
+            (1, "1.6万円"),
+            (2, "1.59万円"),
+            (4, "1.5923万円"),
+        ] {
+            settings
+                .set("CurrencyDecimals", serde_json::json!(digits))
+                .unwrap();
+            let currency = Currency::from_settings(&settings);
+            assert_eq!(currency.decimals(), digits as u32);
+            assert_eq!(currency.candidates("100どる")[1], expected, "{digits} 桁");
+        }
+        // 固定でも同じ桁の設定が効く (≒ と日付はそのまま)
+        let mut fixed = Settings::default();
+        fixed.set("CurrencyDecimals", serde_json::json!(0)).unwrap();
+        assert_eq!(
+            Currency::from_settings(&fixed).candidates("100どる")[1],
+            "≒2万円"
+        );
+        settings
+            .set("CurrencyDecimals", serde_json::json!(99))
+            .unwrap();
+        assert_eq!(
+            Currency::from_settings(&settings).decimals(),
+            MAX_DECIMALS,
+            "多すぎる桁は上限に収める"
+        );
+        settings
+            .set("CurrencyDecimals", serde_json::json!(-1))
+            .unwrap();
+        assert_eq!(Currency::from_settings(&settings).decimals(), 0);
     }
 
     #[test]
@@ -585,7 +683,7 @@ EUR 170
         assert_eq!(rates.rates["USD"], 1.1127);
         assert_eq!(rates.rates["EUR"], 1.0);
         assert_eq!(
-            format_value(rates.convert(100.0, "USD", "JPY").unwrap()),
+            format_value(rates.convert(100.0, "USD", "JPY").unwrap(), 1),
             "1.6万"
         );
         // 書いた表を読み直すと元に戻る

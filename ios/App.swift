@@ -115,6 +115,10 @@ final class SetupViewController: UIViewController, UITextViewDelegate {
         let ai = UIButton(type: .system); ai.setTitle("AIモデル", for: .normal)
         ai.addTarget(self, action: #selector(openAISettings), for: .touchUpInside)
         stack.addArrangedSubview(ai)
+        let currency = UIButton(type: .system); currency.setTitle("通貨の換算", for: .normal)
+        currency.accessibilityIdentifier = "open-currency-settings"
+        currency.addTarget(self, action: #selector(openCurrencySettings), for: .touchUpInside)
+        stack.addArrangedSubview(currency)
         let hero = AppStyle.column(spacing: 10)
         let kicker = AppStyle.label("FLASH  /  FOR iPHONE", .caption1, color: .secondaryLabel)
         let mark = UIImageView(image: UIImage(named: "BrandMark")); mark.contentMode = .scaleAspectFit
@@ -210,6 +214,7 @@ final class SetupViewController: UIViewController, UITextViewDelegate {
     }
     func textViewDidChange(_ textView: UITextView) { placeholder.isHidden = !textView.text.isEmpty }
     @objc private func openAISettings() { navigationController?.pushViewController(AISettingsViewController(), animated: true) }
+    @objc private func openCurrencySettings() { navigationController?.pushViewController(CurrencySettingsViewController(), animated: true) }
     @objc private func openAppearance() { navigationController?.pushViewController(AppearanceViewController(), animated: true) }
     @objc private func endEditing() { view.endEditing(true) }
 }

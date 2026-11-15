@@ -214,7 +214,8 @@ pub extern "C" fn meltype_init(
         convert: None,
     };
     word_checker::configure(is_word);
-    #[cfg(windows)]
+    // 固定・自動・手入力のレートは Windows・macOS・Linux で使える
+    #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
     currency_auto::start();
     1
 }

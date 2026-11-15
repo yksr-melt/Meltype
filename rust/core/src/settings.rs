@@ -381,6 +381,12 @@ impl Settings {
             self.0
                 .insert("CurrencyRateMode".into(), json!(mode.value()));
         }
+        if self.0.contains_key("CurrencyDecimals") {
+            let digits = self
+                .integer("CurrencyDecimals")
+                .clamp(0, i64::from(crate::currency::MAX_DECIMALS));
+            self.0.insert("CurrencyDecimals".into(), json!(digits));
+        }
         let defaults = Self::default();
         for key in crate::settings_schema::OPTIONAL_BOOLEANS {
             if let Some(value) = self.0.get_mut(*key) {

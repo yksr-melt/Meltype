@@ -110,6 +110,42 @@ pub(super) fn page(handle: jlong, page: jint) -> Result<Value> {
                 &mut nodes,
                 "ソフトキーボードはローマ字入力です。JISかな入力は外付けキーボードで使用できます。",
             );
+            label(&mut nodes, "通貨の換算");
+            // Android はネットからレートを取らないので、固定と手入力の 2 つ
+            let modes = ["Fixed", "Manual"];
+            let mode = settings["CurrencyRateMode"].as_str().unwrap_or("Fixed");
+            nodes.push(json!({
+                "type":"select",
+                "text":"通貨のレート",
+                "choices":["固定（同梱のレート）","手入力"],
+                "selected":modes.iter().position(|m| *m == mode).unwrap_or(0),
+                "action":{"action":"currency_mode"},
+                "enabled":true,
+            }));
+            let digits = settings["CurrencyDecimals"]
+                .as_i64()
+                .unwrap_or(1)
+                .clamp(0, 4);
+            nodes.push(json!({
+                "type":"select",
+                "text":"換算した額の小数の桁",
+                "choices":["0","1","2","3","4"],
+                "selected":digits as i32,
+                "action":{"action":"currency_digits"},
+                "enabled":true,
+            }));
+            field(
+                &mut nodes,
+                "currency",
+                "手入力のレート（1単位あたりの円）",
+                settings["CurrencyManualRates"].as_str().unwrap_or(""),
+                2,
+            );
+            button(
+                &mut nodes,
+                "レートを保存",
+                json!({"action":"currency_save"}),
+            );
             field(
                 &mut nodes,
                 "mark",
@@ -387,6 +423,33 @@ pub(super) fn action(handle: jlong, action: Value, fields: Value) -> Result<Valu
         "mark" => (
             json!({"op":"settings_set","name":"SnippetMark","value":string(&fields,"mark")?}),
             None,
+        ),
+        "currency_mode" => {
+            let mode = match action["value"].as_i64() {
+                Some(0) => "Fixed",
+                Some(1) => "Manual",
+                _ => return Err("通貨のレートが正しくありません".into()),
+            };
+            (
+                json!({"op":"settings_set","name":"CurrencyRateMode","value":mode}),
+                Some(0),
+            )
+        }
+        "currency_digits" => {
+            let digits = action["value"]
+                .as_i64()
+                .filter(|digits| {
+                    (0..=i64::from(meltype_core::currency::MAX_DECIMALS)).contains(digits)
+                })
+                .ok_or("小数の桁が正しくありません")?;
+            (
+                json!({"op":"settings_set","name":"CurrencyDecimals","value":digits}),
+                Some(0),
+            )
+        }
+        "currency_save" => (
+            json!({"op":"settings_set","name":"CurrencyManualRates","value":string(&fields,"currency")?}),
+            Some(0),
         ),
         "dictionary_add" => (
             json!({"op":"dictionary_set","reading":string(&fields,"reading")?,"word":string(&fields,"word")?}),

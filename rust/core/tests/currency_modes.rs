@@ -72,3 +72,54 @@ fn the_mode_chooses_fixed_auto_or_manual_rates() {
         fixed
     );
 }
+
+#[test]
+fn the_decimals_setting_applies_to_every_rate_source() {
+    // 手入力 (1 ドル = 159.2338 円) で桁を変える。≒ は出どころのまま付かない
+    let with = |digits: i64| {
+        convert(
+            &[
+                ("CurrencyRateMode", json!("Manual")),
+                ("CurrencyManualRates", json!("USD 159.2338")),
+                ("CurrencyDecimals", json!(digits)),
+            ],
+            "100どる",
+        )
+    };
+    assert!(with(0).contains(&"2万円".to_owned()), "{:?}", with(0));
+    assert!(with(1).contains(&"1.6万円".to_owned()));
+    assert!(with(2).contains(&"1.59万円".to_owned()));
+    assert!(with(4).contains(&"1.5923万円".to_owned()));
+
+    // 自動も同じ桁で書く (1 ドル = 177.18/1.1127 = 159.23 円)
+    let fetched = currency::Rates::parse(
+        "# 日付: 2026-11-20
+EUR	1
+JPY	177.18
+USD	1.1127
+GBP	0.836
+",
+    )
+    .unwrap();
+    currency::set_auto_rates(Some(fetched));
+    let auto = convert(
+        &[
+            ("CurrencyRateMode", json!("Auto")),
+            ("CurrencyDecimals", json!(2)),
+        ],
+        "100どる",
+    );
+    let one = convert(
+        &[
+            ("CurrencyRateMode", json!("Auto")),
+            ("CurrencyDecimals", json!(1)),
+        ],
+        "100どる",
+    );
+    currency::set_auto_rates(None);
+    assert!(
+        auto.contains(&"≒1.59万円（2026/11/20 のレート）".to_owned()),
+        "{auto:?}"
+    );
+    assert!(one.contains(&"≒1.6万円（2026/11/20 のレート）".to_owned()));
+}

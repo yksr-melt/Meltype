@@ -40,7 +40,8 @@ pub fn metadata() -> &'static Value {
         // 通貨の換算に使うレートの出どころ。固定は同梱の配布時のレート、自動はホストが
         // ECB の参照レートを取りに行ったもの (取れなければ固定)、手入力は自分で入れた数
         data["enums"]["CurrencyRateMode"] = json!({"Fixed":"固定（同梱のレート）","Auto":"自動（ネットから取得）","Manual":"手入力"});
-        data["fields"].as_array_mut().unwrap().push(json!({"key":"CurrencyRateMode","type":"CurrencyRateMode","category":"14. 通貨","label":"通貨のレート","description":"金額の換算に使うレートの出どころです。固定はこの版に同梱した配布時のレート (小数第1位の概算)、自動はネットから取った最新のレート (Windowsのみ。取れなければ固定)、手入力は自分で入れた数です。"}));
+        data["fields"].as_array_mut().unwrap().push(json!({"key":"CurrencyRateMode","type":"CurrencyRateMode","category":"14. 通貨","label":"通貨のレート","description":"金額の換算に使うレートの出どころです。固定はこの版に同梱した配布時のレート、自動はネットから取った最新のレート (Windows・macOS・Linux。取れなければ固定)、手入力は自分で入れた数です。"}));
+        data["fields"].as_array_mut().unwrap().push(json!({"key":"CurrencyDecimals","type":"Integer","category":"14. 通貨","label":"換算した額の小数の桁","description":"換算した額を小数第何位まで書くか (0〜4。既定は 1)。固定・自動・手入力のどれでも同じ桁数で書きます。0 にすると 1 の位まで (15,923 → 2万円)、4 にすると 1.5924万円 のように書きます。"}));
         data["fields"].as_array_mut().unwrap().push(json!({"key":"CurrencyManualRates","type":"String","category":"14. 通貨","label":"手入力のレート","description":"1 単位あたりの円。数値だけなら米ドル (150 と書くと 1 ドル=150 円)、通貨コードを書くとその通貨 (USD 150、EUR=170、GBP:200)。カンマ・セミコロン・改行で区切って複数書けます。"}));
         data
     })

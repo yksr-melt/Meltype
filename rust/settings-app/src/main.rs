@@ -1955,7 +1955,7 @@ fn ui_category(key: &str, original: &str) -> &'static str {
         | "ContinueAfterConversion"
         | "CorrectTypos"
         | "StartConversionAtLastClause" => "4. 変換",
-        "CurrencyRateMode" | "CurrencyManualRates" => "14. 通貨",
+        "CurrencyRateMode" | "CurrencyDecimals" | "CurrencyManualRates" => "14. 通貨",
         "SnippetMark"
         | "CalculatorCandidates"
         | "GitHubIssueCandidates"
@@ -2100,6 +2100,7 @@ fn supported(key: &str) -> bool {
         "ZSymbols",
         "SlashAsMiddleDot",
         "CurrencyRateMode",
+        "CurrencyDecimals",
         "CurrencyManualRates",
     ]
     .contains(&key)
