@@ -553,7 +553,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 s => property.SetValue(s, combo.SelectedItem is string name && name != DefaultFontChoice ? name : ""));
         }
         if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor)
-            or nameof(Settings.SettingsWindowBackColor) or nameof(Settings.SettingsWindowTextColor))
+            or nameof(Settings.SettingsWindowBackColor) or nameof(Settings.SettingsWindowTextColor)
+            or nameof(Settings.CompositionBackColor) or nameof(Settings.CompositionTextColor) or nameof(Settings.CompositionAccentColor))
         {
             var fallback = property.Name switch
             {
@@ -561,6 +562,9 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 nameof(Settings.ModeIndicatorDirectColor) => ModeIndicatorWindow.DefaultDirectColor,
                 nameof(Settings.SettingsWindowBackColor) => SystemColors.Control,
                 nameof(Settings.SettingsWindowTextColor) => SystemColors.ControlText,
+                // 変換ボックスの既定はダークの色 (CompositionWindow の Palette.Dark)
+                nameof(Settings.CompositionBackColor) => Color.FromArgb(32, 34, 40),
+                nameof(Settings.CompositionAccentColor) => Color.FromArgb(76, 160, 255),
                 _ => Color.White,
             };
             var panel = ColorEditor(fallback, out var text);

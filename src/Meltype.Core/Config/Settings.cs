@@ -513,6 +513,18 @@ public sealed class Settings
      Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。")]
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
 
+    [Category("8. 表示"), DisplayName("変換ボックスの色: 背景"), Platforms(Platform.Windows),
+     Description("変換ボックスの背景色を #RRGGBB で書きます (例: #1E2A3A)。空なら「変換ボックスの色」(ダーク・ライト) の色。")]
+    public string CompositionBackColor { get; set; } = "";
+
+    [Category("8. 表示"), DisplayName("変換ボックスの色: 文字"), Platforms(Platform.Windows),
+     Description("変換ボックスの文字の色 (打っている文字・候補・意味) を #RRGGBB で書きます (例: #F0F0F0)。空なら「変換ボックスの色」の色。")]
+    public string CompositionTextColor { get; set; } = "";
+
+    [Category("8. 表示"), DisplayName("変換ボックスの色: 選択"), Platforms(Platform.Windows),
+     Description("選んでいる候補・文節の目印の色を #RRGGBB で書きます (例: #4CA0FF)。空なら「変換ボックスの色」の色。")]
+    public string CompositionAccentColor { get; set; } = "";
+
     [Category("8. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;

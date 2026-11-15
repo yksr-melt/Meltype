@@ -28,10 +28,17 @@ internal sealed class CompositionWindow : PopupForm
             Color.FromArgb(240, 242, 246), Color.FromArgb(30, 30, 30));
     }
 
-    /// <summary>色 (ライト / ダーク) と不透明度。変わったときだけ描き直す。</summary>
-    public void SetAppearance(bool light, double opacity)
+    /// <summary>
+    /// 色 (ライト / ダーク) と不透明度。変わったときだけ描き直す。
+    /// back・text・accent は利用者が決めた色 (issue #1509)。null ならライト / ダークの色のまま。
+    /// 文字の色は候補・意味の枠の文字にも使う (一部だけ変わると読みにくい組み合わせになるので、まとめて変える)。
+    /// </summary>
+    public void SetAppearance(bool light, double opacity, Color? back = null, Color? text = null, Color? accent = null)
     {
         var palette = light ? Palette.Light : Palette.Dark;
+        if (back is { } b) palette = palette with { Background = b, MeaningBackground = b };
+        if (text is { } t) palette = palette with { Text = t, Candidate = t, MeaningText = t };
+        if (accent is { } a) palette = palette with { Accent = a };
         opacity = Math.Clamp(opacity, 0.3, 1.0);
         if (Math.Abs(Opacity - opacity) > 0.001)
         {
