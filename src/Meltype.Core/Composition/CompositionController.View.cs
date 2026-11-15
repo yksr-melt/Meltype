@@ -103,7 +103,7 @@ public sealed partial class CompositionController
         if (!_settings().ShowCandidatesWhileTyping || _text.Mode != DisplayMode.Auto || _text.KanaInput || _text.IsAlphanumeric || _text.IsEmpty) return null;
         var kana = _text.AllKana(final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = WithoutWaiting(() => JapaneseCandidates(kana, null).Take(5).ToList());
+        var candidates = WithoutWaiting(() => JapaneseCandidates(kana, null, _converter).Take(5).ToList());
         return candidates.Count > 1 ? candidates : null;
     }
 

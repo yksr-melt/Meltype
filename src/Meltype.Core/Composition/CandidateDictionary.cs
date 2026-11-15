@@ -4,8 +4,7 @@
 namespace Meltype.Composition;
 
 /// <summary>
-/// 変換候補の補助辞書 (読み → 候補)。Microsoft IME の変換エンジンは最有力の 1 候補しか返さないので、
-/// 同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) はここから出す。
+/// 変換候補の補助辞書 (読み → 候補)。変換エンジンの候補に無い同音異義語 (はし → 橋/箸/端、とうてん → 当店/読点) を足す。
 /// 形式は 1 行に「読み 候補 候補 …」。# 以降はコメント。
 /// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
 /// </summary>
@@ -16,6 +15,10 @@ public sealed class CandidateDictionary
 
     // 絵文字・顔文字 (emoji.txt・emoji-cldr.txt)。変換の候補では最後にまとめて出すので、ほかの候補と分けて持つ。
     private readonly Dictionary<string, string[]> _emoji = new(StringComparer.Ordinal);
+
+    // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には誤った候補になりうるので、
+    // ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
+    private readonly Dictionary<string, string[]> _domain = new(StringComparer.Ordinal);
 
     public int Count => _entries.Count + _emoji.Keys.Count(k => !_entries.ContainsKey(k));
 
@@ -30,6 +33,8 @@ public sealed class CandidateDictionary
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("loanwords.txt"));
         // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
         dictionary.AddText(Detection.DictionarySource.ReadEmbedded("brands.txt"));
+        foreach (var name in Detection.DictionarySource.EmbeddedNames("domain-"))
+            dictionary.AddDomainText(Detection.DictionarySource.ReadEmbedded(name));
         if (userDirectory is not null)
         {
             var emoji = Path.Combine(userDirectory, "emoji.txt");
@@ -79,7 +84,20 @@ public sealed class CandidateDictionary
         }
     }
 
-    /// <summary>読みそのものが辞書 (絵文字を含む) にあるか (先頭一致ではなく)。</summary>
+    /// <summary>分野の辞書 (domain-*.txt)。形式は「読み<Tab>表記<Tab>表記 …」、行頭が # の行はコメント。</summary>
+    public void AddDomainText(string text)
+    {
+        foreach (var line in Detection.DictionarySource.DataLines(text))
+        {
+            var parts = line.Split('\t', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2) Add(_domain, parts[0], parts.Skip(1));
+        }
+    }
+
+    /// <summary>
+    /// 読みそのものが辞書 (絵文字を含む) にあるか (先頭一致ではなく)。読み全体を 1 つの文節にまとめるのに使う。
+    /// 分野の辞書は含めない。読みが多いので、ふだんの文 (えかく → 絵|描く) が駅名 (永覚) に合わさって 1 つの文節になってしまう。
+    /// </summary>
     public bool Contains(string reading) => _entries.ContainsKey(reading) || _emoji.ContainsKey(reading);
 
     public void Add(string reading, IEnumerable<string> words) => Add(_entries, reading, words);
@@ -104,6 +122,9 @@ public sealed class CandidateDictionary
 
     /// <summary>絵文字・顔文字以外の候補 (同音異義語・英字で書く語・社名)。</summary>
     public IReadOnlyList<string> LookupWords(string reading) => Lookup(_entries, reading);
+
+    /// <summary>分野の辞書の候補 (病名・駅名・人名など)。</summary>
+    public IReadOnlyList<string> LookupDomain(string reading) => Lookup(_domain, reading);
 
     /// <summary>絵文字・顔文字の候補 (手で書いた emoji.txt の順 → CLDR の順)。</summary>
     public IReadOnlyList<string> LookupEmoji(string reading) => Lookup(_emoji, reading);

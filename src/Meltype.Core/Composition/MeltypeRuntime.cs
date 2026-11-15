@@ -19,6 +19,7 @@ public sealed class MeltypeRuntime : IDisposable
     private readonly CompositionServices _shared;
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
+    private readonly List<IDisposable> _converters = [];
     // 入力していない間も config.json の書き換えを読む (読み直したら SettingsChanged を出す)
     private readonly Timer _settingsCheck;
 
@@ -107,8 +108,30 @@ public sealed class MeltypeRuntime : IDisposable
     public GitHubIssueTitles GitHubTitles { get; } = new();
 
     /// <summary>
-    /// 入力欄 1 つ分の本体を作る。converter は OS ごとの変換エンジン、moreCandidates は読みに対する OS の候補の一覧 (無ければ null)。
-    /// autoSpacing は、英単語の前後の空白を Meltype が整えるか (変換エンジンが空白を入れない OS)。
+    /// 変換エンジン (Mozc と、設定で ON なら Zenzai)。プロセスで 1 つ作り、入力欄の本体で共有する。止めるのは <see cref="Dispose"/>。
+    /// appDirectory は、同梱の Mozc のヘルパー (mozc/meltype_mozc_helper) と Zenzai (zenzai/) を置いたフォルダー。
+    /// </summary>
+    public HybridConverter CreateConverter(string appDirectory)
+    {
+        // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
+        ZenzaiConverter.EndStaleServers();
+        var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
+        var mozc = new MozcConverter(helper, Path.Combine(DataDirectory, "mozc"));
+        var zenzai = new ZenzaiHolder();
+        _converters.Add(mozc);
+        _converters.Add(zenzai);
+        ZenzaiStatus = () => Settings.Current.UseZenzai ? zenzai.Status ?? "まだ起動していません (日本語を変換すると起動します)" : null;
+        return new HybridConverter(mozc, () => Settings.Current is { UseZenzai: true } settings
+            ? zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath, appDirectory), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath, appDirectory), settings.ZenzaiDevice)
+            : zenzai.Get("", ""), zenzai.Failed);
+    }
+
+    /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
+    public Func<string?> ZenzaiStatus { get; private set; } = () => null;
+
+    /// <summary>
+    /// 入力欄 1 つ分の本体を作る。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。
+    /// autoSpacing は、つなげて打った英語の決まり文句 (seeyou) に空白を入れるか (今は Mac だけ)。
     /// directModeDetection なら、英数状態で打ち始めた語がローマ字かを判定して日本語に戻す (設定「英数状態で自動判定」。今は Windows だけ)。
     /// </summary>
     /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
@@ -126,13 +149,16 @@ public sealed class MeltypeRuntime : IDisposable
             // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
             ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
         };
-        return new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
+        var session = new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
+        if (converter is HybridConverter hybrid) session.ReadingOf = hybrid.Reading;
+        return session;
     }
 
     public void Dispose()
     {
         _settingsCheck.Dispose();
         _nowPlaying?.Dispose();
+        foreach (var converter in _converters) converter.Dispose();
     }
 
     /// <summary>学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて消す。ユーザー辞書と設定は消さない。</summary>

@@ -206,14 +206,14 @@ public sealed partial class CompositionController
                 else if (SpaceCommitsMarkdownMarker())
                 {
                     // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
-                    CommitText(_text.Raw + " ", english: false, preserveText: true);
+                    CommitText(_text.Raw + " ", english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
                 }
                 else if (SpaceCommitsAlphanumeric())
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null)) + " ", english: true, _text.Raw);
-                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw);
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? kana => Convert(kana, _converter) : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
                     // Space で変換した = 語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
@@ -421,6 +421,7 @@ public sealed partial class CompositionController
 
     private void Hold(KeyEvent e)
     {
+        if (_heldLetters.Length == 0) _privateComposition = Private;
         _heldLetters.Append(VirtualKeys.ToLetter(e.Vk));
         _heldLastKeyTime = e.TimeMs;
         SendHeld(e);
@@ -473,7 +474,7 @@ public sealed partial class CompositionController
         _out.DeleteHeld(sent);
         ClearHeld();
         _services.DirectDecided?.Invoke(true);
-        BeginComposition();
+        BeginComposition(_privateComposition);
         foreach (var c in letters)
         {
             if (_text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) _text.AppendKana(c, kana);
@@ -620,9 +621,11 @@ public sealed partial class CompositionController
                 Resize(-1);
                 return true;
             case VirtualKeys.Right:
+                SplitWholeSentence();
                 _selectedClause = Math.Min(_selectedClause + 1, _clauses.Count - 1);
                 return true;
             case VirtualKeys.Left:
+                SplitWholeSentence();
                 _selectedClause = Math.Max(_selectedClause - 1, 0);
                 return true;
             case VirtualKeys.Return when shift && _settings().PartialCommit && _selectedClause < _clauses.Count - 1:
@@ -710,6 +713,7 @@ public sealed partial class CompositionController
     {
         StartConversion();
         if (!_converting) return;
+        SplitWholeSentence();
         var shift = _shift;
         _selectedClause = vk == VirtualKeys.Left ? _clauses.Count - 1 : 0;
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
@@ -786,7 +790,7 @@ public sealed partial class CompositionController
         LearnClauses();
         var text = string.Concat(done.Select(c => c.Text));
         CommitText(text, done.All(c => c.IsEnglish), "", chosen: true);
-        BeginComposition();
+        BeginComposition(_privateComposition);
         foreach (var clause in rest)
         {
             if (clause.IsEnglish)

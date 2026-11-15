@@ -226,7 +226,7 @@ public sealed class MeltypeSession
 
     public bool DirectEnglishWord => _directEnglishWord;
 
-    /// <summary>入力を覚えないように求める入力欄か (Windows のブラウザーのシークレット / InPrivate ウィンドウ)。true の間は学習しない。</summary>
+    /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
     public bool Private
     {
         get => _controller.Private;
@@ -348,7 +348,7 @@ public sealed class MeltypeSession
         set => _controller.Selection = value;
     }
 
-    /// <summary>漢字かな交じりの文の読み (再変換。OS の機能)。分からなければ null。</summary>
+    /// <summary>漢字かな交じりの文の読み (再変換。Mozc の逆変換)。分からなければ null。</summary>
     public Func<string, string?> ReadingOf
     {
         set => _controller.ReadingOf = value;
@@ -475,6 +475,16 @@ public sealed class MeltypeSession
         var result = _controller.CommitPending();
         _controller.ResetContext();
         return result;
+    }
+
+    internal void CancelPending()
+    {
+        _controller.CancelPending();
+        _directEnglishWord = false;
+        CodeInput = false;
+        CodeTerminal = false;
+        Selection = null;
+        CanDeleteSurrounding = true;
     }
 
     /// <summary>

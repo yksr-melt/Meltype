@@ -62,7 +62,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
     private const int SettleMs = 60;
 
-    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず今までの変換エンジンに任せる。
+    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
@@ -181,7 +181,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる。
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。
         // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
         var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
@@ -344,12 +344,16 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             info.ArgumentList.Add("--poll");
             info.ArgumentList.Add("0");
             info.Environment.TryAdd("KMP_BLOCKTIME", "5");
-            KillStaleServer();
+            EndStaleServers();
             var process = Process.Start(info);
             if (process is null) { Fail(); return; }
             // Meltype が強制終了されても、llama-server が残らないようにする (Windows: ジョブに入れる。入れておくと、親が消えたとき OS が一緒に終わらせる)
             BindToThisProcess(process);
-            WritePidFile(process);
+            using (var self = Process.GetCurrentProcess())
+            {
+                _pidFile = RecordServer(process.Id, Path.GetFileNameWithoutExtension(_serverPath), process.StartTime.ToUniversalTime().Ticks,
+                    self.Id, self.StartTime.ToUniversalTime().Ticks);
+            }
             // 出力を読み捨てる (読まないとパイプが詰まってサーバーが止まる)
             process.OutputDataReceived += static (_, _) => { };
             process.ErrorDataReceived += static (_, _) => { };
@@ -357,7 +361,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             process.BeginErrorReadLine();
             lock (_gate)
             {
-                if (_disposed) { Kill(process); return; }
+                if (_disposed)
+                {
+                    Kill(process);
+                    DeletePidFile();
+                    return;
+                }
                 _process = process;
             }
             var endpoint = new Uri($"http://127.0.0.1:{port}/");
@@ -411,30 +420,70 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     // ---- llama-server を残さない ----
 
-    private static string PidFile => Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
+    // 起動した llama-server 1 つにつき 1 ファイル。同じ PC で Meltype が複数動く (IME と自己診断など) ので、持ち主の Meltype も書く
+    internal static string PidDirectory => Path.Combine(Path.GetTempPath(), "meltype-zenzai");
 
-    private void WritePidFile(Process process)
-    {
-        try { File.WriteAllText(PidFile, $"{process.Id}\n{Path.GetFileNameWithoutExtension(_serverPath)}\n{process.StartTime.ToUniversalTime().Ticks}"); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
-    }
+    private string? _pidFile;
 
-    /// <summary>
-    /// 前の Meltype が強制終了されて残った llama-server (PID ファイルに書いてあるもの) を終わらせる。
-    /// PID は使い回されるので、名前に加えて起動した時刻も同じときだけ (ユーザーが自分で動かしている別の llama-server を止めないように)。
-    /// </summary>
-    private static void KillStaleServer()
+    /// <summary>起動した llama-server と、持ち主の Meltype を書いておく (<see cref="EndStaleServers"/> が読む)。書いたファイルを返す。</summary>
+    internal static string? RecordServer(int pid, string name, long startTicks, int ownerPid, long ownerStartTicks)
     {
         try
         {
-            if (!File.Exists(PidFile)) return;
-            var lines = File.ReadAllLines(PidFile);
-            File.Delete(PidFile);
-            if (lines.Length < 3 || !int.TryParse(lines[0], out var pid) || pid == Environment.ProcessId || !long.TryParse(lines[2], out var startTicks)) return;
-            using var stale = Process.GetProcessById(pid);
-            if (string.Equals(stale.ProcessName, lines[1], StringComparison.OrdinalIgnoreCase) && stale.StartTime.ToUniversalTime().Ticks == startTicks) Kill(stale);
+            Directory.CreateDirectory(PidDirectory);
+            var file = Path.Combine(PidDirectory, $"{pid}.pid");
+            File.WriteAllText(file, $"{pid}\n{name}\n{startTicks}\n{ownerPid}\n{ownerStartTicks}");
+            return file;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>
+    /// 持ち主の Meltype が終わったのに残っている llama-server (強制終了されたときなど) を終わらせる。持ち主が動いているものは止めない。
+    /// PID は使い回されるので、プロセスは名前と起動した時刻も同じときだけ同じものとみなす (ユーザーが自分で動かしている別の llama-server を止めないように)。
+    /// </summary>
+    public static void EndStaleServers()
+    {
+        string[] files;
+        try { files = Directory.Exists(PidDirectory) ? Directory.GetFiles(PidDirectory, "*.pid") : []; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+        foreach (var file in files)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(file);
+                if (lines.Length < 5 || !int.TryParse(lines[0], out var pid) || !long.TryParse(lines[2], out var startTicks) ||
+                    !int.TryParse(lines[3], out var ownerPid) || !long.TryParse(lines[4], out var ownerStartTicks))
+                {
+                    File.Delete(file);
+                    continue;
+                }
+                if (IsRunning(ownerPid, null, ownerStartTicks)) continue;
+                File.Delete(file);
+                if (!IsRunning(pid, lines[1], startTicks)) continue;
+                using var stale = Process.GetProcessById(pid);
+                Kill(stale);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        }
+    }
+
+    private void DeletePidFile()
+    {
+        try { if (_pidFile is not null) File.Delete(_pidFile); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>pid のプロセスが動いていて、起動した時刻 (と name があれば名前) が同じか。</summary>
+    private static bool IsRunning(int pid, string? name, long startTicks)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return (name is null || string.Equals(process.ProcessName, name, StringComparison.OrdinalIgnoreCase)) &&
+                process.StartTime.ToUniversalTime().Ticks == startTicks;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return false; }
     }
 
     private static IntPtr s_job;
@@ -531,6 +580,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             Kill(process);
             process.Dispose();
         }
+        DeletePidFile();
         _http.Dispose();
     }
 }

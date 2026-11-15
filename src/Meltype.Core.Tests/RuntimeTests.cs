@@ -21,6 +21,41 @@ internal static class RuntimeTests
     }
 
     [Test]
+    public static void Dispose_EndsTheZenzaiServer()
+    {
+        // Mac・Linux には Windows のジョブオブジェクトが無いので、終了するとき (meltype_shutdown) に解放して llama-server を終わらせる
+        if (OperatingSystem.IsWindows() || !File.Exists("/bin/sh")) return;
+        var app = Path.Combine(Path.GetTempPath(), "meltype-app-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(app, "zenzai"));
+        var server = Path.Combine(app, "zenzai", "llama-server");
+        File.WriteAllText(server, "#!/bin/sh\nexec sleep 120\n");
+        File.SetUnixFileMode(server, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        File.WriteAllText(Path.Combine(app, "zenzai", "model.gguf"), "");
+        try
+        {
+            WithRuntime((runtime, _) =>
+            {
+                // 変換すると Zenzai (偽の llama-server) を起動する
+                runtime.CreateConverter(app).ConvertClauses("きょう");
+                string? record = null;
+                for (var i = 0; i < 100 && record is null; i++)
+                {
+                    record = Directory.Exists(ZenzaiConverter.PidDirectory)
+                        ? Directory.GetFiles(ZenzaiConverter.PidDirectory, "*.pid").FirstOrDefault(f => File.ReadAllLines(f) is [_, "llama-server", _, var owner, _] && owner == Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                        : null;
+                    if (record is null) Thread.Sleep(50);
+                }
+                Assert.True(record is not null, "llama-server を起動して記録した");
+                using var process = System.Diagnostics.Process.GetProcessById(int.Parse(File.ReadAllLines(record!)[0], System.Globalization.CultureInfo.InvariantCulture));
+                runtime.Dispose();
+                Assert.True(process.WaitForExit(5000), "解放したら llama-server を終わらせる");
+                Assert.True(!File.Exists(record), "終わらせた llama-server の記録を消す");
+            });
+        }
+        finally { Directory.Delete(app, recursive: true); }
+    }
+
+    [Test]
     public static void DirectModeDetection_ReturnsRomajiToJapanese()
     {
         // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。Mac・Linux ではまだ判定しない (#1724)
