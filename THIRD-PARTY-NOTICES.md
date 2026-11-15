@@ -38,7 +38,6 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 
 次は Windows に標準で入っているものを実行時に呼び出すだけで、Meltype には含まれません。
 
-- Windows のスペルチェッカー (ISpellChecker)
 - UI Automation、IMM32、Text Services Framework
 
 ## 辞書
@@ -77,7 +76,7 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 
 ### よく使う英単語 (dictionaries/english-words.txt)
 
-Windows のスペルチェッカーが使えない環境 (Mac 版・Linux 版・テスト) で英単語を知るのに使います。[SCOWL](http://wordlist.aspell.net/) (Spell Checker Oriented Word Lists、2020.12.07) の大きさ 35 までの english / american の語のうち、小文字の英字だけの語を `tools/make-english-words.mjs` で取り出して作りました。SCOWL の Copyright ファイルの全文:
+全 OS で英単語を知るのに使います。[SCOWL](http://wordlist.aspell.net/) (Spell Checker Oriented Word Lists、2020.12.07) の大きさ 35 までの english / american の語のうち、小文字の英字だけの語を `tools/make-english-words.mjs` で取り出して作りました。SCOWL の Copyright ファイルの全文:
 
 ```
 The collective work is Copyright 2000-2018 by Kevin Atkinson as well
