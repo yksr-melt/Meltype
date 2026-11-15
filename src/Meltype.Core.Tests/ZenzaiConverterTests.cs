@@ -139,13 +139,9 @@ internal static class ZenzaiConverterTests
             using var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
             var hybrid = new HybridConverter(mozc);
 
-            using var forgotten = new ManualResetEventSlim();
-            runtime.ForgetZenzaiHallucinations(hybrid, forget =>
-            {
-                forget();
-                forgotten.Set();
-            });
-            Assert.True(forgotten.Wait(15000), "偽の Mozc のヘルパーが 15 秒で答えなかった");
+            // 裏のスレッドで Mozc に聞き終えると、全部まとめて消す (予測変換の語句は最後に消す)
+            runtime.ForgetZenzaiHallucinations(hybrid);
+            for (var i = 0; i < 300 && runtime.Phrases.Entries().Any(e => e.Text == "名前は魚のは"); i++) Thread.Sleep(50);
             foreach (var e in conversions.Take(2)) Assert.True(runtime.History.Get(e[0]) is null, $"{e[0]} → {e[1]} は消す");
             foreach (var e in conversions.Skip(2)) Assert.Equal(e[1], runtime.History.Get(e[0]), $"{e[0]} → {e[1]} は残す");
             Assert.Equal("名前は", string.Join(",", runtime.Phrases.StartingWith("なま")), "予測変換の語句も消す");
