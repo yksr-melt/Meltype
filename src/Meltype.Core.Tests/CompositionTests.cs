@@ -1467,13 +1467,14 @@ internal static class CompositionTests
     public static void Clauses_InterjectionE_AndGachi()
     {
         // summary.json: 文頭の「え、」が 得、、がちで が 勝ちで になっていた (勝ち の読みは かち)
-        foreach (var (typed, expected) in new[] { ("e,shiran ", "え|、|知らん"), ("ekaku ", "絵|描く"), ("gachideyabai ", "ガチで|ヤバい"),
+        // 英日の区切りの別案 (え、し|ran) があると文全体の 1 文節になるので、文節の区切りでなく変換した文で比べる
+        foreach (var (typed, expected) in new[] { ("e,shiran ", "え、知らん"), ("ekaku ", "絵描く"), ("gachideyabai ", "ガチでヤバい"),
             // 英単語 + する: push|下、commit|死体 になっていた。英単語の無いところ (した = 下) は変換エンジンのまま
-            ("pushshita ", "push|した"), ("commitshitai ", "commit|したい"), ("shita ", "下") })
+            ("pushshita ", "pushした"), ("commitshitai ", "commitしたい"), ("shita ", "下") })
         {
             var k = new Keyboard();
             k.Type(typed);
-            Assert.Equal(expected, string.Join("|", k.Host.View!.Clauses!), typed);
+            Assert.Equal(expected, string.Concat(k.Host.View!.Clauses!), typed);
         }
     }
 
@@ -5152,6 +5153,170 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1737_SegmentationAlternativesAreSentenceCandidates()
+    {
+        // botto は bot|と とも ぼっと とも読める。英日の区切りの案ごとの文を、文全体の 1 つの文節の候補にする
+        var k = new Keyboard();
+        k.Type("botto ");
+        Assert.Equal("botと", string.Join("|", k.Host.View!.Clauses!));
+        Assert.True(k.Host.View.Candidates.Contains("ぼっと"), string.Join(" ", k.Host.View.Candidates));
+        while (string.Concat(k.Host.View!.Clauses!) != "ぼっと") k.Type(" ");
+        k.Type("\n");
+        Assert.Equal("ぼっと", k.Host.Output.Single());
+    }
+
+    [Test]
+    public static void Issue1737_ArrowSplitsSelectedAlternativeIntoClauses()
+    {
+        // → / ← で、選んでいる案の文節に分けて、文節ごとに選び直せる
+        var k = new Keyboard();
+        k.Type("botto ");
+        k.Press(VirtualKeys.Right);
+        Assert.Equal("bot|と", string.Join("|", k.Host.View!.Clauses!));
+        Assert.Equal(1, k.Host.View.SelectedClause);
+
+        var j = new Keyboard();
+        j.Type("botto ");
+        while (string.Concat(j.Host.View!.Clauses!) != "ぼっと") j.Type(" ");
+        j.Press(VirtualKeys.Left);
+        Assert.Equal("ぼっと", string.Join("|", j.Host.View!.Clauses!));
+        j.Type("\n");
+        Assert.Equal("ぼっと", j.Host.Output.Single());
+    }
+
+    [Test]
+    public static void Issue1737_ShiftArrowResizesSelectedAlternative()
+    {
+        // Shift + ← → も、選んでいる案の文節に分けてから区切りを動かす
+        var k = new Keyboard();
+        k.Type("botto ");
+        while (string.Concat(k.Host.View!.Clauses!) != "ぼっと") k.Type(" ");
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift, up: true);
+        Assert.Equal("ぼっ|と", string.Join("|", k.Host.View!.Clauses!));
+    }
+
+    [Test]
+    public static void Issue1737_EnglishEndingShowsAlternativesWithShiftSpace()
+    {
+        // 英単語で終わる入力は、Space では今までどおり確定して空白を入れる。Shift+Space で変換すると区切りの案を出す
+        var space = new Keyboard();
+        space.Type("kyouhaMake ");
+        Assert.Equal("きょうはMake ", space.Host.Document);
+
+        var k = new Keyboard();
+        k.Type("kyouhaMake");
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Space);
+        k.Key(VirtualKeys.LShift, up: true);
+        Assert.True(k.Host.View!.Candidates.Contains("今日は負け"), string.Join(" ", k.Host.View.Candidates));
+    }
+
+    [Test]
+    public static void Issue1737_SpaceAfterF6ConvertsEverythingAsJapanese()
+    {
+        // F6 でかなにして見せた入力は、Space でも英語の区間に戻さず、すべてローマ字として読んで変換する
+        var k = new Keyboard();
+        k.Type("kyouhaMake");
+        k.Press(VirtualKeys.F6);
+        k.Type(" ");
+        Assert.Equal("今日は|負け", string.Join("|", k.Host.View!.Clauses!));
+
+        var j = new Keyboard();
+        j.Type("botto");
+        j.Press(VirtualKeys.F6);
+        j.Type(" \n");
+        Assert.Equal("ぼっと", j.Host.Output.Single());
+
+        // F6 を押さなければ、今までどおり英語の区間は英語のまま
+        var auto = new Keyboard();
+        auto.Type("kyouhaMake");
+        auto.Press(VirtualKeys.Right);
+        Assert.Equal("今日は|Make", string.Join("|", auto.Host.View!.Clauses!));
+    }
+
+    /// <summary>Zenzai を使える変換エンジンの代わり。Zenzai に頼む呼び出し (Convert・ConvertClauses) と頼まない呼び出しの読みを記録する。</summary>
+    private sealed class RecordingStandaloneConverter : IKanjiConverter, IStandaloneConverter
+    {
+        private readonly FakeConverter _inner = new();
+        public List<string> WithZenzai { get; } = [];
+        public List<string> WithoutZenzai { get; } = [];
+
+        public string? Convert(string hiragana)
+        {
+            WithZenzai.Add(hiragana);
+            return _inner.Convert(hiragana);
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        {
+            WithZenzai.Add(hiragana);
+            return _inner.ConvertClauses(hiragana, context);
+        }
+
+        public string? ConvertStandalone(string hiragana)
+        {
+            WithoutZenzai.Add(hiragana);
+            return _inner.Convert(hiragana);
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null)
+        {
+            WithoutZenzai.Add(hiragana);
+            return _inner.ConvertClauses(hiragana, context);
+        }
+    }
+
+    [Test]
+    public static void Issue1737_OtherAlternativesDoNotAskZenzai()
+    {
+        // Zenzai は最後に頼まれた 1 件だけを裏で処理するので、2 番目以降の区切りの案 (きょうはぼっと) は Zenzai に頼まない。
+        // いちばん良い案 (今日は|bot|と) の日本語は、今までどおり Zenzai に頼む
+        var converter = new RecordingStandaloneConverter();
+        var k = new Keyboard(converter: converter);
+        k.Type("kyouhabotto ");
+        Assert.True(k.Host.View!.Candidates.Contains("きょうはぼっと"), string.Join(" ", k.Host.View.Candidates));
+        Assert.True(converter.WithZenzai.Contains("きょうは"), string.Join(" ", converter.WithZenzai));
+        Assert.True(!converter.WithZenzai.Contains("きょうはぼっと"), string.Join(" ", converter.WithZenzai));
+        Assert.True(converter.WithoutZenzai.Contains("きょうはぼっと"), string.Join(" ", converter.WithoutZenzai));
+    }
+
+    [Test]
+    public static void Issue1737_NoKanaAlternativeWithUnreadableLetters()
+    {
+        // ローマ字として読めない英字が残る読み (google → ごおgぇ) は日本語の案にならないので、すべてかなの案は出さない
+        var k = new Keyboard();
+        k.Type("kyouhagooglede ");
+        Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains("ごお", StringComparison.Ordinal)), string.Join(" ", k.Host.View.Candidates));
+    }
+
+    [Test]
+    public static void Issue1737_F7OnWholeSentenceCommitsKatakana()
+    {
+        // 文全体の文節で F7 を押すと、変換をやめて入力全体をカタカナにする (文節に分けずに確定する)
+        var k = new Keyboard();
+        k.Type("botto ");
+        Assert.Equal("botと", string.Join("|", k.Host.View!.Clauses!));
+        k.Press(VirtualKeys.F7);
+        k.Type("\n");
+        Assert.Equal("ボット", k.Host.Output.Single());
+    }
+
+    [Test]
+    public static void Issue1737_SingleClauseAlternativeKeepsItsCandidates()
+    {
+        // sushi は 英語 / すし の 1 文節ずつの案。文全体の候補の後ろに、それぞれの文節の候補 (スシ) も並べて、選んで確定できる
+        var k = new Keyboard();
+        k.Type("sushi ");
+        Assert.True(k.Host.View!.Candidates.Contains("sushi"), string.Join(" ", k.Host.View.Candidates));
+        Assert.True(k.Host.View.Candidates.Contains("スシ"), string.Join(" ", k.Host.View.Candidates));
+        while (string.Concat(k.Host.View!.Clauses!) != "スシ") k.Type(" ");
+        k.Type("\n");
+        Assert.Equal("スシ", k.Host.Output.Single());
+    }
+
+    [Test]
     public static void Clauses_ShiftArrowResizes()
     {
         var k = new Keyboard();
@@ -5797,6 +5962,87 @@ internal static class CompositionTests
             if (before.Length > 0) k.Host.PrecedingText = before;
             k.Type(typed + "\n");
             Assert.Equal(expected, before + k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void Issue1899_TechnicalWordBeforeSuru_StaysEnglish()
+    {
+        // #1899: share は しゃれ とも読めるが、しゃれする・まけします は日本語として成り立たない。
+        // 技術用語の綴りのすぐ後ろが する の活用なら、その区間は英単語として読む (文頭でも同じ)。
+        foreach (var (typed, expected) in new[]
+        {
+            ("fairusharesite", "ふぁいるshareして"),
+            ("fairuwosharesite", "ふぁいるをshareして"),
+            ("fairushareshite", "ふぁいるshareして"),
+            ("fairusharesuru", "ふぁいるshareする"),
+            ("fairushareshita", "ふぁいるshareした"),
+            ("koresharesite", "これshareして"),
+            ("kyounosharesite", "きょうのshareして"),
+            ("mainnisharesite", "mainにshareして"),
+            // share 以外の技術用語も同じ (make は まけ とも読める)
+            ("fairumakeshite", "ふぁいるmakeして"),
+            ("koremakeshimasu", "これmakeします"),
+            ("korecaseshimasu", "これcaseします"),
+            // おしゃれ・おまけ は 1 語の日本語として読む (お + share / お + make に割らない)
+            ("osharesuru", "おしゃれする"),
+            ("oshareshite", "おしゃれして"),
+            ("omakesuru", "おまけする"),
+            ("omakeshite", "おまけして"),
+            // 4 文字以上という条件は無い (uri・sha も技術用語なら英語)
+            ("koreurisuru", "これuriする"),
+            ("koreurishite", "これuriして"),
+            ("koreshasuru", "これshaする"),
+            ("koreshashite", "これshaして"),
+            // ごとする は日本語として成り立つので、goto は日本語のまま
+            ("koregotosuru", "これごとする"),
+            // 日本語由来の語 (ninja) は日本語の読みのまま
+            ("ninjashite", "にんじゃして"),
+            ("ninjasuru", "にんじゃする"),
+            // 逆向き: する が続かない share 単体は今までどおり日本語 (しゃれ)
+            ("share", "しゃれ"),
+            // 文頭でも、する の活用が続けば英語
+            ("sharesuru", "shareする"),
+            ("sharesite", "shareして"),
+            ("shareshitara", "shareしたら"),
+            // する の活用は しない・します なども同じ
+            ("shareshinai", "shareしない"),
+            ("shareshimasu", "shareします"),
+            ("shareshiteiru", "shareしている"),
+            ("sharesareru", "shareされる"),
+            ("sharesarenai", "shareされない"),
+            ("makeshite", "makeして"),
+            // させ は一段動詞の使役形 (負けさせた・褒めさせて) とも読む。読みが一段動詞の語幹なら日本語のまま
+            ("wazatomakesaseta", "わざとまけさせた"),
+            ("wazatomakesaserareta", "わざとまけさせられた"),
+            ("aitewomakesasenaiyounisuru", "あいてをまけさせないようにする"),
+            ("mottohomesasete", "もっとほめさせて"),
+            ("homesaseru", "ほめさせる"),
+            ("sharesaseru", "しゃれさせる"),
+            ("sharesaseta", "しゃれさせた"),
+            // され・せず は一段動詞の使役形ではないので、する の活用として英語のまま
+            ("makesareta", "makeされた"),
+            ("makesezu", "makeせず"),
+            // させず は使役形なので、一段動詞の語幹なら日本語のまま
+            ("makesasezu", "まけさせず"),
+            ("wazatomakesasezu", "わざとまけさせず"),
+            // 一段動詞の語幹でない技術用語は させ でも英語
+            ("casesaseru", "caseさせる"),
+            ("casesasezu", "caseさせず"),
+            ("urisaseru", "uriさせる"),
+            // 技術用語でない英単語 (memo・site) と付属語 (ため・ので) は今までどおり日本語
+            ("memoshite", "めもして"),
+            ("korememoshite", "これめもして"),
+            ("fairumemoshite", "ふぁいるめもして"),
+            ("tameshite", "ためして"),
+            ("korewotameshite", "これをためして"),
+            ("sounanodeshite", "そうなのでして"),
+            ("korekarasiteshite", "これからしてして"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 

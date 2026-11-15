@@ -156,6 +156,12 @@ public sealed partial class CompositionController
         /// <summary>ユーティリティ変換の Replace の文節。候補を足さず、文節の区切りも動かさない。</summary>
         public bool Fixed { get; init; }
 
+        /// <summary>
+        /// ユーティリティ変換の Prepend で、候補の先頭に足した候補の数。変換エンジンの候補の一覧 (Expand) は、その後ろに入れる
+        /// (先頭に足した漢字の間に 言偏にふるとり が入らないように)。
+        /// </summary>
+        public int Leading { get; set; }
+
         /// <summary>候補と同じ順・件数の注記 (ユーティリティ変換が決めたもの)。null なら候補から決める (<see cref="CandidateNotes"/>)。</summary>
         public IReadOnlyList<CandidateNote>? Notes { get; init; }
 
@@ -170,6 +176,9 @@ public sealed partial class CompositionController
 
         /// <summary>候補のうち英訳 (複雑な → complex) のもの。</summary>
         public HashSet<string> Translations { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>英日の区切りの案ごとの文を候補にした、文全体の文節なら、候補の文 → その案の文節。</summary>
+        public Dictionary<string, List<Clause>>? Alternatives { get; init; }
     }
 
     public CompositionController(CompositionDetector detector, IKanjiConverter converter, Func<Config.Settings> settings, CompositionServices? services = null)
@@ -193,10 +202,21 @@ public sealed partial class CompositionController
         _text.ZSymbols = () => _settings().ZSymbols;
     }
 
-    /// <summary>入力を覚えないように求める入力欄か。true の間は学習しない。</summary>
-    public bool Private { get; set; }
+    private bool _privateField;
+    private bool _privateComposition;
 
-    private bool Learning => _settings().LearningEnabled && !Private;
+    /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
+    public bool Private
+    {
+        get => _privateField;
+        set
+        {
+            _privateField = value;
+            if (value && IsComposing) _privateComposition = true;
+        }
+    }
+
+    private bool Learning => _settings().LearningEnabled && !Private && !_privateComposition;
 
     private bool KanaInput => _settings().InputStyle == Config.InputStyle.Kana;
 
@@ -357,10 +377,12 @@ public sealed partial class CompositionController
     /// 候補を開いた後に届いた答えを反映する。文節の区切りを動かしたあとは置き換えない。
     /// 文節の並びが変わる答えは、候補を選び直したか、別の文節へ移動したあとなら置き換えない (選んでいる文節がずれる)。
     /// 候補を選び直した文節は、選んでいる候補を変えずに、新しい候補を上に入れる。何も変わらなければ false。
+    /// 英日の区切りの案を候補にした文全体の文節を選び直したあとも置き換えない。作り直すと選んだ文が新しい案に無くなることがあり、
+    /// その案の文節に分けられなくなる (← → で選び直せず、文節ごとの学習もできない)。
     /// </summary>
     private bool RefreshOpenConversion()
     {
-        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0) return false;
+        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0 || _clauses is [{ Alternatives: not null, Changed: true }]) return false;
         var (old, selected, tabStarted) = (_clauses, _selectedClause, _tabStartedConversion);
         WithoutWaiting(() =>
         {
@@ -479,6 +501,28 @@ public sealed partial class CompositionController
         _clauses = [];
         _spaceStartedConversion = false;
         _tabStartedConversion = false;
+    }
+
+    /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>
+    internal void CancelPending()
+    {
+        ClearComposition();
+        ClearHeld();
+        ForgetLastCommit();
+        _caretBefore = null;
+        _precedingText = null;
+        _followingText = null;
+        _pendingReplace = null;
+        _privateComposition = false;
+        _keptChoices.Clear();
+        _liveCache.Clear();
+        _predictions = [];
+        _predictionKey = "";
+        _predictionIndex = -1;
+        _pressed.Clear();
+        _kanaLayout.Reset();
+        _out.Begin(null, null);
+        _out.Hide();
     }
 
     /// <summary>フォーカスが変わったときなど。前の入力欄の文脈を持ち越さない。</summary>
