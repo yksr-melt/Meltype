@@ -71,7 +71,7 @@ internal static class TipEndToEnd
         var ready = new ManualResetEventSlim();
         Control? serverInvoker = null;
         uint serverThreadId = 0;
-        var settings = new Config.Settings { Mode = Config.InputMode.Tsf, LiveConversion = false, ConversionEngine = Config.ConversionEngine.System };
+        var settings = new Config.Settings { Mode = Config.InputMode.Tsf, LiveConversion = false };
         var serverThread = new Thread(() =>
         {
             var invoker = new Control();

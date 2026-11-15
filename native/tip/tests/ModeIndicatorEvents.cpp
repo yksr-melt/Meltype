@@ -9,7 +9,6 @@
 
 namespace meltype {
 HINSTANCE g_module = nullptr;
-LONG g_locks = 0;
 int toggleRequests = 0;
 double revision = 0;
 void TipLog(const wchar_t*, ...) {}
@@ -82,7 +81,7 @@ int main() {
         ComPtr<ITfCompartment> openClose;
         manager.As(&compartments);
         compartments->GetCompartment(GUID_COMPARTMENT_KEYBOARD_OPENCLOSE, &openClose);
-        auto* service = new TextService();
+        auto* service = new TextService(nullptr);
         if (FAILED(service->ActivateEx(manager.Get(), client, 0))) return 1;
         auto automatic = [&](bool open) {
             VARIANT value;

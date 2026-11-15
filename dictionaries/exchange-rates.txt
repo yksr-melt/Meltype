@@ -1,0 +1,34 @@
+# Meltype 通貨の換算に使うレート (1 ユーロあたりの各通貨の額)
+# 欧州中央銀行 (ECB) の参照レートから tools/make-exchange-rates.mjs で作成。手で直さず、スクリプトを流して作り直す。
+# 出典: European Central Bank (https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml)
+# 日付: 2026-11-12
+EUR	1
+USD	1.1081
+JPY	176.96
+CZK	24.379
+DKK	7.4754
+GBP	0.83595
+HUF	364.98
+PLN	4.4088
+RON	5.3473
+SEK	11.0628
+CHF	0.9232
+ISK	136.60
+NOK	10.5630
+TRY	55.6906
+AUD	1.6246
+BRL	6.2241
+CAD	1.5789
+CNY	7.3891
+HKD	8.6928
+IDR	20225.76
+ILS	3.5495
+INR	104.2118
+KRW	1478.32
+MXN	20.7113
+MYR	4.5194
+NZD	1.9942
+PHP	70.616
+SGD	1.4249
+THB	37.470
+ZAR	18.5219

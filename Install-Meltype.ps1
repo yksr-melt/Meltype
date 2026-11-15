@@ -39,7 +39,7 @@ if (-not $NoIme) {
         $tip = Join-Path $output 'tip'
         foreach ($arch in 'x64', 'x86') {
             New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
-            Copy-Item -LiteralPath (Join-Path $PSScriptRoot "native\tip\bin\$arch\MeltypeTip.dll"), (Join-Path $PSScriptRoot "native\tip\bin\$arch\MeltypeTip.dll.sha256") -Destination (Join-Path $tip $arch) -Force
+            Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $PSScriptRoot "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch) -Force
         }
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'native\tip\Register-Tip.ps1') -Destination $tip -Force
         . (Join-Path $PSScriptRoot 'packaging\meltype-ime.ps1')

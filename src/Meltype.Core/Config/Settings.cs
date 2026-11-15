@@ -78,16 +78,6 @@ public enum CompositionOpacity
     [Description("70%")] Percent70,
 }
 
-/// <summary>かな漢字変換のエンジン。</summary>
-public enum ConversionEngine
-{
-    /// <summary>Mozc で変換し、使えないときは OS の変換エンジン。候補は両方。</summary>
-    [Description("両方 (Mozc を優先)")] Hybrid,
-    [Description("Mozc")] Mozc,
-    /// <summary>OS の変換エンジン (Windows では Microsoft IME)。</summary>
-    [Description("Microsoft IME")] System,
-}
-
 /// <summary>句読点の組み合わせ (Microsoft IME と同じ 4 通り)。, と . を打ったときに出す文字。</summary>
 public enum PunctuationStyle
 {
@@ -217,7 +207,7 @@ public enum AppProfile
     [Description("一般")] General,
     /// <summary>コードエディター・ターミナル。英数が基本で、コメントと文字列 ("…") の中だけ日本語を判定する。</summary>
     [Description("コード")] Code,
-    /// <summary>ゲーム。Meltype は何もしない (キーを横取りせず、Windows の IME の ON/OFF にも触らない。ゲームのチャットは Windows の IME で打つ)。</summary>
+    /// <summary>ゲーム。Meltype キーボードは何もしない (キーを横取りせず、Windows の IME の ON/OFF にも触らない。ゲームのチャットは Windows の IME で打つ)。Meltype IME は英数で始め、英数ではキーを横取りしない (ImeSession.IsGame)。</summary>
     [Description("ゲーム")] Game,
 }
 
@@ -246,7 +236,7 @@ public sealed class Settings
     public bool JapaneseKeyboardOnly { get; set; }
 
     [Category("1. 全般"), DisplayName("遠隔操作などの入力も処理する"), Platforms(Platform.Windows),
-     Description("AnyDesk・VNC などの遠隔操作ソフトや、ULE4JIS などキー配列を変えるソフト (JIS キーボードを US 配列で使う) から届いたキーも、手で打ったキーと同じように処理します (OFF だと、ほかのソフトが送ったキーはそのままアプリに渡し、変換ボックスを開きません。キー配列を変えるソフトは Meltype より後に起動してください)。遠隔操作ソフトとキーボードのマクロ・自動入力のソフトは見分けられないので、ON にするとどちらも処理の対象になります。Meltype 自身が送ったキーは、ON でも処理しません。Chrome リモート デスクトップ・Parsec で操作されている間は、OFF でも処理します (Parsec は、接続していなくても Parsec が動いている間はずっと処理するので、AutoHotkey などが送ったキーも変換の対象になります)。全プロファイル共通です。")]
+     Description("Windows のタッチキーボード、AnyDesk・VNC などの遠隔操作ソフト、ULE4JIS などキー配列を変えるソフト (JIS キーボードを US 配列で使う) から届いたキーも、手で打ったキーと同じように処理します (OFF だと、ほかのソフトが送ったキーはそのままアプリに渡し、変換ボックスを開きません。キー配列を変えるソフトは Meltype より後に起動してください)。遠隔操作ソフトとキーボードのマクロ・自動入力のソフトは見分けられないので、ON にするとどちらも処理の対象になります。Meltype 自身が送ったキーは、ON でも処理しません。Chrome リモート デスクトップ・Parsec で操作されている間は、OFF でも処理します (Parsec は、接続していなくても Parsec が動いている間はずっと処理するので、AutoHotkey などが送ったキーも変換の対象になります)。全プロファイル共通です。")]
     public bool AllowInjectedInput { get; set; }
 
     [Category("1. 全般"), DisplayName("動作モード"), Platforms(Platform.Windows),
@@ -403,15 +393,12 @@ public sealed class Settings
      Description("Keyboard モードで、Space を押さなくても打ったそばから漢字に変換して表示します。")]
     public bool LiveConversion { get; set; } = true;
 
-    [Category("4. 変換"), DisplayName("変換エンジン"), Platforms(Platform.Windows),
-     Description("かな漢字変換に使うエンジン。「両方」は Mozc (Google 日本語入力のオープンソース版) で変換し、Mozc が使えないときは Microsoft IME で変換します。候補には両方の候補が出ます。")]
-    public ConversionEngine ConversionEngine { get; set; } = ConversionEngine.Hybrid;
-
+    // Linux 版は llama-server をまだ同梱していない (#1571)。同梱したら Platform.Linux を足す
     [Category("4. 変換"), DisplayName("Zenzai を使う"), Platforms(Platform.Windows | Platform.Mac),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。Windows では同梱の llama.cpp の llama-server と zenz-v3.2-small を使い、Mac では azooKey に組み込まれた Zenzai を使います。使えないとき・応答が遅いときは、今までの変換エンジンで変換します。Windows の変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。同梱の llama.cpp の llama-server と zenz-v3.2-small を使います。使えないとき・応答が遅いときは、Mozc で変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
     public bool UseZenzai { get; set; } = true;
 
-    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows),
+    [Category("4. 変換"), DisplayName("Zenzai: llama-server の場所"), Platforms(Platform.Windows | Platform.Mac),
      Description("llama.cpp の llama-server (Windows では llama-server.exe) の場所。空なら同梱のものを使います (既定)。「Zenzai を使う」が ON のときに使います。")]
     public string ZenzaiServerPath { get; set; } = "";
 
@@ -861,7 +848,7 @@ public sealed class Settings
     public bool ExcludeFullscreen { get; set; } = true;
 
     [Category("10. アプリ"), DisplayName("ゲームでは止める"), Platforms(Platform.Windows),
-     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype は何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
+     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
     [Category("10. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
@@ -912,7 +899,7 @@ public sealed class Settings
     public bool IsAppEnabled(string? processName) => FindRule(processName)?.Enabled ?? true;
 
     /// <summary>
-    /// ゲームとして Meltype を止めるか: アプリ別設定の種類が「ゲーム」か、アプリ別設定が無く、ゲームのフォルダーにあるアプリ (looksLikeGame) で「ゲームでは止める」が ON。
+    /// ゲームか (Meltype キーボードは止める。Meltype IME は英数で始める): アプリ別設定の種類が「ゲーム」か、アプリ別設定が無く、ゲームのフォルダーにあるアプリ (looksLikeGame) で「ゲームでは止める」が ON。
     /// </summary>
     public bool IsGame(string? processName, bool looksLikeGame) =>
         ProfileFor(processName) == AppProfile.Game || (StopInGames && looksLikeGame && FindRule(processName) is null);

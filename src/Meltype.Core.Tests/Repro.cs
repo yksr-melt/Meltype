@@ -220,10 +220,10 @@ internal static class Henkan
 
     public static Composition.TranslationDictionary TranslationDictionary => Translations.Value;
 
-    /// <summary>Windows のテストランナーが Microsoft IME を変換エンジンにするとき (Mozc が無いとき) に入れる。</summary>
-    public static Composition.IKanjiConverter? FallbackConverter { get; set; }
+    public static string EngineName => Mozc.Value is not null ? "Mozc" : "なし (判定だけ)";
 
-    public static string EngineName => Mozc.Value is not null ? "Mozc" : FallbackConverter is not null ? "Microsoft IME" : "なし (判定だけ)";
+    /// <summary>漢字の読み (Mozc の逆変換。--jht が出てほしい文の読みを求める)。Mozc が無ければ null。</summary>
+    public static Func<string, string?>? ReadingOf => Mozc.Value is { } mozc ? mozc.Reading : null;
 
     /// <summary>アプリと同じ設定の Meltype キーボード (ライブ変換 ON、Mozc があれば Mozc で変換)。</summary>
     public static CompositionTests.Keyboard Keyboard()
@@ -231,7 +231,7 @@ internal static class Henkan
         CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
         // Mozc には覚えさせない (覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう。
         // 確かめたいのは、まだ何も覚えていない人の最初の変換)
-        var converter = Mozc.Value is { } engine ? new WithoutLearning(engine) : FallbackConverter;
+        var converter = Mozc.Value is { } engine ? new WithoutLearning(engine) : null;
         return new(live: true, converter: converter, moreCandidates: Mozc.Value is { } mozc ? mozc.Candidates : null,
             userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
     }

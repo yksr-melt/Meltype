@@ -5,7 +5,8 @@
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Source <x64 と x86 のフォルダーがある所>
 #   powershell -ExecutionPolicy Bypass -File Register-Tip.ps1 -Unregister
 # DLL は C:\Program Files\Meltype\tip にコピーする (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所に置く)。
-# 使っているアプリが古い DLL を掴んでいても入れ替えられるように、古いものは名前を変えて残し、次の登録のときに消す。
+# 登録する DLL は stub (MeltypeTip.dll) で、stub が impl (impl\<SHA-256>\MeltypeTipImpl.dll) をロードする。
+# プロセスがロードしている stub は上書きできないので、リネームして残し、次の登録のときに削除する。
 
 param(
     [string]$Source = (Join-Path $PSScriptRoot 'bin'),
@@ -57,6 +58,23 @@ try {
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
         # 前の登録の残り (使われていて消せなかったもの) を片付ける
         Get-ChildItem -LiteralPath $folder -Filter '*.old' -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
+        # impl は、署名前のバイナリの SHA-256 のフォルダーに置く (プロセスがロードしている前の impl は、そのまま残る)。
+        # SHA-256 をファイル名にすると、Gecko (Firefox など) がロードを拒否する (Stub.cpp の CreateInner)。
+        # stub がロードする impl の指定 (MeltypeTipImpl.dll.sha256) は、stub を登録できてから書き換える (前の stub に戻したときは、前の impl を指したまま)
+        $implHash = "$(Get-Content -LiteralPath (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256") -Raw)".Trim().ToUpperInvariant()
+        if ($implHash -notmatch '^[0-9A-F]{64}$') { throw "$arch\MeltypeTipImpl.dll.sha256 の中身が SHA-256 ではありません。" }
+        $implFolder = Join-Path $folder 'impl'
+        $implDirectory = Join-Path $implFolder $implHash
+        New-Item -ItemType Directory -Force -Path $implDirectory | Out-Null
+        $impl = Join-Path $implDirectory 'MeltypeTipImpl.dll'
+        $staged = "$impl.new"
+        Copy-Item -LiteralPath (Join-Path $Source "$arch\MeltypeTipImpl.dll") -Destination $staged -Force
+        try { Move-Item -LiteralPath $staged -Destination $impl -Force }
+        catch {
+            # 同じ SHA-256 の impl をプロセスがロードしていて上書きできない: 配置済みのものを使う
+            Remove-Item -LiteralPath $staged -Force
+            if (-not (Test-Path -LiteralPath $impl)) { throw }
+        }
         $old = $null
         if (Test-Path -LiteralPath $dll) {
             $old = "$dll.$([DateTime]::Now.ToString('yyyyMMddHHmmss')).old"
@@ -82,6 +100,9 @@ try {
             }
             throw $registerError
         }
+        [IO.File]::WriteAllText((Join-Path $folder 'MeltypeTipImpl.dll.sha256'), $implHash)
+        # 前の impl は、どのプロセスもロードしていなければ削除できる (ロードされている impl は、フォルダーごと残る)
+        Get-ChildItem -LiteralPath $implFolder | Where-Object { $_.FullName -ne $implDirectory } | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
         # 署名する前の中身のハッシュ (次の更新で、同じ DLL なら登録し直さないため)
         $hash = Join-Path $Source "$arch\MeltypeTip.dll.sha256"
         if (Test-Path -LiteralPath $hash) { Copy-Item -LiteralPath $hash -Destination "$dll.sha256" -Force }

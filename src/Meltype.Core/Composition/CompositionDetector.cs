@@ -64,8 +64,8 @@ public sealed partial class CompositionDetector
 
     private static readonly Lazy<WordList> ReadableEnglish = new(() => new WordList(DictionarySource.Load("english-readable.txt", null)));
 
-    /// <summary>english.txt の「日本語由来で英語としても使われる語」(sushi, anime, tofu …)。</summary>
-    private static readonly Lazy<HashSet<string>> JapaneseOriginWords = new(() =>
+    /// <summary>english.txt の見出し (# --- 技術用語 ---) から、次の空行までの語。</summary>
+    private static HashSet<string> EnglishSection(string marker)
     {
         var words = new HashSet<string>(StringComparer.Ordinal);
         var inSection = false;
@@ -73,11 +73,11 @@ public sealed partial class CompositionDetector
         {
             if (line.StartsWith("# ---", StringComparison.Ordinal))
             {
-                inSection = line.Contains("日本語由来");
+                inSection = line.Contains(marker);
                 continue;
             }
             if (!inSection || line.StartsWith('#')) continue;
-            // 日本語由来の語の後ろに、同じ段落で続けて技術用語などを並べてあるので、空行までを読む
+            // 見出しの中に、同じ段落で続けて別の種類の語を並べてあるので、空行までを読む
             if (line.Trim().Length == 0)
             {
                 inSection = false;
@@ -86,10 +86,19 @@ public sealed partial class CompositionDetector
             foreach (var word in line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) words.Add(word);
         }
         return words;
-    });
+    }
+
+    /// <summary>english.txt の「日本語由来で英語としても使われる語」(sushi, anime, tofu …)。</summary>
+    private static readonly Lazy<HashSet<string>> JapaneseOriginWords = new(() => EnglishSection("日本語由来"));
+
+    /// <summary>english.txt の「技術用語」(github, push, share …)。日本語の文の中でも英字のまま書くことの多い語。</summary>
+    private static readonly Lazy<HashSet<string>> TechnicalEnglishWords = new(() => EnglishSection("技術用語"));
 
     /// <summary>日本語由来で英語としても使われる語か (sushi, ramen)。英文の中に出てきても、日本語のつもりのことがある。</summary>
     public static bool IsJapaneseOriginWord(string lower) => JapaneseOriginWords.Value.Contains(lower);
+
+    /// <summary>日本語の文の中でも英字のまま書くことの多い技術用語か (github, push, share)。</summary>
+    public static bool IsTechnicalEnglishWord(string lower) => TechnicalEnglishWords.Value.Contains(lower);
 
     public RomajiDetector Romaji => _romaji;
 
@@ -129,19 +138,26 @@ public sealed partial class CompositionDetector
     /// <param name="manual">自動判定を使わない (設定 AutoDetection が OFF)。Shift で打った大文字始まりの語だけを英語にする。</param>
     /// <param name="englishSentence">キャレットの前が英文 (空白で区切った英単語が 2 語以上続いて空白で終わる: "I want ")。
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
+    /// <param name="reasons">渡したら、区切りを選んだ理由を足す (確定のログ用。issue #1644)。文字列にするのはログに書くときだけ。</param>
     public IReadOnlyList<CompositionSegment> Segment(IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
-        bool manual = false, bool englishSentence = false, bool kanaInput = false)
+        bool manual = false, bool englishSentence = false, bool kanaInput = false, List<Func<string>>? reasons = null)
     {
-        // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の Segment 呼び出しの間だけ、
-        // 連結した原文と各位置のオフセットを使い回す (内容・順序は同じで、文字列を毎回連結しない)。
         Prepare(units);
         var token = _preparedRaw + pending;
-        // Structured Latin tokens are opaque; their components are not Japanese readings.
-        if (!kanaInput && token.All(c => c is >= '!' and <= '~') &&
-            (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token)))
+        if (IsOpaqueToken(token, kanaInput))
+        {
+            reasons?.Add(() => "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま");
             return [new CompositionSegment(true, "", token)];
-        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput);
+        }
+        return FindSpansByReading(units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, reasons: reasons);
     }
+
+    // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の区間分けの間だけ、Prepare で連結した原文と各位置のオフセットを使い回す
+    // (内容・順序は同じで、文字列を毎回連結しない)。
+    // Structured Latin tokens are opaque; their components are not Japanese readings.
+    private static bool IsOpaqueToken(string token, bool kanaInput) =>
+        !kanaInput && token.All(c => c is >= '!' and <= '~') &&
+        (token.Contains('@') && token.Any(char.IsAsciiLetter) || token.Contains('_') || token.Contains("://", StringComparison.Ordinal) || IsStylizedName(token));
 
     /// <summary>
     /// 英語の候補を軽くして区切り直した結果 (変換の候補に、日本語にした語の英語を含む区切り midika → midiか を出すのに使う)。

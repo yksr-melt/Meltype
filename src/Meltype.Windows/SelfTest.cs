@@ -69,15 +69,15 @@ internal static class SelfTest
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
         Check("文脈の手がかり辞書", () => ContextRules.Load(null).Choose("あつい", "気温", "厚い", _ => null) ?? "(なし)");
         Check("ユーザー辞書", () => new UserDictionary(null).Add("きごうとう", "記号等") ?? "登録できる");
-        using (var converter = new MsImeKanjiConverter())
+        Check("変換エンジン (Mozc)", () =>
         {
-            Check("変換エンジン", () => converter.Convert("きょうはいいてんき") ?? "(変換できない: Microsoft IME が無い?)");
-            Check("文節", () => string.Join("|", converter.ConvertClauses("たんいをとる")?.Select(c => c.Text) ?? ["(取れない)"]));
-        }
-        using (var candidates = new WinRtCandidates())
-        {
-            Check("Windows の変換候補", () => string.Join(",", candidates.Get("はし").Take(5)));
-        }
+            using var data = new TemporaryData();
+            using var runtime = new MeltypeRuntime(data.Directory);
+            var converter = runtime.CreateConverter(AppContext.BaseDirectory);
+            if (!converter.MozcInstalled) return "(Mozc のヘルパーが無い)";
+            // Zenzai (llama-server) は起動しない
+            return $"{converter.ConvertStandalone("きょうはいいてんき") ?? "(変換できない)"} / 漢字 → {converter.Reading("漢字") ?? "(逆変換できない)"}";
+        });
         Check("UI Automation", () => { var result = ""; var thread = new Thread(() => result = FocusInspector.Probe()); thread.SetApartmentState(ApartmentState.MTA); thread.Start(); thread.Join(); return result; });
         Check("画面", () =>
         {

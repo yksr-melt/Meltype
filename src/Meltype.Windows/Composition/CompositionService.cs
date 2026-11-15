@@ -17,33 +17,21 @@ internal sealed class CompositionService : IDisposable
     private readonly CompositionWindow _window = new();
     private readonly ModeIndicatorWindow _indicator = new();
     private readonly Func<Config.Settings> _settings;
-    // Microsoft IME と Windows の候補は、応答に上限が無い (WinRT は最大 500ms 待つ) ので入力スレッドで呼ばない。_sta のスレッドからだけ使う
-    private readonly StaThread _sta = new("Meltype Microsoft IME");
-    private readonly MsImeKanjiConverter _converter = new();
     private readonly KeyInjector _injector = new();
-    private readonly WinRtCandidates _windowsCandidates = new();
-    private BackgroundCallbackConverter _system = null!;
-    // Mozc (同梱の mozc/meltype_mozc_helper.exe) と Microsoft IME を組み合わせた変換エンジン。
-    private readonly MozcConverter _mozc = new(Path.Combine(AppContext.BaseDirectory, "mozc", "meltype_mozc_helper.exe"), Path.Combine(Config.AppPaths.DataDirectory, "mozc"));
-    private HybridConverter _hybrid = null!;
-
-    // Zenzai (llama-server + zenz の GGUF。場所が空なら同梱のもの)。設定で ON のときだけ、指定の場所・GPU の設定が変わるたびに作り直す (持ち主は ZenzaiHolder)
-    private readonly ZenzaiHolder _zenzai = new();
-    private ZenzaiConverter? CurrentZenzai() =>
-        _settings() is { UseZenzai: true } settings ? _zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath), settings.ZenzaiDevice) : _zenzai.Get("", "");
+    // Mozc (同梱の mozc\meltype_mozc_helper.exe) と Zenzai (zenzai\)
+    private readonly HybridConverter _hybrid;
 
     /// <param name="runtime">設定・辞書・学習データ (どの OS も同じもの)。</param>
-    /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="CreateSession"/> で渡す)。変換ボックスの見た目・変換エンジンを決める。</param>
+    /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="CreateSession"/> で渡す)。変換ボックスの見た目を決める。</param>
     public CompositionService(Control invoker, MeltypeRuntime runtime, Func<Config.Settings> settings)
     {
         _invoker = invoker;
         Runtime = runtime;
         _settings = settings;
-        _mozc.Budget.Enable();
-        _system = new BackgroundCallbackConverter(_converter.ConvertClauses, reading => _windowsCandidates.Get(reading), _converter.Convert, _mozc.Budget, _sta.Post);
-        _hybrid = new HybridConverter(() => settings().ConversionEngine, _mozc, _system, _system.Candidates, CurrentZenzai, _zenzai.Failed);
+        _hybrid = runtime.CreateConverter(AppContext.BaseDirectory);
+        _hybrid.Budget.Enable();
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
-        if (settings().ConversionEngine != Config.ConversionEngine.System && _mozc.IsInstalled) _mozc.WarmUp();
+        _hybrid.WarmUp();
     }
 
     public MeltypeRuntime Runtime { get; }
@@ -54,7 +42,7 @@ internal sealed class CompositionService : IDisposable
     /// </summary>
     public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false)
     {
-        var session = Runtime.CreateSession(_hybrid, settings, reading => _hybrid.Candidates(reading), directModeDetection: directModeDetection);
+        var session = Runtime.CreateSession(_hybrid, settings, _hybrid.Candidates, directModeDetection: directModeDetection);
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
         session.Corrected += correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai });
         return session;
@@ -94,35 +82,22 @@ internal sealed class CompositionService : IDisposable
         return text.Any(char.IsAsciiLetter) ? Runtime.Detector.Romaji.ConvertLenient(text.ToLowerInvariant(), final: true) : text;
     }
 
-    /// <summary>ユーザー辞書の登録画面用: 語の読みを推測する (かなならそのまま、漢字は Microsoft IME の逆変換)。分からなければ空。</summary>
-    public string GuessReading(string word)
-    {
-        if (word.All(c => KanaChars.IsHiraganaOrLongMark(c) || KanaChars.IsKatakana(c))) return KanaChars.ToHiragana(word);
-        try
-        {
-            return _sta.Invoke(() => _converter.Reading(word)) ?? "";
-        }
-        catch (Exception ex)
-        {
-            Diagnostics.Log.Warn($"読みを推測できませんでした: {ex.Message}");
-            return "";
-        }
-    }
+    /// <summary>ユーザー辞書の登録画面用: 語の読みを推測する。分からなければ空。</summary>
+    public string GuessReading(string word) => _hybrid.Reading(word) ?? "";
 
-    /// <summary>ユーザー辞書の登録画面用: 読みの変換候補 (変換エンジンの結果 → Windows の候補一覧 → カタカナ)。</summary>
+    // 登録画面は入力のスレッド (UI スレッド) から呼ぶ。入力のように待たずに返すと、ヘルパーが答える前の空の一覧になる
+    private const int SuggestWaitMs = 1500;
+
+    /// <summary>ユーザー辞書の登録画面用: 読みの変換候補 (Mozc の候補 → カタカナ)。</summary>
     public IReadOnlyList<string> SuggestWords(string reading)
     {
-        var list = new List<string>();
-        void Add(string? word) { if (!string.IsNullOrEmpty(word) && !list.Contains(word)) list.Add(word); }
-        Add(_sta.Invoke(() => _converter.Convert(reading)));
-        foreach (var word in _sta.Invoke(() => _windowsCandidates.Get(reading, 30))) Add(word);
-        Add(CompositionText.ToKatakana(reading));
+        _hybrid.Budget.Start(SuggestWaitMs);
+        var list = _hybrid.Candidates(reading).Where(word => word.Length > 0).ToList();
+        if (CompositionText.ToKatakana(reading) is { Length: > 0 } katakana && !list.Contains(katakana)) list.Add(katakana);
         return list;
     }
 
     public FocusInspector Focus { get; } = new();
-
-    public bool ConverterAvailable => _converter.IsAvailable;
 
     /// <summary>
     /// 確定した文字を入れる: 前の count 文字を消してから text を入れる。paste なら貼り付けで入れる (貼り付けられなければキーで送る。改行は Shift+Enter)。
@@ -353,6 +328,18 @@ internal sealed class CompositionService : IDisposable
         });
     }
 
+    /// <summary>text を、Meltype IME の入力モードの表示と同じ所 (入力位置の下) に milliseconds だけ出す。どのスレッドから呼んでもよい。</summary>
+    public void ShowNotice(string text, int milliseconds)
+    {
+        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
+        _invoker.BeginInvoke(() =>
+        {
+            var anchor = FindImeIndicatorAnchor();
+            _indicator.SetColors(null, Config.Settings.ParseColor(_settings().ModeIndicatorDirectColor), Config.Settings.ParseColor(_settings().ModeIndicatorTextColor));
+            _indicator.FlashNotice(text, new Point(anchor.X + 2, anchor.Y + 2), milliseconds);
+        });
+    }
+
     private Point FindImeIndicatorAnchor()
     {
         if (FindCaret() is { } caret) return new Point(caret.Left, caret.Bottom + 4);
@@ -385,11 +372,6 @@ internal sealed class CompositionService : IDisposable
 
     /// <summary>変換ボックスを出したまま確定した文字 (次に見せるときに、その幅だけ変換ボックスを右へずらす)。</summary>
     private string _committedWhileVisible = "";
-
-    /// <summary>Zenzai の今の状態 (トレイのメニューに出す)。OFF なら null。</summary>
-    public string? ZenzaiStatus(bool useZenzai, string serverPath, string modelPath) =>
-        !useZenzai ? null
-        : _zenzai.Status ?? "まだ起動していません (日本語を変換すると起動します)";
 
     public void Show(CompositionView view)
     {
@@ -651,17 +633,8 @@ internal sealed class CompositionService : IDisposable
 
     public void Dispose()
     {
+        // 変換エンジン (Mozc・Zenzai) は作った MeltypeRuntime が止める
         Focus.Dispose();
-        _system.Dispose();
-        _sta.Invoke(() =>
-        {
-            _converter.Dispose();
-            _windowsCandidates.Dispose();
-            return true;
-        });
-        _sta.Dispose();
-        _mozc.Dispose();
-        _zenzai.Dispose();
         _window.Dispose();
         _indicator.Dispose();
     }
