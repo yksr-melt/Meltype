@@ -64,8 +64,8 @@ public sealed partial class CompositionDetector
 
     private static readonly Lazy<WordList> ReadableEnglish = new(() => new WordList(DictionarySource.Load("english-readable.txt", null)));
 
-    /// <summary>english.txt の「日本語由来で英語としても使われる語」(sushi, anime, tofu …)。</summary>
-    private static readonly Lazy<HashSet<string>> JapaneseOriginWords = new(() =>
+    /// <summary>english.txt の見出し (# --- 技術用語 ---) から、次の空行までの語。</summary>
+    private static HashSet<string> EnglishSection(string marker)
     {
         var words = new HashSet<string>(StringComparer.Ordinal);
         var inSection = false;
@@ -73,11 +73,11 @@ public sealed partial class CompositionDetector
         {
             if (line.StartsWith("# ---", StringComparison.Ordinal))
             {
-                inSection = line.Contains("日本語由来");
+                inSection = line.Contains(marker);
                 continue;
             }
             if (!inSection || line.StartsWith('#')) continue;
-            // 日本語由来の語の後ろに、同じ段落で続けて技術用語などを並べてあるので、空行までを読む
+            // 見出しの中に、同じ段落で続けて別の種類の語を並べてあるので、空行までを読む
             if (line.Trim().Length == 0)
             {
                 inSection = false;
@@ -86,10 +86,19 @@ public sealed partial class CompositionDetector
             foreach (var word in line.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) words.Add(word);
         }
         return words;
-    });
+    }
+
+    /// <summary>english.txt の「日本語由来で英語としても使われる語」(sushi, anime, tofu …)。</summary>
+    private static readonly Lazy<HashSet<string>> JapaneseOriginWords = new(() => EnglishSection("日本語由来"));
+
+    /// <summary>english.txt の「技術用語」(github, push, share …)。日本語の文の中でも英字のまま書くことの多い語。</summary>
+    private static readonly Lazy<HashSet<string>> TechnicalEnglishWords = new(() => EnglishSection("技術用語"));
 
     /// <summary>日本語由来で英語としても使われる語か (sushi, ramen)。英文の中に出てきても、日本語のつもりのことがある。</summary>
     public static bool IsJapaneseOriginWord(string lower) => JapaneseOriginWords.Value.Contains(lower);
+
+    /// <summary>日本語の文の中でも英字のまま書くことの多い技術用語か (github, push, share)。</summary>
+    public static bool IsTechnicalEnglishWord(string lower) => TechnicalEnglishWords.Value.Contains(lower);
 
     public RomajiDetector Romaji => _romaji;
 

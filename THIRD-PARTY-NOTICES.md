@@ -371,6 +371,10 @@ SPDX-License-Identifier: Unicode-3.0
 
 - 出典: European Central Bank
 
+### 漢字の構成要素 (dictionaries/kanji-parts.txt)
+
+部首の呼び名から漢字を探すのに使います。[KRADFILE](https://www.edrdg.org/krad/kradinf.html) (漢字の構成要素) と [KANJIDIC2](https://www.edrdg.org/wiki/index.php/KANJIDIC_Project) (使われる頻度・画数) から `tools/make-kanji-parts.mjs` で作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。KRADFILE の著作権: Copyright 2001/2007 Michael Raine, James Breen and the Electronic Dictionary Research & Development Group。
+
 ### 国名の語 (dictionaries/countries.txt)
 
 かなに割れる国名 (Bermuda → Bermuだ) を英語にするのに使います (ローマ字として最後まで読める語は今は使わない。#1869)。[Unicode CLDR](https://github.com/unicode-org/cldr) の `common/main/en.xml` の国・地域名を `tools/make-countries.mjs` で語に分けて作りました。著作権・ライセンスは絵文字の辞書と同じ (Unicode, Inc.、Unicode License v3) です。
