@@ -116,8 +116,11 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         // indicator, but still fail if it never appears.
         const auto deadline = now(CLOCK_MONOTONIC) + 1000000;
         static std::unique_ptr<EventSourceTime> later;
-        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 20000, 20000,
-            [dispatcher, instance, ic, deadline](EventSourceTime *, uint64_t) {
+        // The third addTimeEvent argument is timer accuracy, not a repeat
+        // interval. Rearm each poll as a one-shot with a new future deadline.
+        // Keeping an expired timer enabled can spin the event loop forever.
+        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 20000, 0,
+            [dispatcher, instance, ic, deadline](EventSourceTime *timer, uint64_t) {
                 if (ic->inputPanel().auxUp().toString() == "あ") {
                     dispatcher->schedule([dispatcher, instance]() {
                         dispatcher->detach();
@@ -127,6 +130,8 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
                 }
                 FCITX_ASSERT(now(CLOCK_MONOTONIC) < deadline)
                     << "Input mode indicator did not appear: " << ic->inputPanel().auxUp().toString();
+                timer->setTime(now(CLOCK_MONOTONIC) + 20000);
+                timer->setOneShot();
                 return true;
             });
     });
