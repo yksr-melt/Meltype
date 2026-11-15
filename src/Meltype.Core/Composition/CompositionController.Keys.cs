@@ -212,7 +212,7 @@ public sealed partial class CompositionController
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? kana => Convert(kana, _converter) : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
                 else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
@@ -421,6 +421,7 @@ public sealed partial class CompositionController
 
     private void Hold(KeyEvent e)
     {
+        if (_heldLetters.Length == 0) _privateComposition = Private;
         _heldLetters.Append(VirtualKeys.ToLetter(e.Vk));
         _heldLastKeyTime = e.TimeMs;
         SendHeld(e);
@@ -473,7 +474,7 @@ public sealed partial class CompositionController
         _out.DeleteHeld(sent);
         ClearHeld();
         _services.DirectDecided?.Invoke(true);
-        BeginComposition();
+        BeginComposition(_privateComposition);
         foreach (var c in letters)
         {
             if (_text.KanaInput && Detection.KanaDetector.KanaForKey(char.ToUpperInvariant(c), char.IsAsciiLetterUpper(c)) is { } kana) _text.AppendKana(c, kana);
@@ -789,7 +790,7 @@ public sealed partial class CompositionController
         LearnClauses();
         var text = string.Concat(done.Select(c => c.Text));
         CommitText(text, done.All(c => c.IsEnglish), "", chosen: true);
-        BeginComposition();
+        BeginComposition(_privateComposition);
         foreach (var clause in rest)
         {
             if (clause.IsEnglish)
