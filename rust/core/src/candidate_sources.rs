@@ -296,7 +296,12 @@ impl Sources {
         }
         None
     }
-    pub fn candidates(&self, reading: &str, timezone: &str) -> Vec<String> {
+    pub fn candidates(
+        &self,
+        reading: &str,
+        timezone: &str,
+        currency: &crate::currency::Currency,
+    ) -> Vec<String> {
         let mut words = lookup(&self.words, reading);
         let katakana = crate::romaji::katakana(reading);
         words.extend([
@@ -309,7 +314,7 @@ impl Sources {
             chrono::Local::now().naive_local(),
             timezone,
         ));
-        words.extend(crate::currency::candidates(reading));
+        words.extend(currency.candidates(reading));
         words.extend(self.emoji(reading));
         words
     }

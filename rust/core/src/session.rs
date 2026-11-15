@@ -1319,10 +1319,11 @@ impl Session {
                     .get(&reading)
                     .cloned()
                     .unwrap_or_default();
-                values.extend(
-                    self.candidate_sources
-                        .candidates(&reading, self.settings.text("TimeZone")),
-                );
+                values.extend(self.candidate_sources.candidates(
+                    &reading,
+                    self.settings.text("TimeZone"),
+                    &crate::currency::Currency::from_settings(&self.settings),
+                ));
                 let mut unique = Vec::new();
                 for value in values {
                     if !unique.contains(&value) {
@@ -2076,13 +2077,14 @@ impl Session {
             let timezone = self.settings.text("TimeZone");
             let display = self.display(true);
             let front = self.version_front(&display);
+            let currency = crate::currency::Currency::from_settings(&self.settings);
             candidates.extend(
                 self.dictionary()
-                    .candidates_with_front(&display, timezone, &front),
+                    .candidates_with_front(&display, timezone, &front, &currency),
             );
             candidates.extend(
                 self.dictionary()
-                    .candidates_with_front(&reading, timezone, &front),
+                    .candidates_with_front(&reading, timezone, &front, &currency),
             );
             candidates.extend(Linguistics::bundled().words(&reading));
             candidates.extend(self.clipboard_candidates(&reading));
@@ -2407,10 +2409,11 @@ impl Session {
                 values.push(standalone.clone());
             }
             if !self.external_converter_only {
-                values.extend(
-                    self.candidate_sources
-                        .candidates(&clause.reading, self.settings.text("TimeZone")),
-                );
+                values.extend(self.candidate_sources.candidates(
+                    &clause.reading,
+                    self.settings.text("TimeZone"),
+                    &crate::currency::Currency::from_settings(&self.settings),
+                ));
                 values.extend(self.clipboard_candidates(&clause.reading));
                 // MeaningDictionary supplies annotations in the original, not
                 // extra conversion candidates. Adding its reverse readings
@@ -2696,6 +2699,7 @@ impl Session {
                 &reading,
                 self.settings.text("TimeZone"),
                 &front,
+                &crate::currency::Currency::from_settings(&self.settings),
             ));
             candidates.extend(Linguistics::bundled().words(&reading));
         }

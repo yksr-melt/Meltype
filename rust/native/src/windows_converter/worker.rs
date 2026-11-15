@@ -437,6 +437,7 @@ impl Drop for Scope {
     }
 }
 pub(crate) fn scope(settings: &meltype_core::settings::Settings) -> Scope {
+    crate::currency_auto::start();
     Scope(
         with_backend(|backend| {
             if backend.shunti.configure(settings) {

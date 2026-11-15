@@ -2207,6 +2207,7 @@ dependencies = [
 name = "meltype-native"
 version = "1.1.19"
 dependencies = [
+ "chrono",
  "jni 0.21.1",
  "libc",
  "meltype-ai",

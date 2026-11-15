@@ -72,10 +72,39 @@ fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(Some(0)).collect()
 }
 /// No user text is included by this transport. Call outside input/UI locks.
+/// Bounded HTTPS GET for a fixed host and path (1 MB, 5 s, no redirects).
+pub fn get_text(host: &str, path: &str, accept: &str) -> Option<String> {
+    if host.is_empty()
+        || !host.bytes().all(|b| b.is_ascii_graphic())
+        || host.contains('/')
+        || !path.starts_with('/')
+        || !path.bytes().all(|b| b.is_ascii_graphic())
+        || !accept
+            .bytes()
+            .all(|b| b.is_ascii_graphic() || b == b'/' || b == b' ')
+    {
+        return None;
+    }
+    let headers = format!("Accept: {accept}\r\n");
+    String::from_utf8(request(host, path, &headers)?).ok()
+}
+
+/// Bounded HTTPS JSON read from api.github.com. Redirects are disabled.
 pub fn get_api_json(path: &str, token: Option<&str>) -> Option<serde_json::Value> {
     if !path.starts_with("/repos/") || !path.bytes().all(|b| b.is_ascii_graphic()) {
         return None;
     }
+    let mut headers = "Accept: application/vnd.github+json\r\n".to_owned();
+    if let Some(token) = token {
+        // Never forward arbitrary header syntax or token to another host.
+        if !token.is_empty() && token.bytes().all(|c| c.is_ascii_graphic()) {
+            headers.push_str(&format!("Authorization: Bearer {token}\r\n"));
+        }
+    }
+    serde_json::from_slice(&request("api.github.com", path, &headers)?).ok()
+}
+
+fn request(host: &str, path: &str, headers: &str) -> Option<Vec<u8>> {
     unsafe {
         let session = Handle::new(WinHttpOpen(
             wide("Meltype/1").as_ptr(),
@@ -87,12 +116,7 @@ pub fn get_api_json(path: &str, token: Option<&str>) -> Option<serde_json::Value
         if WinHttpSetTimeouts(session.0, 5000, 5000, 5000, 5000) == 0 {
             return None;
         }
-        let connect = Handle::new(WinHttpConnect(
-            session.0,
-            wide("api.github.com").as_ptr(),
-            443,
-            0,
-        ))?;
+        let connect = Handle::new(WinHttpConnect(session.0, wide(host).as_ptr(), 443, 0))?;
         let request = Handle::new(WinHttpOpenRequest(
             connect.0,
             wide("GET").as_ptr(),
@@ -106,14 +130,7 @@ pub fn get_api_json(path: &str, token: Option<&str>) -> Option<serde_json::Value
         if WinHttpSetOption(request.0, 63, (&disable_redirects as *const u32).cast(), 4) == 0 {
             return None;
         }
-        let mut headers = "Accept: application/vnd.github+json\r\n".to_owned();
-        if let Some(token) = token {
-            // Never forward arbitrary header syntax or token to another host.
-            if !token.is_empty() && token.bytes().all(|c| c.is_ascii_graphic()) {
-                headers.push_str(&format!("Authorization: Bearer {token}\r\n"));
-            }
-        }
-        let headers = wide(&headers);
+        let headers = wide(headers);
         if WinHttpSendRequest(
             request.0,
             headers.as_ptr(),
@@ -166,6 +183,6 @@ pub fn get_api_json(path: &str, token: Option<&str>) -> Option<serde_json::Value
             }
             body.extend_from_slice(&buffer[..read as usize]);
         }
-        serde_json::from_slice::<serde_json::Value>(&body).ok()
+        Some(body)
     }
 }

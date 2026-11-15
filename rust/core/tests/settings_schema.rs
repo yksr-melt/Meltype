@@ -19,6 +19,22 @@ fn schema_covers_defaults_choices_labels_and_optional_fields() {
             assert!(choices.contains(&value), "default for {key} outside enum");
         }
     }
+    // 通貨の換算のレートの出どころ (固定・自動・手入力)。既定は同梱の固定
+    let currency = &schema["properties"]["CurrencyRateMode"];
+    assert_eq!(currency["title"], "通貨のレート");
+    assert_eq!(currency["default"], "Fixed");
+    assert_eq!(currency["enum"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        schema["properties"]["CurrencyManualRates"]["type"],
+        "string"
+    );
+    let mut settings = Settings::default();
+    settings.set("CurrencyRateMode", json!("Manual")).unwrap();
+    settings.normalize();
+    assert_eq!(settings.text("CurrencyRateMode"), "Manual");
+    settings.set("CurrencyRateMode", json!("unknown")).unwrap();
+    settings.normalize();
+    assert_eq!(settings.text("CurrencyRateMode"), "Fixed");
     let punctuation = &schema["properties"]["Punctuation"];
     assert_eq!(punctuation["title"], "句読点");
     assert_eq!(punctuation["enum"].as_array().unwrap().len(), 4);

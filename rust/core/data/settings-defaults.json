@@ -295,6 +295,8 @@
   "EnglishFirstInput": false,
   "ConsonantAbbreviations": false,
   "SpaceAroundNumbers": false,
+  "CurrencyRateMode": "Fixed",
+  "CurrencyManualRates": "",
   "NumberKeysSelectCandidates": true,
   "UseZenzai": false,
   "ZenzaiServerPath": "",

@@ -373,6 +373,14 @@ impl Settings {
                 self.0.insert("UseShunti".into(), json!(false));
             }
         }
+        if let Some(value) = self.0.get("CurrencyRateMode") {
+            let mode = value
+                .as_str()
+                .and_then(crate::currency::Mode::parse)
+                .unwrap_or_default();
+            self.0
+                .insert("CurrencyRateMode".into(), json!(mode.value()));
+        }
         let defaults = Self::default();
         for key in crate::settings_schema::OPTIONAL_BOOLEANS {
             if let Some(value) = self.0.get_mut(*key) {

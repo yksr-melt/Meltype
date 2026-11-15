@@ -420,11 +420,23 @@ impl Dictionary {
     }
 
     pub fn candidates(&self, reading: &str, timezone: &str) -> Vec<String> {
-        self.candidates_with_front(reading, timezone, &crate::version::default_front())
+        self.candidates_with_front(
+            reading,
+            timezone,
+            &crate::version::default_front(),
+            &crate::currency::Currency::default(),
+        )
     }
 
-    /// `candidates` と同じだが、「ばーじょん」の候補に OS とフロントを書く (#1868)。
-    pub fn candidates_with_front(&self, reading: &str, timezone: &str, front: &str) -> Vec<String> {
+    /// `candidates` と同じだが、「ばーじょん」の候補に OS とフロントを書き (#1868)、
+    /// 通貨の換算に使うレートを渡す (固定・自動・手入力)。
+    pub fn candidates_with_front(
+        &self,
+        reading: &str,
+        timezone: &str,
+        front: &str,
+        currency: &crate::currency::Currency,
+    ) -> Vec<String> {
         let words = self
             .candidates
             .get(reading)
@@ -465,7 +477,7 @@ impl Dictionary {
             chrono::Local::now().naive_local(),
             timezone,
         ));
-        values.extend(crate::currency::candidates(reading));
+        values.extend(currency.candidates(reading));
         if reading == "ばーじょん" {
             values.push(crate::version::candidate(front));
         }
