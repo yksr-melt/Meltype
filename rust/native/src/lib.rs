@@ -4,6 +4,8 @@
 //! Sessions use opaque integer tokens. Stale handles fail without dereferencing
 //! freed memory. Returned strings use malloc/free, including Swift callbacks.
 use meltype_core::{session::Clause, Session};
+#[cfg(windows)]
+mod currency_auto;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "windows_converter/zenzai.rs"]
 mod desktop_zenzai;
@@ -212,6 +214,8 @@ pub extern "C" fn meltype_init(
         convert: None,
     };
     word_checker::configure(is_word);
+    #[cfg(windows)]
+    currency_auto::start();
     1
 }
 
@@ -444,19 +448,28 @@ unsafe fn external_conversion_unprotected(
                     candidates: clause.candidates.clone(),
                 })
                 .collect();
-            let aligned = desktop_zenzai::align(&mozc_segments, &text)
-                .unwrap_or_else(|| vec![(reading.to_owned(), text)]);
-            segments = aligned
-                .into_iter()
-                .map(|(reading, text)| {
-                    let mut candidates = vec![text.clone()];
-                    if let Some(ordinary) = mozc_segments.iter().find(|s| s.reading == reading) {
-                        candidates
-                            .extend(ordinary.candidates.iter().filter(|s| **s != text).cloned());
-                    }
-                    Clause::new(reading, candidates)
-                })
-                .collect();
+            // Mozc の文節の候補で作れる答え (きずく → 気づく) は Mozc の区切りで使い、
+            // 作れない答えは、かなが読みと合うときだけ使う。どちらでもない答え (繰り返し・
+            // 直前の文節の混入) は捨てて Mozc の結果を残す (Windows の worker と同じ判定)
+            let aligned = desktop_zenzai::align(&mozc_segments, &text).or_else(|| {
+                meltype_core::plausible::plausible(reading, &text)
+                    .then(|| vec![(reading.to_owned(), text.clone())])
+            });
+            if let Some(aligned) = aligned {
+                segments = aligned
+                    .into_iter()
+                    .map(|(reading, text)| {
+                        let mut candidates = vec![text.clone()];
+                        if let Some(ordinary) = mozc_segments.iter().find(|s| s.reading == reading)
+                        {
+                            candidates.extend(
+                                ordinary.candidates.iter().filter(|s| **s != text).cloned(),
+                            );
+                        }
+                        Clause::new(reading, candidates)
+                    })
+                    .collect();
+            }
         }
     }
     let callbacks = CALLBACKS.lock().map(|c| *c).unwrap_or_default();

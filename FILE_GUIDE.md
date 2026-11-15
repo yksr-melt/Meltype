@@ -613,7 +613,7 @@ Windowsで cargo test --workspace --locked は239件成功、手動試験2件は
 |[rust/tip-worker/Cargo.toml](rust/tip-worker/Cargo.toml)|tip-worker crateの依存、OS別機能、実行形式を定義する。|"meltype-tip-worker"|実装・ビルドに必要|
 |[rust/tip-worker/src/main.rs](rust/tip-worker/src/main.rs)|Windows TSF用の別プロセスworker入口。フレーム付き通信でCoreセッションを処理する。|serve、main|実装・ビルドに必要|
 
-### 共同編集用システム辞書（18件）
+### 共同編集用システム辞書（27件）
 
 |ファイル|役割|主要要素|保持理由|
 |---|---|---|---|
@@ -621,6 +621,15 @@ Windowsで cargo test --workspace --locked は239件成功、手動試験2件は
 |[dictionaries/brands.txt](dictionaries/brands.txt)|ブランド名の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|225有効行|共同編集辞書の原本|
 |[dictionaries/candidates.txt](dictionaries/candidates.txt)|読み別の追加候補の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|340有効行|共同編集辞書の原本|
 |[dictionaries/contexts.txt](dictionaries/contexts.txt)|同音語と文脈規則の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|147有効行|共同編集辞書の原本|
+|[dictionaries/countries.txt](dictionaries/countries.txt)|国名の語の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|278有効行|共同編集辞書の原本|
+|[dictionaries/domain-it.txt](dictionaries/domain-it.txt)|IT の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|364有効行|共同編集辞書の原本|
+|[dictionaries/domain-laws.txt](dictionaries/domain-laws.txt)|法令の題名の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|779有効行|共同編集辞書の原本|
+|[dictionaries/domain-medical.txt](dictionaries/domain-medical.txt)|医療の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|12886有効行|共同編集辞書の原本|
+|[dictionaries/domain-names.txt](dictionaries/domain-names.txt)|人名の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|24737有効行|共同編集辞書の原本|
+|[dictionaries/domain-propernouns-sudachi.txt](dictionaries/domain-propernouns-sudachi.txt)|SudachiDict の固有名詞の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|7011有効行|共同編集辞書の原本|
+|[dictionaries/domain-propernouns.txt](dictionaries/domain-propernouns.txt)|固有名詞の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|4280有効行|共同編集辞書の原本|
+|[dictionaries/domain-stations.txt](dictionaries/domain-stations.txt)|駅名の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|1421有効行|共同編集辞書の原本|
+|[dictionaries/domain-words-sudachi.txt](dictionaries/domain-words-sudachi.txt)|SudachiDict の普通名詞の分野の辞書の共同編集用テキスト。上流 v1.6.0 の `domain-*.txt` をそのまま同梱する。|7558有効行|共同編集辞書の原本|
 |[dictionaries/emoji-cldr.txt](dictionaries/emoji-cldr.txt)|CLDRの絵文字の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|5166有効行|共同編集辞書の原本|
 |[dictionaries/emoji.txt](dictionaries/emoji.txt)|顔文字・絵文字の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|125有効行|共同編集辞書の原本|
 |[dictionaries/english-phrases.txt](dictionaries/english-phrases.txt)|英語の定型句の共同編集用テキスト。システム辞書の材料であり、個人用SQLite辞書とは別。|16有効行|共同編集辞書の原本|

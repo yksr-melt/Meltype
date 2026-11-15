@@ -27,6 +27,8 @@ const formats = {
   ]),
   'loanwords.txt': spaced((reading, rest) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, rest.length === 0 ? '候補が無い' : null]),
   'propernouns.txt': words(w => /^[A-Za-z][A-Za-z0-9.+&'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
+  // 国名の語 (tools/make-countries.mjs で作る)。Core は propernouns.txt と同じく読む
+  'countries.txt': words(w => /^[A-Za-z][A-Za-z0-9.+&'-]*$/.test(w) ? null : `「${w}」が英字の語でない`),
   'english.txt': words(w => /^[a-z][a-z0-9_'-]*$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   'english-standalone.txt': words(w => /^[a-z]{3,}$/.test(w) ? null : `「${w}」が3文字以上の小文字の英単語でない`),
   'english-words.txt': words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
@@ -55,6 +57,13 @@ const formats = {
   'emoji.txt': tabbed(2, 99, () => []),
   'emoji-cldr.txt': tabbed(2, 99, () => []),
 };
+// 分野の辞書 (dictionaries/domain-*.txt。tools/make-domain-dictionaries.py で作る)。読み<Tab>表記<Tab>表記 …。
+// Core (Dictionary::bundled) は行頭の # だけをコメントとし、タブだけで区切る。読みは打ったかなと完全一致で引く
+const domain = tabbed(2, Infinity, ([reading, ...words]) => [
+  hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+  ...words.filter(w => w === '').map(() => '空の表記がある'),
+]);
+const formatOf = file => formats[file] ?? (/^domain-[a-z-]+\.txt$/.test(file) ? domain : undefined);
 
 function spaced(check) {
   return line => {
@@ -70,7 +79,7 @@ function words(check) {
 function tabbed(min, max, check) {
   return line => {
     const fields = line.split('\t');
-    if (fields.length < min || fields.length > max) return [`タブ区切りの欄が ${fields.length} 個 (${min === max ? min : `${min}〜${max}`} 個のはず)`];
+    if (fields.length < min || fields.length > max) return [`タブ区切りの欄が ${fields.length} 個 (${min === max ? min : max === Infinity ? `${min} 個以上` : `${min}〜${max} 個`} のはず)`];
     if (fields.some(f => f !== f.trim())) return ['欄の前後に空白がある'];
     return check(fields);
   };
@@ -84,7 +93,7 @@ const report = [];
 for (const file of files) {
   const full = path.join(root, file);
   if (!fs.existsSync(full)) continue; // 消した辞書
-  const format = formats[file];
+  const format = formatOf(file);
   const text = fs.readFileSync(full, 'utf8');
   if (text.charCodeAt(0) === 0xfeff) { report.push(`::warning file=dictionaries/${file}::先頭に BOM がある`); warnings++; }
   if (!format) { report.push(`::warning file=dictionaries/${file}::形式を確かめる決まりが無い辞書 (tools/check-dictionaries.mjs に足してください)`); warnings++; continue; }

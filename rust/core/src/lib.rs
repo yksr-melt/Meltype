@@ -28,6 +28,7 @@ pub mod math_candidates;
 pub mod mozc;
 pub mod number_candidates;
 mod phrase_spacing;
+pub mod plausible;
 pub mod prefix_learning;
 pub mod protection;
 pub mod romaji;

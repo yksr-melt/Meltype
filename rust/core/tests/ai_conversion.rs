@@ -77,3 +77,25 @@ fn explicit_user_dictionary_registration_is_not_replaced_by_ai() {
     assert!(!s.apply_ai_candidates("にほんご", vec!["日本語".into()]));
     assert_eq!(s.commit().commits[0].text, "私の登録語");
 }
+
+#[test]
+fn answers_that_do_not_follow_the_reading_are_dropped_and_mozc_is_kept() {
+    let mut s = converting("kyouhaiitenkidesu");
+    let (reading, _) = s.ai_request().unwrap();
+    let ordinary = s.display(false);
+    // 繰り返し続けた答えは使わない。Zenzai と同じ判定を shuntelligence の候補にも当てる
+    assert!(!s.apply_ai_candidates(
+        &reading,
+        vec!["今日はいい天気です今日はいい天気です".into()]
+    ));
+    assert_eq!(s.display(false), ordinary);
+    // 読みと合う候補だけを残す
+    assert!(s.apply_ai_candidates(
+        &reading,
+        vec![
+            "今日はいい天気です".into(),
+            "今日はいい天気です今日はいい天気です".into()
+        ]
+    ));
+    assert_eq!(s.commit().commits[0].text, "今日はいい天気です");
+}

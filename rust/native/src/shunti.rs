@@ -58,7 +58,49 @@ impl Shunti {
         if result.is_err() {
             self.backend = None;
         }
-        result.ok()
+        let clauses = result.ok()?;
+        plausible_clauses(&clauses).then_some(clauses)
+    }
+}
+
+/// 読みと合わない答え (繰り返し・直前の文節の混入) は使わず Mozc に任せる。
+/// 文節の読みは Mozc の応答を読むときに確かめてあるので、ここでは表記を見る。
+fn plausible_clauses(clauses: &[Clause]) -> bool {
+    clauses.iter().all(|clause| {
+        let text = clause
+            .candidates
+            .first()
+            .map(String::as_str)
+            .unwrap_or(&clause.reading);
+        meltype_core::plausible::plausible(&clause.reading, text)
+    })
+}
+
+#[cfg(test)]
+mod plausible_tests {
+    use super::*;
+    #[test]
+    fn answers_that_do_not_follow_the_reading_are_not_used() {
+        let clause =
+            |reading: &str, text: &str| Clause::new(reading.to_owned(), vec![text.to_owned()]);
+        assert!(plausible_clauses(&[
+            clause("きょうは", "今日は"),
+            clause("いい", "いい"),
+        ]));
+        // 繰り返し・直前の文節の混入は、かなが読みと合わないので使わない (Zenzai と同じ判定)
+        assert!(!plausible_clauses(&[clause(
+            "はーどうぇ",
+            "ハードウェアウェアウェア"
+        )]));
+        assert!(!plausible_clauses(&[
+            clause("きょうは", "今日は"),
+            clause("なまえ", "名前は魚の"),
+        ]));
+        // 文節の候補が空なら読みのままを使う
+        assert!(plausible_clauses(&[Clause::new(
+            "きょう".to_owned(),
+            vec![]
+        )]));
     }
 }
 

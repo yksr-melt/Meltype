@@ -15,11 +15,28 @@ fn value(address: u64) -> &'static str {
     let length = (address & 0xffffffff) as usize;
     std::str::from_utf8(&data[start..start + length]).expect("UTF-8 system dictionary")
 }
-pub(crate) fn text(name: &'static str) -> &'static str {
+pub(crate) fn text(name: &str) -> &'static str {
     value(archive().get(name).expect("required system dictionary"))
 }
-pub(crate) fn try_text(name: &'static str) -> Option<&'static str> {
+pub(crate) fn try_text(name: &str) -> Option<&'static str> {
     archive().get(name).map(value)
+}
+/// 組み込み辞書のうち、名前が prefix で始まるもの (分野の辞書 domain-*)。名前の順。
+/// 行ごとの鍵 (name\0連番) は含めない。
+pub(crate) fn names(prefix: &str) -> Vec<String> {
+    use fst::Streamer;
+    let mut stream = archive().stream();
+    let mut names = Vec::new();
+    while let Some((key, _)) = stream.next() {
+        let Ok(name) = std::str::from_utf8(key) else {
+            continue;
+        };
+        if !name.contains('\0') && name.starts_with(prefix) {
+            names.push(name.to_owned());
+        }
+    }
+    names.sort_unstable();
+    names
 }
 #[cfg(test)]
 mod tests {

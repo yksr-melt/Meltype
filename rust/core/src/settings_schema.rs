@@ -37,6 +37,11 @@ pub fn metadata() -> &'static Value {
         }
         data["enums"]["AiModel"] = json!({"None":"使用しない","Zenz":"Zenz","Shunti":"shuntelligence","Jinen":"Jinen","Kanakanji":"kanakanji-edge","Gamma":"Gamma","Qwen":"Qwen","Shion":"Shion"});
         data["fields"].as_array_mut().unwrap().push(json!({"key":"AiModel","type":"AiModel","category":"1a. AI","label":"AIモデル","description":"使用しない・Zenz・Jinen・kanakanji-edge・shuntelligence・Gamma・Qwen・Shionから選択します。導入とパスは選択したモデルだけ表示します。"}));
+        // 通貨の換算に使うレートの出どころ。固定は同梱の配布時のレート、自動はホストが
+        // ECB の参照レートを取りに行ったもの (取れなければ固定)、手入力は自分で入れた数
+        data["enums"]["CurrencyRateMode"] = json!({"Fixed":"固定（同梱のレート）","Auto":"自動（ネットから取得）","Manual":"手入力"});
+        data["fields"].as_array_mut().unwrap().push(json!({"key":"CurrencyRateMode","type":"CurrencyRateMode","category":"14. 通貨","label":"通貨のレート","description":"金額の換算に使うレートの出どころです。固定はこの版に同梱した配布時のレート (小数第1位の概算)、自動はネットから取った最新のレート (Windowsのみ。取れなければ固定)、手入力は自分で入れた数です。"}));
+        data["fields"].as_array_mut().unwrap().push(json!({"key":"CurrencyManualRates","type":"String","category":"14. 通貨","label":"手入力のレート","description":"1 単位あたりの円。数値だけなら米ドル (150 と書くと 1 ドル=150 円)、通貨コードを書くとその通貨 (USD 150、EUR=170、GBP:200)。カンマ・セミコロン・改行で区切って複数書けます。"}));
         data
     })
 }

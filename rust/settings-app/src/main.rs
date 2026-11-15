@@ -1955,6 +1955,7 @@ fn ui_category(key: &str, original: &str) -> &'static str {
         | "ContinueAfterConversion"
         | "CorrectTypos"
         | "StartConversionAtLastClause" => "4. 変換",
+        "CurrencyRateMode" | "CurrencyManualRates" => "14. 通貨",
         "SnippetMark"
         | "CalculatorCandidates"
         | "GitHubIssueCandidates"
@@ -2024,6 +2025,7 @@ fn category_order(category: &str) -> (u32, &str) {
         "10. アプリ" => 11,
         "11. ログ" => 12,
         "13. 打鍵数" => 13,
+        "14. 通貨" => 14,
         _ => {
             let digits = category
                 .find(|c: char| !c.is_ascii_digit())
@@ -2097,6 +2099,8 @@ fn supported(key: &str) -> bool {
         "NumberKeysSelectCandidates",
         "ZSymbols",
         "SlashAsMiddleDot",
+        "CurrencyRateMode",
+        "CurrencyManualRates",
     ]
     .contains(&key)
         || cfg!(target_os = "linux")
@@ -2181,6 +2185,7 @@ fn choices(key: &str) -> Option<&'static [&'static str]> {
         "CompositionOpacity" => &["Opaque", "Percent90", "Percent80", "Percent70"],
         "UiLanguage" => &["Auto", "Japanese", "English"],
         "TimeZone" => time_zones(),
+        "CurrencyRateMode" => &["Fixed", "Auto", "Manual"],
         _ => return None,
     })
 }

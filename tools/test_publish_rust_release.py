@@ -103,6 +103,11 @@ class PresentationTests(unittest.TestCase):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 publisher.parse_tag(tag)
 
+    def test_zero_padded_tag_uses_the_unpadded_release_notes_heading(self):
+        self.assertEqual(publisher.notes_heading("flash-v0001.0001.0019"), "# Meltype-FLASH v1.1.19\n")
+        self.assertEqual(publisher.notes_heading("flash-v1.0.0"), "# Meltype-FLASH v1.0.0\n")
+        self.assertEqual(publisher.notes_heading("flash-v0000.0001.0000-preview.4"), "# Meltype-FLASH v0.1.0 Pre4\n")
+
     def publish_fixture(self, root, tag, version, release_override=None, skip_benchmark=False):
         assets = root / "assets"
         assets.mkdir()

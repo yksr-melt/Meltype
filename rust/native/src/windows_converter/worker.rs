@@ -190,8 +190,20 @@ impl Backend {
         self.shunti_candidates.clear();
         if let Some(clauses) = self.shunti.convert(reading, context) {
             for clause in &clauses {
-                self.shunti_candidates
-                    .insert(clause.reading.clone(), clause.candidates.clone());
+                // 変換候補の一覧にも、読みと合わない綴り返し・文節混入を出さない。
+                // 先頭の候補は shunti.convert で確かめてあるので、空にはならない
+                let candidates: Vec<_> = clause
+                    .candidates
+                    .iter()
+                    .filter(|candidate| {
+                        meltype_core::plausible::plausible(&clause.reading, candidate)
+                    })
+                    .cloned()
+                    .collect();
+                if !candidates.is_empty() {
+                    self.shunti_candidates
+                        .insert(clause.reading.clone(), candidates);
+                }
             }
             return Some(
                 clauses
@@ -254,10 +266,16 @@ impl Backend {
         }) {
             return ordinary;
         }
+        // Mozc の文節の候補を選んでつなげると作れる答え (読みと表記が違う語: きずく → 気づく) は、
+        // Mozc の文節の区切りで使う。作れない答えは、かなが読みと合うときだけ使う (壊れた答えを出さない)
         from_mozc
             .as_ref()
             .and_then(|segments| super::zenzai::align(segments, &text))
-            .or_else(|| Some(vec![(reading.to_owned(), text)]))
+            .or_else(|| {
+                meltype_core::plausible::plausible(reading, &text)
+                    .then(|| vec![(reading.to_owned(), text)])
+            })
+            .or(ordinary)
     }
     fn candidates(&mut self, reading: &str) -> Vec<String> {
         let mut result = Vec::new();
@@ -419,6 +437,7 @@ impl Drop for Scope {
     }
 }
 pub(crate) fn scope(settings: &meltype_core::settings::Settings) -> Scope {
+    crate::currency_auto::start();
     Scope(
         with_backend(|backend| {
             if backend.shunti.configure(settings) {

@@ -17,6 +17,7 @@ meltype-core.workspace = true
 serde_json.workspace = true
 serde.workspace = true
 libc = "0.2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 unicode-normalization = "0.1"
 jni = { version = "0.21", optional = true }
 meltype-ai = { path = "../ai", optional = true, features = ["download"] }

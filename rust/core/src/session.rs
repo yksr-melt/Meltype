@@ -1319,10 +1319,11 @@ impl Session {
                     .get(&reading)
                     .cloned()
                     .unwrap_or_default();
-                values.extend(
-                    self.candidate_sources
-                        .candidates(&reading, self.settings.text("TimeZone")),
-                );
+                values.extend(self.candidate_sources.candidates(
+                    &reading,
+                    self.settings.text("TimeZone"),
+                    &crate::currency::Currency::from_settings(&self.settings),
+                ));
                 let mut unique = Vec::new();
                 for value in values {
                     if !unique.contains(&value) {
@@ -2072,13 +2073,18 @@ impl Session {
             // callbacks. With no converter result, preserve the complete reading.
             candidates.push(reading.clone());
         } else {
+            // 「ばーじょん」には OS とフロント (IME方式・キーボード方式) も書く (#1868)
+            let timezone = self.settings.text("TimeZone");
+            let display = self.display(true);
+            let front = self.version_front(&display);
+            let currency = crate::currency::Currency::from_settings(&self.settings);
             candidates.extend(
                 self.dictionary()
-                    .candidates(&self.display(true), self.settings.text("TimeZone")),
+                    .candidates_with_front(&display, timezone, &front, &currency),
             );
             candidates.extend(
                 self.dictionary()
-                    .candidates(&reading, self.settings.text("TimeZone")),
+                    .candidates_with_front(&reading, timezone, &front, &currency),
             );
             candidates.extend(Linguistics::bundled().words(&reading));
             candidates.extend(self.clipboard_candidates(&reading));
@@ -2403,10 +2409,11 @@ impl Session {
                 values.push(standalone.clone());
             }
             if !self.external_converter_only {
-                values.extend(
-                    self.candidate_sources
-                        .candidates(&clause.reading, self.settings.text("TimeZone")),
-                );
+                values.extend(self.candidate_sources.candidates(
+                    &clause.reading,
+                    self.settings.text("TimeZone"),
+                    &crate::currency::Currency::from_settings(&self.settings),
+                ));
                 values.extend(self.clipboard_candidates(&clause.reading));
                 // MeaningDictionary supplies annotations in the original, not
                 // extra conversion candidates. Adding its reverse readings
@@ -2489,7 +2496,8 @@ impl Session {
             // the engine supplied the clause (v1.5.0, #1272). Older learned
             // version strings are dropped so an update does not resurrect them.
             if clause.reading == "ばーじょん" {
-                let current = format!("Meltype-FLASH {}", env!("CARGO_PKG_VERSION"));
+                // 不具合の報告にそのまま貼れるように、OS とフロント (IME方式・キーボード方式) も書く (#1868)
+                let current = crate::version::candidate(&crate::version::front(&self.settings));
                 values.retain(|value| !Linguistics::is_version_text(value) || value == &current);
                 values.push(current);
             }
@@ -2668,6 +2676,14 @@ impl Session {
     fn local_clause(&self, reading: String) -> Clause {
         self.local_clause_with_external(reading, vec![])
     }
+    /// 「ばーじょん」の候補に書く OS とフロント (#1868)。ほかの読みでは空のままにする (打つたびに作らない)。
+    fn version_front(&self, reading: &str) -> String {
+        if reading == "ばーじょん" {
+            crate::version::front(&self.settings)
+        } else {
+            String::new()
+        }
+    }
     fn local_clause_with_external(&self, reading: String, external: Vec<String>) -> Clause {
         let mut candidates = self
             .preferences
@@ -2677,10 +2693,14 @@ impl Session {
             .unwrap_or_default();
         candidates.extend(external);
         if !self.external_converter_only {
-            candidates.extend(
-                self.dictionary()
-                    .candidates(&reading, self.settings.text("TimeZone")),
-            );
+            // 「ばーじょん」には OS とフロント (IME方式・キーボード方式) も書く (#1868)
+            let front = self.version_front(&reading);
+            candidates.extend(self.dictionary().candidates_with_front(
+                &reading,
+                self.settings.text("TimeZone"),
+                &front,
+                &crate::currency::Currency::from_settings(&self.settings),
+            ));
             candidates.extend(Linguistics::bundled().words(&reading));
         }
         if let Some(learned) = self.preferences.selected.get(&reading) {

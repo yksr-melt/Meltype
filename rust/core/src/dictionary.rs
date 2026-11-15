@@ -17,6 +17,9 @@ pub struct Dictionary {
     english: Arc<HashSet<String>>,
     japanese: Arc<HashSet<String>>,
     candidates: Arc<HashMap<String, Vec<String>>>,
+    // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には
+    // 誤った候補になりうるので、ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
+    domain: Arc<HashMap<String, Vec<String>>>,
     head_only_phrases: HashSet<String>,
     emoji: Arc<HashMap<String, Vec<String>>>,
     kana_words: Arc<HashSet<String>>,
@@ -70,6 +73,44 @@ impl PrefixIndex {
 fn words(text: &str) -> impl Iterator<Item = &str> {
     text.lines()
         .flat_map(|line| line.split('#').next().unwrap_or("").split_whitespace())
+}
+
+/// 日本語の語のローマ字の書き方 (japanese.txt を広げたもの)。国名の語を絞り込むのに使う。
+fn japanese_romaji() -> &'static HashSet<String> {
+    static SPELLINGS: OnceLock<HashSet<String>> = OnceLock::new();
+    SPELLINGS.get_or_init(|| {
+        words(crate::system_data::text("japanese.txt"))
+            .flat_map(|word| romaji::spelling_variants(word, 64))
+            .collect()
+    })
+}
+
+/// 国名の語 (dictionaries/countries.txt)。英語として扱う固有名詞に足す (#1615)。
+/// ローマ字として最後まで読める語 (Oman・San・Mayotte) は入れない (ワークアラウンド #1869)。
+/// 固有名詞を語の頭でも英語と判定するので、日本語の語の頭とぶつかる (omanjuu → oman中)。
+/// #1869 で判定を直したら、この絞り込みを外して国名の語をすべて入れる。
+pub fn country_words() -> &'static [&'static str] {
+    static WORDS: OnceLock<Vec<&'static str>> = OnceLock::new();
+    WORDS.get_or_init(|| {
+        words(crate::system_data::text("countries.txt"))
+            .filter(|word| word.bytes().all(|b| b.is_ascii_alphanumeric()))
+            // 2 文字の略 (St・El) は、英単語として扱うとローマ字の語 (ost) の区切りを変えてしまうため入れない (#1123)。
+            // 大文字だけの略 (SAR・UK・DRC) も、国名として打つ語ではないので入れない
+            .filter(|word| word.len() >= 3 && !word.bytes().all(|b| b.is_ascii_uppercase()))
+            .filter(|word| {
+                let lower = word.to_ascii_lowercase();
+                let analysis = romaji::analyze(&lower, false);
+                if analysis.valid && (analysis.partial.is_empty() || analysis.partial == "n") {
+                    return false;
+                }
+                // 日本語の語のローマ字の途中と重なる語 (hong は nihongo、sar は saru) は入れない。
+                // 語の途中で英語にすると、もとの日本語の区切りが変わる (#1648 の凍結試験)
+                !japanese_romaji()
+                    .iter()
+                    .any(|spelling| spelling.contains(&lower))
+            })
+            .collect()
+    })
 }
 
 impl Dictionary {
@@ -166,6 +207,7 @@ impl Dictionary {
             let mut names = HashMap::new();
             for word in words(crate::system_data::text("propernouns.txt"))
                 .flat_map(|s| s.split(','))
+                .chain(country_words().iter().copied())
                 .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_alphanumeric()))
             {
                 names
@@ -227,6 +269,7 @@ impl Dictionary {
                 proper: Arc::new(
                     words(crate::system_data::text("propernouns.txt"))
                         .chain(words(crate::system_data::text("brands.txt")))
+                        .chain(country_words().iter().copied())
                         .filter(|word| word.is_ascii())
                         .map(str::to_ascii_lowercase)
                         .collect(),
@@ -237,6 +280,7 @@ impl Dictionary {
                         .collect(),
                 ),
                 candidates: Arc::default(),
+                domain: Arc::default(),
                 head_only_phrases: HashSet::new(),
                 emoji: Arc::default(),
                 max_kana_word_bytes: 0,
@@ -287,6 +331,34 @@ impl Dictionary {
                         .collect();
                     if fields.len() > 1 {
                         dict.add(fields[0], fields[1..].iter().copied());
+                    }
+                }
+            }
+            // 分野の辞書 (domain-*.txt)。形式は「読み<Tab>表記<Tab>表記 …」、行頭が # の行はコメント
+            for name in crate::system_data::names("domain-") {
+                for line in crate::system_data::text(&name).lines() {
+                    if line.starts_with('#') {
+                        continue;
+                    }
+                    // 読みの後ろはタブ区切り。表記の中の空白は語の一部なので、行全体をタブで分ける
+                    let mut fields = line.split('\t');
+                    let Some(reading) = fields.next().map(str::trim) else {
+                        continue;
+                    };
+                    let values: Vec<_> = fields
+                        .map(str::trim)
+                        .filter(|word| !word.is_empty())
+                        .collect();
+                    if reading.is_empty() || values.is_empty() {
+                        continue;
+                    }
+                    let entry = Arc::make_mut(&mut dict.domain)
+                        .entry(reading.to_owned())
+                        .or_insert_with(|| Vec::with_capacity(values.len()));
+                    for value in values {
+                        if !entry.iter().any(|existing| existing == value) {
+                            entry.push(value.to_owned());
+                        }
                     }
                 }
             }
@@ -348,6 +420,23 @@ impl Dictionary {
     }
 
     pub fn candidates(&self, reading: &str, timezone: &str) -> Vec<String> {
+        self.candidates_with_front(
+            reading,
+            timezone,
+            &crate::version::default_front(),
+            &crate::currency::Currency::default(),
+        )
+    }
+
+    /// `candidates` と同じだが、「ばーじょん」の候補に OS とフロントを書き (#1868)、
+    /// 通貨の換算に使うレートを渡す (固定・自動・手入力)。
+    pub fn candidates_with_front(
+        &self,
+        reading: &str,
+        timezone: &str,
+        front: &str,
+        currency: &crate::currency::Currency,
+    ) -> Vec<String> {
         let words = self
             .candidates
             .get(reading)
@@ -375,14 +464,22 @@ impl Dictionary {
                 values.push(value);
             }
         }
+        // 分野の辞書の語 (病名・駅名など) は、使わない人には要らない候補なので、
+        // ふだんの候補 (変換エンジンの候補・ひらがな・カタカナ) を 1 つも後ろに押さないよう、その後ろに並べる。
+        // こうすれば誰にとっても困らないので、分野ごとに外す設定は作らない (#1650)。
+        for word in self.domain_words(reading) {
+            if !values.contains(&word) {
+                values.push(word);
+            }
+        }
         values.extend(crate::time_candidates::candidates(
             reading,
             chrono::Local::now().naive_local(),
             timezone,
         ));
-        values.extend(crate::currency::candidates(reading));
+        values.extend(currency.candidates(reading));
         if reading == "ばーじょん" {
-            values.push(format!("Meltype-FLASH {}", env!("CARGO_PKG_VERSION")));
+            values.push(crate::version::candidate(front));
         }
         for word in words {
             if !values.contains(word) {
@@ -396,6 +493,32 @@ impl Dictionary {
         }
         values
     }
+
+    /// 分野の辞書の候補 (病名・駅名・人名など)。文節の読みは助詞などを含む (せんたんきょだいしょうの) ので、
+    /// 辞書にある最長の先頭部分を置き換え、残りはかなのまま付ける (先端巨大症の)。
+    pub fn domain_words(&self, reading: &str) -> Vec<String> {
+        // 語の後ろに付いていてよい助詞・「だ」など
+        const ENDINGS: &[&str] = &[
+            "", "を", "が", "は", "に", "で", "と", "も", "へ", "の", "や", "な", "だ", "です",
+            "から", "まで", "より", "って", "とか", "さ", "ね", "よ",
+        ];
+        for end in reading.char_indices().map(|(i, c)| i + c.len_utf8()).rev() {
+            // 1 文字の読み (い → 位 胃 …) は、その読みだけの文節のときだけ (いきを → 位きを にしない)
+            if reading[..end].encode_utf16().count() == 1 && end < reading.len() {
+                break;
+            }
+            let suffix = &reading[end..];
+            // 残りが助詞など (はし|を) のときだけ。語の途中 (ふく|ざつな) では使わない
+            if !ENDINGS.contains(&suffix) {
+                continue;
+            }
+            if let Some(words) = self.domain.get(&reading[..end]) {
+                return words.iter().map(|word| format!("{word}{suffix}")).collect();
+            }
+        }
+        Vec::new()
+    }
+
     pub fn emoji(&self, reading: &str) -> Vec<String> {
         self.emoji
             .get(reading)
