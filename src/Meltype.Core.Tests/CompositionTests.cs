@@ -5714,7 +5714,8 @@ internal static class CompositionTests
     [Test]
     public static void Issue1899_TechnicalWordBeforeSuru_StaysEnglish()
     {
-        // #1899: share は しゃれ とも読める。前が日本語の語 (ファイルshareして) でも、技術用語 + する の活用なら英単語として読む。
+        // #1899: share は しゃれ とも読めるが、しゃれする・まけします は日本語として成り立たない。
+        // 技術用語の綴りのすぐ後ろが する の活用なら、その区間は英単語として読む (文頭でも同じ)。
         foreach (var (typed, expected) in new[]
         {
             ("fairusharesite", "ふぁいるshareして"),
@@ -5727,23 +5728,37 @@ internal static class CompositionTests
             ("mainnisharesite", "mainにshareして"),
             // share 以外の技術用語も同じ (make は まけ とも読める)
             ("fairumakeshite", "ふぁいるmakeして"),
-            // おしゃれ・おまけ は 1 語の日本語として読む (o + share / o + make に割らない)
+            ("koremakeshimasu", "これmakeします"),
+            ("korecaseshimasu", "これcaseします"),
+            // おしゃれ・おまけ は 1 語の日本語として読む (お + share / お + make に割らない)
             ("osharesuru", "おしゃれする"),
             ("oshareshite", "おしゃれして"),
             ("omakesuru", "おまけする"),
             ("omakeshite", "おまけして"),
-            // 2・3 文字の技術用語 (uri・sha) は、日本語の語 (うり・しゃ) のまま
-            ("koreurisuru", "これうりする"),
-            ("koreurishite", "これうりして"),
-            ("koreshasuru", "これしゃする"),
-            ("koreshashite", "これしゃして"),
+            // 4 文字以上という条件は無い (uri・sha も技術用語なら英語)
+            ("koreurisuru", "これuriする"),
+            ("koreurishite", "これuriして"),
+            ("koreshasuru", "これshaする"),
+            ("koreshashite", "これshaして"),
+            // ごとする は日本語として成り立つので、goto は日本語のまま
             ("koregotosuru", "これごとする"),
-            // 逆向き: 入力の先頭の share は今までどおり日本語 (しゃれ)
+            // 日本語由来の語 (ninja) は日本語の読みのまま
+            ("ninjashite", "にんじゃして"),
+            ("ninjasuru", "にんじゃする"),
+            // 逆向き: する が続かない share は今までどおり日本語 (しゃれ)
             ("share", "しゃれ"),
-            ("sharesuru", "しゃれする"),
-            ("sharesite", "しゃれして"),
-            ("makeshite", "まけして"),
-            // 技術用語でない英単語 (memo) と付属語 (ため・ので) は今までどおり日本語
+            ("sharesuru", "shareする"),
+            ("sharesite", "shareして"),
+            ("shareshitara", "shareしたら"),
+            // する の活用は しない・します・させる なども同じ
+            ("shareshinai", "shareしない"),
+            ("shareshimasu", "shareします"),
+            ("shareshiteiru", "shareしている"),
+            ("sharesaseru", "shareさせる"),
+            ("sharesareru", "shareされる"),
+            ("sharesarenai", "shareされない"),
+            ("makeshite", "makeして"),
+            // 技術用語でない英単語 (memo・site) と付属語 (ため・ので) は今までどおり日本語
             ("memoshite", "めもして"),
             ("korememoshite", "これめもして"),
             ("fairumemoshite", "ふぁいるめもして"),
