@@ -128,3 +128,40 @@ GBP	0.836
     );
     assert!(one.contains(&"≒1.6万円（2026/11/20 のレート）".to_owned()));
 }
+
+#[test]
+fn amounts_are_converted_while_typing() {
+    // 金額の読みは入力中から日本語として扱う (数字を英語の綴りとして残さない)
+    let mut session = Session::default();
+    for (name, value) in [
+        ("LiveConversion", json!(true)),
+        ("CurrencyRateMode", json!("Manual")),
+        ("CurrencyManualRates", json!("159.3")),
+        ("CurrencyDecimals", json!(1)),
+    ] {
+        session.settings.set(name, value).unwrap();
+    }
+    for c in "100doru".chars() {
+        session.key(0, c as i32, 0);
+    }
+    assert_eq!(session.live_reading().as_deref(), Some("100どる"));
+    let view = session.result(false).view.expect("view");
+    assert_eq!(view.text, "100どる");
+    // 入力中の候補にも換算を出す
+    session
+        .settings
+        .set("ShowCandidatesWhileTyping", json!(true))
+        .unwrap();
+    let view = session.result(false).view.expect("view");
+    assert!(
+        view.candidates.iter().any(|c| c.contains("円")),
+        "{:?}",
+        view.candidates
+    );
+    // 英語の綴り (通貨の読みでない) はそのまま残す
+    let mut english = Session::default();
+    for c in "abc123".chars() {
+        english.key(0, c as i32, 0);
+    }
+    assert_eq!(english.display(false), "abc123");
+}
