@@ -2058,12 +2058,14 @@ internal static class CompositionTests
     [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
-        // #1445・#1651: 変換の候補に出す語
+        // #1445・#1651・#1924: 変換の候補に出す語
         var candidates = CandidateDictionary.Load(null);
         Assert.True(candidates.Lookup("おねしょた").Contains("おねショタ"), "#1445 おねしょた");
         Assert.True(candidates.Lookup("ちゅうに").Contains("厨二"), "#1651 ちゅうに");
         Assert.True(candidates.Lookup("きめつ").Contains("鬼滅"), "#1651 きめつ");
         Assert.True(candidates.Lookup("おしのこ").Contains("推しの子"), "#1651 おしのこ");
+        Assert.True(candidates.Lookup("じゃくしゃだんせい").Contains("ふにゃオス"), "#1924 じゃくしゃだんせい");
+        Assert.True(candidates.Lookup("ふにゃおす").Contains("弱者男性"), "#1924 ふにゃおす");
 
         // #1548・#1490・#1460: 読みで英字の名前を出す
         var predictor = new Predictor(null, null, null);
