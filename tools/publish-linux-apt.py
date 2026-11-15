@@ -11,6 +11,10 @@ import shutil
 import subprocess
 import sys
 
+def tag_version(tag):
+    """ゼロ埋めのタグ (flash-v0001.0001.0020) を deb の版 (1.1.20) に直す。"""
+    return '.'.join(str(int(part)) for part in tag.removeprefix('flash-v').split('.'))
+
 def build(tag, output):
     if not re.fullmatch(r'flash-v\d+\.\d+\.\d+', tag):
         raise ValueError('正式版タグが必要です')
@@ -29,7 +33,7 @@ def build(tag, output):
     if actual != asset.get('digest'):
         raise ValueError('debのSHA-256が一致しません')
     version = subprocess.check_output(['dpkg-deb', '-f', package, 'Version'], text=True).strip()
-    if version != tag.removeprefix('flash-v'):
+    if version != tag_version(tag):
         raise ValueError('debと公開タグの版が一致しません')
     apt = output/'apt'
     binary = apt/'dists/stable/main/binary-amd64'
