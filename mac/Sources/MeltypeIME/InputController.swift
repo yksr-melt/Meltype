@@ -151,6 +151,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         candidatesWindow?.hide()
         auxPanel?.orderOut(nil)
         displayedAux = nil
+        meaningKey = nil
         candidateList = []
         super.deactivateServer(sender)
     }
@@ -341,6 +342,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         candidatesWindow?.hide()
         auxPanel?.orderOut(nil)
         displayedAux = nil
+        meaningKey = nil
     }
 
     private func showAux(_ text: String?, client: IMKTextInput) {
@@ -396,9 +398,24 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         text.addAttributes(attributes, range: range)
     }
 
+    /// 候補で本体が決めた時間 (meaningDelayMs) 止まったら、その候補の意味を候補ウィンドウの注釈に出す。
+    private var meaningKey: String?
+
+    private func scheduleMeaning(_ list: CandidateList) {
+        let key = list.selectedMeaning.map { "\(list.selected):\($0)" }
+        guard key != meaningKey else { return }
+        meaningKey = key
+        guard let key, let meaning = list.selectedMeaning else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(list.meaningDelayMs)) { [weak self] in
+            guard let self, self.meaningKey == key, let window = candidatesWindow, window.isVisible() else { return }
+            window.showAnnotation(NSAttributedString(string: meaning))
+        }
+    }
+
     private func updateCandidates(_ list: CandidateList?, client: IMKTextInput) {
         guard let window = candidatesWindow else { return }
         guard let list else {
+            meaningKey = nil
             candidateList = []
             window.hide()
             return
@@ -424,8 +441,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         if list.selected >= 0 && list.selected < list.items.count {
             selectInWindow(window, index: list.selected)
         }
-        // 選んでいる候補の意味を候補ウィンドウの注釈に出す
-        if let meaning = list.selectedMeaning { window.showAnnotation(NSAttributedString(string: meaning)) }
+        scheduleMeaning(list)
     }
 
     /// 候補ウィンドウで今選ばれている候補の番号 (一覧を作り直すと先頭に戻る)。
