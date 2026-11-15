@@ -87,7 +87,23 @@ start_main_activity() {
   done
   return 1
 }
+# A headless emulator may report boot complete while its display is asleep
+# or the keyguard is still covering the activity. In that state the editor can
+# have focus while its window never gains focus, so Android never binds the
+# selected IME. Keep the disposable test device awake and unlock it before
+# starting the real screen-touch tests.
+adb shell svc power stayon true
+adb shell settings put system screen_off_timeout 2147483647
+adb shell input keyevent KEYCODE_WAKEUP
+adb shell wm dismiss-keyguard
+sleep 2
 start_main_activity
+{
+  adb shell dumpsys power | grep -m 1 -E 'mWakefulness=|mWakefulness:' || true
+  adb shell dumpsys window | grep -m 1 -E 'mCurrentFocus=|mFocusedApp=' || true
+  adb shell dumpsys window policy | grep -m 2 -i 'keyguard' || true
+} > "$REPORT/display-state-before-tests.txt"
+cat "$REPORT/display-state-before-tests.txt"
 status=0
 : > "$REPORT/instrumentation.log"
 run_group() {

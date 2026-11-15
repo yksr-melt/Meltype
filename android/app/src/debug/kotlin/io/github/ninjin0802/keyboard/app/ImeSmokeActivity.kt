@@ -21,6 +21,8 @@ class ImeSmokeActivity : Activity() {
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        // Keep the real input window available throughout the on-device QA.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         editor = EditText(this).apply {
             id = android.R.id.edit
             hint = "IME smoke input"
