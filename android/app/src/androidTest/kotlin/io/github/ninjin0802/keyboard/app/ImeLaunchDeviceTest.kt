@@ -247,6 +247,15 @@ class ImeLaunchDeviceTest {
             keyboardReadyFor(activity, activity.editor,
                 io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI)
         }
+        // restartInput may report an active connection before asynchronous
+        // rebinding settles. Require the binding to remain stable before touch.
+        repeat(3) {
+            Thread.sleep(200)
+            instrumentation.waitForIdleSync()
+            assertTrue("IME lost restarted editor binding: " + describeImeState(activity),
+                keyboardReadyFor(activity, activity.editor,
+                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI))
+        }
         val keyboard = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
             ?: throw AssertionError("Japanese keys not shown")
         tap(keyboard, "a") { it is KeyAction.Romaji && it.char == 'a' }
