@@ -4,7 +4,7 @@
 //! Sessions use opaque integer tokens. Stale handles fail without dereferencing
 //! freed memory. Returned strings use malloc/free, including Swift callbacks.
 use meltype_core::{session::Clause, Session};
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 mod currency_auto;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[path = "windows_converter/zenzai.rs"]
