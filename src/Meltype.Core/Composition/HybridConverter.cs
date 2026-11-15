@@ -122,6 +122,10 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
             ?? (ZenzaiConverter.IsPlausible(hiragana, z[0].Text) ? z : other);
     }
 
+    /// <summary>Zenzai を使わない、文節に区切った変換 (英日の区切りの案の変換用。IStandaloneConverter)。</summary>
+    public IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null) =>
+        mozc.ConvertWithCandidates(hiragana, context)?.Select(s => s.Clause).ToList();
+
     /// <summary>
     /// text を、文節ごとに候補を 1 つずつ選んでつなげて作れるなら、文節の区切りはそのままで、選んだ候補を文字列にした文節の並び。
     /// 作れなければ null。候補は順位の高い方から試す (同じ text を作れる選び方が複数あるとき、変換エンジンの順位に近い方)。
