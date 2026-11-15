@@ -65,7 +65,7 @@ impl Rates {
             let Ok(rate) = value.parse::<f64>() else {
                 continue;
             };
-            if rate > 0.0 {
+            if rate.is_finite() && rate > 0.0 {
                 rates.insert(code.to_owned(), rate);
             }
         }
@@ -80,7 +80,17 @@ impl Rates {
     pub fn convert(&self, amount: f64, from: &str, to: &str) -> Option<f64> {
         let from = *self.rates.get(from)?;
         let to = *self.rates.get(to)?;
-        (from > 0.0).then(|| amount / from * to)
+        if !amount.is_finite()
+            || amount < 0.0
+            || !from.is_finite()
+            || from <= 0.0
+            || !to.is_finite()
+            || to <= 0.0
+        {
+            return None;
+        }
+        let value = amount / from * to;
+        value.is_finite().then_some(value)
     }
 }
 
@@ -221,15 +231,16 @@ pub fn manual_rates(text: &str) -> Option<Rates> {
         let (code, value) = line
             .split_once(|c: char| c.is_whitespace() || c == '=' || c == ':')
             .map_or(("USD", line), |(code, value)| (code.trim(), value.trim()));
+        let value = value.strip_prefix(['=', ':']).unwrap_or(value).trim();
         let code = code.to_ascii_uppercase();
-        if code.len() != 3 || !code.bytes().all(|b| b.is_ascii_alphabetic()) {
+        if code == "JPY" || code.len() != 3 || !code.bytes().all(|b| b.is_ascii_alphabetic()) {
             continue;
         }
         // 「1 ドル = 150.2 円」の 150.2。円を基準にした表には 1/150.2 を入れる
         let Ok(per_unit) = value.parse::<f64>() else {
             continue;
         };
-        if per_unit.is_finite() && per_unit > 0.0 {
+        if per_unit.is_finite() && per_unit > 0.0 && (1.0 / per_unit).is_finite() {
             rates.insert(code, 1.0 / per_unit);
         }
     }
@@ -670,6 +681,25 @@ EUR 170
         assert!(manual_rates("どる 150").is_none());
         assert!(manual_rates("USD 0").is_none());
         assert!(manual_rates("USD -150").is_none());
+    }
+
+    #[test]
+    fn manual_rates_preserve_yen_and_accept_spaced_separators() {
+        let rates = manual_rates("USD = 150; EUR : 170; JPY 100").unwrap();
+        assert_eq!(rates.rates["JPY"], 1.0);
+        assert!((rates.convert(100.0, "USD", "JPY").unwrap() - 15000.0).abs() < 1e-6);
+        assert!((rates.convert(100.0, "EUR", "JPY").unwrap() - 17000.0).abs() < 1e-6);
+        assert!(manual_rates("USD 1e-320").is_none());
+    }
+
+    #[test]
+    fn invalid_rates_and_overflow_do_not_produce_candidates() {
+        assert!(Rates::parse("# 日付: 2026-11-11\nEUR\t1\nUSD\tinf\n").is_none());
+        let mut rates = rates();
+        rates.rates.insert("USD".into(), f64::MIN_POSITIVE);
+        assert!(candidates_with(f64::MAX, ("USD", "ドル"), None, &rates, false, "", 1).is_empty());
+        assert!(rates.convert(f64::NAN, "USD", "JPY").is_none());
+        assert!(rates.convert(-1.0, "USD", "JPY").is_none());
     }
 
     #[test]

@@ -123,6 +123,8 @@ class ComparisonTests(unittest.TestCase):
                  patch.object(comparison.benchmark, "measure_process", side_effect=measure), \
                  patch.object(comparison.benchmark, "command", return_value="rustc test"), \
                  patch.object(comparison.importlib.util, "find_spec", return_value=object()), \
+                 patch.object(comparison.platform, "system", return_value="Windows"), \
+                 patch.object(comparison.platform, "platform", return_value="Windows-test"), \
                  patch.object(comparison.platform, "processor", return_value="test CPU"), \
                  patch.object(comparison.subprocess, "run") as runner, patch("builtins.print"):
                 comparison.main()
