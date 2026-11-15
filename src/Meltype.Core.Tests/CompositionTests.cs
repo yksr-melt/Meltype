@@ -5745,19 +5745,37 @@ internal static class CompositionTests
             // 日本語由来の語 (ninja) は日本語の読みのまま
             ("ninjashite", "にんじゃして"),
             ("ninjasuru", "にんじゃする"),
-            // 逆向き: する が続かない share は今までどおり日本語 (しゃれ)
+            // 逆向き: する が続かない share 単体は今までどおり日本語 (しゃれ)
             ("share", "しゃれ"),
+            // 文頭でも、する の活用が続けば英語
             ("sharesuru", "shareする"),
             ("sharesite", "shareして"),
             ("shareshitara", "shareしたら"),
-            // する の活用は しない・します・させる なども同じ
+            // する の活用は しない・します なども同じ
             ("shareshinai", "shareしない"),
             ("shareshimasu", "shareします"),
             ("shareshiteiru", "shareしている"),
-            ("sharesaseru", "shareさせる"),
             ("sharesareru", "shareされる"),
             ("sharesarenai", "shareされない"),
             ("makeshite", "makeして"),
+            // させ は一段動詞の使役形 (負けさせた・褒めさせて) とも読む。読みが一段動詞の語幹なら日本語のまま
+            ("wazatomakesaseta", "わざとまけさせた"),
+            ("wazatomakesaserareta", "わざとまけさせられた"),
+            ("aitewomakesasenaiyounisuru", "あいてをまけさせないようにする"),
+            ("mottohomesasete", "もっとほめさせて"),
+            ("homesaseru", "ほめさせる"),
+            ("sharesaseru", "しゃれさせる"),
+            ("sharesaseta", "しゃれさせた"),
+            // され・せず は一段動詞の使役形ではないので、する の活用として英語のまま
+            ("makesareta", "makeされた"),
+            ("makesezu", "makeせず"),
+            // させず は使役形なので、一段動詞の語幹なら日本語のまま
+            ("makesasezu", "まけさせず"),
+            ("wazatomakesasezu", "わざとまけさせず"),
+            // 一段動詞の語幹でない技術用語は させ でも英語
+            ("casesaseru", "caseさせる"),
+            ("casesasezu", "caseさせず"),
+            ("urisaseru", "uriさせる"),
             // 技術用語でない英単語 (memo・site) と付属語 (ため・ので) は今までどおり日本語
             ("memoshite", "めもして"),
             ("korememoshite", "これめもして"),
