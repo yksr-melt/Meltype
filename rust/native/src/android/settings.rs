@@ -430,9 +430,11 @@ pub(super) fn action(handle: jlong, action: Value, fields: Value) -> Result<Valu
                 Some(1) => "Manual",
                 _ => return Err("通貨のレートが正しくありません".into()),
             };
+            // 画面を作り直すと、選択の通知 (onItemSelected) で同じ操作が続く。
+            // 表示は選択の部品が自分で変わるので、作り直さずに値だけ保存する。
             (
                 json!({"op":"settings_set","name":"CurrencyRateMode","value":mode}),
-                Some(0),
+                None,
             )
         }
         "currency_digits" => {
@@ -444,7 +446,7 @@ pub(super) fn action(handle: jlong, action: Value, fields: Value) -> Result<Valu
                 .ok_or("小数の桁が正しくありません")?;
             (
                 json!({"op":"settings_set","name":"CurrencyDecimals","value":digits}),
-                Some(0),
+                None,
             )
         }
         "currency_save" => (
