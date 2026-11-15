@@ -450,7 +450,14 @@ public sealed class CompositionText
         }
         // 区切りを選んだ理由も、区切りと同じ計算から取る (確定のログが、実際に確定した区切りと食い違わないように。issue #1644)
         var reasons = new List<Func<string>>();
-        var result = ComputeSegments(reasons);
+        var result = Adjusted(ComputeSegments(reasons)[0], reasons);
+        _segmentsCache = (key, _detector.Memory, _detector.SpellChecker, result, reasons);
+        return result;
+    }
+
+    /// <summary>区間分けに、設定の区間の直し (全角の括弧・かな + w の笑い) をかける。直したら理由を reasons に足す。</summary>
+    private IReadOnlyList<CompositionSegment> Adjusted(IReadOnlyList<CompositionSegment> result, List<Func<string>> reasons)
+    {
         if (FullWidthParentheses && result.Any(s => s.IsEnglish && s.Raw is "(" or ")"))
         {
             result = [.. result.Select(s => s.IsEnglish && s.Raw is "(" or ")" ? new CompositionSegment(false, s.Raw == "(" ? "（" : "）", s.Raw) : s)];
@@ -461,9 +468,24 @@ public sealed class CompositionText
             result = split;
             reasons.Add(() => "設定「かな + w を笑い (ねw・さw) にする」で かな + w に分けた");
         }
-        _segmentsCache = (key, _detector.Memory, _detector.SpellChecker, result, reasons);
         return result;
     }
+
+    /// <summary>
+    /// 変換用の区間分けと、その英日の区切りの別案 (軽い順に count 案まで。先頭は <see cref="ConversionSegments"/>)。
+    /// 案は <see cref="Segments"/> と同じ順番で作る (<see cref="ComputeSegments"/> → <see cref="Adjusted"/>)。
+    /// 別案の区切りの理由は確定のログに書かない (確定のログは <see cref="Segments"/> の理由)。
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<CompositionSegment>> ConversionSegmentAlternatives(int count)
+    {
+        var alternatives = new List<IReadOnlyList<CompositionSegment>>();
+        foreach (var segments in ComputeSegments([], count).Select(a => WithFinalPending(Adjusted(a, []))))
+            if (!alternatives.Any(a => a.SequenceEqual(segments))) alternatives.Add(segments);
+        return alternatives;
+    }
+
+    /// <summary>打った英字をすべてローマ字として読んだ、日本語の 1 区間の区間分け (botto → ぼっと)。ローマ字として読めない英字は残る (google → ごおgぇ)。</summary>
+    public IReadOnlyList<CompositionSegment> AllJapaneseSegments() => [new CompositionSegment(false, AllKana(final: true), Raw)];
 
     /// <summary>今の区切り (Segments) を選んだ理由。確定のログに書く (issue #1644)。</summary>
     public string ExplainSegments()
@@ -512,30 +534,44 @@ public sealed class CompositionText
         return key.ToString();
     }
 
-    private IReadOnlyList<CompositionSegment> ComputeSegments(List<Func<string>> reasons)
+    /// <summary>
+    /// 名前を紹介する英文の名前か。辞書にないローマ字の名前も英字で残す。
+    /// 手動・かな入力・明示的な日本語学習・後ろの日本語は優先する。
+    /// </summary>
+    private bool IsNameInEnglishSentence =>
+        !KanaInput && PrecedingEnglishName && FollowingEnglish != false && !EffectiveManual &&
+        Raw is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && _detector.Memory?.Get(raw.ToLowerInvariant()) != false;
+
+    /// <summary>
+    /// 区間分けと、その英日の区切りの別案 (軽い順に count 案まで。先頭が表示・確定に使う区切り)。reasons には先頭の区切りの理由を足す。
+    /// 別案は <see cref="CompositionDetector.SegmentAlternatives"/> の案。
+    /// 英文の中の名前・保護区間・半角の開き括弧・手動のように、ラティスの外の決まりで区切ったときは別案を出さない
+    /// (決まりで決めた区切りを、ラティスの案で崩さない)。
+    /// </summary>
+    private IReadOnlyList<IReadOnlyList<CompositionSegment>> ComputeSegments(List<Func<string>> reasons, int count = 1)
     {
-        // 名前を紹介する英文では、辞書にないローマ字の名前も英字で残す。
-        // 手動・かな入力・明示的な日本語学習・後ろの日本語は優先する。
-        var raw = Raw;
-        if (!KanaInput && PrecedingEnglishName && FollowingEnglish != false && !EffectiveManual &&
-            raw.Length > 0 && raw.All(char.IsAsciiLetter) && _detector.Memory?.Get(raw.ToLowerInvariant()) != false)
+        if (IsNameInEnglishSentence)
         {
             reasons.Add(() => "名前を紹介する英文の続きなので英字のまま");
-            return [new CompositionSegment(true, "", raw)];
+            return [[new CompositionSegment(true, "", Raw)]];
         }
-        var segments = SegmentWithProtection(_units, reasons);
-        if (HalfWidthOpeners(segments) is not { } adjusted) return segments;
-        // 区切り直した結果だけが確定するので、最初の区切りの理由は捨てる
-        reasons.Clear();
-        reasons.Add(() => "後ろが英語なので開きの記号を半角にして区切り直した");
-        return SegmentWithProtection(adjusted, reasons);
+        var alternatives = SegmentWithProtection(_units, reasons, EffectiveManual ? 1 : count);
+        if (HalfWidthOpeners(alternatives[0]) is { } adjusted)
+        {
+            // 区切り直した結果だけが確定するので、最初の区切りの理由は捨てる
+            reasons.Clear();
+            reasons.Add(() => "後ろが英語なので開きの記号を半角にして区切り直した");
+            return SegmentWithProtection(adjusted, reasons, 1);
+        }
+        return alternatives;
     }
 
-    private IReadOnlyList<CompositionSegment> SegmentWithProtection(IReadOnlyList<CompositionUnit> units, List<Func<string>> reasons)
+    /// <summary>保護区間を英字のまま区切る。保護区間があれば別案は出さない (1 案だけ)。</summary>
+    private IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentWithProtection(IReadOnlyList<CompositionUnit> units, List<Func<string>> reasons, int count)
     {
         var spans = ProtectedSpans();
         if (spans.Count == 0)
-            return _detector.Segment(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput, reasons);
+            return _detector.SegmentAlternatives(units, Pending, PrecedingEnglish, FollowingEnglish, EffectiveManual, PrecedingEnglishSentence, KanaInput, count, reasons);
         var raw = Raw;
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -548,7 +584,7 @@ public sealed class CompositionText
             start = span.End;
         }
         AddGap(start, raw.Length);
-        return result;
+        return [result];
 
         void AddGap(int from, int to)
         {
@@ -664,24 +700,25 @@ public sealed class CompositionText
     public bool? FollowingEnglish { get; set; }
 
     /// <summary>変換用の区間分け。末尾の入力途中の子音は確定扱い (n → ん) にして日本語区間の読みに含める。</summary>
-    public IReadOnlyList<CompositionSegment> ConversionSegments()
+    public IReadOnlyList<CompositionSegment> ConversionSegments() => WithFinalPending(Segments());
+
+    private List<CompositionSegment> WithFinalPending(IReadOnlyList<CompositionSegment> segments)
     {
-        var segments = Segments().ToList();
-        if (segments.Count > 0 && !segments[^1].IsEnglish)
+        var result = segments.ToList();
+        if (result.Count > 0 && !result[^1].IsEnglish)
         {
-            segments[^1] = segments[^1] with { Kana = segments[^1].Kana + PendingText(final: true) };
+            result[^1] = result[^1] with { Kana = result[^1].Kana + PendingText(final: true) };
         }
-        return segments;
+        return result;
     }
 
     /// <summary>
-    /// <see cref="ConversionSegments"/> の segmentIndex 番目 (日本語の区間) の読みのうち [start, start + length) に対応する、打った英字
+    /// 変換用の区間分け segments (<see cref="ConversionSegmentAlternatives"/> の 1 案) の segmentIndex 番目 (日本語の区間) の読みのうち [start, start + length) に対応する、打った英字
     /// (あぴ → api)。変換の候補に「打ったままの英字」を出すのに使う。読みの区切りが 1 音の区切りと合わないときや、かな入力では null。
     /// </summary>
-    public string? RawForReading(int segmentIndex, int start, int length)
+    public string? RawForReading(IReadOnlyList<CompositionSegment> segments, int segmentIndex, int start, int length)
     {
         if (KanaInput) return null;
-        var segments = Segments();
         if (segmentIndex < 0 || segmentIndex >= segments.Count) return null;
         var from = segments.Take(segmentIndex).Sum(s => s.Raw.Length);
         var units = UnitsInRawRange(_units, from, from + segments[segmentIndex].Raw.Length, out var pending);
@@ -736,12 +773,11 @@ public sealed class CompositionText
     }
 
     /// <summary>
-    /// <see cref="ConversionSegments"/> の segmentIndex 番目の区間を、打った英字をローマ字として読んだかな (thin → てぃん)。
+    /// 変換用の区間分け segments の segmentIndex 番目の区間を、打った英字をローマ字として読んだかな (thin → てぃん)。
     /// 英語の区間を日本語の文節として読み直すのに使う。ローマ字として読めない英字はそのまま残る。かな入力では打ったかな。
     /// </summary>
-    public string? KanaForSegment(int segmentIndex)
+    public string? KanaForSegment(IReadOnlyList<CompositionSegment> segments, int segmentIndex)
     {
-        var segments = Segments();
         if (segmentIndex < 0 || segmentIndex >= segments.Count) return null;
         var start = segments.Take(segmentIndex).Sum(segment => segment.Raw.Length);
         var end = start + segments[segmentIndex].Raw.Length;
