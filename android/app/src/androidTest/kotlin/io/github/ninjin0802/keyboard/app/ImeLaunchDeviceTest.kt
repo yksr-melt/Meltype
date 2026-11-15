@@ -216,16 +216,31 @@ class ImeLaunchDeviceTest {
         // Android can restart input in the same editor after showing the IME.
         // A restart must not reset the language that the user just selected.
         requestKeyboard(activity, activity.editor)
-        waitUntil("Japanese QWERTY survives the same editor restart",
-            describe = { describeImeState(activity) + ", selected=" + service.activeKeysForSmokeTest()?.layout?.id }) {
-            activity.editor.hasFocus() &&
-                service.activeKeysForSmokeTest()?.layout?.id ==
-                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
+        // A visible key surface alone is not proof that Android has rebound the
+        // input connection after restartInput. Never inject into an orphaned IME view.
+        waitUntil(
+            "Japanese QWERTY survives the same editor restart",
+            millis = 45_000,
+            retryEveryMillis = 2_000,
+            retry = { requestKeyboard(activity, activity.editor) },
+            describe = {
+                val current = KeyboardService.activeForSmokeTest?.get()
+                describeImeState(activity) + ", selected=" + current?.activeKeysForSmokeTest()?.layout?.id +
+                    ", inputConnection=" + (current?.currentInputConnection != null)
+            },
+        ) {
+            val current = KeyboardService.activeForSmokeTest?.get()
+            val keys = current?.activeKeysForSmokeTest()
+            activity.hasWindowFocus() && activity.editor.hasFocus() &&
+                current?.isInputViewShown == true && current.currentInputConnection != null &&
+                keys?.isAttachedToWindow == true && keys.isShown &&
+                keys.layout.id == io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
         }
-        val keyboard = service.activeKeysForSmokeTest()
+        val keyboard = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
             ?: throw AssertionError("Japanese keys not shown")
         tap(keyboard, "a") { it is KeyAction.Romaji && it.char == 'a' }
-        waitUntil("literal romaji key appears in email editor") {
+        waitUntil("literal romaji key appears in email editor",
+            describe = { describeImeState(activity) + ", text=" + activity.editor.text }) {
             activity.editor.text.toString() == "a"
         }
         assertEquals("a", activity.editor.text.toString())
