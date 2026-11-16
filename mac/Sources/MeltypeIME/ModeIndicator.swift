@@ -105,19 +105,18 @@ final class ModeIndicator {
         return background
     }
 
-    func show(_ mode: MacInputMode, caret: NSRect? = nil) {
+    func show(_ mode: MacInputMode, caret: NSRect? = nil, milliseconds: Int) {
         timer?.invalidate()
         generation += 1
         let currentGeneration = generation
         // サービスと IMK の確定イベントが完了してから出す。確定に伴う UI の整理で隠されないようにする。
         DispatchQueue.main.async { [weak self] in
             guard let self, self.generation == currentGeneration else { return }
-            self.present(mode, caret: caret)
+            self.present(mode, caret: caret, milliseconds: milliseconds)
         }
     }
 
-    private func present(_ mode: MacInputMode, caret: NSRect?) {
-        guard ModeIndicatorSettings.shared.isEnabled else { hide(); return }
+    private func present(_ mode: MacInputMode, caret: NSRect?, milliseconds: Int) {
         let screen: NSScreen?
         if let caret {
             screen = NSScreen.screens.first(where: { $0.frame.contains(caret.origin) || $0.frame.intersects(caret) })
@@ -139,7 +138,7 @@ final class ModeIndicator {
         panel.setFrame(frame, display: true)
         self.panel = panel
         panel.orderFrontRegardless()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { [weak self] _ in self?.hide() }
+        timer = Timer.scheduledTimer(withTimeInterval: Double(milliseconds) / 1000, repeats: false) { [weak self] _ in self?.hide() }
     }
 
     func hide() {

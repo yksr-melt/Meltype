@@ -132,7 +132,7 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 <a name="使い方"></a>
 <img src="images/headings/linux/03.svg" alt="使い方" height="53"><br>
 
-<kbd>半角/全角</kbd> で英数と日本語を切り替えます。
+<kbd>半角/全角</kbd> で英数と日本語を切り替えます。<kbd>英数</kbd>・<kbd>無変換</kbd> で英数に、<kbd>ひらがな/カタカナ</kbd>・<kbd>変換</kbd> で日本語になります。切り替えたときは、入力位置の近くに「あ」か「A」を少しの間出します。入力欄に入ったときも出すには、設定 `ModeIndicator` を `OnSwitchAndFocus` にします。
 
 設定は、アプリの一覧の「Meltype の設定」で変えられます。
 

@@ -12,6 +12,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Meltype.Core\Meltype.Core.csproj" />
     <ProjectReference Include="..\Meltype.Mac.Native\Meltype.Mac.Native.csproj" />
-    <InternalsVisibleTo Include="Meltype.Tests" />
+    <InternalsVisibleTo Include="Meltype.Windows.Tests" />
   </ItemGroup>
 </Project>

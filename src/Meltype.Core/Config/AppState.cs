@@ -47,8 +47,8 @@ public sealed class AppState
             DataFile.Load(configPath, "config.json の状態の値", json =>
             {
                 state = Parse(json);
-                // 動作モードが IME 自動切替 (消した) だった: 初めて起動したときと同じく、Meltype IME を使えなければ Meltype キーボードに戻し、
-                // 使えれば入力方式も Meltype IME にする (Program.ShouldFallBackToKeyboard・TrayApplicationContext.IntroduceTsf)
+                // 動作モードが IME 自動切替 (消した) だった: 初めて起動したときと同じく、
+                // 使えれば入力方式も Meltype IME にする (TrayApplicationContext.IntroduceTsf)
                 if (Settings.TopLevelStringIs(json, nameof(Settings.Mode), "AutoSwitch")) state.TsfIntroduced = false;
             });
             state._path = path;

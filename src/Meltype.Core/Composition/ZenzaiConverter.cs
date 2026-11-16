@@ -62,7 +62,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     // 打鍵が続く間は最後の読みだけを推論する (CPU のみのときに推論が積み重ならないように)
     private const int SettleMs = 60;
 
-    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず今までの変換エンジンに任せる。
+    // 応答が遅かった (CPU の負荷が高いなど) ときは、しばらく使わず Mozc に任せる。
     private const int BackoffMs = 5000;
     private long _pausedUntil;
 
@@ -167,7 +167,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         try
         {
-            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)
+            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
+            // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
             if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
         }
         catch (Exception ex)
@@ -180,7 +181,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc などに任せる
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。
+        // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
         var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
@@ -241,6 +243,63 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
     }
 
+    /// <summary>
+    /// 答えが読みと合っているか。答えのかな (カタカナはひらがなとして) と記号は、読みのその位置の文字と同じでないといけない。
+    /// 漢字 1 文字と、英字・数字の並び 1 つは、読みの 1 文字以上に当たるとみなす (今日 → きょう、Microsoft → まいくろそふと)。
+    /// モデルが読みに無いものを続けた答え (はーどうぇ → ハードウェアウェア: issue #1675、きょうはで → 今日はでで・直前の文節の混入: issue #1511) は合わない。
+    /// </summary>
+    internal static bool IsPlausible(string hiragana, string answer)
+    {
+        var tokens = Tokens(answer);
+        var reading = hiragana.Select(Normalize).ToArray();
+        var dead = new HashSet<(int, int)>();
+        return Match(0, 0);
+
+        // tokens[t] 以降で reading[r] 以降をちょうど作れるか (作れなかった組は覚えて、もう試さない)
+        bool Match(int t, int r)
+        {
+            if (t == tokens.Count) return r == reading.Length;
+            if (r == reading.Length || dead.Contains((t, r))) return false;
+            var (text, wildcard) = tokens[t];
+            if (!wildcard ? Normalize(text[0]) == reading[r] && Match(t + 1, r + 1)
+                : (text.Length == 1 && Normalize(text[0]) == reading[r] && Match(t + 1, r + 1)) || Enumerable.Range(r + 1, reading.Length - r).Any(end => Match(t + 1, end)))
+                return true;
+            dead.Add((t, r));
+            return false;
+        }
+    }
+
+    /// <summary>答えを、読みと 1 文字ずつ比べる文字 (かな・記号) と、読みの 1 文字以上に当たる字 (漢字 1 文字・英数字の並び) に分ける。</summary>
+    private static List<(string Text, bool Wildcard)> Tokens(string answer)
+    {
+        var tokens = new List<(string, bool)>();
+        for (var i = 0; i < answer.Length;)
+        {
+            var c = Normalize(answer[i]);
+            if (char.IsAsciiLetterOrDigit(c))
+            {
+                var end = i;
+                while (end < answer.Length && char.IsAsciiLetterOrDigit(Normalize(answer[end]))) end++;
+                tokens.Add((answer[i..end], true));
+                i = end;
+                continue;
+            }
+            var length = char.IsSurrogatePair(answer, i) ? 2 : 1;
+            var kana = c is >= 'ぁ' and <= 'ゖ' or 'ー' or 'ゝ' or 'ゞ';
+            tokens.Add((answer.Substring(i, length), !kana && !char.IsAsciiLetterOrDigit(c) && !char.IsPunctuation(c) && !char.IsSymbol(c) && !char.IsWhiteSpace(c)));
+            i += length;
+        }
+        return tokens;
+    }
+
+    /// <summary>比べるための文字: カタカナはひらがな (ヵ・ヶ は漢字と同じ扱いのまま)、全角の英数字・記号は半角。</summary>
+    private static char Normalize(char c) => c switch
+    {
+        >= 'ァ' and <= 'ヴ' and not ('ヵ' or 'ヶ') => (char)(c - 0x60),
+        >= '！' and <= '～' => (char)(c - 0xFEE0),
+        _ => c,
+    };
+
     /// <summary>生成された文字列から、終わりの記号 (EOS や U+EE0x) 以降と前後の空白を取り除く。空なら null。</summary>
     internal static string? Clean(string? content)
     {
@@ -285,12 +344,16 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             info.ArgumentList.Add("--poll");
             info.ArgumentList.Add("0");
             info.Environment.TryAdd("KMP_BLOCKTIME", "5");
-            KillStaleServer();
+            EndStaleServers();
             var process = Process.Start(info);
             if (process is null) { Fail(); return; }
             // Meltype が強制終了されても、llama-server が残らないようにする (Windows: ジョブに入れる。入れておくと、親が消えたとき OS が一緒に終わらせる)
             BindToThisProcess(process);
-            WritePidFile(process);
+            using (var self = Process.GetCurrentProcess())
+            {
+                _pidFile = RecordServer(process.Id, Path.GetFileNameWithoutExtension(_serverPath), process.StartTime.ToUniversalTime().Ticks,
+                    self.Id, self.StartTime.ToUniversalTime().Ticks);
+            }
             // 出力を読み捨てる (読まないとパイプが詰まってサーバーが止まる)
             process.OutputDataReceived += static (_, _) => { };
             process.ErrorDataReceived += static (_, _) => { };
@@ -298,7 +361,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             process.BeginErrorReadLine();
             lock (_gate)
             {
-                if (_disposed) { Kill(process); return; }
+                if (_disposed)
+                {
+                    Kill(process);
+                    DeletePidFile();
+                    return;
+                }
                 _process = process;
             }
             var endpoint = new Uri($"http://127.0.0.1:{port}/");
@@ -352,30 +420,70 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
 
     // ---- llama-server を残さない ----
 
-    private static string PidFile => Path.Combine(Path.GetTempPath(), "meltype-zenzai-server.pid");
+    // 起動した llama-server 1 つにつき 1 ファイル。同じ PC で Meltype が複数動く (IME と自己診断など) ので、持ち主の Meltype も書く
+    internal static string PidDirectory => Path.Combine(Path.GetTempPath(), "meltype-zenzai");
 
-    private void WritePidFile(Process process)
-    {
-        try { File.WriteAllText(PidFile, $"{process.Id}\n{Path.GetFileNameWithoutExtension(_serverPath)}\n{process.StartTime.ToUniversalTime().Ticks}"); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
-    }
+    private string? _pidFile;
 
-    /// <summary>
-    /// 前の Meltype が強制終了されて残った llama-server (PID ファイルに書いてあるもの) を終わらせる。
-    /// PID は使い回されるので、名前に加えて起動した時刻も同じときだけ (ユーザーが自分で動かしている別の llama-server を止めないように)。
-    /// </summary>
-    private static void KillStaleServer()
+    /// <summary>起動した llama-server と、持ち主の Meltype を書いておく (<see cref="EndStaleServers"/> が読む)。書いたファイルを返す。</summary>
+    internal static string? RecordServer(int pid, string name, long startTicks, int ownerPid, long ownerStartTicks)
     {
         try
         {
-            if (!File.Exists(PidFile)) return;
-            var lines = File.ReadAllLines(PidFile);
-            File.Delete(PidFile);
-            if (lines.Length < 3 || !int.TryParse(lines[0], out var pid) || pid == Environment.ProcessId || !long.TryParse(lines[2], out var startTicks)) return;
-            using var stale = Process.GetProcessById(pid);
-            if (string.Equals(stale.ProcessName, lines[1], StringComparison.OrdinalIgnoreCase) && stale.StartTime.ToUniversalTime().Ticks == startTicks) Kill(stale);
+            Directory.CreateDirectory(PidDirectory);
+            var file = Path.Combine(PidDirectory, $"{pid}.pid");
+            File.WriteAllText(file, $"{pid}\n{name}\n{startTicks}\n{ownerPid}\n{ownerStartTicks}");
+            return file;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+    }
+
+    /// <summary>
+    /// 持ち主の Meltype が終わったのに残っている llama-server (強制終了されたときなど) を終わらせる。持ち主が動いているものは止めない。
+    /// PID は使い回されるので、プロセスは名前と起動した時刻も同じときだけ同じものとみなす (ユーザーが自分で動かしている別の llama-server を止めないように)。
+    /// </summary>
+    public static void EndStaleServers()
+    {
+        string[] files;
+        try { files = Directory.Exists(PidDirectory) ? Directory.GetFiles(PidDirectory, "*.pid") : []; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return; }
+        foreach (var file in files)
+        {
+            try
+            {
+                var lines = File.ReadAllLines(file);
+                if (lines.Length < 5 || !int.TryParse(lines[0], out var pid) || !long.TryParse(lines[2], out var startTicks) ||
+                    !int.TryParse(lines[3], out var ownerPid) || !long.TryParse(lines[4], out var ownerStartTicks))
+                {
+                    File.Delete(file);
+                    continue;
+                }
+                if (IsRunning(ownerPid, null, ownerStartTicks)) continue;
+                File.Delete(file);
+                if (!IsRunning(pid, lines[1], startTicks)) continue;
+                using var stale = Process.GetProcessById(pid);
+                Kill(stale);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { }
+        }
+    }
+
+    private void DeletePidFile()
+    {
+        try { if (_pidFile is not null) File.Delete(_pidFile); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    /// <summary>pid のプロセスが動いていて、起動した時刻 (と name があれば名前) が同じか。</summary>
+    private static bool IsRunning(int pid, string? name, long startTicks)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            return (name is null || string.Equals(process.ProcessName, name, StringComparison.OrdinalIgnoreCase)) &&
+                process.StartTime.ToUniversalTime().Ticks == startTicks;
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException or System.ComponentModel.Win32Exception) { return false; }
     }
 
     private static IntPtr s_job;
@@ -472,6 +580,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             Kill(process);
             process.Dispose();
         }
+        DeletePidFile();
         _http.Dispose();
     }
 }

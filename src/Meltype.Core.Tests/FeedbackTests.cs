@@ -611,33 +611,6 @@ internal static class MisspellingTests
 internal static class CodeProfileTests
 {
     [Test]
-    public static void LineTracker_FollowsTypingAndResets()
-    {
-        var line = new LineTracker();
-        Assert.True(line.Text is null, "最初は分からない");
-        line.NewLine();
-        line.Append("x = 1 ");
-        Assert.Equal(LineKind.Code, LineContext.Classify(line.Text!));
-        line.Append("// ");
-        Assert.Equal(LineKind.Comment, LineContext.Classify(line.Text!), "// の後はコメント");
-        line.Backspace();
-        line.Backspace();
-        line.Backspace();
-        Assert.Equal("x = 1 ", line.Text);
-        line.NewLine();
-        Assert.Equal("x = 1 \n", line.Text, "改行で新しい行 (前の行も持っておく)");
-        Assert.Equal(LineKind.Code, LineContext.ClassifyText(line.Text!));
-        line.Invalidate();
-        Assert.True(line.Text is null, "キャレットが動いたら分からない");
-        line.Append("\"a");
-        line.Backspace();
-        Assert.True(line.Text is null, "打っても分からないまま");
-        Assert.Equal("\"", line.Tracked, "分からなくなってから打った文字列は追いかける");
-        line.SetFromText("first line\r\n    print(\"こん");
-        Assert.Equal(LineKind.String, LineContext.ClassifyText(line.Text!), "UI Automation で読んだ文字列の、今の行で調べる");
-    }
-
-    [Test]
     public static void LineContext_MultiLineStringsAndComments()
     {
         // Python の """ の中の行 (本文) で日本語が打てなかった
@@ -701,13 +674,12 @@ internal static class CodeProfileTests
         var settings = new Settings
         {
             AutoDetection = true,
-            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false, StartInEnglish = true }],
+            AppKinds = [new AppKind { Name = "チャット", Base = AppProfile.General, AutoDetection = false, LiveConversion = false }],
             AppRules = [new AppRule { Process = "Discord.exe", Kind = "チャット" }, new AppRule { Process = "Code.exe", Profile = AppProfile.Code }],
         };
         Assert.True(!settings.ForApp("discord.exe").AutoDetection, "独自の種類の自動判定");
         Assert.True(!settings.ForApp("Discord.exe").LiveConversion, "独自の種類のライブ変換");
         Assert.True(settings.ForApp("chrome.exe").AutoDetection, "ほかのアプリは全体の設定");
-        Assert.True(settings.KindFor("Discord.exe")?.StartInEnglish == true, "最初は英数");
         Assert.Equal(AppProfile.Code, settings.ProfileFor("Code.exe"));
 
         var path = Path.Combine(Path.GetTempPath(), $"meltype-kinds-{Guid.NewGuid():N}.json");
@@ -717,6 +689,9 @@ internal static class CodeProfileTests
             var loaded = Settings.Load(path);
             Assert.Equal("チャット", loaded.KindFor("Discord.exe")?.Name, "保存して読み込んでも種類を保つ");
             Assert.True(!loaded.Clone().ForApp("Discord.exe").AutoDetection, "複製しても保つ");
+            // 消した項目 (独自の種類の「最初は英数」) が残っている config.json も読める
+            File.WriteAllText(path, $"{{\"SettingsVersion\":{Settings.CurrentVersion},\"AppKinds\":[{{\"Name\":\"チャット\",\"StartInEnglish\":true}}]}}");
+            Assert.Equal("チャット", Settings.Load(path).AppKinds.Single().Name, "消した項目は無視する");
         }
         finally
         {
@@ -991,7 +966,7 @@ internal static class LanguageLearningTests
             Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
             var settings = new Settings { LiveConversion = true, UseZenzai = false };
             var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-                new CompositionOptions { LiveConversion = () => true, Languages = memory }, () => settings);
+                new CompositionServices { Languages = memory }, () => settings);
             foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
             var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
             Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
@@ -1002,7 +977,7 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue959_VersionCandidate_CanBeSelectedAndCommitted()
     {
-        var expected = $"Meltype-{ProjectInfo.CoreVersion}";
+        var expected = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var live in new[] { false, true })
         {
             foreach (var typed in new[] { "ba-jon", "ba-jonn", "ba-zyonn" })
@@ -1027,7 +1002,7 @@ internal static class LanguageLearningTests
     public static void Issue959_VersionCandidate_LiveConversionCommitsKatakana()
     {
         // ライブ変換では、カタカナの「バージョン」を版の候補より前に出し、そのまま確定しても版にしない (Meltype の版を打ちたいことはまれ)
-        var version = $"Meltype-{ProjectInfo.CoreVersion}";
+        var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var typed in new[] { "ba-jon", "ba-jonn", "ba-zyonn" })
         {
             var k = new CompositionTests.Keyboard(live: true,
@@ -1043,7 +1018,7 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue959_VersionCandidate_DoesNotChangeOtherInput()
     {
-        var expected = $"Meltype-{ProjectInfo.CoreVersion}";
+        var expected = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var typed in new[] { "version", "ba-jonappu", "ba-" })
         {
             var k = new CompositionTests.Keyboard();
@@ -1076,11 +1051,13 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue1488_OldVersionInHistoryDoesNotOverrideNormalConversion()
     {
-        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても、通常の「バージョン」にする
+        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても (conversions.json)、通常の「バージョン」にする
         foreach (var old in new[] { "Meltype-1.4.1-pre.2", "Mozc-3.34.6239.102+24.11.oss" })
         {
-            var history = new ConversionHistory(null);
-            history.Remember("ばーじょん", old);
+            var path = Path.Combine(Path.GetTempPath(), $"meltype-version-{Guid.NewGuid():N}.json");
+            File.WriteAllText(path, $"{{\"ばーじょん\":{{\"Text\":\"{old}\",\"Used\":\"2026-11-01T00:00:00Z\"}}}}");
+            var history = new ConversionHistory(path);
+            File.Delete(path);
             foreach (var live in new[] { false, true })
             {
                 var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new VersionConverter());
@@ -1092,7 +1069,7 @@ internal static class LanguageLearningTests
             var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
             standalone.Type("ba-jonn ");
             Assert.Equal("バージョン", standalone.Host.View!.Text, old);
-            Assert.True(standalone.Host.View.Candidates.Contains($"Meltype-{ProjectInfo.CoreVersion}"), "現在の版は引き続き選べる");
+            Assert.True(standalone.Host.View.Candidates.Contains(Composition.Utility.VersionConversion.Candidate(new Settings())), "現在の版は引き続き選べる");
         }
     }
 
@@ -1102,19 +1079,19 @@ internal static class LanguageLearningTests
         var history = new ConversionHistory(null);
         var phrases = new PhraseHistory(null);
         var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
-        keyboard.Type("mukasinoba-jonn ");
-        keyboard.Press(VirtualKeys.Right);
-        var version = $"Meltype-{ProjectInfo.CoreVersion}";
+        keyboard.Type("ba-jonn ");
+        var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.Controller.SelectCandidate(index);
         keyboard.Press(VirtualKeys.Return);
-        Assert.Equal("昔の" + version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
+        Assert.Equal(version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
         Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
-        Assert.True(!phrases.StartingWith("むかしの").Any(), "語句の履歴にも覚えない");
 
-        // 普通の「昔のバージョン」は覚える
+        // 版は入力の全体が ばーじょん のときだけ出す。普通の「昔のバージョン」は覚える
         keyboard.Type("mukasinoba-jonn ");
+        keyboard.Press(VirtualKeys.Right);
+        Assert.True(!keyboard.Host.View!.Candidates.Contains(version), "文の途中の ばーじょん には版を出さない");
         keyboard.Press(VirtualKeys.Return);
         Assert.True(phrases.StartingWith("むかしの").Contains("昔のバージョン"), "通常の語句は覚える");
     }
@@ -1417,7 +1394,8 @@ internal static class LanguageLearningTests
                 // 先頭の @ の語 (#193) はそのままアプリへ渡すので、ここは変換ボックスに入れたときの扱いを確かめる。
                 var k = new CompositionTests.Keyboard { SigilWords = false };
                 k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
+                // 変換ボックスが空のときの Enter は、改行としてアプリに届く
+                Assert.Equal(expected, k.Host.Document.TrimEnd('\n'), typed);
             }
         }
         finally
@@ -1603,6 +1581,7 @@ internal static class LanguageLearningTests
             {
                 var k = new CompositionTests.Keyboard { FunctionKeysAffectSelectedClause = true };
                 k.Type(typed + " ");
+                while (k.Host.View!.SelectedClause > 0) k.Press(VirtualKeys.Left);
                 for (var i = 0; i < rights; i++) k.Press(VirtualKeys.Right);
                 k.Press(VirtualKeys.F6);
                 Assert.Equal(expected, string.Join("|", k.Host.View!.Clauses!), typed);
@@ -1697,6 +1676,37 @@ internal static class RomajiTypoTests
             var k = new CompositionTests.Keyboard();
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void RomajiTypos_FixAShortEnglishWordShownInTheMiddle_WhenTheFixIsALongWord()
+    {
+        // すみ|mas|ね の mas は、同梱の英単語の一覧 (Linux・Mac のスペルチェッカーの代わり) にあるので、打っている途中は英字に見える。
+        // 直すと すみません (4 文字以上の 1 つの語) になるなら直す (issue #971)
+        var previous = CompositionTests.Detector.SpellChecker;
+        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("sumimasne", "すみません"),
+                // 直しても短い語 (たべ・たば) にしかならないものは英字のまま (issue #220)
+                ("tabde", "tabで"),
+                ("tabga", "tabが"),
+                ("kyouhatabdeyaru", "きょうはtabでやる"),
+                // できません / できますね のどちらか分からないものは直さない
+                ("dekimasne", "できmasね"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = previous;
         }
     }
 

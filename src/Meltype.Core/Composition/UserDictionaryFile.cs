@@ -38,7 +38,7 @@ public static class UserDictionaryFile
             var reading = KanaChars.ToHiragana(fields[0].Trim());
             var word = fields[1].Trim();
             // 語の途中の CR・ESC などは確定するとアプリにキー操作として届くので、制御文字を含む語は取り込まない
-            if (reading.Length < UserDictionary.MinReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.Any(char.IsControl))
+            if (reading.Length < UserDictionary.MinRegisteredReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.Any(char.IsControl))
             {
                 skipped++;
                 continue;
@@ -92,7 +92,7 @@ public static class UserDictionaryFile
             // 複数行の定型文は userdict.txt (1 行に 1 語) に入らないので飛ばす。ESC などほかの制御文字を含む語も飛ばす
             reading = KanaChars.ToHiragana(reading?.Trim() ?? "");
             word = word?.Trim() ?? "";
-            if (reading.Length < UserDictionary.MinReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.Any(char.IsControl))
+            if (reading.Length < UserDictionary.MinRegisteredReadingLength || word.Length == 0 || !reading.All(IsReadingChar) || word.Any(char.IsControl))
             {
                 skipped++;
                 continue;

@@ -95,6 +95,7 @@ public sealed class ConversionHistory
     private const int MaxEntries = 5000;
     private readonly string? _path;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    // 裏のスレッドからも消す (MeltypeRuntime.ForgetZenzaiHallucinations) ので、読むときも取る
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
@@ -114,16 +115,25 @@ public sealed class ConversionHistory
         {
             var loaded = JsonSerializer.Deserialize(content, Config.ConversionJsonContext.Default.Conversions);
             // 1 文字の読み (き → 記) は、以前の版で覚えてしまったものも使わない (関係ない変換を巻き込むため)。
-            if (loaded is not null) foreach (var (reading, entry) in loaded) if (reading.Length >= 2) _entries[reading] = entry;
+            // 日時・版から作る語なども、以前の版で覚えてしまったものを使わない (CompositionLearning.IsStale)。
+            if (loaded is not null)
+                foreach (var (reading, entry) in loaded)
+                    if (reading.Length >= 2 && !CompositionLearning.IsStale(reading, entry.Text)) _entries[reading] = entry;
         });
     }
 
     /// <summary>学習した内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
     public int Version { get; private set; }
 
-    public int Count => _entries.Count;
+    public int Count
+    {
+        get { lock (_gate) return _entries.Count; }
+    }
 
-    public string? Get(string reading) => _entries.TryGetValue(reading, out var entry) ? entry.Text : null;
+    public string? Get(string reading)
+    {
+        lock (_gate) return _entries.TryGetValue(reading, out var entry) ? entry.Text : null;
+    }
 
     public void Remember(string reading, string text)
     {
@@ -156,12 +166,17 @@ public sealed class ConversionHistory
     /// <summary>読みが prefix で始まり prefix より長い、学習した変換の語 (新しく使ったものから。Entries() から探すのと同じ順)。</summary>
     public IEnumerable<string> TextsStartingWith(string prefix)
     {
-        if (_index is not { } index || index.Version != Version)
+        (int Version, (string Reading, string Text, DateTime Used, int Order)[] Items) index;
+        lock (_gate)
         {
-            var order = 0;
-            var items = _entries.Select(e => (e.Key, e.Value.Text, e.Value.Used, order++)).ToArray();
-            Array.Sort(items, (a, b) => string.CompareOrdinal(a.Key, b.Key));
-            _index = index = (Version, items);
+            if (_index is not { } built || built.Version != Version)
+            {
+                var order = 0;
+                var items = _entries.Select(e => (e.Key, e.Value.Text, e.Value.Used, order++)).ToArray();
+                Array.Sort(items, (a, b) => string.CompareOrdinal(a.Key, b.Key));
+                _index = built = (Version, items);
+            }
+            index = built;
         }
         var matches = new List<(string Text, DateTime Used, int Order)>();
         for (var i = LowerBound(index.Items, prefix); i < index.Items.Length && index.Items[i].Reading.StartsWith(prefix, StringComparison.Ordinal); i++)
@@ -184,8 +199,10 @@ public sealed class ConversionHistory
     }
 
     /// <summary>学習した変換 (読み → 選んだ語) の一覧 (新しく使ったものから)。設定の「学習した語」に出す。</summary>
-    public IReadOnlyList<(string Reading, string Text, DateTime Used)> Entries() =>
-        _entries.OrderByDescending(e => e.Value.Used).Select(e => (e.Key, e.Value.Text, e.Value.Used)).ToList();
+    public IReadOnlyList<(string Reading, string Text, DateTime Used)> Entries()
+    {
+        lock (_gate) return _entries.OrderByDescending(e => e.Value.Used).Select(e => (e.Key, e.Value.Text, e.Value.Used)).ToList();
+    }
 
     public void Clear()
     {

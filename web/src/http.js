@@ -35,8 +35,29 @@ export async function readJson(request, maxBytes) {
   }
   const declared = Number(request.headers.get("content-length") || 0);
   if (declared > maxBytes) return { error: error(413, "ンァーッ！報告の文が長すぎます！") };
-  const text = await request.text();
-  if (new TextEncoder().encode(text).length > maxBytes) return { error: error(413, "ンァーッ！報告の文が長すぎます！") };
+  // Content-Length が無い・嘘でも、上限を超えた時点で読むのをやめる (全部をメモリに入れてから調べない)
+  const chunks = [];
+  let total = 0;
+  if (request.body) {
+    const reader = request.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => {});
+        return { error: error(413, "ンァーッ！報告の文が長すぎます！") };
+      }
+      chunks.push(value);
+    }
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  const text = new TextDecoder().decode(bytes);
   try {
     return { body: JSON.parse(text) };
   } catch {

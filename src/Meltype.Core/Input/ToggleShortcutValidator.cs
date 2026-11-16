@@ -47,9 +47,8 @@ public static class ToggleShortcutValidator
             return ShortcutValidationError.ShiftSpaceHalfWidth;
 
         // 無変換 (0x1D) / 変換 (0x1C) キー単独
-        // 設定「無変換で英数 / 変換で日本語」が有効な場合は競合するため登録不可
-        if (b.Modifiers == ShortcutModifiers.None &&
-            (settings.ConvertKeysSwitchKeyboard && b.Key is 0x1C or 0x1D))
+        // 無変換・変換だけは英数・日本語にするキー
+        if (b.Modifiers == ShortcutModifiers.None && b.Key is 0x1C or 0x1D)
             return ShortcutValidationError.ConvertKeys;
 
         return ShortcutValidationError.None;

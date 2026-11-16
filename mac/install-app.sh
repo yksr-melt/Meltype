@@ -68,6 +68,8 @@ if [[ "${1:-}" != --prepared ]]; then
     }
     ditto "$source_app" "$stage/Meltype.app"
     codesign --verify --deep --strict "$stage/Meltype.app"
+    # Read-only packaged resources must allow quarantine removal in this working copy.
+    chmod -R u+w "$stage/Meltype.app"
     # Bootstrap with a system tool: an unverified helper cannot prepare itself.
     # Limit this to the signature-verified working copy and the one copied CLI.
     /usr/bin/xattr -drs com.apple.quarantine "$stage/Meltype.app"

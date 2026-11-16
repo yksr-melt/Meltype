@@ -22,7 +22,7 @@ internal static class ScoredSegmentationTests
     /// <summary>打って Enter で確定した文字列 (変換エンジンは使わないので、日本語はかなのまま)。</summary>
     private static string Type(string typed)
     {
-        var session = new MeltypeSession(Detector, new CompositionTests.FakeConverter(), new CompositionOptions(), () => new Settings());
+        var session = new MeltypeSession(Detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings { LiveConversion = false });
         var output = "";
         foreach (var character in typed + "\n")
         {

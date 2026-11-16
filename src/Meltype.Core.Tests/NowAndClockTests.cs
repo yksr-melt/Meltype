@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using Meltype.Composition;
+using Meltype.Composition.Utility;
 using Meltype.Input;
 using static Meltype.Tests.CompositionTests;
 
@@ -71,7 +72,7 @@ internal static class NowAndClockTests
         var k = new Keyboard { ClockTimeZone = "America/New_York", UtcNow = new DateTime(2026, 1, 15, 12, 5, 0, DateTimeKind.Utc) };
         k.Type("tokei ");
         Assert.True(k.Host.View!.Candidates.Contains("07:05"), string.Join(",", k.Host.View.Candidates));
-        Assert.True(CompositionController.ClockZone("Not/AZone") is null && CompositionController.ClockZone(" ") is null, "見つからない・空はこの PC の時刻");
+        Assert.True(ClockConversion.Zone("Not/AZone") is null && ClockConversion.Zone(" ") is null, "見つからない・空はこの PC の時刻");
     }
 
     [Test]
@@ -87,7 +88,7 @@ internal static class NowAndClockTests
     public static void Issue1401_SameZoneAsThisPcHasNoZoneName()
     {
         // この PC と同じタイムゾーンを書いても、タイムゾーンの名前を付けた候補は出さない (設定の説明どおり)
-        var k = new Keyboard { ClockTimeZone = "Asia/Tokyo", LocalTimeZone = CompositionController.ClockZone("Tokyo Standard Time")!, UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
+        var k = new Keyboard { ClockTimeZone = "Asia/Tokyo", LocalTimeZone = ClockConversion.Zone("Tokyo Standard Time")!, UtcNow = new DateTime(2026, 7, 1, 23, 30, 0, DateTimeKind.Utc) };
         k.Type("tokei ");
         Assert.True(!k.Host.View!.Candidates.Any(c => c.Contains("Asia/Tokyo", StringComparison.Ordinal)), string.Join(",", k.Host.View.Candidates));
     }

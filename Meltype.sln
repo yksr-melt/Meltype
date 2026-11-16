@@ -5,9 +5,9 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype", "src\Meltype\Meltype.csproj", "{B548300A-8D2B-4C17-BC5B-9C323FF661E4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Windows", "src\Meltype.Windows\Meltype.Windows.csproj", "{B548300A-8D2B-4C17-BC5B-9C323FF661E4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Tests", "src\Meltype.Tests\Meltype.Tests.csproj", "{FEDB3216-9E1F-4BFA-8AA5-FAD087C94C80}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Windows.Tests", "src\Meltype.Windows.Tests\Meltype.Windows.Tests.csproj", "{FEDB3216-9E1F-4BFA-8AA5-FAD087C94C80}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Core", "src\Meltype.Core\Meltype.Core.csproj", "{1902D57B-8540-4A1C-B957-3C0CE4728E1F}"
 EndProject

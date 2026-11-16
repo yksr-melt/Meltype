@@ -16,16 +16,9 @@ final class ModeServices: NSObject {
     static let portName = "MeltypeModeServices"
     private weak var activeTarget: ModeServiceTarget?
     private let isMeltypeSelected: () -> Bool
-    private let selectWithoutInput: (ModeShortcutAction) -> Void
 
-    init(isMeltypeSelected: @escaping () -> Bool = ModeServices.currentInputSourceIsMeltype,
-         selectWithoutInput: @escaping (ModeShortcutAction) -> Void = { action in
-             let mode = action.mode(after: ModeSelection.shared.current)
-             ModeSelection.shared.select(mode)
-             ModeIndicator.shared.show(mode)
-         }) {
+    init(isMeltypeSelected: @escaping () -> Bool = ModeServices.currentInputSourceIsMeltype) {
         self.isMeltypeSelected = isMeltypeSelected
-        self.selectWithoutInput = selectWithoutInput
         super.init()
     }
 
@@ -49,12 +42,8 @@ final class ModeServices: NSObject {
             error.pointee = "入力ソースでMeltypeを選択してください。"
             return
         }
-        // 入力カーソルがない状態にも、独立したモード選択操作を用意する。
-        guard let target = activeTarget else {
-            selectWithoutInput(action)
-            return
-        }
-        guard target.selectModeFromService(action) else {
+        // モードは入力欄ごとに本体が持つので、入力欄が無ければ選べない
+        guard let target = activeTarget, target.selectModeFromService(action) else {
             error.pointee = "Meltypeの入力欄を取得できませんでした。"
             return
         }

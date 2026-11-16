@@ -739,8 +739,35 @@
                          (namestring (merge-pathnames "source.app" work))))
   (uiop:run-program (list "/usr/bin/xattr" "-w" "com.example.meltype-test" "keep"
                          (namestring (merge-pathnames "source.app" work))))
+  ;; Distribution resources can be read-only with or without quarantine.
+  ;; The executable helper must also remain runnable after preparation.
+  (dolist (name '("plain" "quarantined"))
+    (let ((resource (merge-pathnames (format nil "source.app/Contents/Resources/~A" name) work)))
+      (write-file resource name)
+      (when (equal name "quarantined")
+        (uiop:run-program (list "/usr/bin/xattr" "-w" "com.apple.quarantine" "0083;12345678;Fixture;"
+                               (namestring resource))))
+      (uiop:run-program (list "chmod" "444" (namestring resource)))))
+  (uiop:run-program (list "chmod" "555"
+                         (namestring (merge-pathnames "source.app/Contents/MacOS/MeltypeInstallSupport" work))))
   (run-script work "install-app.sh" (list (namestring (merge-pathnames "source.app" work))
-                                         (namestring (merge-pathnames "installed.app" work)))))
+                                         (namestring (merge-pathnames "installed.app" work))))
+  (dolist (name '("plain" "quarantined"))
+    (let ((source (merge-pathnames (format nil "source.app/Contents/Resources/~A" name) work))
+          (installed (merge-pathnames (format nil "installed.app/Contents/Resources/~A" name) work)))
+      (assert (equal name (uiop:read-file-string installed)))
+      (assert (equal "444" (string-trim '(#\Newline #\Return)
+                                       (uiop:run-program (list "stat" "-f" "%Lp" (namestring source)) :output :string))))
+      (assert (not (search "com.apple.quarantine"
+                           (uiop:run-program (list "/usr/bin/xattr" (namestring installed)) :output :string))))))
+  (assert (search "com.apple.quarantine"
+                  (uiop:run-program (list "/usr/bin/xattr"
+                                         (namestring (merge-pathnames "source.app/Contents/Resources/quarantined" work)))
+                                    :output :string)))
+  (assert (equal "keep" (string-trim '(#\Newline #\Return)
+                                    (uiop:run-program (list "/usr/bin/xattr" "-p" "com.example.meltype-test"
+                                                           (namestring (merge-pathnames "installed.app" work)))
+                                                      :output :string)))))
 
 (defun test-refused-helper-preserved (work)
   (copy-install-script work)
@@ -940,7 +967,7 @@
 
 
     (call-with-work-directory #'test-quarantine-before-helper)
-    (format t "PASS quarantined payload prepared before first helper invocation~%")
+    (format t "PASS read-only payload prepared before helper invocation without changing source~%")
     (call-with-work-directory #'test-refused-helper-preserved)
     (format t "PASS refused helper retained without replacing app~%")
     (call-with-work-directory #'test-register-without-menu-agent)

@@ -43,9 +43,8 @@ function fixture(issues, pr = {}) {
   };
   return {
     api, comments, writes, pull,
-    // PR のイベントで確かめた結果 (確かめなければ 'skip')
-    run: async (action = 'opened', extra = {}) =>
-      (await runAssigneeCheck(api, { action, pull_request: structuredClone(pull), ...extra }, 'pull_request_target', repository))[50] ?? 'skip',
+    // 確かめた結果 (確かめなければ 'skip')
+    run: async () => (await runAssigneeCheck(api, repository))[50] ?? 'skip',
   };
 }
 
@@ -108,36 +107,19 @@ test('Ready for review に戻しても担当でなければ、また Draft に�
   const f = fixture([issue(1, ['alice'])]);
   await f.run();
   f.pull.draft = false;
-  assert.equal(await f.run('ready_for_review'), 'draft');
+  assert.equal(await f.run(), 'draft');
   assert.equal(f.comments.length, 1);
   assert.equal(f.writes.filter(w => w.method === 'GRAPHQL').length, 2);
 });
 
-test('本文を書き換えたときだけ確かめ直す (タイトルだけの変更・同期では何もしない)', async () => {
+test('開いているすべての PR を確かめ、Draft になった PR・閉じた PR はもう見ない', async () => {
   const f = fixture([issue(1, ['alice'])]);
-  assert.equal(await f.run('edited', { changes: { title: { from: '前' } } }), 'skip');
-  assert.equal(await f.run('synchronize'), 'skip');
-  assert.equal(await f.run('edited', { changes: { body: { from: '' } } }), 'draft');
-});
-
-test('イベントの時点ではなく、確かめる直前の本文で判定する', async () => {
-  // イベントでは他人の担当の #1 だったが、job が動くまでに自分の担当の #2 に書き換えた
-  const f = fixture([issue(1, ['alice']), issue(2, ['bob'])]);
-  const event = { action: 'edited', changes: { body: { from: '' } }, pull_request: structuredClone(f.pull) };
-  f.pull.body = 'Fixes #2';
-  assert.equal((await runAssigneeCheck(f.api, event, 'pull_request_target', repository))[50], 'ok');
-  assert.equal(f.writes.length, 0);
-  // 閉じた・Draft にした PR も、今の状態で見る
-  f.pull.body = 'Fixes #1'; f.pull.state = 'closed';
-  assert.equal((await runAssigneeCheck(f.api, event, 'pull_request_target', repository))[50], 'skip');
-});
-
-test('定期実行では、開いているすべての PR を確かめる (イベントの job が取り消されても拾う)', async () => {
-  const f = fixture([issue(1, ['alice'])]);
-  assert.deepEqual(await runAssigneeCheck(f.api, {}, 'schedule', repository), { 50: 'draft' });
+  assert.deepEqual(await runAssigneeCheck(f.api, repository), { 50: 'draft' });
   assert.equal(f.pull.draft, true);
-  assert.deepEqual(await runAssigneeCheck(f.api, {}, 'schedule', repository), { 50: 'skip' }, 'Draft になった PR はもう見ない');
+  assert.deepEqual(await runAssigneeCheck(f.api, repository), { 50: 'skip' });
   assert.equal(f.comments.length, 1);
+  f.pull.state = 'closed';
+  assert.deepEqual(await runAssigneeCheck(f.api, repository), {});
 });
 
 test('PR の一覧は 2 ページ目以降も読む。API エラーなら欠けた一覧で続けない', async () => {

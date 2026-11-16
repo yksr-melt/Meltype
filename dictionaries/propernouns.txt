@@ -7,10 +7,10 @@
 # IT・サービス
 Amazon Google Apple Microsoft Windows macOS iOS iPadOS Android Linux Ubuntu Debian Fedora
 GitHub Meltype GitLab Bitbucket Docker Kubernetes Azure AWS Heroku Vercel Netlify Firebase Supabase Cloudflare
-YouTube Twitter Facebook Instagram TikTok LINE mixi Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
+YouTube Twitter Facebook Instagram TikTok LINE mixi pixiv Discord Slack Zoom Teams Notion Figma Canva Miro Trello Jira Confluence
 Netflix Spotify Hulu Disney Prime Twitch Reddit Pinterest LinkedIn Tumblr Medium Substack
 Yahoo Bing DuckDuckGo Baidu Naver Kakao WeChat WhatsApp Telegram Signal Messenger Skype Webex
-ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL
+SBI ChatGPT OpenAI Claude Anthropic Gemini Gemma Copilot Midjourney Perplexity Bard DeepL Kaggle
 iPhone iPad iPod iMac MacBook AirPods Pixel Galaxy Xperia Surface Kindle Echo Alexa Siri Cortana
 Chrome Firefox Safari Edge Opera Brave Vivaldi
 Excel Word PowerPoint Outlook OneDrive OneNote SharePoint Access Visio Dropbox Evernote Box
@@ -19,7 +19,7 @@ Python JavaScript TypeScript Java Kotlin Swift Rust Ruby PHP Perl Haskell Scala 
 Node Deno Bun Django Flask Rails Laravel Spring Next Nuxt Vite Webpack Tailwind Bootstrap jQuery
 MySQL PostgreSQL SQLite MongoDB Redis Oracle Elasticsearch Kafka Nginx Apache Tomcat
 Steam PlayStation Xbox Switch Minecraft Fortnite Roblox Valorant Apex Overwatch Tetris
-Uber Airbnb Tesla Paypal Stripe Shopify Etsy eBay DLsite
+Uber Airbnb Tesla PayPal Stripe Shopify Etsy eBay DLsite
 Visa Mastercard JCB Amex
 
 # 企業・ブランド
@@ -27,7 +27,7 @@ Adidas Nike Puma Reebok Converse Vans Gucci Prada Chanel Hermes Rolex Omega Citi
 Sony Panasonic Sharp Canon Nikon Fujifilm Olympus Epson Brother
  Lexus Mercedes BMW Audi Volkswagen Porsche Ferrari Lamborghini Volvo Hyundai Kia
 Samsung LG Huawei Xiaomi Lenovo Dell HP Asus Acer Intel AMD Nvidia Qualcomm Arm IBM Cisco
-CocaCola Pepsi Starbucks McDonalds Burger KFC Subway Domino Nestle Kellogg Lego Ikea Costco Walmart Target
+CocaCola Pepsi Starbucks McDonalds Burger KFC Subway Domino Nestle Kellogg Lego IKEA Costco Walmart Target
 Boeing Airbus Disney Pixar Marvel DC Netflix Warner Paramount Universal
 
 # 地名

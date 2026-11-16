@@ -66,13 +66,13 @@ internal static class SettingsSchemaTests
     }
 
     [Test]
-    public static void MeltypeSession_WritesSchemaNextToConfig()
+    public static void Runtime_WritesSchemaNextToConfig()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-schema-" + Guid.NewGuid().ToString("N"));
         try
         {
-            MeltypeSession.CreateDefault(directory, new CompositionTests.FakeConverter(), null, null);
-            Assert.Equal(SettingsSchema.Create(), File.ReadAllText(Path.Combine(directory, SettingsSchema.FileName)), "Mac・Linux 版は config.json の隣に schema を書く");
+            new MeltypeRuntime(directory).Dispose();
+            Assert.Equal(SettingsSchema.Create(), File.ReadAllText(Path.Combine(directory, SettingsSchema.FileName)), "config.json の隣に schema を書く");
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

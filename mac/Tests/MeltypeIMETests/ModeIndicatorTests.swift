@@ -6,35 +6,16 @@ import XCTest
 @testable import MeltypeIME
 
 final class ModeIndicatorTests: XCTestCase {
-    func testSavedSelectionIsRestoredInNewSession() {
-        let suite = "ModeSelectionTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let selection = ModeSelection(defaults: defaults)
-        XCTAssertEqual(selection.current, .automatic)
-        for mode in MacInputMode.allCases {
-            selection.select(mode)
-            XCTAssertEqual(ModeSelection(defaults: defaults).current, mode)
-        }
-    }
-
-    func testCycleStartsAfterSavedSelectionAndUsesMenuOrder() {
-        XCTAssertEqual(MacInputMode.allCases, [.automatic, .direct, .code])
-        XCTAssertEqual(ModeShortcutAction.allCases.prefix(3).map { $0.mode(after: .automatic) }, MacInputMode.allCases)
-        var selected = MacInputMode.automatic
-        selected = ModeShortcutAction.cycle.mode(after: selected)
-        XCTAssertEqual(selected, .direct)
-        selected = ModeShortcutAction.cycle.mode(after: selected)
-        XCTAssertEqual(selected, .code)
-        selected = ModeShortcutAction.cycle.mode(after: selected)
-        XCTAssertEqual(selected, .automatic)
+    func testModesAreJapaneseAndDirect() {
+        XCTAssertEqual(MacInputMode.allCases, [.japanese, .direct])
+        XCTAssertEqual(MacInputMode.allCases.map(\.shortTitle), ["あ", "A"])
     }
 
     func testCaretWindowIsBelowCursorAndClampedToDisplay() {
         let visible = NSRect(x: -1200, y: 0, width: 1200, height: 800)
         let caret = NSRect(x: -500, y: 500, width: 1, height: 20)
         let frame = ModeIndicator.frame(caret: caret, visible: visible)
-        XCTAssertEqual(frame.size, ModeIndicator.content(mode: .automatic, compact: true).frame.size)
+        XCTAssertEqual(frame.size, ModeIndicator.content(mode: .japanese, compact: true).frame.size)
         XCTAssertLessThan(frame.width, 250)
         XCTAssertLessThan(frame.height, 44)
         XCTAssertEqual(frame.minY, caret.minY - frame.height - 6)
@@ -58,7 +39,7 @@ final class ModeIndicatorTests: XCTestCase {
             for mode in MacInputMode.allCases {
                 let view = ModeIndicator.content(mode: mode, compact: compact)
                 let labels = view.subviews.flatMap(\.subviews).compactMap { $0 as? NSTextField }
-                XCTAssertEqual(labels.map(\.stringValue), ["自動", "英数", "Code"])
+                XCTAssertEqual(labels.map(\.stringValue), ["あ", "A"])
                 let rows = view.subviews.filter { !$0.subviews.isEmpty }
                 let selected = rows.filter { $0.layer?.backgroundColor != nil }
                 XCTAssertEqual(selected.flatMap(\.subviews).compactMap { ($0 as? NSTextField)?.stringValue }, [mode.shortTitle])

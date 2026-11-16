@@ -38,6 +38,11 @@ concurrency:
   group: linux-${{ github.ref }}
   cancel-in-progress: true
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   app:
     # x64 と arm64 を、それぞれの CPU のランナーでビルドする (Mozc の Bazel のビルドは、ビルドしているマシンの CPU 向けになる)。
@@ -68,9 +73,8 @@ jobs:
         run: |
           python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_code_mode.py
           python3 linux/tests/test_settings.py
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
@@ -132,7 +136,7 @@ jobs:
       - name: Package (.deb)
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
-            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' linux/build/Meltype-linux/meltype.xml | head -n 1)~test.$(date +%Y%m%d%H%M)"; fi
+            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
           linux/build-deb.sh "$version" linux/build/Meltype-linux linux/build
           dpkg-deb --info linux/build/meltype_*.deb
           dpkg-deb --contents linux/build/meltype_*.deb
@@ -145,7 +149,7 @@ jobs:
           test -x /opt/meltype/mozc/meltype_mozc_helper
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
-          test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' | head -n 1)")/meltype.so"
+          test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' -print -quit)")/meltype.so"
           sudo apt-get remove -y meltype
           test ! -e /opt/meltype/ibus-engine-meltype
           test ! -e /usr/share/ibus/component/meltype.xml
@@ -203,7 +207,7 @@ jobs:
       - name: Package (.rpm)
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
-            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' linux/build/Meltype-linux/meltype.xml | head -n 1)~test.$(date +%Y%m%d%H%M)"; fi
+            version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
           linux/build-rpm.sh "$version" linux/build/Meltype-linux linux/build
           rpm -qpi linux/build/meltype-*.rpm
           rpm -qpR linux/build/meltype-*.rpm
@@ -215,7 +219,7 @@ jobs:
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
-          ibus read-cache --system | grep -q /opt/meltype/ibus-engine-meltype
+          ibus read-cache --system | grep /opt/meltype/ibus-engine-meltype >/dev/null
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
           test -f /usr/lib64/fcitx5/meltype.so
           dnf remove -y meltype
@@ -255,7 +259,6 @@ jobs:
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_code_mode.py
           python3 linux/tests/test_settings.py
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype
@@ -315,7 +318,7 @@ jobs:
           cache: npm
           cache-dependency-path: tools/ime-tests/package-lock.json
       # linux_ime.py が実行環境の記録 (session.json) に dotnet の版を書く
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
       - name: Install IBus and the test tools

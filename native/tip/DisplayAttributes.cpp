@@ -23,7 +23,7 @@ const AttributeSpec kSpecs[] = {
 
 class DisplayAttributeInfo final : public ITfDisplayAttributeInfo {
 public:
-    explicit DisplayAttributeInfo(const AttributeSpec& spec) : spec_(spec) { DllAddRef(); }
+    explicit DisplayAttributeInfo(const AttributeSpec& spec) : spec_(spec) {}
 
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
         if (ppv == nullptr) return E_INVALIDARG;
@@ -67,14 +67,14 @@ public:
     STDMETHODIMP Reset() override { return S_OK; }
 
 private:
-    ~DisplayAttributeInfo() { DllRelease(); }
+    ~DisplayAttributeInfo() = default;
     LONG refs_ = 1;
     const AttributeSpec& spec_;
 };
 
 class DisplayAttributeEnum final : public IEnumTfDisplayAttributeInfo {
 public:
-    explicit DisplayAttributeEnum(ULONG index = 0) : index_(index) { DllAddRef(); }
+    explicit DisplayAttributeEnum(ULONG index = 0) : index_(index) {}
 
     STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override {
         if (ppv == nullptr) return E_INVALIDARG;
@@ -115,7 +115,7 @@ public:
     }
 
 private:
-    ~DisplayAttributeEnum() { DllRelease(); }
+    ~DisplayAttributeEnum() = default;
     LONG refs_ = 1;
     ULONG index_;
 };

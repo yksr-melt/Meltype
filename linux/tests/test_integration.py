@@ -35,7 +35,9 @@ class IntegrationTests(unittest.TestCase):
         cls.addClassCleanup(cls.data.cleanup)
         os.environ["MELTYPE_DATA_DIR"] = cls.data.name
         (Path(cls.data.name) / "config.json").write_text(json.dumps({
-            "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False}), encoding="utf-8")
+            "SpaceAroundEnglish": True, "LiveConversion": False, "SigilWordsDirect": False,
+            "ModeIndicator": "OnSwitchAndFocus", "SettingsVersion": 10}),
+            encoding="utf-8")
         loader = importlib.machinery.SourceFileLoader(
             "meltype_integration_product", str(cls.package / "ibus-engine-meltype"))
         spec = importlib.util.spec_from_loader(loader.name, loader)
@@ -56,6 +58,9 @@ class IntegrationTests(unittest.TestCase):
                 # (メソッド, 値) の発行順。送信順序 (確定と preedit 更新の前後) の検証に使う。
                 self.events = []
                 self.visible_candidates = []
+                # パネルの「あ / A」と補助テキスト
+                self.panel_mode = None
+                self.aux = None
                 super().__init__()
 
             def commit_text(self, text):
@@ -112,10 +117,14 @@ class IntegrationTests(unittest.TestCase):
                 self.visible_candidates = []
 
             def update_auxiliary_text(self, text, visible):
-                pass
+                self.aux = text.get_text() if visible else None
 
             def hide_auxiliary_text(self):
-                pass
+                self.aux = None
+
+            def update_property(self, prop):
+                if prop.get_key() == "InputMode":
+                    self.panel_mode = prop.get_symbol().get_text()
 
             def register_properties(self, properties):
                 pass
@@ -123,9 +132,15 @@ class IntegrationTests(unittest.TestCase):
         cls.engine_class = ClientEngine
 
     def setUp(self):
+        # 本体はプロセスで 1 つ (入力モードをすべての入力欄で同じにする)。テストごとに、エンジンを捨てたあとで作り直す
+        self.addCleanup(self.reset_host)
         self.engine = self.engine_class()
-        self.assertTrue(self.engine._session)
+        self.assertTrue(self.product._shared_host())
         self.addCleanup(self.engine.destroy)
+
+    def reset_host(self):
+        self.product._lib.meltype_ime_destroy(self.product._host)
+        self.product._host = None
 
     def scalar(self, text, state=0):
         keyval = IBus.unicode_to_keyval(text)
@@ -208,6 +223,16 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(self.special(IBus.KEY_Return))
         self.assertEqual("今日", self.engine.document)
         self.assertEqual("", self.engine.marked)
+
+    def test_numpad_without_numlock_moves_like_the_dedicated_keys(self):
+        # NumLock を切ったテンキーの ↓・PageDown も、専用のキーと同じく候補を動かす (PageUp の無いキーボード)
+        self.type_text("kyou")
+        self.assertTrue(self.special(IBus.KEY_space))
+        start = self.engine._lookup.get_cursor_pos()
+        self.assertTrue(self.special(IBus.KEY_KP_Down))
+        self.assertEqual(start + 1, self.engine._lookup.get_cursor_pos())
+        self.assertTrue(self.special(IBus.KEY_KP_Page_Down))
+        self.assertGreater(self.engine._lookup.get_cursor_pos(), start + 1)
 
     def test_protected_actions(self):
         for token in ("@kuraido", "https://sakura.jp/kana", "taro@example.com", "./shumire-shon", r"C:\tools\kana"):
@@ -396,36 +421,18 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(self.special(IBus.KEY_Return))
         self.assertEqual("I love すしがすき", self.engine.document)
 
-    def test_focus_out_disables_replacement_before_committing(self):
-        # 作者のレビューより: meltype_commit は結果を返すだけでなく本体の状態を進めるので、
-        # 置換を無効にするのは呼ぶ前でなければならない (あとからでは取り消せない)。
-        # あわせて、本体が確定した内容 (commit の戻り値) が実際の文書と一致することも確かめる。
-        import ctypes
-        product = type(self).product
-        original = product._lib
-        calls = []
+    def test_focus_out_tells_the_core_that_ibus_committed(self):
+        # 表示中の preedit は IBus が確定するので、本体には committed (表示のまま確定された) を 1 回だけ送り、
+        # 本体からの確定 (置換を含む) を入れない
+        sent = []
+        send = self.engine.send
 
-        class Spy:
-            def __getattr__(self, name):
-                attribute = getattr(original, name)
-                if name == "meltype_set_can_delete":
-                    def set_can_delete(session, value):
-                        calls.append(("can_delete", value))
-                        return attribute(session, value)
-                    return set_can_delete
-                if name == "meltype_commit":
-                    def commit(session):
-                        calls.append(("commit", None))
-                        pointer = attribute(session)
-                        calls.append(("committed", json.loads(ctypes.string_at(pointer).decode())
-                                      if pointer else None))
-                        return pointer
-                    return commit
-                return attribute
+        def spy(event_type, **fields):
+            output = send(event_type, **fields)
+            sent.append((event_type, output))
+            return output
 
-        product._lib = Spy()
-        self.addCleanup(lambda: setattr(product, "_lib", original))
-
+        self.engine.send = spy
         self.type_text("I")
         self.special(IBus.KEY_space)
         self.type_text("love")
@@ -433,48 +440,22 @@ class IntegrationTests(unittest.TestCase):
         self.type_text("sushi")
         self.special(IBus.KEY_space)
         self.type_text("gasuki")
-        calls.clear()
+        sent.clear()
         self.engine.do_focus_out()
 
-        self.assertEqual([name for name, _ in calls], ["can_delete", "commit", "committed", "can_delete"],
-                         "置換を無効にしてから1回だけ commit し、そのあと元に戻す")
-        self.assertEqual(0, calls[0][1], "commit の前に置換を無効にする")
-        self.assertEqual(1, calls[3][1], "commit のあと元に戻す")
-        committed = calls[2][1]["commits"]
-        self.assertEqual(1, len(committed), committed)
-        self.assertEqual(0, committed[0]["deleteBefore"], "置換を混ぜない")
-        self.assertEqual("がすき", committed[0]["text"], "本体の確定が文書と一致する")
+        self.assertEqual(["CommittedByApp"], [event_type for event_type, _ in sent])
+        self.assertEqual([], sent[0][1]["result"]["commits"], "本体は確定を返さない")
         self.assertEqual("I love sushi がすき", self.engine.document)
 
     def test_reconversion_replaces_matching_previous_text(self):
         self.engine.document = "previous"
-        self.engine._apply({"commits": [{"deleteBefore": 8, "expect": "previous", "text": "replacement"}], "view": None})
+        self.engine._apply({"commits": [{"text": "replacement", "removeBefore": "previous", "currentWord": None, "moveCaretBack": 0, "insertByPaste": False}], "view": None})
         self.assertEqual("replacement", self.engine.document)
 
-    def test_reconversion_keeps_typed_text_when_previous_text_changed(self):
-        # #516: 貼り付けなどで前の文字が変わっていたときは、前の文字は消さず、今打った文字だけを入れる
-        # (edit ごと捨てると、打った「って」も消えて、本体の状態とずれる)。
-        self.engine.document = "pasted sentence"
-        self.engine._apply({"commits": [{"deleteBefore": 4, "expect": "word", "text": "って"}], "view": None})
-        self.assertEqual("pasted sentenceって", self.engine.document)
-
-    def test_reconversion_inserts_only_current_word_when_previous_text_changed(self):
-        # 前の文字を消せないときに text を入れると、直した前の語 (make) が二重に入る。今確定した語 (current) だけを入れる。
-        self.engine.document = "負け!"
-        self.engine._apply({"commits": [{"deleteBefore": 2, "expect": "負け", "text": "make want ", "current": "want "}], "view": None})
-        self.assertEqual("負け!want ", self.engine.document)
-
-    def test_reconversion_without_expected_text_does_not_delete(self):
-        # 消す文字が分からない (expect が無い) ときも、消さずに今打った文字だけを入れる。
-        self.engine.document = "pasted"
-        self.engine._apply({"commits": [{"deleteBefore": 2, "text": "って"}], "view": None})
-        self.assertEqual("pastedって", self.engine.document)
-
     def test_reconversion_counts_code_points(self):
-        # 本体の deleteBefore は UTF-16 単位 (😊 は 2) だが、IBus はコードポイント単位 (😊 は 1)。
-        # 消す文字数は、確認できた expect から数える。
+        # IBus はコードポイント単位で消す (😊 は 1)。消す文字数は remove から数える。
         self.engine.document = "pasted😊"
-        self.engine._apply({"commits": [{"deleteBefore": 2, "expect": "😊", "text": "笑"}], "view": None})
+        self.engine._apply({"commits": [{"text": "笑", "removeBefore": "😊", "currentWord": None, "moveCaretBack": 0, "insertByPaste": False}], "view": None})
         self.assertEqual("pasted笑", self.engine.document)
 
     def test_typing_after_paste_keeps_pasted_text(self):
@@ -509,6 +490,59 @@ class IntegrationTests(unittest.TestCase):
         self.special(IBus.KEY_F6)
         self.special(IBus.KEY_Return)
         self.assertEqual("ka か", self.engine.document)
+        # 入力中の無変換は、確定してから英数にする
+        self.type_text("ka")
+        self.special(IBus.KEY_Muhenkan)
+        self.type_text("ka")
+        self.assertEqual("ka かかka", self.engine.document)
+
+    def test_caret_back_moves_into_the_brackets(self):
+        # 空の括弧を確定したあと、キャレットを括弧の中に戻す (← をアプリに送る)
+        forwarded = []
+        self.engine.forward_key_event = lambda keyval, keycode, state: forwarded.append((keyval, state))
+        self.engine._apply({"commits": [{"text": "「」", "removeBefore": None, "currentWord": None, "moveCaretBack": 1, "insertByPaste": False}], "view": None})
+        self.assertEqual([(IBus.KEY_Left, 0), (IBus.KEY_Left, IBus.ModifierType.RELEASE_MASK)], forwarded)
+
+    def test_aux_shows_typed_suggestion_and_hint(self):
+        shown = []
+        self.engine.update_auxiliary_text = lambda text, visible: shown.append(text.get_text())
+        self.engine._apply({"commits": [], "view": {"text": "かん", "converting": False, "clauses": [], "selectedClause": -1,
+                                                    "hint": "Space 変換", "spellingSuggestion": "もしかして", "typedKeys": "kan", "candidates": None}})
+        self.assertEqual(["kan　もしかして　Space 変換"], shown)
+
+    def test_input_purpose_and_app_are_facts(self):
+        # パスワード欄では本体が何も受け持たない
+        self.engine.do_set_content_type(IBus.InputPurpose.PASSWORD, 0)
+        self.type_text("ka")
+        self.assertEqual("ka", self.engine.document)
+        self.engine.do_set_content_type(IBus.InputPurpose.FREE_FORM, 0)
+        # 既定で「コード」のアプリ (VS Code) のコードの行は英数のまま
+        self.engine.document = "let x = "
+        self.engine.do_focus_in_id("/ic/1", "gtk3-im:code")
+        self.type_text("ka")
+        self.assertEqual("let x = ka", self.engine.document)
+
+    def test_mode_is_shown_on_the_panel_and_near_the_caret(self):
+        # どの入力欄にもフォーカスが無いときの仮の入力コンテキストは、入力欄ではない
+        self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_1", "fake")
+        self.engine.do_set_cursor_location(0, 0, 0, 0)
+        self.assertIsNone(self.engine.aux)
+        self.engine.do_focus_out()
+        self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_2", "gtk3-im:gedit")
+        self.assertEqual("あ", self.engine.panel_mode)
+        # 入力欄に入ったときの表示は、入ったあとアプリがキャレットの位置を知らせてから出す
+        self.assertIsNone(self.engine.aux)
+        self.engine.do_set_cursor_location(100, 100, 1, 20)
+        self.assertEqual("あ", self.engine.aux)
+        self.special(IBus.KEY_Eisu_toggle)
+        self.assertEqual(("A", "A"), (self.engine.panel_mode, self.engine.aux))
+        self.special(IBus.KEY_Hiragana_Katakana)
+        self.assertEqual(("あ", "あ"), (self.engine.panel_mode, self.engine.aux))
+
+    def test_app_comes_from_the_client_name(self):
+        for client, app in (("gtk4-im:gnome-text-editor", "gnome-text-editor"), ("gnome-shell", "gnome-shell"), ("fake", None), ("", None)):
+            self.engine.do_focus_in_id("/org/freedesktop/IBus/InputContext_1", client)
+            self.assertEqual(app, self.engine._app, client)
 
     def test_release_ignored_and_shortcut_passed_once(self):
         self.type_text("@kuraido")
@@ -544,7 +578,7 @@ class IntegrationTests(unittest.TestCase):
                         "確定のあとに preedit を消す更新が送られていない")
 
     def test_recommit_deletes_without_hiding_preedit(self):
-        # 確定し直し (deleteBefore あり) でも、確定の前に preedit を消す更新を送らない。
+        # 確定し直し (remove あり) でも、確定の前に preedit を消す更新を送らない。
         # 送ると Chromium 系 (Wayland text-input-v3) が変換中の文字を確定と解釈して挿入し (issue #486)、
         # 続く削除がずれた位置を消して壊れる (い + want → いwanI want)。
         # 変換中の文字は surrounding の削除対象にならないので、消してから入れてよい。

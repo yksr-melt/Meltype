@@ -21,8 +21,7 @@ internal static class JapaneseParticles
 }
 
 /// <summary>
-/// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、OS や外部の変換エンジンを借りる
-/// (Windows: Microsoft IME、Mac / Linux: Mozc など)。
+/// ひらがな → 漢字かな混じりの変換。Meltype 自身は変換の辞書を持たず、全 OS で Mozc (と Zenzai) を使う (<see cref="HybridConverter"/>)。
 /// </summary>
 public interface IKanjiConverter
 {
@@ -36,7 +35,7 @@ public interface IKanjiConverter
 }
 
 /// <summary>
-/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc / Microsoft IME に合わせて同じ文の最大 10 文字だけだが、
+/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
 /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
 /// 入力を始めるたびに、キャレットの前の日本語の文章 (文をまたいで最大 100 文字) を入れる。無ければ null。
 /// </summary>
@@ -46,13 +45,18 @@ public interface IWideContextConverter
 }
 
 /// <summary>
-/// 文節ごとの候補に足す「その読みだけの変換」を、Zenzai を使わずに出せる変換エンジン (HybridConverter)。
-/// 文節の数だけ頼むので、Zenzai に頼むと 1 文節ごとに待たされる (CPU のみで、文節に分かれた文の変換 1 回あたり中央値 98 ミリ秒増えた)。
+/// Zenzai を使わずに変換できる変換エンジン (HybridConverter)。
+/// ConvertStandalone は文節ごとの候補に足す「その読みだけの変換」。文節の数だけ頼むので、Zenzai に頼むと 1 文節ごとに待たされる
+/// (CPU のみで、文節に分かれた文の変換 1 回あたり中央値 98 ミリ秒増えた)。
+/// ConvertClausesStandalone は英日の区切りの案 (2 番目以降) の変換。Zenzai は最後に頼まれた 1 件だけを裏で処理するので、
+/// 案ごとに頼むと、いちばん良い案の依頼が後の案の依頼に上書きされて、その答えが遅れる。
 /// 最初の候補 (文の中での変換結果) は ConvertClauses のままなので、Zenzai の結果が使われる。
 /// </summary>
 public interface IStandaloneConverter
 {
     string? ConvertStandalone(string hiragana);
+
+    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null);
 }
 
 /// <summary>

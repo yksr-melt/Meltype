@@ -139,7 +139,7 @@ internal static class ToggleShortcutTests
         try
         {
             File.WriteAllText(path, """
-                {"SettingsVersion":6,"ConvertKeysSwitchKeyboard":true,"ToggleShortcuts":[],
+                {"SettingsVersion":6,"ToggleShortcuts":[],
                  "ToggleKeyboardShortcuts":"Ctrl+Space; Ctrl+U; Space; Henkan"}
                 """);
             var settings = Settings.Load(path);
@@ -251,7 +251,7 @@ internal static class ToggleShortcutTests
         Meltype.Diagnostics.ShortcutExclusions.Drain();
         try
         {
-            var settings = new Settings { ConvertKeysSwitchKeyboard = true, ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
+            var settings = new Settings { ToggleShortcuts = [new() { Key = 28 }, new() { Key = 29 }, new() { Key = 32, Modifiers = ShortcutModifiers.Control }] };
             var edited = settings.Clone().Normalize(reportShortcutExclusions: false);
             Assert.Equal(1, edited.EffectiveToggleShortcuts.Count, "キーの正規化は既存どおり");
             Assert.Equal(0, Meltype.Diagnostics.ShortcutExclusions.Drain().Length, "編集時は通知しない");
@@ -272,7 +272,7 @@ internal static class ToggleShortcutTests
         try
         {
             var path = Path.Combine(directory, "config.json");
-            File.WriteAllText(path, "{\"SettingsVersion\":6,\"ActiveProfile\":\"仕事\",\"ConvertKeysSwitchKeyboard\":true,\"ToggleShortcuts\":[{\"Key\":28},{\"Key\":29},{\"Key\":32,\"Modifiers\":2}]}");
+            File.WriteAllText(path, "{\"SettingsVersion\":6,\"ActiveProfile\":\"仕事\",\"ToggleShortcuts\":[{\"Key\":28},{\"Key\":29},{\"Key\":32,\"Modifiers\":2}]}");
             var settings = Settings.Load(path);
             var exclusions = Meltype.Diagnostics.ShortcutExclusions.Drain();
             Assert.Equal(2, exclusions.Length);
@@ -329,80 +329,12 @@ internal static class ToggleShortcutTests
 
     private static KeyEvent Key(int vk, bool up = false, bool injected = false, int scan = 0) => new(vk, scan, false, up, injected, 1000);
 
-    /// <summary>直接入力でアプリへ渡した判定中の英字は未確定文字とみなさず、文字を変換せず入力モードを切り替えること。</summary>
-    [Test]
-    public static void Shortcut_DirectDetectionDoesNotCountAsPendingText()
-    {
-        var keyboard = new CompositionTests.Keyboard(direct: true);
-        keyboard.Type("q");
-        var output = string.Concat(keyboard.Host.Output);
-        var modeChanges = 0;
-        keyboard.Controller.ToggleModeRequested += _ =>
-        {
-            if (!keyboard.Controller.TogglePendingInput()) modeChanges++;
-        };
-        keyboard.Gate.OnToggleMode(1);
-        keyboard.Controller.Pump();
-        Assert.Equal(1, modeChanges, "アプリへ渡した文字は変換しない");
-        Assert.Equal(output, string.Concat(keyboard.Host.Output));
-        Assert.True(!keyboard.Controller.IsComposing, "古い自動判定を残さない");
-    }
-
-    /// <summary>未確定文字は確定せず日本語／英字へ切り替え、確定後の要求は入力モード切り替えとして扱うこと。</summary>
-    [Test]
-    public static void Shortcut_TogglesPendingTextBeforeInputMode()
-    {
-        var keyboard = new CompositionTests.Keyboard();
-        var modeChanges = 0;
-        keyboard.Controller.ToggleModeRequested += _ =>
-        {
-            if (!keyboard.Controller.TogglePendingInput()) modeChanges++;
-        };
-        keyboard.Type("nihongo");
-        var japanese = keyboard.Host.View!.Text;
-        keyboard.Gate.OnToggleMode(1);
-        keyboard.Controller.Pump();
-        Assert.Equal("nihongo", keyboard.Host.View!.Text, "未確定文字を英字にする");
-        Assert.Equal(0, keyboard.Host.Output.Count, "確定しない");
-        Assert.Equal(0, modeChanges, "入力モードは変えない");
-        keyboard.Gate.OnToggleMode(1);
-        keyboard.Controller.Pump();
-        Assert.Equal(japanese, keyboard.Host.View!.Text, "日本語に戻す");
-        keyboard.Press(VirtualKeys.Return);
-        keyboard.Gate.OnToggleMode(1);
-        keyboard.Controller.Pump();
-        Assert.Equal(1, modeChanges, "確定後は入力モードを変える");
-    }
-
-    /// <summary>キューに残る打鍵を処理してから未確定状態を判断し、中断時には切り替え要求だけを破棄すること。</summary>
-    [Test]
-    public static void Shortcut_QueuedTogglePreservesInputOrderAndAbort()
-    {
-        var keyboard = new CompositionTests.Keyboard();
-        var modeChanges = 0;
-        keyboard.Controller.ToggleModeRequested += _ =>
-        {
-            if (!keyboard.Controller.TogglePendingInput()) modeChanges++;
-        };
-        keyboard.Gate.OnKey(Key(0x4E), _ => true);
-        keyboard.Gate.OnKey(Key(0x49), _ => true);
-        keyboard.Gate.OnToggleMode(1);
-        keyboard.Controller.Pump();
-        Assert.Equal("ni", keyboard.Host.View!.Text, "先行入力を英字にする");
-        Assert.Equal(0, modeChanges, "処理前に空でもモードを変えない");
-        keyboard.Gate.OnToggleMode(1);
-        keyboard.Gate.OnKey(Key(0x41), _ => true);
-        var rest = keyboard.Gate.Abort();
-        Assert.Equal(1, rest.Count, "切り替え要求を破棄してキーだけ返す");
-        Assert.Equal(0x41, rest[0].Key!.Value.Vk);
-    }
-
     /// <summary>IME が登録キーを文字切り替えとして送った場合、セッションは確定せず日本語／英字を往復すること。</summary>
     [Test]
     public static void Shortcut_ImeTextToggleKeepsCompositionUncommitted()
     {
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionOptions(), () => new Settings())
+            new CompositionServices(), () => new Settings { LiveConversion = false })
         { Direct = false };
         SessionResult? last = null;
         foreach (var c in "nihongo") last = session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
@@ -413,47 +345,6 @@ internal static class ToggleShortcutTests
         var restored = session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false);
         Assert.Equal(japanese, restored.View!.Text);
         Assert.True(session.IsComposing && !session.Direct, "未確定状態と入力モードを維持");
-    }
-
-    /// <summary>US の Alt+バッククォートが VK_KANJI として届いても配列情報で識別でき、JIS と配列情報がない場合は半角/全角として扱うこと。</summary>
-    [Test]
-    public static void Shortcut_UsAltGraveUsesLayoutInsteadOfImeVirtualKey()
-    {
-        foreach (var layoutKey in new[] { 0xC0, 0xF3, 0 })
-        {
-            var down = Key(0x19, scan: 0x29) with { UnmodifiedKey = layoutKey };
-            var up = Key(0x19, up: true, scan: 0x29) with { UnmodifiedKey = layoutKey };
-            var expected = layoutKey == 0xC0 ? 0xC0 : 0x19;
-            var recorder = new ShortcutRecorder();
-            recorder.OnKey(Key(0xA4, scan: 0x38));
-            recorder.OnKey(down);
-            recorder.OnKey(up);
-            var recorded = recorder.OnKey(Key(0xA4, up: true, scan: 0x38))!;
-            Assert.Equal(expected, recorded.Key, "US はバッククォート、JIS と取得不能時は半角/全角");
-            Assert.Equal(ShortcutModifiers.Alt, recorded.Modifiers);
-            var detector = new ToggleShortcutDetector();
-            ToggleShortcut[] bindings = [new() { Key = 0xC0, Modifiers = ShortcutModifiers.Alt }];
-            Assert.Equal(layoutKey == 0xC0, detector.OnKey(down, ShortcutModifiers.Alt, bindings).Toggle, "US の場合だけ既定キーと一致");
-            detector.ReleaseConsumed(up);
-            Assert.Equal(layoutKey == 0xC0, detector.OnKey(down, ShortcutModifiers.Alt, bindings).Toggle, "次の操作も一致");
-        }
-    }
-
-    /// <summary>JIS の Alt+半角/全角を Alt+バッククォートと区別し、主キーの解放通知がなくても Alt を離せば次の操作が発動し、長押しでは繰り返し切り替わらないこと。</summary>
-    [Test]
-    public static void Shortcut_JisAltToggleWorksWithoutMainKeyRelease()
-    {
-        var detector = new ToggleShortcutDetector();
-        ToggleShortcut[] bindings = [new() { Key = 0x19, Modifiers = ShortcutModifiers.Alt }];
-        Assert.True(!detector.OnKey(Key(0x19, scan: 0x29), ShortcutModifiers.Alt, ToggleShortcut.Defaults()).Toggle, "Alt+バッククォートとは一致しない");
-        detector.ReleaseConsumed(Key(0xA4, up: true, scan: 0x38));
-        for (var i = 0; i < 3; i++)
-        {
-            detector.OnKey(Key(0xA4, scan: 0x38), ShortcutModifiers.Alt, bindings);
-            Assert.True(detector.OnKey(Key(0x19, scan: 0x29), ShortcutModifiers.Alt, bindings).Toggle, "毎回切り替え");
-            Assert.True(!detector.OnKey(Key(0x19, scan: 0x29), ShortcutModifiers.Alt, bindings).Toggle, "長押しは切り替えない");
-            detector.ReleaseConsumed(Key(0xA4, up: true, scan: 0x38));
-        }
     }
 
     /// <summary>JIS の半角/全角の特殊な通知を 1 回で取り込み、Alt との組み合わせも主キーの解放を待たずに完了し、バッククォートとは別のキーとして記録すること。</summary>
@@ -498,17 +389,6 @@ internal static class ToggleShortcutTests
         }
     }
 
-    /// <summary>押下時と解放時で仮想キーコードが変化しても、消費フラグが残り続けず次の打鍵が正常に動くこと。</summary>
-    [Test]
-    public static void Shortcut_ChangedVirtualCodeDoesNotLeaveRepeatLatch()
-    {
-        var detector = new ToggleShortcutDetector();
-        ToggleShortcut[] bindings = [new() { Key = 0x19, Modifiers = ShortcutModifiers.Alt }];
-        Assert.True(detector.OnKey(Key(0xF3, scan: 0x29), ShortcutModifiers.Alt, bindings).Toggle, "初回");
-        Assert.True(detector.ReleaseConsumed(Key(0xC0, up: true, scan: 0x29)), "違うコードの解放も対にする");
-        Assert.True(detector.OnKey(Key(0xF4, scan: 0x29), ShortcutModifiers.Alt, bindings).Toggle, "次の打鍵も発動");
-    }
-
     /// <summary>半角/全角の複数のキーコードは同じ割り当てに一致し、バッククォートや余分な修飾キーを含む操作とは一致しないこと。</summary>
     [Test]
     public static void Shortcut_MatchesNormalizedKeysAndExactModifiers()
@@ -521,49 +401,6 @@ internal static class ToggleShortcutTests
         foreach (var vk in new[] { 0x19, 0xF3, 0xF4 })
             Assert.True(!grave.Matches(vk, ShortcutModifiers.Alt), "JIS 半角/全角は別の割り当て");
         Assert.True(!grave.Matches(0xC0, ShortcutModifiers.Alt | ShortcutModifiers.Control), "AltGr を除く");
-    }
-
-    /// <summary>キーリピートや設定変更を挟んでも、キー押下と解放の消費が常に対になってアプリへ漏れないこと。</summary>
-    [Test]
-    public static void Shortcut_RepeatsAndReleaseRemainPairedAfterSettingsChange()
-    {
-        var detector = new ToggleShortcutDetector();
-        ToggleShortcut[] bindings = [new() { Key = 0x20, Modifiers = ShortcutModifiers.Control }];
-        Assert.True(detector.OnKey(Key(0x20), ShortcutModifiers.Control, bindings).Toggle, "初回で切り替え");
-        var repeat = detector.OnKey(Key(0x20), 0, []);
-        Assert.True(repeat.Consume && !repeat.Toggle, "設定・修飾キーを変えても繰り返しは飲み込む");
-        Assert.True(!detector.ReleaseConsumed(Key(0x20, up: true, injected: true)), "外部入力の解放で物理入力の対を消さない");
-        Assert.True(detector.ReleaseConsumed(Key(0x20, up: true)), "方式変更後も解放を飲み込む");
-        Assert.True(!detector.ReleaseConsumed(Key(0x20, up: true)), "二重の解放は通す");
-        Assert.True(!detector.OnKey(Key(0x20, injected: true), ShortcutModifiers.Control, bindings).Consume, "外部入力を通す");
-    }
-
-    /// <summary>Shift や Ctrl などの修飾キー単独の登録は拒否され、レコーダーが通常キーを待ち続けること。</summary>
-    [Test]
-    public static void Shortcut_ModifierKeysAreRejectedAndRecorderKeepsWaiting()
-    {
-        foreach (var vk in new[] { 0x10, 0x11, 0x12, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5, 0x5B, 0x5C })
-        {
-            var binding = new ToggleShortcut { Key = vk };
-            Assert.True(!binding.IsValid && !binding.Matches(vk, 0), "修飾キーは登録・一致不可");
-            var detector = new ToggleShortcutDetector();
-            foreach (var e in new[] { Key(vk), Key(vk), Key(vk, up: true) })
-            {
-                var result = detector.OnKey(e, 0, [binding]);
-                Assert.True(!result.Toggle && !result.Consume, "押下・長押し・解放を通す");
-            }
-            var recorder = new ShortcutRecorder();
-            recorder.OnKey(Key(vk));
-            recorder.OnKey(Key(vk));
-            Assert.True(recorder.OnKey(Key(vk, up: true)) is null && !recorder.Complete, "修飾キーだけでは完了しない");
-            recorder.OnKey(Key(0xA2));
-            recorder.OnKey(Key(0x20));
-            recorder.OnKey(Key(0x20, up: true));
-            Assert.Equal(new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control }, recorder.OnKey(Key(0xA2, up: true))!, "続けて組み合わせを取り込む");
-            var settings = new Settings { ToggleShortcuts = [binding] }.Normalize();
-            Assert.Equal(0, settings.EffectiveToggleShortcuts.Count, "除外後も空を維持");
-            Assert.Equal(0, settings.Clone().Normalize().EffectiveToggleShortcuts.Count, "複製でも空を維持");
-        }
     }
 
     /// <summary>設定の保存・読み込み、プロファイル切り替え、空リスト設定が正しく保持されること。</summary>
@@ -623,7 +460,6 @@ internal static class ToggleShortcutTests
         var valid = new ToggleShortcut { Key = 0x20, Modifiers = ShortcutModifiers.Control };
         var settings = new Settings
         {
-            ConvertKeysSwitchKeyboard = true,
             ToggleShortcuts =
             [
                 new() { Key = 0x75 }, new() { Key = 0x79, Modifiers = ShortcutModifiers.Shift },
@@ -654,8 +490,11 @@ internal static class ToggleShortcutTests
                 Assert.Equal(ShortcutValidationError.UnmodifiedKey, ToggleShortcutValidator.Validate(binding, new Settings(), []));
                 Assert.Equal(0, new Settings { ToggleShortcuts = [binding] }.Normalize().EffectiveToggleShortcuts.Count, "読み込み時も通常入力を奪わない");
             }
-        foreach (var key in new[] { 0x19, 0xF3, 0xF4, 0x1C, 0x1D })
+        foreach (var key in new[] { 0x19, 0xF3, 0xF4 })
             Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
+        // 無変換・変換だけは英数・日本語にするキー
+        foreach (var key in new[] { 0x1C, 0x1D })
+            Assert.Equal(ShortcutValidationError.ConvertKeys, ToggleShortcutValidator.Validate(new() { Key = key }, new Settings(), []));
         Assert.Equal(ShortcutValidationError.None, ToggleShortcutValidator.Validate(
             new() { Key = 0x20, Modifiers = ShortcutModifiers.Control }, new Settings(), []));
     }

@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 //
-// コンフリクトのお知らせ (.github/workflows/conflicts.yml)。
-//   node conflicts.mjs main      … main に push されたとき: 開いている Pull Request を全部調べる
-//   node conflicts.mjs pr <番号>  … Pull Request が更新されたとき: その Pull Request を調べる
+// コンフリクトのお知らせ (.github/workflows/conflicts.yml)。開いている Pull Request を全部調べる。
 //
 // 2 つのことを知らせる。
 //   1. いまのコンフリクト: main とコンフリクトしている Pull Request に「コンフリクト」のラベルとコメントを付ける。
@@ -137,7 +135,7 @@ async function reportNow(pr, files, cause) {
     const lines = [`@${pr.user.login} この Pull Request は、main とコンフリクトしています。`];
     if (cause) lines.push('', `原因になったと思われる変更: #${cause.number} ${cause.title}`);
     lines.push('', 'コンフリクトしているファイル:', ...fileList(files));
-    lines.push('', 'お手数ですが、main に追従して解消してください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
+    lines.push('', '直せるときは main に追従して解消してください。直し方が分からないときや、メンテナー側の変更で起きたときは、この Pull Request のコメントでメンテナーに直すよう頼んでください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
     await gh('POST', `/issues/${pr.number}/labels`, { labels: [Label] });
     await upsert(pr.number, NowMarker, lines.join('\n'));
     console.log(`#${pr.number}: コンフリクトを知らせました`);
@@ -177,7 +175,7 @@ async function reportForecast(pr, hits) {
   for (const { other, files } of hits) {
     lines.push(`- #${other.number} ${other.title} (@${other.user.login})`, ...fileList(files));
   }
-  lines.push('', 'マージの順番を決めるときの参考にしてください。先にマージした方が、もう片方の作者に追従をお願いすることになります。');
+  lines.push('', 'マージの順番を決めるときの参考にしてください。先にマージした方が、もう片方がコンフリクトします (作者が直すか、作者がコメントで頼めばメンテナーが直します)。');
   await upsert(pr.number, ForecastMarker, lines.join('\n'));
   console.log(`#${pr.number}: マージ後に ${hits.length} 件コンフリクトする予告を出しました`);
 }
@@ -188,12 +186,6 @@ async function mergedPull(sha) {
   if (!sha) return null;
   const pulls = await gh('GET', `/commits/${sha}/pulls`).catch(() => []);
   return pulls.find(p => p.merged_at) ?? null;
-}
-
-const [mode, arg] = process.argv.slice(2);
-if (!(mode === 'main' || (mode === 'pr' && /^\d+$/.test(arg ?? '')))) {
-  console.error('使い方: node conflicts.mjs main | pr <番号>');
-  process.exit(1);
 }
 
 await ensureLabel();
@@ -212,30 +204,14 @@ for (const pr of prs) {
 }
 const clean = prs.filter(p => !now.get(p.number).length);
 
-const targets = mode === 'main' ? prs : prs.filter(p => p.number === Number(arg));
-const cause = mode === 'main' ? await mergedPull(process.env.GITHUB_SHA) : null;
+// main への push なら、その push でマージした Pull Request を原因として書く (定期実行では原因が分からない)
+const cause = process.env.GITHUB_EVENT_NAME === 'push' ? await mergedPull(process.env.GITHUB_SHA) : null;
 
-for (const pr of targets) {
+for (const pr of prs) {
   try {
     await reportNow(pr, now.get(pr.number), cause);
     await reportForecast(pr, forecast(main, pr, clean, changed));
   } catch (e) {
     console.log(`#${pr.number}: ${e.message}`);
-  }
-}
-
-// pr のときは、相手側の予告も古くなるので、この Pull Request と同じファイルを変えている Pull Request の予告も更新する
-if (mode === 'pr') {
-  const self = prs.find(p => p.number === Number(arg));
-  if (self) {
-    const mine = changed.get(self.number);
-    for (const other of prs) {
-      if (other.number === self.number || ![...changed.get(other.number)].some(f => mine.has(f))) continue;
-      try {
-        await reportForecast(other, forecast(main, other, clean, changed));
-      } catch (e) {
-        console.log(`#${other.number}: ${e.message}`);
-      }
-    }
   }
 }
