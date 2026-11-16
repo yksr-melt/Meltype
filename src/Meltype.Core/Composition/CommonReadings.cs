@@ -44,13 +44,5 @@ internal static class CommonReadings
     public static PackedWordSet Phrases => SharedPhrases.Value;
 
     /// <summary>活用形の生成に使う本文を読み直す。共有するのは読みの集合だけで、本文は保持しない。</summary>
-    // 実験: よく使う語の印がない語 (readings-rare.txt)。無ければ空
-    private static readonly Lazy<PackedWordSet> SharedRare = new(() => PackedWordSet.FromLines(RareText(), firstField: true));
-    public static PackedWordSet Rare => SharedRare.Value;
-    public static string RareText()
-    {
-        try { return DictionarySource.ReadEmbedded("readings-rare.txt"); } catch (Exception) { return ""; }
-    }
-
     public static string ReadText() => DictionarySource.ReadEmbedded("readings.txt") + "\n" + DictionarySource.ReadEmbedded("readings-extra.txt");
 }

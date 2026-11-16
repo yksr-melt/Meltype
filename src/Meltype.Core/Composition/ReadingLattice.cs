@@ -40,10 +40,6 @@ public sealed partial class CompositionDetector
     private const double KnownEnglishCost = 1;
     // english-readable.txt の語 (open・feature): ローマ字としても読めるが、英語で打つことの多い語
     private const double ReadableEnglishCost = 0.7;
-    // english-words.txt (スペルチェッカー) だけが知っている、ローマ字として最後まで読める 3 文字以下の語 (chi・ma) を、日本語のすぐ後ろで英語にするときに足す。
-    // ローマ字でも読める語のうち英語で打つ語は english.txt・固有名詞に選んで入れてあるので、選んでいない短い語は日本語の続きの読み (や|ち・さ|ま) に譲る。
-    // 4 文字以上の語 (decimate) は、ローマ字として読めても日本語の続きとしてたまたま打つことはまず無い
-    private const double SpellOnlyAfterJapaneseCost = 1;
     // ユーザーが英字に直して覚えた語。同じ読みの日本語の語 (sushi = すし、重み 1) より軽くする
     private const double LearnedEnglishCost = 0.7;
     // 知らない英字 (ローマ字として読めない所: pwd) 1 文字
@@ -88,7 +84,7 @@ public sealed partial class CompositionDetector
     private enum Side : byte { None, Japanese, English, Sentence }
 
     /// <summary>区切りの 1 つの候補。Kana は日本語の候補の読み。Letters は英字を含む日本語の候補か。Neutral は記号・数字・空白 (言語を切り替えない)。</summary>
-    private readonly record struct LatticeEdge(int Start, int End, bool English, string Kana, bool Letters, bool Particle, bool Neutral = false, bool Name = false, bool SpellOnly = false);
+    private readonly record struct LatticeEdge(int Start, int End, bool English, string Kana, bool Letters, bool Particle, bool Neutral = false, bool Name = false);
 
     private sealed record LatticeNode(double Cost, LatticeNode? Previous, LatticeEdge Edge);
 
@@ -192,7 +188,6 @@ public sealed partial class CompositionDetector
                     if (!particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1])) step += SandwichCost;
                 }
                 if (state.Side == Side.Japanese && !state.Particle) step += SwitchCost;
-                if (edge.SpellOnly && state.Side == Side.Japanese) step += SpellOnlyAfterJapaneseCost;
                 if (state.IsEnglish && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start])) step += AdjacentEnglishCost;
                 // 英文の続きの強さは、最初の英語の語までで使い終わる (英文の中の記号では使い終わらない)
                 var sentence = state.Side == Side.Sentence && !char.IsAsciiLetter(text[edge.Start]);
@@ -566,7 +561,6 @@ public sealed partial class CompositionDetector
             if (!isBoundary(end)) continue;
             var span = text[start..end];
             double cost;
-            var spellOnly = false;
             if (span.Contains('\''))
             {
                 if (!IsContraction(span)) continue;
@@ -578,7 +572,6 @@ public sealed partial class CompositionDetector
                 cost = Memory?.Get(span.ToLowerInvariant()) == true ? LearnedEnglishCost
                     : ReadableEnglish.Value.ContainsWord(span.ToLowerInvariant()) ? ReadableEnglishCost : KnownEnglishCost;
                 if (kanaInput && span.Length >= 4) cost += KanaInputEnglishBias;
-                spellOnly = span.Length <= 3 && Memory?.Get(span.ToLowerInvariant()) is null && unknown[end] == unknown[start] && !IsCuratedEnglishWord(span.ToLowerInvariant());
                 // 日本語由来の語 (suzuki・sushi) は、ローマ字で読んだかなも日本語の語として並べる
                 if (span.All(char.IsAsciiLetterLower) && IsJapaneseOriginWord(span) &&
                     _romaji.ConvertLenient(span, final: true) is var reading && reading.All(KanaChars.IsHiraganaOrLongMark))
@@ -602,7 +595,7 @@ public sealed partial class CompositionDetector
                 continue;
             }
             else continue;
-            edges.Add((new LatticeEdge(start, end, true, "", false, false, SpellOnly: spellOnly), cost));
+            edges.Add((new LatticeEdge(start, end, true, "", false, false), cost));
         }
         return edges;
     }
@@ -634,13 +627,9 @@ public sealed partial class CompositionDetector
     {
         if (Memory?.Get(lower) is { } learned) return learned;
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
-        return IsCuratedEnglishWord(lower) || IsLatticeSpellWord(lower);
+        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsLatticeSpellWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
+            IsPediaEnglishWord(lower) || EnglishPhraseSpacing.IsPhrase(lower);
     }
-
-    /// <summary>スペルチェッカー以外の、選んで入れた英単語の一覧にある語か (english.txt・固有名詞・english-readable.txt・-pedia・決まり文句)。</summary>
-    private bool IsCuratedEnglishWord(string lower) =>
-        _english.Words.ContainsWord(lower) || _proper.Contains(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
-        IsPediaEnglishWord(lower) || EnglishPhraseSpacing.IsPhrase(lower);
 
     /// <summary>
     /// スペルチェッカーが知っている語のうち、同梱のよく使う英単語 (english-words.txt) にもある語。
