@@ -76,13 +76,29 @@ public sealed class ContextRules
                 if (stem != head && !list.Any(rule => rule.Candidate == stem) && convertStem(head) != stem) return null;
             }
             var best = list
-                .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => surrounding.Contains(cue, StringComparison.Ordinal))))
+                .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => HasCue(surrounding, cue))))
                 .Where(r => r.Hits > 0)
                 .OrderByDescending(r => r.Hits)
                 .FirstOrDefault();
             return best.Hits > 0 ? best.Candidate + ending : null;
         }
         return null;
+    }
+
+    /// <summary>
+    /// 手がかりの端が英字なら、その端は英単語の境界でだけ当てる (ph を graph・php・iphone に当てない、AC を ACCESS に当てない)。
+    /// かなや漢字の手がかりは部分一致のまま (蒸し → 蒸し暑い)。
+    /// </summary>
+    private static bool HasCue(string surrounding, string cue)
+    {
+        for (var at = surrounding.IndexOf(cue, StringComparison.Ordinal); at >= 0; at = surrounding.IndexOf(cue, at + 1, StringComparison.Ordinal))
+        {
+            var end = at + cue.Length;
+            if (char.IsAsciiLetter(cue[0]) && at > 0 && char.IsAsciiLetter(surrounding[at - 1])) continue;
+            if (char.IsAsciiLetter(cue[^1]) && end < surrounding.Length && char.IsAsciiLetter(surrounding[end])) continue;
+            return true;
+        }
+        return false;
     }
 }
 

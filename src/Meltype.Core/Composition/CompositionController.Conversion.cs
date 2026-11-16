@@ -1007,9 +1007,10 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// 同じ変換ボックスの英字の区間 (ph|しけんし の ph)。日本語の区間は区間ごとに変換するので、文脈の手がかりに足す (issue #1276)。
+    /// 続いた英字の区間 (gra|ph) は 1 語のままにし、日本語の区間を空白にする (英字の手がかりは英単語の境界で当てるため)。
     /// </summary>
     private string EnglishInComposition() =>
-        _text.IsEmpty ? "" : string.Concat(_text.ConversionSegments().Where(s => s.IsEnglish).Select(s => s.Raw + " "));
+        _text.IsEmpty ? "" : string.Concat(_text.ConversionSegments().Select(s => s.IsEnglish ? s.Raw : " "));
 
     /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
