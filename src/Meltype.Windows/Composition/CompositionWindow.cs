@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Drawing.Drawing2D;
+using Meltype.Config;
 
 namespace Meltype.Composition;
 
@@ -30,15 +31,17 @@ internal sealed class CompositionWindow : PopupForm
 
     /// <summary>
     /// 色 (ライト / ダーク) と不透明度。変わったときだけ描き直す。
-    /// back・text・accent は利用者が決めた色 (issue #1509)。null ならライト / ダークの色のまま。
-    /// 文字の色は候補・意味の枠の文字にも使う (一部だけ変わると読みにくい組み合わせになるので、まとめて変える)。
+    /// back・text・accent は利用者が決めた色 (#1509)。null ならライト / ダークの色のまま。
+    /// 見えなくなる組み合わせ (config.json を直接書いたとき) なら、利用者の色を使わない。
     /// </summary>
     public void SetAppearance(bool light, double opacity, Color? back = null, Color? text = null, Color? accent = null)
     {
-        var palette = light ? Palette.Light : Palette.Dark;
-        if (back is { } b) palette = palette with { Background = b, MeaningBackground = b };
-        if (text is { } t) palette = palette with { Text = t, Candidate = t, MeaningText = t };
-        if (accent is { } a) palette = palette with { Accent = a };
+        var (palette, problem) = Resolve(light, back, text, accent);
+        if (problem is not null)
+        {
+            Diagnostics.Log.Info($"変換ボックスの色を使いません: {problem}");
+            palette = light ? Palette.Light : Palette.Dark;
+        }
         opacity = Math.Clamp(opacity, 0.3, 1.0);
         if (Math.Abs(Opacity - opacity) > 0.001)
         {
@@ -51,6 +54,39 @@ internal sealed class CompositionWindow : PopupForm
         _meaningPopup?.SetPalette(palette);
         Invalidate();
     }
+
+    /// <summary>設定の変換ボックスの色で、見えなくなる組み合わせがあれば、その理由。「Windows に合わせる」ならライト・ダークの両方で確かめる。</summary>
+    public static string? ColorProblem(Config.Settings settings)
+    {
+        static Color? ToColor(string value) => Config.Settings.ParseColor(value) is var (r, g, b) ? Color.FromArgb(r, g, b) : null;
+        bool[] themes = settings.CompositionTheme == CompositionTheme.System ? [false, true] : [settings.CompositionIsLight(null)];
+        return themes.Select(light => Resolve(light, ToColor(settings.CompositionBackColor), ToColor(settings.CompositionTextColor), ToColor(settings.CompositionAccentColor)).Problem)
+            .FirstOrDefault(problem => problem is not null);
+    }
+
+    /// <summary>
+    /// テーマに利用者の色を重ねた色の組み合わせと、見えなくなる色があればその理由。
+    /// 文字の色は候補・意味の枠の文字にも使う (一部だけ変わると読みにくい組み合わせになるので、まとめて変える)。
+    /// 上書きしない色 (案内・予測の文字・下線) も、新しい背景の上で見えるかを確かめる。
+    /// </summary>
+    private static (Palette Palette, string? Problem) Resolve(bool light, Color? back, Color? text, Color? accent)
+    {
+        var palette = light ? Palette.Light : Palette.Dark;
+        if (back is { } b) palette = palette with { Background = b, MeaningBackground = b };
+        if (text is { } t) palette = palette with { Text = t, Candidate = t, MeaningText = t };
+        if (accent is { } a) palette = palette with { Accent = a };
+        if (back is null && text is null && accent is null) return (palette, null);
+        var background = Rgb(palette.Background);
+        string? Check(string name, Color color, double minimum) => ColorContrast.Problem(name, Rgb(color), "変換ボックスの色: 背景", background, minimum);
+        var problem = Check("変換ボックスの色: 文字", palette.Text, ColorContrast.TextMinimum)
+            ?? Check("案内の文字 (テーマの色)", palette.Hint, ColorContrast.TextMinimum)
+            ?? Check("予測の文字 (テーマの色)", palette.SuggestionText, ColorContrast.TextMinimum)
+            ?? Check("変換ボックスの色: 選択", palette.Accent, ColorContrast.MarkMinimum)
+            ?? Check("下線 (テーマの色)", palette.Underline, ColorContrast.MarkMinimum);
+        return (palette, problem);
+    }
+
+    private static (int R, int G, int B) Rgb(Color color) => (color.R, color.G, color.B);
 
     /// <summary>
     /// Windows の「既定のアプリ モード」がライトか (HKCU\...\Themes\Personalize の AppsUseLightTheme)。読めなければ null。

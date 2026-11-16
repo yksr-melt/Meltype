@@ -72,6 +72,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
             MessageBox.Show(this, error, "入力モード切り替えキー", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return false;
         }
+        // 見えなくなる色の組み合わせは保存しない (#1509)
+        if ((SettingsWindowColorProblem(edited) ?? CompositionWindow.ColorProblem(edited)) is { } colorProblem)
+        {
+            MessageBox.Show(this, colorProblem, "色", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return false;
+        }
 
         var displayed = edited.Clone().Normalize(reportShortcutExclusions: false);
         var next = Settings.MergeEdits(_opened, displayed, _engine.Settings);
@@ -97,8 +103,10 @@ internal sealed class SettingsForm : Form, IMessageFilter
     /// </summary>
     private void ApplyLook(Settings settings)
     {
-        BackColor = Settings.ParseColor(settings.SettingsWindowBackColor) is var (r, g, b) ? Color.FromArgb(r, g, b) : SystemColors.Control;
-        ForeColor = Settings.ParseColor(settings.SettingsWindowTextColor) is var (tr, tg, tb) ? Color.FromArgb(tr, tg, tb) : SystemColors.ControlText;
+        // 見えなくなる組み合わせ (config.json を直接書いたとき) なら、Windows の既定の色にする
+        var usable = SettingsWindowColorProblem(settings) is null;
+        BackColor = usable && Settings.ParseColor(settings.SettingsWindowBackColor) is var (r, g, b) ? Color.FromArgb(r, g, b) : SystemColors.Control;
+        ForeColor = usable && Settings.ParseColor(settings.SettingsWindowTextColor) is var (tr, tg, tb) ? Color.FromArgb(tr, tg, tb) : SystemColors.ControlText;
         _help.ForeColor = Settings.ParseColor(settings.SettingsWindowTextColor) is null ? SystemColors.GrayText : ForeColor;
 
         var image = LoadImage(settings.SettingsWindowBackgroundImage);
@@ -108,6 +116,15 @@ internal sealed class SettingsForm : Form, IMessageFilter
         old?.Dispose();
         // 画像の上の分類の枠は、透明にしないと枠の背景色で画像が隠れる
         foreach (var group in _groups) group.BackColor = image is null ? Color.Empty : Color.Transparent;
+    }
+
+    /// <summary>設定画面の背景の色と文字の色が近く、文字が見えなくなるなら、その理由。空の色は Windows の既定の色で比べる。</summary>
+    private static string? SettingsWindowColorProblem(Settings settings)
+    {
+        static (int R, int G, int B) Rgb(Color color) => (color.R, color.G, color.B);
+        var back = Settings.ParseColor(settings.SettingsWindowBackColor) ?? Rgb(SystemColors.Control);
+        var text = Settings.ParseColor(settings.SettingsWindowTextColor) ?? Rgb(SystemColors.ControlText);
+        return ColorContrast.Problem("設定画面の文字の色", text, "設定画面の背景の色", back, ColorContrast.TextMinimum);
     }
 
     /// <summary>背景の画像を読む。空・無いファイル・画像でないファイルなら null (画像を出さない)。</summary>
