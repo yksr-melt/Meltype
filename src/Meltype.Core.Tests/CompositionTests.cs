@@ -5612,10 +5612,21 @@ internal static class CompositionTests
     public static void LiveConversion_ConvertsWhileTyping()
     {
         var k = new Keyboard(live: true);
-        k.Type("kyou");
-        Assert.Equal("きょう", k.Showing, "短いうちはかなのまま (的外れな漢字を出さない)");
-        k.Type("ha");
-        Assert.Equal("今日は", k.Showing, "4 文字以上になったら Space を押さなくても漢字で表示");
+        k.Type("ka");
+        Assert.Equal("か", k.Showing, "1 文字はかなのまま (漢字を推測できない)");
+        k.Type("wa");
+        Assert.Equal("川", k.Showing, "2 文字以上になったら Space を押さなくても漢字で表示 (#1900)");
+
+        k = new Keyboard(live: true);
+        k.Type("pushshita");
+        Assert.Equal("pushした", k.Showing, "英単語 + する の活用は、Space の変換と同じくかなのまま");
+        k = new Keyboard(live: true);
+        k.Type("pythonnara");
+        Assert.Equal("pythonなら", k.Showing, "英単語 + 助詞も、Space の変換と同じくかなのまま");
+
+        k = new Keyboard(live: true);
+        k.Type("kyouha");
+        Assert.Equal("今日は", k.Showing);
         k.Type("google");
         Assert.Equal("今日はgoogle", k.Showing, "英語の部分は変換しない");
         k.Type("dekensaku\n");

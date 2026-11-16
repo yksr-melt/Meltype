@@ -132,7 +132,7 @@ Meltype の動きを変える「モード」は、次の 5 つが重なってい
 
 どの OS でも、同梱の Mozc で変換します。Windows・Mac 版は、Zenzai (ニューラルかな漢字変換) で前の文脈も見て変換します。
 
-- **ライブ変換**: 4 文字以上の日本語は、Space を押さなくても打ったそばから漢字で表示します (設定で OFF にできます)
+- **ライブ変換**: 2 文字以上の日本語は、Space を押さなくても打ったそばから漢字で表示します (設定で OFF にできます)
 - **英単語の前後に半角スペース**: 設定の「全般」で ON にすると、日本語と英単語の間に半角スペースを入れます (今日は GitHub に push した。既定は OFF)
 - **句読点**: 設定の「全般」で「、。」「，．」「，。」「、．」から選べます。数字の間の `.` `,` (1.5、1,000) は半角のままです。Mac・Linux 版では `config.json` の `"Punctuation"` に `Japanese` (、。) / `FullWidthCommaPeriod` (，．) / `FullWidthCommaKuten` (，。) / `ToutenFullWidthPeriod` (、．) を書きます
 - **英字の後ろの , . も句読点にする**: 英字だけを打ったとき (`IME.`) の `,` `.` は半角のままです。設定の「全般」で ON にすると、句読点 (`IME。`) にします (既定は OFF)。Mac・Linux 版では `config.json` の `"JapanesePunctuationAfterEnglish": true` で ON にします
