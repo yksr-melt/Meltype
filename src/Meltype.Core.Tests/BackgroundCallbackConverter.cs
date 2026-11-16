@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-namespace Meltype.Composition;
+using Meltype.Composition;
+
+namespace Meltype.Tests;
 
 /// <summary>
-/// 同期でしか答えられない外の変換エンジン (Mac の azooKey・Windows の Microsoft IME) を、1 つのワーカーから呼ぶ。
-/// 関数はワーカーだけが呼ぶので、外の変換エンジンはスレッドセーフでなくてよい。
+/// 背景で答える変換エンジンの偽物 (BackgroundConversionTests)。同期の関数を 1 つのワーカーから呼び、答えが届いたら知らせる。
 /// </summary>
 /// <param name="clauses">(読み, 文脈) → 文節。変換できなければ null。</param>
 /// <param name="candidates">読み → 候補の一覧。</param>
 /// <param name="convert">読み全体の変換。null なら文節をつなげる。</param>
 /// <param name="budget">ほかの変換エンジンと 1 回の入力の待ち時間を共有するときに渡す。</param>
 /// <param name="start">ワーカーを動かすスレッドを選ぶ (COM の STA など)。null なら thread pool。</param>
-public sealed class BackgroundCallbackConverter(
+internal sealed class BackgroundCallbackConverter(
     Func<string, string?, IReadOnlyList<ConversionClause>?> clauses,
     Func<string, IReadOnlyList<string>> candidates,
     Func<string, string?>? convert = null,
@@ -69,7 +70,7 @@ public sealed class BackgroundCallbackConverter(
         {
             if (_answers.TryGetValue(request, out var known))
             {
-                // 外の変換エンジンの答えは同じ読みでも変わる (Zenzai の準備中・処理中は azooKey の答え、Microsoft IME は単語の登録)。
+                // 外の変換エンジンの答えは同じ読みでも変わることがある。
                 // 控えを返して裏で聞き直し、変わっていれば Process が知らせる
                 worker.SubmitIfIdle(request);
                 return known;
@@ -89,7 +90,7 @@ public sealed class BackgroundCallbackConverter(
             Kind.Candidates => new Answer(null, null, candidates(request.Reading)),
             _ => throw new InvalidOperationException($"不明な要求: {request.Kind}"),
         };
-        // 答えが無いのは準備前・一時的な失敗・時間切れ (WinRT) かもしれないので、覚えずに次もまた聞く
+        // 答えが無いのは準備前・一時的な失敗・時間切れかもしれないので、覚えずに次もまた聞く
         if (answer.Clauses is null && answer.Text is null && answer.Candidates is null or { Count: 0 }) return;
         lock (_gate)
         {

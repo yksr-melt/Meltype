@@ -14,17 +14,17 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 │ MeltypeTip.dll (C++, TSF)       │  名前付き   │ TipServer                        │
 │  - キーを受け取る               │  パイプ     │  - つながり・入力欄ごとに        │
 │  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    MeltypeSession                │
-│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Microsoft IME)    │
+│  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Zenzai)           │
 │                                  │  = 1 JSON   │  - 学習データ・ユーザー辞書        │
 └──────────────────────────────┘            └───────────────────────────────┘
 ```
 
 | 場所 | 中身 |
 |---|---|
-| `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 をビルド、`Register-Tip.ps1` で登録 |
+| `native/tip/` | TSF のテキストサービス (C++)。`build.ps1` で x64 / x86 の stub (`MeltypeTip.dll`) と impl (`MeltypeTipImpl.dll`) をビルド、`Register-Tip.ps1` で登録 |
 | `src/Meltype.Windows/Tip/TipServer.cs` | Meltype.exe の中のパイプのサーバー。DLL が読めない入力欄の事実 (アプリ・ウィンドウのタイトル・UI Automation の要素・ゲームらしさ) を足して `ImeHost` に渡す |
 | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | もう 1 つのフロント (Meltype キーボード)。キーボードフックのキーを同じ `ImeHost` に渡し、確定を SendInput で入れ、変換ボックスを自分の窓に出す |
-| `packaging/meltype-ime.ps1` | インストール・アンインストールで IME を登録する / 外す (install.ps1・uninstall.ps1・Install-Meltype.ps1 から使う) |
+| `packaging/meltype-ime.ps1`・`packaging/setup-ime.ps1` | IME を登録する / 外す。setup.exe (`packaging/Meltype.iss`)・アンインストーラー・Meltype.exe (トレイの「Meltype IME」) が setup-ime.ps1 を実行する |
 | `src/Meltype.Core/Ime/` | フロント (TSF・IBus・fcitx5) と本体の境目 (`ImeEvent` / `ImeOutput`)。入力モードとモードを切り替えるキーの意味は `ImeSession` が決める |
 | `src/Meltype.Core.Tests/ImeContractTests.cs` | 境目の契約テスト。判断を持たないフロントで出来事を送り、確定・表示・モード・受け取るキーを確かめる (どの OS でも流れる) |
 | `src/Meltype.Windows.Tests/TipHarness.cs` | `--tip-server` (サーバーだけ動かす)、`--tip-client <打鍵>` (パイプに打鍵を送って応答を出す) |
@@ -35,7 +35,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 位置が分からなければ常駐側でキャレットを探し、それも分からなければマウス位置へ戻します (Terminal の入力欄の左上を入力位置と推測しません)。表示時に別の入力先へ移っていたら表示しません。
 アプリ・Windows による自動的な開閉やパスワード欄への移動だけでは表示されません。
 
-DLL を更新した後の確認では、入力先アプリのプロセスを終了して起動し直します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い DLL が残ることがあります。
+impl を更新した後の確認では、入力先アプリの再起動は要りません (下の「stub と impl」)。stub (`Dll.cpp`・`Stub.cpp`・`Common.cpp`) を変更したときは、入力先アプリのプロセスを再起動します。Windows Terminal は複数ウィンドウでプロセスを共有するため、新しいウィンドウを作るだけでは古い stub が残ることがあります。
 
 自動開閉の検証は次で行えます。短時間テスト画面が前面に出ます。Windows の実際の TSF コンパートメントと通常欄・パスワード欄を使い、プログラムからの開閉は明示的な切り替え (`ModeToggleRequested`) として送らず、タスクバーのボタンでは 1 回ずつ送ることを確認します。パイプ通信だけを記録用に置き換えており、通常の Meltype 本体・設定・学習データには接続しません。前面に出せない場合は終了コード 77 でスキップします。
 
@@ -54,7 +54,37 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 学習データ・ユーザー辞書を複数のプロセスが同時に書き換えて壊し、Mozc のヘルパーもアプリの数だけ起動する。
 そのため、Google 日本語入力 (Mozc) と同じく、本体は 1 つのプロセス (Meltype.exe) に置き、DLL は薄い殻にして通信する。
 
-## MeltypeTip.dll
+### stub と impl
+
+DLL は、COM に登録する stub (`MeltypeTip.dll`) と、TSF の処理を持つ impl (`MeltypeTipImpl.dll`) に分割する。プロセスがロードした DLL はプロセスの終了まで残るので、
+stub が impl をロードし、Meltype の更新後は、アプリを再起動せずに impl を差し替える (#1670)。
+
+- stub は、TSF が IME のオブジェクトに QueryInterface する `ITfTextInputProcessorEx`・`ITfDisplayAttributeProvider` を impl の `TextService` に委譲するだけ。
+  下の表のシンクは、impl の `TextService` が TSF に直接 Advise する
+- impl は `C:\Program Files\Meltype\tip\<x64|x86>\impl\<SHA-256>\MeltypeTipImpl.dll` に配置する。フォルダー名は署名前のバイナリの SHA-256。
+  SHA-256 をファイル名にすると、Gecko (Firefox・Thunderbird など) がロードを拒否する (ファイル名の `.` より前が 16 桁以上の 16 進数の DLL を拒否する)。
+  stub は impl の中身の SHA-256 を照合しない。改竄は置き場所 (Program Files) の ACL で防ぐので、管理者以外が書けるフォルダーに移すなら、中身も照合する。
+  stub がロードする impl は、stub と同じフォルダーの `MeltypeTipImpl.dll.sha256` で指定する。Meltype.exe からパイプで指定する形にはしない
+  (パイプのサーバーを偽装したプロセスによる、残っている古い impl へのダウングレードを防ぐ)。
+  `Register-Tip.ps1` は、stub を登録できてから `MeltypeTipImpl.dll.sha256` を書き換える (stub の登録に失敗して前の stub に戻したときは、前の impl を指したまま)
+- impl は要求に自分の SHA-256 (`impl`) を付ける。Meltype.exe は、同梱の `tip\<x64|x86>\MeltypeTipImpl.dll.sha256` と一致しなければ `{"stale":true}` を返す (`TipBuild`)。
+  impl は stub のウィンドウに `kStubImplStale` を PostMessage し、stub は `MeltypeTipImpl.dll.sha256` を読み直して、変わっていたら前の impl を `Deactivate` し、
+  新しい impl を同じ `ITfThreadMgr`・`TfClientId` で `ActivateEx` する (未確定文字列は、前の impl の `Deactivate` が確定する)。
+  差し替わるまでのキーは、Meltype.exe の応答がタイムアウトしたときと同じ扱いになる
+- 別ビルドの impl とは通信しないので、パイプのプロトコルに後方互換性は要らない。
+  互換性が要るのは stub と impl の ABI (`Globals.h` の `MeltypeTipCreateFn`・`kStubImplStale`) で、変更したら `kStubImplAbi` を上げる。
+  stub は impl の `MeltypeTipAbi` が自分の `kStubImplAbi` と一致しなければロードした impl を使わないので、ABI を変更した更新は、アプリを再起動するまでそのアプリに反映されない
+- 前の impl は `FreeLibrary` しない (プロセスの終了まで残る)。ファイルは、どのプロセスもロードしていなければ次の登録で削除する
+- 差し替えられないアプリ (stub と impl に分割する前の DLL が残っている・古い stub が今の impl をロードできない) は、登録済みの impl が Meltype.exe と同じビルドになってから 3 秒たっても、同じ接続から別ビルドの要求が届くことで検出する。
+  分割前の DLL は更新前から開いているアプリすべてに残るので、Meltype.exe は PC の再起動を求める通知を 1 回だけ出す。通知を見逃しても打てない理由が分かるように、そのアプリで打っている間は、入力モードの表示と同じ所にアプリの再起動を求める表示も出す (届いた要求から決めるので、覚えておく状態は持たない)。分割前の DLL には今までの形式で応答しない (後方互換レイヤーを持たない)
+- 登録済みの impl が Meltype.exe と別ビルドのときは、Meltype キーボードで動かす (`TipServer.IsUsable`)。setup.exe は Meltype IME を先に登録し、登録できなければ本体を入れ替えない (下の「インストール」) ので、
+  更新ではこうならない。残るのは、同じ PC のほかのユーザーが別の版の Meltype IME を登録したときと、Meltype IME を登録したあとに setup.exe がファイルのコピーに失敗して本体を戻したとき。
+  動作モードが Meltype IME なら、Meltype.exe が起動のたびに再登録するかを聞く (聞いたことを覚える状態は持たない)
+- `tip` フォルダーが無い Meltype.exe (`dotnet run`・テスト・ポータブル版) は、impl を照合しない
+
+プロトコルの版の番号 (`ImeEvent.version`) では照合しない。項目名を変更しても番号が `1` のままで、不一致を検出できていなかった。
+
+## MeltypeTip.dll・MeltypeTipImpl.dll
 
 | インターフェース | やること |
 |---|---|
@@ -99,19 +129,22 @@ TSF の IME は、入力するアプリ全部のプロセスに読み込まれ�
 - Meltype.exe より高い権限で動いているアプリ (ふつうは管理者として動いているアプリ)、サインインや UAC の画面 (Meltype.exe の権限より上の入力を扱わない。
   UAC を切っていて、アプリも Meltype.exe も管理者として動く PC では使える)。
   入力モードのキー (半角/全角・US 配列の Alt + `・英数・かな) だけは受け取って、DLL が IME の開閉だけを切り替える (アプリに通すと、PowerShell (PSReadLine) は文字の無いキーを @ として入れる)
-- パスワードの入力欄 (IME を無効にしている入力欄と、入力欄の種類 InputScope がパスワード・暗証番号のもの)。
-  種類は Windows が持つもの (`GetProperty`) と、アプリが知らせるもの (`GetAppProperty`) の両方を読み、どちらかがパスワードならパスワード欄とする。どちらも無い入力欄は、種類を決めていないふつうの入力欄とする
-  (ブラウザーはこれで、パスワード欄では IME を無効にする)。種類の値はあるのに中身を読めないときは、パスワード欄として扱う (問い合わせ自体ができないときは、種類を決めていない入力欄と同じ)。
-  変換中に入力欄がパスワード欄になったとき (IME を無効にした・種類を変えた) は、変換中の文字を確定して、次のキーから受け取らない
-  入力を覚えないように求める入力欄 (InputScope が IS_PRIVATE。ブラウザーのシークレット / InPrivate ウィンドウ) はパスワード欄にしない。
-  入力欄の事実に `"private":true` を付け、本体はその入力欄では学習しない
-- Meltype.exe が動いていない・一時停止中・動作モードが Meltype IME でない・アプリ別設定で OFF か「ゲーム」のアプリ (応答の `state.handlesInput` が false)
+- パスワード・暗証番号の入力欄。InputScope は Windows が持つもの (`GetProperty`) とアプリが知らせるもの (`GetAppProperty`) を読む。
+  Chromium 系では、アプリが知らせるパスワード属性や `IS_PRIVATE` は、同じ TSF コンテキストで IME が無効な場合にパスワード欄として扱う。
+  属性の値があっても中身を読めない場合はキーや周辺文字列を送らない。
+  同じ欄が変換中にパスワード欄に変わった場合は、表示済みの変換文字をその欄に確定する。パスワード属性を確認したら Core に `Password` を通知し、以後のキーをアプリに通す。
+  パスワード欄や IME が無効な欄では、打鍵に伴うキャレット通知も送らない。
+  パスワード欄として捕捉を止めていた場合は、次の入力を始める前に欄の属性を読み直す。
+  別のパスワード欄に移った場合は、変換中の文字を元の通常欄で確定する。IME が無効なコンテキストではキーを通す。
+  元の欄をすぐに編集できず `Password` の通知が先になる場合は、元の欄に表示済みの文字を残し、編集できるようになった時点で TSF の変換だけを終了する。
+  `IS_PRIVATE` のみを受け取った欄では、`Private` を送って学習を抑止し、変換は継続する。
+- Meltype.exe が動いていない・一時停止中・動作モードが Meltype IME でない・アプリ別設定で OFF のアプリ (応答の `state.handlesInput` が false)
 
 ## 通信
 
 - 名前付きパイプ `\\.\pipe\Meltype.Tip.<ユーザーの SID>`。メッセージ単位で、1 メッセージが 1 JSON。
-  要求は `{"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。前の版の DLL の要求 (v1.5.0 以前の `{"op":…}`、`event.version` が違うもの) は読まずに受け持たない応答を返し、DLL はキーをそのまま通す。Meltype.exe は前の版に合わせる処理を持たず、読めない要求を送ってきたアプリに、アプリか PC の再起動を通知で案内する。
-  応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。読めない要求 (版の違う DLL) には `{"active":false,…}` を返し、古い DLL も何もせずにキーを通す
+  要求は `{"impl":impl の SHA-256,"thread":入力スレッド,"x":…,"y":…,"event":{ImeEvent}}` (`TipRequest`)。`thread`・`x`・`y` は Meltype.exe が入力モードの表示と、自分の UI スレッドからの要求を見分けるのに使い、本体には渡さない。
+  応答は `ImeOutput` (`{"v":…,"state":{…},"result":{…}}`)。別ビルドの impl には `{"stale":true}` (上の「stub と impl」)、パースできない要求には `{"active":false,…}` を返し、DLL はどちらもキーを消費しない
 - 状態 (`StateRequested`) は、起動したとき・前面に戻ったとき・アプリや Windows が IME を開閉したときに受け取り直す (待つのは最大 100ms)。変換中だけ、背景の変換の結果を別のつながりの `{"wait":世代}` で待つ
 - 1 キーごとに同期で 1 往復。待つのは最大 800ms。応答が無ければ、変換中の文字はそのまま確定し、打った文字はその場で入れる。
   書き込み・読み取りが時間内に終わらなかったら、閉じて、次の要求でつなぎ直す。5 秒以内にまた時間切れになったら、そのあと 3 秒はつながない (応答しない Meltype.exe を、どのアプリでも打鍵のたびに待たないように)。
@@ -137,6 +170,11 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 - 動作モードは `Tsf` (Meltype IME) と `Keyboard` (Meltype キーボード)。どちらのフロントも事実を同じ `ImeHost` に送るだけで、入力の判断は Core がする。
   `MeltypeEngine` はアプリの部分 (設定・キーボードフックの取り込み・Ctrl + 半角/全角 の一時停止・打鍵数) だけを持ち、動作モードが Keyboard のときだけフックのキーを `KeyboardFront` に渡す
+- Core が `Password` を受け取ると、そのインスタンスの変換状態・候補・文脈をリセットし、以後のキーを変換や学習に使わずアプリに通す。
+  アプリに表示済みの文字の確定は、上記のとおりフロントが扱う。すでに入力の本体がある場合、後続の出来事で `field` が省略されても、最後に通知された `Password` を適用する。
+  `Private` の欄で扱った未確定入力は変換でき、通常欄に移った後で確定しても学習しない。
+  候補をクリックしたときも、DLL は入力欄の種類を読み直し、`CandidateClicked` の `field` で `Private` の有無を知らせる。
+  アプリが確定した打ちかけの文字を再開する場合も、`Private` なら、その欄で読める周辺文字列などと一緒に、再開を保留する前に Core に通知する。
 - 左右の Alt の単独押し: キーのシンクには Alt が届かないので、`TipServer.OnKey` が低レベルフックで見て、DLL の入力スレッドのメッセージ用のウィンドウに知らせる。
   DLL は押下を `KeyPressed`、解放を `KeyReleased` で送り、単独押しかは Core が決める。前面のスレッドの最後の応答が `capture.altKeys` のときだけ知らせる。
   解放は、単独押しでないとフックで分かるとき以外は 0xE8 のあとに送り直す (Core の答えは待たない)
@@ -148,17 +186,20 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 ## インストール
 
-- IME の登録は HKLM に要る (HKCU だけでは ActivateProfile が失敗した) ので、インストールのときだけ UAC で管理者権限を求める。断ったら、今までどおり変換ボックスの方式で動く
-- DLL は `C:\Program Files\Meltype\tip` に置く (管理者として動くアプリにも読み込まれるので、ユーザーが書き換えられない場所)。使っている DLL は名前を変えて残し、次の登録で消す
-- 入れ直すたびに UAC を出さないように、DLL が同じ (署名する前の中身のハッシュ `MeltypeTip.dll.sha256` が同じ) なら登録し直さない。
+- IME の登録は HKLM に要る (HKCU だけでは ActivateProfile が失敗した) ので、登録するときだけ UAC で管理者権限を求める。本体 (`%LOCALAPPDATA%\Programs\Meltype`) の入れ替えには要らない
+- 本体を入れるのは setup.exe (`packaging/Meltype.iss`) だけ。新規インストール・アプリ内の自動更新 (`Updater.Apply` が `/VERYSILENT` で実行)・winget・`Install-Meltype.ps1` が同じ経路を通る。
+  1.6.0 以前の Meltype の自動更新は、リリースの `Meltype-<版>-windows.zip` の `install.ps1` を実行するので、その zip にはインストーラーと、それを同じ引数で実行するだけの `install.ps1` を入れる
+- setup.exe は `PrepareToInstall` (ファイルを入れ替える前) で Meltype IME を登録する。このユーザーが使っている (PC に登録されていて、このユーザーの言語の一覧にある) なら必ず登録し直し、
+  UAC を断られたり失敗したりしたら、本体も入れ替えずにインストールを止め、前の版の Meltype.exe を起動し直す (本体だけ新しくすると、別ビルドの impl と通信できない)。
+  使っていなければ、ウィザードの「Meltype IME を登録する」を選んだときだけ登録し、断られても本体は入れる。
+  登録は PC で 1 つなので、ほかのユーザーが登録しただけの PC で、管理者でないユーザーのインストール・更新を止めないように、「登録済み」でなく「使っている」で分ける。
+  止めたインストールは、自動更新が ON なら次のサインインでもう一度試す (断った版を覚えて聞き直さないことはしない)
+- ウィザードを出さない実行 (自動更新・`winget upgrade`) では、UAC の前に setup-ime.ps1 (`-Explain`) が Meltype からの確認だと分かる説明を出す。UAC には「Windows PowerShell」と読めない `-EncodedCommand` しか出ないため (#970)
+- 未登録の人が後から登録するのは、トレイで Meltype IME を選んだとき (`TrayApplicationContext.SelectTsf`) と、Meltype IME が無かった版から更新して初めて起動したとき (一度だけ聞く: `TsfOffered`)。
+  初めて起動したとき (インストーラーが聞いている)・前に Meltype IME を使っていたとき (`TsfIntroduced`) は聞かない
+- 入れ直すたびに UAC を出さないように、stub と impl が同じ (署名する前の中身のハッシュ `MeltypeTip.dll.sha256`・`MeltypeTipImpl.dll.sha256` が同じ) なら登録し直さない。
   登録できてからハッシュを置くので、途中で失敗したら次に入れ直したときに登録し直す。新しい DLL を登録できなければ、前の DLL に戻して登録し直す。
-  TIP のキーだけ残り、COM の登録 (`InprocServer32`) か DLL が無いとき (セキュリティソフトが登録を途中で止めたとき) も、DLL が同じでも登録し直す。
-  断られたら覚えておき、Install.cmd・Install-Meltype.ps1 を自分で実行したときだけまた聞く
-- 自動更新で入れる install.ps1 は、もう登録してあるときだけ Meltype IME を登録し直す (頼まれていないのに管理者権限の確認を出さない)。
-  まだ入れていない人には、Install.cmd を自分で実行したとき (-Ask) に聞く。
-  Meltype IME が無かった版から更新した人には、Meltype.exe が起動したときに一度だけ聞き (`TsfOffered`)、「はい」ならインストール先の meltype-ime.ps1 で登録する。
-  初めて起動したとき (インストーラーが聞いている)・前に Meltype IME を使っていたとき (`TsfIntroduced`)・前に断ったとき (ImeDeclined) は聞かない。
-  ImeDeclined は、UAC で断ったときと、setup.exe で「Meltype IME を登録する」のチェックを外したときに残す
+  TIP のキーだけ残り、COM の登録 (`InprocServer32`) か DLL が無いとき (セキュリティソフトが登録を途中で止めたとき) も、DLL が同じでも登録し直す
 - 動作モードが Meltype IME なのに、ポータブル版か、ARM64 の Windows か、登録されていないか (登録を外した・ほかのユーザーがアンインストールした・TIP のキーだけ残り、64 ビットの `InprocServer32` か DLL が無い)、
   このユーザーのキーボードの一覧に無ければ、Meltype キーボードで動かす。起動したとき・config.json を読み直したとき・トレイや設定画面で変えたときのどれでも同じ。
   config.json は書き換えない (動かしている動作モードは `MeltypeEngine.Mode`)。Meltype IME を入れ直したら、Meltype.exe を起動し直すか、トレイで Meltype IME を選び直すと Meltype IME で動く
@@ -166,7 +207,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
   確かめてから使うまでにすり替えられないように、管理者として動く側は DLL と Register-Tip.ps1 を `C:\Program Files\Meltype` の下に写し、昇格する前に確かめたハッシュと合うものだけで登録する。
   その処理は、ファイルではなくコマンドとして渡す (ユーザーのフォルダーのスクリプトを、管理者として直接動かさない)
 - 「言語と地域」のキーボードの一覧に Meltype を足す (今のユーザー)。既定の入力方式を自分で決めていなければ、Meltype にする (アンインストールで、Meltype のままなら戻す)
-- アンインストールでは、一覧から外し、登録を外して DLL を消す。アプリが使っていて消せない DLL は、次に Windows を起動したときに消す。
+- アンインストールでは、一覧から外し、登録を外して DLL を消す。画面の無いアンインストール (winget uninstall) でも、インストールと同じく UAC の前に説明を出して外す。UAC を断られたら、一覧から外すだけで登録は残す。アプリが使っていて消せない DLL は、次に Windows を起動したときに消す。
   IME の登録は PC 全体なので、同じ PC のほかのユーザーも Meltype を使っていると、そのユーザーの Meltype IME も使えなくなる
 
 ## セキュリティ上の制限
@@ -200,4 +241,4 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 ## ビルドに要るもの
 
 - .NET 10 SDK
-- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ `Install-Meltype.ps1` は Meltype IME を入れずに続ける
+- Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ `Build-Package.ps1` は Meltype IME を入れずにインストーラーを作る

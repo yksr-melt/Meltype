@@ -2,11 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 #
-# Mozc の変換ヘルパー (meltype_mozc_helper) を Linux 用にビルドする (Windows 版は Build-MozcHelper.ps1)。
+# Mozc の変換ヘルパー (meltype_mozc_helper) を Linux・macOS 用にビルドする (Windows 版は Build-MozcHelper.ps1)。
 #   native/mozc/build-mozc-helper.sh [Mozc を置く場所 (既定: ~/mozc)] [Bazel のディスクキャッシュ]
-# 必要なもの: git、Bazelisk (bazel、環境変数 BAZEL で場所を指定できる)、clang、Mozc の Linux のビルドに要るライブラリ (README.md)。
+# 必要なもの: git、Bazelisk (bazel、環境変数 BAZEL で場所を指定できる)、perl、
+# Linux は clang と Mozc の Linux のビルドに要るライブラリ (README.md)、macOS は Xcode。
 # Mozc-UT の辞書を扱うときは Python 3.10 以降 (PYTHON で場所を指定できる)。
-# できたものは native/mozc/bin/linux/ に置く。
+# できたものは native/mozc/bin/linux/ (macOS は bin/mac/) に置く。
 #
 # Mozc-UT の辞書 (https://github.com/utuhiro78/merge-ut-dictionaries などで作る mozcdic-ut.txt) を
 # 変換の候補に足す場合は、環境変数 MELTYPE_UT_DICTIONARY にそのファイルを指定する。
@@ -18,7 +19,12 @@ here="$(cd "$(dirname "$0")" && pwd)"
 mozc="${1:-$HOME/mozc}"
 cache="${2:-}"
 commit="$(tr -d '[:space:]' < "$here/MOZC_COMMIT")"
-out="$here/bin/linux"
+case "$(uname -s)" in
+    Linux) platform=linux; bazel_config=oss_linux ;;
+    Darwin) platform=mac; bazel_config=oss_macos ;;
+    *) echo "対応していない OS です: $(uname -s)" >&2; exit 1 ;;
+esac
+out="$here/bin/$platform"
 ut_dictionary="${MELTYPE_UT_DICTIONARY:-}"
 
 # src の有無ではなく .git で見る (GitHub Actions のキャッシュが src/third_party_cache だけを先に戻すため)。
@@ -43,7 +49,7 @@ mkdir -p "$out"
 # 取るだけで版を変えないので要らないが、版を合わせる処理を足すときは同じ手当てが要る。
 dictionary_build="$src/data/dictionary_oss/BUILD.bazel"
 if ! grep -q '"dictionary_ut.txt"' "$dictionary_build"; then
-    sed -i 's/^\( *\)"dictionary09\.txt",$/&\n\1"dictionary_ut.txt",/' "$dictionary_build"
+    perl -pi -e 's/^( *)"dictionary09\.txt",$/$&\n$1"dictionary_ut.txt",/' "$dictionary_build"
     if ! grep -q '"dictionary_ut.txt"' "$dictionary_build"; then
         echo "エラー: $dictionary_build に dictionary_ut.txt を足せませんでした (Mozc の BUILD.bazel の形が変わった可能性があります)。" >&2
         exit 1
@@ -76,7 +82,9 @@ if ! grep -q 'name = "meltype_mozc_helper"' "$src/converter/BUILD.bazel"; then
 fi
 
 cd "$src"
-options=(build //converter:meltype_mozc_helper --config oss_linux --config release_build)
+options=(build //converter:meltype_mozc_helper --config "$bazel_config" --config release_build)
+# 最低の macOS を Meltype.app (mac/Resources/Info.plist の LSMinimumSystemVersion) に合わせる (指定しないと、ビルドした Mac の SDK の版になる)
+if [[ $platform == mac ]]; then options+=(--macos_minimum_os=13.3); fi
 options+=("--downloader_config=$here/bazel-downloader.cfg")
 [[ -n "$cache" ]] && options+=("--disk_cache=$cache")
 if ! "${BAZEL:-bazel}" "${options[@]}"; then

@@ -39,7 +39,7 @@ constexpr float kMaxWidth = 520;
 constexpr float kMeaningMaxWidth = 320;
 
 // 1 つのアプリの中で、いくつもの UI スレッドが候補の一覧を出すことがある (エクスプローラーなど)。
-// ファクトリーはマルチスレッド用を 1 つだけ作り、DLL を外してよくなったら (DllCanUnloadNow) 解放する
+// ファクトリーはマルチスレッド用を 1 つだけ生成する (impl はアンロードしないので、解放しない)
 ID2D1Factory* g_d2d = nullptr;
 IDWriteFactory* g_dwrite = nullptr;
 std::mutex g_factoryMutex;
@@ -510,26 +510,6 @@ struct CandidateWindow::Impl {
 
     static int GET_Y_LPARAM_SAFE(LPARAM lParam) { return static_cast<int>(static_cast<short>(HIWORD(lParam))); }
 };
-
-void CandidateWindow::RegisterClasses() {
-    // DllMain から呼ぶので、ここでは何もしない (最初に出すときに登録する)
-}
-
-void CandidateWindow::UnregisterClasses() {
-    if (!g_registered) return;
-    UnregisterClassW(kClassName, g_module);
-    UnregisterClassW(kMeaningClassName, g_module);
-    g_registered = false;
-}
-
-void CandidateWindow::ReleaseFactories() {
-    // 候補の一覧が 1 つも無いとき (TextService が残っていないとき) だけ呼ぶ
-    std::lock_guard<std::mutex> lock(g_factoryMutex);
-    if (g_dwrite) g_dwrite->Release();
-    if (g_d2d) g_d2d->Release();
-    g_dwrite = nullptr;
-    g_d2d = nullptr;
-}
 
 static bool EnsureClasses() {
     std::call_once(g_classOnce, [] {

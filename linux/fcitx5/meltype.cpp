@@ -68,7 +68,7 @@ FCITX_CONFIGURATION(MeltypeConfig,
 
 struct Native {
     void *handle = nullptr;
-    int (*initMozc)(const char *, const char *) = nullptr;
+    int (*init)(const char *, int (*)(const char *)) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
@@ -82,17 +82,18 @@ struct Native {
             return false;
         }
         auto sym = [this](const char *name) { return dlsym(handle, name); };
-        initMozc = reinterpret_cast<decltype(initMozc)>(sym("meltype_init_mozc"));
+        init = reinterpret_cast<decltype(init)>(sym("meltype_init"));
         setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
         create = reinterpret_cast<decltype(create)>(sym("meltype_ime_create"));
         handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
         destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
-        if (!initMozc || !setConversionReady || !create || !handle_ || !destroy || !free) {
+        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
-        if (!initMozc((meltypeDir() + "/mozc/meltype_mozc_helper").c_str(), nullptr)) {
+        // 英単語の判定は同梱の一覧 (nullptr)
+        if (!init(meltypeDir().c_str(), nullptr)) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
         return true;
@@ -328,9 +329,29 @@ int specialKey(fcitx::KeySym sym) {
     }
 }
 
-// (仮想キーコード, 入力する文字)。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める)。Meltype が扱わないキーなら両方 0。
+// テンキーの数字・記号の仮想キーコード (Windows の VK_NUMPAD0〜9・VK_MULTIPLY など)。文字と一緒に渡す。テンキーでなければ 0。
+// 本体は、何も打っていないときのテンキーをそのまま通す (上の段の数字とは分ける: issue #460)
+int keypadKey(fcitx::KeySym sym) {
+    if (sym >= FcitxKey_KP_0 && sym <= FcitxKey_KP_9) return 0x60 + (sym - FcitxKey_KP_0);
+    switch (sym) {
+    case FcitxKey_KP_Multiply: return 0x6A;
+    case FcitxKey_KP_Add: return 0x6B;
+    case FcitxKey_KP_Separator: return 0x6C;
+    case FcitxKey_KP_Subtract: return 0x6D;
+    case FcitxKey_KP_Decimal: return 0x6E;
+    case FcitxKey_KP_Divide: return 0x6F;
+    default: return 0;
+    }
+}
+
+// (仮想キーコード, 入力する文字)。文字を入力するキーの仮想キーコードは 0 (本体が文字から決める。テンキーだけは文字と一緒に渡す)。
+// Meltype が扱わないキーなら両方 0。
 std::pair<int, uint32_t> virtualKey(fcitx::KeySym sym) {
     if (int vk = specialKey(sym)) return {vk, sym == FcitxKey_space ? 0x20u : 0u};
+    if (int vk = keypadKey(sym)) {
+        uint32_t c = fcitx::Key::keySymToUnicode(sym);
+        return {c < 0x20 ? 0 : vk, c < 0x20 ? 0 : c};
+    }
     uint32_t c = fcitx::Key::keySymToUnicode(sym);
     return {0, c < 0x20 ? 0 : c};
 }

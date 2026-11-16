@@ -4,13 +4,12 @@
 // 件数の超過は Draft にせず「PR上限超過」を付けて順番待ちにし (枠が空いたら外す)、PR要対応・情報待ちは通知から 14 日で閉じる。
 // 件数には Draft も含める (Draft を作業中の下書きにだけ使い、上限を避けるために Draft にしなくてよいように)。
 // メンテナーが「次にレビュー」を付けた PR は、件数を数えるときに古い PR より先に枠へ入れる。
-// No Close の付いた PR・Issue は、自動で閉じない。
 // GitHub の本文・差分はデータとして読むだけ。PR のコードは実行しない。
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-export const Labels = { limit: 'PR上限超過', rule: 'PR要対応', info: '情報待ち', exempt: 'No Close', next: '次にレビュー' };
+export const Labels = { limit: 'PR上限超過', rule: 'PR要対応', info: '情報待ち', next: '次にレビュー' };
 export const WaitMs = 14 * 24 * 60 * 60 * 1000;
 // 件数の超過は 14 日で閉じる通知 (版 1)、24 時間で Draft にする通知 (版 2) から、順番待ちの通知 (版 3) に変えた。
 // 前の版の通知は、順番待ちの通知に書き直す。
@@ -37,10 +36,10 @@ export function excessPulls(pulls) {
     }).map(p => p.number));
 }
 
-/** ラベルを付け直した場合・No Close を付け外しした場合・再オープン・Draft から戻した場合は新しい待機期間にする。 */
+/** ラベルを付け直した場合・再オープン・Draft から戻した場合は新しい待機期間にする。 */
 function cycleOf(events, label) {
   const relevant = events.filter(e =>
-    (['labeled', 'unlabeled'].includes(e.event) && [label, Labels.exempt].includes(e.label?.name))
+    (['labeled', 'unlabeled'].includes(e.event) && e.label?.name === label)
     || ['reopened', 'ready_for_review', 'converted_to_draft'].includes(e.event));
   const last = relevant.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id - b.id).at(-1);
   return last ? String(last.id) : 'initial';
@@ -62,7 +61,7 @@ function readNotice(comments, kind) {
 export function decision(item, kind, comments, events, now) {
   const cycle = cycleOf(events, Labels[kind]);
   const notice = readNotice(comments, kind);
-  if (!notice || notice.state.cycle !== cycle || ['resolved', 'exempt'].includes(notice.state.status)
+  if (!notice || notice.state.cycle !== cycle || notice.state.status === 'resolved'
       || notice.state.version !== Versions[kind]) return { action: 'warn', cycle, notice };
   const state = notice.state;
   const limit = kind === 'limit';
@@ -95,7 +94,6 @@ function render(state) {
     info: 'この報告には、確認に必要な情報が足りません。前の質問を確認し、本文の追記またはコメントで返信をお願いします。',
   }[state.kind];
   const status = state.status === 'resolved' ? '✅ この通知の対象ではなくなりました。'
-    : state.status === 'exempt' ? `🛡️ \`${Labels.exempt}\` が付いているため、自動のクローズを止めています。ラベルを外すと、改めて通知して猶予を設けます。`
     : state.status === 'paused' ? '⏸️ 返信または変更を確認したため、自動クローズを止めました。メンテナーの確認をお待ちください。'
       : `${reason}\n\nこの通知から 14 日間、投稿者の返信・本文の変更${state.head ? '・追加の push' : ''}がなければ、自動で閉じます。期限: ${new Date(Date.parse(state.since) + WaitMs).toISOString().slice(0, 10)} (UTC)。情報が揃った場合や対応を再開する場合は、再オープンを依頼できます。`;
   return `${Marker}\n<!-- policy-state:${JSON.stringify(state)} -->\n${status}`;
@@ -141,12 +139,11 @@ export async function runPolicy(api, event, eventName, now = Date.now()) {
   const canClose = ['schedule', 'workflow_dispatch'].includes(eventName);
   let pulls = await list('/pulls?state=open');
   const excess = excessPulls(pulls);
-  // 手動判断用ラベルも初回に用意する。情報待ちは既存のトリアージ bot が作る。
+  // 手動判断用ラベルも初回に用意する。
   const labels = await list('/labels');
   for (const [name, description] of [
     [Labels.limit, '同時オープン PR (Draft を含む) が 2 件を超えていて、枠が空くのを待っている'],
     [Labels.rule, '投稿者によるルールへの対応を待つ (14 日間無反応なら閉じる)'],
-    [Labels.exempt, '自動でクローズしない (メンテナーが付ける)'],
     [Labels.next, '取り込めそうなので、上限の枠に古い PR より先に入れる (メンテナーが付ける)'],
   ]) {
     if (!labels.some(l => l.name === name)) {
@@ -224,13 +221,6 @@ export async function runPolicy(api, event, eventName, now = Date.now()) {
         if (notice && notice.state.status !== 'resolved') await writeNotice(number, { ...notice.state, status: 'resolved' }, notice);
         continue;
       }
-      // No Close の間は期限を数えない。外したときは新しい待機期間にする (cycleOf)。
-      // 件数の超過では閉じないので、順番待ちの通知は No Close があってもそのままにする。
-      if (kind !== 'limit' && names(item).has(Labels.exempt)) {
-        const notice = readNotice(comments, kind);
-        if (notice && !['resolved', 'exempt'].includes(notice.state.status)) await writeNotice(number, { ...notice.state, status: 'exempt' }, notice);
-        continue;
-      }
       const d = decision(item, kind, comments, events, now);
       if (d.action === 'warn') {
         await writeNotice(number, {
@@ -248,7 +238,7 @@ export async function runPolicy(api, event, eventName, now = Date.now()) {
     // 閉じる直前に、返信・push・Draft 化・ラベルをもう一度確認する。
     pulls = await list('/pulls?state=open');
     const fresh = await snapshot(number, isPr);
-    const expired = kind => active(fresh.item, kind, pulls) && !names(fresh.item).has(Labels.exempt)
+    const expired = kind => active(fresh.item, kind, pulls)
       && decision(fresh.item, kind, fresh.comments, fresh.events, now).action === 'close';
     const closeKind = paused ? null : due.find(kind => expired(kind));
     if (closeKind && !kinds.some(kind => active(fresh.item, kind, pulls)

@@ -17,9 +17,6 @@ public interface IImeEnvironment
     /// <summary>入力欄ごとの入力の本体。settings は、その入力欄のアプリの設定。辞書・学習データはフロントの中で共有する。</summary>
     MeltypeSession CreateSession(Func<Settings> settings);
 
-    /// <summary>漢字かな交じりの文の読み (再変換)。OS の機能で分からなければ null。</summary>
-    string? ReadingOf(string text);
-
     /// <summary>ユーザーが登録した定型文。</summary>
     SnippetStore Snippets { get; }
 
@@ -64,7 +61,7 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
         // 文字列の名前のほかに数も読めてしまうので、名前の無い値も知らない値として扱う
         if (e is not null && (!Enum.IsDefined(e.Type) || e.Field?.Traits.Any(trait => !Enum.IsDefined(trait)) == true))
         {
-            Diagnostics.Log.Warn($"フロントから知らない値の出来事が届いたので、受け持ちません: {json}");
+            Diagnostics.Log.Warn("フロントから知らない値の出来事が届いたので、受け持ちません");
             return null;
         }
         return e;
@@ -75,7 +72,7 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
     {
         foreach (var session in _sessions.Values)
         {
-            if (session.IsComposing) session.Close();
+            session.Close();
         }
         _sessions.Clear();
     }
@@ -87,12 +84,13 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             Diagnostics.Log.Warn($"フロントのプロトコルの版 ({e.Version}) が本体 ({Version}) と違うので、受け持ちません");
             return Inactive();
         }
+        var id = e.Instance ?? "";
         if (e.Type == ImeEventType.InstanceDestroyed)
         {
-            if (_sessions.Remove(e.Instance, out var closing) && closing.IsComposing) closing.Close();
+            if (_sessions.Remove(id, out var closing)) closing.Close(e.Field);
             return Inactive();
         }
-        if (!_sessions.TryGetValue(e.Instance, out var session))
+        if (!_sessions.TryGetValue(id, out var session))
         {
             var current = settings();
             var active = ImeSession.IsActive(environment, current, e.Field);
@@ -101,10 +99,10 @@ public sealed class ImeHost(IImeEnvironment environment, Func<Settings> settings
             if (!active || e.Type is not (ImeEventType.KeyPressed or ImeEventType.ModeToggleRequested or ImeEventType.JapaneseModeSelected or ImeEventType.AlphanumericModeSelected) ||
                 e.Field?.Composing == true || _sessions.Count >= MaxSessions)
             {
-                return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
+                return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.IsGame(current, e.Field), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
             }
             session = new ImeSession(environment, settings);
-            _sessions[e.Instance] = session;
+            _sessions[id] = session;
         }
         return session.Handle(e, NextRev());
     }

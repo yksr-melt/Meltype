@@ -1,17 +1,18 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Yukishiro
 
-# -Version を付けると、公開するリリースの名前 (dist\Meltype-<版>-windows.zip) にする (GitHub Actions がタグから付ける)。
+# -Version を付けると、公開するリリースの名前 (dist\Meltype-<版>-setup.exe) にする (GitHub Actions がタグから付ける)。
 # -Portable を付けると、アプリ内にデータを保存するポータブル版 zip を作る。
 # -ReuseBuild を -Portable と一緒に付けると、直前に作った通常版の app を再利用する (CI 用)。
-# -Step Build は通常版の app を作って自己診断するところまで、-Step Sign はその app に署名して zip を作るところだけを行う (CI 用)。
+# -Step Build は通常版の app を作って自己診断するところまで、-Step Sign はその app に署名してインストーラーを作るところだけを行う (CI 用)。
 # 署名の秘密 (MELTYPE_SIGN_PFX / MELTYPE_SIGN_PASSWORD) がある間に、ビルドしたもの (Meltype.exe・Mozc のヘルパー) を実行しないため。
 param([string]$Version = '', [switch]$Portable, [switch]$ReuseBuild, [ValidateSet('All', 'Build', 'Sign')][string]$Step = 'All')
 
 $ErrorActionPreference = 'Stop'
 
-# 協力者に渡すテスト版の zip を作る: dist\Meltype-test-<日付>-windows.zip
-# 中身は ビルド済みの app フォルダー (.NET ランタイム同梱) + Install.cmd / Uninstall.cmd + README.txt。
+# 版を付けなければ、協力者に渡すテスト版を作る: dist\Meltype-test-<日付>-setup.exe
+# 通常版は、ビルド済みの app フォルダー (.NET ランタイム同梱) から Inno Setup でインストーラーを作る (packaging\Meltype.iss)。
+# あわせて、1.6.0 以前の Meltype の自動更新用の zip (dist\Meltype-<版>-windows.zip) も作る (下の「互換の zip」)。
 #
 # .NET の同梱: この環境は NuGet が使えないので自己完結ビルド (--self-contained) の代わりに、
 # この PC にインストール済みの .NET ランタイムを app\dotnet にコピーし、Meltype.exe がそこを使うようにする
@@ -23,6 +24,7 @@ $packageName = if ($Portable) { 'Meltype-portable' } else { 'Meltype' }
 $stage = Join-Path $dist $packageName
 $app = Join-Path $stage 'app'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
+$setupVersion = if ($Version) { $Version } else { "test-$stamp" }
 $zip = if ($Version) {
     if ($Portable) { Join-Path $dist "Meltype-$Version-windows-portable.zip" }
     else { Join-Path $dist "Meltype-$Version-windows.zip" }
@@ -93,7 +95,7 @@ dotnet publish (Join-Path $root 'src\Meltype.Windows\Meltype.Windows.csproj') -c
     -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=dotnet
 if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LASTEXITCODE)。" }
 
-# Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ Microsoft IME だけで動く。
+# Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ漢字に変換できない (かなのまま)。
 if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
     # 前の版の Build-MozcHelper.ps1 で作った bin には無い。版がずれないよう、ほかから補わずに止める
@@ -110,7 +112,7 @@ if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     Write-Host 'Mozc の変換ヘルパーを同梱しました。'
 }
 else {
-    Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。Microsoft IME だけで変換します。'
+    Write-Warning 'Mozc の変換ヘルパーがありません (native\mozc\Build-MozcHelper.ps1)。漢字に変換できません (かなのまま確定します)。'
 }
 
 # Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。
@@ -227,7 +229,7 @@ if (-not $Portable) {
     if ($imeBuilt) {
         foreach ($arch in 'x64', 'x86') {
             New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
-            Copy-Item -LiteralPath (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll"), (Join-Path $root "native\tip\bin\$arch\MeltypeTip.dll.sha256") -Destination (Join-Path $tip $arch)
+            Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
         }
         Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
         Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
@@ -246,7 +248,7 @@ if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
     if (-not $signtool) { throw 'signtool.exe が見つかりません (Windows SDK が必要です)。' }
-    $targets = @('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe', 'tip\x64\MeltypeTip.dll', 'tip\x86\MeltypeTip.dll') |
+    $targets = @('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe', 'tip\x64\MeltypeTip.dll', 'tip\x86\MeltypeTip.dll', 'tip\x64\MeltypeTipImpl.dll', 'tip\x86\MeltypeTipImpl.dll') |
         ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ }
     & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $targets
     if ($LASTEXITCODE -ne 0) { throw "署名に失敗しました (exit code $LASTEXITCODE)。" }
@@ -257,9 +259,10 @@ else {
 }
 
 # 配布する Meltype IME の DLL (署名した後) のハッシュ。インストールのとき、管理者として登録する前に、DLL が書き換えられていないかを確かめるのに使う。
-# (MeltypeTip.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う)
-foreach ($arch in @(if ($imeBuilt) { 'x64', 'x86' })) {
-    $dll = Join-Path $app "tip\$arch\MeltypeTip.dll"
+# (MeltypeTip.dll.sha256・MeltypeTipImpl.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う。
+#  MeltypeTipImpl.dll.sha256 は、インストール先の impl のフォルダー名と、Meltype.exe が要求の impl を照合するのにも使う)
+foreach ($relative in @(if ($imeBuilt) { 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll' })) {
+    $dll = Join-Path $app "tip\$relative"
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $hash = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($dll))).Replace('-', '') } finally { $sha.Dispose() }
     [IO.File]::WriteAllText("$dll.package.sha256", $hash)
@@ -281,23 +284,40 @@ if ($Portable) {
     Copy-Item -LiteralPath (Join-Path $dotnetRoot 'ThirdPartyNotices.txt') -Destination (Join-Path $stage 'DOTNET-THIRD-PARTY-NOTICES.txt')
 }
 else {
-    # 自動更新とインストール用スクリプトは通常版だけに含める。
+    # 自動更新は通常版だけ。
     Copy-Item -LiteralPath (Join-Path $root 'packaging\update.ps1') -Destination $app
-    foreach ($file in 'Install.cmd', 'Uninstall.cmd', 'install.ps1', 'uninstall.ps1', 'README.txt') {
-        Copy-Item -LiteralPath (Join-Path $root "packaging\$file") -Destination $stage
-    }
 }
 Copy-Item -LiteralPath (Join-Path $root 'LICENSE') -Destination (Join-Path $stage 'LICENSE.txt')
 Copy-Item -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md') -Destination (Join-Path $stage 'THIRD-PARTY-NOTICES.txt')
+Remove-Item -LiteralPath (Join-Path $dist 'selftest.txt') -ErrorAction SilentlyContinue
 
 if ($Portable) {
     # 配布時と同じ配置 (exe とマーカーが同じフォルダー) で起動し、data の保存先を含めて確認する。
     Invoke-SelfTest 'ポータブル版の最終配置' (Join-Path $stage 'Meltype.exe') | Out-Null
     # 自己診断が作ったデータは配布物に含めない。
     Remove-Item -LiteralPath (Join-Path $stage 'data') -Recurse -Force -ErrorAction SilentlyContinue
+    Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+    $size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
+    Write-Host "パッケージを作成しました: $zip ($size MB, .NET $version 同梱)"
+    return
 }
 
-Remove-Item -LiteralPath (Join-Path $dist 'selftest.txt') -ErrorAction SilentlyContinue
-Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
-$size = [math]::Round((Get-Item $zip).Length / 1MB, 1)
-Write-Host "パッケージを作成しました: $zip ($size MB, .NET $version 同梱)"
+$iscc = & (Join-Path $root 'packaging\Find-InnoSetup.ps1')
+& $iscc /Q "/DAppVersion=$setupVersion" "/DSourceDir=$stage" "/DOutputDir=$dist" (Join-Path $root 'packaging\Meltype.iss')
+if ($LASTEXITCODE -ne 0) { throw "インストーラーを作れませんでした (exit code $LASTEXITCODE)。" }
+$setup = Join-Path $dist "Meltype-$setupVersion-setup.exe"
+if ($signtool) {
+    & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $setup
+    if ($LASTEXITCODE -ne 0) { throw "インストーラーの署名に失敗しました (exit code $LASTEXITCODE)。" }
+}
+
+# 互換の zip: 1.6.0 以前の Meltype の自動更新は、リリースの Meltype-<版>-windows.zip を展開して install.ps1 を実行する。
+# 更新を強制できない前の版のために、インストーラーと、それを実行するだけの install.ps1 を入れる。
+$bridge = Join-Path $dist 'Meltype-update'
+if (Test-Path -LiteralPath $bridge) { Remove-Item -LiteralPath $bridge -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $bridge | Out-Null
+Copy-Item -LiteralPath $setup, (Join-Path $root 'packaging\install.ps1') -Destination $bridge
+Compress-Archive -Path (Join-Path $bridge '*') -DestinationPath $zip -Force
+Remove-Item -LiteralPath $bridge -Recurse -Force
+$size = [math]::Round((Get-Item $setup).Length / 1MB, 1)
+Write-Host "インストーラーを作成しました: $setup ($size MB, .NET $version 同梱)"

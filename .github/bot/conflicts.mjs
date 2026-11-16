@@ -135,7 +135,7 @@ async function reportNow(pr, files, cause) {
     const lines = [`@${pr.user.login} この Pull Request は、main とコンフリクトしています。`];
     if (cause) lines.push('', `原因になったと思われる変更: #${cause.number} ${cause.title}`);
     lines.push('', 'コンフリクトしているファイル:', ...fileList(files));
-    lines.push('', 'お手数ですが、main に追従して解消してください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
+    lines.push('', '直せるときは main に追従して解消してください。直し方が分からないときや、メンテナー側の変更で起きたときは、この Pull Request のコメントでメンテナーに直すよう頼んでください ([CONTRIBUTING.md](../blob/main/CONTRIBUTING.md))。解消されると、このコメントとラベルは自動で更新されます。');
     await gh('POST', `/issues/${pr.number}/labels`, { labels: [Label] });
     await upsert(pr.number, NowMarker, lines.join('\n'));
     console.log(`#${pr.number}: コンフリクトを知らせました`);
@@ -175,7 +175,7 @@ async function reportForecast(pr, hits) {
   for (const { other, files } of hits) {
     lines.push(`- #${other.number} ${other.title} (@${other.user.login})`, ...fileList(files));
   }
-  lines.push('', 'マージの順番を決めるときの参考にしてください。先にマージした方が、もう片方の作者に追従をお願いすることになります。');
+  lines.push('', 'マージの順番を決めるときの参考にしてください。先にマージした方が、もう片方がコンフリクトします (作者が直すか、作者がコメントで頼めばメンテナーが直します)。');
   await upsert(pr.number, ForecastMarker, lines.join('\n'));
   console.log(`#${pr.number}: マージ後に ${hits.length} 件コンフリクトする予告を出しました`);
 }

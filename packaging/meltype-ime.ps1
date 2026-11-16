@@ -1,9 +1,9 @@
 ﻿# SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 lnkiai
 #
-# Meltype IME (Windows の IME として入力欄に直接入力する。native\tip) を入れる / 外す。install.ps1・uninstall.ps1 から読み込んで使う。
+# Meltype IME (Windows の IME として入力欄に直接入力する。native\tip) を入れる / 外す。setup-ime.ps1 から読み込んで使う。
 #   . .\meltype-ime.ps1
-#   Install-MeltypeIme -Source <x64 と x86 と Register-Tip.ps1 があるフォルダー>
+#   Install-MeltypeIme -Source <x64 と x86 と Register-Tip.ps1 があるフォルダー> [-Explain]
 #   Uninstall-MeltypeIme
 # IME の登録は PC 全体の設定なので、ここだけ管理者権限を求める (UAC の確認が出る)。
 # 「言語と地域」のキーボードの一覧に足すのは、ふつうの権限で (今のユーザーの設定なので)。
@@ -133,14 +133,6 @@ function Remove-MeltypeImeFromLanguageList {
     if ($changed) { Set-WinUserLanguageList $list -Force }
 }
 
-$MeltypeImeDeclinedKey = 'HKCU:\Software\Meltype'
-
-# 登録を断ったことを覚える。自動更新と、Meltype.exe が起動したときには聞かない (Install.cmd を自分で実行したときは聞く)
-function Set-MeltypeImeDeclined {
-    New-Item -Path $MeltypeImeDeclinedKey -Force | Out-Null
-    Set-ItemProperty -LiteralPath $MeltypeImeDeclinedKey -Name ImeDeclined -Value 1 -Type DWord
-}
-
 # ファイルの SHA-256 (Get-FileHash は、ほかのシェルから起動した PowerShell では読み込めないことがあるので .NET で計算する)
 function Get-Sha256([string]$path) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
@@ -173,6 +165,13 @@ function Test-MeltypeImeCurrent([string]$Source) {
         }
         if ((Get-Sha256 $installed) -ne (Get-Sha256 $new)) { return $false }
     }
+    foreach ($arch in 'x64', 'x86') {
+        # stub がロードする impl (Register-Tip.ps1 が impl\<署名前のバイナリの SHA-256>\MeltypeTipImpl.dll に配置する)
+        $implHash = Read-HashFile (Join-Path $Source "$arch\MeltypeTipImpl.dll.sha256")
+        $folder = Join-Path $MeltypeProgramFiles "Meltype\tip\$arch"
+        if (-not $implHash -or $implHash -ne (Read-HashFile (Join-Path $folder 'MeltypeTipImpl.dll.sha256'))) { return $false }
+        if (-not (Test-Path -LiteralPath (Join-Path $folder "impl\$implHash\MeltypeTipImpl.dll"))) { return $false }
+    }
     return $true
 }
 
@@ -190,24 +189,36 @@ function Read-HashFile([string]$path) {
 # 確かめたファイル (Register-Tip.ps1 も) のハッシュを返す。管理者として動く側は、写したものがこれと合うかを確かめる。合わなければ $null
 function Get-MeltypeImeSourceHashes([string]$Source) {
     $hashes = @{}
-    foreach ($arch in 'x64', 'x86') {
-        $dll = Join-Path $Source "$arch\MeltypeTip.dll"
+    foreach ($relative in 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll') {
+        $dll = Join-Path $Source $relative
         # 配布用のパッケージなら署名した後のハッシュ、ソースから入れたとき (署名しない) は署名する前のハッシュ
         $expected = Read-HashFile "$dll.package.sha256"
         if (-not $expected) { $expected = Read-HashFile "$dll.sha256" }
         if (-not (Test-Path -LiteralPath $dll)) { return $null }
         $actual = Get-Sha256 $dll
         if ($expected -and $actual -ne $expected) { return $null }
-        $hashes["$arch\MeltypeTip.dll"] = $actual
+        $hashes[$relative] = $actual
         # 署名する前の中身のハッシュ (Program Files に置き、次の更新で同じ DLL なら登録し直さないのに使う) も、すり替えられないように一緒に確かめる
-        if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$arch\MeltypeTip.dll.sha256"] = Get-Sha256 "$dll.sha256" }
+        if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$relative.sha256"] = Get-Sha256 "$dll.sha256" }
     }
     $hashes['Register-Tip.ps1'] = Get-Sha256 (Join-Path $Source 'Register-Tip.ps1')
     return $hashes
 }
 
-# -Ask: 前に断られていても聞く (Install.cmd を自分で実行したとき)。自動更新では聞かない
-function Install-MeltypeIme([string]$Source, [switch]$Ask) {
+# UAC の前に、Meltype からの確認だと分かる説明を出す (ウィザードを出さない setup.exe・アンインストーラー: #970)。「OK」なら $true
+function Confirm-MeltypeElevation([string]$Text) {
+    Add-Type -AssemblyName System.Windows.Forms
+    # ウィンドウの無い PowerShell から出すので、ほかのウィンドウの後ろに隠れないよう最前面に出す (DefaultDesktopOnly)
+    $answer = [System.Windows.Forms.MessageBox]::Show(
+        "$Text`n`n次に「Windows PowerShell」の管理者権限の確認が出たら「はい」を選んでください。",
+        'Meltype', 'OKCancel', 'Information', 'Button1', 'DefaultDesktopOnly')
+    if ($answer -eq 'OK') { return $true }
+    Write-Host '管理者権限の確認の前にキャンセルしました。'
+    return $false
+}
+
+# -Explain: UAC の前に Confirm-MeltypeElevation で説明を出す。「キャンセル」なら UAC を出さずに $false
+function Install-MeltypeIme([string]$Source, [switch]$Explain) {
     $register = Join-Path $Source 'Register-Tip.ps1'
     if (-not (Test-Path -LiteralPath $register)) { return $false }
     # ARM64 の Windows では、ARM64 のアプリ (メモ帳・エクスプローラーなど) に x64 / x86 の DLL が読み込まれず、日本語が打てなくなる
@@ -224,20 +235,15 @@ function Install-MeltypeIme([string]$Source, [switch]$Ask) {
         try { Add-MeltypeImeToLanguageList } catch { }
         return $true
     }
-    $declined = (Get-ItemProperty -LiteralPath $MeltypeImeDeclinedKey -Name ImeDeclined -ErrorAction SilentlyContinue).ImeDeclined -eq 1
-    if ($declined -and -not $Ask) {
-        Write-Host '前に Meltype IME の登録を断ったので、登録しません (Install.cmd か Install-Meltype.ps1 を実行すると、もう一度聞きます)。'
+    if ($Explain -and -not (Confirm-MeltypeElevation 'Meltype のインストールで、Meltype IME を Windows に登録します。「キャンセル」なら登録しません。登録済みの Meltype IME を更新するときは、Meltype も更新せずに前の版のまま使います。')) {
         return $false
     }
-    Write-Host 'Meltype IME (入力欄に直接入力) を Windows に登録します。管理者権限の確認が出たら「はい」を選んでください。'
+    Write-Host 'Meltype IME (入力欄に直接入力) を Windows に登録します。'
     $result = Invoke-Elevated $Source $hashes 'Register'
     if ($result -ne 'ok') {
-        Write-Host 'Meltype IME を登録できませんでした。今までどおり、変換ボックスで入力する方式で使えます。'
-        # UAC で断られたときだけ覚えて、自動更新では聞かない (失敗したときは、次の更新でまた試す)
-        if ($result -eq 'cancelled') { Set-MeltypeImeDeclined }
+        Write-Host "Meltype IME を登録できませんでした ($result)。"
         return $false
     }
-    Remove-ItemProperty -LiteralPath $MeltypeImeDeclinedKey -Name ImeDeclined -ErrorAction SilentlyContinue
     try {
         Add-MeltypeImeToLanguageList
     }
@@ -249,16 +255,19 @@ function Install-MeltypeIme([string]$Source, [switch]$Ask) {
     return $true
 }
 
-function Uninstall-MeltypeIme {
+# このユーザーの言語の一覧からは必ず外す (管理者権限が要らない)。PC 全体の登録を外すのは UAC で断られたら残す (ほかのユーザーが使っていることもある)
+function Uninstall-MeltypeIme([switch]$Explain) {
     try { Remove-MeltypeImeFromLanguageList } catch { }
-    # 登録を断った記録も消す
-    Remove-Item -LiteralPath $MeltypeImeDeclinedKey -Recurse -Force -ErrorAction SilentlyContinue
+    # 1.6.0 以前の Meltype が、登録を断った記録 (ImeDeclined) を置いていた
+    Remove-Item -LiteralPath 'HKCU:\Software\Meltype' -Recurse -Force -ErrorAction SilentlyContinue
     if (-not (Test-MeltypeImeRegistered)) { return $true }
     $register = Join-Path $MeltypeProgramFiles 'Meltype\tip\Register-Tip.ps1'
-    # Program Files に無ければ、同じ場所 (インストール先) の tip か、ソースの native\tip のもの
+    # Program Files に無ければ、同じ場所 (インストール先) の tip のもの
     if (-not (Test-Path -LiteralPath $register)) { $register = Join-Path $PSScriptRoot 'tip\Register-Tip.ps1' }
-    if (-not (Test-Path -LiteralPath $register)) { $register = Join-Path $PSScriptRoot '..\native\tip\Register-Tip.ps1' }
     if (-not (Test-Path -LiteralPath $register)) { return $false }
-    Write-Host 'Meltype IME の登録を外します。管理者権限の確認が出たら「はい」を選んでください。'
+    if ($Explain -and -not (Confirm-MeltypeElevation 'Meltype のアンインストールで、Meltype IME の登録を Windows から外します。「キャンセル」なら登録を残します (同じ PC のほかのユーザーは、そのまま Meltype IME を使えます)。')) {
+        return $false
+    }
+    Write-Host 'Meltype IME の登録を外します。'
     return (Invoke-Elevated (Split-Path $register) @{ 'Register-Tip.ps1' = (Get-Sha256 $register) } 'Unregister') -eq 'ok'
 }

@@ -215,7 +215,9 @@ internal static class BackgroundConversionTests
         using (converter)
         {
             release.Set();
-            Assert.Equal("単位を,取る", string.Join(",", RefreshUntil(session, v => v.Clauses is { Count: 2 })?.Clauses ?? []));
+            var view = RefreshUntil(session, v => v.Clauses is { Count: 2 });
+            Assert.Equal("単位を,取る", string.Join(",", view?.Clauses ?? []));
+            Assert.Equal(1, view?.SelectedClause, "文節が増えても最後を選ぶ");
         }
     }
 
@@ -267,12 +269,83 @@ internal static class BackgroundConversionTests
     [Test]
     public static void Refresh_DoesNotReplaceTheClausesAfterMovingToAnotherClause()
     {
-        var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+        foreach (var startWithRight in new[] { false, true })
+        {
+            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var session = Session(converter);
+            SessionFacadeTests.Type(session, "tanniwotoru");
+            if (!startWithRight) session.HandleKey(VirtualKeys.Space, null, false, false, false, false);
+            var view = session.HandleKey(startWithRight ? VirtualKeys.Right : VirtualKeys.Left, null, false, false, false, false).View;
+            Assert.Equal(0, view?.SelectedClause, "先頭の文節を選ぶ");
+            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            Assert.True(session.RefreshConversion() is null, "選んでいる文節がずれるので置き換えない");
+        }
+    }
+
+    [Test]
+    public static void Refresh_DoesNotUndoSplittingTheWholeSentence()
+    {
+        // 英日の区切りの案を候補にした文全体の文節を ← で分けたら、届いた答えで文全体の文節に戻さない (issue #1737)
+        var converter = new ChangingAnswer { Clauses = [new("と", "と")] };
         var session = Session(converter);
-        SessionFacadeTests.Type(session, "tanniwotoru ");
-        session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
-        converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
-        Assert.True(session.RefreshConversion() is null, "選んでいる文節がずれるので置き換えない");
+        SessionFacadeTests.Type(session, "botto ");
+        var split = session.HandleKey(VirtualKeys.Left, null, false, false, false, false).View;
+        Assert.Equal("bot,と", string.Join(",", split?.Clauses ?? []));
+        converter.Clauses = [new("と", "戸")];
+        Assert.True(session.RefreshConversion() is null, "分けた文節を置き換えない");
+    }
+
+    [Test]
+    public static void Refresh_DoesNotReplaceTheWholeSentenceAfterChoosingAnAlternative()
+    {
+        // 文全体の文節で案を選び直したあとに届いた答えで作り直すと、選んだ文が新しい案に無くなり、その案の文節に分けられなくなる (issue #1737)
+        var converter = new ChangingAnswer { Clauses = [new("と", "と")] };
+        var session = Session(converter);
+        SessionFacadeTests.Type(session, "botto ");
+        var chosen = SessionFacadeTests.Type(session, " ")[^1].View;
+        Assert.True(chosen?.Clauses is [var text] && text != "botと", string.Join(",", chosen?.Clauses ?? []));
+        converter.Clauses = [new("と", "戸")];
+        Assert.True(session.RefreshConversion() is null, "選び直した文全体の文節を置き換えない");
+    }
+
+    [Test]
+    public static void Refresh_ReturningToTheLastClauseAllowsNewSegmentation()
+    {
+        foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Convert, VirtualKeys.Left, VirtualKeys.Down })
+        {
+            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var session = Session(converter);
+            SessionFacadeTests.Type(session, "tanniwotoru");
+            var opened = session.HandleKey(key, null, false, false, false, false).View;
+            Assert.Equal("単位を,取る", string.Join(",", opened?.Clauses ?? []), $"変換開始: {key}");
+            Assert.Equal(1, opened?.SelectedClause, $"最後の文節を選ぶ: {key}");
+            if (key == VirtualKeys.Space)
+            {
+                session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
+                session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
+            }
+            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            var view = session.RefreshConversion()?.View;
+            Assert.Equal("短,意を,取る", string.Join(",", view?.Clauses ?? []), $"新しい区切り: {key}");
+            Assert.Equal(2, view?.SelectedClause, $"新しい最後の文節: {key}");
+        }
+    }
+
+    [Test]
+    public static void Refresh_DoesNotReplaceTheClausesAfterChoosingACandidate()
+    {
+        foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Up })
+        {
+            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var session = Session(converter);
+            SessionFacadeTests.Type(session, "tanniwotoru");
+            var view = session.HandleKey(key, null, false, false, false, false).View;
+            if (key == VirtualKeys.Space) view = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
+            Assert.Equal(1, view?.SelectedClause, "最後の文節を選ぶ");
+            Assert.True(view?.Clauses is ["単位を", var last] && last != "取る", "最後の文節の候補を選び直す");
+            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            Assert.True(session.RefreshConversion() is null, "選び直した候補を残す");
+        }
     }
 
     [Test]
@@ -310,80 +383,6 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
-    public static void Callback_IsCalledFromOneThreadAtATime()
-    {
-        // Mac の変換エンジン (MeltypeConverter) はスレッドセーフでない。文節と候補を重ねて呼ばない
-        var running = 0;
-        var overlapped = false;
-        void Enter()
-        {
-            if (Interlocked.Increment(ref running) != 1) overlapped = true;
-            Thread.Sleep(5);
-            Interlocked.Decrement(ref running);
-        }
-        using var converter = new BackgroundCallbackConverter(
-            (reading, _) => { Enter(); return [new ConversionClause(reading, reading + "!")]; },
-            reading => { Enter(); return [reading + "?"]; });
-        converter.Budget.Enable();
-        var notified = 0;
-        converter.ResultReady += () => Interlocked.Increment(ref notified);
-        for (var i = 0; i < 40; i++)
-        {
-            converter.ConvertClauses("よみ" + i);
-            converter.Candidates("よみ" + i);
-            Thread.Sleep(2);
-        }
-        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) > 0, 5000), "結果が届く");
-        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref running) == 0, 5000), "ワーカーが止まる");
-        Assert.True(!overlapped, "同時に呼ばない");
-    }
-
-    [Test]
-    public static void Callback_AnswersLater_AndWaitsOnlyWithinTheBudget()
-    {
-        using var release = new ManualResetEventSlim();
-        using var ready = new ManualResetEventSlim();
-        using var converter = new BackgroundCallbackConverter(
-            (reading, _) => { release.Wait(); return [new ConversionClause(reading, "答え")]; },
-            _ => ["候補"]);
-        converter.ResultReady += ready.Set;
-        converter.Budget.Enable();
-
-        var watch = Stopwatch.StartNew();
-        Assert.True(converter.ConvertClauses("よみ") is null, "答えが無ければ待たない");
-        Assert.True(watch.ElapsedMilliseconds < 1000, $"待たない ({watch.ElapsedMilliseconds}ms)");
-        release.Set();
-        Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
-        Assert.Equal("答え", converter.ConvertClauses("よみ")?[0].Text);
-
-        // 候補は Budget の間だけ待てば、その場で受け取れる
-        converter.Budget.Start(3000);
-        Assert.Equal("候補", string.Join(",", converter.Candidates("よみ")));
-    }
-
-    [Test]
-    public static void SystemOnly_ShowsKanaUntilTheAnswer_LikeMozcOnly()
-    {
-        // 変換エンジンが「Microsoft IME」だけ: 答えが届くまではかなで見せ、届いたら表示を更新する
-        using var release = new ManualResetEventSlim();
-        using var ready = new ManualResetEventSlim();
-        var budget = new ConversionBudget();
-        using var system = new BackgroundCallbackConverter(
-            (reading, _) => { release.Wait(10000); return [new ConversionClause(reading, "日本語")]; },
-            _ => [],
-            budget: budget);
-        var hybrid = new HybridConverter(() => ConversionEngine.System, null, system, system.Candidates);
-        hybrid.ResultReady += ready.Set;
-        var session = Session(hybrid);
-
-        Assert.Equal("にほんご", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
-        release.Set();
-        Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
-        // 届いたら表示する。ライブ変換は読みごとに答えるので、同じ読みをもう一度頼むまで繰り返す
-        Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "日本語", 5000), "表示が更新される");
-    }
-
-    [Test]
     public static void MozcOnly_ShowsKanaUntilTheAnswer()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
@@ -393,120 +392,10 @@ internal static class BackgroundConversionTests
         mozc.WarmUp();
         Assert.True(ready.Wait(10000), "起動したら知らせる");
 
-        var hybrid = new HybridConverter(() => ConversionEngine.Mozc, mozc, null, null);
+        var hybrid = new HybridConverter(mozc);
         var session = Session(hybrid);
         Assert.Equal("きしゃがきた", SessionFacadeTests.Type(session, "kishagakita")[^1].View?.Text);
         Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "届いたら表示が更新される");
-    }
-
-    [Test]
-    public static void Callback_AsksAgainAndNotifiesOnlyWhenTheAnswerChanged()
-    {
-        // Mac の Zenzai は準備中・処理中に azooKey の答えを返す。控えたままだと、同じ読みはもう Zenzai の答えにならない
-        var answer = "azooKey";
-        var notified = 0;
-        var asked = 0;
-        using var converter = new BackgroundCallbackConverter((reading, _) =>
-        {
-            Interlocked.Increment(ref asked);
-            return [new ConversionClause(reading, Volatile.Read(ref answer))];
-        }, _ => []);
-        converter.ResultReady += () => Interlocked.Increment(ref notified);
-        Assert.Equal("azooKey", converter.ConvertClauses("よみ")?[0].Text);
-        Assert.Equal(1, Volatile.Read(ref notified));
-
-        Volatile.Write(ref answer, "Zenzai");
-        Assert.True(SpinWait.SpinUntil(() => converter.ConvertClauses("よみ")?[0].Text == "Zenzai", 5000), "聞き直して新しい答えになる");
-        // 知らせるのは控えを書き換えた後なので、新しい答えが見えた時点ではまだ知らせていないことがある
-        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) == 2, 5000), "答えが変わったら知らせる");
-
-        var before = Volatile.Read(ref asked);
-        Assert.True(SpinWait.SpinUntil(() =>
-        {
-            converter.ConvertClauses("よみ");
-            return Volatile.Read(ref asked) >= before + 3;
-        }, 5000), "控えがあっても聞き直す");
-        Assert.Equal(2, Volatile.Read(ref notified), "同じ答えなら知らせない (再描画が聞き直しを呼び、終わらなくなる)");
-    }
-
-    [Test]
-    public static void Callback_RevalidationDoesNotReplaceAWaitingRequest()
-    {
-        using var release = new ManualResetEventSlim();
-        var asked = new System.Collections.Concurrent.ConcurrentQueue<string>();
-        using var converter = new BackgroundCallbackConverter((reading, _) =>
-        {
-            if (reading == "まつ") release.Wait(5000);
-            asked.Enqueue(reading);
-            return [new ConversionClause(reading, reading + "!")];
-        }, _ => []);
-        converter.Budget.Enable();
-        converter.ConvertClauses("ひかえ");
-        converter.Budget.Start(3000);
-        Assert.Equal("ひかえ!", converter.ConvertClauses("ひかえ")?[0].Text);
-        converter.Budget.Start(0);
-        Assert.True(converter.ConvertClauses("まつ") is null, "答えはまだ");
-        Assert.True(converter.ConvertClauses("つぎ") is null, "答えはまだ");
-        converter.ConvertClauses("ひかえ");
-        release.Set();
-        Assert.True(SpinWait.SpinUntil(() => asked.Contains("つぎ"), 5000), "控えの聞き直しで、待っている要求の予約が消えない");
-    }
-
-    [Test]
-    public static void Refresh_ReplacesAnOpenConversionWithTheChangedAnswer()
-    {
-        // 候補を開いたあとも、聞き直した答えが違えば入れ替わる (控えの答えのままにしない)
-        var answer = "azooKey";
-        using var converter = new BackgroundCallbackConverter((reading, _) => [new ConversionClause(reading, Volatile.Read(ref answer))], _ => []);
-        var session = Session(converter);
-        SessionFacadeTests.Type(session, "nihongo ");
-        Volatile.Write(ref answer, "Zenzai");
-        Assert.Equal("Zenzai", RefreshUntil(session, v => v.Text == "Zenzai")?.Text);
-    }
-
-    [Test]
-    public static void Callback_AsksAgainAfterEmptyCandidates()
-    {
-        // Windows の候補 (WinRT) は時間切れで空を返す。空を覚えると、同じ読みでしばらく候補が欠ける
-        var answers = new Queue<IReadOnlyList<string>>([[], ["候補"]]);
-        using var converter = new BackgroundCallbackConverter((_, _) => null, _ => answers.Dequeue());
-        Assert.Equal(0, converter.Candidates("よみ").Count);
-        Assert.Equal("候補", string.Join(",", converter.Candidates("よみ")));
-    }
-
-    [Test]
-    public static void Callback_AsksAgainAfterNoAnswer()
-    {
-        // 変換エンジンの準備前・一時的な失敗の null を覚えると、その読みはかなのままになる
-        var clauses = new Queue<IReadOnlyList<ConversionClause>?>([null, [new ConversionClause("よみ", "読み")]]);
-        var texts = new Queue<string?>([null, "全体"]);
-        var notified = 0;
-        using var converter = new BackgroundCallbackConverter((_, _) => clauses.Dequeue(), _ => [], _ => texts.Dequeue());
-        converter.ResultReady += () => Interlocked.Increment(ref notified);
-        Assert.True(converter.ConvertClauses("よみ") is null, "1 回目は答えが無い");
-        Assert.Equal("読み", converter.ConvertClauses("よみ")?[0].Text, "覚えずに聞き直す");
-        Assert.True(converter.Convert("よみ") is null, "1 回目は答えが無い");
-        Assert.Equal("全体", converter.Convert("よみ"), "覚えずに聞き直す");
-        Assert.Equal(2, Volatile.Read(ref notified), "答えが無いときは知らせない (再描画が同じ要求を繰り返さない)");
-    }
-
-    [Test]
-    public static void Callback_UsesTheConvertFunctionAndTheStartThread()
-    {
-        var started = 0;
-        using var converter = new BackgroundCallbackConverter(
-            (reading, _) => [new ConversionClause(reading, "文節")],
-            _ => [],
-            _ => "全体",
-            start: run =>
-            {
-                Interlocked.Increment(ref started);
-                _ = Task.Run(run);
-            });
-        converter.Budget.Enable();
-        converter.Budget.Start(3000);
-        Assert.Equal("全体", converter.Convert("よみ"));
-        Assert.True(Volatile.Read(ref started) >= 1, "渡した先でワーカーを動かす");
     }
 
     [Test]

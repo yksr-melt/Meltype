@@ -3,7 +3,7 @@
 #
 # Meltype IME (TSF の DLL) をビルドする。Visual Studio Build Tools (C++) が要る。
 #   powershell -ExecutionPolicy Bypass -File native\tip\build.ps1 [-Configuration Release|Debug]
-# 出力: native\tip\bin\x64\MeltypeTip.dll と native\tip\bin\x86\MeltypeTip.dll (32bit のアプリ用)
+# 出力: native\tip\bin\x64 と native\tip\bin\x86 (32bit のアプリ用) に、MeltypeTip.dll (stub) と MeltypeTipImpl.dll (impl)
 
 param([ValidateSet('Release', 'Debug')][string]$Configuration = 'Release')
 
@@ -24,7 +24,10 @@ function Get-Sha256([string]$path) {
     finally { $sha.Dispose() }
 }
 
-$sources = 'Dll.cpp', 'TextService.cpp', 'CandidateWindow.cpp', 'DisplayAttributes.cpp', 'LangBar.cpp', 'Pipe.cpp', 'Json.cpp'
+$dlls = @(
+    @{ Name = 'MeltypeTip'; Sources = 'Dll.cpp', 'Stub.cpp', 'Common.cpp' },
+    @{ Name = 'MeltypeTipImpl'; Sources = 'Impl.cpp', 'TextService.cpp', 'CandidateWindow.cpp', 'DisplayAttributes.cpp', 'LangBar.cpp', 'Pipe.cpp', 'Json.cpp', 'Common.cpp' }
+)
 # /Brepro: 同じソースからは同じ DLL にする (日時を埋め込まない)。入れ直したときに、変わっていない DLL を登録し直さない (UAC を出さない) ため
 $optimize = if ($Configuration -eq 'Release') { '/O2 /MT /DNDEBUG' } else { '/Od /MTd /Zi' }
 $libs = 'ole32.lib oleaut32.lib uuid.lib user32.lib gdi32.lib advapi32.lib d2d1.lib dwrite.lib dwmapi.lib'
@@ -37,14 +40,19 @@ foreach ($arch in 'x64', 'x86') {
     $cmd = @(
         "`"$vcvars`" $vcarch >nul",
         "cd /d `"$here`"",
-        "rc /nologo /fo `"$obj\MeltypeTip.res`" MeltypeTip.rc",
-        "cl /nologo /Brepro /std:c++17 /EHsc /W4 /wd4100 /utf-8 /DUNICODE /D_UNICODE $optimize /Fo`"$obj\\`" /Fd`"$obj\\`" /LD $($sources -join ' ') `"$obj\MeltypeTip.res`" /link /Brepro /DEF:MeltypeTip.def /IMPLIB:`"$obj\MeltypeTip.lib`" /OUT:`"$out\MeltypeTip.dll`" $libs"
-    ) -join ' && '
+        "rc /nologo /fo `"$obj\MeltypeTip.res`" MeltypeTip.rc"
+    ) + @($dlls | ForEach-Object {
+        $name = $_.Name
+        "cl /nologo /Brepro /std:c++17 /EHsc /W4 /wd4100 /utf-8 /DUNICODE /D_UNICODE $optimize /Fo`"$obj\\`" /Fd`"$obj\\`" /LD $($_.Sources -join ' ') `"$obj\MeltypeTip.res`" /link /Brepro /DEF:$name.def /IMPLIB:`"$obj\$name.lib`" /OUT:`"$out\$name.dll`" $libs"
+    }) -join ' && '
     Write-Host "== $arch =="
     cmd /c $cmd
     if ($LASTEXITCODE -ne 0) { throw "$arch のビルドに失敗しました。" }
-    # 署名する前の中身のハッシュ。インストールのとき、登録済みの DLL と同じかを比べるのに使う (署名には毎回違う時刻が入るため)
-    $dll = Join-Path $out 'MeltypeTip.dll'
-    [IO.File]::WriteAllText("$dll.sha256", (Get-Sha256 $dll))
+    # 署名する前の中身のハッシュ。インストールのとき、登録済みの DLL と同じかを比べるのに使う (署名には毎回違う時刻が入るため)。
+    # impl のハッシュは、インストール先での impl のフォルダー名にもなり、Meltype.exe が要求の impl と照合する
+    foreach ($name in $dlls.Name) {
+        $dll = Join-Path $out "$name.dll"
+        [IO.File]::WriteAllText("$dll.sha256", (Get-Sha256 $dll))
+    }
 }
 Write-Host 'できました:' (Join-Path $here 'bin')

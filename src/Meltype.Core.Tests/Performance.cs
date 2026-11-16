@@ -46,8 +46,7 @@ internal static class Performance
         CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
 
         var mozc = Henkan.Engine;
-        IKanjiConverter? inner = mozc ?? Henkan.FallbackConverter;
-        var converter = inner is null ? null : new TimedConverter(inner);
+        var converter = mozc is null ? null : new TimedConverter(mozc);
         var more = mozc is null ? null : new TimedCandidates(mozc.Candidates);
         CompositionTests.Keyboard Keyboard() => new(live: true, converter: converter, moreCandidates: more is null ? null : more.Lookup,
             userDictionary: new UserDictionary(null), translations: Henkan.TranslationDictionary);

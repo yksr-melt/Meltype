@@ -15,6 +15,7 @@ public sealed class PhraseHistory
     private const int MaxEntries = 3000;
     private readonly string? _path;
     private readonly Dictionary<(string Reading, string Text), (int Count, long Used)> _entries = new();
+    // 裏のスレッドからも消す (MeltypeRuntime.ForgetZenzaiHallucinations) ので、読むときも取る
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
@@ -44,7 +45,10 @@ public sealed class PhraseHistory
         }
     }
 
-    public int Count => _entries.Count;
+    public int Count
+    {
+        get { lock (_gate) return _entries.Count; }
+    }
 
     /// <summary>確定した語句を覚える。読みが 3 文字未満・読みのまま (かなのまま) 確定したものは覚えない。</summary>
     public void Remember(string reading, string text)
@@ -71,12 +75,17 @@ public sealed class PhraseHistory
     public IEnumerable<string> StartingWith(string prefix)
     {
         // 読みで並べた索引から、前方一致する範囲だけを見る (並びは、全部を順に見て安定に並べ替えたときと同じ)
-        if (_index is not { } index || index.Version != _version)
+        (int Version, (string Reading, string Text, int Count, long Used, int Order)[] Items) index;
+        lock (_gate)
         {
-            var order = 0;
-            var items = _entries.Select(e => (e.Key.Reading, e.Key.Text, e.Value.Count, e.Value.Used, order++)).ToArray();
-            Array.Sort(items, (a, b) => string.CompareOrdinal(a.Reading, b.Reading));
-            _index = index = (_version, items);
+            if (_index is not { } built || built.Version != _version)
+            {
+                var order = 0;
+                var items = _entries.Select(e => (e.Key.Reading, e.Key.Text, e.Value.Count, e.Value.Used, order++)).ToArray();
+                Array.Sort(items, (a, b) => string.CompareOrdinal(a.Reading, b.Reading));
+                _index = built = (_version, items);
+            }
+            index = built;
         }
         int low = 0, high = index.Items.Length;
         while (low < high)
@@ -93,9 +102,17 @@ public sealed class PhraseHistory
         return matches.OrderByDescending(m => m.Count).ThenByDescending(m => m.Used).ThenBy(m => m.Order).Select(m => m.Text);
     }
 
+    /// <summary>覚えている語句 (読みと語句) の一覧。</summary>
+    public IReadOnlyList<(string Reading, string Text)> Entries()
+    {
+        lock (_gate) return _entries.Keys.ToList();
+    }
+
     /// <summary>覚えている語句の読みのうち、typed で始まるもの (予測の候補を確定したときに、同じ読みで覚え直すため)。</summary>
-    public string? ReadingOf(string text, string typed) =>
-        _entries.Keys.Where(k => k.Text == text && k.Reading.StartsWith(typed, StringComparison.Ordinal)).Select(k => k.Reading).FirstOrDefault();
+    public string? ReadingOf(string text, string typed)
+    {
+        lock (_gate) return _entries.Keys.Where(k => k.Text == text && k.Reading.StartsWith(typed, StringComparison.Ordinal)).Select(k => k.Reading).FirstOrDefault();
+    }
 
     /// <summary>覚えている語句 text を、読みにかかわらずすべて忘れる (予測変換の候補を Delete で消す)。忘れた数を返す。</summary>
     public int Forget(string text)
@@ -110,6 +127,18 @@ public sealed class PhraseHistory
         }
         _saver.WriteNow();
         return keys.Count;
+    }
+
+    /// <summary>読み reading で覚えた語句 text だけを忘れる。忘れたかを返す。</summary>
+    public bool Forget(string reading, string text)
+    {
+        lock (_gate)
+        {
+            if (!_entries.Remove((reading, text))) return false;
+            _version++;
+        }
+        _saver.WriteNow();
+        return true;
     }
 
     public void Clear()
