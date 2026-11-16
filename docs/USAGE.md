@@ -29,6 +29,19 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 <br>
 
+<a name="設定の開き方"></a>
+<img src="images/headings/usage/10.svg" alt="設定の開き方" height="53"><br>
+
+| OS | 開き方 |
+| --- | --- |
+| Windows | タスクバーの右にある Meltype のアイコンを右クリック →「設定...」。アイコンが見当たらなければ「^」の中にあります |
+| Mac | メニューバーの入力メニュー →「Meltype の設定ファイル (config.json) を開く…」 |
+| Linux | アプリの一覧の「Meltype の設定」 |
+
+Windows のタスクバーの入力モードの表示 (「あ」「A」) は、Meltype のアイコンとは別のものです。こちらからは Meltype のメニューは出ません。ユーザー辞書・定型文・学習データを消すメニューも、Meltype のアイコンの右クリックにあります。
+
+<br>
+
 <a name="英語と日本語の判定"></a>
 <img src="images/headings/usage/02.svg" alt="英語と日本語の判定" height="53"><br>
 
