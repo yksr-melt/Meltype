@@ -55,7 +55,8 @@ internal static class CompositionTests
                 "え、しらん" => [new("え", "得"), new("、", "、"), new("しらん", "知らん")],
                 "えかく" => [new("え", "絵"), new("かく", "描く")],
                 "がちでやばい" => [new("がちで", "勝ちで"), new("やばい", "ヤバい")],
-                // 英単語の後ろの する の活用: した → 下、したい → 死体
+                // 英単語の後ろの付属語・する の活用: なら → 奈良、した → 下、したい → 死体
+                "なら" => [new("なら", "奈良")],
                 "した" => [new("した", "下")],
                 "したい" => [new("したい", "死体")],
                 _ => null,
@@ -1484,8 +1485,8 @@ internal static class CompositionTests
         // summary.json: 文頭の「え、」が 得、、がちで が 勝ちで になっていた (勝ち の読みは かち)
         // 英日の区切りの別案 (え、し|ran) があると文全体の 1 文節になるので、文節の区切りでなく変換した文で比べる
         foreach (var (typed, expected) in new[] { ("e,shiran ", "え、知らん"), ("ekaku ", "絵描く"), ("gachideyabai ", "ガチでヤバい"),
-            // 英単語 + する: push|下、commit|死体 になっていた。英単語の無いところ (した = 下) は変換エンジンのまま
-            ("pushshita ", "pushした"), ("commitshitai ", "commitしたい"), ("shita ", "下") })
+            // 英単語 + 付属語・する: python|奈良、push|下、commit|死体 になっていた。英単語の無いところ (なら = 奈良、した = 下) は変換エンジンのまま
+            ("pythonnara ", "pythonなら"), ("nara ", "奈良"), ("pushshita ", "pushした"), ("commitshitai ", "commitしたい"), ("shita ", "下") })
         {
             var k = new Keyboard();
             k.Type(typed);
