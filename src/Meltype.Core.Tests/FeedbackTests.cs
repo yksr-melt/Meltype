@@ -1807,5 +1807,4 @@ internal static class RomajiTypoTests
             CompositionTests.Detector.SpellChecker = null;
         }
     }
-    }
 }
