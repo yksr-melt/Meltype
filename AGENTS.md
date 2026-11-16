@@ -1,5 +1,6 @@
 配布用のパッケージを作る・Windows に入れて試すときは [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md) を読む。
 機能を足すか判断するときは [CONTRIBUTING.md](CONTRIBUTING.md) の「運営の方針」、PR を出すときは「Pull Request を送る場合」を読む。
+`native/tip/`・`src/Meltype.Windows/Tip/` を変えるときは、先に [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) を読む。
 
 ## 構成
 
@@ -21,7 +22,6 @@
 - キーを処理するスレッドでは待たず、I/O もしない。時間のかかる処理は裏のスレッドで動かし、キーの処理では結果をすぐ返す。`ImeHost` は 1 つのスレッドから呼ぶ前提で排他しない。
 - 設定と学習データは、前の版が書いたファイルも読む。前の版にあった設定の値は今の値に読み替え、前の版が誤って学習したものは読み込むときに捨てる。
 - Windows の 2 つのフロントエンドは、Meltype.exe の `CompositionService` を共有する。Meltype IME でも、入力モードの表示 (`ModeIndicatorWindow`) は Meltype.exe が出し、DLL が読めない入力欄の情報 (UI Automation の要素) は Meltype.exe の `FocusInspector` が読む。変換中の表示と候補の一覧は別々で、Meltype キーボードは `CompositionWindow`、Meltype IME は DLL の `native/tip/CandidateWindow.cpp` が描くので、見た目を変えるときは両方を直す。
-- `native/tip/`・`src/Meltype.Windows/Tip/` を変えるときは、先に [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) を読む。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 
 ## コードを書くとき
