@@ -4,7 +4,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 打った文字が入力欄そのものに下線付きで入り、変換の候補だけを入力位置の下に一覧で出す。
 判定・変換のロジック (Meltype.Core) は書き直さず、Mac 版・Linux 版と同じく `MeltypeSession` を使う。
 
-使い方は [USAGE.md](../USAGE.md) の「Meltype IME」、セキュリティの考え方は [SECURITY.md](../../SECURITY.md)。
+使い方は [WINDOWS.md](../WINDOWS.md#meltype-ime-で入力する)、セキュリティの考え方は [SECURITY.md](../../SECURITY.md)。
 
 ## 全体の形
 
