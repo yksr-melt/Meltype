@@ -8,15 +8,15 @@
 | --- | --- | --- |
 | Windows: Meltype IME (TSF) | `native/tip/` | アプリのプロセスに入る DLL。名前付きパイプで Meltype.exe (`src/Meltype.Windows/Tip/TipServer.cs`) に JSON を送る |
 | Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | Meltype.exe の中で `ImeHost` を呼ぶ |
-| macOS | `mac/Sources/MeltypeIME/InputController.swift` | Core を NativeAOT でビルドした `src/Meltype.Mac.Native` を dlopen する |
-| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` の Linux 版 `libMeltypeNative.so` を dlopen する |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Mac.Native` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
+| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
 
 変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。
 
 Core の中の流れ:
 
-1. `ImeHost` が出来事を入力欄ごとの `ImeSession` に振り分ける
+1. `ImeHost` が出来事を入力欄ごとの `ImeSession` に振り分け、`ImeSession` が入力モードとモードを切り替えるキーを決める
 2. `MeltypeSession` がコードの行・`/command`・英数状態を判断し、残りを `CompositionController` に渡す
 3. `CompositionController` (`Composition/CompositionController.*.cs`) がキーを受ける
    - 打鍵: `CompositionDetector` が `Detection/` の判定を使い、英字のまま見せる区間を決める
