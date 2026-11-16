@@ -392,7 +392,7 @@ public sealed partial class CompositionController
         _tabStartedConversion = tabStarted;
         var sameClauses = _clauses.Count == old.Count && _clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && _clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
-        if (nothingNew || !sameClauses && (selected != 0 || old.Any(c => c.Changed)))
+        if (nothingNew || !sameClauses && (selected != old.Count - 1 || old.Any(c => c.Changed)))
         {
             _clauses = old;
             _selectedClause = selected;
@@ -410,7 +410,7 @@ public sealed partial class CompositionController
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
-        _selectedClause = selected;
+        _selectedClause = sameClauses ? selected : _clauses.Count - 1;
         return true;
     }
 

@@ -121,9 +121,11 @@ public sealed class MeltypeRuntime : IDisposable
         _converters.Add(mozc);
         _converters.Add(zenzai);
         ZenzaiStatus = () => Settings.Current.UseZenzai ? zenzai.Status ?? "まだ起動していません (日本語を変換すると起動します)" : null;
-        return new HybridConverter(mozc, () => Settings.Current is { UseZenzai: true } settings
+        var converter = new HybridConverter(mozc, () => Settings.Current is { UseZenzai: true } settings
             ? zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath, appDirectory), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath, appDirectory), settings.ZenzaiDevice)
             : zenzai.Get("", ""), zenzai.Failed);
+        ForgetZenzaiHallucinations(converter);
+        return converter;
     }
 
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
@@ -176,6 +178,39 @@ public sealed class MeltypeRuntime : IDisposable
     /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳の記録は覚えた時刻を持たないので、<see cref="ResetLearning"/> で消す。
     /// </summary>
     public int ForgetLearningSince(DateTime sinceUtc) => History.ForgetSince(sinceUtc) + Languages.ForgetSince(sinceUtc) + Phrases.ForgetSince(sinceUtc);
+
+    /// <summary>
+    /// 前の版が学習した Zenzai の壊れた答え (はーどうぇ → ハードウェアウェア、なまえは → 名前は魚のは: issue #1779) を、
+    /// 選び直した変換と予測変換の語句から消す。#1776 から壊れた答えは使わないので、新しく学習することはない。
+    /// 消すのは、かなを含み、かなが読みと合わず (<see cref="ZenzaiConverter.IsPlausible"/>)、ユーザー辞書・補助辞書の候補でもなく、
+    /// Mozc の文節ごとの候補をつないでも作れない語 (<see cref="HybridConverter"/> が Zenzai の答えを使うかと同じ決め方)。
+    /// 読みと比べるだけだと、Mozc の辞書の表記が読みと違う語 (あんはさうぇい → アン・ハサウェイ) を約 3.4 万件巻き添えにする (#1788)。
+    /// Mozc が答えないときは消さない。消したかは覚えず、起動するたびに呼ぶ (読みと合わない語は少ないので、Mozc に聞くのは数件)。
+    /// 入力スレッドから呼ぶ (ユーザー辞書は入力スレッドで読む)。Mozc に聞いて消すのは裏のスレッドで行う。
+    /// </summary>
+    // TODO: 壊れた答えを学習したのは 1.5.0 以前 (#1776 は 1.5.1 から)。1.5.0 以前から更新する人がいなくなったら、
+    // これと、これだけが使う HybridConverter.IsBuiltFromMozcCandidatesNow・MozcConverter.ConvertWithCandidatesNow・PhraseHistory.Entries・PhraseHistory.Forget(reading, text) と、
+    // ConversionHistory・PhraseHistory の読むときのロックを消す
+    internal void ForgetZenzaiHallucinations(HybridConverter converter)
+    {
+        bool Suspect(string reading, string text) =>
+            text.Any(c => KanaChars.IsHiragana(c) || KanaChars.IsKatakana(c)) && !ZenzaiConverter.IsPlausible(reading, text) &&
+            !UserDictionary.Lookup(reading).Contains(text) && _shared.Candidates?.Lookup(reading).Contains(text) != true;
+        var conversions = History.Entries().Where(e => Suspect(e.Reading, e.Text)).Select(e => (e.Reading, e.Text)).ToList();
+        var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text)).ToList();
+        if (conversions.Count == 0 && phrases.Count == 0) return;
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            var brokenConversions = conversions.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
+            var brokenPhrases = phrases.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
+            if (brokenConversions.Count == 0 && brokenPhrases.Count == 0) return;
+            // Mozc に聞いている間に選び直した変換は消さない
+            foreach (var (reading, text) in brokenConversions) if (History.Get(reading) == text) History.Forget(reading);
+            // 同じ語句を正しい読みでも覚えていることがある (おせわに と おせわになっております → お世話になっております) ので、読みと語句の組で消す
+            foreach (var (reading, text) in brokenPhrases) Phrases.Forget(reading, text);
+            Diagnostics.Log.Info($"Zenzai の壊れた答えを学習から消しました (選び直した変換 {brokenConversions.Count} 件、予測変換の語句 {brokenPhrases.Count} 件)。");
+        });
+    }
 
     /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (設定画面の判定のテストにも使う)。final は、もう続きが無いか。</summary>
     public DetectionResult Evaluate(string letters, bool final, Settings settings) =>

@@ -708,14 +708,14 @@ public sealed partial class CompositionController
     /// <summary>「もしかして」の案内。変換ボックスの、打った文字のすぐ下に出す (書き間違いが無ければ null)。</summary>
     private string? MisspellingSuggestion() => FindMisspelling() is { } typo ? $"もしかして: {typo.Misspelling.Right}　<Tab>で修正" : null;
 
-    /// <summary>変換前に矢印キーを押したとき: 文節に区切って、← なら最後の文節、→ なら最初の文節を選ぶ。</summary>
+    /// <summary>変換前の矢印キー: → は先頭、それ以外は最後の文節を選ぶ。</summary>
     private void EnterClauseSelection(int vk)
     {
         StartConversion();
         if (!_converting) return;
         SplitWholeSentence();
         var shift = _shift;
-        _selectedClause = vk == VirtualKeys.Left ? _clauses.Count - 1 : 0;
+        _selectedClause = vk == VirtualKeys.Right ? 0 : _clauses.Count - 1;
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
         else if (vk == VirtualKeys.Up) NextCandidate(-1);
     }

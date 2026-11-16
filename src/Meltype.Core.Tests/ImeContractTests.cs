@@ -610,6 +610,24 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Password_OverridesAppRuleThatTreatsFieldAsText()
+    {
+        const string app = "auth-client";
+        var front = new Front { App = app };
+        front.Settings.AppRules.Add(new AppRule { Process = app, TextInput = true });
+        front.Traits.Add("NonText");
+        Assert.True(front.Type("ka").All(Consumed), "アプリ別設定でテキスト欄として受け持つ\n" + front.Trace);
+        Assert.Equal("か", front.Composition["t1"], front.Trace);
+
+        front.Traits.Add("Password");
+        foreach (var key in "aiueo\n")
+        {
+            AssertPasswordPass(front, front.Key(key));
+        }
+        Assert.Equal("aiueo\n", front.Document, "パスワード欄では未確定文字を取り消して打鍵を通す\n" + front.Trace);
+    }
+
+    [Test]
     public static void Password_CancelsExistingInputOnTheFirstEvent()
     {
         foreach (var (type, extra) in new[]
@@ -851,6 +869,7 @@ internal static class ImeContractTests
         front.Type("tanniwotoru ");
         Assert.Equal("単位を取る", front.Composition["t1"], front.Trace);
         front.Traits.Clear();
+        front.Key(VirtualKeys.Left);
         front.Key(VirtualKeys.Return, shift: true);
         Assert.Equal("単位を", front.Document, front.Trace);
         Assert.Equal("とる", front.Composition["t1"], front.Trace);
