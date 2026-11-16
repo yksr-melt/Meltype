@@ -417,8 +417,9 @@ public sealed partial class CompositionController
     private List<Clause> ConvertJapaneseSegment(string kana, bool afterEnglish, IKanjiConverter converter)
     {
         var japanese = ConvertJapanese(kana, converter);
-        // 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
-        // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった
+        // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
+        // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
+        // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
         if (afterEnglish && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
         return japanese;
     }
