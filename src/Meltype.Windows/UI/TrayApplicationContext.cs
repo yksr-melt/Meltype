@@ -67,8 +67,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             // DLL は動作モードが Meltype キーボードのときも接続してくる
             if (_engine.Running.Mode != InputMode.Tsf) return;
             // 通知は見逃すことがあるので、そのアプリで打っている間 (同じ接続から別ビルドの要求が届くたび、3 秒おき) は、打っている所にも出す。
-            // 古い DLL が残っているかは届いた要求で分かるので、アプリを再起動して直れば、覚えておく状態なしに出なくなる
-            _composition.ShowNotice($"「{process}」を再起動してください (前の版の Meltype IME が残っていて、入力できません)", 3000);
+            // 古い DLL が残っているかは届いた要求で分かるので、アプリを再起動して直れば、覚えておく状態なしに出なくなる。
+            // エクスプローラーのように単体では再起動しにくいアプリもあるので、アプリではなく PC の再起動を求める (#1919)
+            _composition.ShowNotice($"PC を再起動してください (「{process}」に前の版の Meltype IME が残っていて、入力できません)", 3000);
             // ログはアプリごとに 1 回
             if (!_outdatedApps.Add(process)) return;
             Diagnostics.Log.Warn($"Meltype IME: {process} に、更新前の Meltype IME が残っています。{process} を再起動するまで、Meltype IME で入力できません。");
