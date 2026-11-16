@@ -14,7 +14,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 <a name="打ち方の基本"></a>
 <img src="images/headings/usage/01.svg" alt="打ち方の基本" height="53"><br>
 
-ローマ字で打って、<kbd>Space</kbd> で変換、<kbd>Enter</kbd> で確定します。英単語の後の <kbd>Space</kbd> は、ふつうの空白です。
+ローマ字で打って、<kbd>Space</kbd> で変換、<kbd>Enter</kbd> で確定します。英単語で終わっているときの <kbd>Space</kbd> はふつうの空白になるので、変換するには <kbd>Shift</kbd> + <kbd>Space</kbd> を押します (`kyouhagoogle` を変換するとき)。
 
 | したいこと | キー |
 | --- | --- |
