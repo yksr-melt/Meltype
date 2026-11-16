@@ -212,7 +212,7 @@ public sealed partial class CompositionController
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? (kana, _) => Convert(kana, _converter) : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? (kana, afterEnglish) => string.Concat(ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => c.Text)) : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
                 else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {

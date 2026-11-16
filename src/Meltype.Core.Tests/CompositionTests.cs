@@ -1495,6 +1495,15 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishParticle_SpaceCommitEndingWithEnglish_KeepsKana()
+    {
+        // 英語で終わる入力は Space で変換せずに確定する。そのときも英単語の後ろの付属語はかなのまま (python奈良github になっていた)
+        var k = new Keyboard(live: true);
+        k.Type("pythonnaragithub ");
+        Assert.Equal("pythonならgithub ", k.Host.Output.Single());
+    }
+
+    [Test]
     public static void Clauses_SelectWithArrowsAndConvertEach()
     {
         var k = new Keyboard();
