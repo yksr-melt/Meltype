@@ -189,7 +189,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// 入力スレッドから呼ぶ (ユーザー辞書は入力スレッドで読む)。Mozc に聞いて消すのは裏のスレッドで行う。
     /// </summary>
     // TODO: 壊れた答えを学習したのは 1.5.0 以前 (#1776 は 1.5.1 から)。1.5.0 以前から更新する人がいなくなったら、
-    // これと、これだけが使う HybridConverter.IsBuiltFromMozcCandidatesNow・MozcConverter.ConvertWithCandidatesNow・PhraseHistory.Entries と、
+    // これと、これだけが使う HybridConverter.IsBuiltFromMozcCandidatesNow・MozcConverter.ConvertWithCandidatesNow・PhraseHistory.Entries・PhraseHistory.Forget(reading, text) と、
     // ConversionHistory・PhraseHistory の読むときのロックを消す
     internal void ForgetZenzaiHallucinations(HybridConverter converter)
     {
@@ -206,7 +206,8 @@ public sealed class MeltypeRuntime : IDisposable
             if (brokenConversions.Count == 0 && brokenPhrases.Count == 0) return;
             // Mozc に聞いている間に選び直した変換は消さない
             foreach (var (reading, text) in brokenConversions) if (History.Get(reading) == text) History.Forget(reading);
-            foreach (var (_, text) in brokenPhrases) Phrases.Forget(text);
+            // 同じ語句を正しい読みでも覚えていることがある (おせわに と おせわになっております → お世話になっております) ので、読みと語句の組で消す
+            foreach (var (reading, text) in brokenPhrases) Phrases.Forget(reading, text);
             Diagnostics.Log.Info($"Zenzai の壊れた答えを学習から消しました (選び直した変換 {brokenConversions.Count} 件、予測変換の語句 {brokenPhrases.Count} 件)。");
         });
     }

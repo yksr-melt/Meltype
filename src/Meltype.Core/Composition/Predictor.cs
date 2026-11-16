@@ -129,6 +129,18 @@ public sealed class PhraseHistory
         return keys.Count;
     }
 
+    /// <summary>読み reading で覚えた語句 text だけを忘れる。忘れたかを返す。</summary>
+    public bool Forget(string reading, string text)
+    {
+        lock (_gate)
+        {
+            if (!_entries.Remove((reading, text))) return false;
+            _version++;
+        }
+        _saver.WriteNow();
+        return true;
+    }
+
     public void Clear()
     {
         lock (_gate)
