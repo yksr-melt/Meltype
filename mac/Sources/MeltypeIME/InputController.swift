@@ -17,9 +17,10 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private var japanese = true
     private var hasMarkedText = false
     private var candidateList: [String] = []
+    private var candidatePlacement: CandidatePlacement?
+    private var candidateSize: NSSize?
     private let modeIndicator = ModeIndicator.shared
     private var auxPanel: NSPanel?
-    private var displayedAux: String?
 
     /// ロック画面と OS の認証ダイアログを Password として送り、Core でアプリ別設定より優先する (#1752)。
     private static let authenticationApps: Set<String> = ["com.apple.loginwindow", "com.apple.SecurityAgent"]
@@ -168,9 +169,10 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         candidatesWindow?.hide()
         auxPanel?.orderOut(nil)
-        displayedAux = nil
         meaningKey = nil
         candidateList = []
+        candidatePlacement = nil
+        candidateSize = nil
         super.deactivateServer(sender)
     }
 
@@ -319,6 +321,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             }
             client.insertText(NSAttributedString(string: edit.text), replacementRange: range)
             hasMarkedText = false
+            candidateSize = nil
         }
         if let view = result.view {
             showComposition(view, client: client)
@@ -330,7 +333,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     /// 変換中の文字を入力欄に下線付きで出す (変換中は文節ごと、選んでいる文節は太い下線)。
     private func showComposition(_ view: CompositionView, client: IMKTextInput) {
         let text = NSMutableAttributedString(string: view.text)
-        let length = (view.text as NSString).length
+        let markedText = view.text as NSString
+        let length = markedText.length
         if view.converting && !view.clauses.isEmpty {
             var location = 0
             for (index, clause) in view.clauses.enumerated() {
@@ -344,10 +348,11 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
         client.setMarkedText(NSAttributedString(attributedString: text), selectionRange: NSRange(location: length, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         hasMarkedText = length > 0
-        updateCandidates(view.candidates, client: client)
-        // 打ったキー・もしかして・案内を、入力位置の下のパネルに 1 行で出す
+        // 打ったキー・もしかして・案内の位置は、候補の有無にかかわらず入力行で決める。
         let aux = [view.typedKeys, view.spellingSuggestion, view.hint].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: "　")
-        showAux(aux.isEmpty ? nil : aux, client: client)
+        let layout = aux.isEmpty ? nil : auxiliaryLayout(aux, markedText: markedText, client: client)
+        updateCandidates(view.candidates, placement: layout?.placement, client: client)
+        showAux(layout, client: client)
     }
 
     private func hideComposition(client: IMKTextInput) {
@@ -357,49 +362,133 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             hasMarkedText = false
         }
         candidateList = []
+        candidatePlacement = nil
+        candidateSize = nil
         candidatesWindow?.hide()
         auxPanel?.orderOut(nil)
-        displayedAux = nil
         meaningKey = nil
     }
 
-    private func showAux(_ text: String?, client: IMKTextInput) {
-        guard let text else {
-            auxPanel?.orderOut(nil)
-            displayedAux = nil
-            return
-        }
+    struct CandidatePlacement: Equatable {
+        let bounds: NSRect
+        let visible: NSRect
+        let hint: IMKCandidatesLocationHint
+    }
+
+    private struct AuxiliaryLayout {
+        let label: NSTextField
+        let frame: NSRect
+        let placement: CandidatePlacement
+    }
+
+    private func auxiliaryLayout(_ text: String, markedText: NSString, client: IMKTextInput) -> AuxiliaryLayout? {
         // IMK の位置は未確定文字列からの相対値なので、先頭の 0 を渡す。
         var caret = NSRect.zero
         _ = client.attributes(forCharacterIndex: 0, lineHeightRectangle: &caret)
         guard caret.minX.isFinite, caret.minY.isFinite,
-              caret.width.isFinite, caret.height.isFinite, caret.height > 0 else {
+              caret.width.isFinite, caret.height.isFinite, caret.height > 0,
+              let screen = NSScreen.screens.first(where: { $0.frame.contains(caret.origin) || $0.frame.intersects(caret) }) else { return nil }
+        // 選択位置が途中の行でも候補一覧と重ならないよう、未確定文字列の両端を使う。
+        var end = caret
+        if markedText.length > 1 {
+            let last = markedText.rangeOfComposedCharacterSequence(at: markedText.length - 1).location
+            if last > 0 {
+                end = .zero
+                _ = client.attributes(forCharacterIndex: last, lineHeightRectangle: &end)
+            }
+        }
+        let visible = screen.visibleFrame
+        guard let bounds = Self.compositionBounds(start: caret, end: end, visible: visible) else { return nil }
+        let label = NSTextField(labelWithString: text)
+        label.font = Self.auxiliaryFont
+        label.sizeToFit()
+        let size = NSSize(width: ceil(label.frame.width) + 24,
+                          height: Self.auxiliaryLineHeight + 2 * Self.auxiliaryPadding)
+        guard let frame = Self.auxiliaryFrame(size: size, caret: bounds, visible: visible) else { return nil }
+        return AuxiliaryLayout(label: label, frame: frame,
+                               placement: Self.candidatePlacement(auxiliary: frame, caret: bounds, visible: visible))
+    }
+
+    private func showAux(_ layout: AuxiliaryLayout?, client: IMKTextInput) {
+        if let window = candidatesWindow, window.isVisible() {
+            // 候補一覧が打鍵で一時的に消えても、同じ未確定入力の間は最後に測った大きさで判定する。
+            candidateSize = window.candidateFrame().size
+        }
+        guard let layout else {
             auxPanel?.orderOut(nil)
-            displayedAux = nil
             return
         }
-        displayedAux = text
-        let label = NSTextField(labelWithString: text)
-        label.font = .systemFont(ofSize: 13)
-        label.sizeToFit()
-        let size = NSSize(width: label.frame.width + 24, height: label.frame.height + 16)
-        let panel = auxPanel ?? NSPanel(contentRect: NSRect(origin: .zero, size: size),
+        if let candidateSize, !Self.candidateFits(candidateSize, placement: layout.placement) {
+            auxPanel?.orderOut(nil)
+            return
+        }
+        let frame = layout.frame
+        let label = layout.label
+        let panel = auxPanel ?? NSPanel(contentRect: frame,
             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.level = panelLevel(.floating, above: client)
         panel.hasShadow = true
         panel.backgroundColor = .windowBackgroundColor
         panel.ignoresMouseEvents = true
-        panel.setContentSize(size)
+        panel.setFrame(frame, display: false)
         panel.contentView?.subviews.forEach { $0.removeFromSuperview() }
-        label.frame.origin = NSPoint(x: 12, y: 8)
+        label.frame = NSRect(x: 12, y: (frame.height - Self.auxiliaryLineHeight) / 2,
+                             width: frame.width - 24, height: Self.auxiliaryLineHeight)
         panel.contentView?.addSubview(label)
-        if let screen = NSScreen.screens.first(where: { $0.frame.intersects(caret) }) ?? NSScreen.main {
-            let visible = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: max(visible.minX, min(caret.minX, visible.maxX - size.width)),
-                y: max(visible.minY, min(caret.minY - size.height - 6, visible.maxY - size.height))))
-        }
         auxPanel = panel
-        panel.orderFrontRegardless()
+        if !panel.isVisible { panel.orderFrontRegardless() }
+    }
+
+    private static let auxiliaryFont = NSFont.systemFont(ofSize: 13)
+    private static let auxiliaryLineHeight = ceil(NSLayoutManager().defaultLineHeight(for: auxiliaryFont))
+    private static let auxiliaryPadding: CGFloat = 8
+    private static let minimumAuxiliaryPadding: CGFloat = 2
+    private static let minimumAuxiliaryGap: CGFloat = 2
+    private static let panelGap: CGFloat = 6
+
+    static func compositionBounds(start: NSRect, end: NSRect, visible: NSRect) -> NSRect? {
+        guard end.height.isFinite, end.height > 0,
+              end.minX >= visible.minX, end.minX <= visible.maxX,
+              end.midY >= visible.minY, end.midY <= visible.maxY else { return nil }
+        let bottom = min(start.minY, end.minY)
+        return NSRect(x: start.minX, y: bottom, width: start.width, height: max(start.maxY, end.maxY) - bottom)
+    }
+
+    static func auxiliaryFrame(size: NSSize, caret: NSRect, visible: NSRect) -> NSRect? {
+        let width = min(size.width, visible.width)
+        guard width > 24 else { return nil }
+        let x = max(visible.minX, min(caret.minX, visible.maxX - width))
+        // 空きの広い側を候補一覧に残す。候補一覧が出る前から小窓を同じ側に置く。
+        let belowSpace = caret.minY - visible.minY
+        let aboveSpace = visible.maxY - caret.maxY
+        let preferAbove = belowSpace >= aboveSpace
+        let minimumHeight = size.height - 2 * (auxiliaryPadding - minimumAuxiliaryPadding)
+        for above in [preferAbove, !preferAbove] {
+            let space = above ? aboveSpace : belowSpace
+            // 画面端では間隔と上下の余白を詰め、文字の高さを確保できる間は反対側へ移さない。
+            let height = min(size.height, floor(space - minimumAuxiliaryGap))
+            guard height >= minimumHeight else { continue }
+            let gap = min(panelGap, space - height)
+            let y = above ? caret.maxY + gap : caret.minY - gap - height
+            let frame = NSRect(x: x, y: y, width: width, height: height)
+            if visible.contains(frame) { return frame }
+        }
+        return nil
+    }
+
+    static func candidatePlacement(auxiliary: NSRect, caret: NSRect, visible: NSRect) -> CandidatePlacement {
+        let hint = auxiliary.minY >= caret.maxY ? kIMKLocateCandidatesBelowHint : kIMKLocateCandidatesAboveHint
+        return CandidatePlacement(bounds: caret, visible: visible, hint: hint)
+    }
+
+    static func candidateFits(_ size: NSSize, placement: CandidatePlacement) -> Bool {
+        let bounds = placement.bounds
+        let visible = placement.visible
+        guard size.width > 0, size.width <= visible.width, size.height > 0 else { return false }
+        let available = placement.hint == kIMKLocateCandidatesBelowHint
+            ? bounds.minY - visible.minY
+            : visible.maxY - bounds.maxY
+        return size.height + panelGap <= available
     }
 
     private func addMark(_ style: Int, to text: NSMutableAttributedString, range: NSRange) {
@@ -430,7 +519,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         }
     }
 
-    private func updateCandidates(_ list: CandidateList?, client: IMKTextInput) {
+    private func updateCandidates(_ list: CandidateList?, placement: CandidatePlacement?, client: IMKTextInput) {
         guard let window = candidatesWindow else { return }
         guard let list else {
             meaningKey = nil
@@ -443,16 +532,22 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
         defer { selectingFromCore = false }
         // 注記 (候補の種類など) は候補の後ろに付ける
         let items = zip(list.items, list.notes).map { item, note in note.map { item + "　" + $0 } ?? item }
-        // 一覧を作り直すと選択が先頭に戻るので、中身が変わったとき (別の文節に移ったときなど) だけ作り直す。
-        if candidateList != items || !window.isVisible() {
+        // 入力先の移動にも追従し、位置も中身も変わらない間は選択を保つ。
+        if candidateList != items || candidatePlacement != placement || !window.isVisible() {
+            // 候補の内容だけが変わるときは、小窓を隠して出し直さない。
+            if placement == nil || (candidatePlacement != nil && candidatePlacement != placement) {
+                auxPanel?.orderOut(nil)
+            }
             candidateList = items
+            candidatePlacement = placement
+            let hint = placement?.hint ?? kIMKLocateCandidatesBelowHint
             // IMK が入力位置を取り直すよう、更新前にいったん非表示にする。
             window.hide()
             window.update()
-            window.show(kIMKLocateCandidatesBelowHint)
+            window.show(hint)
             // macOS 26 の IMK は入力位置の更新前に画面を選ぶため、画面移動直後は以前の画面に収まる。
             // 更新された入力位置で画面を選び直し、その後で選択位置を本体とそろえる。
-            window.show(kIMKLocateCandidatesBelowHint)
+            window.show(hint)
             windowIndex = 0
         }
         setCandidatesWindowLevel(above: client)
