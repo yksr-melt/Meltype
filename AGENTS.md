@@ -24,6 +24,7 @@
 - キーを処理するスレッドでは待たず、I/O もしない。時間のかかる処理は裏のスレッドで動かし、キーの処理では結果をすぐ返す。`ImeHost` は 1 つのスレッドから呼ぶ前提で排他しない。
 - 設定と学習データは、前の版が書いたファイルも読む。前の版にあった設定の値は今の値に読み替え、前の版が誤って学習したものは読み込むときに捨てる。
 - Windows の 2 つのフロントエンドは、Meltype.exe の `CompositionService` を共有する。Meltype IME でも、入力モードの表示 (`ModeIndicatorWindow`) は Meltype.exe が出し、DLL が読めない入力欄の情報 (UI Automation の要素) は Meltype.exe の `FocusInspector` が読む。変換中の表示と候補の一覧は別々で、Meltype キーボードは `CompositionWindow`、Meltype IME は DLL の `native/tip/CandidateWindow.cpp` が描くので、見た目を変えるときは両方を直す。
+- マージした PR のブランチは Mergify が消し、GitHub はそのブランチに向いた PR の base を付け替えずに閉じる (#1909)。PR は main に向けて作り、ほかの PR に続く変更はその PR がマージされてから出す。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 
 ## コードを書くとき
