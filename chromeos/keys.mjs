@@ -6,13 +6,17 @@ const named = {Backspace: 8, Tab: 9, Enter: 13, NumpadEnter: 13, ShiftLeft: 16, 
   Semicolon: 186, Equal: 187, Comma: 188, Minus: 189, Period: 190, Slash: 191,
   Backquote: 192, BracketLeft: 219, Backslash: 220, BracketRight: 221,
   Quote: 222, IntlBackslash: 226, IntlYen: 220, IntlRo: 226};
-const modeKeys = {ZenkakuHankaku: "toggle", KanjiMode: "toggle", Hankaku: "direct", Zenkaku: "japanese"};
+const modeKeys = {ZenkakuHankaku: "toggle", KanjiMode: "toggle", Hankaku: "direct", Zenkaku: "japanese",
+  Eisu: "direct", Alphanumeric: "direct", Hiragana: "japanese", Katakana: "japanese",
+  HiraganaKatakana: "japanese", KanaMode: "japanese"};
+const modeCodes = {Lang1: "japanese", Lang2: "direct", Lang3: "japanese", Lang4: "japanese",
+  Lang5: "toggle", KanaMode: "japanese"};
 export function translateKey(event) {
   const code = event.code ?? "";
   const modifiers = (event.shiftKey ? 1 : 0) | (event.ctrlKey ? 2 : 0) |
     (event.altKey || event.altgrKey ? 4 : 0) | (event.metaKey ? 8 : 0);
   // JISの半角/全角はBackquoteと同じ位置だが、文字の ` とは別のキー。
-  const mode = modeKeys[event.key] ?? (code === "Lang5" ? "toggle" : undefined) ??
+  const mode = modeKeys[event.key] ?? modeCodes[code] ??
     // ChromeOS may report the JIS 半角/全角 key as key=Unidentified/Process with
     // code=Backquote. Treat only those IME names as the mode key; a real ` key
     // still keeps its character.

@@ -401,7 +401,7 @@ class EngineTests(unittest.TestCase):
     def test_jis_mode_keys_toggle_both_ways_and_commit_preedit_once(self):
         # JIS keyboards can report Kanji instead of Zenkaku_Hankaku.
         locks = int(IBus.ModifierType.LOCK_MASK | IBus.ModifierType.MOD2_MASK)
-        keys = [(IBus.KEY_Kanji, 0), (IBus.KEY_Kanji, int(IBus.ModifierType.MOD1_MASK)),
+        keys = [(IBus.KEY_grave, 0), (IBus.KEY_Kanji, 0), (IBus.KEY_Kanji, int(IBus.ModifierType.MOD1_MASK)),
                 (IBus.KEY_Zenkaku_Hankaku, 0), (IBus.KEY_Hankaku, 0), (IBus.KEY_Zenkaku, 0)]
         for key, modifiers in keys:
             with self.subTest(key=key, modifiers=modifiers):

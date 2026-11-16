@@ -151,6 +151,24 @@ with tempfile.TemporaryDirectory(prefix="meltype-fcitx-event-") as temporary:
             assert (actual.text, actual.cursor, state(actual.handle)) == (expected.text, expected.cursor, state(expected.handle))
             assert not actual.errors and not expected.errors, (actual.errors, expected.errors)
             count += 1
+        # Escの下がUS配列のgraveとして届いても、記号を挿入せず往復できる。
+        regression_root = Path(temporary) / "grave"
+        regression_root.mkdir()
+        (regression_root / "config.json").write_text('{"DetectionLevel":"Manual"}', encoding="utf-8")
+        regression = Host(create(str(regression_root).encode()))
+        hosts.append(regression)
+        direct(regression.handle, 0)
+        action(regression.handle, 3, 0, None, regression.query_cb, regression.event_cb)
+        regression.text, regression.cursor = "", 0
+        for letter in "kana":
+            assert dispatch(regression.handle, ord(letter), ord(letter), 0, 0, None, regression.query_cb, regression.event_cb)
+        assert dispatch(regression.handle, 0x60, 0x60, 2 | 16, 0, None, regression.query_cb, regression.event_cb)
+        assert regression.text == "かな", regression.text
+        assert state(regression.handle) & 1
+        assert not dispatch(regression.handle, 0x60, 0x60, 0, 1, None, regression.query_cb, regression.event_cb)
+        assert dispatch(regression.handle, 0x60, 0x60, 0, 0, None, regression.query_cb, regression.event_cb)
+        assert not state(regression.handle) & 1
+        assert regression.text == "かな"
         for kind, index in [(1, 0), (1, -1), (0, 0), (1, 1), (0, 0)]:
             for host in hosts:
                 host.trace.clear()

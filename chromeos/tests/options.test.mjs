@@ -39,6 +39,7 @@ async function page(t, {available = true} = {}) {
     const field = elements.get(`#${id}`); field.dataset.setting = key;
     // 実際の type をそのまま使う (checkbox・number・text)
     field.type = tag === "select" ? "select-one" : (attrs.match(/\btype="([^"]+)"/)?.[1] ?? "text");
+    if (tag !== "select") delete field.options;
     if (tag === "select") {
       const contents = html.slice(html.indexOf(`<select${attrs}>`) + `<select${attrs}>`.length).split("</select>")[0];
       field.options = [...contents.matchAll(/value="([^"]+)"/g)].map(([, value]) => ({value}));
@@ -97,6 +98,8 @@ test("入力設定と詳細JSONを同期し、未知の設定・非表示の設�
   p.fields.CurrencyRateMode.value = "Manual";
   await p.fields.CurrencyRateMode.fire("change");
   assert.equal(JSON.parse(get("#settings").value).CurrencyRateMode, "Manual");
+  p.fields.CurrencyManualRates.value = "USD = 150";
+  await p.fields.CurrencyManualRates.fire("change");
   p.fields.TabConversion.checked = false;
   await p.fields.TabConversion.fire("change");
   p.fields.Punctuation.value = "FullWidthCommaPeriod";
@@ -119,6 +122,7 @@ test("入力設定と詳細JSONを同期し、未知の設定・非表示の設�
   assert.deepEqual(p.saved().FutureOption, {keep: true});
   assert.equal(p.saved().Punctuation, "FullWidthCommaPeriod");
   assert.equal(p.saved().TabConversion, false);
+  assert.equal(p.saved().CurrencyManualRates, "USD = 150");
   assert.equal("AppProfile" in JSON.parse(get("#settings").value), false);
   p.fields.DetectionLevel.value = "Aggressive";
   await p.fields.DetectionLevel.fire("change");
