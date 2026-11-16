@@ -5,7 +5,7 @@
 # Meltype の Linux 版 (IBus・fcitx5) を組み立てる。できたものは linux/build/Meltype-linux/ に置く。
 #   linux/build.sh
 # 先に Mozc の変換ヘルパーを native/mozc/build-mozc-helper.sh で (native/mozc/bin/linux/)、
-# Zenzai の llama-server を native/zenzai/build-llama-server.sh で (native/zenzai/bin/linux/) ビルドしておく。
+# Zenzai の llama-server を native/zenzai/build-llama-server.sh で (native/zenzai/bin/linux-<版>/) ビルドしておく。
 # 必要なもの: .NET 10 SDK、clang (NativeAOT のリンクに使う)、zlib (zlib1g-dev)、curl (Zenzai のモデルを取るのに使う)
 # fcitx5 のアドオンは、cmake と fcitx5 の開発用のパッケージ (fcitx5-modules-dev) があればビルドする (無ければ IBus だけ)。
 set -euo pipefail
@@ -13,7 +13,9 @@ here="$(cd "$(dirname "$0")" && pwd)"
 root="$(dirname "$here")"
 out="$here/build/Meltype-linux"
 mozc="$root/native/mozc/bin/linux"
-llama="$root/native/zenzai/bin/linux"
+# shellcheck source=../native/zenzai/zenzai.env
+source "$root/native/zenzai/zenzai.env"
+llama="$root/native/zenzai/bin/linux-$LLAMA_BUILD"
 version="$(dotnet msbuild "$root/src/Meltype.Core/Meltype.Core.csproj" -nologo -getProperty:Version)"
 if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
     echo "版番号が不正です: $version" >&2
@@ -34,7 +36,7 @@ if [[ ! -x "$mozc/meltype_mozc_helper" ]]; then
     exit 1
 fi
 if [[ ! -x "$llama/llama-server" ]]; then
-    echo "Zenzai の llama-server がありません。先に native/zenzai/build-llama-server.sh を実行してください。" >&2
+    echo "Zenzai の llama-server ($LLAMA_BUILD) がありません。先に native/zenzai/build-llama-server.sh を実行してください。" >&2
     exit 1
 fi
 
@@ -70,8 +72,6 @@ echo "== 4/4 Zenzai"
 # モデルの版とハッシュは native/zenzai/zenzai.env (Windows・Mac と共通)。取ってきたモデルは native/zenzai/cache に置き、ハッシュが合えば取り直さない。
 # モデルを取れないとき: リリースのビルド (タグ v*) なら止める (Zenzai は既定 ON なので、無いまま配らない)。
 # 自分で使うビルドなら、モデルを同梱せずに続ける (Zenzai なしで、Mozc だけで変換する)
-# shellcheck source=../native/zenzai/zenzai.env
-source "$root/native/zenzai/zenzai.env"
 cache="$root/native/zenzai/cache"
 mkdir -p "$cache"
 cp -R "$llama" "$out/zenzai"

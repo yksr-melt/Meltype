@@ -115,7 +115,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: llama-cache
         with:
-          path: native/zenzai/bin/linux
+          path: native/zenzai/bin
           key: llama-server-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/zenzai/zenzai.env', 'native/zenzai/build-llama-server.sh') }}
       # Zenzai の llama-server も、Mozc のヘルパーと同じ manylinux のコンテナでビルドする (llama.cpp の Ubuntu 向けのビルドは RHEL 9 系・Debian 12 で動かない)
       - name: Build llama-server

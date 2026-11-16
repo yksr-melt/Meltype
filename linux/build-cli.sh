@@ -168,8 +168,10 @@ fi
 if [[ $package -eq 1 ]]; then
     need dotnet
     need clang
-    # llama-server はソースと版が変わらない限り作り直さない (native/zenzai/build-llama-server.sh を直接流すと作り直す)
-    if [[ ! -x "$root/native/zenzai/bin/linux/llama-server" ]]; then
+    # llama-server は、zenzai.env の版のビルドが無いときだけビルドする (native/zenzai/build-llama-server.sh を直接流すと作り直す)
+    # shellcheck source=../native/zenzai/zenzai.env
+    source "$root/native/zenzai/zenzai.env"
+    if [[ ! -x "$root/native/zenzai/bin/linux-$LLAMA_BUILD/llama-server" ]]; then
         need cmake
         bash "$root/native/zenzai/build-llama-server.sh"
     fi
