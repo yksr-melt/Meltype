@@ -191,7 +191,7 @@ function renderDetail(report) {
       </div>
     </div>
     <div class="detail-section"><h3><span class="pane-tag is-req">必須</span>かならず書く所</h3>${fieldsHtml(form ? form.required : [], report.fields)}</div>
-    <div class="detail-section"><h3><span class="pane-tag is-opt">任意</span>あれば書く所</h3>${fieldsHtml(form ? form.optional : [], report.fields)}</div>
+    <div class="detail-section"><h3><span class="pane-tag is-opt">任意</span>あれば書く所</h3>${fieldsHtml(form ? [...form.optional, ...(form.retired ?? [])] : [], report.fields)}</div>
     <div class="detail-section"><h3>${icon("clip")}添付 (${report.attachments.length})</h3>${
       report.attachments.length ? `<div class="attach-grid">${report.attachments.map((a) => attachmentHtml(report, a)).join("")}</div>` : '<p class="small">添付はありません</p>'
     }</div>`;

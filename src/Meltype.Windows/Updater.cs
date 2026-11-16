@@ -7,9 +7,9 @@ using Meltype.Diagnostics;
 namespace Meltype;
 
 /// <summary>
-/// 自動更新。GitHub のリリースに新しい版があれば、同梱の update.ps1 でダウンロード・展開しておき、
-/// 次に Meltype を起動したとき (Windows へのサインイン時) か、トレイの「更新して再起動」で install.ps1 を実行する。
-/// ネットワーク・zip の処理は PowerShell に任せる (同梱の .NET ランタイムを小さく削っているため)。
+/// 自動更新。GitHub のリリースに新しい版があれば、同梱の update.ps1 でインストーラー (setup.exe) をダウンロードしておき、
+/// 次に Meltype を起動したとき (Windows へのサインイン時) か、トレイの「更新して再起動」でインストーラーを /VERYSILENT で実行する。
+/// ネットワークの処理は PowerShell に任せる (同梱の .NET ランタイムを小さく削っているため)。
 /// </summary>
 internal sealed class Updater : IDisposable
 {
@@ -46,16 +46,16 @@ internal sealed class Updater : IDisposable
     }
 
     /// <summary>
-    /// ダウンロード済みで、今より新しい版 (無ければ null)。
+    /// ダウンロード済みで、今より新しい版とそのインストーラー (無ければ null)。
     /// allowPrerelease は設定の「プレリリース版も自動で更新する」。OFF なら、ON の間にダウンロードしておいたプレリリース版は使わない。
     /// </summary>
-    public static (string Version, string Folder)? Staged(bool allowPrerelease)
+    public static (string Version, string Setup)? Staged(bool allowPrerelease)
     {
         try
         {
             if (!File.Exists(ReadyFile)) return null;
             var parts = File.ReadAllText(ReadyFile).Trim().Split('\t');
-            if (parts.Length != 2 || !IsNewer(parts[0]) || !File.Exists(Path.Combine(parts[1], "install.ps1"))) return null;
+            if (parts.Length != 2 || !IsNewer(parts[0]) || !File.Exists(parts[1])) return null;
             if (Config.ProjectInfo.IsPrerelease(parts[0]) && !allowPrerelease) return null;
             return (parts[0], parts[1]);
         }
@@ -67,10 +67,10 @@ internal sealed class Updater : IDisposable
     }
 
     /// <summary>
-    /// 起動時: ダウンロード済みの新しい版があればインストールを始める (true なら Meltype はそのまま終了する。install.ps1 が新しい版を起動する)。
+    /// 起動時: ダウンロード済みの新しい版があればインストールを始める (true なら Meltype はそのまま終了する。インストーラーが新しい版を起動する)。
     /// 前回インストールに失敗していた (同じ版のまま起動した) ときは、繰り返さない。
     /// </summary>
-    public static bool ApplyStagedAtStartup(Func<bool> enabled, bool allowPrerelease, Func<string, bool>? confirm = null)
+    public static bool ApplyStagedAtStartup(Func<bool> enabled, bool allowPrerelease)
     {
         try
         {
@@ -91,30 +91,22 @@ internal sealed class Updater : IDisposable
         {
             Log.Warn($"更新の状態を読めませんでした: {ex.Message}");
         }
-        // 更新の前に、あなたの打ち方で変わる語があれば見せる (issue #285。「あとで」なら今回は更新しない)
-        return enabled() && Staged(allowPrerelease) is { } staged && (confirm?.Invoke(staged.Version) ?? true) && Apply(allowPrerelease);
+        return enabled() && Apply(allowPrerelease);
     }
 
-    /// <summary>ダウンロード済みの新しい版のインストールを始める。install.ps1 が動いている Meltype を終了させてから入れ替え、起動する。</summary>
+    /// <summary>
+    /// ダウンロード済みの新しい版のインストールを始める。インストーラーが動いている Meltype を終了させてから入れ替え、起動する。
+    /// 登録済みの Meltype IME を更新できなければ (UAC を断った・失敗した)、インストーラーは本体も入れ替えず、前の版を起動し直す。
+    /// </summary>
     public static bool Apply(bool allowPrerelease)
     {
         if (Staged(allowPrerelease) is not { } staged) return false;
         try
         {
             File.WriteAllText(ApplyingFile, staged.Version);
-            var start = new ProcessStartInfo(PowerShell)
-            {
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                WorkingDirectory = staged.Folder,
-            };
-            foreach (var arg in new[] { "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(staged.Folder, "install.ps1") }) start.ArgumentList.Add(arg);
-            // インストーラーの失敗内容を、Meltype を再起動したあとでも確認できるように記録する。
-            // install.ps1 自身のプロセスが Meltype を止めるため、ここでは終了を待たない。
-            start.ArgumentList.Add("-UpdateLog");
-            start.ArgumentList.Add(InstallLog);
-            // 起動したのに install.ps1 が始まらなかったことを、ログから見分けられるようにする。
-            try { File.AppendAllText(InstallLog, $"{DateTimeOffset.Now:o} requested version={staged.Version}\r\n"); } catch { }
+            // インストーラーが Meltype を止めるため、ここでは終了を待たない。失敗の内容は、Meltype を再起動したあとでも確認できるようにログに残す
+            var start = new ProcessStartInfo(staged.Setup) { UseShellExecute = false, WorkingDirectory = Path.GetTempPath() };
+            foreach (var arg in new[] { "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", $"/LOG={InstallLog}" }) start.ArgumentList.Add(arg);
             Process.Start(start);
             Log.Info($"Meltype {staged.Version} に更新します。");
             return true;
@@ -125,51 +117,6 @@ internal sealed class Updater : IDisposable
             // 始められなかったので、次の起動で「更新に失敗した」と扱わないよう消しておく
             try { File.Delete(ApplyingFile); } catch { }
             return false;
-        }
-    }
-
-    /// <summary>
-    /// 更新の前に「あなたの打ち方で変わる語」を調べる (issue #285)。自分で英字 / かなに直した語 (languages.json) を、
-    /// 今の版とダウンロードした新しい版 (Meltype.exe --judge-words) の両方で判定し、見え方が変わる語を返す。
-    /// 調べられなければ (新しい版がこの仕組みを持たない・時間切れ) null。この PC の中だけで動かし、何も送らない。
-    /// </summary>
-    public static IReadOnlyList<Composition.WordChange>? PreviewChanges(IEnumerable<string> words, bool allowPrerelease)
-    {
-        if (Staged(allowPrerelease) is not { } staged) return null;
-        var list = words.Where(Composition.WordJudge.IsWord).Distinct(StringComparer.Ordinal).ToList();
-        if (list.Count == 0) return [];
-        var exe = Path.Combine(staged.Folder, "app", "Meltype.exe");
-        if (!File.Exists(exe)) return null;
-        var input = Path.Combine(Directory, "judge-words.txt");
-        var output = Path.Combine(Directory, "judge-result.txt");
-        try
-        {
-            File.WriteAllLines(input, list);
-            File.Delete(output);
-            var start = new ProcessStartInfo(exe) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(exe)! };
-            foreach (var arg in new[] { "--judge-words", input, output }) start.ArgumentList.Add(arg);
-            using var process = Process.Start(start)!;
-            if (!process.WaitForExit(60_000))
-            {
-                process.Kill();
-                Log.Warn("新しい版の判定が時間内に終わりませんでした。変わる語は調べずに更新します。");
-                return null;
-            }
-            if (process.ExitCode != 0 || !File.Exists(output)) return null;
-            var next = Composition.WordJudge.Parse(File.ReadAllText(output));
-            var now = Composition.WordJudge.Parse(Program.JudgeWords(list));
-            var changes = Composition.WordJudge.Changes(now, next);
-            Log.Info($"Meltype {staged.Version} で見え方が変わる語: {changes.Count} 語 (調べた語 {list.Count})。");
-            return changes;
-        }
-        catch (Exception ex)
-        {
-            Log.Warn($"新しい版で変わる語を調べられませんでした: {ex.Message}");
-            return null;
-        }
-        finally
-        {
-            try { File.Delete(input); File.Delete(output); } catch { }
         }
     }
 

@@ -81,6 +81,9 @@ public sealed class RomajiTypoCorrector
 
     private static double WordCost(ReadOnlySpan<char> word) => Function.Contains(word) ? FunctionWordCost : word.Length >= 2 ? WordCostPerWord : SingleKanaWordCost;
 
+    /// <summary>読みが付属語・助動詞か (が・を・て・ので)。</summary>
+    internal static bool IsFunctionWord(ReadOnlySpan<char> kana) => Function.Contains(kana);
+
     // 助詞・助動詞・よく付く語。1 文字でも語として数える。
     private static readonly string[] FunctionWords =
     [

@@ -207,7 +207,7 @@ public enum AppProfile
     [Description("一般")] General,
     /// <summary>コードエディター・ターミナル。英数が基本で、コメントと文字列 ("…") の中だけ日本語を判定する。</summary>
     [Description("コード")] Code,
-    /// <summary>ゲーム。Meltype は何もしない (キーを横取りせず、Windows の IME の ON/OFF にも触らない。ゲームのチャットは Windows の IME で打つ)。</summary>
+    /// <summary>ゲーム。Meltype キーボードは何もしない (キーを横取りせず、Windows の IME の ON/OFF にも触らない。ゲームのチャットは Windows の IME で打つ)。Meltype IME は英数で始め、英数ではキーを横取りしない (ImeSession.IsGame)。</summary>
     [Description("ゲーム")] Game,
 }
 
@@ -848,7 +848,7 @@ public sealed class Settings
     public bool ExcludeFullscreen { get; set; } = true;
 
     [Category("10. アプリ"), DisplayName("ゲームでは止める"), Platforms(Platform.Windows),
-     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype は何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
+     Description("Steam・Epic Games・Riot Games・EA・Ubisoft・Battle.net・Xbox のゲームのフォルダーにあるアプリ (ウィンドウ表示のゲームも) では、Meltype キーボードは何もしません (キーを横取りせず、Windows の IME にも触らないので、ゲームのチャットは Windows の IME で打てます)。Meltype IME は英数で始め、英数ではキーを横取りしません (チャットでは 半角/全角 で日本語にできます)。ほかのゲームは、アプリ別設定で種類を「ゲーム」にしてください。")]
     public bool StopInGames { get; set; } = true;
 
     [Category("10. アプリ"), DisplayName("アプリ別設定"), Description("アプリ (Windows はプロセス名、macOS は bundle ID、Linux はプログラム名) ごとに、ON/OFF・種類・確定した文字の入れ方・入力欄とみなすかを指定します。種類「コード」(コードエディター・ターミナル) では基本は英数のままで、コメント (// # -- など) と文字列 (\"…\" など) の中だけ日本語を判定します。コードの行で 半角/全角 を押すと、その行だけ日本語で入力できます。README.md などの文章ファイルを開いているときは一般として扱います。")]
@@ -899,7 +899,7 @@ public sealed class Settings
     public bool IsAppEnabled(string? processName) => FindRule(processName)?.Enabled ?? true;
 
     /// <summary>
-    /// ゲームとして Meltype を止めるか: アプリ別設定の種類が「ゲーム」か、アプリ別設定が無く、ゲームのフォルダーにあるアプリ (looksLikeGame) で「ゲームでは止める」が ON。
+    /// ゲームか (Meltype キーボードは止める。Meltype IME は英数で始める): アプリ別設定の種類が「ゲーム」か、アプリ別設定が無く、ゲームのフォルダーにあるアプリ (looksLikeGame) で「ゲームでは止める」が ON。
     /// </summary>
     public bool IsGame(string? processName, bool looksLikeGame) =>
         ProfileFor(processName) == AppProfile.Game || (StopInGames && looksLikeGame && FindRule(processName) is null);

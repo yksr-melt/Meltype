@@ -19,6 +19,11 @@ concurrency:
   # main への push は取り消さない (deploy ジョブがマイグレーションと wrangler deploy の間で止まらないように)
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
+defaults:
+  run:
+    shell: bash
+
 jobs:
   web:
     runs-on: ubuntu-24.04

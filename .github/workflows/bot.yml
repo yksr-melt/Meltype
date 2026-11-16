@@ -1,5 +1,5 @@
 # Meltype の GitHub bot。
-#   Issue を作った・直したとき: OS のラベルと「要トリアージ」を付け、足りない情報を聞き、誤判定の報告なら最新のコードで打ってみて結果を返す。
+#   Issue を作ったとき:「要トリアージ」を付ける。Issue を作った・直したとき: 誤判定の報告なら最新のコードで打ってみて結果を返す。
 #   コメントの行の先頭のコマンド (1 つのコメントに 1 つ。/repro だけは複数行):
 #     だれでも: /repro /explain /ca /jht /help
 #     メンテナー (PR のみ): /test /pack /test-repro /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
@@ -45,7 +45,6 @@ jobs:
       repros: ${{ steps.parse.outputs.repros }}
       reported: ${{ steps.parse.outputs.reported }}
       expected: ${{ steps.parse.outputs.expected }}
-      kind: ${{ steps.parse.outputs.kind }}
       sha: ${{ steps.parse.outputs.sha }}
       comment: ${{ steps.parse.outputs.comment }}
     steps:
@@ -116,7 +115,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $bin | Out-Null
           $api = 'https://api.github.com/repos/yksr-melt/Meltype/releases/latest'
           $rel = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'meltype-bot' }
-          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows.zip' } | Select-Object -First 1
+          $asset = $rel.assets | Where-Object { $_.name -like 'Meltype-*-windows-portable.zip' } | Select-Object -First 1
           if (-not $asset) { Write-Host 'Windows リリースが見つかりません (Mozc なしで続行)'; exit 0 }
           $zip = Join-Path $env:RUNNER_TEMP 'meltype-win.zip'
           Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $zip
@@ -234,7 +233,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-pr-${{ needs.parse.outputs.issue }}
-          path: dist/Meltype-test-*.zip
+          path: dist/Meltype-test-*-setup.exe
           retention-days: 14
 
   report:
@@ -271,7 +270,6 @@ jobs:
           BOT_REPROS: ${{ needs.parse.outputs.repros }}
           BOT_REPORTED: ${{ needs.parse.outputs.reported }}
           BOT_EXPECTED: ${{ needs.parse.outputs.expected }}
-          BOT_KIND: ${{ needs.parse.outputs.kind }}
           BOT_SHA: ${{ needs.parse.outputs.sha }}
           BOT_COMMENT_ID: ${{ needs.parse.outputs.comment }}
           BOT_JOB_RESULT: ${{ needs.run.result == 'success' && 'success' || needs.pr.result == 'success' && 'success' || 'failure' }}

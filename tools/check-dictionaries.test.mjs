@@ -200,3 +200,11 @@ test('起動したファイルの実体のパスを調べられないときは�
   assert.equal(run.status, 1, run.stdout + run.stderr);
   assert.match(run.stderr, /起動したファイル .* の実体のパスを調べられない/);
 });
+
+test('domain-*.txt: 読みはひらがな、表記はタブ区切り。同じ読みが 2 行あればエラー (読みで 1 行にまとめる)', () => {
+  const { errors } = checkDictionary('domain-medical.txt', '# 見出し\nせんたんきょだいしょう\t先端巨大症\nカタカナ\t片仮名\nせんたんきょだいしょう\t末端肥大症\n');
+  assert.deepEqual(messages(errors), [
+    '3: 読み「カタカナ」がひらがなでない',
+    '4: 「せんたんきょだいしょう」が 2 行目と食い違う (「せんたんきょだいしょう\t先端巨大症」と「せんたんきょだいしょう\t末端肥大症」)',
+  ]);
+});
