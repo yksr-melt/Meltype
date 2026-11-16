@@ -215,6 +215,31 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1873_ShortEnglishWords_DoNotSplitRomaji()
+    {
+        // Issue #1873: english-words.txt の短い語 (ploys・chi・tan) が、入力の頭の付属語の後ろや nn を割った所から英単語になっていた
+        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("deploys", "deploys"), ("yachi", "やち"), ("yachiwo", "やちを"), ("tanniGithubde", "たんいGithubで"),
+                // 逆向き: 英単語の後ろの付属語・単位の途中で終わる英単語・前に語がある付属語の後ろの英単語はそのまま
+                ("deploysuru", "deployする"), ("tanniga", "たんいが"), ("reflectsareta", "reflectされた"), ("chottodehijacked", "ちょっとでhijacked"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void Issue378_Memoirs_StaysEnglish()
     {
         // Issue #378: memoirs が メモリ絵s になる報告。今の main では memoirs・memories とも英字のまま (戻らないように)

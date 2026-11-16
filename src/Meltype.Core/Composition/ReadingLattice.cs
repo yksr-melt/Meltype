@@ -208,7 +208,8 @@ public sealed partial class CompositionDetector
                     while (run.Previous is { } previous && !run.Edge.English && !run.Edge.Neutral) { if (previous.Edge.English || previous.Edge.Neutral) break; run = previous; particle |= run.Edge.Particle; }
                     if (!particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1])) step += SandwichCost;
                 }
-                if (state.Side == Side.Japanese && !state.Particle) step += SwitchCost;
+                // 付属語は前の語に付くので、前に語も文脈もない入力の頭の付属語 (ya|chi の や) からの切り替えは軽くしない
+                if (state.Side == Side.Japanese && (!state.Particle || from.Edge.Start == 0 && precedingEnglish is null)) step += SwitchCost;
                 if (state.IsEnglish && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start])) step += AdjacentEnglishCost;
                 // 英文の続きの強さは、最初の英語の語までで使い終わる (英文の中の記号では使い終わらない)
                 var sentence = state.Side == Side.Sentence && !char.IsAsciiLetter(text[edge.Start]);
@@ -240,7 +241,7 @@ public sealed partial class CompositionDetector
         {
             if (!IsBoundary(p)) continue;
             var japanese = JapaneseEdges(units, text, p, unitOf, unitsEnd, pending, kanaInput);
-            var english = EnglishEdges(text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
+            var english = EnglishEdges(text, p, unknown, kanaInput, manual, IsBoundary, position => position >= unitsEnd || unitAt[position] >= 0, precedingEnglish == true);
             var unit = p < unitsEnd ? unitAt[p] : -1;
             // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
@@ -572,7 +573,7 @@ public sealed partial class CompositionDetector
     /// start から始まる、綴りで決まる候補: 英語 (知っている英単語・知らない英字・短縮形) と、
     /// ユーザーがかなに直して覚えた語 (日本語の語として重み 1)。
     /// </summary>
-    private List<(LatticeEdge, double)> EnglishEdges(string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
+    private List<(LatticeEdge, double)> EnglishEdges(string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, Func<int, bool> isUnitBoundary, bool afterEnglish)
     {
         var edges = new List<(LatticeEdge, double)>();
         if (!char.IsAsciiLetter(text[start])) return edges;
@@ -591,7 +592,8 @@ public sealed partial class CompositionDetector
                 if (!IsContraction(span)) continue;
                 cost = KnownEnglishCost;
             }
-            else if (IsWordCasing(span) && IsLatticeEnglishWord(span.ToLowerInvariant()) && (span.Length > 1 || Standalone(text, start, end, afterEnglish)) &&
+            else if (IsWordCasing(span) && IsLatticeEnglishWord(span.ToLowerInvariant(), SplitsDoubledUnit(text, end, isUnitBoundary)) &&
+                     (span.Length > 1 || Standalone(text, start, end, afterEnglish)) &&
                      !IsLowercaseJapaneseProperNoun(span))
             {
                 cost = Memory?.Get(span.ToLowerInvariant()) == true ? LearnedEnglishCost
@@ -648,13 +650,26 @@ public sealed partial class CompositionDetector
     /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・決まり文句・ユーザーが英字に直して覚えた語)。
     /// 1 文字は a・i と、チャットの略し方の u (you)・r (are) だけ。
     /// </summary>
-    private bool IsLatticeEnglishWord(string lower)
+    /// <remarks>
+    /// splitsDoubledUnit (重ねた英字の単位 nn を割って終わる) ときは、english-words.txt にしかない語を数えない。
+    /// english-words.txt は SCOWL の短い語 (tan) を多く含み、単位を割って (tan|ni の nn) 語にすると、日本語の語 (たんい) を割ってしまう。
+    /// english.txt の語の -s の形 (deploys) も語にする。english-words.txt は deploy を持たないので、deploys を短い語 (de|ploys) に割ってしまう。
+    /// </remarks>
+    private bool IsLatticeEnglishWord(string lower, bool splitsDoubledUnit = false)
     {
         if (Memory?.Get(lower) is { } learned) return learned;
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
-        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsLatticeSpellWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
+        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || (!splitsDoubledUnit && IsLatticeSpellWord(lower)) || ReadableEnglish.Value.ContainsWord(lower) ||
+            lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
             IsPediaEnglishWord(lower) || EnglishPhraseSpacing.IsPhrase(lower);
     }
+
+    /// <summary>
+    /// end が、同じ英字を重ねたローマ字の単位 (nn = ん) の 2 文字のあいだか (tan|ni)。
+    /// ほかの単位の途中 (reflect|sa の tsa) は、英単語の後ろの日本語の頭として普通に打つので含めない。
+    /// </summary>
+    private static bool SplitsDoubledUnit(string text, int end, Func<int, bool> isUnitBoundary) =>
+        end > 0 && end < text.Length && char.IsAsciiLetter(text[end]) && !isUnitBoundary(end) && char.ToLowerInvariant(text[end]) == char.ToLowerInvariant(text[end - 1]);
 
     /// <summary>
     /// スペルチェッカーが知っている語のうち、同梱のよく使う英単語 (english-words.txt) にもある語。
