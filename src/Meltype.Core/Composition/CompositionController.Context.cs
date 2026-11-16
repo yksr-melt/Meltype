@@ -21,8 +21,9 @@ public sealed partial class CompositionController
         memory.Context = _text.PrecedingEnglish;
     }
 
-    private void BeginComposition()
+    private void BeginComposition(bool privateInput = false)
     {
+        _privateComposition = Private || privateInput;
         _keptChoices.Clear();
         _modeByKey = false;
         _escReverted = false;
