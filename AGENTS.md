@@ -1,16 +1,27 @@
 フォルダーの構成と詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
 
-## 入力のフロント
+## 構成
 
-入力の判断は `src/Meltype.Core/Ime/` (`ImeSession`) がする。フロントは OS の事実を送り、返ってきた指示を適用する。
+入力の判断は `src/Meltype.Core` の `ImeHost` がする。フロントは OS の事実を `ImeEvent` で送り、返ってきた `ImeOutput` を適用する (`src/Meltype.Core/Ime/ImeProtocol.cs`)。
 
-| フロント | 場所 |
-| --- | --- |
-| Windows: Meltype IME (TSF) | `native/tip/` (DLL)・`src/Meltype.Windows/Tip/TipServer.cs` (Meltype.exe 側) |
-| Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` |
-| macOS | `mac/Sources/MeltypeIME/InputController.swift` |
-| Linux: IBus | `linux/ibus-engine-meltype` |
-| Linux: fcitx5 | `linux/fcitx5/meltype.cpp` |
+| フロント | 場所 | Core との接続 |
+| --- | --- | --- |
+| Windows: Meltype IME (TSF) | `native/tip/` | アプリのプロセスに入る DLL。名前付きパイプで Meltype.exe (`src/Meltype.Windows/Tip/TipServer.cs`) に JSON を送る |
+| Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | Meltype.exe の中で `ImeHost` を呼ぶ |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` | Core を NativeAOT でビルドした `src/Meltype.Mac.Native` を dlopen する |
+| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` の Linux 版 `libMeltypeNative.so` を dlopen する |
+| Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
+
+変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。
+
+Core の中の流れ:
+
+1. `ImeHost` が出来事を入力欄ごとの `ImeSession` に振り分ける
+2. `MeltypeSession` がコードの行・`/command`・英数状態を判断し、残りを `CompositionController` に渡す
+3. `CompositionController` (`Composition/CompositionController.*.cs`) がキーを受ける
+   - 打鍵: `CompositionDetector` が `Detection/` の判定を使い、英字のまま見せる区間を決める
+   - 変換: ユーティリティ変換 (`Composition/Utility/`)・`HybridConverter` (Mozc + Zenzai)・補助辞書の候補を並べる
+   - 確定: `CompositionLearning` が学習する
 
 ## コードを書くとき
 
@@ -18,7 +29,6 @@
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
 - 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントと Core の間の口を変えるなら、先に Issue で相談する。
-- コードに決まりを入れるときは、コメントに理由も書く。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
 
@@ -26,6 +36,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 あなたの名前
 ```
+
+### コメント
+
+既存のコメントがこの決まりに合っていなければ、真似ずにこの決まりで書く。
+
+- コードに決まりを入れるときは、コメントに理由も書く。
+- ワークアラウンドには `ワークアラウンド:` を付け、消せる条件を書く。消せないなら永続であることを書く。
+- Issue 番号は、不具合を直したコードにだけ書く。機能を足したコードには書かない。
 
 ### OS ごとのコード
 
@@ -96,6 +114,8 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 実装の写しのようなテストは書かない。
 
+今の実装で満たせない期待はテストにしない。残すならコメントに書く。
+
 テストを通すために実装を曲げない。既存のテストのケースが仕様として説明できないなら、実装を合わせずにテストを直し、PR にそう書く。
 
 ## PR の「確かめること」
@@ -123,6 +143,7 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 ## 守ること
 
+- PR は自己完結させる。`TODO:` やまだ誰も呼ばない口など、後の PR で続きをやる前提のコードを足さない。やり残したことがあれば、PR の本文の末尾に `## TODO` の節を作り、1 行に 1 つ書く。Issue にするかはメンテナーが決める。
 - PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。
 - PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
 - AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
