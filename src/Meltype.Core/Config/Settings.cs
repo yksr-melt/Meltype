@@ -868,7 +868,9 @@ public sealed class Settings
         // キー入力が別のマシン/VM に届くアプリ。保留すると相手側の IME 状態と食い違う。
         new() { Process = "mstsc.exe", Enabled = false },
         new() { Process = "msrdc.exe", Enabled = false },
-        // Jump Desktop: 接続先 (Mac など) の IME と二重に変換し、確定のたびに前の文字が消えた
+        // Jump Desktop: 接続先 (Mac など) の IME と二重に変換し、確定のたびに前の文字が消えた (#1894)。
+        // 8.6 系の本体は JumpClient.exe、8.3 系には JumpDesktop.exe もある。
+        new() { Process = "JumpClient.exe", Enabled = false },
         new() { Process = "JumpDesktop.exe", Enabled = false },
         new() { Process = "vmconnect.exe", Enabled = false },
         new() { Process = "VirtualBoxVM.exe", Enabled = false },
@@ -1018,7 +1020,8 @@ public sealed class Settings
         if (SettingsVersion < 11)
         {
             // v11: 既定で OFF にするリモートデスクトップに Jump Desktop を追加。ユーザーが自分で入れていれば、そのまま。
-            if (FindRule("JumpDesktop.exe") is null) AppRules.Add(new AppRule { Process = "JumpDesktop.exe", Enabled = false });
+            foreach (var process in (string[])["JumpClient.exe", "JumpDesktop.exe"])
+                if (FindRule(process) is null) AppRules.Add(new AppRule { Process = process, Enabled = false });
         }
         // v7: 追加キーの文字列を共通の一覧へ移し、旧項目を保存しない。
         MigrateLegacyToggleShortcuts(report: true);
