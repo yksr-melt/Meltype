@@ -44,9 +44,18 @@ internal sealed class ImeSession
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
     private const int ContextLength = 20;
 
-    public bool IsComposing => _session.IsComposing;
+    public void Close(ImeField? field = null)
+    {
+        field ??= _field;
+        if (!_session.IsComposing || IsPassword(field)) return;
+        _settings = _source().ForApp(field?.App);
+        _session.Private = ForbidsLearning(field);
+        _session.CommitPending();
+    }
 
-    public void Close() => _session.CommitPending();
+    private static bool IsPassword(ImeField? field) => field?.Traits.Contains(ImeTrait.Password) == true;
+
+    private static bool ForbidsLearning(ImeField? field) => IsPassword(field) || field?.Traits.Contains(ImeTrait.Private) == true;
 
     /// <summary>
     /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・ゲーム (Meltype キーボード)・パスワード欄・全画面 (設定)・
@@ -57,7 +66,7 @@ internal sealed class ImeSession
         var traits = field?.Traits ?? [];
         var app = field?.App;
         return (environment.InputMethod is not { } method || settings.Mode == method) && settings.Enabled &&
-            !traits.Contains(ImeTrait.Password) && !traits.Contains(ImeTrait.Unreachable) &&
+            !IsPassword(field) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
             !(traits.Contains(ImeTrait.NonText) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
@@ -74,7 +83,27 @@ internal sealed class ImeSession
 
     public ImeOutput Handle(ImeEvent e, long rev)
     {
-        _field = e.Field ?? _field;
+        var field = e.Field ?? _field;
+        _session.Private = ForbidsLearning(field);
+        if (IsPassword(field))
+        {
+            if (!IsPassword(_field))
+            {
+                _session.CancelPending();
+                _lastSnippet = null;
+                _snippetKeys = [];
+                _listedPredictions = false;
+                _altDown = 0;
+                _altNotAlone = null;
+                _unreadableCode = false;
+                _line.Clear();
+                // 秘密欄の周辺文字列や選択範囲をセッションに残さない。
+                _field = new ImeField { Traits = [ImeTrait.Password] };
+            }
+            if (e.ImeOpen is { } open) _session.Direct = !open;
+            return new(InitialState(false, !_session.Direct, _settings, game: false, entered: false, rev), Pass);
+        }
+        _field = field;
         var all = _source();
         var settings = _settings = all.ForApp(_field?.App);
         var active = IsActive(_environment, all, _field);
@@ -244,7 +273,6 @@ internal sealed class ImeSession
             if (caret.FocusLeft || caret.FocusEntered) _session.ForgetCodeLine();
         }
         if (e.Field is not { } field) return;
-        _session.Private = field.Traits.Contains(ImeTrait.Private);
         _session.CanDeleteSurrounding = field.CanRemove;
         _session.Selection = field.Selection;
         if (CodeFocusOf(field, settings) is { } focus)
