@@ -281,6 +281,8 @@ internal static class ZenzaiConverterTests
             SessionFacadeTests.Type(session, "kishagakita");
             Assert.True(SpinWait.SpinUntil(() => session.RefreshConversion()?.View?.Text == "記者が来た", 5000), "先に Mozc の答え");
             SessionFacadeTests.Type(session, " ");
+            var first = session.HandleKey(VirtualKeys.Left, null, false, false, false, false).View;
+            Assert.Equal(0, first?.SelectedClause, "Zenzai と異なる先頭の文節を選ぶ");
             // Zenzai の答え (汽車が) と違う候補まで選び直す
             session.HandleKey(VirtualKeys.Down, null, false, false, false, false);
             var chosen = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View?.Text;

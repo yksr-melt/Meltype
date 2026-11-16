@@ -851,6 +851,7 @@ internal static class ImeContractTests
         front.Type("tanniwotoru ");
         Assert.Equal("単位を取る", front.Composition["t1"], front.Trace);
         front.Traits.Clear();
+        front.Key(VirtualKeys.Left);
         front.Key(VirtualKeys.Return, shift: true);
         Assert.Equal("単位を", front.Document, front.Trace);
         Assert.Equal("とる", front.Composition["t1"], front.Trace);
