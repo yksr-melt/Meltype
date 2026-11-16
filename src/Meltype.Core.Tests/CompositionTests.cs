@@ -2058,12 +2058,14 @@ internal static class CompositionTests
     [Test]
     public static void DictionaryAdditions_CandidatesAndBrandNames()
     {
-        // #1445・#1651: 変換の候補に出す語
+        // #1445・#1651・#1924: 変換の候補に出す語
         var candidates = CandidateDictionary.Load(null);
         Assert.True(candidates.Lookup("おねしょた").Contains("おねショタ"), "#1445 おねしょた");
         Assert.True(candidates.Lookup("ちゅうに").Contains("厨二"), "#1651 ちゅうに");
         Assert.True(candidates.Lookup("きめつ").Contains("鬼滅"), "#1651 きめつ");
         Assert.True(candidates.Lookup("おしのこ").Contains("推しの子"), "#1651 おしのこ");
+        Assert.True(candidates.Lookup("じゃくしゃだんせい").Contains("ふにゃオス"), "#1924 じゃくしゃだんせい");
+        Assert.True(candidates.Lookup("ふにゃおす").Contains("弱者男性"), "#1924 ふにゃおす");
 
         // #1548・#1490・#1460: 読みで英字の名前を出す
         var predictor = new Predictor(null, null, null);
@@ -4817,6 +4819,49 @@ internal static class CompositionTests
         var k = new Keyboard(live: true, converter: new YahoConverter(), userDictionary: new UserDictionary(null));
         k.Type("yahoyaho\n");
         Assert.Equal("やほやほ", k.Host.Document);
+    }
+
+    /// <summary>しけんし を 試験し、しけんしたい を 試験したい にする変換エンジン (issue #1276)。</summary>
+    private sealed class ShikenshiConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => hiragana switch
+        {
+            "しけんし" => "試験し",
+            "しけんしたい" => "試験したい",
+            _ => null,
+        };
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            Convert(hiragana) is { } text ? [new(hiragana, text)] : null;
+    }
+
+    [Test]
+    public static void Issue1276_EnglishInTheSameCompositionIsAContextCue()
+    {
+        // #1276: ph|しけんし の しけんし は、同じ変換ボックスの英字 (ph) を手がかりに 試験紙 にする
+        foreach (var live in new[] { false, true })
+        {
+            var k = new Keyboard(live: live, converter: new ShikenshiConverter());
+            k.Type("phsikennsi ");
+            Assert.Equal("ph試験紙", k.Host.View?.Text, $"Space (ライブ変換 {live})");
+        }
+        // 手がかりが無ければ、変換エンジンのまま
+        var plain = new Keyboard(converter: new ShikenshiConverter());
+        plain.Type("sikennsi ");
+        Assert.Equal("試験し", plain.Host.View?.Text);
+        // ph を含む英単語は手がかりにしない (php・iphone・phone・graph・alpha の ph)
+        foreach (var live in new[] { false, true })
+        {
+            foreach (var (typed, expected) in new[] { ("phpsikennsitai ", "php試験したい"), ("iphonesikennsitai ", "iphone試験したい"), ("phonesikennsi ", "phone試験し") })
+            {
+                var k = new Keyboard(live: live, converter: new ShikenshiConverter());
+                k.Type(typed);
+                Assert.Equal(expected, k.Host.View?.Text, $"{typed}(ライブ変換 {live})");
+            }
+        }
+        var rules = ContextRules.Load(null);
+        Assert.Equal(null, ChooseKana(rules, "しけんし", "graphと alphaの"), "確定済みの英単語の中の ph も手がかりにしない");
+        Assert.Equal("試験紙", ChooseKana(rules, "しけんし", "pHの"), "英単語の境界にある pH は手がかり");
     }
 
     /// <summary>さいき を 再起 にする変換エンジン (issue #1681)。</summary>
