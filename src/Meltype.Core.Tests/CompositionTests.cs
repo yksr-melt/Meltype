@@ -5615,7 +5615,7 @@ internal static class CompositionTests
         k.Type("ka");
         Assert.Equal("か", k.Showing, "1 文字はかなのまま (漢字を推測できない)");
         k.Type("wa");
-        Assert.Equal("川", k.Showing, "2 文字以上になったら Space を押さなくても漢字で表示 (#1900)");
+        Assert.Equal("川", k.Showing, "2 文字以上になったら Space を押さなくても漢字で表示");
 
         k = new Keyboard(live: true);
         k.Type("pushshita");
