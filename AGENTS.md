@@ -32,7 +32,7 @@
 - シンプルさを何よりも優先する。
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
-- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントエンドと Core の間の口を変えるなら、先に Issue で相談する。
+- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントエンドと Core の間のプロトコル (`ImeProtocol.cs`) を変えるなら、先に Issue で相談する。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
 
 ```
@@ -56,7 +56,7 @@ OS 間の差分はできるだけ作らない。
 
 - 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。OS の出入口からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
-- Core にもう口がある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
+- Core にもうインターフェースがある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
 - 設定・辞書・学習データと変換エンジンは、どの OS も `MeltypeRuntime` で作る
 - 変換エンジンは全 OS で Mozc と Zenzai だけ (#1740)。OS の変換エンジン (Microsoft IME など) は足さない
 
@@ -146,7 +146,7 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 ## 守ること
 
-- PR は自己完結させる。`TODO:` やまだ誰も呼ばない口など、後の PR で続きをやる前提のコードを足さない。やり残したことがあれば、PR の本文の末尾に `## マージ後の TODO` の節を作り、1 行に 1 つ書く。Issue にするかはメンテナーが決める。
+- PR は自己完結させる。`TODO:` や呼び出し元の無い API など、後の PR で続きをやる前提のコードを足さない。やり残したことがあれば、PR の本文の末尾に `## マージ後の TODO` の節を作り、1 行に 1 つ書く。Issue にするかはメンテナーが決める。
 - PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。
 - PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
 - AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
