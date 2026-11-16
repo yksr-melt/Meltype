@@ -14,11 +14,11 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 <a name="打ち方の基本"></a>
 <img src="images/headings/usage/01.svg" alt="打ち方の基本" height="53"><br>
 
-ローマ字で打って、<kbd>Space</kbd> で変換、<kbd>Enter</kbd> で確定します。英単語で終わっているときの <kbd>Space</kbd> はふつうの空白になるので、変換するには <kbd>Shift</kbd> + <kbd>Space</kbd> を押します (`kyouhagoogle` を変換するとき)。
+ローマ字で打って、<kbd>Space</kbd> で変換、<kbd>Enter</kbd> で確定します。英単語で終わっているときの <kbd>Space</kbd> はふつうの空白になるので、変換するには <kbd>Shift</kbd> + <kbd>Space</kbd> を押します (`kyouhagoogle` のように英単語で終わる文)。
 
 | したいこと | キー |
 | --- | --- |
-| 次の候補 / 前の候補 | <kbd>Space</kbd> / <kbd>Shift</kbd> + <kbd>Space</kbd> |
+| 変換中に次の候補 / 前の候補 | <kbd>Space</kbd> / <kbd>Shift</kbd> + <kbd>Space</kbd> |
 | 予測変換 | <kbd>Tab</kbd> |
 | 変換する文節を選ぶ | <kbd>←</kbd> <kbd>→</kbd> |
 | 文節の区切りを変える | <kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> |
@@ -123,7 +123,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 <a name="かな入力とほかの配列-α版"></a>
 <img src="images/headings/usage/07.svg" alt="かな入力とほかの配列 (α版)" height="53"><br>
 
-設定「入力方式」「かな配列」で、JIS かな・月配列・花配列・NICOLA・中指NICOLA・TRON 配列・SKY 配列を選べます。試験中です。
+設定「入力方式」でかな入力 (JIS)、「ローマ字の配列」で SKY 配列を選べます。Windows の Meltype キーボードでは、「かな配列」で月配列・花配列・NICOLA・中指NICOLA・TRON 配列も選べます。どれも試験中です。
 
 <br>
 
@@ -136,7 +136,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 U=F6;I=F7;O=F8;P=F9;T=F10
 ```
 
-ATOK のように <kbd>変換</kbd> で日本語、<kbd>無変換</kbd> で英字にするには、設定「入力中のキーの役割を分ける」を ON にします。
+ATOK のように、打っている途中の <kbd>変換</kbd> で日本語、<kbd>無変換</kbd> で英字にするには、設定「入力中のキーの役割を分ける」を ON にします。
 
 <br>
 

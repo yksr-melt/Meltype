@@ -241,7 +241,7 @@ Meltype IME の不具合のときは、`%LOCALAPPDATA%\Meltype` に `tip-log` �
 <a name="保存されるデータ"></a>
 <img src="images/headings/windows/11.svg" alt="保存されるデータ" height="53"><br>
 
-設定と学習データは `%LOCALAPPDATA%\Meltype` に保存されます。ファイルの一覧と消し方は [USAGE.md の「データと学習」](USAGE.md#データと学習)、通信については [README の「プライバシー」](../README.md#プライバシー) にあります。
+設定と学習データは `%LOCALAPPDATA%\Meltype` に保存されます。学習の消し方は [USAGE.md の「データと学習」](USAGE.md#データと学習)、通信については [README の「プライバシー」](../README.md#プライバシー) にあります。
 
 <br>
 
