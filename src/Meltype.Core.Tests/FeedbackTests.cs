@@ -1807,4 +1807,30 @@ internal static class RomajiTypoTests
             CompositionTests.Detector.SpellChecker = null;
         }
     }
+
+    [Test]
+    public static void RareReadings_AreWordsWithoutSplittingCommonWords()
+    {
+        // Issue #1784・#1761・#1764: よく使う語でない長い読み (かんれんづける・くるまどめ・ぼごわしゃ) が無く、英単語に負けていた (関連|duke)。
+        // よく使う語どうしの区切り (きょうは|image) は割らない。カタカナの読みの外来語 (vitamin) は英語のまま。打ち間違い直しには使わない (shuppnbutsu)
+        CompositionTests.Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("kanrenduke", "かんれんづけ"), ("kurumadome", "くるまどめ"), ("bogowasha", "ぼごわしゃ"),
+                ("kyouhaimagewotsukuru", "きょうはimageをつくる"), ("kyouhaimagega", "きょうはimageが"), ("kyouhainitwo", "きょうはinitを"), ("konodotwo", "このdotを"),
+                ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
 }
