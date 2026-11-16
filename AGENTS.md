@@ -2,9 +2,9 @@
 
 ## 構成
 
-入力の判断は `src/Meltype.Core` の `ImeHost` がする。フロントは OS の事実を `ImeEvent` で送り、返ってきた `ImeOutput` を適用する (`src/Meltype.Core/Ime/ImeProtocol.cs`)。
+入力の判断は `src/Meltype.Core` の `ImeHost` がする。フロントエンドは OS の事実を `ImeEvent` で送り、返ってきた `ImeOutput` を適用する (`src/Meltype.Core/Ime/ImeProtocol.cs`)。
 
-| フロント | 場所 | Core との接続 |
+| フロントエンド | 場所 | Core との接続 |
 | --- | --- | --- |
 | Windows: Meltype IME (TSF) | `native/tip/` | アプリのプロセスに入る DLL。名前付きパイプで Meltype.exe (`src/Meltype.Windows/Tip/TipServer.cs`) に JSON を送る |
 | Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | Meltype.exe の中で `ImeHost` を呼ぶ |
@@ -28,7 +28,7 @@ Core の中の流れ:
 - シンプルさを何よりも優先する。
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
-- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントと Core の間の口を変えるなら、先に Issue で相談する。
+- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントエンドと Core の間の口を変えるなら、先に Issue で相談する。
 - `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
 
