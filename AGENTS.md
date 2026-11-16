@@ -1,4 +1,5 @@
-フォルダーの構成と詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
+配布用のパッケージを作る・Windows に入れて試すときは [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md) を読む。
+機能を足すか判断するときは [CONTRIBUTING.md](CONTRIBUTING.md) の「運営の方針」、PR を出すときは「Pull Request を送る場合」を読む。
 
 ## 構成
 
