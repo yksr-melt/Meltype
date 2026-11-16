@@ -91,25 +91,6 @@ I want to go to the park  →  I want to go to the park
 
 Meltype は、打った文字を単語ごとに見て、英単語の所だけを英字にします。
 
-<a name="英字になる語"></a>
-<img src="images/headings/usage/s05.svg" alt="英字になる語" height="40">
-
-| 英字になる語 | 例 |
-| --- | --- |
-| ローマ字として読めない語 | `google`・`github`・`hello`・`npm` |
-| 英語の固有名詞 | `amazon`・`adobe`・`netflix` |
-| 大文字で打ち始めた語 | `Tokyo`・`I` |
-| 英文の途中の、助詞と同じ形の 2 文字の語 | `I want to` の `to` |
-
-`sushi`・`repo` のように英語とも日本語とも読める語は、入力欄の前後の文で決めます。
-
-```
-I love ｜ is great   + sushi  →  sushi
-今日は｜             + sushi  →  すし
-```
-
-前後の文で決まらないときは、日本語になります。
-
 <a name="判定が外れたとき"></a>
 <img src="images/headings/usage/s06.svg" alt="判定が外れたとき" height="40">
 
