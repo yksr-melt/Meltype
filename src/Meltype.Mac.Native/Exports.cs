@@ -130,7 +130,7 @@ public static unsafe class Exports
         public Config.InputMode? InputMethod => null;
 
         public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
-            Runtime.CreateSession(Converter, settings, Converter.Candidates, autoSpacing: OperatingSystem.IsMacOS(), directModeDetection: true);
+            Runtime.CreateSession(Converter, settings, Converter.Candidates, directModeDetection: true);
 
         public SnippetStore Snippets => Runtime.Snippets;
 
