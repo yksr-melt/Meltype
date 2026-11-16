@@ -1,7 +1,6 @@
 # ビルド結果
 bin/
 obj/
-app-build/
 dist/
 build-check/
 revised-build*/

@@ -148,7 +148,7 @@ public sealed partial class CompositionController
         public bool Changed { get; set; }
 
         /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら「Zenzai」と出す。</summary>
-        public string? ZenzaiText { get; init; }
+        public string? ZenzaiText { get; set; }
 
         /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
         public bool Expanded { get; set; }
@@ -176,6 +176,9 @@ public sealed partial class CompositionController
 
         /// <summary>候補のうち英訳 (複雑な → complex) のもの。</summary>
         public HashSet<string> Translations { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>英日の区切りの案ごとの文を候補にした、文全体の文節なら、候補の文 → その案の文節。</summary>
+        public Dictionary<string, List<Clause>>? Alternatives { get; init; }
     }
 
     public CompositionController(CompositionDetector detector, IKanjiConverter converter, Func<Config.Settings> settings, CompositionServices? services = null)
@@ -374,10 +377,12 @@ public sealed partial class CompositionController
     /// 候補を開いた後に届いた答えを反映する。文節の区切りを動かしたあとは置き換えない。
     /// 文節の並びが変わる答えは、候補を選び直したか、別の文節へ移動したあとなら置き換えない (選んでいる文節がずれる)。
     /// 候補を選び直した文節は、選んでいる候補を変えずに、新しい候補を上に入れる。何も変わらなければ false。
+    /// 英日の区切りの案を候補にした文全体の文節を選び直したあとも置き換えない。作り直すと選んだ文が新しい案に無くなることがあり、
+    /// その案の文節に分けられなくなる (← → で選び直せず、文節ごとの学習もできない)。
     /// </summary>
     private bool RefreshOpenConversion()
     {
-        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0) return false;
+        if (_clausesEdited || _reconversion is not null || _clauses.Count == 0 || _clauses is [{ Alternatives: not null, Changed: true }]) return false;
         var (old, selected, tabStarted) = (_clauses, _selectedClause, _tabStartedConversion);
         WithoutWaiting(() =>
         {
@@ -387,7 +392,7 @@ public sealed partial class CompositionController
         _tabStartedConversion = tabStarted;
         var sameClauses = _clauses.Count == old.Count && _clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && _clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
-        if (nothingNew || !sameClauses && (selected != 0 || old.Any(c => c.Changed)))
+        if (nothingNew || !sameClauses && (selected != old.Count - 1 || old.Any(c => c.Changed)))
         {
             _clauses = old;
             _selectedClause = selected;
@@ -405,7 +410,7 @@ public sealed partial class CompositionController
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
-        _selectedClause = selected;
+        _selectedClause = sameClauses ? selected : _clauses.Count - 1;
         return true;
     }
 
