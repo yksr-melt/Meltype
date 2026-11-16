@@ -15,7 +15,7 @@
 
 変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。
 
-## 前提
+## 暗黙知
 
 - Mac・Linux 版の Core は NativeAOT で動き、テストは JIT で動く。reflection に頼るコードはテストが通っても配布版で動かないので、JSON はソース生成の `JsonSerializerContext` (`CoreJsonContext` など) で読み書きする。
 - キーを処理するスレッドでは待たず、I/O もしない。時間のかかる処理は裏のスレッドで動かし、キーの処理では結果をすぐ返す。`ImeHost` は 1 つのスレッドから呼ぶ前提で排他しない。
