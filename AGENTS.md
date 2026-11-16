@@ -52,11 +52,11 @@
 
 OS 間の差分はできるだけ作らない。
 
-`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`mac/`・`linux/` は OS の出入口で、OS の事実を読む・結果を書く・画面を描くだけにする。
+`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`native/tip/`・`mac/`・`linux/` はプラットフォーム層で、OS の事実を読む・結果を書く・画面を描くだけにする。
 
-- 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。OS の出入口からは呼ぶだけにする
+- 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。プラットフォーム層からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
-- Core にもうインターフェースがある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
+- Core にもうインターフェースがある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、プラットフォーム層に置く
 - 設定・辞書・学習データと変換エンジンは、どの OS も `MeltypeRuntime` で作る
 - 変換エンジンは全 OS で Mozc と Zenzai だけ (#1740)。OS の変換エンジン (Microsoft IME など) は足さない
 
