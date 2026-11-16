@@ -29,7 +29,7 @@ if [[ ! "$rpmversion" =~ ^[0-9][A-Za-z0-9.+~]*$ ]]; then
     exit 1
 fi
 
-for f in libMeltypeNative.so ibus-engine-meltype meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper; do
+for f in libMeltypeNative.so ibus-engine-meltype meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper zenzai/llama-server; do
     [[ -e "$src/$f" ]] || { echo "必要なファイルがありません: $src/$f (先に linux/build.sh を実行してください)" >&2; exit 1; }
 done
 command -v rpmbuild > /dev/null || { echo "rpmbuild がありません (Fedora なら sudo dnf install rpm-build)" >&2; exit 1; }
@@ -51,7 +51,7 @@ fi
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 
-# 依存: C / C++ のライブラリは rpmbuild が ELF から自動で足す (Zenzai の llama-server が使う libgomp・OpenSSL 3 も)。
+# 依存: C / C++ のライブラリは rpmbuild が ELF から自動で足す。
 # 同梱した llama.cpp のライブラリは、ほかのパッケージに提供するものではないので、自動の Provides・Requires から外す。
 # 自動では足されないもの: ICU (.NET が実行時に dlopen する。InvariantGlobalization=false) と、
 # python3 (IBus のエンジンの #! は /usr/bin/env python3 なので、自動では /usr/bin/env しか足されない)。
@@ -94,14 +94,10 @@ The fcitx5 addon of Meltype.
 
 %install
 mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component %{buildroot}%{_bindir} %{buildroot}%{_datadir}/applications
-cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
+cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/zenzai %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
 chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
-chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper
-# Zenzai (llama-server・ライブラリ・モデル)。linux/build.sh が取れなかったときは空のフォルダー (Zenzai なしで、Mozc だけで変換する)
-mkdir -p %{buildroot}%{target}/zenzai
-if [ -d %{meltype_src}/zenzai ]; then cp -R %{meltype_src}/zenzai/. %{buildroot}%{target}/zenzai/; fi
 find %{buildroot}%{target}/zenzai -type f -exec chmod 644 {} +
-if [ -f %{buildroot}%{target}/zenzai/llama-server ]; then chmod 755 %{buildroot}%{target}/zenzai/llama-server; fi
+chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper %{buildroot}%{target}/zenzai/llama-server
 sed "s|@DIR@|%{target}|g" %{meltype_src}/meltype.xml > %{buildroot}%{_datadir}/ibus/component/meltype.xml
 ln -s %{target}/meltype-settings %{buildroot}%{_bindir}/meltype-settings
 sed "s|@DIR@|%{target}|g" %{meltype_src}/ibus-setup-meltype.desktop > %{buildroot}%{_datadir}/applications/ibus-setup-meltype.desktop

@@ -34,6 +34,15 @@ internal static class SettingsSchemaTests
     }
 
     [Test]
+    public static void PlatformNote_JoinsPlatforms()
+    {
+        // 今の Settings には OS が複数の項目が無いので、組を直接渡す
+        var platforms = SettingsSchema.PlatformNames(Platform.Windows | Platform.Mac);
+        Assert.Equal("Windows,Mac", string.Join(",", platforms), "x-platforms に使う OS をすべて出す");
+        Assert.Equal("Windows・Mac のみ。", SettingsSchema.PlatformNote(platforms), "OS が複数なら・でつなぐ");
+    }
+
+    [Test]
     public static void Platforms_AreSomeButNotAllPlatforms()
     {
         var all = Enum.GetValues<Platform>().Aggregate((a, b) => a | b);
