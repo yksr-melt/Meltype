@@ -142,7 +142,7 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 ## 守ること
 
-- PR は自己完結させる。`TODO:` やまだ誰も呼ばない口など、後の PR で続きをやる前提のコードを足さない。やり残したことがあれば、PR の本文の末尾に `## TODO` の節を作り、1 行に 1 つ書く。Issue にするかはメンテナーが決める。
+- PR は自己完結させる。`TODO:` やまだ誰も呼ばない口など、後の PR で続きをやる前提のコードを足さない。やり残したことがあれば、PR の本文の末尾に `## マージ後の TODO` の節を作り、1 行に 1 つ書く。Issue にするかはメンテナーが決める。
 - PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。
 - PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
 - AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
