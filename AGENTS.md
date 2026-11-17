@@ -12,10 +12,10 @@
 | --- | --- | --- |
 | Windows: Meltype IME (TSF) | `native/tip/` | アプリのプロセスに入る DLL。名前付きパイプで Meltype.exe (`src/Meltype.Windows/Tip/TipServer.cs`) に JSON を送る |
 | Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | Meltype.exe の中で `ImeHost` を呼ぶ |
-| macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Mac.Native` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
-| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Core.CApi` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
+| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Core.CApi` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
-| Android | `android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/KeyboardService.kt`・`core/ImeJson.kt` (出来事と応答の JSON) | `src/Meltype.Mac.Native` を Android 向けにビルドした `libMeltypeNative.so` を JNI (`android/app/src/main/cpp/meltype_jni.cpp`) から呼ぶ |
+| Android | `android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/KeyboardService.kt`・`core/ImeJson.kt` (出来事と応答の JSON) | `src/Meltype.Core.CApi` を Android 向けにビルドした `libMeltypeNative.so` を JNI (`android/app/src/main/cpp/meltype_jni.cpp`) から呼ぶ |
 
 変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは、Mozc をアプリのプロセスで動かし、JNI のコールバックで Core に渡している (#1963)。
 
@@ -53,7 +53,7 @@
 
 OS 間の差分はできるだけ作らない。
 
-`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`native/tip/`・`mac/`・`linux/` はプラットフォーム層で、OS の事実を読む・結果を書く・画面を描くだけにする。
+`src/Meltype.Windows`・`src/Meltype.Core.CApi` (Core を C の関数で出す層)・`native/tip/`・`mac/`・`linux/`・`android/` はプラットフォーム層で、OS の事実を読む・結果を書く・画面を描くだけにする。
 
 - 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。プラットフォーム層からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける

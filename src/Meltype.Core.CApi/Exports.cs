@@ -10,7 +10,7 @@ using Meltype.Detection;
 using Meltype.Ime;
 using Meltype.Input;
 
-namespace Meltype.Mac;
+namespace Meltype.CApi;
 
 /// <summary>
 /// Mac 版の IME (Swift, Input Method Kit)、Linux 版の IME (Python の IBus・C++ の fcitx5)、Android 版 (JNI) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
