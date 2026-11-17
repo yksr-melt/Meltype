@@ -33,6 +33,13 @@ export const PROFILE_CHOICES = {
   os: ["windows", "mac", "linux", "chromeos", "other"],
 };
 
+// タイピングのデータベースが無いときは受け付けない (wrangler.jsonc の TYPING_DB)
+function noDatabase(env) {
+  if (env.TYPING_DB) return null;
+  console.error("TYPING_DB が設定されていないため、タイピング調査を受け付けていません");
+  return error(503, "いまは受け付けられません。時間をおいてもう一度試してください");
+}
+
 function validProfile(input) {
   const profile = {};
   for (const [name, choices] of Object.entries(PROFILE_CHOICES)) {
@@ -46,10 +53,12 @@ async function sessionFor(request, env) {
   const auth = request.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token || token.length > 128) return null;
-  return env.DB.prepare("SELECT id, consent_version FROM typing_sessions WHERE token_hash = ?").bind(await sha256Hex(token)).first();
+  return env.TYPING_DB.prepare("SELECT id, consent_version FROM typing_sessions WHERE token_hash = ?").bind(await sha256Hex(token)).first();
 }
 
 export async function createSession(request, env) {
+  const missing = noDatabase(env);
+  if (missing) return missing;
   const { body, error: invalid } = await readJson(request, 8 * 1024);
   if (invalid) return invalid;
   if (!body || body.consent !== true) return error(400, "参加への同意を確かめられませんでした");
@@ -66,7 +75,7 @@ export async function createSession(request, env) {
 
   const id = randomToken().slice(0, 16);
   const token = randomToken();
-  await env.DB.prepare("INSERT INTO typing_sessions (id, token_hash, profile, consent_version, created_at) VALUES (?, ?, ?, ?, ?)")
+  await env.TYPING_DB.prepare("INSERT INTO typing_sessions (id, token_hash, profile, consent_version, created_at) VALUES (?, ?, ?, ?, ?)")
     .bind(id, await sha256Hex(token), JSON.stringify(validProfile(body.profile)), CONSENT_VERSION, at)
     .run();
   return json({ id, token }, { status: 201 });
@@ -94,6 +103,8 @@ export function validKeys(keys, max) {
 }
 
 export async function addTrial(request, env) {
+  const missing = noDatabase(env);
+  if (missing) return missing;
   const session = await sessionFor(request, env);
   if (!session) return error(401, "参加の番号が見つかりません。ページを読み込み直してください");
   if (session.consent_version !== CONSENT_VERSION) return error(410, "同意の内容が変わりました。もう一度同意してから送ってください");
@@ -109,7 +120,7 @@ export async function addTrial(request, env) {
   if (suspicious(sentence.reading, typed)) return error(422, "お手本と関係ない入力が続いたので、この文は受け付けません");
 
   const at = now();
-  const inserted = await env.DB.prepare(
+  const inserted = await env.TYPING_DB.prepare(
     "INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, created_at) " +
       "SELECT ?1, ?2, ?3, ?4, ?5 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1 AND created_at > ?5 - 86400) < ?6 RETURNING id",
   )
@@ -121,7 +132,9 @@ export async function addTrial(request, env) {
 
 // どれだけ集まったかを、お手本の文ごとに打たれた数で見る (ダッシュボード)
 export async function sentenceCounts(env) {
-  const { results } = await env.DB.prepare("SELECT sentence_id, COUNT(*) AS count FROM typing_trials GROUP BY sentence_id").all();
+  const missing = noDatabase(env);
+  if (missing) return missing;
+  const { results } = await env.TYPING_DB.prepare("SELECT sentence_id, COUNT(*) AS count FROM typing_trials GROUP BY sentence_id").all();
   const counts = new Map(results.map((row) => [row.sentence_id, row.count]));
   return json({
     kinds: KINDS,
@@ -131,7 +144,7 @@ export async function sentenceCounts(env) {
 
 // 一致率が FLAG_ACCURACY 未満の文 (新しいものから FLAG_SCAN 件のうち)。sessionId を渡すと、その参加の文だけを見る
 async function flaggedTrials(env, sessionId = null) {
-  const { results } = await env.DB.prepare(
+  const { results } = await env.TYPING_DB.prepare(
     "SELECT id, session_id, sentence_id, keys, created_at FROM typing_trials WHERE ?1 IS NULL OR session_id = ?1 ORDER BY id DESC LIMIT ?2",
   )
     .bind(sessionId, FLAG_SCAN)
@@ -145,6 +158,8 @@ async function flaggedTrials(env, sessionId = null) {
 
 // お手本とかけ離れた文を送った参加を、多い順に出す。消すかはダッシュボードで人が決める
 export async function flaggedSessions(env) {
+  const missing = noDatabase(env);
+  if (missing) return missing;
   const bySession = new Map();
   for (const trial of await flaggedTrials(env)) {
     const entry = bySession.get(trial.session_id) || { id: trial.session_id, flagged: 0, samples: [], last: 0 };
@@ -160,20 +175,24 @@ export async function flaggedSessions(env) {
 // お手本とかけ離れた文 (一致率が FLAG_ACCURACY 未満) を、その参加から消す。
 // ダッシュボードは Access の内側だが、別のサイトから送らせる書き込みを防ぐため同じオリジンからだけ受け付ける
 export async function deleteFlagged(request, env, url, sessionId) {
+  const missing = noDatabase(env);
+  if (missing) return missing;
   if (request.headers.get("origin") !== url.origin) return error(403, "このページからは操作できません");
   const ids = (await flaggedTrials(env, sessionId)).map((trial) => trial.id);
   // D1 は 1 つの文に渡せる値が 100 個までなので、分けて消す
   const chunks = [];
   for (let i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
-  if (chunks.length) await env.DB.batch(chunks.map((chunk) => env.DB.prepare(`DELETE FROM typing_trials WHERE id IN (${chunk.map(() => "?").join(",")})`).bind(...chunk)));
+  if (chunks.length) await env.TYPING_DB.batch(chunks.map((chunk) => env.TYPING_DB.prepare(`DELETE FROM typing_trials WHERE id IN (${chunk.map(() => "?").join(",")})`).bind(...chunk)));
   return json({ deleted: ids.length });
 }
 
 // 研究用に書き出す。after より大きい id から limit 件ずつ返すので、next が null になるまで続けて読む
 export async function exportTrials(env, url) {
+  const missing = noDatabase(env);
+  if (missing) return missing;
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
-  const { results } = await env.DB.prepare(
+  const { results } = await env.TYPING_DB.prepare(
     "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.keys, t.duration_ms, t.created_at " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.id > ? ORDER BY t.id LIMIT ?",
   )

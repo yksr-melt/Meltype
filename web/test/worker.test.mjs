@@ -118,6 +118,7 @@ beforeEach(() => {
   pending = [];
   env = {
     DB: new FakeD1(),
+    TYPING_DB: new FakeD1("migrations-typing"),
     FILES: new FakeR2(),
     CACHE: new FakeKV(),
     ASSETS,
@@ -561,7 +562,7 @@ describe("タイピング調査", async () => {
     assert.ok(!("typed" in row));
     assert.ok(!JSON.stringify(row).includes("203.0.113.9"));
     // 打った文字・一致率・打鍵の数など、打鍵とお手本から計算できる値は保存しない
-    const columns = (await env.DB.prepare("SELECT name FROM pragma_table_info('typing_trials')").all()).results.map((c) => c.name);
+    const columns = (await env.TYPING_DB.prepare("SELECT name FROM pragma_table_info('typing_trials')").all()).results.map((c) => c.name);
     assert.deepEqual(columns, ["id", "session_id", "sentence_id", "keys", "duration_ms", "created_at"]);
     const counts = await (await call("/api/dashboard/typing/sentences", { headers: await auth() })).json();
     assert.equal(counts.sentences.find((s) => s.id === FIRST.id).count, 1);
@@ -579,7 +580,7 @@ describe("タイピング調査", async () => {
 
   it("知らない答えは unknown にする", async () => {
     await start({ profile: { touch: "<script>", layout: 1 } });
-    const row = await env.DB.prepare("SELECT profile FROM typing_sessions").first();
+    const row = await env.TYPING_DB.prepare("SELECT profile FROM typing_sessions").first();
     assert.deepEqual(JSON.parse(row.profile), { touch: "unknown", layout: "unknown", os: "other" });
   });
 
@@ -615,7 +616,7 @@ describe("タイピング調査", async () => {
     const remove = async (origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/flagged`, { method: "DELETE", headers: { ...(await auth()), origin } });
     assert.equal((await remove("https://evil.example")).status, 403);
     assert.deepEqual(await (await remove("https://meltype.moe")).json(), { deleted: 1 });
-    const left = await env.DB.prepare("SELECT keys FROM typing_trials").all();
+    const left = await env.TYPING_DB.prepare("SELECT keys FROM typing_trials").all();
     assert.equal(left.results.length, 1);
   });
 
@@ -627,17 +628,22 @@ describe("タイピング調査", async () => {
     assert.equal(sessions.length, 0);
   });
 
+  it("タイピングのデータベースが無いときは受け付けない", async () => {
+    delete env.TYPING_DB;
+    assert.equal((await start()).status, 503);
+  });
+
   it("参加に期限は無く、1 日に送れる数だけ決まっている。同意文が変わったら受け付けない", async () => {
     const { token } = await (await start()).json();
-    await env.DB.prepare("UPDATE typing_sessions SET created_at = created_at - 30 * 86400").run();
+    await env.TYPING_DB.prepare("UPDATE typing_sessions SET created_at = created_at - 30 * 86400").run();
     assert.equal((await trial(token)).status, 201);
-    const id = (await env.DB.prepare("SELECT id FROM typing_sessions").first()).id;
+    const id = (await env.TYPING_DB.prepare("SELECT id FROM typing_sessions").first()).id;
     const yesterday = Math.floor(Date.now() / 1000) - 2 * 86400;
-    await env.DB.batch(Array.from({ length: 999 }, () => env.DB.prepare("INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, created_at) VALUES (?, ?, '[]', 1, unixepoch())").bind(id, FIRST.id)));
+    await env.TYPING_DB.batch(Array.from({ length: 999 }, () => env.TYPING_DB.prepare("INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, created_at) VALUES (?, ?, '[]', 1, unixepoch())").bind(id, FIRST.id)));
     assert.equal((await trial(token)).status, 429);
-    await env.DB.prepare("UPDATE typing_trials SET created_at = ?").bind(yesterday).run();
+    await env.TYPING_DB.prepare("UPDATE typing_trials SET created_at = ?").bind(yesterday).run();
     assert.equal((await trial(token)).status, 201);
-    await env.DB.prepare("UPDATE typing_sessions SET consent_version = 0").run();
+    await env.TYPING_DB.prepare("UPDATE typing_sessions SET consent_version = 0").run();
     assert.equal((await trial(token)).status, 410);
   });
 });

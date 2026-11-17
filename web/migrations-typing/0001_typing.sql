@@ -1,7 +1,8 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Yukishiro
 
--- タイピング調査 (/typing/)。参加者は名前も IP も残さず、参加ごとのランダムな番号で分ける。
+-- タイピング調査 (/typing/) のデータベース (TYPING_DB)。報告 (DB) と分け、タイピングのデータで容量が埋まっても報告を受け付けられるようにする。
+-- 参加者は名前も IP も残さず、参加ごとのランダムな番号で分ける。
 CREATE TABLE typing_sessions (
   id TEXT PRIMARY KEY,
   token_hash TEXT NOT NULL UNIQUE,
@@ -24,8 +25,3 @@ CREATE TABLE typing_trials (
 
 CREATE INDEX typing_trials_session ON typing_trials (session_id, created_at);
 CREATE INDEX typing_trials_sentence ON typing_trials (sentence_id);
-
--- 回数制限を報告とタイピング調査で分ける (調査の参加で報告の枠を使い切らないように)
-ALTER TABLE rate_events ADD COLUMN kind TEXT NOT NULL DEFAULT 'report';
-DROP INDEX rate_events_ip;
-CREATE INDEX rate_events_ip ON rate_events (kind, ip_hash, created_at);
