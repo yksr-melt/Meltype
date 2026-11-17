@@ -39,11 +39,12 @@ internal object DeviceTestCore {
             in byClause -> listOf(MozcSegment(reading, byClause.getValue(reading)))
             else -> null
         }
-        override fun predict(reading: String): List<String> = emptyList()
-        override fun learn(clauses: List<MozcClause>, context: String?) {}
+        override fun learn(clauses: List<MozcClause>, context: String?) = false
+        override fun reading(text: String): String? = null
     }
 
-    fun open(): MeltypeCoreHost = MeltypeCoreHost.open(directory, CoreMozcCallbacks(converter))
+    /** Tests send ConversionFinished themselves when they wait for a background conversion. */
+    fun open(): MeltypeCoreHost = MeltypeCoreHost.open(directory, CoreMozcCallbacks({ converter }) {})
 }
 
 /** An editor of its own text, which also tells where the caret is (as TextView does; BaseInputConnection alone does not). */

@@ -38,32 +38,33 @@ class MozcConverter internal constructor(
             }
         }
 
-    override fun predict(reading: String): List<String> =
-        withSession(reading, null) { session ->
-            session.compose().allCandidateWords.candidatesList.map { it.value }.filter { it.isNotEmpty() }.distinct()
-        } ?: emptyList()
-
-    override fun learn(clauses: List<MozcClause>, context: String?) {
-        if (clauses.isEmpty()) return
+    override fun learn(clauses: List<MozcClause>, context: String?): Boolean {
+        if (clauses.isEmpty()) return false
         val reading = clauses.joinToString("") { it.reading }
-        withSession(reading, context) { session ->
+        return withSession(reading, context) { session ->
             session.compose()
             var output = session.startConversion()
-            if (clauseReadings(output, reading) != clauses.map { it.reading }) return@withSession
+            if (clauseReadings(output, reading) != clauses.map { it.reading }) return@withSession false
             clauses.forEachIndexed { index, clause ->
                 if (index > 0) output = session.focusNextClause()
                 val chosen = output.allCandidateWords.candidatesList.firstOrNull { it.hasId() && it.value == clause.text }
-                    ?: return@withSession
+                    ?: return@withSession false
                 output = session.highlight(chosen.id)
             }
             // 選んだ結果が頼まれた表記と違うなら、違うものを覚えさせないよう、確定しない。
             if (output.preedit.segmentList.joinToString("") { it.value } != clauses.joinToString("") { it.text }) {
-                return@withSession
+                return@withSession false
             }
             session.submit()
             session.save()
-        }
+            true
+        } ?: false
     }
+
+    override fun reading(text: String): String? =
+        withSession(text, null) { session ->
+            session.convertReverse().preedit.segmentList.joinToString("") { it.key }.takeIf { it.isNotEmpty() }
+        }
 
     /**
      * 文節ごとの読み。Mozc は読みの中の一部の記号を半角にして返す（「（」→「(」、「？」→「?」など）ので、
@@ -127,6 +128,11 @@ class MozcConverter internal constructor(
 
         /** 変換を始める。返るものに文節の並びと、最初の文節の候補が入っている。 */
         fun startConversion() = key(KeyEvent.SpecialKey.SPACE, withContext = true)
+
+        /** [reading] (漢字かな混じりの文字列) を逆変換する。返るものの文節の key が読み。 */
+        fun convertReverse() = command(withContext = false) {
+            setType(SessionCommand.CommandType.CONVERT_REVERSE).setText(reading)
+        }
 
         /** 次の文節に移る。返るものに、その文節の候補が入っている。 */
         fun focusNextClause() = key(KeyEvent.SpecialKey.RIGHT, withContext = false)

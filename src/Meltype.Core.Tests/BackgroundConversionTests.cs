@@ -387,7 +387,7 @@ internal static class BackgroundConversionTests
     public static void MozcOnly_ShowsKanaUntilTheAnswer()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         using var ready = new ManualResetEventSlim();
         mozc.ResultReady += ready.Set;
         mozc.WarmUp();
@@ -404,7 +404,7 @@ internal static class BackgroundConversionTests
     {
         // ヘルパーの応答を待っている間に再描画しても、届いている答えが読めないとかなに戻って、表示が 漢字 → かな と揺れる
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         mozc.Budget.Enable();
         mozc.Budget.Start(10000);
         Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text, "起動して答える");
@@ -421,7 +421,7 @@ internal static class BackgroundConversionTests
     public static void Mozc_AnswersFromTheWorker_AndReportsReadiness()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         var notified = 0;
         mozc.ResultReady += () => Interlocked.Increment(ref notified);
         mozc.Budget.Enable();

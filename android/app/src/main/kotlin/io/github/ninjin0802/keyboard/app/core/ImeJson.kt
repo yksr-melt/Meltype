@@ -77,6 +77,9 @@ internal object ImeJson {
     fun caretMoved(field: ImeFieldFacts?): String =
         event("CaretMoved", field) { put("caret", caret()) }
 
+    /** 裏で動いていた変換が終わった。Core は結果で変換中の表示を作り直す。 */
+    fun conversionFinished(field: ImeFieldFacts?): String = event("ConversionFinished", field) {}
+
     /** 前の応答の一覧の [index] 番目をタップした。 */
     fun candidateClicked(index: Int, field: ImeFieldFacts?): String =
         event("CandidateClicked", field) { put("index", index) }

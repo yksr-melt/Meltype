@@ -9,6 +9,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.RandomAccessFile
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -69,12 +70,9 @@ class MozcConverterTest {
         }
     }
 
-    // 中身は辞書しだい。空の文字列と重複がないことを確かめる。
-    @Test fun predict_has_no_empty_or_duplicate_entries() {
-        val predictions = converter.predict("あり")
-        assertTrue(predictions.none { it.isEmpty() })
-        assertEquals(predictions.size, predictions.toSet().size)
-    }
+    @Test fun reading_of_converted_text() = assertEquals("きょうはてんきがいい", converter.reading("今日は天気がいい"))
+
+    @Test fun reading_of_empty_returns_null() = assertNull(converter.reading(""))
 
     /** 呼ばれるたびに [step] ミリ秒進む時計と、送った命令の記録をつけた変換器。 */
     private class Timed(engine: MozcEngine, step: Long) {
@@ -102,11 +100,11 @@ class MozcConverterTest {
         timed.assertSessionDeleted()
     }
 
-    // 予測は命令が1つ少ないので、1000 ms ずつ進める。
-    @Test fun predict_finishing_after_the_limit_returns_empty_and_deletes_the_session() {
+    // 逆変換は命令が1つ少ないので、1000 ms ずつ進める。
+    @Test fun reading_finishing_after_the_limit_returns_null_and_deletes_the_session() {
         val timed = Timed(MozcEngine.open(ctx)!!, step = 1000)
-        assertTrue(timed.converter.predict("こうえん").isEmpty())
-        assertEquals(SessionCommand.CommandType.UPDATE_COMPOSITION, timed.sent[timed.sent.size - 2].command.type)
+        assertNull(timed.converter.reading("公園"))
+        assertEquals(SessionCommand.CommandType.CONVERT_REVERSE, timed.sent[timed.sent.size - 2].command.type)
         timed.assertSessionDeleted()
     }
 
@@ -124,13 +122,13 @@ class MozcConverterTest {
 
     @Test fun learned_candidate_becomes_first() {
         val second = converter.convert("こうえん", null)!!.single().candidates[1]
-        repeat(3) { converter.learn(listOf(MozcClause("こうえん", second)), null) }
+        repeat(3) { assertTrue(converter.learn(listOf(MozcClause("こうえん", second)), null)) }
         assertEquals(second, text("こうえん"))
     }
 
     @Test fun learn_with_unknown_text_changes_nothing() {
         val before = text("こうえん")
-        converter.learn(listOf(MozcClause("こうえん", "存在しない表記")), null)
+        assertFalse(converter.learn(listOf(MozcClause("こうえん", "存在しない表記")), null))
         assertEquals(before, text("こうえん"))
     }
 
@@ -151,8 +149,8 @@ class MozcConverterTest {
     @Test fun init_fails_returns_null() {
         val c = MozcConverter(null)
         assertNull(c.convert("あめ", null))
-        assertTrue(c.predict("あめ").isEmpty())
-        c.learn(listOf(MozcClause("あめ", "雨")), null)
+        assertNull(c.reading("雨"))
+        assertFalse(c.learn(listOf(MozcClause("あめ", "雨")), null))
     }
 
     // 動いている Mozc が使っている辞書を壊さないよう、別の場所で確かめる。

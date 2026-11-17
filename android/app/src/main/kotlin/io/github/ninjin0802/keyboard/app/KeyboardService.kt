@@ -40,7 +40,6 @@ import io.github.ninjin0802.keyboard.app.emoji.PrefsStore
 import io.github.ninjin0802.keyboard.app.input.Direction
 import io.github.ninjin0802.keyboard.app.input.EditorBridge
 import io.github.ninjin0802.keyboard.app.input.FieldPolicy
-import io.github.ninjin0802.keyboard.app.input.RetryingOpener
 import io.github.ninjin0802.keyboard.app.input.ShiftState
 import io.github.ninjin0802.keyboard.app.input.enterAction
 import io.github.ninjin0802.keyboard.app.input.enterKind
@@ -60,9 +59,7 @@ import io.github.ninjin0802.keyboard.app.view.ImeGlassSurface
 import io.github.ninjin0802.keyboard.app.view.KeyboardTopEdgeHighlight
 import io.github.ninjin0802.keyboard.app.view.Palette
 import io.github.ninjin0802.keyboard.app.view.bottomPaddingPx
-import io.github.ninjin0802.keyboard.mozc.MozcClause
 import io.github.ninjin0802.keyboard.mozc.MozcBackend
-import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import io.github.ninjin0802.keyboard.mozc.MozcConverter
 import io.github.ninjin0802.keyboard.mozc.MozcEngine
 import java.util.concurrent.LinkedBlockingQueue
@@ -76,12 +73,13 @@ import java.util.concurrent.TimeUnit
  * 変換以外はすべて画面のスレッドで動く。
  */
 class KeyboardService : InputMethodService(), KeyListener {
-    /** 変換と学習を順に行う1本のスレッド。止めたあとに来た依頼は黙って捨てる。 */
+    /** Mozc を開く1本のスレッド。止めたあとに来た依頼は黙って捨てる。 */
     private val worker = ThreadPoolExecutor(
         1, 1, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue(), ThreadPoolExecutor.DiscardPolicy(),
     )
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val converter = LateConverter(RetryingOpener(::openMozc, SystemClock::elapsedRealtime))
+    /** 開くまで、Core の変換のスレッドの要求を待たせる。開けなければ null のまま (Core は変換せず、かなのまま入る)。 */
+    private val mozc = lazy(::openMozc)
      private val bridge = EditorBridge { currentInputConnection }
     /** Where the Core's edits leave the caret; any other move is reported to the Core (CaretMoved). */
     private val caretWatch = CaretWatch()
@@ -100,7 +98,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         if (!policy.convert || !japaneseCoreLayout() || nativeCoreUnavailable) return null
         core?.let { return it }
         return try {
-            MeltypeCoreHost.open(coreDataDirectory(this), CoreMozcCallbacks(converter))
+            MeltypeCoreHost.open(coreDataDirectory(this), CoreMozcCallbacks(mozc::value) { mainHandler.post(::coreConversionFinished) })
                 .also { core = it }
         } catch (error: RuntimeException) {
             enterEmergencyMode(error)
@@ -166,6 +164,13 @@ class KeyboardService : InputMethodService(), KeyListener {
     private fun coreVirtualKey(vk: Int): Boolean {
         val instance = coreForRomaji() ?: return false
         return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts()))
+    }
+
+    /** The Core's converter finished in the background: the Core redraws the composing text with the result. */
+    private fun coreConversionFinished() {
+        val instance = core ?: return
+        if (currentInputConnection == null || !coreInput.composing) return
+        coreSend(instance, ImeJson.conversionFinished(fieldFacts()))
     }
 
     private fun commitCore() {
@@ -316,13 +321,13 @@ class KeyboardService : InputMethodService(), KeyListener {
             nav.choose(it.japaneseLayout, it.englishLayout)
             it.registerChangeListener(settingsListener)
         }
-        // 辞書を写すので時間がかかる。変換と同じスレッドの先頭で行うので、変換はこれが終わってから動く。
-        worker.execute { converter.open() }
+        // 辞書を写すので時間がかかる。開き終わるまで、Core の変換は [mozc] で待つ。
+        worker.execute { mozc.value }
     }
 
     /**
      * Mozc を開く。開けなければ null（変換できないまま、かなの入力だけで動き続ける）。
-     * 変換のスレッドで呼ばれる。失敗したときのやり直しは [RetryingOpener] が決める。
+     * [worker] か Core の変換のスレッドで 1 回だけ呼ばれる。
      */
     private fun openMozc(): MozcBackend? = try {
         val start = System.nanoTime()
@@ -352,7 +357,7 @@ class KeyboardService : InputMethodService(), KeyListener {
         Settings(this).unregisterChangeListener(settingsListener)
         languagePopup.dismiss()
         discardCore()
-        worker.shutdown()   // 積んである学習は終わらせる
+        worker.shutdown()
         super.onDestroy()
     }
 
@@ -844,26 +849,6 @@ class KeyboardService : InputMethodService(), KeyListener {
         val kind = enterKind(imeOptions)
         if (view.enterKind != kind) view.enterKind = kind
         if (view.backTarget != nav.backTarget) view.backTarget = nav.backTarget
-    }
-
-    /**
-     * Mozc の用意ができるまでは、変換に失敗したものとして答える。用意に失敗していたら、
-     * 変換や学習が頼まれたときに [mozc] がやり直す。変換のスレッドでだけ使う。
-     */
-    private class LateConverter(private val mozc: RetryingOpener<MozcBackend>) : MozcBackend {
-        fun open() { mozc.get() }
-
-        override fun convert(reading: String, context: String?): List<MozcSegment>? =
-            timed("convert", reading.length) { mozc.get()?.convert(reading, context) }
-
-        override fun predict(reading: String): List<String> =
-            timed("predict", reading.length) { mozc.get()?.predict(reading) } ?: emptyList()
-
-        private inline fun <T> timed(kind: String, length: Int, block: () -> T): T {
-            val start = System.nanoTime()
-            return block().also { PerfLog.event(kind, (System.nanoTime() - start) / 1000, length) }
-        }
-        override fun learn(clauses: List<MozcClause>, context: String?) { mozc.get()?.learn(clauses, context) }
     }
 
     companion object {

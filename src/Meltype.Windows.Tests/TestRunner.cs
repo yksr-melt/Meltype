@@ -69,7 +69,7 @@ internal static class TestRunner
             // 本物のアプリと同じく Windows のスペルチェッカーも使う。
             CompositionTests.Detector.SpellChecker = Detection.WindowsSpellChecker.Shared;
             // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの (Zenzai は使わない)。
-            using var mozc = new Composition.MozcConverter(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
+            using var mozc = new Composition.MozcConverter(new Composition.MozcHelperProcess(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile")));
             var converter = new Composition.HybridConverter(mozc);
             Console.WriteLine($"変換エンジン: {(mozc.IsInstalled ? "Mozc" : "なし (かなのまま)")}");
             var translations = Composition.TranslationDictionary.Load();
