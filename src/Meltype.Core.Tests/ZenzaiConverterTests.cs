@@ -391,6 +391,21 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void EnglishContext_IsPassed_AndAnswersMozcCannotBuildAreNotUsed()
+    {
+        // 英語で終わる文脈も渡す (chrome + がおもい → が重い)
+        Assert.Equal("今日はchrome", ZenzaiConverter.ContextOf("今日は\nchrome"));
+        Assert.Equal("。", ZenzaiConverter.ContextOf(" \n"), "空なら「。」");
+        Assert.True(ZenzaiConverter.MayResegmentTheHead("python"), "英語で終わる");
+        Assert.True(!ZenzaiConverter.MayResegmentTheHead("今日は") && !ZenzaiConverter.MayResegmentTheHead(null), "日本語で終わる・文脈なし");
+        // 英語で終わる文脈の答え (python + はしる → は知る) は、Mozc の候補で作れなければ使わない
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> run = [(new("はしる", "走る"), ["走る", "はしる"])];
+        Assert.Equal("はしる→走る", Joined(HybridConverter.Choose("はしる", run, "は知る", wholeAnswer: false)));
+        Assert.Equal("はしる→は知る", Joined(HybridConverter.Choose("はしる", run, "は知る")), "日本語の文脈なら、かなが読みと合う答えを使う");
+        Assert.Equal("はしる→はしる", Joined(HybridConverter.Choose("はしる", run, "はしる", wholeAnswer: false)), "Mozc の候補で作れる答えは使う");
+    }
+
+    [Test]
     public static void Choose_KeepsUserWordsOfMozc()
     {
         // 同梱の語句・ユーザー辞書の語 (とどりすと → todoリスト) を Mozc が最初の候補にしたら、Zenzai の答え (トドリスと) で変えない

@@ -198,16 +198,22 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>
-    /// Zenzai に渡す文脈: 前の文字列から改行を除いた、文をまたぐ日本語の文章 (最大 100 文字)。
+    /// Zenzai に渡す文脈: 前の文字列から改行を除いた、文をまたぐ文章 (最大 100 文字)。空のときは「。」(<see cref="NeutralContext"/>)。
     /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
-    /// 英語・記号で終わるときと空のときは「。」(<see cref="NeutralContext"/>)。
+    /// 英語で終わる文脈も渡す。英単語の後ろの読みを、英単語に続く文として変換する (chrome + がおもい → が重い。渡さないと が思い)。
     /// </summary>
     internal static string ContextOf(string? text)
     {
         text = text?.Replace("\r", "").Replace("\n", "").Trim();
-        if (string.IsNullOrEmpty(text) || TextLanguage.Of(text) != false) return NeutralContext;
+        if (string.IsNullOrEmpty(text)) return NeutralContext;
         return text.Length > MaxContext ? text[^MaxContext..] : text;
     }
+
+    /// <summary>
+    /// 文脈を受け取った Zenzai が、読みの頭を前の語に付く助詞にして区切り直すことがあるか: 文脈 (<see cref="ContextOf"/>) が英語で終わるとき。
+    /// python + はしる を python|は知る と読む (python 走る ではなく)。
+    /// </summary>
+    internal static bool MayResegmentTheHead(string? context) => TextLanguage.Of(ContextOf(context)) == true;
 
     /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
     internal static string Prompt(string hiragana, string? context)
