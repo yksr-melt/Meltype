@@ -589,8 +589,36 @@ describe("タイピング調査", () => {
     for (let i = 0; i < 3; i++) assert.equal((await report()).status, 201);
     assert.equal((await report()).status, 429);
     assert.equal((await start({}, "203.0.113.5")).status, 201);
-    for (let i = 0; i < 4; i++) await start({}, "203.0.113.5");
+    for (let i = 0; i < 2; i++) assert.equal((await start({}, "203.0.113.5")).status, 201);
     assert.equal((await start({}, "203.0.113.5")).status, 429);
+  });
+
+  it("お手本の長さに見合わない量の打鍵は受け付けない", async () => {
+    const { token } = await (await start()).json();
+    const many = Array.from({ length: 17 * 12 + 1 }, (_, i) => ["KeyA", "a", i, i]);
+    assert.equal((await trial(token, { keys: many })).status, 400);
+    assert.equal((await trial(token, { typed: "a".repeat(17 * 6 + 1) })).status, 400);
+  });
+
+  it("お手本とかけ離れた送信をダッシュボードに出し、その IP を利用禁止にできる", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { typed: "kyouhaasakaraamegafutteiru." })).status, 201);
+    assert.equal((await trial(token, { typed: "yamada taro desu" })).status, 201);
+    const auth = { "cf-access-jwt-assertion": await jwt(goodClaims()) };
+    const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: auth })).json();
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].flagged, 1);
+    assert.equal(sessions[0].trials, 2);
+    assert.deepEqual(sessions[0].samples, ["yamada taro desu"]);
+
+    const ban = (method, origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/ban`, { method, headers: { ...auth, origin } });
+    assert.equal((await ban("PUT", "https://evil.example")).status, 403);
+    assert.equal((await ban("PUT", "https://meltype.moe")).status, 200);
+    assert.equal((await trial(token)).status, 403);
+    assert.equal((await start()).status, 403);
+    assert.equal((await start({}, "198.51.100.7")).status, 201);
+    assert.equal((await ban("DELETE", "https://meltype.moe")).status, 200);
+    assert.equal((await trial(token)).status, 201);
   });
 
   it("参加から 12 時間たったら打鍵を受け付けない", async () => {

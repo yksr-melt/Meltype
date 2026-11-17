@@ -3297,11 +3297,6 @@ em {
   padding-block: 36px 96px;
 }
 
-.typing-terms h3 {
-  font-size: 1rem;
-  margin: 18px 0 6px;
-}
-
 .typing-terms ul {
   margin: 0;
   padding-left: 1.3em;
@@ -3561,4 +3556,64 @@ em {
 
 .typing-export h3 {
   margin: 0;
+}
+
+.typing-send {
+  margin: 28px auto 0;
+  max-width: 44rem;
+  text-align: left;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.typing-send h3 {
+  font-size: 1.15rem;
+  margin-bottom: 6px;
+}
+
+.typing-send > p {
+  color: var(--muted);
+}
+
+.typing-send h4 {
+  font-size: 0.95rem;
+  margin: 16px 0 6px;
+}
+
+.typing-send .submit-actions {
+  margin-inline: auto;
+}
+
+.typing-auto {
+  justify-content: center;
+  font-weight: 500;
+}
+
+.typing-flagged {
+  flex-basis: 100%;
+}
+
+.typing-flagged h4 {
+  font-size: 0.95rem;
+  margin: 8px 0;
+}
+
+.typing-flagged ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.typing-flagged li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 0.88rem;
+}
+
+.typing-flagged code {
+  flex: 1 1 240px;
 }

@@ -6,14 +6,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>タイピング調査に協力する | Meltype</title>
-  <meta name="description" content="ローマ字入力で、どのキーが抜けやすいか・打ち間違えやすいかを調べるタイピング調査です。お手本の文を打つだけで参加できます。">
+  <title>タイピング | Meltype</title>
+  <meta name="description" content="ローマ字で日本語の文を打つタイピングです。打った記録を、ローマ字入力の打ち間違いの調査に送ることもできます。">
   <meta name="theme-color" content="#3aaee8">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Meltype">
   <meta property="og:url" content="/typing/">
-  <meta property="og:title" content="タイピング調査に協力する | Meltype">
-  <meta property="og:description" content="ローマ字入力の打ち間違えの傾向を調べています。お手本の文を 10 個打つだけ、3 分ほどで参加できます。">
+  <meta property="og:title" content="タイピング | Meltype">
+  <meta property="og:description" content="10 文で 3 分ほどのタイピング。打った記録を、ローマ字入力の打ち間違いの調査に送ることもできます。">
   <meta property="og:image" content="/og.png">
   <meta property="og:locale" content="ja_JP">
   <meta name="twitter:card" content="summary_large_image">
@@ -25,7 +25,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
   <link rel="stylesheet" href="/assets/css/site.css">
   <script type="module" src="/assets/js/typing.js"></script>
-  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 </head>
 <body>
   <a class="skip" href="#main">本文へ移動</a>
@@ -43,7 +43,7 @@
         <a href="/#features">できること</a>
         <a href="/#install">インストール</a>
         <a href="/guide/">使い方ガイド</a>
-        <a class="is-current" href="/typing/" aria-current="page">タイピング調査</a>
+        <a class="is-current" href="/typing/" aria-current="page">タイピング</a>
         <a class="nav-report" href="/report/">問題を報告する</a>
         <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
           <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
@@ -55,43 +55,23 @@
   <main id="main">
     <section class="page-hero" aria-labelledby="typing-title">
       <div class="wrap">
-        <h1 id="typing-title">タイピング調査に協力する</h1>
-        <p>ローマ字入力で「どのキーが抜けやすいか」「どこで打ち間違えやすいか」を調べています。英語では大きな調査がありますが、日本語のローマ字入力の公開データはほとんどありません。集まったデータは、Meltype の打ち間違いの直し方を良くするのに使い、研究用のデータとしても公開する予定です。</p>
+        <h1 id="typing-title">タイピング</h1>
+        <p>お手本の日本語の文を、ローマ字で打ちます。打ち終わったら、打った記録を「どのキーが抜けやすいか」「どこで打ち間違えやすいか」の調査に送ることもできます (送らなくても遊べます)。日本語のローマ字入力では、こうした公開データがほとんどありません。</p>
         <ul class="points">
           <li><svg class="ic"><use href="/assets/img/icons.svg#i-clock"/></svg>10 文で 3 分ほど</li>
           <li><svg class="ic"><use href="/assets/img/icons.svg#i-user"/></svg>名前・メールアドレスは要りません</li>
-          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>パソコンのキーボードで参加できます</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>パソコンのキーボードで遊べます</li>
         </ul>
       </div>
     </section>
 
     <div class="typing wrap" data-typing>
-      <p class="callout is-warn" hidden data-mobile-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>スマートフォン・タブレットの画面のキーボードでは参加できません。パソコンのキーボードで開いてください。</span></p>
+      <p class="callout is-warn" hidden data-mobile-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>スマートフォン・タブレットの画面のキーボードでは打てません。パソコンのキーボードで開いてください。</span></p>
 
-      <!-- 1. 説明と同意 -->
+      <!-- 1. はじめる -->
       <form class="card typing-intro" novalidate data-intro>
-        <h2 class="step-title"><span class="step-no">1</span>参加する前に</h2>
-        <div class="typing-terms">
-          <h3>記録するもの</h3>
-          <ul>
-            <li>お手本の文を打つあいだに押したキー (キーの種類・押した時刻と離した時刻) と、打ち終わった文字</li>
-            <li>下の質問の答え (答えなくても参加できます)</li>
-            <li>参加ごとのランダムな番号 (同じ人の打ち方をまとめて見るため)</li>
-          </ul>
-          <h3>記録しないもの</h3>
-          <ul>
-            <li>名前・メールアドレス・アカウント・IP アドレス (IP は回数の制限のためにハッシュにして 1 日だけ使い、調査のデータには入れません)</li>
-            <li>このページ以外で打った文字 (打つのはお手本の文だけです)</li>
-          </ul>
-          <h3>データの使い道</h3>
-          <ul>
-            <li>Meltype の打ち間違いの直し方・変換を良くするために使います</li>
-            <li>研究用のデータとして公開することがあります。公開するときも、参加ごとのランダムな番号のほかに、人を特定できる手がかりは入れません</li>
-            <li>参加したあとでも、同じブラウザーからならこのページの下のボタンでいつでも消せます (公開したあとのデータからは消せません)</li>
-          </ul>
-          <p class="hint">18 歳未満の方は、おうちの人に確かめてから参加してください。</p>
-        </div>
-
+        <h2 class="step-title"><span class="step-no">1</span>はじめる</h2>
+        <p class="hint">調査に送るときに使う質問です。答えなくても遊べます。</p>
         <div class="fields typing-profile">
           <div class="field">
             <label for="touch">タッチタイピング (キーを見ずに打つ)</label>
@@ -121,19 +101,9 @@
             </select>
           </div>
         </div>
-
-        <label class="typing-consent">
-          <input type="checkbox" data-consent>
-          <span>上の内容を読んで、調査への参加に同意します</span>
-        </label>
-
-        <div class="submit-actions">
-          <div class="cf-turnstile" data-sitekey="" data-action="typing" data-turnstile></div>
-          <button class="btn btn-pink btn-large" type="submit" disabled data-start>
-            <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>はじめる
-          </button>
-        </div>
-        <div class="form-status" role="status" aria-live="polite" data-intro-status></div>
+        <button class="btn btn-pink btn-large" type="submit" data-start>
+          <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>はじめる
+        </button>
       </form>
 
       <!-- 2. 打つ -->
@@ -163,13 +133,49 @@
       <!-- 3. 結果 -->
       <section class="card typing-result" hidden tabindex="-1" data-result aria-labelledby="result-title">
         <svg class="ic done-icon" aria-hidden="true"><use href="/assets/img/icons.svg#i-check"/></svg>
-        <h2 id="result-title">ありがとうございました！</h2>
+        <h2 id="result-title">おつかれさまでした！</h2>
         <dl class="typing-scores">
           <div><dt>速さ</dt><dd><b data-speed>-</b> かな/分</dd></div>
           <div><dt>正確さ</dt><dd><b data-accuracy>-</b> %</dd></div>
           <div><dt>Backspace</dt><dd><b data-backspaces>-</b> 回</dd></div>
         </dl>
         <div class="typing-misses" data-misses></div>
+
+        <!-- 調査に送る (同意した人だけ) -->
+        <form class="typing-send" novalidate data-send>
+          <h3>打った記録を調査に送る</h3>
+          <p>送ると、ローマ字入力の打ち間違いの調査に使われます。送らなくても、このまま続けて遊べます。</p>
+          <div class="typing-terms">
+            <h4>送るもの</h4>
+            <ul>
+              <li>いま打った文ごとの、押したキー (キーの種類・押した時刻と離した時刻) と、打ち終わった文字</li>
+              <li>はじめに答えた質問の答えと、OS の種類</li>
+              <li>参加ごとのランダムな番号 (同じ人の打ち方をまとめて見るため)</li>
+            </ul>
+            <h4>送らないもの・使い方</h4>
+            <ul>
+              <li>名前・メールアドレス・アカウントは送りません。打ったキーはそのまま残るので、お手本と関係ない文字は打たないでください</li>
+              <li>IP アドレスはハッシュにして、回数の制限と、お手本とかけ離れた送信をくり返す悪質な利用を止めるためだけに使います。調査のデータとして書き出すときには入れません</li>
+              <li>Meltype の打ち間違いの直し方・変換を良くするために使います。研究用のデータとして公開することがあり、そのときも参加ごとのランダムな番号のほかに、人を特定するための手がかりは入れません</li>
+              <li>このブラウザーで同意して送ったデータは、ページの下のボタンでいつでも消せます (公開したあとのデータからは消せません)</li>
+            </ul>
+            <p class="hint">18 歳未満の方は、おうちの人に確かめてから送ってください。</p>
+          </div>
+          <label class="typing-consent">
+            <input type="checkbox" data-consent>
+            <span>上の内容を読んで、調査に送ることに同意します</span>
+          </label>
+          <div class="submit-actions">
+            <div class="cf-turnstile" data-sitekey="" data-turnstile></div>
+            <button class="btn btn-pink" type="submit" disabled data-send-button>
+              <svg class="ic"><use href="/assets/img/icons.svg#i-upload"/></svg>この記録を送る
+            </button>
+          </div>
+        </form>
+        <label class="typing-consent typing-auto" hidden data-auto-wrap>
+          <input type="checkbox" checked data-auto>
+          <span>同意したので、これからの記録も続けて送る</span>
+        </label>
         <div class="form-status" role="status" aria-live="polite" data-result-status></div>
         <div class="actions">
           <button class="btn btn-pink" type="button" data-again>
@@ -180,7 +186,7 @@
       </section>
 
       <div class="typing-foot">
-        <p>この調査のデータの扱いは、Meltype の <a href="https://github.com/yksr-melt/Meltype/blob/main/web/README.md">web/README.md</a> にも書いてあります。</p>
+        <p>調査のデータの扱いは、Meltype の <a href="https://github.com/yksr-melt/Meltype/blob/main/web/README.md">web/README.md</a> にも書いてあります。</p>
         <button class="btn btn-ghost btn-small" type="button" hidden data-forget>
           <svg class="ic"><use href="/assets/img/icons.svg#i-trash"/></svg>このブラウザーから送ったデータを消す
         </button>
@@ -199,7 +205,7 @@
         <li><a href="https://github.com/yksr-melt/Meltype/releases">Releases</a></li>
         <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
         <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
-        <li><a href="/typing/">タイピング調査</a></li>
+        <li><a href="/typing/">タイピング</a></li>
         <li><a href="/report/">問題を報告する</a></li>
       </ul>
       <p class="footer-copy">Copyright (C) 2026 雪代 / Yukishiro・GPL-3.0・Logo by <a href="https://github.com/Crysta1221">@Crysta1221</a></p>
