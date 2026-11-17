@@ -71,7 +71,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | <kbd>英数</kbd> / <kbd>無変換</kbd> | 英数 |
 | <kbd>かな</kbd> / <kbd>変換</kbd> | 日本語入力 |
 
-設定「左 Alt で英数 / 右 Alt で日本語」を ON にすると、左右の <kbd>Alt</kbd> だけを押して切り替えられます (Windows・Linux)。Linux の IBus でターミナルに日本語を入力するときは、この設定を ON にしてください。
+設定「左 Alt で英数 / 右 Alt で日本語」を ON にすると、左右の <kbd>Alt</kbd> だけを押して切り替えられます (Windows・Linux)。US 配列のキーボードで Linux の IBus を使うときは、ターミナルで日本語を入力するのにこの設定が要ります。
 
 アプリごとに、動きを 4 つのモードから選べます。設定の「アプリ別設定」の「種類」で変えられます。
 
