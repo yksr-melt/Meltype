@@ -20,13 +20,21 @@ internal static class Impact
 {
     public static void JudgeCorpus(string output, IEnumerable<string> extraLists)
     {
-        // 学習を付けない判定 (WordJudge と同じ)。スペルチェッカーは品質テスト・報告の再現と同じく組み込みの一覧
+        // 学習を付けない判定 (版による自動の判定の違いを見るため)。スペルチェッカーは品質テスト・報告の再現と同じく組み込みの一覧
         var detector = CompositionDetector.CreateDefault();
         detector.SpellChecker ??= BuiltInWordChecker.Shared;
         // 渡した一覧を読めなければ、その語を比べられないので止める (File.ReadAllLines が例外を出す)
         var extra = extraLists.SelectMany(File.ReadAllLines).Select(line => line.Split('\t')[0].Trim());
         var words = Readings().Select(ToRomaji).OfType<string>().Concat(EnglishWords()).Concat(extra).ToList();
-        File.WriteAllText(output, WordJudge.JudgeAll(detector, words), new UTF8Encoding(false));
+        var judged = new StringBuilder();
+        // 英字だけで 2 文字以上の語を、1 語ずつ打って確定したときの見え方 (漢字にはせず、英字 / かなのまま。前後の文脈は無いものとする)
+        foreach (var word in words.Where(w => w.Length >= 2 && w.All(char.IsAsciiLetter)).Distinct(StringComparer.Ordinal))
+        {
+            var text = new CompositionText(detector);
+            foreach (var c in word) text.Append(c);
+            judged.Append(word).Append('\t').Append(text.Display(final: true)).Append('\n');
+        }
+        File.WriteAllText(output, judged.ToString(), new UTF8Encoding(false));
         Console.WriteLine($"判定した語: {words.Distinct(StringComparer.Ordinal).Count()} 語");
     }
 

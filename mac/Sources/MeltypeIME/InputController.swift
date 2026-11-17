@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 // Copyright (C) 2026 aster-void
+// Copyright (C) 2026 HarukiKubota
 
 import Carbon.HIToolbox
 import Cocoa
@@ -19,6 +20,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     private let modeIndicator = ModeIndicator.shared
     private var auxPanel: NSPanel?
     private var displayedAux: String?
+
+    /// ロック画面と OS の認証ダイアログを Password として送り、Core でアプリ別設定より優先する (#1752)。
+    private static let authenticationApps: Set<String> = ["com.apple.loginwindow", "com.apple.SecurityAgent"]
 
     /// 判定の文脈とコードの行の判定に使う、キャレットの前の文字数
     private static let beforeLength = 4000
@@ -50,9 +54,19 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     /// 出来事を本体に送り、返ってきた指示を入力欄に出す。本体が処理できなければ nil。
     @discardableResult
-    private func send(_ type: String, client: IMKTextInput?, _ fields: [String: Any] = [:]) -> ImeOutput? {
+    private func send(_ type: String, client: IMKTextInput?, _ fields: [String: Any] = [:], keyEvent: NSEvent? = nil) -> ImeOutput? {
         var event: [String: Any] = ["version": 1, "type": type, "instance": "mac"]
-        if let client { event["field"] = field(of: client) }
+        let app = client?.bundleIdentifier()
+        if let app, Self.authenticationApps.contains(app) {
+            // ユーザー名は通常自動で入るため、SecurityAgent ではユーザー名欄も含めて打鍵を通す。
+            // 未確定入力の取消に必要な属性だけを送り、打鍵の内容や周辺文字列は Core に渡さない。
+            event["field"] = ["traits": ["Password"]]
+        } else {
+            if let client {
+                event["field"] = field(of: client, app: app)
+            }
+            if let keyEvent { event["key"] = key(of: keyEvent) }
+        }
         event.merge(fields) { _, new in new }
         guard let output = NativeCore.shared.send(Self.host, event) else { return nil }
         japanese = output.state.languageMode == .japanese
@@ -64,9 +78,9 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
     }
 
     /// 入力欄の事実 (ImeField)。キャレットの前後は、変換中なら変換中の文字の前後
-    private func field(of client: IMKTextInput) -> [String: Any] {
+    private func field(of client: IMKTextInput, app: String?) -> [String: Any] {
         var field: [String: Any] = ["composing": hasMarkedText]
-        if let app = client.bundleIdentifier() { field["app"] = app }
+        if let app { field["app"] = app }
         let marked = client.markedRange()
         let anchor = marked.location != NSNotFound && marked.length > 0 ? marked : client.selectedRange()
         guard anchor.location != NSNotFound else {
@@ -117,6 +131,10 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
+        return send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
+    }
+
+    private func key(of event: NSEvent) -> [String: Any] {
         let flags = event.modifierFlags
         var key: [String: Any] = ["vk": KeyMapping.virtualKey(for: event),
                                   "shift": flags.contains(.shift), "ctrl": flags.contains(.control),
@@ -133,7 +151,7 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
             key["ch"] = space ? 0x20 : scalar.value
             if space { key["vk"] = 0x20 }
         }
-        return send("KeyPressed", client: client, ["key": key])?.result.consumed ?? false
+        return key
     }
 
     /// フォーカスが外れた・クリックで別の場所に移ったときなど。未確定の内容をそのまま確定する。

@@ -215,6 +215,31 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1873_PluralOfKnownWord_StaysEnglish()
+    {
+        // Issue #1873: english-words.txt は deploy を持たず ploys を持つので、deploys が de|ploys に割れていた
+        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("deploys", "deploys"), ("updates", "updates"),
+                // 逆向き: 英単語の後ろの す で始まる日本語はそのまま
+                ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void Issue378_Memoirs_StaysEnglish()
     {
         // Issue #378: memoirs が メモリ絵s になる報告。今の main では memoirs・memories とも英字のまま (戻らないように)
@@ -977,7 +1002,7 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue959_VersionCandidate_CanBeSelectedAndCommitted()
     {
-        var expected = $"Meltype-{ProjectInfo.CoreVersion}";
+        var expected = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var live in new[] { false, true })
         {
             foreach (var typed in new[] { "ba-jon", "ba-jonn", "ba-zyonn" })
@@ -1002,7 +1027,7 @@ internal static class LanguageLearningTests
     public static void Issue959_VersionCandidate_LiveConversionCommitsKatakana()
     {
         // ライブ変換では、カタカナの「バージョン」を版の候補より前に出し、そのまま確定しても版にしない (Meltype の版を打ちたいことはまれ)
-        var version = $"Meltype-{ProjectInfo.CoreVersion}";
+        var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var typed in new[] { "ba-jon", "ba-jonn", "ba-zyonn" })
         {
             var k = new CompositionTests.Keyboard(live: true,
@@ -1018,7 +1043,7 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue959_VersionCandidate_DoesNotChangeOtherInput()
     {
-        var expected = $"Meltype-{ProjectInfo.CoreVersion}";
+        var expected = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var typed in new[] { "version", "ba-jonappu", "ba-" })
         {
             var k = new CompositionTests.Keyboard();
@@ -1069,7 +1094,7 @@ internal static class LanguageLearningTests
             var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
             standalone.Type("ba-jonn ");
             Assert.Equal("バージョン", standalone.Host.View!.Text, old);
-            Assert.True(standalone.Host.View.Candidates.Contains($"Meltype-{ProjectInfo.CoreVersion}"), "現在の版は引き続き選べる");
+            Assert.True(standalone.Host.View.Candidates.Contains(Composition.Utility.VersionConversion.Candidate(new Settings())), "現在の版は引き続き選べる");
         }
     }
 
@@ -1080,7 +1105,7 @@ internal static class LanguageLearningTests
         var phrases = new PhraseHistory(null);
         var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
         keyboard.Type("ba-jonn ");
-        var version = $"Meltype-{ProjectInfo.CoreVersion}";
+        var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.Controller.SelectCandidate(index);
@@ -1581,6 +1606,7 @@ internal static class LanguageLearningTests
             {
                 var k = new CompositionTests.Keyboard { FunctionKeysAffectSelectedClause = true };
                 k.Type(typed + " ");
+                while (k.Host.View!.SelectedClause > 0) k.Press(VirtualKeys.Left);
                 for (var i = 0; i < rights; i++) k.Press(VirtualKeys.Right);
                 k.Press(VirtualKeys.F6);
                 Assert.Equal(expected, string.Join("|", k.Host.View!.Clauses!), typed);

@@ -16,6 +16,16 @@ internal static class CommonReadings
     /// <summary>読みの集合 (最初に使うときに読む)。</summary>
     public static PackedWordSet Words => SharedWords.Value;
 
+    private static readonly Lazy<PackedWordSet> SharedIchidanStems = new(() => PackedWordSet.FromWords(
+        DictionarySource.DataLines(ReadText())
+            .Select(line => line.Split('\t'))
+            .Where(parts => parts.Length >= 2 && parts[0].Length >= 2 && parts[0].EndsWith('る') &&
+                            parts[1].Split(',').Contains("v1"))
+            .Select(parts => parts[0][..^1])));
+
+    /// <summary>一段動詞の語幹 (負け・褒め・しゃれ)。させる が使役形か する の活用かを見分ける。</summary>
+    public static PackedWordSet IchidanStems => SharedIchidanStems.Value;
+
     private static readonly Lazy<PackedWordSet> SharedKatakana = new(() => PackedWordSet.FromLines(DictionarySource.ReadEmbedded("katakana.txt")));
 
     /// <summary>カタカナで書く語の読み (dictionaries/katakana.txt)。よく使う語の印が無い語も含む。</summary>

@@ -1,25 +1,38 @@
-フォルダーの構成と詳しい開発手順は [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md)、貢献の決まりは [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。
+## ほかの文書
 
-## 入力のフロント
+配布用のパッケージを作る・Windows に入れて試すときは [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md) を読む。
+機能を足すか判断するときは [CONTRIBUTING.md](CONTRIBUTING.md) の「運営の方針」、PR を出すときは「Pull Request を送る場合」を読む。
+`native/tip/`・`src/Meltype.Windows/Tip/` を変えるときは、先に [docs/dev/TSF_DESIGN.md](docs/dev/TSF_DESIGN.md) を読む。
 
-入力の判断は `src/Meltype.Core/Ime/` (`ImeSession`) がする。フロントは OS の事実を送り、返ってきた指示を適用する。
+## 構成
 
-| フロント | 場所 |
-| --- | --- |
-| Windows: Meltype IME (TSF) | `native/tip/` (DLL)・`src/Meltype.Windows/Tip/TipServer.cs` (Meltype.exe 側) |
-| Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` |
-| macOS | `mac/Sources/MeltypeIME/InputController.swift` |
-| Linux: IBus | `linux/ibus-engine-meltype` |
-| Linux: fcitx5 | `linux/fcitx5/meltype.cpp` |
+入力の判断は `src/Meltype.Core` の `ImeHost` がする。フロントエンドは OS の事実を `ImeEvent` で送り、返ってきた `ImeOutput` を適用する (`src/Meltype.Core/Ime/ImeProtocol.cs`)。
+
+| フロントエンド | 場所 | Core との接続 |
+| --- | --- | --- |
+| Windows: Meltype IME (TSF) | `native/tip/` | アプリのプロセスに入る DLL。名前付きパイプで Meltype.exe (`src/Meltype.Windows/Tip/TipServer.cs`) に JSON を送る |
+| Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | Meltype.exe の中で `ImeHost` を呼ぶ |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Mac.Native` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
+| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
+| Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
+
+変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。
+
+## 暗黙知
+
+- Mac・Linux 版の Core は NativeAOT で動き、テストは JIT で動く。reflection に頼るコードはテストが通っても配布版で動かないので、JSON はソース生成の `JsonSerializerContext` (`CoreJsonContext` など) で読み書きする。
+- キーを処理するスレッドでは待たず、I/O もしない。時間のかかる処理は裏のスレッドで動かし、キーの処理では結果をすぐ返す。`ImeHost` は 1 つのスレッドから呼ぶ前提で排他しない。
+- 設定と学習データは、前の版が書いたファイルも読む。前の版にあった設定の値は今の値に読み替え、前の版が誤って学習したものは読み込むときに捨てる。
+- Windows の 2 つのフロントエンドは、Meltype.exe の `CompositionService` を共有する。Meltype IME でも、入力モードの表示 (`ModeIndicatorWindow`) は Meltype.exe が出し、DLL が読めない入力欄の情報 (UI Automation の要素) は Meltype.exe の `FocusInspector` が読む。変換中の表示と候補の一覧は別々で、Meltype キーボードは `CompositionWindow`、Meltype IME は DLL の `native/tip/CandidateWindow.cpp` が描くので、見た目を変えるときは両方を直す。
+- マージした PR のブランチは Mergify が消し、GitHub はそのブランチに向いた PR の base を付け替えずに閉じる (#1909)。PR は main に向けて作り、ほかの PR に続く変更はその PR がマージされてから出す。
+- `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
 
 ## コードを書くとき
 
 - シンプルさを何よりも優先する。
 - 状態の数を減らせる書き方・状態を持たずに済む書き方を選ぶ。
 - 未知の例外は握りつぶさず、例外として気付けるようにする。
-- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントと Core の間の口を変えるなら、先に Issue で相談する。
-- コードに決まりを入れるときは、コメントに理由も書く。
-- `tools/make-*` の出力は手で直さず、スクリプトを流して作り直す。辞書は先頭のコメントに作成元のスクリプトが書いてある。
+- 不具合は、報告されたケースだけを避ける分岐を足して直さず、原因のある構造を整理して直す（今ある状態を減らす、など）。1 つの機能の中の整理はそのまま PR にしてよい。フロントエンドと Core の間のプロトコル (`ImeProtocol.cs`) を変えるなら、先に Issue で相談する。
 - 新しいソースファイルの先頭にライセンスと著作権を入れる。既存ファイルを真似て `Yukishiro` にせず、変更を頼んだ人（PR を出す人）の名前にする。分からなければ聞く。
 
 ```
@@ -27,16 +40,25 @@
 // Copyright (C) 2026 あなたの名前
 ```
 
+### コメント
+
+既存のコメントがこの決まりに合っていなければ、真似ずにこの決まりで書く。
+
+- ファイルに決まりを入れるときは、そのファイルのコメントに理由も書く。
+- ワークアラウンドには `ワークアラウンド:` を付け、消せる条件を書く。消せないなら永続であることを書く。
+- Issue 番号は、不具合を直したコードにだけ書く。機能を足したコードには書かない。
+
 ### OS ごとのコード
 
 OS 間の差分はできるだけ作らない。
 
-`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`mac/`・`linux/` は OS の出入口で、OS の事実を読む・結果を書く・画面を描くだけにする。
+`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`native/tip/`・`mac/`・`linux/` はプラットフォーム層で、OS の事実を読む・結果を書く・画面を描くだけにする。
 
-- 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。OS の出入口からは呼ぶだけにする
+- 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。プラットフォーム層からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
-- Core にもう口がある OS の部品 (`IKanjiConverter`・`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、OS の出入口に置く
-- 設定・辞書・学習データは、どの OS も `MeltypeRuntime` で作る
+- Core にもうインターフェースがある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、プラットフォーム層に置く
+- 設定・辞書・学習データと変換エンジンは、どの OS も `MeltypeRuntime` で作る
+- 変換エンジンは全 OS で Mozc と Zenzai だけ (#1740)。OS の変換エンジン (Microsoft IME など) は足さない
 
 ## ビルドとテスト
 
@@ -58,14 +80,12 @@ dotnet run --project src/Meltype.Core.Tests -- --version
 dotnet run --project src/Meltype.Windows.Tests
 dotnet run --project src/Meltype.Windows.Tests -- CompositionTests
 dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
-dotnet run --project src/Meltype.Windows.Tests -- --convert きょうはいいてんき # 変換結果と文節区切り
-dotnet run --project src/Meltype.Windows.Tests -- --context この本は:あつい # 文脈付き変換
 
 # 辞書を変えたとき
 node tools/check-dictionaries.mjs
 ```
 
-`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 
@@ -97,6 +117,8 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 実装の写しのようなテストは書かない。
 
+今の実装で満たせない期待はテストにしない。残すならコメントに書く。
+
 テストを通すために実装を曲げない。既存のテストのケースが仕様として説明できないなら、実装を合わせずにテストを直し、PR にそう書く。
 
 ## PR の「確かめること」
@@ -124,6 +146,7 @@ dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:Treat
 
 ## 守ること
 
+- PR は自己完結させる。`TODO:` や呼び出し元の無い API など、後の PR で続きをやる前提のコードを足さない。やり残したことがあれば、PR の本文の末尾に `## マージ後の TODO` の節を作り、1 行に 1 つ書く。Issue にするかはメンテナーが決める。
 - PR は [テンプレート](.github/PULL_REQUEST_TEMPLATE.md) どおりに書く。
 - PR のタイトルの先頭に、触った場所のタグを付ける（`Core/Composition:`・`native/tip:`・`packaging:`・`bot:` など）。
 - AI を使ったことを PR に書く。テンプレートの「AI を使った」にチェックを入れ、使った部分を書く。
