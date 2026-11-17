@@ -506,7 +506,9 @@ describe("GitHub の情報のキャッシュ (KV)", () => {
   });
 });
 
-describe("タイピング調査", () => {
+describe("タイピング調査", async () => {
+  const { SENTENCES } = await import("../public/assets/js/typing-sentences.js");
+  const FIRST = SENTENCES.find((sentence) => sentence.reading === "きょうはあさからあめがふっている。");
   const KEYS = [
     ["KeyK", "k", 0, 80],
     ["KeyY", "y", 120, 200],
@@ -526,7 +528,7 @@ describe("タイピング調査", () => {
     return call("/api/typing/trials", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ sentence: "s001", typed: "kyo", keys: KEYS, duration: 400, ...extra }),
+      body: JSON.stringify({ sentence: FIRST.id, typed: "kyo", keys: KEYS, duration: 400, ...extra }),
     });
   }
 

@@ -36,14 +36,6 @@ describe("ローマ字→かな", () => {
     assert.equal(finalKana("kqa"), "kqあ");
   });
 
-  it("お手本の読みはすべてかなと「ー、。」だけ", () => {
-    const ids = new Set();
-    for (const sentence of SENTENCES) {
-      assert.match(sentence.reading, /^[ぁ-ゖー、。]+$/, sentence.id);
-      assert.ok(!ids.has(sentence.id), sentence.id);
-      ids.add(sentence.id);
-    }
-  });
 });
 
 describe("お手本と打ったものの並べ方", () => {

@@ -20,6 +20,9 @@ CREATE TABLE typing_trials (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   session_id TEXT NOT NULL REFERENCES typing_sessions (id) ON DELETE CASCADE,
   sentence_id TEXT NOT NULL,
+  -- 打ったときのお手本。お手本 (sentences/*.txt) から消した文のデータも、何を打ったかが分かるように写しておく
+  sentence_text TEXT NOT NULL,
+  reading TEXT NOT NULL,
   typed TEXT NOT NULL,
   keys TEXT NOT NULL,
   -- 打鍵の数と、かなにしたときのお手本との一致率 (0〜1)。集計と、お手本とかけ離れた送信を見つけるのに使う

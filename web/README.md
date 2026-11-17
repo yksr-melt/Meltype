@@ -116,7 +116,7 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
 
 ## タイピング (`/typing/`)
 
-お手本の文 (`public/assets/js/typing-sentences.js`) を打つページです。打ち方は、ローマ字打ち・かな打ち (JIS かな) と、Meltype で使える配列 (SKY・月・花・NICOLA・中指NICOLA・TRON。`public/assets/js/typing-layouts.js`、表は `src/Meltype.Core/Input/KanaLayout.cs` と同じ) から選びます。文は、ふつうの文・硬めの文・ネットの会話 (短め) から選びます。誰でも遊べ、打った記録は、ローマ字入力でどのキーが抜けやすいか・打ち間違えやすいかの調査に、同意した人だけが送ります。Meltype のアプリには入れず、このページだけで集めます。
+お手本の文 (`sentences/*.txt`) を打つページです。打ち方は、ローマ字打ち・かな打ち (JIS かな) と、Meltype で使える配列 (SKY・月・花・NICOLA・中指NICOLA・TRON。`public/assets/js/typing-layouts.js`、表は `src/Meltype.Core/Input/KanaLayout.cs` と同じ) から選びます。文は、ふつうの文・硬めの文・ネットの会話 (短め) から選びます。誰でも遊べ、打った記録は、ローマ字入力でどのキーが抜けやすいか・打ち間違えやすいかの調査に、同意した人だけが送ります。Meltype のアプリには入れず、このページだけで集めます。
 
 - 同意するまで、打鍵はどこにも送りません。結果の画面で、同意と「18 歳以上か、保護者の許可をもらっている」の確認をすると (Turnstile の action は `typing`)、その回の記録を送ります。同意から 12 時間・1200 文までは、聞き直さずに続けて送ります (送らないようにも切り替えられます)。
 - 集めるのは、お手本の文の id・打ったローマ字・打鍵 (`[code, key, 押した時刻, 離した時刻]`、時刻は打ち始めからのミリ秒)・かかった時間と、打ち方 (配列)、任意の質問 (タッチタイピング・キーボードの配列) の答え、OS です。ローマ字の配列は打った綴り、かなの配列は打ったかなを `typed` に入れます。自由に書いた文章を送る欄はありません。
@@ -127,4 +127,5 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
 - 参加者は、このブラウザーで同意して送った記録を、ページの下のボタンでいつでも消せます (`DELETE /api/typing/sessions/me`。ページは同意した参加の番号をすべて覚えていて、1 つずつ消します)。
 - ターミナルからも打てます (`public/typing/meltype-typing.mjs`、Node.js 18 以降)。送るには、ページで同意したあとに出る参加の番号を CLI に渡します (Turnstile をブラウザーで通すため)。お手本とローマ字の読み替えはサイトから読み込むので、ページと同じものを使います。ターミナルではキーを離した時刻と Shift が分からないため、記録には `client: "cli"` を付けて分けます。
 - データは消さずに残します (Cron の掃除の対象外)。ダッシュボードから JSON Lines で書き出せます (`/api/dashboard/typing/trials`、Access の内側)。
-- お手本の文は、一度使った id の文と読みを変えないでください。直すときは新しい id で足します。
+- お手本は `sentences/*.txt` に、1 行に 1 文の「表示する文|読み」の形で書きます。ファイル名は「並び順-種類の id.txt」(例: `3-chat.txt`) で、先頭に「種類: 表示名」の行を書きます。新しい種類は、ファイルを足せばページの選択肢に出ます。読みはひらがなと「ー、。」だけで 40 字まで、文と読みの「、。」の数をそろえます。`npm run sentences` (`dev`・`test`・`deploy` でも動く) が確かめて `public/assets/js/typing-sentences.js` を作ります (コミットしない)。
+- 文の id は文と読みから作るので、直すと別の文になります。集めたデータには打ったときの文と読みも残すので、txt から文を消しても何を打ったかは分かります。

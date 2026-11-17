@@ -132,10 +132,10 @@ export async function addTrial(request, env) {
   if (suspicious(sentence.reading, typed, layout)) return error(422, "お手本と関係ない入力が続いたので、この文は受け付けません");
 
   const inserted = await env.DB.prepare(
-    "INSERT INTO typing_trials (session_id, sentence_id, typed, keys, keystrokes, accuracy, client, layout, duration_ms, created_at) " +
-      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?11 RETURNING id",
+    "INSERT INTO typing_trials (session_id, sentence_id, sentence_text, reading, typed, keys, keystrokes, accuracy, client, layout, duration_ms, created_at) " +
+      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?13 RETURNING id",
   )
-    .bind(session.id, sentence.id, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, kanaOf(layout, typed)), client, layout, body.duration, now(), MAX_TRIALS)
+    .bind(session.id, sentence.id, sentence.text, sentence.reading, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, kanaOf(layout, typed)), client, layout, body.duration, now(), MAX_TRIALS)
     .first();
   if (!inserted) return error(429, `1 回の参加で送れるのは ${MAX_TRIALS} 文までです。ありがとうございました！`);
   return json({ id: inserted.id }, { status: 201 });
@@ -200,21 +200,20 @@ export async function exportTrials(env, url) {
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
   const { results } = await env.DB.prepare(
-    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.typed, t.keys, t.accuracy, t.client, t.layout, t.duration_ms, t.created_at " +
+    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.sentence_text, t.reading, t.typed, t.keys, t.accuracy, t.client, t.layout, t.duration_ms, t.created_at " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.id > ? ORDER BY t.id LIMIT ?",
   )
     .bind(after, limit + 1)
     .all();
   const more = results.length > limit;
   const trials = results.slice(0, limit).map((row) => {
-    const sentence = sentenceById(row.sentence_id);
     return {
       id: row.id,
       session: row.session_id,
       profile: JSON.parse(row.profile),
       sentence: row.sentence_id,
-      text: sentence ? sentence.text : null,
-      reading: sentence ? sentence.reading : null,
+      text: row.sentence_text,
+      reading: row.reading,
       typed: row.typed,
       keys: JSON.parse(row.keys),
       accuracy: row.accuracy,
