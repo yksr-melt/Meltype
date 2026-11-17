@@ -162,7 +162,7 @@ internal static unsafe class NativeBoundaryTests
     }
 
     [Test]
-    public static void Native_CombiningMarksAttachBeforeAutomaticEnglishSpacing()
+    public static void Native_CombiningMarksAttachBeforeEnglishSpacing()
     {
         foreach (var mark in new[] { 0x3099, 0xFE0F, 0xE0100 })
         {

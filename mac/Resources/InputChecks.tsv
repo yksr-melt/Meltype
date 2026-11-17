@@ -9,24 +9,23 @@ coffee	coffee
 camera	camera
 feature	feature
 remote	remote
-seeyouagain	see you again
-seeyou	see you
-seeyoulater	see you later
-seeyoutomorrow	see you tomorrow
-thankyou	thank you
-thankyouverymuch	thank you very much
+seeyouagain	seeyouagain
+seeyou	seeyou
+seeyoulater	seeyoulater
+seeyoutomorrow	seeyoutomorrow
+thankyou	thankyou
+thankyouverymuch	thankyouverymuch
 thanks	thanks
 goodbye	goodbye
-goodmorning	good morning
-goodafternoon	good afternoon
-goodevening	good evening
-goodnight	good night
-nicetomeetyou	nice to meet you
-howareyou	how are you
-imfine	im fine
-iloveyou	i love you
-takecare	take care
-welcomehome	welcome home
+goodmorning	goodmorning
+goodafternoon	goodafternoon
+goodevening	goodevening
+goodnight	goodnight
+nicetomeetyou	nicetomeetyou
+howareyou	howareyou
+imfine	imfine
+iloveyou	iloveyou
+takecare	takecare
 see you again	see you again
 thank you very much	thank you very much
 good morning	good morning
@@ -42,4 +41,4 @@ Zorgblax	Zorgblax
 https://example.com	https://example.com
 alice@example.com	alice@example.com
 getUserName	getUserName
-kyouhagoogledekensakuwo,sitaitoomoimasu.seeyouagain	今日はgoogleで検索を、したいと思います。see you again
+kyouhagoogledekensakuwo,sitaitoomoimasu.seeyouagain	今日はgoogleで検索を、したいと思います。seeyouagain

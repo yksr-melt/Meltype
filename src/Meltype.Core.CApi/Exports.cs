@@ -157,7 +157,7 @@ public static unsafe class Exports
         public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
             s_androidConverter is { } android
                 ? Runtime.CreateSession(android, settings, android.Candidates, directModeDetection: true)
-                : Runtime.CreateSession(Converter, settings, Converter.Candidates, autoSpacing: OperatingSystem.IsMacOS(), directModeDetection: true);
+                : Runtime.CreateSession(Converter, settings, Converter.Candidates, directModeDetection: true);
 
         public SnippetStore Snippets => Runtime.Snippets;
 

@@ -140,7 +140,7 @@ internal static class ProtectionTests
     }
 
     [Test]
-    public static void Protected_CommitsIgnoreAutomaticEnglishSpacing()
+    public static void Protected_CommitsIgnoreSpaceAroundEnglish()
     {
         foreach (var raw in new[] { "@user", "taro@example.com", "https://example.com", "./src/main.ts", @"C:\Users\taro" })
             foreach (var operation in new[] { VirtualKeys.Return, VirtualKeys.Space, VirtualKeys.Tab, 0 })
