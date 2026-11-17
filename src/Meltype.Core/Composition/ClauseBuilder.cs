@@ -27,11 +27,14 @@ internal sealed class ClauseBuilder(IKanjiConverter converter, CompositionServic
     internal List<Clause> BuildClauses(IReadOnlyList<CompositionSegment> segments, bool preferJapanese, IKanjiConverter converter)
     {
         var clauses = new List<Clause>();
+        // 同じ変換ボックスでこの区間より前の文字。英語の区間は、日本語の候補を前に出していても打った英字にする (RenderSegments と同じ)
+        var before = new StringBuilder();
         for (var s = 0; s < segments.Count; s++)
         {
             var segment = segments[s];
             if (segment.IsEnglish)
             {
+                before.Append(segment.Raw);
                 if (segment.IsProtected && !preferJapanese)
                 {
                     clauses.Add(new Clause(segment.Raw, true, [segment.Raw]));
@@ -58,7 +61,8 @@ internal sealed class ClauseBuilder(IKanjiConverter converter, CompositionServic
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapaneseSegment(segment.Kana, string.Concat(clauses.Select(c => c.Text)), converter);
+            var japanese = ConvertJapaneseSegment(segment.Kana, before.ToString(), converter);
+            foreach (var clause in japanese) before.Append(clause.Text);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
             var offset = 0;
             foreach (var clause in japanese)

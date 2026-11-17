@@ -1565,6 +1565,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void EnglishParticle_AfterEnglishShownAsJapanese_KeepsKana()
+    {
+        // 英語の区間の最初の候補が日本語 (英字の読みで登録したユーザー辞書の語) でも、その後ろは英単語の後ろ (python|なら)
+        var dictionary = new UserDictionary(null, builtIn: false);
+        dictionary.Add("python", "パイソン");
+        var k = new Keyboard(userDictionary: dictionary);
+        k.Type("pythonnara ");
+        Assert.Equal("パイソンなら", string.Concat(k.Host.View!.Clauses!));
+    }
+
+    [Test]
     public static void EnglishParticle_SpaceCommitEndingWithEnglish_KeepsKana()
     {
         // 英語で終わる入力は Space で変換せずに確定する。そのときも英単語の後ろの付属語はかなのまま (python奈良github になっていた)
