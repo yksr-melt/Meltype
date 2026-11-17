@@ -560,8 +560,12 @@ describe("タイピング調査", async () => {
     assert.deepEqual(row.profile, { touch: "yes", layout: "jis", os: "windows" });
     assert.ok(!("typed" in row));
     assert.ok(!JSON.stringify(row).includes("203.0.113.9"));
-    const stats = await (await call("/api/dashboard/typing/stats", { headers: await auth() })).json();
-    assert.deepEqual(stats, { sessions: 1, trials: 1, keystrokes: 3 });
+    // 打った文字・一致率・打鍵の数など、打鍵とお手本から計算できる値は保存しない
+    const columns = (await env.DB.prepare("SELECT name FROM pragma_table_info('typing_trials')").all()).results.map((c) => c.name);
+    assert.deepEqual(columns, ["id", "session_id", "sentence_id", "keys", "duration_ms", "created_at"]);
+    const counts = await (await call("/api/dashboard/typing/sentences", { headers: await auth() })).json();
+    assert.equal(counts.sentences.find((s) => s.id === FIRST.id).count, 1);
+    assert.equal(counts.sentences.filter((s) => s.count > 0).length, 1);
   });
 
   it("知らない文・おかしな打鍵は受け付けない", async () => {
@@ -606,7 +610,6 @@ describe("タイピング調査", async () => {
     const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: await auth() })).json();
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0].flagged, 1);
-    assert.equal(sessions[0].trials, 2);
     assert.deepEqual(sessions[0].samples, ["kyouhaa"]);
 
     const remove = async (origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/flagged`, { method: "DELETE", headers: { ...(await auth()), origin } });
@@ -616,17 +619,25 @@ describe("タイピング調査", async () => {
     assert.equal(left.results.length, 1);
   });
 
-  it("英語が混ざった文も、お手本どおりなら一致率は 1", async () => {
+  it("英語が混ざった文も、お手本どおりならかけ離れた送信に出ない", async () => {
     const mixed = SENTENCES.find((sentence) => sentence.reading === "きょうはgoogleでしらべた。");
     const { token } = await (await start()).json();
     assert.equal((await trial(token, { sentence: mixed.id, keys: keysOf("kyouhagoogledeshirabeta.") })).status, 201);
-    const row = await env.DB.prepare("SELECT accuracy FROM typing_trials").first();
-    assert.equal(row.accuracy, 1);
+    const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: await auth() })).json();
+    assert.equal(sessions.length, 0);
   });
 
-  it("参加から 12 時間たったら打鍵を受け付けない", async () => {
+  it("参加に期限は無く、1 日に送れる数だけ決まっている。同意文が変わったら受け付けない", async () => {
     const { token } = await (await start()).json();
-    await env.DB.prepare("UPDATE typing_sessions SET created_at = created_at - 13 * 3600").run();
+    await env.DB.prepare("UPDATE typing_sessions SET created_at = created_at - 30 * 86400").run();
+    assert.equal((await trial(token)).status, 201);
+    const id = (await env.DB.prepare("SELECT id FROM typing_sessions").first()).id;
+    const yesterday = Math.floor(Date.now() / 1000) - 2 * 86400;
+    await env.DB.batch(Array.from({ length: 999 }, () => env.DB.prepare("INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, created_at) VALUES (?, ?, '[]', 1, unixepoch())").bind(id, FIRST.id)));
+    assert.equal((await trial(token)).status, 429);
+    await env.DB.prepare("UPDATE typing_trials SET created_at = ?").bind(yesterday).run();
+    assert.equal((await trial(token)).status, 201);
+    await env.DB.prepare("UPDATE typing_sessions SET consent_version = 0").run();
     assert.equal((await trial(token)).status, 410);
   });
 });

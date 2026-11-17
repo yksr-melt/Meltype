@@ -7,11 +7,10 @@
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
 import { align, toKana, toRomaji } from "./romaji.js";
 import { compare, replay, suspicious } from "./typing-check.js";
+import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
 
 const STORAGE_KEY = "meltype-typing";
-// サーバーが打鍵を受け付ける時間 (src/typing.js の SESSION_HOURS) より少し短くして、送る途中で切れないようにする
-const SESSION_MS = 11 * 60 * 60 * 1000;
 const ROUND = 10;
 
 const root = document.querySelector("[data-typing]");
@@ -68,11 +67,12 @@ function shuffle(items) {
 // まだ打っていない文を優先して出す (同じ人が何度も同じ文を打つと、文ごとの比べ方が偏るため)
 function nextRound() {
   const done = new Set(saved.done);
-  const pool = SENTENCES.filter((s) => s.kind === saved.kind);
+  const pool = SENTENCES.filter((s) => s.kind === saved.kind && !s.retired);
   return [...shuffle(pool.filter((s) => !done.has(s.id))), ...shuffle(pool.filter((s) => done.has(s.id)))].slice(0, ROUND);
 }
 
-const sessionAlive = () => Boolean(saved.session && Date.now() - saved.session.startedAt < SESSION_MS);
+// 同意した参加は、同意文が変わるまで使い続ける (同じ人の打ち方をまとめて見られるように)
+const sessionAlive = () => Boolean(saved.session && saved.session.consent === CONSENT_VERSION);
 // 英語が混ざった文は、英語の部分をかなにすると読めないので、打った文字をそのまま見せる
 const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
@@ -252,7 +252,7 @@ function showResult() {
     return;
   }
   if (sessionAlive()) {
-    // 同意した参加の時間のうちは、もう一度聞かない。続けて送るのをやめたら、その回は送らない
+    // 同意したあとは、もう一度聞かない。続けて送るのをやめたら、その回は送らない
     sendForm.hidden = true;
     $("auto-wrap").hidden = false;
     $("auto").checked = saved.auto;
@@ -293,7 +293,7 @@ sendForm.addEventListener("submit", async (event) => {
         },
       }),
     });
-    saved.session = { id: created.id, token: created.token, startedAt: Date.now() };
+    saved.session = { id: created.id, token: created.token, consent: CONSENT_VERSION };
     saved.auto = true;
     save();
     sendForm.hidden = true;
@@ -325,7 +325,7 @@ async function sendRound() {
     } catch (e) {
       round.sent = false;
       if (e.status === 410) {
-        // 参加の時間が切れた。同意からやり直してもらう
+        // 同意文が変わった。同意からやり直してもらう
         saved.session = null;
         save();
         showSendForm();

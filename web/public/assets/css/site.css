@@ -3626,3 +3626,33 @@ em {
 .typing-intro .btn-large {
   margin-top: 16px;
 }
+
+.typing-counts {
+  flex-basis: 100%;
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.typing-counts summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.typing-counts table {
+  margin: 6px 0 4px;
+  border-collapse: collapse;
+}
+
+.typing-counts td {
+  padding: 2px 10px 2px 0;
+}
+
+.typing-counts td:first-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.typing-counts .is-retired {
+  color: var(--muted);
+}

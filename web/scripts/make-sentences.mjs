@@ -6,6 +6,7 @@
 // お手本は txt だけを直す (typing-sentences.js は作るたびに書き直すので、コミットしない)。
 // ファイル名は「並び順-種類の id.txt」。中身は「種類: 表示名」の行と、1 行に 1 文の「表示する文|読み」。# で始まる行と空行は読まない。
 // 文の id は文と読みから作る。文や読みを直すと別の文になり、直す前に集めたデータが直した後の文を指すことはない。
+// 決まり: 一度出したお手本の行は消さない (集めたデータは id でお手本を指すため)。出すのをやめるときは、行の頭に「出さない:」を付ける。
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -45,7 +46,8 @@ export function parse(files) {
         kind.label = label[1];
         return;
       }
-      const parts = line.split("|");
+      const retired = line.startsWith("出さない:");
+      const parts = (retired ? line.slice("出さない:".length) : line).split("|");
       if (parts.length !== 2) return errors.push(`${where}: 「表示する文|読み」の形にしてください`);
       const [text, reading] = parts.map((part) => part.trim());
       if (!text || !reading) return errors.push(`${where}: 文と読みの両方を書いてください`);
@@ -59,10 +61,10 @@ export function parse(files) {
       if (kana.some((part) => finalKana(toRomaji(part)) !== part.replaceAll("…", "。。。"))) return errors.push(`${where}: ローマ字で打てない読みです`);
       if (seen.has(reading)) return errors.push(`${where}: 同じ読みの文が ${seen.get(reading)} にあります`);
       seen.set(reading, where);
-      sentences.push({ kind: kind.id, id: sentenceId(text, reading), text, reading });
+      sentences.push({ kind: kind.id, id: sentenceId(text, reading), text, reading, ...(retired ? { retired: true } : {}) });
     });
     if (!kind.label) errors.push(`${name}: 「種類: 表示名」の行を書いてください`);
-    if (!sentences.some((s) => s.kind === kind.id)) errors.push(`${name}: 文が 1 つもありません`);
+    if (!sentences.some((s) => s.kind === kind.id && !s.retired)) errors.push(`${name}: 出す文が 1 つもありません`);
     kinds.push(kind);
   }
   if (errors.length) throw new Error(`お手本 (sentences/*.txt) に間違いがあります:\n${errors.join("\n")}`);
