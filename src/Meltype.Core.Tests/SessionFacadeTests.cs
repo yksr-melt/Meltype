@@ -497,7 +497,7 @@ internal static class SessionFacadeTests
     {
         // Meltype IME の DLL も予測変換の候補の一覧を出せるように、候補と Tab で選んでいる候補を JSON に入れる
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices { Predictor = new Predictor(null, null, null) }, () => new Settings { PredictiveCandidates = true });
+            new CompositionServices { Predictor = new Predictor(null, null) }, () => new Settings { PredictiveCandidates = true });
         // 固定の操作ガイドを出さない OS・入力方式 (Settings.ShowsGuide) では、文脈の案内だけ
         static string Guide(string hint) => new Settings().ShowsGuide ? hint : "";
         var typing = Type(session, "decis", "I made ")[^1];
@@ -527,7 +527,7 @@ internal static class SessionFacadeTests
     {
         // Meltype IME の候補の一覧で予測変換の候補をクリックしたら、その候補を確定する
         var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices { Predictor = new Predictor(null, null, null) }, () => new Settings { PredictiveCandidates = true });
+            new CompositionServices { Predictor = new Predictor(null, null) }, () => new Settings { PredictiveCandidates = true });
         var predictions = Type(session, "decis", "I made ")[^1].View!.Predictions!;
         var result = session.SelectPrediction(1);
         Assert.Equal(predictions[1], result.Commits.Single().Text);
@@ -707,7 +707,7 @@ internal static class SessionFacadeTests
             var settings = new Settings { ShowGuide = showGuide };
             var guide = settings.ShowsGuide;
             var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-                new CompositionServices { Predictor = new Predictor(null, null, null) }, () => settings);
+                new CompositionServices { Predictor = new Predictor(null, null) }, () => settings);
             var typing = Type(session, "decis", "I made ")[^1];
             Assert.Equal(guide ? "Tab 予測の候補を選ぶ　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字" : "Tab 予測の候補を選ぶ", typing.View!.Hint,
                 "ガイドを出さない設定では文脈の案内だけ");
@@ -1066,9 +1066,9 @@ internal static class SessionFacadeTests
     public static void PrivateField_RemembersNothing()
     {
         // #511: 入力を覚えないように求める入力欄 (ブラウザーのシークレット / InPrivate ウィンドウ) では、選び直した変換を覚えない
-        var history = new ConversionHistory(null);
-        MeltypeSession Session() => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices { History = history, Candidates = CandidateDictionary.Load(null) }, () => new Settings { LiveConversion = false });
+        var converter = new CompositionTests.LearningConverter();
+        MeltypeSession Session() => new(CompositionTests.Detector, converter,
+            new CompositionServices { Candidates = CandidateDictionary.Load(null) }, () => new Settings { LiveConversion = false });
         void ChooseHashi(MeltypeSession session)
         {
             var view = Type(session, "hashiwo ")[^1].View!;
@@ -1081,12 +1081,12 @@ internal static class SessionFacadeTests
         var session = Session();
         session.Private = true;
         ChooseHashi(session);
-        Assert.True(history.Get("はしを") is null, "プライベートの入力欄では覚えない");
+        Assert.True(!converter.HasLearned("はしを", "箸を", expected: false), "プライベートの入力欄では覚えない");
 
         // ふつうの入力欄に戻れば覚える
         session.Private = false;
         ChooseHashi(session);
-        Assert.Equal("箸を", history.Get("はしを"));
+        Assert.True(converter.HasLearned("はしを", "箸を", expected: true), "ふつうの入力欄では覚える");
     }
     [Test]
     public static void Runtime_ReloadsChangedConfigInOpenSession()
@@ -1107,42 +1107,6 @@ internal static class SessionFacadeTests
             Assert.Equal("ね，", Type(session, "ne,\n")[^1].Commits.Single().Text, "書き換えた config.json の句読点");
             var other = runtime.CreateSession(new CompositionTests.FakeConverter());
             Assert.Equal("ね，", Type(other, "ne,\n")[^1].Commits.Single().Text, "後から開いた入力欄も同じ設定");
-        }
-        finally { Directory.Delete(directory, recursive: true); }
-    }
-
-    [Test]
-    public static void Runtime_SessionsShareLearning()
-    {
-        // 入力欄 (セッション) が 2 つあっても、学習データは 1 つ。B で選び直して保存しても、A で選び直したものが消えない
-        var directory = Path.Combine(Path.GetTempPath(), "meltype-session-share-" + Guid.NewGuid().ToString("N"));
-        try
-        {
-            IReadOnlyList<string> More(string reading) => reading switch
-            {
-                "かわ" => ["川", "皮", "河"],
-                "あつい" => ["熱い", "暑い", "厚い"],
-                _ => [],
-            };
-            using var runtime = new MeltypeRuntime(directory);
-            var a = runtime.CreateSession(new CompositionTests.FakeConverter(), moreCandidates: More);
-            var b = runtime.CreateSession(new CompositionTests.FakeConverter(), moreCandidates: More);
-            void Choose(MeltypeSession session, string typed, string word)
-            {
-                var view = Type(session, typed + " ")[^1].View;
-                Assert.True(view?.Candidates.Contains(word) == true, $"{typed}: {string.Join(",", view?.Candidates ?? [])}");
-                session.SelectCandidate(view!.Candidates.ToList().IndexOf(word));
-                Assert.Equal(word, Type(session, "\n")[0].Commits.Single().Text, typed);
-            }
-            Choose(a, "kawa", "皮");
-            Choose(b, "atsui", "暑い");
-
-            var saved = new ConversionHistory(Path.Combine(directory, "conversions.json"));
-            Assert.Equal("皮", saved.Get("かわ"), "A で覚えたものが B の保存で消えない");
-            Assert.Equal("暑い", saved.Get("あつい"));
-            // 次に作った入力欄でも、A・B で覚えたものを使う
-            var c = runtime.CreateSession(new CompositionTests.FakeConverter(), moreCandidates: More);
-            Assert.Equal("皮", Type(c, "kawa ")[^1].View?.Candidates[0]);
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

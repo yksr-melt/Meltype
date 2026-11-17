@@ -115,7 +115,7 @@ internal static class SelfTest
             var directory = Path.Combine(Path.GetTempPath(), $"meltype-selftest-{Guid.NewGuid():N}");
             try
             {
-                new ConversionHistory(Path.Combine(directory, "conversions.json")).Remember("はしを", "箸を");
+                new PhraseHistory(Path.Combine(directory, "phrases.txt")).Remember("きょうは", "今日は");
                 Diagnostics.Log.SetFileOutput(Path.Combine(directory, "meltype.log"));
                 Diagnostics.Log.Info("自己診断");
                 Diagnostics.Log.SetFileOutput(null);

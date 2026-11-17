@@ -155,7 +155,7 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-se
                                    ▼ (UI スレッド。出来事を ImeHost に送り、確定・表示を受け取る)
                     ImeSession ─▶ MeltypeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
                                    │                  HybridConverter (Mozc と Zenzai)
-                                   │                  ContextRules / ConversionHistory / CandidateDictionary
+                                   │                  ContextRules / CandidateDictionary
                                    │                  FocusInspector (UI Automation: 入力欄か・カーソルの前後の文字)
                                    ▼
                   変換ボックスに表示 ─▶ Enter で確定した文字列を SendInput (Unicode) で入力欄へ

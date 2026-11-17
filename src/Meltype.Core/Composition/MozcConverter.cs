@@ -124,7 +124,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private const int SaveEvery = 5;
     private int _learnedSinceSave;
 
-    /// <summary>確定した文節を Mozc に覚えさせる (Mozc の候補に無い文字列の文節があれば覚えない)。</summary>
+    /// <summary>確定した文節を Mozc に覚えさせる (Mozc の候補に無い文字列の文節だけは覚えない)。</summary>
     public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
     {
         if (clauses.Count == 0 || !IsAvailable) return;
@@ -140,6 +140,18 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                 _learnedSinceSave = 0;
                 Send("S");
             }
+        }
+    }
+
+    /// <summary>Mozc が覚えた変換 (学習データ) をすべて消して保存する。ヘルパーの応答を待つ。</summary>
+    public void ForgetLearning()
+    {
+        if (!IsAvailable) return;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            ClearCache();
+            if (Send("X") != "OK" || Send("S") != "OK") Diagnostics.Log.Warn("Mozc の学習データを消せませんでした。");
         }
     }
 

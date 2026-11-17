@@ -46,12 +46,10 @@ public sealed class MeltypeRuntime : IDisposable
         Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
         var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
         Detector.Memory = languages;
-        var history = new ConversionHistory(Path.Combine(dataDirectory, "conversions.json"));
         _shared = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(_userDirectory),
             ContextRules = ContextRules.Load(_userDirectory),
-            History = history,
             Misspellings = MisspellingDictionary.Load(_userDirectory),
             Languages = languages,
             Translations = TranslationDictionary.Load(),
@@ -91,8 +89,6 @@ public sealed class MeltypeRuntime : IDisposable
     /// 入力欄の本体 (<see cref="MeltypeSession"/>) と同じスレッドからだけ使う (Windows は UI スレッド。排他しない)。
     /// </summary>
     public UserDictionary UserDictionary { get; }
-
-    public ConversionHistory History => _shared.History!;
 
     public LanguageMemory Languages => _shared.Languages!;
 
@@ -145,7 +141,7 @@ public sealed class MeltypeRuntime : IDisposable
         var services = _shared with
         {
             UserDictionary = UserDictionary,
-            Predictor = new Predictor(Phrases, UserDictionary, History),
+            Predictor = new Predictor(Phrases, UserDictionary),
             MoreCandidates = moreCandidates,
             AutomaticEnglishSpacing = () => autoSpacing,
             // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
@@ -163,10 +159,10 @@ public sealed class MeltypeRuntime : IDisposable
         foreach (var converter in _converters) converter.Dispose();
     }
 
-    /// <summary>学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて消す。ユーザー辞書と設定は消さない。</summary>
+    /// <summary>学習データ (Mozc の変換の学習・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて消す。ユーザー辞書と設定は消さない。</summary>
     public void ResetLearning()
     {
-        History.Clear();
+        foreach (var mozc in _converters.OfType<MozcConverter>()) ThreadPool.QueueUserWorkItem(_ => mozc.ForgetLearning());
         Languages.Clear();
         Phrases.Clear();
         TranslationHistory.Clear();
@@ -175,13 +171,13 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>
     /// sinceUtc より後に覚えたものだけを消す (一時的な入力・間違えて覚えたものを、全体をリセットせずに消す: issue #277)。消した数を返す。
-    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳の記録は覚えた時刻を持たないので、<see cref="ResetLearning"/> で消す。
+    /// 英字 / かなに直した語・予測変換の語句が対象。Mozc の変換の学習と英訳の記録は覚えた時刻で消せないので、<see cref="ResetLearning"/> で消す。
     /// </summary>
-    public int ForgetLearningSince(DateTime sinceUtc) => History.ForgetSince(sinceUtc) + Languages.ForgetSince(sinceUtc) + Phrases.ForgetSince(sinceUtc);
+    public int ForgetLearningSince(DateTime sinceUtc) => Languages.ForgetSince(sinceUtc) + Phrases.ForgetSince(sinceUtc);
 
     /// <summary>
     /// 前の版が学習した Zenzai の壊れた答え (はーどうぇ → ハードウェアウェア、なまえは → 名前は魚のは: issue #1779) を、
-    /// 選び直した変換と予測変換の語句から消す。#1776 から壊れた答えは使わないので、新しく学習することはない。
+    /// 予測変換の語句から消す。#1776 から壊れた答えは使わないので、新しく学習することはない。
     /// 消すのは、かなを含み、かなが読みと合わず (<see cref="ZenzaiConverter.IsPlausible"/>)、ユーザー辞書・補助辞書の候補でもなく、
     /// Mozc の文節ごとの候補をつないでも作れない語 (<see cref="HybridConverter"/> が Zenzai の答えを使うかと同じ決め方)。
     /// 読みと比べるだけだと、Mozc の辞書の表記が読みと違う語 (あんはさうぇい → アン・ハサウェイ) を約 3.4 万件巻き添えにする (#1788)。
@@ -190,25 +186,21 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     // TODO: 壊れた答えを学習したのは 1.5.0 以前 (#1776 は 1.5.1 から)。1.5.0 以前から更新する人がいなくなったら、
     // これと、これだけが使う HybridConverter.IsBuiltFromMozcCandidatesNow・MozcConverter.ConvertWithCandidatesNow・PhraseHistory.Entries・PhraseHistory.Forget(reading, text) と、
-    // ConversionHistory・PhraseHistory の読むときのロックを消す
+    // PhraseHistory の読むときのロックを消す
     internal void ForgetZenzaiHallucinations(HybridConverter converter)
     {
         bool Suspect(string reading, string text) =>
             text.Any(c => KanaChars.IsHiragana(c) || KanaChars.IsKatakana(c)) && !ZenzaiConverter.IsPlausible(reading, text) &&
             !UserDictionary.Lookup(reading).Contains(text) && _shared.Candidates?.Lookup(reading).Contains(text) != true;
-        var conversions = History.Entries().Where(e => Suspect(e.Reading, e.Text)).Select(e => (e.Reading, e.Text)).ToList();
         var phrases = Phrases.Entries().Where(e => Suspect(e.Reading, e.Text)).ToList();
-        if (conversions.Count == 0 && phrases.Count == 0) return;
+        if (phrases.Count == 0) return;
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            var brokenConversions = conversions.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
-            var brokenPhrases = phrases.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
-            if (brokenConversions.Count == 0 && brokenPhrases.Count == 0) return;
-            // Mozc に聞いている間に選び直した変換は消さない
-            foreach (var (reading, text) in brokenConversions) if (History.Get(reading) == text) History.Forget(reading);
+            var broken = phrases.Where(e => converter.IsBuiltFromMozcCandidatesNow(e.Reading, e.Text) == false).ToList();
+            if (broken.Count == 0) return;
             // 同じ語句を正しい読みでも覚えていることがある (おせわに と おせわになっております → お世話になっております) ので、読みと語句の組で消す
-            foreach (var (reading, text) in brokenPhrases) Phrases.Forget(reading, text);
-            Diagnostics.Log.Info($"Zenzai の壊れた答えを学習から消しました (選び直した変換 {brokenConversions.Count} 件、予測変換の語句 {brokenPhrases.Count} 件)。");
+            foreach (var (reading, text) in broken) Phrases.Forget(reading, text);
+            Diagnostics.Log.Info($"Zenzai の壊れた答えを予測変換の語句から {broken.Count} 件消しました。");
         });
     }
 

@@ -27,9 +27,6 @@ public sealed record CompositionServices
     /// <summary>前後の文字列の手がかりで候補を選ぶ規則 (気温 → 暑い)。</summary>
     public ContextRules? ContextRules { get; init; }
 
-    /// <summary>ユーザーが選び直した変換の記録 (次から最初の候補にする)。</summary>
-    public ConversionHistory? History { get; init; }
-
     /// <summary>
     /// 読みに対する変換候補の一覧 (Windows の変換候補 API)。時間がかかることがあるので、
     /// 候補を切り替え始めたときだけ呼ぶ。null なら補助辞書の候補だけ。

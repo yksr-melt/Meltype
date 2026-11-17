@@ -647,7 +647,7 @@ internal static class ImeContractTests
             var languages = new LanguageMemory(null);
             var phrases = new PhraseHistory(null);
             phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
-            var front = new Front { Services = new CompositionServices { Languages = languages, Predictor = new Predictor(phrases, null, null) } };
+            var front = new Front { Services = new CompositionServices { Languages = languages, Predictor = new Predictor(phrases, null) } };
             front.Settings.PredictiveCandidates = true;
             Assert.True(Candidates(front.Type("nihongo")[^1]).Contains("日本語で入力"), front.Trace);
             front.Traits.Add("Password");
@@ -726,7 +726,7 @@ internal static class ImeContractTests
             converter.Budget.Enable();
             converter.ResultReady += ready.Set;
             var phrases = new PhraseHistory(null);
-            var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+            var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null) } };
             front.Settings.LiveConversion = true;
             front.Settings.PredictiveCandidates = true;
             Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
@@ -778,11 +778,9 @@ internal static class ImeContractTests
     private static void CheckLearning(string directory, string mode)
     {
         var languagePath = Path.Combine(directory, "languages.json");
-        var historyPath = Path.Combine(directory, "conversions.json");
         var phrasePath = Path.Combine(directory, "phrases.txt");
         var translationPath = Path.Combine(directory, "translations.json");
         var languages = new LanguageMemory(languagePath);
-        var history = new ConversionHistory(historyPath);
         var phrases = new PhraseHistory(phrasePath);
         phrases.Remember("にほんごでにゅうりょく", "日本語で入力");
         LearningSaves.FlushAll();
@@ -793,7 +791,7 @@ internal static class ImeContractTests
         {
             Converter = converter, Services = new CompositionServices
             {
-                Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
+                Languages = languages, Predictor = new Predictor(phrases, null),
                 Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
                 MoreCandidates = reading => reading == "にほんご" ? ["日本語", "日本語文"] : [],
             }
@@ -844,13 +842,11 @@ internal static class ImeContractTests
         var learns = mode == "通常";
         LearningSaves.FlushAll();
         Assert.Equal(learns, languages.Get("nihongo") == true, mode);
-        Assert.Equal(learns ? "日本語文" : null, history.Get("にほんご"), mode);
         Assert.Equal(learns ? 1 : 0, translationHistory.Get("かわ").Count, mode);
         Assert.Equal(learns ? 2 : 1, phrases.Count, mode);
         Assert.Equal(learns, originalPhrases != File.ReadAllText(phrasePath), mode);
-        Assert.Equal(learns ? 4 : 1, Directory.GetFiles(directory).Length, mode);
+        Assert.Equal(learns ? 3 : 1, Directory.GetFiles(directory).Length, mode);
         Assert.Equal(languages.Get("nihongo"), new LanguageMemory(languagePath).Get("nihongo"), mode);
-        Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
         Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
         Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
         Assert.Equal(learns, SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, learns ? 5000 : 100), mode);
@@ -926,7 +922,7 @@ internal static class ImeContractTests
                 var front = new Front
                 {
                     Sends = null,
-                    Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) },
+                    Services = new CompositionServices { Predictor = new Predictor(phrases, null) },
                 };
                 front.Settings.PredictiveCandidates = true;
                 var index = Candidates(front.Type("nihongo")[^1]).IndexOf("日本語で入力");
@@ -1116,7 +1112,7 @@ internal static class ImeContractTests
     public static void Select_HighlightDoesNotCommitAPrediction()
     {
         // マウスでなぞった (CandidateHighlighted) だけでは予測変換の候補を確定しない。クリックしたら確定する
-        var front = new Front { Services = new CompositionServices { Predictor = new Predictor(null, null, null) } };
+        var front = new Front { Services = new CompositionServices { Predictor = new Predictor(null, null) } };
         front.Settings.PredictiveCandidates = true;
         front.Document = "I made ";
         var list = front.Type("decis")[^1].GetProperty("result").GetProperty("view").GetProperty("candidates");

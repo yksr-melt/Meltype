@@ -86,8 +86,8 @@ internal static class SlashDateTests
     public static void Issue935_ChosenDateIsNotLearned()
     {
         // 日付の候補 (2026年1月2日 など、書き方によらず) を選んでも学習しない (来年に打つと古い年が最初に出るので)
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history, now: () => new DateTime(2026, 1, 1));
+        var converter = new LearningConverter();
+        var k = new Keyboard(converter: converter, now: () => new DateTime(2026, 1, 1));
         k.Type("1gatu2niti ");
         var view = k.Host.View!;
         var index = view.Candidates.ToList().IndexOf("2026年1月2日");
@@ -95,6 +95,6 @@ internal static class SlashDateTests
         for (var i = 0; i < index; i++) k.Press(VirtualKeys.Space);
         k.Press(VirtualKeys.Return);
         Assert.Equal("2026年1月2日", k.Host.Document, "選んだ候補で確定する");
-        Assert.Equal(null, history.Get("1がつ2にち"), "学習しない");
+        Assert.True(!converter.HasLearned("1がつ2にち", "2026年1月2日", expected: false), "学習しない");
     }
 }

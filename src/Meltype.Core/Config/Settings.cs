@@ -411,7 +411,7 @@ public sealed class Settings
     public bool TranslationCandidates { get; set; } = true;
 
     [Category("6. 候補"), DisplayName("予測変換の候補"),
-     Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・選び直した変換の学習・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
+     Description("打っている途中に、続きの候補を変換ボックスの下に出します (前に確定した語句・ユーザー辞書・よく使うあいさつ・英単語の続き)。Tab / Shift+Tab で選んで Enter で確定します。確定した語句は %LOCALAPPDATA%\\Meltype\\phrases.txt に暗号化せずに覚え (この PC の外には送りません)、「学習データをリセット」で消えます。")]
     public bool PredictiveCandidates { get; set; } = true;
 
     [Category("6. 候補"), DisplayName("予測変換に英字の社名・サービス名"),

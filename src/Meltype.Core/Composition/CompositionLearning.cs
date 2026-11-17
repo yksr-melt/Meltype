@@ -7,7 +7,7 @@ using Clause = Meltype.Composition.CompositionController.Clause;
 namespace Meltype.Composition;
 
 /// <summary>
-/// 確定した入力を学習する (変換履歴・言語の学習・英訳の記録・予測変換の語句・変換エンジン)。
+/// 確定した入力を学習する (言語の学習・英訳の記録・予測変換の語句・変換エンジン)。
 /// 設定「ユーザー学習を使う」と入力欄が学習を求めないかは、呼ぶ側 (<see cref="CompositionController"/>) が見る。
 /// 学習しない候補は <see cref="Learnable"/> の 1 か所で決める。
 /// </summary>
@@ -26,7 +26,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     /// <summary>
     /// 変換エンジンが今の日時・版から作る語か (きょう → 2026/11/10・火曜日、ことし → 令和八年、ばーじょん → Mozc-2.31)。学習しない。
-    /// 読みに無い数字・元号を含むか、読みに無い「曜日」で終わる語。いちばん → 1番 も当てはまるが、Meltype の学習から外すだけで、Mozc は自分で学習する。
+    /// 読みに無い数字・元号を含むか、読みに無い「曜日」で終わる語。いちばん → 1番 も当てはまるが、予測変換の語句から外すだけで、Mozc は自分で学習する。
     /// </summary>
     // TODO: 推測をやめ、変換エンジンが付ける「学習しない」の印で決める。Mozc は日時・版の候補に NO_LEARNING を付けているので、
     // meltype_mozc_helper が候補と一緒に返す。
@@ -53,10 +53,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     private static bool IsOperatorChoice(Clause clause) =>
         MathOperator().IsMatch(clause.Reading) && clause.Text.IndexOfAny(['×', '÷', '+', '＋', '-', '－', '=', '＝']) >= 0;
 
-    /// <summary>変換履歴の語。</summary>
-    public string? LearnedConversion(string reading) => services.History?.Get(reading);
-
-    /// <summary>確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。context は変換エンジンに渡す文脈。</summary>
+    /// <summary>確定した文節を学習する。context は変換エンジンに渡す文脈。</summary>
     public void Learn(IReadOnlyList<Clause> clauses, string? context)
     {
         // 変換の候補から打ったままの英字 (api) を選んで確定したら、その語は次から英字にする (F10 と同じ)。
@@ -69,29 +66,16 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         {
             services.Languages?.Remember(clause.Reading, english: false);
         }
-        // 英訳を選んだら、英訳の記録に (普通の変換の学習より弱く効く)。
+        // 英訳を選んだら、英訳の記録に (変換エンジンの学習より弱く効く)。
         foreach (var clause in clauses.Where(c => c.Translations.Contains(c.Text)))
         {
             services.TranslationHistory?.Remember(clause.Reading, clause.Text);
         }
         LearnConversion(clauses, context);
-        if (services.History is not { } history) return;
-        // 1 文字の読み (き → 記) を覚えると、関係ない変換 (き + ごうとう) まで巻き込むので 2 文字以上だけ。
-        // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
-        foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && (c.Reading.Length >= 2 || c.Reading.Length == 1 && c.Reading[0] is < 'ぁ' or > 'ヿ' && !char.IsAsciiLetter(c.Reading[0]))))
-        {
-            // かな・カタカナのまま確定したのは、その場限りのことが多いので覚えない。
-            // 打ったままの英字を選んだのは、上で英語として覚えた。
-            if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
-            // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
-            if (clause.Translations.Contains(clause.Text)) continue;
-            if (!Learnable(clause)) continue;
-            history.Remember(clause.Reading, clause.Text);
-        }
     }
 
     /// <summary>
-    /// 変換エンジン (Mozc) にも、確定した文節を覚えさせる。英語の文節・打ったままの英字・ユーティリティ変換の候補で区切った、日本語の文節のまとまりごとに。
+    /// 変換の学習は変換エンジン (Mozc) に任せ、Meltype は覚えない。英語の文節・打ったままの英字・ユーティリティ変換の候補で区切った、日本語の文節のまとまりごとに覚えさせる。
     /// 日時・版から作る語 (<see cref="IsVolatile"/>) は Mozc が自分で学習しないので、そのまま渡す。変換エンジンとのやり取りで入力を待たせないよう、裏で行う。
     /// </summary>
     private void LearnConversion(IReadOnlyList<Clause> clauses, string? context)

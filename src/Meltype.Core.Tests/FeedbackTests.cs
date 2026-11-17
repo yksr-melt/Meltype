@@ -1074,36 +1074,11 @@ internal static class LanguageLearningTests
     }
 
     [Test]
-    public static void Issue1488_OldVersionInHistoryDoesNotOverrideNormalConversion()
-    {
-        // 前の版で Meltype や Mozc の版を選んだ履歴が残っていても (conversions.json)、通常の「バージョン」にする
-        foreach (var old in new[] { "Meltype-1.4.1-pre.2", "Mozc-3.34.6239.102+24.11.oss" })
-        {
-            var path = Path.Combine(Path.GetTempPath(), $"meltype-version-{Guid.NewGuid():N}.json");
-            File.WriteAllText(path, $"{{\"ばーじょん\":{{\"Text\":\"{old}\",\"Used\":\"2026-11-01T00:00:00Z\"}}}}");
-            var history = new ConversionHistory(path);
-            File.Delete(path);
-            foreach (var live in new[] { false, true })
-            {
-                var keyboard = new CompositionTests.Keyboard(live: live, history: history, converter: new VersionConverter());
-                keyboard.Type("mukasinoba-jonn ");
-                Assert.Equal("昔のバージョン", keyboard.Host.View!.Text, old);
-                keyboard.Press(VirtualKeys.Return);
-                Assert.Equal("昔のバージョン", keyboard.Host.Document, old);
-            }
-            var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
-            standalone.Type("ba-jonn ");
-            Assert.Equal("バージョン", standalone.Host.View!.Text, old);
-            Assert.True(standalone.Host.View.Candidates.Contains(Composition.Utility.VersionConversion.Candidate(new Settings())), "現在の版は引き続き選べる");
-        }
-    }
-
-    [Test]
     public static void Issue1488_SelectingVersionIsNotRemembered()
     {
-        var history = new ConversionHistory(null);
+        var converter = new CompositionTests.LearningConverter(new VersionConverter());
         var phrases = new PhraseHistory(null);
-        var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
+        var keyboard = new CompositionTests.Keyboard(converter: converter, predictor: new Predictor(phrases, null));
         keyboard.Type("ba-jonn ");
         var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
@@ -1111,7 +1086,7 @@ internal static class LanguageLearningTests
         keyboard.Controller.SelectCandidate(index);
         keyboard.Press(VirtualKeys.Return);
         Assert.Equal(version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
-        Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
+        Assert.True(!converter.HasLearned("ばーじょん", version, expected: false), "変換エンジンに覚えさせない");
 
         // 版は入力の全体が ばーじょん のときだけ出す。普通の「昔のバージョン」は覚える
         keyboard.Type("mukasinoba-jonn ");
@@ -1125,14 +1100,10 @@ internal static class LanguageLearningTests
     public static void Issue1488_OldVersionIsNotPredicted()
     {
         // 前の版で覚えた版番号は、予測の候補に出さない (更新後は古い版になる)
-        var history = new ConversionHistory(null);
-        history.Remember("ばーじょん", "Meltype-1.4.1-pre.2");
-        history.Remember("ばーじょんあっぷ", "バージョンアップ");
         var phrases = new PhraseHistory(null);
         phrases.Remember("むかしのばーじょん", "昔のMeltype-1.4.1-pre.5");
         phrases.Remember("むかしのばーじょんあっぷ", "昔のバージョンアップ");
-        var predictor = new Predictor(phrases, null, history);
-        Assert.Equal("バージョンアップ", string.Join(",", predictor.PredictJapanese("ばーじょ")));
+        var predictor = new Predictor(phrases, null);
         Assert.Equal("昔のバージョンアップ", string.Join(",", predictor.PredictJapanese("むかしのばー")));
     }
 
@@ -1303,7 +1274,7 @@ internal static class LanguageLearningTests
     [Test]
     public static void JsonFiles_ReadWithGeneratedMetadata()
     {
-        // Mac・Linux (NativeAOT) で config.json・languages.json・conversions.json が読めず、上書きで消えていた (issue #151)。
+        // Mac・Linux (NativeAOT) で config.json・languages.json が読めず、上書きで消えていた (issue #151)。
         // 読み書きをビルド時に作った型の情報 (ソース生成) に変えたので、今までの形式のファイルがそのまま読めることを確かめる
         var dir = Path.Combine(Path.GetTempPath(), $"meltype-json-{Guid.NewGuid():N}");
         Directory.CreateDirectory(dir);
@@ -1322,13 +1293,6 @@ internal static class LanguageLearningTests
             var languages = Path.Combine(dir, "languages.json");
             File.WriteAllText(languages, "{\"emoji\":{\"English\":true,\"Used\":\"2026-10-01T00:00:00Z\",\"Count\":3,\"Explicit\":true}}");
             Assert.Equal(true, new LanguageMemory(languages).Get("emoji"));
-
-            var conversions = Path.Combine(dir, "conversions.json");
-            File.WriteAllText(conversions, "{\"ごかん\":{\"Text\":\"互換\",\"Used\":\"2026-10-01T00:00:00Z\"}}");
-            var history = new ConversionHistory(conversions);
-            Assert.Equal("互換", history.Get("ごかん"));
-            history.Remember("きごう", "記号");
-            Assert.Equal("互換", new ConversionHistory(conversions).Get("ごかん"), "保存しても前の学習が残る");
         }
         finally { Directory.Delete(dir, recursive: true); }
     }

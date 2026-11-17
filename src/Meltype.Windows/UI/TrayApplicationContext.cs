@@ -597,7 +597,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _learnedForm.Activate();
             return;
         }
-        _learnedForm = new LearnedWordsForm(_composition.Languages, _composition.History);
+        _learnedForm = new LearnedWordsForm(_composition.Languages);
         _learnedForm.Show();
     }
 
@@ -725,14 +725,14 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ResetLearning()
     {
-        var answer = MessageBox.Show("学習データ (選び直した変換 conversions.json、英字 / かなに直した語 languages.json、予測変換の語句 phrases.txt、選んだ英訳 translations.json) をすべて削除します。よろしいですか？\n\nユーザー辞書 (userdict.txt) と設定は消えません。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        var answer = MessageBox.Show("学習データ (変換の学習 mozc フォルダー、英字 / かなに直した語 languages.json、予測変換の語句 phrases.txt、選んだ英訳 translations.json) をすべて削除します。よろしいですか？\n\nユーザー辞書 (userdict.txt) と設定は消えません。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
         if (answer == DialogResult.OK) _composition.Runtime.ResetLearning();
     }
 
     /// <summary>最近覚えたものだけを忘れる (<see cref="Composition.MeltypeRuntime.ForgetLearningSince"/>)。</summary>
     private void ForgetRecentLearning(DateTime sinceUtc, string label)
     {
-        var answer = MessageBox.Show($"{label}に覚えた学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
+        var answer = MessageBox.Show($"{label}に覚えた学習データ (英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？\n\n変換の学習は、覚えた時刻ごとには消せません (「すべて (リセット)」で消えます)。", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
         if (answer != DialogResult.OK) return;
         var count = _composition.Runtime.ForgetLearningSince(sinceUtc);
         Diagnostics.Log.Info($"{label}に覚えた学習データを削除しました ({count} 件)。");

@@ -53,10 +53,6 @@ internal sealed class InputStyleJsonConverter() : RemovedChoiceJsonConverter<Inp
 [JsonSerializable(typeof(Dictionary<string, Dictionary<string, int>>), TypeInfoPropertyName = "Translations")]
 internal sealed partial class LearningJsonContext : JsonSerializerContext;
 
-/// <summary>変換の学習 (conversions.json) の JSON の読み書き。Entry の名前が LanguageMemory と重なるので分けている。</summary>
-[JsonSerializable(typeof(Dictionary<string, ConversionHistory.Entry>), TypeInfoPropertyName = "Conversions")]
-internal sealed partial class ConversionJsonContext : JsonSerializerContext;
-
 /// <summary>定型文 (snippets.json) の JSON の読み書き (issue #290)。手で読み書きしやすいように字下げする。</summary>
 [JsonSourceGenerationOptions(WriteIndented = true, ReadCommentHandling = JsonCommentHandling.Skip, AllowTrailingCommas = true)]
 [JsonSerializable(typeof(Dictionary<string, string>), TypeInfoPropertyName = "Snippets")]

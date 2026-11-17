@@ -126,13 +126,6 @@ internal static class ZenzaiConverterTests
         Directory.CreateDirectory(directory);
         try
         {
-            string[][] conversions =
-            [
-                ["はーどうぇ", "ハードウェアウェア"], ["きょうはで", "今日はでで"],
-                ["きずくのがはやい", "気づくのが早い"], ["おせわ", "お世話になっております"], ["はーどうぇあ", "ハードウェア"], ["ほし", "☆"],
-            ];
-            File.WriteAllText(Path.Combine(directory, "conversions.json"),
-                "{" + string.Join(",", conversions.Select(e => $"\"{e[0]}\":{{\"Text\":\"{e[1]}\",\"Used\":\"2026-11-01T00:00:00Z\"}}")) + "}");
             File.WriteAllLines(Path.Combine(directory, "phrases.txt"),
             [
                 "なまえは\t名前は魚のは\t3\t0", "なまえは\t名前は\t3\t0", "きずくのがはやい\t気づくのが早い\t3\t0",
@@ -143,12 +136,10 @@ internal static class ZenzaiConverterTests
             using var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
             var hybrid = new HybridConverter(mozc);
 
-            // 裏のスレッドで Mozc に聞き終えると、全部まとめて消す (予測変換の語句は最後に消す)
+            // 裏のスレッドで Mozc に聞き終えると、まとめて消す
             runtime.ForgetZenzaiHallucinations(hybrid);
             for (var i = 0; i < 300 && runtime.Phrases.Entries().Any(e => e is ("なまえは", "名前は魚のは") or ("おせわに", "お世話になっております")); i++) Thread.Sleep(50);
-            foreach (var e in conversions.Take(2)) Assert.True(runtime.History.Get(e[0]) is null, $"{e[0]} → {e[1]} は消す");
-            foreach (var e in conversions.Skip(2)) Assert.Equal(e[1], runtime.History.Get(e[0]), $"{e[0]} → {e[1]} は残す");
-            Assert.Equal("名前は", string.Join(",", runtime.Phrases.StartingWith("なま")), "予測変換の語句も消す");
+            Assert.Equal("名前は", string.Join(",", runtime.Phrases.StartingWith("なま")), "壊れた答えは消す");
             Assert.Equal("気づくのが早い", string.Join(",", runtime.Phrases.StartingWith("きず")), "Mozc の候補で作れる語句は残す");
             Assert.Equal("おせわになっております", string.Join(",", runtime.Phrases.Entries().Where(e => e.Text == "お世話になっております").Select(e => e.Reading)),
                 "壊れた答えと同じ語句を正しい読みで覚えたものは残す");
@@ -417,7 +408,7 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Hybrid_AlignsZenzaiToMozcClauses_AndLearningStillApplies()
+    public static void Hybrid_AlignsZenzaiToMozcClauses()
     {
         // 偽の Mozc のヘルパーは、きしゃがきた を 記者が|来た の 2 文節で、文節ごとの候補も付けて返す
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
@@ -441,12 +432,9 @@ internal static class ZenzaiConverterTests
         var whole = hybrid.ConvertClauses("きしゃがきた", "外の文");
         Assert.True(whole is [{ Reading: "きしゃがきた", Text: "帰社が喜多" }], "できなければ 1 文節: " + Joined(whole));
 
-        // 文節が残るので、選び直して覚えた文節 (きしゃが → 帰社が) は Zenzai の結果の上から効く。1 文節だと効かなかった
-        var history = new ConversionHistory(null);
-        history.Remember("きしゃが", "帰社が");
-        var k = new CompositionTests.Keyboard(history: history, converter: hybrid);
+        var k = new CompositionTests.Keyboard(converter: hybrid);
         k.Type("kishagakita ");
-        Assert.Equal("帰社が着た", k.Showing ?? "", "覚えた文節は覚えた語、ほかは Zenzai の結果");
+        Assert.Equal("汽車が着た", k.Showing ?? "", "Zenzai の結果");
         // 文節ごとの候補に足す「その読みだけの変換」は Zenzai に頼まない (頼むと文節の数だけ待たされる)
         string[] asked;
         lock (server.Prompts) asked = server.Prompts.Select(ReadingIn).ToArray();
@@ -481,17 +469,6 @@ internal static class ZenzaiConverterTests
         plain.Type("tanniwotoru ");
         Assert.True(!plain.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "Zenzai の答えでなければ出さない: " + plain.Host.View.Hint);
         Assert.True(plain.Host.View.ContextHint is null, "Zenzai の答えでなければ文脈の案内にも出さない");
-        // 学習した変換で Zenzai の答えと違う文字列にした文節は数えない
-        useZenzai = true;
-        var history = new ConversionHistory(null);
-        history.Remember("とる", "採る");
-        history.Remember("たんいを", "単位お");
-        var learned = new CompositionTests.Keyboard(converter: hybrid, history: history);
-        learned.Type("tanniwotoru ");
-        Assert.Equal("単位お採る", learned.Showing ?? "", "学習した変換を出す");
-        Assert.True(!learned.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "学習で変わった文節には出さない: " + learned.Host.View.Hint);
-        Assert.True(learned.Host.View.ContextHint is null, "学習で置き換わった文節の Zenzai 表示は残さない");
-
         using var holder = new ZenzaiHolder((s, m, _) => new ZenzaiConverter(server.Endpoint, timeoutMs: 5000));
         Assert.True(holder.Status is null, "OFF・まだ使っていなければ出さない");
         holder.Get("server", "model");

@@ -87,7 +87,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 <a name="変換"></a>
 <img src="images/headings/usage/04.svg" alt="変換" height="53"><br>
 
-選び直した候補は、次から最初に出ます。
+選び直した候補は、Mozc が覚えて次から前に出します。Meltype が足した候補 (絵文字・記号・漢数字・日付など) は覚えません。
 
 書き間違いには「もしかして」が出ます。<kbd>Tab</kbd> で直ります (ぶれすれっど → ブレスレット)。
 

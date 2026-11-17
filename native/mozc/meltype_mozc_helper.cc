@@ -5,13 +5,15 @@
 //   C<TAB>前の文字列<TAB>読み
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
 //   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
-//       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
+//       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。1 文節でも覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
+//   X   学習データを消す ("OK")。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
 
+#include <algorithm>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -81,50 +83,20 @@ class Helper {
     return out;
   }
 
-  // ユーザーが確定した文節 (読みと文字列) を覚えさせる。同じ読みを変換し直し、文節の区切りを合わせて、
-  // 各文節で確定した文字列の候補を選んで確定する (Mozc 自身が確定したときと同じ学習になる)。
+  // ユーザーが確定した文節 (読みと文字列) を覚えさせる。1 文節でも覚えたら true。
   bool Learn(absl::string_view context, absl::string_view clauses) {
     std::vector<std::pair<std::string, std::string>> chosen;
-    std::string reading;
     for (absl::string_view record : absl::StrSplit(clauses, kRecordSeparator)) {
       const std::vector<std::string> fields = absl::StrSplit(record, kUnitSeparator);
       if (fields.size() < 2 || fields[0].empty() || fields[1].empty()) return false;
-      reading += fields[0];
       chosen.emplace_back(fields[0], fields[1]);
     }
     if (chosen.empty()) return false;
+    return LearnClauses(std::string(context), chosen);
+  }
 
-    mozc::Segments segments;
-    if (!Start(context, reading, &segments)) return false;
-    // 文節の区切りをユーザーが確定したものに合わせる (長さは文字数)。
-    std::vector<uint8_t> sizes;
-    for (const auto& [key, value] : chosen) {
-      const size_t length = mozc::Util::CharsLen(key);
-      if (length == 0 || length > 255) return false;
-      sizes.push_back(static_cast<uint8_t>(length));
-    }
-    if (segments.conversion_segments_size() != chosen.size() ||
-        !SameKeys(segments, chosen)) {
-      if (!converter_->ResizeSegments(&segments, Request(), 0, sizes)) return false;
-    }
-    if (segments.conversion_segments_size() != chosen.size()) return false;
-
-    for (size_t i = 0; i < chosen.size(); ++i) {
-      const mozc::Segment& segment = segments.conversion_segment(i);
-      if (segment.key() != chosen[i].first) return false;
-      int index = -1;
-      for (size_t j = 0; j < segment.candidates_size(); ++j) {
-        if (segment.candidate(j).value == chosen[i].second) {
-          index = static_cast<int>(j);
-          break;
-        }
-      }
-      // Mozc の候補に無い文字列 (Meltype の辞書の候補) は覚えさせられない。
-      if (index < 0) return false;
-      if (!converter_->CommitSegmentValue(&segments, i, index)) return false;
-    }
-    converter_->FinishConversion(Request(), &segments);
-    return true;
+  bool ClearLearning() {
+    return engine_->ClearUserHistory() && engine_->ClearUserPrediction();
   }
 
   // 逆変換。文字列 (漢字かな混じり) の読みを返す。逆変換できなければ空。
@@ -163,8 +135,82 @@ class Helper {
   bool Save() { return engine_->Sync(); }
 
  private:
+  using Clauses = std::vector<std::pair<std::string, std::string>>;
+
+  // 同じ読みを変換し直し、文節の区切りを合わせて、各文節で確定した文字列の候補を選んで確定する
+  // (Mozc 自身が確定したときと同じ学習になる)。Mozc の候補に無い文字列 (Meltype の辞書の候補) の文節は
+  // 覚えさせられないので、その文節で区切った前後のまとまりを、前の文節を文脈にして覚えさせ直す。
+  // 区切りを合わせられなければ、文節を 1 つずつ覚えさせ直す。
+  bool LearnClauses(const std::string& context, const Clauses& chosen) {
+    std::string reading;
+    for (const auto& [key, value] : chosen) reading += key;
+    mozc::Segments segments;
+    if (!Start(context, reading, &segments)) return false;
+
+    // 文節ごとの、確定した文字列の候補の位置 (無ければ -1)。区切りを合わせられなければ空。
+    std::vector<int> indexes;
+    if (Align(&segments, chosen)) {
+      for (size_t i = 0; i < chosen.size(); ++i) {
+        const mozc::Segment& segment = segments.conversion_segment(i);
+        int index = -1;
+        for (size_t j = 0; j < segment.candidates_size(); ++j) {
+          if (segment.candidate(j).value == chosen[i].second) {
+            index = static_cast<int>(j);
+            break;
+          }
+        }
+        indexes.push_back(index);
+      }
+    }
+    const bool all_found = indexes.size() == chosen.size() &&
+                           std::find(indexes.begin(), indexes.end(), -1) == indexes.end();
+    if (all_found) {
+      for (size_t i = 0; i < chosen.size(); ++i) {
+        if (!converter_->CommitSegmentValue(&segments, i, indexes[i])) return false;
+      }
+      converter_->FinishConversion(Request(), &segments);
+      return true;
+    }
+    if (chosen.size() == 1) return false;
+
+    bool learned = false;
+    std::string before = context;
+    Clauses run;
+    for (size_t i = 0; i <= chosen.size(); ++i) {
+      // 区切りを合わせられなかったときは 1 文節ずつ、合わせられたときは候補に無い文節の前後で区切る。
+      const bool found = i < chosen.size() && !indexes.empty() && indexes[i] >= 0;
+      if (found) {
+        run.push_back(chosen[i]);
+        continue;
+      }
+      if (!run.empty()) {
+        learned |= LearnClauses(before, run);
+        for (const auto& [key, value] : run) before += value;
+        run.clear();
+      }
+      if (i == chosen.size()) break;
+      if (indexes.empty()) learned |= LearnClauses(before, {chosen[i]});
+      before += chosen[i].second;
+    }
+    return learned;
+  }
+
+  // 文節の区切りをユーザーが確定したものに合わせる (長さは文字数)。
+  bool Align(mozc::Segments* segments, const Clauses& chosen) {
+    if (segments->conversion_segments_size() != chosen.size() || !SameKeys(*segments, chosen)) {
+      std::vector<uint8_t> sizes;
+      for (const auto& [key, value] : chosen) {
+        const size_t length = mozc::Util::CharsLen(key);
+        if (length == 0 || length > 255) return false;
+        sizes.push_back(static_cast<uint8_t>(length));
+      }
+      if (!converter_->ResizeSegments(segments, Request(), 0, sizes)) return false;
+    }
+    return segments->conversion_segments_size() == chosen.size() && SameKeys(*segments, chosen);
+  }
+
   static bool SameKeys(const mozc::Segments& segments,
-                       const std::vector<std::pair<std::string, std::string>>& chosen) {
+                       const Clauses& chosen) {
     for (size_t i = 0; i < chosen.size(); ++i) {
       if (segments.conversion_segment(i).key() != chosen[i].first) return false;
     }
@@ -223,6 +269,8 @@ int main(int argc, char** argv) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "R" && fields.size() >= 2) {
       std::cout << helper.Reverse(fields[1]) << "\n";
+    } else if (fields[0] == "X") {
+      std::cout << (helper.ClearLearning() ? "OK" : "NG") << "\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {

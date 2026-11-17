@@ -310,9 +310,9 @@ public sealed partial class CompositionController
     private Clause WholeClause(List<Clause> clauses, string reading)
     {
         var clause = new Clause(reading, false, JapaneseCandidates(reading, string.Concat(clauses.Select(c => c.Text)), _converter)) { Raw = _text.Raw };
-        // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
+        // 文の中の文節と同じく、文脈の手がかりの語を最初の候補にする (ConvertWithEngine)
         var surrounding = (_precedingText ?? "") + EnglishInComposition() + (_followingText ?? "");
-        if ((_services.ContextRules?.Choose(reading, surrounding, clause.Text, Standalone) ?? _learning.LearnedConversion(reading)) is { } preferred)
+        if (_services.ContextRules?.Choose(reading, surrounding, clause.Text, Standalone) is { } preferred)
             Prefer(clause, preferred);
         KeepTypedSymbols([clause], reading);
         AddOldKana(clause);
@@ -463,7 +463,6 @@ public sealed partial class CompositionController
         var pieces = AlignUserWords(kana, split, converter);
         if (pieces.All(p => p.Word is null && p.Engine is null)) return ConvertWithEngine(kana, converter);
         var clauses = new List<Clause>();
-        var registered = new List<Clause>();
         var parts = new List<Clause>();
         foreach (var (reading, word, aligned) in pieces)
         {
@@ -478,18 +477,17 @@ public sealed partial class CompositionController
             {
                 var clause = new Clause(part, false, JapaneseCandidates(part, text, converter));
                 clauses.Add(clause);
-                // 区切りで分けた文節 (一|学期 の 一) は、学習と文脈の手がかりで選び直さない (いち で 市 を選んだことがあっても 一|学期 のまま)
-                (divided.Count == 1 ? registered : parts).Add(clause);
+                // 区切りで分けた文節 (一|学期 の 一) は、文脈の手がかりで選び直さない
+                if (divided.Count > 1) parts.Add(clause);
             }
         }
-        // 同梱の語句 (しょせん → 所詮) も、文脈の手がかり (試合 → 初戦) と学習で選び直せるようにする。
+        // 同梱の語句 (しょせん → 所詮) も、文脈の手がかり (試合 → 初戦) で選び直せるようにする。
         // 変換エンジンの文節も、語句の文節を含めた前後で文脈の手がかりを見直す (甲斐性ない + こうかい → 後悔)。
         foreach (var clause in clauses)
         {
             if (parts.Contains(clause)) continue;
             var surrounding = (_precedingText ?? "") + EnglishInComposition() + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
-            var preferred = _services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _learning.LearnedConversion(clause.Reading) : null);
-            if (preferred is not null) Prefer(clause, preferred);
+            if (_services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) is { } preferred) Prefer(clause, preferred);
         }
         return clauses;
     }
@@ -589,8 +587,7 @@ public sealed partial class CompositionController
     /// <summary>
     /// 日本語のかなを変換エンジンで文節に区切って変換する。各文節の最初の候補は次の順で決める:
     ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
-    ///   2. ユーザーが前に選び直した変換 (学習)
-    ///   3. 変換エンジンの結果 (入力欄のキャレットの前の文字を文脈として渡している)
+    ///   2. 変換エンジンの結果 (入力欄のキャレットの前の文字を文脈として渡している。ユーザーが選び直した変換は変換エンジンが学習する)
     /// engine を渡したときは、変換エンジンに頼まずにその文節を使う (文全体を変換したときの一部: AlignUserWords)。
     /// </summary>
     private List<Clause> ConvertWithEngine(string kana, IKanjiConverter converter, IReadOnlyList<ConversionClause>? engine = null)
@@ -617,7 +614,7 @@ public sealed partial class CompositionController
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
             var surrounding = (_precedingText ?? "") + EnglishInComposition() + others + (_followingText ?? "");
-            var preferred = _services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? _learning.LearnedConversion(clauses[i].Reading);
+            var preferred = _services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
             // 英単語に挟まれて助詞だけの文節になると、変換エンジンは漢字にしてしまう (github + に + push → 二)。助詞はかなのまま。
@@ -638,10 +635,10 @@ public sealed partial class CompositionController
 
     /// <summary>
     /// かなと一緒に打った記号 (読みの 、。？「 など。CompositionText.Symbol が決めた文字) は、最初の候補でも読みの文字のままにする。
-    /// 変換エンジンの答え・Mozc の学習・変換履歴は、記号を別の文字にすることがある
+    /// 変換エンジンの答え・Mozc の学習は、記号を別の文字にすることがある
     /// (ライブ変換で 例文？ が 例文? に: issue #519、「今日は が ［今日は に: issue #1669、わたしは、 が 私は・ に)。別の候補は一覧に残す。
-    /// 記号だけを打って変換したとき (、 だけ・( だけ) は、選んで覚えた候補を使う (issue #672)。記号だけかは、文節や
-    /// ユーザー辞書で分けた部分の読みでなく、打ったもの全体で決める (わたしは、 の区切りを変えてできた 、 だけの文節にも、覚えた ・ を出さない)。
+    /// 記号だけを打って変換したとき (、 だけ・( だけ) は、変換エンジンの答えを使う (issue #672)。記号だけかは、文節や
+    /// ユーザー辞書で分けた部分の読みでなく、打ったもの全体で決める (わたしは、 の区切りを変えてできた 、 だけの文節にも、Mozc が覚えた ・ を出さない)。
     /// 記号の数が読みと違う答え (から → ～、あんはさうぇい → アン・ハサウェイ) は、どの記号がどれに当たるか分からないので変えない。
     /// 打った記号を文字の種類と数で見分けているのは、変換の結果が区間の種類を持たない文字列だから。区間の種類を持ち回すようになったら (#1735)、区間で決める。
     /// 最初の候補を決める所 (ConvertWithEngine・Reconvert・WholeClause) の最後に呼ぶ。
@@ -1011,7 +1008,6 @@ public sealed partial class CompositionController
         clause.Expanded = false;
         clause.Raw = null;
         clause.Translations.Clear();
-        if (_learning.LearnedConversion(clause.Reading) is { } learned) Prefer(clause, learned);
         KeepTypedSymbols([clause], clause.Reading);
     }
 
@@ -1035,8 +1031,8 @@ public sealed partial class CompositionController
         _text.IsEmpty ? "" : string.Concat(_text.ConversionSegments().Select(s => s.IsEnglish ? s.Raw : " "));
 
     /// <summary>
-    /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
-    /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
+    /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書を使って文節ごとに変換した結果を見せる。
+    /// 打つたびに呼ばれるので、かな・文脈が同じならキャッシュを使う。
     /// </summary>
     private string LiveConvert(string kana, bool afterEnglish)
     {
@@ -1050,7 +1046,7 @@ public sealed partial class CompositionController
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     private List<(string Reading, string Text)> LiveClauses(string kana, bool afterEnglish)
     {
-        var key = string.Join("\u0001", kana, afterEnglish, _precedingText, EnglishInComposition(), _followingText, _services.History?.Version);
+        var key = string.Join("\u0001", kana, afterEnglish, _precedingText, EnglishInComposition(), _followingText);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
         var clauses = WithoutWaiting(() => ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();

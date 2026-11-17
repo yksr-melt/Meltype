@@ -261,7 +261,7 @@ internal static class CompositionTests
 
         public FakeConverter Converter { get; } = new();
 
-        public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
+        public Keyboard(bool live = false, bool direct = false, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
             Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
@@ -283,7 +283,6 @@ internal static class CompositionTests
                 DirectDecided = japanese => { if (japanese) Direct = false; else _directEnglishWord = true; },
                 Candidates = Candidates,
                 ContextRules = Rules,
-                History = history ?? new ConversionHistory(null),
                 MoreCandidates = moreCandidates,
                 UserDictionary = userDictionary,
                 Misspellings = Misspellings,
@@ -797,7 +796,7 @@ internal static class CompositionTests
     public static void Prediction_RemembersCommittedPhrase()
     {
         // #38: 確定した語句を覚え、次に読みを打ちかけたら予測の候補に出す。Tab で選んで Enter で確定
-        var k = new Keyboard(predictor: new Predictor(new PhraseHistory(null), null, null));
+        var k = new Keyboard(predictor: new Predictor(new PhraseHistory(null), null));
         k.Type("kyou ");
         k.Press(VirtualKeys.Return);
         Assert.Equal("今日", k.Host.Document);
@@ -818,7 +817,7 @@ internal static class CompositionTests
         var phrases = new PhraseHistory(null);
         phrases.Remember("とるこりょうり", "トルコ料理");
         phrases.Remember("とることができる", "取ることができる");
-        var k = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
+        var k = new Keyboard(live: true, predictor: new Predictor(phrases, null));
         k.Type("tanniwotoru");
         Assert.Equal("単位を取る", k.Showing);
         Assert.Equal("取ることができる", string.Join(",", k.Host.View!.Predictions ?? []));
@@ -828,7 +827,7 @@ internal static class CompositionTests
         Assert.Equal("単位を取ることができる", k.Host.Document);
 
         // ライブ変換が OFF なら、最後の文節では引かない (打鍵ごとに変換を増やさない)
-        var off = new Keyboard(predictor: new Predictor(phrases, null, null));
+        var off = new Keyboard(predictor: new Predictor(phrases, null));
         off.Type("tanniwotoru");
         Assert.True(off.Host.View!.Predictions is null, "OFF: " + string.Join(",", off.Host.View.Predictions ?? []));
     }
@@ -840,13 +839,13 @@ internal static class CompositionTests
         var phrases = new PhraseHistory(null);
         phrases.Remember("まけおしみ", "負け惜しみ");
         phrases.Remember("きょうはまけた", "今日は負けた");
-        var k = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
+        var k = new Keyboard(live: true, predictor: new Predictor(phrases, null));
         k.Type("kyouhaMake");
         Assert.True(k.Showing!.EndsWith("Make", StringComparison.Ordinal), k.Showing);
         Assert.Equal("今日は負けた", string.Join(",", k.Host.View!.Predictions ?? []));
 
         // 同じ読みでも、日本語で見えていれば最後の文節の続きを出す
-        var japanese = new Keyboard(live: true, predictor: new Predictor(phrases, null, null));
+        var japanese = new Keyboard(live: true, predictor: new Predictor(phrases, null));
         japanese.Type("kyouhamake");
         Assert.Equal("今日は負け", japanese.Showing);
         Assert.True(japanese.Host.View!.Predictions?.Contains("負け惜しみ") == true, "最後の文節の続き: " + string.Join(",", japanese.Host.View.Predictions ?? []));
@@ -858,7 +857,7 @@ internal static class CompositionTests
         // Tab で予測の候補を選んだあと、Enter を押さずに続けて打ったら、その候補で確定して続きを入力する (選ぶ前の打ちかけに戻さない)
         var phrases = new PhraseHistory(null);
         phrases.Remember("きょうのよてい", "今日の予定");
-        var k = new Keyboard(predictor: new Predictor(phrases, null, null));
+        var k = new Keyboard(predictor: new Predictor(phrases, null));
         k.Type("kyou");
         k.Press(VirtualKeys.Tab);
         Assert.Equal("今日の予定", k.Showing);
@@ -873,7 +872,7 @@ internal static class CompositionTests
         // Tab で予測の候補を選んだあとの BackSpace は、確定せずに、選ぶ前の打ちかけから 1 文字消す
         var phrases = new PhraseHistory(null);
         phrases.Remember("きょうのよてい", "今日の予定");
-        var k = new Keyboard(predictor: new Predictor(phrases, null, null));
+        var k = new Keyboard(predictor: new Predictor(phrases, null));
         k.Type("kyou");
         k.Press(VirtualKeys.Tab);
         Assert.Equal("今日の予定", k.Showing);
@@ -886,7 +885,7 @@ internal static class CompositionTests
     public static void Prediction_CompletesEnglishWord()
     {
         // #38: 英単語の打ちかけ (decis) から続きの候補 (decision, decisions …)
-        var k = new Keyboard(predictor: new Predictor(null, null, null));
+        var k = new Keyboard(predictor: new Predictor(null, null));
         k.Host.PrecedingText = "I made ";
         k.Type("decis");
         var predictions = k.Host.View!.Predictions ?? [];
@@ -907,7 +906,7 @@ internal static class CompositionTests
     public static void Issue1213_GreetingPredictions_WithoutLearning()
     {
         // #1213: 学習がなくても、よく使うあいさつを予測の候補に出す
-        var predictor = new Predictor(null, null, null);
+        var predictor = new Predictor(null, null);
         foreach (var (kana, phrase) in new[] { ("おは", "おはようございます"), ("ありがとう", "ありがとうございます"), ("おつかれ", "お疲れ様です"), ("よろし", "よろしくお願いします"), ("こんにち", "こんにちは") })
             Assert.True(predictor.PredictJapanese(kana).Contains(phrase), kana + ": " + string.Join(",", predictor.PredictJapanese(kana)));
         Assert.Equal(0, predictor.PredictJapanese("お").Count, "1 文字では出さない");
@@ -924,7 +923,7 @@ internal static class CompositionTests
         // 前に確定した語句を、定型句より先に出す
         var phrases = new PhraseHistory(null);
         phrases.Remember("おはよう", "お早う");
-        Assert.Equal("お早う", new Predictor(phrases, null, null).PredictJapanese("おは")[0]);
+        Assert.Equal("お早う", new Predictor(phrases, null).PredictJapanese("おは")[0]);
 
         // Tab で選んで Enter で確定する。選ばなければ、今までどおり打った読みを確定する
         var k = new Keyboard(predictor: predictor);
@@ -954,7 +953,7 @@ internal static class CompositionTests
     public static void Issue890_EnglishNamePredictions_FromKanaPrefix()
     {
         // #890: 社名・サービス名を読みで打ちかけたら、英字の名前も予測の候補に出す (設定が ON のとき)
-        var predictor = new Predictor(null, null, null);
+        var predictor = new Predictor(null, null);
         Assert.True(predictor.PredictEnglishNames("しゃお").Contains("Xiaomi"), string.Join(",", predictor.PredictEnglishNames("しゃお")));
         Assert.True(predictor.PredictEnglishNames("ぎっと") is { } git && git.Contains("GitHub") && git.Contains("GitLab"), string.Join(",", predictor.PredictEnglishNames("ぎっと")));
         Assert.True(predictor.PredictEnglishNames("しゃおみ").Contains("Xiaomi"), "読みを打ち終わっても出す");
@@ -1019,16 +1018,13 @@ internal static class CompositionTests
     public static void Now_ChosenTimeIsNotLearned()
     {
         // いま → 17:22 を選んで確定しても覚えない (覚えると、次の いま で古い時刻が最初に出る)
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
+        var converter = new LearningConverter();
+        var k = new Keyboard(converter: converter, now: () => new DateTime(2026, 10, 8, 17, 22, 0));
         k.Type("ima ");
-        var first = k.Showing;
         for (var i = 0; i < 30 && k.Showing != "17:22"; i++) k.Press(VirtualKeys.Space);
         Assert.Equal("17:22", k.Showing, "時刻の候補まで進める");
         k.Type("\n");
-        var next = new Keyboard(history: history, now: () => new DateTime(2026, 10, 8, 18, 5, 0));
-        next.Type("ima ");
-        Assert.Equal(first, next.Showing, "最初の候補は前と同じ (時刻を覚えていない)");
+        Assert.True(!converter.HasLearned("いま", "17:22", expected: false), "変換エンジンに覚えさせない");
     }
 
     [Test]
@@ -1133,22 +1129,22 @@ internal static class CompositionTests
         Assert.True(!bad.Host.View!.Candidates.Any(c => c.Contains('/')), string.Join(" ", bad.Host.View!.Candidates));
 
         // 選んでも学習しない (次に違う日付を打ったときに邪魔になる)
-        var history = new ConversionHistory(null);
-        var chosen = new Keyboard(converter: converter, history: history, now: () => new DateTime(2026, 10, 8));
+        var learner = new LearningConverter(converter);
+        var chosen = new Keyboard(converter: learner, now: () => new DateTime(2026, 10, 8));
         chosen.Type("10gatsu9nichi ");
         var index = chosen.Host.View!.Candidates.ToList().IndexOf("10/9");
         for (var i = 0; i < index; i++) chosen.Press(VirtualKeys.Space);
         chosen.Press(VirtualKeys.Return);
         Assert.Equal("10/9", chosen.Host.Document);
-        Assert.True(history.Get("10がつ9にち") is null, "学習しない");
+        Assert.True(!learner.HasLearned("10がつ9にち", "10/9", expected: false), "学習しない");
         // #935: 曜日付きの 10月9日(金) を選んでも学習しない
-        var weekday = new Keyboard(converter: converter, history: history, now: () => new DateTime(2026, 10, 8));
+        var weekday = new Keyboard(converter: learner, now: () => new DateTime(2026, 10, 8));
         weekday.Type("10gatsu9nichi ");
         var weekdayIndex = weekday.Host.View!.Candidates.ToList().IndexOf("10月9日(金)");
         for (var i = 0; i < weekdayIndex; i++) weekday.Press(VirtualKeys.Space);
         weekday.Press(VirtualKeys.Return);
         Assert.Equal("10月9日(金)", weekday.Host.Document);
-        Assert.True(history.Get("10がつ9にち") is null, "曜日付きも学習しない");
+        Assert.True(!learner.HasLearned("10がつ9にち", "10月9日(金)", expected: false), "曜日付きも学習しない");
     }
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
@@ -2174,7 +2170,7 @@ internal static class CompositionTests
         Assert.True(candidates.Lookup("ふにゃおす").Contains("弱者男性"), "#1924 ふにゃおす");
 
         // #1548・#1490・#1460: 読みで英字の名前を出す
-        var predictor = new Predictor(null, null, null);
+        var predictor = new Predictor(null, null);
         Assert.True(predictor.PredictEnglishNames("ぜんざい").Contains("Zenzai"), "#1548 ぜんざい");
         Assert.True(predictor.PredictEnglishNames("あずーきー").Contains("azooKey"), "#1548 あずーきー");
         Assert.True(predictor.PredictEnglishNames("もずきー").Contains("Mozkey"), "#1548 もずきー");
@@ -2873,7 +2869,7 @@ internal static class CompositionTests
     public static void Issue349_DeleteForgetsTheSelectedPrediction()
     {
         var phrases = new PhraseHistory(null);
-        var k = new Keyboard(predictor: new Predictor(phrases, null, null));
+        var k = new Keyboard(predictor: new Predictor(phrases, null));
         k.Type("kyou ");
         k.Press(VirtualKeys.Return);
         k.Type("kyo");
@@ -3113,20 +3109,6 @@ internal static class CompositionTests
         plain.Remember("nw", english: true, explicitChoice: true);
         plain.Context = false;
         Assert.Equal(true, plain.Get("nw"), "OFF は今までどおり 1 つだけ");
-    }
-
-    [Test]
-    public static void Issue672_DigitChoiceIsLearned()
-    {
-        var k = new Keyboard(history: new ConversionHistory(null));
-        k.Type("1 ");
-        var candidates = k.Host.View!.Candidates.ToList();
-        Assert.True(candidates.Count >= 2, "候補が 2 つ以上: " + string.Join(",", candidates));
-        k.Press(VirtualKeys.Space);
-        var chosen = k.Host.View!.Candidates[k.Host.View.SelectedIndex];
-        k.Press(VirtualKeys.Return);
-        k.Type("1 ");
-        Assert.Equal(chosen, k.Host.View!.Candidates[k.Host.View.SelectedIndex], "次に同じ数字を変換したら、選んだ候補が先に出る");
     }
 
     [Test]
@@ -3569,25 +3551,14 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Punctuation_ChoiceStaysOnPunctuationOnlyInput()
+    public static void Punctuation_TypedWithKanaStaysAsTyped()
     {
-        // 句読点だけを変換して選んだ候補 (、 → ・) は、句読点だけを変換したときにだけ出す。「わたしは、」の 、 は、覚えた変換履歴・Mozc の学習があっても 、 のまま
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history, moreCandidates: reading => reading == "、" ? ["、", "・"] : []);
-        k.Type(", ");
-        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "・"; i++) k.Press(VirtualKeys.Space);
-        k.Press(VirtualKeys.Return);
-        Assert.Equal("・", k.Host.Document);
-
-        var again = new Keyboard(history: history);
-        again.Type(", ");
-        Assert.Equal("・", again.Showing, "句読点だけを変換すると覚えた候補");
-
+        // 「わたしは、」の 、 は、Mozc の学習で ・ になっても、句読点の設定の 、 のまま
         foreach (var style in Enum.GetValues<Meltype.Config.PunctuationStyle>())
         {
-            var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true)) { Punctuation = style };
+            var live = new Keyboard(live: true, converter: new SymbolChangingConverter(split: true)) { Punctuation = style };
             live.Type("watasiha,");
-            Assert.Equal(CompositionOutput.ToSetting(style, "私は、"), live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
+            Assert.Equal(CompositionOutput.ToSetting(style, "私は、"), live.Showing, style + ": かなと一緒に打った句読点は変換エンジンの記号にしない");
         }
     }
 
@@ -3940,8 +3911,9 @@ internal static class CompositionTests
     [Test]
     public static void Conversion_LearnsUserChoice()
     {
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history);
+        // 選び直した変換は、変換エンジンに覚えさせる
+        var converter = new LearningConverter();
+        var k = new Keyboard(converter: converter);
         k.Type("hashiwo ");
         var candidates = k.Host.View!.Candidates;
         var index = candidates.ToList().IndexOf("箸を");
@@ -3949,19 +3921,16 @@ internal static class CompositionTests
         for (var i = 0; i < index; i++) k.Type(" ");
         k.Type("\n");
         Assert.Equal("箸を", k.Host.Output.Single());
-
-        k = new Keyboard(history: history);
-        k.Type("hashiwo ");
-        Assert.Equal("箸を", k.Host.View!.Clauses![0], "前に選び直した変換が最初の候補になる");
+        Assert.True(converter.HasLearned("はしを", "箸を", expected: true), "変換エンジンに覚えさせる");
     }
 
     [Test]
     public static void LearningOff_RemembersNothing()
     {
         // #277: 設定「ユーザー学習を使う」が OFF なら、選び直した変換も、F10 で英字に直した語も覚えない
-        var history = new ConversionHistory(null);
+        var converter = new LearningConverter();
         var languages = new LanguageMemory(null);
-        var k = new Keyboard(history: history, languages: languages) { Learning = false };
+        var k = new Keyboard(converter: converter, languages: languages) { Learning = false };
         k.Type("hashiwo ");
         var index = k.Host.View!.Candidates.ToList().IndexOf("箸を");
         for (var i = 0; i < index; i++) k.Type(" ");
@@ -3970,7 +3939,7 @@ internal static class CompositionTests
         k.Type("api");
         k.Press(VirtualKeys.F10);
         k.Type("\n");
-        Assert.Equal(0, history.Count, "変換を覚えない");
+        Assert.True(!converter.HasLearned("はしを", "箸を", expected: false), "変換を覚えない");
         Assert.Equal(0, languages.Entries().Count, "英字に直した語を覚えない");
     }
 
@@ -4699,33 +4668,10 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void TypedSymbols_LearnedChoiceStaysOnSymbolOnlyInput()
-    {
-        // 記号だけを変換して選んだ候補 (？ → ⁉) は覚えて、次に記号だけを変換したときに出す (#672)。かなと一緒に打った ？ は ？ のまま (#519)
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history, moreCandidates: reading => reading == "？" ? ["？", "⁉"] : []);
-        k.Type("? ");
-        for (var i = 0; i < 10 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "⁉"; i++) k.Press(VirtualKeys.Space);
-        k.Press(VirtualKeys.Return);
-        Assert.Equal("⁉", k.Host.Document);
-        Assert.Equal("⁉", history.Get("？"), "記号だけの文節で選んだ候補は覚える");
-
-        var again = new Keyboard(history: history);
-        again.Type("? ");
-        Assert.Equal("⁉", again.Showing, "記号だけを変換すると覚えた候補");
-
-        var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true));
-        live.Type("reibunn?");
-        Assert.Equal("例文？", live.Showing, "かなと一緒に打った記号は覚えた候補にしない");
-    }
-
-    [Test]
     public static void TypedSymbols_StayAfterResizingClauses()
     {
-        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジン・変換履歴が 、 を ・ にしても)
-        var history = new ConversionHistory(null);
-        history.Remember("、", "・");
-        var k = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
+        // 文節の区切りを変えて変換し直した文節でも、かなと一緒に打った記号は打ったときの文字のまま (変換エンジンが 、 を ・ にしても)
+        var k = new Keyboard(converter: new SymbolChangingConverter(split: true));
         k.Type("watasiha,kyouha? ");
         Assert.Equal("私は|、|今日は|？", string.Join("|", k.Host.View!.Clauses!));
         k.Press(VirtualKeys.Left);
@@ -4734,12 +4680,12 @@ internal static class CompositionTests
         ShiftArrow(k, VirtualKeys.Right);
         Assert.Equal("私は、|今日は|？", string.Join("|", k.Host.View!.Clauses!), "伸ばした文節");
 
-        var end = new Keyboard(history: history, converter: new SymbolChangingConverter(split: true));
+        var end = new Keyboard(converter: new SymbolChangingConverter(split: true));
         end.Type("kyouha, ");
         end.Press(VirtualKeys.Left);
         ShiftArrow(end, VirtualKeys.Right);
         ShiftArrow(end, VirtualKeys.Left);
-        Assert.Equal("今日は|、", string.Join("|", end.Host.View!.Clauses!), "縮めてできた 、 だけの文節も、覚えた ・ にしない");
+        Assert.Equal("今日は|、", string.Join("|", end.Host.View!.Clauses!), "縮めてできた 、 だけの文節も、変換エンジンの ・ にしない");
     }
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
@@ -4755,19 +4701,21 @@ internal static class CompositionTests
     public static void MathWordSymbolFromEngine_IsNotLearned()
     {
         // #293: 3かける4 の × は変換エンジン (Mozc) の候補から選ぶ。選んでも覚えない (覚えると 電話をかける まで × になる)
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history, moreCandidates: reading => reading == "かける" ? ["×"] : []);
+        var converter = new LearningConverter();
+        var k = new Keyboard(converter: converter, moreCandidates: reading => reading == "かける" ? ["×"] : []);
         k.Type("kakeru ");
         for (var i = 0; i < 20 && k.Host.View!.Candidates[k.Host.View.SelectedIndex] != "×"; i++) k.Press(VirtualKeys.Space);
         k.Press(VirtualKeys.Return);
         Assert.Equal("×", k.Host.Document);
-        Assert.True(history.Get("かける") is null, "記号を選んでも学習しない");
+        Assert.True(!converter.HasLearned("かける", "×", expected: false), "記号を選んでも学習しない");
     }
 
-    /// <summary>覚えさせた文節を記録する変換エンジン (Mozc の代わり)。</summary>
-    private sealed class LearningConverter : IKanjiConverter, ILearningConverter
+    /// <summary>覚えさせた文節を記録する変換エンジン (Mozc の代わり)。変換は inner (省略すると FakeConverter) に頼む。</summary>
+    internal sealed class LearningConverter(IKanjiConverter? inner = null) : IKanjiConverter, ILearningConverter
     {
-        private readonly FakeConverter _inner = new();
+        private readonly IKanjiConverter _inner = inner ?? new FakeConverter();
+
+        /// <summary>覚えさせた文節のまとまり (読み=文字列|読み=文字列 …)。</summary>
         public List<string> Learned { get; } = [];
         public string? Convert(string hiragana) => _inner.Convert(hiragana);
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => _inner.ConvertClauses(hiragana, context);
@@ -4776,6 +4724,13 @@ internal static class CompositionTests
         {
             lock (Learned) Learned.Add(string.Join("|", clauses.Select(c => $"{c.Reading}={c.Text}")));
         }
+
+        /// <summary>
+        /// 読み reading の文節を text として覚えさせたか。Learn は裏のスレッドから呼ばれるので、
+        /// 覚えさせたはず (expected) なら届くまで待ち、覚えさせないはずなら少しだけ待って確かめる。
+        /// </summary>
+        public bool HasLearned(string reading, string text, bool expected) =>
+            SpinWait.SpinUntil(() => { lock (Learned) return Learned.Any(l => l.Split('|').Contains($"{reading}={text}")); }, expected ? 5000 : 100);
     }
 
     /// <summary>しゃーなし を 西なし にする変換エンジン (Mozc の苦手な語の代わり)。</summary>
@@ -4912,12 +4867,6 @@ internal static class CompositionTests
         var k = new Keyboard(converter: converter, userDictionary: new UserDictionary(null));
         k.Type("honntounigakkiwohiku ");
         Assert.Equal("本当に|楽器を|弾く", string.Join("|", k.Host.View!.Clauses!));
-        // 区切りで分けた文節は学習で選び直さない (いち で 市 を選んだことがあっても 一|学期 のまま)
-        var history = new ConversionHistory(null);
-        history.Remember("いち", "市");
-        k = new Keyboard(converter: new IchigakkiConverter(), userDictionary: new UserDictionary(null), history: history);
-        k.Type("itigakki ");
-        Assert.Equal("一|学期", string.Join("|", k.Host.View!.Clauses!));
     }
 
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
@@ -5389,14 +5338,6 @@ internal static class CompositionTests
         Assert.True(k.Converter.LastContext is null, "に 以外で始まる読みには仮の文脈を付けない (はしる → は知る を防ぐ)");
     }
 
-    [Test]
-    public static void Learning_SkipsSingleKana()
-    {
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history);
-        k.Type("ki  \n"); // き を変換して候補を選び直す
-        Assert.Equal(0, history.Count, "1 文字の読みは覚えない (き → 記 が きごうとう まで巻き込むため)");
-    }
 
     [Test]
     public static void Issue1737_SegmentationAlternativesAreSentenceCandidates()
@@ -6068,7 +6009,7 @@ internal static class CompositionTests
     public static void TabConversion_PredictionTakesTabFirst()
     {
         // #219: 予測変換の候補が出ているときの Tab は、今までどおり予測を選ぶ
-        var k = new Keyboard(predictor: new Predictor(new PhraseHistory(null), null, null), tabConversion: true);
+        var k = new Keyboard(predictor: new Predictor(new PhraseHistory(null), null), tabConversion: true);
         k.Type("kyou ");
         k.Press(VirtualKeys.Return);
         k.Type("kyo");

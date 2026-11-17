@@ -51,9 +51,6 @@ internal sealed class CompositionService : IDisposable
     /// <summary>背景の変換の結果が届いた (入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
     public event Action? ConversionReady;
 
-    /// <summary>選び直した変換の学習データ (トレイの「学習データをリセット」で消す)。</summary>
-    public ConversionHistory History => Runtime.History;
-
     /// <summary>ユーザーが英字 / かなに直した語の学習 (トレイの「学習データをリセット」で消す)。</summary>
     public LanguageMemory Languages => Runtime.Languages;
 

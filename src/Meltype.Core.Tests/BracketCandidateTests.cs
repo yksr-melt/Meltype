@@ -254,18 +254,13 @@ internal static class BracketCandidateTests
     [Test]
     public static void Brackets_DoNotCallConvertersOrReadOrWriteLearning()
     {
-        var history = new ConversionHistory(null);
-        history.Remember("「", "【");
-        history.Remember("」", "】");
-        history.Remember("「」", "【】");
-        var version = history.Version;
         var converter = new CountingConverter();
         var moreCalls = 0;
         foreach (var learning in new[] { false, true })
         {
             foreach (var raw in new[] { "[", "]", "[]", "()", "{}", "<>" })
             {
-                var k = new CompositionTests.Keyboard(history: history, converter: converter,
+                var k = new CompositionTests.Keyboard(converter: converter,
                     moreCandidates: _ => { moreCalls++; return ["外部候補"]; })
                 { Learning = learning };
                 k.Type(raw + " ");
@@ -274,7 +269,6 @@ internal static class BracketCandidateTests
                 k.Press(VirtualKeys.Return);
             }
         }
-        Assert.Equal(version, history.Version, "選び直しても履歴を更新しない");
         Assert.Equal(0, converter.Calls, "括弧をエンジンに渡さない");
         Assert.Equal(0, moreCalls, "表示や候補送りでも外部候補を追加しない");
         Assert.True(!converter.Learned.Wait(100), "非同期の外部学習を送らない");

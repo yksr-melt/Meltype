@@ -9,7 +9,7 @@ using Meltype.Config;
 using Meltype.Detection;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var detector = CompositionDetector.CreateDefault(); detector.SpellChecker = BuiltInWordChecker.Shared; var languages = new LanguageMemory(null); detector.Memory = languages;
-var services = new CompositionServices { Languages = languages, Candidates = CandidateDictionary.Load(null), ContextRules = ContextRules.Load(null), History = new ConversionHistory(null), Misspellings = MisspellingDictionary.Load(null), RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji) };
+var services = new CompositionServices { Languages = languages, Candidates = CandidateDictionary.Load(null), ContextRules = ContextRules.Load(null), Misspellings = MisspellingDictionary.Load(null), RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji) };
 var samples = args.Length > 0 ? int.Parse(args[0]) : 15; var lengths = args.Length > 1 ? args[1].Split(',').Select(int.Parse).ToArray() : new[] { 256 };
 var cases = new Dictionary<string, string> { ["long_url"] = "https://example.com/" + new string('a', 300), ["natural_mixed"] = "kyouhaiitenkidesunegoogledekensakushitegithubnipushshita", ["mixed_repeated"] = "googledekaigishitegithubnipushshitapythondekaita", ["japanese"] = "kyouhaiitenkidesunewatashihagakuseidesuyoroshikuonegaishimasu" };
 foreach (var length in lengths) foreach (var pair in cases.Where(p => args.Length < 3 || p.Key == args[2]))

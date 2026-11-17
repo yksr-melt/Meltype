@@ -146,7 +146,7 @@ internal static class BackgroundConversionTests
         var phrases = new PhraseHistory(null);
         phrases.Remember("とることができる", "取ることができる");
         var session = new MeltypeSession(CompositionTests.Detector, converter,
-            new CompositionServices { Predictor = new Predictor(phrases, null, null) }, () => new Settings { LiveConversion = true, PredictiveCandidates = true });
+            new CompositionServices { Predictor = new Predictor(phrases, null) }, () => new Settings { LiveConversion = true, PredictiveCandidates = true });
         Assert.Equal(0, SessionFacadeTests.Type(session, "tanniwotoru")[^1].View?.Predictions?.Count ?? 0);
 
         release.Set();

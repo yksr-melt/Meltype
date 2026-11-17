@@ -97,8 +97,8 @@ internal static class NowAndClockTests
     public static void Issue1400_ChosenSongIsNotLearned()
     {
         // 選んだ曲は学習しない (次の「なう」で前の曲が最初に出ないように)
-        var history = new ConversionHistory(null);
-        var k = new Keyboard(history: history) { NowPlayingCandidates = true };
+        var converter = new LearningConverter();
+        var k = new Keyboard(converter: converter) { NowPlayingCandidates = true };
         k.Host.NowPlaying = ("夜に駆ける", "YOASOBI");
         k.Type("nau ");
         var index = k.Host.View!.Candidates.ToList().IndexOf("夜に駆ける");
@@ -106,7 +106,7 @@ internal static class NowAndClockTests
         for (var i = 0; i < index; i++) k.Press(VirtualKeys.Space);
         k.Press(VirtualKeys.Return);
         Assert.Equal("夜に駆ける", k.Host.Document);
-        Assert.Equal(null, history.Get("なう"), "学習しない");
+        Assert.True(!converter.HasLearned("なう", "夜に駆ける", expected: false), "学習しない");
     }
 
     [Test]

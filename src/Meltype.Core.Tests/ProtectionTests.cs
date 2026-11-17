@@ -111,7 +111,6 @@ internal static class ProtectionTests
         {
             Candidates = CandidateDictionary.Load(null),
             ContextRules = ContextRules.Load(null),
-            History = new ConversionHistory(null),
             Misspellings = MisspellingDictionary.Load(null),
             RomajiTypos = RomajiTypoCorrector.Load(CompositionTests.Detector.Romaji),
             Languages = languages,
