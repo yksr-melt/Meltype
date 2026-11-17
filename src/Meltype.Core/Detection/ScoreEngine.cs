@@ -55,7 +55,7 @@ public sealed class ScoreEngine
 
     public DetectionResult Evaluate(DetectionInput input) => Evaluate(input, _settings());
 
-    /// <summary>設定画面の判定テスト用に、保存前の設定で判定できるようにしてある。</summary>
+    /// <summary>呼び出し側が渡した設定で判定する。</summary>
     public DetectionResult Evaluate(DetectionInput input, Settings settings)
     {
         const int threshold = JapaneseThreshold;
