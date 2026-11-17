@@ -430,6 +430,10 @@ public sealed class Settings
      Description("入力中 (変換ボックスに文字があるとき) の Space・変換・無変換・ひらがな/カタカナ キーの役割を分けます。Space: 英語・日本語の判定にかかわらず候補を開く (英字で見えている語も、確定して空白を入れずに候補を出す)。変換: 日本語を優先して変換。無変換: 英字にする。ひらがな/カタカナ: ひらがな ⇔ カタカナ。確定は Enter です。何も打っていないときの各キーは今までどおりです。")]
     public bool SeparateKeyRoles { get; set; }
 
+    [Category("8. キー操作"), DisplayName("無変換でカタカナを切り替える"), Platforms(Platform.Windows | Platform.Linux),
+     Description("入力中に無変換キーを押すたびに、ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に切り替えます。「入力中のキーの役割を分ける」の無変換キーの動作より優先します。")]
+    public bool NonConvertCyclesKana { get; set; }
+
     [Category("4. 判定"), DisplayName("英字を主に入力 (変換キー / ↓ で日本語に)"),
      Description("自動判定をせず、打った英字をそのまま入力中にします (Space は空白、Enter は英字のまま確定)。日本語にしたい語は、変換キーか ↓ を押すと、ローマ字として読んで変換します。コマンドを多く打つ使い方向けで、Microsoft IME の「主に英語を入力する」と同じ動きです。")]
     public bool EnglishFirstInput { get; set; }
