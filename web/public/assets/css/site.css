@@ -3630,3 +3630,11 @@ em {
   color: var(--muted);
   margin-bottom: 10px;
 }
+
+.typing-intro > .hint {
+  margin: 10px 0 0;
+}
+
+.typing-intro .btn-large {
+  margin-top: 16px;
+}

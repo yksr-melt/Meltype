@@ -7,7 +7,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>タイピング | Meltype</title>
-  <meta name="description" content="ローマ字で日本語の文を打つタイピングです。打った記録を、ローマ字入力の打ち間違いの調査に送ることもできます。">
+  <meta name="description" content="日本語の文をローマ字打ち・かな打ちなどで打つタイピングです。打った記録を、ローマ字入力の打ち間違いの調査に送ることもできます。">
   <meta name="theme-color" content="#3aaee8">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Meltype">
@@ -56,7 +56,7 @@
     <section class="page-hero" aria-labelledby="typing-title">
       <div class="wrap">
         <h1 id="typing-title">タイピング</h1>
-        <p>お手本の日本語の文を、ローマ字で打ちます。打ち終わったら、打った記録を「どのキーが抜けやすいか」「どこで打ち間違えやすいか」の調査に送ることもできます (送らなくても遊べます)。日本語のローマ字入力では、こうした公開データがほとんどありません。</p>
+        <p>お手本の日本語の文を、ローマ字打ち・かな打ちや Meltype で使える配列で打ちます。打ち終わったら、打った記録を「どのキーが抜けやすいか」「どこで打ち間違えやすいか」の調査に送ることもできます (送らなくても遊べます)。日本語のローマ字入力では、こうした公開データがほとんどありません。</p>
         <ul class="points">
           <li><svg class="ic"><use href="/assets/img/icons.svg#i-clock"/></svg>10 文で 3 分ほど</li>
           <li><svg class="ic"><use href="/assets/img/icons.svg#i-user"/></svg>名前・メールアドレスは要りません</li>
@@ -71,7 +71,26 @@
       <!-- 1. はじめる -->
       <form class="card typing-intro" novalidate data-intro>
         <h2 class="step-title"><span class="step-no">1</span>はじめる</h2>
-        <p class="hint">調査に送るときに使う質問です。答えなくても遊べます。</p>
+        <div class="fields typing-profile">
+          <div class="field">
+            <label for="style">打ち方</label>
+            <select class="select" id="style" name="style" data-style>
+              <option value="qwerty">ローマ字打ち</option>
+              <option value="jis-kana">かな打ち (JIS かな)</option>
+              <option value="other">そのほかの配列</option>
+            </select>
+          </div>
+          <div class="field" hidden data-other-wrap>
+            <label for="other">配列</label>
+            <select class="select" id="other" name="other" data-other></select>
+          </div>
+          <div class="field">
+            <label for="kind">文の種類</label>
+            <select class="select" id="kind" name="kind" data-kind></select>
+          </div>
+        </div>
+        <p class="hint" data-layout-hint></p>
+        <p class="hint">次の質問は、調査に送るときに使います。答えなくても遊べます。</p>
         <div class="fields typing-profile">
           <div class="field">
             <label for="touch">タッチタイピング (キーを見ずに打つ)</label>
@@ -91,15 +110,6 @@
               <option value="other">そのほか</option>
             </select>
           </div>
-          <div class="field">
-            <label for="method">ふだんの日本語の打ち方</label>
-            <select class="select" id="method" name="method">
-              <option value="unknown">答えない</option>
-              <option value="romaji">ローマ字入力</option>
-              <option value="kana">かな入力</option>
-              <option value="other">そのほか</option>
-            </select>
-          </div>
         </div>
         <button class="btn btn-pink btn-large" type="submit" data-start>
           <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>はじめる
@@ -113,7 +123,7 @@
           <p class="typing-progress"><b data-count>1</b> / <span data-total>10</span></p>
         </div>
         <ol class="typing-howto">
-          <li>IME をオフ (半角英数) にしてください。ローマ字をそのまま打ちます</li>
+          <li>IME をオフ (半角英数) にしてください。選んだ打ち方のまま、キーをそのまま打ちます</li>
           <li>間違えたら <kbd>Backspace</kbd> で直しても、そのまま進んでも大丈夫です。ふだん通りに打ってください</li>
           <li>打ち終わったら <kbd>Enter</kbd> で次の文へ進みます</li>
         </ol>
@@ -148,8 +158,9 @@
           <div class="typing-terms">
             <h4>送るもの</h4>
             <ul>
-              <li>いま打った文ごとの、押したキー (キーの種類・押した時刻と離した時刻) と、打ち終わった文字</li>
+              <li>いま打った文ごとの、押したキー (キーの種類・押した時刻と離した時刻) と、打ち終わった文字、打ち方 (配列)</li>
               <li>はじめに答えた質問の答えと、OS の種類</li>
+              <li>お手本と関係ない入力が続いた文は送りません</li>
               <li>参加ごとのランダムな番号 (同じ人の打ち方をまとめて見るため)</li>
             </ul>
             <h4>送らないもの・使い方</h4>
@@ -159,11 +170,14 @@
               <li>Meltype の打ち間違いの直し方・変換を良くするために使います。研究用のデータとして公開することがあり、そのときも参加ごとのランダムな番号のほかに、人を特定するための手がかりは入れません</li>
               <li>このブラウザーで同意して送ったデータは、ページの下のボタンでいつでも消せます (公開したあとのデータからは消せません)</li>
             </ul>
-            <p class="hint">18 歳未満の方は、おうちの人に確かめてから送ってください。</p>
           </div>
           <label class="typing-consent">
             <input type="checkbox" data-consent>
             <span>上の内容を読んで、調査に送ることに同意します</span>
+          </label>
+          <label class="typing-consent">
+            <input type="checkbox" data-guardian>
+            <span>18 歳以上です。または、18 歳未満で、保護者の許可をもらっています</span>
           </label>
           <div class="submit-actions">
             <div class="cf-turnstile" data-sitekey="" data-turnstile></div>

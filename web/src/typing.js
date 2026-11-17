@@ -5,7 +5,8 @@
 // ページは誰でも遊べ、打鍵は調査に同意した人のものだけを受け付ける。
 // 決まり: 受け付けるのはお手本の id と、それを打った打鍵だけ (自由に書いた文章を送る欄は作らない)。
 // 決まり: IP はハッシュにして回数制限と利用禁止 (typing_bans) にだけ使い、書き出しには入れない。
-import { align, finalKana } from "../public/assets/js/romaji.js";
+import { accuracyOf, kanaOf, suspicious } from "../public/assets/js/typing-check.js";
+import { LAYOUT_IDS } from "../public/assets/js/typing-layouts.js";
 import { sentenceById } from "../public/assets/js/typing-sentences.js";
 import { error, json, now, randomToken, readJson, sha256Hex } from "./http.js";
 import { claimRate, hashIp, verifyTurnstile } from "./reports.js";
@@ -16,7 +17,7 @@ const TYPING_RATE = { kind: "typing", window: 10 * 60, windowLimit: 3, dayLimit:
 // 1 回の参加で打鍵を送れる時間と文の数。休みながら続けて打っても足りる量にしてある
 const SESSION_HOURS = 12;
 const MAX_TRIALS = 1200;
-// 1 文の打鍵の上限は、読み 1 字あたりローマ字 3 打 + Shift・打ち直しの余裕を見て 12 打。
+// 1 文の打鍵の上限は、読み 1 字あたりローマ字 3 打 + Shift・親指キー・打ち直しの余裕を見て 12 打。
 // 文ごとの書き込みの大きさをお手本の長さで抑える (いちばん長い文で 1 文 10 KB ほど)
 const KEYS_PER_KANA = 12;
 const TYPED_PER_KANA = 6;
@@ -31,7 +32,6 @@ const CLIENTS = ["web", "cli"];
 export const PROFILE_CHOICES = {
   touch: ["yes", "partly", "no", "unknown"],
   layout: ["jis", "us", "other", "unknown"],
-  method: ["romaji", "kana", "other", "unknown"],
   os: ["windows", "mac", "linux", "chromeos", "other"],
 };
 
@@ -64,6 +64,8 @@ export async function createSession(request, env) {
   const { body, error: invalid } = await readJson(request, 8 * 1024);
   if (invalid) return invalid;
   if (!body || body.consent !== true) return error(400, "参加への同意を確かめられませんでした");
+  // 18 歳未満は保護者の許可をもらってから送る。ページの「18 歳以上か、保護者の許可をもらっている」の確認
+  if (body.adultOrGuardian !== true) return error(400, "18 歳以上か、保護者の許可をもらっているかを確かめられませんでした");
   if (!env.IP_HASH_SALT) {
     console.error("IP_HASH_SALT が設定されていないため、タイピング調査を受け付けていません");
     return error(503, "いまは受け付けられません。時間をおいてもう一度試してください");
@@ -105,13 +107,6 @@ export function validKeys(keys, max) {
   return out;
 }
 
-// かなにしたときの、お手本の読みとの一致率 (結果の画面の「正確さ」と同じ数え方)
-export function accuracyOf(reading, typed) {
-  const length = [...reading].length;
-  const wrong = align(reading, finalKana(typed)).filter((op) => op.op !== "same").length;
-  return Math.max(0, 1 - wrong / length);
-}
-
 export async function addTrial(request, env) {
   const token = bearer(request);
   const session = token && (await sessionFor(token, env));
@@ -124,18 +119,23 @@ export async function addTrial(request, env) {
   if (!sentence) return error(400, "お手本の文が見つかりません");
   const length = [...sentence.reading].length;
   const typed = body.typed;
-  if (typeof typed !== "string" || typed.length > length * TYPED_PER_KANA || !/^[\x20-\x7e]*$/.test(typed)) return error(400, "打った文字の形式が正しくありません");
+  // ローマ字の配列は打った綴り、かなの配列は打ったかな (typing-layouts.js)
+  if (typeof typed !== "string" || typed.length > length * TYPED_PER_KANA || !/^[\x20-\x7eぁ-ゖー、。・゛゜「」]*$/.test(typed)) return error(400, "打った文字の形式が正しくありません");
   const keys = validKeys(body.keys, length * KEYS_PER_KANA);
   if (!keys) return error(400, "打鍵の記録の形式が正しくありません");
   if (!isInt(body.duration, 1, MAX_MS)) return error(400, "かかった時間の形式が正しくありません");
   const client = body.client === undefined ? "web" : body.client;
   if (!CLIENTS.includes(client)) return error(400, "打った場所の形式が正しくありません");
+  const layout = body.layout === undefined ? "qwerty" : body.layout;
+  if (!LAYOUT_IDS.includes(layout)) return error(400, "配列の形式が正しくありません");
+  // 名前など、お手本と関係ない入力が続く文は残さない (ページと CLI も送る前に同じ判定で止める)
+  if (suspicious(sentence.reading, typed, layout)) return error(422, "お手本と関係ない入力が続いたので、この文は受け付けません");
 
   const inserted = await env.DB.prepare(
-    "INSERT INTO typing_trials (session_id, sentence_id, typed, keys, keystrokes, accuracy, client, duration_ms, created_at) " +
-      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?10 RETURNING id",
+    "INSERT INTO typing_trials (session_id, sentence_id, typed, keys, keystrokes, accuracy, client, layout, duration_ms, created_at) " +
+      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?11 RETURNING id",
   )
-    .bind(session.id, sentence.id, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, typed), client, body.duration, now(), MAX_TRIALS)
+    .bind(session.id, sentence.id, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, kanaOf(layout, typed)), client, layout, body.duration, now(), MAX_TRIALS)
     .first();
   if (!inserted) return error(429, `1 回の参加で送れるのは ${MAX_TRIALS} 文までです。ありがとうございました！`);
   return json({ id: inserted.id }, { status: 201 });
@@ -200,7 +200,7 @@ export async function exportTrials(env, url) {
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
   const { results } = await env.DB.prepare(
-    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.typed, t.keys, t.accuracy, t.client, t.duration_ms, t.created_at " +
+    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.typed, t.keys, t.accuracy, t.client, t.layout, t.duration_ms, t.created_at " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.id > ? ORDER BY t.id LIMIT ?",
   )
     .bind(after, limit + 1)
@@ -219,6 +219,7 @@ export async function exportTrials(env, url) {
       keys: JSON.parse(row.keys),
       accuracy: row.accuracy,
       client: row.client,
+      layout: row.layout,
       duration_ms: row.duration_ms,
       created_at: row.created_at,
     };

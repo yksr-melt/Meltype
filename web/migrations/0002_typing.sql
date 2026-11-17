@@ -27,6 +27,8 @@ CREATE TABLE typing_trials (
   accuracy REAL NOT NULL,
   -- どこで打ったか。web はブラウザー (キーの code と離した時刻がある)、cli はターミナル (打った文字だけで、離した時刻は null)
   client TEXT NOT NULL,
+  -- 打った配列 (public/assets/js/typing-layouts.js の id)。ローマ字の配列なら typed はローマ字の綴り、かなの配列ならかな
+  layout TEXT NOT NULL,
   duration_ms INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );

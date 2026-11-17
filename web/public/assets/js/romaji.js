@@ -137,3 +137,36 @@ export function align(target, typed) {
   }
   return ops.reverse();
 }
+
+// かなを、ヘボン式のローマ字の 1 つの打ち方にする。打ったキーがお手本からどれだけ離れているかを見るのに使う (typing-check.js)
+const HEPBURN = { し: "shi", ち: "chi", つ: "tsu", ふ: "fu", じ: "ji", ぢ: "di", づ: "du", を: "wo", ん: "nn", ー: "-", "、": ",", "。": "." };
+const TO_ROMAJI = new Map();
+for (const [key, value] of TABLE) {
+  // 綴りの短いもの (x・l で始まらないもの) を優先する
+  const current = TO_ROMAJI.get(value);
+  const better = !current || (key[0] !== "x" && key[0] !== "l" && (current[0] === "x" || current[0] === "l" || key.length < current.length));
+  if (better && !/['n]$/.test(key)) TO_ROMAJI.set(value, key);
+}
+for (const [kana, key] of Object.entries(HEPBURN)) TO_ROMAJI.set(kana, key);
+for (const [kana, small] of [["しゃ", "sha"], ["しゅ", "shu"], ["しょ", "sho"], ["ちゃ", "cha"], ["ちゅ", "chu"], ["ちょ", "cho"], ["じゃ", "ja"], ["じゅ", "ju"], ["じょ", "jo"]]) TO_ROMAJI.set(kana, small);
+
+export function toRomaji(kana) {
+  const chars = [...kana];
+  let out = "";
+  for (let i = 0; i < chars.length; i += 1) {
+    if (chars[i] === "っ") {
+      // 次の音の子音を重ねる
+      const next = TO_ROMAJI.get(chars[i + 1] + (chars[i + 2] || "")) || TO_ROMAJI.get(chars[i + 1]) || "";
+      out += /^[a-z]/.test(next) && !/^[aiueon]/.test(next) ? next[0] : "xtu";
+      continue;
+    }
+    const pair = TO_ROMAJI.get(chars[i] + (chars[i + 1] || ""));
+    if (pair && chars[i + 1]) {
+      out += pair;
+      i += 1;
+      continue;
+    }
+    out += TO_ROMAJI.get(chars[i]) ?? chars[i];
+  }
+  return out;
+}

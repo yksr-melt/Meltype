@@ -7,10 +7,11 @@
 //   node meltype-typing.mjs --token 番号     番号を渡して始める (環境変数 MELTYPE_TYPING_TOKEN でもよい)
 //   node meltype-typing.mjs --no-send       送らずに遊ぶ
 //   node meltype-typing.mjs --count 20      打つ文の数 (既定は 10)
+//   node meltype-typing.mjs --kind chat     文の種類 (plain: ふつう・formal: 硬め・chat: ネットの会話。既定は plain)
 //   node meltype-typing.mjs --site URL      別のサイトにつなぐ (開発用)
 // 番号は、ブラウザーのページで調査への同意をしたあとに出る「ターミナルで打つ」の番号。同意していない人は送れない。
 // 決まり: お手本とローマ字の読み替えはサイトから読み込む (ページと同じものを使い、このファイルを配り直さずに済むように)。
-// ターミナルでは押した文字しか分からない。キーを離した時刻は null、Shift は記録しない (送るときに client: "cli" を付けて分ける)。
+// ターミナルではローマ字打ち (QWERTY) だけ。押した文字しか分からないので、キーを離した時刻は null、Shift は記録しない (送るときに client: "cli" を付けて分ける)。
 import { createInterface } from "node:readline/promises";
 import { performance } from "node:perf_hooks";
 
@@ -22,6 +23,7 @@ const option = (name) => {
 const site = (option("--site") || "https://meltype.moe").replace(/\/+$/, "");
 const count = Math.max(1, Math.min(60, Number(option("--count")) || 10));
 const noSend = args.includes("--no-send");
+const kind = option("--kind") || "plain";
 
 const out = process.stdout;
 const dim = (text) => `\x1b[2m${text}\x1b[0m`;
@@ -36,16 +38,31 @@ function die(message) {
 
 if (!process.stdin.isTTY) die("ターミナルで開いてください (キーを 1 つずつ読むため、パイプやリダイレクトでは動きません)");
 
-async function load(path) {
-  const response = await fetch(`${site}${path}`);
-  if (!response.ok) throw new Error(`${path} を読めません (${response.status})`);
-  return import(`data:text/javascript;charset=utf-8,${encodeURIComponent(await response.text())}`);
+// サイトのモジュールを読む。data: の URL には相対パスが使えないので、"./x.js" の import も読んで data: の URL に置き換える
+const sources = new Map();
+async function source(path) {
+  if (!sources.has(path)) {
+    sources.set(
+      path,
+      (async () => {
+        const response = await fetch(`${site}${path}`);
+        if (!response.ok) throw new Error(`${path} を読めません (${response.status})`);
+        let text = await response.text();
+        const dir = path.slice(0, path.lastIndexOf("/") + 1);
+        for (const [, dep] of text.matchAll(/from "\.\/([\w.-]+\.js)"/g)) text = text.replaceAll(`"./${dep}"`, JSON.stringify(await source(dir + dep)));
+        return `data:text/javascript;charset=utf-8,${encodeURIComponent(text)}`;
+      })(),
+    );
+  }
+  return sources.get(path);
 }
+const load = async (path) => import(await source(path));
 
-let SENTENCES, toKana, finalKana, align;
+let SENTENCES, KINDS, toKana, finalKana, align, suspicious;
 try {
-  ({ SENTENCES } = await load("/assets/js/typing-sentences.js"));
+  ({ SENTENCES, KINDS } = await load("/assets/js/typing-sentences.js"));
   ({ toKana, finalKana, align } = await load("/assets/js/romaji.js"));
+  ({ suspicious } = await load("/assets/js/typing-check.js"));
 } catch (e) {
   die(`サイトにつながりません: ${e.message}`);
 }
@@ -64,6 +81,7 @@ let sending = Boolean(token);
 let queue = Promise.resolve();
 let sent = 0;
 let sendError = "";
+let skipped = 0;
 
 function send(trial) {
   if (!sending) return;
@@ -73,7 +91,7 @@ function send(trial) {
       const response = await fetch(`${site}/api/typing/trials`, {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-        body: JSON.stringify({ ...trial, client: "cli" }),
+        body: JSON.stringify({ ...trial, client: "cli", layout: "qwerty" }),
       });
       if (response.ok) {
         sent += 1;
@@ -106,7 +124,8 @@ function shuffle(items) {
   return array;
 }
 
-const queueOfSentences = shuffle(SENTENCES).slice(0, count);
+if (!KINDS.some((k) => k.id === kind)) die(`--kind は ${KINDS.map((k) => k.id).join("・")} のどれかにしてください`);
+const queueOfSentences = shuffle(SENTENCES.filter((s) => s.kind === kind)).slice(0, count);
 const results = [];
 let index = 0;
 let trial;
@@ -149,7 +168,9 @@ function finishSentence() {
   const sentence = queueOfSentences[index];
   const duration = Math.max(1, Math.round(performance.now() - trial.startedAt));
   results.push({ sentence, typed: trial.typed, duration, backspaces: trial.backspaces });
-  send({ sentence: sentence.id, typed: trial.typed, keys: trial.keys, duration });
+  // お手本と関係ない入力が続いた文は送らない (サーバーも同じ判定で受け付けない)
+  if (suspicious(sentence.reading, trial.typed, "qwerty")) skipped += 1;
+  else send({ sentence: sentence.id, typed: trial.typed, keys: trial.keys, duration });
   nextSentence();
 }
 
@@ -237,6 +258,7 @@ async function finish() {
     await queue;
     if (sendError) out.write(`  ${red(`${sent} 文を送りました。${sendError}`)}\n`);
     else out.write(`  ${sent} 文の記録を送りました。ありがとうございます！\n`);
+    if (skipped) out.write(`  ${dim(`お手本と関係ない入力が続いた ${skipped} 文は送りませんでした。`)}\n`);
   }
   process.exit(0);
 }
