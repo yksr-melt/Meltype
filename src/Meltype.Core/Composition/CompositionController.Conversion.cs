@@ -669,19 +669,19 @@ public sealed partial class CompositionController
         var standalone = inContext is null ? Convert(reading, converter) : Standalone(reading);
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
-        return DistinctShown([inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
+        return DistinctShown(c => ComposedText.Converted(reading, c), [inContext, .. _services.UserDictionary?.Lookup(reading) ?? [], standalone, .. _services.Candidates?.LookupWords(reading) ?? [],
             reading, katakana, CompositionText.ToHalfWidthKatakana(katakana), .. _services.Candidates?.LookupDomain(reading) ?? [], .. EmojiBlock(reading)]);
     }
 
     /// <summary>
-    /// 入力欄に出る文字 (設定の句読点にした文字) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、変換エンジンが返す 、 と ， が同じ ， になる。
-    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。区間の種類を出口まで渡せば要らなくなる (#1735)。
+    /// 入力欄に出る文字 (打った句読点を設定の句読点にした文字) が同じ候補は、最初の 1 つだけ残す。「，．」の設定では、打った 、 の候補の 、 と ， が同じ ， になる。
+    /// 変換エンジンの候補が入る所 (この関数を呼ぶ所) だけで重複を消す。compose は候補を打った句読点の区間と一緒にする関数。
     /// </summary>
-    private List<string> DistinctShown(IEnumerable<string?> candidates)
+    private List<string> DistinctShown(Func<string, ComposedText> compose, IEnumerable<string?> candidates)
     {
         var style = _settings().Punctuation;
         var shown = new HashSet<string>(StringComparer.Ordinal);
-        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.ToSetting(style, c)))];
+        return [.. candidates.OfType<string>().Where(c => c.Length > 0 && shown.Add(CompositionOutput.Render(style, compose(c))))];
     }
 
     /// <summary>絵文字・顔文字の候補を、最後に並べる順 (逆順: いちばんよく使うものが最後) で。</summary>
@@ -789,7 +789,7 @@ public sealed partial class CompositionController
         var anchor = clause.IsEnglish ? clause.Candidates.IndexOf(reading) : Math.Max(DictionaryWordsEnd(clause, reading), clause.Leading - 1);
         if (anchor < 0) return;
         var current = clause.Text;
-        var merged = DistinctShown([.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
+        var merged = DistinctShown(clause.Compose, [.. clause.Candidates.Take(anchor + 1), .. more(reading).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
     }
@@ -932,12 +932,16 @@ public sealed partial class CompositionController
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private string LiveConvert(string kana, bool afterEnglish)
+    private ComposedText LiveConvert(string kana, bool afterEnglish)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
-        if (!CountsAsLive(kana)) return kana;
-        return string.Concat(LiveClauses(kana, afterEnglish).Select(c => c.Text));
+        if (!CountsAsLive(kana)) return ComposedText.Kana(kana);
+        return ComposedText.Concat(LiveClauses(kana, afterEnglish).Select(c => ComposedText.Converted(c.Reading, c.Text)));
     }
+
+    /// <summary>日本語の区間を、背景の変換を待って変換した文字。</summary>
+    private ComposedText ConvertedText(string kana, bool afterEnglish) =>
+        ComposedText.Concat(ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => c.Composed));
 
     /// <summary>
     /// ライブ変換するだけの拍があるか。小書きの母音・拗音は直前のかなと合わせて 1 拍 (きょ・ふゅ・しぃ は 1 拍)、っ・ん・ー は 1 拍と数える。
