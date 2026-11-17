@@ -90,7 +90,7 @@ jobs:
           fi
       - name: Upload test code reproducibility evidence and APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-qa-report-and-debug-apk
           path: |
@@ -162,7 +162,7 @@ jobs:
             bash android/tools/run-instrumentation-tests.sh
       - name: Upload Android 17 IME test and recovery evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: android-17-ime-smoke-report
           path: android/build/qa/

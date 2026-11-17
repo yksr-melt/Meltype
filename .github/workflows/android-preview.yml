@@ -71,7 +71,7 @@ jobs:
           sha256sum build/preview/Meltype-debug-ephemeral.apk > build/preview/apk-sha256.txt
       - name: Upload freshly compiled debug APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: meltype-android-debug-build-check
           path: |
