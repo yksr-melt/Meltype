@@ -20,11 +20,22 @@ import gi
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, IBus
 
+# PyGObject 3.56はシグナル引数のfloating参照をPython側で引き取る。
+# IBusがシグナル配送後に参照を確認するまで、ラッパーを生存させる。
+_signal_objects = []
+
+def signal_handler(callback):
+    def invoke(*args):
+        _signal_objects.extend(arg for arg in args if isinstance(arg, IBus.Serializable))
+        return callback(*args)
+    return invoke
+
 def pump(seconds=0.05):
     deadline = time.monotonic() + seconds
     while time.monotonic() < deadline:
         while GLib.MainContext.default().pending():
             GLib.MainContext.default().iteration(False)
+            _signal_objects.clear()
         time.sleep(0.002)
 
 def wait(predicate, description, timeout=15):
@@ -110,14 +121,16 @@ class EngineTests(unittest.TestCase):
         client = "gtk3-im:code" if self._testMethodName == "test_native_application_code_mode" else "Meltype-FLASH integration"
         self.context = self.bus.create_input_context(client)
         self.addCleanup(self.context.destroy)
-        self.context.connect("commit-text", self.commit)
-        self.context.connect("forward-key-event", self.forward)
-        self.context.connect("update-preedit-text", self.preedit)
-        self.context.connect("update-lookup-table", self.lookup)
-        self.context.connect("hide-lookup-table", lambda *_: self.candidates.clear())
-        self.context.connect("update-auxiliary-text", lambda _ic, text, visible: setattr(self, "auxiliary", text.get_text() if visible else ""))
-        self.context.connect("delete-surrounding-text", self.delete)
-        self.context.connect("require-surrounding-text", self.require_surrounding)
+        def connect(name, callback):
+            self.context.connect(name, signal_handler(callback))
+        connect("commit-text", self.commit)
+        connect("forward-key-event", self.forward)
+        connect("update-preedit-text", self.preedit)
+        connect("update-lookup-table", self.lookup)
+        connect("hide-lookup-table", lambda *_: self.candidates.clear())
+        connect("update-auxiliary-text", lambda _ic, text, visible: setattr(self, "auxiliary", text.get_text() if visible else ""))
+        connect("delete-surrounding-text", self.delete)
+        connect("require-surrounding-text", self.require_surrounding)
         self.context.set_capabilities(int(IBus.Capabilite.PREEDIT_TEXT | IBus.Capabilite.AUXILIARY_TEXT | IBus.Capabilite.LOOKUP_TABLE | IBus.Capabilite.FOCUS | IBus.Capabilite.PROPERTY | IBus.Capabilite.SURROUNDING_TEXT))
         self.context.focus_in()
         pump()
