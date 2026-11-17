@@ -1653,24 +1653,16 @@ internal static class RomajiTypoTests
         // 日本語の語の後ろの付属語と、付属語だけを打った入力 (masu) は今までどおり。
         // getsu も 月 になってほしいが、まだ get す になる: get + する の打ちかけ (get|す = 2) が、語にならないかな 2 音 (げ|つ = 6) より軽い。
         // げつ は readings.txt (JMdict のよく使う語) に無い
-        CompositionTests.Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var (typed, expected) in new[]
         {
-            foreach (var (typed, expected) in new[]
-            {
-                ("getu", "げつ"), ("hituatu", "ひつあつ"), ("shunpatu", "しゅんぱつ"), ("repro", "repro"), ("diffmireba", "diffみれば"),
-                ("masu", "ます"), ("tari", "たり"), ("ikou", "いこう"), ("yomou", "よもう"), ("utau", "うたう"), ("ureta", "うれた"), ("reigai", "れいがい"), ("teire", "ていれ"),
-                ("getup", "getup"), ("pushsita", "pushした"),
-            })
-            {
-                var k = new CompositionTests.Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
-            }
-        }
-        finally
+            ("getu", "げつ"), ("hituatu", "ひつあつ"), ("shunpatu", "しゅんぱつ"), ("repro", "repro"), ("diffmireba", "diffみれば"),
+            ("masu", "ます"), ("tari", "たり"), ("ikou", "いこう"), ("yomou", "よもう"), ("utau", "うたう"), ("ureta", "うれた"), ("reigai", "れいがい"), ("teire", "ていれ"),
+            ("getup", "getup"), ("pushsita", "pushした"),
+        })
         {
-            CompositionTests.Detector.SpellChecker = null;
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 
@@ -1680,26 +1672,18 @@ internal static class RomajiTypoTests
         // Issue #1784・#1761・#1764: よく使う語でない長い読み (かんれんづける・くるまどめ・ぼごわしゃ) が無く、英単語に負けていた (関連|duke)。
         // よく使う語どうしの区切り (きょうは|image) は割らない。カタカナの読みの外来語 (vitamin) は英語のまま。打ち間違い直しには使わない (shuppnbutsu)。
         // katakana.txt と重なる読み (おねしゃす) は katakana.txt の重みのまま
-        CompositionTests.Detector.SpellChecker = TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var (typed, expected) in new[]
         {
-            foreach (var (typed, expected) in new[]
-            {
-                ("kanrenduke", "かんれんづけ"), ("kurumadome", "くるまどめ"), ("bogowasha", "ぼごわしゃ"),
-                ("kyouhaimagewotsukuru", "きょうはimageをつくる"), ("kyouhaimagega", "きょうはimageが"), ("kyouhainitwo", "きょうはinitを"), ("konodotwo", "このdotを"),
-                ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
-                // katakana.txt にもある読みは、katakana.txt の重みのまま
-                ("oneshasu", "おねしゃす"),
-            })
-            {
-                var k = new CompositionTests.Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
-            }
-        }
-        finally
+            ("kanrenduke", "かんれんづけ"), ("kurumadome", "くるまどめ"), ("bogowasha", "ぼごわしゃ"),
+            ("kyouhaimagewotsukuru", "きょうはimageをつくる"), ("kyouhaimagega", "きょうはimageが"), ("kyouhainitwo", "きょうはinitを"), ("konodotwo", "このdotを"),
+            ("vitamin", "vitamin"), ("paranoia", "paranoia"), ("veteran", "veteran"), ("shuppnbutsu", "しゅっぱんぶつ"),
+            // katakana.txt にもある読みは、katakana.txt の重みのまま
+            ("oneshasu", "おねしゃす"),
+        })
         {
-            CompositionTests.Detector.SpellChecker = null;
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 }
