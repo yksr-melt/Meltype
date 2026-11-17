@@ -22,6 +22,7 @@
     {
       "binding": "TYPING_DB",
       "database_name": "meltype-typing",
+      "database_id": "7d38d239-c8b2-44b0-bdc3-c69c1925a15b",
       "migrations_dir": "migrations-typing"
     }
   ],
