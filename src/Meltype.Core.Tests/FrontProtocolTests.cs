@@ -27,12 +27,12 @@ internal static class FrontProtocolTests
             // Meltype.exe (TipServer) の応答: 背景の変換の結果の待ち合わせと、別ビルドの impl への応答
             Others: ["generation", "stale"]),
         new("fcitx5", "linux/fcitx5/meltype.cpp", source => source, new(@"\b(?:get|str|flag|integer|strings)\(""(\w+)"""),
-            Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
+            Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             Others: []),
         new("IBus", "linux/ibus-engine-meltype", source => source, new(@"\[""(\w+)""\]|\.get\(""(\w+)"""),
-            Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases", "altKeys"],
+            Unused: ["version", "handlesInput", "imeOpen", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
+                "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
         new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,

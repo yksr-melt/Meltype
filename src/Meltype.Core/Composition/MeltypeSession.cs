@@ -434,13 +434,16 @@ public sealed class MeltypeSession
     }
 
     /// <summary>
-    /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON で入力中なら、変換ボックスで処理する (issue #199)。
+    /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON (無変換は「無変換でカタカナを切り替える」が ON でもよい) で入力中なら、変換ボックスで処理する (issue #199)。
     /// そうでなければ null (ImeSession が英数 / 日本語の切り替えに使う)。
     /// </summary>
     public SessionResult? HandleRoleKey(int vk)
     {
         if (vk is not (VirtualKeys.Convert or VirtualKeys.NonConvert or VirtualKeys.Kana)) return null;
-        if (!_settings().SeparateKeyRoles || !_controller.IsComposing || Direct) return null;
+        // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
+        var settings = _settings();
+        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
+        if (!_controller.IsComposing || Direct) return null;
         return HandleKey(vk, null, false, false, false, false);
     }
 
