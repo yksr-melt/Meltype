@@ -659,7 +659,7 @@ public sealed partial class CompositionDetector
         (start == 0 ? afterEnglish : !char.IsAsciiLetter(text[start - 1])) && (end == text.Length || !char.IsAsciiLetter(text[end]));
 
     /// <summary>
-    /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・決まり文句・ユーザーが英字に直して覚えた語)。
+    /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・ユーザーが英字に直して覚えた語)。
     /// 1 文字は a・i と、チャットの略し方の u (you)・r (are) だけ。
     /// </summary>
     /// <remarks>
@@ -671,7 +671,7 @@ public sealed partial class CompositionDetector
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
         return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsLatticeSpellWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
             lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
-            IsPediaEnglishWord(lower) || EnglishPhraseSpacing.IsPhrase(lower);
+            IsPediaEnglishWord(lower);
     }
 
     /// <summary>

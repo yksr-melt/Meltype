@@ -294,7 +294,6 @@ public sealed partial class CompositionController
     private void CommitText(string text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         LogCommit(text, rule);
-        var formatEnglish = _services.AutomaticEnglishSpacing() && _text.Mode == DisplayMode.Auto;
         var spaceIntended = _spaceStartedConversion;
         var afterEnglish = _text.PrecedingEnglish == true;
         _spaceStartedConversion = false;
@@ -303,7 +302,6 @@ public sealed partial class CompositionController
         _converting = false;
         _clauses = [];
         if (text.Length == 0) return;
-        if (formatEnglish && !preserveText) text = EnglishPhraseSpacing.Format(text);
         var corrected = CorrectPreviousCommit(raw, english);
         if (!preserveText && (_settings().SpaceAroundEnglish || _settings().SpaceAroundNumbers))
             text = AddSpacesAroundEnglish(text, corrected ?? _precedingText, _followingText, _settings().SpaceAroundEnglish, _settings().SpaceAroundNumbers);
