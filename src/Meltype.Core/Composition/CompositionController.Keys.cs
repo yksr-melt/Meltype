@@ -211,14 +211,14 @@ public sealed partial class CompositionController
                 else if (SpaceCommitsMarkdownMarker())
                 {
                     // Markdown の記号だけは、変換せず打った半角 + 空白で確定する
-                    CommitText(_text.Raw + " ", english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
+                    CommitText(ComposedText.Literal(_text.Raw + " "), english: false, preserveText: true, rule: "Space: Markdown の記号なので打ったまま");
                 }
                 else if (SpaceCommitsAlphanumeric())
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? (kana, before) => string.Concat(ConvertJapaneseSegment(kana, Context(before), _converter).Select(c => c.Text)) : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
-                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? ConvertedText : null)) + ComposedText.Literal(" "), english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(ComposedText.Literal(_text.Raw)) + ComposedText.Literal(" "), english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
                     // Space で変換した = 語の後に空白を打とうとした、とも取れる (確定し直して英語にするときに空白を足す)。
@@ -342,7 +342,7 @@ public sealed partial class CompositionController
                 Config.SpaceWidth.Standard => false,
                 _ => throw new InvalidOperationException($"不明な SpaceWidth: {spaceWidth}"),
             };
-            CommitText(halfWidth ? " " : "　", english: false);
+            CommitText(ComposedText.Literal(halfWidth ? " " : "　"), english: false);
             return;
         }
         // かな入力: かなのキーならすべて入力を始める (英数状態でなければ)。
@@ -793,7 +793,7 @@ public sealed partial class CompositionController
         var rest = all.Skip(_selectedClause + 1).ToList();
         _clauses = done;
         LearnClauses();
-        var text = string.Concat(done.Select(c => c.Text));
+        var text = ComposedText.Concat(done.Select(c => c.Composed));
         CommitText(text, done.All(c => c.IsEnglish), "", chosen: true);
         BeginComposition(_privateComposition);
         foreach (var clause in rest)

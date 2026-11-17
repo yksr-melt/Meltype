@@ -22,8 +22,7 @@ namespace Meltype.Composition;
 /// 書き間違いの修正は Suggestion に入れる。案内が無ければ null。
 /// </para>
 /// Notes は Candidates と同じ順序・件数の注記。注記がない候補は None、リスト全体を省略するときは null。
-/// 入力欄に入りうる文字の欄 (Text・Candidates・Clauses・Suggestion・Predictions・Committed) は、CompositionOutput.Show が設定の句読点にする。
-/// そういう欄を足したら Show にも足す。
+/// 入力欄に入りうる文字の欄 (Text・Candidates・Clauses・Predictions・Committed) は、CompositionOutput.Show が渡す関数で、打った句読点を設定の句読点にした文字にする。
 /// </summary>
 public sealed record CompositionView(
     string Text,
@@ -129,7 +128,7 @@ public sealed partial class CompositionController
     /// 予測変換の候補。Text は一覧に出す語、Before は選んだときに語の前に残す文字 (最後の文節の続きの候補なら前の文節の見えている文字、
     /// 読み全体の続きの候補なら空)、Reading は語に置き換わる打ちかけの読み。
     /// </summary>
-    private sealed record Prediction(string Text, string Before, string Reading);
+    private sealed record Prediction(string Text, ComposedText Before, string Reading);
 
     // 英数状態で判定中の語。打鍵はすぐアプリに送り (待たせない)、ローマ字と分かったら消して変換ボックスに入れ直す。
     private readonly StringBuilder _heldLetters = new();
@@ -144,6 +143,11 @@ public sealed partial class CompositionController
         public List<string> Candidates { get; set; } = candidates;
         public int Index { get; set; }
         public string Text => Candidates[Index];
+
+        /// <summary>候補 candidate を、打った句読点の区間と一緒に。</summary>
+        public ComposedText Compose(string candidate) => IsEnglish ? ComposedText.Literal(candidate) : ComposedText.Converted(Reading, candidate);
+
+        public ComposedText Composed => Compose(Text);
 
         /// <summary>ユーザーが候補を選び直したか (確定時に学習する)。</summary>
         public bool Changed { get; set; }
@@ -487,7 +491,7 @@ public sealed partial class CompositionController
             !_text.IsEmpty && _text.Raw.All(char.IsAsciiLetter))
         {
             _correctable.Clear();
-            CommitText(_text.Raw, english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CommitText(ComposedText.Literal(_text.Raw), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CommitIfAny(preserveText);
         UpdateView();

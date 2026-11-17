@@ -57,19 +57,20 @@ public sealed partial class CompositionController
             if (!selected.Expanded) Expand(selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = _clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
-            _out.Show(new CompositionView(
-                string.Concat(_clauses.Select(c => c.Text)),
-                selected.Candidates,
+            var text = ComposedText.Concat(_clauses.Select(c => c.Composed));
+            _out.Show(render => new CompositionView(
+                render(text),
+                selected.Candidates.Select(c => render(selected.Compose(c))).ToList(),
                 selected.Index,
                 true,
                 (zenzai ? "Zenzai · " : "") + "←→ 文節　Space/↓ 候補　1〜9 選択　Shift+←→ 区切り　Enter 確定　Esc 戻る",
-                _clauses.Select(c => c.Text).ToList(),
+                _clauses.Select(c => render(c.Composed)).ToList(),
                 _selectedClause,
                 CandidateNotes(selected),
                 _settings().ShowCandidateMeanings ? CandidateMeaning(selected) : null,
                 MisspellingSuggestion(),
                 Typed: TypedKeys(),
-                Committed: string.Concat(_clauses.Select(c => c.Text)), ContextHint: zenzai ? "Zenzai" : null));
+                Committed: render(text), ContextHint: zenzai ? "Zenzai" : null));
         }
         else
         {
@@ -87,13 +88,20 @@ public sealed partial class CompositionController
                 contextHint = "Tab 予測の候補を選ぶ";
                 hint = contextHint + "　" + hint;
             }
-            var selected = _predictionIndex >= 0 ? _predictions[_predictionIndex].Before + _predictions[_predictionIndex].Text : null;
-            var display = selected ?? CurrentDisplay(final: false);
+            var selected = _predictionIndex >= 0 ? PredictionCommitText(_predictions[_predictionIndex]) : null;
+            var display = selected ?? CurrentComposed(final: false);
+            var committed = selected ?? CurrentComposed(final: true);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates() : null;
-            _out.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
-                Predictions: _predictions.Count > 0 ? _predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
-                Committed: selected ?? CurrentDisplay(final: true), ContextHint: contextHint));
+            _out.Show(render =>
+            {
+                var kana = _text.AllKana(final: false);
+                var candidates = preview?.Select(c => render(ComposedText.Converted(kana, c))).ToList();
+                var shown = render(display);
+                return new CompositionView(shown, candidates ?? [], candidates?.IndexOf(shown) ?? -1, false, hint, Suggestion: misspelling,
+                    Predictions: _predictions.Count > 0 ? _predictions.Select(p => render(PredictionText(p))).ToList() : null, SelectedPrediction: _predictionIndex, Typed: TypedKeys(),
+                    Committed: render(committed), ContextHint: contextHint);
+            });
         }
     }
 
@@ -126,12 +134,12 @@ public sealed partial class CompositionController
         if (_text.IsAlphanumeric)
         {
             // 英単語 1 語の打ちかけ (decis → decisions)
-            if (_text.Raw.All(char.IsAsciiLetter)) _predictions = predictor.PredictEnglish(_text.Raw).Select(w => new Prediction(w, "", _text.Raw)).ToList();
+            if (_text.Raw.All(char.IsAsciiLetter)) _predictions = predictor.PredictEnglish(_text.Raw).Select(w => new Prediction(w, ComposedText.Empty, _text.Raw)).ToList();
             return;
         }
         var kana = _text.AllKana(final: false);
         var predictions = new List<Prediction>();
-        void Add(IEnumerable<string> words, string before, string reading)
+        void Add(IEnumerable<string> words, ComposedText before, string reading)
         {
             foreach (var word in words)
             {
@@ -151,7 +159,7 @@ public sealed partial class CompositionController
             }
         }
         // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
-        if (_text.Raw.Length >= 4 && _text.Raw.All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(_text.Raw), "", _text.Raw);
+        if (_text.Raw.Length >= 4 && _text.Raw.All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(_text.Raw), ComposedText.Empty, _text.Raw);
         _predictions = predictions;
     }
 
@@ -161,9 +169,9 @@ public sealed partial class CompositionController
     /// 最後の文節の続きの候補を選んだときは、前の文節は見えているとおりに残す (たんいをとる → 単位を + 取ることができる)。
     /// Heads は、最後の文節の続きの候補が始まっていないといけない文字 (文節の文字と読み)。読み全体では空
     /// </summary>
-    private List<(string Before, string Reading, string[] Heads)> PredictionStarts(string kana)
+    private List<(ComposedText Before, string Reading, string[] Heads)> PredictionStarts(string kana)
     {
-        var starts = new List<(string Before, string Reading, string[] Heads)> { ("", kana, []) };
+        var starts = new List<(ComposedText Before, string Reading, string[] Heads)> { (ComposedText.Empty, kana, []) };
         // 文節の区切りはライブ変換の結果を使う (打鍵ごとに変換を増やさない)。ライブ変換が OFF のときと、読みが短いうちは読み全体だけ
         if (!_settings().LiveConversion || kana.Length < LiveConversionMinLength) return starts;
         var clauses = LiveClauses(kana, Context(""));
@@ -171,8 +179,8 @@ public sealed partial class CompositionController
         var last = clauses[^1];
         // 見えている文字の終わりが最後の文節 (変換した文字か、変換していない読み) のときだけ。
         // 英語として見せている所があるときなどは、前に残す文字が分からないので読み全体の続きだけにする
-        var display = CurrentDisplay(final: false);
-        var shown = display.EndsWith(last.Text, StringComparison.Ordinal) ? last.Text : display.EndsWith(last.Reading, StringComparison.Ordinal) ? last.Reading : null;
+        var display = CurrentComposed(final: false);
+        var shown = display.Text.EndsWith(last.Text, StringComparison.Ordinal) ? last.Text : display.Text.EndsWith(last.Reading, StringComparison.Ordinal) ? last.Reading : null;
         if (shown is not null) starts.Add((display[..^shown.Length], last.Reading, [last.Text, last.Reading]));
         return starts;
     }

@@ -7,9 +7,9 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// 出来事 1 つの間の、入力欄への書き込み (<see cref="TextEdit"/>)・変換ボックスの表示・キーをアプリに通すか。
-/// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="CompositionText"/> の Symbol)、設定の句読点はここで書き込み・表示の文字に当てる。
+/// 句読点は、読み・変換・学習では設定によらず 、。 で持ち (<see cref="CompositionText"/> の Symbol)、設定の句読点はここで書き込み・表示の文字の打った句読点の区間 (<see cref="ComposedText"/>) に当てる。
 /// 入力欄から読んだ文字 (<see cref="Before"/>・<see cref="After"/>) は、設定の句読点を 、。 に戻して渡す。
-/// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) と候補の重複を消す所 (<see cref="ToSetting"/>) だけ。
+/// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) と候補の重複を消す所 (<see cref="Render"/>) だけ。
 /// </summary>
 internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuation)
 {
@@ -57,7 +57,7 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
 
     public SessionResult Result(bool consumed, Config.Settings settings)
     {
-        if (_pendingDelete > 0) Add("");
+        if (_pendingDelete > 0) Add(ComposedText.Empty);
         // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
         if (!consumed) _committed.Clear();
         // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
@@ -67,7 +67,7 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
 
     public void PassCurrent() => PassedCurrent = true;
 
-    public void Commit(string text) => Add(text);
+    public void Commit(ComposedText text) => Add(text);
 
     /// <summary>直前に確定した文字の末尾から、キャレットを count 文字だけ左へ戻す。</summary>
     public void MoveCaretBackward(int count)
@@ -80,7 +80,7 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
     /// 確定し直し: キャレットの前の count 文字を replacement に置き換えて、続けて今確定した語 (current) を入れる。
     /// 前の文字を消せなかったときに current だけを入れられるように、分けて渡す (Meltype IME など。<see cref="TextEdit"/>)。
     /// </summary>
-    public void ReplaceBackward(int count, string replacement, string current)
+    public void ReplaceBackward(int count, ComposedText replacement, ComposedText current)
     {
         _pendingDelete += count;
         Add(replacement + current, current);
@@ -108,33 +108,22 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
 
     public void ForgetCommitted() => _committed.Clear();
 
-    public void Show(CompositionView view)
+    /// <summary>変換ボックスの表示。build は、入力欄に入りうる文字の欄 (Text・Candidates・Clauses・Predictions・Committed) を、渡された関数で文字にする。</summary>
+    public void Show(Func<Func<ComposedText, string>, CompositionView> build)
     {
-        _view = view with
-        {
-            Text = Punctuate(view.Text),
-            Candidates = view.Candidates.Select(Punctuate).ToList(),
-            Clauses = view.Clauses?.Select(Punctuate).ToList(),
-            Suggestion = view.Suggestion is { } suggestion ? Punctuate(suggestion) : null,
-            Predictions = view.Predictions?.Select(Punctuate).ToList(),
-            Committed = view.Committed is { } committed ? Punctuate(committed) : null,
-        };
+        var style = punctuation();
+        _view = build(text => Render(style, text));
         _hidden = false;
     }
 
-    private string Punctuate(string text) => ToSetting(punctuation(), text);
-
-    /// <summary>
-    /// 、。 をすべて設定の句読点にする。ここには文字しか届かないので、辞書の語・顔文字の 、。 (モーニング娘。) も変わる。
-    /// 句読点にだけ当てるには、区間の種類を出口まで渡す必要がある (#1735)。
-    /// </summary>
-    internal static string ToSetting(Config.PunctuationStyle style, string text)
+    /// <summary>打った句読点の区間を、設定の句読点にした文字。</summary>
+    internal static string Render(Config.PunctuationStyle style, ComposedText text)
     {
         var (comma, period) = Marks(style);
-        return text.Replace('、', comma).Replace('。', period);
+        return text.Render(comma, period);
     }
 
-    /// <summary>設定の句読点を 、。 に戻す (<see cref="ToSetting"/> の逆)。</summary>
+    /// <summary>入力欄の文字の、設定の句読点を 、。 に戻す。入力欄の文字は区間の種類が分からないので、設定の句読点はすべて戻す。</summary>
     internal static string FromSetting(Config.PunctuationStyle style, string text)
     {
         var (comma, period) = Marks(style);
@@ -156,10 +145,11 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
         _hidden = true;
     }
 
-    private void Add(string text, string? current = null)
+    private void Add(ComposedText composed, ComposedText? currentComposed = null)
     {
-        text = Punctuate(text);
-        current = current is null ? null : Punctuate(current);
+        var style = punctuation();
+        var text = Render(style, composed);
+        var current = currentComposed is null ? null : Render(style, currentComposed);
         string? expect = null;
         if (_pendingDelete > 0)
         {
