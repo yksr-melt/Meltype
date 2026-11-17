@@ -11,6 +11,7 @@
 import ctypes
 import json
 import os
+import signal
 import subprocess
 import sys
 
@@ -29,6 +30,7 @@ _lib.meltype_ime_create.restype = ctypes.c_void_p
 _lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 _lib.meltype_ime_handle.restype = ctypes.c_void_p
 _lib.meltype_ime_destroy.argtypes = [ctypes.c_void_p]
+_lib.meltype_shutdown.restype = None
 
 # 本体のプロトコルの版 (ImeHost.Version)
 IME_VERSION = 1
@@ -492,8 +494,9 @@ def main():
         print("Meltype: IBus につながりません", file=sys.stderr)
         sys.exit(1)
     loop = GLib.MainLoop()
-    # IBus が終わったら (ログアウト・ibus restart) 一緒に終わる
+    # IBus が終わったら (ログアウト・ibus restart) 一緒に終わる。IBus がエンジンを止めるときの SIGTERM でも
     bus.connect("disconnected", lambda *_: loop.quit())
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: loop.quit() or GLib.SOURCE_REMOVE)
     factory = IBus.Factory.new(bus.get_connection())
     factory.add_engine("meltype", GObject.type_from_name("MeltypeEngine"))
     if "--ibus" in sys.argv:
@@ -504,6 +507,8 @@ def main():
         component.add_engine(IBus.EngineDesc.new("meltype", "Meltype", "Meltype", "ja", "GPL-3.0-or-later", "Yukishiro", "", "default"))
         bus.register_component(component)
     loop.run()
+    # Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+    _lib.meltype_shutdown()
 
 
 if __name__ == "__main__":
