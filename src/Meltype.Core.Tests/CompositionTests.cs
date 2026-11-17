@@ -24,6 +24,7 @@ internal static class CompositionTests
             "たんい" => "単位",
             "な～～～" => "名～～～",
             "かんたん" => "簡単",
+            "かん" => "感",
             "みぢか" => "身近",
             _ => null,
         };
@@ -57,6 +58,8 @@ internal static class CompositionTests
                 "なら" => [new("なら", "奈良")],
                 "した" => [new("した", "下")],
                 "したい" => [new("したい", "死体")],
+                // 1 拍の拗音: 本物の変換エンジンは きょ を 虚 にする
+                "きょ" => [new("きょ", "虚")],
                 _ => null,
             };
         }
@@ -3245,13 +3248,18 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue677_EnterAsShown_KeepsKanaBeforeFinalN()
+    public static void Issue677_EnterAsShown_CommitsWhatTheFrontShows()
     {
-        // かんたn と見えていた入力は、Enter でかんたんに確定する (語末の n が ん になったところで漢字にしない)
-        var shown = new Keyboard(live: true) { EnterCommitsAsShown = true };
-        shown.Type("kantan");
-        shown.Type("\n");
-        Assert.Equal("かんたん", shown.Host.Document, "設定 ON: 見えていたかなのまま");
+        // 語末の n で終わる入力 (かn・かんたn) も、フロントに見せている形 (末尾の n を ん にして変換した形) のまま確定する
+        foreach (var (typed, expected) in new[] { ("kan", "感"), ("kantan", "簡単") })
+        {
+            var shown = new Keyboard(live: true) { EnterCommitsAsShown = true };
+            shown.Type(typed);
+            var front = SessionResult.ForFront(shown.Host.View!, showGuide: true, numberKeysSelect: true).Text;
+            shown.Type("\n");
+            Assert.Equal(expected, front, typed);
+            Assert.Equal(front, shown.Host.Document, $"設定 ON: 見えているとおりに確定 ({typed})");
+        }
         var normal = new Keyboard(live: true);
         normal.Type("kantan\n");
         Assert.Equal("簡単", normal.Host.Document, "既定は今までどおり");
@@ -5397,10 +5405,27 @@ internal static class CompositionTests
     public static void LiveConversion_ConvertsWhileTyping()
     {
         var k = new Keyboard(live: true);
-        k.Type("kyou");
-        Assert.Equal("きょう", k.Showing, "短いうちはかなのまま (的外れな漢字を出さない)");
-        k.Type("ha");
-        Assert.Equal("今日は", k.Showing, "4 文字以上になったら Space を押さなくても漢字で表示");
+        k.Type("ka");
+        Assert.Equal("か", k.Showing, "1 拍はかなのまま (漢字を推測できない)");
+        k.Type("wa");
+        Assert.Equal("川", k.Showing, "2 拍以上になったら Space を押さなくても漢字で表示");
+
+        k = new Keyboard(live: true);
+        k.Type("kyo");
+        Assert.Equal("きょ", k.Showing, "拗音は前のかなと合わせて 1 拍 (虚 にしない)");
+        k.Type("u");
+        Assert.Equal("今日", k.Showing);
+
+        k = new Keyboard(live: true);
+        k.Type("pushshita");
+        Assert.Equal("pushした", k.Showing, "英単語 + する の活用は、Space の変換と同じくかなのまま");
+        k = new Keyboard(live: true);
+        k.Type("pythonnara");
+        Assert.Equal("pythonなら", k.Showing, "英単語 + 助詞も、Space の変換と同じくかなのまま");
+
+        k = new Keyboard(live: true);
+        k.Type("kyouha");
+        Assert.Equal("今日は", k.Showing);
         k.Type("google");
         Assert.Equal("今日はgoogle", k.Showing, "英語の部分は変換しない");
         k.Type("dekensaku\n");

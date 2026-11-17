@@ -28,6 +28,10 @@ public sealed partial class CompositionDetector
     private const double JapaneseWordCost = 1;
     // katakana.txt の語 (ほすてぃんぐ) と brands.txt の読み (ぎっとはぶ)。katakana.txt は英単語をカタカナにした語 (アマゾン) が多いので、同じ綴りの英単語 (amazon) に譲る
     private const double KatakanaWordCost = 1.1;
+    // readings-rare.txt の語 (JMdict のよく使う語でない語の長い読み: かんれんづけ・くるまどめ)。
+    // 英単語への切り替え (関連|duke = 1 + 1 + 1) より軽く、よく使う語どうしの区切りを割らない重みにする。
+    // 1.5 では きょうはい|まげ が きょうは|image より軽くなり、3 では 関連づけ が 関連|duke と同じ重みになる
+    private const double RareWordCost = 2.5;
     // 語にならないかな 1 音、日本語の中に残る読めない英字 1 文字
     private const double UnknownKanaCost = 3;
     // 語にならない っ・ー、x で打った小書きの母音が語の 1 音目 (だめ|ぇ)
@@ -221,7 +225,11 @@ public sealed partial class CompositionDetector
             }
             else
             {
-                step = cost;
+                // 活用する語の後ろにしか付かない 1 文字の付属語 (う・れ) は、英単語の後ろと、入力の頭で後ろに続きがあるときは、語にならないかなとして読む。
+                // 付属語の軽い重み (0.8) のままだと、ローマ字の途中で英単語を切り出した残り (get|う・hit|う・れ|pro) が、語にならないかな 2 音 (げ|つ) より軽くなる。
+                // 付属語だけを打った入力 (re) は、前に確定した語の続きなので付属語のまま
+                var detached = state.IsEnglish || state.Side == Side.None && edge.End < length;
+                step = detached && VerbAuxiliaries.Contains(edge.Kana) ? UnknownKanaCost : cost;
                 if (state.Side == Side.Sentence) step += SentenceSwitchCost;
                 // 3 文字以上の英単語の後ろの、助詞と同じかなで始まる語 (java|のこ・java|でかく) も、助詞からの切り替えと同じ重みにする
                 // (日本語の道だけが の|こ を のこ にまとめられて、英語が負ける。so|ですか・ma|のなか のような 2 文字の語は除く)
@@ -385,6 +393,12 @@ public sealed partial class CompositionDetector
     private static readonly HashSet<string> NounParticles = ["が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "だ", "です"];
 
     /// <summary>
+    /// 動詞・形容詞の活用形の後ろにしか付かない、1 文字の付属語 (名詞や英単語の後ろには付かない)。
+    /// 2 文字以上の付属語 (ます・ません) は、英単語を切り出した残りにはまずならず、なっても日本語の根拠として十分なので入れない。
+    /// </summary>
+    private static readonly HashSet<string> VerbAuxiliaries = ["う", "た", "て", "ば", "れ"];
+
+    /// <summary>
     /// start から始まる技術用語の綴り (share・make) のすぐ後ろが する の活用 (して・します) か。
     /// その綴りに付属語でない日本語の読み (しゃれ・まけ) があり、日本語由来の語 (ninja) でなければ、
     /// その区間を日本語の語として読まない (issue #1899)。「しゃれする」「まけします」は日本語として成り立たないため。
@@ -416,9 +430,7 @@ public sealed partial class CompositionDetector
 
     /// <summary>かなを、語にならないかなとして読むときの重み (1 音 3、っ・ー は 0.5。小書きのかな ゃ・ぃ は前のかなと 1 音)。</summary>
     private static double UnknownKana(string kana) =>
-        kana.Select((c, i) => c is 'っ' or 'ー' ? LightKanaCost : i > 0 && IsSmallKana(c) ? 0 : UnknownKanaCost).Sum();
-
-    private static bool IsSmallKana(char c) => c is 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'ゃ' or 'ゅ' or 'ょ' or 'ゎ';
+        kana.Select((c, i) => c is 'っ' or 'ー' ? LightKanaCost : i > 0 && KanaChars.IsSmallKana(c) ? 0 : UnknownKanaCost).Sum();
 
     /// <summary>単位の読みがかな (ひらがな・ー) か。</summary>
     private static bool IsKanaUnit(CompositionUnit unit) => unit.Kana.Length > 0 && unit.Kana.All(KanaChars.IsHiraganaOrLongMark);
@@ -441,6 +453,8 @@ public sealed partial class CompositionDetector
         if (RomajiTypoCorrector.CommonWordCost(kana) is { } cost) return (new LatticeEdge(start, end, false, kana, true, particle), cost);
         if (CommonReadings.Phrases.Contains(kana) || _userJapanese.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), JapaneseWordCost);
         if (CommonReadings.Katakana.Contains(kana) || CommonReadings.Brands.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), KatakanaWordCost);
+        // readings-rare.txt の読みは katakana.txt とも重なる (おねしゃす) ので、ほかの一覧の軽い重みを先に使う
+        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), RareWordCost);
         return (new LatticeEdge(start, end, false, kana, true, false), double.NaN);
     }
 
@@ -534,7 +548,7 @@ public sealed partial class CompositionDetector
         for (var k = u; k < units.Count; k++)
         {
             // 語の頭でなくなったら、それより長い語は無い (1 音目は語にならなくても読む)
-            if (!first && !RomajiTypoCorrector.CommonHasPrefix(kana) && !CommonReadings.Katakana.HasPrefix(kana) && !CommonReadings.Brands.HasPrefix(kana) &&
+            if (!first && !RomajiTypoCorrector.CommonHasPrefix(kana) && !RomajiTypoCorrector.RareHasPrefix(kana) && !CommonReadings.Katakana.HasPrefix(kana) && !CommonReadings.Brands.HasPrefix(kana) &&
                 !CommonReadings.Phrases.HasPrefix(kana) && !_userJapanesePrefixes.Contains(kana)) break;
             var unit = units[k];
             if (!IsKanaUnit(unit) || !kanaInput && unit.Raw.Any(char.IsAsciiLetterUpper)) break;
@@ -645,7 +659,7 @@ public sealed partial class CompositionDetector
         (start == 0 ? afterEnglish : !char.IsAsciiLetter(text[start - 1])) && (end == text.Length || !char.IsAsciiLetter(text[end]));
 
     /// <summary>
-    /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・決まり文句・ユーザーが英字に直して覚えた語)。
+    /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・ユーザーが英字に直して覚えた語)。
     /// 1 文字は a・i と、チャットの略し方の u (you)・r (are) だけ。
     /// </summary>
     /// <remarks>
@@ -657,7 +671,7 @@ public sealed partial class CompositionDetector
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
         return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsLatticeSpellWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
             lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
-            IsPediaEnglishWord(lower) || EnglishPhraseSpacing.IsPhrase(lower);
+            IsPediaEnglishWord(lower);
     }
 
     /// <summary>

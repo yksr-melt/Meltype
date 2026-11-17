@@ -590,24 +590,22 @@ public sealed partial class CompositionController
     /// </summary>
     private static IReadOnlyList<ConversionClause> JoinSmallKana(IReadOnlyList<ConversionClause> parts, IKanjiConverter converter)
     {
-        if (!parts.Skip(1).Any(p => p.Reading.Length > 0 && SmallKana.Contains(p.Reading[0]))) return parts;
+        if (!parts.Skip(1).Any(p => p.Reading.Length > 0 && KanaChars.IsSmallKana(p.Reading[0]))) return parts;
         var joined = new List<ConversionClause>();
         foreach (var part in parts)
         {
-            if (joined.Count > 0 && part.Reading.Length > 0 && SmallKana.Contains(part.Reading[0]))
+            if (joined.Count > 0 && part.Reading.Length > 0 && KanaChars.IsSmallKana(part.Reading[0]))
             {
                 var reading = joined[^1].Reading + part.Reading;
                 // 変換しても漢字の後ろに小書きのかなが残る (光ぃ) なら、カタカナ (コウィ) にする。
                 var text = Convert(reading, converter);
-                if (Enumerable.Range(1, Math.Max(0, text.Length - 1)).Any(i => SmallKana.Contains(text[i]) && !IsKana(text[i - 1]))) text = CompositionText.ToKatakana(reading);
+                if (Enumerable.Range(1, Math.Max(0, text.Length - 1)).Any(i => KanaChars.IsSmallKana(text[i]) && !IsKana(text[i - 1]))) text = CompositionText.ToKatakana(reading);
                 joined[^1] = new ConversionClause(reading, text);
             }
             else joined.Add(part);
         }
         return joined;
     }
-
-    private const string SmallKana = "ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ";
 
     private static bool IsKana(char c) => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー';
 
@@ -907,7 +905,12 @@ public sealed partial class CompositionController
     private ComposedText ConvertedText(string kana, string before) =>
         ComposedText.Concat(ConvertJapaneseSegment(kana, Context(before), _converter).Select(c => c.Composed));
 
-    private static bool CountsAsLive(string kana) => kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') >= LiveConversionMinLength;
+    /// <summary>
+    /// ライブ変換するだけの拍があるか。小書きの母音・拗音は直前のかなと合わせて 1 拍 (きょ・ふゅ・しぃ は 1 拍)、っ・ん・ー は 1 拍と数える。
+    /// 1 拍の拗音・外来音を、打っている途中に変換しない (きょ が 虚、ふゅ が フュ になっていた)。
+    /// </summary>
+    private static bool CountsAsLive(string kana) =>
+        kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
     private List<(string Reading, string Text)> LiveClauses(string kana, string context)

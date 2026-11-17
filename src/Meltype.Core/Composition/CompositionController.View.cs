@@ -173,7 +173,7 @@ public sealed partial class CompositionController
     {
         var starts = new List<(ComposedText Before, string Reading, string[] Heads)> { (ComposedText.Empty, kana, []) };
         // 文節の区切りはライブ変換の結果を使う (打鍵ごとに変換を増やさない)。ライブ変換が OFF のときと、読みが短いうちは読み全体だけ
-        if (!_settings().LiveConversion || kana.Length < LiveConversionMinLength) return starts;
+        if (!_settings().LiveConversion || !CountsAsLive(kana)) return starts;
         var clauses = LiveClauses(kana, Context(""));
         if (clauses.Count < 2) return starts;
         var last = clauses[^1];

@@ -68,10 +68,10 @@ public sealed record ReconversionSelection(string Text, string Reading);
 public sealed partial class CompositionController
 {
     /// <summary>
-    /// ライブ変換は 4 文字以上のかなだけ。短い断片は変換エンジンが的外れな漢字を返しやすい
-    /// (きょ → 居, きょう → 喬) ので、打っている途中はかなのまま見せる。短い語は Space で変換する。
+    /// ライブ変換は 2 拍以上のかなだけ。2〜3 拍の語 (きた → 来た, りかい → 理解) もライブ変換する。
+    /// 1 拍は漢字を推測できず、ひらがな 1 字のまま打つことも多いので、かなのまま見せる。拍の数え方は CountsAsLive。
     /// </summary>
-    private const int LiveConversionMinLength = 4;
+    private const int LiveConversionMinLength = 2;
 
     /// <summary>Space・確定など、結果が今すぐ要る 1 回の入力で変換エンジンを待つ時間の合計。Meltype IME の DLL の応答期限 (800ms、TextService.h) より短くする。</summary>
     private const int InputBudgetMs = 400;

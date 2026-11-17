@@ -133,12 +133,11 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>
     /// 入力欄 1 つ分の本体を作る。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。
-    /// autoSpacing は、つなげて打った英語の決まり文句 (seeyou) に空白を入れるか (今は Mac だけ)。
     /// directModeDetection なら、英数状態で打ち始めた語がローマ字かを判定して日本語に戻す (設定「英数状態で自動判定」。今は Windows だけ)。
     /// </summary>
     /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
     public MeltypeSession CreateSession(IKanjiConverter converter, Func<Settings>? settings = null, Func<string, IReadOnlyList<string>>? moreCandidates = null,
-        bool autoSpacing = false, bool directModeDetection = false)
+        bool directModeDetection = false)
     {
         var current = settings ?? (() => Settings.Current);
         UserDictionary.Refresh();
@@ -147,7 +146,6 @@ public sealed class MeltypeRuntime : IDisposable
             UserDictionary = UserDictionary,
             Predictor = new Predictor(Phrases, UserDictionary, History),
             MoreCandidates = moreCandidates,
-            AutomaticEnglishSpacing = () => autoSpacing,
             // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
             ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
         };

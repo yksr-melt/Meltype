@@ -57,13 +57,6 @@ public sealed partial class CompositionController
             text = ComposedText.Literal(shown);
             rules.Add("英語の文脈なので見えていた英字のまま (#127)");
         }
-        // 設定「Enter は見えているとおりに確定」: かな + 語末の n (かんたn) は、確定でライブ変換が漢字にせず、見えていたかなに n を ん にしただけで確定する (issue #677)
-        if (!converting && _settings().EnterCommitsAsShown && _text.Mode == DisplayMode.Auto && _text.Pending == "n" &&
-            CurrentComposed(final: false) is { Length: > 1 } shownKana && shownKana.Text[^1] == 'n' && shownKana.Text[^2] is >= '\u3041' and <= '\u3096')
-        {
-            text = shownKana[..^1] + ComposedText.Literal("ん");
-            rules.Add("見えていたかなのまま (#677)");
-        }
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto && FixEnglishTypo(text) is var fixedText && fixedText.Text != text.Text)
         {
             text = fixedText;
@@ -310,7 +303,6 @@ public sealed partial class CompositionController
     private void CommitText(ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
         LogCommit(text.Text, rule);
-        var formatEnglish = _services.AutomaticEnglishSpacing() && _text.Mode == DisplayMode.Auto;
         var spaceIntended = _spaceStartedConversion;
         var afterEnglish = _text.PrecedingEnglish == true;
         _spaceStartedConversion = false;
@@ -319,7 +311,6 @@ public sealed partial class CompositionController
         _converting = false;
         _clauses = [];
         if (text.Length == 0) return;
-        if (formatEnglish && !preserveText) text = text.WithSpaces(EnglishPhraseSpacing.Format(text.Text));
         var corrected = CorrectPreviousCommit(raw, english);
         if (!preserveText && (_settings().SpaceAroundEnglish || _settings().SpaceAroundNumbers))
             text = text.WithSpaces(AddSpacesAroundEnglish(text.Text, corrected?.Text ?? _precedingText, _followingText, _settings().SpaceAroundEnglish, _settings().SpaceAroundNumbers));

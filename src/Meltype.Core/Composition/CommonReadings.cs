@@ -43,6 +43,14 @@ internal static class CommonReadings
     /// <summary>同梱の語句の読み (dictionaries/phrases.txt の どしたの。文節の頭の印 ^ は外す)。</summary>
     public static PackedWordSet Phrases => SharedPhrases.Value;
 
+    private static readonly Lazy<PackedWordSet> SharedRare = new(() => PackedWordSet.FromLines(RareText(), firstField: true));
+
+    /// <summary>よく使う語でない語の長い読み (dictionaries/readings-rare.txt の かんれんづける)。日英の区切りだけで使い、打ち間違い直しには使わない。</summary>
+    public static PackedWordSet Rare => SharedRare.Value;
+
+    /// <summary>readings-rare.txt の本文を読み直す (活用形の生成に使う)。</summary>
+    public static string RareText() => DictionarySource.ReadEmbedded("readings-rare.txt");
+
     /// <summary>活用形の生成に使う本文を読み直す。共有するのは読みの集合だけで、本文は保持しない。</summary>
     public static string ReadText() => DictionarySource.ReadEmbedded("readings.txt") + "\n" + DictionarySource.ReadEmbedded("readings-extra.txt");
 }

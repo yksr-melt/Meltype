@@ -17,7 +17,40 @@
 
 - Xcode、またはコマンドライン ツール (`xcode-select --install`)
 - .NET 10 SDK (<https://dotnet.microsoft.com/download>。または `curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0`)
-- Mozc の変換ヘルパー (`native/mozc/bin/mac/`)。main の `mac.yml` の成果物 `meltype-mac` の `Meltype.app/Contents/Resources/mozc/` の 3 つのファイルを置く。ヘルパーのソースや `native/mozc/MOZC_COMMIT` を変えたときだけ、`native/mozc/build-mozc-helper.sh` (Bazelisk が要る。初回 30〜40 分) で作る
+- Mozc の変換ヘルパーとライセンスの 3 ファイル (`native/mozc/bin/mac/`)。以下の手順で用意します
+
+Apple シリコンでは、main の `mac.yml` の成果物 `meltype-mac` から取得します。ソースから Mozc をビルドする必要はありません。
+[GitHub CLI](https://cli.github.com/) を入れて `gh auth login` で GitHub にログインした後、リポジトリのルートで次を実行してください。
+
+```bash
+(
+    set -e
+    run_id="$(gh run list --repo yksr-melt/Meltype --workflow mac.yml --branch main --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+    if [[ -z "$run_id" || "$run_id" == null ]]; then
+        echo "main で成功した mac.yml の実行が見つかりません。" >&2
+        exit 1
+    fi
+    mozc_tmp="$(mktemp -d)"
+    trap 'rm -rf "$mozc_tmp"' EXIT
+    gh run download "$run_id" --repo yksr-melt/Meltype --name meltype-mac --dir "$mozc_tmp"
+    unzip -q "$mozc_tmp"/Meltype-*.zip -d "$mozc_tmp"
+    mkdir -p native/mozc/bin/mac
+    cp "$mozc_tmp"/Meltype-mac/Meltype.app/Contents/Resources/mozc/{meltype_mozc_helper,MOZC-LICENSE.txt,MOZC-CREDITS.html} native/mozc/bin/mac/
+    chmod +x native/mozc/bin/mac/meltype_mozc_helper
+)
+```
+
+ブラウザーで取得する場合も GitHub へのログインが必要です。[Actions の mac](https://github.com/yksr-melt/Meltype/actions/workflows/mac.yml) で、main の成功した実行を開き、Artifacts の `meltype-mac` をダウンロードします。
+ダウンロードした zip を展開すると、さらに `Meltype-*.zip` が入っています。それも展開し、`Meltype-mac/Meltype.app/Contents/Resources/mozc/` の `meltype_mozc_helper`・`MOZC-LICENSE.txt`・`MOZC-CREDITS.html` を、リポジトリの `native/mozc/bin/mac/` に置いてください。
+`meltype_mozc_helper` に実行権限がなければ、`chmod +x native/mozc/bin/mac/meltype_mozc_helper` を実行します。成果物の保存期間は 14 日です。期限切れの場合は、成果物が残っている main の成功した実行を選んでください。
+
+成果物は Apple シリコン用だけです。Intel Mac と、ヘルパーのソースや `native/mozc/MOZC_COMMIT` を変えた場合は、[Bazelisk](https://github.com/bazelbuild/bazelisk) を用意して、次のように手元でビルドします。`BAZEL` で Bazelisk の場所を指定します (初回 30〜40 分)。
+
+```bash
+BAZEL="$(command -v bazelisk)" native/mozc/build-mozc-helper.sh
+```
+
+ヘルパーを用意した後、本体をビルドします。
 
 ```bash
 mac/build-cli.sh --setup --all
@@ -37,7 +70,7 @@ mac/build-cli.sh --install   # ビルドしてインストール
 
 ## 1 つのコマンドで更新する
 
-手元のソースで、入れてある Meltype を新しくします。使用中の入力ソースを入れ替えるので、入れ替えてよいときだけ実行します。
+先に[ビルドする](#ビルドする)の手順で Mozc の変換ヘルパーを用意してください。手元のソースで、入れてある Meltype を新しくします。使用中の入力ソースを入れ替えるので、入れ替えてよいときだけ実行します。
 
 ```bash
 bash mac/update.sh
