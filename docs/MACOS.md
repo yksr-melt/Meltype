@@ -98,7 +98,7 @@ brew install --cask yksr-melt/Meltype/meltype
 <a name="ユーザー辞書"></a>
 <img src="images/headings/mac/s02.svg" alt="ユーザー辞書" height="40">
 
-ユーザー辞書は、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。変換では最優先に使います。1 文字の読みは、その 1 文字だけを変換するときだけ使います。
+ユーザー辞書は、データフォルダ (`~/Library/Application Support/Meltype`) の `userdict.txt` に、1 行に「読み<Tab>単語」(UTF-8、読みはひらがな) で書きます。登録した語は Mozc のユーザー辞書に入り、ほかの語との区切りと優先は Mozc が決めます。
 
 macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取り込めます。
 
