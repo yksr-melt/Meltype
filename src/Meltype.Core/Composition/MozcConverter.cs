@@ -121,7 +121,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// </summary>
     private static string? HistoryOf(string? context)
     {
-        if (string.IsNullOrEmpty(context) || CompositionController.LanguageOf(context) != false) return null;
+        if (string.IsNullOrEmpty(context) || TextLanguage.Of(context) != false) return null;
         var text = context[(context.AsSpan().LastIndexOfAny(SentenceEnds) + 1)..].Trim();
         return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
     }

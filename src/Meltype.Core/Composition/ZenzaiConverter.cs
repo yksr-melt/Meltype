@@ -205,7 +205,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     internal static string ContextOf(string? text)
     {
         text = text?.Replace("\r", "").Replace("\n", "").Trim();
-        if (string.IsNullOrEmpty(text) || CompositionController.LanguageOf(text) != false) return NeutralContext;
+        if (string.IsNullOrEmpty(text) || TextLanguage.Of(text) != false) return NeutralContext;
         return text.Length > MaxContext ? text[^MaxContext..] : text;
     }
 

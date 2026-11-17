@@ -242,7 +242,7 @@ internal sealed class ClauseBuilder(IKanjiConverter converter, CompositionServic
     internal List<Clause> ConvertJapaneseSegment(string kana, string before, IKanjiConverter converter)
     {
         var japanese = ConvertJapanese(kana, (precedingText ?? "") + before, converter);
-        var afterEnglish = LanguageOf(before) == true;
+        var afterEnglish = TextLanguage.Of(before) == true;
         // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
         // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
         // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
