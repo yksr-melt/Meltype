@@ -3,12 +3,15 @@
 //! Settings-window translation. The IME itself is unchanged; only the
 //! settings labels, descriptions, choices, and navigation are translated.
 use serde_json::Value;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::cell::Cell;
 use std::sync::OnceLock;
 
 const JAPANESE: u8 = 0;
 const ENGLISH: u8 = 1;
-static LANGUAGE: AtomicU8 = AtomicU8::new(JAPANESE);
+// 表示中の画面の言語を、別スレッドの画面や試験から変更しない。
+thread_local! {
+    static LANGUAGE: Cell<u8> = const { Cell::new(JAPANESE) };
+}
 
 fn data() -> &'static Value {
     static DATA: OnceLock<Value> = OnceLock::new();
@@ -40,11 +43,11 @@ pub fn set(setting: &str) {
         "Japanese" => false,
         _ => system_is_english(),
     };
-    LANGUAGE.store(if english { ENGLISH } else { JAPANESE }, Ordering::Relaxed);
+    LANGUAGE.set(if english { ENGLISH } else { JAPANESE });
 }
 
 pub fn english() -> bool {
-    LANGUAGE.load(Ordering::Relaxed) == ENGLISH
+    LANGUAGE.get() == ENGLISH
 }
 
 /// Translate a fixed UI string. Untranslated strings stay in Japanese.
@@ -111,6 +114,18 @@ pub fn window_title() -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rendering_threads_keep_their_selected_language() {
+        set("Japanese");
+        std::thread::spawn(|| {
+            set("English");
+            assert_eq!(t("設定"), "Settings");
+        })
+        .join()
+        .unwrap();
+        assert_eq!(t("設定"), "設定");
+    }
 
     #[test]
     fn english_translates_navigation_fields_and_choices() {
