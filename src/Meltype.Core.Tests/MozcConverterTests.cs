@@ -13,9 +13,10 @@ internal static class MozcConverterTests
     /// <summary>偽のヘルパーの目印 (学習データの保存先のフォルダー名。ヘルパーにはこれが 1 つ目の引数で渡る)。</summary>
     public const string FakeHelperProfile = "meltype-fake-mozc-helper";
 
-    /// <summary>偽のヘルパー: 1 秒たってから READY を返し、読みをそのまま候補にして返す。読みが おちる なら落ちる。</summary>
+    /// <summary>偽のヘルパー: 1 秒たってから READY を返し、読みをそのまま候補にして返す (ユーザー辞書の語の読みならその語)。読みが おちる なら落ちる。</summary>
     public static int RunFakeHelper()
     {
+        var userWords = new Dictionary<string, string>(StringComparer.Ordinal);
         var input = new StreamReader(Console.OpenStandardInput(), new UTF8Encoding(false));
         var output = new StreamWriter(Console.OpenStandardOutput(), new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
         Thread.Sleep(1000);
@@ -56,7 +57,11 @@ internal static class MozcConverterTests
                     output.WriteLine("きょう\x1f今日");
                     break;
                 case "C":
-                    output.WriteLine(fields[2] + '\x1f' + fields[2]);
+                    output.WriteLine(fields[2] + '\x1f' + userWords.GetValueOrDefault(fields[2], fields[2]));
+                    break;
+                case "U":
+                    userWords = fields[1].Split('\x1e', StringSplitOptions.RemoveEmptyEntries).Select(r => r.Split('\x1f')).ToDictionary(f => f[0], f => f[1]);
+                    output.WriteLine("OK");
                     break;
                 // 逆変換は 漢字 だけ読める
                 case "R":
@@ -112,6 +117,24 @@ internal static class MozcConverterTests
         var hybrid = new HybridConverter(mozc);
         Assert.Equal("めるたいぷ", hybrid.Reading("メルタイプ"));
         Assert.Equal("かんじ", hybrid.Reading("漢字"));
+    }
+
+    [Test]
+    public static void Mozc_ConvertsWithUserDictionaryWords()
+    {
+        var dictionary = new UserDictionary(null, builtIn: false);
+        using var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), FakeHelperProfile), () => dictionary.EngineWords);
+        Assert.Equal("きごうとう", mozc.Convert("きごうとう"));
+        dictionary.Add("きごうとう", "記号等");
+        Assert.Equal("記号等", mozc.Convert("きごうとう"), "登録したら、控えの結果を使わずに変換し直す");
+        Assert.Equal("記号等", mozc.Candidates("きごうとう")[0], "候補の控えも");
+
+        // ヘルパーを起動し直したら、ユーザー辞書の語を送り直す
+        Assert.True(mozc.Convert("おちる") is null, "落ちた");
+        Assert.Equal("記号等", mozc.Convert("きごうとう"), "起動し直したヘルパーでも登録した語");
+
+        dictionary.Remove(new UserWord("きごうとう", "記号等"));
+        Assert.Equal("きごうとう", mozc.Convert("きごうとう"), "消したら使わない");
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)

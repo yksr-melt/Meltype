@@ -106,11 +106,10 @@ const dictionaries = {
       ];
     },
   },
-  // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
+  // 読み<Tab>語句
   'phrases.txt': {
-    format: tabbed(2, 2, ([reading, word]) => [
-      reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
-      reading.split('|').length === word.split('|').length && !word.split('|').includes('') ? null : `読み「${reading}」と語句「${word}」の | の数が違う`,
+    format: tabbed(2, 2, ([reading]) => [
+      hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
     ]),
   },
   // 読み<Tab>語句<Tab>出し始める読み (予測変換の定型句)。出し始める読みは、読みの打ちかけ

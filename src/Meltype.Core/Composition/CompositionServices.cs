@@ -48,7 +48,7 @@ public sealed record CompositionServices
     /// <summary>選んだ英訳の記録 (普通の変換の学習より弱く効かせる)。</summary>
     public TranslationHistory? TranslationHistory { get; init; }
 
-    /// <summary>ユーザー辞書 (変換で最優先に使う)。</summary>
+    /// <summary>ユーザー辞書 (登録した語の候補。変換では Mozc のユーザー辞書に入れる)。</summary>
     public UserDictionary? UserDictionary { get; init; }
 
     /// <summary>よくある書き間違い (ブレスレッド → ブレスレット) の辞書。「もしかして」に使う。null なら出さない。</summary>

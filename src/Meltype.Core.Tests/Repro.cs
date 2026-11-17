@@ -209,9 +209,12 @@ internal static class Henkan
         if (Mozc.IsValueCreated) Mozc.Value?.ClearCache();
     }
 
+    // 同梱の語句だけのユーザー辞書 (まだ何も登録していない人)。Mozc のユーザー辞書にも入れる
+    private static readonly Composition.UserDictionary BuiltInPhrases = new(null);
+
     private static readonly Lazy<Composition.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Composition.MozcConverter(helper, ProfileDirectory)
+            ? new Composition.MozcConverter(helper, ProfileDirectory, () => BuiltInPhrases.EngineWords)
             : null);
     private static readonly Lazy<Composition.TranslationDictionary> Translations = new(Composition.TranslationDictionary.Load);
 
@@ -233,7 +236,7 @@ internal static class Henkan
         // 確かめたいのは、まだ何も覚えていない人の最初の変換)
         var converter = Mozc.Value is { } engine ? new WithoutLearning(engine) : null;
         return new(live: true, converter: converter, moreCandidates: Mozc.Value is { } mozc ? mozc.Candidates : null,
-            userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
+            userDictionary: BuiltInPhrases, translations: Translations.Value);
     }
 
     /// <summary>変換だけを頼み、覚えさせない変換エンジン (ILearningConverter を持たない)。</summary>

@@ -23,6 +23,9 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
 
     private readonly string _helperPath;
     private readonly string? _profileDirectory;
+    private readonly Func<IReadOnlyList<UserWord>> _userWords;
+    // 今のヘルパーに送ったユーザー辞書の語 (_userWords の返したリストそのもの)。起動し直したら null
+    private volatile IReadOnlyList<UserWord>? _sentUserWords;
     // ヘルパーとのやり取りの順番を守る。応答を待つ間も持つので、入力スレッドでは取らない
     private readonly object _gate = new();
     // 変換の結果の控えと、その回数を守る。ヘルパーの応答を待つ間は持たない (_gate の中で取ってよい。逆は取らない)
@@ -63,10 +66,12 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
 
     /// <param name="helperPath">meltype_mozc_helper の実行ファイル。</param>
     /// <param name="profileDirectory">Mozc の学習データの保存先 (null なら Mozc の既定)。</param>
-    public MozcConverter(string helperPath, string? profileDirectory)
+    /// <param name="userWords">Mozc のユーザー辞書に入れる語 (<see cref="UserDictionary.EngineWords"/>)。変わったら別のリストを返す。</param>
+    public MozcConverter(string helperPath, string? profileDirectory, Func<IReadOnlyList<UserWord>>? userWords = null)
     {
         _helperPath = helperPath;
         _profileDirectory = profileDirectory;
+        _userWords = userWords ?? (() => []);
         _worker = new LatestRequestWorker<(string, string)>(ProcessBackground);
     }
 
@@ -108,7 +113,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         lock (_resultsGate)
         {
             _candidateRequests++;
-            if (_candidates.TryGetValue(reading, out var cached))
+            if (UserWordsSent && _candidates.TryGetValue(reading, out var cached))
             {
                 _candidateCacheHits++;
                 return cached;
@@ -164,6 +169,23 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         {
             var started = Stopwatch.GetTimestamp();
             var process = Start();
+            var words = _userWords();
+            if (!ReferenceEquals(words, _sentUserWords))
+            {
+                process.StandardInput.Write("U\t" + string.Join(RecordSeparator, words.Select(w => Clean(w.Reading) + UnitSeparator + Clean(w.Word))) + "\n");
+                process.StandardInput.Flush();
+                var answer = ReadLine(process, TimeoutMs);
+                // ワークアラウンド: U を知らないヘルパー (前の版) は空行を返す。ユーザー辞書なしで変換を続ける (MELTYPE_MOZC に前のリリースのヘルパーを使う --expect のため)。
+                // リリースのヘルパーが U に対応したら消す
+                if (answer == "") Diagnostics.Log.Warn("Mozc の変換ヘルパーが古く、ユーザー辞書を使えません。");
+                else if (answer != "OK")
+                {
+                    Diagnostics.Log.Warn($"Mozc がユーザー辞書を受け取りませんでした ({TimeoutMs}ms)。");
+                    Fail();
+                    return null;
+                }
+                _sentUserWords = words;
+            }
 
             process.StandardInput.Write(request + "\n");
             process.StandardInput.Flush();
@@ -202,7 +224,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
     {
         result = null;
-        if (_disposed) return false;
+        if (_disposed || !UserWordsSent) return false;
         lock (_resultsGate)
         {
             if (!_conversions.TryGetValue(request.Context + "\t" + request.Reading, out result)) return false;
@@ -255,7 +277,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         lock (_gate)
         {
             if (_disposed) return null;
-            // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す (覚えさせたら捨てる)。
+            // ライブ変換は 1 キーごとに同じ読みを何度も変換し直すので、同じ頼み方の結果は使い回す (覚えさせた・ユーザー辞書が変わったら捨てる)。
+            if (!UserWordsSent) ClearCache();
             var key = context + "\t" + reading;
             lock (_resultsGate)
             {
@@ -343,6 +366,9 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         return segments;
     }
 
+    // 控えの変換結果が、今のユーザー辞書の語で変換したものか
+    private bool UserWordsSent => ReferenceEquals(_userWords(), _sentUserWords);
+
     // タブ・改行は区切りに使うので空白にする。
     private static string Clean(string text) => text.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
 
@@ -351,6 +377,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     {
         if (_process is { HasExited: false } running) return running;
         _process?.Dispose();
+        _sentUserWords = null;
         return _process = Launch();
     }
 
