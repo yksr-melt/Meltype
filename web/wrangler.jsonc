@@ -8,7 +8,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/", "/report/*", "/dashboard", "/dashboard/*"],
+    "run_worker_first": ["/api/*", "/", "/report/*", "/typing/*", "/dashboard", "/dashboard/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },

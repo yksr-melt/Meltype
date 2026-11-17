@@ -6,10 +6,16 @@ import { cleanup } from "./cleanup.js";
 import { githubSummary } from "./github.js";
 import { error } from "./http.js";
 import { createReport, getFile, getReport, listReports, stats, uploadFile } from "./reports.js";
+import { addTrial, createSession, deleteSession, exportTrials, typingStats } from "./typing.js";
 
 const routes = [
   ["POST", /^\/api\/reports$/, (c) => createReport(c.request, c.env)],
   ["PUT", /^\/api\/reports\/(\d+)\/files\/(\d+)$/, (c) => uploadFile(c.request, c.env, Number(c.match[1]), Number(c.match[2]))],
+  ["POST", /^\/api\/typing\/sessions$/, (c) => createSession(c.request, c.env)],
+  ["DELETE", /^\/api\/typing\/sessions\/me$/, (c) => deleteSession(c.request, c.env)],
+  ["POST", /^\/api\/typing\/trials$/, (c) => addTrial(c.request, c.env)],
+  ["GET", /^\/api\/dashboard\/typing\/stats$/, (c) => typingStats(c.env)],
+  ["GET", /^\/api\/dashboard\/typing\/trials$/, (c) => exportTrials(c.env, c.url)],
   ["GET", /^\/api\/github$/, (c) => githubSummary(c.env, c.ctx)],
   ["GET", /^\/api\/dashboard\/stats$/, (c) => stats(c.env)],
   ["GET", /^\/api\/dashboard\/reports$/, (c) => listReports(c.env, c.url)],

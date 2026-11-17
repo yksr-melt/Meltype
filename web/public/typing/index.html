@@ -1,0 +1,209 @@
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 Yukishiro -->
+
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>タイピング調査に協力する | Meltype</title>
+  <meta name="description" content="ローマ字入力で、どのキーが抜けやすいか・打ち間違えやすいかを調べるタイピング調査です。お手本の文を打つだけで参加できます。">
+  <meta name="theme-color" content="#3aaee8">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Meltype">
+  <meta property="og:url" content="/typing/">
+  <meta property="og:title" content="タイピング調査に協力する | Meltype">
+  <meta property="og:description" content="ローマ字入力の打ち間違えの傾向を調べています。お手本の文を 10 個打つだけ、3 分ほどで参加できます。">
+  <meta property="og:image" content="/og.png">
+  <meta property="og:locale" content="ja_JP">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="/typing/">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
+  <link rel="stylesheet" href="/assets/css/site.css">
+  <script type="module" src="/assets/js/typing.js"></script>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">本文へ移動</a>
+
+  <header class="site-header" data-header>
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
+        <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/#features">できること</a>
+        <a href="/#install">インストール</a>
+        <a href="/guide/">使い方ガイド</a>
+        <a class="is-current" href="/typing/" aria-current="page">タイピング調査</a>
+        <a class="nav-report" href="/report/">問題を報告する</a>
+        <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="page-hero" aria-labelledby="typing-title">
+      <div class="wrap">
+        <h1 id="typing-title">タイピング調査に協力する</h1>
+        <p>ローマ字入力で「どのキーが抜けやすいか」「どこで打ち間違えやすいか」を調べています。英語では大きな調査がありますが、日本語のローマ字入力の公開データはほとんどありません。集まったデータは、Meltype の打ち間違いの直し方を良くするのに使い、研究用のデータとしても公開する予定です。</p>
+        <ul class="points">
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-clock"/></svg>10 文で 3 分ほど</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-user"/></svg>名前・メールアドレスは要りません</li>
+          <li><svg class="ic"><use href="/assets/img/icons.svg#i-keyboard"/></svg>パソコンのキーボードで参加できます</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="typing wrap" data-typing>
+      <p class="callout is-warn" hidden data-mobile-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>スマートフォン・タブレットの画面のキーボードでは参加できません。パソコンのキーボードで開いてください。</span></p>
+
+      <!-- 1. 説明と同意 -->
+      <form class="card typing-intro" novalidate data-intro>
+        <h2 class="step-title"><span class="step-no">1</span>参加する前に</h2>
+        <div class="typing-terms">
+          <h3>記録するもの</h3>
+          <ul>
+            <li>お手本の文を打つあいだに押したキー (キーの種類・押した時刻と離した時刻) と、打ち終わった文字</li>
+            <li>下の質問の答え (答えなくても参加できます)</li>
+            <li>参加ごとのランダムな番号 (同じ人の打ち方をまとめて見るため)</li>
+          </ul>
+          <h3>記録しないもの</h3>
+          <ul>
+            <li>名前・メールアドレス・アカウント・IP アドレス (IP は回数の制限のためにハッシュにして 1 日だけ使い、調査のデータには入れません)</li>
+            <li>このページ以外で打った文字 (打つのはお手本の文だけです)</li>
+          </ul>
+          <h3>データの使い道</h3>
+          <ul>
+            <li>Meltype の打ち間違いの直し方・変換を良くするために使います</li>
+            <li>研究用のデータとして公開することがあります。公開するときも、参加ごとのランダムな番号のほかに、人を特定できる手がかりは入れません</li>
+            <li>参加したあとでも、同じブラウザーからならこのページの下のボタンでいつでも消せます (公開したあとのデータからは消せません)</li>
+          </ul>
+          <p class="hint">18 歳未満の方は、おうちの人に確かめてから参加してください。</p>
+        </div>
+
+        <div class="fields typing-profile">
+          <div class="field">
+            <label for="touch">タッチタイピング (キーを見ずに打つ)</label>
+            <select class="select" id="touch" name="touch">
+              <option value="unknown">答えない</option>
+              <option value="yes">できる</option>
+              <option value="partly">半分くらい見ずに打てる</option>
+              <option value="no">キーを見て打つ</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="layout">キーボードの配列</label>
+            <select class="select" id="layout" name="layout">
+              <option value="unknown">分からない・答えない</option>
+              <option value="jis">日本語 (JIS)</option>
+              <option value="us">英語 (US)</option>
+              <option value="other">そのほか</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="method">ふだんの日本語の打ち方</label>
+            <select class="select" id="method" name="method">
+              <option value="unknown">答えない</option>
+              <option value="romaji">ローマ字入力</option>
+              <option value="kana">かな入力</option>
+              <option value="other">そのほか</option>
+            </select>
+          </div>
+        </div>
+
+        <label class="typing-consent">
+          <input type="checkbox" data-consent>
+          <span>上の内容を読んで、調査への参加に同意します</span>
+        </label>
+
+        <div class="submit-actions">
+          <div class="cf-turnstile" data-sitekey="" data-action="typing" data-turnstile></div>
+          <button class="btn btn-pink btn-large" type="submit" disabled data-start>
+            <svg class="ic"><use href="/assets/img/icons.svg#i-arrow"/></svg>はじめる
+          </button>
+        </div>
+        <div class="form-status" role="status" aria-live="polite" data-intro-status></div>
+      </form>
+
+      <!-- 2. 打つ -->
+      <section class="card typing-play" hidden data-play aria-labelledby="play-title">
+        <div class="typing-play-head">
+          <h2 class="step-title" id="play-title"><span class="step-no">2</span>お手本を打つ</h2>
+          <p class="typing-progress"><b data-count>1</b> / <span data-total>10</span></p>
+        </div>
+        <ol class="typing-howto">
+          <li>IME をオフ (半角英数) にしてください。ローマ字をそのまま打ちます</li>
+          <li>間違えたら <kbd>Backspace</kbd> で直しても、そのまま進んでも大丈夫です。ふだん通りに打ってください</li>
+          <li>打ち終わったら <kbd>Enter</kbd> で次の文へ進みます</li>
+        </ol>
+        <div class="typing-board" tabindex="0" role="textbox" aria-label="ここをクリックしてから打つ" aria-describedby="typing-target" data-board>
+          <p class="typing-text" id="typing-target" data-text></p>
+          <p class="typing-reading" data-reading></p>
+          <p class="typing-kana" aria-live="off"><span data-kana></span><span class="typing-pending" data-pending></span><span class="typing-caret" aria-hidden="true"></span></p>
+          <p class="typing-romaji" data-romaji></p>
+          <p class="typing-focus-hint" data-focus-hint>ここをクリックしてから打ってください</p>
+        </div>
+        <p class="callout is-danger" hidden data-ime-note><svg class="ic"><use href="/assets/img/icons.svg#i-alert"/></svg><span>IME がオンになっています。半角英数に切り替えてから、この文を打ち直してください。</span></p>
+        <div class="typing-actions">
+          <button class="btn btn-ghost btn-small" type="button" data-skip>この文を飛ばす</button>
+        </div>
+      </section>
+
+      <!-- 3. 結果 -->
+      <section class="card typing-result" hidden tabindex="-1" data-result aria-labelledby="result-title">
+        <svg class="ic done-icon" aria-hidden="true"><use href="/assets/img/icons.svg#i-check"/></svg>
+        <h2 id="result-title">ありがとうございました！</h2>
+        <dl class="typing-scores">
+          <div><dt>速さ</dt><dd><b data-speed>-</b> かな/分</dd></div>
+          <div><dt>正確さ</dt><dd><b data-accuracy>-</b> %</dd></div>
+          <div><dt>Backspace</dt><dd><b data-backspaces>-</b> 回</dd></div>
+        </dl>
+        <div class="typing-misses" data-misses></div>
+        <div class="form-status" role="status" aria-live="polite" data-result-status></div>
+        <div class="actions">
+          <button class="btn btn-pink" type="button" data-again>
+            <svg class="ic"><use href="/assets/img/icons.svg#i-refresh"/></svg>もう 10 文打つ
+          </button>
+          <a class="btn btn-ghost" href="/">トップへ戻る</a>
+        </div>
+      </section>
+
+      <div class="typing-foot">
+        <p>この調査のデータの扱いは、Meltype の <a href="https://github.com/yksr-melt/Meltype/blob/main/web/README.md">web/README.md</a> にも書いてあります。</p>
+        <button class="btn btn-ghost btn-small" type="button" hidden data-forget>
+          <svg class="ic"><use href="/assets/img/icons.svg#i-trash"/></svg>このブラウザーから送ったデータを消す
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <div class="footer-brand">
+        <img src="/assets/img/logo-small.png" alt="Meltype" width="120" height="60">
+        <p>雪解けのように、半角/全角の壁を溶かす日本語入力。</p>
+      </div>
+      <ul class="footer-links">
+        <li><a href="https://github.com/yksr-melt/Meltype">GitHub</a></li>
+        <li><a href="https://github.com/yksr-melt/Meltype/releases">Releases</a></li>
+        <li><a href="https://discord.gg/y44wBbBgHt">Discord</a></li>
+        <li><a href="https://github.com/sponsors/yksr-melt">応援する</a></li>
+        <li><a href="/typing/">タイピング調査</a></li>
+        <li><a href="/report/">問題を報告する</a></li>
+      </ul>
+      <p class="footer-copy">Copyright (C) 2026 雪代 / Yukishiro・GPL-3.0・Logo by <a href="https://github.com/Crysta1221">@Crysta1221</a></p>
+    </div>
+  </footer>
+</body>
+</html>

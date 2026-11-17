@@ -505,3 +505,97 @@ describe("GitHub の情報のキャッシュ (KV)", () => {
     assert.equal((await call("/api/github")).status, 502);
   });
 });
+
+describe("タイピング調査", () => {
+  const KEYS = [
+    ["KeyK", "k", 0, 80],
+    ["KeyY", "y", 120, 200],
+    ["KeyO", "o", 260, 330],
+  ];
+
+  async function start(extra = {}, ip = "203.0.113.9") {
+    turnstileAnswer = { success: true, action: "typing", hostname: "meltype.moe" };
+    return call("/api/typing/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({ consent: true, turnstile: "token", profile: { touch: "yes", layout: "jis", method: "romaji", os: "windows" }, ...extra }),
+    });
+  }
+
+  function trial(token, extra = {}) {
+    return call("/api/typing/trials", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sentence: "s001", typed: "kyo", keys: KEYS, duration: 400, ...extra }),
+    });
+  }
+
+  it("同意が無い・報告用の Turnstile では始められない", async () => {
+    assert.equal((await start({ consent: false })).status, 400);
+    turnstileAnswer = { success: true, action: "report", hostname: "meltype.moe" };
+    const response = await call("/api/typing/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ consent: true, turnstile: "token" }),
+    });
+    assert.equal(response.status, 400);
+  });
+
+  it("打鍵を受け付け、ダッシュボードから書き出せる。IP と自由記述は残らない", async () => {
+    const { id, token } = await (await start()).json();
+    assert.equal((await trial(token)).status, 201);
+    assert.equal((await trial("wrong")).status, 401);
+
+    const jwtToken = await jwt(goodClaims());
+    assert.equal((await call("/api/dashboard/typing/trials")).status, 403);
+    const exported = await (await call("/api/dashboard/typing/trials", { headers: { "cf-access-jwt-assertion": jwtToken } })).json();
+    assert.equal(exported.trials.length, 1);
+    const [row] = exported.trials;
+    assert.equal(row.session, id);
+    assert.equal(row.reading, "きょうはあさからあめがふっている。");
+    assert.deepEqual(row.keys, KEYS);
+    assert.deepEqual(row.profile, { touch: "yes", layout: "jis", method: "romaji", os: "windows" });
+    assert.ok(!JSON.stringify(row).includes("203.0.113.9"));
+    const stats = await (await call("/api/dashboard/typing/stats", { headers: { "cf-access-jwt-assertion": jwtToken } })).json();
+    assert.deepEqual(stats, { sessions: 1, trials: 1, keystrokes: 3 });
+  });
+
+  it("知らない文・おかしな打鍵・ASCII 以外の入力は受け付けない", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { sentence: "nope" })).status, 400);
+    assert.equal((await trial(token, { typed: "きょう" })).status, 400);
+    assert.equal((await trial(token, { keys: [["KeyK", "k", 100, 50]] })).status, 400);
+    assert.equal((await trial(token, { keys: [["KeyK", "k", 100, null], ["KeyY", "y", 50, null]] })).status, 400);
+    assert.equal((await trial(token, { keys: [] })).status, 400);
+    assert.equal((await trial(token, { duration: 0 })).status, 400);
+  });
+
+  it("知らない答えは unknown にする", async () => {
+    await start({ profile: { touch: "<script>", layout: 1 } });
+    const row = await env.DB.prepare("SELECT profile FROM typing_sessions").first();
+    assert.deepEqual(JSON.parse(row.profile), { touch: "unknown", layout: "unknown", method: "unknown", os: "other" });
+  });
+
+  it("参加者は自分のデータを消せる", async () => {
+    const { token } = await (await start()).json();
+    await trial(token);
+    const remove = () => call("/api/typing/sessions/me", { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+    assert.equal((await remove()).status, 200);
+    assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM typing_trials").first()).n, 0);
+    assert.equal((await remove()).status, 404);
+  });
+
+  it("回数制限は報告と別に数える", async () => {
+    for (let i = 0; i < 3; i++) assert.equal((await report()).status, 201);
+    assert.equal((await report()).status, 429);
+    assert.equal((await start({}, "203.0.113.5")).status, 201);
+    for (let i = 0; i < 4; i++) await start({}, "203.0.113.5");
+    assert.equal((await start({}, "203.0.113.5")).status, 429);
+  });
+
+  it("参加から 12 時間たったら打鍵を受け付けない", async () => {
+    const { token } = await (await start()).json();
+    await env.DB.prepare("UPDATE typing_sessions SET created_at = created_at - 13 * 3600").run();
+    assert.equal((await trial(token)).status, 410);
+  });
+});

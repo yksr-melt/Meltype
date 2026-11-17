@@ -271,6 +271,42 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => state.days && drawChart(state.days), 150);
 });
 
+// タイピング調査のデータは、1 行に 1 文の JSON Lines で書き出す (src/typing.js の exportTrials を next が null になるまで読む)
+async function loadTypingStats() {
+  try {
+    const stats = await getJson("/api/dashboard/typing/stats");
+    for (const key of ["sessions", "trials", "keystrokes"]) document.querySelector(`[data-typing-stat="${key}"]`).textContent = formatNumber(stats[key]);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+document.querySelector("[data-typing-export]").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const lines = [];
+    let after = 0;
+    for (;;) {
+      const page = await getJson(`/api/dashboard/typing/trials?after=${after}&limit=1000`);
+      for (const trial of page.trials) lines.push(JSON.stringify(trial));
+      if (page.next === null) break;
+      after = page.next;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "application/x-ndjson" }));
+    link.download = `meltype-typing-${new Date().toISOString().slice(0, 10)}.jsonl`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    toast(`${formatNumber(lines.length)} 文を書き出しました`);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+loadTypingStats();
 initHeader();
 loadStats();
 await loadList(true);

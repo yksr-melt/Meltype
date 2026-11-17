@@ -113,3 +113,14 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
 3. どちらかが空のあいだ、ダッシュボードは 503 で閉じたままです (開けっぱなしにはなりません)
 
 `wrangler.jsonc` で `workers_dev` と `preview_urls` を `false` にしています。Access は `meltype.moe` にしか掛からないため、`*.workers.dev` を開けると Access の外から入れてしまいます。
+
+## タイピング調査 (`/typing/`)
+
+ローマ字入力でどのキーが抜けやすいか・打ち間違えやすいかを調べるため、お手本の文 (`public/assets/js/typing-sentences.js`) を打ったときの打鍵を集めます。Meltype のアプリには入れず、このページだけで集めます。
+
+- 集めるのは、お手本の文の id・打ったローマ字・打鍵 (`[code, key, 押した時刻, 離した時刻]`、時刻は打ち始めからのミリ秒)・かかった時間と、任意の質問 (タッチタイピング・配列・ふだんの打ち方) の答え、OS です。参加者が自分で書いた文章は受け付けません。
+- 参加者は参加ごとのランダムな番号 (`typing_sessions.id`) だけで分けます。IP はハッシュにして回数の制限 (10 分に 5 回・1 日に 20 回参加を始められる) にだけ使い、報告とは別に数えます (`rate_events.kind`)。
+- 参加を始めるときに同意と Turnstile (action は `typing`) を確かめます。打鍵は始めてから 12 時間・600 文まで送れます。
+- 参加者は、同じブラウザーからならページの下のボタンでいつでも自分のデータを消せます (`DELETE /api/typing/sessions/me`)。
+- データは消さずに残します (Cron の掃除の対象外)。ダッシュボードの「タイピング調査」から JSON Lines で書き出せます (`/api/dashboard/typing/trials`、Access の内側)。
+- お手本の文は、一度使った id の文と読みを変えないでください。直すときは新しい id で足します。
