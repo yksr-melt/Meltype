@@ -5,11 +5,12 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// Mozc と Zenzai を組み合わせた、全 OS で使う変換エンジン (#1740)。
-/// Zenzai が使えればその答えを Mozc の文節に当てはめ、使えなければ Mozc で変換する。Mozc が使えなければ変換しない (かなのまま)。
-/// 組み立ては <see cref="MeltypeRuntime.CreateConverter"/>。
+/// Mozc と Zenzai の答えのどちらを使うかは <see cref="Choose"/> が決める。組み立ては <see cref="MeltypeRuntime.CreateConverter"/>。
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
-public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
+/// <param name="userWords">読みに登録したユーザー辞書の語 (<see cref="UserDictionary.Lookup"/>)。</param>
+public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null,
+    Func<string, IReadOnlyList<string>>? userWords = null)
     : IKanjiConverter, ILearningConverter, IStandaloneConverter, IBackgroundConverter
 {
     private ZenzaiConverter? _subscribedZenzai;
@@ -85,17 +86,10 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     private static readonly object CouldNotCreate = new();
 
     public string? Convert(string hiragana) =>
-        (Zenzai(hiragana, null) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
-
-    /// <summary>Zenzai の答えを使えるか (<see cref="ConvertClauses"/> と同じ決め方): かなが読みと合うか、Mozc の文節ごとの候補をつないで作れるか。</summary>
-    private bool IsUsable(string hiragana, string answer) =>
-        ZenzaiConverter.IsPlausible(hiragana, answer) || IsBuiltFromMozcCandidates(hiragana, answer);
-
-    private bool IsBuiltFromMozcCandidates(string hiragana, string answer) =>
-        mozc.ConvertWithCandidates(hiragana) is { } fromMozc && Align(fromMozc, answer) is not null;
+        ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
     /// <summary>
-    /// <see cref="IsBuiltFromMozcCandidates"/> と同じ (文脈なし)。Mozc が答えなかったら null。
+    /// Mozc の文節ごとの候補をつないで answer を作れるか (文脈なし)。Mozc が答えなかったら null。
     /// ヘルパーが答えるまで待つので、入力スレッドでは呼ばない (<see cref="MeltypeRuntime.ForgetZenzaiHallucinations"/> が裏のスレッドで呼ぶ)。
     /// </summary>
     public bool? IsBuiltFromMozcCandidatesNow(string hiragana, string answer) =>
@@ -104,26 +98,26 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
     public string? ConvertStandalone(string hiragana) => mozc.Convert(hiragana);
 
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+        Choose(hiragana, mozc.ConvertWithCandidates(hiragana, context), Zenzai(hiragana, context) is [var z] ? z.Text : null, userWords);
+
     /// <summary>
-    /// Zenzai が使えれば Zenzai の結果。Mozc の結果と同じ文字列なら、そちらの文節の区切りを使う
-    /// (Zenzai の結果は読み全体で 1 つの文節で、区切りを動かせないため)。
-    /// 違う文字列でも、Mozc の文節ごとの候補を 1 つずつ選んでつなげると作れるなら、Mozc の文節の区切りで返す (Align)。
+    /// Mozc の答え (文節と文節ごとの候補) と Zenzai の答え (読み全体の文字列) から、使う文節を決める。どちらも無ければ null。
+    /// Zenzai の答えが Mozc の文節ごとの候補を 1 つずつ選んでつなげて作れるなら、Mozc の文節の区切りで返す (Align。同じ文字列ならそのまま)。
     /// 1 つの文節のままだと、文節ごとに候補を選び直せず、前に選び直して覚えた変換 (文節の読みごと) も効かない。
     /// Mozc の文節で返した結果は、確定すると Mozc にも覚えさせる (Mozc の候補に無い 1 つの文節は、Mozc が覚えない)。
-    /// Mozc の候補で作れない答えは、かなが読みと合うときだけ使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
+    /// Mozc の候補で作れない答えは、かなが読みと合うときだけ、読み全体で 1 つの文節にして使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
     /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
+    /// Mozc が最初の候補にしたユーザー辞書の語 (userWords) は、Zenzai の答えで変えない。Zenzai はユーザー辞書の語を知らない。
     /// </summary>
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+    internal static IReadOnlyList<ConversionClause>? Choose(string hiragana, IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? fromMozc, string? zenzai,
+        Func<string, IReadOnlyList<string>>? userWords = null)
     {
-        var fromMozc = mozc.ConvertWithCandidates(hiragana, context);
-        var other = fromMozc?.Select(s => s.Clause).ToList();
-        if (Zenzai(hiragana, context) is not { Count: > 0 } z) return other;
-        // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
-        if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();
-        // 候補は、この変換で文節と一緒に受け取ったものを使う (ヘルパーには聞き直さない)。
-        // 文節の読みは Mozc が返したまま (全角の（ を ( にするなど、読み全体と少し違うことがある。Mozc だけで変換するときと同じ)
-        return (fromMozc is not null ? Align(fromMozc, z[0].Text)?.Select(c => c with { Zenzai = true }).ToList() : null)
-            ?? (ZenzaiConverter.IsPlausible(hiragana, z[0].Text) ? z : other);
+        var plausible = zenzai is not null && ZenzaiConverter.IsPlausible(hiragana, zenzai);
+        if (fromMozc is null) return plausible ? [new ConversionClause(hiragana, zenzai!, Zenzai: true)] : null;
+        if (zenzai is not null && Align(fromMozc, zenzai, userWords) is { } aligned) return [.. aligned.Select(c => c with { Zenzai = true })];
+        var hasUserWord = fromMozc.Any(c => userWords?.Invoke(c.Clause.Reading).Contains(c.Clause.Text) == true);
+        return plausible && !hasUserWord ? [new ConversionClause(hiragana, zenzai!, Zenzai: true)] : [.. fromMozc.Select(c => c.Clause)];
     }
 
     /// <summary>Zenzai を使わない、文節に区切った変換 (英日の区切りの案の変換用。IStandaloneConverter)。</summary>
@@ -137,11 +131,13 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// 候補と text のその部分を半角にそろえてから比べる (CompositionController.NormalizeHalfWidth と同じ。返す文字列も半角)。
     /// 助詞だけの文節 (に・で など) は、かなの候補しか選ばない。CompositionController は助詞だけの文節をかなに戻すので、
     /// ほかの候補で作ると Zenzai の結果と違ってしまう (にもつを|に|かいに の に を 2 にすると、荷物をに階に になる)。
+    /// 最初の候補が userWords の語の文節は、最初の候補しか選ばない。
     /// </summary>
-    internal static IReadOnlyList<ConversionClause>? Align(IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)> clauses, string text)
+    internal static IReadOnlyList<ConversionClause>? Align(IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)> clauses, string text,
+        Func<string, IReadOnlyList<string>>? userWords = null)
     {
-        var lists = clauses.Select(c => JapaneseParticles.IsParticle(c.Clause.Reading)
-            ? [c.Clause.Reading]
+        var lists = clauses.Select(c => JapaneseParticles.IsParticle(c.Clause.Reading) ? [c.Clause.Reading]
+            : userWords?.Invoke(c.Clause.Reading).Contains(c.Clause.Text) == true ? [c.Clause.Text]
             : (c.Candidates.Contains(c.Clause.Text) ? c.Candidates : [c.Clause.Text, .. c.Candidates])
                 .Select(candidate => CompositionController.NormalizeHalfWidth(candidate, c.Clause.Reading)).ToList()).ToList();
         var chosen = new string[clauses.Count];

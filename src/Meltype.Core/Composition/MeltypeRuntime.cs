@@ -123,7 +123,7 @@ public sealed class MeltypeRuntime : IDisposable
         ZenzaiStatus = () => Settings.Current.UseZenzai ? zenzai.Status ?? "まだ起動していません (日本語を変換すると起動します)" : null;
         var converter = new HybridConverter(mozc, () => Settings.Current is { UseZenzai: true } settings
             ? zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath, appDirectory), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath, appDirectory), settings.ZenzaiDevice)
-            : zenzai.Get("", ""), zenzai.Failed);
+            : zenzai.Get("", ""), zenzai.Failed, UserDictionary.Lookup);
         ForgetZenzaiHallucinations(converter);
         return converter;
     }

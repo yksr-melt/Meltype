@@ -391,6 +391,17 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void Choose_KeepsUserWordsOfMozc()
+    {
+        // 同梱の語句・ユーザー辞書の語 (とどりすと → todoリスト) を Mozc が最初の候補にしたら、Zenzai の答え (トドリスと) で変えない
+        IReadOnlyList<string> UserWords(string reading) => reading == "とどりすと" ? ["todoリスト"] : [];
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> todo = [(new("とどりすと", "todoリスト"), ["todoリスト", "トドリスト"])];
+        Assert.Equal("とどりすと→todoリスト", Joined(HybridConverter.Choose("とどりすと", todo, "トドリスと", UserWords)), "読み全体の 1 つの文節にもしない");
+        Assert.Equal("とどりすと→todoリスト", Joined(HybridConverter.Choose("とどりすと", todo, "トドリスト", UserWords)), "ほかの候補も選ばない");
+        Assert.Equal("とどりすと→トドリスと", Joined(HybridConverter.Choose("とどりすと", todo, "トドリスと")), "ユーザー辞書の語でなければ、かなが読みと合う答えを使う");
+    }
+
+    [Test]
     public static void Align_BuildsTextFromEachClauseCandidates()
     {
         IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> clauses =

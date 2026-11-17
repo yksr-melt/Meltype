@@ -138,8 +138,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
-        context = context?.Replace("\r", "").Replace("\n", "").Trim();
-        context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
+        context = ContextOf(context);
         var key = context + "\u0000" + hiragana;
         lock (_gate)
         {
@@ -196,6 +195,18 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (answer is not null && !slow) _cache[key] = text;
         }
         return text is null ? null : [new ConversionClause(hiragana, text)];
+    }
+
+    /// <summary>
+    /// Zenzai に渡す文脈: 前の文字列から改行を除いた、文をまたぐ日本語の文章 (最大 100 文字)。
+    /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
+    /// 英語・記号で終わるときと空のときは「。」(<see cref="NeutralContext"/>)。
+    /// </summary>
+    internal static string ContextOf(string? text)
+    {
+        text = text?.Replace("\r", "").Replace("\n", "").Trim();
+        if (string.IsNullOrEmpty(text) || CompositionController.LanguageOf(text) != false) return NeutralContext;
+        return text.Length > MaxContext ? text[^MaxContext..] : text;
     }
 
     /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
