@@ -112,6 +112,7 @@ public sealed partial class CompositionController
     private bool _converting;
     private bool? _lastCommitEnglish;
     private string? _lastCommitText;
+    // 前の文字列 (入力を始めたときに決める)。英語も含めてそのまま変換エンジンに渡す (Context)
     private string? _precedingText;
     private string? _followingText;
     /// <summary>入力欄が教えてくれた、キャレットの直前の確定済みの文字 (読めなければ null)。確定し直してよいかの判断に使う。</summary>

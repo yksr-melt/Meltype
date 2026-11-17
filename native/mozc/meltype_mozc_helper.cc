@@ -4,6 +4,7 @@
 // 標準入力から 1 行に 1 つの要求を受け取り、標準出力に 1 行で答える (UTF-8)。
 //   C<TAB>前の文字列<TAB>読み
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
+//       候補1 がユーザー辞書の語か、学習で 1 番目にした語なら、その文節の読みの前に <GS> (0x1D) を付ける。
 //   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
@@ -44,6 +45,7 @@ namespace {
 
 constexpr char kUnitSeparator = '\x1f';
 constexpr char kRecordSeparator = '\x1e';
+constexpr char kGroupSeparator = '\x1d';
 
 class Helper {
  public:
@@ -72,6 +74,7 @@ class Helper {
     for (size_t i = 0; i < segments.conversion_segments_size(); ++i) {
       const mozc::Segment& segment = segments.conversion_segment(i);
       if (i > 0) out += kRecordSeparator;
+      if (segment.candidates_size() > 0 && IsUsersWord(segment.candidate(0))) out += kGroupSeparator;
       out += segment.key();
       for (size_t j = 0; j < segment.candidates_size(); ++j) {
         out += kUnitSeparator;
@@ -163,6 +166,11 @@ class Helper {
   bool Save() { return engine_->Sync(); }
 
  private:
+  static bool IsUsersWord(const mozc::converter::Candidate& candidate) {
+    return (candidate.attributes & (mozc::converter::Attribute::USER_DICTIONARY |
+                                    mozc::converter::Attribute::USER_SEGMENT_HISTORY_REWRITER)) != 0;
+  }
+
   static bool SameKeys(const mozc::Segments& segments,
                        const std::vector<std::pair<std::string, std::string>>& chosen) {
     for (size_t i = 0; i < chosen.size(); ++i) {

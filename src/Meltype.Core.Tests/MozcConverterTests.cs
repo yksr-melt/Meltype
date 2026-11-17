@@ -55,6 +55,21 @@ internal static class MozcConverterTests
                 case "C" when fields[2] == "きょう":
                     output.WriteLine("きょう\x1f今日");
                     break;
+                // 本物の Mozc は、前に同じ語があると区切りを変える (「記号等」含め、 + きごうとう → 気強盗)
+                case "C" when fields[2] == "きごうとう" && fields[1].Contains("記号等"):
+                    output.WriteLine("き\x1f気" + '\x1e' + "ごうとう\x1f強盗");
+                    break;
+                case "C" when fields[2] == "きごうとう":
+                    output.WriteLine("きごう\x1f記号" + '\x1e' + "とう\x1f等");
+                    break;
+                // 受け取った文脈を候補にして返す
+                case "C" when fields[2] == "ぶんみゃく":
+                    output.WriteLine("ぶんみゃく\x1f" + (fields[1].Length > 0 ? fields[1] : "なし"));
+                    break;
+                // 最初の候補がユーザーの語 (学習で 1 番目にした語)
+                case "C" when fields[2] == "はしをわたる":
+                    output.WriteLine("\x1dはしを\x1f箸を\x1f橋を" + '\x1e' + "わたる\x1f渡る");
+                    break;
                 case "C":
                     output.WriteLine(fields[2] + '\x1f' + fields[2]);
                     break;
@@ -112,6 +127,32 @@ internal static class MozcConverterTests
         var hybrid = new HybridConverter(mozc);
         Assert.Equal("めるたいぷ", hybrid.Reading("メルタイプ"));
         Assert.Equal("かんじ", hybrid.Reading("漢字"));
+    }
+
+    [Test]
+    public static void Mozc_UsesTheJapaneseOfTheSameSentenceAsContext()
+    {
+        using var mozc = Fake();
+        Assert.True(WaitConverted(mozc, "あ"), "偽のヘルパーが起動しなかった");
+        string Context(string? context) => mozc.ConvertClauses("ぶんみゃく", context) is [var c] ? c.Text : "(null)";
+        Assert.Equal("この本は", Context("昨日読んだ。この本は"), "同じ文の日本語");
+        Assert.Equal("１２３４５６７８９０", Context("あいう１２３４５６７８９０"), "最大 10 文字");
+        Assert.Equal("なし", Context("github"), "英語で終わるなら渡さない (ごと → 五と・にも → 二も になる)");
+        Assert.Equal("なし", Context("終わり。\n"), "文の始まりなら渡さない");
+        Assert.Equal("記号|等", string.Join("|", mozc.ConvertClauses("きごうとう", "文章を「記号等」含め、")!.Select(c => c.Text)),
+            "文脈で区切りが変わるなら文脈なしの結果を使う");
+    }
+
+    [Test]
+    public static void Hybrid_KeepsTheUsersWordOfMozc()
+    {
+        // 学習で 1 番目にした 箸を は、Zenzai が 橋を と答えても変えない (Zenzai はユーザーの語を知らない)
+        using var mozc = Fake();
+        Assert.True(WaitConverted(mozc, "あ"), "偽のヘルパーが起動しなかった");
+        using var server = new ZenzaiConverterTests.FakeServer { Answer = p => "橋を渡る" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        var hybrid = new HybridConverter(mozc, () => zenzai);
+        Assert.Equal("箸を|渡る", string.Join("|", hybrid.ConvertClauses("はしをわたる", "川の")!.Select(c => c.Text)));
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)

@@ -14,7 +14,7 @@ namespace Meltype.Tests;
 internal static class ZenzaiConverterTests
 {
     /// <summary>受け取った prompt を記録して、answer(prompt) を content にして返す。status が 200 以外ならそのエラーを返す。</summary>
-    private sealed class FakeServer : IDisposable
+    internal sealed class FakeServer : IDisposable
     {
         private readonly HttpListener _listener;
         public List<string> Prompts { get; } = [];
@@ -314,20 +314,6 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Budget_DoesNotNotifyWhenThereIsNoNewText()
-    {
-        using var server = new FakeServer { Answer = p => "かんたん</s>" };
-        using var zenzai = new ZenzaiConverter(server.Endpoint);
-        var notified = 0;
-        zenzai.ResultReady += () => Interlocked.Increment(ref notified);
-        zenzai.Budget.Enable();
-        zenzai.Budget.Start(3000);
-        // 読みのまま (変換していない) の答えは表示を変えない
-        Assert.True(zenzai.ConvertClauses("かんたん") is null, "変換していない");
-        Assert.Equal(0, Volatile.Read(ref notified));
-    }
-
-    [Test]
     public static void NoContext_UsesNeutralSentenceStart()
     {
         // 前の文脈が無い入力は、モデルが迷う (文脈なしの きょう → 強) ので、文の始まりの合図「。」を文脈として渡す
@@ -341,12 +327,12 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void UnchangedAnswer_IsNotUsed_AndDoesNotCountAsFailure()
+    public static void UnchangedAnswer_IsReturned()
     {
-        using var server = new FakeServer { Answer = p => "かんたんなもんだい" };
+        // 英単語の後ろの付属語 (python + なら) は、読みのままが正しい答え。使うかは HybridConverter が Mozc の候補と比べて決める
+        using var server = new FakeServer { Answer = p => "なら" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
-        for (var i = 0; i < 4; i++) Assert.True(zenzai.ConvertClauses("かんたんなもんだい", "前の文") is null, "読みのままなら null");
-        Assert.True(zenzai.IsAvailable, "変換しなかっただけでは諦めない");
+        Assert.True(zenzai.ConvertClauses("なら", "python") is [{ Text: "なら" }], "読みのままの答えも返す");
     }
 
     [Test]
@@ -382,9 +368,9 @@ internal static class ZenzaiConverterTests
         // 偽の Mozc は たんいをとる を 単位を|取る の 2 文節にする。同じ文字列なら、その区切りを使う
         var same = hybrid.ConvertClauses("たんいをとる");
         Assert.True(same is [{ Text: "単位を" }, { Text: "取る" }], "同じなら区切りを使う: " + string.Join("|", same?.Select(c => c.Text) ?? []));
-        // 違えば Zenzai の結果
+        // Mozc の候補で作れない答えは使わない
         var other = hybrid.ConvertClauses("たんい", "前の文");
-        Assert.True(other is [{ Reading: "たんい", Text: "丹位" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
+        Assert.True(other is [{ Reading: "たんい", Text: "単位" }], "Mozc の候補で作れなければ Mozc: " + string.Join("|", other?.Select(c => c.Text) ?? []));
         // 使わない設定 (null) なら今までどおり
         var off = new HybridConverter(mozc, () => null);
         Assert.Equal("単位", off.Convert("たんい") ?? "", "OFF は今までどおり");
@@ -393,27 +379,32 @@ internal static class ZenzaiConverterTests
     [Test]
     public static void Align_BuildsTextFromEachClauseCandidates()
     {
-        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> clauses =
-            [(new("きしゃが", "記者が"), ["記者が", "汽車が", "帰社が"]), (new("きた", "来た"), ["来た", "着た", "北"])];
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>, bool)> clauses =
+            [(new("きしゃが", "記者が"), ["記者が", "汽車が", "帰社が"], false), (new("きた", "来た"), ["来た", "着た", "北"], false)];
         var aligned = HybridConverter.Align(clauses, "汽車が着た");
         Assert.True(aligned is [{ Reading: "きしゃが", Text: "汽車が" }, { Reading: "きた", Text: "着た" }], "文節ごとの候補でできる: " + Joined(aligned));
         Assert.True(HybridConverter.Align(clauses, "記者が北") is [{ Text: "記者が" }, { Text: "北" }], "1 番目の候補もそのまま使う");
         Assert.True(HybridConverter.Align(clauses, "汽車が着たよ") is null, "候補をつないでも作れない (余る)");
         Assert.True(HybridConverter.Align(clauses, "喫茶が来た") is null, "候補に無い字がある");
         // Mozc が候補を返さなかった文節は、読みのままの文字列になる (MozcConverter.ConvertWithCandidates)。それも候補として使う
-        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> noCandidates = [(new("きしゃが", "記者が"), ["記者が"]), (new("きた", "きた"), [])];
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>, bool)> noCandidates = [(new("きしゃが", "記者が"), ["記者が"], false), (new("きた", "きた"), [], false)];
         Assert.True(HybridConverter.Align(noCandidates, "記者がきた") is [{ Text: "記者が" }, { Text: "きた" }], "候補が無い文節は読みのまま: " + Joined(HybridConverter.Align(noCandidates, "記者がきた")));
         Assert.True(HybridConverter.Align(noCandidates, "記者が来た") is null, "候補が無い文節は、読みのまま以外にはしない");
         // 半角の数字を打った読みは、Mozc が全角の候補 (１５日に) を返す。半角にそろえて比べ、半角で返す (CompositionController.NormalizeHalfWidth と同じ)
-        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> digits = [(new("15にちに", "１５日に"), ["１５日に", "十五日に"]), (new("きた", "来た"), ["来た", "着た"])];
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>, bool)> digits = [(new("15にちに", "１５日に"), ["１５日に", "十五日に"], false), (new("きた", "来た"), ["来た", "着た"], false)];
         var halfWidth = HybridConverter.Align(digits, "15日に着た");
         Assert.True(halfWidth is [{ Text: "15日に" }, { Text: "着た" }], "半角の数字: " + Joined(halfWidth));
         Assert.True(HybridConverter.Align(digits, "１５日に着た") is [{ Text: "15日に" }, { Text: "着た" }], "全角で返ってきても半角にそろえる");
         // 前の文節で長い候補を先に選ぶと後ろが作れないときは、短い候補に戻って試す
         // (候補は仮のもの。本物の Mozc で、同じ文節の候補の一方が他方の頭と同じになることはまれ)
-        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> overlap = [(new("あ", "AB"), ["AB", "A"]), (new("い", "BC"), ["BC"])];
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>, bool)> overlap = [(new("あ", "AB"), ["AB", "A"], false), (new("い", "BC"), ["BC"], false)];
         var shorter = HybridConverter.Align(overlap, "ABC");
         Assert.True(shorter is [{ Text: "A" }, { Text: "BC" }], "戻って試す: " + Joined(shorter));
+        // 最初の候補がユーザーの語 (ユーザー辞書の語・学習で 1 番目にした語) の文節は、ほかの候補を選ばない
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>, bool)> learned =
+            [(new("はしを", "箸を"), ["箸を", "橋を", "端を"], true), (new("わたる", "渡る"), ["渡る", "亘る"], false)];
+        Assert.True(HybridConverter.Align(learned, "橋を渡る") is null, "ユーザーの語の文節は変えない");
+        Assert.True(HybridConverter.Align(learned, "箸を亘る") is [{ Text: "箸を" }, { Text: "亘る" }], "ほかの文節は選べる");
     }
 
     [Test]
@@ -437,9 +428,9 @@ internal static class ZenzaiConverterTests
         // Zenzai の結果 (汽車が着た) は Mozc の 1 番目 (記者が来た) と違うが、文節ごとの候補でできるので、Mozc の文節で返す
         var aligned = hybrid.ConvertClauses("きしゃがきた", "前の文");
         Assert.True(aligned is [{ Reading: "きしゃが", Text: "汽車が" }, { Reading: "きた", Text: "着た" }], "Mozc の文節で返す: " + Joined(aligned));
-        // 候補でできなければ、今までどおり読み全体で 1 つの文節
+        // 候補でできなければ、Mozc の結果
         var whole = hybrid.ConvertClauses("きしゃがきた", "外の文");
-        Assert.True(whole is [{ Reading: "きしゃがきた", Text: "帰社が喜多" }], "できなければ 1 文節: " + Joined(whole));
+        Assert.True(whole is [{ Text: "記者が" }, { Text: "来た" }], "できなければ Mozc: " + Joined(whole));
 
         // 文節が残るので、選び直して覚えた文節 (きしゃが → 帰社が) は Zenzai の結果の上から効く。1 文節だと効かなかった
         var history = new ConversionHistory(null);
@@ -453,11 +444,8 @@ internal static class ZenzaiConverterTests
         Assert.True(!asked.Contains("きしゃが") && !asked.Contains("きた"), "文節だけを Zenzai に頼まない: " + string.Join("|", asked));
 
         // 助詞だけの文節 (に) は、かな以外の候補 (2) で当てはめない。当てはめると、助詞をかなに戻す決まりで 荷物をに階に運ぶ になる
-        var cargoClauses = hybrid.ConvertClauses("にもつをにかいにはこぶ", "前の文");
-        Assert.True(cargoClauses is [{ Text: "荷物を2階に運ぶ" }], "助詞の文節を数字にして当てはめない: " + Joined(cargoClauses));
-        var cargo = new CompositionTests.Keyboard(converter: hybrid);
-        cargo.Type("nimotsuwonikainihakobu ");
-        Assert.Equal("荷物を2階に運ぶ", cargo.Showing ?? "", "助詞の文節を数字にしない (1 つの文節のまま)");
+        var cargo = hybrid.ConvertClauses("にもつをにかいにはこぶ", "前の文");
+        Assert.True(cargo is [{ Zenzai: false }, { Text: "に", Zenzai: false }, ..], "助詞の文節を数字にして当てはめない: " + Joined(cargo));
     }
 
     [Test]

@@ -33,15 +33,13 @@ internal static class CompositionTests
 
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
         {
-            if (context is not null) LastContext = context;
+            if (!string.IsNullOrEmpty(context)) LastContext = context;
             return hiragana switch
             {
                 "たんいをとる" => [new("たんいを", "単位を"), new("とる", "取る")],
                 // 英語として見せている語 (Make) も、読み (まけ) にして区切る
                 "きょうはまけ" => [new("きょうは", "今日は"), new("まけ", "負け")],
                 "ひるか" => [new("ひる", "昼"), new("か", "化")],
-                // 本物の変換エンジンは、前に同じ語があると区切りを変える (「記号等」含め、 + きごうとう → 気強盗)。
-                "きごうとう" when context?.Contains("記号等") == true => [new("き", "気"), new("ごうとう", "強盗")],
                 "きごうとう" => [new("きごう", "記号"), new("とう", "等")],
                 "あつい" => [new("あつい", "熱い")],
                 "かわ" => [new("かわ", "川")],
@@ -388,33 +386,6 @@ internal static class CompositionTests
         }
 
         public string? Showing => Host.View?.Text;
-    }
-
-    private sealed class WideContextConverter : IKanjiConverter, IWideContextConverter
-    {
-        public string? WideContext { get; set; }
-        public string? Convert(string hiragana) => null;
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => null;
-    }
-
-    [Test]
-    public static void WideContext_IsPassedToConvertersThatCanUseIt()
-    {
-        var converter = new WideContextConverter();
-        var k = new Keyboard(converter: converter);
-        k.Host.PrecedingText = "昨日は雨でしたが、\n今日は";
-        k.Type("kyou");
-        Assert.Equal("昨日は雨でしたが、今日は", converter.WideContext ?? "(なし)", "改行を除いて文をまたいで渡す");
-        var longText = string.Concat(Enumerable.Repeat("あ", 150)) + "終";
-        var l = new Keyboard(converter: converter);
-        l.Host.PrecedingText = longText;
-        l.Type("kyou");
-        Assert.Equal(100, converter.WideContext?.Length ?? 0, "最大 100 文字");
-        Assert.True(converter.WideContext!.EndsWith('終'), "キャレットに近い方を残す");
-        var e = new Keyboard(converter: converter);
-        e.Host.PrecedingText = "Hello, this is a pen. ";
-        e.Type("kyou");
-        Assert.True(converter.WideContext is null, "英文のときは渡さない");
     }
 
     [Test]
@@ -3807,6 +3778,20 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Conversion_PassesEnglishBeforeAsContext()
+    {
+        // 前の文字列は、英語も文をまたいだ文字も含めてそのまま渡す。どこまで使うかは変換エンジンが決める
+        var k = new Keyboard();
+        k.Host.PrecedingText = "昨日は雨でした。github";
+        k.Type("ninaru ");
+        Assert.Equal("昨日は雨でした。github", k.Converter.LastContext);
+        // 同じ変換ボックスの前の英語の区間も、前の文字列に入れる
+        var inBox = new Keyboard();
+        inBox.Type("pythonnara ");
+        Assert.Equal("python", inBox.Converter.LastContext);
+    }
+
+    [Test]
     public static void Conversion_ContextRulesIke()
     {
         var rules = ContextRules.Load(null);
@@ -5345,48 +5330,6 @@ internal static class CompositionTests
         {
             File.Delete(path);
         }
-    }
-
-    [Test]
-    public static void Context_DoesNotChangeClauseBoundaries()
-    {
-        // 報告: 記号等 がどうしても 機強盗 になる (前に「記号等」があると変換エンジンが き|ごうとう と区切る)。
-        var k = new Keyboard();
-        k.Host.PrecedingText = "文章を「記号等」含め、";
-        k.Type("kigoutou ");
-        Assert.Equal("記号|等", string.Join("|", k.Host.View!.Clauses!), "文脈で区切りが変わるなら文脈なしの結果を使う");
-    }
-
-    [Test]
-    public static void NounStartingWithNi_GetsNoDummyContext()
-    {
-        // 「庭に花が咲いている」が「に輪に花が咲いている」になる (仮の文脈「これ」で「に」を助詞と読ませたため)。
-        foreach (var kana in new[] { "にわにはながさいている", "にほんごをはなす", "にんげんのからだ", "にもつがとどいた", "にしのほう" })
-        {
-            Assert.True(!CompositionController.StartsWithParticleNi(kana), kana + ": 「に」で始まる語には仮の文脈を付けない");
-        }
-        foreach (var kana in new[] { "になってしまう", "についてかんがえる", "によってちがう", "にとってたいせつ", "にかんするしつもん", "にむけて" })
-        {
-            Assert.True(CompositionController.StartsWithParticleNi(kana), kana + ": 助詞の「に」には仮の文脈を付ける");
-        }
-    }
-
-    [Test]
-    public static void ParticleStart_GetsContext()
-    {
-        // 報告: ○○になってしまう → 「になってしまう」が「担ってしまう」になる。
-        var k = new Keyboard();
-        k.Type("ninatteshimau ");
-        Assert.Equal("これ", k.Converter.LastContext, "前の文脈が無いときは仮の文脈で「に」を助詞として読ませる");
-
-        k = new Keyboard();
-        k.Host.PrecedingText = "〇〇";
-        k.Type("ninatteshimau ");
-        Assert.Equal("〇〇", k.Converter.LastContext, "○ などの記号も日本語の文脈として渡す");
-
-        k = new Keyboard();
-        k.Type("hashiru ");
-        Assert.True(k.Converter.LastContext is null, "に 以外で始まる読みには仮の文脈を付けない (はしる → は知る を防ぐ)");
     }
 
     [Test]

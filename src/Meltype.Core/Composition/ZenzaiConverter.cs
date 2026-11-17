@@ -48,7 +48,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private readonly int _timeoutMs;
     private readonly Uri? _fixedEndpoint;
     private readonly object _gate = new();
-    private readonly Dictionary<string, string?> _cache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _cache = new(StringComparer.Ordinal);
     private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private Process? _process;
     private Uri? _endpoint;
@@ -138,11 +138,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
+        context = context?.Replace("\r", "").Replace("\n", "").Trim();
         context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
         var key = context + "\u0000" + hiragana;
         lock (_gate)
         {
-            if (_cache.TryGetValue(key, out var cached)) return cached is null ? null : [new ConversionClause(hiragana, cached)];
+            if (_cache.TryGetValue(key, out var cached)) return [new ConversionClause(hiragana, cached)];
             EnsureStarting();
             if (!_ready || _endpoint is null) return null;
         }
@@ -150,7 +151,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         _worker.Submit(request);
         if (!_worker.Wait(request, Budget.RemainingMs)) return null;
         ThrowWorkerFailure();
-        lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
+        lock (_gate) return _cache.TryGetValue(key, out var answered) ? [new ConversionClause(hiragana, answered)] : null;
     }
 
     // ワーカーの例外は入力スレッドで投げ直す (HybridConverter が受けて持ち主に知らせる: #973)
@@ -180,10 +181,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)
     {
         var started = Environment.TickCount64;
+        // 読みのままの答え (英単語の後ろの なら・しか) も返す。使うかは、Mozc の候補と比べられる HybridConverter が決める
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。
-        // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
-        var text = answer == hiragana ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
@@ -191,10 +190,10 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (answer is null && !slow) _failures++;
             else if (answer is not null) { _failures = 0; _hasAnswered = true; }
             if (_cache.Count >= MaxCache) _cache.Clear();
-            // 使わないと決めた答えも覚える (打鍵のたびに聞き直さない)。失敗・遅いときは覚えない
-            if (answer is not null && !slow) _cache[key] = text;
+            // 失敗・遅いときは覚えない
+            if (answer is not null && !slow) _cache[key] = answer;
         }
-        return text is null ? null : [new ConversionClause(hiragana, text)];
+        return answer is null ? null : [new ConversionClause(hiragana, answer)];
     }
 
     /// <summary>zenz v3 系に渡す文は、文脈を先に置く。v2 の順序では前の文章が変換結果に混ざることがある。</summary>
