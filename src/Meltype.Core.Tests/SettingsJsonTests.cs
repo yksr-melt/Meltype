@@ -47,6 +47,24 @@ internal static class SettingsJsonTests
     }
 
     [Test]
+    public static void SettingsJson_GitHubCandidatesFollowTheRepository()
+    {
+        // v11: GitHubIssueCandidates を消した。OFF のままリポジトリだけ書いてあった人は、問い合わせが始まらないようリポジトリを空にする
+        foreach (var (json, expected) in new[]
+        {
+            ("{\"GitHubIssueCandidates\":true,\"GitHubRepository\":\"a/b\"}", "a/b"),
+            ("{\"GitHubIssueCandidates\":false,\"GitHubRepository\":\"a/b\"}", null),
+            ("{\"GitHubRepository\":\"a/b\"}", null),
+        })
+        {
+            var values = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            Settings.MigrateToV11(values);
+            Assert.Equal(expected, values["GitHubRepository"]?.GetValue<string>(), json);
+            Assert.True(!values.ContainsKey("GitHubIssueCandidates"), "消した項目は残さない: " + json);
+        }
+    }
+
+    [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
         // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま。
