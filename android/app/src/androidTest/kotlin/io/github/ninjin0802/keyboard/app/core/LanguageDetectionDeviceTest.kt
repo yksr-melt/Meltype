@@ -102,7 +102,7 @@ class LanguageDetectionDeviceTest {
 
     /** A whole response as the Core writes it (ImeOutput), with only the view varying. */
     private fun response(view: String) =
-        """{"version":1,"state":{},"result":{"consumed":true,"commits":[],"view":$view}}"""
+        """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":[],"view":$view}}"""
 
     private fun viewOf(view: String) = ImeJson.parse(response(view)).view
 
@@ -146,7 +146,7 @@ class LanguageDetectionDeviceTest {
         val connection = BaseInputConnection(View(ctx), true)
         connection.commitText("keep", 1)
         val adapter = CoreInputAdapter { connection }
-        val broken = """{"version":1,"state":{},"result":{"consumed":true,"commits":[{"text":"x"}],"view":null}}"""
+        val broken = """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":[{"text":"x"}],"view":null}}"""
         assertTrue(runCatching { adapter.apply(broken) }.isFailure)
         assertEquals("keep", connection.getEditable().toString())
     }
@@ -157,7 +157,7 @@ class LanguageDetectionDeviceTest {
         connection.commitText("今日は", 1)
         val adapter = CoreInputAdapter { connection }
         adapter.apply(
-            """{"version":1,"state":{},"result":{"consumed":true,"commits":[{"text":"京は","removeBefore":"今日は",
+            """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":[{"text":"京は","removeBefore":"今日は",
             "currentWord":null,"moveCaretBack":0,"insertByPaste":false}],"view":null}}"""
         )
         assertEquals("京は", connection.getEditable().toString())

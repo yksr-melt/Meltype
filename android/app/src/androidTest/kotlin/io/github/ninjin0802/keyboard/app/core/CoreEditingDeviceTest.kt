@@ -197,5 +197,5 @@ class CoreEditingDeviceTest {
 
     /** A whole response as the Core writes it (ImeOutput). */
     private fun response(commits: String, view: String) =
-        """{"version":1,"state":{},"result":{"consumed":true,"commits":$commits,"view":$view}}"""
+        """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":$commits,"view":$view}}"""
 }
