@@ -67,9 +67,11 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 | キー | 切り替え |
 | --- | --- |
-| <kbd>半角/全角</kbd> | 日本語入力 ⇔ 英数 |
+| <kbd>半角/全角</kbd> / <kbd>Alt</kbd> + <kbd>&#96;</kbd> | 日本語入力 ⇔ 英数 |
 | <kbd>英数</kbd> / <kbd>無変換</kbd> | 英数 |
 | <kbd>かな</kbd> / <kbd>変換</kbd> | 日本語入力 |
+
+設定「左 Alt で英数 / 右 Alt で日本語」を ON にすると、左右の <kbd>Alt</kbd> だけを押して切り替えられます (Windows・Linux)。Linux の IBus でターミナルに日本語を入力するときは、この設定を ON にしてください。
 
 アプリごとに、動きを 4 つのモードから選べます。設定の「アプリ別設定」の「種類」で変えられます。
 
@@ -135,10 +137,6 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 ```
 U=F6;I=F7;O=F8;P=F9;T=F10
 ```
-
-ATOK のように、打っている途中の <kbd>変換</kbd> で日本語、<kbd>無変換</kbd> で英字にするには、設定「入力中のキーの役割を分ける」を ON にします。
-
-Microsoft IME のように、打っている途中の <kbd>無変換</kbd> でひらがな → カタカナ → 半角カタカナと切り替えるには、設定「無変換でカタカナを切り替える」を ON にします (Windows・Linux)。
 
 <br>
 
