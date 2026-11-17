@@ -100,7 +100,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
         Choose(hiragana, mozc.ConvertWithCandidates(hiragana, context), Zenzai(hiragana, context) is [var z] ? z.Text : null, userWords,
-            wholeAnswer: !ZenzaiConverter.MayResegmentTheHead(context));
+            wholeAnswer: !ZenzaiConverter.FollowsEnglishWord(context));
 
     /// <summary>
     /// Mozc の答え (文節と文節ごとの候補) と Zenzai の答え (読み全体の文字列) から、使う文節を決める。どちらも無ければ null。
@@ -108,7 +108,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// 1 つの文節のままだと、文節ごとに候補を選び直せず、前に選び直して覚えた変換 (文節の読みごと) も効かない。
     /// Mozc の文節で返した結果は、確定すると Mozc にも覚えさせる (Mozc の候補に無い 1 つの文節は、Mozc が覚えない)。
     /// Mozc の候補で作れない答えは、かなが読みと合うときだけ、読み全体で 1 つの文節にして使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
-    /// wholeAnswer が false なら (Zenzai が読みの頭を区切り直したかもしれない: <see cref="ZenzaiConverter.MayResegmentTheHead"/>)、Mozc の候補で作れない答えは使わない。
+    /// wholeAnswer が false なら (Zenzai が読みの頭を区切り直したかもしれない: <see cref="ZenzaiConverter.FollowsEnglishWord"/>)、Mozc の候補で作れない答えは使わない。
     /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
     /// Mozc が最初の候補にしたユーザー辞書の語 (userWords) は、Zenzai の答えで変えない。Zenzai はユーザー辞書の語を知らない。
     /// </summary>
