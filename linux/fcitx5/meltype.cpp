@@ -74,6 +74,7 @@ struct Native {
     char *(*handle_)(void *, const char *) = nullptr;
     void (*destroy)(void *) = nullptr;
     void (*free)(void *) = nullptr;
+    void (*shutdown)() = nullptr;
 
     bool load() {
         handle = dlopen((meltypeDir() + "/libMeltypeNative.so").c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -88,7 +89,8 @@ struct Native {
         handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
         destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
-        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free) {
+        shutdown = reinterpret_cast<decltype(shutdown)>(sym("meltype_shutdown"));
+        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free || !shutdown) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
@@ -423,6 +425,8 @@ public:
     ~MeltypeEngine() override {
         s_engine = nullptr;
         if (host_) native_.destroy(host_);
+        // Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+        if (loaded_) native_.shutdown();
     }
 
     // パネル (トレイ) の入力メソッドの表示。本体が最後に返した言語モードを出す
