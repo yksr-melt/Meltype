@@ -217,7 +217,7 @@ public sealed partial class CompositionController
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? ConvertedText : null)) + ComposedText.Literal(" "), english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Builder.ConvertedText : null)) + ComposedText.Literal(" "), english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
                 else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(ComposedText.Literal(_text.Raw)) + ComposedText.Literal(" "), english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {

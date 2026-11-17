@@ -408,7 +408,7 @@ public sealed partial class CompositionController
             foreach (var (fresh, previous) in _clauses.Zip(old))
             {
                 if (!previous.Changed) continue;
-                fresh.Candidates = Distinct([.. fresh.Candidates, .. previous.Candidates]);
+                fresh.Candidates = ClauseBuilder.Distinct([.. fresh.Candidates, .. previous.Candidates]);
                 fresh.Index = fresh.Candidates.IndexOf(previous.Text);
                 fresh.Changed = true;
                 fresh.Translations.UnionWith(previous.Translations);
