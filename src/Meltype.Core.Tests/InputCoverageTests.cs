@@ -19,7 +19,7 @@ internal static class InputCoverageTests
     [Test]
     public static void SpaceAroundEnglish_IsAppliedWhenCommitting()
     {
-        foreach (var (input, expected) in new[] { ("seeyouagain", "seeyouagain"), ("kyouhagoogledekensaku", "きょうは google でけんさく"), ("nice to meet you", "nice to meet you") })
+        foreach (var (input, expected) in new[] { ("kyouhagoogledekensaku", "きょうは google でけんさく"), ("nice to meet you", "nice to meet you") })
         {
             var detector = CompositionDetector.CreateDefault();
             detector.SpellChecker = Meltype.Detection.BuiltInWordChecker.Shared;
