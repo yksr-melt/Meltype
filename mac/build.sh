@@ -34,7 +34,7 @@ mkdir -p "$BUILD"
 
 echo "== 1/3 本体 (C#, NativeAOT) をビルド"
 # リポジトリの nuget.config は NuGet を使わない設定 (Windows の開発環境用) なので、NativeAOT のコンパイラを取るために nuget.org を指定する。
-dotnet publish ../src/Meltype.Mac.Native/Meltype.Mac.Native.csproj -c Release -r "$RID" \
+dotnet publish ../src/Meltype.Core.CApi/Meltype.Core.CApi.csproj -c Release -r "$RID" \
     -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:Version="$VERSION" -p:TreatWarningsAsErrors=true \
     --source https://api.nuget.org/v3/index.json -o "$BUILD/native"
 

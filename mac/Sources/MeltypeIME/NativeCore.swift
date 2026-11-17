@@ -4,7 +4,7 @@
 import AppKit
 import Foundation
 
-// libMeltypeNative.dylib (C# の Meltype.Core を NativeAOT にしたもの) の関数。src/Meltype.Mac.Native/Exports.cs と合わせる。
+// libMeltypeNative.dylib (C# の Meltype.Core を NativeAOT にしたもの) の関数。src/Meltype.Core.CApi/Exports.cs と合わせる。
 typealias IsWordCallback = @convention(c) (UnsafePointer<CChar>?) -> Int32
 
 private typealias InitFunction = @convention(c) (UnsafePointer<CChar>?, IsWordCallback) -> Int32

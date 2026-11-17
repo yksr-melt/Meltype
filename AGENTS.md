@@ -12,8 +12,8 @@
 | --- | --- | --- |
 | Windows: Meltype IME (TSF) | `native/tip/` | アプリのプロセスに入る DLL。名前付きパイプで Meltype.exe (`src/Meltype.Windows/Tip/TipServer.cs`) に JSON を送る |
 | Windows: Meltype キーボード | `src/Meltype.Windows/Keyboard/KeyboardFront.cs` | Meltype.exe の中で `ImeHost` を呼ぶ |
-| macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Mac.Native` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
-| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
+| macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Core.CApi` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
+| Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Core.CApi` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
 
 変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。
@@ -52,7 +52,7 @@
 
 OS 間の差分はできるだけ作らない。
 
-`src/Meltype.Windows`・`src/Meltype.Mac.Native`・`native/tip/`・`mac/`・`linux/` はプラットフォーム層で、OS の事実を読む・結果を書く・画面を描くだけにする。
+`src/Meltype.Windows`・`src/Meltype.Core.CApi`・`native/tip/`・`mac/`・`linux/` はプラットフォーム層で、OS の事実を読む・結果を書く・画面を描くだけにする。
 
 - 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。プラットフォーム層からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける

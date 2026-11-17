@@ -12,7 +12,7 @@ on:
       - 'linux/**'
       - 'native/mozc/**'
       - 'src/Meltype.Core/**'
-      - 'src/Meltype.Mac.Native/**'
+      - 'src/Meltype.Core.CApi/**'
       - 'dictionaries/**'
       - 'nuget.config'
       - 'global.json'
