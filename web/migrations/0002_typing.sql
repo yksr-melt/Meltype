@@ -25,6 +25,8 @@ CREATE TABLE typing_trials (
   -- 打鍵の数と、かなにしたときのお手本との一致率 (0〜1)。集計と、お手本とかけ離れた送信を見つけるのに使う
   keystrokes INTEGER NOT NULL,
   accuracy REAL NOT NULL,
+  -- どこで打ったか。web はブラウザー (キーの code と離した時刻がある)、cli はターミナル (打った文字だけで、離した時刻は null)
+  client TEXT NOT NULL,
   duration_ms INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );

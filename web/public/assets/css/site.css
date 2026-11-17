@@ -3617,3 +3617,16 @@ em {
 .typing-flagged code {
   flex: 1 1 240px;
 }
+
+.typing-cli h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+.typing-cli p {
+  color: var(--muted);
+  margin-bottom: 10px;
+}

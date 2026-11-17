@@ -25,6 +25,9 @@ const MAX_MS = 10 * 60 * 1000;
 // かなにしたときのお手本との一致率がこれより低い文を、ダッシュボードで「お手本とかけ離れた送信」として出す
 export const FLAG_ACCURACY = 0.5;
 
+// 打った場所。ブラウザーのページ (web) と、ブラウザーで同意して出した番号で送るターミナルの CLI (cli, public/typing/meltype-typing.mjs)
+const CLIENTS = ["web", "cli"];
+
 export const PROFILE_CHOICES = {
   touch: ["yes", "partly", "no", "unknown"],
   layout: ["jis", "us", "other", "unknown"],
@@ -125,12 +128,14 @@ export async function addTrial(request, env) {
   const keys = validKeys(body.keys, length * KEYS_PER_KANA);
   if (!keys) return error(400, "打鍵の記録の形式が正しくありません");
   if (!isInt(body.duration, 1, MAX_MS)) return error(400, "かかった時間の形式が正しくありません");
+  const client = body.client === undefined ? "web" : body.client;
+  if (!CLIENTS.includes(client)) return error(400, "打った場所の形式が正しくありません");
 
   const inserted = await env.DB.prepare(
-    "INSERT INTO typing_trials (session_id, sentence_id, typed, keys, keystrokes, accuracy, duration_ms, created_at) " +
-      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?9 RETURNING id",
+    "INSERT INTO typing_trials (session_id, sentence_id, typed, keys, keystrokes, accuracy, client, duration_ms, created_at) " +
+      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?10 RETURNING id",
   )
-    .bind(session.id, sentence.id, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, typed), body.duration, now(), MAX_TRIALS)
+    .bind(session.id, sentence.id, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, typed), client, body.duration, now(), MAX_TRIALS)
     .first();
   if (!inserted) return error(429, `1 回の参加で送れるのは ${MAX_TRIALS} 文までです。ありがとうございました！`);
   return json({ id: inserted.id }, { status: 201 });
@@ -188,7 +193,7 @@ export async function exportTrials(env, url) {
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
   const { results } = await env.DB.prepare(
-    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.typed, t.keys, t.accuracy, t.duration_ms, t.created_at " +
+    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.typed, t.keys, t.accuracy, t.client, t.duration_ms, t.created_at " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.id > ? ORDER BY t.id LIMIT ?",
   )
     .bind(after, limit + 1)
@@ -206,6 +211,7 @@ export async function exportTrials(env, url) {
       typed: row.typed,
       keys: JSON.parse(row.keys),
       accuracy: row.accuracy,
+      client: row.client,
       duration_ms: row.duration_ms,
       created_at: row.created_at,
     };

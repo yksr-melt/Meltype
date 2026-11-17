@@ -621,6 +621,14 @@ describe("タイピング調査", () => {
     assert.equal((await trial(token)).status, 201);
   });
 
+  it("ターミナルの CLI から送った記録は client で分ける", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { client: "cli", keys: [["KeyK", "k", 0, null]] })).status, 201);
+    assert.equal((await trial(token, { client: "bot" })).status, 400);
+    const exported = await (await call("/api/dashboard/typing/trials", { headers: { "cf-access-jwt-assertion": await jwt(goodClaims()) } })).json();
+    assert.deepEqual(exported.trials.map((t) => t.client), ["cli"]);
+  });
+
   it("参加から 12 時間たったら打鍵を受け付けない", async () => {
     const { token } = await (await start()).json();
     await env.DB.prepare("UPDATE typing_sessions SET created_at = created_at - 13 * 3600").run();

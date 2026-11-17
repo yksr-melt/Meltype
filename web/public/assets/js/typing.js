@@ -3,7 +3,7 @@
 
 // タイピング (/typing/)。誰でも遊べ、打った記録は調査に同意した人だけが送る。
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
-import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
+import { copyText, detectOs, escapeHtml, getJson, icon, initHeader, toast } from "./common.js";
 import { align, finalKana, toKana } from "./romaji.js";
 import { SENTENCES } from "./typing-sentences.js";
 
@@ -293,6 +293,7 @@ sendForm.addEventListener("submit", async (event) => {
     saved.auto = true;
     save();
     $("forget").hidden = false;
+    $("cli").hidden = false;
     sendForm.hidden = true;
     $("auto-wrap").hidden = false;
     $("auto").checked = true;
@@ -312,7 +313,7 @@ async function sendRound() {
   setStatus("info", "送っています");
   let sent = 0;
   for (const entry of round) {
-    const body = JSON.stringify({ sentence: entry.sentence.id, typed: entry.typed, keys: entry.keys, duration: entry.duration });
+    const body = JSON.stringify({ sentence: entry.sentence.id, typed: entry.typed, keys: entry.keys, duration: entry.duration, client: "web" });
     try {
       await getJson("/api/typing/trials", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body });
       sent += 1;
@@ -322,6 +323,7 @@ async function sendRound() {
         // 参加の時間が切れた。同意からやり直してもらう
         saved.session = null;
         save();
+        $("cli").hidden = true;
         showSendForm();
         $("auto-wrap").hidden = true;
       }
@@ -350,6 +352,7 @@ $("forget").addEventListener("click", async () => {
   saved.tokens = left;
   if (!left.includes(saved.session && saved.session.token)) saved.session = null;
   save();
+  $("cli").hidden = !sessionAlive();
   $("forget").hidden = left.length === 0;
   alert(left.length ? "消せなかった記録があります。時間をおいてもう一度試してください。" : "消しました。");
 });
@@ -359,3 +362,8 @@ $("forget").addEventListener("click", async () => {
 initHeader();
 if (detectOs() === "mobile") $("mobile-note").hidden = false;
 $("forget").hidden = saved.tokens.length === 0;
+$("cli").hidden = !sessionAlive();
+$("cli-copy").addEventListener("click", async () => {
+  if (!sessionAlive()) return;
+  toast((await copyText(saved.session.token)) ? "番号をコピーしました" : "コピーできませんでした");
+});

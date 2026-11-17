@@ -185,6 +185,13 @@
         </div>
       </section>
 
+      <section class="card typing-cli" hidden data-cli aria-labelledby="cli-title">
+        <h2 id="cli-title"><svg class="ic"><use href="/assets/img/icons.svg#i-terminal"/></svg>ターミナルで打つ</h2>
+        <p>同意した参加の番号を使って、ターミナルからも打って送れます (Node.js 18 以降)。<a href="/typing/meltype-typing.mjs" download>meltype-typing.mjs</a> を落として <code>node meltype-typing.mjs</code> で始め、聞かれたらこの番号を貼ってください。番号は同意から 12 時間使えます。番号を知っている人はあなたとして送れるので、人に見せないでください。</p>
+        <p class="hint">ターミナルではキーを離した時刻と Shift が分からないので、ブラウザーより記録が少なくなります。</p>
+        <button class="btn btn-ghost btn-small" type="button" data-cli-copy><svg class="ic"><use href="/assets/img/icons.svg#i-copy"/></svg>番号をコピー</button>
+      </section>
+
       <div class="typing-foot">
         <p>調査のデータの扱いは、Meltype の <a href="https://github.com/yksr-melt/Meltype/blob/main/web/README.md">web/README.md</a> にも書いてあります。</p>
         <button class="btn btn-ghost btn-small" type="button" hidden data-forget>
