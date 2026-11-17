@@ -706,7 +706,8 @@ internal static class ZenzaiConverterTests
             var keyboard = new CompositionTests.Keyboard(converter: hybrid);
             keyboard.Host.PrecedingText = context;
             keyboard.Type(typed + " ");
-            Assert.Equal(expected, keyboard.Host.View?.Candidates[0] ?? "", "最初の候補: " + typed);
+            // Zenzai の答えは Mozc の文節 (偽の Mozc: うんようする|ばあいは) に当てはめる
+            Assert.Equal(expected, string.Concat(keyboard.Host.View?.Clauses ?? []), "変換した文: " + typed);
             keyboard.Type("\n");
             Assert.Equal(expected, keyboard.Host.Document, "確定した文字: " + typed);
         }

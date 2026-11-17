@@ -95,17 +95,24 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>
     /// ConvertClauses と同じ文節と、この変換で受け取った文節ごとの候補。UsersWord は、最初の候補がユーザー辞書の語か、学習で 1 番目にした語か。
     /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
+    /// </summary>
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates, bool UsersWord)>? ConvertWithCandidates(string hiragana, string? context = null) =>
+        ConvertInSentence(context, history => WithCandidates(Query(history ?? "", hiragana)), c => c.Clause.Reading);
+
+    /// <summary>
+    /// 前の文字列 context を Mozc に文脈 (<see cref="HistoryOf"/>) として渡して変換する (convert は文脈を受け取って Mozc で変換する。文脈なしは null)。
     /// 文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、
     /// 区切りまで変わるなら文脈なしを使う。前に同じ語があると、Mozc は文脈に引きずられて区切りを変えてしまうため
     /// (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
+    /// Android はヘルパーでなくアプリの中の Mozc で変換するが、文脈の渡し方は同じにする。
     /// </summary>
-    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates, bool UsersWord)>? ConvertWithCandidates(string hiragana, string? context = null)
+    internal static IReadOnlyList<T>? ConvertInSentence<T>(string? context, Func<string?, IReadOnlyList<T>?> convert, Func<T, string> reading)
     {
-        if (HistoryOf(context) is not { } history) return WithCandidates(Query("", hiragana));
-        var withContext = WithCandidates(Query(history, hiragana));
-        var plain = WithCandidates(Query("", hiragana));
+        if (HistoryOf(context) is not { } history) return convert(null);
+        var withContext = convert(history);
+        var plain = convert(null);
         if (withContext is null || plain is null) return withContext ?? plain;
-        return withContext.Select(c => c.Clause.Reading).SequenceEqual(plain.Select(c => c.Clause.Reading)) ? withContext : plain;
+        return withContext.Select(reading).SequenceEqual(plain.Select(reading)) ? withContext : plain;
     }
 
     /// <summary>
@@ -205,6 +212,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                     return null;
                 }
                 _sentUserWords = words;
+                // 送る前の辞書で変換した控えを捨てる (逆変換などほかの頼みで送ったときも、次の変換が古い控えを使わない)
+                ClearCache();
             }
 
             process.StandardInput.Write(request + "\n");

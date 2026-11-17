@@ -204,7 +204,10 @@ public static unsafe class Exports
             ConvertClauses(hiragana) is { Count: > 0 } parts
                 ? string.Concat(parts.Select(c => c.Text)) : null;
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+            MozcConverter.ConvertInSentence(context, history => Clauses(hiragana, history), c => c.Reading);
+
+        private List<ConversionClause>? Clauses(string hiragana, string? context)
         {
             var input = ToUtf8(hiragana, out var inputBuffer);
             var contextPointer = context is null ? null : ToUtf8(context, out _);

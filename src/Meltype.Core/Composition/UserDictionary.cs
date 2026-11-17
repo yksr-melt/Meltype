@@ -241,13 +241,15 @@ public sealed class UserDictionary
     {
         var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         // 後から登録したものを先にする。.plist の語はユーザーの登録の後、同梱の語句はさらに後。
-        foreach (var word in Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn))
+        // Mozc も同じ読みの語は先に受け取った語を先に出すので、EngineWords も同じ順にする
+        UserWord[] ordered = [.. Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn)];
+        foreach (var word in ordered)
         {
             if (!byReading.TryGetValue(word.Reading, out var list)) byReading[word.Reading] = list = [];
             if (!list.Contains(word.Word)) list.Add(word.Word);
         }
         _byReading = byReading;
-        EngineWords = [.. _words.Concat(_imported).Concat(_builtIn)];
+        EngineWords = ordered;
     }
 
     /// <summary>

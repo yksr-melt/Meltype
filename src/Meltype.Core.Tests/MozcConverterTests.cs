@@ -63,6 +63,13 @@ internal static class MozcConverterTests
                 case "C" when fields[2] == "きごうとうの":
                     output.WriteLine("きごう\x1f記号" + '\x1e' + "とうの\x1f等の");
                     break;
+                // 本物の Zenzai のテスト (ZenzaiConverterTests.RealZenz_ConvertsOnlyTheCurrentReading) の読み
+                case "C" when fields[2] == "じしょの":
+                    output.WriteLine("じしょの\x1f辞書の\x1f地所の");
+                    break;
+                case "C" when fields[2] == "うんようするばあいは":
+                    output.WriteLine("うんようする\x1f運用する" + '\x1e' + "ばあいは\x1f場合は");
+                    break;
                 // 受け取った文脈を候補にして返す
                 case "C" when fields[2] == "ぶんみゃく":
                     output.WriteLine("ぶんみゃく\x1f" + (fields[1].Length > 0 ? fields[1] : "なし"));
@@ -75,7 +82,8 @@ internal static class MozcConverterTests
                     output.WriteLine(fields[2] + '\x1f' + userWords.GetValueOrDefault(fields[2], fields[2]));
                     break;
                 case "U":
-                    userWords = fields[1].Split('\x1e', StringSplitOptions.RemoveEmptyEntries).Select(r => r.Split('\x1f')).ToDictionary(f => f[0], f => f[1]);
+                    // 本物の Mozc と同じく、同じ読みの語は先に受け取った語を出す
+                    userWords = fields[1].Split('\x1e', StringSplitOptions.RemoveEmptyEntries).Select(r => r.Split('\x1f')).DistinctBy(f => f[0]).ToDictionary(f => f[0], f => f[1]);
                     output.WriteLine("OK");
                     break;
                 // 逆変換は 漢字 だけ読める
@@ -176,8 +184,16 @@ internal static class MozcConverterTests
         Assert.True(mozc.Convert("おちる") is null, "落ちた");
         Assert.Equal("記号等", mozc.Convert("きごうとう"), "起動し直したヘルパーでも登録した語");
 
+        // 消した後で逆変換を頼んでも (そのときに辞書を送る)、次の変換は古い控えを使わない
+        Assert.Equal("記号等", mozc.Convert("きごうとう"));
         dictionary.Remove(new UserWord("きごうとう", "記号等"));
+        Assert.Equal("かんじ", mozc.Reading("漢字"));
         Assert.Equal("きごうとう", mozc.Convert("きごうとう"), "消したら使わない");
+
+        // 同じ読みの語は、後から登録した語を先に出す (Lookup と同じ順)
+        dictionary.Add("しの", "志乃");
+        dictionary.Add("しの", "紫乃");
+        Assert.Equal("紫乃", mozc.Convert("しの"), "後から登録した語");
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)

@@ -422,8 +422,10 @@ public sealed partial class CompositionController
         var japanese = ConvertJapanese(kana, context, converter);
         // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): Mozc は英単語の文脈を名詞として受け取っても、後ろの読みを文の頭の語 (奈良・下) にしてしまう。かなのまま。
         // Zenzai は英単語の文脈で付属語と読むが、Zenzai が使えない・答えが間に合わない (ライブ変換) ときは Mozc の答えになる。
-        // Mozc が英単語の後ろの読みを付属語として変換するようになったら消せる
-        if (LanguageOf(context) == true && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
+        // Mozc が英単語の後ろの読みを付属語として変換するようになったら消せる。
+        // 前の行の英語 (I think so. + 改行 + なら) の後ろは文の頭なので、同じ行の英語の後ろだけ
+        var line = context[(context.AsSpan().LastIndexOfAny('\n', '\r') + 1)..];
+        if (LanguageOf(line) == true && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
         return japanese;
     }
 

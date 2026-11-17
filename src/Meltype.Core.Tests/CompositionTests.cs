@@ -3828,6 +3828,20 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void ParticleAfterEnglish_OnlyOnTheSameLine()
+    {
+        // 英単語の後ろの付属語はかなのまま (Mozc は なら を 奈良 にする)。前の行の英語の後ろは文の頭なので 奈良 のまま
+        var sameLine = new Keyboard();
+        sameLine.Host.PrecedingText = "GitHub";
+        sameLine.Type("nara ");
+        Assert.Equal("なら", string.Concat(sameLine.Host.View!.Clauses!));
+        var nextLine = new Keyboard();
+        nextLine.Host.PrecedingText = "I think so.\n";
+        nextLine.Type("nara ");
+        Assert.Equal("奈良", string.Concat(nextLine.Host.View!.Clauses!));
+    }
+
+    [Test]
     public static void Conversion_ContextRulesIke()
     {
         var rules = ContextRules.Load(null);
