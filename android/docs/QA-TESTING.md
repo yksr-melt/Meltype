@@ -66,11 +66,10 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | C06 | anEditorWithoutItsOwnTextSendsNoTextAndCannotRemove | 読めない入力欄（TYPE_NULL） | before・after を送らず canRemove=false |
 | C07 | theSelectedTextIsSentOnlyWhenTheEditorReportedASelection | abcd の bc を選択 | selection=bc、選択がないと送らない |
 | C08 | aCommittedWordCanBeRecommittedWhenCaretHasNotMoved | i␣Enter→want␣、キャレットを動かさない | 文脈が英語と判明したとき、直前の語を I に確定し直せる |
-| C09 | aTapInTheFirstClauseChoosesItAndShowsTheNextClausesCandidates | hashiwokaminikaku␣（はしを／かみに／かくの3文節）→先頭の文節の別の候補をタップ | 確定しない。先頭の文節はタップした候補になり、候補バーは2つ目の文節（紙に・神に…）の候補に替わる |
-| C10 | aTapInALaterClauseChangesOnlyThatClauseAndTheLastTapCommitsAll | C09のあと2つ目の文節で別の候補→最後の文節で別の候補をタップ | 2つ目だけが替わり先頭は残る。最後のタップで選んだとおりの全文を確定 |
-| C11 | enterInTheMiddleCommitsTheWholeTextAsShown | C09のあと Enter | そのときの表示のまま全文を確定 |
-| C12 | aTapInAConversionOfOneClauseCommits | kyouha␣→今日はをタップ | 1つの文節の変換は、タップで確定（今日は） |
-| C13 | aTapOnAPredictionCommits | hell→予測候補をタップ | 予測候補はタップで確定 |
+| C09 | aTapOnAnotherSplitCommitsThatSentence | hashiwokaminikaku␣（英日の区切りの別案 ha＋しをかみにかく があるので、文全体の1文節）→いまと違う候補をタップ | タップした候補の文を確定 |
+| C10 | enterCommitsTheWholeSentenceAsShown | hashiwokaminikaku␣→Enter | そのときの表示のまま全文を確定 |
+| C11 | aTapInAConversionOfOneClauseCommits | kyouha␣→今日はをタップ | 1つの文節の変換は、タップで確定（今日は） |
+| C12 | aTapOnAPredictionCommits | hell→予測候補をタップ | 予測候補はタップで確定 |
 | D01 | liveConversionTakesEffectFromTheNextKey | config.json の LiveConversion を OFF→ON、kyouha | OFF は きょうは、ON は 今日は（キーボードを作り直さずに効く） |
 | D02 | bracketsPutTheCaretInsideWhenTheSettingIsOn | CursorIntoBrackets を ON、[]Enter | 「」の中にキャレット |
 | D03 | settingOneItemKeepsTheRestOfTheFile | 項目の多い config.json の1項目を変える | ほかの項目・順序はそのまま。一時ファイルを残さない |
@@ -80,12 +79,12 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | E02 | caretMovesByTheAppStopRecommit | 日本語欄で i␣Enter のあとアプリがキャレットを先頭へ動かし末尾へ戻して want␣ | 前の語を確定し直さない |
 | E03 | leavingAnEditorCommitsTheCompositionThere | 日本語欄で ka → 別の欄 → 戻って a Enter | 日本語欄の か は確定され、かあ になる |
 | E04 | ownEditorWritesDoNotLookLikeCaretMoves | 日本語欄で i␣Enter→want␣、キャレットを外から動かさない | I に確定し直し、キーボード自身の編集は外からの移動と数えない |
-| E05 | candidateTapsFixAConversionClauseByClause | 日本語欄で watashinonamaehanakanodesu␣（実際のMozcで変換）→各文節で、いまと違う候補を候補バーでタップ | 最後の文節まで確定せず、タップのたびに次の文節へ進む。最後のタップで選んだとおりの全文を確定 |
+| E05 | candidateTapOnTheLastClauseCommitsTheSentence | 日本語欄で watashinonamaehanakanodesu␣（実際のMozcで変換）→最後の文節で、いまと違う候補を候補バーでタップ | Space のあとは最後の文節を選んでいる。タップで最後の文節がその候補になり、全文を確定 |
 | E06 | keyboardProvidesImePickerOnlyInEmergency | 通常の実IMEと障害時の退避用Viewを確認 | 通常画面に独自IME切り替えボタンはなく、退避用Viewの切り替え操作でAndroid標準IME選択を呼べる。設定画面へのリンクはない |
 | E07 | emailFieldAcceptsLiteralRomajiAfterLanguageSwitch | メール欄で英字QWERTYから日本語QWERTYに切り替えて a をタップ | 変換を無効にした入力欄でも英字 a が直接入力され、Core障害扱いにならない |
 | E08 | externalSendClearsCompositionWithoutReinsertingOldText | 日本語欄で ka を入力→IME外のSendボタンで送信→同じ欄で a を入力 | 送信した内容は「か」、送信後は空欄、次の入力は「あ」のみ（以前の未確定文字は復活しない） |
 
-A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08〜C13、D01〜D02はNative Coreとの接続を含む（C09〜C12の変換は試験用の変換器で、文節の区切りと候補を固定する）。E01〜E08は端末で選んだキーボードを操作して確かめる（E06は退避用Viewの構築も確認する）。実機での画面開閉は自動計測とは別の手動テストである。
+A04〜A06、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08〜C12、D01〜D02はNative Coreとの接続を含む（C09〜C11の変換は試験用の変換器で、文節の区切りと候補を固定する）。E01〜E08は端末で選んだキーボードを操作して確かめる（E06は退避用Viewの構築も確認する）。実機での画面開閉は自動計測とは別の手動テストである。
 
 ## 3. 画面開閉・実機での手動テスト
 

@@ -418,27 +418,21 @@ class ImeLaunchDeviceTest {
     }
 
     /**
-     * With the real converter: after Space, a candidate tap chooses it for the selected clause and
-     * moves on to the next clause; the tap on the last clause commits the whole sentence.
+     * With the real converter: Space selects the last clause (as on the desktop), and a candidate
+     * tap chooses it for that clause and commits the whole sentence.
      */
-    @Test fun candidateTapsFixAConversionClauseByClause() = withRomajiActivity { activity ->
+    @Test fun candidateTapOnTheLastClauseCommitsTheSentence() = withRomajiActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)
         focusJapanese(activity, editor)
         typeRomaji("watashinonamaehanakanodesu ")
         waitUntil("the sentence is converted", describe = { "view=" + coreView() }) { coreView()?.converting == true }
-        val clauses = coreView()!!.clauses.size
-        assertTrue("The sentence was not split into clauses: " + coreView(), clauses >= 2)
-        var expected = ""
-        for (clause in 0 until clauses) {
-            val view = coreView() ?: throw AssertionError("Committed before clause $clause: " + editor.text)
-            assertEquals("Not moved on to clause $clause: $view", clause, view.selectedClause)
-            assertTrue("Not composing at clause $clause: " + editor.text,
-                android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) >= 0)
-            val label = tapCandidateOtherThan(view.clauses[clause])
-            expected = view.clauses.take(clause).joinToString("") + label + view.clauses.drop(clause + 1).joinToString("")
-        }
+        val view = coreView()!!
+        assertTrue("The sentence was not split into clauses: $view", view.clauses.size >= 2)
+        assertEquals("The last clause is not selected: $view", view.clauses.size - 1, view.selectedClause)
+        val label = tapCandidateOtherThan(view.clauses.last())
+        val expected = view.clauses.dropLast(1).joinToString("") + label
         waitUntil("the sentence is committed as chosen", describe = { "text=" + editor.text + " expected=" + expected }) {
             editor.text.toString() == expected &&
                 android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0

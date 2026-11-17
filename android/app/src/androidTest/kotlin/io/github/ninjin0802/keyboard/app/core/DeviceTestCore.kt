@@ -24,8 +24,7 @@ internal object DeviceTestCore {
 
     /**
      * Converts only きょうは (to 今日は), so that live conversion can be seen, and はしをかみにかく in
-     * three clauses (each with its own candidates), so that a conversion of several clauses can be
-     * seen; everything else stays kana.
+     * three clauses, so that a sentence conversion can be seen; everything else stays kana.
      */
     private val converter = object : MozcBackend {
         private val byClause = mapOf(

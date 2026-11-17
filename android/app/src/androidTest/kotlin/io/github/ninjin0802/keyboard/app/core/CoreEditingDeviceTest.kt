@@ -45,19 +45,16 @@ class CoreEditingDeviceTest {
             CandidateTap.tap(adapter, choice.nativeIndex, { field() }) { send(it) }
         }
 
-        /** A candidate of the shown clause from [labels], other than what the clause shows now. */
-        fun other(vararg labels: String): String {
-            val view = adapter.view ?: throw AssertionError("Not composing: " + editor.content)
-            return labels.first { it != view.clauses[view.selectedClause] }
-        }
-
-        /** Types はしをかみにかく and converts it (Space): three clauses, the first one selected. */
-        fun convertThreeClauses() {
+        /**
+         * Types はしをかみにかく and converts it (Space). The Core has another English/Japanese split
+         * (ha + しをかみにかく), so it shows the whole sentence as one clause whose candidates are the splits.
+         */
+        fun convertWholeSentence() {
             type("hashiwokaminikaku ")
             val view = adapter.view
             assertTrue("Not a conversion: $view", view?.converting == true)
-            assertEquals("Not converted in three clauses: $view", 3, view!!.clauses.size)
-            assertEquals(0, view.selectedClause)
+            assertEquals("Not converted as one whole-sentence clause: $view", 1, view!!.clauses.size)
+            assertTrue("No other split to choose: $view", adapter.choices.size >= 2)
         }
     }
 
@@ -151,49 +148,23 @@ class CoreEditingDeviceTest {
         assertNull(adapter.field(emptyList(), selected = false).selection)
     }
 
-    @Test fun aTapInTheFirstClauseChoosesItAndShowsTheNextClausesCandidates() {
+    @Test fun aTapOnAnotherSplitCommitsThatSentence() {
         val typist = Typist()
-        typist.convertThreeClauses()
-        val first = typist.other("橋を", "端を")
-        typist.tap(first)
-        val view = typist.adapter.view
-        assertTrue("The tap committed the whole text: " + typist.editor.content, typist.adapter.composing)
-        assertEquals(0, typist.editor.composingStart)
-        assertEquals(first, view!!.clauses[0])
-        assertEquals("Not moved on to the second clause", 1, view.selectedClause)
-        val labels = typist.adapter.choices.map { it.label }
-        assertTrue("The bar does not show the second clause's candidates: $labels", labels.containsAll(listOf("紙に", "神に")))
-        assertTrue("The bar still shows the first clause's candidates: $labels", "箸を" !in labels)
-    }
-
-    @Test fun aTapInALaterClauseChangesOnlyThatClauseAndTheLastTapCommitsAll() {
-        val typist = Typist()
-        typist.convertThreeClauses()
-        val first = typist.other("橋を", "端を")
-        typist.tap(first)
-        val second = typist.other("神に", "髪に")
-        typist.tap(second)
-        val view = typist.adapter.view!!
-        assertEquals(listOf(first, second), view.clauses.take(2))
-        assertEquals(2, view.selectedClause)
-        assertTrue(typist.adapter.composing)
-
-        val last = typist.other("描く", "欠く")
-        typist.tap(last)
-        assertEquals(first + second + last, typist.editor.content)
+        typist.convertWholeSentence()
+        val shown = typist.adapter.view!!.text
+        val other = typist.adapter.choices.first { it.label != shown }.label
+        typist.tap(other)
+        assertEquals(other, typist.editor.content)
         assertEquals(-1, typist.editor.composingStart)
         assertTrue(!typist.adapter.composing)
     }
 
-    @Test fun enterInTheMiddleCommitsTheWholeTextAsShown() {
+    @Test fun enterCommitsTheWholeSentenceAsShown() {
         val typist = Typist()
-        typist.convertThreeClauses()
-        val first = typist.other("橋を", "端を")
-        typist.tap(first)
+        typist.convertWholeSentence()
         val shown = typist.adapter.view!!.text
         typist.enter()
         assertEquals(shown, typist.editor.content)
-        assertTrue(typist.editor.content.startsWith(first))
         assertEquals(-1, typist.editor.composingStart)
     }
 
