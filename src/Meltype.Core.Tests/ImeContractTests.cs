@@ -53,6 +53,9 @@ internal static class ImeContractTests
         /// <summary>OS の IME の開閉 (TSF の OPENCLOSE)。</summary>
         public bool Open { get; set; } = true;
 
+        /// <summary>OS が IME の開閉を持つフロント (TSF など) か。持たないフロント (Android) は imeOpen を送らない。</summary>
+        public bool SendsImeOpen { get; init; } = true;
+
         /// <summary>入力欄の性質 (OS が知らせるもの)。</summary>
         public List<string> Traits { get; } = [];
 
@@ -99,7 +102,7 @@ internal static class ImeContractTests
             var field = $"{{{surrounding}\"composing\":{(composing ? "true" : "false")},\"traits\":{JsonSerializer.Serialize(Traits)}" +
                 (App is null ? "" : $",\"app\":{Json(App)}") + (Selection is null ? "" : $",\"selection\":{Json(Selection)}") + "}";
             var fieldFact = omitField ? "" : $",\"field\":{field}";
-            var output = Send($"{{\"version\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)},\"imeOpen\":{(Open ? "true" : "false")}{fieldFact}{extra}}}");
+            var output = Send($"{{\"version\":{ImeHost.Version},\"type\":\"{type}\",\"instance\":{Json(instance)}{(SendsImeOpen ? $",\"imeOpen\":{(Open ? "true" : "false")}" : "")}{fieldFact}{extra}}}");
             Apply(output, instance);
             return output;
         }
@@ -591,6 +594,26 @@ internal static class ImeContractTests
         // ゲームでない入力欄は、OS の開閉のまま
         var general = new Front { InputMethod = InputMode.Tsf };
         Assert.True(general.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("imeOpen").GetBoolean(), general.Trace);
+    }
+
+    [Test]
+    public static void EmailAndNumericFields_StartAlphanumericAndRestoreTheModeOnLeaving()
+    {
+        foreach (var trait in new[] { "Email", "Numeric" })
+        {
+            var front = new Front { SendsImeOpen = false };
+            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", front.Trace);
+            front.Traits.Add(trait);
+            var entered = front.Event("CaretMoved", extra: Entered);
+            Assert.True(Active(entered) && entered.GetProperty("state").GetProperty("languageMode").GetString() == "Alphanumeric", $"{trait}: 英数で始める\n" + front.Trace);
+            front.Type("ab");
+            Assert.Equal("ab", front.Document, front.Trace);
+            Assert.True(front.Event("JapaneseModeSelected").GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: 日本語にできる\n" + front.Trace);
+            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: 同じ欄に入り直しても選んだまま\n" + front.Trace);
+            front.Event("AlphanumericModeSelected");
+            front.Traits.Clear();
+            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: 出たら入る前の日本語に戻す\n" + front.Trace);
+        }
     }
 
     [Test]

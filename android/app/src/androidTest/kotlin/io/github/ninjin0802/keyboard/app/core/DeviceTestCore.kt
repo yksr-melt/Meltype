@@ -37,7 +37,7 @@ internal object DeviceTestCore {
             "きょうは" -> listOf(MozcSegment("きょうは", listOf("今日は")))
             "はしをかみにかく" -> byClause.map { (clause, candidates) -> MozcSegment(clause, candidates) }
             in byClause -> listOf(MozcSegment(reading, byClause.getValue(reading)))
-            else -> null
+            else -> emptyList()
         }
         override fun learn(clauses: List<MozcClause>, context: String?) = false
         override fun reading(text: String): String? = null

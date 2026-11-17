@@ -50,12 +50,14 @@ class MozcConverterTest {
 
     @Test fun context_is_accepted() = assertNotNull(converter.convert("あめがふる", "きょうは"))
 
-    @Test fun empty_and_too_long_return_null() {
-        assertNull(converter.convert("", null))
-        assertNull(converter.convert("あ".repeat(101), null))
+    // 渡せない読みは、失敗 (null) でなく変換できない読み (空)。
+    @Test fun empty_and_too_long_are_not_convertible() {
+        assertEquals(emptyList<MozcSegment>(), converter.convert("", null))
+        assertEquals(emptyList<MozcSegment>(), converter.convert("あ".repeat(101), null))
     }
 
-    @Test fun control_characters_return_null() = assertNull(converter.convert("あ\nめ", null))
+    @Test fun control_characters_are_not_convertible() =
+        assertEquals(emptyList<MozcSegment>(), converter.convert("あ\nめ", null))
 
     @Test fun hundred_chars_convert() {
         val r = "あ".repeat(100)
@@ -65,7 +67,8 @@ class MozcConverterTest {
     // 記号は辞書しだいで変換できないことがある。できたなら、文節の読みは渡したものと同じでなければならない。
     @Test fun symbols_give_null_or_matching_readings() {
         for (r in listOf("、。", "（あめ）", "？！…〜ー", "きょうは、あめ。")) {
-            val segments = converter.convert(r, null) ?: continue
+            val segments = converter.convert(r, null)!!
+            if (segments.isEmpty()) continue
             assertEquals(r, segments.joinToString("") { it.reading })
         }
     }

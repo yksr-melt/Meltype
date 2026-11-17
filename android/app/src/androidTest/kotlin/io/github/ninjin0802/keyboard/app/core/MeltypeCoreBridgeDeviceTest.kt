@@ -19,7 +19,7 @@ class MeltypeCoreBridgeDeviceTest {
         MeltypeCoreHost.open(File(context.noBackupFilesDir, "meltype"),
             CoreMozcCallbacks({
                 object : MozcBackend {
-                    override fun convert(reading: String, context: String?): List<MozcSegment>? = null
+                    override fun convert(reading: String, context: String?): List<MozcSegment>? = emptyList()
                     override fun learn(clauses: List<MozcClause>, context: String?) = false
                     override fun reading(text: String): String? = null
                 }

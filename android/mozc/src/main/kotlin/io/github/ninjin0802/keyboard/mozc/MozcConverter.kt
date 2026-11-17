@@ -26,11 +26,11 @@ class MozcConverter internal constructor(
     constructor(engine: MozcEngine?) : this(engine, SystemClock::elapsedRealtime)
 
     override fun convert(reading: String, context: String?): List<MozcSegment>? =
-        withSession(reading, context) { session ->
+        if (!isConvertible(reading)) emptyList() else withSession(reading, context) { session ->
             session.compose()
             var output = session.startConversion()
             val values = output.preedit.segmentList.map { it.value }
-            if (values.isEmpty()) return@withSession null
+            if (values.isEmpty()) return@withSession emptyList()
             clauseReadings(output, reading).mapIndexed { index, clauseReading ->
                 if (index > 0) output = session.focusNextClause()
                 val alternatives = output.allCandidateWords.candidatesList.map { it.value }
@@ -77,10 +77,14 @@ class MozcConverter internal constructor(
         return keys.map { key -> reading.substring(start, start + key.length).also { start += key.length } }
     }
 
-    /** セッションを作り、[block] を実行し、必ずセッションを捨てる。できなければ null。例外は外に出さない。 */
+    /** Mozc に渡せる読みか。渡せない読みは変換できないものとして扱う (失敗ではない)。 */
+    private fun isConvertible(reading: String): Boolean =
+        reading.isNotEmpty() && reading.length <= MAX_READING_LENGTH && reading.none { it.isISOControl() }
+
+    /** セッションを作り、[block] を実行し、必ずセッションを捨てる。できなければ (失敗・時間切れ・渡せない読み) null。例外は外に出さない。 */
     private fun <T> withSession(reading: String, context: String?, block: (Session) -> T): T? {
         val engine = engine ?: return null
-        if (reading.isEmpty() || reading.length > MAX_READING_LENGTH || reading.any { it.isISOControl() }) return null
+        if (!isConvertible(reading)) return null
         // 命令の列が他の操作と混ざらないよう、操作の全体を1つずつ順に行う。
         synchronized(engine) {
             // 締め切りは順番が来てから数える（他の操作を待った時間は入れない）。

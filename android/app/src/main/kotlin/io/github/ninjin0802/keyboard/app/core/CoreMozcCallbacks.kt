@@ -14,18 +14,18 @@ internal class CoreMozcCallbacks(
     private val mozc: () -> MozcBackend?,
     private val conversionReady: () -> Unit,
 ) {
-    /** 要求 1 行に答える。null は失敗 (Mozc を開けなかった。Core は数回続くと Mozc を使うのをやめる)。 */
+    /** 要求 1 行に答える。null は失敗 (Mozc を開けなかった・時間切れ。Core は答えを控えず、数回続くと Mozc を使うのをやめる)。 */
     @Suppress("unused")
     fun request(requestBytes: ByteArray): ByteArray? {
         val converter = mozc() ?: return null
-        return answer(converter, requestBytes.decodeToString()).encodeToByteArray()
+        return answer(converter, requestBytes.decodeToString())?.encodeToByteArray()
     }
 
     /** Core の変換の結果が届いた (Core の変換のスレッドから呼ばれる)。 */
     @Suppress("unused")
     fun ready() = conversionReady()
 
-    private fun answer(converter: MozcBackend, request: String): String {
+    private fun answer(converter: MozcBackend, request: String): String? {
         val fields = request.split('\t')
         return when (fields[0]) {
             "C" -> {
@@ -34,10 +34,9 @@ internal class CoreMozcCallbacks(
                 val segments = converter.convert(reading, context.ifEmpty { null })
                 PerfLog.event("convert", (System.nanoTime() - start) / 1000, reading.length)
                 // 変換できない読みは空行 (Core はかなのまま見せ、同じ読みでは聞き直さない)
-                segments
-                    ?.takeIf { found -> found.joinToString("") { it.reading } == reading }
+                segments?.takeIf { found -> found.joinToString("") { it.reading } == reading }
                     ?.joinToString(RECORD) { s -> (listOf(s.reading) + s.candidates).joinToString(UNIT) }
-                    ?: ""
+                    ?: segments?.let { "" }
             }
             "L" -> {
                 val (context, records) = fields.drop(1)
