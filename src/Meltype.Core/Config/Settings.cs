@@ -818,7 +818,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 11;
+    public const int CurrentVersion = 12;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -860,11 +860,25 @@ public sealed class Settings
     [Category("12. ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]
     public bool LogTypedText { get; set; }
 
+    /// <summary>v12 で既定で OFF にしたリモートデスクトップのクライアント (Windows はプロセス名、macOS は bundle ID)。</summary>
+    private static readonly string[] RemoteDesktopClients =
+    [
+        // Jump Desktop: 8.6 系の本体は JumpClient.exe、8.3 系には JumpDesktop.exe もある
+        "JumpClient.exe", "JumpDesktop.exe",
+        "AnyDesk.exe", "TeamViewer.exe", "parsecd.exe", "rustdesk.exe",
+        // Splashtop・TightVNC Viewer・Citrix Workspace
+        "strwinclt.exe", "tvnviewer.exe", "wfica32.exe",
+        "com.teamviewer.TeamViewer", "com.philandro.anydesk", "tv.parsec.www",
+    ];
+
     public static List<AppRule> DefaultAppRules() =>
     [
         // キー入力が別のマシン/VM に届くアプリ。保留すると相手側の IME 状態と食い違う。
         new() { Process = "mstsc.exe", Enabled = false },
         new() { Process = "msrdc.exe", Enabled = false },
+        // ほかのリモートデスクトップのクライアントも、接続先の IME と二重に変換し、確定のたびに前の文字が消える (#1894)。
+        // プロセス名・bundle ID は公開されている一覧 (LOLRMM など) とベンダーの文書から。違っていてもルールが当たらないだけ。
+        .. RemoteDesktopClients.Select(process => new AppRule { Process = process, Enabled = false }),
         new() { Process = "vmconnect.exe", Enabled = false },
         new() { Process = "VirtualBoxVM.exe", Enabled = false },
         new() { Process = "vmware-vmx.exe", Enabled = false },
@@ -1009,6 +1023,12 @@ public sealed class Settings
             LegacyHankaku = null;
             foreach (var profile in Profiles ?? [])
                 if (profile is not null) InitializeToggleShortcuts(profile.Values ??= new JsonObject(), profile.Name);
+        }
+        if (SettingsVersion < 12)
+        {
+            // v12: 既定で OFF にするリモートデスクトップに、Jump Desktop などのクライアントを追加。ユーザーが自分で入れていれば、そのまま。
+            foreach (var process in RemoteDesktopClients)
+                if (FindRule(process) is null) AppRules.Add(new AppRule { Process = process, Enabled = false });
         }
         // v7: 追加キーの文字列を共通の一覧へ移し、旧項目を保存しない。
         MigrateLegacyToggleShortcuts(report: true);
