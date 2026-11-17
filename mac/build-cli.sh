@@ -27,6 +27,11 @@ Options:
   --all         Run --test --install. This is the default.
   -h, --help    Show this help.
 
+ビルド前の準備:
+  --build・--install・--all (既定) には Mozc の変換ヘルパーが必要です。
+  mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置いてください。
+  --test だけならヘルパーは不要です。--setup ではヘルパーを用意しません。
+
 Examples:
   mac/build-cli.sh --setup --all
   mac/build-cli.sh --build
@@ -64,6 +69,14 @@ done
 if [[ $all -eq 1 ]]; then
     test_core=1
     install=1
+fi
+
+# テストや SDK のセットアップを始める前に、ビルドに必要なヘルパーを確かめる (#1918)。
+if [[ $build_only -eq 1 || $install -eq 1 ]]; then
+    if [[ ! -x "$root/native/mozc/bin/mac/meltype_mozc_helper" ]]; then
+        echo 'Mozc の変換ヘルパーがありません。mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置いてください。' >&2
+        exit 1
+    fi
 fi
 
 if [[ $setup -eq 1 ]]; then
