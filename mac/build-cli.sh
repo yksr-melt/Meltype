@@ -27,10 +27,10 @@ Options:
   --all         Run --test --install. This is the default.
   -h, --help    Show this help.
 
-ビルド前の準備:
-  --build・--install・--all (既定) には Mozc の変換ヘルパーが必要です。
-  mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置いてください。
-  --test だけならヘルパーは不要です。--setup ではヘルパーを用意しません。
+Before building:
+  --build, --install, and --all (the default) need the Mozc conversion helper.
+  Put it in native/mozc/bin/mac/ by following "ビルドする" in mac/README.md.
+  --test alone does not need the helper. --setup does not prepare the helper.
 
 Examples:
   mac/build-cli.sh --setup --all
