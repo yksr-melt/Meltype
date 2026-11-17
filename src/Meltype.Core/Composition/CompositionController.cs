@@ -69,8 +69,8 @@ public sealed record ReconversionSelection(string Text, string Reading);
 public sealed partial class CompositionController
 {
     /// <summary>
-    /// ライブ変換は 2 文字以上のかなだけ。2〜3 文字の語 (きた → 来た, りかい → 理解) もライブ変換する。
-    /// 1 文字は漢字を推測できず、ひらがな 1 字のまま打つことも多いので、かなのまま見せる。
+    /// ライブ変換は 2 拍以上のかなだけ。2〜3 拍の語 (きた → 来た, りかい → 理解) もライブ変換する。
+    /// 1 拍は漢字を推測できず、ひらがな 1 字のまま打つことも多いので、かなのまま見せる。拍の数え方は CountsAsLive。
     /// </summary>
     private const int LiveConversionMinLength = 2;
 
