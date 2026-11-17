@@ -1,5 +1,6 @@
 # Pull Request のチェック「報告の再現」。
-#   本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc のヘルパーで確かめる
+#   本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと Mozc のヘルパーで確かめる。
+#   ヘルパーは、Pull Request が native/mozc を変えていればそのコードでビルドし (linux.yml と同じ手順とキャッシュ)、変えていなければ最新のリリースのものを使う
 # 本文を読むので、本文の編集 (edited) でも流す。必須チェックにはしない
 # (edited の run は取り消し合い、最新の run がこのチェックを報告しないまま残ることがある)。
 # pull_request なので、フォークからの Pull Request でも書き込みの権限は持たない (結果は Summary とチェックの成否で返す)。
@@ -25,7 +26,7 @@ jobs:
   expectations:
     name: 報告の再現
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     permissions:
       contents: read
       pull-requests: read
@@ -39,8 +40,39 @@ jobs:
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
-      - name: Mozc helper from latest release
+      - id: mozc
         if: steps.cases.outputs.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if gh pr diff "$PR" --repo "$GITHUB_REPOSITORY" --name-only | grep -q '^native/mozc/'; then
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.mozc.outputs.build == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/bazel-cache
+            ~/mozc/src/third_party_cache
+          key: mozc-manylinux_2_34-linux-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-${{ hashFiles('native/mozc/*.cc', 'native/mozc/BUILD.fragment') }}
+          restore-keys: |
+            mozc-manylinux_2_34-linux-${{ hashFiles('native/mozc/MOZC_COMMIT') }}-
+      # linux.yml の Bazelisk・Build Mozc helper と同じ
+      - name: Build Mozc helper
+        if: steps.mozc.outputs.build == 'true'
+        run: |
+          mkdir -p "$HOME/tools" "$HOME/mozc" "$HOME/bazel-cache"
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 120 -o "$HOME/tools/bazelisk" https://github.com/bazelbuild/bazelisk/releases/download/v1.29.0/bazelisk-linux-amd64
+          echo "5a408715e932c0250d28bd84555f12edbf70117de42f9181691c736eacc4a992  $HOME/tools/bazelisk" | sha256sum -c -
+          chmod +x "$HOME/tools/bazelisk"
+          docker run --rm --user "$(id -u):$(id -g)" -e USER -e HOME=/tmp/home -e BAZEL=/tools/bazelisk \
+            -v "$PWD:/repo" -v "$HOME/mozc:/mozc" -v "$HOME/bazel-cache:/cache" -v "$HOME/tools:/tools:ro" -w /repo \
+            quay.io/pypa/manylinux_2_34_x86_64:2026.11.01-2 \
+            native/mozc/build-mozc-helper.sh /mozc /cache
+          echo "MELTYPE_MOZC=$PWD/native/mozc/bin/linux/meltype_mozc_helper" >> "$GITHUB_ENV"
+      - name: Mozc helper from latest release
+        if: steps.cases.outputs.count != '0' && steps.mozc.outputs.build != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
