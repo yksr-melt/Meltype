@@ -391,7 +391,7 @@ public sealed class Settings
     public bool LiveConversion { get; set; } = true;
 
     [Category("5. 変換"), DisplayName("Zenzai を使う"),
-     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。同梱の llama.cpp の llama-server と zenz-v3.2-small を使います。使えないとき・応答が遅いときは、Mozc で変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。既定は ON です。")]
+     Description("ニューラルかな漢字変換モデル Zenzai (azooKey の zenz) で、前の文脈を見て変換します。同梱の llama.cpp の llama-server と zenz-v3.2-small を使います。使えないとき・応答が遅いときは、Mozc で変換します。変換結果は、Mozc の文節ごとの候補で作れるときは Mozc の文節に分け、作れないときは読み全体で 1 つの文節になります。Mozc が最初の候補にしたユーザー辞書の語は、Zenzai の答えで変えません。既定は ON です。")]
     public bool UseZenzai { get; set; } = true;
 
     [Category("5. 変換"), DisplayName("Zenzai: llama-server の場所"),
