@@ -215,6 +215,31 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1873_PluralOfKnownWord_StaysEnglish()
+    {
+        // Issue #1873: english-words.txt は deploy を持たず ploys を持つので、deploys が de|ploys に割れていた
+        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("deploys", "deploys"), ("updates", "updates"),
+                // 逆向き: 英単語の後ろの す で始まる日本語はそのまま
+                ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void Issue378_Memoirs_StaysEnglish()
     {
         // Issue #378: memoirs が メモリ絵s になる報告。今の main では memoirs・memories とも英字のまま (戻らないように)
