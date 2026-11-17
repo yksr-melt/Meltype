@@ -188,6 +188,13 @@ export async function setBan(request, env, url, sessionId, ban) {
   return json({ banned: ban });
 }
 
+// お手本とかけ離れた文 (一致率が FLAG_ACCURACY 未満) を、その参加から消す。名前など、お手本と関係ない文字を残さないため
+export async function deleteFlagged(request, env, url, sessionId) {
+  if (request.headers.get("origin") !== url.origin) return error(403, "このページからは操作できません");
+  const result = await env.DB.prepare("DELETE FROM typing_trials WHERE session_id = ? AND accuracy < ?").bind(sessionId, FLAG_ACCURACY).run();
+  return json({ deleted: result.meta.changes });
+}
+
 // 研究用に書き出す。after より大きい id から limit 件ずつ返すので、next が null になるまで続けて読む
 export async function exportTrials(env, url) {
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);

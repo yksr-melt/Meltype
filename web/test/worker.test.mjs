@@ -619,6 +619,13 @@ describe("タイピング調査", () => {
     assert.equal((await start({}, "198.51.100.7")).status, 201);
     assert.equal((await ban("DELETE", "https://meltype.moe")).status, 200);
     assert.equal((await trial(token)).status, 201);
+
+    const removeFlagged = (origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/flagged`, { method: "DELETE", headers: { ...auth, origin } });
+    assert.equal((await removeFlagged("https://evil.example")).status, 403);
+    // 「yamada taro desu」と、打ちかけの「kyo」が消え、お手本どおりに打った文だけが残る
+    assert.deepEqual(await (await removeFlagged("https://meltype.moe")).json(), { deleted: 2 });
+    const left = await env.DB.prepare("SELECT typed FROM typing_trials ORDER BY id").all();
+    assert.deepEqual(left.results.map((row) => row.typed), ["kyouhaasakaraamegafutteiru."]);
   });
 
   it("ターミナルの CLI から送った記録は client で分ける", async () => {
