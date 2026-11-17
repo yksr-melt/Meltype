@@ -169,24 +169,16 @@ internal static class FeedbackTests
     public static void Issue1873_PluralOfKnownWord_StaysEnglish()
     {
         // Issue #1873: english-words.txt は deploy を持たず ploys を持つので、deploys が de|ploys に割れていた
-        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var (typed, expected) in new[]
         {
-            foreach (var (typed, expected) in new[]
-            {
-                ("deploys", "deploys"), ("updates", "updates"),
-                // 逆向き: 英単語の後ろの す で始まる日本語はそのまま
-                ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"),
-            })
-            {
-                var k = new CompositionTests.Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
-            }
-        }
-        finally
+            ("deploys", "deploys"), ("updates", "updates"),
+            // 逆向き: 英単語の後ろの す で始まる日本語はそのまま
+            ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"),
+        })
         {
-            CompositionTests.Detector.SpellChecker = null;
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 
@@ -1444,8 +1436,7 @@ internal static class LanguageLearningTests
     [Test]
     public static void EnglishWordSuru_KeepsEnglishWhileTyping()
     {
-        // deploy は deploys を でploys にするので外している (#1873)
-        foreach (var word in new[] { "test", "commit", "merge", "build", "push" })
+        foreach (var word in new[] { "test", "commit", "deploy", "merge", "build", "push" })
         {
             var k = new CompositionTests.Keyboard();
             k.Type(word);
