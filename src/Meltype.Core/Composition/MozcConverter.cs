@@ -174,13 +174,9 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             {
                 process.StandardInput.Write("U\t" + string.Join(RecordSeparator, words.Select(w => Clean(w.Reading) + UnitSeparator + Clean(w.Word))) + "\n");
                 process.StandardInput.Flush();
-                var answer = ReadLine(process, TimeoutMs);
-                // ワークアラウンド: U を知らないヘルパー (前の版) は空行を返す。ユーザー辞書なしで変換を続ける (MELTYPE_MOZC に前のリリースのヘルパーを使う --expect のため)。
-                // リリースのヘルパーが U に対応したら消す
-                if (answer == "") Diagnostics.Log.Warn("Mozc の変換ヘルパーが古く、ユーザー辞書を使えません。");
-                else if (answer != "OK")
+                if (ReadLine(process, TimeoutMs) != "OK")
                 {
-                    Diagnostics.Log.Warn($"Mozc がユーザー辞書を受け取りませんでした ({TimeoutMs}ms)。");
+                    Diagnostics.Log.Warn("Mozc の変換ヘルパーがユーザー辞書を受け取りませんでした (ヘルパーが古い・応答しない)。");
                     Fail();
                     return null;
                 }
