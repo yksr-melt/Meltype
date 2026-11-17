@@ -14,8 +14,10 @@ namespace Meltype.Composition;
 public sealed partial class CompositionController
 {
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
-    private string CurrentDisplay(bool final) =>
-        _text.Display(final, _settings().LiveConversion ? LiveConvert : null);
+    private string CurrentDisplay(bool final) => CurrentComposed(final).Text;
+
+    private ComposedText CurrentComposed(bool final) =>
+        _text.Compose(final, _settings().LiveConversion ? LiveConvert : null);
 
     private void CommitIfAny(bool preserveText = false)
     {
@@ -43,26 +45,26 @@ public sealed partial class CompositionController
         // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
         var rules = new List<string>();
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
-        var text = converting ? string.Concat(_clauses.Select(c => c.Text))
+        var text = converting ? ComposedText.Concat(_clauses.Select(c => c.Composed))
             : _budget is { Enabled: true } && !_settings().EnterCommitsAsShown
-                ? _text.Display(final: true, _settings().LiveConversion ? (kana, afterEnglish) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => c.Text)) : kana : null)
-                : CurrentDisplay(final: true);
+                ? _text.Compose(final: true, _settings().LiveConversion ? (kana, afterEnglish) => CountsAsLive(kana) ? ConvertedText(kana, afterEnglish) : ComposedText.Kana(kana) : null)
+                : CurrentComposed(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
         if (!converting && _text.Mode == DisplayMode.Auto && !_text.KanaInput && _text.PrecedingEnglish == true && CurrentDisplay(final: false) is { Length: > 0 } shown &&
-            shown.All(char.IsAsciiLetter) && shown != text && text.Any(c => c > 0x7F))
+            shown.All(char.IsAsciiLetter) && shown != text.Text && text.Text.Any(c => c > 0x7F))
         {
-            text = shown;
+            text = ComposedText.Literal(shown);
             rules.Add("英語の文脈なので見えていた英字のまま (#127)");
         }
         // 設定「Enter は見えているとおりに確定」: かな + 語末の n (かんたn) は、確定でライブ変換が漢字にせず、見えていたかなに n を ん にしただけで確定する (issue #677)
         if (!converting && _settings().EnterCommitsAsShown && _text.Mode == DisplayMode.Auto && _text.Pending == "n" &&
-            CurrentDisplay(final: false) is { Length: > 1 } shownKana && shownKana[^1] == 'n' && shownKana[^2] is >= '\u3041' and <= '\u3096')
+            CurrentComposed(final: false) is { Length: > 1 } shownKana && shownKana.Text[^1] == 'n' && shownKana.Text[^2] is >= '\u3041' and <= '\u3096')
         {
-            text = shownKana[..^1] + "ん";
+            text = shownKana[..^1] + ComposedText.Literal("ん");
             rules.Add("見えていたかなのまま (#677)");
         }
-        if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto && FixEnglishTypo(text) is var fixedText && fixedText != text)
+        if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto && FixEnglishTypo(text) is var fixedText && fixedText.Text != text.Text)
         {
             text = fixedText;
             rules.Add("英語の打ち間違いを直した");
@@ -74,19 +76,19 @@ public sealed partial class CompositionController
         {
             // 入れた文字は、アプリが選択していた文字と置き換える。
             rules.Add("選択していた文字の再変換");
-            LogCommit(text + suffix, string.Join("、", rules));
-            _out.Commit(text + suffix);
+            LogCommit((text + ComposedText.Literal(suffix)).Text, string.Join("、", rules));
+            _out.Commit(text + ComposedText.Literal(suffix));
             if (converting) LearnClauses();
             ResetContext();
             ClearComposition();
             return;
         }
-        RecordCorrection(converting, text, suffix);
+        RecordCorrection(converting, text.Text, suffix);
         if (converting) LearnClauses();
         else if (Learning && !_escReverted) _learning.LearnLanguage(_text);
         if (!converting || _clauses.All(CompositionLearning.Learnable))
-            RememberPhrase(converting ? string.Concat(_clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : _text.AllKana(final: true), text, english);
-        CommitText(text + suffix, english, _text.Raw, chosen, preserveText, string.Join("、", rules));
+            RememberPhrase(converting ? string.Concat(_clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : _text.AllKana(final: true), text.Text, english);
+        CommitText(text + ComposedText.Literal(suffix), english, _text.Raw, chosen, preserveText, string.Join("、", rules));
     }
 
     /// <summary>
@@ -146,7 +148,7 @@ public sealed partial class CompositionController
     private void CommitProtected(string suffix)
     {
         // 表示の再計算に依存せず、打った原文そのものを使う (確定条件で区間分けが変わっても記号を変えない)。
-        var text = (_text.IsProtectedRaw ? _text.Raw : CurrentDisplay(final: true)) + suffix;
+        var text = (_text.IsProtectedRaw ? ComposedText.Literal(_text.Raw) : CurrentComposed(final: true)) + ComposedText.Literal(suffix);
         _converting = false;
         _clauses = [];
         _correctable.Clear();
@@ -173,10 +175,17 @@ public sealed partial class CompositionController
         if (!prediction.Text.All(c => c < 0x80) && Learning)
             _services.Predictor?.Phrases?.Remember(PredictionReading(prediction.Text, prediction.Reading), prediction.Text);
         // 最後の文節の続きの候補なら、前の文節 (見えているとおり) とつなげて確定する
-        var text = prediction.Before + prediction.Text;
-        var english = text.All(c => c < 0x80);
-        CommitText(text, english, english ? text : _text.Raw, chosen: true);
+        var text = PredictionCommitText(prediction);
+        var english = text.Text.All(c => c < 0x80);
+        CommitText(text, english, english ? text.Text : _text.Raw, chosen: true);
     }
+
+    /// <summary>予測の候補の語を、打った句読点の区間と一緒に。</summary>
+    private ComposedText PredictionText(Prediction prediction) =>
+        ComposedText.Converted(PredictionReading(prediction.Text, prediction.Reading), prediction.Text);
+
+    /// <summary>予測の候補を選んで確定する文字 (前に残す文字と語)。</summary>
+    private ComposedText PredictionCommitText(Prediction prediction) => prediction.Before + PredictionText(prediction);
 
     /// <summary>予測の候補の読み (前に確定したときの読み)。分からなければ打ちかけの読み。</summary>
     private string PredictionReading(string prediction, string typed) =>
@@ -185,14 +194,14 @@ public sealed partial class CompositionController
     /// <summary>
     /// 英単語で終わる文字列の最後の語が、よくある打ち間違い (teh、recieve) なら正しい綴りにする (Space で確定するとき)。
     /// </summary>
-    private string FixEnglishTypo(string text)
+    private ComposedText FixEnglishTypo(ComposedText text)
     {
         if (!_settings().CorrectTypos) return text;
         var start = text.Length;
-        while (start > 0 && char.IsAsciiLetter(text[start - 1])) start--;
-        if (start == text.Length || _detector.EnglishAutoCorrection(text[start..]) is not { } right) return text;
-        Diagnostics.Log.Decision($"英語の打ち間違いを直しました: {Diagnostics.Log.Text(text[start..])}→{Diagnostics.Log.Text(right)}");
-        return text[..start] + right;
+        while (start > 0 && char.IsAsciiLetter(text.Text[start - 1])) start--;
+        if (start == text.Length || _detector.EnglishAutoCorrection(text.Text[start..]) is not { } right) return text;
+        Diagnostics.Log.Decision($"英語の打ち間違いを直しました: {Diagnostics.Log.Text(text.Text[start..])}→{Diagnostics.Log.Text(right)}");
+        return text[..start] + ComposedText.Literal(right);
     }
 
 
@@ -201,14 +210,14 @@ public sealed partial class CompositionController
     /// 次の語で文脈がはっきりしたら確定し直す (I want: 「胃」→「I」)。キャレットが動いたら (ほかのキー・クリック) 無効。
     /// </summary>
     /// <param name="AfterEnglish">確定したとき、前が英語だった (Are + you)。英文の中の語なので、後ろが日本語でも日本語に直さない (#265)。</param>
-    private sealed record CommitRecord(string Text, string Raw, bool English, bool SpaceIntended, bool AfterEnglish = false);
+    private sealed record CommitRecord(ComposedText Text, string Raw, bool English, bool SpaceIntended, bool AfterEnglish = false);
 
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     private readonly List<CommitRecord> _correctable = [];
     private const int MaxCorrectable = 4;
     private bool _spaceStartedConversion;
     // 確定し直しで消す文字数と、入れ直す文字。今確定する文字と一緒に 1 回で送る。
-    private (int Count, string Text)? _pendingReplace;
+    private (int Count, ComposedText Text)? _pendingReplace;
 
     /// <summary>今の変換を Tab で始めたか (変換中の Tab で候補を送るため。issue #219)。</summary>
     private bool _tabStartedConversion;
@@ -229,12 +238,12 @@ public sealed partial class CompositionController
     /// 今確定しようとしている語 (raw) で文脈がはっきりしたら、直前に確定した英語とも日本語とも読める語を確定し直す。
     /// 例: 「i」を Space で「胃」にした後に want と打つ → 「I want」、「sushi 」の後に「がすき」 → 「すしがすき」。
     /// </summary>
-    private string? CorrectPreviousCommit(string raw, bool english)
+    private ComposedText? CorrectPreviousCommit(string raw, bool english)
     {
         if (_correctable.Count == 0 || !AutoCorrect || !CanDeleteBackward) return null;
         var previous = _correctable[^1];
         List<CommitRecord> targets = [];
-        string? replacement = null;
+        ComposedText? replacement = null;
         if (!previous.English && english && _detector.IsDefinitelyEnglish(raw))
         {
             // 前の語の後ろを Space で区切らずに続けたとき (Enter で確定したときなど) は直さない。英語にすると前の語とつながる (あれ + ON → areON)
@@ -253,11 +262,11 @@ public sealed partial class CompositionController
             if (targets.Any(t => IsSuruRomajiKeepJapanese(t.Raw)))
             {
                 // Space で変換を始めていた分の空白だけは残す (してPR → して PR)。
-                replacement = string.Concat(targets.Select(t => t.Text + (t.SpaceIntended ? " " : "")));
+                replacement = ComposedText.Concat(targets.Select(t => t.Text + ComposedText.Literal(t.SpaceIntended ? " " : "")));
             }
             else
             {
-                replacement = string.Concat(targets.Select(t => (t.Raw == "i" ? "I" : t.Raw) + (t.SpaceIntended ? " " : "")));
+                replacement = ComposedText.Literal(string.Concat(targets.Select(t => (t.Raw == "i" ? "I" : t.Raw) + (t.SpaceIntended ? " " : ""))));
             }
         }
         // 前に英語が続いていた普通の英単語 (Are you の you) は、英文の続きとして打ったもの。後ろが日本語 (すし？) でも日本語に直さない (#265)。
@@ -266,15 +275,15 @@ public sealed partial class CompositionController
         {
             // 英語で確定した語を日本語に (Space で空白を入れていたら取る)。
             targets = [previous];
-            replacement = _detector.Romaji.ConvertLenient(previous.Raw.ToLowerInvariant(), final: true);
+            replacement = ComposedText.Kana(_detector.Romaji.ConvertLenient(previous.Raw.ToLowerInvariant(), final: true));
             // ローマ字として読んでもよく使う語の読みにならない語 (issue → いっすえ、api → あぴ) は英語のまま (issue #121, #124)。
             // sushi → すし のように、日本語の語として読めるときだけ直す。
-            if (_services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement)) return null;
+            if (_services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement.Text)) return null;
         }
         // ユーザーが英字 / かなに直して覚えた語 (F10 で英字にした api) は、覚えたとおりなら書き換えない (issue #124)。
         if (targets.Any(t => _services.Languages?.Get(t.Raw.ToLowerInvariant()) == t.English)) return null;
-        var original = string.Concat(targets.Select(t => t.Text));
-        if (replacement is null || replacement == original) return null;
+        var original = string.Concat(targets.Select(t => t.Text.Text));
+        if (replacement is null || replacement.Text == original) return null;
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。
@@ -285,11 +294,11 @@ public sealed partial class CompositionController
             return null;
         }
 
-        Diagnostics.Log.Decision($"前後の文脈に合わせて確定し直しました: {Diagnostics.Log.Text(original)}→{Diagnostics.Log.Text(replacement)}");
+        Diagnostics.Log.Decision($"前後の文脈に合わせて確定し直しました: {Diagnostics.Log.Text(original)}→{Diagnostics.Log.Text(replacement.Text)}");
         // 消して入れ直すのは、続けて確定する文字と一緒に送る (CommitText)。別々に送ると、その間に入れ直した文字と
         // 続けて確定した文字の順番が入れ替わるアプリがある (Are yoよ人間う？: issue #258)
         _pendingReplace = (original.Length, replacement);
-        _lastCommitText = replacement;
+        _lastCommitText = replacement.Text;
         _correctable.Clear();
         return replacement;
     }
@@ -298,9 +307,9 @@ public sealed partial class CompositionController
     private static readonly HashSet<string> BracketPairs = ["「」", "『』", "（）", "()", "［］", "[]", "｛｝", "{}", "【】", "〈〉", "《》", "〔〕", "\"\"", "“”"];
 
     /// <summary>確定して入力する。英語だったか日本語だったか・確定した文字列を、次の入力の文脈として覚えておく。</summary>
-    private void CommitText(string text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
+    private void CommitText(ComposedText text, bool english, string raw = "", bool chosen = false, bool preserveText = false, string rule = "")
     {
-        LogCommit(text, rule);
+        LogCommit(text.Text, rule);
         var formatEnglish = _services.AutomaticEnglishSpacing() && _text.Mode == DisplayMode.Auto;
         var spaceIntended = _spaceStartedConversion;
         var afterEnglish = _text.PrecedingEnglish == true;
@@ -310,10 +319,10 @@ public sealed partial class CompositionController
         _converting = false;
         _clauses = [];
         if (text.Length == 0) return;
-        if (formatEnglish && !preserveText) text = EnglishPhraseSpacing.Format(text);
+        if (formatEnglish && !preserveText) text = text.WithSpaces(EnglishPhraseSpacing.Format(text.Text));
         var corrected = CorrectPreviousCommit(raw, english);
         if (!preserveText && (_settings().SpaceAroundEnglish || _settings().SpaceAroundNumbers))
-            text = AddSpacesAroundEnglish(text, corrected ?? _precedingText, _followingText, _settings().SpaceAroundEnglish, _settings().SpaceAroundNumbers);
+            text = text.WithSpaces(AddSpacesAroundEnglish(text.Text, corrected?.Text ?? _precedingText, _followingText, _settings().SpaceAroundEnglish, _settings().SpaceAroundNumbers));
         // 英語とも日本語とも読める語を、文脈を決めずに (選び直さずに) 確定したときだけ、後で確定し直せるようにしておく。
         if (!chosen && _detector.IsAmbiguousWord(raw))
         {
@@ -324,7 +333,7 @@ public sealed partial class CompositionController
         }
         else _correctable.Clear();
         _lastCommitEnglish = english;
-        var joined = (_lastCommitText ?? "") + text;
+        var joined = (_lastCommitText ?? "") + text.Text;
         _lastCommitText = joined.Length > 20 ? joined[^20..] : joined;
         _lastCommitTime = Environment.TickCount64;
         if (_pendingReplace is var (count, replacement))
@@ -335,9 +344,9 @@ public sealed partial class CompositionController
         else _out.Commit(text);
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
         // 確定に付けて返す (キーをアプリに通して動かすと、確定に使ったキーまでアプリに通ってしまう: #991・#1353・#1404・#1581)。
-        if (_settings().CursorIntoBrackets && text.Length == 2 && BracketPairs.Contains(text))
+        if (_settings().CursorIntoBrackets && text.Length == 2 && BracketPairs.Contains(text.Text))
             _out.MoveCaretBackward(1);
-        Committed?.Invoke(text);
+        Committed?.Invoke(text.Text);
     }
 
     /// <summary>

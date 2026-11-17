@@ -431,11 +431,11 @@ public sealed class CompositionText
     public bool IsHorizontalRule => !KanaInput && Raw.Length >= 3 && Raw.All(c => c == '-');
 
     /// <summary>変換区間に * が 2 個以上あるときだけ、表示の ＊ を打った半角の * にする (強調 **bold**・*italic*)。</summary>
-    private string HalfWidthStars(string text) => !KanaInput && Raw.Count(c => c == '*') >= 2 ? text.Replace('＊', '*') : text;
+    private bool HalfWidthStars => !KanaInput && Raw.Count(c => c == '*') >= 2;
 
     /// <summary>変換の最初の候補を、入力中の表示と同じ半角にする (* が 2 個以上・---)。当てはまらなければそのまま返す。</summary>
     public string AsDisplayedHalfWidth(string candidate, string? clauseRaw) =>
-        IsHorizontalRule ? clauseRaw ?? candidate : HalfWidthStars(candidate);
+        IsHorizontalRule ? clauseRaw ?? candidate : HalfWidthStars ? candidate.Replace('＊', '*') : candidate;
 
     /// <summary>自動判定の区間分け (Mode が Auto のときに使う)。</summary>
     /// 入力中の表示と、Space・Enter で確定・変換するときで同じ区切りになる。
@@ -813,15 +813,19 @@ public sealed class CompositionText
     }
 
     /// <param name="final">確定・変換のときは true (語末の n を ん にする)。</param>
+    public string Display(bool final) => Compose(final).Text;
+
+    /// <summary>表示する文字を、打った句読点の区間と一緒に。</summary>
+    /// <param name="final">確定・変換のときは true (語末の n を ん にする)。</param>
     /// <param name="convert">日本語の区間 (かな, 前の区間が英語か) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
-    public string Display(bool final, Func<string, bool, string>? convert = null) => Mode switch
+    internal ComposedText Compose(bool final, Func<string, bool, ComposedText>? convert = null) => Mode switch
     {
-        DisplayMode.HalfWidthAlphanumeric => ApplyCase(Raw, Case),
-        DisplayMode.FullWidthAlphanumeric => ToFullWidth(ApplyCase(Raw, Case)),
-        DisplayMode.Hiragana => AllKana(final),
-        DisplayMode.Katakana => ToKatakana(AllKana(final)),
-        DisplayMode.HalfWidthKatakana => ToHalfWidthKatakana(ToKatakana(AllKana(final))),
-        _ => IsNumeric || IsHorizontalRule ? Raw : RenderSegments(final, convert),
+        DisplayMode.HalfWidthAlphanumeric => ComposedText.Literal(ApplyCase(Raw, Case)),
+        DisplayMode.FullWidthAlphanumeric => ComposedText.Literal(ToFullWidth(ApplyCase(Raw, Case))),
+        DisplayMode.Hiragana => ComposedText.Kana(AllKana(final)),
+        DisplayMode.Katakana => ComposedText.Kana(ToKatakana(AllKana(final))),
+        DisplayMode.HalfWidthKatakana => ComposedText.Kana(ToHalfWidthKatakana(ToKatakana(AllKana(final)))),
+        _ => IsNumeric || IsHorizontalRule ? ComposedText.Literal(Raw) : RenderSegments(final, convert),
     };
 
     /// <summary>英字の大文字・小文字を変える (ai → AI / Ai)。</summary>
@@ -872,18 +876,18 @@ public sealed class CompositionText
     }
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
-    public string RenderSegments(bool final, Func<string, bool, string>? convert)
+    internal ComposedText RenderSegments(bool final, Func<string, bool, ComposedText>? convert)
     {
         // 保護範囲 (技術的な文字列) は、幅変換・かな化・漢字変換をせずに原文のまま出す (INV-01)。
-        if (VerifyProtectedRaw()) return Raw;
-        var builder = new StringBuilder();
+        if (VerifyProtectedRaw()) return ComposedText.Literal(Raw);
+        var builder = ComposedText.Empty;
         var segments = Segments();
         for (var i = 0; i < segments.Count; i++)
         {
             var segment = segments[i];
             if (segment.IsEnglish)
             {
-                builder.Append(segment.Raw);
+                builder += ComposedText.Literal(segment.Raw);
                 continue;
             }
             var isLast = i == segments.Count - 1;
@@ -905,10 +909,10 @@ public sealed class CompositionText
                     kana = kana[..^laughter];
                 }
             }
-            builder.Append(convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish) : kana);
-            builder.Append(pending);
+            builder += convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish) : ComposedText.Kana(kana);
+            builder += ComposedText.Literal(pending);
         }
-        return HalfWidthStars(builder.ToString());
+        return HalfWidthStars ? builder.Replace('＊', '*') : builder;
     }
 
     /// <summary>英語判定を無視してすべてかなにしたもの (F6)。</summary>

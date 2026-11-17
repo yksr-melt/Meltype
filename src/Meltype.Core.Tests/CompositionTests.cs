@@ -3499,6 +3499,36 @@ internal static class CompositionTests
         Assert.Equal("わたしは，", typing.Showing, "ライブ変換 OFF で変換する前");
     }
 
+    /// <summary>句読点の入った語を返す変換エンジン。</summary>
+    private sealed class PunctuatedWordConverter : IKanjiConverter
+    {
+        public string? Convert(string hiragana) => Map(hiragana);
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => [new(hiragana, Map(hiragana))];
+
+        private static string Map(string reading) => reading.Replace("もーにんぐむすめ", "モーニング娘。").Replace("かおもじ", "(。・ω・。)");
+    }
+
+    [Test]
+    public static void Punctuation_SettingKeepsMarksInWords()
+    {
+        // 設定の句読点を当てるのは打った 、。 だけ。変換した語の 、。 は変えない
+        foreach (var (keys, expected) in new[] { ("mo-ningumusume,", "モーニング娘。，"), ("kaomojida.", "(。・ω・。)だ．") })
+        {
+            var k = new Keyboard(converter: new PunctuatedWordConverter()) { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+            k.Type(keys + " ");
+            Assert.Equal(expected, k.Showing, keys + ": Space で変換");
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Output.Single(), keys + ": 変換して確定");
+
+            var live = new Keyboard(live: true, converter: new PunctuatedWordConverter()) { Punctuation = Meltype.Config.PunctuationStyle.FullWidthCommaPeriod };
+            live.Type(keys);
+            Assert.Equal(expected, live.Showing, keys + ": ライブ変換");
+            live.Type("\n");
+            Assert.Equal(expected, live.Host.Output.Single(), keys + ": ライブ変換のまま確定");
+        }
+    }
+
     /// <summary>数字と続くかなをまとめて渡されたときだけ「3個」にする変換エンジン。</summary>
     private sealed class CounterConverter : IKanjiConverter
     {
@@ -3587,7 +3617,7 @@ internal static class CompositionTests
         {
             var live = new Keyboard(live: true, history: history, converter: new SymbolChangingConverter(split: true)) { Punctuation = style };
             live.Type("watasiha,");
-            Assert.Equal(CompositionOutput.ToSetting(style, "私は、"), live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
+            Assert.Equal(CompositionOutput.Render(style, ComposedText.Kana("私は、")), live.Showing, style + ": かなと一緒に打った句読点は覚えた候補にしない");
         }
     }
 
