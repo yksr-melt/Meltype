@@ -109,12 +109,12 @@ if [[ $setup -eq 1 ]]; then
         apt)
             sudo apt-get update
             sudo apt-get install -y \
-                build-essential clang lld curl git ibus libibus-1.0-dev pkg-config python3 python3-gi \
+                build-essential cmake clang lld curl git ibus libibus-1.0-dev pkg-config python3 python3-gi \
                 gir1.2-ibus-1.0 zlib1g-dev libdbus-1-dev libglib2.0-dev libgtk-3-dev \
                 libxcb-xfixes0-dev qt6-base-dev
             ;;
         dnf)
-            # rpm-build は --install、cmake と fcitx5-devel は fcitx5 のアドオンのビルドに使う
+            # rpm-build は --install、cmake は Zenzai の llama-server と fcitx5 のアドオン、fcitx5-devel は fcitx5 のアドオンのビルドに使う
             sudo dnf install -y \
                 gcc gcc-c++ make clang lld curl git ibus ibus-devel pkgconf-pkg-config python3 python3-gobject \
                 zlib-ng-compat-devel dbus-devel glib2-devel gtk3-devel libxcb-devel qt6-qtbase-devel \
@@ -168,6 +168,13 @@ fi
 if [[ $package -eq 1 ]]; then
     need dotnet
     need clang
+    # llama-server は、zenzai.env の版のビルドが無いときだけビルドする (native/zenzai/build-llama-server.sh を直接流すと作り直す)
+    # shellcheck source=../native/zenzai/zenzai.env
+    source "$root/native/zenzai/zenzai.env"
+    if [[ ! -x "$root/native/zenzai/bin/linux-$LLAMA_BUILD/llama-server" ]]; then
+        need cmake
+        bash "$root/native/zenzai/build-llama-server.sh"
+    fi
     bash "$root/linux/build.sh"
 fi
 

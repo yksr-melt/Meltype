@@ -185,9 +185,7 @@ public sealed partial class CompositionController
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapanese(segment.Kana, converter);
-            // 英単語 + する (push|した、deploy|しよう): 変換エンジンは英語の後ろの「した」だけを見て 下・死体・使用 にしてしまう。かなのまま
-            if (s > 0 && segments[s - 1].IsEnglish && japanese.Count > 0 && IsSuruAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
+            var japanese = ConvertJapaneseSegment(segment.Kana, s > 0 && segments[s - 1].IsEnglish, converter);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
             var offset = 0;
             foreach (var clause in japanese)
@@ -313,7 +311,7 @@ public sealed partial class CompositionController
     {
         var clause = new Clause(reading, false, JapaneseCandidates(reading, string.Concat(clauses.Select(c => c.Text)), _converter)) { Raw = _text.Raw };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
-        var surrounding = (_precedingText ?? "") + (_followingText ?? "");
+        var surrounding = (_precedingText ?? "") + EnglishInComposition() + (_followingText ?? "");
         if ((_services.ContextRules?.Choose(reading, surrounding, clause.Text, Standalone) ?? _learning.LearnedConversion(reading)) is { } preferred)
             Prefer(clause, preferred);
         KeepTypedSymbols([clause], reading);
@@ -415,6 +413,17 @@ public sealed partial class CompositionController
         clause.Candidates.AddRange(added);
     }
 
+    /// <summary>英日の区間分けの日本語の区間を変換する。Space の変換もライブ変換も、区間ごとにこれを通す。</summary>
+    private List<Clause> ConvertJapaneseSegment(string kana, bool afterEnglish, IKanjiConverter converter)
+    {
+        var japanese = ConvertJapanese(kana, converter);
+        // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
+        // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
+        // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
+        if (afterEnglish && japanese.Count > 0 && IsParticleAfterEnglish(japanese[0])) Prefer(japanese[0], japanese[0].Reading);
+        return japanese;
+    }
+
     /// <summary>
     /// ユーザー辞書の読みが含まれていれば、その部分は登録した単語の文節にし、残りだけを変換エンジンで変換する
     /// (きごうとうふくめ → 記号等|含め)。含まれていなければ普通に変換する。
@@ -478,7 +487,7 @@ public sealed partial class CompositionController
         foreach (var clause in clauses)
         {
             if (parts.Contains(clause)) continue;
-            var surrounding = (_precedingText ?? "") + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
+            var surrounding = (_precedingText ?? "") + EnglishInComposition() + string.Concat(clauses.Where(c => c != clause).Select(c => c.Text)) + (_followingText ?? "");
             var preferred = _services.ContextRules?.Choose(clause.Reading, surrounding, clause.Text, Standalone) ?? (registered.Contains(clause) ? _learning.LearnedConversion(clause.Reading) : null);
             if (preferred is not null) Prefer(clause, preferred);
         }
@@ -607,7 +616,7 @@ public sealed partial class CompositionController
         for (var i = 0; i < clauses.Count; i++)
         {
             var others = string.Concat(clauses.Where((_, k) => k != i).Select(c => c.Text));
-            var surrounding = (_precedingText ?? "") + others + (_followingText ?? "");
+            var surrounding = (_precedingText ?? "") + EnglishInComposition() + others + (_followingText ?? "");
             var preferred = _services.ContextRules?.Choose(clauses[i].Reading, surrounding, clauses[i].Text, Standalone) ?? _learning.LearnedConversion(clauses[i].Reading);
             // 変換エンジンは、文節が「から」だけだと記号 (～) にしてしまう。記号だけの変換結果は、ひらがなの後ろに回す。
             preferred ??= IsSymbolOnly(clauses[i].Text) && clauses[i].Reading.All(KanaChars.IsHiragana) ? clauses[i].Reading : null;
@@ -670,9 +679,22 @@ public sealed partial class CompositionController
         return CompositionDetector.IsSuruForm(reading);
     }
 
-    /// <summary>英単語の後ろの、する の活用の文節を、変換エンジンが漢字で始めた (した → 下、したい → 死体、しよう → 使用)。</summary>
-    private static bool IsSuruAfterEnglish(Clause clause) =>
-        CompositionDetector.SuruForms.Any(clause.Reading.StartsWith) && clause.Text.Length > 0 && !IsKana(clause.Text[0]) && clause.Text != clause.Reading;
+    /// <summary>
+    /// 英単語の後ろの、名詞に付く付属語 (助詞・助動詞) か する の活用の文節を、変換エンジンが漢字で始めた
+    /// (なら → 奈良、しか → 歯科、なの → 名の、した → 下、したい → 死体)。
+    /// </summary>
+    private static bool IsParticleAfterEnglish(Clause clause) =>
+        (NounAttachedWords.Contains(clause.Reading) || CompositionDetector.SuruForms.Any(clause.Reading.StartsWith)) &&
+        clause.Text.Length > 0 && !IsKana(clause.Text[0]) && clause.Text != clause.Reading;
+
+    // 名詞に付く付属語。文節の読み全体と比べるので、変換エンジンが 1 つの文節にまとめる形 (には・なので) も並べる。
+    // か は入れない: 英単語の後ろの 化 (docker化・API化) を変換エンジンが出したときに、かなに戻してしまう
+    private static readonly HashSet<string> NounAttachedWords =
+    [
+        "が", "を", "に", "で", "と", "の", "は", "も", "へ", "や", "から", "まで", "より", "って", "とか", "とは", "には", "では", "にも", "でも",
+        "への", "での", "との", "なら", "しか", "だけ", "のみ", "ほど", "など", "くらい", "ぐらい", "ばかり", "さえ", "すら", "こそ", "ずつ", "ごと", "とも", "ども", "やら", "なり",
+        "だ", "です", "だった", "でした", "だろう", "でしょう", "だよ", "だね", "だし", "だから", "じゃ", "なの", "なのに", "なので", "かも", "みたい", "っぽい", "らしい",
+    ];
 
     private static readonly HashSet<char> SentencePunctuation = ['、', '。', '，', '．', ',', '.', '！', '？', '!', '?', '…', '‥', '「', '」', '(', ')', '（', '）', ' ', '　'];
 
@@ -1006,24 +1028,31 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
+    /// 同じ変換ボックスの英字の区間 (ph|しけんし の ph)。日本語の区間は区間ごとに変換するので、文脈の手がかりに足す (issue #1276)。
+    /// 続いた英字の区間 (gra|ph) は 1 語のままにし、日本語の区間を空白にする (英字の手がかりは英単語の境界で当てるため)。
+    /// </summary>
+    private string EnglishInComposition() =>
+        _text.IsEmpty ? "" : string.Concat(_text.ConversionSegments().Select(s => s.IsEnglish ? s.Raw : " "));
+
+    /// <summary>
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private string LiveConvert(string kana)
+    private string LiveConvert(string kana, bool afterEnglish)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
         if (!CountsAsLive(kana)) return kana;
-        return string.Concat(LiveClauses(kana).Select(c => c.Text));
+        return string.Concat(LiveClauses(kana, afterEnglish).Select(c => c.Text));
     }
 
     private static bool CountsAsLive(string kana) => kana.Count(c => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー') >= LiveConversionMinLength;
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    private List<(string Reading, string Text)> LiveClauses(string kana)
+    private List<(string Reading, string Text)> LiveClauses(string kana, bool afterEnglish)
     {
-        var key = string.Join("\u0001", kana, _precedingText, _followingText, _services.History?.Version);
+        var key = string.Join("\u0001", kana, afterEnglish, _precedingText, EnglishInComposition(), _followingText, _services.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = WithoutWaiting(() => ConvertJapanese(kana, _converter).Select(c => (c.Reading, c.Text)).ToList());
+        var clauses = WithoutWaiting(() => ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
