@@ -55,7 +55,8 @@ internal static class CompositionTests
                 "え、しらん" => [new("え", "得"), new("、", "、"), new("しらん", "知らん")],
                 "えかく" => [new("え", "絵"), new("かく", "描く")],
                 "がちでやばい" => [new("がちで", "勝ちで"), new("やばい", "ヤバい")],
-                // 英単語の後ろの する の活用: した → 下、したい → 死体
+                // 英単語の後ろの付属語・する の活用: なら → 奈良、した → 下、したい → 死体
+                "なら" => [new("なら", "奈良")],
                 "した" => [new("した", "下")],
                 "したい" => [new("したい", "死体")],
                 _ => null,
@@ -208,7 +209,6 @@ internal static class CompositionTests
         public bool LaughterAfterKana { get => Settings.LaughterAfterKana; set => Settings.LaughterAfterKana = value; }
         public bool ContextualLearning { get => Settings.ContextualLearning; set => Settings.ContextualLearning = value; }
         public bool ShowCandidatesWhileTyping { get => Settings.ShowCandidatesWhileTyping; set => Settings.ShowCandidatesWhileTyping = value; }
-        public bool GitHubIssueCandidates { get => Settings.GitHubIssueCandidates; set => Settings.GitHubIssueCandidates = value; }
         public string GitHubRepository { get => Settings.GitHubRepository; set => Settings.GitHubRepository = value; }
         public GitHubIssueTitles? GitHubTitles { get; set; }
         public bool ClipboardCandidates { get => Settings.ClipboardCandidates; set => Settings.ClipboardCandidates = value; }
@@ -1484,13 +1484,22 @@ internal static class CompositionTests
         // summary.json: 文頭の「え、」が 得、、がちで が 勝ちで になっていた (勝ち の読みは かち)
         // 英日の区切りの別案 (え、し|ran) があると文全体の 1 文節になるので、文節の区切りでなく変換した文で比べる
         foreach (var (typed, expected) in new[] { ("e,shiran ", "え、知らん"), ("ekaku ", "絵描く"), ("gachideyabai ", "ガチでヤバい"),
-            // 英単語 + する: push|下、commit|死体 になっていた。英単語の無いところ (した = 下) は変換エンジンのまま
-            ("pushshita ", "pushした"), ("commitshitai ", "commitしたい"), ("shita ", "下") })
+            // 英単語 + 付属語・する: python|奈良、push|下、commit|死体 になっていた。英単語の無いところ (なら = 奈良、した = 下) は変換エンジンのまま
+            ("pythonnara ", "pythonなら"), ("nara ", "奈良"), ("pushshita ", "pushした"), ("commitshitai ", "commitしたい"), ("shita ", "下") })
         {
             var k = new Keyboard();
             k.Type(typed);
             Assert.Equal(expected, string.Concat(k.Host.View!.Clauses!), typed);
         }
+    }
+
+    [Test]
+    public static void EnglishParticle_SpaceCommitEndingWithEnglish_KeepsKana()
+    {
+        // 英語で終わる入力は Space で変換せずに確定する。そのときも英単語の後ろの付属語はかなのまま (python奈良github になっていた)
+        var k = new Keyboard(live: true);
+        k.Type("pythonnaragithub ");
+        Assert.Equal("pythonならgithub ", k.Host.Output.Single());
     }
 
     [Test]
@@ -3071,13 +3080,10 @@ internal static class CompositionTests
     public static void Issue291_HashNumberOffersGitHubTitle()
     {
         var titles = new GitHubIssueTitles((repository, number) => Task.FromResult<string?>(repository == "yksr-melt/Meltype" && number == 123 ? "変換ボックスが隠れる" : null));
-        var k = new Keyboard { GitHubIssueCandidates = true, GitHubRepository = "yksr-melt/Meltype", GitHubTitles = titles };
+        var k = new Keyboard { GitHubRepository = "yksr-melt/Meltype", GitHubTitles = titles };
         k.Type("#123 ");
         var candidates = k.Host.View!.Candidates;
         Assert.True(candidates.Contains("#123 変換ボックスが隠れる") && candidates.Contains("yksr-melt/Meltype#123"), string.Join(",", candidates));
-        var off = new Keyboard { GitHubRepository = "yksr-melt/Meltype", GitHubTitles = titles };
-        off.Type("#123 ");
-        Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("#123 変換ボックスが隠れる"), "OFF は問い合わせない");
         Assert.True(GitHubIssueTitles.IsRepository("a-b/c_d.e") && !GitHubIssueTitles.IsRepository("a/b/c") && !GitHubIssueTitles.IsRepository("a b/c"), "リポジトリの形");
         Assert.True(new GitHubIssueTitles((_, _) => throw new InvalidOperationException()).Lookup("a/b", 1) is null, "失敗は null");
         // 調べられなかった番号 (404・レート制限) は、しばらくしたらもう一度調べる。ずっと覚えて二度と調べない、ということはしない
@@ -3102,13 +3108,27 @@ internal static class CompositionTests
     [Test]
     public static void Issue865_HashNumberIsOneClause()
     {
-        // #123 は # と 123 を別々の文節に変換しない (タイトルが無い・設定 OFF でも)
+        // #123 は # と 123 を別々の文節に変換しない (タイトルが無い・リポジトリが空でも)
         var k = new Keyboard();
         k.Type("#123 ");
         Assert.True(k.Host.View is { } view && view.Candidates.Contains("#123") && view.Candidates.Contains("＃１２３"), string.Join(",", k.Host.View?.Candidates ?? []));
-        var none = new Keyboard { GitHubIssueCandidates = true, GitHubRepository = "a/b", GitHubTitles = new GitHubIssueTitles((_, _) => Task.FromResult<string?>(null)) };
+        var none = new Keyboard { GitHubRepository = "a/b", GitHubTitles = new GitHubIssueTitles((_, _) => Task.FromResult<string?>(null)) };
         none.Type("#45 ");
         Assert.True(none.Host.View is { } v && v.Candidates.Contains("#45"), string.Join(",", none.Host.View?.Candidates ?? []));
+    }
+
+    [Test]
+    public static void Issue1934_GitHubTitlesNeedOnlyTheRepository()
+    {
+        // リポジトリが書いてあれば出す。空なら問い合わせない (ON/OFF の項目は消した)
+        var asked = 0;
+        var titles = new GitHubIssueTitles((_, _) => { asked++; return Task.FromResult<string?>("タイトル"); });
+        var empty = new Keyboard { GitHubTitles = titles };
+        empty.Type("#12 ");
+        Assert.True(asked == 0 && empty.Host.View is { } view && !view.Candidates.Any(c => c.Contains("タイトル", StringComparison.Ordinal)), string.Join(",", empty.Host.View?.Candidates ?? []));
+        var set = new Keyboard { GitHubRepository = "a/b", GitHubTitles = titles };
+        set.Type("#12 ");
+        Assert.True(set.Host.View is { } shown && shown.Candidates.Contains("#12 タイトル"), string.Join(",", set.Host.View?.Candidates ?? []));
     }
 
     [Test]
@@ -3119,7 +3139,7 @@ internal static class CompositionTests
         {
             Assert.Equal("yksr-melt/Meltype", GitHubIssueTitles.Normalize(setting), setting);
             var titles = new GitHubIssueTitles((repository, number) => Task.FromResult<string?>(repository == "yksr-melt/Meltype" && number == 866 ? "候補に出ない" : null));
-            var k = new Keyboard { GitHubIssueCandidates = true, GitHubRepository = setting, GitHubTitles = titles };
+            var k = new Keyboard { GitHubRepository = setting, GitHubTitles = titles };
             k.Type("#866 ");
             var candidates = k.Host.View?.Candidates ?? [];
             Assert.True(candidates.Contains("#866 候補に出ない") && candidates.Contains("yksr-melt/Meltype#866"), setting + ": " + string.Join(",", candidates));

@@ -47,6 +47,24 @@ internal static class SettingsJsonTests
     }
 
     [Test]
+    public static void SettingsJson_GitHubCandidatesFollowTheRepository()
+    {
+        // v11: GitHubIssueCandidates を消した。OFF のままリポジトリだけ書いてあった人は、問い合わせが始まらないようリポジトリを空にする
+        foreach (var (json, expected) in new[]
+        {
+            ("{\"GitHubIssueCandidates\":true,\"GitHubRepository\":\"a/b\"}", "a/b"),
+            ("{\"GitHubIssueCandidates\":false,\"GitHubRepository\":\"a/b\"}", null),
+            ("{\"GitHubRepository\":\"a/b\"}", null),
+        })
+        {
+            var values = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            Settings.MigrateToV11(values);
+            Assert.Equal(expected, values["GitHubRepository"]?.GetValue<string>(), json);
+            Assert.True(!values.ContainsKey("GitHubIssueCandidates"), "消した項目は残さない: " + json);
+        }
+    }
+
+    [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
         // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま。
@@ -153,6 +171,7 @@ internal static class SettingsJsonTests
             Assert.True(loaded.SpaceAroundEnglish, "保存に失敗しても既定値に戻さない");
             Assert.Equal(Settings.CurrentVersion, loaded.SettingsVersion, "移行は済ませる");
             Assert.True(loaded.AppRules.Any(r => r.Process == "maya.exe"), "移行で足したアプリの設定を残す");
+            Assert.True(loaded.AppRules.Any(r => r.Process == "JumpClient.exe" && !r.Enabled) && loaded.AppRules.Any(r => r.Process == "com.philandro.anydesk" && !r.Enabled), "前の版の設定にも、既定で OFF にするリモートデスクトップを足す");
             Assert.True(!File.Exists(path + ".broken"), "保存の失敗を壊れたファイルとして扱わない");
         }
         finally
