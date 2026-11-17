@@ -454,8 +454,9 @@ public sealed partial class CompositionDetector
         var particle = IsNounParticle(kana);
         if (RomajiTypoCorrector.CommonWordCost(kana) is { } cost) return (new LatticeEdge(start, end, false, kana, true, particle), cost);
         if (CommonReadings.Phrases.Contains(kana) || _userJapanese.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), JapaneseWordCost);
-        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), RareWordCost);
         if (CommonReadings.Katakana.Contains(kana) || CommonReadings.Brands.Contains(kana)) return (new LatticeEdge(start, end, false, kana, true, false), KatakanaWordCost);
+        // readings-rare.txt の読みは katakana.txt とも重なる (おねしゃす) ので、ほかの一覧の軽い重みを先に使う
+        if (RomajiTypoCorrector.IsRareWord(kana)) return (new LatticeEdge(start, end, false, kana, true, false), RareWordCost);
         return (new LatticeEdge(start, end, false, kana, true, false), double.NaN);
     }
 
