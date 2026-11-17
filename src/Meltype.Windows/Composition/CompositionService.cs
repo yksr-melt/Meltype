@@ -328,6 +328,18 @@ internal sealed class CompositionService : IDisposable
         });
     }
 
+    /// <summary>text を、Meltype IME の入力モードの表示と同じ所 (入力位置の下) に milliseconds だけ出す。どのスレッドから呼んでもよい。</summary>
+    public void ShowNotice(string text, int milliseconds)
+    {
+        if (!_invoker.IsHandleCreated || _invoker.IsDisposed) return;
+        _invoker.BeginInvoke(() =>
+        {
+            var anchor = FindImeIndicatorAnchor();
+            _indicator.SetColors(null, Config.Settings.ParseColor(_settings().ModeIndicatorDirectColor), Config.Settings.ParseColor(_settings().ModeIndicatorTextColor));
+            _indicator.FlashNotice(text, new Point(anchor.X + 2, anchor.Y + 2), milliseconds);
+        });
+    }
+
     private Point FindImeIndicatorAnchor()
     {
         if (FindCaret() is { } caret) return new Point(caret.Left, caret.Bottom + 4);

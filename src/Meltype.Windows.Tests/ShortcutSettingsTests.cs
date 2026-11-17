@@ -59,7 +59,6 @@ internal static class ShortcutSettingsTests
             using var engine = new MeltypeEngine(TestRuntime.Create());
             using var form = new SettingsForm(engine, new AppState());
             var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-            var input = (TextBox)typeof(SettingsForm).GetField("_testInput", flags)!.GetValue(form)!;
             var collect = typeof(SettingsForm).GetMethod("Collect", flags)!;
             var controls = new List<Control>();
             var pending = new Queue<Control>();
@@ -68,7 +67,6 @@ internal static class ShortcutSettingsTests
                 foreach (Control child in parent.Controls) { controls.Add(child); pending.Enqueue(child); }
             var editor = controls.OfType<ShortcutEditor>().Single();
             editor.LoadBindings([new() { Key = 28 }, new() { Key = 29 }]);
-            input.Text = "nihongo english";
             var edited = (Settings)collect.Invoke(form, null)!;
             Assert.Equal(0, edited.EffectiveToggleShortcuts.Count, "判定用の複製は既存どおり正規化する");
             Assert.Equal(2, editor.CollectBindings().Count, "画面の一覧を保持");

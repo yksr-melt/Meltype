@@ -76,13 +76,29 @@ public sealed class ContextRules
                 if (stem != head && !list.Any(rule => rule.Candidate == stem) && convertStem(head) != stem) return null;
             }
             var best = list
-                .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => surrounding.Contains(cue, StringComparison.Ordinal))))
+                .Select(rule => (rule.Candidate, Hits: rule.Cues.Count(cue => HasCue(surrounding, cue))))
                 .Where(r => r.Hits > 0)
                 .OrderByDescending(r => r.Hits)
                 .FirstOrDefault();
             return best.Hits > 0 ? best.Candidate + ending : null;
         }
         return null;
+    }
+
+    /// <summary>
+    /// 手がかりの端が英字なら、その端は英単語の境界でだけ当てる (ph を graph・php・iphone に当てない、AC を ACCESS に当てない)。
+    /// かなや漢字の手がかりは部分一致のまま (蒸し → 蒸し暑い)。
+    /// </summary>
+    private static bool HasCue(string surrounding, string cue)
+    {
+        for (var at = surrounding.IndexOf(cue, StringComparison.Ordinal); at >= 0; at = surrounding.IndexOf(cue, at + 1, StringComparison.Ordinal))
+        {
+            var end = at + cue.Length;
+            if (char.IsAsciiLetter(cue[0]) && at > 0 && char.IsAsciiLetter(surrounding[at - 1])) continue;
+            if (char.IsAsciiLetter(cue[^1]) && end < surrounding.Length && char.IsAsciiLetter(surrounding[end])) continue;
+            return true;
+        }
+        return false;
     }
 }
 
@@ -95,6 +111,7 @@ public sealed class ConversionHistory
     private const int MaxEntries = 5000;
     private readonly string? _path;
     private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    // 裏のスレッドからも消す (MeltypeRuntime.ForgetZenzaiHallucinations) ので、読むときも取る
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
@@ -124,9 +141,15 @@ public sealed class ConversionHistory
     /// <summary>学習した内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
     public int Version { get; private set; }
 
-    public int Count => _entries.Count;
+    public int Count
+    {
+        get { lock (_gate) return _entries.Count; }
+    }
 
-    public string? Get(string reading) => _entries.TryGetValue(reading, out var entry) ? entry.Text : null;
+    public string? Get(string reading)
+    {
+        lock (_gate) return _entries.TryGetValue(reading, out var entry) ? entry.Text : null;
+    }
 
     public void Remember(string reading, string text)
     {
@@ -159,12 +182,17 @@ public sealed class ConversionHistory
     /// <summary>読みが prefix で始まり prefix より長い、学習した変換の語 (新しく使ったものから。Entries() から探すのと同じ順)。</summary>
     public IEnumerable<string> TextsStartingWith(string prefix)
     {
-        if (_index is not { } index || index.Version != Version)
+        (int Version, (string Reading, string Text, DateTime Used, int Order)[] Items) index;
+        lock (_gate)
         {
-            var order = 0;
-            var items = _entries.Select(e => (e.Key, e.Value.Text, e.Value.Used, order++)).ToArray();
-            Array.Sort(items, (a, b) => string.CompareOrdinal(a.Key, b.Key));
-            _index = index = (Version, items);
+            if (_index is not { } built || built.Version != Version)
+            {
+                var order = 0;
+                var items = _entries.Select(e => (e.Key, e.Value.Text, e.Value.Used, order++)).ToArray();
+                Array.Sort(items, (a, b) => string.CompareOrdinal(a.Key, b.Key));
+                _index = built = (Version, items);
+            }
+            index = built;
         }
         var matches = new List<(string Text, DateTime Used, int Order)>();
         for (var i = LowerBound(index.Items, prefix); i < index.Items.Length && index.Items[i].Reading.StartsWith(prefix, StringComparison.Ordinal); i++)
@@ -187,8 +215,10 @@ public sealed class ConversionHistory
     }
 
     /// <summary>学習した変換 (読み → 選んだ語) の一覧 (新しく使ったものから)。設定の「学習した語」に出す。</summary>
-    public IReadOnlyList<(string Reading, string Text, DateTime Used)> Entries() =>
-        _entries.OrderByDescending(e => e.Value.Used).Select(e => (e.Key, e.Value.Text, e.Value.Used)).ToList();
+    public IReadOnlyList<(string Reading, string Text, DateTime Used)> Entries()
+    {
+        lock (_gate) return _entries.OrderByDescending(e => e.Value.Used).Select(e => (e.Key, e.Value.Text, e.Value.Used)).ToList();
+    }
 
     public void Clear()
     {
