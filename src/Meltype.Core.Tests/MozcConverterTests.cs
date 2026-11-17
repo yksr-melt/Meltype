@@ -158,6 +158,8 @@ internal static class MozcConverterTests
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         var hybrid = new HybridConverter(mozc, () => zenzai);
         Assert.Equal("箸を|渡る", string.Join("|", hybrid.ConvertClauses("はしをわたる", "川の")!.Select(c => c.Text)));
+        // 学習から壊れた答えを消すときは、ユーザーの語の文節のほかの候補も Mozc の候補として数える (橋を渡る を消さない)
+        Assert.True(hybrid.IsBuiltFromMozcCandidatesNow("はしをわたる", "橋を渡る") == true, "Mozc の候補でできる");
     }
 
     [Test]
