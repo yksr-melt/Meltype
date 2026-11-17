@@ -648,11 +648,15 @@ public sealed partial class CompositionDetector
     /// 知っている英単語か (同梱の辞書・固有名詞・スペルチェッカー・english-readable.txt・-pedia・ユーザーが英字に直して覚えた語)。
     /// 1 文字は a・i と、チャットの略し方の u (you)・r (are) だけ。
     /// </summary>
+    /// <remarks>
+    /// english.txt の語の -s の形 (deploys) も語にする。english-words.txt は deploy を持たず ploys を持つので、deploys を de|ploys に割ってしまう。
+    /// </remarks>
     private bool IsLatticeEnglishWord(string lower)
     {
         if (Memory?.Get(lower) is { } learned) return learned;
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
         return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsLatticeSpellWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
+            lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
             IsPediaEnglishWord(lower);
     }
 
