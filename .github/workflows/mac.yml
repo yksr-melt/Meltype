@@ -8,7 +8,7 @@ on:
     paths: &paths
       - 'mac/**'
       - 'src/Meltype.Core/**'
-      - 'src/Meltype.Mac.Native/**'
+      - 'src/Meltype.Core.CApi/**'
       - 'dictionaries/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'

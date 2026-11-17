@@ -9,7 +9,7 @@ on:
       - 'android/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.Tests/**'
-      - 'src/Meltype.Mac.Native/**'
+      - 'src/Meltype.Core.CApi/**'
   workflow_dispatch:
 
 permissions:

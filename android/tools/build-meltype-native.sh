@@ -29,13 +29,13 @@ for spec in "arm64-v8a:linux-bionic-arm64:aarch64-linux-android" "x86_64:linux-b
   CC="$TOOLCHAIN/${TRIPLE}26-clang" \
   CXX="$TOOLCHAIN/${TRIPLE}26-clang++" \
   PATH="$TOOLCHAIN:$PATH" \
-  dotnet publish "$ROOT/src/Meltype.Mac.Native/Meltype.Mac.Native.csproj" \
+  dotnet publish "$ROOT/src/Meltype.Core.CApi/Meltype.Core.CApi.csproj" \
     -c Release -r "$RID" \
     -p:PublishAot=true -p:NativeLib=Shared \
     -p:DisableUnsupportedError=true -p:PublishAotUsingRuntimePack=true \
     -p:AndroidApiLevelMin=26 \
     -p:RestoreSources=https://api.nuget.org/v3/index.json
-  OUTPUT_DIR="$ROOT/src/Meltype.Mac.Native/bin/Release/net10.0/$RID/publish"
+  OUTPUT_DIR="$ROOT/src/Meltype.Core.CApi/bin/Release/net10.0/$RID/publish"
   ls -lah "$OUTPUT_DIR"
   SOURCE="$(find "$OUTPUT_DIR" -maxdepth 1 -type f -name "*.so" -print -quit)"
   [[ -f "$SOURCE" ]] || { echo "NativeAOT output not found: $SOURCE" >&2; exit 1; }
@@ -45,7 +45,7 @@ for spec in "arm64-v8a:linux-bionic-arm64:aarch64-linux-android" "x86_64:linux-b
   # Android dynamic linker resolves DT_NEEDED by soname, not CI filesystem path.
   # Without an explicit SONAME, CMake records the absolute imported path
   # in libmeltype_jni.so and the IME fails to load on real Android devices.
-  # SONAME is set by the native linker (Meltype.Mac.Native.csproj). Do not use
+  # SONAME is set by the native linker (Meltype.Core.CApi.csproj). Do not use
   # patchelf: it corrupts Android ELF PT_LOAD alignment.
   DYNAMIC="$("$TOOLCHAIN/llvm-readelf" -d "$DEST/libMeltypeNative.so")"
   grep -q 'Library soname: \[libMeltypeNative.so\]' <<< "$DYNAMIC" \
