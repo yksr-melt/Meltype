@@ -1,18 +1,11 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 -- Copyright (C) 2026 Yukishiro
 
--- タイピング調査 (/typing/)。参加者は名前を残さず、参加ごとのランダムな番号で分ける。
--- ip_hash は悪質な送信を止める (typing_bans) ためだけに持ち、書き出しには入れない。
+-- タイピング調査 (/typing/)。参加者は名前も IP も残さず、参加ごとのランダムな番号で分ける。
 CREATE TABLE typing_sessions (
   id TEXT PRIMARY KEY,
   token_hash TEXT NOT NULL UNIQUE,
-  ip_hash TEXT NOT NULL,
   profile TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE typing_bans (
-  ip_hash TEXT PRIMARY KEY,
   created_at INTEGER NOT NULL
 );
 
@@ -23,15 +16,11 @@ CREATE TABLE typing_trials (
   -- 打ったときのお手本。お手本 (sentences/*.txt) から消した文のデータも、何を打ったかが分かるように写しておく
   sentence_text TEXT NOT NULL,
   reading TEXT NOT NULL,
-  typed TEXT NOT NULL,
+  -- 打鍵 ([code, key, 押した時刻, 離した時刻] の並び)。打った文字は、ここから組み立てる (public/assets/js/typing-check.js の replay)
   keys TEXT NOT NULL,
   -- 打鍵の数と、かなにしたときのお手本との一致率 (0〜1)。集計と、お手本とかけ離れた送信を見つけるのに使う
   keystrokes INTEGER NOT NULL,
   accuracy REAL NOT NULL,
-  -- どこで打ったか。web はブラウザー (キーの code と離した時刻がある)、cli はターミナル (打った文字だけで、離した時刻は null)
-  client TEXT NOT NULL,
-  -- 打った配列 (public/assets/js/typing-layouts.js の id)。ローマ字の配列なら typed はローマ字の綴り、かなの配列ならかな
-  layout TEXT NOT NULL,
   duration_ms INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );

@@ -3,10 +3,9 @@
 
 // タイピング調査 (/typing/) の受付。どのキーが抜けやすいかを調べるため、お手本の文を打ったときの打鍵を集める。
 // ページは誰でも遊べ、打鍵は調査に同意した人のものだけを受け付ける。
-// 決まり: 受け付けるのはお手本の id と、それを打った打鍵だけ (自由に書いた文章を送る欄は作らない)。
-// 決まり: IP はハッシュにして回数制限と利用禁止 (typing_bans) にだけ使い、書き出しには入れない。
-import { accuracyOf, kanaOf, suspicious } from "../public/assets/js/typing-check.js";
-import { LAYOUT_IDS } from "../public/assets/js/typing-layouts.js";
+// 決まり: 受け付けるのはお手本の id と、それを打った打鍵 (keys) だけ (打った文字は打鍵から組み立てる。自由に書いた文章を送る欄は作らない)。
+// 決まり: IP はハッシュにして回数制限にだけ使い、調査のデータには入れない (rate_events は 1 日で消える)。
+import { accuracyOf, replay, suspicious } from "../public/assets/js/typing-check.js";
 import { sentenceById } from "../public/assets/js/typing-sentences.js";
 import { error, json, now, randomToken, readJson, sha256Hex } from "./http.js";
 import { claimRate, hashIp, verifyTurnstile } from "./reports.js";
@@ -17,17 +16,13 @@ const TYPING_RATE = { kind: "typing", window: 10 * 60, windowLimit: 3, dayLimit:
 // 1 回の参加で打鍵を送れる時間と文の数。休みながら続けて打っても足りる量にしてある
 const SESSION_HOURS = 12;
 const MAX_TRIALS = 1200;
-// 1 文の打鍵の上限は、読み 1 字あたりローマ字 3 打 + Shift・親指キー・打ち直しの余裕を見て 12 打。
+// 1 文の打鍵の上限は、読み 1 字あたりローマ字 3 打 + Shift・打ち直しの余裕を見て 12 打。
 // 文ごとの書き込みの大きさをお手本の長さで抑える (いちばん長い文で 1 文 10 KB ほど)
-const KEYS_PER_KANA = 12;
-const TYPED_PER_KANA = 6;
+const KEYS_PER_CHAR = 12;
 const MAX_BODY = 32 * 1024;
 const MAX_MS = 10 * 60 * 1000;
 // かなにしたときのお手本との一致率がこれより低い文を、ダッシュボードで「お手本とかけ離れた送信」として出す
 export const FLAG_ACCURACY = 0.5;
-
-// 打った場所。ブラウザーのページ (web) と、ブラウザーで同意して出した番号で送るターミナルの CLI (cli, public/typing/meltype-typing.mjs)
-const CLIENTS = ["web", "cli"];
 
 export const PROFILE_CHOICES = {
   touch: ["yes", "partly", "no", "unknown"],
@@ -44,28 +39,17 @@ function validProfile(input) {
   return profile;
 }
 
-const BANNED = "このページから送ることはできません";
-
-async function banned(env, ipHash) {
-  return Boolean(await env.DB.prepare("SELECT 1 FROM typing_bans WHERE ip_hash = ?").bind(ipHash).first());
-}
-
-function bearer(request) {
+async function sessionFor(request, env) {
   const auth = request.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  return token && token.length <= 128 ? token : "";
-}
-
-async function sessionFor(token, env) {
-  return env.DB.prepare("SELECT id, ip_hash, created_at FROM typing_sessions WHERE token_hash = ?").bind(await sha256Hex(token)).first();
+  if (!token || token.length > 128) return null;
+  return env.DB.prepare("SELECT id, created_at FROM typing_sessions WHERE token_hash = ?").bind(await sha256Hex(token)).first();
 }
 
 export async function createSession(request, env) {
   const { body, error: invalid } = await readJson(request, 8 * 1024);
   if (invalid) return invalid;
   if (!body || body.consent !== true) return error(400, "参加への同意を確かめられませんでした");
-  // 18 歳未満は保護者の許可をもらってから送る。ページの「18 歳以上か、保護者の許可をもらっている」の確認
-  if (body.adultOrGuardian !== true) return error(400, "18 歳以上か、保護者の許可をもらっているかを確かめられませんでした");
   if (!env.IP_HASH_SALT) {
     console.error("IP_HASH_SALT が設定されていないため、タイピング調査を受け付けていません");
     return error(503, "いまは受け付けられません。時間をおいてもう一度試してください");
@@ -73,23 +57,22 @@ export async function createSession(request, env) {
   const human = await verifyTurnstile(request, env, body.turnstile, "typing");
   if (human) return error(human.status, human.message);
 
-  const ipHash = await hashIp(request, env);
-  if (await banned(env, ipHash)) return error(403, BANNED);
   const at = now();
-  const limited = await claimRate(env, ipHash, at, TYPING_RATE);
+  const limited = await claimRate(env, await hashIp(request, env), at, TYPING_RATE);
   if (limited) return error(429, limited.message, { retryAfter: limited.retryAfter });
 
   const id = randomToken().slice(0, 16);
   const token = randomToken();
-  await env.DB.prepare("INSERT INTO typing_sessions (id, token_hash, ip_hash, profile, created_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(id, await sha256Hex(token), ipHash, JSON.stringify(validProfile(body.profile)), at)
+  await env.DB.prepare("INSERT INTO typing_sessions (id, token_hash, profile, created_at) VALUES (?, ?, ?, ?)")
+    .bind(id, await sha256Hex(token), JSON.stringify(validProfile(body.profile)), at)
     .run();
   return json({ id, token }, { status: 201 });
 }
 
 const isInt = (value, min, max) => Number.isSafeInteger(value) && value >= min && value <= max;
 
-// 打鍵は [code, key, 押した時刻 ms, 離した時刻 ms か null] の並び。時刻は文を打ち始めてからの経過
+// 打鍵は [code, key, 押した時刻 ms, 離した時刻 ms か null] の並び。時刻は文を打ち始めてからの経過。
+// Backspace の押しっぱなしは、繰り返しのたびに 1 つ (離した時刻は null) 入る
 export function validKeys(keys, max) {
   if (!Array.isArray(keys) || keys.length < 1 || keys.length > max) return null;
   const out = [];
@@ -108,51 +91,31 @@ export function validKeys(keys, max) {
 }
 
 export async function addTrial(request, env) {
-  const token = bearer(request);
-  const session = token && (await sessionFor(token, env));
+  const session = await sessionFor(request, env);
   if (!session) return error(401, "参加の番号が見つかりません。ページを読み込み直してください");
   if (session.created_at + SESSION_HOURS * 3600 < now()) return error(410, "参加を始めてから時間がたちました。もう一度同意してから送ってください");
-  if (await banned(env, session.ip_hash)) return error(403, BANNED);
   const { body, error: invalid } = await readJson(request, MAX_BODY);
   if (invalid) return invalid;
   const sentence = sentenceById(body && body.sentence);
   if (!sentence) return error(400, "お手本の文が見つかりません");
-  const length = [...sentence.reading].length;
-  const typed = body.typed;
-  // ローマ字の配列は打った綴り、かなの配列は打ったかな (typing-layouts.js)
-  if (typeof typed !== "string" || typed.length > length * TYPED_PER_KANA || !/^[\x20-\x7eぁ-ゖー、。・゛゜「」]*$/.test(typed)) return error(400, "打った文字の形式が正しくありません");
-  const keys = validKeys(body.keys, length * KEYS_PER_KANA);
+  const keys = validKeys(body.keys, [...sentence.reading].length * KEYS_PER_CHAR);
   if (!keys) return error(400, "打鍵の記録の形式が正しくありません");
   if (!isInt(body.duration, 1, MAX_MS)) return error(400, "かかった時間の形式が正しくありません");
-  const client = body.client === undefined ? "web" : body.client;
-  if (!CLIENTS.includes(client)) return error(400, "打った場所の形式が正しくありません");
-  const layout = body.layout === undefined ? "qwerty" : body.layout;
-  if (!LAYOUT_IDS.includes(layout)) return error(400, "配列の形式が正しくありません");
-  // 名前など、お手本と関係ない入力が続く文は残さない (ページと CLI も送る前に同じ判定で止める)
-  if (suspicious(sentence.reading, typed, layout)) return error(422, "お手本と関係ない入力が続いたので、この文は受け付けません");
+  const typed = replay(keys);
+  // 名前など、お手本と関係ない入力が続く文は残さない (ページも送る前に同じ判定で止める)
+  if (suspicious(sentence.reading, typed)) return error(422, "お手本と関係ない入力が続いたので、この文は受け付けません");
 
   const inserted = await env.DB.prepare(
-    "INSERT INTO typing_trials (session_id, sentence_id, sentence_text, reading, typed, keys, keystrokes, accuracy, client, layout, duration_ms, created_at) " +
-      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?13 RETURNING id",
+    "INSERT INTO typing_trials (session_id, sentence_id, sentence_text, reading, keys, keystrokes, accuracy, duration_ms, created_at) " +
+      "SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9 WHERE (SELECT COUNT(*) FROM typing_trials WHERE session_id = ?1) < ?10 RETURNING id",
   )
-    .bind(session.id, sentence.id, sentence.text, sentence.reading, typed, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, kanaOf(layout, typed)), client, layout, body.duration, now(), MAX_TRIALS)
+    .bind(session.id, sentence.id, sentence.text, sentence.reading, JSON.stringify(keys), keys.length, accuracyOf(sentence.reading, typed), body.duration, now(), MAX_TRIALS)
     .first();
   if (!inserted) return error(429, `1 回の参加で送れるのは ${MAX_TRIALS} 文までです。ありがとうございました！`);
   return json({ id: inserted.id }, { status: 201 });
 }
 
-// 参加者が自分の参加のデータを消す。ページは、このブラウザーで同意した参加の番号をすべて覚えていて、1 つずつ消す
-export async function deleteSession(request, env) {
-  const token = bearer(request);
-  const session = token && (await sessionFor(token, env));
-  if (!session) return error(404, "消すデータが見つかりません (もう消してあるかもしれません)");
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM typing_trials WHERE session_id = ?").bind(session.id),
-    env.DB.prepare("DELETE FROM typing_sessions WHERE id = ?").bind(session.id),
-  ]);
-  return json({ ok: true });
-}
-
+// ダッシュボードで、どれだけ集まったかを見る
 export async function typingStats(env) {
   const row = await env.DB.prepare(
     "SELECT (SELECT COUNT(*) FROM typing_sessions) AS sessions, COUNT(*) AS trials, COALESCE(SUM(keystrokes), 0) AS keystrokes FROM typing_trials",
@@ -160,13 +123,12 @@ export async function typingStats(env) {
   return json(row);
 }
 
-// お手本とかけ離れた文を送った参加を、多い順に出す。利用禁止にするかはダッシュボードで人が決める
+// お手本とかけ離れた文を送った参加を、多い順に出す。消すかはダッシュボードで人が決める
 export async function flaggedSessions(env) {
   const { results } = await env.DB.prepare(
     "SELECT s.id, s.created_at, COUNT(*) AS flagged, " +
       "(SELECT COUNT(*) FROM typing_trials a WHERE a.session_id = s.id) AS trials, " +
-      "(SELECT json_group_array(typed) FROM (SELECT typed FROM typing_trials b WHERE b.session_id = s.id AND b.accuracy < ?1 ORDER BY b.id LIMIT 5)) AS samples, " +
-      "EXISTS (SELECT 1 FROM typing_bans x WHERE x.ip_hash = s.ip_hash) AS banned " +
+      "(SELECT json_group_array(keys) FROM (SELECT keys FROM typing_trials b WHERE b.session_id = s.id AND b.accuracy < ?1 ORDER BY b.id LIMIT 5)) AS samples " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.accuracy < ?1 " +
       "GROUP BY s.id ORDER BY flagged DESC, s.created_at DESC LIMIT 100",
   )
@@ -174,21 +136,13 @@ export async function flaggedSessions(env) {
     .all();
   return json({
     threshold: FLAG_ACCURACY,
-    sessions: results.map((row) => ({ ...row, samples: JSON.parse(row.samples), banned: Boolean(row.banned) })),
+    // 打った文字は打鍵から組み立てて見せる
+    sessions: results.map((row) => ({ ...row, samples: JSON.parse(row.samples).map((keys) => replay(JSON.parse(keys))) })),
   });
 }
 
-// 参加の IP を利用禁止にする・解く。ダッシュボードは Access の内側だが、別のサイトから送らせる書き込みを防ぐため同じオリジンからだけ受け付ける
-export async function setBan(request, env, url, sessionId, ban) {
-  if (request.headers.get("origin") !== url.origin) return error(403, "このページからは操作できません");
-  const session = await env.DB.prepare("SELECT ip_hash FROM typing_sessions WHERE id = ?").bind(sessionId).first();
-  if (!session) return error(404, "参加が見つかりません");
-  if (ban) await env.DB.prepare("INSERT OR IGNORE INTO typing_bans (ip_hash, created_at) VALUES (?, ?)").bind(session.ip_hash, now()).run();
-  else await env.DB.prepare("DELETE FROM typing_bans WHERE ip_hash = ?").bind(session.ip_hash).run();
-  return json({ banned: ban });
-}
-
-// お手本とかけ離れた文 (一致率が FLAG_ACCURACY 未満) を、その参加から消す。名前など、お手本と関係ない文字を残さないため
+// お手本とかけ離れた文 (一致率が FLAG_ACCURACY 未満) を、その参加から消す。
+// ダッシュボードは Access の内側だが、別のサイトから送らせる書き込みを防ぐため同じオリジンからだけ受け付ける
 export async function deleteFlagged(request, env, url, sessionId) {
   if (request.headers.get("origin") !== url.origin) return error(403, "このページからは操作できません");
   const result = await env.DB.prepare("DELETE FROM typing_trials WHERE session_id = ? AND accuracy < ?").bind(sessionId, FLAG_ACCURACY).run();
@@ -200,28 +154,23 @@ export async function exportTrials(env, url) {
   const after = Math.max(0, Number(url.searchParams.get("after")) || 0);
   const limit = Math.min(1000, Math.max(1, Number(url.searchParams.get("limit")) || 500));
   const { results } = await env.DB.prepare(
-    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.sentence_text, t.reading, t.typed, t.keys, t.accuracy, t.client, t.layout, t.duration_ms, t.created_at " +
+    "SELECT t.id, t.session_id, s.profile, t.sentence_id, t.sentence_text, t.reading, t.keys, t.accuracy, t.duration_ms, t.created_at " +
       "FROM typing_trials t JOIN typing_sessions s ON s.id = t.session_id WHERE t.id > ? ORDER BY t.id LIMIT ?",
   )
     .bind(after, limit + 1)
     .all();
   const more = results.length > limit;
-  const trials = results.slice(0, limit).map((row) => {
-    return {
-      id: row.id,
-      session: row.session_id,
-      profile: JSON.parse(row.profile),
-      sentence: row.sentence_id,
-      text: row.sentence_text,
-      reading: row.reading,
-      typed: row.typed,
-      keys: JSON.parse(row.keys),
-      accuracy: row.accuracy,
-      client: row.client,
-      layout: row.layout,
-      duration_ms: row.duration_ms,
-      created_at: row.created_at,
-    };
-  });
+  const trials = results.slice(0, limit).map((row) => ({
+    id: row.id,
+    session: row.session_id,
+    profile: JSON.parse(row.profile),
+    sentence: row.sentence_id,
+    text: row.sentence_text,
+    reading: row.reading,
+    keys: JSON.parse(row.keys),
+    accuracy: row.accuracy,
+    duration_ms: row.duration_ms,
+    created_at: row.created_at,
+  }));
   return json({ trials, next: more ? trials[trials.length - 1].id : null });
 }

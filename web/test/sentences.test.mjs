@@ -9,7 +9,7 @@ import { parse, readSentences, sentenceId } from "../scripts/make-sentences.mjs"
 describe("お手本の txt", () => {
   it("今のお手本は読める", () => {
     const { kinds, sentences } = readSentences();
-    assert.deepEqual(kinds.map((kind) => kind.id), ["plain", "formal", "chat"]);
+    assert.deepEqual(kinds.map((kind) => kind.id), ["plain", "formal", "chat", "mixed"]);
     assert.ok(sentences.length > 0);
   });
 

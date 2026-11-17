@@ -306,7 +306,7 @@ document.querySelector("[data-typing-export]").addEventListener("click", async (
   }
 });
 
-// お手本とかけ離れた文を送った参加。悪質なら、その参加の IP からタイピング調査に送れなくする
+// お手本とかけ離れた文を送った参加。名前など関係ない入力が残っていれば、その文を消す
 async function loadFlagged() {
   const box = document.querySelector("[data-typing-flagged]");
   try {
@@ -320,8 +320,7 @@ async function loadFlagged() {
         (s) =>
           `<li><span><b>${formatNumber(s.flagged)}</b> / ${formatNumber(s.trials)} 文・${escapeHtml(formatDate(s.created_at * 1000, true))}</span>` +
           `<code>${s.samples.map(escapeHtml).join(" / ")}</code>` +
-          `<button class="btn btn-ghost btn-small" type="button" data-delete-flagged="${escapeHtml(s.id)}">かけ離れた文を消す</button>` +
-          `<button class="btn btn-ghost btn-small" type="button" data-ban="${escapeHtml(s.id)}" data-banned="${s.banned}">${s.banned ? "利用禁止を解く" : "利用禁止にする"}</button></li>`,
+          `<button class="btn btn-ghost btn-small" type="button" data-delete-flagged="${escapeHtml(s.id)}">かけ離れた文を消す</button></li>`,
       )
       .join("")}</ul>`;
   } catch (e) {
@@ -331,31 +330,16 @@ async function loadFlagged() {
 
 document.querySelector("[data-typing-flagged]").addEventListener("click", async (event) => {
   const remove = event.target.closest("[data-delete-flagged]");
-  if (remove) {
-    if (!confirm("この参加の、お手本とかけ離れた文の記録を消します。元に戻せません。よろしいですか？")) return;
-    remove.disabled = true;
-    try {
-      const { deleted } = await getJson(`/api/dashboard/typing/sessions/${encodeURIComponent(remove.dataset.deleteFlagged)}/flagged`, { method: "DELETE" });
-      toast(`${formatNumber(deleted)} 文を消しました`);
-      await Promise.all([loadFlagged(), loadTypingStats()]);
-    } catch (e) {
-      toast(e.message);
-      remove.disabled = false;
-    }
-    return;
-  }
-  const button = event.target.closest("[data-ban]");
-  if (!button) return;
-  const ban = button.dataset.banned !== "true";
-  if (ban && !confirm("この参加の IP から、タイピング調査に送れなくします。よろしいですか？")) return;
-  button.disabled = true;
+  if (!remove) return;
+  if (!confirm("この参加の、お手本とかけ離れた文の記録を消します。元に戻せません。よろしいですか？")) return;
+  remove.disabled = true;
   try {
-    await getJson(`/api/dashboard/typing/sessions/${encodeURIComponent(button.dataset.ban)}/ban`, { method: ban ? "PUT" : "DELETE" });
-    toast(ban ? "利用禁止にしました" : "利用禁止を解きました");
-    await loadFlagged();
+    const { deleted } = await getJson(`/api/dashboard/typing/sessions/${encodeURIComponent(remove.dataset.deleteFlagged)}/flagged`, { method: "DELETE" });
+    toast(`${formatNumber(deleted)} 文を消しました`);
+    await Promise.all([loadFlagged(), loadTypingStats()]);
   } catch (e) {
     toast(e.message);
-    button.disabled = false;
+    remove.disabled = false;
   }
 });
 

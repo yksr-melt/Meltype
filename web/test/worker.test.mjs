@@ -509,18 +509,17 @@ describe("GitHub の情報のキャッシュ (KV)", () => {
 describe("タイピング調査", async () => {
   const { SENTENCES } = await import("../public/assets/js/typing-sentences.js");
   const FIRST = SENTENCES.find((sentence) => sentence.reading === "きょうはあさからあめがふっている。");
-  const KEYS = [
-    ["KeyK", "k", 0, 80],
-    ["KeyY", "y", 120, 200],
-    ["KeyO", "o", 260, 330],
-  ];
+  // 打った文字から打鍵の並びを作る
+  const CODES = { " ": "Space", ".": "Period", ",": "Comma", "-": "Minus" };
+  const keysOf = (text) => [...text].map((char, i) => [CODES[char] || `Key${char.toUpperCase()}`, char, i * 100, i * 100 + 50]);
+  const KEYS = keysOf("kyo");
 
   async function start(extra = {}, ip = "203.0.113.9") {
     turnstileAnswer = { success: true, action: "typing", hostname: "meltype.moe" };
     return call("/api/typing/sessions", {
       method: "POST",
       headers: { "content-type": "application/json", "cf-connecting-ip": ip },
-      body: JSON.stringify({ consent: true, adultOrGuardian: true, turnstile: "token", profile: { touch: "yes", layout: "jis", os: "windows" }, ...extra }),
+      body: JSON.stringify({ consent: true, turnstile: "token", profile: { touch: "yes", layout: "jis", os: "windows" }, ...extra }),
     });
   }
 
@@ -528,9 +527,11 @@ describe("タイピング調査", async () => {
     return call("/api/typing/trials", {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ sentence: FIRST.id, typed: "kyo", keys: KEYS, duration: 400, ...extra }),
+      body: JSON.stringify({ sentence: FIRST.id, keys: KEYS, duration: 400, ...extra }),
     });
   }
+
+  const auth = async () => ({ "cf-access-jwt-assertion": await jwt(goodClaims()) });
 
   it("同意が無い・報告用の Turnstile では始められない", async () => {
     assert.equal((await start({ consent: false })).status, 400);
@@ -543,30 +544,29 @@ describe("タイピング調査", async () => {
     assert.equal(response.status, 400);
   });
 
-  it("打鍵を受け付け、ダッシュボードから書き出せる。IP と自由記述は残らない", async () => {
+  it("打鍵を受け付け、ダッシュボードから書き出せる。IP と打った文字列は残らない", async () => {
     const { id, token } = await (await start()).json();
     assert.equal((await trial(token)).status, 201);
     assert.equal((await trial("wrong")).status, 401);
 
-    const jwtToken = await jwt(goodClaims());
     assert.equal((await call("/api/dashboard/typing/trials")).status, 403);
-    const exported = await (await call("/api/dashboard/typing/trials", { headers: { "cf-access-jwt-assertion": jwtToken } })).json();
+    const exported = await (await call("/api/dashboard/typing/trials", { headers: await auth() })).json();
     assert.equal(exported.trials.length, 1);
     const [row] = exported.trials;
     assert.equal(row.session, id);
-    assert.equal(row.reading, "きょうはあさからあめがふっている。");
+    assert.equal(row.text, FIRST.text);
+    assert.equal(row.reading, FIRST.reading);
     assert.deepEqual(row.keys, KEYS);
     assert.deepEqual(row.profile, { touch: "yes", layout: "jis", os: "windows" });
-    assert.equal(row.layout, "qwerty");
+    assert.ok(!("typed" in row));
     assert.ok(!JSON.stringify(row).includes("203.0.113.9"));
-    const stats = await (await call("/api/dashboard/typing/stats", { headers: { "cf-access-jwt-assertion": jwtToken } })).json();
+    const stats = await (await call("/api/dashboard/typing/stats", { headers: await auth() })).json();
     assert.deepEqual(stats, { sessions: 1, trials: 1, keystrokes: 3 });
   });
 
-  it("知らない文・おかしな打鍵・かなと ASCII 以外の入力は受け付けない", async () => {
+  it("知らない文・おかしな打鍵は受け付けない", async () => {
     const { token } = await (await start()).json();
     assert.equal((await trial(token, { sentence: "nope" })).status, 400);
-    assert.equal((await trial(token, { typed: "漢字" })).status, 400);
     assert.equal((await trial(token, { keys: [["KeyK", "k", 100, 50]] })).status, 400);
     assert.equal((await trial(token, { keys: [["KeyK", "k", 100, null], ["KeyY", "y", 50, null]] })).status, 400);
     assert.equal((await trial(token, { keys: [] })).status, 400);
@@ -577,15 +577,6 @@ describe("タイピング調査", async () => {
     await start({ profile: { touch: "<script>", layout: 1 } });
     const row = await env.DB.prepare("SELECT profile FROM typing_sessions").first();
     assert.deepEqual(JSON.parse(row.profile), { touch: "unknown", layout: "unknown", os: "other" });
-  });
-
-  it("参加者は自分のデータを消せる", async () => {
-    const { token } = await (await start()).json();
-    await trial(token);
-    const remove = () => call("/api/typing/sessions/me", { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
-    assert.equal((await remove()).status, 200);
-    assert.equal((await env.DB.prepare("SELECT COUNT(*) AS n FROM typing_trials").first()).n, 0);
-    assert.equal((await remove()).status, 404);
   });
 
   it("回数制限は報告と別に数える", async () => {
@@ -600,61 +591,37 @@ describe("タイピング調査", async () => {
     const { token } = await (await start()).json();
     const many = Array.from({ length: 17 * 12 + 1 }, (_, i) => ["KeyA", "a", i, i]);
     assert.equal((await trial(token, { keys: many })).status, 400);
-    assert.equal((await trial(token, { typed: "a".repeat(17 * 6 + 1) })).status, 400);
   });
 
-  it("お手本とかけ離れた送信をダッシュボードに出し、その IP を利用禁止にできる", async () => {
+  it("お手本と関係ない入力が続く文は受け付けない", async () => {
     const { token } = await (await start()).json();
-    assert.equal((await trial(token, { typed: "kyouhaasakaraamegafutteiru." })).status, 201);
-    assert.equal((await trial(token, { typed: "kyouhaa" })).status, 201);
-    const auth = { "cf-access-jwt-assertion": await jwt(goodClaims()) };
-    const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: auth })).json();
+    assert.equal((await trial(token, { keys: keysOf("kyouhaasakaraamegafutteiru.yamadatarou") })).status, 422);
+    assert.equal((await trial(token, { keys: keysOf("kyouhaasakaramegafuteiru.") })).status, 201);
+  });
+
+  it("お手本とかけ離れた送信をダッシュボードに出し、その文を消せる", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { keys: keysOf("kyouhaasakaraamegafutteiru.") })).status, 201);
+    assert.equal((await trial(token, { keys: keysOf("kyouhaa") })).status, 201);
+    const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: await auth() })).json();
     assert.equal(sessions.length, 1);
     assert.equal(sessions[0].flagged, 1);
     assert.equal(sessions[0].trials, 2);
     assert.deepEqual(sessions[0].samples, ["kyouhaa"]);
 
-    const ban = (method, origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/ban`, { method, headers: { ...auth, origin } });
-    assert.equal((await ban("PUT", "https://evil.example")).status, 403);
-    assert.equal((await ban("PUT", "https://meltype.moe")).status, 200);
-    assert.equal((await trial(token)).status, 403);
-    assert.equal((await start()).status, 403);
-    assert.equal((await start({}, "198.51.100.7")).status, 201);
-    assert.equal((await ban("DELETE", "https://meltype.moe")).status, 200);
-    assert.equal((await trial(token)).status, 201);
-
-    const removeFlagged = (origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/flagged`, { method: "DELETE", headers: { ...auth, origin } });
-    assert.equal((await removeFlagged("https://evil.example")).status, 403);
-    // 打ちかけの「kyouhaa」と「kyo」が消え、お手本どおりに打った文だけが残る
-    assert.deepEqual(await (await removeFlagged("https://meltype.moe")).json(), { deleted: 2 });
-    const left = await env.DB.prepare("SELECT typed FROM typing_trials ORDER BY id").all();
-    assert.deepEqual(left.results.map((row) => row.typed), ["kyouhaasakaraamegafutteiru."]);
+    const remove = async (origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/flagged`, { method: "DELETE", headers: { ...(await auth()), origin } });
+    assert.equal((await remove("https://evil.example")).status, 403);
+    assert.deepEqual(await (await remove("https://meltype.moe")).json(), { deleted: 1 });
+    const left = await env.DB.prepare("SELECT keys FROM typing_trials").all();
+    assert.equal(left.results.length, 1);
   });
 
-  it("ターミナルの CLI から送った記録は client で分ける", async () => {
+  it("英語が混ざった文も、お手本どおりなら一致率は 1", async () => {
+    const mixed = SENTENCES.find((sentence) => sentence.reading === "きょうはgoogleでしらべた。");
     const { token } = await (await start()).json();
-    assert.equal((await trial(token, { client: "cli", keys: [["KeyK", "k", 0, null]] })).status, 201);
-    assert.equal((await trial(token, { client: "bot" })).status, 400);
-    const exported = await (await call("/api/dashboard/typing/trials", { headers: { "cf-access-jwt-assertion": await jwt(goodClaims()) } })).json();
-    assert.deepEqual(exported.trials.map((t) => t.client), ["cli"]);
-  });
-
-  it("18 歳以上か保護者の許可を確かめないと始められない", async () => {
-    assert.equal((await start({ adultOrGuardian: false })).status, 400);
-  });
-
-  it("お手本と関係ない入力が続く文は受け付けない", async () => {
-    const { token } = await (await start()).json();
-    assert.equal((await trial(token, { typed: "kyouhaasakaraamegafutteiru.yamadatarou" })).status, 422);
-    assert.equal((await trial(token, { typed: "kyouhaasakaramegafuteiru." })).status, 201);
-  });
-
-  it("かな打ちの記録は、打ったかなで採点する", async () => {
-    const { token } = await (await start()).json();
-    assert.equal((await trial(token, { layout: "jis-kana", typed: "きょうはあさからあめがふっている。" })).status, 201);
-    assert.equal((await trial(token, { layout: "dvorak" })).status, 400);
-    const row = await env.DB.prepare("SELECT layout, accuracy FROM typing_trials").first();
-    assert.deepEqual({ ...row }, { layout: "jis-kana", accuracy: 1 });
+    assert.equal((await trial(token, { sentence: mixed.id, keys: keysOf("kyouhagoogledeshirabeta.") })).status, 201);
+    const row = await env.DB.prepare("SELECT accuracy FROM typing_trials").first();
+    assert.equal(row.accuracy, 1);
   });
 
   it("参加から 12 時間たったら打鍵を受け付けない", async () => {

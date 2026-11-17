@@ -3,10 +3,10 @@
 
 // タイピング (/typing/)。誰でも遊べ、打った記録は調査に同意した人だけが送る。
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
-import { copyText, detectOs, escapeHtml, getJson, icon, initHeader, toast } from "./common.js";
-import { align, toKana } from "./romaji.js";
-import { kanaOf, suspicious } from "./typing-check.js";
-import { LAYOUTS, applyStroke, createLayout, isRomajiLayout } from "./typing-layouts.js";
+// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay)。
+import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
+import { align, toKana, toRomaji } from "./romaji.js";
+import { compare, replay, suspicious } from "./typing-check.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
 
 const STORAGE_KEY = "meltype-typing";
@@ -22,17 +22,16 @@ const result = $("result");
 const board = $("board");
 const sendForm = $("send");
 
-// 覚えること: いま使える参加 (session)、このブラウザーで同意したすべての参加の番号 (tokens: データを消すため)、
-// 打った文の id (done)、続けて送るか (auto)。
+// 覚えること: いま使える参加 (session)、打った文の id (done)、続けて送るか (auto)、文の種類 (kind)。
 // localStorage が使えない環境 (プライベートモードなど) では、開いているあいだだけ覚える
 function load() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-    if (saved && Array.isArray(saved.tokens) && Array.isArray(saved.done)) return saved;
+    if (saved && Array.isArray(saved.done)) return saved;
   } catch {
     /* 読めなければ初めから */
   }
-  return { session: null, tokens: [], done: [], auto: true, layout: "qwerty", kind: "plain" };
+  return { session: null, done: [], auto: true, kind: "plain" };
 }
 
 const saved = load();
@@ -45,7 +44,7 @@ function save() {
   }
 }
 
-const state = { queue: [], index: 0, round: [], trial: null, layout: "qwerty", engine: null };
+const state = { queue: [], index: 0, round: [], trial: null };
 
 function setStatus(kind, message) {
   const name = kind === "danger" || kind === "warn" ? "alert" : kind === "ok" ? "check" : "info";
@@ -74,42 +73,16 @@ function nextRound() {
 }
 
 const sessionAlive = () => Boolean(saved.session && Date.now() - saved.session.startedAt < SESSION_MS);
+// 英語が混ざった文は、英語の部分をかなにすると読めないので、打った文字をそのまま見せる
+const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
 // ---- 1. はじめる ----
 
-const OTHER_LAYOUTS = LAYOUTS.filter((layout) => layout.id !== "qwerty" && layout.id !== "jis-kana");
-$("other").innerHTML = OTHER_LAYOUTS.map((layout) => `<option value="${layout.id}">${escapeHtml(layout.label)}</option>`).join("");
 $("kind").innerHTML = KINDS.map((kind) => `<option value="${kind.id}">${escapeHtml(kind.label)}</option>`).join("");
-
-function chosenLayout() {
-  return $("style").value === "other" ? $("other").value : $("style").value;
-}
-
-const LAYOUT_HINTS = {
-  "jis-kana": "かな打ちは、日本語 (JIS) キーボードで、キーに書いてあるかなのとおりに打ちます。",
-  sky: "SKY 配列は、左手で子音、右手で母音・二重母音・「ん」を打ちます。",
-  tsuki: "月配列は、D・K を押してから次のキーを押すと、シフト面の字になります。日本語 (JIS) キーボードで打ってください。",
-  hana: "花配列は、D・K を押してから次のキーを押すと、シフト面の字になります。日本語 (JIS) キーボードで打ってください。",
-  nicola: "親指シフトは、無変換 (左)・変換 (右) を親指キーに使います (Mac は英数・かな)。日本語 (JIS) キーボードで打ってください。",
-  "nakayubi-nicola": "中指NICOLA は、親指キー (無変換・変換) に加え、K を押したままの左手のキー・D を押したままの右手のキーでシフト面の字になります。",
-  tron: "TRON 配列は、無変換 (左)・変換 (右) を親指キーに使います (Mac は英数・かな)。日本語 (JIS) キーボードで打ってください。",
-};
-
-function showLayoutChoice() {
-  $("other-wrap").hidden = $("style").value !== "other";
-  $("layout-hint").textContent = LAYOUT_HINTS[chosenLayout()] || "";
-}
-
-$("style").value = saved.layout === "qwerty" || saved.layout === "jis-kana" ? saved.layout : "other";
-if ($("style").value === "other") $("other").value = saved.layout;
-$("kind").value = saved.kind;
-showLayoutChoice();
-$("style").addEventListener("change", showLayoutChoice);
-$("other").addEventListener("change", showLayoutChoice);
+$("kind").value = KINDS.some((kind) => kind.id === saved.kind) ? saved.kind : KINDS[0].id;
 
 intro.addEventListener("submit", (event) => {
   event.preventDefault();
-  saved.layout = chosenLayout();
   saved.kind = $("kind").value;
   save();
   startRound();
@@ -118,12 +91,10 @@ intro.addEventListener("submit", (event) => {
 // ---- 2. 打つ ----
 
 function newTrial() {
-  state.engine = createLayout(state.layout);
-  return { typed: "", keys: [], open: new Map(), startedAt: 0, backspaces: 0, ime: false };
+  return { keys: [], open: new Map(), startedAt: 0, ime: false };
 }
 
 function startRound() {
-  state.layout = saved.layout;
   state.queue = nextRound();
   state.index = 0;
   state.round = [];
@@ -138,29 +109,22 @@ function loadSentence() {
   state.trial = newTrial();
   $("count").textContent = String(state.index + 1);
   $("text").textContent = sentence.text;
-  $("reading").textContent = sentence.reading;
+  $("reading").textContent = hasEnglish(sentence) ? toRomaji(sentence.reading) : sentence.reading;
   $("ime-note").hidden = true;
   render();
 }
 
 function render() {
-  const romaji = isRomajiLayout(state.layout);
-  const { kana, pending } = romaji ? toKana(state.trial.typed) : { kana: state.trial.typed, pending: "" };
+  const typed = replay(state.trial.keys);
+  const english = hasEnglish(state.queue[state.index]);
+  const { kana, pending } = english ? { kana: typed, pending: "" } : toKana(typed);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
-  $("romaji").textContent = romaji ? state.trial.typed.toLowerCase() : "";
+  $("romaji").textContent = english ? "" : typed.toLowerCase();
 }
 
 function elapsed(event) {
   return Math.max(0, Math.round(event.timeStamp - state.trial.startedAt));
-}
-
-// 打鍵を記録する。押しっぱなしの繰り返しは打鍵として数えない
-function record(event) {
-  const trial = state.trial;
-  if (!trial.startedAt) trial.startedAt = event.timeStamp;
-  trial.open.set(event.code, trial.keys.length);
-  trial.keys.push([event.code, event.key, elapsed(event), null]);
 }
 
 function onKeyDown(event) {
@@ -174,8 +138,10 @@ function onKeyDown(event) {
     return;
   }
   if (event.ctrlKey || event.metaKey || event.altKey) return;
+  const printable = event.key.length === 1 && event.key >= " " && event.key <= "~";
+  if (!printable && !["Backspace", "Enter", "Shift"].includes(event.key)) return;
+  event.preventDefault();
   if (event.key === "Enter") {
-    event.preventDefault();
     if (!event.repeat) finishSentence();
     return;
   }
@@ -186,23 +152,12 @@ function onKeyDown(event) {
     onKeyDown(event);
     return;
   }
-  if (event.key === "Backspace") {
-    event.preventDefault();
-    if (!event.repeat) record(event);
-    trial.typed = [...trial.typed].slice(0, -1).join("");
-    trial.backspaces += 1;
-    render();
-    return;
-  }
-  if (event.repeat) {
-    if (event.key.length === 1) event.preventDefault();
-    return;
-  }
-  const stroke = state.engine.down(event.code, event.key, event.shiftKey, event.timeStamp);
-  if (!stroke && event.key !== "Shift") return;
-  event.preventDefault();
-  record(event);
-  if (stroke) trial.typed = applyStroke(trial.typed, stroke);
+  // 押しっぱなしの繰り返しは、字を消す Backspace だけ打鍵として残す (どこをどう直したかを打鍵から再現できるように)。
+  // 繰り返しの打鍵は離した時刻が無いので null のまま
+  if (event.repeat && event.key !== "Backspace") return;
+  if (!trial.startedAt) trial.startedAt = event.timeStamp;
+  if (!event.repeat) trial.open.set(event.code, trial.keys.length);
+  trial.keys.push([event.code, event.key, elapsed(event), null]);
   render();
 }
 
@@ -210,16 +165,9 @@ function onKeyUp(event) {
   if (play.hidden) return;
   const trial = state.trial;
   const index = trial.open.get(event.code);
-  if (index !== undefined) {
-    trial.open.delete(event.code);
-    trial.keys[index][3] = Math.max(trial.keys[index][2], elapsed(event));
-  }
-  // 中指NICOLA は、キーを離したときに字が決まることがある
-  const stroke = state.engine.up(event.code);
-  if (stroke) {
-    trial.typed = applyStroke(trial.typed, stroke);
-    render();
-  }
+  if (index === undefined) return;
+  trial.open.delete(event.code);
+  trial.keys[index][3] = Math.max(trial.keys[index][2], elapsed(event));
 }
 
 board.addEventListener("keydown", onKeyDown);
@@ -231,9 +179,9 @@ board.addEventListener("blur", () => ($("focus-hint").hidden = false));
 function finishSentence() {
   const trial = state.trial;
   const sentence = state.queue[state.index];
-  if (trial.ime || !trial.typed) return;
+  if (trial.ime || !replay(trial.keys)) return;
   const duration = Math.max(1, Math.round(performance.now() - trial.startedAt));
-  state.round.push({ sentence, typed: trial.typed, keys: trial.keys, duration, backspaces: trial.backspaces, layout: state.layout });
+  state.round.push({ sentence, keys: trial.keys, duration });
   saved.done = [...new Set([...saved.done, sentence.id])];
   save();
   next();
@@ -259,19 +207,22 @@ function showScores() {
   let backspaces = 0;
   const misses = new Map();
   for (const entry of state.round) {
-    const ops = align(entry.sentence.reading, kanaOf(entry.layout, entry.typed));
-    chars += [...entry.sentence.reading].length;
+    const typed = replay(entry.keys);
+    const ops = compare(entry.sentence.reading, typed);
+    chars += ops.filter((op) => op.want).length;
     wrong += ops.filter((op) => op.op !== "same").length;
     ms += entry.duration;
-    backspaces += entry.backspaces;
-    for (const op of ops) if (op.op === "omit" || op.op === "sub") misses.set(op.want, (misses.get(op.want) || 0) + 1);
+    backspaces += entry.keys.filter(([, key]) => key === "Backspace").length;
+    // 抜けた・打ち間違えた字は、英語が混ざった文ならお手本のローマ字の字で数える (英語の部分をかなにすると読めないため)
+    const shown = hasEnglish(entry.sentence) ? align(toRomaji(entry.sentence.reading), typed.toLowerCase()) : ops;
+    for (const op of shown) if (op.op === "omit" || op.op === "sub") misses.set(op.want, (misses.get(op.want) || 0) + 1);
   }
   $("speed").textContent = ms ? String(Math.round((chars / ms) * 60000)) : "-";
   $("accuracy").textContent = chars ? String(Math.max(0, Math.round((1 - wrong / chars) * 1000) / 10)) : "-";
   $("backspaces").textContent = String(backspaces);
   const top = [...misses].sort((a, b) => b[1] - a[1]).slice(0, 8);
   $("misses").innerHTML = top.length
-    ? `<h3>抜けた・打ち間違えた字</h3><ul>${top.map(([kana, n]) => `<li><b>${escapeHtml(kana)}</b><span>${n} 回</span></li>`).join("")}</ul>`
+    ? `<h3>抜けた・打ち間違えた字</h3><ul>${top.map(([char, n]) => `<li><b>${escapeHtml(char)}</b><span>${n} 回</span></li>`).join("")}</ul>`
     : state.round.length
       ? "<p>打ち終わった文には間違いがありませんでした！</p>"
       : "";
@@ -283,7 +234,6 @@ function showSendForm() {
   sendForm.hidden = false;
   $("auto-wrap").hidden = true;
   $("consent").checked = false;
-  $("guardian").checked = false;
   $("send-button").disabled = true;
   const element = $("turnstile");
   if (!window.turnstile) return;
@@ -318,15 +268,13 @@ $("auto").addEventListener("change", (event) => {
   if (saved.auto && state.round.length && !state.round.sent) sendRound();
 });
 
-function updateSendButton() {
-  $("send-button").disabled = !($("consent").checked && $("guardian").checked);
-}
-$("consent").addEventListener("change", updateSendButton);
-$("guardian").addEventListener("change", updateSendButton);
+$("consent").addEventListener("change", (event) => {
+  $("send-button").disabled = !event.target.checked;
+});
 
 sendForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (!$("consent").checked || !$("guardian").checked) return;
+  if (!$("consent").checked) return;
   $("send-button").disabled = true;
   setStatus("info", "準備しています");
   const os = detectOs();
@@ -337,7 +285,6 @@ sendForm.addEventListener("submit", async (event) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         consent: true,
-        adultOrGuardian: true,
         turnstile: window.turnstile && turnstileWidget !== null ? window.turnstile.getResponse(turnstileWidget) : "",
         profile: {
           touch: field("touch"),
@@ -347,11 +294,8 @@ sendForm.addEventListener("submit", async (event) => {
       }),
     });
     saved.session = { id: created.id, token: created.token, startedAt: Date.now() };
-    saved.tokens = [...saved.tokens, created.token];
     saved.auto = true;
     save();
-    $("forget").hidden = false;
-    $("cli").hidden = false;
     sendForm.hidden = true;
     $("auto-wrap").hidden = false;
     $("auto").checked = true;
@@ -371,10 +315,10 @@ async function sendRound() {
   setStatus("info", "送っています");
   let sent = 0;
   // お手本と関係ない入力が続いた文は送らない (サーバーも同じ判定で受け付けない)
-  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, entry.typed, entry.layout));
+  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys)));
   const skipped = round.length - sendable.length;
   for (const entry of sendable) {
-    const body = JSON.stringify({ sentence: entry.sentence.id, typed: entry.typed, keys: entry.keys, duration: entry.duration, client: "web", layout: entry.layout });
+    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration });
     try {
       await getJson("/api/typing/trials", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body });
       sent += 1;
@@ -384,9 +328,7 @@ async function sendRound() {
         // 参加の時間が切れた。同意からやり直してもらう
         saved.session = null;
         save();
-        $("cli").hidden = true;
         showSendForm();
-        $("auto-wrap").hidden = true;
       }
       setStatus(sent ? "warn" : "danger", sent ? `${sent} 文を送ったところで止まりました: ${e.message}` : e.message);
       return;
@@ -398,34 +340,7 @@ async function sendRound() {
 
 $("again").addEventListener("click", startRound);
 
-// ---- データを消す ----
-
-$("forget").addEventListener("click", async () => {
-  if (!saved.tokens.length) return;
-  if (!confirm("このブラウザーから送ったタイピングの記録を全部消します。よろしいですか？")) return;
-  const left = [];
-  for (const token of saved.tokens) {
-    try {
-      await getJson("/api/typing/sessions/me", { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
-    } catch (e) {
-      if (e.status !== 404) left.push(token);
-    }
-  }
-  saved.tokens = left;
-  if (!left.includes(saved.session && saved.session.token)) saved.session = null;
-  save();
-  $("cli").hidden = !sessionAlive();
-  $("forget").hidden = left.length === 0;
-  alert(left.length ? "消せなかった記録があります。時間をおいてもう一度試してください。" : "消しました。");
-});
-
 // ---- はじめ ----
 
 initHeader();
 if (detectOs() === "mobile") $("mobile-note").hidden = false;
-$("forget").hidden = saved.tokens.length === 0;
-$("cli").hidden = !sessionAlive();
-$("cli-copy").addEventListener("click", async () => {
-  if (!sessionAlive()) return;
-  toast((await copyText(saved.session.token)) ? "番号をコピーしました" : "コピーできませんでした");
-});

@@ -53,65 +53,32 @@ describe("お手本と打ったものの並べ方", () => {
 
 describe("お手本のローマ字と、関係ない入力", async () => {
   const { toRomaji } = await import("../public/assets/js/romaji.js");
-  const { suspicious } = await import("../public/assets/js/typing-check.js");
+  const { accuracyOf, replay, suspicious } = await import("../public/assets/js/typing-check.js");
   const reading = "きょうはあさからあめがふっている。";
 
-  it("お手本の読みは、ローマ字にしてもとのかなに戻る (どの文も打てる)", () => {
-    for (const sentence of SENTENCES) assert.equal(finalKana(toRomaji(sentence.reading)), sentence.reading, sentence.id);
+  it("お手本どおりに打てば、英語が混ざった文も一致率は 1", () => {
+    for (const sentence of SENTENCES) assert.equal(accuracyOf(sentence.reading, toRomaji(sentence.reading)), 1, sentence.id);
+    assert.equal(accuracyOf("きょうはgoogleでしらべた。", "KyouhaGoogledesirabeta."), 1);
+  });
+
+  it("打鍵から打った文字を組み立てる (Backspace の押しっぱなしも 1 回ずつ消す)", () => {
+    const keys = [["KeyK", "k", 0, 10], ["KeyY", "y", 20, 30], ["KeyP", "p", 40, 50], ["Backspace", "Backspace", 60, null], ["Backspace", "Backspace", 90, null], ["ShiftLeft", "Shift", 100, 120], ["KeyO", "O", 110, 130]];
+    assert.equal(replay(keys), "kO");
   });
 
   it("押し間違い・綴りの違いは止めない", () => {
     for (const typed of ["kyouhaasakaraamegafutteiru.", "kyouhaasakaramegafuteiru.", "kixyouhaasakaraamegahutteiru.", "kyoyhaasaakaraamegafutteiru.", "kyouha"]) {
-      assert.equal(suspicious(reading, typed, "qwerty"), false, typed);
+      assert.equal(suspicious(reading, typed), false, typed);
     }
-    assert.equal(suspicious("じゅうでん", "zyuudenn", "qwerty"), false);
-    assert.equal(suspicious("ちょっと", "tyoltuto", "qwerty"), false);
+    assert.equal(suspicious("じゅうでん", "zyuudenn"), false);
+    assert.equal(suspicious("ちょっと", "tyoltuto"), false);
   });
 
   it("お手本と関係ないキーが続いたら止める", () => {
     for (const typed of ["kyouhaasakaraamegafutteiru.tanaka", "yamada taro desu", "asdfasdf"]) {
-      assert.equal(suspicious(reading, typed, "qwerty"), true, typed);
+      assert.equal(suspicious(reading, typed), true, typed);
     }
-    assert.equal(suspicious(reading, "きょうはあさからあめがふっている。たなかです", "jis-kana"), true);
-    assert.equal(suspicious(reading, "きょうはあさかあめがふっている", "jis-kana"), false);
-  });
-});
-
-describe("配列", async () => {
-  const { applyStroke, createLayout } = await import("../public/assets/js/typing-layouts.js");
-  const type = (id, keys) => {
-    const layout = createLayout(id);
-    let typed = "";
-    let time = 0;
-    for (const [code, options = {}] of keys) {
-      time += options.gap ?? 200;
-      const down = layout.down(code, options.key ?? "", Boolean(options.shift), time);
-      if (down) typed = applyStroke(typed, down);
-      if (!options.hold) {
-        const up = layout.up(code);
-        if (up) typed = applyStroke(typed, up);
-      }
-    }
-    return typed;
-  };
-
-  it("JIS かなは、゛を前の字に付ける", () => {
-    assert.equal(type("jis-kana", [["KeyT"], ["BracketLeft"], ["KeyQ"]]), "がた");
-    assert.equal(type("jis-kana", [["KeyZ", { shift: true }], ["Digit7", { shift: true }]]), "っゃ");
-  });
-
-  it("月配列は D・K の後のキーをシフト面で読む", () => {
-    // D・K は 1 のシフト。D + J → お、K + F → あ。シフトなしの J は う
-    assert.equal(type("tsuki", [["KeyD"], ["KeyJ"], ["KeyK"], ["KeyF"], ["KeyJ"]]), "おあう");
-  });
-
-  it("NICOLA は親指キーを押したままの字をシフト面で読み、すぐ後に押した親指キーで打ち直す", () => {
-    assert.equal(type("nicola", [["NonConvert", { hold: true }], ["KeyS"]]), "あ");
-    assert.equal(type("nicola", [["KeyS", { hold: true }], ["Convert", { gap: 50 }]]), "じ");
-    assert.equal(type("nicola", [["KeyS"], ["Convert", { gap: 300 }]]), "し");
-  });
-
-  it("SKY 配列はキーをローマ字の綴りにする", () => {
-    assert.equal(type("sky", [["KeyF"], ["KeyJ"]]), "ka");
+    assert.equal(suspicious("このbugはまだfixされていない。", "konobughamadafixsareteinai."), false);
+    assert.equal(suspicious("このbugはまだfixされていない。", "konobughamadafixsareteinai.yamadadesu"), true);
   });
 });
