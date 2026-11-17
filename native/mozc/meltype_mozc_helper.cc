@@ -9,6 +9,9 @@
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
+//   U<TAB>読み1<US>単語1<RS>読み2<US>単語2…
+//       ユーザー辞書の語をすべて入れ替える (名詞として登録する)。"OK" を返す。メモリの上だけで持ち、ファイルには書かない
+//       (Meltype が userdict.txt・同梱の語句から毎回送る。ヘルパーを起動し直したときも送り直す)。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -30,10 +33,13 @@
 #include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
+#include "dictionary/dictionary_interface.h"
 #include "engine/engine.h"
 #include "engine/engine_factory.h"
+#include "engine/modules.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
+#include "protocol/user_dictionary_storage.pb.h"
 #include "request/conversion_request.h"
 
 #ifdef _WIN32
@@ -165,6 +171,22 @@ class Helper {
 
   bool Save() { return engine_->Sync(); }
 
+  // ユーザー辞書の語を入れ替える。Engine::Reload は profile の user_dictionary.db を読み直して入れ替えた語を消すので呼ばない。
+  // Modules に届く公開の経路は GetModulesForTesting だけ (Mozc を上げて無くなればビルドが通らなくなる)。
+  void SetUserWords(absl::string_view words) {
+    mozc::user_dictionary::UserDictionaryStorage storage;
+    mozc::user_dictionary::UserDictionary* dictionary = storage.add_dictionaries();
+    for (absl::string_view record : absl::StrSplit(words, kRecordSeparator, absl::SkipEmpty())) {
+      const std::vector<absl::string_view> fields = absl::StrSplit(record, kUnitSeparator);
+      if (fields.size() < 2) continue;
+      auto* entry = dictionary->add_entries();
+      entry->set_key(fields[0]);
+      entry->set_value(fields[1]);
+      entry->set_pos(mozc::user_dictionary::UserDictionary::NOUN);
+    }
+    engine_->GetModulesForTesting().GetUserDictionary().Load(storage);
+  }
+
  private:
   static bool IsUsersWord(const mozc::converter::Candidate& candidate) {
     return (candidate.attributes & (mozc::converter::Attribute::USER_DICTIONARY |
@@ -231,6 +253,9 @@ int main(int argc, char** argv) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "R" && fields.size() >= 2) {
       std::cout << helper.Reverse(fields[1]) << "\n";
+    } else if (fields[0] == "U") {
+      helper.SetUserWords(fields.size() >= 2 ? fields[1] : "");
+      std::cout << "OK\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {

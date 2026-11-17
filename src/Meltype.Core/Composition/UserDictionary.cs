@@ -10,8 +10,7 @@ public sealed record UserWord(string Reading, string Word);
 
 /// <summary>
 /// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」)。
-/// 変換で最優先に使う: 変換する読みの中に登録した読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
-/// 登録した単語にする (きごうとう → 記号等 を登録すると、きごうとうふくめ → 記号等|含め)。
+/// 変換では、同梱の語句と合わせて Mozc のユーザー辞書に入れ (<see cref="EngineWords"/>)、ほかの語との区切りと優先は Mozc のコストで決める。
 /// トレイの「ユーザー辞書...」から登録・削除する。
 /// importDirectory (Mac / Linux は データフォルダ/dictionaries) に置いた .plist (macOS の「ユーザ辞書」を書き出したもの) の語も使う (#40)。
 /// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む。
@@ -22,24 +21,13 @@ public sealed class UserDictionary
     /// <summary>登録・取り込みできる読みの最小の長さ。</summary>
     public const int MinRegisteredReadingLength = 1;
 
-    /// <summary>
-    /// 読みの途中に見つけて使える読みの最小の長さ。1 文字の読み (お → お父さん) は、ほかの語の中にも現れやすく巻き込みが大きいので、
-    /// 変換する読みが 1 文字だけのとき (その文字だけを変換するとき) にだけ使う (issue #710)。
-    /// </summary>
-    private const int MinSplitReadingLength = 2;
-
     private readonly string? _path;
     private readonly List<UserWord> _words = [];
     // dictionaries/*.plist から読んだ語。userdict.txt の登録の後、同梱の語句の前。保存も表示もしない。
     private readonly List<UserWord> _imported = [];
     // 同梱の語句 (dictionaries/phrases.txt)。変換エンジンが苦手な語句を補う。ユーザーの登録より後回しで、保存も表示もしない。
     private readonly List<UserWord> _builtIn = [];
-    // 同梱の語句のうち、読みの頭に ^ を付けたもの (^けんりつ)。変換エンジンの文節の頭から始まるときだけ使う。
-    private readonly HashSet<string> _headOnly = new(StringComparer.Ordinal);
-    // 同梱の語句のうち、| で文節の区切りを書いたもの (いち|がっき → 一|学期)。読みと語句は | を除いた形で _builtIn に入れる。
-    private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
-    private int _maxReadingLength;
     private readonly string? _importDirectory;
     // 最後に読んだ (読もうとした)・保存したときの userdict.txt の更新時刻と、読めたか。同じ更新時刻のまま読めなければ、読み直さない (警告を繰り返さない)
     private DateTime? _fileTime;
@@ -51,12 +39,7 @@ public sealed class UserDictionary
     {
         _path = path;
         _importDirectory = importDirectory;
-        if (builtIn)
-        {
-            Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
-            MarkHeadOnly();
-            SplitBuiltInClauses();
-        }
+        if (builtIn) Parse(Detection.DictionarySource.ReadEmbedded("phrases.txt").Split('\n'), _builtIn);
         Load(FileTime(), ReadWords(warn: true));
     }
 
@@ -196,50 +179,6 @@ public sealed class UserDictionary
         }
     }
 
-    /// <summary>
-    /// 同梱の語句の | (文節の区切り) を読む。いち|がっき → 一|学期 は、読み いちがっき を 一学期 として見つけ、変換では 一|学期 の 2 つの文節にする
-    /// (数字と 学期 を別に選び直せるように)。読みと語句の | の数が違う行は、同梱の辞書の誤りなので例外にする
-    /// (tools/check-dictionaries.mjs と BuiltInPhrases_AreSplitOut で見つける)。
-    /// </summary>
-    private void SplitBuiltInClauses()
-    {
-        for (var i = 0; i < _builtIn.Count; i++)
-        {
-            var (reading, word) = (_builtIn[i].Reading, _builtIn[i].Word);
-            if (!reading.Contains('|') && !word.Contains('|')) continue;
-            var readings = reading.Split('|');
-            var words = word.Split('|');
-            if (readings.Length != words.Length || readings.Any(r => r.Length == 0) || words.Any(w => w.Length == 0))
-                throw new InvalidDataException($"phrases.txt: 読み「{reading}」と語句「{word}」の | の区切りが合いません");
-            _builtIn[i] = new UserWord(reading.Replace("|", ""), word.Replace("|", ""));
-            _clauses[_builtIn[i].Reading + "\t" + _builtIn[i].Word] = [.. readings.Zip(words)];
-        }
-    }
-
-    /// <summary>
-    /// 見つけた語を文節に分ける。同梱の語句に | で区切りを書いたもの (いちがっき → 一学期 は いち|がっき → 一|学期) は分けた文節、
-    /// それ以外はそのまま 1 つの文節。
-    /// </summary>
-    public IReadOnlyList<(string Reading, string Word)> Clauses(string reading, string word) =>
-        _clauses.TryGetValue(reading + "\t" + word, out var parts) ? parts : [(reading, word)];
-
-    /// <summary>
-    /// 同梱の語句の読みの頭の ^ を読む。^けんりつ は、変換エンジンの文節の頭から始まるときだけ使い、
-    /// 長い語の途中 (はっけんりつ = 発見率 の けんりつ) では使わない (AlignUserWords)。
-    /// </summary>
-    private void MarkHeadOnly()
-    {
-        for (var i = 0; i < _builtIn.Count; i++)
-        {
-            if (!_builtIn[i].Reading.StartsWith('^')) continue;
-            _builtIn[i] = _builtIn[i] with { Reading = _builtIn[i].Reading[1..] };
-            _headOnly.Add(_builtIn[i].Reading.Replace("|", ""));
-        }
-    }
-
-    /// <summary>変換エンジンの文節の頭から始まるときだけ使う同梱の語句の読みか (^けんりつ)。</summary>
-    public bool IsHeadOnly(string reading) => _headOnly.Contains(reading);
-
     /// <summary>登録内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
     public int Version { get; private set; }
 
@@ -291,52 +230,6 @@ public sealed class UserDictionary
     public IReadOnlyList<string> Lookup(string reading) =>
         _byReading.TryGetValue(reading, out var words) ? words : [];
 
-    /// <summary>
-    /// かなを、登録した読みの部分とそれ以外に分ける。先頭から見て、その位置から始まる最も長い登録済みの読みを取る。
-    /// 登録した読みが 1 つも含まれていなければ null。
-    /// </summary>
-    public List<(string Reading, string? Word)>? Split(string kana)
-    {
-        if (_byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
-        var pieces = new List<(string Reading, string? Word)>();
-        var plain = new StringBuilder();
-        var found = false;
-        var i = 0;
-        while (i < kana.Length)
-        {
-            string? matched = null;
-            for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
-            {
-                // 拗音・小さい母音 (じょ・ふぁ) の途中では切らない (いしょくじょうたい が しょくじ|ょうたい で い食事ょうたい になっていた)
-                if (i + length < kana.Length && IsSmallKana(kana[i + length])) continue;
-                if (_byReading.ContainsKey(kana.Substring(i, length)))
-                {
-                    matched = kana.Substring(i, length);
-                    break;
-                }
-            }
-            if (matched is null)
-            {
-                plain.Append(kana[i]);
-                i++;
-                continue;
-            }
-            if (plain.Length > 0)
-            {
-                pieces.Add((plain.ToString(), null));
-                plain.Clear();
-            }
-            pieces.Add((matched, _byReading[matched][0]));
-            found = true;
-            i += matched.Length;
-        }
-        if (plain.Length > 0) pieces.Add((plain.ToString(), null));
-        return found ? pieces : null;
-    }
-
-    /// <summary>前の文字と 1 つの音になる小さいかな (ゃ ゅ ょ ぁ ぃ ぅ ぇ ぉ ゎ)。</summary>
-    private static bool IsSmallKana(char c) => c is 'ゃ' or 'ゅ' or 'ょ' or 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'ゎ';
-
     private void Changed()
     {
         Rebuild();
@@ -354,15 +247,14 @@ public sealed class UserDictionary
             if (!list.Contains(word.Word)) list.Add(word.Word);
         }
         _byReading = byReading;
-        _maxReadingLength = byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length);
-        _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
+        EngineWords = [.. _words.Concat(_imported).Concat(_builtIn)];
     }
 
-    // 同梱の語句だけにある読み (ユーザーが登録した語ではない)。
-    private HashSet<string> _builtInOnly = new(StringComparer.Ordinal);
-
-    /// <summary>ユーザーが登録した (取り込んだ) 語の読みか。同梱の語句だけの読みなら false。</summary>
-    public bool IsUserReading(string reading) => _byReading.ContainsKey(reading) && !_builtInOnly.Contains(reading);
+    /// <summary>
+    /// 変換エンジン (Mozc) のユーザー辞書に入れる語 (userdict.txt・.plist・同梱の語句)。変わるたびに別のリストにするので、参照で変わったか分かる。
+    /// 変換エンジンのスレッドからも読む。
+    /// </summary>
+    public IReadOnlyList<UserWord> EngineWords { get; private set; } = [];
 
     private void Save()
     {
