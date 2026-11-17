@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>07 読みから英字 | キーボード仕様書</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="toc" aria-label="章の一覧">
+      <a class="home" href="index.html">キーボード仕様書</a>
+      <ol>
+        <li><a href="01-overview.html">01 概要</a></li>
+        <li><a href="02-roadmap.html">02 段階と範囲</a></li>
+        <li><a href="03-architecture.html">03 構成</a></li>
+        <li><a href="04-keyboard-ui.html">04 キーボード画面</a></li>
+        <li><a href="05-input-engine.html">05 入力エンジン</a></li>
+        <li><a href="06-conversion-mozc.html">06 変換（Mozc）</a></li>
+        <li><a href="07-kana-to-english.html" aria-current="page">07 読みから英字</a></li>
+        <li><a href="08-auto-detection.html">08 日英自動判別</a></li>
+        <li><a href="09-privacy-security.html">09 プライバシーと安全</a></li>
+        <li><a href="10-licensing.html">10 ライセンス</a></li>
+        <li><a href="11-testing.html">11 テスト</a></li>
+      </ol>
+    </nav>
+    <main>
+      <h1>07 読みから英字</h1>
+      <p class="status"><span class="badge draft">概要</span>（段階2。着手するときに詳細を詰めて「確定」に上げる）</p>
+<h2 id="目的">目的</h2>
+<p>フリックで打った外来語を、英字キーボードに切り替えずに英字で出せるようにする。</p>
+<table>
+<thead>
+<tr>
+<th>打つ</th>
+<th>出る</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>きょうはぐーぐるでけんさく</code></td>
+<td><code>今日はGoogleで検索</code></td>
+</tr>
+<tr>
+<td><code>あしたのみーてぃんぐ</code></td>
+<td><code>明日のmeeting</code></td>
+</tr>
+<tr>
+<td><code>りなっくす</code></td>
+<td><code>Linux</code></td>
+</tr>
+</tbody></table>
+<h2 id="決まっていること">決まっていること</h2>
+<ul>
+<li>対応表には、Meltype が同梱している「読み → 英字」の辞書（<code>loanwords.txt</code>。JMdict から作られたもの）を使う。ライセンスの扱いは <a href="10-licensing.html">10</a>。</li>
+<li><code>engine</code> の中で行う。Mozc の変換結果に、対応表から引いた英字の候補を足す。</li>
+<li>英字の候補は候補バーに必ず出す。</li>
+<li>一度英字を選んだ語は、次からライブ変換でも英字で出す（語ごとに覚える）。カタカナを選び直したら、カタカナに戻す。</li>
+</ul>
+<h2 id="できないこと">できないこと</h2>
+<ul>
+<li>対応表にない英単語は出せない。英字の配列で打つ。</li>
+<li>英語の文は打てない。英字の配列で打つ。</li>
+</ul>
+<h2 id="着手するときに決めること">着手するときに決めること</h2>
+<ul>
+<li>初めて打つ語を、ライブ変換でカタカナと英字のどちらで出すか。語ごとに既定を持つのか、一律にするのか。</li>
+<li>文の途中にある外来語を、どうやって見つけるか（Mozc の文節の区切りに頼るか、対応表で先に探すか）。</li>
+<li>覚えた内容をどこに、どんな形で保存するか。</li>
+<li>対応表にアプリ独自の語を足す仕組みを持つか。</li>
+</ul>
+      <nav class="pager" aria-label="前後の章">
+        <a href="06-conversion-mozc.html">← 06 変換（Mozc）</a>
+        <a href="08-auto-detection.html">08 日英自動判別 →</a>
+      </nav>
+    </main>
+  </div>
+</body>
+</html>
