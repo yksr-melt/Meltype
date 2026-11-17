@@ -256,8 +256,8 @@ public sealed class Settings
     [JsonIgnore, Browsable(false)]
     public IReadOnlyList<ToggleShortcut> EffectiveToggleShortcuts => ToggleShortcuts ?? ToggleShortcut.Defaults();
 
-    [Category("3. 入力モード"), DisplayName("左 Alt で英数 / 右 Alt で日本語"), Platforms(Platform.Windows),
-     Description("左 Alt の単独押しで英数 (直接入力) に、右 Alt の単独押しで日本語入力にします (半角/全角 キーの無い US 配列向け)。Alt + Tab などの組み合わせや Alt + クリックでは切り替えません。単独押しでアプリのメニューバーに移らなくなります。変換中なら、変換中の文字を確定して切り替えます。コードの行では、右 Alt でその行を日本語にします。")]
+    [Category("3. 入力モード"), DisplayName("左 Alt で英数 / 右 Alt で日本語"), Platforms(Platform.Windows | Platform.Linux),
+     Description("左 Alt の単独押しで英数 (直接入力) に、右 Alt の単独押しで日本語入力にします (半角/全角 キーの無い US 配列向け)。")]
     public bool AltKeysSwitchKeyboard { get; set; }
 
     [Category("4. 判定"), DisplayName("確定後も文脈に合わせて直す"),
@@ -429,6 +429,10 @@ public sealed class Settings
     [Category("8. キー操作"), DisplayName("入力中のキーの役割を分ける"),
      Description("入力中 (変換ボックスに文字があるとき) の Space・変換・無変換・ひらがな/カタカナ キーの役割を分けます。Space: 英語・日本語の判定にかかわらず候補を開く (英字で見えている語も、確定して空白を入れずに候補を出す)。変換: 日本語を優先して変換。無変換: 英字にする。ひらがな/カタカナ: ひらがな ⇔ カタカナ。確定は Enter です。何も打っていないときの各キーは今までどおりです。")]
     public bool SeparateKeyRoles { get; set; }
+
+    [Category("8. キー操作"), DisplayName("無変換でカタカナを切り替える"), Platforms(Platform.Windows | Platform.Linux),
+     Description("入力中に無変換キーを押すたびに、ひらがな → 全角カタカナ → 半角カタカナ → ひらがな の順に切り替えます。「入力中のキーの役割を分ける」の無変換キーの動作より優先します。")]
+    public bool NonConvertCyclesKana { get; set; }
 
     [Category("4. 判定"), DisplayName("英字を主に入力 (変換キー / ↓ で日本語に)"),
      Description("自動判定をせず、打った英字をそのまま入力中にします (Space は空白、Enter は英字のまま確定)。日本語にしたい語は、変換キーか ↓ を押すと、ローマ字として読んで変換します。コマンドを多く打つ使い方向けで、Microsoft IME の「主に英語を入力する」と同じ動きです。")]
@@ -818,7 +822,7 @@ public sealed class Settings
             if (profile is not null) InitializeToggleShortcuts(profile.Values, profile.Name, report);
     }
 
-    public const int CurrentVersion = 11;
+    public const int CurrentVersion = 12;
 
     [Category("10. 学習"), DisplayName("ユーザー学習を使う"),
      Description("OFF にすると、選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳を新しく覚えません (今まで覚えた分は使います)。今まで覚えた分を消すときは、トレイの「学習データを消す」を使います。")]
@@ -860,11 +864,25 @@ public sealed class Settings
     [Category("12. ログ"), DisplayName("ログに入力した文字を残す"), Description("確定した文字列・打った英字・読み・直した語をログに残します (不具合を調べるとき用)。OFF なら文字数だけを残します。パスワード欄では入力を扱わないので残りません。")]
     public bool LogTypedText { get; set; }
 
+    /// <summary>v12 で既定で OFF にしたリモートデスクトップのクライアント (Windows はプロセス名、macOS は bundle ID)。</summary>
+    private static readonly string[] RemoteDesktopClients =
+    [
+        // Jump Desktop: 8.6 系の本体は JumpClient.exe、8.3 系には JumpDesktop.exe もある
+        "JumpClient.exe", "JumpDesktop.exe",
+        "AnyDesk.exe", "TeamViewer.exe", "parsecd.exe", "rustdesk.exe",
+        // Splashtop・TightVNC Viewer・Citrix Workspace
+        "strwinclt.exe", "tvnviewer.exe", "wfica32.exe",
+        "com.teamviewer.TeamViewer", "com.philandro.anydesk", "tv.parsec.www",
+    ];
+
     public static List<AppRule> DefaultAppRules() =>
     [
         // キー入力が別のマシン/VM に届くアプリ。保留すると相手側の IME 状態と食い違う。
         new() { Process = "mstsc.exe", Enabled = false },
         new() { Process = "msrdc.exe", Enabled = false },
+        // ほかのリモートデスクトップのクライアントも、接続先の IME と二重に変換し、確定のたびに前の文字が消える (#1894)。
+        // プロセス名・bundle ID は公開されている一覧 (LOLRMM など) とベンダーの文書から。違っていてもルールが当たらないだけ。
+        .. RemoteDesktopClients.Select(process => new AppRule { Process = process, Enabled = false }),
         new() { Process = "vmconnect.exe", Enabled = false },
         new() { Process = "VirtualBoxVM.exe", Enabled = false },
         new() { Process = "vmware-vmx.exe", Enabled = false },
@@ -1009,6 +1027,12 @@ public sealed class Settings
             LegacyHankaku = null;
             foreach (var profile in Profiles ?? [])
                 if (profile is not null) InitializeToggleShortcuts(profile.Values ??= new JsonObject(), profile.Name);
+        }
+        if (SettingsVersion < 12)
+        {
+            // v12: 既定で OFF にするリモートデスクトップに、Jump Desktop などのクライアントを追加。ユーザーが自分で入れていれば、そのまま。
+            foreach (var process in RemoteDesktopClients)
+                if (FindRule(process) is null) AppRules.Add(new AppRule { Process = process, Enabled = false });
         }
         // v7: 追加キーの文字列を共通の一覧へ移し、旧項目を保存しない。
         MigrateLegacyToggleShortcuts(report: true);
