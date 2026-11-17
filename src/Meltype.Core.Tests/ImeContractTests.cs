@@ -479,6 +479,14 @@ internal static class ImeContractTests
             "入力中のキーの役割を分けるなら、無変換は英字にする\n" + front.Trace);
         front.Key('\n');
         front.Settings.SeparateKeyRoles = false;
+        // 役割を分けなくても、無変換でカタカナを切り替える設定が ON なら、入力中の無変換は確定せず切り替える
+        front.Settings.NonConvertCyclesKana = true;
+        front.Type("ka");
+        var cycle = front.Key(VirtualKeys.NonConvert);
+        Assert.True(front.Open && cycle.GetProperty("result").GetProperty("view").GetProperty("text").GetString() == "カ",
+            "無変換でカタカナ (確定して英数にしない)\n" + front.Trace);
+        front.Key('\n');
+        front.Settings.NonConvertCyclesKana = false;
         // 親指シフトの配列では親指キー (変換ボックスで使う)
         front.Settings.InputStyle = InputStyle.Kana;
         front.Settings.KanaLayout = KanaLayout.Nicola;

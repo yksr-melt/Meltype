@@ -92,9 +92,9 @@ public static class SettingsSchema
                 schema["title"] = title.DisplayName;
             var description = property.AttributeProvider?.GetCustomAttributes(typeof(DescriptionAttribute), false).FirstOrDefault() is DescriptionAttribute d ? d.Description : "";
             var platforms = property.AttributeProvider?.GetCustomAttributes(typeof(PlatformsAttribute), false).FirstOrDefault() is PlatformsAttribute p
-                ? Enum.GetValues<Platform>().Where(platform => p.Platforms.HasFlag(platform)).Select(platform => platform.ToString()).ToArray()
+                ? PlatformNames(p.Platforms)
                 : null;
-            if (platforms is not null) description = $"{string.Join("・", platforms)} のみ。{description}";
+            if (platforms is not null) description = $"{PlatformNote(platforms)}{description}";
             if (description.Length > 0) schema["description"] = description;
             // x- で始まるのは JSON Schema の標準には無いキーワード (エディターは無視する)。Linux 版の設定画面が、分類ごとに並べ、使わない OS の項目を隠すのに使う
             if (property.AttributeProvider?.GetCustomAttributes(typeof(CategoryAttribute), false).FirstOrDefault() is CategoryAttribute { Category.Length: > 0 } category)
@@ -105,4 +105,10 @@ public static class SettingsSchema
         }
         return schema;
     }
+
+    internal static string[] PlatformNames(Platform platforms) =>
+        Enum.GetValues<Platform>().Where(platform => platforms.HasFlag(platform)).Select(platform => platform.ToString()).ToArray();
+
+    /// <summary>一部の OS でしか使わない項目の説明の先頭に書く文 (「Windows・Mac のみ。」)。</summary>
+    internal static string PlatformNote(string[] platforms) => $"{string.Join("・", platforms)} のみ。";
 }
