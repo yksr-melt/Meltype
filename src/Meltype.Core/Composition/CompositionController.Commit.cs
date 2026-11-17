@@ -55,13 +55,6 @@ public sealed partial class CompositionController
             text = shown;
             rules.Add("英語の文脈なので見えていた英字のまま (#127)");
         }
-        // 設定「Enter は見えているとおりに確定」: かな + 語末の n (かんたn) は、確定でライブ変換が漢字にせず、見えていたかなに n を ん にしただけで確定する (issue #677)
-        if (!converting && _settings().EnterCommitsAsShown && _text.Mode == DisplayMode.Auto && _text.Pending == "n" &&
-            CurrentDisplay(final: false) is { Length: > 1 } shownKana && shownKana[^1] == 'n' && shownKana[^2] is >= '\u3041' and <= '\u3096')
-        {
-            text = shownKana[..^1] + "ん";
-            rules.Add("見えていたかなのまま (#677)");
-        }
         if (fixEnglish && !converting && _text.Mode == DisplayMode.Auto && FixEnglishTypo(text) is var fixedText && fixedText != text)
         {
             text = fixedText;

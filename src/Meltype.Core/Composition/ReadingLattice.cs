@@ -430,9 +430,7 @@ public sealed partial class CompositionDetector
 
     /// <summary>かなを、語にならないかなとして読むときの重み (1 音 3、っ・ー は 0.5。小書きのかな ゃ・ぃ は前のかなと 1 音)。</summary>
     private static double UnknownKana(string kana) =>
-        kana.Select((c, i) => c is 'っ' or 'ー' ? LightKanaCost : i > 0 && IsSmallKana(c) ? 0 : UnknownKanaCost).Sum();
-
-    private static bool IsSmallKana(char c) => c is 'ぁ' or 'ぃ' or 'ぅ' or 'ぇ' or 'ぉ' or 'ゃ' or 'ゅ' or 'ょ' or 'ゎ';
+        kana.Select((c, i) => c is 'っ' or 'ー' ? LightKanaCost : i > 0 && KanaChars.IsSmallKana(c) ? 0 : UnknownKanaCost).Sum();
 
     /// <summary>単位の読みがかな (ひらがな・ー) か。</summary>
     private static bool IsKanaUnit(CompositionUnit unit) => unit.Kana.Length > 0 && unit.Kana.All(KanaChars.IsHiraganaOrLongMark);

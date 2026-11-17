@@ -124,8 +124,9 @@ internal static class BackgroundConversionTests
 
         release.Set();
         Assert.True(ready.Wait(5000), "結果が届いたら知らせる");
-        var refreshed = session.RefreshConversion();
-        Assert.Equal("日本語", refreshed?.View?.Text);
+        // 打っている途中の読み (には・にほん) の結果も届くので、にほんご の結果が届くまで再描画する
+        SessionResult? refreshed = null;
+        Assert.True(SpinWait.SpinUntil(() => (refreshed = session.RefreshConversion())?.View?.Text == "日本語", 5000), $"再描画で結果を見せる ({refreshed?.View?.Text})");
         Assert.True(refreshed!.Consumed && refreshed.Commits.Count == 0, "再描画は確定しない");
     }
 
