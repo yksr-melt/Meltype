@@ -20,6 +20,10 @@ describe("お手本の txt", () => {
     assert.notEqual(a.id, b.id);
   });
 
+  it("「！？〜…」を読みに書ける", () => {
+    assert.equal(parse([["9-x.txt", "種類: x\nまじ！？|まじ！？\nまあいいか…|まあいいか…\nえ〜、ほんとに？|えー、ほんとに？\n"]]).sentences.length, 3);
+  });
+
   it("間違いは行番号付きでまとめて知らせる", () => {
     assert.throws(
       () => parse([["1-plain.txt", "種類: ふつう\n# コメント\n雨。|あめ\n雨|Ame\n雨\n雨。|あめ。\n雪。|あめ。\n"]]),
