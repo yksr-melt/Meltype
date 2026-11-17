@@ -10,7 +10,7 @@ using Meltype.Input;
 
 namespace Meltype.Composition;
 
-/// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、変換エンジンに渡す文脈、学習の文脈。</summary>
+/// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、学習の文脈。</summary>
 public sealed partial class CompositionController
 {
     /// <summary>設定「英語 / 日本語の学習を前の文脈ごとに分ける」: 学習の文脈 (前が英語か日本語か) を今の入力に合わせる。</summary>
@@ -36,7 +36,6 @@ public sealed partial class CompositionController
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = Environment.TickCount64 - _lastCommitTime < OwnCommitTrustMs;
         _precedingText = _lastCommitEnglish is null ? null : _lastCommitText;
-        UpdateWideContext();
         _followingText = null;
         _text.PrecedingEnglish = _lastCommitEnglish;
         UpdateLearningContext();
@@ -49,7 +48,6 @@ public sealed partial class CompositionController
         if (!recentOwnCommit && before is not null)
         {
             _precedingText = before;
-            UpdateWideContext();
             if (LanguageOf(before) is { } english) _text.PrecedingEnglish = english;
             UpdateLearningContext();
             _text.PrecedingEnglishSentence = IsEnglishSentence(before);
@@ -131,23 +129,4 @@ public sealed partial class CompositionController
         return null;
     }
 
-    /// <summary>変換エンジンに渡す文脈: キャレットの前の確定済みの文字のうち、同じ文の日本語の部分 (最大 10 文字)。</summary>
-    private string? ConversionContext()
-    {
-        var text = _precedingText;
-        if (string.IsNullOrEmpty(text) || LanguageOf(text) != false) return null;
-        var start = text.AsSpan().LastIndexOfAny(SentenceEndSearch);
-        text = text[(start + 1)..].Trim();
-        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
-    }
-
-    /// <summary>広い文脈 (文をまたいで最大 100 文字の、日本語の文章) を、使える変換エンジン (Zenzai) に渡す。英文のときは渡さない。</summary>
-    private void UpdateWideContext()
-    {
-        if (_converter is not IWideContextConverter wide) return;
-        var text = _precedingText?.Replace("\r", "").Replace("\n", "").Trim();
-        wide.WideContext = string.IsNullOrEmpty(text) || LanguageOf(text) != false ? null : text.Length > 100 ? text[^100..] : text;
-    }
-
-    private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }

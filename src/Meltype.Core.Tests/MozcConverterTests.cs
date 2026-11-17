@@ -56,11 +56,23 @@ internal static class MozcConverterTests
                 case "C" when fields[2] == "きょう":
                     output.WriteLine("きょう\x1f今日");
                     break;
+                // 本物の Mozc は、前に同じ語があると区切りを変える (「記号等」含め、 + きごうとうの → 気強盗の)
+                case "C" when fields[2] == "きごうとうの" && fields[1].Contains("記号等"):
+                    output.WriteLine("き\x1f気" + '\x1e' + "ごうとうの\x1f強盗の");
+                    break;
+                case "C" when fields[2] == "きごうとうの":
+                    output.WriteLine("きごう\x1f記号" + '\x1e' + "とうの\x1f等の");
+                    break;
+                // 受け取った文脈を候補にして返す
+                case "C" when fields[2] == "ぶんみゃく":
+                    output.WriteLine("ぶんみゃく\x1f" + (fields[1].Length > 0 ? fields[1] : "なし"));
+                    break;
                 case "C":
                     output.WriteLine(fields[2] + '\x1f' + userWords.GetValueOrDefault(fields[2], fields[2]));
                     break;
                 case "U":
-                    userWords = fields[1].Split('\x1e', StringSplitOptions.RemoveEmptyEntries).Select(r => r.Split('\x1f')).ToDictionary(f => f[0], f => f[1]);
+                    // 本物の Mozc と同じく、同じ読みの語は先に受け取った語を出す
+                    userWords = fields[1].Split('\x1e', StringSplitOptions.RemoveEmptyEntries).Select(r => r.Split('\x1f')).DistinctBy(f => f[0]).ToDictionary(f => f[0], f => f[1]);
                     output.WriteLine("OK");
                     break;
                 // 逆変換は 漢字 だけ読める
@@ -133,8 +145,30 @@ internal static class MozcConverterTests
         Assert.True(mozc.Convert("おちる") is null, "落ちた");
         Assert.Equal("記号等", mozc.Convert("きごうとう"), "起動し直したヘルパーでも登録した語");
 
+        // 消した後で逆変換を頼んでも (そのときに辞書を送る)、次の変換は古い控えを使わない
+        Assert.Equal("記号等", mozc.Convert("きごうとう"));
         dictionary.Remove(new UserWord("きごうとう", "記号等"));
+        Assert.Equal("かんじ", mozc.Reading("漢字"));
         Assert.Equal("きごうとう", mozc.Convert("きごうとう"), "消したら使わない");
+
+        // 同じ読みの語は、後から登録した語を先に出す (Lookup と同じ順)
+        dictionary.Add("しの", "志乃");
+        dictionary.Add("しの", "紫乃");
+        Assert.Equal("紫乃", mozc.Convert("しの"), "後から登録した語");
+    }
+
+    [Test]
+    public static void Mozc_UsesTheJapaneseOfTheSameSentenceAsContext()
+    {
+        using var mozc = Fake();
+        Assert.True(WaitConverted(mozc, "あ"), "偽のヘルパーが起動しなかった");
+        string Context(string? context) => mozc.ConvertClauses("ぶんみゃく", context) is [var c] ? c.Text : "(null)";
+        Assert.Equal("この本は", Context("昨日読んだ。この本は"), "同じ文の日本語");
+        Assert.Equal("１２３４５６７８９０", Context("あいう１２３４５６７８９０"), "最大 10 文字");
+        Assert.Equal("なし", Context("github"), "英語で終わるなら渡さない (ごと → 五と・にも → 二も になる)");
+        Assert.Equal("なし", Context("終わり。\n"), "文の始まりなら渡さない");
+        Assert.Equal("記号|等の", string.Join("|", mozc.ConvertClauses("きごうとうの", "文章を「記号等」含め、")!.Select(c => c.Text)),
+            "文脈で区切りが変わるなら文脈なしの結果を使う");
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)

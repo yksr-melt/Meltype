@@ -29,19 +29,10 @@ public interface IKanjiConverter
     string? Convert(string hiragana);
 
     /// <summary>
-    /// 文節に区切って変換する。区切れなければ null。context は直前の確定済みの文字列 (変換の文脈として使うだけで、結果には含めない)。
+    /// 文節に区切って変換する。区切れなければ null。context は前の文字列 (キャレットの前の文字と、同じ変換ボックスの前の区間。英語も含めてそのまま)。
+    /// 変換の文脈として使うだけで、結果には含めない。どこまで・どう使うかは変換エンジンが決める。
     /// </summary>
     IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null);
-}
-
-/// <summary>
-/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
-/// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
-/// 入力を始めるたびに、キャレットの前の日本語の文章 (文をまたいで最大 100 文字) を入れる。無ければ null。
-/// </summary>
-public interface IWideContextConverter
-{
-    string? WideContext { get; set; }
 }
 
 /// <summary>

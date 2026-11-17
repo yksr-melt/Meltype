@@ -817,8 +817,8 @@ public sealed class CompositionText
 
     /// <summary>表示する文字を、打った句読点の区間と一緒に。</summary>
     /// <param name="final">確定・変換のときは true (語末の n を ん にする)。</param>
-    /// <param name="convert">日本語の区間 (かな, 前の区間が英語か) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
-    internal ComposedText Compose(bool final, Func<string, bool, ComposedText>? convert = null) => Mode switch
+    /// <param name="convert">日本語の区間 (かな, 同じ変換ボックスでその区間より前に出した文字) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
+    internal ComposedText Compose(bool final, Func<string, string, ComposedText>? convert = null) => Mode switch
     {
         DisplayMode.HalfWidthAlphanumeric => ComposedText.Literal(ApplyCase(Raw, Case)),
         DisplayMode.FullWidthAlphanumeric => ComposedText.Literal(ToFullWidth(ApplyCase(Raw, Case))),
@@ -876,7 +876,7 @@ public sealed class CompositionText
     }
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
-    internal ComposedText RenderSegments(bool final, Func<string, bool, ComposedText>? convert)
+    internal ComposedText RenderSegments(bool final, Func<string, string, ComposedText>? convert)
     {
         // 保護範囲 (技術的な文字列) は、幅変換・かな化・漢字変換をせずに原文のまま出す (INV-01)。
         if (VerifyProtectedRaw()) return ComposedText.Literal(Raw);
@@ -909,7 +909,7 @@ public sealed class CompositionText
                     kana = kana[..^laughter];
                 }
             }
-            builder += convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish) : ComposedText.Kana(kana);
+            builder += convert is not null && kana.Length > 0 ? convert(kana, builder.Text) : ComposedText.Kana(kana);
             builder += ComposedText.Literal(pending);
         }
         return HalfWidthStars ? builder.Replace('＊', '*') : builder;

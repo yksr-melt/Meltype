@@ -10,11 +10,8 @@ namespace Meltype.Composition;
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
+    : IKanjiConverter, ILearningConverter, IStandaloneConverter, IBackgroundConverter
 {
-    /// <summary>Zenzai に渡す広い文脈 (Mozc には渡さない)。</summary>
-    public string? WideContext { get; set; }
-
     private ZenzaiConverter? _subscribedZenzai;
     private Action? _zenzaiReady;
 
@@ -70,7 +67,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
             z = zenzai?.Invoke();
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
             Subscribe(z);
-            return z.ConvertClauses(hiragana, WideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
+            return z.ConvertClauses(hiragana, context)?.Select(c => c with { Zenzai = true }).ToList();
         }
         catch (Exception ex)
         {

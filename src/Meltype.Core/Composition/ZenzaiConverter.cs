@@ -138,6 +138,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
+        context = context?.Replace("\r", "").Replace("\n", "").Trim();
         context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
         var key = context + "\u0000" + hiragana;
         lock (_gate)

@@ -47,7 +47,7 @@ public sealed partial class CompositionController
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? ComposedText.Concat(_clauses.Select(c => c.Composed))
             : _budget is { Enabled: true } && !_settings().EnterCommitsAsShown
-                ? _text.Compose(final: true, _settings().LiveConversion ? (kana, afterEnglish) => CountsAsLive(kana) ? ConvertedText(kana, afterEnglish) : ComposedText.Kana(kana) : null)
+                ? _text.Compose(final: true, _settings().LiveConversion ? (kana, before) => CountsAsLive(kana) ? ConvertedText(kana, before) : ComposedText.Kana(kana) : null)
                 : CurrentComposed(final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
@@ -158,7 +158,7 @@ public sealed partial class CompositionController
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     private void LearnClauses()
     {
-        if (Learning) _learning.Learn(_clauses, ConversionContext());
+        if (Learning) _learning.Learn(_clauses, _precedingText);
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>

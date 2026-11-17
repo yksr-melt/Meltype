@@ -96,7 +96,37 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
     /// </summary>
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null) =>
-        WithCandidates(Query(context ?? "", hiragana));
+        ConvertInSentence(context, history => WithCandidates(Query(history ?? "", hiragana)), c => c.Clause.Reading);
+
+    /// <summary>
+    /// Mozc に前の文字列 context を文脈として渡して変換する決まり (Android のアプリの中の Mozc も同じ決まりで変換する)。
+    /// convert は Mozc に渡す文脈 (<see cref="HistoryOf"/>。無ければ null) を受け取って変換する。
+    /// 文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、
+    /// 区切りまで変わるなら文脈なしを使う。前に同じ語があると、Mozc は文脈に引きずられて区切りを変えてしまうため
+    /// (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
+    /// </summary>
+    internal static IReadOnlyList<T>? ConvertInSentence<T>(string? context, Func<string?, IReadOnlyList<T>?> convert, Func<T, string> reading)
+    {
+        if (HistoryOf(context) is not { } history) return convert(null);
+        var withContext = convert(history);
+        var plain = convert(null);
+        if (withContext is null || plain is null) return withContext ?? plain;
+        return withContext.Select(reading).SequenceEqual(plain.Select(reading)) ? withContext : plain;
+    }
+
+    /// <summary>
+    /// Mozc に渡す文脈: 前の文字列のうち、同じ文の日本語の部分 (最大 10 文字)。無ければ null。
+    /// 英語で終わるときは渡さない。Mozc は英語の文脈を名詞として受け取り、英単語の後ろの付属語を漢字にしたまま、
+    /// 文節をつなげて ごと → 五と・にも → 二も にする。
+    /// </summary>
+    private static string? HistoryOf(string? context)
+    {
+        if (string.IsNullOrEmpty(context) || CompositionController.LanguageOf(context) != false) return null;
+        var text = context[(context.AsSpan().LastIndexOfAny(SentenceEnds) + 1)..].Trim();
+        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
+    }
+
+    private static readonly System.Buffers.SearchValues<char> SentenceEnds = System.Buffers.SearchValues.Create("。．！？\n\r");
 
     /// <summary>ConvertWithCandidates と同じ (文脈なし)。Budget を使わず、ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidatesNow(string hiragana) =>
@@ -139,7 +169,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (_disposed) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
             ClearCache();
-            var result = Send($"L\t{Clean(context ?? "")}\t{records}");
+            var result = Send($"L\t{Clean(HistoryOf(context) ?? "")}\t{records}");
             if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
             {
                 _learnedSinceSave = 0;
@@ -181,6 +211,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                     return null;
                 }
                 _sentUserWords = words;
+                // 送る前の辞書で変換した控えを捨てる (逆変換などほかの頼みで送ったときも、次の変換が古い控えを使わない)
+                ClearCache();
             }
 
             process.StandardInput.Write(request + "\n");

@@ -185,7 +185,7 @@ public sealed partial class CompositionController
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapaneseSegment(segment.Kana, s > 0 && segments[s - 1].IsEnglish, converter);
+            var japanese = ConvertJapaneseSegment(segment.Kana, string.Concat(clauses.Select(c => c.Text)), converter);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
             var offset = 0;
             foreach (var clause in japanese)
@@ -413,10 +413,15 @@ public sealed partial class CompositionController
         clause.Candidates.AddRange(added);
     }
 
-    /// <summary>英日の区間分けの日本語の区間を変換する。Space の変換もライブ変換も、区間ごとにこれを通す。</summary>
-    private List<Clause> ConvertJapaneseSegment(string kana, bool afterEnglish, IKanjiConverter converter)
+    /// <summary>
+    /// 英日の区間分けの日本語の区間を変換する。Space の変換もライブ変換も、区間ごとにこれを通す。
+    /// before は同じ変換ボックスでこの区間より前の文字。キャレットの前の文字とつなげて、英語も含めてそのまま変換エンジンに文脈として渡す
+    /// (どこまで・どう使うかは変換エンジンが決める)。
+    /// </summary>
+    private List<Clause> ConvertJapaneseSegment(string kana, string before, IKanjiConverter converter)
     {
-        var japanese = ConvertJapanese(kana, converter);
+        var japanese = ConvertJapanese(kana, (_precedingText ?? "") + before, converter);
+        var afterEnglish = LanguageOf(before) == true;
         // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
         // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
         // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
@@ -424,7 +429,7 @@ public sealed partial class CompositionController
         return japanese;
     }
 
-    private List<Clause> ConvertJapanese(string kana, IKanjiConverter converter)
+    private List<Clause> ConvertJapanese(string kana, string context, IKanjiConverter converter)
     {
         // ローマ字として読めずに残った英字 (こほぃc の c) と半角の記号 (... @) は、変換エンジンに渡すと別の記号 (© ．．． ＠) にされるので、
         // そのままの文節にする。数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
@@ -450,54 +455,23 @@ public sealed partial class CompositionController
                 var run = kana[start..i];
                 // ユーザー辞書に英字のまま登録した読み (zh → ←) はここでも引く
                 if (keep[start]) result.Add(new Clause(run, false, Distinct([.. _services.UserDictionary?.Lookup(run) ?? [], run, .. _services.Candidates?.Lookup(run) ?? [], CompositionText.ToFullWidth(run)])));
-                else result.AddRange(ConvertJapanese(run, converter));
+                else result.AddRange(ConvertJapanese(run, context, converter));
                 start = i;
             }
             return result;
         }
-        return ConvertWithEngine(kana, converter);
+        return ConvertWithEngine(kana, context, converter);
     }
-
-    /// <summary>
-    /// 「に」で始まる読みのうち、助詞の「に」に続くことが多い語 (なる・ついて・よって など) で始まるものか。
-    /// 「にわ (庭)」「にほん (日本)」のように「に」で始まる語まで仮の文脈で助詞と読ませると、
-    /// Zenzai が「に|ワニ|は」のように崩すので、助詞らしい続きのときだけにする。
-    /// </summary>
-    internal static bool StartsWithParticleNi(string kana)
-    {
-        if (kana.Length < 3 || kana[0] != 'に') return false;
-        var rest = kana.AsSpan(1);
-        foreach (var next in ParticleNiContinuations)
-        {
-            if (rest.StartsWith(next, StringComparison.Ordinal)) return true;
-        }
-        return false;
-    }
-
-    private static readonly string[] ParticleNiContinuations =
-    [
-        "なる", "なっ", "なり", "なら", "なれ", "なろ", "ついて", "ついての", "つき", "よっ", "よる", "より", "よれ",
-        "とって", "とっての", "たいし", "たいする", "かんし", "かんする", "おいて", "おける", "むけ", "むか", "わたっ", "わたる",
-        "あたっ", "あたり", "して", "した", "する", "すぎ", "さえ", "しか", "ちがい", "そって", "そう", "もとづ", "くらべ",
-        "かけ", "かわっ", "かわり", "ともな", "つれ", "あわせ", "おうじ", "はいっ", "いく", "いっ", "いれ", "いる", "いた",
-        "きた", "くる", "きて", "でき", "みえ", "きこえ", "かんじ", "おもえ",
-    ];
 
     /// <summary>
     /// 日本語のかなを変換エンジンで文節に区切って変換する。各文節の最初の候補は次の順で決める:
     ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
     ///   2. ユーザーが前に選び直した変換 (学習)
-    ///   3. 変換エンジンの結果 (入力欄のキャレットの前の文字を文脈として渡している)
+    ///   3. 変換エンジンの結果 (前の文字列 context を文脈として渡す)
     /// </summary>
-    private List<Clause> ConvertWithEngine(string kana, IKanjiConverter converter)
+    private List<Clause> ConvertWithEngine(string kana, string context, IKanjiConverter converter)
     {
-        // 文脈が無いまま「に」で始まる読みを変換すると、変換エンジンは「に」を語の頭と読む (になってしまう → 担ってしまう)。
-        // 前の文脈が取れないときは、仮の文脈「これ」を付けて助詞として読ませる (これ + になってしまう → になってしまう)。
-        // 「は」「で」なども助詞になりうるが、仮の文脈を付けると はしる → は知る のように崩れるので「に」だけ。
-        var context = ConversionContext();
-        var parts = context is not null
-            ? ConvertWithContext(kana, context, converter)
-            : converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null);
+        var parts = converter.ConvertClauses(kana, context);
         parts ??= [new ConversionClause(kana, converter.Convert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _services.Candidates?.Contains(kana) == true)
@@ -633,19 +607,6 @@ public sealed partial class CompositionController
     }
 
     private static bool IsKana(char c) => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー';
-
-    /// <summary>
-    /// 文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、
-    /// 区切りまで変わるなら文脈なしを使う。前に同じ語があると、変換エンジンは文脈に引きずられて区切りを変えてしまうため
-    /// (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
-    /// </summary>
-    private static IReadOnlyList<ConversionClause>? ConvertWithContext(string kana, string context, IKanjiConverter converter)
-    {
-        var withContext = converter.ConvertClauses(kana, context);
-        var plain = converter.ConvertClauses(kana);
-        if (withContext is null || plain is null) return withContext ?? plain;
-        return withContext.Select(c => c.Reading).SequenceEqual(plain.Select(c => c.Reading)) ? withContext : plain;
-    }
 
     private static bool IsSymbolOnly(string text) => text.Length > 0 && !text.Any(char.IsLetterOrDigit);
 
@@ -932,16 +893,16 @@ public sealed partial class CompositionController
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private ComposedText LiveConvert(string kana, bool afterEnglish)
+    private ComposedText LiveConvert(string kana, string before)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
         if (!CountsAsLive(kana)) return ComposedText.Kana(kana);
-        return ComposedText.Concat(LiveClauses(kana, afterEnglish).Select(c => ComposedText.Converted(c.Reading, c.Text)));
+        return ComposedText.Concat(LiveClauses(kana, before).Select(c => ComposedText.Converted(c.Reading, c.Text)));
     }
 
     /// <summary>日本語の区間を、背景の変換を待って変換した文字。</summary>
-    private ComposedText ConvertedText(string kana, bool afterEnglish) =>
-        ComposedText.Concat(ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => c.Composed));
+    private ComposedText ConvertedText(string kana, string before) =>
+        ComposedText.Concat(ConvertJapaneseSegment(kana, before, _converter).Select(c => c.Composed));
 
     /// <summary>
     /// ライブ変換するだけの拍があるか。小書きの母音・拗音は直前のかなと合わせて 1 拍 (きょ・ふゅ・しぃ は 1 拍)、っ・ん・ー は 1 拍と数える。
@@ -951,11 +912,11 @@ public sealed partial class CompositionController
         kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    private List<(string Reading, string Text)> LiveClauses(string kana, bool afterEnglish)
+    private List<(string Reading, string Text)> LiveClauses(string kana, string before)
     {
-        var key = string.Join("\u0001", kana, afterEnglish, _precedingText, EnglishInComposition(), _followingText, _services.History?.Version);
+        var key = string.Join("\u0001", kana, before, _precedingText, EnglishInComposition(), _followingText, _services.History?.Version);
         if (_liveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = WithoutWaiting(() => ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => (c.Reading, c.Text)).ToList());
+        var clauses = WithoutWaiting(() => ConvertJapaneseSegment(kana, before, _converter).Select(c => (c.Reading, c.Text)).ToList());
         if (_liveCache.Count > 256) _liveCache.Clear();
         _liveCache[key] = clauses;
         return clauses;
