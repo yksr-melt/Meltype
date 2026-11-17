@@ -127,7 +127,7 @@ function displayFields(value) {
     if (field.type === "checkbox") field.checked = current === true;
     else {
       // 未知の選択肢も保持し、他の項目を変更しただけで既存設定を失わない。
-      if (typeof current === "string" && ![...field.options].some(option => option.value === current)) {
+      if (field.type === "select-one" && typeof current === "string" && ![...field.options].some(option => option.value === current)) {
         const option = document.createElement("option"); option.value = current; option.textContent = current; field.append(option);
       }
       field.value = current ?? "";

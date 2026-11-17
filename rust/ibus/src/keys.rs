@@ -3,6 +3,9 @@
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn mode_key(keyval: u32, scalar: u32, state: u32) -> Option<i32> {
     Some(match keyval {
+        // Escの下がUS配列のgraveで届く環境でも半角/全角を切り替える。
+        // Shift・Ctrl・Alt・Superとの組み合わせは元のキーを保持する。
+        0x60 if modifiers(state) == 0 => 0x19,
         // XKB jp/PC_ALT_LEVEL2 reports Alt+Zenkaku_Hankaku as Kanji.
         // The physical key occupies the US backquote position.
         0xff21 if state & 8 != 0 => 0xc0,
@@ -88,7 +91,12 @@ mod tests {
         assert_eq!(mode_key(0xffe5, 0, 0), Some(0x14));
         assert_eq!(mode_key(0xffbe, 0, 0), Some(0x70));
         assert_eq!(mode_key(0xffc9, 0, 0), Some(0x7b));
-        assert_eq!(mode_key(0x60, 0x60, 0), Some(0xc0));
+        assert_eq!(mode_key(0x60, 0x60, 0), Some(0x19));
+        assert_eq!(mode_key(0x60, 0x60, 2 | 16), Some(0x19));
+        for state in [1, 4, 8, 64] {
+            assert_eq!(mode_key(0x60, 0x60, state), Some(0xc0));
+        }
+        assert_eq!(mode_key(0x27, 0x27, 0), Some(7));
         assert_eq!(mode_key(0xff22, 0, 0), Some(0x1a));
         assert_eq!(mode_key(0xff23, 0, 0), Some(0x1c));
         assert_eq!(mode_key(32, 32, 0), Some(32));

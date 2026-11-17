@@ -243,3 +243,23 @@ test("半角/全角のkeyup名が変わっても所有を解除し、次で日�
     assert.deepEqual(f.errors, []);
   } finally { f.core.free(); }
 });
+
+
+test("かな・英数キーで切り替えた後も日本語入力を続けられる", async () => {
+  const f = fixture();
+  try {
+    for (const [english, kana] of [["Eisu", "HiraganaKatakana"], ["Alphanumeric", "KanaMode"], ["英数", "かな"]]) {
+      await f.type("kana");
+      await f.key(english, "Lang2"); await f.key("Unidentified", "Lang2", "keyup");
+      assert.equal(f.core.is_direct(), true);
+      await f.key("a");
+      assert.deepEqual(f.calls.at(-1), ["ack", "request", false]);
+      await f.key(kana, "Lang1"); await f.key("Unidentified", "Lang1", "keyup");
+      assert.equal(f.core.is_direct(), false);
+      await f.key("a");
+      assert.equal(JSON.parse(f.core.view()).view.text, "あ");
+      await f.key("Enter", "Enter");
+    }
+    assert.deepEqual(f.errors, []);
+  } finally { f.core.free(); }
+});
