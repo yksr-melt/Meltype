@@ -39,9 +39,12 @@ public sealed class RomajiTypoCorrector
         Count = _readings.Count + _forms.Count;
     }
 
-    private static PackedWordSet BuildForms(string readingsText, PackedWordSet readings)
+    private static PackedWordSet BuildForms(string readingsText, PackedWordSet readings) =>
+        PackedWordSet.FromWords(FunctionWords.Concat(Conjugations(readingsText)).Where(form => !readings.Contains(form)));
+
+    private static List<string> Conjugations(string readingsText)
     {
-        var forms = new List<string>(FunctionWords);
+        var forms = new List<string>();
         foreach (var line in Detection.DictionarySource.DataLines(readingsText))
         {
             var parts = line.Split('\t');
@@ -49,11 +52,15 @@ public sealed class RomajiTypoCorrector
             // 同じ読みで活用の違う語 (くる = 繰る v5r・来る vk) は , でつないである
             foreach (var kind in parts[1].Split(',')) AddConjugations(parts[0], kind, forms);
         }
-        return PackedWordSet.FromWords(forms.Where(form => !readings.Contains(form)));
+        return forms;
     }
 
     // 同梱の読み (CommonReadings) から作った付属語・活用した形。Load で作る打ち間違い直しと、日英の区切り (CompositionDetector) で共有する
     private static readonly Lazy<PackedWordSet> CommonForms = new(() => BuildForms(CommonReadings.ReadText(), CommonReadings.Words));
+
+    // readings-rare.txt の語の活用した形 (かんれんづけ)
+    private static readonly Lazy<PackedWordSet> RareForms = new(() =>
+        PackedWordSet.FromWords(Conjugations(CommonReadings.RareText()).Where(form => !CommonReadings.Rare.Contains(form))));
 
     public static RomajiTypoCorrector Load(RomajiDetector romaji) => new(romaji, CommonReadings.Words, CommonForms.Value);
 
@@ -70,6 +77,12 @@ public sealed class RomajiTypoCorrector
 
     /// <summary>kana が、同梱の読み・付属語・活用した形のどれかの頭か。</summary>
     internal static bool CommonHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Words.HasPrefix(kana) || CommonForms.Value.HasPrefix(kana);
+
+    /// <summary>kana が、よく使う語でない語の読み (readings-rare.txt) かその活用した形か。</summary>
+    internal static bool IsRareWord(ReadOnlySpan<char> kana) => CommonReadings.Rare.Contains(kana) || RareForms.Value.Contains(kana);
+
+    /// <summary>kana が、よく使う語でない語の読みかその活用した形の頭か。</summary>
+    internal static bool RareHasPrefix(ReadOnlySpan<char> kana) => CommonReadings.Rare.HasPrefix(kana) || RareForms.Value.HasPrefix(kana);
 
     // 語の生起コスト。日英の区切り (ReadingLattice.cs) と共有する
     // 付属語 (が・を・て)
