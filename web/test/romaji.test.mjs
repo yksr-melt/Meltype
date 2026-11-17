@@ -56,10 +56,11 @@ describe("お手本のローマ字と、関係ない入力", async () => {
   const { accuracyOf, replay, suspicious } = await import("../public/assets/js/typing-check.js");
   const reading = "きょうはあさからあめがふっている。";
 
-  it("「！？〜…」は ! ? ~ と . 3 回で打つ", () => {
+  it("「！？〜「」（）…」は ! ? ~ [ ] ( ) と . 3 回で打つ", () => {
     assert.equal(accuracyOf("まじ！？それな〜", "maji!?sorena~"), 1);
     assert.equal(accuracyOf("まあいいか…", "maaiika..."), 1);
     assert.ok(accuracyOf("まあいいか…", "maaiika.") < 1);
+    assert.equal(accuracyOf("「ええ」（こんわく）", "[ee](konwaku)"), 1);
   });
 
   it("お手本どおりに打てば、英語が混ざった文も一致率は 1", () => {

@@ -15,8 +15,8 @@ import { finalKana, toRomaji } from "../public/assets/js/romaji.js";
 
 const dir = fileURLToPath(new URL("../sentences/", import.meta.url));
 const out = fileURLToPath(new URL("../public/assets/js/typing-sentences.js", import.meta.url));
-// 読みはひらがなと「ー、。！？〜…」(打つときは - , . ! ? ~ と、「…」は . を 3 回)。日本語と英語が混ざった文は、英語の部分を英小文字・数字・「-」・空白で書く
-const READING = /^[ぁ-ゖー、。！？〜…a-z0-9 -]+$/;
+// 読みはひらがなと「ー、。！？〜…「」（）」(打つときは - , . ! ? ~ [ ] ( ) と、「…」は . を 3 回)。日本語と英語が混ざった文は、英語の部分を英小文字・数字・「-」・空白で書く
+const READING = /^[ぁ-ゖー、。！？〜…「」（）a-z0-9 -]+$/;
 // 長い文は打つのに疲れ、1 文の打鍵の上限 (src/typing.js) も大きくなる
 const MAX_KANA = 40;
 
@@ -51,7 +51,7 @@ export function parse(files) {
       if (parts.length !== 2) return errors.push(`${where}: 「表示する文|読み」の形にしてください`);
       const [text, reading] = parts.map((part) => part.trim());
       if (!text || !reading) return errors.push(`${where}: 文と読みの両方を書いてください`);
-      if (!READING.test(reading)) return errors.push(`${where}: 読みは、ひらがなと「ー、。！？〜…」(英語の部分は英小文字・数字・「-」・空白) だけで書いてください`);
+      if (!READING.test(reading)) return errors.push(`${where}: 読みは、ひらがなと「ー、。！？〜…「」（）」(英語の部分は英小文字・数字・「-」・空白) だけで書いてください`);
       if ([...reading].length > MAX_KANA) return errors.push(`${where}: 読みは ${MAX_KANA} 字までにしてください`);
       for (const mark of ["、", "。"]) {
         if (text.split(mark).length !== reading.split(mark).length) return errors.push(`${where}: 文と読みで「${mark}」の数が違います`);
