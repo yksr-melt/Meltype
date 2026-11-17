@@ -15,8 +15,9 @@
 | macOS | `mac/Sources/MeltypeIME/InputController.swift` | `src/Meltype.Mac.Native` を NativeAOT でビルドした `libMeltypeNative.dylib` を dlopen する |
 | Linux: IBus | `linux/ibus-engine-meltype` | `src/Meltype.Mac.Native` を Linux 向けにビルドした `libMeltypeNative.so` を dlopen する |
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
+| Android | `android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/KeyboardService.kt`・`core/ImeJson.kt` (出来事と応答の JSON) | `src/Meltype.Mac.Native` を Android 向けにビルドした `libMeltypeNative.so` を JNI (`android/app/src/main/cpp/meltype_jni.cpp`) から呼ぶ |
 
-変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。
+変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは、Mozc をアプリのプロセスで動かし、JNI のコールバックで Core に渡している (#1963)。
 
 ## 暗黙知
 
@@ -85,7 +86,7 @@ dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
 node tools/check-dictionaries.mjs
 ```
 
-`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Mac は `Meltype-*-mac.zip` 内 `Meltype-mac/Meltype.app/Contents/Resources/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 

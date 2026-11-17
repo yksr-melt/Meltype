@@ -115,6 +115,12 @@ const dictionaries = {
   'readings.txt': {
     format: tabbed(1, 2, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   },
+  'readings-rare.txt': {
+    format: tabbed(1, 2, ([reading]) => [
+      hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+      [...reading].length >= 5 ? null : `読み「${reading}」が 5 文字より短い`,
+    ]),
+  },
   'readings-extra.txt': {
     format: tabbed(1, 2, ([reading]) => [
       hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
