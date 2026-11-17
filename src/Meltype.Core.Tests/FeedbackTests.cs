@@ -215,6 +215,31 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1873_PluralOfKnownWord_StaysEnglish()
+    {
+        // Issue #1873: english-words.txt は deploy を持たず ploys を持つので、deploys が de|ploys に割れていた
+        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
+        try
+        {
+            foreach (var (typed, expected) in new[]
+            {
+                ("deploys", "deploys"), ("updates", "updates"),
+                // 逆向き: 英単語の後ろの す で始まる日本語はそのまま
+                ("deploysuru", "deployする"), ("reflectsareta", "reflectされた"),
+            })
+            {
+                var k = new CompositionTests.Keyboard();
+                k.Type(typed + "\n");
+                Assert.Equal(expected, k.Host.Document, typed);
+            }
+        }
+        finally
+        {
+            CompositionTests.Detector.SpellChecker = null;
+        }
+    }
+
+    [Test]
     public static void Issue378_Memoirs_StaysEnglish()
     {
         // Issue #378: memoirs が メモリ絵s になる報告。今の main では memoirs・memories とも英字のまま (戻らないように)
@@ -1581,6 +1606,7 @@ internal static class LanguageLearningTests
             {
                 var k = new CompositionTests.Keyboard { FunctionKeysAffectSelectedClause = true };
                 k.Type(typed + " ");
+                while (k.Host.View!.SelectedClause > 0) k.Press(VirtualKeys.Left);
                 for (var i = 0; i < rights; i++) k.Press(VirtualKeys.Right);
                 k.Press(VirtualKeys.F6);
                 Assert.Equal(expected, string.Join("|", k.Host.View!.Clauses!), typed);

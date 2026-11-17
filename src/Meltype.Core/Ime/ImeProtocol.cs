@@ -8,7 +8,7 @@ using Meltype.Composition;
 
 namespace Meltype.Ime;
 
-// フロント (TSF・Mac・IBus・fcitx5・Android) と ImeHost のやり取り。フロントは OS から読んだ事実だけを ImeEvent で渡し、
+// フロント (TSF・Meltype キーボード・Mac・IBus・fcitx5・Android) と ImeHost のやり取り。フロントは OS から読んだ事実だけを ImeEvent で渡し、
 // どうするか (確定・表示・モード・どのキーを受け取るか) は ImeHost が ImeOutput で返す。
 // 同じプロセスのフロントは ImeHost.Handle(ImeEvent) を呼び、別プロセスのフロント (TSF の DLL) は 1 メッセージ 1 JSON で送る。
 // フロントは state を毎回まるごと置き換え、result をそのまま適用する。表示・時間・番号の出し分けもフロントは決めない。

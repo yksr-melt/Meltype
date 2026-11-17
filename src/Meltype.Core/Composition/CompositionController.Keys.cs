@@ -212,7 +212,7 @@ public sealed partial class CompositionController
                 {
                     Commit(suffix: " ", fixEnglish: true);
                 }
-                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? Convert : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
+                else if (EndsWithEnglish()) CommitText(FixEnglishTypo(_text.RenderSegments(final: true, _settings().LiveConversion ? (kana, afterEnglish) => string.Concat(ConvertJapaneseSegment(kana, afterEnglish, _converter).Select(c => c.Text)) : null)) + " ", english: true, _text.Raw, rule: "Space: 英語で終わるので変換せずに確定");
                 else if (SpaceCommitsAutoEnglish()) CommitText(FixEnglishTypo(_text.Raw) + " ", english: true, _text.Raw, rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
@@ -621,9 +621,11 @@ public sealed partial class CompositionController
                 Resize(-1);
                 return true;
             case VirtualKeys.Right:
+                SplitWholeSentence();
                 _selectedClause = Math.Min(_selectedClause + 1, _clauses.Count - 1);
                 return true;
             case VirtualKeys.Left:
+                SplitWholeSentence();
                 _selectedClause = Math.Max(_selectedClause - 1, 0);
                 return true;
             case VirtualKeys.Return when shift && _settings().PartialCommit && _selectedClause < _clauses.Count - 1:
@@ -706,13 +708,14 @@ public sealed partial class CompositionController
     /// <summary>「もしかして」の案内。変換ボックスの、打った文字のすぐ下に出す (書き間違いが無ければ null)。</summary>
     private string? MisspellingSuggestion() => FindMisspelling() is { } typo ? $"もしかして: {typo.Misspelling.Right}　<Tab>で修正" : null;
 
-    /// <summary>変換前に矢印キーを押したとき: 文節に区切って、← なら最後の文節、→ なら最初の文節を選ぶ。</summary>
+    /// <summary>変換前の矢印キー: → は先頭、それ以外は最後の文節を選ぶ。</summary>
     private void EnterClauseSelection(int vk)
     {
         StartConversion();
         if (!_converting) return;
+        SplitWholeSentence();
         var shift = _shift;
-        _selectedClause = vk == VirtualKeys.Left ? _clauses.Count - 1 : 0;
+        _selectedClause = vk == VirtualKeys.Right ? 0 : _clauses.Count - 1;
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(vk == VirtualKeys.Left ? -1 : +1);
         else if (vk == VirtualKeys.Up) NextCandidate(-1);
     }
