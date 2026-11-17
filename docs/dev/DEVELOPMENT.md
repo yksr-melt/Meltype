@@ -40,15 +40,19 @@ powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
 - Windows 10 / 11 (x64)、Windows 11 (ARM64)
 - .NET 10 SDK
 - Inno Setup 6 (インストーラーを作ります。無ければ Chocolatey で入れます)
-- Visual Studio (Build Tools でもよい) の「C++ によるデスクトップ開発」(Meltype IME の DLL を作ります)
+- Visual Studio (Build Tools でもよい) の「C++ によるデスクトップ開発」(Meltype IME の DLL を作ります。`-NoIme` なら要りません)
 
 Meltype IME の DLL と、それに要る Visual Studio Installer の「個別のコンポーネント」:
 
 | 作るもの | 作る DLL | 要るコンポーネント |
 | --- | --- | --- |
-| `Install-Meltype.ps1`・配布用のパッケージ (`Build-Package.ps1`) | x64・ARM64X・x86 (1 つでも失敗したら止まる) | MSVC x64/x86 ビルド ツール (最新)・MSVC ARM64/ARM64EC ビルド ツール (最新)・Windows 11 SDK |
+| x64 の PC で `Install-Meltype.ps1` | x64・x86 | MSVC x64/x86 ビルド ツール (最新)・Windows 11 SDK |
+| ARM64 の PC で `Install-Meltype.ps1` | ARM64X・x86 | 上に加えて MSVC ARM64/ARM64EC ビルド ツール (最新) |
+| `Install-Meltype.ps1 -NoIme` (Meltype IME を入れない) | 作らない | 要らない |
+| 配布用のパッケージ (`Build-Package.ps1`) | x64・ARM64X・x86 (1 つでも失敗したら止まる) | ARM64 の PC と同じ |
 | ポータブル版 (`Build-Package.ps1 -Portable`) | 作らない | 要らない |
-| DLL だけ (`.\native\tip\build.ps1 -Architectures x64,x86`) | 指定したもの | arm64 を作らなければ ARM64 のビルドツールは要らない |
+
+C++ のビルドツールが無いときは、`Install-Meltype.ps1 -NoIme` で Meltype IME を入れずにインストールできます (変換ボックスで入力する方式)。
 
 `native\tip\build.ps1` は、ARM64 のビルドツールを `vswhere` でコンポーネント ID `Microsoft.VisualStudio.Component.VC.Tools.ARM64` から探します。
 これは「(最新)」の付いたコンポーネントで、版の付いた ARM64 ビルドツール (「v14.xx」など) だけを入れていると見つかりません。

@@ -8,7 +8,10 @@ param([switch]$NoIme)
 
 $ErrorActionPreference = 'Stop'
 
-& (Join-Path $PSScriptRoot 'Build-Package.ps1')
+# Meltype IME の DLL は、この PC に登録するものだけビルドする (x64 の PC に ARM64 のビルドツールを求めない)。-NoIme ならビルドしない
+. (Join-Path $PSScriptRoot 'packaging\meltype-ime.ps1')
+$imeArchitectures = if ($NoIme) { @() } else { @(Get-MeltypeImeArchitectures) }
+& (Join-Path $PSScriptRoot 'Build-Package.ps1') -ImeArchitectures $imeArchitectures
 $setup = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'dist') -Filter 'Meltype-test-*-setup.exe' -File | Sort-Object LastWriteTime | Select-Object -Last 1
 $arguments = @('/SILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
 if ($NoIme) { $arguments += '/MERGETASKS="!meltypeime"' }
