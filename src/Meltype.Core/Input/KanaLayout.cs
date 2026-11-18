@@ -18,6 +18,24 @@ public enum KanaLayout
     [System.ComponentModel.Description("中指NICOLA")] NakayubiNicola,
     /// <summary>TRON 配列 (親指シフト。無変換・変換が左右の親指キー)。</summary>
     [System.ComponentModel.Description("TRON 配列")] Tron,
+    /// <summary>新JIS かな配列 (JIS X 6004。Shift で 2 段目)。</summary>
+    [System.ComponentModel.Description("新JIS かな")] NewJis,
+    /// <summary>飛鳥配列 (親指シフト)。</summary>
+    [System.ComponentModel.Description("飛鳥配列")] Asuka,
+    /// <summary>下駄配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("下駄配列")] Geta,
+    /// <summary>新下駄配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("新下駄配列")] ShinGeta,
+    /// <summary>薙刀式 (v15。文字キー同士と Space の同時打鍵)。</summary>
+    [System.ComponentModel.Description("薙刀式")] Naginata,
+    /// <summary>蜂蜜小梅配列 (文字キー同士の同時打鍵と親指シフト)。</summary>
+    [System.ComponentModel.Description("蜂蜜小梅配列")] Hachimitsu,
+    /// <summary>シン蜂蜜小梅配列。</summary>
+    [System.ComponentModel.Description("シン蜂蜜小梅配列")] ShinHachimitsu,
+    /// <summary>よだか配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("よだか配列")] Yodaka,
+    /// <summary>かわせみ配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("かわせみ配列")] Kawasemi,
 }
 
 /// <summary>ローマ字入力のキーの配列 (issue #1415)。</summary>
@@ -201,7 +219,22 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
             return map;
         }).ToArray());
 
-    private readonly Dictionary<int, string>[] _faces = layout == KanaLayout.Jis ? [] : Faces[layout];
+    private readonly Dictionary<int, string>[] _faces = Faces.GetValueOrDefault(layout) ?? [];
+    // 同時打鍵の配列 (新JIS・飛鳥・下駄など): 打鍵はこちらで読む
+    private readonly ChordKanaLayout? _chord = ChordKanaLayout.For(layout);
+
+    /// <summary>表の段 row (0 = 数字の段) の column 番目のキーの仮想キー。</summary>
+    internal static int KeyAt(int row, int column) => column < Rows[row].Length ? Rows[row][column] : 0;
+
+    /// <summary>無変換・変換を親指キーに使う配列か (変換ボックスの外でも受け取る)。</summary>
+    public static bool UsesThumbs(KanaLayout layout) =>
+        layout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron || ChordKanaLayout.For(layout) is { UsesThumbs: true };
+
+    /// <summary>Space をシフトに使う配列か (薙刀式)。</summary>
+    public static bool UsesSpace(KanaLayout layout) => ChordKanaLayout.For(layout) is { UsesSpace: true };
+
+    /// <summary>キーを離したことを受け取る必要がある配列か (同時打鍵・親指シフト)。</summary>
+    public static bool NeedsKeyReleases(KanaLayout layout) => UsesThumbs(layout) || ChordKanaLayout.For(layout) is not null;
     private int _prefix;
     // 最後に入力した文字キー (後から押した親指キーで打ち直すため)。
     private int _lastKey;
@@ -227,7 +260,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     public bool IsLayoutKey(int vk) => _faces.Any(face => face.ContainsKey(vk)) || IsThumbShift && vk is LeftThumb or RightThumb;
 
     /// <summary>親指キーを押したままか (離すまで、離したことを受け取る必要がある)。</summary>
-    public bool ThumbHeld => _thumb != 0;
+    public bool ThumbHeld => _chord?.ShiftHeld ?? _thumb != 0;
 
     /// <summary>前置シフトのキーを押して、次のキーを待っているか。</summary>
     public bool HasPrefix => _prefix > 0;
@@ -238,6 +271,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     /// <summary>打ちかけ (前置シフト・押したままの親指キー) を忘れる。入力を確定・取り消したときに呼ぶ。</summary>
     public void Reset()
     {
+        _chord?.Reset();
         _prefix = 0;
         _lastKey = 0;
         _lastTime = long.MinValue;
@@ -249,6 +283,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     public KanaStroke Down(int vk, bool shift, long time)
     {
         if (layout == KanaLayout.Jis) return KanaStroke.NotHandled;
+        if (_chord is not null) return _chord.Down(vk, shift, time);
         if (IsThumbShift && vk is LeftThumb or RightThumb)
         {
             // 押したままの親指キーのリピート: 押したことは変えない (文字に使ったかを消さない)
@@ -317,6 +352,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     /// <summary>キーを離した。</summary>
     public KanaKeyUp Up(int vk)
     {
+        if (_chord is not null) return new KanaKeyUp(_chord.Up(vk), KanaStroke.NotHandled);
         if (vk == _lastKey) _lastReleased = true;
         // 中指NICOLA: D / K を押したまま、文字キーを先に離した → シフト面で打ち直す (文字キーと、まだなら D / K の文字を消す)
         if (vk == _middlePending && _middle != 0)

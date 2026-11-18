@@ -421,10 +421,10 @@ internal sealed class ImeSession
     /// <summary>CapsLock・NumLock・ScrollLock。</summary>
     private static bool IsLockKey(int vk) => vk is 0x14 or 0x90 or 0x91;
 
-    /// <summary>親指シフトのかな配列 (NICOLA・中指NICOLA・TRON) の親指キー (無変換・変換)。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする。</summary>
+    /// <summary>親指シフトのかな配列の親指キー (無変換・変換)。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする。</summary>
     private bool IsThumbKey(int vk, Settings settings) =>
         settings.InputStyle == InputStyle.Kana && !_session.Direct && vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
-        settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
+        KanaLayoutEngine.UsesThumbs(settings.KanaLayout);
 
     /// <summary>
     /// 定型文 (issue #290)。;名前 の文字はそのままアプリへ渡し、続く Space / Tab で登録した文に置き換える。入れた直後の Esc で、打った ;名前 に戻す。
@@ -555,7 +555,7 @@ internal sealed class ImeSession
             PrintableAsciiExcept = direct && directEnglishWord ? EnglishWordCharacters : "",
             Shortcuts = keys.Distinct().ToList(),
             CtrlKeysWhileComposing = composingControlKeys.Select(key => new ImeShortcut(key, (int)ShortcutModifiers.Control)).ToList(),
-            KeyReleases = settings.InputStyle == InputStyle.Kana && settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron,
+            KeyReleases = settings.InputStyle == InputStyle.Kana && KanaLayoutEngine.NeedsKeyReleases(settings.KanaLayout),
             AltKeys = settings.AltKeysSwitchKeyboard,
         };
     }

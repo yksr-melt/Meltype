@@ -3,6 +3,7 @@
 Meltype のソースコード (このリポジトリ) には、次のものを除いて他者の著作物は含まれていません。
 
 - かな配列 (月配列 U9・花配列・NICOLA・中指NICOLA・TRON 配列) の表 (`src/Meltype.Core/Input/KanaLayout.cs`): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
+- 同時打鍵のかな配列 (新JIS かな・飛鳥配列・下駄配列・新下駄配列・薙刀式・蜂蜜小梅配列・シン蜂蜜小梅配列・よだか配列・かわせみ配列) の表 (`src/Meltype.Core/Input/KanaChordTables.cs`。`tools/make-kana-layouts.mjs` で作る): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
 
 ## 配布用パッケージに同梱しているもの
 
