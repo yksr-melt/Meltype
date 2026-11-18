@@ -62,6 +62,13 @@ class CoreConfigDeviceTest {
 
         set(CoreConfig.LIVE_CONVERSION, true)
         type(editor, adapter, "kyouha")
+        // Live conversion does not wait for the converter. As KeyboardService does once the converter has finished,
+        // ask the Core to show the result.
+        val until = System.nanoTime() + 2_000_000_000L
+        while (adapter.shown != "今日は" && System.nanoTime() < until) {
+            Thread.sleep(10)
+            adapter.apply(core.handle(ImeJson.conversionFinished(adapter.field(emptyList()))))
+        }
         assertEquals("Live conversion ON converts while typing", "今日は", adapter.shown)
         assertEquals(true, config.boolean(CoreConfig.LIVE_CONVERSION))
         assertFalse("The Core could not read config.json", broken.exists())

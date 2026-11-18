@@ -112,7 +112,7 @@ public sealed class MeltypeRuntime : IDisposable
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(helper, Path.Combine(DataDirectory, "mozc"));
+        var mozc = new MozcConverter(new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);
@@ -122,6 +122,14 @@ public sealed class MeltypeRuntime : IDisposable
             : zenzai.Get("", ""), zenzai.Failed);
         ForgetZenzaiHallucinations(converter);
         return converter;
+    }
+
+    /// <summary>Zenzai を使わない変換エンジン (Android。llama-server を同梱していない)。mozcHelper はアプリのプロセスの Mozc。</summary>
+    public HybridConverter CreateConverter(IMozcHelper mozcHelper)
+    {
+        var mozc = new MozcConverter(mozcHelper);
+        _converters.Add(mozc);
+        return new HybridConverter(mozc);
     }
 
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>

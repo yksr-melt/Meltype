@@ -2,14 +2,6 @@
 # Debug preview for the Android-only Space swipe change. NOT a release build.
 name: Android debug build verification
 on:
-  push:
-    branches: [feat/android-bilingual-adaptive-ime]
-    paths:
-      - '.github/workflows/android-preview.yml'
-      - 'android/**'
-      - 'src/Meltype.Core/**'
-      - 'src/Meltype.Core.Tests/**'
-      - 'src/Meltype.Core.CApi/**'
   workflow_dispatch:
 
 permissions:

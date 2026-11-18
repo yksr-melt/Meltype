@@ -35,6 +35,9 @@ internal class CoreConfig(private val directory: File) {
     /** The top-level boolean [key], or null if config.json does not set it or cannot be read. */
     fun boolean(key: String): Boolean? = read()?.opt(key) as? Boolean
 
+    /** The top-level string [key], or null if config.json does not set it or cannot be read. */
+    fun string(key: String): String? = read()?.opt(key) as? String
+
     /**
      * Sets the top-level [key] to [value] (a Boolean, number or String the Core expects there) and
      * keeps everything else. False if it was not written: config.json cannot be read, or writing failed.
@@ -104,5 +107,10 @@ internal class CoreConfig(private val directory: File) {
 
         /** Settings.LiveConversion: convert to kanji while typing. */
         const val LIVE_CONVERSION = "LiveConversion"
+
+        /** Settings.SpaceWidth: whether Space in Japanese mode puts a full-width space. */
+        const val SPACE_WIDTH = "SpaceWidth"
+        const val SPACE_WIDTH_STANDARD = "Standard"
+        const val SPACE_WIDTH_FULL = "FullWidth"
     }
 }
