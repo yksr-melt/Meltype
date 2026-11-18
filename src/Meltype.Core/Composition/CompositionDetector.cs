@@ -52,9 +52,9 @@ public sealed partial class CompositionDetector
         _proper = proper ?? new ProperNouns();
     }
 
-    public static CompositionDetector CreateDefault(string? userDictionaryDirectory = null)
+    public static CompositionDetector CreateDefault(string? userDictionaryDirectory = null, Config.RomajiTable romajiTable = Config.RomajiTable.Standard)
     {
-        var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory);
+        var romaji = RomajiDetector.CreateDefault(userDictionaryDirectory, romajiTable);
         var japaneseWords = DictionarySource.Load("japanese.txt", userDictionaryDirectory).ToList();
         var proper = ProperNouns.Load(userDictionaryDirectory);
         var english = new EnglishDetector(DictionarySource.Load("english.txt", userDictionaryDirectory).Concat(proper.LowercaseWords));

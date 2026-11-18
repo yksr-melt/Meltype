@@ -90,6 +90,14 @@ const dictionaries = {
     },
   },
   // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
+  // 綴り<Tab>かな (組み込みのローマ字の表)。綴りは英小文字だけ (RomajiDetector.ParseCustomTable と同じ決まり)
+  'romaji-azik.txt': {
+    format: tabbed(2, 2, ([spelling, kana]) => [
+      /^[a-z]+$/.test(spelling) ? null : `綴り「${spelling}」が英小文字だけでない`,
+      hiragana.test(kana) ? null : `かな「${kana}」がひらがなでない`,
+    ]),
+    keysOf: line => [[line.split('\t')[0], line]],
+  },
   'phrases.txt': {
     format: tabbed(2, 2, ([reading, word]) => [
       reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
