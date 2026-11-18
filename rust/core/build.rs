@@ -23,6 +23,13 @@ fn main() {
     }
     // FST addresses refer to one immutable payload. Gloss text is not encoded
     // as automaton keys or copied into a heap cache during initialization.
+    let domain_names = texts
+        .keys()
+        .filter(|name| name.starts_with("domain-"))
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(output.join("domain-names.txt"), domain_names).unwrap();
     let mut records = std::collections::BTreeMap::new();
     let mut payload = Vec::new();
     for (name, text) in &texts {
@@ -49,6 +56,14 @@ fn main() {
     )
     .unwrap();
     fs::write(output.join("system-values.bin"), payload).unwrap();
+    let readings: BTreeSet<_> = ["readings.txt", "readings-extra.txt"]
+        .iter()
+        .flat_map(|name| texts[*name].lines())
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    let kana = fst::Set::from_iter(readings).unwrap();
+    fs::write(output.join("kana.fst"), kana.as_fst().as_bytes()).unwrap();
     for name in ["english", "japanese", "common", "proper"] {
         let mut entries = BTreeSet::new();
         let files: &[&str] = match name {

@@ -19,11 +19,10 @@ pub struct Dictionary {
     candidates: Arc<HashMap<String, Vec<String>>>,
     // 分野の辞書 (dictionaries/domain-*.txt。医療・駅名・人名など)。ふだん使わない人には
     // 誤った候補になりうるので、ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
-    domain: Arc<HashMap<String, Vec<String>>>,
+    domain: Arc<HashMap<&'static str, Vec<&'static str>>>,
     head_only_phrases: HashSet<String>,
     emoji: Arc<HashMap<String, Vec<String>>>,
-    kana_words: Arc<HashSet<String>>,
-    max_kana_word_bytes: usize,
+    kana_words: PrefixIndex,
     common_english: Arc<HashSet<String>>,
     readable_english: Arc<HashSet<String>>,
     standalone_english: Arc<HashSet<String>>,
@@ -75,16 +74,6 @@ fn words(text: &str) -> impl Iterator<Item = &str> {
         .flat_map(|line| line.split('#').next().unwrap_or("").split_whitespace())
 }
 
-/// 日本語の語のローマ字の書き方 (japanese.txt を広げたもの)。国名の語を絞り込むのに使う。
-fn japanese_romaji() -> &'static HashSet<String> {
-    static SPELLINGS: OnceLock<HashSet<String>> = OnceLock::new();
-    SPELLINGS.get_or_init(|| {
-        words(crate::system_data::text("japanese.txt"))
-            .flat_map(|word| romaji::spelling_variants(word, 64))
-            .collect()
-    })
-}
-
 /// 国名の語 (dictionaries/countries.txt)。英語として扱う固有名詞に足す (#1615)。
 /// ローマ字として最後まで読める語 (Oman・San・Mayotte) は入れない (ワークアラウンド #1869)。
 /// 固有名詞を語の頭でも英語と判定するので、日本語の語の頭とぶつかる (omanjuu → oman中)。
@@ -92,6 +81,15 @@ fn japanese_romaji() -> &'static HashSet<String> {
 pub fn country_words() -> &'static [&'static str] {
     static WORDS: OnceLock<Vec<&'static str>> = OnceLock::new();
     WORDS.get_or_init(|| {
+        // Country keys are ASCII alphanumeric. NUL keeps substring matches
+        // within one spelling while allowing a contiguous search.
+        let mut spellings = String::new();
+        for word in words(crate::system_data::text("japanese.txt")) {
+            for spelling in romaji::spelling_variants(word, 64) {
+                spellings.push_str(&spelling);
+                spellings.push('\0');
+            }
+        }
         words(crate::system_data::text("countries.txt"))
             .filter(|word| word.bytes().all(|b| b.is_ascii_alphanumeric()))
             // 2 文字の略 (St・El) は、英単語として扱うとローマ字の語 (ost) の区切りを変えてしまうため入れない (#1123)。
@@ -105,9 +103,7 @@ pub fn country_words() -> &'static [&'static str] {
                 }
                 // 日本語の語のローマ字の途中と重なる語 (hong は nihongo、sar は saru) は入れない。
                 // 語の途中で英語にすると、もとの日本語の区切りが変わる (#1648 の凍結試験)
-                !japanese_romaji()
-                    .iter()
-                    .any(|spelling| spelling.contains(&lower))
+                !spellings.contains(&lower)
             })
             .collect()
     })
@@ -283,16 +279,10 @@ impl Dictionary {
                 domain: Arc::default(),
                 head_only_phrases: HashSet::new(),
                 emoji: Arc::default(),
-                max_kana_word_bytes: 0,
-                kana_words: Arc::new(
-                    crate::system_data::text("readings.txt")
-                        .lines()
-                        .chain(crate::system_data::text("readings-extra.txt").lines())
-                        .filter(|l| !l.starts_with('#'))
-                        .filter_map(|l| l.split_whitespace().next())
-                        .map(str::to_owned)
-                        .collect(),
-                ),
+                kana_words: PrefixIndex::bundled(include_bytes!(concat!(
+                    env!("OUT_DIR"),
+                    "/kana.fst"
+                ))),
                 common_english: Arc::new(
                     words(crate::system_data::text("english.txt"))
                         .map(str::to_owned)
@@ -335,8 +325,8 @@ impl Dictionary {
                 }
             }
             // 分野の辞書 (domain-*.txt)。形式は「読み<Tab>表記<Tab>表記 …」、行頭が # の行はコメント
-            for name in crate::system_data::names("domain-") {
-                for line in crate::system_data::text(&name).lines() {
+            for name in crate::system_data::domain_names() {
+                for line in crate::system_data::text(name).lines() {
                     if line.starts_with('#') {
                         continue;
                     }
@@ -353,11 +343,11 @@ impl Dictionary {
                         continue;
                     }
                     let entry = Arc::make_mut(&mut dict.domain)
-                        .entry(reading.to_owned())
+                        .entry(reading)
                         .or_insert_with(|| Vec::with_capacity(values.len()));
                     for value in values {
-                        if !entry.iter().any(|existing| existing == value) {
-                            entry.push(value.to_owned());
+                        if !entry.contains(&value) {
+                            entry.push(value);
                         }
                     }
                 }
@@ -401,7 +391,6 @@ impl Dictionary {
                 PrefixIndex::bundled(include_bytes!(concat!(env!("OUT_DIR"), "/common.fst")));
             dict.proper_index =
                 PrefixIndex::bundled(include_bytes!(concat!(env!("OUT_DIR"), "/proper.fst")));
-            dict.max_kana_word_bytes = dict.kana_words.iter().map(String::len).max().unwrap_or(0);
             dict
         })
     }
@@ -948,7 +937,7 @@ impl Dictionary {
             return romaji::hiragana(raw, final_input);
         }
         let reading = romaji::hiragana(raw, final_input);
-        if !self.readable_english.contains(&lower) && self.kana_words.contains(&reading) {
+        if !self.readable_english.contains(&lower) && self.kana_words.0.contains(&reading) {
             return reading;
         }
         if canonical_case && self.english.contains(&lower) {
@@ -1070,7 +1059,7 @@ impl Dictionary {
                         && !self.proper.contains(piece)
                         && romaji::analyze(piece, true).valid)
                     && (self.japanese.contains(piece)
-                        || self.kana_words.contains(piece_reading)
+                        || self.kana_words.0.contains(piece_reading)
                         || [
                             "ha", "wa", "wo", "ga", "no", "ni", "de", "to", "mo", "he", "ya",
                         ]
@@ -1527,15 +1516,22 @@ impl Dictionary {
     }
     pub(crate) fn splits_known_kana_word(&self, text: &str, registered_bytes: usize) -> bool {
         // #487: 登録名「ちな」を既知語「ちなみに」の途中へ強制挿入しない。
-        // 辞書の最長語を上限にし、長い入力全体の走査は避ける。
-        text.char_indices()
-            .map(|(at, ch)| at + ch.len_utf8())
-            .take_while(|end| *end <= self.max_kana_word_bytes)
-            .any(|end| end > registered_bytes && self.kana_words.contains(&text[..end]))
+        let fst = self.kana_words.0.as_fst();
+        let mut node = fst.root();
+        for (offset, byte) in text.bytes().enumerate() {
+            let Some(index) = node.find_input(byte) else {
+                break;
+            };
+            node = fst.node(node.transition_addr(index));
+            if offset + 1 > registered_bytes && node.is_final() {
+                return true;
+            }
+        }
+        false
     }
     pub fn is_japanese(&self, raw: &str) -> bool {
         self.japanese.contains(&raw.to_ascii_lowercase())
-            || self.kana_words.contains(&romaji::hiragana(raw, true))
+            || self.kana_words.0.contains(&romaji::hiragana(raw, true))
     }
     pub fn english_prefix(&self, raw: &str) -> bool {
         let raw = raw.to_ascii_lowercase();
@@ -1607,7 +1603,7 @@ mod prefix_tests {
         assert!(Arc::ptr_eq(&bundled.english, &profile.english));
         assert!(Arc::ptr_eq(&bundled.candidates, &profile.candidates));
         assert!(Arc::ptr_eq(&bundled.emoji, &profile.emoji));
-        assert!(Arc::ptr_eq(&bundled.kana_words, &profile.kana_words));
+        assert!(Arc::ptr_eq(&bundled.kana_words.0, &profile.kana_words.0));
         let reading = "__profile_only__";
         profile.add(reading, std::iter::once("個別候補"));
         assert!(!bundled.candidates.contains_key(reading));
@@ -1615,6 +1611,20 @@ mod prefix_tests {
         assert!(!Arc::ptr_eq(&bundled.candidates, &profile.candidates));
         assert!(Arc::ptr_eq(&bundled.english, &profile.english));
         assert!(Arc::ptr_eq(&bundled.emoji, &profile.emoji));
+    }
+    #[test]
+    fn bundled_reading_index_preserves_the_source_vocabulary() {
+        let expected: std::collections::BTreeSet<_> = ["readings.txt", "readings-extra.txt"]
+            .into_iter()
+            .flat_map(|name| crate::system_data::text(name).lines())
+            .filter(|line| !line.starts_with('#'))
+            .filter_map(|line| line.split_whitespace().next())
+            .collect();
+        let index = &Dictionary::bundled().kana_words;
+        assert_eq!(index.0.len(), expected.len());
+        for reading in expected {
+            assert!(index.0.contains(reading), "{reading}");
+        }
     }
     #[test]
     fn candidate_storage_preserves_order_without_four_slot_minimum() {
