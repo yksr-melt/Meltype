@@ -55,12 +55,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _invoker.CreateControl();
         // 入力・表示は、動かしている設定 (Meltype IME を使えなければ Meltype キーボード) を読む
         _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Running);
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, _composition.Parts, () => _engine.Running));
         _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
         _composition.Focus.TextInputEntered += _engine.OnTextInputEntered;
-        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, () => _engine.Running));
+        _tipServer = new Tip.TipServer(_invoker, _composition, environment => new Ime.ImeHost(environment, _composition.Parts, () => _engine.Running));
         _engine.ImeServer = _tipServer;
         _tipServer.ClientOutdated += process =>
         {

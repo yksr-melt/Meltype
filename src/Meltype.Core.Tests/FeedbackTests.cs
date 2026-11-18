@@ -872,8 +872,7 @@ internal static class LanguageLearningTests
             mixed.Type("notewomiru\n");
             Assert.True(mixed.Host.Document.StartsWith("noteを", StringComparison.Ordinal), "助詞を伴う note も英語: " + mixed.Host.Document);
             var settings = new Settings { LiveConversion = true, UseZenzai = false };
-            var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-                new CompositionServices { Languages = memory }, () => settings);
+            var session = new TestSession(() => settings, services: new CompositionServices { Languages = memory });
             foreach (var c in "konotennmo") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
             var enter = session.HandleKey(VirtualKeys.Return, null, false, false, false, false);
             Assert.Equal("このてんも", enter.Commits.Single().Text, "IME の入力セッションでも日本語のまま");
@@ -898,7 +897,7 @@ internal static class LanguageLearningTests
                 Assert.Equal(1, view.Candidates.Count(c => c == expected), "版の候補を重複させない");
                 Assert.True(view.Candidates.Contains("バージョン"), "普通のカタカナの候補も残す");
                 Assert.True(view.Candidates.Contains("Mozc-test"), "変換エンジンの版の候補も残す");
-                k.Controller.SelectCandidate(view.Candidates.ToList().IndexOf(expected));
+                k.SelectCandidate(view.Candidates.ToList().IndexOf(expected));
                 k.Press(VirtualKeys.Return);
                 Assert.Equal(expected, k.Host.Document, typed);
             }
@@ -990,7 +989,7 @@ internal static class LanguageLearningTests
         var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
-        keyboard.Controller.SelectCandidate(index);
+        keyboard.SelectCandidate(index);
         keyboard.Press(VirtualKeys.Return);
         Assert.Equal(version, keyboard.Host.Document, "明示的に選んだ版は確定できる");
         Assert.True(history.Get("ばーじょん") is null, "変換履歴には覚えない");
