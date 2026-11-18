@@ -7,6 +7,7 @@ Run with: xvfb-run -a dbus-run-session -- python3 rust/ibus/tests/integration.py
 No desktop input-source registration or user IBus daemon is modified.
 """
 import json
+import ctypes
 import os
 from pathlib import Path
 import subprocess
@@ -191,6 +192,61 @@ class EngineTests(unittest.TestCase):
 
     def type(self, raw):
         return [self.key(IBus.unicode_to_keyval(c), c) for c in raw]
+
+    def test_jis_layout_survives_japanese_direct_mode_toggle(self):
+        # Compile the layout declared by the real engine, not synthetic keysyms.
+        layout = self.context.get_engine().get_layout()
+        self.assertEqual(layout, "jp")
+        xkb = ctypes.CDLL("libxkbcommon.so.0")
+        pointer, uint = ctypes.c_void_p, ctypes.c_uint32
+        class Names(ctypes.Structure):
+            _fields_ = [(name, ctypes.c_char_p) for name in ["rules", "model", "layout", "variant", "options"]]
+        signatures = {
+            "xkb_context_new": ([uint], pointer),
+            "xkb_keymap_new_from_names": ([pointer, ctypes.POINTER(Names), uint], pointer),
+            "xkb_state_new": ([pointer], pointer),
+            "xkb_state_update_key": ([pointer, uint, uint], uint),
+            "xkb_state_key_get_one_sym": ([pointer, uint], uint),
+            "xkb_keymap_key_by_name": ([pointer, ctypes.c_char_p], uint),
+        }
+        for name, (arguments, result) in signatures.items():
+            getattr(xkb, name).argtypes = arguments
+            getattr(xkb, name).restype = result
+        for name in ["context", "keymap", "state"]:
+            getattr(xkb, "xkb_" + name + "_unref").argtypes = [pointer]
+        context = xkb.xkb_context_new(0)
+        self.assertTrue(context)
+        self.addCleanup(xkb.xkb_context_unref, context)
+        keymap = xkb.xkb_keymap_new_from_names(context, ctypes.byref(Names(b"evdev", b"jp106", layout.encode(), b"", b"")), 0)
+        self.assertTrue(keymap)
+        self.addCleanup(xkb.xkb_keymap_unref, keymap)
+        state = xkb.xkb_state_new(keymap)
+        self.assertTrue(state)
+        self.addCleanup(xkb.xkb_state_unref, state)
+        def symbol(name):
+            return xkb.xkb_state_key_get_one_sym(state, xkb.xkb_keymap_key_by_name(keymap, name))
+        toggle = symbol(b"TLDE")
+        self.assertEqual(toggle, IBus.KEY_Zenkaku_Hankaku)
+        for _ in range(3):
+            self.document = ""
+            self.assertTrue(self.key(toggle))
+            self.assertEqual(symbol(b"AE02"), ord("2"))
+            self.assertFalse(self.key(symbol(b"AE02"), "2"))
+            shift = xkb.xkb_keymap_key_by_name(keymap, b"LFSH")
+            xkb.xkb_state_update_key(state, shift, 1)
+            self.assertEqual(symbol(b"AE02"), ord('"'))
+            self.assertFalse(self.key(symbol(b"AE02"), '"', int(IBus.ModifierType.SHIFT_MASK)))
+            xkb.xkb_state_update_key(state, shift, 0)
+            self.assertEqual(self.document, '2"')
+            # Test the mode in a fresh text field; an open ASCII quote affects
+            # automatic language detection independently of keyboard layout.
+            self.document = ""
+            self.assertTrue(self.key(toggle))
+            self.assertTrue(all(self.type("kana")))
+            self.assertEqual(self.marked, "かな")
+            self.key(IBus.KEY_Return)
+            self.assertEqual(self.document, "かな")
+            self.assertEqual(self.context.get_engine().get_layout(), "jp")
 
     def test_issue_487_registered_name_does_not_split_known_longer_word(self):
         self.type("chinamini")

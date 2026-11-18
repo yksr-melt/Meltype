@@ -701,7 +701,7 @@ unsafe extern "C" fn disconnected(_bus: Obj, loop_: Obj) {
     g_main_loop_quit(loop_);
 }
 
-pub fn run() -> Result<(), String> {
+pub fn run(layout: &std::ffi::CStr) -> Result<(), String> {
     // Also check on IME service startup when there is no user systemd session.
     // The worker reads AutoUpdate, serializes checks, and limits them to daily.
     let root = meltype_core::storage::Store::default_directory();
@@ -816,7 +816,7 @@ pub fn run() -> Result<(), String> {
                     c"GPL-3.0-or-later".as_ptr(),
                     c"Yukishiro, appipinopi".as_ptr(),
                     c"".as_ptr(),
-                    c"default".as_ptr(),
+                    layout.as_ptr(),
                 ),
             );
             let registered = ibus_bus_register_component(bus, component);

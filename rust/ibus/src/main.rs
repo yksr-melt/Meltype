@@ -6,6 +6,18 @@ mod keys;
 mod platform;
 
 fn main() {
+    let args: Vec<_> = std::env::args_os().collect();
+    let layout_name = match args.iter().position(|arg| arg == "--keyboard-layout") {
+        Some(index) => args
+            .get(index + 1)
+            .and_then(|value| value.to_str())
+            .unwrap_or(""),
+        None => "jp",
+    };
+    let layout = component::keyboard_layout(layout_name).unwrap_or_else(|error| {
+        eprintln!("{error}");
+        std::process::exit(2);
+    });
     if std::env::args().any(|arg| arg == "--print-component" || arg == "--print-setup-desktop") {
         let args: Vec<_> = std::env::args_os().collect();
         let executable =
@@ -22,7 +34,7 @@ fn main() {
                 if args.iter().any(|arg| arg == "--print-setup-desktop") {
                     component::desktop(&exe)
                 } else {
-                    component::xml(&exe)
+                    component::xml(&exe, layout)
                 }
             ),
             Err(error) => {
@@ -37,7 +49,7 @@ fn main() {
         return;
     }
     #[cfg(target_os = "linux")]
-    if let Err(error) = platform::run() {
+    if let Err(error) = platform::run(layout) {
         eprintln!("Meltype IBus: {error}");
         std::process::exit(1);
     }
