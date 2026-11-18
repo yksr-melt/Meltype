@@ -32,13 +32,12 @@ internal sealed class ImeSession
     // 直前に入れた定型文 (すぐに Esc を押したら、打った ;名前 に戻す)
     private (string Text, string Typed)? _lastSnippet;
 
-    public ImeSession(IImeEnvironment environment, Func<Settings> settings)
+    public ImeSession(IImeEnvironment environment, SessionParts parts, Func<Settings> settings)
     {
         _environment = environment;
         _source = settings;
         _settings = settings();
-        _session = environment.CreateSession(() => _settings);
-        _session.ClipboardText = () => environment.ClipboardText;
+        _session = new MeltypeSession(parts, () => _settings) { ClipboardText = () => environment.ClipboardText };
     }
 
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>

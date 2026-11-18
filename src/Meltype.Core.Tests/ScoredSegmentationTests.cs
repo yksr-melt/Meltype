@@ -21,12 +21,12 @@ internal static class ScoredSegmentationTests
     /// <summary>打って Enter で確定した文字列 (変換エンジンは使わないので、日本語はかなのまま)。</summary>
     private static string Type(string typed)
     {
-        var session = new MeltypeSession(Detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings { LiveConversion = false });
+        var session = new TestSession(() => new Settings { LiveConversion = false }, detector: Detector);
         var output = "";
         foreach (var character in typed + "\n")
         {
             var vk = character == '\n' ? VirtualKeys.Return : char.ToUpperInvariant(character);
-            var result = session.HandleKey(vk, character == '\n' ? null : character, char.IsAsciiLetterUpper(character), false, false, false);
+            var result = session.HandleKey(vk, character == '\n' ? null : character, char.IsAsciiLetterUpper(character), false, false, false, output);
             foreach (var edit in result.Commits)
             {
                 if (edit.DeleteBefore > 0) output = output[..(output.Length - Math.Min(edit.DeleteBefore, output.Length))];
