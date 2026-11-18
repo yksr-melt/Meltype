@@ -58,8 +58,9 @@ internal static partial class CompositionController
                 PrecedingEnglish = englishWords > 0 ? true : null,
                 PrecedingEnglishSentence = englishWords >= 2,
             };
-            foreach (var c in word) CompositionText.Append(typed, env, c);
-            var segments = CompositionText.Segments(typed, env);
+            var typedEnv = CompositionText.FragmentEnv(env);
+            foreach (var c in word) CompositionText.Append(typed, typedEnv, c);
+            var segments = CompositionText.Segments(typed, typedEnv);
             foreach (var segment in segments)
             {
                 if (!segment.IsEnglish)
@@ -348,7 +349,7 @@ internal static partial class CompositionController
     private static string? EnglishSplit(CompositionState state, CompositionEnv env, string raw)
     {
         CompositionTextState typed = new CompositionTextState();
-        foreach (var c in raw) CompositionText.Append(typed, env, c);
+        foreach (var c in raw) CompositionText.Append(typed, CompositionText.FragmentEnv(env), c);
         if (CompositionText.Pending(typed).Length > 0) return null;
         var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(state.Text, env), CompositionText.Units(typed));
         if (!segments.Any(s => s.IsEnglish) || segments.All(s => s.IsEnglish)) return null;

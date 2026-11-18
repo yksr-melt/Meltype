@@ -600,6 +600,11 @@ internal static class CompositionTests
             k.Press(VirtualKeys.Return);
             Assert.True(k.Host.Events.Any(e => e == $"replace:{selected}:{expected}"), string.Join(" ", k.Host.Events));
         }
+        // 選んだ文は、設定「自動判定」が OFF でも同じく読む (打っている入力の設定は使わない)
+        var manual = new Keyboard { Manual = true };
+        manual.Host.Selection = new ReconversionSelection("asita no meeting de review shimasu", "asita no meeting de review shimasu");
+        manual.Press(VirtualKeys.Convert);
+        Assert.Equal("あしたの meeting で review します", manual.Showing);
         // 日本語にする所が無い英文は、今までの再変換と同じく扱う (英文を勝手に日本語にしない)
         var english = new Keyboard(direct: true);
         english.Host.Selection = new ReconversionSelection("this is a pen", "this is a pen");

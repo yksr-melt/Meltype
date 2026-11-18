@@ -585,11 +585,11 @@ public sealed partial class CompositionDetector
     }
 
     /// <summary>
-    /// Segment 1 回分の units の、原文・かなの連結と位置。Unreadable は、ローマ字として読めなかった英字の単位 (zoom の m) の数の累積。
+    /// Segment 1 回分の units の、原文の連結と各単位の位置。Unreadable は、ローマ字として読めなかった英字の単位 (zoom の m) の数の累積。
     /// </summary>
-    private sealed record Prepared(int[] Unreadable, string Raw, int[] RawOffsets, string Kana, int[] KanaOffsets);
+    private sealed record Prepared(int[] Unreadable, string Raw, int[] RawOffsets);
 
-    /// <summary>この Segment 呼び出しの units で、原文・かなの連結と位置を用意する (Segment の先頭で必ず呼ぶ)。</summary>
+    /// <summary>この Segment 呼び出しの units で、原文の連結と位置を用意する (Segment の先頭で必ず呼ぶ)。</summary>
     private static Prepared Prepare(IReadOnlyList<CompositionUnit> units)
     {
         var unreadable = new int[units.Count + 1];
@@ -598,18 +598,13 @@ public sealed partial class CompositionDetector
                 char.IsAsciiLetter(unit.Raw[0]) && !IsLaughter(units, i) ? 1 : 0);
         var raw = new StringBuilder();
         var rawOffsets = new int[units.Count + 1];
-        var kana = new StringBuilder();
-        var kanaOffsets = new int[units.Count + 1];
         for (var i = 0; i < units.Count; i++)
         {
             rawOffsets[i] = raw.Length;
             raw.Append(units[i].Raw);
-            kanaOffsets[i] = kana.Length;
-            kana.Append(units[i].Kana);
         }
         rawOffsets[units.Count] = raw.Length;
-        kanaOffsets[units.Count] = kana.Length;
-        return new Prepared(unreadable, raw.ToString(), rawOffsets, kana.ToString(), kanaOffsets);
+        return new Prepared(unreadable, raw.ToString(), rawOffsets);
     }
 
     private static string Kana(IReadOnlyList<CompositionUnit> units, int start, int end) => string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Kana));

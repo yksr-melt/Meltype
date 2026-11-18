@@ -35,6 +35,15 @@ internal static class CompositionText
     /// </summary>
     public static bool? LearningContext(CompositionTextState state, TextEnv env) => env.Settings.ContextualLearning ? state.PrecedingEnglish : null;
 
+    /// <summary>
+    /// 打った英字の一部を読み直すために作る断片に渡すもの。断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。
+    /// 学習の文脈を分ける設定だけは引き継ぐ。
+    /// </summary>
+    public static TextEnv FragmentEnv(TextEnv env) => new(env.Detector, env.Settings.ContextualLearning ? ContextualFragmentSettings : FragmentSettings, null);
+
+    private static readonly Config.Settings FragmentSettings = new();
+    private static readonly Config.Settings ContextualFragmentSettings = new() { ContextualLearning = true };
+
 
     public static IReadOnlyList<CompositionUnit> Units(CompositionTextState state) => state.Units;
     public static string Pending(CompositionTextState state) => state.Pending.ToString();
@@ -258,7 +267,8 @@ internal static class CompositionText
         var segment = state.Mode == DisplayMode.Auto && CompositionText.Segments(state, env) is { Count: > 0 } segments ? segments[^1] : default;
         if (segment.IsEnglish) return 1;
         CompositionTextState fragment = new CompositionTextState();
-        foreach (var c in segment.Raw ?? "") CompositionText.Append(fragment, env, c);
+        var fragmentEnv = FragmentEnv(env);
+        foreach (var c in segment.Raw ?? "") CompositionText.Append(fragment, fragmentEnv, c);
         return CompositionText.Pending(fragment).Length == 0 && CompositionText.Units(fragment).Count > 0 ? CompositionText.Units(fragment)[^1].Raw.Length : state.Units[^1].Raw.Length;
     }
 
@@ -513,7 +523,7 @@ internal static class CompositionText
     /// </summary>
     private static bool IsNameInEnglishSentence(CompositionTextState state, TextEnv env) =>
         !state.KanaInput && state.PrecedingEnglishName && state.FollowingEnglish != false && !CompositionText.EffectiveManual(state, env) &&
-        CompositionText.Raw(state) is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && env.Detector.Memory?.Get(raw.ToLowerInvariant()) != false;
+        CompositionText.Raw(state) is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && env.Detector.Memory?.Get(raw.ToLowerInvariant(), LearningContext(state, env)) != false;
 
     /// <summary>
     /// 区間分けと、その英日の区切りの別案 (軽い順に count 案まで。先頭が表示・確定に使う区切り)。reasons には先頭の区切りの理由を足す。
@@ -593,7 +603,8 @@ internal static class CompositionText
         {
             // 構造の境界がローマ字単位の途中に入った場合だけ、その区間の原文を読み直す。
             CompositionTextState fragment = new CompositionTextState();
-            foreach (var c in CompositionText.Raw(state)[from..to]) CompositionText.Append(fragment, env, c);
+            var fragmentEnv = FragmentEnv(env);
+            foreach (var c in CompositionText.Raw(state)[from..to]) CompositionText.Append(fragment, fragmentEnv, c);
             pending = CompositionText.Pending(fragment);
             return [.. CompositionText.Units(fragment)];
         }
@@ -752,9 +763,10 @@ internal static class CompositionText
         {
             // ラティスが単位の途中で区切った (medals|ha の sha): 区間の打った英字を読み直す
             CompositionTextState fragment = new CompositionTextState();
-            foreach (var c in CompositionText.Raw(state)[start..end]) CompositionText.Append(fragment, env, c);
+            var fragmentEnv = FragmentEnv(env);
+            foreach (var c in CompositionText.Raw(state)[start..end]) CompositionText.Append(fragment, fragmentEnv, c);
             foreach (var unit in fragment.Units) builder.Append(unit.Kana);
-            builder.Append(CompositionText.PendingText(fragment, env, final: true));
+            builder.Append(CompositionText.PendingText(fragment, fragmentEnv, final: true));
         }
         return builder.Length > 0 ? builder.ToString() : null;
     }

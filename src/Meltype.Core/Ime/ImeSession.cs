@@ -286,11 +286,11 @@ internal static class ImeSession
     // 渡さないのはターミナル側の事情 (Windows Terminal の TSF は文書を持たないので空、iTerm2 は日本語を出したあと読めない)。
     // Meltype IME の要求の中で UI Automation で読み直す方法は、待ち合いになるので採らなかった (Windows Terminal の UI Automation は
     // XAML の automation peer で、アプリの UI スレッドで答える。そのスレッドは DLL の中で本体の応答を待って止まっている)。
-    // ターミナルが渡すようになったら、_line・LineBefore・TrackLine・TypesText はまとめて消す。状態を足したり、ほかの判断に使い回したりしない。
+    // ターミナルが渡すようになったら、ImeSessionState.Line・LineBefore・TrackLine・TypesText はまとめて消す。状態を足したり、ほかの判断に使い回したりしない。
 
     /// <summary>
     /// コードの行の判断と変換の文脈に使うキャレットの前。コードの入力欄でキャレットの前が届かない (ターミナルで空のときも) ときだけ、
-    /// <see cref="_line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
+    /// <see cref="ImeSessionState.Line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
     /// </summary>
     private static string? LineBefore(ImeSessionState state, ImeField? field) =>
         CodeInput(state) && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal(state)) ? state.Line.ToString() : Before(state, field);
@@ -538,10 +538,10 @@ internal static class ImeSession
     private static SessionResult Consumed => new(true, [], null);
     private const long UserDictionaryCheckMs = 1000;
 
-    /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
     /// <summary>入力欄のアプリの設定 (アプリ別設定を反映したもの)。</summary>
     private static Settings AppSettings(ImeSessionState state, ImeEnv env) => env.Source().ForApp(state.Field?.App);
 
+    /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
     private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => Env(state, env, AppSettings(state, env));
 
     private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings) => new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
