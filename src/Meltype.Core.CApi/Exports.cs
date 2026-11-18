@@ -114,9 +114,21 @@ public static unsafe class Exports
 
     private static int s_shutDown;
 
-    /// <summary>フロント 1 つ (IBus・fcitx5 のエンジン、Input Method Kit のコントローラー) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。</summary>
+    /// <summary>フロント 1 つ (IBus・fcitx5 のエンジン、Input Method Kit のコントローラー) の <see cref="ImeHost"/> を作る。meltype_ime_destroy で解放する。作れなければ NULL (meltype_ime_handle は NULL に何も返さない)。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_ime_create")]
-    public static IntPtr ImeCreate() => GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), () => Runtime.Settings.Current)));
+    public static IntPtr ImeCreate()
+    {
+        try
+        {
+            var parts = Runtime.SessionParts(Converter, Converter.Candidates, Converter.Reading);
+            return GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), parts, () => Runtime.Settings.Current)));
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Error($"入力の本体を作れませんでした: {ex}");
+            return IntPtr.Zero;
+        }
+    }
 
     /// <summary>出来事 (<see cref="ImeEvent"/> の JSON) を処理して、<see cref="ImeOutput"/> の JSON を返す。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_ime_handle")]
@@ -144,9 +156,6 @@ public static unsafe class Exports
     private sealed class NativeEnvironment : IImeEnvironment
     {
         public Config.InputMode? InputMethod => null;
-
-        public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
-            Runtime.CreateSession(Converter, settings, Converter.Candidates, directModeDetection: true);
 
         public SnippetStore Snippets => Runtime.Snippets;
 

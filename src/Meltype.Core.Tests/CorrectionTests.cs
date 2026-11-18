@@ -14,8 +14,7 @@ internal static class CorrectionTests
     {
         // sushi と打つと すし → F10 で sushi にして確定: 打ったもの sushi / 出たもの すし / 期待 sushi
         var k = new CompositionTests.Keyboard();
-        var log = new CorrectionLog();
-        k.Controller.Corrected += log.Add;
+        var log = k.Corrections;
         k.Host.PrecedingText = "これは";
         k.Type("sushi");
         Assert.Equal("すし", k.Showing);
@@ -34,8 +33,7 @@ internal static class CorrectionTests
     {
         // 直さずに確定したもの・漢字を選び直しただけのものは記録しない
         var k = new CompositionTests.Keyboard();
-        var log = new CorrectionLog();
-        k.Controller.Corrected += log.Add;
+        var log = k.Corrections;
         k.Type("kyouha\n");
         k.Type("hashiwo ");
         k.Press(VirtualKeys.Space);
