@@ -371,6 +371,10 @@ async function sendRound() {
 }
 
 $("again").addEventListener("click", startRound);
+$("choose").addEventListener("click", () => {
+  show(intro);
+  $("kind").focus();
+});
 
 // ---- はじめ ----
 
