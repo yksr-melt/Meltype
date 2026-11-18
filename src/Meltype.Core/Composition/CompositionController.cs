@@ -186,6 +186,8 @@ internal static partial class CompositionController
     {
         state.Out.Begin(before, after);
         Tick(state, env, key.TimeMs);
+        // 処理中のキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)
+        env = env with { Shift = key.Shift, Control = key.Control, Modifier = key.Modifier };
         var consumed = Handle(state, env, key);
         if (!releaseFollows) HandleRelease(state, env, key.Vk);
         Settle(state, env);
@@ -222,7 +224,6 @@ internal static partial class CompositionController
     /// <summary>キーを 1 つ処理する。アプリに通さないなら true。</summary>
     private static bool Handle(CompositionState state, CompositionEnv env, KeyPress key)
     {
-        (state.Shift, state.Control, state.Modifier) = (key.Shift, key.Control, key.Modifier);
         if (!IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, env, key))) return false;
         env.Budget?.Start(InputBudgetMs);
         state.Pressed.Add(key.Vk);
@@ -257,9 +258,7 @@ internal static partial class CompositionController
         // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
         if (kanaUp.ThumbTap && pressed)
         {
-            state.BypassKanaLayout = true;
-            try { HandleKey(state, env, new KeyEvent(vk, 0, false, false, false, 0)); }
-            finally { state.BypassKanaLayout = false; }
+            HandleKey(state, env with { BypassKanaLayout = true }, new KeyEvent(vk, 0, false, false, false, 0));
         }
     }
 
