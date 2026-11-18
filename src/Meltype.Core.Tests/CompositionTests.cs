@@ -315,6 +315,7 @@ internal static class CompositionTests
                 Predictor = predictor,
                 Now = now ?? (() => DateTime.Now),
             };
+            MeltypeRuntime.Connect(Detector, services);
             _ime = new ImeHost(this, new SessionParts(Detector, converter ?? Converter, services)
             {
                 ClassifyDirect = (letters, final, settings) => MeltypeRuntime.ClassifyDirect(DirectEngine, letters, final, settings),

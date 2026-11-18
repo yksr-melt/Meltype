@@ -46,8 +46,7 @@ internal sealed class ImeSessionState
     public readonly StringBuilder Line = new();
 
     // ---- 変換ボックスへの入力 (コードの行・/command・英数状態) ----
-    // Create で入れる (変換ボックスがこの入力欄の設定を読む)
-    public CompositionState Composition = null!;
+    public readonly CompositionState Composition = new();
 
     public long UserDictionaryCheckedMs;
 

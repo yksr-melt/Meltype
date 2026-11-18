@@ -43,7 +43,7 @@ internal static partial class CompositionController
         state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
         // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
         // 確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
-        var before = state.Out.Before;
+        var before = CompositionOutput.Before(state.Out, env);
         state.CaretBefore = before;
         if (!recentOwnCommit && before is not null)
         {

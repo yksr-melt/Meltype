@@ -436,7 +436,7 @@ internal static partial class CompositionController
     /// </summary>
     private static void SendHeld(CompositionState state, KeyEvent e)
     {
-        state.Out.PassCurrent();
+        CompositionOutput.PassCurrent(state.Out);
         state.HeldSent.Append(CharOf(e) ?? '\0');
     }
 
@@ -472,7 +472,7 @@ internal static partial class CompositionController
         var letters = state.HeldLetters.ToString();
         var sent = state.HeldSent.ToString();
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
-        state.Out.DeleteHeld(sent);
+        CompositionOutput.DeleteHeld(state.Out, sent);
         ClearHeld(state);
         DirectDecided(state, true);
         BeginComposition(state, env, state.PrivateComposition);
@@ -925,6 +925,6 @@ internal static partial class CompositionController
     private static void PassKey(CompositionState state)
     {
         state.Correctable.Clear();
-        state.Out.PassCurrent();
+        CompositionOutput.PassCurrent(state.Out);
     }
 }

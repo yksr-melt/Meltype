@@ -47,7 +47,7 @@ internal static partial class CompositionController
         if (CompositionText.IsEmpty(state.Text))
         {
             // 英数状態の判定中は何も表示しない (英語ならそのまま出るだけ)。
-            state.Out.Hide();
+            CompositionOutput.Hide(state.Out);
             return;
         }
         if (IsConverting(state) && state.Clauses.Count > 0)
@@ -57,7 +57,7 @@ internal static partial class CompositionController
             if (!selected.Expanded) Expand(state, env, selected);
             // 出している文節に Zenzai の答えがあれば、説明の頭に「Zenzai」と出す (学習・選び直しで変わった文節は数えない。issue #1152)
             var zenzai = state.Clauses.Any(c => c.ZenzaiText is { } z && c.Text == z);
-            state.Out.Show(new CompositionView(
+            CompositionOutput.Show(state.Out, env, new CompositionView(
                 string.Concat(state.Clauses.Select(c => c.Text)),
                 selected.Candidates,
                 selected.Index,
@@ -91,7 +91,7 @@ internal static partial class CompositionController
             var display = selected ?? CurrentDisplay(state, env, final: false);
             // 設定「入力中も変換候補をいくつか表示」: Space の前から候補を出す (issue #666)
             var preview = selected is null && misspelling is null ? TypingCandidates(state, env) : null;
-            state.Out.Show(new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
+            CompositionOutput.Show(state.Out, env, new CompositionView(display, preview ?? [], preview?.IndexOf(display) ?? -1, false, hint, Suggestion: misspelling,
                 Predictions: state.Predictions.Count > 0 ? state.Predictions.Select(p => p.Text).ToList() : null, SelectedPrediction: state.PredictionIndex, Typed: TypedKeys(state, env),
                 Committed: selected ?? CurrentDisplay(state, env, final: true), ContextHint: contextHint));
         }

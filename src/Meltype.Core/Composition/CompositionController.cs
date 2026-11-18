@@ -139,17 +139,6 @@ internal static partial class CompositionController
         public Dictionary<string, List<Clause>>? Alternatives { get; init; }
     }
 
-    /// <summary>入力欄 1 つ分の状態を作る。</summary>
-    public static CompositionState Create(CompositionDetector detector, Func<Config.Settings> settings, CompositionServices services)
-    {
-        var state = new CompositionState(new CompositionOutput(() => settings().Punctuation), new CompositionTextState());
-        // よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは英語として覚えない。
-        if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
-        if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
-        if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
-        return state;
-    }
-
     /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
     public static bool Private(CompositionState state) => state.PrivateField;
 
@@ -179,7 +168,7 @@ internal static partial class CompositionController
     /// </summary>
     public static SessionResult Press(CompositionState state, CompositionEnv env, KeyPress key, string? before = null, string? after = null, bool releaseFollows = false)
     {
-        state.Out.Begin(before, after);
+        CompositionOutput.Begin(state.Out, env, before, after);
         Tick(state, env, key.TimeMs);
         // 処理中のキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)
         env = env with { Shift = key.Shift, Control = key.Control, Modifier = key.Modifier };
@@ -192,7 +181,7 @@ internal static partial class CompositionController
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>
     public static SessionResult Release(CompositionState state, CompositionEnv env, int vk, string? before = null, string? after = null)
     {
-        state.Out.Begin(before, after);
+        CompositionOutput.Begin(state.Out, env, before, after);
         HandleRelease(state, env, vk);
         Settle(state, env);
         // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
@@ -202,7 +191,7 @@ internal static partial class CompositionController
     /// <summary>キーをアプリに通す。変換ボックスの状態は変えない (英数状態で判定中の語は、しばらく打たなければ英語とみなす)。</summary>
     public static SessionResult Pass(CompositionState state, CompositionEnv env, long nowMs)
     {
-        state.Out.Begin(null, null);
+        CompositionOutput.Begin(state.Out, env, null, null);
         Tick(state, env, nowMs);
         return Result(state, env, consumed: false);
     }
@@ -210,11 +199,11 @@ internal static partial class CompositionController
     /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま。</summary>
     public static SessionResult Current(CompositionState state, CompositionEnv env)
     {
-        state.Out.Begin(null, null);
+        CompositionOutput.Begin(state.Out, env, null, null);
         return Result(state, env, consumed: true) with { Consumed = false };
     }
 
-    private static SessionResult Result(CompositionState state, CompositionEnv env, bool consumed) => state.Out.Result(consumed && !state.Out.PassedCurrent, env.Settings);
+    private static SessionResult Result(CompositionState state, CompositionEnv env, bool consumed) => CompositionOutput.Result(state.Out, env, consumed && !state.Out.PassedCurrent, env.Settings);
 
     /// <summary>キーを 1 つ処理する。アプリに通さないなら true。</summary>
     private static bool Handle(CompositionState state, CompositionEnv env, KeyPress key)
@@ -274,7 +263,7 @@ internal static partial class CompositionController
     /// </summary>
     public static SessionResult? RefreshConversion(CompositionState state, CompositionEnv env)
     {
-        state.Out.Begin(null, null);
+        CompositionOutput.Begin(state.Out, env, null, null);
         return Refresh(state, env) ? Result(state, env, consumed: true) : null;
     }
 
@@ -358,7 +347,7 @@ internal static partial class CompositionController
     /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
     public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index)
     {
-        state.Out.Begin(null, null);
+        CompositionOutput.Begin(state.Out, env, null, null);
         SelectCandidateAt(state, env, index);
         return Result(state, env, consumed: true);
     }
@@ -385,7 +374,7 @@ internal static partial class CompositionController
     /// <summary>予測変換の候補を番号で選んで確定する (Meltype IME の候補の一覧をクリックしたとき)。</summary>
     public static SessionResult CommitPredictionAt(CompositionState state, CompositionEnv env, int index)
     {
-        state.Out.Begin(null, null);
+        CompositionOutput.Begin(state.Out, env, null, null);
         var predictions = CurrentPredictions(state, env);
         if (!IsConverting(state) && index >= 0 && index < predictions.Count)
         {
@@ -401,7 +390,7 @@ internal static partial class CompositionController
     /// </summary>
     public static SessionResult CommitPending(CompositionState state, CompositionEnv env, bool consumed = true, bool preserveLatinRaw = false, bool preserveText = false)
     {
-        state.Out.Begin(null, null);
+        CompositionOutput.Begin(state.Out, env, null, null);
         CommitAll(state, env, preserveLatinRaw, preserveText);
         return Result(state, env, consumed);
     }
@@ -434,7 +423,7 @@ internal static partial class CompositionController
     }
 
     /// <summary>パスワード欄に移ったとき、未確定入力と前の欄の文脈を確定せずに捨てる。</summary>
-    internal static void CancelPending(CompositionState state)
+    internal static void CancelPending(CompositionState state, CompositionEnv env)
     {
         ClearComposition(state);
         ClearHeld(state);
@@ -451,8 +440,8 @@ internal static partial class CompositionController
         state.PredictionIndex = -1;
         state.Pressed.Clear();
         state.KanaLayout.Reset();
-        state.Out.Begin(null, null);
-        state.Out.Hide();
+        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Hide(state.Out);
     }
 
     /// <summary>フォーカスが変わったときなど。前の入力欄の文脈を持ち越さない。</summary>

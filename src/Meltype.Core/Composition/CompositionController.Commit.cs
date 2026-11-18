@@ -63,7 +63,7 @@ internal static partial class CompositionController
             // 入れた文字は、アプリが選択していた文字と置き換える。
             rules.Add("選択していた文字の再変換");
             LogCommit(state, env, text + suffix, string.Join("、", rules));
-            state.Out.Commit(text + suffix);
+            CompositionOutput.Commit(state.Out, env, text + suffix);
             if (converting) LearnClauses(state, env);
             ResetContext(state);
             ClearComposition(state);
@@ -176,7 +176,7 @@ internal static partial class CompositionController
     public static void ForgetLastCommit(CompositionState state)
     {
         state.Correctable.Clear();
-        state.Out.ForgetCommitted();
+        CompositionOutput.ForgetCommitted(state.Out);
         // キャレットが動いた・アプリが文字を入れた: キャレットの前は自分が確定した語ではないので、読めたらアプリの文字を使う。
         // 読めなければ前の文字も、それが英語だったかも分からないものとして扱う (消した後・行の先頭に、英単語の前後の空白を足さない)
         state.LastCommitTime = long.MinValue / 2;
@@ -286,13 +286,13 @@ internal static partial class CompositionController
         if (state.PendingReplace is var (count, replacement))
         {
             state.PendingReplace = null;
-            state.Out.ReplaceBackward(count, replacement, text);
+            CompositionOutput.ReplaceBackward(state.Out, env, count, replacement, text);
         }
-        else state.Out.Commit(text);
+        else CompositionOutput.Commit(state.Out, env, text);
         // 設定「カッコを打ったら中にカーソルを移動」: カッコの組だけを確定したら、中に入る (issue #72)。
         // 確定に付けて返す (キーをアプリに通して動かすと、確定に使ったキーまでアプリに通ってしまう: #991・#1353・#1404・#1581)。
         if (env.Settings.CursorIntoBrackets && text.Length == 2 && BracketPairs.Contains(text))
-            state.Out.MoveCaretBackward(1);
+            CompositionOutput.MoveCaretBackward(state.Out, 1);
     }
 
     /// <summary>

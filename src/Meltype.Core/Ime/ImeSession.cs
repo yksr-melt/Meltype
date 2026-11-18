@@ -29,7 +29,6 @@ internal static class ImeSession
     {
         env.UserDictionary?.Refresh();
         var state = new ImeSessionState { Settings = env.Source(), UserDictionaryCheckedMs = env.TimeMs() };
-        state.Composition = CompositionController.Create(env.Parts.Detector, () => state.Settings, env.Parts.Services);
         return state;
     }
 
@@ -81,7 +80,7 @@ internal static class ImeSession
         {
             if (!IsPassword(state.Field))
             {
-                CancelPending(state);
+                CancelPending(state, env);
                 state.LastSnippet = null;
                 state.ListedPredictions = false;
                 state.AltDown = 0;
@@ -759,9 +758,9 @@ internal static class ImeSession
         return result;
     }
 
-    internal static void CancelPending(ImeSessionState state)
+    internal static void CancelPending(ImeSessionState state, ImeEnv env)
     {
-        CompositionController.CancelPending(state.Composition);
+        CompositionController.CancelPending(state.Composition, Env(state, env));
         state.Composition.DirectEnglishWord = false;
         SetCodeInput(state, false);
         SetCodeTerminal(state, false);

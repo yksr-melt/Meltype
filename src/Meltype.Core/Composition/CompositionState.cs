@@ -71,11 +71,11 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 }
 
 /// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
-internal sealed class CompositionState(CompositionOutput output, CompositionTextState text)
+internal sealed class CompositionState
 {
-    public readonly CompositionOutput Out = output;
+    public readonly CompositionOutputState Out = new();
 
-    public readonly CompositionTextState Text = text;
+    public readonly CompositionTextState Text = new();
 
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);

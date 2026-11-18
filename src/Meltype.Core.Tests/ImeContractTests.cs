@@ -27,7 +27,13 @@ internal static class ImeContractTests
         private readonly List<string> _trace = [];
 
         // Converter・Services・ClassifyDirect を初期化子で決めてから作る
-        private ImeHost Host => _host ??= new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+        private ImeHost Host => _host ??= Create();
+
+        private ImeHost Create()
+        {
+            MeltypeRuntime.Connect(CompositionTests.Detector, Services);
+            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+        }
 
         /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定。null なら判定しない。</summary>
         public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
