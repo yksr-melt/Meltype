@@ -130,7 +130,7 @@ def main(argv):
     _lib = ctypes.CDLL(os.path.join(HERE, "libMeltypeNative.so"))
     _lib.meltype_free.argtypes = [ctypes.c_void_p]
     _lib.meltype_version.restype = ctypes.c_void_p
-    _lib.meltype_init.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
+    _lib.meltype_init.argtypes = [ctypes.c_char_p]
     _lib.meltype_init.restype = ctypes.c_int
     _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
     _lib.meltype_ime_create.restype = ctypes.c_void_p
@@ -158,7 +158,7 @@ def main(argv):
     if not command:
         command = [os.environ.get("SHELL") or "/bin/sh"]
 
-    if not _lib.meltype_init(HERE.encode(), None):
+    if not _lib.meltype_init(HERE.encode()):
         print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
     # 背景の変換の結果は、ワーカーのスレッドからパイプで知らせ、入力のループで ConversionFinished を送る
     ready_read, ready_write = os.pipe()
