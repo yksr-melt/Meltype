@@ -312,7 +312,9 @@ public sealed partial class CompositionController
         var direct = _services.DirectMode();
         if (key.Vk == VirtualKeys.Convert && Selection is { Length: > 0 }) return true;
         if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && KanaInput &&
-            _settings().KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
+            KanaLayoutEngine.UsesThumbs(_settings().KanaLayout)) return true;
+        // Space をシフトに使う配列 (薙刀式): 文頭の Space + 文字キーもシフトにする。Space だけを離したら、ふつうの Space
+        if (key.Vk == VirtualKeys.Space && !key.Shift && !direct && KanaInput && KanaLayoutEngine.UsesSpace(_settings().KanaLayout)) return true;
         // かな入力: かなのキーならすべて入力を始める (StartWith)
         if (KanaInput && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
         // 日本語入力の Shift+Space・設定「スペースの幅」が全角の Space は、全角スペースにする (StartWith)

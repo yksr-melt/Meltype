@@ -331,7 +331,9 @@ public sealed partial class CompositionController
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。英数状態では普通の空白のまま。
         // 設定「スペースの幅」が全角では、Space が全角で Shift+Space が半角 (issue #259)
         var spaceWidth = _settings().SpaceWidth;
-        if (e.Vk == VirtualKeys.Space && !_services.DirectMode() && (spaceWidth == Config.SpaceWidth.FullWidth || _shift))
+        // Space をシフトに使うかな配列 (薙刀式) で、文頭で Space だけを押して離したときも、ここで空白を入れる (押したときに受け取ったので)
+        if (e.Vk == VirtualKeys.Space && !_services.DirectMode() &&
+            (spaceWidth == Config.SpaceWidth.FullWidth || _shift || KanaInput && KanaLayoutEngine.UsesSpace(_settings().KanaLayout)))
         {
             // 「スペースの幅」が半角なら Shift+Space も半角 (issue #708)
             var shifted = _shift;
@@ -339,7 +341,7 @@ public sealed partial class CompositionController
             {
                 Config.SpaceWidth.FullWidth => shifted,
                 Config.SpaceWidth.HalfWidth => true,
-                Config.SpaceWidth.Standard => false,
+                Config.SpaceWidth.Standard => !shifted,
                 _ => throw new InvalidOperationException($"不明な SpaceWidth: {spaceWidth}"),
             };
             CommitText(halfWidth ? " " : "　", english: false);

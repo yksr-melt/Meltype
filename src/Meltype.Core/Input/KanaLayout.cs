@@ -20,6 +20,24 @@ public enum KanaLayout
     [System.ComponentModel.Description("中指NICOLA")] NakayubiNicola,
     /// <summary>TRON 配列 (親指シフト。無変換・変換が左右の親指キー)。</summary>
     [System.ComponentModel.Description("TRON 配列")] Tron,
+    /// <summary>新JIS かな配列 (JIS X 6004。Shift で 2 段目)。</summary>
+    [System.ComponentModel.Description("新JIS かな")] NewJis,
+    /// <summary>飛鳥配列 (親指シフト)。</summary>
+    [System.ComponentModel.Description("飛鳥配列")] Asuka,
+    /// <summary>下駄配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("下駄配列")] Geta,
+    /// <summary>新下駄配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("新下駄配列")] ShinGeta,
+    /// <summary>薙刀式 (v15。文字キー同士と Space の同時打鍵)。</summary>
+    [System.ComponentModel.Description("薙刀式")] Naginata,
+    /// <summary>蜂蜜小梅配列 (文字キー同士の同時打鍵と親指シフト)。</summary>
+    [System.ComponentModel.Description("蜂蜜小梅配列")] Hachimitsu,
+    /// <summary>シン蜂蜜小梅配列。</summary>
+    [System.ComponentModel.Description("シン蜂蜜小梅配列")] ShinHachimitsu,
+    /// <summary>よだか配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("よだか配列")] Yodaka,
+    /// <summary>かわせみ配列 (文字キー同士の同時打鍵)。</summary>
+    [System.ComponentModel.Description("かわせみ配列")] Kawasemi,
 }
 
 /// <summary>ローマ字入力のキーの配列 (issue #1415)。</summary>
@@ -65,10 +83,11 @@ public readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 
 /// <summary>
 /// JIS かな以外のかな配列で、打鍵をかなにする (issue #1415)。表は dictionaries/kana-layouts.txt (配列ごとの「打つキー → かな」)。
+/// 同時打鍵の配列 (新JIS・飛鳥・下駄・薙刀式など) の表は、benizara から作った dictionaries/kana-layouts-benizara.txt。
 /// 打つキーの書き方で、読み方が 2 つある。
 /// <list type="bullet">
 /// <item>並び (d f): 前置シフト。打ったキーの並びが表の並びの途中なら、次のキーを待つ。</item>
-/// <item>同時 (L+f): 押したままのキーと合わせて読む。押したままの親指キー (L・R) とはいつでも、
+/// <item>同時 (L+f): 押したままのキーと合わせて読む。押したままの親指キー (L・R)・Space とはいつでも、
 /// ほかのキーとは、押してから <see cref="ChordWindowMs"/> 以内に次のキーを押したとき。押したときはシフトなしの文字にしておき、
 /// 組み合わせになったら打ち直す (文字キーの直後に押した親指キーも同時打鍵)。</item>
 /// </list>
@@ -81,6 +100,8 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     public const int ChordWindowMs = 100;
 
     public const int LeftThumb = 0x1D, RightThumb = 0x1C;
+    // Shift: 小指シフトの面 (新JIS)。表の Shift+e は、Shift を押したまま e
+    private const int Shift = 0x10;
 
     // 刻印 (表の打つキーの書き方) と仮想キー (日本語 106/109 キーボード)。数字の段・Q の段・A の段・Z の段
     private const string Names = "1234567890-^\\qwertyuiop@[asdfghjkl;:]zxcvbnm,./_";
@@ -92,7 +113,8 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         0x5A, 0x58, 0x43, 0x56, 0x42, 0x4E, 0x4D, 0xBC, 0xBE, 0xBF, 0xE2,
     ];
 
-    private static readonly Lazy<Dictionary<KanaLayout, Table>> Tables = new(() => Table.Load(DictionarySource.ReadEmbedded("kana-layouts.txt")));
+    private static readonly Lazy<Dictionary<KanaLayout, Table>> Tables = new(() =>
+        Table.Load(DictionarySource.ReadEmbedded("kana-layouts.txt") + "\n" + DictionarySource.ReadEmbedded("kana-layouts-benizara.txt")));
 
     /// <summary>1 つの配列の表。並びは「仮想キーを , でつないだもの」、同時は「押したままのキー (小さい順に +) → 文字キー」。</summary>
     private sealed class Table
@@ -100,6 +122,8 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         public readonly Dictionary<string, string> Sequences = new(StringComparer.Ordinal);
         public readonly HashSet<string> Prefixes = new(StringComparer.Ordinal);
         public readonly Dictionary<(string Shifts, int Key), string> Chords = [];
+        /// <summary>シフトにだけ使うキー (押しただけでは文字にならない: 親指キー・Space)。</summary>
+        public readonly HashSet<int> ShiftOnly = [];
 
         public static Dictionary<KanaLayout, Table> Load(string text)
         {
@@ -114,6 +138,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
                 {
                     var keys = cells[1].Split('+').Select(KeyOf).ToArray();
                     table.Chords[(Id(keys[..^1]), keys[^1])] = cells[2];
+                    table.ShiftOnly.UnionWith(keys[..^1].Where(key => key is LeftThumb or RightThumb or VirtualKeys.Space));
                     continue;
                 }
                 var sequence = string.Join(',', cells[1].Split(' ').Select(KeyOf));
@@ -127,6 +152,8 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
         {
             "L" => LeftThumb,
             "R" => RightThumb,
+            "Space" => VirtualKeys.Space,
+            "Shift" => Shift,
             _ when name.Length == 1 && Names.IndexOf(name[0], StringComparison.Ordinal) is >= 0 and var index => Keys[index],
             _ => throw new FormatException($"kana-layouts.txt: 知らないキー {name}"),
         };
@@ -156,26 +183,36 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
 
     public KanaLayout Layout => layout;
 
-    /// <summary>親指キーを押したままか (離すまで、離したことを受け取る必要がある)。</summary>
-    public bool ThumbHeld => _held.Any(key => IsThumb(key.Vk));
+    /// <summary>親指キー・Space (シフトにだけ使うキー) を押したままか (離すまで、離したことを受け取る必要がある)。</summary>
+    public bool ThumbHeld => _held.Any(key => IsShiftOnly(key.Vk));
+
+    /// <summary>無変換・変換を親指キーに使う配列か (変換ボックスの外でも受け取る)。</summary>
+    public static bool UsesThumbs(KanaLayout layout) => Tables.Value.GetValueOrDefault(layout)?.ShiftOnly.Overlaps([LeftThumb, RightThumb]) == true;
+
+    /// <summary>Space をシフトに使う配列か (薙刀式。文頭の Space も受け取る)。</summary>
+    public static bool UsesSpace(KanaLayout layout) => Tables.Value.GetValueOrDefault(layout)?.ShiftOnly.Contains(VirtualKeys.Space) == true;
+
+    /// <summary>キーを離したことを受け取る必要がある配列か (同時打鍵・親指シフト)。</summary>
+    public static bool NeedsKeyReleases(KanaLayout layout) => Tables.Value.GetValueOrDefault(layout)?.Chords.Count > 0;
 
     /// <summary>前置シフトのキーを押して、次のキーを待っているか。</summary>
     public bool HasPrefix => _sequence.Length > 0;
 
-    private static bool IsThumb(int vk) => vk is LeftThumb or RightThumb;
+    private bool IsShiftOnly(int vk) => _table?.ShiftOnly.Contains(vk) == true;
 
     /// <summary>打ちかけ (前置シフト・同時打鍵の打ち直し) を忘れる。入力を確定・取り消したときに呼ぶ。押したままの親指キーは離すまで覚えておく。</summary>
     public void Reset()
     {
         _sequence = "";
-        _held.RemoveAll(key => !IsThumb(key.Vk));
+        _held.RemoveAll(key => !IsShiftOnly(key.Vk));
     }
 
-    /// <summary>キーを押した。shift は Shift キー (小指シフト) を押しているか。Shift を押したキーはふつうの英字・記号。</summary>
+    /// <summary>キーを押した。shift は Shift キー (小指シフト) を押しているか。Shift を押したキーは、Shift の面がある配列 (新JIS) のほかは、ふつうの英字・記号。</summary>
     public KanaStroke Down(int vk, bool shift, long time)
     {
-        // 表の段のキーと親指キーのほか (BackSpace・Enter・Esc・Space など) は、ふつうのキー
-        if (_table is null || shift || Array.IndexOf(Keys, vk) < 0 && !IsThumb(vk)) return KanaStroke.NotHandled;
+        // 表の段のキーとシフトにだけ使うキーのほか (BackSpace・Enter・Esc など) は、ふつうのキー
+        if (_table is null || Array.IndexOf(Keys, vk) < 0 && !IsShiftOnly(vk)) return KanaStroke.NotHandled;
+        if (shift) return _table.Chords.TryGetValue(($"{Shift}", vk), out var pinky) ? new KanaStroke(true, 0, pinky) : KanaStroke.NotHandled;
         // 押したままのキーのリピートは無視する (打った文字を増やさない。親指キーを文字に使ったかも変えない)
         if (_held.Any(key => key.Vk == vk)) return KanaStroke.Consumed;
         return _table.Chords.Count > 0 ? Chord(vk, time) : Sequence(vk);
@@ -198,13 +235,13 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     private KanaStroke Chord(int vk, long time)
     {
         var table = _table!;
-        bool Active(Held key) => IsThumb(key.Vk) || key.Shifting || time - key.Time <= ChordWindowMs;
-        if (IsThumb(vk))
+        bool Active(Held key) => IsShiftOnly(key.Vk) || key.Shifting || time - key.Time <= ChordWindowMs;
+        if (IsShiftOnly(vk))
         {
             var thumb = new Held(vk, time, 0);
             _held.Add(thumb);
             // 文字キーの直後 (押したまま ChordWindowMs 以内) の親指キー: その文字を打ち直す
-            if (_held.LastOrDefault(key => !IsThumb(key.Vk) && !key.Target && !key.Shifting && key.Emitted > 0 && time - key.Time <= ChordWindowMs) is { } last &&
+            if (_held.LastOrDefault(key => !IsShiftOnly(key.Vk) && !key.Target && !key.Shifting && key.Emitted > 0 && time - key.Time <= ChordWindowMs) is { } last &&
                 table.Chords.TryGetValue(($"{vk}", last.Vk), out var shifted))
             {
                 var remove = last.Emitted;
@@ -213,14 +250,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
                 thumb.Shifting = true;
                 return new KanaStroke(true, remove, shifted);
             }
-            return table.Chords.Keys.Any(chord => chord.Shifts == $"{vk}") ? KanaStroke.Consumed : KanaStroke.NotHandled;
-        }
-        // 押したままの親指キー: その面の文字 (無ければ何も入れない)
-        if (_held.FirstOrDefault(key => IsThumb(key.Vk)) is { } held)
-        {
-            held.Shifting = true;
-            _held.Add(new Held(vk, time, 0) { Target = true });
-            return table.Chords.TryGetValue(($"{held.Vk}", vk), out var thumbKana) ? new KanaStroke(true, 0, thumbKana) : KanaStroke.Consumed;
+            return KanaStroke.Consumed;
         }
         var plain = table.Sequences.GetValueOrDefault($"{vk}");
         // 中指NICOLA: D・K を押したままの文字キーは、ふつうの文字にしておき、先に離したら打ち直す
@@ -245,6 +275,13 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
             }
             _held.Add(new Held(vk, time, kana.Length) { Target = true });
             return new KanaStroke(true, remove, kana);
+        }
+        // 押したままの親指キー・Space の面に無いキーは、何も入れない
+        if (_held.FirstOrDefault(key => IsShiftOnly(key.Vk)) is { } held)
+        {
+            held.Shifting = true;
+            _held.Add(new Held(vk, time, 0) { Target = true });
+            return KanaStroke.Consumed;
         }
         // 後から押したこのキーがシフトで、直前の押したままの文字キーと組み合わせになる
         if (_held.LastOrDefault(key => !key.Target && !key.Shifting && key.Emitted > 0 && time - key.Time <= ChordWindowMs) is { } previous &&
@@ -286,6 +323,6 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
             shift.Shifting = true;
             return new KanaKeyUp(false, new KanaStroke(true, remove, kana));
         }
-        return new KanaKeyUp(IsThumb(vk) && !held.Shifting, KanaStroke.NotHandled);
+        return new KanaKeyUp(IsShiftOnly(vk) && !held.Shifting, KanaStroke.NotHandled);
     }
 }
