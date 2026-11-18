@@ -86,8 +86,8 @@ const Help = [
   '',
   '| コマンド | すること | 使える人 |',
   '|---|---|---|',
-  '| `/repro <打ったキー> [space\\|enter\\|none]` | main と最新リリースのコードで打つ (Mozc があれば漢字も) | だれでも |',
-  '| `/repro <SHA> <打ったキー> [space\\|enter\\|none]` | PR の前・PR・main のコードで打ち、PR で結果が変わったか比べる | メンテナー (PR のみ) |',
+  '| `/repro <打ったキー> [space\\|enter\\|none]` | main と最新リリースのコードで、Mozc だけと Mozc + Zenzai で打つ | だれでも |',
+  '| `/repro <SHA> <打ったキー> [space\\|enter\\|none]` | `/repro` を PR の前・PR・main のコードで行い、PR で結果が変わったか比べる | メンテナー (PR のみ) |',
   '| `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |',
   '| `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す | だれでも |',
   '| `/jht <出てほしい文> [/ 読み]` | 考えられるローマ字打ちで変換テスト (読みはオプション) | だれでも |',
@@ -378,7 +378,20 @@ async function report() {
     if (!sha) return name;
     return `${versions.filter(v => v.sha === sha).map(v => VersionLabels[v.name]).join(' = ')} (${sha.slice(0, 7)})`;
   };
-  const resultOf = r => r && `${(r.committed ?? '') + (r.composing ?? '')}\n${r.converted ?? ''}`;
+  // repro の結果は Mozc だけのもの (一番上) と、Zenzai も使ったもの (zenzai。Zenzai を使えなかったら zenzai.error) の 2 つ。
+  // zenzai が無いのは Zenzai を試さない版 (Repro.cs が zenzai を出す前の版) で、表には — を出す
+  const typedOf = r => (r.committed ?? '') + (r.composing ?? '');
+  const outcomeCell = r => {
+    if (!r) return '—';
+    if (r.error) return `⚠️ ${md(r.error)}`;
+    const typed = typedOf(r);
+    return cell(typed) + (r.converted && r.converted !== typed ? ` / Space: ${cell(r.converted)}` : '');
+  };
+  const usable = o => o && !o.error;
+  const outcomes = r => [r, r.zenzai].filter(usable);
+  // Zenzai の結果は、どちらの版でも使えたときだけ比べる
+  const sameOutcome = (a, b) => outcomeCell(a) === outcomeCell(b)
+    && (!usable(a.zenzai) || !usable(b.zenzai) || outcomeCell(a.zenzai) === outcomeCell(b.zenzai));
 
   if (action === 'repro') {
     const marker = process.env.BOT_COMMENT_ID ? `repro-${process.env.BOT_COMMENT_ID}` : 'repro';
@@ -395,28 +408,28 @@ async function report() {
         sections.push(`${code(keys)} は再現を試せませんでした。`);
         continue;
       }
+      const withZenzai = results.some(v => v.r?.zenzai);
       const rows = [];
       let verdict;
       for (const { name, r } of results) {
-        if (!r) { rows.push(`| ${md(name)} | (失敗) |`); continue; }
+        if (!r) { rows.push(`| ${md(versionLabel(name))} | (失敗) |${withZenzai ? ' (失敗) |' : ''}`); continue; }
         if (r.engine) engine = r.engine;
-        const result = (r.committed ?? '') + (r.composing ?? '');
-        const extra = r.converted && r.converted !== result ? ` / Space: ${cell(r.converted)}` : '';
-        rows.push(`| ${md(versionLabel(name))} | ${cell(result)}${extra} |`);
+        rows.push(`| ${md(versionLabel(name))} | ${outcomeCell(r)} |${withZenzai ? ` ${outcomeCell(r.zenzai)} |` : ''}`);
         if ((name === 'main' || name === 'pr') && !verdict) {
-          if (expected && (result === expected || r.converted === expected)) verdict = 'match';
-          else if (reported && (result === reported || r.converted === reported)) verdict = 'reproduced';
+          const texts = outcomes(r).flatMap(o => [typedOf(o), o.converted]);
+          if (expected && texts.includes(expected)) verdict = 'match';
+          else if (reported && texts.includes(reported)) verdict = 'reproduced';
           else verdict = 'different';
         }
       }
       verdicts.push(verdict);
       const pr = results.find(v => v.name === 'pr')?.r, base = results.find(v => v.name === 'base')?.r;
-      const change = pr && base ? (resultOf(pr) === resultOf(base) ? 'PR の前と同じ結果です。' : 'PR で結果が変わりました。') : '';
+      const change = pr && base ? (sameOutcome(pr, base) ? 'PR の前と同じ結果です。' : 'PR で結果が変わりました。') : '';
       sections.push([
         `${code(keys)} を打ってみました (最後のキー: ${last})。`,
         '',
-        '| 版 | 結果 |',
-        '|---|---|',
+        withZenzai ? '| 版 | Mozc | Mozc + Zenzai |' : '| 版 | 結果 |',
+        withZenzai ? '|---|---|---|' : '|---|---|',
         ...rows,
         ...(change ? ['', change] : []),
       ].join('\n'));

@@ -129,6 +129,12 @@ jobs:
           $full = (Resolve-Path (Join-Path $bin 'meltype_mozc_helper.exe')).Path
           "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "MELTYPE_MOZC=$full"
+          # /repro は Zenzai (zip の zenzai\ の llama-server とモデル) も使った結果を返す。zip に無ければ Repro.cs が zenzai に理由を出す
+          $zenzai = Join-Path $extract 'zenzai'
+          $model = Get-ChildItem -Path $zenzai -Filter '*.gguf' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $modelPath = if ($model) { $model.FullName } else { Join-Path $zenzai 'model.gguf' }
+          "MELTYPE_ZENZAI_SERVER=$(Join-Path $zenzai 'llama-server.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MELTYPE_ZENZAI_MODEL=$modelPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Run
         env:
           ACTION: ${{ needs.parse.outputs.action }}

@@ -188,7 +188,7 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 
 | コマンド | すること | 使える人 |
 |---|---|---|
-| `/repro <打ったキー> [space\|enter\|none]` | 最新のコード (と最新のリリース) で打ってみて、結果を返す | だれでも |
+| `/repro <打ったキー> [space\|enter\|none]` | 最新のコード (と最新のリリース) で、Mozc だけと Mozc + Zenzai で打ってみて、結果を返す | だれでも |
 | `/repro <SHA> <打ったキー> [space\|enter\|none]` | Pull Request の前・Pull Request・main のコードで打ち、Pull Request で結果が変わったかを返す | メンテナー |
 | `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |
 | `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す (最新のコードと最新のリリース) | だれでも |
