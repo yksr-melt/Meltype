@@ -8,10 +8,14 @@ using static Meltype.Composition.CompositionController;
 
 namespace Meltype.Composition;
 
+/// <summary>入力中の文字列の処理 (<see cref="CompositionText"/>) が使う、入力欄の状態でないもの (判定器・入力欄のアプリの設定・ローマ字の打ち間違いの直し方)。</summary>
+internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, RomajiTypoCorrector? RomajiTypos);
+
 /// <summary>
 /// 変換ボックスの処理が使う、入力欄の状態でないもの (判定器・変換エンジン・辞書・学習データ・入力欄のアプリの設定・OS の機能)。出来事ごとに作って渡す。
 /// </summary>
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
+    : TextEnv(Detector, Settings, Services.RomajiTypos)
 {
     public CompositionLearning Learning { get; } = new(Services, Converter);
 
@@ -67,11 +71,11 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 }
 
 /// <summary>入力欄 1 つ分の変換ボックスの状態 (データだけ)。処理は <see cref="CompositionController"/> の関数が受け取って書き換える。</summary>
-internal sealed class CompositionState(CompositionOutput output, CompositionText text)
+internal sealed class CompositionState(CompositionOutput output, CompositionTextState text)
 {
     public readonly CompositionOutput Out = output;
 
-    public readonly CompositionText Text = text;
+    public readonly CompositionTextState Text = text;
 
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);

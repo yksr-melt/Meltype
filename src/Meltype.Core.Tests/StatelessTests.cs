@@ -16,20 +16,20 @@ internal static class StatelessTests
     [Test]
     public static void Functions_HaveNoMutableStaticFields()
     {
-        foreach (var type in new[] { typeof(CompositionController), typeof(ImeSession) })
+        foreach (var type in new[] { typeof(CompositionController), typeof(CompositionText), typeof(ImeSession) })
         {
             var mutable = type.GetFields(Declared).Where(f => !f.IsInitOnly && !f.IsLiteral).Select(f => f.Name).ToList();
-            Assert.True(mutable.Count == 0, $"{type.Name} の書き換えられる static フィールド (状態は CompositionState・ImeSessionState に置く): {string.Join(", ", mutable)}");
+            Assert.True(mutable.Count == 0, $"{type.Name} の書き換えられる static フィールド (状態は CompositionState・CompositionTextState・ImeSessionState に置く): {string.Join(", ", mutable)}");
         }
     }
 
     [Test]
     public static void States_AreDataOnly()
     {
-        foreach (var type in new[] { typeof(CompositionState), typeof(ImeSessionState) })
+        foreach (var type in new[] { typeof(CompositionState), typeof(CompositionTextState), typeof(ImeSessionState) })
         {
             var methods = type.GetMethods(Declared).Where(m => !m.IsSpecialName && m.GetCustomAttribute<CompilerGeneratedAttribute>() is null).Select(m => m.Name).ToList();
-            Assert.True(methods.Count == 0, $"{type.Name} の関数 (処理は CompositionController・ImeSession に置く): {string.Join(", ", methods)}");
+            Assert.True(methods.Count == 0, $"{type.Name} の関数 (処理は CompositionController・CompositionText・ImeSession に置く): {string.Join(", ", methods)}");
         }
     }
 }

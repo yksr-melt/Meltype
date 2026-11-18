@@ -6583,9 +6583,10 @@ internal static class CompositionTests
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, typed);
         }
-        var text = new CompositionText(Detector);
-        foreach (var c in "suityoku") text.Append(c);
-        Assert.Equal("JA:suityoku", string.Join(" | ", text.Segments().Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
+        var text = new Composition.CompositionTextState();
+        var env = TestSupport.Env(Detector);
+        foreach (var c in "suityoku") CompositionText.Append(text, env, c);
+        Assert.Equal("JA:suityoku", string.Join(" | ", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
     }
 
     [Test]
@@ -6599,21 +6600,23 @@ internal static class CompositionTests
         {
             File.WriteAllText(Path.Combine(dir, "romaji.txt"), "ngh\tにゅう\n");
             var detector = CompositionDetector.CreateDefault(dir);
-            var text = new CompositionText(detector);
-            text.Append('n');
-            Assert.Equal("n", text.Display(final: false), "n だけなら打ちかけのまま");
-            text.Append('g');
-            Assert.Equal("ng", text.Display(final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
-            text.Append('h');
-            Assert.Equal("にゅう", text.Display(final: false), "続けて打つと登録した読みになる");
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(detector);
+            CompositionText.Append(text, env, 'n');
+            Assert.Equal("n", CompositionText.Display(text, env, final: false), "n だけなら打ちかけのまま");
+            CompositionText.Append(text, env, 'g');
+            Assert.Equal("ng", CompositionText.Display(text, env, final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
+            CompositionText.Append(text, env, 'h');
+            Assert.Equal("にゅう", CompositionText.Display(text, env, final: false), "続けて打つと登録した読みになる");
             // 表を登録していない場合 (main 側の判定に従う)
-            var plain = new CompositionText(Detector);
-            foreach (var c in "ng") plain.Append(c);
+            var plain = new Composition.CompositionTextState();
+            var plainEnv = TestSupport.Env(Detector);
+            foreach (var c in "ng") CompositionText.Append(plain, plainEnv, c);
             // main の判定では、語頭の ng は表の有無に関係なく英字の ng として表示される (main だけの状態でも同じ結果を確認済み)。
             // 表の登録で変わるのは、続けて h を打ったときに にゅう になるかどうか。
-            Assert.Equal("ng", plain.Display(final: false), "表が無いときの ng は main と同じ表示");
-            plain.Append('h');
-            Assert.True(plain.Display(final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
+            Assert.Equal("ng", CompositionText.Display(plain, plainEnv, final: false), "表が無いときの ng は main と同じ表示");
+            CompositionText.Append(plain, plainEnv, 'h');
+            Assert.True(CompositionText.Display(plain, plainEnv, final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
@@ -6642,9 +6645,10 @@ internal static class CompositionTests
             Assert.True(laughed.Contains("かな + w に分けた"), "笑いの w に分けたことがログに出る: " + laughed);
 
             // 保護区間を含む入力も、保護区間以外の区切りの重みを出す
-            var text = new CompositionText(Detector);
-            foreach (var c in "@kuraido kyouha") text.Append(c);
-            var mention = text.ExplainSegments();
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(Detector);
+            foreach (var c in "@kuraido kyouha") CompositionText.Append(text, env, c);
+            var mention = CompositionText.ExplainSegments(text, env);
             Assert.True(mention.Contains("保護区間") && mention.Contains("区切り "), "保護区間と、ほかの区間の区切り: " + mention);
         }
         finally

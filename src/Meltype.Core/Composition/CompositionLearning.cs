@@ -119,14 +119,13 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     /// <summary>
     /// ユーザーが自分で英字 / かなに直して確定した語を覚える (api と打って F10 で英字にした → 次から api は英字)。
-    /// 自動の判定と違う方を選んだときだけ。1 語の英字だけを対象にする。
+    /// 自動の判定と違う方を選んだときだけ。1 語の英字だけを対象にする。automatic は自動の判定の区間。
     /// </summary>
-    public void LearnLanguage(CompositionText text)
+    public void LearnLanguage(CompositionTextState text, IReadOnlyList<CompositionSegment> automatic)
     {
         if (services.Languages is not { } memory) return;
-        var raw = text.Raw;
+        var raw = CompositionText.Raw(text);
         if (raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return;
-        var automatic = text.Segments();
         switch (text.Mode)
         {
             case DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric when !automatic.All(s => s.IsEnglish):

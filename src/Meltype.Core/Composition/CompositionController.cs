@@ -142,16 +142,11 @@ internal static partial class CompositionController
     /// <summary>入力欄 1 つ分の状態を作る。</summary>
     public static CompositionState Create(CompositionDetector detector, Func<Config.Settings> settings, CompositionServices services)
     {
-        var state = new CompositionState(new CompositionOutput(() => settings().Punctuation), new CompositionText(detector));
-        state.Text.Manual = () => !settings().AutoDetection;
-        state.Text.TypoCorrector = services.RomajiTypos;
+        var state = new CompositionState(new CompositionOutput(() => settings().Punctuation), new CompositionTextState());
         // よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは英語として覚えない。
         if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
         if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
         if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
-        state.Text.CorrectTypos = () => settings().CorrectTypos;
-        state.Text.Slash = () => settings().Slash;
-        state.Text.ZSymbols = () => settings().ZSymbols;
         return state;
     }
 
@@ -172,7 +167,7 @@ internal static partial class CompositionController
     private static bool AutoCorrect(CompositionState state, CompositionEnv env) => env.Settings.AutoCorrectAfterCommit && env.Settings.AutoDetection;
 
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
-    public static bool IsComposing(CompositionState state) => !state.Text.IsEmpty || state.HeldLetters.Length > 0;
+    public static bool IsComposing(CompositionState state) => !CompositionText.IsEmpty(state.Text) || state.HeldLetters.Length > 0;
 
     /// <summary>変換して候補を選んでいるか。</summary>
     public static bool IsConverting(CompositionState state) => state.Clauses.Count > 0;
@@ -286,7 +281,7 @@ internal static partial class CompositionController
     private static bool Refresh(CompositionState state, CompositionEnv env)
     {
         state.LiveCache.Clear();
-        if (state.Text.IsEmpty || IsConverting(state) && !RefreshOpenConversion(state, env)) return false;
+        if (CompositionText.IsEmpty(state.Text) || IsConverting(state) && !RefreshOpenConversion(state, env)) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
         if (state.PredictionIndex < 0) state.PredictionKey = "\u0000";
         UpdateView(state, env);
@@ -376,7 +371,7 @@ internal static partial class CompositionController
         if (!IsConverting(state) && TypingCandidates(state, env) is { } typing)
         {
             if (index < 0 || index >= typing.Count) return;
-            state.Clauses = [new Clause(state.Text.AllKana(final: false), false, typing) { Raw = state.Text.Raw, Expanded = true }];
+            state.Clauses = [new Clause(CompositionText.AllKana(state.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(state.Text), Expanded = true }];
             state.SelectedClause = 0;
         }
         if (!IsConverting(state) || state.Clauses.Count == 0) return;
@@ -419,10 +414,10 @@ internal static partial class CompositionController
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
         if (preserveLatinRaw && !IsConverting(state) && state.Reconversion is null && !state.Text.KanaInput &&
             state.Text.Mode is DisplayMode.Auto or DisplayMode.HalfWidthAlphanumeric &&
-            !state.Text.IsEmpty && state.Text.Raw.All(char.IsAsciiLetter))
+            !CompositionText.IsEmpty(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CommitText(state, env, state.Text.Raw, english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CommitText(state, env, CompositionText.Raw(state.Text), english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
         else CommitIfAny(state, env, preserveText);
         UpdateView(state, env);
@@ -432,7 +427,7 @@ internal static partial class CompositionController
     private static void ClearComposition(CompositionState state)
     {
         state.Reconversion = null;
-        state.Text.Clear();
+        CompositionText.Clear(state.Text);
         state.Clauses = [];
         state.SpaceStartedConversion = false;
         state.TabStartedConversion = false;
