@@ -9,7 +9,7 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// プロセスで 1 つの入力の土台: 設定・判定器・辞書・学習データ・定型文。どの OS のアプリもこれを 1 つ作り、
-/// 入力欄ごとの本体 (<see cref="MeltypeSession"/>) は <see cref="CreateSession"/> で作る。
+/// 入力欄ごとの本体は、<see cref="SessionParts"/> を渡した <see cref="Ime.ImeHost"/> が作る。
 /// 入力欄ごとに辞書・学習データを作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
 /// </summary>
 public sealed class MeltypeRuntime : IDisposable
@@ -84,7 +84,7 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>
     /// ユーザー辞書。入力欄を作ったとき・入力を始めたときに、外で変わっていたら読み直す (<see cref="UserDictionary.Refresh"/>)。
-    /// 入力欄の本体 (<see cref="MeltypeSession"/>) と同じスレッドからだけ使う (Windows は UI スレッド。排他しない)。
+    /// 入力欄の本体 (<see cref="Ime.ImeHost"/>) と同じスレッドからだけ使う (Windows は UI スレッド。排他しない)。
     /// </summary>
     public UserDictionary UserDictionary { get; }
 
@@ -135,27 +135,26 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
     public Func<string?> ZenzaiStatus { get; private set; } = () => null;
 
-    /// <summary>
-    /// 入力欄 1 つ分の本体を作る。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。
-    /// directModeDetection なら、英数状態で打ち始めた語がローマ字かを判定して日本語に戻す (設定「英数状態で自動判定」。今は Windows だけ)。
-    /// </summary>
-    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
-    public MeltypeSession CreateSession(IKanjiConverter converter, Func<Settings>? settings = null, Func<string, IReadOnlyList<string>>? moreCandidates = null,
-        bool directModeDetection = false)
+    /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。</summary>
+    /// <param name="candidates">読みの変換候補の一覧 (<see cref="HybridConverter.Candidates"/>)。</param>
+    /// <param name="readingOf">漢字かな交じりの文の読み (<see cref="HybridConverter.Reading"/>)。</param>
+    public SessionParts SessionParts(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
+        Action<Correction>? corrected = null)
     {
-        var current = settings ?? (() => Settings.Current);
-        UserDictionary.Refresh();
         var services = _shared with
         {
             UserDictionary = UserDictionary,
             Predictor = new Predictor(Phrases, UserDictionary, History),
-            MoreCandidates = moreCandidates,
-            // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
-            ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
+            MoreCandidates = candidates,
         };
-        var session = new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
-        if (converter is HybridConverter hybrid) session.ReadingOf = hybrid.Reading;
-        return session;
+        return new SessionParts(Detector, converter, services)
+        {
+            // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
+            ClassifyDirect = OperatingSystem.IsWindows() ? ClassifyDirect : null,
+            ReadingOf = readingOf,
+            NowPlaying = () => _nowPlaying?.Read(),
+            Corrected = corrected,
+        };
     }
 
     public void Dispose()
@@ -215,13 +214,18 @@ public sealed class MeltypeRuntime : IDisposable
     }
 
     /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (トレイの「ログ / 判定理由」の判定にも使う)。final は、もう続きが無いか。</summary>
-    public DetectionResult Evaluate(string letters, bool final, Settings settings) =>
-        _directEngine.Value.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
+    public DetectionResult Evaluate(string letters, bool final, Settings settings) => Evaluate(_directEngine.Value, letters, final, settings);
+
+    private static DetectionResult Evaluate(ScoreEngine engine, string letters, bool final, Settings settings) =>
+        engine.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
 
     /// <summary>英数状態で打ち始めた英字 (letters) がローマ字 (日本語) かを判定する。final は、もう続きが無いか。</summary>
-    public Verdict ClassifyDirect(string letters, bool final, Settings settings)
+    public Verdict ClassifyDirect(string letters, bool final, Settings settings) => ClassifyDirect(_directEngine.Value, letters, final, settings);
+
+    /// <summary><see cref="ClassifyDirect(string, bool, Settings)"/> を、判定器 engine で行う (テストは辞書を読み直さずに共有の判定器で行う)。</summary>
+    public static Verdict ClassifyDirect(ScoreEngine engine, string letters, bool final, Settings settings)
     {
-        var result = Evaluate(letters, final, settings);
+        var result = Evaluate(engine, letters, final, settings);
         // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、よく使う英単語の一覧の語なら日本語にしない。
         if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && BuiltInWordChecker.Shared.IsWord(letters.ToLowerInvariant()))
         {

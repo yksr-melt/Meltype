@@ -23,10 +23,14 @@ internal static class ImeContractTests
     /// </summary>
     private sealed class Front : IImeEnvironment
     {
-        private readonly ImeHost _host;
+        private ImeHost? _host;
         private readonly List<string> _trace = [];
 
-        public Front() => _host = new ImeHost(this, () => Settings);
+        // Converter・Services・ClassifyDirect を初期化子で決めてから作る
+        private ImeHost Host => _host ??= new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+
+        /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定。null なら判定しない。</summary>
+        public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
 
         // 入力モードの表示の既定は OS と入力方式で違うので、どの OS でも同じに決めておく
         public Settings Settings { get; set; } = new() { LiveConversion = false, ModeIndicator = ModeIndicatorTiming.OnSwitchAndFocus };
@@ -37,16 +41,13 @@ internal static class ImeContractTests
         public IKanjiConverter Converter { get; init; } = new CompositionTests.FakeConverter();
         public CompositionServices Services { get; init; } = new();
 
-        public MeltypeSession CreateSession(Func<Settings> settings) =>
-            new(CompositionTests.Detector, Converter, Services, settings, directModeDetection: true);
-
         public SnippetStore Snippets { get; } = new(null);
 
         public string? ClipboardText => null;
 
-        public int Sessions => _host.SessionCount;
+        public int Sessions => Host.SessionCount;
 
-        public void CloseAll() => _host.CloseAll();
+        public void CloseAll() => Host.CloseAll();
 
         public string Document { get; set; } = "";
 
@@ -86,7 +87,7 @@ internal static class ImeContractTests
 
         public JsonElement Send(string json)
         {
-            var reply = _host.Handle(json);
+            var reply = Host.Handle(json);
             _trace.Add($"  {json}\n    → {reply}");
             using var document = JsonDocument.Parse(reply);
             return document.RootElement.Clone();
@@ -716,7 +717,7 @@ internal static class ImeContractTests
         var front = new Front
         {
             Open = false,
-            Services = new CompositionServices { ClassifyDirect = (letters, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided },
+            ClassifyDirect = (letters, _, _) => letters == "ka" ? Verdict.Japanese : Verdict.Undecided,
         };
         front.Settings.DirectModeAutoDetect = true;
         front.Key('k');

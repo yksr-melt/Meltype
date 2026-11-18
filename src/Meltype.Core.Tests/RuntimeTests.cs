@@ -62,11 +62,12 @@ internal static class RuntimeTests
         if (!OperatingSystem.IsWindows()) return;
         WithRuntime((runtime, _) =>
         {
-            var session = runtime.CreateSession(new CompositionTests.FakeConverter(), directModeDetection: true);
+            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), null, _ => null);
+            var session = new TestSession(parts, () => runtime.Settings.Current);
             session.Direct = true;
             foreach (var c in "konnnichiha") session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
             Assert.True(!session.Direct && session.IsComposing, "ローマ字だと分かったら日本語入力に戻る");
-            var english = runtime.CreateSession(new CompositionTests.FakeConverter(), directModeDetection: true);
+            var english = new TestSession(parts, () => runtime.Settings.Current);
             english.Direct = true;
             foreach (var c in "hello ") english.HandleKey(c == ' ' ? 0x20 : char.ToUpperInvariant(c), c, false, false, false, false);
             Assert.True(english.Direct, "英語なら英数のまま");
@@ -86,7 +87,8 @@ internal static class RuntimeTests
                 <?xml version="1.0" encoding="UTF-8"?>
                 <plist version="1.0"><array><dict><key>phrase</key><string>雪代</string><key>shortcut</key><string>ゆきしろ</string></dict></array></plist>
                 """);
-            runtime.CreateSession(new CompositionTests.FakeConverter());
+            new TestSession(runtime.SessionParts(new CompositionTests.FakeConverter(), null, _ => null), () => runtime.Settings.Current)
+                .HandleKey('A', 'a', false, false, false, false);
             Assert.Equal("雪代", runtime.UserDictionary.Lookup("ゆきしろ") is [var word, ..] ? word : "(なし)");
         });
     }
@@ -98,8 +100,9 @@ internal static class RuntimeTests
         WithRuntime((runtime, directory) =>
         {
             var now = 0L;
-            var session = new MeltypeSession(runtime.Detector, new CompositionTests.FakeConverter(), new CompositionServices { UserDictionary = runtime.UserDictionary },
-                () => runtime.Settings.Current, timeMs: () => now);
+            var session = new TestSession(() => runtime.Settings.Current, services: new CompositionServices { UserDictionary = runtime.UserDictionary },
+                detector: runtime.Detector, timeMs: () => now);
+            session.HandleKey(Input.VirtualKeys.Escape, null, false, false, false, false);
             runtime.UserDictionary.Add("あおい", "葵");
             var path = Path.Combine(directory, "userdict.txt");
             File.WriteAllText(path, "あおい\t葵\nゆきしろ\t雪代\n");

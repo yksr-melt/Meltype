@@ -333,9 +333,7 @@ internal static class ToggleShortcutTests
     [Test]
     public static void Shortcut_ImeTextToggleKeepsCompositionUncommitted()
     {
-        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices(), () => new Settings { LiveConversion = false })
-        { Direct = false };
+        var session = new TestSession(() => new Settings { LiveConversion = false });
         SessionResult? last = null;
         foreach (var c in "nihongo") last = session.HandleKey(char.ToUpperInvariant(c), c, false, false, false, false);
         var japanese = last!.View!.Text;

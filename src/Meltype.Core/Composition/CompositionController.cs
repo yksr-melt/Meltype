@@ -293,9 +293,6 @@ public sealed partial class CompositionController
         return Result(consumed: true) with { Consumed = false };
     }
 
-    /// <summary>変換ボックスの表示 (フロントに渡す形にする前のもの。テストで見る)。出していなければ null。</summary>
-    internal CompositionView? View => _out.View;
-
     private SessionResult Result(bool consumed) => _out.Result(consumed && !_out.PassedCurrent, _settings());
 
     /// <summary>キーを 1 つ処理する。アプリに通さないなら true。</summary>
