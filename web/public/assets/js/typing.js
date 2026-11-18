@@ -228,17 +228,41 @@ function showScores() {
       : "";
 }
 
+// Turnstile は同意の欄を出すときに読み込む。ページと一緒に読むと、読み終わる前に欄を出したとき確認の枠が出ないため。
+// 読み込めないとき (広告ブロッカーなど) は、送れない理由を出す
+const TURNSTILE_ERROR = "人かどうかの確認 (Turnstile) を読み込めませんでした。広告ブロッカーなどを止めてから、ページを読み込み直してください";
+let turnstileLoading = null;
 let turnstileWidget = null;
 
-function showSendForm() {
+function loadTurnstile() {
+  turnstileLoading ??= new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
+    script.async = true;
+    script.onload = () => resolve(window.turnstile);
+    script.onerror = () => {
+      turnstileLoading = null;
+      script.remove();
+      reject(new Error(TURNSTILE_ERROR));
+    };
+    document.head.append(script);
+  });
+  return turnstileLoading;
+}
+
+async function showSendForm() {
   sendForm.hidden = false;
   $("auto-wrap").hidden = true;
   $("consent").checked = false;
   $("send-button").disabled = true;
   const element = $("turnstile");
-  if (!window.turnstile) return;
-  if (turnstileWidget === null) turnstileWidget = window.turnstile.render(element, { sitekey: element.dataset.sitekey, action: "typing" });
-  else window.turnstile.reset(turnstileWidget);
+  try {
+    const turnstile = await loadTurnstile();
+    if (turnstileWidget === null) turnstileWidget = turnstile.render(element, { sitekey: element.dataset.sitekey, action: "typing" });
+    else turnstile.reset(turnstileWidget);
+  } catch (e) {
+    setStatus("danger", e.message);
+  }
 }
 
 function showResult() {
@@ -275,6 +299,10 @@ $("consent").addEventListener("change", (event) => {
 sendForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!$("consent").checked) return;
+  if (turnstileWidget === null) {
+    setStatus("danger", TURNSTILE_ERROR);
+    return;
+  }
   $("send-button").disabled = true;
   setStatus("info", "準備しています");
   const os = detectOs();
@@ -285,7 +313,7 @@ sendForm.addEventListener("submit", async (event) => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         consent: true,
-        turnstile: window.turnstile && turnstileWidget !== null ? window.turnstile.getResponse(turnstileWidget) : "",
+        turnstile: window.turnstile.getResponse(turnstileWidget),
         profile: {
           touch: field("touch"),
           layout: field("layout"),
@@ -302,7 +330,7 @@ sendForm.addEventListener("submit", async (event) => {
     await sendRound();
   } catch (e) {
     $("send-button").disabled = false;
-    if (window.turnstile && turnstileWidget !== null) window.turnstile.reset(turnstileWidget);
+    window.turnstile.reset(turnstileWidget);
     setStatus("danger", e.message);
   }
 });
