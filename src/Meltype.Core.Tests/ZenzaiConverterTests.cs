@@ -212,7 +212,7 @@ internal static class ZenzaiConverterTests
         Assert.Equal(1, server.Prompts.Count, "同じ読みと文脈は覚えている");
     }
 
-    private static (MeltypeSession Session, MozcConverter Mozc, ZenzaiConverter Zenzai, FakeServer Server, ManualResetEventSlim Release) LateZenzai()
+    private static (TestSession Session, MozcConverter Mozc, ZenzaiConverter Zenzai, FakeServer Server, ManualResetEventSlim Release) LateZenzai()
     {
         var release = new ManualResetEventSlim();
         // 止めるのは きしゃがきた だけ (止めたままだと、時間切れで Zenzai が 5 秒休む)
@@ -229,7 +229,7 @@ internal static class ZenzaiConverterTests
         var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile)));
         var hybrid = new HybridConverter(mozc, () => zenzai);
         hybrid.Budget.Enable();
-        var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionServices(), () => new Settings { LiveConversion = true });
+        var session = new TestSession(() => new Settings { LiveConversion = true }, hybrid);
         // Mozc の起動を待つ
         hybrid.Budget.Start(10000);
         mozc.ConvertClauses("あ");

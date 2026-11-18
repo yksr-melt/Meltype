@@ -219,7 +219,7 @@ internal static class Henkan
 
     private static readonly Lazy<Composition.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, ProfileDirectory))
+            ? new Composition.MozcConverter(new WithoutLearning(new Composition.MozcHelperProcess(helper, ProfileDirectory)))
             : null);
     private static readonly Lazy<Composition.TranslationDictionary> Translations = new(Composition.TranslationDictionary.Load);
 
@@ -267,20 +267,24 @@ internal static class Henkan
     /// <summary><see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。</summary>
     public static CompositionTests.Keyboard Keyboard(bool zenzai)
     {
-        // Mozc には覚えさせない (覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう。
-        // 確かめたいのは、まだ何も覚えていない人の最初の変換)
-        var converter = Mozc.Value is { } engine
-            ? new WithoutLearning(zenzai ? new Composition.HybridConverter(engine, () => Zenzai.Value) : engine)
-            : null;
-        return new(live: true, converter: converter, moreCandidates: Mozc.Value is { } mozc ? mozc.Candidates : null,
+        // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (Budget を Enable しない)
+        var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
+        return new(live: true, converter: converter, moreCandidates: converter is null ? null : converter.Candidates,
             userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
     }
 
-    /// <summary>変換だけを頼み、覚えさせない変換エンジン (ILearningConverter を持たない)。</summary>
-    private sealed class WithoutLearning(Composition.IKanjiConverter inner) : Composition.IKanjiConverter
+    /// <summary>
+    /// 学習の要求 (L) に答えるだけで、Mozc に覚えさせないヘルパー。覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう
+    /// (確かめたいのは、まだ何も覚えていない人の最初の変換)。
+    /// </summary>
+    private sealed class WithoutLearning(Composition.IMozcHelper inner) : Composition.IMozcHelper
     {
-        public string? Convert(string hiragana) => inner.Convert(hiragana);
-        public IReadOnlyList<Composition.ConversionClause>? ConvertClauses(string hiragana, string? context = null) => inner.ConvertClauses(hiragana, context);
+        public bool IsInstalled => inner.IsInstalled;
+        public void Start() => inner.Start();
+        public string? Send(string request) => request.StartsWith("L\t", StringComparison.Ordinal) ? "OK" : inner.Send(request);
+        public void Reset() => inner.Reset();
+        public long WorkingSet => inner.WorkingSet;
+        public void Dispose() => inner.Dispose();
     }
 
     public static void Run(string keys)
