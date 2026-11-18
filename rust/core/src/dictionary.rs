@@ -1531,7 +1531,7 @@ impl Dictionary {
     }
     pub fn is_japanese(&self, raw: &str) -> bool {
         self.japanese.contains(&raw.to_ascii_lowercase())
-            || self.kana_words.0.contains(&romaji::hiragana(raw, true))
+            || self.kana_words.0.contains(romaji::hiragana(raw, true))
     }
     pub fn english_prefix(&self, raw: &str) -> bool {
         let raw = raw.to_ascii_lowercase();
