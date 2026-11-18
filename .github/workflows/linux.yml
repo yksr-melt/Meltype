@@ -10,6 +10,7 @@ on:
   pull_request:
     paths: &paths
       - 'linux/**'
+      - 'tui/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
       - 'src/Meltype.Core/**'
@@ -74,7 +75,7 @@ jobs:
         run: |
           python3 -c "import ast; ast.parse(open('linux/ibus-engine-meltype', encoding='utf-8').read())"
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_tty.py
+          python3 tui/test_tty.py
           python3 linux/tests/test_settings.py
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
@@ -280,7 +281,7 @@ jobs:
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py
-          python3 linux/tests/test_tty.py
+          python3 tui/test_tty.py
           python3 linux/tests/test_settings.py
       - name: IBus and real Mozc integration tests
         run: timeout 120 python3 linux/tests/test_integration.py /opt/meltype

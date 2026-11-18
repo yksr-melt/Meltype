@@ -43,22 +43,42 @@ ESCAPE_KEYS = {
 }
 
 
+PASTE_START, PASTE_END = "\x1b[200~", "\x1b[201~"
+
+
 def split_keys(data):
-    """端末から読んだ文字列を、キー 1 つずつの (送られた文字列, キー) に分ける。キーは本体の ImeKey の形で、本体に渡さないものは None。"""
+    """端末から読んだ文字列を、キー 1 つずつの (送られた文字列, キー) に分ける。キーは本体の ImeKey の形で、本体に渡さないものは None。
+    途中で切れたもの (read が CSI や貼り付けの途中で分かれたとき) は、次に読んだ文字列の前に付けるよう (キーの一覧, 残り) で返す。"""
     keys = []
     i = 0
     while i < len(data):
         c = data[i]
+        if data.startswith(PASTE_START, i):
+            # 貼り付け (bracketed paste) は、打ったキーでないので本体に渡さず、印ごと子に送る
+            end = data.find(PASTE_END, i)
+            if end < 0:
+                return keys, data[i:]
+            end += len(PASTE_END)
+            keys.append((data[i:end], None))
+            i = end
+            continue
         if c == "\x1b":
             # CSI (ESC [) と SS3 (ESC O) は、終わりの文字 (@〜~) までを 1 つのキーにする
             if i + 1 < len(data) and data[i + 1] in "[O":
                 end = i + 2
                 while end < len(data) and not ("@" <= data[end] <= "~"):
                     end += 1
+                if end >= len(data):
+                    return keys, data[i:]
                 raw = data[i:end + 1]
+                # X10 形式のマウスの報告は、ESC [ M の後ろの 3 バイトも報告の一部
+                if raw == "\x1b[M":
+                    if end + 3 >= len(data):
+                        return keys, data[i:]
+                    raw = data[i:end + 4]
                 found = ESCAPE_KEYS.get(raw[1:])
                 keys.append((raw, {"vk": found[0], "shift": found[1]} if found else None))
-                i = end + 1
+                i += len(raw)
                 continue
             # ESC + 文字は Alt を押した文字。ESC だけなら Esc キー
             if i + 1 < len(data) and data[i + 1] >= " ":
@@ -82,7 +102,7 @@ def split_keys(data):
         else:
             keys.append((c, {"ch": ord(c)}))
         i += 1
-    return keys
+    return keys, ""
 
 
 def width(text):
@@ -221,6 +241,7 @@ def main(argv):
     saved = termios.tcgetattr(stdin)
     tty.setraw(stdin)
     decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    pending = ""  # 前に読んだ文字列の、途中で切れたエスケープシーケンス・貼り付け
     send("CaretMoved", caret={"moved": True, "passedKey": 0, "focusEntered": True})
     try:
         while True:
@@ -245,7 +266,8 @@ def main(argv):
                 data = os.read(stdin, 4096)
                 if not data:
                     break
-                for raw, key in split_keys(decoder.decode(data)):
+                keys, pending = split_keys(pending + decoder.decode(data))
+                for raw, key in keys:
                     key_event(raw, key)
     finally:
         if shown:
