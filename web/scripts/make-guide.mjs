@@ -70,7 +70,7 @@ export function render(markdown) {
 }
 
 function page({ title, slug }, body) {
-  const nav = PAGES.map((p) => `<a href="${pageUrl(p.slug)}"${p.slug === slug ? ' aria-current="page"' : ""}>${escapeHtml(p.title)}</a>`).join("\n        ");
+  const nav = PAGES.map((p) => `<a href="${pageUrl(p.slug)}"${p.slug === slug ? ' aria-current="page"' : ""}>${escapeHtml(p.title)}</a>`).join("\n      ");
   const source = PAGES.find((p) => p.slug === slug).file;
   return `<!doctype html>
 <html lang="ja">
@@ -88,20 +88,35 @@ function page({ title, slug }, body) {
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700;900&display=swap">
   <link rel="stylesheet" href="/assets/css/site.css">
   <link rel="stylesheet" href="/assets/css/guide.css">
+  <script type="module" src="/assets/js/guide.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">本文へ移動</a>
-  <header class="site-header">
+  <header class="site-header" data-header>
     <div class="header-inner">
-      <a class="brand" href="/" aria-label="Meltypeのトップ">
+      <a class="brand" href="/" aria-label="Meltype のトップ">
         <img src="/assets/img/logo-small.png" alt="" width="120" height="60">
       </a>
-      <nav class="guide-nav" aria-label="使い方ガイド">
-        ${nav}
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-nav-toggle>
+        <svg class="ic"><use href="/assets/img/icons.svg#i-menu"/></svg>
+        <span class="sr-only">メニュー</span>
+      </button>
+      <nav class="site-nav" id="site-nav" aria-label="サイト内の移動" data-nav>
+        <a href="/#features">できること</a>
+        <a href="/#install">インストール</a>
+        <a class="is-current" href="/guide/">使い方ガイド</a>
+        <a href="/typing/">タイピング</a>
+        <a class="nav-report" href="/report/">問題を報告する</a>
+        <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">
+          <svg class="ic"><use href="/assets/img/icons.svg#i-download"/></svg>ダウンロード
+        </a>
       </nav>
     </div>
   </header>
   <main id="main" class="guide">
+    <nav class="guide-nav" aria-label="使い方ガイドのページ">
+      ${nav}
+    </nav>
     <article class="guide-body">
 ${body}
     </article>
