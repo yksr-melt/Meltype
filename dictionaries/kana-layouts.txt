@@ -1,9 +1,10 @@
 # かな配列の表 (設定「かな配列」で JIS かな以外を選んだとき)。Core の KanaLayoutEngine が読む
-# 形式: 配列<Tab>打つキー<Tab>かな
+# 形式: 配列<Tab>打つキー<Tab>かな[<Tab>次の入力]
 # 打つキーは日本語 106/109 キーボードの刻印 (q ; @ など。¥ は \、ろ は _)。L は左の親指キー (無変換)、R は右の親指キー (変換)
 #   d f   … d を打ってから f を打つ (前置シフト)
 #   L+f   … 同時に押す (同時打鍵・親指シフト)
-# 表は benizara (https://github.com/k-ayaki/benizara、MIT License、Copyright (c) 2018 綾木健一郎) の定義ファイルから取った
+# 表は benizara (https://github.com/k-ayaki/benizara、MIT License、Copyright (c) 2018 綾木健一郎) の定義ファイルから取った。
+# 月配列 (2-263) は 2-263 式の配列図どおりに書いた
 Nicola	-	ー
 Nicola	q	。
 Nicola	w	か
@@ -552,3 +553,98 @@ Hana	k m	み
 Hana	k ,	を
 Hana	k .	お
 Hana	k /	ぬ
+Tsuki2263	-	ー
+Tsuki2263	q	そ
+Tsuki2263	w	こ
+Tsuki2263	e	し
+Tsuki2263	r	て
+Tsuki2263	t	ょ
+Tsuki2263	y	つ
+Tsuki2263	u	ん
+Tsuki2263	i	い
+Tsuki2263	o	の
+Tsuki2263	p	り
+Tsuki2263	@	ち
+Tsuki2263	a	は
+Tsuki2263	s	か
+Tsuki2263	f	と
+Tsuki2263	g	た
+Tsuki2263	h	く
+Tsuki2263	j	う
+Tsuki2263	l	゛
+Tsuki2263	;	き
+Tsuki2263	:	れ
+Tsuki2263	z	す
+Tsuki2263	x	け
+Tsuki2263	c	に
+Tsuki2263	v	な
+Tsuki2263	b	さ
+Tsuki2263	n	っ
+Tsuki2263	m	る
+Tsuki2263	,	、
+Tsuki2263	.	。
+Tsuki2263	/	゜
+Tsuki2263	d q	ぁ
+Tsuki2263	d w	ひ
+Tsuki2263	d e	ほ
+Tsuki2263	d r	ふ
+Tsuki2263	d t	め
+Tsuki2263	d y	ぬ
+Tsuki2263	d u	え
+Tsuki2263	d i	み
+Tsuki2263	d o	や
+Tsuki2263	d p	ぇ
+Tsuki2263	d @	「
+Tsuki2263	d a	ぃ
+Tsuki2263	d s	を
+Tsuki2263	d d	ら
+Tsuki2263	d f	あ
+Tsuki2263	d g	よ
+Tsuki2263	d h	ま
+Tsuki2263	d j	お
+Tsuki2263	d k	も
+Tsuki2263	d l	わ
+Tsuki2263	d ;	ゆ
+Tsuki2263	d :	」
+Tsuki2263	d z	ぅ
+Tsuki2263	d x	へ
+Tsuki2263	d c	せ
+Tsuki2263	d v	ゅ
+Tsuki2263	d b	ゃ
+Tsuki2263	d n	む
+Tsuki2263	d m	ろ
+Tsuki2263	d ,	ね
+Tsuki2263	d .	ー
+Tsuki2263	d /	ぉ
+Tsuki2263	k q	ぁ
+Tsuki2263	k w	ひ
+Tsuki2263	k e	ほ
+Tsuki2263	k r	ふ
+Tsuki2263	k t	め
+Tsuki2263	k y	ぬ
+Tsuki2263	k u	え
+Tsuki2263	k i	み
+Tsuki2263	k o	や
+Tsuki2263	k p	ぇ
+Tsuki2263	k @	「
+Tsuki2263	k a	ぃ
+Tsuki2263	k s	を
+Tsuki2263	k d	ら
+Tsuki2263	k f	あ
+Tsuki2263	k g	よ
+Tsuki2263	k h	ま
+Tsuki2263	k j	お
+Tsuki2263	k k	も
+Tsuki2263	k l	わ
+Tsuki2263	k ;	ゆ
+Tsuki2263	k :	」
+Tsuki2263	k z	ぅ
+Tsuki2263	k x	へ
+Tsuki2263	k c	せ
+Tsuki2263	k v	ゅ
+Tsuki2263	k b	ゃ
+Tsuki2263	k n	む
+Tsuki2263	k m	ろ
+Tsuki2263	k ,	ね
+Tsuki2263	k .	ー
+Tsuki2263	k /	ぉ

@@ -3,6 +3,7 @@
 Meltype のソースコード (このリポジトリ) には、次のものを除いて他者の著作物は含まれていません。
 
 - かな配列 (月配列 U9・花配列・NICOLA・中指NICOLA・TRON 配列) の表 (`dictionaries/kana-layouts.txt`): [benizara](https://github.com/k-ayaki/benizara) の配列定義ファイルから取りました。MIT License (Copyright (c) 2018 綾木健一郎)
+- 新月配列の表 (`dictionaries/kana-layouts-shingetsu.txt`。`tools/make-shingetsu-layout.mjs` で作る): [shingetsu-layout](https://github.com/nagamine-git/shingetsu-layout) の `shingetsu-romantable.txt` から取りました。MIT License (Copyright (c) 2026 nagamine-git)
 
 ## 配布用パッケージに同梱しているもの
 
