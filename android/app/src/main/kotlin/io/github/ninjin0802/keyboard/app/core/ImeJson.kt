@@ -40,7 +40,8 @@ internal data class ImeView(
     val selectedClause: Int = 0,
 )
 
-internal data class ImeResult(val consumed: Boolean, val commits: List<ImeCommit>, val view: ImeView?)
+/** [japanese] は、打ったら効く言語モードが日本語か (state.languageMode。受け持たない入力欄では英数)。 */
+internal data class ImeResult(val consumed: Boolean, val commits: List<ImeCommit>, val view: ImeView?, val japanese: Boolean)
 
 internal object ImeJson {
     /** ImeHost.Version と同じ。 */
@@ -55,6 +56,7 @@ internal object ImeJson {
 
     /** Windows の仮想キーコード (Core の VirtualKeys と同じ値)。 */
     const val VK_RETURN = 0x0D
+    const val VK_LEFT = 0x25
     const val VK_RIGHT = 0x27
 
     /** 文字の無いキー (Back 0x08・Enter 0x0D・→ 0x27 など)。vk は Windows の仮想キーコード。 */
@@ -76,6 +78,18 @@ internal object ImeJson {
     /** キーボードが書き換えていないのに、キャレットが動いた (タップ・矢印キー・アプリの編集)。 */
     fun caretMoved(field: ImeFieldFacts?): String =
         event("CaretMoved", field) { put("caret", caret()) }
+
+    /** あa のキー: 日本語 ⇔ 英数を切り替える。 */
+    fun modeToggleRequested(field: ImeFieldFacts?): String = event("ModeToggleRequested", field) {}
+
+    /** 空白キーの長押しのメニューで日本語を選んだ。 */
+    fun japaneseModeSelected(field: ImeFieldFacts?): String = event("JapaneseModeSelected", field) {}
+
+    /** 空白キーの長押しのメニューで英語を選んだ。 */
+    fun alphanumericModeSelected(field: ImeFieldFacts?): String = event("AlphanumericModeSelected", field) {}
+
+    /** 裏で動いていた変換が終わった。Core は結果で変換中の表示を作り直す。 */
+    fun conversionFinished(field: ImeFieldFacts?): String = event("ConversionFinished", field) {}
 
     /** 前の応答の一覧の [index] 番目をタップした。 */
     fun candidateClicked(index: Int, field: ImeFieldFacts?): String =
@@ -107,9 +121,10 @@ internal object ImeJson {
         put("canRemove", field.canRemove)
     }
 
-    /** 応答 ({"version","state","result"}) の result を読む。形が違えば例外を投げる (入力欄を書き換える前に)。 */
+    /** 応答 ({"version","state","result"}) の state の言語モードと result を読む。形が違えば例外を投げる (入力欄を書き換える前に)。 */
     fun parse(json: String): ImeResult {
-        val result = JSONObject(json).getJSONObject("result")
+        val output = JSONObject(json)
+        val result = output.getJSONObject("result")
         val commits = result.getJSONArray("commits")
         return ImeResult(
             consumed = result.getBoolean("consumed"),
@@ -122,6 +137,7 @@ internal object ImeJson {
                 )
             },
             view = if (result.isNull("view")) null else view(result.getJSONObject("view")),
+            japanese = output.getJSONObject("state").getString("languageMode") == "Japanese",
         )
     }
 

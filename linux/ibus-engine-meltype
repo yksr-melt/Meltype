@@ -22,7 +22,7 @@ _lib.meltype_free.argtypes = [ctypes.c_void_p]
 _lib.meltype_version.restype = ctypes.c_void_p
 _lib.meltype_report_url.argtypes = [ctypes.c_char_p]
 _lib.meltype_report_url.restype = ctypes.c_void_p
-_lib.meltype_init.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
+_lib.meltype_init.argtypes = [ctypes.c_char_p]
 _lib.meltype_init.restype = ctypes.c_int
 _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
 _lib.meltype_set_conversion_ready.restype = None
@@ -59,8 +59,7 @@ import gi
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, GObject, IBus  # noqa: E402
 
-# 英単語の判定は同梱の一覧 (None)
-if not _lib.meltype_init(HERE.encode(), None):
+if not _lib.meltype_init(HERE.encode()):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
@@ -132,6 +131,9 @@ ALT_KEYS = (0xA4, 0xA5)
 
 # 矢印キー (←) のキーコード (確定したあとにキャレットを戻す)
 KEYCODE_LEFT = 105
+# 本体が使った Alt の解放の前に挟む、何もしないキー (MeltypeEngine._alt_key のワークアラウンド)。GNOME は送られたキーを keysym から
+# keymap のキーに引き直すので、keymap にあって何も割り当てられていない F19 にする
+KEYCODE_F19 = 189
 
 
 # ---- 入力エンジン ----
@@ -236,7 +238,7 @@ class MeltypeEngine(IBus.Engine):
         released = bool(state & IBus.ModifierType.RELEASE_MASK)
         vk, character = virtual_key(keyval)
         if vk in ALT_KEYS:
-            return self._alt_key(vk, state, released)
+            return self._alt_key(vk, keyval, keycode, state, released)
         if released:
             return False
         if self._alt_down:
@@ -253,8 +255,8 @@ class MeltypeEngine(IBus.Engine):
                 "alt": bool(state & IBus.ModifierType.MOD1_MASK),
                 "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
 
-    def _alt_key(self, vk, state, released):
-        """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたときだけアプリに通さない。"""
+    def _alt_key(self, vk, keyval, keycode, state, released):
+        """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたら止める。"""
         if not released:
             # 押したままの自動の繰り返しは、最初の押下だけを送る
             if not self._alt_keys or self._alt_down == vk:
@@ -269,7 +271,15 @@ class MeltypeEngine(IBus.Engine):
         self._alt_down = 0
         self._alt_interrupted = False
         output = self.send("KeyReleased", key={"vk": vk, "interrupted": interrupted})
-        return bool(output and output["result"]["consumed"])
+        if not (output and output["result"]["consumed"]):
+            return False
+        # ワークアラウンド: 止めた Alt の解放を、何もしないキー (F19) の押下・解放のあとに送り直す (Windows の 0xE8 と同じ)。
+        # Alt の単独押しで入力モードを切り替える限り恒久的に必要で、消せない。止めたままだと、次のキーがアプリに届くまで
+        # アプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すと、アプリが Alt の単独押し (メニュー) と受け取る。
+        self.forward_key_event(IBus.KEY_F19, KEYCODE_F19, 0)
+        self.forward_key_event(IBus.KEY_F19, KEYCODE_F19, IBus.ModifierType.RELEASE_MASK)
+        self.forward_key_event(keyval, keycode, state)
+        return True
 
     def _leave(self, focus_out):
         """フォーカスが外れる・Reset (クリックなど)。キャレットはこの入力欄の外か、クリックした所に移る。

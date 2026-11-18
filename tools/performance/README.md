@@ -111,7 +111,7 @@ python3 tools/benchmark-composition.py /path/to/baseline-checkout \
 <img src="../../docs/images/headings/performance/s05.svg" alt="測る範囲" height="40">
 
 時間に入るのは、`HandleKey`、結果の JSON への書き出し、Enter での確定です。辞書の読み込み・起動・セッションを作る時間は入りません。
-両方の版とも、同梱のスペルチェッカーと、空の言語の学習を使います。変換エンジンは、候補を何も返さない偽物です。
+両方の版とも、空の言語の学習を使います。変換エンジンは、候補を何も返さない偽物です。
 記録するのは、合計の時間・スレッドが確保したメモリ・1 キーごとの p50 / p95 / max・確定した文字列の SHA-256 です。
 URL 以外の確定した文字列は、baseline と同じでなければなりません (URL は打ったまま残すように変えたので、わざと違います)。
 

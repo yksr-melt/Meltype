@@ -21,19 +21,15 @@ namespace Meltype.CApi;
 /// </summary>
 public static unsafe class Exports
 {
-    /// <summary>小文字の英単語 → 英語として正しい綴りなら 1 (Mac のスペルチェッカー)。</summary>
-    private static delegate* unmanaged<byte*, int> s_isWord;
-
     /// <summary>
     /// 最初に 1 回呼ぶ。appDirectory は同梱の Mozc のヘルパー (mozc/meltype_mozc_helper) と Zenzai (zenzai/) を置いたフォルダー。
-    /// isWord は英単語の判定 (NULL なら同梱の英単語の一覧)。Mozc のヘルパーがあれば 1、無ければ 0 (変換はかなのまま)。
+    /// Mozc のヘルパーがあれば 1、無ければ 0 (変換はかなのまま)。
     /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_init")]
-    public static int Init(byte* appDirectory, delegate* unmanaged<byte*, int> isWord)
+    public static int Init(byte* appDirectory)
     {
         try
         {
-            s_isWord = isWord;
             var directory = FromUtf8(appDirectory);
             if (string.IsNullOrEmpty(directory)) throw new ArgumentException("appDirectory が空です");
             s_converter = Runtime.CreateConverter(directory);
@@ -48,8 +44,8 @@ public static unsafe class Exports
         }
     }
 
-    /// <summary>設定・辞書・学習データ。Swift 側のスペルチェッカーを登録した後 (meltype_init) に作る。</summary>
-    private static MeltypeRuntime Runtime => s_runtime ??= MeltypeRuntime.OpenDefault(s_isWord == null ? null : new CallbackWordChecker());
+    /// <summary>設定・辞書・学習データ (最初に使うときに作る)。</summary>
+    private static MeltypeRuntime Runtime => s_runtime ??= MeltypeRuntime.OpenDefault();
 
     private static MeltypeRuntime? s_runtime;
 
@@ -58,22 +54,17 @@ public static unsafe class Exports
 
     private static HybridConverter? s_converter;
 
-    // Android uses an in-process Mozc library, unlike the desktop platforms' helper process.
-    // It supplies only conversion data; input decisions remain in the shared ImeHost.
-    private static AndroidCallbackConverter? s_androidConverter;
-
+    /// <summary>
+    /// Android 版の meltype_init。Mozc はアプリのプロセスで動くので、変換ヘルパーの要求 1 行 (native/mozc/meltype_mozc_helper.cc の先頭) を
+    /// mozcRequest に渡し、答えの 1 行を受け取る。mozcRequest は変換のスレッドから呼ばれ、malloc した UTF-8 (失敗なら NULL) を返す。
+    /// </summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_android_init")]
-    public static int AndroidInit(
-        delegate* unmanaged<byte*, byte*, byte*> clauses,
-        delegate* unmanaged<byte*, byte*> candidates,
-        delegate* unmanaged<byte*, int> isWord)
+    public static int AndroidInit(delegate* unmanaged<byte*, byte*> mozcRequest)
     {
         try
         {
-            if (clauses == null || candidates == null) return 0;
-            s_isWord = isWord;
-            _ = Runtime;
-            s_androidConverter = new AndroidCallbackConverter(clauses, candidates);
+            if (mozcRequest == null) return 0;
+            s_converter = Runtime.CreateConverter(new CallbackMozcHelper(mozcRequest));
             return 1;
         }
         catch (Exception ex)
@@ -84,7 +75,7 @@ public static unsafe class Exports
     }
 
     /// <summary>
-    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init の後、meltype_ime_create の前に 1 回呼ぶ。
+    /// 変換エンジンを入力のスレッドで待たず、結果が届いたら notify を呼ぶ。meltype_init (Android は meltype_android_init) の後、meltype_ime_create の前に 1 回呼ぶ。
     /// notify はワーカーのスレッドで呼ばれるので、フロントはメインループに移してから、フォーカスのある入力欄に refresh の出来事を送る。
     /// 呼ばないフロント (古いフロント・--self-test) では、結果を反映する経路が無いので、答えが出るまで待つ。
     /// </summary>
@@ -155,9 +146,7 @@ public static unsafe class Exports
         public Config.InputMode? InputMethod => null;
 
         public MeltypeSession CreateSession(Func<Config.Settings> settings) =>
-            s_androidConverter is { } android
-                ? Runtime.CreateSession(android, settings, android.Candidates, directModeDetection: true)
-                : Runtime.CreateSession(Converter, settings, Converter.Candidates, directModeDetection: true);
+            Runtime.CreateSession(Converter, settings, Converter.Candidates, directModeDetection: true);
 
         public SnippetStore Snippets => Runtime.Snippets;
 
@@ -194,50 +183,36 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "meltype_free")]
     public static void Free(byte* text) => NativeMemory.Free(text);
 
-    // JNI callbacks allocate UTF-8 results with malloc. TakeUtf8 releases them once.
-    // Exceptions from Kotlin are recorded by the JNI caller and cause handle to fail.
-    private sealed class AndroidCallbackConverter(
-        delegate* unmanaged<byte*, byte*, byte*> clauses,
-        delegate* unmanaged<byte*, byte*> candidates) : IKanjiConverter
+    /// <summary>Android: アプリのプロセスの Mozc。動かすのも止めるのもアプリなので、Start・Reset・Dispose では何もしない。</summary>
+    private sealed class CallbackMozcHelper(delegate* unmanaged<byte*, byte*> request) : IMozcHelper
     {
-        public string? Convert(string hiragana) =>
-            ConvertClauses(hiragana) is { Count: > 0 } parts
-                ? string.Concat(parts.Select(c => c.Text)) : null;
+        public bool IsInstalled => true;
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        public long WorkingSet => 0;
+
+        public void Start()
         {
-            var input = ToUtf8(hiragana, out var inputBuffer);
-            var contextPointer = context is null ? null : ToUtf8(context, out _);
+        }
+
+        public string? Send(string line)
+        {
+            var input = ToUtf8(line);
             try
             {
-                var text = TakeUtf8(clauses(input, contextPointer));
-                if (text is null) return null;
-                var result = new List<ConversionClause>();
-                foreach (var line in text.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    var tab = line.IndexOf('\t');
-                    if (tab <= 0) return null;
-                    result.Add(new ConversionClause(line[..tab], line[(tab + 1)..]));
-                }
-                return result.Count > 0 &&
-                    string.Concat(result.Select(c => c.Reading)) == hiragana ? result : null;
+                return TakeUtf8(request(input));
             }
             finally
             {
-                NativeMemory.Free(inputBuffer);
-                if (contextPointer != null) NativeMemory.Free(contextPointer);
+                NativeMemory.Free(input);
             }
         }
 
-        public string[] Candidates(string reading)
+        public void Reset()
         {
-            var input = ToUtf8(reading, out var inputBuffer);
-            try
-            {
-                var text = TakeUtf8(candidates(input));
-                return text is null ? [] : text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
-            }
-            finally { NativeMemory.Free(inputBuffer); }
+        }
+
+        public void Dispose()
+        {
         }
     }
 
@@ -248,36 +223,15 @@ public static unsafe class Exports
         finally { NativeMemory.Free(text); }
     }
 
-    private sealed class CallbackWordChecker : IWordChecker
-    {
-        public bool IsAvailable => s_isWord != null;
-
-        public bool IsWord(string lower)
-        {
-            if (s_isWord == null || lower.Length < 2) return false;
-            var pointer = ToUtf8(lower, out var buffer);
-            try
-            {
-                return s_isWord(pointer) != 0;
-            }
-            finally
-            {
-                NativeMemory.Free(buffer);
-            }
-        }
-    }
-
     // ---- UTF-8 の文字列 ----
 
     private static string? FromUtf8(byte* text) => text == null ? null : Marshal.PtrToStringUTF8((IntPtr)text);
 
     /// <summary>malloc した UTF-8 の文字列にする (呼び出し側が解放する)。</summary>
-    private static byte* ToUtf8(string text) => ToUtf8(text, out _);
-
-    private static byte* ToUtf8(string text, out byte* buffer)
+    private static byte* ToUtf8(string text)
     {
         var length = Encoding.UTF8.GetByteCount(text);
-        buffer = (byte*)NativeMemory.Alloc((nuint)length + 1);
+        var buffer = (byte*)NativeMemory.Alloc((nuint)length + 1);
         fixed (char* chars = text) Encoding.UTF8.GetBytes(chars, text.Length, buffer, length);
         buffer[length] = 0;
         return buffer;

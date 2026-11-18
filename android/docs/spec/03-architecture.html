@@ -87,29 +87,28 @@
 <tr><td><code>src/Meltype.Core/</code>（共有）</td><td>QWERTYローマ字入力の日英自動判別、未確定文字と候補の管理</td><td>C#（Android向けNativeAOT出力）</td></tr>
 <tr><td><code>app/src/main/cpp/</code></td><td>C# NativeAOTライブラリとのJNI接続、Kotlinからのコールバック</td><td>あり（NDK）</td></tr></tbody></table>
 <h3 id="依存の向き">依存の向き</h3>
-<pre>日本語QWERTY: app ──→ JNI ──→ C# Meltype.Core (NativeAOT)
-                                   └──→ Mozc変換コールバック（端末内）
-英字QWERTY・数字記号・変換無効欄: app ──→ InputConnection
+<pre>すべてのキー: app ──→ JNI ──→ C# Meltype.Core (NativeAOT)
+                                   └──→ MozcConverter ──→ JNIコールバック ──→ mozc（端末内）
 </pre>
 <ul>
 <li><code>app</code> は入力欄の事実とキーを共有Coreへ送り、その応答を入力欄に適用する。</li>
 <li><code>mozc</code> は共有Coreから要求されたかな漢字変換を端末内で実行する。</li>
-<li>変換無効の入力欄では、キーの文字を直接入力する。12キー・フリックの実装は含まれない。</li>
+<li>パスワード欄では、Coreがキーを処理せず、<code>app</code> が打ったとおりに入力する。12キー・フリックの実装は含まれない。</li>
 </ul>
 <p>入力判断を共有Coreに一本化することで、デスクトップ版との二重実装による挙動差を避ける。Coreが利用できない場合は別のローマ字エンジンへ切り替えず、退避用IME選択画面を出す。</p>
 <h2 id="処理の流れ">処理の流れ</h2>
 <ol>
 <li>利用者がQWERTYのキーを押すと、<code>app</code> がAndroidのキー操作と入力欄の状態を取得する。</li>
-<li>日本語QWERTYではJNI経由でC# Coreへ出来事を送る。変換が必要ならCoreからMozcを呼ぶ。</li>
+<li>JNI経由でC# Coreへ出来事を送る。変換が必要ならCoreの変換のスレッドからMozcを呼ぶ。</li>
 <li>Coreが返した指示をアダプターが入力欄と候補バーに適用する。</li>
-<li>英字QWERTY・数字記号・変換無効欄では、必要に応じて文字を直接入力する。</li>
+<li>Coreが処理しなかったキー（パスワード欄のキーなど）は、文字を直接入力する。</li>
 <li>Coreの初期化・応答が失敗した場合は未確定文字を保護し、Android標準のIME選択画面に退避できる。</li>
 </ol>
 <p>C# CoreはAndroidの入力欄に直接触れない。入力欄への書き込みは<code>app</code>の<code>InputConnection</code>アダプターが行う。詳しくは<a href="08-auto-detection.html">08</a>。</p>
 <h2 id="スレッド">スレッド</h2>
 <ul>
 <li>キーの描画とタッチの処理は、画面のスレッドで行う。</li>
-<li>変換は時間がかかることがあるので、専用のスレッド1本で順番に行う。</li>
+<li>変換は時間がかかることがあるので、Coreの変換のスレッドで行う。結果が届くと、キーボードが画面のスレッドから <code>ConversionFinished</code> をCoreに送る。</li>
 <li>変換の結果が返ったとき、その間に読みが変わっていたら、その結果は捨てる。入力欄が切り替わっていた場合も捨てる。</li>
 </ul>
 <h2 id="キーボード画面の作り方">キーボード画面の作り方</h2>

@@ -32,7 +32,7 @@ import io.github.ninjin0802.keyboard.app.layout.nearestKeyAt
 interface KeyListener {
     fun onKey(action: KeyAction, direction: Direction, timeMs: Long)
 
-    /** 空白キーが長押しされた。カーソルを動かす状態に入ってよければ true（未確定文字があるあいだは false）。 */
+    /** 文字の配列で空白キーが長押しされた。言語のメニューを出したら true（出さなければ、カーソルを動かす状態に入る）。 */
     fun onSpaceLanguageMenu(x: Float, y: Float): Boolean = false
 
     /** A space long-press retains the original pointer stream; hover is tracked here. */
@@ -148,18 +148,17 @@ class KeyboardView(context: Context) : View(context) {
         val k = pressed
         if (k == null || k.action != KeyAction.Space || !holds(k)) return@Runnable
         if (!cursorGesture.longPress(SystemClock.uptimeMillis())) return@Runnable
-        if (layout.id == LayoutId.ROMAJI || layout.id == LayoutId.QWERTY) {
-            if (listener?.onSpaceLanguageMenu(downX, downY) == true) {
-                spaceMenuOpened = true
-                KeyFeedback.play(this, hapticEnabled, KeyFeedback.Kind.LONG_PRESS)
-            }
+        // 文字の配列では言語のメニュー。メニューを出さないとき (変換中) は、ほかの配列と同じくカーソルを動かす。
+        if ((layout.id == LayoutId.ROMAJI || layout.id == LayoutId.QWERTY) && listener?.onSpaceLanguageMenu(downX, downY) == true) {
+            spaceMenuOpened = true
+            KeyFeedback.play(this, hapticEnabled, KeyFeedback.Kind.LONG_PRESS)
             cursorGesture.cancel()
             return@Runnable
         }
         if (listener?.onCursorModeStart() == true) {
             KeyFeedback.play(this, hapticEnabled, KeyFeedback.Kind.LONG_PRESS)
         } else {
-            cursorGesture.cancel()   // 未確定文字がある。離したときに、ふつうの空白キーとして働く。
+            cursorGesture.cancel()   // 離したときに、ふつうの空白キーとして働く。
         }
     }
 
