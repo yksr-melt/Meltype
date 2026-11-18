@@ -29,7 +29,7 @@ if [[ ! "$rpmversion" =~ ^[0-9][A-Za-z0-9.+~]*$ ]]; then
     exit 1
 fi
 
-for f in libMeltypeNative.so ibus-engine-meltype meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper zenzai/llama-server; do
+for f in libMeltypeNative.so ibus-engine-meltype meltype-tty meltype-settings ibus-setup-meltype.desktop meltype.xml icon.png LICENSE THIRD-PARTY-NOTICES.md mozc/meltype_mozc_helper zenzai/llama-server; do
     [[ -e "$src/$f" ]] || { echo "必要なファイルがありません: $src/$f (先に linux/build.sh を実行してください)" >&2; exit 1; }
 done
 command -v rpmbuild > /dev/null || { echo "rpmbuild がありません (Fedora なら sudo dnf install rpm-build)" >&2; exit 1; }
@@ -94,12 +94,13 @@ The fcitx5 addon of Meltype.
 
 %install
 mkdir -p %{buildroot}%{target} %{buildroot}%{_datadir}/ibus/component %{buildroot}%{_bindir} %{buildroot}%{_datadir}/applications
-cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/zenzai %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
+cp -R %{meltype_src}/libMeltypeNative.so %{meltype_src}/ibus-engine-meltype %{meltype_src}/meltype-tty %{meltype_src}/meltype-settings %{meltype_src}/icon.png %{meltype_src}/mozc %{meltype_src}/zenzai %{meltype_src}/LICENSE %{meltype_src}/THIRD-PARTY-NOTICES.md %{buildroot}%{target}/
 chmod 644 %{buildroot}%{target}/libMeltypeNative.so %{buildroot}%{target}/icon.png %{buildroot}%{target}/LICENSE %{buildroot}%{target}/THIRD-PARTY-NOTICES.md
 find %{buildroot}%{target}/zenzai -type f -exec chmod 644 {} +
-chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper %{buildroot}%{target}/zenzai/llama-server
+chmod 755 %{buildroot}%{target}/ibus-engine-meltype %{buildroot}%{target}/meltype-tty %{buildroot}%{target}/meltype-settings %{buildroot}%{target}/mozc/meltype_mozc_helper %{buildroot}%{target}/zenzai/llama-server
 sed "s|@DIR@|%{target}|g" %{meltype_src}/meltype.xml > %{buildroot}%{_datadir}/ibus/component/meltype.xml
 ln -s %{target}/meltype-settings %{buildroot}%{_bindir}/meltype-settings
+ln -s %{target}/meltype-tty %{buildroot}%{_bindir}/meltype-tty
 sed "s|@DIR@|%{target}|g" %{meltype_src}/ibus-setup-meltype.desktop > %{buildroot}%{_datadir}/applications/ibus-setup-meltype.desktop
 %if %{with_fcitx5}
 install -D -m 644 %{meltype_src}/fcitx5/meltype.so %{buildroot}%{_libdir}/fcitx5/meltype.so
@@ -120,6 +121,7 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 %dir %{target}
 %{target}/libMeltypeNative.so
 %{target}/ibus-engine-meltype
+%{target}/meltype-tty
 %{target}/meltype-settings
 %{target}/icon.png
 %{target}/mozc
@@ -128,6 +130,7 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 %license %{target}/LICENSE
 %{_datadir}/ibus/component/meltype.xml
 %{_bindir}/meltype-settings
+%{_bindir}/meltype-tty
 %{_datadir}/applications/ibus-setup-meltype.desktop
 
 %if %{with_fcitx5}
