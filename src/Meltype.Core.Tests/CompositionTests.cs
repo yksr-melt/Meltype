@@ -3091,28 +3091,22 @@ internal static class CompositionTests
     [Test]
     public static void Issue491_LearningCanBeSeparatedByContext()
     {
-        var memory = new LanguageMemory(null) { ContextSensitive = true };
-        memory.Context = false;
-        memory.Remember("nw", english: false, explicitChoice: true);
-        memory.Context = true;
-        memory.Remember("nw", english: true, explicitChoice: true);
-        memory.Context = false;
-        Assert.Equal(false, memory.Get("nw"), "日本語の後では日本語");
-        memory.Context = true;
-        Assert.Equal(true, memory.Get("nw"), "英語の後では英語");
+        var memory = new LanguageMemory(null);
+        memory.Remember("nw", english: false, explicitChoice: true, context: false);
+        memory.Remember("nw", english: true, explicitChoice: true, context: true);
+        Assert.Equal(false, memory.Get("nw", context: false), "日本語の後では日本語");
+        Assert.Equal(true, memory.Get("nw", context: true), "英語の後では英語");
         // 学習した語の一覧には、印 (@e / @j) を出さず、語そのものと文脈を分けて返す。消すときは印付きの名前
         var listed = memory.Entries().OrderBy(e => e.Context).ToList();
         Assert.True(listed.All(e => e.Word == "nw"), "語に印が付かない: " + string.Join(",", listed.Select(e => e.Word)));
         Assert.True(listed.Select(e => e.Context).SequenceEqual(["日本語の後", "英語の後"]) || listed.Select(e => e.Context).SequenceEqual(["英語の後", "日本語の後"]), "文脈が分かる");
         memory.Remove([listed.First(e => e.Context == "英語の後").EntryKey]);
         Assert.Equal(1, memory.Entries().Count, "文脈ごとに消せる");
-        memory.Remember("nw", english: true, explicitChoice: true);
-        memory.Context = null;
+        memory.Remember("nw", english: true, explicitChoice: true, context: true);
         Assert.True(memory.Get("nw") is null, "文脈が分からなければ、文脈ごとの学習は使わない");
         var plain = new LanguageMemory(null);
         plain.Remember("nw", english: true, explicitChoice: true);
-        plain.Context = false;
-        Assert.Equal(true, plain.Get("nw"), "OFF は今までどおり 1 つだけ");
+        Assert.Equal(true, plain.Get("nw", context: false), "OFF (文脈で分けずに覚えたもの) は今までどおり 1 つだけ");
     }
 
     [Test]

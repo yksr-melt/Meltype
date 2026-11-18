@@ -57,17 +57,17 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     public string? LearnedConversion(string reading) => services.History?.Get(reading);
 
     /// <summary>確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。before はキャレットの前の確定済みの文字列。</summary>
-    public void Learn(IReadOnlyList<Clause> clauses, string? before)
+    public void Learn(IReadOnlyList<Clause> clauses, string? before, bool? context)
     {
         // 変換の候補から打ったままの英字 (api) を選んで確定したら、その語は次から英字にする (F10 と同じ)。
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && c.Raw is { } raw && c.Text == raw && Learnable(c)))
         {
-            services.Languages?.Remember(clause.Raw!, english: true);
+            services.Languages?.Remember(clause.Raw!, english: true, context: context);
         }
         // 英語と判定した語で日本語の候補 (go → 語) を選んだら、その語は次から日本語にする (F6 と同じ)。
         foreach (var clause in clauses.Where(c => c.IsEnglish && CompositionController.IsJapaneseText(c.Text) && c.Reading.All(char.IsAsciiLetter) && Learnable(c)))
         {
-            services.Languages?.Remember(clause.Reading, english: false);
+            services.Languages?.Remember(clause.Reading, english: false, context: context);
         }
         // 英訳を選んだら、英訳の記録に (普通の変換の学習より弱く効く)。
         foreach (var clause in clauses.Where(c => c.Translations.Contains(c.Text)))
@@ -121,7 +121,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// ユーザーが自分で英字 / かなに直して確定した語を覚える (api と打って F10 で英字にした → 次から api は英字)。
     /// 自動の判定と違う方を選んだときだけ。1 語の英字だけを対象にする。automatic は自動の判定の区間。
     /// </summary>
-    public void LearnLanguage(CompositionTextState text, IReadOnlyList<CompositionSegment> automatic)
+    public void LearnLanguage(CompositionTextState text, IReadOnlyList<CompositionSegment> automatic, bool? context)
     {
         if (services.Languages is not { } memory) return;
         var raw = CompositionText.Raw(text);
@@ -129,14 +129,14 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         switch (text.Mode)
         {
             case DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric when !automatic.All(s => s.IsEnglish):
-                memory.Remember(raw, english: true, explicitChoice: true);
+                memory.Remember(raw, english: true, explicitChoice: true, context: context);
                 break;
             case DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana when automatic.Any(s => s.IsEnglish):
-                memory.Remember(raw, english: false, explicitChoice: true);
+                memory.Remember(raw, english: false, explicitChoice: true, context: context);
                 break;
             case DisplayMode.Auto when text.SuggestionAccepted && automatic.All(s => s.IsEnglish):
                 // 自動判定を使わないときに、Tab で提案どおり英字にした。
-                memory.Remember(raw, english: true, explicitChoice: true);
+                memory.Remember(raw, english: true, explicitChoice: true, context: context);
                 break;
         }
     }

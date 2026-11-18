@@ -30,6 +30,11 @@ public readonly record struct CompositionSegment(bool IsEnglish, string Kana, st
 /// </summary>
 internal static class CompositionText
 {
+    /// <summary>
+    /// 英語 / 日本語の学習を引く文脈: 前が英語か (true)・日本語か (false)。設定「英語 / 日本語の学習を前の文脈ごとに分ける」が OFF なら null。
+    /// </summary>
+    public static bool? LearningContext(CompositionTextState state, TextEnv env) => env.Settings.ContextualLearning ? state.PrecedingEnglish : null;
+
 
     public static IReadOnlyList<CompositionUnit> Units(CompositionTextState state) => state.Units;
     public static string Pending(CompositionTextState state) => state.Pending.ToString();
@@ -68,7 +73,7 @@ internal static class CompositionText
             var word = preceding.ToString();
             var lower = word.ToLowerInvariant();
             var acronym = word.Any(char.IsAsciiLetterUpper) && word.All(c => char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c));
-            var knownUnambiguous = word.Length >= 3 && env.Detector.IsKnownEnglishWord(word) && !env.Detector.Romaji.AnalyzeFragment(lower).IsValid;
+            var knownUnambiguous = word.Length >= 3 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), word) && !env.Detector.Romaji.AnalyzeFragment(lower).IsValid;
             var properNoun = env.Detector.ProperNouns.Contains(lower) && (state.Units[^1].Raw != "-" || word.Any(char.IsAsciiLetterUpper) || !env.Detector.Romaji.AnalyzeFragment(lower).IsValid);
             // かなにならずに残った英字 (p-hub の p、kyouhapt-query-digest の t) の後の - は長音ではない。かなになった ん (n-to) の後は長音
             var unconverted = state.Units[^2].Kana == state.Units[^2].Raw && state.Units[^2].Raw.All(char.IsAsciiLetterLower);
@@ -498,7 +503,7 @@ internal static class CompositionText
             .Append(state.FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
             .Append(state.PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
             .Append(state.PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-').Append(state.LaughterAfterKana ? 'L' : '-')
-            .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1);
+            .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1).Append(':').Append(LearningContext(state, env) switch { true => 'e', false => 'j', null => '-' });
         return key.ToString();
     }
 
@@ -539,7 +544,7 @@ internal static class CompositionText
     {
         var spans = CompositionText.ProtectedSpans(state);
         if (spans.Count == 0)
-            return env.Detector.SegmentAlternatives(units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, CompositionText.EffectiveManual(state, env), state.PrecedingEnglishSentence, state.KanaInput, count, reasons);
+            return env.Detector.SegmentAlternatives(LearningContext(state, env), units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, CompositionText.EffectiveManual(state, env), state.PrecedingEnglishSentence, state.KanaInput, count, reasons);
         var raw = CompositionText.Raw(state);
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -558,7 +563,7 @@ internal static class CompositionText
         {
             if (from == to) return;
             var gapUnits = CompositionText.UnitsInRawRange(state, env, units, from, to, out var pending);
-            var segments = env.Detector.Segment(gapUnits, pending, from == 0 ? state.PrecedingEnglish : false,
+            var segments = env.Detector.Segment(LearningContext(state, env), gapUnits, pending, from == 0 ? state.PrecedingEnglish : false,
                 to == raw.Length ? state.FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
                 from == 0 && state.PrecedingEnglishSentence, state.KanaInput, reasons);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
@@ -649,7 +654,7 @@ internal static class CompositionText
     public static string? Suggestion(CompositionTextState state, TextEnv env)
     {
         if (state.Mode != DisplayMode.Auto || !CompositionText.EffectiveManual(state, env) || CompositionText.IsNumeric(state)) return null;
-        var suggested = env.Detector.Segment(state.Units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, false, state.PrecedingEnglishSentence, state.KanaInput);
+        var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, false, state.PrecedingEnglishSentence, state.KanaInput);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(CompositionText.Segments(state, env))) return null;
         return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
     }
@@ -955,7 +960,7 @@ internal static class CompositionText
             // 数字のすぐ後ろの単位 (10|mm|で) は打ち間違いではない
             var unitAfterNumber = start > 0 && state.Units[start - 1].Raw is [var digit] && char.IsAsciiDigit(digit) &&
                 UnitWords.Any(u => letters.StartsWith(u, StringComparison.OrdinalIgnoreCase));
-            if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !env.Detector.IsKnownEnglishWord(letters) &&
+            if (!unitAfterNumber && letters.All(char.IsAsciiLetterLower) && !env.Detector.IsKnownEnglishWord(LearningContext(state, env), letters) &&
                 corrector.FirstUnreadable(letters, final: true) is var first and > 0 &&
                 !(runOffset + first < shownEnglish.Count && shownEnglish[runOffset + first] && (firmEnglish[runOffset + first] || !CompositionText.FixesIntoLongWord(state, env, corrector, letters, first))) &&
                 // 数字のすぐ前の短い英字 (kaibunsyo|rta|2026 の rta) は略語。打ち間違いとして直さない
@@ -1033,7 +1038,7 @@ internal static class CompositionText
             letters = state.Units[i].Raw + letters;
             if (soleSyllable && i == start - 1) continue;
             var runStart = i == 0 || !IsLetters(state.Units[i - 1].Raw);
-            if (letters.Length >= 3 && (runStart ? env.Detector.IsKnownEnglishWord(letters) : env.Detector.IsListedEnglishWord(letters.ToLowerInvariant()))) return end;
+            if (letters.Length >= 3 && (runStart ? env.Detector.IsKnownEnglishWord(LearningContext(state, env), letters) : env.Detector.IsListedEnglishWord(LearningContext(state, env), letters.ToLowerInvariant()))) return end;
         }
         state.Units.RemoveRange(start, end - start);
         if (withPending) state.Pending.Clear();
@@ -1067,8 +1072,8 @@ internal static class CompositionText
             // 5 文字以上の知っている語 (meeting) か、同梱の英語の辞書の 2〜4 文字の語 (user・rta・av)
             // 4 文字の知っている語で、ローマ字として読めないもの (help・milk) も英語 (help|pe-ji → へおっぺーじ にしない)
             var lower = segment.Raw.ToLowerInvariant();
-            var word = segment.IsProtected || segment.IsEnglish && (segment.Raw.Length >= 5 && env.Detector.IsKnownEnglishWord(segment.Raw) || segment.Raw.Length is >= 2 and <= 4 && env.Detector.IsListedEnglishWord(lower) ||
-                segment.Raw.Length == 4 && env.Detector.IsKnownEnglishWord(lower) && !env.Detector.Romaji.Analyze(lower).IsValid ||
+            var word = segment.IsProtected || segment.IsEnglish && (segment.Raw.Length >= 5 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), segment.Raw) || segment.Raw.Length is >= 2 and <= 4 && env.Detector.IsListedEnglishWord(LearningContext(state, env), lower) ||
+                segment.Raw.Length == 4 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), lower) && !env.Detector.Romaji.Analyze(lower).IsValid ||
                 // 3 文字のよく使う英単語で、最後の子音がかなにならないもの (tab|de の b)。表示で英字にしたものを、確定で打ち間違いとして たべ に直さない (issue #220)
                 segment.Raw.Length == 3 && lower.All(char.IsAsciiLetterLower) && CompositionDetector.IsCommonEnglishWord(lower) && env.Detector.Romaji.AnalyzeFragment(lower).Partial.Length > 0);
             for (var i = 0; i < segment.Raw.Length; i++)
@@ -1106,8 +1111,8 @@ internal static class CompositionText
             for (var e = Math.Min(letters.Length, s + 16); e > first; e--)
             {
                 var word = letters[s..e];
-                if (s == 0 && word.Length >= 5 && env.Detector.IsKnownEnglishWord(word)) return true;
-                if ((s == 0 || word.Length >= 5) && env.Detector.IsListedEnglishWord(word)) return true;
+                if (s == 0 && word.Length >= 5 && env.Detector.IsKnownEnglishWord(LearningContext(state, env), word)) return true;
+                if ((s == 0 || word.Length >= 5) && env.Detector.IsListedEnglishWord(LearningContext(state, env), word)) return true;
             }
         }
         return false;

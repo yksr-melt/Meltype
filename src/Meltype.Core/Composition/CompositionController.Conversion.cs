@@ -350,7 +350,7 @@ internal static partial class CompositionController
         CompositionTextState typed = new CompositionTextState();
         foreach (var c in raw) CompositionText.Append(typed, env, c);
         if (CompositionText.Pending(typed).Length > 0) return null;
-        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.Units(typed));
+        var segments = env.Detector.SegmentLeaningEnglish(CompositionText.LearningContext(state.Text, env), CompositionText.Units(typed));
         if (!segments.Any(s => s.IsEnglish) || segments.All(s => s.IsEnglish)) return null;
         return string.Concat(segments.Select(s => s.IsEnglish ? s.Raw : s.Kana));
     }

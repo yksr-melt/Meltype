@@ -13,14 +13,6 @@ namespace Meltype.Composition;
 /// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、変換エンジンに渡す文脈、学習の文脈。</summary>
 internal static partial class CompositionController
 {
-    /// <summary>設定「英語 / 日本語の学習を前の文脈ごとに分ける」: 学習の文脈 (前が英語か日本語か) を今の入力に合わせる。</summary>
-    private static void UpdateLearningContext(CompositionState state, CompositionEnv env)
-    {
-        if (env.Services.Languages is not { } memory) return;
-        memory.ContextSensitive = env.Settings.ContextualLearning;
-        memory.Context = state.Text.PrecedingEnglish;
-    }
-
     private static void BeginComposition(CompositionState state, CompositionEnv env, bool privateInput = false)
     {
         state.PrivateComposition = Private(state) || privateInput;
@@ -38,7 +30,6 @@ internal static partial class CompositionController
         state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
         state.FollowingText = null;
         state.Text.PrecedingEnglish = state.LastCommitEnglish;
-        UpdateLearningContext(state, env);
         state.Text.PrecedingEnglishSentence = state.LastCommitEnglish == true && IsEnglishSentence(state.LastCommitText);
         state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
         // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
@@ -49,7 +40,6 @@ internal static partial class CompositionController
         {
             state.PrecedingText = before;
             if (LanguageOf(before) is { } english) state.Text.PrecedingEnglish = english;
-            UpdateLearningContext(state, env);
             state.Text.PrecedingEnglishSentence = IsEnglishSentence(before);
             state.Text.PrecedingEnglishName = IsEnglishNameContext(before);
         }

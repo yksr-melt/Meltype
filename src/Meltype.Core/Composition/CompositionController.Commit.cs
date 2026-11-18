@@ -71,7 +71,7 @@ internal static partial class CompositionController
         }
         RecordCorrection(state, env, converting, text, suffix);
         if (converting) LearnClauses(state, env);
-        else if (Learning(state, env) && !state.EscReverted) env.Learning.LearnLanguage(state.Text, CompositionText.Segments(state.Text, env));
+        else if (Learning(state, env) && !state.EscReverted) env.Learning.LearnLanguage(state.Text, CompositionText.Segments(state.Text, env), CompositionText.LearningContext(state.Text, env));
         if (!converting || state.Clauses.All(CompositionLearning.Learnable))
             RememberPhrase(state, env, converting ? string.Concat(state.Clauses.Select(c => c.IsEnglish ? "" : c.Reading)) : CompositionText.AllKana(state.Text, env, final: true), text, english);
         CommitText(state, env, text + suffix, english, CompositionText.Raw(state.Text), chosen, preserveText, string.Join("、", rules));
@@ -144,7 +144,7 @@ internal static partial class CompositionController
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     private static void LearnClauses(CompositionState state, CompositionEnv env)
     {
-        if (Learning(state, env)) env.Learning.Learn(state.Clauses, state.PrecedingText);
+        if (Learning(state, env)) env.Learning.Learn(state.Clauses, state.PrecedingText, CompositionText.LearningContext(state.Text, env));
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
@@ -231,7 +231,7 @@ internal static partial class CompositionController
             if (env.Services.RomajiTypos is { } lexicon && !lexicon.IsWord(replacement)) return null;
         }
         // ユーザーが英字 / かなに直して覚えた語 (F10 で英字にした api) は、覚えたとおりなら書き換えない (issue #124)。
-        if (targets.Any(t => env.Services.Languages?.Get(t.Raw.ToLowerInvariant()) == t.English)) return null;
+        if (targets.Any(t => env.Services.Languages?.Get(t.Raw.ToLowerInvariant(), CompositionText.LearningContext(state.Text, env)) == t.English)) return null;
         var original = string.Concat(targets.Select(t => t.Text));
         if (replacement is null || replacement == original) return null;
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
