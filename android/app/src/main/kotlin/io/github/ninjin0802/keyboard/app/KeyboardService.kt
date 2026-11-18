@@ -112,7 +112,8 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     private fun fieldFacts(): ImeFieldFacts {
         val start = System.nanoTime()
-        return coreInput.field(fieldTraits, fieldApp, fieldReadable, selected = selStart != selEnd).also {
+        // パスワード欄の文字は読まない (Core はパスワード欄を受け持たず、文字も使わない)。
+        return coreInput.field(fieldTraits, fieldApp, fieldReadable && !policy.isPassword, selected = selStart != selEnd).also {
             if (PerfLog.enabled) PerfLog.event("field", (System.nanoTime() - start) / 1000, it.before?.length ?: -1)
         }
     }
