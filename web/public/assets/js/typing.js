@@ -91,7 +91,7 @@ intro.addEventListener("submit", (event) => {
 // ---- 2. 打つ ----
 
 function newTrial() {
-  return { keys: [], open: new Map(), startedAt: 0, ime: false };
+  return { keys: [], open: new Map(), startedAt: null, ime: false };
 }
 
 function startRound() {
@@ -123,8 +123,9 @@ function render() {
   $("romaji").textContent = english ? "" : typed.toLowerCase();
 }
 
-function elapsed(event) {
-  return Math.max(0, Math.round(event.timeStamp - state.trial.startedAt));
+// 時刻は performance.now() で測る。event.timeStamp は、ブラウザーや設定 (指紋対策など) によって 0 や粗い値になり、打鍵の間隔が取れないため
+function elapsed() {
+  return Math.max(0, Math.round(performance.now() - state.trial.startedAt));
 }
 
 function onKeyDown(event) {
@@ -155,9 +156,9 @@ function onKeyDown(event) {
   // 押しっぱなしの繰り返しは、字を消す Backspace だけ打鍵として残す (どこをどう直したかを打鍵から再現できるように)。
   // 繰り返しの打鍵は離した時刻が無いので null のまま
   if (event.repeat && event.key !== "Backspace") return;
-  if (!trial.startedAt) trial.startedAt = event.timeStamp;
+  trial.startedAt ??= performance.now();
   if (!event.repeat) trial.open.set(event.code, trial.keys.length);
-  trial.keys.push([event.code, event.key, elapsed(event), null]);
+  trial.keys.push([event.code, event.key, elapsed(), null]);
   render();
 }
 
@@ -167,7 +168,7 @@ function onKeyUp(event) {
   const index = trial.open.get(event.code);
   if (index === undefined) return;
   trial.open.delete(event.code);
-  trial.keys[index][3] = Math.max(trial.keys[index][2], elapsed(event));
+  trial.keys[index][3] = Math.max(trial.keys[index][2], elapsed());
 }
 
 board.addEventListener("keydown", onKeyDown);
