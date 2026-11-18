@@ -153,14 +153,17 @@ jobs:
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
             version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
           linux/build-deb.sh "$version" linux/build/Meltype-linux linux/build
-          dpkg-deb --info linux/build/meltype_*.deb
-          dpkg-deb --contents linux/build/meltype_*.deb
+          for deb in linux/build/meltype*.deb; do dpkg-deb --info "$deb"; dpkg-deb --contents "$deb"; done
+          # 端末版は GTK 4 (設定画面) に依存しない
+          ! dpkg-deb --field linux/build/meltype-tty_*.deb Depends | grep -q gtk
           ls -la linux/build
       # 実際に apt で入れて、決まった場所に置かれるか・外せるかを確かめる
       - name: Test .deb
         run: |
-          sudo apt-get install -y ./linux/build/meltype_*.deb
+          sudo apt-get install -y ./linux/build/meltype*.deb
           test -x /opt/meltype/ibus-engine-meltype
+          test -x /opt/meltype/meltype-tty
+          /usr/bin/meltype-tty --version
           test -x /opt/meltype/mozc/meltype_mozc_helper
           # Zenzai の llama-server が、同梱のライブラリと deb の依存で起動できるか
           /opt/meltype/zenzai/llama-server --version
@@ -171,12 +174,15 @@ jobs:
           sudo apt-get remove -y meltype
           test ! -e /opt/meltype/ibus-engine-meltype
           test ! -e /usr/share/ibus/component/meltype.xml
+          test -x /opt/meltype/meltype-tty
+          sudo apt-get remove -y meltype-tty meltype-common
+          test ! -e /opt/meltype/libMeltypeNative.so
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-${{ matrix.asset }}
           path: |
             linux/build/Meltype-*.zip
-            linux/build/meltype_*.deb
+            linux/build/meltype*.deb
           retention-days: 14
 
   # dnf で入れられる .rpm (Fedora・RHEL 9 系)。本体と Mozc のヘルパーは app のジョブがビルドした zip のものを使い、
@@ -241,7 +247,9 @@ jobs:
           ibus read-cache --system | grep /opt/meltype/ibus-engine-meltype >/dev/null
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
           test -f /usr/lib64/fcitx5/meltype.so
-          dnf remove -y meltype
+          /usr/bin/meltype-tty --version
+          dnf remove -y meltype meltype-tty meltype-common
+          test ! -e /opt/meltype/libMeltypeNative.so
           test ! -e /opt/meltype/ibus-engine-meltype
           test ! -e /usr/share/ibus/component/meltype.xml
           test ! -e /usr/lib64/fcitx5/meltype.so
@@ -274,7 +282,7 @@ jobs:
           name: meltype-${{ matrix.asset }}-rpm
           path: rpms
       - name: Install .rpm
-        run: dnf install -y ./rpms/meltype-[0-9]*.rpm
+        run: dnf install -y ./rpms/meltype-[0-9]*.rpm ./rpms/meltype-common-*.rpm ./rpms/meltype-tty-*.rpm
       # 同梱の llama-server が、サポートする中で一番古い glibc 2.34・libstdc++ (GCC 11) で起動できるか
       - name: Zenzai llama-server
         run: /opt/meltype/zenzai/llama-server --version

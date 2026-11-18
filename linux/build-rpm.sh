@@ -3,11 +3,11 @@
 # Copyright (C) 2026 aster-void
 #
 # linux/build.sh で組み立てたもの (または Meltype-<版>-linux.zip を展開したフォルダー) から、
-# Fedora・RHEL 9 系の .rpm パッケージ (meltype と、fcitx5 のアドオンがあれば meltype-fcitx5) を作る。
+# Fedora・RHEL 9 系の .rpm パッケージ (meltype-common・meltype・meltype-tty と、fcitx5 のアドオンがあれば meltype-fcitx5) を作る。
 # dnf で入れる・更新する・外すためのもの。中身は build-deb.sh と同じ。
 #   linux/build-rpm.sh [版] [組み立てたフォルダー] [出力先]
 #   例: linux/build-rpm.sh 1.2.2-pre.2 linux/build/Meltype-linux linux/build
-#   使う人: sudo dnf install ./meltype-1.2.2~pre.2-1.x86_64.rpm / sudo dnf remove meltype
+#   使う人: sudo dnf install ./meltype-common-1.2.2~pre.2-1.x86_64.rpm ./meltype-1.2.2~pre.2-1.x86_64.rpm / sudo dnf remove meltype
 # fcitx5 のアドオン (fcitx5/meltype.so) は、入れる先のディストリビューションの fcitx5 に対してビルドしたものを置いておく
 # (Ubuntu でビルドしたものは fcitx5 の版が違う)。CI は Fedora のコンテナでビルドし直してから、これを実行する。
 # 必要なもの: rpmbuild (Fedora なら rpm-build)
@@ -55,6 +55,7 @@ trap 'rm -rf "$stage"' EXIT
 # 同梱した llama.cpp のライブラリは、ほかのパッケージに提供するものではないので、自動の Provides・Requires から外す。
 # 自動では足されないもの: ICU (.NET が実行時に dlopen する。InvariantGlobalization=false) と、
 # python3 (IBus のエンジンの #! は /usr/bin/env python3 なので、自動では /usr/bin/env しか足されない)。
+# 本体 (meltype-common) を、IBus・設定画面 (meltype) と端末版 (meltype-tty) に分ける (端末版だけを使う人に、設定画面のための GTK 4 を入れさせないため)。
 # fcitx5 のアドオンは Fedora の glibc を要求するので、サブパッケージ meltype-fcitx5 に分け、meltype は RHEL 9 系でも入るようにする。
 # meltype-fcitx5 は、fcitx5 が入っていれば dnf が meltype と一緒に入れる (Supplements)。
 # IBus の一覧 (ibus write-cache) は Fedora の ibus パッケージのファイルトリガーが作り直すので、ここでは実行しない
@@ -74,13 +75,29 @@ Release: 1
 Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
-Requires: libicu, python3 >= 3.9, python3-gobject, gtk4, gobject-introspection, libglvnd-gles
+Requires: meltype-common%{?_isa} = %{version}-%{release}, python3 >= 3.9, python3-gobject, gtk4, gobject-introspection, libglvnd-gles
 Recommends: ibus
 
 %description
 Meltype is a Japanese input method (IBus engine and fcitx5 addon).
 English words typed while writing Japanese stay as English,
 and romaji becomes Japanese, without switching the input mode.
+
+# 前の版の meltype は本体も持っていたので、本体だけを新しくして前の版の meltype と並べることはできない
+%package common
+Summary: Core of Meltype (conversion engines)
+Requires: libicu
+Conflicts: meltype < %{version}-%{release}
+
+%description common
+The core of Meltype shared by the IBus engine, the fcitx5 addon and the terminal front end.
+
+%package tty
+Summary: Meltype for terminals
+Requires: meltype-common%{?_isa} = %{version}-%{release}, python3 >= 3.9
+
+%description tty
+Meltype for terminals without a GUI (console, SSH, tmux).
 
 %if %{with_fcitx5}
 %package fcitx5
@@ -118,20 +135,24 @@ pkill -f %{target}/ibus-engine-meltype > /dev/null 2>&1 || :
 
 # 設定と学習データ (~/.local/share/Meltype) は人ごとのものなので消さない
 %files
-%dir %{target}
-%{target}/libMeltypeNative.so
 %{target}/ibus-engine-meltype
-%{target}/meltype-tty
 %{target}/meltype-settings
 %{target}/icon.png
+%{_datadir}/ibus/component/meltype.xml
+%{_bindir}/meltype-settings
+%{_datadir}/applications/ibus-setup-meltype.desktop
+
+%files common
+%dir %{target}
+%{target}/libMeltypeNative.so
 %{target}/mozc
 %{target}/zenzai
 %{target}/THIRD-PARTY-NOTICES.md
 %license %{target}/LICENSE
-%{_datadir}/ibus/component/meltype.xml
-%{_bindir}/meltype-settings
+
+%files tty
+%{target}/meltype-tty
 %{_bindir}/meltype-tty
-%{_datadir}/applications/ibus-setup-meltype.desktop
 
 %if %{with_fcitx5}
 %files fcitx5

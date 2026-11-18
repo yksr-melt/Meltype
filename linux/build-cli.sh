@@ -187,9 +187,9 @@ if [[ $install -eq 1 ]]; then
     version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p' "$root/linux/build/Meltype-linux/meltype.xml" | head -n 1)+dev.$(date +%Y%m%d%H%M%S)"
     case "$distro" in
         apt)
-            rm -f "$root"/linux/build/meltype_*.deb
+            rm -f "$root"/linux/build/meltype*.deb
             bash "$root/linux/build-deb.sh" "$version" "$root/linux/build/Meltype-linux" "$root/linux/build"
-            sudo apt-get install -y "$root"/linux/build/meltype_*.deb
+            sudo apt-get install -y "$root"/linux/build/meltype*.deb
             ;;
         dnf)
             rm -f "$root"/linux/build/meltype-*.rpm
