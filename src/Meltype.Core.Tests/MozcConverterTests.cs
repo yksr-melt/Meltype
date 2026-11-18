@@ -76,13 +76,13 @@ internal static class MozcConverterTests
     }
 
     /// <summary>偽のヘルパーで動く Mozc (最初の変換は起動を待つ)。</summary>
-    public static MozcConverter Fake() => new(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), FakeHelperProfile));
+    public static MozcConverter Fake() => new(new MozcHelperProcess(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), FakeHelperProfile)));
 
     [Test]
     public static void Mozc_StartsInBackground_AndDoesNotWaitForIt()
     {
         var profile = Path.Combine(Path.GetTempPath(), FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         mozc.Budget.Enable();
 
         // 起動しているあいだ (READY を待っているあいだ) の変換は、待たずに null を返す (呼び出し側はかなのまま見せる)
@@ -107,7 +107,7 @@ internal static class MozcConverterTests
     public static void Mozc_Reading_AsksTheHelper()
     {
         var profile = Path.Combine(Path.GetTempPath(), FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         Assert.Equal("かんじ", mozc.Reading("漢字"));
         Assert.True(mozc.Reading("読めない") is null, "逆変換できなければ null");
         Assert.True(mozc.IsAvailable, "逆変換できなくても使える");

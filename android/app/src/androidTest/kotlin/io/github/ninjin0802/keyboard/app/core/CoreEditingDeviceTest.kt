@@ -42,7 +42,7 @@ class CoreEditingDeviceTest {
         fun tap(label: String) {
             val choice = adapter.choices.firstOrNull { it.label == label }
                 ?: throw AssertionError("No candidate $label in " + adapter.choices.map { it.label })
-            CandidateTap.tap(adapter, choice.nativeIndex, { field() }) { send(it) }
+            send(ImeJson.candidateClicked(choice.nativeIndex, field()))
         }
 
         /**
@@ -148,12 +148,15 @@ class CoreEditingDeviceTest {
         assertNull(adapter.field(emptyList(), selected = false).selection)
     }
 
-    @Test fun aTapOnAnotherSplitCommitsThatSentence() {
+    // A conversion candidate is chosen, as a click on the desktop; Enter commits it.
+    @Test fun aTapOnAnotherSplitChoosesThatSentence() {
         val typist = Typist()
         typist.convertWholeSentence()
         val shown = typist.adapter.view!!.text
         val other = typist.adapter.choices.first { it.label != shown }.label
         typist.tap(other)
+        assertEquals(other, typist.adapter.view?.text)
+        typist.enter()
         assertEquals(other, typist.editor.content)
         assertEquals(-1, typist.editor.composingStart)
         assertTrue(!typist.adapter.composing)
@@ -168,13 +171,15 @@ class CoreEditingDeviceTest {
         assertEquals(-1, typist.editor.composingStart)
     }
 
-    @Test fun aTapInAConversionOfOneClauseCommits() {
+    @Test fun aTapInAConversionOfOneClauseChoosesTheCandidate() {
         val typist = Typist()
         typist.type("kyouha ")
         val view = typist.adapter.view
         assertTrue("Not a conversion: $view", view?.converting == true)
         assertEquals(1, view!!.clauses.size)
         typist.tap("今日は")
+        assertEquals("今日は", typist.adapter.view?.text)
+        typist.enter()
         assertEquals("今日は", typist.editor.content)
         assertEquals(-1, typist.editor.composingStart)
     }
@@ -192,5 +197,5 @@ class CoreEditingDeviceTest {
 
     /** A whole response as the Core writes it (ImeOutput). */
     private fun response(commits: String, view: String) =
-        """{"version":1,"state":{},"result":{"consumed":true,"commits":$commits,"view":$view}}"""
+        """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":$commits,"view":$view}}"""
 }

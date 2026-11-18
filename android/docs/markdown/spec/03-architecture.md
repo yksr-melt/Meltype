@@ -18,9 +18,8 @@
 
 ```text
 KeyboardService (Kotlin IME)
-  ├─ 日本語QWERTY → MeltypeCoreHost → JNI → C# Meltype.Core (NativeAOT)
-  │                                      └→ Mozcの変換コールバック
-  └─ 英字QWERTY・数字記号・変換無効の入力欄 → InputConnectionへの直接入力
+  └─ すべてのキー → MeltypeCoreHost → JNI → C# Meltype.Core (NativeAOT)
+                                         └→ MozcConverter → JNIコールバック → 端末内のMozc
        ↓
 Android InputConnection / CandidateBarView
 ```
@@ -40,4 +39,4 @@ Android InputConnection / CandidateBarView
 
 ## セキュリティ・テスト
 
-IMEはネットワーク権限を要求せず、入力内容を外部送信しない。パスワード等の変換を禁止する入力欄では共有Coreを使用しない。Android 15のInstrumentation 18/18件合格、Pixel 10 Pro Fold（Android 17）実機確認完了。[仕様08](08-auto-detection.md)・[テスト11](11-testing.md)も参照。
+IMEはネットワーク権限を要求せず、入力内容を外部送信しない。パスワード欄では共有Coreがキーを処理せず、打ったとおりに入力する。Android 15のInstrumentation 18/18件合格、Pixel 10 Pro Fold（Android 17）実機確認完了。[仕様08](08-auto-detection.md)・[テスト11](11-testing.md)も参照。

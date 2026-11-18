@@ -11,7 +11,10 @@ data class MozcClause(val reading: String, val text: String)
  * It does not decide how keystrokes are composed, converted, or committed.
  */
 interface MozcBackend {
+    /** 文節に区切った変換。変換できない読みは空のリスト、失敗 (時間切れ・Mozc を使えない) は null。 */
     fun convert(reading: String, context: String?): List<MozcSegment>?
-    fun predict(reading: String): List<String>
-    fun learn(clauses: List<MozcClause>, context: String?)
+    /** 確定した文節を覚えさせる。覚えたら true。 */
+    fun learn(clauses: List<MozcClause>, context: String?): Boolean
+    /** 漢字かな混じりの [text] の読み (逆変換)。できなければ null。 */
+    fun reading(text: String): String?
 }

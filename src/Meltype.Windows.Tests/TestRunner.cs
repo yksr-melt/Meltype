@@ -53,7 +53,7 @@ internal static class TestRunner
             // dotnet run --project src/Meltype.Windows.Tests -- --type "ke-kiwotabeta "
             // 本物の変換エンジンをつないだ変換ボックスに 1 文字ずつ打ち、表示の変化を見る (ライブ変換 ON)。
             // Mozc は MELTYPE_MOZC、無ければ native\mozc\bin のもの (Zenzai は使わない)。
-            using var mozc = new Composition.MozcConverter(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile"));
+            using var mozc = new Composition.MozcConverter(new Composition.MozcHelperProcess(MozcHelper() ?? "", Path.Combine(Path.GetTempPath(), "meltype-mozc-profile")));
             var converter = new Composition.HybridConverter(mozc);
             Console.WriteLine($"変換エンジン: {(mozc.IsInstalled ? "Mozc" : "なし (かなのまま)")}");
             var translations = Composition.TranslationDictionary.Load();
