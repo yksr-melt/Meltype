@@ -26,6 +26,53 @@ public enum RomajiLayout
     [System.ComponentModel.Description("QWERTY")] Qwerty,
     /// <summary>SKY 配列 (白鳥・小橋 1987 の基本配列。左手が子音、右手が母音・二重母音・撥音)。</summary>
     [System.ComponentModel.Description("SKY 配列")] Sky,
+    [System.ComponentModel.Description("Dvorak")] Dvorak,
+    [System.ComponentModel.Description("Colemak")] Colemak,
+    [System.ComponentModel.Description("Workman")] Workman,
+    [System.ComponentModel.Description("大西配列")] Ohnishi,
+    [System.ComponentModel.Description("Eucalyn 配列")] Eucalyn,
+}
+
+/// <summary>
+/// 英字の位置を入れ替えるローマ字の配列 (Dvorak など): QWERTY の位置で打った文字を、その配列の文字にする。
+/// 入れ替えるのは英字の 3 段 (Q の段・A の段・Z の段の 10 キーずつ) だけで、数字と記号のキーはそのまま。
+/// 表は QWERTY の qwertyuiop / asdfghjkl; / zxcvbnm,./ の位置に、その配列の文字を並べたもの。
+/// </summary>
+public static class LetterLayout
+{
+    private const string Qwerty = "qwertyuiopasdfghjkl;zxcvbnm,./";
+
+    private static readonly Dictionary<RomajiLayout, string> Tables = new()
+    {
+        [RomajiLayout.Dvorak] = "',.pyfgcrlaoeuidhtns;qjkxbmwvz",
+        [RomajiLayout.Colemak] = "qwfpgjluy;arstdhneiozxcvbkm,./",
+        [RomajiLayout.Workman] = "qdrwbjfup;ashtgyneoizxmcvkl,./",
+        [RomajiLayout.Ohnishi] = "qlu,.fwrypeiao-ktnshzxcv;gdmjb",
+        [RomajiLayout.Eucalyn] = "qw,.;mrdypaoeiugtksnzxcvfbhjl/",
+    };
+
+    // 入れ替えた先の記号のキー (日本語キーボードの仮想キー)。' は日本語キーボードでは Shift + 7 なので、キーは変えずに文字だけ変える
+    private static readonly Dictionary<char, int> SymbolKeys = new()
+    {
+        [','] = 0xBC, ['.'] = 0xBE, ['/'] = 0xBF, [';'] = 0xBB, ['-'] = 0xBD,
+    };
+
+    /// <summary>位置を入れ替える配列か (QWERTY・SKY 配列は入れ替えない)。</summary>
+    public static bool Remaps(RomajiLayout layout) => Tables.ContainsKey(layout);
+
+    /// <summary>QWERTY の位置で打った文字 ch を、その配列のキーと文字にする。入れ替えない文字なら null。</summary>
+    public static (int Vk, char Ch)? Map(RomajiLayout layout, char ch)
+    {
+        if (!Tables.TryGetValue(layout, out var table)) return null;
+        var upper = char.IsAsciiLetterUpper(ch);
+        var index = Qwerty.IndexOf(char.ToLowerInvariant(ch));
+        if (index < 0) return null;
+        var mapped = table[index];
+        if (char.IsAsciiLetter(mapped)) return (char.ToUpperInvariant(mapped), upper ? char.ToUpperInvariant(mapped) : mapped);
+        // Shift で打った記号の位置 (< > ? :) は入れ替えない (英字の位置の Shift だけを大文字にする)
+        if (!char.IsAsciiLetter(ch)) return null;
+        return SymbolKeys.TryGetValue(mapped, out var vk) ? (vk, mapped) : (0, mapped);
+    }
 }
 
 /// <summary>SKY 配列: QWERTY の位置のキーを、ローマ字の綴りにする (issue #1415)。</summary>
