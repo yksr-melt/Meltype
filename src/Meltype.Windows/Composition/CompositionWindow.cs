@@ -30,13 +30,14 @@ internal sealed class CompositionWindow : PopupForm
 
     /// <summary>
     /// 色 (ライト / ダーク) と不透明度。変わったときだけ描き直す。
-    /// custom は「カスタム」の背景と文字の色。文字の色は候補・意味の枠の文字にも使う (一部だけ変わると読みにくい組み合わせになるので、まとめて変える)。
+    /// custom は「カスタム」の背景と文字の色。文字・案内・目印・下線はすべて文字の色で描く
+    /// (テーマの色を残すと、中間の明るさの背景で目印や案内が背景と同じ明るさになって見えなくなるため)。
     /// </summary>
     public void SetAppearance(bool light, double opacity, (Color Back, Color Text)? custom = null)
     {
         var palette = light ? Palette.Light : Palette.Dark;
         if (custom is var (back, text))
-            palette = palette with { Background = back, MeaningBackground = back, Text = text, Candidate = text, MeaningText = text };
+            palette = new(back, text, text, text, text, text, text, text, back, text);
         opacity = Math.Clamp(opacity, 0.3, 1.0);
         if (Math.Abs(Opacity - opacity) > 0.001)
         {

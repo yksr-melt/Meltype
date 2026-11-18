@@ -516,27 +516,23 @@ public sealed class Settings
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
 
     [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 背景"), Platforms(Platform.Windows),
-     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。明るい色ならライト、暗い色ならダークの案内の文字・目印の色と組み合わせます。")]
+     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。")]
     public string CompositionCustomBackColor { get; set; } = "#202228";
 
     [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 文字"), Platforms(Platform.Windows),
-     Description("「変換ボックスの色」が「カスタム」のときの文字の色 (打っている文字・候補・意味) を #RRGGBB で書きます。")]
+     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。")]
     public string CompositionCustomTextColor { get; set; } = "#FFFFFF";
 
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
 
-    [Category("9. 表示"), DisplayName("設定画面の背景の色"), Platforms(Platform.Windows),
-     Description("この設定画面の背景色を #RRGGBB で書きます (例: #202020)。文字は背景に合わせて白か黒になります。空なら Windows の既定の色。")]
-    public string SettingsWindowBackColor { get; set; } = "";
 
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch
     {
         CompositionTheme.Light => true,
         CompositionTheme.System => windowsLight ?? false,
-        CompositionTheme.Custom => ParseColor(CompositionCustomBackColor) is { } back && ColorContrast.IsLight(back),
         _ => false,
     };
 
@@ -545,7 +541,10 @@ public sealed class Settings
         CompositionTheme == CompositionTheme.Custom && ParseColor(CompositionCustomBackColor) is { } back && ParseColor(CompositionCustomTextColor) is { } text
             ? (back, text) : null;
 
-    /// <summary>決めた色で文字が読みにくくなるなら、利用者に見せる警告。保存を止めるかは利用者が決める。</summary>
+    /// <summary>
+    /// 決めた色で文字が読みにくくなるなら、利用者に見せる警告。保存を止めるかは利用者が決める。
+    /// カスタムでは文字・案内・目印・下線をすべて文字の色で描くので、文字と背景の 1 組だけを確かめれば足りる。
+    /// </summary>
     public string? ColorWarning() =>
         CompositionCustomColors() is var (back, text)
             ? ColorContrast.Warning("変換ボックスのカスタムの色: 文字", text, "変換ボックスのカスタムの色: 背景", back)

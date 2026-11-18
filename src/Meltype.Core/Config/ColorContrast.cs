@@ -16,9 +16,6 @@ public static class ColorContrast
         return (Math.Max(x, y) + 0.05) / (Math.Min(x, y) + 0.05);
     }
 
-    /// <summary>黒い文字のほうが白い文字より読める明るい色か。</summary>
-    public static bool IsLight((int R, int G, int B) back) => Ratio(back, (0, 0, 0)) > Ratio(back, (255, 255, 255));
-
     /// <summary>fore が back の上で読みにくければ、利用者に見せる警告。読めれば null。</summary>
     public static string? Warning(string foreName, (int R, int G, int B) fore, string backName, (int R, int G, int B) back) =>
         Ratio(fore, back) >= TextMinimum ? null

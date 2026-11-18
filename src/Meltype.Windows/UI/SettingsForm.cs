@@ -70,7 +70,8 @@ internal sealed class SettingsForm : Form, IMessageFilter
             return false;
         }
         // 読みにくい色の組み合わせは警告だけして、保存するかは利用者が決める
-        if (edited.ColorWarning() is { } colorWarning &&
+        // 前に警告を承知で保存した色なら、ほかの設定を保存するたびに聞かない
+        if (edited.ColorWarning() is { } colorWarning && colorWarning != _opened.ColorWarning() &&
             MessageBox.Show(this, colorWarning + "\n\nこのまま保存しますか?", "色", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
             return false;
 
@@ -87,30 +88,33 @@ internal sealed class SettingsForm : Form, IMessageFilter
         }
 
         _opened = displayed;
-        ApplyLook(next);
         return true;
     }
 
     /// <summary>
-    /// 設定画面の背景色を反映する。文字は背景に合わせて白か黒にする (文字の色を選べると、背景と近い色にして読めなくなるため)。
+    /// Windows の「既定のアプリ モード」がダークなら、設定画面も暗い色にする (ダークにしている人が設定画面だけ明るいのを望むことはないので、設定にしない)。
     /// 色は窓に設定し、子の部品は WinForms の「親の色を引き継ぐ」仕組みで同じ色になる。
     /// 入力欄 (TextBox など) は既定で親の色を引き継がず Windows の色のままなので、文字が読めなくなることはない。
     /// </summary>
-    private void ApplyLook(Settings settings)
+    private void ApplyLook()
     {
-        if (Settings.ParseColor(settings.SettingsWindowBackColor) is var (r, g, b))
-        {
-            BackColor = Color.FromArgb(r, g, b);
-            ForeColor = ColorContrast.IsLight((r, g, b)) ? Color.Black : Color.White;
-            _help.ForeColor = ForeColor;
-        }
-        else
-        {
-            BackColor = SystemColors.Control;
-            ForeColor = SystemColors.ControlText;
-            _help.ForeColor = SystemColors.GrayText;
-        }
+        if (CompositionWindow.WindowsUsesLightTheme() != false) return;
+        BackColor = Color.FromArgb(32, 32, 32);
+        ForeColor = Color.White;
+        _help.ForeColor = Color.FromArgb(170, 170, 170);
     }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // タイトルバーも暗くする (DWMWA_USE_IMMERSIVE_DARK_MODE。Windows 10 20H1 より前は何もしない)
+        if (CompositionWindow.WindowsUsesLightTheme() != false) return;
+        var dark = 1;
+        _ = DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int));
+    }
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     public SettingsForm(MeltypeEngine engine, AppState state)
     {
@@ -186,7 +190,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
         var controlsBuilt = opening.ElapsedMilliseconds;
         LoadFrom(_draft);
-        ApplyLook(_draft);
+        ApplyLook();
         RefreshProfiles();
         _opened = Collect();
         var valuesLoaded = opening.ElapsedMilliseconds;
@@ -517,13 +521,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 s => property.SetValue(s, combo.SelectedItem is string name && name != DefaultFontChoice ? name : ""));
         }
         if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor)
-            or nameof(Settings.SettingsWindowBackColor) or nameof(Settings.CompositionCustomBackColor) or nameof(Settings.CompositionCustomTextColor))
+            or nameof(Settings.CompositionCustomBackColor) or nameof(Settings.CompositionCustomTextColor))
         {
             var fallback = property.Name switch
             {
                 nameof(Settings.ModeIndicatorJapaneseColor) => ModeIndicatorWindow.DefaultJapaneseColor,
                 nameof(Settings.ModeIndicatorDirectColor) => ModeIndicatorWindow.DefaultDirectColor,
-                nameof(Settings.SettingsWindowBackColor) => SystemColors.Control,
                 // 変換ボックスのカスタムの背景の既定はダークの色 (CompositionWindow の Palette.Dark)
                 nameof(Settings.CompositionCustomBackColor) => Color.FromArgb(32, 34, 40),
                 _ => Color.White,
