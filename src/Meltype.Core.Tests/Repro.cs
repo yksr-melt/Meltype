@@ -29,8 +29,6 @@ internal static class Repro
         // bot が結果を読むので、ほかの環境の文字コードにせず UTF-8 で出す
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         var typed = new string(keys.Where(c => c is >= ' ' and <= '~').Take(MaxKeys).ToArray()).Trim();
-        // Windows のテストランナーなら Windows のスペルチェッカー、ほかの環境では同梱の英単語の一覧 (アプリと同じ)
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
 
         var hasMozc = Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } path && File.Exists(path);
         // Mozc があればライブ変換付きキーボード、無ければ判定だけの偽物
@@ -59,8 +57,6 @@ internal static class Repro
             mozc.Clauses,
             mozc.Candidates,
             zenzai,
-            // 英語のスペルチェッカーを使ったか (Windows では使う。使わないと英単語の判定が実際のアプリと違うことがある)
-            spellChecker = CompositionTests.Detector.SpellChecker is not null,
         }, Json));
 
         if (hasMozc) Henkan.Shutdown();
@@ -159,7 +155,6 @@ internal static class Checks
     /// </summary>
     public static void MixedBench(string output)
     {
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
         var romaji = CompositionTests.Detector.Romaji;
         // MELTYPE_BENCH_OFFSET で選ぶ語をずらす (調整に使っていない語で確かめる)
         var offset = int.TryParse(Environment.GetEnvironmentVariable("MELTYPE_BENCH_OFFSET"), out var o) ? o % 97 : 0;
@@ -272,7 +267,6 @@ internal static class Henkan
     /// <summary><see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。</summary>
     public static CompositionTests.Keyboard Keyboard(bool zenzai)
     {
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
         // Mozc には覚えさせない (覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう。
         // 確かめたいのは、まだ何も覚えていない人の最初の変換)
         var converter = Mozc.Value is { } engine
@@ -341,7 +335,6 @@ internal static class MozcCompare
         if (helper is null || !File.Exists(helper)) throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
         var profile = Path.Combine(Path.GetTempPath(), $"meltype-mozc-compare-{Environment.ProcessId}");
         using var mozc = new Composition.MozcConverter(helper, profile);
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
         var results = new List<object>();
         int currentOk = 0, wholeOk = 0;
         foreach (var line in File.ReadAllLines(input))
