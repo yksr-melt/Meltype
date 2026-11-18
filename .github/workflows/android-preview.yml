@@ -40,7 +40,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y patchelf curl git python3 build-essential
           sdkmanager 'ndk;28.2.13676358'
-      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/wrapper-validation@v6
       - name: Rebuild pinned Mozc JNI and dictionary from source
         run: bash android/tools/build-mozc.sh
       - name: Rebuild shared C# Meltype.Core for Android
