@@ -328,6 +328,18 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void ContextOf_UsesJapaneseTextAcrossSentences()
+    {
+        Assert.Equal("昨日は雨でしたが、今日は", ZenzaiConverter.ContextOf("昨日は雨でしたが、\n今日は"), "改行を除いて文をまたいで渡す");
+        var longText = ZenzaiConverter.ContextOf(string.Concat(Enumerable.Repeat("あ", 150)) + "終");
+        Assert.Equal(100, longText.Length, "最大 100 文字");
+        Assert.True(longText.EndsWith('終'), "キャレットに近い方を残す");
+        Assert.Equal("。", ZenzaiConverter.ContextOf("Hello, this is a pen. "), "英文で終わるなら「。」");
+        Assert.Equal("。", ZenzaiConverter.ContextOf("今日はpython"), "英単語で終わるなら「。」");
+        Assert.Equal("。", ZenzaiConverter.ContextOf(null), "無ければ「。」");
+    }
+
+    [Test]
     public static void NoContext_UsesNeutralSentenceStart()
     {
         // 前の文脈が無い入力は、モデルが迷う (文脈なしの きょう → 強) ので、文の始まりの合図「。」を文脈として渡す

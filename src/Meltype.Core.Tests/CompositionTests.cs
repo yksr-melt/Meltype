@@ -3836,6 +3836,12 @@ internal static class CompositionTests
         var inBox = new Keyboard();
         inBox.Type("pythonnara ");
         Assert.Equal("python", inBox.Converter.LastContext);
+        // 入力欄の文字の後ろに続けるので、英語の区間を挟んだ日本語の区間には、入力欄の日本語 (今日は) だけを渡さない
+        // (英語で終わる文脈は、Mozc は使わず、Zenzai は「。」にする: MozcConverterTests・ZenzaiConverterTests)
+        var afterApp = new Keyboard();
+        afterApp.Host.PrecedingText = "今日は";
+        afterApp.Type("pythonnara ");
+        Assert.Equal("今日はpython", afterApp.Converter.LastContext);
     }
 
     [Test]
