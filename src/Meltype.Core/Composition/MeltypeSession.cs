@@ -235,6 +235,7 @@ internal sealed class MeltypeSession
     private CompositionEnv Env => new(_parts.Detector, _parts.Converter, _services, _settings())
     {
         ReadingOf = _parts.ReadingOf,
+        NowMs = _timeMs(),
         Clipboard = _clipboardText,
         NowPlaying = _parts.NowPlaying,
         Corrected = _parts.Corrected,

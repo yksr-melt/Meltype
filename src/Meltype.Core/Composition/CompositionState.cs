@@ -16,6 +16,9 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
     public ConversionBudget? Budget => (Converter as IBackgroundConverter)?.Budget;
 
+    /// <summary>出来事を処理する時刻 (ミリ秒)。</summary>
+    public long NowMs { get; init; }
+
     /// <summary>漢字かな交じりの文の読み (再変換)。分からなければ null。</summary>
     public Func<string, string?> ReadingOf { get; init; } = _ => null;
 

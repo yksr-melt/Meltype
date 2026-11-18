@@ -34,7 +34,7 @@ internal static partial class CompositionController
         state.Text.SquareBrackets = env.Settings.SquareBrackets;
         state.Text.LaughterAfterKana = env.Settings.LaughterAfterKana;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
-        var recentOwnCommit = Environment.TickCount64 - state.LastCommitTime < OwnCommitTrustMs;
+        var recentOwnCommit = env.NowMs - state.LastCommitTime < OwnCommitTrustMs;
         state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
         state.FollowingText = null;
         state.Text.PrecedingEnglish = state.LastCommitEnglish;

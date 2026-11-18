@@ -284,7 +284,7 @@ internal static partial class CompositionController
         state.LastCommitEnglish = english;
         var joined = (state.LastCommitText ?? "") + text;
         state.LastCommitText = joined.Length > 20 ? joined[^20..] : joined;
-        state.LastCommitTime = Environment.TickCount64;
+        state.LastCommitTime = env.NowMs;
         if (state.PendingReplace is var (count, replacement))
         {
             state.PendingReplace = null;
