@@ -12,6 +12,8 @@ import { KINDS, SENTENCES } from "./typing-sentences.js";
 
 const STORAGE_KEY = "meltype-typing";
 const ROUND = 10;
+// 全部の種類の文を混ぜて出す選択肢。種類の id (sentences/ のファイル名の [a-z]+) と重ならない値にしている
+const ALL_KINDS = "*";
 
 const root = document.querySelector("[data-typing]");
 const $ = (name) => root.querySelector(`[data-${name}]`);
@@ -30,7 +32,7 @@ function load() {
   } catch {
     /* 読めなければ初めから */
   }
-  return { session: null, done: [], auto: true, kind: "plain" };
+  return { session: null, done: [], auto: true, kind: ALL_KINDS };
 }
 
 const saved = load();
@@ -67,7 +69,7 @@ function shuffle(items) {
 // まだ打っていない文を優先して出す (同じ人が何度も同じ文を打つと、文ごとの比べ方が偏るため)
 function nextRound() {
   const done = new Set(saved.done);
-  const pool = SENTENCES.filter((s) => s.kind === saved.kind && !s.retired);
+  const pool = SENTENCES.filter((s) => (saved.kind === ALL_KINDS || s.kind === saved.kind) && !s.retired);
   return [...shuffle(pool.filter((s) => !done.has(s.id))), ...shuffle(pool.filter((s) => done.has(s.id)))].slice(0, ROUND);
 }
 
@@ -78,8 +80,9 @@ const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
 // ---- 1. はじめる ----
 
-$("kind").innerHTML = KINDS.map((kind) => `<option value="${kind.id}">${escapeHtml(kind.label)}</option>`).join("");
-$("kind").value = KINDS.some((kind) => kind.id === saved.kind) ? saved.kind : KINDS[0].id;
+const kindOptions = [{ id: ALL_KINDS, label: "シャッフル (全部の種類)" }, ...KINDS];
+$("kind").innerHTML = kindOptions.map((kind) => `<option value="${kind.id}">${escapeHtml(kind.label)}</option>`).join("");
+$("kind").value = kindOptions.some((kind) => kind.id === saved.kind) ? saved.kind : ALL_KINDS;
 
 intro.addEventListener("submit", (event) => {
   event.preventDefault();
