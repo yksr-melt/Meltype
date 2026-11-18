@@ -11,50 +11,50 @@ using Meltype.Input;
 namespace Meltype.Composition;
 
 /// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、変換エンジンに渡す文脈、学習の文脈。</summary>
-public sealed partial class CompositionController
+internal static partial class CompositionController
 {
     /// <summary>設定「英語 / 日本語の学習を前の文脈ごとに分ける」: 学習の文脈 (前が英語か日本語か) を今の入力に合わせる。</summary>
-    private void UpdateLearningContext()
+    private static void UpdateLearningContext(CompositionState state)
     {
-        if (_services.Languages is not { } memory) return;
-        memory.ContextSensitive = _settings().ContextualLearning;
-        memory.Context = _text.PrecedingEnglish;
+        if (state.Services.Languages is not { } memory) return;
+        memory.ContextSensitive = state.Settings().ContextualLearning;
+        memory.Context = state.Text.PrecedingEnglish;
     }
 
-    private void BeginComposition(bool privateInput = false)
+    private static void BeginComposition(CompositionState state, bool privateInput = false)
     {
-        _privateComposition = Private || privateInput;
-        _keptChoices.Clear();
-        _modeByKey = false;
-        _escReverted = false;
+        state.PrivateComposition = Private(state) || privateInput;
+        state.KeptChoices.Clear();
+        state.ModeByKey = false;
+        state.EscReverted = false;
         // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
-        if (_settings().EnglishFirstInput && !KanaInput && _text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.HalfWidthAlphanumeric;
-        _text.KanaInput = KanaInput;
-        _text.FullWidthParentheses = _settings().FullWidthParentheses;
-        _text.SquareBrackets = _settings().SquareBrackets;
-        _text.LaughterAfterKana = _settings().LaughterAfterKana;
+        if (state.Settings().EnglishFirstInput && !KanaInput(state) && state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.HalfWidthAlphanumeric;
+        state.Text.KanaInput = KanaInput(state);
+        state.Text.FullWidthParentheses = state.Settings().FullWidthParentheses;
+        state.Text.SquareBrackets = state.Settings().SquareBrackets;
+        state.Text.LaughterAfterKana = state.Settings().LaughterAfterKana;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
-        var recentOwnCommit = Environment.TickCount64 - _lastCommitTime < OwnCommitTrustMs;
-        _precedingText = _lastCommitEnglish is null ? null : _lastCommitText;
-        _followingText = null;
-        _text.PrecedingEnglish = _lastCommitEnglish;
-        UpdateLearningContext();
-        _text.PrecedingEnglishSentence = _lastCommitEnglish == true && IsEnglishSentence(_lastCommitText);
-        _text.PrecedingEnglishName = _lastCommitEnglish == true && IsEnglishNameContext(_lastCommitText);
+        var recentOwnCommit = Environment.TickCount64 - state.LastCommitTime < OwnCommitTrustMs;
+        state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
+        state.FollowingText = null;
+        state.Text.PrecedingEnglish = state.LastCommitEnglish;
+        UpdateLearningContext(state);
+        state.Text.PrecedingEnglishSentence = state.LastCommitEnglish == true && IsEnglishSentence(state.LastCommitText);
+        state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
         // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
         // 確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
-        var before = _out.Before;
-        _caretBefore = before;
+        var before = state.Out.Before;
+        state.CaretBefore = before;
         if (!recentOwnCommit && before is not null)
         {
-            _precedingText = before;
-            if (LanguageOf(before) is { } english) _text.PrecedingEnglish = english;
-            UpdateLearningContext();
-            _text.PrecedingEnglishSentence = IsEnglishSentence(before);
-            _text.PrecedingEnglishName = IsEnglishNameContext(before);
+            state.PrecedingText = before;
+            if (LanguageOf(before) is { } english) state.Text.PrecedingEnglish = english;
+            UpdateLearningContext(state);
+            state.Text.PrecedingEnglishSentence = IsEnglishSentence(before);
+            state.Text.PrecedingEnglishName = IsEnglishNameContext(before);
         }
-        _followingText = _out.After;
-        _text.FollowingEnglish = LanguageOfStart(_out.After);
+        state.FollowingText = state.Out.After;
+        state.Text.FollowingEnglish = LanguageOfStart(state.Out.After);
     }
 
     /// <summary>

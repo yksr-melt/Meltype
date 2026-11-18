@@ -198,7 +198,7 @@ public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter 
 /// </summary>
 internal sealed class MeltypeSession
 {
-    private readonly CompositionController _controller;
+    private readonly CompositionState _state;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly UserDictionary? _userDictionary;
@@ -225,12 +225,10 @@ internal sealed class MeltypeSession
                 _directEnglishWord = !japanese;
             },
         };
-        _controller = new CompositionController(parts.Detector, parts.Converter, settings, services)
-        {
-            ReadingOf = parts.ReadingOf,
-            NowPlaying = parts.NowPlaying,
-        };
-        _controller.Corrected += parts.Corrected;
+        _state = CompositionController.Create(parts.Detector, parts.Converter, settings, services);
+        _state.ReadingOf = parts.ReadingOf;
+        _state.NowPlaying = parts.NowPlaying;
+        _state.Corrected += parts.Corrected;
     }
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
@@ -244,7 +242,7 @@ internal sealed class MeltypeSession
             if (!value)
             {
                 _directEnglishWord = false;
-                if (wasDirect) _controller.AbandonDirectHold();
+                if (wasDirect) CompositionController.AbandonDirectHold(_state);
             }
         }
     }
@@ -254,8 +252,8 @@ internal sealed class MeltypeSession
     /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
     public bool Private
     {
-        get => _controller.Private;
-        set => _controller.Private = value;
+        get => CompositionController.Private(_state);
+        set => CompositionController.SetPrivate(_state, value);
     }
 
     /// <summary>
@@ -296,7 +294,7 @@ internal sealed class MeltypeSession
     /// </summary>
     public bool SetCodeLine(bool japanese, string? before)
     {
-        if (!CodeInput || Direct || _controller.IsComposing) return false;
+        if (!CodeInput || Direct || CompositionController.IsComposing(_state)) return false;
         if (!japanese)
         {
             if (!_codeJapanese) return false;
@@ -316,7 +314,7 @@ internal sealed class MeltypeSession
     /// </summary>
     public bool CodeEnglishAt(string? before)
     {
-        if (!CodeInput || Direct || _controller.IsComposing) return false;
+        if (!CodeInput || Direct || CompositionController.IsComposing(_state)) return false;
         return !_codeJapanese && CodeLineKind(before) == LineKind.Code;
     }
 
@@ -346,30 +344,30 @@ internal sealed class MeltypeSession
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
     public bool CanDeleteSurrounding
     {
-        get => _controller.CanDeleteBackward;
-        set => _controller.CanDeleteBackward = value;
+        get => _state.CanDeleteBackward;
+        set => _state.CanDeleteBackward = value;
     }
 
     /// <summary>変換ボックスに何か入っているか。</summary>
-    public bool IsComposing => _controller.IsComposing;
+    public bool IsComposing => CompositionController.IsComposing(_state);
 
     /// <summary>変換して候補を選んでいるか。</summary>
-    public bool IsConverting => _controller.IsConverting;
+    public bool IsConverting => CompositionController.IsConverting(_state);
 
     /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
-    public IReadOnlyList<int> ComposingControlKeys() => _controller.ComposingControlKeys();
+    public IReadOnlyList<int> ComposingControlKeys() => CompositionController.ComposingControlKeys(_state);
 
     /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
     public string? Selection
     {
-        get => _controller.Selection;
-        set => _controller.Selection = value;
+        get => _state.Selection;
+        set => _state.Selection = value;
     }
 
     /// <summary>クリップボードの文字 (OS の機能)。読めなければ null。</summary>
     public Func<string?> ClipboardText
     {
-        set => _controller.Clipboard = value;
+        set => _state.Clipboard = value;
     }
 
     /// <summary>
@@ -387,7 +385,7 @@ internal sealed class MeltypeSession
             LineContext.ClassifyText(line) == LineKind.String &&
             LineContext.ClassifyText(line + ch) == LineKind.Code)
         {
-            var committed = _controller.IsComposing ? CommitPending() : new SessionResult(false, [], null);
+            var committed = CompositionController.IsComposing(_state) ? CommitPending() : new SessionResult(false, [], null);
             return committed with { Consumed = false };
         }
         var now = _timeMs();
@@ -400,33 +398,33 @@ internal sealed class MeltypeSession
             _directEnglishWord = false;
         if ((Direct && (!settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
-            return _controller.Pass(now);
+            return CompositionController.Pass(_state, now);
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !_controller.IsComposing && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
+        if (!modifier && !CompositionController.IsComposing(_state) && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
             SigilWord.PassesAfter(before, '/'))
         {
-            _controller.MarkSlashAtStart();
+            CompositionController.MarkSlashAtStart(_state);
         }
-        else if (!modifier && !_controller.IsComposing && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        else if (!modifier && !CompositionController.IsComposing(_state) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
         {
-            return _controller.Pass(now);
+            return CompositionController.Pass(_state, now);
         }
-        if (CodeInput && !_codeJapanese && !_controller.IsComposing && CodeLineKind(before) == LineKind.Code)
+        if (CodeInput && !_codeJapanese && !CompositionController.IsComposing(_state) && CodeLineKind(before) == LineKind.Code)
         {
-            return _controller.Pass(now);
+            return CompositionController.Pass(_state, now);
         }
         // 入力欄を作り直さないフロント (Meltype キーボード) でも、外で変えたユーザー辞書を使う
-        if (!_controller.IsComposing && now - _userDictionaryCheckedMs >= UserDictionaryCheckMs)
+        if (!CompositionController.IsComposing(_state) && now - _userDictionaryCheckedMs >= UserDictionaryCheckMs)
         {
             _userDictionaryCheckedMs = now;
             _userDictionary?.Refresh();
         }
-        var result = _controller.Press(new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
+        var result = CompositionController.Press(_state, new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
-        if (!result.Consumed && !_controller.IsComposing) ForgetLastCommit();
+        if (!result.Consumed && !CompositionController.IsComposing(_state)) ForgetLastCommit();
         return result;
     }
 
@@ -436,7 +434,7 @@ internal sealed class MeltypeSession
     /// </summary>
     public SessionResult HandleKeyUp(int vk, string? before, string? after)
     {
-        return _controller.Release(vk, before, after);
+        return CompositionController.Release(_state, vk, before, after);
     }
 
     /// <summary>
@@ -449,7 +447,7 @@ internal sealed class MeltypeSession
         // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
         var settings = _settings();
         if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
-        if (!_controller.IsComposing || Direct) return null;
+        if (!CompositionController.IsComposing(_state) || Direct) return null;
         return HandleKey(vk, null, false, false, false, false);
     }
 
@@ -469,26 +467,26 @@ internal sealed class MeltypeSession
     /// </summary>
     public void ForgetLastCommit()
     {
-        _controller.ForgetLastCommit();
+        CompositionController.ForgetLastCommit(_state);
     }
 
     public void ForgetDirectInput()
     {
         _directEnglishWord = false;
-        _controller.AbandonDirectHold();
+        CompositionController.AbandonDirectHold(_state);
     }
 
     /// <summary>フォーカスが外れたときなど。未確定の内容をそのまま確定する。</summary>
     public SessionResult CommitPending()
     {
-        var result = _controller.CommitPending();
-        _controller.ResetContext();
+        var result = CompositionController.CommitPending(_state);
+        CompositionController.ResetContext(_state);
         return result;
     }
 
     internal void CancelPending()
     {
-        _controller.CancelPending();
+        CompositionController.CancelPending(_state);
         _directEnglishWord = false;
         CodeInput = false;
         CodeTerminal = false;
@@ -500,7 +498,7 @@ internal sealed class MeltypeSession
     /// 文字を伴わない・扱えないキーを、変換ボックスの状態を変えずにアプリへそのまま渡す (Consumed = false)。
     /// 不正な C ABI の引数で不正な文字列を作らないための経路。
     /// </summary>
-    public SessionResult PassThrough() => _controller.Pass(_timeMs());
+    public SessionResult PassThrough() => CompositionController.Pass(_state, _timeMs());
 
     /// <summary>
     /// 未確定の内容を確定したうえで、元の OS イベントを 1 回だけアプリへ通す (Consumed = false)。
@@ -517,20 +515,20 @@ internal sealed class MeltypeSession
 
     private SessionResult CommitForPassThrough(bool preserveLatinRaw, bool preserveText)
     {
-        var result = _controller.CommitPending(consumed: false, preserveLatinRaw, preserveText);
-        _controller.ResetContext();
+        var result = CompositionController.CommitPending(_state, consumed: false, preserveLatinRaw, preserveText);
+        CompositionController.ResetContext(_state);
         return result;
     }
 
     /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
     /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま (変換中ならその表示)。</summary>
-    public SessionResult Unchanged() => _controller.Current();
+    public SessionResult Unchanged() => CompositionController.Current(_state);
 
-    public SessionResult? RefreshConversion() => _controller.RefreshConversion();
+    public SessionResult? RefreshConversion() => CompositionController.RefreshConversion(_state);
 
     /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>
-    public SessionResult SelectCandidate(int index) => _controller.SelectCandidate(index);
+    public SessionResult SelectCandidate(int index) => CompositionController.SelectCandidate(_state, index);
 
     /// <summary>候補の一覧で予測変換の候補をクリックしたとき。その候補を確定する。</summary>
-    public SessionResult SelectPrediction(int index) => _controller.CommitPredictionAt(index);
+    public SessionResult SelectPrediction(int index) => CompositionController.CommitPredictionAt(_state, index);
 }
