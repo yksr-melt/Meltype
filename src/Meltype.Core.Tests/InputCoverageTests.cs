@@ -22,13 +22,12 @@ internal static class InputCoverageTests
         foreach (var (input, expected) in new[] { ("kyouhagoogledekensaku", "きょうは google でけんさく"), ("nice to meet you", "nice to meet you") })
         {
             var detector = CompositionDetector.CreateDefault();
-            var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(),
-                new CompositionServices(), () => new Settings { SpaceAroundEnglish = true, AutoCorrectAfterCommit = true, LiveConversion = false });
+            var session = new TestSession(() => new Settings { SpaceAroundEnglish = true, AutoCorrectAfterCommit = true, LiveConversion = false }, detector: detector);
             var output = "";
             foreach (var character in input + "\n")
             {
                 var result = session.HandleKey(character == '\n' ? VirtualKeys.Return : char.ToUpperInvariant(character),
-                    character == '\n' ? null : character, false, false, false, false);
+                    character == '\n' ? null : character, false, false, false, false, output);
                 foreach (var edit in result.Commits)
                 {
                     if (edit.DeleteBefore > 0) output = output[..(output.Length - Math.Min(edit.DeleteBefore, output.Length))];
@@ -52,13 +51,13 @@ internal static class InputCoverageTests
             "I want to go to the park", "I am going home", "my name is Taro" })
         {
             var detector = CompositionDetector.CreateDefault();
-            var session = new MeltypeSession(detector, new CompositionTests.FakeConverter(), new CompositionServices(), () => new Settings());
+            var session = new TestSession(() => new Settings(), detector: detector);
             var output = "";
             foreach (var character in phrase + "\n")
             {
                 var vk = character == ' ' ? VirtualKeys.Space : character == '\n' ? VirtualKeys.Return : char.ToUpperInvariant(character);
                 var result = session.HandleKey(vk, character is ' ' or '\n' ? null : character,
-                    char.IsAsciiLetterUpper(character), false, false, false);
+                    char.IsAsciiLetterUpper(character), false, false, false, output);
                 foreach (var edit in result.Commits)
                 {
                     if (edit.DeleteBefore > 0) output = output[..(output.Length - Math.Min(edit.DeleteBefore, output.Length))];

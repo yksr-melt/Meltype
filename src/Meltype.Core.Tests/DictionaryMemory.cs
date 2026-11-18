@@ -212,7 +212,7 @@ internal static class DictionaryMemory
         var allocations = new List<double>();
         for (var round = 0; round < rounds; round++)
         {
-            var session = new MeltypeSession(detector, new Identity(), services, () => new Settings());
+            var session = new TestSession(() => new Settings(), new Identity(), services, detector);
             var allocated = GC.GetAllocatedBytesForCurrentThread();
             var watch = Stopwatch.StartNew();
             foreach (var input in inputs)
