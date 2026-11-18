@@ -21,18 +21,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
-      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Test instrumentation result aggregation
         run: python3 android/tools/test-instrumentation-report.py
       - name: Install Android NDK and source-build prerequisites
@@ -63,7 +63,7 @@ jobs:
           test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
       - name: Run Android 15 instrumentation and publish individual outcomes
         id: device_tests
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 35
           target: google_apis
@@ -90,7 +90,7 @@ jobs:
           fi
       - name: Upload test code reproducibility evidence and APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-qa-report-and-debug-apk
           path: |
@@ -109,12 +109,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: android-actions/setup-android@v3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: 'platform-tools build-tools;36.0.0'
       - name: Reuse debug APKs built in Android QA
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: android-qa-report-and-debug-apk
           path: android
@@ -135,7 +135,7 @@ jobs:
         run: |
           test -e /dev/kvm && sudo chmod 666 /dev/kvm || true
       - name: Verify actual selected IME input on Android 17
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           # Android 17 is published as API 37.0, not "android-37". Its
           # stable-channel x86_64 image is the 16 KB page size one
@@ -162,7 +162,7 @@ jobs:
             bash android/tools/run-instrumentation-tests.sh
       - name: Upload Android 17 IME test and recovery evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-17-ime-smoke-report
           path: android/build/qa/

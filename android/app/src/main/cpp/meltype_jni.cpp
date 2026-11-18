@@ -12,8 +12,7 @@
 #include <vector>
 
 extern "C" {
-int meltype_android_init(unsigned char* (*mozc_request)(unsigned char*),
-                 int (*is_word)(unsigned char*));
+int meltype_android_init(unsigned char* (*mozc_request)(unsigned char*));
 void meltype_set_conversion_ready(void (*notify)());
 void* meltype_ime_create();
 unsigned char* meltype_ime_handle(void* host, unsigned char* json);
@@ -167,7 +166,7 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
         callback_instance = nullptr;
         return JNI_FALSE;
     }
-    if (meltype_android_init(mozc_request, nullptr) != 1) {
+    if (meltype_android_init(mozc_request) != 1) {
         env->DeleteGlobalRef(callback_instance);
         callback_instance = nullptr;
         return JNI_FALSE;

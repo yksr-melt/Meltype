@@ -68,7 +68,7 @@ FCITX_CONFIGURATION(MeltypeConfig,
 
 struct Native {
     void *handle = nullptr;
-    int (*init)(const char *, int (*)(const char *)) = nullptr;
+    int (*init)(const char *) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
@@ -94,8 +94,7 @@ struct Native {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
-        // 英単語の判定は同梱の一覧 (nullptr)
-        if (!init(meltypeDir().c_str(), nullptr)) {
+        if (!init(meltypeDir().c_str())) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
         return true;
@@ -469,7 +468,7 @@ public:
         if (send(ic, "KeyPressed", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
     }
 
-    // 左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたときだけアプリに通さない
+    // 左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたら止める
     void altKey(fcitx::InputContext *ic, MeltypeState *state, int vk, fcitx::KeyStates states, fcitx::KeyEvent &event) {
         Json output;
         if (!event.isRelease()) {
@@ -485,9 +484,17 @@ public:
         const bool interrupted = state->altInterrupted;
         state->altDown = 0;
         state->altInterrupted = false;
-        if (send(ic, "KeyReleased", std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"interrupted\":" + boolean(interrupted) + "}", output) &&
-            output.get("result")->flag("consumed"))
-            event.filterAndAccept();
+        if (!send(ic, "KeyReleased", std::string(",\"key\":{\"vk\":") + std::to_string(vk) + ",\"interrupted\":" + boolean(interrupted) + "}", output) ||
+            !output.get("result")->flag("consumed"))
+            return;
+        event.filterAndAccept();
+        // ワークアラウンド: 止めた Alt の解放を、何もしないキー (F19) の押下・解放のあとに送り直す (Windows の 0xE8 と同じ)。
+        // Alt の単独押しで入力モードを切り替える限り恒久的に必要で、消せない。止めたままだと、次のキーがアプリに届くまで
+        // アプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すと、アプリが Alt の単独押し (メニュー) と受け取る。
+        // GNOME は送られたキーを keysym から keymap のキーに引き直すので、keymap にあって何も割り当てられていない F19 にする
+        ic->forwardKey(fcitx::Key(FcitxKey_F19), false);
+        ic->forwardKey(fcitx::Key(FcitxKey_F19), true);
+        ic->forwardKey(event.rawKey(), true);
     }
 
     // 入力欄にフォーカスが入った・入力メソッドを Meltype にした
@@ -607,6 +614,11 @@ private:
                                           std::pair{fcitx::CapabilityFlag::Sensitive, "Private"}}) {
             if (flags.test(flag)) traits += std::string(traits.empty() ? "" : ",") + "\"" + name + "\"";
         }
+        // ワークアラウンド: KDE Plasma のロック画面のパスワード欄は、qtdeclarative の TextInput が echoMode: Password で ImhHiddenText を外すので
+        // (qt/qtdeclarative@b74e821906)、Password でなく Sensitive で届く。Sensitive は Chromium のシークレットなど学習しないだけの欄にも付くので、アプリ名で絞る。
+        // ロック画面のキーが fcitx5 に届くのは QT_IM_MODULE=fcitx のとき (program() は kscreenlocker_greet) だけで、KWin の入力メソッドで動かすとロック中のキーは届かない
+        if (!flags.test(fcitx::CapabilityFlag::Password) && flags.test(fcitx::CapabilityFlag::Sensitive) && ic->program() == "kscreenlocker_greet")
+            traits += ",\"Password\"";
         return "{\"before\":" + before + ",\"after\":" + after + ",\"selection\":" + selection +
             ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) + ",\"traits\":[" + traits + "]" +
             (ic->program().empty() ? "" : ",\"app\":" + quote(ic->program())) + ",\"canRemove\":" + boolean(surrounding) + "}";

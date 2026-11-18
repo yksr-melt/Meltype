@@ -49,6 +49,9 @@ internal static class MozcConverterTests
                 case "C" when fields[2] == "たんいをとる":
                     output.WriteLine("たんいを\x1f単位を" + '\x1e' + "とる\x1f取る");
                     break;
+                case "C" when fields[2] == "にほんごをかく":
+                    output.WriteLine("にほんごを\x1f日本語を" + '\x1e' + "かく\x1f書く");
+                    break;
                 case "C" when fields[2] == "たんい":
                     output.WriteLine("たんい\x1f単位");
                     break;

@@ -57,7 +57,8 @@ OS 間の差分はできるだけ作らない。
 
 - 機能の判断と処理は、1 つの OS でしか使わない機能も `src/Meltype.Core` に書く。プラットフォーム層からは呼ぶだけにする
 - OS の API を呼ぶ機能は、Core でビルドできれば (P/Invoke・COM の関数表を直接呼ぶ。NativeAOT で動く) Core に置く。機能のフォルダーに OS の名前を付けて並べ (`NowPlaying/WindowsMediaSession.cs`)、`OperatingSystem.IsWindows()` などで選ぶ。Windows の API には `[SupportedOSPlatform("windows")]` を付ける
-- Core にもうインターフェースがある OS の部品 (`IWordChecker`) と、WinForms・組み込みの COM (`[ComImport]`) を使うものは、プラットフォーム層に置く
+- WinForms・組み込みの COM (`[ComImport]`) を使うものは、プラットフォーム層に置く
+- 英単語の判定は全 OS で同梱の一覧 (`english-words.txt`) だけ (#1508)。OS のスペルチェッカーは使わない
 - 設定・辞書・学習データと変換エンジンは、どの OS も `MeltypeRuntime` で作る
 - 変換エンジンは全 OS で Mozc と Zenzai だけ (#1740)。OS の変換エンジン (Microsoft IME など) は足さない
 
@@ -77,7 +78,7 @@ dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/d
 dotnet run --project src/Meltype.Core.Tests -- --mixed-bench out.json # 日本語文中の英単語の区切り
 dotnet run --project src/Meltype.Core.Tests -- --version
 
-# Windows 専用（src/Meltype.Windows.Tests。Windows のスペルチェッカーも使う）
+# Windows 専用（src/Meltype.Windows.Tests）
 dotnet run --project src/Meltype.Windows.Tests
 dotnet run --project src/Meltype.Windows.Tests -- CompositionTests
 dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
@@ -86,7 +87,7 @@ dotnet run --project src/Meltype.Windows.Tests -- --explain konnichiwa hello
 node tools/check-dictionaries.mjs
 ```
 
-`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Mac は `Meltype-*-mac.zip` 内 `Meltype-mac/Meltype.app/Contents/Resources/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。
+`--repro`・`--perf` などで漢字変換するには、環境変数 `MELTYPE_MOZC` に Mozc 変換ヘルパーのパスを指定する（未指定だと判定のみで、かなのまま確定する。`--expect` は未指定だとエラーになる）。ヘルパーは最新のリリースの zip から取る（Linux は `Meltype-*-linux.zip` 内 `Meltype-linux/mozc/meltype_mozc_helper`、Mac は `Meltype-*-mac.zip` 内 `Meltype-mac/Meltype.app/Contents/Resources/mozc/meltype_mozc_helper`、Windows は `Meltype-*-windows-portable.zip` 内 `meltype_mozc_helper.exe`）。`native/mozc/build-mozc-helper.sh` で手元ビルドするのは、ヘルパーのソースや `MOZC_COMMIT` を変えたときだけ（初回 30〜40 分かかる）。`--repro` は、`MELTYPE_ZENZAI_SERVER` (llama-server) と `MELTYPE_ZENZAI_MODEL` (zenz の .gguf) もあれば、Zenzai も使って打った結果を `zenzai` に出す (Windows のリリースの zip の `zenzai\` にある)。
 
 その他のフラグ（`--perf`・`--judge-corpus`・`--henkan` など）は `src/Meltype.Core.Tests/Program.cs` のコメントを見てください。
 

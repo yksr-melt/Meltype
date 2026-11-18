@@ -271,6 +271,98 @@ window.addEventListener("resize", () => {
   resizeTimer = setTimeout(() => state.days && drawChart(state.days), 150);
 });
 
+// タイピング調査のデータは、1 行に 1 文の JSON Lines で書き出す (src/typing.js の exportTrials を next が null になるまで読む)
+// どれだけ集まったかを、お手本の種類ごとの合計と、文ごとに打たれた数で見る
+async function loadTypingCounts() {
+  const box = document.querySelector("[data-typing-counts]");
+  try {
+    const { kinds: labels, sentences } = await getJson("/api/dashboard/typing/sentences");
+    const label = (id) => (labels.find((kind) => kind.id === id) || { label: id }).label;
+    const kinds = new Map();
+    for (const sentence of sentences) {
+      const kind = kinds.get(sentence.kind) || [];
+      kind.push(sentence);
+      kinds.set(sentence.kind, kind);
+    }
+    box.innerHTML = [...kinds]
+      .map(([kind, list]) => {
+        const total = list.reduce((sum, s) => sum + s.count, 0);
+        const rows = [...list]
+          .sort((a, b) => a.count - b.count)
+          .map((s) => `<tr${s.retired ? ' class="is-retired"' : ""}><td>${formatNumber(s.count)}</td><td>${escapeHtml(s.text)}${s.retired ? " (出さない)" : ""}</td></tr>`)
+          .join("");
+        return `<details><summary>${escapeHtml(label(kind))}: ${formatNumber(list.length)} 文・${formatNumber(total)} 回</summary><table><tbody>${rows}</tbody></table></details>`;
+      })
+      .join("");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+document.querySelector("[data-typing-export]").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const lines = [];
+    let after = 0;
+    for (;;) {
+      const page = await getJson(`/api/dashboard/typing/trials?after=${after}&limit=1000`);
+      for (const trial of page.trials) lines.push(JSON.stringify(trial));
+      if (page.next === null) break;
+      after = page.next;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], { type: "application/x-ndjson" }));
+    link.download = `meltype-typing-${new Date().toISOString().slice(0, 10)}.jsonl`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    toast(`${formatNumber(lines.length)} 文を書き出しました`);
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+// お手本とかけ離れた文を送った参加。名前など関係ない入力が残っていれば、その文を消す
+async function loadFlagged() {
+  const box = document.querySelector("[data-typing-flagged]");
+  try {
+    const { threshold, scanned, sessions } = await getJson("/api/dashboard/typing/flagged");
+    if (!sessions.length) {
+      box.innerHTML = "";
+      return;
+    }
+    box.innerHTML = `<h4>お手本とかけ離れた送信 (新しい ${formatNumber(scanned)} 文のうち、一致率 ${Math.round(threshold * 100)}% 未満)</h4><ul>${sessions
+      .map(
+        (s) =>
+          `<li><span><b>${formatNumber(s.flagged)}</b> 文・${escapeHtml(formatDate(s.last * 1000, true))}</span>` +
+          `<code>${s.samples.map(escapeHtml).join(" / ")}</code>` +
+          `<button class="btn btn-ghost btn-small" type="button" data-delete-flagged="${escapeHtml(s.id)}">かけ離れた文を消す</button></li>`,
+      )
+      .join("")}</ul>`;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+document.querySelector("[data-typing-flagged]").addEventListener("click", async (event) => {
+  const remove = event.target.closest("[data-delete-flagged]");
+  if (!remove) return;
+  if (!confirm("この参加の、お手本とかけ離れた文の記録を消します。元に戻せません。よろしいですか？")) return;
+  remove.disabled = true;
+  try {
+    const { deleted } = await getJson(`/api/dashboard/typing/sessions/${encodeURIComponent(remove.dataset.deleteFlagged)}/flagged`, { method: "DELETE" });
+    toast(`${formatNumber(deleted)} 文を消しました`);
+    await Promise.all([loadFlagged(), loadTypingCounts()]);
+  } catch (e) {
+    toast(e.message);
+    remove.disabled = false;
+  }
+});
+
+loadTypingCounts();
+loadFlagged();
 initHeader();
 loadStats();
 await loadList(true);

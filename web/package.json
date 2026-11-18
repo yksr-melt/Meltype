@@ -3,13 +3,14 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/make-guide.mjs && wrangler d1 migrations apply DB --local && wrangler dev",
+    "dev": "node scripts/make-sentences.mjs && node scripts/make-guide.mjs && wrangler d1 migrations apply DB --local && wrangler d1 migrations apply TYPING_DB --local && wrangler dev",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "node scripts/make-guide.mjs && wrangler d1 migrations apply DB --remote && wrangler deploy",
-    "test": "node --test test/worker.test.mjs test/guide.test.mjs",
-    "check": "node --check src/worker.js && node --check src/access.js && node --check src/cleanup.js && node --check src/reports.js && node --check src/github.js && node --check src/http.js && node --check public/assets/js/common.js && node --check public/assets/js/report-schema.js && node --check public/assets/js/site.js && node --check public/assets/js/report.js && node --check public/assets/js/dashboard.js && node --check scripts/make-guide.mjs",
-    "guide": "node scripts/make-guide.mjs"
+    "deploy": "node scripts/make-sentences.mjs && node scripts/make-guide.mjs && wrangler d1 migrations apply DB --remote && wrangler d1 migrations apply TYPING_DB --remote && wrangler deploy",
+    "test": "node scripts/make-sentences.mjs && node --test test/worker.test.mjs test/guide.test.mjs test/romaji.test.mjs test/sentences.test.mjs",
+    "check": "node scripts/make-sentences.mjs && node --check src/worker.js && node --check src/access.js && node --check src/cleanup.js && node --check src/reports.js && node --check src/github.js && node --check src/http.js && node --check src/typing.js && node --check public/assets/js/common.js && node --check public/assets/js/report-schema.js && node --check public/assets/js/site.js && node --check public/assets/js/report.js && node --check public/assets/js/dashboard.js && node --check public/assets/js/typing.js && node --check public/assets/js/guide.js && node --check public/assets/js/romaji.js && node --check public/assets/js/typing-check.js && node --check public/assets/js/typing-consent.js && node --check public/assets/js/typing-sentences.js && node --check scripts/make-guide.mjs && node --check scripts/make-sentences.mjs",
+    "guide": "node scripts/make-guide.mjs",
+    "sentences": "node scripts/make-sentences.mjs"
   },
   "devDependencies": {
     "marked": "18.2.0",

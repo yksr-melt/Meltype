@@ -7,7 +7,9 @@
   flex-wrap: wrap;
   gap: 4px 16px;
   align-items: center;
-  margin-left: auto;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
 }
 
 .guide-nav a {

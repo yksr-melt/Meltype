@@ -12,17 +12,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
       - name: Run desktop shared Core regression tests
@@ -32,7 +32,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y patchelf curl git python3 build-essential
           sdkmanager 'ndk;28.2.13676358'
-      - uses: gradle/actions/wrapper-validation@v4
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Rebuild pinned Mozc JNI and dictionary from source
         run: bash android/tools/build-mozc.sh
       - name: Rebuild shared C# Meltype.Core for Android
@@ -63,7 +63,7 @@ jobs:
           sha256sum build/preview/Meltype-debug-ephemeral.apk > build/preview/apk-sha256.txt
       - name: Upload freshly compiled debug APK
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: meltype-android-debug-build-check
           path: |

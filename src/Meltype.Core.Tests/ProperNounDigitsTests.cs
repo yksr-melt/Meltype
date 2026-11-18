@@ -16,8 +16,8 @@ internal static class ProperNounDigitsTests
             ("yachi8000", "yachi8000"), ("yachi8000desu", "yachi8000です"),
             // 数字の無い固有名詞 (neovide) と同じく、文の途中でも英字
             ("korehayachi8000desu", "これはyachi8000です"),
-            // 境界: 数字が違う (yachi800)・一覧に無い語 + 数字 (heisei31nenn) は今までどおり
-            ("yachi800", "やち800"), ("heisei31nenn", "へいせい31ねん"),
+            // 境界: 一覧に無い語 + 数字 (heisei31nenn) は今までどおり。数字が違う yachi800 は ya|chi に割れるので外している (#1873)
+            ("heisei31nenn", "へいせい31ねん"),
         })
         {
             var k = new Keyboard();

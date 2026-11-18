@@ -81,24 +81,6 @@ internal static class WindowsTests
     }
 
     [Test]
-    public static void SpellChecker_DisposeStopsTheWorkerAndClosesItsWaitHandle()
-    {
-        using var checker = new Detection.WindowsSpellChecker();
-        _ = checker.IsAvailable;
-        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var worker = (Thread?)typeof(Detection.WindowsSpellChecker).GetField("_comThread", flags)!.GetValue(checker);
-        var wake = (AutoResetEvent)typeof(Detection.WindowsSpellChecker).GetField("_wake", flags)!.GetValue(checker)!;
-        checker.Dispose();
-        checker.Dispose();
-        Assert.True(worker is null || !worker.IsAlive, "問い合わせのスレッドが終了している");
-        Assert.True(wake.SafeWaitHandle.IsClosed, "待機ハンドルを閉じる");
-        var disposed = false;
-        try { checker.IsWord("test"); }
-        catch (ObjectDisposedException) { disposed = true; }
-        Assert.True(disposed, "破棄した後に問い合わせを再開しない");
-    }
-
-    [Test]
     public static void Main_RunsOnStaThread()
     {
         // クリップボード・UI は STA でないと動かない。Main の前にメソッドを足して、[STAThread] がそちらに付いていた (v1.2.0 の自己診断で失敗)
