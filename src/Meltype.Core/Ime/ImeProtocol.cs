@@ -112,9 +112,9 @@ public enum ImeTrait
     Terminal,
     /// <summary>パスワード・暗証番号 (IBus の InputPurpose.PASSWORD / PIN・fcitx5 の CapabilityFlag::Password・TSF の IS_PASSWORD・UI Automation の IsPassword・Android の inputType のパスワード)。</summary>
     Password,
-    /// <summary>メールアドレスの入力欄 (Android の inputType の EMAIL_ADDRESS)。</summary>
+    /// <summary>メールアドレスの入力欄 (Android の inputType の EMAIL_ADDRESS)。受け持たない。</summary>
     Email,
-    /// <summary>数字・電話番号・日時の入力欄 (Android の inputType の NUMBER・PHONE・DATETIME)。</summary>
+    /// <summary>数字・電話番号・日時の入力欄 (Android の inputType の NUMBER・PHONE・DATETIME)。受け持たない。</summary>
     Numeric,
     /// <summary>入力を覚えないように求める (TSF の IS_PRIVATE・IBus の InputHints.PRIVATE・fcitx5 の CapabilityFlag::Sensitive・Android の IME_FLAG_NO_PERSONALIZED_LEARNING)。</summary>
     Private,

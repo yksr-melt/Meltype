@@ -203,8 +203,8 @@ class ImeLaunchDeviceTest {
         }
     }
 
-    /** An email editor starts alphanumeric (the Core decides from the Email trait); Japanese can still be selected there. */
-    @Test fun emailFieldStartsAlphanumericAndCanSwitchToJapanese() = withRomajiActivity { activity ->
+    /** The Core does not handle an email editor (Email trait): it shows English QWERTY even after あa, and keys go in as typed. */
+    @Test fun emailFieldTypesKeysAsTheyAre() = withRomajiActivity { activity ->
         requestKeyboard(activity, activity.editor)
         waitUntil(
             "English QWERTY in email editor", millis = 45_000,
@@ -214,55 +214,22 @@ class ImeLaunchDeviceTest {
             keyboardReadyFor(activity, activity.editor,
                 io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY)
         }
-
-        // あa sends ModeToggleRequested to the Core. Avoid depending on long-press gesture timing.
+        // あa sends ModeToggleRequested, which the Core does not take here. Avoid depending on long-press gesture timing.
         val service = KeyboardService.activeForSmokeTest?.get()
             ?: throw AssertionError("Keyboard service missing")
         instrumentation.runOnMainSync {
             service.onKey(KeyAction.Language, Direction.TAP, SystemClock.uptimeMillis())
         }
-        waitUntil("Japanese QWERTY after language switch",
-            describe = { describeImeState(activity) + ", selected=" + service.activeKeysForSmokeTest()?.layout?.id }) {
-            activity.editor.hasFocus() &&
-                service.activeKeysForSmokeTest()?.layout?.id ==
-                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
-        }
-        // Android can restart input in the same editor after showing the IME.
-        // A restart must not reset the language that the user just selected.
-        requestKeyboard(activity, activity.editor)
-        // A visible key surface alone is not proof that Android has rebound the
-        // input connection after restartInput. Never inject into an orphaned IME view.
-        waitUntil(
-            "Japanese QWERTY survives the same editor restart",
-            millis = 45_000,
-            retryEveryMillis = 2_000,
-            retry = { requestKeyboard(activity, activity.editor) },
-            describe = {
-                val current = KeyboardService.activeForSmokeTest?.get()
-                describeImeState(activity) + ", selected=" + current?.activeKeysForSmokeTest()?.layout?.id +
-                    ", inputConnection=" + (current?.currentInputConnection != null)
-            },
-        ) {
-            keyboardReadyFor(activity, activity.editor,
-                io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI)
-        }
-        // restartInput may report an active connection before asynchronous
-        // rebinding settles. Require the binding to remain stable before touch.
-        repeat(3) {
-            Thread.sleep(200)
-            instrumentation.waitForIdleSync()
-            assertTrue("IME lost restarted editor binding: " + describeImeState(activity),
-                keyboardReadyFor(activity, activity.editor,
-                    io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI))
-        }
-        val keyboard = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
-            ?: throw AssertionError("Japanese keys not shown")
-        tap(keyboard, "a") { it is KeyAction.Romaji && it.char == 'a' }
-        waitUntil("romaji key composes Japanese in email editor",
+        instrumentation.waitForIdleSync()
+        assertTrue("English QWERTY must stay after あa: " + describeImeState(activity),
+            keyboardReadyFor(activity, activity.editor, io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY))
+        val keyboard = service.activeKeysForSmokeTest() ?: throw AssertionError("Keys not shown")
+        tap(keyboard, "a") { it == KeyAction.Text("a") }
+        waitUntil("the key goes in as typed in the email editor",
             describe = { describeImeState(activity) + ", text=" + activity.editor.text }) {
-            activity.editor.text.toString() == "あ"
+            activity.editor.text.toString() == "a"
         }
-        assertEquals("あ", activity.editor.text.toString())
+        assertEquals("a", activity.editor.text.toString())
     }
 
     /** Runs [block] in the smoke-test activity. */

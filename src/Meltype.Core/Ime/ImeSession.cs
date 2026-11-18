@@ -55,21 +55,18 @@ internal sealed class ImeSession
 
     private static bool IsPassword(ImeField? field) => field?.Traits.Contains(ImeTrait.Password) == true;
 
-    /// <summary>英数で始める入力欄 (メール・数字)。</summary>
-    public static bool IsAlphanumericField(ImeField? field) => field?.Traits.Any(trait => trait is ImeTrait.Email or ImeTrait.Numeric) == true;
-
     private static bool ForbidsLearning(ImeField? field) => IsPassword(field) || field?.Traits.Contains(ImeTrait.Private) == true;
 
     /// <summary>
     /// この入力欄で入力を受け持つか。設定「動作モード」がこのフロントの入力方式で、一時停止中・アプリ別設定で OFF・ゲーム (Meltype キーボード)・パスワード欄・全画面 (設定)・
-    /// 日本語以外の入力言語 (設定)・フロントが文字を送れない所・入力欄でない所 (アプリ別設定で「入力欄とみなす」アプリとターミナルを除く) でない。
+    /// 日本語以外の入力言語 (設定)・メールアドレスと数字の入力欄・フロントが文字を送れない所・入力欄でない所 (アプリ別設定で「入力欄とみなす」アプリとターミナルを除く) でない。
     /// </summary>
     public static bool IsActive(IImeEnvironment environment, Settings settings, ImeField? field)
     {
         var traits = field?.Traits ?? [];
         var app = field?.App;
         return (environment.InputMethod is not { } method || settings.Mode == method) && settings.Enabled &&
-            !IsPassword(field) && !traits.Contains(ImeTrait.Unreachable) &&
+            !IsPassword(field) && !traits.Contains(ImeTrait.Email) && !traits.Contains(ImeTrait.Numeric) && !traits.Contains(ImeTrait.Unreachable) &&
             !(settings.ExcludeFullscreen && traits.Contains(ImeTrait.Fullscreen)) &&
             !(settings.JapaneseKeyboardOnly && traits.Contains(ImeTrait.OtherLanguage)) &&
             !(traits.Contains(ImeTrait.NonText) && !settings.TreatsAsTextInput(app) && !(app is not null && LineContext.TerminalProcesses.Contains(app))) &&
@@ -118,18 +115,6 @@ internal sealed class ImeSession
         var game = IsGame(all, _field);
         if (game && !_game) _session.Direct = true;
         _game = game;
-        // メール・数字の入力欄に入ったら英数にし、出たら入る前の言語モードに戻す
-        var alphanumericField = IsAlphanumericField(_field);
-        if (alphanumericField && !_alphanumericField)
-        {
-            _directBeforeAlphanumericField = _session.Direct;
-            _session.Direct = true;
-        }
-        else if (!alphanumericField && _alphanumericField)
-        {
-            _session.Direct = _directBeforeAlphanumericField;
-        }
-        _alphanumericField = alphanumericField;
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
@@ -176,10 +161,6 @@ internal sealed class ImeSession
 
     // 前の出来事の入力欄がゲームだった
     private bool _game;
-
-    // 前の出来事の入力欄がメール・数字の入力欄だった。その欄に入る前の英数か
-    private bool _alphanumericField;
-    private bool _directBeforeAlphanumericField;
 
     // ---- 左右の Alt の単独押し (設定「左 Alt で英数 / 右 Alt で日本語」) ----
 

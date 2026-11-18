@@ -80,7 +80,7 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | E04 | ownEditorWritesDoNotLookLikeCaretMoves | 日本語欄で i␣Enter→want␣、キャレットを外から動かさない | I に確定し直し、キーボード自身の編集は外からの移動と数えない |
 | E05 | candidateTapChoosesForTheClauseAndEnterCommits | 日本語欄で watashinonamaehanakanodesu␣（実際のMozcで変換）→最後の文節で、いまと違う候補を候補バーでタップ→空白キーの長押しで左へ1文節→Enter | Space のあとは最後の文節を選んでいる。タップで最後の文節がその候補になり（確定しない）、長押しで1つ前の文節を選び、Enter で全文を確定 |
 | E06 | keyboardProvidesImePickerOnlyInEmergency | 通常の実IMEと障害時の退避用Viewを確認 | 通常画面に独自IME切り替えボタンはなく、退避用Viewの切り替え操作でAndroid標準IME選択を呼べる。設定画面へのリンクはない |
-| E07 | emailFieldStartsAlphanumericAndCanSwitchToJapanese | メール欄で英字QWERTYを確かめ→あa→同じ欄を始め直す→a をタップ | Core が英数で始めるので英字QWERTYが出る。あa で日本語QWERTYになり、始め直しても日本語のまま。a で「あ」が入り、Core障害扱いにならない |
+| E07 | emailFieldTypesKeysAsTheyAre | メール欄で英字QWERTYを確かめ→あa→a をタップ | Core が受け持たないので英字QWERTYのまま。a がそのまま入り、Core障害扱いにならない |
 | E08 | externalSendClearsCompositionWithoutReinsertingOldText | 日本語欄で ka を入力→IME外のSendボタンで送信→同じ欄で a を入力 | 送信した内容は「か」、送信後は空欄、次の入力は「あ」のみ（以前の未確定文字は復活しない） |
 
 A04〜A05、A14〜A15、C03〜C04はCoreの応答の形（ImeOutput）の固定JSONで検証する。A01〜A03、A08〜A09、A12、A16、C01〜C02、C05、C08〜C12、D01〜D02はNative Coreとの接続を含む（C09〜C11の変換は試験用の変換器で、文節の区切りと候補を固定する）。E01〜E08は端末で選んだキーボードを操作して確かめる（E06は退避用Viewの構築も確認する）。実機での画面開閉は自動計測とは別の手動テストである。

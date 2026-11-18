@@ -597,22 +597,18 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void EmailAndNumericFields_StartAlphanumericAndRestoreTheModeOnLeaving()
+    public static void EmailAndNumericFields_AreNotHandled()
     {
         foreach (var trait in new[] { "Email", "Numeric" })
         {
             var front = new Front { SendsImeOpen = false };
-            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", front.Trace);
             front.Traits.Add(trait);
             var entered = front.Event("CaretMoved", extra: Entered);
-            Assert.True(Active(entered) && entered.GetProperty("state").GetProperty("languageMode").GetString() == "Alphanumeric", $"{trait}: 英数で始める\n" + front.Trace);
-            front.Type("ab");
-            Assert.Equal("ab", front.Document, front.Trace);
-            Assert.True(front.Event("JapaneseModeSelected").GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: 日本語にできる\n" + front.Trace);
-            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: 同じ欄に入り直しても選んだまま\n" + front.Trace);
-            front.Event("AlphanumericModeSelected");
+            Assert.True(!Active(entered) && entered.GetProperty("state").GetProperty("languageMode").GetString() == "Alphanumeric", $"{trait}: 受け持たない (英数)\n" + front.Trace);
+            Assert.True(!Active(front.Key('a')) && front.Document == "a", $"{trait}: キーはそのまま入る\n" + front.Trace);
+            Assert.True(front.Event("JapaneseModeSelected").GetProperty("state").GetProperty("languageMode").GetString() == "Alphanumeric", $"{trait}: 日本語にしない\n" + front.Trace);
             front.Traits.Clear();
-            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: 出たら入る前の日本語に戻す\n" + front.Trace);
+            Assert.True(front.Event("CaretMoved", extra: Entered).GetProperty("state").GetProperty("languageMode").GetString() == "Japanese", $"{trait}: ふつうの欄では日本語\n" + front.Trace);
         }
     }
 

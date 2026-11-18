@@ -16,7 +16,7 @@ HTML正本の[08仕様](../../spec/08-auto-detection.html)と同期した実装�
 - **候補表示:** Androidの `CandidateBarView` を再利用する。Coreの一覧は1つだけ（変換中は変換の候補、入力中は予測変換か入力中の変換の候補）で、それだけを表示する。Coreが候補を返さないあいだは何も出さない。
 - **候補選択:** Coreの一覧の番号を保持し、タップは `CandidateClicked` で送る。予測変換の候補はそれで確定し、変換の候補は選んだあと Enter で確定する。変換中にスペースを長押しして指を左右に動かすと、← → を Core に送り、選ぶ文節を動かす。
 - **プライバシー:** Android IMEのネットワークアクセスは要求しない。入力欄の事実だけを Core に伝える（パスワード欄は `Password`、`IME_FLAG_NO_PERSONALIZED_LEARNING` は `Private`、メールアドレス欄は `Email`、数字・電話番号・日付と時刻の欄は `Numeric`）。学習するかは Core がデスクトップ版と同じ規則で決める。
-- **言語モード:** 英字QWERTY・数字記号を含め、すべてのキーを共有Coreに送る。言語モードは Core が持ち、文字のページは `state.languageMode` に従ってローマ字QWERTYか英字QWERTYを出す。`あa` キーは `ModeToggleRequested`、スペース長押しの言語メニューは `JapaneseModeSelected` / `AlphanumericModeSelected` を送る。言語モードはデスクトップ版と同じく入力欄をまたいで引き継ぎ、`Email`・`Numeric` の欄では Core が英数で始めて、離れると前のモードに戻す。パスワード欄のキーは Core が処理せず、打ったとおりに入る。
+- **言語モード:** 英字QWERTY・数字記号を含め、すべてのキーを共有Coreに送る。言語モードは Core が持ち、文字のページは `state.languageMode` に従ってローマ字QWERTYか英字QWERTYを出す。`あa` キーは `ModeToggleRequested`、スペース長押しの言語メニューは `JapaneseModeSelected` / `AlphanumericModeSelected` を送る。言語モードはデスクトップ版と同じく入力欄をまたいで引き継ぎ、`Email`・`Numeric` の欄はパスワード欄と同じく Core が受け持たず、打ったとおりに入る。パスワード欄のキーは Core が処理せず、打ったとおりに入る。
 - **変換:** Core はほかの OS と同じく `MeltypeRuntime.CreateConverter` で変換エンジンを作り、端末内の Mozc を使う（[06](06-conversion-mozc.md)）。変換は Core の変換のスレッドで行い、結果が届くとキーボードが `ConversionFinished` を送る。
 - **適用範囲:** 12キー・フリックは未提供（[Issue #1885](https://github.com/yksr-melt/Meltype/issues/1885)）。
 
