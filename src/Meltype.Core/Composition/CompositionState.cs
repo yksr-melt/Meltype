@@ -23,6 +23,15 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     /// </summary>
     public Func<string, bool, Verdict>? ClassifyDirect { get; init; }
 
+    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
+    public string? Selection { get; init; }
+
+    /// <summary>
+    /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
+    /// 確定し直すと元の文字が残ったまま書き足されてしまう (api → apiあぴ) ので、確定し直さない。
+    /// </summary>
+    public bool CanDeleteBackward { get; init; } = true;
+
     /// <summary>出来事を処理する時刻 (ミリ秒)。</summary>
     public long NowMs { get; init; }
 
@@ -119,14 +128,7 @@ internal sealed class CompositionState(CompositionOutput output, CompositionText
 
     public bool PrivateComposition;
 
-    /// <summary>
-    /// 入力欄の確定済みの文字を消せるか。消せない入力欄 (Linux で周りの文字の削除に対応していないアプリ) では、
-    /// 確定し直すと元の文字が残ったまま書き足されてしまう (api → apiあぴ) ので、確定し直さない。
-    /// </summary>
-    public bool CanDeleteBackward = true;
 
-    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
-    public string? Selection;
 
     // F6〜F10 (Ctrl+U/I/O/P・無変換・ひらがなキーも) でかな・英字にしたか。次に文字を打ったら確定する。
     public bool ModeByKey;

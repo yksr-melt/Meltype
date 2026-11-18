@@ -1019,7 +1019,7 @@ internal static partial class CompositionController
     /// </summary>
     private static ReconversionSelection? ReconversionSelectionNow(CompositionState state, CompositionEnv env)
     {
-        if (state.Selection is not { Length: > 0 } text) return null;
+        if (env.Selection is not { Length: > 0 } text) return null;
         var reading = IsRomajiText(text) ? text : env.ReadingOf(text) is { } read ? CompositionOutput.FromSetting(env.Settings.Punctuation, read) : null;
         return reading is { Length: > 0 } ? new ReconversionSelection(text, reading) : null;
     }

@@ -190,7 +190,7 @@ internal static partial class CompositionController
     /// </summary>
     private static string? CorrectPreviousCommit(CompositionState state, CompositionEnv env, string raw, bool english)
     {
-        if (state.Correctable.Count == 0 || !AutoCorrect(state, env) || !state.CanDeleteBackward) return null;
+        if (state.Correctable.Count == 0 || !AutoCorrect(state, env) || !env.CanDeleteBackward) return null;
         var previous = state.Correctable[^1];
         List<CommitRecord> targets = [];
         string? replacement = null;

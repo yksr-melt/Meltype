@@ -120,7 +120,7 @@ internal static class ImeSession
             ImeEventType.JapaneseModeSelected when active => Switch(state, env, true, before, ref explicitChange, toggle: false),
             ImeEventType.AlphanumericModeSelected when active => Switch(state, env, false, before, ref explicitChange, toggle: false),
             ImeEventType.CommitRequested => CommitPending(state, env),
-            ImeEventType.CommittedByApp => CommittedOutside(state, env, e.Field),
+            ImeEventType.CommittedByApp => CommittedOutside(state, env),
             // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む
             ImeEventType.CandidateClicked when state.ListedPredictions => SelectPrediction(state, env, e.Index),
             ImeEventType.CandidateHighlighted when state.ListedPredictions => Unchanged(state, env),
@@ -249,8 +249,6 @@ internal static class ImeSession
             if (caret.FocusLeft || caret.FocusEntered) ForgetCodeLine(state);
         }
         if (e.Field is not { } field) return;
-        state.Composition.CanDeleteBackward = field.CanRemove;
-        state.Composition.Selection = field.Selection;
         if (CodeFocusOf(field, settings) is { } focus)
         {
             var code = focus != CodeFocus.None;
@@ -465,11 +463,10 @@ internal static class ImeSession
     }
 
     /// <summary>OS が変換中の文字を表示のまま確定した: 本体も確定したことにする。文字はもう入っているので、確定し直しも入れない。</summary>
-    private static SessionResult CommittedOutside(ImeSessionState state, ImeEnv env, ImeField? field)
+    private static SessionResult CommittedOutside(ImeSessionState state, ImeEnv env)
     {
-        state.Composition.CanDeleteBackward = false;
-        CommitPending(state, env);
-        state.Composition.CanDeleteBackward = field?.CanRemove ?? true;
+        CompositionController.CommitPending(state.Composition, Env(state, env) with { CanDeleteBackward = false });
+        CompositionController.ResetContext(state.Composition);
         return Consumed;
     }
 
@@ -548,6 +545,8 @@ internal static class ImeSession
         ReadingOf = env.Parts.ReadingOf,
         ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, state.Settings) : null,
         NowMs = env.TimeMs(),
+        Selection = state.Field?.Selection,
+        CanDeleteBackward = CanDeleteSurrounding(state),
         Clipboard = () => env.Environment.ClipboardText,
         NowPlaying = env.Parts.NowPlaying,
         Corrected = env.Parts.Corrected,
@@ -633,7 +632,7 @@ internal static class ImeSession
     private static LineKind CodeLineKind(string? before) => before is null ? LineKind.Code : LineContext.ClassifyText(before);
 
     /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
-    public static bool CanDeleteSurrounding(ImeSessionState state) => state.Composition.CanDeleteBackward;
+    public static bool CanDeleteSurrounding(ImeSessionState state) => state.Field?.CanRemove ?? true;
 
     /// <summary>変換ボックスに何か入っているか。</summary>
     public static bool IsComposing(ImeSessionState state) => CompositionController.IsComposing(state.Composition);
@@ -644,8 +643,6 @@ internal static class ImeSession
     /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
     public static IReadOnlyList<int> ComposingControlKeys(ImeSessionState state, ImeEnv env) => CompositionController.ComposingControlKeys(state.Composition, Env(state, env));
 
-    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
-    public static string? Selection(ImeSessionState state) => state.Composition.Selection;
 
 
     /// <summary>
@@ -768,8 +765,6 @@ internal static class ImeSession
         state.Composition.DirectEnglishWord = false;
         SetCodeInput(state, false);
         SetCodeTerminal(state, false);
-        state.Composition.Selection = null;
-        state.Composition.CanDeleteBackward = true;
     }
 
     /// <summary>

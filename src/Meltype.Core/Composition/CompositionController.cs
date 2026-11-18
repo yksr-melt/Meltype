@@ -233,7 +233,7 @@ internal static partial class CompositionController
     private static bool StartsComposition(CompositionState state, CompositionEnv env, KeyPress key)
     {
         var direct = state.Direct;
-        if (key.Vk == VirtualKeys.Convert && state.Selection is { Length: > 0 }) return true;
+        if (key.Vk == VirtualKeys.Convert && env.Selection is { Length: > 0 }) return true;
         if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && KanaInput(state, env) &&
             env.Settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
         // かな入力: かなのキーならすべて入力を始める (StartWith)
