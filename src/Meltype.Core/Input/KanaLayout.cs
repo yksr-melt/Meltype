@@ -9,7 +9,7 @@ public enum KanaLayout
     /// <summary>JIS かな配列 (キーボードの刻印どおり)。</summary>
     [System.ComponentModel.Description("JIS かな")] Jis,
     /// <summary>月配列 (U9。D・K の前置シフト)。</summary>
-    [System.ComponentModel.Description("月配列")] Tsuki,
+    [System.ComponentModel.Description("月配列 (U9)")] Tsuki,
     /// <summary>花配列 (D・K の前置シフト)。</summary>
     [System.ComponentModel.Description("花配列")] Hana,
     /// <summary>NICOLA (親指シフト。無変換・変換が左右の親指キー)。</summary>
@@ -18,6 +18,10 @@ public enum KanaLayout
     [System.ComponentModel.Description("中指NICOLA")] NakayubiNicola,
     /// <summary>TRON 配列 (親指シフト。無変換・変換が左右の親指キー)。</summary>
     [System.ComponentModel.Description("TRON 配列")] Tron,
+    /// <summary>月配列 2-263 式 (D・K の前置シフト)。</summary>
+    [System.ComponentModel.Description("月配列 (2-263)")] Tsuki2263,
+    /// <summary>新月配列 (月配列 2-263 式をもとにした、☆・★ の前置シフトと ゛ の後置の配列)。</summary>
+    [System.ComponentModel.Description("新月配列")] Shingetsu,
 }
 
 /// <summary>ローマ字入力のキーの配列 (issue #1415)。</summary>
@@ -62,7 +66,7 @@ public readonly record struct KanaStroke(bool Handled, int RemoveLast = 0, strin
 public readonly record struct KanaKeyUp(bool ThumbTap, KanaStroke Stroke);
 
 /// <summary>
-/// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON) で、打鍵をかなにする (issue #1415)。
+/// JIS かな以外のかな配列 (月・花・NICOLA・中指NICOLA・TRON・新月) で、打鍵をかなにする (issue #1415)。
 /// 前置シフト (月・花) は、シフトのキーを押した次の 1 打鍵をシフト面で読む。
 /// 親指シフト (NICOLA・TRON) は、親指キー (左 = 無変換、右 = 変換) を押している間の文字キー、または文字キーを押してから
 /// <see cref="ChordWindowMs"/> 以内に押した親指キーで、その文字をシフト面で読む (同時打鍵)。
@@ -171,6 +175,21 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
                 "ず,ぱ,ぜ,,ざ,び,ぷ,ぶ,ぺ,べ,",
             ],
         ],
+        // 月配列 2-263 式。D・K のどちらを押しても、次のキーを 2 段目で読む
+        [KanaLayout.Tsuki2263] = [
+            [
+                ",,,,,,,,,,ー,,",
+                "そ,こ,し,て,ょ,つ,ん,い,の,り,ち,",
+                "は,か,1,と,た,く,う,1,゛,き,れ,",
+                "す,け,に,な,さ,っ,る,、,。,゜,",
+            ],
+            [
+                ",,,,,,,,,,,,",
+                "ぁ,ひ,ほ,ふ,め,ぬ,え,み,や,ぇ,「,",
+                "ぃ,を,ら,あ,よ,ま,お,も,わ,ゆ,」,",
+                "ぅ,へ,せ,ゅ,ゃ,む,ろ,ね,ー,ぉ,",
+            ],
+        ],
         [KanaLayout.Hana] = [
             [
                 ",,,,,,,,,,,,ぇ",
@@ -201,7 +220,12 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
             return map;
         }).ToArray());
 
-    private readonly Dictionary<int, string>[] _faces = layout == KanaLayout.Jis ? [] : Faces[layout];
+    private readonly Dictionary<int, string>[] _faces = Faces.GetValueOrDefault(layout) ?? [];
+    // キーの並びで決める配列 (新月配列): 打鍵はこちらで読む
+    private readonly SequenceKanaLayout? _sequence = SequenceKanaLayout.For(layout);
+
+    /// <summary>表の段 row (0 = 数字の段) の column 番目のキーの仮想キー。</summary>
+    internal static int KeyAt(int row, int column) => column < Rows[row].Length ? Rows[row][column] : 0;
     private int _prefix;
     // 最後に入力した文字キー (後から押した親指キーで打ち直すため)。
     private int _lastKey;
@@ -221,7 +245,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     public KanaLayout Layout => layout;
 
     public bool IsThumbShift => layout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
-    public bool IsPrefixShift => layout is KanaLayout.Tsuki or KanaLayout.Hana;
+    public bool IsPrefixShift => layout is KanaLayout.Tsuki or KanaLayout.Tsuki2263 or KanaLayout.Hana;
 
     /// <summary>JIS かな以外で、その配列が文字を割り当てているキーか (変換ボックスを開くキー)。</summary>
     public bool IsLayoutKey(int vk) => _faces.Any(face => face.ContainsKey(vk)) || IsThumbShift && vk is LeftThumb or RightThumb;
@@ -230,7 +254,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     public bool ThumbHeld => _thumb != 0;
 
     /// <summary>前置シフトのキーを押して、次のキーを待っているか。</summary>
-    public bool HasPrefix => _prefix > 0;
+    public bool HasPrefix => _prefix > 0 || _sequence is { Pending: true };
 
     /// <summary>左手で打つキー (表の各段の左から 5 つ)。</summary>
     public static bool IsLeftHand(int vk) => Rows.Any(row => Array.IndexOf(row, vk) is >= 0 and < 5);
@@ -238,6 +262,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     /// <summary>打ちかけ (前置シフト・押したままの親指キー) を忘れる。入力を確定・取り消したときに呼ぶ。</summary>
     public void Reset()
     {
+        _sequence?.Reset();
         _prefix = 0;
         _lastKey = 0;
         _lastTime = long.MinValue;
@@ -249,6 +274,7 @@ public sealed class KanaLayoutEngine(KanaLayout layout)
     public KanaStroke Down(int vk, bool shift, long time)
     {
         if (layout == KanaLayout.Jis) return KanaStroke.NotHandled;
+        if (_sequence is not null) return _sequence.Down(vk, shift);
         if (IsThumbShift && vk is LeftThumb or RightThumb)
         {
             // 押したままの親指キーのリピート: 押したことは変えない (文字に使ったかを消さない)
