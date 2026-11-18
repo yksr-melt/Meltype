@@ -139,11 +139,9 @@ internal static partial class CompositionController
     }
 
     /// <summary>入力欄 1 つ分の状態を作る。</summary>
-    public static CompositionState Create(CompositionDetector detector, IKanjiConverter converter, Func<Config.Settings> settings, CompositionServices? services = null)
+    public static CompositionState Create(CompositionDetector detector, Func<Config.Settings> settings, CompositionServices services)
     {
-        services ??= new CompositionServices();
-        var state = new CompositionState(new CompositionOutput(() => settings().Punctuation), new CompositionText(detector), detector, converter, settings, services,
-            new CompositionLearning(services, converter), (converter as IBackgroundConverter)?.Budget);
+        var state = new CompositionState(new CompositionOutput(() => settings().Punctuation), new CompositionText(detector));
         state.Text.Manual = () => !settings().AutoDetection;
         state.Text.TypoCorrector = services.RomajiTypos;
         // よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは英語として覚えない。
@@ -165,12 +163,12 @@ internal static partial class CompositionController
         if (value && IsComposing(state)) state.PrivateComposition = true;
     }
 
-    private static bool Learning(CompositionState state) => state.Settings().LearningEnabled && !Private(state) && !state.PrivateComposition;
+    private static bool Learning(CompositionState state, CompositionEnv env) => env.Settings.LearningEnabled && !Private(state) && !state.PrivateComposition;
 
-    private static bool KanaInput(CompositionState state) => state.Settings().InputStyle == Config.InputStyle.Kana;
+    private static bool KanaInput(CompositionState state, CompositionEnv env) => env.Settings.InputStyle == Config.InputStyle.Kana;
 
     /// <summary>英語とも日本語とも読める語を、次の語の文脈に合わせて確定し直すか。</summary>
-    private static bool AutoCorrect(CompositionState state) => state.Settings().AutoCorrectAfterCommit && state.Settings().AutoDetection;
+    private static bool AutoCorrect(CompositionState state, CompositionEnv env) => env.Settings.AutoCorrectAfterCommit && env.Settings.AutoDetection;
 
     /// <summary>変換ボックスに入力中か、英数状態で打ち始めの語を判定中か。</summary>
     public static bool IsComposing(CompositionState state) => !state.Text.IsEmpty || state.HeldLetters.Length > 0;
@@ -183,91 +181,91 @@ internal static partial class CompositionController
     /// 変換ボックスに入力していないときは、入力を始めるキー (<see cref="StartsComposition"/>) だけを受け取り、ほかはアプリに通す。
     /// releaseFollows なら、離したことは <see cref="Release"/> で届く (false なら押した直後に離したとみなす)。
     /// </summary>
-    public static SessionResult Press(CompositionState state, KeyPress key, string? before = null, string? after = null, bool releaseFollows = false)
+    public static SessionResult Press(CompositionState state, CompositionEnv env, KeyPress key, string? before = null, string? after = null, bool releaseFollows = false)
     {
         state.Out.Begin(before, after);
-        Tick(state, key.TimeMs);
-        var consumed = Handle(state, key);
-        if (!releaseFollows) HandleRelease(state, key.Vk);
-        Settle(state);
-        return Result(state, consumed);
+        Tick(state, env, key.TimeMs);
+        var consumed = Handle(state, env, key);
+        if (!releaseFollows) HandleRelease(state, env, key.Vk);
+        Settle(state, env);
+        return Result(state, env, consumed);
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>
-    public static SessionResult Release(CompositionState state, int vk, string? before = null, string? after = null)
+    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk, string? before = null, string? after = null)
     {
         state.Out.Begin(before, after);
-        HandleRelease(state, vk);
-        Settle(state);
+        HandleRelease(state, env, vk);
+        Settle(state, env);
         // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
-        return Result(state, consumed: true);
+        return Result(state, env, consumed: true);
     }
 
     /// <summary>キーをアプリに通す。変換ボックスの状態は変えない (英数状態で判定中の語は、しばらく打たなければ英語とみなす)。</summary>
-    public static SessionResult Pass(CompositionState state, long nowMs)
+    public static SessionResult Pass(CompositionState state, CompositionEnv env, long nowMs)
     {
         state.Out.Begin(null, null);
-        Tick(state, nowMs);
-        return Result(state, consumed: false);
+        Tick(state, env, nowMs);
+        return Result(state, env, consumed: false);
     }
 
     /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま。</summary>
-    public static SessionResult Current(CompositionState state)
+    public static SessionResult Current(CompositionState state, CompositionEnv env)
     {
         state.Out.Begin(null, null);
-        return Result(state, consumed: true) with { Consumed = false };
+        return Result(state, env, consumed: true) with { Consumed = false };
     }
 
-    private static SessionResult Result(CompositionState state, bool consumed) => state.Out.Result(consumed && !state.Out.PassedCurrent, state.Settings());
+    private static SessionResult Result(CompositionState state, CompositionEnv env, bool consumed) => state.Out.Result(consumed && !state.Out.PassedCurrent, env.Settings);
 
     /// <summary>キーを 1 つ処理する。アプリに通さないなら true。</summary>
-    private static bool Handle(CompositionState state, KeyPress key)
+    private static bool Handle(CompositionState state, CompositionEnv env, KeyPress key)
     {
         (state.Shift, state.Control, state.Modifier) = (key.Shift, key.Control, key.Modifier);
-        if (!IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, key))) return false;
-        state.Budget?.Start(InputBudgetMs);
+        if (!IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, env, key))) return false;
+        env.Budget?.Start(InputBudgetMs);
         state.Pressed.Add(key.Vk);
-        HandleKey(state, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs));
+        HandleKey(state, env, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs));
         return true;
     }
 
     /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
-    private static bool StartsComposition(CompositionState state, KeyPress key)
+    private static bool StartsComposition(CompositionState state, CompositionEnv env, KeyPress key)
     {
-        var direct = state.Services.DirectMode();
+        var direct = env.Services.DirectMode();
         if (key.Vk == VirtualKeys.Convert && state.Selection is { Length: > 0 }) return true;
-        if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && KanaInput(state) &&
-            state.Settings().KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
+        if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && KanaInput(state, env) &&
+            env.Settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
         // かな入力: かなのキーならすべて入力を始める (StartWith)
-        if (KanaInput(state) && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
+        if (KanaInput(state, env) && !direct && Detection.KanaDetector.IsKanaKey(key.Vk)) return true;
         // 日本語入力の Shift+Space・設定「スペースの幅」が全角の Space は、全角スペースにする (StartWith)
-        if (key.Vk == VirtualKeys.Space) return key.Shift || !direct && state.Settings().SpaceWidth == Config.SpaceWidth.FullWidth;
+        if (key.Vk == VirtualKeys.Space) return key.Shift || !direct && env.Settings.SpaceWidth == Config.SpaceWidth.FullWidth;
         if (key.Ch is not { } c) return false;
         if (VirtualKeys.IsLetter(key.Vk) && char.IsAsciiLetter(c)) return true;
         // 句読点・かぎかっこ・長音・数字・記号 (Shift で打つものも)
         return StartsWithSymbol(c);
     }
 
-    private static void HandleRelease(CompositionState state, int vk)
+    private static void HandleRelease(CompositionState state, CompositionEnv env, int vk)
     {
         var pressed = state.Pressed.Remove(vk);
         if (!IsComposing(state) && !state.KanaLayout.ThumbHeld) return;
         var kanaUp = state.KanaLayout.Up(vk);
         // 中指NICOLA: シフトのキーを押したまま先に離した文字キーを、シフト面で打ち直す
-        if (kanaUp.Stroke.Handled && IsComposing(state)) ApplyKanaStroke(state, kanaUp.Stroke);
+        if (kanaUp.Stroke.Handled && IsComposing(state)) ApplyKanaStroke(state, env, kanaUp.Stroke);
         // 親指シフト: 文字に使わずに離した親指キーは、もとの働き (変換・無変換) をする
         if (kanaUp.ThumbTap && pressed)
         {
             state.BypassKanaLayout = true;
-            try { HandleKey(state, new KeyEvent(vk, 0, false, false, false, 0)); }
+            try { HandleKey(state, env, new KeyEvent(vk, 0, false, false, false, 0)); }
             finally { state.BypassKanaLayout = false; }
         }
     }
 
     /// <summary>出来事を処理した後。表示を作り直し、入力が終わったら再変換の状態と押したキーを忘れる。</summary>
-    private static void Settle(CompositionState state)
+    private static void Settle(CompositionState state, CompositionEnv env)
     {
-        UpdateView(state);
+        UpdateView(state, env);
         // 親指キーを押したままなら、離したことを受け取るまで受け取り続ける (文頭で親指キーだけを押したとき。変換ボックスは空)
         if (IsComposing(state) || state.KanaLayout.ThumbHeld) return;
         // 読みをすべて削除した場合も、元の選択範囲は置換せず再変換を終了する。
@@ -279,19 +277,19 @@ internal static partial class CompositionController
     /// 背景の変換の結果が届いた。入力スレッドで呼ぶ。変換エンジンが使えなかった間の結果を捨てて、入力中の表示を作り直す。
     /// 表示を作り直したなら true。
     /// </summary>
-    public static SessionResult? RefreshConversion(CompositionState state)
+    public static SessionResult? RefreshConversion(CompositionState state, CompositionEnv env)
     {
         state.Out.Begin(null, null);
-        return Refresh(state) ? Result(state, consumed: true) : null;
+        return Refresh(state, env) ? Result(state, env, consumed: true) : null;
     }
 
-    private static bool Refresh(CompositionState state)
+    private static bool Refresh(CompositionState state, CompositionEnv env)
     {
         state.LiveCache.Clear();
-        if (state.Text.IsEmpty || state.Converting && !RefreshOpenConversion(state)) return false;
+        if (state.Text.IsEmpty || state.Converting && !RefreshOpenConversion(state, env)) return false;
         // 文節が分かると最後の文節の予測が出せる。予測を選んでいる間は、選んでいる候補を置き換えない
         if (state.PredictionIndex < 0) state.PredictionKey = "\u0000";
-        UpdateView(state);
+        UpdateView(state, env);
         return true;
     }
 
@@ -302,13 +300,13 @@ internal static partial class CompositionController
     /// 英日の区切りの案を候補にした文全体の文節を選び直したあとも置き換えない。作り直すと選んだ文が新しい案に無くなることがあり、
     /// その案の文節に分けられなくなる (← → で選び直せず、文節ごとの学習もできない)。
     /// </summary>
-    private static bool RefreshOpenConversion(CompositionState state)
+    private static bool RefreshOpenConversion(CompositionState state, CompositionEnv env)
     {
         if (state.ClausesEdited || state.Reconversion is not null || state.Clauses.Count == 0 || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
         var (old, selected, tabStarted) = (state.Clauses, state.SelectedClause, state.TabStartedConversion);
-        WithoutWaiting(state, () =>
+        WithoutWaiting(state, env, () =>
         {
-            StartConversion(state, state.ConversionPrefersJapanese);
+            StartConversion(state, env, state.ConversionPrefersJapanese);
             return true;
         });
         state.TabStartedConversion = tabStarted;
@@ -337,28 +335,28 @@ internal static partial class CompositionController
     }
 
     /// <summary>英数状態で判定中の語が、無入力のまま一定時間たったら英語とみなす。</summary>
-    private static void Tick(CompositionState state, long nowMs)
+    private static void Tick(CompositionState state, CompositionEnv env, long nowMs)
     {
         if (state.HeldLetters.Length == 0 || nowMs - state.HeldLastKeyTime < DirectHoldIdleMs) return;
-        DecideHeld(state, final: true);
+        DecideHeld(state, env, final: true);
     }
 
     public static void AbandonDirectHold(CompositionState state) => ClearHeld(state);
 
     /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
-    public static SessionResult SelectCandidate(CompositionState state, int index)
+    public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index)
     {
         state.Out.Begin(null, null);
-        SelectCandidateAt(state, index);
-        return Result(state, consumed: true);
+        SelectCandidateAt(state, env, index);
+        return Result(state, env, consumed: true);
     }
 
-    private static void SelectCandidateAt(CompositionState state, int index)
+    private static void SelectCandidateAt(CompositionState state, CompositionEnv env, int index)
     {
         // 入力中に出した候補 (設定「入力中も変換候補をいくつか表示」) をクリックしたら、変換を始めてからその候補を選ぶ
         // 入力中の候補は読み全体の候補なので、変換を始めて文節に分かれると一覧が変わり、番号が別の語を指す。
         // 見えていた一覧のまま、読み全体 1 つの文節にして、クリックした語を選ぶ
-        if (!state.Converting && TypingCandidates(state) is { } typing)
+        if (!state.Converting && TypingCandidates(state, env) is { } typing)
         {
             if (index < 0 || index >= typing.Count) return;
             state.Clauses = [new Clause(state.Text.AllKana(final: false), false, typing) { Raw = state.Text.Raw, Expanded = true }];
@@ -370,37 +368,37 @@ internal static partial class CompositionController
         if (index < 0 || index >= clause.Candidates.Count) return;
         clause.Index = index;
         clause.Changed = true;
-        UpdateView(state);
+        UpdateView(state, env);
     }
 
     /// <summary>予測変換の候補を番号で選んで確定する (Meltype IME の候補の一覧をクリックしたとき)。</summary>
-    public static SessionResult CommitPredictionAt(CompositionState state, int index)
+    public static SessionResult CommitPredictionAt(CompositionState state, CompositionEnv env, int index)
     {
         state.Out.Begin(null, null);
-        var predictions = CurrentPredictions(state);
+        var predictions = CurrentPredictions(state, env);
         if (!state.Converting && index >= 0 && index < predictions.Count)
         {
-            CommitPrediction(state, predictions[index]);
-            UpdateView(state);
+            CommitPrediction(state, env, predictions[index]);
+            UpdateView(state, env);
         }
-        return Result(state, consumed: true);
+        return Result(state, env, consumed: true);
     }
 
     /// <summary>
     /// 無効化・フォーカス喪失などで、未確定の内容をそのまま確定する。consumed: 出来事をアプリに通さないか。
     /// preserveLatinRaw: 結合アクセントが続くので、明示的に選択していない ASCII 英字の原文を確定する。preserveText: 確定する文字列に自動空白を加えない。
     /// </summary>
-    public static SessionResult CommitPending(CompositionState state, bool consumed = true, bool preserveLatinRaw = false, bool preserveText = false)
+    public static SessionResult CommitPending(CompositionState state, CompositionEnv env, bool consumed = true, bool preserveLatinRaw = false, bool preserveText = false)
     {
         state.Out.Begin(null, null);
-        CommitAll(state, preserveLatinRaw, preserveText);
-        return Result(state, consumed);
+        CommitAll(state, env, preserveLatinRaw, preserveText);
+        return Result(state, env, consumed);
     }
 
-    private static void CommitAll(CompositionState state, bool preserveLatinRaw, bool preserveText)
+    private static void CommitAll(CompositionState state, CompositionEnv env, bool preserveLatinRaw, bool preserveText)
     {
-        state.Budget?.Start(InputBudgetMs);
-        if (state.HeldLetters.Length > 0) ReleaseHeldAsEnglish(state);
+        env.Budget?.Start(InputBudgetMs);
+        if (state.HeldLetters.Length > 0) ReleaseHeldAsEnglish(state, env);
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
         if (preserveLatinRaw && !state.Converting && state.Reconversion is null && !state.Text.KanaInput &&
@@ -408,10 +406,10 @@ internal static partial class CompositionController
             !state.Text.IsEmpty && state.Text.Raw.All(char.IsAsciiLetter))
         {
             state.Correctable.Clear();
-            CommitText(state, state.Text.Raw, english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
+            CommitText(state, env, state.Text.Raw, english: true, preserveText: true, rule: "英字にアクセント記号が続くので打ったまま");
         }
-        else CommitIfAny(state, preserveText);
-        UpdateView(state);
+        else CommitIfAny(state, env, preserveText);
+        UpdateView(state, env);
     }
 
     /// <summary>変換中の文節・候補・選択中の文節をすべて消す。再変換の状態も消す。</summary>

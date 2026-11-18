@@ -14,31 +14,31 @@ namespace Meltype.Composition;
 internal static partial class CompositionController
 {
     /// <summary>設定「英語 / 日本語の学習を前の文脈ごとに分ける」: 学習の文脈 (前が英語か日本語か) を今の入力に合わせる。</summary>
-    private static void UpdateLearningContext(CompositionState state)
+    private static void UpdateLearningContext(CompositionState state, CompositionEnv env)
     {
-        if (state.Services.Languages is not { } memory) return;
-        memory.ContextSensitive = state.Settings().ContextualLearning;
+        if (env.Services.Languages is not { } memory) return;
+        memory.ContextSensitive = env.Settings.ContextualLearning;
         memory.Context = state.Text.PrecedingEnglish;
     }
 
-    private static void BeginComposition(CompositionState state, bool privateInput = false)
+    private static void BeginComposition(CompositionState state, CompositionEnv env, bool privateInput = false)
     {
         state.PrivateComposition = Private(state) || privateInput;
         state.KeptChoices.Clear();
         state.ModeByKey = false;
         state.EscReverted = false;
         // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
-        if (state.Settings().EnglishFirstInput && !KanaInput(state) && state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.HalfWidthAlphanumeric;
-        state.Text.KanaInput = KanaInput(state);
-        state.Text.FullWidthParentheses = state.Settings().FullWidthParentheses;
-        state.Text.SquareBrackets = state.Settings().SquareBrackets;
-        state.Text.LaughterAfterKana = state.Settings().LaughterAfterKana;
+        if (env.Settings.EnglishFirstInput && !KanaInput(state, env) && state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.HalfWidthAlphanumeric;
+        state.Text.KanaInput = KanaInput(state, env);
+        state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
+        state.Text.SquareBrackets = env.Settings.SquareBrackets;
+        state.Text.LaughterAfterKana = env.Settings.LaughterAfterKana;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = Environment.TickCount64 - state.LastCommitTime < OwnCommitTrustMs;
         state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
         state.FollowingText = null;
         state.Text.PrecedingEnglish = state.LastCommitEnglish;
-        UpdateLearningContext(state);
+        UpdateLearningContext(state, env);
         state.Text.PrecedingEnglishSentence = state.LastCommitEnglish == true && IsEnglishSentence(state.LastCommitText);
         state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
         // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
@@ -49,7 +49,7 @@ internal static partial class CompositionController
         {
             state.PrecedingText = before;
             if (LanguageOf(before) is { } english) state.Text.PrecedingEnglish = english;
-            UpdateLearningContext(state);
+            UpdateLearningContext(state, env);
             state.Text.PrecedingEnglishSentence = IsEnglishSentence(before);
             state.Text.PrecedingEnglishName = IsEnglishNameContext(before);
         }
