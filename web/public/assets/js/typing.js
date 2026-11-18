@@ -3,10 +3,10 @@
 
 // タイピング (/typing/)。誰でも遊べ、打った記録は調査に同意した人だけが送る。
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
-// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay)。
+// 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay。Backspace は Meltype と同じく日本語なら 1 音消す)。
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
 import { align, toKana, toRomaji } from "./romaji.js";
-import { compare, replay, suspicious } from "./typing-check.js";
+import { TYPING_VERSION, compare, replay, suspicious } from "./typing-check.js";
 import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
 
@@ -115,8 +115,9 @@ function loadSentence() {
 }
 
 function render() {
-  const typed = replay(state.trial.keys);
-  const english = hasEnglish(state.queue[state.index]);
+  const sentence = state.queue[state.index];
+  const typed = replay(state.trial.keys, sentence.reading);
+  const english = hasEnglish(sentence);
   const { kana, pending } = english ? { kana: typed, pending: "" } : toKana(typed);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
@@ -180,7 +181,7 @@ board.addEventListener("blur", () => ($("focus-hint").hidden = false));
 function finishSentence() {
   const trial = state.trial;
   const sentence = state.queue[state.index];
-  if (trial.ime || !replay(trial.keys)) return;
+  if (trial.ime || !replay(trial.keys, sentence.reading)) return;
   const duration = Math.max(1, Math.round(performance.now() - trial.startedAt));
   state.round.push({ sentence, keys: trial.keys, duration });
   saved.done = [...new Set([...saved.done, sentence.id])];
@@ -208,7 +209,7 @@ function showScores() {
   let backspaces = 0;
   const misses = new Map();
   for (const entry of state.round) {
-    const typed = replay(entry.keys);
+    const typed = replay(entry.keys, entry.sentence.reading);
     const ops = compare(entry.sentence.reading, typed);
     chars += ops.filter((op) => op.want).length;
     wrong += ops.filter((op) => op.op !== "same").length;
@@ -344,10 +345,10 @@ async function sendRound() {
   setStatus("info", "送っています");
   let sent = 0;
   // お手本と関係ない入力が続いた文は送らない (サーバーも同じ判定で受け付けない)
-  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys)));
+  const sendable = round.filter((entry) => !suspicious(entry.sentence.reading, replay(entry.keys, entry.sentence.reading)));
   const skipped = round.length - sendable.length;
   for (const entry of sendable) {
-    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration });
+    const body = JSON.stringify({ sentence: entry.sentence.id, keys: entry.keys, duration: entry.duration, version: TYPING_VERSION });
     try {
       await getJson("/api/typing/trials", { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${token}` }, body });
       sent += 1;

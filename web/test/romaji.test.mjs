@@ -68,9 +68,21 @@ describe("お手本のローマ字と、関係ない入力", async () => {
     assert.equal(accuracyOf("きょうはgoogleでしらべた。", "KyouhaGoogledesirabeta."), 1);
   });
 
-  it("打鍵から打った文字を組み立てる (Backspace の押しっぱなしも 1 回ずつ消す)", () => {
+  const keysOf = (text) => [...text].map((char) => [char === "<" ? "Backspace" : "Key", char === "<" ? "Backspace" : char, 0, 0]);
+
+  it("Backspace は Meltype と同じく、日本語は 1 音・打ちかけと英語は 1 文字消す", () => {
+    const reading = "きょうはgoogleでしらべた。";
+    assert.equal(replay(keysOf("kyouha<"), reading), "kyou");
+    assert.equal(replay(keysOf("kyo<"), reading), "");
+    assert.equal(replay(keysOf("ky<"), reading), "k");
+    assert.equal(replay(keysOf("kyouhagoog<"), reading), "kyouhagoo");
+    assert.equal(replay(keysOf("kyouhagoogle<<"), reading), "kyouhagoog");
+    assert.equal(replay(keysOf("atta<"), "あった"), "at");
+  });
+
+  it("版 1 の記録は、Backspace で 1 文字消していたときの決まりで組み立てる", () => {
     const keys = [["KeyK", "k", 0, 10], ["KeyY", "y", 20, 30], ["KeyP", "p", 40, 50], ["Backspace", "Backspace", 60, null], ["Backspace", "Backspace", 90, null], ["ShiftLeft", "Shift", 100, 120], ["KeyO", "O", 110, 130]];
-    assert.equal(replay(keys), "kO");
+    assert.equal(replay(keys, "きょう", 1), "kO");
   });
 
   it("押し間違い・綴りの違いは止めない", () => {

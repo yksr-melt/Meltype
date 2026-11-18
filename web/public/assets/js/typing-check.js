@@ -4,13 +4,37 @@
 // タイピングの 1 文の打鍵から、打った文字を組み立てて採点し、お手本と関係ない入力 (名前など) が続いていないかを見る。
 // ページとサーバー (src/typing.js) で同じものを使う。
 // 決まり: 送るのは打鍵 (keys) だけにし、打った文字はここで打鍵から組み立てる (直したあとの文字列を、打った文字列と取り違えないように)。
-import { align, finalKana, toRomaji } from "./romaji.js";
+import { align, finalKana, toRomaji, toUnits } from "./romaji.js";
+
+// 打鍵から打った文字を組み立てる決まりの版。記録 (typing_trials.version) に残し、組み立てるときに使う。
+// 決まり: 組み立て方を変えたら 1 つ上げ、前の版の組み立て方も残す (前に集めた打鍵は、そのとき画面に出ていた決まりで読むため)。
+//   1: Backspace で 1 文字消す
+//   2: Backspace で Meltype と同じく、日本語は 1 音 (ka なら 2 文字)、英語と打ちかけの綴りは 1 文字消す
+export const TYPING_VERSION = 2;
+
+// 打ち終わりの英字が、お手本の英語の語の打ちかけか (2 文字以上で、お手本のどれかの語の頭と同じなら英語とみなす)。
+// Meltype は英語の区間なら 1 文字ずつ消すので、お手本に出てくる英語の語で見分ける
+function englishTail(typed, words) {
+  const run = (typed.toLowerCase().match(/[a-z0-9-]+$/) || [""])[0];
+  for (let length = run.length; length >= 2; length -= 1) {
+    const tail = run.slice(-length);
+    if (words.some((word) => word.startsWith(tail))) return true;
+  }
+  return false;
+}
+
+function backspace(typed, words) {
+  const { units, pending } = toUnits(typed);
+  if (pending || units.length === 0 || englishTail(typed, words)) return typed.slice(0, -1);
+  return typed.slice(0, -units[units.length - 1].raw.length);
+}
 
 // 打鍵 ([code, key, 押した時刻, 離した時刻]) を頭から打ち直し、Enter を押したときに残っていた文字にする
-export function replay(keys) {
+export function replay(keys, reading, version = TYPING_VERSION) {
+  const words = reading.match(/[a-z0-9-]+/g) || [];
   let typed = "";
   for (const [, key] of keys) {
-    if (key === "Backspace") typed = typed.slice(0, -1);
+    if (key === "Backspace") typed = version >= 2 ? backspace(typed, words) : typed.slice(0, -1);
     else if (key.length === 1 && key >= " " && key <= "~") typed += key;
   }
   return typed;
