@@ -33,6 +33,8 @@ Assert-That ($errors.Count -eq 0) 'Invalid manager syntax'
 $replacements = @{
     'Get-InstallRoot' = 'function Get-InstallRoot { return $global:MeltypeLifecycleTest.install }'
     'Assert-Administrator' = 'function Assert-Administrator { $global:MeltypeLifecycleTest.calls.Add("admin") }'
+    'Set-StartMenuShortcut' = 'function Set-StartMenuShortcut($Exe) { $global:MeltypeLifecycleTest.calls.Add("shortcut:set") }'
+    'Remove-StartMenuShortcut' = 'function Remove-StartMenuShortcut { $global:MeltypeLifecycleTest.calls.Add("shortcut:remove") }'
     'Get-Server' = @'
 function Get-Server($View) {
     $arch = if ($View -eq [Microsoft.Win32.RegistryView]::Registry64) { 'x64' } else { 'x86' }
@@ -62,7 +64,7 @@ function Invoke-StartupMaintenance([string]$Exe,[string]$Operation) {
 '@
 }
 $functions = @($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $replacements.ContainsKey($node.Name)}, $true))
-Assert-That ($functions.Count -eq 5) 'OS seam definitions changed; update the harness'
+Assert-That ($functions.Count -eq 7) 'OS seam definitions changed; update the harness'
 foreach ($function in $functions | Sort-Object {$_.Extent.StartOffset} -Descending) {
     $source = $source.Substring(0,$function.Extent.StartOffset) + $replacements[$function.Name] + $source.Substring($function.Extent.EndOffset)
 }
@@ -134,7 +136,7 @@ Assert-That ((Get-Content -LiteralPath $unlisted -Raw) -eq 'preserve unlisted fi
 Assert-That (-not (Test-Path -LiteralPath $lockedPath)) 'Cleanup did not remove previously locked DLL'
 Assert-That (Test-Path -LiteralPath $unlisted) 'Cleanup removed unlisted file'
 Assert-That (-not $state.enabled -and $state.registration.Count -eq 0) 'Uninstall left startup or IME registrations'
-Assert-That (($state.calls -join ',') -eq 'admin,startup:stop-tray,startup:disable,register:x64:True,register:x86:True,admin') 'Uninstall did not disable startup first'
+Assert-That (($state.calls -join ',') -eq 'admin,startup:stop-tray,startup:disable,register:x64:True,register:x86:True,shortcut:remove,admin,shortcut:remove') 'Uninstall did not disable startup first'
 Assert-That ((Get-Content -LiteralPath $data -Raw) -eq 'keep learning and settings') 'User data changed'
 $badFolder = Join-Path $state.install 'versions/modified'
 New-Item -ItemType Directory -Path $badFolder -Force | Out-Null
