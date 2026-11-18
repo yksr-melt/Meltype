@@ -316,7 +316,8 @@ internal static class FeedbackTests
         k.Type("google");
         Assert.Equal("ごおgぇ", k.Showing, "手動: 自動では英字にしない");
         Assert.Equal("Tab → google (英字に)", k.Host.View!.ContextHint, "手動の提案は固定の操作一覧と分けて返す");
-        Assert.Equal("Tab → google (英字に)　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字", k.Host.View.Hint, "従来の案内は変えない");
+        // 固定の操作ガイドを出さない OS・入力方式 (Settings.ShowsGuide) では、文脈の案内だけ
+        Assert.Equal("Tab → google (英字に)" + (k.Settings.ShowsGuide ? "　Space 変換　←→ 文節　Enter 確定　F7 カタカナ　F10 英字" : ""), k.Host.View.Hint, "従来の案内は変えない");
         Assert.True(k.Host.View.Suggestion is null, "英字の提案は書き間違いの修正ではない");
         k.Press(VirtualKeys.Tab);
         Assert.Equal("google", k.Showing, "Tab で提案どおり英字");
@@ -883,13 +884,13 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue959_VersionCandidate_CanBeSelectedAndCommitted()
     {
-        var expected = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var live in new[] { false, true })
         {
             foreach (var typed in new[] { "ba-jon", "ba-jonn", "ba-zyonn" })
             {
                 var k = new CompositionTests.Keyboard(live: live,
                     moreCandidates: reading => reading == "ばーじょん" ? ["バージョン", "Mozc-test"] : []);
+                var expected = Composition.Utility.VersionConversion.Candidate(k.Settings);
                 k.Type(typed + " ");
                 var view = k.Host.View!;
                 Assert.True(view.Converting, typed + ": 変換中");
@@ -908,11 +909,11 @@ internal static class LanguageLearningTests
     public static void Issue959_VersionCandidate_LiveConversionCommitsKatakana()
     {
         // ライブ変換では、カタカナの「バージョン」を版の候補より前に出し、そのまま確定しても版にしない (Meltype の版を打ちたいことはまれ)
-        var version = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var typed in new[] { "ba-jon", "ba-jonn", "ba-zyonn" })
         {
             var k = new CompositionTests.Keyboard(live: true,
                 moreCandidates: reading => reading == "ばーじょん" ? ["バージョン", "Mozc-test"] : []);
+            var version = Composition.Utility.VersionConversion.Candidate(k.Settings);
             k.Type(typed + " ");
             var candidates = k.Host.View!.Candidates.ToList();
             Assert.True(candidates.IndexOf("バージョン") is >= 0 and var katakana && katakana < candidates.IndexOf(version), typed + ": " + string.Join(" ", candidates));
@@ -924,10 +925,10 @@ internal static class LanguageLearningTests
     [Test]
     public static void Issue959_VersionCandidate_DoesNotChangeOtherInput()
     {
-        var expected = Composition.Utility.VersionConversion.Candidate(new Settings());
         foreach (var typed in new[] { "version", "ba-jonappu", "ba-" })
         {
             var k = new CompositionTests.Keyboard();
+            var expected = Composition.Utility.VersionConversion.Candidate(k.Settings);
             k.Type(typed + " ");
             Assert.True(k.Host.View?.Candidates.Contains(expected) != true, typed + ": ほかの読みには版を出さない");
         }
@@ -975,7 +976,7 @@ internal static class LanguageLearningTests
             var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
             standalone.Type("ba-jonn ");
             Assert.Equal("バージョン", standalone.Host.View!.Text, old);
-            Assert.True(standalone.Host.View.Candidates.Contains(Composition.Utility.VersionConversion.Candidate(new Settings())), "現在の版は引き続き選べる");
+            Assert.True(standalone.Host.View.Candidates.Contains(Composition.Utility.VersionConversion.Candidate(standalone.Settings)), "現在の版は引き続き選べる");
         }
     }
 
@@ -986,7 +987,7 @@ internal static class LanguageLearningTests
         var phrases = new PhraseHistory(null);
         var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
         keyboard.Type("ba-jonn ");
-        var version = Composition.Utility.VersionConversion.Candidate(new Settings());
+        var version = Composition.Utility.VersionConversion.Candidate(keyboard.Settings);
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.SelectCandidate(index);
