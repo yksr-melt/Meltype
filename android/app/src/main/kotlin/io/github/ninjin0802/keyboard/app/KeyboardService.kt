@@ -694,8 +694,9 @@ class KeyboardService : InputMethodService(), KeyListener {
         emojiRecents.used(emoji, policy.recordsEmoji)
     }
 
-    /** 未確定文字があるあいだは、空白キーは「次の候補」のまま。変換しない欄では、持っている1文字を確定してから動かす。 */
+    /** 言語のメニューを出す。未確定文字があるあいだは出さない (空白キーの長押しで文節・カーソルを動かす)。 */
     override fun onSpaceLanguageMenu(x: Float, y: Float): Boolean {
+        if (coreInput.composing) return false
         val anchor = keyboardView ?: return false
         if (nav.current != LayoutId.ROMAJI && nav.current != LayoutId.QWERTY) return false
         return languagePopup.show(
