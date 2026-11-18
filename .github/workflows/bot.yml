@@ -155,7 +155,11 @@ jobs:
             exit 0
           }
           # repro と ca (Mozc があれば漢字も。ca も repro と同じく打つ。last は space)。REPROS の i 番目の結果は results/<i>/repro-<版の名前>.json
-          # 打つ版は VERSIONS (/repro <SHA> の PR・PR の前・main)。無ければ main と最新のリリース。同じ commit の版は 1 度だけ打つ
+          # Zenzai の結果を返すのは repro だけ (ca は Mozc の候補だけを返すので、Zenzai を起動しない)
+          if ($env:ACTION -ne 'repro') { Remove-Item Env:MELTYPE_ZENZAI_SERVER, Env:MELTYPE_ZENZAI_MODEL -ErrorAction SilentlyContinue }
+          # 打つ版は VERSIONS (/repro <SHA> の PR の前・PR・main)。無ければ main と最新のリリース。同じ commit の版は 1 度だけ打つ。
+          # PR は最後に打つ (PR のビルドが失敗してもほかの版の結果を返す。PR のコードが動く前に、ほかの版を打ち終える)。
+          # 表の並びは report (meltype-bot.mjs) が VERSIONS の順に決める
           $versions = if ($env:VERSIONS) { @($env:VERSIONS | ConvertFrom-Json) } else {
             [pscustomobject]@{ name = 'main'; sha = (git rev-parse HEAD) }
             $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
@@ -163,7 +167,7 @@ jobs:
           }
           $head = git rev-parse HEAD
           $done = @{}
-          foreach ($v in $versions) {
+          foreach ($v in @($versions | Sort-Object -Stable { $_.name -eq 'pr' })) {
             if ($done.ContainsKey($v.sha)) { continue }
             $done[$v.sha] = $true
             $root = '.'

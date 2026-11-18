@@ -416,9 +416,11 @@ async function report() {
         if (r.engine) engine = r.engine;
         rows.push(`| ${md(versionLabel(name))} | ${outcomeCell(r)} |${withZenzai ? ` ${outcomeCell(r.zenzai)} |` : ''}`);
         if ((name === 'main' || name === 'pr') && !verdict) {
+          // Mozc だけか Mozc + Zenzai のどちらかで報告と同じなら、もう一方が期待どおりでも再現とする
+          // (Zenzai が遅い PC では Mozc の結果になる。アプリは Zenzai が既定で ON)
           const texts = outcomes(r).flatMap(o => [typedOf(o), o.converted]);
-          if (expected && texts.includes(expected)) verdict = 'match';
-          else if (reported && texts.includes(reported)) verdict = 'reproduced';
+          if (reported && texts.includes(reported)) verdict = 'reproduced';
+          else if (expected && texts.includes(expected)) verdict = 'match';
           else verdict = 'different';
         }
       }
