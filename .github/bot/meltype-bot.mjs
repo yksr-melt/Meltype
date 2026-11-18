@@ -86,13 +86,13 @@ const Help = [
   '',
   '| コマンド | すること | 使える人 |',
   '|---|---|---|',
-  '| `/repro <打ったキー> [space\\|enter\\|none]` | 最新のコードで打つ (Mozc があれば漢字も) | だれでも |',
+  '| `/repro <打ったキー> [space\\|enter\\|none]` | main と最新リリースのコードで打つ (Mozc があれば漢字も) | だれでも |',
+  '| `/repro <SHA> <打ったキー> [space\\|enter\\|none]` | PR の前・PR・main のコードで打ち、PR で結果が変わったか比べる | メンテナー (PR のみ) |',
   '| `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |',
   '| `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す | だれでも |',
   '| `/jht <出てほしい文> [/ 読み]` | 考えられるローマ字打ちで変換テスト (読みはオプション) | だれでも |',
   '| `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |',
   '| `/pack <SHA>` | Pull Request のコードでテスト版のインストーラー (setup.exe) を作る | メンテナー |',
-  '| `/test-repro <SHA> <キー>` | PR のコードで `/repro` | メンテナー |',
   '| `/test-jht <SHA> <文> [/ 読み]` | PR のコードで `/jht` | メンテナー |',
   '| `/test-explain <SHA> <キー>` | PR のコードで `/explain` | メンテナー |',
   '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でないか、docs/release-notes/<版>.md が無ければ止める | 管理者 |',
@@ -195,7 +195,7 @@ async function parse() {
   }
   // コマンドはどの行に書いてもよい。/test/foo のようなパスはコマンドにしない。
   // /release・/pre-release は 1 行目だけ (手順の説明やコードブロックの中の行でタグとリリースを作らないため)
-  const commands = lines.map(l => l.match(/^\/(self-assign|repro|explain|ca|jht|test-repro|test-jht|test-explain|test|pack|pre-release|release|help)(?=\s|$)\s*(.*)$/))
+  const commands = lines.map(l => l.match(/^\/(self-assign|repro|explain|ca|jht|test-jht|test-explain|test|pack|pre-release|release|help)(?=\s|$)\s*(.*)$/))
     .filter((m, i) => m && (i === 0 || !['release', 'pre-release'].includes(m[1])));
   if (commands.length === 0 || event.comment.user?.type === 'Bot') return output({ action: 'none' });
   if (commands.length > 1 && !commands.every(([, c]) => c === 'repro')) {
@@ -207,7 +207,7 @@ async function parse() {
     return output({ action: 'none' });
   }
   const [, command, rest] = commands[0];
-  const prOnly = ['test', 'pack', 'test-repro', 'test-jht', 'test-explain'];
+  const prOnly = ['test', 'pack', 'test-jht', 'test-explain'];
 
   if (command === 'release' || command === 'pre-release') {
     // 権限の広い処理は parse では行わない (parse はだれのコメントでも動くので、権限は contents: read のまま)。
@@ -230,31 +230,28 @@ async function parse() {
     await upsertComment(issue, `help-${event.comment.id}`, Help);
     return output({ action: 'none' });
   }
+  // PR のコードを動かすのは、メンテナーが確かめた commit だけ。コメントの後に head を差し替えられても、見ていないコードは動かさない。
+  // 40 桁の完全一致だけを受け付ける (短い前方一致だと、先頭が同じ無害な commit と悪意のある commit を作って差し替えられる)
+  // 通れば PR の head を返し、通らなければ理由をコメントして null を返す
+  const verifiedHead = async (sha, usage) => {
+    const fail = async text => { await upsertComment(issue, `error-${event.comment.id}`, text); return null; };
+    const name = command === 'repro' ? '/repro <SHA>' : `/${command}`;
+    if (!isPr) return fail(`\`${name}\` は Pull Request でだけ使えます。`);
+    if (!maintainer) return fail(`\`${name}\` はメンテナーだけが使えます (Pull Request のコードを動かすため)。`);
+    const head = (await gh('GET', `/pulls/${issue}`)).head.sha;
+    if (sha === head) return head;
+    const why = isSha(sha) ? `\`${sha}\` は PR の今の head と違います。` : `\`/${command}\` には、中身を確かめた commit の SHA (40 桁) を付けてください。`;
+    return fail(`${why}今の head は \`${head}\` です。確かめてから \`/${command} ${head}${usage}\` と書いてください。`);
+  };
+
   if (prOnly.includes(command)) {
-    if (!isPr) {
-      await upsertComment(issue, `error-${event.comment.id}`, `\`/${command}\` は Pull Request でだけ使えます。`);
-      return output({ action: 'none' });
-    }
-    if (!maintainer) {
-      await upsertComment(issue, `error-${event.comment.id}`, `\`/${command}\` はメンテナーだけが使えます (Pull Request のコードを動かすため)。`);
-      return output({ action: 'none' });
-    }
-    const pr = await gh('GET', `/pulls/${issue}`);
-    // メンテナーが確かめた commit だけを動かす。コメントの後に head を差し替えられても、見ていないコードは動かさない。
-    // 40 桁の完全一致だけを受け付ける (短い前方一致だと、先頭が同じ無害な commit と悪意のある commit を作って差し替えられる)
     const given = rest.trim().split(/\s+/)[0];
-    const sha = given.replace(/^`|`$/g, '').toLowerCase();
     const args = rest.trim().slice(given.length).trim();
-    const head = pr.head.sha;
-    if (!/^[0-9a-f]{40}$/.test(sha) || sha !== head) {
-      const usage = { 'test-repro': ' <キー>', 'test-jht': ' <文>', 'test-explain': ' <キー>' }[command] ?? '';
-      const why = /^[0-9a-f]{40}$/.test(sha) ? `\`${sha}\` は PR の今の head と違います。` : `\`/${command}\` には、中身を確かめた commit の SHA (40 桁) を付けてください。`;
-      await upsertComment(issue, `error-${event.comment.id}`, `${why}今の head は \`${head}\` です。確かめてから \`/${command} ${head}${usage}\` と書いてください。`);
-      return output({ action: 'none' });
-    }
+    const head = await verifiedHead(unquote(given).toLowerCase(), { 'test-jht': ' <文>', 'test-explain': ' <キー>' }[command] ?? '');
+    if (!head) return output({ action: 'none' });
     await react('eyes');
     if (command === 'test' || command === 'pack') {
-      return output({ action: command, issue, sha: pr.head.sha, comment: event.comment.id });
+      return output({ action: command, issue, sha: head, comment: event.comment.id });
     }
     if (command === 'test-jht') {
       const text = args.replace(/^`|`$/g, '');
@@ -262,15 +259,14 @@ async function parse() {
         await upsertComment(issue, `error-${event.comment.id}`, `出てほしい文を書いてください (例: \`/test-jht ${head} 私はgoogleが好きです\` または \`/test-jht ${head} 私はgoogleが好きです / わたしはgoogleがすきです\`)。`);
         return output({ action: 'none' });
       }
-      return output({ action: 'test-jht', issue, keys: text.slice(0, 500), sha: pr.head.sha, comment: event.comment.id });
+      return output({ action: 'test-jht', issue, keys: text.slice(0, 500), sha: head, comment: event.comment.id });
     }
-    const request = command === 'test-repro' ? reproRequest(args) : { keys: keysOf(args) };
-    if (!isKeys(request.keys)) {
+    const keys = keysOf(args);
+    if (!isKeys(keys)) {
       await upsertComment(issue, `error-${event.comment.id}`, `打ったキーを英字で書いてください (例: \`/${command} ${head} nihongowohanasu\`)。`);
       return output({ action: 'none' });
     }
-    if (command === 'test-repro') return output({ action: command, issue, repros: JSON.stringify([request]), reported: '', expected: '', sha: pr.head.sha, comment: event.comment.id });
-    return output({ action: command, issue, keys: request.keys, sha: pr.head.sha, comment: event.comment.id });
+    return output({ action: command, issue, keys, sha: head, comment: event.comment.id });
   }
 
   if (command === 'jht') {
@@ -291,18 +287,36 @@ async function parse() {
     await upsertComment(issue, `error-${event.comment.id}`, `打ったキーを英字で書いてください (例: \`/${command} ${example}\`)。\n\n${Help}`);
     return output({ action: 'none' });
   }
+  // /repro <SHA> は、PR・PR の前 (main との merge base)・main の commit で打って比べる。どの行にも同じ SHA を書く
+  const shas = new Set(requests.map(r => r.sha));
+  if (shas.size > 1) {
+    await upsertComment(issue, `error-${event.comment.id}`, '`/repro` を複数行書くときは、どの行にも同じ SHA を付けるか、どの行にも付けないでください。');
+    return output({ action: 'none' });
+  }
+  const [sha] = shas;
+  let versions = '';
+  if (sha) {
+    const head = await verifiedHead(sha, ' <キー>');
+    if (!head) return output({ action: 'none' });
+    const main = (await gh('GET', '/git/ref/heads/main')).object.sha;
+    const base = (await gh('GET', `/compare/${main}...${head}`)).merge_base_commit.sha;
+    versions = JSON.stringify([{ name: 'pr', sha: head }, { name: 'base', sha: base }, { name: 'main', sha: main }]);
+  }
   await react('eyes');
   if (command === 'explain') return output({ action: command, issue, keys: requests[0].keys, comment: event.comment.id });
-  return output({ action: command, issue, repros: JSON.stringify(requests), reported: '', expected: '', comment: event.comment.id });
+  return output({ action: command, issue, repros: JSON.stringify(requests.map(({ keys, last }) => ({ keys, last }))), versions, reported: '', expected: '', comment: event.comment.id });
 }
 
-const keysOf = text => text.trim().split(/\s+/).join(' ').replace(/^`|`$/g, '').slice(0, MaxKeys);
+const unquote = text => text.replace(/^`|`$/g, '');
+const isSha = text => /^[0-9a-f]{40}$/.test(text);
+const keysOf = text => unquote(text.trim().split(/\s+/).join(' ')).slice(0, MaxKeys);
 
-// /repro・/test-repro の「<打ったキー> [space|enter|none]」
+// /repro の「[<SHA>] <打ったキー> [space|enter|none]」
 function reproRequest(text) {
   const words = text.trim().split(/\s+/);
+  const sha = words.length > 1 && isSha(unquote(words[0]).toLowerCase()) ? unquote(words.shift()).toLowerCase() : undefined;
   const last = ['space', 'enter', 'none'].includes(words.at(-1)) && words.length > 1 ? words.pop() : 'enter';
-  return { keys: keysOf(words.join(' ')), last };
+  return { sha, keys: keysOf(words.join(' ')), last };
 }
 
 // 改行は空白にする (空行でコードスパンが切れ、後ろが Markdown として表示されるため)
@@ -347,15 +361,26 @@ async function report() {
   const runUrl = `${process.env.GITHUB_SERVER_URL}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
   const keys = process.env.BOT_KEYS;
 
-  // repro・ca の結果は results/<repros の番号>/repro-<版>.json
+  // repro・ca の結果は results/<repros の番号>/repro-<版>.json。/repro <SHA> の版は BOT_VERSIONS の name で、その順に並べる
   const repros = JSON.parse(process.env.BOT_REPROS || '[]');
+  const versions = JSON.parse(process.env.BOT_VERSIONS || '[]');
+  const order = name => versions.findIndex(v => v.name === name);
   const reproResults = i => {
     const sub = path.join(dir, String(i));
     const files = fs.existsSync(sub) ? fs.readdirSync(sub).filter(f => f.startsWith('repro-')).sort() : [];
-    return files.map(file => ({ name: file.replace(/^repro-/, '').replace(/\.json$/, ''), r: readJson(path.join(sub, file)) }));
+    return files.map(file => ({ name: file.replace(/^repro-/, '').replace(/\.json$/, ''), r: readJson(path.join(sub, file)) }))
+      .sort((a, b) => order(a.name) - order(b.name));
   };
+  // /repro <SHA> は同じ commit の版を 1 度だけ打つので、その commit の版の名前を = でつなぐ (例: PR の前 = main)
+  const VersionLabels = { pr: 'PR', base: 'PR の前', main: 'main' };
+  const versionLabel = name => {
+    const sha = versions.find(v => v.name === name)?.sha;
+    if (!sha) return name;
+    return `${versions.filter(v => v.sha === sha).map(v => VersionLabels[v.name]).join(' = ')} (${sha.slice(0, 7)})`;
+  };
+  const resultOf = r => r && `${(r.committed ?? '') + (r.composing ?? '')}\n${r.converted ?? ''}`;
 
-  if (action === 'repro' || action === 'test-repro') {
+  if (action === 'repro') {
     const marker = process.env.BOT_COMMENT_ID ? `repro-${process.env.BOT_COMMENT_ID}` : 'repro';
     const reported = process.env.BOT_REPORTED, expected = process.env.BOT_EXPECTED;
     const runs = repros.map((r, i) => ({ ...r, results: reproResults(i) }));
@@ -377,7 +402,7 @@ async function report() {
         if (r.engine) engine = r.engine;
         const result = (r.committed ?? '') + (r.composing ?? '');
         const extra = r.converted && r.converted !== result ? ` / Space: ${cell(r.converted)}` : '';
-        rows.push(`| ${md(name)} | ${cell(result)}${extra} |`);
+        rows.push(`| ${md(versionLabel(name))} | ${cell(result)}${extra} |`);
         if ((name === 'main' || name === 'pr') && !verdict) {
           if (expected && (result === expected || r.converted === expected)) verdict = 'match';
           else if (reported && (result === reported || r.converted === reported)) verdict = 'reproduced';
@@ -385,12 +410,15 @@ async function report() {
         }
       }
       verdicts.push(verdict);
+      const pr = results.find(v => v.name === 'pr')?.r, base = results.find(v => v.name === 'base')?.r;
+      const change = pr && base ? (resultOf(pr) === resultOf(base) ? 'PR の前と同じ結果です。' : 'PR で結果が変わりました。') : '';
       sections.push([
-        `${code(keys)} を打ってみました (最後のキー: ${last}${action === 'test-repro' ? `、PR ${process.env.BOT_SHA?.slice(0, 7)}` : ''})。`,
+        `${code(keys)} を打ってみました (最後のキー: ${last})。`,
         '',
         '| 版 | 結果 |',
         '|---|---|',
         ...rows,
+        ...(change ? ['', change] : []),
       ].join('\n'));
     }
     const hasMozc = /Mozc/i.test(engine);
