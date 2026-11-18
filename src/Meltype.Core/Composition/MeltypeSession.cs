@@ -168,44 +168,69 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 }
 
 /// <summary>
+/// 入力欄の本体 (<see cref="MeltypeSession"/>) を作る部品。プロセスで 1 つ作り、入力欄で共有する。
+/// 本物は <see cref="MeltypeRuntime.SessionParts"/> で作り、テストは偽の変換エンジン・学習データで作る。
+/// </summary>
+public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services)
+{
+    /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定 (打った英字, もう続きが無いか, 入力欄のアプリの設定)。null なら判定しない。</summary>
+    public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
+
+    /// <summary>漢字かな交じりの文の読み (再変換)。分からなければ null を返す。</summary>
+    public Func<string, string?> ReadingOf { get; init; } = _ => null;
+
+    /// <summary>今再生している曲 (OS の機能)。読めなければ null を返す。</summary>
+    public Func<(string Title, string Artist)?> NowPlaying { get; init; } = () => null;
+
+    /// <summary>キーを処理した時刻 (ミリ秒。テストでは打った間隔を決める)。</summary>
+    public Func<long> TimeMs { get; init; } = () => Environment.TickCount64;
+
+    /// <summary>ユーザーが判定を直した (トレイの「直した誤判定を報告...」)。</summary>
+    public Action<Correction>? Corrected { get; init; }
+}
+
+/// <summary>
 /// 入力欄 1 つ分の Meltype の入力の本体 (<see cref="Ime.ImeSession"/> が使う)。フロントはキーを 1 つずつ渡し、
 /// 「使ったか (アプリに渡さないか)」をその場で受け取る。コードの行・/command・英数状態の判断をして、残りを <see cref="CompositionController"/> に渡す。
 ///
 /// キーは Windows の仮想キーコード (A-Z = 0x41-0x5A、Space = 0x20 …) で渡す。入力する文字は ch で渡す (キーボード配列の違いは OS 側で解決済み)。
 /// 変換ボックスの表示・確定する文字は、戻り値の <see cref="SessionResult"/> で返す。1 つのスレッドから使う。
 /// </summary>
-public sealed class MeltypeSession
+internal sealed class MeltypeSession
 {
     private readonly CompositionController _controller;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
-    private readonly bool _directModeDetection;
     private readonly UserDictionary? _userDictionary;
     private const long UserDictionaryCheckMs = 1000;
     private long _userDictionaryCheckedMs;
     private bool _directEnglishWord;
     private bool _direct;
 
-    public MeltypeSession(CompositionDetector detector, IKanjiConverter converter, CompositionServices services, Func<Settings> settings,
-        bool directModeDetection = false, Func<long>? timeMs = null)
+    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。</param>
+    public MeltypeSession(SessionParts parts, Func<Settings> settings)
     {
         _settings = settings;
-        _timeMs = timeMs ?? (() => Environment.TickCount64);
-        _directModeDetection = directModeDetection;
-        _userDictionary = services.UserDictionary;
+        _timeMs = parts.TimeMs;
+        _userDictionary = parts.Services.UserDictionary;
+        _userDictionary?.Refresh();
         _userDictionaryCheckedMs = _timeMs();
-        var controllerServices = directModeDetection
-            ? services with
+        var services = parts.Services with
+        {
+            DirectMode = () => Direct,
+            ClassifyDirect = parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings()) : null,
+            DirectDecided = japanese =>
             {
-                DirectMode = () => Direct,
-                DirectDecided = japanese =>
-                {
-                    Direct = !japanese;
-                    _directEnglishWord = !japanese;
-                },
-            }
-            : services;
-        _controller = new CompositionController(detector, converter, settings, controllerServices);
+                Direct = !japanese;
+                _directEnglishWord = !japanese;
+            },
+        };
+        _controller = new CompositionController(parts.Detector, parts.Converter, settings, services)
+        {
+            ReadingOf = parts.ReadingOf,
+            NowPlaying = parts.NowPlaying,
+        };
+        _controller.Corrected += parts.Corrected;
     }
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
@@ -219,7 +244,7 @@ public sealed class MeltypeSession
             if (!value)
             {
                 _directEnglishWord = false;
-                if (wasDirect && _directModeDetection) _controller.AbandonDirectHold();
+                if (wasDirect) _controller.AbandonDirectHold();
             }
         }
     }
@@ -334,13 +359,6 @@ public sealed class MeltypeSession
     /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
     public IReadOnlyList<int> ComposingControlKeys() => _controller.ComposingControlKeys();
 
-    /// <summary>ユーザーが判定を直した (英字 / かなに直した語。トレイの「直した誤判定を報告...」)。</summary>
-    public event Action<Correction>? Corrected
-    {
-        add => _controller.Corrected += value;
-        remove => _controller.Corrected -= value;
-    }
-
     /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
     public string? Selection
     {
@@ -348,22 +366,10 @@ public sealed class MeltypeSession
         set => _controller.Selection = value;
     }
 
-    /// <summary>漢字かな交じりの文の読み (再変換。Mozc の逆変換)。分からなければ null。</summary>
-    public Func<string, string?> ReadingOf
-    {
-        set => _controller.ReadingOf = value;
-    }
-
     /// <summary>クリップボードの文字 (OS の機能)。読めなければ null。</summary>
     public Func<string?> ClipboardText
     {
         set => _controller.Clipboard = value;
-    }
-
-    /// <summary>今再生している曲 (OS の機能)。読めなければ null。</summary>
-    public Func<(string Title, string Artist)?> NowPlaying
-    {
-        set => _controller.NowPlaying = value;
     }
 
     /// <summary>
@@ -388,11 +394,11 @@ public sealed class MeltypeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = _settings();
-        if (Direct && _directModeDetection && _directEnglishWord &&
+        if (Direct && _directEnglishWord &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
             _directEnglishWord = false;
-        if ((Direct && (!_directModeDetection || !settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
+        if ((Direct && (!settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
         {
             return _controller.Pass(now);
         }
