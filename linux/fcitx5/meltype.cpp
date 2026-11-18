@@ -607,6 +607,11 @@ private:
                                           std::pair{fcitx::CapabilityFlag::Sensitive, "Private"}}) {
             if (flags.test(flag)) traits += std::string(traits.empty() ? "" : ",") + "\"" + name + "\"";
         }
+        // ワークアラウンド: KDE Plasma のロック画面のパスワード欄は、qtdeclarative の TextInput が echoMode: Password で ImhHiddenText を外すので
+        // (qt/qtdeclarative@b74e821906)、Password でなく Sensitive で届く。Sensitive は Chromium のシークレットなど学習しないだけの欄にも付くので、アプリ名で絞る。
+        // ロック画面のキーが fcitx5 に届くのは QT_IM_MODULE=fcitx のとき (program() は kscreenlocker_greet) だけで、KWin の入力メソッドで動かすとロック中のキーは届かない
+        if (!flags.test(fcitx::CapabilityFlag::Password) && flags.test(fcitx::CapabilityFlag::Sensitive) && ic->program() == "kscreenlocker_greet")
+            traits += ",\"Password\"";
         return "{\"before\":" + before + ",\"after\":" + after + ",\"selection\":" + selection +
             ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) + ",\"traits\":[" + traits + "]" +
             (ic->program().empty() ? "" : ",\"app\":" + quote(ic->program())) + ",\"canRemove\":" + boolean(surrounding) + "}";

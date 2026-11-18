@@ -6,10 +6,17 @@ import { cleanup } from "./cleanup.js";
 import { githubSummary } from "./github.js";
 import { error } from "./http.js";
 import { createReport, getFile, getReport, listReports, stats, uploadFile } from "./reports.js";
+import { addTrial, createSession, deleteFlagged, exportTrials, flaggedSessions, sentenceCounts } from "./typing.js";
 
 const routes = [
   ["POST", /^\/api\/reports$/, (c) => createReport(c.request, c.env)],
   ["PUT", /^\/api\/reports\/(\d+)\/files\/(\d+)$/, (c) => uploadFile(c.request, c.env, Number(c.match[1]), Number(c.match[2]))],
+  ["POST", /^\/api\/typing\/sessions$/, (c) => createSession(c.request, c.env)],
+  ["POST", /^\/api\/typing\/trials$/, (c) => addTrial(c.request, c.env)],
+  ["GET", /^\/api\/dashboard\/typing\/sentences$/, (c) => sentenceCounts(c.env)],
+  ["GET", /^\/api\/dashboard\/typing\/trials$/, (c) => exportTrials(c.env, c.url)],
+  ["GET", /^\/api\/dashboard\/typing\/flagged$/, (c) => flaggedSessions(c.env)],
+  ["DELETE", /^\/api\/dashboard\/typing\/sessions\/([A-Za-z0-9_-]+)\/flagged$/, (c) => deleteFlagged(c.request, c.env, c.url, c.match[1])],
   ["GET", /^\/api\/github$/, (c) => githubSummary(c.env, c.ctx)],
   ["GET", /^\/api\/dashboard\/stats$/, (c) => stats(c.env)],
   ["GET", /^\/api\/dashboard\/reports$/, (c) => listReports(c.env, c.url)],

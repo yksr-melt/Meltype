@@ -3,3 +3,4 @@ node_modules/
 .dev.vars
 dist/
 public/guide/
+public/assets/js/typing-sentences.js
