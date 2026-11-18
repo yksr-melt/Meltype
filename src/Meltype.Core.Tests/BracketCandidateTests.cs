@@ -160,7 +160,7 @@ internal static class BracketCandidateTests
         k.Key(VirtualKeys.LShift, up: true);
         Assert.Equal(1, k.Host.View!.Clauses!.Count);
         Assert.Equal("［］", k.Host.View.Text);
-        k.Controller.SelectCandidate(2);
+        k.SelectCandidate(2);
         Assert.Equal("「」", k.Host.View.Text);
         k.Press(VirtualKeys.Escape);
         Assert.True(!k.Host.View!.Converting, "Escで変換を取り消す");
@@ -181,7 +181,7 @@ internal static class BracketCandidateTests
                 k.Type(raw + " ");
                 var candidates = k.Host.View!.Candidates.ToArray();
                 var notes = k.Host.View.Notes!.ToArray();
-                k.Controller.SelectCandidate(1);
+                k.SelectCandidate(1);
                 k.Type("a\b ");
                 Assert.Equal(candidates[1], k.Host.View!.Text, raw);
                 Assert.Equal(1, k.Host.View.SelectedIndex, raw);
@@ -206,7 +206,7 @@ internal static class BracketCandidateTests
         // 続けて打つと表示は入力に戻り、選んだ形は再変換のときだけ復元する (ContinueAfterConversion の既存仕様)。
         var k = new CompositionTests.Keyboard { ContinueAfterConversion = true };
         k.Type("[] ");
-        k.Controller.SelectCandidate(5);
+        k.SelectCandidate(5);
         Assert.Equal("【】", k.Host.View!.Text);
         k.Type("a");
         Assert.Equal("", k.Host.Document, "続けて入力しても未確定");
@@ -219,8 +219,7 @@ internal static class BracketCandidateTests
     [Test]
     public static void Brackets_SessionContinuesTypingWithoutCommittingAndRestoresSelection()
     {
-        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices(), () => new Settings { ContinueAfterConversion = true, LiveConversion = true });
+        var session = new TestSession(() => new Settings { ContinueAfterConversion = true, LiveConversion = true });
         session.HandleKey(0xDB, '[', false, false, false, false);
         session.HandleKey(0xDD, ']', false, false, false, false);
         var original = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View!;
@@ -270,7 +269,7 @@ internal static class BracketCandidateTests
                 { Learning = learning };
                 k.Type(raw + " ");
                 Assert.Equal(0, k.Host.View!.SelectedIndex);
-                k.Controller.SelectCandidate(1);
+                k.SelectCandidate(1);
                 k.Press(VirtualKeys.Return);
             }
         }
@@ -298,8 +297,7 @@ internal static class BracketCandidateTests
     [Test]
     public static void Brackets_SessionJsonAndClicksKeepNotesOutOfCommits()
     {
-        var session = new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices(), () => new Settings { TabConversion = true });
+        var session = new TestSession(() => new Settings { TabConversion = true });
         session.HandleKey(0xDB, '[', false, false, false, false);
         session.HandleKey(0xDD, ']', false, false, false, false);
         var result = session.HandleKey(VirtualKeys.Tab, null, false, false, false, false);
@@ -326,7 +324,7 @@ internal static class BracketCandidateTests
             {
                 var k = new CompositionTests.Keyboard { CursorIntoBrackets = true };
                 k.Type(raw + " ");
-                k.Controller.SelectCandidate(i);
+                k.SelectCandidate(i);
                 k.Press(VirtualKeys.Return);
                 Assert.Equal(expected[i], k.Host.Document);
                 // 従来のカッコの組だけが対象。<>・＜＞・｢｣ は含めない。

@@ -103,8 +103,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
 
     public InputMode? InputMethod => InputMode.Keyboard;
 
-    public MeltypeSession CreateSession(Func<Settings> settings) => _composition.CreateSession(settings, directModeDetection: true);
-
     public SnippetStore Snippets => _composition.Snippets;
 
     public string? ClipboardText => CompositionService.ClipboardText;
