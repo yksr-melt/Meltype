@@ -437,8 +437,7 @@ internal static partial class CompositionController
     private static void SendHeld(CompositionState state, KeyEvent e)
     {
         state.Out.PassCurrent();
-        if (CharOf(e) is { } c) state.Out.RecordHeldPassed(c);
-        state.HeldSent++;
+        state.HeldSent.Append(CharOf(e) ?? '\0');
     }
 
     /// <summary>判定中の英字の、最後の - より後ろ (e-ma → ma)。- が無ければ全体。</summary>
@@ -471,7 +470,7 @@ internal static partial class CompositionController
     private static void SwitchHeldToJapanese(CompositionState state, CompositionEnv env)
     {
         var letters = state.HeldLetters.ToString();
-        var sent = state.HeldSent;
+        var sent = state.HeldSent.ToString();
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
         state.Out.DeleteHeld(sent);
         ClearHeld(state);
@@ -556,8 +555,7 @@ internal static partial class CompositionController
     private static void ClearHeld(CompositionState state)
     {
         state.HeldLetters.Clear();
-        state.HeldSent = 0;
-        state.Out.ResetHeldPassed();
+        state.HeldSent.Clear();
     }
 
     /// <summary>

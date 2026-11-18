@@ -125,7 +125,8 @@ internal sealed class CompositionState(CompositionOutput output, CompositionText
     // 英数状態で判定中の語。打鍵はすぐアプリに送り (待たせない)、ローマ字と分かったら消して変換ボックスに入れ直す。
     public readonly StringBuilder HeldLetters = new();
 
-    public int HeldSent;
+    // 英数状態で判定中の語のうち、アプリに通した文字 (文字の無いキーは \0)
+    public readonly StringBuilder HeldSent = new();
 
     public long HeldLastKeyTime;
 

@@ -20,7 +20,6 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
     private readonly StringBuilder _committed = new();
     private const int MaxCommitted = 256;
     // 英数状態で判定中の語のうち、アプリに通した文字 (日本語と分かったら消す)
-    private readonly StringBuilder _heldPassed = new();
     private string? _before;
     private CompositionView? _view;
     private bool _hidden;
@@ -87,24 +86,16 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
     }
 
     /// <summary>
-    /// 英数状態で判定中の語 (count 文字) を消す (日本語と分かったとき)。今のキーも通すところだったなら、通さずに消す数から引く。
+    /// 英数状態で判定中の語 (アプリに通した文字 sent) を消す (日本語と分かったとき)。今のキーも通すところだったなら、通さずに消す数から引く。
     /// 消す文字は、アプリに通した文字で確かめる。
     /// </summary>
-    public void DeleteHeld(int count)
+    public void DeleteHeld(string sent)
     {
-        if (PassedCurrent) count--;
+        if (PassedCurrent && sent.Length > 0) sent = sent[..^1];
         PassedCurrent = false;
-        _pendingExpect = count > 0 && _heldPassed.Length >= count ? _heldPassed.ToString(0, count) : null;
-        _heldPassed.Clear();
-        _pendingDelete += Math.Max(0, count);
+        _pendingExpect = sent.Length > 0 ? sent : null;
+        _pendingDelete += sent.Length;
     }
-
-    public void RecordHeldPassed(char c)
-    {
-        if (char.IsAscii(c) && !char.IsControl(c)) _heldPassed.Append(c);
-    }
-
-    public void ResetHeldPassed() => _heldPassed.Clear();
 
     public void ForgetCommitted() => _committed.Clear();
 
