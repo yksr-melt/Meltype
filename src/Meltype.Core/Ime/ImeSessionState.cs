@@ -35,9 +35,6 @@ internal sealed class ImeSessionState
 
     public string? AltNotAlone;
 
-    // 次に受け取る、定型文のキー (SnippetKeys)
-    public List<int> SnippetKeys = [];
-
     // 前の応答の一覧が予測変換の候補だった (select の番号を読むため)
     public bool ListedPredictions;
 

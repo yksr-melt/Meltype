@@ -75,6 +75,7 @@ internal sealed class CompositionState(CompositionOutput output, CompositionText
     // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
     public readonly HashSet<int> Pressed = [];
 
+    // 変換中の文節 (変換していなければ空)
     public List<Clause> Clauses = [];
 
     public bool ConversionPrefersJapanese;
@@ -84,7 +85,6 @@ internal sealed class CompositionState(CompositionOutput output, CompositionText
 
     public int SelectedClause;
 
-    public bool Converting;
 
     public bool? LastCommitEnglish;
 

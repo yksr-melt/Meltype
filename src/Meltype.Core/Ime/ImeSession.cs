@@ -83,7 +83,6 @@ internal static class ImeSession
             {
                 CancelPending(state);
                 state.LastSnippet = null;
-                state.SnippetKeys = [];
                 state.ListedPredictions = false;
                 state.AltDown = 0;
                 state.AltNotAlone = null;
@@ -134,7 +133,7 @@ internal static class ImeSession
         // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
         if (game && composing && !IsComposing(state) && e.Key?.Vk is VirtualKeys.Return or VirtualKeys.Escape) CompositionController.SetDirect(state.Composition, true);
         TrackLine(state, e, result);
-        state.SnippetKeys = SnippetKeys(state, env, e, result, settings);
+        var snippetKeys = SnippetKeys(state, env, e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
         var japanese = ShowsJapanese(state, before);
         state.ListedPredictions = result.View is { } shown && SessionResult.ListsPredictions(shown) == true;
@@ -146,7 +145,7 @@ internal static class ImeSession
             ImeOpen = !Direct(state),
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), state.SnippetKeys),
+            Capture = Capture(active, Direct(state), DirectEnglishWord(state), settings, game, ComposingControlKeys(state, env), snippetKeys),
             Revision = rev,
         }, result);
     }

@@ -37,7 +37,6 @@ internal static partial class CompositionController
         state.Text.Mode = DisplayMode.Hiragana;
         state.Clauses = [new Clause(converted, false, [converted, selection.Text])];
         state.SelectedClause = 0;
-        state.Converting = true;
     }
 
     /// <summary>
@@ -107,7 +106,6 @@ internal static partial class CompositionController
                 fixedClause.Index = index;
             state.Clauses = [fixedClause];
             state.SelectedClause = 0;
-            state.Converting = true;
             return;
         }
         // 打った英字全体がユーザー辞書の読み (helloworld → 登録した語) か子音の略入力の読み (ast → 明日。issue #62) なら、
@@ -124,7 +122,6 @@ internal static partial class CompositionController
                 ? Distinct([.. registered, .. romaji, .. english])
                 : Distinct([.. registered, .. english, .. romaji])) { Raw = typedRaw, Kana = reading }];
             state.SelectedClause = 0;
-            state.Converting = true;
             return;
         }
         // 区切りの別案があれば、別案ごとに変換した文を 1 つの文節の候補にする (issue #1737)
@@ -141,7 +138,6 @@ internal static partial class CompositionController
         if (state.Text.IsSlashAtStart && clauses is [var slash]) Prefer(slash, "/");
         state.Clauses = clauses;
         state.SelectedClause = state.Clauses.Count - 1;
-        state.Converting = true;
     }
 
     /// <summary>

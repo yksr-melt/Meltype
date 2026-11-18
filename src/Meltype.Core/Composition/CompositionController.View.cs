@@ -50,7 +50,7 @@ internal static partial class CompositionController
             state.Out.Hide();
             return;
         }
-        if (state.Converting && state.Clauses.Count > 0)
+        if (IsConverting(state) && state.Clauses.Count > 0)
         {
             var selected = state.Clauses[state.SelectedClause];
             // 選んでいる文節は、最初から候補の一覧をすべて出す (Space を 1 回押しただけでは一部しか出ず、選び間違えやすかった)。

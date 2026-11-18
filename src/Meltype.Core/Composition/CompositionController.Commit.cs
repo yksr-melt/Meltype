@@ -23,7 +23,7 @@ internal static partial class CompositionController
     }
 
     /// <summary>今の未確定入力が、自動では変換してはいけない保護区間か (F9/F10 などの明示指定は除く)。</summary>
-    private static bool IsProtectedInput(CompositionState state) => !state.Converting && state.Text.Mode == DisplayMode.Auto && state.Text.HasProtectedTail;
+    private static bool IsProtectedInput(CompositionState state) => !IsConverting(state) && state.Text.Mode == DisplayMode.Auto && state.Text.HasProtectedTail;
 
     private static void Commit(CompositionState state, CompositionEnv env, string suffix = "", bool preserveText = false)
     {
@@ -32,7 +32,7 @@ internal static partial class CompositionController
             CommitProtected(state, env, suffix);
             return;
         }
-        var converting = state.Converting && state.Clauses.Count > 0;
+        var converting = IsConverting(state) && state.Clauses.Count > 0;
         // 文全体の文節で区切りの案を選び直したら、選んだ案の文節で確定する (選び直したことは chosen に残す)。
         // 案の文 (botと・ボット) を選んだときは、英語 / 日本語を学習しない (LanguageMemory に覚えさせない)。日英判定の精度がまだ低く、
         // 間違えて選んだ案やその場限りの案まで覚えると、次からの判定を崩すため。判定の精度が上がったら、学習するかを見直す。
@@ -129,7 +129,6 @@ internal static partial class CompositionController
     {
         // 表示の再計算に依存せず、打った原文そのものを使う (確定条件で区間分けが変わっても記号を変えない)。
         var text = (state.Text.IsProtectedRaw ? state.Text.Raw : CurrentDisplay(state, env, final: true)) + suffix;
-        state.Converting = false;
         state.Clauses = [];
         state.Correctable.Clear();
         // raw を空にして渡し、保護原文を確定後補正・学習の対象にしない (INV-06)。
@@ -266,7 +265,6 @@ internal static partial class CompositionController
         state.SpaceStartedConversion = false;
         state.TabStartedConversion = false;
         state.Text.Clear();
-        state.Converting = false;
         state.Clauses = [];
         if (text.Length == 0) return;
         var corrected = CorrectPreviousCommit(state, env, raw, english);

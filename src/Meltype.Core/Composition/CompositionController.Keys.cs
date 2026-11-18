@@ -75,7 +75,7 @@ internal static partial class CompositionController
             // 変換ボックスに入力中の Ctrl + キー (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから通す)。
             if (IsControl(vk)) return;
             // 設定「Control キーの割り当て」が ATOK 風: Ctrl + K / L で文節の長さを変える。変換中だけ (Shift + ← → と同じ。issue #599)
-            if (state.Converting && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
+            if (IsConverting(state) && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
             {
                 Resize(state, env, vk == 'L' ? +1 : -1);
                 return;
@@ -90,7 +90,7 @@ internal static partial class CompositionController
             {
                 if (mac is ResizeExtend or ResizeShrink)
                 {
-                    if (state.Converting) Resize(state, env, mac == ResizeExtend ? +1 : -1);
+                    if (IsConverting(state)) Resize(state, env, mac == ResizeExtend ? +1 : -1);
                     return;
                 }
                 vk = mac;
@@ -138,7 +138,7 @@ internal static partial class CompositionController
             return;
         }
 
-        if (state.Converting && HandleConversionKey(state, env, vk)) return;
+        if (IsConverting(state) && HandleConversionKey(state, env, vk)) return;
 
         switch (vk)
         {
@@ -192,7 +192,7 @@ internal static partial class CompositionController
                 return;
             case VirtualKeys.Kana when env.Settings.SeparateKeyRoles:
                 // ひらがな / カタカナ キー: 押すたびに ひらがな ⇔ カタカナ (漢字・英字の状態からは、まずひらがな)
-                SetMode(state, state.Text.Mode == DisplayMode.Hiragana && !state.Converting ? DisplayMode.Katakana : DisplayMode.Hiragana);
+                SetMode(state, state.Text.Mode == DisplayMode.Hiragana && !IsConverting(state) ? DisplayMode.Katakana : DisplayMode.Hiragana);
                 state.ModeByKey = true;
                 return;
             case VirtualKeys.Space:
@@ -257,10 +257,10 @@ internal static partial class CompositionController
                 var step = state.Shift ? -1 : 1;
                 state.PredictionIndex = (state.PredictionIndex + 1 + step + state.Predictions.Count + 1) % (state.Predictions.Count + 1) - 1;
                 return;
-            case VirtualKeys.Tab when !state.Converting && !state.Shift && env.Settings.TabConversion && TabStartsConversion(state, env):
+            case VirtualKeys.Tab when !IsConverting(state) && !state.Shift && env.Settings.TabConversion && TabStartsConversion(state, env):
                 // Space なら変換を始める場面の Tab は、Space と同じく変換を始める (Microsoft IME と同じ。空白を打とうとした意味ではない: issue #219)。
                 StartConversion(state, env);
-                state.TabStartedConversion = state.Converting;
+                state.TabStartedConversion = IsConverting(state);
                 return;
             case VirtualKeys.F6: SetMode(state, DisplayMode.Hiragana); state.ModeByKey = true; return;
             case VirtualKeys.F7: SetMode(state, DisplayMode.Katakana); state.ModeByKey = true; return;
@@ -289,7 +289,7 @@ internal static partial class CompositionController
         if (CharOf(e) is { } ch && !char.IsControl(ch) && ch != ' ')
         {
             // 打ち始めの ・ を Space で / にしてから打った名前 (/help) は、/ を確定して半角のままアプリへ渡す。
-            if (state.Converting && state.Text.IsSlashAtStart && state.Clauses is [{ Text: "/" }] && SigilWord.IsNameChar(ch))
+            if (IsConverting(state) && state.Text.IsSlashAtStart && state.Clauses is [{ Text: "/" }] && SigilWord.IsNameChar(ch))
             {
                 Commit(state, env);
                 PassKey(state);
@@ -396,7 +396,7 @@ internal static partial class CompositionController
             return;
         }
         foreach (var clause in state.Clauses.Where(c => !c.IsEnglish)) state.KeptChoices[clause.Reading] = clause.Text;
-        state.Converting = false;
+        state.Clauses = [];
     }
 
     /// <summary>
@@ -405,7 +405,7 @@ internal static partial class CompositionController
     /// </summary>
     private static void CommitBeforeTyping(CompositionState state, CompositionEnv env)
     {
-        if (state.Converting) CommitOrKeepConversion(state, env);
+        if (IsConverting(state)) CommitOrKeepConversion(state, env);
         else if (state.ModeByKey)
         {
             Commit(state, env);
@@ -642,7 +642,7 @@ internal static partial class CompositionController
                 return true;
             case VirtualKeys.Tab when FindMisspelling(state, env) is { } typo:
                 // もしかして: 書き間違いを直して変換し直す。
-                state.Converting = false;
+                state.Clauses = [];
                 FixMisspelling(state, typo);
                 StartConversion(state, env);
                 return true;
@@ -667,7 +667,7 @@ internal static partial class CompositionController
             case VirtualKeys.Back:
             case VirtualKeys.Escape:
                 // 変換を取り消して、かなの入力に戻る。
-                state.Converting = false;
+                state.Clauses = [];
                 state.TabStartedConversion = false;
                 return true;
             case >= 0x31 and <= 0x39 when !shift && !state.Text.KanaInput && env.Settings.NumberKeysSelectCandidates:
@@ -714,7 +714,7 @@ internal static partial class CompositionController
     private static void EnterClauseSelection(CompositionState state, CompositionEnv env, int vk)
     {
         StartConversion(state, env);
-        if (!state.Converting) return;
+        if (!IsConverting(state)) return;
         SplitWholeSentence(state);
         var shift = state.Shift;
         state.SelectedClause = vk == VirtualKeys.Right ? 0 : state.Clauses.Count - 1;
@@ -807,7 +807,7 @@ internal static partial class CompositionController
     private static DisplayMode NextKanaCycleMode(CompositionState state, CompositionEnv env)
     {
         // 変換中は、まずひらがなに戻す
-        if (state.Converting) return DisplayMode.Hiragana;
+        if (IsConverting(state)) return DisplayMode.Hiragana;
         switch (state.Text.Mode)
         {
             case DisplayMode.Hiragana: return DisplayMode.Katakana;
@@ -823,7 +823,7 @@ internal static partial class CompositionController
 
     private static void SetMode(CompositionState state, DisplayMode mode)
     {
-        state.Converting = false;
+        state.Clauses = [];
         state.Text.Mode = mode;
         state.Text.Case = LetterCase.AsTyped;
     }
@@ -834,9 +834,9 @@ internal static partial class CompositionController
     /// </summary>
     private static void SetAlphanumericMode(CompositionState state, CompositionEnv env, DisplayMode mode)
     {
-        var before = state.Converting ? null : CurrentDisplay(state, env, final: false);
-        var sameMode = !state.Converting && state.Text.Mode == mode;
-        state.Converting = false;
+        var before = IsConverting(state) ? null : CurrentDisplay(state, env, final: false);
+        var sameMode = !IsConverting(state) && state.Text.Mode == mode;
+        state.Clauses = [];
         if (!sameMode)
         {
             state.Text.Mode = mode;
@@ -902,7 +902,7 @@ internal static partial class CompositionController
     {
         if (state.Text.IsEmpty) return [];
         var keys = new HashSet<int>();
-        if (state.Converting && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
+        if (IsConverting(state) && env.Settings.ControlKeys == Config.ControlKeyLayout.Atok) keys.UnionWith(['K', 'L']);
         if (!string.IsNullOrWhiteSpace(env.Settings.ControlKeyBindings)) keys.UnionWith(ControlKeyBindingParser.Parse(env.Settings.ControlKeyBindings).Keys);
         for (var vk = 'A'; vk <= 'Z'; vk++)
         {
