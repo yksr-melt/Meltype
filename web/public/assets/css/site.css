@@ -3288,3 +3288,371 @@ em {
   font-size: 0.72rem;
   padding: 1px 10px;
 }
+
+/* ---- タイピング調査 (/typing/) ---- */
+
+.typing {
+  display: grid;
+  gap: 24px;
+  padding-block: 36px 96px;
+}
+
+.typing-terms ul {
+  margin: 0;
+  padding-left: 1.3em;
+  color: var(--muted);
+}
+
+.typing-terms li + li {
+  margin-top: 4px;
+}
+
+.typing-terms .hint {
+  margin-top: 14px;
+}
+
+.typing-profile {
+  margin: 24px 0 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.typing-consent {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.typing-consent input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--sky-deep);
+}
+
+.typing-play-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.typing-progress {
+  font-family: var(--font-head);
+  color: var(--muted);
+}
+
+.typing-progress b {
+  font-size: 1.4rem;
+  color: var(--sky-deep);
+}
+
+.typing-howto {
+  margin: 0 0 18px;
+  padding-left: 1.3em;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.typing-board {
+  position: relative;
+  background: var(--surface-2);
+  border: 2px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  text-align: center;
+  cursor: text;
+  outline: none;
+}
+
+.typing-board:focus {
+  border-color: var(--sky);
+  box-shadow: 0 0 0 4px var(--sky-soft);
+}
+
+.typing-text {
+  font-family: var(--font-head);
+  font-size: clamp(1.25rem, 1rem + 1.2vw, 1.7rem);
+  font-weight: 700;
+  color: var(--ink-strong);
+}
+
+.typing-reading {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.typing-kana {
+  min-height: 2em;
+  margin-top: 20px;
+  font-family: var(--font-head);
+  font-size: 1.3rem;
+  color: var(--ink-strong);
+  word-break: break-all;
+}
+
+.typing-pending {
+  color: var(--sky-deep);
+  text-decoration: underline dotted;
+}
+
+.typing-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  background: var(--sky);
+  opacity: 0;
+}
+
+.typing-board:focus .typing-caret {
+  animation: typing-blink 1s steps(1) infinite;
+}
+
+@keyframes typing-blink {
+  50% { opacity: 1; }
+}
+
+.typing-romaji {
+  min-height: 1.5em;
+  font-family: var(--font-mono);
+  color: var(--muted);
+  font-size: 0.9rem;
+  word-break: break-all;
+}
+
+.typing-focus-hint {
+  position: absolute;
+  inset: auto 0 8px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.typing-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.typing-play .callout {
+  margin-top: 14px;
+}
+
+.typing-result {
+  text-align: center;
+  padding: 44px 28px;
+}
+
+.typing-result h2 {
+  font-size: 1.6rem;
+  margin-bottom: 18px;
+}
+
+.typing-scores {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin: 0 0 22px;
+}
+
+.typing-scores div {
+  background: var(--surface-2);
+  border-radius: var(--radius-s);
+  padding: 12px 22px;
+  min-width: 130px;
+}
+
+.typing-scores dt {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.typing-scores dd {
+  margin: 0;
+  font-family: var(--font-head);
+}
+
+.typing-scores b {
+  font-size: 1.6rem;
+  color: var(--sky-deep);
+}
+
+.typing-misses h3 {
+  font-size: 1rem;
+  margin-bottom: 10px;
+}
+
+.typing-misses ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.typing-misses li {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  background: var(--pink-soft);
+  border-radius: 999px;
+  padding: 4px 14px;
+}
+
+.typing-misses li b {
+  font-family: var(--font-head);
+  font-size: 1.15rem;
+  color: var(--pink-deep);
+}
+
+.typing-misses li span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.typing-misses p {
+  color: var(--muted);
+}
+
+.typing-result .actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 22px;
+}
+
+.typing-result .done-icon {
+  margin-inline: auto;
+}
+
+.typing-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .typing-profile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.typing-export {
+  margin-top: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+}
+
+.typing-export h3 {
+  margin: 0;
+}
+
+.typing-send {
+  margin: 28px auto 0;
+  max-width: 44rem;
+  text-align: left;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
+}
+
+.typing-send h3 {
+  font-size: 1.15rem;
+  margin-bottom: 6px;
+}
+
+.typing-send > p {
+  color: var(--muted);
+}
+
+.typing-send h4 {
+  font-size: 0.95rem;
+  margin: 16px 0 6px;
+}
+
+.typing-send .submit-actions {
+  margin-inline: auto;
+}
+
+.typing-auto {
+  justify-content: center;
+  font-weight: 500;
+}
+
+.typing-flagged {
+  flex-basis: 100%;
+}
+
+.typing-flagged h4 {
+  font-size: 0.95rem;
+  margin: 8px 0;
+}
+
+.typing-flagged ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.typing-flagged li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  font-size: 0.88rem;
+}
+
+.typing-flagged code {
+  flex: 1 1 240px;
+}
+
+
+.typing-intro > .hint {
+  margin: 10px 0 0;
+}
+
+.typing-intro .btn-large {
+  margin-top: 16px;
+}
+
+.typing-counts {
+  flex-basis: 100%;
+  display: grid;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.typing-counts summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.typing-counts table {
+  margin: 6px 0 4px;
+  border-collapse: collapse;
+}
+
+.typing-counts td {
+  padding: 2px 10px 2px 0;
+}
+
+.typing-counts td:first-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.typing-counts .is-retired {
+  color: var(--muted);
+}
