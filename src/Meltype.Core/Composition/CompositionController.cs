@@ -232,7 +232,7 @@ internal static partial class CompositionController
     /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>
     private static bool StartsComposition(CompositionState state, CompositionEnv env, KeyPress key)
     {
-        var direct = env.Services.DirectMode();
+        var direct = state.Direct;
         if (key.Vk == VirtualKeys.Convert && state.Selection is { Length: > 0 }) return true;
         if (key.Vk is VirtualKeys.Convert or VirtualKeys.NonConvert && !direct && KanaInput(state, env) &&
             env.Settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron) return true;
@@ -342,6 +342,23 @@ internal static partial class CompositionController
     }
 
     public static void AbandonDirectHold(CompositionState state) => ClearHeld(state);
+
+    /// <summary>英数 (直接入力) にする・やめる。やめたら、英数状態で判定中の語も忘れる。</summary>
+    public static void SetDirect(CompositionState state, bool direct)
+    {
+        var wasDirect = state.Direct;
+        state.Direct = direct;
+        if (direct) return;
+        state.DirectEnglishWord = false;
+        if (wasDirect) ClearHeld(state);
+    }
+
+    /// <summary>英数状態で打ち始めた語の判定が決まった (japanese: ローマ字だったので日本語入力に戻った / false: 英語だった)。</summary>
+    private static void DirectDecided(CompositionState state, bool japanese)
+    {
+        state.Direct = !japanese;
+        state.DirectEnglishWord = !japanese;
+    }
 
     /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
     public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index)

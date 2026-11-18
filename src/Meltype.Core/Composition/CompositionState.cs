@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 
 using System.Text;
+using Meltype.Detection;
 using Meltype.Input;
 using static Meltype.Composition.CompositionController;
 
@@ -15,6 +16,12 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     public CompositionLearning Learning { get; } = new(Services, Converter);
 
     public ConversionBudget? Budget => (Converter as IBackgroundConverter)?.Budget;
+
+    /// <summary>
+    /// 英数状態で打ち始めた文字がローマ字 (日本語) かを判定する。null なら英数状態では判定しない。
+    /// 引数は (打った英字, もう続きが無いか)。
+    /// </summary>
+    public Func<string, bool, Verdict>? ClassifyDirect { get; init; }
 
     /// <summary>出来事を処理する時刻 (ミリ秒)。</summary>
     public long NowMs { get; init; }
@@ -49,6 +56,12 @@ internal sealed class CompositionState(CompositionOutput output, CompositionText
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);
 
     public bool BypassKanaLayout;
+
+    /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
+    public bool Direct;
+
+    /// <summary>英数状態で打ち始めた語を英語と判定して、その続きを打っているか。</summary>
+    public bool DirectEnglishWord;
 
     public readonly Dictionary<string, List<(string Reading, string Text)>> LiveCache = new(StringComparer.Ordinal);
 

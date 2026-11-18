@@ -331,7 +331,7 @@ internal static partial class CompositionController
         // 日本語入力のときの Shift+Space は全角スペース (Microsoft IME と同じ: issue #24)。英数状態では普通の空白のまま。
         // 設定「スペースの幅」が全角では、Space が全角で Shift+Space が半角 (issue #259)
         var spaceWidth = env.Settings.SpaceWidth;
-        if (e.Vk == VirtualKeys.Space && !env.Services.DirectMode() && (spaceWidth == Config.SpaceWidth.FullWidth || state.Shift))
+        if (e.Vk == VirtualKeys.Space && !state.Direct && (spaceWidth == Config.SpaceWidth.FullWidth || state.Shift))
         {
             // 「スペースの幅」が半角なら Shift+Space も半角 (issue #708)
             var shifted = state.Shift;
@@ -346,7 +346,7 @@ internal static partial class CompositionController
             return;
         }
         // かな入力: かなのキーならすべて入力を始める (英数状態でなければ)。
-        if (KanaInput(state, env) && !env.Services.DirectMode() && KanaOf(state, e) is { } key)
+        if (KanaInput(state, env) && !state.Direct && KanaOf(state, e) is { } key)
         {
             BeginComposition(state, env);
             state.Text.AppendKana(key.Raw, key.Kana);
@@ -354,20 +354,20 @@ internal static partial class CompositionController
         }
         var c = CharOf(e);
         var letter = VirtualKeys.IsLetter(e.Vk) && c is { } l && char.IsAsciiLetter(l);
-        if (letter && env.Services.DirectMode())
+        if (letter && state.Direct)
         {
             // 英数状態: ローマ字かどうか判定する (打鍵はすぐ送る)。大文字で始まる語は英語なのでそのまま通す。
-            if (env.Services.ClassifyDirect is null || state.Shift || char.IsAsciiLetterUpper(c!.Value))
+            if (env.ClassifyDirect is null || state.Shift || char.IsAsciiLetterUpper(c!.Value))
             {
                 Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(c.ToString()!)}は大文字 / Shift なので英語のまま");
                 PassKey(state);
-                env.Services.DirectDecided?.Invoke(false);
+                DirectDecided(state, false);
             }
             else Hold(state, env, e);
             return;
         }
         // 句読点・かぎかっこ・長音・中黒・数字でも入力を始める (、。「」ー・)。英数状態ではそのまま通す。
-        if (letter || (c is { } symbol && StartsWithSymbol(symbol) && !env.Services.DirectMode()))
+        if (letter || (c is { } symbol && StartsWithSymbol(symbol) && !state.Direct))
         {
             BeginComposition(state, env);
             state.Text.Append(c!.Value);
@@ -454,7 +454,7 @@ internal static partial class CompositionController
         var part = LastHyphenPart(state);
         var verdict = env.Detector.IsHyphenatedEnglishWord(state.HeldLetters.ToString()) ? Verdict.English
             : part.Length == 0 ? Verdict.Undecided
-            : env.Services.ClassifyDirect!(part, final);
+            : env.ClassifyDirect!(part, final);
         // 2 文字の英単語 (up、my) でも、ローマ字の打ちかけとして読める (う + p) なら、続きを見てから決める
         // (upa- → うぱー、my → みゃ)。Space などで打ち終われば英語。
         if (verdict == Verdict.English && !final && part.Length <= 2 && state.HeldLetters.Length <= 2 &&
@@ -475,7 +475,7 @@ internal static partial class CompositionController
         // 判定を待たずに送っていた英字を消して、変換ボックスに入れ直す。
         state.Out.DeleteHeld(sent);
         ClearHeld(state);
-        env.Services.DirectDecided?.Invoke(true);
+        DirectDecided(state, true);
         BeginComposition(state, env, state.PrivateComposition);
         foreach (var c in letters)
         {
@@ -490,7 +490,7 @@ internal static partial class CompositionController
     /// </summary>
     private static bool HandleKanaLayout(CompositionState state, CompositionEnv env, KeyEvent e)
     {
-        if (!KanaInput(state, env) && !env.Services.DirectMode() && env.Settings.RomajiLayout == RomajiLayout.Sky)
+        if (!KanaInput(state, env) && !state.Direct && env.Settings.RomajiLayout == RomajiLayout.Sky)
         {
             // SKY 配列: キーをローマ字の綴りにして足す。英語の判定はしない (ひらがなで見せる)
             if (state.Shift || SkyLayout.Romaji(e.Vk) is not { } romaji) return false;
@@ -500,7 +500,7 @@ internal static partial class CompositionController
             foreach (var c in romaji) state.Text.Append(c);
             return true;
         }
-        var layout = KanaInput(state, env) && !env.Services.DirectMode() ? env.Settings.KanaLayout : KanaLayout.Jis;
+        var layout = KanaInput(state, env) && !state.Direct ? env.Settings.KanaLayout : KanaLayout.Jis;
         if (state.KanaLayout.Layout != layout) state.KanaLayout = new KanaLayoutEngine(layout);
         if (layout == KanaLayout.Jis) return false;
         // 親指キーは (入力していないとき・変換中も) 受け取っておき、文字に使わずに離したらもとの働き (再変換・変換・無変換) をする
@@ -550,7 +550,7 @@ internal static partial class CompositionController
     {
         ClearHeld(state);
         state.Correctable.Clear();
-        env.Services.DirectDecided?.Invoke(false);
+        DirectDecided(state, false);
     }
 
     private static void ClearHeld(CompositionState state)

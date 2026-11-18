@@ -200,14 +200,11 @@ internal sealed class MeltypeSession
 {
     private readonly CompositionState _state;
     private readonly SessionParts _parts;
-    private readonly CompositionServices _services;
     private readonly Func<Settings> _settings;
     private readonly Func<long> _timeMs;
     private readonly UserDictionary? _userDictionary;
     private const long UserDictionaryCheckMs = 1000;
     private long _userDictionaryCheckedMs;
-    private bool _directEnglishWord;
-    private bool _direct;
 
     /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。</param>
     public MeltypeSession(SessionParts parts, Func<Settings> settings)
@@ -218,23 +215,14 @@ internal sealed class MeltypeSession
         _userDictionary = parts.Services.UserDictionary;
         _userDictionary?.Refresh();
         _userDictionaryCheckedMs = _timeMs();
-        _services = parts.Services with
-        {
-            DirectMode = () => Direct,
-            ClassifyDirect = parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings()) : null,
-            DirectDecided = japanese =>
-            {
-                Direct = !japanese;
-                _directEnglishWord = !japanese;
-            },
-        };
-        _state = CompositionController.Create(parts.Detector, settings, _services);
+        _state = CompositionController.Create(parts.Detector, settings, parts.Services);
     }
 
     /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
-    private CompositionEnv Env => new(_parts.Detector, _parts.Converter, _services, _settings())
+    private CompositionEnv Env => new(_parts.Detector, _parts.Converter, _parts.Services, _settings())
     {
         ReadingOf = _parts.ReadingOf,
+        ClassifyDirect = _parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, _settings()) : null,
         NowMs = _timeMs(),
         Clipboard = _clipboardText,
         NowPlaying = _parts.NowPlaying,
@@ -244,20 +232,11 @@ internal sealed class MeltypeSession
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
     public bool Direct
     {
-        get => _direct;
-        set
-        {
-            var wasDirect = _direct;
-            _direct = value;
-            if (!value)
-            {
-                _directEnglishWord = false;
-                if (wasDirect) CompositionController.AbandonDirectHold(_state);
-            }
-        }
+        get => _state.Direct;
+        set => CompositionController.SetDirect(_state, value);
     }
 
-    public bool DirectEnglishWord => _directEnglishWord;
+    public bool DirectEnglishWord => _state.DirectEnglishWord;
 
     /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
     public bool Private
@@ -404,11 +383,11 @@ internal sealed class MeltypeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = _settings();
-        if (Direct && _directEnglishWord &&
+        if (Direct && _state.DirectEnglishWord &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
-            _directEnglishWord = false;
-        if ((Direct && (!settings.DirectModeAutoDetect || _directEnglishWord)) || !settings.Enabled)
+            _state.DirectEnglishWord = false;
+        if ((Direct && (!settings.DirectModeAutoDetect || _state.DirectEnglishWord)) || !settings.Enabled)
         {
             return CompositionController.Pass(_state, Env, now);
         }
@@ -484,7 +463,7 @@ internal sealed class MeltypeSession
 
     public void ForgetDirectInput()
     {
-        _directEnglishWord = false;
+        _state.DirectEnglishWord = false;
         CompositionController.AbandonDirectHold(_state);
     }
 
@@ -499,7 +478,7 @@ internal sealed class MeltypeSession
     internal void CancelPending()
     {
         CompositionController.CancelPending(_state);
-        _directEnglishWord = false;
+        _state.DirectEnglishWord = false;
         CodeInput = false;
         CodeTerminal = false;
         Selection = null;

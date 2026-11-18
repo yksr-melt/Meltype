@@ -276,7 +276,7 @@ internal static partial class CompositionController
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
         var context = new UtilityContext(env.Settings, env.Services.Now(), env.Services.UtcNow(), env.Services.LocalTimeZone(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles());
-        return UtilityConversions.Convert(new UtilityInput(state.Text, reading, env.Services.DirectMode(), context));
+        return UtilityConversions.Convert(new UtilityInput(state.Text, reading, state.Direct, context));
     }
 
     /// <summary>
