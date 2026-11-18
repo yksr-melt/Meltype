@@ -136,9 +136,6 @@ internal sealed class CompositionState(CompositionOutput output, CompositionText
     // Esc で戻した語は、判定として覚えない
     public bool EscReverted;
 
-    public string? BoundKeysText;
-
-    public Dictionary<int, int> BoundKeys = [];
 
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     public readonly List<CommitRecord> Correctable = [];

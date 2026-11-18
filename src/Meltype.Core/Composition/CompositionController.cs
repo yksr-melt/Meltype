@@ -54,7 +54,8 @@ public readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Contro
 public sealed record ReconversionSelection(string Text, string Reading);
 
 /// <summary>
-/// 入力欄 1 つ分の変換ボックス (未確定文字列) の本体 (どのフロントも <see cref="MeltypeSession"/> から使う)。責務ごとにファイルを分けている (CompositionController.*.cs)。
+/// 入力欄 1 つ分の変換ボックス (未確定文字列) の処理 (どのフロントも <see cref="Ime.ImeSession"/> から使う)。状態は <see cref="CompositionState"/> に置き、
+/// 入力欄の状態でないものは出来事ごとに <see cref="CompositionEnv"/> で受け取る。責務ごとにファイルを分けている (CompositionController.*.cs)。
 ///   文字キー → ボックスに追加 (日本語ならかな、英単語なら英字で自動表示)
 ///   Space   → 文節に区切って漢字変換 (英単語で終わっているときは確定して空白)
 ///   Shift+Space → 英単語と判定した語も、ローマ字として読んで変換 (go → 語)

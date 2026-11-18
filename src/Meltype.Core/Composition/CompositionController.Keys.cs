@@ -81,7 +81,7 @@ internal static partial class CompositionController
                 return;
             }
             // 設定「Control キーの割り当て」: 組み込みの割り当てより先に見る (issue #63・#209)
-            if (!state.Text.IsEmpty && BoundControlKey(state, env, vk) is { } bound)
+            if (!state.Text.IsEmpty && BoundControlKey(env, vk) is { } bound)
             {
                 vk = bound;
             }
@@ -882,16 +882,11 @@ internal static partial class CompositionController
     };
 
     /// <summary>設定「Control キーの割り当て」(T=F6;Y=F7 …) で、Control + vk に割り当てたキー。無ければ null。</summary>
-    private static int? BoundControlKey(CompositionState state, CompositionEnv env, int vk)
+    private static int? BoundControlKey(CompositionEnv env, int vk)
     {
         var text = env.Settings.ControlKeyBindings;
         if (string.IsNullOrWhiteSpace(text)) return null;
-        if (!ReferenceEquals(text, state.BoundKeysText) && text != state.BoundKeysText)
-        {
-            state.BoundKeysText = text;
-            state.BoundKeys = ControlKeyBindingParser.Parse(text);
-        }
-        return state.BoundKeys.TryGetValue(vk, out var key) ? key : null;
+        return ControlKeyBindingParser.Parse(text).TryGetValue(vk, out var key) ? key : null;
     }
 
     /// <summary>
