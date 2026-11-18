@@ -34,7 +34,7 @@ internal static class UtilityConversionTests
         k.Press(VirtualKeys.Space);
         var index = k.Host.View!.Candidates.ToList().IndexOf(text);
         Assert.True(index >= 0, $"{typed} の候補に {text}: " + string.Join(",", k.Host.View.Candidates));
-        k.Controller.SelectCandidate(index);
+        k.SelectCandidate(index);
         k.Press(VirtualKeys.Return);
     }
 
