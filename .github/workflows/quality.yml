@@ -52,7 +52,7 @@ jobs:
           - { project: Meltype.Windows.Tests, os: windows-latest }
           - { project: Meltype.Core, os: ubuntu-latest }
           - { project: Meltype.Core.Tests, os: ubuntu-latest }
-          - { project: Meltype.Mac.Native, os: ubuntu-latest }
+          - { project: Meltype.Core.CApi, os: ubuntu-latest }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:

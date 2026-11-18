@@ -7,7 +7,7 @@ using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Ime;
 using Meltype.Input;
-using Meltype.Mac;
+using Meltype.CApi;
 
 namespace Meltype.Tests;
 
@@ -162,7 +162,7 @@ internal static unsafe class NativeBoundaryTests
     }
 
     [Test]
-    public static void Native_CombiningMarksAttachBeforeAutomaticEnglishSpacing()
+    public static void Native_CombiningMarksAttachBeforeEnglishSpacing()
     {
         foreach (var mark in new[] { 0x3099, 0xFE0F, 0xE0100 })
         {

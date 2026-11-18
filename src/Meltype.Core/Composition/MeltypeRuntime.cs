@@ -104,7 +104,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>登録した定型文 (;名前 + Space で入れる: issue #290)。</summary>
     public SnippetStore Snippets { get; }
 
-    /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。プロセスの間だけ覚える。</summary>
+    /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で Issue・PR のタイトルを出す GitHub のリポジトリ」)。プロセスの間だけ覚える。</summary>
     public GitHubIssueTitles GitHubTitles { get; } = new();
 
     /// <summary>
@@ -133,12 +133,11 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>
     /// 入力欄 1 つ分の本体を作る。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。
-    /// autoSpacing は、つなげて打った英語の決まり文句 (seeyou) に空白を入れるか (今は Mac だけ)。
     /// directModeDetection なら、英数状態で打ち始めた語がローマ字かを判定して日本語に戻す (設定「英数状態で自動判定」。今は Windows だけ)。
     /// </summary>
     /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
     public MeltypeSession CreateSession(IKanjiConverter converter, Func<Settings>? settings = null, Func<string, IReadOnlyList<string>>? moreCandidates = null,
-        bool autoSpacing = false, bool directModeDetection = false)
+        bool directModeDetection = false)
     {
         var current = settings ?? (() => Settings.Current);
         UserDictionary.Refresh();
@@ -147,7 +146,6 @@ public sealed class MeltypeRuntime : IDisposable
             UserDictionary = UserDictionary,
             Predictor = new Predictor(Phrases, UserDictionary, History),
             MoreCandidates = moreCandidates,
-            AutomaticEnglishSpacing = () => autoSpacing,
             // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
             ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
         };
@@ -212,7 +210,7 @@ public sealed class MeltypeRuntime : IDisposable
         });
     }
 
-    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (設定画面の判定のテストにも使う)。final は、もう続きが無いか。</summary>
+    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (トレイの「ログ / 判定理由」の判定にも使う)。final は、もう続きが無いか。</summary>
     public DetectionResult Evaluate(string letters, bool final, Settings settings) =>
         _directEngine.Value.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
 

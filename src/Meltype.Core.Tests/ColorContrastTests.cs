@@ -8,11 +8,19 @@ namespace Meltype.Tests;
 internal static class ColorContrastTests
 {
     [Test]
-    public static void ColorContrast_RejectsColorsThatCannotBeRead()
+    public static void CustomCompositionColors_WarnOnlyWhenTheTextIsHardToRead()
     {
-        Assert.True(ColorContrast.Problem("文字", (255, 255, 255), "背景", (0, 0, 0), ColorContrast.TextMinimum) is null, "白と黒は読める");
-        Assert.True(ColorContrast.Problem("文字", (0, 0, 0), "背景", (0x20, 0x20, 0x20), ColorContrast.TextMinimum) is not null, "暗い背景の黒い文字は読めない");
-        Assert.True(ColorContrast.Problem("文字", (0xFF, 0xDC, 0x78), "背景", (255, 255, 255), ColorContrast.TextMinimum) is not null, "白い背景のダークの予測の文字は読めない");
-        Assert.True(ColorContrast.Problem("文字", (0x77, 0x77, 0x77), "背景", (255, 255, 255), ColorContrast.MarkMinimum) is null, "目印は文字より薄くてもよい");
+        Assert.True(new Settings { CompositionTheme = CompositionTheme.Custom }.ColorWarning() is null, "既定のカスタムの色では警告しない");
+        foreach (var (back, text) in new[] { ("#1E2A3A", "#F0F0F0"), ("#FFF8E7", "#222222"), ("#000000", "#FFFF00") })
+            Assert.True(new Settings { CompositionTheme = CompositionTheme.Custom, CompositionCustomBackColor = back, CompositionCustomTextColor = text }.ColorWarning() is null, $"{back} の上の {text} は読める");
+        Assert.True(new Settings { CompositionTheme = CompositionTheme.Custom, CompositionCustomBackColor = "#202020", CompositionCustomTextColor = "#000000" }.ColorWarning() is not null, "暗い背景の黒い文字は警告する");
+        Assert.True(new Settings { CompositionTheme = CompositionTheme.Dark, CompositionCustomBackColor = "#202020", CompositionCustomTextColor = "#000000" }.ColorWarning() is null, "カスタムでなければ使わない色なので警告しない");
+    }
+
+    [Test]
+    public static void CustomCompositionColors_PickTheLightOrDarkThemeFromTheBackground()
+    {
+        Assert.True(new Settings { CompositionTheme = CompositionTheme.Custom, CompositionCustomBackColor = "#FFF8E7" }.CompositionIsLight(null), "明るい背景はライトの案内の色");
+        Assert.True(!new Settings { CompositionTheme = CompositionTheme.Custom, CompositionCustomBackColor = "#1E2A3A" }.CompositionIsLight(true), "暗い背景は Windows がライトでもダークの案内の色");
     }
 }

@@ -140,7 +140,7 @@ internal static class ProtectionTests
     }
 
     [Test]
-    public static void Protected_CommitsIgnoreAutomaticEnglishSpacing()
+    public static void Protected_CommitsIgnoreSpaceAroundEnglish()
     {
         foreach (var raw in new[] { "@user", "taro@example.com", "https://example.com", "./src/main.ts", @"C:\Users\taro" })
             foreach (var operation in new[] { VirtualKeys.Return, VirtualKeys.Space, VirtualKeys.Tab, 0 })
@@ -268,7 +268,7 @@ internal static class ProtectionTests
             var text = new CompositionText(CompositionTests.Detector);
             foreach (var c in "kyouha「" + token + "」ashita") text.Append(c);
             var calls = new List<string>();
-            var shown = text.Display(final: true, convert: kana =>
+            var shown = text.Display(final: true, convert: (kana, _) =>
             {
                 calls.Add(kana);
                 return kana.Replace("きょうは", "今日は").Replace("あした", "明日");

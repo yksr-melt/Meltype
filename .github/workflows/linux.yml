@@ -11,8 +11,9 @@ on:
     paths: &paths
       - 'linux/**'
       - 'native/mozc/**'
+      - 'native/zenzai/**'
       - 'src/Meltype.Core/**'
-      - 'src/Meltype.Mac.Native/**'
+      - 'src/Meltype.Core.CApi/**'
       - 'dictionaries/**'
       - 'nuget.config'
       - 'global.json'
@@ -111,6 +112,18 @@ jobs:
             -v "$PWD:/repo" -v "$HOME/mozc:/mozc" -v "$HOME/bazel-cache:/cache" -v "$HOME/tools:/tools:ro" -w /repo \
             quay.io/pypa/manylinux_2_34_${{ matrix.manylinux }}:2026.11.01-2 \
             native/mozc/build-mozc-helper.sh /mozc /cache
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: llama-cache
+        with:
+          path: native/zenzai/bin
+          key: llama-server-manylinux_2_34-${{ matrix.asset }}-${{ hashFiles('native/zenzai/zenzai.env', 'native/zenzai/build-llama-server.sh') }}
+      # Zenzai の llama-server も、Mozc のヘルパーと同じ manylinux のコンテナでビルドする (llama.cpp の Ubuntu 向けのビルドは RHEL 9 系・Debian 12 で動かない)
+      - name: Build llama-server
+        if: steps.llama-cache.outputs.cache-hit != 'true'
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp/home -v "$PWD:/repo" -w /repo \
+            quay.io/pypa/manylinux_2_34_${{ matrix.manylinux }}:2026.11.01-2 \
+            native/zenzai/build-llama-server.sh
       - name: Build
         run: linux/build.sh
       # fcitx5 のアドオンを、fcitx5 のテスト用のフロントエンドで動かす。Mozc を外した本体だけで、かなの確定と変換の候補を見る
@@ -147,6 +160,9 @@ jobs:
           sudo apt-get install -y ./linux/build/meltype_*.deb
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          # Zenzai の llama-server が、同梱のライブラリと deb の依存で起動できるか
+          /opt/meltype/zenzai/llama-server --version
+          ls /opt/meltype/zenzai/*.gguf
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
           test -f "$(dirname "$(find /usr/lib -name libclassicui.so -path '*fcitx5*' -print -quit)")/meltype.so"
@@ -218,6 +234,7 @@ jobs:
           dnf install -y ./linux/build/meltype-*.rpm
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
+          /opt/meltype/zenzai/llama-server --version
           grep -q '<exec>/opt/meltype/ibus-engine-meltype --ibus</exec>' /usr/share/ibus/component/meltype.xml
           ibus read-cache --system | grep /opt/meltype/ibus-engine-meltype >/dev/null
           test -f /usr/share/fcitx5/inputmethod/meltype.conf
@@ -256,6 +273,9 @@ jobs:
           path: rpms
       - name: Install .rpm
         run: dnf install -y ./rpms/meltype-[0-9]*.rpm
+      # 同梱の llama-server が、サポートする中で一番古い glibc 2.34・libstdc++ (GCC 11) で起動できるか
+      - name: Zenzai llama-server
+        run: /opt/meltype/zenzai/llama-server --version
       - name: Python tests
         run: |
           python3 linux/tests/test_virtual_key.py

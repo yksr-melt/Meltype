@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
+<!-- Copyright (C) 2026 KoheiTakada -->
+<!-- Android adaptation of the Meltype icon in web/public/favicon.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.35"
+        android:scaleY="1.35"
+        android:translateX="13.5"
+        android:translateY="-2.7">
+        <path
+            android:pathData="M30 42V22M30 31l5.4-5.4M30 31l-5.4-5.4M30 42L12.7 32M20.5 36.5l-2-7.3M20.5 36.5l-7.4 2M30 42L12.7 52M20.5 47.5l-7.4-2M20.5 47.5l-2 7.3M30 42v20M30 53l-5.4 5.4M30 53l5.4 5.4M30 42l17.3 10M39.5 47.5l2 7.3M39.5 47.5l7.4-2M30 42l17.3-10M39.5 36.5l7.4 2M39.5 36.5l2-7.3"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#7391ee"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M30 42V22M30 31l5.4-5.4M30 31l-5.4-5.4M30 42L12.7 32M20.5 36.5l-2-7.3M20.5 36.5l-7.4 2M30 42L12.7 52M20.5 47.5l-7.4-2M20.5 47.5l-2 7.3M30 42v20M30 53l-5.4 5.4M30 53l5.4 5.4M30 42l17.3 10M39.5 47.5l2 7.3M39.5 47.5l7.4-2M30 42l17.3-10M39.5 36.5l7.4 2M39.5 36.5l2-7.3"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#ffffff"
+            android:strokeWidth="5"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M30 42V22M30 31l5.4-5.4M30 31l-5.4-5.4M30 42L12.7 32M20.5 36.5l-2-7.3M20.5 36.5l-7.4 2M30 42L12.7 52M20.5 47.5l-7.4-2M20.5 47.5l-2 7.3M30 42v20M30 53l-5.4 5.4M30 53l5.4 5.4M30 42l17.3 10M39.5 47.5l2 7.3M39.5 47.5l7.4-2M30 42l17.3-10M39.5 36.5l7.4 2M39.5 36.5l2-7.3"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#3aaee8"
+            android:strokeWidth="2.6"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M21.5 50V34l8.5 10 8.5-10v16"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#7391ee"
+            android:strokeWidth="10"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M21.5 50V34l8.5 10 8.5-10v16"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#ffffff"
+            android:strokeWidth="7"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+        <path
+            android:pathData="M21.5 50V34l8.5 10 8.5-10v16"
+            android:fillColor="@android:color/transparent"
+            android:strokeColor="#ff8ab4"
+            android:strokeWidth="4"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

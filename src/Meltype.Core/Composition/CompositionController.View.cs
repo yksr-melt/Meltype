@@ -165,8 +165,8 @@ public sealed partial class CompositionController
     {
         var starts = new List<(string Before, string Reading, string[] Heads)> { ("", kana, []) };
         // 文節の区切りはライブ変換の結果を使う (打鍵ごとに変換を増やさない)。ライブ変換が OFF のときと、読みが短いうちは読み全体だけ
-        if (!_settings().LiveConversion || kana.Length < LiveConversionMinLength) return starts;
-        var clauses = LiveClauses(kana);
+        if (!_settings().LiveConversion || !CountsAsLive(kana)) return starts;
+        var clauses = LiveClauses(kana, afterEnglish: false);
         if (clauses.Count < 2) return starts;
         var last = clauses[^1];
         // 見えている文字の終わりが最後の文節 (変換した文字か、変換していない読み) のときだけ。

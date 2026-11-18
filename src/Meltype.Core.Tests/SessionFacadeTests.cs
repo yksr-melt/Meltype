@@ -179,7 +179,7 @@ internal static class SessionFacadeTests
         foreach (var (input, expected) in new[] {
             ("wsldeshell", "wslでshell"),
             ("kyouhagoogledekensaku", "今日はgoogleで検索"),
-            ("seeyouagain", "see you again"),
+            ("seeyouagain", "seeyouagain"),
             ("I want to go to the park", "I want to go to the park"),
             ("Zorgblax", "Zorgblax"),
             ("stackoverflow", "stackoverflow"),
@@ -191,7 +191,7 @@ internal static class SessionFacadeTests
             ("get_user_name", "get_user_name") })
         {
             var session = new MeltypeSession(CompositionDetector.CreateDefault(), new CompositionTests.FakeConverter(),
-                new CompositionServices { AutomaticEnglishSpacing = () => true }, () => new Settings { LiveConversion = true });
+                new CompositionServices(), () => new Settings { LiveConversion = true });
             var results = Type(session, input + "\n");
             var output = "";
             for (var i = 0; i < results.Count; i++)

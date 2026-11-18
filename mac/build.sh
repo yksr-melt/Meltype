@@ -6,7 +6,7 @@
 #   ./build.sh            ビルドしてインストール
 #   ./build.sh --no-install  ビルドだけ (build/Meltype.app)
 # 必要なもの: macOS 13.3 以降、Xcode (またはコマンドライン ツール: xcode-select --install)、.NET 10 SDK、
-# Mozc の変換ヘルパー (先に native/mozc/build-mozc-helper.sh でビルドして native/mozc/bin/mac/ に置く)
+# Mozc の変換ヘルパー (mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置く)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -26,7 +26,7 @@ if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then VERSION="${GITHUB_REF_NAME#v}";
 APP="$BUILD/Meltype.app"
 MOZC=../native/mozc/bin/mac
 if [[ ! -x "$MOZC/meltype_mozc_helper" ]]; then
-    echo "Mozc の変換ヘルパーがありません。先に native/mozc/build-mozc-helper.sh を実行してください。" >&2
+    echo 'Mozc の変換ヘルパーがありません。mac/README.md の「ビルドする」に従って native/mozc/bin/mac/ に置いてください。' >&2
     exit 1
 fi
 rm -rf "$BUILD/native" "$APP"
@@ -34,7 +34,7 @@ mkdir -p "$BUILD"
 
 echo "== 1/3 本体 (C#, NativeAOT) をビルド"
 # リポジトリの nuget.config は NuGet を使わない設定 (Windows の開発環境用) なので、NativeAOT のコンパイラを取るために nuget.org を指定する。
-dotnet publish ../src/Meltype.Mac.Native/Meltype.Mac.Native.csproj -c Release -r "$RID" \
+dotnet publish ../src/Meltype.Core.CApi/Meltype.Core.CApi.csproj -c Release -r "$RID" \
     -p:PublishAot=true -p:NativeLib=Shared -p:StripSymbols=true -p:Version="$VERSION" -p:TreatWarningsAsErrors=true \
     --source https://api.nuget.org/v3/index.json -o "$BUILD/native"
 

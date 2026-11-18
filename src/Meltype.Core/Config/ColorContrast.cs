@@ -3,29 +3,26 @@
 
 namespace Meltype.Config;
 
-/// <summary>
-/// 利用者が決めた色の組み合わせが読めるか (WCAG 2 のコントラスト比)。
-/// 背景と文字が近い色だと文字が見えなくなるので、設定画面はその組み合わせを保存しない。
-/// </summary>
+/// <summary>利用者が決めた色の組み合わせが読めるか (WCAG 2 のコントラスト比)。</summary>
 public static class ColorContrast
 {
     /// <summary>文字に要る比 (WCAG 2 の AA)。</summary>
     public const double TextMinimum = 4.5;
 
-    /// <summary>文字でない目印 (選んでいる候補の枠・下線・スイッチ) に要る比 (WCAG 2 の非テキスト)。</summary>
-    public const double MarkMinimum = 3.0;
-
     /// <summary>2 色のコントラスト比 (1〜21)。</summary>
     public static double Ratio((int R, int G, int B) a, (int R, int G, int B) b)
     {
-        var (light, dark) = (Luminance(a), Luminance(b)) is var (x, y) && x >= y ? (x, y) : (y, x);
-        return (light + 0.05) / (dark + 0.05);
+        var (x, y) = (Luminance(a), Luminance(b));
+        return (Math.Max(x, y) + 0.05) / (Math.Min(x, y) + 0.05);
     }
 
-    /// <summary>fore が back の上で見えなければ、利用者に見せる理由。見えれば null。</summary>
-    public static string? Problem(string foreName, (int R, int G, int B) fore, string backName, (int R, int G, int B) back, double minimum) =>
-        Ratio(fore, back) >= minimum ? null
-            : $"「{foreName}」と「{backName}」の色が近く、見えにくくなります (コントラスト比 {Ratio(fore, back):0.0}。{minimum:0.0} 以上にしてください)。";
+    /// <summary>黒い文字のほうが白い文字より読める明るい色か。</summary>
+    public static bool IsLight((int R, int G, int B) back) => Ratio(back, (0, 0, 0)) > Ratio(back, (255, 255, 255));
+
+    /// <summary>fore が back の上で読みにくければ、利用者に見せる警告。読めれば null。</summary>
+    public static string? Warning(string foreName, (int R, int G, int B) fore, string backName, (int R, int G, int B) back) =>
+        Ratio(fore, back) >= TextMinimum ? null
+            : $"「{foreName}」と「{backName}」の色が近く、文字が見えにくくなります (コントラスト比 {Ratio(fore, back):0.0}。{TextMinimum:0.0} 以上がおすすめです)。";
 
     private static double Luminance((int R, int G, int B) color) =>
         0.2126 * Channel(color.R) + 0.7152 * Channel(color.G) + 0.0722 * Channel(color.B);
