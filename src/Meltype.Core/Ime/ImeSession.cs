@@ -28,7 +28,7 @@ internal static class ImeSession
     public static ImeSessionState Create(ImeEnv env)
     {
         env.UserDictionary?.Refresh();
-        var state = new ImeSessionState { Settings = env.Source(), UserDictionaryCheckedMs = env.TimeMs() };
+        var state = new ImeSessionState { UserDictionaryCheckedMs = env.TimeMs() };
         return state;
     }
 
@@ -39,7 +39,7 @@ internal static class ImeSession
     {
         field ??= state.Field;
         if (!IsComposing(state) || IsPassword(field)) return;
-        state.Settings = env.Source().ForApp(field?.App);
+        state.Field = field;
         CompositionController.SetPrivate(state.Composition, ForbidsLearning(field));
         CommitPending(state, env);
     }
@@ -91,11 +91,11 @@ internal static class ImeSession
                 state.Field = new ImeField { Traits = [ImeTrait.Password] };
             }
             if (e.ImeOpen is { } open) CompositionController.SetDirect(state.Composition, !open);
-            return new(InitialState(false, !Direct(state), state.Settings, game: false, entered: false, rev), Pass);
+            return new(InitialState(false, !Direct(state), AppSettings(state, env), game: false, entered: false, rev), Pass);
         }
         state.Field = field;
         var all = env.Source();
-        var settings = state.Settings = all.ForApp(state.Field?.App);
+        var settings = all.ForApp(state.Field?.App);
         var active = IsActive(env.Environment, all, state.Field);
         var lastSnippet = state.LastSnippet;
         if (e.Type == ImeEventType.KeyPressed || e.Caret?.Moved == true) state.LastSnippet = null;
@@ -539,10 +539,15 @@ internal static class ImeSession
     private const long UserDictionaryCheckMs = 1000;
 
     /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
-    private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, state.Settings)
+    /// <summary>入力欄のアプリの設定 (アプリ別設定を反映したもの)。</summary>
+    private static Settings AppSettings(ImeSessionState state, ImeEnv env) => env.Source().ForApp(state.Field?.App);
+
+    private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => Env(state, env, AppSettings(state, env));
+
+    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings) => new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
     {
         ReadingOf = env.Parts.ReadingOf,
-        ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, state.Settings) : null,
+        ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
         NowMs = env.TimeMs(),
         Selection = state.Field?.Selection,
         CanDeleteBackward = CanDeleteSurrounding(state),
@@ -665,7 +670,7 @@ internal static class ImeSession
         var now = env.TimeMs();
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
-        var settings = state.Settings;
+        var settings = AppSettings(state, env);
         if (Direct(state) && state.Composition.DirectEnglishWord &&
             (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
              before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
@@ -719,7 +724,7 @@ internal static class ImeSession
     {
         if (vk is not (VirtualKeys.Convert or VirtualKeys.NonConvert or VirtualKeys.Kana)) return null;
         // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
-        var settings = state.Settings;
+        var settings = AppSettings(state, env);
         if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
         if (!CompositionController.IsComposing(state.Composition) || Direct(state)) return null;
         return ComposeKey(state, env, vk, null, false, false, false, false);

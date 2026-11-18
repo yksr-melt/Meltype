@@ -21,9 +21,6 @@ internal sealed class ImeSessionState
 {
     public ImeField? Field;
 
-    /// <summary>入力欄のアプリの設定 (アプリ別設定を反映したもの)。出来事ごとに入れ直し、変換ボックスが読む。</summary>
-    public required Settings Settings;
-
     // 直前に入れた定型文 (すぐに Esc を押したら、打った ;名前 に戻す)
     public (string Text, string Typed)? LastSnippet;
 
