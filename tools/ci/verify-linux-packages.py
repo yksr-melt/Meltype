@@ -51,8 +51,9 @@ def check_payload(root, bundle, version, kind, arch):
     xml = ET.parse(root / 'usr/share/ibus/component/meltype-flash.xml').getroot()
     assert xml.findtext('name') == 'org.freedesktop.IBus.MeltypeFlash'
     assert xml.findtext('version') == version
-    assert xml.findtext('exec') == "'/" + TARGET + "/meltype-ibus' --ibus"
+    assert xml.findtext('exec') == "'/" + TARGET + "/meltype-ibus' --ibus --keyboard-layout jp"
     assert xml.findtext('engines/engine/name') == 'meltype-flash'
+    assert xml.findtext('engines/engine/layout') == 'jp'
     assert xml.findtext('engines/engine/icon') == '/' + TARGET + '/icon.png'
     for name in DESKTOPS:
         desktop = (root / 'usr/share/applications' / name).read_text(encoding='utf-8')
