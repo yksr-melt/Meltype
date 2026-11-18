@@ -22,6 +22,7 @@ class MeltypeCoreBridgeDeviceTest {
                     override fun convert(reading: String, context: String?): List<MozcSegment>? = emptyList()
                     override fun learn(clauses: List<MozcClause>, context: String?) = false
                     override fun reading(text: String): String? = null
+                    override fun replaceUserWords(words: List<MozcClause>) = true
                 }
             }) {}).use { core ->
             // Check the JSON contract and the JNI round-trip. Japanese conversion

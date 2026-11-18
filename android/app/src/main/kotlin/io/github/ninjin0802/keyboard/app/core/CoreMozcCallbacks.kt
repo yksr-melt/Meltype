@@ -47,6 +47,13 @@ internal class CoreMozcCallbacks(
                 if (converter.learn(clauses, context.ifEmpty { null })) "OK" else "NG"
             }
             "R" -> converter.reading(fields[1]) ?: ""
+            "U" -> {
+                val words = fields[1].split(RECORD).filter { it.isNotEmpty() }.map { record ->
+                    val (reading, word) = record.split(UNIT)
+                    MozcClause(reading, word)
+                }
+                if (converter.replaceUserWords(words)) "OK" else "NG"
+            }
             // 覚えさせるたびに保存している (MozcConverter.learn)
             "S" -> "OK"
             else -> throw IllegalArgumentException("Unknown Mozc helper request: ${fields[0]}")

@@ -15,6 +15,8 @@ interface MozcBackend {
     fun convert(reading: String, context: String?): List<MozcSegment>?
     /** 確定した文節を覚えさせる。覚えたら true。 */
     fun learn(clauses: List<MozcClause>, context: String?): Boolean
+    /** Mozc のユーザー辞書の語を [words] (読みと語) ですべて入れ替える。入れ替えたら true。 */
+    fun replaceUserWords(words: List<MozcClause>): Boolean
     /** 漢字かな混じりの [text] の読み (逆変換)。できなければ null。 */
     fun reading(text: String): String?
 }

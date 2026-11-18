@@ -38,6 +38,8 @@ class MozcConverter internal constructor(
             }
         }
 
+    override fun replaceUserWords(words: List<MozcClause>): Boolean = engine?.replaceUserDictionary(words) ?: false
+
     override fun learn(clauses: List<MozcClause>, context: String?): Boolean {
         if (clauses.isEmpty()) return false
         val reading = clauses.joinToString("") { it.reading }

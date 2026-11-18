@@ -41,6 +41,7 @@ internal object DeviceTestCore {
         }
         override fun learn(clauses: List<MozcClause>, context: String?) = false
         override fun reading(text: String): String? = null
+        override fun replaceUserWords(words: List<MozcClause>) = true
     }
 
     /** Tests send ConversionFinished themselves when they wait for a background conversion. */

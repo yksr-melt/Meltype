@@ -11,13 +11,15 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage.UserDictionary
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage.UserDictionaryStorage
 
 /**
  * プロセスに1つだけある Mozc。辞書を読める場所に写し、Mozc を初期化し、命令を1つずつ渡す。
  *
  * Mozc の本体はプロセス全体で1つなので、[open] は何度呼んでも同じものを返す。
  */
-class MozcEngine private constructor() {
+class MozcEngine private constructor(private val profile: File) {
     /** 命令を1つ送る。失敗は null。どのスレッドから呼んでもよい（1つずつ順に処理する）。 */
     @Synchronized
     fun eval(input: ProtoCommands.Input): ProtoCommands.Output? {
@@ -31,10 +33,40 @@ class MozcEngine private constructor() {
         }
     }
 
+    /**
+     * Mozc のユーザー辞書の語を [words] ですべて入れ替える (名詞として登録する)。入れ替えたら true。
+     * Mozc はプロファイルの user_dictionary.db を読むので、それを書いてから読み直させる。
+     */
+    @Synchronized
+    fun replaceUserDictionary(words: List<MozcClause>): Boolean {
+        val dictionary = UserDictionary.newBuilder().setId(1).setName("Meltype")
+        for (word in words) {
+            dictionary.addEntries(UserDictionary.Entry.newBuilder().setKey(word.reading).setValue(word.text).setPos(UserDictionary.PosType.NOUN))
+        }
+        val storage = UserDictionaryStorage.newBuilder().addDictionaries(dictionary).build()
+        // 途中で止まっても半端なものが残らないよう、別の名前で書いてから置き換える。
+        val target = File(profile, USER_DICTIONARY_FILE)
+        val temporary = File(profile, "$USER_DICTIONARY_FILE.tmp")
+        try {
+            FileOutputStream(temporary).use { output ->
+                storage.writeTo(output)
+                output.fd.sync()
+            }
+            if (!temporary.renameTo(target)) return false
+        } catch (e: IOException) {
+            Log.w(TAG, "replaceUserDictionary: ${e.javaClass.simpleName}")
+            return false
+        } finally {
+            temporary.delete()
+        }
+        return eval(ProtoCommands.Input.newBuilder().setType(ProtoCommands.Input.CommandType.RELOAD_AND_WAIT).build()) != null
+    }
+
     companion object {
         private const val TAG = "MozcEngine"
         private const val DATA_FILE = "mozc.data"
         private const val NO_DICTIONARY_VERSION = "0.0.0"
+        private const val USER_DICTIONARY_FILE = "user_dictionary.db"
         private var opened: MozcEngine? = null
 
         /** 初期化に失敗したら null。辞書を写すので、最初の1回は時間がかかる。メインスレッドの外で呼ぶ。 */
@@ -51,7 +83,7 @@ class MozcEngine private constructor() {
                 // そのときの辞書の版は "0.0.0" になるので、それで見分ける。
                 val version = MozcJni.getDataVersion()
                 if (version.isEmpty() || version == NO_DICTIONARY_VERSION) return null
-                MozcEngine().also { opened = it }
+                MozcEngine(profile).also { opened = it }
             } catch (e: Exception) {
                 Log.w(TAG, "open: ${e.javaClass.simpleName}")
                 null

@@ -50,6 +50,18 @@ class MozcConverterTest {
 
     @Test fun context_is_accepted() = assertNotNull(converter.convert("あめがふる", "きょうは"))
 
+    // ユーザー辞書の語は、後ろに付属語が付いても 1 番目に出る。入れ替えたら前の語は出ない。
+    @Test fun user_words_replace_the_user_dictionary() {
+        try {
+            assertTrue(converter.replaceUserWords(listOf(MozcClause("しの", "しのにゃ"))))
+            assertEquals("しのにゃが", converter.convert("しのがきた", null)!![0].candidates[0])
+            assertTrue(converter.replaceUserWords(emptyList()))
+            assertFalse(converter.convert("しのがきた", null)!![0].candidates.contains("しのにゃが"))
+        } finally {
+            converter.replaceUserWords(emptyList())
+        }
+    }
+
     // 渡せない読みは、失敗 (null) でなく変換できない読み (空)。
     @Test fun empty_and_too_long_are_not_convertible() {
         assertEquals(emptyList<MozcSegment>(), converter.convert("", null))
