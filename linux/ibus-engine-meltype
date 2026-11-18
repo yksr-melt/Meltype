@@ -132,7 +132,7 @@ ALT_KEYS = (0xA4, 0xA5)
 
 # 矢印キー (←) のキーコード (確定したあとにキャレットを戻す)
 KEYCODE_LEFT = 105
-# 本体が使った Alt の解放の前に挟む、何もしないキー (Windows の 0xE8 と同じ役目)。GNOME は送られたキーを keysym から
+# 本体が使った Alt の解放の前に挟む、何もしないキー (MeltypeEngine._alt_key のワークアラウンド)。GNOME は送られたキーを keysym から
 # keymap のキーに引き直すので、keymap にあって何も割り当てられていない F19 にする
 KEYCODE_F19 = 189
 
@@ -257,9 +257,7 @@ class MeltypeEngine(IBus.Engine):
                 "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
 
     def _alt_key(self, vk, keyval, keycode, state, released):
-        """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通す。
-        解放は、本体が consumed にしたら止めて、何もしないキー (F19) の押下・解放のあとに送り直す。
-        止めたままだと、次のキーがアプリに届くまでアプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すとアプリが Alt の単独押し (メニュー) と受け取る。"""
+        """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたら止める。"""
         if not released:
             # 押したままの自動の繰り返しは、最初の押下だけを送る
             if not self._alt_keys or self._alt_down == vk:
@@ -276,6 +274,9 @@ class MeltypeEngine(IBus.Engine):
         output = self.send("KeyReleased", key={"vk": vk, "interrupted": interrupted})
         if not (output and output["result"]["consumed"]):
             return False
+        # ワークアラウンド: 止めた Alt の解放を、何もしないキー (F19) の押下・解放のあとに送り直す (Windows の 0xE8 と同じ)。
+        # Alt の単独押しで入力モードを切り替える限り恒久的に必要で、消せない。止めたままだと、次のキーがアプリに届くまで
+        # アプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すと、アプリが Alt の単独押し (メニュー) と受け取る。
         self.forward_key_event(IBus.KEY_F19, KEYCODE_F19, 0)
         self.forward_key_event(IBus.KEY_F19, KEYCODE_F19, IBus.ModifierType.RELEASE_MASK)
         self.forward_key_event(keyval, keycode, state)

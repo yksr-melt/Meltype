@@ -469,10 +469,7 @@ public:
         if (send(ic, "KeyPressed", fields, output) && output.get("result")->flag("consumed")) event.filterAndAccept();
     }
 
-    // 左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通す。
-    // 解放は、本体が consumed にしたら止めて、何もしないキー (F19) の押下・解放のあとに送り直す (Windows の 0xE8 と同じ役目)。
-    // 止めたままだと、次のキーがアプリに届くまでアプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すとアプリが Alt の単独押し (メニュー) と受け取る。
-    // GNOME は送られたキーを keysym から keymap のキーに引き直すので、keymap にあって何も割り当てられていない F19 にする
+    // 左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたら止める
     void altKey(fcitx::InputContext *ic, MeltypeState *state, int vk, fcitx::KeyStates states, fcitx::KeyEvent &event) {
         Json output;
         if (!event.isRelease()) {
@@ -492,6 +489,10 @@ public:
             !output.get("result")->flag("consumed"))
             return;
         event.filterAndAccept();
+        // ワークアラウンド: 止めた Alt の解放を、何もしないキー (F19) の押下・解放のあとに送り直す (Windows の 0xE8 と同じ)。
+        // Alt の単独押しで入力モードを切り替える限り恒久的に必要で、消せない。止めたままだと、次のキーがアプリに届くまで
+        // アプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すと、アプリが Alt の単独押し (メニュー) と受け取る。
+        // GNOME は送られたキーを keysym から keymap のキーに引き直すので、keymap にあって何も割り当てられていない F19 にする
         ic->forwardKey(fcitx::Key(FcitxKey_F19), false);
         ic->forwardKey(fcitx::Key(FcitxKey_F19), true);
         ic->forwardKey(event.rawKey(), true);
