@@ -35,7 +35,9 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
     /// <summary>1 つの ImeHost で持つ入力欄の数の上限 (TSF では 1 つのスレッドに 1 つなので、ふつうは 1 つ)。</summary>
     private const int MaxSessions = 16;
 
-    private readonly Dictionary<string, ImeSession> _sessions = [];
+    // 入力欄ごとの状態。処理は ImeSession の関数が受け取って書き換える
+    private readonly Dictionary<string, ImeSessionState> _sessions = [];
+    private readonly ImeEnv _env = new(environment, parts, settings);
     private static long s_rev;
 
     public int SessionCount => _sessions.Count;
@@ -70,7 +72,7 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
     {
         foreach (var session in _sessions.Values)
         {
-            session.Close();
+            ImeSession.Close(session, _env);
         }
         _sessions.Clear();
     }
@@ -85,7 +87,7 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
         var id = e.Instance ?? "";
         if (e.Type == ImeEventType.InstanceDestroyed)
         {
-            if (_sessions.Remove(id, out var closing)) closing.Close(e.Field);
+            if (_sessions.Remove(id, out var closing)) ImeSession.Close(closing, _env, e.Field);
             return Inactive();
         }
         if (!_sessions.TryGetValue(id, out var session))
@@ -99,10 +101,10 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
             {
                 return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.IsGame(current, e.Field), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
             }
-            session = new ImeSession(environment, parts, settings);
+            session = ImeSession.Create(_env);
             _sessions[id] = session;
         }
-        return session.Handle(e, NextRev());
+        return ImeSession.Handle(session, _env, e, NextRev());
     }
 
     private static long NextRev() => Interlocked.Increment(ref s_rev);
