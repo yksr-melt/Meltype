@@ -9,14 +9,17 @@ case "$data" in /*) ;; *) echo 'XDG_DATA_HOME must be absolute.' >&2; exit 1 ;; 
 system=false
 prefix=/usr
 uninstall=false
+keyboard_layout=jp
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --system) system=true; shift ;;
         --prefix) [[ $# -ge 2 ]] || exit 1; prefix="$2"; shift 2 ;;
         --uninstall) uninstall=true; shift ;;
-        *) echo 'Usage: bash install.sh [--system [--prefix /absolute/path]] [--uninstall]' >&2; exit 1 ;;
+        --keyboard-layout) [[ $# -ge 2 ]] || exit 1; keyboard_layout="$2"; shift 2 ;;
+        *) echo 'Usage: bash install.sh [--system [--prefix /absolute/path]] [--keyboard-layout jp|us|default] [--uninstall]' >&2; exit 1 ;;
     esac
 done
+case "$keyboard_layout" in jp|us|default) ;; *) echo 'Keyboard layout must be jp, us or default.' >&2; exit 1 ;; esac
 if $system; then
     case "$prefix" in /*) ;; *) echo 'Prefix must be absolute.' >&2; exit 1 ;; esac
     target="$prefix/libexec/meltype-flash/ibus"
@@ -150,7 +153,7 @@ if [[ -f "$stage/new/mozc/meltype_mozc_helper" ]]; then chmod 755 "$stage/new/mo
 # Validate the new executable before replacing any old file. The descriptor must
 # contain final paths even though validation runs from the staging directory.
 temporary="$(mktemp "$components/.meltype-flash.XXXXXX")"
-"$stage/new/meltype-ibus" --print-component --component-executable "$target/meltype-ibus" > "$temporary"
+"$stage/new/meltype-ibus" --print-component --component-executable "$target/meltype-ibus" --keyboard-layout "$keyboard_layout" > "$temporary"
 chmod 644 "$temporary"
 grep -q '<component>' "$temporary" && grep -q '</component>' "$temporary" || fail 'Invalid IBus component output.'
 desktop_temporary="$(mktemp "$applications/.meltype-setup.XXXXXX")"

@@ -36,6 +36,20 @@ class Installation(unittest.TestCase):
     def run_script(self, *args, check=True):
         return subprocess.run(["bash", str(self.script), *args], env=self.env, text=True, capture_output=True, check=check)
 
+    def test_keyboard_layout_selection_and_invalid_layout_preserve_installation(self):
+        for layout in ["jp", "us", "default"]:
+            self.run_script("--keyboard-layout", layout)
+            component = ET.parse(self.component)
+            self.assertEqual(component.findtext("engines/engine/layout"), layout)
+            self.assertEqual(shlex.split(component.findtext("exec"))[-2:], ["--keyboard-layout", layout])
+        original = self.component.read_bytes()
+        self.assertNotEqual(self.run_script("--keyboard-layout", "bad", check=False).returncode, 0)
+        self.assertEqual(self.component.read_bytes(), original)
+        for args in [["--keyboard-layout"], ["--keyboard-layout", "bad"]]:
+            result = subprocess.run([str(self.binary), "--print-component", *args], capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(result.stdout, b"")
+
     def test_install_component_command_round_trips_paths_and_uninstall_preserves_user_data(self):
         self.run_script()
         component = ET.fromstring(self.component.read_text(encoding="utf-8"))
@@ -44,7 +58,8 @@ class Installation(unittest.TestCase):
         self.assertEqual(component.findtext("engines/engine/icon"), str(self.target / "icon.png"))
         self.assertEqual((self.target / "icon.png").read_bytes(), (self.bundle / "icon.png").read_bytes())
         command = shlex.split(component.findtext("exec"))
-        self.assertEqual(command, [str(self.target / "meltype-ibus"), "--ibus"])
+        self.assertEqual(command, [str(self.target / "meltype-ibus"), "--ibus", "--keyboard-layout", "jp"])
+        self.assertEqual(component.findtext("engines/engine/layout"), "jp")
         self.assertEqual(shlex.split(component.findtext("engines/engine/setup")),[str(self.target / "meltype-flash")])
         self.assertIn("X-Meltype-Flash-IBus=true",self.desktop.read_text(encoding="utf-8"))
         self.assertEqual(self.desktop.stat().st_mode & 0o777,0o644)
@@ -205,7 +220,7 @@ class Installation(unittest.TestCase):
         component = prefix / "share/ibus/component/meltype-flash.xml"
         binary = prefix / "libexec/meltype-flash/ibus/meltype-ibus"
         command = shlex.split(ET.parse(component).findtext("exec"))
-        self.assertEqual(command, [str(binary), "--ibus"])
+        self.assertEqual(command, [str(binary), "--ibus", "--keyboard-layout", "jp"])
         self.assertIn("Meltype-FLASH IBus", subprocess.check_output([str(binary), "--version"], text=True))
         helper = binary.parent / "mozc/meltype_mozc_helper"
         self.assertTrue(os.access(helper, os.X_OK))

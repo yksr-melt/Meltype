@@ -1,3 +1,10 @@
+# Meltype-FLASH v1.1.24
+
+- Linuxの配布IBus版で、日本語キーボード（JIS）配列を既定にしました。Meltype-FLASHを選んだまま半角／全角キーで日本語・英数を切り替え、英数でも `2` は `2`、`Shift+2` は `"` になります。US配列を使う場合はインストール時に `--keyboard-layout us`、従来の配列継承は `--keyboard-layout default` を指定できます。
+- Windowsで更新が同時に実行されたときに管理情報が失われ、次回から「No managed Rust IME installation」と表示される問題を修正しました。同時更新を防ぎ、管理情報の保存が失敗しても元の情報を残します。
+
+---
+
 # Meltype-FLASH v1.1.23
 
 - LinuxのIBus・fcitx5で、Esc下の半角／全角キーがバッククォートとして届く場合も、日本語と英数を切り替えられるようにしました。修飾キーなしのバッククォートを切り替えに使います。
