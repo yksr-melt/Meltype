@@ -2,11 +2,13 @@
 // Copyright (C) 2026 ninjin0802
 package io.github.ninjin0802.keyboard.app
 
+import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.content.Intent
 import android.widget.TextView
 import java.lang.ref.WeakReference
+import kotlin.math.abs
 import android.inputmethodservice.InputMethodService
 import android.os.Build
 import android.os.Handler
@@ -24,7 +26,6 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.view.Gravity
-import io.github.ninjin0802.keyboard.app.core.CandidateTap
 import io.github.ninjin0802.keyboard.app.core.CaretWatch
 import io.github.ninjin0802.keyboard.app.core.CoreInputAdapter
 import io.github.ninjin0802.keyboard.app.core.CoreMozcCallbacks
@@ -40,7 +41,6 @@ import io.github.ninjin0802.keyboard.app.emoji.PrefsStore
 import io.github.ninjin0802.keyboard.app.input.Direction
 import io.github.ninjin0802.keyboard.app.input.EditorBridge
 import io.github.ninjin0802.keyboard.app.input.FieldPolicy
-import io.github.ninjin0802.keyboard.app.input.RetryingOpener
 import io.github.ninjin0802.keyboard.app.input.ShiftState
 import io.github.ninjin0802.keyboard.app.input.enterAction
 import io.github.ninjin0802.keyboard.app.input.enterKind
@@ -60,9 +60,7 @@ import io.github.ninjin0802.keyboard.app.view.ImeGlassSurface
 import io.github.ninjin0802.keyboard.app.view.KeyboardTopEdgeHighlight
 import io.github.ninjin0802.keyboard.app.view.Palette
 import io.github.ninjin0802.keyboard.app.view.bottomPaddingPx
-import io.github.ninjin0802.keyboard.mozc.MozcClause
 import io.github.ninjin0802.keyboard.mozc.MozcBackend
-import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import io.github.ninjin0802.keyboard.mozc.MozcConverter
 import io.github.ninjin0802.keyboard.mozc.MozcEngine
 import java.util.concurrent.LinkedBlockingQueue
@@ -76,32 +74,24 @@ import java.util.concurrent.TimeUnit
  * 変換以外はすべて画面のスレッドで動く。
  */
 class KeyboardService : InputMethodService(), KeyListener {
-    /** 変換と学習を順に行う1本のスレッド。止めたあとに来た依頼は黙って捨てる。 */
+    /** Mozc を開く1本のスレッド。止めたあとに来た依頼は黙って捨てる。 */
     private val worker = ThreadPoolExecutor(
         1, 1, 0L, TimeUnit.MILLISECONDS, LinkedBlockingQueue(), ThreadPoolExecutor.DiscardPolicy(),
     )
     private val mainHandler = Handler(Looper.getMainLooper())
-    private val converter = LateConverter(RetryingOpener(::openMozc, SystemClock::elapsedRealtime))
-     private val bridge = EditorBridge { currentInputConnection }
+    private val bridge = EditorBridge { currentInputConnection }
     /** Where the Core's edits leave the caret; any other move is reported to the Core (CaretMoved). */
     private val caretWatch = CaretWatch()
     private val coreInput = CoreInputAdapter(caretWatch) { currentInputConnection }
     private var core: MeltypeCoreHost? = null
     private var nativeCoreUnavailable = false
 
-    /** A Japanese QWERTY layout, including its symbol pages, must use the shared Core. */
-    private fun japaneseCoreLayout(): Boolean =
-        nav.current == LayoutId.ROMAJI ||
-            ((nav.current == LayoutId.SYMBOLS || nav.current == LayoutId.SYMBOLS2) &&
-                nav.backTarget == LayoutId.ROMAJI)
-
-    /** Keep the same C# Core (ImeHost) as Windows/Mac/Linux for QWERTY romaji. */
-    private fun coreForRomaji(): MeltypeCoreHost? {
-        if (!policy.convert || !japaneseCoreLayout() || nativeCoreUnavailable) return null
+    /** The shared Core (ImeHost) takes every key, as on Windows/Mac/Linux. Null once it has failed. */
+    private fun coreHost(): MeltypeCoreHost? {
+        if (nativeCoreUnavailable) return null
         core?.let { return it }
         return try {
-            MeltypeCoreHost.open(coreDataDirectory(this), CoreMozcCallbacks(converter))
-                .also { core = it }
+            MeltypeCoreHost.open(coreDataDirectory(this), coreCallbacks(this)).also { core = it }
         } catch (error: RuntimeException) {
             enterEmergencyMode(error)
             null
@@ -122,7 +112,8 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     private fun fieldFacts(): ImeFieldFacts {
         val start = System.nanoTime()
-        return coreInput.field(fieldTraits, fieldApp, fieldReadable, selected = selStart != selEnd).also {
+        // パスワード欄の文字は読まない (Core はパスワード欄を受け持たず、文字も使わない)。
+        return coreInput.field(fieldTraits, fieldApp, fieldReadable && !policy.isPassword, selected = selStart != selEnd).also {
             if (PerfLog.enabled) PerfLog.event("field", (System.nanoTime() - start) / 1000, it.before?.length ?: -1)
         }
     }
@@ -141,11 +132,15 @@ class KeyboardService : InputMethodService(), KeyListener {
     private fun coreSend(instance: MeltypeCoreHost, event: String, moved: Boolean = false): Boolean {
         coreKnowsMoved = moved
         return try {
-            coreInput.emojiEnabled = Settings(this).emojiEnabled
             val response = instance.handle(event)
                 ?: throw IllegalStateException("Native Core returned no output")
             val consumed = coreInput.apply(response)
             candidateBar?.show(coreInput.candidates, coreInput.selected)
+            // The letters page shows the Core's language mode.
+            if (nav.japanese != coreInput.japanese) {
+                nav.japanese = coreInput.japanese
+                renderKeys()
+            }
             consumed
         } catch (error: RuntimeException) {
             enterEmergencyMode(error)
@@ -156,16 +151,30 @@ class KeyboardService : InputMethodService(), KeyListener {
         }
     }
 
-    /** A key that types [ch]. The Core decides its virtual key from the character. */
-    private fun coreCharacter(ch: Int, shift: Boolean = false): Boolean {
-        val instance = coreForRomaji() ?: return false
-        return coreSend(instance, ImeJson.characterKey(ch, shift, fieldFacts()))
+    /** A key that types [ch]. The Core decides its virtual key from the character. A key the Core passes on goes into the editor. */
+    private fun typeCharacter(ch: Int, shift: Boolean = false) {
+        val instance = coreHost() ?: return
+        val consumed = coreSend(instance, ImeJson.characterKey(ch, shift, fieldFacts()))
+        if (core != null && !consumed) insertPassed(String(Character.toChars(ch)))
     }
 
-    /** A key without a character (Back 0x08, Enter 0x0D). */
+    /** A key without a character (Back 0x08, Enter 0x0D, ← 0x25, → 0x27). Returns whether the Core consumed it. */
     private fun coreVirtualKey(vk: Int): Boolean {
-        val instance = coreForRomaji() ?: return false
+        val instance = coreHost() ?: return false
         return coreSend(instance, ImeJson.virtualKey(vk, fieldFacts()))
+    }
+
+    /** An event that changes the language mode (あa, the language menu). */
+    private fun coreMode(event: (ImeFieldFacts) -> String) {
+        val instance = coreHost() ?: return
+        coreSend(instance, event(fieldFacts()))
+    }
+
+    /** The Core's converter finished in the background: the Core redraws the composing text with the result. */
+    private fun coreConversionFinished() {
+        val instance = core ?: return
+        if (currentInputConnection == null || !coreInput.composing) return
+        coreSend(instance, ImeJson.conversionFinished(fieldFacts()))
     }
 
     private fun commitCore() {
@@ -273,19 +282,14 @@ class KeyboardService : InputMethodService(), KeyListener {
     private var emojiPanel: EmojiPanelView? = null
     private val emojiRecents by lazy { EmojiRecentsStore(PrefsStore(this, "emoji")) }
 
-    private var policy = FieldPolicy(LayoutId.ROMAJI, convert = true, learn = true)
+    private var policy = FieldPolicy(emptyList(), symbols = false)
     private var imeOptions = 0
-    // A restart of the same editor must not undo a user-selected language.
-    // Field ID is required: two unlabelled editors in one app cannot be distinguished.
-    private data class FieldIdentity(val app: String?, val id: Int, val inputType: Int, val imeOptions: Int)
-    private var lastFieldIdentity: FieldIdentity? = null
-    /** いまの配列と、あa・?123・絵文字・戻るキーの行き先。 */
+    /** いまのページと、?123・絵文字・戻るキーの行き先。文字のページの言語は Core の言語モード。 */
     private val nav = LayoutNavigator()
     private val noEmojiLayouts = mutableMapOf<LayoutId, io.github.ninjin0802.keyboard.app.layout.KeyboardLayout>()
 
     /** 配列の切り替えと、絵文字の画面の開け閉め。どの順で確定して何を出すかは [ScreenCoordinator] が決める。 */
     private val screens = ScreenCoordinator(nav, object : ScreenCoordinator.Screen {
-        override fun commitComposing() = this@KeyboardService.commitComposing()
         override fun showKeyboard() = showLayout()
         override fun releaseShift() = setShift(ShiftState.OFF)
         override fun showEmojiPanel(pressedAtMs: Long) = openEmojiPanel(pressedAtMs)
@@ -312,53 +316,26 @@ class KeyboardService : InputMethodService(), KeyListener {
         super.onCreate()
         activeForSmokeTest = WeakReference(this)
         createdAtNanos = System.nanoTime()
-        Settings(this).let {
-            nav.choose(it.japaneseLayout, it.englishLayout)
-            it.registerChangeListener(settingsListener)
-        }
-        // 辞書を写すので時間がかかる。変換と同じスレッドの先頭で行うので、変換はこれが終わってから動く。
-        worker.execute { converter.open() }
-    }
-
-    /**
-     * Mozc を開く。開けなければ null（変換できないまま、かなの入力だけで動き続ける）。
-     * 変換のスレッドで呼ばれる。失敗したときのやり直しは [RetryingOpener] が決める。
-     */
-    private fun openMozc(): MozcBackend? = try {
-        val start = System.nanoTime()
-        MozcEngine.open(applicationContext)?.let { engine ->
-            MozcConverter(engine).also { PerfLog.event("mozc-open", (System.nanoTime() - start) / 1000) }
-        }
-    } catch (t: Throwable) {
-        logWorkerFailure(t)
-        null
+        active = WeakReference(this)
+        Settings(this).registerChangeListener(settingsListener)
+        // 辞書を写すので時間がかかる。開き終わるまで、Core の変換は待つ。
+        val mozc = mozc(this)
+        worker.execute { mozc.value }
     }
 
     // 設定が変わったら、開いているキーボードにもすぐ効かせる。弱い参照で持たれるので、フィールドで握る。
-    private val settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, changedKey ->
-        val settings = Settings(this)
-        // 配列を選び直して、いま出している配列が替わるときは、未確定文字を確定してから出し直す。
-        screens.settingsChanged(settings.japaneseLayout, settings.englishLayout)
-        if (!settings.emojiEnabled) closeEmojiPanel()
-        if (core != null) {
-            coreInput.emojiEnabled = settings.emojiEnabled
-            candidateBar?.show(coreInput.candidates, coreInput.selected)
-        }
+    private val settingsListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
         showLayout()
     }
 
     override fun onDestroy() {
         if (activeForSmokeTest?.get() === this) activeForSmokeTest = null
+        if (active?.get() === this) active = null
         Settings(this).unregisterChangeListener(settingsListener)
         languagePopup.dismiss()
         discardCore()
-        worker.shutdown()   // 積んである学習は終わらせる
+        worker.shutdown()
         super.onDestroy()
-    }
-
-    /** Avoid logging text from the user's input. */
-    private fun logWorkerFailure(t: Throwable) {
-        Log.w(TAG, "worker: ${t.javaClass.simpleName}")
     }
 
     /** 横向きでも入力欄を全画面にしない（アプリの画面を見ながら打てるようにする）。 */
@@ -416,14 +393,9 @@ class KeyboardService : InputMethodService(), KeyListener {
         val start = System.nanoTime()
         val bar = CandidateBarView(this).also { it.onPick = { index ->
             val instance = core
-            if (instance != null && nav.current == LayoutId.ROMAJI) {
-                val choice = coreInput.choices.getOrNull(index)
-                if (choice != null) {
-                    // A prediction or a one-clause conversion is committed by the tap. In a conversion
-                    // of several clauses, the tap moves on to the next clause, and commits on the last.
-                    CandidateTap.tap(coreInput, choice.nativeIndex, { fieldFacts() }) { coreSend(instance, it) }
-                }
-            }
+            val choice = coreInput.choices.getOrNull(index)
+            // The Core decides what the tap does (a prediction commits; a conversion candidate is chosen for its clause).
+            if (instance != null && choice != null) coreSend(instance, ImeJson.candidateClicked(choice.nativeIndex, fieldFacts()))
         } }
         val keys = KeyboardView(this).also { it.listener = this }
         // 絵文字の画面は、開いているあいだ、候補バーとキーの代わりに同じ場所に出る（高さは同じ）。
@@ -558,8 +530,6 @@ class KeyboardService : InputMethodService(), KeyListener {
     }
 
     private fun startNormalInputView(info: EditorInfo, restarting: Boolean) {
-        val identity = FieldIdentity(info.packageName, info.fieldId, info.inputType, info.imeOptions)
-        val keepSelectedLanguage = restarting && info.fieldId != View.NO_ID && identity == lastFieldIdentity
         super.onStartInputView(info, restarting)
         // A restart after an external send must not revive a composition the app deleted.
         forgetCompositionIfEditorWasCleared()
@@ -574,19 +544,15 @@ class KeyboardService : InputMethodService(), KeyListener {
         if (coreInput.composing) leaveCore(focusLeft = false)
         policy = fieldPolicy(info.inputType, info.imeOptions)
         imeOptions = info.imeOptions
-        fieldTraits = buildList {
-            if (policy.isPassword) add("Password")
-            if (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0) add("Private")
-        }
+        fieldTraits = policy.traits
         fieldApp = info.packageName
         fieldReadable = info.inputType != InputType.TYPE_NULL
         selStart = info.initialSelStart
         selEnd = info.initialSelEnd
         caretWatch.reset(selStart, selEnd)
-        core?.let { instance -> coreSend(instance, ImeJson.focusEntered(fieldFacts()), moved = true) }
+        coreHost()?.let { instance -> coreSend(instance, ImeJson.focusEntered(fieldFacts()), moved = true) }
         coreInField = true
-        lastFieldIdentity = identity
-        if (keepSelectedLanguage) showLayout() else screens.fieldStarted(policy.layout)
+        screens.fieldStarted(policy.symbols)
         applyCurrentInsets()
     }
 
@@ -657,80 +623,35 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     private fun handleKey(action: KeyAction, direction: Direction, timeMs: Long) {
         // An error has already put the editor into emergency mode. Never keep typing into it
-        // from queued touch events, and never silently fall back to raw/Kotlin Japanese input.
-        if (nativeCoreUnavailable && policy.convert && japaneseCoreLayout()) return
+        // from queued touch events, and never silently fall back to raw/Kotlin input.
+        if (nativeCoreUnavailable) return
         when (action) {
             is KeyAction.Text -> {
                 val typed = if (nav.current == LayoutId.QWERTY) shift.apply(action.text) else action.text
-                if (policy.convert && japaneseCoreLayout()) {
-                    if (coreForRomaji() == null) return
-                    for (ch in typed) {
-                        val consumed = coreCharacter(ch.code)
-                        if (core == null) return
-                        if (!consumed) insertPassed(ch.toString())
-                    }
-                } else {
-                    insert(typed)
+                for (ch in typed) {
+                    typeCharacter(ch.code)
+                    if (core == null) return
                 }
                 if (nav.current == LayoutId.QWERTY) setShift(shift.onCharTyped())
             }
             is KeyAction.Romaji -> {
-                // Core is the only Japanese QWERTY engine; failure shows the emergency picker.
-                val scalar = if (shift != ShiftState.OFF) action.char.uppercaseChar() else action.char
-                if (!policy.convert) {
-                    // Email, password, and other non-converting editors accept literal keys,
-                    // even after the user switches from English to Japanese QWERTY.
-                    insert(scalar.toString())
-                } else {
-                    val consumed = coreCharacter(scalar.code, shift = shift != ShiftState.OFF)
-                    // A Core failure shows recovery UI, never a second Japanese input engine.
-                    if (core != null && !consumed) insertPassed(scalar.toString())
-                }
+                val shifted = shift != ShiftState.OFF
+                typeCharacter((if (shifted) action.char.uppercaseChar() else action.char).code, shift = shifted)
                 setShift(shift.onCharTyped())
             }
-            KeyAction.Delete -> {
-                if (policy.convert && japaneseCoreLayout()) {
-                    if (coreForRomaji() == null) return
-                    if (!coreVirtualKey(0x08) && core != null) {
-                        bridge.deleteBeforeCursor()
-                        caretWatch.lose()
-                    }
-                } else if (selStart != selEnd) {
-                    sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
-                } else {
-                    bridge.deleteBeforeCursor()
-                }
+            KeyAction.Delete -> if (!coreVirtualKey(0x08) && core != null) {
+                if (selStart != selEnd) sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL) else bridge.deleteBeforeCursor()
+                caretWatch.lose()
             }
-            KeyAction.Space -> {
-                if (policy.convert && japaneseCoreLayout()) {
-                    if (coreForRomaji() == null) return
-                    val consumed = coreCharacter(' '.code)
-                    if (core != null && !consumed) insertPassed(" ")
-                } else {
-                    insert(" ")
-                }
-            }
-            KeyAction.Enter -> if (coreForRomaji() != null) {
-                val consumed = coreVirtualKey(0x0D)
-                if (core != null && !consumed) {
-                    caretWatch.lose()
-                    val editorAction = enterAction(imeOptions)
-                    if (editorAction != null) currentInputConnection?.performEditorAction(editorAction)
-                    else sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
-                }
-            } else if (nativeCoreUnavailable && nav.current.isJapanese) {
-                return
-            } else {
-                commitComposing()
+            KeyAction.Space -> typeCharacter(' '.code)
+            KeyAction.Enter -> if (!coreVirtualKey(ImeJson.VK_RETURN) && core != null) {
+                caretWatch.lose()
                 val editorAction = enterAction(imeOptions)
-                if (editorAction != null) {
-                    currentInputConnection?.performEditorAction(editorAction)
-                } else {
-                    sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
-                }
+                if (editorAction != null) currentInputConnection?.performEditorAction(editorAction)
+                else sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
             }
             KeyAction.Shift -> setShift(shift.onShiftPressed())
-            KeyAction.Language -> screens.language()
+            KeyAction.Language -> coreMode(ImeJson::modeToggleRequested)
             is KeyAction.Switch -> screens.switchTo(action.to)
             KeyAction.Emoji -> if (Settings(this).emojiEnabled) screens.openEmoji(timeMs)
             KeyAction.Back -> screens.back()
@@ -774,8 +695,9 @@ class KeyboardService : InputMethodService(), KeyListener {
         emojiRecents.used(emoji, policy.recordsEmoji)
     }
 
-    /** 未確定文字があるあいだは、空白キーは「次の候補」のまま。変換しない欄では、持っている1文字を確定してから動かす。 */
+    /** 言語のメニューを出す。未確定文字があるあいだは出さない (空白キーの長押しで文節・カーソルを動かす)。 */
     override fun onSpaceLanguageMenu(x: Float, y: Float): Boolean {
+        if (coreInput.composing) return false
         val anchor = keyboardView ?: return false
         if (nav.current != LayoutId.ROMAJI && nav.current != LayoutId.QWERTY) return false
         return languagePopup.show(
@@ -785,7 +707,7 @@ class KeyboardService : InputMethodService(), KeyListener {
             selected = nav.current,
             allowEmoji = Settings(this).emojiEnabled,
             onSelectLanguage = { target ->
-                if (nav.current != target) screens.language()
+                coreMode(if (target == LayoutId.ROMAJI) ImeJson::japaneseModeSelected else ImeJson::alphanumericModeSelected)
             },
             onEmoji = { screens.openEmoji(SystemClock.uptimeMillis()) },
         )
@@ -803,14 +725,17 @@ class KeyboardService : InputMethodService(), KeyListener {
         languagePopup.dismiss()
     }
 
+    /** 変換中は、空白キーの長押しで動かすと、選ぶ文節を動かす（Core に ← → を送る）。 */
     override fun onCursorModeStart(): Boolean {
-        if (coreInput.composing) return false
-        commitComposing()
         cursorPosition = null
         return true
     }
 
     override fun onCursorMove(steps: Int) {
+        if (coreInput.composing) {
+            repeat(abs(steps)) { coreVirtualKey(if (steps < 0) ImeJson.VK_LEFT else ImeJson.VK_RIGHT) }
+            return
+        }
         // 最初の1回は、入力欄が知らせてきた位置から。範囲を選んであれば、動かす向きの端から。
         val from = cursorPosition ?: if (selStart < 0 || selEnd < 0) null else if (steps < 0) minOf(selStart, selEnd) else maxOf(selStart, selEnd)
         cursorPosition = bridge.moveCursor(steps, from)
@@ -833,7 +758,13 @@ class KeyboardService : InputMethodService(), KeyListener {
 
     /** いまの配列を出す。絵文字の画面が開いていれば閉じる。 */
     private fun showLayout() {
+        nav.closeEmoji()
         closeEmojiPanel()
+        renderKeys()
+    }
+
+    /** キーボードの配列を、いまのページと Core の言語モードに合わせる（絵文字の画面はそのまま）。 */
+    private fun renderKeys() {
         val view = keyboardView ?: return
         view.hapticEnabled = Settings(this).hapticEnabled
         val baseLayout = Layouts.of(nav.current)
@@ -843,32 +774,42 @@ class KeyboardService : InputMethodService(), KeyListener {
         if (view.shift != shift) view.shift = shift
         val kind = enterKind(imeOptions)
         if (view.enterKind != kind) view.enterKind = kind
-        if (view.backTarget != nav.backTarget) view.backTarget = nav.backTarget
-    }
-
-    /**
-     * Mozc の用意ができるまでは、変換に失敗したものとして答える。用意に失敗していたら、
-     * 変換や学習が頼まれたときに [mozc] がやり直す。変換のスレッドでだけ使う。
-     */
-    private class LateConverter(private val mozc: RetryingOpener<MozcBackend>) : MozcBackend {
-        fun open() { mozc.get() }
-
-        override fun convert(reading: String, context: String?): List<MozcSegment>? =
-            timed("convert", reading.length) { mozc.get()?.convert(reading, context) }
-
-        override fun predict(reading: String): List<String> =
-            timed("predict", reading.length) { mozc.get()?.predict(reading) } ?: emptyList()
-
-        private inline fun <T> timed(kind: String, length: Int, block: () -> T): T {
-            val start = System.nanoTime()
-            return block().also { PerfLog.event(kind, (System.nanoTime() - start) / 1000, length) }
-        }
-        override fun learn(clauses: List<MozcClause>, context: String?) { mozc.get()?.learn(clauses, context) }
+        if (view.backTarget != nav.letters) view.backTarget = nav.letters
     }
 
     companion object {
         @Volatile internal var activeForSmokeTest: WeakReference<KeyboardService>? = null
         private const val TAG = "KeyboardService"
-        private const val CONTEXT_LENGTH = 20
+
+        // The native Core keeps the first callbacks for the whole process (meltype_android_init), so they must not
+        // hold a KeyboardService: Mozc is opened once per process, and results go to the service shown now.
+        private var mozc: Lazy<MozcBackend?>? = null
+        private var callbacks: CoreMozcCallbacks? = null
+
+        /** The service whose keyboard shows the Core's conversion results. */
+        @Volatile private var active: WeakReference<KeyboardService>? = null
+
+        private fun mozc(context: Context): Lazy<MozcBackend?> =
+            mozc ?: lazy { openMozc(context.applicationContext) }.also { mozc = it }
+
+        private fun coreCallbacks(context: Context): CoreMozcCallbacks =
+            callbacks ?: CoreMozcCallbacks(mozc(context)) {
+                active?.get()?.let { service -> service.mainHandler.post(service::coreConversionFinished) }
+            }.also { callbacks = it }
+
+        /**
+         * Mozc を開く。開けなければ null（変換できないまま、かなの入力だけで動き続ける）。
+         * [worker] か Core の変換のスレッドで 1 回だけ呼ばれる。
+         */
+        private fun openMozc(context: Context): MozcBackend? = try {
+            val start = System.nanoTime()
+            MozcEngine.open(context)?.let { engine ->
+                MozcConverter(engine).also { PerfLog.event("mozc-open", (System.nanoTime() - start) / 1000) }
+            }
+        } catch (t: Throwable) {
+            // Avoid logging text from the user's input.
+            Log.w(TAG, "mozc: ${t.javaClass.simpleName}")
+            null
+        }
     }
 }

@@ -427,25 +427,13 @@ Dictionary<string, (int Pass, int Total)> ByCategory, List<string> Failures, Lis
             if (!ok) failures.Add($"[{category}] {detail}");
         }
 
-        // 実際と同じく、使えるなら Windows のスペルチェッカーも使う。
-        // Windows のスペルチェッカーが無い環境 (Linux・Mac の CI) では、アプリの Mac 版・Linux 版と同じく同梱の英単語の一覧を使う。
-        IWordChecker? spell = Environment.GetEnvironmentVariable("MELTYPE_NO_SPELLCHECK") is not null ? null
-            : TestSupport.WordChecker is { IsAvailable: true } checker ? checker : Detection.BuiltInWordChecker.Shared;
-        CompositionTests.Detector.SpellChecker = spell;
-        try
+        foreach (var c in Typing)
         {
-            foreach (var c in Typing)
-            {
-                var k = new CompositionTests.Keyboard();
-                k.Host.PrecedingText = c.Before;
-                k.Type(c.Typed + "\n");
-                var actual = k.Host.Document;
-                Score(c.Category, actual == c.Expected, $"{(c.Before is null ? "" : $"「{c.Before}」+ ")}{c.Typed} → {actual} (期待: {c.Expected})");
-            }
-        }
-        finally
-        {
-            CompositionTests.Detector.SpellChecker = null;
+            var k = new CompositionTests.Keyboard();
+            k.Host.PrecedingText = c.Before;
+            k.Type(c.Typed + "\n");
+            var actual = k.Host.Document;
+            Score(c.Category, actual == c.Expected, $"{(c.Before is null ? "" : $"「{c.Before}」+ ")}{c.Typed} → {actual} (期待: {c.Expected})");
         }
 
         // かな入力 (JIS)

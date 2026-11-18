@@ -10,20 +10,11 @@ internal static class ReportedMisdetectionTests
 {
     private static void Check(params (string Typed, string Expected)[] cases)
     {
-        // アプリと同じく、英単語はスペルチェッカー (Windows 以外は同梱の一覧) でも確かめる
-        Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
-        try
+        foreach (var (typed, expected) in cases)
         {
-            foreach (var (typed, expected) in cases)
-            {
-                var k = new Keyboard();
-                k.Type(typed + "\n");
-                Assert.Equal(expected, k.Host.Document, typed);
-            }
-        }
-        finally
-        {
-            Detector.SpellChecker = null;
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
         }
     }
 

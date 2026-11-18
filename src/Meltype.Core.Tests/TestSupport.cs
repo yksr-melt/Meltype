@@ -8,9 +8,6 @@ namespace Meltype.Tests;
 
 internal static class TestSupport
 {
-    /// <summary>英単語の判定に使うスペルチェッカー (Windows のテストランナーが Windows のものを入れる。無ければ同梱の辞書だけ)。</summary>
-    public static IWordChecker? WordChecker { get; set; }
-
     public static Settings DefaultSettings() => new Settings().Normalize();
 
     public static ScoreEngine CreateEngine(Settings? settings = null)

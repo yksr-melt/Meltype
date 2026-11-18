@@ -4,49 +4,45 @@ package io.github.ninjin0802.keyboard.app.input
 
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
-import io.github.ninjin0802.keyboard.app.layout.LayoutId
 
 /**
- * [layout]: 入力欄の種類に応じて表示する最初の配列。日本語QWERTYまたは英語QWERTY。
- * [holdLast]: パスワード欄かどうかを判断するための互換プロパティ。パスワード欄では偽となる。
+ * 入力欄の種類から分かる事実。[traits] は Core に送る ImeTrait の名前 (変換するか・英数で始めるか・覚えるかは Core が決める)、
+ * [symbols] は数字・記号のページで始めるか。
  */
-data class FieldPolicy(val layout: LayoutId, val convert: Boolean, val learn: Boolean, val holdLast: Boolean = true) {
-    /** パスワードの欄（数字だけのパスワードを含む）。何も持たない欄が、ちょうどそれに当たる。 */
-    val isPassword: Boolean get() = !holdLast
+data class FieldPolicy(val traits: List<String>, val symbols: Boolean) {
+    /** パスワードの欄（数字だけのパスワードを含む）。 */
+    val isPassword: Boolean get() = PASSWORD in traits
 
     /**
-     * 絵文字の画面で選んだ絵文字を「最近使ったもの」に足すか。学習する欄だけ（spec 04・09）。
-     * パスワードの欄では、学習の指定がどうであっても足さない。
+     * 絵文字の画面で選んだ絵文字を「最近使ったもの」に足すか。パスワードの欄と、覚えないように求める欄では足さない（spec 04・09）。
      */
-    val recordsEmoji: Boolean get() = learn && !isPassword
+    val recordsEmoji: Boolean get() = !isPassword && PRIVATE !in traits
 
     /** 絵文字の画面に「最近使ったもの」を出すか。パスワードの欄では、覚えてある絵文字を見せない（spec 04・09）。 */
     val showsRecentEmoji: Boolean get() = !isPassword
+
+    companion object {
+        const val PASSWORD = "Password"
+        const val PRIVATE = "Private"
+        const val EMAIL = "Email"
+        const val NUMERIC = "Numeric"
+    }
 }
 
-/** 入力欄の種類から、最初の配列・変換・学習を決める（spec 09）。 */
+/** 入力欄の種類（EditorInfo の inputType・imeOptions）から、Core に送る事実と最初のページを決める（spec 09）。 */
 fun fieldPolicy(inputType: Int, imeOptions: Int): FieldPolicy {
     val cls = inputType and InputType.TYPE_MASK_CLASS
     val variation = inputType and InputType.TYPE_MASK_VARIATION
-    return when {
-        cls == InputType.TYPE_CLASS_NUMBER ->
-            FieldPolicy(
-                LayoutId.SYMBOLS, convert = false, learn = false,
-                holdLast = variation != InputType.TYPE_NUMBER_VARIATION_PASSWORD,
-            )
-        cls == InputType.TYPE_CLASS_PHONE || cls == InputType.TYPE_CLASS_DATETIME ->
-            FieldPolicy(LayoutId.SYMBOLS, convert = false, learn = false)
-        cls == InputType.TYPE_CLASS_TEXT && variation in passwordVariations ->
-            FieldPolicy(LayoutId.QWERTY, convert = false, learn = false, holdLast = false)
-        cls == InputType.TYPE_CLASS_TEXT && variation in emailVariations ->
-            FieldPolicy(LayoutId.QWERTY, convert = false, learn = false)
-        // URL 欄は検索にも使うため日本語で始める。URL の直接入力は英字配列に切り替えられる。学習はしない。
-        cls == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_URI ->
-            FieldPolicy(LayoutId.ROMAJI, convert = true, learn = false)
-        imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0 ->
-            FieldPolicy(LayoutId.ROMAJI, convert = true, learn = false)
-        else -> FieldPolicy(LayoutId.ROMAJI, convert = true, learn = true)
+    val numeric = cls == InputType.TYPE_CLASS_NUMBER || cls == InputType.TYPE_CLASS_PHONE || cls == InputType.TYPE_CLASS_DATETIME
+    val traits = buildList {
+        // 種類ごとに同じ数値が別の意味になる（数字のパスワード 0x10 は、日付と時刻では「日付」）ので、種類と組で見る。
+        if (cls == InputType.TYPE_CLASS_TEXT && variation in passwordVariations ||
+            cls == InputType.TYPE_CLASS_NUMBER && variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD) add(FieldPolicy.PASSWORD)
+        if (cls == InputType.TYPE_CLASS_TEXT && variation in emailVariations) add(FieldPolicy.EMAIL)
+        if (numeric) add(FieldPolicy.NUMERIC)
+        if (imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0) add(FieldPolicy.PRIVATE)
     }
+    return FieldPolicy(traits, symbols = numeric)
 }
 
 private val passwordVariations = setOf(
@@ -84,6 +80,3 @@ fun enterKind(imeOptions: Int): EnterKind = when (enterAction(imeOptions)) {
     EditorInfo.IME_ACTION_DONE -> EnterKind.DONE
     else -> EnterKind.OTHER
 }
-
-/** 確定キーの名前。 */
-fun enterLabel(imeOptions: Int): String = enterKind(imeOptions).label

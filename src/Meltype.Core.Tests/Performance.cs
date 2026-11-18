@@ -41,9 +41,8 @@ internal static class Performance
         var cases = Load(casesFile ?? DefaultCases);
         if (cases.Count == 0) throw new InvalidOperationException("例文がありません");
 
-        // 判定の正解率 (品質テスト)。品質テストはスペルチェッカーを外して終わるので、先に動かす
+        // 判定の正解率 (品質テスト)
         var quality = Quality.Run();
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
 
         var mozc = Henkan.Engine;
         var converter = mozc is null ? null : new TimedConverter(mozc);
