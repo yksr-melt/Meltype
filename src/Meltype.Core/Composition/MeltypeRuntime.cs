@@ -111,12 +111,17 @@ public sealed class MeltypeRuntime : IDisposable
     /// 変換エンジン (Mozc と、設定で ON なら Zenzai)。プロセスで 1 つ作り、入力欄の本体で共有する。止めるのは <see cref="Dispose"/>。
     /// appDirectory は、同梱の Mozc のヘルパー (mozc/meltype_mozc_helper) と Zenzai (zenzai/) を置いたフォルダー。
     /// </summary>
-    public HybridConverter CreateConverter(string appDirectory)
+    public HybridConverter CreateConverter(string appDirectory) =>
+        CreateConverter(appDirectory, new MozcHelperProcess(
+            Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper"),
+            Path.Combine(DataDirectory, "mozc")));
+
+    /// <summary><see cref="CreateConverter(string)"/> と同じで、Mozc の変換ヘルパーを mozcHelper にする (Android はアプリのプロセスの Mozc)。</summary>
+    public HybridConverter CreateConverter(string appDirectory, IMozcHelper mozcHelper)
     {
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
-        var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(helper, Path.Combine(DataDirectory, "mozc"), () => UserDictionary.EngineWords);
+        var mozc = new MozcConverter(mozcHelper, () => UserDictionary.EngineWords);
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);

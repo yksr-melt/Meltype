@@ -37,8 +37,8 @@ internal static class FrontProtocolTests
             Others: ["app", "selection", "NonText"]),
         new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
             new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
-            // Android reports field facts to Core, and handles text edits and candidate choices from its output.
-            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii",
+            // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output.
+            Unused: ["version", "handlesInput", "imeOpen", "modeIndicatorMs", "capture", "printableAscii",
                 "printableAsciiExcept", "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste",
                 "keyReleases", "altKeys", "hint", "spellingSuggestion", "typedKeys", "notes", "numbered",
                 "selectedMeaning", "meaningDelayMs"],

@@ -23,11 +23,10 @@ internal class CoreInputAdapter(
     var shown: String = ""
         private set
     val composing: Boolean get() = shown.isNotEmpty()
-    var emojiEnabled: Boolean = true
-        set(value) {
-            field = value
-            refreshChoices()
-        }
+
+    /** The Core's language mode in the last response: Japanese, or alphanumeric (which shows the English layout). */
+    var japanese: Boolean = true
+        private set
     private var latestView: ImeView? = null
 
     /** The view of the last response (null when nothing is composing). */
@@ -48,7 +47,7 @@ internal class CoreInputAdapter(
     }
 
     private fun refreshChoices() {
-        val (nextChoices, nextSelected) = CoreCandidateChoices.fromView(latestView, emojiEnabled)
+        val (nextChoices, nextSelected) = CoreCandidateChoices.fromView(latestView)
         choices = nextChoices
         candidates = nextChoices.map { DisplayCandidate(it.label) }
         selected = nextSelected
@@ -120,6 +119,7 @@ internal class CoreInputAdapter(
             shown = result.view?.text ?: ""
         }
         latestView = result.view
+        japanese = result.japanese
         refreshChoices()
         return result.consumed
     }

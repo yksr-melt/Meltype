@@ -214,7 +214,7 @@ internal static class Henkan
 
     private static readonly Lazy<Composition.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Composition.MozcConverter(helper, ProfileDirectory, () => BuiltInPhrases.EngineWords)
+            ? new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, ProfileDirectory), () => BuiltInPhrases.EngineWords)
             : null);
     private static readonly Lazy<Composition.TranslationDictionary> Translations = new(Composition.TranslationDictionary.Load);
 
@@ -297,7 +297,7 @@ internal static class MozcCompare
         var helper = Environment.GetEnvironmentVariable("MELTYPE_MOZC");
         if (helper is null || !File.Exists(helper)) throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
         var profile = Path.Combine(Path.GetTempPath(), $"meltype-mozc-compare-{Environment.ProcessId}");
-        using var mozc = new Composition.MozcConverter(helper, profile);
+        using var mozc = new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, profile));
         CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
         var results = new List<object>();
         int currentOk = 0, wholeOk = 0;

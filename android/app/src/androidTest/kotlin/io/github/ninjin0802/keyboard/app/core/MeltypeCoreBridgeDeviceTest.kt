@@ -17,11 +17,13 @@ class MeltypeCoreBridgeDeviceTest {
     @Test fun coreAnswersEventsThroughTheImeProtocol() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         MeltypeCoreHost.open(File(context.noBackupFilesDir, "meltype"),
-            CoreMozcCallbacks(object : MozcBackend {
-                override fun convert(reading: String, context: String?): List<MozcSegment>? = null
-                override fun predict(reading: String): List<String> = emptyList()
-                override fun learn(clauses: List<MozcClause>, context: String?) = Unit
-            })).use { core ->
+            CoreMozcCallbacks({
+                object : MozcBackend {
+                    override fun convert(reading: String, context: String?): List<MozcSegment>? = emptyList()
+                    override fun learn(clauses: List<MozcClause>, context: String?) = false
+                    override fun reading(text: String): String? = null
+                }
+            }) {}).use { core ->
             // Check the JSON contract and the JNI round-trip. Japanese conversion
             // also needs the Mozc callback and InputConnection integration.
             val field = ImeFieldFacts(before = "", after = "", composing = false)

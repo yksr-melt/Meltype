@@ -191,7 +191,7 @@ internal static class WindowsTests
         if (!File.Exists(helper)) return; // Mozc の変換ヘルパーが無い環境
         var profile = Path.Combine(Path.GetTempPath(), $"meltype-mozc-dispose-{Environment.ProcessId}");
         static int Helpers() => System.Diagnostics.Process.GetProcessesByName("meltype_mozc_helper").Length;
-        var mozc = new MozcConverter(helper, profile);
+        var mozc = new MozcConverter(new MozcHelperProcess(helper, profile));
         try
         {
             if (mozc.Convert("てすと") is null) return; // 起動できない環境

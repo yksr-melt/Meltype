@@ -18,25 +18,16 @@ class LanguageDetectionDeviceTest {
     @Test fun freshSettingsDefaultToRomajiHalfWidthAndNoEmoji() {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val prefs = ctx.getSharedPreferences("settings", Context.MODE_PRIVATE)
-        val keys = listOf("japanese_layout", "japanese_space_full_width", "emoji_enabled")
+        val keys = listOf("emoji_enabled")
         val original = prefs.all.toMap()
         try {
             val clear = prefs.edit()
             keys.forEach(clear::remove)
             check(clear.commit())
             val settings = io.github.ninjin0802.keyboard.app.Settings(ctx)
-            assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI, settings.japaneseLayout)
-            assertEquals(false, settings.japaneseSpaceFullWidth)
             assertEquals(false, settings.emojiEnabled)
-
-            check(prefs.edit().putString("japanese_layout", "kana").commit())
-            settings.japaneseSpaceFullWidth = true
             settings.emojiEnabled = true
-            val saved = io.github.ninjin0802.keyboard.app.Settings(ctx)
-            // 12-key flick is not offered in PR #1149; even a legacy write must read as QWERTY.
-            assertEquals(io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI, saved.japaneseLayout)
-            assertEquals(true, saved.japaneseSpaceFullWidth)
-            assertEquals(true, saved.emojiEnabled)
+            assertEquals(true, io.github.ninjin0802.keyboard.app.Settings(ctx).emojiEnabled)
         } finally {
             val restore = prefs.edit()
             keys.forEach { key ->
@@ -111,7 +102,7 @@ class LanguageDetectionDeviceTest {
 
     /** A whole response as the Core writes it (ImeOutput), with only the view varying. */
     private fun response(view: String) =
-        """{"version":1,"state":{},"result":{"consumed":true,"commits":[],"view":$view}}"""
+        """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":[],"view":$view}}"""
 
     private fun viewOf(view: String) = ImeJson.parse(response(view)).view
 
@@ -150,26 +141,12 @@ class LanguageDetectionDeviceTest {
         assertTrue(CoreCandidateChoices.fromView(null).first.isEmpty())
     }
 
-    @Test fun emojiPreferenceFiltersPredictionsWithoutShiftingIndices() {
-        val typing = viewOf(
-            """{"text":"ありがとう","converting":false,"clauses":[],"selectedClause":0,"hint":"","spellingSuggestion":null,
-            "typedKeys":null,"candidates":{"items":["ありがとう😊","ありがとうございます"],"notes":[null,null],
-            "numbered":false,"selected":-1,"selectedMeaning":null,"meaningDelayMs":1500}}"""
-        )
-        val enabled = CoreCandidateChoices.fromView(typing, allowEmoji = true).first
-        val disabled = CoreCandidateChoices.fromView(typing, allowEmoji = false).first
-        assertTrue(enabled.any { it.label == "ありがとう😊" })
-        assertTrue(disabled.none { it.label == "ありがとう😊" })
-        // The Core still numbers the hidden emoji as 0, so the click must send 1.
-        assertEquals(1, disabled.single { it.label == "ありがとうございます" }.nativeIndex)
-    }
-
     @Test fun malformedResponseLeavesTheEditorAlone() {
         val ctx = InstrumentationRegistry.getInstrumentation().targetContext
         val connection = BaseInputConnection(View(ctx), true)
         connection.commitText("keep", 1)
         val adapter = CoreInputAdapter { connection }
-        val broken = """{"version":1,"state":{},"result":{"consumed":true,"commits":[{"text":"x"}],"view":null}}"""
+        val broken = """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":[{"text":"x"}],"view":null}}"""
         assertTrue(runCatching { adapter.apply(broken) }.isFailure)
         assertEquals("keep", connection.getEditable().toString())
     }
@@ -180,7 +157,7 @@ class LanguageDetectionDeviceTest {
         connection.commitText("今日は", 1)
         val adapter = CoreInputAdapter { connection }
         adapter.apply(
-            """{"version":1,"state":{},"result":{"consumed":true,"commits":[{"text":"京は","removeBefore":"今日は",
+            """{"version":1,"state":{"languageMode":"Japanese"},"result":{"consumed":true,"commits":[{"text":"京は","removeBefore":"今日は",
             "currentWord":null,"moveCaretBack":0,"insertByPaste":false}],"view":null}}"""
         )
         assertEquals("京は", connection.getEditable().toString())

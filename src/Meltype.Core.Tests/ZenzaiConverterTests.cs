@@ -140,7 +140,7 @@ internal static class ZenzaiConverterTests
             ]);
             File.WriteAllText(Path.Combine(directory, "userdict.txt"), "おせわ\tお世話になっております\n");
             using var runtime = new MeltypeRuntime(directory);
-            using var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
+            using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile)));
             var hybrid = new HybridConverter(mozc);
 
             // 裏のスレッドで Mozc に聞き終えると、全部まとめて消す (予測変換の語句は最後に消す)
@@ -154,7 +154,7 @@ internal static class ZenzaiConverterTests
                 "壊れた答えと同じ語句を正しい読みで覚えたものは残す");
 
             // Mozc が答えないときは、Mozc の候補で作れるか分からないので消さない
-            using var missing = new MozcConverter(Path.Combine(directory, "missing-helper"), null);
+            using var missing = new MozcConverter(new MozcHelperProcess(Path.Combine(directory, "missing-helper"), null));
             Assert.True(new HybridConverter(missing).IsBuiltFromMozcCandidatesNow("きょうはで", "今日はでで") is null, "Mozc が無い");
         }
         finally { Directory.Delete(directory, recursive: true); }
@@ -165,7 +165,7 @@ internal static class ZenzaiConverterTests
     {
         // 偽の Mozc のヘルパーは、きずくのがはやい を 築くのが|早い で返し、文節ごとの候補に 気づくのが・速い もある。ほかの読みは読みのまま返す
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         using var server = new FakeServer
         {
             Answer = p => p.Contains("キズクノガハヤイ") ? "気づくのが早い" : p.Contains("ハードウェ") ? "ハードウェアウェアウェア" : p.Contains("ナマエ") ? "名前は魚の" : ReadingIn(p),
@@ -226,7 +226,7 @@ internal static class ZenzaiConverterTests
             },
         };
         var zenzai = new ZenzaiConverter(server.Endpoint);
-        var mozc = new MozcConverter(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile));
+        var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile)));
         var hybrid = new HybridConverter(mozc, () => zenzai);
         hybrid.Budget.Enable();
         var session = new MeltypeSession(CompositionTests.Detector, hybrid, new CompositionServices(), () => new Settings { LiveConversion = true });
@@ -452,7 +452,7 @@ internal static class ZenzaiConverterTests
     {
         // 偽の Mozc のヘルパーは、きしゃがきた を 記者が|来た の 2 文節で、文節ごとの候補も付けて返す
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         // ほかの読み (文節ごとの候補を作るときの きしゃが・きた など) は読みのまま返す。空を返すと失敗と数えられ、3 回で Zenzai を使わなくなる
         using var server = new FakeServer
         {

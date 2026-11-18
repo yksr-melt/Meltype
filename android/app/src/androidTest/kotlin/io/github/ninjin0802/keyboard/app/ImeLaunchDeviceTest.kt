@@ -203,8 +203,8 @@ class ImeLaunchDeviceTest {
         }
     }
 
-    /** A non-converting email editor still accepts literal keys if Japanese QWERTY is selected. */
-    @Test fun emailFieldAcceptsLiteralRomajiAfterLanguageSwitch() = withRomajiActivity { activity ->
+    /** An email editor starts alphanumeric (the Core decides from the Email trait); Japanese can still be selected there. */
+    @Test fun emailFieldStartsAlphanumericAndCanSwitchToJapanese() = withRomajiActivity { activity ->
         requestKeyboard(activity, activity.editor)
         waitUntil(
             "English QWERTY in email editor", millis = 45_000,
@@ -215,8 +215,7 @@ class ImeLaunchDeviceTest {
                 io.github.ninjin0802.keyboard.app.layout.LayoutId.QWERTY)
         }
 
-        // The space-bar language popup and this key action both use the same
-        // screen navigation. Avoid depending on long-press gesture timing.
+        // あa sends ModeToggleRequested to the Core. Avoid depending on long-press gesture timing.
         val service = KeyboardService.activeForSmokeTest?.get()
             ?: throw AssertionError("Keyboard service missing")
         instrumentation.runOnMainSync {
@@ -259,18 +258,15 @@ class ImeLaunchDeviceTest {
         val keyboard = KeyboardService.activeForSmokeTest?.get()?.activeKeysForSmokeTest()
             ?: throw AssertionError("Japanese keys not shown")
         tap(keyboard, "a") { it is KeyAction.Romaji && it.char == 'a' }
-        waitUntil("literal romaji key appears in email editor",
+        waitUntil("romaji key composes Japanese in email editor",
             describe = { describeImeState(activity) + ", text=" + activity.editor.text }) {
-            activity.editor.text.toString() == "a"
+            activity.editor.text.toString() == "あ"
         }
-        assertEquals("a", activity.editor.text.toString())
+        assertEquals("あ", activity.editor.text.toString())
     }
 
-    /** Runs [block] with the Japanese layout set to QWERTY romaji, the layout that goes through the native Core. */
+    /** Runs [block] in the smoke-test activity. */
     private fun withRomajiActivity(block: (ImeSmokeActivity) -> Unit) {
-        val settings = io.github.ninjin0802.keyboard.app.Settings(target)
-        val originalLayout = settings.japaneseLayout
-        settings.japaneseLayout = io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
         val activity = instrumentation.startActivitySync(
             Intent(target, ImeSmokeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         ) as ImeSmokeActivity
@@ -278,7 +274,6 @@ class ImeLaunchDeviceTest {
             block(activity)
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
-            settings.japaneseLayout = originalLayout
         }
     }
 
@@ -418,10 +413,10 @@ class ImeLaunchDeviceTest {
     }
 
     /**
-     * With the real converter: Space selects the last clause (as on the desktop), and a candidate
-     * tap chooses it for that clause and commits the whole sentence.
+     * With the real converter: Space selects the last clause (as on the desktop), a candidate tap chooses it for that
+     * clause, the Space-bar cursor gesture moves to the previous clause, and Enter commits the whole sentence.
      */
-    @Test fun candidateTapOnTheLastClauseCommitsTheSentence() = withRomajiActivity { activity ->
+    @Test fun candidateTapChoosesForTheClauseAndEnterCommits() = withRomajiActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)
@@ -433,6 +428,18 @@ class ImeLaunchDeviceTest {
         assertEquals("The last clause is not selected: $view", view.clauses.size - 1, view.selectedClause)
         val label = tapCandidateOtherThan(view.clauses.last())
         val expected = view.clauses.dropLast(1).joinToString("") + label
+        waitUntil("the candidate is chosen for the last clause", describe = { "view=" + coreView() }) {
+            coreView()?.text == expected
+        }
+        val service = KeyboardService.activeForSmokeTest?.get() ?: throw AssertionError("Keyboard service missing")
+        instrumentation.runOnMainSync {
+            assertTrue(service.onCursorModeStart())
+            service.onCursorMove(-1)
+        }
+        waitUntil("the cursor gesture selects the previous clause", describe = { "view=" + coreView() }) {
+            coreView()?.selectedClause == view.clauses.size - 2
+        }
+        instrumentation.runOnMainSync { service.onKey(KeyAction.Enter, Direction.TAP, SystemClock.uptimeMillis()) }
         waitUntil("the sentence is committed as chosen", describe = { "text=" + editor.text + " expected=" + expected }) {
             editor.text.toString() == expected &&
                 android.view.inputmethod.BaseInputConnection.getComposingSpanStart(editor.text) < 0
@@ -444,11 +451,6 @@ class ImeLaunchDeviceTest {
         assertEquals("The actual keyboard must be the system-selected default",
             expectedIme, Settings.Secure.getString(target.contentResolver,
                 Settings.Secure.DEFAULT_INPUT_METHOD))
-        // The Japanese check below must take the QWERTY romaji path, which is the
-        // only one that goes through the native Core.
-        val settings = io.github.ninjin0802.keyboard.app.Settings(target)
-        val originalLayout = settings.japaneseLayout
-        settings.japaneseLayout = io.github.ninjin0802.keyboard.app.layout.LayoutId.ROMAJI
         val activity = instrumentation.startActivitySync(
             Intent(target, ImeSmokeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         ) as ImeSmokeActivity
@@ -558,7 +560,6 @@ class ImeLaunchDeviceTest {
             assertTrue("Japanese romaji did not go through the native Core", native)
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
-            settings.japaneseLayout = originalLayout
         }
     }
 }

@@ -10,7 +10,6 @@ class ScreenCoordinatorTest {
     private val history = mutableListOf<String>()
     private var hasEmoji = true
     private val screens = ScreenCoordinator(nav, object : ScreenCoordinator.Screen {
-        override fun commitComposing() { history += "commit" }
         override fun showKeyboard() { history += "keyboard:${nav.current}" }
         override fun releaseShift() { history += "shift" }
         override fun showEmojiPanel(pressedAtMs: Long): Boolean {
@@ -20,19 +19,17 @@ class ScreenCoordinatorTest {
         }
     })
     private fun run(action: () -> Unit) = history.clear().let { action(); history.toList() }
-    @Test fun fieldChoosesQwertyOrSymbols() {
-        assertEquals(listOf("shift","keyboard:ROMAJI"), run { screens.fieldStarted(LayoutId.ROMAJI) })
-        assertEquals(listOf("shift","keyboard:QWERTY"), run { screens.fieldStarted(LayoutId.QWERTY) })
-        assertEquals(listOf("shift","keyboard:SYMBOLS"), run { screens.fieldStarted(LayoutId.SYMBOLS) })
+    @Test fun fieldChoosesLettersOrSymbols() {
+        assertEquals(listOf("shift","keyboard:ROMAJI"), run { screens.fieldStarted(symbols = false) })
+        assertEquals(listOf("shift","keyboard:SYMBOLS"), run { screens.fieldStarted(symbols = true) })
     }
-    @Test fun pageNavigationDoesNotCommitComposingText() {
-        screens.fieldStarted(LayoutId.ROMAJI)
-        assertEquals(listOf("shift","keyboard:QWERTY"), run { screens.language() })
+    @Test fun pageNavigationShowsTheKeyboard() {
+        screens.fieldStarted(symbols = false)
         assertEquals(listOf("shift","keyboard:SYMBOLS"), run { screens.switchTo(LayoutId.SYMBOLS) })
-        assertEquals(listOf("shift","keyboard:QWERTY"), run { screens.back() })
+        assertEquals(listOf("shift","keyboard:ROMAJI"), run { screens.back() })
     }
-    @Test fun emojiPanelCanReturnWithoutCommitting() {
-        screens.fieldStarted(LayoutId.ROMAJI)
+    @Test fun emojiPanelCanReturn() {
+        screens.fieldStarted(symbols = false)
         assertEquals(listOf("emoji:ROMAJI"), run { screens.openEmoji(10) })
         assertTrue(nav.emojiOpen)
         assertEquals(listOf("shift","keyboard:ROMAJI"), run { screens.switchTo(LayoutId.ROMAJI) })
@@ -40,7 +37,7 @@ class ScreenCoordinatorTest {
     }
     @Test fun missingEmojiPanelDoesNotChangeNavigation() {
         hasEmoji = false
-        screens.fieldStarted(LayoutId.QWERTY)
+        screens.fieldStarted(symbols = false)
         assertEquals(emptyList(), run { screens.openEmoji(10) })
         assertFalse(nav.emojiOpen)
     }

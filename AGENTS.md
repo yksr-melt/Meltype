@@ -17,7 +17,7 @@
 | Linux: fcitx5 | `linux/fcitx5/meltype.cpp` | `libMeltypeNative.so` を dlopen する |
 | Android | `android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/KeyboardService.kt`・`core/ImeJson.kt` (出来事と応答の JSON) | `src/Meltype.Core.CApi` を Android 向けにビルドした `libMeltypeNative.so` を JNI (`android/app/src/main/cpp/meltype_jni.cpp`) から呼ぶ |
 
-変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは、Mozc をアプリのプロセスで動かし、JNI のコールバックで Core に渡している (#1963)。
+変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは Mozc をアプリのプロセスで動かし、`meltype_mozc_helper` と同じ 1 行の要求を JNI のコールバック (`core/CoreMozcCallbacks.kt`) で答える。
 
 ## 暗黙知
 
