@@ -2,7 +2,6 @@
 // Copyright (C) 2026 KoheiTakada
 // Android JNI adapter for the Meltype.Native NativeAOT C ABI (meltype_ime_*).
 #include <jni.h>
-#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -13,8 +12,8 @@
 #include <vector>
 
 extern "C" {
-int meltype_android_init(unsigned char* (*clauses)(unsigned char*, unsigned char*),
-                 unsigned char* (*candidates)(unsigned char*));
+int meltype_android_init(unsigned char* (*mozc_request)(unsigned char*));
+void meltype_set_conversion_ready(void (*notify)());
 void* meltype_ime_create();
 unsigned char* meltype_ime_handle(void* host, unsigned char* json);
 void meltype_ime_destroy(void* host);
@@ -23,26 +22,21 @@ void meltype_free(unsigned char* ptr);
 
 namespace {
 std::mutex init_mutex;
-std::mutex handle_mutex;
 std::string data_dir;
 // MELTYPE_DATA_DIR/AppPaths are process-global. A failed Core init cannot safely be retried
 // with a different directory after the native runtime may have read the old one.
 bool init_attempted = false;
-// Core callbacks may execute on another JNI-attached thread. The result must be visible
-// to the thread waiting for meltype_ime_handle to finish.
-std::atomic<bool> callback_exception{false};
+// The Core calls these from its converter thread, which the JVM does not know.
 JavaVM* vm = nullptr;
 jobject callback_instance = nullptr;
-jmethodID clauses_method = nullptr;
-jmethodID candidates_method = nullptr;
+jmethodID request_method = nullptr;
+jmethodID ready_method = nullptr;
 
-// Never turn a Java/Kotlin converter exception into an apparently empty conversion.
-// Report the original stack, then signal the enclosing JNI handle call to fail.
+// A Kotlin exception becomes a failed request: the Core logs it and stops using Mozc after a few in a row.
 void describe_callback_exception(JNIEnv* env) {
     if (!env->ExceptionCheck()) return;
     env->ExceptionDescribe();
     env->ExceptionClear();
-    callback_exception.store(true);
 }
 
 struct CallbackEnvironment {
@@ -79,48 +73,30 @@ unsigned char* malloc_java_bytes(JNIEnv* env, jbyteArray result) {
     return buffer;
 }
 
-unsigned char* convert_clauses(unsigned char* reading, unsigned char* context) {
+// One Mozc helper request line in, one answer line out (native/mozc/meltype_mozc_helper.cc). NULL on failure.
+unsigned char* mozc_request(unsigned char* request) {
     CallbackEnvironment jni;
-    if (!jni.env || !callback_instance || !clauses_method) {
-        callback_exception.store(true);
-        return nullptr;
-    }
+    if (!jni.env || !callback_instance) return nullptr;
     auto* env = jni.env;
-    const auto r = new_utf8_array(env, reading);
-    const auto c = new_utf8_array(env, context);
+    const auto r = new_utf8_array(env, request);
     if (env->ExceptionCheck() || !r) {
         describe_callback_exception(env);
         if (r) env->DeleteLocalRef(r);
-        if (c) env->DeleteLocalRef(c);
         return nullptr;
     }
-    auto result = static_cast<jbyteArray>(env->CallObjectMethod(callback_instance, clauses_method, r, c));
-    auto* converted = malloc_java_bytes(env, result);
+    auto result = static_cast<jbyteArray>(env->CallObjectMethod(callback_instance, request_method, r));
+    auto* answer = malloc_java_bytes(env, result);
     if (result) env->DeleteLocalRef(result);
     env->DeleteLocalRef(r);
-    if (c) env->DeleteLocalRef(c);
-    return converted;
+    return answer;
 }
 
-unsigned char* convert_candidates(unsigned char* reading) {
+void conversion_ready() {
     CallbackEnvironment jni;
-    if (!jni.env || !callback_instance || !candidates_method) {
-        callback_exception.store(true);
-        return nullptr;
-    }
-    auto* env = jni.env;
-    const auto r = new_utf8_array(env, reading);
-    if (env->ExceptionCheck() || !r) {
-        describe_callback_exception(env); if (r) env->DeleteLocalRef(r);
-        return nullptr;
-    }
-    auto result = static_cast<jbyteArray>(env->CallObjectMethod(callback_instance, candidates_method, r));
-    auto* converted = malloc_java_bytes(env, result);
-    if (result) env->DeleteLocalRef(result);
-    env->DeleteLocalRef(r);
-    return converted;
+    if (!jni.env || !callback_instance) return;
+    jni.env->CallVoidMethod(callback_instance, ready_method);
+    describe_callback_exception(jni.env);
 }
-
 
 // Java Modified UTF-8 is not ordinary UTF-8 for NUL and supplementary planes.
 // Byte arrays preserve the exact UTF-8 bytes produced by Kotlin.
@@ -167,14 +143,14 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
     if (env->GetJavaVM(&vm) != JNI_OK) return JNI_FALSE;
     auto clazz = env->GetObjectClass(callbacks);
     if (!clazz) return JNI_FALSE;
-    clauses_method = env->GetMethodID(clazz, "clauses", "([B[B)[B");
-    if (env->ExceptionCheck() || !clauses_method) {
+    request_method = env->GetMethodID(clazz, "request", "([B)[B");
+    if (env->ExceptionCheck() || !request_method) {
         env->ExceptionClear();
         env->DeleteLocalRef(clazz);
         return JNI_FALSE;
     }
-    candidates_method = env->GetMethodID(clazz, "candidates", "([B)[B");
-    if (env->ExceptionCheck() || !candidates_method) {
+    ready_method = env->GetMethodID(clazz, "ready", "()V");
+    if (env->ExceptionCheck() || !ready_method) {
         env->ExceptionClear();
         env->DeleteLocalRef(clazz);
         return JNI_FALSE;
@@ -190,11 +166,12 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_init(
         callback_instance = nullptr;
         return JNI_FALSE;
     }
-    if (meltype_android_init(convert_clauses, convert_candidates) != 1) {
+    if (meltype_android_init(mozc_request) != 1) {
         env->DeleteGlobalRef(callback_instance);
         callback_instance = nullptr;
         return JNI_FALSE;
     }
+    meltype_set_conversion_ready(conversion_ready);
     data_dir = requested;
     return JNI_TRUE;
 }
@@ -220,13 +197,5 @@ Java_io_github_ninjin0802_keyboard_app_core_NativeApi_handle(
     if (!host || !event) return nullptr;
     auto json = read_utf8(env, event);
     if (env->ExceptionCheck()) return nullptr;
-    // A callback error belongs to this handle invocation, never to another concurrent call.
-    std::lock_guard<std::mutex> handle_guard(handle_mutex);
-    callback_exception.store(false);
-    auto* result = meltype_ime_handle(as_handle(host), json.data());
-    if (callback_exception.load()) {
-        if (result) meltype_free(result);
-        return nullptr; // Kotlin reports Core failure and offers the emergency IME picker.
-    }
-    return return_utf8(env, result);
+    return return_utf8(env, meltype_ime_handle(as_handle(host), json.data()));
 }

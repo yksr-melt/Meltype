@@ -7,41 +7,36 @@ import io.github.ninjin0802.keyboard.app.layout.LayoutNavigator
 import kotlin.test.*
 
 class LayoutNavigatorTest {
-    @Test fun japaneseQwertyIsDefaultAndLanguageToggles() {
+    @Test fun lettersFollowTheCoreLanguageMode() {
         val n = LayoutNavigator()
         assertEquals(LayoutId.ROMAJI, n.current)
-        n.toggleLanguage(); assertEquals(LayoutId.QWERTY, n.current)
-        n.toggleLanguage(); assertEquals(LayoutId.ROMAJI, n.current)
+        n.japanese = false; assertEquals(LayoutId.QWERTY, n.current)
+        n.japanese = true; assertEquals(LayoutId.ROMAJI, n.current)
     }
-    @Test fun emailAndNumberFieldsStartCorrectly() {
+    @Test fun numberFieldsStartWithSymbols() {
         val n = LayoutNavigator()
-        n.start(LayoutId.QWERTY); assertEquals(LayoutId.QWERTY, n.current)
-        n.start(LayoutId.SYMBOLS); assertEquals(LayoutId.SYMBOLS, n.current)
-        assertEquals(LayoutId.QWERTY, n.backTarget)
+        n.start(symbols = true); assertEquals(LayoutId.SYMBOLS, n.current)
+        n.start(symbols = false); assertEquals(LayoutId.ROMAJI, n.current)
     }
-    @Test fun symbolPagesReturnToPreviousLanguage() {
+    @Test fun symbolPagesReturnToTheLettersOfTheCurrentLanguage() {
         val n = LayoutNavigator()
-        for (from in listOf(LayoutId.ROMAJI, LayoutId.QWERTY)) {
-            n.start(from)
+        for (japanese in listOf(true, false)) {
+            n.japanese = japanese
+            n.start(symbols = false)
             n.switchTo(LayoutId.SYMBOLS)
             n.switchTo(LayoutId.SYMBOLS2)
-            assertEquals(from, n.backTarget)
+            assertEquals(LayoutId.SYMBOLS2, n.current)
             n.back()
-            assertEquals(from, n.current)
+            assertEquals(n.letters, n.current)
         }
     }
-    @Test fun emojiPanelDoesNotChangeTheSelectedLanguage() {
+    @Test fun emojiPanelKeepsThePage() {
         val n = LayoutNavigator()
-        n.start(LayoutId.QWERTY)
+        n.switchTo(LayoutId.SYMBOLS)
         n.openEmoji(); assertTrue(n.emojiOpen)
-        n.toggleLanguage(); assertEquals(LayoutId.QWERTY, n.current)
-        n.switchTo(LayoutId.QWERTY); assertFalse(n.emojiOpen)
-        assertEquals(LayoutId.QWERTY, n.current)
-    }
-    @Test fun invalidChoicesDoNotChangeSupportedLayouts() {
-        val n = LayoutNavigator(LayoutId.SYMBOLS, LayoutId.ROMAJI)
-        assertEquals(LayoutId.ROMAJI, n.current)
-        assertFalse(n.choose(LayoutId.QWERTY, LayoutId.ROMAJI))
-        assertEquals(LayoutId.ROMAJI, n.current)
+        n.back(); assertEquals(LayoutId.SYMBOLS, n.current)
+        n.switchTo(LayoutId.SYMBOLS); assertFalse(n.emojiOpen)
+        assertEquals(LayoutId.SYMBOLS, n.current)
+        n.openEmoji(); n.closeEmoji(); assertFalse(n.emojiOpen)
     }
 }
