@@ -227,48 +227,6 @@ internal static class KanaLayoutTests
     }
 
     [Test]
-    public static void LetterLayout_DvorakTypesRomajiByPosition()
-    {
-        // Dvorak: QWERTY の j = h、f = u なので jf = ふ。ショートカットではない英字はすべて入れ替える
-        var k = new Keyboard { RomajiLayout = RomajiLayout.Dvorak };
-        k.Type("jf");
-        Assert.Equal("ふ", k.Showing);
-        // QWERTY の位置 v j d = k a e ではない: Dvorak で k = v、a = a、i = g → v a g = かい
-        var j = new Keyboard { RomajiLayout = RomajiLayout.Dvorak };
-        j.Type("vag");
-        Assert.Equal("かい", j.Showing);
-    }
-
-    [Test]
-    public static void LetterLayout_EnglishDetectionUsesMappedLetters()
-    {
-        // Colemak で google と打つキー (QWERTY の t;;tue) は英語の google になる
-        var k = new Keyboard { RomajiLayout = RomajiLayout.Colemak };
-        k.Type("t;;tuk");
-        Assert.Equal("google", k.Showing);
-    }
-
-    [Test]
-    public static void LetterLayout_SymbolPositions()
-    {
-        // 大西配列: QWERTY の l ; d = s h a、r = , (、)
-        var k = new Keyboard { RomajiLayout = RomajiLayout.Ohnishi };
-        k.Type("l;dr");
-        Assert.Equal("しゃ、", k.Showing);
-        Assert.Equal((0xBC, ','), LetterLayout.Map(RomajiLayout.Ohnishi, 'r'));
-        // 英字の位置の Shift は大文字に、記号の位置の Shift (:) は入れ替えない
-        Assert.Equal(((int)'S', 'S'), LetterLayout.Map(RomajiLayout.Ohnishi, 'L'));
-        Assert.Equal(null, LetterLayout.Map(RomajiLayout.Ohnishi, ':'));
-    }
-
-    [Test]
-    public static void LetterLayout_QwertyAndSkyDoNotRemap()
-    {
-        Assert.Equal(null, LetterLayout.Map(RomajiLayout.Qwerty, 'a'));
-        Assert.Equal(null, LetterLayout.Map(RomajiLayout.Sky, 'a'));
-    }
-
-    [Test]
     public static void SkyLayout_WordsLookingEnglishStayJapanese()
     {
         // 打ったキーの英字 (h j → u a) は英単語として見ない

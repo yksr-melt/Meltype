@@ -302,24 +302,11 @@ public sealed partial class CompositionController
     private bool Handle(KeyPress key)
     {
         (_shift, _control, _modifier) = (key.Shift, key.Control, key.Modifier);
-        key = RemapLetterLayout(key);
         if (!IsComposing && !_kanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(key))) return false;
         _budget?.Start(InputBudgetMs);
         _pressed.Add(key.Vk);
         HandleKey(new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs));
         return true;
-    }
-
-    /// <summary>
-    /// ローマ字の配列が Dvorak などのとき、日本語入力中の英字のキーをその配列の文字にする。
-    /// 英数状態・ショートカット (Ctrl・Alt・Command) はアプリにそのまま届くキーなので入れ替えない。
-    /// </summary>
-    private KeyPress RemapLetterLayout(KeyPress key)
-    {
-        var layout = _settings().RomajiLayout;
-        if (!LetterLayout.Remaps(layout) || KanaInput || key.Control || key.Modifier || _services.DirectMode()) return key;
-        if (key.Ch is not { } ch || LetterLayout.Map(layout, ch) is not { } mapped) return key;
-        return key with { Vk = mapped.Vk == 0 ? key.Vk : mapped.Vk, Ch = mapped.Ch };
     }
 
     /// <summary>変換ボックスを開くキーか。変換キーは選んだ文字の再変換、親指シフトのかな配列の 無変換・変換 は親指キー。</summary>

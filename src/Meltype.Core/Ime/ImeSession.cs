@@ -365,6 +365,7 @@ internal sealed class ImeSession
     private SessionResult HandleKey(ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet,
         ref bool explicitChange)
     {
+        key = LetterLayout.Apply(key, settings, _session.Direct);
         var composing = _session.IsComposing;
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
