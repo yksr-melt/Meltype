@@ -26,7 +26,6 @@ internal sealed class ImeSession
 {
     private readonly IImeEnvironment _environment;
     private readonly Func<Settings> _source;
-    private readonly MeltypeSession _session;
     private ImeField? _field;
     private Settings _settings;
     // 直前に入れた定型文 (すぐに Esc を押したら、打った ;名前 に戻す)
@@ -37,7 +36,12 @@ internal sealed class ImeSession
         _environment = environment;
         _source = settings;
         _settings = settings();
-        _session = new MeltypeSession(parts, () => _settings) { ClipboardText = () => environment.ClipboardText };
+        _parts = parts;
+        _timeMs = parts.TimeMs;
+        _userDictionary = parts.Services.UserDictionary;
+        _userDictionary?.Refresh();
+        _userDictionaryCheckedMs = _timeMs();
+        _composition = CompositionController.Create(parts.Detector, () => _settings, parts.Services);
     }
 
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>
@@ -46,10 +50,10 @@ internal sealed class ImeSession
     public void Close(ImeField? field = null)
     {
         field ??= _field;
-        if (!_session.IsComposing || IsPassword(field)) return;
+        if (!IsComposing || IsPassword(field)) return;
         _settings = _source().ForApp(field?.App);
-        _session.Private = ForbidsLearning(field);
-        _session.CommitPending();
+        Private = ForbidsLearning(field);
+        CommitPending();
     }
 
     private static bool IsPassword(ImeField? field) => field?.Traits.Contains(ImeTrait.Password) == true;
@@ -83,12 +87,12 @@ internal sealed class ImeSession
     public ImeOutput Handle(ImeEvent e, long rev)
     {
         var field = e.Field ?? _field;
-        _session.Private = ForbidsLearning(field);
+        Private = ForbidsLearning(field);
         if (IsPassword(field))
         {
             if (!IsPassword(_field))
             {
-                _session.CancelPending();
+                CancelPending();
                 _lastSnippet = null;
                 _snippetKeys = [];
                 _listedPredictions = false;
@@ -99,8 +103,8 @@ internal sealed class ImeSession
                 // 秘密欄の周辺文字列や選択範囲をセッションに残さない。
                 _field = new ImeField { Traits = [ImeTrait.Password] };
             }
-            if (e.ImeOpen is { } open) _session.Direct = !open;
-            return new(InitialState(false, !_session.Direct, _settings, game: false, entered: false, rev), Pass);
+            if (e.ImeOpen is { } open) Direct = !open;
+            return new(InitialState(false, !Direct, _settings, game: false, entered: false, rev), Pass);
         }
         _field = field;
         var all = _source();
@@ -112,34 +116,34 @@ internal sealed class ImeSession
         ApplyFacts(e, settings);
         // ゲームに入ったら英数にする (IsGame)
         var game = IsGame(all, _field);
-        if (game && !_game) _session.Direct = true;
+        if (game && !_game) Direct = true;
         _game = game;
         var before = LineBefore(e.Field);
         var wasJapanese = ShowsJapanese(before);
         var explicitChange = false;
-        var composing = _session.IsComposing;
+        var composing = IsComposing;
         var result = WithPaste(Verify(e.Type switch
         {
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(),
             ImeEventType.KeyReleased when active && e.Key is { Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } alt => AltReleased(alt, before, settings, ref explicitChange),
             ImeEventType.KeyReleased when active && e.Key is { } released =>
-                _session.HandleKeyUp(ToggleShortcut.NormalizeHankakuKey(released.Vk), before, e.Field?.After),
+                HandleKeyUp(ToggleShortcut.NormalizeHankakuKey(released.Vk), before, e.Field?.After),
             ImeEventType.ModeToggleRequested when active => Switch(!wasJapanese, before, ref explicitChange, toggle: true),
             ImeEventType.JapaneseModeSelected when active => Switch(true, before, ref explicitChange, toggle: false),
             ImeEventType.AlphanumericModeSelected when active => Switch(false, before, ref explicitChange, toggle: false),
-            ImeEventType.CommitRequested => _session.CommitPending(),
+            ImeEventType.CommitRequested => CommitPending(),
             ImeEventType.CommittedByApp => CommittedOutside(e.Field),
             // 番号は前の応答の一覧 (変換の候補か予測変換の候補か) で読む
-            ImeEventType.CandidateClicked when _listedPredictions => _session.SelectPrediction(e.Index),
-            ImeEventType.CandidateHighlighted when _listedPredictions => _session.Unchanged(),
-            ImeEventType.CandidateClicked or ImeEventType.CandidateHighlighted => _session.SelectCandidate(e.Index),
-            ImeEventType.ConversionFinished when active => _session.RefreshConversion() ?? _session.Unchanged(),
+            ImeEventType.CandidateClicked when _listedPredictions => SelectPrediction(e.Index),
+            ImeEventType.CandidateHighlighted when _listedPredictions => Unchanged(),
+            ImeEventType.CandidateClicked or ImeEventType.CandidateHighlighted => SelectCandidate(e.Index),
+            ImeEventType.ConversionFinished when active => RefreshConversion() ?? Unchanged(),
             // view が null だと、フロントは変換中の表示を消す。表示を変えない出来事は今の表示を返す
-            _ => _session.Unchanged(),
+            _ => Unchanged(),
         }, e.Field), settings);
         // ゲームでは、Enter で確定・Esc で取り消したら英数に戻す。ゲーム (Minecraft 26.2 までの GLFW など) はチャットを閉じたことを知らせてこないので、
         // 日本語のままだと閉じたあとの移動のキー (WASD) が変換中の文字になる。チャットを送る・閉じる前の Enter・Esc を区切りにする
-        if (game && composing && !_session.IsComposing && e.Key?.Vk is VirtualKeys.Return or VirtualKeys.Escape) _session.Direct = true;
+        if (game && composing && !IsComposing && e.Key?.Vk is VirtualKeys.Return or VirtualKeys.Escape) Direct = true;
         TrackLine(e, result);
         _snippetKeys = SnippetKeys(e, result, settings);
         // キーでアプリの文字が変わったあとの位置は、フロントが次の出来事 (caret) で知らせる
@@ -150,10 +154,10 @@ internal sealed class ImeSession
         return new(new ImeState
         {
             HandlesInput = active,
-            ImeOpen = !_session.Direct,
+            ImeOpen = !Direct,
             LanguageMode = active && japanese ? ImeLanguageMode.Japanese : ImeLanguageMode.Alphanumeric,
             ModeIndicatorMs = active && indicate && result.View is null ? ModeIndicatorMs : 0,
-            Capture = Capture(active, _session.Direct, _session.DirectEnglishWord, settings, game, _session.ComposingControlKeys(), _snippetKeys),
+            Capture = Capture(active, Direct, DirectEnglishWord, settings, game, ComposingControlKeys(), _snippetKeys),
             Revision = rev,
         }, result);
     }
@@ -196,7 +200,7 @@ internal sealed class ImeSession
         if (notAlone is not null)
         {
             Diagnostics.Log.Decision($"{side} Alt: 単独押しにしません ({notAlone})");
-            return _session.PassThrough();
+            return PassThrough();
         }
         Diagnostics.Log.Decision($"{side} Alt の単独押しで{(vk == VirtualKeys.RMenu ? "日本語" : "英数")}にします");
         return Switch(vk == VirtualKeys.RMenu, before, ref explicitChange, toggle: false);
@@ -211,7 +215,7 @@ internal sealed class ImeSession
     /// </summary>
     private List<int> SnippetKeys(ImeEvent e, SessionResult result, Settings settings)
     {
-        if (_session.IsComposing) return [];
+        if (IsComposing) return [];
         var before = Before(e.Field);
         if (e.Type == ImeEventType.KeyPressed && !result.Consumed && e.Key is { Ch: > 0 and < 0x10000 } key) before += (char)key.Ch;
         var keys = new List<int>();
@@ -255,33 +259,33 @@ internal sealed class ImeSession
     private void ApplyFacts(ImeEvent e, Settings settings)
     {
         // OS の IME の開閉が変わった (アプリ・Windows が変えた・ほかのフロントの操作): 本体のモードを合わせる
-        if (e.ImeOpen is { } open && _session.Direct == open)
+        if (e.ImeOpen is { } open && Direct == open)
         {
-            _session.Direct = !open;
-            _session.ForgetDirectInput();
+            Direct = !open;
+            ForgetDirectInput();
         }
         if (e.Caret is { } caret)
         {
             if (caret.Moved)
             {
-                _session.ForgetLastCommit();
-                _session.ForgetDirectInput();
+                ForgetLastCommit();
+                ForgetDirectInput();
             }
-            if (caret.PassedKey is { } vk) _session.CaretMoved(vk, caret.Ctrl);
+            if (caret.PassedKey is { } vk) CaretMoved(vk, caret.Ctrl);
             // 入力欄を出入りした (入った知らせだけで、出た知らせが来ないこともある)
-            if (caret.FocusLeft || caret.FocusEntered) _session.ForgetCodeLine();
+            if (caret.FocusLeft || caret.FocusEntered) ForgetCodeLine();
         }
         if (e.Field is not { } field) return;
-        _session.CanDeleteSurrounding = field.CanRemove;
-        _session.Selection = field.Selection;
+        CanDeleteSurrounding = field.CanRemove;
+        Selection = field.Selection;
         if (CodeFocusOf(field, settings) is { } focus)
         {
             var code = focus != CodeFocus.None;
-            if (_session.CodeInput != code) _session.CodeInput = code;
-            _session.CodeTerminal = focus == CodeFocus.Terminal;
+            if (CodeInput != code) CodeInput = code;
+            CodeTerminal = focus == CodeFocus.Terminal;
         }
         // コードの入力欄でキャレットの前を読めないと、コードの行として英数にする。読めない入力欄を調べられるように、変わったときだけ書く
-        var unreadable = _session.CodeInput && field.Before is null;
+        var unreadable = CodeInput && field.Before is null;
         if (unreadable != _unreadableCode)
         {
             _unreadableCode = unreadable;
@@ -307,7 +311,7 @@ internal sealed class ImeSession
     }
 
     private string? Before(ImeField? field) =>
-        field?.Before is { Length: > ContextLength } before && !_session.CodeInput ? before[^ContextLength..] : field?.Before;
+        field?.Before is { Length: > ContextLength } before && !CodeInput ? before[^ContextLength..] : field?.Before;
 
     // ==== ワークアラウンド: ターミナルがキャレットの前の文字を渡さないことへの対処 (#1687) ====
     // 本体は判断を事実だけでするのが原則で、打ったキーから入力欄の中身を推測するのはこの 1 か所だけの例外。
@@ -321,7 +325,7 @@ internal sealed class ImeSession
     /// <see cref="_line"/> を使う (ワークアラウンド)。定型文・確定し直しは本物の文字が要るので、<see cref="Before"/> を使う。
     /// </summary>
     private string? LineBefore(ImeField? field) =>
-        _session.CodeInput && field is { } f && (f.Before is null || f.Before.Length == 0 && _session.CodeTerminal) ? _line.ToString() : Before(field);
+        CodeInput && field is { } f && (f.Before is null || f.Before.Length == 0 && CodeTerminal) ? _line.ToString() : Before(field);
 
     // ワークアラウンド: この入力欄の今の行のうち、本体が知っている文字 (通したキーの文字と確定した文字)。
     // キャレットが打つ以外で動いたら、空 (作ったときと同じ状態) に戻す
@@ -364,7 +368,7 @@ internal sealed class ImeSession
     private SessionResult HandleKey(ImeKey key, ImeField? field, string? before, Settings settings, (string Text, string Typed)? lastSnippet,
         ref bool explicitChange)
     {
-        var composing = _session.IsComposing;
+        var composing = IsComposing;
         var modifiers = Modifiers(key);
         var plain = modifiers == ShortcutModifiers.None;
         var vk = key.Vk != 0 ? ToggleShortcut.NormalizeHankakuKey(key.Vk) : VirtualKeyOf(key.Ch);
@@ -372,21 +376,21 @@ internal sealed class ImeSession
         if (vk is VirtualKeys.LMenu or VirtualKeys.RMenu)
         {
             AltPressed(key, vk);
-            return _session.PassThrough();
+            return PassThrough();
         }
         var toggle = settings.EffectiveToggleShortcuts.Any(shortcut => shortcut.Matches(vk, modifiers));
         // 押しっぱなしで、入力モードを何度も切り替えない
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
         if (toggle && !composing) return Switch(!ShowsJapanese(before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
-        if (toggle && !_session.IsConverting) return _session.HandleKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
+        if (toggle && !IsConverting) return ComposeKey(VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
         // ロックのキーは文字を入れないので、打ちかけに触らずにアプリに通す (切り替えキーに登録したものは、上で切り替えに使った)
-        if (IsLockKey(vk)) return _session.PassThrough();
+        if (IsLockKey(vk)) return PassThrough();
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
         if (vk == VirtualKeys.OemAttn && plain) return Switch(false, before, ref explicitChange, toggle: false);
         if (vk is VirtualKeys.Kana or VirtualKeys.Convert or VirtualKeys.NonConvert && plain)
         {
-            if (_session.HandleRoleKey(vk) is { } role) return role;
+            if (HandleRoleKey(vk) is { } role) return role;
             // 入力中の無変換は、英数キーと同じく確定してから英数にする。入力中の変換・かなは変換ボックスのキー
             var switches = composing ? vk == VirtualKeys.NonConvert : !(vk == VirtualKeys.Convert && ShowsJapanese(before) && field?.Selection is { Length: > 0 });
             if (switches && !IsThumbKey(vk, settings))
@@ -399,21 +403,21 @@ internal sealed class ImeSession
         if (key.Text is { Length: > 0 } text && Rune.DecodeFromUtf16(text, out var first, out _) == System.Buffers.OperationStatus.Done)
         {
             return Rune.GetUnicodeCategory(first) is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark
-                ? _session.CommitCombiningForPassThrough(preserveLatinRaw: first.Value is >= 0x0300 and <= 0x036F)
-                : _session.CommitForPassThrough();
+                ? CommitCombiningForPassThrough(preserveLatinRaw: first.Value is >= 0x0300 and <= 0x036F)
+                : CommitForPassThrough();
         }
         // 不正な Unicode (負数・単独サロゲート・上限超過) は、状態を変えずにアプリへそのまま渡す
-        if (key.Ch != 0 && !Rune.IsValid(key.Ch)) return _session.PassThrough();
+        if (key.Ch != 0 && !Rune.IsValid(key.Ch)) return PassThrough();
         // 結合文字は、未確定の表示に取り込まず、直前の内容を確定してからアプリに通す。
         // U+0300..036F の Latin アクセントのみ ASCII 英字の原文を優先する (濁点・異体字セレクターでは、日本語の表示や選んだ候補をそのまま確定する)
         if (key.Ch != 0 && Rune.GetUnicodeCategory(new Rune(key.Ch)) is UnicodeCategory.NonSpacingMark or
             UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark)
-            return _session.CommitCombiningForPassThrough(preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
+            return CommitCombiningForPassThrough(preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
-        if (key.Ch >= 0x10000) return _session.CommitForPassThrough();
-        var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After, key.ReleaseFollows);
+        if (key.Ch >= 0x10000) return CommitForPassThrough();
+        var result = ComposeKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
-        if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
+        if (!result.Consumed) CaretMoved(vk, key.Ctrl);
         return result;
     }
 
@@ -422,7 +426,7 @@ internal sealed class ImeSession
 
     /// <summary>親指シフトのかな配列 (NICOLA・中指NICOLA・TRON) の親指キー (無変換・変換)。変換ボックスで受け取り、文字に使わずに離したらもとの働きをする。</summary>
     private bool IsThumbKey(int vk, Settings settings) =>
-        settings.InputStyle == InputStyle.Kana && !_session.Direct && vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
+        settings.InputStyle == InputStyle.Kana && !Direct && vk is VirtualKeys.Convert or VirtualKeys.NonConvert &&
         settings.KanaLayout is KanaLayout.Nicola or KanaLayout.NakayubiNicola or KanaLayout.Tron;
 
     /// <summary>
@@ -440,11 +444,11 @@ internal sealed class ImeSession
             _lastSnippet = (text, typed);
             return new SessionResult(true, [new TextEdit(typed.Length, text, typed)], null);
         }
-        return key.Ch is > 0 and < 0x10000 && SnippetTrigger.PassesThrough(settings.SnippetMark, before, (char)key.Ch) ? _session.PassThrough() : null;
+        return key.Ch is > 0 and < 0x10000 && SnippetTrigger.PassesThrough(settings.SnippetMark, before, (char)key.Ch) ? PassThrough() : null;
     }
 
     private bool SnippetUsable([NotNullWhen(true)] string? before, Settings settings) =>
-        before is not null && _session.CanDeleteSurrounding && settings.SnippetMark is [_] && settings.InputStyle != InputStyle.Kana && _environment.Snippets.Count > 0;
+        before is not null && CanDeleteSurrounding && settings.SnippetMark is [_] && settings.InputStyle != InputStyle.Kana && _environment.Snippets.Count > 0;
 
     /// <summary>文字を入力するキーの仮想キーコード。特別な扱いのない文字 (記号など) は 0x07 (本体は文字だけを見る)。</summary>
     private static int VirtualKeyOf(int ch) => ch switch
@@ -473,7 +477,7 @@ internal sealed class ImeSession
         {
             var verified = edit.DeleteBefore == 0 ||
                 before is not null && edit.Expect is { } expect && expect.Length == edit.DeleteBefore && before.EndsWith(expect, StringComparison.Ordinal) &&
-                _session.CanDeleteSurrounding && !(field?.Composing == true && edit.Current is null);
+                CanDeleteSurrounding && !(field?.Composing == true && edit.Current is null);
             var applied = verified ? edit : edit with { DeleteBefore = 0, Text = edit.Current ?? edit.Text, Expect = null, Current = null };
             if (!verified) Diagnostics.Log.Decision("確定し直す文字がキャレットの前に無いので、前の文字を消しません");
             before = before is null ? null : before[..^applied.DeleteBefore] + applied.Text;
@@ -496,9 +500,9 @@ internal sealed class ImeSession
     /// <summary>OS が変換中の文字を表示のまま確定した: 本体も確定したことにする。文字はもう入っているので、確定し直しも入れない。</summary>
     private SessionResult CommittedOutside(ImeField? field)
     {
-        _session.CanDeleteSurrounding = false;
-        _session.CommitPending();
-        _session.CanDeleteSurrounding = field?.CanRemove ?? true;
+        CanDeleteSurrounding = false;
+        CommitPending();
+        CanDeleteSurrounding = field?.CanRemove ?? true;
         return Consumed;
     }
 
@@ -510,24 +514,24 @@ internal sealed class ImeSession
     private SessionResult Switch(bool japanese, string? before, ref bool explicitChange, bool toggle)
     {
         explicitChange = true;
-        var result = _session.IsComposing ? _session.CommitPending() : Consumed;
+        var result = IsComposing ? CommitPending() : Consumed;
         if (japanese)
         {
-            _session.Direct = false;
-            if (_session.CodeEnglishAt(before)) _session.SetCodeLine(true, before);
+            Direct = false;
+            if (CodeEnglishAt(before)) SetCodeLine(true, before);
         }
         else
         {
-            var codeLineReset = _session.SetCodeLine(false, before);
-            if (!toggle || !codeLineReset) _session.Direct = true;
+            var codeLineReset = SetCodeLine(false, before);
+            if (!toggle || !codeLineReset) Direct = true;
         }
         return result;
     }
 
     /// <summary>受け持たなくなった (一時停止・動作モードの変更): 変換中の内容は確定して、キーはアプリに通す。</summary>
-    private SessionResult Leave() => _session.IsComposing ? _session.CommitPending() with { Consumed = false } : Pass;
+    private SessionResult Leave() => IsComposing ? CommitPending() with { Consumed = false } : Pass;
 
-    private bool ShowsJapanese(string? before) => !_session.Direct && !_session.CodeEnglishAt(before);
+    private bool ShowsJapanese(string? before) => !Direct && !CodeEnglishAt(before);
 
     private static ShortcutModifiers Modifiers(ImeKey key) =>
         (key.Shift ? ShortcutModifiers.Shift : 0) | (key.Ctrl ? ShortcutModifiers.Control : 0) |
@@ -569,4 +573,311 @@ internal sealed class ImeSession
     private static SessionResult Pass => new(false, [], null);
 
     private static SessionResult Consumed => new(true, [], null);
+
+    // ---- 変換ボックスへの入力 (コードの行・/command・英数状態) ----
+
+    private readonly CompositionState _composition;
+    private readonly SessionParts _parts;
+    private readonly Func<long> _timeMs;
+    private readonly UserDictionary? _userDictionary;
+    private const long UserDictionaryCheckMs = 1000;
+    private long _userDictionaryCheckedMs;
+
+    /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
+    private CompositionEnv Env => new(_parts.Detector, _parts.Converter, _parts.Services, _settings)
+    {
+        ReadingOf = _parts.ReadingOf,
+        ClassifyDirect = _parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, _settings) : null,
+        NowMs = _timeMs(),
+        Clipboard = () => _environment.ClipboardText,
+        NowPlaying = _parts.NowPlaying,
+        Corrected = _parts.Corrected,
+    };
+
+    /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
+    public bool Direct
+    {
+        get => _composition.Direct;
+        set => CompositionController.SetDirect(_composition, value);
+    }
+
+    public bool DirectEnglishWord => _composition.DirectEnglishWord;
+
+    /// <summary>入力を覚えないように求める入力欄か。その欄で扱った未確定入力は、欄を離れて確定しても学習しない。</summary>
+    public bool Private
+    {
+        get => CompositionController.Private(_composition);
+        set => CompositionController.SetPrivate(_composition, value);
+    }
+
+    /// <summary>
+    /// コードの入力欄ではコメント・文字列以外を直接入力する。コメント・文字列の中かは、フロントが渡すキャレットの前の文字 (before) だけで決め、
+    /// 打ったキーから行を追いかけない。
+    /// </summary>
+    private bool _codeInput;
+    public bool CodeInput
+    {
+        get => _codeInput;
+        set
+        {
+            _codeInput = value;
+            _codeJapanese = false;
+        }
+    }
+
+    /// <summary>コードの入力欄がターミナルか。</summary>
+    public bool CodeTerminal
+    {
+        get => _codeTerminal;
+        set
+        {
+            // エディターとターミナルを行き来した (VS Code など、同じ入力の本体のまま): 日本語にしていたら英数に戻す
+            if (_codeTerminal != value) _codeJapanese = false;
+            _codeTerminal = value;
+        }
+    }
+    private bool _codeTerminal;
+
+    // 半角/全角 で、コードの行でも日本語にしている (改行しても続ける。Meltype キーボードと同じ)
+    private bool _codeJapanese;
+
+    /// <summary>
+    /// コードの入力欄で、コードの行を日本語にする (japanese) / 英数に戻す。半角/全角 を押したとき。
+    /// コードの行 (コメント・文字列の外) を日本語にしたとき、日本語にしていたのを英数に戻したときに true。
+    /// コメント・文字列の中、コードの入力欄でないときは何もせずに false (IME の ON/OFF を切り替える)。
+    /// </summary>
+    public bool SetCodeLine(bool japanese, string? before)
+    {
+        if (!CodeInput || Direct || CompositionController.IsComposing(_composition)) return false;
+        if (!japanese)
+        {
+            if (!_codeJapanese) return false;
+            _codeJapanese = false;
+            Diagnostics.Log.Info("コードの行: 英数に戻す");
+            return true;
+        }
+        if (_codeJapanese || CodeLineKind(before) != LineKind.Code) return false;
+        _codeJapanese = true;
+        Diagnostics.Log.Info("コードの行: 日本語で入力 (改行しても続ける。キャレットが別の場所に移るか、もう一度押すまで)");
+        return true;
+    }
+
+    /// <summary>
+    /// 次に打つキーが、コードの行なので英数のままアプリに通るか (入力モードの表示に使う)。
+    /// before はキャレットの前。
+    /// </summary>
+    public bool CodeEnglishAt(string? before)
+    {
+        if (!CodeInput || Direct || CompositionController.IsComposing(_composition)) return false;
+        return !_codeJapanese && CodeLineKind(before) == LineKind.Code;
+    }
+
+    /// <summary>
+    /// キャレットが動いた (passedVk はアプリに通したキー。0 ならクリックなど、control は Ctrl を押していたか)。
+    /// 半角/全角 で日本語にしていたら、矢印・Tab・Ctrl の操作・クリックで英数に戻す (Meltype キーボードと同じ。改行では戻さない)。
+    /// アプリに通した Esc (vim などの操作に移る) でも戻す。ターミナルは、出力でもキャレットが動くので、キーなしの移動では戻さない。
+    /// </summary>
+    public void CaretMoved(int passedVk, bool control)
+    {
+        if (!_codeJapanese) return;
+        var moved = control || passedVk is VirtualKeys.Tab or VirtualKeys.Escape or (>= 0x21 and <= 0x28) or 0x2E || !CodeTerminal && passedVk == 0;
+        if (moved) ForgetCodeLine();
+    }
+
+    /// <summary>コードの行を日本語にしていたのをやめる (キャレットが別の場所に移った・フォーカスが外れた)。</summary>
+    public void ForgetCodeLine()
+    {
+        if (!_codeJapanese) return;
+        _codeJapanese = false;
+        Diagnostics.Log.Info("コードの行: キャレットが別の場所に移ったので英数に戻す");
+    }
+
+    /// <summary>キャレットの位置の種類。キャレットの前が分からない入力欄 (周辺文字列を返さないターミナル) はコードの行とする (日本語にするには SetCodeLine)。</summary>
+    private static LineKind CodeLineKind(string? before) => before is null ? LineKind.Code : LineContext.ClassifyText(before);
+
+    /// <summary>入力欄が確定済みの文字の削除に対応しているか (Linux の IBus では、対応していないアプリがある)。false なら確定し直さない。</summary>
+    public bool CanDeleteSurrounding
+    {
+        get => _composition.CanDeleteBackward;
+        set => _composition.CanDeleteBackward = value;
+    }
+
+    /// <summary>変換ボックスに何か入っているか。</summary>
+    public bool IsComposing => CompositionController.IsComposing(_composition);
+
+    /// <summary>変換して候補を選んでいるか。</summary>
+    public bool IsConverting => CompositionController.IsConverting(_composition);
+
+    /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
+    public IReadOnlyList<int> ComposingControlKeys() => CompositionController.ComposingControlKeys(_composition, Env);
+
+    /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
+    public string? Selection
+    {
+        get => _composition.Selection;
+        set => _composition.Selection = value;
+    }
+
+
+    /// <summary>
+    /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
+    /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
+    /// </summary>
+    /// <param name="releaseFollows">ワークアラウンド (ImeEventType.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
+    public SessionResult ComposeKey(int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
+        bool releaseFollows = false)
+    {
+        // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
+        // 変換中の before は、変換中の文字より前 (フロントが渡す)
+        if (CodeInput && !Direct && !control && !alt && !command &&
+            ch is '"' or '\'' or '`' && before is { } line &&
+            LineContext.ClassifyText(line) == LineKind.String &&
+            LineContext.ClassifyText(line + ch) == LineKind.Code)
+        {
+            var committed = CompositionController.IsComposing(_composition) ? CommitPending() : new SessionResult(false, [], null);
+            return committed with { Consumed = false };
+        }
+        var now = _timeMs();
+        // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
+        var modifier = control || alt || command;
+        var settings = _settings;
+        if (Direct && _composition.DirectEnglishWord &&
+            (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
+             before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
+            _composition.DirectEnglishWord = false;
+        if ((Direct && (!settings.DirectModeAutoDetect || _composition.DirectEnglishWord)) || !settings.Enabled)
+        {
+            return CompositionController.Pass(_composition, Env, now);
+        }
+        // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
+        // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
+        if (!modifier && !CompositionController.IsComposing(_composition) && ch is '/' && !PassesSlash(before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(before, '/'))
+        {
+            CompositionController.MarkSlashAtStart(_composition);
+        }
+        else if (!modifier && !CompositionController.IsComposing(_composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        {
+            return CompositionController.Pass(_composition, Env, now);
+        }
+        if (CodeInput && !_codeJapanese && !CompositionController.IsComposing(_composition) && CodeLineKind(before) == LineKind.Code)
+        {
+            return CompositionController.Pass(_composition, Env, now);
+        }
+        // 入力欄を作り直さないフロント (Meltype キーボード) でも、外で変えたユーザー辞書を使う
+        if (!CompositionController.IsComposing(_composition) && now - _userDictionaryCheckedMs >= UserDictionaryCheckMs)
+        {
+            _userDictionaryCheckedMs = now;
+            _userDictionary?.Refresh();
+        }
+        var result = CompositionController.Press(_composition, Env, new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
+        // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
+        // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
+        if (!result.Consumed && !CompositionController.IsComposing(_composition)) ForgetLastCommit();
+        return result;
+    }
+
+    /// <summary>
+    /// ワークアラウンド (ImeEventType.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
+    /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
+    /// </summary>
+    public SessionResult HandleKeyUp(int vk, string? before, string? after)
+    {
+        return CompositionController.Release(_composition, Env, vk, before, after);
+    }
+
+    /// <summary>
+    /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON (無変換は「無変換でカタカナを切り替える」が ON でもよい) で入力中なら、変換ボックスで処理する (issue #199)。
+    /// そうでなければ null (ImeSession が英数 / 日本語の切り替えに使う)。
+    /// </summary>
+    public SessionResult? HandleRoleKey(int vk)
+    {
+        if (vk is not (VirtualKeys.Convert or VirtualKeys.NonConvert or VirtualKeys.Kana)) return null;
+        // 無変換でのカタカナ切り替えは、役割を分ける設定が OFF でも働く (CompositionController 側で NonConvertCyclesKana を見る)
+        var settings = _settings;
+        if (!(settings.SeparateKeyRoles || vk == VirtualKeys.NonConvert && settings.NonConvertCyclesKana)) return null;
+        if (!CompositionController.IsComposing(_composition) || Direct) return null;
+        return ComposeKey(vk, null, false, false, false, false);
+    }
+
+    /// <summary>
+    /// 打ち始めの / を、・ にせずそのままアプリへ渡すか。コードの入力欄で、キャレットがコードの中か、
+    /// ターミナルの AI の入力行 (Claude Code・Codex の /command を打つ所) にあるとき。
+    /// コメント・文字列の中は ・ にする (Meltype キーボードと同じ)。
+    /// </summary>
+    private bool PassesSlash(string? before) =>
+        CodeInput && !_codeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
+
+
+
+    /// <summary>
+    /// このセッションの外でキャレットが動いた (OS の IME がアプリに通したキー・クリック・別の入力欄に移った) とき。
+    /// 前に確定した語を、次の語の文脈で確定し直さないようにする。
+    /// </summary>
+    public void ForgetLastCommit()
+    {
+        CompositionController.ForgetLastCommit(_composition);
+    }
+
+    public void ForgetDirectInput()
+    {
+        _composition.DirectEnglishWord = false;
+        CompositionController.AbandonDirectHold(_composition);
+    }
+
+    /// <summary>フォーカスが外れたときなど。未確定の内容をそのまま確定する。</summary>
+    public SessionResult CommitPending()
+    {
+        var result = CompositionController.CommitPending(_composition, Env);
+        CompositionController.ResetContext(_composition);
+        return result;
+    }
+
+    internal void CancelPending()
+    {
+        CompositionController.CancelPending(_composition);
+        _composition.DirectEnglishWord = false;
+        CodeInput = false;
+        CodeTerminal = false;
+        Selection = null;
+        CanDeleteSurrounding = true;
+    }
+
+    /// <summary>
+    /// 文字を伴わない・扱えないキーを、変換ボックスの状態を変えずにアプリへそのまま渡す (Consumed = false)。
+    /// 不正な C ABI の引数で不正な文字列を作らないための経路。
+    /// </summary>
+    public SessionResult PassThrough() => CompositionController.Pass(_composition, Env, _timeMs());
+
+    /// <summary>
+    /// 未確定の内容を確定したうえで、元の OS イベントを 1 回だけアプリへ通す (Consumed = false)。
+    /// 補助面の文字 (非 BMP) を char へ切り詰めずに渡すための経路。確定と pass-through を二重に行わない。
+    /// </summary>
+    public SessionResult CommitForPassThrough() => CommitForPassThrough(preserveLatinRaw: false, preserveText: false);
+
+    /// <summary>
+    /// 結合文字が直前の文字に付くよう、確定する文字列に自動空白を加えない。
+    /// 結合アクセントなら、明示的に選択していない ASCII 英字の原文を優先して確定する。
+    /// </summary>
+    public SessionResult CommitCombiningForPassThrough(bool preserveLatinRaw) =>
+        CommitForPassThrough(preserveLatinRaw, preserveText: true);
+
+    private SessionResult CommitForPassThrough(bool preserveLatinRaw, bool preserveText)
+    {
+        var result = CompositionController.CommitPending(_composition, Env, consumed: false, preserveLatinRaw, preserveText);
+        CompositionController.ResetContext(_composition);
+        return result;
+    }
+
+    /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
+    /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま (変換中ならその表示)。</summary>
+    public SessionResult Unchanged() => CompositionController.Current(_composition, Env);
+
+    public SessionResult? RefreshConversion() => CompositionController.RefreshConversion(_composition, Env);
+
+    /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>
+    public SessionResult SelectCandidate(int index) => CompositionController.SelectCandidate(_composition, Env, index);
+
+    /// <summary>候補の一覧で予測変換の候補をクリックしたとき。その候補を確定する。</summary>
+    public SessionResult SelectPrediction(int index) => CompositionController.CommitPredictionAt(_composition, Env, index);
 }
