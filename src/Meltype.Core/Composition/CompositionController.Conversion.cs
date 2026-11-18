@@ -152,7 +152,6 @@ public sealed partial class CompositionController
     // 変換の候補に出す英日の区切りの案の数 (いちばん良い案を含む)
     private const int MaxSegmentationAlternatives = 4;
 
-    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足す。</summary>
     /// <summary>入力の全体に一致したユーティリティ変換の候補。一致しなければ null。</summary>
     private UtilityCandidates? Utilities(IReadOnlyList<CompositionSegment> segments)
     {
@@ -161,6 +160,7 @@ public sealed partial class CompositionController
         return UtilityConversions.Convert(new UtilityInput(_text, reading, _services.DirectMode(), context));
     }
 
+    /// <summary>文全体の文節の候補の後ろに、文節が 1 つの案のその文節の候補を足す。</summary>
     internal static void AddSingleClauseCandidates(Clause whole)
     {
         foreach (var clauses in whole.Alternatives!.Values)

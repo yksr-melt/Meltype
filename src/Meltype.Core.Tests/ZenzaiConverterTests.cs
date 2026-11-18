@@ -411,6 +411,14 @@ internal static class ZenzaiConverterTests
         Assert.Equal("とどりすと→todoリスト", Joined(HybridConverter.Choose("とどりすと", todo, "トドリスと", UserWords)), "読み全体の 1 つの文節にもしない");
         Assert.Equal("とどりすと→todoリスト", Joined(HybridConverter.Choose("とどりすと", todo, "トドリスト", UserWords)), "ほかの候補も選ばない");
         Assert.Equal("とどりすと→トドリスと", Joined(HybridConverter.Choose("とどりすと", todo, "トドリスと")), "ユーザー辞書の語でなければ、かなが読みと合う答えを使う");
+
+        // 後ろに付属語が付いて、Mozc の文節が語より長くなっても守る (しの → 紫乃 を登録すると、しのがきた は 紫乃が|来た)
+        IReadOnlyList<string> Shino(string reading) => reading == "しの" ? ["紫乃"] : [];
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> shino = [(new("しのが", "紫乃が"), ["紫乃が", "篠が", "死のが"]), (new("きた", "来た"), ["来た", "着た"])];
+        Assert.Equal("しのが→紫乃が|きた→来た", Joined(HybridConverter.Choose("しのがきた", shino, "篠が来た", Shino)), "Mozc の候補で作れる答えでも変えない");
+        Assert.Equal("しのが→紫乃が|きた→着た", Joined(HybridConverter.Choose("しのがきた", shino, "紫乃が着た", Shino)), "ほかの文節は Zenzai の答えを使う");
+        IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> todoWo = [(new("とどりすとを", "todoリストを"), ["todoリストを", "トドリストを"])];
+        Assert.Equal("とどりすとを→todoリストを", Joined(HybridConverter.Choose("とどりすとを", todoWo, "トドリスとを", UserWords)), "読み全体の 1 つの文節にもしない");
     }
 
     [Test]
