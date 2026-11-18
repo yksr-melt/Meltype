@@ -4,10 +4,9 @@
 import { LIMITS, formById, titleFor, validateFields, validateFiles } from "../public/assets/js/report-schema.js";
 import { error, json, now, randomToken, readJson, sha256Hex } from "./http.js";
 
-const SHORT_WINDOW = 10 * 60;
-const SHORT_LIMIT = 3;
 const DAY = 24 * 60 * 60;
-const DAY_LIMIT = 10;
+// 回数制限は種類 (rate_events.kind) ごとに数える
+export const REPORT_RATE = { kind: "report", window: 10 * 60, windowLimit: 3, dayLimit: 10, unit: "件", verb: "送れる" };
 const UPLOAD_WINDOW = 60 * 60;
 const MIN_FILL_MS = 3000;
 const MAX_BODY = 200 * 1024;
@@ -26,14 +25,14 @@ function rateKey(ip) {
   return expandIpv6(ip.split("%")[0]).slice(0, 4).join(":") + "::/64";
 }
 
-async function hashIp(request, env) {
+export async function hashIp(request, env) {
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   return sha256Hex(`${env.IP_HASH_SALT}\n${rateKey(ip)}`);
 }
 
 const TURNSTILE_VERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
-export async function verifyTurnstile(request, env, token) {
+export async function verifyTurnstile(request, env, token, action = "report") {
   if (!env.TURNSTILE_SECRET) {
     console.error("TURNSTILE_SECRET が設定されていないため、報告を受け付けていません");
     return { status: 503, message: "いまは報告を受け付けられません。時間をおいてもう一度試してください" };
@@ -57,39 +56,39 @@ export async function verifyTurnstile(request, env, token) {
     return { status: 503, message: "ロボットでないことの確認ができませんでした。時間をおいてもう一度試してください" };
   }
   if (!result.success) return { status: 400, message: "ロボットでないことの確認ができませんでした。ページを読み込み直してください" };
-  if (result.action && result.action !== "report") return { status: 400, message: "ロボットでないことの確認ができませんでした" };
+  if (result.action && result.action !== action) return { status: 400, message: "ロボットでないことの確認ができませんでした" };
   const hosts = String(env.TURNSTILE_HOSTNAMES || "").split(",").map((h) => h.trim()).filter(Boolean);
   if (hosts.length && !hosts.includes(result.hostname)) return { status: 400, message: "ロボットでないことの確認ができませんでした" };
   return null;
 }
 
-function limitMessage(times, at) {
-  const recent = times.filter((time) => time > at - SHORT_WINDOW);
-  if (recent.length >= SHORT_LIMIT) {
+function limitMessage(rule, times, at) {
+  const recent = times.filter((time) => time > at - rule.window);
+  if (recent.length >= rule.windowLimit) {
     return {
-      retryAfter: Math.max(1, recent[recent.length - SHORT_LIMIT] + SHORT_WINDOW - at),
-      message: `同じ場所から送れるのは 10 分に ${SHORT_LIMIT} 件までです。少し待ってからもう一度送ってください`,
+      retryAfter: Math.max(1, recent[recent.length - rule.windowLimit] + rule.window - at),
+      message: `同じ場所から${rule.verb}のは ${rule.window / 60} 分に ${rule.windowLimit} ${rule.unit}までです。少し待ってからもう一度試してください`,
     };
   }
   return {
-    retryAfter: Math.max(1, (times.length >= DAY_LIMIT ? times[times.length - DAY_LIMIT] + DAY : at + SHORT_WINDOW) - at),
-    message: `同じ場所から送れるのは 1 日に ${DAY_LIMIT} 件までです。時間をおいてからもう一度送ってください`,
+    retryAfter: Math.max(1, (times.length >= rule.dayLimit ? times[times.length - rule.dayLimit] + DAY : at + rule.window) - at),
+    message: `同じ場所から${rule.verb}のは 1 日に ${rule.dayLimit} ${rule.unit}までです。時間をおいてからもう一度試してください`,
   };
 }
 
-export async function claimRate(env, ipHash, at) {
+export async function claimRate(env, ipHash, at, rule = REPORT_RATE) {
   const claimed = await env.DB.prepare(
-    "INSERT INTO rate_events (ip_hash, created_at) SELECT ?1, ?2 " +
-      "WHERE (SELECT COUNT(*) FROM rate_events WHERE ip_hash = ?1 AND created_at > ?2 - ?3) < ?4 " +
-      "AND (SELECT COUNT(*) FROM rate_events WHERE ip_hash = ?1 AND created_at > ?2 - ?5) < ?6 RETURNING rowid",
+    "INSERT INTO rate_events (kind, ip_hash, created_at) SELECT ?7, ?1, ?2 " +
+      "WHERE (SELECT COUNT(*) FROM rate_events WHERE kind = ?7 AND ip_hash = ?1 AND created_at > ?2 - ?3) < ?4 " +
+      "AND (SELECT COUNT(*) FROM rate_events WHERE kind = ?7 AND ip_hash = ?1 AND created_at > ?2 - ?5) < ?6 RETURNING rowid",
   )
-    .bind(ipHash, at, SHORT_WINDOW, SHORT_LIMIT, DAY, DAY_LIMIT)
+    .bind(ipHash, at, rule.window, rule.windowLimit, DAY, rule.dayLimit, rule.kind)
     .first();
   if (claimed) return null;
-  const { results } = await env.DB.prepare("SELECT created_at FROM rate_events WHERE ip_hash = ? AND created_at > ? ORDER BY created_at")
-    .bind(ipHash, at - DAY)
+  const { results } = await env.DB.prepare("SELECT created_at FROM rate_events WHERE kind = ? AND ip_hash = ? AND created_at > ? ORDER BY created_at")
+    .bind(rule.kind, ipHash, at - DAY)
     .all();
-  return limitMessage(results.map((row) => row.created_at), at);
+  return limitMessage(rule, results.map((row) => row.created_at), at);
 }
 
 export async function createReport(request, env) {

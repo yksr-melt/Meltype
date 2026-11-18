@@ -50,7 +50,7 @@ npx wrangler secret put TURNSTILE_SECRET
 ```
 
 - **R2 は無くても動きます。** R2 を使えないときは `wrangler.jsonc` の `r2_buckets` をコメントにしておくと、報告の画面に添付の欄を出さず、文章だけ受け付けます (添付付きの送信は断ります)。R2 を有効にしたら (Cloudflare のダッシュボード → R2。支払い方法の登録が要ることがあります)、`r2_buckets` のコメントを外してデプロイし直すと、添付も受け付けます。
-- 最初の `wrangler deploy` で D1 (`meltype-reports`)・R2 (`meltype-report-files`)・KV (`CACHE`) が作られ、`database_id` と KV の `id` が `wrangler.jsonc` に書き戻されます。先に自分で作る場合は `npx wrangler d1 create meltype-reports`・`npx wrangler r2 bucket create meltype-report-files`・`npx wrangler kv namespace create CACHE` を実行して、ID を `wrangler.jsonc` に手動で書いてください。
+- 最初の `wrangler deploy` で D1 (`meltype-reports`・`meltype-typing`)・R2 (`meltype-report-files`)・KV (`CACHE`) が作られ、`database_id` と KV の `id` が `wrangler.jsonc` に書き戻されます。先に自分で作る場合は `npx wrangler d1 create meltype-reports`・`npx wrangler d1 create meltype-typing`・`npx wrangler r2 bucket create meltype-report-files`・`npx wrangler kv namespace create CACHE` を実行して、ID を `wrangler.jsonc` に手動で書いてください。
 - `workers_dev` を `false` にしているので、`*.workers.dev` では開けません。Cloudflare のダッシュボード → Workers → `meltype-web` → 設定 → ドメインとルート で、`meltype.moe` をカスタム ドメインに追加してください。
 - `IP_HASH_SALT` には長いランダムな文字列 (`openssl rand -base64 32` など) を入れてください。ない場合、報告は503で受け付けません。IPアドレスはこの値と合わせたハッシュにしてから、レートリミットのためにそれぞれ1日間保存します。
 - Turnstile: Cloudflareのダッシュボード → Turnstileでウィジェットを作り (ホスト名は `meltype.moe`)、サイトキーを `wrangler.jsonc` の `TURNSTILE_SITE_KEY` に、シークレットキーを `wrangler secret put TURNSTILE_SECRET` で入れます。`TURNSTILE_SECRET` がない場合、報告は503で受け付けません。
@@ -113,3 +113,21 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
 3. どちらかが空のあいだ、ダッシュボードは 503 で閉じたままです (開けっぱなしにはなりません)
 
 `wrangler.jsonc` で `workers_dev` と `preview_urls` を `false` にしています。Access は `meltype.moe` にしか掛からないため、`*.workers.dev` を開けると Access の外から入れてしまいます。
+
+## タイピング (`/typing/`)
+
+お手本の文 (`sentences/*.txt`) をローマ字で打つページです。文は、ふつうの文・硬めの文・ネットの会話 (短め)・日本語と英語が混ざった文から選びます。誰でも遊べ、打った記録は、どのキーが抜けやすいか・打ち間違えやすいかの調査に、同意した人だけが送ります。Meltype のアプリには入れず、このページだけで集めます。
+
+- 同意するまで、打鍵はどこにも送りません。結果の画面で同意すると (Turnstile の action は `typing`)、その回の記録を送ります。同意したあとは聞き直さずに続けて送ります (送らないようにも切り替えられます)。参加に期限は無く、同じブラウザーなら同じ参加として記録します (同じ人の打ち間違いの傾向を追えるように)。同意文の条件を変えたら `public/assets/js/typing-consent.js` の版を上げ、前の版で同意した参加からは受け付けず、同意を聞き直します。
+- 集めるのは、お手本の文の id・打鍵 (`[code, key, 押した時刻, 離した時刻]`、時刻は打ち始めからのミリ秒。Backspace の押しっぱなしは繰り返しのたびに 1 つ入り、離した時刻は null)・かかった時間と、任意の質問 (タッチタイピング・キーボードの配列) の答え、OS です。打った文字は送らず、打鍵から組み立てます (`public/assets/js/typing-check.js` の `replay`。直したあとの文字列を、打った文字列と取り違えないように)。自由に書いた文章を送る欄はありません。
+- 1 文の打鍵は読み 1 字あたり 12 打までにして、1 文の書き込みをお手本の長さで抑えます。1 つの参加から送れるのは 1 日に 1000 文までです。参加を始められるのは 1 つの IP から 10 分に 3 回・1 日に 6 回で、報告とは別に数えます (`rate_events.kind`)。
+- タイピング調査のデータは、報告とは別の D1 (`TYPING_DB`、`meltype-typing`。マイグレーションは `migrations-typing/`) に入れます。タイピングのデータで容量が埋まっても、報告を受け付けられるようにするためです。回数制限 (`rate_events`) だけは報告と同じ D1 で数えます。
+- 参加者は参加ごとのランダムな番号 (`typing_sessions.id`) で分けます。IP はハッシュにして回数の制限にだけ使い、調査のデータには入れません。
+- お手本と関係ない入力 (名前など) が続く文は、ページが送らず、サーバーも受け付けません。お手本のローマ字のどの字の隣のキーでもない字が 3 打続くか、かなにしてお手本と違う字が 4 字続いたら止めます。
+- 打鍵とお手本から計算できる値 (打った文字・一致率・打鍵の数・お手本の文と読み) は保存しません。読み替えの規則を直しても、古い行だけ古い規則の値で残らないように、使うたびに計算します。
+- 一致率 (打った文字とお手本をかなにして比べる。英語の部分も同じ規則でかなにするので、正しく打てば一致する) が 50% 未満の文は、ダッシュボードの「お手本とかけ離れた送信」に出ます (新しい 5000 文から計算する)。名前など関係ない入力が残っていれば、その参加のかけ離れた文を消せます。
+- 調査は雪代 (Yukishiro) が Meltype のために行い、データの持ち主も雪代です (同意文に書いてある。問い合わせ先は Meltype の Discord と GitHub の Issue)。
+- 研究用に公開するときは、集めたデータ (お手本の文を含む) を CC BY-SA 4.0 で公開します (同意文にもそう書いてある。GPLv3 へは一方向に互換があるので、Meltype の学習にも使える)。同意文の条件を変えると、それより前に送られたデータは新しい条件に同意していないので、変えるときは前のデータの扱いも決める。
+- データは消さずに残します (Cron の掃除の対象外)。ダッシュボードにお手本の文ごとに打たれた数を出し、JSON Lines で書き出せます (書き出すときに、お手本の文と読みを id から引いて付ける) (`/api/dashboard/typing/*`、Access の内側)。
+- お手本は `sentences/*.txt` に、1 行に 1 文の「表示する文|読み」の形で書きます。ファイル名は「並び順-種類の id.txt」(例: `3-chat.txt`) で、先頭に「種類: 表示名」の行を書きます。新しい種類は、ファイルを足せばページの選択肢に出ます。読みはひらがなと「ー、。！？〜…「」（）」(英語の部分は英小文字・数字・「-」・空白) で 40 字まで (「！？〜「」（）」は `!` `?` `~` `[` `]` `(` `)`、「…」は `.` を 3 回打つ)、文と読みの「、。」の数をそろえます。`npm run sentences` (`dev`・`test`・`deploy` でも動く) が確かめて `public/assets/js/typing-sentences.js` を作ります (コミットしない)。
+- 文の id は文と読みから作るので、直すと別の文になります。集めたデータは id でお手本を指すので、一度出したお手本の行は消しません。出すのをやめるときは、行の頭に「出さない:」を付けます (ページには出なくなり、id からは引ける)。

@@ -8,7 +8,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/", "/report/*", "/dashboard", "/dashboard/*"],
+    "run_worker_first": ["/api/*", "/", "/report/*", "/typing/*", "/dashboard", "/dashboard/*"],
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "404-page"
   },
@@ -17,6 +17,13 @@
       "binding": "DB",
       "database_name": "meltype-reports",
       "migrations_dir": "migrations"
+    },
+    // タイピング調査 (/typing/) のデータ。報告と分けて、こちらで容量が埋まっても報告を受け付けられるようにする (web/README.md)
+    {
+      "binding": "TYPING_DB",
+      "database_name": "meltype-typing",
+      "database_id": "7d38d239-c8b2-44b0-bdc3-c69c1925a15b",
+      "migrations_dir": "migrations-typing"
     }
   ],
   // R2 (添付の置き場)。外すと添付の欄を出さず、報告の文章だけ受け付ける (web/README.md)
