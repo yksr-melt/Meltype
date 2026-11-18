@@ -115,32 +115,32 @@ public sealed partial class CompositionDetector
 
     /// <param name="reasons">渡したら、選んだ道と、言語の割り当てが違う一番軽い道 (次点) を書く関数を足す (確定のログ用。issue #1644)。
     /// キーを打つたびに呼ばれるので、次点を探して文字列にするのは、ログに書くときだけにする。</param>
-    private List<CompositionSegment> FindSpansByReading(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
+    private List<CompositionSegment> FindSpansByReading(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
         bool manual, bool englishSentence, bool kanaInput, double englishBias = 0, List<Func<string>>? reasons = null) =>
-        FindSpanAlternatives(learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, englishBias, 1, reasons)[0];
+        FindSpanAlternatives(prepared, learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, englishBias, 1, reasons)[0];
 
     /// <summary>
     /// 区切りの上位 count 案を、軽い順に返す。先頭は <see cref="FindSpansByReading"/> と同じ。区間の並びが同じ道 (日本語の語の区切りだけが違う道) は 1 案にまとめる。
     /// count が 2 以上なら、(位置, 状態) ごとに軽い道を <see cref="PathsPerState"/> 個ずつ残す (k-best Viterbi)。最も軽い案から <see cref="AlternativeMargin"/> より重い案は返さない。
     /// reasons には、いちばん良い案を選んだ理由を足す。
     /// </summary>
-    private List<List<CompositionSegment>> FindSpanAlternatives(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
+    private List<List<CompositionSegment>> FindSpanAlternatives(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish, bool? followingEnglish,
         bool manual, bool englishSentence, bool kanaInput, double englishBias, int count, List<Func<string>>? reasons = null)
     {
-        var text = _preparedRaw + pending;
+        var text = prepared.Raw + pending;
         var length = text.Length;
         if (length == 0) return [[new CompositionSegment(false, "", "")]];
         var keep = count > 1 ? PathsPerState : 1;
-        var unitsEnd = _preparedRaw.Length;
+        var unitsEnd = prepared.Raw.Length;
         // 文字の位置 → その位置から始まる単位 (単位の境目でなければ -1)
         var unitAt = new int[length + 1];
         Array.Fill(unitAt, -1);
-        for (var k = 0; k < units.Count; k++) unitAt[_preparedRawOffsets[k]] = k;
+        for (var k = 0; k < units.Count; k++) unitAt[prepared.RawOffsets[k]] = k;
         unitAt[unitsEnd] = units.Count;
         // 文字の位置 → その文字を含む単位
         var unitOf = new int[unitsEnd];
         for (var k = 0; k < units.Count; k++)
-            for (var p = _preparedRawOffsets[k]; p < _preparedRawOffsets[k + 1]; p++) unitOf[p] = k;
+            for (var p = prepared.RawOffsets[k]; p < prepared.RawOffsets[k + 1]; p++) unitOf[p] = k;
         bool IsBoundary(int position) => !kanaInput || unitAt[position] >= 0 || position == length;
 
         // 知らない英字として英語にできる文字 (ローマ字として読めない英字・大文字・打ち終わって読めない入力途中の子音) の数の累積
@@ -151,7 +151,7 @@ public sealed partial class CompositionDetector
         {
             var c = text[p];
             var unreadable = char.IsAsciiLetterUpper(c) ||
-                (p < unitsEnd ? unitAt[p] is var k and >= 0 && _preparedUnreadable[k + 1] > _preparedUnreadable[k] : finalPending.Any(char.IsAsciiLetter));
+                (p < unitsEnd ? unitAt[p] is var k and >= 0 && prepared.Unreadable[k + 1] > prepared.Unreadable[k] : finalPending.Any(char.IsAsciiLetter));
             unknown[p + 1] = unknown[p] + (char.IsAsciiLetter(c) && unreadable ? 1 : 0);
         }
 
@@ -247,12 +247,12 @@ public sealed partial class CompositionDetector
         for (var p = 0; p < length; p++)
         {
             if (!IsBoundary(p)) continue;
-            var japanese = JapaneseEdges(units, text, p, unitOf, unitsEnd, pending, kanaInput);
-            var english = EnglishEdges(learning, text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
+            var japanese = JapaneseEdges(prepared, units, text, p, unitOf, unitsEnd, pending, kanaInput);
+            var english = EnglishEdges(prepared, learning, text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
             var unit = p < unitsEnd ? unitAt[p] : -1;
             // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
-                ? new LatticeEdge(p, _preparedRawOffsets[unit + 1], false, units[unit].Kana, false, false, true)
+                ? new LatticeEdge(p, prepared.RawOffsets[unit + 1], false, units[unit].Kana, false, false, true)
                 : null;
 
             // 記号・数字の決まり (状態によらないもの)
@@ -281,7 +281,7 @@ public sealed partial class CompositionDetector
                 if (end < 0 && unit > 0 && englishLevel && !kanaInput && units[unit - 1].Raw == "." && state.PreviousEnglish) end = DotSuffixEnd(learning, units, unit, pending);
                 if (end > unit)
                 {
-                    var to = end == units.Count ? length : _preparedRawOffsets[end];
+                    var to = end == units.Count ? length : prepared.RawOffsets[end];
                     OfferEdge(node, state, new LatticeEdge(p, to, true, "", false, false), KnownEnglishCost);
                     continue;
                 }
@@ -292,7 +292,7 @@ public sealed partial class CompositionDetector
                     continue;
                 }
                 if (domain > unit)
-                    OfferEdge(node, state, new LatticeEdge(p, domain == units.Count ? length : _preparedRawOffsets[domain], true, "", false, false),
+                    OfferEdge(node, state, new LatticeEdge(p, domain == units.Count ? length : prepared.RawOffsets[domain], true, "", false, false),
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
                 // 英文の中の記号 (, . ! ? -) は半角のまま
                 if (unit >= 0 && !kanaInput && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
@@ -463,7 +463,7 @@ public sealed partial class CompositionDetector
     /// ローマ字入力では、英語の候補が単位の途中で終わった所 (medal|s|ha の ha) は、単位の残りをローマ字として読み直す。
     /// 日本語の語は単位の途中で終わってもよい (単位の頭をローマ字として読み直す)。大文字を含む単位は日本語にしない (かな入力を除く)。
     /// </summary>
-    private List<(LatticeEdge, double)> JapaneseEdges(IReadOnlyList<CompositionUnit> units, string text, int start, int[] unitOf, int unitsEnd, string pending,
+    private List<(LatticeEdge, double)> JapaneseEdges(Prepared prepared, IReadOnlyList<CompositionUnit> units, string text, int start, int[] unitOf, int unitsEnd, string pending,
         bool kanaInput)
     {
         var edges = new List<(LatticeEdge, double)>();
@@ -507,7 +507,7 @@ public sealed partial class CompositionDetector
             return edges;
         }
         var u = unitOf[start];
-        var unitStart = _preparedRawOffsets[u];
+        var unitStart = prepared.RawOffsets[u];
         var kana = "";
         if (start == unitStart)
         {
@@ -527,7 +527,7 @@ public sealed partial class CompositionDetector
             for (; !kanaInput && next <= Math.Min(units.Count, u + 3); next++)
             {
                 if (next > u + 1 && units[next - 1].Raw is var raw && (raw.Length == 0 || !raw.All(char.IsAsciiLetterLower))) break;
-                var rest = text[start.._preparedRawOffsets[next]];
+                var rest = text[start..prepared.RawOffsets[next]];
                 if (rest.Any(char.IsAsciiLetterUpper)) break;
                 if (_romaji.AnalyzeFragment(rest) is { IsValid: true, Partial: "" } complete)
                 {
@@ -541,7 +541,7 @@ public sealed partial class CompositionDetector
                 return edges;
             }
             kana = reading.Kana;
-            Add(_preparedRawOffsets[next], kana);
+            Add(prepared.RawOffsets[next], kana);
             if (next == units.Count) AddPending();
             u = next;
         }
@@ -552,12 +552,12 @@ public sealed partial class CompositionDetector
                 !CommonReadings.Phrases.HasPrefix(kana) && !_userJapanesePrefixes.Contains(kana)) break;
             var unit = units[k];
             if (!IsKanaUnit(unit) || !kanaInput && unit.Raw.Any(char.IsAsciiLetterUpper)) break;
-            var from = _preparedRawOffsets[k];
+            var from = prepared.RawOffsets[k];
             // 語が単位の途中で終わる (日本語の後ろの英語が単位の途中から始まる)
-            for (var end = from + 1; !kanaInput && !first && end < _preparedRawOffsets[k + 1]; end++)
+            for (var end = from + 1; !kanaInput && !first && end < prepared.RawOffsets[k + 1]; end++)
                 if (_romaji.AnalyzeFragment(text[from..end].ToLowerInvariant()) is { IsValid: true, Partial: "" } head) Add(end, kana + head.Kana, wordOnly: true);
             kana += unit.Kana;
-            Add(_preparedRawOffsets[k + 1], kana);
+            Add(prepared.RawOffsets[k + 1], kana);
             if (k + 1 == units.Count) AddPending();
         }
         return edges;
@@ -586,7 +586,7 @@ public sealed partial class CompositionDetector
     /// start から始まる、綴りで決まる候補: 英語 (知っている英単語・知らない英字・短縮形) と、
     /// ユーザーがかなに直して覚えた語 (日本語の語として重み 1)。
     /// </summary>
-    private List<(LatticeEdge, double)> EnglishEdges(bool? learning, string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
+    private List<(LatticeEdge, double)> EnglishEdges(Prepared prepared, bool? learning, string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
     {
         var edges = new List<(LatticeEdge, double)>();
         if (!char.IsAsciiLetter(text[start])) return edges;
@@ -623,7 +623,7 @@ public sealed partial class CompositionDetector
                 continue;
             }
             else if (!kanaInput && end == length && span.Length >= 4 && span.All(char.IsAsciiLetterLower) &&
-                     unknown[Math.Max(start, Math.Min(end, _preparedRaw.Length))] > unknown[start] && _english.IsPrefix(span))
+                     unknown[Math.Max(start, Math.Min(end, prepared.Raw.Length))] > unknown[start] && _english.IsPrefix(span))
                 // 入力の最後の、英単語の頭 (insta|ll)。入力途中の子音より前に、ローマ字で読めない英字があるときだけ (mala は まぁ、mits は みつ の途中)
                 cost = EnglishPrefixCost;
             else if (!kanaInput && unknown[end] > unknown[start])

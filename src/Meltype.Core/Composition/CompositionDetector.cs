@@ -147,14 +147,14 @@ public sealed partial class CompositionDetector
     public IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentAlternatives(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish,
         bool? followingEnglish, bool manual, bool englishSentence, bool kanaInput, int count, List<Func<string>>? reasons = null)
     {
-        Prepare(units);
-        var token = _preparedRaw + pending;
+        var prepared = Prepare(units);
+        var token = prepared.Raw + pending;
         if (IsOpaqueToken(token, kanaInput))
         {
             reasons?.Add(() => "記号の入った語 (メールアドレス・URL・_ の入った名前など) なので英字のまま");
             return [[new CompositionSegment(true, "", token)]];
         }
-        var alternatives = FindSpanAlternatives(learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, 0, count, reasons);
+        var alternatives = FindSpanAlternatives(prepared, learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence && precedingEnglish == true, kanaInput, 0, count, reasons);
         // すべてローマ字として読んだ案。入力途中の子音は含めない (日本語の区間と同じく、変換するときに足す)。
         // ローマ字として読めない英字が残る読み (google → ごおgぇ) は、日本語の案にならないので出さない
         if (alternatives.Count < count && !kanaInput && string.Concat(units.Select(u => u.Kana)) is var kana &&
@@ -164,8 +164,6 @@ public sealed partial class CompositionDetector
         return alternatives;
     }
 
-    // 区間分けは units[i..j] の生文字列・かなを何度も作る。1 回の区間分けの間だけ、Prepare で連結した原文と各位置のオフセットを使い回す
-    // (内容・順序は同じで、文字列を毎回連結しない)。
     // Structured Latin tokens are opaque; their components are not Japanese readings.
     private static bool IsOpaqueToken(string token, bool kanaInput) =>
         !kanaInput && token.All(c => c is >= '!' and <= '~') &&
@@ -176,8 +174,8 @@ public sealed partial class CompositionDetector
     /// </summary>
     public IReadOnlyList<CompositionSegment> SegmentLeaningEnglish(bool? learning, IReadOnlyList<CompositionUnit> units)
     {
-        Prepare(units);
-        return FindSpansByReading(learning, units, "", null, null, false, false, false, LeaningEnglishBias);
+        var prepared = Prepare(units);
+        return FindSpansByReading(prepared, learning, units, "", null, null, false, false, false, LeaningEnglishBias);
     }
 
     /// <summary>
@@ -307,7 +305,7 @@ public sealed partial class CompositionDetector
     /// @ の後ろ (Discord・X のメンション @kuraido) と、_ の入った語 (upah_setu、cafely_latte) は、ローマ字として読めても英字のまま。
     /// 英字・数字・_ が続く所までがユーザー名 (@ の後ろは、メールアドレスのドメインの . - も含める)。
     /// </summary>
-    private int UserNameEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private static int UserNameEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsNameUnit(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
         var n = units.Count;
@@ -586,22 +584,18 @@ public sealed partial class CompositionDetector
                Enumerable.Range(k + 1, units.Count - k - 1).TakeWhile(j => units[j].Raw.Length > 0 && char.IsAsciiLetter(units[j].Raw[0])).All(j => units[j].Raw is "w" or "W");
     }
 
-    private IReadOnlyList<CompositionUnit>? _preparedUnits;
-    // ローマ字として読めなかった英字の単位 (zoom の m) の数の累積
-    private int[] _preparedUnreadable = [];
-    private string _preparedRaw = "";
-    private int[] _preparedRawOffsets = [];
-    private string _preparedKana = "";
-    private int[] _preparedKanaOffsets = [];
+    /// <summary>
+    /// Segment 1 回分の units の、原文・かなの連結と位置。Unreadable は、ローマ字として読めなかった英字の単位 (zoom の m) の数の累積。
+    /// </summary>
+    private sealed record Prepared(int[] Unreadable, string Raw, int[] RawOffsets, string Kana, int[] KanaOffsets);
 
     /// <summary>この Segment 呼び出しの units で、原文・かなの連結と位置を用意する (Segment の先頭で必ず呼ぶ)。</summary>
-    private void Prepare(IReadOnlyList<CompositionUnit> units)
+    private static Prepared Prepare(IReadOnlyList<CompositionUnit> units)
     {
         var unreadable = new int[units.Count + 1];
         for (var i = 0; i < units.Count; i++)
             unreadable[i + 1] = unreadable[i] + (units[i] is { Raw.Length: 1 } unit && unit.Kana == unit.Raw &&
                 char.IsAsciiLetter(unit.Raw[0]) && !IsLaughter(units, i) ? 1 : 0);
-        _preparedUnreadable = unreadable;
         var raw = new StringBuilder();
         var rawOffsets = new int[units.Count + 1];
         var kana = new StringBuilder();
@@ -615,24 +609,10 @@ public sealed partial class CompositionDetector
         }
         rawOffsets[units.Count] = raw.Length;
         kanaOffsets[units.Count] = kana.Length;
-        _preparedUnits = units;
-        _preparedRaw = raw.ToString();
-        _preparedRawOffsets = rawOffsets;
-        _preparedKana = kana.ToString();
-        _preparedKanaOffsets = kanaOffsets;
+        return new Prepared(unreadable, raw.ToString(), rawOffsets, kana.ToString(), kanaOffsets);
     }
 
-    private string Kana(IReadOnlyList<CompositionUnit> units, int start, int end)
-    {
-        if (ReferenceEquals(units, _preparedUnits) && start >= 0 && end < _preparedKanaOffsets.Length)
-            return _preparedKana.Substring(_preparedKanaOffsets[start], _preparedKanaOffsets[end] - _preparedKanaOffsets[start]);
-        return string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Kana));
-    }
+    private static string Kana(IReadOnlyList<CompositionUnit> units, int start, int end) => string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Kana));
 
-    private string Raw(IReadOnlyList<CompositionUnit> units, int start, int end)
-    {
-        if (ReferenceEquals(units, _preparedUnits) && start >= 0 && end < _preparedRawOffsets.Length)
-            return _preparedRaw.Substring(_preparedRawOffsets[start], _preparedRawOffsets[end] - _preparedRawOffsets[start]);
-        return string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Raw));
-    }
+    private static string Raw(IReadOnlyList<CompositionUnit> units, int start, int end) => string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Raw));
 }
