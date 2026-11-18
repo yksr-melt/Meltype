@@ -165,7 +165,7 @@ impl Dictionary {
                     if word.ends_with('t') && lower[prefix.len()..].starts_with('s') {
                         let reading =
                             format!("{}つ", romaji::hiragana(&word[..word.len() - 1], true));
-                        if self.kana_words.iter().any(|w| w.starts_with(&reading)) {
+                        if self.kana_words.contains(&reading) {
                             return false;
                         }
                     }
@@ -331,7 +331,7 @@ impl Dictionary {
                     let covered = (j.saturating_sub(8)..=j).any(|start| {
                         (j + 1..=n.min(j + 9)).any(|end| {
                             let reading = kana[start..end].concat();
-                            reading.chars().count() >= 3 && self.kana_words.contains(&reading)
+                            reading.chars().count() >= 3 && self.kana_words.0.contains(&reading)
                         })
                     });
                     if covered
