@@ -95,6 +95,20 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         frontend->call<ITestFrontend::pushCommitExpectation>(common->candidate(common->cursorIndex()).text().toString());
         typeKeys(frontend, uuid, "\n");
 
+        // Sensitive の入力欄は、ロック画面ならパスワード欄として変換しない。ほかのアプリ (Chromium のシークレットなど) では変換する
+        for (const auto &[program, composes] : {std::pair{"kscreenlocker_greet", false}, std::pair{"chromium", true}}) {
+            auto sensitiveUuid = frontend->call<ITestFrontend::createInputContext>(program);
+            auto *sensitive = instance->inputContextManager().findByUUID(sensitiveUuid);
+            sensitive->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
+            sensitive->focusIn();
+            instance->setCurrentInputMethod(sensitive, "meltype", true);
+            FCITX_ASSERT(frontend->call<ITestFrontend::sendKeyEvent>(sensitiveUuid, Key("n"), false) == composes) << program;
+            FCITX_ASSERT(sensitive->inputPanel().preedit().empty() != composes) << program;
+            if (composes) frontend->call<ITestFrontend::pushCommitExpectation>("ん");
+            sensitive->focusOut();
+        }
+        ic->focusIn();
+
         // パネルの入力メソッドの表示は、本体の言語モード (英数・かなのキーで切り替える)
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), false);

@@ -118,6 +118,7 @@ beforeEach(() => {
   pending = [];
   env = {
     DB: new FakeD1(),
+    TYPING_DB: new FakeD1("migrations-typing"),
     FILES: new FakeR2(),
     CACHE: new FakeKV(),
     ASSETS,
@@ -503,5 +504,146 @@ describe("GitHub の情報のキャッシュ (KV)", () => {
   it("KV が空で GitHub も読めなければ 502", async () => {
     github.down = true;
     assert.equal((await call("/api/github")).status, 502);
+  });
+});
+
+describe("タイピング調査", async () => {
+  const { SENTENCES } = await import("../public/assets/js/typing-sentences.js");
+  const FIRST = SENTENCES.find((sentence) => sentence.reading === "きょうはあさからあめがふっている。");
+  // 打った文字から打鍵の並びを作る
+  const CODES = { " ": "Space", ".": "Period", ",": "Comma", "-": "Minus" };
+  const keysOf = (text) => [...text].map((char, i) => [CODES[char] || `Key${char.toUpperCase()}`, char, i * 100, i * 100 + 50]);
+  const KEYS = keysOf("kyo");
+
+  async function start(extra = {}, ip = "203.0.113.9") {
+    turnstileAnswer = { success: true, action: "typing", hostname: "meltype.moe" };
+    return call("/api/typing/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": ip },
+      body: JSON.stringify({ consent: true, turnstile: "token", profile: { touch: "yes", layout: "jis", os: "windows" }, ...extra }),
+    });
+  }
+
+  function trial(token, extra = {}) {
+    return call("/api/typing/trials", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      body: JSON.stringify({ sentence: FIRST.id, keys: KEYS, duration: 400, ...extra }),
+    });
+  }
+
+  const auth = async () => ({ "cf-access-jwt-assertion": await jwt(goodClaims()) });
+
+  it("同意が無い・報告用の Turnstile では始められない", async () => {
+    assert.equal((await start({ consent: false })).status, 400);
+    turnstileAnswer = { success: true, action: "report", hostname: "meltype.moe" };
+    const response = await call("/api/typing/sessions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ consent: true, turnstile: "token" }),
+    });
+    assert.equal(response.status, 400);
+  });
+
+  it("打鍵を受け付け、ダッシュボードから書き出せる。IP と打った文字列は残らない", async () => {
+    const { id, token } = await (await start()).json();
+    assert.equal((await trial(token)).status, 201);
+    assert.equal((await trial("wrong")).status, 401);
+
+    assert.equal((await call("/api/dashboard/typing/trials")).status, 403);
+    const exported = await (await call("/api/dashboard/typing/trials", { headers: await auth() })).json();
+    assert.equal(exported.trials.length, 1);
+    const [row] = exported.trials;
+    assert.equal(row.session, id);
+    assert.equal(row.text, FIRST.text);
+    assert.equal(row.reading, FIRST.reading);
+    assert.deepEqual(row.keys, KEYS);
+    assert.deepEqual(row.profile, { touch: "yes", layout: "jis", os: "windows" });
+    assert.ok(!("typed" in row));
+    assert.ok(!JSON.stringify(row).includes("203.0.113.9"));
+    // 打った文字・一致率・打鍵の数など、打鍵とお手本から計算できる値は保存しない
+    const columns = (await env.TYPING_DB.prepare("SELECT name FROM pragma_table_info('typing_trials')").all()).results.map((c) => c.name);
+    assert.deepEqual(columns, ["id", "session_id", "sentence_id", "keys", "duration_ms", "created_at"]);
+    const counts = await (await call("/api/dashboard/typing/sentences", { headers: await auth() })).json();
+    assert.equal(counts.sentences.find((s) => s.id === FIRST.id).count, 1);
+    assert.equal(counts.sentences.filter((s) => s.count > 0).length, 1);
+  });
+
+  it("知らない文・おかしな打鍵は受け付けない", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { sentence: "nope" })).status, 400);
+    assert.equal((await trial(token, { keys: [["KeyK", "k", 100, 50]] })).status, 400);
+    assert.equal((await trial(token, { keys: [["KeyK", "k", 100, null], ["KeyY", "y", 50, null]] })).status, 400);
+    assert.equal((await trial(token, { keys: [] })).status, 400);
+    assert.equal((await trial(token, { duration: 0 })).status, 400);
+  });
+
+  it("知らない答えは unknown にする", async () => {
+    await start({ profile: { touch: "<script>", layout: 1 } });
+    const row = await env.TYPING_DB.prepare("SELECT profile FROM typing_sessions").first();
+    assert.deepEqual(JSON.parse(row.profile), { touch: "unknown", layout: "unknown", os: "other" });
+  });
+
+  it("回数制限は報告と別に数える", async () => {
+    for (let i = 0; i < 3; i++) assert.equal((await report()).status, 201);
+    assert.equal((await report()).status, 429);
+    assert.equal((await start({}, "203.0.113.5")).status, 201);
+    for (let i = 0; i < 2; i++) assert.equal((await start({}, "203.0.113.5")).status, 201);
+    assert.equal((await start({}, "203.0.113.5")).status, 429);
+  });
+
+  it("お手本の長さに見合わない量の打鍵は受け付けない", async () => {
+    const { token } = await (await start()).json();
+    const many = Array.from({ length: 17 * 12 + 1 }, (_, i) => ["KeyA", "a", i, i]);
+    assert.equal((await trial(token, { keys: many })).status, 400);
+  });
+
+  it("お手本と関係ない入力が続く文は受け付けない", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { keys: keysOf("kyouhaasakaraamegafutteiru.yamadatarou") })).status, 422);
+    assert.equal((await trial(token, { keys: keysOf("kyouhaasakaramegafuteiru.") })).status, 201);
+  });
+
+  it("お手本とかけ離れた送信をダッシュボードに出し、その文を消せる", async () => {
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { keys: keysOf("kyouhaasakaraamegafutteiru.") })).status, 201);
+    assert.equal((await trial(token, { keys: keysOf("kyouhaa") })).status, 201);
+    const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: await auth() })).json();
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].flagged, 1);
+    assert.deepEqual(sessions[0].samples, ["kyouhaa"]);
+
+    const remove = async (origin) => call(`/api/dashboard/typing/sessions/${sessions[0].id}/flagged`, { method: "DELETE", headers: { ...(await auth()), origin } });
+    assert.equal((await remove("https://evil.example")).status, 403);
+    assert.deepEqual(await (await remove("https://meltype.moe")).json(), { deleted: 1 });
+    const left = await env.TYPING_DB.prepare("SELECT keys FROM typing_trials").all();
+    assert.equal(left.results.length, 1);
+  });
+
+  it("英語が混ざった文も、お手本どおりならかけ離れた送信に出ない", async () => {
+    const mixed = SENTENCES.find((sentence) => sentence.reading === "きょうはgoogleでしらべた。");
+    const { token } = await (await start()).json();
+    assert.equal((await trial(token, { sentence: mixed.id, keys: keysOf("kyouhagoogledeshirabeta.") })).status, 201);
+    const { sessions } = await (await call("/api/dashboard/typing/flagged", { headers: await auth() })).json();
+    assert.equal(sessions.length, 0);
+  });
+
+  it("タイピングのデータベースが無いときは受け付けない", async () => {
+    delete env.TYPING_DB;
+    assert.equal((await start()).status, 503);
+  });
+
+  it("参加に期限は無く、1 日に送れる数だけ決まっている。同意文が変わったら受け付けない", async () => {
+    const { token } = await (await start()).json();
+    await env.TYPING_DB.prepare("UPDATE typing_sessions SET created_at = created_at - 30 * 86400").run();
+    assert.equal((await trial(token)).status, 201);
+    const id = (await env.TYPING_DB.prepare("SELECT id FROM typing_sessions").first()).id;
+    const yesterday = Math.floor(Date.now() / 1000) - 2 * 86400;
+    await env.TYPING_DB.batch(Array.from({ length: 999 }, () => env.TYPING_DB.prepare("INSERT INTO typing_trials (session_id, sentence_id, keys, duration_ms, created_at) VALUES (?, ?, '[]', 1, unixepoch())").bind(id, FIRST.id)));
+    assert.equal((await trial(token)).status, 429);
+    await env.TYPING_DB.prepare("UPDATE typing_trials SET created_at = ?").bind(yesterday).run();
+    assert.equal((await trial(token)).status, 201);
+    await env.TYPING_DB.prepare("UPDATE typing_sessions SET consent_version = 0").run();
+    assert.equal((await trial(token)).status, 410);
   });
 });
