@@ -217,7 +217,7 @@ public sealed partial class CompositionController
     {
         public string? Convert(string hiragana) => standalone.ConvertStandalone(hiragana);
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => standalone.ConvertClausesStandalone(hiragana, context);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null) => standalone.ConvertClausesStandalone(hiragana, before);
     }
 
     /// <summary>
@@ -511,7 +511,7 @@ public sealed partial class CompositionController
     {
         var unchanged = pieces.Select(p => (p.Reading, p.Word, (IReadOnlyList<ConversionClause>?)null)).ToList();
         if (_services.UserDictionary is not { } dictionary) return unchanged;
-        var engine = ConversionContext() is { } context ? ConvertWithContext(kana, context, converter) : converter.ConvertClauses(kana);
+        var engine = converter.ConvertClauses(kana, _precedingText);
         if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return unchanged;
         var starts = new HashSet<int>();
         for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
@@ -562,31 +562,6 @@ public sealed partial class CompositionController
     }
 
     /// <summary>
-    /// 「に」で始まる読みのうち、助詞の「に」に続くことが多い語 (なる・ついて・よって など) で始まるものか。
-    /// 「にわ (庭)」「にほん (日本)」のように「に」で始まる語まで仮の文脈で助詞と読ませると、
-    /// Zenzai が「に|ワニ|は」のように崩すので、助詞らしい続きのときだけにする。
-    /// </summary>
-    internal static bool StartsWithParticleNi(string kana)
-    {
-        if (kana.Length < 3 || kana[0] != 'に') return false;
-        var rest = kana.AsSpan(1);
-        foreach (var next in ParticleNiContinuations)
-        {
-            if (rest.StartsWith(next, StringComparison.Ordinal)) return true;
-        }
-        return false;
-    }
-
-    private static readonly string[] ParticleNiContinuations =
-    [
-        "なる", "なっ", "なり", "なら", "なれ", "なろ", "ついて", "ついての", "つき", "よっ", "よる", "より", "よれ",
-        "とって", "とっての", "たいし", "たいする", "かんし", "かんする", "おいて", "おける", "むけ", "むか", "わたっ", "わたる",
-        "あたっ", "あたり", "して", "した", "する", "すぎ", "さえ", "しか", "ちがい", "そって", "そう", "もとづ", "くらべ",
-        "かけ", "かわっ", "かわり", "ともな", "つれ", "あわせ", "おうじ", "はいっ", "いく", "いっ", "いれ", "いる", "いた",
-        "きた", "くる", "きて", "でき", "みえ", "きこえ", "かんじ", "おもえ",
-    ];
-
-    /// <summary>
     /// 日本語のかなを変換エンジンで文節に区切って変換する。各文節の最初の候補は次の順で決める:
     ///   1. 文脈の手がかり辞書 (前後に 気温 があれば あつい → 暑い)
     ///   2. ユーザーが前に選び直した変換 (学習)
@@ -595,13 +570,7 @@ public sealed partial class CompositionController
     /// </summary>
     private List<Clause> ConvertWithEngine(string kana, IKanjiConverter converter, IReadOnlyList<ConversionClause>? engine = null)
     {
-        // 文脈が無いまま「に」で始まる読みを変換すると、変換エンジンは「に」を語の頭と読む (になってしまう → 担ってしまう)。
-        // 前の文脈が取れないときは、仮の文脈「これ」を付けて助詞として読ませる (これ + になってしまう → になってしまう)。
-        // 「は」「で」なども助詞になりうるが、仮の文脈を付けると はしる → は知る のように崩れるので「に」だけ。
-        var context = ConversionContext();
-        var parts = engine ?? (context is not null
-            ? ConvertWithContext(kana, context, converter)
-            : converter.ConvertClauses(kana, StartsWithParticleNi(kana) ? "これ" : null));
+        var parts = engine ?? converter.ConvertClauses(kana, _precedingText);
         parts ??= [new ConversionClause(kana, converter.Convert(kana) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && _services.Candidates?.Contains(kana) == true)
@@ -737,19 +706,6 @@ public sealed partial class CompositionController
     }
 
     private static bool IsKana(char c) => c is (>= 'ぁ' and <= 'ゖ') or (>= 'ァ' and <= 'ヺ') or 'ー';
-
-    /// <summary>
-    /// 文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、
-    /// 区切りまで変わるなら文脈なしを使う。前に同じ語があると、変換エンジンは文脈に引きずられて区切りを変えてしまうため
-    /// (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
-    /// </summary>
-    private static IReadOnlyList<ConversionClause>? ConvertWithContext(string kana, string context, IKanjiConverter converter)
-    {
-        var withContext = converter.ConvertClauses(kana, context);
-        var plain = converter.ConvertClauses(kana);
-        if (withContext is null || plain is null) return withContext ?? plain;
-        return withContext.Select(c => c.Reading).SequenceEqual(plain.Select(c => c.Reading)) ? withContext : plain;
-    }
 
     private static bool IsSymbolOnly(string text) => text.Length > 0 && !text.Any(char.IsLetterOrDigit);
 

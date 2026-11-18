@@ -117,6 +117,52 @@ internal static class MozcConverterTests
         Assert.Equal("かんじ", hybrid.Reading("漢字"));
     }
 
+    /// <summary>同じプロセスで答えるヘルパー。受け取った要求を Requests に残す。</summary>
+    private sealed class AnsweringHelper(Func<string, string, string?> convert) : IMozcHelper
+    {
+        public List<string> Requests { get; } = [];
+        public bool IsInstalled => true;
+        public void Start() { }
+
+        public string? Send(string request)
+        {
+            Requests.Add(request);
+            var fields = request.Split('\t');
+            return fields[0] == "C" ? convert(fields[1], fields[2]) : "OK";
+        }
+
+        public void Reset() { }
+        public long WorkingSet => 0;
+        public void Dispose() { }
+    }
+
+    [Test]
+    public static void Mozc_Context_DoesNotChangeClauseBoundaries()
+    {
+        // 報告: 記号等 がどうしても 機強盗 になる (前に「記号等」があると Mozc が き|ごうとう と区切る)。文脈で区切りが変わるなら文脈なしの結果を使う
+        var helper = new AnsweringHelper((context, reading) => context.Contains("記号等") ? "き\x1f気\x1eごうとう\x1f強盗" : "きごう\x1f記号\x1eとう\x1f等");
+        using var mozc = new MozcConverter(helper);
+        Assert.Equal("記号|等", string.Join("|", mozc.ConvertClauses("きごうとう", "文章を「記号等」含め、")!.Select(c => c.Text)));
+        // 区切りが同じなら、文脈付きの結果 (漢字の選び方だけが文脈で変わる)
+        var same = new AnsweringHelper((context, reading) => context.Length > 0 ? "あつい\x1f厚い" : "あつい\x1f暑い");
+        using var book = new MozcConverter(same);
+        Assert.Equal("厚い", book.ConvertClauses("あつい", "この本は")![0].Text);
+    }
+
+    [Test]
+    public static void Mozc_ParticleStart_GetsContext()
+    {
+        // 報告: ○○になってしまう → 「になってしまう」が「担ってしまう」になる。前の文脈が無いときは仮の文脈で「に」を助詞として読ませる
+        var helper = new AnsweringHelper((_, reading) => reading + '\x1f' + reading);
+        using var mozc = new MozcConverter(helper);
+        mozc.ConvertClauses("になってしまう");
+        Assert.Equal("C\tこれ\tになってしまう", helper.Requests[^1]);
+        mozc.ConvertClauses("になってしまう", "〇〇");
+        Assert.True(helper.Requests.Contains("C\t〇〇\tになってしまう"), "○ などの記号も日本語の文脈として渡す: " + string.Join(" / ", helper.Requests));
+        mozc.ConvertClauses("はしる");
+        Assert.Equal("C\t\tはしる", helper.Requests[^1], "に 以外で始まる読みには仮の文脈を付けない (はしる → は知る を防ぐ)");
+    }
+
     private static bool WaitConverted(MozcConverter mozc, string reading)
     {
         var watch = Stopwatch.StartNew();

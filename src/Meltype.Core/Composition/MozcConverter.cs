@@ -55,15 +55,24 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     public string? Convert(string hiragana) =>
         ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-        ConvertWithCandidates(hiragana, context)?.Select(s => s.Clause).ToList();
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null) =>
+        ConvertWithCandidates(hiragana, before)?.Select(s => s.Clause).ToList();
 
     /// <summary>
     /// ConvertClauses と同じ文節と、この変換で受け取った文節ごとの候補。
     /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
+    /// 文脈は同じ文の日本語 (<see cref="PrecedingText.Sentence"/>)。文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き
+    /// (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、区切りまで変わるなら文脈なしを使う。前に同じ語があると、
+    /// Mozc は文脈に引きずられて区切りを変えてしまうため (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
     /// </summary>
-    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null) =>
-        WithCandidates(Query(context ?? "", hiragana));
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? before = null)
+    {
+        if (PrecedingText.Sentence(before) is not { } sentence) return WithCandidates(Query(PrecedingText.ParticleNi(hiragana) ?? "", hiragana));
+        var withContext = Query(sentence, hiragana);
+        var plain = Query("", hiragana);
+        if (withContext is null || plain is null) return WithCandidates(withContext ?? plain);
+        return WithCandidates(withContext.Select(s => s.Reading).SequenceEqual(plain.Select(s => s.Reading)) ? withContext : plain);
+    }
 
     /// <summary>ConvertWithCandidates と同じ (文脈なし)。Budget を使わず、ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidatesNow(string hiragana) =>
@@ -97,7 +106,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private int _learnedSinceSave;
 
     /// <summary>確定した文節を Mozc に覚えさせる (Mozc の候補に無い文字列の文節があれば覚えない)。</summary>
-    public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
+    public void Learn(string? before, IReadOnlyList<ConversionClause> clauses)
     {
         if (clauses.Count == 0 || !IsAvailable) return;
         var records = string.Join(RecordSeparator, clauses.Select(c => Clean(c.Reading).Replace(UnitSeparator, ' ') + UnitSeparator + Clean(c.Text).Replace(UnitSeparator, ' ')));
@@ -106,7 +115,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (_disposed) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
             ClearCache();
-            var result = Send($"L\t{Clean(context ?? "")}\t{records}");
+            var result = Send($"L\t{Clean(PrecedingText.Sentence(before) ?? "")}\t{records}");
             if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
             {
                 _learnedSinceSave = 0;
