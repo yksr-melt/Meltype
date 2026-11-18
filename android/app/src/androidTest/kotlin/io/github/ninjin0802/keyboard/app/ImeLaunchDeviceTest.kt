@@ -180,7 +180,7 @@ class ImeLaunchDeviceTest {
     }
 
     /** Normal typing shows no extra switch button; recovery offers direct system IME selection. */
-    @Test fun keyboardProvidesImePickerOnlyInEmergency() = withRomajiActivity { activity ->
+    @Test fun keyboardProvidesImePickerOnlyInEmergency() = withSmokeActivity { activity ->
         focusJapanese(activity, activity.japaneseEditor)
         val service = KeyboardService.activeForSmokeTest?.get()
             ?: throw AssertionError("Keyboard service missing")
@@ -204,7 +204,7 @@ class ImeLaunchDeviceTest {
     }
 
     /** The Core does not handle an email editor (Email trait): it shows English QWERTY even after あa, and keys go in as typed. */
-    @Test fun emailFieldTypesKeysAsTheyAre() = withRomajiActivity { activity ->
+    @Test fun emailFieldTypesKeysAsTheyAre() = withSmokeActivity { activity ->
         requestKeyboard(activity, activity.editor)
         waitUntil(
             "English QWERTY in email editor", millis = 45_000,
@@ -233,7 +233,7 @@ class ImeLaunchDeviceTest {
     }
 
     /** Runs [block] in the smoke-test activity. */
-    private fun withRomajiActivity(block: (ImeSmokeActivity) -> Unit) {
+    private fun withSmokeActivity(block: (ImeSmokeActivity) -> Unit) {
         val activity = instrumentation.startActivitySync(
             Intent(target, ImeSmokeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         ) as ImeSmokeActivity
@@ -265,7 +265,7 @@ class ImeLaunchDeviceTest {
      * The keyboard's own edits are not caret moves: i + want re-commits i as I. A caret move by
      * the app is one: the Core is told and leaves the word before the caret alone.
      */
-    @Test fun ownEditorWritesDoNotLookLikeCaretMoves() = withRomajiActivity { activity ->
+    @Test fun ownEditorWritesDoNotLookLikeCaretMoves() = withSmokeActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)
@@ -280,7 +280,7 @@ class ImeLaunchDeviceTest {
         assertEquals("Own edits were taken as caret moves", start, outsideCaretMoves())
     }
 
-    @Test fun caretMovesByTheAppStopRecommit() = withRomajiActivity { activity ->
+    @Test fun caretMovesByTheAppStopRecommit() = withSmokeActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)
@@ -303,7 +303,7 @@ class ImeLaunchDeviceTest {
     }
 
     /** Sending from a button outside the IME must not keep or reinsert unsent composition. */
-    @Test fun externalSendClearsCompositionWithoutReinsertingOldText() = withRomajiActivity { activity ->
+    @Test fun externalSendClearsCompositionWithoutReinsertingOldText() = withSmokeActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)
@@ -329,7 +329,7 @@ class ImeLaunchDeviceTest {
     }
 
     /** Leaving an editor keeps the composing text there; the next editor starts without it. */
-    @Test fun leavingAnEditorCommitsTheCompositionThere() = withRomajiActivity { activity ->
+    @Test fun leavingAnEditorCommitsTheCompositionThere() = withSmokeActivity { activity ->
         val japanese = activity.japaneseEditor
         focusJapanese(activity, japanese)
         instrumentation.runOnMainSync { japanese.setText("") }
@@ -383,7 +383,7 @@ class ImeLaunchDeviceTest {
      * With the real converter: Space selects the last clause (as on the desktop), a candidate tap chooses it for that
      * clause, the Space-bar cursor gesture moves to the previous clause, and Enter commits the whole sentence.
      */
-    @Test fun candidateTapChoosesForTheClauseAndEnterCommits() = withRomajiActivity { activity ->
+    @Test fun candidateTapChoosesForTheClauseAndEnterCommits() = withSmokeActivity { activity ->
         val editor = activity.japaneseEditor
         focusJapanese(activity, editor)
         clear(editor)

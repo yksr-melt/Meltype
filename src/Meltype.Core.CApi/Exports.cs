@@ -69,7 +69,7 @@ public static unsafe class Exports
         {
             if (mozcRequest == null) return 0;
             s_isWord = isWord;
-            s_converter = Runtime.CreateConverter(AppContext.BaseDirectory, new CallbackMozcHelper(mozcRequest));
+            s_converter = Runtime.CreateConverter(new CallbackMozcHelper(mozcRequest));
             return 1;
         }
         catch (Exception ex)
