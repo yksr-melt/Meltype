@@ -77,6 +77,8 @@ class MozcConverterTest {
 
     @Test fun reading_of_empty_returns_null() = assertNull(converter.reading(""))
 
+    @Test fun reading_keeps_numbers_whole() = assertEquals("2026ねん", converter.reading("2026年"))
+
     /** 呼ばれるたびに [step] ミリ秒進む時計と、送った命令の記録をつけた変換器。 */
     private class Timed(engine: MozcEngine, step: Long) {
         val sent = mutableListOf<Input>()

@@ -793,7 +793,7 @@ class KeyboardService : InputMethodService(), KeyListener {
             mozc ?: lazy { openMozc(context.applicationContext) }.also { mozc = it }
 
         private fun coreCallbacks(context: Context): CoreMozcCallbacks =
-            callbacks ?: CoreMozcCallbacks(mozc(context)::value) {
+            callbacks ?: CoreMozcCallbacks(mozc(context)) {
                 active?.get()?.let { service -> service.mainHandler.post(service::coreConversionFinished) }
             }.also { callbacks = it }
 

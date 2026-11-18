@@ -44,7 +44,7 @@ internal object DeviceTestCore {
     }
 
     /** Tests send ConversionFinished themselves when they wait for a background conversion. */
-    fun open(): MeltypeCoreHost = MeltypeCoreHost.open(directory, CoreMozcCallbacks({ converter }) {})
+    fun open(): MeltypeCoreHost = MeltypeCoreHost.open(directory, CoreMozcCallbacks(lazyOf(converter)) {})
 }
 
 /** An editor of its own text, which also tells where the caret is (as TextView does; BaseInputConnection alone does not). */

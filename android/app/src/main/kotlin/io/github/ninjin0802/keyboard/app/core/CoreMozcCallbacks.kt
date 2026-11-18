@@ -11,14 +11,17 @@ import io.github.ninjin0802.keyboard.mozc.MozcClause
  * JNI が Core の変換のスレッド (入力のスレッドとは別) から呼ぶ。
  */
 internal class CoreMozcCallbacks(
-    private val mozc: () -> MozcBackend?,
+    private val mozc: Lazy<MozcBackend?>,
     private val conversionReady: () -> Unit,
 ) {
     /** 要求 1 行に答える。null は失敗 (Mozc を開けなかった・時間切れ。Core は答えを控えず、数回続くと Mozc を使うのをやめる)。 */
     @Suppress("unused")
     fun request(requestBytes: ByteArray): ByteArray? {
-        val converter = mozc() ?: return null
-        return answer(converter, requestBytes.decodeToString())?.encodeToByteArray()
+        val request = requestBytes.decodeToString()
+        // 逆変換 (再変換の読み) は入力のスレッドから頼まれるので、Mozc を開き終わるのを待たずに「逆変換できない」と答える
+        if (request.startsWith("R\t") && !mozc.isInitialized()) return ByteArray(0)
+        val converter = mozc.value ?: return null
+        return answer(converter, request)?.encodeToByteArray()
     }
 
     /** Core の変換の結果が届いた (Core の変換のスレッドから呼ばれる)。 */

@@ -61,9 +61,15 @@ class MozcConverter internal constructor(
         } ?: false
     }
 
+    /**
+     * 半角の数字は 1 字ずつ読む (2026年 → にぜろにろくねん) ので、全角にして渡し (２０２６年 → ２０２６ねん)、読みの数字は半角に戻す
+     * (デスクトップの meltype_mozc_helper と同じ)。
+     */
     override fun reading(text: String): String? =
-        withSession(text, null) { session ->
-            session.convertReverse().preedit.segmentList.joinToString("") { it.key }.takeIf { it.isNotEmpty() }
+        withSession(text.map { if (it in '0'..'9') '０' + (it - '0') else it }.joinToString(""), null) { session ->
+            session.convertReverse().preedit.segmentList.joinToString("") { it.key }
+                .map { if (it in '０'..'９') '0' + (it - '０') else it }.joinToString("")
+                .takeIf { it.isNotEmpty() }
         }
 
     /**
