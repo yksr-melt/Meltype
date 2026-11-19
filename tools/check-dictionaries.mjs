@@ -45,6 +45,14 @@ const dictionaries = {
   'loanwords.txt': {
     format: spaced((reading, rest) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`, rest.length === 0 ? '候補が無い' : null]),
   },
+  // 英単語 カタカナ カタカナ …。Core は打った英字を小文字にして引く
+  'katakana-spellings.txt': {
+    format: spaced((word, rest) => [
+      /^[a-z]+$/.test(word) ? null : `「${word}」が小文字の英単語でない`,
+      rest.length === 0 ? '候補が無い' : null,
+      ...rest.filter(w => !/^[ァ-ヺー]+$/.test(w)).map(w => `「${w}」がカタカナでない`),
+    ]),
+  },
   'propernouns.txt': {
     // Core (ProperNouns) は空白・タブ・, で区切った語のうち、ASCII の英数字だけの語を登録し、それ以外は黙って捨てる
     format: words(w => /^[A-Za-z][A-Za-z0-9]*$/.test(w) ? null : `「${w}」が英字で始まる英数字だけの語でない (Core は登録しない)`),

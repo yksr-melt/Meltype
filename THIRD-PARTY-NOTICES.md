@@ -66,6 +66,10 @@ Meltype のソースコード (このリポジトリ) には、次のものを�
 
 リナックス → Linux のように、カタカナで打った語の候補に英字の書き方を出すのに使います。JMdict の英字で書く語 (Ｌｉｎｕｘ、ＧＨＱ) の書き方とカタカナの読みを `tools/make-loanwords.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
 
+### 英単語のカタカナ表記 (dictionaries/katakana-spellings.txt)
+
+export → エクスポート のように、英語として打った語の変換の候補にカタカナ表記を出すのに使います。JMdict のカタカナ語のうち、最初の英訳がよく使う英単語 1 語のものを `tools/make-katakana-spellings.mjs` で取り出して作りました。著作権・ライセンスは英訳の候補と同じ (EDRDG、CC BY-SA 4.0) で、この派生データも CC BY-SA 4.0 です。
+
 ### 候補の意味 (dictionaries/meanings.txt)
 
 変換中に候補で止まったとき、その候補の日本語の意味を出すのに使います。[ウィクショナリー日本語版](https://ja.wiktionary.org/) の記事から [kaikki.org](https://kaikki.org/jawiktionary/) (wiktextract、Tatu Ylonen) が取り出したデータを元に、英訳の候補と同じよく使う語の意味の最初の文を `tools/make-meanings.mjs` で取り出して作りました (長い文は途中で切っています)。

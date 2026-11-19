@@ -178,10 +178,15 @@ public sealed partial class CompositionController
                     english = Distinct([.. english, .. _services.Candidates?.Lookup(segment.Raw) ?? []]);
                 var reading = RomajiReading(segment.Raw);
                 List<string> romaji = reading is null ? [] : JapaneseCandidates(reading, null, converter);
-                clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
-                    ? Distinct([.. romaji, .. english])
-                    : Distinct([.. english, .. romaji]))
-                { Kana = _text.KanaForSegment(segments, s) });
+                // カタカナ表記 (export → エクスポート) は候補の最後。英字・ローマ字として読んだ候補の順は変えず、選んだときだけカタカナにする
+                var katakana = (_services.Candidates?.KatakanaSpellings(segment.Raw.ToLowerInvariant()) ?? []).Where(k => !romaji.Contains(k)).ToList();
+                var clause = new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
+                    ? Distinct([.. romaji, .. english, .. katakana])
+                    : Distinct([.. english, .. romaji, .. katakana]))
+                { Kana = _text.KanaForSegment(segments, s) };
+                // カタカナ表記を選んでも、英語の綴りは日本語の読みでないので、その語を日本語として覚えない (覚えると次から export が えxぽrt になる)
+                clause.NotLearned.UnionWith(katakana);
+                clauses.Add(clause);
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
