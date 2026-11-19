@@ -218,6 +218,18 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void Settings_AreReadOncePerEvent()
+    {
+        // 出来事の途中で設定が変わっても (受け持つ → 止める)、その出来事の中の判断は始めに読んだ設定でそろえる
+        var reads = 0;
+        var session = new TestSession(() => new Settings { Enabled = ++reads <= 2 });
+        session.HandleKey('A', 'a', false, false, false, false);
+        var k = session.HandleKey('K', 'k', false, false, false, false);
+        Assert.Equal(2, reads, "設定は出来事ごとに 1 回読む");
+        Assert.True(session.State.HandlesInput && k.Consumed, "受け持つと答えたキーはアプリに通さない");
+    }
+
+    [Test]
     public static void Numpad_IsPassedOnlyWhenNothingIsTyped()
     {
         // #460: Windows・Mac・fcitx5・IBus は、テンキーの数字・記号を「仮想キーコード (0x60〜0x6F) と文字」で送る。

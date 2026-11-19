@@ -8,8 +8,8 @@ using Meltype.Config;
 namespace Meltype.Ime;
 
 /// <summary><see cref="ImeSession"/> の処理が使う、入力欄の状態でないもの。<see cref="ImeHost"/> が出来事ごとに渡す。</summary>
-/// <param name="Source">設定 (config.json)。アプリ別設定は入力欄のアプリで反映する。</param>
-internal sealed record ImeEnv(IImeEnvironment Environment, SessionParts Parts, Func<Settings> Source)
+/// <param name="Settings">設定 (config.json)。出来事の始めに 1 回読んだもの。アプリ別設定は入力欄のアプリで反映する。</param>
+internal sealed record ImeEnv(IImeEnvironment Environment, SessionParts Parts, Settings Settings)
 {
     public UserDictionary? UserDictionary => Parts.Services.UserDictionary;
 

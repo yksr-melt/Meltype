@@ -94,7 +94,7 @@ internal static class ImeSession
             return new(InitialState(false, !Direct(state), AppSettings(state, env), game: false, entered: false, rev), Pass);
         }
         state.Field = field;
-        var all = env.Source();
+        var all = env.Settings;
         var settings = all.ForApp(state.Field?.App);
         var active = IsActive(env.Environment, all, state.Field);
         var lastSnippet = state.LastSnippet;
@@ -539,7 +539,7 @@ internal static class ImeSession
     private const long UserDictionaryCheckMs = 1000;
 
     /// <summary>入力欄のアプリの設定 (アプリ別設定を反映したもの)。</summary>
-    private static Settings AppSettings(ImeSessionState state, ImeEnv env) => env.Source().ForApp(state.Field?.App);
+    private static Settings AppSettings(ImeSessionState state, ImeEnv env) => env.Settings.ForApp(state.Field?.App);
 
     /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
     private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => Env(state, env, AppSettings(state, env));
