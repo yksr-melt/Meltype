@@ -319,7 +319,7 @@ public sealed class CompositionText
     {
         // 最後の数字の位置 (その後ろが英字だけのとき)
         var digit = _units.Count - 1;
-        while (digit >= 0 && IsLetters(_units[digit].Raw)) digit--;
+        while (digit >= 0 && IsLetters(_units[digit])) digit--;
         if (digit < 0 || _units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(_units.Skip(digit + 1).Select(u => u.Raw)) + _pending;
         var lower = run.ToLowerInvariant();
@@ -998,14 +998,14 @@ public sealed class CompositionText
         var start = 0;
         while (start < _units.Count)
         {
-            if (!IsLetters(_units[start].Raw) || IsLaughter(_units[start]))
+            if (!IsLetters(_units[start]) || IsLaughter(_units[start]))
             {
                 offset += _units[start].Raw.Length;
                 start++;
                 continue;
             }
             var end = start;
-            while (end < _units.Count && IsLetters(_units[end].Raw) && !IsLaughter(_units[end])) end++;
+            while (end < _units.Count && IsLetters(_units[end]) && !IsLaughter(_units[end])) end++;
             var atEnd = end == _units.Count;
             var letters = string.Concat(_units.Skip(start).Take(end - start).Select(u => u.Raw)) + (atEnd ? Pending : "");
             var runOffset = offset;
@@ -1052,13 +1052,13 @@ public sealed class CompositionText
         var withPending = _pending.Length > 0;
         while (end > 0 || withPending)
         {
-            if (!withPending && !IsLetters(_units[end - 1].Raw))
+            if (!withPending && !IsLetters(_units[end - 1]))
             {
                 end--;
                 continue;
             }
             var runStart = end;
-            while (runStart > 0 && IsLetters(_units[runStart - 1].Raw)) runStart--;
+            while (runStart > 0 && IsLetters(_units[runStart - 1])) runStart--;
             KeepLaughterAt(end, withPending);
             withPending = false;
             end = runStart;
@@ -1086,11 +1086,11 @@ public sealed class CompositionText
         // 設定「かな + w を笑いにする」: 1 つのかなの音 (ね・さ) だけの後ろの w は、その 2 つで英単語 (new・saw) にしない (issue #713・#492)。
         // もっと長い英単語 (snow・window) の終わりは、今までどおり英単語
         var soleSyllable = LaughterAfterKana && start > 0 && _units[start - 1].Kana is [>= 'ぁ' and <= 'ん'] && _units[start - 1].Raw.All(char.IsAsciiLetter);
-        for (var i = start - 1; i >= 0 && _units[i].Raw.Length > 0 && _units[i].Raw.All(char.IsAsciiLetter); i--)
+        for (var i = start - 1; i >= 0 && IsLetters(_units[i]); i--)
         {
             letters = _units[i].Raw + letters;
             if (soleSyllable && i == start - 1) continue;
-            var runStart = i == 0 || !IsLetters(_units[i - 1].Raw);
+            var runStart = i == 0 || !IsLetters(_units[i - 1]);
             if (letters.Length >= 3 && (runStart ? _detector.IsKnownEnglishWord(letters) : _detector.IsListedEnglishWord(letters.ToLowerInvariant()))) return end;
         }
         _units.RemoveRange(start, end - start);
@@ -1171,7 +1171,11 @@ public sealed class CompositionText
         return false;
     }
 
-    private static bool IsLetters(string raw) => raw.Length > 0 && raw.All(char.IsAsciiLetter);
+    /// <summary>
+    /// 英字を打って、英字かかなを見せている単位か。英字から作った記号 (zl → →) は含めない
+    /// (英字の並びに入れると、打ち間違いとして直したり (hogezl → ほげぞ: issue #2013)、単位・笑いの判定に混ざったりする)。
+    /// </summary>
+    private static bool IsLetters(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter) && unit.Kana.All(char.IsLetter);
 
     /// <summary>単位 [start, end) の読みを、正しい読み (カタカナ) に置き換える。end が単位の数を超えるときは語末の n も含む。</summary>
     public void ReplaceReading(int start, int end, string rightKatakana)
