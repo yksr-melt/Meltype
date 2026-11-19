@@ -19,6 +19,39 @@ internal static class ReleaseNotesTests
     }
 
     [Test]
+    public static void ReleaseNotes_HidesMarkdownDecorationsInPlainText()
+    {
+        const string markdown = """
+            # Meltype v1.6.0
+
+            説明の **強調** と `code` です。
+
+            ## 変わったこと
+
+            - **項目** です (#1)。
+              - 入れ子です。
+            - [報告フォーム](https://example.com/report) から送れます。
+
+            **Full Changelog**: https://example.com/compare
+            """;
+
+        var expected = """
+            Meltype v1.6.0
+
+            説明の 強調 と code です。
+
+            変わったこと
+
+            ・項目 です (#1)。
+              ・入れ子です。
+            ・報告フォーム から送れます。
+
+            Full Changelog: https://example.com/compare
+            """.ReplaceLineEndings("\n");
+        Assert.Equal(expected, ReleaseNotesText.ToPlainText(markdown));
+    }
+
+    [Test]
     public static void ReleaseUrls_PointToTheTagAndTheList()
     {
         Assert.Equal("https://github.com/yksr-melt/Meltype/releases/tag/v1.3.1-pre.3", ProjectInfo.ReleaseUrl("1.3.1-pre.3"));

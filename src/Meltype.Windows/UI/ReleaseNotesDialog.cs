@@ -33,7 +33,7 @@ internal sealed class ReleaseNotesDialog : Form
         }
     }
 
-    private ReleaseNotesDialog(string version, bool updated, string? notes)
+    internal ReleaseNotesDialog(string version, bool updated, string? notes)
     {
         Text = $"Meltype {version} のリリースノート";
         StartPosition = FormStartPosition.CenterScreen;
@@ -57,7 +57,7 @@ internal sealed class ReleaseNotesDialog : Form
             ReadOnly = true,
             ScrollBars = ScrollBars.Vertical,
             BackColor = SystemColors.Window,
-            Text = (notes ?? "").ReplaceLineEndings("\r\n"),
+            Text = (notes is null ? "" : Config.ReleaseNotesText.ToPlainText(notes)).ReplaceLineEndings("\r\n"),
         };
         var textPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 0, 10, 0), Visible = notes is not null };
         textPanel.Controls.Add(text);
@@ -76,6 +76,13 @@ internal sealed class ReleaseNotesDialog : Form
         Controls.Add(buttons);
         AcceptButton = close;
         CancelButton = close;
+        // 本文の欄に最初のフォーカスが当たると、Windows が中身を全選択する。開いたときは「閉じる」に置く。
+        ActiveControl = close;
+        Shown += (_, _) =>
+        {
+            text.Select(0, 0);
+            close.Focus();
+        };
         if (notes is null) Height = intro.PreferredHeight + buttons.PreferredSize.Height + LogicalToDeviceUnits(80);
     }
 
