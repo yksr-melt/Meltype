@@ -5,7 +5,7 @@
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
 // 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay)。
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
-import { align, toKana, toRomaji } from "./romaji.js";
+import { align, finalKana, toKana, toRomaji } from "./romaji.js";
 import { compare, replay, suspicious } from "./typing-check.js";
 import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
@@ -117,9 +117,33 @@ function loadSentence() {
   render();
 }
 
+// 打った字をかなにする。お手本の英単語と一致した部分は英語のまま出す。
+// 英単語は、それまでの入力をかなにし切った位置 (残りが無いか n だけ) でだけ探す。どこでも探すと、kaigi の ai のように日本語の中の字まで英語になるため。
+// ワークアラウンド: 打った字を Meltype のエンジンで組み立てるようにしたら消す
+function previewKana(typed, words) {
+  let kana = "";
+  let start = 0;
+  let i = 0;
+  while (i < typed.length) {
+    const { pending } = toKana(typed.slice(start, i));
+    const word = (pending === "" || pending === "n") && words.find((w) => typed.slice(i, i + w.length).toLowerCase() === w);
+    if (word) {
+      kana += finalKana(typed.slice(start, i)) + typed.slice(i, i + word.length);
+      i += word.length;
+      start = i;
+    } else {
+      i += 1;
+    }
+  }
+  const rest = toKana(typed.slice(start));
+  return { kana: kana + rest.kana, pending: rest.pending };
+}
+
 function render() {
   const typed = replay(state.trial.keys);
-  const { kana, pending } = toKana(typed);
+  // 長い単語を先に試す (app と apple が両方あれば apple を取る)
+  const words = (state.queue[state.index].reading.match(/[a-z]+/g) ?? []).sort((a, b) => b.length - a.length);
+  const { kana, pending } = previewKana(typed, words);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
   $("romaji").textContent = typed.toLowerCase();
