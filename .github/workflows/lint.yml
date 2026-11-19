@@ -40,6 +40,11 @@ jobs:
         run: dotnet format whitespace --folder --verify-no-changes
       - name: 静的解析
         run: dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true
+      # Mac・Linux・Android 版の Core は NativeAOT で動き、テストは JIT で動く。NativeAOT で動かないコード (reflection など) を
+      # trim・AOT のアナライザーで失敗にする。アナライザーは NuGet のパッケージ (Microsoft.NET.ILLink.Tasks) なので、
+      # csproj には書かず (nuget.config が NuGet を使わない設定のため)、ここで nuget.org を指定する
+      - name: NativeAOT
+        run: dotnet build src/Meltype.Core.CApi -c Release -p:IsAotCompatible=true -p:TreatWarningsAsErrors=true -p:RestoreSources=https://api.nuget.org/v3/index.json
 
   license-header:
     if: github.event_name == 'pull_request'

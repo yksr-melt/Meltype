@@ -14,8 +14,6 @@
     <AssemblyName>MeltypeNative</AssemblyName>
     <RootNamespace>Meltype.CApi</RootNamespace>
     <InvariantGlobalization>false</InvariantGlobalization>
-    <!-- NativeAOT で動かないコードを、ふつうのビルドで trim・AOT のアナライザーの警告にする (Meltype.Core.csproj と同じ) -->
-    <IsAotCompatible>true</IsAotCompatible>
     <!-- 設定・学習データの JSON は、ビルド時に作った型の情報 (Meltype.Core の SettingsJsonContext など、ソース生成) で読み書きする。
          reflection は NativeAOT では列挙型のプロパティ・private な型を読めない (issue #151)。念のため有効のままにし、Meltype.Core の型も削らずに残す。 -->
     <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
