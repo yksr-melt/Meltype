@@ -7,16 +7,28 @@ namespace Meltype.Tests;
 internal static class ReleaseNotesDialogTests
 {
     [Test]
-    public static void ReleaseNotesDialog_HidesMarkdownAndDoesNotSelectAll()
+    public static void ReleaseNotesDialog_DecoratesMarkdownAndDoesNotSelectAll()
     {
-        using var dialog = new UI.ReleaseNotesDialog("1.6.0", updated: true, "# Meltype v1.6.0\n\n- **項目** と `code`");
+        using var dialog = new UI.ReleaseNotesDialog("1.6.0", updated: true, "# Meltype v1.6.0\n\n- **項目** と `code`\n  - 入れ子");
         dialog.Show();
         Application.DoEvents();
 
-        var text = Descendants(dialog).OfType<TextBox>().Single();
-        Assert.Equal("Meltype v1.6.0\r\n\r\n・項目 と code", text.Text);
+        var text = Descendants(dialog).OfType<RichTextBox>().Single();
+        Assert.Equal("Meltype v1.6.0\n\n・項目 と code\n  ・入れ子", text.Text.ReplaceLineEndings("\n"));
         Assert.Equal(0, text.SelectionLength, "開いたときに本文を全選択しない");
         Assert.True(dialog.ActiveControl is Button { Text: "閉じる" }, "開いたときは「閉じる」にフォーカスする");
+
+        text.Select(0, "Meltype v1.6.0".Length);
+        Assert.True(text.SelectionFont is { Bold: true }, "見出しは太字");
+        Assert.True(text.SelectionFont!.Size > text.Font.Size, "見出しは本文より大きい");
+
+        var strong = text.Text.IndexOf("項目", StringComparison.Ordinal);
+        text.Select(strong, "項目".Length);
+        Assert.True(text.SelectionFont is { Bold: true }, "**強調** は太字");
+
+        var code = text.Text.IndexOf("code", StringComparison.Ordinal);
+        text.Select(code, "code".Length);
+        Assert.Equal("Consolas", text.SelectionFont!.FontFamily.Name, "`code` は等幅");
     }
 
     private static IEnumerable<Control> Descendants(Control root)
