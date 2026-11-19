@@ -65,6 +65,24 @@ internal static class SettingsJsonTests
     }
 
     [Test]
+    public static void SettingsJson_ShowTypedKeysMovesToTheChoice()
+    {
+        // v13: ShowTypedKeys (真偽値) を TypedKeys (選択肢) にした。OFF にしていた人だけ「表示しない」にする
+        foreach (var (json, expected) in new[]
+        {
+            ("{\"ShowTypedKeys\":false}", "Off"),
+            ("{\"ShowTypedKeys\":true}", null),
+            ("{}", null),
+        })
+        {
+            var values = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+            Settings.MigrateToV13(values);
+            Assert.Equal(expected, values["TypedKeys"]?.GetValue<string>(), json);
+            Assert.True(!values.ContainsKey("ShowTypedKeys"), "消した項目は残さない: " + json);
+        }
+    }
+
+    [Test]
     public static void SettingsJson_TsfIndicatorMovesToTheSharedSetting()
     {
         // v10: Meltype IME だけの ShowTsfModeIndicator を ModeIndicator に移す。Meltype キーボードの人の ModeIndicator はそのまま。

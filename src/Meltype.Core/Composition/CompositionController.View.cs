@@ -107,8 +107,17 @@ public sealed partial class CompositionController
         return candidates.Count > 1 ? candidates : null;
     }
 
-    /// <summary>変換ボックスに出す、打ったキー (設定が ON のときだけ)。</summary>
-    private string? TypedKeys() => _settings().ShowTypedKeys && _text.Raw is { Length: > 0 } raw ? raw : null;
+    /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、英日に分けたあとのかなと英字。</summary>
+    private string? TypedKeys()
+    {
+        if (_text.IsEmpty) return null;
+        return _settings().TypedKeys switch
+        {
+            TypedKeysStyle.Keys => _text.Raw,
+            TypedKeysStyle.Kana => _text.RenderSegments(final: false, convert: null),
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// 予測変換の候補を、今の打ちかけから作り直す。打った内容が変わったら選んでいた候補は戻す。
