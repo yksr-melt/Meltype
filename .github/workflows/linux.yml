@@ -11,6 +11,7 @@ on:
       - 'linux/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
+      - 'native/build-core-linux.sh'
       - '.github/actions/linux-native/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
