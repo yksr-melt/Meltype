@@ -305,7 +305,7 @@ public sealed partial class CompositionDetector
     /// @ の後ろ (Discord・X のメンション @kuraido) と、_ の入った語 (upah_setu、cafely_latte) は、ローマ字として読めても英字のまま。
     /// 英字・数字・_ が続く所までがユーザー名 (@ の後ろは、メールアドレスのドメインの . - も含める)。
     /// </summary>
-    private static int UserNameEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private static int UserNameEnd(Prepared prepared, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsNameUnit(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(c => char.IsAsciiLetterOrDigit(c) || c == '_');
         var n = units.Count;
@@ -319,7 +319,7 @@ public sealed partial class CompositionDetector
             end++;
             while (end < n && IsNameUnit(units[end])) end++;
         }
-        var name = Raw(units, start, end) + (end == n ? pending : "");
+        var name = Raw(prepared, start, end) + (end == n ? pending : "");
         if (!name.Any(char.IsAsciiLetter)) return -1;
         if (mention || name.Contains('_')) return end;
         // メールアドレスの @ より前 (tanaka@、yamada.taro@): @ を打ったら、その前も英字のまま。
@@ -344,7 +344,7 @@ public sealed partial class CompositionDetector
     /// 語の先頭から拡張子までを 1 つの英語区間の候補にする (句点の後ろの日本語 ryoukaidesu.|deha とは重みで比べる)。大文字や知っている英単語 (Meltype.amr) は、拡張子を別区間のままにする。
     /// 数字の前 (3.14desu)・小数 (soudesu.1.5)・最後まで読める語 (Meltype.desu) は対象外。
     /// </summary>
-    private int ReadableStemDotSuffixEnd(bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int ReadableStemDotSuffixEnd(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         if (start > 0 && units[start - 1].Raw.Length > 0 && units[start - 1].Raw.All(char.IsAsciiLetter)) return -1;
         var dot = start;
@@ -352,13 +352,13 @@ public sealed partial class CompositionDetector
         if (char.IsAsciiLetterUpper(units[dot].Raw[0])) return -1;
         while (dot < units.Count && units[dot].Raw.Length > 0 && units[dot].Raw.All(char.IsAsciiLetter)) dot++;
         if (dot >= units.Count || units[dot].Raw != ".") return -1;
-        var stem = Raw(units, start, dot);
+        var stem = Raw(prepared, start, dot);
         // 小文字の、日本語の語と同じ綴りの固有名詞 (wakatte) は、区間分けでかなになるので、ここでドメインとしてまとめる (wakatte.tv)
         if (IsKnownEnglishWord(learning, stem) && !IsLowercaseJapaneseProperNoun(learning, stem)) return -1;
-        var suffix = DotSuffixEnd(learning, units, dot + 1, pending);
+        var suffix = DotSuffixEnd(prepared, learning, units, dot + 1, pending);
         if (suffix <= dot + 1) return -1;
         // 1.5 のような小数は拡張子ではない (soudesu.1.5 → そうです。1.5)。cpp のような英字の拡張子だけをまとめる。
-        var suffixRaw = Raw(units, dot + 1, Math.Min(suffix, units.Count));
+        var suffixRaw = Raw(prepared, dot + 1, Math.Min(suffix, units.Count));
         if (suffixRaw.Length > 0 && char.IsAsciiDigit(suffixRaw[0])) return -1;
         return suffix;
     }
@@ -367,10 +367,10 @@ public sealed partial class CompositionDetector
     /// 入力先頭のドットファイル (.gitignore / .env / .dll) の終わり。無ければ -1 (issue #431)。
     /// 途中の 3.14desu や「です。」の . には使わない (start == 0 のときだけ)。
     /// </summary>
-    private int LeadingDotfileEnd(bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending, bool manual)
+    private int LeadingDotfileEnd(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending, bool manual)
     {
         if (manual || start != 0 || units.Count == 0 || units[0].Raw != ".") return -1;
-        var end = DotSuffixEnd(learning, units, 1, pending);
+        var end = DotSuffixEnd(prepared, learning, units, 1, pending);
         return end > 1 ? end : -1;
     }
 
@@ -380,7 +380,7 @@ public sealed partial class CompositionDetector
     /// 拡張子は、ローマ字として読めない (dll、aab)・数字や . / を含む (e57、go.mod)・よく使う拡張子 (ace、ini) なら英字のまま。
     /// 最後までローマ字として読める語 (Meltype.desu) は、今までどおり判定する。後ろの助詞からは日本語 (MeltypeTip.dll|wokesu)。
     /// </summary>
-    private int DotSuffixEnd(bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int DotSuffixEnd(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '+');
         var n = units.Count;
@@ -392,7 +392,7 @@ public sealed partial class CompositionDetector
             end++;
             while (end < n && IsPart(units[end])) end++;
         }
-        var name = Raw(units, start, end) + (end == n ? pending : "");
+        var name = Raw(prepared, start, end) + (end == n ? pending : "");
         if (!name.Any(char.IsAsciiLetter)) return -1;
         var lower = name.ToLowerInvariant();
         static bool Known(string label) => DomainSuffixes.Contains(label) || FileExtensions.Contains(label);
@@ -407,9 +407,9 @@ public sealed partial class CompositionDetector
         //   読めない語の後ろ: 助詞から最後まで読めるとき (dll|wokesu、json|nokakikata)。長い名前の途中 (gitig|nore)・助詞だけ (gc|no、t|ga) では分けない
         for (var k = start + 1; k < end; k++)
         {
-            var stem = Raw(units, start, k).ToLowerInvariant();
+            var stem = Raw(prepared, start, k).ToLowerInvariant();
             if (stem.Length > 4) break;
-            var rest = (Raw(units, k, end) + (end == n ? pending : "")).ToLowerInvariant();
+            var rest = (Raw(prepared, k, end) + (end == n ? pending : "")).ToLowerInvariant();
             if (TrailingParticles.FirstOrDefault(p => rest.StartsWith(p, StringComparison.Ordinal)) is not { } particle) continue;
             var afterParticle = rest[particle.Length..];
             // 英単語が続くのは 3 文字以上のときだけ (au|to|mount にしない)
@@ -420,9 +420,9 @@ public sealed partial class CompositionDetector
         // 読めない語の後ろに、(助詞 +) 3 音以上の日本語の語から始まる読める語が続く (.env|fairu、.zshrc|nosettei)。短い語 (.js|on のおん) では分けない
         for (var k = start + 1; !readable && k < end; k++)
         {
-            var stem = Raw(units, start, k).ToLowerInvariant();
+            var stem = Raw(prepared, start, k).ToLowerInvariant();
             if (Readable(stem)) continue;
-            var rest = (Raw(units, k, end) + (end == n ? pending : "")).ToLowerInvariant();
+            var rest = (Raw(prepared, k, end) + (end == n ? pending : "")).ToLowerInvariant();
             if (!Readable(rest)) continue;
             var particle = TrailingParticles.FirstOrDefault(p => rest.StartsWith(p, StringComparison.Ordinal)) ?? "";
             var kana = _romaji.ConvertLenient(rest[particle.Length..], final: true);
@@ -437,7 +437,7 @@ public sealed partial class CompositionDetector
     /// 数字を含む固有名詞 (propernouns.txt の yachi8000) の終わり。start からの英字・数字が一覧にあるとき (前後に日本語が続いてもよい)。
     /// 英字の部分がローマ字として読めても、数字の前で区切ってかなにしない (やち8000 にしない: issue #1013)。
     /// </summary>
-    private int ProperNounWithDigitsEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int ProperNounWithDigitsEnd(Prepared prepared, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsPart(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetterOrDigit);
         if (start >= units.Count || !IsPart(units[start])) return -1;
@@ -446,7 +446,7 @@ public sealed partial class CompositionDetector
         var end = -1;
         for (var i = start + 1; i <= units.Count && IsPart(units[i - 1]); i++)
         {
-            var word = Raw(units, start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
+            var word = Raw(prepared, start, i) + (i == units.Count && pending.All(char.IsAsciiLetterOrDigit) ? pending : "");
             if (word.Any(char.IsAsciiDigit) && word.Any(char.IsAsciiLetter) && _proper.Contains(word.ToLowerInvariant())) end = i;
         }
         return end;
@@ -458,18 +458,18 @@ public sealed partial class CompositionDetector
     /// 日本語の途中の数字 (かいぎは3じ) を略語にしないよう、前後の英字は短く、全体も短いときだけ。
     /// 末尾の子音が打ちかけ (pending の n: i18|n) のときも、数字の後ろの英字として数える。
     /// </summary>
-    private int NumeronymEnd(IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int NumeronymEnd(Prepared prepared, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         static bool IsLetter(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter);
         static bool IsDigit(CompositionUnit unit) => unit.Raw is [var d] && char.IsAsciiDigit(d);
         if (start >= units.Count || !IsLetter(units[start])) return -1;
         var i = start;
         while (i < units.Count && IsLetter(units[i])) i++;
-        var headLen = Raw(units, start, i).Length;
+        var headLen = Raw(prepared, start, i).Length;
         if (headLen is < 1 or > 2 || i >= units.Count || !IsDigit(units[i])) return -1;
         var digitStart = i;
         while (i < units.Count && IsDigit(units[i])) i++;
-        var digitLen = Raw(units, digitStart, i).Length;
+        var digitLen = Raw(prepared, digitStart, i).Length;
         if (digitLen is < 1 or > 2) return -1;
         var digitEnd = i;
         var pendingLetters = i == units.Count && pending.Length > 0 && pending.All(char.IsAsciiLetter) ? pending : "";
@@ -479,18 +479,18 @@ public sealed partial class CompositionDetector
             while (i < units.Count && IsLetter(units[i])) i++;
             // 数字の後ろにまた数字が続く形 (a1b2) は対象外
             if (i < units.Count && IsDigit(units[i])) return -1;
-            var tailLen = Raw(units, tailStart, i).Length;
+            var tailLen = Raw(prepared, tailStart, i).Length;
             pendingLetters = i == units.Count && pending.Length > 0 && pending.All(char.IsAsciiLetter) ? pending : "";
             if (tailLen + pendingLetters.Length is < 1 or > 3) return -1;
         }
         else if (pendingLetters.Length is < 1 or > 3) return -1;
-        var word = Raw(units, start, i) + pendingLetters;
+        var word = Raw(prepared, start, i) + pendingLetters;
         if (word.Length is < 3 or > 6) return -1;
         // 数字の前と後ろが、どちらもかなとして最後まで読める (huuso|ku|6|me|-toru の ku と me) なら、
         // 略語 (i18n の n、k8s の s、h2o の h) ではなく、数字を挟んだ日本語 (風速6メートル: issue #1017)。
         // 母音 1 文字 (e2e・o2o の e・o) は、かなとして読めても略語のことが多いので、子音から始まる 2 文字以上のときだけ。
-        var head = Raw(units, start, digitStart).ToLowerInvariant();
-        var tail = (Raw(units, digitEnd, i) + pendingLetters).ToLowerInvariant();
+        var head = Raw(prepared, start, digitStart).ToLowerInvariant();
+        var tail = (Raw(prepared, digitEnd, i) + pendingLetters).ToLowerInvariant();
         if (head.Length >= 2 && tail.Length >= 2 && _romaji.AnalyzeFragment(head) is { IsValid: true, Partial: "" } &&
             _romaji.AnalyzeFragment(tail) is { IsValid: true, Partial: "" }) return -1;
         return i;
@@ -500,7 +500,7 @@ public sealed partial class CompositionDetector
     /// start から始まる - の入った英単語 (e-mail、co-op) の終わり。無ければ -1。
     /// 後ろに日本語が続いてもよい (e-mail|de) ので、- の後ろは長い方から英単語になる所を探す。
     /// </summary>
-    private int HyphenatedWordEnd(bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
+    private int HyphenatedWordEnd(Prepared prepared, bool? learning, IReadOnlyList<CompositionUnit> units, int start, string pending)
     {
         var n = units.Count;
         // 日本語を打っている最中のローマ字列では、明示した英数字表記だけを英語として切り出す。
@@ -512,7 +512,7 @@ public sealed partial class CompositionDetector
         if (dash == start || dash >= n || units[dash].Raw != "-") return -1;
         for (var end = n; end > dash + 1; end--)
         {
-            var word = (Raw(units, start, end) + (end == n ? pending : "")).ToLowerInvariant();
+            var word = (Raw(prepared, start, end) + (end == n ? pending : "")).ToLowerInvariant();
             if (afterJapaneseRomaji ? NumericHyphenatedWords.Contains(word) : IsHyphenatedEnglishWord(learning, word)) return end;
         }
         return -1;
@@ -585,9 +585,9 @@ public sealed partial class CompositionDetector
     }
 
     /// <summary>
-    /// Segment 1 回分の units の、原文の連結と各単位の位置。Unreadable は、ローマ字として読めなかった英字の単位 (zoom の m) の数の累積。
+    /// Segment 1 回分の units の、原文・かなの連結と各単位の位置。Unreadable は、ローマ字として読めなかった英字の単位 (zoom の m) の数の累積。
     /// </summary>
-    private sealed record Prepared(int[] Unreadable, string Raw, int[] RawOffsets);
+    private sealed record Prepared(int[] Unreadable, string Raw, int[] RawOffsets, string Kana, int[] KanaOffsets);
 
     /// <summary>この Segment 呼び出しの units で、原文の連結と位置を用意する (Segment の先頭で必ず呼ぶ)。</summary>
     private static Prepared Prepare(IReadOnlyList<CompositionUnit> units)
@@ -598,16 +598,23 @@ public sealed partial class CompositionDetector
                 char.IsAsciiLetter(unit.Raw[0]) && !IsLaughter(units, i) ? 1 : 0);
         var raw = new StringBuilder();
         var rawOffsets = new int[units.Count + 1];
+        var kana = new StringBuilder();
+        var kanaOffsets = new int[units.Count + 1];
         for (var i = 0; i < units.Count; i++)
         {
             rawOffsets[i] = raw.Length;
             raw.Append(units[i].Raw);
+            kanaOffsets[i] = kana.Length;
+            kana.Append(units[i].Kana);
         }
         rawOffsets[units.Count] = raw.Length;
-        return new Prepared(unreadable, raw.ToString(), rawOffsets);
+        kanaOffsets[units.Count] = kana.Length;
+        return new Prepared(unreadable, raw.ToString(), rawOffsets, kana.ToString(), kanaOffsets);
     }
 
-    private static string Kana(IReadOnlyList<CompositionUnit> units, int start, int end) => string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Kana));
+    /// <summary>start 番目から end 番目の手前までの単位のかな。</summary>
+    private static string Kana(Prepared prepared, int start, int end) => prepared.Kana[prepared.KanaOffsets[start]..prepared.KanaOffsets[end]];
 
-    private static string Raw(IReadOnlyList<CompositionUnit> units, int start, int end) => string.Concat(Enumerable.Range(start, end - start).Select(k => units[k].Raw));
+    /// <summary>start 番目から end 番目の手前までの単位の原文。</summary>
+    private static string Raw(Prepared prepared, int start, int end) => prepared.Raw[prepared.RawOffsets[start]..prepared.RawOffsets[end]];
 }

@@ -260,14 +260,14 @@ public sealed partial class CompositionDetector
             // 技術用語の綴り + する の活用 (share|して・make|します): 日本語の語 (しゃれ・まけ) には する を付けられないので、日本語の候補を出さない
             var technical = !kanaInput && englishLevel && IsTechnicalWordBeforeSuru(text, p);
             // ローマ字として読める語 + . + ドメイン・拡張子 (llama.cpp・hoge.io): 句点の後ろの日本語 (ryoukaidesu.|deha) と重みで比べる
-            var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(learning, units, unit, pending) : -1;
+            var domain = unit >= 0 && !kanaInput && englishLevel ? ReadableStemDotSuffixEnd(prepared, learning, units, unit, pending) : -1;
             if (unit >= 0 && !kanaInput)
             {
-                forced = LeadingDotfileEnd(learning, units, unit, pending, manual);
-                if (forced < 0) forced = UserNameEnd(units, unit, pending);
-                if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(learning, units, unit, pending);
-                if (forced < 0 && englishLevel) forced = NumeronymEnd(units, unit, pending);
-                if (forced < 0 && englishLevel) forced = ProperNounWithDigitsEnd(units, unit, pending);
+                forced = LeadingDotfileEnd(prepared, learning, units, unit, pending, manual);
+                if (forced < 0) forced = UserNameEnd(prepared, units, unit, pending);
+                if (forced < 0 && englishLevel) forced = HyphenatedWordEnd(prepared, learning, units, unit, pending);
+                if (forced < 0 && englishLevel) forced = NumeronymEnd(prepared, units, unit, pending);
+                if (forced < 0 && englishLevel) forced = ProperNounWithDigitsEnd(prepared, units, unit, pending);
                 if (forced < 0 && englishLevel) forced = VersionSuffixEnd(units, unit, pending);
             }
 
@@ -278,7 +278,7 @@ public sealed partial class CompositionDetector
                 var state = LatticeState.FromKey(key);
                 var end = forced;
                 // ドメイン・拡張子の . の後ろ (tetr.io、MeltypeTip.dll)
-                if (end < 0 && unit > 0 && englishLevel && !kanaInput && units[unit - 1].Raw == "." && state.PreviousEnglish) end = DotSuffixEnd(learning, units, unit, pending);
+                if (end < 0 && unit > 0 && englishLevel && !kanaInput && units[unit - 1].Raw == "." && state.PreviousEnglish) end = DotSuffixEnd(prepared, learning, units, unit, pending);
                 if (end > unit)
                 {
                     var to = end == units.Count ? length : prepared.RawOffsets[end];
@@ -347,7 +347,7 @@ public sealed partial class CompositionDetector
             var edges = new List<LatticeEdge>();
             for (var node = last; node?.Previous is not null; node = node.Previous) edges.Add(node.Edge);
             edges.Reverse();
-            return ToSegments(units, text, unitAt, unitsEnd, edges);
+            return ToSegments(prepared, text, unitAt, unitsEnd, edges);
         }
     }
 
@@ -675,13 +675,13 @@ public sealed partial class CompositionDetector
     }
 
     /// <summary>選んだ候補の並びを、英語・日本語の区間の並びにする (続いた日本語の候補は 1 つの区間にする。英語の候補は 1 つずつの区間)。</summary>
-    private List<CompositionSegment> ToSegments(IReadOnlyList<CompositionUnit> units, string text, int[] unitAt, int unitsEnd, List<LatticeEdge> edges)
+    private List<CompositionSegment> ToSegments(Prepared prepared, string text, int[] unitAt, int unitsEnd, List<LatticeEdge> edges)
     {
         var segments = new List<CompositionSegment>();
         foreach (var edge in edges)
         {
             var raw = text[edge.Start..edge.End];
-            var kana = edge.English ? "" : EdgeKana(units, text, unitAt, unitsEnd, edge);
+            var kana = edge.English ? "" : EdgeKana(prepared, text, unitAt, unitsEnd, edge);
             if (segments.Count > 0 && !edge.English && !segments[^1].IsEnglish)
                 segments[^1] = segments[^1] with { Kana = segments[^1].Kana + kana, Raw = segments[^1].Raw + raw };
             else segments.Add(new CompositionSegment(edge.English, kana, raw));
@@ -693,11 +693,11 @@ public sealed partial class CompositionDetector
     /// 日本語の候補の表示の読み。単位の境目どうしなら単位の読み、単位の途中で区切ったなら候補の読み。
     /// 入力途中の子音 (pending) は表示・変換のときに後ろに足すので含めない。
     /// </summary>
-    private string EdgeKana(IReadOnlyList<CompositionUnit> units, string text, int[] unitAt, int unitsEnd, LatticeEdge edge)
+    private string EdgeKana(Prepared prepared, string text, int[] unitAt, int unitsEnd, LatticeEdge edge)
     {
         var end = Math.Min(edge.End, unitsEnd);
         if (edge.Start >= end) return "";
-        if (unitAt[edge.Start] >= 0 && unitAt[end] >= 0) return Kana(units, unitAt[edge.Start], unitAt[end]);
+        if (unitAt[edge.Start] >= 0 && unitAt[end] >= 0) return Kana(prepared, unitAt[edge.Start], unitAt[end]);
         if (edge.End <= unitsEnd) return edge.Kana;
         return _romaji.ConvertLenient(text[edge.Start..end].ToLowerInvariant(), final: false).Replace('-', 'ー');
     }
