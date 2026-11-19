@@ -11,118 +11,92 @@ namespace Meltype.Composition;
 /// 入力欄から読んだ文字 (<see cref="Before"/>・<see cref="After"/>) は、設定の句読点を 、。 に戻して渡す。
 /// ここのほかに設定の句読点を扱うのは、再変換の読み (<see cref="FromSetting"/>) と候補の重複を消す所 (<see cref="ToSetting"/>) だけ。
 /// </summary>
-internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuation)
+internal static class CompositionOutput
 {
-    private readonly List<TextEdit> _commits = [];
-    private int _pendingDelete;
-    private string? _pendingExpect;
-    // 続けて確定した文字の終わりの部分 (確定し直しで消す文字を、フロントで確かめられるように)
-    private readonly StringBuilder _committed = new();
     private const int MaxCommitted = 256;
-    // 英数状態で判定中の語のうち、アプリに通した文字 (日本語と分かったら消す)
-    private readonly StringBuilder _heldPassed = new();
-    private string? _before;
-    private CompositionView? _view;
-    private bool _hidden;
-
-    /// <summary>今のキーをアプリに通すか。</summary>
-    public bool PassedCurrent { get; private set; }
 
     /// <summary>キャレットの前の文字。出来事の前の文字に、この出来事で確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
-    public string? Before
+    public static string? Before(CompositionOutputState state, CompositionEnv env)
     {
-        get
-        {
-            var before = _before;
-            if (before is null) return null;
-            foreach (var edit in _commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
-            return FromSetting(punctuation(), before);
-        }
+        var before = state.Before;
+        if (before is null) return null;
+        foreach (var edit in state.Commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
+        return FromSetting(env.Settings.Punctuation, before);
     }
 
-    public string? After { get; private set; }
+    public static CompositionView? View(CompositionOutputState state) => state.Hidden ? null : state.View;
 
-    public CompositionView? View => _hidden ? null : _view;
-
-    public void Begin(string? before, string? after)
+    public static void Begin(CompositionOutputState state, CompositionEnv env, string? before, string? after)
     {
-        _commits.Clear();
-        _pendingDelete = 0;
-        _pendingExpect = null;
-        _before = before;
-        After = after is null ? null : FromSetting(punctuation(), after);
-        PassedCurrent = false;
-        _hidden = false;
+        state.Commits.Clear();
+        state.PendingDelete = 0;
+        state.PendingExpect = null;
+        state.Before = before;
+        state.After = after is null ? null : FromSetting(env.Settings.Punctuation, after);
+        state.PassedCurrent = false;
+        state.Hidden = false;
     }
 
-    public SessionResult Result(bool consumed, Config.Settings settings)
+    public static SessionResult Result(CompositionOutputState state, CompositionEnv env, bool consumed, Config.Settings settings)
     {
-        if (_pendingDelete > 0) Add("");
+        if (state.PendingDelete > 0) CompositionOutput.Add(state, env, "");
         // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
-        if (!consumed) _committed.Clear();
+        if (!consumed) state.Committed.Clear();
         // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
-        var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings.ShowsGuide, settings.NumberKeysSelectCandidates);
-        return new SessionResult(consumed, _commits.ToList(), view);
+        var view = state.Hidden || state.View is not { } shown ? null : SessionResult.ForFront(shown, settings.ShowsGuide, settings.NumberKeysSelectCandidates);
+        return new SessionResult(consumed, state.Commits.ToList(), view);
     }
 
-    public void PassCurrent() => PassedCurrent = true;
+    public static void PassCurrent(CompositionOutputState state) => state.PassedCurrent = true;
 
-    public void Commit(string text) => Add(text);
+    public static void Commit(CompositionOutputState state, CompositionEnv env, string text) => CompositionOutput.Add(state, env, text);
 
     /// <summary>直前に確定した文字の末尾から、キャレットを count 文字だけ左へ戻す。</summary>
-    public void MoveCaretBackward(int count)
+    public static void MoveCaretBackward(CompositionOutputState state, int count)
     {
-        var last = _commits[^1];
-        _commits[^1] = last with { CaretBack = last.CaretBack + count };
+        var last = state.Commits[^1];
+        state.Commits[^1] = last with { CaretBack = last.CaretBack + count };
     }
 
     /// <summary>
     /// 確定し直し: キャレットの前の count 文字を replacement に置き換えて、続けて今確定した語 (current) を入れる。
     /// 前の文字を消せなかったときに current だけを入れられるように、分けて渡す (Meltype IME など。<see cref="TextEdit"/>)。
     /// </summary>
-    public void ReplaceBackward(int count, string replacement, string current)
+    public static void ReplaceBackward(CompositionOutputState state, CompositionEnv env, int count, string replacement, string current)
     {
-        _pendingDelete += count;
-        Add(replacement + current, current);
+        state.PendingDelete += count;
+        CompositionOutput.Add(state, env, replacement + current, current);
     }
 
     /// <summary>
-    /// 英数状態で判定中の語 (count 文字) を消す (日本語と分かったとき)。今のキーも通すところだったなら、通さずに消す数から引く。
+    /// 英数状態で判定中の語 (アプリに通した文字 sent) を消す (日本語と分かったとき)。今のキーも通すところだったなら、通さずに消す数から引く。
     /// 消す文字は、アプリに通した文字で確かめる。
     /// </summary>
-    public void DeleteHeld(int count)
+    public static void DeleteHeld(CompositionOutputState state, string sent)
     {
-        if (PassedCurrent) count--;
-        PassedCurrent = false;
-        _pendingExpect = count > 0 && _heldPassed.Length >= count ? _heldPassed.ToString(0, count) : null;
-        _heldPassed.Clear();
-        _pendingDelete += Math.Max(0, count);
+        if (state.PassedCurrent && sent.Length > 0) sent = sent[..^1];
+        state.PassedCurrent = false;
+        state.PendingExpect = sent.Length > 0 ? sent : null;
+        state.PendingDelete += sent.Length;
     }
 
-    public void RecordHeldPassed(char c)
+    public static void ForgetCommitted(CompositionOutputState state) => state.Committed.Clear();
+
+    public static void Show(CompositionOutputState state, CompositionEnv env, CompositionView view)
     {
-        if (char.IsAscii(c) && !char.IsControl(c)) _heldPassed.Append(c);
-    }
-
-    public void ResetHeldPassed() => _heldPassed.Clear();
-
-    public void ForgetCommitted() => _committed.Clear();
-
-    public void Show(CompositionView view)
-    {
-        _view = view with
+        state.View = view with
         {
-            Text = Punctuate(view.Text),
-            Candidates = view.Candidates.Select(Punctuate).ToList(),
-            Clauses = view.Clauses?.Select(Punctuate).ToList(),
-            Suggestion = view.Suggestion is { } suggestion ? Punctuate(suggestion) : null,
-            Predictions = view.Predictions?.Select(Punctuate).ToList(),
-            Committed = view.Committed is { } committed ? Punctuate(committed) : null,
+            Text = CompositionOutput.Punctuate(state, env, view.Text),
+            Candidates = view.Candidates.Select((text) => CompositionOutput.Punctuate(state, env, text)).ToList(),
+            Clauses = view.Clauses?.Select((text) => CompositionOutput.Punctuate(state, env, text)).ToList(),
+            Suggestion = view.Suggestion is { } suggestion ? CompositionOutput.Punctuate(state, env, suggestion) : null,
+            Predictions = view.Predictions?.Select((text) => CompositionOutput.Punctuate(state, env, text)).ToList(),
+            Committed = view.Committed is { } committed ? CompositionOutput.Punctuate(state, env, committed) : null,
         };
-        _hidden = false;
+        state.Hidden = false;
     }
 
-    private string Punctuate(string text) => ToSetting(punctuation(), text);
+    private static string Punctuate(CompositionOutputState state, CompositionEnv env, string text) => ToSetting(env.Settings.Punctuation, text);
 
     /// <summary>
     /// 、。 をすべて設定の句読点にする。ここには文字しか届かないので、辞書の語・顔文字の 、。 (モーニング娘。) も変わる。
@@ -150,35 +124,35 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
         _ => throw new InvalidOperationException($"句読点の設定 {style} の文字が無い"),
     };
 
-    public void Hide()
+    public static void Hide(CompositionOutputState state)
     {
-        _view = null;
-        _hidden = true;
+        state.View = null;
+        state.Hidden = true;
     }
 
-    private void Add(string text, string? current = null)
+    private static void Add(CompositionOutputState state, CompositionEnv env, string text, string? current = null)
     {
-        text = Punctuate(text);
-        current = current is null ? null : Punctuate(current);
+        text = CompositionOutput.Punctuate(state, env, text);
+        current = current is null ? null : CompositionOutput.Punctuate(state, env, current);
         string? expect = null;
-        if (_pendingDelete > 0)
+        if (state.PendingDelete > 0)
         {
-            if (_pendingExpect is { } expected)
+            if (state.PendingExpect is { } expected)
             {
                 expect = expected;
-                _pendingExpect = null;
-                _committed.Clear();
+                state.PendingExpect = null;
+                state.Committed.Clear();
             }
-            else if (_committed.Length >= _pendingDelete)
+            else if (state.Committed.Length >= state.PendingDelete)
             {
-                expect = _committed.ToString(_committed.Length - _pendingDelete, _pendingDelete);
-                _committed.Length -= _pendingDelete;
+                expect = state.Committed.ToString(state.Committed.Length - state.PendingDelete, state.PendingDelete);
+                state.Committed.Length -= state.PendingDelete;
             }
-            else _committed.Clear();
+            else state.Committed.Clear();
         }
-        _commits.Add(new TextEdit(_pendingDelete, text, expect, _pendingDelete > 0 ? current : null));
-        _pendingDelete = 0;
-        _committed.Append(text);
-        if (_committed.Length > MaxCommitted) _committed.Remove(0, _committed.Length - MaxCommitted);
+        state.Commits.Add(new TextEdit(state.PendingDelete, text, expect, state.PendingDelete > 0 ? current : null));
+        state.PendingDelete = 0;
+        state.Committed.Append(text);
+        if (state.Committed.Length > MaxCommitted) state.Committed.Remove(0, state.Committed.Length - MaxCommitted);
     }
 }

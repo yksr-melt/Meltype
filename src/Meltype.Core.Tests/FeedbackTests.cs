@@ -1396,9 +1396,10 @@ internal static class LanguageLearningTests
         {
             string Segments(CompositionDetector detector)
             {
-                var text = new CompositionText(detector);
-                foreach (var c in "game") text.Append(c);
-                return string.Join("|", text.Segments().Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
+                var text = new Composition.CompositionTextState();
+                var env = TestSupport.Env(detector);
+                foreach (var c in "game") CompositionText.Append(text, env, c);
+                return string.Join("|", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
             }
             Assert.Equal("EN:game", Segments(CompositionDetector.CreateDefault(directory)));
             File.WriteAllText(Path.Combine(directory, "japanese.txt"), "game\n");
@@ -1410,9 +1411,10 @@ internal static class LanguageLearningTests
             var registered = CompositionDetector.CreateDefault(directory);
             foreach (var (typed, expected) in new[] { ("sakurazaka", "さくらざか"), ("papatto", "ぱぱっと") })
             {
-                var text = new CompositionText(registered);
-                foreach (var c in typed) text.Append(c);
-                Assert.Equal(expected, text.Display(true), typed);
+                var text = new Composition.CompositionTextState();
+                var env = TestSupport.Env(registered);
+                foreach (var c in typed) CompositionText.Append(text, env, c);
+                Assert.Equal(expected, CompositionText.Display(text, env, true), typed);
             }
         }
         finally

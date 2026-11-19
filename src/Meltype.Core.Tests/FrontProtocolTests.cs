@@ -35,6 +35,13 @@ internal static class FrontProtocolTests
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
+        new("端末", "tui/meltype-tty", source => source, new(@"\[""(\w+)""\]"),
+            // 端末はキーをすべて送り (capture を見ない)、canRemove: false なので removeBefore は来ない。案内 (hint) は端末に届かないキーも書くので出さない
+            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii", "printableAsciiExcept",
+                "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "altKeys", "keyReleases", "revision", "currentWord", "insertByPaste",
+                "removeBefore", "hint", "notes", "selectedMeaning", "meaningDelayMs"],
+            // 送る入力欄の性質
+            Others: ["Terminal"]),
         new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
             new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
             // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output.

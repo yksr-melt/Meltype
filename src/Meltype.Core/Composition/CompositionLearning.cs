@@ -56,25 +56,28 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// <summary>変換履歴の語。</summary>
     public string? LearnedConversion(string reading) => services.History?.Get(reading);
 
-    /// <summary>確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。context は変換エンジンに渡す文脈。</summary>
-    public void Learn(IReadOnlyList<Clause> clauses, string? context)
+    /// <summary>
+    /// 確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。
+    /// conversionContext は変換エンジンに渡す文脈。context は英語 / 日本語の学習の文脈 (<see cref="LanguageMemory"/>)。
+    /// </summary>
+    public void Learn(IReadOnlyList<Clause> clauses, string? conversionContext, bool? context)
     {
         // 変換の候補から打ったままの英字 (api) を選んで確定したら、その語は次から英字にする (F10 と同じ)。
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && c.Raw is { } raw && c.Text == raw && Learnable(c)))
         {
-            services.Languages?.Remember(clause.Raw!, english: true);
+            services.Languages?.Remember(clause.Raw!, english: true, context: context);
         }
         // 英語と判定した語で日本語の候補 (go → 語) を選んだら、その語は次から日本語にする (F6 と同じ)。
         foreach (var clause in clauses.Where(c => c.IsEnglish && CompositionController.IsJapaneseText(c.Text) && c.Reading.All(char.IsAsciiLetter) && Learnable(c)))
         {
-            services.Languages?.Remember(clause.Reading, english: false);
+            services.Languages?.Remember(clause.Reading, english: false, context: context);
         }
         // 英訳を選んだら、英訳の記録に (普通の変換の学習より弱く効く)。
         foreach (var clause in clauses.Where(c => c.Translations.Contains(c.Text)))
         {
             services.TranslationHistory?.Remember(clause.Reading, clause.Text);
         }
-        LearnConversion(clauses, context);
+        LearnConversion(clauses, conversionContext);
         if (services.History is not { } history) return;
         // 1 文字の読み (き → 記) を覚えると、関係ない変換 (き + ごうとう) まで巻き込むので 2 文字以上だけ。
         // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
@@ -119,25 +122,24 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
 
     /// <summary>
     /// ユーザーが自分で英字 / かなに直して確定した語を覚える (api と打って F10 で英字にした → 次から api は英字)。
-    /// 自動の判定と違う方を選んだときだけ。1 語の英字だけを対象にする。
+    /// 自動の判定と違う方を選んだときだけ。1 語の英字だけを対象にする。automatic は自動の判定の区間。
     /// </summary>
-    public void LearnLanguage(CompositionText text)
+    public void LearnLanguage(CompositionTextState text, IReadOnlyList<CompositionSegment> automatic, bool? context)
     {
         if (services.Languages is not { } memory) return;
-        var raw = text.Raw;
+        var raw = CompositionText.Raw(text);
         if (raw.Length < 2 || !raw.All(char.IsAsciiLetter)) return;
-        var automatic = text.Segments();
         switch (text.Mode)
         {
             case DisplayMode.HalfWidthAlphanumeric or DisplayMode.FullWidthAlphanumeric when !automatic.All(s => s.IsEnglish):
-                memory.Remember(raw, english: true, explicitChoice: true);
+                memory.Remember(raw, english: true, explicitChoice: true, context: context);
                 break;
             case DisplayMode.Hiragana or DisplayMode.Katakana or DisplayMode.HalfWidthKatakana when automatic.Any(s => s.IsEnglish):
-                memory.Remember(raw, english: false, explicitChoice: true);
+                memory.Remember(raw, english: false, explicitChoice: true, context: context);
                 break;
             case DisplayMode.Auto when text.SuggestionAccepted && automatic.All(s => s.IsEnglish):
                 // 自動判定を使わないときに、Tab で提案どおり英字にした。
-                memory.Remember(raw, english: true, explicitChoice: true);
+                memory.Remember(raw, english: true, explicitChoice: true, context: context);
                 break;
         }
     }

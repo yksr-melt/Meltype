@@ -8,7 +8,7 @@ internal sealed class CalculatorConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input)
     {
-        var raw = input.Text.Raw;
+        var raw = CompositionText.Raw(input.Text);
         if (!input.Context.Settings.CalculatorCandidates || input.Text.KanaInput || input.Text.Mode != DisplayMode.Auto || Calculator.Evaluate(raw) is not { } result) return null;
         return new([raw, result, $"{raw.TrimEnd('=')}={result}"], UtilityPlacement.Replace);
     }
