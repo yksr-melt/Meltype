@@ -1686,4 +1686,21 @@ internal static class RomajiTypoTests
             Assert.Equal(expected, k.Host.Document, typed);
         }
     }
+
+    [Test]
+    public static void RareReadings_IncludeShortReadings()
+    {
+        // Issue #2015・#2016・#2024: よく使う語でない 3〜4 文字の読み (ごびゅう・ろんぱ・おんぱ・うちどめ) が無く、後ろを英単語にしていた (ろんpa・うちdome)。
+        // 日本語の後ろに打った英単語 (いとてきなbug・うちのdomain) は英語のまま。使わない語の読み (これしゃ = 此れ者) では割らない
+        foreach (var (typed, expected) in new[]
+        {
+            ("itotekinagobyuu", "いとてきなごびゅう"), ("ronpa", "ろんぱ"), ("onpa", "おんぱ"), ("uchidome", "うちどめ"), ("ronpasuru", "ろんぱする"),
+            ("itotekinabug", "いとてきなbug"), ("uchinodomain", "うちのdomain"), ("koreshasuru", "これshaする"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
 }

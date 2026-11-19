@@ -28,7 +28,7 @@ public sealed partial class CompositionDetector
     private const double JapaneseWordCost = 1;
     // katakana.txt の語 (ほすてぃんぐ) と brands.txt の読み (ぎっとはぶ)。katakana.txt は英単語をカタカナにした語 (アマゾン) が多いので、同じ綴りの英単語 (amazon) に譲る
     private const double KatakanaWordCost = 1.1;
-    // readings-rare.txt の語 (JMdict のよく使う語でない語の長い読み: かんれんづけ・くるまどめ)。
+    // readings-rare.txt の語 (JMdict のよく使う語でない語の 3 文字以上の読み: ろんぱ・かんれんづけ・くるまどめ)。
     // 英単語への切り替え (関連|duke = 1 + 1 + 1) より軽く、よく使う語どうしの区切りを割らない重みにする。
     // 1.5 では きょうはい|まげ が きょうは|image より軽くなり、3 では 関連づけ が 関連|duke と同じ重みになる
     private const double RareWordCost = 2.5;
