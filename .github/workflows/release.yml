@@ -56,7 +56,7 @@ jobs:
           files: |
             dist/Meltype-*.zip
             dist/Meltype-*-setup.exe
-            dist/meltype_*.deb
+            dist/meltype*.deb
             dist/meltype-*.rpm
           fail_on_unmatched_files: true
 
@@ -180,12 +180,8 @@ jobs:
           APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
         run: |
-          mapfile -d '' -t debs < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype_*.deb' -print0 | sort -z)
-          if (("${#debs[@]}" != 2)); then
-            echo "Expected amd64 and arm64 .deb packages; found ${#debs[@]}." >&2
-            exit 1
-          fi
-          bash linux/build-apt-repository.sh "${debs[@]}" "$RUNNER_TEMP/meltype-pages"
+          mapfile -d '' -t debs < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype*.deb' -print0 | sort -z)
+          bash linux/build-apt-repository.sh "$RUNNER_TEMP/meltype-pages" "${debs[@]}"
       - name: Build signed dnf repository
         if: steps.signing.outputs.ready == 'true'
         env:

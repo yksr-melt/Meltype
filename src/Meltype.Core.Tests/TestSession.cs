@@ -29,7 +29,11 @@ internal sealed class TestSession : IImeEnvironment
     }
 
     /// <param name="parts">入力欄の本体を作る部品 (<see cref="MeltypeRuntime.SessionParts"/> で作ったもの)。</param>
-    public TestSession(SessionParts parts, Func<Settings> settings) => _host = new ImeHost(this, parts, settings);
+    public TestSession(SessionParts parts, Func<Settings> settings)
+    {
+        MeltypeRuntime.Connect(parts.Detector, parts.Services);
+        _host = new ImeHost(this, parts, settings);
+    }
 
     public InputMode? InputMethod => null;
 

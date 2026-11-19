@@ -315,6 +315,7 @@ internal static class CompositionTests
                 Predictor = predictor,
                 Now = now ?? (() => DateTime.Now),
             };
+            MeltypeRuntime.Connect(Detector, services);
             _ime = new ImeHost(this, new SessionParts(Detector, converter ?? Converter, services)
             {
                 ClassifyDirect = (letters, final, settings) => MeltypeRuntime.ClassifyDirect(DirectEngine, letters, final, settings),
@@ -450,9 +451,21 @@ internal static class CompositionTests
 
     private sealed class WideContextConverter : IKanjiConverter, IWideContextConverter
     {
-        public string? WideContext { get; set; }
+        public List<string?> WideContexts { get; } = [];
         public string? Convert(string hiragana) => null;
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => null;
+
+        public string? Convert(string hiragana, string? wideContext)
+        {
+            WideContexts.Add(wideContext);
+            return null;
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext)
+        {
+            WideContexts.Add(wideContext);
+            return null;
+        }
     }
 
     [Test]
@@ -461,18 +474,20 @@ internal static class CompositionTests
         var converter = new WideContextConverter();
         var k = new Keyboard(converter: converter);
         k.Host.PrecedingText = "昨日は雨でしたが、\n今日は";
-        k.Type("kyou");
-        Assert.Equal("昨日は雨でしたが、今日は", converter.WideContext ?? "(なし)", "改行を除いて文をまたいで渡す");
+        k.Type("kyou ");
+        Assert.True(converter.WideContexts.Count > 0 && converter.WideContexts.All(c => c == "昨日は雨でしたが、今日は"), "改行を除いて文をまたいで渡す: " + string.Join(" / ", converter.WideContexts));
+        converter.WideContexts.Clear();
         var longText = string.Concat(Enumerable.Repeat("あ", 150)) + "終";
         var l = new Keyboard(converter: converter);
         l.Host.PrecedingText = longText;
-        l.Type("kyou");
+        l.Type("kyou ");
         // 最大 100 文字にするが、フロントから届くキャレットの前を ImeSession が 20 文字に切るので、今は 20 文字までしか届かない
-        Assert.True(converter.WideContext!.EndsWith('終'), "キャレットに近い方を残す");
+        Assert.True(converter.WideContexts.Count > 0 && converter.WideContexts.All(c => c?.EndsWith('終') == true), "キャレットに近い方を残す");
+        converter.WideContexts.Clear();
         var e = new Keyboard(converter: converter);
         e.Host.PrecedingText = "Hello, this is a pen. ";
-        e.Type("kyou");
-        Assert.True(converter.WideContext is null, "英文のときは渡さない");
+        e.Type("kyou ");
+        Assert.True(converter.WideContexts.Count > 0 && converter.WideContexts.All(c => c is null), "英文のときは渡さない");
     }
 
     [Test]
@@ -590,6 +605,11 @@ internal static class CompositionTests
             k.Press(VirtualKeys.Return);
             Assert.True(k.Host.Events.Any(e => e == $"replace:{selected}:{expected}"), string.Join(" ", k.Host.Events));
         }
+        // 選んだ文は、設定「自動判定」が OFF でも同じく読む (打っている入力の設定は使わない)
+        var manual = new Keyboard { Manual = true };
+        manual.Host.Selection = new ReconversionSelection("asita no meeting de review shimasu", "asita no meeting de review shimasu");
+        manual.Press(VirtualKeys.Convert);
+        Assert.Equal("あしたの meeting で review します", manual.Showing);
         // 日本語にする所が無い英文は、今までの再変換と同じく扱う (英文を勝手に日本語にしない)
         var english = new Keyboard(direct: true);
         english.Host.Selection = new ReconversionSelection("this is a pen", "this is a pen");
@@ -3081,28 +3101,22 @@ internal static class CompositionTests
     [Test]
     public static void Issue491_LearningCanBeSeparatedByContext()
     {
-        var memory = new LanguageMemory(null) { ContextSensitive = true };
-        memory.Context = false;
-        memory.Remember("nw", english: false, explicitChoice: true);
-        memory.Context = true;
-        memory.Remember("nw", english: true, explicitChoice: true);
-        memory.Context = false;
-        Assert.Equal(false, memory.Get("nw"), "日本語の後では日本語");
-        memory.Context = true;
-        Assert.Equal(true, memory.Get("nw"), "英語の後では英語");
+        var memory = new LanguageMemory(null);
+        memory.Remember("nw", english: false, explicitChoice: true, context: false);
+        memory.Remember("nw", english: true, explicitChoice: true, context: true);
+        Assert.Equal(false, memory.Get("nw", context: false), "日本語の後では日本語");
+        Assert.Equal(true, memory.Get("nw", context: true), "英語の後では英語");
         // 学習した語の一覧には、印 (@e / @j) を出さず、語そのものと文脈を分けて返す。消すときは印付きの名前
         var listed = memory.Entries().OrderBy(e => e.Context).ToList();
         Assert.True(listed.All(e => e.Word == "nw"), "語に印が付かない: " + string.Join(",", listed.Select(e => e.Word)));
         Assert.True(listed.Select(e => e.Context).SequenceEqual(["日本語の後", "英語の後"]) || listed.Select(e => e.Context).SequenceEqual(["英語の後", "日本語の後"]), "文脈が分かる");
         memory.Remove([listed.First(e => e.Context == "英語の後").EntryKey]);
         Assert.Equal(1, memory.Entries().Count, "文脈ごとに消せる");
-        memory.Remember("nw", english: true, explicitChoice: true);
-        memory.Context = null;
+        memory.Remember("nw", english: true, explicitChoice: true, context: true);
         Assert.True(memory.Get("nw") is null, "文脈が分からなければ、文脈ごとの学習は使わない");
         var plain = new LanguageMemory(null);
         plain.Remember("nw", english: true, explicitChoice: true);
-        plain.Context = false;
-        Assert.Equal(true, plain.Get("nw"), "OFF は今までどおり 1 つだけ");
+        Assert.Equal(true, plain.Get("nw", context: false), "OFF (文脈で分けずに覚えたもの) は今までどおり 1 つだけ");
     }
 
     [Test]
@@ -6575,9 +6589,10 @@ internal static class CompositionTests
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, typed);
         }
-        var text = new CompositionText(Detector);
-        foreach (var c in "suityoku") text.Append(c);
-        Assert.Equal("JA:suityoku", string.Join(" | ", text.Segments().Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
+        var text = new Composition.CompositionTextState();
+        var env = TestSupport.Env(Detector);
+        foreach (var c in "suityoku") CompositionText.Append(text, env, c);
+        Assert.Equal("JA:suityoku", string.Join(" | ", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
     }
 
     [Test]
@@ -6591,21 +6606,23 @@ internal static class CompositionTests
         {
             File.WriteAllText(Path.Combine(dir, "romaji.txt"), "ngh\tにゅう\n");
             var detector = CompositionDetector.CreateDefault(dir);
-            var text = new CompositionText(detector);
-            text.Append('n');
-            Assert.Equal("n", text.Display(final: false), "n だけなら打ちかけのまま");
-            text.Append('g');
-            Assert.Equal("ng", text.Display(final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
-            text.Append('h');
-            Assert.Equal("にゅう", text.Display(final: false), "続けて打つと登録した読みになる");
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(detector);
+            CompositionText.Append(text, env, 'n');
+            Assert.Equal("n", CompositionText.Display(text, env, final: false), "n だけなら打ちかけのまま");
+            CompositionText.Append(text, env, 'g');
+            Assert.Equal("ng", CompositionText.Display(text, env, final: false), "表の綴りの打ちかけは んg ではなく ng と表示する");
+            CompositionText.Append(text, env, 'h');
+            Assert.Equal("にゅう", CompositionText.Display(text, env, final: false), "続けて打つと登録した読みになる");
             // 表を登録していない場合 (main 側の判定に従う)
-            var plain = new CompositionText(Detector);
-            foreach (var c in "ng") plain.Append(c);
+            var plain = new Composition.CompositionTextState();
+            var plainEnv = TestSupport.Env(Detector);
+            foreach (var c in "ng") CompositionText.Append(plain, plainEnv, c);
             // main の判定では、語頭の ng は表の有無に関係なく英字の ng として表示される (main だけの状態でも同じ結果を確認済み)。
             // 表の登録で変わるのは、続けて h を打ったときに にゅう になるかどうか。
-            Assert.Equal("ng", plain.Display(final: false), "表が無いときの ng は main と同じ表示");
-            plain.Append('h');
-            Assert.True(plain.Display(final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
+            Assert.Equal("ng", CompositionText.Display(plain, plainEnv, final: false), "表が無いときの ng は main と同じ表示");
+            CompositionText.Append(plain, plainEnv, 'h');
+            Assert.True(CompositionText.Display(plain, plainEnv, final: false) != "にゅう", "表が無ければ ngh は にゅう にならない");
         }
         finally { Directory.Delete(dir, recursive: true); }
     }
@@ -6634,9 +6651,10 @@ internal static class CompositionTests
             Assert.True(laughed.Contains("かな + w に分けた"), "笑いの w に分けたことがログに出る: " + laughed);
 
             // 保護区間を含む入力も、保護区間以外の区切りの重みを出す
-            var text = new CompositionText(Detector);
-            foreach (var c in "@kuraido kyouha") text.Append(c);
-            var mention = text.ExplainSegments();
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(Detector);
+            foreach (var c in "@kuraido kyouha") CompositionText.Append(text, env, c);
+            var mention = CompositionText.ExplainSegments(text, env);
             Assert.True(mention.Contains("保護区間") && mention.Contains("区切り "), "保護区間と、ほかの区間の区切り: " + mention);
         }
         finally
