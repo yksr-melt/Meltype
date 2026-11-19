@@ -187,6 +187,14 @@ public sealed partial class CompositionDetector
         // position の英字が、次の文字と同じ子音を重ねたもの (tt の t = っ)
         bool DoubledAt(int position) => position + 1 < length && char.IsAsciiLetter(text[position]) && char.ToLowerInvariant(text[position + 1]) == char.ToLowerInvariant(text[position]);
 
+        // position の直前が、大文字 1 つ + 小文字だけの並び (Kilo・S) で、その前が英字でない
+        bool InsideCapitalizedWord(int position)
+        {
+            var p = position;
+            while (p > 0 && char.IsAsciiLetterLower(text[p - 1])) p--;
+            return p > 0 && char.IsAsciiLetterUpper(text[p - 1]) && (p == 1 || !char.IsAsciiLetter(text[p - 2]));
+        }
+
         void OfferEdge(LatticeNode from, LatticeState state, LatticeEdge edge, double cost)
         {
             double step;
@@ -206,11 +214,12 @@ public sealed partial class CompositionDetector
                 step = cost + EnglishTieBreak + englishBias;
                 if (state.Side == Side.Japanese && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start]))
                 {
-                    // 英字 → 日本語 → 英字 と、英字のあいだで区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く
+                    // 英字 → 日本語 → 英字 と、英字のあいだで区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く。
+                    // ただし大文字 1 つで始まる小文字の並びの途中 (Kilo|へ|arts・Om|に|sphere) は 1 つの名前なので、付属語でも除かない
                     var run = from;
                     var particle = run.Edge.Particle;
                     while (run.Previous is { } previous && !run.Edge.English && !run.Edge.Neutral) { if (previous.Edge.English || previous.Edge.Neutral) break; run = previous; particle |= run.Edge.Particle; }
-                    if (!particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1])) step += SandwichCost;
+                    if ((!particle || InsideCapitalizedWord(run.Edge.Start)) && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1])) step += SandwichCost;
                 }
                 if (state.Side == Side.Japanese && !state.Particle) step += SwitchCost;
                 if (state.IsEnglish && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start])) step += AdjacentEnglishCost;
