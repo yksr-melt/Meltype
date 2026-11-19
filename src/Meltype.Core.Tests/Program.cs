@@ -11,7 +11,7 @@ namespace Meltype.Tests;
 ///   dotnet run --project src/Meltype.Core.Tests -- --eval       … 品質テストの正解率と外れた例
 ///   dotnet run --project src/Meltype.Core.Tests -- --version    … 版 (Meltype.Core)
 ///   dotnet run --project src/Meltype.Core.Tests -- --explain konnichiwa hello … 1 文字ずつの判定理由
-/// Windows では src/Meltype.Windows.Tests から実行すると、Windows のスペルチェッカーを使い、Windows 専用のテストもまとめて流す。
+/// Windows では src/Meltype.Windows.Tests から実行すると、Windows 専用のテストもまとめて流す。
 /// </summary>
 internal static class Program
 {
@@ -33,12 +33,13 @@ internal static class Program
             case "--segments":
                 // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前) と、区間分けのラティスの道と重み
                 {
-                    var text = new Meltype.Composition.CompositionText(CompositionTests.Detector);
-                    foreach (var c in args.ElementAtOrDefault(1) ?? "") text.Append(c);
+                    var text = new Composition.CompositionTextState();
+                    var env = TestSupport.Env(CompositionTests.Detector);
+                    foreach (var c in args.ElementAtOrDefault(1) ?? "") Composition.CompositionText.Append(text, env, c);
                     Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-                    Console.WriteLine("units: " + string.Join(" ", text.Units.Select(u => $"{u.Raw}={u.Kana}")) + (text.Pending.Length > 0 ? $" +{text.Pending}" : ""));
+                    Console.WriteLine("units: " + string.Join(" ", Composition.CompositionText.Units(text).Select(u => $"{u.Raw}={u.Kana}")) + (Composition.CompositionText.Pending(text).Length > 0 ? $" +{Composition.CompositionText.Pending(text)}" : ""));
                     CompositionTests.Detector.LatticeTrace = Console.WriteLine;
-                    var segments = text.Segments();
+                    var segments = Composition.CompositionText.Segments(text, env);
                     CompositionTests.Detector.LatticeTrace = null;
                     Console.WriteLine("segments: " + string.Join(" | ", segments.Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw)));
                 }

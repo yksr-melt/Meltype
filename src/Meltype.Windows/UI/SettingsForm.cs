@@ -14,7 +14,6 @@ namespace Meltype.UI;
 /// 設定画面。Settings の各項目を種類に合わせた部品で並べる:
 ///   ON/OFF → スイッチ (ToggleSwitch)、選択肢 (列挙型) → 日本語名のプルダウン、アプリ別設定 → 表 (ON/OFF はスイッチ)。
 /// 項目名・分類・説明は Settings の属性 (DisplayName / Category / Description) から取る。
-/// 下の「判定テスト」欄では、打った英字をローマ字 (日本語) と英語のどちらと判定するかと理由を確認できる。
 /// </summary>
 internal sealed class SettingsForm : Form, IMessageFilter
 {
@@ -43,8 +42,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
     // 4 行に収まらない説明は末尾を「…」にする (全文はツールチップで見られる)
     private readonly Panel _helpPanel = new() { Dock = DockStyle.Bottom, BorderStyle = BorderStyle.FixedSingle };
     private const int HelpLines = 4;
-    private readonly TextBox _testInput = new() { Dock = DockStyle.Top, ImeMode = ImeMode.Disable };
-    private readonly TextBox _testResult = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
     private readonly ToolTip _toolTip = new() { AutoPopDelay = 20000 };
     // プロファイル (仕事用・趣味用・SNS 用など) を選ぶ欄
     private readonly ComboBox _profiles = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 200, Anchor = AnchorStyles.Left };
@@ -72,6 +69,11 @@ internal sealed class SettingsForm : Form, IMessageFilter
             MessageBox.Show(this, error, "入力モード切り替えキー", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return false;
         }
+        // 読みにくい色の組み合わせは警告だけして、保存するかは利用者が決める
+        // 前に警告を承知で保存した色なら、ほかの設定を保存するたびに聞かない
+        if (edited.ColorWarning() is { } colorWarning && colorWarning != _opened.ColorWarning() &&
+            MessageBox.Show(this, colorWarning + "\n\nこのまま保存しますか?", "色", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) != DialogResult.Yes)
+            return false;
 
         var displayed = edited.Clone().Normalize(reportShortcutExclusions: false);
         var next = Settings.MergeEdits(_opened, displayed, _engine.Settings);
@@ -88,6 +90,31 @@ internal sealed class SettingsForm : Form, IMessageFilter
         _opened = displayed;
         return true;
     }
+
+    /// <summary>
+    /// Windows の「既定のアプリ モード」がダークなら、設定画面も暗い色にする (ダークにしている人が設定画面だけ明るいのを望むことはないので、設定にしない)。
+    /// 色は窓に設定し、子の部品は WinForms の「親の色を引き継ぐ」仕組みで同じ色になる。
+    /// 入力欄 (TextBox など) は既定で親の色を引き継がず Windows の色のままなので、文字が読めなくなることはない。
+    /// </summary>
+    private void ApplyLook()
+    {
+        if (CompositionWindow.WindowsUsesLightTheme() != false) return;
+        BackColor = Color.FromArgb(32, 32, 32);
+        ForeColor = Color.White;
+        _help.ForeColor = Color.FromArgb(170, 170, 170);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        // タイトルバーも暗くする (DWMWA_USE_IMMERSIVE_DARK_MODE。Windows 10 20H1 より前は何もしない)
+        if (CompositionWindow.WindowsUsesLightTheme() != false) return;
+        var dark = 1;
+        _ = DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int));
+    }
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
     public SettingsForm(MeltypeEngine engine, AppState state)
     {
@@ -128,13 +155,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
         _helpPanel.Controls.Add(_help);
         _helpPanel.Height = TextRenderer.MeasureText("あ", Font).Height * HelpLines + _help.Padding.Vertical + 6;
 
-        var testLabel = new Label { Text = "判定テスト (ローマ字か英語かの判定。英字で入力):", Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 2) };
-        _testInput.TextChanged += (_, _) => RunTest();
-        var testPanel = new Panel { Dock = DockStyle.Bottom, Height = 110, Padding = new Padding(8, 0, 8, 0) };
-        testPanel.Controls.Add(_testResult);
-        testPanel.Controls.Add(_testInput);
-        testPanel.Controls.Add(testLabel);
-
         var apply = new Button { Text = "適用", AutoSize = true, Padding = new Padding(13, 4, 13, 4) };
         var ok = new Button { Text = "OK", AutoSize = true, Padding = new Padding(13, 4, 13, 4) };
         var cancel = new Button { Text = "キャンセル", AutoSize = true, DialogResult = DialogResult.Cancel, Padding = new Padding(13, 4, 13, 4) };
@@ -155,7 +175,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
         defaults.Click += (_, _) =>
         {
             LoadFrom(new Settings());
-            RunTest();
         };
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, FlowDirection = FlowDirection.RightToLeft, AutoSize = true, Padding = new Padding(6) };
         buttons.Controls.AddRange(cancel, ok, apply, defaults);
@@ -165,13 +184,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
         Controls.Add(BuildViewOptions());
         Controls.Add(BuildProfileBar());
         Controls.Add(_helpPanel);
-        Controls.Add(testPanel);
         Controls.Add(buttons);
         AcceptButton = ok;
         CancelButton = cancel;
 
         var controlsBuilt = opening.ElapsedMilliseconds;
         LoadFrom(_draft);
+        ApplyLook();
         RefreshProfiles();
         _opened = Collect();
         var valuesLoaded = opening.ElapsedMilliseconds;
@@ -308,7 +327,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
             // 今の画面の値を今のプロファイルに入れてから、選んだプロファイルの値を読み込む
             _draft = Collect().SwitchProfile(name);
             LoadFrom(_draft);
-            RunTest();
         };
         add.Click += (_, _) =>
         {
@@ -345,7 +363,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
             _draft = Collect().RemoveProfile(name) ?? _draft;
             LoadFrom(_draft);
             RefreshProfiles();
-            RunTest();
         };
         // プロファイルを人に渡す: 書き出したファイルを、相手が「読み込む...」で新しいプロファイルとして足す
         export.Click += (_, _) =>
@@ -393,7 +410,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
             _draft = next;
             LoadFrom(_draft);
             RefreshProfiles();
-            RunTest();
         };
         bar.Controls.AddRange([label, _profiles, add, rename, remove, export, import]);
         return bar;
@@ -504,12 +520,15 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 },
                 s => property.SetValue(s, combo.SelectedItem is string name && name != DefaultFontChoice ? name : ""));
         }
-        if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor))
+        if (type == typeof(string) && property.Name is nameof(Settings.ModeIndicatorJapaneseColor) or nameof(Settings.ModeIndicatorDirectColor) or nameof(Settings.ModeIndicatorTextColor)
+            or nameof(Settings.CompositionCustomBackColor) or nameof(Settings.CompositionCustomTextColor))
         {
             var fallback = property.Name switch
             {
                 nameof(Settings.ModeIndicatorJapaneseColor) => ModeIndicatorWindow.DefaultJapaneseColor,
                 nameof(Settings.ModeIndicatorDirectColor) => ModeIndicatorWindow.DefaultDirectColor,
+                // 変換ボックスのカスタムの背景の既定はダークの色 (CompositionWindow の Palette.Dark)
+                nameof(Settings.CompositionCustomBackColor) => Color.FromArgb(32, 34, 40),
                 _ => Color.White,
             };
             var panel = ColorEditor(fallback, out var text);
@@ -673,21 +692,14 @@ internal sealed class SettingsForm : Form, IMessageFilter
         }
     }
 
-    private ComboBox DropDown(string[] items)
+    private static ComboBox DropDown(string[] items)
     {
         var combo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 250, Anchor = AnchorStyles.Left };
         combo.Items.AddRange(items);
-        combo.SelectedIndexChanged += (_, _) => RunTest();
         return combo;
     }
 
-    /// <summary>ON/OFF の項目のスイッチ。切り替えたら下の判定テストをやり直す (プルダウンと同じ)。</summary>
-    private ToggleSwitch Toggle()
-    {
-        var toggle = new ToggleSwitch { Anchor = AnchorStyles.Left };
-        toggle.CheckedChanged += (_, _) => RunTest();
-        return toggle;
-    }
+    private static ToggleSwitch Toggle() => new() { Anchor = AnchorStyles.Left };
 
     /// <summary>プルダウンの 1 項目を灰色で出し、選んだら前の項目に戻す。</summary>
     private static void DisableChoice(ComboBox combo, int disabled)
@@ -948,37 +960,6 @@ internal sealed class SettingsForm : Form, IMessageFilter
         var settings = _draft.Clone();
         foreach (var binding in _bindings) binding.Store(settings);
         return settings;
-    }
-
-    private void RunTest()
-    {
-        if (_loadingSettings || _bindings.Count == 0) return;
-        var words = _testInput.Text.ToLowerInvariant().Split([' ', '\t'], StringSplitOptions.RemoveEmptyEntries);
-        if (words.Length == 0)
-        {
-            _testResult.Text = "";
-            return;
-        }
-        var settings = Collect();
-        var lines = new List<string>();
-        foreach (var word in words)
-        {
-            var letters = new string(word.Where(c => c is >= 'a' and <= 'z').ToArray());
-            if (letters.Length == 0) continue;
-            // 実際の動作と同じく 1 文字ずつ判定し、最初に結論が出た時点の結果を表示する。
-            for (var i = 1; i <= letters.Length; i++)
-            {
-                var result = _engine.Evaluate(letters[..i], settings);
-                if (result.Verdict != Detection.Verdict.Undecided || i == letters.Length)
-                {
-                    var verdict = result.Verdict == Detection.Verdict.Undecided ? "Unknown (Space で確定)" : result.Verdict.ToString();
-                    lines.Add($"{word}: {verdict} — \"{letters[..i]}\" の時点, JP={result.JapaneseScore} EN={result.EnglishScore}\r\n    " +
-                              string.Join("\r\n    ", result.Contributions.Select(c => c.ToString())));
-                    break;
-                }
-            }
-        }
-        _testResult.Text = string.Join("\r\n", lines);
     }
 
     protected override void Dispose(bool disposing)

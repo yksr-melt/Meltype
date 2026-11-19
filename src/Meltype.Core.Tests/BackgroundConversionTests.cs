@@ -21,10 +21,10 @@ internal static class BackgroundConversionTests
         },
         _ => []);
 
-    private static MeltypeSession Session(IKanjiConverter converter)
+    private static TestSession Session(IKanjiConverter converter)
     {
         (converter as IBackgroundConverter)?.Budget.Enable();
-        return new(CompositionTests.Detector, converter, new CompositionServices(), () => new Settings { LiveConversion = true });
+        return new(() => new Settings { LiveConversion = true }, converter);
     }
 
     [Test]
@@ -124,8 +124,9 @@ internal static class BackgroundConversionTests
 
         release.Set();
         Assert.True(ready.Wait(5000), "結果が届いたら知らせる");
-        var refreshed = session.RefreshConversion();
-        Assert.Equal("日本語", refreshed?.View?.Text);
+        // 打っている途中の読み (には・にほん) の結果も届くので、にほんご の結果が届くまで再描画する
+        SessionResult? refreshed = null;
+        Assert.True(SpinWait.SpinUntil(() => (refreshed = session.RefreshConversion())?.View?.Text == "日本語", 5000), $"再描画で結果を見せる ({refreshed?.View?.Text})");
         Assert.True(refreshed!.Consumed && refreshed.Commits.Count == 0, "再描画は確定しない");
     }
 
@@ -145,8 +146,8 @@ internal static class BackgroundConversionTests
         converter.Budget.Enable();
         var phrases = new PhraseHistory(null);
         phrases.Remember("とることができる", "取ることができる");
-        var session = new MeltypeSession(CompositionTests.Detector, converter,
-            new CompositionServices { Predictor = new Predictor(phrases, null, null) }, () => new Settings { LiveConversion = true, PredictiveCandidates = true });
+        var session = new TestSession(() => new Settings { LiveConversion = true, PredictiveCandidates = true }, converter,
+            new CompositionServices { Predictor = new Predictor(phrases, null, null) });
         Assert.Equal(0, SessionFacadeTests.Type(session, "tanniwotoru")[^1].View?.Predictions?.Count ?? 0);
 
         release.Set();
@@ -156,8 +157,9 @@ internal static class BackgroundConversionTests
         Assert.Equal("取ることができる", string.Join(",", view?.Predictions ?? []));
 
         // 予測を選んでいる間に結果が届いても、選んでいる候補はそのまま
-        Assert.Equal(0, SessionFacadeTests.Type(session, "\t")[^1].View?.SelectedPrediction);
-        Assert.Equal(0, session.RefreshConversion()?.View?.SelectedPrediction);
+        var tab = SessionFacadeTests.Type(session, "\t")[^1];
+        Assert.Equal(0, tab.View?.SelectedPrediction);
+        Assert.Equal(0, (session.RefreshConversion() ?? tab).View?.SelectedPrediction);
     }
 
     [Test]
@@ -168,7 +170,7 @@ internal static class BackgroundConversionTests
     }
 
     /// <summary>答えが届くまで候補を開いて、その後に答えを届ける。</summary>
-    private static (MeltypeSession Session, ManualResetEventSlim Release, ManualResetEventSlim Ready, BackgroundCallbackConverter Converter) OpenWithoutAnswer(string typed)
+    private static (TestSession Session, ManualResetEventSlim Release, ManualResetEventSlim Ready, BackgroundCallbackConverter Converter) OpenWithoutAnswer(string typed)
     {
         var release = new ManualResetEventSlim();
         var ready = new ManualResetEventSlim();
@@ -176,9 +178,12 @@ internal static class BackgroundConversionTests
             (reading, _) =>
             {
                 release.Wait(10000);
-                return reading == "たんいをとる"
-                    ? [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")]
-                    : [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")];
+                return reading switch
+                {
+                    "たんいをとる" => [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")],
+                    "にほんごをかく" => [new ConversionClause("にほんごを", "日本語を"), new ConversionClause("かく", "書く")],
+                    _ => [new ConversionClause(reading, reading == "にほんご" ? "日本語" : reading + "!")],
+                };
             },
             _ => ["候補1", "候補2"]);
         converter.ResultReady += ready.Set;
@@ -187,7 +192,7 @@ internal static class BackgroundConversionTests
         return (session, release, ready, converter);
     }
 
-    private static CompositionView? RefreshUntil(MeltypeSession session, Func<CompositionView, bool> done)
+    private static CompositionView? RefreshUntil(TestSession session, Func<CompositionView, bool> done)
     {
         CompositionView? view = null;
         SpinWait.SpinUntil(() => session.RefreshConversion()?.View is { } v && done(view = v), 5000);
@@ -211,12 +216,12 @@ internal static class BackgroundConversionTests
     [Test]
     public static void Refresh_SplitsAnUntouchedConversionIntoTheArrivedClauses()
     {
-        var (session, release, _, converter) = OpenWithoutAnswer("tanniwotoru");
+        var (session, release, _, converter) = OpenWithoutAnswer("nihongowokaku");
         using (converter)
         {
             release.Set();
             var view = RefreshUntil(session, v => v.Clauses is { Count: 2 });
-            Assert.Equal("単位を,取る", string.Join(",", view?.Clauses ?? []));
+            Assert.Equal("日本語を,書く", string.Join(",", view?.Clauses ?? []));
             Assert.Equal(1, view?.SelectedClause, "文節が増えても最後を選ぶ");
         }
     }
@@ -313,20 +318,20 @@ internal static class BackgroundConversionTests
     {
         foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Convert, VirtualKeys.Left, VirtualKeys.Down })
         {
-            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
             var session = Session(converter);
-            SessionFacadeTests.Type(session, "tanniwotoru");
+            SessionFacadeTests.Type(session, "nihongowokaku");
             var opened = session.HandleKey(key, null, false, false, false, false).View;
-            Assert.Equal("単位を,取る", string.Join(",", opened?.Clauses ?? []), $"変換開始: {key}");
+            Assert.Equal("日本語を,書く", string.Join(",", opened?.Clauses ?? []), $"変換開始: {key}");
             Assert.Equal(1, opened?.SelectedClause, $"最後の文節を選ぶ: {key}");
             if (key == VirtualKeys.Space)
             {
                 session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
                 session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
             }
-            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
             var view = session.RefreshConversion()?.View;
-            Assert.Equal("短,意を,取る", string.Join(",", view?.Clauses ?? []), $"新しい区切り: {key}");
+            Assert.Equal("日本,語を,書く", string.Join(",", view?.Clauses ?? []), $"新しい区切り: {key}");
             Assert.Equal(2, view?.SelectedClause, $"新しい最後の文節: {key}");
         }
     }
@@ -336,14 +341,14 @@ internal static class BackgroundConversionTests
     {
         foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Up })
         {
-            var converter = new ChangingAnswer { Clauses = [new("たんいを", "単位を"), new("とる", "取る")] };
+            var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
             var session = Session(converter);
-            SessionFacadeTests.Type(session, "tanniwotoru");
+            SessionFacadeTests.Type(session, "nihongowokaku");
             var view = session.HandleKey(key, null, false, false, false, false).View;
             if (key == VirtualKeys.Space) view = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
             Assert.Equal(1, view?.SelectedClause, "最後の文節を選ぶ");
-            Assert.True(view?.Clauses is ["単位を", var last] && last != "取る", "最後の文節の候補を選び直す");
-            converter.Clauses = [new("たん", "短"), new("いを", "意を"), new("とる", "取る")];
+            Assert.True(view?.Clauses is ["日本語を", var last] && last != "書く", "最後の文節の候補を選び直す");
+            converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
             Assert.True(session.RefreshConversion() is null, "選び直した候補を残す");
         }
     }
@@ -378,7 +383,7 @@ internal static class BackgroundConversionTests
     {
         // --repro・--self-test: 結果を受け取る経路が無いので、打鍵ごとに答えを待つ
         using var converter = Slow(delayMs: 50);
-        var session = new MeltypeSession(CompositionTests.Detector, converter, new CompositionServices(), () => new Settings { LiveConversion = true });
+        var session = new TestSession(() => new Settings { LiveConversion = true }, converter);
         Assert.Equal("日本語", SessionFacadeTests.Type(session, "nihongo")[^1].View?.Text);
     }
 
@@ -386,7 +391,7 @@ internal static class BackgroundConversionTests
     public static void MozcOnly_ShowsKanaUntilTheAnswer()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         using var ready = new ManualResetEventSlim();
         mozc.ResultReady += ready.Set;
         mozc.WarmUp();
@@ -403,7 +408,7 @@ internal static class BackgroundConversionTests
     {
         // ヘルパーの応答を待っている間に再描画しても、届いている答えが読めないとかなに戻って、表示が 漢字 → かな と揺れる
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         mozc.Budget.Enable();
         mozc.Budget.Start(10000);
         Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text, "起動して答える");
@@ -420,7 +425,7 @@ internal static class BackgroundConversionTests
     public static void Mozc_AnswersFromTheWorker_AndReportsReadiness()
     {
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
-        using var mozc = new MozcConverter(Environment.ProcessPath!, profile);
+        using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         var notified = 0;
         mozc.ResultReady += () => Interlocked.Increment(ref notified);
         mozc.Budget.Enable();

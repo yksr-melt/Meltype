@@ -101,11 +101,10 @@ internal static class ProtectionTests
         Assert.Equal(0, keyboard.Host.Output.Count, "確定入力を足さない");
     }
 
-    // ---- 確定契約 (MeltypeSession は Linux/Mac アダプターと同じ経路) ----
+    // ---- 確定契約 (Linux/Mac アダプターと同じく ImeHost を通す) ----
 
-    private static MeltypeSession Create(LanguageMemory? languages = null, bool spaceAroundEnglish = false)
+    private static TestSession Create(LanguageMemory? languages = null, bool spaceAroundEnglish = false)
     {
-        CompositionTests.Detector.SpellChecker = Detection.BuiltInWordChecker.Shared;
         // 製品の CreateDefault と同じく、候補辞書・誤字補正・文脈辞書を入れる (実経路と同じ条件で検査する)。
         var services = new CompositionServices
         {
@@ -117,10 +116,10 @@ internal static class ProtectionTests
             Languages = languages,
         };
         // 行頭の @・/ (#193 の「そのままアプリへ渡す」) を切り、変換ボックスの中の保護区間の扱いを確かめる。
-        return new MeltypeSession(CompositionTests.Detector, new CompositionTests.FakeConverter(), services, () => new Settings { SigilWordsDirect = false, SpaceAroundEnglish = spaceAroundEnglish });
+        return new TestSession(() => new Settings { SigilWordsDirect = false, SpaceAroundEnglish = spaceAroundEnglish }, services: services);
     }
 
-    private static SessionResult TypeOne(MeltypeSession session, char c)
+    private static SessionResult TypeOne(TestSession session, char c)
     {
         // Linux ラッパー (ibus-engine-meltype) と同じく、英字は A-Z の仮想キー、他の文字は他文字キー (7)。
         var vk = c switch
@@ -134,13 +133,13 @@ internal static class ProtectionTests
         return session.HandleKey(vk, c is ' ' or '\n' ? null : c, char.IsAsciiLetterUpper(c), false, false, false);
     }
 
-    private static void TypeText(MeltypeSession session, string text)
+    private static void TypeText(TestSession session, string text)
     {
         foreach (var c in text) TypeOne(session, c);
     }
 
     [Test]
-    public static void Protected_CommitsIgnoreAutomaticEnglishSpacing()
+    public static void Protected_CommitsIgnoreSpaceAroundEnglish()
     {
         foreach (var raw in new[] { "@user", "taro@example.com", "https://example.com", "./src/main.ts", @"C:\Users\taro" })
             foreach (var operation in new[] { VirtualKeys.Return, VirtualKeys.Space, VirtualKeys.Tab, 0 })
@@ -265,17 +264,18 @@ internal static class ProtectionTests
     {
         foreach (var token in new[] { "@kuraido", "https://example.com/nihongo", "taro@example.com", "./shumire-shon", @"C:\Users\taro" })
         {
-            var text = new CompositionText(CompositionTests.Detector);
-            foreach (var c in "kyouha「" + token + "」ashita") text.Append(c);
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(CompositionTests.Detector);
+            foreach (var c in "kyouha「" + token + "」ashita") CompositionText.Append(text, env, c);
             var calls = new List<string>();
-            var shown = text.Display(final: true, convert: kana =>
+            var shown = CompositionText.Display(text, env, final: true, convert: (kana, _) =>
             {
                 calls.Add(kana);
                 return kana.Replace("きょうは", "今日は").Replace("あした", "明日");
             });
             Assert.Equal("今日は「" + token + "」明日", shown, token);
             Assert.True(calls.All(kana => !kana.Contains(token)), "保護原文を漢字変換へ渡さない");
-            Assert.Equal(token, text.ConversionSegments().Single(s => s.IsProtected).Raw);
+            Assert.Equal(token, CompositionText.ConversionSegments(text, env).Single(s => s.IsProtected).Raw);
         }
     }
 

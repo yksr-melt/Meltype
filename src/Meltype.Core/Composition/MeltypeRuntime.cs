@@ -9,13 +9,12 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// プロセスで 1 つの入力の土台: 設定・判定器・辞書・学習データ・定型文。どの OS のアプリもこれを 1 つ作り、
-/// 入力欄ごとの本体 (<see cref="MeltypeSession"/>) は <see cref="CreateSession"/> で作る。
+/// 入力欄ごとの本体は、<see cref="SessionParts"/> を渡した <see cref="Ime.ImeHost"/> が作る。
 /// 入力欄ごとに辞書・学習データを作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
 /// </summary>
 public sealed class MeltypeRuntime : IDisposable
 {
     private readonly string _userDirectory;
-    private readonly IWordChecker _wordChecker;
     private readonly CompositionServices _shared;
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
@@ -24,14 +23,12 @@ public sealed class MeltypeRuntime : IDisposable
     private readonly Timer _settingsCheck;
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
-    /// <param name="wordChecker">OS のスペルチェッカー。使えなければ同梱のよく使う英単語の一覧を使う (meeting を英語と分かるように)。</param>
     /// <param name="nowPlaying">再生中の曲を OS から読み始める (テストでは読まない)。</param>
-    public MeltypeRuntime(string dataDirectory, IWordChecker? wordChecker = null, bool nowPlaying = false)
+    public MeltypeRuntime(string dataDirectory, bool nowPlaying = false)
     {
         DataDirectory = dataDirectory;
         Directory.CreateDirectory(dataDirectory);
         _userDirectory = Path.Combine(dataDirectory, "dictionaries");
-        _wordChecker = wordChecker is { IsAvailable: true } ? wordChecker : BuiltInWordChecker.Shared;
         SettingsSchema.Write(dataDirectory);
         Settings = new SettingsFile(Path.Combine(dataDirectory, "config.json"), loaded =>
         {
@@ -42,7 +39,6 @@ public sealed class MeltypeRuntime : IDisposable
         // ログの設定を、入力の前に入れる
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
-        Detector.SpellChecker = _wordChecker;
         Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
         var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
         Detector.Memory = languages;
@@ -60,6 +56,7 @@ public sealed class MeltypeRuntime : IDisposable
             TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
             GitHubTitles = () => GitHubTitles,
         };
+        Connect(Detector, _shared);
         Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
         // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
         UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: _userDirectory);
@@ -70,10 +67,10 @@ public sealed class MeltypeRuntime : IDisposable
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
-    public static MeltypeRuntime OpenDefault(IWordChecker? wordChecker = null, bool nowPlaying = true)
+    public static MeltypeRuntime OpenDefault(bool nowPlaying = true)
     {
         AppPaths.MigrateFromOldName();
-        return new MeltypeRuntime(AppPaths.DataDirectory, wordChecker, nowPlaying);
+        return new MeltypeRuntime(AppPaths.DataDirectory, nowPlaying);
     }
 
     public string DataDirectory { get; }
@@ -88,7 +85,7 @@ public sealed class MeltypeRuntime : IDisposable
 
     /// <summary>
     /// ユーザー辞書。入力欄を作ったとき・入力を始めたときに、外で変わっていたら読み直す (<see cref="UserDictionary.Refresh"/>)。
-    /// 入力欄の本体 (<see cref="MeltypeSession"/>) と同じスレッドからだけ使う (Windows は UI スレッド。排他しない)。
+    /// 入力欄の本体 (<see cref="Ime.ImeHost"/>) と同じスレッドからだけ使う (Windows は UI スレッド。排他しない)。
     /// </summary>
     public UserDictionary UserDictionary { get; }
 
@@ -104,7 +101,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>登録した定型文 (;名前 + Space で入れる: issue #290)。</summary>
     public SnippetStore Snippets { get; }
 
-    /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で GitHub の Issue・PR のタイトルを候補に出す」)。プロセスの間だけ覚える。</summary>
+    /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で Issue・PR のタイトルを出す GitHub のリポジトリ」)。プロセスの間だけ覚える。</summary>
     public GitHubIssueTitles GitHubTitles { get; } = new();
 
     /// <summary>
@@ -116,7 +113,7 @@ public sealed class MeltypeRuntime : IDisposable
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(helper, Path.Combine(DataDirectory, "mozc"));
+        var mozc = new MozcConverter(new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);
@@ -128,32 +125,48 @@ public sealed class MeltypeRuntime : IDisposable
         return converter;
     }
 
+    /// <summary>Zenzai を使わない変換エンジン (Android。llama-server を同梱していない)。mozcHelper はアプリのプロセスの Mozc。</summary>
+    public HybridConverter CreateConverter(IMozcHelper mozcHelper)
+    {
+        var mozc = new MozcConverter(mozcHelper);
+        _converters.Add(mozc);
+        return new HybridConverter(mozc);
+    }
+
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
     public Func<string?> ZenzaiStatus { get; private set; } = () => null;
 
-    /// <summary>
-    /// 入力欄 1 つ分の本体を作る。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。
-    /// autoSpacing は、つなげて打った英語の決まり文句 (seeyou) に空白を入れるか (今は Mac だけ)。
-    /// directModeDetection なら、英数状態で打ち始めた語がローマ字かを判定して日本語に戻す (設定「英数状態で自動判定」。今は Windows だけ)。
-    /// </summary>
-    /// <param name="settings">入力欄のアプリの設定 (アプリ別設定を反映したもの)。null なら config.json の設定。</param>
-    public MeltypeSession CreateSession(IKanjiConverter converter, Func<Settings>? settings = null, Func<string, IReadOnlyList<string>>? moreCandidates = null,
-        bool autoSpacing = false, bool directModeDetection = false)
+    /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。</summary>
+    /// <param name="candidates">読みの変換候補の一覧 (<see cref="HybridConverter.Candidates"/>)。</param>
+    /// <param name="readingOf">漢字かな交じりの文の読み (<see cref="HybridConverter.Reading"/>)。</param>
+    public SessionParts SessionParts(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
+        Action<Correction>? corrected = null)
     {
-        var current = settings ?? (() => Settings.Current);
-        UserDictionary.Refresh();
         var services = _shared with
         {
             UserDictionary = UserDictionary,
             Predictor = new Predictor(Phrases, UserDictionary, History),
-            MoreCandidates = moreCandidates,
-            AutomaticEnglishSpacing = () => autoSpacing,
-            // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
-            ClassifyDirect = directModeDetection && OperatingSystem.IsWindows() ? (letters, final) => ClassifyDirect(letters, final, current()) : null,
+            MoreCandidates = candidates,
         };
-        var session = new MeltypeSession(Detector, converter, services, current, directModeDetection) { NowPlaying = () => _nowPlaying?.Read() };
-        if (converter is HybridConverter hybrid) session.ReadingOf = hybrid.Reading;
-        return session;
+        return new SessionParts(Detector, converter, services)
+        {
+            // Mac・Linux では判定しない。判定すると、判定中の英字があるときにかなキーで日本語に切り替わらない (#1724)
+            ClassifyDirect = OperatingSystem.IsWindows() ? ClassifyDirect : null,
+            ReadingOf = readingOf,
+            NowPlaying = () => _nowPlaying?.Read(),
+            Corrected = corrected,
+        };
+    }
+
+    /// <summary>
+    /// 判定器と辞書・学習データをつなぐ (持ち主が作ったときに 1 回)。よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは
+    /// 英語として覚えない。
+    /// </summary>
+    public static void Connect(CompositionDetector detector, CompositionServices services)
+    {
+        if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
+        if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
+        if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
     }
 
     public void Dispose()
@@ -212,18 +225,23 @@ public sealed class MeltypeRuntime : IDisposable
         });
     }
 
-    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (設定画面の判定のテストにも使う)。final は、もう続きが無いか。</summary>
-    public DetectionResult Evaluate(string letters, bool final, Settings settings) =>
-        _directEngine.Value.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
+    /// <summary>英字 (letters) がローマ字 (日本語) か英語かの判定 (トレイの「ログ / 判定理由」の判定にも使う)。final は、もう続きが無いか。</summary>
+    public DetectionResult Evaluate(string letters, bool final, Settings settings) => Evaluate(_directEngine.Value, letters, final, settings);
+
+    private static DetectionResult Evaluate(ScoreEngine engine, string letters, bool final, Settings settings) =>
+        engine.Evaluate(new DetectionInput(letters, letters.Select(c => (int)char.ToUpperInvariant(c)).ToArray(), final), settings);
 
     /// <summary>英数状態で打ち始めた英字 (letters) がローマ字 (日本語) かを判定する。final は、もう続きが無いか。</summary>
-    public Verdict ClassifyDirect(string letters, bool final, Settings settings)
+    public Verdict ClassifyDirect(string letters, bool final, Settings settings) => ClassifyDirect(_directEngine.Value, letters, final, settings);
+
+    /// <summary><see cref="ClassifyDirect(string, bool, Settings)"/> を、判定器 engine で行う (テストは辞書を読み直さずに共有の判定器で行う)。</summary>
+    public static Verdict ClassifyDirect(ScoreEngine engine, string letters, bool final, Settings settings)
     {
-        var result = Evaluate(letters, final, settings);
-        // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、スペルチェッカーの語なら日本語にしない。
-        if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && _wordChecker.IsWord(letters.ToLowerInvariant()))
+        var result = Evaluate(engine, letters, final, settings);
+        // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、よく使う英単語の一覧の語なら日本語にしない。
+        if (result.Verdict == Verdict.Japanese && letters.Length >= 4 && BuiltInWordChecker.Shared.IsWord(letters.ToLowerInvariant()))
         {
-            Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(letters)}は英単語 (スペルチェッカー) なので日本語にしない");
+            Diagnostics.Log.Info($"英数状態: {Diagnostics.Log.Text(letters)}はよく使う英単語なので日本語にしない");
             return final ? Verdict.English : Verdict.Undecided;
         }
         if (result.Verdict == Verdict.Japanese) Diagnostics.Log.Decision($"英数状態でローマ字を検知: {result.Describe()}");

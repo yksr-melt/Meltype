@@ -95,6 +95,20 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         frontend->call<ITestFrontend::pushCommitExpectation>(common->candidate(common->cursorIndex()).text().toString());
         typeKeys(frontend, uuid, "\n");
 
+        // Sensitive の入力欄は、ロック画面ならパスワード欄として変換しない。ほかのアプリ (Chromium のシークレットなど) では変換する
+        for (const auto &[program, composes] : {std::pair{"kscreenlocker_greet", false}, std::pair{"chromium", true}}) {
+            auto sensitiveUuid = frontend->call<ITestFrontend::createInputContext>(program);
+            auto *sensitive = instance->inputContextManager().findByUUID(sensitiveUuid);
+            sensitive->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
+            sensitive->focusIn();
+            instance->setCurrentInputMethod(sensitive, "meltype", true);
+            FCITX_ASSERT(frontend->call<ITestFrontend::sendKeyEvent>(sensitiveUuid, Key("n"), false) == composes) << program;
+            FCITX_ASSERT(sensitive->inputPanel().preedit().empty() != composes) << program;
+            if (composes) frontend->call<ITestFrontend::pushCommitExpectation>("ん");
+            sensitive->focusOut();
+        }
+        ic->focusIn();
+
         // パネルの入力メソッドの表示は、本体の言語モード (英数・かなのキーで切り替える)
         FCITX_ASSERT(instance->inputMethodLabel(ic) == "あ") << instance->inputMethodLabel(ic);
         frontend->call<ITestFrontend::keyEvent>(uuid, Key("Eisu_toggle"), false);
@@ -110,14 +124,28 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         ic->inputPanel().reset();
         ic->focusIn();
         FCITX_ASSERT(ic->inputPanel().auxUp().empty()) << ic->inputPanel().auxUp().toString();
+        // fcitx5 activates the input method asynchronously, and Meltype waits 30ms
+        // after activation before showing the indicator. A fixed 100ms assertion
+        // can run before activation on a busy Fedora runner. Wait for the actual
+        // indicator, but still fail if it never appears.
+        const auto deadline = now(CLOCK_MONOTONIC) + 1000000;
         static std::unique_ptr<EventSourceTime> later;
-        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 100000, 0,
-            [dispatcher, instance, ic](EventSourceTime *, uint64_t) {
-                FCITX_ASSERT(ic->inputPanel().auxUp().toString() == "あ") << ic->inputPanel().auxUp().toString();
-                dispatcher->schedule([dispatcher, instance]() {
-                    dispatcher->detach();
-                    instance->exit();
-                });
+        // The third addTimeEvent argument is timer accuracy, not a repeat
+        // interval. Rearm each poll as a one-shot with a new future deadline.
+        // Keeping an expired timer enabled can spin the event loop forever.
+        later = instance->eventLoop().addTimeEvent(CLOCK_MONOTONIC, now(CLOCK_MONOTONIC) + 20000, 0,
+            [dispatcher, instance, ic, deadline](EventSourceTime *timer, uint64_t) {
+                if (ic->inputPanel().auxUp().toString() == "あ") {
+                    dispatcher->schedule([dispatcher, instance]() {
+                        dispatcher->detach();
+                        instance->exit();
+                    });
+                    return false;
+                }
+                FCITX_ASSERT(now(CLOCK_MONOTONIC) < deadline)
+                    << "Input mode indicator did not appear: " << ic->inputPanel().auxUp().toString();
+                timer->setTime(now(CLOCK_MONOTONIC) + 20000);
+                timer->setOneShot();
                 return true;
             });
     });

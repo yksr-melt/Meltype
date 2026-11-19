@@ -7,7 +7,7 @@ using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Ime;
 using Meltype.Input;
-using Meltype.Mac;
+using Meltype.CApi;
 
 namespace Meltype.Tests;
 
@@ -19,15 +19,12 @@ internal static unsafe class NativeBoundaryTests
     {
         private readonly GCHandle _handle;
 
-        public NativeSession() => _handle = GCHandle.Alloc(new ImeHost(this, () => Settings));
+        public NativeSession() =>
+            _handle = GCHandle.Alloc(new ImeHost(this, new SessionParts(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionServices()), () => Settings));
 
         public Settings Settings { get; } = new() { SpaceAroundEnglish = true, LiveConversion = false };
 
         public InputMode? InputMethod => null;
-
-        public MeltypeSession CreateSession(Func<Settings> settings) => new(CompositionTests.Detector, new CompositionTests.FakeConverter(),
-            new CompositionServices(), settings);
-
 
         public SnippetStore Snippets { get; } = new(null);
 
@@ -162,7 +159,7 @@ internal static unsafe class NativeBoundaryTests
     }
 
     [Test]
-    public static void Native_CombiningMarksAttachBeforeAutomaticEnglishSpacing()
+    public static void Native_CombiningMarksAttachBeforeEnglishSpacing()
     {
         foreach (var mark in new[] { 0x3099, 0xFE0F, 0xE0100 })
         {

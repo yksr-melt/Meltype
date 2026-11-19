@@ -12,7 +12,6 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
-        using var spellChecker = Detection.WindowsSpellChecker.Shared;
         // Meltype.exe --version: 版だけを出して終わる (フック・UI は起動しない)。
         // WinExe はコンソールを持たないので、親ターミナル (cmd / PowerShell) に付け直してから書く。
         if (args.FirstOrDefault() == "--version")
@@ -76,7 +75,7 @@ internal static class Program
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault(Detection.WindowsSpellChecker.Shared));
+            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault());
             engine.Start();
         }
         catch (Exception ex)

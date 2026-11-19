@@ -55,7 +55,7 @@ public sealed class ScoreEngine
 
     public DetectionResult Evaluate(DetectionInput input) => Evaluate(input, _settings());
 
-    /// <summary>設定画面の判定テスト用に、保存前の設定で判定できるようにしてある。</summary>
+    /// <summary>呼び出し側が渡した設定で判定する。</summary>
     public DetectionResult Evaluate(DetectionInput input, Settings settings)
     {
         const int threshold = JapaneseThreshold;
@@ -101,7 +101,7 @@ public sealed class ScoreEngine
                 _typo.Evaluate(letters, contributions);
 
                 // 5 文字以上が最後までローマ字として読めて、英単語 (の先頭) にも当たらない (fukare) なら日本語寄り。
-                // 辞書にない英単語 (debate) は、英数状態の判定でスペルチェッカーが止める (MeltypeEngine.ClassifyDirect)。
+                // 辞書にない英単語 (debate) は、英数状態の判定でよく使う英単語の一覧が止める (MeltypeRuntime.ClassifyDirect)。
                 if (letters.Length >= 5 && analysis.Partial.Length == 0 && !_english.IsPrefix(original))
                 {
                     contributions.Add(new Contribution("Romaji", letters.Length >= 6 ? 4 : 3, 0, "5 文字以上がすべてローマ字として成立し、英単語にも当たらない"));

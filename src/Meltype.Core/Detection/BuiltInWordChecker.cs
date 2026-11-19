@@ -5,9 +5,9 @@ namespace Meltype.Detection;
 
 /// <summary>
 /// 同梱のよく使う英単語の一覧 (dictionaries/english-words.txt、SCOWL から作成) で英単語かを調べる。
-/// Windows のスペルチェッカーが使えない環境 (Mac 版・Linux 版・テスト) で、その代わりに使う。打ち間違いの自動修正は無い。
+/// 全 OS で同じ判定にするため、OS のスペルチェッカーは使わない (#1508)。
 /// </summary>
-public sealed class BuiltInWordChecker : IWordChecker
+public sealed class BuiltInWordChecker
 {
     private static readonly Lazy<BuiltInWordChecker> SharedInstance = new(() => new BuiltInWordChecker(DictionarySource.ReadEmbedded("english-words.txt")));
 
@@ -16,10 +16,9 @@ public sealed class BuiltInWordChecker : IWordChecker
 
     private readonly PackedWordSet _words;
 
-    public BuiltInWordChecker(string text) => _words = PackedWordSet.FromLines(text);
+    private BuiltInWordChecker(string text) => _words = PackedWordSet.FromLines(text);
 
-    public bool IsAvailable => _words.Count > 0;
-
+    /// <summary>小文字の英単語 (a-z だけ) が、一覧にあるか。</summary>
     public bool IsWord(string lower) => _words.Contains(lower);
     internal bool IsWord(ReadOnlySpan<char> lower) => _words.Contains(lower);
 }

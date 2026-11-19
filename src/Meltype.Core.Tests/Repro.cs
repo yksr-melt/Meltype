@@ -8,12 +8,20 @@ namespace Meltype.Tests;
 /// <summary>
 /// 報告された「打ったもの」を Meltype キーボードで打ってみる (GitHub の bot が誤判定の報告を再現するのに使う)。
 /// MELTYPE_MOZC に変換ヘルパーがあればアプリと同じく Mozc で漢字に変換する。無ければ日本語 / 英語の判定だけ (漢字にしない)。
+/// Mozc に加えて MELTYPE_ZENZAI_SERVER・MELTYPE_ZENZAI_MODEL があれば、Zenzai も使って打った結果を zenzai に出す。
 /// </summary>
 internal static class Repro
 {
-    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+    // bot (meltype-bot.mjs) は、Mozc だけの結果を一番上の committed・converted などで、Zenzai の結果を zenzai の下の同じ名前で読む
+    private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     /// <summary>打つ文字の上限 (bot に長い文を渡されても時間がかからないように)。</summary>
     private const int MaxKeys = 300;
+
+    /// <param name="Showing">最後のキーの前に変換ボックスに出ていたもの。</param>
+    /// <param name="Committed">最後のキーを押した後に、入力欄に入ったもの。</param>
+    /// <param name="Composing">最後のキーを押した後に、まだ変換ボックスにあるもの。</param>
+    /// <param name="Converted">Space で変換した結果 (漢字対応の確認用。変換エンジンが無ければ null)。</param>
+    private sealed record Result(string? Showing, string Committed, string? Composing, string? Converted, IReadOnlyList<string>? Clauses, IReadOnlyList<string>? Candidates);
 
     public static void Type(string keys, string last)
     {
@@ -21,43 +29,20 @@ internal static class Repro
         // bot が結果を読むので、ほかの環境の文字コードにせず UTF-8 で出す
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
         var typed = new string(keys.Where(c => c is >= ' ' and <= '~').Take(MaxKeys).ToArray()).Trim();
-        // Windows のテストランナーなら Windows のスペルチェッカー、ほかの環境では同梱の英単語の一覧 (アプリと同じ)
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
 
         var hasMozc = Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } path && File.Exists(path);
         // Mozc があればライブ変換付きキーボード、無ければ判定だけの偽物
-        CompositionTests.Keyboard Create() => hasMozc ? Henkan.Keyboard() : new CompositionTests.Keyboard();
-
-        var k = Create();
-        k.Type(typed);
-        var showing = k.Showing;
-        switch (last)
+        var mozc = Run(() => hasMozc ? Henkan.Keyboard() : new CompositionTests.Keyboard(), typed, last, hasMozc);
+        // Zenzai が起動しない・途中で答えなくなったときは、Mozc に任せた結果を Zenzai の結果として出さず、理由を出す
+        object? zenzai = null;
+        if (hasMozc && Henkan.HasZenzai)
         {
-            case "space": k.Type(" "); break;
-            case "enter": k.Type("\n"); break;
-        }
-        var committed = k.Host.Document;
-        var composing = k.Showing;
-
-        // Space で変換した結果も返す (漢字対応の確認用。last が space なら committed と同じ経路)
-        string? converted = null;
-        IReadOnlyList<string>? clauses = null;
-        IReadOnlyList<string>? candidates = null;
-        if (hasMozc && last != "space")
-        {
-            var s = Create();
-            s.Type(typed + " ");
-            var view = s.Host.View;
-            converted = view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : s.Host.Document;
-            clauses = view is { Converting: true, Clauses: { } c } ? c : null;
-            candidates = view is { Converting: true } ? view.Candidates.Take(9).ToList() : null;
-        }
-        else if (hasMozc && last == "space")
-        {
-            var view = k.Host.View;
-            converted = view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : committed;
-            clauses = view is { Converting: true, Clauses: { } c } ? c : null;
-            candidates = view is { Converting: true } ? view.Candidates.Take(9).ToList() : null;
+            if (Henkan.StartZenzai() is { } notStarted) zenzai = new { error = notStarted };
+            else
+            {
+                var result = Run(() => Henkan.Keyboard(zenzai: true), typed, last, convert: true);
+                zenzai = Henkan.ZenzaiFailure is { } failure ? new { error = failure } : result;
+            }
         }
 
         Console.WriteLine(JsonSerializer.Serialize(new
@@ -65,19 +50,42 @@ internal static class Repro
             typed,
             last,
             engine = hasMozc ? Henkan.EngineName : "なし (判定だけ)",
-            // 最後のキーの前に変換ボックスに出ていたもの
-            showing,
-            // 最後のキーを押した後: 入力欄に入ったもの + まだ変換ボックスにあるもの
-            committed,
-            composing,
-            converted,
-            clauses,
-            candidates,
-            // 英語のスペルチェッカーを使ったか (Windows では使う。使わないと英単語の判定が実際のアプリと違うことがある)
-            spellChecker = CompositionTests.Detector.SpellChecker is not null,
+            mozc.Showing,
+            mozc.Committed,
+            mozc.Composing,
+            mozc.Converted,
+            mozc.Clauses,
+            mozc.Candidates,
+            zenzai,
         }, Json));
 
         if (hasMozc) Henkan.Shutdown();
+    }
+
+    private static Result Run(Func<CompositionTests.Keyboard> create, string typed, string last, bool convert)
+    {
+        var k = create();
+        k.Type(typed);
+        var showing = k.Showing;
+        switch (last)
+        {
+            case "space": k.Type(" "); break;
+            case "enter": k.Type("\n"); break;
+        }
+        if (!convert) return new(showing, k.Host.Document, k.Showing, null, null, null);
+        // last が space なら、打った結果がそのまま Space で変換した結果
+        var host = k.Host;
+        if (last != "space")
+        {
+            var s = create();
+            s.Type(typed + " ");
+            host = s.Host;
+        }
+        var view = host.View;
+        return new(showing, k.Host.Document, k.Showing,
+            view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : host.Document,
+            view is { Converting: true, Clauses: { } c } ? c : null,
+            view is { Converting: true } ? view.Candidates.Take(9).ToList() : null);
     }
 }
 
@@ -147,7 +155,6 @@ internal static class Checks
     /// </summary>
     public static void MixedBench(string output)
     {
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
         var romaji = CompositionTests.Detector.Romaji;
         // MELTYPE_BENCH_OFFSET で選ぶ語をずらす (調整に使っていない語で確かめる)
         var offset = int.TryParse(Environment.GetEnvironmentVariable("MELTYPE_BENCH_OFFSET"), out var o) ? o % 97 : 0;
@@ -200,6 +207,7 @@ internal static class Henkan
     public static void Shutdown()
     {
         if (Mozc.IsValueCreated) Mozc.Value?.Dispose();
+        if (Zenzai.IsValueCreated) Zenzai.Value?.Dispose();
         try { if (Directory.Exists(ProfileDirectory)) Directory.Delete(ProfileDirectory, recursive: true); } catch { }
     }
 
@@ -211,9 +219,37 @@ internal static class Henkan
 
     private static readonly Lazy<Composition.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Composition.MozcConverter(helper, ProfileDirectory)
+            ? new Composition.MozcConverter(new WithoutLearning(new Composition.MozcHelperProcess(helper, ProfileDirectory)))
             : null);
     private static readonly Lazy<Composition.TranslationDictionary> Translations = new(Composition.TranslationDictionary.Load);
+
+    // bot の Windows の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
+    private const int ZenzaiTimeoutMs = 30000;
+    private static readonly Lazy<Composition.ZenzaiConverter?> Zenzai = new(() =>
+        Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_SERVER") is { Length: > 0 } server &&
+        Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_MODEL") is { Length: > 0 } model
+            ? new Composition.ZenzaiConverter(server, model, ZenzaiTimeoutMs)
+            : null);
+
+    /// <summary>MELTYPE_ZENZAI_SERVER と MELTYPE_ZENZAI_MODEL があるか (ファイルがあるかは <see cref="StartZenzai"/> で確かめる)。</summary>
+    public static bool HasZenzai => Zenzai.Value is not null;
+
+    /// <summary>Zenzai の llama-server を起動して、答えられるまで待つ。使えなければその理由、使えれば null。</summary>
+    public static string? StartZenzai()
+    {
+        if (Zenzai.Value is not { IsInstalled: true } zenzai) return "llama-server かモデルのファイルがありません";
+        zenzai.WarmUp();
+        for (var i = 0; i < 200 && !zenzai.IsReady && !zenzai.GaveUp; i++) Thread.Sleep(300);
+        return zenzai.IsReady ? null : "llama-server が起動しませんでした";
+    }
+
+    /// <summary>打った後に、Zenzai が途中で答えなくなっていた理由 (答えなかった変換は Mozc の結果になる)。答えていれば null。</summary>
+    public static string? ZenzaiFailure => Zenzai.Value switch
+    {
+        { GaveUp: true } => "Zenzai が続けて答えませんでした",
+        { IsResting: true } => $"Zenzai の答えが {ZenzaiTimeoutMs / 1000} 秒以内に届きませんでした",
+        _ => null,
+    };
 
     /// <summary>MELTYPE_MOZC の Mozc (無ければ null)。性能の計測 (--perf) が控えの使い回しの回数を読むのに使う。</summary>
     public static Composition.MozcConverter? Engine => Mozc.Value;
@@ -226,21 +262,29 @@ internal static class Henkan
     public static Func<string, string?>? ReadingOf => Mozc.Value is { } mozc ? mozc.Reading : null;
 
     /// <summary>アプリと同じ設定の Meltype キーボード (ライブ変換 ON、Mozc があれば Mozc で変換)。</summary>
-    public static CompositionTests.Keyboard Keyboard()
+    public static CompositionTests.Keyboard Keyboard() => Keyboard(zenzai: false);
+
+    /// <summary><see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。</summary>
+    public static CompositionTests.Keyboard Keyboard(bool zenzai)
     {
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
-        // Mozc には覚えさせない (覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう。
-        // 確かめたいのは、まだ何も覚えていない人の最初の変換)
-        var converter = Mozc.Value is { } engine ? new WithoutLearning(engine) : null;
-        return new(live: true, converter: converter, moreCandidates: Mozc.Value is { } mozc ? mozc.Candidates : null,
+        // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (Budget を Enable しない)
+        var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
+        return new(live: true, converter: converter, moreCandidates: converter is null ? null : converter.Candidates,
             userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
     }
 
-    /// <summary>変換だけを頼み、覚えさせない変換エンジン (ILearningConverter を持たない)。</summary>
-    private sealed class WithoutLearning(Composition.IKanjiConverter inner) : Composition.IKanjiConverter
+    /// <summary>
+    /// 学習の要求 (L) に答えるだけで、Mozc に覚えさせないヘルパー。覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう
+    /// (確かめたいのは、まだ何も覚えていない人の最初の変換)。
+    /// </summary>
+    private sealed class WithoutLearning(Composition.IMozcHelper inner) : Composition.IMozcHelper
     {
-        public string? Convert(string hiragana) => inner.Convert(hiragana);
-        public IReadOnlyList<Composition.ConversionClause>? ConvertClauses(string hiragana, string? context = null) => inner.ConvertClauses(hiragana, context);
+        public bool IsInstalled => inner.IsInstalled;
+        public void Start() => inner.Start();
+        public string? Send(string request) => request.StartsWith("L\t", StringComparison.Ordinal) ? "OK" : inner.Send(request);
+        public void Reset() => inner.Reset();
+        public long WorkingSet => inner.WorkingSet;
+        public void Dispose() => inner.Dispose();
     }
 
     public static void Run(string keys)
@@ -294,8 +338,7 @@ internal static class MozcCompare
         var helper = Environment.GetEnvironmentVariable("MELTYPE_MOZC");
         if (helper is null || !File.Exists(helper)) throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
         var profile = Path.Combine(Path.GetTempPath(), $"meltype-mozc-compare-{Environment.ProcessId}");
-        using var mozc = new Composition.MozcConverter(helper, profile);
-        CompositionTests.Detector.SpellChecker ??= Detection.BuiltInWordChecker.Shared;
+        using var mozc = new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, profile));
         var results = new List<object>();
         int currentOk = 0, wholeOk = 0;
         foreach (var line in File.ReadAllLines(input))

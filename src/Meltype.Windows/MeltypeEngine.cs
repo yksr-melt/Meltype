@@ -215,7 +215,7 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>動かす動作モードを Meltype IME に変えたか (選んでも使えなければ Meltype キーボードのまま)。</summary>
     internal static bool SwitchesToTsf(InputMode previous, InputMode next) => previous != InputMode.Tsf && next == InputMode.Tsf;
 
-    public DetectionResult Evaluate(string letters, Settings? settings = null) => Runtime.Evaluate(letters, final: false, settings ?? _settings);
+    public DetectionResult Evaluate(string letters) => Runtime.Evaluate(letters, final: false, _settings);
 
     private static bool IsDown(int vk) => (Native.GetAsyncKeyState(vk) & 0x8000) != 0;
 

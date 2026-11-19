@@ -2,10 +2,11 @@
 #   Issue を作ったとき:「要トリアージ」を付ける。Issue を作った・直したとき: 誤判定の報告なら最新のコードで打ってみて結果を返す。
 #   コメントの行の先頭のコマンド (1 つのコメントに 1 つ。/repro だけは複数行):
 #     だれでも: /repro /explain /ca /jht /help
-#     メンテナー (PR のみ): /test /pack /test-repro /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
+#     メンテナー (PR のみ): /repro <SHA> /test /pack /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
+#       /repro <SHA> は PR・PR の前 (main との merge base)・main の 3 つの commit で打って比べる
 #     管理者: /release <版> /pre-release <版> (コメントの 1 行目だけ。タグとリリースの下書きを作り、配布物のビルドを始める)
 # Issue・コメントの文は誰でも書けるので、run: の中に ${{ }} で埋め込まず、環境変数で値として渡す。
-# Pull Request のコードは、書き込みの権限を持たない job (pr) でだけ動かす。結果のコメントは別の job (report) が書く。
+# Pull Request のコードは、書き込みの権限を持たない job (run・pr) でだけ動かす。結果のコメントは別の job (report) が書く。
 # 漢字変換には最新リリースの meltype_mozc_helper を使う (毎回 Bazel ビルドしない)。
 name: bot
 
@@ -43,6 +44,7 @@ jobs:
       issue: ${{ steps.parse.outputs.issue }}
       keys: ${{ steps.parse.outputs.keys }}
       repros: ${{ steps.parse.outputs.repros }}
+      versions: ${{ steps.parse.outputs.versions }}
       reported: ${{ steps.parse.outputs.reported }}
       expected: ${{ steps.parse.outputs.expected }}
       sha: ${{ steps.parse.outputs.sha }}
@@ -92,12 +94,12 @@ jobs:
           BOT_RELEASE_COMMAND: ${{ needs.parse.outputs.release_command }}
           BOT_RELEASE_VERSION: ${{ needs.parse.outputs.release_version }}
 
-  # main 上での repro / explain / ca / jht
+  # main 上での repro / explain / ca / jht。/repro <SHA> は PR のコードも動かす (メンテナーのみ。parse で author_association と SHA を確認済み)
   run:
     needs: parse
     if: needs.parse.outputs.action == 'repro' || needs.parse.outputs.action == 'explain' || needs.parse.outputs.action == 'ca' || needs.parse.outputs.action == 'jht'
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
       contents: read
     steps:
@@ -127,11 +129,18 @@ jobs:
           $full = (Resolve-Path (Join-Path $bin 'meltype_mozc_helper.exe')).Path
           "MELTYPE_MOZC=$full" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           Write-Host "MELTYPE_MOZC=$full"
+          # /repro は Zenzai (zip の zenzai\ の llama-server とモデル) も使った結果を返す。zip に無ければ Repro.cs が zenzai に理由を出す
+          $zenzai = Join-Path $extract 'zenzai'
+          $model = Get-ChildItem -Path $zenzai -Filter '*.gguf' -ErrorAction SilentlyContinue | Select-Object -First 1
+          $modelPath = if ($model) { $model.FullName } else { Join-Path $zenzai 'model.gguf' }
+          "MELTYPE_ZENZAI_SERVER=$(Join-Path $zenzai 'llama-server.exe')" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "MELTYPE_ZENZAI_MODEL=$modelPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Run
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
           REPROS: ${{ needs.parse.outputs.repros }}
+          VERSIONS: ${{ needs.parse.outputs.versions }}
           MELTYPE_UTF8: '1'
         run: |
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
@@ -145,21 +154,37 @@ jobs:
             dotnet run --project src/Meltype.Core.Tests -c Release -- --jht "$env:KEYS" | Out-File results/jht.json -Encoding utf8NoBOM
             exit 0
           }
-          # repro と ca (Mozc があれば漢字も。ca も repro と同じく打つ。last は space)。REPROS の i 番目の結果は results/<i>/
-          $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
-          $release = $tag -and (git ls-tree --name-only $tag src/Meltype.Core.Tests/Repro.cs)
-          if ($release) { git worktree add ../release $tag }
-          $i = 0
-          foreach ($r in ($env:REPROS | ConvertFrom-Json)) {
-            $build = if ($i -gt 0) { '--no-build' }
-            New-Item -ItemType Directory -Force "results/$i" | Out-Null
-            dotnet run --project src/Meltype.Windows.Tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-main.json" -Encoding utf8
-            if ($release) {
-              # 前の版は Windows のテストが src/Meltype.Tests にある (src/Meltype.Windows.Tests に名前を変える前の版)
-              $releaseTests = if (Test-Path ../release/src/Meltype.Windows.Tests) { '../release/src/Meltype.Windows.Tests' } else { '../release/src/Meltype.Tests' }
-              dotnet run --project $releaseTests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-$tag.json" -Encoding utf8
+          # repro と ca (Mozc があれば漢字も。ca も repro と同じく打つ。last は space)。REPROS の i 番目の結果は results/<i>/repro-<版の名前>.json
+          # Zenzai の結果を返すのは repro だけ (ca は Mozc の候補だけを返すので、Zenzai を起動しない)
+          if ($env:ACTION -ne 'repro') { Remove-Item Env:MELTYPE_ZENZAI_SERVER, Env:MELTYPE_ZENZAI_MODEL -ErrorAction SilentlyContinue }
+          # 打つ版は VERSIONS (/repro <SHA> の PR の前・PR・main)。無ければ main と最新のリリース。同じ commit の版は 1 度だけ打つ。
+          # PR は最後に打つ (PR のビルドが失敗してもほかの版の結果を返す。PR のコードが動く前に、ほかの版を打ち終える)。
+          # 表の並びは report (meltype-bot.mjs) が VERSIONS の順に決める
+          $versions = if ($env:VERSIONS) { @($env:VERSIONS | ConvertFrom-Json) } else {
+            [pscustomobject]@{ name = 'main'; sha = (git rev-parse HEAD) }
+            $tag = git tag -l 'v*' --sort=-v:refname | Select-Object -First 1
+            if ($tag -and (git ls-tree --name-only $tag src/Meltype.Core.Tests/Repro.cs)) { [pscustomobject]@{ name = $tag; sha = (git rev-parse "$tag^{commit}") } }
+          }
+          $head = git rev-parse HEAD
+          $done = @{}
+          foreach ($v in @($versions | Sort-Object -Stable { $_.name -eq 'pr' })) {
+            if ($done.ContainsKey($v.sha)) { continue }
+            $done[$v.sha] = $true
+            $root = '.'
+            if ($v.sha -ne $head) {
+              $root = "../$($v.name)"
+              git fetch --quiet --no-tags origin $v.sha
+              git worktree add --quiet --detach $root $v.sha
             }
-            $i++
+            # src/Meltype.Windows.Tests に名前を変える前の版は、Windows のテストが src/Meltype.Tests にある
+            $tests = if (Test-Path "$root/src/Meltype.Windows.Tests") { "$root/src/Meltype.Windows.Tests" } else { "$root/src/Meltype.Tests" }
+            $i = 0
+            foreach ($r in ($env:REPROS | ConvertFrom-Json)) {
+              $build = if ($i -gt 0) { '--no-build' }
+              New-Item -ItemType Directory -Force "results/$i" | Out-Null
+              dotnet run --project $tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-$($v.name).json" -Encoding utf8
+              $i++
+            }
           }
       # 途中で失敗しても、できた分の結果を返す
       - if: ${{ !cancelled() }}
@@ -169,10 +194,10 @@ jobs:
           path: results/
           retention-days: 7
 
-  # PR のコードで test / pack / test-repro / test-jht / test-explain (メンテナーのみ。parse で author_association と SHA を確認済み)
+  # PR のコードで test / pack / test-jht / test-explain (メンテナーのみ。parse で author_association と SHA を確認済み)
   pr:
     needs: parse
-    if: contains(fromJSON('["test","pack","test-repro","test-jht","test-explain"]'), needs.parse.outputs.action)
+    if: contains(fromJSON('["test","pack","test-jht","test-explain"]'), needs.parse.outputs.action)
     runs-on: windows-latest
     timeout-minutes: 45
     permissions:
@@ -186,7 +211,7 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - name: Mozc helper from latest release
-        if: needs.parse.outputs.action == 'test-repro' || needs.parse.outputs.action == 'test-jht'
+        if: needs.parse.outputs.action == 'test-jht'
         run: *mozc-helper
       - name: Test
         if: needs.parse.outputs.action == 'test'
@@ -201,26 +226,19 @@ jobs:
         if: needs.parse.outputs.action == 'pack'
         shell: powershell
         run: .\Build-Package.ps1
-      - name: test-repro / test-jht / test-explain
-        if: contains(fromJSON('["test-repro","test-jht","test-explain"]'), needs.parse.outputs.action)
+      - name: test-jht / test-explain
+        if: contains(fromJSON('["test-jht","test-explain"]'), needs.parse.outputs.action)
         env:
           ACTION: ${{ needs.parse.outputs.action }}
           KEYS: ${{ needs.parse.outputs.keys }}
-          REPROS: ${{ needs.parse.outputs.repros }}
           MELTYPE_UTF8: '1'
         run: |
           [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
           New-Item -ItemType Directory -Force results | Out-Null
           if ($env:ACTION -eq 'test-explain') {
             dotnet run --project src/Meltype.Core.Tests -c Release -- --explain "$env:KEYS" | Out-File results/explain.txt -Encoding utf8
-          } elseif ($env:ACTION -eq 'test-jht') {
-            dotnet run --project src/Meltype.Core.Tests -c Release -- --jht "$env:KEYS" | Out-File results/jht.json -Encoding utf8NoBOM
           } else {
-            $r = $env:REPROS | ConvertFrom-Json
-            New-Item -ItemType Directory -Force results/0 | Out-Null
-            # src/Meltype.Windows.Tests に名前を変える前の PR は、Windows のテストが src/Meltype.Tests にある
-            $windowsTests = if (Test-Path src/Meltype.Windows.Tests) { 'src/Meltype.Windows.Tests' } else { 'src/Meltype.Tests' }
-            dotnet run --project $windowsTests -c Release -- --repro "$($r.keys)" "$($r.last)" | Out-File results/0/repro-pr.json -Encoding utf8
+            dotnet run --project src/Meltype.Core.Tests -c Release -- --jht "$env:KEYS" | Out-File results/jht.json -Encoding utf8NoBOM
           }
       # テストの失敗も結果として返すので、step が失敗しても上げる
       - if: ${{ !cancelled() && needs.parse.outputs.action != 'pack' }}
@@ -268,6 +286,7 @@ jobs:
           BOT_ISSUE: ${{ needs.parse.outputs.issue }}
           BOT_KEYS: ${{ needs.parse.outputs.keys }}
           BOT_REPROS: ${{ needs.parse.outputs.repros }}
+          BOT_VERSIONS: ${{ needs.parse.outputs.versions }}
           BOT_REPORTED: ${{ needs.parse.outputs.reported }}
           BOT_EXPECTED: ${{ needs.parse.outputs.expected }}
           BOT_SHA: ${{ needs.parse.outputs.sha }}

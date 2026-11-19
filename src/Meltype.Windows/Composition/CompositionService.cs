@@ -8,7 +8,7 @@ namespace Meltype.Composition;
 
 /// <summary>
 /// Meltype.exe の 2 つのフロント (Meltype キーボード・Meltype IME) が使う Windows の部品 (UI スレッドで作る)。
-/// 変換エンジン・辞書・学習データ (入力欄ごとの <see cref="MeltypeSession"/> で共有する)、フォーカスのある要素 (UI Automation)、
+/// 変換エンジン・辞書・学習データ (入力欄の本体の部品 <see cref="Parts"/>)、フォーカスのある要素 (UI Automation)、
 /// 入力モードの表示と、Meltype キーボードの変換ボックス・確定した文字の送り込み (SendInput・貼り付け)。判断はしない。
 /// </summary>
 internal sealed class CompositionService : IDisposable
@@ -22,7 +22,7 @@ internal sealed class CompositionService : IDisposable
     private readonly HybridConverter _hybrid;
 
     /// <param name="runtime">設定・辞書・学習データ (どの OS も同じもの)。</param>
-    /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="CreateSession"/> で渡す)。変換ボックスの見た目を決める。</param>
+    /// <param name="settings">Meltype の設定 (入力欄ごとの設定は <see cref="Ime.ImeHost"/> が決める)。変換ボックスの見た目を決める。</param>
     public CompositionService(Control invoker, MeltypeRuntime runtime, Func<Config.Settings> settings)
     {
         _invoker = invoker;
@@ -32,21 +32,17 @@ internal sealed class CompositionService : IDisposable
         _hybrid.Budget.Enable();
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         _hybrid.WarmUp();
+        // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
+        Parts = runtime.SessionParts(_hybrid, _hybrid.Candidates, _hybrid.Reading, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai }));
     }
 
     public MeltypeRuntime Runtime { get; }
 
     /// <summary>
-    /// 入力欄 1 つ分の入力の本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄・変換ボックスと共有する
+    /// 入力欄の本体を作る部品 (2 つのフロントの <see cref="Ime.ImeHost"/> に渡す)。辞書・学習データ・変換エンジンは、ほかの入力欄・変換ボックスと共有する
     /// (UI スレッドからだけ使うので排他は要らない)。
     /// </summary>
-    public MeltypeSession CreateSession(Func<Config.Settings> settings, bool directModeDetection = false)
-    {
-        var session = Runtime.CreateSession(_hybrid, settings, _hybrid.Candidates, directModeDetection: directModeDetection);
-        // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
-        session.Corrected += correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai });
-        return session;
-    }
+    public SessionParts Parts { get; }
 
     /// <summary>背景の変換の結果が届いた (入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
     public event Action? ConversionReady;
@@ -426,7 +422,9 @@ internal sealed class CompositionService : IDisposable
         };
         Diagnostics.Log.Info($"変換ボックスを出す入力位置: {(caret is { } r ? $"{r.X},{r.Y} 高さ {r.Height}{(wholeField ? " (入力欄の枠)" : "")}" : "分からない")}");
         _window.SetFontFamily(_settings().CompositionFont);
-        _window.SetAppearance(_settings().CompositionIsLight(CompositionWindow.WindowsUsesLightTheme()), _settings().CompositionOpacityValue);
+        var settings = _settings();
+        _window.SetAppearance(settings.CompositionIsLight(CompositionWindow.WindowsUsesLightTheme()), settings.CompositionOpacityValue,
+            settings.CompositionCustomColors() is var ((br, bg, bb), (tr, tg, tb)) ? (Color.FromArgb(br, bg, bb), Color.FromArgb(tr, tg, tb)) : null);
         // 出すモニターの拡大率に合わせる (入力位置のモニター。分からなければ変換ボックスを置く位置のモニター)
         var monitorScale = MonitorScale(caret?.Location ?? FindAnchor(caret, caretSearched: true));
         _window.SetMonitorScale(monitorScale);

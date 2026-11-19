@@ -65,23 +65,6 @@ const dictionaries = {
   'english-words.txt': {
     format: words(w => /^[a-z]{2,}$/.test(w) ? null : `「${w}」が小文字の英字の語でない`),
   },
-  // 繋げた形<Tab>空白で区切った語句。繋げた形が、語句の空白を除いた形と一致することまで確かめる
-  'english-phrases.txt': {
-    // コメントは行頭の # だけ (commentAt を見る)。行末に # を書くと Core はその行を登録しない
-    format: noInlineComment(tabbed(2, 2, ([joined, phrase]) => [
-      /^[a-z]+$/.test(joined) ? null : `「${joined}」が小文字の英字でない`,
-      phrase.split(' ').every(w => /^[a-z]+$/.test(w)) ? null : `語句「${phrase}」が小文字の英字の語でない`,
-      // 1 語だけだと Core は空白を入れず、繋げた形を定型句として英語扱いするだけになる
-      phrase.includes(' ') ? null : `語句「${phrase}」が 1 語だけ (定型句は 2 語以上。空白が入らないので登録する意味が無い)`,
-      joined === phrase.replace(/ /g, '') ? null : `「${joined}」が語句「${phrase}」を繋げた形でない`,
-    ])),
-    // Core (EnglishPhraseSpacing) は 1 文字目の # だけをコメントとして読み飛ばす。行末の # 以降は欄に残り、その行は登録されない
-    commentAt: line => line.startsWith('#') ? 0 : -1,
-    // Core が行を trim せずタブで分けるので、行頭の空白や行末の余分なタブがあると登録されない
-    untrimmed: true,
-    // Core は繋げた形をキーに、後の行で上書きする
-    keysOf: line => { const [joined, phrase] = line.split('\t'); return [[joined, phrase]]; },
-  },
   // ローマ字として最後まで読めても英語にする語。ファイル冒頭の決まりどおり 3 文字以上だけ。Core は小文字にして読む
   'english-readable.txt': {
     format: words(w => /^[A-Za-z]{3,}$/.test(w) ? null : `「${w}」が 3 文字以上の英字の語でない`),
@@ -131,6 +114,12 @@ const dictionaries = {
   },
   'readings.txt': {
     format: tabbed(1, 2, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  },
+  'readings-rare.txt': {
+    format: tabbed(1, 2, ([reading]) => [
+      hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`,
+      [...reading].length >= 5 ? null : `読み「${reading}」が 5 文字より短い`,
+    ]),
   },
   'readings-extra.txt': {
     format: tabbed(1, 2, ([reading]) => [
@@ -194,10 +183,6 @@ const domain = {
   keysOf: line => [[line.split('\t')[0], line]],
 };
 const configOf = file => dictionaries[file] ?? (/^domain-[a-z-]+\.txt$/.test(file) ? domain : undefined);
-
-function noInlineComment(check) {
-  return line => line.includes('#') ? ['行末にコメントは書けない (コメントは行頭の # だけ。行末に書くとこの行は読み込まれない)'] : check(line);
-}
 
 function spaced(check) {
   return line => {

@@ -8,19 +8,6 @@ namespace Meltype.Composition;
 /// <summary>CompositionController が使う辞書・学習データと、設定でない外の入力。設定は <see cref="Config.Settings"/> を別に渡す。</summary>
 public sealed record CompositionServices
 {
-    /// <summary>英数 (直接入力) 状態か。</summary>
-    public Func<bool> DirectMode { get; init; } = () => false;
-
-    /// <summary>
-    /// 英数状態で打ち始めた文字がローマ字 (日本語) かを判定する。null なら英数状態では判定しない。
-    /// 引数は (打った英字, もう続きが無いか)。
-    /// </summary>
-    public Func<string, bool, Verdict>? ClassifyDirect { get; init; }
-
-    /// <summary>英数状態での判定結果を知らせる (true: 日本語だったので日本語入力に戻った / false: 英語だった)。</summary>
-    public Action<bool>? DirectDecided { get; init; }
-
-
     /// <summary>同音異義語などの補助候補。</summary>
     public CandidateDictionary? Candidates { get; init; }
 
@@ -64,8 +51,6 @@ public sealed record CompositionServices
 
     /// <summary>この PC のタイムゾーン (時計の候補にタイムゾーンの名前を付けるかの判定に使う。テストでは差し替える)。</summary>
     public Func<TimeZoneInfo> LocalTimeZone { get; init; } = () => TimeZoneInfo.Local;
-
-    public Func<bool> AutomaticEnglishSpacing { get; init; } = () => false;
 
     /// <summary>ユーザーが英字 / かなに直した語の学習。</summary>
     public LanguageMemory? Languages { get; init; }

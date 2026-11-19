@@ -11,6 +11,7 @@
 import ctypes
 import json
 import os
+import signal
 import subprocess
 import sys
 
@@ -21,7 +22,7 @@ _lib.meltype_free.argtypes = [ctypes.c_void_p]
 _lib.meltype_version.restype = ctypes.c_void_p
 _lib.meltype_report_url.argtypes = [ctypes.c_char_p]
 _lib.meltype_report_url.restype = ctypes.c_void_p
-_lib.meltype_init.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
+_lib.meltype_init.argtypes = [ctypes.c_char_p]
 _lib.meltype_init.restype = ctypes.c_int
 _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
 _lib.meltype_set_conversion_ready.restype = None
@@ -29,6 +30,7 @@ _lib.meltype_ime_create.restype = ctypes.c_void_p
 _lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
 _lib.meltype_ime_handle.restype = ctypes.c_void_p
 _lib.meltype_ime_destroy.argtypes = [ctypes.c_void_p]
+_lib.meltype_shutdown.restype = None
 
 # 本体のプロトコルの版 (ImeHost.Version)
 IME_VERSION = 1
@@ -57,8 +59,7 @@ import gi
 gi.require_version("IBus", "1.0")
 from gi.repository import GLib, GObject, IBus  # noqa: E402
 
-# 英単語の判定は同梱の一覧 (None)
-if not _lib.meltype_init(HERE.encode(), None):
+if not _lib.meltype_init(HERE.encode()):
     print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
 
 # 最後にフォーカスを受けたエンジン。背景の変換の結果が届いたら、この入力欄の表示を作り直す
@@ -95,6 +96,8 @@ SPECIAL_KEYS = {
     IBus.KEY_F6: 0x75, IBus.KEY_F7: 0x76, IBus.KEY_F8: 0x77, IBus.KEY_F9: 0x78, IBus.KEY_F10: 0x79,
     # 入力モードのキー (意味は本体が決める)
     IBus.KEY_Zenkaku_Hankaku: 0x19, IBus.KEY_Hankaku: 0x19, IBus.KEY_Zenkaku: 0x19,
+    # 左右の Alt (単独押しかは本体が決める。ImeCapture.AltKeys)
+    IBus.KEY_Alt_L: 0xA4, IBus.KEY_Alt_R: 0xA5,
     IBus.KEY_Eisu_toggle: 0xF0, IBus.KEY_Hiragana_Katakana: 0x15, IBus.KEY_Henkan: 0x1C, IBus.KEY_Muhenkan: 0x1D,
 }
 
@@ -124,8 +127,13 @@ def virtual_key(keyval):
 BEFORE_LENGTH = 4000
 AFTER_LENGTH = 20
 
+ALT_KEYS = (0xA4, 0xA5)
+
 # 矢印キー (←) のキーコード (確定したあとにキャレットを戻す)
 KEYCODE_LEFT = 105
+# 本体が使った Alt の解放の前に挟む、何もしないキー (MeltypeEngine._alt_key のワークアラウンド)。GNOME は送られたキーを keysym から
+# keymap のキーに引き直すので、keymap にあって何も割り当てられていない F19 にする
+KEYCODE_F19 = 189
 
 
 # ---- 入力エンジン ----
@@ -168,6 +176,10 @@ class MeltypeEngine(IBus.Engine):
         self._properties = IBus.PropList()
         # パネルの「あ / A」(GNOME などは key が InputMode のプロパティの symbol を出す)。本体が最後に返した言語モードを出す
         self._language_mode = None
+        # 左右の Alt (ImeCapture.AltKeys): 本体が受け取るか、押している Alt (0 なら無し)、押している間にほかのキーを押したか
+        self._alt_keys = False
+        self._alt_down = 0
+        self._alt_interrupted = False
         self._mode_property = IBus.Property(key="InputMode", prop_type=IBus.PropType.NORMAL, label=IBus.Text.new_from_string("あ"),
                                             symbol=IBus.Text.new_from_string("あ"), sensitive=False, visible=True)
         self._properties.append(self._mode_property)
@@ -189,6 +201,7 @@ class MeltypeEngine(IBus.Engine):
             return None
         output = json.loads(reply)
         self._apply(output["result"])
+        self._alt_keys = output["state"]["capture"]["altKeys"]
         if output["state"]["languageMode"] != self._language_mode:
             self._language_mode = output["state"]["languageMode"]
             label = IBus.Text.new_from_string("あ" if self._language_mode == "Japanese" else "A")
@@ -222,17 +235,51 @@ class MeltypeEngine(IBus.Engine):
     # ---- IBus からの呼び出し ----
 
     def do_process_key_event(self, keyval, keycode, state):
-        if state & IBus.ModifierType.RELEASE_MASK:
-            return False
+        released = bool(state & IBus.ModifierType.RELEASE_MASK)
         vk, character = virtual_key(keyval)
+        if vk in ALT_KEYS:
+            return self._alt_key(vk, keyval, keycode, state, released)
+        if released:
+            return False
+        if self._alt_down:
+            self._alt_interrupted = True
         if vk is None:
             return False
-        key = {"vk": vk, "ch": character,
-               "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
-               "alt": bool(state & IBus.ModifierType.MOD1_MASK),
-               "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
-        output = self.send("KeyPressed", key=key)
+        output = self.send("KeyPressed", key=self._key(vk, character, state))
         return bool(output and output["result"]["consumed"])
+
+    @staticmethod
+    def _key(vk, character, state):
+        return {"vk": vk, "ch": character,
+                "shift": bool(state & IBus.ModifierType.SHIFT_MASK), "ctrl": bool(state & IBus.ModifierType.CONTROL_MASK),
+                "alt": bool(state & IBus.ModifierType.MOD1_MASK),
+                "command": bool(state & (IBus.ModifierType.SUPER_MASK | IBus.ModifierType.MOD4_MASK))}
+
+    def _alt_key(self, vk, keyval, keycode, state, released):
+        """左右の Alt。単独押しかは本体が決めるので、押下は本体に知らせてアプリに通し、解放は本体が consumed にしたら止める。"""
+        if not released:
+            # 押したままの自動の繰り返しは、最初の押下だけを送る
+            if not self._alt_keys or self._alt_down == vk:
+                return False
+            self._alt_interrupted = self._alt_down != 0
+            self._alt_down = vk
+            self.send("KeyPressed", key=self._key(vk, 0, state))
+            return False
+        if self._alt_down != vk:
+            return False
+        interrupted = self._alt_interrupted
+        self._alt_down = 0
+        self._alt_interrupted = False
+        output = self.send("KeyReleased", key={"vk": vk, "interrupted": interrupted})
+        if not (output and output["result"]["consumed"]):
+            return False
+        # ワークアラウンド: 止めた Alt の解放を、何もしないキー (F19) の押下・解放のあとに送り直す (Windows の 0xE8 と同じ)。
+        # Alt の単独押しで入力モードを切り替える限り恒久的に必要で、消せない。止めたままだと、次のキーがアプリに届くまで
+        # アプリの修飾キーの状態に Alt が残り、その間のクリックが Alt 付きになる。F19 を挟まずに送り直すと、アプリが Alt の単独押し (メニュー) と受け取る。
+        self.forward_key_event(IBus.KEY_F19, KEYCODE_F19, 0)
+        self.forward_key_event(IBus.KEY_F19, KEYCODE_F19, IBus.ModifierType.RELEASE_MASK)
+        self.forward_key_event(keyval, keycode, state)
+        return True
 
     def _leave(self, focus_out):
         """フォーカスが外れる・Reset (クリックなど)。キャレットはこの入力欄の外か、クリックした所に移る。
@@ -240,6 +287,10 @@ class MeltypeEngine(IBus.Engine):
         表示中の preedit は IBus がそのまま確定する (COMMIT モード)。エンジンがここで送る文字はフォーカスが外れたあとで
         届かないうえ、届いても順序が壊れるので、本体には「表示のまま確定された」と伝える。
         """
+        # Alt + Tab などでフォーカスが移ると、Alt を離したことはこのエンジンに届かない。本体には、割り込まれて離したと伝える
+        if self._alt_down:
+            vk, self._alt_down, self._alt_interrupted = self._alt_down, 0, False
+            self.send("KeyReleased", key={"vk": vk, "interrupted": True})
         caret = {"moved": True, "passedKey": 0, "focusLeft": focus_out}
         if self._preedit_visible:
             self._preedit_visible = False
@@ -492,8 +543,9 @@ def main():
         print("Meltype: IBus につながりません", file=sys.stderr)
         sys.exit(1)
     loop = GLib.MainLoop()
-    # IBus が終わったら (ログアウト・ibus restart) 一緒に終わる
+    # IBus が終わったら (ログアウト・ibus restart) 一緒に終わる。IBus がエンジンを止めるときの SIGTERM でも
     bus.connect("disconnected", lambda *_: loop.quit())
+    GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, lambda: loop.quit() or GLib.SOURCE_REMOVE)
     factory = IBus.Factory.new(bus.get_connection())
     factory.add_engine("meltype", GObject.type_from_name("MeltypeEngine"))
     if "--ibus" in sys.argv:
@@ -504,6 +556,8 @@ def main():
         component.add_engine(IBus.EngineDesc.new("meltype", "Meltype", "Meltype", "ja", "GPL-3.0-or-later", "Yukishiro", "", "default"))
         bus.register_component(component)
     loop.run()
+    # Zenzai の llama-server を終わらせ、Mozc の学習を保存する (呼ばずに終わると、次に起動した Meltype が終わらせるまで llama-server が残る)
+    _lib.meltype_shutdown()
 
 
 if __name__ == "__main__":

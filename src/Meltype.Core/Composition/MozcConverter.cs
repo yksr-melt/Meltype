@@ -2,27 +2,19 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
 
 namespace Meltype.Composition;
 
 /// <summary>
-/// Mozc (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジン。
-/// 同梱の変換ヘルパー (meltype_mozc_helper) を別のプロセスで動かし、標準入出力で変換を頼む。
-///
-/// やり取り (UTF-8、1 行ずつ) は native/mozc/meltype_mozc_helper.cc の先頭に書いてある。
+/// Mozc (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジン。変換ヘルパー (<see cref="IMozcHelper"/>) に 1 行ずつ変換を頼む。
 /// ヘルパーが無い・起動できない・応答しないときは null を返す (呼び出し側はかなのまま見せる)。
 /// </summary>
 public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
-    private const int TimeoutMs = 1500;
-    private const int StartTimeoutMs = 10000;
 
-    private readonly string _helperPath;
-    private readonly string? _profileDirectory;
+    private readonly IMozcHelper _helper;
     // ヘルパーとのやり取りの順番を守る。応答を待つ間も持つので、入力スレッドでは取らない
     private readonly object _gate = new();
     // 変換の結果の控えと、その回数を守る。ヘルパーの応答を待つ間は持たない (_gate の中で取ってよい。逆は取らない)
@@ -30,7 +22,6 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private readonly Dictionary<string, IReadOnlyList<string>> _candidates = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<(string Reading, IReadOnlyList<string> Candidates)>?> _conversions = new(StringComparer.Ordinal);
     private readonly LatestRequestWorker<(string, string)> _worker;
-    private Process? _process;
     private volatile int _failures;
 
     // 性能の計測用の回数と時間 (--perf)。ロックの中で数えるだけなので、ふだんの入力は遅くならない
@@ -41,32 +32,13 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private long _helperCalls;
     private long _helperTicks;
 
-    // 要る DLL が無くて起動できない (Visual C++ のランタイムが無いなど)。起動し直しても同じなので、もう試さない
-    private volatile bool _missingDependency;
-
     // 終了した。終了のあとで裏の処理 (覚えさせる・WarmUp) が動いても、ヘルパーを起動し直さない
     private volatile bool _disposed;
 
-    // Windows: 子プロセスを起動するあいだ、DLL が見つからないときのエラーの画面を出さない (子プロセスはこの設定を引き継ぐ)。
-    // 子プロセスが引き継ぐのはプロセス全体の設定だけなので、SetThreadErrorMode では効かない。起動したらすぐ戻す
-    private const uint SEM_FAILCRITICALERRORS = 0x0001;
-    private const uint SEM_NOOPENFILEERRORBOX = 0x8000;
-
-    [DllImport("kernel32.dll")]
-    private static extern uint SetErrorMode(uint mode);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint GetErrorMode();
-
-    // STATUS_DLL_NOT_FOUND / STATUS_ENTRYPOINT_NOT_FOUND / STATUS_INVALID_IMAGE_FORMAT (起動のときに DLL を読み込めなかった)
-    private static bool IsLoaderFailure(int exitCode) => exitCode is unchecked((int)0xC0000135) or unchecked((int)0xC0000139) or unchecked((int)0xC000007B);
-
-    /// <param name="helperPath">meltype_mozc_helper の実行ファイル。</param>
-    /// <param name="profileDirectory">Mozc の学習データの保存先 (null なら Mozc の既定)。</param>
-    public MozcConverter(string helperPath, string? profileDirectory)
+    /// <param name="helper">変換ヘルパー。この MozcConverter が Dispose する。</param>
+    public MozcConverter(IMozcHelper helper)
     {
-        _helperPath = helperPath;
-        _profileDirectory = profileDirectory;
+        _helper = helper;
         _worker = new LatestRequestWorker<(string, string)>(ProcessBackground);
     }
 
@@ -75,10 +47,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     public event Action? ResultReady;
 
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
-    public bool IsInstalled => File.Exists(_helperPath);
+    public bool IsInstalled => _helper.IsInstalled;
 
     /// <summary>使えるか。何度も失敗したら諦める。</summary>
-    public bool IsAvailable => IsInstalled && _failures < 3 && !_missingDependency;
+    public bool IsAvailable => IsInstalled && _failures < 3;
 
     public string? Convert(string hiragana) =>
         ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
@@ -163,17 +135,12 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         try
         {
             var started = Stopwatch.GetTimestamp();
-            var process = Start();
-
-            process.StandardInput.Write(request + "\n");
-            process.StandardInput.Flush();
-            var line = ReadLine(process, TimeoutMs);
+            var line = _helper.Send(request);
             _helperCalls++;
             _helperTicks += Stopwatch.GetTimestamp() - started;
 
             if (line is null)
             {
-                Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
                 Fail();
                 return null;
             }
@@ -235,7 +202,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (_disposed || !IsAvailable) return false;
             try
             {
-                Start();
+                _helper.Start();
                 return true;
             }
             catch (Exception ex)
@@ -315,11 +282,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             long workingSet = 0;
             try
             {
-                if (_process is { HasExited: false } process)
-                {
-                    process.Refresh();
-                    workingSet = process.WorkingSet64;
-                }
+                workingSet = _helper.WorkingSet;
             }
             catch
             {
@@ -346,86 +309,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     // タブ・改行は区切りに使うので空白にする。
     private static string Clean(string text) => text.Replace('\t', ' ').Replace('\n', ' ').Replace('\r', ' ');
 
-    /// <summary>動いているヘルパー (_gate の中で呼ぶ)。動いていなければ起動して READY を待つ。入力スレッドは _gate を取らないので、入力は止まらない。</summary>
-    private Process Start()
-    {
-        if (_process is { HasExited: false } running) return running;
-        _process?.Dispose();
-        return _process = Launch();
-    }
-
-    private Process Launch()
-    {
-        var info = new ProcessStartInfo(_helperPath)
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            StandardInputEncoding = new UTF8Encoding(false),
-            StandardOutputEncoding = new UTF8Encoding(false),
-            WorkingDirectory = Path.GetDirectoryName(_helperPath) ?? "",
-        };
-        if (_profileDirectory is not null)
-        {
-            Directory.CreateDirectory(_profileDirectory);
-            info.ArgumentList.Add(_profileDirectory);
-        }
-        Process process;
-        // 今の設定に足す (GetErrorMode で読む。SetErrorMode(0) で読むと、一瞬プロセス全体の設定が 0 になる)
-        var previousMode = 0u;
-        if (OperatingSystem.IsWindows())
-        {
-            previousMode = GetErrorMode();
-            // 戻り値は以前のモード (エラーコードではない)。復元には直前に読んだモードを使う。
-            _ = SetErrorMode(previousMode | SEM_FAILCRITICALERRORS | SEM_NOOPENFILEERRORBOX);
-        }
-        try
-        {
-            process = Process.Start(info) ?? throw new InvalidOperationException("起動できませんでした");
-        }
-        finally
-        {
-            if (OperatingSystem.IsWindows()) _ = SetErrorMode(previousMode);
-        }
-        // Mozc のログ (標準エラー) は読み捨てる (溜まるとヘルパーが止まる)。
-        process.ErrorDataReceived += (_, _) => { };
-        process.BeginErrorReadLine();
-        var ready = ReadLine(process, StartTimeoutMs);
-        if (ready != "READY")
-        {
-            if (process.WaitForExit(1000) && IsLoaderFailure(process.ExitCode))
-            {
-                _missingDependency = true;
-                Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できません (DLL を読み込めない: 0x{process.ExitCode:X8}。同梱の Visual C++ のランタイムが無いか壊れている)。漢字に変換できません。");
-            }
-            try { process.Kill(); } catch { }
-            process.Dispose();
-            throw new InvalidOperationException($"起動に失敗しました: {ready ?? "応答なし"}");
-        }
-        Diagnostics.Log.Info("Mozc の変換エンジンを起動しました。");
-        return process;
-    }
-
-    private static string? ReadLine(Process process, int timeoutMs)
-    {
-        var task = process.StandardOutput.ReadLineAsync();
-        return task.Wait(timeoutMs) ? task.Result : null;
-    }
-
     private void Fail()
     {
         _failures++;
-        try
-        {
-            if (_process is { HasExited: false }) _process.Kill();
-        }
-        catch
-        {
-        }
-        _process?.Dispose();
-        _process = null;
+        _helper.Reset();
     }
 
     /// <summary>起動しておく (最初の変換で待たないように)。</summary>
@@ -437,20 +324,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         lock (_gate)
         {
             _disposed = true;
-            try
-            {
-                if (_process is { HasExited: false } process)
-                {
-                    process.StandardInput.Write("Q\n");
-                    process.StandardInput.Flush();
-                    if (!process.WaitForExit(1000)) process.Kill();
-                }
-            }
-            catch
-            {
-            }
-            _process?.Dispose();
-            _process = null;
+            _helper.Dispose();
         }
     }
 }

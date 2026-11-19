@@ -13,7 +13,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Core", "src\Meltype
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Core.Tests", "src\Meltype.Core.Tests\Meltype.Core.Tests.csproj", "{33945929-5A8A-4997-9676-C5CB183585C0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Mac.Native", "src\Meltype.Mac.Native\Meltype.Mac.Native.csproj", "{1A57B4E4-58E4-403B-B98B-2CB4F3EAB99C}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Meltype.Core.CApi", "src\Meltype.Core.CApi\Meltype.Core.CApi.csproj", "{1A57B4E4-58E4-403B-B98B-2CB4F3EAB99C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
