@@ -226,9 +226,9 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます。あわせて、よく使う語 (約 5.7 万語) の判定が main から変わった語を一覧にします (参考。失敗にはしません) |
 | 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc で確かめます |
 | CLA | いつも | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」)。初めての方は、同意するまで失敗します |
-| quality | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、Roslyn の解析の警告とあわせて 1 件でもあれば失敗 |
-| CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
-| 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
+| lint | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、Roslyn の解析の警告とあわせて 1 件でもあれば失敗 |
+| vulnerability / codeql | いつも | C#・C++・JavaScript・Python・Actions を CodeQL で解析し、新しく見つかった重大なセキュリティの問題があれば失敗 |
+| vulnerability / dependencies | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
 

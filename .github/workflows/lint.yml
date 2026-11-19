@@ -1,11 +1,9 @@
-# コードの品質のチェック (issue #1083)。ビルドとテストは windows.yml・core.yml、辞書・精度は core.yml、報告の再現は pr-expectations.yml。
+# フォーマットと静的解析 (issue #1083)。ビルドとテストは windows.yml・core.yml、辞書・精度は core.yml、報告の再現は pr-expectations.yml、脆弱性は vulnerability.yml。
 #   フォーマット … すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
 #   静的解析     … Roslyn の解析 (AnalysisLevel=latest-recommended) の警告が 1 件でもあれば失敗。重要度は .editorconfig で変える。
 #                  SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
 #                  Windows 版のプロジェクトも EnableWindowsTargeting で Linux のランナーで調べる
-#   依存関係     … Pull Request で足した・上げた依存 (npm・Swift・Actions など) に、既知の脆弱性 (high 以上) があれば失敗
-# セキュリティの解析 (CodeQL) は codeql.yml。
-name: quality
+name: lint
 
 on:
   pull_request:
@@ -17,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: quality-${{ github.ref }}
+  group: lint-${{ github.ref }}
   cancel-in-progress: true
 
 # bash を明示すると -eo pipefail で動き、パイプの途中のコマンドの失敗も止まる (既定の bash -e では最後のコマンドしか見ない。#1842)
@@ -26,7 +24,7 @@ defaults:
     shell: bash
 
 jobs:
-  quality:
+  lint:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -40,12 +38,3 @@ jobs:
         run: dotnet format whitespace --folder --verify-no-changes
       - name: 静的解析
         run: dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true
-
-  dependencies:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
-        with:
-          fail-on-severity: high
