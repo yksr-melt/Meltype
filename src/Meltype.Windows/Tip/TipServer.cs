@@ -73,11 +73,26 @@ internal sealed class TipServer : IDisposable
     /// </summary>
     public static bool IsOtherBuildRegistered => InstalledBuild() == false;
 
-    /// <summary>登録済みの impl がこの Meltype.exe と別ビルドなら、登録済みの impl の SHA-256 (<see cref="TipBuild.OtherBuild"/>)。同じビルド・登録されていなければ null。</summary>
-    public static string? OtherRegisteredBuild => RegisteredTipFolder() is { } folder ? TipBuild.Shipped.OtherBuild(folder) : null;
+    /// <summary>
+    /// 登録済みの impl がこの Meltype.exe と別ビルドなら、その Meltype IME を同梱した Meltype の版 (Register-Tip.ps1 が置く version.txt。1.5.1+abc1234)。
+    /// version.txt が無い (置く前の Meltype が登録した)・読めなければ "?"。同じビルド・登録されていなければ null。
+    /// </summary>
+    public static string? OtherRegisteredVersion => RegisteredTipFolder() is { } folder && !TipBuild.Shipped.IsInstalled(folder) ? ReadVersion(folder) : null;
+
+    private static string ReadVersion(string folder)
+    {
+        try
+        {
+            return File.ReadAllText(Path.Combine(folder, "version.txt")).Trim() is { Length: > 0 } version ? ProjectInfo.ShortCommit(version) : "?";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return "?";
+        }
+    }
 
     // 登録済みの impl がこの Meltype.exe と同じビルドか。登録されていなければ null
-    private static bool? InstalledBuild() => RegisteredTipFolder() is { } folder ? TipBuild.Shipped.OtherBuild(folder) is null : null;
+    private static bool? InstalledBuild() => RegisteredTipFolder() is { } folder ? TipBuild.Shipped.IsInstalled(folder) : null;
 
     // 登録済みの tip フォルダー (x64・x86 の上)。登録されていなければ null
     private static string? RegisteredTipFolder() =>
@@ -715,10 +730,8 @@ internal sealed class TipServer : IDisposable
 
         public string? ClipboardText => CompositionService.ClipboardText;
 
-        public string? FrontName => "Meltype IME";
-
         // 別ビルドの impl とは通信しない (TipBuild.Matches) ので、つながっている impl はこの Meltype.exe と同じビルド
-        public string? OtherTipBuild => null;
+        public string? OtherTipVersion => null;
 
     }
 

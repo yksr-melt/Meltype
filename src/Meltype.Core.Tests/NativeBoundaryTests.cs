@@ -30,9 +30,7 @@ internal static unsafe class NativeBoundaryTests
 
         public string? ClipboardText => null;
 
-        public string? FrontName => null;
-
-        public string? OtherTipBuild => null;
+        public string? OtherTipVersion => null;
 
         /// <summary>最後の応答で変換中の文字があったか。</summary>
         public bool IsComposing { get; private set; }

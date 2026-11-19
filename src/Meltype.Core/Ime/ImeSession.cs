@@ -554,7 +554,7 @@ internal static class ImeSession
         Selection = state.Field?.Selection,
         CanDeleteBackward = CanDeleteSurrounding(state),
         Clipboard = () => env.Environment.ClipboardText,
-        Front = () => new(env.Environment.FrontName, env.Environment.OtherTipBuild),
+        OtherTipVersion = () => env.Environment.OtherTipVersion,
         NowPlaying = env.Parts.NowPlaying,
         Corrected = env.Parts.Corrected,
     };

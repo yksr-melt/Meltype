@@ -272,7 +272,7 @@ internal static partial class CompositionController
     private static UtilityCandidates? Utilities(CompositionState state, CompositionEnv env, IReadOnlyList<CompositionSegment> segments)
     {
         var reading = segments is [{ IsEnglish: false, Kana.Length: > 0 } only] ? only.Kana : null;
-        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Services.UtcNow(), env.Services.LocalTimeZone(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.Front);
+        var context = new UtilityContext(env.Settings, env.Services.Now(), env.Services.UtcNow(), env.Services.LocalTimeZone(), env.Clipboard, env.NowPlaying, env.Services.GitHubTitles(), env.OtherTipVersion);
         return UtilityConversions.Convert(new UtilityInput(state.Text, reading, state.Direct, context));
     }
 

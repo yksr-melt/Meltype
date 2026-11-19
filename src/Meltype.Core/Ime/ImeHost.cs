@@ -20,14 +20,11 @@ public interface IImeEnvironment
     /// <summary>クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に読む)。読めなければ null。</summary>
     string? ClipboardText { get; }
 
-    /// <summary>「ばーじょん」の候補に出す、このフロントの名前 (Meltype IME・Meltype キーボード・IBus・fcitx5)。OS にフロントが 1 つしかなければ null。</summary>
-    string? FrontName { get; }
-
     /// <summary>
-    /// Windows に登録されている Meltype IME (native/tip の impl) が Meltype.exe と別のビルドなら、その impl の SHA-256 (読めなければ "?")。
+    /// Windows に登録されている Meltype IME が Meltype.exe と別のビルドなら、その Meltype IME を同梱した Meltype の版 (分からなければ "?")。
     /// 同じビルド・登録されていない・ほかの OS では null。キーを処理するスレッドで読むので、読むたびに I/O をしない。
     /// </summary>
-    string? OtherTipBuild { get; }
+    string? OtherTipVersion { get; }
 }
 
 /// <summary>

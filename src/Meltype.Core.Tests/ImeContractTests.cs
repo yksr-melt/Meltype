@@ -51,9 +51,7 @@ internal static class ImeContractTests
 
         public string? ClipboardText => null;
 
-        public string? FrontName => null;
-
-        public string? OtherTipBuild => null;
+        public string? OtherTipVersion => null;
 
         public int Sessions => Host.SessionCount;
 

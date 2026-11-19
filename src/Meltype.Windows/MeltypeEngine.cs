@@ -19,11 +19,11 @@ internal sealed class MeltypeEngine : IDisposable
     private readonly KeyboardMonitor _monitor;
     // Chrome リモート デスクトップ・Parsec で操作されているか (#372)
     private readonly RemoteControl _remote = new();
-    // config.json の設定と、動かしている設定 (Running)・登録済みの Meltype IME の別のビルド (OtherTipBuild) の写し。
+    // config.json の設定と、動かしている設定 (Running)・登録済みの別のビルドの Meltype IME の版 (OtherTipVersion) の写し。
     // フックの中でファイル・レジストリを見ないように、土台が読み直したときに差し替える
     private volatile Settings _settings = null!;
     private volatile Settings _running = null!;
-    private volatile string? _otherTipBuild;
+    private volatile string? _otherTipVersion;
     private bool _disposed;
 
     /// <summary>動かしている設定 (<see cref="Running"/>) が変わった (前と後)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
@@ -75,15 +75,15 @@ internal sealed class MeltypeEngine : IDisposable
     public Settings Running => _running;
 
     /// <summary>
-    /// 動作モードが Meltype IME で、登録済みの Meltype IME がこの Meltype.exe と別ビルドなら、そのビルド (<see cref="Tip.TipServer.OtherRegisteredBuild"/>)。
+    /// 動作モードが Meltype IME で、登録済みの Meltype IME がこの Meltype.exe と別ビルドなら、その Meltype IME の版 (<see cref="Tip.TipServer.OtherRegisteredVersion"/>)。
     /// 動作モードが Meltype キーボードなら、登録済みの Meltype IME は入力に関わらないので null。
     /// </summary>
-    public string? OtherTipBuild => _otherTipBuild;
+    public string? OtherTipVersion => _otherTipVersion;
 
     private void Load(Settings next)
     {
         _running = RunningSettings(_settings, next);
-        _otherTipBuild = next.Mode == InputMode.Tsf ? Tip.TipServer.OtherRegisteredBuild : null;
+        _otherTipVersion = next.Mode == InputMode.Tsf ? Tip.TipServer.OtherRegisteredVersion : null;
         _settings = next;
     }
 

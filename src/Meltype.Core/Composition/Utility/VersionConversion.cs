@@ -8,33 +8,44 @@ namespace Meltype.Composition.Utility;
 /// <summary>
 /// ばーじょん に、実行中の Meltype の版・フロント・Zenzai の設定 (Meltype-1.5.0 (Windows / Meltype IME、Zenzai: ON)) を出す (issue #959・#1868)。
 /// 不具合の報告にそのまま貼れるように、タグの無い自己ビルドではコミット ID も付け (Meltype-1.5.0+abc1234)、
-/// Windows に登録されている Meltype IME が別のビルドなら、そのことと Meltype IME のビルドも付ける。
+/// Windows に登録されている Meltype IME が別のビルドなら、そのことと、その Meltype IME を同梱した Meltype の版も付ける。
 /// </summary>
 internal sealed class VersionConversion : IUtilityConversion
 {
     public UtilityCandidates? Convert(UtilityInput input) =>
-        input.Reading == "ばーじょん" ? new([Candidate(input.Context.Settings, input.Context.Front())], UtilityPlacement.Append) : null;
+        input.Reading == "ばーじょん" ? new([Candidate(input.Context.Settings, input.Context.OtherTipVersion())], UtilityPlacement.Append) : null;
 
-    internal static string Candidate(Settings settings, VersionFront front) =>
-        Text(ProjectInfo.WithCommit(ProjectInfo.CoreVersion), Os, front, settings.UseZenzai);
+    internal static string Candidate(Settings settings, string? otherTipVersion) =>
+        Text(ProjectInfo.WithCommit(ProjectInfo.CoreVersion), Front(settings), settings.UseZenzai, otherTipVersion);
 
-    internal static string Text(string version, string os, VersionFront front, bool zenzai) => string.Concat(
-        $"Meltype-{version} ({os}",
-        front.Name is { } name ? $" / {name}" : "",
-        $"、Zenzai: {(zenzai ? "ON" : "OFF")}",
-        // Meltype IME の DLL の版は Meltype の版と別で、DLL を変えたときだけ上がる (native/tip/MeltypeTip.rc) ので、どのビルドかは impl のハッシュで示す
-        front.OtherTipBuild is { } tip ? $"、Meltype IME は別のビルド: {tip[..Math.Min(7, tip.Length)]}" : "",
-        ")");
+    internal static string Text(string version, string front, bool zenzai, string? otherTipVersion) =>
+        $"Meltype-{version} ({front}、Zenzai: {(zenzai ? "ON" : "OFF")}{(otherTipVersion is { } tip ? $"、Meltype IME は別の版: {tip}" : "")})";
 
-    private static string Os =>
-        OperatingSystem.IsWindows() ? "Windows"
+    /// <summary>
+    /// OS と入力のフロント。Windows は動かしている設定の動作モードで決まる (Meltype IME を使えなければ Meltype キーボードになっている)。
+    /// Linux はプロセスのコマンドラインで決まる。macOS はフロントが 1 つなので OS だけにする。
+    /// </summary>
+    private static string Front(Settings settings) =>
+        OperatingSystem.IsWindows() ? $"Windows / {(settings.Mode == InputMode.Tsf ? "Meltype IME" : "Meltype キーボード")}"
         : OperatingSystem.IsMacOS() ? "macOS"
-        : OperatingSystem.IsLinux() ? "Linux"
+        : OperatingSystem.IsLinux() ? (LinuxFront.Value is { } front ? $"Linux / {front}" : "Linux")
         : "?";
-}
 
-/// <summary>
-/// 「ばーじょん」の候補に出す、フロントのこと。Name はフロントの名前 (OS にフロントが 1 つしかなければ null)、
-/// OtherTipBuild は Windows に登録されている Meltype IME の別のビルド (<see cref="Ime.IImeEnvironment.OtherTipBuild"/>)。
-/// </summary>
-internal sealed record VersionFront(string? Name, string? OtherTipBuild);
+    /// <summary>
+    /// Linux のフロント (IBus・fcitx5・端末)。どのフロントも Core を自分のプロセスに読み込むので、プロセスのコマンドライン
+    /// (fcitx5 は fcitx5 の本体、IBus と端末は python3 で動かすスクリプト) の名前で分かる。プロセスの間は変わらないので、最初に 1 回だけ読む。
+    /// 分からなければ (テストなど) null。
+    /// </summary>
+    private static readonly Lazy<string?> LinuxFront = new(() => LinuxFrontOf(File.ReadAllText("/proc/self/cmdline").Split('\0')));
+
+    // コマンドラインに出るプログラムの名前 → フロントの名前
+    private static readonly Dictionary<string, string> LinuxFronts = new()
+    {
+        ["fcitx5"] = "fcitx5",
+        ["ibus-engine-meltype"] = "IBus",
+        ["meltype-tty"] = "端末",
+    };
+
+    internal static string? LinuxFrontOf(IEnumerable<string> commandLine) =>
+        commandLine.Select(argument => LinuxFronts.GetValueOrDefault(Path.GetFileName(argument))).FirstOrDefault(front => front is not null);
+}
