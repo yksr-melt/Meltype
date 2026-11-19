@@ -12,9 +12,6 @@ namespace Meltype.Composition;
 public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
     : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
 {
-    /// <summary>Zenzai に渡す広い文脈 (Mozc には渡さない)。</summary>
-    public string? WideContext { get; set; }
-
     private ZenzaiConverter? _subscribedZenzai;
     private Action? _zenzaiReady;
 
@@ -62,7 +59,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// 変換で例外になった Zenzai は、それからは使わず (打つたびに例外にしない)、持ち主に知らせる (zenzaiFailed)。
     /// 止める (Dispose) のは持ち主で、ここでは止めない。持ち主が新しく作ったら、それは使う。
     /// </summary>
-    private List<ConversionClause>? Zenzai(string hiragana, string? context)
+    private List<ConversionClause>? Zenzai(string hiragana, string? context, string? wideContext)
     {
         ZenzaiConverter? z = null;
         try
@@ -70,7 +67,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
             z = zenzai?.Invoke();
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
             Subscribe(z);
-            return z.ConvertClauses(hiragana, WideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
+            return z.ConvertClauses(hiragana, wideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
         }
         catch (Exception ex)
         {
@@ -87,8 +84,11 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     private object? _failedZenzai;
     private static readonly object CouldNotCreate = new();
 
-    public string? Convert(string hiragana) =>
-        (Zenzai(hiragana, null) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
+    public string? Convert(string hiragana) => Convert(hiragana, null);
+
+    /// <summary>読み全体の変換。Zenzai には広い文脈 (wideContext) を渡す (IWideContextConverter)。</summary>
+    public string? Convert(string hiragana, string? wideContext) =>
+        (Zenzai(hiragana, null, wideContext) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
 
     /// <summary>Zenzai の答えを使えるか (<see cref="ConvertClauses"/> と同じ決め方): かなが読みと合うか、Mozc の文節ごとの候補をつないで作れるか。</summary>
     private bool IsUsable(string hiragana, string answer) =>
@@ -116,11 +116,14 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// Mozc の候補で作れない答えは、かなが読みと合うときだけ使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
     /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
     /// </summary>
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => ConvertClauses(hiragana, context, null);
+
+    /// <summary><see cref="ConvertClauses(string, string?)"/> と同じ。Zenzai には context の代わりに広い文脈 (wideContext) があれば渡す (IWideContextConverter)。</summary>
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext)
     {
         var fromMozc = mozc.ConvertWithCandidates(hiragana, context);
         var other = fromMozc?.Select(s => s.Clause).ToList();
-        if (Zenzai(hiragana, context) is not { Count: > 0 } z) return other;
+        if (Zenzai(hiragana, context, wideContext) is not { Count: > 0 } z) return other;
         // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
         if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();
         // 候補は、この変換で文節と一緒に受け取ったものを使う (ヘルパーには聞き直さない)。
