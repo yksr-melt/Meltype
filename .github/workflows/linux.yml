@@ -155,7 +155,7 @@ jobs:
           linux/build-deb.sh "$version" linux/build/Meltype-linux linux/build
           for deb in linux/build/meltype*.deb; do dpkg-deb --info "$deb"; dpkg-deb --contents "$deb"; done
           # 端末版は GTK 4 (設定画面) に依存しない
-          ! dpkg-deb --field linux/build/meltype-tty_*.deb Depends | grep -q gtk
+          if dpkg-deb --field linux/build/meltype-tty_*.deb Depends | grep gtk; then exit 1; fi
           ls -la linux/build
       # 実際に apt で入れて、決まった場所に置かれるか・外せるかを確かめる
       - name: Test .deb
