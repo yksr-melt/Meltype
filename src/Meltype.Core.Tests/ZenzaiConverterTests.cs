@@ -201,6 +201,25 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
+    public static void ParticleStart_GetsDummyContext_OnlyWithoutContext()
+    {
+        // 「。」の後の にわたるこうじ を、Zenzai は 庭田るこうじ と読む。前の文脈が無いときは仮の文脈「これ」で「に」を助詞として読ませる
+        using var server = new FakeServer { Answer = _ => "答え</s>" };
+        using var zenzai = new ZenzaiConverter(server.Endpoint);
+        // Zenzai に渡した文脈 (文の U+EE02 から、読みの U+EE00 の前まで)
+        string ContextOf(string reading, string? before)
+        {
+            SpinWait.SpinUntil(() => zenzai.ConvertClauses(reading, before) is not null, 5000);
+            var prompt = server.Prompts.Last(p => ReadingIn(p) == reading);
+            return prompt[(prompt.IndexOf('') + 1)..prompt.IndexOf('')];
+        }
+        Assert.Equal("これ", ContextOf("にわたるこうじ", null), "前の文脈が無い");
+        Assert.Equal("これ", ContextOf("にわたるこうじ", "Hello, "), "英語の後ろ");
+        Assert.Equal("長期", ContextOf("にわたるこうじ", "長期"), "日本語の後ろは、その文脈");
+        Assert.Equal("。", ContextOf("にわにはながさいている", null), "「に」で始まる語 (庭) には付けない (#1617)");
+    }
+
+    [Test]
     public static void TypingCandidates_AskZenzaiWithTheSameContext_AsLiveConversion()
     {
         // 入力中の候補 (その読みだけの変換) を、ライブ変換と別の文脈で頼むと、Zenzai は最後に頼まれた 1 件だけを処理するので、ライブ変換の依頼が消える

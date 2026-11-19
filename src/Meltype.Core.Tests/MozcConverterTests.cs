@@ -150,46 +150,17 @@ internal static class MozcConverterTests
     }
 
     [Test]
-    public static void Mozc_ParticleStart_GetsContext()
+    public static void Mozc_GetsTheSentenceAsContext()
     {
-        // 報告: ○○になってしまう → 「になってしまう」が「担ってしまう」になる。前の文脈が無いときは仮の文脈で「に」を助詞として読ませる
         var helper = new AnsweringHelper((_, reading) => reading + '\x1f' + reading);
         using var mozc = new MozcConverter(helper);
-        mozc.ConvertClauses("になってしまう");
-        Assert.Equal("C\tこれ\tになってしまう", helper.Requests[^1]);
         mozc.ConvertClauses("になってしまう", "〇〇");
         Assert.True(helper.Requests.Contains("C\t〇〇\tになってしまう"), "○ などの記号も日本語の文脈として渡す: " + string.Join(" / ", helper.Requests));
-        mozc.ConvertClauses("はしる");
-        Assert.Equal("C\t\tはしる", helper.Requests[^1], "に 以外で始まる読みには仮の文脈を付けない (はしる → は知る を防ぐ)");
-    }
-
-    [Test]
-    public static void ParticleStart_ClauseCandidates_UseTheSameContext()
-    {
-        // 前の文脈が無いときの仮の文脈「これ」は、文の変換のほか、文節ごとの候補に足す「その読みだけの変換」にも付く。
-        // 文脈なしで変換した 担ってしまう を候補に出さない
-        var helper = new AnsweringHelper((context, reading) => reading switch
-        {
-            "になってしまう" => context == "これ" ? "になってしまう\x1fになってしまう" : "になってしまう\x1f担ってしまう",
-            _ => reading + '\x1f' + reading,
-        });
-        using var mozc = new MozcConverter(helper);
-        var session = new TestSession(() => new Config.Settings { LiveConversion = false }, new HybridConverter(mozc));
-        var view = SessionFacadeTests.Type(session, "ninatteshimau ")[^1].View;
-        Assert.Equal("になってしまう", view?.Text ?? "(なし)");
-        Assert.True(view is not null && !view.Candidates.Contains("担ってしまう"), "候補: " + string.Join(" / ", view?.Candidates ?? []));
-    }
-
-    [Test]
-    public static void ZenzaiAnswer_IsCheckedTheSameWay_WhenConvertingAndWhenCleaningHistory()
-    {
-        // Zenzai の答え (に来て気づく) を Mozc の候補で確かめるとき、変換中と、起動時に変換履歴を掃除するとき (待つ版) で同じ文脈を渡す。
-        // 違うと、変換で使った語を掃除で消してしまう
-        var helper = new AnsweringHelper((context, reading) => context == "これ" ? "にきて\x1fに来て\x1eきずく\x1f気づく" : "にきて\x1f似来て\x1eきずく\x1f築く");
-        using var mozc = new MozcConverter(helper);
-        var hybrid = new HybridConverter(mozc);
-        Assert.Equal(true, hybrid.IsBuiltFromMozcCandidatesNow("にきてきずく", "に来て気づく"), "仮の文脈「これ」で変換した候補で作れる");
-        Assert.Equal("C\tこれ\tにきてきずく", helper.Requests[^1]);
+        mozc.ConvertClauses("になってしまう", "Hello, ");
+        Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "英語の後ろは文脈なし");
+        // 仮の文脈「これ」は Zenzai だけに付ける (Mozc は付けても変換が変わらない)
+        mozc.ConvertClauses("になってしまう");
+        Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "前の文脈が無ければ文脈なし");
     }
 
     private static bool WaitConverted(MozcConverter mozc, string reading)

@@ -76,7 +76,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithContext(string hiragana, string? before,
         Func<string, string, List<(string Reading, IReadOnlyList<string> Candidates)>?> request)
     {
-        if (PrecedingText.Sentence(before) is not { } sentence) return WithCandidates(request(PrecedingText.ParticleNi(hiragana) ?? "", hiragana));
+        if (PrecedingText.Sentence(before) is not { } sentence) return WithCandidates(request("", hiragana));
         var withContext = request(sentence, hiragana);
         var plain = request("", hiragana);
         if (withContext is null || plain is null) return WithCandidates(withContext ?? plain);
