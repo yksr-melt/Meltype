@@ -2,7 +2,8 @@
 #   csharp         … フォーマット: すべての .cs を dotnet format whitespace で調べ、違反があれば失敗
 #                    静的解析: Roslyn の解析 (AnalysisLevel=latest-recommended) の警告が 1 件でもあれば失敗。重要度は .editorconfig で変える。
 #                    SDK (10.0.x) が上がって新しいルールが増えると、main でも失敗する。
-#                    Windows 版のプロジェクトも EnableWindowsTargeting で Linux のランナーで調べる
+#                    Windows 版のプロジェクトも調べるので Windows のランナーで流す
+#                    (nuget.config がパッケージのソースを空にしているので、Linux では Windows のターゲティングパックを取れない)
 #   license-header … Pull Request で足したソースファイルの先頭に、ライセンス・著作権の表記があるか (.github/bot/license-header.mjs)
 name: lint
 
@@ -26,7 +27,7 @@ defaults:
 
 jobs:
   csharp:
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -38,7 +39,7 @@ jobs:
       - name: フォーマット
         run: dotnet format whitespace --folder --verify-no-changes
       - name: 静的解析
-        run: dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true
+        run: dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true
 
   license-header:
     if: github.event_name == 'pull_request'

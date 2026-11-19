@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 KoheiTakada
 name: Android QA — reproducible device tests
-# Pull Request では流さない。Android を変えた Pull Request では、手動実行 (Run workflow) でそのブランチを選んで流す。
+# Pull Request では流さない。
 on:
   workflow_dispatch:
 
