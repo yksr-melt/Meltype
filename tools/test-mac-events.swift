@@ -286,7 +286,7 @@ struct EventTests {
    let line = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
    let placement = CompositionPanelPlacement(start: line, end: line, visible: visible)!
    let items = (1...15).map { "候補\($0)" }
-   let list = CandidateList(items: items, notes: [], numbered: true, pageSize: 9, selected: 0, selectedMeaning: nil, meaningDelayMs: 0)
+   let list = CandidateList(items: items, notes: [], numbered: true, pageSize: 9, pageStart: 0, selected: 0, selectedMeaning: nil, meaningDelayMs: 0)
    let panel = CompositionPanel(choose: { _ in }, highlight: { _ in })
    panel.show(guide: "短い案内", list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
    let lineHeight = compositionPanel(showing: "短い案内").1.frame.height
@@ -299,13 +299,13 @@ struct EventTests {
    precondition(scroll.frame.height == 9 * 32)
    panel.hide()
   }
-  check("The conversion panel uses the Core page size and aligns notes on the right") { _, _ in
+  check("The conversion panel uses the Core page range and aligns notes on the right") { _, _ in
    let visible = NSScreen.main!.visibleFrame
    let line = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
    let placement = CompositionPanelPlacement(start: line, end: line, visible: visible)!
    let items = (1...13).map { "候補\($0)" }
    let notes: [String?] = items.indices.map { $0 == 0 ? "注記" : "長めの注記" }
-   let list = CandidateList(items: items, notes: notes, numbered: true, pageSize: 5, selected: 0,
+   let list = CandidateList(items: items, notes: notes, numbered: true, pageSize: 5, pageStart: 0, selected: 0,
                             selectedMeaning: nil, meaningDelayMs: 0)
    var highlighted: Int?
    let panel = CompositionPanel(choose: { _ in }, highlight: { highlighted = $0 })
@@ -331,7 +331,7 @@ struct EventTests {
    let wheel = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -1, wheel2: 0, wheel3: 0)!
    scroll.scrollWheel(with: NSEvent(cgEvent: wheel)!)
    precondition(highlighted == 5, "scrolling past the page end should highlight the next page")
-   let unnumbered = CandidateList(items: items, notes: [], numbered: false, pageSize: 5, selected: 10, selectedMeaning: nil, meaningDelayMs: 0)
+   let unnumbered = CandidateList(items: items, notes: [], numbered: false, pageSize: 5, pageStart: 10, selected: 10, selectedMeaning: nil, meaningDelayMs: 0)
    let firstHeight = window.frame.height
    panel.show(guide: "操作案内", list: unnumbered, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
    precondition(table.numberOfRows == 3 && window.frame.height == firstHeight)
@@ -350,7 +350,7 @@ struct EventTests {
    let notes: [String?] = items.map { _ in "注記" }
    var clicked: Int?
    let panel = CompositionPanel(choose: { clicked = $0 }, highlight: { _ in })
-   let list = CandidateList(items: items, notes: notes, numbered: true, pageSize: 9, selected: 11, selectedMeaning: "意味", meaningDelayMs: 20)
+   let list = CandidateList(items: items, notes: notes, numbered: true, pageSize: 9, pageStart: 9, selected: 11, selectedMeaning: "意味", meaningDelayMs: 20)
    panel.show(guide: "操作案内", list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
    let (window, guide, scroll) = compositionPanel(showing: "操作案内")
    let table = scroll.documentView as! NSTableView

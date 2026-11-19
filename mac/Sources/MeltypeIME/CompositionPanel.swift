@@ -138,11 +138,6 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let list: CandidateList?
         let converting: Bool
         let placement: CompositionPanelPlacement
-
-        var pageStart: Int {
-            guard converting, let list, list.items.indices.contains(list.selected) else { return 0 }
-            return list.selected / list.pageSize * list.pageSize
-        }
     }
 
     private struct CandidateText {
@@ -264,7 +259,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         }
         // 表示中のパネルの大きさと中身を、途中の状態を見せずに一度に入れ替える。
         if window.isVisible { window.disableScreenUpdatesUntilFlush() }
-        let pageStart = content.pageStart
+        let pageStart = list?.pageStart ?? 0
         let end = content.converting ? min(items.count, pageStart + pageSize) : items.count
         let range = pageStart..<end
         guideLabel.attributedStringValue = styled(content.guide, font: Self.guideFont, color: .labelColor, lineBreakMode: .byTruncatingTail)
@@ -497,7 +492,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
 
     private func turnPage(_ step: Int) -> Bool {
         guard window.isVisible, !scroll.isHidden, let content, content.converting, let list = content.list else { return false }
-        let start = content.pageStart + step * list.pageSize
+        let start = list.pageStart + step * list.pageSize
         guard list.items.indices.contains(start) else { return false }
         highlight(start)
         return true
