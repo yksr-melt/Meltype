@@ -61,8 +61,15 @@ public sealed partial class CompositionController
             ReleaseHeldAsEnglish();
         }
 
-        // 大文字・文節の区切りの変更に使う Shift は、ほかのキーと一緒に届く。Shift だけでは何もしない。
-        if (IsShift(vk)) return;
+        // 修飾キーの押下そのものは、変換ボックスを変えずにアプリに通す。Shift・Ctrl は続くキーのフラグとして届き、そこで大文字・文節の長さ・Ctrl のショートカットに使う。
+        // 押下を使うと、Meltype キーボードのフックは押下を OS に届けないので、続くキーに Shift・Ctrl が付かない (#2012)。
+        // 修飾キーだけではキャレットは動かないので、直前の語は確定し直せるままにする。Windows キーは単独で離すとスタートメニューに移るので、確定してから通す
+        if (VirtualKeys.IsModifier(vk))
+        {
+            if (vk is VirtualKeys.LWin or VirtualKeys.RWin) CommitIfAny();
+            _out.PassCurrent();
+            return;
+        }
         // 何も打っていないときのテンキーの数字・記号は、変換ボックスに入れず、そのまま通す (半角で入る。Excel・CAD などで数値を打つとき: issue #460)。
         // 入力中なら今までどおり変換ボックスに入れる (3 + ji → 3時 のように続けて変換できる)
         if (_text.IsEmpty && !_control && !_modifier && vk is >= 0x60 and <= 0x6F)
@@ -73,7 +80,6 @@ public sealed partial class CompositionController
         if (_control && !_text.IsEmpty)
         {
             // 変換ボックスに入力中の Ctrl + キー (Ctrl+U/I/O/P はかな・英字の切り替え、Ctrl+H は BackSpace。それ以外は確定してから通す)。
-            if (IsControl(vk)) return;
             // 設定「Control キーの割り当て」が ATOK 風: Ctrl + K / L で文節の長さを変える。変換中だけ (Shift + ← → と同じ。issue #599)
             if (_converting && _settings().ControlKeys == Config.ControlKeyLayout.Atok && vk is 'K' or 'L')
             {
@@ -117,7 +123,7 @@ public sealed partial class CompositionController
                 return;
             }
         }
-        else if (_modifier || VirtualKeys.IsModifier(vk))
+        else if (_modifier)
         {
             // Ctrl / Alt / Command のショートカットの前に確定する。
             CommitIfAny();
@@ -859,10 +865,6 @@ public sealed partial class CompositionController
         }
     }
 
-    private static bool IsShift(int vk) => vk is VirtualKeys.Shift or VirtualKeys.LShift or VirtualKeys.RShift;
-
-    private static bool IsControl(int vk) => vk is VirtualKeys.Control or VirtualKeys.LControl or VirtualKeys.RControl;
-
     private const int ResizeExtend = 0x7FFF0001, ResizeShrink = 0x7FFF0002;
 
     /// <summary>
@@ -931,8 +933,6 @@ public sealed partial class CompositionController
         'H' => VirtualKeys.Back,
         _ => null,
     };
-
-    private static bool IsCommandModifier(int vk) => VirtualKeys.IsModifier(vk) && !IsShift(vk);
 
     /// <summary>そのキーで入力する文字 (記号・数字を含む)。文字を生まないキーなら null。</summary>
     private static char? CharOf(KeyEvent e) => e.Scan is > 0 and < 0x10000 ? (char)e.Scan : null;

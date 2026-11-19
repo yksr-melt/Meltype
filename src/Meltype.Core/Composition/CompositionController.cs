@@ -265,7 +265,7 @@ public sealed partial class CompositionController
         var consumed = Handle(key);
         if (!releaseFollows) HandleRelease(key.Vk);
         Settle();
-        return Result(consumed);
+        return _out.Result(consumed && !_out.PassedCurrent, _settings(), typed: !VirtualKeys.IsModifier(key.Vk));
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>

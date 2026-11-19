@@ -55,11 +55,12 @@ internal sealed class CompositionOutput(Func<Config.PunctuationStyle> punctuatio
         _hidden = false;
     }
 
-    public SessionResult Result(bool consumed, Config.Settings settings)
+    /// <param name="typed">アプリに渡したら文字が入るかもしれないキーか (修飾キーは文字を入れない)。</param>
+    public SessionResult Result(bool consumed, Config.Settings settings, bool typed = true)
     {
         if (_pendingDelete > 0) Add("");
         // アプリに渡したキーの文字は、確定した文字の続きとしては分からない
-        if (!consumed) _committed.Clear();
+        if (!consumed && typed) _committed.Clear();
         // 操作ガイドを出さない設定では、入力に応じた案内 (手動判定の提案・予測など) だけ。どのフロントもこの表示を受け取る
         var view = _hidden || _view is not { } shown ? null : SessionResult.ForFront(shown, settings.ShowsGuide, settings.NumberKeysSelectCandidates);
         return new SessionResult(consumed, _commits.ToList(), view);

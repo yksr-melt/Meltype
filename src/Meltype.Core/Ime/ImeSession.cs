@@ -412,8 +412,8 @@ internal sealed class ImeSession
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return _session.CommitForPassThrough();
         var result = _session.HandleKey(vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After, key.ReleaseFollows);
-        // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
-        if (!result.Consumed) _session.CaretMoved(vk, key.Ctrl);
+        // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)。修飾キーだけでは動かない
+        if (!result.Consumed && !VirtualKeys.IsModifier(vk)) _session.CaretMoved(vk, key.Ctrl);
         return result;
     }
 
