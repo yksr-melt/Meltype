@@ -840,9 +840,6 @@ internal static partial class CompositionController
         return list;
     }
 
-    /// <summary>数字キーでの選択とフロントの表示で共通に使う、候補ページの先頭。</summary>
-    internal static int CandidatePageStart(int index) => Math.Max(0, index) / CandidatePageSize * CandidatePageSize;
-
     /// <summary>候補の一覧の次 (前) のページの最初の候補を選ぶ。最後のページの次は最初のページに戻る。</summary>
     private static void NextCandidatePage(CompositionState state, CompositionEnv env, int step)
     {
@@ -850,7 +847,7 @@ internal static partial class CompositionController
         if (!clause.IsEnglish && !clause.Expanded) Expand(state, env, clause);
         var pages = (clause.Candidates.Count + CandidatePageSize - 1) / CandidatePageSize;
         if (pages <= 1) return;
-        var page = (CandidatePageStart(clause.Index) / CandidatePageSize + step + pages) % pages;
+        var page = (Math.Max(0, clause.Index) / CandidatePageSize + step + pages) % pages;
         clause.Index = page * CandidatePageSize;
         clause.Changed = true;
     }

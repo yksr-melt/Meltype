@@ -687,7 +687,7 @@ internal static partial class CompositionController
     {
         var clause = state.Clauses[state.SelectedClause];
         if (!clause.Expanded) Expand(state, env, clause);
-        var index = CandidatePageStart(clause.Index) + row;
+        var index = Math.Max(0, clause.Index) / CandidatePageSize * CandidatePageSize + row;
         if (index >= clause.Candidates.Count) return false;
         clause.Index = index;
         clause.Changed = true;
