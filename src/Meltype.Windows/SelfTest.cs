@@ -59,9 +59,10 @@ internal static class SelfTest
         var detector = CompositionDetector.CreateDefault();
         Check("変換ボックスの英語判定", () =>
         {
-            var text = new CompositionText(detector);
-            foreach (var c in "kyouhagoogle") text.Append(c);
-            return text.Display(final: false);
+            var text = new CompositionTextState();
+            var env = new TextEnv(detector, new Config.Settings(), null);
+            foreach (var c in "kyouhagoogle") CompositionText.Append(text, env, c);
+            return CompositionText.Display(text, env, final: false);
         });
         Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));

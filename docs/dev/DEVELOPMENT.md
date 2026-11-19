@@ -152,7 +152,7 @@ tools/Scan-WindowsPackage.ps1 -Path @('dist/Meltype', 'dist/Meltype-<version>-se
 物理キー ─▶ KeyboardMonitor ─▶ KeyboardFront (変換ボックスが開いている間は、キーとクリックをすべて順番どおりに保留)
                                    │
                                    ▼ (UI スレッド。出来事を ImeHost に送り、確定・表示を受け取る)
-                    ImeSession ─▶ MeltypeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
+                    ImeSession ─▶ CompositionController ◀─ CompositionDetector (英語の区間の判定)
                                    │                  HybridConverter (Mozc と Zenzai)
                                    │                  ContextRules / ConversionHistory / CandidateDictionary
                                    │                  FocusInspector (UI Automation: 入力欄か・カーソルの前後の文字)

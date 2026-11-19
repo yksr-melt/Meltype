@@ -37,11 +37,13 @@ public interface IKanjiConverter
 /// <summary>
 /// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
 /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
-/// 入力を始めるたびに、キャレットの前の日本語の文章 (文をまたいで最大 100 文字) を入れる。無ければ null。
+/// wideContext は、キャレットの前の日本語の文章 (文をまたいで最大 100 文字)。無ければ null。
 /// </summary>
 public interface IWideContextConverter
 {
-    string? WideContext { get; set; }
+    string? Convert(string hiragana, string? wideContext);
+
+    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext);
 }
 
 /// <summary>
