@@ -372,11 +372,13 @@ fn mobile_offline_dictionary_converts_and_commits_without_an_engine() {
 
 #[test]
 fn editing_a_particle_preserves_the_english_word_before_it() {
-    let mut session = Session::default();
-    type_text(&mut session, "ashitanomeetingwa");
-    assert_eq!(session.display(false), "あしたのmeetingわ");
-    session.key(8, 0, 0);
-    type_text(&mut session, "wo");
-    assert_eq!(session.display(false), "あしたのmeetingを");
-    assert_eq!(session.commit().commits[0].text, "あしたのmeetingを");
+    for (stem, expected) in [("ashitanomeeting", "あしたのmeeting"), ("bug", "bug")] {
+        let mut session = Session::default();
+        type_text(&mut session, &format!("{stem}wa"));
+        assert_eq!(session.display(false), format!("{expected}わ"));
+        session.key(8, 0, 0);
+        type_text(&mut session, "wo");
+        assert_eq!(session.display(false), format!("{expected}を"));
+        assert_eq!(session.commit().commits[0].text, format!("{expected}を"));
+    }
 }

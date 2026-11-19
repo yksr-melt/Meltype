@@ -279,7 +279,8 @@ pub(crate) fn unit_boundaries(
                 };
             let split_stem = length >= 2
                 && (matches!(rest.as_bytes()[0], b'l' | b'x')
-                    || matches!(token.spelling.as_str(), "gwo" | "gwa") && prefix.ends_with("ing")
+                    || matches!(token.spelling.as_str(), "gwo" | "gwa")
+                        && (prefix.ends_with("ing") || whole_english(prefix))
                     || rest.starts_with("ts")
                     // English final d/t must stay before Japanese ha/wa,
                     // rather than joining the following dha/dwa syllable.
