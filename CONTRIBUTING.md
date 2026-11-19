@@ -132,6 +132,8 @@ Pull Request を作ると、チェックが流れたあとに bot がこの文�
 // Copyright (C) 2026 あなたの名前
 ```
 
+Pull Request を作ると「license-header」のチェックが確かめ、抜けや名前の間違いがあればファイルに注釈を付けて失敗にします (直し方はチェックの Summary に出ます)。
+
 <br>
 
 <a name="ai-の利用について"></a>
@@ -226,12 +228,11 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます。あわせて、よく使う語 (約 5.7 万語) の判定が main から変わった語を一覧にします (参考。失敗にはしません) |
 | 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc で確かめます |
 | CLA | いつも | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」)。初めての方は、同意するまで失敗します |
-| lint | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、Roslyn の解析の警告とあわせて 1 件でもあれば失敗 |
+| lint / csharp | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、Roslyn の解析の警告とあわせて 1 件でもあれば失敗 |
+| lint / license-header | いつも | 足したソースファイルの先頭のライセンス・著作権の表記 (上の「ソースファイルの先頭の表記」) |
 | vulnerability / codeql | いつも | C#・C++・JavaScript・Python・Actions を CodeQL で解析し、新しく見つかった重大なセキュリティの問題があれば失敗 |
 | vulnerability / dependencies | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
 
 フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析は `dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true` で手元でも確かめられます (Linux・macOS でも Windows 版まで調べられます)。CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。
-
-Mac 版・Linux 版・端末版・Android 版のビルドとテストは、Pull Request では流れません。変えたときは、Actions の画面でそのワークフロー (mac・linux・tui・Android QA) をブランチに対して手で実行 (Run workflow) して確かめてください。
