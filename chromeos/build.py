@@ -2,7 +2,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Build the shared Rust engine and a load-unpacked ChromeOS extension ZIP."""
 import argparse
+import base64
 import array
+import gzip
 import hashlib
 import json
 import re
@@ -82,15 +84,35 @@ def build_kanji_dictionary():
     print(json.dumps({"kanji_entries": len(entries), "dictionary_bytes": (pkg / "kanji.bin").stat().st_size}))
 
 
+def extract_dictionary():
+    packed = ROOT / "native/mozc/portable"
+    pkg = ROOT / "chromeos/pkg"
+    pkg.mkdir(exist_ok=True)
+    with gzip.open(packed / "kanji.bin.gz", "rb") as src, (pkg / "kanji.bin").open("wb") as dest:
+        shutil.copyfileobj(src, dest)
+    shutil.copyfile(packed / "NOTICES.txt", pkg / "MOZC-DICTIONARY-NOTICES.txt")
+
+
 def run(*args):
     subprocess.run([str(a) for a in args], cwd=ROOT, check=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--refresh-dictionary", action="store_true", help="regenerate the bundled offline dictionary from the pinned Mozc sources")
     parser.add_argument("--wasm-bindgen", default="wasm-bindgen")
     parser.add_argument("--out", type=Path, default=ROOT / "dist/chromeos-preview")
     args = parser.parse_args()
+    if args.refresh_dictionary:
+        build_kanji_dictionary()
+        packed = ROOT / "native/mozc/portable"
+        with (ROOT / "chromeos/pkg/kanji.bin").open("rb") as src, (packed / "kanji.bin.gz").open("wb") as out:
+            with gzip.GzipFile(filename="", fileobj=out, mode="wb", compresslevel=6, mtime=0) as gz:
+                shutil.copyfileobj(src, gz)
+        digest = hashlib.sha256((ROOT / "chromeos/pkg/kanji.bin").read_bytes()).digest()
+        (packed / "integrity.txt").write_text("sha256-" + base64.b64encode(digest).decode("ascii") + "\n", encoding="ascii")
+        shutil.copyfile(ROOT / "chromeos/pkg/MOZC-DICTIONARY-NOTICES.txt", packed / "NOTICES.txt")
+        return
     tool = shutil.which(str(args.wasm_bindgen)) or str(Path(args.wasm_bindgen).resolve())
     version = subprocess.check_output([tool, "--version"], encoding="utf-8").strip()
     if version != f"wasm-bindgen {VERSION}":
@@ -105,9 +127,13 @@ def main():
     metadata = json.loads(subprocess.check_output(["cargo", "metadata", "--no-deps", "--format-version", "1"], cwd=ROOT, encoding="utf-8"))
     wasm = Path(metadata["target_directory"]) / "wasm32-unknown-unknown/release/meltype_browser.wasm"
     run(tool, wasm, "--target", "web", "--out-dir", ROOT / "chromeos/pkg")
-    build_kanji_dictionary()
+    extract_dictionary()
     run(sys.executable, ROOT / "chromeos/build-shunti.py", ROOT / "chromeos/ai")
     run("node", "--test", *sorted((ROOT / "chromeos/tests").glob("*.test.mjs")))
+    package_extension(out)
+
+
+def package_extension(out):
     out.mkdir(parents=True, exist_ok=True)
     for name in FILES + ("README.md",):
         shutil.copyfile(ROOT / "chromeos" / name, out / name)

@@ -95,7 +95,7 @@ APKを入れるだけでは有効になりません。システムのキーボ�
 <details>
 <summary>候補が少ない・別のアプリで削除や再変換が動かない</summary>
 
-Android版はMozcを同梱せず、補助辞書を使います。アプリごとの入力欄実装にも違いがあります。
+1.1.25以降のAndroid版はMozcの語彙・接続コストを同梱し、入力中の読みをSpaceで漢字に変換できます。辞書の追加インストールは不要です。アプリごとの入力欄実装にも違いがあります。
 OS・メーカー・APKの版・アプリ名・入力したキーと期待する結果を [Issues](https://github.com/appipinopi/Meltype-Flash/issues/new/choose) に記載してください。
 
 </details>

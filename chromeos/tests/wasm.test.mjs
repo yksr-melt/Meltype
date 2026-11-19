@@ -248,3 +248,89 @@ test("同梱語句の分割は二を助詞のにへ戻さず、別の単語の�
     } finally { s.free(); }
   }
 });
+
+test("部首の説明で漢字を選び、通常の入力欄で確定できる", () => {
+  BrowserSession.load_dictionary(readFileSync(new URL("../pkg/kanji.bin", import.meta.url)));
+  const s = new BrowserSession(JSON.stringify({settings: {LiveConversion: false}}));
+  try {
+    type(s, "gonbennnifurutori");
+    const view = key(s, 32, " ").view;
+    assert.equal(view.text, "誰");
+    assert.ok(view.candidates.includes("讎"));
+    assert.equal(key(s, 13).commits[0].text, "誰");
+  } finally {
+    s.free();
+  }
+});
+
+test("同梱Mozc辞書で irekatawo を入れ方をとして確定する", () => {
+  BrowserSession.load_dictionary(readFileSync(new URL("../pkg/kanji.bin", import.meta.url)));
+  const s = new BrowserSession("");
+  try {
+    type(s, "irekatawo");
+    assert.equal(JSON.parse(s.view()).view.text, "いれかたを");
+    assert.equal(key(s, 32, " ").view.text, "入れ方を");
+    assert.equal(key(s, 13).commits[0].text, "入れ方を");
+  } finally { s.free(); }
+});
+
+test("日本語の入れ方・入れますと英語のmeetingは打ち直しても正しく確定する", () => {
+  BrowserSession.load_dictionary(readFileSync(new URL("../pkg/kanji.bin", import.meta.url)));
+  for (const [mistyped, replacement, reading, expected] of [
+    ["irekatawa", "wo", "いれかたを", "入れ方を"],
+    ["iremasi", "su", "いれます", "入れます"],
+    ["ashitanomeetingwa", "wo", "あしたのmeetingを", "明日のmeetingを"],
+  ]) {
+    const s = new BrowserSession("");
+    try {
+      type(s, mistyped); key(s, 8); type(s, replacement);
+      assert.equal(JSON.parse(s.view()).view.text, reading);
+      assert.equal(key(s, 32, " ").view.text, expected);
+      assert.equal(key(s, 13).commits[0].text, expected);
+    } finally { s.free(); }
+  }
+});
+
+test("同梱辞書のSHA-256を照合し、変換中に読み込んだ辞書を適用できる", async () => {
+  const bytes = readFileSync(new URL("../pkg/kanji.bin", import.meta.url));
+  const {createHash} = await import("node:crypto");
+  assert.equal(BrowserSession.dictionary_integrity(), "sha256-" + createHash("sha256").update(bytes).digest("base64"));
+  const s = new BrowserSession("");
+  try {
+    assert.equal(s.apply_dictionary(), false);
+    type(s, "iremasu"); key(s, 32, " ");
+    BrowserSession.load_verified_dictionary(bytes);
+    assert.equal(s.apply_dictionary(), true);
+    assert.equal(key(s, 13).commits[0].text, "入れます");
+  } finally { s.free(); }
+});
+
+test("検索・チャット・URL入力欄で確定は一度だけ行い、半角／全角で往復できる", async () => {
+  const {ImeController} = await import("../controller.mjs");
+  const s = new BrowserSession(JSON.stringify({settings: {DirectModeAutoDetect: false}}));
+  const commits = [], errors = [];
+  const ime = Object.fromEntries(["setComposition", "clearComposition", "setCandidates",
+    "setCandidateWindowProperties", "setCursorPosition"].map(name => [name, async () => true]));
+  ime.commitText = async data => { commits.push([data.contextID, data.text]); return true; };
+  ime.keyEventHandled = () => {};
+  const c = new ImeController({ime, load: async () => s, persist: async () => {}, report: e => errors.push(e)});
+  let seq = 0;
+  const send = async (key, code, type = "keydown") => {
+    c.key("meltype-rust", {key, code, type}, String(++seq)); await c.queue;
+  };
+  try {
+    c.activate("meltype-rust");
+    for (const [id, field] of ["search", "text", "url"].entries()) {
+      c.focus({contextID: id + 1, type: field});
+      for (const ch of "meetingwo") await send(ch, "Key" + ch.toUpperCase());
+      await send(" ", "Space"); await send("Enter", "Enter");
+      for (const direct of [true, false]) {
+        await send("ZenkakuHankaku", "Backquote");
+        assert.equal(s.is_direct(), direct, field);
+        await send("Unidentified", "", "keyup");
+      }
+    }
+    assert.deepEqual(commits, [[1, "meetingを"], [2, "meetingを"], [3, "meetingを"]]);
+    assert.deepEqual(errors, []);
+  } finally { s.free(); }
+});

@@ -72,48 +72,9 @@ fn main() -> eframe::Result {
         options,
         Box::new(|cc| {
             widgets::configure_style(&cc.egui_ctx);
-            let mut fonts = egui::FontDefinitions::default();
-            let paths = std::env::var_os("MELTYPE_FONT")
-                .map(std::path::PathBuf::from)
-                .into_iter()
-                .chain(
-                    [
-                        "C:/Windows/Fonts/YuGothR.ttc",
-                        "C:/Windows/Fonts/YuGothM.ttc",
-                        "C:/Windows/Fonts/meiryo.ttc",
-                        "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
-                        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
-                    ]
-                    .into_iter()
-                    .map(std::path::PathBuf::from),
-                );
-            for path in paths {
-                if let Ok(bytes) = std::fs::read(&path) {
-                    let mut font = egui::FontData::from_owned(bytes);
-                    if path
-                        .file_name()
-                        .is_some_and(|name| name == "YuGothM.ttc" || name == "YuGothR.ttc")
-                    {
-                        font.index = 1;
-                    }
-                    fonts.font_data.insert("japanese".into(), font.into());
-                    fonts
-                        .families
-                        .entry(egui::FontFamily::Monospace)
-                        .or_default()
-                        .push("japanese".into());
-                    fonts
-                        .families
-                        .entry(egui::FontFamily::Proportional)
-                        .or_default()
-                        .insert(0, "japanese".into());
-                    cc.egui_ctx.set_fonts(fonts);
-                    break;
-                }
-            }
-            let app = App::new();
-            #[cfg(windows)]
-            let mut app = app;
+            let mut app = App::new();
+            app.settings_visible = !resident || needs_consent;
+            app.update_ui_fonts(&cc.egui_ctx);
             #[cfg(windows)]
             if app.resident {
                 match windows_services::HiddenRepaint::start(cc) {
@@ -125,7 +86,51 @@ fn main() -> eframe::Result {
         }),
     )
 }
+fn install_ui_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+    let paths = std::env::var_os("MELTYPE_FONT")
+        .map(std::path::PathBuf::from)
+        .into_iter()
+        .chain(
+            [
+                "C:/Windows/Fonts/YuGothR.ttc",
+                "C:/Windows/Fonts/YuGothM.ttc",
+                "C:/Windows/Fonts/meiryo.ttc",
+                "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+                "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            ]
+            .into_iter()
+            .map(std::path::PathBuf::from),
+        );
+    for path in paths {
+        if let Ok(bytes) = std::fs::read(&path) {
+            let mut font = egui::FontData::from_owned(bytes);
+            if path
+                .file_name()
+                .is_some_and(|name| name == "YuGothM.ttc" || name == "YuGothR.ttc")
+            {
+                font.index = 1;
+            }
+            fonts.font_data.insert("japanese".into(), font.into());
+            fonts
+                .families
+                .entry(egui::FontFamily::Monospace)
+                .or_default()
+                .push("japanese".into());
+            fonts
+                .families
+                .entry(egui::FontFamily::Proportional)
+                .or_default()
+                .insert(0, "japanese".into());
+            ctx.set_fonts(fonts);
+            break;
+        }
+    }
+}
+
 struct App {
+    settings_visible: bool,
+    ui_fonts_active: bool,
     store: Store,
     lifecycle: lifecycle::Lifecycle,
     ai_setup: ai_setup::AiSetup,
@@ -213,6 +218,37 @@ impl App {
             app
         }
     }
+    #[cfg(windows)]
+    fn show_settings(&mut self, ctx: &egui::Context) {
+        self.settings_visible = true;
+        ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+    }
+
+    fn update_ui_fonts(&mut self, ctx: &egui::Context) {
+        // The welcome dialog also makes the root viewport visible.
+        if self.lifecycle.welcome {
+            self.settings_visible = true;
+        }
+        let needed = self.settings_visible
+            || self.consent_pending
+            || self.release_notes
+            || self.lifecycle.about
+            || self.lifecycle.updates
+            || self.dialogs.log
+            || self.dialogs.report
+            || self.dialogs.corrections
+            || (cfg!(feature = "visual-test") && std::env::var_os("MELTYPE_UI_CAPTURE").is_some());
+        if needed != self.ui_fonts_active {
+            if needed {
+                install_ui_fonts(ctx);
+            } else {
+                ctx.set_fonts(egui::FontDefinitions::default());
+            }
+            self.ui_fonts_active = needed;
+            ctx.request_repaint();
+        }
+    }
+
     fn with_store(store: Store) -> Self {
         let shortcut_warnings = std::fs::read_to_string(store.directory.join("config.json"))
             .map(|text| Settings::shortcut_migration_warnings(&text).join("\n"))
@@ -244,6 +280,8 @@ impl App {
         let release_notes = release_notes_from_update;
         let release_notes_english = crate::i18n::english();
         Self {
+            settings_visible: true,
+            ui_fonts_active: false,
             lifecycle: lifecycle::Lifecycle::new(&settings),
             ai_setup: ai_setup::AiSetup::default(),
             dialogs: dialogs::Dialogs::default(),
@@ -447,6 +485,7 @@ impl App {
         #[cfg(windows)]
         if self.resident {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.settings_visible = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
             self.discard = false;
             return;
@@ -459,7 +498,7 @@ impl App {
     fn maintenance_quit(&mut self, ctx: &egui::Context) {
         if self.settings.0 != self.opened.0 {
             self.status = "更新・削除のための終了要求があります。未保存の設定を保存または取り消してください。".into();
-            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+            self.show_settings(ctx);
             return;
         }
         self.closing = true;
@@ -622,7 +661,7 @@ impl App {
                 Err(error) => {
                     self.status = error;
                     self.resident = false;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     return;
                 }
             }
@@ -645,7 +684,7 @@ impl App {
                     }
                     self.page = page;
                     self.discard = false;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
@@ -662,7 +701,7 @@ impl App {
                     self.settings_category = Some("13. 打鍵数".into());
                     self.filter.clear();
                     self.discard = false;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
@@ -672,7 +711,7 @@ impl App {
                     if restore {
                         self.open_backup_dialog();
                         if self.restore_prompt {
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                            self.show_settings(ctx);
                             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                         }
                     } else {
@@ -681,12 +720,12 @@ impl App {
                 }
                 tray::Action::Forget(scope) => {
                     self.forget_prompt = Some(scope);
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 tray::Action::Uninstall => {
                     self.uninstall_prompt = true;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 tray::Action::CheckUpdates => {
@@ -695,13 +734,13 @@ impl App {
                 }
                 tray::Action::ReleaseNotes => {
                     self.open_release_notes();
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 tray::Action::About => self.lifecycle.about = true,
                 tray::Action::Help => {
                     self.lifecycle.welcome = true;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 tray::Action::Folder => {
@@ -733,7 +772,7 @@ impl App {
                 tray::Action::Status(message) => self.status = message,
                 tray::Action::Error(message) => {
                     self.status = message;
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
+                    self.show_settings(ctx);
                     ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
                 action => {
@@ -2261,6 +2300,7 @@ impl eframe::App for App {
         // 同意待ちでもトレイは作る。設定画面だけを同意画面で止める。
         #[cfg(windows)]
         self.update_tray(ctx);
+        self.update_ui_fonts(ctx);
         if self.consent_pending {
             self.consent(ctx);
             return;
@@ -2426,6 +2466,15 @@ impl eframe::App for App {
                     }
                     if ui.button(i18n::t("バージョン情報")).clicked() {
                         self.lifecycle.about = true;
+                    }
+                    if ui
+                        .add_enabled(
+                            self.settings.0 != self.opened.0,
+                            egui::Button::new(i18n::t("適用")),
+                        )
+                        .clicked()
+                    {
+                        self.save();
                     }
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -2855,6 +2904,38 @@ mod tests {
             "mouse click did not change the switch"
         );
     }
+    #[cfg(windows)]
+    #[test]
+    fn resident_fonts_follow_settings_and_independent_dialogs() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut app = App::with_store(Store::new(directory.path()));
+        app.lifecycle.welcome = false;
+        app.consent_pending = false;
+        app.release_notes = false;
+        app.settings_visible = false;
+        let ctx = egui::Context::default();
+
+        for (settings, log, needed) in [
+            (false, false, false),
+            (true, false, true),
+            (false, true, true),
+            (false, false, false),
+            (false, true, true),
+        ] {
+            app.settings_visible = settings;
+            app.dialogs.log = log;
+            app.update_ui_fonts(&ctx);
+            assert_eq!(app.ui_fonts_active, needed);
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                if std::path::Path::new("C:/Windows/Fonts/YuGothR.ttc").is_file() {
+                    ctx.fonts(|f| {
+                        assert_eq!(f.has_glyph(&egui::FontId::default(), '語'), needed);
+                    });
+                }
+            });
+        }
+    }
+
     #[cfg(windows)]
     #[test]
     fn maintenance_exit_preserves_unsaved_drafts_and_enabled_preference() {

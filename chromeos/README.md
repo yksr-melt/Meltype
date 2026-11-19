@@ -142,7 +142,7 @@ OS・拡張機能の版・サイト・入力手順を [Issues](https://github.co
 <h2><img src="../assets/branding/readme/chromeos/headings/9f8c2f09ae3c.svg" alt="開発者向け" width="1000"></h2>
 
 Rustと `wasm-bindgen-cli`、Pythonが必要です。リポジトリのルートから実行します。
-初回ビルドでは `native/mozc/MOZC_COMMIT` に固定したMozcの辞書と接続コストを取得します。取得したデータは `tools/data/chromeos-mozc/<commit>/` に保存し、次回から再利用します。実行時の外部通信は不要です。
+通常のビルドでは、同梱済みのMozc辞書を展開するため辞書のダウンロードは不要です。辞書を更新する開発者は、固定版を確認して `python chromeos/build.py --refresh-dictionary` を実行してください。
 
 ```sh
 python chromeos/build.py

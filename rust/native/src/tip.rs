@@ -3,7 +3,53 @@
 //! In-process adapter for upstream's TSF JSON protocol. Each frontend owns a
 //! connection; session IDs cannot address sessions in other connections.
 use super::*;
+use meltype_core::{settings::Settings, storage::Store};
 use serde_json::{json, Value};
+
+struct AppSettings {
+    directory: std::path::PathBuf,
+    process: String,
+    bytes: Option<Vec<u8>>,
+    settings: std::rc::Rc<Settings>,
+}
+
+fn config_bytes(store: &Store) -> std::io::Result<Option<Vec<u8>>> {
+    match std::fs::read(store.directory.join("config.json")) {
+        Ok(bytes) => Ok(Some(bytes)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn app_settings(
+    cache: &mut Option<AppSettings>,
+    store: &Store,
+    process: &str,
+) -> std::rc::Rc<Settings> {
+    let bytes = config_bytes(store);
+    if let (Ok(current), Some(entry)) = (&bytes, cache.as_ref()) {
+        if entry.directory == store.directory && entry.process == process && entry.bytes == *current
+        {
+            return entry.settings.clone();
+        }
+    }
+    let loaded = store.settings();
+    let valid = loaded.is_ok();
+    let settings = std::rc::Rc::new(loaded.unwrap_or_default().for_app(process));
+    // Settings migration or a parallel edit may replace config.json while loading.
+    if let Ok(bytes) = bytes {
+        if valid && config_bytes(store).is_ok_and(|current| current == bytes) {
+            *cache = Some(AppSettings {
+                directory: store.directory.clone(),
+                process: process.into(),
+                bytes,
+                settings: settings.clone(),
+            });
+        }
+    }
+    settings
+}
+
 static CONNECTIONS: OnceLock<Mutex<HashMap<usize, HashMap<String, usize>>>> = OnceLock::new();
 fn connections() -> &'static Mutex<HashMap<usize, HashMap<String, usize>>> {
     CONNECTIONS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -53,11 +99,13 @@ unsafe fn request_inner(connection: *mut c_void, request: *const c_char) -> Opti
     let inactive = || json!({"active":false,"consumed":false,"commits":[],"view":null}).to_string();
     let op = request["op"].as_str()?;
     #[cfg(not(test))]
-    let settings =
-        meltype_core::storage::Store::new(meltype_core::storage::Store::default_directory())
-            .settings()
-            .unwrap_or_default()
-            .for_app(request["process"].as_str().unwrap_or(""));
+    let settings = {
+        thread_local! { static LAST: std::cell::RefCell<Option<AppSettings>> = const { std::cell::RefCell::new(None) }; }
+        let store = Store::new(Store::default_directory());
+        LAST.with_borrow_mut(|cache| {
+            app_settings(cache, &store, request["process"].as_str().unwrap_or(""))
+        })
+    };
     #[cfg(test)]
     let settings = meltype_core::settings::Settings::default()
         .for_app(request["process"].as_str().unwrap_or(""));
@@ -529,6 +577,34 @@ mod tests {
             assert_eq!(value["active"], false);
             meltype_tip_destroy(a);
             meltype_tip_destroy(b);
+        }
+    }
+}
+
+#[cfg(test)]
+mod profile_cache_tests {
+    use super::*;
+    #[test]
+    fn settings_follow_the_field_and_same_length_rewrites() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(dir.path());
+        let mut cache = None;
+        let first = app_settings(&mut cache, &store, "chrome");
+        assert!(std::rc::Rc::ptr_eq(
+            &first,
+            &app_settings(&mut cache, &store, "chrome")
+        ));
+        assert!(!std::rc::Rc::ptr_eq(
+            &first,
+            &app_settings(&mut cache, &store, "notepad")
+        ));
+        for (value, expected) in [("true ", true), ("false", false)] {
+            let data = format!(r#"{{"SettingsVersion":5,"DirectModeAutoDetect":{value}}}"#);
+            std::fs::write(store.directory.join("config.json"), data).unwrap();
+            assert_eq!(
+                app_settings(&mut cache, &store, "notepad").boolean("DirectModeAutoDetect"),
+                expected
+            );
         }
     }
 }

@@ -300,5 +300,5 @@ fn kana_editing_transforms_and_undo_keep_physical_key_history() {
     }
     // In 1.3.0 the removed Both choice is migrated to Romaji.
     assert_eq!(s.settings.text("InputStyle"), "Romaji");
-    assert_eq!(s.display(false), "bいあf");
+    assert_eq!(s.display(false), "びぃあf"); // Romaji: byi → びぃ (#1464).
 }

@@ -220,6 +220,7 @@ public:
         if(!loaded_ || event.isRelease())return;
         auto *ic=event.inputContext();
         syncContext(ic);
+        if (ic->propertyFor(&factory_)->privacyAttributes & 1u) return;
         ViewSink sink{this,ic,{},nullptr,{},{}};
         const auto key=event.key();
         if(native_.keyEvent(ic->propertyFor(&factory_)->session(),key.sym(),fcitx::Key::keySymToUnicode(key.sym()),
@@ -327,7 +328,10 @@ private:
     void syncContext(fcitx::InputContext *ic) {
         auto *state=ic->propertyFor(&factory_);
         const auto caps=ic->capabilityFlags();
-        const uint32_t flags=(caps.test(fcitx::CapabilityFlag::Password)?1u:0u)
+        // Plasma's Qt lock screen can mark a password as Sensitive without Password.
+        const bool password = caps.test(fcitx::CapabilityFlag::Password)
+            || (caps.test(fcitx::CapabilityFlag::Sensitive) && ic->program() == "kscreenlocker_greet");
+        const uint32_t flags=(password?1u:0u)
             |(caps.test(fcitx::CapabilityFlag::Sensitive)?2u:0u)
             |(caps.test(fcitx::CapabilityFlag::Terminal)?4u:0u);
         if(state->privacyAttributes!=(flags&3u))hidePreedit(ic);

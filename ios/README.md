@@ -20,6 +20,7 @@
 
 iPhone・iPadのカスタムキーボードとして動く、Rust版Meltype-FLASHの初期プレビューです。
 **未確定文字はキーボードの中に表示し、確定した文字だけを入力欄へ送ります。**
+外部の変換エンジンから候補を取得できないときは、同梱したMozc辞書でオフライン変換できます。
 
 <a id="内容"></a>
 <h2><img src="../assets/branding/readme/ios/headings/df8764ebcf5d.svg" alt="内容" width="1000"></h2>

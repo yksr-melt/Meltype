@@ -63,7 +63,7 @@ test("a field change during site lookup never applies the old key or mode", asyn
   f.core.key = () => assert.fail("old key reached Core");
   f.core.set_code_mode = () => assert.fail("old mode reached Core");
   f.controller.key("meltype-rust", event, "old-field");
-  await waiting;
+  await new Promise(resolve => setImmediate(resolve));
   f.controller.focus({contextID: 8, type: "text"});
   release("code"); await f.controller.queue;
   assert.deepEqual(f.calls, [["ack", "old-field", false]]);
@@ -114,7 +114,7 @@ test("passwords, unknown fields, other engines and injected extension events pas
   const f = fixture();
   assert.equal(f.controller.key("other", event, "a"), false);
   assert.equal(f.controller.key("meltype-rust", {...event, extensionId: "foreign"}, "b"), false);
-  for (const type of ["password", "null", "number", "tel"]) {
+  for (const type of ["password", "null", "number", "tel", "email"]) {
     f.controller.focus({contextID: 7, type});
     assert.equal(f.controller.key("meltype-rust", event, "c"), false);
   }
@@ -165,4 +165,104 @@ test("prediction rows and clicks use prediction selection instead of conversion 
   assert.equal(f.calls.some(c => c[0] === "setCursorPosition"), false);
   f.controller.candidate("meltype-rust", 0, "left"); await f.controller.queue;
   assert.equal(f.calls.find(c => c[0] === "commitText")[1].text, reply.view.predictions[0]);
+});
+
+test("候補推論が終わる前に打鍵を返し、完了後は確定を再送せず表示だけ更新する", async () => {
+  const f = fixture();
+  let complete, applied = 0;
+  f.controller.convert = () => new Promise(resolve => { complete = resolve; });
+  f.core.ai_request = () => JSON.stringify(["はし", ""]);
+  f.core.ai_apply = () => { applied++; return true; };
+  f.core.view = () => JSON.stringify({view: {text: "橋", converting: true, candidates: ["橋"]}});
+  f.controller.key("meltype-rust", event, "first");
+  await f.controller.queue;
+  assert.deepEqual(f.calls.at(-1), ["ack", "first", true]);
+  assert.equal(applied, 0);
+  complete(["橋"]);
+  await new Promise(resolve => setImmediate(resolve));
+  await f.controller.queue;
+  assert.equal(applied, 1);
+  assert.equal(f.calls.filter(([name]) => name === "setComposition").at(-1)[1].text, "橋");
+  assert.equal(f.calls.filter(([name]) => name === "commitText").length, 0);
+});
+
+test("推論中でも次の打鍵が進み、選択やフォーカス変更より古い結果は捨てる", async () => {
+  for (const blur of [false, true]) {
+    const f = fixture();
+    let complete, applied = 0;
+    f.controller.convert = () => new Promise(resolve => { complete = resolve; });
+    f.core.ai_request = () => JSON.stringify(["はし", ""]);
+    f.core.ai_apply = () => { applied++; return false; };
+    f.controller.key("meltype-rust", event, "first");
+    await f.controller.queue;
+    if (blur) f.controller.focus({contextID: 9, type: "text"});
+    else {
+      f.controller.key("meltype-rust", {...event, key: "ArrowDown", code: "ArrowDown"}, "next");
+      await f.controller.queue;
+      assert.deepEqual(f.calls.at(-1), ["ack", "next", true]);
+      assert.equal(f.calls.filter(([name]) => name === "setCandidates").length, 1);
+    }
+    complete(["橋"]);
+    await new Promise(resolve => setImmediate(resolve));
+    await f.controller.queue;
+    assert.equal(applied, 0);
+  }
+});
+
+test("別のキーを離しても半角／全角の長押しは再切替せず、匿名のキーアップで解除する", async () => {
+  const f = fixture();
+  let direct = false, switches = 0;
+  f.core.is_direct = () => direct;
+  f.core.set_direct = value => {
+    direct = value; switches++;
+    return JSON.stringify({consumed: true, commits: [], view: null});
+  };
+  const send = (type, key, code, id) => f.controller.key("meltype-rust", {type, key, code}, id);
+  send("keydown", "ZenkakuHankaku", "Backquote", "press");
+  send("keyup", "a", "KeyA", "unrelated");
+  send("keydown", "ZenkakuHankaku", "Backquote", "repeat");
+  send("keyup", "Unidentified", "", "release");
+  send("keydown", "ZenkakuHankaku", "Backquote", "again");
+  await f.controller.queue;
+  assert.equal(switches, 2);
+  assert.equal(direct, false);
+  assert.deepEqual(f.calls.filter(row => row[0] === "ack").map(row => row.slice(1)),
+    [["press", true], ["unrelated", false], ["repeat", true], ["release", true], ["again", true]]);
+});
+
+test("英字では辞書を読まず、日本語の先読み中も次の打鍵を受け付けて別の入力欄に候補を送らない", async () => {
+  const f = fixture();
+  let started, finish, loads = 0, applied = 0;
+  const waiting = new Promise(resolve => { started = resolve; });
+  f.controller.loadDictionary = () => {
+    loads++; started(); return new Promise(resolve => { finish = resolve; });
+  };
+  f.core.apply_dictionary = () => { applied++; return false; };
+  f.core.key = vk => JSON.stringify({consumed: true, commits: [], view: {text: vk === 65 ? "a" : "か", converting: vk === 32}});
+  f.controller.key("meltype-rust", event, "letter"); await f.controller.queue;
+  assert.equal(loads, 0);
+  f.controller.key("meltype-rust", {...event, key: "k", code: "KeyK"}, "kana");
+  await waiting;
+  await f.controller.queue;
+  assert.deepEqual(f.calls.at(-1), ["ack", "kana", true]);
+  f.controller.key("meltype-rust", {type: "keydown", key: " ", code: "Space"}, "convert");
+  await new Promise(resolve => setImmediate(resolve));
+  f.controller.focus({contextID: 8, type: "text"});
+  finish(); await f.controller.queue;
+  assert.equal(applied, 0);
+  assert.equal(f.calls.some(([name, args]) => name === "setComposition" && args.contextID === 8), false);
+  f.controller.key("meltype-rust", {type: "keydown", key: " ", code: "Space"}, "convert-again");
+  await f.controller.queue;
+  assert.equal(loads, 1);
+});
+
+test("起動に一度失敗しても次のキーで入力を再開する", async () => {
+  let attempts = 0;
+  const f = fixture(async () => {
+    if (++attempts === 1) throw new Error("initial load failed");
+    return f.core;
+  });
+  f.controller.key("meltype-rust", event, "first"); await f.controller.queue;
+  f.controller.key("meltype-rust", event, "retry"); await f.controller.queue;
+  assert.deepEqual(f.calls.filter(c => c[0] === "ack"), [["ack", "first", false], ["ack", "retry", true]]);
 });

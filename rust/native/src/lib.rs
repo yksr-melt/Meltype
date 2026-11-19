@@ -1130,28 +1130,16 @@ pub extern "C" fn meltype_begin_async_from_session(handle: *mut c_void) -> u64 {
     };
     let reading = session.reading();
     let id = session.begin_async_conversion(&reading, "");
-    let reading = reading.clone();
+    let lookup = session.prepare_dictionary_candidates(reading);
     let key = handle as usize;
     drop(all);
-    // Prototype producer: the bundled/user dictionary is consulted off the
-    // input thread. A real host can call meltype_complete_async_conversion
-    // with an external engine result instead.
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        let Ok(mut all) = sessions().lock() else {
-            return;
-        };
-        let Some(session) = all.get_mut(&key) else {
-            return;
-        };
-        let Some(ac) = session.async_conversion() else {
-            return;
-        };
-        if ac.id != id {
-            return;
+        let candidates = lookup();
+        if let Ok(mut all) = sessions().lock() {
+            if let Some(session) = all.get_mut(&key) {
+                session.complete_async_conversion(id, candidates);
+            }
         }
-        let candidates = session.dictionary_candidates(&reading);
-        session.complete_async_conversion(id, candidates);
     });
     id
 }
@@ -1161,7 +1149,10 @@ pub extern "C" fn meltype_async_can_begin(handle: *mut c_void) -> i32 {
     sessions()
         .lock()
         .ok()
-        .and_then(|all| all.get(&(handle as usize)).map(|s| !s.raw().is_empty()))
+        .and_then(|all| {
+            all.get(&(handle as usize))
+                .map(|s| !s.raw().is_empty() && !s.is_converting())
+        })
         .unwrap_or(false) as i32
 }
 
@@ -1482,7 +1473,9 @@ pub extern "C" fn meltype_role_key(handle: *mut c_void, vk: i32) -> *mut c_char 
             all.get(&(handle as usize)).map(|s| {
                 !s.raw().is_empty()
                     && (s.settings.boolean("SeparateKeyRoles")
-                        || vk == 0x1d && s.settings.boolean("MuhenkanKatakanaCycle"))
+                        || vk == 0x1d
+                            && s.settings.boolean("MuhenkanKatakanaCycle")
+                            && !s.protects_tail())
             })
         })
         .unwrap_or(false);
