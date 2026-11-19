@@ -2,7 +2,7 @@
 
 Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Services Framework) でも動くようにしたもの。
 打った文字が入力欄そのものに下線付きで入り、変換の候補だけを入力位置の下に一覧で出す。
-判定・変換のロジック (Meltype.Core) は書き直さず、Mac 版・Linux 版と同じく `MeltypeSession` を使う。
+判定・変換のロジック (Meltype.Core) は書き直さず、Mac 版・Linux 版と同じく `ImeHost` を使う。
 
 使い方は [WINDOWS.md](../WINDOWS.md#meltype-ime-で入力する)、セキュリティの考え方は [SECURITY.md](../../SECURITY.md)。
 
@@ -13,7 +13,7 @@ Windows 版の Meltype を、Windows 正規の IME の仕組み (TSF, Text Servi
 ┌──────────────────────────────┐            ┌───────────────────────────────┐
 │ MeltypeTip.dll (C++, TSF)       │  名前付き   │ TipServer                        │
 │  - キーを受け取る               │  パイプ     │  - つながり・入力欄ごとに        │
-│  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    MeltypeSession                │
+│  - 未確定の文字を下線付きで置く  │ ◀───────▶ │    ImeHost                       │
 │  - 候補の一覧を描く              │ 1 メッセージ│  - 変換 (Mozc + Zenzai)           │
 │                                  │  = 1 JSON   │  - 学習データ・ユーザー辞書        │
 └──────────────────────────────┘            └───────────────────────────────┘
@@ -227,7 +227,7 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 | 層 | テスト | CI | 確かめること |
 |---|---|---|---|
-| 入力の本体 (MeltypeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
+| 入力の本体 (ImeSession) | `src/Meltype.Core.Tests/SessionFacadeTests.cs`・`InputRegressionTests.cs` など | Windows・Linux・Mac | 打鍵ごとの確定・表示、予測の候補と Tab、変換中のショートカット、コードの行、英数の自動判定 |
 | フロントと本体の境目 (ImeHost の JSON) | `src/Meltype.Core.Tests/ImeContractTests.cs` | Windows・Linux・Mac | 入力 → 変換 → 確定 → 続けて入力、BackSpace・Esc、確定で変換を終える、キャレットを動かしたら前の確定を直さない、入力欄 (instance) ごとに分ける・閉じる、つなぎ直したフロントの続きを受け持たない、受け持たなくなったときの確定、入力モードのキー、受け取るキー、選んだ文字の再変換、コードの行 |
 | TipServer の要求と入力モードの表示 | `src/Meltype.Windows.Tests/TipIndicatorTests.cs` | Windows (build.yml の test) | 要求の位置の読み取り、明示的な切り替えで設定が ON のときだけ表示する |
 | パイプ | `--tip-client` | 手で流す | 実際のパイプでのやり取り |

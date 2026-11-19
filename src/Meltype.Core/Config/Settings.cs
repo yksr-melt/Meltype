@@ -67,6 +67,8 @@ public enum CompositionTheme
     [Description("ライト")] Light,
     /// <summary>Windows の「既定のアプリ モード」(ライト / ダーク) に合わせる。</summary>
     [Description("Windows の設定に合わせる")] System,
+    /// <summary>利用者が決めた背景と文字の色 (<see cref="Settings.CompositionCustomBackColor"/>・<see cref="Settings.CompositionCustomTextColor"/>)。</summary>
+    [Description("カスタム")] Custom,
 }
 
 /// <summary>変換ボックスの不透明度。</summary>
@@ -510,12 +512,21 @@ public sealed class Settings
     public string CompositionFont { get; set; } = "";
 
     [Category("9. 表示"), DisplayName("変換ボックスの色"), Platforms(Platform.Windows),
-     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。")]
+     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。カスタム: 「変換ボックスのカスタムの色」の背景と文字の色で出します (Meltype キーボードだけ。Meltype IME の候補の一覧は Windows の色のまま)。")]
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 背景"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。")]
+    public string CompositionCustomBackColor { get; set; } = "#202228";
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 文字"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。")]
+    public string CompositionCustomTextColor { get; set; } = "#FFFFFF";
 
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
+
 
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch
@@ -524,6 +535,20 @@ public sealed class Settings
         CompositionTheme.System => windowsLight ?? false,
         _ => false,
     };
+
+    /// <summary>カスタムの変換ボックスの背景と文字の色 (読めない値なら null で、ライト / ダークの色のまま)。</summary>
+    public ((int R, int G, int B) Back, (int R, int G, int B) Text)? CompositionCustomColors() =>
+        CompositionTheme == CompositionTheme.Custom && ParseColor(CompositionCustomBackColor) is { } back && ParseColor(CompositionCustomTextColor) is { } text
+            ? (back, text) : null;
+
+    /// <summary>
+    /// 決めた色で文字が読みにくくなるなら、利用者に見せる警告。保存を止めるかは利用者が決める。
+    /// カスタムでは文字・案内・目印・下線をすべて文字の色で描くので、文字と背景の 1 組だけを確かめれば足りる。
+    /// </summary>
+    public string? ColorWarning() =>
+        CompositionCustomColors() is var (back, text)
+            ? ColorContrast.Warning("変換ボックスのカスタムの色: 文字", text, "変換ボックスのカスタムの色: 背景", back)
+            : null;
 
     /// <summary>変換ボックスの不透明度 (0.7〜1)。</summary>
     [Browsable(false), JsonIgnore]

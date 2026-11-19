@@ -35,7 +35,8 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
     /// <summary>1 つの ImeHost で持つ入力欄の数の上限 (TSF では 1 つのスレッドに 1 つなので、ふつうは 1 つ)。</summary>
     private const int MaxSessions = 16;
 
-    private readonly Dictionary<string, ImeSession> _sessions = [];
+    // 入力欄ごとの状態。処理は ImeSession の関数が受け取って書き換える
+    private readonly Dictionary<string, ImeSessionState> _sessions = [];
     private static long s_rev;
 
     public int SessionCount => _sessions.Count;
@@ -68,9 +69,10 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
     /// <summary>フロントがいなくなった (TSF のパイプが切れた): 入力欄をすべて閉じる。</summary>
     public void CloseAll()
     {
+        var env = new ImeEnv(environment, parts, settings());
         foreach (var session in _sessions.Values)
         {
-            session.Close();
+            ImeSession.Close(session, env);
         }
         _sessions.Clear();
     }
@@ -83,14 +85,16 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
             return Inactive();
         }
         var id = e.Instance ?? "";
+        // 1 つの出来事の中の判断は、ここで 1 回読んだ設定でそろえる
+        var current = settings();
+        var env = new ImeEnv(environment, parts, current);
         if (e.Type == ImeEventType.InstanceDestroyed)
         {
-            if (_sessions.Remove(id, out var closing)) closing.Close(e.Field);
+            if (_sessions.Remove(id, out var closing)) ImeSession.Close(closing, env, e.Field);
             return Inactive();
         }
         if (!_sessions.TryGetValue(id, out var session))
         {
-            var current = settings();
             var active = ImeSession.IsActive(environment, current, e.Field);
             // フロントは変換中なのに入力の続きが無い (つなぎ直した): 新しく始めると変換中の文字を消したり置き換えたりするので受け持たない
             // (フロントは変換中の文字をそのまま確定し、キーをアプリに通す)
@@ -99,10 +103,10 @@ public sealed class ImeHost(IImeEnvironment environment, SessionParts parts, Fun
             {
                 return new(ImeSession.InitialState(active, e.ImeOpen ?? true, current.ForApp(e.Field?.App), ImeSession.IsGame(current, e.Field), ImeSession.AnnouncesFocus(e), NextRev()), Pass);
             }
-            session = new ImeSession(environment, parts, settings);
+            session = ImeSession.Create(env);
             _sessions[id] = session;
         }
-        return session.Handle(e, NextRev());
+        return ImeSession.Handle(session, env, e, NextRev());
     }
 
     private static long NextRev() => Interlocked.Increment(ref s_rev);
