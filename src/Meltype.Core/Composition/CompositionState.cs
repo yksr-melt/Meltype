@@ -27,15 +27,6 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     /// </summary>
     public Func<string, bool, Verdict>? ClassifyDirect { get; init; }
 
-    /// <summary>処理中のキーで Shift を押していたか (大文字・文節の区切り・Shift+Space に使う)。</summary>
-    public bool Shift { get; init; }
-
-    /// <summary>処理中のキーで Ctrl を押していたか。</summary>
-    public bool Control { get; init; }
-
-    /// <summary>処理中のキーで Ctrl・Alt・Command のどれかを押していたか。</summary>
-    public bool Modifier { get; init; }
-
     /// <summary>文字に使わずに離した親指キーの、もとの働き (変換・無変換) をしているか。かな配列を通さない。</summary>
     public bool BypassKanaLayout { get; init; }
 
@@ -80,7 +71,6 @@ internal sealed class CompositionState
     // かな配列 (JIS かな以外。設定が変わったら作り直す。issue #1415)
     public KanaLayoutEngine KanaLayout = new(Input.KanaLayout.Jis);
 
-
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
     public bool Direct;
 
@@ -89,6 +79,13 @@ internal sealed class CompositionState
 
     public readonly Dictionary<string, List<(string Reading, string Text)>> LiveCache = new(StringComparer.Ordinal);
 
+    // 最後に押したキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)。
+    // 次のキーを押すまで、ほかの出来事 (離した親指キーのもとの働きなど) もこの値で処理する。
+    public bool Shift;
+
+    public bool Control;
+
+    public bool Modifier;
 
     // 押したキー (離したことを受け取るまで。親指シフトの親指キーを、文字に使わずに離したかを見る)
     public readonly HashSet<int> Pressed = [];

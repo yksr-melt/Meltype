@@ -170,8 +170,6 @@ internal static partial class CompositionController
     {
         CompositionOutput.Begin(state.Out, env, before, after);
         Tick(state, env, key.TimeMs);
-        // 処理中のキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)
-        env = env with { Shift = key.Shift, Control = key.Control, Modifier = key.Modifier };
         var consumed = Handle(state, env, key);
         if (!releaseFollows) HandleRelease(state, env, key.Vk);
         Settle(state, env);
@@ -208,6 +206,7 @@ internal static partial class CompositionController
     /// <summary>キーを 1 つ処理する。アプリに通さないなら true。</summary>
     private static bool Handle(CompositionState state, CompositionEnv env, KeyPress key)
     {
+        (state.Shift, state.Control, state.Modifier) = (key.Shift, key.Control, key.Modifier);
         if (!IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, env, key))) return false;
         env.Budget?.Start(InputBudgetMs);
         state.Pressed.Add(key.Vk);
