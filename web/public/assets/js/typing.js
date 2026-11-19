@@ -75,7 +75,6 @@ function nextRound() {
 
 // 同意した参加は、同意文が変わるまで使い続ける (同じ人の打ち方をまとめて見られるように)
 const sessionAlive = () => Boolean(saved.session && saved.session.consent === CONSENT_VERSION);
-// 英語が混ざった文は、英語の部分をかなにすると読めないので、打った文字をそのまま見せる
 const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
 // ---- 1. はじめる ----
@@ -112,18 +111,18 @@ function loadSentence() {
   state.trial = newTrial();
   $("count").textContent = String(state.index + 1);
   $("text").textContent = sentence.text;
-  $("reading").textContent = hasEnglish(sentence) ? toRomaji(sentence.reading) : sentence.reading;
+  $("reading").textContent = sentence.reading;
+  $("reading-romaji").textContent = toRomaji(sentence.reading);
   $("ime-note").hidden = true;
   render();
 }
 
 function render() {
   const typed = replay(state.trial.keys);
-  const english = hasEnglish(state.queue[state.index]);
-  const { kana, pending } = english ? { kana: typed, pending: "" } : toKana(typed);
+  const { kana, pending } = toKana(typed);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
-  $("romaji").textContent = english ? "" : typed.toLowerCase();
+  $("romaji").textContent = typed.toLowerCase();
 }
 
 // 時刻は performance.now() で測る。event.timeStamp は、ブラウザーや設定 (指紋対策など) によって 0 や粗い値になり、打鍵の間隔が取れないため
