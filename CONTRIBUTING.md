@@ -227,9 +227,11 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 | 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc で確かめます |
 | CLA | いつも | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」)。初めての方は、同意するまで失敗します |
 | quality | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、Roslyn の解析の警告とあわせて 1 件でもあれば失敗 |
+| CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
+| 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
 
-フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析は `dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true` で手元でも確かめられます (Linux・macOS でも Windows 版まで調べられます)。
+フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析は `dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true` で手元でも確かめられます (Linux・macOS でも Windows 版まで調べられます)。CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。
 
 Mac 版・Linux 版・端末版・Android 版のビルドとテストは、Pull Request では流れません。変えたときは、Actions の画面でそのワークフロー (mac・linux・tui・Android QA) をブランチに対して手で実行 (Run workflow) して確かめてください。
