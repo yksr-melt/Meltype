@@ -162,7 +162,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// 判定器と辞書・学習データをつなぐ (持ち主が作ったときに 1 回)。よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは
     /// 英語として覚えない。
     /// </summary>
-    internal static void Connect(CompositionDetector detector, CompositionServices services)
+    public static void Connect(CompositionDetector detector, CompositionServices services)
     {
         if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
         if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
