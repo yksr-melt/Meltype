@@ -71,10 +71,10 @@ sudo apt update
 sudo apt install meltype
 ```
 
-リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `meltype-common` と `meltype` の `.deb` (x86_64 は `_amd64.deb`、ARM64 は `_arm64.deb`) をダウンロードして、次のコマンドでインストールします。
+リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.deb` (x86_64 は `meltype_<version>_amd64.deb`、ARM64 は `meltype_<version>_arm64.deb`) をダウンロードして、次のコマンドでインストールします。
 
 ```bash
-sudo apt install ./meltype-common_<version>_amd64.deb ./meltype_<version>_amd64.deb
+sudo apt install ./meltype_<version>_amd64.deb
 ```
 
 IBus の部品は「おすすめ」なので、ふつうは一緒に入ります。
@@ -99,11 +99,11 @@ sudo dnf install meltype
 
 fcitx5 のアドオンは別のパッケージ `meltype-fcitx5` です。fcitx5 が入っていれば、dnf が `meltype` と一緒に入れます。
 
-リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `meltype-common` と `meltype` の `.rpm` (x86_64 は `.x86_64.rpm`、ARM64 は `.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。fcitx5 で使うときは、`meltype-fcitx5` も一緒に入れます。
+リポジトリを登録せずに入れるときは、[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う `.rpm` (x86_64 は `meltype-<version>-1.x86_64.rpm`、ARM64 は `meltype-<version>-1.aarch64.rpm`) をダウンロードして、次のコマンドでインストールします。fcitx5 で使うときは、`meltype-fcitx5-<version>-1.x86_64.rpm` も一緒に入れます。
 
 ```bash
-sudo dnf install ./meltype-common-<version>-1.x86_64.rpm ./meltype-<version>-1.x86_64.rpm
-sudo dnf install ./meltype-common-<version>-1.x86_64.rpm ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x86_64.rpm  # fcitx5 で使うとき
+sudo dnf install ./meltype-<version>-1.x86_64.rpm
+sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x86_64.rpm  # fcitx5 で使うとき
 ```
 
 <a name="ほかのディストリビューション"></a>
@@ -144,9 +144,11 @@ sudo dnf install ./meltype-common-<version>-1.x86_64.rpm ./meltype-<version>-1.x
 
 GUI の無い端末 (fbterm などのコンソール・SSH の先・tmux の中) では、`meltype-tty` を起動すると、その中のシェルで Meltype を使えます。IBus・fcitx5 は要りません。
 
-`meltype-tty` は別のパッケージです。上のリポジトリを登録してから、`sudo apt install meltype-tty` か `sudo dnf install meltype-tty` で入れます (`meltype` は要りません)。ファイルから入れるときは、`meltype-common` と `meltype-tty` の `.deb`・`.rpm` を一緒に入れます。
+端末版は apt・dnf のパッケージとは別の配布物です。[Releases](https://github.com/yksr-melt/Meltype/releases/latest) から CPU に合う zip (x86_64 は `Meltype-<version>-tty-linux.zip`、ARM64 は `Meltype-<version>-tty-linux-arm64.zip`) をダウンロードして、好きな場所に展開します。python3 (3.9 以降) と ICU (`libicu`) が要ります。
 
 ```sh
+unzip Meltype-<version>-tty-linux.zip -d ~/.local/share
+ln -s ~/.local/share/Meltype-tty/meltype-tty ~/.local/bin/meltype-tty
 meltype-tty            # $SHELL を起動
 meltype-tty -- vim     # コマンドを指定して起動
 ```
