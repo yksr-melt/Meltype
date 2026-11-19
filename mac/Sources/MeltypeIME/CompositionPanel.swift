@@ -99,8 +99,6 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
     private static let candidateRowHeight: CGFloat = 32
     // Windows IME の候補窓 (kMaxWidth) と同じ上限。長い案内や候補でパネルが広がりすぎないようにする。
     private static let maxWidth: CGFloat = 520
-    // Core の数字キー選択は、選択中の候補が属する 9 件のページ内で行う。
-    private static let pageSize = 9
 
     private let window = NonactivatingCompositionWindow(contentRect: .zero,
         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -143,7 +141,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
 
         var pageStart: Int {
             guard converting, let list, list.items.indices.contains(list.selected) else { return 0 }
-            return list.selected / CompositionPanel.pageSize * CompositionPanel.pageSize
+            return list.selected / list.pageSize * list.pageSize
         }
     }
 
@@ -257,6 +255,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         let spacing = Self.spacing
         let list = content.list
         let items = list?.items ?? []
+        let pageSize = list?.pageSize ?? 0
         let notes = list?.notes ?? []
         let numbered = list?.numbered == true
         let numberWidth = numbered ? Self.numberColumnWidth : 0
@@ -266,11 +265,11 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
         // 表示中のパネルの大きさと中身を、途中の状態を見せずに一度に入れ替える。
         if window.isVisible { window.disableScreenUpdatesUntilFlush() }
         let pageStart = content.pageStart
-        let end = content.converting ? min(items.count, pageStart + Self.pageSize) : items.count
+        let end = content.converting ? min(items.count, pageStart + pageSize) : items.count
         let range = pageStart..<end
         guideLabel.attributedStringValue = styled(content.guide, font: Self.guideFont, color: .labelColor, lineBreakMode: .byTruncatingTail)
         meaningLabel.attributedStringValue = styled(meaning ?? "", font: Self.meaningFont, color: .secondaryLabelColor)
-        let position = content.converting && items.count > Self.pageSize
+        let position = content.converting && items.count > pageSize
             ? "\(max(0, list?.selected ?? 0) + 1) / \(items.count)" : ""
         positionLabel.attributedStringValue = styled(position, font: Self.guideFont, color: .secondaryLabelColor, alignment: .right)
         positionLabel.alignment = .right
@@ -308,9 +307,9 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
             ? min(height(of: meaningLabel, width: width), 3 * meaningLineHeight, detailBudget) : 0
         if detailHeight > 0 { remaining -= detailHeight + spacing }
         // 最後のページの候補が少なくても、ページ送りでパネルの高さを変えない。
-        let regularPageHeight = CGFloat(min(items.count, Self.pageSize)) * Self.candidateRowHeight
+        let regularPageHeight = CGFloat(min(items.count, pageSize)) * Self.candidateRowHeight
         let documentHeight = newRows.reduce(CGFloat.zero) { $0 + $1.height }
-        let listHeight = content.converting && items.count > Self.pageSize ? regularPageHeight : documentHeight
+        let listHeight = content.converting && items.count > pageSize ? regularPageHeight : documentHeight
         let scrollHeight = remaining >= Self.candidateRowHeight ? min(listHeight, regularPageHeight, remaining) : 0
 
         let sections: [(NSView, CGFloat)] = [
@@ -498,7 +497,7 @@ final class CompositionPanel: NSObject, NSTableViewDataSource, NSTableViewDelega
 
     private func turnPage(_ step: Int) -> Bool {
         guard window.isVisible, !scroll.isHidden, let content, content.converting, let list = content.list else { return false }
-        let start = content.pageStart + step * Self.pageSize
+        let start = content.pageStart + step * list.pageSize
         guard list.items.indices.contains(start) else { return false }
         highlight(start)
         return true

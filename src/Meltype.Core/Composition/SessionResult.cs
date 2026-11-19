@@ -84,6 +84,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
             AppendNullable(builder, predictions ? null : view.Notes?[i].ToDisplayText());
         }
         builder.Append("],\"numbered\":").Append(Numbered(view) ? "true" : "false");
+        builder.Append(",\"pageSize\":").Append(CompositionController.CandidatePageSize);
         builder.Append(",\"selected\":").Append(predictions ? view.SelectedPrediction : view.SelectedIndex)
             .Append(",\"selectedMeaning\":");
         AppendNullable(builder, view.Meaning);

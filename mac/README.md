@@ -10,6 +10,8 @@
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。コマンドはどれも、リポジトリのフォルダーで実行します。
 
+候補パネルのページサイズは、Core の応答の `view.candidates.pageSize` を使います。表示範囲とスクロールによるページ送りを、Core の数字キー選択・ページキーの区切りにそろえます。
+
 ## ビルドする
 
 必要なもの:
