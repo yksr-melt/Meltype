@@ -69,14 +69,14 @@ internal static partial class CompositionController
                     continue;
                 }
                 // 英語の語: 前の日本語をまとめて変換してから、空白で区切って足す
-                if (kana.Length > 0) output.Append(Convert(state, kana.ToString(), env.Converter));
+                if (kana.Length > 0) output.Append(Convert(kana.ToString(), SegmentBefore(state, output.ToString()), env.Converter));
                 kana.Clear();
                 if (output.Length > 0 && output[^1] != ' ') output.Append(' ');
                 output.Append(segment.Raw).Append(' ');
             }
             englishWords = segments.Count > 0 && segments[^1].IsEnglish ? (segments.Count == 1 ? englishWords + 1 : 1) : 0;
         }
-        if (kana.Length > 0) output.Append(Convert(state, kana.ToString(), env.Converter));
+        if (kana.Length > 0) output.Append(Convert(kana.ToString(), SegmentBefore(state, output.ToString()), env.Converter));
         return output.ToString().TrimEnd();
     }
 
@@ -180,7 +180,7 @@ internal static partial class CompositionController
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
-            var japanese = ConvertJapaneseSegment(state, env, segment.Kana, s > 0 && segments[s - 1].IsEnglish, converter);
+            var japanese = ConvertJapaneseSegment(state, env, segment.Kana, s > 0 && segments[s - 1].IsEnglish, SegmentBefore(state, string.Concat(clauses.Select(c => c.Text))), converter);
             // 候補の最後に、打ったままの英字 (あぴ → api) と全角の英字も出す (Space を連打して英字に戻せる)。
             var offset = 0;
             foreach (var clause in japanese)
@@ -409,9 +409,9 @@ internal static partial class CompositionController
     }
 
     /// <summary>英日の区間分けの日本語の区間を変換する。Space の変換もライブ変換も、区間ごとにこれを通す。</summary>
-    private static List<Clause> ConvertJapaneseSegment(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, IKanjiConverter converter)
+    private static List<Clause> ConvertJapaneseSegment(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before, IKanjiConverter converter)
     {
-        var japanese = ConvertJapanese(state, env, kana, converter);
+        var japanese = ConvertJapanese(state, env, kana, before, converter);
         // ワークアラウンド: 英単語 + 付属語 (python|なら、push|した): 変換エンジンは英語の後ろの読みだけを見て、文の頭の語 (奈良・下) にしてしまう。かなのまま。
         // 変換エンジンに文脈 (英単語・これ) を渡しても、名詞の読みを前に付けて変換しても、なら・しか・しよう は直らなかった。
         // 変換エンジンが英単語を前の文脈として受け取り、後ろの読みを付属語として変換するようになったら消せる
@@ -423,7 +423,7 @@ internal static partial class CompositionController
     /// ユーザー辞書の読みが含まれていれば、その部分は登録した単語の文節にし、残りだけを変換エンジンで変換する
     /// (きごうとうふくめ → 記号等|含め)。含まれていなければ普通に変換する。
     /// </summary>
-    private static List<Clause> ConvertJapanese(CompositionState state, CompositionEnv env, string kana, IKanjiConverter converter)
+    private static List<Clause> ConvertJapanese(CompositionState state, CompositionEnv env, string kana, string before, IKanjiConverter converter)
     {
         // ローマ字として読めずに残った英字 (こほぃc の c) と半角の記号 (... @) は、変換エンジンに渡すと別の記号 (© ．．． ＠) にされるので、
         // そのままの文節にする。数字は、記号・英字とつながっていればそのまま (3.0 の 3 を 1 文字だけ渡すと ❸ にされる)、
@@ -449,14 +449,14 @@ internal static partial class CompositionController
                 var run = kana[start..i];
                 // ユーザー辞書に英字のまま登録した読み (zh → ←) はここでも引く
                 if (keep[start]) result.Add(new Clause(run, false, Distinct([.. env.Services.UserDictionary?.Lookup(run) ?? [], run, .. env.Services.Candidates?.Lookup(run) ?? [], CompositionText.ToFullWidth(run)])));
-                else result.AddRange(ConvertJapanese(state, env, run, converter));
+                else result.AddRange(ConvertJapanese(state, env, run, before + string.Concat(result.Select(c => c.Text)), converter));
                 start = i;
             }
             return result;
         }
-        if (env.Services.UserDictionary?.Split(kana) is not { } split) return ConvertWithEngine(state, env, kana, converter);
-        var pieces = AlignUserWords(state, env, kana, split, converter);
-        if (pieces.All(p => p.Word is null && p.Engine is null)) return ConvertWithEngine(state, env, kana, converter);
+        if (env.Services.UserDictionary?.Split(kana) is not { } split) return ConvertWithEngine(state, env, kana, before, converter);
+        var pieces = AlignUserWords(state, env, kana, before, split, converter);
+        if (pieces.All(p => p.Word is null && p.Engine is null)) return ConvertWithEngine(state, env, kana, before, converter);
         var clauses = new List<Clause>();
         var registered = new List<Clause>();
         var parts = new List<Clause>();
@@ -464,7 +464,7 @@ internal static partial class CompositionController
         {
             if (word is null)
             {
-                clauses.AddRange(ConvertWithEngine(state, env, reading, converter, aligned));
+                clauses.AddRange(ConvertWithEngine(state, env, reading, before + string.Concat(clauses.Select(c => c.Text)), converter, aligned));
                 continue;
             }
             // 同梱の語句に文節の区切りがあれば、その区切りで分ける (いちがっき → 一|学期)
@@ -502,11 +502,11 @@ internal static partial class CompositionController
     /// 語より前は今までどおり別に変換する (文全体の変換エンジンの結果にすると、これほんあか が コレ本垢 になる)。
     /// 始まりが文節の途中の語は、どの文字が語の読みに当たるか分からないので、今までどおり語で区切る。
     /// </summary>
-    private static List<(string Reading, string? Word, IReadOnlyList<ConversionClause>? Engine)> AlignUserWords(CompositionState state, CompositionEnv env, string kana, List<(string Reading, string? Word)> pieces, IKanjiConverter converter)
+    private static List<(string Reading, string? Word, IReadOnlyList<ConversionClause>? Engine)> AlignUserWords(CompositionState state, CompositionEnv env, string kana, string before, List<(string Reading, string? Word)> pieces, IKanjiConverter converter)
     {
         var unchanged = pieces.Select(p => (p.Reading, p.Word, (IReadOnlyList<ConversionClause>?)null)).ToList();
         if (env.Services.UserDictionary is not { } dictionary) return unchanged;
-        var engine = converter.ConvertClauses(kana, state.PrecedingText);
+        var engine = converter.ConvertClauses(kana, before);
         if (engine is null || string.Concat(engine.Select(c => c.Reading)) != kana) return unchanged;
         var starts = new HashSet<int>();
         for (int i = 0, offset = 0; i < engine.Count; offset += engine[i].Reading.Length, i++) starts.Add(offset);
@@ -563,16 +563,16 @@ internal static partial class CompositionController
     ///   3. 変換エンジンの結果 (入力欄のキャレットの前の文字を文脈として渡している)
     /// engine を渡したときは、変換エンジンに頼まずにその文節を使う (文全体を変換したときの一部: AlignUserWords)。
     /// </summary>
-    private static List<Clause> ConvertWithEngine(CompositionState state, CompositionEnv env, string kana, IKanjiConverter converter, IReadOnlyList<ConversionClause>? engine = null)
+    private static List<Clause> ConvertWithEngine(CompositionState state, CompositionEnv env, string kana, string before, IKanjiConverter converter, IReadOnlyList<ConversionClause>? engine = null)
     {
-        var parts = engine ?? converter.ConvertClauses(kana, state.PrecedingText);
-        parts ??= [new ConversionClause(kana, converter.Convert(kana, state.PrecedingText) ?? kana)];
+        var parts = engine ?? converter.ConvertClauses(kana, before);
+        parts ??= [new ConversionClause(kana, converter.Convert(kana, before) ?? kana)];
         // 読み全体が補助辞書・絵文字の辞書の語 (かんがえるかお → 🤔) なら、文節に分けずに 1 つの文節にして候補を出す。
         if (parts.Count > 1 && env.Services.Candidates?.Contains(kana) == true)
         {
             parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
         }
-        parts = JoinSmallKana(state, parts, converter);
+        parts = JoinSmallKana(parts, before, converter);
         var clauses = parts.Select(p => new Clause(p.Reading, false, JapaneseCandidates(state, env, p.Reading, NormalizeHalfWidth(p.Text, p.Reading), converter))
         {
             ZenzaiText = p.Zenzai ? NormalizeHalfWidth(p.Text, p.Reading) : null,
@@ -681,7 +681,7 @@ internal static partial class CompositionController
     /// 変換エンジンの知らない語を区切り間違えたもの (こうぃ → 光|ぃ)。つなげた読みは、その文節だけで変換し直す
     /// (こうぃ → コウィ。wi で打っていれば こゐ も候補に出る)。
     /// </summary>
-    private static IReadOnlyList<ConversionClause> JoinSmallKana(CompositionState state, IReadOnlyList<ConversionClause> parts, IKanjiConverter converter)
+    private static IReadOnlyList<ConversionClause> JoinSmallKana(IReadOnlyList<ConversionClause> parts, string before, IKanjiConverter converter)
     {
         if (!parts.Skip(1).Any(p => p.Reading.Length > 0 && KanaChars.IsSmallKana(p.Reading[0]))) return parts;
         var joined = new List<ConversionClause>();
@@ -691,7 +691,7 @@ internal static partial class CompositionController
             {
                 var reading = joined[^1].Reading + part.Reading;
                 // 変換しても漢字の後ろに小書きのかなが残る (光ぃ) なら、カタカナ (コウィ) にする。
-                var text = Convert(state, reading, converter);
+                var text = Convert(reading, before + string.Concat(joined.Take(joined.Count - 1).Select(c => c.Text)), converter);
                 if (Enumerable.Range(1, Math.Max(0, text.Length - 1)).Any(i => KanaChars.IsSmallKana(text[i]) && !IsKana(text[i - 1]))) text = CompositionText.ToKatakana(reading);
                 joined[^1] = new ConversionClause(reading, text);
             }
@@ -721,7 +721,7 @@ internal static partial class CompositionController
     private static List<string> JapaneseCandidates(CompositionState state, CompositionEnv env, string reading, string? inContext, IKanjiConverter converter)
     {
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
-        var standalone = inContext is null ? Convert(state, reading, converter) : Standalone(state, env, reading);
+        var standalone = inContext is null ? Convert(reading, state.PrecedingText, converter) : Standalone(state, env, reading);
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
         return DistinctShown(state, env, [inContext, .. env.Services.UserDictionary?.Lookup(reading) ?? [], standalone, .. env.Services.Candidates?.LookupWords(reading) ?? [],
@@ -964,7 +964,7 @@ internal static partial class CompositionController
         KeepTypedSymbols(state, [clause], clause.Reading);
     }
 
-    private static string Convert(CompositionState state, string kana, IKanjiConverter converter) => NormalizeHalfWidth(converter.Convert(kana, state.PrecedingText) ?? kana, kana);
+    private static string Convert(string kana, string? before, IKanjiConverter converter) => NormalizeHalfWidth(converter.Convert(kana, before) ?? kana, kana);
 
     /// <summary>
     /// 文の中での変換結果がある文節の候補に足す「その読みだけの変換」。Zenzai を使える変換エンジンでも Zenzai には頼まない (IStandaloneConverter)。
@@ -987,11 +987,11 @@ internal static partial class CompositionController
     /// ライブ変換: Space を押したときと同じく、文脈・手がかり辞書・学習を使って文節ごとに変換した結果を見せる。
     /// 打つたびに呼ばれるので、かな・文脈・学習の状態が同じならキャッシュを使う。
     /// </summary>
-    private static string LiveConvert(CompositionState state, CompositionEnv env, string kana, bool afterEnglish)
+    private static string LiveConvert(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
         // 記号 (～ ! ? …) は数えない。かなが短いうちに記号を足しただけで、的外れな漢字にしない (な～～～ が 名～～～ になっていた: issue #505)
         if (!CountsAsLive(kana)) return kana;
-        return string.Concat(LiveClauses(state, env, kana, afterEnglish).Select(c => c.Text));
+        return string.Concat(LiveClauses(state, env, kana, afterEnglish, before).Select(c => c.Text));
     }
 
     /// <summary>
@@ -1002,15 +1002,21 @@ internal static partial class CompositionController
         kana.Where((c, i) => IsKana(c) && !(i > 0 && KanaChars.IsSmallKana(c) && IsKana(kana[i - 1]))).Count() >= LiveConversionMinLength;
 
     /// <summary>ライブ変換の文節 (読みと変換した文字)。予測変換で最後の文節を探すときも、同じ打鍵で変換した結果を使う。</summary>
-    private static List<(string Reading, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish)
+    private static List<(string Reading, string Text)> LiveClauses(CompositionState state, CompositionEnv env, string kana, bool afterEnglish, string before)
     {
-        var key = string.Join("\u0001", kana, afterEnglish, state.PrecedingText, EnglishInComposition(state, env), state.FollowingText, env.Services.History?.Version);
+        var key = string.Join("\u0001", kana, afterEnglish, before, EnglishInComposition(state, env), state.FollowingText, env.Services.History?.Version);
         if (state.LiveCache.TryGetValue(key, out var cached)) return cached;
-        var clauses = WithoutWaiting(state, env, () => ConvertJapaneseSegment(state, env, kana, afterEnglish, env.Converter).Select(c => (c.Reading, c.Text)).ToList());
+        var clauses = WithoutWaiting(state, env, () => ConvertJapaneseSegment(state, env, kana, afterEnglish, before, env.Converter).Select(c => (c.Reading, c.Text)).ToList());
         if (state.LiveCache.Count > 256) state.LiveCache.Clear();
         state.LiveCache[key] = clauses;
         return clauses;
     }
+
+    /// <summary>
+    /// 変換ボックスの日本語の区間を変換するときの、キャレットの前の文字列: 入力欄のキャレットの前に、変換ボックスの中でその区間より前に出ている文字
+    /// (英語の区間は英字のまま) を足したもの (github + にpushした の に は、github の後ろとして変換する)。
+    /// </summary>
+    private static string SegmentBefore(CompositionState state, string inComposition) => (state.PrecedingText ?? "") + inComposition;
 
     private static T WithoutWaiting<T>(CompositionState state, CompositionEnv env, Func<T> convert) => env.Budget is null ? convert() : env.Budget.WithLimit(0, convert);
 
