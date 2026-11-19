@@ -14,5 +14,7 @@ charset = utf-8-bom
 [*.cs]
 indent_style = space
 indent_size = 4
+# .gitattributes と同じ LF。書かないと、Windows の dotnet format は CRLF に直そうとする
+end_of_line = lf
 # 対応表 (キーの表など) は 1 行に複数の項目を並べる
 csharp_new_line_before_members_in_object_initializers = false
