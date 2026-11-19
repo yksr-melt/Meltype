@@ -29,21 +29,67 @@ public interface IKanjiConverter
     string? Convert(string hiragana);
 
     /// <summary>
-    /// 文節に区切って変換する。区切れなければ null。context は直前の確定済みの文字列 (変換の文脈として使うだけで、結果には含めない)。
+    /// 文節に区切って変換する。区切れなければ null。before はキャレットの前の確定済みの文字列そのまま (変換の文脈として使うだけで、結果には含めない)。
+    /// どこまでをどう使うかは変換エンジンが決める (<see cref="PrecedingText"/>)。
     /// </summary>
-    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null);
+    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null);
 }
 
-/// <summary>
-/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
-/// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
-/// wideContext は、キャレットの前の日本語の文章 (文をまたいで最大 100 文字)。無ければ null。
-/// </summary>
-public interface IWideContextConverter
+/// <summary>キャレットの前の確定済みの文字列から、変換エンジンが文脈に使う部分を取り出す。</summary>
+internal static class PrecedingText
 {
-    string? Convert(string hiragana, string? wideContext);
+    /// <summary>Mozc の文脈: 同じ文の日本語の部分 (最大 10 文字)。前が日本語でなければ null。</summary>
+    public static string? Sentence(string? before)
+    {
+        if (string.IsNullOrEmpty(before) || CompositionController.LanguageOf(before) != false) return null;
+        var start = before.AsSpan().LastIndexOfAny(SentenceEndSearch);
+        var text = before[(start + 1)..].Trim();
+        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
+    }
 
-    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext);
+    /// <summary>
+    /// Zenzai の文脈: 改行を除いた、文をまたぐ日本語の文章 (最大 100 文字)。前が日本語でなければ null。
+    /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
+    /// </summary>
+    public static string? Passage(string? before)
+    {
+        var text = before?.Replace("\r", "").Replace("\n", "").Trim();
+        return string.IsNullOrEmpty(text) || CompositionController.LanguageOf(text) != false ? null : text.Length > 100 ? text[^100..] : text;
+    }
+
+    /// <summary>
+    /// 前の文脈が無いまま「に」で始まる読みを変換すると、変換エンジンは「に」を語の頭と読む (になってしまう → 担ってしまう)。
+    /// そのときに付ける仮の文脈「これ」(これ + になってしまう → になってしまう)。付けないなら null。
+    /// 「は」「で」なども助詞になりうるが、仮の文脈を付けると はしる → は知る のように崩れるので「に」だけ。
+    /// </summary>
+    public static string? ParticleNi(string hiragana) => StartsWithParticleNi(hiragana) ? "これ" : null;
+
+    /// <summary>
+    /// 「に」で始まる読みのうち、助詞の「に」に続くことが多い語 (なる・ついて・よって など) で始まるものか。
+    /// 「にわ (庭)」「にほん (日本)」のように「に」で始まる語まで仮の文脈で助詞と読ませると、
+    /// Zenzai が「に|ワニ|は」のように崩すので、助詞らしい続きのときだけにする。
+    /// </summary>
+    internal static bool StartsWithParticleNi(string kana)
+    {
+        if (kana.Length < 3 || kana[0] != 'に') return false;
+        var rest = kana.AsSpan(1);
+        foreach (var next in ParticleNiContinuations)
+        {
+            if (rest.StartsWith(next, StringComparison.Ordinal)) return true;
+        }
+        return false;
+    }
+
+    private static readonly string[] ParticleNiContinuations =
+    [
+        "なる", "なっ", "なり", "なら", "なれ", "なろ", "ついて", "ついての", "つき", "よっ", "よる", "より", "よれ",
+        "とって", "とっての", "たいし", "たいする", "かんし", "かんする", "おいて", "おける", "むけ", "むか", "わたっ", "わたる",
+        "あたっ", "あたり", "して", "した", "する", "すぎ", "さえ", "しか", "ちがい", "そって", "そう", "もとづ", "くらべ",
+        "かけ", "かわっ", "かわり", "ともな", "つれ", "あわせ", "おうじ", "はいっ", "いく", "いっ", "いれ", "いる", "いた",
+        "きた", "くる", "きて", "でき", "みえ", "きこえ", "かんじ", "おもえ",
+    ];
+
+    private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }
 
 /// <summary>
@@ -58,7 +104,7 @@ public interface IStandaloneConverter
 {
     string? ConvertStandalone(string hiragana);
 
-    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null);
+    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? before = null);
 }
 
 /// <summary>
@@ -110,6 +156,6 @@ public interface IBackgroundConverter
 /// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
 public interface ILearningConverter
 {
-    /// <summary>ユーザーが確定した文節 (読みと文字列、区切りも確定したとおり) を覚えさせる。context は直前の確定済みの文字列。</summary>
-    void Learn(string? context, IReadOnlyList<ConversionClause> clauses);
+    /// <summary>ユーザーが確定した文節 (読みと文字列、区切りも確定したとおり) を覚えさせる。before はキャレットの前の確定済みの文字列そのまま。</summary>
+    void Learn(string? before, IReadOnlyList<ConversionClause> clauses);
 }
