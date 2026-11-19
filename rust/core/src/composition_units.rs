@@ -145,18 +145,19 @@ impl Units {
                     break;
                 }
                 let letter = last.spelling.as_bytes()[0].to_ascii_lowercase();
-                // Keep the final g of an English -ing word when retyping wa/wo after an edit.
+                // Keep the final g of a recognized English word when retyping wa/wo after an edit.
                 if letter == b'g'
                     && (self.pending.is_empty() && text == "w"
                         || self.pending == "w" && matches!(text, "a" | "o"))
                 {
                     let stem = self.raw.strip_suffix(&self.pending).unwrap_or(&self.raw);
-                    if stem.ends_with("ing")
-                        && stem.char_indices().rev().take(40).any(|(i, _)| {
-                            let word = &stem[i..];
-                            word.len() > 3
-                                && crate::dictionary::Dictionary::bundled().known_english(word)
-                        })
+                    if crate::dictionary::Dictionary::bundled().known_english(stem)
+                        || stem.ends_with("ing")
+                            && stem.char_indices().rev().take(40).any(|(i, _)| {
+                                let word = &stem[i..];
+                                word.len() > 3
+                                    && crate::dictionary::Dictionary::bundled().known_english(word)
+                            })
                     {
                         break;
                     }
