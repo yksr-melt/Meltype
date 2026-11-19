@@ -143,7 +143,13 @@ var
   Parameters: String;
 begin
   ExtractTemporaryFiles('{app}\tip\Register-Tip.ps1');
+  // ソースから入れるとき (Install-Meltype.ps1) は、その PC に登録するアーキテクチャの DLL しか無い。無いものは展開しない (展開すると失敗する)
+#if DirExists(SourceDir + "\app\tip\x64")
   ExtractTemporaryFiles('{app}\tip\x64\*');
+#endif
+#if DirExists(SourceDir + "\app\tip\arm64")
+  ExtractTemporaryFiles('{app}\tip\arm64\*');
+#endif
   ExtractTemporaryFiles('{app}\tip\x86\*');
   ExtractTemporaryFiles('{app}\meltype-ime.ps1');
   ExtractTemporaryFiles('{app}\setup-ime.ps1');
