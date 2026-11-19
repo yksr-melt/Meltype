@@ -1,11 +1,12 @@
 # 端末版 (tui/) をビルドしてテストし、本体・Mozc・Zenzai を同梱した zip を Artifacts に置く。
-# 端末版・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき。
+# 端末版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。Pull Request では流さない。
 # リリースへの添付は release.yml。
 name: tui
 
 on:
-  pull_request:
-    paths: &paths
+  push:
+    branches: [main]
+    paths:
       - 'tui/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
@@ -23,9 +24,6 @@ on:
       - 'src/Directory.Build.targets'
       - 'src/Directory.Packages.props'
       - '.github/workflows/tui.yml'
-  push:
-    branches: [main]
-    paths: *paths
   workflow_dispatch:
   workflow_call:
 

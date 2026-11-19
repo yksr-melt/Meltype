@@ -1,11 +1,12 @@
 # Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
-# Mac 版・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき。
+# Mac 版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。Pull Request では流さない。
 # リリースへの添付と Homebrew の cask の更新は release.yml。
 name: mac
 
 on:
-  pull_request:
-    paths: &paths
+  push:
+    branches: [main]
+    paths:
       - 'mac/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
@@ -16,9 +17,6 @@ on:
       - 'tools/test-mac-boundaries.*'
       - 'tools/test-mac-events.*'
       - '.github/workflows/mac.yml'
-  push:
-    branches: [main]
-    paths: *paths
   workflow_dispatch:
   workflow_call:
 
@@ -70,10 +68,9 @@ jobs:
           chmod +x "$HOME/tools/bazelisk"
       - name: Build Mozc helper
         run: BAZEL="$HOME/tools/bazelisk" native/mozc/build-mozc-helper.sh "$HOME/mozc" "$HOME/bazel-cache"
-      # 配布用の署名 (Apple Developer Program の Developer ID の証明書があるときだけ。公証に時間がかかるので Pull Request ではしない)。秘密:
+      # 配布用の署名 (Apple Developer Program の Developer ID の証明書があるときだけ)。秘密:
       #   MAC_CERT_P12_BASE64 (証明書の .p12 を Base64 にしたもの)、MAC_CERT_PASSWORD、MAC_IDENTITY ("Developer ID Application: 名前 (チームID)")
       - name: Signing certificate
-        if: github.event_name != 'pull_request'
         env:
           MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
           MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
