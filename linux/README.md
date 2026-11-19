@@ -43,8 +43,8 @@ linux/build-cli.sh --install
 `+dev` の版は、同じ版のリリース版より新しい扱いになります。リリース版に戻すときは、ダウングレードを明示します。
 
 ```bash
-sudo apt install --allow-downgrades meltype=<版> meltype-common=<版>   # apt のリポジトリから。ファイルなら ./meltype-common_<版>_amd64.deb と ./meltype_<版>_amd64.deb
-sudo dnf downgrade meltype meltype-common                              # dnf のリポジトリから。ファイルなら ./meltype-common-<版>-1.x86_64.rpm・./meltype-<版>-1.x86_64.rpm・./meltype-fcitx5-<版>-1.x86_64.rpm
+sudo apt install --allow-downgrades meltype=<版>   # apt のリポジトリから。ファイルなら ./meltype_<版>_amd64.deb
+sudo dnf downgrade meltype                          # dnf のリポジトリから。ファイルなら ./meltype-<版>-1.x86_64.rpm と ./meltype-fcitx5-<版>-1.x86_64.rpm
 ```
 
 入力ソースの一覧に Meltype が出てこないときは、Linux のセッションを入り直してください。

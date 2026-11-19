@@ -4,47 +4,45 @@
 #
 # Build a signed, single-version apt repository for GitHub Pages.
 # Usage: APT_SIGNING_KEY_B64=... APT_SIGNING_KEY_PASSPHRASE=... \
-#        bash linux/build-apt-repository.sh <site-root> <.deb>...
-# Takes meltype-common, meltype and meltype-tty for both amd64 and arm64.
+#        bash linux/build-apt-repository.sh <amd64.deb> <arm64.deb> <site-root>
 set -euo pipefail
 
-if [[ $# -lt 2 ]]; then
-  echo "Usage: $0 <GitHub Pages site root> <.deb>..." >&2
+if [[ $# -ne 3 ]]; then
+  echo "Usage: $0 <amd64 .deb> <arm64 .deb> <GitHub Pages site root>" >&2
   exit 2
 fi
 
-site_root="$1"
-shift
-expected=(meltype-common.amd64 meltype-common.arm64 meltype.amd64 meltype.arm64 meltype-tty.amd64 meltype-tty.arm64)
-declare -A packages_found=()
+debs=("$1" "$2")
+site_root="$3"
+declare -A architectures=()
 apt_root="$site_root/apt"
 pool="$apt_root/pool/main/m/meltype"
 mkdir -p "$pool"
-find "$pool" -maxdepth 2 -type f -name 'meltype*.deb' -delete
+find "$pool" -maxdepth 2 -type f -name 'meltype_*.deb' -delete
 
-for deb in "$@"; do
+for deb in "${debs[@]}"; do
   if [[ ! -f "$deb" ]]; then
     echo "Error: .deb not found: $deb" >&2
     exit 1
   fi
+  package="$(dpkg-deb --field "$deb" Package)"
   architecture="$(dpkg-deb --field "$deb" Architecture)"
-  package="$(dpkg-deb --field "$deb" Package).$architecture"
-  if [[ " ${expected[*]} " != *" $package "* ]]; then
-    echo "Error: unexpected .deb: $package ($deb)." >&2
+  if [[ "$package" != meltype || ( "$architecture" != amd64 && "$architecture" != arm64 ) ]]; then
+    echo "Error: expected a Meltype amd64 or arm64 package; got $package ($architecture)." >&2
     exit 1
   fi
-  if [[ -n "${packages_found[$package]:-}" ]]; then
-    echo "Error: duplicate .deb for $package." >&2
+  if [[ -n "${architectures[$architecture]:-}" ]]; then
+    echo "Error: duplicate .deb for architecture $architecture." >&2
     exit 1
   fi
-  packages_found["$package"]=1
+  architectures["$architecture"]=1
   mkdir -p "$pool/$architecture"
   cp "$deb" "$pool/$architecture/"
 done
 
-for package in "${expected[@]}"; do
-  if [[ -z "${packages_found[$package]:-}" ]]; then
-    echo "Error: missing .deb for $package." >&2
+for architecture in amd64 arm64; do
+  if [[ -z "${architectures[$architecture]:-}" ]]; then
+    echo "Error: missing Meltype .deb for architecture $architecture." >&2
     exit 1
   fi
 done

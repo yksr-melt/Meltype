@@ -62,10 +62,10 @@ fi
 
 echo "== 3/4 組み立て"
 sed "s|@VERSION@|$version|g" "$here/meltype.xml" > "$out/meltype.xml"
-cp "$here/ibus-engine-meltype" "$root/tui/meltype-tty" "$here/meltype-settings" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$out/"
+cp "$here/ibus-engine-meltype" "$here/meltype-settings" "$here/ibus-setup-meltype.desktop" "$here/icon.png" "$out/"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$out/"
 cp "$mozc/meltype_mozc_helper" "$mozc/MOZC-LICENSE.txt" "$mozc/MOZC-CREDITS.html" "$out/mozc/"
-chmod +x "$out/ibus-engine-meltype" "$out/meltype-tty" "$out/meltype-settings" "$out/mozc/meltype_mozc_helper"
+chmod +x "$out/ibus-engine-meltype" "$out/meltype-settings" "$out/mozc/meltype_mozc_helper"
 
 echo "== 4/4 Zenzai"
 # llama.cpp の llama-server (MIT) と zenz-v3.2-small (Apache-2.0) を zenzai/ に同梱する (Windows の zenzai\・Mac と同じ)。
