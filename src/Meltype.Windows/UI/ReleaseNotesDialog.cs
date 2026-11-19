@@ -75,7 +75,8 @@ internal sealed class ReleaseNotesDialog : Form
         Controls.Add(buttons);
         AcceptButton = close;
         CancelButton = close;
-        // 本文の欄に最初のフォーカスが当たると、Windows が中身を全選択する。開いたときは「閉じる」に置く。
+        // WinForms の TextBox は、選択範囲をコードで指定していないと最初のフォーカスで中身を全選択する (TextBox.OnGotFocus)。
+        // 本文は RichTextBox に替えたので全選択は起きないが、開いたときは「閉じる」にフォーカスを置く。
         ActiveControl = close;
         Shown += (_, _) =>
         {

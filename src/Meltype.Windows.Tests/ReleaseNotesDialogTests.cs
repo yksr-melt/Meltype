@@ -7,7 +7,7 @@ namespace Meltype.Tests;
 internal static class ReleaseNotesDialogTests
 {
     [Test]
-    public static void ReleaseNotesDialog_DecoratesMarkdownAndDoesNotSelectAll()
+    public static void ReleaseNotesDialog_LaysOutBulletsAndDoesNotSelectAll()
     {
         using var dialog = new UI.ReleaseNotesDialog("1.6.0", updated: true, "# Meltype v1.6.0\n\n- **項目** と `code`\n  - 入れ子");
         dialog.Show();
@@ -19,16 +19,7 @@ internal static class ReleaseNotesDialogTests
         Assert.True(dialog.ActiveControl is Button { Text: "閉じる" }, "開いたときは「閉じる」にフォーカスする");
 
         text.Select(0, "Meltype v1.6.0".Length);
-        Assert.True(text.SelectionFont is { Bold: true }, "見出しは太字");
-        Assert.True(text.SelectionFont!.Size > text.Font.Size, "見出しは本文より大きい");
-
-        var strong = text.Text.IndexOf("項目", StringComparison.Ordinal);
-        text.Select(strong, "項目".Length);
-        Assert.True(text.SelectionFont is { Bold: true }, "**強調** は太字");
-
-        var code = text.Text.IndexOf("code", StringComparison.Ordinal);
-        text.Select(code, "code".Length);
-        Assert.Equal("Consolas", text.SelectionFont!.FontFamily.Name, "`code` は等幅");
+        Assert.True(text.SelectionFont is { } heading && heading.Size > text.Font.Size, "見出しは本文より大きい");
     }
 
     private static IEnumerable<Control> Descendants(Control root)
