@@ -422,7 +422,9 @@ internal sealed class CompositionService : IDisposable
         };
         Diagnostics.Log.Info($"変換ボックスを出す入力位置: {(caret is { } r ? $"{r.X},{r.Y} 高さ {r.Height}{(wholeField ? " (入力欄の枠)" : "")}" : "分からない")}");
         _window.SetFontFamily(_settings().CompositionFont);
-        _window.SetAppearance(_settings().CompositionIsLight(CompositionWindow.WindowsUsesLightTheme()), _settings().CompositionOpacityValue);
+        var settings = _settings();
+        _window.SetAppearance(settings.CompositionIsLight(CompositionWindow.WindowsUsesLightTheme()), settings.CompositionOpacityValue,
+            settings.CompositionCustomColors() is var ((br, bg, bb), (tr, tg, tb)) ? (Color.FromArgb(br, bg, bb), Color.FromArgb(tr, tg, tb)) : null);
         // 出すモニターの拡大率に合わせる (入力位置のモニター。分からなければ変換ボックスを置く位置のモニター)
         var monitorScale = MonitorScale(caret?.Location ?? FindAnchor(caret, caretSearched: true));
         _window.SetMonitorScale(monitorScale);

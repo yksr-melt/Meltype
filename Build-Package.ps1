@@ -6,7 +6,12 @@
 # -ReuseBuild を -Portable と一緒に付けると、直前に作った通常版の app を再利用する (CI 用)。
 # -Step Build は通常版の app を作って自己診断するところまで、-Step Sign はその app に署名してインストーラーを作るところだけを行う (CI 用)。
 # 署名の秘密 (MELTYPE_SIGN_PFX / MELTYPE_SIGN_PASSWORD) がある間に、ビルドしたもの (Meltype.exe・Mozc のヘルパー) を実行しないため。
-param([string]$Version = '', [switch]$Portable, [switch]$ReuseBuild, [ValidateSet('All', 'Build', 'Sign')][string]$Step = 'All')
+# 通常版には、いつも Meltype IME の DLL を入れる (ビルドに失敗したら止める)。-ImeArchitectures は、どのアーキテクチャの DLL を入れるかだけを決める。
+# 配布用は 3 つとも。Install-Meltype.ps1 は、その PC に登録するものだけ (x64 の PC に ARM64 のビルドツールを求めない)
+param(
+    [string]$Version = '', [switch]$Portable, [switch]$ReuseBuild, [ValidateSet('All', 'Build', 'Sign')][string]$Step = 'All',
+    [ValidateSet('x64', 'arm64', 'x86')][string[]]$ImeArchitectures = ('x64', 'arm64', 'x86')
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -24,6 +29,11 @@ $packageName = if ($Portable) { 'Meltype-portable' } else { 'Meltype' }
 $stage = Join-Path $dist $packageName
 $app = Join-Path $stage 'app'
 $stamp = Get-Date -Format 'yyyyMMdd-HHmm'
+# app に入れた Meltype IME の DLL (stub と impl。どのアーキテクチャを入れたかは -ImeArchitectures で決まるので、ファイルから読む)
+function Get-MeltypeImeDlls {
+    $tip = Join-Path $app 'tip'
+    if (Test-Path -LiteralPath $tip) { Get-ChildItem -LiteralPath $tip -Recurse -Include 'MeltypeTip.dll', 'MeltypeTipImpl.dll' -File | ForEach-Object { $_.FullName } }
+}
 $setupVersion = if ($Version) { $Version } else { "test-$stamp" }
 $zip = if ($Version) {
     if ($Portable) { Join-Path $dist "Meltype-$Version-windows-portable.zip" }
@@ -88,7 +98,6 @@ if ($Step -eq 'Sign') {
         throw '署名する通常版のビルドがありません。先に Build-Package.ps1 -Step Build を実行してください。'
     }
     $version = (Get-ChildItem (Join-Path $runtime 'shared\Microsoft.NETCore.App') -Directory | Sort-Object { [version]$_.Name } | Select-Object -Last 1).Name
-    $imeBuilt = Test-Path -LiteralPath (Join-Path $app 'tip')
 }
 else {
 dotnet publish (Join-Path $root 'src\Meltype.Windows\Meltype.Windows.csproj') -c Release -o $app -p:DebugType=none `
@@ -218,22 +227,15 @@ Invoke-SelfTest '読み込まれない部品も削った後' (Join-Path $app 'Me
 
 # Meltype IME (入力欄に直接入力する TSF の DLL)。ポータブル版は登録を行わないので含めない。
 $tip = Join-Path $app 'tip'
-$imeBuilt = $false
 if (-not $Portable) {
-    $imeBuilt = $true
-    try { & (Join-Path $root 'native\tip\build.ps1') -Configuration Release }
-    catch {
-        $imeBuilt = $false
-        Write-Warning "Meltype IME をビルドできないので、入れずに作ります: $($_.Exception.Message)"
+    # 1 つでもビルドに失敗したら止める (Meltype IME の欠けた通常版を作らない)
+    & (Join-Path $root 'native\tip\build.ps1') -Configuration Release -Architectures $ImeArchitectures
+    foreach ($arch in $ImeArchitectures) {
+        New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
+        Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
     }
-    if ($imeBuilt) {
-        foreach ($arch in 'x64', 'x86') {
-            New-Item -ItemType Directory -Force -Path (Join-Path $tip $arch) | Out-Null
-            Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
-        }
-        Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
-        Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
-    }
+    Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
+    Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
 }
 }
 if ($Step -eq 'Build') {
@@ -248,8 +250,8 @@ if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
     if (-not $signtool) { throw 'signtool.exe が見つかりません (Windows SDK が必要です)。' }
-    $targets = @('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe', 'tip\x64\MeltypeTip.dll', 'tip\x86\MeltypeTip.dll', 'tip\x64\MeltypeTipImpl.dll', 'tip\x86\MeltypeTipImpl.dll') |
-        ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ }
+    $targets = @(@('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe') |
+        ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ }) + @(Get-MeltypeImeDlls)
     & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $targets
     if ($LASTEXITCODE -ne 0) { throw "署名に失敗しました (exit code $LASTEXITCODE)。" }
     Write-Host "署名しました: $($targets.Count) 個のファイル"
@@ -261,8 +263,7 @@ else {
 # 配布する Meltype IME の DLL (署名した後) のハッシュ。インストールのとき、管理者として登録する前に、DLL が書き換えられていないかを確かめるのに使う。
 # (MeltypeTip.dll.sha256・MeltypeTipImpl.dll.sha256 は署名する前の中身のハッシュで、更新のときに「同じ DLL か」を比べるのに使う。
 #  MeltypeTipImpl.dll.sha256 は、インストール先の impl のフォルダー名と、Meltype.exe が要求の impl を照合するのにも使う)
-foreach ($relative in @(if ($imeBuilt) { 'x64\MeltypeTip.dll', 'x86\MeltypeTip.dll', 'x64\MeltypeTipImpl.dll', 'x86\MeltypeTipImpl.dll' })) {
-    $dll = Join-Path $app "tip\$relative"
+foreach ($dll in Get-MeltypeImeDlls) {
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try { $hash = [BitConverter]::ToString($sha.ComputeHash([IO.File]::ReadAllBytes($dll))).Replace('-', '') } finally { $sha.Dispose() }
     [IO.File]::WriteAllText("$dll.package.sha256", $hash)
