@@ -40,7 +40,7 @@ powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
 - Windows 10 / 11 (x64)、Windows 11 (ARM64)
 - .NET 10 SDK
 - Inno Setup 6 (インストーラーを作ります。無ければ Chocolatey で入れます)
-- Visual Studio (Build Tools でもよい) の「C++ によるデスクトップ開発」(Meltype IME の DLL を作ります。`-NoIme` なら要りません)
+- Visual Studio (Build Tools でもよい) の「C++ によるデスクトップ開発」(Meltype IME の DLL を作ります)
 
 Meltype IME の DLL と、それに要る Visual Studio Installer の「個別のコンポーネント」:
 
@@ -48,11 +48,10 @@ Meltype IME の DLL と、それに要る Visual Studio Installer の「個別�
 | --- | --- | --- |
 | x64 の PC で `Install-Meltype.ps1` | x64・x86 | MSVC x64/x86 ビルド ツール (最新)・Windows 11 SDK |
 | ARM64 の PC で `Install-Meltype.ps1` | ARM64X・x86 | 上に加えて MSVC ARM64/ARM64EC ビルド ツール (最新) |
-| `Install-Meltype.ps1 -NoIme` (Meltype IME を入れない) | 作らない | 要らない |
 | 配布用のパッケージ (`Build-Package.ps1`) | x64・ARM64X・x86 (1 つでも失敗したら止まる) | ARM64 の PC と同じ |
 | ポータブル版 (`Build-Package.ps1 -Portable`) | 作らない | 要らない |
 
-C++ のビルドツールが無いときは、`Install-Meltype.ps1 -NoIme` で Meltype IME を入れずにインストールできます (変換ボックスで入力する方式)。
+`Install-Meltype.ps1 -NoIme` も DLL を作って入れます (`-NoIme` は Meltype IME を新しく登録しないだけで、登録済みなら更新し、アンインストールで外すため)。
 
 `native\tip\build.ps1` は、ARM64 のビルドツールを `vswhere` でコンポーネント ID `Microsoft.VisualStudio.Component.VC.Tools.ARM64` から探します。
 これは「(最新)」の付いたコンポーネントで、版の付いた ARM64 ビルドツール (「v14.xx」など) だけを入れていると見つかりません。
