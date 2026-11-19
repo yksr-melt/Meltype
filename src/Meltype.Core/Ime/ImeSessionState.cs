@@ -11,6 +11,9 @@ namespace Meltype.Ime;
 /// <param name="Settings">設定 (config.json)。出来事の始めに 1 回読んだもの。アプリ別設定は入力欄のアプリで反映する。</param>
 internal sealed record ImeEnv(IImeEnvironment Environment, SessionParts Parts, Settings Settings)
 {
+    /// <summary>入力欄のアプリの設定 (アプリ別設定を反映したもの)。ImeSession の入口 (Handle・Close) で、入力欄が決まったら 1 回作る。</summary>
+    public Settings App { get; init; } = Settings;
+
     public UserDictionary? UserDictionary => Parts.Services.UserDictionary;
 
     public Func<long> TimeMs => Parts.TimeMs;
