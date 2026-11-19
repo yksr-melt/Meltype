@@ -9,6 +9,9 @@
     <Nullable>enable</Nullable>
     <!-- OS の API を COM の関数表で直接呼ぶため (NowPlaying/WindowsMediaSession.cs) -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Mac・Linux・Android 版では NativeAOT で動き、テストは JIT で動く。NativeAOT で動かないコード (reflection など) を
+         ふつうのビルドで trim・AOT のアナライザーの警告にし、lint の静的解析で Pull Request のうちに止める。 -->
+    <IsAotCompatible>true</IsAotCompatible>
     <AssemblyName>Meltype.Core</AssemblyName>
     <RootNamespace>Meltype</RootNamespace>
     <Version>1.6.0</Version>
