@@ -117,7 +117,7 @@ internal static partial class CompositionController
             var lower = typedRaw.ToLowerInvariant();
             List<string> registered = [.. env.Services.UserDictionary?.Lookup(lower) ?? [], .. env.Settings.ConsonantAbbreviations ? env.Services.Candidates?.Lookup(lower) ?? [] : []];
             var reading = RomajiReading(state, env, typedRaw);
-            List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, env.Converter);
+            List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, SegmentBefore(state, ""), env.Converter);
             List<string> english = [typedRaw, .. EnglishCandidates(state, env, typedRaw)];
             state.Clauses = [new Clause(typedRaw, true, preferJapanese
                 ? Distinct([.. registered, .. romaji, .. english])
@@ -172,7 +172,7 @@ internal static partial class CompositionController
                 if (segment.Raw.All(c => !char.IsLetterOrDigit(c)))
                     english = Distinct([.. english, .. env.Services.Candidates?.Lookup(segment.Raw) ?? []]);
                 var reading = RomajiReading(state, env, segment.Raw);
-                List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, converter);
+                List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, SegmentBefore(state, string.Concat(clauses.Select(c => c.Text))), converter);
                 clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
                     ? Distinct([.. romaji, .. english])
                     : Distinct([.. english, .. romaji]))
@@ -210,9 +210,9 @@ internal static partial class CompositionController
     /// <summary>Zenzai に頼まない変換 (<see cref="IStandaloneConverter"/>) を、変換エンジンとして使う。</summary>
     private sealed class WithoutZenzai(IStandaloneConverter standalone) : IKanjiConverter
     {
-        public string? Convert(string hiragana, string? before = null) => standalone.ConvertStandalone(hiragana);
+        public string? Convert(string hiragana, string? before) => standalone.ConvertStandalone(hiragana);
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null) => standalone.ConvertClausesStandalone(hiragana, before);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => standalone.ConvertClausesStandalone(hiragana, before);
     }
 
     /// <summary>
@@ -304,7 +304,7 @@ internal static partial class CompositionController
 
     private static Clause WholeClause(CompositionState state, CompositionEnv env, List<Clause> clauses, string reading)
     {
-        var clause = new Clause(reading, false, JapaneseCandidates(state, env, reading, string.Concat(clauses.Select(c => c.Text)), env.Converter)) { Raw = CompositionText.Raw(state.Text) };
+        var clause = new Clause(reading, false, JapaneseCandidates(state, env, reading, string.Concat(clauses.Select(c => c.Text)), null, env.Converter)) { Raw = CompositionText.Raw(state.Text) };
         // 文の中の文節と同じく、文脈の手がかりか、前に選び直した語を最初の候補にする (ConvertWithEngine)
         var surrounding = (state.PrecedingText ?? "") + EnglishInComposition(state, env) + (state.FollowingText ?? "");
         if ((env.Services.ContextRules?.Choose(reading, surrounding, clause.Text, text => Standalone(state, env, text)) ?? env.Learning.LearnedConversion(reading)) is { } preferred)
@@ -471,7 +471,7 @@ internal static partial class CompositionController
             var divided = env.Services.UserDictionary!.Clauses(reading, word);
             foreach (var (part, text) in divided)
             {
-                var clause = new Clause(part, false, JapaneseCandidates(state, env, part, text, converter));
+                var clause = new Clause(part, false, JapaneseCandidates(state, env, part, text, null, converter));
                 clauses.Add(clause);
                 // 区切りで分けた文節 (一|学期 の 一) は、学習と文脈の手がかりで選び直さない (いち で 市 を選んだことがあっても 一|学期 のまま)
                 (divided.Count == 1 ? registered : parts).Add(clause);
@@ -573,7 +573,7 @@ internal static partial class CompositionController
             parts = [new ConversionClause(kana, string.Concat(parts.Select(p => p.Text)))];
         }
         parts = JoinSmallKana(parts, before, converter);
-        var clauses = parts.Select(p => new Clause(p.Reading, false, JapaneseCandidates(state, env, p.Reading, NormalizeHalfWidth(p.Text, p.Reading), converter))
+        var clauses = parts.Select(p => new Clause(p.Reading, false, JapaneseCandidates(state, env, p.Reading, NormalizeHalfWidth(p.Text, p.Reading), null, converter))
         {
             ZenzaiText = p.Zenzai ? NormalizeHalfWidth(p.Text, p.Reading) : null,
         }).ToList();
@@ -718,10 +718,11 @@ internal static partial class CompositionController
     /// 1 つも後ろに押さないよう、その後ろに並べる。こうすれば誰にとっても困らないので、分野ごとに外す設定は作らない (#1650)。
     /// 絵文字・顔文字は最後に逆順で並べるので、変換してすぐ ↑ を押すと、いちばんよく使う絵文字 (えがお → 😊) になる (issue #133)。
     /// </summary>
-    private static List<string> JapaneseCandidates(CompositionState state, CompositionEnv env, string reading, string? inContext, IKanjiConverter converter)
+    /// before は、文の中での変換結果 (inContext) が無いときに、その読みだけの変換に渡す文脈 (<see cref="SegmentBefore"/>)。inContext があれば null。
+    private static List<string> JapaneseCandidates(CompositionState state, CompositionEnv env, string reading, string? inContext, string? before, IKanjiConverter converter)
     {
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)
-        var standalone = inContext is null ? Convert(reading, state.PrecedingText, converter) : Standalone(state, env, reading);
+        var standalone = inContext is null ? Convert(reading, before, converter) : Standalone(state, env, reading);
         var katakana = CompositionText.ToKatakana(reading);
         // ユーザー辞書に登録した単語は、文の中での変換結果の次に出す (文節の区切りを変えて読みが一致したときなど)。
         return DistinctShown(state, env, [inContext, .. env.Services.UserDictionary?.Lookup(reading) ?? [], standalone, .. env.Services.Candidates?.LookupWords(reading) ?? [],
@@ -905,8 +906,9 @@ internal static partial class CompositionController
         {
             current.Reading += next!.Reading[0];
             next.Reading = next.Reading[1..];
+            Reconvert(state, env, state.SelectedClause);
             if (next.Reading.Length == 0) state.Clauses.Remove(next);
-            else Reconvert(state, env, next);
+            else Reconvert(state, env, state.SelectedClause + 1);
         }
         else
         {
@@ -918,9 +920,9 @@ internal static partial class CompositionController
                 state.Clauses.Insert(state.SelectedClause + 1, next);
             }
             else next.Reading = moved + next.Reading;
-            Reconvert(state, env, next);
+            Reconvert(state, env, state.SelectedClause);
+            Reconvert(state, env, state.SelectedClause + 1);
         }
-        Reconvert(state, env, current);
         RestoreRaw(state, env);
     }
 
@@ -943,17 +945,18 @@ internal static partial class CompositionController
     private static bool ReadAsJapanese(CompositionState state, CompositionEnv env, int index)
     {
         if (!CanReadAsJapanese(state.Clauses[index])) return false;
-        var clause = new Clause(state.Clauses[index].Kana!, false, []);
-        Reconvert(state, env, clause);
-        state.Clauses[index] = clause;
+        state.Clauses[index] = new Clause(state.Clauses[index].Kana!, false, []);
+        Reconvert(state, env, index);
         return true;
     }
 
     private static bool CanReadAsJapanese(Clause clause) => clause is { IsEnglish: true, Kana: { } kana } && kana.Any(IsKana);
 
-    private static void Reconvert(CompositionState state, CompositionEnv env, Clause clause)
+    /// <summary>index の文節を、読みだけで変換し直す。文脈は、変換ボックスの中でその文節より前にある文字まで。</summary>
+    private static void Reconvert(CompositionState state, CompositionEnv env, int index)
     {
-        clause.Candidates = JapaneseCandidates(state, env, clause.Reading, null, env.Converter);
+        var clause = state.Clauses[index];
+        clause.Candidates = JapaneseCandidates(state, env, clause.Reading, null, SegmentBefore(state, string.Concat(state.Clauses.Take(index).Select(c => c.Text))), env.Converter);
         clause.Index = 0;
         clause.Changed = false;
         // 前の読みのもの。候補の一覧は、文節を選んだときに新しい読みで取り直す
@@ -972,7 +975,7 @@ internal static partial class CompositionController
     /// </summary>
     private static string Standalone(CompositionState state, CompositionEnv env, string kana)
     {
-        var converted = env.Converter is IStandaloneConverter standalone ? standalone.ConvertStandalone(kana) : env.Converter.Convert(kana);
+        var converted = env.Converter is IStandaloneConverter standalone ? standalone.ConvertStandalone(kana) : env.Converter.Convert(kana, null);
         return NormalizeHalfWidth(converted ?? kana, kana);
     }
 

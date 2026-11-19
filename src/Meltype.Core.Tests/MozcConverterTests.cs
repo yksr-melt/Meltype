@@ -88,16 +88,16 @@ internal static class MozcConverterTests
         // 起動しているあいだ (READY を待っているあいだ) の変換は、待たずに null を返す (呼び出し側はかなのまま見せる)
         mozc.WarmUp();
         var watch = Stopwatch.StartNew();
-        Assert.True(mozc.ConvertClauses("あ") is null, "起動を待たない");
+        Assert.True(mozc.ConvertClauses("あ", null) is null, "起動を待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動を待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(WaitConverted(mozc, "い"), "起動したら変換する");
 
         // ヘルパーが落ちたら、起動し直しを待たずに null を返し、起動し直したらまた変換する
         mozc.Budget.Start(5000);
-        Assert.True(mozc.ConvertClauses("おちる") is null, "落ちた");
+        Assert.True(mozc.ConvertClauses("おちる", null) is null, "落ちた");
         mozc.Budget.Start(0);
         watch.Restart();
-        Assert.True(mozc.ConvertClauses("う") is null, "起動し直しを待たない");
+        Assert.True(mozc.ConvertClauses("う", null) is null, "起動し直しを待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"起動し直しを待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(WaitConverted(mozc, "え"), "起動し直したら変換する");
         Assert.True(mozc.IsAvailable, "起動し直せたので使える");
@@ -158,7 +158,7 @@ internal static class MozcConverterTests
         Assert.True(helper.Requests.Contains("C\t〇〇\tになってしまう"), "○ などの記号も日本語の文脈として渡す: " + string.Join(" / ", helper.Requests));
         mozc.ConvertClauses("になってしまう", "Hello, ");
         Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "英語の後ろは文脈なし");
-        mozc.ConvertClauses("になってしまう");
+        mozc.ConvertClauses("になってしまう", null);
         Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "前の文脈が無ければ文脈なし");
     }
 
@@ -167,7 +167,7 @@ internal static class MozcConverterTests
         var watch = Stopwatch.StartNew();
         while (watch.ElapsedMilliseconds < 10000)
         {
-            if (mozc.ConvertClauses(reading) is { Count: 1 } clauses && clauses[0].Text == reading) return true;
+            if (mozc.ConvertClauses(reading, null) is { Count: 1 } clauses && clauses[0].Text == reading) return true;
             Thread.Sleep(50);
         }
         return false;

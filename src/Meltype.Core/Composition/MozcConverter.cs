@@ -52,10 +52,10 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3;
 
-    public string? Convert(string hiragana, string? before = null) =>
+    public string? Convert(string hiragana, string? before) =>
         ConvertClauses(hiragana, before) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null) =>
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
         ConvertWithCandidates(hiragana, before)?.Select(s => s.Clause).ToList();
 
     /// <summary>
@@ -65,7 +65,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、区切りまで変わるなら文脈なしを使う。前に同じ語があると、
     /// Mozc は文脈に引きずられて区切りを変えてしまうため (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
     /// </summary>
-    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? before = null) =>
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? before) =>
         WithContext(hiragana, before, Query);
 
     /// <summary>ConvertWithCandidates と同じ (前の文脈なし)。Budget を使わず、ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>

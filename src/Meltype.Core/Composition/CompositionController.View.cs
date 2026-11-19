@@ -102,7 +102,7 @@ internal static partial class CompositionController
         if (!env.Settings.ShowCandidatesWhileTyping || state.Text.Mode != DisplayMode.Auto || state.Text.KanaInput || CompositionText.IsAlphanumeric(state.Text, env) || CompositionText.IsEmpty(state.Text)) return null;
         var kana = CompositionText.AllKana(state.Text, env, final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = WithoutWaiting(state, env, () => JapaneseCandidates(state, env, kana, null, env.Converter).Take(5).ToList());
+        var candidates = WithoutWaiting(state, env, () => JapaneseCandidates(state, env, kana, null, SegmentBefore(state, ""), env.Converter).Take(5).ToList());
         return candidates.Count > 1 ? candidates : null;
     }
 

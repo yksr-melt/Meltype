@@ -26,13 +26,13 @@ internal static class JapaneseParticles
 public interface IKanjiConverter
 {
     /// <summary>全体を 1 回で変換する。変換できなければ null。before は <see cref="ConvertClauses"/> と同じ。</summary>
-    string? Convert(string hiragana, string? before = null);
+    string? Convert(string hiragana, string? before);
 
     /// <summary>
     /// 文節に区切って変換する。区切れなければ null。before はキャレットの前の確定済みの文字列そのまま (変換の文脈として使うだけで、結果には含めない)。
     /// どこまでをどう使うかは変換エンジンが決める (<see cref="PrecedingText"/>)。
     /// </summary>
-    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null);
+    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before);
 }
 
 /// <summary>キャレットの前の確定済みの文字列から、変換エンジンが文脈に使う部分を取り出す。</summary>
@@ -72,7 +72,7 @@ public interface IStandaloneConverter
 {
     string? ConvertStandalone(string hiragana);
 
-    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? before = null);
+    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? before);
 }
 
 /// <summary>

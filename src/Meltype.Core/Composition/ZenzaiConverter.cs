@@ -130,11 +130,11 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         lock (_gate) EnsureStarting();
     }
 
-    public string? Convert(string hiragana, string? before = null) =>
+    public string? Convert(string hiragana, string? before) =>
         ConvertClauses(hiragana, before) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
     /// <summary>文脈は、文をまたぐ文章 (<see cref="PrecedingText.Passage"/>)。無ければ「。」(文の始まり)。</summary>
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null)
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
     {
         ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;

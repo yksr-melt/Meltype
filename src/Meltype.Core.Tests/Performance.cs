@@ -357,9 +357,9 @@ internal static class Performance
             Calls = 0;
         }
 
-        public string? Convert(string hiragana, string? before = null) => Time(() => inner.Convert(hiragana, before));
+        public string? Convert(string hiragana, string? before) => Time(() => inner.Convert(hiragana, before));
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => Time(() => inner.ConvertClauses(hiragana, context));
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Time(() => inner.ConvertClauses(hiragana, before));
 
         private T Time<T>(Func<T> call)
         {
