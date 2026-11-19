@@ -184,6 +184,12 @@ public sealed partial class CompositionDetector
             return count;
         }
 
+        bool IsSingleKanaWord(LatticeEdge edge)
+        {
+            var word = text[edge.Start..edge.End];
+            return word.All(char.IsAsciiLetterLower) && _romaji.ConvertLenient(word, final: true) is { Length: 1 } kana && !char.IsAsciiLetter(kana[0]);
+        }
+
         // position の英字が、次の文字と同じ子音を重ねたもの (tt の t = っ)
         bool DoubledAt(int position) => position + 1 < length && char.IsAsciiLetter(text[position]) && char.ToLowerInvariant(text[position + 1]) == char.ToLowerInvariant(text[position]);
 
@@ -233,6 +239,9 @@ public sealed partial class CompositionDetector
                 if (state.Side == Side.Sentence) step += SentenceSwitchCost;
                 // 3 文字以上の英単語の後ろの、助詞と同じかなで始まる語 (java|のこ・java|でかく) も、助詞からの切り替えと同じ重みにする
                 // (日本語の道だけが の|こ を のこ にまとめられて、英語が負ける。so|ですか・ma|のなか のような 2 文字の語は除く)
+                // かな 1 音と同じ綴りの小文字の英単語 (hi = ひ・me = め) に付属語を続けた形 (hi|の) は、付属語でも切り替えを数える。
+                // 1 文字の日本語の語 (ひ = 1.5) は英単語 (1) より重いので、切り替えを数えないと ひの が hiの になる
+                else if (state.IsEnglish && edge.Particle && from.Edge.English && IsSingleKanaWord(from.Edge)) step += SwitchCost;
                 else if (state.IsEnglish && !edge.Particle &&
                          !(edge.Kana.Length > 1 && NounParticles.Contains(edge.Kana[..1]) && from.Edge.English && from.Edge.End - from.Edge.Start >= 3)) step += SwitchCost;
                 // 前の英語の文脈からの切り替えは、英語の語から始めた道も最初の日本語で数える (hello + sushi|が を すしが と同じ重さの差で比べる)

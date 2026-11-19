@@ -2228,6 +2228,25 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2003_SingleKanaEnglishWordBeforeParticle_IsJapanese()
+    {
+        // #2003: hi は ひ と同じ綴りの英単語で、ひの が hiの になっていた。1 文字の日本語の語は英単語より重く、付属語は切り替えを数えなかった。
+        foreach (var (typed, expected) in new[]
+        {
+            ("hinochikakuniatta", "ひのちかくにあった"),
+            ("hino", "ひの"),
+            // 英単語だけなら英語のまま。2 音以上の英単語の後ろの付属語も英語のまま
+            ("hi", "hi"),
+            ("githubno", "githubの"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void Issue1132_ShortEnglishThenJapanese()
     {
         // 短い英単語の後ろが読める日本語でも、#537 の補正で全文英字に戻っていた。
