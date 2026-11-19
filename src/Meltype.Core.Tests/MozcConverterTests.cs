@@ -164,6 +164,23 @@ internal static class MozcConverterTests
     }
 
     [Test]
+    public static void ParticleStart_ClauseCandidates_UseTheSameContext()
+    {
+        // 前の文脈が無いときの仮の文脈「これ」は、文の変換のほか、文節ごとの候補に足す「その読みだけの変換」にも付く。
+        // 文脈なしで変換した 担ってしまう を候補に出さない
+        var helper = new AnsweringHelper((context, reading) => reading switch
+        {
+            "になってしまう" => context == "これ" ? "になってしまう\x1fになってしまう" : "になってしまう\x1f担ってしまう",
+            _ => reading + '\x1f' + reading,
+        });
+        using var mozc = new MozcConverter(helper);
+        var session = new TestSession(() => new Config.Settings { LiveConversion = false }, new HybridConverter(mozc));
+        var view = SessionFacadeTests.Type(session, "ninatteshimau ")[^1].View;
+        Assert.Equal("になってしまう", view?.Text ?? "(なし)");
+        Assert.True(view is not null && !view.Candidates.Contains("担ってしまう"), "候補: " + string.Join(" / ", view?.Candidates ?? []));
+    }
+
+    [Test]
     public static void ZenzaiAnswer_IsCheckedTheSameWay_WhenConvertingAndWhenCleaningHistory()
     {
         // Zenzai の答え (に来て気づく) を Mozc の候補で確かめるとき、変換中と、起動時に変換履歴を掃除するとき (待つ版) で同じ文脈を渡す。
