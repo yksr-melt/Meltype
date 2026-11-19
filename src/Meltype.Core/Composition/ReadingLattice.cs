@@ -18,6 +18,9 @@ namespace Meltype.Composition;
 /// - 記号・数字の決まり (ドメイン・拡張子・ユーザー名・- の入った語・数字を挟んだ略語・英文の中の記号) は、コストで比べずにその区間を英語にする。
 /// - 技術用語の綴りのすぐ後ろが する の活用 (share|して・make|します) なら、その綴りを日本語の語 (しゃれ・まけ) として読まない (しゃれする・まけします は日本語でない)。ただし一段動詞の使役形 (make|させた) は日本語のまま。
 /// - ローマ字入力では 1 文字ずつを区切りの位置にする (単位の途中で区切れる: get|Element、medal|s|ha)。かな入力では打った単位の境目だけ。
+/// - english-words.txt にしかない語は、ローマ字の単位の子音と母音のあいだで終わらせない (tow|iru の wi、ne|led|aro の da)。
+///   日本語の側は母音から読み直すので語になりやすく (いる・ある)、子音を取られた単位 (うぃ) の語 (ウィルキンソン) が知らない外来語だと重みで負ける。
+///   english.txt などに選んで入れた語 (bug|aru) は、日本語の文の中で打つので切ってよい。
 /// </summary>
 public sealed partial class CompositionDetector
 {
@@ -248,7 +251,7 @@ public sealed partial class CompositionDetector
         {
             if (!IsBoundary(p)) continue;
             var japanese = JapaneseEdges(units, text, p, unitOf, unitsEnd, pending, kanaInput);
-            var english = EnglishEdges(text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
+            var english = EnglishEdges(text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true, position => position >= unitsEnd || unitAt[position] >= 0);
             var unit = p < unitsEnd ? unitAt[p] : -1;
             // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
             LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
@@ -586,7 +589,7 @@ public sealed partial class CompositionDetector
     /// start から始まる、綴りで決まる候補: 英語 (知っている英単語・知らない英字・短縮形) と、
     /// ユーザーがかなに直して覚えた語 (日本語の語として重み 1)。
     /// </summary>
-    private List<(LatticeEdge, double)> EnglishEdges(string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish)
+    private List<(LatticeEdge, double)> EnglishEdges(string text, int start, int[] unknown, bool kanaInput, bool manual, Func<int, bool> isBoundary, bool afterEnglish, Func<int, bool> unitBoundary)
     {
         var edges = new List<(LatticeEdge, double)>();
         if (!char.IsAsciiLetter(text[start])) return edges;
@@ -611,6 +614,8 @@ public sealed partial class CompositionDetector
                 cost = Memory?.Get(span.ToLowerInvariant()) == true ? LearnedEnglishCost
                     : ReadableEnglish.Value.ContainsWord(span.ToLowerInvariant()) ? ReadableEnglishCost : KnownEnglishCost;
                 if (kanaInput && span.Length >= 4) cost += KanaInputEnglishBias;
+                // english-words.txt にしかない語は、ローマ字の単位の子音までで終わらせない (tow|いる は wi の w を取る)
+                if (end < length && !unitBoundary(end) && "aiueo".Contains(text[end]) && Memory?.Get(span.ToLowerInvariant()) is null && !IsCuratedEnglishWord(span.ToLowerInvariant())) continue;
                 // 日本語由来の語 (suzuki・sushi) は、ローマ字で読んだかなも日本語の語として並べる
                 if (span.All(char.IsAsciiLetterLower) && IsJapaneseOriginWord(span) &&
                     _romaji.ConvertLenient(span, final: true) is var reading && reading.All(KanaChars.IsHiraganaOrLongMark))
@@ -669,10 +674,14 @@ public sealed partial class CompositionDetector
     {
         if (Memory?.Get(lower) is { } learned) return learned;
         if (lower.Length == 1) return lower is "a" or "i" or "u" or "r";
-        return _english.Words.ContainsWord(lower) || _proper.Contains(lower) || IsCommonEnglishWord(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
-            lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
-            IsPediaEnglishWord(lower);
+        return IsCuratedEnglishWord(lower) || IsCommonEnglishWord(lower);
     }
+
+    /// <summary>english-words.txt (SCOWL) 以外の、選んで入れた英単語の一覧にある語か (english.txt とその -s の形・固有名詞・english-readable.txt・-pedia)。</summary>
+    private bool IsCuratedEnglishWord(string lower) =>
+        _english.Words.ContainsWord(lower) || _proper.Contains(lower) || ReadableEnglish.Value.ContainsWord(lower) ||
+        lower.Length >= 4 && lower[^1] == 's' && _english.Words.ContainsWord(lower[..^1]) ||
+        IsPediaEnglishWord(lower);
 
     /// <summary>選んだ候補の並びを、英語・日本語の区間の並びにする (続いた日本語の候補は 1 つの区間にする。英語の候補は 1 つずつの区間)。</summary>
     private List<CompositionSegment> ToSegments(IReadOnlyList<CompositionUnit> units, string text, int[] unitAt, int unitsEnd, List<LatticeEdge> edges)

@@ -1686,4 +1686,21 @@ internal static class RomajiTypoTests
             Assert.Equal(expected, k.Host.Document, typed);
         }
     }
+
+    [Test]
+    public static void SpellCheckerOnlyWord_DoesNotTakeConsonantOfRomajiUnit()
+    {
+        // Issue #2029: english-words.txt にしかない語 (tow) が wi の w を取り、残りの i を いる と読んでいた (towいるキンソン)。
+        // 単位の境目で終わる語 (dot|wo) と、english.txt の語 (word|aru・word|ga) は英語のまま
+        foreach (var (typed, expected) in new[]
+        {
+            ("towirukinnsonn", "とうぃるきんそん"), ("fanntatowirukinnsonn", "ふぁんたとうぃるきんそん"), ("towiki", "とうぃき"), ("towiriamu", "とうぃりあむ"),
+            ("dotwo", "dotを"), ("wordaru", "wordある"), ("wordga", "wordが"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
 }
