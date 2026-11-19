@@ -120,6 +120,20 @@ fn issue_1113_muhenkan_cycles_width_without_committing_or_changing_default() {
 }
 
 #[test]
+fn muhenkan_from_conversion_or_explicit_english_restores_hiragana() {
+    for key in [0x20, 0x79] {
+        let mut s = Session::default();
+        s.settings
+            .set("MuhenkanKatakanaCycle", json!(true))
+            .unwrap();
+        type_text(&mut s, "nihongo");
+        s.key(key, 0, 0);
+        assert_eq!(s.key(0x1d, 0, 0).view.unwrap().text, "にほんご");
+        assert_eq!(s.key(0x1d, 0, 0).view.unwrap().text, "ニホンゴ");
+    }
+}
+
+#[test]
 fn issue_460_empty_numpad_passes_through_but_composing_numpad_is_input() {
     // 上流1.5.1: 何も打っていないときのテンキーは変換ボックスに入れない。
     for (vk, c) in [
@@ -294,4 +308,75 @@ fn issue_1011_continued_reading_does_not_keep_short_dictionary_expansion() {
     type_text(&mut s, "hennkannkouritugayokunai");
     assert!(!s.display(false).contains(phrase));
     assert!(!s.commit().commits[0].text.contains(phrase));
+}
+
+#[test]
+fn japanese_spellings_and_english_words_remain_distinguishable() {
+    let mut errors = Vec::new();
+    for (raw, expected) in [
+        ("kye", "きぇ"),
+        ("gwi", "ぐぃ"),
+        ("zwa", "ずぁ"),
+        ("fya", "ふゃ"),
+        ("mye", "みぇ"),
+        ("syi", "しぃ"),
+        ("ryi", "りぃ"),
+        ("hwa", "ふぁ"),
+        ("hye", "ひぇ"),
+        ("swe", "すぇ"),
+        ("gwo", "ぐぉ"),
+        ("dwo", "どぉ"),
+    ]
+    .into_iter()
+    .chain(
+        [
+            "trying", "swan", "swine", "highway", "pathway", "hyena", "babying", "studying", "two",
+            "network", "bye", "rye",
+        ]
+        .map(|word| (word, word)),
+    ) {
+        let mut s = Session::default();
+        type_text(&mut s, raw);
+        let shown = s.display(false);
+        let committed = s.commit().commits[0].text.clone();
+        if shown != expected || committed != expected {
+            errors.push((raw, shown, committed));
+        }
+    }
+    assert!(errors.is_empty(), "{errors:?}");
+}
+
+#[test]
+fn japanese_irekata_keeps_its_reading_before_particles() {
+    for (raw, reading) in [
+        ("irekatawo", "いれかたを"),
+        ("irekataga", "いれかたが"),
+        ("irete", "いれて"),
+        ("fire", "fire"),
+    ] {
+        let mut session = Session::default();
+        type_text(&mut session, raw);
+        assert_eq!(session.display(false), reading, "{raw}");
+    }
+}
+
+#[cfg(feature = "bundled-mozc")]
+#[test]
+fn mobile_offline_dictionary_converts_and_commits_without_an_engine() {
+    let mut session = Session::default();
+    type_text(&mut session, "irekatawo");
+    let result = session.key(32, 32, 0);
+    assert_eq!(result.view.unwrap().text, "入れ方を");
+    assert_eq!(session.commit().commits[0].text, "入れ方を");
+}
+
+#[test]
+fn editing_a_particle_preserves_the_english_word_before_it() {
+    let mut session = Session::default();
+    type_text(&mut session, "ashitanomeetingwa");
+    assert_eq!(session.display(false), "あしたのmeetingわ");
+    session.key(8, 0, 0);
+    type_text(&mut session, "wo");
+    assert_eq!(session.display(false), "あしたのmeetingを");
+    assert_eq!(session.commit().commits[0].text, "あしたのmeetingを");
 }

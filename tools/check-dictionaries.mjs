@@ -54,6 +54,14 @@ const formats = {
   'translations.txt': tabbed(3, 3, ([, kind]) => [['n', 'na', 'i', 'v', 'adv'].includes(kind) ? null : `品詞「${kind}」が n / na / i / v / adv でない`]),
   'meanings.txt': tabbed(3, 3, ([, reading]) => [reading === '' || hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   'readings.txt': tabbed(1, 2, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  'kanji-parts.txt': tabbed(2, 2, ([kanji, parts]) => [
+    [...kanji].length === 1 ? null : '漢字は1文字にしてください',
+    parts.split(' ').every(part => [...part].length === 1) ? null : '要素は1文字ずつ空白で区切ってください',
+  ]),
+  'radicals.txt': tabbed(2, 2, ([name, part]) => [
+    hiragana.test(name) ? null : '呼び名はひらがなにしてください',
+    [...part].length === 1 ? null : '要素は1文字にしてください',
+  ]),
   'emoji.txt': tabbed(2, 99, () => []),
   'emoji-cldr.txt': tabbed(2, 99, () => []),
 };

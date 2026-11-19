@@ -25,22 +25,22 @@ const report = message => { diagnostic = message; console.warn("Meltype:", messa
 const controller = available ? new ImeController({
   ime: chrome.input.ime, report, incognito: chrome.extension?.inIncognitoContext === true,
   resolveMode: context => profiles.resolve(context),
-  convert: async (core,result) => {
-    if (!shunti?.ready) return result;
-    const request = JSON.parse(core.ai_request());
-    if (!request) return result;
-    try {
-      const candidates = await shunti.convert(request[0],request[1]);
-      if (candidates.length && core.ai_apply(request[0],JSON.stringify(candidates))) return {...result,view:JSON.parse(core.view()).view};
-    } catch (error) { report(`shunti: ${error}`); }
-    return result;
+  convert: async ([reading, context]) => {
+    const model = shunti;
+    if (!model?.ready) return [];
+    const candidates = await model.convert(reading, context);
+    return model === shunti ? candidates : [];
+  },
+  loadDictionary: async () => {
+    const dictionary = await fetch(chrome.runtime.getURL("pkg/kanji.bin"), {integrity: BrowserSession.dictionary_integrity()});
+    if (!dictionary.ok) throw new Error("漢字辞書を読み込めません。拡張機能のフォルダーを全体更新してください。");
+    BrowserSession.load_verified_dictionary(new Uint8Array(await dictionary.arrayBuffer()));
   },
   load: async () => {
-    const saved = await chrome.storage.local.get("snapshot");
-    await init({module_or_path: chrome.runtime.getURL("pkg/meltype_browser_bg.wasm")});
-    const dictionary = await fetch(chrome.runtime.getURL("pkg/kanji.bin"));
-    if (!dictionary.ok) throw new Error("漢字辞書を読み込めません。拡張機能のフォルダーを全体更新してください。");
-    BrowserSession.load_dictionary(new Uint8Array(await dictionary.arrayBuffer()));
+    const [saved] = await Promise.all([
+      chrome.storage.local.get("snapshot"),
+      init({module_or_path: chrome.runtime.getURL("pkg/meltype_browser_bg.wasm")}),
+    ]);
     // Invalid data is preserved. Never silently replace it with defaults.
     const core = new BrowserSession(saved.snapshot ?? "");
     prepareAI(core);
@@ -48,7 +48,7 @@ const controller = available ? new ImeController({
     core.focusIfNeeded = (generation, learning) => {
       if (focusedGeneration !== generation) { core.focus(learning); focusedGeneration = generation; }
     };
-    diagnostic = "Rust Core・漢字辞書起動済み。ChromeOSの入力方法にMeltype-FLASH（日本語配列）またはMeltype-FLASH（US配列）を追加してください。";
+    diagnostic = "Rust Core起動済み。ChromeOSの入力方法にMeltype-FLASH（日本語配列）またはMeltype-FLASH（US配列）を追加してください。";
     return core;
   },
   persist: snapshot => chrome.storage.local.set({snapshot}),

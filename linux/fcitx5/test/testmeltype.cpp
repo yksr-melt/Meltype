@@ -108,6 +108,22 @@ void scheduleEvent(EventDispatcher *dispatcher, Instance *instance) {
         ic->setCapabilityFlags(originalCaps);
 #endif
 
+#ifdef MELTYPE_RUST_CORE
+        for (const auto &program : {"kscreenlocker_greet", "chromium"}) {
+            const auto field = frontend->call<ITestFrontend::createInputContext>(program);
+            auto *context = instance->inputContextManager().findByUUID(field);
+            context->setCapabilityFlags(CapabilityFlags{CapabilityFlag::Sensitive});
+            context->focusIn();
+            instance->setCurrentInputMethod(context, "meltype", true);
+            typeKeys(frontend, field, "ka");
+            const bool lockScreen = std::string(program) == "kscreenlocker_greet";
+            FCITX_ASSERT(context->inputPanel().preedit().toString() == (lockScreen ? "" : "か")) << program;
+            if (!lockScreen) frontend->call<ITestFrontend::pushCommitExpectation>("か");
+            typeKeys(frontend, field, "\n");
+            context->focusOut();
+        }
+#endif
+
         dispatcher->schedule([dispatcher, instance]() {
             dispatcher->detach();
             instance->exit();

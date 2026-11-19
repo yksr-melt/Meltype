@@ -7,8 +7,8 @@ settings:
   base:
     SWIFT_VERSION: '5.0'
     ARCHS: arm64
-    MARKETING_VERSION: '1.1.24'
-    CURRENT_PROJECT_VERSION: '30'
+    MARKETING_VERSION: '1.1.25'
+    CURRENT_PROJECT_VERSION: '31'
     CODE_SIGNING_ALLOWED: NO
     MELTYPE_APP_GROUP: group.com.appipinopi.meltypeflash
 # 利用状況の集計 (Aptabase)。0.4.0 以降を使う。版を固定するときは exactVersion にする。
@@ -20,7 +20,7 @@ targets:
   MeltypeFlash:
     type: application
     platform: iOS
-    sources: [AISettings.swift, AISettingsViewController.swift, Analytics.swift, CurrencySettings.swift, CurrencySettingsViewController.swift, ../rust/ai/packages.json, ../rust/ai/model-catalog.json, App.swift, AppStyle.swift, MeltypeTextView.swift, KeyboardAppearance.swift, AppearanceViewController.swift, KeyboardDemoViewController.swift, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, Assets.xcassets]
+    sources: [../native/mozc/portable/NOTICES.txt, AISettings.swift, AISettingsViewController.swift, Analytics.swift, CurrencySettings.swift, CurrencySettingsViewController.swift, ../rust/ai/packages.json, ../rust/ai/model-catalog.json, App.swift, AppStyle.swift, MeltypeTextView.swift, KeyboardAppearance.swift, AppearanceViewController.swift, KeyboardDemoViewController.swift, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, Assets.xcassets]
     entitlements:
       path: generated/App.entitlements
       properties:
@@ -49,7 +49,7 @@ targets:
   MeltypeFlashKeyboard:
     type: app-extension
     platform: iOS
-    sources: [AISettings.swift, CurrencySettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift]
+    sources: [../native/mozc/portable/NOTICES.txt, AISettings.swift, CurrencySettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift]
     entitlements:
       path: generated/Keyboard.entitlements
       properties:
@@ -90,7 +90,7 @@ targets:
   KeyboardTests:
     type: bundle.unit-test
     platform: iOS
-    sources: [AISettings.swift, AISettingsTests.swift, CurrencySettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift, MeltypeTextView.swift, KeyboardTests.swift]
+    sources: [../native/mozc/portable/NOTICES.txt, AISettings.swift, AISettingsTests.swift, CurrencySettings.swift, ../rust/ai/model-catalog.json, KeyboardViewController.swift, KeyboardEditing.swift, FlickKey.swift, KeyboardAppearance.swift, MeltypeTextView.swift, KeyboardTests.swift]
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES

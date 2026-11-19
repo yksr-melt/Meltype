@@ -150,3 +150,6 @@ nikon
 
 # Issue #1005: ドキュメントの途中から英語を切り出さない。
 dokyumento
+
+# 「入れ方を」「入れて」で英単語 ire を切り出さない。
+irekata irete iremasu iremasita iremashita iremasen

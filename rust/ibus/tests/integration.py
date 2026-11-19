@@ -373,6 +373,23 @@ class EngineTests(unittest.TestCase):
         self.type("ka")
         self.assertEqual(self.marked, "か")
 
+    def test_literal_fields_bypass_input_and_restore_normal_composition(self):
+        for purpose in (IBus.InputPurpose.DIGITS, IBus.InputPurpose.NUMBER,
+                        IBus.InputPurpose.PHONE, IBus.InputPurpose.EMAIL):
+            with self.subTest(purpose=purpose):
+                self.type("ka")
+                self.assertEqual(self.marked, "か")
+                self.context.set_content_type(int(purpose), 0)
+                pump()
+                requests = self.context_requests
+                self.assertFalse(any(self.type("a2")))
+                self.assertEqual(self.marked, "")
+                self.assertEqual(self.context_requests, requests)
+                self.context.set_content_type(int(IBus.InputPurpose.FREE_FORM), 0)
+                pump()
+        self.type("na")
+        self.assertEqual(self.marked, "な")
+
     def test_private_hint_preserves_conversion_without_learning(self):
         self.context.set_content_type(int(IBus.InputPurpose.FREE_FORM), 1 << 11)
         pump()
@@ -509,6 +526,21 @@ class EngineTests(unittest.TestCase):
         self.assertTrue(self.key(IBus.KEY_space, state=shift))
         self.assertTrue(all(self.type("nihongo")))
         self.assertEqual(self.marked, "にほんご")
+
+    def test_async_conversion_publishes_candidates_and_space_selects_next(self):
+        path = self.root / "data/config.json"
+        original = path.read_text(encoding="utf-8")
+        self.addCleanup(path.write_text, original, encoding="utf-8")
+        path.write_text(json.dumps(dict(json.loads(original), AsyncConversion=True)), encoding="utf-8")
+        self.type("hashi")
+        self.assertTrue(self.key(IBus.KEY_space))
+        wait(lambda: len(self.candidates) > 1, "asynchronous candidates")
+        selected = self.selected_candidate
+        self.assertTrue(self.key(IBus.KEY_space))
+        self.assertNotEqual(self.selected_candidate, selected)
+        self.assertEqual(self.document, "")
+        self.key(IBus.KEY_Return)
+        self.assertTrue(self.document)
 
     def test_issue_1113_muhenkan_cycles_katakana_without_mode_change(self):
         path = self.root / "data/config.json"

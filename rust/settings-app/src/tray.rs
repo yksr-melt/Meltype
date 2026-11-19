@@ -6,7 +6,7 @@ use crate::{
     windows_services::{self, Hotkey},
 };
 use eframe::egui;
-use meltype_core::{settings::Settings, storage::Store};
+use meltype_core::{ai_model::AiModel, settings::Settings, storage::Store};
 use std::sync::mpsc::{self, Receiver};
 use tray_icon::{
     menu::{CheckMenuItem, Menu, MenuEvent, MenuId, MenuItem, PredefinedMenuItem, Submenu},
@@ -43,6 +43,26 @@ enum Event {
     Menu(MenuId),
     Toggle,
 }
+fn ai_status_text(settings: &Settings) -> String {
+    let model = AiModel::selected(settings);
+    if model == AiModel::None {
+        return "AI変換: 使用しない".into();
+    }
+    let configured = if model == AiModel::Shunti {
+        settings.boolean("UseShunti") && !settings.text("ShuntiHelperPath").is_empty()
+    } else {
+        settings.boolean("UseZenzai")
+            && !settings.text("ZenzaiServerPath").is_empty()
+            && !settings.text("ZenzaiModelPath").is_empty()
+    };
+    let status = if configured {
+        "設定済み"
+    } else {
+        "設定を確認"
+    };
+    format!("AI変換: {}（{status}）", model.label())
+}
+
 pub struct Tray {
     stop_event: crate::tray_control::StopEvent,
     // Drop the subclass/hotkey before dropping its tray-owned native window.
@@ -54,7 +74,7 @@ pub struct Tray {
     ime_mode: CheckMenuItem,
     keyboard_mode: CheckMenuItem,
     auto_detection: CheckMenuItem,
-    zenzai: MenuItem,
+    ai_status: MenuItem,
     auto_update: CheckMenuItem,
     profiles: Submenu,
     profile_items: Vec<(String, CheckMenuItem)>,
@@ -86,7 +106,7 @@ impl Tray {
             .map_err(|_| "トレイは既に起動しています。設定画面を開きました。".to_owned())?;
         let menu = Menu::new();
         let status = MenuItem::new("Meltype-FLASH", false, None);
-        let zenzai = MenuItem::new("Zenzai", false, None);
+        let ai_status = MenuItem::new(ai_status_text(settings), false, None);
         let enabled = CheckMenuItem::new(
             "Meltype-FLASH を有効にする",
             true,
@@ -94,7 +114,7 @@ impl Tray {
             None,
         );
         menu.append(&status).map_err(|e| e.to_string())?;
-        menu.append(&zenzai).map_err(|e| e.to_string())?;
+        menu.append(&ai_status).map_err(|e| e.to_string())?;
         menu.append(&PredefinedMenuItem::separator())
             .map_err(|e| e.to_string())?;
         menu.append(&enabled).map_err(|e| e.to_string())?;
@@ -258,7 +278,7 @@ impl Tray {
             ime_mode,
             keyboard_mode,
             auto_detection,
-            zenzai,
+            ai_status,
             auto_update,
             profiles,
             profile_items: vec![],
@@ -339,15 +359,7 @@ impl Tray {
         self.auto_update.set_checked(settings.boolean("AutoUpdate"));
         self.auto_detection
             .set_checked(settings.text("DetectionLevel") != "Manual");
-        self.zenzai.set_text(if !settings.boolean("UseZenzai") {
-            "Zenzai: 使っていません".to_owned()
-        } else if settings.text("ZenzaiServerPath").is_empty()
-            || settings.text("ZenzaiModelPath").is_empty()
-        {
-            "Zenzai: 設定を確認".to_owned()
-        } else {
-            "Zenzai: 使えます".to_owned()
-        });
+        self.ai_status.set_text(ai_status_text(settings));
         self.profiles
             .set_text(format!("プロファイル: {}", settings.text("ActiveProfile")));
         let names: Vec<String> = settings.0["Profiles"]
@@ -524,6 +536,29 @@ fn text_icon(enabled: bool) -> Result<Icon, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn status_identifies_the_selected_model_even_with_shared_backend_flags() {
+        let mut settings = Settings::default();
+        for model in AiModel::ALL {
+            model.select(&mut settings, false);
+            if model == AiModel::None {
+                assert_eq!(ai_status_text(&settings), "AI変換: 使用しない");
+                continue;
+            }
+            assert_eq!(
+                ai_status_text(&settings),
+                format!("AI変換: {}（設定を確認）", model.label())
+            );
+            model.select(&mut settings, true);
+            for key in ["ShuntiHelperPath", "ZenzaiServerPath", "ZenzaiModelPath"] {
+                settings.set(key, serde_json::json!("path")).unwrap();
+            }
+            assert_eq!(
+                ai_status_text(&settings),
+                format!("AI変換: {}（設定済み）", model.label())
+            );
+        }
+    }
     #[test]
     fn tray_actions_write_shared_store_and_merge_with_an_open_settings_window() {
         let dir = tempfile::tempdir().unwrap();

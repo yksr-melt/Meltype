@@ -14,13 +14,17 @@ Meltype-FLASH 1.1.19で、上流 [v1.6.0](https://github.com/yksr-melt/Meltype/r
 | 法令名の読み（#1650） | 上流の辞書のまま。大きいツをっにした読み（あんままっさーじ…）で引け、改題前の題名の読みでは引けないことを試験で確かめる |
 | 辞書のライセンス | `THIRD-PARTY-NOTICES.md` に分野の辞書と国名の語の出典・ライセンスを足した。`tools/check-dictionaries.mjs` は `countries.txt` と `domain-*.txt` の形式を確かめる |
 
+## 1.1.25で追加したもの
+
+- 設定画面の「適用」で、ウィンドウを開いたまま変更を保存できる（#1853）。
+- ChromeOS・Android・iOSにMozcの語彙と接続コストを同梱。OSにMozc本体がなくてもオフラインで漢字変換できる。ChromeOSでは辞書をWASM側で受け取る際の全体コピーを1回省いた。
+
 ## 移植していないもの
 
 | 対象 | 扱い |
 | --- | --- |
 | 変換エンジンを全OSでMozc＋Zenzaiに統一（#1749） | 対象外。FlashはMozc・Zenzai・shuntelligenceなどを設定「AIモデル」で選ぶ独自の構成なので、「変換エンジン」設定とOS側の変換エンジンは残す |
 | Windowsでゲームの中でもIMEを使えるようにする（#1805・#1859） | 未移植。FlashのTSF・macOS・IBusの各入力層はゲームの判定と英数への切り替えを受け持っていない。ゲームでは止める既存の設定（`StopInGames`）のまま |
-| Windows設定画面の「適用」ボタン（#1853） | 対象外。Flashの設定画面は変更のたびに保存する |
 | 前の版のIMEが残っているアプリへの再起動の案内（#1844） | 未移植。WindowsのTSF側の作業になる |
 | WindowsキーボードのShift記号の修正（#1836） | 未移植。Flashのキーボード方式はC#版とは別の実装 |
 | Macの最低macOS 13.3・azooKeyの除去（#1749） | 対象外。FlashのMac版は独自の実装で、azooKeyを同梱していない |

@@ -126,6 +126,25 @@ impl Dictionary {
         if !raw.bytes().all(|b| b.is_ascii_alphabetic()) || raw.is_empty() {
             return self.composition(raw, final_input, before, after, level);
         }
+        // A plural followed by the particle wo can look like the syllable swo.
+        // Keep the scored English word intact while the particle is being typed.
+        if level != "Manual" {
+            if let Some((stem, particle)) = raw
+                .strip_suffix("wo")
+                .map(|s| (s, "を"))
+                .or_else(|| raw.strip_suffix('w').map(|s| (s, "w")))
+                .filter(|(stem, _)| stem.ends_with('s'))
+            {
+                let previous = self.composition_scored(stem, false, before, after, level);
+                let word = previous
+                    .rsplit(|c: char| !c.is_ascii_alphabetic())
+                    .next()
+                    .unwrap_or("");
+                if word.len() >= 3 && self.scored_known(word) {
+                    return previous + particle;
+                }
+            }
+        }
         if level != "Manual" {
             if let Some(mixed) = self.english_particle_pair(raw) {
                 return mixed;

@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "Meltype-FLASH for ChromeOS",
   "description": "日本語と英語を自動判定するChromeOS向け日本語入力。",
-  "version": "1.1.24",
-  "version_name": "1.1.24",
+  "version": "1.1.25",
+  "version_name": "1.1.25",
   "minimum_chrome_version": "119",
   "permissions": [
     "alarms",

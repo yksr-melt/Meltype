@@ -7,3 +7,9 @@ meta
 
 # Issue #1377: pre単独は英字。presidentなどの入力途中を切り出さない。
 pre
+
+# Keep whole English words when the same keys also spell extended kana (#1464).
+swan
+two
+bye
+rye

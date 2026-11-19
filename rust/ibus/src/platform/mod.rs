@@ -104,7 +104,6 @@ unsafe extern "C" fn initialize(engine: Obj, _class: Obj) {
             connect(engine, c"focus-in-id", focus_in_id as *const c_void);
             connect(engine, c"focus-out-id", focus_out_id as *const c_void);
         }
-        connect(engine, c"enable", enable as *const c_void);
         connect(engine, c"set-capabilities", capabilities as *const c_void);
         connect(engine, c"set-content-type", content_type as *const c_void);
         connect(engine, c"candidate-clicked", candidate as *const c_void);
@@ -461,7 +460,7 @@ unsafe extern "C" fn process_key(
         // IBus reports key release with IBUS_RELEASE_MASK. Forward it to the
         // core so NICOLA press/release-order chording and thumb taps work.
         with(engine, |s| {
-            if s.session.is_null() {
+            if s.session.is_null() || s.private {
                 return 0;
             }
             if let Some((vk, ch)) = crate::keys::translate(keyval, ibus_keyval_to_unicode(keyval)) {
@@ -477,10 +476,10 @@ unsafe extern "C" fn process_key(
         return 0;
     }
     with(engine, |s| {
-        if s.session.is_null() {
+        if s.session.is_null() || s.private {
             return 0;
         }
-        if !s.direct && !s.private {
+        if !s.direct {
             let role = match keyval {
                 0xff23 => Some(0x1c),
                 0xff22 => Some(0x1d),
@@ -495,15 +494,13 @@ unsafe extern "C" fn process_key(
                 }
             }
         }
-        if !s.private {
-            if let Some(vk) = crate::keys::mode_key(keyval, ibus_keyval_to_unicode(keyval), state) {
-                let pointer =
-                    native::meltype_mode_key(s.session, vk, crate::keys::modifiers(state));
-                if !pointer.is_null() {
-                    s.apply(engine, result(pointer));
-                    s.direct = native::meltype_input_mode(s.session) == 1;
-                    return 1;
-                }
+        if let Some(vk) = crate::keys::mode_key(keyval, ibus_keyval_to_unicode(keyval), state) {
+            let pointer =
+                native::meltype_mode_key(s.session, vk, crate::keys::modifiers(state));
+            if !pointer.is_null() {
+                s.apply(engine, result(pointer));
+                s.direct = native::meltype_input_mode(s.session) == 1;
+                return 1;
             }
         }
         match crate::keys::translate(keyval, ibus_keyval_to_unicode(keyval)) {
@@ -523,18 +520,6 @@ unsafe extern "C" fn flush(engine: Obj, _data: Obj) {
         s.direct = native::meltype_input_mode(s.session) == 1;
     });
 }
-unsafe extern "C" fn enable(engine: Obj, _data: Obj) {
-    with(engine, |s| {
-        if !s.private {
-            ibus_engine_get_surrounding_text(
-                engine,
-                ptr::null_mut(),
-                ptr::null_mut(),
-                ptr::null_mut(),
-            );
-        }
-    });
-}
 unsafe extern "C" fn capabilities(engine: Obj, caps: u32, _data: Obj) {
     with(engine, |s| {
         s.caps = caps;
@@ -543,7 +528,8 @@ unsafe extern "C" fn capabilities(engine: Obj, caps: u32, _data: Obj) {
 }
 unsafe extern "C" fn content_type(engine: Obj, purpose: u32, hints: u32, _data: Obj) {
     with(engine, |s| {
-        let private = matches!(purpose, 8 | 9) || hints & (1 << 12) != 0;
+        // IBus DIGITS, NUMBER, PHONE, EMAIL, PASSWORD and PIN expect literal input.
+        let private = matches!(purpose, 2 | 3 | 4 | 6 | 8 | 9) || hints & (1 << 12) != 0;
         let no_learning = private || hints & (1 << 11) != 0;
         if private != s.private || no_learning != s.no_learning {
             s.hide(engine);

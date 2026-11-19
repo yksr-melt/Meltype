@@ -11,6 +11,17 @@ fn main() {
         PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("../../dictionaries");
     let output = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     println!("cargo:rerun-if-changed={}", directory.display());
+    if matches!(
+        env::var("CARGO_CFG_TARGET_OS").as_deref(),
+        Ok("android" | "ios")
+    ) || env::var_os("CARGO_FEATURE_BUNDLED_MOZC").is_some()
+    {
+        let packed = directory.join("../native/mozc/portable/kanji.bin.gz");
+        println!("cargo:rerun-if-changed={}", packed.display());
+        let mut decoder = flate2::read::GzDecoder::new(fs::File::open(packed).unwrap());
+        let mut dictionary = fs::File::create(output.join("kanji.bin")).unwrap();
+        std::io::copy(&mut decoder, &mut dictionary).unwrap();
+    }
     let mut texts = std::collections::BTreeMap::new();
     for entry in fs::read_dir(&directory).unwrap() {
         let path = entry.unwrap().path();
@@ -62,6 +73,21 @@ fn main() {
         .filter(|line| !line.starts_with('#'))
         .filter_map(|line| line.split_whitespace().next())
         .collect();
+    let common: BTreeSet<_> = texts["readings.txt"]
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    let mut radical_names = String::new();
+    for line in texts["radicals.txt"]
+        .lines()
+        .filter(|line| !line.starts_with('#'))
+    {
+        if let Some((name, part)) = line.split_once('\t') {
+            radical_names.push_str(&format!("{name}\t{part}\t{}\n", !common.contains(name)));
+        }
+    }
+    fs::write(output.join("radical-names.txt"), radical_names).unwrap();
     let kana = fst::Set::from_iter(readings).unwrap();
     fs::write(output.join("kana.fst"), kana.as_fst().as_bytes()).unwrap();
     for name in ["english", "japanese", "common", "proper"] {

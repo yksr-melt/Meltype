@@ -195,7 +195,7 @@ struct CommittedInput {
 
 pub struct Session {
     v130: v130::State,
-    profile_dictionary: Option<Dictionary>,
+    profile_dictionary: Option<std::sync::Arc<Dictionary>>,
     candidate_sources: std::sync::Arc<crate::candidate_sources::Sources>,
     profile_misspellings: Option<Linguistics>,
     probe_cache: std::sync::Arc<romaji::probes::Cache>,
@@ -345,7 +345,7 @@ impl Default for Session {
 impl Session {
     fn dictionary(&self) -> &Dictionary {
         self.profile_dictionary
-            .as_ref()
+            .as_deref()
             .unwrap_or_else(|| Dictionary::bundled())
     }
     #[cfg(feature = "filesystem")]
@@ -361,7 +361,8 @@ impl Session {
             };
         let mut hook_session = crate::input_session::InputSession::default();
         let profile_dictionary =
-            Dictionary::profile(&store.directory.join("dictionaries"), custom_romaji.clone());
+            Dictionary::profile(&store.directory.join("dictionaries"), custom_romaji.clone())
+                .map(std::sync::Arc::new);
         hook_session.set_model(state.prefix_model.clone());
         let skk_directory = store.directory.join("dictionaries");
         let skk_user = crate::skk::Dictionary::load_user(&skk_directory);
@@ -436,7 +437,8 @@ impl Session {
                 self.profile_dictionary = Dictionary::profile(
                     &store.directory.join("dictionaries"),
                     self.custom_romaji.clone(),
-                );
+                )
+                .map(std::sync::Arc::new);
                 let skk_directory = store.directory.join("dictionaries");
                 self.skk_user = crate::skk::Dictionary::load_user(&skk_directory);
                 self.skk_dictionary = crate::skk::Dictionary::load_dir(&skk_directory);
@@ -2040,6 +2042,13 @@ impl Session {
         // platform adapter declines converter calls because Enabled is false
         // while an already-open composition is being edited.
         if external.is_empty() && !self.external_converter_only {
+            #[cfg(any(target_os = "android", target_os = "ios", feature = "bundled-mozc"))]
+            if reading.chars().any(crate::linguistics::kana) {
+                let clauses = crate::portable_mozc::bundled().clauses(self, &reading);
+                if self.begin_clauses(clauses) {
+                    return;
+                }
+            }
             let mut runs: Vec<(bool, String)> = Vec::new();
             for c in reading.chars() {
                 let english = c.is_ascii_alphabetic();
@@ -2130,6 +2139,7 @@ impl Session {
             unique.retain(|candidate| candidate != &shown);
             unique.insert(0, shown);
         }
+        crate::kanji_parts::prepend(crate::kanji_parts::find(&reading), &mut unique);
         if let Some(learned) = self
             .preferences
             .selected
@@ -2293,18 +2303,23 @@ impl Session {
             return true;
         }
         let _romaji = romaji::Scope::new(self.custom_romaji.clone());
+        let whole_reading: String = clauses
+            .iter()
+            .map(|clause| clause.reading.as_str())
+            .collect();
         if self.raw.is_empty()
             || clauses.is_empty()
             || clauses.iter().any(|c| {
                 c.reading.is_empty() || c.candidates.is_empty() || c.selected >= c.candidates.len()
             })
-            || clauses
-                .iter()
-                .map(|c| c.reading.as_str())
-                .collect::<String>()
-                != self.conversion_reading()
+            || whole_reading != self.conversion_reading()
         {
             return false;
+        }
+        let radical_candidates = crate::kanji_parts::find(&whole_reading);
+        if !radical_candidates.is_empty() && clauses.len() > 1 {
+            let rendered: String = clauses.iter().map(Clause::text).collect();
+            clauses = vec![Clause::new(whole_reading, vec![rendered])];
         }
         let mut divided = Vec::new();
         let mut phrase_parts = Vec::new();
@@ -2601,6 +2616,10 @@ impl Session {
             clauses[0].candidates.insert(0, shown);
             clauses[0].selected = 0;
         }
+        if clauses.len() == 1 && !radical_candidates.is_empty() {
+            crate::kanji_parts::prepend(radical_candidates, &mut clauses[0].candidates);
+            clauses[0].selected = 0;
+        }
         self.rank_clauses(&mut clauses);
         self.live_clauses.clear();
         self.clauses = clauses;
@@ -2700,29 +2719,54 @@ impl Session {
         }
     }
     fn local_clause_with_external(&self, reading: String, external: Vec<String>) -> Clause {
+        self.prepare_local_clause(reading, external)()
+    }
+
+    fn prepare_local_clause(
+        &self,
+        reading: String,
+        external: Vec<String>,
+    ) -> impl FnOnce() -> Clause + Send + 'static {
         let mut candidates = self
             .preferences
             .user_dictionary
             .get(&reading)
             .cloned()
             .unwrap_or_default();
-        candidates.extend(external);
-        if !self.external_converter_only {
-            // 「ばーじょん」には OS とフロント (IME方式・キーボード方式) も書く (#1868)
-            let front = self.version_front(&reading);
-            candidates.extend(self.dictionary().candidates_with_front(
-                &reading,
-                self.settings.text("TimeZone"),
-                &front,
-                &crate::currency::Currency::from_settings(&self.settings),
-            ));
-            candidates.extend(Linguistics::bundled().words(&reading));
+        let learned = self.preferences.selected.get(&reading).cloned();
+        let local = (!self.external_converter_only).then(|| {
+            (
+                self.profile_dictionary.clone(),
+                self.settings.text("TimeZone").to_owned(),
+                self.version_front(&reading),
+                crate::currency::Currency::from_settings(&self.settings),
+            )
+        });
+        move || {
+            candidates.extend(external);
+            if let Some((profile, timezone, front, currency)) = local {
+                let dictionary = profile.as_deref().unwrap_or_else(|| Dictionary::bundled());
+                candidates.extend(
+                    dictionary.candidates_with_front(&reading, &timezone, &front, &currency),
+                );
+                candidates.extend(Linguistics::bundled().words(&reading));
+            }
+            if let Some(learned) = learned {
+                candidates.insert(0, learned);
+            }
+            Clause::new(reading, candidates)
         }
-        if let Some(learned) = self.preferences.selected.get(&reading) {
-            candidates.insert(0, learned.clone());
-        }
-        Clause::new(reading, candidates)
     }
+
+    /// Snapshot just the selected reading's inputs so lookup can run outside the session lock.
+    pub fn prepare_dictionary_candidates(
+        &self,
+        reading: String,
+    ) -> impl FnOnce() -> Vec<String> + Send + 'static {
+        let lookup = self.prepare_local_clause(reading, Vec::new());
+        move || lookup().candidates
+    }
+
     fn resize_clause(&mut self, grow: bool) {
         let index = self.selected_clause;
         let Some(current) = self.clauses.get(index) else {
@@ -3263,16 +3307,25 @@ impl Session {
                 self.begin_conversion(vec![]);
                 self.result(true)
             }
-            0x1d if self.settings.boolean("MuhenkanKatakanaCycle") && !self.raw.is_empty() => self
-                .key(
-                    match self.function_key {
-                        0x76 => 0x77,
-                        0x77 => 0x75,
-                        _ => 0x76,
-                    },
-                    0,
-                    modifiers,
-                ),
+            0x1d if self.settings.boolean("MuhenkanKatakanaCycle")
+                && !self.raw.is_empty()
+                && !self.protects_tail() =>
+            {
+                let next = match self.function_key {
+                    _ if self.is_converting() => 0x75,
+                    0x75 => 0x76,
+                    0x76 => 0x77,
+                    0 if self
+                        .display(false)
+                        .chars()
+                        .any(|c| matches!(c, 'ぁ'..='ゖ' | 'ゝ' | 'ゞ' | 'ー')) =>
+                    {
+                        0x76
+                    }
+                    _ => 0x75,
+                };
+                self.key(next, 0, modifiers)
+            }
             0x1d if self.settings.boolean("SeparateKeyRoles") && !self.raw.is_empty() => {
                 self.key(0x79, 0, modifiers)
             }

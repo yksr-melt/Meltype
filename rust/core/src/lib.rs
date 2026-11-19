@@ -20,6 +20,7 @@ pub mod input_session;
 pub mod kana;
 pub mod kana_layout;
 mod kana_layout_data;
+mod kanji_parts;
 #[cfg(feature = "filesystem")]
 pub mod keycount;
 mod language_memory;
@@ -29,6 +30,7 @@ pub mod mozc;
 pub mod number_candidates;
 mod phrase_spacing;
 pub mod plausible;
+pub mod portable_mozc;
 pub mod prefix_learning;
 pub mod protection;
 pub mod romaji;

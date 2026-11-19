@@ -66,3 +66,19 @@ fn cancellation_and_timeout_never_apply_results() {
     assert!(!session.complete_async_conversion(id, vec!["柿".into()]));
     assert!(!session.try_apply_async_conversion("かき", vec!["柿".into()]));
 }
+
+#[test]
+fn pending_dictionary_lookup_uses_the_requesting_sessions_words() {
+    let mut session = Session::default();
+    session
+        .preferences
+        .user_dictionary
+        .insert("はし".into(), vec!["登録した橋".into()]);
+    let expected = session.dictionary_candidates("はし");
+    let lookup = session.prepare_dictionary_candidates("はし".into());
+    session.preferences.user_dictionary.clear();
+    drop(session);
+    let actual = std::thread::spawn(lookup).join().unwrap();
+    assert_eq!(actual, expected);
+    assert!(actual.contains(&"登録した橋".to_owned()));
+}

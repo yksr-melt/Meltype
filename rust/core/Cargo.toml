@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [features]
+bundled-mozc = []
 default = ["filesystem"]
 filesystem = ["dep:tempfile", "dep:fs2", "dep:rusqlite"]
 
@@ -29,4 +30,5 @@ rusqlite = { version = "0.37", features = ["bundled"], optional = true }
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "wasmbind"] }
 
 [build-dependencies]
+flate2 = "1"
 fst = "0.4.7"
