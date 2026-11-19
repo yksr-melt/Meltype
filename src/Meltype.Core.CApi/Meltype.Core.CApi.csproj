@@ -4,6 +4,7 @@
     NativeAOT の共有ライブラリにする (mac/build.sh・native/build-core-linux.sh・android/tools/build-meltype-native.sh):
       dotnet publish src/Meltype.Core.CApi -c Release -r osx-arm64 -p:PublishAot=true -p:NativeLib=Shared
     PublishAot はここには書かない (書くと Windows でのふつうのビルドでも NuGet から AOT のコンパイラを取りに行くため)。
+    IsAotCompatible も同じ理由で書かない (NuGet から trim・AOT のアナライザーを取りに行く)。.github/workflows/lint.yml が付けてビルドする。
   -->
   <PropertyGroup>
     <OutputType>Library</OutputType>
