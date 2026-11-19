@@ -13,18 +13,12 @@ internal static class UtilityConversionTests
     private static readonly DateTime Tuesday = new(2026, 11, 10, 20, 5, 0);
 
     /// <summary>決めた文節に区切る変換エンジン。</summary>
-    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter, ILearningConverter
+    private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
     {
         private readonly FakeConverter _inner = new();
-        public List<string> Learned { get; } = [];
         public string? Convert(string hiragana) => ConvertClauses(hiragana) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana);
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
             clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
-
-        public void Learn(string? context, IReadOnlyList<ConversionClause> learned)
-        {
-            lock (Learned) Learned.Add(string.Join("|", learned.Select(c => $"{c.Reading}={c.Text}")));
-        }
     }
 
     /// <summary>変換して、候補の一覧を広げてから text を選んで確定する。</summary>
@@ -124,19 +118,6 @@ internal static class UtilityConversionTests
         var weekday = new Keyboard(history: history, moreCandidates: reading => reading == "かようび" ? ["火曜日"] : [], now: () => Tuesday);
         Choose(weekday, "kayoubi", "火曜日");
         Assert.Equal("火曜日", history.Get("かようび"), "読みに ようび がある 火曜日 は覚える");
-    }
-
-    [Test]
-    public static void DigitsNotInTheReading_AreLeftToTheEngineToLearn()
-    {
-        // いちばん → 1番 は Meltype の変換履歴には覚えないが、Mozc には覚えさせる (Mozc は日時の候補を自分で学習しない)
-        var history = new ConversionHistory(null);
-        var converter = new SplitConverter([]);
-        var k = new Keyboard(converter: converter, history: history, moreCandidates: reading => reading == "いちばん" ? ["一番", "1番"] : []);
-        Choose(k, "itiban", "1番");
-        Assert.True(history.Get("いちばん") is null, "Meltype の変換履歴には覚えない");
-        for (var i = 0; i < 100 && converter.Learned.Count == 0; i++) Thread.Sleep(10);
-        lock (converter.Learned) Assert.Equal("いちばん=1番", converter.Learned.SingleOrDefault() ?? "(なし)");
     }
 
     [Test]

@@ -10,7 +10,7 @@ namespace Meltype.Composition;
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
+    : IKanjiConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
 {
     /// <summary>Zenzai に渡す広い文脈 (Mozc には渡さない)。</summary>
     public string? WideContext { get; set; }
@@ -112,7 +112,6 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// (Zenzai の結果は読み全体で 1 つの文節で、区切りを動かせないため)。
     /// 違う文字列でも、Mozc の文節ごとの候補を 1 つずつ選んでつなげると作れるなら、Mozc の文節の区切りで返す (Align)。
     /// 1 つの文節のままだと、文節ごとに候補を選び直せず、前に選び直して覚えた変換 (文節の読みごと) も効かない。
-    /// Mozc の文節で返した結果は、確定すると Mozc にも覚えさせる (Mozc の候補に無い 1 つの文節は、Mozc が覚えない)。
     /// Mozc の候補で作れない答えは、かなが読みと合うときだけ使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
     /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
     /// </summary>
@@ -172,9 +171,6 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
             return false;
         }
     }
-
-    /// <summary>確定した文節を Mozc に覚えさせる。</summary>
-    public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => mozc.Learn(context, clauses);
 
     /// <summary>読みの候補の一覧 (Mozc)。</summary>
     public IReadOnlyList<string> Candidates(string reading) => mozc.Candidates(reading);

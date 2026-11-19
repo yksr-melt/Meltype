@@ -8,7 +8,6 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.ExtractedText
 import android.view.inputmethod.ExtractedTextRequest
 import androidx.test.platform.app.InstrumentationRegistry
-import io.github.ninjin0802.keyboard.mozc.MozcClause
 import io.github.ninjin0802.keyboard.mozc.MozcBackend
 import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import java.io.File
@@ -39,7 +38,6 @@ internal object DeviceTestCore {
             in byClause -> listOf(MozcSegment(reading, byClause.getValue(reading)))
             else -> emptyList()
         }
-        override fun learn(clauses: List<MozcClause>, context: String?) = false
         override fun reading(text: String): String? = null
     }
 

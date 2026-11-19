@@ -104,10 +104,3 @@ public interface IBackgroundConverter
     /// </summary>
     event Action? ResultReady;
 }
-
-/// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
-public interface ILearningConverter
-{
-    /// <summary>ユーザーが確定した文節 (読みと文字列、区切りも確定したとおり) を覚えさせる。context は直前の確定済みの文字列。</summary>
-    void Learn(string? context, IReadOnlyList<ConversionClause> clauses);
-}

@@ -56,6 +56,21 @@ internal static class RuntimeTests
     }
 
     [Test]
+    public static void Issue2014_MozcLearningOfOlderVersions_IsDiscarded()
+    {
+        // 前の版が Mozc に覚えさせた区切り (boundary.db・segment.db) は、読みを誤った位置で区切る変換 (しょうひ → ショウ日) を固定する。変換エンジンを作るときに捨てる
+        WithRuntime((runtime, directory) =>
+        {
+            var profile = Path.Combine(directory, "mozc");
+            Directory.CreateDirectory(profile);
+            File.WriteAllText(Path.Combine(profile, "boundary.db"), "");
+            File.WriteAllText(Path.Combine(profile, "segment.db"), "");
+            runtime.CreateConverter(Path.Combine(directory, "app-without-helpers"));
+            Assert.True(!Directory.Exists(profile) || Directory.GetFileSystemEntries(profile).Length == 0, "前の版の Mozc の学習データを捨てる");
+        });
+    }
+
+    [Test]
     public static void DirectModeDetection_ReturnsRomajiToJapanese()
     {
         // 英数状態で打ち始めた語がローマ字なら日本語に戻す (設定「英数状態で自動判定」)。Mac・Linux ではまだ判定しない (#1724)

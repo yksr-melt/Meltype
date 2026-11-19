@@ -112,7 +112,7 @@ public sealed class MeltypeRuntime : IDisposable
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
+        var mozc = new MozcConverter(new MozcHelperProcess(helper, MozcProfile()));
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);
@@ -122,6 +122,26 @@ public sealed class MeltypeRuntime : IDisposable
             : zenzai.Get("", ""), zenzai.Failed);
         ForgetZenzaiHallucinations(converter);
         return converter;
+    }
+
+    /// <summary>
+    /// Mozc のユーザーデータの場所。Meltype は Mozc に学習させないので、起動のたびに空にする。
+    /// 前の版が Mozc に覚えさせた文節の区切りと候補 (boundary.db・segment.db など) は、読みを誤った位置で区切る変換を固定するので捨てる (issue #2014)。
+    /// 場所は残す (渡さないと、Mozc は入れてある Mozc のユーザーデータを読む)。
+    /// </summary>
+    private string MozcProfile()
+    {
+        var profile = Path.Combine(DataDirectory, "mozc");
+        try
+        {
+            if (Directory.Exists(profile)) Directory.Delete(profile, recursive: true);
+        }
+        catch (IOException ex)
+        {
+            // 強制終了された Meltype の変換ヘルパーがまだファイルを開いている (Windows)。次に起動したときに消す
+            Diagnostics.Log.Warn($"前の版の Mozc の学習データを消せませんでした: {ex.Message}");
+        }
+        return profile;
     }
 
     /// <summary>Zenzai を使わない変換エンジン (Android。llama-server を同梱していない)。mozcHelper はアプリのプロセスの Mozc。</summary>

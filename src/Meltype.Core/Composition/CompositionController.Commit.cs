@@ -151,7 +151,7 @@ public sealed partial class CompositionController
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     private void LearnClauses()
     {
-        if (Learning) _learning.Learn(_clauses, ConversionContext());
+        if (Learning) _learning.Learn(_clauses);
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>

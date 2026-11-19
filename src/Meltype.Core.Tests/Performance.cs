@@ -344,7 +344,7 @@ internal static class Performance
         }
     }
 
-    /// <summary>変換エンジンを呼んだ回数と時間を数える (覚えさせない: ILearningConverter を持たない)。</summary>
+    /// <summary>変換エンジンを呼んだ回数と時間を数える。</summary>
     private sealed class TimedConverter(IKanjiConverter inner) : IKanjiConverter
     {
         private long _ticks;

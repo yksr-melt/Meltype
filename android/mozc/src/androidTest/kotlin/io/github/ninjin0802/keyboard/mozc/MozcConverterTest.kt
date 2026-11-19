@@ -9,7 +9,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.RandomAccessFile
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -125,37 +124,10 @@ class MozcConverterTest {
         timed.assertSessionDeleted()
     }
 
-    @Test fun learned_candidate_becomes_first() {
-        val second = converter.convert("こうえん", null)!!.single().candidates[1]
-        repeat(3) { assertTrue(converter.learn(listOf(MozcClause("こうえん", second)), null)) }
-        assertEquals(second, text("こうえん"))
-    }
-
-    @Test fun learn_with_unknown_text_changes_nothing() {
-        val before = text("こうえん")
-        assertFalse(converter.learn(listOf(MozcClause("こうえん", "存在しない表記")), null))
-        assertEquals(before, text("こうえん"))
-    }
-
-    @Test fun learns_every_clause_of_a_sentence() {
-        val reading = "あめがふる"
-        val chosen = converter.convert(reading, null)!!.map { MozcClause(it.reading, it.candidates[1]) }
-        assertTrue(chosen.size > 1)
-        repeat(3) { converter.learn(chosen, null) }
-        assertEquals(chosen.joinToString("") { it.text }, text(reading))
-    }
-
-    @Test fun learn_with_other_clause_boundaries_changes_nothing() {
-        val before = converter.convert("あめがふる", null)
-        converter.learn(listOf(MozcClause("あめ", "飴"), MozcClause("がふる", "がふる")), null)
-        assertEquals(before, converter.convert("あめがふる", null))
-    }
-
     @Test fun init_fails_returns_null() {
         val c = MozcConverter(null)
         assertNull(c.convert("あめ", null))
         assertNull(c.reading("雨"))
-        assertFalse(c.learn(listOf(MozcClause("あめ", "雨")), null))
     }
 
     // 動いている Mozc が使っている辞書を壊さないよう、別の場所で確かめる。

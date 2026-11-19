@@ -200,10 +200,10 @@ internal static class Henkan
     private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
     private const int MaxKeys = 300;
 
-    /// <summary>Mozc の学習データの場所。bot が同時にいくつも動かすので、プロセスごとに分ける (終わったら消す)。</summary>
+    /// <summary>Mozc のユーザーデータの場所。bot が同時にいくつも動かすので、プロセスごとに分ける (終わったら消す)。</summary>
     private static readonly string ProfileDirectory = Path.Combine(Path.GetTempPath(), $"meltype-henkan-mozc-{Environment.ProcessId}");
 
-    /// <summary>終わるときに、Mozc の変換ヘルパーを止めて、学習データの場所を消す。</summary>
+    /// <summary>終わるときに、Mozc の変換ヘルパーを止めて、ユーザーデータの場所を消す。</summary>
     public static void Shutdown()
     {
         if (Mozc.IsValueCreated) Mozc.Value?.Dispose();
@@ -219,7 +219,7 @@ internal static class Henkan
 
     private static readonly Lazy<Composition.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Composition.MozcConverter(new WithoutLearning(new Composition.MozcHelperProcess(helper, ProfileDirectory)))
+            ? new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, ProfileDirectory))
             : null);
     private static readonly Lazy<Composition.TranslationDictionary> Translations = new(Composition.TranslationDictionary.Load);
 
@@ -271,20 +271,6 @@ internal static class Henkan
         var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
         return new(live: true, converter: converter, moreCandidates: converter is null ? null : converter.Candidates,
             userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
-    }
-
-    /// <summary>
-    /// 学習の要求 (L) に答えるだけで、Mozc に覚えさせないヘルパー。覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう
-    /// (確かめたいのは、まだ何も覚えていない人の最初の変換)。
-    /// </summary>
-    private sealed class WithoutLearning(Composition.IMozcHelper inner) : Composition.IMozcHelper
-    {
-        public bool IsInstalled => inner.IsInstalled;
-        public void Start() => inner.Start();
-        public string? Send(string request) => request.StartsWith("L\t", StringComparison.Ordinal) ? "OK" : inner.Send(request);
-        public void Reset() => inner.Reset();
-        public long WorkingSet => inner.WorkingSet;
-        public void Dispose() => inner.Dispose();
     }
 
     public static void Run(string keys)

@@ -4,7 +4,6 @@ package io.github.ninjin0802.keyboard.app.core
 
 import io.github.ninjin0802.keyboard.app.PerfLog
 import io.github.ninjin0802.keyboard.mozc.MozcBackend
-import io.github.ninjin0802.keyboard.mozc.MozcClause
 
 /**
  * Core の MozcConverter が送る変換ヘルパーの要求 (native/mozc/meltype_mozc_helper.cc の先頭) に、[mozc] で答える。
@@ -41,17 +40,7 @@ internal class CoreMozcCallbacks(
                     ?.joinToString(RECORD) { s -> (listOf(s.reading) + s.candidates).joinToString(UNIT) }
                     ?: segments?.let { "" }
             }
-            "L" -> {
-                val (context, records) = fields.drop(1)
-                val clauses = records.split(RECORD).map { record ->
-                    val (reading, text) = record.split(UNIT)
-                    MozcClause(reading, text)
-                }
-                if (converter.learn(clauses, context.ifEmpty { null })) "OK" else "NG"
-            }
             "R" -> converter.reading(fields[1]) ?: ""
-            // 覚えさせるたびに保存している (MozcConverter.learn)
-            "S" -> "OK"
             else -> throw IllegalArgumentException("Unknown Mozc helper request: ${fields[0]}")
         }
     }

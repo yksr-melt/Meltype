@@ -167,7 +167,7 @@ internal static class WindowsTests
     [Test]
     public static void Mozc_DoesNotRestartAfterDispose()
     {
-        // 確定のあと裏で覚えさせる処理・起動直後の WarmUp が、終了 (Dispose) のあとで動くことがある。ヘルパーを起動し直さない
+        // 起動直後の WarmUp・裏の変換が、終了 (Dispose) のあとで動くことがある。ヘルパーを起動し直さない
         var helper = Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } path ? path
             : Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "native", "mozc", "bin", "meltype_mozc_helper.exe"));
         if (!File.Exists(helper)) return; // Mozc の変換ヘルパーが無い環境
@@ -179,8 +179,6 @@ internal static class WindowsTests
             if (mozc.Convert("てすと") is null) return; // 起動できない環境
             mozc.Dispose();
             var before = Helpers();
-            mozc.Learn("", [new ConversionClause("てすと", "テスト")]);
-            Assert.Equal(before, Helpers(), "Dispose のあとで覚えさせても、ヘルパーを起動しない");
             Assert.True(mozc.Convert("てすと") is null, "Dispose のあとは変換しない");
             Assert.Equal(before, Helpers(), "Dispose のあとで変換しても、ヘルパーを起動しない");
         }
