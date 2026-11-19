@@ -9,7 +9,7 @@
 | 設定画面 (`meltype-settings`, Python・GTK 4) | `config.schema.json` から画面を組み立てて、`config.json` を書く |
 | 判定の本体 (`libMeltypeNative.so`) | Windows 版と共通の C# の部分 (`src/Meltype.Core`) を NativeAOT で Linux 用のライブラリにしたもの |
 | 漢字変換 | Mozc の変換ヘルパー (`native/mozc`) |
-| 文脈を見た変換 (Zenzai) | llama.cpp の llama-server と zenz のモデル。llama-server は `native/zenzai/build-llama-server.sh` が `native/zenzai/zenzai.env` の版のソースからビルドし、モデルは `linux/build.sh` が取ってくる (取れなければ同梱せず、Mozc だけで変換する)。どちらも `zenzai/` に置く |
+| 文脈を見た変換 (Zenzai) | llama.cpp の llama-server と zenz のモデル。llama-server は `native/zenzai/build-llama-server.sh` が `native/zenzai/zenzai.env` の版のソースからビルドし、モデルは `native/build-core-linux.sh` が取ってくる (取れなければ同梱せず、Mozc だけで変換する)。どちらも `zenzai/` に置く |
 
 全体の仕組み・テストは [docs/dev/DEVELOPMENT.md](../docs/dev/DEVELOPMENT.md) にあります。
 
@@ -43,8 +43,8 @@ linux/build-cli.sh --install
 `+dev` の版は、同じ版のリリース版より新しい扱いになります。リリース版に戻すときは、ダウングレードを明示します。
 
 ```bash
-sudo apt install --allow-downgrades meltype=<版> meltype-common=<版>   # apt のリポジトリから。ファイルなら ./meltype-common_<版>_amd64.deb と ./meltype_<版>_amd64.deb
-sudo dnf downgrade meltype meltype-common                              # dnf のリポジトリから。ファイルなら ./meltype-common-<版>-1.x86_64.rpm・./meltype-<版>-1.x86_64.rpm・./meltype-fcitx5-<版>-1.x86_64.rpm
+sudo apt install --allow-downgrades meltype=<版>   # apt のリポジトリから。ファイルなら ./meltype_<版>_amd64.deb
+sudo dnf downgrade meltype                          # dnf のリポジトリから。ファイルなら ./meltype-<版>-1.x86_64.rpm と ./meltype-fcitx5-<版>-1.x86_64.rpm
 ```
 
 入力ソースの一覧に Meltype が出てこないときは、Linux のセッションを入り直してください。

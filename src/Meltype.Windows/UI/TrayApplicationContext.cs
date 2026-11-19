@@ -201,12 +201,10 @@ internal sealed class TrayApplicationContext : ApplicationContext
     /// <summary>
     /// Meltype IME (TSF) を入れたら、一度だけ動作モードを Meltype IME にする
     /// (PC に登録されていても、このユーザーのキーボードの一覧に無ければ Win + Space で選べないので切り替えない)
-    /// (ARM64 の Windows には Meltype IME は対応していないので切り替えない)
     /// </summary>
     private void IntroduceTsf()
     {
-        if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList ||
-            RuntimeInformation.OSArchitecture == Architecture.Arm64) return;
+        if (AppPaths.IsPortable || _state.TsfIntroduced || !Tip.TipServer.IsRegistered || !Tip.TipServer.IsInUserLanguageList) return;
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         _state.TsfIntroduced = true;
         _state.Save();
@@ -218,8 +216,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
         Diagnostics.Log.Info("Meltype IME が入っているので、動作モードを Meltype IME にしました。");
     }
 
-    /// <summary>Meltype IME をインストール先の setup-ime.ps1 で登録できるか (ポータブル版・ARM64 の Windows・tip フォルダーの無い Meltype.exe では登録できない)。</summary>
-    private static bool CanRegisterTsf => !AppPaths.IsPortable && RuntimeInformation.OSArchitecture != Architecture.Arm64 &&
+    /// <summary>Meltype IME をインストール先の setup-ime.ps1 で登録できるか (ポータブル版・tip フォルダーの無い Meltype.exe では登録できない)。</summary>
+    private static bool CanRegisterTsf => !AppPaths.IsPortable &&
         File.Exists(Path.Combine(AppContext.BaseDirectory, "setup-ime.ps1")) && Directory.Exists(Path.Combine(AppContext.BaseDirectory, "tip"));
 
     /// <summary>トレイで Meltype IME を選んだ。使えなければ、登録するかを聞いてから切り替える。</summary>
@@ -536,7 +534,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _enabledItem.Checked = enabled;
         _keyboardModeItem.Checked = keyboard;
         _tsfModeItem.Checked = tsf;
-        // Meltype IME を使えず (ARM64 の Windows・登録されていない・キーボードの一覧に無い)、登録もできないなら選べない
+        // Meltype IME を使えず (登録されていない・キーボードの一覧に無い)、登録もできないなら選べない
         // (使えないまま選ぶとキーボードフックが止まり、どこでも何も起きなくなる。登録できるなら、選んだときに登録する: SelectTsf)
         var registered = Tip.TipServer.IsRegistered;
         _tsfModeItem.Enabled = tsf || Tip.TipServer.IsUsable || CanRegisterTsf;

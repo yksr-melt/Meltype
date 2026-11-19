@@ -1,11 +1,11 @@
 # リリース。タグ (v*) の push と、bot の /release・/pre-release (タグで workflow_dispatch する) で動く。
-# windows.yml・mac.yml・linux.yml を呼んで配布物を作り、タグならリリースに添付する。
+# windows.yml・mac.yml・linux.yml・tui.yml を呼んで配布物を作り、タグならリリースに添付する。
 #   publish             … 配布物をタグのリリースに添付して公開する (bot が作った下書きがあれば、それに付ける)
 #   homebrew            … Casks/meltype.rb の更新 PR を作る (main は PR 必須のため)
 #   winget              … winget-pkgs に新しい版の PR を出す (winget.yml。プレリリースは出さない)
 #   *-repositories      … apt と dnf のリポジトリを GitHub Pages に公開する
-# homebrew・winget・*-repositories は publish のあと (どれかの OS が失敗したら、どこにも公開しない)。
-# タグでなく手動実行したときは、3 つの OS のテスト版の配布物を Artifacts に置くだけ。
+# homebrew・winget・*-repositories は publish のあと (どれかの配布物が失敗したら、どこにも公開しない)。
+# タグでなく手動実行したときは、テスト版の配布物を Artifacts に置くだけ。
 # 呼ぶワークフローには書き込みの権限を渡さない。書き込みはこのファイルのジョブだけがする。
 name: release
 
@@ -36,10 +36,13 @@ jobs:
   linux:
     uses: ./.github/workflows/linux.yml
     secrets: inherit
+  tui:
+    uses: ./.github/workflows/tui.yml
+    secrets: inherit
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, mac, linux]
+    needs: [windows, mac, linux, tui]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -56,7 +59,7 @@ jobs:
           files: |
             dist/Meltype-*.zip
             dist/Meltype-*-setup.exe
-            dist/meltype*.deb
+            dist/meltype_*.deb
             dist/meltype-*.rpm
           fail_on_unmatched_files: true
 
@@ -180,8 +183,12 @@ jobs:
           APT_SIGNING_KEY_B64: ${{ secrets.APT_SIGNING_KEY_B64 }}
           APT_SIGNING_KEY_PASSPHRASE: ${{ secrets.APT_SIGNING_KEY_PASSPHRASE }}
         run: |
-          mapfile -d '' -t debs < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype*.deb' -print0 | sort -z)
-          bash linux/build-apt-repository.sh "$RUNNER_TEMP/meltype-pages" "${debs[@]}"
+          mapfile -d '' -t debs < <(find "$RUNNER_TEMP/meltype-artifacts" -type f -name 'meltype_*.deb' -print0 | sort -z)
+          if (("${#debs[@]}" != 2)); then
+            echo "Expected amd64 and arm64 .deb packages; found ${#debs[@]}." >&2
+            exit 1
+          fi
+          bash linux/build-apt-repository.sh "${debs[@]}" "$RUNNER_TEMP/meltype-pages"
       - name: Build signed dnf repository
         if: steps.signing.outputs.ready == 'true'
         env:
