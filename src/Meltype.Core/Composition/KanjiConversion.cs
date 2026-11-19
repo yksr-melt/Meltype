@@ -48,47 +48,14 @@ internal static class PrecedingText
     }
 
     /// <summary>
-    /// Zenzai の文脈: 改行を除いた、文をまたぐ日本語の文章 (最大 100 文字)。前が日本語でなければ null。
+    /// Zenzai の文脈: 改行を除いた、文をまたぐ文章 (最大 100 文字)。英語もそのまま渡す (GitHub + にわたるこうじ → に渡る工事)。無ければ null。
     /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
     /// </summary>
     public static string? Passage(string? before)
     {
         var text = before?.Replace("\r", "").Replace("\n", "").Trim();
-        return string.IsNullOrEmpty(text) || CompositionController.LanguageOf(text) != false ? null : text.Length > 100 ? text[^100..] : text;
+        return string.IsNullOrEmpty(text) ? null : text.Length > 100 ? text[^100..] : text;
     }
-
-    /// <summary>
-    /// Zenzai の、前の文脈が無いときの文脈。「に」で始まる読みを「。」の後で変換すると、Zenzai は「に」を語の頭と読む (にわたるこうじ → 庭田るこうじ)。
-    /// そのときに付ける仮の文脈「これ」(これ + にわたるこうじ → にわたる工事)。付けないなら null。
-    /// 「は」「で」なども助詞になりうるが、仮の文脈を付けると はしる → は知る のように崩れるので「に」だけ。
-    /// Mozc には付けない (v1.6.0 のヘルパーで、「これ」があってもなくても変換は同じだった)。
-    /// </summary>
-    public static string? ParticleNi(string hiragana) => StartsWithParticleNi(hiragana) ? "これ" : null;
-
-    /// <summary>
-    /// 「に」で始まる読みのうち、助詞の「に」に続くことが多い語 (なる・ついて・よって など) で始まるものか。
-    /// 「にわ (庭)」「にほん (日本)」のように「に」で始まる語まで仮の文脈で助詞と読ませると、
-    /// Zenzai が「に|ワニ|は」のように崩すので、助詞らしい続きのときだけにする。
-    /// </summary>
-    internal static bool StartsWithParticleNi(string kana)
-    {
-        if (kana.Length < 3 || kana[0] != 'に') return false;
-        var rest = kana.AsSpan(1);
-        foreach (var next in ParticleNiContinuations)
-        {
-            if (rest.StartsWith(next, StringComparison.Ordinal)) return true;
-        }
-        return false;
-    }
-
-    private static readonly string[] ParticleNiContinuations =
-    [
-        "なる", "なっ", "なり", "なら", "なれ", "なろ", "ついて", "ついての", "つき", "よっ", "よる", "より", "よれ",
-        "とって", "とっての", "たいし", "たいする", "かんし", "かんする", "おいて", "おける", "むけ", "むか", "わたっ", "わたる",
-        "あたっ", "あたり", "して", "した", "する", "すぎ", "さえ", "しか", "ちがい", "そって", "そう", "もとづ", "くらべ",
-        "かけ", "かわっ", "かわり", "ともな", "つれ", "あわせ", "おうじ", "はいっ", "いく", "いっ", "いれ", "いる", "いた",
-        "きた", "くる", "きて", "でき", "みえ", "きこえ", "かんじ", "おもえ",
-    ];
 
     private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }

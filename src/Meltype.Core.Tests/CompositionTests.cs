@@ -475,12 +475,12 @@ internal static class CompositionTests
     [Test]
     public static void PrecedingText_PassageCrossesSentences()
     {
-        // Zenzai の文脈は、改行を除いて文をまたぐ日本語の文章 (最大 100 文字)
+        // Zenzai の文脈は、改行を除いて文をまたぐ文章 (最大 100 文字)
         Assert.Equal("昨日は雨でしたが、今日は", PrecedingText.Passage("昨日は雨でしたが、\n今日は") ?? "(なし)", "改行を除いて文をまたいで渡す");
         var passage = PrecedingText.Passage(string.Concat(Enumerable.Repeat("あ", 150)) + "終");
         Assert.Equal(100, passage?.Length ?? 0, "最大 100 文字");
         Assert.True(passage!.EndsWith('終'), "キャレットに近い方を残す");
-        Assert.True(PrecedingText.Passage("Hello, this is a pen. ") is null, "英文のときは渡さない");
+        Assert.Equal("Hello, this is a pen.", PrecedingText.Passage("Hello, this is a pen. ") ?? "(なし)", "英文もそのまま渡す");
         // Mozc の文脈は、同じ文の日本語 (最大 10 文字)
         Assert.Equal("今日は", PrecedingText.Sentence("昨日は雨でした。今日は") ?? "(なし)");
     }
@@ -5340,20 +5340,6 @@ internal static class CompositionTests
         finally
         {
             File.Delete(path);
-        }
-    }
-
-    [Test]
-    public static void NounStartingWithNi_GetsNoDummyContext()
-    {
-        // 「庭に花が咲いている」が「に輪に花が咲いている」になる (仮の文脈「これ」で「に」を助詞と読ませたため)。
-        foreach (var kana in new[] { "にわにはながさいている", "にほんごをはなす", "にんげんのからだ", "にもつがとどいた", "にしのほう" })
-        {
-            Assert.True(!PrecedingText.StartsWithParticleNi(kana), kana + ": 「に」で始まる語には仮の文脈を付けない");
-        }
-        foreach (var kana in new[] { "になってしまう", "についてかんがえる", "によってちがう", "にとってたいせつ", "にかんするしつもん", "にむけて" })
-        {
-            Assert.True(PrecedingText.StartsWithParticleNi(kana), kana + ": 助詞の「に」には仮の文脈を付ける");
         }
     }
 

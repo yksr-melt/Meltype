@@ -158,7 +158,6 @@ internal static class MozcConverterTests
         Assert.True(helper.Requests.Contains("C\t〇〇\tになってしまう"), "○ などの記号も日本語の文脈として渡す: " + string.Join(" / ", helper.Requests));
         mozc.ConvertClauses("になってしまう", "Hello, ");
         Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "英語の後ろは文脈なし");
-        // 仮の文脈「これ」は Zenzai だけに付ける (Mozc は付けても変換が変わらない)
         mozc.ConvertClauses("になってしまう");
         Assert.Equal("C\t\tになってしまう", helper.Requests[^1], "前の文脈が無ければ文脈なし");
     }

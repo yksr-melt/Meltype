@@ -201,9 +201,8 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void ParticleStart_GetsDummyContext_OnlyWithoutContext()
+    public static void Context_IsTheTextBeforeTheCaret_EnglishIncluded()
     {
-        // 「。」の後の にわたるこうじ を、Zenzai は 庭田るこうじ と読む。前の文脈が無いときは仮の文脈「これ」で「に」を助詞として読ませる
         using var server = new FakeServer { Answer = _ => "答え</s>" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         // Zenzai に渡した文脈 (文の U+EE02 から、読みの U+EE00 の前まで)
@@ -211,12 +210,26 @@ internal static class ZenzaiConverterTests
         {
             SpinWait.SpinUntil(() => zenzai.ConvertClauses(reading, before) is not null, 5000);
             var prompt = server.Prompts.Last(p => ReadingIn(p) == reading);
-            return prompt[(prompt.IndexOf('') + 1)..prompt.IndexOf('')];
+            return prompt[(prompt.IndexOf('\uEE02') + 1)..prompt.IndexOf('\uEE00')];
         }
-        Assert.Equal("これ", ContextOf("にわたるこうじ", null), "前の文脈が無い");
-        Assert.Equal("これ", ContextOf("にわたるこうじ", "Hello, "), "英語の後ろ");
-        Assert.Equal("長期", ContextOf("にわたるこうじ", "長期"), "日本語の後ろは、その文脈");
-        Assert.Equal("。", ContextOf("にわにはながさいている", null), "「に」で始まる語 (庭) には付けない (#1617)");
+        // 英単語の後ろの「に」は助詞 (GitHub + にわたるこうじ → に渡る工事)。英語の文脈を捨てると、Zenzai は 庭田るこうじ と読む
+        Assert.Equal("GitHub", ContextOf("にわたるこうじ", "GitHub "), "英語もそのまま");
+        Assert.Equal("昨日は雨でしたが、今日は", ContextOf("きょう", "昨日は雨でしたが、\n今日は"), "改行を除いて文をまたぐ");
+        Assert.Equal("。", ContextOf("にわにはながさいている", null), "前の文脈が無ければ文の始まり");
+    }
+
+    [Test]
+    public static void JapaneseAfterEnglish_InTheSameComposition_GetsTheEnglishAsContext()
+    {
+        // github と続けて打った についてはなす は、github の後ろとして Zenzai に頼む (入力欄のキャレットの前だけを渡すと、「に」を語の頭と読む)
+        using var server = new FakeServer { Answer = p => ReadingIn(p) == "についてはなす" ? "について話す</s>" : ReadingIn(p) };
+        using var zenzai = new ZenzaiConverter(server.Endpoint, timeoutMs: 5000);
+        using var mozc = MozcConverterTests.Fake();
+        var session = new TestSession(() => new Settings { LiveConversion = true }, new HybridConverter(mozc, () => zenzai));
+        SessionFacadeTests.Type(session, "githubnitsuitehanasu", before: "昨日は");
+        SpinWait.SpinUntil(() => server.Prompts.Any(p => ReadingIn(p) == "についてはなす"), 5000);
+        var asked = server.Prompts.Where(p => ReadingIn(p) == "についてはなす").ToList();
+        Assert.True(asked.Count > 0 && asked.All(p => p.StartsWith("昨日はgithub", StringComparison.Ordinal)), "依頼: " + string.Join(" / ", asked));
     }
 
     [Test]
