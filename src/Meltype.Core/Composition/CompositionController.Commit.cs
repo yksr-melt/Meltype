@@ -144,7 +144,7 @@ internal static partial class CompositionController
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     private static void LearnClauses(CompositionState state, CompositionEnv env)
     {
-        if (Learning(state, env)) env.Learning.Learn(state.Clauses, state.PrecedingText, CompositionText.LearningContext(state.Text, env));
+        if (Learning(state, env)) env.Learning.Learn(state.Clauses, ConversionContext(state), CompositionText.LearningContext(state.Text, env));
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>

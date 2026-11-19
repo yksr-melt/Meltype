@@ -56,8 +56,11 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// <summary>変換履歴の語。</summary>
     public string? LearnedConversion(string reading) => services.History?.Get(reading);
 
-    /// <summary>確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。before はキャレットの前の確定済みの文字列。</summary>
-    public void Learn(IReadOnlyList<Clause> clauses, string? before, bool? context)
+    /// <summary>
+    /// 確定した文節を学習する (次に同じ読みを変換したとき最初の候補にする)。
+    /// conversionContext は変換エンジンに渡す文脈。context は英語 / 日本語の学習の文脈 (<see cref="LanguageMemory"/>)。
+    /// </summary>
+    public void Learn(IReadOnlyList<Clause> clauses, string? conversionContext, bool? context)
     {
         // 変換の候補から打ったままの英字 (api) を選んで確定したら、その語は次から英字にする (F10 と同じ)。
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && c.Raw is { } raw && c.Text == raw && Learnable(c)))
@@ -74,7 +77,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         {
             services.TranslationHistory?.Remember(clause.Reading, clause.Text);
         }
-        LearnConversion(clauses, before);
+        LearnConversion(clauses, conversionContext);
         if (services.History is not { } history) return;
         // 1 文字の読み (き → 記) を覚えると、関係ない変換 (き + ごうとう) まで巻き込むので 2 文字以上だけ。
         // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
@@ -94,7 +97,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// 変換エンジン (Mozc) にも、確定した文節を覚えさせる。英語の文節・打ったままの英字・ユーティリティ変換の候補で区切った、日本語の文節のまとまりごとに。
     /// 日時・版から作る語 (<see cref="IsVolatile"/>) は Mozc が自分で学習しないので、そのまま渡す。変換エンジンとのやり取りで入力を待たせないよう、裏で行う。
     /// </summary>
-    private void LearnConversion(IReadOnlyList<Clause> clauses, string? before)
+    private void LearnConversion(IReadOnlyList<Clause> clauses, string? context)
     {
         if (converter is not ILearningConverter learner) return;
         var run = new List<ConversionClause>();
@@ -103,7 +106,7 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
             if (run.Count == 0) return;
             var learned = run.ToList();
             run.Clear();
-            ThreadPool.QueueUserWorkItem(_ => learner.Learn(before, learned));
+            ThreadPool.QueueUserWorkItem(_ => learner.Learn(context, learned));
         }
         foreach (var clause in clauses)
         {
