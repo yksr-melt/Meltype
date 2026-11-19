@@ -19,6 +19,9 @@ const Marker = '<!-- meltype-bot -->';
 const Maintainers = ['OWNER', 'MEMBER', 'COLLABORATOR'];
 const MaxKeys = 300;
 const MaxRepros = 10;
+// /learn の手順の数と、確定した語の長さの上限 (Repro.cs の MaxLessons と同じ数)
+const MaxLessons = 5;
+const MaxLessonText = 50;
 
 async function gh(method, url, body, auth = token) {
   const response = await fetch(`${api}/repos/${repo}${url}`, {
@@ -82,7 +85,7 @@ async function react(content) {
 }
 
 const Help = [
-  'Meltype bot のコマンド (コメントの行の先頭に書いてください。`/release`・`/pre-release` は 1 行目だけ。1 つのコメントに 1 つ。`/repro` だけは 1 行に 1 つずつ複数書けます):',
+  'Meltype bot のコマンド (コメントの行の先頭に書いてください。`/release`・`/pre-release` は 1 行目だけ。1 つのコメントに 1 つ。`/repro` だけは 1 行に 1 つずつ複数書けます。`/learn` は `/repro`・`/ca` と同じコメントに書きます):',
   '',
   '| コマンド | すること | 使える人 |',
   '|---|---|---|',
@@ -90,6 +93,7 @@ const Help = [
   '| `/repro <SHA> <打ったキー> [space\\|enter\\|none]` | `/repro` を PR の前・PR・main のコードで行い、PR で結果が変わったか比べる | メンテナー (PR のみ) |',
   '| `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |',
   '| `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す | だれでも |',
+  `| \`/learn <打ったキー> [→ <確定した語>]\` | 同じコメントの \`/repro\`・\`/ca\` の前に、別の入力欄で打って確定し、学習させる (確定した語があれば Space で変換して候補から選ぶ)。${MaxLessons} 行まで | だれでも |`,
   '| `/jht <出てほしい文> [/ 読み]` | 考えられるローマ字打ちで変換テスト (読みはオプション) | だれでも |',
   '| `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |',
   '| `/pack <SHA>` | Pull Request のコードでテスト版のインストーラー (setup.exe) を作る | メンテナー |',
@@ -195,9 +199,27 @@ async function parse() {
   }
   // コマンドはどの行に書いてもよい。/test/foo のようなパスはコマンドにしない。
   // /release・/pre-release は 1 行目だけ (手順の説明やコードブロックの中の行でタグとリリースを作らないため)
-  const commands = lines.map(l => l.match(/^\/(self-assign|repro|explain|ca|jht|test-jht|test-explain|test|pack|pre-release|release|help)(?=\s|$)\s*(.*)$/))
+  const matched = lines.map(l => l.match(/^\/(self-assign|repro|explain|ca|jht|test-jht|test-explain|test|pack|pre-release|release|help|learn)(?=\s|$)\s*(.*)$/))
     .filter((m, i) => m && (i === 0 || !['release', 'pre-release'].includes(m[1])));
-  if (commands.length === 0 || event.comment.user?.type === 'Bot') return output({ action: 'none' });
+  if (matched.length === 0 || event.comment.user?.type === 'Bot') return output({ action: 'none' });
+  // /learn は、同じコメントの /repro・/ca の前に学習させる手順 (学習した後で起きる誤変換を再現する)
+  const lessons = matched.filter(([, c]) => c === 'learn').map(([, , r]) => learnRequest(r));
+  const commands = matched.filter(([, c]) => c !== 'learn');
+  if (lessons.length > 0) {
+    const fail = text => upsertComment(issue, `error-${event.comment.id}`, `${text}\n\n${Help}`);
+    if (!['repro', 'ca'].includes(commands[0]?.[1])) {
+      await fail('`/learn` は、`/repro` か `/ca` と同じコメントに書いてください。');
+      return output({ action: 'none' });
+    }
+    if (lessons.length > MaxLessons) {
+      await fail(`\`/learn\` は 1 つのコメントに ${MaxLessons} 個までです。`);
+      return output({ action: 'none' });
+    }
+    if (!lessons.every(l => isKeys(l.keys) && l.text.length <= MaxLessonText)) {
+      await fail(`\`/learn\` には、打ったキーを英字で書き、確定した語は ${MaxLessonText} 文字までにしてください (例: \`/learn niti → （日）\`)。`);
+      return output({ action: 'none' });
+    }
+  }
   if (commands.length > 1 && !commands.every(([, c]) => c === 'repro')) {
     await upsertComment(issue, `error-${event.comment.id}`, `1 つのコメントに書けるコマンドは 1 つです (\`/repro\` だけは 1 行に 1 つずつ ${MaxRepros} 個まで書けます)。`);
     return output({ action: 'none' });
@@ -304,12 +326,20 @@ async function parse() {
   }
   await react('eyes');
   if (command === 'explain') return output({ action: command, issue, keys: requests[0].keys, comment: event.comment.id });
-  return output({ action: command, issue, repros: JSON.stringify(requests.map(({ keys, last }) => ({ keys, last }))), versions, reported: '', expected: '', comment: event.comment.id });
+  // 手順は Repro.cs の --learn に「打ったキー → 確定した語」で渡す
+  const learn = lessons.map(l => l.text ? `${l.keys} → ${l.text}` : l.keys);
+  return output({ action: command, issue, repros: JSON.stringify(requests.map(({ keys, last }) => ({ keys, last, learn }))), versions, reported: '', expected: '', comment: event.comment.id });
 }
 
 const unquote = text => text.replace(/^`|`$/g, '');
 const isSha = text => /^[0-9a-f]{40}$/.test(text);
 const keysOf = text => unquote(text.trim().split(/\s+/).join(' ')).slice(0, MaxKeys);
+
+// /learn の「<打ったキー> [→ <確定した語>]」。→ の代わりに前後に空白のある -> も使える (キーの - と > を分けるため)
+function learnRequest(text) {
+  const [keys, word = ''] = text.split(/\s*→\s*|\s+->\s+/, 2);
+  return { keys: keysOf(keys), text: unquote(word.trim()) };
+}
 
 // /repro の「[<SHA>] <打ったキー> [space|enter|none]」
 function reproRequest(text) {
@@ -387,6 +417,21 @@ async function report() {
     const typed = typedOf(r);
     return cell(typed) + (r.converted && r.converted !== typed ? ` / Space: ${cell(r.converted)}` : '');
   };
+  // /learn の手順。learned (手順ごとに確定したもの) が無いのは、学習に対応する前の版 (結果は学習していない)
+  const lessonOf = text => { const [keys, word] = text.split(' → '); return { keys, word }; };
+  const unlearned = (learn, r) => learn?.length > 0 && r && !r.error && !Array.isArray(r.learned);
+  const learnNotes = (learn, results) => {
+    if (!(learn?.length > 0)) return [];
+    const lines = [`先に別の入力欄で打って確定し、学習させました: ${learn.map(lessonOf).map(l => code(l.keys) + (l.word ? ` → ${cell(l.word)}` : '')).join('、')}`];
+    for (const { name, r } of results) {
+      if (unlearned(learn, r)) { lines.push(`ℹ️ ${md(versionLabel(name))} は学習に対応していない版なので、学習させずに打ちました。`); continue; }
+      learn.map(lessonOf).forEach((l, i) => {
+        const committed = r?.learned?.[i];
+        if (l.word && committed != null && committed !== l.word) lines.push(`⚠️ ${md(versionLabel(name))}: ${code(l.keys)} の候補に ${cell(l.word)} が無く、${cell(committed)} と確定しました。`);
+      });
+    }
+    return [...lines, ''];
+  };
   const usable = o => o && !o.error;
   const outcomes = r => [r, r.zenzai].filter(usable);
   // Zenzai の結果は、どちらの版でも使えたときだけ比べる
@@ -403,7 +448,7 @@ async function report() {
     }
     const sections = [], verdicts = [];
     let engine = '';
-    for (const { keys, last, results } of runs) {
+    for (const { keys, last, learn, results } of runs) {
       if (results.length === 0) {
         sections.push(`${code(keys)} は再現を試せませんでした。`);
         continue;
@@ -415,7 +460,7 @@ async function report() {
         if (!r) { rows.push(`| ${md(versionLabel(name))} | (失敗) |${withZenzai ? ' (失敗) |' : ''}`); continue; }
         if (r.engine) engine = r.engine;
         rows.push(`| ${md(versionLabel(name))} | ${outcomeCell(r)} |${withZenzai ? ` ${outcomeCell(r.zenzai)} |` : ''}`);
-        if ((name === 'main' || name === 'pr') && !verdict) {
+        if ((name === 'main' || name === 'pr') && !verdict && !unlearned(learn, r)) {
           // Mozc だけか Mozc + Zenzai のどちらかで報告と同じなら、もう一方が期待どおりでも再現とする
           // (Zenzai が遅い PC では Mozc の結果になる。アプリは Zenzai が既定で ON)
           const texts = outcomes(r).flatMap(o => [typedOf(o), o.converted]);
@@ -428,6 +473,7 @@ async function report() {
       const pr = results.find(v => v.name === 'pr')?.r, base = results.find(v => v.name === 'base')?.r;
       const change = pr && base ? (sameOutcome(pr, base) ? 'PR の前と同じ結果です。' : 'PR で結果が変わりました。') : '';
       sections.push([
+        ...learnNotes(learn, results),
         `${code(keys)} を打ってみました (最後のキー: ${last})。`,
         '',
         withZenzai ? '| 版 | Mozc | Mozc + Zenzai |' : '| 版 | 結果 |',
@@ -441,7 +487,7 @@ async function report() {
     if (!hasMozc) lines.push('ℹ️ Mozc の変換ヘルパーが使えなかったため、**漢字変換は検証していません** (日本語 / 英語の判定と入力結果のみ)。');
     else if (verdicts.includes('reproduced')) lines.push('🔁 報告と同じ結果になりました。**再現しました。**');
     else if (verdicts.includes('match')) lines.push('✅ 最新のコードでは期待どおりでした。次の版で直っているかもしれません。');
-    else if (expected || reported) lines.push('報告とは違う結果になりました。アプリ・前後の文・学習で変わることがあります。');
+    else if (expected || reported) lines.push('報告とは違う結果になりました。アプリ・前後の文・学習で変わることがあります (学習は `/learn` で先に学習させてから試せます)。');
     lines.push('', `<sub>変換エンジン: ${engine ? md(engine) : 'なし (判定だけ)'}。${!hasMozc ? '漢字の正しさは未確認。' : ''}[実行結果](${runUrl})</sub>`);
     await upsertComment(issue, marker, lines.join('\n'));
     if (verdicts.includes('reproduced')) await gh('POST', `/issues/${issue}/labels`, { labels: ['再現済み'] }).catch(() => {});
@@ -471,6 +517,7 @@ async function report() {
     };
     const names = results.map(v => md(v.name));
     const lines = [
+      ...learnNotes(repros[0]?.learn, results),
       `${code(keys)} を Space で変換しました。`,
       '',
       '| 版 | 文節 |',

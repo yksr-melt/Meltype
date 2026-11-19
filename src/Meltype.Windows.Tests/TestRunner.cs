@@ -45,7 +45,7 @@ internal static class TestRunner
         if (args.FirstOrDefault() == "--repro")
         {
             // GitHub の bot 用: 報告された打鍵を打ってみて JSON で返す (Meltype.Core.Tests の --repro と同じ)。
-            Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
+            Repro.Type(args[1..]);
             return 0;
         }
         if (args.FirstOrDefault() == "--type")

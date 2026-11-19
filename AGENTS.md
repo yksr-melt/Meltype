@@ -72,6 +72,7 @@ dotnet run --project src/Meltype.Core.Tests
 dotnet run --project src/Meltype.Core.Tests -- CompositionTests # 名前に一致するテストだけ
 dotnet run --project src/Meltype.Core.Tests -- --eval # 品質テスト（正解率と外れた例）
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter # 打ったときの見え方と確定結果
+dotnet run --project src/Meltype.Core.Tests -- --repro 26niti space --learn "niti → （日）" # 先に学習させてから打つ
 dotnet run --project src/Meltype.Core.Tests -- --explain konnichiwa hello # 1文字ずつの判定理由
 dotnet run --project src/Meltype.Core.Tests -- --segments kyouhagoogle # 単位と英日区間分け
 dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json # 報告された誤変換
