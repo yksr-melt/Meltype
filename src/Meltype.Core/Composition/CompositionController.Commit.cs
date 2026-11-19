@@ -163,7 +163,6 @@ internal static partial class CompositionController
     private static string PredictionReading(CompositionState state, CompositionEnv env, string prediction, string typed) =>
         env.Services.Predictor?.Phrases?.ReadingOf(prediction, typed) ?? typed;
 
-
     /// <summary>
     /// 直前に確定した語。英語とも日本語とも読める語 (i, sushi) を文脈が分からないまま確定したとき、
     /// 次の語で文脈がはっきりしたら確定し直す (I want: 「胃」→「I」)。キャレットが動いたら (ほかのキー・クリック) 無効。

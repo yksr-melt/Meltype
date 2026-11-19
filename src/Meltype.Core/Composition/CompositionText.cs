@@ -46,7 +46,6 @@ internal static class CompositionText
 
     private static readonly Config.Settings FragmentSettings = new();
 
-
     public static IReadOnlyList<CompositionUnit> Units(CompositionTextState state) => state.Units;
     public static string Pending(CompositionTextState state) => state.Pending.ToString();
     public static bool IsEmpty(CompositionTextState state) => state.Units.Count == 0 && state.Pending.Length == 0;

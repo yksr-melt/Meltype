@@ -647,8 +647,6 @@ internal static class ImeSession
     /// <summary>入力中に Ctrl と一緒に押すと、変換ボックスで使う英字のキー。</summary>
     public static IReadOnlyList<int> ComposingControlKeys(ImeSessionState state, ImeEnv env) => CompositionController.ComposingControlKeys(state.Composition, Env(state, env));
 
-
-
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
@@ -737,8 +735,6 @@ internal static class ImeSession
     /// </summary>
     private static bool PassesSlash(ImeSessionState state, string? before) =>
         CodeInput(state) && !state.CodeJapanese && CodeLineKind(before) is LineKind.Code or LineKind.Prompt;
-
-
 
     /// <summary>
     /// このセッションの外でキャレットが動いた (OS の IME がアプリに通したキー・クリック・別の入力欄に移った) とき。

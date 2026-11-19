@@ -107,7 +107,6 @@ internal sealed class CompositionState
 
     public int SelectedClause;
 
-
     public bool? LastCommitEnglish;
 
     public string? LastCommitText;
@@ -142,14 +141,11 @@ internal sealed class CompositionState
 
     public bool PrivateComposition;
 
-
-
     // F6〜F10 (Ctrl+U/I/O/P・無変換・ひらがなキーも) でかな・英字にしたか。次に文字を打ったら確定する。
     public bool ModeByKey;
 
     // Esc で戻した語は、判定として覚えない
     public bool EscReverted;
-
 
     /// <summary>続けて確定した、英語とも日本語とも読める語 (古い順)。make sure you → have で全部英語に直す。</summary>
     public readonly List<CommitRecord> Correctable = [];

@@ -16,8 +16,7 @@ internal static class CompositionOutput
     private const int MaxCommitted = 256;
 
     /// <summary>キャレットの前の文字。出来事の前の文字に、この出来事で確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
-    public static string? Before
-(CompositionOutputState state, CompositionEnv env)
+    public static string? Before(CompositionOutputState state, CompositionEnv env)
     {
         var before = state.Before;
         if (before is null) return null;

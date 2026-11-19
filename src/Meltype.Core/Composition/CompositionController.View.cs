@@ -41,7 +41,6 @@ internal static partial class CompositionController
     private static string ToHalfWidth(string text) =>
         new(text.Select(c => c is >= '！' and <= '～' ? (char)(c - 0xFEE0) : c == '　' ? ' ' : c).ToArray());
 
-
     private static void UpdateView(CompositionState state, CompositionEnv env)
     {
         if (CompositionText.IsEmpty(state.Text))
