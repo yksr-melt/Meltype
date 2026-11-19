@@ -70,6 +70,7 @@ struct Native {
     void *handle = nullptr;
     int (*init)(const char *) = nullptr;
     void (*setConversionReady)(void (*)()) = nullptr;
+    void (*setFront)(const char *) = nullptr;
     void *(*create)() = nullptr;
     char *(*handle_)(void *, const char *) = nullptr;
     void (*destroy)(void *) = nullptr;
@@ -85,18 +86,20 @@ struct Native {
         auto sym = [this](const char *name) { return dlsym(handle, name); };
         init = reinterpret_cast<decltype(init)>(sym("meltype_init"));
         setConversionReady = reinterpret_cast<decltype(setConversionReady)>(sym("meltype_set_conversion_ready"));
+        setFront = reinterpret_cast<decltype(setFront)>(sym("meltype_set_front"));
         create = reinterpret_cast<decltype(create)>(sym("meltype_ime_create"));
         handle_ = reinterpret_cast<decltype(handle_)>(sym("meltype_ime_handle"));
         destroy = reinterpret_cast<decltype(destroy)>(sym("meltype_ime_destroy"));
         free = reinterpret_cast<decltype(free)>(sym("meltype_free"));
         shutdown = reinterpret_cast<decltype(shutdown)>(sym("meltype_shutdown"));
-        if (!init || !setConversionReady || !create || !handle_ || !destroy || !free || !shutdown) {
+        if (!init || !setConversionReady || !setFront || !create || !handle_ || !destroy || !free || !shutdown) {
             FCITX_ERROR() << "Meltype: libMeltypeNative.so の関数が足りません";
             return false;
         }
         if (!init(meltypeDir().c_str())) {
             FCITX_WARN() << "Meltype: Mozc を使えません (漢字変換はひらがなのままになります)";
         }
+        setFront("fcitx5");
         return true;
     }
 

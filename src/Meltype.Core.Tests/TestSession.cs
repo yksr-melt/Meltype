@@ -37,6 +37,10 @@ internal sealed class TestSession : IImeEnvironment
 
     public string? ClipboardText => null;
 
+    public string? FrontName => null;
+
+    public string? OtherTipBuild => null;
+
     /// <summary>直近の応答の状態。</summary>
     public ImeState State { get; private set; } = new() { Capture = new ImeCapture() };
 

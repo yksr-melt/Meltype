@@ -42,12 +42,16 @@ internal sealed class TipBuild(string folder)
         }
     }
 
-    /// <summary>登録済みの stub (MeltypeTip.dll) がこれからロードする impl が、同梱の impl と同じビルドか。</summary>
+    /// <summary>
+    /// 登録済みの stub (MeltypeTip.dll) がこれからロードする impl が同梱の impl と別ビルドなら、登録済みの impl の SHA-256 (読めなければ "?")。
+    /// 同じビルドなら null。アーキテクチャのうち、最初に違ったものを返す。
+    /// </summary>
     /// <param name="installed">登録済みの tip フォルダー (x64・x86 の下に MeltypeTip.dll と MeltypeTipImpl.dll.sha256)。</param>
-    public bool IsInstalled(string installed)
-    {
-        return _hashes.All(pair => string.Equals(ReadHash(Path.Combine(installed, pair.Key)), pair.Value, StringComparison.OrdinalIgnoreCase));
-    }
+    public string? OtherBuild(string installed) => _hashes
+        .Select(pair => (shipped: pair.Value, installed: ReadHash(Path.Combine(installed, pair.Key))))
+        .Where(pair => !string.Equals(pair.installed, pair.shipped, StringComparison.OrdinalIgnoreCase))
+        .Select(pair => pair.installed ?? "?")
+        .FirstOrDefault();
 
     private static string? ReadHash(string folder)
     {

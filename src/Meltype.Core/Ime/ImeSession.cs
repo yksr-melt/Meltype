@@ -37,7 +37,11 @@ internal sealed class ImeSession
         _environment = environment;
         _source = settings;
         _settings = settings();
-        _session = new MeltypeSession(parts, () => _settings) { ClipboardText = () => environment.ClipboardText };
+        _session = new MeltypeSession(parts, () => _settings)
+        {
+            ClipboardText = () => environment.ClipboardText,
+            Front = () => new(environment.FrontName, environment.OtherTipBuild),
+        };
     }
 
     /// <summary>コードの入力欄でないときに、判定の文脈として使うキャレットの前の文字数。</summary>

@@ -253,6 +253,9 @@ public sealed partial class CompositionController
     /// <summary>今再生している曲 (曲名・アーティスト。「なう」の候補に出す。issue #1400)。読めない・再生していなければ null。</summary>
     public Func<(string Title, string Artist)?> NowPlaying { get; set; } = () => null;
 
+    /// <summary>このフロントのこと (「ばーじょん」の候補に出す)。</summary>
+    internal Func<VersionFront> Front { get; set; } = () => new(null, null);
+
     /// <summary>
     /// キーを押した。before / after は入力欄のキャレットの前後の確定済みの文字 (分かれば)。
     /// 変換ボックスに入力していないときは、入力を始めるキー (<see cref="StartsComposition"/>) だけを受け取り、ほかはアプリに通す。

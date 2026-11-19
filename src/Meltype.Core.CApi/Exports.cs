@@ -160,7 +160,20 @@ public static unsafe class Exports
         public SnippetStore Snippets => Runtime.Snippets;
 
         public string? ClipboardText => null;
+
+        public string? FrontName => s_front;
+
+        public string? OtherTipBuild => null;
     }
+
+    /// <summary>
+    /// フロントの名前 (「ばーじょん」の候補に出す)。1 つの OS にフロントが 2 つある Linux (IBus・fcitx5) だけが、meltype_ime_create の前に 1 回呼ぶ。
+    /// 呼ばないフロント (Mac・Android) では OS の名前だけを出す。
+    /// </summary>
+    [UnmanagedCallersOnly(EntryPoint = "meltype_set_front")]
+    public static void SetFront(byte* name) => s_front = FromUtf8(name);
+
+    private static string? s_front;
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>
     [UnmanagedCallersOnly(EntryPoint = "meltype_data_directory")]

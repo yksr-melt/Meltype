@@ -29,6 +29,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly ForegroundTracker _foreground = new();
     private readonly KeyInjector _injector = new();
     private readonly ImeHost _host;
+    private readonly Func<string?> _otherTipBuild;
     private readonly System.Threading.Timer _pollTimer;
     private readonly object _gate = new();
     private readonly Queue<Input> _queue = new();
@@ -67,10 +68,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     }
 
     /// <param name="createHost">入力の本体を作る (設定は本体に渡す。フロントは読まない)。</param>
-    public KeyboardFront(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost)
+    /// <param name="otherTipBuild">登録済みの Meltype IME の別のビルド (<see cref="IImeEnvironment.OtherTipBuild"/>)。</param>
+    public KeyboardFront(Control invoker, CompositionService composition, Func<IImeEnvironment, ImeHost> createHost, Func<string?> otherTipBuild)
     {
         _invoker = invoker;
         _composition = composition;
+        _otherTipBuild = otherTipBuild;
         _host = createHost(this);
         _state = new ImeState { Capture = new ImeCapture() };
         composition.Focus.TreatsWindowAsTextInput = () => WindowInputApps.Contains(_foreground.Current.ProcessName);
@@ -106,6 +109,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     public SnippetStore Snippets => _composition.Snippets;
 
     public string? ClipboardText => CompositionService.ClipboardText;
+
+    public string? FrontName => "Meltype キーボード";
+
+    public string? OtherTipBuild => _otherTipBuild();
 
 
     // ---- フックのスレッド ----

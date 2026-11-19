@@ -372,6 +372,12 @@ internal sealed class MeltypeSession
         set => _controller.Clipboard = value;
     }
 
+    /// <summary>このフロントのこと (「ばーじょん」の候補に出す)。</summary>
+    public Func<Utility.VersionFront> Front
+    {
+        set => _controller.Front = value;
+    }
+
     /// <summary>
     /// キーを 1 つ処理する。before / after は入力欄のキャレットの前後の文字列 (分かれば。英語とも日本語とも読める語の判定と変換の文脈に使う)。
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。

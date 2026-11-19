@@ -248,13 +248,40 @@ internal static class UtilityConversionTests
     private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
 
     [Test]
-    public static void Issue1868_VersionShowsCommitAndFront()
+    public static void Issue1868_VersionShowsCommitFrontAndZenzai()
     {
-        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どちらも OS とフロントを付ける
-        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME)", VersionConversion.Text("1.5.1", "Windows / Meltype IME"));
-        Assert.Equal("Meltype-1.5.1+abc1234 (Linux)", VersionConversion.Text("1.5.1+abc1234", "Linux"));
-        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux")), "学習・予測には使わない");
-        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings());
+        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どれも OS・フロント (分かれば)・Zenzai の設定を付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME、Zenzai: ON)", VersionConversion.Text("1.5.1", "Windows", new("Meltype IME", null), zenzai: true));
+        Assert.Equal("Meltype-1.5.1+abc1234 (Linux / fcitx5、Zenzai: OFF)", VersionConversion.Text("1.5.1+abc1234", "Linux", new("fcitx5", null), zenzai: false));
+        Assert.Equal("Meltype-1.5.1 (macOS、Zenzai: ON)", VersionConversion.Text("1.5.1", "macOS", new(null, null), zenzai: true));
+        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux", new("IBus", null), zenzai: true)), "学習・予測には使わない");
+        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings(), new(null, null));
         Assert.True(candidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) && candidate.EndsWith(')'), candidate);
+    }
+
+    [Test]
+    public static void Issue1868_VersionShowsOtherTipBuildOnlyWhenItDiffers()
+    {
+        // 登録済みの Meltype IME が別のビルドのときだけ、そのことと Meltype IME のビルド (impl のハッシュの先頭) を付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype キーボード、Zenzai: ON、Meltype IME は別のビルド: 1a2b3c4)",
+            VersionConversion.Text("1.5.1", "Windows", new("Meltype キーボード", "1a2b3c4d5e6f"), zenzai: true));
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype キーボード、Zenzai: ON、Meltype IME は別のビルド: ?)",
+            VersionConversion.Text("1.5.1", "Windows", new("Meltype キーボード", "?"), zenzai: true));
+        Assert.True(!VersionConversion.Text("1.5.1", "Windows", new("Meltype IME", null), zenzai: true).Contains("別のビルド"), "同じビルドなら付けない");
+    }
+
+    [Test]
+    public static void Issue1868_VersionCandidateReadsTheFront()
+    {
+        // 候補は、打っているフロントの名前と Meltype IME のビルド、入力欄のアプリの設定の Zenzai を読む
+        var k = new CompositionTests.Keyboard { FrontName = "IBus" };
+        k.Settings.UseZenzai = false;
+        k.Type("ba-jonn ");
+        Assert.True(k.Host.View!.Candidates.Contains(k.VersionCandidate), string.Join(" ", k.Host.View.Candidates));
+        Assert.True(k.VersionCandidate.Contains(" / IBus、Zenzai: OFF)", StringComparison.Ordinal), k.VersionCandidate);
+
+        var stale = new CompositionTests.Keyboard { OtherTipBuild = "0123456789abcdef" };
+        stale.Type("ba-jonn ");
+        Assert.True(stale.Host.View!.Candidates.Any(c => c.EndsWith("、Meltype IME は別のビルド: 0123456)", StringComparison.Ordinal)), string.Join(" ", stale.Host.View.Candidates));
     }
 }

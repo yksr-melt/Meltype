@@ -19,9 +19,11 @@ internal sealed class MeltypeEngine : IDisposable
     private readonly KeyboardMonitor _monitor;
     // Chrome リモート デスクトップ・Parsec で操作されているか (#372)
     private readonly RemoteControl _remote = new();
-    // config.json の設定と、動かしている設定 (Running) の写し。フックの中でファイル・レジストリを見ないように、土台が読み直したときに差し替える
+    // config.json の設定と、動かしている設定 (Running)・登録済みの Meltype IME の別のビルド (OtherTipBuild) の写し。
+    // フックの中でファイル・レジストリを見ないように、土台が読み直したときに差し替える
     private volatile Settings _settings = null!;
     private volatile Settings _running = null!;
+    private volatile string? _otherTipBuild;
     private bool _disposed;
 
     /// <summary>動かしている設定 (<see cref="Running"/>) が変わった (前と後)。どのスレッドからも呼ばれる。受け取った側で UI スレッドに移して <see cref="OnSettingsChanged"/> を呼ぶ。</summary>
@@ -51,13 +53,10 @@ internal sealed class MeltypeEngine : IDisposable
         runtime.SettingsChanged += next =>
         {
             if (_running is not { } previous) return;
-            _running = RunningSettings(_settings, next);
-            _settings = next;
+            Load(next);
             SettingsChanged?.Invoke(previous, _running);
         };
-        var settings = runtime.Settings.Current;
-        _running = RunningSettings(null, settings);
-        _settings = settings;
+        Load(runtime.Settings.Current);
         _monitor = new KeyboardMonitor(OnKey, OnMouseButton, OnForegroundChanged, OnFocusChanged);
         KeyCounter = new KeyCounter(Path.Combine(runtime.DataDirectory, "keycount.json"));
         _keyCountTimer = new System.Threading.Timer(_ => KeyCounter.Save(), null, 60_000, 60_000);
@@ -74,6 +73,19 @@ internal sealed class MeltypeEngine : IDisposable
 
     /// <summary>動かしている設定。入力・表示・報告はこれを読む。動作モードが Meltype IME でも、使えなければ Meltype キーボード。</summary>
     public Settings Running => _running;
+
+    /// <summary>
+    /// 動作モードが Meltype IME で、登録済みの Meltype IME がこの Meltype.exe と別ビルドなら、そのビルド (<see cref="Tip.TipServer.OtherRegisteredBuild"/>)。
+    /// 動作モードが Meltype キーボードなら、登録済みの Meltype IME は入力に関わらないので null。
+    /// </summary>
+    public string? OtherTipBuild => _otherTipBuild;
+
+    private void Load(Settings next)
+    {
+        _running = RunningSettings(_settings, next);
+        _otherTipBuild = next.Mode == InputMode.Tsf ? Tip.TipServer.OtherRegisteredBuild : null;
+        _settings = next;
+    }
 
     // 動作モードが Meltype IME なのに使えなければ (ポータブル版・ARM64 の Windows・登録されていない・登録済みの Meltype IME がこの Meltype.exe と別ビルド・
     // キーボードの一覧に無い)、Meltype キーボードで動かす。
