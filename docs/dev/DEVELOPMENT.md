@@ -37,10 +37,29 @@ powershell -ExecutionPolicy Bypass -File .\Install-Meltype.ps1
 
 必要なもの:
 
-- Windows 10 / 11 (x64 / ARM64)
+- Windows 10 / 11 (x64)、Windows 11 (ARM64)
 - .NET 10 SDK
 - Inno Setup 6 (インストーラーを作ります。無ければ Chocolatey で入れます)
-- Meltype IME も入れるときは、Visual Studio Build Tools の「C++ によるデスクトップ開発」(MSVC と Windows SDK)。無ければ Meltype IME を入れずに続けます (ARM64 では入れません)
+- Visual Studio (Build Tools でもよい) の「C++ によるデスクトップ開発」(Meltype IME の DLL を作ります)
+
+Meltype IME の DLL と、それに要る Visual Studio Installer の「個別のコンポーネント」:
+
+| 作るもの | 作る DLL | 要るコンポーネント |
+| --- | --- | --- |
+| x64 の PC で `Install-Meltype.ps1` | x64・x86 | MSVC x64/x86 ビルド ツール (最新)・Windows 11 SDK |
+| ARM64 の PC で `Install-Meltype.ps1` | ARM64X・x86 | 上に加えて MSVC ARM64/ARM64EC ビルド ツール (最新) |
+| 配布用のパッケージ (`Build-Package.ps1`) | x64・ARM64X・x86 (1 つでも失敗したら止まる) | ARM64 の PC と同じ |
+| ポータブル版 (`Build-Package.ps1 -Portable`) | 作らない | 要らない |
+
+`Install-Meltype.ps1 -NoIme` も DLL を作って入れます (`-NoIme` は Meltype IME を新しく登録しないだけで、登録済みなら更新し、アンインストールで外すため)。
+
+`native\tip\build.ps1` は、ARM64 のビルドツールを `vswhere` でコンポーネント ID `Microsoft.VisualStudio.Component.VC.Tools.ARM64` から探します。
+これは「(最新)」の付いたコンポーネントで、版の付いた ARM64 ビルドツール (「v14.xx」など) だけを入れていると見つかりません。
+「Visual Studio の C++ ビルドツールが見つかりません」と出たら、次で確かめてください (何も出なければ、上のコンポーネントを入れる)。
+
+```powershell
+& "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.ARM64 -property installationPath
+```
 
 ## Mac・Linux でビルドする
 
@@ -114,6 +133,8 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
 新規インストール・アプリ内の自動更新・winget・`Install-Meltype.ps1` は、どれもこのインストーラーで入れます。
 あわせて作る `Meltype-<版>-windows.zip` は、1.6.0 以前の Meltype の自動更新用です (インストーラーと、それを実行するだけの `install.ps1` が入っています)。
 
+漢字変換も確かめるときは、先に Mozc の変換ヘルパーを `native\mozc\bin\` に作っておきます ([native/mozc/README.md](../../native/mozc/README.md))。無ければ、かなのまま確定するパッケージになります。
+
 - .NET のランタイムを `app\dotnet` に同梱しているので、使う人の PC に .NET は要りません (`Meltype.exe` がそこを使う: `AppHostDotNetSearch=AppRelative`)
 - 小さくする (30MB 未満) ために、ランタイムから Meltype が使わない部品を削ります
   1. Meltype.dll が使う型から参照をたどり、要らないアセンブリを削る (`Meltype.Tests -- --runtime-closure`)
@@ -121,6 +142,15 @@ powershell -ExecutionPolicy Bypass -File .\Build-Package.ps1
   3. もう一度自己診断を走らせ、削りすぎていないことを確かめる (失敗したらインストーラーを作らない)
 - 自己診断は、設定・判定・辞書・変換エンジン・Windows の候補 API・UI Automation・各画面・タスクトレイ・データの保存を、キーボードフックを掛けずに一通り動かします
 - インストール先は `%LOCALAPPDATA%\Programs\Meltype` で、管理者権限は要りません。配布用のファイルの元は [packaging/](../../packaging/) にあります
+
+インストーラーや Meltype IME の登録を変えたときは、実機で次を確かめます。
+
+- 新しく入れる: Meltype IME の登録 (UAC)、メモ帳などでの入力と変換、Win + Space で Meltype を選べること
+- 前の版 (リリースの setup.exe) からの上書き更新:
+  - 更新の前から開いていたアプリで打てるか、再起動の案内が出るか
+  - 再起動したあとに、入力・変換ができ、設定と学習した辞書が引き継がれているか
+- アンインストール: Meltype IME の登録が外れ、`C:\Program Files\Meltype` が消えるか (使われていた DLL は再起動のあと)
+- ARM64 の PC では、ARM64 のアプリ (メモ帳など)・x64 のアプリ・32 ビットのアプリのそれぞれで打てるか
 
 ポータブル版は次で作れます。
 
