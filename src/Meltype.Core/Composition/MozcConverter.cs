@@ -52,8 +52,8 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3;
 
-    public string? Convert(string hiragana) =>
-        ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
+    public string? Convert(string hiragana, string? before = null) =>
+        ConvertClauses(hiragana, before) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null) =>
         ConvertWithCandidates(hiragana, before)?.Select(s => s.Clause).ToList();
@@ -65,18 +65,23 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、区切りまで変わるなら文脈なしを使う。前に同じ語があると、
     /// Mozc は文脈に引きずられて区切りを変えてしまうため (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
     /// </summary>
-    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? before = null)
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? before = null) =>
+        WithContext(hiragana, before, Query);
+
+    /// <summary>ConvertWithCandidates と同じ (前の文脈なし)。Budget を使わず、ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidatesNow(string hiragana) =>
+        WithContext(hiragana, null, Request);
+
+    /// <summary>before から Mozc に渡す文脈を決めて、request (待つ・待たない) で変換する。</summary>
+    private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithContext(string hiragana, string? before,
+        Func<string, string, List<(string Reading, IReadOnlyList<string> Candidates)>?> request)
     {
-        if (PrecedingText.Sentence(before) is not { } sentence) return WithCandidates(Query(PrecedingText.ParticleNi(hiragana) ?? "", hiragana));
-        var withContext = Query(sentence, hiragana);
-        var plain = Query("", hiragana);
+        if (PrecedingText.Sentence(before) is not { } sentence) return WithCandidates(request(PrecedingText.ParticleNi(hiragana) ?? "", hiragana));
+        var withContext = request(sentence, hiragana);
+        var plain = request("", hiragana);
         if (withContext is null || plain is null) return WithCandidates(withContext ?? plain);
         return WithCandidates(withContext.Select(s => s.Reading).SequenceEqual(plain.Select(s => s.Reading)) ? withContext : plain);
     }
-
-    /// <summary>ConvertWithCandidates と同じ (文脈なし)。Budget を使わず、ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>
-    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidatesNow(string hiragana) =>
-        WithCandidates(Request("", hiragana));
 
     private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithCandidates(List<(string Reading, IReadOnlyList<string> Candidates)>? segments) =>
         segments is { Count: > 0 }

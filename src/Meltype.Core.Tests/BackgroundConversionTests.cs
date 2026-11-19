@@ -266,7 +266,7 @@ internal static class BackgroundConversionTests
 
         public event Action? ResultReady { add { } remove { } }
 
-        public string? Convert(string hiragana) => string.Concat(Clauses.Select(c => c.Text));
+        public string? Convert(string hiragana, string? before = null) => string.Concat(Clauses.Select(c => c.Text));
 
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => Clauses;
     }

@@ -84,8 +84,12 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     private object? _failedZenzai;
     private static readonly object CouldNotCreate = new();
 
-    public string? Convert(string hiragana) =>
-        (Zenzai(hiragana, null) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
+    /// <summary>
+    /// 読み全体の変換。Zenzai には文の変換 (<see cref="ConvertClauses"/>) と同じ文脈で頼む (Zenzai は最後に頼まれた 1 件だけを処理するので、
+    /// 同じ読みを別の文脈で頼むと、文の変換の依頼が消える)。
+    /// </summary>
+    public string? Convert(string hiragana, string? before = null) =>
+        (Zenzai(hiragana, before) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
 
     /// <summary>Zenzai の答えを使えるか (<see cref="ConvertClauses"/> と同じ決め方): かなが読みと合うか、Mozc の文節ごとの候補をつないで作れるか。</summary>
     private bool IsUsable(string hiragana, string answer) =>

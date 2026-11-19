@@ -786,7 +786,7 @@ internal static class ImeContractTests
     {
         private readonly CompositionTests.FakeConverter _converter = new();
         public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
-        public string? Convert(string hiragana) => _converter.Convert(hiragana);
+        public string? Convert(string hiragana, string? before = null) => _converter.Convert(hiragana);
         public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => _converter.ConvertClauses(hiragana, context);
         public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
     }

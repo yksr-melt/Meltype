@@ -241,7 +241,7 @@ internal static class BracketCandidateTests
     {
         public int Calls { get; private set; }
         public ManualResetEventSlim Learned { get; } = new();
-        public string? Convert(string reading) { Calls++; return reading; }
+        public string? Convert(string reading, string? before = null) { Calls++; return reading; }
         public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null)
         {
             Calls++;

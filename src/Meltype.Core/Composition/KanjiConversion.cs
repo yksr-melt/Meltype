@@ -25,8 +25,8 @@ internal static class JapaneseParticles
 /// </summary>
 public interface IKanjiConverter
 {
-    /// <summary>全体を 1 回で変換する。変換できなければ null。</summary>
-    string? Convert(string hiragana);
+    /// <summary>全体を 1 回で変換する。変換できなければ null。before は <see cref="ConvertClauses"/> と同じ。</summary>
+    string? Convert(string hiragana, string? before = null);
 
     /// <summary>
     /// 文節に区切って変換する。区切れなければ null。before はキャレットの前の確定済みの文字列そのまま (変換の文脈として使うだけで、結果には含めない)。

@@ -130,8 +130,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         lock (_gate) EnsureStarting();
     }
 
-    public string? Convert(string hiragana) =>
-        ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
+    public string? Convert(string hiragana, string? before = null) =>
+        ConvertClauses(hiragana, before) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
     /// <summary>文脈は、文をまたぐ日本語の文章 (<see cref="PrecedingText.Passage"/>)。無ければ「。」(文の始まり)。</summary>
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before = null)

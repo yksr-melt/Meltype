@@ -163,6 +163,18 @@ internal static class MozcConverterTests
         Assert.Equal("C\t\tはしる", helper.Requests[^1], "に 以外で始まる読みには仮の文脈を付けない (はしる → は知る を防ぐ)");
     }
 
+    [Test]
+    public static void ZenzaiAnswer_IsCheckedTheSameWay_WhenConvertingAndWhenCleaningHistory()
+    {
+        // Zenzai の答え (に来て気づく) を Mozc の候補で確かめるとき、変換中と、起動時に変換履歴を掃除するとき (待つ版) で同じ文脈を渡す。
+        // 違うと、変換で使った語を掃除で消してしまう
+        var helper = new AnsweringHelper((context, reading) => context == "これ" ? "にきて\x1fに来て\x1eきずく\x1f気づく" : "にきて\x1f似来て\x1eきずく\x1f築く");
+        using var mozc = new MozcConverter(helper);
+        var hybrid = new HybridConverter(mozc);
+        Assert.Equal(true, hybrid.IsBuiltFromMozcCandidatesNow("にきてきずく", "に来て気づく"), "仮の文脈「これ」で変換した候補で作れる");
+        Assert.Equal("C\tこれ\tにきてきずく", helper.Requests[^1]);
+    }
+
     private static bool WaitConverted(MozcConverter mozc, string reading)
     {
         var watch = Stopwatch.StartNew();
