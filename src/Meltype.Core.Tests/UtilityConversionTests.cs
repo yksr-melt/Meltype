@@ -248,13 +248,41 @@ internal static class UtilityConversionTests
     private static List<string> Kanji(string reading) => KanjiPartsConversion.Find(reading);
 
     [Test]
-    public static void Issue1868_VersionShowsCommitAndFront()
+    public static void Issue1868_VersionShowsCommitFrontAndZenzai()
     {
-        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どちらも OS とフロントを付ける
-        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME)", VersionConversion.Text("1.5.1", "Windows / Meltype IME"));
-        Assert.Equal("Meltype-1.5.1+abc1234 (Linux)", VersionConversion.Text("1.5.1+abc1234", "Linux"));
-        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux")), "学習・予測には使わない");
-        var candidate = VersionConversion.Candidate(new Meltype.Config.Settings());
-        Assert.True(candidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) && candidate.EndsWith(')'), candidate);
+        // リリースは版だけ、タグの無い自己ビルドはコミット ID も付ける。どれも OS とフロント・Zenzai の設定を付ける
+        Assert.Equal("Meltype-1.5.1 (Windows / Meltype IME、Zenzai: ON)", VersionConversion.Text("1.5.1", "Windows / Meltype IME", zenzai: true, otherTipVersion: null));
+        Assert.Equal("Meltype-1.5.1+abc1234 (Linux / fcitx5、Zenzai: OFF)", VersionConversion.Text("1.5.1+abc1234", "Linux / fcitx5", zenzai: false, otherTipVersion: null));
+        Assert.True(Predictor.IsVersionText(VersionConversion.Text("1.5.1+abc1234", "Linux", zenzai: true, otherTipVersion: null)), "学習・予測には使わない");
+        var k = new CompositionTests.Keyboard();
+        k.Settings.UseZenzai = false;
+        k.Type("ba-jonn ");
+        Assert.True(k.Host.View!.Candidates.Contains(k.VersionCandidate), string.Join(" ", k.Host.View.Candidates));
+        Assert.True(k.VersionCandidate.StartsWith($"Meltype-{Meltype.Config.ProjectInfo.WithCommit(Meltype.Config.ProjectInfo.CoreVersion)} (", StringComparison.Ordinal) &&
+            k.VersionCandidate.EndsWith("、Zenzai: OFF)", StringComparison.Ordinal), k.VersionCandidate);
+    }
+
+    [Test]
+    public static void Issue1868_VersionShowsOtherTipVersionOnlyWhenItDiffers()
+    {
+        // 登録済みの Meltype IME が別のビルドのときだけ、そのことと、その Meltype IME を同梱した Meltype の版を付ける
+        Assert.Equal("Meltype-1.6.0 (Windows / Meltype キーボード、Zenzai: ON、Meltype IME は別の版: 1.5.1)",
+            VersionConversion.Text("1.6.0", "Windows / Meltype キーボード", zenzai: true, otherTipVersion: "1.5.1"));
+        var stale = new CompositionTests.Keyboard { OtherTipVersion = "1.5.1+abc1234" };
+        stale.Type("ba-jonn ");
+        Assert.True(stale.Host.View!.Candidates.Any(c => c.EndsWith("、Meltype IME は別の版: 1.5.1+abc1234)", StringComparison.Ordinal)), string.Join(" ", stale.Host.View.Candidates));
+        var same = new CompositionTests.Keyboard();
+        same.Type("ba-jonn ");
+        Assert.True(!same.Host.View!.Candidates.Any(c => c.Contains("別の版", StringComparison.Ordinal)), "同じビルドなら付けない");
+    }
+
+    [Test]
+    public static void Issue1868_LinuxFrontFromCommandLine()
+    {
+        // Linux のフロントは、Core を読み込んだプロセスのコマンドラインで分かる
+        Assert.Equal("fcitx5", VersionConversion.LinuxFrontOf(["/usr/bin/fcitx5", "-d"]));
+        Assert.Equal("IBus", VersionConversion.LinuxFrontOf(["python3", "/opt/meltype/ibus-engine-meltype", "--ibus"]));
+        Assert.Equal("端末", VersionConversion.LinuxFrontOf(["/usr/bin/python3", "/home/u/Meltype-tty/meltype-tty"]));
+        Assert.Equal(null, VersionConversion.LinuxFrontOf(["python3", "tools/test-native-boundaries.py", "libMeltypeNative.so"]));
     }
 }
