@@ -78,7 +78,8 @@ class PresentationTests(unittest.TestCase):
         for scope in ("CI専用試験", "隔離IBus", "エミュレーター", "実WASM・模擬IME API", "iOS Simulator"):
             self.assertIn(scope, body)
         self.assertIn("通常アプリ・物理端末でのIME入力確認とは別です", body)
-        self.assertEqual(body.count("https://raw.githubusercontent.com/"), 10)
+        self.assertEqual(body.count(".png)"), 10)
+        self.assertEqual(body.count(".svg)"), 10)
         self.assertIn("/" + "b" * 40 + "/flash-v0.1.0-preview.4/", body)
         self.assertNotIn("releases/download/flash-v0.1.0-preview.4/cpu.png", body)
         self.assertNotIn("[全測定", body)
@@ -93,7 +94,8 @@ class PresentationTests(unittest.TestCase):
         self.assertIn("Androidはdebug署名、macOSはアドホック署名です", body)
         for os_name in ("Windows", "macOS", "Linux", "Android", "ChromeOS", "iOS"):
             self.assertIn(f"|{os_name}|成功|未実施|", body)
-        self.assertEqual(body.count("https://raw.githubusercontent.com/"), 10)
+        self.assertEqual(body.count(".png)"), 10)
+        self.assertEqual(body.count(".svg)"), 10)
         self.assertIn("/" + "b" * 40 + "/flash-v1.0.0/", body)
 
     def test_only_flash_stable_and_preview_tags_are_accepted(self):
@@ -201,6 +203,8 @@ class PresentationTests(unittest.TestCase):
             (directory / "charts/README.md").write_text("## 全入力の中央値\n\n## CPU・RAMのプロセス中央値\n\n## 表示範囲外の測定値\n\n|項目|値|\n|---|---|\n|sample|999|\n\n## 全画像\n\n[raw](data.csv)", encoding="utf-8")
             for name in publisher.IMAGES:
                 (directory / "charts" / name).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+            for name in publisher.ZOOM_IMAGES:
+                (directory / "charts" / name).write_text('<svg xmlns="http://www.w3.org/2000/svg"/>', encoding="utf-8")
             _, body = publisher.validate_benchmark(directory, "a" * 40)
             self.assertNotIn("data.csv", body)
             self.assertIn("表示範囲外の測定値", body)
@@ -224,12 +228,12 @@ class PresentationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temporary, patch.object(publisher, "api", side_effect=fake_api):
             charts = Path(temporary)
-            for name in publisher.IMAGES:
+            for name in publisher.IMAGES + publisher.ZOOM_IMAGES:
                 (charts / name).write_bytes(b"png")
             self.assertEqual(publisher.publish_images("flash-v0.1.0-preview.4", charts), "media-commit")
         tree = next(payload for path, payload, _ in calls if path == "git/trees")
         self.assertEqual(tree["base_tree"], "old-tree")
-        self.assertEqual(len(tree["tree"]), 10)
+        self.assertEqual({entry["path"].split("/")[-1] for entry in tree["tree"]}, set(publisher.IMAGES + publisher.ZOOM_IMAGES))
         ref, payload, method = calls[-1]
         self.assertEqual((ref, method, payload["force"]), ("git/refs/heads/release-media", "PATCH", False))
 

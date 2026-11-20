@@ -10,12 +10,14 @@ from pathlib import Path
 import re
 import subprocess
 import tomllib
+from xml.etree import ElementTree
 
 REPO = "appipinopi/Meltype-Flash"
 MEDIA_BRANCH = "release-media"
 COMBINED_IMAGES = ("speed-32-64.png", "speed-128-256.png", "speed-short-edit.png", "cpu.png", "ram.png")
 RUST_IMAGES = tuple("rust-" + name for name in COMBINED_IMAGES)
 IMAGES = RUST_IMAGES + COMBINED_IMAGES
+ZOOM_IMAGES = tuple(Path(name).with_suffix(".svg").name for name in IMAGES)
 PACKAGES = (
     "Meltype-flash-Windows-x64.zip", "Meltype-flash-Linux-x64.tar.gz",
     "Meltype-flash-macOS-arm64.zip", "Meltype-flash-macOS-x64.zip",
@@ -111,6 +113,9 @@ def validate_benchmark(directory, sha):
     for name in IMAGES:
         if not (directory / "charts" / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
             raise ValueError(f"箱ひげ図がありません: {name}")
+    for name in ZOOM_IMAGES:
+        if ElementTree.parse(directory / "charts" / name).getroot().tag != "{http://www.w3.org/2000/svg}svg":
+            raise ValueError(f"拡大用のSVGが不正です: {name}")
     notes = (directory / "charts/README.md").read_text(encoding="utf-8-sig")
     if "## 全入力の中央値" not in notes or "## CPU・RAMのプロセス中央値" not in notes or "## 全画像" not in notes:
         raise ValueError("測定結果の本文がありません")
@@ -183,7 +188,8 @@ def compose_body(tag, sha, benchmark, media_sha, changes):
                                ("C#・Rust前版・現在版（3者比較）", COMBINED_IMAGES)]:
             rows += ["#### " + heading, ""]
             for name in names:
-                rows += [f"![{name}](https://raw.githubusercontent.com/{REPO}/{media_sha}/{tag}/{name})", ""]
+                base = f"https://raw.githubusercontent.com/{REPO}/{media_sha}/{tag}/"
+                rows += [f"![{name}]({base}{name})", "", f"[拡大表示（SVG）]({base}{Path(name).with_suffix('.svg')})", ""]
         rows += ["測定レポート・画像・生データのダウンロード用アセットは添付していません。", ""]
     body = collapse_details(normalize_markdown("\n".join(rows)))
     if re.search(r"\]\((?!https://)[^)]+\)", body):
@@ -207,7 +213,7 @@ def publish_images(tag, charts):
     payload = {"tree": []}
     if parent:
         payload["base_tree"] = api(f"git/commits/{parent}")["tree"]["sha"]
-    for name in IMAGES:
+    for name in IMAGES + ZOOM_IMAGES:
         blob = api("git/blobs", {"content": base64.b64encode((charts / name).read_bytes()).decode(), "encoding": "base64"})
         payload["tree"].append({"path": f"{tag}/{name}", "mode": "100644", "type": "blob", "sha": blob["sha"]})
     tree = api("git/trees", payload)

@@ -67,7 +67,8 @@ def axis_window(stats, log=None):
         span = max(hi - lo, .08)
         limits = (10 ** (lo - span * .12), 10 ** (hi + span * .4))
     else:
-        span = max(high - low, abs(high) * .1, 1e-9)
+        # Very close measurements still need distinct positions on the plot.
+        span = max(high - low, abs(high) * 1e-12) if high > low else max(abs(high) * .1, 1e-9)
         limits = (low - span * .12, high + span * .4)
         if all(stat["minimum"] >= 0 for stat in stats):
             limits = (max(0, limits[0]), limits[1])
@@ -77,6 +78,8 @@ def axis_window(stats, log=None):
 def boxes(ax, groups, ylabel, title, *, log=None):
     stats = [distribution(groups[v]) for v in VERSIONS]
     scale, limits = axis_window(stats, log)
+    medians = {stat["med"] for stat in stats}
+    digits = next(n for n in range(4, 18) if len({format(m, f".{n}g") for m in medians}) == len(medians))
     visible_stats = []
     for version, stat in zip(VERSIONS, stats):
         stat["axis_scale"] = scale
@@ -99,7 +102,7 @@ def boxes(ax, groups, ylabel, title, *, log=None):
         ax.scatter(position + offsets[visible], values[visible], s=18,
                    color=COLORS[position - 1], alpha=.42, zorder=2)
         stat = stats[position - 1]
-        annotation = f"median {stat['med']:.4g}\nn={stat['n']}, outliers={len(stat['fliers'])}"
+        annotation = f"median {stat['med']:.{digits}g}\nn={stat['n']}, outliers={len(stat['fliers'])}"
         if stat["off_scale"]:
             annotation += f"\n{len(stat['off_scale'])} off-scale\n(values in report)"
         ax.text(position, .98, annotation,
@@ -108,7 +111,7 @@ def boxes(ax, groups, ylabel, title, *, log=None):
     ax.set_yscale(scale)
     ax.set_ylim(*limits)
     if scale == "linear":
-        ax.ticklabel_format(axis="y", style="plain", useOffset=False)
+        ax.ticklabel_format(axis="y", style="plain", useOffset=(limits[1] - limits[0] < abs(limits[0]) * 1e-4))
     ax.set_xticks(range(1, len(VERSIONS) + 1), LABELS)
     ax.set_xlim(.45, len(VERSIONS) + .55)
     ax.set_title(title, fontsize=13, pad=12)
@@ -141,7 +144,33 @@ def off_scale_table(stats):
     return rows
 
 
-def finish(fig, path, title, note):
+def zoom_medians(ax, groups):
+    """Reveal close medians in the scalable view; keep the full distribution in the PNG."""
+    if not ax.axison:
+        return
+    values = np.array([groups[v]["med"] for v in VERSIONS])
+    transform = ax.yaxis.get_transform()
+    span = np.ptp(transform.transform(values))
+    visible = np.ptp(transform.transform(ax.get_ylim()))
+    if span == 0 or span >= visible * .1:
+        return
+    title, unit = ax.get_title(), ax.get_ylabel().removesuffix(" (log scale)")
+    ax.clear()
+    ax.set_title(title)
+    ax.set_ylabel(f"{unit} (median detail)")
+    ax.set_xticks(range(1, len(values) + 1), LABELS)
+    ax.set_xlim(.45, len(values) + .55)
+    padding = max(np.ptp(values) * .3, abs(values[0]) * 1e-12)
+    ax.set_ylim(values.min() - padding, values.max() + padding)
+    for x, (value, color) in enumerate(zip(values, COLORS), 1):
+        ax.plot(x, value, "o", color=color)
+        ax.annotate(np.format_float_positional(value, trim="-"), (x, value),
+                    xytext=(0, 6), textcoords="offset points", ha="center")
+    ax.grid(axis="y", alpha=.22)
+    ax.spines[["top", "right"]].set_visible(False)
+
+
+def finish(fig, path, title, note, panel_stats):
     fig.suptitle(title, fontsize=15, fontweight="bold", y=1 - .12 / fig.get_figheight())
     fig.legend(handles=[Patch(facecolor=c, alpha=.55, label=l) for c, l in zip(COLORS, LABELS)] + [
         Line2D([0], [0], color="#111111", linewidth=2.2, label="Median"),
@@ -153,6 +182,9 @@ def finish(fig, path, title, note):
     fig.subplots_adjust(left=.09, right=.98, bottom=.85 / height,
                         top=1 - (1.65 if len(VERSIONS) == 3 else 1.35) / height, hspace=.65, wspace=.3)
     fig.savefig(path, dpi=170, facecolor="white", metadata={"Software": "Meltype benchmark plotter"})
+    for ax, groups in zip(fig.axes, panel_stats):
+        zoom_medians(ax, groups)
+    fig.savefig(path.with_suffix(".svg"), facecolor="white", metadata={"Date": None})
     plt.close(fig)
 
 
@@ -183,7 +215,8 @@ def render_charts(report, output, names, comparison_label, rounds, process_count
             ax.set_visible(False)
         finish(fig, output / filename, f"{report.get('host_os', 'Windows')} / {report.get('backend', 'core')}: {title}",
                "Lower is faster. Each dot = one sequence; whiskers = 1.5 x IQR. Off-scale values are listed in the report.\n"
-               "No TSF, candidate rendering, external converter, prediction or learning.\n" + stamp)
+               "No TSF, candidate rendering, external converter, prediction or learning.\n" + stamp,
+               [stats["speed"][case["case"]] for case in cases])
     mib = 1024 ** 2
     panels = [
         (names[3], "CPU / elapsed time across complete benchmark processes", [
@@ -213,7 +246,8 @@ def render_charts(report, output, names, comparison_label, rounds, process_count
             stats["resource_units"][key] = unit
         finish(fig, output / filename, title,
                "Each dot = one process run; includes startup, dictionaries, sessions, warmups and JSON output.\n"
-               "Off-scale values are listed in the report. RSS peak from OS; available memory samples at ~50 ms. Unavailable metrics marked unmeasured.\n" + stamp.split(" | n=")[0] + f" | n={process_count} processes / version")
+               "Off-scale values are listed in the report. RSS peak from OS; available memory samples at ~50 ms. Unavailable metrics marked unmeasured.\n" + stamp.split(" | n=")[0] + f" | n={process_count} processes / version",
+               [stats["resources"][key] for key, *_ in metrics])
     return stats, panels
 
 
@@ -231,7 +265,7 @@ def main():
         report["hardware"] = json.loads(args.hardware.read_text(encoding="utf-8-sig"))
     output = args.output
     output.mkdir(parents=True, exist_ok=True)
-    if any((output / name).exists() for name in IMAGES + RUST_IMAGES):
+    if any((output / name).with_suffix(ext).exists() for name in IMAGES + RUST_IMAGES for ext in (".png", ".svg")):
         raise ValueError("Choose a new output directory; existing charts are preserved")
     global VERSIONS, LABELS, COLORS
     rust_versions = report.get("comparison_kind") == "rust-versions"
@@ -344,7 +378,7 @@ def main():
                     ("C#・Rust前版・現在版（3者比較）", IMAGES)] if with_csharp else [("2者比較", IMAGES)]
     images = [name for _, names in image_groups for name in names]
     for heading, names in image_groups:
-        rows += ["### " + heading, "", *[f"![{name}]({name})\n" for name in names]]
+        rows += ["### " + heading, "", *[f"![{name}]({name})\n\n[拡大表示（SVG）]({Path(name).with_suffix('.svg')})\n" for name in names]]
     current_option = (f" --current-ref {report['new_ref']}" if report.get("current_source") == "tag/commit" else "")
     rows += ["## 証跡・再現", "", "[全測定の合計時間CSV](timings.csv)／[CPU・RAMの全観測CSV](resources.csv)／[中央値・四分位・全外れ値の数値](boxplot-statistics.json)／[測定条件・ハッシュ・コンパイラ・全合計時間](summary.json)", "",
              "```powershell", "$env:PYTHONUTF8='1'",
