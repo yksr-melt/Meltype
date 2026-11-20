@@ -15,6 +15,7 @@ internal sealed class UiAutomation
 {
     // プロパティ ID・パターン ID・コントロールの種類 (UIAutomationClient.h)
     public const int ControlTypeEdit = 50004, ControlTypeDocument = 50030, ControlTypeComboBox = 50003, ControlTypePane = 50033, ControlTypeText = 50020;
+    public const int ControlTypeMenu = 50009, ControlTypeMenuItem = 50011;
     private const int BoundingRectangleProperty = 30001, ProcessIdProperty = 30002, ControlTypeProperty = 30003, NameProperty = 30005,
         AutomationIdProperty = 30011, NativeWindowHandleProperty = 30020,
         IsKeyboardFocusableProperty = 30009, ClassNameProperty = 30012, IsPasswordProperty = 30019,
