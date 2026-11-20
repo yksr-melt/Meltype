@@ -333,6 +333,11 @@ internal static class CompositionTests
 
         string? IImeEnvironment.ClipboardText => Host.ClipboardText;
 
+        public string? OtherTipVersion { get; set; }
+
+        /// <summary>今の「ばーじょん」の候補。</summary>
+        public string VersionCandidate => Composition.Utility.VersionConversion.Candidate(Settings, OtherTipVersion);
+
         /// <summary>出来事を送り、応答を入力欄に当てる。vk は、本体が使わなかったらアプリに入れるキー (0 ならなし)。</summary>
         private SessionResult Send(ImeEventType type, ImeKey? key = null, ImeCaret? caret = null, int index = 0, int vk = 0, bool shift = false)
         {

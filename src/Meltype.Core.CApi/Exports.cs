@@ -160,6 +160,8 @@ public static unsafe class Exports
         public SnippetStore Snippets => Runtime.Snippets;
 
         public string? ClipboardText => null;
+
+        public string? OtherTipVersion => null;
     }
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>
