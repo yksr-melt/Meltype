@@ -571,10 +571,10 @@ internal sealed class TipServer : IDisposable
     // TextService::kTaskbarMenuFocus。Win+X のメニューは Win32 のメニューフラグを立てず、UI Automation で分かる。
     private const uint TaskbarMenuFocusMessage = 0x8000 + 3;
 
-    private static void OnTaskbarMenuFocusChanged(IntPtr taskbar, IntPtr focus)
+    // thread はフォーカスのある HWND のスレッド。キーを処理する TIP のメッセージ用ウィンドウへ送る。
+    private static void OnTaskbarMenuFocusChanged(uint thread, IntPtr focus)
     {
-        var thread = Native.GetWindowThreadProcessId(taskbar, out _);
-        if (thread != 0 && MessageWindow(thread) is { } target)
+        if (MessageWindow(thread) is { } target)
             Native.PostMessageW(target, TaskbarMenuFocusMessage, IntPtr.Zero, focus);
     }
 

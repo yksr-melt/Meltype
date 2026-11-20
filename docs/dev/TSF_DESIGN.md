@@ -144,10 +144,9 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   元の欄をすぐに編集できず `Password` の通知が先になる場合は、元の欄に表示済みの文字を残し、編集できるようになった時点で TSF の変換だけを終了する。
   `IS_PRIVATE` のみを受け取った欄では、`Private` を送って学習を抑止し、変換は継続する。
 - Meltype.exe が動いていない・一時停止中・動作モードが Meltype IME でない・アプリ別設定で OFF のアプリ (応答の `state.handlesInput` が false)
-- タスクバーの XAML メニュー (Win+X など) にフォーカスしているときの、修飾キーなしの英数字・記号 (ASCII の `!` から `~`) と Space。Space を入力モードのキーに割り当てていても、メニューに通す。
-  Win32 のメニューフラグが立たないため、Meltype.exe の `FocusInspector` が UI Automation でメニューのフォーカスを検出し、`TipServer` がフォーカスの HWND を TIP に通知する (閉じたら 0)。
+- タスクバーの XAML メニュー (Win+X など) にフォーカスしているときの、修飾キー (Shift を含む) なしで入力される英数字・記号 (ASCII の `!` から `~` の範囲) と Space。Space を入力モードのキーに割り当てていても、メニューに通す。
+  Win32 のメニューフラグが立たないため、Meltype.exe の `FocusInspector` が UI Automation でメニューのフォーカスを検出し、`TipServer` がフォーカスの HWND を、その HWND のスレッドの TIP に通知する (閉じたら 0)。
   TIP はフォーカスのルート HWND が前面ウィンドウと一致し、フォーカス自体も通知時と一致する間、キーを Windows に通す。
-  通知は非同期のため、メニューを開いた直後や別の HWND のサブメニューに移った直後の打鍵に間に合うかは、実機で別に確認する必要がある。
 
 ## 通信
 

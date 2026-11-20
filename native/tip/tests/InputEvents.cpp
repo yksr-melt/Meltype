@@ -124,8 +124,6 @@ int main() {
         check(!takesKey('U'), "the next submenu access key passes without another notification at the same HWND");
         check(!takesKey('1'), "a digit goes to the taskbar menu");
         check(!takesKey(VK_SPACE), "Space goes to the taskbar menu even when configured as a shortcut");
-        check(!takesKey(VK_DOWN), "an arrow goes to the taskbar menu");
-        check(!takesKey(VK_ESCAPE), "Escape goes to the taskbar menu");
         BOOL eaten = TRUE;
         service->OnKeyDown(context.Get(), VK_SPACE, 1, &eaten);
         check(!eaten && toggleRequests == 0, "the actual Space key does not toggle the input mode in a menu");

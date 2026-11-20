@@ -28,7 +28,7 @@ public sealed class FocusInspector : IDisposable
     private FocusInfo _info => _state.Info;
     private string? _loggedDescription;
     private (string Description, Rectangle? Bounds)? _lastTextInput;
-    private IntPtr _taskbarMenuWindow;
+    private uint _taskbarMenuThread;
 
     /// <summary>
     /// 別の入力欄 (パスワード以外) にフォーカスが移った (このクラスのスレッドから呼ばれる)。入力モード (あ / A) の表示に使う。
@@ -38,8 +38,9 @@ public sealed class FocusInspector : IDisposable
     /// <summary>フォーカスが入力欄でない所・パスワード欄に移ったと分かったとき (このクラスのスレッドから呼ばれる)。引数は理由。</summary>
     public event Action<string>? CaptureLost;
 
-    // タスクバーのメニューと、そのメニューがキーを受け取る HWND。メニューから出たらフォーカスを 0 で通知する。
-    internal event Action<IntPtr, IntPtr>? TaskbarMenuFocusChanged;
+    // タスクバーのメニューでキーを受け取る HWND と、その HWND のスレッド (キーを処理する TIP のスレッド)。
+    // メニューから出たら、前に知らせたスレッドへフォーカスを 0 で通知する (閉じたメニューの HWND からはスレッドを求められないため、スレッドで覚える)。
+    internal event Action<uint, IntPtr>? TaskbarMenuFocusChanged;
 
     public FocusInspector()
     {
@@ -357,11 +358,11 @@ public sealed class FocusInspector : IDisposable
 
     private void PublishTaskbarMenuFocus(IntPtr focus)
     {
-        var window = focus == IntPtr.Zero ? IntPtr.Zero : _inspectedForeground;
-        if (_taskbarMenuWindow != IntPtr.Zero && _taskbarMenuWindow != window)
-            TaskbarMenuFocusChanged?.Invoke(_taskbarMenuWindow, IntPtr.Zero);
-        _taskbarMenuWindow = window;
-        if (window != IntPtr.Zero) TaskbarMenuFocusChanged?.Invoke(window, focus);
+        var thread = focus == IntPtr.Zero ? 0 : Native.GetWindowThreadProcessId(focus, out _);
+        if (_taskbarMenuThread != 0 && _taskbarMenuThread != thread)
+            TaskbarMenuFocusChanged?.Invoke(_taskbarMenuThread, IntPtr.Zero);
+        _taskbarMenuThread = thread;
+        if (thread != 0) TaskbarMenuFocusChanged?.Invoke(thread, focus);
     }
 
     private void ApplyFocus(long sequence, FocusInfo info, IntPtr affinityWindow)

@@ -1051,8 +1051,11 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     ch = 0;
     if (disabled_ || vk >= 256) return false;
     if (IsModifier(vk) && !CapturesKey(vk, lParam)) return false;
-    // ワークアラウンド: XAML メニューは Win32 のメニューフラグを立てない (#2000)。OS の動作に合わせて永続的に UIA の通知を使う。
-    // 通知時と同じ入力先にいる間だけ、単独の文字キーと Space をメニューへ渡す。
+    // タスクバーの XAML メニュー (Win+X など) は Win32 のメニューフラグを立てないので、UI Automation の通知で調べる (#2000)。
+    // 通知時と同じ入力先にいる間だけ、修飾キーなしの文字キーと Space をメニューへ渡す。
+    // Space を入力モードのキーに割り当てていてもメニューを優先するため、CapturesKey より前で調べる。
+    // タスクバーには変換中の文字が無いので、ここで返しても ResumeOrCommit などの後始末は要らない
+    // (このスレッドの前の入力欄で変換中だった文字は、フォーカスが移ったときに OnSetFocus で確定している)。
     if (taskbarMenuFocus_ && GetForegroundWindow() == GetAncestor(taskbarMenuFocus_, GA_ROOT) && GetFocus() == taskbarMenuFocus_ &&
         !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
         (static_cast<ULONG_PTR>(lParam) & (1u << 29)) == 0) {

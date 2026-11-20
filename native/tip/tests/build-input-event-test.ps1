@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 cet-t
-# ビルドだけ行う。../bin/tests/InputEvents.exe を実行すると、短時間テスト画面を前面に出す。
+# Build only. Run ../bin/tests/InputEvents.exe to briefly show the test window.
 $ErrorActionPreference = 'Stop'
 $nativeDir = Split-Path $PSScriptRoot -Parent
 $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
@@ -17,4 +17,4 @@ $command = @(
     "cl /nologo /std:c++17 /EHsc /W4 /wd4100 /utf-8 /DUNICODE /D_UNICODE /I. /Fo`"$testObj\\`" $sources /Fe:`"$testOut\InputEvents.exe`" /link ole32.lib oleaut32.lib uuid.lib user32.lib gdi32.lib advapi32.lib d2d1.lib dwrite.lib dwmapi.lib"
 ) -join ' && '
 cmd /c $command
-if ($LASTEXITCODE -ne 0) { throw '入力イベントのテストをビルドできませんでした。' }
+if ($LASTEXITCODE -ne 0) { throw 'Input event test build failed.' }
