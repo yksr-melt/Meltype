@@ -21,11 +21,7 @@ internal static class BackgroundConversionTests
         },
         _ => []);
 
-    private static TestSession Session(IKanjiConverter converter)
-    {
-        (converter as IBackgroundConverter)?.Budget.Enable();
-        return new(() => new Settings { LiveConversion = true }, converter);
-    }
+    private static TestSession Session(IKanjiConverter converter) => new(() => new Settings { LiveConversion = true }, converter, lateResults: true);
 
     [Test]
     public static void Signal_DoesNotLoseANotificationBeforeWaiting()
@@ -143,11 +139,10 @@ internal static class BackgroundConversionTests
                 return reading == "たんいをとる" ? [new ConversionClause("たんいを", "単位を"), new ConversionClause("とる", "取る")] : [new ConversionClause(reading, reading)];
             },
             _ => []);
-        converter.Budget.Enable();
         var phrases = new PhraseHistory(null);
         phrases.Remember("とることができる", "取ることができる");
         var session = new TestSession(() => new Settings { LiveConversion = true, PredictiveCandidates = true }, converter,
-            new CompositionServices { Predictor = new Predictor(phrases, null, null) });
+            new CompositionServices { Predictor = new Predictor(phrases, null, null) }, lateResults: true);
         Assert.Equal(0, SessionFacadeTests.Type(session, "tanniwotoru")[^1].View?.Predictions?.Count ?? 0);
 
         release.Set();
@@ -258,17 +253,13 @@ internal static class BackgroundConversionTests
         }
     }
 
-    private sealed class ChangingAnswer : IKanjiConverter, IBackgroundConverter
+    private sealed class ChangingAnswer : TestConverter
     {
         public IReadOnlyList<ConversionClause> Clauses { get; set; } = [];
 
-        public ConversionBudget Budget { get; } = new();
+        public override string? Convert(string hiragana, string? before) => string.Concat(Clauses.Select(c => c.Text));
 
-        public event Action? ResultReady { add { } remove { } }
-
-        public string? Convert(string hiragana, string? before) => string.Concat(Clauses.Select(c => c.Text));
-
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Clauses;
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Clauses;
     }
 
     [Test]
@@ -409,16 +400,14 @@ internal static class BackgroundConversionTests
         // ヘルパーの応答を待っている間に再描画しても、届いている答えが読めないとかなに戻って、表示が 漢字 → かな と揺れる
         var profile = Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile);
         using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
-        mozc.Budget.Enable();
-        mozc.Budget.Start(10000);
-        Assert.Equal("あ", mozc.ConvertClauses("あ", null)?[0].Text, "起動して答える");
-        Assert.True(mozc.Candidates("あ").Count > 0, "候補も覚えた");
+        var deadline = Environment.TickCount64 + 10000;
+        Assert.Equal("あ", Ask(mozc, "あ", deadline)?[0].Text, "起動して答える");
+        Assert.True(mozc.Candidates("あ", deadline).Count > 0, "候補も覚えた");
 
-        mozc.Budget.Start(0);
-        Assert.True(mozc.ConvertClauses("おそい", null) is null, "遅い読みをワーカーに頼む");
+        Assert.True(Ask(mozc, "おそい", 0) is null, "遅い読みをワーカーに頼む");
         Thread.Sleep(200);
-        Assert.Equal("あ", mozc.ConvertClauses("あ", null)?[0].Text, "ヘルパーの応答を待っている間も、届いている答えを読める");
-        Assert.True(mozc.Candidates("あ").Count > 0, "候補も読める");
+        Assert.Equal("あ", Ask(mozc, "あ", 0)?[0].Text, "ヘルパーの応答を待っている間も、届いている答えを読める");
+        Assert.True(mozc.Candidates("あ", 0).Count > 0, "候補も読める");
     }
 
     [Test]
@@ -428,22 +417,24 @@ internal static class BackgroundConversionTests
         using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         var notified = 0;
         mozc.ResultReady += () => Interlocked.Increment(ref notified);
-        mozc.Budget.Enable();
 
         // 起動の完了を知らせる
         mozc.WarmUp();
         Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) >= 1, 10000), "起動したら知らせる");
 
         var watch = Stopwatch.StartNew();
-        Assert.True(mozc.ConvertClauses("あ", null) is null, "控えが無ければ待たない");
+        Assert.True(Ask(mozc, "あ", 0) is null, "控えが無ければ待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"応答を待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) >= 2, 5000), "結果が届いたら知らせる");
-        Assert.Equal("あ", mozc.ConvertClauses("あ", null)?[0].Text);
+        Assert.Equal("あ", Ask(mozc, "あ", 0)?[0].Text);
 
         // 失敗は知らせない (再描画が同じ要求を繰り返さない)
         var before = Volatile.Read(ref notified);
-        Assert.True(mozc.ConvertClauses("おちる", null) is null, "落ちる読み");
+        Assert.True(Ask(mozc, "おちる", 0) is null, "落ちる読み");
         Thread.Sleep(500);
         Assert.Equal(before, Volatile.Read(ref notified));
     }
+
+    /// <summary>deadline (Environment.TickCount64) まで答えを待つ変換。0 なら待たない。</summary>
+    private static IReadOnlyList<ConversionClause>? Ask(MozcConverter mozc, string reading, long deadline) => mozc.Convert(new ConversionRequest(reading, null) { Deadline = deadline });
 }

@@ -217,7 +217,7 @@ internal static partial class CompositionController
                 {
                     Commit(state, env, suffix: " ");
                 }
-                else if (EndsWithEnglish(state, env)) CommitText(state, env, CompositionText.RenderSegments(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(state, shown), env.Converter).Select(c => c.Text)) : null) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
+                else if (EndsWithEnglish(state, env)) CommitText(state, env, CompositionText.RenderSegments(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true).Select(c => c.Text)) : null) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
                 else if (SpaceCommitsAutoEnglish(state, env)) CommitText(state, env, CompositionText.Raw(state.Text) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
@@ -572,7 +572,7 @@ internal static partial class CompositionController
     private static bool SpaceCommitsMarkdownMarker(CompositionState state) => state.Text.Mode == DisplayMode.Auto && CompositionText.IsMarkdownMarker(state.Text);
 
     private static bool SpaceCommitsAlphanumeric(CompositionState state, CompositionEnv env) =>
-        CompositionText.IsAlphanumericAt(state.Text, env, final: true) && !(state.Text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiDigit) && state.Text.PrecedingEnglish != true);
+        CompositionText.IsAlphanumericAt(state.Text, env, final: true) && !(state.Text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiDigit) && env.Context().PrecedingEnglish != true);
 
     private static bool SpaceCommitsAutoEnglish(CompositionState state, CompositionEnv env) => state.Text.Mode == DisplayMode.Auto && env.Detector.IsEnglishAtWordEnd(CompositionText.Raw(state.Text), !env.Settings.AutoDetection);
 

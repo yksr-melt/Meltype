@@ -46,7 +46,7 @@ internal static class Performance
 
         var mozc = Henkan.Engine;
         var converter = mozc is null ? null : new TimedConverter(mozc);
-        var more = mozc is null ? null : new TimedCandidates(mozc.Candidates);
+        var more = mozc is null ? null : new TimedCandidates(reading => mozc.Candidates(reading));
         CompositionTests.Keyboard Keyboard() => new(live: true, converter: converter, moreCandidates: more is null ? null : more.Lookup,
             userDictionary: new UserDictionary(null), translations: Henkan.TranslationDictionary);
 
@@ -344,7 +344,7 @@ internal static class Performance
         }
     }
 
-    /// <summary>変換エンジンを呼んだ回数と時間を数える (覚えさせない: ILearningConverter を持たない)。</summary>
+    /// <summary>変換エンジンを呼んだ回数と時間を数える (覚えさせない: Learn は何もしない)。</summary>
     private sealed class TimedConverter(IKanjiConverter inner) : IKanjiConverter
     {
         private long _ticks;
@@ -357,9 +357,7 @@ internal static class Performance
             Calls = 0;
         }
 
-        public string? Convert(string hiragana, string? before) => Time(() => inner.Convert(hiragana, before));
-
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Time(() => inner.ConvertClauses(hiragana, before));
+        public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => Time(() => inner.Convert(request));
 
         private T Time<T>(Func<T> call)
         {

@@ -32,8 +32,11 @@ internal static class ImeContractTests
         private ImeHost Create()
         {
             MeltypeRuntime.Connect(CompositionTests.Detector, Services);
-            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect, LateResults = LateResults }, () => Settings);
         }
+
+        /// <summary>変換エンジンの答えを待たず、後から受け取るか (<see cref="SessionParts.LateResults"/>)。</summary>
+        public bool LateResults { get; init; }
 
         /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定。null なら判定しない。</summary>
         public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
@@ -763,10 +766,9 @@ internal static class ImeContractTests
                 if (reading != "にほんご" || !release.Wait(5000)) return null;
                 return [new ConversionClause(reading, "日本語")];
             }, _ => []);
-            converter.Budget.Enable();
             converter.ResultReady += ready.Set;
             var phrases = new PhraseHistory(null);
-            var front = new Front { Converter = converter, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+            var front = new Front { Converter = converter, LateResults = true, Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
             front.Settings.LiveConversion = true;
             front.Settings.PredictiveCandidates = true;
             Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
@@ -784,13 +786,13 @@ internal static class ImeContractTests
         }
     }
 
-    private sealed class LearningConverter : IKanjiConverter, ILearningConverter
+    private sealed class LearningConverter : TestConverter
     {
         private readonly CompositionTests.FakeConverter _converter = new();
         public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
-        public string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
-        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
+        public override string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
+        public override void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
     }
 
     [Test]
@@ -835,7 +837,7 @@ internal static class ImeContractTests
             {
                 Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
                 Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
-                MoreCandidates = reading => reading == "にほんご" ? ["日本語", "日本語文"] : [],
+                MoreCandidates = (reading, _) => reading == "にほんご" ? ["日本語", "日本語文"] : [],
             }
         };
         front.Settings.PredictiveCandidates = true;
