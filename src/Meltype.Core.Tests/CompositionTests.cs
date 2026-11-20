@@ -476,13 +476,13 @@ internal static class CompositionTests
     public static void PrecedingText_PassageCrossesSentences()
     {
         // Zenzai の文脈は、改行を除いて文をまたぐ文章 (最大 100 文字)
-        Assert.Equal("昨日は雨でしたが、今日は", PrecedingText.Passage("昨日は雨でしたが、\n今日は") ?? "(なし)", "改行を除いて文をまたいで渡す");
-        var passage = PrecedingText.Passage(string.Concat(Enumerable.Repeat("あ", 150)) + "終");
+        Assert.Equal("昨日は雨でしたが、今日は", EngineContext.Passage("昨日は雨でしたが、\n今日は") ?? "(なし)", "改行を除いて文をまたいで渡す");
+        var passage = EngineContext.Passage(string.Concat(Enumerable.Repeat("あ", 150)) + "終");
         Assert.Equal(100, passage?.Length ?? 0, "最大 100 文字");
         Assert.True(passage!.EndsWith('終'), "キャレットに近い方を残す");
-        Assert.Equal("Hello, this is a pen.", PrecedingText.Passage("Hello, this is a pen. ") ?? "(なし)", "英文もそのまま渡す");
+        Assert.Equal("Hello, this is a pen.", EngineContext.Passage("Hello, this is a pen. ") ?? "(なし)", "英文もそのまま渡す");
         // Mozc の文脈は、同じ文の日本語 (最大 10 文字)
-        Assert.Equal("今日は", PrecedingText.Sentence("昨日は雨でした。今日は") ?? "(なし)");
+        Assert.Equal("今日は", EngineContext.Sentence("昨日は雨でした。今日は") ?? "(なし)");
     }
 
     [Test]

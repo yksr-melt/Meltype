@@ -133,12 +133,12 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     public string? Convert(string hiragana, string? before) =>
         ConvertClauses(hiragana, before) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
 
-    /// <summary>文脈は、文をまたぐ文章 (<see cref="PrecedingText.Passage"/>)。無ければ「。」(文の始まり)。</summary>
+    /// <summary>文脈は、文をまたぐ文章 (<see cref="EngineContext.Passage"/>)。無ければ「。」(文の始まり)。</summary>
     public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
     {
         ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
-        var context = PrecedingText.Passage(before) ?? NeutralContext;
+        var context = EngineContext.Passage(before) ?? NeutralContext;
         var key = context + "\u0000" + hiragana;
         lock (_gate)
         {

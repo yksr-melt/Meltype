@@ -61,7 +61,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>
     /// ConvertClauses と同じ文節と、この変換で受け取った文節ごとの候補。
     /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
-    /// 文脈は同じ文の日本語 (<see cref="PrecedingText.Sentence"/>)。文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き
+    /// 文脈は同じ文の日本語 (<see cref="EngineContext.Sentence"/>)。文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き
     /// (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、区切りまで変わるなら文脈なしを使う。前に同じ語があると、
     /// Mozc は文脈に引きずられて区切りを変えてしまうため (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
     /// </summary>
@@ -76,7 +76,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithContext(string hiragana, string? before,
         Func<string, string, List<(string Reading, IReadOnlyList<string> Candidates)>?> request)
     {
-        if (PrecedingText.Sentence(before) is not { } sentence) return WithCandidates(request("", hiragana));
+        if (EngineContext.Sentence(before) is not { } sentence) return WithCandidates(request("", hiragana));
         var withContext = request(sentence, hiragana);
         var plain = request("", hiragana);
         if (withContext is null || plain is null) return WithCandidates(withContext ?? plain);
@@ -120,7 +120,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (_disposed) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
             ClearCache();
-            var result = Send($"L\t{Clean(PrecedingText.Sentence(before) ?? "")}\t{records}");
+            var result = Send($"L\t{Clean(EngineContext.Sentence(before) ?? "")}\t{records}");
             if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
             {
                 _learnedSinceSave = 0;

@@ -30,13 +30,13 @@ public interface IKanjiConverter
 
     /// <summary>
     /// 文節に区切って変換する。区切れなければ null。before はキャレットの前の確定済みの文字列そのまま (変換の文脈として使うだけで、結果には含めない)。
-    /// どこまでをどう使うかは変換エンジンが決める (<see cref="PrecedingText"/>)。
+    /// どこまでをどう使うかは変換エンジンが決める。
     /// </summary>
     IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before);
 }
 
 /// <summary>キャレットの前の確定済みの文字列から、変換エンジンが文脈に使う部分を取り出す。</summary>
-internal static class PrecedingText
+internal static class EngineContext
 {
     /// <summary>Mozc の文脈: 同じ文の日本語の部分 (最大 10 文字)。前が日本語でなければ null。</summary>
     public static string? Sentence(string? before)
