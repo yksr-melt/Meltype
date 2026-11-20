@@ -140,7 +140,9 @@ internal sealed class MeltypeEngine : IDisposable
             if (!e.Injected && e.IsDown && e.Vk == VirtualKeys.OemEnlw && e.Scan == 0x29 && !e.Extended) return true;
         }
         var capture = Volatile.Read(ref _shortcutCapture);
-        if (!e.Injected && capture is not null)
+        // 取り込みを始める前から押していたキー (ボタンを押した Enter・押したままの Shift) の解放は、押下がアプリに届いているので通す。
+        // 飲み込むと、アプリと OS では押したままになる (#2078)
+        if (!e.Injected && capture is not null && (e.IsDown || _captureDown.Contains(e.PhysicalId)))
         {
             if (e.IsDown) _captureDown.Add(e.PhysicalId); else _captureDown.Remove(e.PhysicalId);
             _captureHankakuTail = e.IsUp && e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
