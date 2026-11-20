@@ -25,7 +25,7 @@ internal sealed class TestSession : IImeEnvironment
         {
             ClassifyDirect = classifyDirect is null ? null : (letters, final, _) => classifyDirect(letters, final),
             TimeMs = timeMs ?? (() => Environment.TickCount64),
-            LateResults = lateResults,
+            LateResults = () => lateResults,
         }, settings)
     {
     }

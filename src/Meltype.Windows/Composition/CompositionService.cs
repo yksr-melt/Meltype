@@ -32,7 +32,7 @@ internal sealed class CompositionService : IDisposable
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         _hybrid.WarmUp();
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
-        Parts = runtime.SessionParts(_hybrid, _hybrid.Candidates, _hybrid.Reading, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai })) with { LateResults = true };
+        Parts = runtime.SessionParts(_hybrid, _hybrid.Candidates, _hybrid.Reading, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai })) with { LateResults = () => true };
     }
 
     public MeltypeRuntime Runtime { get; }

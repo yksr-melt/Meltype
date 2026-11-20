@@ -32,11 +32,11 @@ internal static class ImeContractTests
         private ImeHost Create()
         {
             MeltypeRuntime.Connect(CompositionTests.Detector, Services);
-            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect, LateResults = LateResults }, () => Settings);
+            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect, LateResults = () => LateResults }, () => Settings);
         }
 
-        /// <summary>変換エンジンの答えを待たず、後から受け取るか (<see cref="SessionParts.LateResults"/>)。</summary>
-        public bool LateResults { get; init; }
+        /// <summary>変換エンジンの答えを待たず、後から受け取るか (<see cref="SessionParts.LateResults"/>)。入力欄を作った後に変えてもよい。</summary>
+        public bool LateResults { get; set; }
 
         /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定。null なら判定しない。</summary>
         public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
@@ -784,6 +784,26 @@ internal static class ImeContractTests
             Assert.Equal(0, Commits(result).GetArrayLength(), front.Trace);
             Assert.Equal(0, phrases.Count, front.Trace);
         }
+    }
+
+    [Test]
+    public static void LateResults_TakesEffectAfterTheHostIsCreated()
+    {
+        // fcitx5 は入力欄を作ってから、答えを後から受け取ると知らせる (meltype_set_conversion_ready)。その後のキーは答えを待たない
+        using var release = new ManualResetEventSlim();
+        using var converter = new BackgroundCallbackConverter((reading, _) =>
+        {
+            if (reading != "にほんご" || !release.Wait(5000)) return null;
+            return [new ConversionClause(reading, "日本語")];
+        }, _ => []);
+        var front = new Front { Converter = converter };
+        front.Settings.LiveConversion = true;
+        front.Event("StateRequested");
+        front.LateResults = true;
+        var started = Environment.TickCount64;
+        Assert.Equal("にほんご", View(front.Type("nihongo")[^1]).GetProperty("text").GetString(), front.Trace);
+        Assert.True(Environment.TickCount64 - started < 2000, "変換エンジンの答えを待たない");
+        release.Set();
     }
 
     private sealed class LearningConverter : TestConverter

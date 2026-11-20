@@ -83,7 +83,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
             : null;
 
     /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する (deadline まで待つ)。</summary>
-    public IReadOnlyList<string> Candidates(string reading, long deadline = long.MaxValue)
+    public IReadOnlyList<string> Candidates(string reading, long deadline)
     {
         lock (_resultsGate)
         {
@@ -171,7 +171,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
         var request = (Clean(context), Clean(reading));
         if (TryCached(request, out var result)) return result;
         _worker.Submit(request);
-        return _worker.Wait(request, (int)Math.Clamp(deadline - Environment.TickCount64, 0, int.MaxValue)) && TryCached(request, out result) ? result : null;
+        return _worker.Wait(request, ConversionRequest.RemainingMs(deadline)) && TryCached(request, out result) ? result : null;
     }
 
     private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)

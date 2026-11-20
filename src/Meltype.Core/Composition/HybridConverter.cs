@@ -156,7 +156,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     public void Learn(string? before, IReadOnlyList<ConversionClause> clauses) => mozc.Learn(before, clauses);
 
     /// <summary>読みの候補の一覧 (Mozc。deadline まで待つ)。</summary>
-    public IReadOnlyList<string> Candidates(string reading, long deadline = long.MaxValue) => mozc.Candidates(reading, deadline);
+    public IReadOnlyList<string> Candidates(string reading, long deadline) => mozc.Candidates(reading, deadline);
 
     /// <summary>文字列 (漢字かな混じり) の読み。かなだけならそのまま (カタカナはひらがなに)。再変換とユーザー辞書の登録で使う。分からなければ null。</summary>
     public string? Reading(string text) =>

@@ -144,7 +144,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
         var live = new LiveRequest(hiragana, context, key);
         _worker.Submit(live);
-        if (!_worker.Wait(live, request.RemainingMs)) return null;
+        if (!_worker.Wait(live, ConversionRequest.RemainingMs(request.Deadline))) return null;
         ThrowWorkerFailure();
         lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
     }

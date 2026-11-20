@@ -548,26 +548,27 @@ internal static class ImeSession
 
     private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings)
     {
-        var composition = Facts(state, env, settings);
-        return composition with { Context = () => CompositionController.ContextOf(state.Composition, composition) };
+        var lateResults = env.Parts.LateResults();
+        CompositionEnv composition = null!;
+        composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
+        {
+            ReadingOf = env.Parts.ReadingOf,
+            ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
+            NowMs = env.TimeMs(),
+            Selection = state.Field?.Selection,
+            CanDeleteBackward = CanDeleteSurrounding(state),
+            Clipboard = () => env.Environment.ClipboardText,
+            OtherTipVersion = () => env.Environment.OtherTipVersion,
+            NowPlaying = env.Parts.NowPlaying,
+            Corrected = env.Parts.Corrected,
+            Before = LineBefore(state, state.Field),
+            After = state.Field?.After,
+            LateResults = lateResults,
+            Deadline = lateResults ? 0 : long.MaxValue,
+            Context = () => CompositionController.ContextOf(state.Composition, composition),
+        };
+        return composition;
     }
-
-    private static CompositionEnv Facts(ImeSessionState state, ImeEnv env, Settings settings) => new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
-    {
-        ReadingOf = env.Parts.ReadingOf,
-        ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
-        NowMs = env.TimeMs(),
-        Selection = state.Field?.Selection,
-        CanDeleteBackward = CanDeleteSurrounding(state),
-        Clipboard = () => env.Environment.ClipboardText,
-        OtherTipVersion = () => env.Environment.OtherTipVersion,
-        NowPlaying = env.Parts.NowPlaying,
-        Corrected = env.Parts.Corrected,
-        Before = LineBefore(state, state.Field),
-        After = state.Field?.After,
-        LateResults = env.Parts.LateResults,
-        Deadline = env.Parts.LateResults ? 0 : long.MaxValue,
-    };
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
     public static bool Direct(ImeSessionState state) => state.Composition.Direct;

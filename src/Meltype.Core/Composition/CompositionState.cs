@@ -15,7 +15,7 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
     public FragmentOrigin? Fragment { get; init; }
 
     /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionController.ContextOf"/>)。</summary>
-    public Func<TextContext> Context { get; init; } = () => TextContext.None;
+    public required Func<TextContext> Context { get; init; }
 }
 
 /// <summary>

@@ -40,7 +40,8 @@ public sealed record ConversionRequest(string Hiragana, string? Before)
     /// </summary>
     public long Deadline { get; init; } = long.MaxValue;
 
-    internal int RemainingMs => (int)Math.Clamp(Deadline - Environment.TickCount64, 0, int.MaxValue);
+    /// <summary>deadline (Environment.TickCount64) までの残りのミリ秒。過ぎていれば 0。</summary>
+    internal static int RemainingMs(long deadline) => (int)Math.Clamp(deadline - Environment.TickCount64, 0, int.MaxValue);
 }
 
 /// <summary>

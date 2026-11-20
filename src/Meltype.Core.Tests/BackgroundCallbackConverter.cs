@@ -34,10 +34,10 @@ internal sealed class BackgroundCallbackConverter(
     public event Action? ResultReady;
 
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) =>
-        Ask(new Request(Kind.Clauses, request.Hiragana, request.Before), request.RemainingMs)?.Clauses;
+        Ask(new Request(Kind.Clauses, request.Hiragana, request.Before), ConversionRequest.RemainingMs(request.Deadline))?.Clauses;
 
-    public IReadOnlyList<string> Candidates(string reading, long deadline = long.MaxValue) =>
-        Ask(new Request(Kind.Candidates, reading, null), (int)Math.Clamp(deadline - Environment.TickCount64, 0, int.MaxValue))?.Candidates ?? [];
+    public IReadOnlyList<string> Candidates(string reading, long deadline) =>
+        Ask(new Request(Kind.Candidates, reading, null), ConversionRequest.RemainingMs(deadline))?.Candidates ?? [];
 
     /// <summary>最初の変換の準備 (辞書の読み込み) をワーカーで済ませておく。</summary>
     public void WarmUp() => Worker().Submit(new Request(Kind.Clauses, "にほんご", null));

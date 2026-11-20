@@ -60,7 +60,7 @@ internal static class SelfTest
         Check("変換ボックスの英語判定", () =>
         {
             var text = new CompositionTextState();
-            var env = new TextEnv(detector, new Config.Settings(), null);
+            var env = new TextEnv(detector, new Config.Settings(), null) { Context = () => TextContext.None };
             foreach (var c in "kyouhagoogle") CompositionText.Append(text, env, c);
             return CompositionText.Display(text, env, final: false);
         });

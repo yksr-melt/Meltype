@@ -46,7 +46,7 @@ internal static class Performance
 
         var mozc = Henkan.Engine;
         var converter = mozc is null ? null : new TimedConverter(mozc);
-        var more = mozc is null ? null : new TimedCandidates(reading => mozc.Candidates(reading));
+        var more = mozc is null ? null : new TimedCandidates(reading => mozc.Candidates(reading, long.MaxValue));
         CompositionTests.Keyboard Keyboard() => new(live: true, converter: converter, moreCandidates: more is null ? null : more.Lookup,
             userDictionary: new UserDictionary(null), translations: Henkan.TranslationDictionary);
 

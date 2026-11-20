@@ -718,7 +718,7 @@ internal static partial class CompositionController
     /// 1 つも後ろに押さないよう、その後ろに並べる。こうすれば誰にとっても困らないので、分野ごとに外す設定は作らない (#1650)。
     /// 絵文字・顔文字は最後に逆順で並べるので、変換してすぐ ↑ を押すと、いちばんよく使う絵文字 (えがお → 😊) になる (issue #133)。
     /// </summary>
-    /// before は、文の中での変換結果 (inContext) が無いときに、その読みだけの変換に渡す文脈 (<see cref="SegmentBefore"/>)。inContext があれば null。
+    /// <param name="before">文の中での変換結果 (inContext) が無いときに、その読みだけの変換に渡す文脈 (<see cref="SegmentBefore"/>)。inContext があれば null。</param>
     private static List<string> JapaneseCandidates(CompositionState state, CompositionEnv env, string reading, string? inContext, string? before, bool zenzai)
     {
         // 文の中での変換結果が無いとき (文節の区切りを変えた・打っている途中の候補) は、その読みだけの変換が最初の候補になるので、Zenzai も使う (Convert)

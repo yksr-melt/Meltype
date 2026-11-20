@@ -125,7 +125,7 @@ internal static class Checks
             if (typed.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー' or >= 'ァ' and <= 'ヺ'))
             {
                 var reading = new string(typed.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
-                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading)).Distinct().ToList();
+                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading, long.MaxValue)).Distinct().ToList();
                 results.Add(new { typed, expected, kind = "候補", actual = string.Join(" ", list.Take(12)), ok = list.Contains(expected) });
                 Henkan.Reset();
                 continue;
@@ -269,7 +269,7 @@ internal static class Henkan
     {
         // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
         var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
-        return new(live: true, converter: converter, moreCandidates: converter is null ? null : reading => converter.Candidates(reading),
+        return new(live: true, converter: converter, moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
             userDictionary: new Meltype.Composition.UserDictionary(null), translations: Translations.Value);
     }
 

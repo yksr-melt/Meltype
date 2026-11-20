@@ -63,7 +63,7 @@ internal static class TestRunner
                 var bar = text.IndexOf('|');
                 // MELTYPE_DIRECT=1 なら英数 (直接入力) の状態から打ち始める。
                 var direct = Environment.GetEnvironmentVariable("MELTYPE_DIRECT") == "1";
-                var keyboard = new CompositionTests.Keyboard(live: true, direct: direct, converter: converter, moreCandidates: reading => converter.Candidates(reading), userDictionary: new Composition.UserDictionary(null), translations: translations);
+                var keyboard = new CompositionTests.Keyboard(live: true, direct: direct, converter: converter, moreCandidates: reading => converter.Candidates(reading, long.MaxValue), userDictionary: new Composition.UserDictionary(null), translations: translations);
                 if (bar >= 0) keyboard.Host.PrecedingText = text[..bar];
                 foreach (var c in bar >= 0 ? text[(bar + 1)..] : text)
                 {

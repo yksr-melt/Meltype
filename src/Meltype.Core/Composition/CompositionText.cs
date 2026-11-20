@@ -42,7 +42,7 @@ internal static class CompositionText
     /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。学習の文脈は元の入力のもの。
     /// </summary>
     public static TextEnv FragmentEnv(CompositionTextState state, TextEnv env) =>
-        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(state, env)) };
+        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(state, env)), Context = () => TextContext.None };
 
     private static readonly Config.Settings FragmentSettings = new();
 

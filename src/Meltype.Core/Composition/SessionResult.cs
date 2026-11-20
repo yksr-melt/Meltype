@@ -191,6 +191,7 @@ public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter 
     /// <summary>
     /// 変換エンジンの答えを後から受け取れるフロントか (Converter の <see cref="IKanjiConverter.ResultReady"/> を受けて ConversionFinished を送る)。
     /// true なら入力スレッドは答えを待たない (Space・確定のときだけ少し待つ)。false なら答えるまで待つ (--repro・--self-test)。
+    /// 出来事ごとに読む (フロントは入力欄を作った後に、答えを後から受け取ると知らせることがある: fcitx5)。
     /// </summary>
-    public bool LateResults { get; init; }
+    public Func<bool> LateResults { get; init; } = () => false;
 }

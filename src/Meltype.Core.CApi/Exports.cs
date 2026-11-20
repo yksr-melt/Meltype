@@ -123,7 +123,7 @@ public static unsafe class Exports
     {
         try
         {
-            var parts = Runtime.SessionParts(Converter, Converter.Candidates, Converter.Reading) with { LateResults = s_lateResults };
+            var parts = Runtime.SessionParts(Converter, Converter.Candidates, Converter.Reading) with { LateResults = () => s_lateResults };
             return GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), parts, () => Runtime.Settings.Current)));
         }
         catch (Exception ex)
