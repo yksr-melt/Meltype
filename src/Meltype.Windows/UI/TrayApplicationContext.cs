@@ -135,7 +135,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _autoUpdateItem = new ToolStripMenuItem("自動で更新する", null, (_, _) => ToggleAutoUpdate());
         updates.DropDownItems.Add(_autoUpdateItem);
         updates.DropDownItems.Add("今すぐ更新を確認", null, (_, _) => CheckForUpdate());
-        updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false));
+        updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false, _engine));
         _updateItem = new ToolStripMenuItem("", null, (_, _) => ApplyUpdate()) { Visible = false };
         updates.DropDownItems.Add(_updateItem);
         updates.DropDownOpening += (_, _) =>
@@ -172,13 +172,13 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _invoker.BeginInvoke(ShowWelcome);
         }
         // 更新したあとの初めての起動なら、その版のリリースノートを一度だけ見せる (issue #1207)。
-        // 初めて起動した人には見せず、今の版を見せたことにしておく
+        // 設定で自動表示を OFF にしていれば見せない。初めて起動した人には見せず、今の版を見せたことにしておく
         if (_state.ReleaseNotesShown != AppInfo.Version)
         {
-            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_state.ReleaseNotesShown, AppInfo.Version, firstRun);
+            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_state.ReleaseNotesShown, AppInfo.Version, firstRun, _engine.Settings.ShowReleaseNotesAfterUpdate);
             _state.ReleaseNotesShown = AppInfo.Version;
             _state.Save();
-            if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true));
+            if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true, _engine));
         }
         // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
         // (初めて起動した人には、インストーラーが聞いている)

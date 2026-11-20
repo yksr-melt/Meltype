@@ -73,10 +73,10 @@ public static class ProjectInfo
 
     /// <summary>
     /// 更新したあとの初めての起動で、リリースノートを見せるか (issue #1207)。最後に見せた版と今の版が違えば見せる。
-    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。
+    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。autoShow が OFF なら見せない。
     /// </summary>
-    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun) =>
-        !firstRun && currentVersion != "?" && shownVersion != currentVersion;
+    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun, bool autoShow = true) =>
+        autoShow && !firstRun && currentVersion != "?" && shownVersion != currentVersion;
 
     /// <summary>不具合報告のフォーム (ReportForm) があるか。無ければ GitHub の Issue の画面で報告してもらう。</summary>
     public static bool HasReportForm => ReportForm.Length > 0;

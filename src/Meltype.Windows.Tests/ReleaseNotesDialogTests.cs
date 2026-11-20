@@ -22,6 +22,23 @@ internal static class ReleaseNotesDialogTests
         Assert.True(text.SelectionFont is { } heading && heading.Size > text.Font.Size, "見出しは本文より大きい");
     }
 
+    [Test]
+    public static void ReleaseNotesDialog_DontShowAgainChangesAutoShowSetting()
+    {
+        bool? showAfterUpdate = null;
+        using var dialog = new UI.ReleaseNotesDialog("1.6.0", updated: true, "- 項目", showAfterUpdate: true, show => showAfterUpdate = show);
+        var dontShow = Descendants(dialog).OfType<CheckBox>().Single();
+        Assert.Equal("今後表示しない", dontShow.Text);
+        Assert.True(!dontShow.Checked, "自動表示が ON ならチェックしない");
+        dontShow.Checked = true;
+        Assert.Equal(false, showAfterUpdate, "チェックしたら自動表示を OFF にする");
+        dontShow.Checked = false;
+        Assert.Equal(true, showAfterUpdate, "外したら自動表示を ON に戻す");
+
+        using var off = new UI.ReleaseNotesDialog("1.6.0", updated: false, null, showAfterUpdate: false, _ => { });
+        Assert.True(Descendants(off).OfType<CheckBox>().Single().Checked, "自動表示が OFF ならチェックしておく");
+    }
+
     private static IEnumerable<Control> Descendants(Control root)
     {
         foreach (Control child in root.Controls)
