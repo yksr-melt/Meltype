@@ -7,7 +7,7 @@
 kyouhagoogledekensaku  →  今日はgoogleで検索
 ```
 
-インストールと OS ごとの設定は [WINDOWS.md](WINDOWS.md)・[MACOS.md](MACOS.md)・[LINUX.md](LINUX.md) にあります。
+インストールと OS ごとの設定は [WINDOWS.md](WINDOWS.md)・[MACOS.md](MACOS.md)・[LINUX.md](LINUX.md)、端末版は [TTY.md](TTY.md) にあります。
 
 <br>
 
