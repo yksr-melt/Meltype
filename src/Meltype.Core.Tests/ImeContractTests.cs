@@ -51,6 +51,8 @@ internal static class ImeContractTests
 
         public string? ClipboardText => null;
 
+        public string? OtherTipVersion => null;
+
         public int Sessions => Host.SessionCount;
 
         public void CloseAll() => Host.CloseAll();

@@ -130,6 +130,13 @@ try {
         $hash = Join-Path $Source "$arch\MeltypeTip.dll.sha256"
         if (Test-Path -LiteralPath $hash) { Copy-Item -LiteralPath $hash -Destination "$dll.sha256" -Force }
     }
+    if (-not $Unregister) {
+        # この Meltype IME を同梱した Meltype の版。別の版の Meltype の Meltype.exe が「ばーじょん」の候補に出す (無ければ前の版を残さない)
+        $version = Join-Path $Source 'version.txt'
+        $installedVersion = Join-Path $target 'version.txt'
+        if (Test-Path -LiteralPath $version) { Copy-Item -LiteralPath $version -Destination $installedVersion -Force }
+        else { Remove-Item -LiteralPath $installedVersion -Force -ErrorAction SilentlyContinue }
+    }
     if ($Unregister) {
         # DLL が無くて regsvr32 で外せなかったときのために、登録をレジストリから直接消す (有っても消してよい。64 ビットと 32 ビットの両方の場所)
         $clsid = '{417D801B-A9BD-4C26-BD16-356A825A6998}'
