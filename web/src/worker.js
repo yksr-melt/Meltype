@@ -5,6 +5,7 @@ import { requireAccess } from "./access.js";
 import { cleanup } from "./cleanup.js";
 import { githubSummary } from "./github.js";
 import { error } from "./http.js";
+import { mcp } from "./mcp.js";
 import { createReport, getFile, getReport, listReports, stats, uploadFile } from "./reports.js";
 import { addTrial, createSession, deleteFlagged, exportTrials, flaggedSessions, sentenceCounts } from "./typing.js";
 
@@ -18,6 +19,7 @@ const routes = [
   ["GET", /^\/api\/dashboard\/typing\/flagged$/, (c) => flaggedSessions(c.env)],
   ["DELETE", /^\/api\/dashboard\/typing\/sessions\/([A-Za-z0-9_-]+)\/flagged$/, (c) => deleteFlagged(c.request, c.env, c.url, c.match[1])],
   ["GET", /^\/api\/github$/, (c) => githubSummary(c.env, c.ctx)],
+  ["POST", /^\/api\/dashboard\/mcp$/, (c) => mcp(c.request, c.env)],
   ["GET", /^\/api\/dashboard\/stats$/, (c) => stats(c.env)],
   ["GET", /^\/api\/dashboard\/reports$/, (c) => listReports(c.env, c.url)],
   ["GET", /^\/api\/dashboard\/reports\/(\d+)$/, (c) => getReport(c.env, Number(c.match[1]))],

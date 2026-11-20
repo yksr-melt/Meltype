@@ -647,3 +647,38 @@ describe("タイピング調査", async () => {
     assert.equal((await trial(token)).status, 410);
   });
 });
+
+describe("MCP (/api/dashboard/mcp)", () => {
+  async function rpc(body, headers) {
+    headers ??= { "cf-access-jwt-assertion": await jwt(goodClaims()) };
+    return call("/api/dashboard/mcp", { method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body) });
+  }
+
+  it("Access を通らなければ答えない", async () => {
+    assert.equal((await rpc({ jsonrpc: "2.0", id: 1, method: "tools/list" }, {})).status, 403);
+  });
+
+  it("初期化して道具の一覧を返す", async () => {
+    const init = await (await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18" } })).json();
+    assert.equal(init.result.protocolVersion, "2025-06-18");
+    assert.equal((await rpc({ jsonrpc: "2.0", method: "notifications/initialized" })).status, 202);
+    const { result } = await (await rpc({ jsonrpc: "2.0", id: 2, method: "tools/list" })).json();
+    assert.ok(result.tools.some((t) => t.name === "get_report"));
+  });
+
+  it("道具で報告を読める", async () => {
+    assert.equal((await report()).status, 201);
+    const { result } = await (await rpc({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_report", arguments: { id: 1 } } })).json();
+    assert.equal(result.isError, false);
+    assert.equal(JSON.parse(result.content[0].text).fields.contact, "Discord: someone");
+    const list = await (await rpc({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "list_reports", arguments: { limit: 5 } } })).json();
+    assert.equal(JSON.parse(list.result.content[0].text).reports.length, 1);
+    const missing = await (await rpc({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "get_report", arguments: { id: 99 } } })).json();
+    assert.equal(missing.result.isError, true);
+  });
+
+  it("知らない道具・メソッドはエラーにする", async () => {
+    assert.equal((await (await rpc({ jsonrpc: "2.0", id: 6, method: "tools/call", params: { name: "nope" } })).json()).error.code, -32602);
+    assert.equal((await (await rpc({ jsonrpc: "2.0", id: 7, method: "resources/list" })).json()).error.code, -32601);
+  });
+});
