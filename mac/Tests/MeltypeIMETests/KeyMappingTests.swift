@@ -65,6 +65,19 @@ final class KeyMappingTests: XCTestCase {
         }
     }
 
+    func testEisuAndKanaAreNotPassedToApps() {
+        // 英数・かな の characters は半角の空白。本体には文字なしで渡し、アプリには通さない
+        for (keyCode, expectedKey) in [(kVK_JIS_Eisu, Int32(0xF0)), (kVK_JIS_Kana, Int32(0x15))] {
+            for flags: NSEvent.ModifierFlags in [[], .shift] {
+                let input = event(keyCode, " ", flags: flags)
+                XCTAssertEqual(KeyMapping.virtualKey(for: input), expectedKey)
+                XCTAssertEqual(KeyMapping.text(for: input), "")
+                XCTAssertTrue(KeyMapping.isInputModeKey(input))
+            }
+        }
+        XCTAssertFalse(KeyMapping.isInputModeKey(event(kVK_Space, " ")))
+    }
+
     func testTextAndSpaceArePreserved() {
         for (keyCode, text) in [(kVK_ANSI_A, "a"), (kVK_ANSI_E, "e\u{301}"), (kVK_Space, " "), (kVK_ANSI_A, ""), (kVK_ANSI_A, "\u{E000}"), (kVK_ANSI_A, "👩‍💻")] {
             let input = event(keyCode, text)

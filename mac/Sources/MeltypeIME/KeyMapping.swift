@@ -15,6 +15,12 @@ enum KeyMapping {
         return event.characters ?? ""
     }
 
+    /// 英数・かな のキーか。この 2 つの characters は半角の空白 (U+0020) なので、アプリに通すと空白が入る
+    /// (Mozc・macSKK も同じ理由で通さない)。本体がキーを通すと決めても、アプリには渡さない。
+    static func isInputModeKey(_ event: NSEvent) -> Bool {
+        Int(event.keyCode) == kVK_JIS_Eisu || Int(event.keyCode) == kVK_JIS_Kana
+    }
+
     /// 操作キーの対応表。ここに追加したキーは必ず文字なしで本体に渡す。
     private static func operationVirtualKey(for keyCode: UInt16) -> Int32? {
         switch Int(keyCode) {

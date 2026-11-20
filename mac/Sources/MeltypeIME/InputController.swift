@@ -134,7 +134,8 @@ final class MeltypeInputController: IMKInputController, ModeServiceTarget {
 
     override func handle(_ event: NSEvent!, client sender: Any!) -> Bool {
         guard let event, event.type == .keyDown, let client = sender as? IMKTextInput else { return false }
-        return send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
+        let consumed = send("KeyPressed", client: client, keyEvent: event)?.result.consumed ?? false
+        return consumed || KeyMapping.isInputModeKey(event)
     }
 
     private func key(of event: NSEvent) -> [String: Any] {
