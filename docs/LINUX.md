@@ -138,7 +138,7 @@ sudo dnf install ./meltype-<version>-1.x86_64.rpm ./meltype-fcitx5-<version>-1.x
 
 かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください。自分の llama-server・モデルを使うときは、`config.json` の `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
 
-設定「カッコを打ったら中にカーソルを移動」は、fcitx5・IBus ともに未対応です。設定画面には項目が表示されます。
+設定「カッコを打ったら中にカーソルを移動」が ON のとき、`「」`・`（）`・`()` などの空の括弧を <kbd>Enter</kbd> で確定すると、改行せず括弧の中へ移ります。
 
 ### 端末だけで使う (meltype-tty)
 
