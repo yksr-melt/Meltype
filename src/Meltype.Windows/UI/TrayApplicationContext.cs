@@ -172,14 +172,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _invoker.BeginInvoke(ShowWelcome);
         }
         // 更新したあとの初めての起動なら、その版のリリースノートを一度だけ見せる (issue #1207)。
-        // 設定で自動表示を OFF にしていれば見せない。初めて起動した人には見せず、今の版を見せたことにしておく
-        if (_state.ReleaseNotesShown != AppInfo.Version)
-        {
-            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_state.ReleaseNotesShown, AppInfo.Version, firstRun, _engine.Settings.ShowReleaseNotesAfterUpdate);
-            _state.ReleaseNotesShown = AppInfo.Version;
-            _state.Save();
-            if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true, _engine));
-        }
+        // 設定で自動表示を OFF にしていれば見せない
+        if (TakeReleaseNotes(_state, AppInfo.Version, firstRun, _engine.Settings.ShowReleaseNotesAfterUpdate))
+            _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true, _engine));
         // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
         // (初めて起動した人には、インストーラーが聞いている)
         if (!AppPaths.IsPortable && !_state.TsfOffered)
@@ -322,6 +317,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
     internal static string UpdateFailedMessage(string version, bool autoUpdate) => autoUpdate
         ? $"Meltype {version} に更新できませんでした。今の版のまま動いています。次に Windows にサインインしたときに、もう一度更新します。記録: {Updater.InstallLog}"
         : $"Meltype {version} に更新できませんでした。今の版のまま動いています。トレイの「更新」→「今すぐ更新を確認」から、もう一度更新できます。記録: {Updater.InstallLog}";
+
+    /// <summary>
+    /// 更新したあとの初めての起動で、その版のリリースノートを出すか決めて、見せた版を state.json に残す (issue #1207)。
+    /// 設定で自動表示を OFF にしていても、初めて起動した人でも、見せたことにしておく (あとで ON に戻しても、その版のは自動では出さない)。
+    /// </summary>
+    internal static bool TakeReleaseNotes(AppState state, string version, bool firstRun, bool autoShow)
+    {
+        if (state.ReleaseNotesShown == version) return false;
+        var show = ProjectInfo.ShouldShowReleaseNotes(state.ReleaseNotesShown, version, firstRun, autoShow);
+        state.ReleaseNotesShown = version;
+        state.Save();
+        return show;
+    }
 
     private void OnUpdateBalloonClicked(object? sender, EventArgs e)
     {

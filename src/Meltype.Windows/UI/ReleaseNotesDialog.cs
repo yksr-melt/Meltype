@@ -26,10 +26,18 @@ internal sealed class ReleaseNotesDialog : Form
             }
             _open = new ReleaseNotesDialog(version, updated, Bundled(version), engine.Settings.ShowReleaseNotesAfterUpdate, showAfterUpdate =>
             {
-                var next = engine.Settings.Clone();
-                if (next.ShowReleaseNotesAfterUpdate == showAfterUpdate) return;
-                next.ShowReleaseNotesAfterUpdate = showAfterUpdate;
-                engine.ApplySettings(next);
+                // チェックは画面の操作から直接呼ばれるので、設定の保存や反映で例外が出ても画面を壊さない
+                try
+                {
+                    var next = engine.Settings.Clone();
+                    if (next.ShowReleaseNotesAfterUpdate == showAfterUpdate) return;
+                    next.ShowReleaseNotesAfterUpdate = showAfterUpdate;
+                    engine.ApplySettings(next);
+                }
+                catch (Exception ex)
+                {
+                    Diagnostics.Log.Warn($"リリースノートの自動表示の設定を変えられませんでした: {ex.Message}");
+                }
             });
             _open.Show();
         }

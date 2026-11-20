@@ -573,7 +573,7 @@ public sealed class Settings
     public bool UpdatePrerelease { get; set; }
 
     [Category("13. 更新"), DisplayName("更新後にリリースノートを表示する"), Platforms(Platform.Windows),
-     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (トレイの「更新」→「リリースノート...」からは、いつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
+     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、トレイの「更新」→「リリースノート...」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
     public bool ShowReleaseNotesAfterUpdate { get; set; } = true;
 
     [Category("2. 入力方式"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]

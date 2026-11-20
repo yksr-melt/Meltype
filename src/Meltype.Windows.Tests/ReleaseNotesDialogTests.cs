@@ -39,6 +39,46 @@ internal static class ReleaseNotesDialogTests
         Assert.True(Descendants(off).OfType<CheckBox>().Single().Checked, "自動表示が OFF ならチェックしておく");
     }
 
+    [Test]
+    public static void ReleaseNotesDialog_DontShowAgainIsSavedThroughTheEngine()
+    {
+        using var engine = new MeltypeEngine(TestRuntime.Create());
+        var configPath = Path.Combine(engine.Runtime.DataDirectory, "config.json");
+        Assert.True(engine.Settings.ShowReleaseNotesAfterUpdate, "既定では更新後に出す");
+
+        UI.ReleaseNotesDialog.ShowFor("1.6.0", updated: true, engine);
+        Application.DoEvents();
+        var dialog = Application.OpenForms.OfType<UI.ReleaseNotesDialog>().Single();
+        try
+        {
+            var dontShow = Descendants(dialog).OfType<CheckBox>().Single();
+            Assert.True(!dontShow.Checked, "自動表示が ON ならチェックしない");
+
+            dontShow.Checked = true;
+            Assert.True(!engine.Settings.ShowReleaseNotesAfterUpdate, "チェックしたら動いている設定も OFF にする");
+            Assert.True(!Config.Settings.Load(configPath).ShowReleaseNotesAfterUpdate, "config.json にも保存する");
+
+            dontShow.Checked = false;
+            Assert.True(engine.Settings.ShowReleaseNotesAfterUpdate, "外したら ON に戻す");
+        }
+        finally
+        {
+            dialog.Close();
+        }
+    }
+
+    [Test]
+    public static void ReleaseNotes_StartupShowsOnceAndRespectsAutoShow()
+    {
+        var updated = new Config.AppState { ReleaseNotesShown = "1.6.0" };
+        Assert.True(!UI.TrayApplicationContext.TakeReleaseNotes(updated, "1.7.0", firstRun: false, autoShow: false), "設定が OFF なら自動では出さない");
+        Assert.Equal("1.7.0", updated.ReleaseNotesShown, "出さなくても、その版は見せたことにする");
+        Assert.True(!UI.TrayApplicationContext.TakeReleaseNotes(updated, "1.7.0", firstRun: false, autoShow: true), "同じ版は二度出さない");
+
+        Assert.True(UI.TrayApplicationContext.TakeReleaseNotes(new Config.AppState { ReleaseNotesShown = "1.6.0" }, "1.7.0", firstRun: false, autoShow: true), "ON なら更新後に出す");
+        Assert.True(!UI.TrayApplicationContext.TakeReleaseNotes(new Config.AppState(), "1.7.0", firstRun: true, autoShow: true), "初めての起動では出さない");
+    }
+
     private static IEnumerable<Control> Descendants(Control root)
     {
         foreach (Control child in root.Controls)
