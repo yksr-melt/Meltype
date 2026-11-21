@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 yksr-melt
 # PowerShell 7 / Windows 用。SignPath で署名した成果物を確かめる。
-# テスト署名では、SHA-256 で固定した自己署名証明書を実行中だけ CurrentUser Root に登録し、必ず削除する。
+# テスト署名では、SHA-256 で固定した自己署名証明書を実行中だけ LocalMachine Root に登録し、必ず削除する。
+# CurrentUser Root への追加は Windows が確認ダイアログを出し、人のいない runner では止まったままになるため、管理者で動く runner の LocalMachine を使う。
 # 本番署名では信頼ストアを変更しない。どちらも Windows の検証結果 Valid のみを受け入れる。
 
 $ErrorActionPreference = 'Stop'
@@ -36,7 +37,7 @@ function Test-MeltypeSignPathArtifact {
             if (-not $before.ContainsKey($target)) { throw "署名対象がありません: $target" }
         }
         if ($TrustPinnedTestCertificate) {
-            # 署名者の公開証明書をピン留めしてから、一時的に CurrentUser Root に登録する。
+            # 署名者の公開証明書をピン留めしてから、一時的に LocalMachine Root に登録する。
             $candidate = (Get-AuthenticodeSignature -LiteralPath $after[$Targets[0]]).SignerCertificate
             if ($null -eq $candidate) { throw 'テスト署名の証明書が見つかりません。' }
             if ($candidate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256) -ine $ExpectedCertificateSha256) {
@@ -45,12 +46,12 @@ function Test-MeltypeSignPathArtifact {
             if ($candidate.Subject -cne $candidate.Issuer) { throw '一時信頼は自己署名テスト証明書にのみ対応します。' }
             $temporaryStore = [Security.Cryptography.X509Certificates.X509Store]::new(
                 [Security.Cryptography.X509Certificates.StoreName]::Root,
-                [Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+                [Security.Cryptography.X509Certificates.StoreLocation]::LocalMachine)
             $temporaryStore.Open([Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
             $existing = $temporaryStore.Certificates.Find(
                 [Security.Cryptography.X509Certificates.X509FindType]::FindByThumbprint,
                 $candidate.Thumbprint, $false)
-            if ($existing.Count -ne 0) { throw 'テスト証明書が既に CurrentUser Root に存在します。' }
+            if ($existing.Count -ne 0) { throw 'テスト証明書が既に LocalMachine Root に存在します。' }
             $temporaryStore.Add($candidate)
             $temporaryCertificate = $candidate
         }
