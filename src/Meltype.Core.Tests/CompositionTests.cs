@@ -285,13 +285,13 @@ internal static class CompositionTests
         public Keyboard(bool live = false, bool direct = false, ConversionHistory? history = null, IKanjiConverter? converter = null,
             Func<string, IReadOnlyList<string>>? moreCandidates = null, UserDictionary? userDictionary = null, LanguageMemory? languages = null,
             TranslationDictionary? translations = null, TranslationHistory? translationHistory = null, Predictor? predictor = null,
-            Func<DateTime>? now = null, bool showTypedKeys = false, bool tabConversion = false, bool englishNamePredictions = false)
+            Func<DateTime>? now = null, Meltype.Config.TypedKeysStyle typedKeys = Meltype.Config.TypedKeysStyle.Off, bool tabConversion = false, bool englishNamePredictions = false)
         {
             Settings = new Meltype.Config.Settings
             {
                 Mode = Meltype.Config.InputMode.Keyboard,
                 LiveConversion = live,
-                ShowTypedKeys = showTypedKeys,
+                TypedKeys = typedKeys,
                 TabConversion = tabConversion,
                 PredictiveCandidates = predictor is not null,
                 EnglishNamePredictions = englishNamePredictions,
@@ -1097,7 +1097,7 @@ internal static class CompositionTests
     public static void TypedKeys_ShownWhenEnabled()
     {
         // #224: 設定「打ったキーを表示」が ON なら、変換ボックスに打ったキーを渡す (変換中も)
-        var k = new Keyboard(showTypedKeys: true);
+        var k = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Keys);
         k.Type("kyouha");
         Assert.Equal("kyouha", k.Host.View!.Typed);
         k.Type(" ");
@@ -1106,6 +1106,20 @@ internal static class CompositionTests
         var off = new Keyboard();
         off.Type("kyouha");
         Assert.True(off.Host.View!.Typed is null, "OFF なら出さない");
+    }
+
+    [Test]
+    public static void TypedKeys_KanaShowsReadingBeforeKanji()
+    {
+        // 「漢字変換前」は、英日に分けたあと・漢字にする前の形を出す (漢字になっても読みを確かめられる)
+        var k = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+        k.Type("kyouha ");
+        Assert.True(k.Host.View!.Converting, "変換中");
+        Assert.Equal("きょうは", k.Host.View!.Typed, k.Host.View!.Text);
+        // 表示と同じなら出さない (かなのまま・英字だけ)
+        var same = new Keyboard(typedKeys: Meltype.Config.TypedKeysStyle.Kana);
+        same.Type("kyouha");
+        Assert.True(same.Host.View!.Typed is null, "表示と同じ");
     }
 
     [Test]

@@ -1027,7 +1027,7 @@ internal static class ImeContractTests
     {
         // どのフロントも text をそのまま出す。確定される形 (OS が表示のまま確定しても同じになる) で、打っている途中の英字は typed で見える
         var front = new Front();
-        front.Settings.ShowTypedKeys = true;
+        front.Settings.TypedKeys = Meltype.Config.TypedKeysStyle.Keys;
         var view = front.Type("kan")[^1].GetProperty("result").GetProperty("view");
         Assert.Equal("かん", view.GetProperty("text").GetString(), front.Trace);
         Assert.Equal("kan", view.GetProperty("typedKeys").GetString(), front.Trace);

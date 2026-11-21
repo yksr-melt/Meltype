@@ -106,8 +106,17 @@ internal static partial class CompositionController
         return candidates.Count > 1 ? candidates : null;
     }
 
-    /// <summary>変換ボックスに出す、打ったキー (設定が ON のときだけ)。</summary>
-    private static string? TypedKeys(CompositionState state, CompositionEnv env) => env.Settings.ShowTypedKeys && CompositionText.Raw(state.Text) is { Length: > 0 } raw ? raw : null;
+    /// <summary>変換ボックスに出す、打ったもの (設定「打ったキーを表示」)。漢字変換前は、英日に分けたあとのかなと英字。</summary>
+    private static string? TypedKeys(CompositionState state, CompositionEnv env)
+    {
+        if (CompositionText.IsEmpty(state.Text)) return null;
+        return env.Settings.TypedKeys switch
+        {
+            TypedKeysStyle.Keys => CompositionText.Raw(state.Text),
+            TypedKeysStyle.Kana => CompositionText.RenderSegments(state.Text, env, final: false, convert: null),
+            _ => null,
+        };
+    }
 
     /// <summary>
     /// 予測変換の候補を、今の打ちかけから作り直す。打った内容が変わったら選んでいた候補は戻す。
