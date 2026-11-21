@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using Meltype.Composition.Utility;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Learning;
 
 namespace Meltype.Composition;
 
@@ -18,10 +21,10 @@ public sealed record CompositionServices
     public ConversionHistory? History { get; init; }
 
     /// <summary>
-    /// 読みに対する変換候補の一覧 (Windows の変換候補 API)。時間がかかることがあるので、
+    /// 読みに対する変換エンジンの候補の一覧 (読み, 答えを待ってよい時刻 <see cref="Engine.ConversionRequest.Deadline"/>)。時間がかかることがあるので、
     /// 候補を切り替え始めたときだけ呼ぶ。null なら補助辞書の候補だけ。
     /// </summary>
-    public Func<string, IReadOnlyList<string>>? MoreCandidates { get; init; }
+    public Func<string, long, IReadOnlyList<string>>? MoreCandidates { get; init; }
 
     /// <summary>英訳の候補 (複雑な → complex)。null なら出さない。</summary>
     public TranslationDictionary? Translations { get; init; }

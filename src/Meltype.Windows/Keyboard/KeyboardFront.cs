@@ -4,6 +4,7 @@
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Diagnostics;
+using Meltype.Dictionary;
 using Meltype.Ime;
 using Meltype.Input;
 

@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using Meltype.Composition;
+using Meltype.Dictionary;
 using Meltype.Input;
 
 namespace Meltype.UI;
