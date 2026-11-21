@@ -104,7 +104,7 @@ public sealed class SnippetStore
 /// Space / Tab を押したときに名前が登録したものなら、;名前 を消して定型文を入れる (一致しなければ何もしない)。
 /// for(;i&lt;n;i++)・a;b の ; は前が空白ではないので対象にしない。どれもキャレットの前の文字 (before) だけで決める。
 /// </summary>
-public static class SnippetTrigger
+internal static class SnippetTrigger
 {
     /// <summary>キャレットの前に c を打つと、;名前 の途中になるか (変換せずにアプリへ渡す)。</summary>
     public static bool PassesThrough(string mark, string before, char c) => IsTyped(mark, Word(before) + c);
