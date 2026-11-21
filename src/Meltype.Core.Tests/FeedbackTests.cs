@@ -123,6 +123,25 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1744_CapitalizedJapaneseName_IsNotSplit()
+    {
+        // Issue #1744・#2168: 大文字で始めて打った日本人名が、頭で切られて日本語が続いていた (T赤橋・Yukiしろ・Takeもと・Toyoだ・Satoし)。
+        foreach (var (typed, expected) in new[]
+        {
+            ("Takahashi", "Takahashi"), ("Yukishiro", "Yukishiro"), ("Takemoto", "Takemoto"), ("Toyoda", "Toyoda"), ("Satoshi", "Satoshi"),
+            // 長音を書かないヘボン式と、書いた綴り
+            ("Sato", "Sato"), ("Satou", "Satou"),
+            // 名前の後ろの付属語は日本語のまま。小文字で打った名前は日本語
+            ("Tanakaga", "Tanakaが"), ("Satoshiha", "Satoshiは"), ("takahashi", "たかはし"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void Issue376_SuruAfterEnglishAndParticle_IsJapanese()
     {
         // Issue #376: 英単語 + 助詞 + する の活用 (password|ni|site) を、英単語 + 助詞 + 英単語 (api|no|error) と見て site を英字にしていた
