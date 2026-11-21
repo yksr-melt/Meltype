@@ -96,14 +96,13 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
     /// </summary>
     private void LearnConversion(IReadOnlyList<Clause> clauses, string? before)
     {
-        if (converter is not ILearningConverter learner) return;
         var run = new List<ConversionClause>();
         void Flush()
         {
             if (run.Count == 0) return;
             var learned = run.ToList();
             run.Clear();
-            ThreadPool.QueueUserWorkItem(_ => learner.Learn(before, learned));
+            ThreadPool.QueueUserWorkItem(_ => converter.Learn(before, learned));
         }
         foreach (var clause in clauses)
         {
