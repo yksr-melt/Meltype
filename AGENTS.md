@@ -20,6 +20,8 @@
 
 変換エンジンは Core が別プロセスで動かす。Mozc は `meltype_mozc_helper`、Zenzai は llama.cpp の `llama-server`。Android だけは Mozc をアプリのプロセスで動かし、`meltype_mozc_helper` と同じ 1 行の要求を JNI のコールバック (`core/CoreMozcCallbacks.kt`) で答える。
 
+`src/Meltype.Core` の namespace は `Ime` → `Composition` (と `Composition.Utility`) → `Detection`・`Learning`・`Engine`・`Dictionary` → `Libraries.Chars`・`Libraries.Lexicon` の向きにだけ参照する。`Detection`・`Learning`・`Engine`・`Dictionary` どうしと、`Libraries` の中どうしは参照しない。どこからでも使えるのは `Config`・`Input`・`Diagnostics`。
+
 ## 暗黙知
 
 - Mac・Linux 版の Core は NativeAOT で動き、テストは JIT で動く。reflection に頼るコードはテストが通っても配布版で動かないので、JSON はソース生成の `JsonSerializerContext` (`CoreJsonContext` など) で読み書きする。
@@ -73,6 +75,7 @@ dotnet run --project src/Meltype.Core.Tests
 dotnet run --project src/Meltype.Core.Tests -- CompositionTests # 名前に一致するテストだけ
 dotnet run --project src/Meltype.Core.Tests -- --eval # 品質テスト（正解率と外れた例）
 dotnet run --project src/Meltype.Core.Tests -- --repro kyouhagoogle enter # 打ったときの見え方と確定結果
+dotnet run --project src/Meltype.Core.Tests -- --repro 26niti space --learn "niti → （日）" # 先に学習させてから打つ
 dotnet run --project src/Meltype.Core.Tests -- --explain konnichiwa hello # 1文字ずつの判定理由
 dotnet run --project src/Meltype.Core.Tests -- --segments kyouhagoogle # 単位と英日区間分け
 dotnet run --project src/Meltype.Core.Tests -- --expect src/Meltype.Core.Tests/data/issue-cases.tsv out.json # 報告された誤変換

@@ -46,7 +46,7 @@ internal sealed class MeltypeEngine : IDisposable
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
     private bool _injectedHintLogged;
 
-    public MeltypeEngine(Composition.MeltypeRuntime runtime)
+    public MeltypeEngine(Ime.MeltypeRuntime runtime)
     {
         Runtime = runtime;
         // 先に受け取り始める (読んでから受け取り始めるまでに読み直した分を逃さないように。その間に届いた分は、下で読む)
@@ -66,7 +66,7 @@ internal sealed class MeltypeEngine : IDisposable
     }
 
     /// <summary>設定・辞書・学習データ (どの OS も同じもの)。</summary>
-    public Composition.MeltypeRuntime Runtime { get; }
+    public Ime.MeltypeRuntime Runtime { get; }
 
     /// <summary>config.json の設定。設定画面・トレイはこれを写して変える (<see cref="Running"/> を写すと、Meltype キーボードを保存してしまう)。</summary>
     public Settings Settings => _settings;

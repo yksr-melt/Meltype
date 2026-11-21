@@ -3,9 +3,12 @@
 
 using System.Globalization;
 using System.Text;
+using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
 
 namespace Meltype.Composition;
 
@@ -169,7 +172,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 
 /// <summary>
 /// 入力欄の本体 (<see cref="Ime.ImeSession"/>) を作る部品。プロセスで 1 つ作り、入力欄で共有する。
-/// 本物は <see cref="MeltypeRuntime.SessionParts"/> で作り、テストは偽の変換エンジン・学習データで作る。
+/// 本物は Ime の MeltypeRuntime.SessionParts で作り、テストは偽の変換エンジン・学習データで作る。
 /// </summary>
 public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services)
 {

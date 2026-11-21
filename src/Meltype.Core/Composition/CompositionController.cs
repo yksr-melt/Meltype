@@ -6,6 +6,7 @@ using System.Text;
 using Meltype.Composition.Utility;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
 using Meltype.Input;
 
 namespace Meltype.Composition;

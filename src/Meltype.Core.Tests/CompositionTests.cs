@@ -4,8 +4,14 @@
 using Meltype.Composition;
 using Meltype.Composition.Utility;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Tests;
 
@@ -4563,8 +4569,8 @@ internal static class CompositionTests
         k = new Keyboard();
         k.Type("3ji");
         Assert.Equal("3じ", k.Showing, "数字の後にかなが続けば日本語");
-        Assert.Equal("2025年10月", CompositionController.NormalizeHalfWidth("２０２５年１０月", "2025ねん10がつ"), "変換エンジンが全角にした数字は半角に戻す");
-        Assert.Equal("１つ", CompositionController.NormalizeHalfWidth("１つ", "ひとつ"), "読みに半角数字が無ければそのまま");
+        Assert.Equal("2025年10月", TextChars.NormalizeHalfWidth("２０２５年１０月", "2025ねん10がつ"), "変換エンジンが全角にした数字は半角に戻す");
+        Assert.Equal("１つ", TextChars.NormalizeHalfWidth("１つ", "ひとつ"), "読みに半角数字が無ければそのまま");
     }
 
     [Test]
@@ -4647,9 +4653,9 @@ internal static class CompositionTests
     [Test]
     public static void HalfWidth_IsKeptAfterConversion()
     {
-        Assert.Equal("sだけが", CompositionController.NormalizeHalfWidth("ｓだけが", "sだけが"));
-        Assert.Equal("2025年", CompositionController.NormalizeHalfWidth("２０２５年", "2025ねん"));
-        Assert.Equal("ＡＢＣ", CompositionController.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
+        Assert.Equal("sだけが", TextChars.NormalizeHalfWidth("ｓだけが", "sだけが"));
+        Assert.Equal("2025年", TextChars.NormalizeHalfWidth("２０２５年", "2025ねん"));
+        Assert.Equal("ＡＢＣ", TextChars.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
     }
 
     /// <summary>
@@ -6522,6 +6528,23 @@ internal static class CompositionTests
         {
             ("zh", "←"), ("zj", "↓"), ("zk", "↑"), ("zl", "→"),
             ("z/", "・"), ("zu", "ず"), ("puzzle", "puzzle"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void Issue2013_ZArrowAfterKanaIsNotTypo()
+    {
+        // Issue #2013: かなの後ろの zl (→) を、確定のときに前のローマ字と合わせて打ち間違い (hogezo) として ぞ に直さない。
+        // z + 母音 (hogezo) は今までどおり ぞ。
+        foreach (var (typed, expected) in new[]
+        {
+            ("hogezl", "ほげ→"), ("hogezlfuga", "ほげ→ふが"), ("hogezk", "ほげ↑"), ("truezlfalse", "true→false"),
+            ("hogezo", "ほげぞ"),
         })
         {
             var k = new Keyboard();

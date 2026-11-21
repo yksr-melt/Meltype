@@ -5,6 +5,10 @@ using System.Globalization;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
+using Meltype.Learning;
 
 namespace Meltype;
 

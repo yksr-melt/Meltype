@@ -2,7 +2,13 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices;
+using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Composition;
 

@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 
 namespace Meltype.Composition.Utility;
 
