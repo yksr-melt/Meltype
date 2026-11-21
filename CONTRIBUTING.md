@@ -132,7 +132,7 @@ Pull Request を作ると、チェックが流れたあとに bot がこの文�
 // Copyright (C) 2026 あなたの名前
 ```
 
-Pull Request を作ると「notices」のチェックが確かめ、抜けや名前の間違いがあればファイルに注釈を付けて失敗にします (直し方はチェックの Summary に出ます)。
+Pull Request を作ると「license-header」のチェックが確かめます。
 
 <br>
 
@@ -184,7 +184,7 @@ Meltype の日英判定・変換は手元の端末の中で行い、クラウド
 <img src="docs/images/headings/contributing/05.svg" alt="bot のコマンド" height="53"><br>
 
 
-Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub Actions で実行して結果をコメントします。1 つのコメントに書けるコマンドは 1 つです。`/repro` だけは 1 行に 1 つずつ、10 個まで書けます。
+Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub Actions で実行して結果をコメントします。1 つのコメントに書けるコマンドは 1 つです。`/repro` だけは 1 行に 1 つずつ、10 個まで書けます。`/learn` は `/repro`・`/ca` と同じコメントに書きます。
 
 | コマンド | すること | 使える人 |
 |---|---|---|
@@ -192,10 +192,18 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 | `/repro <SHA> <打ったキー> [space\|enter\|none]` | Pull Request の前・Pull Request・main のコードで打ち、Pull Request で結果が変わったかを返す | メンテナー |
 | `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |
 | `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す (最新のコードと最新のリリース) | だれでも |
+| `/learn <打ったキー> [→ <確定した語>]` | 同じコメントの `/repro`・`/ca` の前に、別の入力欄で打って確定し、学習させる。確定した語を書くと、Space で変換して候補から選ぶ。5 行まで | だれでも |
 | `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |
 | `/pack <SHA>` | Pull Request のコードで Windows のテスト版の zip を作る | メンテナー |
 | `/self-assign` | 自分を Issue の Assignees に入れる (担当になる) | だれでも |
 | `/help` | コマンドの一覧 | だれでも |
+
+学習した後で起きる誤変換は、`/learn` で先に学習させてから試します。例えば、`niti` を （日） と確定した後に `26niti` が 26（日） になるかは、次のように書きます。最新のリリースが学習に対応していなければ、その版は学習させずに打ちます。
+
+```
+/learn niti → （日）
+/repro 26niti space
+```
 
 `/repro`・`/test`・`/pack` の `<SHA>` は、中身を確かめた commit の SHA (40 桁) です。PR の今の head と違えば動かしません。
 
@@ -222,20 +230,19 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 
 | チェック | 流れるとき | 内容 |
 |---|---|---|
-| test / core | いつも | Windows 版のビルドとテスト (test)、判定・変換のコアのテスト (core。Linux・Mac) |
-| mac / linux | Mac 版・Linux 版か共通部分が変わったとき | Mac 版・Linux 版のビルドとテスト。Linux 版は IBus で実際に打って確かめます。できた配布物は実行結果の Artifacts から取れます |
-| web | `web/` が変わったとき | Web (Cloudflare Workers・報告フォーム) の構文・テスト |
-| 辞書の形式 | `dictionaries/` が変わったとき | 読めない行・ひらがなでない読み・重複など (`node tools/check-dictionaries.mjs` で手元でも確かめられます) |
-| 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と Pull Request で品質テストを比べ、新しく外れた例があれば失敗。直った例も一覧に出ます。あわせて、よく使う語 (約 5.7 万語) の判定が main から変わった語を一覧にします (参考。失敗にはしません) |
-| 報告の再現 | いつも | Pull Request の本文の「## 確かめること」の「入力 → 期待」を、Pull Request のコードと最新のリリースの Mozc で確かめます |
-| CLA | いつも | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」)。初めての方は、同意するまで失敗します |
-| notices | いつも | 足したソースファイルの先頭のライセンス・著作権の表記 (上の「ソースファイルの先頭の表記」) |
-| フォーマット | いつも | すべての `.cs` の空白・改行・字下げを `dotnet format whitespace` で調べ、違反があれば失敗 |
-| 静的解析 | いつも | Roslyn の解析の警告が 1 件でもあれば失敗 |
-| CodeQL | いつも | C#・C++・JavaScript・Python・Actions のセキュリティの解析。新しく見つかった重大な問題があれば失敗 |
-| スクリプト | いつも | `.github/bot`・`tools` の Node のスクリプトのテスト |
-| 依存関係 | いつも | 足した・上げた依存に既知の脆弱性 (high 以上) があれば失敗 |
+| test | いつも | Windows 版のテスト |
+| core | いつも | 判定・変換のコアのテスト |
+| mac / linux / tui | その OS 向けのコード (`mac/`・`linux/`・`tui/`・`src/Meltype.Core.CApi/` など) が変わったとき | その OS 向けのビルドとテスト |
+| web | `web/` が変わったとき | Web のテスト |
+| 辞書の形式 | `dictionaries/` が変わったとき | 辞書の形式 |
+| 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と比べた判定・変換の精度 |
+| 報告の再現 | いつも | 本文の「## 確かめること」の例 |
+| CLA | いつも | 貢献者ライセンス同意 (上の「コードの貢献と貢献者ライセンス同意」) |
+| lint / csharp | いつも | C# のフォーマットと静的解析 |
+| lint / license-header | いつも | ソースファイルの先頭の表記 (上の「ソースファイルの先頭の表記」) |
+| vulnerability / codeql | いつも | セキュリティの解析 |
+| vulnerability / dependencies | いつも | 依存の脆弱性 |
 
 結果は、チェックの「Details」→「Summary」に表で出ます。
 
-フォーマットは自動では直さないので、失敗したら `dotnet format whitespace --folder` を流してください。静的解析は `dotnet build Meltype.sln -c Release -p:AnalysisLevel=latest-recommended -p:TreatWarningsAsErrors=true -p:EnableWindowsTargeting=true` で手元でも確かめられます (Linux・macOS でも Windows 版まで調べられます)。CodeQL は、前からあるコードの問題ではなく、Pull Request で新しく出た問題だけを見ます (前からある問題は Security タブの Code scanning に一覧で残し、少しずつ直します)。
+フォーマットは `dotnet format whitespace --folder` で直せます。

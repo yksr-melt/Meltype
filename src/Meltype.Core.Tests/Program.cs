@@ -27,8 +27,8 @@ internal static class Program
                 return 0;
             case "--repro":
                 // 打ったキーをそのまま打ってみて、結果を JSON で返す (GitHub の bot が報告を再現するのに使う)。
-                //   --repro nihongowohanasu [enter|space|none]
-                Repro.Type(args.ElementAtOrDefault(1) ?? "", args.ElementAtOrDefault(2) ?? "enter");
+                //   --repro nihongowohanasu [enter|space|none] [--learn "打ったキー → 確定した語"]…
+                Repro.Type(args[1..]);
                 return 0;
             case "--segments":
                 // 調べる用: 打った文字の単位と、英語 / 日本語の区間分け (Enter の前) と、区間分けのラティスの道と重み
