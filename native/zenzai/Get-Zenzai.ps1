@@ -67,7 +67,8 @@ $system = [Environment]::GetFolderPath('System')
 $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
 $placed = New-Object 'System.Collections.Generic.List[string]'
 $queue = New-Object 'System.Collections.Generic.Queue[string]'
-Get-ChildItem -LiteralPath $OutDir -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { [void]$seen.Add($_.Name); $queue.Enqueue($_.FullName) }
+# 起点は zip から置いた llama-server と DLL。$OutDir には前回置いたランタイムも残っているので、それを起点にすると調べ済み扱いになって置き直せない
+Get-ChildItem -LiteralPath $extract -File | Where-Object { $_.Extension -in '.exe', '.dll' } | ForEach-Object { [void]$seen.Add($_.Name); $queue.Enqueue($_.FullName) }
 while ($queue.Count -gt 0) {
     $file = $queue.Dequeue()
     $dependents = & $dumpbin.FullName /nologo /dependents $file | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^[\w.-]+\.dll$' }
