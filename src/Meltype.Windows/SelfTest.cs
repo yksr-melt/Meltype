@@ -152,7 +152,7 @@ internal static class SelfTest
             var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
             var server = Task.Run(() => AnswerOnce(listener, """{"content":"今日は"}"""));
             using var zenzai = new ZenzaiConverter(new Uri($"http://127.0.0.1:{port}/"), timeoutMs: 10000);
-            var text = zenzai.Convert("きょうは");
+            var text = zenzai.Convert("きょうは", null);
             // 偽のサーバーの側で例外になったときは、その例外を出す (Wait が投げる)
             server.Wait(TimeSpan.FromSeconds(10));
             return text ?? throw new InvalidOperationException("偽の llama-server から答えを受け取れない");

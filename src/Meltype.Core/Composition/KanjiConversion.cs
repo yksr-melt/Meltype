@@ -25,25 +25,39 @@ internal static class JapaneseParticles
 /// </summary>
 public interface IKanjiConverter
 {
-    /// <summary>全体を 1 回で変換する。変換できなければ null。</summary>
-    string? Convert(string hiragana);
+    /// <summary>全体を 1 回で変換する。変換できなければ null。before は <see cref="ConvertClauses"/> と同じ。</summary>
+    string? Convert(string hiragana, string? before);
 
     /// <summary>
-    /// 文節に区切って変換する。区切れなければ null。context は直前の確定済みの文字列 (変換の文脈として使うだけで、結果には含めない)。
+    /// 文節に区切って変換する。区切れなければ null。before はキャレットの前の確定済みの文字列そのまま (変換の文脈として使うだけで、結果には含めない)。
+    /// どこまでをどう使うかは変換エンジンが決める。
     /// </summary>
-    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null);
+    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before);
 }
 
-/// <summary>
-/// 広い文脈を使える変換エンジン (Zenzai)。ConvertClauses に渡す文脈は、Mozc に合わせて同じ文の最大 10 文字だけだが、
-/// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
-/// wideContext は、キャレットの前の日本語の文章 (文をまたいで最大 100 文字)。無ければ null。
-/// </summary>
-public interface IWideContextConverter
+/// <summary>キャレットの前の確定済みの文字列から、変換エンジンが文脈に使う部分を取り出す。</summary>
+internal static class EngineContext
 {
-    string? Convert(string hiragana, string? wideContext);
+    /// <summary>Mozc の文脈: 同じ文の日本語の部分 (最大 10 文字)。前が日本語でなければ null。</summary>
+    public static string? Sentence(string? before)
+    {
+        if (string.IsNullOrEmpty(before) || CompositionController.LanguageOf(before) != false) return null;
+        var start = before.AsSpan().LastIndexOfAny(SentenceEndSearch);
+        var text = before[(start + 1)..].Trim();
+        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
+    }
 
-    IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext);
+    /// <summary>
+    /// Zenzai の文脈: 改行を除いた、文をまたぐ文章 (最大 100 文字)。英語もそのまま渡す (GitHub + にわたるこうじ → に渡る工事)。無ければ null。
+    /// ニューラルモデルは前の文までの長い文脈ほど強い (文脈の無い きょう → 強 が、「昨日」だけで 今日 になる)。
+    /// </summary>
+    public static string? Passage(string? before)
+    {
+        var text = before?.Replace("\r", "").Replace("\n", "").Trim();
+        return string.IsNullOrEmpty(text) ? null : text.Length > 100 ? text[^100..] : text;
+    }
+
+    private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }
 
 /// <summary>
@@ -58,7 +72,7 @@ public interface IStandaloneConverter
 {
     string? ConvertStandalone(string hiragana);
 
-    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null);
+    IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? before);
 }
 
 /// <summary>

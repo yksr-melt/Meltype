@@ -6,7 +6,7 @@
 # Signs the packages and repodata/repomd.xml with the same key as the apt repository.
 # Usage: APT_SIGNING_KEY_B64=... APT_SIGNING_KEY_PASSPHRASE=... \
 #        bash linux/build-rpm-repository.sh <site-root> <.rpm>...
-# Takes meltype-common, meltype, meltype-tty and meltype-fcitx5 for both x86_64 and aarch64.
+# Takes meltype and meltype-fcitx5 for both x86_64 and aarch64.
 # Needs: rpm (rpmsign), createrepo_c, gpg
 set -euo pipefail
 
@@ -17,7 +17,7 @@ fi
 
 site_root="$1"
 shift
-expected=(meltype-common.x86_64 meltype-common.aarch64 meltype.x86_64 meltype.aarch64 meltype-tty.x86_64 meltype-tty.aarch64 meltype-fcitx5.x86_64 meltype-fcitx5.aarch64)
+expected=(meltype.x86_64 meltype.aarch64 meltype-fcitx5.x86_64 meltype-fcitx5.aarch64)
 declare -A packages_found=()
 rpm_root="$site_root/rpm"
 packages="$rpm_root/packages"

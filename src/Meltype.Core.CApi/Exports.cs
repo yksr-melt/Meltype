@@ -14,7 +14,7 @@ namespace Meltype.CApi;
 
 /// <summary>
 /// Mac 版の IME (Swift, Input Method Kit)、Linux 版の IME (Python の IBus・C++ の fcitx5)、Android 版 (JNI) から呼ぶ C の関数。入力は meltype_ime_handle の 1 つで受ける。
-/// NativeAOT で libMeltypeNative.dylib (mac/build.sh) / libMeltypeNative.so (linux/build.sh) にする。
+/// NativeAOT で libMeltypeNative.dylib (mac/build.sh) / libMeltypeNative.so (native/build-core-linux.sh) にする。
 ///
 /// 文字列はすべて UTF-8 の NUL 終端。こちらが返す文字列は meltype_free で解放する。
 /// Input Method Kit はメインスレッドから呼ぶので、排他はしない。
@@ -160,6 +160,8 @@ public static unsafe class Exports
         public SnippetStore Snippets => Runtime.Snippets;
 
         public string? ClipboardText => null;
+
+        public string? OtherTipVersion => null;
     }
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>

@@ -144,7 +144,7 @@ internal static class Checks
             results.Add(new { typed, expected, kind = "入力", actual, ok = entered == expected || converted == expected });
         }
         // MozcConverter は失敗を null や空の候補で返すので、Mozc なしの結果で通っていないことを確かめる
-        if (mozc.Convert("にほんご") is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
+        if (mozc.Convert("にほんご", null) is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
         File.WriteAllText(output, JsonSerializer.Serialize(results, Json));
     }
 
@@ -346,7 +346,7 @@ internal static class MozcCompare
             var shown = k.Showing ?? "";
             var english = System.Text.RegularExpressions.Regex.Matches(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*").Select(m => m.Value).ToList();
             var reading = System.Text.RegularExpressions.Regex.Replace(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*", Placeholder);
-            var clauses = mozc.ConvertClauses(reading) ?? [];
+            var clauses = mozc.ConvertClauses(reading, null) ?? [];
             var text = string.Concat(clauses.Select(c => c.Text));
             var placeholders = System.Text.RegularExpressions.Regex.Count(text, PlaceholderText);
             string whole;

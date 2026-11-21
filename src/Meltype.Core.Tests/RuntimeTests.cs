@@ -36,7 +36,7 @@ internal static class RuntimeTests
             WithRuntime((runtime, _) =>
             {
                 // 変換すると Zenzai (偽の llama-server) を起動する
-                runtime.CreateConverter(app).ConvertClauses("きょう");
+                runtime.CreateConverter(app).ConvertClauses("きょう", null);
                 string? record = null;
                 for (var i = 0; i < 100 && record is null; i++)
                 {

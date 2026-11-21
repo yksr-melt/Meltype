@@ -240,8 +240,8 @@ internal static class BracketCandidateTests
     private sealed class CountingConverter : IKanjiConverter
     {
         public int Calls { get; private set; }
-        public string? Convert(string reading) { Calls++; return reading; }
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null)
+        public string? Convert(string reading, string? before) { Calls++; return reading; }
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before)
         {
             Calls++;
             return [new(reading, reading)];

@@ -19,6 +19,12 @@ public interface IImeEnvironment
 
     /// <summary>クリップボードの文字 (設定「クリップボードの文字を変換候補に出す」のときだけ、変換した瞬間に読む)。読めなければ null。</summary>
     string? ClipboardText { get; }
+
+    /// <summary>
+    /// Windows に登録されている Meltype IME が Meltype.exe と別のビルドなら、その Meltype IME を同梱した Meltype の版 (分からなければ "?")。
+    /// 同じビルド・登録されていない・ほかの OS では null。キーを処理するスレッドで読むので、読むたびに I/O をしない。
+    /// </summary>
+    string? OtherTipVersion { get; }
 }
 
 /// <summary>
