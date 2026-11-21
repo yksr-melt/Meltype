@@ -9,7 +9,7 @@ namespace Meltype.Config;
 /// 同じプロセスの設定画面 (Windows) は <see cref="Apply"/> で変える。どのスレッドから読んでもよい。
 /// </summary>
 /// <param name="loaded">読んだ・読み直した・変えたときに、lock の中で呼ぶ (待つ処理をしない)。</param>
-internal sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null)
+public sealed class SettingsFile(string path, Action<Settings>? loaded = null, Func<long>? timeMs = null)
 {
     private readonly object _gate = new();
 

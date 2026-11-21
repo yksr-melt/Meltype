@@ -14,13 +14,13 @@ internal static class ContextBoundaryTests
         var detector = CompositionDetector.CreateDefault();
         detector.Memory = memory;
         detector.IsCommonJapanese = RomajiTypoCorrector.Load(detector.Romaji).IsCommonJapanese;
-        var text = new CompositionTextState
+        var context = TextContext.None with
         {
             PrecedingEnglish = before.Length == 0 ? null : true,
             PrecedingEnglishSentence = before.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length >= 2,
             PrecedingEnglishName = CompositionController.IsEnglishNameContext(before),
         };
-        return (text, TestSupport.Env(detector, new Settings { AutoDetection = !manual }));
+        return (new CompositionTextState(), TestSupport.Env(detector, new Settings { AutoDetection = !manual }) with { Context = () => context });
     }
 
     [Test]

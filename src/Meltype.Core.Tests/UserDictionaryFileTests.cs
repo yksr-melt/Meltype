@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
-using Meltype.Composition;
+using Meltype.Dictionary;
 
 namespace Meltype.Tests;
 

@@ -1,13 +1,27 @@
 # Linux 版 (linux/、IBus・fcitx5) をビルドしてテストし、ビルド済みのファイルの zip と .deb・.rpm を Artifacts に置く。
-#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた Pull Request と main、手動実行、release.yml (タグ) から呼ばれたとき
+#   app・rpm・rpm-el9 … Linux 版・Mozc のヘルパー・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき
+#                       Linux 版のコードを変えた Pull Request では、app のビルドとテストだけを流す (.deb・.rpm は作らない)
 #   ime-ci   … IME の E2E の基盤 (tools/ime-tests) の契約のテスト
 #   ime-real … app が作った x64 の zip を、IBus と Chromium で実際に打って確かめる
 # リリースへの添付と apt・dnf のリポジトリの公開は release.yml。
 name: linux
 
 on:
+  # Core・辞書だけの変更は core.yml のテストと lint.yml の NativeAOT のアナライザーで見るので、ここでは流さない
   pull_request:
-    paths: &paths
+    paths:
+      - 'linux/**'
+      - 'native/mozc/**'
+      - 'native/zenzai/**'
+      - 'native/build-core-linux.sh'
+      - '.github/actions/linux-native/**'
+      - 'src/Meltype.Core.CApi/**'
+      - 'tools/test-native-boundaries.py'
+      - 'tools/ime-tests/**'
+      - '.github/workflows/linux.yml'
+  push:
+    branches: [main]
+    paths:
       - 'linux/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
@@ -27,9 +41,6 @@ on:
       - 'tools/test-native-boundaries.py'
       - 'tools/ime-tests/**'
       - '.github/workflows/linux.yml'
-  push:
-    branches: [main]
-    paths: *paths
   workflow_dispatch:
   workflow_call:
 
@@ -74,8 +85,8 @@ jobs:
       # NativeAOT のリンクと、fcitx5 のアドオン・テストに使うもの
       - name: Packages
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y clang lld pkg-config zlib1g-dev python3 python3-gi gir1.2-ibus-1.0 \
             ibus dbus-x11 xvfb xauth \
             cmake fcitx5 fcitx5-modules-dev libfcitx5core-dev libfcitx5utils-dev libfcitx5config-dev
       - uses: ./.github/actions/linux-native
@@ -102,6 +113,7 @@ jobs:
           (cd linux/build && zip -qr "$name" Meltype-linux)
       # apt で入れられる .deb (#863)。タグなら版、それ以外は meltype.xml の版 + テスト版の印
       - name: Package (.deb)
+        if: github.event_name != 'pull_request'
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then version="${GITHUB_REF_NAME#v}"; else
             version="$(sed -n 's|.*<version>\(.*\)</version>.*|\1|p;T;q' linux/build/Meltype-linux/meltype.xml)~test.$(date +%Y%m%d%H%M)"; fi
@@ -111,8 +123,9 @@ jobs:
           ls -la linux/build
       # 実際に apt で入れて、決まった場所に置かれるか・外せるかを確かめる
       - name: Test .deb
+        if: github.event_name != 'pull_request'
         run: |
-          sudo apt-get install -y ./linux/build/meltype_*.deb
+          sudo apt-get -o Acquire::Retries=3 install -y ./linux/build/meltype_*.deb
           test -x /opt/meltype/ibus-engine-meltype
           test -x /opt/meltype/mozc/meltype_mozc_helper
           # Zenzai の llama-server が、同梱のライブラリと deb の依存で起動できるか
@@ -135,6 +148,7 @@ jobs:
   # dnf で入れられる .rpm (Fedora・RHEL 9 系)。本体と Mozc のヘルパーは app のジョブがビルドした zip のものを使い、
   # fcitx5 のアドオン (meltype-fcitx5) だけ Fedora の fcitx5 に対してビルドし直す (Ubuntu 24.04 の fcitx5 とは版が違う)
   rpm:
+    if: github.event_name != 'pull_request'
     needs: app
     strategy:
       matrix:
@@ -298,8 +312,8 @@ jobs:
           dotnet-version: 10.0.x
       - name: Install IBus and the test tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y python3-gi gir1.2-ibus-1.0 ibus ibus-gtk3 dbus-x11 xvfb xauth xdotool x11-xkb-utils
           npm --prefix tools/ime-tests ci
           cd tools/ime-tests
           npx playwright install --with-deps chromium

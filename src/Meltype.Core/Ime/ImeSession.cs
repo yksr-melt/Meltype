@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 using Meltype.Input;
 
 namespace Meltype.Ime;
@@ -115,7 +116,7 @@ internal static class ImeSession
             ImeEventType.KeyPressed when e.Key is { } key => active ? HandleKey(state, env, key, e.Field, before, settings, lastSnippet, ref explicitChange) : Leave(state, env),
             ImeEventType.KeyReleased when active && e.Key is { Vk: VirtualKeys.LMenu or VirtualKeys.RMenu } alt => AltReleased(state, env, alt, before, settings, ref explicitChange),
             ImeEventType.KeyReleased when active && e.Key is { } released =>
-                HandleKeyUp(state, env, ToggleShortcut.NormalizeHankakuKey(released.Vk), before, e.Field?.After),
+                HandleKeyUp(state, env, ToggleShortcut.NormalizeHankakuKey(released.Vk)),
             ImeEventType.ModeToggleRequested when active => Switch(state, env, !wasJapanese, before, ref explicitChange, toggle: true),
             ImeEventType.JapaneseModeSelected when active => Switch(state, env, true, before, ref explicitChange, toggle: false),
             ImeEventType.AlphanumericModeSelected when active => Switch(state, env, false, before, ref explicitChange, toggle: false),
@@ -348,7 +349,7 @@ internal static class ImeSession
         if (key.Repeat && (toggle || plain && vk is ToggleShortcut.Hankaku or VirtualKeys.OemAttn or VirtualKeys.Kana)) return Consumed;
         if (toggle && !composing) return Switch(state, env, !ShowsJapanese(state, before), before, ref explicitChange, toggle: true);
         // 入力中は変換ボックスの英字表示の切り替え。変換中は変換ボックスのキーとして使う (Shift+Space は「前の候補へ」)
-        if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, null, false, false, false, false, before, field?.After);
+        if (toggle && !IsConverting(state)) return ComposeKey(state, env, VirtualKeys.Kanji, null, false, false, false, false);
         // ロックのキーは文字を入れないので、打ちかけに触らずにアプリに通す (切り替えキーに登録したものは、上で切り替えに使った)
         if (IsLockKey(vk)) return PassThrough(state, env);
         if (vk == ToggleShortcut.Hankaku && !key.Ctrl && !key.Alt && !composing) return Consumed;
@@ -380,7 +381,7 @@ internal static class ImeSession
             return CommitCombiningForPassThrough(state, env, preserveLatinRaw: key.Ch is >= 0x0300 and <= 0x036F);
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
-        var result = ComposeKey(state, env, vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, before, field?.After, key.ReleaseFollows);
+        var result = ComposeKey(state, env, vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
         // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
         if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
         return result;
@@ -546,18 +547,29 @@ internal static class ImeSession
     /// <summary>変換ボックスの処理に渡す、入力欄の状態でないもの (今の設定で作る)。</summary>
     private static CompositionEnv Env(ImeSessionState state, ImeEnv env) => Env(state, env, env.App);
 
-    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings) => new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
+    private static CompositionEnv Env(ImeSessionState state, ImeEnv env, Settings settings)
     {
-        ReadingOf = env.Parts.ReadingOf,
-        ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
-        NowMs = env.TimeMs(),
-        Selection = state.Field?.Selection,
-        CanDeleteBackward = CanDeleteSurrounding(state),
-        Clipboard = () => env.Environment.ClipboardText,
-        OtherTipVersion = () => env.Environment.OtherTipVersion,
-        NowPlaying = env.Parts.NowPlaying,
-        Corrected = env.Parts.Corrected,
-    };
+        var lateResults = env.Parts.LateResults();
+        CompositionEnv composition = null!;
+        composition = new(env.Parts.Detector, env.Parts.Converter, env.Parts.Services, settings)
+        {
+            ReadingOf = env.Parts.ReadingOf,
+            ClassifyDirect = env.Parts.ClassifyDirect is { } classify ? (letters, final) => classify(letters, final, settings) : null,
+            NowMs = env.TimeMs(),
+            Selection = state.Field?.Selection,
+            CanDeleteBackward = CanDeleteSurrounding(state),
+            Clipboard = () => env.Environment.ClipboardText,
+            OtherTipVersion = () => env.Environment.OtherTipVersion,
+            NowPlaying = env.Parts.NowPlaying,
+            Corrected = env.Parts.Corrected,
+            Before = LineBefore(state, state.Field),
+            After = state.Field?.After,
+            LateResults = lateResults,
+            Deadline = lateResults ? 0 : long.MaxValue,
+            Context = () => CompositionController.ContextOf(state.Composition, composition),
+        };
+        return composition;
+    }
 
     /// <summary>英数 (直接入力) か。true の間はキーをすべてアプリに渡す (Mac の「英数」キー、「かな」キーで戻す)。</summary>
     public static bool Direct(ImeSessionState state) => state.Composition.Direct;
@@ -655,9 +667,9 @@ internal static class ImeSession
     /// 入力モードを切り替えるキーの意味は ImeSession が決めるので、ここでは見ない。
     /// </summary>
     /// <param name="releaseFollows">ワークアラウンド (ImeEventType.KeyReleased): 離したことは <see cref="HandleKeyUp"/> で届く。false なら押した直後に離したとみなす。</param>
-    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command, string? before = null, string? after = null,
-        bool releaseFollows = false)
+    public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
     {
+        var before = LineBefore(state, state.Field);
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
         // 変換中の before は、変換中の文字より前 (フロントが渡す)
         if (CodeInput(state) && !Direct(state) && !control && !alt && !command &&
@@ -701,7 +713,7 @@ internal static class ImeSession
             state.UserDictionaryCheckedMs = now;
             env.UserDictionary?.Refresh();
         }
-        var result = CompositionController.Press(state.Composition, Env(state, env), new KeyPress(vk, ch, shift, control, alt, command, now), before, after, releaseFollows);
+        var result = CompositionController.Press(state.Composition, Env(state, env), new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
         if (!result.Consumed && !CompositionController.IsComposing(state.Composition)) ForgetLastCommit(state);
@@ -712,10 +724,7 @@ internal static class ImeSession
     /// ワークアラウンド (ImeEventType.KeyReleased): releaseFollows を付けて押したキーを離した。親指シフトの親指キー・中指NICOLA のシフトのキーを離したことを、
     /// かな配列に伝える (文字に使わずに離した親指キーは、もとの変換・無変換をする)。離したことをアプリに通すかはフロントが押下のとおりに決める。
     /// </summary>
-    public static SessionResult HandleKeyUp(ImeSessionState state, ImeEnv env, int vk, string? before, string? after)
-    {
-        return CompositionController.Release(state.Composition, Env(state, env), vk, before, after);
-    }
+    public static SessionResult HandleKeyUp(ImeSessionState state, ImeEnv env, int vk) => CompositionController.Release(state.Composition, Env(state, env), vk);
 
     /// <summary>
     /// 変換・無変換・ひらがな/カタカナ キー。設定「入力中のキーの役割を分ける」が ON (無変換は「無変換でカタカナを切り替える」が ON でもよい) で入力中なら、変換ボックスで処理する (issue #199)。
@@ -796,10 +805,10 @@ internal static class ImeSession
         return result;
     }
 
-    /// <summary>背景の変換の結果が届いたとき (IBackgroundConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
     /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま (変換中ならその表示)。</summary>
     public static SessionResult Unchanged(ImeSessionState state, ImeEnv env) => CompositionController.Current(state.Composition, Env(state, env));
 
+    /// <summary>背景の変換の結果が届いたとき (IKanjiConverter.ResultReady を入力スレッドに移して呼ぶ)。表示が変わらないなら null (入力していない・候補を開いている)。</summary>
     public static SessionResult? RefreshConversion(ImeSessionState state, ImeEnv env) => CompositionController.RefreshConversion(state.Composition, Env(state, env));
 
     /// <summary>候補ウィンドウで候補をクリックしたとき。</summary>

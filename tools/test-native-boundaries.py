@@ -174,14 +174,15 @@ class NativeBoundaryTests(unittest.TestCase):
 
     def test_normal_enter_keeps_english_spacing(self):
         self.type_text("ka", after="world")
-        result = self.key(0, vk=0x0D)
+        # キャレットの前後は出来事ごとにフロントが送ったものを使う (フロントはキーのたびに送る)
+        result = self.key(0, vk=0x0D, after="world")
         self.assertTrue(result["consumed"])
         self.assertEqual([self.commit("か ")], result["commits"])
 
     def test_name_context_keeps_unknown_name(self):
         for char in "taro":
             self.key(ord(char), before="my name is ")
-        self.assertEqual("taro", self.key(0, vk=0x0D)["commits"][0]["text"])
+        self.assertEqual("taro", self.key(0, vk=0x0D, before="my name is ")["commits"][0]["text"])
 
     def test_english_term_particle_tail(self):
         self.type_text("apinoerror")
