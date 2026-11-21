@@ -37,11 +37,11 @@ internal sealed class BackgroundCallbackConverter(
 
     public event Action? ResultReady;
 
-    public string? Convert(string hiragana) =>
+    public string? Convert(string hiragana, string? before) =>
         Ask(new Request(Kind.Convert, hiragana, null))?.Text;
 
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-        Ask(new Request(Kind.Clauses, hiragana, context))?.Clauses;
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+        Ask(new Request(Kind.Clauses, hiragana, before))?.Clauses;
 
     public IReadOnlyList<string> Candidates(string reading) =>
         Ask(new Request(Kind.Candidates, reading, null))?.Candidates ?? [];

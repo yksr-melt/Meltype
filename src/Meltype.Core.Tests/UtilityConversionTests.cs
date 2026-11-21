@@ -17,9 +17,9 @@ internal static class UtilityConversionTests
     {
         private readonly FakeConverter _inner = new();
         public List<string> Learned { get; } = [];
-        public string? Convert(string hiragana) => ConvertClauses(hiragana) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+        public string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } parts ? string.Concat(parts.Select(c => c.Text)) : _inner.Convert(hiragana, before);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
 
         public void Learn(string? context, IReadOnlyList<ConversionClause> learned)
         {

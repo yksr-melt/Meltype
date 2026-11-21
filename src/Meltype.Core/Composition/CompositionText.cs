@@ -786,8 +786,8 @@ internal static class CompositionText
     }
 
     /// <param name="final">確定・変換のときは true (語末の n を ん にする)。</param>
-    /// <param name="convert">日本語の区間 (かな, 前の区間が英語か) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
-    public static string Display(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string>? convert = null) => state.Mode switch
+    /// <param name="convert">日本語の区間 (かな, 前の区間が英語か, 変換ボックスの中でその区間より前に出ている文字) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
+    public static string Display(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, string>? convert = null) => state.Mode switch
     {
         DisplayMode.HalfWidthAlphanumeric => ApplyCase(CompositionText.Raw(state), state.Case),
         DisplayMode.FullWidthAlphanumeric => ToFullWidth(ApplyCase(CompositionText.Raw(state), state.Case)),
@@ -838,7 +838,7 @@ internal static class CompositionText
     }
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
-    public static string RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string>? convert)
+    public static string RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, string>? convert)
     {
         // 保護範囲 (技術的な文字列) は、幅変換・かな化・漢字変換をせずに原文のまま出す (INV-01)。
         if (CompositionText.VerifyProtectedRaw(state)) return CompositionText.Raw(state);
@@ -871,7 +871,7 @@ internal static class CompositionText
                     kana = kana[..^laughter];
                 }
             }
-            builder.Append(convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish) : kana);
+            builder.Append(convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish, builder.ToString()) : kana);
             builder.Append(pending);
         }
         return CompositionText.HalfWidthStars(state, builder.ToString());

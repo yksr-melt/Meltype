@@ -118,23 +118,4 @@ internal static partial class CompositionController
         if (c >= '\u2000' && !char.IsWhiteSpace(c) && c != '\u3000') return false;
         return null;
     }
-
-    /// <summary>変換エンジンに渡す文脈: キャレットの前の確定済みの文字のうち、同じ文の日本語の部分 (最大 10 文字)。</summary>
-    private static string? ConversionContext(CompositionState state)
-    {
-        var text = state.PrecedingText;
-        if (string.IsNullOrEmpty(text) || LanguageOf(text) != false) return null;
-        var start = text.AsSpan().LastIndexOfAny(SentenceEndSearch);
-        text = text[(start + 1)..].Trim();
-        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
-    }
-
-    /// <summary>広い文脈 (文をまたいで最大 100 文字の、日本語の文章)。使える変換エンジン (Zenzai) に渡す。英文のときは null。</summary>
-    private static string? WideContext(CompositionState state)
-    {
-        var text = state.PrecedingText?.Replace("\r", "").Replace("\n", "").Trim();
-        return string.IsNullOrEmpty(text) || LanguageOf(text) != false ? null : text.Length > 100 ? text[^100..] : text;
-    }
-
-    private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }
