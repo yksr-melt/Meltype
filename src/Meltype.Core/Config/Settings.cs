@@ -28,6 +28,13 @@ public sealed class PlatformsAttribute(Platform platforms) : Attribute
     public Platform Platforms { get; } = platforms;
 }
 
+/// <summary>組み込みのローマ字の表。</summary>
+public enum RomajiTable
+{
+    [Description("標準")] Standard,
+    [Description("AZIK")] Azik,
+}
+
 public enum InputStyle
 {
     /// <summary>ローマ字入力。</summary>
@@ -584,6 +591,10 @@ public sealed class Settings
      Description("入力方式が「ローマ字入力」のときのキーの配列。QWERTY (ふつう) か SKY 配列 (左手が子音 , W R M H / N T S K Y / P D Z G B、右手が母音 UU AI OU 。 EI / U A O I E / UN AN ON IN EN)。SKY 配列では、英字のキーを SKY 配列のローマ字にしてから読みます (拗音は子音 + Y + 母音、促音は子音を 2 回)。英語の自動判定は使わず、日本語として読みます。Meltype キーボードで使えます。")]
     public RomajiLayout RomajiLayout { get; set; } = RomajiLayout.Qwerty;
 
+    [Category("2. 入力方式"), DisplayName("ローマ字の表"),
+     Description("ローマ字の綴りの表。標準 (Microsoft IME と同じ綴り) か AZIK (拡張ローマ字: kz = かん、q = ん、kt = こと など)。どちらでも、ユーザー辞書のフォルダーの romaji.txt に書いた綴りが優先します。変えたら Meltype を起動し直すと効きます。")]
+    public RomajiTable RomajiTable { get; set; } = RomajiTable.Standard;
+
     [Category("4. 判定"), DisplayName("英語 / 日本語を自動で判定する"),
      Description("打った英字が英語か日本語 (ローマ字) かを自動で判定し、英語なら英字にします。OFF にすると、Shift で打った大文字で始まる語だけを英字にし、ほかの語は提案だけ出します (変換ボックスで Tab を押すと提案どおり英字に)。英数状態の検知と、確定後の直しもしません。Meltype キーボード・Meltype IME・かな入力のすべてに効きます。")]
     public bool AutoDetection { get; set; } = true;
@@ -1006,6 +1017,7 @@ public sealed class Settings
         if (!Enum.IsDefined(InputStyle)) InputStyle = InputStyle.Romaji;
         if (!Enum.IsDefined(KanaLayout)) KanaLayout = KanaLayout.Jis;
         if (!Enum.IsDefined(RomajiLayout)) RomajiLayout = RomajiLayout.Qwerty;
+        if (!Enum.IsDefined(RomajiTable)) RomajiTable = RomajiTable.Standard;
         AppRules ??= [];
         AppKinds ??= [];
         AppRules.RemoveAll(r => r is null || string.IsNullOrWhiteSpace(r.Process));
