@@ -175,10 +175,10 @@ internal static class DictionaryMemory
     }
 
     /// <summary>外部の漢字変換エンジンの処理時間を含めないため、読みをそのまま返す。</summary>
-    private sealed class Identity : IKanjiConverter
+    private sealed class Identity : TestConverter
     {
-        public string? Convert(string hiragana, string? before) => hiragana;
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => null;
+        public override string? Convert(string hiragana, string? before) => hiragana;
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => null;
     }
 
     public static void Bench(int rounds)

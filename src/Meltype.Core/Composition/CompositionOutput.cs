@@ -18,7 +18,7 @@ internal static class CompositionOutput
     /// <summary>キャレットの前の文字。出来事の前の文字に、この出来事で確定した文字を入れたもの (フロントは確定を入れてから変換中の文字を置く)。</summary>
     public static string? Before(CompositionOutputState state, CompositionEnv env)
     {
-        var before = state.Before;
+        var before = env.Before;
         if (before is null) return null;
         foreach (var edit in state.Commits) before = before[..^Math.Min(edit.DeleteBefore, before.Length)] + edit.Text;
         return FromSetting(env.Settings.Punctuation, before);
@@ -26,13 +26,14 @@ internal static class CompositionOutput
 
     public static CompositionView? View(CompositionOutputState state) => state.Hidden ? null : state.View;
 
-    public static void Begin(CompositionOutputState state, CompositionEnv env, string? before, string? after)
+    /// <summary>キャレットの後ろの文字 (設定の句読点を変換ボックスの句読点に読み替えたもの)。</summary>
+    public static string? After(CompositionEnv env) => env.After is null ? null : FromSetting(env.Settings.Punctuation, env.After);
+
+    public static void Begin(CompositionOutputState state)
     {
         state.Commits.Clear();
         state.PendingDelete = 0;
         state.PendingExpect = null;
-        state.Before = before;
-        state.After = after is null ? null : FromSetting(env.Settings.Punctuation, after);
         state.PassedCurrent = false;
         state.Hidden = false;
     }
