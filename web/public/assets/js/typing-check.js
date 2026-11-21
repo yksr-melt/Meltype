@@ -12,25 +12,46 @@ import { align, finalKana, toRomaji, toUnits } from "./romaji.js";
 //   2: Backspace で Meltype と同じく、日本語は 1 音 (ka なら 2 文字)、英語と打ちかけの綴りは 1 文字消す
 export const TYPING_VERSION = 2;
 
-// 打ち終わりが、お手本の英語の語を打ち終えたところか。Meltype は英語の区間なら 1 文字ずつ消すので、お手本に出てくる英語の語で見分ける。
-// 語の打ちかけ (no・me・ma) は見ない。日本語の 1 音と同じ綴りなので、Meltype もかなで見せていて、1 音ずつ消す
-function englishTail(typed, words) {
-  const lower = typed.toLowerCase();
-  return words.some((word) => word.length >= 2 && lower.endsWith(word));
+// 表示と Backspace で同じ単位を使う。英単語はかなの境目 (残りが無いか n だけ) でだけ探し、1 文字を 1 単位にする。
+// ワークアラウンド: 打った字を Meltype のエンジンで組み立てるようにしたら消す。
+function typingUnits(typed, reading) {
+  const words = (reading.match(/[a-z]+/g) ?? []).sort((a, b) => b.length - a.length);
+  const units = [];
+  let start = 0;
+  let i = 0;
+  while (i < typed.length) {
+    const before = toUnits(typed.slice(start, i));
+    const word = (before.pending === "" || before.pending === "n") && words.find((w) => typed.slice(i, i + w.length).toLowerCase() === w);
+    if (word) {
+      units.push(...before.units);
+      if (before.pending) units.push({ raw: typed.slice(i - 1, i), kana: "ん" });
+      for (const char of typed.slice(i, i + word.length)) units.push({ raw: char, kana: char });
+      i += word.length;
+      start = i;
+    } else {
+      i += 1;
+    }
+  }
+  const rest = toUnits(typed.slice(start));
+  return { units: [...units, ...rest.units], pending: rest.pending };
 }
 
-function backspace(typed, words) {
-  const { units, pending } = toUnits(typed);
-  if (pending || units.length === 0 || englishTail(typed, words)) return typed.slice(0, -1);
+export function previewKana(typed, reading) {
+  const { units, pending } = typingUnits(typed, reading);
+  return { kana: units.map((unit) => unit.kana).join(""), pending };
+}
+
+function backspace(typed, reading) {
+  const { units, pending } = typingUnits(typed, reading);
+  if (pending || units.length === 0) return typed.slice(0, -1);
   return typed.slice(0, -units[units.length - 1].raw.length);
 }
 
 // 打鍵 ([code, key, 押した時刻, 離した時刻]) を頭から打ち直し、Enter を押したときに残っていた文字にする
 export function replay(keys, reading, version = TYPING_VERSION) {
-  const words = reading.match(/[a-z0-9-]+/g) || [];
   let typed = "";
   for (const [, key] of keys) {
-    if (key === "Backspace") typed = version >= 2 ? backspace(typed, words) : typed.slice(0, -1);
+    if (key === "Backspace") typed = version >= 2 ? backspace(typed, reading) : typed.slice(0, -1);
     else if (key.length === 1 && key >= " " && key <= "~") typed += key;
   }
   return typed;

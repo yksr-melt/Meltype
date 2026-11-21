@@ -7,46 +7,46 @@
 
 const VOWELS = ["a", "i", "u", "e", "o"];
 
+// 綴りは Meltype 本体 (src/Meltype.Core/Detection/RomajiDetector.cs の Table と CompositionTable) と同じにする。
+// 本体で打てる綴りがここで打てないと、Meltype の利用者がふだんどおり打っても間違いになるため。
 const BASE = {
-  a: "あ", i: "い", u: "う", e: "え", o: "お",
-  ka: "か", ki: "き", ku: "く", ke: "け", ko: "こ",
-  sa: "さ", si: "し", su: "す", se: "せ", so: "そ", shi: "し",
-  ta: "た", ti: "ち", tu: "つ", te: "て", to: "と", chi: "ち", tsu: "つ",
-  na: "な", ni: "に", nu: "ぬ", ne: "ね", no: "の",
-  ha: "は", hi: "ひ", hu: "ふ", he: "へ", ho: "ほ", fu: "ふ",
-  ma: "ま", mi: "み", mu: "む", me: "め", mo: "も",
-  ya: "や", yu: "ゆ", yo: "よ", yi: "い", ye: "いぇ",
-  ra: "ら", ri: "り", ru: "る", re: "れ", ro: "ろ",
-  la: "ぁ", li: "ぃ", lu: "ぅ", le: "ぇ", lo: "ぉ",
-  xa: "ぁ", xi: "ぃ", xu: "ぅ", xe: "ぇ", xo: "ぉ",
-  wa: "わ", wi: "うぃ", wu: "う", we: "うぇ", wo: "を",
-  ga: "が", gi: "ぎ", gu: "ぐ", ge: "げ", go: "ご",
-  za: "ざ", zi: "じ", zu: "ず", ze: "ぜ", zo: "ぞ", ji: "じ",
-  da: "だ", di: "ぢ", du: "づ", de: "で", do: "ど",
-  ba: "ば", bi: "び", bu: "ぶ", be: "べ", bo: "ぼ",
-  pa: "ぱ", pi: "ぴ", pu: "ぷ", pe: "ぺ", po: "ぽ",
-  va: "ゔぁ", vi: "ゔぃ", vu: "ゔ", ve: "ゔぇ", vo: "ゔぉ",
-  fa: "ふぁ", fi: "ふぃ", fe: "ふぇ", fo: "ふぉ",
-  ja: "じゃ", ju: "じゅ", je: "じぇ", jo: "じょ",
-  sha: "しゃ", shu: "しゅ", she: "しぇ", sho: "しょ",
-  cha: "ちゃ", chu: "ちゅ", che: "ちぇ", cho: "ちょ",
-  tsa: "つぁ", tsi: "つぃ", tse: "つぇ", tso: "つぉ",
-  tha: "てゃ", thi: "てぃ", thu: "てゅ", the: "てぇ", tho: "てょ",
-  dha: "でゃ", dhi: "でぃ", dhu: "でゅ", dhe: "でぇ", dho: "でょ",
-  twu: "とぅ", dwu: "どぅ",
-  lya: "ゃ", lyu: "ゅ", lyo: "ょ", xya: "ゃ", xyu: "ゅ", xyo: "ょ",
-  ltu: "っ", xtu: "っ", ltsu: "っ", xtsu: "っ", lwa: "ゎ", xwa: "ゎ",
-  lka: "ゕ", xka: "ゕ", lke: "ゖ", xke: "ゖ",
-  nn: "ん", "n'": "ん", xn: "ん",
+  a: "あ", i: "い", yi: "い", u: "う", whu: "う", wu: "う", e: "え", o: "お",
+  ka: "か", ki: "き", ku: "く", ke: "け", ko: "こ", kya: "きゃ", kyu: "きゅ", kyo: "きょ",
+  sa: "さ", shi: "し", si: "し", su: "す", se: "せ", ce: "せ", so: "そ", sha: "しゃ",
+  sya: "しゃ", shu: "しゅ", syu: "しゅ", sho: "しょ", syo: "しょ", she: "しぇ", sye: "しぇ", ta: "た",
+  chi: "ち", ti: "ち", tsu: "つ", tu: "つ", te: "て", to: "と", cha: "ちゃ", tya: "ちゃ",
+  cya: "ちゃ", chu: "ちゅ", tyu: "ちゅ", cyu: "ちゅ", cho: "ちょ", tyo: "ちょ", cyo: "ちょ", che: "ちぇ",
+  tye: "ちぇ", cye: "ちぇ", tha: "てゃ", thu: "てゅ", tho: "てょ", na: "な", ni: "に", nu: "ぬ",
+  ne: "ね", no: "の", nya: "にゃ", nyu: "にゅ", nyo: "にょ", nyi: "にぃ", nye: "にぇ", ha: "は",
+  hi: "ひ", fu: "ふ", hu: "ふ", he: "へ", ho: "ほ", hya: "ひゃ", hyu: "ひゅ", hyo: "ひょ",
+  fa: "ふぁ", hwa: "ふぁ", fi: "ふぃ", fyi: "ふぃ", hwi: "ふぃ", fe: "ふぇ", fye: "ふぇ", hwe: "ふぇ",
+  fo: "ふぉ", hwo: "ふぉ", fya: "ふゃ", fyu: "ふゅ", fyo: "ふょ", ma: "ま", mi: "み", mu: "む",
+  me: "め", mo: "も", mya: "みゃ", myu: "みゅ", myo: "みょ", ya: "や", yu: "ゆ", yo: "よ",
+  ra: "ら", ri: "り", ru: "る", re: "れ", ro: "ろ", rya: "りゃ", ryu: "りゅ", ryo: "りょ",
+  wa: "わ", wo: "を", who: "うぉ", wha: "うぁ", ga: "が", gi: "ぎ", gu: "ぐ", ge: "げ",
+  go: "ご", gya: "ぎゃ", gyu: "ぎゅ", gyo: "ぎょ", za: "ざ", ji: "じ", zi: "じ", zu: "ず",
+  ze: "ぜ", zo: "ぞ", ja: "じゃ", jya: "じゃ", zya: "じゃ", ju: "じゅ", jyu: "じゅ", zyu: "じゅ",
+  jo: "じょ", jyo: "じょ", zyo: "じょ", je: "じぇ", jye: "じぇ", zye: "じぇ", da: "だ", di: "ぢ",
+  du: "づ", de: "で", do: "ど", dha: "でゃ", dhu: "でゅ", dho: "でょ", dya: "ぢゃ", dyu: "ぢゅ",
+  dyo: "ぢょ", ba: "ば", bi: "び", bu: "ぶ", be: "べ", bo: "ぼ", bya: "びゃ", byu: "びゅ",
+  byo: "びょ", pa: "ぱ", pi: "ぴ", pu: "ぷ", pe: "ぺ", po: "ぽ", pya: "ぴゃ", pyu: "ぴゅ",
+  pyo: "ぴょ", twa: "とぁ", twi: "とぃ", twe: "とぇ", twu: "とぅ", two: "とぉ", dwa: "どぁ", dwi: "どぃ",
+  dwe: "どぇ", dwu: "どぅ", dwo: "どぉ", kyi: "きぃ", kye: "きぇ", gyi: "ぎぃ", gye: "ぎぇ", syi: "しぃ",
+  zyi: "じぃ", jyi: "じぃ", dyi: "ぢぃ", dye: "ぢぇ", hyi: "ひぃ", hye: "ひぇ", byi: "びぃ", bye: "びぇ",
+  pyi: "ぴぃ", pye: "ぴぇ", myi: "みぃ", mye: "みぇ", ryi: "りぃ", rye: "りぇ", kwi: "くぃ", kwu: "くぅ",
+  kwe: "くぇ", kwo: "くぉ", gwi: "ぐぃ", gwu: "ぐぅ", gwe: "ぐぇ", gwo: "ぐぉ", swa: "すぁ", swi: "すぃ",
+  swu: "すぅ", swe: "すぇ", swo: "すぉ", zwa: "ずぁ", zwi: "ずぃ", zwu: "ずぅ", zwe: "ずぇ", zwo: "ずぉ",
+  xa: "ぁ", la: "ぁ", xi: "ぃ", li: "ぃ", xyi: "ぃ", lyi: "ぃ", xu: "ぅ", lu: "ぅ",
+  xe: "ぇ", le: "ぇ", xye: "ぇ", lye: "ぇ", xo: "ぉ", lo: "ぉ", xya: "ゃ", lya: "ゃ",
+  xyu: "ゅ", lyu: "ゅ", xyo: "ょ", lyo: "ょ", xtu: "っ", ltu: "っ", xtsu: "っ", ltsu: "っ",
+  xwa: "ゎ", lwa: "ゎ", xka: "ゕ", lka: "ゕ", xke: "ゖ", lke: "ゖ", xn: "ん", va: "ゔぁ",
+  vi: "ゔぃ", vu: "ゔ", ve: "ゔぇ", vo: "ゔぉ", ye: "いぇ", wi: "うぃ", whi: "うぃ", we: "うぇ",
+  whe: "うぇ", wyi: "ゐ", wye: "ゑ", thi: "てぃ", dhi: "でぃ", the: "てぇ", dhe: "でぇ", qi: "くぃ",
+  qe: "くぇ", qo: "くぉ", ca: "か", ci: "し", cu: "く", co: "こ", cyi: "ちぃ", tyi: "ちぃ",
+  kwa: "くぁ", gwa: "ぐぁ", tsa: "つぁ", tsi: "つぃ", tse: "つぇ", tso: "つぉ",
+  nn: "ん", "n'": "ん",
   "-": "ー", ",": "、", ".": "。", "!": "！", "?": "？", "~": "〜", "[": "「", "]": "」", "(": "（", ")": "）",
 };
-
-// きゃ・しゃ (sya) など「子音 + y + 母音」と、きぇ (kye) などをまとめて作る
-const Y_ROWS = { k: "き", s: "し", t: "ち", n: "に", h: "ひ", m: "み", r: "り", g: "ぎ", z: "じ", j: "じ", d: "ぢ", b: "び", p: "ぴ", c: "ち", f: "ふ", v: "ゔ" };
-const SMALL = { a: "ゃ", i: "ぃ", u: "ゅ", e: "ぇ", o: "ょ" };
-for (const [consonant, kana] of Object.entries(Y_ROWS)) {
-  for (const vowel of VOWELS) BASE[`${consonant}y${vowel}`] ??= kana + SMALL[vowel];
-}
 
 const TABLE = new Map(Object.entries(BASE));
 const LONGEST = Math.max(...[...TABLE.keys()].map((key) => key.length));

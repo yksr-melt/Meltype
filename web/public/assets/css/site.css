@@ -3425,6 +3425,7 @@ em {
 .typing-focus-hint {
   position: absolute;
   inset: auto 24px 8px;
+  text-align: center;
   font-size: 0.82rem;
   color: var(--muted);
 }

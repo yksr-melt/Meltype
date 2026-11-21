@@ -5,8 +5,8 @@
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
 // 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay。Backspace は Meltype と同じく日本語なら 1 音消す)。
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
-import { align, toKana, toRomaji } from "./romaji.js";
-import { TYPING_VERSION, compare, replay, suspicious } from "./typing-check.js";
+import { align, toRomaji } from "./romaji.js";
+import { TYPING_VERSION, compare, previewKana, replay, suspicious } from "./typing-check.js";
 import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
 
@@ -75,7 +75,6 @@ function nextRound() {
 
 // 同意した参加は、同意文が変わるまで使い続ける (同じ人の打ち方をまとめて見られるように)
 const sessionAlive = () => Boolean(saved.session && saved.session.consent === CONSENT_VERSION);
-// 英語が混ざった文は、英語の部分をかなにすると読めないので、打った文字をそのまま見せる
 const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
 // ---- 1. はじめる ----
@@ -112,7 +111,8 @@ function loadSentence() {
   state.trial = newTrial();
   $("count").textContent = String(state.index + 1);
   $("text").textContent = sentence.text;
-  $("reading").textContent = hasEnglish(sentence) ? toRomaji(sentence.reading) : sentence.reading;
+  $("reading").textContent = sentence.reading;
+  $("reading-romaji").textContent = toRomaji(sentence.reading);
   $("ime-note").hidden = true;
   render();
 }
@@ -120,11 +120,10 @@ function loadSentence() {
 function render() {
   const sentence = state.queue[state.index];
   const typed = replay(state.trial.keys, sentence.reading);
-  const english = hasEnglish(sentence);
-  const { kana, pending } = english ? { kana: typed, pending: "" } : toKana(typed);
+  const { kana, pending } = previewKana(typed, sentence.reading);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
-  $("romaji").textContent = english ? "" : typed.toLowerCase();
+  $("romaji").textContent = typed.toLowerCase();
 }
 
 // 時刻は performance.now() で測る。event.timeStamp は、ブラウザーや設定 (指紋対策など) によって 0 や粗い値になり、打鍵の間隔が取れないため
