@@ -351,8 +351,14 @@ pub(crate) fn generated_candidates(reading: &str) -> Vec<String> {
         if let Some(values) = backend.shunti_candidates.get(reading) {
             return values.clone();
         }
-        backend.neural_segments.iter().filter(|(r, _)| r == reading).map(|(_, t)| t.clone()).collect()
-    }).unwrap_or_default()
+        backend
+            .neural_segments
+            .iter()
+            .filter(|(r, _)| r == reading)
+            .map(|(_, t)| t.clone())
+            .collect()
+    })
+    .unwrap_or_default()
 }
 unsafe extern "C" fn convert(reading: *const c_char) -> *mut c_char {
     let value = crate::read(reading).and_then(|s| with_backend(|b| b.convert(&s)).flatten());

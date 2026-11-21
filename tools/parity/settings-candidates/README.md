@@ -40,3 +40,5 @@ cargo test -p meltype-core --test upstream_settings_apps
 主fixture `upstream-settings-candidates.json` の677ケースは、未変更C# v1.3.0（6310c44b728d5ad88284853f9ef37ea224993b18）から再採取した。Coreと辞書の70ファイルをGitオブジェクトと照合し、WindowsチェックアウトのCRLFだけを正規化して確認した。全677ケースが実Rust DLLと一致した後に固定している。従来の45e14f8基準から応答が変わったのはnumber-widthだけで、1.3.0の漢数字・大字候補を含む。期待値をRustから生成したものではない。
 
 再固定は `freeze.py <全比較成功の証跡フォルダー> --baseline 6310c44b728d5ad88284853f9ef37ea224993b18 --output rust/core/tests/data/upstream-settings-candidates.json`。採取ホストのビルドではCoreProjectをその基準の未変更Coreに指定する。追加のexhaustive-batchとexpanded-regressionsは、それぞれJSON内に記録された従来の基準を維持する。この更新で全設定直積の検証を再開したわけではない。
+
+`both-input-formal-composition` は `InputStyle=Both` の設定確認に絞り、`konnichiwa` の共通入力で比較する。後から追加された `byi` ローマ字拡張を含む入力を旧C# 1.3.0の固定期待値と比較しないための更新で、ケースの期待値は未変更C# 1.3.0から再採取し、Rust DLLとの一致を検証している。

@@ -17,6 +17,10 @@ on:
         description: 'ベンチマークを実行せず、本文へ未実施と記載する'
         type: boolean
         default: false
+      update_existing:
+        description: '同じソースSHAで公開済みのリリースへ測定結果を追加する'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -152,7 +156,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-release-linux
-      - run: sudo apt-get update && sudo apt-get install -y libibus-1.0-dev ibus gir1.2-ibus-1.0 python3-gi dbus-x11 xvfb fonts-noto-cjk libxkbcommon-x11-0 rpm dpkg-dev cpio
+      - run: sudo apt-get update && sudo apt-get install -y libibus-1.0-dev ibus gir1.2-ibus-1.0 python3-gi dbus-x11 xvfb fonts-noto-cjk libxkbcommon-x11-0 rpm dpkg-dev cpio zlib1g-dev
       - run: cargo test --workspace --locked
       - uses: bazel-contrib/setup-bazel@0.15.0
         with:
@@ -197,9 +201,10 @@ jobs:
         env:
           PYTHONUTF8: '1'
           BENCHMARK_BASELINE: ${{ inputs.benchmark_baseline }}
+          BENCHMARK_CURRENT_REF: ${{ inputs.update_existing && inputs.tag || github.sha }}
         run: |
           git fetch --tags https://github.com/yksr-melt/Meltype.git
-          python tools/compare-rust-benchmarks.py --build --with-csharp --fetch-tags --baseline-ref "$BENCHMARK_BASELINE" --output dist/release-benchmark --samples 3 --warmups 1 --rounds 9
+          python tools/compare-rust-benchmarks.py --build --with-csharp --fetch-tags --current-ref "$BENCHMARK_CURRENT_REF" --baseline-ref "$BENCHMARK_BASELINE" --output dist/release-benchmark --samples 3 --warmups 1 --rounds 9
           python -m pip install --disable-pip-version-check matplotlib==3.10.8 numpy==2.4.2
           python tools/plot-windows-benchmark.py dist/release-benchmark/report.json --output dist/release-benchmark/charts
       - uses: actions/upload-artifact@v4
@@ -344,9 +349,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           SKIP_BENCHMARK: ${{ inputs.skip_benchmark }}
+          UPDATE_EXISTING: ${{ inputs.update_existing }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           benchmark_args=(--benchmark artifacts/release-benchmark)
           if [[ "$SKIP_BENCHMARK" == true ]]; then
             benchmark_args=(--skip-benchmark)
           fi
-          python3 tools/publish-rust-release.py --tag "$TAG" --sha "$GITHUB_SHA" --assets release-assets "${benchmark_args[@]}" --output release-body.md --publish
+          update_args=()
+          if [[ "$UPDATE_EXISTING" == true ]]; then
+            update_args=(--update-existing)
+            SOURCE_SHA=$(git rev-parse "$TAG^{commit}")
+          else
+            SOURCE_SHA="$GITHUB_SHA"
+          fi
+          python3 tools/publish-rust-release.py --tag "$TAG" --sha "$SOURCE_SHA" --assets release-assets "${benchmark_args[@]}" "${update_args[@]}" --output release-body.md --publish

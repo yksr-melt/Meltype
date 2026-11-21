@@ -33,6 +33,33 @@ class PresentationTests(unittest.TestCase):
         with patch.object(publisher, "gh", return_value=json.dumps([[release]])):
             self.assertEqual(publisher.find_release(release["tag_name"]), release)
 
+    def test_existing_release_update_requires_same_source_and_preserves_assets(self):
+        tag = "flash-v1.1.26"
+        release = {"id": 26, "tag_name": tag, "draft": False, "prerelease": False,
+                   "assets": [{"name": name, "digest": "sha256:abc"}
+                              for name in publisher.PACKAGES + publisher.DOCUMENTS]}
+        with patch.object(publisher, "api", return_value={"object": {"sha": "a" * 40}}):
+            original = publisher.validate_existing_release(release, tag, "a" * 40, False)
+        self.assertEqual(set(original), set(publisher.PACKAGES + publisher.DOCUMENTS))
+        with patch.object(publisher, "api", return_value={"html_url": "https://example.invalid/release",
+                "body": "Benchmark results", "assets": release["assets"]}) as update:
+            result = publisher.update_existing_release(release, "v1.1.26", "Benchmark results", original)
+        self.assertEqual(result["html_url"], "https://example.invalid/release")
+        update.assert_called_once_with("releases/26", {"name": "v1.1.26", "body": "Benchmark results"}, "PATCH")
+
+    def test_existing_release_update_rejects_source_or_asset_mismatch(self):
+        tag = "flash-v1.1.26"
+        release = {"id": 26, "tag_name": tag, "draft": False, "prerelease": False,
+                   "assets": [{"name": name, "digest": "sha256:abc"}
+                              for name in publisher.PACKAGES + publisher.DOCUMENTS]}
+        with patch.object(publisher, "api", return_value={"object": {"sha": "b" * 40}}):
+            with self.assertRaisesRegex(ValueError, "ソースSHA"):
+                publisher.validate_existing_release(release, tag, "a" * 40, False)
+        with patch.object(publisher, "api", return_value={"object": {"sha": "a" * 40}}):
+            release["assets"].pop()
+            with self.assertRaisesRegex(ValueError, "配布ファイル一式"):
+                publisher.validate_existing_release(release, tag, "a" * 40, False)
+
     def test_missing_release_is_distinct_from_an_api_error(self):
         with patch.object(publisher, "gh", return_value=json.dumps([[]])):
             self.assertIsNone(publisher.find_release("flash-v0.1.0-preview.5"))

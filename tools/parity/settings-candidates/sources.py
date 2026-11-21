@@ -35,7 +35,7 @@ def generate():
     add('separate-key-width','hashi',tail=[[29,0,0],[32,32,0],[40,0,0],[13,0,0]],settings={'SeparateKeyRoles':True})
     add('multiple-clauses','hashikami',converter={'clauses':{'はしかみ':[['はし','橋'],['かみ','紙']]},'candidates':{'はし':['橋','箸'],'かみ':['紙','神']}})
     add('context-other-clause','atsuihashi',files={'dictionaries/contexts.txt':'あつい 厚い : 橋\n'},converter={'clauses':{'あついはし':[['あつい','暑い'],['はし','橋']]}})
-    add('both-input-formal-composition','byiaf',settings={'InputStyle':'Both'},tail=[[13,0,0]])
+    add('both-input-formal-composition','konnichiwa',settings={'InputStyle':'Both'},tail=[[13,0,0]])
     return rows
 
 

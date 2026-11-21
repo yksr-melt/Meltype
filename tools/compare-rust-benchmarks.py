@@ -105,7 +105,14 @@ def build_csharp(args, output):
     env = os.environ.copy()
     env.update(DOTNET_TieredCompilation="0", DOTNET_CLI_TELEMETRY_OPTOUT="1")
     with (output / "csharp-build.log").open("w", encoding="utf-8") as log:
-        subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
+        try:
+            subprocess.run(command, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
+        except subprocess.CalledProcessError:
+            log.flush()
+            details = (output / "csharp-build.log").read_text(encoding="utf-8", errors="replace")
+            print("C# benchmark build failed; final build log lines follow:", file=sys.stderr)
+            print("\n".join(details.splitlines()[-80:]), file=sys.stderr)
+            raise
     binary = output / "csharp" / ("Compare.dll" if args.jit else "Compare" + SUFFIX)
     return binary, root, snapshot, dict(csharp_ref=reference, csharp_commit=commit,
         csharp_runtime="JIT (tiering disabled)" if args.jit else "NativeAOT",
