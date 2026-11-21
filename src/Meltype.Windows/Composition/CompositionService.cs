@@ -2,7 +2,13 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices;
+using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Composition;
 
@@ -29,11 +35,10 @@ internal sealed class CompositionService : IDisposable
         Runtime = runtime;
         _settings = settings;
         _hybrid = runtime.CreateConverter(AppContext.BaseDirectory);
-        _hybrid.Budget.Enable();
         _hybrid.ResultReady += () => ConversionReady?.Invoke();
         _hybrid.WarmUp();
         // 直したときの「Zenzai を使う」も覚えておく (報告を開くまでに設定を変えても、直したときの設定で報告する。issue #1197)
-        Parts = runtime.SessionParts(_hybrid, _hybrid.Candidates, _hybrid.Reading, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai }));
+        Parts = runtime.SessionParts(_hybrid, _hybrid.Candidates, _hybrid.Reading, correction => Corrections.Add(correction with { Zenzai = _settings().UseZenzai })) with { LateResults = () => true };
     }
 
     public MeltypeRuntime Runtime { get; }
@@ -87,8 +92,7 @@ internal sealed class CompositionService : IDisposable
     /// <summary>ユーザー辞書の登録画面用: 読みの変換候補 (Mozc の候補 → カタカナ)。</summary>
     public IReadOnlyList<string> SuggestWords(string reading)
     {
-        _hybrid.Budget.Start(SuggestWaitMs);
-        var list = _hybrid.Candidates(reading).Where(word => word.Length > 0).ToList();
+        var list = _hybrid.Candidates(reading, Environment.TickCount64 + SuggestWaitMs).Where(word => word.Length > 0).ToList();
         if (CompositionText.ToKatakana(reading) is { Length: > 0 } katakana && !list.Contains(katakana)) list.Add(katakana);
         return list;
     }

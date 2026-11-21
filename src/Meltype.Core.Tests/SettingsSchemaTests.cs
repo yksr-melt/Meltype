@@ -3,8 +3,8 @@
 
 using System.Reflection;
 using System.Text.Json.Nodes;
-using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Ime;
 
 namespace Meltype.Tests;
 

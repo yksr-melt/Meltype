@@ -2,6 +2,9 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
@@ -10,18 +13,6 @@ public enum DisplayMode { Auto, Hiragana, Katakana, FullWidthAlphanumeric, HalfW
 
 /// <summary>英字 (F9 / F10) で見せるときの大文字・小文字。F9 / F10 を続けて押すと 打ったまま → すべて大文字 → 先頭だけ大文字 と切り替わる。</summary>
 public enum LetterCase { AsTyped, Upper, Capitalized }
-
-/// <summary>
-/// 変換ボックス内の 1 単位。ローマ字 1 音 (きょ, っ, ん …)・ローマ字として読めなかった英字 1 文字・記号 1 文字のいずれか。
-/// Raw は実際に打った文字 (英語として表示するときに使う)。
-/// </summary>
-public readonly record struct CompositionUnit(string Kana, string Raw);
-
-/// <summary>表示上のひとまとまり。英語と判定した区間は英字のまま、それ以外は日本語 (かな/漢字)。</summary>
-public readonly record struct CompositionSegment(bool IsEnglish, string Kana, string Raw)
-{
-    public bool IsProtected { get; init; }
-}
 
 /// <summary>
 /// 未確定の入力。打ったそばからローマ字をかな 1 音ずつの単位にしていき、まだ音にならない子音
@@ -35,14 +26,14 @@ internal static class CompositionText
     /// 打った英字を読み直す断片は、読み直す元の入力の文脈を使う。
     /// </summary>
     public static bool? LearningContext(CompositionTextState state, TextEnv env) =>
-        env.Fragment is { } origin ? origin.LearningContext : env.Settings.ContextualLearning ? state.PrecedingEnglish : null;
+        env.Fragment is { } origin ? origin.LearningContext : env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null;
 
     /// <summary>
     /// 打った英字の一部を読み直すために作る断片に渡すもの。state は読み直す元の入力。
     /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。学習の文脈は元の入力のもの。
     /// </summary>
     public static TextEnv FragmentEnv(CompositionTextState state, TextEnv env) =>
-        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(state, env)) };
+        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(state, env)), Context = () => TextContext.None };
 
     private static readonly Config.Settings FragmentSettings = new();
 
@@ -305,7 +296,7 @@ internal static class CompositionText
     {
         // 最後の数字の位置 (その後ろが英字だけのとき)
         var digit = state.Units.Count - 1;
-        while (digit >= 0 && IsLetters(state.Units[digit].Raw)) digit--;
+        while (digit >= 0 && IsLetters(state.Units[digit])) digit--;
         if (digit < 0 || state.Units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(state.Units.Skip(digit + 1).Select(u => u.Raw)) + state.Pending;
         var lower = run.ToLowerInvariant();
@@ -490,7 +481,7 @@ internal static class CompositionText
         for (var i = 0; i < segments.Count; i++)
         {
             var segment = segments[i];
-            if (segment.IsEnglish && segment.Raw.Length == 3 && segment.Raw[2] is 'w' && !(i > 0 ? segments[i - 1].IsEnglish : state.PrecedingEnglishSentence) &&
+            if (segment.IsEnglish && segment.Raw.Length == 3 && segment.Raw[2] is 'w' && !(i > 0 ? segments[i - 1].IsEnglish : env.Context().PrecedingEnglishSentence) &&
                 char.IsAsciiLetterLower(segment.Raw[0]) && char.IsAsciiLetterLower(segment.Raw[1]) &&
                 env.Detector.Romaji.Analyze(segment.Raw[..2]) is { IsValid: true, Partial: "" } reading && reading.Kana.Length == 1)
             {
@@ -510,10 +501,10 @@ internal static class CompositionText
         var key = new StringBuilder();
         foreach (var unit in state.Units) key.Append(unit.Kana).Append('\u0001').Append(unit.Raw).Append('\u0002');
         key.Append('\u0003').Append(state.Pending).Append('\u0003')
-            .Append(state.PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
-            .Append(state.FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
-            .Append(state.PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
-            .Append(state.PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-').Append(state.LaughterAfterKana ? 'L' : '-')
+            .Append(env.Context().PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
+            .Append(env.Context().FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
+            .Append(env.Context().PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
+            .Append(env.Context().PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-').Append(state.LaughterAfterKana ? 'L' : '-')
             .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1).Append(':').Append(LearningContext(state, env) switch { true => 'e', false => 'j', null => '-' });
         return key.ToString();
     }
@@ -523,7 +514,7 @@ internal static class CompositionText
     /// 手動・かな入力・明示的な日本語学習・後ろの日本語は優先する。
     /// </summary>
     private static bool IsNameInEnglishSentence(CompositionTextState state, TextEnv env) =>
-        !state.KanaInput && state.PrecedingEnglishName && state.FollowingEnglish != false && !CompositionText.EffectiveManual(state, env) &&
+        !state.KanaInput && env.Context().PrecedingEnglishName && env.Context().FollowingEnglish != false && !CompositionText.EffectiveManual(state, env) &&
         CompositionText.Raw(state) is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && env.Detector.Memory?.Get(raw.ToLowerInvariant(), LearningContext(state, env)) != false;
 
     /// <summary>
@@ -555,7 +546,7 @@ internal static class CompositionText
     {
         var spans = CompositionText.ProtectedSpans(state);
         if (spans.Count == 0)
-            return env.Detector.SegmentAlternatives(LearningContext(state, env), units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, CompositionText.EffectiveManual(state, env), state.PrecedingEnglishSentence, state.KanaInput, count, reasons);
+            return env.Detector.SegmentAlternatives(LearningContext(state, env), units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, CompositionText.EffectiveManual(state, env), env.Context().PrecedingEnglishSentence, state.KanaInput, count, reasons);
         var raw = CompositionText.Raw(state);
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -574,9 +565,9 @@ internal static class CompositionText
         {
             if (from == to) return;
             var gapUnits = CompositionText.UnitsInRawRange(state, env, units, from, to, out var pending);
-            var segments = env.Detector.Segment(LearningContext(state, env), gapUnits, pending, from == 0 ? state.PrecedingEnglish : false,
-                to == raw.Length ? state.FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
-                from == 0 && state.PrecedingEnglishSentence, state.KanaInput, reasons);
+            var segments = env.Detector.Segment(LearningContext(state, env), gapUnits, pending, from == 0 ? env.Context().PrecedingEnglish : false,
+                to == raw.Length ? env.Context().FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
+                from == 0 && env.Context().PrecedingEnglishSentence, state.KanaInput, reasons);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
             if (to < raw.Length && pending.Length > 0 && !segments[^1].IsEnglish)
                 segments = [.. segments.Take(segments.Count - 1), segments[^1] with
@@ -666,7 +657,7 @@ internal static class CompositionText
     public static string? Suggestion(CompositionTextState state, TextEnv env)
     {
         if (state.Mode != DisplayMode.Auto || !CompositionText.EffectiveManual(state, env) || CompositionText.IsNumeric(state)) return null;
-        var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, false, state.PrecedingEnglishSentence, state.KanaInput);
+        var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(CompositionText.Segments(state, env))) return null;
         return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
     }
@@ -958,14 +949,14 @@ internal static class CompositionText
         var start = 0;
         while (start < state.Units.Count)
         {
-            if (!IsLetters(state.Units[start].Raw) || IsLaughter(state.Units[start]))
+            if (!IsLetters(state.Units[start]) || IsLaughter(state.Units[start]))
             {
                 offset += state.Units[start].Raw.Length;
                 start++;
                 continue;
             }
             var end = start;
-            while (end < state.Units.Count && IsLetters(state.Units[end].Raw) && !IsLaughter(state.Units[end])) end++;
+            while (end < state.Units.Count && IsLetters(state.Units[end]) && !IsLaughter(state.Units[end])) end++;
             var atEnd = end == state.Units.Count;
             var letters = string.Concat(state.Units.Skip(start).Take(end - start).Select(u => u.Raw)) + (atEnd ? CompositionText.Pending(state) : "");
             var runOffset = offset;
@@ -1012,13 +1003,13 @@ internal static class CompositionText
         var withPending = state.Pending.Length > 0;
         while (end > 0 || withPending)
         {
-            if (!withPending && !IsLetters(state.Units[end - 1].Raw))
+            if (!withPending && !IsLetters(state.Units[end - 1]))
             {
                 end--;
                 continue;
             }
             var runStart = end;
-            while (runStart > 0 && IsLetters(state.Units[runStart - 1].Raw)) runStart--;
+            while (runStart > 0 && IsLetters(state.Units[runStart - 1])) runStart--;
             CompositionText.KeepLaughterAt(state, env, end, withPending);
             withPending = false;
             end = runStart;
@@ -1046,11 +1037,11 @@ internal static class CompositionText
         // 設定「かな + w を笑いにする」: 1 つのかなの音 (ね・さ) だけの後ろの w は、その 2 つで英単語 (new・saw) にしない (issue #713・#492)。
         // もっと長い英単語 (snow・window) の終わりは、今までどおり英単語
         var soleSyllable = state.LaughterAfterKana && start > 0 && state.Units[start - 1].Kana is [>= 'ぁ' and <= 'ん'] && state.Units[start - 1].Raw.All(char.IsAsciiLetter);
-        for (var i = start - 1; i >= 0 && state.Units[i].Raw.Length > 0 && state.Units[i].Raw.All(char.IsAsciiLetter); i--)
+        for (var i = start - 1; i >= 0 && IsLetters(state.Units[i]); i--)
         {
             letters = state.Units[i].Raw + letters;
             if (soleSyllable && i == start - 1) continue;
-            var runStart = i == 0 || !IsLetters(state.Units[i - 1].Raw);
+            var runStart = i == 0 || !IsLetters(state.Units[i - 1]);
             if (letters.Length >= 3 && (runStart ? env.Detector.IsKnownEnglishWord(LearningContext(state, env), letters) : env.Detector.IsListedEnglishWord(LearningContext(state, env), letters.ToLowerInvariant()))) return end;
         }
         state.Units.RemoveRange(start, end - start);
@@ -1131,7 +1122,11 @@ internal static class CompositionText
         return false;
     }
 
-    private static bool IsLetters(string raw) => raw.Length > 0 && raw.All(char.IsAsciiLetter);
+    /// <summary>
+    /// 英字を打って、英字かかなを見せている単位か。英字から作った記号 (zl → →) は含めない
+    /// (英字の並びに入れると、打ち間違いとして直したり (hogezl → ほげぞ: issue #2013)、単位・笑いの判定に混ざったりする)。
+    /// </summary>
+    private static bool IsLetters(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter) && unit.Kana.All(char.IsLetter);
 
     /// <summary>単位 [start, end) の読みを、正しい読み (カタカナ) に置き換える。end が単位の数を超えるときは語末の n も含む。</summary>
     public static void ReplaceReading(CompositionTextState state, int start, int end, string rightKatakana)

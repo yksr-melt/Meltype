@@ -1,6 +1,7 @@
 # Meltype 英単語のカタカナ表記 (英単語 カタカナ カタカナ …)。export → エクスポート
 # JMdict (Electronic Dictionary Research and Development Group) のカタカナ語の英訳から tools/make-katakana-spellings.mjs で作成。
 # JMdict は Creative Commons Attribution-ShareAlike 4.0 (CC BY-SA 4.0) で公開されている: https://www.edrdg.org/edrdg/licence.html
+# CMUdict (Carnegie Mellon University、BSD-2-Clause) の発音で子音の並びを照合。出典・ライセンス: THIRD-PARTY-NOTICES.md
 aardvark アードバーク
 abacus アバカス
 ability アビリティー
@@ -8,17 +9,22 @@ abnormal アブノーマル
 abort アボート
 abortion アボーション
 absolute アブソリュート アブソルート
+abstract アブストラクト
 abstraction アブストラクション
 abuse アビューズ アビュース
 abyss アビス
 academic アカデミック
 academy アカデミー
 acceleration アクセラレーション
+accelerator アクセラレータ アクセラレーター
+accent アクセント
 accept アクセプト
 acceptance アクセプタンス
+access アクセス
 accessibility アクセシビリティ アクセシビリティー
 accessible アクセシブル
 accessing アクセシング
+accessory アクセサリー アクセサリ
 accident アクシデント
 accidental アクシデンタル
 acclaim アクレイム
@@ -30,16 +36,17 @@ accordion アコーディオン アコーデオン アコーディアン
 account アカウント
 accountability アカウンタビリティ アカウンタビリティー
 accounting アカウンティング
-accredit アクレジット アクレディット
+accredit アクレディット
 accumulate アキュミュレイト アキュムレイト アクムレイト
 accuracy アキュラシー
 accurate アキュレイト アキュレット
-accusation アキュゼイション アキュセイション
+accusation アキュゼイション
 ace エース
 achievement アチーブメント
 acid アシッド
 acknowledge アクノリッジ
 acne アクネ
+acoustic アコースティック
 acquaint アクウェイント アクエイント
 acquaintance アクウェインタンス アクエインタンス
 acquiesce アクイエス アクウィエス
@@ -76,7 +83,7 @@ addressing アドレッシング
 adept アデプト
 adjacent アジェイサント アジェイスント
 adjective アジェクティブ アジェクテブ
-adjustment アジャスト アジャストメント
+adjustment アジャストメント
 administration アドミニストレーション
 administrator アドミニストレータ アドミニストレーター
 admiral アドミラル
@@ -84,20 +91,21 @@ admission アドミッション
 admittance アドミタンス アドミッタンス
 adobe アドベ アドービ
 adolescence アドレセンス
-adopting アドプト
 adoption アダプション
-adult アダルト アダルティック
-advanced アドバンスド アドバンスト
-advantage アドバンテージ アドヴァンテージ アドバンテッジ メリット
+adult アダルト
+advance アドバンス
+advanced アドバンスト
+advantage アドバンテージ アドヴァンテージ アドバンテッジ
 adventure アドベンチャー
 adventurous アドベンチャラス
 advertisement アドバタイズメント
 advertising アドバタイジング
 advice アドバイス
 adviser アドバイザー
+advisor アドバイザー
 advisory アドバイザリー アドバイザリ
+aerial エアリアル
 aerodynamics エアロダイナミクス エアロダイナミックス
-aerosol エアゾール エアロゾル エーロゾル
 affair アフェア アフェアー
 affection アフェクション
 affiliate アフィリエイト
@@ -107,12 +115,12 @@ affirmative アファーマティブ
 after アフター
 afternoon アフタヌーン
 afterwards アーフタワーズ
+again アゲーン アゲイン アゲン
 age エイジ エージ
 agency エージェンシー エイジェンシー
 agenda アジェンダ
 agent エージェント エージント
 aggravate アグラベイト アグリベイト
-aggregating アグリゲート アグリゲイト
 aggression アグレション アグレッション アグレッシン
 aggressive アグレッシブ アグレッシヴ アグレシブ アグレシヴ
 agility アジリティ アジリティー
@@ -122,12 +130,13 @@ agitation アジテーション
 agitator アジテーター
 agonize アガナイズ
 agreeable アグレアブル
-agreeing アグリー
 agreement アグリーメント アグリメント
 agriculture アグリカルチャー アグリカルチャ
 ahead アヘッド
 aid エイド エード
-air エア エアー エヤー
+aim エイム
+air エア エアー
+airborne エアボーン
 aircraft エアクラフト
 airfield エアフィールド
 airline エアライン
@@ -143,10 +152,9 @@ ale エール
 alert アラート
 algorithm アルゴリズム
 alias エイリアス
-aliasing エイリアシング
 alibi アリバイ
 alien エイリアン
-alignment アライメント アラインメント
+alignment アラインメント
 alive アライブ
 all オール
 allegory アレゴリー
@@ -159,12 +167,14 @@ allowance アローワンス アローアンス アラウアンス アロウア�
 alloy アロイ
 almanac アルマナック
 almighty オールマイティ オールマイティー
+almond アーモンド
 alphabet アルファベット
 alphanumeric アルファニューメリック
 alternate オルタネイト オルタネート
 alternative オルタナティブ オルタナティヴ
 alternator オルタネーター オルタネータ
 altruism オルトルイズム
+aluminum アルミニウム アルミニューム
 amateur アマチュア
 amazing アメージング アメイジング
 ambassador アンバサダー
@@ -175,38 +185,36 @@ ambiguity アンビギュイティ
 ambition アンビション
 ambitious アンビシャス
 ambivalence アンビバレンス アンビヴァレンス
-ambivalent アンビバレント アンビバレンツ
+ambivalent アンビバレント
 ambulance アンビュランス
 ambush アンブッシュ
 amen アーメン エイメン
 amendment アメンドメント
 amenity アメニティ アメニティー
-amethyst アメジスト アメシスト
+amethyst アメシスト
 amnesty アムネスティ
 amoeba アメーバ アミーバ
-amorphous アモルファス
 amount アマウント
 amp アンプ
-ampere アンペア
+ampere アンプ アンペア
 ampersand アンパサンド アンパーサンド
-amphetamine アンフェタミン
 amplifier アンプリファイアー アンプリファイア アンプリファイヤー アンプリファイヤ
 amulet アミュレット
 amusement アミューズメント
 anachronism アナクロニズム
 anagram アナグラム
 anal アナル
-analgesic アナルジージク
 analog アナログ
+analogue アナログ
 analogy アナロジー
-analysis アナリシス アナライズ
+analysis アナリシス
 analyst アナリスト
 analyzer アナライザ アナライザー
-anarchism アナーキズム アナキズム
 anarchist アナーキスト アナキスト
 anarchy アナーキー
-anathema アナテマ
 anatomy アナトミー
+anchor アンカー
+anchoring アンカリング
 anchovy アンチョビー アンチョビ
 ancient エンシェント
 android アンドロイド
@@ -218,7 +226,7 @@ angler アングラー
 angry アングリー
 angular アンギュラー
 animal アニマル
-animation アニメーション アニメート アニメイト
+animation アニメーション
 ankle アンクル
 annex アネックス
 anniversary アニバーサリー
@@ -228,7 +236,7 @@ announcer アナウンサー
 annual アニュアル
 anomaly アノマリー
 anonymous アノニマス
-anorak アノラック パッカー
+anorak アノラック
 another アナザー
 answer アンサー
 antagonism アンタゴニズム
@@ -237,20 +245,20 @@ antelope アンテロープ
 antenna アンテナ
 anthem アンセム
 anthology アンソロジー
-anticlimax アンチクライマックス
+anticipation アンティシペーション
 antidote アンチドート アンチドーテ
 antifreeze アンチフリーズ
-antonym アントニム
 anvil アンビル アンヴィル
 apartment アパートメント
 apathy アパシー
 aperture アパーチャ アパーチュア アパーチャー
 aphorism アフォリズム アフォルズム
-apiece パー
 apostrophe アポストロフィ アポストロフィー
+apparel アパレル
+appeal アピール アッピール
 appearance アピアランス
 append アペンド
-appendicitis アペンディサイティス
+appendix アペンディックス アペンディクス
 appetite アペタイト
 appetizer アペタイザー
 applause アプローズ
@@ -261,18 +269,20 @@ application アプリケーション
 applicator アプリケーター アプリケータ
 apply アプライ
 appointment アポイントメント
+approach アプローチ
 appropriation アプロプリエーション
 approval アプルーバル
 apricot アプリコット
 apron エプロン
 aquamarine アクアマリン アクアマリーン
-aquarium アクアリウム マリンパーク マリーンパーク
+aquarium アクアリウム
 aquatic アクアティック
 aqueduct アキダクト アクウダクト アクウィダクト
 arbiter アービタ アビタ
 arbitrary アービトラリ アービトレリ
 arbitration アービトレーション
 arc アーク
+arcade アーケード アーケイド
 arch アーチ
 archaeology アーキオロジー アーケオロジー
 archaic アーケイック
@@ -284,8 +294,7 @@ architect アーキテクト
 architectural アーキテクチュラル アーキテクチャル
 architecture アーキテクチャ アーキテクチャー
 archive アーカイブ
-archives アーカイブス アーカイブズ
-archiving アーカイビング
+archives アーカイブズ
 ardent アーデント アーダント
 ardor アーダー
 arduous アージュアス
@@ -293,11 +302,11 @@ area エリア
 arena アリーナ
 argue アーギュー
 argument アーギュメント
+aristocracy アリストクラシー
 aristocrat アリストクラット
 aristocratic アリストクラティック
 arithmetic アリスマティック
 arm アーム
-armadillo アルマジロ
 armament アーマメント
 armchair アームチェア アームチェアー
 arming アーミング
@@ -312,9 +321,10 @@ arrangement アレンジメント
 array アレイ アレー
 arrival アライバル
 arrow アロー
-arsenic アーセニック アーセン
+arsenic アーセニック
 art アート
 artery アーテリー
+artichoke アーティチョーク アーティーチョーク
 article アーティクル アーテクル
 articulate アーティキュレート アーティキュレイト
 articulation アーティキュレーション
@@ -326,6 +336,7 @@ artistic アーティスティック
 artists アーティスツ
 artwork アートワーク
 ascension アセンション
+asexual アセクシャル アセクシュアル
 ash アッシュ
 ashamed アシェイムド
 aside アサイド
@@ -345,10 +356,11 @@ assert アサート
 assertion アサーション
 assessment アセスメント
 asset アセット
-assignment アサイン アサインメント
+assignment アサインメント
 assimilate アシミレイト
 assimilation アシミレイション
-assistance アシスト アシスタンス
+assist アシスト
+assistance アシスタンス
 assistant アシスタント
 associate アソシエイト アソシエート
 associates アソシエーツ
@@ -361,21 +373,23 @@ asterisk アスタリスク
 asteroid アステロイド
 astonish アストニッシュ
 astonishment アストニッシメント アストニッシュメント
-astringent アストリンゼント アストリンゼン
+astringent アストリンゼント
 astrology アストロロジー
 astronaut アストロノート アストロノウト
 astronomy アストロノミー
 asylum アサイラム
-asymmetry アシンメトリー アシメトリー
+asymmetry アシメトリー
 athlete アスリート
-athletics アスレチック アスレチックス アスレティックス
+athletics アスレチックス アスレティックス
+atlas アトラス
 atmosphere アトモスフィア アトモスフェア
 atom アトム
 atomic アトミック
 attach アタッチ
 attachment アタッチメント
 attack アタック
-attendance アテンド アテンダンス
+attacker アタッカー
+attendance アテンダンス
 attendant アテンダント
 attention アテンション
 attic アティック
@@ -396,11 +410,10 @@ authentic オーセンティック
 authenticity オーセンティシティ
 author オーサー
 authority オーソリティー オーソリティ
-authorization オーソライズ オーソリゼーション オーソライゼーション
+authorization オーソリゼーション オーソライゼーション
 auto オート
 autobiography オートバイオグラフィー
 autocracy オートクラシー
-autograph サイン
 automatic オートマチック オートマティック
 automation オートメーション
 automobile オートモビル オートモービル
@@ -413,26 +426,32 @@ avalanche アバランチ アヴァランチ
 avenue アベニュー アヴェニュー アヴェニュ
 average アベレージ
 aviation アヴィエーション アビエーション
-await アウェイト アウエイト
-awake アウェイク アウエイク
-awaken アウェイクン アウエイクン
+avocado アボカド
+await アウェイト
+awake アウェイク
+awaken アウェイクン
 award アワード アウォード
-aware アウェア アウエア
+aware アウェア
+away アウェイ アウェー
 awning オーニング
 axis アクシス
 axle アクスル
 azalea アザレア
 baby ベビー ベイビー
+bachelor バチェラー
 back バック
-backer バッカー
+backbone バックボーン
+backer バック バッカー
 backfire バックファイア
 backgammon バックギャモン
+background バックグラウンド バックグランド
 backhand バックハンド
 backing バッキング
 backlash バックラッシュ
 backlog バックログ
 backpack バックパック
 backpacking バックパッキング
+backslash バックスラッシュ
 backstage バックステージ
 backtrack バックトラック
 bacon ベーコン
@@ -440,44 +459,51 @@ bacteria バクテリア バクテリヤ
 bad バッド
 badge バッジ
 badminton バドミントン
+baffle バッフル
 bag バッグ
 bagel ベーグル
 baggage バゲージ バゲッジ バッゲージ
-baked ベイクド ベークド
 bakery ベーカリー
 baking ベーキング ベイキング
 balance バランス
-balanced バランスド
 balancing バランシング
-balcony バルコニー ベランダ
+balcony バルコニー
 balk ボーク
 ball ボール
-ballad バラッド
+ballad バラード バラッド
+ballast バラスト
 balloon バルーン
 ballot バロット
 ballroom ボールルーム
 balm バーム バルム
 bamboo バンブー
 banana バナナ
+band バンド
 bandage バンデージ
 banding バンディング
 bandit バンディット バンデット
 bandwagon バンドワゴン
-bang バング バン
+bang バング
 banjo バンジョー
+bank バンク
 banker バンカー
 banking バンキング
 banner バナー
 banquet バンケット
-baptism バプテスマ バプティズム
+baptism バプティズム
 bar バー
 barbarian バーバリアン
 barber バーバー
+bard バード
 bare ベア
 bargain バーゲン
 barge バージ
 baritone バリトン
+bark バーク
+barn バーン
+barometer バロメーター バロメータ
 baron バロン
+barrel バレル バーレル
 barricade バリケード
 barrier バリア バリアー バリヤ バリヤー
 barrister バリスター
@@ -491,21 +517,24 @@ bashing バッシング
 basic ベーシック
 basil バジル
 basin ベイスン
+basis ベース ベイス
 basket バスケット
 basketball バスケットボール
-bass ベース
+bass ベース バス
 bassoon バスーン
+bat バット
 batch バッチ
 bath バス
 bathroom バスルーム
 bathtub バスタブ
+baton バトン
 batter バッター
-battery バッテリー バッテリ
+battery バッテリー バッテリ バタリー
 batting バッティング
 battle バトル
-baud ボー
 bay ベイ
 bayonet バヨネット ベイオネット
+bazaar バザー
 beach ビーチ
 beacon ビーコン
 beads ビーズ
@@ -519,6 +548,8 @@ bearer ベアラ
 bearing ベアリング
 beast ビースト
 beat ビート
+beater ビーター
+beats ビーツ
 beautiful ビューティフル
 beauty ビューティー ビューティ
 beaver ビーバー
@@ -533,64 +564,73 @@ beetle ビートル
 beets ビーツ
 before ビフォー ビフォア ビフォアー
 beginner ビギナー
-beginning ビギニング ビギン
+beginning ビギニング
+behavior ビヘイビア
 believer ビリーバー
 bell ベル
 bellboy ベルボーイ
 bellows ベローズ
 belly ベリー
+belt ベルト
 bench ベンチ
 bend ベンド
 bending ベンディング
 benefit ベネフィット
 bent ベント
 berry ベリー
-berserk ベルセルク バーサーク
+berserk バーサーク
 berth バース
 best ベスト
 bet ベット
 better ベター
 beverage ビバレッジ ベバレッジ ベバリッジ ビバリッジ
 bias バイアス バイヤス
-bib スタイ
+bib ビブ
+bible バイブル
 bibliography ビブリオグラフィー
 bicycle バイシクル
 big ビッグ
+bikini ビキニ
 bilateral バイラテラル
 bilingual バイリンガル
 bill ビル
 billboard ビルボード
-billiards ビリヤード ビリアード
 billion ビリオン
 binary バイナリ バイナリー
 binder バインダー
-binding バインディング バインド
+binding バインディング
 bingo ビンゴ
 biography バイオグラフィー
 biological バイオロジカル
 biology バイオロジー
 bird バード
 birthday バースデー バースディ バースデイ
+biscuit ビスケット
 bisexual バイセクシャル バイセクシュアル
+bishop ビショップ
 bison バイソン
-bit ビット
-bitmap ビットマップ
+bit ビット バイト
+bitter ビター
 bittersweet ビタースイート
-bizarre ビザール
 black ブラック
+blackberry ブラックベリー
 blackbird ブラックバード
 blackboard ブラックボード
 blackjack ブラックジャック
 blacklist ブラックリスト
 blackout ブラックアウト
+blacksmith ブラックスミス
 blade ブレード ブレイド
 blank ブランク
 blanket ブランケット
 blanking ブランキング
+blast ブラスト
 blazer ブレザー
 bleach ブリーチ
 bleaching ブリーチング
+bleeding ブリーディング
 blend ブレンド
+blind ブラインド
 blink ブリンク
 blinking ブリンキング
 blister ブリスター
@@ -598,6 +638,7 @@ blitz ブリッツ
 blizzard ブリザード
 blob ブロッブ
 bloc ブロック
+block ブロック
 blockbuster ブロックバスター
 blocking ブロッキング
 blog ブログ
@@ -605,31 +646,42 @@ blogger ブロガー
 blonde ブロンド
 blood ブラッド
 bloodhound ブラッドハウンド
+bloom ブルーム
 blooming ブルーミング
 blossom ブロッサム
+blotter ブロッター
 blouse ブラウス
+blow ブロー
 blue ブルー
 bluebell ブルーベル
 blueberry ブルーベリー
 bluebird ブルーバード
+bluegrass ブルーグラス
 blueprint ブループリント
-blues ブルース ブルーズ
+blues ブルーズ
 bluff ブラフ
+blushing ブラッシング
+boa ボア
 board ボード
+boarder ボーダー
 boarding ボーディング
 boardwalk ボードウォーク
 boat ボート
+bob ボブ ボッブ
 bobbin ボビン
+bobcat ボブキャット
 bodice ボディス
 body ボディー ボディ ボデー
 bodyguard ボディーガード ボディガード
+boiled ボイルド
 boiler ボイラー ボイラ
 boiling ボイリング
 bold ボールド
 bolt ボルト
 bomb ボム
-bomber ボンバー ボマー
+bomber ボマー
 bond ボンド
+bondage ボンデージ
 bonding ボンディング
 bone ボーン
 bonnet ボンネット
@@ -641,21 +693,21 @@ bookend ブックエンド
 booking ブッキング
 bookkeeping ブックキーピング
 booklet ブックレット
-bookmark ブックマーカー
+bookmark ブックマーク ブックマーカー
 bookshelf ブックシェルフ
 bookstore ブックストア
 boom ブーム
-boomerang ブーメラン
 boost ブースト
 booster ブースター ブースタ
 boot ブート
-bootee ブーティ ブーティー
 booth ブース
 bootleg ブートレグ ブートレッグ
 boots ブーツ
 bootstrap ブートストラップ
+booty ブーティ ブーティー
 bop バップ
 border ボーダー
+bore ボア
 boring ボーリング
 boss ボス
 botanical ボタニカル
@@ -663,28 +715,35 @@ bottle ボトル
 bottleneck ボトルネック
 bottom ボトム
 bottomless ボトムレス
-bounce バウンド
+boulder ボルダー ボールダー
+bounce バウンス
+bound バウンド
 boundary バウンダリー バウンダリ
 bounty バウンティ バウンティー
 bourbon バーボン
+bout バウト
 boutique ブティック
+bow ボー ボウ バウ
+bowing ボーイング ボウイング
 bowl ボウル ボール
 bowler ボウラー
+bowling ボウリング ボーリング
 box ボックス
+boxer ボクサー
 boxing ボクシング
 boy ボーイ
 boycott ボイコット
 boyfriend ボーイフレンド
 boyish ボーイッシュ
-bra ブラジャー
 brace ブレース
 bracelet ブレスレット
 bracket ブラケット
 braid ブレード ブレイド
+braids ブレイズ
+brain ブレーン ブレイン
 brainstorm ブレインストーム ブレーンストーム
 brainstorming ブレインストーミング ブレーンストーミング
 brainwashing ブレインウォッシング
-braising ブレイズ
 brake ブレーキ
 braking ブレーキング
 branch ブランチ
@@ -693,27 +752,31 @@ branding ブランディング
 brandy ブランデー ブランディ ブランディー ブランデ
 brass ブラス
 brave ブレイブ ブレイヴ ブレーブ ブレーヴ
+breach ブリーチ
+breaching ブリーチング
 bread ブレッド
+break ブレイク ブレーク
 breakdown ブレイクダウン ブレークダウン
 breakfast ブレックファースト ブレックファスト ブレークファスト
-breaking ブレイキン
 breakthrough ブレークスルー ブレイクスルー
 breast ブレスト
 breath ブレス
 breathing ブリージング
 breeder ブリーダー
 breeze ブリーズ
+brewery ブルワリー ブリュワリー
 bridal ブライダル
 bride ブライド
 bridesmaid ブライズメイド
+bridge ブリッジ
 bridging ブリッジング
 briefcase ブリーフケース
 briefing ブリーフィング
-briefs ブリーフ
 brightness ブライトネス
 brilliant ブリリアント
 brim ブリム
 brine ブライン
+broach ブローチ
 broadcast ブロードキャスト
 broadcasting ブロードキャスティング
 brocade ブロケード
@@ -725,28 +788,33 @@ broker ブローカー ブローカ
 bronze ブロンズ
 brooch ブローチ
 brook ブルック
+broom ブルーム
 broth ブロス
 brother ブラザー
+brothers ブラザーズ
 brown ブラウン
 brownie ブラウニー
-browse バロース ブラウズ
+browse ブラウズ
 browsing ブラウジング
 brunch ブランチ
 brunette ブルネット ブルーネット
 brush ブラシ ブラッシュ
 brushing ブラッシング
 bubble バブル
+bubbly バブリー
 bucket バケット
 buckle バックル
 buddy バディ バディー
 budget バジェット
+buff バフ
 buffalo バッファロー
 buffer バッファ バッファー
 buffered バッファード
 buffering バッファリング
 buffet バフェ
-buffing バッフ
+bug バグ
 bugging バッギング
+buggy バギー
 bugle ビューグル
 build ビルド
 builder ビルダ ビルダー
@@ -759,26 +827,34 @@ bulldog ブルドッグ
 bulldozer ブルドーザー
 bump バンプ
 bumper バンパー
+bun バン
 bunch バンチ
+bundle バンドル
+bundling バンドリング
 bungalow バンガロー
-bunion バニオン
 bunker バンカー
 bunny バニー
+buns バンズ
 buoy ブイ
 bureau ビューロー
 bureaucracy ビューロクラシー
 bureaucrat ビューロクラット
 burner バーナー
 burning バーニング
+burst バースト
 bus バス
+bush ブッシュ
 bushel ブッシェル
 business ビジネス
 businessman ビジネスマン
 businesswoman ビジネスウーマン
+busing バッシング
+bust バスト
 busy ビジー
 butcher ブッチャー
 butler バトラー
 butter バター
+butterfly バタフライ
 buttermilk バターミルク
 butterscotch バタースコッチ バタースカッチ
 butting バッティング
@@ -790,6 +866,7 @@ buzzer ブザー
 bye バイ
 bypass バイパス
 byte バイト
+cab キャブ
 cabin キャビン ケビン
 cabinet キャビネット
 cable ケーブル
@@ -797,14 +874,19 @@ cache キャッシュ
 caching キャッシング
 cactus カクタス
 caddie キャディー キャディ
+cadence ケイデンス
 cafeteria カフェテリア
 cage ケージ
 cake ケーキ
+calcium カルシウム
 calculation カルキュレーション
 calculator カリキュレータ カリキュレーター
 calendar カレンダー カレンダ
 calf カーフ
-calibration キャリブレーション キャリブレート
+calibration キャリブレーション
+calico キャラコ キャリコ
+call コール
+calligraphy カリグラフィー
 callus カルス
 calorie カロリー
 cam カム
@@ -812,11 +894,11 @@ camel キャメル
 cameo カメオ
 camera カメラ
 camp キャンプ
+campaign キャンペーン
 camper キャンパー
 camping キャンピング
 campus キャンパス
 canal カナル キャナル
-cancellation キャンセル
 cancer キャンサー
 candidate キャンディデート
 candle キャンドル
@@ -836,11 +918,13 @@ cantaloupe キャンタロープ カンタループ カンタロープ
 canter キャンター カンター
 canvas キャンバス カンバス キャンヴァス
 canyon キャニオン
+cap キャップ
 capability ケイパビリティ ケーパビリティ
 capacitance キャパシタンス
-capacitor コンデンサ コンデンサー キャパシタ キャパシター
+capacitor キャパシタ キャパシター
 capacity キャパシティ キャパシティー
 cape ケープ
+caper ケッパー ケイパー ケーパー
 capillary キャピラリー キャピラリ
 capital キャピタル キャピトル カピタル
 capitalism キャピタリズム
@@ -849,15 +933,23 @@ capping キャッピング
 captain キャプテン
 caption キャプション
 captive キャプティブ
+capture キャプチャー キャプチャ
 car カー
+caramel キャラメル
+carat カラット
 caravan キャラバン
 carbon カーボン
 carburetor キャブレター
+carcass カーカス
+card カード
 cardigan カーディガン カーデガン
+cardinal カーディナル
+care ケア
 career キャリア
 cargo カーゴ
 caribou カリブー
 caricature カリカチュア
+carnation カーネーション
 carnival カーニバル
 carol キャロル カロル
 carp カープ
@@ -867,34 +959,45 @@ carriage キャリッジ
 carrier キャリア キャリアー キャリヤ キャリヤー
 carrot キャロット
 carry キャリー
+cart カート
+carton カートン
 cartoon カートゥーン
 cartridge カートリッジ
 carving カービング
 cascade カスケード キャスケード
+case ケース
 cash キャッシュ
+cashew カシュー
 cashier キャッシャー
-cashmere カシミヤ カシミア
+cashing キャッシング
 casing ケーシング
-cask キャスク
+cask キャスク カスク
+casket カスケット キャスケット
 casserole カセロール
+cassette カセット
+cast キャスト
 caster キャスター キャスタ カスター
+casting キャスティング
 castle キャッスル
 casual カジュアル
 cat キャット カト
 catapult カタパルト カタプルト
 catastrophe カタストロフィー カタストロフィ カタストロフ キャタストロフィ
 catch キャッチ
+catching キャッチング
 catchy キャッチー
 catechism カテキズム
-categorizing カテゴライズ
 catering ケータリング
 catfish キャットフィッシュ
+catnip キャットニップ
+cats キャッツ
+catwalk キャットウォーク キャットウオーク
 cauliflower カリフラワー
 caulking コーキング
 caution コーション
 cave ケーブ ケイブ
 cavern カバーン
-caviar キャビア
+caviar キャビア カビア
 caving ケービング
 cavity キャビティー キャビティ
 ceiling シーリング
@@ -902,12 +1005,15 @@ celebration セレブレーション
 celebrity セレブリティー セレブリティ
 celery セロリ セルリー
 cell セル
+cellar セラー
 cellist チェリスト
-cello チェロ セロ
-cellulose セルロース セルローズ
+cello チェロ
+cellular セルラー
+cellulose セルロース
 cement セメント
 census センサス
 cent セント
+center センター センタ
 centering センタリング
 centerpiece センターピース
 central セントラル
@@ -917,13 +1023,16 @@ cereal シリアル セリアル
 ceremony セレモニー
 certificate サーティフィケート サティフィケート
 chaff チャフ
+chain チェーン チェイン
 chainsaw チェーンソー チェンソー
 chair チェア チェアー
 chairman チェアマン
 chairperson チェアパーソン チェアパースン
 chalk チョーク
+chalking チョーキング
 challenger チャレンジャー
 challenging チャレンジング
+chamber チャンバー チェンバー
 chameleon カメレオン
 champion チャンピオン チャンピョン チャンピォン チャンピヨン
 championship チャンピオンシップ
@@ -932,6 +1041,8 @@ chandelier シャンデリア
 change チェンジ
 changeover チェンジオーバー
 channel チャネル チャンネル
+channeling チャネリング
+chant チャント
 chaos ケイオス ケーオス
 chaotic カオティック
 chapel チャペル
@@ -939,9 +1050,10 @@ chaplain チャプレン
 chapter チャプター チャプタ
 character キャラクター
 charcoal チャコール
+charge チャージ
 charger チャージャー チャージャ
+charging チャージング
 chariot チャリオット
-charismatic カリスマチック
 charity チャリティー チャリティ
 charm チャーム
 charming チャーミング
@@ -949,48 +1061,56 @@ chart チャート
 charter チャーター
 chase チェイス
 chasing チェーシング
-chassis シャーシ シャシー シャシ シャーシー
 chat チャット
 chatter チャター
 chattering チャタリング
 chauvinist ショービニスト
 cheap チープ
 cheating チーティング
+check チェッカー チェック チッキ
+checker チェッカー
+checkpoint チェックポイント
 cheek チーク
 cheer チア チアー
 cheese チーズ
-cheesecloth チーズクロス
+cheetah チーター チータ
 chemical ケミカル
 chemist ケミスト
 chemistry ケミストリー
 cherry チェリー
 cherub チェラブ
 chess チェス
-chicken チキン チキンレース
+chest チェスト
+chicken チキン
 chief チーフ
 child チャイルド
 children チルドレン
 chilled チルド
 chime チャイム
 chimney チムニー
+chimpanzee チンパンジー
 chin チン
+china チャイナ
 chip チップ
-chiropractor カイロプラクター カイロプラター
-chloroform クルルホルム クロロホルム
+chiropractor カイロプラクター
 chlorophyll クロロフィル
 chocolate チョコレート
 choice チョイス
 choir クワイア クワイヤ
+choke チョーク
 cholesterol コレステロール
-chop チャップ
+chop チョップ チャップ
 chopper チョッパー
+choral コーラル
 chord コード
 choreographer コレオグラファー コリオグラファー
 choreography コレオグラフィー コリオグラフィー コレオグラフィ コリオグラフィ
 chorus コーラス
 chowder チャウダー
+chromium クロミウム
 chronicle クロニクル
 chronology クロノロジー
+chuck チャック
 chunk チャンク
 church チャーチ
 chute シュート
@@ -998,28 +1118,31 @@ cigar シガー
 cigarette シガレット
 cinder シンダー
 cinnamon シナモン
+circle サークル
+circuit サーキット
 circular サーキュラー
 circulation サーキュレーション
-circumflex サーカムフレックス
 circus サーカス
 citation サイテーション
 citizen シチズン
 citizenship シティズンシップ シチズンシップ
+citrus シトラス
 city シティ シティー
 civic シビック
 civil シビル
 civilian シビリアン
 civilization シビライゼーション シビリゼーション
 clad クラッド
+claim クレーム
 clairvoyance クレアボヤンス クレヤボヤンス
 clam クラム
 clamp クランプ
 clan クラン
-claret クラレット
 clarinet クラリネット
 clarity クラリティー クラリティ
 clasp クラスプ
 class クラス
+classic クラシック
 classical クラシカル
 classification クラシフィケーション
 classmate クラスメイト クラスメート
@@ -1043,6 +1166,7 @@ clef クレフ
 cleric クレリック
 clerk クラーク
 clever クレバー
+click クリック
 client クライアント
 cliff クリフ
 climax クライマックス
@@ -1052,6 +1176,7 @@ climbing クライミング
 clinch クリンチ
 clinic クリニック
 clinical クリニカル
+clip クリップ
 clipboard クリップボード
 clipping クリッピング
 clique クリーク
@@ -1071,55 +1196,63 @@ clothes クローズ
 clothing クロージング
 cloud クラウド
 clove クローブ
+clover クローバー クロバー クローバ
 clown クラウン
+club クラブ
 clubhouse クラブハウス
 cluster クラスター クラスタ
+clustering クラスタリング
 clutch クラッチ
 coach コーチ コーチャー
 coaching コーチング
 coal コール
 coast コースト
+coaster コースター
 coat コート
 coating コーティング
 coax コアックス
+cobalt コバルト
 cobbler コブラー
 cobra コブラ
 cock コック
 cockpit コックピット コクピット
 cockroach コックローチ
 cocktail カクテル
-coconut ココナッツ ココナツ
+cocoa ココア
 cocoon コクーン
 code コード
 coding コーディング
 coffin コフィン
-coherence コヒーレンス
+coherence コヒーレンス コヒーレンシ コヒーレンシー
 coherent コヒーレント
 coil コイル
 coin コイン
 coke コーク
 colander コランダー
 cold コールド
-colic コリック
-collaboration コラボレーション コラボレート
+collaboration コラボレーション
 collaborative コラボレイティブ
 collaborator コラボレーター
 collar カラー
 collect コレクト
+collection コレクション
 collector コレクター コレクタ
 collectors コレクターズ
 college カレッジ
 collie コリー
-collision コリジョン アタリ
+collision コリジョン
 colloquial コロキュアル
 collusion コリュージョン
+colon コロン
 colonial コロニアル
 colony コロニー
 color カラー
+colored カラード
 colorful カラフル
 coloring カラーリング カラリング
 colorless カラーレス
-coma コーマ
+column コラム カラム
+coma コマ コーマ
 comb コーム
 combat コンバット
 combination コンビネーション
@@ -1127,12 +1260,9 @@ comeback カムバック
 comedian コメディアン
 comedy コメディ コメディー
 comet コメット
-comfort コンフォート
-comfortable コンフォータブル コンファタブル カンファタブル コンフォタブル
 comic コミック
 comical コミカル
 comics コミックス
-comma カンマ コンマ
 command コマンド
 commander コマンダー
 commando コマンド
@@ -1140,9 +1270,11 @@ comment コメント
 commentary コメンタリー
 commentator コメンテーター
 commerce コマース
+commercial コマーシャル
 commercialism コマーシャリズム
 commission コミッション
 commissioner コミッショナー
+commit コミット
 commitment コミットメント
 committee コミッティー コミッティ
 commodity コモディティ コモディティー
@@ -1156,20 +1288,21 @@ communism コミュニズム
 communist コミュニスト
 community コミュニティ コミュニティー
 commuter コミューター
-compact コンパクト ハンディー ハンディ
-compaction コンパクション
-comparison コンパレート コンペア コンペアー
+compact コンパクト
+companion コンパニオン
+company カンパニー コンパニー
 compartment コンパートメント
+compass コンパス
 compatibility コンパチビリティ コンパチビリティー
 compatible コンパチブル
 competence コンピテンス コンピタンス
 competition コンペティション
 competitive コンペティティブ
 competitor コンペティター コンペチター
-compilation コンピレーション コンパイル
+compilation コンピレーション
 compiler コンパイラ コンパイラー
 complete コンプリート
-completion コンプリーション コンプリション パスコンプリート
+completion コンプリーション コンプリション
 complex コンプレックス
 compliance コンプライアンス
 complication コンプリケーション
@@ -1194,7 +1327,6 @@ conceptual コンセプチュアル
 concert コンサート
 concession コンセッション
 concise コンサイス
-concordance コンコーダンス コンコルダンス
 concourse コンコース
 concurrent コンカレント
 condense コンデンス
@@ -1204,6 +1336,7 @@ condom コンドーム
 condominium コンドミニアム
 conduct コンダクト
 conductor コンダクター
+cone コーン
 cones コーンズ
 confection コンフェクション
 confederation コンフェデレーション
@@ -1217,7 +1350,7 @@ conflict コンフリクト
 conform コンフォーム
 confusion コンフュージョン
 conglomerate コングロマリット
-congratulations コングラチュレーションズ コングラチュレーション
+congratulations コングラチュレーションズ
 congress コングレス
 conifer コニファー
 connect コネクト
@@ -1237,13 +1370,14 @@ console コンソール
 consolidation コンソリデーション
 consonant コンソナント
 consort コンソート
-consortium コンソーシアム コンソーティアム
+consortium コンソーシアム
 constant コンスタント
 constellation コンステレーション
 constitution コンスティチューション
 constraint コンストレイント
 construct コンストラクト
 construction コンストラクション
+consul コンサル コンスル
 consultant コンサルタント
 consultants コンサルタンツ
 consultation コンサルテーション
@@ -1251,9 +1385,11 @@ consulting コンサルティング
 consumer コンシューマー コンシューマ
 consumption コンサンプション
 contact コンタクト
+container コンテナ コンテナー
 contamination コンタミネーション
 contemporary コンテンポラリー
 content コンテント
+contention コンテンション
 contents コンテンツ
 contest コンテスト
 contestant コンテスタント
@@ -1261,6 +1397,7 @@ context コンテキスト コンテクスト
 continental コンチネンタル
 contingency コンティンジェンシー
 continuation コンティニュエーション
+continue コンティニュー
 continuity コンティニュイティ コンティニュイティー
 contortion コントーション
 contour コンター コントゥア コントゥアー カントゥア カントゥアー
@@ -1284,8 +1421,10 @@ convertible コンバーチブル コンバーティブル
 convex コンベックス
 convoy コンボイ
 cooker クッカー
-cookie クッキー ビスケット
+cookie クーキー クッキー
 cooking クッキング
+cool クール
+cooler クーラー
 cooling クーリング
 cooperative コーポラティブ
 coordinate コーディネート コーディネイト
@@ -1300,7 +1439,8 @@ cord コード
 cordless コードレス
 corduroy コーデュロイ
 core コア
-corkscrew コークスクリュー コルクスクリュー
+cork コーク
+corkscrew コークスクリュー
 corn コーン
 corner コーナー コーナ
 cornering コーナリング コーナーリング
@@ -1312,36 +1452,32 @@ corporate コーポレート
 corporation コーポレーション
 corpse コープス
 corpus コーパス
-corrector コレクター コレクタ
 correspondence コレスポンデンス
 correspondent コレスポンデント
-corset コルセット
-cosmetics コスメティック コスメチック
 cosmic コズミック
-cosmology コスモロジー
-cosmopolitan コスモポリタン
-cosmos コスモ コスモス
 cost コスト
 costume コスチューム
 cottage コテージ コッテージ
 cotton コットン
 couch カウチ
+couching コーチング
 cougar クーガー
 council カウンシル
 counseling カウンセリング
 counselor カウンセラー
-count カウント
+count カウント カウントアウト
 countdown カウントダウン
 counter カウンター カウンタ
 counterpart カウンターパート
 counting カウンティング
-country カントリー カンツリー
+country カントリー
 county カウンティ
 couple カップル
 coupling カップリング
 courage カレッジ
 courier クーリエ
 course コース
+court コート
 courtesy カーテシ
 courthouse コートハウス
 courtyard コートヤード
@@ -1352,19 +1488,24 @@ covering カバーリング
 covert カバート
 cow カウ
 cowboy カウボーイ カーボーイ
-cowhide カウハイド
 cox コックス
+coyote コヨーテ
 cozy コージー
 crab クラブ
 crack クラック
 cracker クラッカー
 cracking クラッキング
+cradle クレードル クレイドル
 craft クラフト
-craftsman クラフトマン
 cranberry クランベリー
+crane クレーン
+crank クランク
+crash クラッシュ
 crater クレーター クレータ
+crawl クロール
 crazy クレイジー クレージー
 cream クリーム
+creamy クリーミー
 create クリエート クリエイト
 creation クリエイション クリエーション
 creative クリエイティブ
@@ -1372,13 +1513,14 @@ creativity クリエイティビティ クリエイティビティー クリエ�
 creator クリエイター クリエーター
 creature クリーチャー
 credibility クレディビリティー クレディビリティ
-credit クレジット
 creek クリーク
+creep クリープ
 crescent クレセント クレッセント
+crest クレスト
 crew クルー
+cricket クリケット
 crime クライム
-crimson クリムソン クリムゾン
-crinkle クリンクル
+crimson クリムゾン
 crisis クライシス
 crispy クリスピー
 criteria クライテリア
@@ -1390,16 +1532,15 @@ crocodile クロコダイル
 crocus クロッカス
 crony クローニー
 crop クロップ
-cropping トリミング
-croquet クロケット
 cross クロス
 crossbow クロスボウ クロスボー
 crossword クロスワード
 crouch クラウチ
 crow クロウ
-crowbar バール
 crowd クラウド
+crown クラウン
 cruise クルーズ
+cruiser クルーザー
 cruising クルージング
 crumb クラム
 crumble クランブル
@@ -1415,23 +1556,22 @@ cube キューブ
 cubic キュービック
 cubicle キュービクル
 cuckoo クックー
+cue キュー
 cuffs カフス
 cult カルト
 culture カルチャー
-cupboard カップボード
-cupping カッピング
+cup カップ
 curator キュレーター
 curd カード
 cure キュア
 curiosity キュリオシティー
+curl カール
 curling カーリング
 curly カーリー
-currants カレンズ カレンツ カランツ
 currency カレンシー
 current カレント
 curriculum カリキュラム
 curse カース
-cursor カーソル
 curtain カーテン
 curtsy カーテシー
 curve カーブ
@@ -1439,7 +1579,6 @@ cushion クッション
 custard カスタード
 custom カスタム
 customer カスタマー
-customization カスタマイズ
 customs カスタムズ
 cut カット
 cutback カットバック
@@ -1448,11 +1587,10 @@ cuticle キューティクル
 cutlery カトラリー
 cutter カッター
 cutting カッティング
-cybernetics サイバネティックス サイバネティクス
 cycle サイクル
 cyclic サイクリック
 cycling サイクリング
-cyclist サイクリスト チャリダー
+cyclist サイクリスト
 cyclone サイクロン
 cylinder シリンダー シリンダ
 cymbal シンバル
@@ -1462,50 +1600,51 @@ cynicism シニシズム
 cypress サイプレス
 dab ダブ
 daddy ダディー ダディ
+daemon デーモン デモン
 dagger ダガー
 daily デイリー デーリー
-dairy ミルクプラント
 daisy デイジー デージー
 dam ダム
 damage ダメージ
 damper ダンパ ダンパー
-dance ダンス ダンスパーティー
+dance ダンス
 dancer ダンサー ダンサ
 dancing ダンシング
 dandelion ダンデライオン ダンディライオン
-dandy ダンディ ダンディー ダンディマン
+dandy ダンディ ダンディー
 dangerous デンジャラス
 dark ダーク
-darling ダーリン
 darts ダーツ
 dash ダッシュ ダーシ
 dashboard ダッシュボード
 data データ データー
 database データベース
-date デーツ
+date デート
 daughter ドーター
+day デー デイ
 daylight デイライト デーライト
 daytime デイタイム データイム
+dead デッド
 deadline デッドライン
 deadlock デッドロック
 deal ディール
+dealer ディーラー
 dealing ディーリング
 dean ディーン
 dear ディア
-death ポア デス
+death デス
 debate ディベート
-debugger デバッガ デバッガー
-debugging デバッギング デバッグ
+debugging デバッギング
 decade ディケード
-decanter デキャンタ デカンタ デキャンター デカンター
 decay ディケイ
 decency ディセンシー
 decentralization ディセントラリゼーション
 decibel デシベル
 decimal デシマル
 decision デシジョン
+deck デッキ
 decoder デコーダ デコーダー ディコーダー
-decoding デコーディング デコード
+decoding デコーディング
 decoration デコレーション
 decorative デコラティブ
 decorator デコレーター デコレータ
@@ -1517,35 +1656,41 @@ deer ディア
 default デフォルト
 defender ディフェンダー
 defending ディフェンディング
+defense ディフェンス
 defensive ディフェンシブ
 definition デフィニション ディフィニション
 deflation デフレーション デフレション
-defrosting デフロスト
+defrost デフロスト
 degree デグリー ディグリー
 delay ディレイ ディレー
+delegate デリゲート
 delegation デレゲーション デリゲーション
-delete デリート トル
+delete デリート
 delicacy デリカシー
+delicate デリケート デリケイト
 delicious デリシャス
-delimiter デリミタ
 delivery デリバリー
 deluxe デラックス
 demand デマンド ディマンド
+demerit デメリット
 democracy デモクラシー
 democrat デモクラット
 democratic デモクラティック デモクラチック
 demon デーモン デモン
 demonstration デモンストレーション
+demonstrator デモンストレーター
 den デン
 denim デニム
 denomination デノミネーション
+dent デント
 dental デンタル
 deodorant デオドラント
 department デパートメント
-departure デパーチャー ゲットアウト
+departure デパーチャー
 deposit デポジット
 depression デプレッション ディプレッション
-derivatives デリバティブ
+derivative デリバティブ
+derrick デリック
 describe ディスクライブ
 description ディスクリプション
 descriptor ディスクリプタ ディスクリプター
@@ -1562,7 +1707,8 @@ destiny デスティニー ディスティニー
 destroyer デストロイヤー
 detach デタッチ
 detail ディテール ディティール
-detection ディテクション ディテクト
+detailing ディーテイリング
+detection ディテクション
 detective ディテクティブ ディティクティブ デテクティブ
 detector ディテクター ディテクタ
 detonation デトネーション
@@ -1570,16 +1716,18 @@ developer デベロッパー ディベロッパー デベロッパ
 development ディベロップメント デベロップメント
 device デバイス ディバイス
 devil デビル
-diabetes ダイアベティス
 diagonal ダイアゴナル
 diagram ダイアグラム ダイヤグラム
+dial ダイヤル ダイアル
 dialect ダイアレクト ダイヤレクト
+dialog ダイアログ ダイアローグ
 dialogue ダイアログ ダイアローグ
 diameter ダイアミター ダイアメーター
 diamond ダイヤモンド ダイアモンド
 diaphragm ダイヤフラム ダイアフラム
 diary ダイアリー
 dice ダイス
+dicing ダイシング
 dictation ディクテーション
 dictionary ディクショナリ ディクショナリー
 diesel ディーゼル ジーゼル
@@ -1590,11 +1738,10 @@ differentiation ディファレンシエーション
 difficult ディフィカルト
 digest ダイジェスト
 digit ディジット デジット
-digital デジタル ディジタル デジ
-digitize ディジタライズ
+digital デジタル ディジタル
 dignity ディグニティ ディグニティー
-dilemma ジレンマ ディレンマ
 diligence ディリジェンス
+dill ディル
 dime ダイム
 dimension ディメンション
 dimensional ディメンショナル
@@ -1603,33 +1750,33 @@ diner ダイナー
 dinghy ディンギー
 dining ダイニング
 dinner ディナー
-dinosaur ダイノソー ダイノソア ディノサウル
-dinosaurs ディノサウルス
+dinosaur ダイノソー ダイノソア
 dip ディップ
-diphtheria ジフテリア
 diploma ディプロマ
 diplomacy ディプロマシー
 diplomat ディプロマット
+dips ディップス
 direct ダイレクト
 direction ディレクション ダイレクション
 directive ディレクティブ
 director ディレクター ディレクタ
 directory ディレクトリ ディレクトリー
+dirt ダート
 dirty ダーティー ダーティ
 disable ディスエーブル
-disabling ディセーブル
-disadvantage デメリット ディスアドバンテージ
+disadvantage ディスアドバンテージ
+disc ディスク
 discharge ディスチャージ
 discipline ディシプリン
 disclosure ディスクロージャー
 disconnect ディスコネクト
 discord ディスコード
 discount ディスカウント
-discouragement ディスカレッジ
 discourse ディスコース
 discover ディスカバー
 discovery ディスカバリー
 discrepancy ディスクレパンシー
+discrete ディスクリート
 discretion ディスクレション
 discus ディスカス
 discussion ディスカッション
@@ -1638,12 +1785,15 @@ dish ディッシュ
 dishwasher ディッシュウォッシャー
 disillusion ディスイリュージョン
 disk ディスク
+dislike ディスライク
 disorder ディスオーダー ディソーダー
 dispatch ディスパッチ
+dispel ディスペル デスペル
 dispenser ディスペンサー ディスペンサ
 displacement ディスプレースメント
 display ディスプレイ ディスプレー
 disposable ディスポーザブル
+disrupt ディスラプト
 dissolve ディゾルブ
 distance ディスタンス
 distortion ディストーション
@@ -1652,6 +1802,7 @@ distributor ディストリビューター
 disturb ディスターブ
 dither ディザ ディザー
 dithering ディザリング
+dive ダイブ
 diver ダイバー
 diversity ダイバーシティ ダイバーシティー
 diving ダイビング
@@ -1664,6 +1815,7 @@ document ドキュメント
 documentary ドキュメンタリー ドキュメンタリ ドキュメンタル
 documentation ドキュメンテーション
 dodging ドッジング
+dodo ドードー ドド
 dog ドッグ
 dogma ドグマ
 dogmatic ドグマティック ドグマチック
@@ -1675,28 +1827,34 @@ dolphin ドルフィン
 domain ドメイン
 dome ドーム
 domestic ドメスティック
-domination ドミネート ドミネイト
+dominant ドミナント
 dominion ドミニオン
+domino ドミノ
 donation ドネーション
 donkey ドンキー
+donor ドナー
 doom ドゥーム
 door ドア
-doorman ドアボーイ ドアマン
+doorman ドアマン
 doors ドアーズ
 dormitory ドーミトリー ドミトリー
 dot ドット
 double ダブル
 doubling ダブリング
 dough ドウ
-doughnut ドーナツ ドーナッツ
 dove ダブ
+down ダウン
 downgrade ダウングレード
 downhill ダウンヒル
 downstream ダウンストリーム
 downtown ダウンタウン
+draft ドラフト
+drag ドラッグ ドラァグ
 dragging ドラッギング
+dragon ドラゴン
 drain ドレン ドレイン ドレーン
 drainage ドレナージュ ドレナージ
+drama ドラマ
 dramatic ドラマチック ドラマティック
 dramatist ドラマチスト
 drape ドレープ
@@ -1704,23 +1862,30 @@ draping ドレーピング
 drastic ドラスチック ドラスティック
 draw ドロー
 drawer ドロワー ドロア ドロワ ドロアー ドローワー
-drawers ズロース ドロワーズ ドロワース
+drawers ドロワーズ
 drawing ドローイング
 dream ドリーム
 dreamer ドリーマー
 dreaming ドリーミング
 dreamy ドリーミー
-dress ドレス ワンピース
+dress ドレス
 dresser ドレッサー
 dressing ドレッシング
 dressmaker ドレスメーカー
 dressy ドレッシー
+dribble ドリブル
+drier ドライヤー
 drift ドリフト
+drill ドリル
 drink ドリンク
+drinker ドリンカー
 drip ドリップ
 drive ドライブ
+driver ドライバー
 driveway ドライブウェイ ドライブウエイ ドライブウェー ドライブウエー
+driving ドライビング
 drone ドローン
+drop ドロップ ドリップ
 dropout ドロップアウト
 drug ドラッグ
 drugstore ドラッグストア
@@ -1728,6 +1893,7 @@ drum ドラム
 drummer ドラマー
 drumming ドラミング
 dry ドライ
+dryer ドライヤー
 dual デュアル
 dualism デュアリズム
 dub ダブ
@@ -1749,10 +1915,12 @@ dumpling ダンプリング
 dune デューン
 dungeon ダンジョン
 dunk ダンク
-duplicate デュープ デュプリケート
+duplex デュプレックス デュープレックス
+duplicate デュプリケート
 duration デュレイション
 dust ダスト
 duty デューティ
+dwarf ドワーフ
 dwell ドエル
 dwelling ドエリング ドゥエリング
 dynamic ダイナミック
@@ -1761,10 +1929,9 @@ dynamite ダイナマイト
 dynamo ダイナモ
 dyslexia ディスレクシア ディスレキシア
 eagle イーグル
-ear イヤ イア イヤー
+ear イア
 early アーリー
-earmark イヤマーク
-earring イヤリング イアリング
+earring イアリング
 earth アース
 earthly アースリ
 earthworm アースワーム
@@ -1786,25 +1953,26 @@ economics エコノミクス エコノミックス
 economist エコノミスト
 economy エコノミー エコノミ
 ecosystem エコシステム
+ecstasy エクスタシー
 edge エッジ
 edging エッジング
 edgy エッジー
 edit エディット
 editing エディティング
 edition エディション
+editor エディター エディタ
 editorial エディトリアル
-education エデュケーション
 effect エフェクト イフェクト
 effective エフェクティブ
 effects エフェクツ
 efficiency エフィシェンシー
+egg エッグ
 eggplant エッグプラント
 egoism エゴイズム
 egotism エゴティズム
 egotist エゴティスト エゴチスト
 eight エイト
 eighteen エイティーン
-ejaculation エヤクラチオン
 eject イジェクト
 elastic エラスティック エラスチック
 elasticity イラステシティ
@@ -1825,8 +1993,10 @@ elephant エレファント
 elevation エレベーション
 elevator エレベーター エレベータ
 eleven イレブン
+eleventh イレブンス
 elf エルフ
 eligibility エリジビリティー
+elimination エリミネーション イリミネーション
 elk エルク
 elm エルム
 elude エルード
@@ -1835,7 +2005,6 @@ embalming エンバーミング
 embargo エンバーゴ エンバーゴー
 embassy エンバシー
 emblem エンブレム
-embossing エンボス
 embroidery エンブロイダリー
 embryo エンブリオ
 emerald エメラルド
@@ -1848,23 +2017,20 @@ emotion エモーション
 emotional エモーショナル
 empathy エンパシー
 emperor エンペラー
-emphasis エンファシス
 empire エンパイア エンパイヤ
 employer エンプロイヤー エンプロイア エンプロイヤ エンプロイアー
 empress エンプレス
 empty エンプティー
-emulation エミュレート エミュレーション
+emulation エミュレーション
 emulator エミュレータ エミュレーター
-emulsion エマルジョン エマルション
+emulsion エマルション
 enable エネーブル
-enabling イネーブル
 enamel エナメル
-encoding エンコーディング エンコード
-encore アンコール
+enclosure エンクロージャー エンクロージャ
+encoding エンコーディング
 encounter エンカウンター
-encouragement エンカレッジ
 encyclopedia エンサイクロペディア
-end エンド キリ
+end エンド
 ending エンディング
 endive エンダイブ
 endless エンドレス
@@ -1873,29 +2039,31 @@ enema エネマ
 enemy エネミー
 energy エナジー エナージー
 enforcement エンフォースメント
+engage エンゲージ エンゲイジ
+engagement エンゲージメント
 engine エンジン
 engineer エンジニア
 engineering エンジニアリング
 engraver エングレーバー
 engraving エングレービング エングレーヴィング
-enhanced エンハンスド エンハンスト
+enhanced エンハンスト
 enhancement エンハンスメント
 enhancing エンハンシング
 enigma エニグマ
-enjoying エンジョイ
 enlargement エンラージメント
+ensemble アンサンブル
 enter エンター
 enterprise エンタープライズ
 entertainer エンターテイナー エンターティナー
-entertainment エンターテインメント エンターテイメント エンタテインメント エンタテイメント
-entertainments エンターテイメンツ エンタテイメンツ
-enthusiast マニア マニヤ エンスージアスト
+entertainment エンターテインメント エンタテインメント
+enthusiast エンスージアスト
 entity エンティティ エンティティー
 entrance エントランス
 entrant エントラント
 entropy エントロピー エントロピ
+entry エントリー エントリ
 envelope エンベロープ
-environment エンバイロメント エンヴァイロメント エンバイロンメント
+environment エンバイロンメント
 envy エンヴィー エンヴィ
 enzyme エンザイム
 eon イーオン
@@ -1910,20 +2078,17 @@ equal イコール
 equipment イクイップメント エクイップメント
 equitable エクイタブル
 equity エクイティ エクイティー
-eraser イレーザー
 erection エレクション
-ergonomic エルゴノミック
 erotic エロチック エロティック
 error エラー
 eruption イラプション
-escalation エスカレート エスカレーション
+escalation エスカレーション
 escalator エスカレーター エスカレータ
 escape エスケープ
 escort エスコート
 essay エッセイ エッセー
 essence エッセンス
 essential エッセンシャル
-establishing エスタブリッシュ
 establishment エスタブリッシュメント
 estate エステート
 etching エッチング
@@ -1933,15 +2098,16 @@ ether イーサ
 ethical エシカル
 ethics エシックス
 ethnic エスニック
-ethos エートス エトス
 euthanasia ユーサネイジア
 evacuation エバキュエーション
 evaluation エバリュエーション
 evangelist エバンジェリスト エヴァンジェリスト
+eve イブ イヴ
 even イーブン
 evening イブニング イヴニング
 event イベント
 ever エバー エバ
+evergreen エバーグリーン エヴァーグリーン
 everybody エブリバディ
 evidence エビデンス
 evil イービル イビル イーブル エビル
@@ -1952,26 +2118,22 @@ excellence エクセレンス
 excellent エクセレント
 exception エクセプション
 exchange エクスチェンジ
-excited ハイテンション
-excitement エキサイト エキサイトメント
+excitement エキサイトメント
 exciting エキサイティング エクサイティング
 exclusive エクスクルーシブ
-excursion エクスカーション エクスカージョン エキスカーション
+excursion エクスカージョン
 excuse エクスキューズ
-execute エグゼキュート
 executioner エクスキューショナー
 executive エグゼクティブ
-executor エクスキューター
 exempt エグゼンプト
 exemption エグゼンプション
 exercise エキササイズ エクササイズ
-exhaust エキゾースト エグゾースト
-exhibition エキシビション エキシビジョン エキジビション
+exhaust エグゾースト
+exhibition エキシビション
 exile エグザイル
 existence エグジスタンス
 exit エグジット
 exodus エクソダス
-exotic エキゾチック エキゾティック
 expansion エキスパンション エクスパンション
 expedition エクスペディション
 expense エクスペンス
@@ -1989,9 +2151,12 @@ express エクスプレス エキスプレス
 expression エクスプレッション
 extension エクステンション
 extent エクステント
+exterior エクステリア
 external エクスターナル
+extra エクストラ エキストラ
 extreme エクストリーム
 eye アイ
+eyebrow アイブロウ アイブロー
 eyelash アイラッシュ
 eyes アイズ
 eyesight アイサイト
@@ -1999,25 +2164,27 @@ fable フェーブル
 fabric ファブリック
 fabrication ファブリケーション
 face フェイス フェース
+facet ファセット
 facial フェイシャル フェーシャル
 facility ファシリティ ファシリティー
 facsimile ファクシミリ
 fact ファクト
 faction ファクション
 factor ファクター
-factorial ファクトリアル
 factoring ファクタリング
 factory ファクトリー ファクトリ
 faculty ファカルティ
 fad ファッド ファド
 fade フェード
+fading フェーディング
 failure フェイリュア フェイル フェール
 fair フェア フェアー
 fairy フェアリー
 faith フェース フェイス
 fake フェイク フェーク
 falcon ファルコン
-fall ダウン
+fall フォール
+fallout フォールアウト
 false フォルス フォールス
 familiar ファミリア ファミリアー
 family ファミリー ファミリ
@@ -2025,7 +2192,6 @@ fan ファン
 fanatic ファナティック
 fancy ファンシー
 fantastic ファンタスティック
-fantasy ファンタジー
 farm ファーム
 farmer ファーマー
 fascism ファシズム
@@ -2050,10 +2216,13 @@ federalism フェデラリズム
 federalist フェデラリスト
 federation フェデレーション
 fee フィー
+feed フィード
+feedback フィードバック
 feeder フィーダ フィーダー
 feeding フィーディング
 feeling フィーリング
 feint フェイント
+fellow フェロー
 fellowship フェローシップ
 felt フェルト
 female フィメール フィーメール フィーメイル フィーメル フィメイル
@@ -2063,9 +2232,14 @@ feminism フェミニズム
 feminist フェミニスト
 fence フェンス
 fencing フェンシング
+fender フェンダー
+ferret フェレット
 ferry フェリー
+festival フェスティバル フェスティヴァル
+fetch フェッチ
 fetish フェティッシュ
 feudalism フューダリズム
+fever フィーバー
 fez フェズ
 fiber ファイバー ファイバ
 fiberglass ファイバーグラス
@@ -2073,6 +2247,7 @@ fiction フィクション
 fictional フィクショナル
 fiddle フィドル
 fiddler フィドラー
+fidelity フィデリティー
 field フィールド
 fielding フィールディング
 fiesta フィエスタ
@@ -2082,18 +2257,18 @@ fifty フィフティー フィフティ
 fight ファイト
 fighter ファイター
 fighting ファイティング
-figurative フィギュラティフ
 figure フィギュア
 figurehead フィギュアヘッド
 filament フィラメント
+file ファイル
 filing ファイリング
 fill フィル
 filler フィラー
-fillet フィレット
 filling フィリング
 film フィルム フイルム
 filter フィルター フィルタ
 filtering フィルタリング
+fin フィン
 final ファイナル
 finance ファイナンス フィナンス
 financial フィナンシャル ファイナンシャル
@@ -2122,31 +2297,44 @@ fishing フィッシング
 fist フィスト
 fit フィット
 fitness フィットネス
+fitting フィッティング
 five ファイブ
 fixed フィクスト
 fixture フィクスチャー フィクスチャ
 fizz フィズ
 flag フラグ フラッグ
+flagship フラッグシップ
 flake フレーク
 flame フレーム
 flaming フレーミング
 flamingo フラミンゴ
-flannel フランネル フラノ
+flannel フランネル
+flap フラップ
 flare フレア フレアー
+flaring フレアリング
+flash フラッシュ
 flashback フラッシュバック
+flasher フラッシャー
 flashing フラッシング
 flashlight フラッシュライト
 flat フラット
 flavor フレーバー
 fleece フリース
+flex フレックス
 flexibility フレキシビリティ フレキシビリティー フレクシビリティ フレクシビリティー
 flexible フレキシブル
+flick フリック
 flicker フリッカー フリッカ
 flier フライヤー
+flies フライズ
 flight フライト
 flint フリント
+flip フリップ
+flipper フリッパー
+flipping フリッピング
 float フロート
 floating フローティング
+flood フラッド
 flooding フラッディング
 floodlight フラッドライト
 floor フロア フロアー
@@ -2154,20 +2342,28 @@ flop フロップ
 flora フローラ フロラ
 floral フローラル
 florist フローリスト フロリスト
+floss フロス
 flounce フラウンス
+flourish フラリッシュ
 flow フロー
 flower フラワー
 fluctuation フラクチュエーション
 fluid フルード
 fluke フロック
+flush フラッシュ
 flute フルート フリュート
 flutist フルーティスト
+flutter フラッター
 flux フラックス
+fly フライ
 flying フライング
 foam フォーム
+focus フォーカス
 fog フォグ
+foil フォイル
 folder フォルダ フォルダー
-folding フォールディング フォールド
+folding フォールディング
+folk フォーク
 folklore フォークロア
 follies フォーリーズ
 follow フォロー
@@ -2178,24 +2374,24 @@ food フード
 foods フーズ
 fool フール
 foolish フーリッシュ
-foot フット フート
+foot フート フット
+football フットボール
 footing フーチング
-footlights フットライト
 footnote フットノート
 footprint フットプリント
 footwork フットワーク
 force フォース
 ford フォード
+fore フォア ファー
 forecast フォーキャスト
+forefront フロンティア
 foreground フォアグラウンド フォアグランド
 foreign フォーリン
 foreigner フォリナー フォーリナー
 foreman フォアマン
-forensic フォレンジック
 forest フォレスト フォーレスト
-forever フォーエバー
 forge フォージ
-fork フォーク ホーク
+fork フォーク
 form フォーム
 formal フォーマル
 format フォーマット
@@ -2206,30 +2402,37 @@ fortress フォートレス
 fortune フォーチュン
 forty フォーティー フォーティ
 forum フォーラム
+forward フォワード
+forwarder フォワーダー
 forwarding フォワーディング
 foul ファウル ファール
+foundation ファンデーション ファウンデーション
+foundry ファウンドリ ファウンドリー
 fountain ファウンテン
 four フォア フォー
 fourteen フォーティーン
 fox フォックス
 fractal フラクタル
+fraction フラクション
 fractional フラクショナル
 fragile フラジャイル
 fragment フラグメント
 fragmentation フラグメンテーション
 fragrance フレグランス
+frail フレイル フレール
 frame フレーム
 framework フレームワーク
 framing フレーミング
 franchise フランチャイズ
 frank フランク
-frankfurter フランクフルター
 fraternity フラタニティ フラタニティー
+freak フリーク
+free フリー
 freedom フリーダム
 freelance フリーランス
 freeway フリーウェイ フリーウェー フリーウエー
 freezer フリーザー
-freezing フリーズ フリージング
+freezing フリージング
 freight フレート フレイト
 frequency フリークエンシー
 fresh フレッシュ
@@ -2242,21 +2445,24 @@ friend フレンド
 friendly フレンドリー
 friends フレンズ
 friendship フレンドシップ
+frieze フリーズ
 frigate フリゲート
-frigidity フリジディティー
 frill フリル
 fringe フリンジ
 fritter フリッター
 frog フロッグ
+front フロント
+frontier フロンティア
 frost フロスト
 frosting フロスティング
 frozen フローズン
-fruit フルーツ
 fruity フルーティー フルーティ
 frustration フラストレーション
 fudge ファッジ
 fuel フューエル フュエル
+fulfillment フルフィルメント
 full フル
+fumble ファンブル
 fun ファン
 function ファンクション
 functional ファンクショナル
@@ -2268,25 +2474,28 @@ fundamentals ファンダメンタルズ
 funeral フューネラル
 funny ファニー
 fur ファー
-furlong ファーロング ハロン
+furlong ファーロング
 furnace ファーネス
 furniture ファニチャー ファニチャ ファーニチャー ファニチュア
-fuse ヒューズ フューズ
+fuse フューズ
 fusion フュージョン
 future フューチャー
+fuzz ファズ
 fuzzy ファジー ファジィ
 gadget ガジェット ガゼット
+gag ギャグ
 gain ゲイン
+gal ガル
 galaxy ギャラクシー
 gale ゲイル
 gallery ギャラリー ガレリー
-galley ギャレー
+galley ガレー ガリー ゲラ ギャレー
 gallon ガロン
-gallop ギャロップ ガロップ
+gallop ギャロップ
 gambler ギャンブラー
-gambling ギャンブル
 game ゲーム
 gamer ゲーマー
+gaming ゲーミング
 gang ギャング
 gangster ギャングスター
 gap ギャップ
@@ -2304,18 +2513,22 @@ garnish ガーニッシュ
 garter ガーター
 gasket ガスケット ギャスケット
 gasoline ガソリン
+gate ゲート
 gateway ゲートウェイ ゲートウエイ ゲートウエー
+gather ギャザー ギャーザー
 gathering ギャザリング
 gauge ゲージ
 gauntlet ガントレット ゴーントレット
-gauze ゴーズ ゴース
+gauze ゴーズ
 gazelle ガゼル
 gazette ガゼット
 gear ギア ギヤ
+gel ゼリー ジェリー ジェル
 gelatin ゼラチン
 gem ジェム
 gender ジェンダー
 gene ジーン
+general ゼネラル ジェネラル
 generate ジェネレート
 generation ジェネレーション ゼネレーション
 generator ジェネレータ ジェネレーター
@@ -2332,12 +2545,12 @@ geography ジオグラフィー
 geology ジオロジー
 geometric ジオメトリック
 geometry ジオメトリー ジオメトリ
+geranium ゼラニウム
 gesture ジェスチャー ジェスチャ ゼスチャー ゼスチュア
-getting ゲット
 ghost ゴースト
-ghosting ゴースティング
 giant ジャイアント
 gift ギフト
+gifted ギフテッド
 gig ギグ
 gilt ギルト
 gimmick ギミック
@@ -2349,6 +2562,7 @@ giraffe ジラフ
 girder ガーダー ガーダ
 girdle ガードル
 girl ガール
+girlfriend ガールフレンド
 girlish ガーリッシュ
 girls ガールズ
 give ギブ
@@ -2356,6 +2570,7 @@ glacier グレーシャー
 gladiator グラディエーター
 glamorous グラマラス
 glare グレア
+glass グラス
 glaze グレーズ
 glee グリー
 glider グライダー
@@ -2364,35 +2579,43 @@ glimpse グリンプス
 glitter グリッター
 global グローバル
 globe グローブ
-globule グロビュール
 gloomy グルーミー
+glory グローリー
+gloss グロス
 glossary グロッサリー グロサリー
 glossy グロッシー
+glove グローブ グラブ
 glucose グルコース
-glue グルー セメダイン
+glue グルー
 gluttony グラトニー
-glycerin グリセリン リスリン
 gnome ノーム
 gnu ヌー
+go ゴー
+goal ゴール
 goalie ゴーリー
 goalkeeper ゴールキーパー
 goat ゴート
 goblet ゴブレット
 goblin ゴブリン
+god ゴッド
 godfather ゴッドファーザー
 godmother ゴッドマザー
-goggles ゴーグル
 gold ゴールド
 golden ゴールデン
 golf ゴルフ
 golfer ゴルファー
-good グー グッド
-goodbye グッドバイ グッバイ
+gondola ゴンドラ
+gong ゴング
+good グッド
+goodbye グッドバイ
 goods グッズ
 goose グース
 gore ゴア
 gorgeous ゴージャス
+gorilla ゴリラ
+gospel ゴスペル
 gossip ゴシップ
+gouge ゴージ
 goulash グーラッシュ
 government ガバメント
 governor ガバナー
@@ -2400,9 +2623,11 @@ gown ガウン
 grace グレイス
 gradation グラデーション
 grade グレード グレイド
+grader グレーダー グレーダ
 gradient グラディエント
 grading グレーディング
 graffiti グラフィティー グラフィティ
+grain グレーン ゲレイン ゲレーン グレイン
 grammar グラマー
 grand グランド
 grandstand グランドスタンド
@@ -2411,60 +2636,76 @@ granola グラノーラ
 grant グラント
 granule グラニュール
 grape グレープ
-grapefruit グレープフルーツ
 graph グラフ
+graphic グラフィック
 graphical グラフィカル
-graphics グラフィック グラフィックス グラフィクス
+graphics グラフィックス グラフィクス
 graphite グラファイト
 grappling グラップリング
 grass グラス
 grasshopper グラスホッパー
 grate グレート グレイト
 grater グレーター グレイター
-grave グレイブ
+grave グレイブ グラーヴェ グラーベ
 gravel グラベル
+graver グレーバー
 gravity グラビティ グラビティー
 gravy グレービー グレイビー
+gray グレー グレイ
 graying グレーイング
 grease グリース グリス
 great グレート グレイト
 greater グレーター
+green グリーン
+greenback グリーンバック
 greenhouse グリーンハウス
 gremlin グレムリン
 grenade グレネード
+greyhound グレーハウンド グレイハウンド
 grid グリッド
 grief グリーフ
+grill グリル
+grille グリル
 grime グライム
 grind グラインド
 grinder グラインダー グラインダ
 grip グリップ
 grit グリット
+grizzly グリズリー
 grocery グローサリー グロサリー
-groggy グロッキー グロッギー
+groggy グロッギー
 grooming グルーミング
 groove グルーヴ グルーブ
 groovy グルーヴィー グルービー グルーヴィ
 grotesque グロテスク
+ground グラウンド グランド
 grounding グラウンディング
 groundwork グラウンドワーク
+group グループ
 grouping グルーピング
 growth グロース
+guarantee ギャランティー ギャランティ
+guard ガード
 guardian ガーディアン
-guarding ガード
 guest ゲスト
 guidance ガイダンス
 guide ガイド
 guidebook ガイドブック
 guideline ガイドライン
 guild ギルド
+guilt ギルト
+guilty ギルティ ギルティー
 guinea ギニー
 guitar ギター
 guitarist ギタリスト
 gully ガリー ガリ
-gumdrop ガムドロップ
+gum ガム
 gun ガン
+gunman ガンマン
 gunner ガンナー
+guppy グッピー
 gust ガスト
+gut ガット
 guts ガッツ
 gutter ガター ガーター
 guy ガイ
@@ -2478,18 +2719,21 @@ hacker ハッカー
 hacking ハッキング
 hackney ハクニー
 hacksaw ハクソー ハックソー
-haddock モンツキダラ
+haddock ハドック
+hair ヘア ヘアー ヘヤ ヘヤー
 haircut ヘアカット
 half ハーフ
 halfway ハーフウェイ ハーフウェー ハーフウエイ ハーフウエー
 halibut ハリバット
-hallelujah ハレルヤ アレルヤ
+hall ホール
+hallelujah ハレルヤ
+hallucination ハルシネーション ハルシネイション
 halo ハロー ハロ
 halon ハロン
 halter ホールター
+ham ハム
+hamburger ハンバーガー
 hamlet ハムレット
-hammer ハンマー
-hammock ハンモック
 hamster ハムスター
 hamstring ハムストリング
 hand ハンド
@@ -2500,15 +2744,20 @@ handicraft ハンディクラフト
 handkerchief ハンカチーフ
 handle ハンドル
 handlebar ハンドルバー
+handler ハンドラー ハンドラ
+handling ハンドリング
 handmade ハンドメイド ハンドメード
 handout ハンドアウト
 handshake ハンドシェーク ハンドシェイク
 handsome ハンサム
-hang ハングアップ
+handy ハンディー ハンディ
+hang ハング
 hangar ハンガー
-happening ハペニング
+hanger ハンガー
+happening ハプニング ハペニング
 happiness ハピネス ハッピネス
 happy ハッピー
+harassment ハラスメント
 harbor ハーバー
 harboring ハーバリング
 hard ハード
@@ -2525,6 +2774,7 @@ harpsichord ハープシコード
 harrow ハロー
 harvest ハーベスト ハーヴェスト
 harvester ハーベスター
+hash ハッシュ ハヤシ
 haste ヘイスト
 hat ハット
 hatch ハッチ
@@ -2534,29 +2784,37 @@ hate ヘイト ヘート
 haunt ハウント
 hawk ホーク
 hazard ハザード
+head ヘッド
+header ヘッダー ヘッダ ヘッド
+heading ヘディング ヘッディング
+headlight ヘッドライト
 headline ヘッドライン
-headphone ヘッドホン ヘッドフォン
-headquarters ヘッドクォーター ヘッドクオーター
+headphone ヘッドフォン
+headrest ヘッドレスト
 healer ヒーラー
-healing ヒール
+healing ヒーリング
 health ヘルス
 healthy ヘルシー
 heap ヒープ
 hear ヒア
+hearing ヒアリング ヒヤリング
 heart ハート
 heartbeat ハートビート
 heartbreak ハートブレイク
 heat ヒート
 heater ヒーター ヒータ
+heath ヒース
+heather ヘザー
 heaven ヘブン ヘヴン
 heavy ヘビー ヘヴィ
 hedge ヘッジ
 hedgehog ヘッジホッグ
 hedging ヘッジング
+heel ヒール
 height ハイト
 heights ハイツ
 helicopter ヘリコプター
-heliport ヘリポート
+helium ヘリウム
 hell ヘル
 hello ハロー
 helm ヘルム
@@ -2569,12 +2827,12 @@ hemoglobin ヘモグロビン
 hemp ヘンプ
 herald ヘラルド
 herb ハーブ
+here ヒア
 hero ヒーロー
 heroic ヒロイック
 heroin ヘロイン
 heroine ヒロイン
 heroism ヒロイズム
-herpes ヘルペス
 heterogeneous ヘテロジーニアス ヘテロジニアス
 heterosexual ヘテロセクシュアル ヘテロセクシャル
 heterosexuality ヘテロセクシュアリティ
@@ -2585,10 +2843,11 @@ hibernation ハイバネーション
 hickory ヒッコリー
 hiding ハイディング
 hierarchy ハイアラーキー ハイアラーキ
+high ハイ
 highbrow ハイブラウ ハイブロー
 highland ハイランド
 highlight ハイライト
-highway ハイウェイ ハイウェー ハイウエー ハイウエイ
+highway ハイウェイ ハイウェー
 hijack ハイジャック
 hike ハイク
 hiker ハイカー
@@ -2597,10 +2856,9 @@ hill ヒル
 hillbilly ヒルビリー
 hinge ヒンジ ヒンヂ
 hint ヒント
+hip ヒップ
+hippie ヒッピー
 hippopotamus ヒポポタマス
-hippy ヒッピー
-hips ヒップ
-hiss ヒスノイズ
 hissing ヒッシング
 histogram ヒストグラム
 historic ヒストリック
@@ -2610,41 +2868,43 @@ hitchhiker ヒッチハイカー
 hitting ヒッティング
 hobby ホビー
 hobo ホーボー
+hock ホック
+hockey ホッケー
 hog ホッグ
 hoist ホイスト
 hold ホールド
 holder ホルダー
+holding ホールディング
 holdup ホールドアップ
 hole ホール
 holiday ホリデー ホリデイ
 holiness ホーリネス
 hollow ホロー
 holster ホルスター
+holy ホーリー ホリー
 home ホーム
 homeless ホームレス
 homemade ホームメード ホームメイド
 homes ホームズ
-homesickness ホームシック
 homespun ホームスパン
 homework ホームワーク
 homing ホーミング
 homogeneous ホモジニアス ホモジーニアス
 homosexual ホモセクシャル ホモセクシュアル
 homosexuality ホモセクシュアリティ ホモセクシュアリティー
+hone ホーン
 honey ハニー
 honeycomb ハニカム
 honeymoon ハネムーン
 honing ホーニング
 honor オナー
-hood フード
-hook フック
-hoop フープ
+hook ホック
 hop ホップ
 hope ホープ
 hopper ホッパー
 hopscotch ホップスコッチ
-horde ホルド
 horizontal ホリゾンタル
+horn ホーン
 hornet ホーネット
 horoscope ホロスコープ
 horror ホラー
@@ -2654,22 +2914,26 @@ horseradish ホースラディッシュ
 hose ホーズ
 hospital ホスピタル
 hospitality ホスピタリティー ホスピタリティ
-hostel ホステル バッパー
+host ホスト
+hostel ホステル
+hostess ホステス
 hosting ホスティング
 hosts ホスツ
 hot ホット
 hotel ホテル
 hound ハウンド
-hour アワー
 house ハウス
 household ハウスホールド
 housekeeper ハウスキーパー
 housewife ハウスワイフ
+housing ハウジング
 hover ホバー
+hovering ホバリング
 how ハウ
 hub ハブ
 huddle ハドル
 hug ハグ
+hum ハム
 human ヒューマン
 humanism ヒューマニズム
 humanist ヒューマニスト
@@ -2677,18 +2941,16 @@ humanity ヒューマニティー ヒューマニティ
 humble ハンブル
 humming ハミング
 hummingbird ハミングバード
-humor ユーモア
-humorist ユーモリスト
-humorous ユーモラス
 hump ハンプ
 hundred ハンドレッド
 hunger ハンガー
+hungry ハングリー
 hunt ハント
 hunter ハンター
 hunting ハンティング ハンチング
 hurdle ハードル
 hurdling ハードリング
-hurrah フラー
+hurling ハーリング
 hurricane ハリケーン ハリケイン
 husband ハズバンド
 husky ハスキー
@@ -2696,17 +2958,15 @@ hustle ハッスル
 hustler ハスラー
 hut ハット
 hybrid ハイブリッド
-hydroplane ハイドロプレーン ハイドロプレイン ハイドロプレン
-hydroplaning ハイドロプレーニング
 hyena ハイエナ
 hymn ヒム
 hyphen ハイフン
 hyphenation ハイフネーション
 hypnosis ヒプノシス
 hypocrite ヒポクリット
-hysterical ヒステリック
+hysteric ヒステリック
 iceberg アイスバーグ
-icebreaker アイスブレーカー アイスブレイカー アイスブレイク アイスブレーク アイスブレーキング アイスブレイキング
+icebreaker アイスブレーカー アイスブレイカー アイスブレイク アイスブレーク
 icicle アイシクル
 icing アイシング
 icon アイコン
@@ -2721,40 +2981,47 @@ identify アイデンティファイ アイデンテファイ
 identity アイデンティティ アイデンティティー
 idiom イディオム
 idle アイドル
+idler アイドラ アイドラー
 idling アイドリング
 idly アイドゥリ アイドリ
+idol アイドル
+if イフ
 igloo イグルー
 ignition イグニッション イグニション
 iguana イグアナ
 illegal イリーガル
-illumination イルミネーション イルミネート
+illumination イルミネーション
 illusion イリュージョン
 illustration イラストレーション
 illustrator イラストレーター イラストレータ
+image イメージ
 imaginary イマジナリー イマジナリ
 imagination イマジネーション
 imagine イマジン
 imaging イメージング
-imbalance インバランス
+imbalance アンバランス インバランス
 imitation イミテーション
 immediate イミディエイト
 immigration イミグレーション
-immoral アンモラル インモラル
 immortal イモータル
+impact インパクト
 impedance インピーダンス
 imperial インペリアル
 imperialism インペリアリズム
-implementation インプリメンテーション インプリメント
+implant インプラント
+implement インプリメント
+implementation インプリメンテーション
 implication インプリケーション
 import インポート
 important インポータント
 impossible インポシブル インポッシブル
+impostor インポスター
 impression インプレッション
 impressive インプレッシブ
 imprinting インプリンティング
 improvisation インプロビゼーション インプロヴィゼーション
 impulse インパルス
-inbreeding インブリード インブリーディング
+inbreeding インブリーディング
 incense インセンス
 incentive インセンティブ インセンティヴ
 incest インセスト
@@ -2781,27 +3048,25 @@ independence インデペンデンス インディペンデンス
 independent インディペンデント
 index インデックス
 indexing インデクシング インデキシング
-indicator インジケーター インジケータ
+indigo インディゴ
 indirect インダイレクト
 individual インディビジュアル
-individualism インディビジュアリズム
-individualist インディビジュアリスト
 indoctrination インドクトリネーション
 indolent インドレント
 indoor インドア
 induction インダクション
+industrial インダストリアル
 industry インダストリー インダストリ
 infant インファント
-inferno インフェルノ
 infield インフィールド
 infinite インフィニット
 infinity インフィニティ インフィニティー
-infix インフィックス
 inflatable インフレータブル
 inflation インフレーション
 influence インフルエンス
 influenza インフルエンザ
 informal インフォーマル
+informant インフォーマント
 information インフォメーション インフォーメーション
 informer インフォーマー
 infrastructure インフラストラクチャー インフラストラクチャ
@@ -2809,6 +3074,7 @@ infusion インフュージョン
 ingenious インジニアス インジーニャス
 ingest インジェスト
 inheritance インヘリタンス
+initial イニシャル イニシアル
 initialize イニシャライズ イニシアライズ
 initiation イニシエーション
 initiative イニシアティブ イニシアチブ
@@ -2816,7 +3082,6 @@ initiator イニシエータ イニシエーター
 injection インジェクション
 injunction インジャンクション
 ink インク
-inking インキング
 inlay インレー
 inlet インレット
 inn イン
@@ -2824,11 +3089,12 @@ inner インナー
 inning イニング インニング
 innkeeper インキーパー
 innocence イノセンス
-innocent ナイーブ ナイーヴ イノセント
+innocent イノセント
 innovation イノベーション
 input インプット
 insect インセクト
-insertion インサート インサーション
+insert インサート
+insertion インサーション
 inside インサイド
 insider インサイダー
 insight インサイト
@@ -2838,13 +3104,14 @@ inspector インスペクター
 inspiration インスピレーション
 installation インストレーション インスタレーション
 installment インストールメント
+instance インスタンス
 instant インスタント
 instinct インスティンクト
 institute インスティチュート
 institution インスティテューション インスティチューション
 instruction インストラクション
 instructor インストラクター
-instrument インストルメント インスツルメント インストゥルメント
+instrument インストルメント インストゥルメント
 instrumental インストゥルメンタル インストルメンタル
 insulation インシュレーション
 insulator インシュレーター インシュレータ
@@ -2864,16 +3131,18 @@ intelligent インテリジェント
 intensity インテンシティ インテンシティー
 intensive インテンシブ
 intentional インテンショナル
-interaction インタラクション インターアクション
+interaction インタラクション
 interactive インタラクティブ
 interception インターセプション
 interchange インターチェンジ
-intercom インターホン インターフォン インターコム インターカム
+intercom インターコム インターカム
+intercontinental インターコンチネンタル
 intercourse インターコース
 interest インタレスト
 interesting インタレスティング
 interface インタフェース インターフェース インターフェイス
-interference インターフェア インターフェアレンス インターフェアランス
+interference インターフェアレンス インターフェアランス
+interior インテリア
 interlock インターロック
 interlude インタールード
 intermission インターミッション
@@ -2883,9 +3152,11 @@ international インターナショナル インタナショナル
 interplay インタープレー
 interpret インタプリト
 interpretation インタープリテーション
+interpreter インタープリター インタプリタ インタープリタ
 interrogation インタロゲーション
 interrupt インタラプト インターラプト
 interval インターバル
+interview インタビュー
 interviewer インタビュアー インタヴュアー インタビューアー
 intimacy インティマシー
 intimate インティメイト インティメート
@@ -2916,33 +3187,40 @@ island アイランド
 isle アイル
 isolate アイソレート
 isolation アイソレーション
-italics イタリック
+issue イシュー
 item アイテム
 iteration イテレーション
 ivory アイボリー アイヴォリー アイボリ
 ivy アイビー アイビ
 jab ジャブ
-jabber ジャバー
 jack ジャッキ ジャック
+jackal ジャッカル
 jackass ジャッカス
-jacket ジャケット ジャケツ ダストカバー
-jackknife ジャックナイフ
+jacket ジャケット
 jackpot ジャックポット
 jade ジェイド ジェード
+jaguar ジャガー
 jail ジェイル
 jam ジャム
 jamming ジャミング
+jar ジャー
 jargon ジャーゴン
 javelin ジャベリン
 jaw ジョー
 jawboning ジョーボニング
 jazz ジャズ
 jealousy ジェラシー
-jeans ジーンズ ジンス
+jeans ジーンズ
+jelly ゼリー ジェリー
 jerky ジャーキー
+jersey ジャージー ジャージ
 jet ジェット
 jewel ジュエル
 jewelry ジュエリー
+jig ジグ
+jigsaw ジグソー
+jingle ジングル
+jinx ジンクス
 job ジョブ
 jockey ジョッキー
 jog ジョグ
@@ -2950,7 +3228,7 @@ jogger ジョガー
 jogging ジョギング
 join ジョイン
 joint ジョイント
-joke ギャグ ジョーク
+joke ジョーク
 joker ジョーカー
 journal ジャーナル
 journalism ジャーナリズム
@@ -2960,18 +3238,23 @@ joy ジョイ
 joyful ジョイフル
 jubilee ジュビリー
 judge ジャッジ
+judgment ジャッジメント
 jug ジャグ
+juggle ジャッグル ジャグル
 juggler ジャグラー
 juggling ジャグリング
 juice ジュース
+juicy ジューシー
 jumbo ジャンボ
 jump ジャンプ
+jumper ジャンパー ジャンパ
 jumping ジャンピング
 junction ジャンクション
 jungle ジャングル
 junior ジュニア
 junk ジャンク
 junket ジャンケット
+junkie ジャンキー
 jury ジュリー
 just ジャスト
 justice ジャスティス
@@ -2981,21 +3264,27 @@ jute ジュート ジュト
 juvenile ジュブナイル ジュヴナイル ジュベナイル
 kaleidoscope カレイドスコープ カレードスコープ
 kangaroo カンガルー
+karat カラット
 kayak カヤック
 keel キール
 keg ケグ
 kelp ケルプ
 kennel ケンネル
 kerchief カーチフ
+kernel カーネル
 kerosene ケロシン
 ketchup ケチャップ
 kettle ケトル
+key キー
 keyboard キーボード
 keyhole キーホール
+keying キーイング
 keynote キーノート
 keystone キーストーン
+keyword キーワード
 khaki カーキ カーキー
 kick キック
+kickback キックバック
 kickoff キックオフ
 kid キッド
 kidnap キッドナップ
@@ -3011,10 +3300,12 @@ kind カインド
 king キング
 kingdom キングダム
 kiosk キオスク キヨスク
+kipper キッパー
 kiss キス キッス
 kit キット
 kitchen キッチン
 kite カイト
+kiwi キウイ キウィ キーウィ キーウィー
 knee ニー
 knickers ニッカーズ
 knife ナイフ
@@ -3023,8 +3314,9 @@ knit ニット
 knitting ニッティング
 knob ノブ ノッブ
 knock ノック
-knocker ノッカー
+knocking ノッキング
 knockout ノックアウト
+knot ノット
 know ノウ
 knowledge ナレッジ
 knuckle ナックル
@@ -3042,9 +3334,11 @@ lacy レーシー
 ladder ラダー
 ladle レードル
 lady レディー レディ
+lag ラグ
 lager ラガー
+laggard ラガード
 lagoon ラグーン
-lake レーク レイク
+lake レーク レイク レーキ
 lamb ラム
 lampoon ランプーン
 lance ランス
@@ -3052,9 +3346,12 @@ land ランド
 landing ランディング
 landmark ランドマーク
 landscape ランドスケープ
+lane レーン
 language ランゲージ
 lantern ランタン
+lap ラップ
 lapel ラペル
+lapping ラッピング
 lapse ラプス
 lard ラード
 large ラージ
@@ -3066,10 +3363,11 @@ late レイト
 lateral ラテラル
 latex ラテックス
 lath ラス
-lathe レース
 latitude ラチチュード ラティチュード
 lattice ラティス ラチス
+launch ローンチ ラウンチ ロンチ ランチ
 launcher ランチャー ランチャ
+laundering ロンダリング ローンダリング
 laundry ランドリー
 laurel ローレル
 lava ラーバ
@@ -3077,17 +3375,19 @@ lavatory ラバトリー
 lavender ラベンダー
 law ロー
 lawful ローフル
+lawn ローン
 layer レイヤー レイヤ
 layered レイヤード
 layman レイマン
 layout レイアウト
-lead リード インテル
-leader リーダー リーダ キャップ
+lead リード
+leader リーダー リーダ
 leadership リーダーシップ
 leading リーディング レディング
 leaf リーフ
 leaflet リーフレット
 league リーグ
+leak リーク
 leakage リーケージ
 leaky リーキー
 learning ラーニング
@@ -3099,31 +3399,34 @@ leaving リービング
 lecture レクチャー
 lecturer レクチャラー
 leech リーチ
+leek リーキ リーク
 left レフト
 leg レグ レッグ
 legacy レガシー レガシ
 legal リーガル
 legend レジェンド
-leggings レギンス
-legion レギオン
 legitimacy レジティマシー
 leisure レジャー
 lemonade レモネード
 length レングス
 lentil レンチル
+leopard レオパード
 leotard レオタード
-lesbian レズビアン レスビアン
+lesbian レズビアン
 lesson レッスン
 let レット
 letter レター
 letterhead レターヘッド
 lettering レタリング
+lettuce レタス
 level レベル
 leveling レベリング
 lever レバー
 leverage レバレッジ
 lexical レキシカル
+lexicon レキシコン
 liability ライアビリティー
+liaison リエゾン
 liar ライアー
 liberal リベラル
 liberalism リベラリズム
@@ -3139,9 +3442,11 @@ licorice リコリス
 lie ライ
 life ライフ
 lifeboat ライフボート
+lifeline ライフライン
 lifestyle ライフスタイル
 lifetime ライフタイム
-ligature リガチャー リガチャ
+lift リフト
+lifting リフティング
 light ライト
 lighter ライター ライタ
 lighthouse ライトハウス
@@ -3149,46 +3454,55 @@ lighting ライティング
 lightning ライトニング
 lightweight ライトウェイト ライトウエイト
 like ライク
+lilac ライラック
 lily リリー
 limbo リンボー
+lime ライム
 limelight ライムライト
 limerick リメリック
 limit リミット
 limitation リミテーション
 limited リミテッド
+limousine リムジン リムジーン
 line ライン
 lineage リネージ
 linear リニア
 linen リネン
 liner ライナー
-liniment リニメント
 lining ライニング
 link リンク
 linkage リンケージ
 linked リンクト
 linker リンカー リンカ
+links リンクス
 linoleum リノリウム
 lint リント
+lion ライオン
 lip リップ
 lipstick リップスティック
 liquid リキッド
 liquor リカー
 list リスト
 listen リッスン
+listener リスナー
 listening リスニング
 listing リスティング
 literacy リテラシー リテラシ
 literal リテラル
 literature リテラチャー リテラチュア
 little リトル
+live ライブ ライヴ
 liver リバー
 living リビング
 lizard リザード
 load ロード
+loader ローダー ローダ
 loading ローディング
-loafers ローファー ローファ ローファーズ
+loafers ローファーズ
 loam ローム
 loan ローン
+lob ロブ
+lobbing ロビング
 lobby ロビー
 lobbying ロビイング ロビーイング
 lobbyist ロビイスト
@@ -3201,6 +3515,7 @@ location ロケーション
 lock ロック
 locker ロッカー
 locket ロケット
+locking ロッキング
 locomotion ロコモーション
 locomotive ロコモーティブ ロコモティブ
 lodge ロッジ
@@ -3211,7 +3526,7 @@ logarithm ロガリズム
 logger ロガー
 logic ロジック
 logical ロジカル
-logo ロゴ ロゴタイプ
+logo ロゴ
 lollipop ロリポップ
 loneliness ロンリネス
 lonely ロンリー
@@ -3224,11 +3539,11 @@ lore ロアー
 loser ルーザー
 loss ロス
 lost ロスト
+lot ロット
 lotion ローション
-lottery ロッタリー ロッテリー ロト ロット
+lottery ロッタリー ロッテリー
 lotus ロータス
 loud ラウド
-loudness ラウドネス
 loudspeaker ラウドスピーカー
 lounge ラウンジ
 love ラブ ラヴ
@@ -3246,6 +3561,7 @@ lunatic ルナティック
 lunch ランチ
 luncheon ランチョン
 lunchtime ランチタイム
+lung ラング
 lunge ランジ
 lupine ルーピン
 lure ルアー
@@ -3253,17 +3569,17 @@ luster ラスター
 lute リュート
 luxury ラグジュアリー
 lyre ライアー ライア
+lyric リリック
 lyrical リリカル
-lyrics リリック
 macaroni マカロニ
 mace メース
 machete マチェット マシェット マチェーテ マチェテ マシェティ
 machine マシン マシーン
 machinery マシーナリー マシーナリ
 macho マッチョ
-macroscopic マクロスコピック
 mad マッド
 madness マッドネス
+magazine マガジン
 magenta マゼンタ マジェンタ
 magic マジック
 magical マジカル
@@ -3272,22 +3588,30 @@ magnet マグネット
 magnetic マグネチック マグネティック
 magnitude マグニチュード
 magnolia マグノリア
+magnum マグナム
 mahogany マホガニー
 maid メイド メード
+mail メール
 mailbox メールボックス
 mailing メーリング
 main メイン メーン
 mainframe メインフレーム
 mainstream メインストリーム
 maintenance メンテナンス メインテナンス
+maize メイズ
 majestic マジェスティック
 majesty マジェスティー マジェスティ
 major メジャー メージャー メイジャー
 majority マジョリティー
+maker メーカー
+makeup メイクアップ メークアップ メーキャップ メイキャップ
+making メイキング メーキング
 malaria マラリア
 male メール
+mall モール
+mallet マレット
 malt モルト
-man マン
+man マン メン
 manage マネージ
 management マネジメント マネージメント
 manager マネージャー マネジャー マネージャ
@@ -3296,39 +3620,42 @@ mandolin マンドリン
 maneuver マニューバー マニューバ マヌーバー マヌーバ
 mangrove マングローブ
 manhole マンホール
+mania マニア マニヤ
+maniac マニアック
 manicure マニキュア マニュキュア マニュキア
 manifesto マニフェスト
-manifold マニホールド
 manipulate マニピュレイト
 manipulation マニピュレーション
 mannequin マネキン
-manners マナー
+mannerism マンネリズム
 manpower マンパワー
-mantelpiece マンテルピース
 mantle マントル
+manual マニュアル
 manufacture マニュファクチュア マニュファクチャー
 manufacturer マニュファクチャラー マニファクチャラー
 manufacturing マニュファクチャリング マニュファクチュアリング
 manuscript マニュスクリプト
 map マップ
 maple メープル メイプル
+mapping マッピング
 marathon マラソン
 marble マーブル
 march マーチ
-margarine マーガリン
+marching マーチング
 margin マージン
 marginal マージナル
 marigold マリーゴールド
 marina マリーナ
 marine マリン マリーン
 mark マーク
+marker マーカー
 market マーケット
 marketing マーケティング
 marketplace マーケットプレイス
 marking マーキング
 marmalade マーマレード ママレード
 maroon マルーン
-marriage マリッジ
+marriage マリアージュ マリッジ
 marshal マーシャル
 marshmallow マシュマロ
 mart マート
@@ -3338,28 +3665,38 @@ mascara マスカラ
 mascot マスコット
 masculine マスキュリン
 mash マッシュ
+mask マスク
 masking マスキング
-masochist マゾヒスト
+masquerade マスカレード
 mass マス マッス
 massage マッサージ マサージュ
 massive マッシブ
+mast マスト
+master マスター マスタ
+mastering マスタリング
 masterpiece マスターピース
 masturbation マスターベーション
 mat マット
+match マッチ
 matching マッチング
-mate メート メイト
+matchmaker マッチメーカー
+mate メート メイト マテ
 material マテリアル マティリアル
 materialism マテリアリズム
 materialist マテリアリスト
+maternity マタニティ マタニティー
 matrix マトリックス マトリクス
+matte マット
 matter マター
 mattress マットレス
 mature マチュア
+maul モール
 mauve モーブ
 maxim マキシム マクシム
 maximum マキシマム マクシマム
 mayor メイヤー
 me ミー
+meal ミール
 meander メアンダー
 meaning ミーニング
 measure メジャー
@@ -3372,15 +3709,16 @@ mechanism メカニズム
 medal メダル
 medallion メダリオン
 media メディア
-median メディアン メジアン
+median メディアン
 mediator メディエイタ
 medical メディカル
 medicine メディスン メディシン
 meditation メディテーション
+medium ミディアム メディウム ミーディアム メディアム
 medley メドレー
 meeting ミーティング
 megabyte メガバイト
-megaphone メガホン メガフォン
+megaphone メガフォン
 megaton メガトン
 melancholy メランコリー
 mellow メロウ メロー
@@ -3388,12 +3726,14 @@ melodic メロディック
 melodious メロディアス
 melodrama メロドラマ
 melody メロディー メロディ
+melon メロン
 melt メルト
 melting メルティング
 member メンバー メンバ
 members メンバーズ
 membership メンバーシップ メンバシップ
 membrane メンブレン メンブレイン メンブレーン
+memo メモ
 memorable メモラブル
 memorandum メモランダム
 memorial メモリアル
@@ -3410,9 +3750,11 @@ mentoring メンタリング
 menu メニュー
 merchandising マーチャンダイジング
 merchant マーチャント
+mercury マーキュリー
 merely ミアリー ミアリ
 merge マージ
 meridian メリディアン
+merit メリット
 mermaid マーメイド
 merry メリー
 mesh メッシュ メシュ
@@ -3434,18 +3776,16 @@ metropolis メトロポリス
 metropolitan メトロポリタン
 microcode マイクロコード
 microcomputer マイクロコンピューター マイクロコンピュータ
-microfiche マイクロフィッシュ
 microfilm マイクロフィルム
-microphone マイクロフォン マイクロホン
+micrometer マイクロメーター マイクロメータ ミクロメーター ミクロメータ
+microphone マイクロフォン
 microprocessor マイクロプロセッサー マイクロプロセッサ
 microscope マイクロスコープ
 microscopic マイクロスコピック ミクロスコピック
-microsecond マイクロセカンド
 microwave マイクロウェーブ マイクロウエーブ
 middle ミドル
 midget ミゼット
 midnight ミッドナイト
-midriff ミドリフ
 midsummer ミッドサマー
 migrate マイグレート
 migration マイグレーション
@@ -3454,21 +3794,24 @@ mileage マイレージ
 milestone マイルストーン
 military ミリタリー
 milk ミルク
-milker ミルカー
 mill ミル
 milling ミーリング
 million ミリオン
 millionaire ミリオネア
 millisecond ミリセカンド ミリセコンド
-mime パントマイム マイム
+mime マイム
 mimic ミミック
+mimicry ミミクリー ミミクリ
+mincemeat ミンスミート
 mind マインド
 mine マイン
+miner マイナー
 mineral ミネラル
 miniature ミニチュア
-minibus マイクロバス ミニバス
+minibus ミニバス
 minimal ミニマル
 minimalism ミニマリズム
+minimalist ミニマリスト
 minimum ミニマム
 mining マイニング
 minion ミニオン
@@ -3478,19 +3821,19 @@ minor マイナー
 minority マイノリティー マイノリティ
 minstrel ミンストレル
 minus マイナス
+minutes ミニッツ
 miracle ミラクル
 mirage ミラージュ
 mirror ミラー
 mirroring ミラーリング
-misdirection ミスディレクション
 misfortune ミスフォーチュン
 misleading ミスリーディング
 misprint ミスプリント
 missile ミサイル
 mission ミッション
-misspelling ミススペル ミススペリング
+misspelling ミススペリング
 mist ミスト
-mistake ミス ミステイク ミステーク
+mistake ミステイク ミステーク
 mistress ミストレス
 misty ミスティー
 misunderstanding ミスアンダスタンディング
@@ -3498,16 +3841,18 @@ mitt ミット
 mitten ミトン
 mix ミックス
 mixed ミクスト ミックスト
+mixer ミキサー
 mixing ミキシング
 mixture ミクスチャー ミクスチュア
 mnemonic ニーモニック
 mob モブ モッブ
-mobbing モビング
 mobile モバイル モービル モビール モビル
 mobility モビリティー モビリティ
 moccasin モカシン
 modal モーダル
+mode モード
 model モデル
+modeling モデリング
 moderate モデレート
 moderation モデレーション
 moderator モデレーター モデレータ
@@ -3522,10 +3867,11 @@ module モジュール
 mohair モヘア モヘヤ
 moist モイスト
 moisture モイスチャー
-mold モールド モール
+mold モールド
 molding モールディング
-mole モール
+mole モーレ モール
 molecular モレキュラー
+moment モーメント モメント
 momentum モーメンタム モメンタム モウメンタム
 monarch モナーク
 monarchy モナーキー
@@ -3533,6 +3879,7 @@ monetarism マネタリズム
 monetary マネタリー
 money マネー
 mongoose マングース
+monitor モニター モニタ
 monitoring モニタリング
 monk モンク
 monkey モンキー
@@ -3548,11 +3895,11 @@ monotonous モノトナス
 monsoon モンスーン
 monster モンスター
 month マンス
+monthly マンスリー
 monument モニュメント
 monumental モニュメンタル
 mood ムード
 moon ムーン
-mooning ムーニング
 moonlight ムーンライト
 moor ムーア ムア
 moose ムース
@@ -3561,13 +3908,9 @@ moped モペット モペッド
 morale モラール
 moralist モラリスト
 morality モラリティー
-morals モラル
 moratorium モラトリアム
-morgue モルグ
 morning モーニング
-morphology モルフォルジー モルホルジー
 mortal モータル
-mortar モルタル
 mortgage モーゲージ モーゲッジ モアゲージ
 mosaic モザイク
 mosque モスク
@@ -3577,17 +3920,22 @@ motel モーテル モテル
 mother マザー
 mothering マザリング マザーリング
 motion モーション
-motivation モチベーション モティベーション モチベート
+motivate モチベート
+motivation モチベーション モティベーション
 motor モーター モータ
 motorbike モーターバイク
 motorcycle モーターサイクル
 motorist モータリスト
 motto モットー
+mound マウンド
 mount マウント
 mountain マウンテン
+mounting マウンティング
+mouse マウス
 mouth マウス
 mouthpiece マウスピース
 move ムーブ
+movement ムーブメント ムーヴメント
 mover ムーバー
 movie ムービー
 moving ムービング
@@ -3595,13 +3943,14 @@ mower モーア
 mud マッド
 muff マフ
 muffin マッフィン マフィン
+muffler マフラー
 mug マグ
 mulch マルチ
 mulching マルチング
+mule ミュール
 multinational マルチナショナル
 multiple マルチプル マルティプル
-multiprocessing マルチプロセッシング
-multitasking マルチタスキング マルチタスク
+multitasking マルチタスキング
 murder マーダー
 muscle マッスル
 museum ミュージアム
@@ -3610,6 +3959,7 @@ musical ミュージカル
 musician ミュージシャン
 musk ムスク
 musket マスケット
+must マスト
 mustang ムスタング マスタング
 mustard マスタード
 mutant ミュータント
@@ -3626,7 +3976,9 @@ mythology ミソロジー
 nail ネイル ネール
 naked ネイキッド
 name ネーム
+naming ネーミング
 napalm ナパーム
+napkin ナプキン
 narration ナレーション
 narrative ナラティブ ナラティヴ
 narrator ナレーター
@@ -3644,32 +3996,31 @@ naturalization ナチュラリゼーション
 naturalize ナチュラライズ
 nature ネイチャー ネーチャー
 nautical ノーティカル
-navigation ナビゲーション ナビゲート
+navel ネーブル
+navigation ナビゲーション
 navigator ナビゲーター ナビゲータ
 navy ネイビー ネービー
 nay ナーイ
 neat ニート
 nebula ネビュラ
 neck ネック
-neckerchief ネッカチーフ
-necking ネッキング
 necklace ネックレス
-neckline ネックライン
-necktie ダービータイ
-necrophilia ネクロフィリア
+necktie ネクタイ
 nectar ネクター
-nectarine ネクタリン
 need ニード
 needle ニードル
 needs ニーズ
 negate ネゲート
+negative ネガティブ
 neglect ネグレクト
-negotiation ネゴシエーション ネゴシエート
+negotiation ネゴシエーション
 negotiator ネゴシエーター ネゴシエイター ネゴシエータ
+neon ネオン
 nepotism ネポティズム
 nervous ナーバス
 nest ネスト
 nesting ネスティング
+net ネット
 netting ネッティング
 network ネットワーク
 networking ネットワーキング
@@ -3682,49 +4033,50 @@ never ネバー
 new ニュー
 newbie ニュービー
 newcomer ニューカマー
-news ニュース
-newscaster ニュースキャスター
-newsletter ニュースレター ニューズレター
-newspaper ニュースペーパー
-newsstand ニューススタンド
+newsletter ニューズレター
+newton ニュートン
 next ネクスト
 nibble ニブル
 nice ナイス
+niche ニッチ
 nick ニック
+nickel ニッケル
 nickname ニックネーム
 nicotine ニコチン
 night ナイト
-nightclub クラブ ナイトクラブ
-nightgown ナイトガウン
+nightclub ナイトクラブ
+nightingale ナイチンゲール ナイティンゲール ナイチンゲイル ナイティンゲイル
 nightmare ナイトメア
 nine ナイン
+ninth ナインス
 nipple ニップル
+nit ニト
 no ノー
 noble ノーブル
 nobleman ノーブルマン
 node ノード
 noise ノイズ
-noiseless ノイズレス
-noisiness ノイジネス
 noisy ノイジー
 nomad ノマド ノーマッド ノマッド
 nominal ノミナル
-nomination ノミネート ノミネーション
-nonchalant ノンチャラン
+nomination ノミネーション
 nonfiction ノンフィクション
 nonsense ナンセンス
+nonstop ノンストップ
 noodle ヌードル
+nook ヌック ヌーク
 noon ヌーン
-norm ノルム ノーム
+norm ノーム
 normal ノーマル
 north ノース
 northwestern ノースウェスタン
+nose ノーズ
 nostalgia ノスタルジア
 nostalgic ノスタルジック
 not ノット
 notation ノーテーション
 notch ノッチ
-note メモ
+note ノート
 notebook ノートブック
 nothing ナッシング
 notorious ノートリアス
@@ -3738,24 +4090,25 @@ nozzle ノズル
 nuclear ニュークリア ニュークレア ヌークリア ヌークレア
 nucleus ニュクリアス
 nude ヌード
+nugget ナゲット
 nuisance ニューサンス
 null ヌル ナル
 number ナンバー
 numbering ナンバリング ナンバーリング
 nurse ナース
+nursery ナーサリー
+nut ナット
 nutcracker ナットクラッカー
-nutmeg ナツメグ ナツメッグ ナッツメッグ
 nuts ナッツ
 nylon ナイロン
-nymph ニンフ
 oak オーク
 oaks オークス
-oar オール
 oasis オアシス
 oatmeal オートミール
 object オブジェクト
 objection オブジェクション
 obligation オブリゲーション
+observable オブザーバブル
 observer オブザーバー オブザーバ
 obsession オブセッション
 obstruction オブストラクション
@@ -3764,6 +4117,7 @@ occupied オキュパイド
 occupy アキュパイ
 ocean オーシャン
 octopus アクトパス オクトパス
+odds オッズ
 ode オード
 odometer オドメーター
 of オブ
@@ -3776,19 +4130,22 @@ official オフィシャル
 offset オフセット
 offshore オフショア
 ogre オーガ オーガー
+ohm オーム
 oil オイル
 oily オイリー
+okra オクラ
 old オールド
+omelet オムレット
 omen オーメン
-omitting オミット
 omnibus オムニバス
+onion オニオン
 only オンリー
 onward オンワード
 opal オパール
 opaque オペーク
+open オープン
 opener オープナー
 opening オープニング
-operand オペランド
 operating オペレーティング
 operation オペレーション
 operational オペレーショナル
@@ -3799,7 +4156,7 @@ opium オピウム
 opossum オポッサム
 opportunist オポチュニスト
 opportunity オポチュニティー オポチュニティ
-opposition オポジション アゲンスト アゲインスト アゲィンスト
+opposition オポジション
 optic オプティック
 optical オプティカル オプチカル
 optician オプティシャン
@@ -3812,18 +4169,19 @@ optional オプショナル
 opus オーパス
 oracle オラクル
 oral オーラル
+orange オレンジ
 orchard オーチャード
 orchestra オーケストラ
 orchestration オーケストレーション
 orchid オーキッド
+order オーダー
 ordinary オーディナリー
 organic オーガニック
-organism オーガニズム オルガニズム
-organist オルガニスト
+organism オーガニズム
 organization オーガニゼーション オーガナイゼーション
-organize オーガナイズ オルガナイズ
-organizer オーガナイザー オルガナイザー
-orgasm オーガズム オルガスム
+organize オーガナイズ
+organizer オーガナイザー
+orgasm オーガズム
 orgy オージー
 orientation オリエンテーション
 oriented オリエンテッド
@@ -3837,6 +4195,7 @@ orphan オーファン
 orthodox オーソドックス
 orthography オーソグラフィー
 oscilloscope オシロスコープ
+ostrich オストリッチ オーストリッチ
 otherwise アザワイズ
 ouch アウチ イタタ イタッ イテッ
 ounce オンス
@@ -3844,13 +4203,16 @@ ours アウアズ
 ourselves アウアセルブズ
 oust アウスト
 outbound アウトバウンド
+outbreak アウトブレイク アウトブレーク
 outburst アウトバスト
 outcome アウトカム
-outdoors アウトドア アウトドアズ
+outdoors アウトドアズ
 outer アウター アウタ
 outfield アウトフィールド
 outfit アウトフィット
+outing アウティング
 outlaw アウトロー
+outlet アウトレット
 outline アウトライン
 outlook アウトルック
 output アウトプット
@@ -3862,16 +4224,15 @@ outward アウトワード
 oval オーバル
 ovation オベーション
 oven オーブン
+over オーバー
 overall オーバーオール
 overcharge オーバーチャージ
 overcoat オーバーコート
-overdose オーバードーズ
 overdraft オーバードラフト
-overhand オーバーハンド
+overflow オーバーフロー
 overhang オーバーハング
 overhaul オーバーホール
 overhead オーバーヘッド オーバヘッド
-overheating オーバーヒート
 overkill オーバーキル
 overlap オーバーラップ
 overlay オーバーレイ オーバレイ
@@ -3879,27 +4240,28 @@ overload オーバーロード
 overloading オーバーローディング
 overnight オーバーナイト
 overpass オーバーパス
-overprint オーバープリント
 override オーバーライド
-oversampling オーバーサンプリング
+overrun オーバーラン
 overshoot オーバーシュート
 overtime オーバータイム
 overture オーバーチュア
 overweight オーバーウェイト オーバーウエイト オーバーウエート オーバーウェート
 overwork オーバーワーク
-overwriting オーバーライト
 owl アウル
+owner オーナー オーナ
 ownership オーナーシップ
 oxide オキシド オキサイド
 oxygen オキシジェン
 oyster オイスター
 ozone オゾン
-pace ピッチ ペース
+pace ペース
 pacemaker ペースメーカー ペースメーカ
 pack パック
 package パッケージ
 packaging パッケージング
 packer パッカー
+packet パケット
+packing パッキング
 pad パッド
 padding パディング パッディング
 paddle パドル
@@ -3908,6 +4270,7 @@ paddock パドック
 pageant ページェント
 pager ページャー ページャ
 pagination ページネーション
+paging ページング
 pagoda パゴダ
 paid ペイド
 pail ペール
@@ -3917,24 +4280,29 @@ painter ペインター
 painting ペインティング
 pair ペア ペアー
 pairing ペアリング
-pajamas パジャマ
 palace パレス パラス
 pale ペール
 palette パレット
-pamphlet パンフレット
+palm パーム
 pan パン
 pancake パンケーキ
 panda パンダ
+pane ペイン ペーン
 panel パネル
 panic パニック
+panning パンニング
 panorama パノラマ
+pansy パンジー
 panther パンサー
-panties パンティー パンティ
+pantomime パントマイム
 pantry パントリー
+pants パンツ
+papaya パパイヤ パパイア
 paper ペーパー
 paperback ペーパーバック
 paperweight ペーパーウェイト ペーパーウエイト
 paperwork ペーパーワーク
+paprika パプリカ
 par パー
 parachute パラシュート
 parade パレード
@@ -3952,10 +4320,11 @@ paraphrase パラフレーズ
 parasite パラサイト
 parchment パーチメント
 parent ペアレント
-parentheses パーレン
 parents ペアレンツ
 parish パリッシュ パリシ
 parity パリティ パリティー
+park パーク
+parka パーカー パーカ パッカー
 parking パーキング
 parkway パークウェイ
 parliament パーラメント
@@ -3963,32 +4332,39 @@ parlor パーラー
 parody パロディー パロディ
 parsec パーセク
 parser パーサー パーサ
-parsing パージング パース
-part パーツ パート
+parsley パセリ
+part パート
 partial パーシャル
 participation パーティシペーション
 particle パーティクル
 parting パーティング
 partition パーティション パーテーション
 partitioning パーティショニング
+partner パートナー
 partnership パートナーシップ
-passage パッセージ
+party パーティー パーティ
+pass パス
+passage パサージュ パッサージュ パッセージ
 passenger パッセンジャー
+passing パッシング
 passion パッション
 passionate パッショネート
 passive パッシブ
 passport パスポート
 password パスワード
+paste ペースト
 pastel パステル
 pastoral パストラル
 pastry ペストリー ペイストリー ペーストリー
 pat パット
+patch パッチ
 patchwork パッチワーク
 patent パテント
 paternalism パターナリズム
 paternity パタニティ パタニティー
+path パス
 pathetic パセティック
-pathos ペーソス パトス
+pathos ペーソス
 patience ペイシェンス ペーシェンス
 patient ペイシェント ペーシェント
 patio パティオ
@@ -3996,23 +4372,30 @@ patriarch パトリアルク
 patriot パトリオット
 patriotism パトリオティズム
 patrol パトロール
+patron パトロン
 pattern パターン パタン
 patting パッティング
+patty パティ
 pause ポーズ
 pavement ペーブメント
 pavilion パビリオン
+pawn ポーン
 pay ペイ
+payload ペイロード
 payment ペイメント
+payoff ペイオフ
 payroll ペイロール
 peace ピース
 peaceful ピースフル
 peach ピーチ
 peacock ピーコック
 peak ピーク
-peanut ピーナッツ ピーナツ
 pearl パール
+pearling パーリング
 peasant ペザント
 peat ピート
+pecan ピーカン ペカン
+peck ペック
 pedal ペダル
 pedant ペダント
 pedantic ペダンティック ペダンチック
@@ -4031,13 +4414,13 @@ pellet ペレット ペリット
 pen ペン
 penalty ペナルティー ペナルティ
 pencil ペンシル
+pendant ペンダント
 pending ペンディング
-pendulum ペンデュラム ペンジュラム
+pendulum ペンジュラム
 penguin ペンギン
 penicillin ペニシリン
-penknife ペンナイフ
-penmanship ペンマンシップ
-pennant ペナント チャンピオンフラッグ
+pennant ペナント
+pension ペンション
 penthouse ペントハウス
 people ピープル
 pepper ペッパー ペパー
@@ -4045,12 +4428,15 @@ peppermint ペパーミント ペパミント
 percent パーセント
 percentage パーセンテージ
 perception パーセプション
+perch パーチ
 percolator パーコレーター パーコレータ
 percussion パーカッション
 perfect パーフェクト
 perforation パーフォレーション
+performance パフォーマンス
 performer パフォーマー
-perfume パフューム パヒューム
+perfume パフューム
+period ピリオド
 periodic ピリオディック
 peripheral ペリフェラル
 periscope ペリスコープ
@@ -4073,20 +4459,23 @@ pewter ピューター
 phantom ファントム
 pharmacy ファーマシー
 phase フェーズ フェイズ
+phasing フェイジング
 phenomena フェノミナ フェノメナ
 phenomenon フェノメノン
 philanthropy フィランソロピー フィランスロピー
 philosopher フィロソファー
 philosophy フィロソフィー
-phone フォーン フォン ホーン
+phoenix フェニックス
+phone フォーン フォン
 phonetics フォネティックス
 phonics フォニックス
 phonograph フォノグラフ
 phony フォニー
+phosphorus フォスフォラス
 photo フォト
 photogenic フォトジェニック
 photograph フォトグラフ
-photographer カメラマン フォトグラファー
+photographer フォトグラファー
 photography フォトグラフィー フォトグラフィ
 photon フォトン
 photosynthesis フォトシンセシス
@@ -4095,11 +4484,14 @@ phrasing フレイジング フレージング
 physical フィジカル
 physics フィジックス
 physiology フィジオロジー
+physique フィジーク
 pianist ピアニスト
+piano ピアノ
 pick ピック
 picket ピケット
 picketing ピケッティング
-pickles ピクルス
+picking ピッキング
+pickup ピックアップ
 picnic ピクニック
 picture ピクチャー ピクチャ
 picturesque ピクチャレスク
@@ -4110,17 +4502,20 @@ pier ピアー
 piercing ピアッシング ピアシング
 pig ピッグ
 pigeon ピジョン
+piggyback ピギーバック
 pigment ピグメント
+pike パイク
+pile パイル
 pill ピル
 pilling ピリング
 pillow ピロー
-pillowcase ピローケース ピロケース
 pilot パイロット
+pin ピン
 pinch ピンチ
-pincushion ピンクッション
+pine パイン
+pineapple パイナップル パインアップル
 pinion ピニオン
 pink ピンク
-pinking ピンキング
 pinnacle ピナクル
 pinpoint ピンポイント
 pint パイント
@@ -4128,13 +4523,17 @@ pioneer パイオニア
 pipe パイプ
 pipeline パイプライン
 piping パイピング
-pirate パイレーツ パイレート
+pirate パイレート
+pirates パイレーツ
 pistol ピストル
 piston ピストン
+pit ピット
+pitch ピッチ
 pitcher ピッチャー
 pitchfork ピッチフォーク
 pitching ピッチング
 pivot ピボット ピヴォット
+pixie ピクシー
 placard プラカード
 place プレース プレイス
 placement プレースメント プレイスメント
@@ -4144,17 +4543,20 @@ plan プラン
 plane プレーン プレイン
 planet プラネット
 planetarium プラネタリウム
-planing プレーニング
 plankton プランクトン
 planner プランナー
 planning プランニング
+plant プラント
 plantain プランテーン プランテイン プランテン
 plantation プランテーション
+planter プランター
+plaque プラーク
 plasma プラズマ
 plaster プラスター プラスタ
 plastic プラスチック プラスティック
+plate プレート
 plateau プラトー
-platform プラットホーム プラットフォーム
+platform プラットフォーム
 platter プラター プラッター プラタ プラッタ
 play プレイ プレー
 playback プレイバック プレーバック
@@ -4162,18 +4564,21 @@ player プレイヤー プレーヤー
 playful プレイフル
 playground プレイグラウンド プレーグラウンド
 plaza プラザ プラーザ
+plea アピール アッピール
 please プリーズ
 pleasure プレジャー プレジャ
-pleat プリーツ
+pleats プリーツ
 pledge プレッジ
-pliers プライヤー プライヤ
+plot プロット
 plotter プロッタ プロッター
+plow プラウ
 plug プラグ
 plum プラム
 plume プルーム プリューム
 plunger プランジャー プランジャ
 plus プラス
 plush プラッシュ
+plutonium プルトニウム
 plywood プライウッド
 pneumatic ニューマチック ニューマティック
 pocket ポケット
@@ -4185,8 +4590,10 @@ poet ポエット ポエト
 poetic ポエティック
 poetical ポエティカル
 poetry ポエトリー
+point ピント ポイント
+pointer ポインタ ポインター
 pointing ポインティング
-poise ポイズ
+poise ポアズ ポイズ
 poison ポイズン
 poker ポーカー
 polar ポーラー ポーラ
@@ -4204,6 +4611,7 @@ political ポリティカル
 politician ポリティシャン
 politics ポリティクス ポリティックス
 polka ポルカ
+poll ポール
 polling ポーリング
 pollution ポリューション
 polo ポロ
@@ -4211,12 +4619,13 @@ polygon ポリゴン
 polyp ポリープ ポリプ
 polytechnic ポリテクニック
 pond ポンド
-pontoon ポンツーン
 pony ポニー
 poodle プードル
+pool プール
 poor プア プアー プーア
 pop ポップ
 popcorn ポップコーン
+poplar ポプラ
 poppy ポピー ポッピー
 popular ポピュラー
 popularity ポピュラリティー ポピュラリティ
@@ -4224,7 +4633,6 @@ population ポピュレーション
 porcelain ポーセリン ポーセレン ポースレン
 porch ポーチ
 pork ポーク
-pornography ポルノグラフィー ポルノグラフィ
 porridge ポリッジ
 port ポート
 portability ポータビリティ ポータビリティー
@@ -4236,24 +4644,29 @@ porting ポーティング
 portion ポーション
 portrait ポートレート ポートレイト
 pose ポーズ
-posing モック ポージング
+posing ポージング
 position ポジション
 positioning ポジショニング
+positive ポジティブ ポジティヴ
 positivism ポジティビズム
+possession ポゼッション
 possibility ポシビリティ ポッシビリティ
 possible ポシブル ポッシブル
 possum ポッサム
-postbox ポスト
+post ポスト
 postcard ポストカード
 poster ポスター ポスタ
+posting ポスティング
 postman ポストマン
 postmaster ポストマスタ ポストマスター
 postscript ポストスクリプト
+pot ポット
 potato ポテト
 potential ポテンシャル
 pothole ポットホール
 potion ポーション
 pouch ポーチ パウチ
+pound パウンド
 powder パウダー
 powdery パウダリー
 power パワー
@@ -4262,32 +4675,33 @@ powerhouse パワーハウス
 practical プラクティカル
 practice プラクティス
 pragmatic プラグマティック プラグマチック
-pragmatics プラグマティックス
 pragmatism プラグマティズム プラグマチズム
 prairie プレーリー
 prawn プローン プラウン
-praying プレー プレイ
+prayer プレー プレイ
 preamble プリアンブル
 precious プレシャス
 precision プレシジョン プリシジョン
-prefab プレハブ
 preference プレファレンス プリファレンス
 prefix プレフィックス プレフィクス プリフィックス
 prelude プレリュード
 premise プレミス
 premium プレミアム
-presence プレゼンツ プレゼンス
+prepaid プリペイド プリペード
+presence プレゼンス
 present プレゼント
 presentation プレゼンテーション
 presenter プレゼンター
+presents プレゼンツ
+preserve プリザーブ プレザーブ
+preserved プリザーブド
 president プレジデント
-pressing プレス プレッシング
+press プレス
+pressing プレッシング
 pressure プレッシャー
 prestige プレスティージ プレステージ
 pretty プリティ プリティー
-pretzel プレッツェル
 preview プレビュー
-previewer プレビューア
 price プライス
 priceless プライスレス
 pricing プライシング
@@ -4324,6 +4738,7 @@ process プロセス
 processing プロセッシング プロセシング
 processor プロセッサー プロセッサ
 prodigy プロディジー
+producer プロデューサー プロデューサ
 product プロダクト
 production プロダクション
 productive プロダクティブ プロダクティヴ
@@ -4335,7 +4750,9 @@ professor プロフェッサー
 profile プロファイル
 profiling プロファイリング
 profit プロフィット
+program プログラム
 programmable プログラマブル
+programmer プログラマー プログラマ
 programming プログラミング
 progress プログレス
 progressive プレグレッシブ プログレッシブ プログレッシヴ
@@ -4350,6 +4767,8 @@ promise プロミス
 promising プロミッシング
 promotion プロモーション
 prompt プロンプト
+proof プルーフ
+prop プロップ
 propaganda プロパガンダ
 propagation プロパゲーション
 propeller プロペラ
@@ -4362,7 +4781,8 @@ prospect プロスペクト
 prospective プロスペクティブ
 prostitute プロスティテュート プロスティチュート
 protected プロテクテッド
-protection プロテクション プロテクト
+protection プロテクション
+protector プロテクター
 protein プロテイン
 protest プロテスト
 protocol プロトコル プロトコール
@@ -4371,7 +4791,7 @@ prototype プロトタイプ
 proud プラウド
 providence プロヴィデンス プロビデンス
 province プロビンス
-provisioning プロビジョニング プロビショニング
+provisioning プロビジョニング
 proxy プロキシ プロクシ
 prune プルーン
 psychedelic サイケデリック
@@ -4382,40 +4802,45 @@ psychologist サイコロジスト
 psychology サイコロジー
 psychopath サイコパス
 psychotherapy サイコセラピー
-pub パブ パブリックハウス
+pub パブ
 public パブリック
 publicity パブリシティー パブリシティ
 publisher パブリッシャー パブリッシャ
-publishing パブリッシュ
+publishing パブリッシング
 puck パック
 pudding プディング
+puff パフ
 pull プル
 pulley プーリー プーリ
-pullover プルオーバー
 pulp パルプ
 pulse パルス
-puma プーマ
+puma プーマ ピューマ
 pumice パミス パマス
 pumping パンピング ポンピング
 pumpkin パンプキン
 pumps パンプス
+punch パンチ ポンチ
 punching パンチング
 punctual パンクチュアル
 punctuation パンクチュエーション
-puncture パンク
 punishment パニッシュメント
+punk パンク
+punt パント
 puppet パペット
 puppy パピー
 pure ピュア ピュアー
+purge パージ
 purple パープル
 purpose パーパス
 purse パース
 pursuit パシュート
 push プッシュ
 pusher プッシャー
+pushing プッシング
 pussy プッシー
 putt パット
 putter パター
+putting パッティング
 putty パテ
 puzzle パズル
 pyramid ピラミッド
@@ -4433,8 +4858,9 @@ quarterback クォーターバック クオーターバック
 quarterly クォータリー クオータリー
 quartz クォーツ クオーツ
 queen クイーン クィーン
-quenching クエンチ
+queer クィア クイア
 query クエリ クエリー
+quest クエスト
 question クエスチョン クエッション
 queue キュー
 queuing キューイング
@@ -4459,19 +4885,17 @@ rack ラック
 racket ラケット
 racking ラッキング
 radar レーダー レーダ
-radial ラジアル
-radiance ラディアンス ラジアンス
-radiation ラジエーション ラディエーション
-radiator ラジエーター ラジエター ラジエータ ラジエタ
-radical ラジカル ラディカル
-radio ラジオ
+radiance ラディアンス
+radiation ラディエーション
+radical ラディカル
 radish ラディッシュ
-radius ラジウス
 raft ラフト
 rafting ラフティング
 rag ラグ
+ragged ラギッド
 ragtime ラグタイム
 raid レイド
+rail レール
 railroad レールロード
 railway レールウェイ レールウエイ レールウェー レールウエー
 rain レーン レイン
@@ -4493,7 +4917,10 @@ rap ラップ
 rape レイプ
 rapist レイピスト
 rare レア レアー
+rarity レアリティ レアリティー
 raspberry ラズベリー
+raster ラスター ラスタ
+rat ラット
 rate レート レイト
 rating レーティング レイティング
 ratio レシオ
@@ -4501,12 +4928,14 @@ rational ラショナル
 rationalization ラショナリゼーション
 rave レイブ
 razor レザー レーザー
+reach リーチ
 reaction リアクション
-reactor リアクター リアクトル
+reactor リアクター
 readability リードビリティー リーダビリティ リーダビリティー
 readable リーダブル
+reader リーダー リーダ
 readiness レディネス
-reading リーディング リード
+reading リーディング
 ready レディ レディー
 real リアル
 realism リアリズム
@@ -4518,6 +4947,7 @@ ream リーム
 reaper リーパー
 rear リア リヤ
 reason リーズン
+reasonable リーズナブル
 rebate リベート
 rebel レベル
 rebellion レベリオン レベリヨン
@@ -4526,6 +4956,7 @@ reborn リボーン
 rebound リバウンド
 rebuild リビルド
 rebuilt リビルト
+recall リコール
 receipt レシート
 receiver レシーバー レシーバ
 reception レセプション リセプション
@@ -4535,12 +4966,13 @@ recipe レシピ
 recipient レシピエント
 recital リサイタル
 recitation レシテーション
+reclining リクライニング
 recognition レコグニション
 recoil リコイル
 recommendation リコメンデーション レコメンデーション
-recommending レコメンド リコメンド
-recompile リコンパイル
 reconstruction リコンストラクション
+record レコード
+recorder レコーダー レコーダ リコーダー リコーダ
 recording レコーディング
 recover リカバー
 recovery リカバリー リカバリ
@@ -4548,9 +4980,8 @@ recreation レクリエーション レクレーション レクリェーショ�
 recruit リクルート
 recruiting リクルーティング
 recurrent リカレント
-recursion リカージョン
 recursive リカーシブ
-recycling リサイクル リサイクリング
+recycling リサイクリング
 red レッド
 redirect リダイレクト
 redirection リダイレクション
@@ -4558,67 +4989,70 @@ redo リドゥ リドゥー
 redress リドレス
 reduction リダクション
 redundancy リダンダンシー
+reed リード
 reef リーフ
 reel リール
 referee レフェリー レフリー
 reference レファレンス リファレンス
 referendum レファレンダム
 refill リフィル レフィル
-refinement リファイン
 reflect リフレクト
 reflection リフレクション
 reflective リフレクティブ
 reflector リフレクター レフレクター リフレクタ レフレクタ
 reflex レフレックス リフレックス
+reformer リフォーマー
 refrain リフレーン リフレイン
-refreshment リフレッシュ リフレッシュメント
+refresh リフレッシュ
+refreshment リフレッシュメント
 refugee レフュジー
 refund リファンド
 regalia レガリア
 regatta レガッタ
 regime レジーム
+regimental レジメンタル
 region リージョン
 regional リージョナル
+register レジスター レジスタ
+registrar レジストラ
 registration レジストレーション
+registry レジストリ レジストリー
+regression リグレッション レグレッション
 regret リグレット
 regular レギュラー
 regulation レギュレーション レギュラシオン
 rehabilitation リハビリテーション
 rehearsal リハーサル
 reimbursement リインバースメント
-reinforcement リインホースメント リインフォースメント
-rejection リジェクト
+reinforcement リインフォースメント
 relation リレーション
 relational リレーショナル
 relationship リレーションシップ
-relaxation リラクゼーション リラクセーション
-relaxing リラックス
+relaxation リラクセーション
 relay リレー
+release リリース
 reliability リライアビリティー
 relic レリック
-relief リリーフ
-relocatable リロケータブル
+relief リリーフ レリーフ
 relocate リロケート
 relocation リロケーション
+reluctance リラクタンス
 remake リメイク リメーク
 remark リマーク
 remedial リメディアル
-reminder リマインダー
-reminding リマインド
+reminder リマインダー リマインド
 reminiscence レミニセンス
+remote リモート
 removable リムーバブル
-removing リムーブ
 rename リネーム
 rendering レンダリング
+rendezvous ランデブー ランデヴー
 renewable リニューアブル
 renewal リニューアル
-renewing リニュー
 renovation リノベーション
 rental レンタル
 repair リペア
 repeat リピート
-repertoire レパートリー
-replacement リプレース リプレイス
 replay リプレイ リプレー
 replica レプリカ
 replicate リプリケート
@@ -4637,8 +5071,8 @@ republic リパブリック
 republican リパブリカン
 reputation レピュテーション
 request リクエスト
-rerouting リルート
 resale リセール
+rescheduling リスケジューリング
 rescue レスキュー
 research リサーチ
 researcher リサーチャー
@@ -4646,12 +5080,11 @@ reservation リザベーション
 reserve リザーブ レザーブ
 reset リセット
 residence レジデンス
+resident レジデント
 residential レジデンシャル
 resilience レジリエンス
 resin レジン
-resistance レジスト
 resolution レゾリューション
-resolver リゾルバー リゾルバ レゾルバ
 resonance レゾナンス
 resort リゾート
 resource リソース
@@ -4663,6 +5096,8 @@ responsive レスポンシブ リスポンシブ
 rest レスト
 restart リスタート
 restoration レストレーション
+restore レストア リストア
+restructuring リストラクチャリング リストラクチュアリング
 result リザルト
 resume レジューム
 resurrection リザレクション
@@ -4670,8 +5105,9 @@ retail リテール
 retailer リテーラー
 retainer リテーナー リテナー
 retention リテンション
-retirement リタイア リタイヤ
 retract リトラクト
+retreat リトリート
+retriever レトリバー レトリーバー
 retrospective レトロスペクティブ
 retry リトライ
 return リターン
@@ -4681,14 +5117,15 @@ reuse リユース
 revelation レベレーション
 revenge リベンジ
 revenue レベニュー
-reverberation リバーブ リヴァーブ
+reversal リバーサル
 reverse リバース
 reversible リバーシブル
 review レビュー レヴュー
 reviewer レビュアー レビューアー
-revising リバイス リバイズ
+revised リバイズド
 revision リビジョン
 revival リバイバル
+revoke リボーク
 revolt リボルト レボルト
 revolution レボリューション
 revolver リボルバー
@@ -4698,29 +5135,34 @@ rewind リワインド
 rewrite リライト
 rhapsody ラプソディ ラプソディー
 rhetoric レトリック
-rheumatism リウマチ リュウマチ リューマチ
 rhododendron ロードデンドロン
 rhubarb ルバーブ
 rhyme ライム
 rhythm リズム
 rhythmic リズミック
+rib リブ
 ribbon リボン
+rice ライス
 rich リッチ
 ride ライド
+rider ライダー
 ridge リッジ
 ridicule リディキュール
 riding ライディング
 rifle ライフル
 rifling ライフリング
 rig リグ
+rigging リギング
 right ライト
 rights ライツ
 rim リム
 ring リング
 ringing リンギング
+rink リンク
+rinse リンス
 riot ライオット
+ripping リッピング
 ripple リップル リプル
-rise アップ
 rising ライジング
 risk リスク
 risky リスキー
@@ -4729,11 +5171,13 @@ river リバー
 rivet リベット
 road ロード
 roadside ロードサイド
-roar ガオー
+roaming ローミング
 roast ロースト
 robber ロバー
+robin ロビン
 robot ロボット
 robustness ロバストネス
+rock ロック
 rocker ロッカー
 rocket ロケット
 rocking ロッキング
@@ -4742,11 +5186,13 @@ rodeo ロデオ
 rogue ローグ
 role ロール
 roll ロール
-roller ローラー ローラ
+roller ローラー ローラ ロール
+rolling ローリング
 romance ロマンス ローマンス
 romantic ロマンチック ロマンティック
 roof ルーフ
 roofing ルーフィング
+rook ルーク
 rookie ルーキー
 room ルーム
 roommate ルームメイト ルームメート
@@ -4755,19 +5201,23 @@ roots ルーツ
 rope ロープ ロップ
 rose ローズ
 rosemary ローズマリー
-roster ロスター
+roster ロースター ロスター
 rotary ロータリー
 rotation ローテーション
 rotisserie ロティサリー
 rotor ローター
 rotunda ロタンダ ロータンダ ロウタンダ ロトンダ
 rough ラフ
+round ラウンド
 roundabout ラウンドアバウト ラウンダバウト
 route ルート
+router ルーター ルータ
 routine ルーチン ルーティン ルーティーン
 routing ルーティング
+row ロー
 rowing ローイング
-royal ロイヤル ローヤル
+royal ロイヤル ローヤル ロワイヤル ロワイアル
+royalty ロイヤリティ ロイヤルティ ロイヤリティー ロイヤルティー
 rubber ラバー
 ruby ルビー ルビ
 rudder ラダー
@@ -4777,17 +5227,18 @@ ruffle ラッフル
 rug ラグ ラッグ
 rugby ラグビー
 rugged ラギッド
-ruins ルイン
 rule ルール
 ruler ルーラー ルーラ
 rum ラム
 rummy ラミー
-rump ランプ ラム
+rump ランプ
 run ラン
 runaway ランナウェイ ランナウエイ ランナウェー
 runner ランナー
 running ランニング
+runway ランウェイ ランウエイ ランウェー ランウエー
 rural ルーラル
+rush ラッシュ
 rust ラスト
 rustic ラスティック ラスチック
 rye ライ
@@ -4808,10 +5259,6 @@ sailor セーラー
 saint セント セイント
 salary サラリー
 sale セール
-sales セールス
-salesman セールスマン
-salesperson セールスパーソン
-saleswoman セールスウーマン
 salmon サーモン
 saloon サルーン
 salt ソルト
@@ -4819,7 +5266,6 @@ salvage サルベージ
 sample サンプル
 sampler サンプラー サンプラ
 sampling サンプリング
-sanatorium サナトリウム
 sanction サンクション
 sanctuary サンクチュアリ サンクチュアリー
 sand サンド
@@ -4830,7 +5276,7 @@ sandstorm サンドストーム
 sandwich サンドイッチ サンドウィッチ
 sanitary サニタリー
 sapphire サファイア サファイヤ
-sardine サージン サーディン
+sardine サーディン
 sari サリー
 sash サッシ サッシュ
 satellite サテライト
@@ -4841,32 +5287,34 @@ sauce ソース
 saucepan ソースパン
 saucer ソーサー
 sausage ソーセージ
+save セーブ
 saving セービング
-savory セボリー
+savory セボリー セイボリー
 saw ソー
-saxophone サクソフォン サキソフォン サキソホン サクソフォーン
-saying セイ
+saxophone サクソフォン サキソフォン サクソフォーン
 scalar スカラー スケーラー
+scale スケール
 scaling スケーリング
 scallop スカラップ
 scalp スカルプ
+scalping スキャルピング
 scan スキャン
 scandal スキャンダル
 scandalous スキャンダラス
 scanner スキャナー スキャナ
 scanning スキャニング
-scanties スキャンティ スキャンティー
 scapegoat スケープゴート
 scapegoating スケープゴーティング
 scarecrow スケアクロー
+scarf スカーフ
 scarlet スカーレット
 scavenger スカベンジャー スカベンジャ スキャベンジャー スキャベンジャ
+scenario シナリオ
 scene シーン
 schedule スケジュール
 scheduler スケジューラ スケジューラー
 scheduling スケジューリング
 scheme スキーム
-schizophrenia スキゾフレニア
 scholarship スカラシップ スカラーシップ
 school スクール
 schoolboy スクールボーイ
@@ -4875,25 +5323,31 @@ schooner スクーナー
 science サイエンス
 scientific サイエンティフィック
 scientist サイエンティスト
-scissors シザーズ シザース
+scissors シザーズ
+scoop スクープ
 scooter スクーター
 scope スコープ
 scoping スコーピング
+score スコア
 scorer スコアラー スコアラ
 scoring スコアリング
-scorpion スコーピオン スコルピオン
+scorpion スコーピオン
+scout スカウト
 scouting スカウティング
+scram スクラム
 scramble スクランブル
+scrap スクラップ
 scrapbook スクラップブック
+scraping スクレイピング スクレーピング
 scratch スクラッチ
 screen スクリーン
 screening スクリーニング
 screw スクリュー
 screwdriver スクリュードライバー
-script シナリオ
-scripting スクリプティング
+script スクリプト
 scroll スクロール
 scrolling スクローリング
+scrub スクラブ
 scruple スクループル
 sculpture スカルプチュア スカルプチャー
 sea シー
@@ -4904,10 +5358,12 @@ seam シーム
 search サーチ
 searchlight サーチライト
 seaside シーサイド
+season シーズン
 seasonal シーズナル シーゾナル
 seasoning シーズニング
 seat シート
-second セカンド
+secession セセッション
+second セカンド セコンド
 secondary セカンダリー セカンダリ
 secret シークレット
 secretary セクレタリー
@@ -4918,7 +5374,6 @@ sector セクター セクタ
 secure セキュア
 security セキュリティ セキュリティー
 sedan セダン
-sediment セジメント
 seed シード
 seeding シーディング
 seeds シーズ
@@ -4928,17 +5383,14 @@ seesaw シーソー
 segment セグメント
 segmentation セグメンテーション
 selecting セレクティング
-selection セレクション セレクト
-selector セレクタ セレクター
+selection セレクション
 selfish セルフィッシュ
 seller セラー
 selling セリング
 semantic セマンティック
 semantics セマンティクス セマンティックス
 semester セメスター
-semicolon セミコロン
 semiconductor セミコンダクタ セミコンダクター
-semifinals セミファイナル
 seminar セミナー
 seminary セミナリー
 senator セネター
@@ -4948,6 +5400,7 @@ seniority シニオリティー
 sensation センセーション
 sensational センセーショナル
 sensationalism センセーショナリズム
+sense センス
 sensibility センシビリティー
 sensible センシブル
 sensitive センシティブ
@@ -4961,7 +5414,6 @@ separates セパレーツ
 separation セパレーション
 separator セパレータ セパレーター
 sequence シーケンス シークエンス
-sequencer シーケンサー シーケンサ シークエンサー シークエンサ
 sequencing シークエンシング
 sequential シーケンシャル
 sergeant サージャント サージェント
@@ -4975,9 +5427,14 @@ server サーバー サーバ
 service サービス
 serviceman サービスマン
 session セッション
+set セット
+setback セットバック
+setter セッター
 setting セッティング
 seven セブン
+sevens セブンズ
 seventeen セブンティーン
+seventh セブンス
 severe シビア シビアー シビヤ シビヤー
 sewing ソーイング
 sex セックス
@@ -4986,37 +5443,51 @@ sexist セクシスト
 sexual セクシャル セクシュアル
 sexuality セクシュアリティ セクシャリティ セクシャリティー セクシュアリティー
 sexy セクシー
-shack バラック
+shabby シャビー
 shading シェーディング
 shadow シャドー シャドウ
+shadowing シャドーイング シャドウイング
+shaft シャフト
+shaggy シャギー
+shake シェイク シェーク
 shampoo シャンプー
 shamrock シャムロック
 shape シェイプ シェープ
+shaping シェーピング シェイピング
+share シェア
 shared シェアード
-sharing シェア シェアリング
+sharing シェアリング
 shark シャーク
-sharpener シャープナー
+sharp シャープ
+sharpness シャープネス
 shaver シェーバー シェイバー
 shaving シェービング
 shawl ショール
-shear シヤー
-shearing シャリング
-sheath サック シース
+shear シヤー シア
+shearing シャリング シャーリング
+sheath シース
 sheep シープ
-sheet シーツ シート
+sheer シアー シア
+sheet シート
 shelf シェルフ
 shell シェル
 shelter シェルター
+shepherd シェパード
+sherbet シャーベット
 sheriff シェリフ
 sherry シェリー セリー
 shield シールド
 shift シフト
+shin シン
+shingle シングル
 shining シャイニング
 ship シップ
 shipping シッピング
-shock ギョッ
+shire シャイア
+shock ショック
 shocking ショッキング
 shoes シューズ
+shoot シュート
 shooting シューティング
 shop ショップ
 shopper ショッパー
@@ -5025,8 +5496,8 @@ shore ショア
 short ショート
 shortening ショートニング
 shorthand ショートハンド
-shorts ショーツ ショートパンツ
-shot ショット
+shorts ショーツ
+shot シュート ショット
 shotgun ショットガン
 shoulder ショルダー
 shovel シャベル ショベル
@@ -5036,65 +5507,79 @@ showdown ショウダウン ショーダウン
 shower シャワー
 showman ショーマン
 shrimp シュリンプ
+shrink シュリンク
+shroud シュラウド
+shuffle シャッフル
 shuffling シャッフリング
 shunt シャント
 shut シャット
 shutdown シャットダウン
+shutter シャッター シャッタ シヤッター シヤッタ
+shuttle シャトル シャットル
 shy シャイ
 side サイド
 sideline サイドライン
+sidewalk サイドウォーク
 siding サイディング
+sign サイン
 signal シグナル
 signature シグネチャ シグネチャー シグニチャー シグニチャ
 silence サイレンス
 silent サイレント
+silicon シリコン
 silk シルク
 silo サイロ
 silt シルト
 silver シルバー
-simile シミリ
 simple シンプル
 simplicity シンプリシティー
 simplify シンプリファイ
-simulation シミュレーション シミュレート
+simulation シミュレーション
 simulator シミュレーター シミュレータ
 sincere シンシア
 sine サイン
 singer シンガー
 single シングル
+singles シングルズ
 singularity シンギュラリティ シンギュラリティー
 sink シンク
 sinking シンキング
-siphon サイフォン サイホン
+siphon サイフォン
 siren サイレン
-sirloin サーロイン ロース
-sisterhood シスターフッド
+sister シスター
 site サイト
-sitting シット
+sitter シッター
 situation シチュエーション
 six シックス
 sixteen シックスティーン
+sixth シックス
 sixty シックスティー シックスティ
 size サイズ
 sizing サイジング
 sizzle シズル
+skate スケート
 skateboard スケートボード
 skateboarding スケートボーディング
 skater スケーター
 skating スケーティング
+skeleton スケルトン
 skeptic スケプティック スケプチック
 skepticism スケプチシズム
 sketch スケッチ
 skew スキュー
-skiing スキー
+ski スキー
 skill スキル
 skillet スキレット
 skillful スキルフル
+skimming スキミング
 skin スキン
-skipper スキッパー
+skinny スキニー
+skip スキップ
+skipper スキッパー スキップ
 skirt スカート
-skit スキット ショートコント
+skit スキット
 skull スカル
+skunk スカンク スコンク
 sky スカイ
 skylight スカイライト
 skyline スカイライン
@@ -5104,17 +5589,22 @@ slack スラック
 slacker スラッカー
 slacks スラックス
 slag スラグ
-slaking スレーキング
+slam スラム
 slang スラング
 slant スラント
 slapstick スラップスティック
+slash スラッシュ
+slat スラット
 slate スレート
+slave スレーブ スレイブ スレーヴ スレイヴ
+sleek スレーキ スレキ
 sleep スリープ
 sleeper スリーパー
 sleeve スリーブ スリーヴ
 slender スレンダー
 slice スライス
 slicker スリッカー
+slide スライダー スライダ スライド
 sliding スライディング
 slim スリム
 slime スライム
@@ -5124,8 +5614,9 @@ slingshot スリングショット
 slip スリップ
 slipper スリッパ
 slit スリット
-slitter スリッター スリッタ
+sliver スライバー
 slogan スローガン
+slop スロップ
 slope スロープ
 slot スロット
 slow スロー
@@ -5134,37 +5625,47 @@ slug スラッグ
 slum スラム
 slump スランプ
 slur スラー
+slush スラッシュ
 slut スラット
+smack スマック
 small スモール
+smart スマート
 smash スマッシュ
 smashing スマッシング
 smear スミアー スメア スメアー
 smell スメル
 smile スマイル
 smock スモック
-smocking スモッキング
 smog スモッグ
 smoke スモーク
 smoker スモーカー
 smoking スモーキング
+smooth スムーズ
 smoothing スムージング
 snack スナック
 snake スネーク スネイク
+snap スナップ
+snapshot スナップショット
+snare スネア
+snatch スナッチ
 sneaker スニーカー
 sniper スナイパー
+snippet スニペット
 snob スノッブ スノブ
 snooker スヌーカー
+snooze スヌーズ
 snorkel スノーケル
 snorkeling シュノーケリング スノーケリング
 snow スノー スノウ
 snowflake スノーフレーク
+snowplow スノープラウ スノープロウ
 snuff スナッフ
 soaking ソーキング
 soap ソープ
 soaring ソアリング
 soccer サッカー
 social ソーシャル ソシアル ソシャル
-socialism ソーシャリズム ソシアリズム ソシアリスム
+socialism ソーシャリズム ソシアリズム
 socialist ソーシャリスト ソシアリスト
 society ソサイエティ ソサエティ
 sociology ソシオロジー
@@ -5178,12 +5679,14 @@ softball ソフトボール
 software ソフトウェア ソフトウエア
 soil ソイル
 solar ソーラー
-soldering ソルダリング ソルダーリング
 soldier ソルジャー
+sole ソール
+solicitor ソリシター
 solid ソリッド
 solidarity ソリダリティー
-solitaire ソリティア ソリテール ソリテア
+solitaire ソリティア ソリテア
 soloist ソロイスト
+solution ソリューション
 somersault サマーソルト
 something サムシング
 son サン
@@ -5194,42 +5697,52 @@ sophistication ソフィスティケーション
 sorcerer ソーサラー
 sorcery ソーサリー
 sorry ソーリー
-sorting ソーティング ソート
+sorting ソーティング
 soul ソウル ソール
 sound サウンド
 sounder サウンダー サウンダ
 sounding サウンディング
 soundtrack サウンドトラック
+soup スープ
+sour サワー
+source ソース
+sourcing ソーシング
 south サウス
 southern サザン
 southpaw サウスポー
 souvenir スーベニア
+spa スパ スパー
 space スペース
 spacecraft スペースクラフト
 spacing スペーシング
 span スパン
-spangle スパンコール スパングル
+spangle スパングル
 spaniel スパニエル
+spanking スパンキング
 spanner スパナ
 spanning スパニング
 spar スパー
+spare スペア
 spark スパーク
 sparkle スパークル
 sparkling スパークリング
 sparring スパーリング
 spasm スパズム
+spats スパッツ
+spattering スパッタリング
 spatula スパチュラ
-spawning スポーン
 speak スピーク
 speaker スピーカー スピーカ
+speaking スピーキング
 spear スピア
-spearmint スペアミント
 special スペシャル
 specialist スペシャリスト
 specific スペシフィック
-specifications スペック
 spectacle スペクタクル
+spectacular スペクタクル
+specter スペクター
 spectrum スペクトラム
+speculation スペキュレーション
 speculator スペキュレーター
 speech スピーチ
 speed スピード
@@ -5240,12 +5753,15 @@ spelling スペリング
 spice スパイス
 spicy スパイシー
 spider スパイダー
+spike スパイク
 spin スピン
 spine スパイン
 spiral スパイラル
 spirit スピリット
+spirits スピリッツ
 spiritual スピリチュアル
-splash チャップン スプラッシュ
+splash スプラッシュ
+splatter スプラッター スプラッタ
 splice スプライス
 splicing スプライシング
 splint スプリント
@@ -5259,9 +5775,8 @@ sponge スポンジ
 sponsor スポンサー スポンサ
 sponsorship スポンサーシップ
 spool スプール
-spooling スプーリング
 spoon スプーン
-sport スポーツ
+sports スポーツ
 sportsmanship スポーツマンシップ
 spot スポット スパット
 spotlight スポットライト
@@ -5269,27 +5784,33 @@ sprawl スプロール
 spray スプレー
 spread スプレッド
 spreadsheet スプレッドシート
+spring スプリング
 springboard スプリングボード
+sprinkle スプリンクル
 sprinkler スプリンクラー
-sprinkles スプリンクル
 sprint スプリント
-sprinter スプリンター スピードランナー
+sprinter スプリンター
 sprout スプラウト
 spruce スプルース
+spun スパン
 spur スパー
 spurt スパート
 sputtering スパッタリング
 spy スパイ
+squad スカッド スコッド
 squall スコール
+square スクエア スコヤ
+squash スカッシュ
+squat スクワット
 squatter スクワッター スコッター
-squeeze スクイーズ
+squeeze スクイズ スクイーズ
 squid スクイッド
 stability スタビリティ スタビリティー
 stable ステーブル ステイブル
 stack スタック
 stacking スタッキング
-stadium スタジアム
 staff スタッフ
+stage ステージ
 stagnation スタグネーション
 stain ステイン
 stair ステア
@@ -5301,20 +5822,20 @@ stallion スタリオン
 stamina スタミナ
 stamp スタンプ
 stance スタンス
+stand スタンド
 standard スタンダード
-standards スタンダーズ
-standby スタンバイ
 standing スタンディング
 standpoint スタンドポイント
-stands スタンド
 stanza スタンザ
 staple ステープル
-stapler ステープラー ホッチキス ホチキス
+stapler ステープラー
+star スター
 starboard スターボード
 starch スターチ
 stardom スターダム
 starlight スターライト
 start スタート
+starter スターター
 starting スターティング
 state ステート ステイト
 statement ステートメント
@@ -5329,36 +5850,42 @@ status ステータス ステイタス
 stay ステイ ステー
 steady ステディ ステディー
 steak ステーキ
+steal スチール スティール
 stealth ステルス
 steam スチーム
 steamroller スチームローラー
 steel スチール スティール
 steer ステア
 steering ステアリング
+stem ステム
 stencil ステンシル
 stenographer ステノグラファー
-stenography ステノグラフィー
+step ステップ
 stepping ステッピング
 steps ステップス
+stereo ステレオ
 stereotype ステレオタイプ ステロタイプ
 sterling スターリング
+stew シチュー
 steward スチュワード
 stewardess スチュワーデス
-stick スティック
+stick スティック ステッキ
 sticker ステッカー
 stigma スティグマ
+still スチール スチル
 sting スティング
 stinger スティンガー
+stirrup スターラップ
 stitch ステッチ スティッチ
 stock ストック
 stockbroker ストックブローカー
 stockholder ストックホルダー
-stockings ストッキング
 stockyard ストックヤード
+stokes ストークス
+stole ストール
 stomach ストマック
 stomp ストンプ
 stone ストーン
-stool スツール
 stop ストップ
 stopover ストップオーバー
 stopper ストッパー
@@ -5368,52 +5895,61 @@ store ストア ストアー
 storm ストーム
 story ストーリー ストーリ
 stout スタウト
-straight ストレート
+stove ストーブ
+straight ストレート ストレッチ
 strain ストレイン
-strainer ストレーナー
+strand ストランド
 strangeness ストレンジネス
 stranger ストレンジャー
+strap ストラップ
 strategy ストラテジー
+straw ストロー
 strawberry ストロベリー
+streaking ストリーキング
+stream ストリーム
+streamer ストリーマー ストリーマ
 streaming ストリーミング
 streamline ストリームライン
 street ストリート
 streetcar ストリートカー
 strength ストレングス
 stress ストレス
+stretch ストレッチ
+stretcher ストレッチャー
 stretching ストレッチング
 stride ストライド
+strike ストライキ ストライク
 striker ストライカー
 string ストリング
-strings ストリングス
+strip ストリップ
 stripe ストライプ
-striping ストライピング
 stripper ストリッパー
+stroke ストローク
 strong ストロング
 structure ストラクチャ ストラクチャー
 struggle ストラグル ストラッグル
 stub スタブ
 stud スタッド
 student スチューデント
-studio スタジオ
 study スタディー スタディ
-stuffed スタッフド
+stuff スタッフ
 stuffing スタッフィング
+stump スタンプ
 stun スタン
 stunt スタント
 stunts スタンツ
+style スタイル
 styling スタイリング
-stylish スタイリッシュ ハイカラ
+stylish スタイリッシュ
 stylus スタイラス
 sub サブ
+subgroup サブグループ
 subject サブジェクト
 sublet サブレット
 submarine サブマリン
-subprogram サブプログラム
+submission サブミッション
 subroutine サブルーチン
 subscriber サブスクライバー サブスクライバ
-subscribing サブスクライブ
-subscript サブスクリプト
 subscription サブスクリプション
 subset サブセット
 substance サブスタンス
@@ -5425,19 +5961,19 @@ success サクセス
 suction サクション
 suffix サフィックス
 sugar シュガー
-suggestion サジェスチョン サゼッション サジェスト
+suggestion サジェスチョン
 suicide スーサイド スイサイド シュイサイド
 suit スート
-suitcase スーツケース トランク
+suite スイート スウィート
 sulfur サルファ サルファー
 sum サム
 summarize サマライズ
 summary サマリー サマリ
 summer サマー
+summit サミット
 sunburn サンバーン
 sundae サンデー
 sunflower サンフラワー
-sunglasses サングラス
 sunlight サンライト
 sunny サニー
 sunrise サンライズ
@@ -5445,26 +5981,25 @@ sunscreen サンスクリーン
 sunset サンセット
 sunshine サンシャイン
 suntan サンタン
+super スーパー スーパ
 supercomputer スーパーコンピュータ スーパーコンピューター
 supermarket スーパーマーケット
-superscript スーパースクリプト
 supersonic スーパーソニック
 superstar スーパースター
 supervision スーパービジョン
-supervisor スーパーバイザー スーパーバイザ スーパバイザ スーババイザ
+supervisor スーパーバイザー スーパーバイザ スーパバイザ
 supper サパー
 supplement サプリメント
 supplier サプライヤー
 supply サプライ
 support サポート
-suppression サプレス
+supporter サポーター サポータ
 supreme シュプリーム スプリーム シュープリーム
 surcharge サーチャージ
 sure シュア シュアー
 surf サーフ
 surface サーフェイス サーフェス サーフィス
 surfboard サーフボード
-surfing サーフィン
 surge サージ
 surgeon サージャン
 surgery サージェリー サージャリー
@@ -5473,29 +6008,36 @@ surplus サープラス
 surprise サプライズ
 surreal シュール
 surrender サレンダー
+surround サラウンド
 surveillance サーベイランス
 survey サーベイ
 surveyor サーベイヤー サベイヤー サーベーヤー サベーヤー
 survival サバイバル
 suspended サスペンデッド
-suspenders サスペンダー
-suspension サスペンド
+suspense サスペンス
+suspension サスペンション
 sustain サスティーン サスティン サステイン
 sustainable サステナブル サステイナブル サスティナブル サステーナブル
 swab スワブ
 swan スワン
-swatting スワッティング
+swapping スワッピング
 sway スウェー スエー
 swaying スウェーイング
+sweat スウェット スエット スェット
 sweater セーター
 sweep スイープ スウィープ
+sweeper スイーパー スウィーパー
+sweet スイート スウィート
 sweetheart スウィートハート スイートハート
+sweets スイーツ
 swell スウェル
 swim スイム
 swimming スイミング
+swing スイング スウィング
 swinging スインギング
+swipe スワイプ
+swirling スワリング
 switch スイッチ
-switched スイッチド
 switcher スイッチャ スイッチャー
 switching スイッチング
 swivel スイバル スイベル
@@ -5504,23 +6046,19 @@ syllable シラブル
 syllabus シラバス
 symbol シンボル
 symbolic シンボリック
+symbolism シンボリズム
 symbolize シンボライズ
-symmetric シンメトリック
-symmetry シンメトリー
 sympathetic シンパセティック
 sympathy シンパシー
-symphonic シンフォニック
-symphony シンフォニー
 synagogue シナゴーグ
-synapse シナプス
-synchronization シンクロナイズ シンクロナイゼーション
+synchronization シンクロナイゼーション
 synchronized シンクロナイズド
 synchronous シンクロナス
-syndicate シンジケート
 syndrome シンドローム
 synonym シノニム
 synopsis シノプシス
 syntax シンタックス シンタクス
+synthesis シンセシス
 synthesizer シンセサイザー シンセサイザ
 synthetic シンセティック
 syringe シリンジ
@@ -5528,6 +6066,8 @@ syrup シラップ
 system システム
 systematic システマティック システマチック
 systems システムズ
+tab タブ
+tabby タビー
 table テーブル
 tablecloth テーブルクロス
 tablespoon テーブルスプーン
@@ -5536,53 +6076,64 @@ tabloid タブロイド
 taboo タブー
 tack タック
 tacking タッキング
+tackle タックル
 tact タクト
 tactic タクティック
 tactical タクティカル
 tactics タクティクス
 tag タグ タッグ
+tagging タギング
 tail テール テイル
 tailgate テールゲート
-taillight テールライト
 tailor テーラー テイラー
 tailored テーラード
+take テイク テーク
 takeover テイクオーバー
 talc タルク
-talisman タリスマン タリズマン
+talent タレント
+talisman タリスマン
+talk トーク
 tall トール
 tallow タロウ
 tally タリー
 tambourine タンバリン
 tamper タンパー
+tan タン
 tandem タンデム
+tangent タンジェント
 tangerine タンジェリン
 tangible タンジブル
+tango タンゴ
+tank タンク
 tanker タンカー
+tanner タンナー
 tap タップ
 tape テープ
 taper テーパー
 tapering テーパリング
-tapestry タペストリー タピストリー タピスリー
+tapestry タペストリー タピストリー
+taping テーピング
 tapping タッピング
-tar タール
+tarantula タランチュラ
 target ターゲット
 targeting ターゲティング ターゲッティング
 tariff タリフ
 tart タート
 tartan タータン
-tartar タルタル
 task タスク
 tassel タッセル
 taste テイスト
-tasteful センスフル
-tautology トートロジー
+tasting テイスティング ティスティング テースティング
+tattoo タトゥー
 tax タックス
-taxi タクシー ハイタク
+taxi タクシー
+taxiing タキシング
 taxpayer タックスペイヤー
 tea ティー ティ
 teacher ティーチャー ティーチャ
 teaching ティーチング
 teacup ティーカップ
+teak チーク
 team チーム
 teaming チーミング
 teammate チームメイト チームメート
@@ -5601,21 +6152,25 @@ teenager ティーンエイジャー ティーンエージャー
 teens ティーンズ
 telegraph テレグラフ
 telepathy テレパシー
-telephone テレホン テレフォン
+telephone テレフォン
 telescope テレスコープ
 teletype テレタイプ
 television テレビジョン
+tell テル
 teller テラー
 temper テンパー
 temperament テンペラメント
 template テンプレート
+temple テンプル
 temporary テンポラリー テンポラリ
-temptation テンプテーション
+ten テン
+tenant テナント
 tendency テンデンシー
 tender タンダー テンダー
 tennis テニス
 tenor テナー
 tense テンス
+tension テンション
 tent テント
 term ターム
 terminal ターミナル
@@ -5628,12 +6183,12 @@ terrier テリア
 territory テリトリー
 terrorism テロリズム
 terrorist テロリスト
+test テスト
 testament テスタメント
 testing テスティング
 tetanus テタヌス
 tether テザー
-tethering テザリング
-text テキスト テクスト テキス
+text テキスト テクスト
 textbook テキストブック
 textile テキスタイル テクスタイル
 texture テクスチャ テクスチャー
@@ -5650,17 +6205,24 @@ thermal サーマル
 thermometer サーモメーター サーモメータ
 thermostat サーモスタット
 thesaurus シソーラス
+thief シーフ
 thimble シンブル
 thin シン
 think シンク
 thinking シンキング
+thinner シンナー
 third サード
 thirteen サーティーン
+thirteenth サーティーンス
 thirty サーティー サーティ
+thong ソング
+thoroughbred サラブレッド
 thousand サウザンド
+thread スレッド
 three スリー
 thresher スレッシャー
 thrill スリル
+thriller スリラー
 thrilling スリリング
 throat スロート
 throttle スロットル
@@ -5669,23 +6231,25 @@ throughput スループット
 throw スロー
 throwing スローイング
 thrust スラスト
-thud ドサ
 thumb サム
+thumbing サミング
 thunder サンダー
-thyme タイム
 tiara ティアラ
+tick チェック ティック
 ticket チケット ティケット
 tidal タイダル
 tide タイド
-tie タイ ネクタイ
+tie タイ
+tied タイド
 tier ティア ティアー
+tiger タイガー
 tight タイト
 tightrope タイトロープ
 tights タイツ
 tilde チルダ ティルデ
 tile タイル
-tiling タイリング
 tilt チルト ティルト
+time タイム
 timeless タイムレス
 timely タイムリー
 timer タイマー タイマ
@@ -5694,7 +6258,8 @@ timetable タイムテーブル
 timing タイミング
 tint ティント
 tiny タイニー
-tip チップ
+tip チップ ティップ
+tips ティップス チップス
 tire タイヤ
 tissue ティッシュ
 title タイトル
@@ -5702,7 +6267,7 @@ toad トード
 toast トースト
 toaster トースター
 toboggan トボガン
-today トゥデー ツデー
+today トゥデー
 toddler トドラー
 toe トゥ トウ トー
 toffee トフィー タフィー
@@ -5712,18 +6277,14 @@ token トークン
 tolerance トレランス
 toll トール
 tomahawk トマホーク
-tomorrow トゥモロー ツモロー
+tomato トマト
+tomorrow トゥモロー
 tonal トーナル
 tone トーン
-tongs トング
-tonguing タンギング
 tonic トニック
 tonight トゥナイト
-tool ツール
-tooling ツーリング
-toolkit ツールキット
 tooth トゥース ツース
-top トップ トップス
+top トップ
 topaz トパーズ トッパーズ トパズ
 topic トピック
 topical トピカル
@@ -5732,23 +6293,24 @@ topography トポグラフィー
 topology トポロジー トポロジ
 topping トッピング
 torch トーチ
-tornado トルネード
-torque トルク
+torrent トレント
 tortoise トータス
 torture トーチャー トーチャ
+toss トス
 total トータル
 totem トーテム
 touch タッチ
+touchdown タッチダウン
 tough タフ
 toughness タフネス
-tour ツアー
-tourist ツーリスト
 tournament トーナメント
 towel タオル
 tower タワー
 town タウン
 toy トイ トーイ
-tracing トレース トレーシング
+trace トレース
+tracing トレーシング
+track トラック
 tracking トラッキング
 tract トラクト
 traction トラクション
@@ -5759,20 +6321,23 @@ trader トレーダー
 trading トレーディング
 tradition トラディション
 traditional トラディショナル
-traffic トラフィック トラヒック
+traffic トラフィック
 tragedy トラジディー トラジェディー
 tragic トラジック
 trail トレイル トレール
+trailer トレーラー トレーラ トレイラー トレイラ
 train トレイン トレーン
 trainee トレーニー トレイニー
+trainer トレーナー
+training トレーニング
 trampoline トランポリン
+trance トランス
 tranquilizer トランキライザー
 transaction トランザクション トランズアクション
-transcontinental トランスコンチネンタル トランスコンティネンタル
 transcription トランスクリプション
 transfer トランスファー
 transformation トランスフォーメーション
-transformer トランス
+transformer トランスフォーマー
 transient トランジェント
 transistor トランジスタ トランジスター
 transit トランジット
@@ -5781,6 +6346,7 @@ translate トランスレート
 translation トランスレーション
 translator トランスレータ トランスレーター
 translucent トランスルーセント
+transmission トランスミッション
 transmitter トランスミッター
 transparency トランスペアレンシー
 transparent トランスペアレント
@@ -5788,27 +6354,34 @@ transplant トランスプラント
 transport トランスポート
 transportation トランスポーテーション
 trap トラップ
+trapeze トラピーズ
+trapping トラッピング
 trash トラッシュ
+trauma トラウマ
 travel トラベル
 traveler トラベラー
+traveling トラベリング
+traverse トラバース
 tray トレー トレイ
-treacle トリークル
-treadmill トレッドミル ランニングマシン ランニングマシーン ウォーキングマシン ウォーキングマシーン
+tread トレッド
+treadmill トレッドミル
 treasure トレジャー
 treasurer トレジャラー
+treatment トリートメント
 treble トレブル
 trekking トレッキング
 trellis トレリス
-trembling クエイク
 trench トレンチ
-trenching トレンチング
 trend トレンド
 trendy トレンディー トレンディ
 trestle トレッスル
 trial トライアル
+triangle トライアングル
 tribal トライバル
 tribute トリビュート
 trick トリック
+trickle トリクル
+trickster トリックスター
 tricky トリッキー
 tricycle トライシクル トライサイクル
 trifle トライフル
@@ -5816,13 +6389,17 @@ trigger トリガー トリガ
 trill トリル
 trillion トリリオン
 trim トリム
+trimmer トリマー トリマ
+trimming トリミング
 trip トリップ
 tripe トライプ
 triple トリプル
 triplet トリプレット
 tripod トライポッド トリポッド
+tripping トリッピング
 trivia トリビア
 trivial トリビアル
+troll トロール トロル
 trolley トロリー
 trolling トローリング
 trombone トロンボーン
@@ -5835,10 +6412,10 @@ troublemaker トラブルメーカー
 trough トラフ
 trousers トラウザーズ
 truck トラック
-true トゥルー トルー ツルー
+true トゥルー トルー
 trumpet トランペット
-truncating トランケート
-trunking トランキング
+trunk トランク
+trunks トランクス
 trust トラスト
 trustee トラスティ トラスティー
 truth トゥルース
@@ -5848,10 +6425,14 @@ tub タブ
 tuba チューバ テューバ
 tube チューブ
 tubing チュービング
+tuck タック
 tuft タフト
 tulip チューリップ
+tumbler タンブラー
 tumbling タンブリング
 tune チューン
+tuned チューンド
+tuner チューナー チューナ
 tunic チュニック チューニック
 tuning チューニング
 tunnel トンネル
@@ -5860,28 +6441,30 @@ turban ターバン
 turbine タービン
 turbulence タービュランス
 turf ターフ
+turkey ターキー
 turn ターン
 turnaround ターンアラウンド
 turning ターニング
 turnip ターニップ
+turnover ターンオーバー
+turnpike ターンパイク
 turnstile ターンスタイル
-turpentine テレピン テレビン
+turntable ターンテーブル
+turquoise ターコイズ
 turret ターレット タレット
+turtle タートル
 turtleneck タートルネック
 tutor チューター テューター
 tutorial チュートリアル
 tuxedo タキシード
-tweed ツイード
-tweet ツイート ツィート
-tweezers ツイーザーズ
 twelve トゥエルブ
 twenty トゥエンティー
 twilight トワイライト
-twin ツイン
 twinkle トウインクル
+twist ツイスト
+twister ツイスター
 type タイプ
 typeface タイプフェース
-typesetter タイプセッター
 typewriter タイプライター タイプライタ
 typhoon タイフーン
 typical ティピカル
@@ -5889,27 +6472,28 @@ typing タイピング
 typist タイピスト
 tyranny ティラニー
 tyrant タイラント
+ubiquitous ユビキタス ユービキタス
 ugliness アグリネス
 ultimate アルティメット
 ultra ウルトラ
 umbrella アンブレラ
 umpire アンパイア アンパイヤ
-unbelievable アンビリーバブル アンビリーバボー アンビリバボー
+unbelievable アンビリーバブル
 unbreakable アンブレイカブル
 uncle アンクル
 unconscious アンコンシャス
+uncut アンカット
 under アンダー
 undercover アンダーカバー
 undercut アンダーカット アンダカット
 underdog アンダードッグ
-underflow アンダーフロー アンダフロー
+underground アンダーグラウンド アンダーグランド
 underline アンダーライン
-underpants パンツ
-underscore アンダースコア アンダーバー
-undershirt アンダーシャツ アンダーシャート
-understanding アンダースタンド
+underpass アンダーパス
+underscore アンダースコア
+undershirt アンダーシャート
 undertone アンダートーン
-underwear アンダーウェア アンダーウエア インナーウェア インナーウエア
+underwear アンダーウェア アンダーウエア
 undo アンドゥ アンドゥー
 unfair アンフェア
 unhappy アンハッピー
@@ -5917,12 +6501,11 @@ unicorn ユニコーン
 unicycle ユニサイクル
 unidentified アンアイデンティファイド
 unification ユニフィケーション
-uniform ユニフォーム ユニホーム
+uniform ユニフォーム
 uniformity ユニフォーミティー
 unify ユニファイ
 union ユニオン
 unique ユニーク
-unison ユニゾン
 unit ユニット
 united ユナイテッド
 unity ユニティー
@@ -5930,19 +6513,20 @@ universal ユニバーサル
 universe ユニバース
 university ユニバーシティー
 unknown アンノウン アンノーン
-unlocking アンロック
 unlucky アンラッキー
-unpaid ノーギャラ
 unpopular アンポピュラー
 unwrap アンラップ
 upbeat アップビート
 update アップデート
 upgrade アップグレード
 upload アップロード
+upon アポン
 upper アッパー
 upright アップライト
+upset アップセット
 upstream アップストリーム
 uptown アップタウン
+upturn アップターン
 urban アーバン
 urbane アーベイン
 urchin アーチン アーチャン
@@ -5950,10 +6534,10 @@ urge アージ
 urgency アージェンシー アージャンシー
 urgent アージェント アージャント
 use ユース
+used ユーズド
 user ユーザー ユーザ
 users ユーザーズ
 usher アッシャー
-utilitarianism ユーティリタリアニズム ユーティリテリアニズム
 utility ユーティリティー ユーティリティ ユティリティー
 vacation バケーション
 vacuum バキューム
@@ -5967,19 +6551,19 @@ van バン
 vandalism バンダリズム ヴァンダリズム
 vane ベーン
 vanguard ヴァンガード バンガード
-vanilla バニラ ヴァニラ ワニラ
+vanilla バニラ ヴァニラ
 vanity バニティー バニティ ヴァニティ ヴァニティー
 variable バリアブル ヴァリアブル
 variant バリアント ヴァリアント
 variation バリエーション ヴァリエーション
 variety バラエティ バラエティー
-varnish ワニス バニッシュ バーニッシュ
+varnish バニッシュ バーニッシュ
 vault ヴォールト ボールト
 vector ベクター ベクタ
 vegetable ベジタブル
 vegetarian ベジタリアン ヴェジタリアン
 vegetarianism ベジタリアニズム ヴェジタリアニズム
-vehicle ビークル ヴィークル
+vehicle ビークル ヴィークル ビヒクル
 veil ベール ヴェール
 velocity ベロシティ ベロシティー
 velvet ベルベット ヴェルヴェット
@@ -5988,22 +6572,27 @@ veneer ベニヤ ベニア
 vent ベント
 ventilator ベンチレーター
 venture ベンチャー ベンチャ ヴェンチャー
+veranda ベランダ
 verification ベリフィケーション
 verify ベリファイ
 vermin ヴァーミン
+vernacular ヴァナキュラー バナキュラー
 verse バース ヴァース
 version バージョン
 vertical バーチカル バーティカル
 vertigo バーティゴ
 very ベリー
 vest ベスト ヴェスト
+veteran ベテラン
 vial バイアル
 vibration バイブレーション ヴァイブレーション
 vice バイス ヴァイス
 victim ヴィクティム ビクティム
 victor ビクター ビクタ
 victory ビクトリー ヴィクトリー
+video ビデオ
 view ビュー
+viewer ビューアー ビューア ビューワー ビューワ ビュアー ビュワー ビュア
 viewing ビューイング
 viewpoint ビューポイント
 vigilance ヴィジランス ビジランス
@@ -6012,12 +6601,14 @@ village ビレッジ ヴィレッジ
 villain ヴィラン
 vinegar ビネガー ヴィネガー
 vineyard ヴィンヤード
+vintage ヴィンテージ ビンテージ
 vinyl ビニール ビニル バイナル
 violation バイオレーション
 violence バイオレンス ヴァイオレンス
 violet バイオレット ヴァイオレット
 violin バイオリン ヴァイオリン
 viper バイパー
+viral バイラル
 virgin バージン ヴァージン
 virginity バージニティー バージニティ
 virtual バーチャル
@@ -6027,6 +6618,8 @@ visa ビザ
 vise バイス
 visibility ビジビリティ ビジビリティー
 visible ビジブル
+vision ビジョン ヴィジョン
+visionary ビジョナリー
 visitor ビジター
 visor バイザー
 vista ビスタ
@@ -6036,6 +6629,7 @@ vital バイタル
 vitality バイタリティ バイタリティー
 vivid ビビッド ヴィヴィッド
 vocabulary ボキャブラリー
+vocal ボーカル ヴォーカル
 vocalist ボーカリスト ヴォーカリスト
 voice ボイス
 voicing ヴォイシング ボイシング
@@ -6045,137 +6639,140 @@ volley ボレー
 volleyball バレーボール
 volt ボルト ヴォルト
 voltage ボルテージ
-volume ベリューム
+volume ボリューム ベリューム
 voluntary ボランタリー ヴォランタリー
 volunteer ボランティア
-voluptuous グラマー
 voodoo ブードゥー
-vortex ボーテックス ボルテックス
+vortex ボーテックス
 voucher バウチャー
 voyager ボイジャー ボイエジャ
 vulnerability ヴァルネラビリティ バルネラビリティ バルネラビリティー
-wafer ウェハ ウエハ ウェハー ウエハー ウェーハ ウエーハ ウエハース ウェハース
 waffle ワッフル
 wage ウェイジ
 wagon ワゴン
-waist ウエスト ウェスト ウェイスト
-waistline ウエストライン ウェストライン
-waiter ウェイター ウエイター ウエーター
-waitress ウェイトレス ウエイトレス
-waiver ウェーバー ウエーバー
-walk ウォーク ウオーク
-walker ウォーカー ウオーカー
-walking ウォーキング ウオーキング
-wall ウォール ウオール
+waist ウェスト ウェイスト
+waistline ウェストライン
+wait ウェイト
+waiter ウェイター
+waiting ウェイティング ウェーティング
+waitress ウェイトレス
+waiver ウェーバー
+wake ウェーキ
+walk ウォーク
+walker ウォーカー
+walking ウォーキング
+wall ウォール
 wallet ウォレット ワレット ワーレット
 wallpaper ウォールペーパー
 walnut ウォールナット ウォルナット
 waltz ワルツ
 wand ワンド ウォンド
 wane ウェイン
+wanted ウォンテッド
 wants ウォンツ
-war ウォー ウオー
-warden ウォーデン ワーデン ウオーデン
+war ウォー
+warden ウォーデン ワーデン
 wardrobe ワードローブ
-warehouse ウェアハウス ウエアハウス
+warehouse ウェアハウス
 warm ウォーム
-warmer ウォーマー ウオーマー
+warmer ウォーマー
 warming ウォーミング
 warning ワーニング ウォーニング
+warp ワープ
 warrant ワラント ウォラント ウォーラント
 warrior ウォリアー ウォーリア ウォーリアー
-wars ウォーズ ウオーズ
+wars ウォーズ
 wash ウォッシュ
-washable ウォッシャブル ウオッシャブル
+washable ウォッシャブル
 washer ワッシャー ウォッシャー ワッシャ
-waste ウェイスト ウエスト
+waste ウェイスト
+watch ウォッチ ワッチ
 watchdog ウォッチドッグ
-watching ウォッチング ウオッチング
-watchman ウォッチマン ウオッチマン
-water ウォーター ウォータ ウオーター
+watching ウォッチング
+watchman ウォッチマン
+water ウォーター ウォータ
 watercolor ウォーターカラー
 waterfall ウォーターフォール ウォータフォール
-waterfront ウォーターフロント ウオーターフロント
-waterproof ウォータープルーフ ウオータープルーフ
+waterfront ウォーターフロント
+watermark ウォーターマーク
+watermelon ウォーターメロン
+waterproof ウォータープルーフ
 watertight ウォータータイト
 watt ワット
-way ウェイ ウェー ウエー
-weak ウィーク ウイーク
+wave ウェーブ
+wax ワックス
+way ウェイ ウェー
+weak ウィーク
 weakening ウィークニング
-weapon ウェポン ウエポン
-wear ウェア ウエア
+weapon ウェポン
+wear ウェア
 weasel ウィーゼル
-weather ウェザー ウエザー ウェザ
-weaving ウィービング ウイービング
+weather ウェザー ウェザ
+weaving ウィービング
 web ウェブ
-wedding ウェディング ウエディング
-wedge ウェッジ ウエッジ
+webbing ウェビング
+wedding ウェディング
+wedge ウェッジ
 weed ウィード
-week ウィーク ウイーク
-weekday ウィークデー ウイークデー ウィークデイ ウイークデイ
-weekend ウィークエンド ウイークエンド
+week ウィーク
+weekday ウィークデー ウィークデイ
+weekend ウィークエンド
 weekly ウィークリー
-weight ウェイト ウエイト ウエート ウェート
-welcome ウェルカム ウエルカム
-welfare ウェルフェア ウエルフェア
+weight ウェイト ウェート
+welcome ウェルカム
+welfare ウェルフェア
 werewolf ウェアウルフ ワーウルフ
-west ウエスト ウェスト
-wet ウェット ウエット
-whale ホエール ホェール
-whisk ホイッパー
-whisper ウィスパー ウイスパー
-whistle ホイッスル
+west ウェスト
+wet ウェット
+whisker ウィスカー
+whiskey ウィスキー ウヰスキー ウィスキ
+whisper ウィスパー
 white ホワイト
+whitening ホワイトニング
 whole ホール
 wholesale ホールセール
 wholesaler ホールセラー
 why ホワイ
-wick ウィク ウイック
+wick ウィク
+wicket ウィッケット ウィケット
 wide ワイド
-widow ウィドー ウイドー ウィドウ ウイドウ
+widow ウィドー ウィドウ
 widower ウィドウア
 wife ワイフ
-wig ウィッグ ウイッグ
+wig ウィッグ
 wild ワイルド
 wildcat ワイルドキャット
 wildlife ワイルドライフ
-will ウイル ウィル
-win ウィン ウイン
-winch ウインチ ウィンチ
-wind ウインド ウィンド
-windfall ウインドフォール
-windmill ウィンドミル ウインドミル
-window ウィンドウ ウインドウ ウインドー ウィンドー
-windowpane ウインドーペーン
-windscreen ウインドスクリーン ウィンドスクリーン
+will ウィル
+win ウィン
+winch ウィンチ
+wind ウィンド
+winding ワインディング
+windmill ウィンドミル
+window ウィンドウ ウィンドー
+windshield ウィンドシールド
 wine ワイン
-wink ウインク ウィンク
-winner ウイナー
-winning ウイニング ウィニング
-winter ウィンター ウインター ウィンタ
+wing ウィング
+wink ウィンク
+winning ウィニング
+winter ウィンター ウィンタ
+wipe ワイプ
 wiping ワイピング
 wire ワイヤ ワイヤー ワイア
 wired ワイヤード
 wiring ワイヤリング
 wise ワイズ
-wish ウィッシュ ウイッシュ
-wit ウイット ウィット
-witch ウィッチ ウイッチ
-with ウィズ ウイズ
-wizard ウィザード ウイザード
+wish ウィッシュ
+wit ウィット
+witch ウィッチ
+with ウィズ
+wizard ウィザード
 woke ウォーク
-wolf ウルフ
-woman ウーマン
 wombat ウォンバット
 women ウィメン
 wonder ワンダー
 wonderful ワンダフル
 wonderland ワンダーランド
-wood ウッド
-woodchuck ウッドチャック
-woodpecker ウッドペッカー
-woody ウッディ ウッディー
-wool ウール
 word ワード
 wording ワーディング
 work ワーク
@@ -6184,38 +6781,35 @@ workbook ワークブック
 worker ワーカー
 working ワーキング
 workload ワークロード
+workout ワークアウト
 works ワークス
 workshop ワークショップ
 workstation ワークステーション
 world ワールド
 worldwide ワールドワイド
-worm ワーム
+worm ウォーム ワーム
 wormhole ワームホール
 worship ワーシップ
 worst ワースト
-worsted ウーステッド
-wow ワオ ワーオ ワオー
+wow ワウ ワオ ワーオ ワオー
 wrapper ラッパー
 wrapping ラッピング
 wreath リース
 wrench レンチ
+wrestler レスラー
 wrestling レスリング
 wrist リスト
 wristwatch リストウォッチ リストウオッチ
 writer ライター
 writing ライティング
 xenophobia ゼノフォビア
-xylophone シロフォン シロホン
+yacht ヨット
+yak ヤク
 yam ヤム
+yard ヤード
 yardstick ヤードスティック
 yarn ヤーン
 year イヤー
-yeast イースト
-yellow イエロー イェロー
-yes イエス イェス
-yesterday イエスタデー イエスタデイ
-yeti イエティ
-yield イールド
 yoke ヨーク
 you ユー
 young ヤング
@@ -6224,11 +6818,14 @@ yourself ユアセルフ
 youth ユース
 zeal ジール ズィール
 zebra ゼブラ
+zigzag ジグザグ
 zinc ジンク
+zip ジッパー
 zipper ジッパー
 zodiac ゾーディアック ゾディアック ゾウディアック
 zombie ゾンビ
 zone ゾーン
+zoning ゾーニング
 zoo ズー
 zoological ゾゥァラジカル ゾウアラジカル
 zoology ズーオロジー ゾゥアラジィ ゾウオロジー
