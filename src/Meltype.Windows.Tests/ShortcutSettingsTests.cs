@@ -3,7 +3,6 @@
 using System.Text.Json;
 using Meltype.Config;
 using Meltype.Input;
-using Meltype.Tip;
 using Meltype.UI;
 
 namespace Meltype.Tests;

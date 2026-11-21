@@ -1,4 +1,5 @@
 using Meltype.Config;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Detection;
 

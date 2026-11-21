@@ -4,7 +4,11 @@
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -938,16 +942,16 @@ internal static class LanguageLearningTests
     }
 
     /// <summary>Mozc のように「ばーじょん」を「バージョン」にする変換エンジン (版番号は学習しない)。</summary>
-    private sealed class VersionConverter : IKanjiConverter
+    private sealed class VersionConverter : TestConverter
     {
-        public string? Convert(string reading, string? before) => reading switch
+        public override string? Convert(string reading, string? before) => reading switch
         {
             "ばーじょん" => "バージョン",
             "むかしの" => "昔の",
             "むかしのばーじょん" => "昔のバージョン",
             _ => null,
         };
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before) => reading switch
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before) => reading switch
         {
             "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", "バージョン")],
             "ばーじょん" => [new(reading, "バージョン")],

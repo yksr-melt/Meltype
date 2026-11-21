@@ -3,6 +3,8 @@
 
 using System.Text;
 using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Engine;
 using Meltype.Input;
 using static Meltype.Composition.CompositionController;
 
@@ -13,6 +15,20 @@ internal record TextEnv(CompositionDetector Detector, Config.Settings Settings, 
 {
     /// <summary>打った英字を読み直す断片なら、読み直す元の入力 (<see cref="CompositionText.FragmentEnv"/>)。断片でなければ null。</summary>
     public FragmentOrigin? Fragment { get; init; }
+
+    /// <summary>入力欄の文脈。使うたびに、そのときの入力欄の文字と自分の確定の記録から決める (<see cref="CompositionController.ContextOf"/>)。</summary>
+    public required Func<TextContext> Context { get; init; }
+}
+
+/// <summary>
+/// 入力欄の文脈。PrecedingText・FollowingText はキャレットの前後の確定済みの文字列 (変換エンジンに渡す・英単語の前後の空白を決める)。
+/// PrecedingEnglish・FollowingEnglish は、前・後ろの文字が英語なら true、日本語なら false、分からなければ null。英語とも日本語とも読める語 (sushi など) の扱いを決める。
+/// PrecedingEnglishSentence は、キャレットの前が英文の途中 ("I want ") か。日本語の文の中の英単語 (GitHub の) より強い英語の根拠。
+/// PrecedingEnglishName は、キャレットの前が名前を言う英文 ("my name is ") か。
+/// </summary>
+internal sealed record TextContext(string? PrecedingText, bool? PrecedingEnglish, bool PrecedingEnglishSentence, bool PrecedingEnglishName, string? FollowingText, bool? FollowingEnglish)
+{
+    public static readonly TextContext None = new(null, null, false, false, null, null);
 }
 
 /// <summary>打った英字を読み直す断片が、読み直す元の入力から引き継ぐもの。LearningContext は元の入力の学習の文脈。</summary>
@@ -26,7 +42,14 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 {
     public CompositionLearning Learning { get; } = new(Services, Converter);
 
-    public ConversionBudget? Budget => (Converter as IBackgroundConverter)?.Budget;
+    /// <summary>
+    /// 変換エンジンの答えを後から受け取れるフロント (<see cref="IKanjiConverter.ResultReady"/> を受けて RefreshConversion を呼ぶ) か。
+    /// false なら答えるまで待つ (--repro・--self-test)。
+    /// </summary>
+    public bool LateResults { get; init; }
+
+    /// <summary>変換エンジンの答えを待ってよい時刻 (<see cref="ConversionRequest.Deadline"/>)。</summary>
+    public long Deadline { get; init; } = long.MaxValue;
 
     /// <summary>
     /// 英数状態で打ち始めた文字がローマ字 (日本語) かを判定する。null なら英数状態では判定しない。
@@ -36,6 +59,12 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
 
     /// <summary>文字に使わずに離した親指キーの、もとの働き (変換・無変換) をしているか。かな配列を通さない。</summary>
     public bool BypassKanaLayout { get; init; }
+
+    /// <summary>フロントが送ってきた、キャレットの前の確定済みの文字 (この出来事の前のもの。読めなければ null)。</summary>
+    public string? Before { get; init; }
+
+    /// <summary>フロントが送ってきた、キャレットの後ろの確定済みの文字 (読めなければ null)。</summary>
+    public string? After { get; init; }
 
     /// <summary>入力欄で選んでいる文字 (変換キーで再変換する。フロントが送ってきたもの)。</summary>
     public string? Selection { get; init; }
@@ -113,13 +142,6 @@ internal sealed class CompositionState
     public bool? LastCommitEnglish;
 
     public string? LastCommitText;
-
-    public string? PrecedingText;
-
-    public string? FollowingText;
-
-    /// <summary>入力欄が教えてくれた、キャレットの直前の確定済みの文字 (読めなければ null)。確定し直してよいかの判断に使う。</summary>
-    public string? CaretBefore;
 
     public long LastCommitTime = long.MinValue / 2;
 

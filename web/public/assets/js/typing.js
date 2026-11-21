@@ -5,7 +5,7 @@
 // 決まり: 同意するまでは打鍵をどこにも送らない (打った記録はこのページのメモリーにだけ置く)。
 // 決まり: 送るのは打鍵だけ。画面に出す打った文字も、打鍵から組み立てる (typing-check.js の replay)。
 import { detectOs, escapeHtml, getJson, icon, initHeader } from "./common.js";
-import { align, toKana, toRomaji } from "./romaji.js";
+import { align, finalKana, toKana, toRomaji } from "./romaji.js";
 import { compare, replay, suspicious } from "./typing-check.js";
 import { CONSENT_VERSION } from "./typing-consent.js";
 import { KINDS, SENTENCES } from "./typing-sentences.js";
@@ -75,7 +75,6 @@ function nextRound() {
 
 // 同意した参加は、同意文が変わるまで使い続ける (同じ人の打ち方をまとめて見られるように)
 const sessionAlive = () => Boolean(saved.session && saved.session.consent === CONSENT_VERSION);
-// 英語が混ざった文は、英語の部分をかなにすると読めないので、打った文字をそのまま見せる
 const hasEnglish = (sentence) => /[a-z]/.test(sentence.reading);
 
 // ---- 1. はじめる ----
@@ -112,18 +111,42 @@ function loadSentence() {
   state.trial = newTrial();
   $("count").textContent = String(state.index + 1);
   $("text").textContent = sentence.text;
-  $("reading").textContent = hasEnglish(sentence) ? toRomaji(sentence.reading) : sentence.reading;
+  $("reading").textContent = sentence.reading;
+  $("reading-romaji").textContent = toRomaji(sentence.reading);
   $("ime-note").hidden = true;
   render();
 }
 
+// 打った字をかなにする。お手本の英単語と一致した部分は英語のまま出す。
+// 英単語は、それまでの入力をかなにし切った位置 (残りが無いか n だけ) でだけ探す。どこでも探すと、kaigi の ai のように日本語の中の字まで英語になるため。
+// ワークアラウンド: 打った字を Meltype のエンジンで組み立てるようにしたら消す
+function previewKana(typed, words) {
+  let kana = "";
+  let start = 0;
+  let i = 0;
+  while (i < typed.length) {
+    const { pending } = toKana(typed.slice(start, i));
+    const word = (pending === "" || pending === "n") && words.find((w) => typed.slice(i, i + w.length).toLowerCase() === w);
+    if (word) {
+      kana += finalKana(typed.slice(start, i)) + typed.slice(i, i + word.length);
+      i += word.length;
+      start = i;
+    } else {
+      i += 1;
+    }
+  }
+  const rest = toKana(typed.slice(start));
+  return { kana: kana + rest.kana, pending: rest.pending };
+}
+
 function render() {
   const typed = replay(state.trial.keys);
-  const english = hasEnglish(state.queue[state.index]);
-  const { kana, pending } = english ? { kana: typed, pending: "" } : toKana(typed);
+  // 長い単語を先に試す (app と apple が両方あれば apple を取る)
+  const words = (state.queue[state.index].reading.match(/[a-z]+/g) ?? []).sort((a, b) => b.length - a.length);
+  const { kana, pending } = previewKana(typed, words);
   $("kana").textContent = kana;
   $("pending").textContent = pending;
-  $("romaji").textContent = english ? "" : typed.toLowerCase();
+  $("romaji").textContent = typed.toLowerCase();
 }
 
 // 時刻は performance.now() で測る。event.timeStamp は、ブラウザーや設定 (指紋対策など) によって 0 や粗い値になり、打鍵の間隔が取れないため
