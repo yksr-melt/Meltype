@@ -29,9 +29,6 @@ if CommandLine.arguments.contains("--register-input-source") {
     exit(0)
 }
 
-/// 変換の候補の一覧 (すべての入力欄で共有する)。
-var candidatesWindow: IMKCandidates?
-
 func runIsolatedChecks(inputPath: String?) -> Int32 {
     let files = FileManager.default
     let data = files.temporaryDirectory.appendingPathComponent("meltype-input-check.\(UUID().uuidString)", isDirectory: true)
@@ -236,7 +233,6 @@ guard let bundleIdentifier = Bundle.main.bundleIdentifier,
     NSLog("Meltype: IMKServer を起動できませんでした (Meltype.app から起動してください)")
     exit(1)
 }
-candidatesWindow = IMKCandidates(server: server, panelType: kIMKSingleColumnScrollingCandidatePanel)
 NSRegisterServicesProvider(ModeServices.shared, ModeServices.portName)
 NativeCore.shared.startBackgroundConversion()
 // 終了するときに llama-server を止める (ログアウトなどの終了と、SIGTERM。強制終了で残ったものは、次に起動したときに止める)

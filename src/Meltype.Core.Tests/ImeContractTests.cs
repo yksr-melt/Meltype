@@ -27,7 +27,13 @@ internal static class ImeContractTests
         private readonly List<string> _trace = [];
 
         // Converter・Services・ClassifyDirect を初期化子で決めてから作る
-        private ImeHost Host => _host ??= new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+        private ImeHost Host => _host ??= Create();
+
+        private ImeHost Create()
+        {
+            MeltypeRuntime.Connect(CompositionTests.Detector, Services);
+            return new ImeHost(this, new SessionParts(CompositionTests.Detector, Converter, Services) { ClassifyDirect = ClassifyDirect }, () => Settings);
+        }
 
         /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定。null なら判定しない。</summary>
         public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }
@@ -44,6 +50,8 @@ internal static class ImeContractTests
         public SnippetStore Snippets { get; } = new(null);
 
         public string? ClipboardText => null;
+
+        public string? OtherTipVersion => null;
 
         public int Sessions => Host.SessionCount;
 
@@ -209,6 +217,18 @@ internal static class ImeContractTests
         front.Key('\n');
         Assert.Equal("今日はあいうえお", front.Document, front.Trace);
         Assert.True(!Consumed(front.Key('\n')), "打っていないときの Enter はアプリに通す\n" + front.Trace);
+    }
+
+    [Test]
+    public static void Settings_AreReadOncePerEvent()
+    {
+        // 出来事の途中で設定が変わっても (受け持つ → 止める)、その出来事の中の判断は始めに読んだ設定でそろえる
+        var reads = 0;
+        var session = new TestSession(() => new Settings { Enabled = ++reads <= 2 });
+        session.HandleKey('A', 'a', false, false, false, false);
+        var k = session.HandleKey('K', 'k', false, false, false, false);
+        Assert.Equal(2, reads, "設定は出来事ごとに 1 回読む");
+        Assert.True(session.State.HandlesInput && k.Consumed, "受け持つと答えたキーはアプリに通さない");
     }
 
     [Test]
@@ -768,8 +788,8 @@ internal static class ImeContractTests
     {
         private readonly CompositionTests.FakeConverter _converter = new();
         public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
-        public string? Convert(string hiragana) => _converter.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => _converter.ConvertClauses(hiragana, context);
+        public string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
         public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
     }
 

@@ -35,6 +35,13 @@ internal static class FrontProtocolTests
                 "ctrlKeysWhileComposing", "revision", "currentWord", "insertByPaste", "keyReleases"],
             // 送る入力欄の事実
             Others: ["app", "selection", "NonText"]),
+        new("端末", "tui/meltype-tty", source => source, new(@"\[""(\w+)""\]"),
+            // 端末はキーをすべて送り (capture を見ない)、canRemove: false なので removeBefore は来ない。案内 (hint) は端末に届かないキーも書くので出さない
+            Unused: ["version", "state", "handlesInput", "imeOpen", "languageMode", "modeIndicatorMs", "capture", "printableAscii", "printableAsciiExcept",
+                "shortcuts", "vk", "modifiers", "ctrlKeysWhileComposing", "altKeys", "keyReleases", "revision", "currentWord", "insertByPaste",
+                "removeBefore", "hint", "notes", "selectedMeaning", "meaningDelayMs"],
+            // 送る入力欄の性質
+            Others: ["Terminal"]),
         new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
             new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
             // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output.
@@ -45,9 +52,9 @@ internal static class FrontProtocolTests
             Others: []),
         new("macOS", "mac/Sources/MeltypeIME/NativeCore.swift", source => source[source.IndexOf("struct ImeOutput", StringComparison.Ordinal)..source.IndexOf("/// libMeltypeNative", StringComparison.Ordinal)],
             new(@"\blet (\w+):"),
-            // IMK は候補ウィンドウの番号を消せない・IME からアプリのキャレットを動かせない
+            // Input Method Kit では IME からアプリのキャレットを動かせない。
             Unused: ["version", "handlesInput", "imeOpen", "capture", "printableAscii", "printableAsciiExcept", "shortcuts", "vk", "modifiers",
-                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "numbered", "keyReleases", "altKeys"],
+                "ctrlKeysWhileComposing", "revision", "currentWord", "moveCaretBack", "insertByPaste", "keyReleases", "altKeys"],
             Others: []),
     ];
 

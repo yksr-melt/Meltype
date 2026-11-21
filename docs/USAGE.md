@@ -7,7 +7,7 @@
 kyouhagoogledekensaku  →  今日はgoogleで検索
 ```
 
-インストールと OS ごとの設定は [WINDOWS.md](WINDOWS.md)・[MACOS.md](MACOS.md)・[LINUX.md](LINUX.md) にあります。
+インストールと OS ごとの設定は [WINDOWS.md](WINDOWS.md)・[MACOS.md](MACOS.md)・[LINUX.md](LINUX.md)、端末版は [TTY.md](TTY.md) にあります。
 
 <br>
 
@@ -109,7 +109,7 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 | えがお | 😊 |
 | かおもじ | 顔文字 |
 | ごんべんにふるとり | 誰 |
-| ばーじょん | Meltype の版 (不具合の報告に貼ってください) |
+| ばーじょん | Meltype の版と、使っている入力方式・Zenzai の設定 (不具合の報告に貼ってください) |
 
 <br>
 
