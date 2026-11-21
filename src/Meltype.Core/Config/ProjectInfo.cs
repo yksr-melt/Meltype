@@ -27,6 +27,10 @@ public static class ProjectInfo
     public static string? BuildCommit =>
         typeof(ProjectInfo).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion.Split('+') is [_, var commit, ..] ? commit[..Math.Min(7, commit.Length)] : null;
 
+    /// <summary>.NET SDK が付けた版 (1.5.1+<コミット ID 全体>) のコミット ID を、先頭 7 文字にする (1.5.1+abc1234)。コミット ID が無ければそのまま。</summary>
+    public static string ShortCommit(string version) =>
+        version.Split('+') is [var number, var commit, ..] ? $"{number}+{commit[..Math.Min(7, commit.Length)]}" : version;
+
     /// <summary>版にタグの無い自己ビルドのコミット ID を付けたもの (1.5.1+abc1234)。不具合の報告と「ばーじょん」の候補で同じ版の文字列にする (issue #1868)。</summary>
     public static string WithCommit(string version) => BuildCommit is { } commit ? $"{version}+{commit}" : version;
 
@@ -69,10 +73,10 @@ public static class ProjectInfo
 
     /// <summary>
     /// 更新したあとの初めての起動で、リリースノートを見せるか (issue #1207)。最後に見せた版と今の版が違えば見せる。
-    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。
+    /// 初めて起動したとき (新しく入れたとき) は、更新ではないので見せない。autoShow が OFF なら見せない。
     /// </summary>
-    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun) =>
-        !firstRun && currentVersion != "?" && shownVersion != currentVersion;
+    public static bool ShouldShowReleaseNotes(string? shownVersion, string currentVersion, bool firstRun, bool autoShow = true) =>
+        autoShow && !firstRun && currentVersion != "?" && shownVersion != currentVersion;
 
     /// <summary>不具合報告のフォーム (ReportForm) があるか。無ければ GitHub の Issue の画面で報告してもらう。</summary>
     public static bool HasReportForm => ReportForm.Length > 0;
@@ -104,7 +108,7 @@ public static class ProjectInfo
     /// 欄の id (typed・actual・expected・key・zenzai・context) は、ひな形と合わせる。
     /// Zenzai の欄は、直したときの「Zenzai を使う」の設定 (Correction.Zenzai) で入れる。分からなければ空のまま (issue #1197)。
     /// </summary>
-    public static string MisdetectionReportUrl(Composition.Correction correction, string os, string version, string environment) =>
+    public static string MisdetectionReportUrl(Meltype.Diagnostics.Correction correction, string os, string version, string environment) =>
         GitHubReportUrl("2-misdetection.yml", os, version, environment) +
         $"&title={Uri.EscapeDataString("[誤判定] " + correction.Typed)}" +
         $"&typed={Uri.EscapeDataString(correction.Typed)}" +

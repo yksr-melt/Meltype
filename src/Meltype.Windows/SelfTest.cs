@@ -5,6 +5,10 @@ using System.Globalization;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
+using Meltype.Learning;
 
 namespace Meltype;
 
@@ -60,7 +64,7 @@ internal static class SelfTest
         Check("変換ボックスの英語判定", () =>
         {
             var text = new CompositionTextState();
-            var env = new TextEnv(detector, new Config.Settings(), null);
+            var env = new TextEnv(detector, new Config.Settings(), null) { Context = () => TextContext.None };
             foreach (var c in "kyouhagoogle") CompositionText.Append(text, env, c);
             return CompositionText.Display(text, env, final: false);
         });
@@ -75,7 +79,7 @@ internal static class SelfTest
             var converter = runtime.CreateConverter(AppContext.BaseDirectory);
             if (!converter.MozcInstalled) return "(Mozc のヘルパーが無い)";
             // Zenzai (llama-server) は起動しない
-            return $"{converter.ConvertStandalone("きょうはいいてんき") ?? "(変換できない)"} / 漢字 → {converter.Reading("漢字") ?? "(逆変換できない)"}";
+            return $"{(converter.Convert(new ConversionRequest("きょうはいいてんき", null) { Zenzai = false }) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : "(変換できない)")} / 漢字 → {converter.Reading("漢字") ?? "(逆変換できない)"}";
         });
         Check("UI Automation", () => { var result = ""; var thread = new Thread(() => result = FocusInspector.Probe()); thread.SetApartmentState(ApartmentState.MTA); thread.Start(); thread.Join(); return result; });
         Check("画面", () =>
@@ -152,7 +156,7 @@ internal static class SelfTest
             var port = ((System.Net.IPEndPoint)listener.LocalEndpoint).Port;
             var server = Task.Run(() => AnswerOnce(listener, """{"content":"今日は"}"""));
             using var zenzai = new ZenzaiConverter(new Uri($"http://127.0.0.1:{port}/"), timeoutMs: 10000);
-            var text = zenzai.Convert("きょうは");
+            var text = zenzai.Convert(new ConversionRequest("きょうは", null)) is [var clause] ? clause.Text : null;
             // 偽のサーバーの側で例外になったときは、その例外を出す (Wait が投げる)
             server.Wait(TimeSpan.FromSeconds(10));
             return text ?? throw new InvalidOperationException("偽の llama-server から答えを受け取れない");

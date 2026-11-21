@@ -69,6 +69,7 @@ struct CandidateList: Decodable {
     let items: [String]
     /// 候補ごとの注記 (無ければ nil)
     let notes: [String?]
+    let numbered: Bool
     let selected: Int
     /// 選んでいる候補の意味。候補で meaningDelayMs 止まったら注釈に出す
     let selectedMeaning: String?

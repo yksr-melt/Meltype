@@ -2,6 +2,7 @@
 // Copyright (C) 2026 aster-void
 
 using System.Text;
+using Meltype.Detection;
 
 namespace Meltype.Composition;
 
@@ -30,20 +31,6 @@ internal sealed class CompositionTextState
     public bool SlashAtStart;
 
     public (string Key, LanguageMemory? Memory, IReadOnlyList<CompositionSegment> Segments, List<Func<string>> Reasons)? SegmentsCache;
-
-    /// <summary>
-    /// 入力欄のキャレットの前の確定済みの文字が英語なら true、日本語なら false、分からなければ null。
-    /// 英語とも日本語とも読める語 (sushi など) の扱いを、後ろ (<see cref="FollowingEnglish"/>) と合わせて決める。
-    /// </summary>
-    public bool? PrecedingEnglish;
-
-    /// <summary>キャレットの前が英文の途中 ("I want ") か。日本語の文の中の英単語 (GitHub の) より強い英語の根拠。</summary>
-    public bool PrecedingEnglishSentence;
-
-    public bool PrecedingEnglishName;
-
-    /// <summary>キャレットの後ろの文字が英語なら true、日本語なら false、分からなければ null。</summary>
-    public bool? FollowingEnglish;
 
     // ---- 保護範囲 (メンション・URL・メール・パス) ----
     public string? ProtectedCacheRaw;

@@ -326,6 +326,11 @@ public sealed class Settings
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
     public bool PartialCommit { get; set; }
 
+    // ワークアラウンド: 変換を始めたときに選ぶ文節を、Mozc の区切りと変換の uncertainty から決められるようになったら (#2105) 消す。
+    [Category("8. キー操作"), DisplayName("変換を始めたら最後の文節を選ぶ"),
+     Description("Space・Shift + Space・Tab・変換・↑ ↓ で変換を始めたとき、最後の文節を選びます (OFF のときは先頭の文節)。変換前の ← は最後の文節、→ は先頭の文節を選びます。")]
+    public bool ConversionStartsAtLastClause { get; set; }
+
     [Category("8. キー操作"), DisplayName("Control キーの割り当て"),
      Description("入力中の Control + 英字の割り当てです。標準: Ctrl + U / I / O / P で F6 / F7 / F10 / F9、Ctrl + H で BackSpace。ATOK 風: 標準に加えて、変換中の Ctrl + K で選んでいる文節を縮め、Ctrl + L で伸ばします (Shift + ← → と同じ)。macOS 風: Control + J / K / L をひらがな / カタカナ / 全角英字 (F6 / F7 / F9) に、Control + H / D を前 / 後ろの 1 文字を消す、N / P を次 / 前の候補、B / F / A / E をカーソル移動、O / I を変換中の文節を伸ばす / 縮める、にします (macOS 標準の日本語入力と同じ)。")]
     public ControlKeyLayout ControlKeys { get; set; } = ControlKeyLayout.Standard;
@@ -572,6 +577,10 @@ public sealed class Settings
      Description("ON にすると、正式版の前に公開するプレリリース版 (1.3.1-pre.4 など) も自動更新の対象にします。新しい機能や修正を早く試せますが、不具合や動作の不安定さが含まれることがあります。OFF (標準) では正式版だけを対象にします。")]
     public bool UpdatePrerelease { get; set; }
 
+    [Category("13. 更新"), DisplayName("更新後にリリースノートを表示する"), Platforms(Platform.Windows),
+     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、トレイの「更新」→「リリースノート...」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
+    public bool ShowReleaseNotesAfterUpdate { get; set; } = true;
+
     [Category("2. 入力方式"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]
     [JsonConverter(typeof(InputStyleJsonConverter))]
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
@@ -608,7 +617,7 @@ public sealed class Settings
     private static readonly HashSet<string> SharedKeys =
     [
         SchemaKey, nameof(Profiles), nameof(ActiveProfile), nameof(SettingsVersion),
-        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease),
+        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease), nameof(ShowReleaseNotesAfterUpdate),
         // 入力の方式 (Windows の IME として入力するか) は PC 全体の選び方なので、プロファイルで変えない
         nameof(Mode),
     ];

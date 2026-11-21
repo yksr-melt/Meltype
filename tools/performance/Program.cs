@@ -7,7 +7,10 @@ using System.Text;
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
+using Meltype.Learning;
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var detector = CompositionDetector.CreateDefault(); var languages = new LanguageMemory(null); detector.Memory = languages;
 var services = new CompositionServices { Languages = languages, Candidates = CandidateDictionary.Load(null), ContextRules = ContextRules.Load(null), History = new ConversionHistory(null), Misspellings = MisspellingDictionary.Load(null), RomajiTypos = RomajiTypoCorrector.Load(detector.Romaji) };
@@ -30,4 +33,4 @@ foreach (var length in lengths) foreach (var pair in cases.Where(p => args.Lengt
 static ImeEvent Key(int vk, int ch, bool shift) => new() { Version = ImeHost.Version, Type = ImeEventType.KeyPressed, Key = new ImeKey { Vk = vk, Ch = ch, Shift = shift } };
 static class Bench { public static int Sink; }
 sealed class Environment : IImeEnvironment { public InputMode? InputMethod => null; public SnippetStore Snippets { get; } = new(null); public string? ClipboardText => null; }
-sealed class Converter : IKanjiConverter { public string? Convert(string reading) => null; public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => null; }
+sealed class Converter : IKanjiConverter { public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => null; }

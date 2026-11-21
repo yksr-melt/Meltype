@@ -3,10 +3,11 @@
 
 using System.Globalization;
 using System.Text;
-using Meltype.Composition.Utility;
 using Meltype.Config;
 using Meltype.Detection;
+using Meltype.Dictionary;
 using Meltype.Input;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
@@ -217,7 +218,7 @@ internal static partial class CompositionController
                 {
                     Commit(state, env, suffix: " ");
                 }
-                else if (EndsWithEnglish(state, env)) CommitText(state, env, CompositionText.RenderSegments(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish) => string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, env.Converter).Select(c => c.Text)) : null) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
+                else if (EndsWithEnglish(state, env)) CommitText(state, env, CompositionText.RenderSegments(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true).Select(c => c.Text)) : null) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: 英語で終わるので変換せずに確定");
                 else if (SpaceCommitsAutoEnglish(state, env)) CommitText(state, env, CompositionText.Raw(state.Text) + " ", english: true, CompositionText.Raw(state.Text), rule: "Space: かなにならない子音で終わる英単語");
                 else
                 {
@@ -572,7 +573,7 @@ internal static partial class CompositionController
     private static bool SpaceCommitsMarkdownMarker(CompositionState state) => state.Text.Mode == DisplayMode.Auto && CompositionText.IsMarkdownMarker(state.Text);
 
     private static bool SpaceCommitsAlphanumeric(CompositionState state, CompositionEnv env) =>
-        CompositionText.IsAlphanumericAt(state.Text, env, final: true) && !(state.Text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiDigit) && state.Text.PrecedingEnglish != true);
+        CompositionText.IsAlphanumericAt(state.Text, env, final: true) && !(state.Text.Mode == DisplayMode.Auto && CompositionText.IsNumeric(state.Text) && CompositionText.Raw(state.Text).All(char.IsAsciiDigit) && env.Context().PrecedingEnglish != true);
 
     private static bool SpaceCommitsAutoEnglish(CompositionState state, CompositionEnv env) => state.Text.Mode == DisplayMode.Auto && env.Detector.IsEnglishAtWordEnd(CompositionText.Raw(state.Text), !env.Settings.AutoDetection);
 
@@ -708,14 +709,19 @@ internal static partial class CompositionController
     /// <summary>「もしかして」の案内。変換ボックスの、打った文字のすぐ下に出す (書き間違いが無ければ null)。</summary>
     private static string? MisspellingSuggestion(CompositionState state, CompositionEnv env) => FindMisspelling(state, env) is { } typo ? $"もしかして: {typo.Misspelling.Right}　<Tab>で修正" : null;
 
-    /// <summary>変換前の矢印キー: → は先頭、それ以外は最後の文節を選ぶ。</summary>
+    /// <summary>変換前に矢印キーを押したとき: 文節に区切って、← なら最後の文節、→ なら最初の文節、↑ ↓ なら変換を始めたときの文節を選ぶ。</summary>
     private static void EnterClauseSelection(CompositionState state, CompositionEnv env, int vk)
     {
         StartConversion(state, env);
         if (!IsConverting(state)) return;
         SplitWholeSentence(state);
         var shift = state.Shift;
-        state.SelectedClause = vk == VirtualKeys.Right ? 0 : state.Clauses.Count - 1;
+        state.SelectedClause = vk switch
+        {
+            VirtualKeys.Left => state.Clauses.Count - 1,
+            VirtualKeys.Right => 0,
+            _ => InitialClause(env, state.Clauses.Count),
+        };
         if (shift && vk is VirtualKeys.Left or VirtualKeys.Right) Resize(state, env, vk == VirtualKeys.Left ? -1 : +1);
         else if (vk == VirtualKeys.Up) NextCandidate(state, env, -1);
     }

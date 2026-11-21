@@ -207,6 +207,9 @@ function Get-MeltypeImeSourceHashes([string]$Source) {
         if (Test-Path -LiteralPath "$dll.sha256") { $hashes["$relative.sha256"] = Get-Sha256 "$dll.sha256" }
     }
     $hashes['Register-Tip.ps1'] = Get-Sha256 (Join-Path $Source 'Register-Tip.ps1')
+    # 同梱した Meltype の版 (Register-Tip.ps1 が登録先に置く)
+    $version = Join-Path $Source 'version.txt'
+    if (Test-Path -LiteralPath $version) { $hashes['version.txt'] = Get-Sha256 $version }
     return $hashes
 }
 

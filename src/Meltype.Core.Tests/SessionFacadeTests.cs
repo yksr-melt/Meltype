@@ -4,7 +4,11 @@
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -1105,7 +1109,7 @@ internal static class SessionFacadeTests
                 _ => [],
             };
             using var runtime = new MeltypeRuntime(directory);
-            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), More, _ => null);
+            var parts = runtime.SessionParts(new CompositionTests.FakeConverter(), (reading, _) => More(reading), _ => null);
             var a = new TestSession(parts, () => runtime.Settings.Current);
             var b = new TestSession(parts, () => runtime.Settings.Current);
             void Choose(TestSession session, string typed, string word)

@@ -71,6 +71,9 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   impl は stub のウィンドウに `kStubImplStale` を PostMessage し、stub は `MeltypeTipImpl.dll.sha256` を読み直して、変わっていたら前の impl を `Deactivate` し、
   新しい impl を同じ `ITfThreadMgr`・`TfClientId` で `ActivateEx` する (未確定文字列は、前の impl の `Deactivate` が確定する)。
   差し替わるまでのキーは、Meltype.exe の応答がタイムアウトしたときと同じ扱いになる
+- `Register-Tip.ps1` は、登録した Meltype IME を同梱した Meltype の版 (`tip\version.txt`。`Build-Package.ps1` が Meltype.exe の版を書く) を `C:\Program Files\Meltype\tip\version.txt` に置く。
+  登録済みの impl が別ビルドのとき、Meltype.exe はこの版を「ばーじょん」の候補に出す (`TipServer.OtherRegisteredVersion`)。
+  DLL に版を埋め込まないのは、DLL が同じなら登録し直さない (UAC を出さない) ため (`MeltypeTip.rc`)
 - 別ビルドの impl とは通信しないので、パイプのプロトコルに後方互換性は要らない。
   互換性が要るのは stub と impl の ABI (`Globals.h` の `MeltypeTipCreateFn`・`kStubImplStale`) で、変更したら `kStubImplAbi` を上げる。
   stub は impl の `MeltypeTipAbi` が自分の `kStubImplAbi` と一致しなければロードした impl を使わないので、ABI を変更した更新は、アプリを再起動するまでそのアプリに反映されない
