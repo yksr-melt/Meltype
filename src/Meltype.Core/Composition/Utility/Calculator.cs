@@ -8,7 +8,7 @@ namespace Meltype.Composition.Utility;
 /// 数字と + - * / ( ) だけの式を計算する (変換の候補に結果を出す。issue #295)。
 /// 式として読めない・0 で割る・桁が大きすぎるときは null。外部の入力を実行しないよう、四則演算だけを自前で読む。
 /// </summary>
-public static class Calculator
+internal static class Calculator
 {
     private const int MaxLength = 80;
 

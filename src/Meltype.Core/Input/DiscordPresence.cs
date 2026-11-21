@@ -16,7 +16,7 @@ namespace Meltype.Input;
 /// 送るのは今日と合計の打鍵数・直近の 1 分あたりの打鍵数・Meltype の起動時刻だけ (打った文字・変換候補・入力先のアプリ名は送らない)。
 /// 入力とは別のスレッドで UpdateInterval ごとに送り、Discord が起動していない・切れたときは次の回につなぎ直す (入力には影響しない)。
 /// </summary>
-internal sealed class DiscordPresence : IDisposable
+public sealed class DiscordPresence : IDisposable
 {
     /// <summary>Discord の開発者ポータルで作ったアプリの ID (Application ID)。空なら何も送らない。</summary>
     public const string ClientId = "1567084278423093311";

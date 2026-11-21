@@ -20,7 +20,7 @@ public enum LineKind
 }
 
 /// <summary>「コード」のアプリで、フォーカスのある入力欄の種類。</summary>
-public enum CodeFocus
+internal enum CodeFocus
 {
     /// <summary>コードを書く場所ではない (チャット・AI への質問、設定の画面など)。一般のアプリと同じに扱う。</summary>
     None,
@@ -35,7 +35,7 @@ public enum CodeFocus
 /// キャレットがコメントや文字列の中にあるか (日本語を書く場所か) を調べる。
 /// 複数行のコメント・文字列 (/* … */ の途中の行、""" … """) は、行頭の * 以外は分からない。
 /// </summary>
-public static class LineContext
+internal static class LineContext
 {
     /// <summary>
     /// キャレットより前の文字列 (前の行も含んでよい) から、キャレットの位置の種類を調べる。
