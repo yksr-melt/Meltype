@@ -562,6 +562,23 @@ kbd {
   margin-bottom: 28px;
 }
 
+.hero-milestone {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 6px 16px 6px 12px;
+  border-radius: 999px;
+  background: var(--pink-soft);
+  color: var(--pink-deep);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.hero-milestone b {
+  font-family: var(--font-head);
+}
+
 .hero-stats {
   display: flex;
   flex-wrap: wrap;
