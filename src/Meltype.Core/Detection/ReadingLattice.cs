@@ -629,7 +629,10 @@ public sealed partial class CompositionDetector
             else if (!kanaInput && unknown[end] > unknown[start])
             {
                 var name = span.Length >= 3 && char.IsAsciiLetterUpper(span[0]) && char.IsAsciiLetterLower(span[1]);
-                cost = span.Sum(ch => char.IsAsciiLetterUpper(ch) ? UnknownUpperCost : name ? NameLetterCost : UnknownLetterCost);
+                // 日本人名 (Takahashi) は長さによらず知っている英単語と同じ重みにする。小文字 1 文字ごとの重みでは、長い名前ほど頭で切って日本語を続けた道 (T|赤橋・Toyo|だ) が軽くなる (#1744)。
+                // 名前の頭で切る道 (Ai|かわ) には、知らない語と同じく NameSplitCost を足すので、Name の印は残す
+                cost = name && IsJapaneseName(span) ? KnownEnglishCost
+                    : span.Sum(ch => char.IsAsciiLetterUpper(ch) ? UnknownUpperCost : name ? NameLetterCost : UnknownLetterCost);
                 edges.Add((new LatticeEdge(start, end, true, "", false, false, Name: name), cost));
                 continue;
             }
@@ -638,6 +641,11 @@ public sealed partial class CompositionDetector
         }
         return edges;
     }
+
+    /// <summary>大文字 1 文字の後ろが小文字だけで、ローマ字で読むと日本人の姓・名の読み (dictionaries/names.txt) になるか (Takahashi・Sato)。</summary>
+    private bool IsJapaneseName(string span) =>
+        span.Skip(1).All(char.IsAsciiLetterLower) && _romaji.ConvertLenient(span.ToLowerInvariant(), final: true) is var reading &&
+        reading.All(KanaChars.IsHiragana) && CommonReadings.Names.Contains(CommonReadings.WithoutLongVowels(reading));
 
     /// <summary>英単語の書き方の大文字・小文字か (its・Its・ITS と、固有名詞の書き方 GitHub)。iTs は its の書き方ではない。</summary>
     private bool IsWordCasing(string span) =>
