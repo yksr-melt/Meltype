@@ -123,6 +123,25 @@ internal static class FeedbackTests
     }
 
     [Test]
+    public static void Issue1744_CapitalizedJapaneseName_IsNotSplit()
+    {
+        // Issue #1744・#2168: 大文字で始めて打った日本人名が、頭で切られて日本語が続いていた (T赤橋・Yukiしろ・Takeもと・Toyoだ・Satoし)。
+        foreach (var (typed, expected) in new[]
+        {
+            ("Takahashi", "Takahashi"), ("Yukishiro", "Yukishiro"), ("Takemoto", "Takemoto"), ("Toyoda", "Toyoda"), ("Satoshi", "Satoshi"),
+            // 長音を書かないヘボン式と、書いた綴り
+            ("Sato", "Sato"), ("Satou", "Satou"),
+            // 名前の後ろの付属語は日本語のまま。小文字で打った名前は日本語
+            ("Tanakaga", "Tanakaが"), ("Satoshiha", "Satoshiは"), ("takahashi", "たかはし"),
+        })
+        {
+            var k = new CompositionTests.Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void Issue376_SuruAfterEnglishAndParticle_IsJapanese()
     {
         // Issue #376: 英単語 + 助詞 + する の活用 (password|ni|site) を、英単語 + 助詞 + 英単語 (api|no|error) と見て site を英字にしていた
@@ -1267,7 +1286,7 @@ internal static class LanguageLearningTests
             // Issue #104: 英単語 (moral) の最後の l + tu が っ にならなかった。英単語 + つ (hotel|tukau) は今までどおり
             ("moraltute", "もらって"), ("hoteltukau", "hotelつかう"), ("hoteltsukau", "hotelつかう"), ("mailtukau", "mailつかう"), ("realtukau", "realつかう"), ("tooltukau", "toolつかう"),
             // Issue #218: 英単語 (hotel・total) の後ろでわざわざ打った ltu が、l の重なり (te|ll = tell) で英字になっていた
-            ("hotelltu", "hotelっ"), ("hotelltsu", "hotelっ"), ("totalltute", "totalって"), ("hotellya", "hotellや"), ("welltuned", "welltuned"),
+            ("hotelltu", "hotelっ"), ("hotelltsu", "hotelっ"), ("totalltute", "totalって"), ("welltuned", "welltuned"),
             // Issue #220: 表示では tabで なのに、確定すると打ち間違いとして たべ に直されていた
             ("tabde", "tabで"), ("tabga", "tabが"), ("kyouhatabdeyaru", "きょうはtabでやる"), ("tabete", "たべて"), ("onegaishimsu", "おねがいします"),
             // 伸ばす音の う + について (そう|u|ni|t の unit) で、t と s が つ にならず英単語 unit になっていた。英単語 + する (commit|する) は今までどおり

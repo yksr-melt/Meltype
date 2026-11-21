@@ -9,7 +9,7 @@ namespace Meltype.Detection;
 /// 同梱のよく使う英単語の一覧 (dictionaries/english-words.txt、SCOWL から作成) で英単語かを調べる。
 /// 全 OS で同じ判定にするため、OS のスペルチェッカーは使わない (#1508)。
 /// </summary>
-public sealed class BuiltInWordChecker
+internal sealed class BuiltInWordChecker
 {
     private static readonly Lazy<BuiltInWordChecker> SharedInstance = new(() => new BuiltInWordChecker(DictionarySource.ReadEmbedded("english-words.txt")));
 

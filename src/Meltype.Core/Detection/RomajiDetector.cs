@@ -6,10 +6,10 @@ using System.Text;
 
 namespace Meltype.Detection;
 
-public readonly record struct RomajiToken(string Romaji, string Kana);
+internal readonly record struct RomajiToken(string Romaji, string Kana);
 
 /// <summary>ローマ字としての解析結果。入力途中 (prefix) を前提にしている。</summary>
-public sealed record RomajiAnalysis(
+internal sealed record RomajiAnalysis(
     bool IsValid,
     IReadOnlyList<RomajiToken> Tokens,
     string Partial,
@@ -197,7 +197,7 @@ public sealed class RomajiDetector
     private static bool IsVowel(char c) => c is 'a' or 'i' or 'u' or 'e' or 'o';
     private static bool IsConsonant(char c) => c is >= 'a' and <= 'z' && !IsVowel(c);
 
-    public RomajiAnalysis Analyze(string letters) => Analyze(letters, strictStart: true, composition: false);
+    internal RomajiAnalysis Analyze(string letters) => Analyze(letters, strictStart: true, composition: false);
 
     /// <summary>c 行 (ca / cu / co = か く こ) を k 行に読み替える (ch は そのまま)。英数状態の判定で、fucarete を fukarete として調べるのに使う。</summary>
     public static string ReadCRow(string letters)
@@ -215,7 +215,7 @@ public sealed class RomajiDetector
     /// 変換ボックス用。語の途中から解析し (語頭の「ん」「っ」も許す)、"nn" は Microsoft IME と同じく常に「ん」と読む
     /// (tanni → たんい。こんにちは は konnnichiha)。
     /// </summary>
-    public RomajiAnalysis AnalyzeFragment(string letters) => Analyze(letters, strictStart: false, composition: true);
+    internal RomajiAnalysis AnalyzeFragment(string letters) => Analyze(letters, strictStart: false, composition: true);
 
     private RomajiAnalysis Analyze(string letters, bool strictStart, bool composition)
     {
@@ -379,7 +379,7 @@ public sealed class RomajiDetector
         return analysis.IsValid ? analysis.Kana + analysis.Partial : letters;
     }
 
-    public RomajiAnalysis AnalyzeWord(string word)
+    internal RomajiAnalysis AnalyzeWord(string word)
     {
         var analysis = Analyze(word);
         return analysis.IsValid && analysis.Partial == "n" ? Analyze(word + "n") : analysis;

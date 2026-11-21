@@ -8,7 +8,7 @@ namespace Meltype.Engine;
 /// 設定の場所が空なら、アプリのフォルダーの <c>zenzai\</c> にあるものを使う。
 /// 自分で用意したものを使いたい人は、設定に場所を書けば同梱のものより優先する。
 /// </summary>
-public static class ZenzaiBundle
+internal static class ZenzaiBundle
 {
     /// <summary>同梱のフォルダーの名前 (アプリのフォルダーの中)。</summary>
     public const string FolderName = "zenzai";

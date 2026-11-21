@@ -12,7 +12,7 @@ namespace Meltype.Engine;
 /// </summary>
 /// <param name="create">llama-server と GGUF の場所と使う GPU から作る (テストでは差し替える)。</param>
 /// <param name="now">今の時刻 (ミリ秒。テストでは差し替える)。</param>
-public sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? create = null, Func<long>? now = null) : IDisposable
+internal sealed class ZenzaiHolder(Func<string, string, string, ZenzaiConverter>? create = null, Func<long>? now = null) : IDisposable
 {
     private readonly Func<string, string, string, ZenzaiConverter> _create = create ?? CreateAndWarmUp;
     private readonly Func<long> _now = now ?? (() => Environment.TickCount64);

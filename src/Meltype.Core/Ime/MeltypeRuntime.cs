@@ -83,7 +83,7 @@ public sealed class MeltypeRuntime : IDisposable
     public string DataDirectory { get; }
 
     /// <summary>config.json の設定 (変わったら読み直す。同じプロセスの設定画面は Apply で変える)。</summary>
-    internal SettingsFile Settings { get; }
+    public SettingsFile Settings { get; }
 
     /// <summary>設定を読み直した・変えた。設定の lock の中で、読んだ・変えたスレッドから呼ぶので、受け手は待たない (UI は BeginInvoke で触る)。</summary>
     public event Action<Settings>? SettingsChanged;
@@ -109,7 +109,7 @@ public sealed class MeltypeRuntime : IDisposable
     public SnippetStore Snippets { get; }
 
     /// <summary>#123 の候補で調べた GitHub のタイトル (設定「#番号で Issue・PR のタイトルを出す GitHub のリポジトリ」)。プロセスの間だけ覚える。</summary>
-    public GitHubIssueTitles GitHubTitles { get; } = new();
+    internal GitHubIssueTitles GitHubTitles { get; } = new();
 
     /// <summary>
     /// 変換エンジン (Mozc と、設定で ON なら Zenzai)。プロセスで 1 つ作り、入力欄の本体で共有する。止めるのは <see cref="Dispose"/>。

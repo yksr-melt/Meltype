@@ -4,7 +4,7 @@
 namespace Meltype.Composition;
 
 /// <summary>自動変換してはいけない区間の種類。</summary>
-public enum ProtectedKind
+internal enum ProtectedKind
 {
     Mention,
     Url,
@@ -17,7 +17,7 @@ public enum ProtectedKind
 /// 打った原文 (raw) のうち、自動変換・幅変換・かな化・誤字補正から保護する区間。
 /// 位置は raw の UTF-16 インデックス。サロゲートペアの途中には置かない。
 /// </summary>
-public readonly record struct ProtectedSpan(int Start, int Length, ProtectedKind Kind)
+internal readonly record struct ProtectedSpan(int Start, int Length, ProtectedKind Kind)
 {
     public int End => Start + Length;
 }
@@ -27,7 +27,7 @@ public readonly record struct ProtectedSpan(int Start, int Length, ProtectedKind
 /// 「ネットワーク上で妥当か」ではなく「構造の強い開始条件を満たすか」だけを見る (妥当性の検証ではない)。
 /// 初期実装は読みやすい線形スキャン。
 /// </summary>
-public static class ProtectedSpanScanner
+internal static class ProtectedSpanScanner
 {
     /// <summary>この位置から始まる保護区間を、優先順 (URL → WindowsPath → Email → Mention → PosixPath) で返す。</summary>
     public static IReadOnlyList<ProtectedSpan> Scan(string raw)
@@ -55,17 +55,6 @@ public static class ProtectedSpanScanner
     /// <summary>raw 全体が 1 つの保護区間か。</summary>
     public static bool CoversWhole(string raw) =>
         Scan(raw) is { Count: 1 } spans && spans[0].Start == 0 && spans[0].End == raw.Length;
-
-    /// <summary>raw の末尾が保護区間で終わっているか (その区間を返す)。</summary>
-    public static bool TryTail(string raw, out ProtectedSpan span)
-    {
-        span = default;
-        if (string.IsNullOrEmpty(raw)) return false;
-        var spans = Scan(raw);
-        if (spans.Count == 0 || spans[^1].End != raw.Length) return false;
-        span = spans[^1];
-        return true;
-    }
 
     private static ProtectedSpan? MatchAt(string raw, int start, int previousEnd, ref int schemeEnd)
     {

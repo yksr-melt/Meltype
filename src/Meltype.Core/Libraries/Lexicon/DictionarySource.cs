@@ -4,7 +4,7 @@
 namespace Meltype.Libraries.Lexicon;
 
 /// <summary>組み込み辞書 (dictionaries/*.txt を埋め込んだもの) とユーザー辞書を読む。</summary>
-public static class DictionarySource
+internal static class DictionarySource
 {
     public static string ReadEmbedded(string name)
     {
