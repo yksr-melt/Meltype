@@ -38,9 +38,13 @@ class AxisTests(unittest.TestCase):
         self.assertIn("0.001 × 1", table)
         self.assertTrue(any("2 off-scale" in text.get_text() for text in ax.texts))
 
-    def test_widely_different_versions_share_a_log_axis(self):
+    def test_widely_different_versions_share_a_wave_break(self):
         ax, stats = self.draw({"csharp": [100, 110, 120], "rust": [.1, .11, .12]})
-        self.assertEqual(ax.get_yscale(), "log")
+        self.assertEqual(ax.get_yscale(), "function")
+        a, b = stats["rust"]["axis_break"]
+        self.assertTrue(.12 < a < b < 100)
+        self.assertTrue(any(line.get_gid() == "axis-break-wave" for line in ax.lines))
+        ax.figure.canvas.draw()
         self.assertEqual(stats["csharp"]["axis_limits"], stats["rust"]["axis_limits"])
         self.assertFalse(stats["csharp"]["off_scale"])
         self.assertFalse(stats["rust"]["off_scale"])
@@ -77,7 +81,7 @@ class AxisTests(unittest.TestCase):
     def test_zero_samples_disable_auto_log_and_explicit_log_rejects_them(self):
         groups = {"csharp": [0, 1, 2], "rust": [100, 110, 120]}
         ax, _ = self.draw(groups)
-        self.assertEqual(ax.get_yscale(), "linear")
+        self.assertEqual(ax.get_yscale(), "function")
         with self.assertRaises(ValueError):
             self.draw(groups, log=True)
 

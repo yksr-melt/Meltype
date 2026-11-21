@@ -75,9 +75,58 @@ def axis_window(stats, log=None):
     return ("log" if use_log else "linear"), limits
 
 
+def separated_ranges(groups, limits):
+    """Find a large empty interval between complete visible distributions."""
+    ranges = []
+    for samples in groups.values():
+        visible = [v for v in samples if limits[0] <= v <= limits[1]]
+        ranges.append((min(visible), max(visible)))
+    ranges.sort()
+    low, high = ranges[0][0], max(b for _, b in ranges)
+    end = ranges[0][1]
+    for start, last in ranges[1:]:
+        gap = start - end
+        if gap > 0 and gap >= .8 * (high - low) and gap >= .25 * max(abs(high), abs(low)):
+            return low, end, start, high
+        end = max(end, last)
+    return None
+
+
+def draw_wave_break(ax, separated, limits):
+    low, end, start, high = separated
+    # Keep equal units on either side. Compress only the empty middle.
+    span = max((end - low) + (high - start), (start - end) * .04)
+    a, b = end + .08 * span, start - .08 * span
+    short_gap = .12 * span
+    ratio = short_gap / (b - a)
+
+    def forward(y):
+        return np.where(y <= a, y - a, np.where(y < b, (y - a) * ratio, short_gap + (y - b)))
+
+    def inverse(y):
+        return np.where(y <= 0, y + a, np.where(y < short_gap, a + y / ratio, b + (y - short_gap)))
+
+    ax.set_yscale("function", functions=(forward, inverse))
+    ax.set_ylim(*limits)
+    ticks = []
+    for lo, hi in [(low, end), (start, high)]:
+        ticks.extend([lo] if hi - lo < .13 * span else [lo, hi])
+    ax.set_yticks(ticks, [np.format_float_positional(t, precision=6, fractional=False, trim="-") for t in ticks])
+    x = np.linspace(-.012, 1, 320)
+    y = inverse(short_gap * (.5 + .22 * np.sin(x * 16 * np.pi)))
+    ax.plot(x, y, transform=ax.get_yaxis_transform(), color="#555555", linewidth=1,
+            clip_on=False, gid="axis-break-wave")
+    return [a, b]
+
+
 def boxes(ax, groups, ylabel, title, *, log=None):
     stats = [distribution(groups[v]) for v in VERSIONS]
     scale, limits = axis_window(stats, log)
+    separated = separated_ranges(groups, limits) if log is None else None
+    if separated:
+        low, end, start, high = separated
+        span = max((end - low) + (high - start), (start - end) * .04)
+        limits = max(limits[0], low - .12 * span), min(limits[1], high + .5 * span)
     medians = {stat["med"] for stat in stats}
     digits = next(n for n in range(4, 18) if len({format(m, f".{n}g") for m in medians}) == len(medians))
     visible_stats = []
@@ -108,14 +157,19 @@ def boxes(ax, groups, ylabel, title, *, log=None):
         ax.text(position, .98, annotation,
                 transform=ax.get_xaxis_transform(), ha="center", va="top", fontsize=9 if len(VERSIONS) == 3 else 10,
                 bbox=dict(facecolor="white", edgecolor="none", alpha=.9), zorder=5)
-    ax.set_yscale(scale)
-    ax.set_ylim(*limits)
-    if scale == "linear":
+    if separated:
+        interval = draw_wave_break(ax, separated, limits)
+        for stat in stats:
+            stat.update(axis_scale="broken-linear", axis_break=interval)
+    else:
+        ax.set_yscale(scale)
+        ax.set_ylim(*limits)
+    if scale == "linear" and not separated:
         ax.ticklabel_format(axis="y", style="plain", useOffset=(limits[1] - limits[0] < abs(limits[0]) * 1e-4))
     ax.set_xticks(range(1, len(VERSIONS) + 1), LABELS)
     ax.set_xlim(.45, len(VERSIONS) + .55)
     ax.set_title(title, fontsize=13, pad=12)
-    ax.set_ylabel(ylabel + (" (log scale)" if scale == "log" else ""))
+    ax.set_ylabel(ylabel + (" (wave = axis break)" if separated else " (log scale)" if scale == "log" else ""))
     ax.grid(axis="y", alpha=.22, which="both")
     ax.spines[["top", "right"]].set_visible(False)
     return {v: stat for v, stat in zip(VERSIONS, stats)}
@@ -344,7 +398,7 @@ def main():
             "", "## 条件と箱ひげ図の読み方", "",
             f"各入力・各版 {report['samples_per_round']} 試行 × {rounds} 巡、各巡 {report['warmups_per_case']} 回ウォームアップ。実行順は巡ごとに先頭を入れ替える循環順。CPU・RAMは各版 {process_count} プロセスを独立した観測値とする。",
             f"測定環境: {report['machine']} / {report.get('hardware', {}).get('Name',report['cpu'])} / {report['process_resources'][0]['logical_processors']}論理CPU / OS可視RAM {report['process_resources'][0]['system_memory_before']['total_bytes']/(1024**3):.2f} GiB。{report['rustc'].splitlines()[0]} {' / .NET ' + report.get('dotnet', 'not recorded (prebuilt)') if not rust_versions or with_csharp else ''}。", "",
-            "四分位数は線形補間（type 7）。箱はQ1〜Q3、黒線は中央値、ひげはQ1−1.5×IQR〜Q3＋1.5×IQR内の最端の観測値。赤い菱形は外れ値。統計は全観測値から計算する。各パネルは通常値に合わせて表示範囲を自動調整し、全比較対象に同じ目盛を使う。正の値の幅が10倍を超える場合は対数、それ以外は線形。Q1−3×幅〜Q3＋3×幅から離れた外れ値（幅はIQRと中央値の5%の大きい方、最低1e-9）は軸の拡大に使わず、表示範囲外なら画像に件数、本文の表に値を記載する。青/橙の点は表示範囲内の観測値。", "",
+            "四分位数は線形補間（type 7）。箱はQ1〜Q3、黒線は中央値、ひげはQ1−1.5×IQR〜Q3＋1.5×IQR内の最端の観測値。赤い菱形は外れ値。統計は全観測値から計算する。各パネルは通常値に合わせて表示範囲を自動調整し、全比較対象に同じ目盛を使う。比較対象の間に大きな空白がある場合は、その区間を波線で短縮する。波線の上下では同じ線形目盛を使う。それ以外は正の値の幅が10倍を超える場合に対数目盛を使う。Q1−3×幅〜Q3＋3×幅から離れた外れ値（幅はIQRと中央値の5%の大きい方、最低1e-9）は軸の拡大に使わず、表示範囲外なら画像に件数、本文の表に値を記載する。青/橙の点は表示範囲内の観測値。", "",
             "速度はCoreの打鍵＋JSON応答生成。セッション生成・辞書構築・起動は区間外。CPU・RAMはそれらとウォームアップ・JSON出力を含むプロセス全体。外部変換・OSスペル・ライブ変換・予測・学習・TSF・候補描画・実アプリ入力は対象外。出力/比較対象の打鍵状態の一致は全UI・全候補の同等性を意味しない。", "",
             "## 全入力の中央値", ""]
     header = "|入力|" + "|".join(f"{label} (ms)" for label in LABELS) + "|現在/以前|Rust状態一致|"

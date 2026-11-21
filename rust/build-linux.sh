@@ -17,6 +17,7 @@ if [[ "${MELTYPE_REQUIRE_MOZC:-0}" == 1 ]]; then
 fi
 cargo build --manifest-path "$root/Cargo.toml" --locked --release --workspace --target-dir "$target"
 mkdir -p "$out"
+cargo build --manifest-path "$root/Cargo.toml" --locked --release -p meltype-cli --features meltype-core/bundled-mozc --target-dir "$target"
 cp "$target/release/meltype-ibus" "$target/release/meltype-flash" "$target/release/meltype-rs" "$out/"
 cp "$root/LICENSE" "$root/THIRD-PARTY-NOTICES.md" "$root/rust/README.md" "$root/rust/MIGRATION.md" "$root/rust/ibus/install.sh" "$out/"
 cp "$root/assets/branding/meltype-flash-256.png" "$out/icon.png"

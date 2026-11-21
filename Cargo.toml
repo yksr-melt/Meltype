@@ -3,7 +3,7 @@ members = ["rust/ai", "rust/core", "rust/native", "rust/cli", "rust/settings-app
 resolver = "2"
 
 [workspace.package]
-version = "1.1.25"
+version = "1.1.26"
 edition = "2021"
 rust-version = "1.88"
 license = "GPL-3.0-or-later"
