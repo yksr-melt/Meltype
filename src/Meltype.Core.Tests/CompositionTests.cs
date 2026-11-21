@@ -16,7 +16,7 @@ internal static class CompositionTests
 
     internal sealed class FakeConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana switch
+        public string? Convert(string hiragana, string? before) => hiragana switch
         {
             "きょう" => "今日",
             "にほんご" => "日本語",
@@ -34,9 +34,9 @@ internal static class CompositionTests
         /// <summary>直近の ConvertClauses に渡された文脈 (文脈なしの呼び出しは数えない)。</summary>
         public string? LastContext { get; private set; }
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
         {
-            if (context is not null) LastContext = context;
+            if (before is not null) LastContext = before;
             return hiragana switch
             {
                 "たんいをとる" => [new("たんいを", "単位を"), new("とる", "取る")],
@@ -46,7 +46,7 @@ internal static class CompositionTests
                 "きょうはまけ" => [new("きょうは", "今日は"), new("まけ", "負け")],
                 "ひるか" => [new("ひる", "昼"), new("か", "化")],
                 // 本物の変換エンジンは、前に同じ語があると区切りを変える (「記号等」含め、 + きごうとう → 気強盗)。
-                "きごうとう" when context?.Contains("記号等") == true => [new("き", "気"), new("ごうとう", "強盗")],
+                "きごうとう" when before?.Contains("記号等") == true => [new("き", "気"), new("ごうとう", "強盗")],
                 "きごうとう" => [new("きごう", "記号"), new("とう", "等")],
                 "あつい" => [new("あつい", "熱い")],
                 "かわ" => [new("かわ", "川")],
@@ -454,45 +454,40 @@ internal static class CompositionTests
         public string? Showing => Host.View?.Text;
     }
 
-    private sealed class WideContextConverter : IKanjiConverter, IWideContextConverter
+    private sealed class ContextConverter : IKanjiConverter
     {
-        public List<string?> WideContexts { get; } = [];
-        public string? Convert(string hiragana) => null;
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => null;
+        public string? Before { get; private set; }
+        public string? Convert(string hiragana, string? before) => null;
 
-        public string? Convert(string hiragana, string? wideContext)
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
         {
-            WideContexts.Add(wideContext);
-            return null;
-        }
-
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext)
-        {
-            WideContexts.Add(wideContext);
+            Before = before;
             return null;
         }
     }
 
     [Test]
-    public static void WideContext_IsPassedToConvertersThatCanUseIt()
+    public static void Context_IsTheTextBeforeTheCaretAsIs()
     {
-        var converter = new WideContextConverter();
+        // 変換エンジンには、キャレットの前の文字をそのまま渡す。どこまで使うかは変換エンジンが決める
+        var converter = new ContextConverter();
         var k = new Keyboard(converter: converter);
         k.Host.PrecedingText = "昨日は雨でしたが、\n今日は";
         k.Type("kyou ");
-        Assert.True(converter.WideContexts.Count > 0 && converter.WideContexts.All(c => c == "昨日は雨でしたが、今日は"), "改行を除いて文をまたいで渡す: " + string.Join(" / ", converter.WideContexts));
-        converter.WideContexts.Clear();
-        var longText = string.Concat(Enumerable.Repeat("あ", 150)) + "終";
-        var l = new Keyboard(converter: converter);
-        l.Host.PrecedingText = longText;
-        l.Type("kyou ");
-        // 最大 100 文字にするが、フロントから届くキャレットの前を ImeSession が 20 文字に切るので、今は 20 文字までしか届かない
-        Assert.True(converter.WideContexts.Count > 0 && converter.WideContexts.All(c => c?.EndsWith('終') == true), "キャレットに近い方を残す");
-        converter.WideContexts.Clear();
-        var e = new Keyboard(converter: converter);
-        e.Host.PrecedingText = "Hello, this is a pen. ";
-        e.Type("kyou ");
-        Assert.True(converter.WideContexts.Count > 0 && converter.WideContexts.All(c => c is null), "英文のときは渡さない");
+        Assert.Equal("昨日は雨でしたが、\n今日は", converter.Before ?? "(なし)");
+    }
+
+    [Test]
+    public static void PrecedingText_PassageCrossesSentences()
+    {
+        // Zenzai の文脈は、改行を除いて文をまたぐ文章 (最大 100 文字)
+        Assert.Equal("昨日は雨でしたが、今日は", EngineContext.Passage("昨日は雨でしたが、\n今日は") ?? "(なし)", "改行を除いて文をまたいで渡す");
+        var passage = EngineContext.Passage(string.Concat(Enumerable.Repeat("あ", 150)) + "終");
+        Assert.Equal(100, passage?.Length ?? 0, "最大 100 文字");
+        Assert.True(passage!.EndsWith('終'), "キャレットに近い方を残す");
+        Assert.Equal("Hello, this is a pen.", EngineContext.Passage("Hello, this is a pen. ") ?? "(なし)", "英文もそのまま渡す");
+        // Mozc の文脈は、同じ文の日本語 (最大 10 文字)
+        Assert.Equal("今日は", EngineContext.Sentence("昨日は雨でした。今日は") ?? "(なし)");
     }
 
     [Test]
@@ -1222,9 +1217,9 @@ internal static class CompositionTests
     private sealed class SplitConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
     {
         private readonly FakeConverter _inner = new();
-        public string? Convert(string hiragana) => _inner.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+        public string? Convert(string hiragana, string? before) => _inner.Convert(hiragana, before);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
     }
 
     [Test]
@@ -3428,13 +3423,13 @@ internal static class CompositionTests
 
         public List<string> Received { get; } = [];
 
-        public string? Convert(string hiragana)
+        public string? Convert(string hiragana, string? before)
         {
             Received.Add(hiragana);
             return Map(hiragana);
         }
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
         {
             Received.Add(hiragana);
             return [new(hiragana, Map(hiragana))];
@@ -3518,9 +3513,9 @@ internal static class CompositionTests
     {
         public List<string> Received { get; } = [];
 
-        public string? Convert(string hiragana) => Map(hiragana);
+        public string? Convert(string hiragana, string? before) => Map(hiragana);
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
         {
             Received.Add(hiragana);
             return Map(hiragana) is { } text ? [new(hiragana, text)] : null;
@@ -4668,9 +4663,9 @@ internal static class CompositionTests
     /// </summary>
     private sealed class SymbolChangingConverter(bool split) : IKanjiConverter
     {
-        public string? Convert(string hiragana) => Map(hiragana);
+        public string? Convert(string hiragana, string? before) => Map(hiragana);
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
             split ? System.Text.RegularExpressions.Regex.Matches(hiragana, @"[\p{L}\p{N}]+|.").Select(m => new ConversionClause(m.Value, Map(m.Value))).ToList() : [new(hiragana, Map(hiragana))];
 
         private static string Map(string reading) => reading
@@ -4752,9 +4747,9 @@ internal static class CompositionTests
     private sealed class ClauseConverter(Dictionary<string, ConversionClause[]> clauses) : IKanjiConverter
     {
         private readonly FakeConverter _inner = new();
-        public string? Convert(string hiragana) => hiragana switch { "かける" => "掛ける", "わる" => "割る", "たす" => "足す", _ => _inner.Convert(hiragana) };
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, context);
+        public string? Convert(string hiragana, string? before) => hiragana switch { "かける" => "掛ける", "わる" => "割る", "たす" => "足す", _ => _inner.Convert(hiragana, before) };
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+            clauses.TryGetValue(hiragana, out var result) ? result : _inner.ConvertClauses(hiragana, before);
     }
 
     [Test]
@@ -4775,8 +4770,8 @@ internal static class CompositionTests
     {
         private readonly FakeConverter _inner = new();
         public List<string> Learned { get; } = [];
-        public string? Convert(string hiragana) => _inner.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => _inner.ConvertClauses(hiragana, context);
+        public string? Convert(string hiragana, string? before) => _inner.Convert(hiragana, before);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _inner.ConvertClauses(hiragana, before);
 
         public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
         {
@@ -4787,8 +4782,8 @@ internal static class CompositionTests
     /// <summary>しゃーなし を 西なし にする変換エンジン (Mozc の苦手な語の代わり)。</summary>
     private sealed class NishinashiConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana.Replace("しゃーなし", "西なし");
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => [new(hiragana, Convert(hiragana)!)];
+        public string? Convert(string hiragana, string? before) => hiragana.Replace("しゃーなし", "西なし");
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => [new(hiragana, Convert(hiragana, before)!)];
     }
 
     [Test]
@@ -4805,8 +4800,8 @@ internal static class CompositionTests
     /// <summary>いちがっき を 一楽器 にする変換エンジン (issue #1037)。</summary>
     private sealed class IchigakkiConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana.Replace("いちがっき", "一楽器").Replace("いち", "一").Replace("がっき", "楽器");
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => [new(hiragana, Convert(hiragana)!)];
+        public string? Convert(string hiragana, string? before) => hiragana.Replace("いちがっき", "一楽器").Replace("いち", "一").Replace("がっき", "楽器");
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => [new(hiragana, Convert(hiragana, before)!)];
     }
 
     [Test]
@@ -4929,9 +4924,9 @@ internal static class CompositionTests
     /// <summary>やほやほ を 谷保谷保 にする変換エンジン (issue #424)。</summary>
     private sealed class YahoConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana == "やほやほ" ? "谷保谷保" : null;
+        public string? Convert(string hiragana, string? before) => hiragana == "やほやほ" ? "谷保谷保" : null;
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
             hiragana == "やほやほ" ? [new("やほ", "谷保"), new("やほ", "谷保")] : null;
     }
 
@@ -4947,15 +4942,15 @@ internal static class CompositionTests
     /// <summary>しけんし を 試験し、しけんしたい を 試験したい にする変換エンジン (issue #1276)。</summary>
     private sealed class ShikenshiConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana switch
+        public string? Convert(string hiragana, string? before) => hiragana switch
         {
             "しけんし" => "試験し",
             "しけんしたい" => "試験したい",
             _ => null,
         };
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-            Convert(hiragana) is { } text ? [new(hiragana, text)] : null;
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
+            Convert(hiragana, before) is { } text ? [new(hiragana, text)] : null;
     }
 
     [Test]
@@ -4990,9 +4985,9 @@ internal static class CompositionTests
     /// <summary>さいき を 再起 にする変換エンジン (issue #1681)。</summary>
     private sealed class SaikiConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana == "さいき" ? "再起" : null;
+        public string? Convert(string hiragana, string? before) => hiragana == "さいき" ? "再起" : null;
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) =>
             hiragana == "さいき" ? [new("さいき", "再起")] : null;
     }
 
@@ -5187,8 +5182,8 @@ internal static class CompositionTests
     /// <summary>わたしのことがすき・しのがきた を区切る変換エンジン (ユーザー辞書の語が文節の途中に入るテスト用)。</summary>
     private sealed class WatashiConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => ConvertClauses(hiragana) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => hiragana switch
+        public string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana switch
         {
             "わたしのことがすき" => [new("わたしの", "私の"), new("ことが", "事が"), new("すき", "好き")],
             "わた" => [new("わた", "綿")],
@@ -5221,8 +5216,8 @@ internal static class CompositionTests
 
     private sealed class AgeashiConverter : IKanjiConverter
     {
-        public string? Convert(string hiragana) => ConvertClauses(hiragana) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => hiragana switch
+        public string? Convert(string hiragana, string? before) => ConvertClauses(hiragana, before) is { } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana switch
         {
             "あげあしとらないで" => [new("あげあし", "揚げ足"), new("とらないで", "取らないで")],
             "ないで" => [new("ないで", "内で")],
@@ -5354,48 +5349,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Context_DoesNotChangeClauseBoundaries()
-    {
-        // 報告: 記号等 がどうしても 機強盗 になる (前に「記号等」があると変換エンジンが き|ごうとう と区切る)。
-        var k = new Keyboard();
-        k.Host.PrecedingText = "文章を「記号等」含め、";
-        k.Type("kigoutou ");
-        Assert.Equal("記号|等", string.Join("|", k.Host.View!.Clauses!), "文脈で区切りが変わるなら文脈なしの結果を使う");
-    }
-
-    [Test]
-    public static void NounStartingWithNi_GetsNoDummyContext()
-    {
-        // 「庭に花が咲いている」が「に輪に花が咲いている」になる (仮の文脈「これ」で「に」を助詞と読ませたため)。
-        foreach (var kana in new[] { "にわにはながさいている", "にほんごをはなす", "にんげんのからだ", "にもつがとどいた", "にしのほう" })
-        {
-            Assert.True(!CompositionController.StartsWithParticleNi(kana), kana + ": 「に」で始まる語には仮の文脈を付けない");
-        }
-        foreach (var kana in new[] { "になってしまう", "についてかんがえる", "によってちがう", "にとってたいせつ", "にかんするしつもん", "にむけて" })
-        {
-            Assert.True(CompositionController.StartsWithParticleNi(kana), kana + ": 助詞の「に」には仮の文脈を付ける");
-        }
-    }
-
-    [Test]
-    public static void ParticleStart_GetsContext()
-    {
-        // 報告: ○○になってしまう → 「になってしまう」が「担ってしまう」になる。
-        var k = new Keyboard();
-        k.Type("ninatteshimau ");
-        Assert.Equal("これ", k.Converter.LastContext, "前の文脈が無いときは仮の文脈で「に」を助詞として読ませる");
-
-        k = new Keyboard();
-        k.Host.PrecedingText = "〇〇";
-        k.Type("ninatteshimau ");
-        Assert.Equal("〇〇", k.Converter.LastContext, "○ などの記号も日本語の文脈として渡す");
-
-        k = new Keyboard();
-        k.Type("hashiru ");
-        Assert.True(k.Converter.LastContext is null, "に 以外で始まる読みには仮の文脈を付けない (はしる → は知る を防ぐ)");
-    }
-
-    [Test]
     public static void Learning_SkipsSingleKana()
     {
         var history = new ConversionHistory(null);
@@ -5495,28 +5448,28 @@ internal static class CompositionTests
         public List<string> WithZenzai { get; } = [];
         public List<string> WithoutZenzai { get; } = [];
 
-        public string? Convert(string hiragana)
+        public string? Convert(string hiragana, string? before)
         {
             WithZenzai.Add(hiragana);
-            return _inner.Convert(hiragana);
+            return _inner.Convert(hiragana, before);
         }
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
         {
             WithZenzai.Add(hiragana);
-            return _inner.ConvertClauses(hiragana, context);
+            return _inner.ConvertClauses(hiragana, before);
         }
 
         public string? ConvertStandalone(string hiragana)
         {
             WithoutZenzai.Add(hiragana);
-            return _inner.Convert(hiragana);
+            return _inner.Convert(hiragana, null);
         }
 
-        public IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null)
+        public IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? before)
         {
             WithoutZenzai.Add(hiragana);
-            return _inner.ConvertClauses(hiragana, context);
+            return _inner.ConvertClauses(hiragana, before);
         }
     }
 
@@ -5601,6 +5554,38 @@ internal static class CompositionTests
         Assert.True(k.Host.View.Candidates.Contains("たんいをと★"), "選んでいる文節: " + string.Join(",", k.Host.View.Candidates));
         k.Press(VirtualKeys.Right);
         Assert.True(k.Host.View.Candidates.Contains("る★"), "前に選んでいた次の文節: " + string.Join(",", k.Host.View.Candidates));
+    }
+
+    private sealed class ContextRecordingConverter : IKanjiConverter
+    {
+        private readonly FakeConverter _inner = new();
+        public List<(string Hiragana, string? Before)> Converted { get; } = [];
+
+        public string? Convert(string hiragana, string? before)
+        {
+            Converted.Add((hiragana, before));
+            return _inner.Convert(hiragana, before);
+        }
+
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _inner.ConvertClauses(hiragana, before);
+    }
+
+    [Test]
+    public static void Clauses_ResizedClauseUsesClausesBeforeItAsContext()
+    {
+        // 区切りを動かして読みだけで変換し直す文節には、キャレットの前に続けて、変換ボックスの中でその文節より前にある文字も文脈にする
+        var converter = new ContextRecordingConverter();
+        var k = new Keyboard(converter: converter);
+        k.Host.PrecedingText = "これは";
+        k.Type("nihongowokaku ");
+        Assert.Equal("日本語を|書く", string.Join("|", k.Host.View!.Clauses!));
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Left);
+        k.Key(VirtualKeys.LShift, up: true);
+        Assert.Equal("日本語|をかく", string.Join("|", k.Host.View!.Clauses!));
+        Assert.True(converter.Converted.Contains(("にほんご", "これは")), string.Join(",", converter.Converted));
+        Assert.True(converter.Converted.Contains(("をかく", "これは日本語")), string.Join(",", converter.Converted));
     }
 
     [Test]
@@ -5969,12 +5954,12 @@ internal static class CompositionTests
     private sealed class KyouhaConverter : IKanjiConverter
     {
         private readonly FakeConverter _inner = new();
-        public string? Convert(string hiragana) => _inner.Convert(hiragana);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => hiragana switch
+        public string? Convert(string hiragana, string? before) => _inner.Convert(hiragana, before);
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => hiragana switch
         {
             "きょう" => [new("きょう", "今日")],
             "きょうは" => [new("きょう", "今日"), new("は", "は")],
-            _ => _inner.ConvertClauses(hiragana, context),
+            _ => _inner.ConvertClauses(hiragana, before),
         };
     }
 

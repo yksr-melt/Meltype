@@ -940,14 +940,14 @@ internal static class LanguageLearningTests
     /// <summary>Mozc のように「ばーじょん」を「バージョン」にする変換エンジン (版番号は学習しない)。</summary>
     private sealed class VersionConverter : IKanjiConverter
     {
-        public string? Convert(string reading) => reading switch
+        public string? Convert(string reading, string? before) => reading switch
         {
             "ばーじょん" => "バージョン",
             "むかしの" => "昔の",
             "むかしのばーじょん" => "昔のバージョン",
             _ => null,
         };
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => reading switch
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before) => reading switch
         {
             "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", "バージョン")],
             "ばーじょん" => [new(reading, "バージョン")],

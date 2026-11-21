@@ -10,7 +10,7 @@ namespace Meltype.Composition;
 /// </summary>
 /// <param name="zenzaiFailed">変換で例外になった Zenzai を、持ち主 (zenzai を渡した側) に知らせる。止めて作り直すのは持ち主が行う。</param>
 public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? zenzai = null, Action<ZenzaiConverter>? zenzaiFailed = null)
-    : IKanjiConverter, ILearningConverter, IWideContextConverter, IStandaloneConverter, IBackgroundConverter
+    : IKanjiConverter, ILearningConverter, IStandaloneConverter, IBackgroundConverter
 {
     private ZenzaiConverter? _subscribedZenzai;
     private Action? _zenzaiReady;
@@ -59,7 +59,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// 変換で例外になった Zenzai は、それからは使わず (打つたびに例外にしない)、持ち主に知らせる (zenzaiFailed)。
     /// 止める (Dispose) のは持ち主で、ここでは止めない。持ち主が新しく作ったら、それは使う。
     /// </summary>
-    private List<ConversionClause>? Zenzai(string hiragana, string? context, string? wideContext)
+    private List<ConversionClause>? Zenzai(string hiragana, string? before)
     {
         ZenzaiConverter? z = null;
         try
@@ -67,7 +67,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
             z = zenzai?.Invoke();
             if (z is null || ReferenceEquals(z, _failedZenzai) || !z.IsAvailable) return null;
             Subscribe(z);
-            return z.ConvertClauses(hiragana, wideContext ?? context)?.Select(c => c with { Zenzai = true }).ToList();
+            return z.ConvertClauses(hiragana, before)?.Select(c => c with { Zenzai = true }).ToList();
         }
         catch (Exception ex)
         {
@@ -84,18 +84,19 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     private object? _failedZenzai;
     private static readonly object CouldNotCreate = new();
 
-    public string? Convert(string hiragana) => Convert(hiragana, null);
-
-    /// <summary>読み全体の変換。Zenzai には広い文脈 (wideContext) を渡す (IWideContextConverter)。</summary>
-    public string? Convert(string hiragana, string? wideContext) =>
-        (Zenzai(hiragana, null, wideContext) is [var z] && IsUsable(hiragana, z.Text) ? z.Text : null) ?? ConvertStandalone(hiragana);
+    /// <summary>
+    /// 読み全体の変換。Zenzai には文の変換 (<see cref="ConvertClauses"/>) と同じ文脈で頼む (Zenzai は最後に頼まれた 1 件だけを処理するので、
+    /// 同じ読みを別の文脈で頼むと、文の変換の依頼が消える)。
+    /// </summary>
+    public string? Convert(string hiragana, string? before) =>
+        (Zenzai(hiragana, before) is [var z] && IsUsable(hiragana, before, z.Text) ? z.Text : null) ?? mozc.Convert(hiragana, before);
 
     /// <summary>Zenzai の答えを使えるか (<see cref="ConvertClauses"/> と同じ決め方): かなが読みと合うか、Mozc の文節ごとの候補をつないで作れるか。</summary>
-    private bool IsUsable(string hiragana, string answer) =>
-        ZenzaiConverter.IsPlausible(hiragana, answer) || IsBuiltFromMozcCandidates(hiragana, answer);
+    private bool IsUsable(string hiragana, string? before, string answer) =>
+        ZenzaiConverter.IsPlausible(hiragana, answer) || IsBuiltFromMozcCandidates(hiragana, before, answer);
 
-    private bool IsBuiltFromMozcCandidates(string hiragana, string answer) =>
-        mozc.ConvertWithCandidates(hiragana) is { } fromMozc && Align(fromMozc, answer) is not null;
+    private bool IsBuiltFromMozcCandidates(string hiragana, string? before, string answer) =>
+        mozc.ConvertWithCandidates(hiragana, before) is { } fromMozc && Align(fromMozc, answer) is not null;
 
     /// <summary>
     /// <see cref="IsBuiltFromMozcCandidates"/> と同じ (文脈なし)。Mozc が答えなかったら null。
@@ -105,7 +106,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
         mozc.ConvertWithCandidatesNow(hiragana) is { } fromMozc ? Align(fromMozc, answer) is not null : null;
 
     /// <summary>Zenzai を使わない変換 (文節ごとの候補に足す「その読みだけの変換」用。IStandaloneConverter)。</summary>
-    public string? ConvertStandalone(string hiragana) => mozc.Convert(hiragana);
+    public string? ConvertStandalone(string hiragana) => mozc.Convert(hiragana, null);
 
     /// <summary>
     /// Zenzai が使えれば Zenzai の結果。Mozc の結果と同じ文字列なら、そちらの文節の区切りを使う
@@ -116,14 +117,11 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     /// Mozc の候補で作れない答えは、かなが読みと合うときだけ使う (<see cref="ZenzaiConverter.IsPlausible"/>)。
     /// 壊れた答え (はーどうぇ → ハードウェアウェア) は使わず、表記が読みと違う語 (きずく → 気づく、あんはさうぇい → アン・ハサウェイ) は Mozc の候補にあれば使う。
     /// </summary>
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => ConvertClauses(hiragana, context, null);
-
-    /// <summary><see cref="ConvertClauses(string, string?)"/> と同じ。Zenzai には context の代わりに広い文脈 (wideContext) があれば渡す (IWideContextConverter)。</summary>
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context, string? wideContext)
+    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before)
     {
-        var fromMozc = mozc.ConvertWithCandidates(hiragana, context);
+        var fromMozc = mozc.ConvertWithCandidates(hiragana, before);
         var other = fromMozc?.Select(s => s.Clause).ToList();
-        if (Zenzai(hiragana, context, wideContext) is not { Count: > 0 } z) return other;
+        if (Zenzai(hiragana, before) is not { Count: > 0 } z) return other;
         // Zenzai の答えと同じなら、その文節も Zenzai の答えとして印を付ける
         if (other is not null && string.Concat(other.Select(c => c.Text)) == z[0].Text) return other.Select(c => c with { Zenzai = true }).ToList();
         // 候補は、この変換で文節と一緒に受け取ったものを使う (ヘルパーには聞き直さない)。
@@ -133,8 +131,8 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     }
 
     /// <summary>Zenzai を使わない、文節に区切った変換 (英日の区切りの案の変換用。IStandaloneConverter)。</summary>
-    public IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? context = null) =>
-        mozc.ConvertWithCandidates(hiragana, context)?.Select(s => s.Clause).ToList();
+    public IReadOnlyList<ConversionClause>? ConvertClausesStandalone(string hiragana, string? before) =>
+        mozc.ConvertWithCandidates(hiragana, before)?.Select(s => s.Clause).ToList();
 
     /// <summary>
     /// text を、文節ごとに候補を 1 つずつ選んでつなげて作れるなら、文節の区切りはそのままで、選んだ候補を文字列にした文節の並び。
@@ -177,7 +175,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
     }
 
     /// <summary>確定した文節を Mozc に覚えさせる。</summary>
-    public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => mozc.Learn(context, clauses);
+    public void Learn(string? before, IReadOnlyList<ConversionClause> clauses) => mozc.Learn(before, clauses);
 
     /// <summary>読みの候補の一覧 (Mozc)。</summary>
     public IReadOnlyList<string> Candidates(string reading) => mozc.Candidates(reading);
