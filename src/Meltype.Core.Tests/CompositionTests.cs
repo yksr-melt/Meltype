@@ -2248,6 +2248,26 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2038_DashAfterLettersAtEnd_IsLongVowel()
+    {
+        // #2038: 英字の直後で後ろに英数字が続かない - を英語の記号として読み、ROMpura- が英字のまま、he- が he- のままだった。
+        foreach (var (typed, expected) in new[]
+        {
+            ("ROMpura-", "ROMぷらー"),
+            ("he-", "へー"),
+            ("karenda-", "かれんだー"),
+            // 後ろに英字が続く - は英語の語をつなぐ記号のまま
+            ("pre-release", "pre-release"),
+            ("e-mail", "e-mail"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
     public static void Issue1132_ShortEnglishThenJapanese()
     {
         // 短い英単語の後ろが読める日本語でも、#537 の補正で全文英字に戻っていた。

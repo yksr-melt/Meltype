@@ -250,8 +250,11 @@ public sealed partial class CompositionDetector
             var japanese = JapaneseEdges(prepared, units, text, p, unitOf, unitsEnd, pending, kanaInput);
             var english = EnglishEdges(prepared, learning, text, p, unknown, kanaInput, manual, IsBoundary, precedingEnglish == true);
             var unit = p < unitsEnd ? unitAt[p] : -1;
-            // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない
-            LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit])
+            // 記号・数字・空白・z の記号 (zh = ←) の単位: 言語を切り替えない。
+            // ただし英字の直後で、後ろに英数字が続かない - は英語の語をつなぐ記号でなく長音 (he|ー・ROMpura|ー) なので、記号にしない
+            var trailingDash = unit >= 0 && units[unit].Raw == "-" && p > 0 && char.IsAsciiLetter(text[p - 1]) &&
+                (p + 1 >= length || !char.IsAsciiLetterOrDigit(text[p + 1]));
+            LatticeEdge? neutral = unit >= 0 && !IsKanaUnit(units[unit]) && !IsLetterUnit(units[unit]) && !trailingDash
                 ? new LatticeEdge(p, prepared.RawOffsets[unit + 1], false, units[unit].Kana, false, false, true)
                 : null;
 
@@ -295,7 +298,7 @@ public sealed partial class CompositionDetector
                     OfferEdge(node, state, new LatticeEdge(p, domain == units.Count ? length : prepared.RawOffsets[domain], true, "", false, false),
                         KnownEnglishCost + ReadableDomainLetterCost * (text.IndexOf('.', p) - p));
                 // 英文の中の記号 (, . ! ? -) は半角のまま
-                if (unit >= 0 && !kanaInput && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
+                if (unit >= 0 && !kanaInput && !trailingDash && IsAsciiSymbol(units[unit]) && state.PreviousEnglish && state.AllEnglish &&
                     KeepsPunctuationAfterEnglish(units, unit, pending, precedingEnglish))
                 {
                     OfferEdge(node, state, new LatticeEdge(p, p + 1, true, "", false, false), 0);
