@@ -224,6 +224,7 @@ internal static class CompositionTests
         public bool FunctionKeysAffectSelectedClause { get => Settings.FunctionKeysAffectSelectedClause; set => Settings.FunctionKeysAffectSelectedClause = value; }
         public Meltype.Config.ControlKeyLayout ControlKeys { get => Settings.ControlKeys; set => Settings.ControlKeys = value; }
         public bool PartialCommit { get => Settings.PartialCommit; set => Settings.PartialCommit = value; }
+        public bool ConversionStartsAtLastClause { get => Settings.ConversionStartsAtLastClause; set => Settings.ConversionStartsAtLastClause = value; }
         public bool CursorIntoBrackets { get => Settings.CursorIntoBrackets; set => Settings.CursorIntoBrackets = value; }
         public string ControlKeyBindings { get => Settings.ControlKeyBindings; set => Settings.ControlKeyBindings = value; }
         public bool CalculatorCandidates { get => Settings.CalculatorCandidates; set => Settings.CalculatorCandidates = value; }
@@ -556,7 +557,7 @@ internal static class CompositionTests
             j.Press(key);
             Assert.True(j.Host.View?.Converting == true, $"英字から変換: {key}");
             Assert.Equal("単位を|取る", string.Join("|", j.Host.View!.Clauses!), $"文節: {key}");
-            Assert.Equal(1, j.Host.View.SelectedClause, $"最後の文節: {key}");
+            Assert.Equal(0, j.Host.View.SelectedClause, $"先頭の文節: {key}");
         }
 
         // 設定が OFF なら今までどおり (kyou は日本語)
@@ -807,7 +808,7 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Convert);
         Assert.True(k.Host.View?.Converting == true, "選択範囲を再変換");
         Assert.Equal("単位を|取る", string.Join("|", k.Host.View!.Clauses!));
-        Assert.Equal(1, k.Host.View.SelectedClause, "最後の文節を選ぶ");
+        Assert.Equal(0, k.Host.View.SelectedClause, "先頭の文節を選ぶ");
         Assert.Equal(0, k.Host.Output.Count, "確定までは選択範囲を置き換えない");
     }
 
@@ -1667,7 +1668,9 @@ internal static class CompositionTests
         var k = new Keyboard();
         k.Type("nihongowokaku ");
         Assert.Equal("日本語を|書く", string.Join("|", k.Host.View!.Clauses!), "Space で文節に区切って変換");
-        Assert.Equal(1, k.Host.View.SelectedClause, "最初は最後の文節を選択");
+        Assert.Equal(0, k.Host.View.SelectedClause, "最初は先頭の文節を選択");
+        k.Press(VirtualKeys.Right);
+        Assert.Equal(1, k.Host.View.SelectedClause, "→ で次の文節");
         k.Type(" ");
         Assert.Equal("日本語を|かく", string.Join("|", k.Host.View.Clauses!), "Space で選択中の文節だけ次の候補");
         k.Press(VirtualKeys.Left);
@@ -1677,43 +1680,33 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue1620_ConversionStartsAtTheLastClause()
+    public static void ConversionStartsAtTheFirstOrLastClause()
     {
-        foreach (var key in new[] { "space", "shift-space", "tab", "convert" })
-        {
-            var converter = new SplitConverter(new Dictionary<string, ConversionClause[]>
+        foreach (var last in new[] { false, true })
+            foreach (var key in new[] { "space", "shift-space", "tab", "convert", "down", "left", "right" })
             {
-                ["きょうはてんきがいいから"] = [new("きょうは", "今日は"), new("てんきが", "天気が"), new("いいから", "いいから")],
-            });
-            var k = new Keyboard(converter: converter, tabConversion: true);
-            k.Type("kyouhatenkigaiikara");
-            if (key == "shift-space") k.Key(VirtualKeys.LShift);
-            k.Press(key switch { "tab" => VirtualKeys.Tab, "convert" => VirtualKeys.Convert, _ => VirtualKeys.Space });
-            if (key == "shift-space") k.Key(VirtualKeys.LShift, up: true);
-            var view = k.Host.View!;
-            Assert.Equal("今日は|天気が|いいから", string.Join("|", view.Clauses!), key);
-            Assert.Equal(2, view.SelectedClause, key);
-            k.Press(VirtualKeys.Left);
-            Assert.Equal(1, k.Host.View!.SelectedClause, key);
-            k.Press(VirtualKeys.Right);
-            Assert.Equal(2, k.Host.View!.SelectedClause, key);
-        }
-    }
-
-    [Test]
-    public static void Issue1620_NumberAndPartialCommitAtTheLastClause()
-    {
-        var number = new Keyboard();
-        number.Type("nihongowokaku ");
-        var chosen = number.Host.View!.Candidates[1];
-        number.Press('2');
-        Assert.Equal("日本語を" + chosen, number.Host.Document, "番号を選ぶと全文を確定");
-        var partial = new Keyboard { PartialCommit = true };
-        partial.Type("nihongowokaku ");
-        partial.Key(VirtualKeys.LShift);
-        partial.Press(VirtualKeys.Return);
-        partial.Key(VirtualKeys.LShift, up: true);
-        Assert.Equal("日本語を書く", partial.Host.Document, "最後の文節までを確定");
+                var converter = new SplitConverter(new Dictionary<string, ConversionClause[]>
+                {
+                    ["きょうはてんきがいいから"] = [new("きょうは", "今日は"), new("てんきが", "天気が"), new("いいから", "いいから")],
+                });
+                var k = new Keyboard(converter: converter, tabConversion: true) { ConversionStartsAtLastClause = last };
+                k.Type("kyouhatenkigaiikara");
+                if (key == "shift-space") k.Key(VirtualKeys.LShift);
+                k.Press(key switch
+                {
+                    "tab" => VirtualKeys.Tab,
+                    "convert" => VirtualKeys.Convert,
+                    "down" => VirtualKeys.Down,
+                    "left" => VirtualKeys.Left,
+                    "right" => VirtualKeys.Right,
+                    _ => VirtualKeys.Space,
+                });
+                if (key == "shift-space") k.Key(VirtualKeys.LShift, up: true);
+                var view = k.Host.View!;
+                Assert.Equal("今日は|天気が|いいから", string.Join("|", view.Clauses!), $"{key} {last}");
+                var expected = key switch { "left" => 2, "right" => 0, _ => last ? 2 : 0 };
+                Assert.Equal(expected, view.SelectedClause, $"{key} {last}");
+            }
     }
 
     [Test]
@@ -1744,15 +1737,15 @@ internal static class CompositionTests
             arrow.Press(key);
             Assert.True(arrow.Host.View?.Converting == true, $"矢印キーで変換: {key}");
             Assert.Equal(2, arrow.Host.View!.Clauses!.Count, $"文節数: {key}");
-            Assert.Equal("単位を", arrow.Host.View.Clauses[0], $"先頭の文節は変えない: {key}");
-            Assert.Equal(1, arrow.Host.View.SelectedClause, $"最後の文節を選ぶ: {key}");
+            Assert.Equal("取る", arrow.Host.View.Clauses[1], $"後ろの文節は変えない: {key}");
+            Assert.Equal(0, arrow.Host.View.SelectedClause, $"先頭の文節を選ぶ: {key}");
             if (key == VirtualKeys.Up)
             {
                 Assert.True(arrow.Host.View.Candidates.Count > 1, "前の候補がある");
-                Assert.Equal(arrow.Host.View.Candidates.Count - 1, arrow.Host.View.SelectedIndex, "↑ は最後の文節の前の候補を選ぶ");
+                Assert.Equal(arrow.Host.View.Candidates.Count - 1, arrow.Host.View.SelectedIndex, "↑ は先頭の文節の前の候補を選ぶ");
             }
             else
-                Assert.Equal("取る", arrow.Host.View.Clauses[1], "↓ は最初の候補を選ぶ");
+                Assert.Equal("単位を", arrow.Host.View.Clauses[0], "↓ は最初の候補を選ぶ");
         }
     }
 
@@ -2766,6 +2759,7 @@ internal static class CompositionTests
         {
             var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
             k.Type("m3e4wotukau ");
+            k.Press(VirtualKeys.Right);
             ShiftArrow(k, VirtualKeys.Left);
             ShiftArrow(k, VirtualKeys.Left);
             ShiftArrow(k, VirtualKeys.Right);
@@ -2784,6 +2778,7 @@ internal static class CompositionTests
         {
             var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
             k.Type("m3e4wotukau ");
+            k.Press(VirtualKeys.Right);
             ShiftArrow(k, VirtualKeys.Left);
             var before = k.Host.View!.Clauses!;
             Assert.Equal("m|3え4をつか|う", string.Join("|", before), "後ろの文節が縮む");
@@ -2815,7 +2810,7 @@ internal static class CompositionTests
         {
             var k = new Keyboard { FunctionKeysAffectSelectedClause = true };
             k.Type("nihongowogoogleto ");
-            k.Press(VirtualKeys.Left);
+            k.Press(VirtualKeys.Right);
             Assert.Equal("にほんごを|google|と", string.Join("|", k.Host.View!.Clauses!), "2 番目の英語の文節を選ぶ");
             k.Press(vk);
             Assert.True(k.Host.View!.Converting, "変換は続く");
@@ -5577,8 +5572,6 @@ internal static class CompositionTests
         // (mi-thingu は #153 の対応で最初から みーてぃんぐ と読むようになったので、英語の文節が残る例で確かめる)
         var k = new Keyboard();
         k.Type("konohoteldeyaru ");
-        k.Press(VirtualKeys.Left);
-        k.Press(VirtualKeys.Left);
         Assert.Equal("この|hotel|でやる", string.Join("|", k.Host.View!.Clauses!));
         k.Key(VirtualKeys.LShift);
         k.Press(VirtualKeys.Right);
@@ -5589,7 +5582,7 @@ internal static class CompositionTests
 
         k = new Keyboard();
         k.Type("konohoteldeyaru ");
-        k.Press(VirtualKeys.Left);
+        k.Press(VirtualKeys.Right);
         k.Key(VirtualKeys.LShift);
         k.Press(VirtualKeys.Left);
         Assert.Equal("この|ほて|lでやる", string.Join("|", k.Host.View!.Clauses!), "選んだ英語の文節も読み直して縮め、外れたかなは次の文節へ");
@@ -5599,8 +5592,6 @@ internal static class CompositionTests
 
         k = new Keyboard();
         k.Type("nihongoGithubde ");
-        k.Press(VirtualKeys.Left);
-        k.Press(VirtualKeys.Left);
         Assert.Equal("日本語|Github|で", string.Join("|", k.Host.View!.Clauses!));
         k.Key(VirtualKeys.LShift);
         k.Press(VirtualKeys.Left);
@@ -6086,12 +6077,10 @@ internal static class CompositionTests
         k = new Keyboard(converter: converter);
         k.Type("buresureddo ");
         Assert.True(k.Host.View?.Suggestion?.Contains("ブレスレット") == true, "変換中に書き間違いの案内を出す");
-        k.Press(VirtualKeys.Left);
-        Assert.Equal(0, k.Host.View!.SelectedClause, "選び直した文節から変換し直す");
         k.Press(VirtualKeys.Tab);
         Assert.True(k.Host.View?.Converting == true, "書き間違いを直して変換を続ける");
         Assert.Equal("ブレス|レット", string.Join("|", k.Host.View!.Clauses!));
-        Assert.Equal(1, k.Host.View.SelectedClause, "最後の文節を選ぶ");
+        Assert.Equal(0, k.Host.View.SelectedClause, "先頭の文節を選ぶ");
     }
 
     [Test]
