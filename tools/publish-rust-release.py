@@ -272,7 +272,7 @@ def main():
         tag_version = args.tag.removeprefix("flash-v")
         core = tag_version.split("-")[0]
         normalized = ".".join(str(int(part)) for part in core.split(".")) + tag_version[len(core):].replace("-preview.", "-pre.")
-        if head != args.sha or normalized != version:
+        if (not args.update_existing and head != args.sha) or normalized != version:
             raise ValueError("タグ・ソースの版・実行元コミットが一致しません")
     validate_assets(args.assets)
     benchmark = None
