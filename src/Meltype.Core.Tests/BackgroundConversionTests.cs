@@ -222,7 +222,7 @@ internal static class BackgroundConversionTests
             release.Set();
             var view = RefreshUntil(session, v => v.Clauses is { Count: 2 });
             Assert.Equal("日本語を,書く", string.Join(",", view?.Clauses ?? []));
-            Assert.Equal(1, view?.SelectedClause, "文節が増えても最後を選ぶ");
+            Assert.Equal(0, view?.SelectedClause, "文節が増えても先頭を選ぶ");
         }
     }
 
@@ -314,25 +314,25 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
-    public static void Refresh_ReturningToTheLastClauseAllowsNewSegmentation()
+    public static void Refresh_ReturningToTheFirstClauseAllowsNewSegmentation()
     {
-        foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Convert, VirtualKeys.Left, VirtualKeys.Down })
+        foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Convert, VirtualKeys.Right, VirtualKeys.Down })
         {
             var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
             var session = Session(converter);
             SessionFacadeTests.Type(session, "nihongowokaku");
             var opened = session.HandleKey(key, null, false, false, false, false).View;
             Assert.Equal("日本語を,書く", string.Join(",", opened?.Clauses ?? []), $"変換開始: {key}");
-            Assert.Equal(1, opened?.SelectedClause, $"最後の文節を選ぶ: {key}");
+            Assert.Equal(0, opened?.SelectedClause, $"先頭の文節を選ぶ: {key}");
             if (key == VirtualKeys.Space)
             {
-                session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
                 session.HandleKey(VirtualKeys.Right, null, false, false, false, false);
+                session.HandleKey(VirtualKeys.Left, null, false, false, false, false);
             }
             converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
             var view = session.RefreshConversion()?.View;
             Assert.Equal("日本,語を,書く", string.Join(",", view?.Clauses ?? []), $"新しい区切り: {key}");
-            Assert.Equal(2, view?.SelectedClause, $"新しい最後の文節: {key}");
+            Assert.Equal(0, view?.SelectedClause, $"新しい先頭の文節: {key}");
         }
     }
 
@@ -346,8 +346,8 @@ internal static class BackgroundConversionTests
             SessionFacadeTests.Type(session, "nihongowokaku");
             var view = session.HandleKey(key, null, false, false, false, false).View;
             if (key == VirtualKeys.Space) view = session.HandleKey(VirtualKeys.Down, null, false, false, false, false).View;
-            Assert.Equal(1, view?.SelectedClause, "最後の文節を選ぶ");
-            Assert.True(view?.Clauses is ["日本語を", var last] && last != "書く", "最後の文節の候補を選び直す");
+            Assert.Equal(0, view?.SelectedClause, "先頭の文節を選ぶ");
+            Assert.True(view?.Clauses is [var first, "書く"] && first != "日本語を", "先頭の文節の候補を選び直す");
             converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
             Assert.True(session.RefreshConversion() is null, "選び直した候補を残す");
         }

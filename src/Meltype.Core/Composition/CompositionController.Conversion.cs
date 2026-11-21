@@ -138,7 +138,7 @@ internal static partial class CompositionController
         // 打ち始めの ・ は、Space で / にする。
         if (CompositionText.IsSlashAtStart(state.Text) && clauses is [var slash]) Prefer(slash, "/");
         state.Clauses = clauses;
-        state.SelectedClause = state.Clauses.Count - 1;
+        state.SelectedClause = 0;
     }
 
     /// <summary>
