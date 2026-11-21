@@ -402,6 +402,7 @@ SPDX-License-Identifier: Unicode-3.0
 | `domain-stations.txt` | [SKK 辞書](https://github.com/skk-dev/dict) SKK-JISYO.station | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (Meltype では GPL-3.0-or-later で使う) |
 | `domain-propernouns.txt` | SKK 辞書 SKK-JISYO.propernoun | MITA Yuusuke、SKK Development Team | GPL-2.0-or-later (同上) |
 | `domain-names.txt` | SKK 辞書 SKK-JISYO.jinmei・SKK-JISYO.fullname | Wnn Consortium、SKK Development Team、Akie Kaidoh | GPL-2.0-or-later (同上) |
+| `names.txt` | SKK 辞書 SKK-JISYO.jinmei の読み | Wnn Consortium、SKK Development Team | GPL-2.0-or-later (同上) |
 | `domain-propernouns-sudachi.txt`・`domain-words-sudachi.txt` | [SudachiDict](https://github.com/WorksApplications/SudachiDict) core (20261015) の固有名詞 (一般)・普通名詞 (正規化表記と同じ表記だけ) | Works Applications Co., Ltd.。一部は UniDic (Copyright (c) 2011-2013, The UniDic Consortium) | Apache License 2.0。UniDic 由来の部分は BSD-3-Clause (下の全文) |
 | `domain-laws.txt` | [e-Gov 法令検索](https://laws.e-gov.go.jp/) の法令 API の、今ある法律の題名と読み | デジタル庁 | [公共データ利用規約 (第1.0版)](https://www.digital.go.jp/resources/open_data/public_data_license_v1.0) (CC BY 4.0 と互換)。出典: e-Gov 法令検索。題名と読みを取り出して加工した |
 
