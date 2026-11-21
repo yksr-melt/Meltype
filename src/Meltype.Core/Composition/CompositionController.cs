@@ -109,7 +109,7 @@ internal static partial class CompositionController
         /// <summary>ユーザーが候補を選び直したか (確定時に学習する)。</summary>
         public bool Changed { get; set; }
 
-        /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら「Zenzai」と出す。</summary>
+        /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら説明に「Zenzai」と出し、候補の一覧ではこの候補に注記を付ける。</summary>
         public string? ZenzaiText { get; set; }
 
         /// <summary>

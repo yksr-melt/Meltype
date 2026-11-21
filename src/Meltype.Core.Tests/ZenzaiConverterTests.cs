@@ -5,6 +5,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using Meltype.Config;
+using Meltype.Dictionary;
 using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
@@ -534,6 +535,14 @@ internal static class ZenzaiConverterTests
         Assert.Equal("日本語お描く", learned.Showing ?? "", "学習した変換を出す");
         Assert.True(!learned.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "学習で変わった文節には出さない: " + learned.Host.View.Hint);
         Assert.True(learned.Host.View.ContextHint is null, "学習で置き換わった文節の Zenzai 表示は残さない");
+
+        // 候補の一覧では、Zenzai の答えの候補にだけ注記を付ける (学習で先頭が変わっても、Zenzai の答えがどれか分かる)
+        Assert.Equal(CandidateNote.Zenzai, k.Host.View.Notes?[k.Host.View.SelectedIndex] ?? CandidateNote.None, string.Join(" ", k.Host.View.Candidates));
+        Assert.True(plain.Host.View.Notes?.Contains(CandidateNote.Zenzai) != true, "Zenzai の答えでなければ注記を付けない");
+        var learnedNotes = learned.Host.View.Notes ?? [];
+        var zenzaiIndex = learned.Host.View.Candidates.ToList().IndexOf("日本語を");
+        Assert.True(zenzaiIndex > 0 && learnedNotes.ElementAtOrDefault(zenzaiIndex) == CandidateNote.Zenzai, "学習で後ろに回った Zenzai の答えに注記を付ける: " + string.Join(" ", learned.Host.View.Candidates));
+        Assert.True(learnedNotes.ElementAtOrDefault(learned.Host.View.SelectedIndex) != CandidateNote.Zenzai, "学習した候補には付けない");
 
         using var holder = new ZenzaiHolder((s, m, _) => new ZenzaiConverter(server.Endpoint, timeoutMs: 5000));
         Assert.True(holder.Status is null, "OFF・まだ使っていなければ出さない");
