@@ -30,7 +30,8 @@ internal sealed class DiscordPresence : IDisposable
     private readonly Func<bool> _enabled;
     private readonly Func<Stats> _stats;
     private readonly string _clientId;
-    private readonly DateTimeOffset _startedAt;
+    // 再接続や表示の OFF/ON で経過時間がリセットされないよう、起動時に一度だけ記録する。
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
     private readonly CancellationTokenSource _stop = new();
     private readonly Task _loop;
     private Stream? _stream;
@@ -42,9 +43,6 @@ internal sealed class DiscordPresence : IDisposable
         _enabled = enabled;
         _stats = stats;
         _clientId = clientId;
-        // 再接続や表示の OFF/ON でも経過時間がリセットされないよう、プロセスの起動時刻を固定する。
-        using var process = System.Diagnostics.Process.GetCurrentProcess();
-        _startedAt = new DateTimeOffset(process.StartTime.ToUniversalTime());
         _loop = Task.Run(RunAsync);
     }
 
