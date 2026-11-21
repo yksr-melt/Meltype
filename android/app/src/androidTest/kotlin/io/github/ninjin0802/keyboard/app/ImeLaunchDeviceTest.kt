@@ -380,8 +380,8 @@ class ImeLaunchDeviceTest {
     }
 
     /**
-     * With the real converter: Space selects the last clause (as on the desktop), a candidate tap chooses it for that
-     * clause, the Space-bar cursor gesture moves to the previous clause, and Enter commits the whole sentence.
+     * With the real converter: Space selects the first clause (as on the desktop), a candidate tap chooses it for that
+     * clause, the Space-bar cursor gesture moves to the next clause, and Enter commits the whole sentence.
      */
     @Test fun candidateTapChoosesForTheClauseAndEnterCommits() = withSmokeActivity { activity ->
         val editor = activity.japaneseEditor
@@ -392,19 +392,19 @@ class ImeLaunchDeviceTest {
         waitUntil("the sentence is converted", describe = { "view=" + coreView() }) { coreView()?.converting == true }
         val view = coreView()!!
         assertTrue("The sentence was not split into clauses: $view", view.clauses.size >= 2)
-        assertEquals("The last clause is not selected: $view", view.clauses.size - 1, view.selectedClause)
-        val label = tapCandidateOtherThan(view.clauses.last())
-        val expected = view.clauses.dropLast(1).joinToString("") + label
-        waitUntil("the candidate is chosen for the last clause", describe = { "view=" + coreView() }) {
+        assertEquals("The first clause is not selected: $view", 0, view.selectedClause)
+        val label = tapCandidateOtherThan(view.clauses.first())
+        val expected = label + view.clauses.drop(1).joinToString("")
+        waitUntil("the candidate is chosen for the first clause", describe = { "view=" + coreView() }) {
             coreView()?.text == expected
         }
         val service = KeyboardService.activeForSmokeTest?.get() ?: throw AssertionError("Keyboard service missing")
         instrumentation.runOnMainSync {
             assertTrue(service.onCursorModeStart())
-            service.onCursorMove(-1)
+            service.onCursorMove(1)
         }
-        waitUntil("the cursor gesture selects the previous clause", describe = { "view=" + coreView() }) {
-            coreView()?.selectedClause == view.clauses.size - 2
+        waitUntil("the cursor gesture selects the next clause", describe = { "view=" + coreView() }) {
+            coreView()?.selectedClause == 1
         }
         instrumentation.runOnMainSync { service.onKey(KeyAction.Enter, Direction.TAP, SystemClock.uptimeMillis()) }
         waitUntil("the sentence is committed as chosen", describe = { "text=" + editor.text + " expected=" + expected }) {
