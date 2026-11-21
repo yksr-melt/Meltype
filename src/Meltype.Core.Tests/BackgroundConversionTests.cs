@@ -266,9 +266,9 @@ internal static class BackgroundConversionTests
 
         public event Action? ResultReady { add { } remove { } }
 
-        public string? Convert(string hiragana) => string.Concat(Clauses.Select(c => c.Text));
+        public string? Convert(string hiragana, string? before) => string.Concat(Clauses.Select(c => c.Text));
 
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => Clauses;
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => Clauses;
     }
 
     [Test]
@@ -411,13 +411,13 @@ internal static class BackgroundConversionTests
         using var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, profile));
         mozc.Budget.Enable();
         mozc.Budget.Start(10000);
-        Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text, "起動して答える");
+        Assert.Equal("あ", mozc.ConvertClauses("あ", null)?[0].Text, "起動して答える");
         Assert.True(mozc.Candidates("あ").Count > 0, "候補も覚えた");
 
         mozc.Budget.Start(0);
-        Assert.True(mozc.ConvertClauses("おそい") is null, "遅い読みをワーカーに頼む");
+        Assert.True(mozc.ConvertClauses("おそい", null) is null, "遅い読みをワーカーに頼む");
         Thread.Sleep(200);
-        Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text, "ヘルパーの応答を待っている間も、届いている答えを読める");
+        Assert.Equal("あ", mozc.ConvertClauses("あ", null)?[0].Text, "ヘルパーの応答を待っている間も、届いている答えを読める");
         Assert.True(mozc.Candidates("あ").Count > 0, "候補も読める");
     }
 
@@ -435,14 +435,14 @@ internal static class BackgroundConversionTests
         Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) >= 1, 10000), "起動したら知らせる");
 
         var watch = Stopwatch.StartNew();
-        Assert.True(mozc.ConvertClauses("あ") is null, "控えが無ければ待たない");
+        Assert.True(mozc.ConvertClauses("あ", null) is null, "控えが無ければ待たない");
         Assert.True(watch.ElapsedMilliseconds < 500, $"応答を待たない ({watch.ElapsedMilliseconds}ms)");
         Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref notified) >= 2, 5000), "結果が届いたら知らせる");
-        Assert.Equal("あ", mozc.ConvertClauses("あ")?[0].Text);
+        Assert.Equal("あ", mozc.ConvertClauses("あ", null)?[0].Text);
 
         // 失敗は知らせない (再描画が同じ要求を繰り返さない)
         var before = Volatile.Read(ref notified);
-        Assert.True(mozc.ConvertClauses("おちる") is null, "落ちる読み");
+        Assert.True(mozc.ConvertClauses("おちる", null) is null, "落ちる読み");
         Thread.Sleep(500);
         Assert.Equal(before, Volatile.Read(ref notified));
     }

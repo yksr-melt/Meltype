@@ -265,7 +265,7 @@
 (defun test-main-registration-keeps-input-menu (work)
   ;; 本体の登録コマンドをそのままコンパイルし、登録APIとkillallだけをスタブ化する。
   (let* ((source (uiop:read-file-string (merge-pathnames "mac/Sources/MeltypeIME/main.swift" *root*)))
-         (end (search "/// 変換の候補の一覧" source))
+         (end (search "func runIsolatedChecks(" source))
          (binary (merge-pathnames "main-registrar" work))
          (called (merge-pathnames "menu-restart-called" work)))
     (assert end)
