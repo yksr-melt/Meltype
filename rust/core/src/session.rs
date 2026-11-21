@@ -1448,7 +1448,11 @@ impl Session {
                         .unwrap_or(&self.candidates)
                         .iter()
                         .map(|c| {
-                            if self.clauses.get(self.selected_clause).is_some_and(|clause| clause.ai_candidates.contains(c)) {
+                            if self
+                                .clauses
+                                .get(self.selected_clause)
+                                .is_some_and(|clause| clause.ai_candidates.contains(c))
+                            {
                                 let model = crate::ai_model::AiModel::selected(&self.settings);
                                 return Some(format!("AI · {}", model.value().to_lowercase()));
                             }
@@ -2607,11 +2611,17 @@ impl Session {
                 && crate::currency::parse(&clause.reading).is_some()
                 && crate::currency::auto_rates().is_some()
             {
-                let amounts = crate::currency::Currency::from_settings(&self.settings).candidates(&clause.reading);
+                let amounts = crate::currency::Currency::from_settings(&self.settings)
+                    .candidates(&clause.reading);
                 let first = values.first().cloned();
                 values.retain(|word| Some(word) == first.as_ref() || !amounts.contains(word));
                 let insert = 1.min(values.len());
-                values.splice(insert..insert, amounts.into_iter().filter(|word| Some(word) != first.as_ref()));
+                values.splice(
+                    insert..insert,
+                    amounts
+                        .into_iter()
+                        .filter(|word| Some(word) != first.as_ref()),
+                );
             }
             let raw = clause.raw.take();
             let generated = std::mem::take(&mut clause.ai_candidates);

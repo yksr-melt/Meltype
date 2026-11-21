@@ -59,8 +59,12 @@ impl Shunti {
             self.backend = None;
         }
         let mut clauses = result.ok()?;
-        if !plausible_clauses(&clauses) { return None; }
-        for clause in &mut clauses { clause.ai_candidates.clone_from(&clause.candidates); }
+        if !plausible_clauses(&clauses) {
+            return None;
+        }
+        for clause in &mut clauses {
+            clause.ai_candidates.clone_from(&clause.candidates);
+        }
         Some(clauses)
     }
 }
