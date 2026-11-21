@@ -10,6 +10,55 @@ namespace Meltype.Tests;
 /// <summary>入力モード切り替えショートカットの取り込み (Recorder)、キー判定 (Detector)、設定移行とバリデーション。</summary>
 internal static class ToggleShortcutTests
 {
+    [Test]
+    public static void ShortcutCapture_PassesPreexistingHoldsIncludingRepeats()
+    {
+        foreach (var vk in new[] { VirtualKeys.LShift, VirtualKeys.Return })
+        {
+            var capture = new ShortcutCapture();
+            var recorder = new ShortcutRecorder();
+            var received = 0;
+            void Record(KeyEvent e) { received++; recorder.OnKey(e); }
+            var down = new KeyEvent(vk, 0, false, false, false, 0);
+            Assert.True(!capture.OnKey(down, null), "押下と解放の取り込み結果");
+            Assert.True(!capture.OnKey(down, Record), "取り込み前の押下のリピートを通す");
+            Assert.True(!capture.OnKey(down with { IsUp = true }, Record), "元の押下と解放を対で通す");
+            Assert.Equal(0, received);
+            Assert.True(capture.OnKey(down, Record), "離してから押し直したキーは取り込む");
+            Assert.True(capture.OnKey(down, Record), "押下と解放の取り込み結果");
+            Assert.True(capture.OnKey(down with { IsUp = true }, Record), "押下と解放の取り込み結果");
+            Assert.Equal(3, received);
+        }
+    }
+
+    [Test]
+    public static void ShortcutCapture_CancelKeepsCapturedKeysPaired()
+    {
+        var capture = new ShortcutCapture();
+        var down = new KeyEvent('F', 0, false, false, false, 0);
+        Assert.True(capture.OnKey(down, _ => { }), "押下と解放の取り込み結果");
+        Assert.True(capture.OnKey(down, null), "取り込み終了後もリピートは止める");
+        Assert.True(capture.OnKey(down with { IsUp = true }, null), "押下と解放の取り込み結果");
+        Assert.True(!capture.OnKey(down, null), "次の押下は通常の入力");
+    }
+
+    [Test]
+    public static void ShortcutCapture_RecordsFreshChordAndIgnoresInjectedReleases()
+    {
+        var capture = new ShortcutCapture();
+        var recorder = new ShortcutRecorder();
+        ToggleShortcut? result = null;
+        void Record(KeyEvent e) { result = recorder.OnKey(e) ?? result; }
+        var shift = new KeyEvent(VirtualKeys.LShift, 0x2A, false, false, false, 0);
+        var key = new KeyEvent('F', 0x21, false, false, false, 0);
+        Assert.True(capture.OnKey(shift, Record), "押下と解放の取り込み結果");
+        Assert.True(!capture.OnKey(shift with { IsUp = true, Injected = true }, Record), "押下と解放の取り込み結果");
+        Assert.True(capture.OnKey(key, Record), "押下と解放の取り込み結果");
+        Assert.True(capture.OnKey(key with { IsUp = true }, Record), "押下と解放の取り込み結果");
+        Assert.True(capture.OnKey(shift with { IsUp = true }, Record), "押下と解放の取り込み結果");
+        Assert.Equal(new ToggleShortcut { Key = 'F', Modifiers = ShortcutModifiers.Shift }, result);
+    }
+
     /// <summary>v6/v7 移行時の解析失敗ログと競合除外のログ・通知は各1回で、保存後の再読み込みでは繰り返さないこと。</summary>
     [Test]
     public static void Shortcut_LoadReportsLegacyMigrationProblemsExactlyOnce()
