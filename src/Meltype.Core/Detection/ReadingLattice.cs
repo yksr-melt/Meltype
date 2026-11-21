@@ -46,6 +46,9 @@ public sealed partial class CompositionDetector
     private const double ReadableEnglishCost = 0.7;
     // ユーザーが英字に直して覚えた語。同じ読みの日本語の語 (sushi = すし、重み 1) より軽くする
     private const double LearnedEnglishCost = 0.7;
+    // 小文字の 2 文字以下の知っている英単語 (be・pa・on) に足す。ローマ字の 1 音と同じ綴りなので、日本語の途中に切り出されやすい (す|be|を・ろん|pa)。
+    // 大文字を含む語 (AI・Go) は日本語のノードと取り合わないので足さない。覚えた語にも足さない
+    private const double ShortEnglishCost = 1;
     // 知らない英字 (ローマ字として読めない所: pwd) 1 文字
     private const double UnknownLetterCost = 1.5;
     // 入力の最後の、知っている英単語の頭 (insta)。英単語 + 日本語 1 音 (ins + た) より軽く、日本語の語より重い
@@ -609,7 +612,7 @@ public sealed partial class CompositionDetector
                      !IsLowercaseJapaneseProperNoun(learning, span))
             {
                 cost = Memory?.Get(span.ToLowerInvariant(), learning) == true ? LearnedEnglishCost
-                    : ReadableEnglish.Value.ContainsWord(span.ToLowerInvariant()) ? ReadableEnglishCost : KnownEnglishCost;
+                    : (ReadableEnglish.Value.ContainsWord(span.ToLowerInvariant()) ? ReadableEnglishCost : KnownEnglishCost) + (span.Length <= 2 && span.All(char.IsAsciiLetterLower) ? ShortEnglishCost : 0);
                 if (kanaInput && span.Length >= 4) cost += KanaInputEnglishBias;
                 // 日本語由来の語 (suzuki・sushi) は、ローマ字で読んだかなも日本語の語として並べる
                 if (span.All(char.IsAsciiLetterLower) && IsJapaneseOriginWord(span) &&
