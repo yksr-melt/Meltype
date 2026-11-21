@@ -14,7 +14,7 @@ function fixture({corrupt = false, fail = false} = {}) {
     sha256:createHash("sha256").update(data).digest("hex")
   }))}};
   const packages = new ShuntiPackages({metadata,storage:{read:async()=>value,write:async data=>{value=data;writes++;}},
-    fetcher:async()=>{const n=requests++; if(fail&&n===1)throw Error("interrupted"); return new Response(corrupt?new Uint8Array([0]):bytes[n]);}});
+    fetcher:async()=>{const n=requests++ % 2; if(fail&&n===1)throw Error("interrupted"); return new Response(corrupt?new Uint8Array([0]):bytes[n]);}});
   return {packages, metadata, writes:()=>writes, requests:()=>requests, value:()=>value};
 }
 test("downloads publish one complete verified package and reuse it offline", async()=>{
@@ -24,6 +24,7 @@ test("downloads publish one complete verified package and reuse it offline", asy
   await f.packages.install(); assert.equal(f.requests(),2);
   new Uint8Array(f.value().files["kkc_lex.bin"])[0]=0;
   await assert.rejects(f.packages.load(),/変更/);
+  await f.packages.install(); assert.equal(f.writes(),2); assert.equal(await f.packages.installed(),true);
 });
 test("interrupted or altered downloads leave no partially installed environment", async()=>{
   for(const mode of [{corrupt:true},{fail:true}]){

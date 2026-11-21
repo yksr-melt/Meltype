@@ -49,10 +49,13 @@ impl Session {
         if candidates.is_empty() {
             return false;
         }
+        let generated = candidates.clone();
         let previous = self.clauses.iter().map(Clause::text).collect::<String>();
         if !previous.is_empty() && !candidates.contains(&previous) {
             candidates.push(previous);
         }
-        self.begin_clauses(vec![Clause::new(reading, candidates)])
+        let mut clause = Clause::new(reading, candidates);
+        clause.ai_candidates = generated;
+        self.begin_clauses(vec![clause])
     }
 }

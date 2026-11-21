@@ -57,6 +57,7 @@
     "https://us.aptabase.com/*"
   ],
   "optional_host_permissions": [
+    "https://api.coinbase.com/*",
     "https://api.github.com/*",
     "https://github.com/*",
     "https://release-assets.githubusercontent.com/*"

@@ -162,3 +162,9 @@ python chromeos/build.py
 <h2><img src="../assets/branding/readme/chromeos/headings/5019e541f273.svg" alt="1.0.1のキーボード配列" width="1000"></h2>
 
 ChromeOSの入力方法で「Meltype-FLASH（日本語配列）」または「Meltype-FLASH（US配列）」を選んでください。既存の入力方法は日本語配列へ更新されます。USキーボードの場合はUS配列を追加して選び直してください。日本語配列では半角／全角、US配列ではAlt+Backquoteで英数・日本語を切り替えます。
+
+## AI候補と通貨の換算
+
+設定で「shunti」を選び、モデルをインストールして「入力設定を保存」を押します。Spaceで変換したとき、AIが返して採用された候補に「AI · shunti」が付きます。
+
+「通貨のレート」を「自動（最新レート）」にして保存すると、Coinbaseから参考レートを取得します。入力欄に移った時やSpaceで変換した時に、最短1分間隔で更新します。入力した金額や文章は送信しません。「1どる」を変換すると、円換算が候補に出ます。

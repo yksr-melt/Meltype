@@ -9,6 +9,7 @@ name = "meltype-rs"
 path = "src/main.rs"
 
 [dependencies]
+crossterm = { version = "0.29", default-features = false, features = ["events", "windows"] }
 meltype-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true

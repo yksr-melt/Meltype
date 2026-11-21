@@ -46,6 +46,7 @@ struct Backend {
     candidates: HashMap<String, Vec<String>>,
     zenzai: Zenzai,
     shunti: crate::shunti::Shunti,
+    neural_segments: Vec<(String, String)>,
     shunti_candidates: HashMap<String, Vec<String>>,
 }
 impl Backend {
@@ -187,6 +188,7 @@ impl Backend {
             .map(|text| String::from_utf16_lossy(&text))
     }
     fn clauses(&mut self, reading: &str, context: &str) -> Option<Vec<(String, String)>> {
+        self.neural_segments.clear();
         self.shunti_candidates.clear();
         if let Some(clauses) = self.shunti.convert(reading, context) {
             for clause in &clauses {
@@ -264,18 +266,20 @@ impl Backend {
                 .collect::<String>()
                 == text
         }) {
+            self.neural_segments = ordinary.clone().unwrap_or_default();
             return ordinary;
         }
         // Mozc の文節の候補を選んでつなげると作れる答え (読みと表記が違う語: きずく → 気づく) は、
         // Mozc の文節の区切りで使う。作れない答えは、かなが読みと合うときだけ使う (壊れた答えを出さない)
-        from_mozc
+        let accepted = from_mozc
             .as_ref()
             .and_then(|segments| super::zenzai::align(segments, &text))
             .or_else(|| {
                 meltype_core::plausible::plausible(reading, &text)
                     .then(|| vec![(reading.to_owned(), text)])
-            })
-            .or(ordinary)
+            });
+        self.neural_segments = accepted.clone().unwrap_or_default();
+        accepted.or(ordinary)
     }
     fn candidates(&mut self, reading: &str) -> Vec<String> {
         let mut result = Vec::new();
@@ -341,6 +345,14 @@ fn with_backend<T>(f: impl FnOnce(&mut Backend) -> T) -> Option<T> {
         .try_with(|state| state.try_borrow_mut().ok()?.as_mut().map(f))
         .ok()
         .flatten()
+}
+pub(crate) fn generated_candidates(reading: &str) -> Vec<String> {
+    with_backend(|backend| {
+        if let Some(values) = backend.shunti_candidates.get(reading) {
+            return values.clone();
+        }
+        backend.neural_segments.iter().filter(|(r, _)| r == reading).map(|(_, t)| t.clone()).collect()
+    }).unwrap_or_default()
 }
 unsafe extern "C" fn convert(reading: *const c_char) -> *mut c_char {
     let value = crate::read(reading).and_then(|s| with_backend(|b| b.convert(&s)).flatten());
@@ -415,6 +427,7 @@ pub fn install() -> Option<WorkerConverters> {
             candidates: HashMap::new(),
             zenzai: Zenzai::default(),
             shunti: crate::shunti::Shunti::default(),
+            neural_segments: Vec::new(),
             shunti_candidates: HashMap::new(),
         })
     });

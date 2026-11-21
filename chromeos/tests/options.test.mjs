@@ -91,7 +91,7 @@ test("入力設定と詳細JSONを同期し、未知の設定・非表示の設�
   assert.equal(p.fields.LearningEnabled.checked, true);
   // 通貨の換算: ChromeOS は固定と手入力、それに小数の桁
   assert.equal(p.fields.CurrencyRateMode.value, "Fixed");
-  assert.deepEqual(p.fields.CurrencyRateMode.options.map(item => item.value), ["Fixed", "Manual"]);
+  assert.deepEqual(p.fields.CurrencyRateMode.options.map(item => item.value), ["Fixed", "Auto", "Manual"]);
   p.fields.CurrencyDecimals.value = "2";
   await p.fields.CurrencyDecimals.fire("change");
   assert.equal(JSON.parse(get("#settings").value).CurrencyDecimals, 2, "小数の桁は数で持つ");
@@ -245,6 +245,11 @@ test("モデルの導入後はインストール済みへ変わり、別の版�
   p.fields.AiModel.value="Shunti"; await p.fields.AiModel.fire("change");
   assert.equal(get("#ai-version").options.length,6);
   assert.equal(get("#ai-install").disabled,false);
+  chrome.permissions.request = async () => false;
+  await get("#ai-install").fire("click");
+  assert.match(get("#ai-status").textContent, /許可されませんでした/);
+  assert.equal(get("#ai-install").disabled,false);
+  chrome.permissions.request = async () => true;
   await get("#ai-install").fire("click");
   assert.equal(get("#ai-install").textContent,"インストール済み");
   assert.equal(get("#ai-install").disabled,true);

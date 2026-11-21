@@ -468,3 +468,9 @@ Linuxで自動更新を選んで保存すると、設定アプリを閉じた後
 Linuxのアプリ設定にはVS Code（`code` / `com.visualstudio.code`）、GNOME Terminal（`org.gnome.Terminal`）、Konsole（`org.kde.konsole`）などの例があります。「Linuxの標準アプリを追加」で登録できます。入力モード切替キーはIBusを選択中の入力欄で利用でき、デスクトップに予約されたキーはOS側の設定が優先します。
 
 Windowsのログイン時起動は、サインイン後に少し待って起動し、失敗した場合は再試行するユーザー用タスクを使用します。タスクがWindows側で無効になっている場合も、起動設定の表示に反映します。
+
+## TTY版
+
+端末で `meltype-rs --tty` を実行します。ローマ字を入力し、Spaceで変換、上下キーで候補を選び、Enterで確定します。Escで未確定入力を取り消し、Ctrl+Cで終了します。確定文は標準出力、入力中の表示は標準エラーに出るので、`meltype-rs --tty > memo.txt` でも使えます。
+
+Mozc辞書を含むTTY版は `cargo build --release --locked -p meltype-cli --features meltype-core/bundled-mozc` で作成できます。

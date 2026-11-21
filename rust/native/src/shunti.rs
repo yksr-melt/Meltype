@@ -58,8 +58,10 @@ impl Shunti {
         if result.is_err() {
             self.backend = None;
         }
-        let clauses = result.ok()?;
-        plausible_clauses(&clauses).then_some(clauses)
+        let mut clauses = result.ok()?;
+        if !plausible_clauses(&clauses) { return None; }
+        for clause in &mut clauses { clause.ai_candidates.clone_from(&clause.candidates); }
+        Some(clauses)
     }
 }
 

@@ -220,7 +220,7 @@ async function reload() {
   const {preferences} = await request({op: "site_preferences"});
   displayPreferences(preferences);
   const state = await request({op: "status"});
-  document.querySelector("#diagnostic").textContent = state.diagnostic;
+  document.querySelector("#diagnostic").textContent = [state.diagnostic, state.aiStatus].filter(Boolean).join(" ／ ");
   if (!state.available) {
     status.textContent = "この環境ではMeltypeを入力方法として利用できません。ChromeOSの入力方法・管理設定を確認してください。";
     disableCore(true);
@@ -240,6 +240,9 @@ document.querySelector("#settings-form").addEventListener("submit", event => {
     const value = parseSettings();
     disableCore(true);
     try {
+      if (value.CurrencyRateMode === "Auto" && !await chrome.permissions.request({origins:["https://api.coinbase.com/*"]})) {
+        throw new Error("最新レートの取得にはCoinbaseへのアクセス許可が必要です。");
+      }
       const {snapshot} = await request({op: "snapshot"});
       const latest = JSON.parse(snapshot).settings;
       const hidden = Object.fromEntries(Object.entries(latest).filter(([key]) => desktopOnly.has(key)));
@@ -305,19 +308,25 @@ updateZip.addEventListener("click", () => show(async () => {
 reloadExtension.addEventListener("click", () => chrome.runtime.reload());
 
 aiInstall.addEventListener("click", async () => {
-  if (!globalThis.confirm("shuntiの環境を作成してよいですか？ 辞書（CC BY-SA 4.0）・モデル（CC BY 4.0）を別ダウンロードします。入力内容は送信しません。")) return;
   // Request optional host access while the user's button gesture is active.
-  const variant = parseSettings().ShuntiModelVariant ?? "shunti-v7-s8p";
-  const packages = new ShuntiPackages({variant});
-  const permission = chrome.permissions.request({origins:modelOrigins,permissions:["unlimitedStorage"]});
   disableCore(true); aiInstall.disabled = true; aiVersion.disabled = true;
   try {
-    if (!await permission) throw new Error("ダウンロードが許可されませんでした");
+    const variant = parseSettings().ShuntiModelVariant ?? "shunti-v7-s8p";
+    const packages = new ShuntiPackages({variant});
+    if (!await chrome.permissions.request({origins:modelOrigins, permissions:["unlimitedStorage"]})) throw new Error("ダウンロードが許可されませんでした");
     aiStatus.textContent = "AI環境を準備しています…";
-    await packages.install();
+    await packages.install((file, size, total) => {
+      aiStatus.textContent = file + " を取得中 " + Math.floor(size / 1048576) + (total ? " / " + Math.ceil(total / 1048576) : "") + " MiB";
+    });
     const value = parseSettings(); value.AiModel = "Shunti"; value.ShuntiModelVariant = variant; value.UseShunti = true;
     settings.value = JSON.stringify(value,null,2); displayFields(value);
+    aiInstall.textContent = "インストール済み";
     aiStatus.textContent = "インストールしました。「入力設定を保存」で反映します。";
-  } catch (error) { aiStatus.textContent = String(error); }
-  finally { disableCore(false); aiVersion.disabled = false; await refreshAI(parseSettings()); }
+  } catch (error) {
+    aiStatus.textContent = String(error) + "。もう一度インストールできます。";
+    aiInstall.disabled = false;
+  } finally {
+    disableCore(false);
+    aiVersion.disabled = false;
+  }
 });

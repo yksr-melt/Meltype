@@ -471,7 +471,9 @@ unsafe fn external_conversion_unprotected(
                                 ordinary.candidates.iter().filter(|s| **s != text).cloned(),
                             );
                         }
-                        Clause::new(reading, candidates)
+                        let mut clause = Clause::new(reading, candidates);
+                        clause.ai_candidates.push(text);
+                        clause
                     })
                     .collect();
             }
@@ -498,6 +500,8 @@ unsafe fn external_conversion_unprotected(
                                 }
                             }
                             let mut clause = Clause::new(r.to_owned(), vec![t.to_owned()]);
+                            #[cfg(windows)]
+                            { clause.ai_candidates = windows_converter::generated_candidates(r); }
                             clause.expansion = Some(candidates);
                             if expand_candidates {
                                 clause.standalone = Some(standalone_conversion(r, callbacks));
