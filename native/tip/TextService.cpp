@@ -107,24 +107,23 @@ void MaskSystemModifier() {
 }
 
 // ワークアラウンド: Tk (Python の IDLE など) は、IME が確定した文字のコードを仮想キーとしても引き、p〜~ (0x70〜0x7E) を
-// F1〜F15 のキーにする (IDLE では p でヘルプが開く。issue #1463)。KEYEVENTF_UNICODE で送った文字は WM_CHAR として正しく扱うので、
-// Tk の入力欄では確定した文字を送り込む。Tk が直っても、直る前の Tk を同梱した Python が使われる間は消せない
+// F1〜F15 のキーにする (IDLE では p でヘルプが開く。issue #1463)。WM_CHAR の文字は正しく扱うので、
+// Tk の入力欄では確定した文字を WM_CHAR でポストする。SendInput でなくポストにするのは、ポストしたメッセージは入力のメッセージより
+// 先に取り出されるため (SendInput だと、すでに打った次のキーより後に届いて順番が入れ替わる)。キーイベントにならないので、
+// TIP のキーの処理も通らない。Tk が直っても、直る前の Tk を同梱した Python が使われる間は消せない (永続)
 bool IsTkWindow(HWND window) {
     wchar_t name[16] = {};
     return window != nullptr && GetClassNameW(window, name, 16) > 0 && lstrcmpW(name, L"TkChild") == 0;
 }
 
-bool SendText(const std::wstring& text) {
-    std::vector<INPUT> inputs(text.size() * 2);
-    for (size_t i = 0; i < inputs.size(); i++) {
-        inputs[i].type = INPUT_KEYBOARD;
-        inputs[i].ki.wScan = text[i / 2];
-        inputs[i].ki.dwFlags = KEYEVENTF_UNICODE | (i % 2 == 1 ? KEYEVENTF_KEYUP : 0);
-        inputs[i].ki.dwExtraInfo = kReinjectMarker;
+bool PostText(HWND window, const std::wstring& text) {
+    for (const wchar_t ch : text) {
+        if (!PostMessageW(window, WM_CHAR, ch, 1)) {
+            TipLog(L"確定した文字をアプリに送れません: %lu", GetLastError());
+            return false;
+        }
     }
-    if (SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT)) == inputs.size()) return true;
-    TipLog(L"確定した文字をアプリに送り込めません: %lu", GetLastError());
-    return false;
+    return true;
 }
 
 // そのキーで入力される文字 (無ければ 0)
@@ -1654,6 +1653,8 @@ void TextService::MoveCaretAfterCommit(TfEditCookie ec, ITfContext* context, ITf
 }
 
 bool TextService::ExtendOverPrevious(TfEditCookie ec, ITfRange* range, LONG count, const JsonValue& expect) {
+    // Tk には文字を書き込まずにポストするので (IsTkWindow)、前に確定した文字を消せない。確定し直さない
+    if (IsTkWindow(GetFocus())) return false;
     Microsoft::WRL::ComPtr<ITfRange> previous;
     if (FAILED(range->Clone(&previous))) return false;
     previous->Collapse(ec, TF_ANCHOR_START);
@@ -1702,8 +1703,8 @@ void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG co
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack, ITfRange** movedCaret) {
-    // Tk には、変換中の文字を消して確定してから、文字を送り込む (上の IsTkWindow のワークアラウンド)
-    if (IsTkWindow(GetFocus())) {
+    // Tk には、変換中の文字を消して確定してから、文字をポストする (上の IsTkWindow のワークアラウンド)
+    if (const HWND window = GetFocus(); IsTkWindow(window)) {
         if (composition_ != nullptr) {
             ITfRange* composing = nullptr;
             if (SUCCEEDED(composition_->GetRange(&composing))) {
@@ -1712,7 +1713,7 @@ bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* ra
             }
             EndComposition(ec);
         }
-        return SendText(text);
+        return PostText(window, text);
     }
     if (composition_ == nullptr) {
         ITfContextComposition* contextComposition = nullptr;
