@@ -33,7 +33,6 @@ HTML正本の[08仕様](../../spec/08-auto-detection.html)と同期した実装�
 ## 検証
 
 - 日本語 `arigatou`、`konnichiwa`、英語 `hello`、`meeting`、混在 `hello arigatou` の入力をAndroidで検証。
-- Coreの一覧の表示と番号、予測候補のクリックでの確定、Coreが候補を返さないときに何も出さないこと、応答の適用（`removeBefore`・`moveCaretBack`・壊れた応答）、キャレットの移動と入力欄の出入り、`config.json` への書き込みと次のキーからの反映、設定の保存をテスト（[QA-TESTING](../../QA-TESTING.md)）。
 - 2026-10-25のQAビルドではAndroid 15エミュレーターのInstrumentation **18件すべてが成功**。Pixel 10 Pro Fold（Android 17）で実機確認済み。[CI実行結果](https://github.com/KoheiTakada/Meltypetest/actions/runs/40163689812)。この確認は全端末・全アプリの互換性を保証しない。
 
 ## 制限と保留
