@@ -11,52 +11,40 @@ using Meltype.Input;
 namespace Meltype.Composition;
 
 /// <summary>入力欄の文脈: キャレットの前後の文字 (英語か日本語か)、変換エンジンに渡す文脈、学習の文脈。</summary>
-public sealed partial class CompositionController
+internal static partial class CompositionController
 {
-    /// <summary>設定「英語 / 日本語の学習を前の文脈ごとに分ける」: 学習の文脈 (前が英語か日本語か) を今の入力に合わせる。</summary>
-    private void UpdateLearningContext()
+    private static void BeginComposition(CompositionState state, CompositionEnv env, bool privateInput = false)
     {
-        if (_services.Languages is not { } memory) return;
-        memory.ContextSensitive = _settings().ContextualLearning;
-        memory.Context = _text.PrecedingEnglish;
-    }
-
-    private void BeginComposition(bool privateInput = false)
-    {
-        _privateComposition = Private || privateInput;
-        _keptChoices.Clear();
-        _modeByKey = false;
-        _escReverted = false;
+        state.PrivateComposition = Private(state) || privateInput;
+        state.KeptChoices.Clear();
+        state.ModeByKey = false;
+        state.EscReverted = false;
         // 設定「英字を主に入力」: 判定せず、打った英字のまま見せる (issue #839)
-        if (_settings().EnglishFirstInput && !KanaInput && _text.Mode == DisplayMode.Auto) _text.Mode = DisplayMode.HalfWidthAlphanumeric;
-        _text.KanaInput = KanaInput;
-        _text.FullWidthParentheses = _settings().FullWidthParentheses;
-        _text.SquareBrackets = _settings().SquareBrackets;
-        _text.LaughterAfterKana = _settings().LaughterAfterKana;
+        if (env.Settings.EnglishFirstInput && !KanaInput(state, env) && state.Text.Mode == DisplayMode.Auto) state.Text.Mode = DisplayMode.HalfWidthAlphanumeric;
+        state.Text.KanaInput = KanaInput(state, env);
+        state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
+        state.Text.SquareBrackets = env.Settings.SquareBrackets;
+        state.Text.LaughterAfterKana = env.Settings.LaughterAfterKana;
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
-        var recentOwnCommit = Environment.TickCount64 - _lastCommitTime < OwnCommitTrustMs;
-        _precedingText = _lastCommitEnglish is null ? null : _lastCommitText;
-        UpdateWideContext();
-        _followingText = null;
-        _text.PrecedingEnglish = _lastCommitEnglish;
-        UpdateLearningContext();
-        _text.PrecedingEnglishSentence = _lastCommitEnglish == true && IsEnglishSentence(_lastCommitText);
-        _text.PrecedingEnglishName = _lastCommitEnglish == true && IsEnglishNameContext(_lastCommitText);
+        var recentOwnCommit = env.NowMs - state.LastCommitTime < OwnCommitTrustMs;
+        state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
+        state.FollowingText = null;
+        state.Text.PrecedingEnglish = state.LastCommitEnglish;
+        state.Text.PrecedingEnglishSentence = state.LastCommitEnglish == true && IsEnglishSentence(state.LastCommitText);
+        state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
         // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
         // 確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
-        var before = _out.Before;
-        _caretBefore = before;
+        var before = CompositionOutput.Before(state.Out, env);
+        state.CaretBefore = before;
         if (!recentOwnCommit && before is not null)
         {
-            _precedingText = before;
-            UpdateWideContext();
-            if (LanguageOf(before) is { } english) _text.PrecedingEnglish = english;
-            UpdateLearningContext();
-            _text.PrecedingEnglishSentence = IsEnglishSentence(before);
-            _text.PrecedingEnglishName = IsEnglishNameContext(before);
+            state.PrecedingText = before;
+            if (LanguageOf(before) is { } english) state.Text.PrecedingEnglish = english;
+            state.Text.PrecedingEnglishSentence = IsEnglishSentence(before);
+            state.Text.PrecedingEnglishName = IsEnglishNameContext(before);
         }
-        _followingText = _out.After;
-        _text.FollowingEnglish = LanguageOfStart(_out.After);
+        state.FollowingText = state.Out.After;
+        state.Text.FollowingEnglish = LanguageOfStart(state.Out.After);
     }
 
     /// <summary>
@@ -130,24 +118,4 @@ public sealed partial class CompositionController
         if (c >= '\u2000' && !char.IsWhiteSpace(c) && c != '\u3000') return false;
         return null;
     }
-
-    /// <summary>変換エンジンに渡す文脈: キャレットの前の確定済みの文字のうち、同じ文の日本語の部分 (最大 10 文字)。</summary>
-    private string? ConversionContext()
-    {
-        var text = _precedingText;
-        if (string.IsNullOrEmpty(text) || LanguageOf(text) != false) return null;
-        var start = text.AsSpan().LastIndexOfAny(SentenceEndSearch);
-        text = text[(start + 1)..].Trim();
-        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
-    }
-
-    /// <summary>広い文脈 (文をまたいで最大 100 文字の、日本語の文章) を、使える変換エンジン (Zenzai) に渡す。英文のときは渡さない。</summary>
-    private void UpdateWideContext()
-    {
-        if (_converter is not IWideContextConverter wide) return;
-        var text = _precedingText?.Replace("\r", "").Replace("\n", "").Trim();
-        wide.WideContext = string.IsNullOrEmpty(text) || LanguageOf(text) != false ? null : text.Length > 100 ? text[^100..] : text;
-    }
-
-    private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }

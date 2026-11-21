@@ -68,31 +68,28 @@ public sealed class LanguageMemory
 
     public int Count => _entries.Count;
 
-    /// <summary>学習を前の文脈 (英語の後か日本語の後か) ごとに分けるか (設定「英語 / 日本語の学習を前の文脈ごとに分ける」: issue #491)。</summary>
-    public bool ContextSensitive { get; set; }
-
-    /// <summary>今の入力の前が英語か (true)、日本語か (false)、分からないか (null)。</summary>
-    public bool? Context { get; set; }
-
-    /// <summary>文脈ごとに分けるときの、語の後ろにつける印 (分けないときは空)。</summary>
-    private string ContextSuffix => ContextSensitive && Context is { } english ? (english ? "@e" : "@j") : "";
+    /// <summary>
+    /// 文脈ごとに分けるときの、語の後ろにつける印 (分けないときは空)。context は今の入力の前が英語か (true)・日本語か (false) で、
+    /// 学習を前の文脈ごとに分けない (設定「英語 / 日本語の学習を前の文脈ごとに分ける」が OFF: issue #491)・前が分からないなら null。
+    /// </summary>
+    private static string ContextSuffix(bool? context) => context is { } english ? (english ? "@e" : "@j") : "";
 
     /// <summary>覚えている内容が変わるたびに増える (判定の結果を使い回してよいかを見るのに使う)。</summary>
     public int Version { get; private set; }
 
     /// <summary>覚えている語なら英語か (true) 日本語か (false)。覚えていなければ null。word は小文字の英字。</summary>
-    public bool? Get(string word)
+    public bool? Get(string word, bool? context = null)
     {
-        if (ContextSuffix is { Length: > 0 } suffix && _entries.TryGetValue(word + suffix, out var contextual))
+        if (ContextSuffix(context) is { Length: > 0 } suffix && _entries.TryGetValue(word + suffix, out var contextual))
             return NeedsTwice(word, contextual) ? null : contextual.English;
         if (!_entries.TryGetValue(word, out var entry)) return null;
         if (NeedsTwice(word, entry)) return null;
         return entry.English;
     }
 
-    internal bool? Get(ReadOnlySpan<char> word)
+    internal bool? Get(ReadOnlySpan<char> word, bool? context = null)
     {
-        if (ContextSuffix is { Length: > 0 }) return Get(word.ToString());
+        if (context is not null) return Get(word.ToString(), context);
         if (!_entries.GetAlternateLookup<ReadOnlySpan<char>>().TryGetValue(word, out var entry)) return null;
         if (NeedsTwice(word.ToString(), entry)) return null;
         return entry.English;
@@ -100,20 +97,20 @@ public sealed class LanguageMemory
 
     /// <summary>
     /// ユーザーが英字 / かなに直した語を覚える (2 文字以上の英字だけ)。
-    /// explicitChoice は F10 / F6 / Tab ではっきり直したとき (変換の候補から選んだだけなら false)。
+    /// explicitChoice は F10 / F6 / Tab ではっきり直したとき (変換の候補から選んだだけなら false)。context は前の文脈 (<see cref="ContextSuffix"/>)。
     /// </summary>
-    public void Remember(string word, bool english, bool explicitChoice = false)
+    public void Remember(string word, bool english, bool explicitChoice = false, bool? context = null)
     {
         word = word.ToLowerInvariant();
         if (word.Length < 2 || !word.All(char.IsAsciiLetterLower)) return;
-        lock (_gate) RememberLocked(word, english, explicitChoice);
+        lock (_gate) RememberLocked(word, english, explicitChoice, context);
         _saver.Request();
     }
 
-    private void RememberLocked(string word, bool english, bool explicitChoice)
+    private void RememberLocked(string word, bool english, bool explicitChoice, bool? context)
     {
         Version++;
-        var entryKey = word + ContextSuffix;
+        var entryKey = word + ContextSuffix(context);
         if (_entries.TryGetValue(entryKey, out var old) && old.English == english)
         {
             old.Used = DateTime.UtcNow;
