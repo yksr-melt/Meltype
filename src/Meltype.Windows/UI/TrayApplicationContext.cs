@@ -735,7 +735,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (answer == DialogResult.OK) _composition.Runtime.ResetLearning();
     }
 
-    /// <summary>最近覚えたものだけを忘れる (<see cref="Composition.MeltypeRuntime.ForgetLearningSince"/>)。</summary>
+    /// <summary>最近覚えたものだけを忘れる (<see cref="Ime.MeltypeRuntime.ForgetLearningSince"/>)。</summary>
     private void ForgetRecentLearning(DateTime sinceUtc, string label)
     {
         var answer = MessageBox.Show($"{label}に覚えた学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？", "Meltype", MessageBoxButtons.OKCancel, MessageBoxIcon.Question);
@@ -767,7 +767,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _tipServer.Dispose();
         _engine.Keyboard = null;
         _keyboard.Dispose();
-        Composition.LearningSaves.FlushAll();
+        Config.LearningSaves.FlushAll();
         _composition.Dispose();
         _settingsForm?.Close();
         _logForm?.Close();

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 
-using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Detection;
 using Meltype.Input;
 
 namespace Meltype.Tests;

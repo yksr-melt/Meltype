@@ -21,7 +21,16 @@
 | `docs/` | 利用者向けの文書 (使い方・OS ごとの説明)。`docs/release-notes/` はリリースノート |
 | `docs/dev/` | 開発者向けの文書 (開発・設計・リリースの手順) |
 
-`src/Meltype.Core/` の中は、`Ime/` (`ImeSession`。入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)、`Composition/` (変換ボックスの中身: 英語の区間の判定・変換の流れ・候補・文脈・学習・ユーザー辞書・もしかして)、`Detection/` (ローマ字・英語・辞書・かな・打ち間違いの判定)、`Input/` (キーの表し方・コードの行の判定)、`NowPlaying/` (再生中の曲を OS から読む)、`Config/`・`Diagnostics/` (設定・ログ) に分かれています。
+`src/Meltype.Core/` の中は、次のように分かれています。参照の向きは AGENTS.md の「構成」のとおりです。
+
+- `Ime/`: `ImeHost`・`ImeSession` (入力の判断を受け持ち、各 OS のフロントはこれを呼ぶ)・部品の組み立て (`MeltypeRuntime`)・コードの行の判定
+- `Composition/`: 変換ボックスの中身 (変換の流れ・候補・文脈・確定・学習の呼び出し)。`Composition/Utility/` はユーティリティ変換 (計算・日付・再生中の曲など)
+- `Detection/`: ローマ字・英語・辞書・かな・打ち間違いの判定と、英語か日本語かの学習
+- `Learning/`: 変換の学習と予測変換
+- `Engine/`: 変換エンジン (Mozc・Zenzai)
+- `Dictionary/`: ユーザー辞書・補助辞書・英訳・意味・もしかしての辞書・スニペット
+- `Libraries/Chars/`・`Libraries/Lexicon/`: どこからでも使う文字の判定と、同梱の辞書の読み込み
+- `Input/`・`Config/`・`Diagnostics/`: キーの表し方・設定・ログと誤判定の報告
 
 ## Windows でビルドして試す
 

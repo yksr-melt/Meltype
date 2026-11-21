@@ -4,7 +4,9 @@
 using System.Diagnostics;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Engine;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
