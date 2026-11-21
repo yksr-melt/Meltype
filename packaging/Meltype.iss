@@ -88,7 +88,7 @@ Filename: "{app}\Meltype.exe"; Parameters: "--exit"; Flags: runhidden waituntilt
 Filename: "{sys}\schtasks.exe"; Parameters: "/Delete /TN Meltype /F"; Flags: runhidden waituntilterminated; RunOnceId: "DeleteStartupTask"
 
 [UninstallDelete]
-; 設定と学習データ ({localappdata}\Meltype) は、アンインストールの最後に聞いてから消す (CurUninstallStepChanged)
+; データのフォルダー ({localappdata}\Meltype) は、アンインストールの最後に聞いてから消す (CurUninstallStepChanged)
 Type: filesandordirs; Name: "{app}"
 
 [Code]
@@ -222,11 +222,11 @@ begin
     Exec(PowerShell(), Parameters, '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 #endif
   end;
-  // 設定と学習データは入れ直したときにも使えるよう、聞いてから消す (既定は残す)。画面の無いアンインストールでは残す。
+  // データのフォルダーは入れ直したときにも使えるよう、聞いてから丸ごと消す (既定は残す)。画面の無いアンインストールでは残す。
   if (CurUninstallStep = usPostUninstall) and not UninstallSilent() then
   begin
     Data := ExpandConstant('{localappdata}\Meltype');
-    if DirExists(Data) and (MsgBox('設定と学習データ (' + Data + ') も削除しますか?' + #13#10 + #13#10 + '「いいえ」なら残します。もう一度インストールしたときに、そのまま使えます。', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
+    if DirExists(Data) and (MsgBox('Meltype のデータ (' + Data + ') もすべて削除しますか? 設定・学習データ・ユーザー辞書・打鍵数などが消えます。' + #13#10 + #13#10 + '「いいえ」なら残します。もう一度インストールしたときに、そのまま使えます。', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES) then
       DelTree(Data, True, True, True);
   end;
 end;

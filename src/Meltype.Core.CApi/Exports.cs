@@ -54,6 +54,9 @@ public static unsafe class Exports
 
     private static HybridConverter? s_converter;
 
+    // meltype_set_conversion_ready を呼んだ (変換エンジンの答えを後から受け取れる) フロントか
+    private static bool s_lateResults;
+
     /// <summary>
     /// Android 版の meltype_init。Mozc はアプリのプロセスで動くので、変換ヘルパーの要求 1 行 (native/mozc/meltype_mozc_helper.cc の先頭) を
     /// mozcRequest に渡し、答えの 1 行を受け取る。mozcRequest は変換のスレッドから呼ばれ、malloc した UTF-8 (失敗なら NULL) を返す。
@@ -84,7 +87,7 @@ public static unsafe class Exports
     {
         try
         {
-            Converter.Budget.Enable();
+            s_lateResults = true;
             Converter.ResultReady += () => notify();
         }
         catch (Exception ex)
@@ -120,7 +123,7 @@ public static unsafe class Exports
     {
         try
         {
-            var parts = Runtime.SessionParts(Converter, Converter.Candidates, Converter.Reading);
+            var parts = Runtime.SessionParts(Converter, Converter.Candidates, Converter.Reading) with { LateResults = () => s_lateResults };
             return GCHandle.ToIntPtr(GCHandle.Alloc(new ImeHost(new NativeEnvironment(), parts, () => Runtime.Settings.Current)));
         }
         catch (Exception ex)
@@ -160,6 +163,8 @@ public static unsafe class Exports
         public SnippetStore Snippets => Runtime.Snippets;
 
         public string? ClipboardText => null;
+
+        public string? OtherTipVersion => null;
     }
 
     /// <summary>データの保存場所 (設定・学習・ユーザー辞書)。meltype_free で解放する。</summary>

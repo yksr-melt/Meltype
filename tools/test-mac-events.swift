@@ -8,6 +8,8 @@ final class EventClient: NSObject, IMKTextInput {
  var document=""; var marked=""
  var appID = "local.meltype.event-client"
  var contextReads = 0
+ var lineRect = NSRect(x:0,y:0,width:1,height:20)
+ var fontSize: CGFloat = 13
  func text(_ value:Any?)->String { (value as? NSAttributedString)?.string ?? (value as? String ?? "") }
  func insertText(_ string: Any!, replacementRange: NSRange) { let value=text(string); if replacementRange.location != NSNotFound { document=(document as NSString).replacingCharacters(in:replacementRange,with:value) } else {document+=value}; marked="" }
  func setMarkedText(_ string: Any!, selectionRange: NSRange, replacementRange: NSRange) {marked=text(string)}
@@ -29,7 +31,10 @@ final class EventClient: NSObject, IMKTextInput {
  }
  func length()->Int {(document as NSString).length}
  func characterIndex(for point:NSPoint, tracking mode:IMKLocationToOffsetMappingMode, inMarkedRange:UnsafeMutablePointer<ObjCBool>!)->Int {inMarkedRange?.pointee=false; return 0}
- func attributes(forCharacterIndex index:Int, lineHeightRectangle rectangle:UnsafeMutablePointer<NSRect>!)->[AnyHashable:Any]! {rectangle?.pointee=NSRect(x:0,y:0,width:1,height:20); return [:]}
+ func attributes(forCharacterIndex index:Int, lineHeightRectangle rectangle:UnsafeMutablePointer<NSRect>!)->[AnyHashable:Any]! {
+  rectangle?.pointee = lineRect
+  return [NSAttributedString.Key.font: NSFont.systemFont(ofSize: fontSize)]
+ }
  func validAttributesForMarkedText()->[Any]! {[]}
  func overrideKeyboard(withKeyboardNamed name:String!) {}
  func selectMode(_ identifier:String!) {}
@@ -41,7 +46,6 @@ final class EventClient: NSObject, IMKTextInput {
  func string(from range:NSRange, actualRange:UnsafeMutablePointer<NSRange>!)->String! {actualRange?.pointee=range;return attributedSubstring(from:range)?.string}
  func firstRect(forCharacterRange range:NSRange, actualRange:UnsafeMutablePointer<NSRange>!)->NSRect {actualRange?.pointee=range;return .zero}
 }
-var candidatesWindow: IMKCandidates? = nil
 @main
 struct EventTests {
  static func main() {
@@ -178,6 +182,246 @@ struct EventTests {
   }
   check("Command shortcut commits once") { controller,client in
    type(controller,client,"@kuraido");precondition(!key(controller,client,"a",flags:.command));equal(client.document,"@kuraido");equal(client.marked,"")
+  }
+  func compositionPanel(showing guide: String) -> (NSPanel, NSTextField, NSScrollView) {
+   for case let panel as NSPanel in app.windows where panel.isVisible {
+    let views = panel.contentView?.subviews ?? []
+    if let label = views.compactMap({ $0 as? NSTextField }).first(where: { !$0.isHidden && $0.stringValue == guide }),
+       let scroll = views.compactMap({ $0 as? NSScrollView }).first {
+     return (panel, label, scroll)
+    }
+   }
+   fatalError("Missing composition panel with \(guide)")
+  }
+  func candidateTable() -> NSTableView {
+   for window in app.windows where window.isVisible {
+    for case let scroll as NSScrollView in window.contentView?.subviews ?? [] where !scroll.isHidden {
+     if let table = scroll.documentView as? NSTableView { return table }
+    }
+   }
+   fatalError("Missing candidate table")
+  }
+  func candidateCell(_ table: NSTableView, row: Int) -> NSTableCellView {
+   guard let cell = table.view(atColumn: 0, row: row, makeIfNecessary: true) as? NSTableCellView else {
+    fatalError("Missing candidate cell \(row)")
+   }
+   return cell
+  }
+  check("Spelling suggestion returns to the same panel after Escape") { controller, client in
+   let visible = NSScreen.main!.visibleFrame
+   client.lineRect = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
+   let guide = "buresureddo　もしかして: ブレスレット　<Tab>で修正"
+   type(controller, client, "buresureddo")
+   let (panel, _, scroll) = compositionPanel(showing: guide)
+   precondition(scroll.isHidden && panel.frame.minY > client.lineRect.maxY)
+   precondition(key(controller, client, " ", code: UInt16(kVK_Space)))
+   precondition(!scroll.isHidden, "conversion should show candidates in the same panel")
+   precondition(key(controller, client, "\u{1b}", code: UInt16(kVK_Escape)))
+   equal(client.marked, "ぶれすれっど")
+   precondition(compositionPanel(showing: guide).0 === panel && scroll.isHidden)
+   controller.commitComposition(client)
+   precondition(!panel.isVisible)
+  }
+  check("Candidates stay visible when the client has no caret position") { controller, client in
+   client.lineRect = .zero
+   type(controller, client, "peejitesuto")
+   precondition(key(controller, client, " ", code: UInt16(kVK_Space)))
+   let table = candidateTable()
+   let window = table.window!
+   let screen = NSScreen.screens.first { NSMouseInRect(NSEvent.mouseLocation, $0.frame, false) }!
+   precondition(table.numberOfRows == 9 && screen.visibleFrame.contains(window.frame))
+   // ウィンドウの位置は整数に丸められるので、1 ポイントまでのずれは許す。
+   precondition(abs(window.frame.midX - screen.visibleFrame.midX) <= 1, "\(window.frame) \(screen.visibleFrame)")
+   controller.commitComposition(client)
+   precondition(!window.isVisible)
+  }
+  check("Predictive candidates leave the guide next to the same input line") { controller, client in
+   let visible = NSScreen.main!.visibleFrame
+   client.lineRect = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
+   client.fontSize = 9
+   type(controller, client, "ko")
+   let (panel, guide, scroll) = compositionPanel(showing: "ko")
+   let guideY = panel.frame.minY + guide.frame.minY
+   let guideHeight = guide.frame.height
+   precondition((guide.attributedStringValue.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)?.pointSize == 12)
+   precondition(scroll.isHidden)
+   client.fontSize = 36
+   type(controller, client, "u")
+   precondition(!scroll.isHidden, "the user dictionary should supply a prediction")
+   let prediction = candidateCell(candidateTable(), row: 0)
+   precondition(prediction.subviews == [prediction.textField!], "predictions do not have number labels")
+   precondition(panel.frame.minY + guide.frame.minY == guideY)
+   precondition(guide.frame.height == guideHeight && !scroll.frame.intersects(guide.frame))
+   type(controller, client, "ho")
+   precondition(compositionPanel(showing: "kouho").0 === panel && scroll.isHidden)
+   precondition(panel.frame.minY + guide.frame.minY == guideY)
+   controller.commitComposition(client)
+  }
+  check("The guide expands with typed text and stays inside the right edge") { _, _ in
+   let visible = NSScreen.main!.visibleFrame
+   let panel = CompositionPanel(choose: { _ in }, highlight: { _ in })
+   for x in [visible.midX, visible.maxX - 30] {
+    let line = NSRect(x: x, y: visible.midY, width: 1, height: 20)
+    let placement = CompositionPanelPlacement(start: line, end: line, visible: visible)!
+    var previous: NSRect?
+    for text in ["abcdef", "abcdefg", "abcdefgh", "abcdefghijklmnop"] {
+     panel.show(guide: text, list: nil, converting: false, clause: 0, placement: placement, aboveWindowLevel: 0)
+     let (window, guide, _) = compositionPanel(showing: text)
+     let frame = window.frame
+     precondition(guide.frame.width >= guide.cell!.cellSize.width, "the guide must display the complete line")
+     precondition(guide.frame.height == guide.cell!.cellSize.height)
+     precondition(visible.contains(frame))
+     precondition(x == visible.midX ? frame.minX == x : frame.maxX == visible.maxX)
+     if let previous {
+      precondition(frame.width > previous.width)
+      if x != visible.midX { precondition(frame.minX < previous.minX) }
+     }
+     previous = frame
+    }
+   }
+   panel.hide()
+  }
+  check("A long guide stays on one line and keeps the candidate rows") { _, _ in
+   let visible = NSScreen.main!.visibleFrame
+   let line = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
+   let placement = CompositionPanelPlacement(start: line, end: line, visible: visible)!
+   let items = (1...15).map { "候補\($0)" }
+   let list = CandidateList(items: items, notes: [], numbered: true, selected: 0, selectedMeaning: nil, meaningDelayMs: 0)
+   let panel = CompositionPanel(choose: { _ in }, highlight: { _ in })
+   panel.show(guide: "短い案内", list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
+   let lineHeight = compositionPanel(showing: "短い案内").1.frame.height
+   let long = String(repeating: "とても長い打ったキーと操作案内", count: 20)
+   panel.show(guide: long, list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
+   let (window, guide, scroll) = compositionPanel(showing: long)
+   precondition(window.frame.width <= 520, "\(window.frame)")
+   precondition(guide.frame.height == lineHeight, "the guide must not wrap")
+   precondition(!scroll.isHidden && candidateTable().numberOfRows == 9)
+   precondition(scroll.frame.height == 9 * 32)
+   panel.hide()
+  }
+  check("The conversion panel fits nine rows and aligns notes on the right") { _, _ in
+   let visible = NSScreen.main!.visibleFrame
+   let line = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
+   let placement = CompositionPanelPlacement(start: line, end: line, visible: visible)!
+   let items = (1...15).map { "候補\($0)" }
+   let notes: [String?] = items.indices.map { $0 == 0 ? "注記" : "長めの注記" }
+   let list = CandidateList(items: items, notes: notes, numbered: true, selected: 0,
+                            selectedMeaning: nil, meaningDelayMs: 0)
+   var highlighted: Int?
+   let panel = CompositionPanel(choose: { _ in }, highlight: { highlighted = $0 })
+   panel.show(guide: "操作案内", list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
+   let (window, _, scroll) = compositionPanel(showing: "操作案内")
+   let table = candidateTable()
+   precondition(table.numberOfRows == 9)
+   precondition(table.visibleRect.maxY == table.rect(ofRow: 8).maxY)
+   let firstCell = candidateCell(table, row: 0)
+   let title = firstCell.textField!.attributedStringValue
+   precondition((title.attribute(.font, at: 0, effectiveRange: nil) as? NSFont) == NSFont.systemFont(ofSize: 15))
+   var rightEdges: [CGFloat] = []
+   for (index, note) in [(0, "注記"), (1, "長めの注記")] {
+    let cell = candidateCell(table, row: index)
+    cell.layoutSubtreeIfNeeded()
+    let labels = cell.subviews.compactMap { $0 as? NSTextField }
+    let detail = labels.first { $0.stringValue == note }!
+    precondition(detail.alignment == .right)
+    precondition(cell.textField!.frame.maxX < detail.frame.minX)
+    rightEdges.append(detail.frame.maxX)
+   }
+   precondition(rightEdges[0] == rightEdges[1])
+   let wheel = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: -1, wheel2: 0, wheel3: 0)!
+   scroll.scrollWheel(with: NSEvent(cgEvent: wheel)!)
+   precondition(highlighted == 9, "scrolling past the page end should highlight the next page")
+   let unnumbered = CandidateList(items: items, notes: [], numbered: false, selected: 9, selectedMeaning: nil, meaningDelayMs: 0)
+   let firstHeight = window.frame.height
+   panel.show(guide: "操作案内", list: unnumbered, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
+   precondition(table.numberOfRows == 6 && window.frame.height == firstHeight)
+   let unnumberedCell = candidateCell(table, row: 0)
+   precondition(unnumberedCell.subviews == [unnumberedCell.textField!])
+   equal(unnumberedCell.textField!.stringValue, "候補10")
+   panel.hide()
+  }
+  check("Candidate selection stays reachable in a short panel") { _, _ in
+   let screen = NSScreen.main!.visibleFrame
+   let visible = NSRect(x: screen.minX, y: screen.minY, width: 380, height: 200)
+   let line = NSRect(x: visible.midX, y: visible.midY - 12, width: 1, height: 24)
+   let placement = CompositionPanelPlacement(start: line, end: line, visible: visible)!
+   var items = (0..<14).map { "候補\($0)" }
+   items[9] = String(repeating: "長い候補", count: 30)
+   let notes: [String?] = items.map { _ in "注記" }
+   var clicked: Int?
+   let panel = CompositionPanel(choose: { clicked = $0 }, highlight: { _ in })
+   let list = CandidateList(items: items, notes: notes, numbered: true, selected: 11, selectedMeaning: "意味", meaningDelayMs: 20)
+   panel.show(guide: "操作案内", list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
+   let (window, guide, scroll) = compositionPanel(showing: "操作案内")
+   let table = scroll.documentView as! NSTableView
+   precondition(!window.canBecomeKey && visible.contains(window.frame))
+   precondition(!guide.frame.intersects(scroll.frame))
+   precondition(table.numberOfRows == 5 && table.selectedRow == 2)
+   precondition(table.visibleRect.intersects(table.rect(ofRow: 2)))
+   precondition(table.rect(ofRow: 0).height > table.rect(ofRow: 1).height)
+   let row = table.rowView(atRow: 2, makeIfNecessary: true)
+   precondition(row?.accessibilityPerformPress() == true && clicked == list.selected)
+   let cell = candidateCell(table, row: 2)
+   precondition(cell.textField?.stringValue == "候補11" && cell.textField?.alignment == .left)
+   precondition(cell.subviews.compactMap { ($0 as? NSTextField)?.stringValue } == ["3", "候補11", "注記"])
+   let detail = window.contentView?.subviews.last as! NSTextField
+   precondition(detail.isHidden, "the meaning should wait for the delay")
+   // 高さが足りないときは、案内と候補一覧を優先する。
+   precondition(!scroll.isHidden && detail.isHidden)
+   let roomy = CompositionPanelPlacement(start: line, end: line, visible: screen)!
+   panel.show(guide: "操作案内", list: list, converting: true, clause: 0, placement: roomy, aboveWindowLevel: 0)
+   let deadline = Date().addingTimeInterval(2)
+   while detail.isHidden, Date() < deadline {
+    RunLoop.main.run(until: min(deadline, Date().addingTimeInterval(0.05)))
+   }
+   precondition(!detail.isHidden && detail.stringValue == "意味",
+                "meaning is hidden=\(detail.isHidden), value=\(detail.stringValue), available=\(roomy.availableHeight)")
+   precondition(!detail.frame.intersects(guide.frame) && !detail.frame.intersects(scroll.frame))
+   panel.show(guide: "操作案内", list: list, converting: true, clause: 0, placement: placement, aboveWindowLevel: 0)
+   precondition(!scroll.isHidden && detail.isHidden)
+   panel.hide()
+  }
+  for digit in [kVK_ANSI_2, kVK_ANSI_Keypad2] {
+   check("Page keys and number key \(digit) follow the same Core page") { controller, client in
+    let visible = NSScreen.main!.visibleFrame
+    client.lineRect = NSRect(x: visible.midX, y: visible.minY + 9, width: 1, height: 20)
+    type(controller, client, "peejitesuto")
+    precondition(key(controller, client, " ", code: UInt16(kVK_Space)))
+    let table = candidateTable()
+    @MainActor func pageKey(_ code: Int, _ scalar: Int) {
+     precondition(key(controller, client, String(UnicodeScalar(scalar)!), code: UInt16(code)))
+     precondition(client.document.isEmpty)
+     precondition(table.selectedRow == 0)
+     let first = candidateCell(table, row: 0)
+     equal(client.marked, first.textField!.stringValue)
+     precondition((first.subviews.first as? NSTextField)?.stringValue == "1")
+    }
+    let first = client.marked
+    precondition(table.numberOfRows == 9)
+    pageKey(kVK_PageUp, NSPageUpFunctionKey)
+    precondition(client.marked != first, "Page Up from the first page should wrap")
+    pageKey(kVK_PageDown, NSPageDownFunctionKey)
+    equal(client.marked, first)
+    pageKey(kVK_PageDown, NSPageDownFunctionKey)
+    precondition(client.marked != first, "Page Down should open the second page")
+    let secondPage = client.marked
+    let up = String(UnicodeScalar(NSUpArrowFunctionKey)!)
+    let down = String(UnicodeScalar(NSDownArrowFunctionKey)!)
+    precondition(key(controller, client, up, code: UInt16(kVK_UpArrow)))
+    precondition(table.selectedRow == 8)
+    let previousPageLast = candidateCell(table, row: 8)
+    equal(client.marked, previousPageLast.textField!.stringValue)
+    precondition((previousPageLast.subviews.first as? NSTextField)?.stringValue == "9")
+    precondition(key(controller, client, down, code: UInt16(kVK_DownArrow)))
+    precondition(table.selectedRow == 0)
+    equal(client.marked, secondPage)
+    let secondRow = candidateCell(table, row: 1)
+    precondition((secondRow.subviews.first as? NSTextField)?.stringValue == "2")
+    let expected = secondRow.textField!.stringValue
+    precondition(key(controller, client, "2", code: UInt16(digit)))
+    equal(client.document, expected)
+    equal(client.marked, "")
+   }
   }
   print("\(passed) Mac event/integration cases passed (synthetic client; OS IME registration and app GUI NOT_RUN)")
  }

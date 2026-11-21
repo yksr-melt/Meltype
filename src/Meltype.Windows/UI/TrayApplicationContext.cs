@@ -55,7 +55,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _invoker.CreateControl();
         // 入力・表示は、動かしている設定 (Meltype IME を使えなければ Meltype キーボード) を読む
         _composition = new Composition.CompositionService(_invoker, _engine.Runtime, () => _engine.Running);
-        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, _composition.Parts, () => _engine.Running));
+        _keyboard = new Keyboard.KeyboardFront(_invoker, _composition, environment => new Ime.ImeHost(environment, _composition.Parts, () => _engine.Running), () => _engine.OtherTipVersion);
         _keyboard.ModeChanged += OnKeyboardModeChanged;
         _engine.Keyboard = _keyboard;
         _engine.Focus = _composition.Focus;
@@ -135,7 +135,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         _autoUpdateItem = new ToolStripMenuItem("自動で更新する", null, (_, _) => ToggleAutoUpdate());
         updates.DropDownItems.Add(_autoUpdateItem);
         updates.DropDownItems.Add("今すぐ更新を確認", null, (_, _) => CheckForUpdate());
-        updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false));
+        updates.DropDownItems.Add("リリースノート...", null, (_, _) => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: false, _engine));
         _updateItem = new ToolStripMenuItem("", null, (_, _) => ApplyUpdate()) { Visible = false };
         updates.DropDownItems.Add(_updateItem);
         updates.DropDownOpening += (_, _) =>
@@ -172,14 +172,9 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _invoker.BeginInvoke(ShowWelcome);
         }
         // 更新したあとの初めての起動なら、その版のリリースノートを一度だけ見せる (issue #1207)。
-        // 初めて起動した人には見せず、今の版を見せたことにしておく
-        if (_state.ReleaseNotesShown != AppInfo.Version)
-        {
-            var showNotes = ProjectInfo.ShouldShowReleaseNotes(_state.ReleaseNotesShown, AppInfo.Version, firstRun);
-            _state.ReleaseNotesShown = AppInfo.Version;
-            _state.Save();
-            if (showNotes) _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true));
-        }
+        // 設定で自動表示を OFF にしていれば見せない
+        if (TakeReleaseNotes(_state, AppInfo.Version, firstRun, _engine.Settings.ShowReleaseNotesAfterUpdate))
+            _invoker.BeginInvoke(() => ReleaseNotesDialog.ShowFor(AppInfo.Version, updated: true, _engine));
         // Meltype IME が入る前の版から更新した人に、一度だけ Meltype IME を入れるかを聞く
         // (初めて起動した人には、インストーラーが聞いている)
         if (!AppPaths.IsPortable && !_state.TsfOffered)
@@ -322,6 +317,19 @@ internal sealed class TrayApplicationContext : ApplicationContext
     internal static string UpdateFailedMessage(string version, bool autoUpdate) => autoUpdate
         ? $"Meltype {version} に更新できませんでした。今の版のまま動いています。次に Windows にサインインしたときに、もう一度更新します。記録: {Updater.InstallLog}"
         : $"Meltype {version} に更新できませんでした。今の版のまま動いています。トレイの「更新」→「今すぐ更新を確認」から、もう一度更新できます。記録: {Updater.InstallLog}";
+
+    /// <summary>
+    /// 更新したあとの初めての起動で、その版のリリースノートを出すか決めて、見せた版を state.json に残す (issue #1207)。
+    /// 設定で自動表示を OFF にしていても、初めて起動した人でも、見せたことにしておく (あとで ON に戻しても、その版のは自動では出さない)。
+    /// </summary>
+    internal static bool TakeReleaseNotes(AppState state, string version, bool firstRun, bool autoShow)
+    {
+        if (state.ReleaseNotesShown == version) return false;
+        var show = ProjectInfo.ShouldShowReleaseNotes(state.ReleaseNotesShown, version, firstRun, autoShow);
+        state.ReleaseNotesShown = version;
+        state.Save();
+        return show;
+    }
 
     private void OnUpdateBalloonClicked(object? sender, EventArgs e)
     {

@@ -35,14 +35,14 @@ internal static class CompositionText
     /// 打った英字を読み直す断片は、読み直す元の入力の文脈を使う。
     /// </summary>
     public static bool? LearningContext(CompositionTextState state, TextEnv env) =>
-        env.Fragment is { } origin ? origin.LearningContext : env.Settings.ContextualLearning ? state.PrecedingEnglish : null;
+        env.Fragment is { } origin ? origin.LearningContext : env.Settings.ContextualLearning ? env.Context().PrecedingEnglish : null;
 
     /// <summary>
     /// 打った英字の一部を読み直すために作る断片に渡すもの。state は読み直す元の入力。
     /// 断片は設定によらず既定の設定 (自動判定・z の記号・/ のまま) で読み、打ち間違いを直さない。学習の文脈は元の入力のもの。
     /// </summary>
     public static TextEnv FragmentEnv(CompositionTextState state, TextEnv env) =>
-        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(state, env)) };
+        new(env.Detector, FragmentSettings, null) { Fragment = new FragmentOrigin(LearningContext(state, env)), Context = () => TextContext.None };
 
     private static readonly Config.Settings FragmentSettings = new();
 
@@ -490,7 +490,7 @@ internal static class CompositionText
         for (var i = 0; i < segments.Count; i++)
         {
             var segment = segments[i];
-            if (segment.IsEnglish && segment.Raw.Length == 3 && segment.Raw[2] is 'w' && !(i > 0 ? segments[i - 1].IsEnglish : state.PrecedingEnglishSentence) &&
+            if (segment.IsEnglish && segment.Raw.Length == 3 && segment.Raw[2] is 'w' && !(i > 0 ? segments[i - 1].IsEnglish : env.Context().PrecedingEnglishSentence) &&
                 char.IsAsciiLetterLower(segment.Raw[0]) && char.IsAsciiLetterLower(segment.Raw[1]) &&
                 env.Detector.Romaji.Analyze(segment.Raw[..2]) is { IsValid: true, Partial: "" } reading && reading.Kana.Length == 1)
             {
@@ -510,10 +510,10 @@ internal static class CompositionText
         var key = new StringBuilder();
         foreach (var unit in state.Units) key.Append(unit.Kana).Append('\u0001').Append(unit.Raw).Append('\u0002');
         key.Append('\u0003').Append(state.Pending).Append('\u0003')
-            .Append(state.PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
-            .Append(state.FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
-            .Append(state.PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
-            .Append(state.PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-').Append(state.LaughterAfterKana ? 'L' : '-')
+            .Append(env.Context().PrecedingEnglish switch { true => 'E', false => 'J', null => '-' })
+            .Append(env.Context().FollowingEnglish switch { true => 'E', false => 'J', null => '-' })
+            .Append(env.Context().PrecedingEnglishSentence ? 'S' : '-').Append(state.KanaInput ? 'K' : '-')
+            .Append(env.Context().PrecedingEnglishName ? 'N' : '-').Append(state.FullWidthParentheses ? 'W' : '-').Append(state.LaughterAfterKana ? 'L' : '-')
             .Append(CompositionText.EffectiveManual(state, env) ? 'M' : '-').Append(':').Append(env.Detector.Memory?.Version ?? -1).Append(':').Append(LearningContext(state, env) switch { true => 'e', false => 'j', null => '-' });
         return key.ToString();
     }
@@ -523,7 +523,7 @@ internal static class CompositionText
     /// 手動・かな入力・明示的な日本語学習・後ろの日本語は優先する。
     /// </summary>
     private static bool IsNameInEnglishSentence(CompositionTextState state, TextEnv env) =>
-        !state.KanaInput && state.PrecedingEnglishName && state.FollowingEnglish != false && !CompositionText.EffectiveManual(state, env) &&
+        !state.KanaInput && env.Context().PrecedingEnglishName && env.Context().FollowingEnglish != false && !CompositionText.EffectiveManual(state, env) &&
         CompositionText.Raw(state) is { Length: > 0 } raw && raw.All(char.IsAsciiLetter) && env.Detector.Memory?.Get(raw.ToLowerInvariant(), LearningContext(state, env)) != false;
 
     /// <summary>
@@ -555,7 +555,7 @@ internal static class CompositionText
     {
         var spans = CompositionText.ProtectedSpans(state);
         if (spans.Count == 0)
-            return env.Detector.SegmentAlternatives(LearningContext(state, env), units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, CompositionText.EffectiveManual(state, env), state.PrecedingEnglishSentence, state.KanaInput, count, reasons);
+            return env.Detector.SegmentAlternatives(LearningContext(state, env), units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, CompositionText.EffectiveManual(state, env), env.Context().PrecedingEnglishSentence, state.KanaInput, count, reasons);
         var raw = CompositionText.Raw(state);
         var result = new List<CompositionSegment>();
         var start = 0;
@@ -574,9 +574,9 @@ internal static class CompositionText
         {
             if (from == to) return;
             var gapUnits = CompositionText.UnitsInRawRange(state, env, units, from, to, out var pending);
-            var segments = env.Detector.Segment(LearningContext(state, env), gapUnits, pending, from == 0 ? state.PrecedingEnglish : false,
-                to == raw.Length ? state.FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
-                from == 0 && state.PrecedingEnglishSentence, state.KanaInput, reasons);
+            var segments = env.Detector.Segment(LearningContext(state, env), gapUnits, pending, from == 0 ? env.Context().PrecedingEnglish : false,
+                to == raw.Length ? env.Context().FollowingEnglish : false, CompositionText.EffectiveManual(state, env),
+                from == 0 && env.Context().PrecedingEnglishSentence, state.KanaInput, reasons);
             // 内部の区切りの子音は後の保護文字列とは結合しない。末尾の Pending は表示側が扱う。
             if (to < raw.Length && pending.Length > 0 && !segments[^1].IsEnglish)
                 segments = [.. segments.Take(segments.Count - 1), segments[^1] with
@@ -666,7 +666,7 @@ internal static class CompositionText
     public static string? Suggestion(CompositionTextState state, TextEnv env)
     {
         if (state.Mode != DisplayMode.Auto || !CompositionText.EffectiveManual(state, env) || CompositionText.IsNumeric(state)) return null;
-        var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), state.PrecedingEnglish, state.FollowingEnglish, false, state.PrecedingEnglishSentence, state.KanaInput);
+        var suggested = env.Detector.Segment(LearningContext(state, env), state.Units, CompositionText.Pending(state), env.Context().PrecedingEnglish, env.Context().FollowingEnglish, false, env.Context().PrecedingEnglishSentence, state.KanaInput);
         if (!suggested.Any(s => s.IsEnglish) || suggested.SequenceEqual(CompositionText.Segments(state, env))) return null;
         return string.Join(" ", suggested.Where(s => s.IsEnglish).Select(s => s.Raw));
     }
@@ -786,8 +786,8 @@ internal static class CompositionText
     }
 
     /// <param name="final">確定・変換のときは true (語末の n を ん にする)。</param>
-    /// <param name="convert">日本語の区間 (かな, 前の区間が英語か) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
-    public static string Display(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string>? convert = null) => state.Mode switch
+    /// <param name="convert">日本語の区間 (かな, 前の区間が英語か, 変換ボックスの中でその区間より前に出ている文字) を漢字に変換する関数 (ライブ変換)。null ならかなのまま。</param>
+    public static string Display(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, string>? convert = null) => state.Mode switch
     {
         DisplayMode.HalfWidthAlphanumeric => ApplyCase(CompositionText.Raw(state), state.Case),
         DisplayMode.FullWidthAlphanumeric => ToFullWidth(ApplyCase(CompositionText.Raw(state), state.Case)),
@@ -838,7 +838,7 @@ internal static class CompositionText
     }
 
     /// <summary>英語区間は英字のまま、日本語区間はかな (または漢字)。保護範囲は打った原文のまま。</summary>
-    public static string RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string>? convert)
+    public static string RenderSegments(CompositionTextState state, TextEnv env, bool final, Func<string, bool, string, string>? convert)
     {
         // 保護範囲 (技術的な文字列) は、幅変換・かな化・漢字変換をせずに原文のまま出す (INV-01)。
         if (CompositionText.VerifyProtectedRaw(state)) return CompositionText.Raw(state);
@@ -871,7 +871,7 @@ internal static class CompositionText
                     kana = kana[..^laughter];
                 }
             }
-            builder.Append(convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish) : kana);
+            builder.Append(convert is not null && kana.Length > 0 ? convert(kana, i > 0 && segments[i - 1].IsEnglish, builder.ToString()) : kana);
             builder.Append(pending);
         }
         return CompositionText.HalfWidthStars(state, builder.ToString());

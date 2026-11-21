@@ -18,12 +18,14 @@ internal sealed class TestSession : IImeEnvironment
 
     /// <param name="classifyDirect">英数状態で打ち始めた英字がローマ字 (日本語) かの判定 (打った英字, もう続きが無いか)。null なら判定しない。</param>
     /// <param name="timeMs">キーを処理した時刻 (ミリ秒)。null なら実際の時刻。</param>
+    /// <param name="lateResults">変換エンジンの答えを待たず、後から RefreshConversion で受け取るか (<see cref="SessionParts.LateResults"/>)。</param>
     public TestSession(Func<Settings> settings, IKanjiConverter? converter = null, CompositionServices? services = null, CompositionDetector? detector = null,
-        Func<string, bool, Detection.Verdict>? classifyDirect = null, Func<long>? timeMs = null)
+        Func<string, bool, Detection.Verdict>? classifyDirect = null, Func<long>? timeMs = null, bool lateResults = false)
         : this(new SessionParts(detector ?? CompositionTests.Detector, converter ?? new CompositionTests.FakeConverter(), services ?? new CompositionServices())
         {
             ClassifyDirect = classifyDirect is null ? null : (letters, final, _) => classifyDirect(letters, final),
             TimeMs = timeMs ?? (() => Environment.TickCount64),
+            LateResults = () => lateResults,
         }, settings)
     {
     }
@@ -40,6 +42,8 @@ internal sealed class TestSession : IImeEnvironment
     public SnippetStore Snippets { get; } = new(null);
 
     public string? ClipboardText => null;
+
+    public string? OtherTipVersion => null;
 
     /// <summary>直近の応答の状態。</summary>
     public ImeState State { get; private set; } = new() { Capture = new ImeCapture() };

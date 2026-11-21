@@ -15,7 +15,7 @@ internal static partial class CompositionController
 {
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private static string CurrentDisplay(CompositionState state, CompositionEnv env, bool final) =>
-        CompositionText.Display(state.Text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish) => LiveConvert(state, env, kana, afterEnglish) : null);
+        CompositionText.Display(state.Text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => LiveConvert(state, env, kana, afterEnglish, SegmentBefore(env, shown)) : null);
 
     private static void CommitIfAny(CompositionState state, CompositionEnv env, bool preserveText = false)
     {
@@ -42,14 +42,14 @@ internal static partial class CompositionController
         if (converting) SplitWholeSentence(state);
         // 区間分けの重みで決まらなかった確定の決まり。誤変換の報告をログから読み解けるよう、通った決まりを確定のログに書く (issue #1644)
         var rules = new List<string>();
-        // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
+        // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても env.Deadline までは答えを待つ
         var text = converting ? string.Concat(state.Clauses.Select(c => c.Text))
-            : env.Budget is { Enabled: true } && !env.Settings.EnterCommitsAsShown
-                ? CompositionText.Display(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, env.Converter).Select(c => c.Text)) : kana : null)
+            : env.LateResults && !env.Settings.EnterCommitsAsShown
+                ? CompositionText.Display(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(env, shown), zenzai: true).Select(c => c.Text)) : kana : null)
                 : CurrentDisplay(state, env, final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
-        if (!converting && state.Text.Mode == DisplayMode.Auto && !state.Text.KanaInput && state.Text.PrecedingEnglish == true && CurrentDisplay(state, env, final: false) is { Length: > 0 } shown &&
+        if (!converting && state.Text.Mode == DisplayMode.Auto && !state.Text.KanaInput && env.Context().PrecedingEnglish == true && CurrentDisplay(state, env, final: false) is { Length: > 0 } shown &&
             shown.All(char.IsAsciiLetter) && shown != text && text.Any(c => c > 0x7F))
         {
             text = shown;
@@ -63,8 +63,9 @@ internal static partial class CompositionController
             // 入れた文字は、アプリが選択していた文字と置き換える。
             rules.Add("選択していた文字の再変換");
             LogCommit(state, env, text + suffix, string.Join("、", rules));
-            CompositionOutput.Commit(state.Out, env, text + suffix);
+            // 学習の文脈は確定する前のキャレットの前 (確定した文字を入れる前)
             if (converting) LearnClauses(state, env);
+            CompositionOutput.Commit(state.Out, env, text + suffix);
             ResetContext(state);
             ClearComposition(state);
             return;
@@ -116,7 +117,7 @@ internal static partial class CompositionController
             (state.Text.Mode, state.Text.Case) = (mode, letterCase);
         }
         if (shown == text) return;
-        var before = state.PrecedingText ?? "";
+        var before = env.Context().PrecedingText ?? "";
         env.Corrected.Invoke(new Correction(CompositionText.Raw(state.Text), shown, text, suffix.Contains(' ') ? "Space (変換)" : "Enter (確定)",
             before.Length > 20 ? before[^20..] : before, DateTime.Now));
     }
@@ -144,7 +145,7 @@ internal static partial class CompositionController
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     private static void LearnClauses(CompositionState state, CompositionEnv env)
     {
-        if (Learning(state, env)) env.Learning.Learn(state.Clauses, ConversionContext(state), CompositionText.LearningContext(state.Text, env));
+        if (Learning(state, env)) env.Learning.Learn(state.Clauses, env.Context().PrecedingText, CompositionText.LearningContext(state.Text, env));
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>
@@ -236,7 +237,7 @@ internal static partial class CompositionController
         // 直前に確定した語が、今のキャレットの位置に無い (別の場所をクリックした等) ときは書き換えない。
         // 消すつもりの文字がそこに無いので、消すとキャレットの前の別の文字が消えてしまう。
         // 入力欄の文字をその場で読めるホストだけ確かめる (Windows は別のスレッドで後から読むので、古い値で誤って止めない)。
-        if (state.CaretBefore is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
+        if (CompositionOutput.Before(state.Out, env) is { } caretBefore && !caretBefore.EndsWith(original, StringComparison.Ordinal))
         {
             Diagnostics.Log.Decision($"キャレットの位置が変わっているので確定し直しません: {Diagnostics.Log.Text(original)}");
             state.Correctable.Clear();
@@ -260,7 +261,7 @@ internal static partial class CompositionController
     {
         LogCommit(state, env, text, rule);
         var spaceIntended = state.SpaceStartedConversion;
-        var afterEnglish = state.Text.PrecedingEnglish == true;
+        var afterEnglish = env.Context().PrecedingEnglish == true;
         state.SpaceStartedConversion = false;
         state.TabStartedConversion = false;
         CompositionText.Clear(state.Text);
@@ -268,7 +269,7 @@ internal static partial class CompositionController
         if (text.Length == 0) return;
         var corrected = CorrectPreviousCommit(state, env, raw, english);
         if (!preserveText && (env.Settings.SpaceAroundEnglish || env.Settings.SpaceAroundNumbers))
-            text = AddSpacesAroundEnglish(text, corrected ?? state.PrecedingText, state.FollowingText, env.Settings.SpaceAroundEnglish, env.Settings.SpaceAroundNumbers);
+            text = AddSpacesAroundEnglish(text, corrected ?? env.Context().PrecedingText, env.Context().FollowingText, env.Settings.SpaceAroundEnglish, env.Settings.SpaceAroundNumbers);
         // 英語とも日本語とも読める語を、文脈を決めずに (選び直さずに) 確定したときだけ、後で確定し直せるようにしておく。
         if (!chosen && env.Detector.IsAmbiguousWord(raw))
         {

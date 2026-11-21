@@ -25,26 +25,22 @@ internal static partial class CompositionController
         state.Text.FullWidthParentheses = env.Settings.FullWidthParentheses;
         state.Text.SquareBrackets = env.Settings.SquareBrackets;
         state.Text.LaughterAfterKana = env.Settings.LaughterAfterKana;
+    }
+
+    /// <summary>
+    /// 入力欄の文脈 (<see cref="TextEnv.Context"/>)。フロントが渡したキャレットの前後の文字 (この出来事で確定した文字を入れたもの) から決める。
+    /// 自分が確定した直後と、キャレットの前が読めないときは、自分の確定の記録 (最後に確定した語) を使う。
+    /// </summary>
+    internal static TextContext ContextOf(CompositionState state, CompositionEnv env)
+    {
+        var after = CompositionOutput.After(env);
         // 自分が確定した直後は、アプリ側のテキストがまだ更新されていないかもしれないので自分の記録を信じる。
         var recentOwnCommit = env.NowMs - state.LastCommitTime < OwnCommitTrustMs;
-        state.PrecedingText = state.LastCommitEnglish is null ? null : state.LastCommitText;
-        state.FollowingText = null;
-        state.Text.PrecedingEnglish = state.LastCommitEnglish;
-        state.Text.PrecedingEnglishSentence = state.LastCommitEnglish == true && IsEnglishSentence(state.LastCommitText);
-        state.Text.PrecedingEnglishName = state.LastCommitEnglish == true && IsEnglishNameContext(state.LastCommitText);
-        // フロントが渡したキャレットの前の文字 (このキーで確定した文字を入れたもの)。読めなければ null で、キャレットの位置は確かめない (今までどおり直す)。
-        // 確定し直してよいか (直前に確定した語が今のキャレットの位置にあるか) の判断にも使う。
-        var before = CompositionOutput.Before(state.Out, env);
-        state.CaretBefore = before;
-        if (!recentOwnCommit && before is not null)
-        {
-            state.PrecedingText = before;
-            if (LanguageOf(before) is { } english) state.Text.PrecedingEnglish = english;
-            state.Text.PrecedingEnglishSentence = IsEnglishSentence(before);
-            state.Text.PrecedingEnglishName = IsEnglishNameContext(before);
-        }
-        state.FollowingText = state.Out.After;
-        state.Text.FollowingEnglish = LanguageOfStart(state.Out.After);
+        if (!recentOwnCommit && CompositionOutput.Before(state.Out, env) is { } before)
+            return new TextContext(before, LanguageOf(before) ?? state.LastCommitEnglish, IsEnglishSentence(before), IsEnglishNameContext(before), after, LanguageOfStart(after));
+        var english = state.LastCommitEnglish;
+        return new TextContext(english is null ? null : state.LastCommitText, english,
+            english == true && IsEnglishSentence(state.LastCommitText), english == true && IsEnglishNameContext(state.LastCommitText), after, LanguageOfStart(after));
     }
 
     /// <summary>
@@ -118,23 +114,4 @@ internal static partial class CompositionController
         if (c >= '\u2000' && !char.IsWhiteSpace(c) && c != '\u3000') return false;
         return null;
     }
-
-    /// <summary>変換エンジンに渡す文脈: キャレットの前の確定済みの文字のうち、同じ文の日本語の部分 (最大 10 文字)。</summary>
-    private static string? ConversionContext(CompositionState state)
-    {
-        var text = state.PrecedingText;
-        if (string.IsNullOrEmpty(text) || LanguageOf(text) != false) return null;
-        var start = text.AsSpan().LastIndexOfAny(SentenceEndSearch);
-        text = text[(start + 1)..].Trim();
-        return text.Length == 0 ? null : text.Length > 10 ? text[^10..] : text;
-    }
-
-    /// <summary>広い文脈 (文をまたいで最大 100 文字の、日本語の文章)。使える変換エンジン (Zenzai) に渡す。英文のときは null。</summary>
-    private static string? WideContext(CompositionState state)
-    {
-        var text = state.PrecedingText?.Replace("\r", "").Replace("\n", "").Trim();
-        return string.IsNullOrEmpty(text) || LanguageOf(text) != false ? null : text.Length > 100 ? text[^100..] : text;
-    }
-
-    private static readonly System.Buffers.SearchValues<char> SentenceEndSearch = System.Buffers.SearchValues.Create("。．！？\n\r");
 }

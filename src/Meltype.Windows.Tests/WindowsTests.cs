@@ -176,12 +176,12 @@ internal static class WindowsTests
         var mozc = new MozcConverter(new MozcHelperProcess(helper, profile));
         try
         {
-            if (mozc.Convert("てすと") is null) return; // 起動できない環境
+            if (mozc.Convert(new ConversionRequest("てすと", null)) is null) return; // 起動できない環境
             mozc.Dispose();
             var before = Helpers();
             mozc.Learn("", [new ConversionClause("てすと", "テスト")]);
             Assert.Equal(before, Helpers(), "Dispose のあとで覚えさせても、ヘルパーを起動しない");
-            Assert.True(mozc.Convert("てすと") is null, "Dispose のあとは変換しない");
+            Assert.True(mozc.Convert(new ConversionRequest("てすと", null)) is null, "Dispose のあとは変換しない");
             Assert.Equal(before, Helpers(), "Dispose のあとで変換しても、ヘルパーを起動しない");
         }
         finally
