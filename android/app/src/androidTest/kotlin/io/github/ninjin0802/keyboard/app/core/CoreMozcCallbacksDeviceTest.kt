@@ -3,7 +3,6 @@
 package io.github.ninjin0802.keyboard.app.core
 
 import io.github.ninjin0802.keyboard.mozc.MozcBackend
-import io.github.ninjin0802.keyboard.mozc.MozcClause
 import io.github.ninjin0802.keyboard.mozc.MozcSegment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -11,17 +10,11 @@ import org.junit.Test
 
 /** CoreMozcCallbacks answers the Core's MozcConverter in the line protocol of native/mozc/meltype_mozc_helper.cc. */
 class CoreMozcCallbacksDeviceTest {
-    private val learned = mutableListOf<Pair<List<MozcClause>, String?>>()
-
     private val backend = object : MozcBackend {
         override fun convert(reading: String, context: String?): List<MozcSegment>? = when (reading) {
             "あめがふる" -> listOf(MozcSegment("あめが", listOf("雨が", "飴が")), MozcSegment("ふる", listOf("降る", "振る")))
             "たいむあうと" -> null
             else -> emptyList()
-        }
-        override fun learn(clauses: List<MozcClause>, context: String?): Boolean {
-            learned += clauses to context
-            return clauses.first().text == "雨が"
         }
         override fun reading(text: String): String? = if (text == "雨") "あめ" else null
     }
@@ -36,13 +29,6 @@ class CoreMozcCallbacksDeviceTest {
     @Test fun anUnconvertibleReadingIsAnEmptyLineAndAFailureIsNoAnswer() {
         assertEquals("", ask("C\t\tほげ"))
         assertNull(ask("C\t\tたいむあうと"))
-    }
-
-    @Test fun learningPassesTheClausesAndTheContext() {
-        assertEquals("OK", ask("L\tきょうは\tあめが\u001f雨が\u001eふる\u001f降る"))
-        assertEquals(listOf(MozcClause("あめが", "雨が"), MozcClause("ふる", "降る")) to "きょうは", learned.single())
-        assertEquals("NG", ask("L\t\tあめが\u001f飴が"))
-        assertNull(learned.last().second)
     }
 
     @Test fun reverseConversion() {

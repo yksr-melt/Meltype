@@ -24,7 +24,7 @@ internal sealed record FragmentOrigin(bool? LearningContext);
 internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services, Config.Settings Settings)
     : TextEnv(Detector, Settings, Services.RomajiTypos)
 {
-    public CompositionLearning Learning { get; } = new(Services, Converter);
+    public CompositionLearning Learning { get; } = new(Services);
 
     public ConversionBudget? Budget => (Converter as IBackgroundConverter)?.Budget;
 

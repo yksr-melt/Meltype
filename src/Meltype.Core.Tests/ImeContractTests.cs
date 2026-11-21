@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
-using System.Collections.Concurrent;
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
@@ -784,15 +783,6 @@ internal static class ImeContractTests
         }
     }
 
-    private sealed class LearningConverter : IKanjiConverter, ILearningConverter
-    {
-        private readonly CompositionTests.FakeConverter _converter = new();
-        public ConcurrentQueue<(string? Context, IReadOnlyList<ConversionClause> Clauses)> Learned { get; } = new();
-        public string? Convert(string hiragana, string? before) => _converter.Convert(hiragana, before);
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => _converter.ConvertClauses(hiragana, before);
-        public void Learn(string? context, IReadOnlyList<ConversionClause> clauses) => Learned.Enqueue((context, clauses));
-    }
-
     [Test]
     public static void PrivateAndLearningOff_ConvertButDoNotLearn()
     {
@@ -828,10 +818,9 @@ internal static class ImeContractTests
         LearningSaves.FlushAll();
         var originalPhrases = File.ReadAllText(phrasePath);
         var translationHistory = new TranslationHistory(translationPath);
-        var converter = new LearningConverter();
         var front = new Front
         {
-            Converter = converter, Services = new CompositionServices
+            Services = new CompositionServices
             {
                 Languages = languages, History = history, Predictor = new Predictor(phrases, null, history),
                 Translations = TranslationDictionary.Parse("川\tn\triver"), TranslationHistory = translationHistory,
@@ -893,8 +882,6 @@ internal static class ImeContractTests
         Assert.Equal(history.Get("にほんご"), new ConversionHistory(historyPath).Get("にほんご"), mode);
         Assert.Equal(phrases.Count, new PhraseHistory(phrasePath).Count, mode);
         Assert.Equal(translationHistory.Get("かわ").Count, new TranslationHistory(translationPath).Get("かわ").Count, mode);
-        Assert.Equal(learns, SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, learns ? 5000 : 100), mode);
-        Assert.Equal(learns, converter.Learned.Any(request => request.Clauses.Any(clause => clause.Text == "日本語文")), mode);
         if (mode == "Privateから通常欄へ移動")
         {
             // Private で始めた入力が終わったあと、同じ instance で始め直した通常入力は学習する。
@@ -910,8 +897,9 @@ internal static class ImeContractTests
     [Test]
     public static void Private_StillSuppressesLearningAfterPartialCommit()
     {
-        var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
+        var phrases = new PhraseHistory(null);
+        var front = new Front { Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Settings.PartialCommit = true;
         front.Traits.Add("Private");
         front.Type("tanniwotoru ");
@@ -925,14 +913,15 @@ internal static class ImeContractTests
         Assert.True(View(front.Event("StateRequested")).GetProperty("converting").GetBoolean(), front.Trace);
         front.Key('\n');
         Assert.True(front.Document.Length > "単位を".Length, front.Trace);
-        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+        Assert.Equal(0, phrases.Count, front.Trace);
     }
 
     [Test]
     public static void Private_ReportedBeforeResumingDoesNotLearnOnLaterCommit()
     {
-        var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
+        var phrases = new PhraseHistory(null);
+        var front = new Front { Services = new CompositionServices { Predictor = new Predictor(phrases, null, null) } };
+        front.Settings.PredictiveCandidates = true;
         front.Type("nihongo");
 
         // TSF はアプリが表示済みの文字を確定した時点で Private を読み、再開を保留する前に知らせる。
@@ -943,11 +932,10 @@ internal static class ImeContractTests
         Assert.Equal("日本語", front.Composition["t1"], front.Trace);
         front.Key('\n');
         Assert.Equal("日本語", front.Document, front.Trace);
-        Assert.True(!SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 100), front.Trace);
+        Assert.Equal(0, phrases.Count, front.Trace);
 
         front.Type("kyou \n");
-        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), front.Trace);
-        Assert.Equal("今日", converter.Learned.Single().Clauses.Single().Text, front.Trace);
+        Assert.Equal("今日", phrases.StartingWith("きょ").SingleOrDefault(), front.Trace);
     }
 
     [Test]
@@ -985,29 +973,6 @@ internal static class ImeContractTests
                 directory.Delete(recursive: true);
             }
         }
-    }
-
-    [Test]
-    public static void Learning_UsesSurroundingTextInAnOrdinaryFieldAfterPrivateInput()
-    {
-        var converter = new LearningConverter();
-        var front = new Front { Converter = converter };
-        front.Traits.Add("Private");
-        front.Type("nihongo \n");
-        Assert.Equal("日本語", front.Document, front.Trace);
-        front.Traits.Clear();
-        front.Document = "前置き";
-        front.Event("CaretMoved", extra: Entered);
-        front.Type("kyou \n");
-        AssertLearned(converter, "今日", "前置き", front.Trace);
-    }
-
-    private static void AssertLearned(LearningConverter converter, string text, string? context, string trace)
-    {
-        Assert.True(SpinWait.SpinUntil(() => !converter.Learned.IsEmpty, 5000), trace);
-        Assert.True(converter.Learned.TryDequeue(out var request), trace);
-        Assert.Equal(text, request.Clauses.Single().Text, trace);
-        Assert.Equal(context, request.Context, trace);
     }
 
     [Test]

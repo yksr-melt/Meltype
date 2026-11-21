@@ -120,10 +120,3 @@ public interface IBackgroundConverter
     /// </summary>
     event Action? ResultReady;
 }
-
-/// <summary>確定した変換を覚えられる変換エンジン (Mozc)。次から同じ読みで同じ文字列を先に出す。</summary>
-public interface ILearningConverter
-{
-    /// <summary>ユーザーが確定した文節 (読みと文字列、区切りも確定したとおり) を覚えさせる。before はキャレットの前の確定済みの文字列そのまま。</summary>
-    void Learn(string? before, IReadOnlyList<ConversionClause> clauses);
-}
