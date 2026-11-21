@@ -206,11 +206,27 @@ public sealed partial class CompositionDetector
                 step = cost + EnglishTieBreak + englishBias;
                 if (state.Side == Side.Japanese && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start]))
                 {
-                    // 英字 → 日本語 → 英字 と、英字のあいだで区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く
+                    // 英字 → 日本語 → 英字 と、英字のあいだで区切りなしに戻る (procras|ち|cle)。あいだが付属語を含むとき (excel|と|ppt) は除く。
+                    // 付属語の例外は、直前が選んで入れた語か、かなとして読めない英字だけの略語 (rds) の場合だけ。
+                    // SCOWL の短い語をつないだ未知語の途中 (Spectra|so|に|cs・kilo|へ|arts) には付属語を作らない。
                     var run = from;
                     var particle = run.Edge.Particle;
                     while (run.Previous is { } previous && !run.Edge.English && !run.Edge.Neutral) { if (previous.Edge.English || previous.Edge.Neutral) break; run = previous; particle |= run.Edge.Particle; }
-                    if (!particle && run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1])) step += SandwichCost;
+                    if (run.Previous is { Edge.English: true } before && before.Edge.End == run.Edge.Start && run.Edge.Start > 0 && char.IsAsciiLetter(text[run.Edge.Start - 1]))
+                    {
+                        var leftRun = before;
+                        while (leftRun.Previous is { Edge.English: true } earlier && earlier.Edge.End == leftRun.Edge.Start) leftRun = earlier;
+                        var left = text[leftRun.Edge.Start..before.Edge.End].ToLowerInvariant();
+                        var leftKana = _romaji.ConvertLenient(left, final: true);
+                        var leftIsEnglish = IsListedEnglishWord(learning, left) || left.Length >= 2 &&
+                            (leftKana.All(char.IsAsciiLetter) || IsCommonEnglishWord(left) && leftKana.Any(char.IsAsciiLetter));
+                        // と|っ|pt のように、重ねた子音の1つが日本語側に入っている道も ppt として調べる。
+                        var rightStart = from.Edge.Kana == "っ" && DoubledAt(edge.Start - 1) ? edge.Start - 1 : edge.Start;
+                        var right = text[rightStart..edge.End].ToLowerInvariant();
+                        var rightIsEnglish = IsLatticeEnglishWord(learning, right) || _romaji.ConvertLenient(right, final: true).Any(char.IsAsciiLetter);
+                        if (!particle) step += SandwichCost;
+                        else if (!leftIsEnglish || !rightIsEnglish) step += 2 * SwitchCost;
+                    }
                 }
                 if (state.Side == Side.Japanese && !state.Particle) step += SwitchCost;
                 if (state.IsEnglish && edge.Start > 0 && char.IsAsciiLetter(text[edge.Start - 1]) && char.IsAsciiLetter(text[edge.Start])) step += AdjacentEnglishCost;
