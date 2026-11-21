@@ -90,6 +90,15 @@ const dictionaries = {
     },
   },
   // 読み<Tab>語句。同じ数の | で区切ると別の文節にする (いち|がっき<Tab>一|学期)
+  // 配列<Tab>打つキー<Tab>かな (かな配列の表)。打つキーは刻印の 1 文字・L・R を空白 (並び) か + (同時) でつなぐ
+  'kana-layouts.txt': {
+    format: tabbed(3, 3, ([layout, keys, kana]) => [
+      /^[A-Z][A-Za-z]+$/.test(layout) ? null : `配列「${layout}」が KanaLayout の名前でない`,
+      /^([1-90\-^\\a-z@[;:\],./_LR])([ +][1-90\-^\\a-z@[;:\],./_LR])*$/.test(keys) ? null : `打つキー「${keys}」の書き方が違う`,
+      kana.length > 0 ? null : 'かなが空',
+    ]),
+    keysOf: line => { const [layout, keys] = line.split('\t'); return [[`${layout}\t${keys}`, line]]; },
+  },
   'phrases.txt': {
     format: tabbed(2, 2, ([reading, word]) => [
       reading.replace(/^\^/, '').split('|').every(r => hiragana.test(r)) ? null : `読み「${reading}」がひらがなでない`,
