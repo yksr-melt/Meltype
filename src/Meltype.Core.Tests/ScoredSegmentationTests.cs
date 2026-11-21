@@ -89,4 +89,15 @@ internal static class ScoredSegmentationTests
         foreach (var (typed, expected) in new[] { ("exceltoppt", "excelとppt"), ("pythontoffmpeg", "pythonとffmpeg"), ("mottekita", "もってきた") })
             Assert.Equal(expected, Type(typed), typed);
     }
+
+    [Test]
+    public static void ShortEnglishWord_IsNotCutOutOfJapanese()
+    {
+        // 2 文字の英単語 (be・pa・ma・on・ve・he) をローマ字の途中から切り出していた (#2141・#2016・#1908・#1588・#1699・#1377)。
+        // 大文字の略語・付属語を挟んだ英単語 (Xのpost・Goでrewrite) は英語のまま
+        foreach (var (typed, expected) in new[] {
+            ("subewomotanai", "すべをもたない"), ("ronpa", "ろんぱ"), ("cve", "cve"), ("he-", "へー"), ("USENsama", "USENさま"), ("beepon", "beepおん"), ("meni", "めに"),
+            ("Xnopost", "Xのpost"), ("AInomodel", "AIのmodel"), ("Goderewrite", "Goでrewrite"), ("jsnocode", "jsのcode"), ("lsshite", "lsして") })
+            Assert.Equal(expected, Type(typed), typed);
+    }
 }
