@@ -37,6 +37,11 @@ function expect(resultFile) {
   summary('| | 入力 | 期待 | Pull Request の結果 | 比べ方 |\n|---|---|---|---|---|');
   results.forEach(r => summary(`| ${r.ok ? '✅' : '❌'} | ${code(r.typed)} | ${cell(r.expected)} | ${cell(r.actual)} | ${cell(r.kind)} |`));
   if (failed > 0) {
+    // 本文由来の値を含むので、行頭を ❌ にして改行を消し、ワークフローコマンド (::…) として読まれないようにする
+    const line = text => String(text ?? '').replace(/\r\n|[\r\n]/g, ' ');
+    for (const r of results.filter(r => !r.ok)) {
+      console.error(line(`❌ ${r.typed} → 期待: ${r.expected} / 結果: ${r.actual} (${r.kind})`));
+    }
     console.error(`${failed} 個の例が期待どおりになりませんでした`);
     process.exitCode = 1;
   }
