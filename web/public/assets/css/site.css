@@ -496,42 +496,21 @@ kbd {
   letter-spacing: 0.02em;
 }
 
-/* 5 万ダウンロード記念の帯。ヘッダーの直下に全幅で出す */
+/* 5 万ダウンロード記念の帯。ヘッダーの直下に全幅で出す。
+   白い文字が 4.5:1 以上で読めるように、背景はライト・ダークのどちらでも濃い色に固定する
+   (テーマの --pink などはダークで明るいパステルになり、白い文字が読めない) */
 .milestone {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(110deg, var(--pink) 0%, var(--peri) 50%, var(--sky) 100%);
+  background: linear-gradient(110deg, #c9346a 0%, #6c4fb4 50%, #1673b0 100%);
   color: #fff;
-}
-
-.milestone::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
-  transform: translateX(-100%);
-  animation: milestone-shine 4s ease-in-out infinite;
-  pointer-events: none;
-}
-
-@keyframes milestone-shine {
-  0%,
-  40% {
-    transform: translateX(-100%);
-  }
-
-  100% {
-    transform: translateX(100%);
-  }
 }
 
 .milestone-inner {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 18px;
-  padding-top: 18px;
-  padding-bottom: 18px;
+  gap: 14px;
+  padding-top: 10px;
+  padding-bottom: 10px;
 }
 
 .milestone-text {
@@ -540,35 +519,33 @@ kbd {
   align-items: baseline;
   justify-content: center;
   column-gap: 12px;
+  row-gap: 4px;
   margin: 0;
   text-align: center;
-  text-shadow: 0 2px 8px rgba(31, 42, 68, 0.25);
 }
 
 .milestone-number {
   font-family: var(--font-head);
   font-weight: 900;
-  font-size: clamp(2.2rem, 6vw, 3.4rem);
-  line-height: 1;
+  font-size: clamp(1.8rem, 5vw, 2.2rem);
+  line-height: 1.1;
   letter-spacing: 0.02em;
 }
 
 .milestone-label {
   font-family: var(--font-head);
   font-weight: 700;
-  font-size: clamp(1.2rem, 3vw, 1.7rem);
+  font-size: clamp(1.1rem, 3vw, 1.35rem);
 }
 
 .milestone-thanks {
-  flex-basis: 100%;
-  margin-top: 6px;
   font-size: 0.95rem;
 }
 
 .milestone-spark {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   fill: currentColor;
   animation: milestone-twinkle 1.8s ease-in-out infinite alternate;
 }
@@ -592,6 +569,10 @@ kbd {
 @media (max-width: 560px) {
   .milestone-spark {
     display: none;
+  }
+
+  .milestone-thanks {
+    flex-basis: 100%;
   }
 }
 
@@ -3335,7 +3316,6 @@ em {
     scroll-behavior: auto;
   }
 
-  .milestone::after,
   .milestone-spark {
     animation: none;
   }
