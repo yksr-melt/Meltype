@@ -59,6 +59,29 @@ def find_release(tag):
     return next((release for page in pages for release in page if release["tag_name"] == tag), None)
 
 
+def validate_existing_release(release, tag, sha, prerelease):
+    if release is None or release.get("draft") or release.get("prerelease") != prerelease:
+        raise ValueError("ベンチマーク更新対象の公開リリースが見つからないか、設定が一致しません")
+    if release.get("tag_name") != tag:
+        raise ValueError("更新対象のタグが一致しません")
+    target = api(f"git/ref/tags/{tag}")["object"]["sha"]
+    if target != sha:
+        raise ValueError("公開済みタグのソースSHAが更新対象と一致しません")
+    expected = set(PACKAGES + DOCUMENTS)
+    assets = {asset["name"]: asset.get("digest") for asset in release.get("assets", [])}
+    if set(assets) != expected or any(not digest or not digest.startswith("sha256:") for digest in assets.values()):
+        raise ValueError("既存の配布ファイル一式またはSHA256が確認できません")
+    return assets
+
+
+def update_existing_release(release, title, body, original_assets):
+    updated = api(f"releases/{release['id']}", {"name": title, "body": body}, "PATCH")
+    assets = {asset["name"]: asset.get("digest") for asset in updated.get("assets", [])}
+    if normalize_markdown(updated.get("body", "")) != normalize_markdown(body) or assets != original_assets:
+        raise ValueError("更新後の本文が一致しないか、既存の配布ファイルが変わりました")
+    return updated
+
+
 def normalize_markdown(text):
     text = text.replace("\r", "")
     text = re.sub(r"(?m)^(\|[^\n]*\|)\n+(?=\|)", r"\1\n", text)
@@ -235,7 +258,10 @@ def main():
     measurement.add_argument("--skip-benchmark", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--publish", action="store_true", help="検証後、画像と下書きをGitHubへ保存する")
+    parser.add_argument("--update-existing", action="store_true", help="同じソースSHAの公開リリースに測定結果だけを追加する")
     args = parser.parse_args()
+    if args.update_existing and (not args.publish or args.skip_benchmark):
+        parser.error("--update-existing には --publish と --benchmark が必要です")
     _, preview = parse_tag(args.tag)
     prerelease = preview is not None
     if not re.fullmatch(r"[0-9a-f]{40}", args.sha):
@@ -259,9 +285,13 @@ def main():
     title, body = compose_body(args.tag, args.sha, benchmark, args.sha, changes)
     expected_images = 0 if args.skip_benchmark else len(IMAGES)
     validate_rendered(body, expected_images=expected_images)
+    existing = None
+    original_assets = None
     if args.publish:
-        # 再実行で公開済みリリースや配布ファイルを上書きしない。
-        if find_release(args.tag) is not None:
+        existing = find_release(args.tag)
+        if args.update_existing:
+            original_assets = validate_existing_release(existing, args.tag, args.sha, prerelease)
+        elif existing is not None:
             raise ValueError("同じタグのリリースが既にあります。上書きしません")
         if not args.skip_benchmark:
             media_sha = publish_images(args.tag, args.benchmark / "charts")
@@ -273,6 +303,10 @@ def main():
                      for name in sorted(PACKAGES + DOCUMENTS[:2]))
     (args.assets / "SHA256SUMS.txt").write_text(hashes, encoding="utf-8", newline="\n")
     if args.publish:
+        if args.update_existing:
+            release = update_existing_release(existing, title, body, original_assets)
+            print(release["html_url"])
+            return
         names = [str(args.assets / name) for name in PACKAGES + DOCUMENTS]
         gh("release", "create", args.tag, *names, "--repo", REPO, "--target", args.sha,
            "--title", title, "--notes-file", str(args.output), f"--prerelease={str(prerelease).lower()}", "--draft")
