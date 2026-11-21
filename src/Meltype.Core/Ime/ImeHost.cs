@@ -4,7 +4,7 @@
 using System.Text.Json;
 using Meltype.Composition;
 using Meltype.Config;
-using Meltype.Input;
+using Meltype.Dictionary;
 
 namespace Meltype.Ime;
 

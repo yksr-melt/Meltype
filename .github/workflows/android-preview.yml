@@ -29,8 +29,8 @@ jobs:
         run: dotnet run --project src/Meltype.Core.Tests/Meltype.Core.Tests.csproj -c Release
       - name: Install Android NDK and source-build prerequisites
         run: |
-          sudo apt-get update
-          sudo apt-get install -y patchelf curl git python3 build-essential
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y patchelf curl git python3 build-essential
           sdkmanager 'ndk;28.2.13676358'
       - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
       - name: Rebuild pinned Mozc JNI and dictionary from source

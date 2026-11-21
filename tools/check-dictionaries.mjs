@@ -137,6 +137,9 @@ const dictionaries = {
   'katakana.txt': {
     format: tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
   },
+  'names.txt': {
+    format: tabbed(1, 1, ([reading]) => [hiragana.test(reading) ? null : `読み「${reading}」がひらがなでない`]),
+  },
   // 顔文字に # が入るので、行頭の # だけがコメント。空白も中身なので前後の空白を除かない
   'emoji.txt': {
     format: tabbed(2, 99, () => []),

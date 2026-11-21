@@ -4,7 +4,10 @@
 using System.Globalization;
 using System.Reflection;
 using System.Text;
-using Meltype.Composition;
+using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 

@@ -82,7 +82,7 @@ internal static class TipHarness
         return failed;
     }
 
-    internal static Composition.CompositionService CreateService(Control invoker, Composition.MeltypeRuntime runtime) =>
+    internal static Composition.CompositionService CreateService(Control invoker, Ime.MeltypeRuntime runtime) =>
         new(invoker, runtime, () => new Config.Settings());
 
     private static string Send(NamedPipeClientStream pipe, string json)

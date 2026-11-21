@@ -2,7 +2,14 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices;
+using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
@@ -87,7 +94,7 @@ internal sealed class CompositionService : IDisposable
     public IReadOnlyList<string> SuggestWords(string reading)
     {
         var list = _hybrid.Candidates(reading, Environment.TickCount64 + SuggestWaitMs).Where(word => word.Length > 0).ToList();
-        if (CompositionText.ToKatakana(reading) is { Length: > 0 } katakana && !list.Contains(katakana)) list.Add(katakana);
+        if (KanaChars.ToKatakana(reading) is { Length: > 0 } katakana && !list.Contains(katakana)) list.Add(katakana);
         return list;
     }
 

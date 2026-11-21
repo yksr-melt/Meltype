@@ -3,11 +3,12 @@
 
 using System.Runtime.InteropServices;
 using System.Text.Json;
+using Meltype.CApi;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 using Meltype.Ime;
 using Meltype.Input;
-using Meltype.CApi;
 
 namespace Meltype.Tests;
 
