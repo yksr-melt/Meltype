@@ -1,5 +1,6 @@
 # Windows 版のビルドとテスト、配布物 (package) のビルド。
-#   test・installer-script・lifecycle … Pull Request と main で流す。test は main の必須チェック
+#   test                               … Pull Request と main で流す。main の必須チェック
+#   installer-script・lifecycle        … main・タグ・手動実行。Pull Request では流さない
 #   mozc・package                      … タグ・手動実行 (release.yml から呼ばれたときを含む)。mozc は native/mozc を変えて main に push したときも
 #                                        配布物は Artifacts (meltype-package) に置くだけで、リリースへの添付は release.yml がする
 name: windows
@@ -59,6 +60,7 @@ jobs:
 
   # インストーラーの台本 (packaging/Meltype.iss) が Inno Setup で通るか。中身はダミーのファイルで確かめる (本物は package で作る)。
   installer-script:
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
@@ -85,6 +87,7 @@ jobs:
   #   Meltype IME の登録 (管理者権限が要る) は通さない。
   #   update.ps1 のダウンロードは、ここでは確かめていない (API の URL が固定で、偽のサーバーに向けられない)。別途、CI での検証が要る。
   lifecycle:
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
