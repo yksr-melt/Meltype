@@ -306,7 +306,7 @@ STDMETHODIMP TextService::ActivateEx(ITfThreadMgr* threadMgr, TfClientId clientI
     }
     open_ = !disabled_;
 
-    candidates_ = std::make_unique<CandidateWindow>([this](int index) { SelectCandidate(index); });
+    candidates_ = std::make_unique<CandidateWindow>(threadMgr_, [this](int index) { SelectCandidate(index); });
 
     if (!disabled_) {
         langBar_ = new LangBarButton(this);
