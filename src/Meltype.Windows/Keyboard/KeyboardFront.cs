@@ -34,8 +34,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly System.Threading.Timer _pollTimer;
     private readonly object _gate = new();
     private readonly Queue<Input> _queue = new();
-    // 押している物理キー (自動の繰り返しを見分ける)。フックのスレッドだけが使う
-    private readonly HashSet<int> _held = [];
+    // 押している物理キーと、その仮想キー (自動の繰り返しと、押している修飾キーを見分ける)。フックのスレッドだけが使う
+    private readonly Dictionary<int, int> _held = [];
     // 本体が使った押下 (離したこともアプリに通さない)。_gate で守る
     private readonly HashSet<int> _consumed = [];
     // ワークアラウンド (ImeEventType.KeyReleased): 離したことも本体に送る押下。_gate で守る
@@ -44,8 +44,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     // アプリに通した入力の知らせ (Caret) は順番どおりに本体に送るが、後のキーを並ばせない
     private int _waiting;
     private bool _busy;
-    // UI スレッドが _queue から取り出して処理している入力 (処理を終えるまで、アプリに送り直していない)。_gate で守る
-    private Input? _processing;
     private volatile bool _composing;
     private volatile ImeState _state;
     // 押下を本体に送った左右の Alt (ImeCapture.AltKeys) と、押している間にほかのキー・マウスのボタンを押したか。フックのスレッドだけが使う
@@ -122,7 +120,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         var repeat = false;
         if (e.IsDown)
         {
-            repeat = !_held.Add(e.PhysicalId);
+            repeat = !_held.TryAdd(e.PhysicalId, e.Vk);
             if (_alt != 0 && e.Vk != _alt) _altInterrupted = true;
         }
         else _held.Remove(e.PhysicalId);
@@ -254,7 +252,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 _busy = input.Waits;
                 if (_busy) _waiting--;
                 caretFollows = _queue.TryPeek(out var next) && next.Caret is not null;
-                _processing = input;
             }
             try
             {
@@ -268,10 +265,6 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
                 _composing = false;
                 _composition.Hide();
                 ReplayQueued();
-            }
-            finally
-            {
-                lock (_gate) _processing = null;
             }
         }
     }
@@ -472,25 +465,12 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         return capture;
     }
 
-    // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直すので、
-    // 送り直すまでは GetAsyncKeyState に表れない (止めたキーは反映されない)。そうしないと、変換中に Shift + / を打つと
-    // Shift が離れて見え、? が / (・) になる。GetAsyncKeyState に表れないのは、並べてまだ送り直していない押下 (処理中のものと _queue) だけなので、
-    // それも見る (同じ物理キーの解放が後ろに並んでいれば、離している)。並びが空なら GetAsyncKeyState だけで決まる
-    private bool IsDown(int vk)
-    {
-        if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) return true;
-        var down = new HashSet<int>();
-        lock (_gate)
-        {
-            foreach (var input in _processing is { } current ? _queue.Prepend(current) : _queue)
-            {
-                if (input.Key is not { } key || key.Vk != vk && GenericModifier(key.Vk) != vk) continue;
-                if (key.IsDown) down.Add(key.PhysicalId);
-                else down.Remove(key.PhysicalId);
-            }
-        }
-        return down.Count > 0;
-    }
+    // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直す。送り直すまでと、
+    // 本体が使って送り直さなかった押下 (変換中の Shift) は GetAsyncKeyState に表れないので、フックが受け取った押下と解放 (_held) で見る。
+    // 並べた押下だけを見ていたので、本体が Shift を使ったあとに押した ← は Shift なしになり、文節の区切りを変えずに隣の文節を選んでいた (#2118)。
+    // Meltype が動く前から押していたキーは _held に無いので、GetAsyncKeyState も見る
+    private bool IsDown(int vk) =>
+        (Native.GetAsyncKeyState(vk) & 0x8000) != 0 || _held.Values.Any(held => held == vk || GenericModifier(held) == vk);
 
     /// <summary>左右を区別する修飾キーの、区別しない仮想キー (修飾キーでなければ 0)。</summary>
     private static int GenericModifier(int vk) => vk switch
