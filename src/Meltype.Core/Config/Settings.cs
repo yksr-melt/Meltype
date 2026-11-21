@@ -11,7 +11,7 @@ namespace Meltype.Config;
 
 /// <summary>Meltype の OS。<see cref="PlatformsAttribute"/> で組にする。</summary>
 [Flags]
-public enum Platform
+internal enum Platform
 {
     Windows = 1,
     Mac = 2,
@@ -23,7 +23,7 @@ public enum Platform
 /// config.schema.json の説明の先頭に「Windows・Mac のみ。」のように出し、x-platforms に OS の名前を出す。
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
-public sealed class PlatformsAttribute(Platform platforms) : Attribute
+internal sealed class PlatformsAttribute(Platform platforms) : Attribute
 {
     public Platform Platforms { get; } = platforms;
 }

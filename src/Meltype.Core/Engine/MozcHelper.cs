@@ -33,7 +33,7 @@ public interface IMozcHelper : IDisposable
 /// <summary>同梱の変換ヘルパー (meltype_mozc_helper) を別のプロセスで動かし、標準入出力でやり取りする。</summary>
 /// <param name="helperPath">meltype_mozc_helper の実行ファイル。</param>
 /// <param name="profileDirectory">Mozc の学習データの保存先 (null なら Mozc の既定)。</param>
-public sealed class MozcHelperProcess(string helperPath, string? profileDirectory) : IMozcHelper
+internal sealed class MozcHelperProcess(string helperPath, string? profileDirectory) : IMozcHelper
 {
     private const int TimeoutMs = 1500;
     private const int StartTimeoutMs = 10000;
