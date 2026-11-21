@@ -71,6 +71,8 @@ brew install --cask yksr-melt/Meltype/meltype
 
 入力メニューの「日本語・英語の自動判定」で使います。JIS キーボードの <kbd>英数</kbd> / <kbd>かな</kbd> で、英数 (直接入力) / 日本語に切り替えます。
 
+変換の候補と入力中の案内は、入力位置の近くに表示します。候補はキー操作やクリックで選べます。
+
 設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
 
 かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分の llama-server・モデルを使うときは `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。

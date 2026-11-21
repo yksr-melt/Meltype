@@ -39,7 +39,7 @@ def main():
         filenames = [
             'NativeCore.swift', 'InputController.swift', 'KeyMapping.swift', 'MacUserDictionary.swift',
             'ModeShortcuts.swift', 'ModeIndicator.swift', 'ModeServices.swift', 'InputSourceRegistration.swift',
-            'ImportDialogPresentation.swift',
+            'ImportDialogPresentation.swift', 'CompositionPanel.swift',
         ]
         subprocess.run(['xcrun', 'swiftc', '-swift-version', '5',
                         str(repo / 'tools/test-mac-events.swift'),
@@ -47,7 +47,14 @@ def main():
                         '-framework', 'InputMethodKit', '-framework', 'Carbon', '-o', str(executable)], check=True)
         data = root / 'data'
         data.mkdir()
-        (data / 'config.json').write_text(json.dumps({'SpaceAroundEnglish': True, 'LiveConversion': False, 'SigilWordsDirect': False}))
+        (data / 'config.json').write_text(json.dumps({
+            'SpaceAroundEnglish': True, 'LiveConversion': False, 'SigilWordsDirect': False,
+            'ShowTypedKeys': True, 'PredictiveCandidates': True,
+        }))
+        # 「こう」で予測候補が開き、「こうほ」まで打つと閉じるようにする。
+        # ページ送りの検証用に、Mozc に頼らず 3 ページ分の候補を用意する。
+        paged = ''.join(f'ぺえじてすと\t候補{i:02}\n' for i in range(1, 21))
+        (data / 'userdict.txt').write_text('こうほ\t候補\n' + paged, encoding='utf-8')
         env = os.environ.copy()
         env['MELTYPE_DATA_DIR'] = str(data)
         subprocess.run([str(executable)], env=env, check=True)
