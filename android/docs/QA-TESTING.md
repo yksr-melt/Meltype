@@ -65,8 +65,8 @@ Mozcの初回ソースビルドは大量の依存を取得する。版・SHAを�
 | C06 | anEditorWithoutItsOwnTextSendsNoTextAndCannotRemove | 読めない入力欄（TYPE_NULL） | before・after を送らず canRemove=false |
 | C07 | theSelectedTextIsSentOnlyWhenTheEditorReportedASelection | abcd の bc を選択 | selection=bc、選択がないと送らない |
 | C08 | aCommittedWordCanBeRecommittedWhenCaretHasNotMoved | i␣Enter→want␣、キャレットを動かさない | 文脈が英語と判明したとき、直前の語を I に確定し直せる |
-| C09 | aTapOnAnotherSplitChoosesThatSentence | hashiwokaminikaku␣（英日の区切りの別案 ha＋しをかみにかく があるので、文全体の1文節）→いまと違う候補をタップ→Enter | タップで候補の文を選び（確定しない）、Enter でその文を確定 |
-| C10 | enterCommitsTheWholeSentenceAsShown | hashiwokaminikaku␣→Enter | そのときの表示のまま全文を確定 |
+| C09 | aTapOnAnotherSplitChoosesThatSentence | midigaii␣（midi＋がいい と みぢがいい の区切りの別案があるので、文全体の1文節）→いまと違う候補をタップ→Enter | タップで候補の文を選び（確定しない）、Enter でその文を確定 |
+| C10 | enterCommitsTheWholeSentenceAsShown | midigaii␣→Enter | そのときの表示のまま全文を確定 |
 | C11 | aTapInAConversionOfOneClauseChoosesTheCandidate | kyouha␣→今日はをタップ→Enter | タップで今日はを選び（確定しない）、Enter で確定 |
 | C12 | aTapOnAPredictionCommits | hell→予測候補をタップ | 予測候補はタップで確定 |
 | D01 | liveConversionTakesEffectFromTheNextKey | config.json の LiveConversion を OFF→ON、kyouha | OFF は きょうは、ON は 今日は（キーボードを作り直さずに効く） |

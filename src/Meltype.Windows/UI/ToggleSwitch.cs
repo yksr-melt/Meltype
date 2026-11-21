@@ -259,9 +259,10 @@ internal sealed class ToggleSwitch : Control
         }
         else
         {
-            fill = !enabled ? Color.Transparent : pressed ? Color.FromArgb(24, 0, 0, 0) : hover ? Color.FromArgb(15, 0, 0, 0) : Color.FromArgb(6, 0, 0, 0);
-            border = Color.FromArgb(enabled ? 114 : 55, 0, 0, 0);
-            knob = Color.FromArgb(enabled ? 158 : 92, 0, 0, 0);
+            // 文字の色を薄くして描く。黒で描くと、設定画面の背景を暗くしたときに見えなくなる (#1509)
+            fill = !enabled ? Color.Transparent : pressed ? Color.FromArgb(24, foreColor) : hover ? Color.FromArgb(15, foreColor) : Color.FromArgb(6, foreColor);
+            border = Color.FromArgb(enabled ? 114 : 55, foreColor);
+            knob = Color.FromArgb(enabled ? 158 : 92, foreColor);
         }
 
         var smoothing = g.SmoothingMode;

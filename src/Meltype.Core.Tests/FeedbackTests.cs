@@ -890,7 +890,7 @@ internal static class LanguageLearningTests
             {
                 var k = new CompositionTests.Keyboard(live: live,
                     moreCandidates: reading => reading == "ばーじょん" ? ["バージョン", "Mozc-test"] : []);
-                var expected = Composition.Utility.VersionConversion.Candidate(k.Settings);
+                var expected = k.VersionCandidate;
                 k.Type(typed + " ");
                 var view = k.Host.View!;
                 Assert.True(view.Converting, typed + ": 変換中");
@@ -913,7 +913,7 @@ internal static class LanguageLearningTests
         {
             var k = new CompositionTests.Keyboard(live: true,
                 moreCandidates: reading => reading == "ばーじょん" ? ["バージョン", "Mozc-test"] : []);
-            var version = Composition.Utility.VersionConversion.Candidate(k.Settings);
+            var version = k.VersionCandidate;
             k.Type(typed + " ");
             var candidates = k.Host.View!.Candidates.ToList();
             Assert.True(candidates.IndexOf("バージョン") is >= 0 and var katakana && katakana < candidates.IndexOf(version), typed + ": " + string.Join(" ", candidates));
@@ -928,7 +928,7 @@ internal static class LanguageLearningTests
         foreach (var typed in new[] { "version", "ba-jonappu", "ba-" })
         {
             var k = new CompositionTests.Keyboard();
-            var expected = Composition.Utility.VersionConversion.Candidate(k.Settings);
+            var expected = k.VersionCandidate;
             k.Type(typed + " ");
             Assert.True(k.Host.View?.Candidates.Contains(expected) != true, typed + ": ほかの読みには版を出さない");
         }
@@ -938,16 +938,16 @@ internal static class LanguageLearningTests
     }
 
     /// <summary>Mozc のように「ばーじょん」を「バージョン」にする変換エンジン (版番号は学習しない)。</summary>
-    private sealed class VersionConverter : IKanjiConverter
+    private sealed class VersionConverter : TestConverter
     {
-        public string? Convert(string reading) => reading switch
+        public override string? Convert(string reading, string? before) => reading switch
         {
             "ばーじょん" => "バージョン",
             "むかしの" => "昔の",
             "むかしのばーじょん" => "昔のバージョン",
             _ => null,
         };
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? context = null) => reading switch
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before) => reading switch
         {
             "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", "バージョン")],
             "ばーじょん" => [new(reading, "バージョン")],
@@ -976,7 +976,7 @@ internal static class LanguageLearningTests
             var standalone = new CompositionTests.Keyboard(history: history, converter: new VersionConverter());
             standalone.Type("ba-jonn ");
             Assert.Equal("バージョン", standalone.Host.View!.Text, old);
-            Assert.True(standalone.Host.View.Candidates.Contains(Composition.Utility.VersionConversion.Candidate(standalone.Settings)), "現在の版は引き続き選べる");
+            Assert.True(standalone.Host.View.Candidates.Contains(standalone.VersionCandidate), "現在の版は引き続き選べる");
         }
     }
 
@@ -987,7 +987,7 @@ internal static class LanguageLearningTests
         var phrases = new PhraseHistory(null);
         var keyboard = new CompositionTests.Keyboard(history: history, converter: new VersionConverter(), predictor: new Predictor(phrases, null, history));
         keyboard.Type("ba-jonn ");
-        var version = Composition.Utility.VersionConversion.Candidate(keyboard.Settings);
+        var version = keyboard.VersionCandidate;
         var index = keyboard.Host.View!.Candidates.ToList().IndexOf(version);
         Assert.True(index > 0, "現在の版は通常の候補より後ろにある");
         keyboard.SelectCandidate(index);
@@ -1396,9 +1396,10 @@ internal static class LanguageLearningTests
         {
             string Segments(CompositionDetector detector)
             {
-                var text = new CompositionText(detector);
-                foreach (var c in "game") text.Append(c);
-                return string.Join("|", text.Segments().Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
+                var text = new Composition.CompositionTextState();
+                var env = TestSupport.Env(detector);
+                foreach (var c in "game") CompositionText.Append(text, env, c);
+                return string.Join("|", CompositionText.Segments(text, env).Select(s => (s.IsEnglish ? "EN:" : "JA:") + s.Raw));
             }
             Assert.Equal("EN:game", Segments(CompositionDetector.CreateDefault(directory)));
             File.WriteAllText(Path.Combine(directory, "japanese.txt"), "game\n");
@@ -1410,9 +1411,10 @@ internal static class LanguageLearningTests
             var registered = CompositionDetector.CreateDefault(directory);
             foreach (var (typed, expected) in new[] { ("sakurazaka", "さくらざか"), ("papatto", "ぱぱっと") })
             {
-                var text = new CompositionText(registered);
-                foreach (var c in typed) text.Append(c);
-                Assert.Equal(expected, text.Display(true), typed);
+                var text = new Composition.CompositionTextState();
+                var env = TestSupport.Env(registered);
+                foreach (var c in typed) CompositionText.Append(text, env, c);
+                Assert.Equal(expected, CompositionText.Display(text, env, true), typed);
             }
         }
         finally

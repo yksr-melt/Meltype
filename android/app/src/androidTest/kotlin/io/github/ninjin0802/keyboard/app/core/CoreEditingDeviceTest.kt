@@ -46,11 +46,11 @@ class CoreEditingDeviceTest {
         }
 
         /**
-         * Types はしをかみにかく and converts it (Space). The Core has another English/Japanese split
-         * (ha + しをかみにかく), so it shows the whole sentence as one clause whose candidates are the splits.
+         * 「midiがいい」は英単語と日本語の読み「みぢ」の両方で区切れるので、
+         * Space で文全体を1文節にし、区切りの別案を候補に出す。
          */
         fun convertWholeSentence() {
-            type("hashiwokaminikaku ")
+            type("midigaii ")
             val view = adapter.view
             assertTrue("Not a conversion: $view", view?.converting == true)
             assertEquals("Not converted as one whole-sentence clause: $view", 1, view!!.clauses.size)

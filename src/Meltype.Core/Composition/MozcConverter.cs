@@ -9,7 +9,7 @@ namespace Meltype.Composition;
 /// Mozc (Google 日本語入力のオープンソース版、BSD-3-Clause) の変換エンジン。変換ヘルパー (<see cref="IMozcHelper"/>) に 1 行ずつ変換を頼む。
 /// ヘルパーが無い・起動できない・応答しないときは null を返す (呼び出し側はかなのまま見せる)。
 /// </summary>
-public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDisposable
+public sealed class MozcConverter : IKanjiConverter, IDisposable
 {
     private const char UnitSeparator = '\x1f';
     private const char RecordSeparator = '\x1e';
@@ -42,8 +42,6 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         _worker = new LatestRequestWorker<(string, string)>(ProcessBackground);
     }
 
-    public ConversionBudget Budget { get; } = new();
-
     public event Action? ResultReady;
 
     /// <summary>ヘルパーがあるか (起動できるかは使ってみるまで分からない)。</summary>
@@ -52,30 +50,40 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     /// <summary>使えるか。何度も失敗したら諦める。</summary>
     public bool IsAvailable => IsInstalled && _failures < 3;
 
-    public string? Convert(string hiragana) =>
-        ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) =>
-        ConvertWithCandidates(hiragana, context)?.Select(s => s.Clause).ToList();
+    public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => ConvertWithCandidates(request)?.Select(s => s.Clause).ToList();
 
     /// <summary>
-    /// ConvertClauses と同じ文節と、この変換で受け取った文節ごとの候補。
+    /// Convert と同じ文節と、この変換で受け取った文節ごとの候補。
     /// 候補の控え (Candidates) は、ほかの変換や覚えさせたときに捨てられることがあるので使わない。
+    /// 文脈は同じ文の日本語 (<see cref="EngineContext.Sentence"/>)。文脈付きと文脈なしの両方で変換し、文節の区切りが同じなら文脈付き
+    /// (漢字の選び方だけが文脈で変わる: この本は + あつい → 厚い)、区切りまで変わるなら文脈なしを使う。前に同じ語があると、
+    /// Mozc は文脈に引きずられて区切りを変えてしまうため (「記号等」含め、 + きごうとう → き|ごうとう → 気強盗)。
     /// </summary>
-    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(string hiragana, string? context = null) =>
-        WithCandidates(Query(context ?? "", hiragana));
+    internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidates(ConversionRequest request) =>
+        WithContext(request.Hiragana, request.Before, (context, reading) => Query(context, reading, request.Deadline));
 
-    /// <summary>ConvertWithCandidates と同じ (文脈なし)。Budget を使わず、ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>
+    /// <summary>ConvertWithCandidates と同じ (前の文脈なし)。ヘルパーが答えるまで待つので、入力スレッドでは呼ばない。</summary>
     internal IReadOnlyList<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? ConvertWithCandidatesNow(string hiragana) =>
-        WithCandidates(Request("", hiragana));
+        WithContext(hiragana, null, Request);
+
+    /// <summary>before から Mozc に渡す文脈を決めて、request (待つ・待たない) で変換する。</summary>
+    private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithContext(string hiragana, string? before,
+        Func<string, string, List<(string Reading, IReadOnlyList<string> Candidates)>?> request)
+    {
+        if (EngineContext.Sentence(before) is not { } sentence) return WithCandidates(request("", hiragana));
+        var withContext = request(sentence, hiragana);
+        var plain = request("", hiragana);
+        if (withContext is null || plain is null) return WithCandidates(withContext ?? plain);
+        return WithCandidates(withContext.Select(s => s.Reading).SequenceEqual(plain.Select(s => s.Reading)) ? withContext : plain);
+    }
 
     private static List<(ConversionClause Clause, IReadOnlyList<string> Candidates)>? WithCandidates(List<(string Reading, IReadOnlyList<string> Candidates)>? segments) =>
         segments is { Count: > 0 }
             ? segments.Select(s => (new ConversionClause(s.Reading, (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading), s.Candidates)).ToList()
             : null;
 
-    /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する。</summary>
-    public IReadOnlyList<string> Candidates(string reading)
+    /// <summary>読みの変換候補 (多い順)。直前の変換で同じ読みの文節があればその候補、無ければその読みだけで変換する (deadline まで待つ)。</summary>
+    public IReadOnlyList<string> Candidates(string reading, long deadline)
     {
         lock (_resultsGate)
         {
@@ -86,7 +94,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
                 return cached;
             }
         }
-        var segments = Query("", reading);
+        var segments = Query("", reading, deadline);
         if (segments is null) return [];
         // 1 文節ならその候補。複数の文節に分かれたなら、最初の候補をつなげたものだけ。
         return segments.Count == 1 ? segments[0].Candidates : [string.Concat(segments.Select(s => (s.Candidates.Count > 0 ? s.Candidates[0] : null) ?? s.Reading))];
@@ -97,7 +105,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
     private int _learnedSinceSave;
 
     /// <summary>確定した文節を Mozc に覚えさせる (Mozc の候補に無い文字列の文節があれば覚えない)。</summary>
-    public void Learn(string? context, IReadOnlyList<ConversionClause> clauses)
+    public void Learn(string? before, IReadOnlyList<ConversionClause> clauses)
     {
         if (clauses.Count == 0 || !IsAvailable) return;
         var records = string.Join(RecordSeparator, clauses.Select(c => Clean(c.Reading).Replace(UnitSeparator, ' ') + UnitSeparator + Clean(c.Text).Replace(UnitSeparator, ' ')));
@@ -106,7 +114,7 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
             if (_disposed) return;
             // 覚えさせると候補の順番が変わるので、候補の控えを捨てる。
             ClearCache();
-            var result = Send($"L\t{Clean(context ?? "")}\t{records}");
+            var result = Send($"L\t{Clean(EngineContext.Sentence(before) ?? "")}\t{records}");
             if (result == "OK" && ++_learnedSinceSave >= SaveEvery)
             {
                 _learnedSinceSave = 0;
@@ -156,14 +164,14 @@ public sealed class MozcConverter : IKanjiConverter, ILearningConverter, IDispos
         }
     }
 
-    /// <summary>入力スレッドからの問い合わせ。Budget を使っているときは、キャッシュに無ければワーカーに頼み、Budget の間だけ待つ。</summary>
-    private List<(string Reading, IReadOnlyList<string> Candidates)>? Query(string context, string reading)
+    /// <summary>入力スレッドからの問い合わせ。キャッシュに無ければワーカーに頼み、deadline (Environment.TickCount64) まで待つ。</summary>
+    private List<(string Reading, IReadOnlyList<string> Candidates)>? Query(string context, string reading, long deadline)
     {
         if (string.IsNullOrEmpty(reading) || !IsAvailable) return null;
         var request = (Clean(context), Clean(reading));
         if (TryCached(request, out var result)) return result;
         _worker.Submit(request);
-        return _worker.Wait(request, Budget.RemainingMs) && TryCached(request, out result) ? result : null;
+        return _worker.Wait(request, ConversionRequest.RemainingMs(deadline)) && TryCached(request, out result) ? result : null;
     }
 
     private bool TryCached((string Context, string Reading) request, out List<(string Reading, IReadOnlyList<string> Candidates)>? result)
