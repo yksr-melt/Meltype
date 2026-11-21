@@ -9,6 +9,8 @@ namespace Meltype.Tests;
 /// 報告された「打ったもの」を Meltype キーボードで打ってみる (GitHub の bot が誤判定の報告を再現するのに使う)。
 /// MELTYPE_MOZC に変換ヘルパーがあればアプリと同じく Mozc で漢字に変換する。無ければ日本語 / 英語の判定だけ (漢字にしない)。
 /// Mozc に加えて MELTYPE_ZENZAI_SERVER・MELTYPE_ZENZAI_MODEL があれば、Zenzai も使って打った結果を zenzai に出す。
+///   --repro 26niti space --learn "niti → （日）"
+/// --learn の手順は、先に別の入力欄で打って確定し、Meltype に学習させる (学習した後で起きる誤変換を再現する。Mozc には覚えさせない: Henkan.Keyboard)。
 /// </summary>
 internal static class Repro
 {
@@ -16,23 +18,53 @@ internal static class Repro
     private static readonly JsonSerializerOptions Json = new() { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     /// <summary>打つ文字の上限 (bot に長い文を渡されても時間がかからないように)。</summary>
     private const int MaxKeys = 300;
+    /// <summary>学習させる手順の上限 (bot に長い手順を渡されても時間がかからないように)。</summary>
+    private const int MaxLessons = 5;
 
     /// <param name="Showing">最後のキーの前に変換ボックスに出ていたもの。</param>
     /// <param name="Committed">最後のキーを押した後に、入力欄に入ったもの。</param>
     /// <param name="Composing">最後のキーを押した後に、まだ変換ボックスにあるもの。</param>
     /// <param name="Converted">Space で変換した結果 (漢字対応の確認用。変換エンジンが無ければ null)。</param>
-    private sealed record Result(string? Showing, string Committed, string? Composing, string? Converted, IReadOnlyList<string>? Clauses, IReadOnlyList<string>? Candidates);
+    internal sealed record Result(string? Showing, string Committed, string? Composing, string? Converted, IReadOnlyList<string>? Clauses, IReadOnlyList<string>? Candidates);
 
-    public static void Type(string keys, string last)
+    /// <summary>学習させる手順。Keys を打ち、Text があれば Space で変換して候補から Text を選び、Enter で確定する。</summary>
+    internal sealed record Lesson(string Keys, string? Text)
     {
-        // 英字・数字・記号と空白だけ (それ以外の文字はキーとして打てない)
+        /// <summary>「打ったキー」か「打ったキー → 確定した語」。</summary>
+        public static Lesson Parse(string text)
+        {
+            var parts = text.Split('→', 2);
+            var word = parts.ElementAtOrDefault(1)?.Trim();
+            return new(Repro.Keys(parts[0]), string.IsNullOrEmpty(word) ? null : word);
+        }
+    }
+
+    /// <summary>--repro の後ろの引数: 打ったキー [space|enter|none] [--learn 手順]…</summary>
+    public static void Type(IReadOnlyList<string> args)
+    {
+        var lessons = args.Select((arg, i) => (arg, i)).Where(a => a.arg == "--learn" && a.i + 1 < args.Count)
+            .Select(a => Lesson.Parse(args[a.i + 1])).Take(MaxLessons).ToList();
+        Type(args.ElementAtOrDefault(0) ?? "", args.ElementAtOrDefault(1) is { } last && last != "--learn" ? last : "enter", lessons);
+    }
+
+    // 英字・数字・記号と空白だけ (それ以外の文字はキーとして打てない)
+    private static string Keys(string text) => new string(text.Where(c => c is >= ' ' and <= '~').Take(MaxKeys).ToArray()).Trim();
+
+    private static void Type(string keys, string last, IReadOnlyList<Lesson> lessons)
+    {
         // bot が結果を読むので、ほかの環境の文字コードにせず UTF-8 で出す
         Console.OutputEncoding = new System.Text.UTF8Encoding(false);
-        var typed = new string(keys.Where(c => c is >= ' ' and <= '~').Take(MaxKeys).ToArray()).Trim();
+        var typed = Keys(keys);
 
         var hasMozc = Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } path && File.Exists(path);
-        // Mozc があればライブ変換付きキーボード、無ければ判定だけの偽物
-        var mozc = Run(() => hasMozc ? Henkan.Keyboard() : new CompositionTests.Keyboard(), typed, last, hasMozc);
+        // 学習データは、手順で覚えたものをどの入力欄でも読む
+        var history = new Meltype.Learning.ConversionHistory(null);
+        var languages = new Meltype.Detection.LanguageMemory(null);
+        // Mozc があればライブ変換付きキーボード、無ければ判定だけの偽物。手順のほかは覚えない (Henkan.Keyboard と同じ)
+        CompositionTests.Keyboard Create(bool zenzai) => hasMozc ? Henkan.Keyboard(zenzai, history, languages)
+            : new(history: history, languages: languages) { Learning = false };
+        var learned = Learn(() => Create(zenzai: false), lessons);
+        var mozc = Run(() => Create(zenzai: false), typed, last, hasMozc);
         // Zenzai が起動しない・途中で答えなくなったときは、Mozc に任せた結果を Zenzai の結果として出さず、理由を出す
         object? zenzai = null;
         if (hasMozc && Henkan.HasZenzai)
@@ -40,7 +72,7 @@ internal static class Repro
             if (Henkan.StartZenzai() is { } notStarted) zenzai = new { error = notStarted };
             else
             {
-                var result = Run(() => Henkan.Keyboard(zenzai: true), typed, last, convert: true);
+                var result = Run(() => Create(zenzai: true), typed, last, convert: true);
                 zenzai = Henkan.ZenzaiFailure is { } failure ? new { error = failure } : result;
             }
         }
@@ -50,6 +82,7 @@ internal static class Repro
             typed,
             last,
             engine = hasMozc ? Henkan.EngineName : "なし (判定だけ)",
+            learned,
             mozc.Showing,
             mozc.Committed,
             mozc.Composing,
@@ -62,7 +95,7 @@ internal static class Repro
         if (hasMozc) Henkan.Shutdown();
     }
 
-    private static Result Run(Func<CompositionTests.Keyboard> create, string typed, string last, bool convert)
+    internal static Result Run(Func<CompositionTests.Keyboard> create, string typed, string last, bool convert)
     {
         var k = create();
         k.Type(typed);
@@ -86,6 +119,30 @@ internal static class Repro
             view is { Converting: true } ? string.Concat(view.Clauses ?? [view.Text]) : host.Document,
             view is { Converting: true, Clauses: { } c } ? c : null,
             view is { Converting: true } ? view.Candidates.Take(9).ToList() : null);
+    }
+
+    /// <summary>
+    /// 手順を 1 つずつ、学習を ON にした入力欄で打って確定する。手順ごとに確定したものを返す (手順が無ければ null)。
+    /// 確定したものが次に打つものの前の文にならないように、手順ごとに入力欄を分ける。
+    /// </summary>
+    internal static IReadOnlyList<string>? Learn(Func<CompositionTests.Keyboard> create, IReadOnlyList<Lesson> lessons)
+    {
+        if (lessons.Count == 0) return null;
+        return lessons.Select(lesson =>
+        {
+            var k = create();
+            k.Learning = true;
+            k.Type(lesson.Keys);
+            if (lesson.Text is { } text && k.Showing != text)
+            {
+                // Space で変換して、候補の Text まで Space で進める (候補に無ければ最初の候補で確定する)
+                k.Type(" ");
+                var index = k.Host.View?.Candidates.ToList().IndexOf(text) ?? -1;
+                for (var i = 0; i < index; i++) k.Type(" ");
+            }
+            k.Type("\n");
+            return k.Host.Document;
+        }).ToList();
     }
 }
 
@@ -219,7 +276,7 @@ internal static class Henkan
 
     private static readonly Lazy<Engine.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Engine.MozcConverter(new WithoutLearning(new Engine.MozcHelperProcess(helper, ProfileDirectory)))
+            ? new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, ProfileDirectory))
             : null);
     private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
 
@@ -264,27 +321,30 @@ internal static class Henkan
     /// <summary>アプリと同じ設定の Meltype キーボード (ライブ変換 ON、Mozc があれば Mozc で変換)。</summary>
     public static CompositionTests.Keyboard Keyboard() => Keyboard(zenzai: false);
 
-    /// <summary><see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。</summary>
-    public static CompositionTests.Keyboard Keyboard(bool zenzai)
+    /// <summary>
+    /// <see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。history・languages は学習データ (無ければ新しく作る)。
+    /// 確定しても Meltype に覚えさせない (学習の設定を OFF にする。覚えたものは読む)。覚えさせると、前の打ち方・前の文で確定した
+    /// 変換が次の打ち方の結果を変えてしまう (確かめたいのは、まだ何も覚えていない人か、--repro の --learn の手順だけを覚えた人の変換)。
+    /// </summary>
+    public static CompositionTests.Keyboard Keyboard(bool zenzai, Learning.ConversionHistory? history = null, Detection.LanguageMemory? languages = null)
     {
         // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
         var converter = Mozc.Value is { } engine ? new Engine.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
-        return new(live: true, converter: converter, moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
-            userDictionary: new Meltype.Dictionary.UserDictionary(null), translations: Translations.Value);
+        return new(live: true, history: history, converter: converter is null ? null : new WithoutEngineLearning(converter),
+            moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
+            userDictionary: new Meltype.Dictionary.UserDictionary(null), languages: languages, translations: Translations.Value)
+        { Learning = false };
     }
 
     /// <summary>
-    /// 学習の要求 (L) に答えるだけで、Mozc に覚えさせないヘルパー。覚えさせると、前の打ち方・前の文で確定した変換が次の打ち方の結果を変えてしまう
-    /// (確かめたいのは、まだ何も覚えていない人の最初の変換)。
+    /// 変換エンジン (Mozc) には、--learn の手順でも覚えさせない。変換エンジンへの学習は確定した後に裏のスレッドで行われ、
+    /// 終わったことを知る方法が無いので、次を打つ前に覚え終わっている保証が無い (Meltype の学習は確定と同時に終わる)。
     /// </summary>
-    private sealed class WithoutLearning(Engine.IMozcHelper inner) : Engine.IMozcHelper
+    private sealed class WithoutEngineLearning(Engine.IKanjiConverter inner) : Engine.IKanjiConverter
     {
-        public bool IsInstalled => inner.IsInstalled;
-        public void Start() => inner.Start();
-        public string? Send(string request) => request.StartsWith("L\t", StringComparison.Ordinal) ? "OK" : inner.Send(request);
-        public void Reset() => inner.Reset();
-        public long WorkingSet => inner.WorkingSet;
-        public void Dispose() => inner.Dispose();
+        public IReadOnlyList<Engine.ConversionClause>? Convert(Engine.ConversionRequest request) => inner.Convert(request);
+
+        public event Action? ResultReady { add => inner.ResultReady += value; remove => inner.ResultReady -= value; }
     }
 
     public static void Run(string keys)
