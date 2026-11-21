@@ -337,6 +337,20 @@ internal static class BackgroundConversionTests
     }
 
     [Test]
+    public static void Refresh_SelectsTheLastClauseWhenTheSettingIsOn()
+    {
+        var converter = new ChangingAnswer { Clauses = [new("にほんごを", "日本語を"), new("かく", "書く")] };
+        var session = new TestSession(() => new Settings { LiveConversion = true, ConversionStartsAtLastClause = true }, converter);
+        SessionFacadeTests.Type(session, "nihongowokaku");
+        var opened = session.HandleKey(VirtualKeys.Space, null, false, false, false, false).View;
+        Assert.Equal(1, opened?.SelectedClause, "最後の文節を選ぶ");
+        converter.Clauses = [new("にほん", "日本"), new("ごを", "語を"), new("かく", "書く")];
+        var view = session.RefreshConversion()?.View;
+        Assert.Equal("日本,語を,書く", string.Join(",", view?.Clauses ?? []), "最後の文節を選んだままなら区切りを置き換える");
+        Assert.Equal(2, view?.SelectedClause, "新しい最後の文節");
+    }
+
+    [Test]
     public static void Refresh_DoesNotReplaceTheClausesAfterChoosingACandidate()
     {
         foreach (var key in new[] { VirtualKeys.Space, VirtualKeys.Up })

@@ -138,8 +138,11 @@ internal static partial class CompositionController
         // 打ち始めの ・ は、Space で / にする。
         if (CompositionText.IsSlashAtStart(state.Text) && clauses is [var slash]) Prefer(slash, "/");
         state.Clauses = clauses;
-        state.SelectedClause = 0;
+        state.SelectedClause = InitialClause(env, clauses.Count);
     }
+
+    /// <summary>変換を始めたときに選ぶ文節。</summary>
+    private static int InitialClause(CompositionEnv env, int clauseCount) => env.Settings.ConversionStartsAtLastClause ? clauseCount - 1 : 0;
 
     /// <summary>
     /// 区切りの 1 案の文節。英語区間はそのまま、日本語区間は文脈を付けて変換エンジンで文節に区切って変換する。

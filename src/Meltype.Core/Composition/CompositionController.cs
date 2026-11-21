@@ -295,7 +295,7 @@ internal static partial class CompositionController
         state.TabStartedConversion = tabStarted;
         var sameClauses = state.Clauses.Count == old.Count && state.Clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && state.Clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
-        if (nothingNew || !sameClauses && (selected != 0 || old.Any(c => c.Changed)))
+        if (nothingNew || !sameClauses && (selected != InitialClause(env, old.Count) || old.Any(c => c.Changed)))
         {
             state.Clauses = old;
             state.SelectedClause = selected;
@@ -313,7 +313,7 @@ internal static partial class CompositionController
                 fresh.NotLearned.UnionWith(previous.NotLearned);
             }
         }
-        state.SelectedClause = selected;
+        state.SelectedClause = sameClauses ? selected : InitialClause(env, state.Clauses.Count);
         return true;
     }
 
