@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Yukishiro
 //
-// ソースファイルの先頭のライセンス・著作権の表記を確かめるチェック (.github/workflows/quality.yml の notices から呼ぶ)。
+// ソースファイルの先頭のライセンス・著作権の表記を確かめるチェック (.github/workflows/lint.yml の license-header から呼ぶ)。
 //   - Pull Request で新しく足したソースファイルに `SPDX-License-Identifier` と `Copyright (C) <年> <名前>` があるか
 //   - 作者 (yksr-melt) 以外の人が、Yukishiro (雪代) の名義で著作権の行を書いていないか
 //     (貢献の著作権は貢献した人に残る: CONTRIBUTING.md の CLA。自分の名前で書いてもらう)
@@ -114,7 +114,7 @@ async function main() {
   process.exitCode = 1;
 }
 
-/** node .github/bot/notices.mjs --self-test: 判定だけを確かめる (GitHub には何も書かない)。 */
+/** node .github/bot/license-header.mjs --self-test: 判定だけを確かめる (GitHub には何も書かない)。 */
 function selfTest() {
   const file = (filename, status, lines) => ({ filename, status, patch: lines.map(l => `+${l}`).join('\n') });
   const cases = [
