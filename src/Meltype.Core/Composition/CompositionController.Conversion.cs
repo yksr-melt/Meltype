@@ -6,7 +6,9 @@ using System.Text;
 using Meltype.Composition.Utility;
 using Meltype.Config;
 using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Engine;
+using Meltype.Libraries.Chars;
+using static Meltype.Libraries.Chars.TextChars;
 
 namespace Meltype.Composition;
 
@@ -135,8 +137,11 @@ internal static partial class CompositionController
         // 打ち始めの ・ は、Space で / にする。
         if (CompositionText.IsSlashAtStart(state.Text) && clauses is [var slash]) Prefer(slash, "/");
         state.Clauses = clauses;
-        state.SelectedClause = state.Clauses.Count - 1;
+        state.SelectedClause = InitialClause(env, clauses.Count);
     }
+
+    /// <summary>変換を始めたときに選ぶ文節。</summary>
+    private static int InitialClause(CompositionEnv env, int clauseCount) => env.Settings.ConversionStartsAtLastClause ? clauseCount - 1 : 0;
 
     /// <summary>
     /// 区切りの 1 案の文節。英語区間はそのまま、日本語区間は文脈を付けて変換エンジンで文節に区切って変換する。
@@ -848,24 +853,6 @@ internal static partial class CompositionController
         var merged = DistinctShown(state, env, [.. clause.Candidates.Take(anchor + 1), .. more(reading, env.Deadline).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
-    }
-
-    /// <summary>
-    /// 変換エンジンは読みの中の英数字を全角にする (2025ねん → ２０２５年、sだけが → ｓだけが) ので、
-    /// 半角で打った数字・英字は半角に戻す。読みに半角の英数字が無ければ (全角を選んだ候補など) そのまま。
-    /// </summary>
-    internal static string NormalizeHalfWidth(string converted, string reading)
-    {
-        var digits = reading.Any(char.IsAsciiDigit);
-        var letters = reading.Any(char.IsAsciiLetter);
-        if (!digits && !letters) return converted;
-        var chars = converted.ToCharArray();
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (digits && chars[i] is >= '０' and <= '９') chars[i] = (char)(chars[i] - 0xFEE0);
-            else if (letters && chars[i] is >= 'Ａ' and <= 'Ｚ' or >= 'ａ' and <= 'ｚ') chars[i] = (char)(chars[i] - 0xFEE0);
-        }
-        return new string(chars);
     }
 
     /// <summary>

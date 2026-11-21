@@ -3,6 +3,8 @@
 
 using System.Text;
 using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Engine;
 using Meltype.Input;
 using static Meltype.Composition.CompositionController;
 

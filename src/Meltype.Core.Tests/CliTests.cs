@@ -28,7 +28,7 @@ internal static class CliTests
     public static void Repro_LearnsLessonsBeforeTyping()
     {
         // --learn の手順で選んだ変換を覚えてから打つ。打つ入力欄は覚えたものを読むだけで、覚えない
-        var history = new Meltype.Composition.ConversionHistory(null);
+        var history = new Meltype.Learning.ConversionHistory(null);
         CompositionTests.Keyboard Create() => new(live: true, history: history) { Learning = false };
         var learned = Repro.Learn(Create, [Repro.Lesson.Parse("hashiwo → 箸を")]);
         Assert.Equal("箸を", string.Join(",", learned ?? []), "手順で確定したもの");

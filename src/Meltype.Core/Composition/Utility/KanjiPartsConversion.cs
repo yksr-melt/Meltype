@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Yukishiro
 
 using Meltype.Detection;
+using Meltype.Libraries.Lexicon;
 
 namespace Meltype.Composition.Utility;
 

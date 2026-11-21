@@ -58,8 +58,8 @@ internal static class Repro
 
         var hasMozc = Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } path && File.Exists(path);
         // 学習データは、手順で覚えたものをどの入力欄でも読む
-        var history = new Meltype.Composition.ConversionHistory(null);
-        var languages = new Meltype.Composition.LanguageMemory(null);
+        var history = new Meltype.Learning.ConversionHistory(null);
+        var languages = new Meltype.Detection.LanguageMemory(null);
         // Mozc があればライブ変換付きキーボード、無ければ判定だけの偽物。手順のほかは覚えない (Henkan.Keyboard と同じ)
         CompositionTests.Keyboard Create(bool zenzai) => hasMozc ? Henkan.Keyboard(zenzai, history, languages)
             : new(history: history, languages: languages) { Learning = false };
@@ -171,7 +171,7 @@ internal static class Checks
     public static void Expect(string input, string output)
     {
         var mozc = Henkan.Engine ?? throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
-        var candidates = Composition.CandidateDictionary.Load(null);
+        var candidates = Dictionary.CandidateDictionary.Load(null);
         var results = new List<object>();
         foreach (var line in File.ReadAllLines(input))
         {
@@ -217,7 +217,7 @@ internal static class Checks
         var offset = int.TryParse(Environment.GetEnvironmentVariable("MELTYPE_BENCH_OFFSET"), out var o) ? o % 97 : 0;
         string[] prefixes = ["sorede", "kinouha", "chotto", "atode", "kyoumo", "sugoku", "mottekita", "tsukatte", "watashino", "minnani", "zenbu", "korekara"];
         string[] suffixes = ["wotsukau", "gasuki", "dekensaku", "nitsuite", "toiu", "mademiru", "kamo", "nanode", "ha", "wo", "ga", "ni", "de"];
-        var words = Detection.DictionarySource.ReadEmbedded("english-words.txt").Split('\n').Select(w => w.Trim())
+        var words = Libraries.Lexicon.DictionarySource.ReadEmbedded("english-words.txt").Split('\n').Select(w => w.Trim())
             .Where(w => w.Length is >= 4 and <= 10 && w.All(char.IsAsciiLetterLower) && !romaji.Analyze(w).IsValid)
             .Where((_, index) => index % 97 == offset).ToList();
         var results = new List<object>();
@@ -274,18 +274,18 @@ internal static class Henkan
         if (Mozc.IsValueCreated) Mozc.Value?.ClearCache();
     }
 
-    private static readonly Lazy<Composition.MozcConverter?> Mozc = new(() =>
+    private static readonly Lazy<Engine.MozcConverter?> Mozc = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } helper && File.Exists(helper)
-            ? new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, ProfileDirectory))
+            ? new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, ProfileDirectory))
             : null);
-    private static readonly Lazy<Composition.TranslationDictionary> Translations = new(Composition.TranslationDictionary.Load);
+    private static readonly Lazy<Dictionary.TranslationDictionary> Translations = new(Dictionary.TranslationDictionary.Load);
 
     // bot の Windows の runner は CPU だけで計算するので、アプリより長く待つ (待ちきれなかった答えを ZenzaiConverter は捨てて、しばらく休む)
     private const int ZenzaiTimeoutMs = 30000;
-    private static readonly Lazy<Composition.ZenzaiConverter?> Zenzai = new(() =>
+    private static readonly Lazy<Engine.ZenzaiConverter?> Zenzai = new(() =>
         Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_SERVER") is { Length: > 0 } server &&
         Environment.GetEnvironmentVariable("MELTYPE_ZENZAI_MODEL") is { Length: > 0 } model
-            ? new Composition.ZenzaiConverter(server, model, ZenzaiTimeoutMs)
+            ? new Engine.ZenzaiConverter(server, model, ZenzaiTimeoutMs)
             : null);
 
     /// <summary>MELTYPE_ZENZAI_SERVER と MELTYPE_ZENZAI_MODEL があるか (ファイルがあるかは <see cref="StartZenzai"/> で確かめる)。</summary>
@@ -309,9 +309,9 @@ internal static class Henkan
     };
 
     /// <summary>MELTYPE_MOZC の Mozc (無ければ null)。性能の計測 (--perf) が控えの使い回しの回数を読むのに使う。</summary>
-    public static Composition.MozcConverter? Engine => Mozc.Value;
+    public static Engine.MozcConverter? Engine => Mozc.Value;
 
-    public static Composition.TranslationDictionary TranslationDictionary => Translations.Value;
+    public static Dictionary.TranslationDictionary TranslationDictionary => Translations.Value;
 
     public static string EngineName => Mozc.Value is not null ? "Mozc" : "なし (判定だけ)";
 
@@ -326,13 +326,13 @@ internal static class Henkan
     /// 確定しても Meltype に覚えさせない (学習の設定を OFF にする。覚えたものは読む)。覚えさせると、前の打ち方・前の文で確定した
     /// 変換が次の打ち方の結果を変えてしまう (確かめたいのは、まだ何も覚えていない人か、--repro の --learn の手順だけを覚えた人の変換)。
     /// </summary>
-    public static CompositionTests.Keyboard Keyboard(bool zenzai, Composition.ConversionHistory? history = null, Composition.LanguageMemory? languages = null)
+    public static CompositionTests.Keyboard Keyboard(bool zenzai, Learning.ConversionHistory? history = null, Detection.LanguageMemory? languages = null)
     {
         // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
-        var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
+        var converter = Mozc.Value is { } engine ? new Engine.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
         return new(live: true, history: history, converter: converter is null ? null : new WithoutEngineLearning(converter),
             moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
-            userDictionary: new Meltype.Composition.UserDictionary(null), languages: languages, translations: Translations.Value)
+            userDictionary: new Meltype.Dictionary.UserDictionary(null), languages: languages, translations: Translations.Value)
         { Learning = false };
     }
 
@@ -340,9 +340,9 @@ internal static class Henkan
     /// 変換エンジン (Mozc) には、--learn の手順でも覚えさせない。変換エンジンへの学習は確定した後に裏のスレッドで行われ、
     /// 終わったことを知る方法が無いので、次を打つ前に覚え終わっている保証が無い (Meltype の学習は確定と同時に終わる)。
     /// </summary>
-    private sealed class WithoutEngineLearning(Composition.IKanjiConverter inner) : Composition.IKanjiConverter
+    private sealed class WithoutEngineLearning(Engine.IKanjiConverter inner) : Engine.IKanjiConverter
     {
-        public IReadOnlyList<Composition.ConversionClause>? Convert(Composition.ConversionRequest request) => inner.Convert(request);
+        public IReadOnlyList<Engine.ConversionClause>? Convert(Engine.ConversionRequest request) => inner.Convert(request);
 
         public event Action? ResultReady { add => inner.ResultReady += value; remove => inner.ResultReady -= value; }
     }
@@ -398,7 +398,7 @@ internal static class MozcCompare
         var helper = Environment.GetEnvironmentVariable("MELTYPE_MOZC");
         if (helper is null || !File.Exists(helper)) throw new InvalidOperationException("MELTYPE_MOZC に Mozc の変換ヘルパーの場所を入れてください");
         var profile = Path.Combine(Path.GetTempPath(), $"meltype-mozc-compare-{Environment.ProcessId}");
-        using var mozc = new Composition.MozcConverter(new Composition.MozcHelperProcess(helper, profile));
+        using var mozc = new Engine.MozcConverter(new Engine.MozcHelperProcess(helper, profile));
         var results = new List<object>();
         int currentOk = 0, wholeOk = 0;
         foreach (var line in File.ReadAllLines(input))
