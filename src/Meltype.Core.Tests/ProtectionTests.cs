@@ -268,7 +268,7 @@ internal static class ProtectionTests
             var env = TestSupport.Env(CompositionTests.Detector);
             foreach (var c in "kyouha「" + token + "」ashita") CompositionText.Append(text, env, c);
             var calls = new List<string>();
-            var shown = CompositionText.Display(text, env, final: true, convert: (kana, _) =>
+            var shown = CompositionText.Display(text, env, final: true, convert: (kana, _, _) =>
             {
                 calls.Add(kana);
                 return kana.Replace("きょうは", "今日は").Replace("あした", "明日");
