@@ -29,9 +29,10 @@ internal static class Impact
         // 英字だけで 2 文字以上の語を、1 語ずつ打って確定したときの見え方 (漢字にはせず、英字 / かなのまま。前後の文脈は無いものとする)
         foreach (var word in words.Where(w => w.Length >= 2 && w.All(char.IsAsciiLetter)).Distinct(StringComparer.Ordinal))
         {
-            var text = new CompositionText(detector);
-            foreach (var c in word) text.Append(c);
-            judged.Append(word).Append('\t').Append(text.Display(final: true)).Append('\n');
+            var text = new Composition.CompositionTextState();
+            var env = TestSupport.Env(detector);
+            foreach (var c in word) CompositionText.Append(text, env, c);
+            judged.Append(word).Append('\t').Append(CompositionText.Display(text, env, final: true)).Append('\n');
         }
         File.WriteAllText(output, judged.ToString(), new UTF8Encoding(false));
         Console.WriteLine($"判定した語: {words.Distinct(StringComparer.Ordinal).Count()} 語");

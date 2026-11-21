@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Yukishiro
+#
+# Meltype の端末版。pty を挟んでシェル (や指定したコマンド) を子プロセスとして動かし、端末から読んだキーを
+# 本体 (libMeltypeNative.so の ImeHost) に渡す。本体が受け取らなかったキーは、読んだバイト列のまま子に送る。
+# 確定した文字は子に書き、変換中の文字と候補はカーソルの位置に重ねて描く。GUI の無い端末 (fbterm・SSH の先・tmux の中) で使う。
+#   meltype-tty             $SHELL を起動する
+#   meltype-tty -- vim a.txt
+#   meltype-tty --version   版だけを出して終わる
+#
+# 端末からは入力欄の文字を読めないので、field の before・after は送らない (読めない) で、canRemove は false にする。
+import codecs
+import ctypes
+import fcntl
+import json
+import os
+import pty
+import select
+import signal
+import struct
+import sys
+import termios
+import tty
+import unicodedata
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+
+# 本体のプロトコルの版 (ImeHost.Version)
+IME_VERSION = 1
+
+# ---- キー: 端末が送るバイト列 → 本体のキー (Windows の仮想キーコード) ----
+
+# エスケープシーケンス → (仮想キーコード, Shift)
+ESCAPE_KEYS = {
+    "[A": (0x26, False), "[B": (0x28, False), "[C": (0x27, False), "[D": (0x25, False),
+    "OA": (0x26, False), "OB": (0x28, False), "OC": (0x27, False), "OD": (0x25, False),
+    "[H": (0x24, False), "[F": (0x23, False), "OH": (0x24, False), "OF": (0x23, False),
+    "[1~": (0x24, False), "[4~": (0x23, False), "[7~": (0x24, False), "[8~": (0x23, False),
+    "[3~": (0x2E, False), "[5~": (0x21, False), "[6~": (0x22, False),
+    "[17~": (0x75, False), "[18~": (0x76, False), "[19~": (0x77, False), "[20~": (0x78, False), "[21~": (0x79, False),
+    "[Z": (0x09, True),
+}
+
+
+PASTE_START, PASTE_END = "\x1b[200~", "\x1b[201~"
+
+
+def split_keys(data):
+    """端末から読んだ文字列を、キー 1 つずつの (送られた文字列, キー) に分ける。キーは本体の ImeKey の形で、本体に渡さないものは None。
+    途中で切れたもの (read が CSI や貼り付けの途中で分かれたとき) は、次に読んだ文字列の前に付けるよう (キーの一覧, 残り) で返す。"""
+    keys = []
+    i = 0
+    while i < len(data):
+        c = data[i]
+        if data.startswith(PASTE_START, i):
+            # 貼り付け (bracketed paste) は、打ったキーでないので本体に渡さず、印ごと子に送る
+            end = data.find(PASTE_END, i)
+            if end < 0:
+                return keys, data[i:]
+            end += len(PASTE_END)
+            keys.append((data[i:end], None))
+            i = end
+            continue
+        if c == "\x1b":
+            # CSI (ESC [) と SS3 (ESC O) は、終わりの文字 (@〜~) までを 1 つのキーにする
+            if i + 1 < len(data) and data[i + 1] in "[O":
+                end = i + 2
+                while end < len(data) and not ("@" <= data[end] <= "~"):
+                    end += 1
+                if end >= len(data):
+                    return keys, data[i:]
+                raw = data[i:end + 1]
+                # X10 形式のマウスの報告は、ESC [ M の後ろの 3 バイトも報告の一部
+                if raw == "\x1b[M":
+                    if end + 3 >= len(data):
+                        return keys, data[i:]
+                    raw = data[i:end + 4]
+                found = ESCAPE_KEYS.get(raw[1:])
+                keys.append((raw, {"vk": found[0], "shift": found[1]} if found else None))
+                i += len(raw)
+                continue
+            # ESC + 文字は Alt を押した文字。ESC だけなら Esc キー
+            if i + 1 < len(data) and data[i + 1] >= " ":
+                keys.append((data[i:i + 2], {"ch": ord(data[i + 1]), "alt": True}))
+                i += 2
+                continue
+            keys.append((c, {"vk": 0x1B}))
+        elif c == "\r" or c == "\n":
+            keys.append((c, {"vk": 0x0D}))
+        elif c == "\t":
+            keys.append((c, {"vk": 0x09}))
+        elif c in "\x7f\x08":
+            keys.append((c, {"vk": 0x08}))
+        elif c == " ":
+            keys.append((c, {"vk": 0x20, "ch": 0x20}))
+        elif "\x01" <= c <= "\x1a":
+            # Ctrl + 英字 (Ctrl+A は 0x01)
+            keys.append((c, {"vk": ord("A") + ord(c) - 1, "ctrl": True}))
+        elif c < " ":
+            keys.append((c, None))
+        else:
+            keys.append((c, {"ch": ord(c)}))
+        i += 1
+    return keys, ""
+
+
+def width(text):
+    """端末で表示したときの桁数 (全角は 2 桁)。"""
+    return sum(2 if unicodedata.east_asian_width(c) in "WF" else 0 if unicodedata.combining(c) else 1 for c in text)
+
+
+def overlay(view):
+    """変換中の表示と候補を、カーソルの位置に重ねる 1 行にする。(エスケープシーケンス付きの文字列, 桁数) を返す。"""
+    if not view:
+        return "", 0
+    parts = []
+    clauses = view["clauses"]
+    if view["converting"] and clauses:
+        # 変換中: 文節ごとに下線。選んでいる文節は反転する
+        for index, clause in enumerate(clauses):
+            parts.append(("\x1b[7m" if index == view["selectedClause"] else "\x1b[4m") + clause + "\x1b[0m")
+    elif view["text"]:
+        parts.append("\x1b[4m" + view["text"] + "\x1b[0m")
+    plain = "".join(clauses) if view["converting"] and clauses else view["text"]
+    extra = []
+    listed = view["candidates"]
+    if listed:
+        for index, item in enumerate(listed["items"]):
+            label = f"{index + 1}." if listed["numbered"] else ""
+            text = label + item
+            extra.append(f"\x1b[7m{text}\x1b[0m" if index == listed["selected"] else text)
+            plain += " " + text
+    else:
+        # 案内 (hint) はキーの説明で長く、端末に届かないキー (半角/全角など) も書くので出さない
+        aux = " ".join(part for part in (view["typedKeys"], view["spellingSuggestion"]) if part)
+        if aux:
+            extra.append("\x1b[2m" + aux + "\x1b[0m")
+            plain += " " + aux
+    return "".join(parts) + "".join(" " + e for e in extra), width(plain)
+
+
+# ---- 起動 ----
+
+def main(argv):
+    if "--" in argv:
+        command = argv[argv.index("--") + 1:]
+    else:
+        command = [a for a in argv if a != "--version"]
+    _lib = ctypes.CDLL(os.path.join(HERE, "libMeltypeNative.so"))
+    _lib.meltype_free.argtypes = [ctypes.c_void_p]
+    _lib.meltype_version.restype = ctypes.c_void_p
+    _lib.meltype_init.argtypes = [ctypes.c_char_p]
+    _lib.meltype_init.restype = ctypes.c_int
+    _lib.meltype_set_conversion_ready.argtypes = [ctypes.CFUNCTYPE(None)]
+    _lib.meltype_ime_create.restype = ctypes.c_void_p
+    _lib.meltype_ime_handle.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.meltype_ime_handle.restype = ctypes.c_void_p
+
+    def take(pointer):
+        if not pointer:
+            return None
+        try:
+            return ctypes.string_at(pointer).decode("utf-8")
+        finally:
+            _lib.meltype_free(pointer)
+
+    if "--version" in argv[:argv.index("--") if "--" in argv else len(argv)]:
+        version = take(_lib.meltype_version())
+        if not version or not version.strip():
+            print("Meltype: 本体の版を取得できません", file=sys.stderr)
+            return 1
+        print(f"Meltype {version}")
+        return 0
+    if not os.isatty(sys.stdin.fileno()):
+        print("Meltype: 端末の中で起動してください", file=sys.stderr)
+        return 1
+    if not command:
+        command = [os.environ.get("SHELL") or "/bin/sh"]
+
+    if not _lib.meltype_init(HERE.encode()):
+        print("Meltype: Mozc を使えません (漢字変換はひらがなのままになります)", file=sys.stderr)
+    # 背景の変換の結果は、ワーカーのスレッドからパイプで知らせ、入力のループで ConversionFinished を送る
+    ready_read, ready_write = os.pipe()
+    conversion_ready = ctypes.CFUNCTYPE(None)(lambda: os.write(ready_write, b"!") and None)
+    _lib.meltype_set_conversion_ready(conversion_ready)
+    host = _lib.meltype_ime_create()
+
+    pid, master = pty.fork()
+    if pid == 0:
+        try:
+            os.execvp(command[0], command)
+        except OSError as error:
+            print(f"Meltype: {command[0]} を起動できません: {error}", file=sys.stderr)
+        os._exit(127)
+
+    stdin, stdout = sys.stdin.fileno(), sys.stdout.fileno()
+
+    def resize(*_):
+        size = fcntl.ioctl(stdin, termios.TIOCGWINSZ, struct.pack("HHHH", 0, 0, 0, 0))
+        fcntl.ioctl(master, termios.TIOCSWINSZ, size)
+
+    resize()
+    signal.signal(signal.SIGWINCH, resize)
+
+    shown = 0  # カーソルの位置に重ねて描いている桁数
+    composing = False
+
+    def draw(view):
+        nonlocal shown, composing
+        text, columns = overlay(view)
+        if not shown and not text:
+            return
+        # カーソルを保存して描き、元に戻す。端の折り返しは止めて、画面がスクロールしないようにする
+        out = "\x1b7\x1b[?7l" + (" " * shown + "\x1b8\x1b7" if shown else "") + text + "\x1b[?7h\x1b8"
+        os.write(stdout, out.encode())
+        shown = columns
+        composing = bool(view and view["text"])
+
+    def send(event_type, **fields):
+        event = {"version": IME_VERSION, "type": event_type, "instance": "tty",
+                 "field": {"composing": composing, "traits": ["Terminal"], "canRemove": False}, **fields}
+        reply = take(_lib.meltype_ime_handle(host, json.dumps(event).encode()))
+        if reply is None:
+            return False
+        result = json.loads(reply)["result"]
+        # 子に書く前に重ねた表示を消す (子の出力が表示の上に重ならないように)
+        if shown:
+            draw(None)
+        for edit in result["commits"]:
+            os.write(master, (edit["text"] + "\x1b[D" * edit["moveCaretBack"]).encode())
+        draw(result["view"])
+        return result["consumed"]
+
+    def key_event(raw, key):
+        if key is None or not send("KeyPressed", key={"vk": 0, "ch": 0, "shift": False, "ctrl": False, "alt": False, **key}):
+            if key is None and composing:
+                send("CommitRequested", caret={"moved": True, "passedKey": 0})
+            os.write(master, raw.encode())
+
+    saved = termios.tcgetattr(stdin)
+    tty.setraw(stdin)
+    decoder = codecs.getincrementaldecoder("utf-8")("replace")
+    pending = ""  # 前に読んだ文字列の、途中で切れたエスケープシーケンス・貼り付け
+    send("CaretMoved", caret={"moved": True, "passedKey": 0, "focusEntered": True})
+    try:
+        while True:
+            try:
+                readable, _, _ = select.select([stdin, master, ready_read], [], [])
+            except InterruptedError:
+                continue
+            if ready_read in readable:
+                os.read(ready_read, 1024)
+                send("ConversionFinished")
+            if master in readable:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:
+                    break
+                if not data:
+                    break
+                if shown:
+                    draw(None)
+                os.write(stdout, data)
+            if stdin in readable:
+                data = os.read(stdin, 4096)
+                if not data:
+                    break
+                keys, pending = split_keys(pending + decoder.decode(data))
+                for raw, key in keys:
+                    key_event(raw, key)
+    finally:
+        if shown:
+            draw(None)
+        termios.tcsetattr(stdin, termios.TCSAFLUSH, saved)
+        _lib.meltype_shutdown()
+    _, status = os.waitpid(pid, 0)
+    return os.waitstatus_to_exitcode(status)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
