@@ -106,6 +106,27 @@ void MaskSystemModifier() {
     SendInput(2, mask, sizeof(INPUT));
 }
 
+// ワークアラウンド: Tk (Python の IDLE など) は、IME が確定した文字のコードを仮想キーとしても引き、p〜~ (0x70〜0x7E) を
+// F1〜F15 のキーにする (IDLE では p でヘルプが開く。issue #1463)。KEYEVENTF_UNICODE で送った文字は WM_CHAR として正しく扱うので、
+// Tk の入力欄では確定した文字を送り込む。Tk が直っても、直る前の Tk を同梱した Python が使われる間は消せない
+bool IsTkWindow(HWND window) {
+    wchar_t name[16] = {};
+    return window != nullptr && GetClassNameW(window, name, 16) > 0 && lstrcmpW(name, L"TkChild") == 0;
+}
+
+bool SendText(const std::wstring& text) {
+    std::vector<INPUT> inputs(text.size() * 2);
+    for (size_t i = 0; i < inputs.size(); i++) {
+        inputs[i].type = INPUT_KEYBOARD;
+        inputs[i].ki.wScan = text[i / 2];
+        inputs[i].ki.dwFlags = KEYEVENTF_UNICODE | (i % 2 == 1 ? KEYEVENTF_KEYUP : 0);
+        inputs[i].ki.dwExtraInfo = kReinjectMarker;
+    }
+    if (SendInput(static_cast<UINT>(inputs.size()), inputs.data(), sizeof(INPUT)) == inputs.size()) return true;
+    TipLog(L"確定した文字をアプリに送り込めません: %lu", GetLastError());
+    return false;
+}
+
 // そのキーで入力される文字 (無ければ 0)
 wchar_t CharOf(UINT vk, LPARAM lParam) {
     BYTE state[256] = {};
@@ -1681,6 +1702,18 @@ void TextService::RewriteBeforeCaret(ITfContext* context, ITfRange* end, LONG co
 }
 
 bool TextService::WriteCommit(TfEditCookie ec, ITfContext* context, ITfRange* range, const std::wstring& text, int caretBack, ITfRange** movedCaret) {
+    // Tk には、変換中の文字を消して確定してから、文字を送り込む (上の IsTkWindow のワークアラウンド)
+    if (IsTkWindow(GetFocus())) {
+        if (composition_ != nullptr) {
+            ITfRange* composing = nullptr;
+            if (SUCCEEDED(composition_->GetRange(&composing))) {
+                composing->SetText(ec, 0, L"", 0);
+                composing->Release();
+            }
+            EndComposition(ec);
+        }
+        return SendText(text);
+    }
     if (composition_ == nullptr) {
         ITfContextComposition* contextComposition = nullptr;
         if (SUCCEEDED(context->QueryInterface(IID_ITfContextComposition, reinterpret_cast<void**>(&contextComposition)))) {
