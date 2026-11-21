@@ -177,8 +177,8 @@ internal static class DictionaryMemory
     /// <summary>外部の漢字変換エンジンの処理時間を含めないため、読みをそのまま返す。</summary>
     private sealed class Identity : IKanjiConverter
     {
-        public string? Convert(string hiragana) => hiragana;
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null) => null;
+        public string? Convert(string hiragana, string? before) => hiragana;
+        public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? before) => null;
     }
 
     public static void Bench(int rounds)

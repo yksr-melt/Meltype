@@ -38,7 +38,7 @@ def main():
                           for name in ("NativeCore.swift", "InputController.swift", "KeyMapping.swift",
                                        "MacUserDictionary.swift", "ModeShortcuts.swift", "ModeIndicator.swift",
                                        "ModeServices.swift", "InputSourceRegistration.swift",
-                                       "ImportDialogPresentation.swift")],
+                                       "ImportDialogPresentation.swift", "CompositionPanel.swift")],
                         "-framework", "InputMethodKit", "-framework", "Carbon", "-o", str(executable)], check=True)
         data = root / "data"
         data.mkdir()
