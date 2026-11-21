@@ -56,17 +56,6 @@ public static class ProtectedSpanScanner
     public static bool CoversWhole(string raw) =>
         Scan(raw) is { Count: 1 } spans && spans[0].Start == 0 && spans[0].End == raw.Length;
 
-    /// <summary>raw の末尾が保護区間で終わっているか (その区間を返す)。</summary>
-    public static bool TryTail(string raw, out ProtectedSpan span)
-    {
-        span = default;
-        if (string.IsNullOrEmpty(raw)) return false;
-        var spans = Scan(raw);
-        if (spans.Count == 0 || spans[^1].End != raw.Length) return false;
-        span = spans[^1];
-        return true;
-    }
-
     private static ProtectedSpan? MatchAt(string raw, int start, int previousEnd, ref int schemeEnd)
     {
         // 長い構造 (URL / パス / メール) を優先し、メンションは最後に回す。
