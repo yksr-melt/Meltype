@@ -283,7 +283,7 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>変換の控えの使い回しと、ヘルパーへの問い合わせの回数・時間 (性能の計測用)。入力した文字は含まない。</summary>
-    public MozcStatistics Statistics()
+    internal MozcStatistics Statistics()
     {
         lock (_gate)
         {
@@ -341,5 +341,5 @@ public sealed class MozcConverter : IKanjiConverter, IDisposable
 /// MozcConverter の計測値 (起動してからの合計)。Requests / CacheHits は変換、CandidateRequests / CandidateCacheHits は候補の一覧、
 /// HelperCalls / HelperTime は変換ヘルパーとのやり取り (学習・保存も含む)、HelperWorkingSet は変換ヘルパーの使っているメモリ (起動していなければ 0)。
 /// </summary>
-public readonly record struct MozcStatistics(long Requests, long CacheHits, long CandidateRequests, long CandidateCacheHits,
+internal readonly record struct MozcStatistics(long Requests, long CacheHits, long CandidateRequests, long CandidateCacheHits,
     long HelperCalls, TimeSpan HelperTime, long HelperWorkingSet);

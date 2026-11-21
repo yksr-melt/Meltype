@@ -6,6 +6,13 @@ using Meltype.Config;
 
 namespace Meltype.Detection;
 
+/// <summary>英字で打った語を英語・日本語のどちらで出すかを学習したもの (トレイの「学習した語」の一覧に出す)。Active は今有効になっているか (2 回目を待っている語は false)。</summary>
+public sealed record LearnedLanguage(string Word, bool English, int Count, DateTime Used, bool Active, string? Key = null, string? Context = null)
+{
+    /// <summary>忘れるときに渡す名前 (文脈ごとに分けて覚えた語は、印 @e / @j 付き)。</summary>
+    public string EntryKey => Key ?? Word;
+}
+
 /// <summary>
 /// 英語とも日本語とも読める語 (api, sushi …) を、ユーザーが自分で英字 / かなに直したときに覚えておく。
 /// 次からその語は、自動の判定より覚えた方を優先する (api と打って F10 で英字にして確定 → 次から api は英字)。
@@ -30,13 +37,6 @@ public sealed class LanguageMemory
 
         /// <summary>F10 / F6 などで、はっきり英字 / かなに直したか (変換の候補から選んだだけなら false)。</summary>
         public bool Explicit { get; set; }
-    }
-
-    /// <summary>学習した語 (設定の「学習した語」の一覧に出す)。Active は今有効になっているか (2 回目を待っている語は false)。</summary>
-    public sealed record Learned(string Word, bool English, int Count, DateTime Used, bool Active, string? Key = null, string? Context = null)
-    {
-        /// <summary>Remove に渡す名前 (文脈ごとに分けて覚えた語は、印 @e / @j 付き)。</summary>
-        public string EntryKey => Key ?? Word;
     }
 
     /// <summary>
@@ -138,9 +138,9 @@ public sealed class LanguageMemory
     }
 
     /// <summary>学習した語の一覧 (新しく使ったものから)。</summary>
-    public IReadOnlyList<Learned> Entries() =>
+    public IReadOnlyList<LearnedLanguage> Entries() =>
         _entries.OrderByDescending(e => e.Value.Used)
-            .Select(e => new Learned(WithoutContext(e.Key), e.Value.English, Math.Max(1, e.Value.Count), e.Value.Used, !NeedsTwice(e.Key, e.Value), e.Key,
+            .Select(e => new LearnedLanguage(WithoutContext(e.Key), e.Value.English, Math.Max(1, e.Value.Count), e.Value.Used, !NeedsTwice(e.Key, e.Value), e.Key,
                 e.Key.EndsWith("@e", StringComparison.Ordinal) ? "英語の後" : e.Key.EndsWith("@j", StringComparison.Ordinal) ? "日本語の後" : null))
             .ToList();
 
