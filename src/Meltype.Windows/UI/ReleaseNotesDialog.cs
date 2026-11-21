@@ -15,7 +15,7 @@ internal sealed class ReleaseNotesDialog : Form
     private static ReleaseNotesDialog? _open;
 
     /// <summary>その版のリリースノートを出す (もう出ていれば前に出す)。updated なら「更新しました」と書く。</summary>
-    public static void ShowFor(string version, bool updated)
+    public static void ShowFor(string version, bool updated, MeltypeEngine engine)
     {
         try
         {
@@ -24,7 +24,21 @@ internal sealed class ReleaseNotesDialog : Form
                 _open.Activate();
                 return;
             }
-            _open = new ReleaseNotesDialog(version, updated, Bundled(version));
+            _open = new ReleaseNotesDialog(version, updated, Bundled(version), engine.Settings.ShowReleaseNotesAfterUpdate, showAfterUpdate =>
+            {
+                // チェックは画面の操作から直接呼ばれるので、設定の保存や反映で例外が出ても画面を壊さない
+                try
+                {
+                    var next = engine.Settings.Clone();
+                    if (next.ShowReleaseNotesAfterUpdate == showAfterUpdate) return;
+                    next.ShowReleaseNotesAfterUpdate = showAfterUpdate;
+                    engine.ApplySettings(next);
+                }
+                catch (Exception ex)
+                {
+                    Diagnostics.Log.Warn($"リリースノートの自動表示の設定を変えられませんでした: {ex.Message}");
+                }
+            });
             _open.Show();
         }
         catch (Exception ex)
@@ -33,7 +47,7 @@ internal sealed class ReleaseNotesDialog : Form
         }
     }
 
-    internal ReleaseNotesDialog(string version, bool updated, string? notes)
+    internal ReleaseNotesDialog(string version, bool updated, string? notes, bool showAfterUpdate = true, Action<bool>? setShowAfterUpdate = null)
     {
         Text = $"Meltype {version} のリリースノート";
         StartPosition = FormStartPosition.CenterScreen;
@@ -61,6 +75,12 @@ internal sealed class ReleaseNotesDialog : Form
         var textPanel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10, 0, 10, 0), Visible = notes is not null };
         textPanel.Controls.Add(text);
 
+        // 次に更新したときから自動で出さない (設定の「更新後にリリースノートを表示する」と同じ)
+        var dontShow = new CheckBox { Text = "今後表示しない", AutoSize = true, Checked = !showAfterUpdate };
+        dontShow.CheckedChanged += (_, _) => setShowAfterUpdate?.Invoke(!dontShow.Checked);
+        var footer = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(10, 0, 10, 0) };
+        footer.Controls.Add(dontShow);
+
         var close = new Button { Text = "閉じる", AutoSize = true, DialogResult = DialogResult.OK };
         close.Click += (_, _) => Close();
         var page = new Button { Text = "GitHub で見る", AutoSize = true };
@@ -72,6 +92,7 @@ internal sealed class ReleaseNotesDialog : Form
 
         Controls.Add(textPanel);
         Controls.Add(intro);
+        Controls.Add(footer);
         Controls.Add(buttons);
         AcceptButton = close;
         CancelButton = close;
@@ -85,7 +106,7 @@ internal sealed class ReleaseNotesDialog : Form
             text.Select(0, 0);
             close.Focus();
         };
-        if (notes is null) Height = intro.PreferredHeight + buttons.PreferredSize.Height + LogicalToDeviceUnits(80);
+        if (notes is null) Height = intro.PreferredHeight + footer.PreferredSize.Height + buttons.PreferredSize.Height + LogicalToDeviceUnits(60);
     }
 
     /// <summary>見出しは大きく太く、強調は太字、インラインコードは等幅で出す。リンクは文字だけ出す。</summary>
