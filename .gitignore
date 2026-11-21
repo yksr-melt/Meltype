@@ -29,6 +29,7 @@ native/mozc/bin/
 native/zenzai/bin/
 native/zenzai/cache/
 linux/build/
+tui/build/
 tools/data/
 native/tip/bin/
 native/tip/obj/

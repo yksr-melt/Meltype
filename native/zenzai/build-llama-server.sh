@@ -4,8 +4,8 @@
 #
 # Linux 版に同梱する llama.cpp の llama-server (CPU 版) を、native/zenzai/zenzai.env の版のソースからビルドする。
 #   native/zenzai/build-llama-server.sh
-# できたもの (llama-server・共有ライブラリ・LICENSE-llama.cpp.txt) は native/zenzai/bin/linux-<版>/ に置き、linux/build.sh が同梱する。
-# フォルダーの名前に版を入れ、zenzai.env の版を上げたら、前の版のビルドを linux/build.sh が使わないようにする。
+# できたもの (llama-server・共有ライブラリ・LICENSE-llama.cpp.txt) は native/zenzai/bin/linux-<版>/ に置き、native/build-core-linux.sh が同梱する。
+# フォルダーの名前に版を入れ、zenzai.env の版を上げたら、前の版のビルドを native/build-core-linux.sh が使わないようにする。
 # 必要なもの: curl、cmake、C / C++ のコンパイラ。
 # 配る物は、サポートする中で一番古い glibc (2.34、RHEL 9 系) の manylinux のコンテナでビルドする (Mozc のヘルパーと同じ、#1484)。
 # llama.cpp の Ubuntu 向けのビルドは Ubuntu 24.04 の glibc・libstdc++ を要求し、RHEL 9 系・Debian 12 で動かない。
