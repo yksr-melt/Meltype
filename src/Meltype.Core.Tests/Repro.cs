@@ -10,7 +10,7 @@ namespace Meltype.Tests;
 /// MELTYPE_MOZC に変換ヘルパーがあればアプリと同じく Mozc で漢字に変換する。無ければ日本語 / 英語の判定だけ (漢字にしない)。
 /// Mozc に加えて MELTYPE_ZENZAI_SERVER・MELTYPE_ZENZAI_MODEL があれば、Zenzai も使って打った結果を zenzai に出す。
 ///   --repro 26niti space --learn "niti → （日）"
-/// --learn の手順は、先に別の入力欄で打って確定し、Meltype と Mozc に学習させる (学習した後で起きる誤変換を再現する)。
+/// --learn の手順は、先に別の入力欄で打って確定し、Meltype に学習させる (学習した後で起きる誤変換を再現する。Mozc には覚えさせない: Henkan.Keyboard)。
 /// </summary>
 internal static class Repro
 {
@@ -141,7 +141,6 @@ internal static class Repro
                 for (var i = 0; i < index; i++) k.Type(" ");
             }
             k.Type("\n");
-            Henkan.WaitForLearning();
             return k.Host.Document;
         }).ToList();
     }
@@ -324,26 +323,28 @@ internal static class Henkan
 
     /// <summary>
     /// <see cref="Keyboard()"/> の、zenzai なら Zenzai の答えも使うもの。history・languages は学習データ (無ければ新しく作る)。
-    /// 確定しても Meltype にも Mozc にも覚えさせない (学習の設定を OFF にする。覚えたものは読む)。覚えさせると、前の打ち方・前の文で確定した
+    /// 確定しても Meltype に覚えさせない (学習の設定を OFF にする。覚えたものは読む)。覚えさせると、前の打ち方・前の文で確定した
     /// 変換が次の打ち方の結果を変えてしまう (確かめたいのは、まだ何も覚えていない人か、--repro の --learn の手順だけを覚えた人の変換)。
     /// </summary>
     public static CompositionTests.Keyboard Keyboard(bool zenzai, Composition.ConversionHistory? history = null, Composition.LanguageMemory? languages = null)
     {
         // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
         var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
-        return new(live: true, history: history, converter: converter, moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
+        return new(live: true, history: history, converter: converter is null ? null : new WithoutEngineLearning(converter),
+            moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
             userDictionary: new Meltype.Composition.UserDictionary(null), languages: languages, translations: Translations.Value)
         { Learning = false };
     }
 
     /// <summary>
-    /// 確定したときに裏で Mozc に覚えさせるのを待つ (--repro の --learn の手順の後、次を打つ前に)。
-    /// 覚えさせる処理は Mozc を排他するので、積まれた処理が動き出してから Mozc に聞けば、覚え終わってから答える。
+    /// 変換エンジン (Mozc) には、--learn の手順でも覚えさせない。変換エンジンへの学習は確定した後に裏のスレッドで行われ、
+    /// 終わったことを知る方法が無いので、次を打つ前に覚え終わっている保証が無い (Meltype の学習は確定と同時に終わる)。
     /// </summary>
-    public static void WaitForLearning()
+    private sealed class WithoutEngineLearning(Composition.IKanjiConverter inner) : Composition.IKanjiConverter
     {
-        SpinWait.SpinUntil(() => ThreadPool.PendingWorkItemCount == 0, 5000);
-        Mozc.Value?.Reading("あ");
+        public IReadOnlyList<Composition.ConversionClause>? Convert(Composition.ConversionRequest request) => inner.Convert(request);
+
+        public event Action? ResultReady { add => inner.ResultReady += value; remove => inner.ResultReady -= value; }
     }
 
     public static void Run(string keys)
