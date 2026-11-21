@@ -4,7 +4,7 @@
 namespace Meltype.Config;
 
 /// <summary>通常版とポータブル版でデータの保存先を切り替える。</summary>
-internal static class AppPaths
+public static class AppPaths
 {
     private const string PortableMarker = "Meltype.portable";
 

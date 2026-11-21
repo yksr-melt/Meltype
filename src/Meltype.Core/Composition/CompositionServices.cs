@@ -47,7 +47,7 @@ public sealed record CompositionServices
     /// <summary>ローマ字の打ち間違いを直すもの (onegaishimsu → お願いします)。null なら直さない。</summary>
     public RomajiTypoCorrector? RomajiTypos { get; init; }
 
-    public Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
+    internal Func<GitHubIssueTitles?> GitHubTitles { get; init; } = () => null;
 
     /// <summary>今の時刻 (UTC。タイムゾーンを指定した時計の候補に使う。テストでは差し替える)。</summary>
     public Func<DateTime> UtcNow { get; init; } = () => DateTime.UtcNow;
