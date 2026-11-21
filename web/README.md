@@ -114,6 +114,21 @@ https://meltype.moe/report/?form=bug&os=Windows+11&version=0.0.0&environment=ENV
 
 `wrangler.jsonc` で `workers_dev` と `preview_urls` を `false` にしています。Access は `meltype.moe` にしか掛からないため、`*.workers.dev` を開けると Access の外から入れてしまいます。
 
+### Claude から読む (MCP)
+
+`/api/dashboard/mcp` は、ダッシュボードの読み取り (件数・報告の一覧と中身・タイピングのお手本の数・怪しい参加) を MCP の道具で出します。消す操作は出しません。Access の内側なので、AI にはサービス トークンを渡します。
+
+1. Zero Trust → Access → サービス認証 → サービス トークン でトークンを作る
+2. ダッシュボードの Access アプリに、アクションが「Service Auth」で Include がそのトークンのポリシーを足す
+3. Claude Code に登録する
+
+```bash
+claude mcp add --transport http meltype-dashboard https://meltype.moe/api/dashboard/mcp \
+  --header "CF-Access-Client-Id: <クライアント ID>" --header "CF-Access-Client-Secret: <シークレット>"
+```
+
+トークンを持つ人は報告の連絡先まで読めるので、トークンはメンテナーの手元だけに置き、要らなくなったら Access で取り消します。
+
 ## タイピング (`/typing/`)
 
 お手本の文 (`sentences/*.txt`) をローマ字で打つページです。文は、ふつうの文・硬めの文・ネットの会話 (短め)・日本語と英語が混ざった文から選びます。誰でも遊べ、打った記録は、どのキーが抜けやすいか・打ち間違えやすいかの調査に、同意した人だけが送ります。Meltype のアプリには入れず、このページだけで集めます。
