@@ -67,6 +67,8 @@ public enum CompositionTheme
     [Description("ライト")] Light,
     /// <summary>Windows の「既定のアプリ モード」(ライト / ダーク) に合わせる。</summary>
     [Description("Windows の設定に合わせる")] System,
+    /// <summary>利用者が決めた背景と文字の色 (<see cref="Settings.CompositionCustomBackColor"/>・<see cref="Settings.CompositionCustomTextColor"/>)。</summary>
+    [Description("カスタム")] Custom,
 }
 
 /// <summary>変換ボックスの不透明度。</summary>
@@ -510,12 +512,21 @@ public sealed class Settings
     public string CompositionFont { get; set; } = "";
 
     [Category("9. 表示"), DisplayName("変換ボックスの色"), Platforms(Platform.Windows),
-     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。")]
+     Description("ダーク: 黒っぽい背景に白い文字 (今までの見た目)。ライト: 白っぽい背景に黒い文字。Windows の設定に合わせる: Windows の「既定のアプリ モード」(設定の 個人用設定 > 色) に合わせます。カスタム: 「変換ボックスのカスタムの色」の背景と文字の色で出します (Meltype キーボードだけ。Meltype IME の候補の一覧は Windows の色のまま)。")]
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 背景"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。")]
+    public string CompositionCustomBackColor { get; set; } = "#202228";
+
+    [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 文字"), Platforms(Platform.Windows),
+     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。")]
+    public string CompositionCustomTextColor { get; set; } = "#FFFFFF";
 
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),
      Description("変換ボックスを少し透かして、後ろの文字を見えるようにします。100% は透けません。")]
     public CompositionOpacity CompositionOpacity { get; set; } = CompositionOpacity.Opaque;
+
 
     /// <summary>変換ボックスをライトの色で出すか。windowsLight は Windows のアプリ モードがライトか (分からなければ null = ダーク)。</summary>
     public bool CompositionIsLight(bool? windowsLight) => CompositionTheme switch
@@ -524,6 +535,20 @@ public sealed class Settings
         CompositionTheme.System => windowsLight ?? false,
         _ => false,
     };
+
+    /// <summary>カスタムの変換ボックスの背景と文字の色 (読めない値なら null で、ライト / ダークの色のまま)。</summary>
+    public ((int R, int G, int B) Back, (int R, int G, int B) Text)? CompositionCustomColors() =>
+        CompositionTheme == CompositionTheme.Custom && ParseColor(CompositionCustomBackColor) is { } back && ParseColor(CompositionCustomTextColor) is { } text
+            ? (back, text) : null;
+
+    /// <summary>
+    /// 決めた色で文字が読みにくくなるなら、利用者に見せる警告。保存を止めるかは利用者が決める。
+    /// カスタムでは文字・案内・目印・下線をすべて文字の色で描くので、文字と背景の 1 組だけを確かめれば足りる。
+    /// </summary>
+    public string? ColorWarning() =>
+        CompositionCustomColors() is var (back, text)
+            ? ColorContrast.Warning("変換ボックスのカスタムの色: 文字", text, "変換ボックスのカスタムの色: 背景", back)
+            : null;
 
     /// <summary>変換ボックスの不透明度 (0.7〜1)。</summary>
     [Browsable(false), JsonIgnore]
@@ -547,12 +572,16 @@ public sealed class Settings
      Description("ON にすると、正式版の前に公開するプレリリース版 (1.3.1-pre.4 など) も自動更新の対象にします。新しい機能や修正を早く試せますが、不具合や動作の不安定さが含まれることがあります。OFF (標準) では正式版だけを対象にします。")]
     public bool UpdatePrerelease { get; set; }
 
+    [Category("13. 更新"), DisplayName("更新後にリリースノートを表示する"), Platforms(Platform.Windows),
+     Description("新しい版に更新したあとの最初の起動で、その版のリリースノートを表示します。OFF にすると自動では表示しません (インストール版では、トレイの「更新」→「リリースノート...」からいつでも見られます)。リリースノートの画面の「今後表示しない」でも変えられます。全プロファイル共通です。")]
+    public bool ShowReleaseNotesAfterUpdate { get; set; } = true;
+
     [Category("2. 入力方式"), DisplayName("入力方式"), Description("ローマ字入力 / かな入力 (JIS、α版: 試験中)。Meltype キーボードでは、かな入力を選ぶと JIS かな配列で入力し (Shift+E = ぃ, Shift+Z = っ, Shift+ね = 、)、打ったキーの英字が英単語なら英字で見せます。")]
     [JsonConverter(typeof(InputStyleJsonConverter))]
     public InputStyle InputStyle { get; set; } = InputStyle.Romaji;
 
     [Category("2. 入力方式"), DisplayName("かな配列"), Platforms(Platform.Windows),
-     Description("入力方式が「かな入力」のときの配列。JIS かな (刻印どおり)・月配列 (U9。D・K を押してから次のキーで 2 段目・3 段目)・花配列 (D・K を押してから次のキーで 2 段目)・NICOLA (親指シフト。無変換が左、変換が右の親指キー)・中指NICOLA (NICOLA に加え、K を押したまま左手のキーを押して先に離すと左シフト、D を押したまま右手のキーを押して先に離すと右シフト)・TRON 配列 (親指シフト)。親指シフトは、親指キーを押したまま文字キーを押すか、文字キーの直後 (0.1 秒以内) に親指キーを押します。親指キーだけを押して離すと、ふつうの変換・無変換です。Shift を押したキーはふつうの英字・記号です。JIS かな以外では、打ったキーの英字を英単語として見せません。Meltype キーボードで使えます。")]
+     Description("入力方式が「かな入力」のときの配列。JIS かな (刻印どおり)・月配列 (U9。D・K を押してから次のキーで 2 段目・3 段目)・花配列 (D・K を押してから次のキーで 2 段目)・NICOLA (親指シフト。無変換が左、変換が右の親指キー)・中指NICOLA (NICOLA に加え、K を押したまま左手のキーを押して先に離すと左シフト、D を押したまま右手のキーを押して先に離すと右シフト)・TRON 配列 (親指シフト)・新JIS かな (Shift で 2 段目)・飛鳥配列 (親指シフト)・下駄配列・新下駄配列・薙刀式 (Space もシフト)・蜂蜜小梅配列・シン蜂蜜小梅配列・よだか配列・かわせみ配列 (文字キー同士の同時打鍵)。同時打鍵は、2 つ (薙刀式は 3 つまで) のキーを 0.1 秒以内に押すか、組み合わせに使ったキーを押したまま次のキーを押します。親指シフトは、親指キーを押したまま文字キーを押すか、文字キーの直後 (0.1 秒以内) に親指キーを押します。親指キーだけを押して離すと、ふつうの変換・無変換です。Shift を押したキーはふつうの英字・記号です (新JIS かなを除く)。JIS かな以外では、打ったキーの英字を英単語として見せません。Meltype キーボードで使えます。")]
     public KanaLayout KanaLayout { get; set; } = KanaLayout.Jis;
 
     [Category("2. 入力方式"), DisplayName("ローマ字の配列"), Platforms(Platform.Windows),
@@ -583,7 +612,7 @@ public sealed class Settings
     private static readonly HashSet<string> SharedKeys =
     [
         SchemaKey, nameof(Profiles), nameof(ActiveProfile), nameof(SettingsVersion),
-        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease),
+        nameof(Enabled), nameof(JapaneseKeyboardOnly), nameof(AllowInjectedInput), nameof(FileLog), nameof(LogTypedText), nameof(AutoUpdate), nameof(UpdatePrerelease), nameof(ShowReleaseNotesAfterUpdate),
         // 入力の方式 (Windows の IME として入力するか) は PC 全体の選び方なので、プロファイルで変えない
         nameof(Mode),
     ];

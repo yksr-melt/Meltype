@@ -5,7 +5,6 @@ import Foundation
 import InputMethodKit
 
 // 実際の NativeCore / InputController / KeyMapping と一緒にコンパイルする。
-var candidatesWindow: IMKCandidates? = nil
 
 @main
 enum BoundaryTests {
