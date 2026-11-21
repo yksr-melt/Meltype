@@ -78,6 +78,9 @@ internal static partial class CompositionController
     /// <summary>Space・確定など、結果が今すぐ要る 1 回の入力で変換エンジンを待つ時間の合計。Meltype IME の DLL の応答期限 (800ms、TextService.h) より短くする。</summary>
     private const int InputBudgetMs = 400;
 
+    /// <summary>この入力で変換エンジンの答えを InputBudgetMs まで待つ env (答えを後から受け取れないフロントでは、答えるまで待つ)。</summary>
+    private static CompositionEnv WaitingForInput(CompositionEnv env) => env.LateResults ? env with { Deadline = Environment.TickCount64 + InputBudgetMs } : env;
+
     /// <summary>候補の一覧の 1 ページの数 (変換ボックス・Linux の候補の一覧と合わせる)。数字キー 1〜9 でこのページの中から選ぶ。</summary>
     internal const int CandidatePageSize = 9;
 
@@ -107,6 +110,12 @@ internal static partial class CompositionController
 
         /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら「Zenzai」と出す。</summary>
         public string? ZenzaiText { get; set; }
+
+        /// <summary>
+        /// 日本語の文節の、文の中での変換結果 (変換エンジンの答え・ユーザー辞書の語)。<see cref="AddCandidates"/> が、その読みだけの変換などの候補をこの後ろに並べる。
+        /// 候補を足し終えた文節と、変換エンジンに頼まない文節 (英語・記号) は null。
+        /// </summary>
+        public string? Engine { get; set; }
 
         /// <summary>外部変換エンジンの候補追加が完了したか。<see cref="Fixed"/> の文節では追加せずに完了扱いにする。</summary>
         public bool Expanded { get; set; }
@@ -162,14 +171,15 @@ internal static partial class CompositionController
     public static bool IsConverting(CompositionState state) => state.Clauses.Count > 0;
 
     /// <summary>
-    /// キーを押した。before / after は入力欄のキャレットの前後の確定済みの文字 (分かれば)。
+    /// キーを押した。
     /// 変換ボックスに入力していないときは、入力を始めるキー (<see cref="StartsComposition"/>) だけを受け取り、ほかはアプリに通す。
     /// releaseFollows なら、離したことは <see cref="Release"/> で届く (false なら押した直後に離したとみなす)。
     /// </summary>
-    public static SessionResult Press(CompositionState state, CompositionEnv env, KeyPress key, string? before = null, string? after = null, bool releaseFollows = false)
+    public static SessionResult Press(CompositionState state, CompositionEnv env, KeyPress key, bool releaseFollows = false)
     {
-        CompositionOutput.Begin(state.Out, env, before, after);
+        CompositionOutput.Begin(state.Out);
         Tick(state, env, key.TimeMs);
+        env = WaitingForInput(env);
         var consumed = Handle(state, env, key);
         if (!releaseFollows) HandleRelease(state, env, key.Vk);
         Settle(state, env);
@@ -177,9 +187,9 @@ internal static partial class CompositionController
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>
-    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk, string? before = null, string? after = null)
+    public static SessionResult Release(CompositionState state, CompositionEnv env, int vk)
     {
-        CompositionOutput.Begin(state.Out, env, before, after);
+        CompositionOutput.Begin(state.Out);
         HandleRelease(state, env, vk);
         Settle(state, env);
         // 離したことはフロントが押下のとおりに通す。Consumed が false なら、離したことで今のキーの働きをした (文字に使わずに離した親指キー)
@@ -189,7 +199,7 @@ internal static partial class CompositionController
     /// <summary>キーをアプリに通す。変換ボックスの状態は変えない (英数状態で判定中の語は、しばらく打たなければ英語とみなす)。</summary>
     public static SessionResult Pass(CompositionState state, CompositionEnv env, long nowMs)
     {
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         Tick(state, env, nowMs);
         return Result(state, env, consumed: false);
     }
@@ -197,7 +207,7 @@ internal static partial class CompositionController
     /// <summary>入力の内容を変えない出来事 (フォーカス・キャレットの知らせなど) の結果。表示は今のまま。</summary>
     public static SessionResult Current(CompositionState state, CompositionEnv env)
     {
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         return Result(state, env, consumed: true) with { Consumed = false };
     }
 
@@ -208,7 +218,6 @@ internal static partial class CompositionController
     {
         (state.Shift, state.Control, state.Modifier) = (key.Shift, key.Control, key.Modifier);
         if (!IsComposing(state) && !state.KanaLayout.ThumbHeld && (key.Modifier || !StartsComposition(state, env, key))) return false;
-        env.Budget?.Start(InputBudgetMs);
         state.Pressed.Add(key.Vk);
         HandleKey(state, env, new KeyEvent(key.Vk, key.Ch ?? 0, false, false, false, key.TimeMs));
         return true;
@@ -262,7 +271,7 @@ internal static partial class CompositionController
     /// </summary>
     public static SessionResult? RefreshConversion(CompositionState state, CompositionEnv env)
     {
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         return Refresh(state, env) ? Result(state, env, consumed: true) : null;
     }
 
@@ -287,11 +296,7 @@ internal static partial class CompositionController
     {
         if (state.ClausesEdited || state.Reconversion is not null || state.Clauses.Count == 0 || state.Clauses is [{ Alternatives: not null, Changed: true }]) return false;
         var (old, selected, tabStarted) = (state.Clauses, state.SelectedClause, state.TabStartedConversion);
-        WithoutWaiting(state, env, () =>
-        {
-            StartConversion(state, env, state.ConversionPrefersJapanese);
-            return true;
-        });
+        StartConversion(state, WithoutWaiting(env), state.ConversionPrefersJapanese);
         state.TabStartedConversion = tabStarted;
         var sameClauses = state.Clauses.Count == old.Count && state.Clauses.Zip(old).All(p => p.First.Reading == p.Second.Reading);
         var nothingNew = sameClauses && state.Clauses.Zip(old).All(p => p.First.Text == p.Second.Text && p.First.Candidates.All(p.Second.Candidates.Contains));
@@ -346,7 +351,7 @@ internal static partial class CompositionController
     /// <summary>変換中の文節の候補を番号で選ぶ (Mac の候補ウィンドウをクリックしたときなど)。</summary>
     public static SessionResult SelectCandidate(CompositionState state, CompositionEnv env, int index)
     {
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         SelectCandidateAt(state, env, index);
         return Result(state, env, consumed: true);
     }
@@ -373,7 +378,7 @@ internal static partial class CompositionController
     /// <summary>予測変換の候補を番号で選んで確定する (Meltype IME の候補の一覧をクリックしたとき)。</summary>
     public static SessionResult CommitPredictionAt(CompositionState state, CompositionEnv env, int index)
     {
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         var predictions = CurrentPredictions(state, env);
         if (!IsConverting(state) && index >= 0 && index < predictions.Count)
         {
@@ -389,14 +394,14 @@ internal static partial class CompositionController
     /// </summary>
     public static SessionResult CommitPending(CompositionState state, CompositionEnv env, bool consumed = true, bool preserveLatinRaw = false, bool preserveText = false)
     {
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         CommitAll(state, env, preserveLatinRaw, preserveText);
         return Result(state, env, consumed);
     }
 
     private static void CommitAll(CompositionState state, CompositionEnv env, bool preserveLatinRaw, bool preserveText)
     {
-        env.Budget?.Start(InputBudgetMs);
+        env = WaitingForInput(env);
         if (state.HeldLetters.Length > 0) ReleaseHeldAsEnglish(state, env);
         // e + 結合アクセントを「え + アクセント」にしない。明示した表示モード・候補・かな入力は尊重する。
         // ASCII 英字だけの原文に Latin アクセントが続く場合に限り、変換や学習を経由せず確定する。
@@ -427,9 +432,6 @@ internal static partial class CompositionController
         ClearComposition(state);
         ClearHeld(state);
         ForgetLastCommit(state);
-        state.CaretBefore = null;
-        state.PrecedingText = null;
-        state.FollowingText = null;
         state.PendingReplace = null;
         state.PrivateComposition = false;
         state.KeptChoices.Clear();
@@ -439,7 +441,7 @@ internal static partial class CompositionController
         state.PredictionIndex = -1;
         state.Pressed.Clear();
         state.KanaLayout.Reset();
-        CompositionOutput.Begin(state.Out, env, null, null);
+        CompositionOutput.Begin(state.Out);
         CompositionOutput.Hide(state.Out);
     }
 
@@ -448,7 +450,6 @@ internal static partial class CompositionController
     {
         state.LastCommitEnglish = null;
         state.LastCommitText = null;
-        state.CaretBefore = null;
         state.Correctable.Clear();
     }
 }

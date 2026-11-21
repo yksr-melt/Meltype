@@ -139,7 +139,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。</summary>
     /// <param name="candidates">読みの変換候補の一覧 (<see cref="HybridConverter.Candidates"/>)。</param>
     /// <param name="readingOf">漢字かな交じりの文の読み (<see cref="HybridConverter.Reading"/>)。</param>
-    public SessionParts SessionParts(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
+    public SessionParts SessionParts(IKanjiConverter converter, Func<string, long, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
         Action<Correction>? corrected = null)
     {
         var services = _shared with
