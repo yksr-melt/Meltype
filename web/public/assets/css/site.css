@@ -3360,6 +3360,7 @@ em {
   border: 2px solid var(--line);
   border-radius: var(--radius);
   padding: 28px 24px;
+  text-align: left;
   cursor: text;
   outline: none;
 }
@@ -3423,7 +3424,7 @@ em {
 
 .typing-focus-hint {
   position: absolute;
-  inset: auto 0 8px;
+  inset: auto 24px 8px;
   text-align: center;
   font-size: 0.82rem;
   color: var(--muted);

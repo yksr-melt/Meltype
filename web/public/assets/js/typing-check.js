@@ -4,13 +4,54 @@
 // タイピングの 1 文の打鍵から、打った文字を組み立てて採点し、お手本と関係ない入力 (名前など) が続いていないかを見る。
 // ページとサーバー (src/typing.js) で同じものを使う。
 // 決まり: 送るのは打鍵 (keys) だけにし、打った文字はここで打鍵から組み立てる (直したあとの文字列を、打った文字列と取り違えないように)。
-import { align, finalKana, toRomaji } from "./romaji.js";
+import { align, finalKana, toRomaji, toUnits } from "./romaji.js";
+
+// 打鍵から打った文字を組み立てる決まりの版。記録 (typing_trials.version) に残し、組み立てるときに使う。
+// 決まり: 組み立て方を変えたら 1 つ上げ、前の版の組み立て方も残す (前に集めた打鍵は、そのとき画面に出ていた決まりで読むため)。
+//   1: Backspace で 1 文字消す
+//   2: Backspace で Meltype と同じく、日本語は 1 音 (ka なら 2 文字)、英語と打ちかけの綴りは 1 文字消す
+export const TYPING_VERSION = 2;
+
+// 表示と Backspace で同じ単位を使う。英単語はかなの境目 (残りが無いか n だけ) でだけ探し、1 文字を 1 単位にする。
+// ワークアラウンド: 打った字を Meltype のエンジンで組み立てるようにしたら消す。
+function typingUnits(typed, reading) {
+  const words = (reading.match(/[a-z]+/g) ?? []).sort((a, b) => b.length - a.length);
+  const units = [];
+  let start = 0;
+  let i = 0;
+  while (i < typed.length) {
+    const before = toUnits(typed.slice(start, i));
+    const word = (before.pending === "" || before.pending === "n") && words.find((w) => typed.slice(i, i + w.length).toLowerCase() === w);
+    if (word) {
+      units.push(...before.units);
+      if (before.pending) units.push({ raw: typed.slice(i - 1, i), kana: "ん" });
+      for (const char of typed.slice(i, i + word.length)) units.push({ raw: char, kana: char });
+      i += word.length;
+      start = i;
+    } else {
+      i += 1;
+    }
+  }
+  const rest = toUnits(typed.slice(start));
+  return { units: [...units, ...rest.units], pending: rest.pending };
+}
+
+export function previewKana(typed, reading) {
+  const { units, pending } = typingUnits(typed, reading);
+  return { kana: units.map((unit) => unit.kana).join(""), pending };
+}
+
+function backspace(typed, reading) {
+  const { units, pending } = typingUnits(typed, reading);
+  if (pending || units.length === 0) return typed.slice(0, -1);
+  return typed.slice(0, -units[units.length - 1].raw.length);
+}
 
 // 打鍵 ([code, key, 押した時刻, 離した時刻]) を頭から打ち直し、Enter を押したときに残っていた文字にする
-export function replay(keys) {
+export function replay(keys, reading, version = TYPING_VERSION) {
   let typed = "";
   for (const [, key] of keys) {
-    if (key === "Backspace") typed = typed.slice(0, -1);
+    if (key === "Backspace") typed = version >= 2 ? backspace(typed, reading) : typed.slice(0, -1);
     else if (key.length === 1 && key >= " " && key <= "~") typed += key;
   }
   return typed;
