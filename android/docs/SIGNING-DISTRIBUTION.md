@@ -28,7 +28,9 @@ Androidのコードパッケージや元作者の著作権表示はApplication I
 2. **Run workflow** でブランチを `main` にし、版番号を `0.1.0-preview.1` の形式で指定して実行する。次の公開では `0.1.0-preview.2` のように新しい版を指定する。
 3. 固定した Mozc と、実行時のコミットの共有 Core をソースからビルドする。Core・JVM のテストが通ったら、release APK を配布用の鍵で署名する。
 4. 署名・Application ID・版番号・16 KiB 対応を確認し、[Releases](https://github.com/yksr-melt/Meltype/releases) に **Pre-release** として公開する。APK・SHA-256・署名証明書の情報・ソースのコミットを添付する。既存のタグがある版は失敗にし、配布物を上書きしない。
-5. 更新時は同じ Actions を使う。Android の `versionCode` にはこのワークフローの実行番号（`github.run_number`）を使い、新しい実行ごとに増やす。同じ Application ID・同じ署名鍵・より大きい `versionCode` の APK は上書きインストールできる。
+5. Android の `versionCode` には、公開するコミットまでの全履歴のコミット数（`git rev-list --count HEAD`）を使う。新しい版は前の公開より進んだ `main` のコミットから作る。同じコミットの再実行では同じ番号になり、ワークフローを改名しても番号は戻らない。同じ Application ID・同じ署名鍵・より大きい `versionCode` の APK は上書きインストールできる。
+
+Gradle は未署名の release APK を作り、配布用 Actions の `apksigner` で署名する。リリースノートには、対応機能・制限を重複して並べず、公開するコミットの Android README へのリンクを載せる。
 
 `main` 以外・署名情報の不足・鍵を開けない場合はビルド前に停止する。秘密鍵は確認と署名のときだけ一時ファイルに戻し、各ステップの終了時に削除する。成果物に秘密鍵を含めない。
 

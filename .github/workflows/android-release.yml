@@ -25,8 +25,6 @@ defaults:
 
 env:
   MELTYPE_VERSION_NAME: ${{ inputs.version }}
-  # このワークフローの新しい実行ごとに増え、上書き更新に使える。
-  MELTYPE_VERSION_CODE: ${{ github.run_number }}
 
 jobs:
   apk:
@@ -36,6 +34,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # main のコミット数を versionCode に使うため、全履歴を取得する。
+          fetch-depth: 0
+      - name: Android の更新用の版番号を決める
+        # main が進むと増え、ワークフローを改名しても番号が戻らない。
+        run: echo "MELTYPE_VERSION_CODE=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
       - name: 公開する版と署名情報を確認する
         env:
           GH_TOKEN: ${{ github.token }}
@@ -171,9 +174,7 @@ jobs:
           cat > "$RUNNER_TEMP/android-release-notes.md" << EOF
           Android 版 Meltype のプレビューです。開発途中のため、不具合が残っている可能性があります。
 
-          - Android 8.0 以降（arm64-v8a・x86_64）に対応。
-          - QWERTY での日英自動判別、端末内の Mozc による漢字変換・ライブ変換・候補選択に対応。
-          - 12 キー・フリック入力、ユーザー辞書の編集、音声入力、カスタムテーマは未対応。
+          対応機能・制限・使い方は、この版の [Android 版の説明]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/android/README.md) を確認してください。
 
           添付の Meltype.apk を端末にダウンロードしてインストールしてください。
           設定で Meltype をキーボードとして有効にし、入力方法に選んで使います。
