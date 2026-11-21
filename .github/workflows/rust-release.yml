@@ -211,6 +211,7 @@ jobs:
           path: |
             dist/release-benchmark/report.json
             dist/release-benchmark/charts/*.png
+            dist/release-benchmark/charts/*.svg
             dist/release-benchmark/charts/README.md
             dist/release-benchmark/charts/summary.json
   macos:

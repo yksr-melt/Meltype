@@ -38,9 +38,13 @@ class AxisTests(unittest.TestCase):
         self.assertIn("0.001 × 1", table)
         self.assertTrue(any("2 off-scale" in text.get_text() for text in ax.texts))
 
-    def test_widely_different_versions_share_a_log_axis(self):
+    def test_widely_different_versions_share_a_wave_break(self):
         ax, stats = self.draw({"csharp": [100, 110, 120], "rust": [.1, .11, .12]})
-        self.assertEqual(ax.get_yscale(), "log")
+        self.assertEqual(ax.get_yscale(), "function")
+        a, b = stats["rust"]["axis_break"]
+        self.assertTrue(.12 < a < b < 100)
+        self.assertTrue(any(line.get_gid() == "axis-break-wave" for line in ax.lines))
+        ax.figure.canvas.draw()
         self.assertEqual(stats["csharp"]["axis_limits"], stats["rust"]["axis_limits"])
         self.assertFalse(stats["csharp"]["off_scale"])
         self.assertFalse(stats["rust"]["off_scale"])
@@ -56,6 +60,19 @@ class AxisTests(unittest.TestCase):
                 self.assertGreaterEqual(high, value)
                 self.assertEqual(stats["csharp"]["off_scale"], [])
 
+    def test_close_medians_are_separated_and_labelled(self):
+        ax, _ = self.draw({"csharp": [100] * 10, "rust": [100.00001] * 10})
+        lo, hi = ax.get_ylim()
+        self.assertLess(hi - lo, 0.00002)
+        self.assertIn("median 100.00001", ax.texts[1].get_text())
+
+    def test_zoom_view_distinguishes_medians_inside_overlapping_distributions(self):
+        ax, stats = self.draw({"csharp": [90, 100, 110], "rust": [90, 100.00001, 110]})
+        self.assertGreater(ax.get_ylim()[1] - ax.get_ylim()[0], 20)
+        plotter.zoom_medians(ax, stats)
+        self.assertLess(ax.get_ylim()[1] - ax.get_ylim()[0], .00002)
+        self.assertIn("median detail", ax.get_ylabel())
+
     def test_moderate_outlier_is_still_drawn(self):
         _, stats = self.draw({"csharp": [10, 11, 12, 13, 14] * 4 + [18], "rust": [10] * 20})
         self.assertIn(18, stats["csharp"]["fliers"])
@@ -64,7 +81,7 @@ class AxisTests(unittest.TestCase):
     def test_zero_samples_disable_auto_log_and_explicit_log_rejects_them(self):
         groups = {"csharp": [0, 1, 2], "rust": [100, 110, 120]}
         ax, _ = self.draw(groups)
-        self.assertEqual(ax.get_yscale(), "linear")
+        self.assertEqual(ax.get_yscale(), "function")
         with self.assertRaises(ValueError):
             self.draw(groups, log=True)
 
@@ -107,6 +124,9 @@ class AxisTests(unittest.TestCase):
             self.assertIn("表示範囲外の測定値", (root / "step.md").read_text(encoding="utf-8"))
             for name in plotter.IMAGES:
                 self.assertTrue((root / "charts" / name).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"))
+                svg = Path(name).with_suffix(".svg")
+                self.assertIn(f"]({svg})", notes)
+                self.assertIn("<svg", (root / "charts" / svg).read_text(encoding="utf-8"))
             # CI releases compare two Rust versions rather than C# and Rust.
             report.update(comparison_kind="rust-versions", old_ref="flash-v0.1.0-preview.3",
                           new_ref="b" * 40, current_version="0.1.0-pre.4", samples=report["samples_per_round"],

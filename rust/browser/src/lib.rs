@@ -43,6 +43,12 @@ impl BrowserSession {
         Ok(())
     }
 
+    pub fn set_exchange_rates(table: &str) -> Result<(), String> {
+        let rates = meltype_core::currency::Rates::parse(table).ok_or("invalid exchange rates")?;
+        meltype_core::currency::set_auto_rates(Some(rates));
+        Ok(())
+    }
+
     pub fn load_dictionary(bytes: Vec<u8>) -> Result<(), String> {
         let dictionary = KanjiDictionary::parse(bytes)?;
         KANJI.with(|slot| *slot.borrow_mut() = Some(dictionary));

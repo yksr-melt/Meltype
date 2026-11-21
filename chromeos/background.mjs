@@ -5,6 +5,7 @@ import {SiteProfiles} from "./site-profiles.mjs";
 import {ShuntiProxy} from "./shunti.mjs";
 import {cachedUpdate,checkForUpdate,hasUpdatePermission} from "./update.mjs";
 import {track} from "./analytics.mjs";
+let aiStatus = "AIはオフです";
 let shunti, aiEpoch = 0, aiLifecycle = Promise.resolve();
 function prepareAI(core) {
   const epoch=++aiEpoch, previous=shunti;
@@ -12,11 +13,39 @@ function prepareAI(core) {
   const selected=settings.UseShunti === true && settings.AiModel !== "None";
   shunti=selected ? new ShuntiProxy(settings.ShuntiModelVariant ?? "shunti-v7-s8p") : null;
   const next=shunti;
+  aiStatus = next ? "shuntiを準備中" : "AIはオフです";
   aiLifecycle=aiLifecycle.catch(()=>{}).then(async()=>{
     await previous?.dispose();
     if (epoch !== aiEpoch || !next) return;
-    try { await next.prepare(); } catch (error) { if (epoch === aiEpoch) report(`shunti: ${error}`); }
+    try {
+      await next.prepare();
+      if (epoch === aiEpoch) aiStatus = "shuntiは準備完了です";
+    } catch (error) {
+      if (epoch === aiEpoch) { aiStatus = "shuntiの準備に失敗しました: " + error; report(aiStatus); }
+    }
   });
+}
+let autoRates = false, nextRateCheck = 0, fetchingRates = false;
+async function refreshRates() {
+  if (!autoRates || fetchingRates || Date.now() < nextRateCheck) return;
+  nextRateCheck = Date.now() + 60000;
+  fetchingRates = true;
+  try {
+    const response = await fetch("https://api.coinbase.com/v2/exchange-rates?currency=EUR", {
+      credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(8000)
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+    const {data} = await response.json();
+    const rates = Object.entries(data.rates).filter(([code, rate]) => /^[A-Z]{3}$/.test(code) && Number.isFinite(Number(rate)) && Number(rate) > 0);
+    if (data.currency !== "EUR" || !["USD", "JPY"].every(code => rates.some(([key]) => key === code))) throw new Error("為替レートが不正です");
+    BrowserSession.set_exchange_rates(["# 日付: " + new Date().toISOString().slice(0,10), "EUR\t1",
+      ...rates.map(([code, rate]) => code + "\t" + Number(rate))].join("\n"));
+  } catch (error) { report("為替レートの取得: " + error); }
+  finally { fetchingRates = false; }
+}
+function configureRates(core) {
+  autoRates = JSON.parse(core.snapshot()).settings.CurrencyRateMode === "Auto";
+  void refreshRates();
 }
 const profiles = new SiteProfiles(chrome);
 const available = Boolean(chrome.input?.ime?.onKeyEvent);
@@ -44,6 +73,7 @@ const controller = available ? new ImeController({
     // Invalid data is preserved. Never silently replace it with defaults.
     const core = new BrowserSession(saved.snapshot ?? "");
     prepareAI(core);
+    configureRates(core);
     let focusedGeneration = -1;
     core.focusIfNeeded = (generation, learning) => {
       if (focusedGeneration !== generation) { core.focus(learning); focusedGeneration = generation; }
@@ -79,11 +109,14 @@ if (controller) {
     }).catch(error => report(String(error)));
   });
   ime.onDeactivated.addListener(engine => controller.deactivate(engine));
-  ime.onFocus.addListener(context => controller.focus(context));
+  ime.onFocus.addListener(context => { controller.focus(context); void refreshRates(); });
   ime.onInputContextUpdate.addListener(context => controller.updateContext(context));
   ime.onBlur.addListener(id => controller.blur(id));
   ime.onReset.addListener(engine => { if (controller.engine === engine) controller.invalidate(); });
-  ime.onKeyEvent.addListener((engine, event, requestId) => controller.key(engine, event, requestId));
+  ime.onKeyEvent.addListener((engine, event, requestId) => {
+    if (event.code === "Space") void refreshRates();
+    return controller.key(engine, event, requestId);
+  });
   ime.onCandidateClicked.addListener((engine, id, button) => controller.candidate(engine, id, button));
   ime.onSurroundingTextChanged.addListener((engine, info) => {
     const generation = controller.generation, id = controller.context?.contextID;
@@ -126,7 +159,7 @@ chrome.permissions?.onAdded?.addListener(details => {
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || sender.url !== chrome.runtime.getURL("options.html")) return false;
   (async () => {
-    if (message.op === "status") return {available, diagnostic, update: await cachedUpdate()};
+    if (message.op === "status") return {available, diagnostic, aiStatus, update: await cachedUpdate()};
     if (message.op === "update_check") return await checkUpdate();
     if (message.op === "update_cached") return await cachedUpdate();
     if (message.op === "site_preferences") return {preferences: await profiles.preferences()};
@@ -142,6 +175,7 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       if (message.op === "configure") {
         core.configure(message.settings);
         prepareAI(core);
+        configureRates(core);
         controller.invalidate();
       } else if (message.op === "clear_learning") core.clear_learning();
       else throw new Error("Unknown command");

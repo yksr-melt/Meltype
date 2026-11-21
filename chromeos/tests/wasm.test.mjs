@@ -15,12 +15,26 @@ test("selected shunti candidates pass through the real WASM core and reset rejec
     const request=JSON.parse(s.ai_request());
     assert.equal(request[0],"きょうはいいてんきです");
     assert.equal(s.ai_apply(request[0],JSON.stringify(["今日は良い天気です"])),true);
+    const view = JSON.parse(s.view()).view;
+    assert.equal(view.notes[view.candidates.indexOf("今日は良い天気です")], "AI · shunti");
     assert.equal(key(s,13).commits[0].text,"今日は良い天気です");
     assert.equal(s.ai_apply(request[0],JSON.stringify(["古い応答"])),false);
     type(s,"nihongo"); key(s,32," "); s.reset();
     assert.equal(JSON.parse(s.ai_request()),null);
     assert.equal(s.ai_apply("にほんご",JSON.stringify(["古い応答"])),false);
   } finally { s.free(); }
+});
+
+test("1ドルの最新円換算が最初の候補ページに入る", () => {
+  BrowserSession.load_dictionary(readFileSync(new URL("../pkg/kanji.bin", import.meta.url)));
+  BrowserSession.set_exchange_rates("# 日付: 2026-11-20\nEUR\t1\nUSD\t1.2\nJPY\t180");
+  const session = new BrowserSession(JSON.stringify({settings:{CurrencyRateMode:"Auto", LiveConversion:false}}));
+  try {
+    type(session, "1doru");
+    const {candidates} = key(session, 32, " ").view;
+    assert(candidates.slice(0, 9).includes("≒150円"));
+    assert(candidates.some(c => c.includes("2026/11/20")));
+  } finally { session.free(); }
 });
 
 test("ChromeOSの同梱辞書で基本語と文を漢字変換し、Enterで確定できる", () => {

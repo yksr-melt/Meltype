@@ -46,7 +46,12 @@ test("real service-worker listeners register before hydration and route keys int
   chrome.storage.local.get = async key => {reads.push(key); return {[key]: stored[key]};};
   chrome.storage.local.set = async value => {Object.assign(stored, value);};
   const originalFetch = globalThis.fetch;
+  let rateQueries = 0;
   globalThis.fetch = async url => {
+    if (url === "https://api.coinbase.com/v2/exchange-rates?currency=EUR") {
+      rateQueries++;
+      return Response.json({data:{currency:"EUR",rates:{USD:"1.2",JPY:"180"}}});
+    }
     const file = url === chrome.runtime.getURL("pkg/kanji.bin") ? "kanji.bin" : "meltype_browser_bg.wasm";
     assert.equal(url, chrome.runtime.getURL(`pkg/${file}`));
     return new Response(readFileSync(new URL(`../pkg/${file}`, import.meta.url)), {headers: {"Content-Type": file.endsWith("wasm") ? "application/wasm" : "application/octet-stream"}});
@@ -95,6 +100,13 @@ test("real service-worker listeners register before hydration and route keys int
     assert.deepEqual(await kanjiCommit, {contextID: 5, text: "日本語"});
     const message = chrome.runtime.onMessage.listeners[0];
     const send = data => new Promise(resolve => message(data, {id: chrome.runtime.id, url: chrome.runtime.getURL("options.html")}, resolve));
+    await send({op: "configure", settings: JSON.stringify({CurrencyRateMode:"Auto", LiveConversion:false})});
+    for (const [i, char] of [..."1doru"].entries()) await legacyKey(char, i === 0 ? "Digit1" : "Key" + char.toUpperCase(), "fx" + i);
+    await legacyKey(" ", "Space", "fx-space");
+    const fx = calls.filter(([name]) => name === "setCandidates").at(-1)[1].candidates;
+    assert(fx.slice(0, 9).some(row => row.candidate === "≒150円"));
+    assert.equal(rateQueries, 1);
+    ime.onReset.listeners[0]("meltype-rust");
     const {preferences} = await send({op: "site_preferences"});
     assert.equal((await send({op: "save_site_preferences", preferences: {...preferences, enabled: true}})).preferences.enabled, true);
     ime.onReset.listeners[0]("meltype-rust");

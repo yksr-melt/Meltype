@@ -14,6 +14,10 @@ try {
         cargo build --locked --release @packages --target $target --target-dir "$root/target"
         if ($LASTEXITCODE -ne 0) { throw "cargo failed: $target" }
     }
+    if (-not $NativeOnly) {
+        cargo build --locked --release -p meltype-cli --features meltype-core/bundled-mozc --target x86_64-pc-windows-msvc --target-dir "$root/target"
+        if ($LASTEXITCODE -ne 0) { throw "TTY build failed" }
+    }
     if ($WithTip) {
         & "$root/native/tip/build.ps1" -RustCore
         if ($LASTEXITCODE -ne 0) { throw 'TSF build failed' }

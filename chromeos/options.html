@@ -33,7 +33,7 @@
             </div>
             <div id="ai-details" hidden>
               <label for="ai-version">バージョン・モデルサイズ</label><select id="ai-version"></select>
-              <p>辞書・モデルを任意ダウンロードします。パス入力は不要です。</p>
+              <p>インストールを押すと、辞書（CC BY-SA 4.0）とモデル（CC BY 4.0）を取得します。入力内容は送信しません。</p>
               <button id="ai-install" type="button">shuntiをインストール</button>
               <p id="ai-status" role="status"></p>
             </div>
@@ -65,8 +65,8 @@
             <legend>通貨の換算</legend>
             <div class="setting-row">
               <label for="currency-mode">通貨のレート</label>
-              <select id="currency-mode" data-setting="CurrencyRateMode" data-help="金額の換算に使うレートの出どころです。固定はこの版に同梱した配布時のレート、手入力は自分で入れた数です。ChromeOSではネットからレートを取りません。">
-                <option value="Fixed">固定（同梱のレート）</option><option value="Manual">手入力</option>
+              <select id="currency-mode" data-setting="CurrencyRateMode" data-help="金額の換算に使うレートの出どころです。固定はこの版に同梱した配布時のレート、手入力は自分で入れた数です。自動ではCoinbaseの為替APIを入力と別に取得します。未取得時は同梱レートを使い、取得後は直近のレートを使います。">
+                <option value="Fixed">固定（同梱のレート）</option><option value="Auto">自動（最新レート）</option><option value="Manual">手入力</option>
               </select>
             </div>
             <div class="setting-row">
@@ -151,7 +151,7 @@
       </fieldset>
       <fieldset class="settings-group">
         <legend>ChromeOSで使えること</legend>
-        <p>通常の辞書変換・予測候補・学習を端末内で使えます。AI変換は搭載していません。</p>
+        <p>通常の辞書変換・予測候補・学習を端末内で使えます。shuntiを導入すると、AIが出した候補には「AI · shunti」と表示します。</p>
         <p>候補はChromeOS標準の表示を使います。候補の色・フォント・位置の変更、OS辞書、確定後の削除・Undoは未対応です。</p>
         <p class="group-description">通常のWindows・macOS・Linux上のChrome用IMEではありません。物理JIS配列や各アプリでの動作は、実機で未確認の範囲があります。</p>
       </fieldset>

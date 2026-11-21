@@ -802,6 +802,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
 
 [[package]]
+name = "crossterm"
+version = "0.29.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d8b9f2e4c67f833b660cdb0a3523065869fb35570177239812ed4c905aeff87b"
+dependencies = [
+ "bitflags 2.13.2",
+ "crossterm_winapi",
+ "document-features",
+ "mio",
+ "parking_lot",
+ "rustix 1.1.5",
+ "signal-hook",
+ "signal-hook-mio",
+ "winapi",
+]
+
+[[package]]
+name = "crossterm_winapi"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acdd7c62a3665c7f6830a51635d9ac9b23ed385797f70a83bb8bafe9c572ab2b"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2124,7 +2150,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-ai"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "cc",
  "flate2",
@@ -2140,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-browser"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "meltype-core",
  "serde",
@@ -2150,8 +2176,9 @@ dependencies = [
 
 [[package]]
 name = "meltype-cli"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
+ "crossterm",
  "meltype-core",
  "serde",
  "serde_json",
@@ -2159,7 +2186,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-core"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2179,7 +2206,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-ibus"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "meltype-core",
  "meltype-native",
@@ -2188,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-ios"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "meltype-ai",
  "meltype-core",
@@ -2197,7 +2224,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-mac-register"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "objc2 0.6.5",
  "objc2-foundation 0.3.2",
@@ -2206,7 +2233,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-native"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "chrono",
  "jni 0.21.1",
@@ -2224,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-settings"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "ab_glyph",
  "chrono",
@@ -2249,7 +2276,7 @@ dependencies = [
 
 [[package]]
 name = "meltype-tip-worker"
-version = "1.1.25"
+version = "1.1.26"
 dependencies = [
  "libc",
  "meltype-native",
@@ -2327,6 +2354,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
 dependencies = [
  "libc",
+ "log",
  "wasi",
  "windows-sys 0.61.2",
 ]
@@ -3664,6 +3692,27 @@ name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+
+[[package]]
+name = "signal-hook"
+version = "0.3.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d881a16cf4426aa584979d30bd82cb33429027e42122b169753d6ef1085ed6e2"
+dependencies = [
+ "libc",
+ "signal-hook-registry",
+]
+
+[[package]]
+name = "signal-hook-mio"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b75a19a7a740b25bc7944bdee6172368f988763b744e3d4dfe753f6b4ece40cc"
+dependencies = [
+ "libc",
+ "mio",
+ "signal-hook",
+]
 
 [[package]]
 name = "signal-hook-registry"

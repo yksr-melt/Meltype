@@ -69,15 +69,19 @@ export class ShuntiPackages {
   }
   async load() { return this.verified(await this.storage.read(this.revision)); }
   // Caller must obtain consent and download permissions before invoking this method.
-  async install() {
+  async install(progress = () => {}) {
     const previous = await this.storage.read(this.revision);
-    if (previous) return this.verified(previous);
+    if (previous) {
+      try { return await this.verified(previous); } catch { /* 壊れた保存データは検証済みの再取得分で置き換える。 */ }
+    }
     const manifest = await this.manifest(), files = {};
     for (const spec of manifest.files) {
-      const response = await this.fetcher(spec.url, {credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(180000)});
+      const response = await this.fetcher(spec.url, {credentials: "omit", referrerPolicy: "no-referrer", signal: AbortSignal.timeout(900000)});
       if (!response.ok) throw new Error(`AIパッケージを取得できません (${response.status})`);
       const expected = Number(response.headers.get("content-length"));
       if (expected > limit) throw new Error("AIファイルが大きすぎます");
+      const preallocated = Number.isSafeInteger(expected) && expected > 0 && !response.headers.get("content-encoding")
+        ? new Uint8Array(expected) : null;
       const chunks = []; let size = 0;
       const reader = response.body.getReader();
       try {
@@ -85,15 +89,20 @@ export class ShuntiPackages {
           const {done, value} = await reader.read(); if (done) break;
           size += value.byteLength;
           if (size > limit) throw new Error("AIファイルが大きすぎます");
-          chunks.push(value);
+          if (preallocated) {
+            if (size > expected) throw new Error("AIファイルのサイズが一致しません");
+            preallocated.set(value, size - value.byteLength);
+          } else chunks.push(value);
+          progress(spec.name, size, expected);
         }
       } finally { await reader.cancel(); }
-      const bytes = new Uint8Array(size); let offset = 0;
+      if (preallocated && size !== expected) throw new Error("AIファイルの取得が途中で終了しました");
+      const bytes = preallocated ?? new Uint8Array(size); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
       if (await sha(bytes) !== spec.sha256) throw new Error("AIファイルのSHA-256が一致しません");
       files[spec.name] = bytes.buffer;
     }
-    const value = await this.verified({revision:this.revision, files});
+    const value = {revision:this.revision, files};
     // Publish the entire environment in one transaction; failures leave no partial package.
     await this.storage.write(value, this.revision);
     return value;

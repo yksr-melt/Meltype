@@ -137,6 +137,8 @@ pub struct Clause {
     pub raw: Option<String>,
     /// True only after an explicit candidate selection; reset by reconversion.
     pub changed: bool,
+    /// この文節の推論で実際に返った候補。
+    pub ai_candidates: Vec<String>,
     /// Translation membership belongs to this clause, not the whole sentence.
     pub translations: Vec<String>,
     /// Separate engine calls retain their place before auxiliary words.
@@ -167,6 +169,7 @@ impl Clause {
             kana: None,
             raw: None,
             changed: false,
+            ai_candidates: Vec::new(),
             translations: Vec::new(),
             standalone: None,
             expansion: None,
@@ -1445,6 +1448,10 @@ impl Session {
                         .unwrap_or(&self.candidates)
                         .iter()
                         .map(|c| {
+                            if self.clauses.get(self.selected_clause).is_some_and(|clause| clause.ai_candidates.contains(c)) {
+                                let model = crate::ai_model::AiModel::selected(&self.settings);
+                                return Some(format!("AI · {}", model.value().to_lowercase()));
+                            }
                             if self
                                 .clauses
                                 .get(self.selected_clause)
@@ -2596,8 +2603,20 @@ impl Session {
             if !values.is_empty() {
                 values.splice(1..1, more);
             }
+            if self.settings.text("CurrencyRateMode") == "Auto"
+                && crate::currency::parse(&clause.reading).is_some()
+                && crate::currency::auto_rates().is_some()
+            {
+                let amounts = crate::currency::Currency::from_settings(&self.settings).candidates(&clause.reading);
+                let first = values.first().cloned();
+                values.retain(|word| Some(word) == first.as_ref() || !amounts.contains(word));
+                let insert = 1.min(values.len());
+                values.splice(insert..insert, amounts.into_iter().filter(|word| Some(word) != first.as_ref()));
+            }
             let raw = clause.raw.take();
+            let generated = std::mem::take(&mut clause.ai_candidates);
             *clause = Clause::new(clause.reading.clone(), values);
+            clause.ai_candidates = generated;
             clause.raw = raw;
             clause.translations = translations;
             preceding.push_str(clause.text());
@@ -3400,6 +3419,7 @@ impl Session {
                             Some(self.raw.clone())
                         },
                         changed: self.chosen_conversion,
+                        ai_candidates: Vec::new(),
                         translations: self.translation_candidates.clone(),
                         standalone: None,
                         expansion: None,
