@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "io.github.ninjin0802.keyboard.app"
+    namespace = "app.meltype.keyboard"
     compileSdk = 36
     defaultConfig {
         applicationId = "app.meltype.keyboard"
