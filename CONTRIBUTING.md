@@ -224,7 +224,7 @@ Pull Request を作ると、変わったものに合わせて次のチェック�
 |---|---|---|
 | test | いつも | Windows 版のテスト |
 | core | いつも | 判定・変換のコアのテスト |
-| mac / linux / tui / Android QA | その OS 向けのコード (`mac/`・`linux/`・`tui/`・`android/`・`src/Meltype.Core.CApi/` など) が変わったとき | その OS 向けのビルドとテスト |
+| mac / linux / tui | その OS 向けのコード (`mac/`・`linux/`・`tui/`・`src/Meltype.Core.CApi/` など) が変わったとき | その OS 向けのビルドとテスト |
 | web | `web/` が変わったとき | Web のテスト |
 | 辞書の形式 | `dictionaries/` が変わったとき | 辞書の形式 |
 | 精度の比較 | 判定・変換の本体か辞書が変わったとき | main と比べた判定・変換の精度 |
