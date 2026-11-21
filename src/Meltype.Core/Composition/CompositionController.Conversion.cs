@@ -6,7 +6,9 @@ using System.Text;
 using Meltype.Composition.Utility;
 using Meltype.Config;
 using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Engine;
+using Meltype.Libraries.Chars;
+using static Meltype.Libraries.Chars.TextChars;
 
 namespace Meltype.Composition;
 
@@ -851,24 +853,6 @@ internal static partial class CompositionController
         var merged = DistinctShown(state, env, [.. clause.Candidates.Take(anchor + 1), .. more(reading, env.Deadline).Select(c => NormalizeHalfWidth(c, reading)), .. clause.Candidates.Skip(anchor + 1)]);
         clause.Candidates = merged;
         clause.Index = Math.Max(0, merged.IndexOf(current));
-    }
-
-    /// <summary>
-    /// 変換エンジンは読みの中の英数字を全角にする (2025ねん → ２０２５年、sだけが → ｓだけが) ので、
-    /// 半角で打った数字・英字は半角に戻す。読みに半角の英数字が無ければ (全角を選んだ候補など) そのまま。
-    /// </summary>
-    internal static string NormalizeHalfWidth(string converted, string reading)
-    {
-        var digits = reading.Any(char.IsAsciiDigit);
-        var letters = reading.Any(char.IsAsciiLetter);
-        if (!digits && !letters) return converted;
-        var chars = converted.ToCharArray();
-        for (var i = 0; i < chars.Length; i++)
-        {
-            if (digits && chars[i] is >= '０' and <= '９') chars[i] = (char)(chars[i] - 0xFEE0);
-            else if (letters && chars[i] is >= 'Ａ' and <= 'Ｚ' or >= 'ａ' and <= 'ｚ') chars[i] = (char)(chars[i] - 0xFEE0);
-        }
-        return new string(chars);
     }
 
     /// <summary>
