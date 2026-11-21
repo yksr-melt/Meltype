@@ -12,15 +12,11 @@ import { align, finalKana, toRomaji, toUnits } from "./romaji.js";
 //   2: Backspace で Meltype と同じく、日本語は 1 音 (ka なら 2 文字)、英語と打ちかけの綴りは 1 文字消す
 export const TYPING_VERSION = 2;
 
-// 打ち終わりの英字が、お手本の英語の語の打ちかけか (2 文字以上で、お手本のどれかの語の頭と同じなら英語とみなす)。
-// Meltype は英語の区間なら 1 文字ずつ消すので、お手本に出てくる英語の語で見分ける
+// 打ち終わりが、お手本の英語の語を打ち終えたところか。Meltype は英語の区間なら 1 文字ずつ消すので、お手本に出てくる英語の語で見分ける。
+// 語の打ちかけ (no・me・ma) は見ない。日本語の 1 音と同じ綴りなので、Meltype もかなで見せていて、1 音ずつ消す
 function englishTail(typed, words) {
-  const run = (typed.toLowerCase().match(/[a-z0-9-]+$/) || [""])[0];
-  for (let length = run.length; length >= 2; length -= 1) {
-    const tail = run.slice(-length);
-    if (words.some((word) => word.startsWith(tail))) return true;
-  }
-  return false;
+  const lower = typed.toLowerCase();
+  return words.some((word) => word.length >= 2 && lower.endsWith(word));
 }
 
 function backspace(typed, words) {

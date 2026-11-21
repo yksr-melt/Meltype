@@ -78,6 +78,11 @@ describe("お手本のローマ字と、関係ない入力", async () => {
     assert.equal(replay(keysOf("kyouhagoog<"), reading), "kyouhagoo");
     assert.equal(replay(keysOf("kyouhagoogle<<"), reading), "kyouhagoog");
     assert.equal(replay(keysOf("atta<"), "あった"), "at");
+    // お手本の英語の語の頭と同じ綴りの日本語の 1 音は、日本語として 1 音消す
+    assert.equal(replay(keysOf("kono<"), "このnoteにはれんしゅうのきろくがある。"), "ko");
+    assert.equal(replay(keysOf("game<"), "がめんにならぶmenuからのみものをえらんだ。"), "ga");
+    assert.equal(replay(keysOf("ekima<"), "えきまでのるーとをmapでしらべた。"), "eki");
+    assert.equal(replay(keysOf("kononote<"), "このnoteにはれんしゅうのきろくがある。"), "kononot");
   });
 
   it("版 1 の記録は、Backspace で 1 文字消していたときの決まりで組み立てる", () => {
