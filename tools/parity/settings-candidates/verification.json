@@ -112,7 +112,7 @@
   ],
   "performance_remeasured": false,
   "sha256": {
-    "rust/core/tests/data/upstream-settings-candidates.json": "be18b47ff0d636eeb77f5680f7dd2c171ecc052912709c34f795bccb0701698e",
+    "rust/core/tests/data/upstream-settings-candidates.json": "0d72c24ae68d3747a6d01a82b2463c16f48fbf9dab12271bddb88185ceef1792",
     "rust/core/tests/data/upstream-settings-apps.json": "86f51a63da7ee967177b30f36795dc0d7b29b0b9cd05c9b838f2375d606f85d5",
     "C:/opencode-rust/meltype-target-1.94/release/meltype_native.dll": "b48fbd4c592a4c9be670c2bae6ed3152d8965cd3e5c630be3760ab9850c8a38a",
     "C:/opencode-rust/meltype-target-1.94/release/meltype-tip-worker.exe": "fd7dbc0ff8a3d65f670fd0bfe28beeefa2e2e5663edfca7db598b3fb3aca1ddc",
