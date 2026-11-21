@@ -46,7 +46,8 @@ public sealed partial class CompositionDetector
     private const double ReadableEnglishCost = 0.7;
     // ユーザーが英字に直して覚えた語。同じ読みの日本語の語 (sushi = すし、重み 1) より軽くする
     private const double LearnedEnglishCost = 0.7;
-    // 小文字の 2 文字以下の知っている英単語 (be・pa・on) に足す。ローマ字の 1 音と同じ綴りなので、日本語の途中に切り出されやすい (す|be|を・ろん|pa)。
+    // 小文字の 2 文字以下の知っている英単語 (be・pa・on) に足す。ローマ字の 1 音と同じ綴りなので、辞書にない日本語の語 (すべ・ろんぱ) が
+    // 語にならないかな + 短い英単語 + 語にならないかな (す|be|を・ろん|pa) に割れていた。
     // 大文字を含む語 (AI・Go) は日本語のノードと取り合わないので足さない。覚えた語にも足さない
     private const double ShortEnglishCost = 1;
     // 知らない英字 (ローマ字として読めない所: pwd) 1 文字
