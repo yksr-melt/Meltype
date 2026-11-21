@@ -143,6 +143,7 @@ def provenance(package, files, settings):
     return {"version": 1,
             "repositoryRevision": command(["git", "-C", str(ROOT), "rev-parse", "HEAD"]),
             "repositoryDirty": bool(command(["git", "-C", str(ROOT), "status", "--porcelain"])),
+            "pullRequestHead": os.environ.get("PR_HEAD_SHA") or None,
             "github": {"runId": os.environ.get("GITHUB_RUN_ID"),
                        "runAttempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
                        "runnerImage": os.environ.get("ImageOS"),

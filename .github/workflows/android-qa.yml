@@ -1,8 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 KoheiTakada
 name: Android QA — reproducible device tests
-# Pull Request では流さない。
 on:
+  # Core だけの変更は core.yml のテストと lint.yml の NativeAOT のアナライザーで見るので、ここでは流さない
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'src/Meltype.Core.CApi/**'
+      - '.github/workflows/android-qa.yml'
   workflow_dispatch:
 
 permissions:
