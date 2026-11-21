@@ -183,7 +183,7 @@ internal static class Checks
             if (typed.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー' or >= 'ァ' and <= 'ヺ'))
             {
                 var reading = new string(typed.Select(c => c is >= 'ァ' and <= 'ヶ' ? (char)(c - 0x60) : c).ToArray());
-                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading)).Distinct().ToList();
+                var list = candidates.Lookup(reading).Concat(mozc.Candidates(reading, long.MaxValue)).Distinct().ToList();
                 results.Add(new { typed, expected, kind = "候補", actual = string.Join(" ", list.Take(12)), ok = list.Contains(expected) });
                 Henkan.Reset();
                 continue;
@@ -202,7 +202,7 @@ internal static class Checks
             results.Add(new { typed, expected, kind = "入力", actual, ok = entered == expected || converted == expected });
         }
         // MozcConverter は失敗を null や空の候補で返すので、Mozc なしの結果で通っていないことを確かめる
-        if (mozc.Convert("にほんご") is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
+        if (mozc.ConvertText("にほんご", null) is null) throw new InvalidOperationException("Mozc を起動できないか、Mozc が応答しませんでした");
         File.WriteAllText(output, JsonSerializer.Serialize(results, Json));
     }
 
@@ -329,9 +329,9 @@ internal static class Henkan
     /// </summary>
     public static CompositionTests.Keyboard Keyboard(bool zenzai, Composition.ConversionHistory? history = null, Composition.LanguageMemory? languages = null)
     {
-        // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (Budget を Enable しない)
+        // アプリと同じく Mozc と Zenzai を合わせた変換エンジンを使う。答えが届くまで待つ (LateResults にしない)
         var converter = Mozc.Value is { } engine ? new Composition.HybridConverter(engine, zenzai ? () => Zenzai.Value : null) : null;
-        return new(live: true, history: history, converter: converter, moreCandidates: converter is null ? null : converter.Candidates,
+        return new(live: true, history: history, converter: converter, moreCandidates: converter is null ? null : reading => converter.Candidates(reading, long.MaxValue),
             userDictionary: new Meltype.Composition.UserDictionary(null), languages: languages, translations: Translations.Value)
         { Learning = false };
     }
@@ -419,7 +419,7 @@ internal static class MozcCompare
             var shown = k.Showing ?? "";
             var english = System.Text.RegularExpressions.Regex.Matches(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*").Select(m => m.Value).ToList();
             var reading = System.Text.RegularExpressions.Regex.Replace(shown, "[A-Za-z0-9][A-Za-z0-9._'+#-]*", Placeholder);
-            var clauses = mozc.ConvertClauses(reading) ?? [];
+            var clauses = mozc.ConvertClauses(reading, null) ?? [];
             var text = string.Concat(clauses.Select(c => c.Text));
             var placeholders = System.Text.RegularExpressions.Regex.Count(text, PlaceholderText);
             string whole;

@@ -100,7 +100,7 @@ const Help = [
   '| `/test-jht <SHA> <文> [/ 読み]` | PR のコードで `/jht` | メンテナー |',
   '| `/test-explain <SHA> <キー>` | PR のコードで `/explain` | メンテナー |',
   '| `/release <版>` | 版 (例: `1.2.3`) のタグとリリースの下書きを作り、Windows・Mac・Linux の配布物のビルドを始める。csproj・Info.plist の版が <版> でないか、docs/release-notes/<版>.md が無ければ止める | 管理者 |',
-  '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1` の形) | 管理者 |',
+  '| `/pre-release <版>` | `/release` のプレリリース版 (版は `1.2.3-pre.1`・`1.2.3-rc.1` の形) | 管理者 |',
   '| `/self-assign` | 自分を Issue の Assignees に入れる (担当になる)。`要トリアージ` の間はメンテナーだけ | だれでも |',
   '| `/help` | この一覧 | だれでも |',
   '',
@@ -108,7 +108,7 @@ const Help = [
 ].join('\n');
 
 // /release <版>・/pre-release <版> (issue #665)。管理者 (admin / maintain) だけ。
-//   1. 版の形を確かめる (release: 1.2.3 / pre-release: 1.2.3-pre.1)
+//   1. 版の形を確かめる (release: 1.2.3 / pre-release: 1.2.3-pre.1・1.2.3-rc.1)
 //   2. main の csproj (2 つ)・Info.plist の版が <版> と合うか確かめる (版を上げ忘れた配布を防ぐ: issue #601)
 //   3. タグ v<版> を main の先頭に作る (もうあれば止める)
 //   4. リリースの下書きを作る。本文は main の docs/release-notes/<版>.md (配布物にも同じものを同梱する: issue #1207)。無ければ止める。pre-release は prerelease
@@ -120,8 +120,8 @@ async function releaseCommand(issue, command, version) {
   const pre = command === 'pre-release';
   const permission = await gh('GET', `/collaborators/${event.comment.user.login}/permission`).then(r => r.permission).catch(() => 'none');
   if (!['admin', 'maintain'].includes(permission)) return reply(`\`/${command}\` は管理者 (admin / maintain) だけが使えます。`);
-  const shape = pre ? /^\d+\.\d+\.\d+-pre\.\d+$/ : /^\d+\.\d+\.\d+$/;
-  if (!shape.test(version)) return reply(`版を ${pre ? '`1.2.3-pre.1`' : '`1.2.3`'} の形で書いてください (例: \`/${command} ${pre ? '1.2.3-pre.1' : '1.2.3'}\`)。`);
+  const shape = pre ? /^\d+\.\d+\.\d+-(pre|rc)\.\d+$/ : /^\d+\.\d+\.\d+$/;
+  if (!shape.test(version)) return reply(`版を ${pre ? '`1.2.3-pre.1`・`1.2.3-rc.1`' : '`1.2.3`'} の形で書いてください (例: \`/${command} ${pre ? '1.2.3-pre.1' : '1.2.3'}\`)。`);
   await react('eyes');
   const read = async file => Buffer.from((await gh('GET', `/contents/${file}?ref=main`)).content, 'base64').toString('utf8');
   const mismatches = [];
