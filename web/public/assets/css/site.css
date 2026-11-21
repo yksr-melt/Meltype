@@ -496,6 +496,105 @@ kbd {
   letter-spacing: 0.02em;
 }
 
+/* 5 万ダウンロード記念の帯。ヘッダーの直下に全幅で出す */
+.milestone {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(110deg, var(--pink) 0%, var(--peri) 50%, var(--sky) 100%);
+  color: #fff;
+}
+
+.milestone::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: milestone-shine 4s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes milestone-shine {
+  0%,
+  40% {
+    transform: translateX(-100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.milestone-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.milestone-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 12px;
+  margin: 0;
+  text-align: center;
+  text-shadow: 0 2px 8px rgba(31, 42, 68, 0.25);
+}
+
+.milestone-number {
+  font-family: var(--font-head);
+  font-weight: 900;
+  font-size: clamp(2.2rem, 6vw, 3.4rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.milestone-label {
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: clamp(1.2rem, 3vw, 1.7rem);
+}
+
+.milestone-thanks {
+  flex-basis: 100%;
+  margin-top: 6px;
+  font-size: 0.95rem;
+}
+
+.milestone-spark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  fill: currentColor;
+  animation: milestone-twinkle 1.8s ease-in-out infinite alternate;
+}
+
+.milestone-spark:last-child {
+  animation-delay: 0.9s;
+}
+
+@keyframes milestone-twinkle {
+  from {
+    transform: scale(0.75) rotate(0deg);
+    opacity: 0.7;
+  }
+
+  to {
+    transform: scale(1.1) rotate(20deg);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .milestone-spark {
+    display: none;
+  }
+}
+
 .hero {
   position: relative;
   overflow: hidden;
@@ -560,23 +659,6 @@ kbd {
   flex-wrap: wrap;
   gap: 14px 16px;
   margin-bottom: 28px;
-}
-
-.hero-milestone {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 12px;
-  padding: 6px 16px 6px 12px;
-  border-radius: 999px;
-  background: var(--pink-soft);
-  color: var(--pink-deep);
-  font-size: 0.92rem;
-  line-height: 1.5;
-}
-
-.hero-milestone b {
-  font-family: var(--font-head);
 }
 
 .hero-stats {
@@ -3251,6 +3333,11 @@ em {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  .milestone::after,
+  .milestone-spark {
+    animation: none;
   }
 
   .has-reveal [data-reveal] {
