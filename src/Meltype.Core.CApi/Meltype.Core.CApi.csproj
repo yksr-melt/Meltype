@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
     Meltype.Core を C の関数で呼べるようにするライブラリ。Mac・Linux・Android 版の IME が読み込む。
-    NativeAOT の共有ライブラリにする (mac/build.sh・linux/build.sh・android/tools/build-meltype-native.sh):
+    NativeAOT の共有ライブラリにする (mac/build.sh・native/build-core-linux.sh・android/tools/build-meltype-native.sh):
       dotnet publish src/Meltype.Core.CApi -c Release -r osx-arm64 -p:PublishAot=true -p:NativeLib=Shared
     PublishAot はここには書かない (書くと Windows でのふつうのビルドでも NuGet から AOT のコンパイラを取りに行くため)。
   -->

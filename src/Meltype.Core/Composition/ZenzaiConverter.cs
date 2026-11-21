@@ -29,9 +29,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     private static readonly SearchValues<char> OutputBoundaries = SearchValues.Create("\uEE00\uEE01\uEE02\uEE03\uEE04\uEE05\uEE06\uEE07\uEE08\n");
     private const int StartTimeoutMs = 30000;
     private const int MaxReading = 80;
-    private const int MaxContext = 100;
 
-    // ワーカーで待つ時間。入力は止めないので、CPU だけで計算する PC でも答えが届く長さにする (Space で待つのは ConversionBudget の間だけ)
+    // ワーカーで待つ時間。入力は止めないので、CPU だけで計算する PC でも答えが届く長さにする (Space で待つのは ConversionRequest.Deadline まで)
     private const int DefaultTimeoutMs = 1500;
     private const int MaxCache = 256;
 
@@ -120,8 +119,6 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     /// <summary>一度でも答えたか (ZenzaiHolder が、使えていたあとの失敗を一時的なものと見るのに使う)。</summary>
     public bool HasAnswered => _hasAnswered;
 
-    public ConversionBudget Budget { get; internal set; } = new();
-
     public event Action? ResultReady;
 
     /// <summary>サーバーの起動をバックグラウンドで始める (入力を始める前に呼ぶ)。</summary>
@@ -131,14 +128,13 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         lock (_gate) EnsureStarting();
     }
 
-    public string? Convert(string hiragana) =>
-        ConvertClauses(hiragana) is { Count: > 0 } clauses ? string.Concat(clauses.Select(c => c.Text)) : null;
-
-    public IReadOnlyList<ConversionClause>? ConvertClauses(string hiragana, string? context = null)
+    /// <summary>文脈は、文をまたぐ文章 (<see cref="EngineContext.Passage"/>)。無ければ「。」(文の始まり)。</summary>
+    public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request)
     {
+        var (hiragana, before) = (request.Hiragana, request.Before);
         ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
-        context = string.IsNullOrEmpty(context) ? NeutralContext : context.Length > MaxContext ? context[^MaxContext..] : context;
+        var context = EngineContext.Passage(before) ?? NeutralContext;
         var key = context + "\u0000" + hiragana;
         lock (_gate)
         {
@@ -146,9 +142,9 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             EnsureStarting();
             if (!_ready || _endpoint is null) return null;
         }
-        var request = new LiveRequest(hiragana, context, key);
-        _worker.Submit(request);
-        if (!_worker.Wait(request, Budget.RemainingMs)) return null;
+        var live = new LiveRequest(hiragana, context, key);
+        _worker.Submit(live);
+        if (!_worker.Wait(live, ConversionRequest.RemainingMs(request.Deadline))) return null;
         ThrowWorkerFailure();
         lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
     }

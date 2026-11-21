@@ -272,4 +272,4 @@ inotify
 stat
 stats
 # Issue #2017: 鉱物・天然石の名前 (Fluorite が Flu + おりて に割れる。english-words.txt に無く、頭の英単語 + 日本語の語に割れていた)
-fluorite hematite calcite magnetite rhodochrosite rhodonite sodalite amazonite moonstone sunstone tourmaline morganite tanzanite selenite kryptonite
+fluorite hematite calcite magnetite rhodochrosite rhodonite sodalite amazonite moonstone sunstone tourmaline morganite tanzanite selenite kryptonite bloodstone fluoride
