@@ -61,6 +61,9 @@ internal sealed record CompositionEnv(CompositionDetector Detector, IKanjiConver
     /// <summary>今再生している曲 (曲名・アーティスト。「なう」の候補に出す。issue #1400)。読めない・再生していなければ null。</summary>
     public Func<(string Title, string Artist)?> NowPlaying { get; init; } = () => null;
 
+    /// <summary>Windows に登録されている、別のビルドの Meltype IME の版 (<see cref="Ime.IImeEnvironment.OtherTipVersion"/>。「ばーじょん」の候補に出す)。</summary>
+    public Func<string?> OtherTipVersion { get; init; } = () => null;
+
     /// <summary>
     /// ユーザーが自動の判定を自分で直して確定したとき (F6〜F10 で英字 / かなにした、変換の候補から打ったままの英字・日本語を選んだ)。
     /// 誤判定の報告 (トレイの「直した誤判定を報告...」) に使う。記録を作るだけで、どこにも送らない (issue #284)。

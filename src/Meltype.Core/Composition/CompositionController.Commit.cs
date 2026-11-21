@@ -15,7 +15,7 @@ internal static partial class CompositionController
 {
     /// <summary>今の表示 (ライブ変換が有効なら日本語区間は漢字に変換済み)。</summary>
     private static string CurrentDisplay(CompositionState state, CompositionEnv env, bool final) =>
-        CompositionText.Display(state.Text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish) => LiveConvert(state, env, kana, afterEnglish) : null);
+        CompositionText.Display(state.Text, env, final, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => LiveConvert(state, env, kana, afterEnglish, SegmentBefore(state, shown)) : null);
 
     private static void CommitIfAny(CompositionState state, CompositionEnv env, bool preserveText = false)
     {
@@ -45,7 +45,7 @@ internal static partial class CompositionController
         // 設定「Enter は見えているとおりに確定」が OFF なら、背景の結果が間に合っていなくても Budget の間は答えを待つ
         var text = converting ? string.Concat(state.Clauses.Select(c => c.Text))
             : env.Budget is { Enabled: true } && !env.Settings.EnterCommitsAsShown
-                ? CompositionText.Display(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, env.Converter).Select(c => c.Text)) : kana : null)
+                ? CompositionText.Display(state.Text, env, final: true, env.Settings.LiveConversion ? (kana, afterEnglish, shown) => CountsAsLive(kana) ? string.Concat(ConvertJapaneseSegment(state, env, kana, afterEnglish, SegmentBefore(state, shown), env.Converter).Select(c => c.Text)) : kana : null)
                 : CurrentDisplay(state, env, final: true);
         // 英語の文脈で英字だけに見えていた入力 (hello mata) は、確定するときに判定し直してかなにしない: 見えているとおりに確定する (issue #127)。
         // 文脈がない単独の語 (mine → みね) は、今までどおり確定時の判定に任せる
@@ -144,7 +144,7 @@ internal static partial class CompositionController
     /// <summary>確定した文節を学習する。設定「ユーザー学習を使う」が OFF なら、新しく覚えない (issue #277)</summary>
     private static void LearnClauses(CompositionState state, CompositionEnv env)
     {
-        if (Learning(state, env)) env.Learning.Learn(state.Clauses, ConversionContext(state), CompositionText.LearningContext(state.Text, env));
+        if (Learning(state, env)) env.Learning.Learn(state.Clauses, state.PrecedingText, CompositionText.LearningContext(state.Text, env));
     }
 
     /// <summary>予測変換の候補を確定する。日本語なら覚え直して、次からより前に出す。</summary>

@@ -235,6 +235,9 @@ if (-not $Portable) {
         Copy-Item -LiteralPath ('MeltypeTip.dll', 'MeltypeTip.dll.sha256', 'MeltypeTipImpl.dll', 'MeltypeTipImpl.dll.sha256' | ForEach-Object { Join-Path $root "native\tip\bin\$arch\$_" }) -Destination (Join-Path $tip $arch)
     }
     Copy-Item -LiteralPath (Join-Path $root 'native\tip\Register-Tip.ps1') -Destination $tip
+    # この Meltype IME を同梱した Meltype の版 (タグの無いビルドはコミット ID 付き)。Register-Tip.ps1 が登録先に置き、
+    # 別の版の Meltype の Meltype.exe が「ばーじょん」の候補に出す。DLL には埋め込まない (DLL が同じなら登録し直さないため。MeltypeTip.rc)
+    [IO.File]::WriteAllText((Join-Path $tip 'version.txt'), (Get-Item -LiteralPath (Join-Path $app 'Meltype.exe')).VersionInfo.ProductVersion)
     Copy-Item -LiteralPath (Join-Path $root 'packaging\meltype-ime.ps1') -Destination $app
 }
 }
