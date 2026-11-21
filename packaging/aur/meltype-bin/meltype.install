@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Yukishiro
+#
+# linux/build-deb.sh の postinst・prerm・postrm と同じことをする。
+
+post_install() {
+    if command -v ibus > /dev/null 2>&1; then ibus write-cache --system > /dev/null 2>&1 || true; fi
+    echo "Meltype を入れました。ログアウトしてログインし直してから、入力ソース (IBus) か fcitx5 の設定で Meltype を追加してください。"
+}
+
+pre_upgrade() {
+    pkill -f /opt/meltype/ibus-engine-meltype > /dev/null 2>&1 || true
+}
+
+post_upgrade() {
+    if command -v ibus > /dev/null 2>&1; then ibus write-cache --system > /dev/null 2>&1 || true; fi
+}
+
+pre_remove() {
+    pkill -f /opt/meltype/ibus-engine-meltype > /dev/null 2>&1 || true
+}
+
+post_remove() {
+    if command -v ibus > /dev/null 2>&1; then ibus write-cache --system > /dev/null 2>&1 || true; fi
+}
