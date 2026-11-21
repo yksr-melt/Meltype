@@ -1843,6 +1843,12 @@ internal static class CompositionTests
             ["here"] = "here",
             ["hero"] = "hero",
             ["I fly a kite"] = "I fly a kite",
+            // て の縮まった ちゃ (kit + や にしない)。英単語の後ろの や は英語のまま
+            ["kitya"] = "きちゃ",
+            ["kityatta"] = "きちゃった",
+            ["mityatta"] = "みちゃった",
+            ["catya"] = "catや",
+            ["robotya"] = "robotや",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -6528,6 +6534,23 @@ internal static class CompositionTests
         {
             ("zh", "←"), ("zj", "↓"), ("zk", "↑"), ("zl", "→"),
             ("z/", "・"), ("zu", "ず"), ("puzzle", "puzzle"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void Issue2013_ZArrowAfterKanaIsNotTypo()
+    {
+        // Issue #2013: かなの後ろの zl (→) を、確定のときに前のローマ字と合わせて打ち間違い (hogezo) として ぞ に直さない。
+        // z + 母音 (hogezo) は今までどおり ぞ。
+        foreach (var (typed, expected) in new[]
+        {
+            ("hogezl", "ほげ→"), ("hogezlfuga", "ほげ→ふが"), ("hogezk", "ほげ↑"), ("truezlfalse", "true→false"),
+            ("hogezo", "ほげぞ"),
         })
         {
             var k = new Keyboard();
