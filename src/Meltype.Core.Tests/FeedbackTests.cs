@@ -938,16 +938,16 @@ internal static class LanguageLearningTests
     }
 
     /// <summary>Mozc のように「ばーじょん」を「バージョン」にする変換エンジン (版番号は学習しない)。</summary>
-    private sealed class VersionConverter : IKanjiConverter
+    private sealed class VersionConverter : TestConverter
     {
-        public string? Convert(string reading, string? before) => reading switch
+        public override string? Convert(string reading, string? before) => reading switch
         {
             "ばーじょん" => "バージョン",
             "むかしの" => "昔の",
             "むかしのばーじょん" => "昔のバージョン",
             _ => null,
         };
-        public IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before) => reading switch
+        public override IReadOnlyList<ConversionClause>? ConvertClauses(string reading, string? before) => reading switch
         {
             "むかしのばーじょん" => [new("むかしの", "昔の"), new("ばーじょん", "バージョン")],
             "ばーじょん" => [new(reading, "バージョン")],
@@ -1690,14 +1690,16 @@ internal static class RomajiTypoTests
     }
 
     [Test]
-    public static void SpellCheckerOnlyWord_DoesNotTakeConsonantOfRomajiUnit()
+    public static void ForeignReadings_DoNotBreakEnglishBeforeVowels()
     {
-        // Issue #2029: english-words.txt にしかない語 (tow) が wi の w を取り、残りの i を いる と読んでいた (towいるキンソン)。
+        // Issue #2029: 知らない外来語の読みが高コストで、先頭の一部を英単語 tow にしていた。語全体の読みを辞書に入れ、英単語の候補は消さない。
         // 単位の境目で終わる語 (dot|wo) と、english.txt の語 (word|aru・word|ga) は英語のまま
         foreach (var (typed, expected) in new[]
         {
             ("towirukinnsonn", "とうぃるきんそん"), ("fanntatowirukinnsonn", "ふぁんたとうぃるきんそん"), ("towiki", "とうぃき"), ("towiriamu", "とうぃりあむ"),
             ("dotwo", "dotを"), ("wordaru", "wordある"), ("wordga", "wordが"),
+            ("gridiiyo", "gridいいよ"), ("swapiretai", "swapいれたい"), ("ledaru", "ledある"),
+            ("gridwo", "gridを"), ("swapga", "swapが"), ("ledno", "ledの"),
         })
         {
             var k = new CompositionTests.Keyboard();
