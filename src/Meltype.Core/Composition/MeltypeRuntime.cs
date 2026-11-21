@@ -56,6 +56,7 @@ public sealed class MeltypeRuntime : IDisposable
             TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
             GitHubTitles = () => GitHubTitles,
         };
+        Connect(Detector, _shared);
         Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
         // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
         UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: _userDirectory);
@@ -138,7 +139,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。</summary>
     /// <param name="candidates">読みの変換候補の一覧 (<see cref="HybridConverter.Candidates"/>)。</param>
     /// <param name="readingOf">漢字かな交じりの文の読み (<see cref="HybridConverter.Reading"/>)。</param>
-    public SessionParts SessionParts(IKanjiConverter converter, Func<string, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
+    public SessionParts SessionParts(IKanjiConverter converter, Func<string, long, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
         Action<Correction>? corrected = null)
     {
         var services = _shared with
@@ -155,6 +156,17 @@ public sealed class MeltypeRuntime : IDisposable
             NowPlaying = () => _nowPlaying?.Read(),
             Corrected = corrected,
         };
+    }
+
+    /// <summary>
+    /// 判定器と辞書・学習データをつなぐ (持ち主が作ったときに 1 回)。よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは
+    /// 英語として覚えない。
+    /// </summary>
+    public static void Connect(CompositionDetector detector, CompositionServices services)
+    {
+        if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
+        if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
+        if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
     }
 
     public void Dispose()
