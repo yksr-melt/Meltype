@@ -38,6 +38,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     private readonly HashSet<int> _held = [];
     // 本体が使った押下 (離したこともアプリに通さない)。_gate で守る
     private readonly HashSet<int> _consumed = [];
+    // 本体が使って送り直さなかった修飾キーの押下 (物理キー → 左右を区別しない仮想キー)。離すまで GetAsyncKeyState に表れないので IsDown が見る。_gate で守る
+    private readonly Dictionary<int, int> _consumedModifiers = [];
     // ワークアラウンド (ImeEventType.KeyReleased): 離したことも本体に送る押下。_gate で守る
     private readonly HashSet<int> _releaseFollows = [];
     // 並んでいるキー・クリックの数と、UI スレッドで処理しているか (どちらかなら、後のキー・クリックも並べる)。_gate で守る。
@@ -141,6 +143,7 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         if (altRelease) _alt = 0;
         lock (_gate)
         {
+            if (e.IsUp) _consumedModifiers.Remove(e.PhysicalId);
             if (altRelease) return Enqueue(input with { Event = new ImeKey { Vk = e.Vk, Interrupted = _altInterrupted } });
             if (_waiting > 0 || _busy || _composing || e.IsUp && _releaseFollows.Contains(e.PhysicalId)) return Enqueue(input);
             if (e.IsUp) return UpOutside(e);
@@ -336,7 +339,11 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // 修飾キーは、本体が使った押下でも離したことはアプリに通す。押下がアプリに届いたあとの自動の繰り返し
         // (変換ボックスを出す前から押していた Shift など) を本体が使うと、離したことを止めたときアプリと OS では押したままになり、
         // 打つ文字もクリックもすべて Shift 付きになる。押していないキーを離しても何も起きない
-        if (!VirtualKeys.IsModifier(e.Vk)) lock (_gate) _consumed.Add(e.PhysicalId);
+        lock (_gate)
+        {
+            if (!VirtualKeys.IsModifier(e.Vk)) _consumed.Add(e.PhysicalId);
+            else _consumedModifiers[e.PhysicalId] = GenericModifier(e.Vk) is var generic and not 0 ? generic : e.Vk;
+        }
         // Alt・Win と一緒に押したキー (US 配列の Alt + ` など) を使うと、アプリには修飾キーだけを押したように見えてメニューに移るので、何もしないキーを送る
         if (key.Alt || key.Command) KeyInjector.SendKey(0xE8);
     }
@@ -425,6 +432,8 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             _queue.Clear();
             _waiting = 0;
             _consumed.Clear();
+            // 別のウィンドウ・ロック画面へ移ると、離したことがフックに来ないことがある (押したままにしない)
+            _consumedModifiers.Clear();
         }
         foreach (var input in inputs)
         {
@@ -475,13 +484,15 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
     // 押している修飾キーか。変換中はフックが修飾キーの押下も止めて並べ、本体に聞いてから送り直すので、
     // 送り直すまでは GetAsyncKeyState に表れない (止めたキーは反映されない)。そうしないと、変換中に Shift + / を打つと
     // Shift が離れて見え、? が / (・) になる。GetAsyncKeyState に表れないのは、並べてまだ送り直していない押下 (処理中のものと _queue) だけなので、
-    // それも見る (同じ物理キーの解放が後ろに並んでいれば、離している)。並びが空なら GetAsyncKeyState だけで決まる
+    // それも見る (同じ物理キーの解放が後ろに並んでいれば、離している)。本体が使って送り直さなかった押下も表れないので見る
+    // (見ないと、Shift を押したまま続けて打つと、本体が Shift を使ったあとのキーが Shift なしになる: #1838)
     private bool IsDown(int vk)
     {
         if ((Native.GetAsyncKeyState(vk) & 0x8000) != 0) return true;
         var down = new HashSet<int>();
         lock (_gate)
         {
+            if (_consumedModifiers.ContainsValue(vk)) return true;
             foreach (var input in _processing is { } current ? _queue.Prepend(current) : _queue)
             {
                 if (input.Key is not { } key || key.Vk != vk && GenericModifier(key.Vk) != vk) continue;
