@@ -18,7 +18,9 @@ function cases(output) {
   const list = [];
 
   // 「## 期待する打鍵と変換」の下の「入力 → 期待」の行
-  const section = body.split(/^##\s*期待する打鍵と変換\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
+  // 「## 確かめること」は改名前の見出し (#2165)。改名前に開いた PR の本文がこの見出しのままなので、
+  // 読まないと例が 0 個になり、確かめずに成功する。開いている PR の本文を書き換え終えたら消す
+  const section = body.split(/^##\s*(?:期待する打鍵と変換|確かめること)\s*$/m)[1]?.split(/^##\s/m)[0] ?? '';
   for (const line of section.split('\n')) {
     const match = line.replace(/^\s*[-*]\s*/, '').match(/^(.+?)\s*(?:→|->)\s*(.+)$/);
     if (!match || line.trim().startsWith('<!--')) continue;
