@@ -25,6 +25,19 @@ describe("ローマ字→かな", () => {
     }
   });
 
+  it("Meltype 本体で打てる綴り (c 行・q・wh など) でも打てる", () => {
+    for (const [typed, kana] of [
+      ["caga", "かが"],
+      ["cocoro", "こころ"],
+      ["cyotto", "ちょっと"],
+      ["qo-to", "くぉーと"],
+      ["whi-ru", "うぃーる"],
+      ["kwa", "くぁ"],
+    ]) {
+      assert.equal(finalKana(typed), kana, typed);
+    }
+  });
+
   it("綴りの途中は pending に残す", () => {
     assert.deepEqual(toKana("kyo"), { kana: "きょ", pending: "" });
     assert.deepEqual(toKana("ky"), { kana: "", pending: "ky" });
