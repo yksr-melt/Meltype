@@ -4,7 +4,7 @@
 namespace Meltype.Libraries.Chars;
 
 /// <summary>かな・カタカナ・漢字の文字種の判定と、ひらがな ⇔ カタカナの変換。複数の場所に同じ式を書かないためにまとめた。</summary>
-internal static class KanaChars
+public static class KanaChars
 {
     private const int KatakanaOffset = 0x60;
 

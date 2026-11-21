@@ -11,7 +11,7 @@ namespace Meltype.Composition.Utility;
 /// 調べるのは「リポジトリ + 番号」だけで、打った文字は送らない。結果はこのセッションの間だけ覚え、ファイルには書かない。
 /// 変換をあまり待たせないよう、待つのは <see cref="Timeout"/> まで。非公開のリポジトリは環境変数 MELTYPE_GITHUB_TOKEN のトークンで読む。
 /// </summary>
-public sealed class GitHubIssueTitles
+internal sealed class GitHubIssueTitles
 {
     private sealed class Entry(Task<string?> task, long started)
     {

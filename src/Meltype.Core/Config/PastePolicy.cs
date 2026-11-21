@@ -12,7 +12,7 @@ namespace Meltype.Config;
 /// 文字をキーとして送らない貼り付けなら原理的に起きない (参考: tdesktop#26643、WinCompose#512)。
 /// </summary>
 
-public static class PastePolicy
+internal static class PastePolicy
 {
     public static bool IsQtWindowClass(string? className) =>
     className is { Length: >= 3 } &&

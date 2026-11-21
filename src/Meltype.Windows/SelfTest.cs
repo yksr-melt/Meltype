@@ -63,10 +63,12 @@ internal static class SelfTest
         var detector = CompositionDetector.CreateDefault();
         Check("変換ボックスの英語判定", () =>
         {
-            var text = new CompositionTextState();
-            var env = new TextEnv(detector, new Config.Settings(), null) { Context = () => TextContext.None };
-            foreach (var c in "kyouhagoogle") CompositionText.Append(text, env, c);
-            return CompositionText.Display(text, env, final: false);
+            // フロントと同じく ImeHost に打ったキーを送る (変換エンジンは使わない)
+            var settings = new Config.Settings();
+            var host = new ImeHost(new SelfTestEnvironment(), new SessionParts(detector, new NoConverter(), new CompositionServices()), () => settings);
+            ImeOutput? output = null;
+            foreach (var c in "kyouhagoogle") output = host.Handle(new ImeEvent { Version = ImeHost.Version, Type = ImeEventType.KeyPressed, Key = new ImeKey { Ch = c } });
+            return output?.Result.View?.Text ?? "(表示なし)";
         });
         Check("書き間違い辞書", () => MisspellingDictionary.Load(null).Find("ぶれすれっど")?.Right ?? "(見つからない)");
         Check("補助辞書", () => string.Join(",", CandidateDictionary.Load(null).Lookup("はし")));
@@ -202,5 +204,21 @@ internal static class SelfTest
             try { System.IO.Directory.Delete(Directory, recursive: true); }
             catch (IOException) { }
         }
+    }
+
+    private sealed class SelfTestEnvironment : IImeEnvironment
+    {
+        public Config.InputMode? InputMethod => null;
+
+        public SnippetStore Snippets { get; } = new(null);
+
+        public string? ClipboardText => null;
+
+        public string? OtherTipVersion => null;
+    }
+
+    private sealed class NoConverter : IKanjiConverter
+    {
+        public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request) => null;
     }
 }

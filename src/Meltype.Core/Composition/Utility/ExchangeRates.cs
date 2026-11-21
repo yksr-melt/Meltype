@@ -9,7 +9,7 @@ namespace Meltype.Composition.Utility;
 /// 通貨の換算に使う為替レート (issue #342)。欧州中央銀行 (ECB) の参照レートを、
 /// リリースのときに tools/make-exchange-rates.mjs で dictionaries/exchange-rates.txt に書いて同梱する。使うときにネットにはつながない。
 /// </summary>
-public static class ExchangeRates
+internal static class ExchangeRates
 {
     /// <summary>レートの表。Date は ECB のレートの日付、Rates は 1 ユーロあたりの各通貨の額 (EUR は 1)。</summary>
     public sealed record Snapshot(DateOnly Date, IReadOnlyDictionary<string, decimal> Rates)
