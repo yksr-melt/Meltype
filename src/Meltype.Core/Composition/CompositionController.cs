@@ -183,7 +183,7 @@ internal static partial class CompositionController
         var consumed = Handle(state, env, key);
         if (!releaseFollows) HandleRelease(state, env, key.Vk);
         Settle(state, env);
-        return Result(state, env, consumed);
+        return CompositionOutput.Result(state.Out, env, consumed && !state.Out.PassedCurrent, env.Settings, typed: !VirtualKeys.IsModifier(key.Vk));
     }
 
     /// <summary>ワークアラウンド: releaseFollows を付けて押したキーを離した (親指シフトの親指キー・中指NICOLA のシフトのキー)。</summary>

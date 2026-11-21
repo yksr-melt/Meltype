@@ -381,8 +381,8 @@ internal static class ImeSession
         // 補助面の文字 (絵文字など) は char に入らないので、未確定の内容を確定してからアプリに通す
         if (key.Ch >= 0x10000) return CommitForPassThrough(state, env);
         var result = ComposeKey(state, env, vk, key.Ch > 0 ? (char)key.Ch : null, key.Shift, key.Ctrl, key.Alt, key.Command, key.ReleaseFollows);
-        // アプリに通したキーはキャレットを動かすかもしれない (Core が通すと決めたので、フロントからは送られてこない)
-        if (!result.Consumed) CaretMoved(state, vk, key.Ctrl);
+        // 修飾キーの押下だけではキャレットは動かない。
+        if (!result.Consumed && !VirtualKeys.IsModifier(vk)) CaretMoved(state, vk, key.Ctrl);
         return result;
     }
 
