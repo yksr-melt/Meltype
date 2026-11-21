@@ -137,7 +137,7 @@ public sealed partial class CompositionDetector
     /// <param name="englishSentence">キャレットの前が英文 (空白で区切った英単語が 2 語以上続いて空白で終わる: "I want ")。
     /// 日本語の文の中の英単語 (GitHub の) より強い英語の根拠として扱う。</param>
     /// <param name="reasons">渡したら、区切りを選んだ理由を足す (確定のログ用。issue #1644)。文字列にするのはログに書くときだけ。</param>
-    public IReadOnlyList<CompositionSegment> Segment(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
+    internal IReadOnlyList<CompositionSegment> Segment(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish = null, bool? followingEnglish = null,
         bool manual = false, bool englishSentence = false, bool kanaInput = false, List<Func<string>>? reasons = null) =>
         SegmentAlternatives(learning, units, pending, precedingEnglish, followingEnglish, manual, englishSentence, kanaInput, 1, reasons)[0];
 
@@ -145,7 +145,7 @@ public sealed partial class CompositionDetector
     /// <see cref="Segment"/> の区切りと、その別案 (軽い順に count 案まで)。先頭は <see cref="Segment"/> と同じ。
     /// 別案は、ラティスの上位案と、打った英字をすべてローマ字として読んだ案 (botto → ぼっと)。記号の入った語は別案を出さない。
     /// </summary>
-    public IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentAlternatives(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish,
+    internal IReadOnlyList<IReadOnlyList<CompositionSegment>> SegmentAlternatives(bool? learning, IReadOnlyList<CompositionUnit> units, string pending, bool? precedingEnglish,
         bool? followingEnglish, bool manual, bool englishSentence, bool kanaInput, int count, List<Func<string>>? reasons = null)
     {
         var prepared = Prepare(units);
@@ -173,7 +173,7 @@ public sealed partial class CompositionDetector
     /// <summary>
     /// 英語の候補を軽くして区切り直した結果 (変換の候補に、日本語にした語の英語を含む区切り midika → midiか を出すのに使う)。
     /// </summary>
-    public IReadOnlyList<CompositionSegment> SegmentLeaningEnglish(bool? learning, IReadOnlyList<CompositionUnit> units)
+    internal IReadOnlyList<CompositionSegment> SegmentLeaningEnglish(bool? learning, IReadOnlyList<CompositionUnit> units)
     {
         var prepared = Prepare(units);
         return FindSpansByReading(prepared, learning, units, "", null, null, false, false, false, LeaningEnglishBias);

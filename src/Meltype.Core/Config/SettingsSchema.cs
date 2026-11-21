@@ -18,7 +18,7 @@ namespace Meltype.Config;
 /// Linux 版の設定画面 (linux/meltype-settings) も、この schema から画面を組み立てる。
 /// Settings の型と、設定画面に出す名前・説明・分類 (DisplayName・Description・Category) から、起動のたびに作る。
 /// </summary>
-public static class SettingsSchema
+internal static class SettingsSchema
 {
     public const string FileName = "config.schema.json";
 
