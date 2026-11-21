@@ -47,6 +47,7 @@ internal sealed class TipServer : IDisposable
         _composition = composition;
         _createHost = createHost;
         composition.ConversionReady += _conversion.Notify;
+        composition.Focus.TaskbarMenuFocusChanged += OnTaskbarMenuFocusChanged;
     }
 
     private readonly ConversionSignal _conversion = new();
@@ -569,6 +570,16 @@ internal sealed class TipServer : IDisposable
     /// <summary>DLL の TextService::kAltKey。wParam は仮想キーコード、lParam は AltFlags。</summary>
     private const uint AltKeyMessage = 0x8000 + 2;
 
+    // TextService::kTaskbarMenuFocus。Win+X のメニューは Win32 のメニューフラグを立てず、UI Automation で分かる。
+    private const uint TaskbarMenuFocusMessage = 0x8000 + 3;
+
+    // thread はフォーカスのある HWND のスレッド。キーを処理する TIP のメッセージ用ウィンドウへ送る。
+    private static void OnTaskbarMenuFocusChanged(uint thread, IntPtr focus)
+    {
+        if (MessageWindow(thread) is { } target)
+            Native.PostMessageW(target, TaskbarMenuFocusMessage, IntPtr.Zero, focus);
+    }
+
     [Flags]
     private enum AltFlags
     {
@@ -750,6 +761,7 @@ internal sealed class TipServer : IDisposable
 
     public void Dispose()
     {
+        _composition.Focus.TaskbarMenuFocusChanged -= OnTaskbarMenuFocusChanged;
         // _stop は Dispose しない (受け付けの待ち・つながりの処理が、止まる途中でまだ Token を読むため)
         _stop.Cancel();
     }

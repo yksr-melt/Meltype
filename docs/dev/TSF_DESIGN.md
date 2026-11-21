@@ -39,9 +39,11 @@ impl を更新した後の確認では、入力先アプリの再起動は要り
 
 自動開閉の検証は次で行えます。短時間テスト画面が前面に出ます。Windows の実際の TSF コンパートメントと通常欄・パスワード欄を使い、プログラムからの開閉は明示的な切り替え (`ModeToggleRequested`) として送らず、タスクバーのボタンでは 1 回ずつ送ることを確認します。パイプ通信だけを記録用に置き換えており、通常の Meltype 本体・設定・学習データには接続しません。前面に出せない場合は終了コード 77 でスキップします。
 
+同じテストで、タスクバーのメニューフォーカスを知らせる通知を TIP に送り、英数字と Space をメニューに通すこと、フォーカスが変わった後と閉じる通知の後は通常の入力に戻ることも確かめます。UI Automation による検出や、通知が打鍵に間に合うかはこのテストでは確かめられません。
+
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File native/tip/tests/build-mode-indicator-test.ps1
-native/tip/bin/tests/ModeIndicatorEvents.exe
+powershell -NoProfile -ExecutionPolicy Bypass -File native/tip/tests/build-input-event-test.ps1
+native/tip/bin/tests/InputEvents.exe
 ```
 
 `--tip-e2e` の制約: Windows は、人のキーボード操作がしばらく無い状態だと、プログラムが送り込んだキー (SendInput) も、TSF のキー処理を直接呼んだキー (ITfKeystrokeMgr) も、IME に渡さない。
@@ -142,6 +144,9 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
   元の欄をすぐに編集できず `Password` の通知が先になる場合は、元の欄に表示済みの文字を残し、編集できるようになった時点で TSF の変換だけを終了する。
   `IS_PRIVATE` のみを受け取った欄では、`Private` を送って学習を抑止し、変換は継続する。
 - Meltype.exe が動いていない・一時停止中・動作モードが Meltype IME でない・アプリ別設定で OFF のアプリ (応答の `state.handlesInput` が false)
+- タスクバーの XAML メニュー (Win+X など) にフォーカスしているときの、修飾キー (Shift を含む) なしで入力される英数字・記号 (ASCII の `!` から `~` の範囲) と Space。Space を入力モードのキーに割り当てていても、メニューに通す。
+  Win32 のメニューフラグが立たないため、Meltype.exe の `FocusInspector` が UI Automation でメニューのフォーカスを検出し、`TipServer` がフォーカスの HWND を、その HWND のスレッドの TIP に通知する (閉じたら 0)。
+  TIP はフォーカスのルート HWND が前面ウィンドウと一致し、フォーカス自体も通知時と一致する間、キーを Windows に通す。
 
 ## 通信
 

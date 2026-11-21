@@ -28,6 +28,7 @@ public sealed class FocusInspector : IDisposable
     private FocusInfo _info => _state.Info;
     private string? _loggedDescription;
     private (string Description, Rectangle? Bounds)? _lastTextInput;
+    private uint _taskbarMenuThread;
 
     /// <summary>
     /// 別の入力欄 (パスワード以外) にフォーカスが移った (このクラスのスレッドから呼ばれる)。入力モード (あ / A) の表示に使う。
@@ -36,6 +37,10 @@ public sealed class FocusInspector : IDisposable
 
     /// <summary>フォーカスが入力欄でない所・パスワード欄に移ったと分かったとき (このクラスのスレッドから呼ばれる)。引数は理由。</summary>
     public event Action<string>? CaptureLost;
+
+    // タスクバーのメニューでキーを受け取る HWND と、その HWND のスレッド (キーを処理する TIP のスレッド)。
+    // メニューから出たら、前に知らせたスレッドへフォーカスを 0 で通知する (閉じたメニューの HWND からはスレッドを求められないため、スレッドで覚える)。
+    internal event Action<uint, IntPtr>? TaskbarMenuFocusChanged;
 
     public FocusInspector()
     {
@@ -346,8 +351,18 @@ public sealed class FocusInspector : IDisposable
     {
         // 連続したフォーカス変更は、最新の 1 回だけ調べる。
         if (sequence != Interlocked.Read(ref _focusSequence)) return;
-        var info = Inspect(out var affinityWindow);
+        var info = Inspect(out var affinityWindow, out var taskbarMenuFocus);
+        if (sequence == Interlocked.Read(ref _focusSequence)) PublishTaskbarMenuFocus(taskbarMenuFocus);
         ApplyFocus(sequence, info, affinityWindow);
+    }
+
+    private void PublishTaskbarMenuFocus(IntPtr focus)
+    {
+        var thread = focus == IntPtr.Zero ? 0 : Native.GetWindowThreadProcessId(focus, out _);
+        if (_taskbarMenuThread != 0 && _taskbarMenuThread != thread)
+            TaskbarMenuFocusChanged?.Invoke(_taskbarMenuThread, IntPtr.Zero);
+        _taskbarMenuThread = thread;
+        if (thread != 0) TaskbarMenuFocusChanged?.Invoke(thread, focus);
     }
 
     private void ApplyFocus(long sequence, FocusInfo info, IntPtr affinityWindow)
@@ -433,9 +448,10 @@ public sealed class FocusInspector : IDisposable
         className is not null && (className.Contains("autocomplete", StringComparison.OrdinalIgnoreCase) ||
             className.Contains("OmniLinkItem", StringComparison.Ordinal) || className == "PopupRowContentView");
 
-    private FocusInfo Inspect(out IntPtr affinityWindow)
+    private FocusInfo Inspect(out IntPtr affinityWindow, out IntPtr taskbarMenuFocus)
     {
         affinityWindow = IntPtr.Zero;
+        taskbarMenuFocus = IntPtr.Zero;
         try
         {
             _inspectedForegroundBefore = _inspectedForeground;
@@ -452,6 +468,8 @@ public sealed class FocusInspector : IDisposable
             if (Input.ForegroundTracker.TypingAllowedWindows.ContainsKey(_inspectedForeground) &&
                 Input.ForegroundTracker.DirectInputControls.ContainsKey(new IntPtr(element.NativeWindowHandle))) return new FocusInfo(false, false, null, "Meltype の画面 (横取りしない欄)");
             var type = element.ControlType;
+            if (type is UiAutomation.ControlTypeMenu or UiAutomation.ControlTypeMenuItem && IsFocusedTaskbarElement(element))
+                taskbarMenuFocus = _inspectedFocus;
             var description = $"{ControlTypeName(type)} \"{Trim(element.Name)}\" ({element.ClassName})";
             if (element.IsPassword) return new FocusInfo(true, true, element.Bounds, description);
 
@@ -542,6 +560,17 @@ public sealed class FocusInspector : IDisposable
             affinityWindow = IntPtr.Zero;
             return new FocusInfo(false, false, null, $"確認できない: {ex.GetType().Name}");
         }
+    }
+
+    private bool IsFocusedTaskbarElement(UiAutomation.Element element)
+    {
+        if (_inspectedFocus == IntPtr.Zero) return false;
+        var name = new char[32];
+        var length = Native.GetClassName(_inspectedForeground, name, name.Length);
+        if (name.AsSpan(0, length) is not ("Shell_TrayWnd" or "Shell_SecondaryTrayWnd")) return false;
+        var thread = Native.GetWindowThreadProcessId(_inspectedForeground, out var process);
+        return thread != 0 && element.ProcessId == process && Native.GetForegroundWindow() == _inspectedForeground &&
+            FocusedWindow(_inspectedForeground) == _inspectedFocus;
     }
 
     private const int ControlTypeGroup = 50026;

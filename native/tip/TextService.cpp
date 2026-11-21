@@ -73,8 +73,9 @@ bool IsModifier(UINT vk) {
 
 bool KeyDown(int vk) { return (GetKeyState(vk) & 0x8000) != 0; }
 
-// このスレッドでメニューを開いている (Win+X のメニュー・右クリックのメニュー・メニューバーなど: issue #862)。
-// メニューの間に打つキーはメニューのアクセスキー (Win+X の U など) なので、入力欄の IME として受け取らない
+// このスレッドで Win32 のメニューを開いている (右クリックのメニュー・メニューバーなど: issue #862)。
+// メニューの間に打つキーはアクセスキーなので、入力欄の IME として受け取らない。
+// XAML のメニューはこのフラグを立てないため、別途 UI Automation の通知で調べる。
 bool InMenuMode() {
     GUITHREADINFO info = {sizeof(info)};
     return GetGUIThreadInfo(GetCurrentThreadId(), &info) &&
@@ -867,6 +868,10 @@ LRESULT CALLBACK TextService::MessageWindowProc(HWND window, UINT message, WPARA
         self->HandleAltKey(static_cast<UINT>(wParam), static_cast<UINT>(lParam));
         return 0;
     }
+    if (message == kTaskbarMenuFocus && self) {
+        self->taskbarMenuFocus_ = reinterpret_cast<HWND>(lParam);
+        return 0;
+    }
     return DefWindowProcW(window, message, wParam, lParam);
 }
 
@@ -884,6 +889,7 @@ void TextService::DestroyMessageWindow() {
         DestroyWindow(window_);
         window_ = nullptr;
     }
+    taskbarMenuFocus_ = nullptr;
     // worker は this や TSF に触れない。DLL を解放する前に通信の終わりを待つ
     if (conversionWait_.valid()) {
         conversionWait_.wait();
@@ -1045,6 +1051,17 @@ bool TextService::WouldEat(ITfContext* context, UINT vk, LPARAM lParam, wchar_t&
     ch = 0;
     if (disabled_ || vk >= 256) return false;
     if (IsModifier(vk) && !CapturesKey(vk, lParam)) return false;
+    // タスクバーの XAML メニュー (Win+X など) は Win32 のメニューフラグを立てないので、UI Automation の通知で調べる (#2000)。
+    // 通知時と同じ入力先にいる間だけ、修飾キーなしの文字キーと Space をメニューへ渡す。
+    // Space を入力モードのキーに割り当てていてもメニューを優先するため、CapturesKey より前で調べる。
+    // タスクバーには変換中の文字が無いので、ここで返しても ResumeOrCommit などの後始末は要らない
+    // (このスレッドの前の入力欄で変換中だった文字は、フォーカスが移ったときに OnSetFocus で確定している)。
+    if (taskbarMenuFocus_ && GetForegroundWindow() == GetAncestor(taskbarMenuFocus_, GA_ROOT) && GetFocus() == taskbarMenuFocus_ &&
+        !KeyDown(VK_SHIFT) && !KeyDown(VK_CONTROL) && !KeyDown(VK_MENU) && !KeyDown(VK_LWIN) && !KeyDown(VK_RWIN) &&
+        (static_cast<ULONG_PTR>(lParam) & (1u << 29)) == 0) {
+        const wchar_t menuKey = CharOf(vk, lParam);
+        if (vk == VK_SPACE || (menuKey >= L'!' && menuKey <= L'~')) return false;
+    }
     // アプリが確定した打ちかけの文字があれば、このキーの前に、変換中に戻すか確定したことにする
     ResumeOrCommit(context);
     // VK_PACKET: ほかのソフト (パスワード管理・AutoHotkey など) が送り込んだ文字。送り直せないので受け取らずに通す。
