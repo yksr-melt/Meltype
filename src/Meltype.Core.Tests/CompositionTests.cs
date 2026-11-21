@@ -2241,6 +2241,37 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2003_SingleKanaEnglishWordBeforeParticle_IsJapanese()
+    {
+        // #2003: hi は ひ と同じ綴りの英単語で、ひの が hiの になっていた。1 文字の日本語の語は英単語より重く、付属語は切り替えを数えなかった。
+        foreach (var (typed, expected) in new[]
+        {
+            ("hinochikakuniatta", "ひのちかくにあった"),
+            ("hino", "ひの"),
+            // 英単語だけなら英語のまま。2 音以上の英単語の後ろの付属語も英語のまま
+            ("hi", "hi"),
+            ("githubno", "githubの"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void ConversionAlternatives_KeepRealEnglishJapaneseAmbiguity()
+    {
+        var text = new CompositionTextState();
+        var env = TestSupport.Env(Detector);
+        foreach (var c in "midigaii") CompositionText.Append(text, env, c);
+        var alternatives = CompositionText.ConversionSegmentAlternatives(text, env, 4);
+        Assert.True(alternatives.Any(a => a.Any(s => s.IsEnglish && s.Raw == "midi")), "英単語 midi の区切り");
+        Assert.True(alternatives.Any(a => a.All(s => !s.IsEnglish)), "日本語の読みの区切り");
+        // ha|し のように、日本語の音を偶然の英単語にした区切りは、この QA の前提にしない。
+    }
+
+    [Test]
     public static void Issue1132_ShortEnglishThenJapanese()
     {
         // 短い英単語の後ろが読める日本語でも、#537 の補正で全文英字に戻っていた。

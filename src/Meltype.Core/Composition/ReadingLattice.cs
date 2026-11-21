@@ -184,6 +184,16 @@ public sealed partial class CompositionDetector
             return count;
         }
 
+        double ParticleBridgeCost(LatticeEdge edge)
+        {
+            var word = text[edge.Start..edge.End];
+            if (!edge.English || !word.All(char.IsAsciiLetterLower) || Memory?.Get(word, learning) == true) return 0;
+            // 助詞の前では、同じ綴りの日本語の語より英単語の生起コストが軽い分だけ補う。
+            // hi=ひ は 1.5-1=0.5、ha=は は 0.8-1<0 なので 0。語の長さや特定の綴りでは分けない。
+            var kana = _romaji.ConvertLenient(word, final: true);
+            return RomajiTypoCorrector.CommonWordCost(kana) is { } cost ? Math.Max(0, cost - KnownEnglishCost) : 0;
+        }
+
         // position の英字が、次の文字と同じ子音を重ねたもの (tt の t = っ)
         bool DoubledAt(int position) => position + 1 < length && char.IsAsciiLetter(text[position]) && char.ToLowerInvariant(text[position + 1]) == char.ToLowerInvariant(text[position]);
 
@@ -233,6 +243,8 @@ public sealed partial class CompositionDetector
                 if (state.Side == Side.Sentence) step += SentenceSwitchCost;
                 // 3 文字以上の英単語の後ろの、助詞と同じかなで始まる語 (java|のこ・java|でかく) も、助詞からの切り替えと同じ重みにする
                 // (日本語の道だけが の|こ を のこ にまとめられて、英語が負ける。so|ですか・ma|のなか のような 2 文字の語は除く)
+                // 助詞への接続を無料にすることで、同じ綴りの日本語との生起コストの差まで消さない。
+                else if (state.IsEnglish && edge.Particle) step += ParticleBridgeCost(from.Edge);
                 else if (state.IsEnglish && !edge.Particle &&
                          !(edge.Kana.Length > 1 && NounParticles.Contains(edge.Kana[..1]) && from.Edge.English && from.Edge.End - from.Edge.Start >= 3)) step += SwitchCost;
                 // 前の英語の文脈からの切り替えは、英語の語から始めた道も最初の日本語で数える (hello + sushi|が を すしが と同じ重さの差で比べる)
