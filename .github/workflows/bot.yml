@@ -1,7 +1,7 @@
 # Meltype の GitHub bot。
 #   Issue を作ったとき:「要トリアージ」を付ける。Issue を作った・直したとき: 誤判定の報告なら最新のコードで打ってみて結果を返す。
 #   コメントの行の先頭のコマンド (1 つのコメントに 1 つ。/repro だけは複数行):
-#     だれでも: /repro /explain /ca /jht /help
+#     だれでも: /repro /explain /ca /jht /help (/learn は /repro・/ca と同じコメントに書き、先に学習させる手順)
 #     メンテナー (PR のみ): /repro <SHA> /test /pack /test-jht /test-explain (どれも 1 語目に確かめた commit の SHA (40 桁)。PR の head と違えば動かさない)
 #       /repro <SHA> は PR・PR の前 (main との merge base)・main の 3 つの commit で打って比べる
 #     管理者: /release <版> /pre-release <版> (コメントの 1 行目だけ。タグとリリースの下書きを作り、配布物のビルドを始める)
@@ -182,7 +182,9 @@ jobs:
             foreach ($r in ($env:REPROS | ConvertFrom-Json)) {
               $build = if ($i -gt 0) { '--no-build' }
               New-Item -ItemType Directory -Force "results/$i" | Out-Null
-              dotnet run --project $tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" | Out-File "results/$i/repro-$($v.name).json" -Encoding utf8
+              # /learn の手順 (学習に対応する前の版は --learn を読まない。結果に learned が無いことで report が見分ける)
+              $learn = @($r.learn | Where-Object { $_ } | ForEach-Object { '--learn'; $_ })
+              dotnet run --project $tests -c Release $build -- --repro "$($r.keys)" "$($r.last)" @learn | Out-File "results/$i/repro-$($v.name).json" -Encoding utf8
               $i++
             }
           }

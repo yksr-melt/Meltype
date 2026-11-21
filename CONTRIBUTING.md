@@ -184,7 +184,7 @@ Meltype の日英判定・変換は手元の端末の中で行い、クラウド
 <img src="docs/images/headings/contributing/05.svg" alt="bot のコマンド" height="53"><br>
 
 
-Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub Actions で実行して結果をコメントします。1 つのコメントに書けるコマンドは 1 つです。`/repro` だけは 1 行に 1 つずつ、10 個まで書けます。
+Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub Actions で実行して結果をコメントします。1 つのコメントに書けるコマンドは 1 つです。`/repro` だけは 1 行に 1 つずつ、10 個まで書けます。`/learn` は `/repro`・`/ca` と同じコメントに書きます。
 
 | コマンド | すること | 使える人 |
 |---|---|---|
@@ -192,10 +192,18 @@ Issue・Pull Request のコメントの行の先頭に書くと、bot が GitHub
 | `/repro <SHA> <打ったキー> [space\|enter\|none]` | Pull Request の前・Pull Request・main のコードで打ち、Pull Request で結果が変わったかを返す | メンテナー |
 | `/explain <打ったキー>` | 英数状態の検知での 1 文字ずつの判定理由 | だれでも |
 | `/ca <打ったキー>` | Space で変換して、文節の区切りと最初の文節の候補 (9 件まで) を出す (最新のコードと最新のリリース) | だれでも |
+| `/learn <打ったキー> [→ <確定した語>]` | 同じコメントの `/repro`・`/ca` の前に、別の入力欄で打って確定し、学習させる。確定した語を書くと、Space で変換して候補から選ぶ。5 行まで | だれでも |
 | `/test <SHA>` | Pull Request のコードでテストを流す | メンテナー |
 | `/pack <SHA>` | Pull Request のコードで Windows のテスト版の zip を作る | メンテナー |
 | `/self-assign` | 自分を Issue の Assignees に入れる (担当になる) | だれでも |
 | `/help` | コマンドの一覧 | だれでも |
+
+学習した後で起きる誤変換は、`/learn` で先に学習させてから試します。例えば、`niti` を （日） と確定した後に `26niti` が 26（日） になるかは、次のように書きます。最新のリリースが学習に対応していなければ、その版は学習させずに打ちます。
+
+```
+/learn niti → （日）
+/repro 26niti space
+```
 
 `/repro`・`/test`・`/pack` の `<SHA>` は、中身を確かめた commit の SHA (40 桁) です。PR の今の head と違えば動かしません。
 
