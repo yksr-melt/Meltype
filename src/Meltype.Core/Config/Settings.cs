@@ -521,11 +521,11 @@ public sealed class Settings
     public CompositionTheme CompositionTheme { get; set; } = CompositionTheme.Dark;
 
     [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 背景"), Platforms(Platform.Windows),
-     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。")]
+     Description("「変換ボックスの色」が「カスタム」のときの背景色を #RRGGBB で書きます。背景と文字のどちらかが空なら、既定のダーク配色で表示します。")]
     public string CompositionCustomBackColor { get; set; } = "#202228";
 
     [Category("9. 表示"), DisplayName("変換ボックスのカスタムの色: 文字"), Platforms(Platform.Windows),
-     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。")]
+     Description("「変換ボックスの色」が「カスタム」のときの文字の色を #RRGGBB で書きます。案内の文字・選んでいる候補の目印・下線もこの色で描きます。背景と文字のどちらかが空なら、既定のダーク配色で表示します。")]
     public string CompositionCustomTextColor { get; set; } = "#FFFFFF";
 
     [Category("9. 表示"), DisplayName("変換ボックスの不透明度"), Platforms(Platform.Windows),

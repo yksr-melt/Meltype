@@ -189,27 +189,27 @@ internal sealed class SettingsForm : Form, IMessageFilter
             (grid.IsCurrentCellInEditMode && grid.CurrentCellAddress == new Point(e.ColumnIndex, e.RowIndex)))
             return;
 
+        // Flat の標準ボタンを描くと明るい背景が付く。セルの背景と値を描き、矢印だけを足す。
+        e.Paint(e.ClipBounds, e.PaintParts & ~DataGridViewPaintParts.ContentBackground);
+        e.Handled = true;
+
         var cell = e.CellBounds;
-        var width = Math.Min(SystemInformation.HorizontalScrollBarThumbWidth, cell.Width - 4);
-        // Flat のボタンのクリック範囲は、行を高くしても文字の高さ + 4 ピクセルまで。
+        // WinForms のクリック範囲に合わせる。横は罫線 1・左右の余白 3 ずつ・隙間 1、
+        // 縦は罫線 1・上下の余白 1 ずつを除く。ボタンの高さは文字の高さ + 4 まで。
+        var width = Math.Min(SystemInformation.HorizontalScrollBarThumbWidth, cell.Width - 8);
         var height = Math.Min(TextRenderer.MeasureText(graphics, " ", style.Font ?? grid.Font).Height + 4, cell.Height - 3);
-        if (width < 7 || height < 7) return;
-        // 表の Flat な選択欄はシステム色で矢印を描く。クリック判定と値の描画を残し、ボタンの部分だけ重ねる。
+        if (width < 5 || height < 3) return;
         var x = grid.RightToLeft == RightToLeft.Yes ? cell.Left + 2 : cell.Right - width - 2;
         var button = new Rectangle(x, cell.Top + 1, width, height);
-        e.Paint(e.ClipBounds, e.PaintParts);
         var state = graphics.Save();
         graphics.SetClip(Rectangle.Intersect(e.ClipBounds, button), System.Drawing.Drawing2D.CombineMode.Intersect);
         var selected = (e.PaintParts & DataGridViewPaintParts.SelectionBackground) != 0 &&
             (e.State & DataGridViewElementStates.Selected) != 0;
-        using var background = new SolidBrush(selected ? style.SelectionBackColor : style.BackColor);
         using var arrow = new Pen(selected ? style.SelectionForeColor : style.ForeColor);
-        graphics.FillRectangle(background, button);
         var center = new Point(button.Left + button.Width / 2, button.Top + button.Height / 2);
         var size = Math.Max(2, button.Width / 5);
         graphics.DrawLines(arrow, new Point[] { new(center.X - size, center.Y - 1), new(center.X, center.Y + size - 1), new(center.X + size, center.Y - 1) });
         graphics.Restore(state);
-        e.Handled = true;
     }
 
     protected override void OnHandleCreated(EventArgs e)
