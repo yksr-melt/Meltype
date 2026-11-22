@@ -191,10 +191,12 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
         var cell = e.CellBounds;
         var width = Math.Min(SystemInformation.HorizontalScrollBarThumbWidth, cell.Width - 4);
-        if (width < 7 || cell.Height < 7) return;
+        // Flat のボタンのクリック範囲は、行を高くしても文字の高さ + 4 ピクセルまで。
+        var height = Math.Min(TextRenderer.MeasureText(graphics, " ", style.Font ?? grid.Font).Height + 4, cell.Height - 3);
+        if (width < 7 || height < 7) return;
         // 表の Flat な選択欄はシステム色で矢印を描く。クリック判定と値の描画を残し、ボタンの部分だけ重ねる。
         var x = grid.RightToLeft == RightToLeft.Yes ? cell.Left + 2 : cell.Right - width - 2;
-        var button = new Rectangle(x, cell.Top + 1, width, cell.Height - 3);
+        var button = new Rectangle(x, cell.Top + 1, width, height);
         e.Paint(e.ClipBounds, e.PaintParts);
         var state = graphics.Save();
         graphics.SetClip(Rectangle.Intersect(e.ClipBounds, button), System.Drawing.Drawing2D.CombineMode.Intersect);
@@ -551,9 +553,9 @@ internal sealed class SettingsForm : Form, IMessageFilter
             table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
             foreach (var property in category)
             {
-                if (CreateBinding(property) is not { } binding) continue;
                 var name = property.GetCustomAttribute<DisplayNameAttribute>()?.DisplayName ?? property.Name;
                 var description = property.GetCustomAttribute<DescriptionAttribute>()?.Description ?? "";
+                if (CreateBinding(property, name, description) is not { } binding) continue;
                 var label = new Label { Text = name, AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 6) };
                 // スイッチには見出しの文字が無いので、ナレーターには項目名で読ませる
                 binding.Control.AccessibleName = name;
@@ -582,7 +584,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
     }
 
     /// <summary>項目の種類に合わせた部品を作る。</summary>
-    private Binding? CreateBinding(PropertyInfo property)
+    private Binding? CreateBinding(PropertyInfo property, string name, string description)
     {
         var type = property.PropertyType;
         if (property.Name == nameof(Settings.ToggleShortcuts))
@@ -639,6 +641,9 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 _ => Color.White,
             };
             var panel = ColorEditor(fallback, out var text);
+            // プレースホルダーは WinForms の固定の灰色で描かれ、暗い入力欄では読みにくい。
+            if (_darkMode) ShowHelpFor(text, name, description);
+            else text.PlaceholderText = "空なら既定の色";
             // カスタムの色は「変換ボックスの色」がカスタムのときだけ使うので、色を決めたらカスタムにする
             // (ダークのまま色を決めて、変換ボックスの色が変わらないと思われていた)
             if (property.Name is nameof(Settings.CompositionCustomBackColor) or nameof(Settings.CompositionCustomTextColor))
@@ -884,7 +889,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
     /// </summary>
     private static UserControl ColorEditor(Color fallback, out TextBox text)
     {
-        var box = text = new TextBox { Dock = DockStyle.Fill, PlaceholderText = "空なら既定の色" };
+        var box = text = new TextBox { Dock = DockStyle.Fill };
         var swatch = new Panel { Width = 28, Dock = DockStyle.Right, BorderStyle = BorderStyle.FixedSingle };
         var pick = new Button { Text = "選ぶ…", AutoSize = true, Dock = DockStyle.Right };
         Color Current() => Settings.ParseColor(box.Text) is var (r, g, b) ? Color.FromArgb(r, g, b) : fallback;
