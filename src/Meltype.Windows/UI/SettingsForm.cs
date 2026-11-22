@@ -30,6 +30,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
     private readonly MeltypeEngine _engine;
     private readonly AppState _state;
+    private readonly bool _darkMode;
     private readonly List<Binding> _bindings = [];
     private readonly TableLayoutPanel _body = new() { Dock = DockStyle.Fill, ColumnCount = 1, AutoScroll = true, Padding = new Padding(8, 8, SystemInformation.VerticalScrollBarWidth + 4, 8) };
     // 左の分類の一覧。選ぶと、その分類の枠まで設定の一覧をスクロールする (issue #1200)
@@ -92,23 +93,128 @@ internal sealed class SettingsForm : Form, IMessageFilter
     }
 
     /// <summary>
-    /// Windows の「既定のアプリ モード」がダークなら、設定画面も暗い色にする (ダークにしている人が設定画面だけ明るいのを望むことはないので、設定にしない)。
-    /// 色は窓に設定し、子の部品は WinForms の「親の色を引き継ぐ」仕組みで同じ色になる。
-    /// 入力欄 (TextBox など) は既定で親の色を引き継がず Windows の色のままなので、文字が読めなくなることはない。
+    /// Windows の「既定のアプリ モード」に合わせ、ダークのときは一覧・入力欄・表にも暗い配色を適用する。
+    /// ハイコントラスト時は Windows の配色を優先する。
     /// </summary>
-    private void ApplyLook()
+    private void ApplyDarkColors()
     {
-        if (CompositionWindow.WindowsUsesLightTheme() != false) return;
         BackColor = Color.FromArgb(32, 32, 32);
         ForeColor = Color.White;
         _help.ForeColor = Color.FromArgb(170, 170, 170);
+        var inputBackground = Color.FromArgb(56, 56, 56);
+        var useWindowsDarkTheme = OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000);
+
+        // 一覧や入力欄は親ウィンドウの色を引き継がない (#2187)。
+        ApplyInputColors(this);
+
+        void ApplyInputColors(Control parent)
+        {
+            foreach (Control control in parent.Controls)
+            {
+                if (useWindowsDarkTheme)
+                {
+                    if (control is ComboBox comboBox)
+                        ApplyOnHandleCreated(comboBox, () => ApplyDarkComboTheme(comboBox));
+                    else if (control == _body || control is ListBox or ScrollBar or DataGridView)
+                        ApplyOnHandleCreated(control, () => { _ = Native.SetWindowTheme(control.Handle, "DarkMode_Explorer", null); });
+                }
+                switch (control)
+                {
+                    case ListBox or TextBoxBase or ComboBox:
+                        control.BackColor = inputBackground;
+                        control.ForeColor = ForeColor;
+                        // テーマ付きのプルダウンを閉じたときの背景も、入力欄の色で描く。
+                        if (control is ComboBox { DrawMode: DrawMode.Normal } combo)
+                        {
+                            combo.DrawMode = DrawMode.OwnerDrawFixed;
+                            combo.DrawItem += (_, e) => DrawChoice(combo, e);
+                        }
+                        break;
+                    case GroupBox group:
+                        // 見出しの既定色は Windows のテーマから来る。親の文字色は明示して渡す。
+                        group.ForeColor = ForeColor;
+                        break;
+                    case DataGridView grid:
+                        grid.BackgroundColor = inputBackground;
+                        grid.GridColor = Color.FromArgb(96, 96, 96);
+                        // Windows の描画に任せると、見出しはセルの配色を使わない。
+                        grid.EnableHeadersVisualStyles = false;
+                        grid.DefaultCellStyle.BackColor = inputBackground;
+                        grid.DefaultCellStyle.ForeColor = ForeColor;
+                        foreach (var header in new[] { grid.ColumnHeadersDefaultCellStyle, grid.RowHeadersDefaultCellStyle })
+                        {
+                            header.BackColor = BackColor;
+                            header.ForeColor = ForeColor;
+                        }
+                        grid.CellPainting += PaintDarkGridArrow;
+                        if (useWindowsDarkTheme)
+                        {
+                            grid.EditingControlShowing += (_, e) =>
+                            {
+                                if (e.Control is not ComboBox editor) return;
+                                // Flat の矢印は Windows テーマに関係なく明るい色で描かれる。
+                                editor.FlatStyle = FlatStyle.Standard;
+                                ApplyDarkComboTheme(editor);
+                            };
+                        }
+                        break;
+                }
+                ApplyInputColors(control);
+            }
+        }
+    }
+
+    private static void ApplyOnHandleCreated(Control control, Action apply)
+    {
+        control.HandleCreated += (_, _) => apply();
+        if (control.IsHandleCreated) apply();
+    }
+
+    private static void ApplyDarkComboTheme(ComboBox combo)
+    {
+        // Windows 11 の WinForms と同じテーマをコンボボックス本体に指定する。
+        _ = Native.SetWindowTheme(combo.Handle, "DarkMode_CFD", null);
+        // 開いた選択肢一覧は本体とは別のウィンドウハンドルを持つ。
+        // テーマはハンドル単位で適用されるため、一覧にも個別に指定する。
+        var info = new Native.COMBOBOXINFO { cbSize = System.Runtime.InteropServices.Marshal.SizeOf<Native.COMBOBOXINFO>() };
+        if (Native.GetComboBoxInfo(combo.Handle, ref info) && info.hwndList != IntPtr.Zero)
+            _ = Native.SetWindowTheme(info.hwndList, "DarkMode_Explorer", null);
+    }
+
+    private static void PaintDarkGridArrow(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (sender is not DataGridView grid || e.Graphics is not { } graphics || e.CellStyle is not { } style ||
+            e.RowIndex < 0 || e.ColumnIndex < 0 ||
+            grid.Columns[e.ColumnIndex] is not DataGridViewComboBoxColumn || (e.PaintParts & DataGridViewPaintParts.ContentBackground) == 0 ||
+            (grid.IsCurrentCellInEditMode && grid.CurrentCellAddress == new Point(e.ColumnIndex, e.RowIndex)))
+            return;
+
+        var cell = e.CellBounds;
+        var width = Math.Min(SystemInformation.HorizontalScrollBarThumbWidth, cell.Width - 4);
+        if (width < 7 || cell.Height < 7) return;
+        // 表の Flat な選択欄はシステム色で矢印を描く。クリック判定と値の描画を残し、ボタンの部分だけ重ねる。
+        var x = grid.RightToLeft == RightToLeft.Yes ? cell.Left + 2 : cell.Right - width - 2;
+        var button = new Rectangle(x, cell.Top + 1, width, cell.Height - 3);
+        e.Paint(e.ClipBounds, e.PaintParts);
+        var state = graphics.Save();
+        graphics.SetClip(Rectangle.Intersect(e.ClipBounds, button), System.Drawing.Drawing2D.CombineMode.Intersect);
+        var selected = (e.PaintParts & DataGridViewPaintParts.SelectionBackground) != 0 &&
+            (e.State & DataGridViewElementStates.Selected) != 0;
+        using var background = new SolidBrush(selected ? style.SelectionBackColor : style.BackColor);
+        using var arrow = new Pen(selected ? style.SelectionForeColor : style.ForeColor);
+        graphics.FillRectangle(background, button);
+        var center = new Point(button.Left + button.Width / 2, button.Top + button.Height / 2);
+        var size = Math.Max(2, button.Width / 5);
+        graphics.DrawLines(arrow, new Point[] { new(center.X - size, center.Y - 1), new(center.X, center.Y + size - 1), new(center.X + size, center.Y - 1) });
+        graphics.Restore(state);
+        e.Handled = true;
     }
 
     protected override void OnHandleCreated(EventArgs e)
     {
         base.OnHandleCreated(e);
         // タイトルバーも暗くする (DWMWA_USE_IMMERSIVE_DARK_MODE。Windows 10 20H1 より前は何もしない)
-        if (CompositionWindow.WindowsUsesLightTheme() != false) return;
+        if (!_darkMode) return;
         var dark = 1;
         _ = DwmSetWindowAttribute(Handle, 20, ref dark, sizeof(int));
     }
@@ -116,12 +222,13 @@ internal sealed class SettingsForm : Form, IMessageFilter
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
-    public SettingsForm(MeltypeEngine engine, AppState state)
+    public SettingsForm(MeltypeEngine engine, AppState state, bool? darkMode = null)
     {
         // 開くまでにかかった時間をログに書く (遅いときに、部品を作るのと表示するののどちらに時間がかかったかを測る。issue #1199)
         var opening = System.Diagnostics.Stopwatch.StartNew();
         _engine = engine;
         _state = state;
+        _darkMode = darkMode ?? (!SystemInformation.HighContrast && CompositionWindow.WindowsUsesLightTheme() == false);
         // 動かしている設定を見せる (Meltype IME を使えなければ Meltype キーボード)。変えなかった項目は、閉じるときに MergeEdits が config.json の値のままにする
         _draft = engine.Running.Clone().Normalize();
         Text = "Meltype 設定";
@@ -190,7 +297,7 @@ internal sealed class SettingsForm : Form, IMessageFilter
 
         var controlsBuilt = opening.ElapsedMilliseconds;
         LoadFrom(_draft);
-        ApplyLook();
+        if (_darkMode) ApplyDarkColors();
         RefreshProfiles();
         _opened = Collect();
         var valuesLoaded = opening.ElapsedMilliseconds;
@@ -705,20 +812,23 @@ internal sealed class SettingsForm : Form, IMessageFilter
     private static void DisableChoice(ComboBox combo, int disabled)
     {
         combo.DrawMode = DrawMode.OwnerDrawFixed;
-        combo.DrawItem += (_, e) =>
-        {
-            if (e.Index < 0) return;
-            e.DrawBackground();
-            var color = e.Index == disabled ? SystemColors.GrayText : e.ForeColor;
-            TextRenderer.DrawText(e.Graphics, combo.GetItemText(combo.Items[e.Index]), e.Font, e.Bounds, color, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
-            e.DrawFocusRectangle();
-        };
+        combo.DrawItem += (_, e) => DrawChoice(combo, e, disabled);
         var previous = disabled == 0 ? 1 : 0;
         combo.SelectedIndexChanged += (_, _) =>
         {
             if (combo.SelectedIndex == disabled) combo.SelectedIndex = previous;
             else previous = combo.SelectedIndex;
         };
+    }
+
+    private static void DrawChoice(ComboBox combo, DrawItemEventArgs e, int disabled = -1)
+    {
+        e.DrawBackground();
+        if (e.Index < 0) return;
+        var color = e.Index == disabled ? SystemColors.GrayText : e.ForeColor;
+        TextRenderer.DrawText(e.Graphics, combo.GetItemText(combo.Items[e.Index]), e.Font, e.Bounds, color,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+        e.DrawFocusRectangle();
     }
 
     /// <summary>窓を開いている実行中のアプリの一覧を出し、選んだものをアプリ別設定の表に足す (既に表にあれば、その行を選ぶ)。</summary>
