@@ -6480,6 +6480,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void SigilWord_LongNameStaysDirect()
+    {
+        // #2205: 名前が 20 文字を超えても、空白まで続けてそのままアプリへ渡す (途中から日本語に戻らない)。
+        var typed = "@exampleabc-jh.ed.jpdesu";
+        var k = new Keyboard();
+        k.Type(typed);
+        Assert.True(!k.Captured && k.Showing is null, $"{typed}: 変換ボックスを開かない");
+        Assert.Equal(typed, k.Host.Document, typed);
+    }
+
+    [Test]
     public static void SlashAtStart_IsMiddleDotInText()
     {
         // 文章の入力欄の打ち始めの / は ・ (Microsoft IME と同じ)。続けて打てば日本語のまま。

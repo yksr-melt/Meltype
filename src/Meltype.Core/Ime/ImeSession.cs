@@ -670,6 +670,8 @@ internal static class ImeSession
     public static SessionResult ComposeKey(ImeSessionState state, ImeEnv env, int vk, char? ch, bool shift, bool control, bool alt, bool command, bool releaseFollows = false)
     {
         var before = LineBefore(state, state.Field);
+        // 先頭の記号から続く名前の判定は、切り詰めていない前の文字で行う (20 文字を超える名前で記号が落ちないように)
+        var sigilBefore = CodeInput(state) ? before : state.Field?.Before;
         // 文字列を閉じる引用符は英数のままアプリに通す (打っている途中の日本語は確定する。空の文字列 "" を閉じるときも)。
         // 変換中の before は、変換中の文字より前 (フロントが渡す)
         if (CodeInput(state) && !Direct(state) && !control && !alt && !command &&
@@ -694,12 +696,12 @@ internal static class ImeSession
         }
         // 先頭か空白の直後の /command・$skill・@ファイル名 は、変換せずにそのままアプリへ渡す (#193)。
         // 文章の入力欄の / は、変換ボックスに ・ として入れる。Space で / にすると、続く名前はそのまま渡す。
-        if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(before) && settings.SigilWordsDirect &&
-            SigilWord.PassesAfter(before, '/'))
+        if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is '/' && !PassesSlash(state, before) && !SigilWord.InNameAfter(sigilBefore) && settings.SigilWordsDirect &&
+            SigilWord.PassesAfter(sigilBefore, '/'))
         {
             CompositionController.MarkSlashAtStart(state.Composition);
         }
-        else if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(before, c))
+        else if (!modifier && !CompositionController.IsComposing(state.Composition) && ch is { } c && settings.SigilWordsDirect && SigilWord.PassesAfter(sigilBefore, c))
         {
             return CompositionController.Pass(state.Composition, Env(state, env), now);
         }
