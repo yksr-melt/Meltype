@@ -532,6 +532,17 @@ internal sealed class SettingsForm : Form, IMessageFilter
                 _ => Color.White,
             };
             var panel = ColorEditor(fallback, out var text);
+            // カスタムの色は「変換ボックスの色」がカスタムのときだけ使うので、色を決めたらカスタムにする
+            // (ダークのまま色を決めて、変換ボックスの色が変わらないと思われていた)
+            if (property.Name is nameof(Settings.CompositionCustomBackColor) or nameof(Settings.CompositionCustomTextColor))
+                text.TextChanged += (_, _) =>
+                {
+                    if (_loadingSettings) return;
+                    var theme = _bindings.Single(b => b.Property.Name == nameof(Settings.CompositionTheme));
+                    var settings = CollectValues();
+                    settings.CompositionTheme = CompositionTheme.Custom;
+                    theme.Load(settings);
+                };
             return new Binding(property, panel,
                 s => text.Text = (string?)property.GetValue(s) ?? "",
                 s => property.SetValue(s, text.Text.Trim()));
