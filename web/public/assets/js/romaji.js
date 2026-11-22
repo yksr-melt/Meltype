@@ -49,7 +49,7 @@ const BASE = {
 };
 
 const TABLE = new Map(Object.entries(BASE));
-const LONGEST = Math.max(...[...TABLE.keys()].map((key) => key.length));
+export const LONGEST = Math.max(...[...TABLE.keys()].map((key) => key.length));
 // ある文字列が、まだどれかの綴りの途中かどうか
 const PREFIXES = new Set([...TABLE.keys()].flatMap((key) => [...key].map((_, i) => key.slice(0, i + 1))));
 
@@ -57,43 +57,51 @@ const isConsonant = (c) => /[a-z]/.test(c) && !VOWELS.includes(c);
 
 // 打ったローマ字をかなにする。kana は確定した部分、pending は綴りの途中で残っている部分。
 // 打ち間違えた文字 (どの綴りにもならない文字) は、かなにせずそのまま kana に入れる。
-export function toKana(romaji) {
-  const text = String(romaji).toLowerCase();
-  let kana = "";
+// 打ったローマ字を、かなの 1 音ずつ (units: 綴り raw とかな kana の組) に分ける。pending は綴りの途中で残っている部分。
+// 打ち間違えた文字 (どの綴りにもならない文字) は、その文字だけの 1 音にする
+export function toUnits(romaji) {
+  const raw = String(romaji);
+  const text = raw.toLowerCase();
+  const units = [];
   let i = 0;
+  const push = (length, kana) => {
+    units.push({ raw: raw.slice(i, i + length), kana });
+    i += length;
+  };
   while (i < text.length) {
     const c = text[i];
     const next = text[i + 1];
     // 子音を重ねたら「っ」(nn は「ん」なので除く)
     if (next !== undefined && c === next && isConsonant(c) && c !== "n") {
-      kana += "っ";
-      i += 1;
+      push(1, "っ");
       continue;
     }
     // n の後に母音・y・n 以外が来たら「ん」
     if (c === "n" && next !== undefined && !VOWELS.includes(next) && next !== "y" && next !== "n" && next !== "'") {
-      kana += "ん";
-      i += 1;
+      push(1, "ん");
       continue;
     }
     let matched = false;
     for (let length = Math.min(LONGEST, text.length - i); length > 0; length -= 1) {
-      const piece = text.slice(i, i + length);
-      const value = TABLE.get(piece);
+      const value = TABLE.get(text.slice(i, i + length));
       if (value !== undefined) {
-        kana += value;
-        i += length;
+        push(length, value);
         matched = true;
         break;
       }
     }
     if (matched) continue;
-    const rest = text.slice(i);
-    if (PREFIXES.has(rest)) return { kana, pending: rest };
-    kana += c;
-    i += 1;
+    if (PREFIXES.has(text.slice(i))) return { units, pending: text.slice(i) };
+    push(1, c);
   }
-  return { kana, pending: "" };
+  return { units, pending: "" };
+}
+
+// 打ったローマ字をかなにする。kana は確定した部分、pending は綴りの途中で残っている部分。
+// 打ち間違えた文字 (どの綴りにもならない文字) は、かなにせずそのまま kana に入れる。
+export function toKana(romaji) {
+  const { units, pending } = toUnits(romaji);
+  return { kana: units.map((unit) => unit.kana).join(""), pending };
 }
 
 // 打ち終わった入力を読みとして見る。最後に残った n は「ん」にする (変換を確定するときと同じ)。
