@@ -46,13 +46,18 @@ internal static class ImeSession
     }
 
     /// <summary>
-    /// パスワード欄か。ターミナルの sudo・ssh は、パスワードを尋ねていることを OS に知らせない (エコーを止めるだけ) ので、
+    /// パスワード欄か。
+    /// ワークアラウンド: ターミナルの sudo・ssh は、パスワードを尋ねていることを OS に知らせない (エコーを止めるだけ) ので、
     /// キャレットの前の行がパスワードのプロンプトならパスワード欄とする (#1201)。
     /// </summary>
     private static bool IsPassword(ImeField? field) =>
         field is not null && (field.Traits.Contains(ImeTrait.Password) ||
             field.Before is { } before && IsTerminal(field) && LineContext.IsPasswordPrompt(before));
 
+    /// <summary>
+    /// ターミナルか。ImeTrait.Terminal は IBus・fcitx5・meltype-tty しか送らないので、Windows・macOS のためにアプリ・要素の名前でも見る。
+    /// アプリ別設定の種類は見ない (種類を「一般」にしたターミナルでも、パスワードは日本語にしない)。
+    /// </summary>
     private static bool IsTerminal(ImeField field) =>
         field.Traits.Contains(ImeTrait.Terminal) || field.App is { } app && LineContext.ClassifyFocus(app, field.Element) == CodeFocus.Terminal;
 
