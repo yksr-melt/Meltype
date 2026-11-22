@@ -9,7 +9,7 @@ namespace Meltype.Detection;
 /// 日本語辞書の語との編集距離で打ち間違いを拾う (設計書 §15)。
 /// 補助的な加点だけで、これ単独では閾値に届かないようにしてある。
 /// </summary>
-public sealed class TypoDetector(WordList japaneseWords)
+internal sealed class TypoDetector(WordList japaneseWords)
 {
     public const int MinLength = 5;
 

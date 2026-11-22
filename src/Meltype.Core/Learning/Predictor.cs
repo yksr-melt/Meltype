@@ -11,7 +11,7 @@ namespace Meltype.Learning;
 /// (きょうは まで打つと、前に確定した「今日は天気がいい」を出す)。
 /// 1 行に「読み<Tab>語句<Tab>回数<Tab>最後に使った日時 (UTC の Ticks)」のテキストで保存する。
 /// </summary>
-public sealed class PhraseHistory
+internal sealed class PhraseHistory
 {
     private const int MaxEntries = 3000;
     private readonly string? _path;
@@ -216,7 +216,7 @@ public sealed class Predictor
     private readonly record struct EnglishName(string Reading, string Word, bool Brand, int Order);
 
     /// <param name="userWords">ユーザー辞書の語 (読み, 語)。呼ぶたびに今の語を返す。</param>
-    public Predictor(PhraseHistory? phrases, Func<IEnumerable<(string Reading, string Word)>>? userWords, ConversionHistory? history)
+    internal Predictor(PhraseHistory? phrases, Func<IEnumerable<(string Reading, string Word)>>? userWords, ConversionHistory? history)
     {
         _phrases = phrases;
         _userWords = userWords;
@@ -231,7 +231,7 @@ public sealed class Predictor
         });
     }
 
-    public PhraseHistory? Phrases => _phrases;
+    internal PhraseHistory? Phrases => _phrases;
 
     /// <summary>
     /// 版番号 (Meltype-1.4.0・Mozc-3.34.6239.102+24.11.oss) を含むか。

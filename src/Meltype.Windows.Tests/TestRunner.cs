@@ -105,7 +105,7 @@ internal static class TestRunner
             composition.ShowView(new Composition.CompositionView("ぶれすれっど", ["ブレスレッド", "ぶれすれっど", "buresureddo"], 0, true, "Space/↓ 候補", Suggestion: "もしかして: ブレスレット　<Tab>で修正"), new Point(-5000, -5000));
             var indicator = new Composition.ModeIndicatorWindow();
             indicator.Flash(true, new Point(-5000, -5000), 1200);
-            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(), new Learning.ConversionHistory(null)), new UI.WelcomeForm(), indicator, composition })
+            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(engine.Runtime)), new UI.WelcomeForm(), indicator, composition })
             {
                 using (form)
                 {
@@ -154,13 +154,13 @@ internal static class TestRunner
     }
 
     /// <summary>--render-forms 用の、学習した語の見本。</summary>
-    private static Detection.LanguageMemory LearnedSample()
+    private static Ime.MeltypeRuntime LearnedSample(Ime.MeltypeRuntime runtime)
     {
-        var memory = new Detection.LanguageMemory(null) { IsReadableRomaji = _ => true };
-        memory.Remember("go", english: true);
-        memory.Remember("api", english: true);
-        memory.Remember("sushi", english: false, explicitChoice: true);
-        return memory;
+        runtime.Languages.IsReadableRomaji = _ => true;
+        runtime.Languages.Remember("go", english: true);
+        runtime.Languages.Remember("api", english: true);
+        runtime.Languages.Remember("sushi", english: false, explicitChoice: true);
+        return runtime;
     }
 
     /// <summary>画面の中から条件に合うコントロールを探す (--render-forms 用)。</summary>

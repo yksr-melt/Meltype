@@ -2,13 +2,11 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Runtime.InteropServices;
-using Meltype.Detection;
 using Meltype.Diagnostics;
 using Meltype.Dictionary;
 using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
-using Meltype.Learning;
 using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
@@ -52,18 +50,6 @@ internal sealed class CompositionService : IDisposable
 
     /// <summary>背景の変換の結果が届いた (入力欄に知らせる)。ワーカーのスレッドで呼ぶ。</summary>
     public event Action? ConversionReady;
-
-    /// <summary>選び直した変換の学習データ (トレイの「学習データをリセット」で消す)。</summary>
-    public ConversionHistory History => Runtime.History;
-
-    /// <summary>ユーザーが英字 / かなに直した語の学習 (トレイの「学習データをリセット」で消す)。</summary>
-    public LanguageMemory Languages => Runtime.Languages;
-
-    /// <summary>選んだ英訳の記録 (トレイの「学習データをリセット」で消す)。</summary>
-    public TranslationHistory TranslationHistory => Runtime.TranslationHistory;
-
-    /// <summary>予測変換のために覚えた、確定した語句。</summary>
-    public PhraseHistory Phrases => Runtime.Phrases;
 
     /// <summary>ユーザー辞書 (トレイの「ユーザー辞書...」で編集する)。</summary>
     public UserDictionary UserDictionary => Runtime.UserDictionary;

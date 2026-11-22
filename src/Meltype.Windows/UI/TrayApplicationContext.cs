@@ -603,7 +603,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
             _learnedForm.Activate();
             return;
         }
-        _learnedForm = new LearnedWordsForm(_composition.Languages, _composition.History);
+        _learnedForm = new LearnedWordsForm(_composition.Runtime);
         _learnedForm.Show();
     }
 

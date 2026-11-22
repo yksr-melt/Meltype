@@ -96,14 +96,26 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     public UserDictionary UserDictionary { get; }
 
-    public ConversionHistory History => _shared.History!;
+    internal ConversionHistory History => _shared.History!;
 
-    public LanguageMemory Languages => _shared.Languages!;
+    internal LanguageMemory Languages => _shared.Languages!;
 
-    public TranslationHistory TranslationHistory => _shared.TranslationHistory!;
+    internal TranslationHistory TranslationHistory => _shared.TranslationHistory!;
 
     /// <summary>予測変換のために覚えた、確定した語句。</summary>
-    public PhraseHistory Phrases { get; }
+    internal PhraseHistory Phrases { get; }
+
+    /// <summary>英字で打った語を英語・日本語のどちらで出すか学習したもの (新しく使ったものから)。</summary>
+    public IReadOnlyList<LearnedLanguage> LearnedLanguages() => Languages.Entries();
+
+    /// <summary>学習した語を忘れる。keys は <see cref="LearnedLanguage.EntryKey"/>。</summary>
+    public void ForgetLanguages(IEnumerable<string> keys) => Languages.Remove(keys);
+
+    /// <summary>読みに対して選び直した変換 (はし → 箸) の学習。</summary>
+    public IReadOnlyList<(string Reading, string Text, DateTime Used)> LearnedConversions() => History.Entries();
+
+    /// <summary>読みに対して選び直した変換の学習を忘れる。</summary>
+    public void ForgetConversion(string reading) => History.Forget(reading);
 
     /// <summary>登録した定型文 (;名前 + Space で入れる: issue #290)。</summary>
     public SnippetStore Snippets { get; }
@@ -169,7 +181,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// 判定器と辞書・学習データをつなぐ (持ち主が作ったときに 1 回)。よく使う日本語の読み (kyouha = 今日は) は、一度英字にして確定しただけでは
     /// 英語として覚えない。
     /// </summary>
-    public static void Connect(CompositionDetector detector, CompositionServices services)
+    internal static void Connect(CompositionDetector detector, CompositionServices services)
     {
         if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
         if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
@@ -242,7 +254,7 @@ public sealed class MeltypeRuntime : IDisposable
     public Verdict ClassifyDirect(string letters, bool final, Settings settings) => ClassifyDirect(_directEngine.Value, letters, final, settings);
 
     /// <summary><see cref="ClassifyDirect(string, bool, Settings)"/> を、判定器 engine で行う (テストは辞書を読み直さずに共有の判定器で行う)。</summary>
-    public static Verdict ClassifyDirect(ScoreEngine engine, string letters, bool final, Settings settings)
+    internal static Verdict ClassifyDirect(ScoreEngine engine, string letters, bool final, Settings settings)
     {
         var result = Evaluate(engine, letters, final, settings);
         // 同梱の辞書にない英単語 (debate, potato) はローマ字としても読めるので、よく使う英単語の一覧の語なら日本語にしない。
