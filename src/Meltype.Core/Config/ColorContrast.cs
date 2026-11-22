@@ -4,7 +4,7 @@
 namespace Meltype.Config;
 
 /// <summary>利用者が決めた色の組み合わせが読めるか (WCAG 2 のコントラスト比)。</summary>
-public static class ColorContrast
+internal static class ColorContrast
 {
     /// <summary>文字に要る比 (WCAG 2 の AA)。</summary>
     public const double TextMinimum = 4.5;

@@ -2,26 +2,17 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Text;
+using Meltype.Detection;
+using Meltype.Dictionary;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
 /// <summary>変換ボックスの表示形式。Auto 以外は F6〜F10 などでユーザーが明示的に選んだもの。</summary>
-public enum DisplayMode { Auto, Hiragana, Katakana, FullWidthAlphanumeric, HalfWidthAlphanumeric, HalfWidthKatakana }
+internal enum DisplayMode { Auto, Hiragana, Katakana, FullWidthAlphanumeric, HalfWidthAlphanumeric, HalfWidthKatakana }
 
 /// <summary>英字 (F9 / F10) で見せるときの大文字・小文字。F9 / F10 を続けて押すと 打ったまま → すべて大文字 → 先頭だけ大文字 と切り替わる。</summary>
-public enum LetterCase { AsTyped, Upper, Capitalized }
-
-/// <summary>
-/// 変換ボックス内の 1 単位。ローマ字 1 音 (きょ, っ, ん …)・ローマ字として読めなかった英字 1 文字・記号 1 文字のいずれか。
-/// Raw は実際に打った文字 (英語として表示するときに使う)。
-/// </summary>
-public readonly record struct CompositionUnit(string Kana, string Raw);
-
-/// <summary>表示上のひとまとまり。英語と判定した区間は英字のまま、それ以外は日本語 (かな/漢字)。</summary>
-public readonly record struct CompositionSegment(bool IsEnglish, string Kana, string Raw)
-{
-    public bool IsProtected { get; init; }
-}
+internal enum LetterCase { AsTyped, Upper, Capitalized }
 
 /// <summary>
 /// 未確定の入力。打ったそばからローマ字をかな 1 音ずつの単位にしていき、まだ音にならない子音
@@ -305,7 +296,7 @@ internal static class CompositionText
     {
         // 最後の数字の位置 (その後ろが英字だけのとき)
         var digit = state.Units.Count - 1;
-        while (digit >= 0 && IsLetters(state.Units[digit].Raw)) digit--;
+        while (digit >= 0 && IsLetters(state.Units[digit])) digit--;
         if (digit < 0 || state.Units[digit].Raw is not [var d] || !char.IsAsciiDigit(d)) return;
         var run = string.Concat(state.Units.Skip(digit + 1).Select(u => u.Raw)) + state.Pending;
         var lower = run.ToLowerInvariant();
@@ -958,14 +949,14 @@ internal static class CompositionText
         var start = 0;
         while (start < state.Units.Count)
         {
-            if (!IsLetters(state.Units[start].Raw) || IsLaughter(state.Units[start]))
+            if (!IsLetters(state.Units[start]) || IsLaughter(state.Units[start]))
             {
                 offset += state.Units[start].Raw.Length;
                 start++;
                 continue;
             }
             var end = start;
-            while (end < state.Units.Count && IsLetters(state.Units[end].Raw) && !IsLaughter(state.Units[end])) end++;
+            while (end < state.Units.Count && IsLetters(state.Units[end]) && !IsLaughter(state.Units[end])) end++;
             var atEnd = end == state.Units.Count;
             var letters = string.Concat(state.Units.Skip(start).Take(end - start).Select(u => u.Raw)) + (atEnd ? CompositionText.Pending(state) : "");
             var runOffset = offset;
@@ -1012,13 +1003,13 @@ internal static class CompositionText
         var withPending = state.Pending.Length > 0;
         while (end > 0 || withPending)
         {
-            if (!withPending && !IsLetters(state.Units[end - 1].Raw))
+            if (!withPending && !IsLetters(state.Units[end - 1]))
             {
                 end--;
                 continue;
             }
             var runStart = end;
-            while (runStart > 0 && IsLetters(state.Units[runStart - 1].Raw)) runStart--;
+            while (runStart > 0 && IsLetters(state.Units[runStart - 1])) runStart--;
             CompositionText.KeepLaughterAt(state, env, end, withPending);
             withPending = false;
             end = runStart;
@@ -1046,11 +1037,11 @@ internal static class CompositionText
         // 設定「かな + w を笑いにする」: 1 つのかなの音 (ね・さ) だけの後ろの w は、その 2 つで英単語 (new・saw) にしない (issue #713・#492)。
         // もっと長い英単語 (snow・window) の終わりは、今までどおり英単語
         var soleSyllable = state.LaughterAfterKana && start > 0 && state.Units[start - 1].Kana is [>= 'ぁ' and <= 'ん'] && state.Units[start - 1].Raw.All(char.IsAsciiLetter);
-        for (var i = start - 1; i >= 0 && state.Units[i].Raw.Length > 0 && state.Units[i].Raw.All(char.IsAsciiLetter); i--)
+        for (var i = start - 1; i >= 0 && IsLetters(state.Units[i]); i--)
         {
             letters = state.Units[i].Raw + letters;
             if (soleSyllable && i == start - 1) continue;
-            var runStart = i == 0 || !IsLetters(state.Units[i - 1].Raw);
+            var runStart = i == 0 || !IsLetters(state.Units[i - 1]);
             if (letters.Length >= 3 && (runStart ? env.Detector.IsKnownEnglishWord(LearningContext(state, env), letters) : env.Detector.IsListedEnglishWord(LearningContext(state, env), letters.ToLowerInvariant()))) return end;
         }
         state.Units.RemoveRange(start, end - start);
@@ -1131,7 +1122,11 @@ internal static class CompositionText
         return false;
     }
 
-    private static bool IsLetters(string raw) => raw.Length > 0 && raw.All(char.IsAsciiLetter);
+    /// <summary>
+    /// 英字を打って、英字かかなを見せている単位か。英字から作った記号 (zl → →) は含めない
+    /// (英字の並びに入れると、打ち間違いとして直したり (hogezl → ほげぞ: issue #2013)、単位・笑いの判定に混ざったりする)。
+    /// </summary>
+    private static bool IsLetters(CompositionUnit unit) => unit.Raw.Length > 0 && unit.Raw.All(char.IsAsciiLetter) && unit.Kana.All(char.IsLetter);
 
     /// <summary>単位 [start, end) の読みを、正しい読み (カタカナ) に置き換える。end が単位の数を超えるときは語末の n も含む。</summary>
     public static void ReplaceReading(CompositionTextState state, int start, int end, string rightKatakana)

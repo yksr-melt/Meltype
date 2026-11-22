@@ -18,7 +18,7 @@ public readonly record struct KeyEvent(int Vk, int Scan, bool Extended, bool IsU
     public override string ToString() => $"{(IsUp ? "↑" : "↓")}{Vk:X2}";
 }
 
-internal static class VirtualKeys
+public static class VirtualKeys
 {
     public const int Back = 0x08, Tab = 0x09, Return = 0x0D, Escape = 0x1B, Space = 0x20;
     public const int Shift = 0x10, Control = 0x11, Menu = 0x12, LShift = 0xA0, RShift = 0xA1,

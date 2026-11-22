@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Globalization;
-using Meltype.Composition;
+using Meltype.Detection;
+using Meltype.Learning;
 
 namespace Meltype.UI;
 

@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Text;
 using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
 using Meltype.Input;
 
 namespace Meltype.Ime;
