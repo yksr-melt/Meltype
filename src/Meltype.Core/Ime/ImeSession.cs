@@ -690,9 +690,9 @@ internal static class ImeSession
         // Ctrl・Option・Command と一緒のキーは、変換ボックスが空ならアプリの操作 (コピーなど) なので触らない。
         var modifier = control || alt || command;
         var settings = env.App;
+        var wordBoundary = ch is { } typed && !EnglishWordCharacters.Contains(typed);
         if (Direct(state) && state.Composition.DirectEnglishWord &&
-            (ch is { } directChar && !char.IsAsciiLetterOrDigit(directChar) && directChar is not ('@' or '_') ||
-             before is { Length: > 0 } && !char.IsAsciiLetterOrDigit(before[^1]) && before[^1] is not ('@' or '_')))
+            (wordBoundary || before is [.., var previous] && !EnglishWordCharacters.Contains(previous)))
             state.Composition.DirectEnglishWord = false;
         if ((Direct(state) && (!settings.DirectModeAutoDetect || state.Composition.DirectEnglishWord)) || !settings.Enabled)
         {
@@ -722,7 +722,12 @@ internal static class ImeSession
         var result = CompositionController.Press(state.Composition, Env(state, env), new KeyPress(vk, ch, shift, control, alt, command, now), releaseFollows);
         // アプリに渡したキー (変換していないときの BackSpace・矢印・Enter など) はキャレットを動かすかもしれない。
         // 前に確定した語を確定し直さない (消す位置がずれて関係ない文字を消さないように)
-        if (!result.Consumed && !CompositionController.IsComposing(state.Composition)) ForgetLastCommit(state);
+        if (!result.Consumed && !CompositionController.IsComposing(state.Composition))
+        {
+            ForgetLastCommit(state);
+            // 保留を打ち切った同じキーで区切ったときも、次の語から判定を再開する (#2219)。
+            if (wordBoundary) state.Composition.DirectEnglishWord = false;
+        }
         return result;
     }
 

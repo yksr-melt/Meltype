@@ -1986,6 +1986,37 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2219_DirectModeDetectsJapaneseAfterPunctuation()
+    {
+        foreach (var prefix in new[] { "home-", "data,", "home.", "off-" })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(prefix);
+            Assert.Equal(prefix, k.Host.Document);
+            Assert.True(k.Direct, prefix);
+            k.Type("konnnichiha\n");
+            Assert.Equal(prefix + "こんにちは", k.Host.Document);
+        }
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeKeepsJapaneseDictionaryMatches()
+    {
+        foreach (var (keys, expected) in new[]
+        {
+            ("inu", "いぬ"),
+            ("inuga", "いぬが"),
+            ("inuwo", "いぬを"),
+            ("inuwokau", "いぬをかう"),
+        })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(keys + "\n");
+            Assert.Equal(expected, k.Host.Document, keys);
+        }
+    }
+
+    [Test]
     public static void DirectMode_LongVowelDashSwitchesToJapanese()
     {
         // 英数状態で ro-maji と打つと、- の時点で英語として出してしまっていた (ローマ字 が打てない)。

@@ -131,9 +131,10 @@ internal sealed class ScoreEngine
             return Result(Verdict.English, letters, contributions, "日本語の入力として成立しない");
         }
 
-        // 促音や打ち間違いの加点でも、英単語の打ちかけ (matche、bagga) は英字で送り続ける。
+        // 日本語辞書に一致する語は今までどおり得点で判定する。ローマ字の綴りからの推測だけで、
+        // 英単語の打ちかけ (matche、bagga) を日本語に切り替えない。
         if (japanese >= threshold && japanese - english >= threshold &&
-            (!romajiValid || !BuiltInWordChecker.Shared.HasPrefix(original)))
+            (!romajiValid || japaneseDictionaryPrefix || !BuiltInWordChecker.Shared.HasPrefix(original)))
         {
             return Result(Verdict.Japanese, letters, contributions, "日本語スコアが閾値を超えた");
         }
