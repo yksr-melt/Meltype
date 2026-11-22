@@ -204,9 +204,9 @@ internal static class WindowsTests
     }
 
     [Test]
-    public static void ApplySettings_ActivatesTsfOnlyWhenSwitchingToIt()
+    public static void SettingsChange_ActivatesTsfOnlyWhenSwitchingToIt()
     {
-        // トレイでも設定画面でも、動作モードを Meltype IME に変えたら入力方式も Meltype IME にする。
+        // トレイでも設定アプリでも、動作モードを Meltype IME に変えたら入力方式も Meltype IME にする。
         Assert.True(MeltypeEngine.SwitchesToTsf(InputMode.Keyboard, InputMode.Tsf), "Meltype キーボードから");
         Assert.True(!MeltypeEngine.SwitchesToTsf(InputMode.Tsf, InputMode.Tsf), "ほかの設定だけ変えたときは切り替えない");
         Assert.True(!MeltypeEngine.SwitchesToTsf(InputMode.Keyboard, InputMode.Keyboard), "Meltype IME を使えずに元のモードに戻したときは切り替えない");

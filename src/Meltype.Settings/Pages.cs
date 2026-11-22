@@ -15,10 +15,10 @@ namespace Meltype.SettingsApp;
 /// </summary>
 internal static class Pages
 {
-    /// <param name="takeNewWord">ユーザー辞書の登録欄に入れておく語 (MainWindow の --add-word)。</param>
-    public static IEnumerable<Page> All(Window owner, Func<Dictionary.UserWord?> takeNewWord) =>
+    /// <param name="newWord">ユーザー辞書の登録欄に入れておく語 (MainWindow の --add-word)。</param>
+    public static IEnumerable<Page> All(Window owner, Func<Dictionary.UserWord?> newWord) =>
     [
-        new(UserDictionaryPage.Title, () => UserDictionaryPage.Build(owner, takeNewWord())),
+        new(UserDictionaryPage.Title, () => UserDictionaryPage.Build(owner, newWord())),
         new("定型文", () => SnippetsPage.Build(owner)),
         new("学習データ", () => LearningPage.Build(owner)),
         new("バックアップ", () => BackupPage.Build(owner)),

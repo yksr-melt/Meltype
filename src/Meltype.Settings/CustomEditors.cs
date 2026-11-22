@@ -63,11 +63,19 @@ internal static class CustomEditors
         }
         var box = SettingEditors.Text((string?)context.Value ?? "", text =>
         {
-            context.Store.Edit(settings =>
+            if (customTheme)
             {
-                context.Item.Property.SetValue(settings, text.Trim());
-                if (customTheme) settings.CompositionTheme = CompositionTheme.Custom;
-            });
+                // 「変換ボックスの色」も変わるので、ページを出し直す (Replace)
+                context.Store.Replace(settings =>
+                {
+                    var next = settings.Clone();
+                    context.Item.Property.SetValue(next, text.Trim());
+                    next.CompositionTheme = CompositionTheme.Custom;
+                    return next;
+                });
+                return;
+            }
+            context.Set(text.Trim());
             Show(text.Trim());
         });
         box.MinWidth = 120;

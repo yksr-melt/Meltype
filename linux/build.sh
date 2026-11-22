@@ -33,7 +33,7 @@ case "$(uname -m)" in
     *) echo "設定アプリをビルドできない CPU です: $(uname -m)" >&2; exit 1 ;;
 esac
 dotnet publish "$root/src/Meltype.Settings/Meltype.Settings.csproj" -c Release -r "$rid" \
-    -p:PublishAot=true -p:StripSymbols=true -o "$here/build/settings"
+    -p:StripSymbols=true -o "$here/build/settings"
 cp "$here/build/settings/MeltypeSettings" "$out/meltype-settings"
 cp "$here/build/settings/libSkiaSharp.so" "$here/build/settings/libHarfBuzzSharp.so" "$out/"
 

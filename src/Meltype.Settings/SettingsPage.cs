@@ -23,8 +23,28 @@ internal static class SettingsPage
         {
             if (headers) page.Children.Add(new TextBlock { Text = category, Classes = { "pageHeader" }, Margin = new Thickness(0, 12, 0, 4) });
             foreach (var item in items) page.Children.Add(Card(item, SettingEditors.Create(new EditorContext(item, store, owner))));
+            // 検索の結果 (見出し付き) には出さない。いくつもの分類の一部だけを戻すことになる
+            if (!headers) page.Children.Add(ResetButton(category, items, store, owner));
         }
         return page;
+    }
+
+    /// <summary>この分類の項目を既定値に戻す。変えたらすぐ保存するので、確かめてから戻す。</summary>
+    private static Button ResetButton(string category, IReadOnlyList<SettingItem> items, SettingsStore store, Window owner)
+    {
+        var button = SettingEditors.Button("この分類を既定値に戻す…", async () =>
+        {
+            if (!await Dialogs.Ask(owner, "既定値に戻す", $"「{category}」の設定をすべて既定値に戻しますか？", ok: "戻す")) return;
+            var defaults = new Settings();
+            store.Replace(settings =>
+            {
+                var next = settings.Clone();
+                foreach (var item in items) item.Property.SetValue(next, item.Property.GetValue(defaults));
+                return next;
+            });
+        });
+        button.Margin = new Thickness(0, 8, 0, 0);
+        return button;
     }
 
     private static Border Card(SettingItem item, Editor editor)

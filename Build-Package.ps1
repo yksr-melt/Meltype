@@ -106,7 +106,7 @@ if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LAS
 
 # 設定アプリ (src\Meltype.Settings)。NativeAOT でビルドし、同梱の .NET ランタイムを使わない (ランタイムは下で Meltype.exe が使うものだけに削るため)。
 # Meltype.exe と同じフォルダーに置く (ポータブル版の印 Meltype.portable を同じフォルダーから見て、同じデータフォルダーを使うため)
-dotnet publish (Join-Path $root 'src\Meltype.Settings\Meltype.Settings.csproj') -c Release -r win-x64 -o $app -p:PublishAot=true -p:DebugType=none
+dotnet publish (Join-Path $root 'src\Meltype.Settings\Meltype.Settings.csproj') -c Release -r win-x64 -o $app -p:DebugType=none
 if ($LASTEXITCODE -ne 0) { throw "設定アプリのビルドに失敗しました (exit code $LASTEXITCODE)。" }
 
 # Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ漢字に変換できない (かなのまま)。

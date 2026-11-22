@@ -3,7 +3,7 @@
     Meltype の設定アプリ (Windows・Mac・Linux 共通)。設定のほか、ユーザー辞書・定型文・学習データ・バックアップを扱う。
     入力する Meltype とは別のプロセスで、データフォルダーのファイルを Meltype.Core で読み書きする (入力する側は、変わったファイルを読み直す)。
     配布物は NativeAOT でビルドする (各 OS の build スクリプト):
-      dotnet publish src/Meltype.Settings -c Release -r <RID> -p:PublishAot=true
+      dotnet publish src/Meltype.Settings -c Release -r <RID>
   -->
   <PropertyGroup>
     <!-- WinExe: Windows でコンソールの窓を出さない (Mac・Linux では Exe と同じ) -->
@@ -13,11 +13,19 @@
     <Nullable>enable</Nullable>
     <AssemblyName>MeltypeSettings</AssemblyName>
     <RootNamespace>Meltype.SettingsApp</RootNamespace>
-    <Version>1.7.1</Version>
     <Product>Meltype</Product>
     <ApplicationIcon>..\..\native\tip\meltype.ico</ApplicationIcon>
     <InvariantGlobalization>false</InvariantGlobalization>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <!--
+      NuGet の依存 (推移的なものも) の版を packages.lock.json に固定する。CI (環境変数 CI) では、lock と違えば restore を失敗にする。
+      配布物は各 OS の build スクリプトが -r <RID> で publish するので、lock に RID ごとの依存と NativeAOT のコンパイラも入れる
+      (PublishAot・RuntimeIdentifiers をここに書かないと、publish の restore が lock と食い違う)
+    -->
+    <PublishAot>true</PublishAot>
+    <RuntimeIdentifiers>win-x64;osx-arm64;osx-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />

@@ -18,7 +18,6 @@ internal sealed class MainWindow : Window
     private readonly ListBox _navigation = new();
     private readonly ScrollViewer _content = new();
 
-    /// <param name="args">--add-word [語 [読み]]: ユーザー辞書のページを、登録欄に語と読みを入れて開く (Windows の単語の登録のホットキー)。</param>
     public MainWindow(string[] args)
     {
         Title = "Meltype の設定";
@@ -26,14 +25,23 @@ internal sealed class MainWindow : Window
         Height = 720;
         MinWidth = 640;
         MinHeight = 400;
-        _pages = [.. _catalog.Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, headers: false))), .. Pages.All(this, () => Interlocked.Exchange(ref _addWord, null)),
+        _pages = [.. _catalog.Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, headers: false), ShowsSettings: true)), .. Pages.All(this, () => _addWord),
             // プロファイルは使う人が少ないので、一覧のいちばん下に置く
-            new Page("プロファイル", () => ProfilesPage.Build(_store, this))];
+            new Page("プロファイル", () => ProfilesPage.Build(_store, this), ShowsSettings: true)];
         _navigation.ItemsSource = _pages.Select(p => p.Title).ToList();
-        _navigation.SelectionChanged += (_, _) => ShowPage();
+        _navigation.SelectionChanged += (_, _) =>
+        {
+            // ほかのページに移ったら、起動の引数の語は使い終わり
+            if (_navigation.SelectedItem as string != UserDictionaryPage.Title) _addWord = null;
+            ShowPage();
+        };
         _search.TextChanged += (_, _) => ShowPage();
         // ほかのプロセスが config.json を書いたら、出している値を読み直す
-        _store.Changed += ShowPage;
+        // 設定を出していないページ (ユーザー辞書・定型文など) は、打ちかけの入力を消さないように作り直さない
+        _store.Changed += () =>
+        {
+            if (!string.IsNullOrWhiteSpace(_search.Text) || _content.Tag is Page { ShowsSettings: true }) ShowPage();
+        };
         _store.Failed += message => _ = Dialogs.Inform(this, "設定を保存できませんでした", $"{AppPaths.ConfigFile}\n\n{message}");
 
         var sidebar = new DockPanel { Width = 240, Margin = new Thickness(8) };
@@ -45,15 +53,26 @@ internal sealed class MainWindow : Window
         root.Children.Add(_content);
         Content = root;
 
-        if (args is ["--add-word", .. var word])
-        {
-            _addWord = new UserWord(word.ElementAtOrDefault(1) ?? "", word.ElementAtOrDefault(0) ?? "");
-            _navigation.SelectedIndex = _pages.ToList().FindIndex(p => p.Title == UserDictionaryPage.Title);
-        }
-        else _navigation.SelectedIndex = 0;
+        _navigation.SelectedIndex = 0;
+        Open(args);
     }
 
-    /// <summary>起動したときに登録欄に入れる語。ユーザー辞書のページを 1 回作ったら使わない。</summary>
+    /// <summary>
+    /// 起動の引数に合わせたページを出す。2 つ目に起動した設定アプリの引数も、ここで受け取る (<see cref="SingleInstance"/>)。
+    /// --add-word [語 [読み]]: ユーザー辞書のページを、登録欄に語と読みを入れて開く (Windows の単語の登録のホットキー)。
+    /// </summary>
+    public void Open(string[] args)
+    {
+        if (args is not ["--add-word", .. var word]) return;
+        _search.Text = "";
+        _addWord = new UserWord(word.ElementAtOrDefault(1) ?? "", word.ElementAtOrDefault(0) ?? "");
+        var index = _pages.ToList().FindIndex(p => p.Title == UserDictionaryPage.Title);
+        // もうユーザー辞書のページを出していたときは、選び直しにならないので作り直す
+        if (_navigation.SelectedIndex == index) ShowPage();
+        else _navigation.SelectedIndex = index;
+    }
+
+    /// <summary>起動の引数で登録欄に入れる語。ユーザー辞書のページを出し直しても入れる (検索を消すと遅れて出し直す)。ほかのページに移ったら捨てる。</summary>
     private UserWord? _addWord;
 
     private static Control Dock(Control control, Dock dock)
@@ -69,6 +88,7 @@ internal sealed class MainWindow : Window
         var words = (_search.Text ?? "").Split(' ', '　', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length > 0)
         {
+            _content.Tag = null;
             var found = _catalog.Select(g => (g.Category, (IReadOnlyList<SettingItem>)g.Items.Where(i => SettingsPage.Matches(i, words)).ToList()))
                 .Where(g => g.Item2.Count > 0).ToList();
             _content.Content = found.Count > 0
@@ -86,5 +106,5 @@ internal sealed class MainWindow : Window
     }
 }
 
-/// <summary>左の一覧の 1 項目。選ぶたびに Build で作り直す (状態を持たない)。</summary>
-internal sealed record Page(string Title, Func<Control> Build);
+/// <summary>左の一覧の 1 項目。選ぶたびに Build で作り直す (状態を持たない)。ShowsSettings は config.json の値を出すページ (書き換わったら作り直す)。</summary>
+internal sealed record Page(string Title, Func<Control> Build, bool ShowsSettings = false);

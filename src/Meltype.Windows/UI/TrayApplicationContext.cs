@@ -188,9 +188,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
         _state.TsfIntroduced = true;
         _state.Save();
-        var next = _engine.Settings.Clone();
-        next.Mode = InputMode.Tsf;
-        _engine.ApplySettings(next);
+        _engine.EditSettings(settings => settings.Mode = InputMode.Tsf);
         // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードだったときも、入力方式を Meltype IME にする
         if (wasTsf) Tip.TipServer.ActivateForSession();
         Diagnostics.Log.Info("Meltype IME が入っているので、動作モードを Meltype IME にしました。");
@@ -225,7 +223,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
         if (!await OfferRegisterTsf("Meltype IME を更新しますか？\n\n" +
             "Windows に登録されている Meltype IME が、ほかの版の Meltype のものです。更新するまでは、Meltype キーボード (変換ボックスで入力) で動きます。")) return;
         // 動かす動作モード (MeltypeEngine.Running) を決め直す
-        _engine.ApplySettings(_engine.Settings);
+        _engine.EditSettings(_ => { });
         UpdateStatus();
     }
 
@@ -471,10 +469,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ToggleAutoUpdate()
     {
-        var next = _engine.Settings.Clone();
-        next.AutoUpdate = !next.AutoUpdate;
-        _engine.ApplySettings(next);
-        _autoUpdateItem.Checked = next.AutoUpdate;
+        _engine.EditSettings(settings => settings.AutoUpdate = !settings.AutoUpdate);
+        _autoUpdateItem.Checked = _engine.Settings.AutoUpdate;
     }
 
     private void FillProfiles()
@@ -492,7 +488,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
     private void SwitchProfile(string name)
     {
         if (name == _engine.Settings.ActiveProfile) return;
-        _engine.ApplySettings(_engine.Settings.SwitchProfile(name));
+        _engine.ReplaceSettings(settings => settings.SwitchProfile(name));
         UpdateStatus();
         if (ProfileSwitchMessage(_engine.Settings) is { } message) ShowBalloonTip(1500, "Meltype", message);
     }
@@ -504,9 +500,7 @@ internal sealed class TrayApplicationContext : ApplicationContext
 
     private void ToggleAutoDetection()
     {
-        var next = _engine.Settings.Clone();
-        next.AutoDetection = !next.AutoDetection;
-        _engine.ApplySettings(next);
+        _engine.EditSettings(settings => settings.AutoDetection = !settings.AutoDetection);
         UpdateStatus();
     }
 
@@ -514,10 +508,11 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (AppPaths.IsPortable && mode != InputMode.Keyboard) return;
         var wasTsf = _engine.Running.Mode == InputMode.Tsf;
-        var next = _engine.Settings.Clone();
-        next.Mode = mode;
-        next.Enabled = true;
-        _engine.ApplySettings(next);
+        _engine.EditSettings(settings =>
+        {
+            settings.Mode = mode;
+            settings.Enabled = true;
+        });
         // ほかのモードからなら MeltypeEngine.OnSettingsChanged が切り替える。もう Meltype IME のモードで選び直したとき (Win + Space でほかの IME にしていた) も、入力方式を Meltype IME に戻す
         if (wasTsf && mode == InputMode.Tsf) Tip.TipServer.ActivateForSession();
     }

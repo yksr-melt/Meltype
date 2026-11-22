@@ -119,9 +119,7 @@ internal sealed class MeltypeEngine : IDisposable
         get => _settings.Enabled;
         set
         {
-            var next = _settings.Clone();
-            next.Enabled = value;
-            ApplySettings(next);
+            EditSettings(settings => settings.Enabled = value);
         }
     }
 
@@ -186,7 +184,19 @@ internal sealed class MeltypeEngine : IDisposable
     private bool KeyCountAllowed(Settings settings) =>
         settings.Enabled && settings.IsAppEnabled(_foreground.Current.ProcessName) && Focus is { Resolved: true, Current.IsPassword: false };
 
-    public void ApplySettings(Settings settings) => Runtime.Settings.Apply(settings);
+    /// <summary>
+    /// config.json を読み直してから change で 1 項目を変えて保存する (設定アプリが直前に書いた値を戻さない)。
+    /// 保存できなくても、このプロセスでは変えた設定を使う (一時停止などが効かなくならないように)。
+    /// </summary>
+    public void EditSettings(Action<Settings> change) => ReplaceSettings(settings =>
+    {
+        var next = settings.Clone();
+        change(next);
+        return next;
+    });
+
+    /// <summary><see cref="EditSettings"/> と同じで、プロファイルの切り替えなど設定全体を作り直す。</summary>
+    public void ReplaceSettings(Func<Settings, Settings> change) => Runtime.Settings.Edit(change, useUnsaved: true);
 
     /// <summary>設定が変わった後の処理 (UI スレッド)。設定画面で変えたときも、config.json を外で書き換えたときも呼ぶ。</summary>
     public void OnSettingsChanged(Settings previous, Settings next)

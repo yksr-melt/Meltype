@@ -139,7 +139,7 @@ else
 fi
 echo "== 4/4 設定アプリ (C#, NativeAOT) をビルドして Meltype Settings.app を組み立て"
 dotnet publish ../src/Meltype.Settings/Meltype.Settings.csproj -c Release -r "$RID" \
-    -p:PublishAot=true -p:StripSymbols=true -p:Version="$VERSION" -o "$BUILD/settings"
+    -p:StripSymbols=true -p:Version="$VERSION" -o "$BUILD/settings"
 mkdir -p "$SETTINGS_APP/Contents/MacOS" "$SETTINGS_APP/Contents/Resources"
 # 実行ファイルと、描画に使うライブラリ (libSkiaSharp・libHarfBuzzSharp・libAvaloniaNative。実行ファイルの隣から読む)
 cp "$BUILD/settings/MeltypeSettings" "$BUILD/settings/"*.dylib "$SETTINGS_APP/Contents/MacOS/"
