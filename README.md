@@ -1,3 +1,6 @@
+#注意
+このプロジェクトはWindowsとChromeOS Linuxのみ実証済みで行っています。
+
 # Meltype-FLASH
 
 <!-- meltype-flash-platform:start -->
