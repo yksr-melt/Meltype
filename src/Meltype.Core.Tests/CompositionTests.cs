@@ -952,6 +952,17 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Prediction_NoEnglishCompletionAfterEnglishJapaneseSplit()
+    {
+        // 頭を英語と判定して botと と見せているときに、打った全体の続き (bottom) を出さない
+        var k = new Keyboard(predictor: new Predictor(null, null, null));
+        k.Type("botto");
+        if (!k.Showing.StartsWith("bot", StringComparison.Ordinal)) return;
+        var predictions = k.Host.View!.Predictions ?? [];
+        Assert.True(!predictions.Contains("bottom"), k.Showing + ": " + string.Join(",", predictions));
+    }
+
+    [Test]
     public static void Prediction_CompletesEnglishWord()
     {
         // #38: 英単語の打ちかけ (decis) から続きの候補 (decision, decisions …)

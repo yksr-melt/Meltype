@@ -150,8 +150,10 @@ internal static partial class CompositionController
                 if (env.Settings.EnglishNamePredictions) Add(Connected(predictor.PredictEnglishNames(reading)), before, reading);
             }
         }
-        // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す
-        if (CompositionText.Raw(state.Text).Length >= 4 && CompositionText.Raw(state.Text).All(char.IsAsciiLetter)) Add(predictor.PredictEnglish(CompositionText.Raw(state.Text)), "", CompositionText.Raw(state.Text));
+        // 長い英単語は、打ち終わるまでローマ字として見えていることがある (decis → でしs)。英字だけを 4 文字以上打っていれば英単語の続きも出す。
+        // 頭を英語と判定して日英に分けて見せているとき (botto → botと) は、打った全体は 1 語の英単語ではないので出さない (bottom を出さない)
+        if (CompositionText.Raw(state.Text).Length >= 4 && CompositionText.Raw(state.Text).All(char.IsAsciiLetter)
+            && !CurrentDisplay(state, env, final: false).StartsWith(CompositionText.Raw(state.Text)[0])) Add(predictor.PredictEnglish(CompositionText.Raw(state.Text)), "", CompositionText.Raw(state.Text));
         state.Predictions = predictions;
     }
 
