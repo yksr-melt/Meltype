@@ -49,7 +49,7 @@ const BASE = {
 };
 
 const TABLE = new Map(Object.entries(BASE));
-const LONGEST = Math.max(...[...TABLE.keys()].map((key) => key.length));
+export const LONGEST = Math.max(...[...TABLE.keys()].map((key) => key.length));
 // ある文字列が、まだどれかの綴りの途中かどうか
 const PREFIXES = new Set([...TABLE.keys()].flatMap((key) => [...key].map((_, i) => key.slice(0, i + 1))));
 
