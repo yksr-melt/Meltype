@@ -17,15 +17,8 @@
     <ApplicationIcon>..\..\native\tip\meltype.ico</ApplicationIcon>
     <InvariantGlobalization>false</InvariantGlobalization>
     <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
-    <!--
-      NuGet の依存 (推移的なものも) の版を packages.lock.json に固定する。CI (環境変数 CI) では、lock と違えば restore を失敗にする。
-      配布物は各 OS の build スクリプトが -r <RID> で publish するので、lock に RID ごとの依存と NativeAOT のコンパイラも入れる
-      (PublishAot・RuntimeIdentifiers をここに書かないと、publish の restore が lock と食い違う)
-    -->
+    <!-- 配布物は NativeAOT で publish する。各 OS の build スクリプトは -r <RID> だけを付ける -->
     <PublishAot>true</PublishAot>
-    <RuntimeIdentifiers>win-x64;osx-arm64;osx-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <RestoreLockedMode Condition="'$(CI)' == 'true'">true</RestoreLockedMode>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="12.1.6" />
