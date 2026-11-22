@@ -1,0 +1,39 @@
+# Meltype のブラウザー版 (web-ime/) 用の Mozc。web-ime/mozc/build-mozc-wasm.sh が converter/BUILD.bazel に足す。
+mozc_cc_binary(
+    name = "meltype_mozc_wasm_bin",
+    srcs = [
+        "meltype_mozc_helper.cc",
+        "meltype_mozc_wasm.cc",
+    ],
+    linkopts = [
+        "-sMODULARIZE=1",
+        "-sEXPORT_ES6=1",
+        "-sEXPORT_NAME=createMozc",
+        "-sALLOW_MEMORY_GROWTH=1",
+        "-sENVIRONMENT=web,worker",
+        "-sEXPORTED_RUNTIME_METHODS=cwrap,ccall,UTF8ToString",
+        "-sEXPORTED_FUNCTIONS=_main,_meltype_mozc_init,_meltype_mozc_request",
+    ],
+    deps = [
+        ":converter_interface",
+        ":segments",
+        "//base:init_mozc",
+        "//base:system_util",
+        "//base:util",
+        "//composer",
+        "//config:config_handler",
+        "//engine",
+        "//engine:engine_factory",
+        "//protocol:commands_cc_proto",
+        "//protocol:config_cc_proto",
+        "//request:conversion_request",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+load("@emsdk//emscripten_toolchain:wasm_rules.bzl", "wasm_cc_binary")
+
+wasm_cc_binary(
+    name = "meltype_mozc_wasm",
+    cc_target = ":meltype_mozc_wasm_bin",
+)
