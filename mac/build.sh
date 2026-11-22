@@ -146,7 +146,7 @@ cp "$BUILD/settings/MeltypeSettings" "$BUILD/settings/"*.dylib "$SETTINGS_APP/Co
 cp Resources/Settings/Info.plist "$SETTINGS_APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$SETTINGS_APP/Contents/Info.plist"
 cp -R Resources/Settings/ja.lproj "$SETTINGS_APP/Contents/Resources/"
-sips -s format icns ../linux/icon.png --out "$SETTINGS_APP/Contents/Resources/icon.icns" > /dev/null
+sips -s format icns Resources/Settings/icon.png --out "$SETTINGS_APP/Contents/Resources/icon.icns" > /dev/null
 
 # 同梱する実行ファイル・ライブラリの最低の macOS が、Meltype.app の LSMinimumSystemVersion より新しければ止める
 # (Bazel でビルドした Mozc のヘルパーは、指定しないとビルドした Mac の SDK の版になり、古い macOS で起動できなかった)
