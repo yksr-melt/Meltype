@@ -4,9 +4,12 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
-using Meltype.Composition;
 using Meltype.Config;
+using Meltype.Dictionary;
+using Meltype.Engine;
+using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -179,14 +182,14 @@ internal static class ZenzaiConverterTests
         // かなが読みと合わない答え (ず の読みの づ) も、Mozc の候補で作れるなら使う
         var variant = hybrid.ConvertClauses("きずくのがはやい", "前の文");
         Assert.True(variant is [{ Text: "気づくのが" }, { Text: "早い" }], "Mozc の候補にある表記: " + Joined(variant));
-        Assert.Equal("気づくのが早い", hybrid.Convert("きずくのがはやい", null) ?? "", "その読みだけの変換も同じ");
+        Assert.Equal("気づくのが早い", hybrid.ConvertText("きずくのがはやい", null) ?? "", "その読みだけの変換も同じ");
         // Mozc の候補で作れず、かなが読みと合わない答え (#1675・#1511) は、Zenzai が答えても使わず、Mozc に任せる
         Assert.Equal("ハードウェアウェアウェア", Answered("はーどうぇ", "前の文"), "Zenzai は答えをそのまま返す");
         Assert.True(hybrid.ConvertClauses("はーどうぇ", "前の文") is [{ Text: "はーどうぇ" }], "繰り返し続けた答え");
         Assert.Equal("名前は魚の", Answered("なまえ", "前の文"), "Zenzai は答えをそのまま返す");
         Assert.True(hybrid.ConvertClauses("なまえ", "前の文") is [{ Text: "なまえ" }], "直前の文節の混入");
         Assert.Equal("名前は魚の", Answered("なまえ", null), "Zenzai は答えをそのまま返す");
-        Assert.Equal("なまえ", hybrid.Convert("なまえ", null) ?? "", "その読みだけの変換も Mozc に任せる");
+        Assert.Equal("なまえ", hybrid.ConvertText("なまえ", null) ?? "", "その読みだけの変換も Mozc に任せる");
 
         // Zenzai が答えるまで待って、その答え (覚えているので、HybridConverter が聞くと同じ答えが返る)
         string? Answered(string reading, string? context)
@@ -276,12 +279,9 @@ internal static class ZenzaiConverterTests
         var zenzai = new ZenzaiConverter(server.Endpoint);
         var mozc = new MozcConverter(new MozcHelperProcess(Environment.ProcessPath!, Path.Combine(Path.GetTempPath(), MozcConverterTests.FakeHelperProfile)));
         var hybrid = new HybridConverter(mozc, () => zenzai);
-        hybrid.Budget.Enable();
-        var session = new TestSession(() => new Settings { LiveConversion = true }, hybrid);
+        var session = new TestSession(() => new Settings { LiveConversion = true }, hybrid, lateResults: true);
         // Mozc の起動を待つ
-        hybrid.Budget.Start(10000);
-        mozc.ConvertClauses("あ", null);
-        hybrid.Budget.Start(0);
+        mozc.ConvertClauses("あ", null, deadline: Environment.TickCount64 + 10000);
         return (session, mozc, zenzai, server, release);
     }
 
@@ -342,36 +342,32 @@ internal static class ZenzaiConverterTests
     }
 
     [Test]
-    public static void Budget_AnswersFromTheWorker_AndNotifies()
+    public static void Deadline_AnswersFromTheWorker_AndNotifies()
     {
         using var server = new FakeServer { Answer = p => p.Contains("キョウ") ? "今日</s>" : "" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         using var ready = new ManualResetEventSlim();
         zenzai.ResultReady += ready.Set;
-        zenzai.Budget.Enable();
 
-        Assert.True(zenzai.ConvertClauses("きょう", "朝") is null, "答えが無ければ待たない");
+        Assert.True(zenzai.ConvertClauses("きょう", "朝", deadline: 0) is null, "答えが無ければ待たない");
         Assert.True(ready.Wait(5000), "答えが届いたら知らせる");
-        Assert.True(zenzai.ConvertClauses("きょう", "朝") is [{ Text: "今日" }], "届いた答えを返す");
+        Assert.True(zenzai.ConvertClauses("きょう", "朝", deadline: 0) is [{ Text: "今日" }], "届いた答えを返す");
         Assert.Equal(1, server.Prompts.Count, "同じ要求を 2 回送らない");
 
-        // 答えが要るときは Budget の間だけ待つ
-        zenzai.Budget.Start(3000);
+        // 答えが要るときは Deadline まで待つ
         server.Answer = _ => "明日</s>";
-        Assert.True(zenzai.ConvertClauses("あした", "朝") is [{ Text: "明日" }], "Budget の間は待って答える");
+        Assert.True(zenzai.ConvertClauses("あした", "朝", deadline: Environment.TickCount64 + 3000) is [{ Text: "明日" }], "Deadline までは待って答える");
     }
 
     [Test]
-    public static void Budget_DoesNotNotifyWhenThereIsNoNewText()
+    public static void Deadline_DoesNotNotifyWhenThereIsNoNewText()
     {
         using var server = new FakeServer { Answer = p => "かんたん</s>" };
         using var zenzai = new ZenzaiConverter(server.Endpoint);
         var notified = 0;
         zenzai.ResultReady += () => Interlocked.Increment(ref notified);
-        zenzai.Budget.Enable();
-        zenzai.Budget.Start(3000);
         // 読みのまま (変換していない) の答えは表示を変えない
-        Assert.True(zenzai.ConvertClauses("かんたん", null) is null, "変換していない");
+        Assert.True(zenzai.ConvertClauses("かんたん", null, deadline: Environment.TickCount64 + 3000) is null, "変換していない");
         Assert.Equal(0, Volatile.Read(ref notified));
     }
 
@@ -435,7 +431,7 @@ internal static class ZenzaiConverterTests
         Assert.True(other is [{ Reading: "たんい", Text: "丹位" }], "違えば Zenzai: " + string.Join("|", other?.Select(c => c.Text) ?? []));
         // 使わない設定 (null) なら今までどおり
         var off = new HybridConverter(mozc, () => null);
-        Assert.Equal("単位", off.Convert("たんい", null) ?? "", "OFF は今までどおり");
+        Assert.Equal("単位", off.ConvertText("たんい", null) ?? "", "OFF は今までどおり");
     }
 
     [Test]
@@ -452,7 +448,7 @@ internal static class ZenzaiConverterTests
         IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> noCandidates = [(new("きしゃが", "記者が"), ["記者が"]), (new("きた", "きた"), [])];
         Assert.True(HybridConverter.Align(noCandidates, "記者がきた") is [{ Text: "記者が" }, { Text: "きた" }], "候補が無い文節は読みのまま: " + Joined(HybridConverter.Align(noCandidates, "記者がきた")));
         Assert.True(HybridConverter.Align(noCandidates, "記者が来た") is null, "候補が無い文節は、読みのまま以外にはしない");
-        // 半角の数字を打った読みは、Mozc が全角の候補 (１５日に) を返す。半角にそろえて比べ、半角で返す (CompositionController.NormalizeHalfWidth と同じ)
+        // 半角の数字を打った読みは、Mozc が全角の候補 (１５日に) を返す。半角にそろえて比べ、半角で返す (TextChars.NormalizeHalfWidth と同じ)
         IReadOnlyList<(ConversionClause, IReadOnlyList<string>)> digits = [(new("15にちに", "１５日に"), ["１５日に", "十五日に"]), (new("きた", "来た"), ["来た", "着た"])];
         var halfWidth = HybridConverter.Align(digits, "15日に着た");
         Assert.True(halfWidth is [{ Text: "15日に" }, { Text: "着た" }], "半角の数字: " + Joined(halfWidth));
@@ -540,6 +536,14 @@ internal static class ZenzaiConverterTests
         Assert.True(!learned.Host.View!.Hint.Contains("Zenzai", StringComparison.Ordinal), "学習で変わった文節には出さない: " + learned.Host.View.Hint);
         Assert.True(learned.Host.View.ContextHint is null, "学習で置き換わった文節の Zenzai 表示は残さない");
 
+        // 候補の一覧では、Zenzai の答えの候補にだけ注記を付ける (学習で先頭が変わっても、Zenzai の答えがどれか分かる)
+        Assert.Equal(CandidateNote.Zenzai, k.Host.View.Notes?[k.Host.View.SelectedIndex] ?? CandidateNote.None, string.Join(" ", k.Host.View.Candidates));
+        Assert.True(plain.Host.View.Notes?.Contains(CandidateNote.Zenzai) != true, "Zenzai の答えでなければ注記を付けない");
+        var learnedNotes = learned.Host.View.Notes ?? [];
+        var zenzaiIndex = learned.Host.View.Candidates.ToList().IndexOf("日本語を");
+        Assert.True(zenzaiIndex > 0 && learnedNotes.ElementAtOrDefault(zenzaiIndex) == CandidateNote.Zenzai, "学習で後ろに回った Zenzai の答えに注記を付ける: " + string.Join(" ", learned.Host.View.Candidates));
+        Assert.True(learnedNotes.ElementAtOrDefault(learned.Host.View.SelectedIndex) != CandidateNote.Zenzai, "学習した候補には付けない");
+
         using var holder = new ZenzaiHolder((s, m, _) => new ZenzaiConverter(server.Endpoint, timeoutMs: 5000));
         Assert.True(holder.Status is null, "OFF・まだ使っていなければ出さない");
         holder.Get("server", "model");
@@ -559,7 +563,7 @@ internal static class ZenzaiConverterTests
         var hybrid = new HybridConverter(mozc,
             () => throw new FileNotFoundException("Could not load file or assembly 'System.Net.Http'"));
         Assert.True(hybrid.ConvertClauses("たんいをとる", null) is [{ Text: "単位を" }, { Text: "取る" }], "文節に分けた変換は、ほかの変換エンジンで");
-        Assert.Equal("今日", hybrid.Convert("きょう", null) ?? "", "1 回の変換も、ほかの変換エンジンで");
+        Assert.Equal("今日", hybrid.ConvertText("きょう", null) ?? "", "1 回の変換も、ほかの変換エンジンで");
         var k = new CompositionTests.Keyboard(converter: hybrid);
         k.Type("tanniwotoru ");
         Assert.Equal("単位を取る", k.Showing ?? "", "打っても入力が止まらない");
@@ -676,7 +680,7 @@ internal static class ZenzaiConverterTests
         Assert.Equal("橋", Joined(second!.ConvertClauses("はし", null)).Split('→')[^1], "作り直したものは使える");
         // 一度でも答えたものが諦めたときは、一時的な失敗として最初の待ち時間 (5 分) から (続けて失敗した 2 回目の 10 分にしない)
         server.Status = 500;
-        for (var i = 0; i < 3; i++) second.ConvertClauses("かわ" + new string('の', i), null);
+        for (var i = 0; i < 3; i++) second!.ConvertClauses("かわ" + new string('の', i), null);
         Assert.True(holder.Get("server", "model") is null, "また諦めたら止める");
         now += (long)holder.RetryAfter.TotalMilliseconds;
         Assert.True(holder.Get("server", "model") is not null && created.Count == 3, "使えていたあとの失敗は、最初の待ち時間で作り直す");
@@ -703,7 +707,7 @@ internal static class ZenzaiConverterTests
         var second = holder.Get("server", "model");
         Assert.True(second is not null && !ReferenceEquals(second, first) && created.Count == 2, "しばらくたったら作り直す (一時的な失敗で止めたままにしない)");
         Assert.Equal("橋", Joined(second!.ConvertClauses("はし", null)).Split('→')[^1], "作り直したものは使える");
-        Assert.True(holder.Get("", "") is null && second.ConvertClauses("はしを", null) is null, "OFF にしたら止める");
+        Assert.True(holder.Get("", "") is null && second!.ConvertClauses("はしを", null) is null, "OFF にしたら止める");
     }
 
     /// <summary>zenz に渡した文 (U+EE00 + カタカナの読み + …) の読みを、ひらがなにして返す。</summary>

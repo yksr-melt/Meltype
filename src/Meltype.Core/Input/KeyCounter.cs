@@ -15,7 +15,7 @@ namespace Meltype.Input;
 /// フックのスレッドから Count を呼び、ファイル (keycount.json) には Save でまとめて書く。
 /// 打った文字は残さない (どのキーを何回押したかだけ)。
 /// </summary>
-internal sealed partial class KeyCounter
+public sealed partial class KeyCounter
 {
     public sealed class Data
     {

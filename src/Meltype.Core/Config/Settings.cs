@@ -11,7 +11,7 @@ namespace Meltype.Config;
 
 /// <summary>Meltype の OS。<see cref="PlatformsAttribute"/> で組にする。</summary>
 [Flags]
-public enum Platform
+internal enum Platform
 {
     Windows = 1,
     Mac = 2,
@@ -23,7 +23,7 @@ public enum Platform
 /// config.schema.json の説明の先頭に「Windows・Mac のみ。」のように出し、x-platforms に OS の名前を出す。
 /// </summary>
 [AttributeUsage(AttributeTargets.Property)]
-public sealed class PlatformsAttribute(Platform platforms) : Attribute
+internal sealed class PlatformsAttribute(Platform platforms) : Attribute
 {
     public Platform Platforms { get; } = platforms;
 }
@@ -333,6 +333,11 @@ public sealed class Settings
     [Category("8. キー操作"), DisplayName("Shift + Enter で選んだ文節までを確定"),
      Description("文節に分けて変換しているとき、Shift + Enter で、選んでいる文節までを確定し、残りの文節は未確定のまま (ひらがなに戻して) 続けて編集できるようにします。")]
     public bool PartialCommit { get; set; }
+
+    // ワークアラウンド: 変換を始めたときに選ぶ文節を、Mozc の区切りと変換の uncertainty から決められるようになったら (#2105) 消す。
+    [Category("8. キー操作"), DisplayName("変換を始めたら最後の文節を選ぶ"),
+     Description("Space・Shift + Space・Tab・変換・↑ ↓ で変換を始めたとき、最後の文節を選びます (OFF のときは先頭の文節)。変換前の ← は最後の文節、→ は先頭の文節を選びます。")]
+    public bool ConversionStartsAtLastClause { get; set; }
 
     [Category("8. キー操作"), DisplayName("Control キーの割り当て"),
      Description("入力中の Control + 英字の割り当てです。標準: Ctrl + U / I / O / P で F6 / F7 / F10 / F9、Ctrl + H で BackSpace。ATOK 風: 標準に加えて、変換中の Ctrl + K で選んでいる文節を縮め、Ctrl + L で伸ばします (Shift + ← → と同じ)。macOS 風: Control + J / K / L をひらがな / カタカナ / 全角英字 (F6 / F7 / F9) に、Control + H / D を前 / 後ろの 1 文字を消す、N / P を次 / 前の候補、B / F / A / E をカーソル移動、O / I を変換中の文節を伸ばす / 縮める、にします (macOS 標準の日本語入力と同じ)。")]

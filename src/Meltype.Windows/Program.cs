@@ -41,7 +41,7 @@ internal static class Program
             Log.Error($"未処理の例外: {e.ExceptionObject}");
             Log.FlushFile();
             WriteCrashLog(e.ExceptionObject);
-            Composition.LearningSaves.FlushAll();
+            Config.LearningSaves.FlushAll();
         };
 
         if (!AppPaths.IsPortable) AppPaths.MigrateFromOldName();
@@ -69,13 +69,13 @@ internal static class Program
 
         // 学習データは確定のたびに書かず、少し後にまとめて書く。終了・ログオフのときに残りを書く
         // (更新の確認は学習データを別に読み込んで書くので、それより後で切り替える)
-        Composition.LearningSaves.Deferred = true;
-        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => Composition.LearningSaves.FlushAll();
+        Config.LearningSaves.Deferred = true;
+        Microsoft.Win32.SystemEvents.SessionEnding += (_, _) => Config.LearningSaves.FlushAll();
 
         MeltypeEngine engine;
         try
         {
-            engine = new MeltypeEngine(Composition.MeltypeRuntime.OpenDefault());
+            engine = new MeltypeEngine(Ime.MeltypeRuntime.OpenDefault());
             engine.Start();
         }
         catch (Exception ex)
@@ -93,7 +93,7 @@ internal static class Program
             using var exitSignal = new ExitSignal();
             Application.Run(new TrayApplicationContext(engine, state));
         }
-        Composition.LearningSaves.FlushAll();
+        Config.LearningSaves.FlushAll();
         return 0;
     }
 

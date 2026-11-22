@@ -3,10 +3,10 @@
 
 using System.Globalization;
 using System.Text;
-using Meltype.Composition.Utility;
 using Meltype.Config;
-using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Dictionary;
+using Meltype.Learning;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Composition;
 
@@ -18,7 +18,7 @@ internal static partial class CompositionController
         env.Services.Meanings?.Lookup(clause.Text, clause.IsEnglish ? null : clause.Reading) ?? env.Services.Translations?.Meaning(clause.Text);
 
     /// <summary>
-    /// 候補の右に小さく出す注記: 英訳 (complex)、半角 / 全角 (同じ記号・英数字の半角と全角が両方候補にあるとき。# と ＃ は見分けにくい)。
+    /// 候補の右に小さく出す注記: Zenzai の答え、英訳 (complex)、半角 / 全角 (同じ記号・英数字の半角と全角が両方候補にあるとき。# と ＃ は見分けにくい)。
     /// 注記が 1 つも無ければ null。
     /// </summary>
     private static List<CandidateNote>? CandidateNotes(Clause clause)
@@ -27,6 +27,7 @@ internal static partial class CompositionController
         if (clause.Notes is { } fixedNotes) return [.. fixedNotes];
         var notes = clause.Candidates.Select(c =>
         {
+            if (c == clause.ZenzaiText) return CandidateNote.Zenzai;
             if (clause.Translations.Contains(c)) return CandidateNote.Translation;
             var half = ToHalfWidth(c);
             if (half != c && clause.Candidates.Contains(half)) return CandidateNote.FullWidth;
@@ -102,7 +103,7 @@ internal static partial class CompositionController
         if (!env.Settings.ShowCandidatesWhileTyping || state.Text.Mode != DisplayMode.Auto || state.Text.KanaInput || CompositionText.IsAlphanumeric(state.Text, env) || CompositionText.IsEmpty(state.Text)) return null;
         var kana = CompositionText.AllKana(state.Text, env, final: false);
         if (kana.Length < 2 || !kana.All(c => c is >= 'ぁ' and <= 'ゖ' or 'ー')) return null;
-        var candidates = WithoutWaiting(state, env, () => JapaneseCandidates(state, env, kana, null, SegmentBefore(state, ""), env.Converter).Take(5).ToList());
+        var candidates = JapaneseCandidates(state, WithoutWaiting(env), kana, null, SegmentBefore(env, ""), zenzai: true).Take(5).ToList();
         return candidates.Count > 1 ? candidates : null;
     }
 
@@ -174,7 +175,7 @@ internal static partial class CompositionController
         var starts = new List<(string Before, string Reading, string[] Heads)> { ("", kana, []) };
         // 文節の区切りはライブ変換の結果を使う (打鍵ごとに変換を増やさない)。ライブ変換が OFF のときと、読みが短いうちは読み全体だけ
         if (!env.Settings.LiveConversion || !CountsAsLive(kana)) return starts;
-        var clauses = LiveClauses(state, env, kana, afterEnglish: false, SegmentBefore(state, ""));
+        var clauses = LiveClauses(state, env, kana, afterEnglish: false, SegmentBefore(env, ""));
         if (clauses.Count < 2) return starts;
         var last = clauses[^1];
         // 見えている文字の終わりが最後の文節 (変換した文字か、変換していない読み) のときだけ。
