@@ -37,19 +37,6 @@ android {
                 ?: error("MELTYPE_TEST_KEY_PASSWORD is missing")
         }
     }
-    // Distributable APKs are signed only with the long-lived private key.
-    // Never fall back to a runner-generated debug key for the release variant.
-    val distributionKeystore = System.getenv("MELTYPE_SIGNING_KEYSTORE")?.takeIf { it.isNotBlank() }
-    if (distributionKeystore != null) {
-        signingConfigs.create("meltypeDistribution") {
-            storeFile = file(distributionKeystore)
-            storePassword = System.getenv("MELTYPE_SIGNING_PASSWORD")
-                ?: error("MELTYPE_SIGNING_PASSWORD is missing")
-            keyAlias = "meltype"
-            keyPassword = System.getenv("MELTYPE_SIGNING_PASSWORD")
-                ?: error("MELTYPE_SIGNING_PASSWORD is missing")
-        }
-    }
     buildTypes {
         getByName("debug") {
             applicationIdSuffix = ".debug"
@@ -61,9 +48,7 @@ android {
             // 使わないコードを落として小さくする。残すものは mozc/consumer-rules.pro に書いてある。
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // The release variant is deliberately unsigned without the secret key.
-            // Only the release workflow may publish Meltype.apk.
-            signingConfig = distributionKeystore?.let { signingConfigs.getByName("meltypeDistribution") }
+            // 配布用の署名は、ビルド後に android-release.yml の apksigner で行う。
         }
     }
     compileOptions {

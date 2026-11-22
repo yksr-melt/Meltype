@@ -2,7 +2,7 @@
 
 Android用の仮想キーボード（IME）。日本語QWERTYでは **日英自動判別が実装済み**。既存のC# `Meltype.Core` を **NativeAOT + JNI** で共有し、Kotlinで判別ロジックを再実装していません。PR #1149 は QWERTY 専用です。12キーのかな／英字フリック入力は選択できず、体験設計とCore統合を [Issue #1885](https://github.com/yksr-melt/Meltype/issues/1885) で検討します。
 
-このブランチは、[ninjin0802さんのAndroid試作PR #621](https://github.com/yksr-melt/Meltype/pull/621) を土台にした [本家向け統合PR #1149](https://github.com/yksr-melt/Meltype/pull/1149) の提出ソースです。元のAndroid実装への貢献・クレジットを維持し、レビューの一本化を提案しています。正式リリースではなく、実機検証済みの開発・QA版です。
+Android版は、[ninjin0802さんのAndroid試作PR #621](https://github.com/yksr-melt/Meltype/pull/621) を土台に、[統合PR #1149](https://github.com/yksr-melt/Meltype/pull/1149) で本家に取り込みました。元のAndroid実装への貢献・クレジットを維持しています。開発中のプレビュー版です。
 
 ## 実装済みの主な機能
 
@@ -56,7 +56,7 @@ ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash tools/build-meltype-nati
 
 Android APK: `android/app/build/outputs/apk/debug/app-debug.apk`。端末テストには別途Androidのテスト用APKとエミュレーター／実機が必要です。
 
-MozcのJNI／辞書成果物やC# NativeAOTの生成物、配布署名鍵はソース管理しません。正式なアプリID・リリース署名・配布方針は本家メンテナー判断待ち。デバッグ／QA署名済みAPKを公式リリースと扱わないでください。
+MozcのJNI／辞書成果物やC# NativeAOTの生成物、配布署名鍵はソース管理しません。配布用APKは、下の「APK配布と署名」にあるActionsで生成します。デバッグ／QA署名済みAPKは一時検証用です。
 
 ## リポジトリ構成
 
@@ -73,7 +73,7 @@ MozcのJNI／辞書成果物やC# NativeAOTの生成物、配布署名鍵はソ�
 
 - 配布用Application ID: `app.meltype.keyboard`（ユーザー名・元実装者名は含めない）
 - APK名: `Meltype.apk`
-- 公開先: [GitHub Releases](https://github.com/KoheiTakada/Meltype/releases)
+- 公開先: [GitHub Releases の Android プレビュー](https://github.com/yksr-melt/Meltype/releases)。[Android preview release](https://github.com/yksr-melt/Meltype/actions/workflows/android-release.yml) を `main` で手動実行して公開する。
 - 更新時の互換性: **同じApplication ID、同じ秘密署名鍵、増加するversionCode** を維持する。毎回変わるCIデバッグ鍵は配布には使わない。
 - 設定・操作方法: [署名と配布手順](docs/SIGNING-DISTRIBUTION.md)。署名鍵はGitHub Secretsに登録し、Git履歴へは置かない。
 - 一時検証用のデバッグAPKは `.debug` を付けた別パッケージIDで配布版と分離する。

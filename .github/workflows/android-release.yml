@@ -1,0 +1,187 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 yksr-melt
+name: Android preview release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Android版の版番号（例: 0.1.0-preview.1）'
+        required: true
+        default: '0.1.0-preview.1'
+        type: string
+
+permissions:
+  contents: read
+
+# 同じタグへの公開が同時に走るのを防ぐ。
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  MELTYPE_VERSION_NAME: ${{ inputs.version }}
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # main のコミット数を versionCode に使うため、全履歴を取得する。
+          fetch-depth: 0
+      - name: Android の更新用の版番号を決める
+        # main が進むと増え、ワークフローを改名しても番号が戻らない。
+        run: echo "MELTYPE_VERSION_CODE=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+      - name: 公開する版と署名情報を確認する
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MELTYPE_SIGNING_KEYSTORE_BASE64: ${{ secrets.MELTYPE_SIGNING_KEYSTORE_BASE64 }}
+          MELTYPE_SIGNING_PASSWORD: ${{ secrets.MELTYPE_SIGNING_PASSWORD }}
+        run: |
+          if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+            echo '::error::main を選んで実行してください。'
+            exit 1
+          fi
+          if [[ ! "$MELTYPE_VERSION_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+-preview\.[1-9][0-9]*$ ]]; then
+            echo '::error::版番号は 0.1.0-preview.1 のように指定してください。'
+            exit 1
+          fi
+          if [[ -z "$MELTYPE_SIGNING_KEYSTORE_BASE64" || -z "$MELTYPE_SIGNING_PASSWORD" ]]; then
+            echo '::error::MELTYPE_SIGNING_KEYSTORE_BASE64 と MELTYPE_SIGNING_PASSWORD を Actions Secrets に登録してください。'
+            exit 1
+          fi
+          tag="android-v$MELTYPE_VERSION_NAME"
+          refs="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$tag" --jq '.[].ref')"
+          if grep -Fxq "refs/tags/$tag" <<< "$refs"; then
+            echo '::error::この版のタグは既にあります。新しい版番号を指定してください。'
+            exit 1
+          fi
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: ビルド前に署名鍵を開けることを確認する
+        env:
+          MELTYPE_SIGNING_KEYSTORE_BASE64: ${{ secrets.MELTYPE_SIGNING_KEYSTORE_BASE64 }}
+          MELTYPE_SIGNING_PASSWORD: ${{ secrets.MELTYPE_SIGNING_PASSWORD }}
+        run: |
+          umask 077
+          keystore="$(mktemp "$RUNNER_TEMP/meltype-signing.XXXXXX.p12")"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$MELTYPE_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          keytool -list -storetype PKCS12 -keystore "$keystore" \
+            -storepass:env MELTYPE_SIGNING_PASSWORD > /dev/null
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+      - name: 共有 Core のテスト
+        run: dotnet run --project src/Meltype.Core.Tests -c Release
+      - name: ビルドに必要なものを入れる
+        run: |
+          sudo apt-get -o Acquire::Retries=3 update
+          sudo apt-get -o Acquire::Retries=3 install -y patchelf curl git python3 build-essential
+          sdkmanager 'ndk;28.2.13676358'
+      - name: 固定した Mozc のソースからビルドする
+        run: bash android/tools/build-mozc.sh
+      - name: 共有 Core を Android 向けにビルドする
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          bash android/tools/build-meltype-native.sh
+      - name: JVM のテストと release APK のビルド
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
+      - name: 配布用の鍵で APK に署名する
+        env:
+          MELTYPE_SIGNING_KEYSTORE_BASE64: ${{ secrets.MELTYPE_SIGNING_KEYSTORE_BASE64 }}
+          MELTYPE_SIGNING_PASSWORD: ${{ secrets.MELTYPE_SIGNING_PASSWORD }}
+        run: |
+          umask 077
+          keystore="$(mktemp "$RUNNER_TEMP/meltype-signing.XXXXXX.p12")"
+          trap 'rm -f "$keystore"' EXIT
+          printf '%s' "$MELTYPE_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          mkdir -p android/build/release
+          # PowerShell が付ける別名にも対応するため、PKCS12 内の唯一の秘密鍵を使う。
+          # 署名はビルド後に行い、鍵のファイルはこのステップが終わるときに消す。
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" sign \
+            --ks "$keystore" --ks-type PKCS12 \
+            --ks-pass env:MELTYPE_SIGNING_PASSWORD --key-pass env:MELTYPE_SIGNING_PASSWORD \
+            --out android/build/release/Meltype.apk \
+            android/app/build/outputs/apk/release/app-release-unsigned.apk
+      - name: 署名・アプリ ID・版・16 KiB 対応を確認する
+        run: |
+          apk=android/build/release/Meltype.apk
+          build_tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$build_tools/apksigner" verify --verbose --print-certs "$apk" \
+            > android/build/release/signature.txt
+          badging="$("$build_tools/aapt" dump badging "$apk")"
+          if [[ "$badging" != "package: name='app.meltype.keyboard' versionCode='$MELTYPE_VERSION_CODE' versionName='$MELTYPE_VERSION_NAME'"* \
+             || "$badging" == *application-debuggable* ]]; then
+            echo '::error::APK のアプリ ID・版、または debuggable の設定が配布用と合いません。'
+            exit 1
+          fi
+          python3 android/tools/check-apk-16k.py "$apk"
+          git rev-parse HEAD > android/build/release/source-commit.txt
+          cd android/build/release
+          sha256sum Meltype.apk > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: meltype-android-release
+          path: |
+            android/build/release/Meltype.apk
+            android/build/release/signature.txt
+            android/build/release/source-commit.txt
+            android/build/release/SHA256SUMS
+          if-no-files-found: error
+
+  publish:
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    # ソースをビルドするジョブには、リリースを書き込む権限を渡さない。
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: meltype-android-release
+          path: dist
+      - name: Android のプレビューを公開する
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd dist
+          sha256sum --check SHA256SUMS
+          tag="android-v$MELTYPE_VERSION_NAME"
+          # v* のデスクトップ版とタグを分け、既存の配布物を上書きしない。
+          refs="$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$tag" --jq '.[].ref')"
+          if grep -Fxq "refs/tags/$tag" <<< "$refs"; then
+            echo '::error::この版のタグは既にあります。既存のリリースは変更しません。'
+            exit 1
+          fi
+          cat > "$RUNNER_TEMP/android-release-notes.md" << EOF
+          Android 版 Meltype のプレビューです。開発途中のため、不具合が残っている可能性があります。
+
+          対応機能・制限・使い方は、この版の [Android 版の説明]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/android/README.md) を確認してください。
+
+          添付の Meltype.apk を端末にダウンロードしてインストールしてください。
+          設定で Meltype をキーボードとして有効にし、入力方法に選んで使います。
+
+          ソース: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA
+          EOF
+          gh release create "$tag" Meltype.apk SHA256SUMS signature.txt source-commit.txt \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Meltype for Android $MELTYPE_VERSION_NAME（プレビュー）" \
+            --notes-file "$RUNNER_TEMP/android-release-notes.md" --prerelease --latest=false
