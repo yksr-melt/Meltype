@@ -42,7 +42,7 @@ internal static class FrontProtocolTests
                 "removeBefore", "hint", "notes", "selectedMeaning", "meaningDelayMs"],
             // 送る入力欄の性質
             Others: ["Terminal"]),
-        new("Android", "android/app/src/main/kotlin/io/github/ninjin0802/keyboard/app/core/ImeJson.kt", source => source,
+        new("Android", "android/app/src/main/kotlin/app/meltype/keyboard/core/ImeJson.kt", source => source,
             new(@"\b(?:get|opt)(?:String|Int|Boolean|JSONObject|JSONArray)\(""(\w+)""|\bisNull\(""(\w+)"""),
             // Android reports field facts to Core, and handles text edits, candidate choices and the language mode from its output.
             Unused: ["version", "handlesInput", "imeOpen", "modeIndicatorMs", "capture", "printableAscii",
