@@ -97,8 +97,11 @@ stub が impl をロードし、Meltype の更新後は、アプリを再起動�
 | ITfCompositionSink | アプリの側が変換中の文字を確定したとき (打っている途中で、キャレットがその後ろのままなら、次のキーで変換中に戻して続ける。空のノートに最初の文字を入れたときに、アプリが入力欄を作り直して確定することがあるため) |
 | ITfDisplayAttributeProvider | 下線の種類 (打っている途中は点線、変換した文節は細線、選んでいる文節は太線) |
 | ITfCompartmentEventSink | 日本語 ⇔ 英数 (IME の ON/OFF)。半角/全角 と、タスクバーの「あ / A」のボタン (ITfLangBarItemButton) で切り替える |
+| ITfCandidateListUIElement | 候補の一覧を UI Element として `ITfUIElementMgr` に知らせる (`CandidateWindow.cpp`)。アプリが自分で描くと答えたら (`BeginUIElement` の show が FALSE) 窓は出さない |
 
-ゲームなど、候補を自分で描くアプリ向けの UILess (ITfCandidateListUIElement) には対応していない。
+ゲームなど、候補を自分で描くアプリ (UILess) は、スレッドを `TF_TMAE_UIELEMENTENABLEDONLY` で始め、`GUID_TFCAT_TIPCAP_UIELEMENTENABLED` に登録した IME だけを有効にする。
+登録していないと、そのアプリでは IME が動かず、打ったキーがそのまま入る。そのため、このカテゴリに登録し、候補の一覧は必ず `ITfUIElementMgr` を通して出す。
+アプリが自分で描くときに渡すのは候補の一覧だけで、「もしかして」・打ったキー・案内・候補の意味は出ない。ページの区切りは Meltype が決める (`SetPageIndex` は受け付けない)。
 
 ### キーの流れ
 
@@ -222,7 +225,6 @@ DLL の中で、Direct2D + DirectWrite で描く (絵文字もカラーで出る
 
 ## 未対応・確かめていないこと
 
-- UILess (候補を自分で描くアプリ)
 - ARM64 の Windows では、64 ビットのアプリ用に ARM64X の DLL (`tip\arm64`。ARM64 と x64 のアプリのどちらにも読み込める) を登録する。
   ARM64 の実機では、まだ広くは確かめていない
 - 確かめたのは、RichEdit の入力欄 (`--tip-e2e`)、パイプ (`--tip-client`)、ストアアプリと同じ AppContainer からの接続。

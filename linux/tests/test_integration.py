@@ -214,8 +214,11 @@ class IntegrationTests(unittest.TestCase):
     def test_real_mozc_candidate_selection(self):
         self.type_text("kyou")
         self.assertTrue(self.special(IBus.KEY_space))
-        self.assertIn("今日", self.engine.visible_candidates)
-        index = self.engine.visible_candidates.index("今日")
+        # IBus の候補には注記の欄が無いので、エンジンは注記を「　」で候補の後ろに付けて出す。
+        # 「今日」に Zenzai の注記が付くかは、Zenzai が答えたかで変わる
+        index = next((i for i, candidate in enumerate(self.engine.visible_candidates)
+                      if candidate == "今日" or candidate.startswith("今日　")), None)
+        self.assertIsNotNone(index, self.engine.visible_candidates)
         page_size = self.engine._lookup.get_page_size()
         while self.engine._lookup.get_cursor_pos() // page_size < index // page_size:
             self.special(IBus.KEY_Page_Down)

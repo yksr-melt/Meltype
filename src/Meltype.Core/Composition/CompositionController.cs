@@ -46,13 +46,13 @@ public sealed record CompositionView(
     bool Numbered = false);
 
 /// <summary>キーを 1 つ押した。Ch は入力する文字 (キーボード配列は OS 側で解決済み。文字を生まないキーなら null)。</summary>
-public readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
+internal readonly record struct KeyPress(int Vk, char? Ch, bool Shift, bool Control, bool Alt, bool Command, long TimeMs)
 {
     public bool Modifier => Control || Alt || Command;
 }
 
 /// <summary>選択中の確定済みの文字と、その読み (再変換)。</summary>
-public sealed record ReconversionSelection(string Text, string Reading);
+internal sealed record ReconversionSelection(string Text, string Reading);
 
 /// <summary>
 /// 入力欄 1 つ分の変換ボックス (未確定文字列) の処理 (どのフロントも <see cref="Ime.ImeSession"/> から使う)。状態は <see cref="CompositionState"/> に置き、
@@ -109,7 +109,7 @@ internal static partial class CompositionController
         /// <summary>ユーザーが候補を選び直したか (確定時に学習する)。</summary>
         public bool Changed { get; set; }
 
-        /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら「Zenzai」と出す。</summary>
+        /// <summary>変換エンジンが返したときの Zenzai の答え (Zenzai の答えでなければ null)。今の文字列がこれと同じなら説明に「Zenzai」と出し、候補の一覧ではこの候補に注記を付ける。</summary>
         public string? ZenzaiText { get; set; }
 
         /// <summary>

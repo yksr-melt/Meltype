@@ -124,8 +124,9 @@ public sealed class RomajiTypoCorrector
         {
             case "v1":
                 if (word[^1] != 'る') break;
-                // て・た 形も 1 語にする: 語幹が 1 文字 (み・ね) だと 1 文字の語の重みになり、み|て が英単語 mite に負ける
-                foreach (var ending in (string[])["", "て", "た"]) forms.Add(stem + ending);
+                // て・た 形 (と て の縮まった ちゃ・ちゃった の ちゃっ) も 1 語にする: 語幹が 1 文字 (み・き) だと 1 文字の語の重みになり、
+                // み|て が英単語 mite に、き|ちゃ が kit + や に負ける
+                foreach (var ending in (string[])["", "て", "た", "ちゃ", "ちゃっ"]) forms.Add(stem + ending);
                 break;
             case "i":
                 if (word[^1] != 'い') break;
@@ -133,7 +134,7 @@ public sealed class RomajiTypoCorrector
                 if (word == "いい") foreach (var ending in (string[])["よく", "よかっ", "よけれ"]) forms.Add(ending);
                 break;
             case "vk":
-                if (word.EndsWith("くる", StringComparison.Ordinal)) foreach (var form in (string[])["き", "きて", "きた", "こ", "く", "くれ"]) forms.Add(word[..^2] + form);
+                if (word.EndsWith("くる", StringComparison.Ordinal)) foreach (var form in (string[])["き", "きて", "きた", "きちゃ", "きちゃっ", "こ", "く", "くれ"]) forms.Add(word[..^2] + form);
                 break;
             case "vs":
                 if (word.EndsWith("する", StringComparison.Ordinal)) foreach (var form in (string[])["し", "さ", "せ", "すれ", "しろ"]) forms.Add(word[..^2] + form);

@@ -1843,6 +1843,12 @@ internal static class CompositionTests
             ["here"] = "here",
             ["hero"] = "hero",
             ["I fly a kite"] = "I fly a kite",
+            // て の縮まった ちゃ (kit + や にしない)。英単語の後ろの や は英語のまま
+            ["kitya"] = "きちゃ",
+            ["kityatta"] = "きちゃった",
+            ["mityatta"] = "みちゃった",
+            ["catya"] = "catや",
+            ["robotya"] = "robotや",
         };
         foreach (var (typed, expected) in cases)
         {
