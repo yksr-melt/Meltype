@@ -19,12 +19,12 @@ internal static class LearningPage
 {
     private sealed record Conversion(string Reading, string Text, DateTime Used);
 
-    private static LearningData Open() => new(AppPaths.DataDirectory);
-
     private static string Date(DateTime used) => used.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture);
 
     public static Control Build(Window owner)
     {
+        // ローマ字の表を読むので、ページを開くたびに 1 回だけ作る (一覧・消す操作の前に、ファイルを読み直す)
+        var data = LearningData.OpenStandalone(AppPaths.DataDirectory);
         var message = Pages.Message();
         var filter = new TextBox { PlaceholderText = "絞り込み (語・読み)", Width = 220 };
         var languages = new ListBox
@@ -49,7 +49,6 @@ internal static class LearningPage
         void Reload()
         {
             var query = (filter.Text ?? "").Trim();
-            var data = Open();
             var words = data.Languages().Where(e => query.Length == 0 || e.Word.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
             var chosen = data.Conversions().Where(e => query.Length == 0 || e.Reading.Contains(query) || e.Text.Contains(query)).Select(e => new Conversion(e.Reading, e.Text, e.Used)).ToList();
             languages.ItemsSource = words;
@@ -62,7 +61,7 @@ internal static class LearningPage
         {
             var keys = languages.SelectedItems?.OfType<LearnedLanguage>().Select(e => e.EntryKey).ToList() ?? [];
             if (keys.Count == 0) return;
-            Open().ForgetLanguages(keys);
+            data.ForgetLanguages(keys);
             Pages.Show(message, $"{keys.Count} 語を忘れました。");
             Reload();
         }
@@ -71,7 +70,6 @@ internal static class LearningPage
         {
             var readings = conversions.SelectedItems?.OfType<Conversion>().Select(e => e.Reading).ToList() ?? [];
             if (readings.Count == 0) return;
-            var data = Open();
             foreach (var reading in readings) data.ForgetConversion(reading);
             Pages.Show(message, $"{readings.Count} 語を忘れました。");
             Reload();
@@ -80,7 +78,7 @@ internal static class LearningPage
         async Task ForgetSince(DateTime sinceUtc, string label)
         {
             if (!await Dialogs.Ask(owner, "学習データを消す", $"{label}に覚えた学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句) を削除します。よろしいですか？", ok: "削除")) return;
-            var count = Open().ForgetSince(sinceUtc);
+            var count = data.ForgetSince(sinceUtc);
             Pages.Show(message, count > 0 ? $"{label}に覚えたものを {count} 件削除しました。" : "削除するものはありませんでした。");
             Reload();
         }
@@ -99,7 +97,7 @@ internal static class LearningPage
         {
             if (!await Dialogs.Ask(owner, "学習データを消す",
                     "学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて削除します。よろしいですか？\n\nユーザー辞書と設定は消えません。", ok: "すべて削除")) return;
-            Open().Reset();
+            data.Reset();
             Pages.Show(message, "学習データをすべて削除しました。");
             Reload();
         });

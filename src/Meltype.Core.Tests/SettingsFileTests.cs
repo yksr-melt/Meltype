@@ -61,4 +61,31 @@ internal static class SettingsFileTests
         }
         finally { Directory.Delete(directory, recursive: true); }
     }
+
+    /// <summary>設定アプリで 1 項目を変えて保存しても、直前にほかのプロセス (トレイ) が書いた値を、間隔の間の古い設定で戻さない。</summary>
+    [Test]
+    public static void SettingsFile_EditReadsLatestFileBeforeSaving()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-file-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            var file = new SettingsFile(path, timeMs: () => 0);
+            Assert.True(file.Current.Enabled, "最初は有効");
+            // 間隔が経つ前に、ほかのプロセスが一時停止する
+            var paused = new Settings { Enabled = false };
+            paused.Save(path);
+            File.SetLastWriteTimeUtc(path, new DateTime(2026, 1, 1, 0, 0, 1, DateTimeKind.Utc));
+            var saved = file.Edit(settings =>
+            {
+                var next = settings.Clone();
+                next.Punctuation = PunctuationStyle.FullWidthCommaPeriod;
+                return next;
+            })!;
+            Assert.True(!saved.Enabled && saved.Punctuation == PunctuationStyle.FullWidthCommaPeriod, "一時停止のまま、変えた項目だけを重ねる");
+            Assert.True(!Settings.Load(path).Enabled, "保存したファイルも一時停止のまま");
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
 }

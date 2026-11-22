@@ -31,23 +31,39 @@ internal sealed class SettingsStore
 
     public Settings Current => _file.Current;
 
-    /// <summary>ほかのプロセスが config.json を書いた (画面の値を読み直す)。</summary>
+    /// <summary>画面の値を読み直す (ほかのプロセスが config.json を書いた・設定全体を変えた・保存できなかった)。</summary>
     public event Action? Changed;
 
+    /// <summary>保存できなかった (理由)。画面は保存した値 (変える前の値) で出し直す。</summary>
+    public event Action<string>? Failed;
+
     /// <summary>1 つの項目を変えて保存する。</summary>
-    public void Edit(Action<Settings> change)
+    public void Edit(Action<Settings> change) => Replace(settings =>
     {
-        var next = _file.Current.Clone();
+        var next = settings.Clone();
         change(next);
-        _shown = _file.Apply(next);
-    }
+        return next;
+    }, showAll: false);
 
     /// <summary>プロファイルの切り替えなど、設定全体を作り直す操作をして保存する。operation が null を返したら何もせず false。</summary>
-    public bool Replace(Func<Settings, Settings?> operation)
+    public bool Replace(Func<Settings, Settings?> operation) => Replace(operation, showAll: true);
+
+    // showAll: 保存したあとに画面を出し直す (1 項目の変更は、変えた部品がもう新しい値を出している)
+    private bool Replace(Func<Settings, Settings?> operation, bool showAll)
     {
-        if (operation(_file.Current) is not { } next) return false;
-        _shown = _file.Apply(next);
-        Changed?.Invoke();
+        try
+        {
+            if (_file.Edit(operation) is not { } next) return false;
+            _shown = next;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _shown = _file.Current;
+            Failed?.Invoke(ex.Message);
+            Changed?.Invoke();
+            return false;
+        }
+        if (showAll) Changed?.Invoke();
         return true;
     }
 }

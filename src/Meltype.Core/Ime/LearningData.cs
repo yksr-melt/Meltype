@@ -10,8 +10,8 @@ namespace Meltype.Ime;
 /// <summary>
 /// データフォルダーの学習データ: 選び直した変換 (conversions.json)・英字 / かなに直した語 (languages.json)・
 /// 予測変換の語句 (phrases.txt)・選んだ英訳 (translations.json)。
-/// 入力する Meltype は <see cref="MeltypeRuntime"/> の中に 1 つ持ち、設定アプリは見る・消すたびに作る。
-/// どちらも、ほかのプロセスが書き換えたファイルは保存せずに読み直す (<see cref="Config.FileStamp"/>)。
+/// 入力する Meltype は <see cref="MeltypeRuntime"/> の中に 1 つ持ち、設定アプリは <see cref="OpenStandalone"/> で開く。
+/// どちらも、ほかのプロセスが書き換えたファイルは保存せずに読み直す (<see cref="Config.FileStamp"/>)。一覧を返す前・消す前にも読み直す。
 /// </summary>
 public sealed class LearningData(string dataDirectory)
 {
@@ -23,8 +23,25 @@ public sealed class LearningData(string dataDirectory)
 
     internal TranslationHistory Translations { get; } = new(Path.Combine(dataDirectory, "translations.json"));
 
+    /// <summary>
+    /// 入力する Meltype の外 (設定アプリ) で開く。判定器は作らないので、学習した語が今有効か (<see cref="LearnedLanguage.Active"/>) を決める
+    /// ローマ字の読みとよく使う日本語の読みだけをつなぐ (入力する Meltype では <see cref="MeltypeRuntime.Connect"/> がつなぐ)。
+    /// </summary>
+    public static LearningData OpenStandalone(string dataDirectory)
+    {
+        var data = new LearningData(dataDirectory);
+        var romaji = RomajiDetector.CreateDefault(Path.Combine(dataDirectory, "dictionaries"));
+        data.LanguageMemory.IsCommonJapanese = RomajiTypoCorrector.Load(romaji).IsCommonJapanese;
+        data.LanguageMemory.IsReadableRomaji = LanguageMemory.ReadableBy(romaji);
+        return data;
+    }
+
     /// <summary>英字で打った語を英語・日本語のどちらで出すか学習したもの (新しく使ったものから)。</summary>
-    public IReadOnlyList<LearnedLanguage> Languages() => LanguageMemory.Entries();
+    public IReadOnlyList<LearnedLanguage> Languages()
+    {
+        Refresh();
+        return LanguageMemory.Entries();
+    }
 
     /// <summary>学習した語を忘れる。keys は <see cref="LearnedLanguage.EntryKey"/>。</summary>
     public void ForgetLanguages(IEnumerable<string> keys)
@@ -34,7 +51,11 @@ public sealed class LearningData(string dataDirectory)
     }
 
     /// <summary>読みに対して選び直した変換 (はし → 箸) の学習 (新しく使ったものから)。</summary>
-    public IReadOnlyList<(string Reading, string Text, DateTime Used)> Conversions() => History.Entries();
+    public IReadOnlyList<(string Reading, string Text, DateTime Used)> Conversions()
+    {
+        Refresh();
+        return History.Entries();
+    }
 
     /// <summary>読みに対して選び直した変換の学習を忘れる。</summary>
     public void ForgetConversion(string reading)

@@ -30,6 +30,7 @@ echo "== 設定アプリ (C#, NativeAOT)"
 case "$(uname -m)" in
     x86_64) rid=linux-x64 ;;
     aarch64) rid=linux-arm64 ;;
+    *) echo "設定アプリをビルドできない CPU です: $(uname -m)" >&2; exit 1 ;;
 esac
 dotnet publish "$root/src/Meltype.Settings/Meltype.Settings.csproj" -c Release -r "$rid" \
     -p:PublishAot=true -p:StripSymbols=true -o "$here/build/settings"

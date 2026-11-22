@@ -179,7 +179,7 @@ public sealed class MeltypeRuntime : IDisposable
     internal static void Connect(CompositionDetector detector, CompositionServices services)
     {
         if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
-        if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
+        if (services.Languages is { } memory) memory.IsReadableRomaji ??= LanguageMemory.ReadableBy(detector.Romaji);
         if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
     }
 

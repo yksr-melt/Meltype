@@ -101,9 +101,9 @@ public static class Backup
         }
         foreach (var (path, bytes) in files)
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
             if (File.Exists(path)) File.Copy(path, path + ".before-restore", overwrite: true);
-            File.WriteAllBytes(path, bytes);
+            // 入力している Meltype が書きかけのファイルを読み直さないように、書き終えてから置き換える
+            DataFile.Write(path, temp => File.WriteAllBytes(temp, bytes));
         }
         return files.Count;
     }

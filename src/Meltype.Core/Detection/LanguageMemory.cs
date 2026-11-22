@@ -53,6 +53,9 @@ public sealed class LanguageMemory
     /// </summary>
     public Func<string, bool>? IsReadableRomaji { get; set; }
 
+    /// <summary><see cref="IsReadableRomaji"/> の決め方: 途中までではなく、全体がローマ字として読める。</summary>
+    internal static Func<string, bool> ReadableBy(RomajiDetector romaji) => word => romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
+
     /// <summary>英語として覚えるのに 2 回要る語か。</summary>
     private bool NeedsTwice(string word, Entry entry) =>
         entry.English && Math.Max(1, entry.Count) < 2 &&

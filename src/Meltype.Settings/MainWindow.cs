@@ -34,6 +34,7 @@ internal sealed class MainWindow : Window
         _search.TextChanged += (_, _) => ShowPage();
         // ほかのプロセスが config.json を書いたら、出している値を読み直す
         _store.Changed += ShowPage;
+        _store.Failed += message => _ = Dialogs.Inform(this, "設定を保存できませんでした", $"{AppPaths.ConfigFile}\n\n{message}");
 
         var sidebar = new DockPanel { Width = 240, Margin = new Thickness(8) };
         _search.Margin = new Thickness(0, 0, 0, 8);

@@ -54,10 +54,30 @@ public sealed class SettingsFile(string path, Action<Settings>? loaded = null, F
         }
     }
 
-    private Settings Read()
+    /// <summary>
+    /// config.json を読み直してから change で変えて保存する (ほかのプロセスが直前に書いた値を、間隔の間の古い設定で戻さない)。
+    /// change が null を返したら保存せずに null を返す。保存できなければ例外にする (設定アプリが利用者に知らせる)。
+    /// </summary>
+    public Settings? Edit(Func<Settings, Settings?> change)
+    {
+        lock (_gate)
+        {
+            if (change(Read(force: true)) is not { } edited) return null;
+            var next = edited.Clone().Normalize();
+            next.Save(path);
+            _writeTime = File.GetLastWriteTimeUtc(path);
+            _settings = next;
+            _checkedMs = _timeMs();
+            _failed = false;
+            loaded?.Invoke(next);
+            return next;
+        }
+    }
+
+    private Settings Read(bool force = false)
     {
         var now = _timeMs();
-        if (_settings is not null && now - _checkedMs < CheckIntervalMs) return _settings;
+        if (_settings is not null && !force && now - _checkedMs < CheckIntervalMs) return _settings;
         _checkedMs = now;
         // 読む前の時刻を覚える。読んでいる間に書かれても、次に読み直す (Load の移行で保存したときも 1 回読み直す)
         DateTime writeTime;

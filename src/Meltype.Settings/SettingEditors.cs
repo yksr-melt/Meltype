@@ -92,7 +92,7 @@ internal static class SettingEditors
         return number;
     }
 
-    /// <summary>文字列の入力欄。打つたびに保存せず、Enter・フォーカスが外れたときに保存する (入力する Meltype が、打ちかけの値を読まないように)。</summary>
+    /// <summary>文字列の入力欄。打つたびに保存せず、Enter・フォーカスが外れた・画面から外れたときに保存する (入力する Meltype が、打ちかけの値を読まないように)。</summary>
     public static TextBox Text(string value, Action<string> changed)
     {
         var box = new TextBox { Text = value, MinWidth = 200, VerticalAlignment = VerticalAlignment.Center };
@@ -105,6 +105,8 @@ internal static class SettingEditors
             changed(text);
         }
         box.LostFocus += (_, _) => Commit();
+        // 打ってすぐ窓を閉じた・ほかのページに移ったときは、フォーカスが外れる前に画面から外れる
+        box.DetachedFromVisualTree += (_, _) => Commit();
         box.KeyDown += (_, e) =>
         {
             if (e.Key == Avalonia.Input.Key.Enter) Commit();
