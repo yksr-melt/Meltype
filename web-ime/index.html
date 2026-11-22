@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meltype Web</title>
+<link rel="stylesheet" href="meltype-web.css">
+<style>
+  body { margin: 0 auto; max-width: 720px; padding: 24px 16px; font: 16px/1.6 system-ui, sans-serif; background: Canvas; color: CanvasText; }
+  textarea { width: 100%; box-sizing: border-box; height: 12em; font: inherit; }
+  #status { color: GrayText; font-size: 14px; }
+</style>
+</head>
+<body>
+<h1>Meltype Web</h1>
+<p>ローマ字のまま打つと、日本語と英語を自動で分けて入力します。Space で変換、Enter で確定します。</p>
+<textarea id="text" placeholder="kyouhagooglede kensakusita" disabled></textarea>
+<p id="status">読み込み中…</p>
+<script type="module">
+  import { attach } from "./meltype-web.js";
+  const field = document.getElementById("text");
+  const status = document.getElementById("status");
+  try {
+    const ime = await attach(field);
+    field.disabled = false;
+    field.focus();
+    status.textContent = ime.mozc ? "準備できました。" : "準備できました (Mozc が無いので、漢字変換はしません)。";
+    window.meltype = ime;
+  } catch (error) {
+    status.textContent = `読み込めませんでした: ${error}`;
+    throw error;
+  }
+</script>
+</body>
+</html>
