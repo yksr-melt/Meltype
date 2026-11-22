@@ -11,7 +11,7 @@ namespace Meltype.Learning;
 /// 形式は 1 行に「読み 候補 : 手がかり 手がかり …」。前後の文字列に手がかりが含まれていれば、その候補を最初にする
 /// (気温 が近くにあれば あつい → 暑い、財布 なら かわ → 革)。変換エンジンだけでは文脈を読み切れない語を補う。
 /// </summary>
-public sealed class ContextRules
+internal sealed class ContextRules
 {
     private readonly Dictionary<string, List<(string Candidate, string[] Cues)>> _rules = new(StringComparer.Ordinal);
 
@@ -107,7 +107,7 @@ public sealed class ContextRules
 /// ユーザーが選び直した変換の記録 (Microsoft IME の学習と同じ)。次に同じ読みを変換したとき最初の候補にする。
 /// %LOCALAPPDATA%\Meltype\conversions.json に「文節の読み → 選んだ文字列」だけを保存する。
 /// </summary>
-public sealed class ConversionHistory
+internal sealed class ConversionHistory
 {
     private const int MaxEntries = 5000;
     private readonly string? _path;
