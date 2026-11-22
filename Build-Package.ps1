@@ -127,6 +127,14 @@ else {
 # Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。
 # 「Zenzai を使う」は既定 ON で、場所が空なら app\zenzai のものを使う。無ければ今までの変換エンジンだけで変換する。
 if (Test-Path -LiteralPath (Join-Path $zenzaiBin 'llama-server.exe')) {
+    # llama-server が使う Visual C++ のランタイム (VCRUNTIME140.dll など) は Get-Zenzai.ps1 が横に置き、VC-RUNTIME.txt に書いている。
+    # 無いまま配ると、「Visual C++ 再頒布可能パッケージ」が入っていない PC で llama-server が起動できない
+    $zenzaiRuntimeList = Join-Path $zenzaiBin 'VC-RUNTIME.txt'
+    $zenzaiRuntimeDlls = if (Test-Path -LiteralPath $zenzaiRuntimeList) { @(Get-Content -LiteralPath $zenzaiRuntimeList | Where-Object { $_.Trim() }) } else { @() }
+    $zenzaiMissing = $zenzaiRuntimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $zenzaiBin $_)) }
+    if ($zenzaiRuntimeDlls.Count -eq 0 -or $zenzaiMissing) {
+        throw "llama-server と一緒に置く Visual C++ のランタイムがありません ($(if ($zenzaiMissing) { $zenzaiMissing -join ', ' } else { 'VC-RUNTIME.txt' }))。native\zenzai\Get-Zenzai.ps1 を実行し直してください。"
+    }
     New-Item -ItemType Directory -Force -Path (Join-Path $app 'zenzai') | Out-Null
     Copy-Item -Path (Join-Path $zenzaiBin '*') -Destination (Join-Path $app 'zenzai') -Force
     Write-Host 'Zenzai (llama-server とモデル) を同梱しました。'

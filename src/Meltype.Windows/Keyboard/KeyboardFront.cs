@@ -328,7 +328,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
             lock (_gate) _releaseFollows.Add(e.PhysicalId);
         }
         var output = Send(ImeEventType.KeyPressed, key);
-        if (!output.Result.Consumed)
+        // Shift・Ctrl は、本体が使った押下もアプリに通す。止めた押下は GetAsyncKeyState に表れないので、通さないと
+        // 押したまま打った後のキー (変換中の Shift + ←) が修飾キーなしになる (#2118)。
+        // Alt・Win は押して離すだけでメニューやスタートを開くので通さない (Shift・Ctrl の単独押しは下で防ぐ)
+        if (!output.Result.Consumed || GenericModifier(e.Vk) is VirtualKeys.Shift or VirtualKeys.Control || e.Vk is VirtualKeys.Shift or VirtualKeys.Control)
         {
             _composition.Replay(e);
             return;
@@ -337,8 +340,10 @@ internal sealed class KeyboardFront : IImeEnvironment, IDisposable
         // (変換ボックスを出す前から押していた Shift など) を本体が使うと、離したことを止めたときアプリと OS では押したままになり、
         // 打つ文字もクリックもすべて Shift 付きになる。押していないキーを離しても何も起きない
         if (!VirtualKeys.IsModifier(e.Vk)) lock (_gate) _consumed.Add(e.PhysicalId);
-        // Alt・Win と一緒に押したキー (US 配列の Alt + ` など) を使うと、アプリには修飾キーだけを押したように見えてメニューに移るので、何もしないキーを送る
-        if (key.Alt || key.Command) KeyInjector.SendKey(0xE8);
+        // 修飾キーと一緒に押したキーを使うと、アプリには修飾キーだけを押して離したように見える。Alt・Win ではメニューに移り
+        // (US 配列の Alt + ` など)、Shift・Ctrl では単独押しに割り当てた機能が動く (JetBrains の IDE の Shift 2 回で Search Everywhere、
+        // 変換中の Shift + ← を 2 回など) ので、何もしないキー (0xE8、割り当てなし) を送る
+        if (key.Alt || key.Command || key.Shift || key.Ctrl) KeyInjector.SendKey(0xE8);
     }
 
     /// <summary>出来事を送り、返ってきた確定・表示・入力モードを反映する。</summary>

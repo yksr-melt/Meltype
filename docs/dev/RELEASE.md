@@ -32,6 +32,10 @@ bot は、main の `Meltype.Windows.csproj`・`Meltype.Core.csproj`・`Info.plis
 
 Actions の画面で release.yml をブランチに対して手で実行 (Run workflow) すると、3 つの OS のテスト版の配布物を実行結果の Artifacts に置きます (リリースには付けません)。1 つの OS だけなら、windows.yml・mac.yml・linux.yml を手で実行します。
 
+### Android のプレビューを出す
+
+[Android preview release](https://github.com/yksr-melt/Meltype/actions/workflows/android-release.yml) を `main` で手動実行し、版を `0.1.0-preview.1` の形式で指定します。署名付きの `Meltype.apk` を `android-v<版>` の Pre-release に公開します。署名用の Secrets と更新時の注意点は [Android の署名・配布手順](../../android/docs/SIGNING-DISTRIBUTION.md) を参照してください。
+
 ## 同梱の .NET の更新
 
 配布物の .NET の版は、どこにも固定していません。ビルドのたびに setup-dotnet (`10.0.x`) がその時の最新の SDK とランタイムを入れます。

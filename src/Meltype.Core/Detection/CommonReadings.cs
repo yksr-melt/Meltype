@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Eisenferik
 
+using System.Text;
 using Meltype.Detection;
 using Meltype.Libraries.Lexicon;
 
@@ -31,6 +32,30 @@ internal static class CommonReadings
 
     /// <summary>カタカナで書く語の読み (dictionaries/katakana.txt)。よく使う語の印が無い語も含む。</summary>
     public static PackedWordSet Katakana => SharedKatakana.Value;
+
+    private static readonly Lazy<PackedWordSet> SharedNames = new(() => PackedWordSet.FromWords(
+        DictionarySource.DataLines(DictionarySource.ReadEmbedded("names.txt")).Select(WithoutLongVowels)));
+
+    /// <summary>日本人の姓・名の読み (dictionaries/names.txt)。長音を除いた形 (さとう → さと) で入れる。<see cref="WithoutLongVowels"/> で引く。</summary>
+    public static PackedWordSet Names => SharedNames.Value;
+
+    /// <summary>
+    /// お段の後ろの う・お と、う段の後ろの う を除く (さとう・おおの・ゆうき → さと・おの・ゆき)。
+    /// ヘボン式のローマ字は長音を書かない (Sato・Ono・Yuki) ので、打った綴りの読みと名前の読みを、両方この形にして比べる。
+    /// </summary>
+    public static string WithoutLongVowels(string kana)
+    {
+        var result = new StringBuilder(kana.Length);
+        foreach (var c in kana)
+        {
+            var previous = result.Length > 0 ? result[^1] : '\0';
+            var oRow = "おこそとのほもよろをごぞどぼぽょぉ".Contains(previous);
+            var uRow = "うくすつぬふむゆるぐずづぶぷゅぅ".Contains(previous);
+            if (c == 'う' && (oRow || uRow) || c == 'お' && oRow) continue;
+            result.Append(c);
+        }
+        return result.ToString();
+    }
 
     private static readonly Lazy<PackedWordSet> SharedBrands = new(() => PackedWordSet.FromLines(
         string.Join('\n', DictionarySource.ReadEmbedded("brands.txt").Split('\n').Select(line => line.Split(' ')[0]))));
