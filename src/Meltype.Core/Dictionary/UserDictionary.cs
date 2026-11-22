@@ -12,8 +12,9 @@ public sealed record UserWord(string Reading, string Word);
 
 /// <summary>
 /// ユーザー辞書 (%LOCALAPPDATA%\Meltype\userdict.txt、1 行に「読み[Tab]単語」)。
-/// 変換で最優先に使う: 変換する読みの中に登録した読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
-/// 登録した単語にする (きごうとう → 記号等 を登録すると、きごうとうふくめ → 記号等|含め)。
+/// 登録した語は変換エンジン (Mozc) のユーザー辞書にも渡し (<see cref="EngineWords"/>)、ほかの語との取り合いを Mozc のコストで決める。
+/// Mozc が受け取るまで (前の版のヘルパー) は、変換する読みの中に登録した読みが含まれていれば、その部分は変換エンジンの区切りに関係なく
+/// 登録した単語にする (きごうとう → 記号等 を登録すると、きごうとうふくめ → 記号等|含め: <see cref="Split"/>)。
 /// トレイの「ユーザー辞書...」から登録・削除する。
 /// importDirectory (Mac / Linux は データフォルダ/dictionaries) に置いた .plist (macOS の「ユーザ辞書」を書き出したもの) の語も使う (#40)。
 /// .plist の語は userdict.txt には書かず、置いたファイルをそのまま読む。
@@ -42,6 +43,11 @@ public sealed class UserDictionary
     private readonly Dictionary<string, (string Reading, string Word)[]> _clauses = new(StringComparer.Ordinal);
     private Dictionary<string, List<string>> _byReading = new(StringComparer.Ordinal);
     private int _maxReadingLength;
+    // 同梱の語句だけの _byReading と最長の読み。ユーザーの語を Mozc が受け取ったら、Split はこちらで当てはめる
+    private Dictionary<string, List<string>> _builtInByReading = new(StringComparer.Ordinal);
+    private int _maxBuiltInReadingLength;
+    // Mozc が受け取ったユーザーの語の Version (受け取っていなければ -1)。裏のスレッドで書き、入力のスレッドで読む
+    private volatile int _engineVersion = -1;
     private readonly string? _importDirectory;
     // 最後に読んだ (読もうとした)・保存したときの userdict.txt の更新時刻と、読めたか。同じ更新時刻のまま読めなければ、読み直さない (警告を繰り返さない)
     private DateTime? _fileTime;
@@ -80,6 +86,7 @@ public sealed class UserDictionary
         }
         Load(fileTime, words);
         Version++;
+        WordsChanged?.Invoke();
         Diagnostics.Log.Info("ユーザー辞書が変わったので読み直しました。");
         return true;
     }
@@ -244,8 +251,17 @@ public sealed class UserDictionary
     /// <summary>変換エンジンの文節の頭から始まるときだけ使う同梱の語句の読みか (^けんりつ)。</summary>
     public bool IsHeadOnly(string reading) => _headOnly.Contains(reading);
 
-    /// <summary>登録内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
+    /// <summary>登録内容が変わるたびに増える。</summary>
     public int Version { get; private set; }
+
+    /// <summary>登録した語 (userdict.txt・.plist) が変わった。変えたスレッド (入力・UI のスレッド) で呼ぶので、受け手は待たない。</summary>
+    public event Action? WordsChanged;
+
+    /// <summary>変換エンジンに渡す語 (userdict.txt と .plist の語。同梱の語句は含めない) と、その <see cref="Version"/>。</summary>
+    public (int Version, IReadOnlyList<UserWord> Words) EngineWords() => (Version, [.. _words, .. _imported]);
+
+    /// <summary>変換エンジンが <see cref="EngineWords"/> の version の語を受け取った。今の版の語なら、<see cref="Split"/> はユーザーの語を当てはめない。</summary>
+    public void InEngine(int version) => _engineVersion = version;
 
     public int Count => _words.Count;
 
@@ -301,7 +317,8 @@ public sealed class UserDictionary
     /// </summary>
     public List<(string Reading, string? Word)>? Split(string kana)
     {
-        if (_byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
+        var (byReading, maxReadingLength) = _engineVersion == Version ? (_builtInByReading, _maxBuiltInReadingLength) : (_byReading, _maxReadingLength);
+        if (byReading.Count == 0 || kana.Length < MinRegisteredReadingLength) return null;
         var pieces = new List<(string Reading, string? Word)>();
         var plain = new StringBuilder();
         var found = false;
@@ -309,11 +326,11 @@ public sealed class UserDictionary
         while (i < kana.Length)
         {
             string? matched = null;
-            for (var length = Math.Min(_maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
+            for (var length = Math.Min(maxReadingLength, kana.Length - i); length >= (kana.Length == 1 ? MinRegisteredReadingLength : MinSplitReadingLength); length--)
             {
                 // 拗音・小さい母音 (じょ・ふぁ) の途中では切らない (いしょくじょうたい が しょくじ|ょうたい で い食事ょうたい になっていた)
                 if (i + length < kana.Length && KanaChars.IsSmallKana(kana[i + length])) continue;
-                if (_byReading.ContainsKey(kana.Substring(i, length)))
+                if (byReading.ContainsKey(kana.Substring(i, length)))
                 {
                     matched = kana.Substring(i, length);
                     break;
@@ -330,7 +347,7 @@ public sealed class UserDictionary
                 pieces.Add((plain.ToString(), null));
                 plain.Clear();
             }
-            pieces.Add((matched, _byReading[matched][0]));
+            pieces.Add((matched, byReading[matched][0]));
             found = true;
             i += matched.Length;
         }
@@ -343,20 +360,26 @@ public sealed class UserDictionary
         Rebuild();
         Version++;
         Save();
+        WordsChanged?.Invoke();
     }
 
     private void Rebuild()
     {
-        var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         // 後から登録したものを先にする。.plist の語はユーザーの登録の後、同梱の語句はさらに後。
-        foreach (var word in Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn))
+        (_byReading, _maxReadingLength) = ByReading(Enumerable.Reverse(_words).Concat(_imported).Concat(_builtIn));
+        (_builtInByReading, _maxBuiltInReadingLength) = ByReading(_builtIn);
+        _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static (Dictionary<string, List<string>> ByReading, int MaxReadingLength) ByReading(IEnumerable<UserWord> words)
+    {
+        var byReading = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var word in words)
         {
             if (!byReading.TryGetValue(word.Reading, out var list)) byReading[word.Reading] = list = [];
             if (!list.Contains(word.Word)) list.Add(word.Word);
         }
-        _byReading = byReading;
-        _maxReadingLength = byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length);
-        _builtInOnly = _builtIn.Select(w => w.Reading).Except(_words.Concat(_imported).Select(w => w.Reading)).ToHashSet(StringComparer.Ordinal);
+        return (byReading, byReading.Count == 0 ? 0 : byReading.Keys.Max(k => k.Length));
     }
 
     // 同梱の語句だけにある読み (ユーザーが登録した語ではない)。

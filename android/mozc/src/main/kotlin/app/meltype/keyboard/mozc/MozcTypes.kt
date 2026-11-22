@@ -17,4 +17,6 @@ interface MozcBackend {
     fun learn(clauses: List<MozcClause>, context: String?): Boolean
     /** 漢字かな混じりの [text] の読み (逆変換)。できなければ null。 */
     fun reading(text: String): String?
+    /** ユーザー辞書の [name] の辞書を [tsv] (1 行に「読み<Tab>語<Tab>品詞」) の語で入れ替える。頼めたら true (入れ替えは Mozc が裏で行う)。 */
+    fun importUserDictionary(name: String, tsv: String): Boolean
 }

@@ -50,6 +50,13 @@ internal class CoreMozcCallbacks(
                 if (converter.learn(clauses, context.ifEmpty { null })) "OK" else "NG"
             }
             "R" -> converter.reading(fields[1]) ?: ""
+            "D" -> {
+                val (name, records) = fields.drop(1)
+                // 1 行目の # で、Mozc の形式 (読み・語・品詞) として読ませる
+                val tsv = "# Meltype\n" + records.split(RECORD).filter { it.isNotEmpty() }
+                    .joinToString("") { it.split(UNIT).joinToString("\t") + "\n" }
+                if (converter.importUserDictionary(name, tsv)) "OK" else "NG"
+            }
             // 覚えさせるたびに保存している (MozcConverter.learn)
             "S" -> "OK"
             else -> throw IllegalArgumentException("Unknown Mozc helper request: ${fields[0]}")

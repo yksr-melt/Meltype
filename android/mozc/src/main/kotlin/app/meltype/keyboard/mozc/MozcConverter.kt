@@ -10,6 +10,7 @@ import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.KeyEvent
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Output
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.SessionCommand
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage.UserDictionaryImportData
 
 /**
  * Mozc でかなを漢字に変える。[engine] が null（初期化に失敗）なら、何も変換しない。
@@ -71,6 +72,15 @@ class MozcConverter internal constructor(
                 .map { if (it in '０'..'９') '0' + (it - '０') else it }.joinToString("")
                 .takeIf { it.isNotEmpty() }
         }
+
+    override fun importUserDictionary(name: String, tsv: String): Boolean {
+        val engine = engine ?: return false
+        val input = Input.newBuilder().setType(Input.CommandType.IMPORT_USER_DICTIONARY)
+            .setUserDictionaryImportData(UserDictionaryImportData.newBuilder().setDictionaryName(name).setData(tsv))
+            .build()
+        // 変換の命令の列と混ざらないよう、ほかの操作と同じく 1 つずつ順に行う
+        return synchronized(engine) { eval(input) != null }
+    }
 
     /**
      * 文節ごとの読み。Mozc は読みの中の一部の記号を半角にして返す（「（」→「(」、「？」→「?」など）ので、

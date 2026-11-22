@@ -135,6 +135,9 @@ internal sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>
     /// <summary>確定した文節を Mozc に覚えさせる。</summary>
     public void Learn(string? before, IReadOnlyList<ConversionClause> clauses) => mozc.Learn(before, clauses);
 
+    /// <summary>Mozc のユーザー辞書の name の辞書を words で入れ替える (<see cref="MozcConverter.SetUserDictionary"/>)。</summary>
+    public bool SetUserDictionary(string name, IReadOnlyList<(string Reading, string Word, string Pos)> words) => mozc.SetUserDictionary(name, words);
+
     /// <summary>読みの候補の一覧 (Mozc。deadline まで待つ)。</summary>
     public IReadOnlyList<string> Candidates(string reading, long deadline) => mozc.Candidates(reading, deadline);
 

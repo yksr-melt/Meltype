@@ -8,6 +8,9 @@
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
+//   D<TAB>辞書の名前<TAB>読み1<US>語1<US>品詞1<RS>読み2<US>語2<US>品詞2…
+//       ユーザー辞書。名前の辞書の語をすべて入れ替え、変換に使えるようにしてから "OK" (できなければ "NG") を返す。
+//       品詞は Mozc の品詞名 (名詞・人名・動詞ワ行五段…)。語が無ければ辞書を消す。ほかの名前の辞書には触らない。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -19,6 +22,9 @@
 #include <utility>
 #include <vector>
 
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "base/init_mozc.h"
@@ -29,10 +35,14 @@
 #include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
+#include "dictionary/user_dictionary_storage.h"
+#include "dictionary/user_dictionary_util.h"
+#include "dictionary/user_pos.h"
 #include "engine/engine.h"
 #include "engine/engine_factory.h"
 #include "protocol/commands.pb.h"
 #include "protocol/config.pb.h"
+#include "protocol/user_dictionary_storage.pb.h"
 #include "request/conversion_request.h"
 
 #ifdef _WIN32
@@ -162,11 +172,70 @@ class Helper {
 
   bool Save() { return engine_->Sync(); }
 
+  // ユーザー辞書の名前の辞書を、words の語で入れ替える。Engine::ImportUserDictionary は終わるのを待てない (非同期) ので、
+  // 保存先のファイルを書いてから読み直させる。同じ語なら書かない (起動のたびに Meltype が送るため)。
+  // Mozc の辞書の取り込み (user_dictionary_importer) は、このパッケージから使えない (Bazel の visibility) ので、語は自分で組み立てる。
+  bool SetDictionary(absl::string_view name, absl::string_view words) {
+    mozc::user_dictionary::UserDictionary imported;
+    for (absl::string_view record : absl::StrSplit(words, kRecordSeparator, absl::SkipEmpty())) {
+      const std::vector<absl::string_view> fields = absl::StrSplit(record, kUnitSeparator);
+      if (fields.size() < 3) return false;
+      mozc::user_dictionary::UserDictionary::Entry entry;
+      entry.set_key(std::string(fields[0]));
+      entry.set_value(std::string(fields[1]));
+      // 知らない品詞名は名詞にする (語を落とさない)
+      const auto pos = mozc::dictionary::UserPos::ToPosType(fields[2]);
+      entry.set_pos(mozc::user_dictionary::UserDictionary::PosType_IsValid(pos) ? pos : mozc::user_dictionary::UserDictionary::NOUN);
+      mozc::user_dictionary::SanitizeEntry(&entry);
+      // Mozc が登録できない語 (読みが長すぎる・使えない文字) は飛ばし、ほかの語は登録する
+      if (!mozc::user_dictionary::ValidateEntry(entry).ok()) continue;
+      *imported.add_entries() = std::move(entry);
+    }
+
+    mozc::UserDictionaryStorage storage(mozc::UserDictionaryStorage::GetDefaultUserDictionaryFileName());
+    if (absl::Status status = storage.Load(); !status.ok() && !absl::IsNotFound(status)) return false;
+    mozc::user_dictionary::UserDictionary* dictionary = nullptr;
+    for (int i = 0; i < storage.GetProto().dictionaries_size(); ++i) {
+      if (storage.GetProto().dictionaries(i).name() == name) {
+        dictionary = storage.GetProto().mutable_dictionaries(i);
+        break;
+      }
+    }
+    if (dictionary != nullptr && SameEntries(*dictionary, imported)) return true;
+    if (imported.entries_size() == 0) {
+      if (dictionary == nullptr) return true;
+      if (!storage.DeleteDictionary(dictionary->id()).ok()) return false;
+    } else {
+      if (dictionary == nullptr) {
+        const absl::StatusOr<uint64_t> id = storage.CreateDictionary(name);
+        if (!id.ok()) return false;
+        dictionary = storage.GetUserDictionary(*id);
+        if (dictionary == nullptr) return false;
+      }
+      *dictionary->mutable_entries() = imported.entries();
+    }
+    if (!storage.Lock()) return false;
+    const bool saved = storage.Save().ok();
+    storage.UnLock();
+    return saved && engine_->ReloadAndWait();
+  }
+
  private:
   static bool SameKeys(const mozc::Segments& segments,
                        const std::vector<std::pair<std::string, std::string>>& chosen) {
     for (size_t i = 0; i < chosen.size(); ++i) {
       if (segments.conversion_segment(i).key() != chosen[i].first) return false;
+    }
+    return true;
+  }
+
+  static bool SameEntries(const mozc::user_dictionary::UserDictionary& a,
+                          const mozc::user_dictionary::UserDictionary& b) {
+    if (a.entries_size() != b.entries_size()) return false;
+    for (int i = 0; i < a.entries_size(); ++i) {
+      const auto& x = a.entries(i);
+      const auto& y = b.entries(i);
+      if (x.key() != y.key() || x.value() != y.value() || x.pos() != y.pos()) return false;
     }
     return true;
   }
@@ -223,6 +292,8 @@ int main(int argc, char** argv) {
       std::cout << (helper.Learn(fields[1], fields[2]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "R" && fields.size() >= 2) {
       std::cout << helper.Reverse(fields[1]) << "\n";
+    } else if (fields[0] == "D" && fields.size() >= 3) {
+      std::cout << (helper.SetDictionary(fields[1], fields[2]) ? "OK" : "NG") << "\n";
     } else if (fields[0] == "S") {
       std::cout << (helper.Save() ? "OK" : "NG") << "\n";
     } else {

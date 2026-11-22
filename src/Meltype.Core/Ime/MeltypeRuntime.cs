@@ -167,9 +167,39 @@ public sealed class MeltypeRuntime : IDisposable
             ? zenzai.Get(ZenzaiBundle.ServerPath(settings.ZenzaiServerPath, appDirectory), ZenzaiBundle.ModelPath(settings.ZenzaiModelPath, appDirectory), settings.ZenzaiDevice)
             : zenzai.Get("", ""));
         ForgetZenzaiHallucinations(converter);
+        ConnectUserDictionary(converter);
         return converter;
     }
 
+    // Mozc のユーザー辞書に入れる Meltype の語の辞書の名前 (ユーザーが Mozc に作った辞書とは分ける)
+    private const string EngineDictionaryName = "Meltype";
+    private readonly object _engineDictionaryGate = new();
+    private int _engineDictionarySent = -1;
+
+    /// <summary>
+    /// ユーザー辞書の語を Mozc に渡す (変換エンジンを作ったとき・語が変わったとき)。Mozc が受け取った版の語は、Core の
+    /// <see cref="UserDictionary.Split"/> では当てはめず、ほかの語との取り合いを Mozc のコストで決める。ヘルパーの応答を待つので裏のスレッドで送る。
+    /// </summary>
+    private void ConnectUserDictionary(HybridConverter converter)
+    {
+        void Send()
+        {
+            var (version, words) = UserDictionary.EngineWords();
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                lock (_engineDictionaryGate)
+                {
+                    // 後から変わった語をもう送った
+                    if (version < _engineDictionarySent) return;
+                    _engineDictionarySent = version;
+                    // userdict.txt は品詞を持たないので名詞にする
+                    if (converter.SetUserDictionary(EngineDictionaryName, [.. words.Select(w => (w.Reading, w.Word, "名詞"))])) UserDictionary.InEngine(version);
+                }
+            });
+        }
+        UserDictionary.WordsChanged += Send;
+        Send();
+    }
 
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
     public Func<string?> ZenzaiStatus { get; private set; } = () => null;

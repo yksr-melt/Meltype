@@ -124,6 +124,26 @@ internal sealed class MozcConverter : IKanjiConverter, IDisposable
     }
 
     /// <summary>
+    /// Mozc のユーザー辞書の name の辞書を、words の語 (読み・語・Mozc の品詞名) で入れ替える。入れ替えて変換に使えるようになったら true。
+    /// 前の版のヘルパーは要求を知らず空行を返すので false。ヘルパーの応答を待つので、入力スレッドでは呼ばない。
+    /// </summary>
+    public bool SetUserDictionary(string name, IReadOnlyList<(string Reading, string Word, string Pos)> words)
+    {
+        if (!IsAvailable) return false;
+        var records = string.Join(RecordSeparator, words.Select(w => string.Join(UnitSeparator, Field(w.Reading), Field(w.Word), Field(w.Pos))));
+        lock (_gate)
+        {
+            if (_disposed) return false;
+            if (Send($"D\t{Clean(name)}\t{records}") != "OK") return false;
+            // 登録した語で候補が変わるので、控えを捨てる
+            ClearCache();
+            return true;
+        }
+
+        static string Field(string text) => Clean(text).Replace(UnitSeparator, ' ').Replace(RecordSeparator, ' ');
+    }
+
+    /// <summary>
     /// 文字列 (漢字かな混じり) の読み (ひらがな)。逆変換できなければ null。
     /// 再変換とユーザー辞書の登録で呼ぶ。キャッシュせず、ヘルパーの応答を待つ。
     /// </summary>
