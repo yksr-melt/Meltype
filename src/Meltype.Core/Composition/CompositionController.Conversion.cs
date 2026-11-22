@@ -175,10 +175,15 @@ internal static partial class CompositionController
                     english = Distinct([.. english, .. env.Services.Candidates?.Lookup(segment.Raw) ?? []]);
                 var reading = RomajiReading(state, env, segment.Raw);
                 List<string> romaji = reading is null ? [] : JapaneseCandidates(state, env, reading, null, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))), zenzai);
-                clauses.Add(new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
-                    ? Distinct([.. romaji, .. english])
-                    : Distinct([.. english, .. romaji]))
-                { Kana = CompositionText.KanaForSegment(state.Text, env, segments, s) });
+                // カタカナ表記 (export → エクスポート) は候補の最後。英字・ローマ字として読んだ候補の順は変えず、選んだときだけカタカナにする
+                var katakana = (env.Services.Candidates?.KatakanaSpellings(segment.Raw.ToLowerInvariant()) ?? []).Where(k => !romaji.Contains(k)).ToList();
+                var clause = new Clause(segment.Raw, true, preferJapanese && romaji.Count > 0
+                    ? Distinct([.. romaji, .. english, .. katakana])
+                    : Distinct([.. english, .. romaji, .. katakana]))
+                { Kana = CompositionText.KanaForSegment(state.Text, env, segments, s) };
+                // カタカナ表記を選んでも、英語の綴りは日本語の読みでないので、その語を日本語として覚えない (覚えると次から export が えxぽrt になる)
+                clause.NotLearned.UnionWith(katakana);
+                clauses.Add(clause);
                 continue;
             }
             if (segment.Kana.Length == 0) continue;
