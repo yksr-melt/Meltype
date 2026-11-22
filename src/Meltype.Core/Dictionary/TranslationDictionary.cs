@@ -118,20 +118,47 @@ public sealed class TranslationDictionary
 public sealed class TranslationHistory
 {
     private readonly string? _path;
-    private readonly Dictionary<string, Dictionary<string, int>> _counts = new(StringComparer.Ordinal);
+    // 読み直すときは、中身を書き換えずに丸ごと差し替える (Get は入力のスレッドから lock を取らずに読む)
+    private Dictionary<string, Dictionary<string, int>> _counts;
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
+    private readonly FileStamp _stamp;
 
     public TranslationHistory(string? path)
     {
         _saver = new DeferredSaver(Write);
         _path = path;
+        _stamp = new FileStamp(path);
+        _counts = Load(path);
+    }
+
+    private static Dictionary<string, Dictionary<string, int>> Load(string? path)
+    {
+        var counts = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
         Config.DataFile.Load(path, "英訳の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Translations);
-            if (loaded is not null) foreach (var (key, value) in loaded) _counts[key] = value;
+            if (loaded is not null) foreach (var (key, value) in loaded) counts[key] = value;
         });
+        return counts;
+    }
+
+    /// <summary>ほかのプロセス (設定アプリ) が translations.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
+    internal void Refresh()
+    {
+        lock (_fileGate)
+        {
+            if (_stamp.Changed) Reload();
+        }
+    }
+
+    // _fileGate の中で呼ぶ。読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)
+    private void Reload()
+    {
+        _stamp.Synced();
+        var counts = Load(_path);
+        lock (_gate) _counts = counts;
     }
 
     /// <summary>読みに対して選んだ回数 (多い順)。</summary>
@@ -162,9 +189,15 @@ public sealed class TranslationHistory
         {
             lock (_fileGate)
             {
+                if (_stamp.Changed)
+                {
+                    Reload();
+                    return true;
+                }
                 string json;
                 lock (_gate) json = JsonSerializer.Serialize(_counts, Config.LearningJsonContext.Default.Translations);
                 Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+                _stamp.Synced();
             }
             return true;
         }

@@ -83,7 +83,7 @@ public static class Backup
 
     /// <summary>
     /// バックアップを戻す (同じ名前のファイルは上書き。今のファイルは .before-restore として残す)。戻したファイルの数を返す。
-    /// 戻した後は Meltype を起動し直す (読み込み済みの設定・学習データを読み直すため)。
+    /// 設定・ユーザー辞書・学習データ・定型文は、入力している Meltype が書き換えに気づいて読み直す。dictionaries/ と state.json は、Meltype を起動し直すまで読まない。
     /// </summary>
     public static int Restore(byte[] content, string dataDirectory)
     {

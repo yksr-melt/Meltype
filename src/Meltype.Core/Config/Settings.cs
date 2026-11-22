@@ -754,59 +754,6 @@ public sealed class Settings
         return current.SwitchProfile(unique);
     }
 
-    /// <summary>
-    /// 設定画面で変えた項目だけを今の設定 (current) に重ねた設定を返す。opened は画面を開いた時点の画面の値、edited は閉じる時点の画面の値。
-    /// 画面を開いている間にトレイなどで変えた項目 (一時停止・動作モード・自動判定・プロファイルなど) は、画面で変えていなければ current のまま。
-    /// プロファイルごとの値はプロファイルの名前ごとに比べる。トレイでプロファイルを切り替えても、画面で変えた値は画面で選んでいたプロファイルに入る。
-    /// 使っているプロファイルは、画面で切り替えたときだけ画面のものにする。プロファイルの一覧 (足す・名前を変える・消す) は画面のもの (トレイでは切り替えるだけ)。
-    /// </summary>
-    public static Settings MergeEdits(Settings opened, Settings edited, Settings current)
-    {
-        if (edited.ToJson() == opened.ToJson()) return current.Clone().Normalize();
-        var openedJson = JsonSerializer.SerializeToNode(opened, JsonType)!.AsObject();
-        var editedJson = JsonSerializer.SerializeToNode(edited, JsonType)!.AsObject();
-        var merged = JsonSerializer.SerializeToNode(current, JsonType)!.AsObject();
-        foreach (var key in SharedKeys)
-        {
-            if (key is nameof(Profiles) or nameof(ActiveProfile)) continue;
-            if (!JsonNode.DeepEquals(openedJson[key], editedJson[key])) merged[key] = editedJson[key]?.DeepClone();
-        }
-        var active = edited.ActiveProfile != opened.ActiveProfile || edited.Profiles.All(p => p.Name != current.ActiveProfile) ? edited.ActiveProfile : current.ActiveProfile;
-        var profiles = new List<SettingsProfile>();
-        foreach (var name in edited.ProfileNames)
-        {
-            var values = MergeValues(opened.ValuesOf(name), edited.ValuesOf(name)!, current.ValuesOf(name));
-            if (name == active)
-            {
-                foreach (var (key, value) in values)
-                {
-                    if (!SharedKeys.Contains(key)) merged[key] = value?.DeepClone();
-                }
-            }
-            profiles.Add(new SettingsProfile { Name = name, Values = values });
-        }
-        var next = merged.Deserialize(JsonType) ?? current.Clone();
-        next.Profiles = profiles;
-        next.ActiveProfile = active;
-        return next.Normalize();
-
-        // 画面で足した (名前を変えた・読み込んだ) プロファイルは、画面の値のまま
-        static JsonObject MergeValues(JsonObject? opened, JsonObject edited, JsonObject? current)
-        {
-            if (opened is null || current is null) return edited.DeepClone().AsObject();
-            var values = current.DeepClone().AsObject();
-            foreach (var (key, value) in edited)
-            {
-                if (!JsonNode.DeepEquals(opened[key], value)) values[key] = value?.DeepClone();
-            }
-            return values;
-        }
-    }
-
-    /// <summary>プロファイルの値。使っているプロファイルは今の値。そのプロファイルが無ければ null。</summary>
-    private JsonObject? ValuesOf(string name) =>
-        name == ActiveProfile ? ProfileValues() : Profiles.FirstOrDefault(p => p.Name == name) is { } profile ? profile.Values ?? [] : null;
-
     /// <summary>旧プロファイルの追加キーを移行する。未設定と明示的な空の一覧は区別する。</summary>
     private static void InitializeToggleShortcuts(JsonObject? values, string profile = DefaultProfileName, bool report = true)
     {
