@@ -174,6 +174,8 @@ internal static class UserDictionaryEngineTests
             Assert.True(SpinWait.SpinUntil(() => helper.Dictionary().Contains("しの\x1f紫乃\x1f名詞"), 5000), "変換エンジンを作ったら、登録した語を名詞として渡す: " + helper.Dictionary());
             runtime.UserDictionary.Add("きごうとう", "記号等");
             Assert.True(SpinWait.SpinUntil(() => helper.Dictionary().Contains("きごうとう\x1f記号等"), 5000), "語が変わったら渡し直す: " + helper.Dictionary());
+            runtime.UserDictionary.AddRange([new UserWord("ぐぐる", "ググる", "動詞ラ行五段")]);
+            Assert.True(SpinWait.SpinUntil(() => helper.Dictionary().Contains("ぐぐる\x1fググる\x1f動詞ラ行五段"), 5000), "登録した品詞を渡す: " + helper.Dictionary());
         }
         finally { Directory.Delete(directory, recursive: true); }
     }

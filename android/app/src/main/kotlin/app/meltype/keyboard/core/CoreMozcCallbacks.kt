@@ -53,8 +53,8 @@ internal class CoreMozcCallbacks(
             "R" -> converter.reading(fields[1]) ?: ""
             "D" -> {
                 val words = fields[1].split(RECORD).filter { it.isNotEmpty() }.map { record ->
-                    val (reading, word) = record.split(UNIT)
-                    MozcWord(reading, word)
+                    val (reading, word, pos) = record.split(UNIT)
+                    MozcWord(reading, word, pos)
                 }
                 if (converter.setUserDictionary(words)) "OK" else "NG"
             }

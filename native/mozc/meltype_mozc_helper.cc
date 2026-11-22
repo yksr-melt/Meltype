@@ -10,7 +10,8 @@
 //       逆変換。文字列の読み (ひらがな) を返す。逆変換できなければ空行。
 //   D<TAB>読み1<US>語1<US>品詞1<RS>読み2<US>語2<US>品詞2…
 //       ユーザー辞書。語をすべて入れ替え、変換に使えるようにしてから "OK" (できなければ "NG") を返す。
-//       品詞は Mozc の品詞名 (名詞・人名・動詞ワ行五段…)。語はメモリにだけ置き、起動し直したら Meltype が送り直す。
+//       品詞は Mozc の品詞名 (名詞・人名・動詞ワ行五段…) か、ほかの日本語入力の品詞名 (さ変名詞・ら行五段…)。知らない品詞は名詞。
+//       語はメモリにだけ置き、起動し直したら Meltype が送り直す。
 //   S   学習データを保存する ("OK")。
 //   Q   保存して終了する。
 // 起動が終わったら "READY" を 1 行出す。引数 1 つ目は学習データの保存先 (省略可)。
@@ -36,7 +37,7 @@
 #include "converter/segments.h"
 #include "dictionary/dictionary_interface.h"
 #include "dictionary/user_dictionary_util.h"
-#include "dictionary/user_pos.h"
+#include "dictionary/user_dictionary_importer.h"
 #include "engine/engine.h"
 #include "engine/engine_factory.h"
 #include "protocol/commands.pb.h"
@@ -172,19 +173,22 @@ class Helper {
   bool Save() { return engine_->Sync(); }
 
   // ユーザー辞書を words の語で入れ替える。Mozc のユーザー辞書のファイル (user_dictionary.db) は使わない。
-  // Mozc の辞書の取り込み (user_dictionary_importer) は、このパッケージから使えない (Bazel の visibility) ので、語は自分で組み立てる。
+  // 品詞は、ほかの日本語入力の品詞名 (Microsoft IME・ATOK など) も Mozc の取り込みと同じ対応表 (ConvertEntry) で読み替える。
+  // build-mozc-helper.sh・Build-MozcHelper.ps1 が、取り込みの Bazel の visibility をこのパッケージに広げている。
   bool SetDictionary(absl::string_view words) {
     mozc::user_dictionary::UserDictionaryStorage storage;
     mozc::user_dictionary::UserDictionary* dictionary = storage.add_dictionaries();
     for (absl::string_view record : absl::StrSplit(words, kRecordSeparator, absl::SkipEmpty())) {
       const std::vector<absl::string_view> fields = absl::StrSplit(record, kUnitSeparator);
       if (fields.size() < 3) return false;
+      const mozc::user_dictionary::RawEntry raw{.key = std::string(fields[0]), .value = std::string(fields[1]), .pos = std::string(fields[2])};
       mozc::user_dictionary::UserDictionary::Entry entry;
-      entry.set_key(std::string(fields[0]));
-      entry.set_value(std::string(fields[1]));
       // 知らない品詞名は名詞にする (語を落とさない)
-      const auto pos = mozc::dictionary::UserPos::ToPosType(fields[2]);
-      entry.set_pos(mozc::user_dictionary::UserDictionary::PosType_IsValid(pos) ? pos : mozc::user_dictionary::UserDictionary::NOUN);
+      if (!mozc::user_dictionary::ConvertEntry(raw, &entry)) {
+        entry.set_key(raw.key);
+        entry.set_value(raw.value);
+        entry.set_pos(mozc::user_dictionary::UserDictionary::NOUN);
+      }
       mozc::user_dictionary::SanitizeEntry(&entry);
       // Mozc が登録できない語 (読みが長すぎる・使えない文字) は飛ばし、ほかの語は登録する
       if (!mozc::user_dictionary::ValidateEntry(entry).ok()) continue;
