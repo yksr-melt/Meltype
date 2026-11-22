@@ -72,10 +72,10 @@ class ComparisonTests(unittest.TestCase):
         with patch.object(comparison.benchmark, "command", side_effect=['[workspace.package]\nversion="1.0.0"', tags]):
             self.assertEqual(comparison.previous_release("flash-v1.0.0"), "flash-v0.1.0-preview.7")
 
-    def test_csharp_auto_uses_latest_stable_not_rust_or_preview(self):
+    def test_csharp_auto_uses_latest_adapter_compatible_stable_not_rust_or_preview(self):
         with patch.object(comparison.benchmark, "command", return_value=
-            "v1.9.0\nv1.10.0\nv2.0.0-pre.1\nflash-v9.0.0\nrust-v8.0.0"):
-            self.assertEqual(comparison.csharp_release(), "v1.10.0")
+            "v1.5.0\nv1.6.0\nv1.7.0\nv1.10.0\nv2.0.0-pre.1\nflash-v9.0.0\nrust-v8.0.0"):
+            self.assertEqual(comparison.csharp_release(), "v1.6.0")
 
     def test_every_version_occupies_every_run_position(self):
         versions = ("csharp", "old", "new")

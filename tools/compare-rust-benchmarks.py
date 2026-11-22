@@ -27,6 +27,7 @@ if os.name != "nt":
     from process_resources import measure_process
     benchmark.measure_process = measure_process
 SUFFIX = ".exe" if os.name == "nt" else ""
+CSHARP_BENCHMARK_API_MAX = (1, 6, 0)
 
 
 def sha(path):
@@ -59,9 +60,10 @@ def previous_release(current_ref=None):
 def csharp_release():
     tags = benchmark.command(["git", "tag", "--list"]).splitlines()
     stable = [tag for tag in tags if re.fullmatch(r"v\d+\.\d+\.\d+", tag)]
-    if not stable:
-        raise ValueError("No C# stable release tag; fetch tags or set --csharp-ref")
-    return max(stable, key=version_key)
+    compatible = [tag for tag in stable if (key := version_key(tag)) is not None and key[:3] <= CSHARP_BENCHMARK_API_MAX]
+    if not compatible:
+        raise ValueError("No stable C# release with the benchmark adapter API; fetch tags or set --csharp-ref")
+    return max(compatible, key=version_key)
 
 
 def measurement_order(versions, round_index):
@@ -186,8 +188,8 @@ def build_hosts(args, output):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--fetch-tags", action="store_true", help="Fetch published version tags from origin before selection")
-    parser.add_argument("--with-csharp", action="store_true", help="Include the latest stable C# release")
-    parser.add_argument("--csharp-ref", default="auto", help="C# tag/commit, default latest stable v* tag")
+    parser.add_argument("--with-csharp", action="store_true", help="Include the latest stable C# release supported by the comparison adapter")
+    parser.add_argument("--csharp-ref", default="auto", help="C# tag/commit; auto selects the latest release supported by the comparison adapter")
     parser.add_argument("--csharp", type=Path, help="Prebuilt native C# benchmark executable")
     parser.add_argument("--jit", action="store_true", help="Explicit C# JIT instead of NativeAOT (build mode only)")
     parser.add_argument("--current-ref", help="Build this Rust tag/commit instead of the working tree")

@@ -1,0 +1,78 @@
+name: 公開版ベンチマーク更新
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 更新する正式版タグ
+        required: true
+        type: string
+      benchmark_baseline:
+        description: 比較する以前の公開版タグ (auto は自動選択)
+        required: true
+        default: auto
+        type: string
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Validate release and exact source tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^flash-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$GITHUB_REPOSITORY" = appipinopi/Meltype-Flash
+          test "$GITHUB_REF" = refs/heads/rust
+          VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+          TAG_VERSION=$(python3 -c 'import sys; print(".".join(str(int(x)) for x in sys.argv[1].split(".")))' "${TAG#flash-v}")
+          test "$VERSION" = "$TAG_VERSION"
+          RELEASE=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")
+          test "$(jq -r .draft <<<"$RELEASE")" = false
+          test "$(jq -r .prerelease <<<"$RELEASE")" = false
+          RELEASE_SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)
+          test "$(git rev-parse "$TAG^{commit}")" = "$RELEASE_SHA"
+  update:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ inputs.tag }}
+      BENCHMARK_BASELINE: ${{ inputs.benchmark_baseline }}
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install NativeAOT and chart dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang zlib1g-dev
+          python -m pip install --disable-pip-version-check matplotlib==3.10.8 numpy==2.4.2
+      - name: Fetch upstream release tags
+        run: git fetch --tags https://github.com/yksr-melt/Meltype.git
+      - name: Compare the exact published Rust tag with compatible C# and previous Rust
+        timeout-minutes: 30
+        run: |
+          python tools/compare-rust-benchmarks.py --build --with-csharp --fetch-tags --current-ref "$TAG" --baseline-ref "$BENCHMARK_BASELINE" --output dist/release-benchmark --samples 3 --warmups 1 --rounds 9
+          python tools/plot-windows-benchmark.py dist/release-benchmark/report.json --output dist/release-benchmark/charts
+      - name: Download and verify existing release assets
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release-assets
+      - name: Update benchmark notes and images without replacing packages
+        run: |
+          SOURCE_SHA=$(git rev-parse "$TAG^{commit}")
+          python tools/publish-rust-release.py --tag "$TAG" --sha "$SOURCE_SHA" --assets release-assets --benchmark dist/release-benchmark --output dist/release-body.md --publish --update-existing
