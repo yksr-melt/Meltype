@@ -25,7 +25,7 @@ internal sealed class MainWindow : Window
         Height = 720;
         MinWidth = 640;
         MinHeight = 400;
-        _pages = [.. _catalog.Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, headers: false), ShowsSettings: true)), .. Pages.All(this, () => _addWord),
+        _pages = [.. _catalog.Select(g => new Page(g.Category, () => SettingsPage.Build([g], _store, this, search: false), ShowsSettings: true)), .. Pages.All(this, () => _addWord),
             // プロファイルは使う人が少ないので、一覧のいちばん下に置く
             new Page("プロファイル", () => ProfilesPage.Build(_store, this), ShowsSettings: true)];
         _navigation.ItemsSource = _pages.Select(p => p.Title).ToList();
@@ -92,8 +92,8 @@ internal sealed class MainWindow : Window
             var found = _catalog.Select(g => (g.Category, (IReadOnlyList<SettingItem>)g.Items.Where(i => SettingsPage.Matches(i, words)).ToList()))
                 .Where(g => g.Item2.Count > 0).ToList();
             _content.Content = found.Count > 0
-                ? SettingsPage.Build(found, _store, this, headers: true)
-                : new TextBlock { Text = "一致する設定がありません。", Margin = new Thickness(24), Opacity = 0.7 };
+                ? SettingsPage.Build(found, _store, this, search: true)
+                : new TextBlock { Text = "一致する設定がありません。", Margin = new Thickness(32, 24), Opacity = 0.7 };
             return;
         }
         if (_navigation.SelectedIndex < 0) return;

@@ -4,6 +4,8 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
+using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
@@ -36,19 +38,43 @@ internal sealed class App : Application
     {
         Name = "Meltype";
         Styles.Add(new FluentTheme());
+        // 窓の背景の上に、項目ごとのカードを少し明るく浮かせる (Windows 11 の設定と同じ形)。ダークでもカードを背景より明るくするので、色はテーマごとに決める
+        Resources.ThemeDictionaries[ThemeVariant.Light] = new ResourceDictionary
+        {
+            ["PageBackground"] = new SolidColorBrush(Color.Parse("#F3F3F3")),
+            ["CardBackground"] = new SolidColorBrush(Color.Parse("#FFFFFF")),
+            ["CardBorder"] = new SolidColorBrush(Color.Parse("#E5E5E5")),
+        };
+        Resources.ThemeDictionaries[ThemeVariant.Dark] = new ResourceDictionary
+        {
+            ["PageBackground"] = new SolidColorBrush(Color.Parse("#202020")),
+            ["CardBackground"] = new SolidColorBrush(Color.Parse("#2B2B2B")),
+            ["CardBorder"] = new SolidColorBrush(Color.Parse("#1D1D1D")),
+        };
+        Styles.Add(new Style(x => x.OfType<Window>())
+        {
+            Setters = { new Setter(TemplatedControl.BackgroundProperty, new DynamicResourceExtension("PageBackground")) },
+        });
         Styles.Add(new Style(x => x.OfType<Border>().Class("card"))
         {
             Setters =
             {
-                new Setter(Border.PaddingProperty, new Thickness(16, 12)),
-                new Setter(Border.CornerRadiusProperty, new CornerRadius(6)),
+                new Setter(Border.PaddingProperty, new Thickness(16, 14)),
+                new Setter(Border.CornerRadiusProperty, new CornerRadius(8)),
                 new Setter(Border.BorderThicknessProperty, new Thickness(1)),
-                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("SystemControlForegroundBaseLowBrush")),
+                new Setter(Border.BackgroundProperty, new DynamicResourceExtension("CardBackground")),
+                new Setter(Border.BorderBrushProperty, new DynamicResourceExtension("CardBorder")),
             },
         });
-        Styles.Add(new Style(x => x.OfType<Border>().Class("sidebar"))
+        // ページの中身: 広い窓でも 1 行が長くなりすぎないように、幅に上限を付けて左に寄せる
+        Styles.Add(new Style(x => x.OfType<StackPanel>().Class("page"))
         {
-            Setters = { new Setter(Border.BackgroundProperty, new DynamicResourceExtension("SystemControlBackgroundChromeMediumLowBrush")) },
+            Setters =
+            {
+                new Setter(Layoutable.MarginProperty, new Thickness(32, 24)),
+                new Setter(Layoutable.MaxWidthProperty, 880.0),
+                new Setter(Layoutable.HorizontalAlignmentProperty, HorizontalAlignment.Left),
+            },
         });
         Styles.Add(new Style(x => x.OfType<Border>().Class("sidebar").Descendant().OfType<ListBox>())
         {
@@ -60,7 +86,12 @@ internal sealed class App : Application
         });
         Styles.Add(new Style(x => x.OfType<TextBlock>().Class("pageHeader"))
         {
-            Setters = { new Setter(TextBlock.FontSizeProperty, 18.0), new Setter(TextBlock.FontWeightProperty, FontWeight.SemiBold) },
+            Setters =
+            {
+                new Setter(TextBlock.FontSizeProperty, 24.0),
+                new Setter(TextBlock.FontWeightProperty, FontWeight.SemiBold),
+                new Setter(Layoutable.MarginProperty, new Thickness(0, 0, 0, 8)),
+            },
         });
     }
 

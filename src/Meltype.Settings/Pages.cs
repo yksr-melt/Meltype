@@ -28,7 +28,7 @@ internal static class Pages
     /// <summary>ページの見出しと説明を上に置き、続けて parts を縦に並べる。</summary>
     public static StackPanel Layout(string title, string description, params Control[] parts)
     {
-        var page = new StackPanel { Spacing = 12, Margin = new Thickness(24, 16) };
+        var page = new StackPanel { Spacing = 12, Classes = { "page" } };
         page.Children.Add(new TextBlock { Text = title, Classes = { "pageHeader" } });
         if (description.Length > 0) page.Children.Add(Hint(description));
         foreach (var part in parts) page.Children.Add(part);

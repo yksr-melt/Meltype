@@ -13,18 +13,23 @@ namespace Meltype.SettingsApp;
 /// <summary>設定の項目を、1 項目 1 枚のカードで縦に並べる (名前と説明が左、部品が右。表は名前の下に幅いっぱい)。</summary>
 internal static class SettingsPage
 {
-    public static Control Build(IEnumerable<(string Category, IReadOnlyList<SettingItem> Items)> groups, SettingsStore store, Window owner, bool headers)
+    /// <param name="search">検索の結果 (いくつもの分類の一部)。分類ごとの「既定値に戻す」を出さない。</param>
+    public static Control Build(IEnumerable<(string Category, IReadOnlyList<SettingItem> Items)> groups, SettingsStore store, Window owner, bool search)
     {
-        var page = new StackPanel { Spacing = 8, Margin = new Thickness(24, 16) };
-        // 値はトレイで選んだプロファイルにも入るので、プロファイルを使い分けている人には、どれを変えているかを出す
-        if (store.Current.Profiles.Count > 1)
-            page.Children.Add(new TextBlock { Text = $"プロファイル「{store.Current.ActiveProfile}」の値を変えています。", Opacity = 0.7 });
+        var page = new StackPanel { Spacing = 4, Classes = { "page" } };
+        var first = true;
         foreach (var (category, items) in groups)
         {
-            if (headers) page.Children.Add(new TextBlock { Text = category, Classes = { "pageHeader" }, Margin = new Thickness(0, 12, 0, 4) });
+            var header = new TextBlock { Text = category, Classes = { "pageHeader" } };
+            // 検索の結果の 2 つ目からの分類は、前の分類と間を空ける (1 つ目は pageHeader のスタイルの余白のまま)
+            if (!first) header.Margin = new Thickness(0, 24, 0, 8);
+            page.Children.Add(header);
+            // 値はトレイで選んだプロファイルにも入るので、プロファイルを使い分けている人には、どれを変えているかを出す
+            if (first && store.Current.Profiles.Count > 1)
+                page.Children.Add(new TextBlock { Text = $"プロファイル「{store.Current.ActiveProfile}」の値を変えています。", Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8) });
+            first = false;
             foreach (var item in items) page.Children.Add(Card(item, SettingEditors.Create(new EditorContext(item, store, owner))));
-            // 検索の結果 (見出し付き) には出さない。いくつもの分類の一部だけを戻すことになる
-            if (!headers) page.Children.Add(ResetButton(category, items, store, owner));
+            if (!search) page.Children.Add(ResetButton(category, items, store, owner));
         }
         return page;
     }
@@ -43,7 +48,7 @@ internal static class SettingsPage
                 return next;
             });
         });
-        button.Margin = new Thickness(0, 8, 0, 0);
+        button.Margin = new Thickness(0, 12, 0, 0);
         return button;
     }
 

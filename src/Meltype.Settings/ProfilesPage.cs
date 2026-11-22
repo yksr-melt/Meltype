@@ -15,7 +15,7 @@ internal static class ProfilesPage
     {
         // 一度もプロファイルを作っていない config.json は、Normalize で「標準」を足す
         var settings = store.Current.Clone().Normalize(reportShortcutExclusions: false);
-        var page = new StackPanel { Spacing = 8, Margin = new Thickness(24, 16) };
+        var page = new StackPanel { Spacing = 8, Classes = { "page" } };
         page.Children.Add(new TextBlock
         {
             Text = "設定の値をまとめて名前を付け、切り替えて使えます (例: 仕事用・趣味用)。切り替えると、ほかのページの設定はそのプロファイルの値になります。Meltype の有効 / 無効・ログ・更新はプロファイルによらず共通です。",
