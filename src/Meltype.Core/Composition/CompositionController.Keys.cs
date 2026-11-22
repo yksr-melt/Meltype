@@ -38,24 +38,30 @@ internal static partial class CompositionController
                 Hold(state, env, e);
                 return;
             }
-            // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英単語の途中にはまず出てこないので、ローマ字として
-            // 読めれば日本語に戻す。英語の接頭辞 (e-mail、co-op) かもしれないときは - も送って判定を続け、- の後ろで決める
-            // (e-mail → 英語、e-me-ru → えーめーる)。
+            // 母音の後の - は長音 (ro-maji → ろーまじ、de-ta → でーた)。英語の接頭辞 (e-mail、co-op) なら - の後ろで判定する。
+            // すでに完結した英単語の後ろでは、home-made のように - をアプリへ通す (#2219)。
             var part = LastHyphenPart(state);
             if (vk == VirtualKeys.OemMinus && !state.Shift && !state.Modifier && part.Length > 0 &&
                 env.Detector.Romaji.AnalyzeFragment(part) is { IsValid: true, Partial: "" })
             {
-                var prefix = !state.HeldLetters.ToString().Contains('-') && CompositionDetector.IsHyphenPrefix(part);
-                state.HeldLetters.Append('-');
-                state.HeldLastKeyTime = e.TimeMs;
-                if (prefix)
+                var firstPart = state.HeldLetters.Length == part.Length;
+                var prefix = firstPart && CompositionDetector.IsHyphenPrefix(part);
+                var finishedEnglishWord = firstPart && !prefix &&
+                    env.Detector.IsListedEnglishWord(CompositionText.LearningContext(state.Text, env), part) &&
+                    env.ClassifyDirect!(part, true) == Verdict.English;
+                if (!finishedEnglishWord)
                 {
-                    SendHeld(state, e);
+                    state.HeldLetters.Append('-');
+                    state.HeldLastKeyTime = e.TimeMs;
+                    if (prefix)
+                    {
+                        SendHeld(state, e);
+                        return;
+                    }
+                    Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(state.HeldLetters.ToString())} (母音の後の長音)");
+                    SwitchHeldToJapanese(state, env);
                     return;
                 }
-                Diagnostics.Log.Decision($"英数状態でローマ字を検知: {Diagnostics.Log.Text(state.HeldLetters.ToString())} (母音の後の長音)");
-                SwitchHeldToJapanese(state, env);
-                return;
             }
             // 英字以外のキー・Shift・Ctrl で判定を打ち切り、英語として出してから、そのキーを普通に処理する。
             Diagnostics.Log.Info($"英数状態の判定を打ち切り: キー 0x{vk:X2} (Shift {state.Shift})");

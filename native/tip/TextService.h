@@ -112,7 +112,7 @@ private:
     void HandleAltKey(UINT vk, UINT flags);
     bool IsReinjected(UINT vk);
     bool Reinject(UINT vk);
-    void RememberPassed(ITfContext* context, UINT vk);
+    void RememberPassed(ITfContext* context, UINT vk, wchar_t ch);
     void ForgetSecretField();
     // Meltype.exe から受け取った切り替えキーのうち、修飾キー付きのものを TSF (PreserveKey) に登録し直す
     void RefreshPreservedKeys();
@@ -219,6 +219,7 @@ private:
     int conversionGeneration_ = -1;    // 知っている世代 (Meltype.exe の ConversionSignal)。-1 は未取得
 
     UINT passedVk_ = 0;            // 最後にアプリに通したキー (キャレットが動いたときに Meltype.exe に伝える)
+    wchar_t passedChar_ = 0;       // そのキーで入力する文字 (ショートカットなら 0)
     bool passedControl_ = false;   // そのとき Ctrl を押していたか
     ULONGLONG passedTime_ = 0;
     bool eatenDown_[256] = {};     // 受け取って、まだ離していないキー (離したことも受け取る。押したままなら自動の繰り返し)

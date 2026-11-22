@@ -546,7 +546,10 @@ void TextService::SendCaret(TfEditCookie ec, ITfContext* context, bool selection
     const bool clicked = selectionChanged && ((GetAsyncKeyState(VK_LBUTTON) | GetAsyncKeyState(VK_RBUTTON)) & 0x8000) != 0;
     const bool recent = !clicked && passedTime_ != 0 && GetTickCount64() - passedTime_ < 500;
     std::string caret = std::string(",\"caret\":{\"moved\":") + (selectionChanged || recent ? "true" : "false");
-    if (recent) caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
+    if (recent) {
+        caret += ",\"passedKey\":" + std::to_string(passedVk_) + (passedControl_ ? ",\"ctrl\":true" : "");
+        if (passedChar_ != 0) caret += ",\"passedChar\":" + std::to_string(passedChar_);
+    }
     else if (selectionChanged) caret += ",\"passedKey\":0";
     caret += "}";
     JsonValue reply;
@@ -1178,7 +1181,7 @@ STDMETHODIMP TextService::OnTestKeyDown(ITfContext* context, WPARAM wParam, LPAR
     wchar_t ch = 0;
     *eaten = WouldEat(context, vk, lParam, ch, true) ? TRUE : FALSE;
     // アプリにそのまま渡すキー (BackSpace・矢印・Enter・Space など) はキャレットを動かす (編集の通知で Meltype.exe に伝える)
-    if (!*eaten && !IsModifier(vk)) RememberPassed(context, vk);
+    if (!*eaten && !IsModifier(vk)) RememberPassed(context, vk, ch);
     return S_OK;
 }
 
@@ -1192,7 +1195,7 @@ STDMETHODIMP TextService::OnKeyDown(ITfContext* context, WPARAM wParam, LPARAM l
     passVk_ = 0;
     wchar_t ch = 0;
     if (!WouldEat(context, vk, lParam, ch, false)) {
-        if (!IsModifier(vk)) RememberPassed(context, vk);
+        if (!IsModifier(vk)) RememberPassed(context, vk, ch);
         *eaten = FALSE;
         return S_OK;
     }
@@ -1354,13 +1357,14 @@ void TextService::HandleAltKey(UINT vk, UINT flags) {
     FlushOpen();
 }
 
-void TextService::RememberPassed(ITfContext* context, UINT vk) {
+void TextService::RememberPassed(ITfContext* context, UINT vk, wchar_t ch) {
     // 通常欄に戻った直後の通知にも、秘密欄で通したキーを持ち越さない。
     if (!state_.Active() || ContextDisabled(context)) {
         passedTime_ = 0;
         return;
     }
     passedVk_ = vk;
+    passedChar_ = ch;
     passedControl_ = KeyDown(VK_CONTROL);
     passedTime_ = GetTickCount64();
 }

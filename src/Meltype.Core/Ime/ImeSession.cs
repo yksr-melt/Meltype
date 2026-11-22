@@ -244,9 +244,9 @@ internal static class ImeSession
             {
                 ForgetLastCommit(state);
                 // 素通しした英数字でキャレットが進んでも、同じ語の途中から判定し直さない (#2219)。
-                if (caret is { Ctrl: false, FocusLeft: false, FocusEntered: false, PassedKey: { } passedKey } &&
-                    (VirtualKeys.IsLetter(passedKey) || passedKey is >= '0' and <= '9') &&
-                    (e.Field?.Before is null || e.Field.Before is [.., var last] && EnglishWordCharacters.Contains(last)))
+                if (caret is { FocusLeft: false, FocusEntered: false, PassedChar: >= '!' and <= '~' and var passedChar } &&
+                    EnglishWordCharacters.Contains((char)passedChar) &&
+                    (e.Field?.Before is null || e.Field.Before is [.., var last] && last == passedChar))
                     CompositionController.AbandonDirectHold(state.Composition);
                 else
                     ForgetDirectInput(state);

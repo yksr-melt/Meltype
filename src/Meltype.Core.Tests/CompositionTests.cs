@@ -403,7 +403,16 @@ internal static class CompositionTests
             {
                 Host.Apply(new SessionResult(false, [], null), vk, shift, _ctrlHeld, captured: false);
                 // アプリに通したキーはキャレットを動かすかもしれない
-                if (!VirtualKeys.IsModifier(vk)) Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = vk, Ctrl = _ctrlHeld });
+                if (!VirtualKeys.IsModifier(vk))
+                {
+                    Send(ImeEventType.CaretMoved, caret: new ImeCaret
+                    {
+                        Moved = true,
+                        PassedKey = vk,
+                        PassedChar = !_ctrlHeld ? Host.CharFromKey(vk, shift) ?? '\0' : '\0',
+                        Ctrl = _ctrlHeld,
+                    });
+                }
                 return false;
             }
             var releaseFollows = _state.Capture.KeyReleases && !VirtualKeys.IsModifier(vk);
@@ -1955,7 +1964,11 @@ internal static class CompositionTests
     [Test]
     public static void Issue2219_DirectModeKeepsEnglishWordsWhileTyping()
     {
-        foreach (var word in new[] { "template", "memorial", "memories" })
+        foreach (var word in new[]
+        {
+            "template", "memorial", "memories", "matches", "baggage", "bachelor", "authority", "bedding", "biggest", "bending",
+            "home-made", "data-driven", "use-case", "meta-analysis", "name-based", "time-zone",
+        })
         {
             var k = new Keyboard(direct: true);
             for (var i = 0; i < word.Length; i++)
@@ -1965,8 +1978,10 @@ internal static class CompositionTests
                 Assert.Equal(word[..(i + 1)], k.Host.Document, "打った文字はすぐ入力欄に届く");
             }
 
-            k.Type(" konnnichiha\n");
-            Assert.Equal($"{word} こんにちは", k.Host.Document);
+            k.Type("\n");
+            Assert.Equal($"{word}\n", k.Host.Document, "英単語の後の Enter は改行する");
+            k.Type("konnnichiha\n");
+            Assert.Equal($"{word}\nこんにちは", k.Host.Document);
         }
     }
 
