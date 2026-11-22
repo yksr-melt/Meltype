@@ -183,7 +183,7 @@ else
     codesign --force --deep --sign - "$APP"
     codesign --force --deep --sign - "$SETTINGS_APP"
 fi
-echo "作成しました: $APP・$SETTINGS_APP"
+echo "作成しました: ${APP}・${SETTINGS_APP}"
 
 if [[ $INSTALL -eq 1 ]]; then
     TARGET="$HOME/Library/Input Methods"
