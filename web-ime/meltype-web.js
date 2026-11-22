@@ -207,10 +207,16 @@ function drawBox(box, field, view) {
     });
     box.append(list);
   }
+  box.style.left = "0px";
   if (view.hint) box.append(Object.assign(document.createElement("div"), { className: "meltype-hint", textContent: view.hint }));
   const { left, top } = caretPosition(field);
-  box.style.left = `${left}px`;
+  // 画面の右端からはみ出さないようにする
+  box.style.left = `${Math.max(window.scrollX, Math.min(left, window.scrollX + document.documentElement.clientWidth - box.offsetWidth - 8))}px`;
   box.style.top = `${top}px`;
+  // 選んでいる候補が見えるように一覧を送る (scrollIntoView はページまで動かすので使わない)
+  const list = box.querySelector(".meltype-candidates");
+  const selected = list?.querySelector(".meltype-selected");
+  if (selected) list.scrollTop = Math.max(0, selected.offsetTop - list.offsetTop - list.clientHeight / 2 + selected.offsetHeight / 2);
 }
 
 /** キャレットの下の位置 (ページの座標)。入力欄と同じ見た目の写しを作って測る。 */
