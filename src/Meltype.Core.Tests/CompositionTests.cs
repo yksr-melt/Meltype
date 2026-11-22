@@ -1928,6 +1928,49 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue2219_DirectModeConvertsFromTheFirstKey()
+    {
+        foreach (var (keys, expected) in new[]
+        {
+            ("temotonopurojekuto", "てもとのぷろじぇくと"),
+            ("makuro-rinn", "まくろーりん"),
+            ("memorigatarinai", "めもりがたりない"),
+        })
+        {
+            var k = new Keyboard(direct: true);
+            k.Type(keys);
+            Assert.True(!k.Direct, $"{keys}: 日本語に切り替わる");
+            Assert.Equal("", k.Host.Document, $"{keys}: 先に送った英字が入力欄に残らない");
+            k.Type(" \n");
+            Assert.Equal(expected, k.Host.Document, keys);
+        }
+
+        // 最初に報告された綴りでも、末尾とは独立に「てもと」まで変換欄に入る。
+        var reported = new Keyboard(direct: true);
+        reported.Type("temotonopuroject");
+        Assert.Equal("", reported.Host.Document);
+        Assert.True(reported.Showing?.StartsWith("てもと", StringComparison.Ordinal) == true, reported.Showing ?? "");
+    }
+
+    [Test]
+    public static void Issue2219_DirectModeKeepsEnglishWordsWhileTyping()
+    {
+        foreach (var word in new[] { "template", "memorial", "memories" })
+        {
+            var k = new Keyboard(direct: true);
+            for (var i = 0; i < word.Length; i++)
+            {
+                k.Type(word[i].ToString());
+                Assert.True(k.Direct, $"{word[..(i + 1)]}: 英数のまま");
+                Assert.Equal(word[..(i + 1)], k.Host.Document, "打った文字はすぐ入力欄に届く");
+            }
+
+            k.Type(" konnnichiha\n");
+            Assert.Equal($"{word} こんにちは", k.Host.Document);
+        }
+    }
+
+    [Test]
     public static void DirectMode_LongVowelDashSwitchesToJapanese()
     {
         // 英数状態で ro-maji と打つと、- の時点で英語として出してしまっていた (ローマ字 が打てない)。

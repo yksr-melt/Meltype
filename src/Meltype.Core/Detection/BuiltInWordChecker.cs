@@ -23,4 +23,5 @@ internal sealed class BuiltInWordChecker
     /// <summary>小文字の英単語 (a-z だけ) が、一覧にあるか。</summary>
     public bool IsWord(string lower) => _words.Contains(lower);
     internal bool IsWord(ReadOnlySpan<char> lower) => _words.Contains(lower);
+    internal bool HasPrefix(ReadOnlySpan<char> lower) => _words.HasPrefix(lower);
 }

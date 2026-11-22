@@ -315,6 +315,36 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void Issue2219_TsfDoesNotRestartDetectionWithinAnEnglishWord()
+    {
+        var session = new TestSession(() => new Settings { Mode = InputMode.Tsf },
+            classifyDirect: (letters, _) => letters switch
+            {
+                "hel" => Detection.Verdict.English,
+                "ka" => Detection.Verdict.Japanese,
+                _ => Detection.Verdict.Undecided,
+            })
+        {
+            Direct = true,
+        };
+
+        var field = new Field();
+        Type(session, "hel", field);
+        // TSF が素通しした英字の後は、キャレットの移動だけが届く。
+        field.Text += "l";
+        session.Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = 'L' }, before: field.Text);
+        var continuation = Type(session, "ka", field);
+        Assert.True(continuation.All(result => !result.Consumed && result.View is null), "空白のない続きは英字のまま");
+        Assert.Equal("hellka", field.Text);
+
+        field.Text += " ";
+        session.Send(ImeEventType.CaretMoved, caret: new ImeCaret { Moved = true, PassedKey = VirtualKeys.Space }, before: field.Text);
+        var next = Type(session, "ka", field)[^1];
+        Assert.Equal("か", next.View?.Text, "空白の後では日本語を検知する");
+        Assert.Equal("hellka ", field.Text);
+    }
+
+    [Test]
     public static void TsfDirectMode_ResumesDetectionAfterUnsentEnglishWordBoundary()
     {
         var settings = new Settings { DirectModeAutoDetect = true };
