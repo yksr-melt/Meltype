@@ -45,7 +45,16 @@ internal static class ImeSession
         CommitPending(state, ForField(state, env));
     }
 
-    private static bool IsPassword(ImeField? field) => field?.Traits.Contains(ImeTrait.Password) == true;
+    /// <summary>
+    /// パスワード欄か。ターミナルの sudo・ssh は、パスワードを尋ねていることを OS に知らせない (エコーを止めるだけ) ので、
+    /// キャレットの前の行がパスワードのプロンプトならパスワード欄とする (#1201)。
+    /// </summary>
+    private static bool IsPassword(ImeField? field) =>
+        field is not null && (field.Traits.Contains(ImeTrait.Password) ||
+            field.Before is { } before && IsTerminal(field) && LineContext.IsPasswordPrompt(before));
+
+    private static bool IsTerminal(ImeField field) =>
+        field.Traits.Contains(ImeTrait.Terminal) || field.App is { } app && LineContext.ClassifyFocus(app, field.Element) == CodeFocus.Terminal;
 
     private static bool ForbidsLearning(ImeField? field) => IsPassword(field) || field?.Traits.Contains(ImeTrait.Private) == true;
 
