@@ -20,6 +20,9 @@ public sealed class CandidateDictionary
     // ほかの候補と分けて持ち、ひらがな・カタカナの後ろに並べる (#1650)。
     private readonly Dictionary<string, string[]> _domain = new(StringComparer.Ordinal);
 
+    // 英単語のカタカナ表記 (dictionaries/katakana-spellings.txt。export → エクスポート)。英単語で引くので、読みで引くほかの候補と分けて持つ。
+    private readonly Dictionary<string, string[]> _katakana = new(StringComparer.Ordinal);
+
     public int Count => _entries.Count + _emoji.Keys.Count(k => !_entries.ContainsKey(k));
 
     public static CandidateDictionary Load(string? userDirectory)
@@ -33,6 +36,11 @@ public sealed class CandidateDictionary
         dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("loanwords.txt"));
         // JMdict に無い社名・サービス名 (しゃおみ → Xiaomi)。手で書いたもの
         dictionary.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("brands.txt"));
+        foreach (var line in Libraries.Lexicon.DictionarySource.LinesWithoutComments(Libraries.Lexicon.DictionarySource.ReadEmbedded("katakana-spellings.txt")))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2) Add(dictionary._katakana, parts[0], parts.Skip(1));
+        }
         foreach (var name in Libraries.Lexicon.DictionarySource.EmbeddedNames("domain-"))
             dictionary.AddDomainText(Libraries.Lexicon.DictionarySource.ReadEmbedded(name));
         if (userDirectory is not null)
@@ -125,6 +133,9 @@ public sealed class CandidateDictionary
 
     /// <summary>分野の辞書の候補 (病名・駅名・人名など)。</summary>
     public IReadOnlyList<string> LookupDomain(string reading) => Lookup(_domain, reading);
+
+    /// <summary>英単語 (小文字) のカタカナ表記 (export → エクスポート)。無ければ空。</summary>
+    public IReadOnlyList<string> KatakanaSpellings(string word) => _katakana.GetValueOrDefault(word) ?? [];
 
     /// <summary>絵文字・顔文字の候補 (手で書いた emoji.txt の順 → CLDR の順)。</summary>
     public IReadOnlyList<string> LookupEmoji(string reading) => Lookup(_emoji, reading);

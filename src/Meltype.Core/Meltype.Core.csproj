@@ -19,6 +19,7 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Meltype.Windows.Tests" />
     <InternalsVisibleTo Include="Meltype.Core.Tests" />
+    <InternalsVisibleTo Include="Benchmark" />
     <EmbeddedResource Include="..\..\dictionaries\*.txt" LogicalName="Meltype.dictionaries.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -2,30 +2,27 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Globalization;
-using Meltype.Detection;
-using Meltype.Learning;
+using Meltype.Ime;
 
 namespace Meltype.UI;
 
 /// <summary>
 /// 学習した語の一覧 (トレイの「学習した語...」)。間違えて覚えた語 (go を英語として覚えて にほんgo になる など) を、
 /// 学習データ全体をリセットせずに 1 語ずつ忘れさせる。
-///   英語 / 日本語: 英字で打った語を英語・日本語のどちらで出すか (LanguageMemory)
-///   変換: 読みに対して選び直した変換 (ConversionHistory: はし → 箸)
+///   英語 / 日本語: 英字で打った語を英語・日本語のどちらで出すか (MeltypeRuntime.LearnedLanguages)
+///   変換: 読みに対して選び直した変換 (MeltypeRuntime.LearnedConversions: はし → 箸)
 /// </summary>
 internal sealed class LearnedWordsForm : Form
 {
-    private readonly LanguageMemory _languages;
-    private readonly ConversionHistory _conversions;
+    private readonly MeltypeRuntime _runtime;
     private readonly DataGridView _languageGrid = FormControls.ReadOnlyGrid();
     private readonly DataGridView _conversionGrid = FormControls.ReadOnlyGrid();
     private readonly TextBox _filter = new() { Width = 220, PlaceholderText = "絞り込み (語・読み)" };
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
 
-    public LearnedWordsForm(LanguageMemory languages, ConversionHistory conversions)
+    public LearnedWordsForm(MeltypeRuntime runtime)
     {
-        _languages = languages;
-        _conversions = conversions;
+        _runtime = runtime;
         Text = "Meltype 学習した語";
         StartPosition = FormStartPosition.CenterScreen;
         Size = new Size(620, 540);
@@ -90,14 +87,14 @@ internal sealed class LearnedWordsForm : Form
     {
         var filter = _filter.Text.Trim();
         _languageGrid.Rows.Clear();
-        foreach (var entry in _languages.Entries().Where(e => filter.Length == 0 || e.Word.Contains(filter, StringComparison.OrdinalIgnoreCase)))
+        foreach (var entry in _runtime.LearnedLanguages().Where(e => filter.Length == 0 || e.Word.Contains(filter, StringComparison.OrdinalIgnoreCase)))
         {
             var row = _languageGrid.Rows.Add(entry.Word, (entry.English ? "英語 (英字のまま)" : "日本語 (かな)") + (entry.Context is { } context ? $"・{context}" : ""), entry.Count,
                 entry.Active ? "有効" : "もう一度で覚える", entry.Used.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
             _languageGrid.Rows[row].Tag = entry.EntryKey;
         }
         _conversionGrid.Rows.Clear();
-        foreach (var (reading, text, used) in _conversions.Entries().Where(e => filter.Length == 0 || e.Reading.Contains(filter) || e.Text.Contains(filter)))
+        foreach (var (reading, text, used) in _runtime.LearnedConversions().Where(e => filter.Length == 0 || e.Reading.Contains(filter) || e.Text.Contains(filter)))
         {
             var row = _conversionGrid.Rows.Add(reading, text, used.ToLocalTime().ToString("yyyy/MM/dd", CultureInfo.InvariantCulture));
             _conversionGrid.Rows[row].Tag = reading;
@@ -111,8 +108,8 @@ internal sealed class LearnedWordsForm : Form
         var grid = _tabs.SelectedIndex == 0 ? _languageGrid : _conversionGrid;
         var keys = grid.SelectedRows.Cast<DataGridViewRow>().Select(r => (string)r.Tag!).ToList();
         if (keys.Count == 0) return;
-        if (_tabs.SelectedIndex == 0) _languages.Remove(keys);
-        else foreach (var reading in keys) _conversions.Forget(reading);
+        if (_tabs.SelectedIndex == 0) _runtime.ForgetLanguages(keys);
+        else foreach (var reading in keys) _runtime.ForgetConversion(reading);
         Diagnostics.Log.Info($"学習した語を {keys.Count} 個忘れました。");
         Reload();
     }

@@ -93,8 +93,8 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         return arguments;
     }
 
-    /// <summary>すでに動いている llama-server を使う (テストと Windows の SelfTest 用)。</summary>
-    public ZenzaiConverter(Uri endpoint, int timeoutMs = DefaultTimeoutMs) : this("", "", timeoutMs)
+    /// <summary>すでに動いている llama-server を使う (テストと自己診断の SelfCheck 用)。</summary>
+    internal ZenzaiConverter(Uri endpoint, int timeoutMs = DefaultTimeoutMs) : this("", "", timeoutMs)
     {
         _fixedEndpoint = endpoint;
         _endpoint = endpoint;

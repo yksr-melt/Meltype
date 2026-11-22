@@ -7,7 +7,7 @@ using Meltype.Libraries.Lexicon;
 namespace Meltype.Detection;
 
 /// <summary>ローマ字の打ち間違いを直した結果。Start と Length は直す前の英字の並びの中の位置。</summary>
-public readonly record struct RomajiFix(string Wrong, string Right, string Kana);
+internal readonly record struct RomajiFix(string Wrong, string Right, string Kana);
 
 /// <summary>
 /// ローマ字の打ち間違い (onegaishimsu → onegaishimasu、arigatpu → arigatou、sumimasne → sumimasen) を直す。
@@ -179,7 +179,7 @@ public sealed class RomajiTypoCorrector
     /// 小文字の英字の並び letters (ローマ字として読めない子音を含む) を直す。直せなければ null。
     /// final でなければ、まだ打っている途中 (語末の子音はそのまま残してよい)。
     /// </summary>
-    public RomajiFix? Fix(string letters, bool final)
+    internal RomajiFix? Fix(string letters, bool final)
     {
         var first = FirstUnreadable(letters, final);
         // 語頭の打ち間違いはまれで、英字 1 文字 + 日本語 (sだけが) のこともあるので見ない。

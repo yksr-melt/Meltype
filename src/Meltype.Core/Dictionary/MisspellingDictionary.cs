@@ -9,7 +9,7 @@ using Meltype.Libraries.Lexicon;
 namespace Meltype.Dictionary;
 
 /// <summary>読みの中に見つけた書き間違い。Start と Length は読み (カタカナ) の中の位置。</summary>
-public readonly record struct Misspelling(int Start, int Length, string Wrong, string Right);
+internal readonly record struct Misspelling(int Start, int Length, string Wrong, string Right);
 
 /// <summary>
 /// よくある書き間違い (ブレスレッド → ブレスレット、シュミレーション → シミュレーション) の辞書。「もしかして」に使う。
@@ -72,7 +72,7 @@ public sealed class MisspellingDictionary
     }
 
     /// <summary>読み (ひらがな・カタカナ) の中から書き間違いを 1 つ探す。無ければ null。</summary>
-    public Misspelling? Find(string reading)
+    internal Misspelling? Find(string reading)
     {
         var text = KanaChars.ToKatakana(reading);
         // 1. 辞書に書いてある誤り (長いものを優先)
