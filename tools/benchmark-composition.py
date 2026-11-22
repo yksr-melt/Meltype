@@ -69,7 +69,7 @@ def main():
 <ProjectReference Include="%s"/></ItemGroup></Project>''' % escape(str(core)))
             command = ['dotnet', 'publish', str(project), '-c', 'Release', '-o', str(directory / 'bin')]
             if not args.jit:
-                command += ['-p:PublishAot=true', '--source', 'https://api.nuget.org/v3/index.json']
+                command += ['-p:PublishAot=true']
             with (output / (label + '-build.log')).open('w') as log:
                 subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, check=True)
             programs[label] = (['dotnet', str(directory / 'bin/Benchmark.dll')] if args.jit else [str(directory / 'bin/Benchmark')])

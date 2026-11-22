@@ -73,7 +73,7 @@ brew install --cask yksr-melt/Meltype/meltype
 
 変換の候補と入力中の案内は、入力位置の近くに表示します。候補はキー操作やクリックで選べます。
 
-設定・学習データ・ユーザー辞書は `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。設定は Windows 版と同じ `config.json` で、入力メニューの「Meltype の設定ファイル (config.json) を開く…」で開いて直接編集します。VS Code などのエディターでは、項目の補完と説明が出ます。
+設定・ユーザー辞書・定型文・学習データは、Launchpad の「Meltype の設定」(入力メニューの「Meltype の設定…」でも開けます) で変えます。ファイルは `~/Library/Application Support/Meltype` にあります (入力メニューの「Meltype のデータフォルダを開く」)。
 
 かな漢字変換は、同梱の Mozc で行います。Zenzai (llama.cpp の llama-server と zenz-v3.2-small、同梱) で、キャレットの前の文を文脈にして変換します (既定で ON。CPU で計算します)。使わないときは `config.json` の `"UseZenzai": false`、自分の llama-server・モデルを使うときは `"ZenzaiServerPath"`・`"ZenzaiModelPath"` に場所を書きます。
 
@@ -113,7 +113,7 @@ macOS の「ユーザ辞書」の語は、次の手順で `userdict.txt` に取�
 <a name="windows-版との違い"></a>
 <img src="images/headings/mac/s03.svg" alt="Windows 版との違い (今のところ)" height="40">
 
-- 設定画面・トレイ・ユーザー辞書の画面はありません (`config.json`・`userdict.txt` を直接編集。[ユーザー辞書](#ユーザー辞書))
+- トレイはありません (入力メニューから操作します)
 - 設定「カッコを打ったら中にカーソルを移動」は未対応です
 
 <br>
@@ -161,7 +161,7 @@ Safari や一般のネイティブアプリのパスワード欄は、現在 Mel
 
 ```bash
 launchctl remove io.github.yksr-melt.Meltype.manual
-rm -rf ~/Library/Input\ Methods/Meltype.app
+rm -rf ~/Library/Input\ Methods/Meltype.app ~/Applications/Meltype\ Settings.app
 # 設定と学習データも消すなら
 rm -rf ~/Library/Application\ Support/Meltype
 ```

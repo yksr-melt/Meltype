@@ -10,6 +10,7 @@
 | `src/Meltype.Core/` | OS に依存しない部分 (Windows・Mac・Linux 共通)。英語 / 日本語の判定・ローマ字・変換ボックスの中身・辞書・学習・設定 |
 | `src/Meltype.Windows/` | Windows 版 (キーボードフック・変換ボックスの画面・IMM32 / TSF・UI Automation・トレイ) |
 | `src/Meltype.Core.CApi/` | Mac・Linux・Android 版の IME から呼ぶ C の関数 (Meltype.Core を NativeAOT で dylib・so にする) |
+| `src/Meltype.Settings/` | 設定アプリ (Windows・Mac・Linux 共通、Avalonia)。設定・ユーザー辞書・定型文・学習データ・バックアップ。各 OS のビルドが NativeAOT で同梱する |
 | `mac/` | Mac 版の IME (Swift、Input Method Kit) |
 | `linux/` | Linux 版 (IBus・fcitx5 のエンジン) |
 | `native/` | Meltype IME (Windows の TSF の DLL) と Mozc のヘルパー ([native/mozc/README.md](../../native/mozc/README.md)。Mozc-UT の辞書は [MOZC-UT.md](MOZC-UT.md)) |

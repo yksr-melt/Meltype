@@ -40,9 +40,6 @@ internal sealed class MeltypeEngine : IDisposable
     /// <summary>Discord のステータスに打鍵数を出す (打鍵数の「Discord に表示する」が ON の間だけ。入力とは別のスレッドで送る)。</summary>
     private readonly DiscordPresence _discordPresence;
 
-    private Action<KeyEvent>? _shortcutCapture;
-    private bool _captureHankakuTail;
-    private readonly HashSet<int> _captureDown = [];
     // ほかのソフトが送ったキーを通したことを、1 回だけログに書いたか (#250)
     private bool _injectedHintLogged;
 
@@ -128,30 +125,8 @@ internal sealed class MeltypeEngine : IDisposable
         }
     }
 
-    public void CaptureShortcut(Action<KeyEvent>? capture) => Volatile.Write(ref _shortcutCapture, capture);
-
     private bool OnKey(KeyEvent e)
     {
-        // 登録画面の取り込みは入力より先。終了後も飲み込んだキー解放は対にする。
-        // 取り込みを終えた F3 解放に続く F4 押下を、通常の切り替えとして実行しない。
-        if (_captureHankakuTail)
-        {
-            _captureHankakuTail = false;
-            if (!e.Injected && e.IsDown && e.Vk == VirtualKeys.OemEnlw && e.Scan == 0x29 && !e.Extended) return true;
-        }
-        var capture = Volatile.Read(ref _shortcutCapture);
-        if (!e.Injected && capture is not null)
-        {
-            if (e.IsDown) _captureDown.Add(e.PhysicalId); else _captureDown.Remove(e.PhysicalId);
-            _captureHankakuTail = e.IsUp && e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
-            capture(e);
-            return true;
-        }
-        if (e.IsUp && _captureDown.Remove(e.PhysicalId))
-        {
-            _captureHankakuTail = e.Vk == VirtualKeys.OemAuto && e.Scan == 0x29 && !e.Extended;
-            return true;
-        }
         var settings = _running;
         // 遠隔操作 (AnyDesk・VNC) のキーは、ほかのソフトが送ったキー (LLKHF_INJECTED) として届く。設定で許可していれば手で打ったキーとして扱う。
         // Meltype 自身が送り直したキーは、印 (InjectedMarker) でフックの入口で除いているので、ここには来ない (自分の出力を処理し直さない)。

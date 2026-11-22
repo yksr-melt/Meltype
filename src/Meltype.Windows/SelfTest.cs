@@ -46,11 +46,8 @@ internal static class SelfTest
         {
             using var data = new TemporaryData();
             using var engine = new MeltypeEngine(new MeltypeRuntime(data.Directory));
-            using var invoker = new Control();
-            invoker.CreateControl();
-            using var service = new CompositionService(invoker, engine.Runtime, () => engine.Settings);
             var names = new List<string>();
-            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.LogForm(engine) })
+            foreach (var form in new Form[] { new UI.LogForm(engine) })
             {
                 using (form)
                 {
