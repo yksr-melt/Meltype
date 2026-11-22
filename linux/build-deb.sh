@@ -85,7 +85,7 @@ EOF
 find "$root" -type d -exec chmod 755 {} +
 
 # 依存: 本体 (NativeAOT)・Mozc の変換ヘルパー・Zenzai の llama-server が使う C / C++ のライブラリと zlib、IBus のエンジン (Python)、
-# 設定アプリ (Avalonia) が使う fontconfig と、dlopen で読む X11 のライブラリ。
+# 設定アプリ (Avalonia) が使う fontconfig (日本語のフォントを fc-match で探す) と、dlopen で読む X11 のライブラリ。
 # IBus は fcitx5 だけで使う人もいるので Recommends にする
 installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
 {
@@ -94,7 +94,7 @@ installed_size="$(du -sk --exclude=DEBIAN "$root" | cut -f1)"
     echo "Architecture: $arch"
     echo "Maintainer: Yukishiro <https://github.com/yksr-melt/Meltype>"
     echo "Installed-Size: $installed_size"
-    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9), python3-gi, libfontconfig1, libx11-6, libice6, libsm6, libxcursor1, libxext6, libxfixes3, libxi6, libxrandr2"
+    echo "Depends: libc6, libstdc++6, libgcc-s1, zlib1g, python3 (>= 3.9), python3-gi, libfontconfig1, fontconfig, libx11-6, libice6, libsm6, libxcursor1, libxext6, libxfixes3, libxi6, libxrandr2"
     echo "Recommends: ibus, gir1.2-ibus-1.0"
     if $with_fcitx5; then echo "Suggests: fcitx5"; fi
     echo "Section: utils"

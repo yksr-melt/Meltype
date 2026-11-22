@@ -58,7 +58,7 @@ trap 'rm -rf "$stage"' EXIT
 # fcitx5 のアドオンは Fedora の glibc を要求するので、サブパッケージ meltype-fcitx5 に分け、meltype は RHEL 9 系でも入るようにする。
 # meltype-fcitx5 は、fcitx5 が入っていれば dnf が meltype と一緒に入れる (Supplements)。
 # IBus の一覧 (ibus write-cache) は Fedora の ibus パッケージのファイルトリガーが作り直すので、ここでは実行しない
-# 設定アプリ (Avalonia) は X11 のライブラリを dlopen で読むので、自動の Requires に出ない。名前で書く
+# 設定アプリ (Avalonia) は X11 のライブラリを dlopen で読み、日本語のフォントを fc-match で探すので、自動の Requires に出ない。名前で書く
 cat > "$stage/meltype.spec" << 'EOF'
 %global debug_package %{nil}
 %global _build_id_links none
@@ -74,7 +74,7 @@ Release: 1
 Summary: Japanese input method without the Hankaku/Zenkaku key
 License: GPL-3.0-or-later
 URL: https://github.com/yksr-melt/Meltype
-Requires: libicu, python3 >= 3.9, python3-gobject, libX11, libICE, libSM, libXcursor, libXext, libXfixes, libXi, libXrandr
+Requires: libicu, python3 >= 3.9, python3-gobject, fontconfig, libX11, libICE, libSM, libXcursor, libXext, libXfixes, libXi, libXrandr
 Recommends: ibus
 
 %description

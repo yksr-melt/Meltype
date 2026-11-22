@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 aster-void
 
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -27,7 +28,31 @@ internal static class Program
             if (window.WindowState == WindowState.Minimized) window.WindowState = WindowState.Normal;
             window.Activate();
         }));
-        return AppBuilder.Configure<App>().UsePlatformDetect().StartWithClassicDesktopLifetime(args);
+        return AppBuilder.Configure<App>().UsePlatformDetect()
+            .With(new FontManagerOptions { DefaultFamilyName = JapaneseFont() })
+            .StartWithClassicDesktopLifetime(args);
+    }
+
+    /// <summary>
+    /// 画面の既定のフォント。日本語のフォントにする: OS の既定のフォントに漢字が無いと、Avalonia は代わりに中国語の字形のフォントで漢字を描くことがある。
+    /// Linux は入っているフォントが PC ごとに違うので、fontconfig に日本語のゴシックを聞く。
+    /// </summary>
+    private static string JapaneseFont()
+    {
+        if (OperatingSystem.IsWindows()) return "Yu Gothic UI";
+        if (OperatingSystem.IsMacOS()) return "Hiragino Sans";
+        try
+        {
+            using var match = Process.Start(new ProcessStartInfo("fc-match", ["--format=%{family[0]}", "sans-serif:lang=ja"]) { RedirectStandardOutput = true })!;
+            var family = match.StandardOutput.ReadToEnd().Trim();
+            match.WaitForExit();
+            if (family.Length > 0) return family;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            // fc-match が無い (fontconfig の道具が入っていない)
+        }
+        return "Noto Sans CJK JP";
     }
 }
 
