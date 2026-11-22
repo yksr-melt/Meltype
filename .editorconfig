@@ -2,7 +2,7 @@
 # Copyright (C) 2026 Yukishiro
 #
 # エディターと dotnet format・Roslyn の解析の設定 (issue #1083)。
-# 解析のルールは、CI (.github/workflows/quality.yml) では AnalysisLevel=latest-recommended で流し、警告が 1 件でもあれば失敗にする。
+# 解析のルールは、CI (.github/workflows/lint.yml) では AnalysisLevel=latest-recommended で流し、警告が 1 件でもあれば失敗にする。
 # 重要度を変えるときは、下の [*.cs] に dotnet_diagnostic.<ID>.severity = error / warning / suggestion / none を足す。
 # error にするとふだんのビルド (Windows 版も) も止まる。
 root = true
@@ -14,5 +14,7 @@ charset = utf-8-bom
 [*.cs]
 indent_style = space
 indent_size = 4
+# .gitattributes と同じ LF。書かないと、Windows の dotnet format は CRLF に直そうとする
+end_of_line = lf
 # 対応表 (キーの表など) は 1 行に複数の項目を並べる
 csharp_new_line_before_members_in_object_initializers = false

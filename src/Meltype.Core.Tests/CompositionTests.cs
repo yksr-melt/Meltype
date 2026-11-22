@@ -4,8 +4,14 @@
 using Meltype.Composition;
 using Meltype.Composition.Utility;
 using Meltype.Config;
+using Meltype.Detection;
+using Meltype.Diagnostics;
+using Meltype.Dictionary;
+using Meltype.Engine;
 using Meltype.Ime;
 using Meltype.Input;
+using Meltype.Learning;
+using Meltype.Libraries.Chars;
 
 namespace Meltype.Tests;
 
@@ -1837,6 +1843,12 @@ internal static class CompositionTests
             ["here"] = "here",
             ["hero"] = "hero",
             ["I fly a kite"] = "I fly a kite",
+            // て の縮まった ちゃ (kit + や にしない)。英単語の後ろの や は英語のまま
+            ["kitya"] = "きちゃ",
+            ["kityatta"] = "きちゃった",
+            ["mityatta"] = "みちゃった",
+            ["catya"] = "catや",
+            ["robotya"] = "robotや",
         };
         foreach (var (typed, expected) in cases)
         {
@@ -4585,8 +4597,8 @@ internal static class CompositionTests
         k = new Keyboard();
         k.Type("3ji");
         Assert.Equal("3じ", k.Showing, "数字の後にかなが続けば日本語");
-        Assert.Equal("2025年10月", CompositionController.NormalizeHalfWidth("２０２５年１０月", "2025ねん10がつ"), "変換エンジンが全角にした数字は半角に戻す");
-        Assert.Equal("１つ", CompositionController.NormalizeHalfWidth("１つ", "ひとつ"), "読みに半角数字が無ければそのまま");
+        Assert.Equal("2025年10月", TextChars.NormalizeHalfWidth("２０２５年１０月", "2025ねん10がつ"), "変換エンジンが全角にした数字は半角に戻す");
+        Assert.Equal("１つ", TextChars.NormalizeHalfWidth("１つ", "ひとつ"), "読みに半角数字が無ければそのまま");
     }
 
     [Test]
@@ -4669,9 +4681,9 @@ internal static class CompositionTests
     [Test]
     public static void HalfWidth_IsKeptAfterConversion()
     {
-        Assert.Equal("sだけが", CompositionController.NormalizeHalfWidth("ｓだけが", "sだけが"));
-        Assert.Equal("2025年", CompositionController.NormalizeHalfWidth("２０２５年", "2025ねん"));
-        Assert.Equal("ＡＢＣ", CompositionController.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
+        Assert.Equal("sだけが", TextChars.NormalizeHalfWidth("ｓだけが", "sだけが"));
+        Assert.Equal("2025年", TextChars.NormalizeHalfWidth("２０２５年", "2025ねん"));
+        Assert.Equal("ＡＢＣ", TextChars.NormalizeHalfWidth("ＡＢＣ", "えーびーしー"), "読みに英数字が無ければ全角のまま");
     }
 
     /// <summary>
@@ -5433,6 +5445,72 @@ internal static class CompositionTests
         k.Press(VirtualKeys.Space);
         k.Key(VirtualKeys.LShift, up: true);
         Assert.True(k.Host.View!.Candidates.Contains("今日は負け"), string.Join(" ", k.Host.View.Candidates));
+    }
+
+    private static void ShiftSpace(Keyboard k)
+    {
+        k.Key(VirtualKeys.LShift);
+        k.Press(VirtualKeys.Space);
+        k.Key(VirtualKeys.LShift, up: true);
+    }
+
+    [Test]
+    public static void EnglishWord_KatakanaSpellingIsACandidate()
+    {
+        // 英語と判定した語の変換の候補に、カタカナ表記を出す。英字が最初の候補のまま (Space では今までどおり英字で確定する)
+        var space = new Keyboard();
+        space.Type("export ");
+        Assert.Equal("export ", space.Host.Document);
+
+        var k = new Keyboard { SeparateKeyRoles = true };
+        k.Type("application ");
+        Assert.Equal("application", k.Host.View!.Candidates[0]);
+        Assert.True(k.Host.View.Candidates.Contains("アプリケーション"), string.Join(" ", k.Host.View.Candidates));
+
+        // Shift+Space (日本語を先に) でも、ローマ字として読めない語は英字が先で、カタカナ表記は最後
+        var shift = new Keyboard();
+        shift.Type("export");
+        ShiftSpace(shift);
+        Assert.Equal("export", shift.Host.View!.Candidates[0]);
+        Assert.Equal("エクスポート", shift.Host.View.Candidates[^1]);
+    }
+
+    [Test]
+    public static void EnglishWord_KatakanaSpellingKeepsRomajiCandidatesFirst()
+    {
+        // ローマ字として読める語 (game → がめ) は、読んだ候補を今までどおり出し、カタカナ表記 (ゲーム) はその後ろ
+        var k = new Keyboard { SeparateKeyRoles = true };
+        k.Type("game ");
+        var candidates = k.Host.View!.Candidates.ToList();
+        Assert.Equal("game", candidates[0]);
+        Assert.True(candidates.IndexOf("がめ") >= 0 && candidates.IndexOf("がめ") < candidates.IndexOf("ゲーム"), string.Join(" ", candidates));
+    }
+
+    [Test]
+    public static void EnglishWord_ChoosingKatakanaSpellingDoesNotMakeItJapanese()
+    {
+        // カタカナ表記を選んで確定しても、その英単語を日本語として覚えない (覚えると次から export が えxぽrt になる)
+        var languages = new LanguageMemory(null);
+        var k = new Keyboard(languages: languages);
+        k.Type("export");
+        ShiftSpace(k);
+        var katakana = k.Host.View!.Candidates.ToList().IndexOf("エクスポート");
+        for (var i = 0; i < katakana; i++) k.Press(VirtualKeys.Space);
+        k.Type("\n");
+        Assert.Equal("エクスポート", k.Host.Output.Single());
+        Assert.Equal(0, languages.Entries().Count);
+        k.Type("export\n");
+        Assert.Equal("export", k.Host.Output.Last());
+
+        // ローマ字として読んだ候補 (camera → カメラ) を選んだら、今までどおり日本語として覚える
+        var camera = new Keyboard(languages: languages);
+        camera.Type("camera");
+        ShiftSpace(camera);
+        var index = camera.Host.View!.Candidates.ToList().IndexOf("カメラ");
+        for (var i = 0; i < index; i++) camera.Press(VirtualKeys.Space);
+        camera.Type("\n");
+        Assert.Equal("カメラ", camera.Host.Output.Single());
+        Assert.Equal(1, languages.Entries().Count);
     }
 
     [Test]
@@ -6544,6 +6622,23 @@ internal static class CompositionTests
         {
             ("zh", "←"), ("zj", "↓"), ("zk", "↑"), ("zl", "→"),
             ("z/", "・"), ("zu", "ず"), ("puzzle", "puzzle"),
+        })
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+        }
+    }
+
+    [Test]
+    public static void Issue2013_ZArrowAfterKanaIsNotTypo()
+    {
+        // Issue #2013: かなの後ろの zl (→) を、確定のときに前のローマ字と合わせて打ち間違い (hogezo) として ぞ に直さない。
+        // z + 母音 (hogezo) は今までどおり ぞ。
+        foreach (var (typed, expected) in new[]
+        {
+            ("hogezl", "ほげ→"), ("hogezlfuga", "ほげ→ふが"), ("hogezk", "ほげ↑"), ("truezlfalse", "true→false"),
+            ("hogezo", "ほげぞ"),
         })
         {
             var k = new Keyboard();

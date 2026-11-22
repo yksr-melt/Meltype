@@ -3,10 +3,9 @@
 
 using System.Globalization;
 using System.Text;
-using Meltype.Composition.Utility;
 using Meltype.Config;
 using Meltype.Detection;
-using Meltype.Input;
+using Meltype.Diagnostics;
 
 namespace Meltype.Composition;
 

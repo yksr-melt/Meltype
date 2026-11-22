@@ -127,6 +127,14 @@ else {
 # Zenzai (llama.cpp の llama-server と zenz-v3.2-small。native\zenzai\Get-Zenzai.ps1 で取ってきたもの) を同梱する (issue #1120)。
 # 「Zenzai を使う」は既定 ON で、場所が空なら app\zenzai のものを使う。無ければ今までの変換エンジンだけで変換する。
 if (Test-Path -LiteralPath (Join-Path $zenzaiBin 'llama-server.exe')) {
+    # llama-server が使う Visual C++ のランタイム (VCRUNTIME140.dll など) は Get-Zenzai.ps1 が横に置き、VC-RUNTIME.txt に書いている。
+    # 無いまま配ると、「Visual C++ 再頒布可能パッケージ」が入っていない PC で llama-server が起動できない
+    $zenzaiRuntimeList = Join-Path $zenzaiBin 'VC-RUNTIME.txt'
+    $zenzaiRuntimeDlls = if (Test-Path -LiteralPath $zenzaiRuntimeList) { @(Get-Content -LiteralPath $zenzaiRuntimeList | Where-Object { $_.Trim() }) } else { @() }
+    $zenzaiMissing = $zenzaiRuntimeDlls | Where-Object { -not (Test-Path -LiteralPath (Join-Path $zenzaiBin $_)) }
+    if ($zenzaiRuntimeDlls.Count -eq 0 -or $zenzaiMissing) {
+        throw "llama-server と一緒に置く Visual C++ のランタイムがありません ($(if ($zenzaiMissing) { $zenzaiMissing -join ', ' } else { 'VC-RUNTIME.txt' }))。native\zenzai\Get-Zenzai.ps1 を実行し直してください。"
+    }
     New-Item -ItemType Directory -Force -Path (Join-Path $app 'zenzai') | Out-Null
     Copy-Item -Path (Join-Path $zenzaiBin '*') -Destination (Join-Path $app 'zenzai') -Force
     Write-Host 'Zenzai (llama-server とモデル) を同梱しました。'
@@ -163,7 +171,7 @@ Copy-Item -LiteralPath (Join-Path $dotnetRoot 'ThirdPartyNotices.txt') -Destinat
 #      ネイティブの DLL は、デバッグ用 (mscordaccore, mscordbi, DiaSymReader, createdump) と WPF の描画用を削る。
 #   2. 実際に読み込まれたかで削る: 1 の状態で自己診断を走らせ、読み込まれなかった大きなアセンブリ (512KB 超) を削る
 #      (XML・ネットワーク・暗号などは WinForms から参照されているが、Meltype の使い方では読み込まれない)。
-#      設定で ON にしたときだけ使う部品 (Zenzai・GitHub の題名の HTTP など) は、自己診断 (SelfTest.Run) の中で一度使って読み込ませる。
+#      設定で ON にしたときだけ使う部品 (Zenzai・GitHub の題名の HTTP など) は、自己診断 (Core の部品は Meltype.Core の SelfCheck.Checks、画面などは SelfTest.Run) の中で一度使って読み込ませる。
 #      読み込まれないと、ここで削られ、ON にしたとたん動かなくなる (#973)。機能を足すときは、自己診断にも足す。
 #      (Zenzai は loopback の偽の llama-server に変換を頼む。GitHub の題名の HTTPS は型に触るだけで、TLS の接続そのものは自己診断では確かめていない)
 #   どちらの後も自己診断を走らせ、削りすぎていないことを確かめる。

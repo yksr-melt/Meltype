@@ -151,7 +151,7 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 | 変換ボックスの文字の大きさ | 自動 (入力欄に合わせる、既定) / 小 / 中 / 大 / 特大 / 最大 |
 | 変換ボックスのフォント | この PC にあるフォント (既定は Yu Gothic UI) |
 | 変換ボックスの色 | **ダーク** (既定) / **ライト** / **Windows の設定に合わせる** / **カスタム** |
-| 変換ボックスのカスタムの色: 背景 / 文字 | 「カスタム」のときの色 (#RRGGBB)。案内の文字・選んでいる候補の目印もこの文字の色で描きます |
+| 変換ボックスのカスタムの色: 背景 / 文字 | 「カスタム」のときの色 (#RRGGBB)。色を変えると「変換ボックスの色」も「カスタム」になります。案内の文字・選んでいる候補の目印もこの文字の色で描きます |
 | 変換ボックスの不透明度 | 100% (既定) / 90% / 80% / 70% |
 
 - 候補の一覧が入力欄や下の行を隠すときは、「変換ボックスの位置」を **カーソルの上** にしてください
@@ -205,7 +205,7 @@ Meltype キーボードで入力するときの変換ボックスの設定と、
 [Zenzai](https://github.com/ensan-hcl/azooKey) (azooKey の zenz モデル) で、前の文脈を見てかな漢字変換します。**既定で ON** で、llama.cpp の `llama-server.exe` (b11719 の CPU 版) とモデル [zenz-v3.2-small](https://huggingface.co/Miwa-Keita/zenz-v3.2-small-gguf) (Apache-2.0) を Meltype に同梱しています (`app\zenzai\`)。
 
 - Meltype が llama-server を 127.0.0.1 で起動します。使えないときは、Mozc で変換します
-- Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
+- Zenzai の答えを出しているときは、変換ボックスの下の説明の行の頭に「Zenzai」と出ます。候補の一覧では、Zenzai の答えの候補の右に「Zenzai」と出ます。Zenzai の状態はトレイのメニューに出ます
 - CPU の負荷が気になるときは、設定の「Zenzai を使う」を OFF にしてください
 - 自分で用意した llama-server や zenz v3 系のモデルを使うときは、「Zenzai: llama-server の場所」「Zenzai: モデル (GGUF) の場所」に書きます (空なら同梱のもの)。GPU 版 (Vulkan・CUDA) の llama-server なら、「Zenzai: 使う GPU」に `llama-server --list-devices` で出る名前 (例: `Vulkan0`) を書くと GPU で計算します
 

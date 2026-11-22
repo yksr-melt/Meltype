@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Yukishiro
 
 using System.Diagnostics;
-using Meltype.Config;
 
 namespace Meltype.Input;
 

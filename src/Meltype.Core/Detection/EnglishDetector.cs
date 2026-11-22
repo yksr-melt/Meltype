@@ -10,7 +10,7 @@ namespace Meltype.Detection;
 /// </summary>
 public sealed class EnglishDetector
 {
-    public WordList Words { get; }
+    internal WordList Words { get; }
 
     public EnglishDetector(IEnumerable<string> words) => Words = new(words);
 
