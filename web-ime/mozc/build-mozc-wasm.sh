@@ -38,6 +38,11 @@ if ! grep -q 'name = "emsdk"' "$src/MODULE.bazel"; then
         "$emsdk_version" "$mozc/emsdk/bazel" >> "$src/MODULE.bazel"
 fi
 
+# スレッドを使わずにビルドする (thread-inline.patch の先頭)
+if ! grep -q MOZC_THREAD_RUNS_INLINE "$src/base/thread.h"; then
+    patch -d "$src" -p1 < "$here/thread-inline.patch"
+fi
+
 cd "$src"
 # Emscripten は POSIX として動くので、Mozc の Linux 向けの分岐 (oss_linux) でビルドする
 "${BAZEL:-bazel}" build //converter:meltype_mozc_wasm --config oss_linux --config release_build \
