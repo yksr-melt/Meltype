@@ -1,0 +1,10 @@
+# Meltype 分野の辞書 (SKK 辞書 SKK-JISYO.station から作成)
+# 元データ: SKK 辞書 https://github.com/skk-dev/dict
+# Copyright (C) 2003-2005 MITA Yuusuke  <clefs@mail.goo.ne.jp>
+# SKK Development Team <skk@ring.gr.jp>
+# ライセンス: GPL-2.0-or-later (各ファイルの先頭の「version 2, or (at your option) any later version」)。Meltype では GPL-3.0-or-later で使う。
+# 加工: 送り仮名の無い語の候補から注釈と式を除き、読みがひらがなだけの語を取り出した。
+# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
+# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、ひらがな・カタカナの後ろに並ぶ)
+# 参考資料用の抜粋: テストで使う語だけを残した。全文は本家の dictionaries/domain-stations.txt。
+あいづかのうえき	会津加納駅

@@ -1,0 +1,9 @@
+# Meltype 分野の辞書: 情報 (高等学校の情報科の用語)
+# 元データ: IDiME (https://github.com/ssvp003/IDiME)。情報処理学会 情報入試委員会「情報科全教科書用語リスト 第2版」をもとにしたもの
+# ライセンス: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)。この派生データも CC BY-SA 4.0。
+# 加工: 読みがひらがなだけの行を、読みで 1 行にまとめた。かなだけで書く語と、よく使う語の読み (readings.txt) は除いた。
+# Mozc の変換ヘルパー (MELTYPE_MOZC) に読みを変換させ、Mozc が出せる語は除いた。
+# 作り直し: MELTYPE_MOZC=… python3 tools/make-domain-dictionaries.py it …
+# 形式: 読み<Tab>表記<Tab>表記 …  (変換の候補では、ひらがな・カタカナの後ろに並ぶ)
+# 参考資料用の抜粋: テストで使う語だけを残した。全文は本家の dictionaries/domain-it.txt。
+いくせいしゃけん	育成者権
