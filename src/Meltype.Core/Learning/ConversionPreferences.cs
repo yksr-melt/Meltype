@@ -170,14 +170,16 @@ public sealed class ConversionHistory
         _saver.Request();
     }
 
-    public void Forget(string reading)
+    /// <summary>読みの学習を忘れる。saveNow が false (確定のとき) なら、覚えるときと同じく後でまとめて保存する。</summary>
+    public void Forget(string reading, bool saveNow = true)
     {
         lock (_gate)
         {
             if (!_entries.Remove(reading)) return;
             Version++;
         }
-        _saver.WriteNow();
+        if (saveNow) _saver.WriteNow();
+        else _saver.Request();
     }
 
     /// <summary>読みが prefix で始まり prefix より長い、学習した変換の語 (新しく使ったものから。Entries() から探すのと同じ順)。</summary>
