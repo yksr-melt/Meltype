@@ -180,6 +180,19 @@ internal static class CompositionTests
     /// Meltype キーボード (<c>KeyboardFront</c>) と同じに <see cref="ImeHost"/> を呼ぶフロント。本体が受け取るキー (state.capture。入力中はすべて) だけを送り、
     /// 受け取らないキーはアプリ (<see cref="FakeHost"/>) に入れて caret で知らせる。表示はフロントに渡した形 (result.view) を見る。
     /// </summary>
+    /// <summary>打って Enter で確定した文字を比べる。外れたケースは 1 つ目で止めずにまとめて出す。</summary>
+    internal static void AssertCommitted(params (string Typed, string Committed)[] cases)
+    {
+        var failures = new List<string>();
+        foreach (var (typed, committed) in cases)
+        {
+            var k = new Keyboard();
+            k.Type(typed + "\n");
+            if (k.Host.Document != committed) failures.Add($"{typed} → {k.Host.Document} (期待: {committed})");
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
+    }
+
     internal sealed class Keyboard : IImeEnvironment
     {
         private long _now = 1000;
@@ -1962,16 +1975,9 @@ internal static class CompositionTests
     public static void HyphenatedEnglishWords_StayEnglish()
     {
         // えーmail、こーおp になっていた
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("e-mail", "e-mail"), ("co-op", "co-op"), ("bio-break", "bio-break"), ("e-maildeokuru", "e-mailでおくる"), ("x-ray", "x-ray"), ("lo-fi", "lo-fi"), ("Lo-fi", "Lo-fi"), ("sci-fi", "sci-fi"), ("lo-fiwokiku", "lo-fiをきく"), ("r-18", "r-18"), ("sub-6", "sub-6"), ("GPT-6.7", "GPT-6.7"), ("Blu-ray", "Blu-ray"),
-            ("e-to", "えーと"), ("su-pa-", "すーぱー"), ("o-bun", "おーぶん"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("e-to", "えーと"), ("su-pa-", "すーぱー"), ("o-bun", "おーぶん"));
     }
 
     [Test]
@@ -2026,58 +2032,52 @@ internal static class CompositionTests
         Assert.True(dictionary.Lookup("たんおめ").Contains("誕おめ"), "たんおめ → 誕おめ");
     }
 
-    /// <summary>打って確定した文字。報告された誤判定 (Issue の番号) と、同じ原因で崩れやすい入力。</summary>
-    private static readonly (string Typed, string Committed, string Why)[] TypedAndCommitted =
-    [
-        ("Gemma4\n", "Gemma4", "#404"),
-        ("holoX\n", "holoX", "#469"),
-        ("fusion\n", "fusion", "#346"),
-        ("enumerate\n", "enumerate", "#506"),
-        ("fatigue\n", "fatigue", "#536"),
-        ("infobesity\n", "infobesity", "#538"),
-        ("whois\n", "whois", "#616"),
-        ("siri-zu\n", "しりーず", "#656"),
-        ("imaopenshita\n", "いまopenした", "#669"),
-        ("fyu\n", "ふゅ", "#674"),
-        ("guesstimation\n", "guesstimation", "#683"),
-        ("enshittification\n", "enshittification", "#686"),
-        ("Finfluencer\n", "Finfluencer", "#689"),
-        ("datamation\n", "datamation", "#690"),
-        ("adware\n", "adware", "#691"),
-        ("greedflation\n", "greedflation", "#692"),
-        ("englishtojapanesewomazeteuteru\n", "englishとjapaneseをまぜてうてる", "#712"),
-        ("binge-watch\n", "binge-watch", "#724"),
-        ("openstreetmap\n", "openstreetmap", "#725"),
-        ("malvertising\n", "malvertising", "#726"),
-        ("ad-blocker\n", "ad-blocker", "#727"),
-        ("adtech\n", "adtech", "#730"),
-        ("robonomics\n", "robonomics", "#731"),
-        ("mobisode\n", "mobisode", "#732"),
-        ("netizenry\n", "netizenry", "#733"),
-        ("tver\n", "tver", "#735"),
-        ("changesuru\n", "changeする", "#411"),
-        ("imaopenno\n", "いまopenの", "#485"),
-        ("mozcgamiteirutohaie\n", "mozcがみているとはいえ", "#249"),
-        ("DeVitode\n", "DeVitoで", "#268"),
-        ("kachiwodefinesuru\n", "かちをdefineする", "#421"),
-        ("mondaiwodefusesuru\n", "もんだいをdefuseする", "#419"),
-        ("Blu-ray\n", "Blu-ray", "#435"),
-        ("kameramotteschoolheiku\n", "かめらもってschoolへいく", "後ろの長い英単語が短い英単語に勝つ (motteschoolhe が mottes + ちょおl + へ になっていた)"),
-        ("# hello ", "# hello ", "Markdown の記号を確定したあとに本文を続けて打てる"),
-        ("abctodef\n", "abcとdef", "#154 英字のあいだの と は助詞 (全体を 1 つの英単語にしない)"),
-    ];
-
+    /// <summary>報告された誤判定 (Issue の番号) と、同じ原因で崩れやすい入力。</summary>
     [Test]
-    public static void TypedText_IsCommittedAsExpected()
+    public static void ReportedInputs_AreCommittedAsExpected() => AssertCommitted(
+        ("Gemma4", "Gemma4"), // #404
+        ("holoX", "holoX"), // #469
+        ("fusion", "fusion"), // #346
+        ("enumerate", "enumerate"), // #506
+        ("fatigue", "fatigue"), // #536
+        ("infobesity", "infobesity"), // #538
+        ("whois", "whois"), // #616
+        ("siri-zu", "しりーず"), // #656
+        ("imaopenshita", "いまopenした"), // #669
+        ("fyu", "ふゅ"), // #674
+        ("guesstimation", "guesstimation"), // #683
+        ("enshittification", "enshittification"), // #686
+        ("Finfluencer", "Finfluencer"), // #689
+        ("datamation", "datamation"), // #690
+        ("adware", "adware"), // #691
+        ("greedflation", "greedflation"), // #692
+        ("englishtojapanesewomazeteuteru", "englishとjapaneseをまぜてうてる"), // #712
+        ("binge-watch", "binge-watch"), // #724
+        ("openstreetmap", "openstreetmap"), // #725
+        ("malvertising", "malvertising"), // #726
+        ("ad-blocker", "ad-blocker"), // #727
+        ("adtech", "adtech"), // #730
+        ("robonomics", "robonomics"), // #731
+        ("mobisode", "mobisode"), // #732
+        ("netizenry", "netizenry"), // #733
+        ("tver", "tver"), // #735
+        ("changesuru", "changeする"), // #411
+        ("imaopenno", "いまopenの"), // #485
+        ("mozcgamiteirutohaie", "mozcがみているとはいえ"), // #249
+        ("DeVitode", "DeVitoで"), // #268
+        ("kachiwodefinesuru", "かちをdefineする"), // #421
+        ("mondaiwodefusesuru", "もんだいをdefuseする"), // #419
+        ("Blu-ray", "Blu-ray"), // #435
+        ("kameramotteschoolheiku", "かめらもってschoolへいく"), // 後ろの長い英単語が短い英単語に勝つ (motteschoolhe が mottes + ちょおl + へ になっていた)
+        ("abctodef", "abcとdef")); // #154 英字のあいだの と は助詞 (全体を 1 つの英単語にしない)
+
+    // Markdown の記号を確定したあとに本文を続けて打てる
+    [Test]
+    public static void MarkdownMarker_ThenContent()
     {
-        var failures = new List<string>();
-        foreach (var (typed, committed, why) in TypedAndCommitted)
-        {
-            var k = new Keyboard();
-            k.Type(typed);
-            if (k.Host.Document != committed) failures.Add($"{why}: {typed.TrimEnd()} → {k.Host.Document} (期待: {committed})");
-        }
-        Assert.True(failures.Count == 0, string.Join("\n", failures));
+        var k = new Keyboard();
+        k.Type("# hello ");
+        Assert.Equal("# hello ", k.Host.Document);
     }
 
     [Test]
@@ -3179,24 +3179,14 @@ internal static class CompositionTests
     public static void SingleCapital_ThenParticle_IsSplit()
     {
         // Anisiyouka が英字のままになっていた (A にしようか)。名前 (Tanaka) は区切らない。
-        foreach (var (typed, expected) in new[] { ("Anisiyouka", "Aにしようか"), ("Xgawakaru", "Xがわかる"), ("Tanaka", "Tanaka") })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        AssertCommitted(("Anisiyouka", "Aにしようか"), ("Xgawakaru", "Xがわかる"), ("Tanaka", "Tanaka"));
     }
 
     [Test]
     public static void CommaAfterDigit_IsTouten_UnlessDigitFollows()
     {
         // x64,arm64 の , は読点 (x64、arm64)。1,000 の , は桁区切りのまま。
-        foreach (var (typed, expected) in new[] { ("x64,arm64", "x64、arm64"), ("1,000en", "1,000えん") })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+        AssertCommitted(("x64,arm64", "x64、arm64"), ("1,000en", "1,000えん"));
     }
 
     [Test]
@@ -6030,8 +6020,7 @@ internal static class CompositionTests
     {
         // Twitter の報告: 「commitしてpushして」が こっみつぃてぷっして になる
         // (英単語の最後の t + s が つ になる / 末尾の pushsite は site も英単語なので全部英字になる)
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("commitsitepushsite", "commitしてpushして"),
             ("commitsuru", "commitする"),
             ("commitsitekara", "commitしてから"),
@@ -6044,13 +6033,7 @@ internal static class CompositionTests
             ("websitewomiru", "websiteをみる"),
             ("tetsudou", "てつどう"),
             // #422: declutter が辞書に無いと、助詞 de + clutter に割れて「むだをでclutterする」になる
-            ("mudawodecluttersuru", "むだをdeclutterする"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("mudawodecluttersuru", "むだをdeclutterする"));
     }
 
     [Test]
@@ -6079,8 +6062,7 @@ internal static class CompositionTests
     {
         // #1899: share は しゃれ とも読めるが、しゃれする・まけします は日本語として成り立たない。
         // 技術用語の綴りのすぐ後ろが する の活用なら、その区間は英単語として読む (文頭でも同じ)。
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("fairusharesite", "ふぁいるshareして"),
             ("fairuwosharesite", "ふぁいるをshareして"),
             ("fairushareshite", "ふぁいるshareして"),
@@ -6146,13 +6128,7 @@ internal static class CompositionTests
             ("tameshite", "ためして"),
             ("korewotameshite", "これをためして"),
             ("sounanodeshite", "そうなのでして"),
-            ("korekarasiteshite", "これからしてして"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("korekarasiteshite", "これからしてして"));
     }
 
     [Test]
@@ -6365,32 +6341,18 @@ internal static class CompositionTests
     public static void Issue407_TsuideNiFetch()
     {
         // Issue #407: ついでに の途中の ide を英単語にしない。見出しが先頭の ideにfetch は英字のまま。
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("tuidenifetch upstream", "ついでにfetch upstream"),
-            ("idenifetch", "ideにfetch"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("idenifetch", "ideにfetch"));
     }
 
     [Test]
     public static void Issue338_ZArrowKeys()
     {
         // Issue #338: zh / zj / zk / zl は Microsoft IME と同じ矢印。z + 記号は今までどおり。zz の次の l (puzzle) は矢印にしない。
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("zh", "←"), ("zj", "↓"), ("zk", "↑"), ("zl", "→"),
-            ("z/", "・"), ("zu", "ず"), ("puzzle", "puzzle"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("z/", "・"), ("zu", "ず"), ("puzzle", "puzzle"));
     }
 
     [Test]
@@ -6398,16 +6360,9 @@ internal static class CompositionTests
     {
         // Issue #2013: かなの後ろの zl (→) を、確定のときに前のローマ字と合わせて打ち間違い (hogezo) として ぞ に直さない。
         // z + 母音 (hogezo) は今までどおり ぞ。
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("hogezl", "ほげ→"), ("hogezlfuga", "ほげ→ふが"), ("hogezk", "ほげ↑"), ("truezlfalse", "true→false"),
-            ("hogezo", "ほげぞ"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("hogezo", "ほげぞ"));
     }
 
     [Test]
@@ -6446,17 +6401,10 @@ internal static class CompositionTests
     {
         // Issue #885: suit は英単語だが、t + yo を ちょ と読むと すいちょく (垂直) になるので、全体を日本語にする。
         // 英単語の後ろの助詞 (githubya → githubや) と、日本語の読みにならない英単語 + yo (editよ) は今までどおり英字を残す。
-        foreach (var (typed, expected) in new[]
-        {
+        AssertCommitted(
             ("suityoku", "すいちょく"),
             ("githubya", "githubや"),
-            ("edityo", "editよ"),
-        })
-        {
-            var k = new Keyboard();
-            k.Type(typed + "\n");
-            Assert.Equal(expected, k.Host.Document, typed);
-        }
+            ("edityo", "editよ"));
         var text = new Composition.CompositionTextState();
         var env = TestSupport.Env(Detector);
         foreach (var c in "suityoku") CompositionText.Append(text, env, c);
