@@ -192,7 +192,7 @@ public sealed class LanguageMemory
             }
             return true;
         }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
+        catch (Exception ex)
         {
             Diagnostics.Log.Warn($"英語 / 日本語の学習データを保存できませんでした: {ex.Message}");
             return false;

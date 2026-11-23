@@ -136,8 +136,20 @@ public sealed class RomajiDetector
     /// ユーザーのローマ字の表 (romaji.txt)。1 行に「綴り<Tab>かな」(空白区切りも可)、行頭の # はコメント。
     /// 綴りは英小文字だけ (大文字は小文字にする)。英字以外 (; など) を含む行は読まない。
     /// </summary>
-    public static Dictionary<string, string>? LoadCustomTable(string? userDictionaryDirectory) =>
-        Config.DataFile.ReadUserText(userDictionaryDirectory, "romaji.txt", "ローマ字の表 (romaji.txt) ") is { } text ? ParseCustomTable(text) : null;
+    public static Dictionary<string, string>? LoadCustomTable(string? userDictionaryDirectory)
+    {
+        if (userDictionaryDirectory is null) return null;
+        var path = Path.Combine(userDictionaryDirectory, "romaji.txt");
+        try
+        {
+            return File.Exists(path) ? ParseCustomTable(File.ReadAllText(path)) : null;
+        }
+        catch (Exception ex)
+        {
+            Diagnostics.Log.Warn($"ローマ字の表 (romaji.txt) を読めませんでした: {ex.Message}");
+            return null;
+        }
+    }
 
     public static Dictionary<string, string> ParseCustomTable(string text)
     {

@@ -151,7 +151,6 @@ internal sealed unsafe class WindowsMediaSession : INowPlayingSource
         }
         catch (Exception ex)
         {
-            // COM の失敗 (HRESULT) は、.NET がいろいろな型の例外に変えて投げるので、型で分けられない。使えないものとして止める
             _unavailable = true;
             Diagnostics.Log.Warn($"再生中の曲の変化を受け取れません: {ex.Message}");
         }
@@ -274,10 +273,9 @@ internal sealed unsafe class WindowsMediaSession : INowPlayingSource
             {
                 s_instance?.Changed(sessions: ((IntPtr*)self)[1] == 1);
             }
-            catch (Exception ex)
+            catch
             {
-                // Windows に例外を返さない (Windows から呼ばれる関数が例外を投げると、アプリごと落ちる)
-                Diagnostics.Log.Error($"再生中の曲の変化を受け取れませんでした: {ex}");
+                // Windows に例外を返さない
             }
             return 0;
         }
@@ -321,7 +319,6 @@ internal sealed unsafe class WindowsMediaSession : INowPlayingSource
         }
         catch (Exception ex)
         {
-            // COM の失敗は型で分けられない (上の Subscribe と同じ)
             _unavailable = true;
             Diagnostics.Log.Warn($"再生中の曲を読めません: {ex.Message}");
             return null;

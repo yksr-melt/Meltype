@@ -132,6 +132,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     public IReadOnlyList<ConversionClause>? Convert(ConversionRequest request)
     {
         var (hiragana, before) = (request.Hiragana, request.Before);
+        ThrowWorkerFailure();
         if (string.IsNullOrEmpty(hiragana) || hiragana.Length > MaxReading || !IsAvailable || Environment.TickCount64 < Interlocked.Read(ref _pausedUntil)) return null;
         var context = EngineContext.Passage(before) ?? NeutralContext;
         var key = context + "\u0000" + hiragana;
@@ -144,16 +145,32 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         var live = new LiveRequest(hiragana, context, key);
         _worker.Submit(live);
         if (!_worker.Wait(live, ConversionRequest.RemainingMs(request.Deadline))) return null;
+        ThrowWorkerFailure();
         lock (_gate) return _cache.TryGetValue(key, out var answered) && answered is not null ? [new ConversionClause(hiragana, answered)] : null;
+    }
+
+    // ワーカーの例外は入力スレッドで投げ直す (HybridConverter が受けて持ち主に知らせる: #973)
+    private Exception? _workerFailure;
+
+    private void ThrowWorkerFailure()
+    {
+        if (Interlocked.Exchange(ref _workerFailure, null) is { } failure) throw new InvalidOperationException("Zenzai の変換で例外になりました", failure);
     }
 
     private readonly record struct LiveRequest(string Hiragana, string Context, string Key);
 
     private void ProcessBackground(LiveRequest request)
     {
-        // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
-        // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
-        if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        try
+        {
+            // 変換しなかった・失敗した答えは知らせない (表示が変わらない。失敗では再描画がまた同じ要求を出す)。
+            // 壊れた答えは知らせる (使うかは HybridConverter が Mozc の候補と比べて決めるので、ここでは分からない。使わなければ表示は変わらない)
+            if (ConvertNow(request.Hiragana, request.Context, request.Key) is not null) ResultReady?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            Volatile.Write(ref _workerFailure, ex);
+        }
     }
 
     private IReadOnlyList<ConversionClause>? ConvertNow(string hiragana, string context, string key)
@@ -213,10 +230,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
             if (!response.IsSuccessStatusCode) return null;
             using var reader = new StreamReader(response.Content.ReadAsStream(cts.Token), Encoding.UTF8);
             using var json = JsonDocument.Parse(reader.ReadToEnd());
-            // 形の違う答え (content が無い・文字列でない) は、答えなかったのと同じ (失敗として数え、続けば諦める)
-            var content = json.RootElement is { ValueKind: JsonValueKind.Object } root && root.TryGetProperty("content", out var c) && c.ValueKind == JsonValueKind.String
-                ? c.GetString()
-                : null;
+            var content = json.RootElement.TryGetProperty("content", out var c) ? c.GetString() : null;
             return Clean(content);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or OperationCanceledException or JsonException or IOException or ObjectDisposedException)

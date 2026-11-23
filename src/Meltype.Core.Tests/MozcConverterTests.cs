@@ -119,7 +119,7 @@ internal static class MozcConverterTests
     {
         public List<string> Requests { get; } = [];
         public bool IsInstalled => true;
-        public bool Start() => true;
+        public void Start() { }
 
         public string? Send(string request)
         {

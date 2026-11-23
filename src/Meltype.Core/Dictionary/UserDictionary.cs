@@ -115,7 +115,7 @@ public sealed class UserDictionary
         {
             // まだ登録していない
         }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex) || Config.DataFile.IsBrokenContent(ex))
+        catch (Exception ex)
         {
             if (warn) Diagnostics.Log.Warn($"ユーザー辞書を読めませんでした: {ex.Message}");
             return null;
@@ -160,7 +160,7 @@ public sealed class UserDictionary
             if (!Directory.Exists(directory)) return;
             files = Directory.GetFiles(directory, "*.plist");
         }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
+        catch (Exception ex)
         {
             Diagnostics.Log.Warn($"ユーザー辞書のフォルダを読めませんでした: {ex.Message}");
             return;
@@ -174,7 +174,7 @@ public sealed class UserDictionary
                 _imported.AddRange(result.Words);
                 Diagnostics.Log.Info($"ユーザー辞書 {Path.GetFileName(file)}: {result.Words.Count} 語 (飛ばした項目: {result.Skipped})");
             }
-            catch (Exception ex) when (Config.DataFile.IsFileError(ex) || Config.DataFile.IsBrokenContent(ex))
+            catch (Exception ex)
             {
                 Diagnostics.Log.Warn($"ユーザー辞書 {Path.GetFileName(file)} を読めませんでした: {ex.Message}");
             }
@@ -374,7 +374,7 @@ public sealed class UserDictionary
             _fileTime = FileTime();
             _read = _fileTime is not null;
         }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
+        catch (Exception ex)
         {
             Diagnostics.Log.Warn($"ユーザー辞書を保存できませんでした: {ex.Message}");
         }

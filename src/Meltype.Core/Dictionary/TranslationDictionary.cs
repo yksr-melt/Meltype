@@ -168,7 +168,7 @@ public sealed class TranslationHistory
             }
             return true;
         }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
+        catch (Exception ex)
         {
             Diagnostics.Log.Warn($"英訳の学習データを保存できませんでした: {ex.Message}");
             return false;

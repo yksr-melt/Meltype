@@ -100,8 +100,6 @@ internal sealed class LatestRequestWorker<TRequest>(Action<TRequest> process, in
             }
             catch (Exception ex)
             {
-                // 背景の処理の一番外。変換エンジンの失敗は中で捕まえるので、ここに来るのはコードの誤り。
-                // 投げ直すとアプリごと落ちて入力できなくなるので、中身 (場所) をログに書いて次の要求を続ける
                 Diagnostics.Log.Error($"背景の変換に失敗しました: {ex}");
             }
             lock (_gate)

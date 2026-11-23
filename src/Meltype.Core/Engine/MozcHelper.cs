@@ -11,17 +11,16 @@ namespace Meltype.Engine;
 /// Mozc の変換ヘルパーとの 1 行ずつのやり取り (UTF-8。要求と応答の形は native/mozc/meltype_mozc_helper.cc の先頭)。
 /// <see cref="MozcConverter"/> が 1 つずつ順に呼ぶ (同時には呼ばない)。
 /// デスクトップは別プロセスのヘルパー (<see cref="MozcHelperProcess"/>)、Android はアプリのプロセスの Mozc を JNI のコールバックで呼ぶ (Meltype.Core.CApi)。
-/// ヘルパーが動かない・止まった・答えないのは普通に起こるので、例外ではなく戻り値 (false・null) で返す。
 /// </summary>
 public interface IMozcHelper : IDisposable
 {
     /// <summary>ヘルパーがあるか (動かせるかは使ってみるまで分からない)。</summary>
     bool IsInstalled { get; }
 
-    /// <summary>動いていなければ動かす。動かせなければ false (理由はログに書く)。</summary>
-    bool Start();
+    /// <summary>動いていなければ動かす。動かせなければ例外。</summary>
+    void Start();
 
-    /// <summary>1 行送って 1 行受け取る。動いていなければ動かしてから送る。動かせない・やり取りが切れた・応答が無ければ null。</summary>
+    /// <summary>1 行送って 1 行受け取る。動いていなければ動かしてから送る。応答が無ければ null。</summary>
     string? Send(string request);
 
     /// <summary>やり取りに失敗した。動いているヘルパーを止め、次の <see cref="Start"/> で動かし直す。</summary>
@@ -60,22 +59,13 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
 
     public bool IsInstalled => File.Exists(helperPath) && !_missingDependency;
 
-    public bool Start() => Running() is not null;
+    public void Start() => Running();
 
     public string? Send(string request)
     {
-        if (Running() is not { } process) return null;
-        try
-        {
-            process.StandardInput.Write(request + "\n");
-            process.StandardInput.Flush();
-        }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
-        {
-            // ヘルパーが終わっていて、パイプが切れていた
-            Diagnostics.Log.Warn($"Mozc に送れませんでした: {ex.Message}");
-            return null;
-        }
+        var process = Running();
+        process.StandardInput.Write(request + "\n");
+        process.StandardInput.Flush();
         var line = ReadLine(process, TimeoutMs);
         if (line is null) Diagnostics.Log.Warn($"Mozc が応答しませんでした ({TimeoutMs}ms)。");
         return line;
@@ -83,21 +73,15 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
 
     public void Reset()
     {
-        if (_process is not null) Stop(_process);
-        _process = null;
-    }
-
-    private static void Stop(Process process)
-    {
         try
         {
-            if (!process.HasExited) process.Kill();
+            if (_process is { HasExited: false }) _process.Kill();
         }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
+        catch
         {
-            // 止めるあいだに終わった
         }
-        process.Dispose();
+        _process?.Dispose();
+        _process = null;
     }
 
     public long WorkingSet
@@ -105,28 +89,20 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
         get
         {
             if (_process is not { HasExited: false } process) return 0;
-            try
-            {
-                process.Refresh();
-                return process.WorkingSet64;
-            }
-            catch (Exception ex) when (EngineFailure.IsExpected(ex))
-            {
-                // 読むあいだに終わった
-                return 0;
-            }
+            process.Refresh();
+            return process.WorkingSet64;
         }
     }
 
-    /// <summary>動いているヘルパー。動いていなければ起動して READY を待つ。起動できなければ null。</summary>
-    private Process? Running()
+    /// <summary>動いているヘルパー。動いていなければ起動して READY を待つ。</summary>
+    private Process Running()
     {
         if (_process is { HasExited: false } running) return running;
         _process?.Dispose();
         return _process = Launch();
     }
 
-    private Process? Launch()
+    private Process Launch()
     {
         var info = new ProcessStartInfo(helperPath)
         {
@@ -139,8 +115,12 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
             StandardOutputEncoding = new UTF8Encoding(false),
             WorkingDirectory = Path.GetDirectoryName(helperPath) ?? "",
         };
-        if (profileDirectory is not null) info.ArgumentList.Add(profileDirectory);
-        Process? process;
+        if (profileDirectory is not null)
+        {
+            Directory.CreateDirectory(profileDirectory);
+            info.ArgumentList.Add(profileDirectory);
+        }
+        Process process;
         // 今の設定に足す (GetErrorMode で読む。SetErrorMode(0) で読むと、一瞬プロセス全体の設定が 0 になる)
         var previousMode = 0u;
         if (OperatingSystem.IsWindows())
@@ -151,20 +131,12 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
         }
         try
         {
-            if (profileDirectory is not null) Directory.CreateDirectory(profileDirectory);
-            process = Process.Start(info);
-        }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex) || Config.DataFile.IsFileError(ex))
-        {
-            // 実行ファイルを動かせない (権限が無い・壊れている) か、学習データのフォルダを作れない
-            Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できませんでした: {ex.Message}");
-            return null;
+            process = Process.Start(info) ?? throw new InvalidOperationException("起動できませんでした");
         }
         finally
         {
             if (OperatingSystem.IsWindows()) _ = SetErrorMode(previousMode);
         }
-        if (process is null) return null;
         // Mozc のログ (標準エラー) は読み捨てる (溜まるとヘルパーが止まる)。
         process.ErrorDataReceived += (_, _) => { };
         process.BeginErrorReadLine();
@@ -176,46 +148,36 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
                 _missingDependency = true;
                 Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できません (DLL を読み込めない: 0x{process.ExitCode:X8}。同梱の Visual C++ のランタイムが無いか壊れている)。漢字に変換できません。");
             }
-            else Diagnostics.Log.Warn($"Mozc の変換ヘルパーが起動しませんでした: {ready ?? "応答なし"}");
-            Stop(process);
-            return null;
+            try { process.Kill(); } catch { }
+            process.Dispose();
+            throw new InvalidOperationException($"起動に失敗しました: {ready ?? "応答なし"}");
         }
         Diagnostics.Log.Info("Mozc の変換エンジンを起動しました。");
         return process;
     }
 
-    /// <summary>1 行読む。時間内に答えない・終わった・パイプが切れたら null。</summary>
     private static string? ReadLine(Process process, int timeoutMs)
     {
         var task = process.StandardOutput.ReadLineAsync();
-        try
-        {
-            return task.Wait(timeoutMs) ? task.Result : null;
-        }
-        catch (AggregateException ex) when (ex.InnerException is { } inner && EngineFailure.IsExpected(inner))
-        {
-            return null;
-        }
+        return task.Wait(timeoutMs) ? task.Result : null;
     }
 
     /// <summary>保存して終わらせる (Q)。</summary>
     public void Dispose()
     {
-        if (_process is not { } process) return;
         try
         {
-            if (!process.HasExited)
+            if (_process is { HasExited: false } process)
             {
                 process.StandardInput.Write("Q\n");
                 process.StandardInput.Flush();
-                process.WaitForExit(1000);
+                if (!process.WaitForExit(1000)) process.Kill();
             }
         }
-        catch (Exception ex) when (EngineFailure.IsExpected(ex))
+        catch
         {
-            // もう終わっていた・パイプが切れていた
         }
-        Stop(process);
+        _process?.Dispose();
         _process = null;
     }
 }

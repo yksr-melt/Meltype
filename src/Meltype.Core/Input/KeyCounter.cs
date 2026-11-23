@@ -187,7 +187,7 @@ public sealed partial class KeyCounter
             _dirty = false;
         }
         try { DataFile.Write(_path, temp => File.WriteAllText(temp, json)); }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
+        catch (Exception ex)
         {
             lock (_lock) _dirty = true;
             Diagnostics.Log.Warn($"打鍵数を保存できませんでした: {ex.Message}");
