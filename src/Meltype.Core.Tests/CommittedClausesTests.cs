@@ -4,6 +4,7 @@
 using Meltype.Composition;
 using Meltype.Config;
 using Meltype.Input;
+using Meltype.Learning;
 
 namespace Meltype.Tests;
 
@@ -32,6 +33,22 @@ internal static class CommittedClausesTests
     }
 
     [Test]
+    public static void F6OnLiveConversion_KeepsTheEngineAnswerBeforeLearning()
+    {
+        // ライブ変換の文字は学習で選び直した後 (暑い) だが、変換エンジンの答え (熱い) は元のまま残す
+        var history = new ConversionHistory(null);
+        history.Remember("あつい", "暑い");
+        var (state, env) = Composing("atsui", liveConversion: true, new AtsuiConverter(), new CompositionServices { History = history });
+        Press(state, env, VirtualKeys.F6);
+        Assert.Equal("あつい|熱い|あつい", Joined(CompositionController.CommittedClauses(state, env)));
+    }
+
+    private sealed class AtsuiConverter : TestConverter
+    {
+        public override string? Convert(string hiragana, string? before) => hiragana == "あつい" ? "熱い" : null;
+    }
+
+    [Test]
     public static void ChangedInput_DoesNotUseTheLeftConversion()
     {
         var (state, env) = Composing("kyouha", liveConversion: false);
@@ -41,9 +58,9 @@ internal static class CommittedClausesTests
         Assert.Equal("きょう|-|きょう", Joined(CompositionController.CommittedClauses(state, env)), "入力が変わったら、抜けた変換は使わない");
     }
 
-    private static (CompositionState State, CompositionEnv Env) Composing(string typed, bool liveConversion)
+    private static (CompositionState State, CompositionEnv Env) Composing(string typed, bool liveConversion, Engine.IKanjiConverter? converter = null, CompositionServices? services = null)
     {
-        var env = new CompositionEnv(CompositionTests.Detector, new CompositionTests.FakeConverter(), new CompositionServices(), new Settings { LiveConversion = liveConversion })
+        var env = new CompositionEnv(CompositionTests.Detector, converter ?? new CompositionTests.FakeConverter(), services ?? new CompositionServices(), new Settings { LiveConversion = liveConversion })
         {
             Context = () => TextContext.None,
         };

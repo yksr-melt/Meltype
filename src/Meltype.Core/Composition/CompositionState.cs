@@ -150,7 +150,7 @@ internal sealed class CompositionState
     /// <summary>英数状態で打ち始めた語を英語と判定して、その続きを打っているか。</summary>
     public bool DirectEnglishWord;
 
-    public readonly Dictionary<string, List<(string Reading, string Text)>> LiveCache = new(StringComparer.Ordinal);
+    public readonly Dictionary<string, List<(string Reading, string? Engine, string Text)>> LiveCache = new(StringComparer.Ordinal);
 
     // 最後に押したキーの修飾キー (Shift は大文字・文節の区切り・Shift+Space に使う)。
     // 次のキーを押すまで、ほかの出来事 (離した親指キーのもとの働きなど) もこの値で処理する。

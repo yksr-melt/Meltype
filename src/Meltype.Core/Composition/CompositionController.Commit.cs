@@ -150,7 +150,7 @@ internal static partial class CompositionController
                 if (segment.IsEnglish) clauses.Add((segment.Kana, null, segment.Raw));
                 else if (env.Settings.LiveConversion && CountsAsLive(segment.Kana))
                     clauses.AddRange(LiveClauses(state, env, segment.Kana, i > 0 && segments[i - 1].IsEnglish, SegmentBefore(env, string.Concat(clauses.Select(c => c.Text))))
-                        .Select(c => (c.Reading, (string?)c.Text, c.Text)));
+                        .Select(c => (c.Reading, c.Engine, c.Text)));
                 else clauses.Add((segment.Kana, null, segment.Kana));
             }
             return clauses;
