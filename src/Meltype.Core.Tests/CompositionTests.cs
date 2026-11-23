@@ -2026,20 +2026,58 @@ internal static class CompositionTests
         Assert.True(dictionary.Lookup("たんおめ").Contains("誕おめ"), "たんおめ → 誕おめ");
     }
 
-    [Test]
-    public static void Issue404_Gemma4StaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("Gemma4\n");
-        Assert.Equal("Gemma4", k.Host.Document);
-    }
+    /// <summary>打って確定した文字。報告された誤判定 (Issue の番号) と、同じ原因で崩れやすい入力。</summary>
+    private static readonly (string Typed, string Committed, string Why)[] TypedAndCommitted =
+    [
+        ("Gemma4\n", "Gemma4", "#404"),
+        ("holoX\n", "holoX", "#469"),
+        ("fusion\n", "fusion", "#346"),
+        ("enumerate\n", "enumerate", "#506"),
+        ("fatigue\n", "fatigue", "#536"),
+        ("infobesity\n", "infobesity", "#538"),
+        ("whois\n", "whois", "#616"),
+        ("siri-zu\n", "しりーず", "#656"),
+        ("imaopenshita\n", "いまopenした", "#669"),
+        ("fyu\n", "ふゅ", "#674"),
+        ("guesstimation\n", "guesstimation", "#683"),
+        ("enshittification\n", "enshittification", "#686"),
+        ("Finfluencer\n", "Finfluencer", "#689"),
+        ("datamation\n", "datamation", "#690"),
+        ("adware\n", "adware", "#691"),
+        ("greedflation\n", "greedflation", "#692"),
+        ("englishtojapanesewomazeteuteru\n", "englishとjapaneseをまぜてうてる", "#712"),
+        ("binge-watch\n", "binge-watch", "#724"),
+        ("openstreetmap\n", "openstreetmap", "#725"),
+        ("malvertising\n", "malvertising", "#726"),
+        ("ad-blocker\n", "ad-blocker", "#727"),
+        ("adtech\n", "adtech", "#730"),
+        ("robonomics\n", "robonomics", "#731"),
+        ("mobisode\n", "mobisode", "#732"),
+        ("netizenry\n", "netizenry", "#733"),
+        ("tver\n", "tver", "#735"),
+        ("changesuru\n", "changeする", "#411"),
+        ("imaopenno\n", "いまopenの", "#485"),
+        ("mozcgamiteirutohaie\n", "mozcがみているとはいえ", "#249"),
+        ("DeVitode\n", "DeVitoで", "#268"),
+        ("kachiwodefinesuru\n", "かちをdefineする", "#421"),
+        ("mondaiwodefusesuru\n", "もんだいをdefuseする", "#419"),
+        ("Blu-ray\n", "Blu-ray", "#435"),
+        ("kameramotteschoolheiku\n", "かめらもってschoolへいく", "後ろの長い英単語が短い英単語に勝つ (motteschoolhe が mottes + ちょおl + へ になっていた)"),
+        ("# hello ", "# hello ", "Markdown の記号を確定したあとに本文を続けて打てる"),
+        ("abctodef\n", "abcとdef", "#154 英字のあいだの と は助詞 (全体を 1 つの英単語にしない)"),
+    ];
 
     [Test]
-    public static void Issue469_HoloXStaysEnglish()
+    public static void TypedText_IsCommittedAsExpected()
     {
-        var k = new Keyboard();
-        k.Type("holoX\n");
-        Assert.Equal("holoX", k.Host.Document);
+        var failures = new List<string>();
+        foreach (var (typed, committed, why) in TypedAndCommitted)
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            if (k.Host.Document != committed) failures.Add($"{why}: {typed.TrimEnd()} → {k.Host.Document} (期待: {committed})");
+        }
+        Assert.True(failures.Count == 0, string.Join("\n", failures));
     }
 
     [Test]
@@ -2235,14 +2273,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue346_FusionStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("fusion\n");
-        Assert.Equal("fusion", k.Host.Document);
-    }
-
-    [Test]
     public static void Issue537_ProcrasticleStaysEnglish()
     {
         var k = new Keyboard();
@@ -2330,43 +2360,11 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue506_EnumerateStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("enumerate\n");
-        Assert.Equal("enumerate", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue536_FatigueStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("fatigue\n");
-        Assert.Equal("fatigue", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue538_InfobesityStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("infobesity\n");
-        Assert.Equal("infobesity", k.Host.Document);
-    }
-
-    [Test]
     public static void Issue505_LiveConvertIgnoresSymbolsInLength()
     {
         var k = new Keyboard(live: true);
         k.Type("na~~~\n");
         Assert.Equal("な～～～", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue616_WhoisStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("whois\n");
-        Assert.Equal("whois", k.Host.Document);
     }
 
     [Test]
@@ -2384,78 +2382,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue656_SiriHyphenIsLongVowel()
-    {
-        var k = new Keyboard();
-        k.Type("siri-zu\n");
-        Assert.Equal("しりーず", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue669_OpenStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("imaopenshita\n");
-        Assert.Equal("いまopenした", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue674_FyuIsFuxyu()
-    {
-        var k = new Keyboard();
-        k.Type("fyu\n");
-        Assert.Equal("ふゅ", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue683_GuesstimationStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("guesstimation\n");
-        Assert.Equal("guesstimation", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue686_EnshittificationStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("enshittification\n");
-        Assert.Equal("enshittification", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue689_FinfluencerStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("Finfluencer\n");
-        Assert.Equal("Finfluencer", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue690_DatamationStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("datamation\n");
-        Assert.Equal("datamation", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue691_AdwareStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("adware\n");
-        Assert.Equal("adware", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue692_GreedflationStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("greedflation\n");
-        Assert.Equal("greedflation", k.Host.Document);
-    }
-
-    [Test]
     public static void Issue706_AonishikiOffersName()
     {
         var dictionary = CandidateDictionary.Load(null);
@@ -2469,102 +2395,6 @@ internal static class CompositionTests
         Assert.True(dictionary.Add("お", "お父さん") is null, "1 文字の読みも登録できる");
         Assert.Equal("お父さん", dictionary.Split("お")?.Single().Word, "その 1 文字だけを変換するときは登録した単語");
         Assert.True(dictionary.Split("おかね") is null, "ほかの語の途中の 1 文字は巻き込まない");
-    }
-
-    [Test]
-    public static void Issue712_JapaneseStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("englishtojapanesewomazeteuteru\n");
-        Assert.Equal("englishとjapaneseをまぜてうてる", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue724_BingeWatchStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("binge-watch\n");
-        Assert.Equal("binge-watch", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue725_OpenStreetMapStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("openstreetmap\n");
-        Assert.Equal("openstreetmap", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue726_MalvertisingStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("malvertising\n");
-        Assert.Equal("malvertising", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue727_AdBlockerStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("ad-blocker\n");
-        Assert.Equal("ad-blocker", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue730_AdtechStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("adtech\n");
-        Assert.Equal("adtech", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue731_RobonomicsStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("robonomics\n");
-        Assert.Equal("robonomics", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue732_MobisodeStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("mobisode\n");
-        Assert.Equal("mobisode", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue733_NetizenryStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("netizenry\n");
-        Assert.Equal("netizenry", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue735_TverStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("tver\n");
-        Assert.Equal("tver", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue411_ChangeStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("changesuru\n");
-        Assert.Equal("changeする", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue485_OpenNoStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("imaopenno\n");
-        Assert.Equal("いまopenの", k.Host.Document);
     }
 
     [Test]
@@ -2960,22 +2790,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue249_MozcThenJapanese()
-    {
-        var k = new Keyboard();
-        k.Type("mozcgamiteirutohaie\n");
-        Assert.Equal("mozcがみているとはいえ", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue268_DeVitoThenParticle()
-    {
-        var k = new Keyboard();
-        k.Type("DeVitode\n");
-        Assert.Equal("DeVitoで", k.Host.Document);
-    }
-
-    [Test]
     public static void Issue72_CursorMovesIntoBrackets()
     {
         var k = new Keyboard { CursorIntoBrackets = true };
@@ -3338,30 +3152,6 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue421_DefineStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("kachiwodefinesuru\n");
-        Assert.Equal("かちをdefineする", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue419_DefuseStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("mondaiwodefusesuru\n");
-        Assert.Equal("もんだいをdefuseする", k.Host.Document);
-    }
-
-    [Test]
-    public static void Issue435_BluRayStaysEnglish()
-    {
-        var k = new Keyboard();
-        k.Type("Blu-ray\n");
-        Assert.Equal("Blu-ray", k.Host.Document);
-    }
-
-    [Test]
     public static void CandidateMeaning_FromTranslations()
     {
         // 候補で止まったら意味を出す (同音異義語の手がかり)
@@ -3383,15 +3173,6 @@ internal static class CompositionTests
         Assert.True(meanings.Lookup("持って", "もって") is not null, "活用した形 (持って → 持つ)");
         Assert.True(meanings.Lookup("美しかった", "うつくしかった") is not null, "い形容詞の活用");
         Assert.Equal(null, meanings.Lookup("はし", "はし"), "かなだけの候補には出さない");
-    }
-
-    [Test]
-    public static void LaterLongerEnglishWord_WinsOverShorterOne()
-    {
-        // motteschoolhe が mottes (英単語) + ちょおl + へ になっていた。持って + school + へ。
-        var k = new Keyboard();
-        k.Type("kameramotteschoolheiku\n");
-        Assert.Equal("かめらもってschoolへいく", k.Host.Document);
     }
 
     [Test]
@@ -4259,15 +4040,6 @@ internal static class CompositionTests
             k.Type(typed + " ");
             Assert.Equal(committed, k.Host.Document, $"「{typed}」+ Space");
         }
-    }
-
-    [Test]
-    public static void MarkdownMarker_ThenContent()
-    {
-        // マーカー確定のあとに本文を続けて打てる
-        var k = new Keyboard();
-        k.Type("# hello ");
-        Assert.Equal("# hello ", k.Host.Document);
     }
 
     [Test]
@@ -6603,15 +6375,6 @@ internal static class CompositionTests
             k.Type(typed + "\n");
             Assert.Equal(expected, k.Host.Document, typed);
         }
-    }
-
-    [Test]
-    public static void Issue154_AbcToDef()
-    {
-        // Issue #154: 英字のあいだの「と」は助詞。全体を 1 つの英単語にしない。
-        var k = new Keyboard();
-        k.Type("abctodef\n");
-        Assert.Equal("abcとdef", k.Host.Document);
     }
 
     [Test]
