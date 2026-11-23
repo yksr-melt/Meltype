@@ -14,7 +14,7 @@ namespace Meltype.Detection;
 /// 日本語入力中に google と打って「ごおｇぇ」になるのを防ぐのが目的。英語かどうかは区間ごとに判定するので、
 /// 「きょうは google」なら google の部分だけが英字になる。区切り方は ReadingLattice.cs。
 /// </summary>
-public sealed partial class CompositionDetector
+internal sealed partial class CompositionDetector
 {
     private readonly RomajiDetector _romaji;
     private readonly EnglishDetector _english;
