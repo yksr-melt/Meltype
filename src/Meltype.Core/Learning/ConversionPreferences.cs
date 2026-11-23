@@ -100,11 +100,12 @@ internal sealed class ConversionHistory
 {
     private const int MaxEntries = 5000;
     private readonly string? _path;
-    private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    private Dictionary<string, Entry> _entries;
     // 裏のスレッドからも消す (MeltypeRuntime.ForgetZenzaiHallucinations) ので、読むときも取る
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
+    private readonly FileStamp _stamp;
     private (int Version, (string Reading, string Text, DateTime Used, int Order)[] Items)? _index;
 
     internal sealed class Entry
@@ -117,6 +118,13 @@ internal sealed class ConversionHistory
     {
         _saver = new DeferredSaver(Write);
         _path = path;
+        _stamp = new FileStamp(path);
+        _entries = Load(path);
+    }
+
+    private static Dictionary<string, Entry> Load(string? path)
+    {
+        var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         Config.DataFile.Load(path, "変換の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.ConversionJsonContext.Default.Conversions);
@@ -124,8 +132,30 @@ internal sealed class ConversionHistory
             // 日時・版から作る語なども、以前の版で覚えてしまったものを使わない (StaleWords.IsStale)。
             if (loaded is not null)
                 foreach (var (reading, entry) in loaded)
-                    if (reading.Length >= 2 && !StaleWords.IsStale(reading, entry.Text)) _entries[reading] = entry;
+                    if (reading.Length >= 2 && !StaleWords.IsStale(reading, entry.Text)) entries[reading] = entry;
         });
+        return entries;
+    }
+
+    /// <summary>ほかのプロセス (設定アプリ) が conversions.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
+    internal void Refresh()
+    {
+        lock (_fileGate)
+        {
+            if (_stamp.Changed) Reload();
+        }
+    }
+
+    // _fileGate の中で呼ぶ。読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)
+    private void Reload()
+    {
+        _stamp.Synced();
+        var entries = Load(_path);
+        lock (_gate)
+        {
+            _entries = entries;
+            Version++;
+        }
     }
 
     /// <summary>学習した内容が変わるたびに増える (変換結果のキャッシュを捨てるため)。</summary>
@@ -242,9 +272,15 @@ internal sealed class ConversionHistory
         {
             lock (_fileGate)
             {
+                if (_stamp.Changed)
+                {
+                    Reload();
+                    return true;
+                }
                 string json;
                 lock (_gate) json = JsonSerializer.Serialize(_entries, Config.ConversionJsonContext.Default.Conversions);
                 Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+                _stamp.Synced();
             }
             return true;
         }

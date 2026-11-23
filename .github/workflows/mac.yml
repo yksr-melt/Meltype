@@ -1,4 +1,4 @@
-# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
+# Mac 版 (mac/) をビルドしてテストし、テスター向けの zip (Meltype.app・Meltype Settings.app + install.sh + 説明) を Artifacts (meltype-mac) に置く。
 # Mac 版・共通部分を変えた main、手動実行、release.yml (タグ) から呼ばれたとき。
 # Mac 版のコードを変えた Pull Request では、ビルドとテストだけを流す (署名と zip は作らない)。
 # リリースへの添付と Homebrew の cask の更新は release.yml。
@@ -10,6 +10,7 @@ on:
     paths:
       - 'mac/**'
       - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
       - 'tools/test-native-boundaries.py'
@@ -22,6 +23,7 @@ on:
       - 'mac/**'
       - 'src/Meltype.Core/**'
       - 'src/Meltype.Core.CApi/**'
+      - 'src/Meltype.Settings/**'
       - 'dictionaries/**'
       - 'native/mozc/**'
       - 'native/zenzai/**'
@@ -121,9 +123,11 @@ jobs:
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
-          ditto -c -k --keepParent mac/build/Meltype.app "$RUNNER_TEMP/notarize.zip"
-          xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
-          xcrun stapler staple mac/build/Meltype.app
+          for app in Meltype "Meltype Settings"; do
+            ditto -c -k --keepParent "mac/build/$app.app" "$RUNNER_TEMP/notarize.zip"
+            xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD" --wait
+            xcrun stapler staple "mac/build/$app.app"
+          done
       - name: Package
         if: github.event_name != 'pull_request'
         run: |
