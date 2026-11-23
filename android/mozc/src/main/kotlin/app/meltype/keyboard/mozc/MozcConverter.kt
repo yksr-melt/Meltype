@@ -4,6 +4,7 @@ package app.meltype.keyboard.mozc
 
 import android.os.SystemClock
 import android.util.Log
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidateWindow.CandidateAttribute
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.CompositionMode
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Context
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input
@@ -38,8 +39,9 @@ class MozcConverter internal constructor(
             if (values.isEmpty()) return@withSession emptyList()
             clauseReadings(output, reading).mapIndexed { index, clauseReading ->
                 if (index > 0) output = session.focusNextClause()
-                val alternatives = output.allCandidateWords.candidatesList.map { it.value }
-                MozcSegment(clauseReading, (listOf(values[index]) + alternatives).filter { it.isNotEmpty() }.distinct())
+                val words = output.allCandidateWords.candidatesList
+                val userWord = words.any { it.value == values[index] && CandidateAttribute.USER_DICTIONARY in it.attributesList }
+                MozcSegment(clauseReading, (listOf(values[index]) + words.map { it.value }).filter { it.isNotEmpty() }.distinct(), userWord)
             }
         }
 

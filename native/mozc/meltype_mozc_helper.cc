@@ -4,6 +4,7 @@
 // 標準入力から 1 行に 1 つの要求を受け取り、標準出力に 1 行で答える (UTF-8)。
 //   C<TAB>前の文字列<TAB>読み
 //       変換。文節ごとに「読み<US>候補1<US>候補2…」を <RS> でつないで返す (US = 0x1F, RS = 0x1E)。変換できなければ空行。
+//       ユーザー辞書の語を含む候補 (活用した形も) は、頭に <GS> (0x1D) を付ける。
 //   L<TAB>前の文字列<TAB>読み1<US>確定した文字列1<RS>読み2<US>確定した文字列2…
 //       学習。ユーザーが確定した文節の区切りと文字列を Mozc に覚えさせる。覚えたら "OK"、できなければ "NG"。
 //   R<TAB>文字列
@@ -32,6 +33,7 @@
 #include "base/util.h"
 #include "composer/composer.h"
 #include "config/config_handler.h"
+#include "converter/attribute.h"
 #include "converter/candidate.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
@@ -54,6 +56,7 @@ namespace {
 
 constexpr char kUnitSeparator = '\x1f';
 constexpr char kRecordSeparator = '\x1e';
+constexpr char kUserDictionaryMark = '\x1d';
 
 class Helper {
  public:
@@ -85,6 +88,7 @@ class Helper {
       out += segment.key();
       for (size_t j = 0; j < segment.candidates_size(); ++j) {
         out += kUnitSeparator;
+        if (segment.candidate(j).attributes & mozc::converter::Attribute::USER_DICTIONARY) out += kUserDictionaryMark;
         out += segment.candidate(j).value;
       }
     }

@@ -3,7 +3,8 @@
 package app.meltype.keyboard.mozc
 
 /** Text units returned by the Android Mozc engine to the C# Core callback. */
-data class MozcSegment(val reading: String, val candidates: List<String>)
+/** [userWord] は、最初の候補がユーザー辞書の語を含むか (活用した形も)。 */
+data class MozcSegment(val reading: String, val candidates: List<String>, val userWord: Boolean = false)
 data class MozcClause(val reading: String, val text: String)
 /** ユーザー辞書の 1 語。[pos] は Mozc の品詞名 (名詞・動詞ラ行五段…)。 */
 data class MozcWord(val reading: String, val word: String, val pos: String)

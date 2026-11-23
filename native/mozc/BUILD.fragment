@@ -3,6 +3,7 @@ mozc_cc_binary(
     name = "meltype_mozc_helper",
     srcs = ["meltype_mozc_helper.cc"],
     deps = [
+        ":attribute",
         ":converter_interface",
         ":segments",
         "//base:init_mozc",

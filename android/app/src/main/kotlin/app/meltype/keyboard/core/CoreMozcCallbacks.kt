@@ -39,7 +39,11 @@ internal class CoreMozcCallbacks(
                 PerfLog.event("convert", (System.nanoTime() - start) / 1000, reading.length)
                 // 変換できない読みは空行 (Core はかなのまま見せ、同じ読みでは聞き直さない)
                 segments?.takeIf { found -> found.joinToString("") { it.reading } == reading }
-                    ?.joinToString(RECORD) { s -> (listOf(s.reading) + s.candidates).joinToString(UNIT) }
+                    ?.joinToString(RECORD) { s ->
+                        // ユーザー辞書の語を含む候補は頭に GS を付ける (デスクトップの meltype_mozc_helper と同じ)
+                        val candidates = s.candidates.mapIndexed { i, c -> if (i == 0 && s.userWord) USER_WORD + c else c }
+                        (listOf(s.reading) + candidates).joinToString(UNIT)
+                    }
                     ?: segments?.let { "" }
             }
             "L" -> {
@@ -67,5 +71,6 @@ internal class CoreMozcCallbacks(
     private companion object {
         const val UNIT = "\u001f"
         const val RECORD = "\u001e"
+        const val USER_WORD = "\u001d"
     }
 }
