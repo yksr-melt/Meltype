@@ -77,8 +77,9 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
         {
             if (_process is { HasExited: false }) _process.Kill();
         }
-        catch
+        catch (Exception ex) when (EngineFailure.IsExpected(ex))
         {
+            // もう終わっていた
         }
         _process?.Dispose();
         _process = null;
@@ -148,7 +149,7 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
                 _missingDependency = true;
                 Diagnostics.Log.Warn($"Mozc の変換ヘルパーを起動できません (DLL を読み込めない: 0x{process.ExitCode:X8}。同梱の Visual C++ のランタイムが無いか壊れている)。漢字に変換できません。");
             }
-            try { process.Kill(); } catch { }
+            try { process.Kill(); } catch (Exception ex) when (EngineFailure.IsExpected(ex)) { }
             process.Dispose();
             throw new InvalidOperationException($"起動に失敗しました: {ready ?? "応答なし"}");
         }
@@ -174,8 +175,9 @@ internal sealed class MozcHelperProcess(string helperPath, string? profileDirect
                 if (!process.WaitForExit(1000)) process.Kill();
             }
         }
-        catch
+        catch (Exception ex) when (EngineFailure.IsExpected(ex))
         {
+            // もう終わっていた・パイプが切れていた
         }
         _process?.Dispose();
         _process = null;

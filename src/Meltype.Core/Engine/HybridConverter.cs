@@ -68,7 +68,7 @@ public sealed class HybridConverter(MozcConverter mozc, Func<ZenzaiConverter?>? 
             Subscribe(z);
             return z.Convert(request)?.Select(c => c with { Zenzai = true }).ToList();
         }
-        catch (Exception ex)
+        catch (Exception ex) when (EngineFailure.IsExpected(ex))
         {
             var failed = (object?)z ?? CouldNotCreate;
             if (!ReferenceEquals(failed, _failedZenzai)) Diagnostics.Log.Error($"Zenzai で変換できないので、Mozc で変換します: {ex}");

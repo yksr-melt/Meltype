@@ -169,6 +169,7 @@ public sealed class ZenzaiConverter : IKanjiConverter, IDisposable
         }
         catch (Exception ex)
         {
+            // 背景のスレッドの例外は、次に変換を頼まれたときに投げ直す (握りつぶさない)
             Volatile.Write(ref _workerFailure, ex);
         }
     }

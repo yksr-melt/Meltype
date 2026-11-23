@@ -46,7 +46,7 @@ internal static class SettingsSchema
             if (File.Exists(path) && File.ReadAllText(path) == json) return;
             DataFile.Write(path, temp => File.WriteAllText(temp, json));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"{FileName} を書けませんでした: {ex.Message}");
         }

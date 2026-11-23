@@ -92,7 +92,7 @@ public sealed class SnippetStore
         {
             Config.DataFile.Write(_path, temp => File.WriteAllText(temp, Export(), Encoding.UTF8));
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"定型文を保存できませんでした: {ex.Message}");
         }
