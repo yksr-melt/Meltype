@@ -177,9 +177,9 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     {
         var started = Environment.TickCount64;
         var answer = Complete(Prompt(hiragana, context));
-        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。
+        // 読みのまま (変換していない: かんたん → かんたん) の答えは使わない。Mozc に任せる。記号の幅は、zenz に半角で渡すので見ない (ほんとう？ → ほんとう?)。
         // 壊れた答え (はーどうぇ → ハードウェアウェア…) かは、Mozc の候補と比べられる HybridConverter が決める
-        var text = answer == hiragana ? null : answer;
+        var text = answer is null || ToHalfWidth(answer) == ToHalfWidth(hiragana) ? null : answer;
         var slow = Environment.TickCount64 - started >= _timeoutMs;
         lock (_gate)
         {
@@ -197,9 +197,20 @@ internal sealed class ZenzaiConverter : IKanjiConverter, IDisposable
     internal static string Prompt(string hiragana, string? context)
     {
         var sb = new StringBuilder();
-        if (!string.IsNullOrEmpty(context)) sb.Append(ContextMark).Append(context);
-        return sb.Append(InputMark).Append(ToKatakana(hiragana)).Append(OutputMark).ToString();
+        if (!string.IsNullOrEmpty(context)) sb.Append(ContextMark).Append(ToHalfWidth(context));
+        return sb.Append(InputMark).Append(ToKatakana(ToHalfWidth(hiragana))).Append(OutputMark).ToString();
     }
+
+    /// <summary>
+    /// 全角の英数字・記号 (！〜～) を半角にする。zenz は全角の ＊ ＃ ％ Ａ などを読めず、読みに無い字を出す (＊にほんご＊ → ô日本語瑤: issue #2231) が、半角なら読める。
+    /// 読みの記号は全角になっている (ローマ字の * を ＊ にする) ので、zenz に渡す前に半角にする。答えの記号は、CompositionController が読みの記号に戻す。
+    /// </summary>
+    internal static string ToHalfWidth(string text) =>
+        string.Create(text.Length, text, static (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+                span[i] = source[i] is >= '！' and <= '～' ? (char)(source[i] - 0xFEE0) : source[i];
+        });
 
     internal static string ToKatakana(string text) =>
         string.Create(text.Length, text, static (span, source) =>

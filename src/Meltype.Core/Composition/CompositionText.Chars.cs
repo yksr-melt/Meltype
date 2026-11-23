@@ -18,19 +18,21 @@ internal static partial class CompositionText
         return env.Detector.Romaji.ConvertLenient(pending.ToLowerInvariant(), final);
     }
 
-    /// <summary>日本語の中で打った記号 (Microsoft IME と同じく全角)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
+    /// <summary>日本語の中で打った記号 (全角。テスターの報告で決めた)。英語の区間では打ったままの半角で出す。数字と括弧は半角のまま。</summary>
     private static char Symbol(CompositionTextState state, char c) => c switch
     {
         '-' => 'ー',
         // 句読点は、読みでは設定によらず 、。 (設定の句読点は CompositionOutput が当てる)。
         ',' => '、',
         '.' => '。',
+        // 設定の括弧の幅は、句読点と違って CompositionOutput では当てられない。出口には区間の種類が届かず、英語の区間の ( や、半角を選んだ候補の () まで全角になる (#1735)
+        // TODO (#2010): 英語の区間かを状態で判別し、記号の表示の幅を読みに焼き込んでいるのがよくない。読みに全角の記号が入るので、Zenzai には半角に直して渡している (ZenzaiConverter.ToHalfWidth)
         '[' => state.SquareBrackets ? '［' : '「',
         ']' => state.SquareBrackets ? '］' : '」',
         // ASCII の括弧はチャット本文でもそのまま使われるため、入力した幅を保つ。
         '(' => state.FullWidthParentheses ? '（' : '(',
         ')' => state.FullWidthParentheses ? '）' : ')',
-        // ! ? は Microsoft IME と同じく全角 (テスターのチャットでも、日本語の後ろの ？ ！ は 96% が全角だった)。
+        // ! ? は全角 (テスターのチャットでも、日本語の後ろの ？ ！ は 96% が全角だった)。
         // : ; | はチャット本文でも半角で使うので、入力した幅を保つ。
         ':' => ':',
         ';' => ';',
