@@ -15,6 +15,8 @@ cask "meltype" do
   depends_on arch: :arm64
   depends_on macos: :ventura
 
+  app "Meltype-mac/Meltype Settings.app"
+
   installer script: {
     executable: "Meltype-mac/install.sh",
     args:       ["--homebrew"],

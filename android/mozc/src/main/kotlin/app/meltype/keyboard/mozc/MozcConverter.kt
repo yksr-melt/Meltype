@@ -10,6 +10,11 @@ import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.KeyEvent
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Output
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.SessionCommand
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage.UserDictionary
+import org.mozc.android.inputmethod.japanese.protobuf.ProtoUserDictionaryStorage.UserDictionaryStorage
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 
 /**
  * Mozc でかなを漢字に変える。[engine] が null（初期化に失敗）なら、何も変換しない。
@@ -71,6 +76,37 @@ class MozcConverter internal constructor(
                 .map { if (it in '０'..'９') '0' + (it - '０') else it }.joinToString("")
                 .takeIf { it.isNotEmpty() }
         }
+
+    /**
+     * Mozc の辞書の取り込み (IMPORT_USER_DICTIONARY) は終わるのを待てない (非同期) ので、ユーザー辞書のファイルを書いてから、
+     * 待てる読み直し (RELOAD_AND_WAIT) で読ませる。ファイルには Meltype の語だけを書く (毎回 Core の語から作る)。
+     */
+    override fun setUserDictionary(words: List<MozcWord>): Boolean {
+        val engine = engine ?: return false
+        val dictionary = UserDictionary.newBuilder().setId(1).setName("Meltype")
+        for (word in words) {
+            dictionary.addEntries(UserDictionary.Entry.newBuilder().setKey(word.reading).setValue(word.word).setPos(UserDictionary.PosType.NOUN))
+        }
+        val storage = UserDictionaryStorage.newBuilder().addDictionaries(dictionary).build()
+        // 変換の命令の列と混ざらないよう、ほかの操作と同じく 1 つずつ順に行う
+        return synchronized(engine) {
+            write(engine.userDictionaryFile, storage.toByteArray()) &&
+                eval(Input.newBuilder().setType(Input.CommandType.RELOAD_AND_WAIT).build()) != null
+        }
+    }
+
+    // 途中で止まっても半端なものが残らないよう、別の名前で書いてから置き換える
+    private fun write(file: File, bytes: ByteArray): Boolean {
+        val temporary = File(file.path + ".tmp")
+        return try {
+            FileOutputStream(temporary).use { it.write(bytes); it.fd.sync() }
+            temporary.renameTo(file)
+        } catch (e: IOException) {
+            false
+        } finally {
+            temporary.delete()
+        }
+    }
 
     /**
      * 文節ごとの読み。Mozc は読みの中の一部の記号を半角にして返す（「（」→「(」、「？」→「?」など）ので、

@@ -9,7 +9,7 @@ namespace Meltype.Dictionary;
 /// 組み込みの dictionaries/candidates.txt と %LOCALAPPDATA%\Meltype\dictionaries\candidates.txt を読む。
 /// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1711:Identifiers should not have incorrect suffix", Justification = "日本語入力の辞書を表す既存の公開名。コレクション型を表すものではない。")]
-public sealed class CandidateDictionary
+internal sealed class CandidateDictionary
 {
     private readonly Dictionary<string, string[]> _entries = new(StringComparer.Ordinal);
 
@@ -43,27 +43,8 @@ public sealed class CandidateDictionary
         }
         foreach (var name in Libraries.Lexicon.DictionarySource.EmbeddedNames("domain-"))
             dictionary.AddDomainText(Libraries.Lexicon.DictionarySource.ReadEmbedded(name));
-        if (userDirectory is not null)
-        {
-            var emoji = Path.Combine(userDirectory, "emoji.txt");
-            try
-            {
-                if (File.Exists(emoji)) dictionary.AddTabText(File.ReadAllText(emoji));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの絵文字辞書を読めませんでした: {ex.Message}");
-            }
-            var path = Path.Combine(userDirectory, "candidates.txt");
-            try
-            {
-                if (File.Exists(path)) dictionary.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの候補辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        Config.DataFile.LoadUserText(userDirectory, "emoji.txt", "ユーザーの絵文字辞書", dictionary.AddTabText);
+        Config.DataFile.LoadUserText(userDirectory, "candidates.txt", "ユーザーの候補辞書", dictionary.AddText);
         return dictionary;
     }
 
