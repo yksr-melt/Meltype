@@ -5,11 +5,10 @@ Meltype をウェブページの入力欄で使うためのものです。Core (
 ```bash
 dotnet workload install wasm-tools
 web-ime/mozc/build-mozc-wasm.sh   # Mozc (初回は 30 分以上。無くても動くが、漢字変換しない)
-web-ime/build.sh
-cd web-ime/dist && python3 -m http.server 8123   # → http://localhost:8123/
+web-ime/build.sh [出力先]          # 既定は web-ime/dist/
 ```
 
-ページに埋め込むときは、`dist/` の中身を置いて次のように付けます。
+Meltype のサイトの [/playground/](../web/README.md#ブラウザーで試す-playground) は、これを `web/public/playground/engine/` に作って使います。ほかのページに埋め込むときは、出力先の中身を置いて次のように付けます。
 
 ```html
 <link rel="stylesheet" href="meltype-web.css">
@@ -21,7 +20,6 @@ cd web-ime/dist && python3 -m http.server 8123   # → http://localhost:8123/
 
 ## 中身
 
-- `index.html`: プレイグラウンド。例を自動で打つボタンと、Core とのやり取り (ImeEvent → ImeOutput) の表示がある。
 - `meltype-web.js`・`meltype-web.css`: 埋め込み用。変換中の文字と候補はキャレットの下の箱に出し、入力欄には確定した文字だけを入れる。
 - `../src/Meltype.Web`: Core をブラウザーの .NET で動かす。
 - `mozc/`: Mozc を Emscripten で WebAssembly にする。デスクトップ版と同じ `meltype_mozc_helper.cc` を取り込み、要求 1 行を関数で受ける。

@@ -62,10 +62,9 @@ async function loadMozc() {
 
 /**
  * 入力欄に Meltype を付ける。返す物の detach() で外し、toggle() で日本語 / 英数を切り替える。
- * options.onExchange(event, output) は出来事と答えを 1 つずつ受け取る (プレイグラウンドが表示に使う)。
  * @param {HTMLTextAreaElement | HTMLInputElement} field
  */
-export async function attach(field, options = {}) {
+export async function attach(field) {
   const core = await loadCore();
   const host = core.exports.Create();
   const box = createBox();
@@ -87,7 +86,6 @@ export async function attach(field, options = {}) {
       ...extra,
     };
     const output = JSON.parse(core.exports.Handle(host, JSON.stringify(event)));
-    options.onExchange?.(event, output);
     state = output.state;
     apply(output.result);
     return output.result.consumed;

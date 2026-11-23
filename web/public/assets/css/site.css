@@ -3740,3 +3740,148 @@ em {
 .typing-counts .is-retired {
   color: var(--muted);
 }
+
+/* ブラウザーで試す (/playground/) */
+
+.playground {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 64px;
+}
+
+.playground .step-title {
+  margin-bottom: 8px;
+}
+
+.playground-field {
+  position: relative;
+  margin-top: 12px;
+}
+
+.playground-field .textarea {
+  min-height: 11em;
+  font-size: 1.15rem;
+  padding-bottom: 2.6em;
+}
+
+.playground-status {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.playground-status.is-ready::before {
+  content: "● ";
+  color: var(--ok);
+}
+
+.playground-status.is-error {
+  color: var(--danger);
+}
+
+.playground-samples {
+  margin: 12px 0 16px;
+}
+
+.playground-samples button {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  padding: 3px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-strong);
+  cursor: pointer;
+}
+
+.playground-samples button:hover {
+  border-color: var(--sky-deep);
+  color: var(--sky-deep);
+}
+
+.playground-keys {
+  margin: 0 0 10px;
+  padding-left: 1.2em;
+  display: grid;
+  gap: 6px;
+}
+
+/* meltype-web.js が入力欄の後ろに置く、日本語 / 英数の切り替え。入力欄の右下に重ねる */
+.playground-field .meltype-mode {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  min-width: 2.4em;
+  font-family: var(--font-head);
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 2px 10px;
+  color: var(--on-accent);
+  background: var(--sky-deep);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* meltype-web.js が出す、変換中の文字と候補の一覧 */
+.meltype-box {
+  position: absolute;
+  z-index: 100;
+  width: max-content;
+  min-width: 8em;
+  max-width: min(32em, calc(100vw - 32px));
+  padding: 6px 0;
+  background: var(--surface);
+  color: var(--ink-strong);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-s);
+  box-shadow: 0 8px 24px rgb(31 42 68 / 0.14);
+  font-family: var(--font-body);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.meltype-text {
+  padding: 2px 14px;
+}
+
+.meltype-text span {
+  text-decoration: underline 1px;
+  text-underline-offset: 4px;
+}
+
+.meltype-text .meltype-selected-clause {
+  text-decoration-color: var(--sky-deep);
+  text-decoration-thickness: 3px;
+}
+
+.meltype-typed,
+.meltype-hint {
+  padding: 0 14px;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.meltype-candidates {
+  margin: 6px 0 4px;
+  padding: 4px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  /* 9 件 (数字キーで選べる数) を見せ、残りはスクロールする */
+  max-height: calc(9 * (1.5em + 4px));
+  overflow-y: auto;
+}
+
+.meltype-candidates li {
+  padding: 2px 14px;
+  cursor: pointer;
+}
+
+.meltype-candidates li:hover {
+  background: var(--sky-soft);
+}
+
+.meltype-candidates li.meltype-selected {
+  color: var(--on-accent);
+  background: var(--sky-deep);
+}
