@@ -1,6 +1,6 @@
-# コンフリクトのお知らせ (.github/bot/conflicts.mjs)。
-#   いまのコンフリクト: main とコンフリクトしている Pull Request に、ラベルとコメントを付ける (解消したら外す)
-#   マージ後の予告:     「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」をコメントする
+# マージしたあとのコンフリクトの予告 (.github/bot/conflicts.mjs)。
+#   「この Pull Request をマージすると、どの Pull Request がコンフリクトするか」をコメントする
+#   (いま main とコンフリクトしているかのラベルとコメントは Mergify が付ける。.mergify.yml)
 # main に push されたときと 1 時間ごとに、開いている Pull Request を全部調べる (Pull Request のイベントでは動かさない)。
 # Pull Request のコードは git の中に取ってくるだけで、実行しない
 # (スクリプトは main のものを使い、コンフリクトは git merge-tree で確かめる)。
