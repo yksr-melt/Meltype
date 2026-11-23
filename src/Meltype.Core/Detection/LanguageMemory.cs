@@ -18,7 +18,7 @@ public sealed record LearnedLanguage(string Word, bool English, int Count, DateT
 /// 次からその語は、自動の判定より覚えた方を優先する (api と打って F10 で英字にして確定 → 次から api は英字)。
 /// %LOCALAPPDATA%\Meltype\languages.json に「打った英字 → 英語か」だけを保存する。
 /// </summary>
-public sealed class LanguageMemory
+internal sealed class LanguageMemory
 {
     private const int MaxEntries = 3000;
     private readonly string? _path;

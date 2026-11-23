@@ -174,7 +174,7 @@ public sealed record SessionResult(bool Consumed, IReadOnlyList<TextEdit> Commit
 /// 入力欄の本体 (<see cref="Ime.ImeSession"/>) を作る部品。プロセスで 1 つ作り、入力欄で共有する。
 /// 本物は Ime の MeltypeRuntime.SessionParts で作り、テストは偽の変換エンジン・学習データで作る。
 /// </summary>
-public sealed record SessionParts(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services)
+internal sealed record SessionParts(CompositionDetector Detector, IKanjiConverter Converter, CompositionServices Services)
 {
     /// <summary>英数状態で打ち始めた英字がローマ字 (日本語) かの判定 (打った英字, もう続きが無いか, 入力欄のアプリの設定)。null なら判定しない。</summary>
     public Func<string, bool, Settings, Verdict>? ClassifyDirect { get; init; }

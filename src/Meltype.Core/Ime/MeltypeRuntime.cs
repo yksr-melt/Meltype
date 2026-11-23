@@ -16,7 +16,7 @@ namespace Meltype.Ime;
 
 /// <summary>
 /// プロセスで 1 つの入力の土台: 設定・判定器・辞書・学習データ・定型文。どの OS のアプリもこれを 1 つ作り、
-/// 入力欄ごとの本体は、<see cref="SessionParts"/> を渡した <see cref="Ime.ImeHost"/> が作る。
+/// 変換エンジンも 1 つだけ持ち (<see cref="StartConverter"/>)、入力欄ごとの本体 (<see cref="Ime.ImeHost"/>) は <see cref="CreateHost"/> で作る。
 /// 入力欄ごとに辞書・学習データを作ると、学習データを保存するときにほかの入力欄で覚えたものを上書きし、辞書も入力欄の数だけメモリに持つ。
 /// </summary>
 public sealed class MeltypeRuntime : IDisposable
@@ -92,7 +92,7 @@ public sealed class MeltypeRuntime : IDisposable
     /// <summary>設定を読み直した・変えた。設定の lock の中で、読んだ・変えたスレッドから呼ぶので、受け手は待たない (UI は BeginInvoke で触る)。</summary>
     public event Action<Settings>? SettingsChanged;
 
-    public CompositionDetector Detector { get; }
+    internal CompositionDetector Detector { get; }
 
     /// <summary>
     /// ユーザー辞書。入力欄を作ったとき・入力を始めたときに、外で変わっていたら読み直す (<see cref="UserDictionary.Refresh"/>)。
@@ -119,15 +119,46 @@ public sealed class MeltypeRuntime : IDisposable
     internal GitHubIssueTitles GitHubTitles { get; } = new();
 
     /// <summary>
-    /// 変換エンジン (Mozc と、設定で ON なら Zenzai)。プロセスで 1 つ作り、入力欄の本体で共有する。止めるのは <see cref="Dispose"/>。
+    /// 入力欄の本体が使う変換エンジン (Mozc と、設定で ON なら Zenzai) を用意する。<see cref="CreateHost"/> の前に 1 回呼ぶ。止めるのは <see cref="Dispose"/>。
     /// appDirectory は、同梱の Mozc のヘルパー (mozc/meltype_mozc_helper) と Zenzai (zenzai/) を置いたフォルダー。
+    /// mozc は、ヘルパーを起動せずにアプリのプロセスの Mozc を使うとき (Android)。Mozc を使えれば true (使えなければ変換はかなのまま)。
     /// </summary>
-    public HybridConverter CreateConverter(string appDirectory)
+    public bool StartConverter(string appDirectory, IMozcHelper? mozc = null)
+    {
+        var converter = CreateConverter(appDirectory, mozc);
+        _converter = converter;
+        converter.WarmUp();
+        return converter.MozcInstalled;
+    }
+
+    private HybridConverter? _converter;
+
+    private HybridConverter Converter => _converter ?? throw new InvalidOperationException("変換エンジンを先に用意してください (StartConverter)");
+
+    /// <summary>変換エンジンの答えが後から届いた (入力欄に refresh を送る)。ワーカーのスレッドで呼ぶ。<see cref="StartConverter"/> の後に登録する。</summary>
+    public event Action? ConversionReady
+    {
+        add => Converter.ResultReady += value;
+        remove => Converter.ResultReady -= value;
+    }
+
+    /// <summary>
+    /// 入力欄 1 つの本体を作る。辞書・学習データ・変換エンジンは、ほかの入力欄と共有する。
+    /// lateResults は、フロントが変換エンジンの答えを後から受け取れるか (<see cref="ConversionReady"/> で refresh を送る)。corrected は、ユーザーが判定を直したとき。
+    /// </summary>
+    public ImeHost CreateHost(IImeEnvironment environment, Func<Settings> settings, Func<bool> lateResults, Action<Correction>? corrected = null) =>
+        new(environment, SessionParts(Converter, Converter.Candidates, Converter.Reading, corrected) with { LateResults = lateResults }, settings);
+
+    /// <summary>単語の登録のホットキー (Windows) 用: 選んでいた語の読みを推測する。分からなければ空。</summary>
+    public string GuessReading(string word) => Converter.Reading(word) ?? "";
+
+    /// <summary>変換エンジン (テストでは <see cref="StartConverter"/> を通さずに作って直接使う)。</summary>
+    internal HybridConverter CreateConverter(string appDirectory, IMozcHelper? mozcHelper = null)
     {
         // 強制終了された Meltype の llama-server は、Zenzai が OFF でも起動したときに終わらせる
         ZenzaiConverter.EndStaleServers();
         var helper = Path.Combine(appDirectory, "mozc", OperatingSystem.IsWindows() ? "meltype_mozc_helper.exe" : "meltype_mozc_helper");
-        var mozc = new MozcConverter(new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
+        var mozc = new MozcConverter(mozcHelper ?? new MozcHelperProcess(helper, Path.Combine(DataDirectory, "mozc")));
         var zenzai = new ZenzaiHolder();
         _converters.Add(mozc);
         _converters.Add(zenzai);
@@ -139,21 +170,14 @@ public sealed class MeltypeRuntime : IDisposable
         return converter;
     }
 
-    /// <summary>Zenzai を使わない変換エンジン (Android。llama-server を同梱していない)。mozcHelper はアプリのプロセスの Mozc。</summary>
-    public HybridConverter CreateConverter(IMozcHelper mozcHelper)
-    {
-        var mozc = new MozcConverter(mozcHelper);
-        _converters.Add(mozc);
-        return new HybridConverter(mozc);
-    }
 
     /// <summary>Zenzai の今の状態 (トレイのメニューに出す。issue #1152)。OFF・変換エンジンを作っていなければ null。</summary>
     public Func<string?> ZenzaiStatus { get; private set; } = () => null;
 
-    /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は <see cref="CreateConverter"/> で作った変換エンジン (テストでは偽物)。</summary>
+    /// <summary>入力欄の本体を作る部品 (<see cref="Ime.ImeHost"/> に渡す)。converter は変換エンジン (テストでは偽物)。</summary>
     /// <param name="candidates">読みの変換候補の一覧 (<see cref="HybridConverter.Candidates"/>)。</param>
     /// <param name="readingOf">漢字かな交じりの文の読み (<see cref="HybridConverter.Reading"/>)。</param>
-    public SessionParts SessionParts(IKanjiConverter converter, Func<string, long, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
+    internal SessionParts SessionParts(IKanjiConverter converter, Func<string, long, IReadOnlyList<string>>? candidates, Func<string, string?> readingOf,
         Action<Correction>? corrected = null)
     {
         var services = _shared with

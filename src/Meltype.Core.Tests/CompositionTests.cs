@@ -220,7 +220,6 @@ internal static class CompositionTests
         public bool NumberKeysSelectCandidates { get => Settings.NumberKeysSelectCandidates; set => Settings.NumberKeysSelectCandidates = value; }
         public bool SpaceAroundEnglish { get => Settings.SpaceAroundEnglish; set => Settings.SpaceAroundEnglish = value; }
         public Meltype.Config.SpaceWidth SpaceWidth { get => Settings.SpaceWidth; set => Settings.SpaceWidth = value; }
-        public bool EnterCommitsAsShown { get => Settings.EnterCommitsAsShown; set => Settings.EnterCommitsAsShown = value; }
         public bool AlphanumericKeyStartsAsTyped { get => Settings.AlphanumericKeyStartsAsTyped; set => Settings.AlphanumericKeyStartsAsTyped = value; }
         public bool FullWidthParentheses { get => Settings.FullWidthParentheses; set => Settings.FullWidthParentheses = value; }
         public Meltype.Config.SlashStyle Slash { get => Settings.Slash; set => Settings.Slash = value; }
@@ -1082,6 +1081,23 @@ internal static class CompositionTests
         Assert.Equal("😊", k.Showing);
         k.Press(VirtualKeys.Up);
         Assert.Equal("😄", k.Showing);
+    }
+
+    [Test]
+    public static void Issue2111_KanaChoiceForgetsLearnedWord()
+    {
+        // では → 出端 を覚えたあと、かなの では を選んで確定したら、次の では は 出端 にしない
+        var history = new ConversionHistory(null);
+        history.Remember("では", "出端");
+        var k = new Keyboard(history: history);
+        k.Type("deha ");
+        Assert.Equal("出端", k.Showing, "覚えた語が最初の候補");
+        for (var i = 0; i < 30 && k.Showing != "では"; i++) k.Press(VirtualKeys.Space);
+        Assert.Equal("では", k.Showing, "かなの候補まで進める");
+        k.Type("\n");
+        var next = new Keyboard(history: history);
+        next.Type("deha ");
+        Assert.Equal("では", next.Showing, "かなを選んだので、覚えた 出端 を忘れる");
     }
 
     [Test]
@@ -2582,17 +2598,42 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue677_EnterCanCommitAsShown()
+    public static void Issue1980_TypoFixIsShownWhileTyping()
     {
-        // 打ち間違い (onegaishimsu) は、既定では確定するときに直す。設定 ON なら見えているとおりに確定する
-        var normal = new Keyboard();
-        normal.Type("onegaishimsu\n");
-        var shownKeyboard = new Keyboard { EnterCommitsAsShown = true };
-        shownKeyboard.Type("onegaishimsu");
-        var shown = shownKeyboard.Showing;
-        shownKeyboard.Type("\n");
-        Assert.Equal(shown, shownKeyboard.Host.Document, "見えているとおりに確定");
-        Assert.True(normal.Host.Document != shown, "既定は確定するとき直す: " + normal.Host.Document + " / " + shown);
+        // 打ち間違いは、Enter で直すのと同じ形で打っている途中から見せる (見えていたものと違う文字が入っていた: #677・#1980)
+        foreach (var (typed, expected) in new[] { ("onegaishimsu", "おねがいします"), ("sumimasne", "すみません"), ("ikimahsou", "いきましょう") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            var front = SessionResult.ForFront(k.Host.View!, showGuide: true, numberKeysSelect: true).Text;
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+            Assert.Equal(k.Host.Document, front, $"見えていたとおりに確定 ({typed})");
+        }
+        // 打ち間違いの無い入力・英単語は、今までどおり直さずに見せる
+        foreach (var (typed, expected) in new[] { ("kantan", "かんたん"), ("githubnipushsuru", "githubにpushする") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            var front = SessionResult.ForFront(k.Host.View!, showGuide: true, numberKeysSelect: true).Text;
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+            Assert.Equal(k.Host.Document, front, $"見えていたとおりに確定 ({typed})");
+        }
+        // 英語と判定して英字で見せている所は、直さずに見えているとおりに確定する (inclu が いんこう で入っていた)
+        foreach (var (typed, expected) in new[] { ("inclu", "inclu"), ("obsidi", "obしぢ"), ("mainnipushsu", "mainにpushす") })
+        {
+            var k = new Keyboard();
+            k.Type(typed);
+            var front = SessionResult.ForFront(k.Host.View!, showGuide: true, numberKeysSelect: true).Text;
+            k.Type("\n");
+            Assert.Equal(expected, k.Host.Document, typed);
+            Assert.Equal(k.Host.Document, front, $"見えていたとおりに確定 ({typed})");
+        }
+        // 打っている音の途中 (kyouh の h) は直さずに見せる (打った子音が表示から消えない)
+        var typing = new Keyboard();
+        typing.Type("kyouh");
+        Assert.Equal("きょうh", SessionResult.ForFront(typing.Host.View!, showGuide: true, numberKeysSelect: true).Text, "打っている音の途中");
     }
 
     [Test]
@@ -3071,6 +3112,28 @@ internal static class CompositionTests
     }
 
     [Test]
+    public static void Issue1403_CalculatorOffersPower()
+    {
+        Assert.Equal("1024", Calculator.Evaluate("2^10"), "べき乗");
+        Assert.Equal("1024", Calculator.Evaluate("2＾10"), "全角の＾");
+        Assert.Equal("512", Calculator.Evaluate("2^3^2"), "右結合");
+        Assert.Equal("27", Calculator.Evaluate("3*6^2/4"), "べき乗は乗除より優先");
+        Assert.Equal("-1024", Calculator.Evaluate("-2^10"), "符号より累乗優先");
+        Assert.Equal("1024", Calculator.Evaluate("(-2)^10"), "括弧で括った場合");
+        Assert.Equal("0.5", Calculator.Evaluate("2^-1"), "負の指数");
+        Assert.Equal("1", Calculator.Evaluate("0^0"), "0^0 は 1");
+        Assert.Equal("95367431640625", Calculator.Evaluate("5^20"), "10^15 未満は出す");
+        Assert.True(Calculator.Evaluate("10^15") is null, "大きすぎる結果は出さない");
+        Assert.True(Calculator.Evaluate("2^") is null && Calculator.Evaluate("^2") is null && Calculator.Evaluate("(-2)^0.5") is null, "途中・虚数は null");
+        var k = new Keyboard { CalculatorCandidates = true };
+        k.Type("2^10 ");
+        Assert.True(k.Host.View!.Candidates.Contains("1024") && k.Host.View.Candidates.Contains("2^10=1024"), string.Join(",", k.Host.View.Candidates));
+        var off = new Keyboard();
+        off.Type("2^10 ");
+        Assert.True(off.Host.View is null || !off.Host.View.Candidates.Contains("1024"), "OFF は候補に出さない");
+    }
+
+    [Test]
     public static void Issue713_SingleKanaThenWIsLaughter()
     {
         var k = new Keyboard { LaughterAfterKana = true };
@@ -3094,10 +3157,11 @@ internal static class CompositionTests
     [Test]
     public static void Laughter_IsShownAsWWhileTyping()
     {
-        // 打っている途中も、確定と同じく笑いの w で見せる (くさっっw と見せて、確定で くさwww になっていた)
-        // 打っている途中に くさwww と見せたいが、フロントに渡す表示 (確定される形) は くさっっw になっている
+        // 打っている途中も、確定と同じく笑いの w で見せる (くさっっw と見せて、確定で くさwww になっていた: #2101)
         var k = new Keyboard();
-        k.Type("kusawww\n");
+        k.Type("kusawww");
+        Assert.Equal("くさwww", SessionResult.ForFront(k.Host.View!, showGuide: true, numberKeysSelect: true).Text, "打っている途中");
+        k.Type("\n");
         Assert.Equal("くさwww", k.Host.Document);
         // w の後ろに母音を打てば っ (wwa = っわ)
         var sokuon = new Keyboard();
@@ -3287,22 +3351,19 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue677_EnterAsShown_CommitsWhatTheFrontShows()
+    public static void Issue677_EnterCommitsWhatTheFrontShows()
     {
         // 語末の n で終わる入力 (かn・かんたn) も、フロントに見せている形 (末尾の n を ん にして変換した形) のまま確定する
         foreach (var (typed, expected) in new[] { ("kan", "感"), ("kantan", "簡単") })
         {
-            var shown = new Keyboard(live: true) { EnterCommitsAsShown = true };
+            var shown = new Keyboard(live: true);
             shown.Type(typed);
             var front = SessionResult.ForFront(shown.Host.View!, showGuide: true, numberKeysSelect: true).Text;
             shown.Type("\n");
             Assert.Equal(expected, front, typed);
-            Assert.Equal(front, shown.Host.Document, $"設定 ON: 見えているとおりに確定 ({typed})");
+            Assert.Equal(front, shown.Host.Document, $"見えているとおりに確定 ({typed})");
         }
-        var normal = new Keyboard(live: true);
-        normal.Type("kantan\n");
-        Assert.Equal("簡単", normal.Host.Document, "既定は今までどおり");
-        var done = new Keyboard(live: true) { EnterCommitsAsShown = true };
+        var done = new Keyboard(live: true);
         done.Type("kantann\n");
         Assert.Equal("簡単", done.Host.Document, "nn まで打てば漢字");
     }

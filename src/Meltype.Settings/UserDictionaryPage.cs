@@ -6,7 +6,7 @@ using Avalonia.Controls.Templates;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Meltype.Config;
-using Meltype.Detection;
+using Meltype.Ime;
 using Meltype.Dictionary;
 
 namespace Meltype.SettingsApp;
@@ -22,13 +22,7 @@ internal static class UserDictionaryPage
     /// <param name="newWord">登録欄に入れておく語と読み (Windows の単語の登録のホットキーで、選んでいた語)。</param>
     public static Control Build(Window owner, UserWord? newWord = null)
     {
-        // 読みはローマ字で打ってもよい (kigoutou → きごうとう)。ユーザーのローマ字の表 (romaji.txt) も使う
-        var romaji = RomajiDetector.CreateDefault(Path.Combine(AppPaths.DataDirectory, "dictionaries"));
-        string ToReading(string input)
-        {
-            var text = input.Trim();
-            return text.Any(char.IsAsciiLetter) ? romaji.ConvertLenient(text.ToLowerInvariant(), final: true) : text;
-        }
+        var typed = new TypedReading(AppPaths.DataDirectory);
 
         var reading = new TextBox { PlaceholderText = "読み (ローマ字・ひらがな)", Width = 220, Text = newWord?.Reading };
         var preview = Pages.Hint("");
@@ -55,7 +49,7 @@ internal static class UserDictionaryPage
 
         void Register()
         {
-            var kana = ToReading(reading.Text ?? "");
+            var kana = typed.ToHiragana(reading.Text ?? "");
             if (Open().Add(kana, word.Text ?? "") is { } error)
             {
                 Pages.Show(message, error, error: true);
@@ -85,7 +79,7 @@ internal static class UserDictionaryPage
             Reload();
         }
 
-        reading.TextChanged += (_, _) => preview.Text = (reading.Text ?? "").Any(char.IsAsciiLetter) ? "→ " + ToReading(reading.Text!) : "";
+        reading.TextChanged += (_, _) => preview.Text = (reading.Text ?? "").Any(char.IsAsciiLetter) ? "→ " + typed.ToHiragana(reading.Text!) : "";
         filter.TextChanged += (_, _) => Reload();
         foreach (var box in new[] { reading, word })
         {

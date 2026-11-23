@@ -230,7 +230,7 @@ internal sealed class PhraseHistory
 ///   英語: よく使う英単語 (english.txt) → 同梱の英単語の一覧 (english-words.txt) の、前方一致する語 (短い順)
 ///   英字の名前 (設定が ON のとき、issue #890): 社名・サービス名 (brands.txt) → 英字で書く語 (loanwords.txt) の、読みが前方一致する語 (しゃお → Xiaomi)
 /// </summary>
-public sealed class Predictor
+internal sealed class Predictor
 {
     /// <summary>出す候補の数。</summary>
     public const int MaxPredictions = 5;

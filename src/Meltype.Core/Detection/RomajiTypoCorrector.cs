@@ -15,7 +15,7 @@ internal readonly record struct RomajiFix(string Wrong, string Right, string Kan
 /// (隣のキーとの打ち間違い・入れ替わり・抜け・余計な 1 文字) のうち、よく使う語の読みでいちばん自然に区切れるものを選ぶ。
 /// 直したところが知っている語 (2 文字以上か、ます・です・て などの付属語) に入らなければ直さない。
 /// </summary>
-public sealed class RomajiTypoCorrector
+internal sealed class RomajiTypoCorrector
 {
     private readonly RomajiDetector _romaji;
     // よく使う語の読み (Load で作ったときは、かな入力の判定と同じ CommonReadings を共有する) と、付属語・活用した形

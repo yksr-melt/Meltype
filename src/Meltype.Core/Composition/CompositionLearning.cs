@@ -55,9 +55,15 @@ internal sealed partial class CompositionLearning(CompositionServices services, 
         // ただし数字・記号の 1 文字 (1 → ①、( → （) は、かなの途中に巻き込まれないので覚える (issue #672)。
         foreach (var clause in clauses.Where(c => !c.IsEnglish && c.Changed && (c.Reading.Length >= 2 || c.Reading.Length == 1 && c.Reading[0] is < 'ぁ' or > 'ヿ' && !char.IsAsciiLetter(c.Reading[0]))))
         {
-            // かな・カタカナのまま確定したのは、その場限りのことが多いので覚えない。
+            // かな・カタカナのまま確定したのは、その場限りのことが多いので覚えない。前に選んだ語を覚えていれば忘れる
+            // (覚えた語が最初の候補に出続け、かなを選んで確定しても直らなかった: #2111)。
+            if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading))
+            {
+                history.Forget(clause.Reading, saveNow: false);
+                continue;
+            }
             // 打ったままの英字を選んだのは、上で英語として覚えた。
-            if (clause.Text == clause.Reading || clause.Text == CompositionText.ToKatakana(clause.Reading) || clause.Text == clause.Raw) continue;
+            if (clause.Text == clause.Raw) continue;
             // 英訳は上で英訳の記録に入れた (ここで覚えると次から 1 番目に出てしまう)。
             if (clause.Translations.Contains(clause.Text)) continue;
             if (!Learnable(clause)) continue;
