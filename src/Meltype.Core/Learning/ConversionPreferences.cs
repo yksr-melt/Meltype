@@ -25,18 +25,7 @@ internal sealed class ContextRules
     {
         var rules = new ContextRules();
         rules.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("contexts.txt"));
-        if (userDirectory is not null)
-        {
-            var path = Path.Combine(userDirectory, "contexts.txt");
-            try
-            {
-                if (File.Exists(path)) rules.AddText(File.ReadAllText(path));
-            }
-            catch (Exception ex)
-            {
-                Diagnostics.Log.Warn($"ユーザーの文脈辞書を読めませんでした: {ex.Message}");
-            }
-        }
+        Config.DataFile.LoadUserText(userDirectory, "contexts.txt", "ユーザーの文脈辞書", rules.AddText);
         return rules;
     }
 
@@ -259,7 +248,7 @@ internal sealed class ConversionHistory
             }
             return true;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {
             Diagnostics.Log.Warn($"変換の学習データを保存できませんでした: {ex.Message}");
             return false;

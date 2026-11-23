@@ -60,8 +60,9 @@ internal static class DictionarySource
             if (!File.Exists(userFile)) yield break;
             text = File.ReadAllText(userFile);
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
+            // 読めないユーザーの一覧は無いものとして、同梱の一覧だけを使う
             yield break;
         }
         foreach (var word in ParseWords(text)) yield return word;

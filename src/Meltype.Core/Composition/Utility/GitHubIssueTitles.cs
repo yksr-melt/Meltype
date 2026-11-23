@@ -60,8 +60,9 @@ internal sealed class GitHubIssueTitles
             entry.Waited = true;
             return entry.Task.Wait(Timeout) && !entry.Task.IsFaulted ? entry.Task.Result : null;
         }
-        catch (Exception)
+        catch (AggregateException)
         {
+            // 調べている途中で失敗した (通信できない・レート制限)
             return null;
         }
     }

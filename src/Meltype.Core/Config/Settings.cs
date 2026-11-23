@@ -1208,9 +1208,10 @@ public sealed class Settings
         catch (Exception ex)
         {
             // 壊れた設定で起動不能にしない。元ファイルは退避して既定値で動く。
+            // 手で書いた値の型が違うと、移行の処理 (MigrateToV8 の GetValue<string> など) が InvalidOperationException を投げるので、型で絞らない (DataFile)
             try { File.Copy(path, path + ".broken", overwrite: true); }
-            catch (Exception copyEx) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"config.json を読み込めなかったため既定値を使います: {ex.Message}");
+            catch (Exception copyEx) when (DataFile.IsFileError(copyEx)) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
+            DataFile.ReportUnreadable("config.json (既定値を使います) ", ex);
             return new Settings();
         }
     }
@@ -1258,7 +1259,7 @@ public sealed class Settings
         {
             // 保存できなくても、読み込んだ設定は使う (既定値に戻すと、次の保存でユーザーの設定が消える)。
             try { settings.Save(path); }
-            catch (Exception ex) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
+            catch (Exception ex) when (DataFile.IsFileError(ex)) { Diagnostics.Log.Warn($"移行した config.json を保存できませんでした: {ex.Message}"); }
         }
         return settings;
     }
