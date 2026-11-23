@@ -40,8 +40,23 @@
 .meltype-candidates li { padding: 2px 10px; cursor: pointer; }
 .meltype-candidates li.meltype-selected { background: var(--meltype-accent); color: #fff; }
 .meltype-mode {
-  margin-left: 4px;
-  min-width: 2em;
-  font: 13px system-ui, sans-serif;
+  display: inline-flex;
+  margin-bottom: 6px;
+  border: 1px solid var(--meltype-border);
+  border-radius: 999px;
+  overflow: hidden;
+  font: 14px/1.4 system-ui, sans-serif;
+}
+.meltype-mode button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border: 0;
+  background: var(--meltype-bg);
+  color: var(--meltype-muted);
+  font: inherit;
   cursor: pointer;
 }
+.meltype-mode button b { font-size: 16px; }
+.meltype-mode button[aria-pressed="true"] { background: var(--meltype-accent); color: #fff; }

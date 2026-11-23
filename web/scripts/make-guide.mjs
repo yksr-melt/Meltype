@@ -105,7 +105,6 @@ function page({ title, slug }, body) {
         <a href="/#features">できること</a>
         <a href="/#install">インストール</a>
         <a class="is-current" href="/guide/">使い方ガイド</a>
-        <a href="/playground/">ブラウザーで試す</a>
         <a href="/typing/">タイピング</a>
         <a class="nav-report" href="/report/">問題を報告する</a>
         <a class="btn btn-small" href="https://github.com/yksr-melt/Meltype/releases/latest">

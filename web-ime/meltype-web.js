@@ -102,7 +102,7 @@ export async function attach(field) {
     if (result.commits.length) field.dispatchEvent(new Event("input", { bubbles: true }));
     view = result.view;
     drawBox(box, field, view);
-    indicator.textContent = state?.languageMode === "Japanese" ? "あ" : "A";
+    for (const button of modes.children) button.setAttribute("aria-pressed", String(button.dataset.mode === state?.languageMode));
   };
 
   const onKeyDown = (e) => {
@@ -137,13 +137,24 @@ export async function attach(field) {
     field.focus();
   };
 
-  // モードの表示と切り替え (キーボードに 半角/全角 が無い環境のため)
-  const indicator = document.createElement("button");
-  indicator.type = "button";
-  indicator.className = "meltype-mode";
-  indicator.title = "日本語 / 英数 を切り替える";
-  indicator.addEventListener("mousedown", (e) => { e.preventDefault(); send("ModeToggleRequested"); field.focus(); });
-  field.insertAdjacentElement("afterend", indicator);
+  // 日本語 / 英数の切り替え (キーボードに 半角/全角 が無い環境のため)。今のモードを押した状態で見せる
+  const modes = document.createElement("div");
+  modes.className = "meltype-mode";
+  modes.setAttribute("role", "group");
+  modes.setAttribute("aria-label", "入力モード");
+  for (const [mode, mark, label, type] of [["Japanese", "あ", "日本語", "JapaneseModeSelected"], ["Alphanumeric", "A", "英数", "AlphanumericModeSelected"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.mode = mode;
+    button.innerHTML = `<b></b>`;
+    button.firstChild.textContent = mark;
+    button.append(label);
+    // マウスで押しても入力欄からフォーカスを外さない (変換中の文字を確定させない)
+    button.addEventListener("mousedown", (e) => e.preventDefault());
+    button.addEventListener("click", () => { send(type); field.focus(); });
+    modes.append(button);
+  }
+  field.insertAdjacentElement("beforebegin", modes);
 
   field.addEventListener("keydown", onKeyDown);
   field.addEventListener("mouseup", onMoved);
@@ -151,7 +162,8 @@ export async function attach(field) {
   field.addEventListener("blur", onBlur);
   box.addEventListener("mousedown", onClickCandidate);
   core.listeners.add(onReady);
-  send("StateRequested");
+  // 日本語で始める (Meltype は日本語のままでも英語を打てるので)
+  send("JapaneseModeSelected");
 
   return {
     mozc: core.mozc,
@@ -164,7 +176,7 @@ export async function attach(field) {
       field.removeEventListener("blur", onBlur);
       core.listeners.delete(onReady);
       box.remove();
-      indicator.remove();
+      modes.remove();
     },
   };
 }
