@@ -654,6 +654,7 @@ internal static partial class CompositionController
                         index = clause.Candidates.Count - 1;
                     }
                     clause.Index = index;
+                    clause.Changed = true;
                 }
                 return true;
             case VirtualKeys.Back:
@@ -770,6 +771,8 @@ internal static partial class CompositionController
             index = clause.Candidates.Count - 1;
         }
         clause.Index = index;
+        // 候補から選んだのと同じく、確定したら学習する
+        clause.Changed = true;
     }
 
     /// <summary>
