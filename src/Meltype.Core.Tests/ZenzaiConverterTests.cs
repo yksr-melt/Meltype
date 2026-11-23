@@ -85,6 +85,8 @@ internal static class ZenzaiConverterTests
         Assert.Equal("キョウ", ZenzaiConverter.Prompt("きょう", null), "文脈なし");
         Assert.Equal("この本はアツイ", ZenzaiConverter.Prompt("あつい", "この本は"), "v3 では文脈を前に置く");
         Assert.Equal("ー、。ABC", ZenzaiConverter.ToKatakana("ー、。ABC"), "かな以外はそのまま");
+        // #2231: zenz は全角の記号を読めず、＊にほんご＊ を ô日本語瑤 にする
+        Assert.Equal("10%#ハッシュハ*", ZenzaiConverter.Prompt("＃はっしゅは＊", "１０％"), "全角の英数字・記号は半角");
     }
 
     [Test]
@@ -746,6 +748,9 @@ internal static class ZenzaiConverterTests
         // 文脈の無い きょう は、何も渡すと モデルが迷って 強 になる。「。」を文脈にして 今日 にする
         Assert.Equal("今日", zenzai.ConvertClauses("きょう", null) is [var bare] ? bare.Text : "", "文脈なしでも きょう は 今日 (「。」を文脈にする: 何も渡さないと 強)");
         Assert.Equal("今日", zenzai.ConvertClauses("きょう", "あしたは") is [var today] ? today.Text : "", "文脈 (あしたは) で 今日");
+        // #2231: 読みの全角の記号 (ローマ字の * は ＊ になる) の位置に、読みに無い字を出さない (記号は半角で答える)
+        Assert.Equal("*日本語*", zenzai.ConvertClauses("＊にほんご＊", null) is [var star] ? star.Text : "", "＊にほんご＊");
+        Assert.Equal("図書館***", zenzai.ConvertClauses("としょかん＊＊＊", null) is [var stars] ? stars.Text : "", "としょかん＊＊＊");
     }
 
     [Test]
