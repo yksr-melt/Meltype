@@ -1130,6 +1130,24 @@ internal static class ImeContractTests
     }
 
     [Test]
+    public static void KanaKey_IsTheSameKeyOnEveryFront()
+    {
+        // カタカナ/ひらがな キーは Windows が 0xF2、IBus・fcitx5・Mac が 0x15 で送る
+        foreach (var vk in new[] { VirtualKeys.OemCopy, VirtualKeys.Kana })
+        {
+            var front = new Front();
+            front.Key(VirtualKeys.NonConvert);
+            Assert.True(Consumed(front.Key(vk)) && front.Open, $"0x{vk:X2}: 日本語にする\n" + front.Trace);
+            var toggle = new Front();
+            toggle.Settings.ToggleShortcuts = [new() { Key = VirtualKeys.Kana }];
+            toggle.Key(vk);
+            Assert.True(!toggle.Open, $"0x{vk:X2}: 切り替えキーに登録したら英数\n" + toggle.Trace);
+            toggle.Key(vk);
+            Assert.True(toggle.Open, $"0x{vk:X2}: もう一度押して日本語\n" + toggle.Trace);
+        }
+    }
+
+    [Test]
     public static void CtrlH_DeletesWhetherTheFrontSendsTheKeyOrItsCharacter()
     {
         // Meltype キーボードは仮想キーコード、Mac・IBus・fcitx5 はキーの文字 (h) を送る

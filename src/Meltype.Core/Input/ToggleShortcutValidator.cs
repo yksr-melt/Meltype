@@ -34,13 +34,13 @@ public static class ToggleShortcutValidator
 
         // 通常入力を奪わないよう、Ctrl・Alt・Win を伴わないキーは IME 用キーと CapsLock だけに絞る。
         // US キーボードには IME 用キーが無いので、CapsLock と、PowerToys などで CapsLock から割り当て直す
-        // カタカナ/ひらがな (VK_OEM_COPY) を 1 キーの切り替えに使えるようにする。
+        // カタカナ/ひらがな を 1 キーの切り替えに使えるようにする。
         // Shift だけの英字・記号も文字入力に使うので、単独押しと同じ規則にする。
         // Shift+Space だけは例外にする (#1033)。日本語入力中の Shift+Space は、全角スペースではなく
         // 日本語 / 英数の切り替えに使いたいという要望があり、Space は文字入力に使わないため。
         var shiftSpace = b.Modifiers == ShortcutModifiers.Shift && b.Key == VirtualKeys.Space;
         if (!shiftSpace && (b.Modifiers & ~ShortcutModifiers.Shift) == ShortcutModifiers.None &&
-            ToggleShortcut.NormalizeHankakuKey(b.Key) is not (ToggleShortcut.Hankaku or ToggleShortcut.CapsLock or VirtualKeys.OemCopy or 0x1C or 0x1D))
+            ToggleShortcut.NormalizeKey(b.Key) is not (ToggleShortcut.Hankaku or ToggleShortcut.CapsLock or VirtualKeys.Kana or 0x1C or 0x1D))
             return ShortcutValidationError.UnmodifiedKey;
 
         // 設定「スペースの幅」が「半角」のときは、Shift+Space を切り替えに使うと競合する。
