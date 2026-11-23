@@ -43,8 +43,8 @@ internal sealed class CandidateDictionary
         }
         foreach (var name in Libraries.Lexicon.DictionarySource.EmbeddedNames("domain-"))
             dictionary.AddDomainText(Libraries.Lexicon.DictionarySource.ReadEmbedded(name));
-        if (Config.DataFile.ReadUserText(userDirectory, "emoji.txt", "ユーザーの絵文字辞書") is { } emoji) dictionary.AddTabText(emoji);
-        if (Config.DataFile.ReadUserText(userDirectory, "candidates.txt", "ユーザーの候補辞書") is { } candidates) dictionary.AddText(candidates);
+        Config.DataFile.LoadUserText(userDirectory, "emoji.txt", "ユーザーの絵文字辞書", dictionary.AddTabText);
+        Config.DataFile.LoadUserText(userDirectory, "candidates.txt", "ユーザーの候補辞書", dictionary.AddText);
         return dictionary;
     }
 

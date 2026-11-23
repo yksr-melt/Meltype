@@ -25,7 +25,7 @@ internal sealed class ContextRules
     {
         var rules = new ContextRules();
         rules.AddText(Libraries.Lexicon.DictionarySource.ReadEmbedded("contexts.txt"));
-        if (Config.DataFile.ReadUserText(userDirectory, "contexts.txt", "ユーザーの文脈辞書") is { } text) rules.AddText(text);
+        Config.DataFile.LoadUserText(userDirectory, "contexts.txt", "ユーザーの文脈辞書", rules.AddText);
         return rules;
     }
 

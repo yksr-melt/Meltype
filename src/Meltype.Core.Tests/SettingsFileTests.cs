@@ -8,6 +8,26 @@ namespace Meltype.Tests;
 internal static class SettingsFileTests
 {
     [Test]
+    public static void Settings_WithAValueOfTheWrongType_LoadsDefaults()
+    {
+        // 手で書いた値の型が違う (Process が数) と、古い版の設定の読み替えが InvalidOperationException を投げる。起動できなくせず、既定値で動く
+        var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-type-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var path = Path.Combine(directory, "config.json");
+            File.WriteAllText(path, """{"SettingsVersion":7,"TextInputApps":"a.exe","AppRules":[{"Process":1}]}""");
+            var settings = Settings.Load(path);
+            Assert.Equal(new Settings().LiveConversion, settings.LiveConversion, "既定値");
+            Assert.True(File.Exists(path + ".broken"), "読めなかったファイルは .broken に残す");
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [Test]
     public static void SettingsFile_ChecksWriteTimeOncePerInterval()
     {
         var directory = Path.Combine(Path.GetTempPath(), "meltype-settings-file-" + Guid.NewGuid().ToString("N"));

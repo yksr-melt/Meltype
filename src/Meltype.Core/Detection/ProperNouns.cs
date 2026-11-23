@@ -25,7 +25,7 @@ internal sealed class ProperNouns
         // それまで英語にしたい国名は、確かめて propernouns.txt に書く (Benin・Panama)
         var romaji = new RomajiDetector();
         nouns.AddText(DictionarySource.ReadEmbedded("countries.txt"), word => romaji.Analyze(word) is not { IsValid: true, Partial: "" or "n" });
-        if (Config.DataFile.ReadUserText(userDirectory, "propernouns.txt", "ユーザーの固有名詞辞書") is { } text) nouns.AddText(text);
+        Config.DataFile.LoadUserText(userDirectory, "propernouns.txt", "ユーザーの固有名詞辞書", text => nouns.AddText(text));
         return nouns;
     }
 

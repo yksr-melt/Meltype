@@ -40,9 +40,10 @@ internal sealed class PhraseHistory
                 _entries[(parts[0], parts[1])] = (Math.Max(1, count), used);
             }
         }
-        catch (Exception ex) when (Config.DataFile.IsFileError(ex))
+        catch (Exception ex)
         {
-            Diagnostics.Log.Warn($"予測変換の学習データを読めませんでした: {ex.Message}");
+            // 読むときは型で絞らない (Config.DataFile)
+            Config.DataFile.ReportUnreadable("予測変換の学習データ", ex);
         }
     }
 

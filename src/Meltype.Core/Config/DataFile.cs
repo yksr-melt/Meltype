@@ -8,8 +8,10 @@ namespace Meltype.Config;
 
 /// <summary>
 /// 設定・学習データのファイルの読み書きで共通の手順。
-/// 読み書きで捕まえる例外は <see cref="IsFileError"/> と <see cref="IsBrokenContent"/> だけにする。
-/// それ以外の例外はコードの誤りなので、ログに書いて握りつぶさずに気付けるようにする。
+/// 書くとき (中身は Meltype が作る) に捕まえる例外は <see cref="IsFileError"/> だけにする。それ以外はコードの誤りなので投げる。
+/// 読むとき (中身は利用者が書き換えられる) は、中身から出る例外を型で「壊れている」と「コードの誤り」に分けられない
+/// (手で書いた値の型が違うと、解析が InvalidOperationException などを投げる)。読み込みはすべて捕まえて既定のまま続け、
+/// 想定外の型の例外は <see cref="ReportUnreadable"/> が中身 (場所) ごと Log.Error に書いて、気付けるようにする。
 /// </summary>
 internal static class DataFile
 {
@@ -20,21 +22,31 @@ internal static class DataFile
     public static bool IsBrokenContent(Exception ex) => ex is JsonException or InvalidDataException or XmlException or FormatException or System.Text.DecoderFallbackException;
 
     /// <summary>
-    /// 利用者のフォルダのテキストファイル (辞書など) を読む。無ければ null。読めなければログに出して null。
+    /// 利用者が書き換えられるファイルを読めなかったことをログに書く。ファイルの問題・壊れた中身は要点だけ、
+    /// それ以外の型 (読み込みのコードの誤りかもしれない) は中身ごと Log.Error に書く。
     /// what は「ユーザーの候補辞書」のように、ログに出す名前。
     /// </summary>
-    public static string? ReadUserText(string? directory, string fileName, string what)
+    public static void ReportUnreadable(string what, Exception ex)
     {
-        if (directory is null) return null;
+        if (IsFileError(ex) || IsBrokenContent(ex)) Diagnostics.Log.Warn($"{what}を読めませんでした: {ex.Message}");
+        else Diagnostics.Log.Error($"{what}を読めませんでした: {ex}");
+    }
+
+    /// <summary>
+    /// 利用者のフォルダのテキストファイル (辞書など) があれば、中身を parse に渡す。読めない・解析できなければログに出して飛ばす。
+    /// what は「ユーザーの候補辞書」のように、ログに出す名前。
+    /// </summary>
+    public static void LoadUserText(string? directory, string fileName, string what, Action<string> parse)
+    {
+        if (directory is null) return;
         var path = Path.Combine(directory, fileName);
         try
         {
-            return File.Exists(path) ? File.ReadAllText(path) : null;
+            if (File.Exists(path)) parse(File.ReadAllText(path));
         }
-        catch (Exception ex) when (IsFileError(ex))
+        catch (Exception ex)
         {
-            Diagnostics.Log.Warn($"{what}を読めませんでした: {ex.Message}");
-            return null;
+            ReportUnreadable(what, ex);
         }
     }
 
@@ -61,11 +73,11 @@ internal static class DataFile
         {
             load(File.ReadAllText(path));
         }
-        catch (Exception ex) when (IsFileError(ex) || IsBrokenContent(ex))
+        catch (Exception ex)
         {
             try { File.Copy(path, path + ".broken", overwrite: true); }
             catch (Exception copyEx) when (IsFileError(copyEx)) { Diagnostics.Log.Warn($"{Path.GetFileName(path)} を .broken に残せませんでした: {copyEx.Message}"); }
-            Diagnostics.Log.Warn($"{what}を読めませんでした: {ex.Message}");
+            ReportUnreadable(what, ex);
         }
     }
 }

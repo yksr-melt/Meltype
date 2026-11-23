@@ -85,10 +85,10 @@ public sealed class SettingsFile(string path, Action<Settings>? loaded = null, F
                 _settings = Settings.LoadOrThrow(path);
                 _failed = false;
             }
-            catch (Exception ex) when (DataFile.IsFileError(ex) || DataFile.IsBrokenContent(ex))
+            catch (Exception ex)
             {
-                // 読み直すたびにログを書かないように、書くのは更新時刻が変わったときだけ
-                if (changed) Diagnostics.Log.Warn($"config.json を読み直せなかったので、前の設定を使い続けます: {ex.Message}");
+                // 利用者が書いた中身から出る例外は型で分けられない (DataFile)。読み直すたびにログを書かないように、書くのは更新時刻が変わったときだけ
+                if (changed) DataFile.ReportUnreadable("config.json (前の設定を使い続けます) ", ex);
                 _failed = true;
                 return _settings;
             }

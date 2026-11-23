@@ -58,6 +58,12 @@ public sealed class DiscordPresence : IDisposable
                 if (_stream is not null) Diagnostics.Log.Info($"Discord との接続が切れました: {ex.Message}");
                 Disconnect();
             }
+            catch (Exception ex)
+            {
+                // それ以外はコードの誤り。この Task の例外は誰も受け取らない (Dispose が待つだけ) ので、ここで中身ごとログに書いて止める
+                Diagnostics.Log.Error($"Discord に表示できなくなりました: {ex}");
+                break;
+            }
             try { await Task.Delay(UpdateInterval, _stop.Token); }
             catch (OperationCanceledException) { break; }
         }
