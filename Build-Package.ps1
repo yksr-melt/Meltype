@@ -104,6 +104,11 @@ dotnet publish (Join-Path $root 'src\Meltype.Windows\Meltype.Windows.csproj') -c
     -p:AppHostDotNetSearch=AppRelative -p:AppHostRelativeDotNet=dotnet
 if ($LASTEXITCODE -ne 0) { throw "ビルドに失敗しました (exit code $LASTEXITCODE)。" }
 
+# 設定アプリ (src\Meltype.Settings)。NativeAOT でビルドし、同梱の .NET ランタイムを使わない (ランタイムは下で Meltype.exe が使うものだけに削るため)。
+# Meltype.exe と同じフォルダーに置く (ポータブル版の印 Meltype.portable を同じフォルダーから見て、同じデータフォルダーを使うため)
+dotnet publish (Join-Path $root 'src\Meltype.Settings\Meltype.Settings.csproj') -c Release -r win-x64 -o $app -p:DebugType=none
+if ($LASTEXITCODE -ne 0) { throw "設定アプリのビルドに失敗しました (exit code $LASTEXITCODE)。" }
+
 # Mozc の変換ヘルパー (native\mozc\Build-MozcHelper.ps1 で作ったもの) を同梱する。無ければ漢字に変換できない (かなのまま)。
 if (Test-Path -LiteralPath (Join-Path $mozcBin 'meltype_mozc_helper.exe')) {
     # ヘルパーが使う Visual C++ のランタイム (MSVCP140.dll など) は、Build-MozcHelper.ps1 がビルドに使った Visual Studio から bin に置いている。
@@ -255,13 +260,13 @@ if ($Step -eq 'Build') {
 }
 
 # コード署名 (証明書があるときだけ): 環境変数 MELTYPE_SIGN_PFX (証明書の .pfx) と MELTYPE_SIGN_PASSWORD を設定すると、
-# Meltype.exe・Meltype.dll・Mozc のヘルパーに署名する (SmartScreen の警告とウイルス対策ソフトの誤検知を減らすため)。
+# Meltype.exe・Meltype.dll・設定アプリ・Mozc のヘルパーに署名する (SmartScreen の警告とウイルス対策ソフトの誤検知を減らすため)。
 # GitHub Actions では、秘密 SIGN_PFX_BASE64 / SIGN_PASSWORD を登録すると windows.yml が設定する。
 if ($env:MELTYPE_SIGN_PFX -and (Test-Path -LiteralPath $env:MELTYPE_SIGN_PFX)) {
     $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -like '*\x64\*' } | Sort-Object FullName | Select-Object -Last 1
     if (-not $signtool) { throw 'signtool.exe が見つかりません (Windows SDK が必要です)。' }
-    $targets = @(@('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'mozc\meltype_mozc_helper.exe') |
+    $targets = @(@('Meltype.exe', 'Meltype.dll', 'Meltype.Core.dll', 'MeltypeSettings.exe', 'mozc\meltype_mozc_helper.exe') |
         ForEach-Object { Join-Path $app $_ } | Where-Object { Test-Path -LiteralPath $_ }) + @(Get-MeltypeImeDlls)
     & $signtool.FullName sign /f $env:MELTYPE_SIGN_PFX /p $env:MELTYPE_SIGN_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $targets
     if ($LASTEXITCODE -ne 0) { throw "署名に失敗しました (exit code $LASTEXITCODE)。" }

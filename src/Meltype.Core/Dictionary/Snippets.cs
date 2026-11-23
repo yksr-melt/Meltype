@@ -14,17 +14,39 @@ namespace Meltype.Dictionary;
 public sealed class SnippetStore
 {
     private readonly string? _path;
-    private readonly Dictionary<string, string> _snippets = new(StringComparer.Ordinal);
-    // フックのスレッド (展開) と UI スレッド (編集の画面) の両方から使う
+    private Dictionary<string, string> _snippets;
+    // フックのスレッド (展開) と UI スレッド・設定の読み直しのタイマー (編集・読み直し) から使う
     private readonly object _gate = new();
+    private readonly Config.FileStamp _stamp;
 
     public SnippetStore(string? path)
     {
         _path = path;
+        _stamp = new Config.FileStamp(path);
+        _snippets = Load(path);
+    }
+
+    private static Dictionary<string, string> Load(string? path)
+    {
+        var snippets = new Dictionary<string, string>(StringComparer.Ordinal);
         Config.DataFile.Load(path, "定型文", content =>
         {
-            foreach (var (name, text) in Parse(content)) _snippets[name] = text;
+            foreach (var (name, text) in Parse(content)) snippets[name] = text;
         });
+        return snippets;
+    }
+
+    /// <summary>
+    /// ほかのプロセス (設定アプリ) が snippets.json を書き換えていたら読み直す (<see cref="Config.FileStamp"/>)。
+    /// 編集する前にも呼び、ほかのプロセスで足した定型文を、この編集の保存で消さない。
+    /// </summary>
+    public void Refresh()
+    {
+        if (!_stamp.Changed) return;
+        // 読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)。展開 (Get) を待たせないように、読むのは lock の外
+        _stamp.Synced();
+        var snippets = Load(_path);
+        lock (_gate) _snippets = snippets;
     }
 
     public int Count { get { lock (_gate) return _snippets.Count; } }
@@ -49,6 +71,7 @@ public sealed class SnippetStore
     public bool Set(string name, string text)
     {
         if (!IsValidName(name) || !IsValidText(text)) return false;
+        Refresh();
         lock (_gate) _snippets[name] = text.ReplaceLineEndings("\n");
         Save();
         return true;
@@ -57,6 +80,7 @@ public sealed class SnippetStore
     public void Remove(string name)
     {
         bool removed;
+        Refresh();
         lock (_gate) removed = _snippets.Remove(name);
         if (removed) Save();
     }
@@ -73,6 +97,7 @@ public sealed class SnippetStore
     public int Import(string json)
     {
         var parsed = Parse(json).ToList();
+        Refresh();
         lock (_gate) foreach (var (name, text) in parsed) _snippets[name] = text;
         if (parsed.Count > 0) Save();
         return parsed.Count;
@@ -90,7 +115,9 @@ public sealed class SnippetStore
         if (_path is null) return;
         try
         {
-            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, Export(), Encoding.UTF8));
+            var json = Export();
+            Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json, Encoding.UTF8));
+            _stamp.Synced();
         }
         catch (Exception ex) when (Config.DataFile.IsFileError(ex))
         {

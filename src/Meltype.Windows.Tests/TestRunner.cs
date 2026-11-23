@@ -93,19 +93,14 @@ internal static class TestRunner
         if (args.FirstOrDefault() == "--tip-client") return TipHarness.Client(args[1].Replace("\\n", "\n"));
         if (args.FirstOrDefault() == "--render-forms")
         {
-            // 調査用: 設定画面とユーザー辞書の画面を表示せずに画像にする。
+            // 調査用: Meltype.exe の画面 (報告・使い方・入力モードの表示・変換ボックス) を表示せずに画像にする。
             Application.EnableVisualStyles();
-            var engine = new MeltypeEngine(TestRuntime.Create());
-            using var invoker = new Control();
-            invoker.CreateControl();
-            using var service = new Composition.CompositionService(invoker, engine.Runtime, () => engine.Settings);
-            service.UserDictionary.Add("きごうとう", "記号等");
             var composition = new Composition.CompositionWindow();
             // 候補が 9 個より多いとき (ページに分けて出す) の見た目。2 ページ目の候補を選んでいる。
             composition.ShowView(new Composition.CompositionView("ぶれすれっど", ["ブレスレッド", "ぶれすれっど", "buresureddo"], 0, true, "Space/↓ 候補", Suggestion: "もしかして: ブレスレット　<Tab>で修正"), new Point(-5000, -5000));
             var indicator = new Composition.ModeIndicatorWindow();
             indicator.Flash(true, new Point(-5000, -5000), 1200);
-            foreach (var form in new Form[] { new UI.SettingsForm(engine, new Config.AppState()), new UI.UserDictionaryForm(service), new UI.ReportDialog(new Config.Settings()), new UI.LearnedWordsForm(LearnedSample(engine.Runtime)), new UI.WelcomeForm(), indicator, composition })
+            foreach (var form in new Form[] { new UI.ReportDialog(new Config.Settings()), new UI.WelcomeForm(), indicator, composition })
             {
                 using (form)
                 {
@@ -116,16 +111,6 @@ internal static class TestRunner
                     using var bitmap = new Bitmap(form.Width, form.Height);
                     form.DrawToBitmap(bitmap, new Rectangle(0, 0, form.Width, form.Height));
                     bitmap.Save(Path.Combine(args[1], form.GetType().Name + ".png"));
-                    // 設定画面は、アプリ別設定の表のあたりまでスクロールした画像も作る。
-                    if (form is UI.SettingsForm && FindControl(form, c => c is Button { Text: "実行中のアプリから追加…" }) is { } button &&
-                        FindControl(form, c => c is ScrollableControl { AutoScroll: true } s && s.Contains(button)) is ScrollableControl scroller)
-                    {
-                        scroller.ScrollControlIntoView(button.Parent!);
-                        Application.DoEvents();
-                        using var scrolled = new Bitmap(form.Width, form.Height);
-                        form.DrawToBitmap(scrolled, new Rectangle(0, 0, form.Width, form.Height));
-                        scrolled.Save(Path.Combine(args[1], "SettingsForm-apps.png"));
-                    }
                     // スクロールできる画面は、いちばん下までスクロールした画像も作る (一番下の項目が見切れていないか)。
                     if (FindControl(form, c => c is ScrollableControl { AutoScroll: true, VerticalScroll.Visible: true }) is ScrollableControl bottom)
                     {
@@ -151,16 +136,6 @@ internal static class TestRunner
         if (Environment.GetEnvironmentVariable("MELTYPE_MOZC") is { Length: > 0 } configured) return configured;
         var bundled = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "native", "mozc", "bin", "meltype_mozc_helper.exe"));
         return File.Exists(bundled) ? bundled : null;
-    }
-
-    /// <summary>--render-forms 用の、学習した語の見本。</summary>
-    private static Ime.MeltypeRuntime LearnedSample(Ime.MeltypeRuntime runtime)
-    {
-        runtime.Languages.IsReadableRomaji = _ => true;
-        runtime.Languages.Remember("go", english: true);
-        runtime.Languages.Remember("api", english: true);
-        runtime.Languages.Remember("sushi", english: false, explicitChoice: true);
-        return runtime;
     }
 
     /// <summary>画面の中から条件に合うコントロールを探す (--render-forms 用)。</summary>

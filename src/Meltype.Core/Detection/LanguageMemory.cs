@@ -22,10 +22,12 @@ internal sealed class LanguageMemory
 {
     private const int MaxEntries = 3000;
     private readonly string? _path;
-    private readonly Dictionary<string, Entry> _entries = new(StringComparer.Ordinal);
+    // 読み直すときは、中身を書き換えずに丸ごと差し替える (Get は入力のスレッドから lock を取らずに読む)
+    private Dictionary<string, Entry> _entries;
     private readonly object _gate = new();
     private readonly object _fileGate = new();
     private readonly DeferredSaver _saver;
+    private readonly FileStamp _stamp;
 
     internal sealed class Entry
     {
@@ -51,6 +53,9 @@ internal sealed class LanguageMemory
     /// </summary>
     public Func<string, bool>? IsReadableRomaji { get; set; }
 
+    /// <summary><see cref="IsReadableRomaji"/> の決め方: 途中までではなく、全体がローマ字として読める。</summary>
+    internal static Func<string, bool> ReadableBy(RomajiDetector romaji) => word => romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
+
     /// <summary>英語として覚えるのに 2 回要る語か。</summary>
     private bool NeedsTwice(string word, Entry entry) =>
         entry.English && Math.Max(1, entry.Count) < 2 &&
@@ -60,11 +65,40 @@ internal sealed class LanguageMemory
     {
         _saver = new DeferredSaver(Write);
         _path = path;
+        _stamp = new FileStamp(path);
+        _entries = Load(path);
+    }
+
+    private static Dictionary<string, Entry> Load(string? path)
+    {
+        var entries = new Dictionary<string, Entry>(StringComparer.Ordinal);
         Config.DataFile.Load(path, "英語 / 日本語の学習データ", content =>
         {
             var loaded = JsonSerializer.Deserialize(content, Config.LearningJsonContext.Default.Languages);
-            if (loaded is not null) foreach (var (word, entry) in loaded) _entries[word] = entry;
+            if (loaded is not null) foreach (var (word, entry) in loaded) entries[word] = entry;
         });
+        return entries;
+    }
+
+    /// <summary>ほかのプロセス (設定アプリ) が languages.json を書き換えていたら読み直す (<see cref="FileStamp"/>)。</summary>
+    internal void Refresh()
+    {
+        lock (_fileGate)
+        {
+            if (_stamp.Changed) Reload();
+        }
+    }
+
+    // _fileGate の中で呼ぶ。読む前に更新時刻を覚える (読んでいる間に書かれても、次にまた読み直す)
+    private void Reload()
+    {
+        _stamp.Synced();
+        var entries = Load(_path);
+        lock (_gate)
+        {
+            _entries = entries;
+            Version++;
+        }
     }
 
     public int Count => _entries.Count;
@@ -186,9 +220,15 @@ internal sealed class LanguageMemory
         {
             lock (_fileGate)
             {
+                if (_stamp.Changed)
+                {
+                    Reload();
+                    return true;
+                }
                 string json;
                 lock (_gate) json = JsonSerializer.Serialize(_entries, Config.LearningJsonContext.Default.Languages);
                 Config.DataFile.Write(_path, temp => File.WriteAllText(temp, json));
+                _stamp.Synced();
             }
             return true;
         }

@@ -15,7 +15,7 @@ internal static class TestRuntime
             catch (IOException) { }
         };
         var runtime = new Ime.MeltypeRuntime(directory);
-        if (settings is not null) runtime.Settings.Apply(settings);
+        if (settings is not null) runtime.Settings.Edit(_ => settings);
         return runtime;
     }
 }

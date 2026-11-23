@@ -34,11 +34,11 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 
 | OS | 開き方 |
 | --- | --- |
-| Windows | タスクバーの右にある青い丸の「あ」を右クリック →「設定...」。英数のときは「A」、一時停止中は灰色の丸になります。見当たらなければ「^」の中にあります |
-| Mac | メニューバーの入力メニュー →「Meltype の設定ファイル (config.json) を開く…」 |
+| Windows | スタートメニューの「Meltype の設定」。タスクバーの右にある青い丸の「あ」を右クリック →「設定・辞書・学習データ...」でも開けます (英数のときは「A」、一時停止中は灰色の丸。見当たらなければ「^」の中にあります) |
+| Mac | Launchpad の「Meltype の設定」。メニューバーの入力メニュー →「Meltype の設定…」でも開けます |
 | Linux | アプリの一覧の「Meltype の設定」 |
 
-丸の無い「あ」「A」と Meltype のロゴは Windows の入力モードの表示で、右クリックしても Meltype のメニューは出ません。ユーザー辞書・定型文・学習データを消すメニューも、青い丸の「あ」の右クリックにあります。
+ユーザー辞書・定型文・学習データ・バックアップも、この「Meltype の設定」で扱います。丸の無い「あ」「A」と Meltype のロゴは Windows の入力モードの表示で、右クリックしても Meltype のメニューは出ません。
 
 <br>
 
@@ -118,9 +118,9 @@ kyouhagoogledekensaku  →  今日はgoogleで検索
 <a name="自分の語を足す"></a>
 <img src="images/headings/usage/06.svg" alt="自分の語を足す" height="53"><br>
 
-**ユーザー辞書**: Windows はタスクトレイの「ユーザー辞書...」で登録します。Microsoft IME・Google 日本語入力の辞書も取り込めます。Mac は [MACOS.md](MACOS.md#ユーザー辞書) を見てください。
+**ユーザー辞書**: 「Meltype の設定」の「ユーザー辞書」で登録します。
 
-**定型文**: Windows はタスクトレイの「定型文...」で登録して、`;名前` と打って <kbd>Space</kbd> で呼び出します。
+**定型文**: 「Meltype の設定」の「定型文」で登録して、`;名前` と打って <kbd>Space</kbd> で呼び出します。
 
 <br>
 
@@ -153,4 +153,4 @@ U=F6;I=F7;O=F8;P=F9;T=F10
 | Mac | `~/Library/Application Support/Meltype` |
 | Linux | `~/.local/share/Meltype` |
 
-学習した語は、Windows ではタスクトレイの「学習データを消す」で消せます。
+学習した語は、「Meltype の設定」の「学習データ」で消せます。

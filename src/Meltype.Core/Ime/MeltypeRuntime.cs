@@ -26,7 +26,8 @@ public sealed class MeltypeRuntime : IDisposable
     private readonly Lazy<ScoreEngine> _directEngine;
     private readonly INowPlayingSource? _nowPlaying;
     private readonly List<IDisposable> _converters = [];
-    // 入力していない間も config.json の書き換えを読む (読み直したら SettingsChanged を出す)
+    // 入力していない間も、ほかのプロセス (設定アプリ・エディター) による config.json・学習データ・定型文の書き換えを読む
+    // (config.json を読み直したら SettingsChanged を出す)
     private readonly Timer _settingsCheck;
 
     /// <param name="dataDirectory">設定・辞書・学習データの置き場所 (<see cref="AppPaths.DataDirectory"/>。テストでは一時フォルダー)。</param>
@@ -47,30 +48,33 @@ public sealed class MeltypeRuntime : IDisposable
         _ = Settings.Current;
         Detector = CompositionDetector.CreateDefault(_userDirectory);
         Detector.UseJapanesePunctuationAfterEnglish = () => Settings.Current.JapanesePunctuationAfterEnglish;
-        var languages = new LanguageMemory(Path.Combine(dataDirectory, "languages.json"));
-        Detector.Memory = languages;
-        var history = new ConversionHistory(Path.Combine(dataDirectory, "conversions.json"));
+        Learning = new LearningData(dataDirectory);
+        Detector.Memory = Learning.LanguageMemory;
         _shared = new CompositionServices
         {
             Candidates = CandidateDictionary.Load(_userDirectory),
             ContextRules = ContextRules.Load(_userDirectory),
-            History = history,
+            History = Learning.History,
             Misspellings = MisspellingDictionary.Load(_userDirectory),
-            Languages = languages,
+            Languages = Learning.LanguageMemory,
             Translations = TranslationDictionary.Load(),
             Meanings = MeaningDictionary.Load(),
             RomajiTypos = RomajiTypoCorrector.Load(Detector.Romaji),
-            TranslationHistory = new TranslationHistory(Path.Combine(dataDirectory, "translations.json")),
+            TranslationHistory = Learning.Translations,
             GitHubTitles = () => GitHubTitles,
         };
         Connect(Detector, _shared);
-        Phrases = new PhraseHistory(Path.Combine(dataDirectory, "phrases.txt"));
         // dictionaries/ に置いた macOS の「ユーザ辞書」の .plist も読む (#40)
         UserDictionary = new UserDictionary(Path.Combine(dataDirectory, "userdict.txt"), importDirectory: _userDirectory);
         Snippets = new SnippetStore(Path.Combine(dataDirectory, "snippets.json"));
         _directEngine = new(() => ScoreEngine.CreateDefault(() => Settings.Current, _userDirectory));
         if (nowPlaying) _nowPlaying = NowPlayingSource.Create(() => Settings.Current.NowPlayingCandidates);
-        _settingsCheck = new Timer(_ => _ = Settings.Current, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
+        _settingsCheck = new Timer(_ =>
+        {
+            _ = Settings.Current;
+            Learning.Refresh();
+            Snippets.Refresh();
+        }, null, SettingsFile.CheckIntervalMs, SettingsFile.CheckIntervalMs);
     }
 
     /// <summary>既定の保存場所 (<see cref="AppPaths.DataDirectory"/>) で作る。旧名 (AutoIME) の保存場所があれば、先に移す。</summary>
@@ -96,26 +100,17 @@ public sealed class MeltypeRuntime : IDisposable
     /// </summary>
     public UserDictionary UserDictionary { get; }
 
-    internal ConversionHistory History => _shared.History!;
+    /// <summary>学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳)。</summary>
+    public LearningData Learning { get; }
 
-    internal LanguageMemory Languages => _shared.Languages!;
+    internal ConversionHistory History => Learning.History;
 
-    internal TranslationHistory TranslationHistory => _shared.TranslationHistory!;
+    internal LanguageMemory Languages => Learning.LanguageMemory;
+
+    internal TranslationHistory TranslationHistory => Learning.Translations;
 
     /// <summary>予測変換のために覚えた、確定した語句。</summary>
-    internal PhraseHistory Phrases { get; }
-
-    /// <summary>英字で打った語を英語・日本語のどちらで出すか学習したもの (新しく使ったものから)。</summary>
-    public IReadOnlyList<LearnedLanguage> LearnedLanguages() => Languages.Entries();
-
-    /// <summary>学習した語を忘れる。keys は <see cref="LearnedLanguage.EntryKey"/>。</summary>
-    public void ForgetLanguages(IEnumerable<string> keys) => Languages.Remove(keys);
-
-    /// <summary>読みに対して選び直した変換 (はし → 箸) の学習。</summary>
-    public IReadOnlyList<(string Reading, string Text, DateTime Used)> LearnedConversions() => History.Entries();
-
-    /// <summary>読みに対して選び直した変換の学習を忘れる。</summary>
-    public void ForgetConversion(string reading) => History.Forget(reading);
+    internal PhraseHistory Phrases => Learning.Phrases;
 
     /// <summary>登録した定型文 (;名前 + Space で入れる: issue #290)。</summary>
     public SnippetStore Snippets { get; }
@@ -154,26 +149,8 @@ public sealed class MeltypeRuntime : IDisposable
     public ImeHost CreateHost(IImeEnvironment environment, Func<Settings> settings, Func<bool> lateResults, Action<Correction>? corrected = null) =>
         new(environment, SessionParts(Converter, Converter.Candidates, Converter.Reading, corrected) with { LateResults = lateResults }, settings);
 
-    /// <summary>ユーザー辞書の登録画面用: 入力された読み (ローマ字でもよい) をひらがなにする。</summary>
-    public string ToReading(string input)
-    {
-        var text = input.Trim();
-        return text.Any(char.IsAsciiLetter) ? Detector.Romaji.ConvertLenient(text.ToLowerInvariant(), final: true) : text;
-    }
-
-    /// <summary>ユーザー辞書の登録画面用: 語の読みを推測する。分からなければ空。</summary>
+    /// <summary>単語の登録のホットキー (Windows) 用: 選んでいた語の読みを推測する。分からなければ空。</summary>
     public string GuessReading(string word) => Converter.Reading(word) ?? "";
-
-    // 登録画面は入力のスレッド (UI スレッド) から呼ぶ。入力のように待たずに返すと、ヘルパーが答える前の空の一覧になる
-    private const int SuggestWaitMs = 1500;
-
-    /// <summary>ユーザー辞書の登録画面用: 読みの変換候補 (Mozc の候補 → カタカナ)。</summary>
-    public IReadOnlyList<string> SuggestWords(string reading)
-    {
-        var list = Converter.Candidates(reading, Environment.TickCount64 + SuggestWaitMs).Where(word => word.Length > 0).ToList();
-        if (KanaChars.ToKatakana(reading) is { Length: > 0 } katakana && !list.Contains(katakana)) list.Add(katakana);
-        return list;
-    }
 
     /// <summary>変換エンジン (テストでは <see cref="StartConverter"/> を通さずに作って直接使う)。</summary>
     internal HybridConverter CreateConverter(string appDirectory, IMozcHelper? mozcHelper = null)
@@ -226,7 +203,7 @@ public sealed class MeltypeRuntime : IDisposable
     internal static void Connect(CompositionDetector detector, CompositionServices services)
     {
         if (services.Languages is { } languages && services.RomajiTypos is { } typos) languages.IsCommonJapanese ??= typos.IsCommonJapanese;
-        if (services.Languages is { } memory) memory.IsReadableRomaji ??= word => detector.Romaji.AnalyzeFragment(word) is { IsValid: true, Partial: "" };
+        if (services.Languages is { } memory) memory.IsReadableRomaji ??= LanguageMemory.ReadableBy(detector.Romaji);
         if (services.RomajiTypos is { } lexicon) detector.IsCommonJapanese ??= lexicon.IsCommonJapanese;
     }
 
@@ -236,22 +213,6 @@ public sealed class MeltypeRuntime : IDisposable
         _nowPlaying?.Dispose();
         foreach (var converter in _converters) converter.Dispose();
     }
-
-    /// <summary>学習データ (選び直した変換・英字 / かなに直した語・予測変換の語句・選んだ英訳) をすべて消す。ユーザー辞書と設定は消さない。</summary>
-    public void ResetLearning()
-    {
-        History.Clear();
-        Languages.Clear();
-        Phrases.Clear();
-        TranslationHistory.Clear();
-        Diagnostics.Log.Info("学習データをリセットしました。");
-    }
-
-    /// <summary>
-    /// sinceUtc より後に覚えたものだけを消す (一時的な入力・間違えて覚えたものを、全体をリセットせずに消す: issue #277)。消した数を返す。
-    /// 選び直した変換・英字 / かなに直した語・予測変換の語句が対象。英訳の記録は覚えた時刻を持たないので、<see cref="ResetLearning"/> で消す。
-    /// </summary>
-    public int ForgetLearningSince(DateTime sinceUtc) => History.ForgetSince(sinceUtc) + Languages.ForgetSince(sinceUtc) + Phrases.ForgetSince(sinceUtc);
 
     /// <summary>
     /// 前の版が学習した Zenzai の壊れた答え (はーどうぇ → ハードウェアウェア、なまえは → 名前は魚のは: issue #1779) を、
