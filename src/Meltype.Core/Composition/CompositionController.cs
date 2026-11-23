@@ -363,8 +363,7 @@ internal static partial class CompositionController
         if (!IsConverting(state) && TypingCandidates(state, env) is { } typing)
         {
             if (index < 0 || index >= typing.Count) return;
-            state.Clauses = [new Clause(CompositionText.AllKana(state.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(state.Text), Expanded = true }];
-            state.SelectedClause = 0;
+            state.Conversion = new Conversion([new Clause(CompositionText.AllKana(state.Text, env, final: false), false, typing) { Raw = CompositionText.Raw(state.Text), Expanded = true }], ConversionTrigger.Other, preferJapanese: false);
         }
         if (!IsConverting(state) || state.Clauses.Count == 0) return;
         var clause = state.Clauses[state.SelectedClause];

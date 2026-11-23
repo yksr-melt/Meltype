@@ -391,7 +391,7 @@ internal static partial class CompositionController
             return;
         }
         foreach (var clause in state.Clauses.Where(c => !c.IsEnglish)) state.KeptChoices[clause.Reading] = clause.Text;
-        state.Clauses = [];
+        state.Conversion = null;
     }
 
     /// <summary>
@@ -635,7 +635,7 @@ internal static partial class CompositionController
                 return true;
             case VirtualKeys.Tab when FindMisspelling(state, env) is { } typo:
                 // もしかして: 書き間違いを直して変換し直す。
-                state.Clauses = [];
+                state.Conversion = null;
                 FixMisspelling(state, typo);
                 StartConversion(state, env);
                 return true;
@@ -782,7 +782,7 @@ internal static partial class CompositionController
         var all = state.Clauses;
         var done = all.Take(state.SelectedClause + 1).ToList();
         var rest = all.Skip(state.SelectedClause + 1).ToList();
-        state.Clauses = done;
+        state.Conversion!.Clauses = done;
         LearnClauses(state, env);
         var text = string.Concat(done.Select(c => c.Text));
         CommitText(state, env, text, done.All(c => c.IsEnglish), "", chosen: true);
@@ -820,7 +820,7 @@ internal static partial class CompositionController
 
     private static void SetMode(CompositionState state, DisplayMode mode)
     {
-        state.Clauses = [];
+        state.Conversion = null;
         state.Text.Mode = mode;
         state.Text.Case = LetterCase.AsTyped;
     }
@@ -833,7 +833,7 @@ internal static partial class CompositionController
     {
         var before = IsConverting(state) ? null : CurrentDisplay(state, env, final: false);
         var sameMode = !IsConverting(state) && state.Text.Mode == mode;
-        state.Clauses = [];
+        state.Conversion = null;
         if (!sameMode)
         {
             state.Text.Mode = mode;

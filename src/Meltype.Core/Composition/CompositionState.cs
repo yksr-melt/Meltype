@@ -166,17 +166,8 @@ internal sealed class CompositionState
     /// <summary>変換中なら、その文節と選んでいる文節など。変換していなければ null (変換を終えると、変換にかかわる値はまとめて消える)。</summary>
     public Conversion? Conversion;
 
-    /// <summary>変換中の文節 (変換していなければ空)。空にすると変換を終える。変換中に入れ替えると、選んでいる文節などはそのまま。</summary>
-    public List<Clause> Clauses
-    {
-        get => Conversion?.Clauses ?? [];
-        set
-        {
-            if (value.Count == 0) Conversion = null;
-            else if (Conversion is { } conversion) conversion.Clauses = value;
-            else Conversion = new Conversion(value, ConversionTrigger.Other, preferJapanese: false);
-        }
-    }
+    /// <summary>変換中の文節 (変換していなければ空)。変換を始める・終えるのは <see cref="Conversion"/> への代入だけにする。</summary>
+    public List<Clause> Clauses => Conversion?.Clauses ?? [];
 
     /// <summary>選んでいる文節 (変換していなければ 0)。変換していないときには変えられない。</summary>
     public int SelectedClause
