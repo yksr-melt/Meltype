@@ -853,6 +853,28 @@ internal static class SessionFacadeTests
     }
 
     [Test]
+    public static void CodeInput_UrlSchemesRemainCode()
+    {
+        // #1623: http:// の // はコメントではない。
+        foreach (var input in new[] { "curl http://example.com/a", "curl HTTPS://example.com", "open file:///tmp/a", "x=git+ssh://a" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            var field = new Field();
+            Assert.True(Type(session, input, field).All(r => !r.Consumed && r.View is null), input);
+            Assert.Equal(input, field.Text);
+            Assert.True(Type(session, " ima", field).All(r => !r.Consumed && r.View is null), input);
+        }
+        // URL の後ろや前のコメント、引用符の中は今までどおり日本語。
+        foreach (var before in new[] { "curl http://a // ", "curl http://a #", "x = 1 // http://a ", "s = \"http://a ", "curl http://a/b//" })
+        {
+            var session = Create();
+            session.CodeInput = true;
+            Assert.Equal("いま", Type(session, "ima", new Field(before))[^1].View?.Text, before);
+        }
+    }
+
+    [Test]
     public static void EnglishSentence_RemainsEnglish()
     {
         var session = Create();

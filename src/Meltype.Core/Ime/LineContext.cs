@@ -80,6 +80,11 @@ internal static class LineContext
             }
             var atStart = lineStart && !char.IsWhiteSpace(c);
             if (!char.IsWhiteSpace(c)) lineStart = false;
+            if (SchemeSlashes(text, i) is > 0 and var slashes)
+            {
+                i += slashes - 1;
+                continue;
+            }
             string? open = null;
             if (StartsWith(text, i, "\"\"\"")) (open, kind) = ("\"\"\"", LineKind.String);
             else if (StartsWith(text, i, "'''")) (open, kind) = ("'''", LineKind.String);
@@ -137,6 +142,11 @@ internal static class LineContext
                 quote = c;
                 continue;
             }
+            if (SchemeSlashes(line, i) is > 0 and var slashes)
+            {
+                i += slashes - 1;
+                continue;
+            }
             if (StartsWith(line, i, "//")) return LineKind.Comment;
             if (StartsWith(line, i, "/*"))
             {
@@ -162,6 +172,17 @@ internal static class LineContext
             if (atStart && StartsWithIgnoreCase(line, i, "rem ")) return LineKind.Comment;
         }
         return quote is null ? LineKind.Code : LineKind.String;
+    }
+
+    // #1623: http:// や file:/// のスキーム名の後の / の数 (それ以外は 0)。コメントの // とみなさない。
+    // :// はほぼ URL にしか出ないので、スキーム名は一覧にせず「英字 + :」で見分ける。
+    // URL の残りは読み飛ばさず、続く // や # はコメントとして調べる (URL の終わりが分からないため)。
+    private static int SchemeSlashes(string text, int index)
+    {
+        if (index < 2 || text[index - 1] != ':' || !char.IsAsciiLetter(text[index - 2])) return 0;
+        var end = index;
+        while (end < text.Length && text[end] == '/') end++;
+        return end - index is 2 or 3 ? end - index : 0;
     }
 
     /// <summary>
