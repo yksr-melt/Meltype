@@ -100,7 +100,7 @@ jobs:
         run: |
           bad=0
           while IFS= read -r -d '' f; do
-            if ! head -c 4 "$f" | grep -q ELF; then continue; fi
+            if [[ "$(head -c 4 "$f")" != $'\x7fELF' ]]; then continue; fi
             syms="$(objdump -T "$f" | grep -E 'GLIBC_2\.(3[5-9]|[4-9][0-9])([^0-9]|$)' || true)"
             if [[ -n "$syms" ]]; then
               echo "::error::$f が glibc 2.34 より新しいシンボルを使っています"
