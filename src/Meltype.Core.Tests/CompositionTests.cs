@@ -1099,9 +1099,9 @@ internal static class CompositionTests
     }
 
     [Test]
-    public static void Issue2111_KanaChoiceForgetsLearnedWord()
+    public static void Issue2111_KanaChoiceReplacesLearnedWord()
     {
-        // では → 出端 を覚えたあと、かなの では を選んで確定したら、次の では は 出端 にしない
+        // では → 出端 を覚えたあと、かなの では を選んで確定したら、次の では は かなを最初の候補にする
         var history = new ConversionHistory(null);
         history.Remember("では", "出端");
         var k = new Keyboard(history: history);
@@ -1112,7 +1112,38 @@ internal static class CompositionTests
         k.Type("\n");
         var next = new Keyboard(history: history);
         next.Type("deha ");
-        Assert.Equal("では", next.Showing, "かなを選んだので、覚えた 出端 を忘れる");
+        Assert.Equal("では", next.Showing, "選んだかなを覚える");
+    }
+
+    [Test]
+    public static void FunctionKeyOnClauseIsLearned()
+    {
+        // 文節だけを F6 でかなにして確定したら、候補からかなを選んだのと同じく覚える
+        var history = new ConversionHistory(null);
+        var k = new Keyboard(history: history) { FunctionKeysAffectSelectedClause = true };
+        k.Type("tanniwotoru ");
+        k.Press(VirtualKeys.Left);
+        k.Press(VirtualKeys.F6);
+        Assert.Equal("たんいを取る", string.Concat(k.Host.View!.Clauses!));
+        k.Type("\n");
+        var next = new Keyboard(history: history);
+        next.Type("tanniwotoru ");
+        Assert.Equal("たんいを取る", next.Showing, "かなにした文節を覚える");
+    }
+
+    [Test]
+    public static void EscOnClauseIsLearned()
+    {
+        // 設定「変換中の Esc は選んだ文節だけをかなに戻す」で戻して確定したのも、かなを選んだのと同じく覚える
+        var history = new ConversionHistory(null);
+        var k = new Keyboard(history: history) { EscRevertsSelectedClause = true };
+        k.Type("tanniwotoru ");
+        k.Press(VirtualKeys.Left);
+        k.Press(VirtualKeys.Escape);
+        k.Type("\n");
+        var next = new Keyboard(history: history);
+        next.Type("tanniwotoru ");
+        Assert.Equal("たんいを取る", next.Showing, "かなに戻した文節を覚える");
     }
 
     [Test]

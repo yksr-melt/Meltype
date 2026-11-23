@@ -136,6 +136,50 @@ internal static class SettingsFormTests
         Assert.True(choices.Items.Contains("雑談"), "読み込み後の編集は、アプリ別設定の選択肢にすぐ反映する");
     }
 
+    [Test]
+    public static void SettingsForm_DarkModeKeepsInputAndTableTextReadable()
+    {
+        using var engine = new MeltypeEngine(TestRuntime.Create());
+        using var form = new UI.SettingsForm(engine, new AppState(), darkMode: true);
+        var controls = Descendants(form).ToList();
+        Assert.True(controls.OfType<ListBox>().Any() && controls.OfType<TextBox>().Any() && controls.OfType<ComboBox>().Any(),
+            "設定に一覧・入力欄・プルダウンがある");
+        foreach (var control in controls.Where(c => c is ListBox or TextBoxBase or ComboBox))
+            Check(control.BackColor, control.ForeColor, control.AccessibleName ?? control.GetType().Name);
+
+        var grids = controls.OfType<DataGridView>().ToList();
+        Assert.True(grids.Count > 0, "アプリ別設定に表がある");
+        foreach (var grid in grids)
+        {
+            Assert.True(grid.BackgroundColor.GetBrightness() < 0.5f, "行のない部分も暗い");
+            Assert.True(!grid.EnableHeadersVisualStyles, "見出しも設定画面の配色で描く");
+            foreach (var style in new[] { grid.DefaultCellStyle, grid.RowHeadersDefaultCellStyle, grid.ColumnHeadersDefaultCellStyle })
+                Check(style.BackColor, style.ForeColor, "表のセルと見出し");
+        }
+
+        static void Check(Color background, Color text, string name)
+        {
+            Assert.True(background.GetBrightness() < 0.5f, $"{name} の背景は暗い");
+            Assert.True(ColorContrast.Ratio((background.R, background.G, background.B), (text.R, text.G, text.B)) >= ColorContrast.TextMinimum,
+                $"{name} の文字は背景の上で読める");
+        }
+    }
+
+    [Test]
+    public static void SettingsForm_LightModeUsesWindowsInputColors()
+    {
+        using var engine = new MeltypeEngine(TestRuntime.Create());
+        using var form = new UI.SettingsForm(engine, new AppState(), darkMode: false);
+        var controls = Descendants(form).ToList();
+        foreach (var control in controls.Where(c => c is ListBox or TextBoxBase or ComboBox))
+            Assert.Equal(SystemColors.Window, control.BackColor, "ライトでは Windows の入力欄の背景を使う");
+        foreach (var grid in controls.OfType<DataGridView>())
+        {
+            Assert.Equal(SystemColors.Window, grid.DefaultCellStyle.BackColor, "ライトでは Windows のセルの背景を使う");
+            Assert.True(grid.EnableHeadersVisualStyles, "ライトでは Windows の見出しの外観を使う");
+        }
+    }
+
     private static IEnumerable<Control> Descendants(Control root)
     {
         foreach (Control child in root.Controls)
