@@ -5,6 +5,7 @@ package app.meltype.keyboard.core
 import app.meltype.keyboard.PerfLog
 import app.meltype.keyboard.mozc.MozcBackend
 import app.meltype.keyboard.mozc.MozcClause
+import app.meltype.keyboard.mozc.MozcWord
 
 /**
  * Core の MozcConverter が送る変換ヘルパーの要求 (native/mozc/meltype_mozc_helper.cc の先頭) に、[mozc] で答える。
@@ -50,6 +51,13 @@ internal class CoreMozcCallbacks(
                 if (converter.learn(clauses, context.ifEmpty { null })) "OK" else "NG"
             }
             "R" -> converter.reading(fields[1]) ?: ""
+            "D" -> {
+                val words = fields[1].split(RECORD).filter { it.isNotEmpty() }.map { record ->
+                    val (reading, word) = record.split(UNIT)
+                    MozcWord(reading, word)
+                }
+                if (converter.setUserDictionary(words)) "OK" else "NG"
+            }
             // 覚えさせるたびに保存している (MozcConverter.learn)
             "S" -> "OK"
             else -> throw IllegalArgumentException("Unknown Mozc helper request: ${fields[0]}")
