@@ -582,13 +582,15 @@ internal static class ImeContractTests
     }
 
     [Test]
-    public static void Issue2219_TsfCaretDistinguishesTextFromShortcut()
+    public static void Issue2219_TsfCaretDistinguishesTextFromMovement()
     {
         foreach (var (before, notification) in new[]
         {
             ("hellka ", ",\"caret\":{\"moved\":true,\"passedKey\":32,\"passedChar\":32}"),
             // Alt+F で、同じ f で終わる別の位置へ移動する。文字の追加はない。
             ("hellka staff", ",\"caret\":{\"moved\":true,\"passedKey\":70}"),
+            // アプリが文字を追加せず、同じ a で終わる別の位置へキャレットだけを移動する。
+            ("hellka data", ",\"caret\":{\"moved\":true,\"passedKey\":0}"),
         })
         {
             var front = new Front
